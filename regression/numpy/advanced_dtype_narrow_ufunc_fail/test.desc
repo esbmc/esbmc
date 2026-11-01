@@ -1,0 +1,4 @@
+CORE
+main.py
+--incremental-bmc
+^ERROR: TypeError: numpy\.sinh\(\) over a dtype narrower than 64 bits is not supported$

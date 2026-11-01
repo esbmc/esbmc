@@ -1,5 +1,6 @@
 #pragma once
 
+#include <python-frontend/numpy/numpy_dtype.h>
 #include <python-frontend/numpy/numpy_reducer_shared.h>
 
 #include <python-frontend/function_call/expr.h>
@@ -20,6 +21,11 @@ class python_converter;
 std::string extract_numpy_dtype_name(
   const nlohmann::json &dtype_node,
   const nlohmann::json &ast);
+
+/// Whether the literal of `np.array(literal)` holds a complex number.
+bool numpy_literal_call_is_complex(const nlohmann::json &call);
+std::optional<std::size_t>
+numpy_literal_string_width(const nlohmann::json &call);
 
 /// The literal `np.array(literal, dtype=...)` stores, cast to its dtype.
 nlohmann::json
@@ -117,7 +123,12 @@ private:
   // The element type of the array built from the literal @p list: a fixed-width
   // string, or empty for the literal's own.
   typet constructor_element_type(const nlohmann::json &list) const;
-  void reject_complex_array_operands(const std::string &function) const;
+  void reject_unmodelled_operands(const std::string &function) const;
+  void reject_array_copy_with_dtype(const std::string &function) const;
+  void reject_narrow_float_mean(
+    const std::string &function,
+    const nlohmann::json &arg) const;
+  bool is_string_operand(const nlohmann::json &arg) const;
   bool is_complex_operand(const nlohmann::json &arg) const;
   // @p build run with constructor_element_type(@p list) at the leaves of
   // the static arrays it builds.
@@ -138,6 +149,34 @@ private:
 
   std::string get_dtype() const;
   typet get_typet_from_dtype() const;
+  std::optional<numpy_dtypet> runtime_fill_dtype() const;
+  typet string_element_type(std::size_t literal_width) const;
+  std::optional<exprt> full_of_array_fill(
+    const std::vector<std::size_t> &dims,
+    const nlohmann::json &fill_node);
+  std::optional<std::vector<nlohmann::json>>
+  narrow_float_mean_nodes(const nlohmann::json &operand) const;
+  std::optional<exprt> try_narrow_float_mean();
+  exprt full_of_literal_array(
+    const std::vector<std::size_t> &dims,
+    const nlohmann::json &fill);
+  std::optional<exprt> try_narrow_operand_call(const std::string &function);
+  std::optional<std::vector<nlohmann::json>>
+  complex_element_nodes(const nlohmann::json &operand);
+  std::optional<nlohmann::json>
+  complex_reducer_operand(const std::string &function) const;
+  std::optional<exprt> try_complex_reducer(const std::string &function);
+  exprt complex_truth_reduce(
+    const std::string &function,
+    const std::vector<nlohmann::json> &nodes);
+  exprt complex_value_reduce(
+    const std::string &function,
+    const std::vector<nlohmann::json> &nodes);
+  bool is_narrow_operand(const nlohmann::json &arg) const;
+  bool has_narrow_operand() const;
+  std::optional<exprt> narrow_ufunc_as_operator(const std::string &function);
+  std::optional<exprt>
+  call_with_narrow_constructors_bound(const std::string &function);
   size_t get_dtype_size() const;
 
   // `*_like`'s element type from dtype= (an override) or the base array's

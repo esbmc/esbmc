@@ -394,7 +394,6 @@ regression/numpy/bool_mask_reassigned_success
 regression/numpy/bool_mask_rows_allfalse_edge
 regression/numpy/column_slice_reverse_edge
 regression/numpy/column_slice_zero_step_fail
-regression/numpy/complex_real_imag_success
 regression/numpy/concatenate_axis0_success
 regression/numpy/concatenate_shape_mismatch_fail
 regression/numpy/constructor_materialize_module_alias_fail
@@ -411,7 +410,6 @@ regression/numpy/elementwise_1d_success
 regression/numpy/empty_list_shape_success
 regression/numpy/empty_named_shape_success
 regression/numpy/empty_no_shape_fail
-regression/numpy/empty_object_dtype_fail
 regression/numpy/empty_zero_size_edge
 regression/numpy/fancy_index_var_reassigned_fail
 regression/numpy/flatten_constructor_unsupported_fail
@@ -1713,7 +1711,6 @@ regression/python/strict-type-checking_fail
 regression/python/string-format-map-empty_fail
 regression/python/github_7081_map
 regression/python-contracts/clause_call_fail
-regression/numpy/symbolic_shape_inconsistent_rank_fail
 regression/python/github_3593
 regression/numpy/view_escape_function_call_success
 regression/python/github_3701_14

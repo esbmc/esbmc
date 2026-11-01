@@ -1,5 +1,6 @@
 #pragma once
 
+#include <python-frontend/numpy/numpy_dtype.h>
 #include <array>
 #include <deque>
 #include <functional>
@@ -49,6 +50,10 @@ class get_expr_depth_guard;
 // Defined in converter_stmt.cpp; shared with numpy_call_expr.cpp so both can
 // verify a Name/Attribute receiver actually resolves to the imported numpy
 // module before treating a call as a numpy constructor/method.
+/// Replaces stable names for slices and rows of literal numpy string arrays by
+/// their source, whose storage they share.
+void alias_numpy_string_views(nlohmann::json &ast);
+
 bool is_imported_numpy_module_alias(
   const nlohmann::json &ast,
   const std::string &name);
@@ -1331,6 +1336,31 @@ private:
   // A numpy array parameter decays to a pointer; element-wise arithmetic
   // reads it back through its pre-decay array type.
   exprt numpy_param_as_array(const exprt &operand) const;
+  exprt
+  numpy_view_operand_as_array(const nlohmann::json &node, const exprt &operand);
+  void numpy_view_operands_as_arrays(
+    const nlohmann::json &element,
+    const nlohmann::json &left,
+    const nlohmann::json &right,
+    exprt &lhs,
+    exprt &rhs);
+  std::optional<exprt> numpy_string_elementwise_compare(
+    const nlohmann::json &element,
+    const exprt &lhs,
+    const exprt &rhs);
+  std::optional<exprt> numpy_equality_result(
+    const std::string &op,
+    const nlohmann::json &element,
+    const exprt &lhs,
+    const exprt &rhs);
+  void hoist_complex_view_reads(exprt &lhs, exprt &rhs);
+  std::optional<exprt> try_numpy_attribute_expr(const nlohmann::json &element);
+  bool store_through_numpy_view(
+    const nlohmann::json &target,
+    const exprt &lhs,
+    const exprt &rhs,
+    const locationt &location,
+    codet &target_block);
   exprt snapshot_left_operand(
     const nlohmann::json &left,
     const exprt &lhs,
@@ -1416,6 +1446,35 @@ private:
   // case, to keep that function's own decision count down.
   std::optional<typet>
   numpy_elementwise_return_type(const nlohmann::json &func_def) const;
+  std::optional<typet> numpy_narrow_read_type(
+    const nlohmann::json &arg,
+    const std::string &enclosing) const;
+  std::optional<typet> numpy_scalar_param_type(
+    const std::string &func_name,
+    std::size_t param_index) const;
+  std::optional<typet> numpy_scalar_of_binop(
+    const nlohmann::json &function_node,
+    const nlohmann::json &value) const;
+  std::optional<typet> numpy_scalar_of_element(
+    const nlohmann::json &function_node,
+    const nlohmann::json &value) const;
+  void record_numpy_scalar_return(
+    const nlohmann::json &function_node,
+    code_typet &type,
+    symbolt &function);
+  void apply_numpy_scalar_param_type(
+    const std::string &arg_name,
+    bool numpy_array_param,
+    const std::string &function,
+    std::size_t index,
+    typet &arg_type) const;
+  std::optional<typet> numpy_scalar_of_returned(
+    const nlohmann::json &function_node,
+    const nlohmann::json &value) const;
+  std::optional<typet>
+  numpy_scalar_return_type(const nlohmann::json &function_node) const;
+  // Functions whose every return is one narrow element.
+  std::map<std::string, typet> numpy_scalar_returns_;
   std::optional<typet> try_infer_numpy_array_arg_type(
     const nlohmann::json &arg,
     const nlohmann::json &module_body) const;
@@ -2335,6 +2394,10 @@ private:
   nlohmann::json
   bind_to_fresh_name(const nlohmann::json &value, const std::string &prefix);
   std::optional<exprt> try_lowered_compare(const nlohmann::json &element);
+  std::optional<exprt> try_get_numpy_storage_attr(
+    const nlohmann::json &base,
+    const std::string &attr);
+  std::optional<exprt> try_numpy_dtype_compare(const nlohmann::json &element);
   std::optional<exprt>
   try_chained_compare_with_call(const nlohmann::json &element);
   nlohmann::json chained_compare_as_pairs(const nlohmann::json &element);
@@ -2470,7 +2533,7 @@ private:
   bool takes_numpy_view_argument(const nlohmann::json &call, std::size_t index);
   bool is_rank1_numpy_view(const nlohmann::json &node) const;
   bool is_rank1_numpy_array_name(const nlohmann::json &node) const;
-  void reject_builtin_over_complex_array(const nlohmann::json &node) const;
+  void reject_builtin_over_opaque_array(const nlohmann::json &node);
   bool is_foldable_constant_index(const exprt &expr) const;
   bool adapt_numpy_view_builtin_arguments(nlohmann::json &node);
   std::optional<nlohmann::json>
@@ -2649,9 +2712,8 @@ private:
 
   /// Raise Python's TypeError for item assignment on an immutable container,
   /// reporting whether `container_type` is one.
-  bool reject_immutable_item_assignment(
-    const typet &container_type,
-    codet &target_block);
+  bool
+  reject_immutable_item_assignment(const exprt &container, codet &target_block);
 
   void record_numpy_view_copy(const exprt &lhs, const nlohmann::json &rhs_node);
   std::string numpy_view_source_of(const std::string &storage_id) const;
@@ -3171,7 +3233,36 @@ private:
     const std::string &op,
     const exprt &lhs,
     const exprt &rhs,
+    const nlohmann::json &left,
+    const nlohmann::json &right,
     const locationt &location);
+  bool is_numpy_valued_node(const nlohmann::json &node) const;
+  bool
+  is_weak_numpy_operand(const nlohmann::json &node, const typet &type) const;
+  exprt raise_if_outside_numpy_integer(
+    const exprt &value,
+    const typet &element,
+    const typet &result_type,
+    const locationt &location);
+  exprt numpy_complex_element_op(
+    const std::string &op,
+    const exprt &x,
+    const exprt &y,
+    const typet &type);
+  exprt numpy_complex_quotient(const exprt &x, const exprt &y, const typet &dt);
+  exprt numpy_or_array_operation(
+    const std::string &op,
+    exprt &lhs,
+    exprt &rhs,
+    const nlohmann::json &left,
+    const nlohmann::json &right,
+    const nlohmann::json &element);
+  void cast_weak_float_compare(
+    const std::string &op,
+    exprt &lhs,
+    exprt &rhs,
+    const nlohmann::json &left,
+    const nlohmann::json &right) const;
   void
   guard_negative_exponents(const exprt &exponents, const locationt &location);
   exprt numpy_elementwise(
@@ -3948,6 +4039,51 @@ private:
   /// an argument adds its class too.
   std::set<std::string> base_ctor_called;
   bool build_static_lists = false;
+  exprt get_expr_without_lhs(const nlohmann::json &node);
+  std::optional<numpy_dtypet> numpy_array_dtype(const nlohmann::json &base);
+  void reject_unmodelled_array_method(const nlohmann::json &call);
+  void reject_numpy_scalar_crossing(
+    const typet &type,
+    const std::string &action) const;
+  void reject_unsafe_numpy_string_slice(const nlohmann::json &array) const;
+  void reject_unsafe_numpy_string_binding(
+    const nlohmann::json &value,
+    const exprt &lhs);
+  void reject_numpy_scalars_in_container(const nlohmann::json &assign);
+  void reject_numpy_scalar_return(const nlohmann::json &value);
+  void reject_numpy_scalar_read(
+    const nlohmann::json &value,
+    const std::string &action);
+  void
+  reject_numpy_scalar_in_attribute(const exprt &lhs, const exprt &rhs) const;
+  void reject_subscript_of_unmodelled_method(const nlohmann::json &element);
+  void reject_narrow_method_result_operands(
+    const std::string &op,
+    const exprt &lhs,
+    const exprt &rhs,
+    const nlohmann::json &left,
+    const nlohmann::json &right);
+  exprt raise_if_weak_store_outside(
+    const exprt &rhs,
+    const typet &element,
+    const nlohmann::json &value);
+  std::optional<numpy_dtypet>
+  constructor_keyword_dtype(const nlohmann::json &call) const;
+  typet literal_call_array_type(
+    const nlohmann::json &call,
+    const std::optional<numpy_dtypet> &dtype) const;
+  bool is_narrow_builtin_sum(const nlohmann::json &node);
+  const nlohmann::json *
+  numpy_element_annotation(const nlohmann::json &function_node) const;
+  std::optional<exprt>
+  try_numpy_string_membership(const nlohmann::json &element);
+  /// `b = a[0]` keeps the scalar's dtype; rebinding such a name rejects.
+  void bind_numpy_scalar_name(
+    const nlohmann::json &target,
+    symbolt *symbol,
+    exprt &lhs,
+    const exprt &rhs);
+  exprt numpy_narrow_unary(const std::string &op, const exprt &operand);
   /// The element type a numpy constructor's dtype= gives the static array
   /// get_static_array builds; empty when the literal's own type is used.
   typet numpy_element_type;

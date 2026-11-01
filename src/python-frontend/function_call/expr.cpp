@@ -9,6 +9,8 @@
 #include <python-frontend/math/python_int_overflow.h>
 #include <python-frontend/math/python_math.h>
 #include <python-frontend/numpy/numpy_reducer_shared.h>
+#include <python-frontend/numpy/numpy_call_expr.h>
+#include <python-frontend/numpy/numpy_dtype.h>
 #include <util/base/host_rounding_mode.h>
 #include <python-frontend/exception/python_exception_handler.h>
 #include <python-frontend/python-list/python_list.h>
@@ -1234,8 +1236,8 @@ exprt function_call_expr::build_constant_from_arg() const
     // (char-element) operand: a bytes literal serialises to an identical
     // Constant JSON, but tuple(b"ab") is (97, 98) in CPython — its operand type
     // is an int array (not char), so it correctly falls through to the error.
-    const bool is_string_operand =
-      (et.is_array() || et.is_pointer()) && et.subtype() == char_type();
+    const bool is_string_operand = (et.is_array() || et.is_pointer()) &&
+                                   type_utils::is_char_storage(et.subtype());
     std::string str_val;
     if (
       is_string_operand &&
@@ -3720,72 +3722,177 @@ bool function_call_expr::is_numpy_astype_call() const
   return function_id_.get_function() == "astype";
 }
 
-// Resolve the dtype argument to a target typet. Accepts np.float64-style
-// attribute access, bare type names (float/int/bool), and string literals
-// ("float64"); mirrors the dtype vocabulary already used for np.array(...,
-// dtype=...) and np.zeros(..., dtype=...) (see numpy_call_expr.cpp), but
-// kept local since astype's dtype is a positional arg, not a kwarg.
-static typet resolve_astype_target_type(const nlohmann::json &dtype_node)
+// The target element type, by the same normalization as a constructor's dtype=.
+static typet resolve_astype_target_type(
+  const nlohmann::json &dtype_node,
+  const nlohmann::json &ast)
 {
-  std::string name;
-  if (
-    dtype_node.value("_type", std::string()) == "Attribute" &&
-    dtype_node.contains("attr"))
-    name = dtype_node["attr"].get<std::string>();
-  else if (
-    dtype_node.value("_type", std::string()) == "Name" &&
-    dtype_node.contains("id"))
-    name = dtype_node["id"].get<std::string>();
-  else if (
-    dtype_node.value("_type", std::string()) == "Constant" &&
-    dtype_node.contains("value") && dtype_node["value"].is_string())
-    name = dtype_node["value"].get<std::string>();
-  else
+  const std::string kind = dtype_node.value("_type", std::string());
+  const bool spelled = kind == "Attribute" || kind == "Name" ||
+                       (kind == "Constant" && dtype_node.contains("value") &&
+                        dtype_node["value"].is_string());
+  if (!spelled)
     throw std::runtime_error(
       "TypeError: astype() requires a dtype argument (e.g. np.float64, "
       "float, int, bool)");
-
-  static const std::unordered_map<std::string, std::string> aliases = {
-    {"bool_", "bool"},
-    {"int_", "int64"},
-    {"int", "int64"},
-    {"uint_", "uint64"},
-    {"uint", "uint64"},
-    {"float_", "float64"},
-    {"float", "float64"}};
-  auto alias_it = aliases.find(name);
-  if (alias_it != aliases.end())
-    name = alias_it->second;
-
-  if (name == "bool")
-    return bool_type();
-  if (name == "int8")
-    return signedbv_typet(8);
-  if (name == "int16")
-    return signedbv_typet(16);
-  if (name == "int32")
-    return signedbv_typet(32);
-  if (name == "int64")
-    return signedbv_typet(64);
-  if (name == "uint8")
-    return unsignedbv_typet(8);
-  if (name == "uint16")
-    return unsignedbv_typet(16);
-  if (name == "uint32")
-    return unsignedbv_typet(32);
-  if (name == "uint64")
-    return unsignedbv_typet(64);
-  if (name == "float32")
-    return build_float_type(32);
-  if (name == "float64")
-    return build_float_type(64);
-
-  if (name == "complex64" || name == "complex128" || name == "complex")
+  std::string name = kind == "Name" ? dtype_node.value("id", "") : "";
+  try
+  {
+    name = extract_numpy_dtype_name(dtype_node, ast);
+  }
+  catch (const std::runtime_error &)
+  {
+    if (kind != "Name")
+      throw;
+  }
+  const auto dtype = numpy_dtype_from_name(name);
+  if (!dtype || dtype->kind == numpy_dtypet::kindt::string)
     throw std::runtime_error(
-      "TypeError: astype() to a complex dtype is not supported");
+      "TypeError: astype() target dtype '" + name + "' is not supported");
+  return dtype->element_type();
+}
 
+// The dtype a target spelled as a string dtype gives over elements of @p
+// source: a bare `str` holds what NumPy reserves for any value of the source's
+// dtype.
+static std::optional<std::size_t> astype_string_width(
+  const nlohmann::json &dtype_node,
+  const nlohmann::json &ast,
+  const typet &source)
+{
+  std::string name;
+  try
+  {
+    name = extract_numpy_dtype_name(dtype_node, ast);
+  }
+  catch (const std::runtime_error &)
+  {
+    name = dtype_node.value("id", "");
+  }
+  const auto dtype = numpy_dtype_from_name(name);
+  if (!dtype || dtype->kind != numpy_dtypet::kindt::string)
+    return std::nullopt;
+  if (dtype->bits)
+    return dtype->bits / 32;
+  if (source.is_bool())
+    return 5;
+  if (source.is_array())
+  {
+    BigInt capacity;
+    to_integer(to_array_type(source).size(), capacity);
+    return capacity.to_uint64() - 1;
+  }
+  if (source.is_signedbv() || source.is_unsignedbv())
+  {
+    static const std::map<std::size_t, std::size_t> digits = {
+      {8, 4}, {16, 6}, {32, 11}, {64, 21}};
+    return digits.at(bv_width(source)) - (source.is_unsignedbv() ? 1 : 0);
+  }
   throw std::runtime_error(
-    "TypeError: astype() target dtype '" + name + "' is not supported");
+    "TypeError: astype(str) of this numpy dtype is not supported");
+}
+
+// `a.astype(str)`: each cell holds the first characters of str(element), up to
+// the terminator str() wrote.
+exprt function_call_expr::numpy_astype_to_string(
+  const nlohmann::json &receiver,
+  const exprt &source,
+  std::size_t width) const
+{
+  const locationt location = converter_.get_location_from_decl(call_);
+  const auto &array = to_array_type(source.type());
+  BigInt length;
+  if (to_integer(array.size(), length))
+    throw std::runtime_error(
+      "TypeError: astype(str) of an array of run-time length is not supported");
+  const typet cell = type_handler_.build_array(char_type(), width + 1);
+  const typet result_type = type_handler_.build_array(cell, length.to_uint64());
+  symbolt &result = converter_.create_tmp_symbol(
+    call_, "$astype_str$", result_type, gen_zero(result_type));
+  code_declt decl(build_symbol(result));
+  decl.operands().push_back(gen_zero(result_type));
+  decl.location() = location;
+  converter_.add_instruction(decl);
+  const bool integer =
+    array.subtype().is_signedbv() || array.subtype().is_unsignedbv();
+  for (long long i = 0; i < length.to_int64(); ++i)
+  {
+    nlohmann::json read = {
+      {"_type", "Subscript"},
+      {"value", receiver},
+      {"slice", {{"_type", "Constant"}, {"value", i}}}};
+    converter_.copy_location_fields_from_decl(call_, read);
+    converter_.copy_location_fields_from_decl(call_, read["slice"]);
+    const auto builtin = [&](const char *name, const nlohmann::json &argument) {
+      nlohmann::json applied = {
+        {"_type", "Call"},
+        {"func",
+         {{"_type", "Name"}, {"id", name}, {"ctx", {{"_type", "Load"}}}}},
+        {"args", nlohmann::json::array({argument})},
+        {"keywords", nlohmann::json::array()}};
+      converter_.copy_location_fields_from_decl(call_, applied);
+      converter_.copy_location_fields_from_decl(call_, applied["func"]);
+      return applied;
+    };
+    const exprt text = converter_.get_expr(
+      array.subtype().is_array()
+        ? read
+        : builtin("str", integer ? builtin("int", read) : read));
+    const typet text_type =
+      text.type().is_array() ? pointer_typet(char_type()) : text.type();
+    symbolt &chars =
+      converter_.create_tmp_symbol(call_, "$astype_text$", text_type, exprt());
+    code_declt chars_decl(build_symbol(chars));
+    chars_decl.location() = location;
+    converter_.add_instruction(chars_decl);
+    if (text.id() == "code" && text.get("statement") == "function_call")
+    {
+      code_function_callt bound = to_code_function_call(to_code(text));
+      bound.lhs() = build_symbol(chars);
+      converter_.add_instruction(bound);
+    }
+    else
+    {
+      code_assignt bound(
+        build_symbol(chars),
+        text.type().is_array() ? address_of_exprt(index_exprt(
+                                   text, gen_zero(size_type()), char_type()))
+                               : text);
+      bound.location() = location;
+      converter_.add_instruction(bound);
+    }
+    symbolt &ended = converter_.create_tmp_symbol(
+      call_, "$astype_ended$", bool_type(), gen_boolean(false));
+    code_declt ended_decl(build_symbol(ended));
+    ended_decl.operands().push_back(gen_boolean(false));
+    ended_decl.location() = location;
+    converter_.add_instruction(ended_decl);
+    const exprt target_cell =
+      index_exprt(build_symbol(result), from_integer(i, size_type()), cell);
+    for (std::size_t j = 0; j < width; ++j)
+    {
+      const exprt character = dereference_exprt(
+        build_add(build_symbol(chars), from_integer(j, size_type()), text_type),
+        char_type());
+      code_blockt copy;
+      code_assignt stop(
+        build_symbol(ended), equality_exprt(character, gen_zero(char_type())));
+      stop.location() = location;
+      copy.copy_to_operands(stop);
+      code_assignt store(
+        index_exprt(target_cell, from_integer(j, size_type()), char_type()),
+        character);
+      store.location() = location;
+      copy.copy_to_operands(store);
+      code_ifthenelset unfinished;
+      unfinished.cond() = not_exprt(build_symbol(ended));
+      unfinished.then_case() = copy;
+      unfinished.location() = location;
+      converter_.add_instruction(unfinished);
+    }
+  }
+  converter_.numpy_result_is_fresh_copy_ = true;
+  return build_symbol(result);
 }
 
 exprt function_call_expr::handle_numpy_astype() const
@@ -3805,12 +3912,39 @@ exprt function_call_expr::handle_numpy_astype() const
       "TypeError: astype() is only supported on numpy arrays");
 
   const array_typet &src_array = static_cast<const array_typet &>(arr_type);
+  if (type_utils::is_numpy_string_array(arr_type))
+  {
+    const auto width = astype_string_width(
+      call_["args"][0], converter_.ast(), src_array.subtype());
+    if (
+      !width || src_array.subtype().subtype().is_array() ||
+      call_["func"]["value"].value("_type", "") != "Name")
+      throw std::runtime_error(
+        "TypeError: astype() of a numpy string array to this dtype is not "
+        "supported");
+    return numpy_astype_to_string(call_["func"]["value"], arr_expr, *width);
+  }
   if (ns.follow(src_array.subtype()).is_array())
     throw std::runtime_error(
       "TypeError: astype() on a multi-dimensional array is not supported "
       "yet; cast the innermost rows individually");
 
-  const typet target_type = resolve_astype_target_type(call_["args"][0]);
+  if (
+    const auto width = astype_string_width(
+      call_["args"][0], converter_.ast(), src_array.subtype()))
+  {
+    if (call_["func"]["value"].value("_type", "") != "Name")
+      throw std::runtime_error(
+        "TypeError: astype(str) of an unnamed array is not supported");
+    return numpy_astype_to_string(call_["func"]["value"], arr_expr, *width);
+  }
+
+  const typet target_type =
+    resolve_astype_target_type(call_["args"][0], converter_.ast());
+  if (is_complex_type(src_array.subtype()) && !is_complex_type(target_type))
+    throw std::runtime_error(
+      "TypeError: astype() from a complex dtype to a real one is not "
+      "supported");
   const locationt location = converter_.get_location_from_decl(call_);
 
   array_typet result_type(target_type, src_array.size());
@@ -3834,7 +3968,13 @@ exprt function_call_expr::handle_numpy_astype() const
 
   exprt src_elem =
     build_index(arr_expr, build_symbol(index_var), src_array.subtype());
-  exprt casted_elem = build_typecast(src_elem, target_type);
+  const exprt complex_elem = promote_to_complex(src_elem);
+  exprt casted_elem = is_complex_type(target_type)
+                        ? complex_as_element(
+                            complex_part(complex_elem, "real"),
+                            complex_part(complex_elem, "imag"),
+                            target_type)
+                        : build_typecast(src_elem, target_type);
   exprt dest_elem =
     build_index(build_symbol(result_sym), build_symbol(index_var), target_type);
 
@@ -3857,6 +3997,11 @@ exprt function_call_expr::handle_numpy_astype() const
   while_stmt.location() = location;
   converter_.add_instruction(while_stmt);
 
+  if (converter_.current_lhs)
+  {
+    converter_.current_lhs->type() = result_type;
+    converter_.update_symbol(*converter_.current_lhs);
+  }
   return build_symbol(result_sym);
 }
 
@@ -3950,7 +4095,7 @@ exprt function_call_expr::handle_list_append() const
   // generic array path; build_push_list_call then takes their address.
   if (
     !value_to_append.is_constant() && value_to_append.type().is_array() &&
-    value_to_append.type().subtype() == char_type())
+    type_utils::is_char_storage(value_to_append.type().subtype()))
   {
     const array_typet &array_type = to_array_type(value_to_append.type());
     if (array_type.size().is_constant())
@@ -4353,8 +4498,8 @@ exprt function_call_expr::handle_cmath_inverse_fast_path()
   model_call.location() = converter_.get_location_from_decl(call_);
 
   python_math &math = converter_.get_math_handler();
-  exprt zr = build_member(z, "real", double_type());
-  exprt zi = build_member(z, "imag", double_type());
+  exprt zr = complex_part(z, "real");
+  exprt zi = complex_part(z, "imag");
   exprt zero = from_double(0.0, double_type());
   // V.3: build the pure-imaginary guard (zr == 0) in IREP2.
   expr2tc zr2, zero2;
@@ -5311,6 +5456,8 @@ exprt function_call_expr::get()
 {
   if (std::optional<exprt> raise = check_explicit_super())
     return *raise;
+  if (std::optional<exprt> number = try_int_of_numpy_scalar())
+    return *number;
 
   // Use dispatch table to handle special function types
   auto dispatch_table = get_dispatch_table();
@@ -5336,6 +5483,77 @@ function_call_expr::find_receiver_symbol(symbol_id &obj_symbol_id) const
   obj_symbol_id.set_object(caller);
   return converter_.follow_retype_alias(
     converter_.find_symbol(obj_symbol_id.to_string()));
+}
+
+// `sum(a)` over a narrow array: Python adds the elements to 0, a weak int, so
+// the running total stays at the element's width rather than the reducer's.
+std::optional<exprt> function_call_expr::try_builtin_sum_over_numpy_scalars()
+{
+  const auto &args = call_["args"];
+  if (
+    function_id_.get_function() != "sum" || args.size() != 1 ||
+    args[0].value("_type", "") != "Name" ||
+    !try_find_function(converter_.ast()["body"], "sum").empty())
+    return std::nullopt;
+  const std::string id =
+    converter_.resolve_name_symbol_id(args[0].value("id", ""));
+  const symbolt *symbol = converter_.symbol_table().find_symbol(id);
+  const typet type =
+    symbol ? converter_.ns.follow(symbol->get_type()) : typet();
+  if (
+    !type.is_array() ||
+    (!type_utils::is_numpy_scalar_type(type_utils::array_scalar_type(type)) &&
+     !type_utils::is_numpy_complex_array(type)))
+    return std::nullopt;
+  BigInt length;
+  if (to_integer(to_array_type(type).size(), length))
+    return std::nullopt;
+  nlohmann::json total = {{"_type", "Constant"}, {"value", 0}};
+  converter_.copy_location_fields_from_decl(call_, total);
+  for (long long i = 0; i < length.to_int64(); ++i)
+  {
+    nlohmann::json index = {{"_type", "Constant"}, {"value", i}};
+    nlohmann::json item = {
+      {"_type", "Subscript"}, {"value", args[0]}, {"slice", index}};
+    nlohmann::json sum = {
+      {"_type", "BinOp"},
+      {"left", total},
+      {"op", {{"_type", "Add"}}},
+      {"right", item}};
+    converter_.copy_location_fields_from_decl(call_, index);
+    converter_.copy_location_fields_from_decl(call_, item);
+    converter_.copy_location_fields_from_decl(call_, sum);
+    total = std::move(sum);
+  }
+  return converter_.get_expr(total);
+}
+
+// int(x) of a narrow scalar is a Python int, no longer wrapping at the width.
+std::optional<exprt> function_call_expr::try_int_of_numpy_scalar()
+{
+  const auto &args = call_["args"];
+  const std::string &function = function_id_.get_function();
+  const bool text = function == "str" || function == "repr";
+  if (
+    (function != "int" && function != "float" && !text) || args.size() != 1 ||
+    args[0].value("_type", "") != "Subscript" ||
+    json_utils::ast_contains_call(args[0]))
+    return std::nullopt;
+  const exprt value = converter_.get_expr(args[0]);
+  if (text)
+  {
+    converter_.reject_numpy_scalar_crossing(value.type(), function + "() of");
+    return std::nullopt;
+  }
+  if (is_complex_type(converter_.ns.follow(value.type())))
+    throw std::runtime_error(
+      "TypeError: " + function + "() of a complex number is not supported");
+  if (function != "int" || !type_utils::is_numpy_numeric_element(value.type()))
+    return std::nullopt;
+  if (value.type().is_unsignedbv() && bv_width(value.type()) == 64)
+    throw std::runtime_error(
+      "TypeError: int() of a numpy uint64 scalar is not supported");
+  return typecast_exprt(value, long_long_int_type());
 }
 
 exprt function_call_expr::handle_general_function_call()
@@ -5859,6 +6077,8 @@ std::optional<exprt> function_call_expr::try_numpy_tolist_or_inplace_sort()
 {
   if (std::optional<exprt> materialized = try_materialize_numpy_tolist())
     return materialized;
+  if (std::optional<exprt> summed = try_builtin_sum_over_numpy_scalars())
+    return summed;
   return try_numpy_inplace_sort();
 }
 
@@ -6373,7 +6593,9 @@ std::optional<exprt> function_call_expr::try_fold_identity_array_return()
   typet innermost = converter_.ns.follow(element_candidate);
   while (innermost.is_array())
     innermost = converter_.ns.follow(to_array_type(innermost).subtype());
-  if (innermost == char_type())
+  if (
+    type_utils::is_char_storage(innermost) &&
+    !type_utils::is_numpy_string_array(element_candidate))
     return std::nullopt;
 
   return ret_expr;
@@ -6697,8 +6919,10 @@ std::optional<exprt> function_call_expr::apply_builtin_dispatch(
       if (elem_type.is_floatbv())
         actual_func_name += "_float";
       else if (
-        (elem_type.is_pointer() && elem_type.subtype() == char_type()) ||
-        (elem_type.is_array() && elem_type.subtype() == char_type()))
+        (elem_type.is_pointer() &&
+         type_utils::is_char_storage(elem_type.subtype())) ||
+        (elem_type.is_array() &&
+         type_utils::is_char_storage(elem_type.subtype())))
         actual_func_name += "_str";
       // Integer types use base name without suffix
     }
@@ -7812,20 +8036,6 @@ typet function_call_expr::dict_param_value_type(const symbolt *func, size_t idx)
     fn["args"]["args"][idx].value("annotation", nlohmann::json()));
 }
 
-// A numpy string or complex array is read only element by element; a callee
-// would read its storage as numbers.
-static void reject_unmodelled_numpy_array_argument(const typet &type)
-{
-  if (type_utils::is_numpy_string_array(type))
-    throw std::runtime_error(
-      "TypeError: passing a numpy string array to a function is not "
-      "supported");
-  if (type_utils::is_numpy_complex_array(type))
-    throw std::runtime_error(
-      "TypeError: passing a numpy complex array to a function is not "
-      "supported");
-}
-
 std::optional<exprt> function_call_expr::build_positional_arguments(
   code_function_callt &call,
   size_t param_offset,
@@ -7882,7 +8092,8 @@ std::optional<exprt> function_call_expr::build_positional_arguments(
 
       // Handle character-to-string-pointer conversion
       if (
-        param_type.is_pointer() && param_type.subtype() == char_type() &&
+        param_type.is_pointer() &&
+        type_utils::is_char_storage(param_type.subtype()) &&
         (arg.type().is_signedbv() || arg.type().is_unsignedbv()) &&
         arg.type() == char_type())
       {
@@ -7947,7 +8158,7 @@ std::optional<exprt> function_call_expr::build_positional_arguments(
       typet arg_followed_type = converter_.ns.follow(arg.type());
       if (
         param_type.is_pointer() && param_type.subtype().is_array() &&
-        param_type.subtype().subtype() == char_type() &&
+        type_utils::is_char_storage(param_type.subtype().subtype()) &&
         arg_followed_type.is_struct())
       {
         if (!arg.is_symbol())
@@ -8180,7 +8391,7 @@ std::optional<exprt> function_call_expr::build_positional_arguments(
     }
 
     reject_list_for_numpy_parameter(arg.type(), params, param_idx);
-    reject_unmodelled_numpy_array_argument(arg.type());
+    reject_scalar_crossing_into_parameter(arg.type(), params, param_idx);
 
     // All array function arguments (e.g. bytes type) are handled as pointers.
     if (arg.type().is_array())
@@ -8194,8 +8405,8 @@ std::optional<exprt> function_call_expr::build_positional_arguments(
       // bug (no regression relied on this, since it never worked). Reject it
       // explicitly rather than emit an unsound cast.
       if (
-        arg.type().subtype() != char_type() && param_idx < params.size() &&
-        params[param_idx].type().is_pointer())
+        !type_utils::is_char_storage(arg.type().subtype()) &&
+        param_idx < params.size() && params[param_idx].type().is_pointer())
       {
         const typet &target =
           converter_.ns.follow(params[param_idx].type().subtype());
@@ -8249,6 +8460,15 @@ std::optional<exprt> function_call_expr::build_positional_arguments(
 
 // A list where a numpy array parameter is expected would be read as the
 // array's elements.
+void function_call_expr::reject_scalar_crossing_into_parameter(
+  const typet &arg_type,
+  const code_typet::argumentst &params,
+  std::size_t param_idx) const
+{
+  if (param_idx >= params.size() || params[param_idx].type() != arg_type)
+    converter_.reject_numpy_scalar_crossing(arg_type, "passing");
+}
+
 void function_call_expr::reject_list_for_numpy_parameter(
   const typet &arg_type,
   const code_typet::argumentst &params,
@@ -8478,7 +8698,7 @@ exprt function_call_expr::finalize_call(
         // Check if default value is a string array type
         if (
           default_val.type().is_array() &&
-          default_val.type().subtype() == char_type())
+          type_utils::is_char_storage(default_val.type().subtype()))
         {
           // For constant string arrays, convert to string_constantt to ensure
           // proper initialization

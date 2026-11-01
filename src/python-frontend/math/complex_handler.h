@@ -93,6 +93,16 @@ public:
   exprt normalize_numeric_expr(const exprt &value) const;
 
 private:
+  exprt compare_complex64_with_number(
+    const std::string &op,
+    const exprt &lhs,
+    const exprt &rhs,
+    const nlohmann::json &element) const;
+  exprt numpy_complex_operation(
+    const std::string &op,
+    const exprt &lhs,
+    const exprt &rhs,
+    const nlohmann::json &element) const;
   python_converter &converter_;
   contextt &symbol_table_;
   type_handler &type_handler_;

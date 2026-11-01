@@ -721,12 +721,14 @@ exprt function_call_expr::handle_isinstance() const
     // char-pointer (a Python str), short-circuit to true here.
     if (
       expected_type.is_array() &&
-      to_array_type(expected_type).subtype() == char_type())
+      type_utils::is_char_storage(to_array_type(expected_type).subtype()))
     {
       const typet &obj_type = obj_expr.type();
       if (
-        (obj_type.is_array() && obj_type.subtype() == char_type()) ||
-        (obj_type.is_pointer() && obj_type.subtype() == char_type()))
+        (obj_type.is_array() &&
+         type_utils::is_char_storage(obj_type.subtype())) ||
+        (obj_type.is_pointer() &&
+         type_utils::is_char_storage(obj_type.subtype())))
         return type_name == "type" ? isinstance_str_as_type(obj_expr)
                                    : true_exprt();
     }
@@ -2343,7 +2345,7 @@ exprt function_call_expr::handle_complex() const
         {
           const typet &elem_type = symbol_type.subtype();
           const bool is_textual_char_array =
-            elem_type == char_type() ||
+            type_utils::is_char_storage(elem_type) ||
             (elem_type.is_signedbv() &&
              to_signedbv_type(elem_type).get_width() == 8) ||
             (elem_type.is_unsignedbv() &&
@@ -2585,10 +2587,10 @@ exprt function_call_expr::handle_complex() const
   real_arg = promote_to_complex(real_arg);
   imag_arg = promote_to_complex(imag_arg);
 
-  exprt a = build_member(real_arg, "real", double_type());
-  exprt b = build_member(real_arg, "imag", double_type());
-  exprt c = build_member(imag_arg, "real", double_type());
-  exprt d = build_member(imag_arg, "imag", double_type());
+  exprt a = complex_part(real_arg, "real");
+  exprt b = complex_part(real_arg, "imag");
+  exprt c = complex_part(imag_arg, "real");
+  exprt d = complex_part(imag_arg, "imag");
 
   exprt real_part("ieee_sub", double_type());
   real_part.copy_to_operands(a, d);

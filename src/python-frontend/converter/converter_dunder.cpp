@@ -381,11 +381,37 @@ exprt python_converter::dispatch_dunder_operator(
   return nil_exprt();
 }
 
+static void
+reject_unmodelled_numpy_unary(const std::string &op, const typet &type)
+{
+  const bool strings = type_utils::is_numpy_string_array(type);
+  const bool complex_view =
+    type.is_pointer() &&
+    is_complex_type(type_utils::array_scalar_type(type.subtype()));
+  if (
+    strings || complex_view ||
+    (type_utils::is_numpy_complex_array(type) && op != "USub" && op != "UAdd"))
+    throw std::runtime_error(
+      "TypeError: numpy unary '" + op + "' over a " +
+      (strings ? "string" : "complex") + " array is not supported");
+  if (
+    op == "abs" && type.is_array() &&
+    type_utils::is_numpy_scalar_type(type_utils::array_scalar_type(type)))
+    throw std::runtime_error(
+      "TypeError: numpy.abs() over a dtype narrower than 64 bits is not "
+      "supported");
+}
+
 exprt python_converter::dispatch_unary_dunder_operator(
   const std::string &op,
   exprt &operand,
   const locationt &loc)
 {
+  reject_unmodelled_numpy_unary(op, operand.type());
+  const exprt narrow = numpy_narrow_unary(op, operand);
+  if (!narrow.is_nil())
+    return narrow;
+
   // Resolve the operand to its (pointee) struct. Under the object-model
   // migration (#3067/#4773) a class instance is a `Class*` pointer, so follow
   // it to the struct exactly as the binary dispatch does — otherwise str(obj),

@@ -3,6 +3,7 @@
 #include <python-frontend/math/bounded_math.h>
 #include <python-frontend/numpy/ndarray_shape.h>
 #include <python-frontend/numpy/numpy_call_expr.h>
+#include <python-frontend/numpy/numpy_dtype.h>
 #include <python-frontend/numpy/numpy_nditer.h>
 #include <python-frontend/numpy/numpy_random.h>
 #include <python-frontend/numpy/numpy_reducer_shared.h>
@@ -53,6 +54,8 @@ exprt np_member(const exprt &base, const irep_idt &name, const typet &t)
 {
   expr2tc base2;
   migrate_expr(base, base2);
+  if (is_complex64_type(base.type()))
+    return migrate_expr_back(complex_part(base2, name));
   return migrate_expr_back(member2tc(migrate_type(t), base2, name));
 }
 
@@ -132,11 +135,17 @@ static exprt filled_array(const typet &shape, const exprt &value)
   return array;
 }
 
-// Broadcasting an array fill over the shape is not modelled.
+static bool is_sequence_literal(const nlohmann::json &node)
+{
+  const std::string type = node.value("_type", std::string());
+  return type == "List" || type == "Tuple";
+}
+
+// Broadcasting an array fill over a shape known only at run time, or where the
+// result is read as a literal, is not modelled.
 static void reject_array_full_fill(const nlohmann::json &fill)
 {
-  const std::string type = fill.value("_type", std::string());
-  if (type == "List" || type == "Tuple")
+  if (is_sequence_literal(fill))
     throw std::runtime_error(
       "TypeError: numpy.full() with an array fill value is not supported");
 }
@@ -1286,78 +1295,6 @@ static scalar_kind get_scalar_kind(const nlohmann::json &node)
   if (node.contains("value") && node["value"].is_number_float())
     return scalar_kind::float_like;
   return scalar_kind::int_like;
-}
-
-[[maybe_unused]] static std::string
-promote_numpy_dtype(const std::string &lhs_dtype, const std::string &rhs_dtype)
-{
-  if (lhs_dtype == rhs_dtype)
-    return lhs_dtype;
-
-  auto rank = [](const std::string &dt) -> int {
-    if (dt == "bool")
-      return 0;
-    if (dt == "int8")
-      return 1;
-    if (dt == "uint8")
-      return 2;
-    if (dt == "int16")
-      return 3;
-    if (dt == "uint16")
-      return 4;
-    if (dt == "int32")
-      return 5;
-    if (dt == "uint32")
-      return 6;
-    if (dt == "int64")
-      return 7;
-    if (dt == "uint64")
-      return 8;
-    if (dt == "float16")
-      return 9;
-    if (dt == "float32")
-      return 10;
-    if (dt == "float64")
-      return 11;
-    if (dt == "complex64")
-      return 12;
-    if (dt == "complex128")
-      return 13;
-    return 7;
-  };
-
-  static const std::vector<std::string> dtype_by_rank = {
-    "bool",
-    "int8",
-    "uint8",
-    "int16",
-    "uint16",
-    "int32",
-    "uint32",
-    "int64",
-    "uint64",
-    "float16",
-    "float32",
-    "float64",
-    "complex64",
-    "complex128"};
-
-  int lr = rank(lhs_dtype);
-  int rr = rank(rhs_dtype);
-  int result = std::max(lr, rr);
-
-  // uint + signed int of same width → next larger signed int or float64
-  bool lhs_unsigned = lhs_dtype.find("uint") != std::string::npos;
-  bool rhs_unsigned = rhs_dtype.find("uint") != std::string::npos;
-  if (lhs_unsigned != rhs_unsigned && result <= 8)
-  {
-    if (result < 7)
-      result = std::min(result + 1, 7);
-    else
-      result = 11; // float64
-  }
-
-  return dtype_by_rank[static_cast<std::size_t>(result)];
 }
 
 [[maybe_unused]] static std::string scalar_kind_to_dtype(scalar_kind kind)
@@ -4459,6 +4396,19 @@ std::optional<exprt> numpy_call_expr::try_materialize_descriptor_copy_call()
   if (call_["args"].empty())
     throw std::runtime_error("TypeError: numpy.copy() requires an array");
 
+  if (is_string_operand(call_["args"][0]))
+  {
+    const exprt source = converter_.get_expr(call_["args"][0]);
+    symbolt &copy = converter_.create_tmp_symbol(
+      call_, "$numpy_string_copy$", source.type(), exprt());
+    code_declt decl(symbol_expr(copy));
+    decl.operands().push_back(source);
+    decl.location() = converter_.get_location_from_decl(call_);
+    converter_.current_block->copy_to_operands(decl);
+    converter_.numpy_result_is_fresh_copy_ = true;
+    return symbol_expr(copy);
+  }
+
   return converter_.build_numpy_descriptor_materialized_array(call_["args"][0]);
 }
 
@@ -4743,6 +4693,9 @@ std::optional<exprt> numpy_call_expr::try_argmin_argmax_axis_result(
 std::optional<exprt>
 numpy_call_expr::try_early_result(const std::string &function)
 {
+  if (std::optional<exprt> narrow = try_narrow_operand_call(function))
+    return narrow;
+
   static const std::set<std::string> model_only = {
     "remainder", "nextafter", "isclose"};
   if (std::optional<exprt> math = try_runtime_math(function))
@@ -5066,29 +5019,117 @@ static auto create_binary_op(
   return bin_op;
 }
 
+// A `U<n>` spelling as its name; `V` and `S` have no model and reject.
+static std::optional<std::string> sized_numpy_dtype(const std::string &name)
+{
+  const bool sized =
+    name.size() > 1 &&
+    std::all_of(name.begin() + 1, name.end(), [](unsigned char c) {
+      return std::isdigit(c) != 0;
+    });
+  if (name[0] == 'V' && (sized || name.size() == 1))
+    throw std::runtime_error("TypeError: numpy void dtypes are not supported");
+  if (name[0] == 'S' && (sized || name.size() == 1))
+    throw std::runtime_error("TypeError: numpy bytes dtypes are not supported");
+  if (name[0] != 'U' || !sized)
+    return std::nullopt;
+  constexpr std::size_t max_numpy_string_width = 1024;
+  const std::string digits = name.substr(1);
+  if (
+    digits.size() > 4 || std::stoul(digits) == 0 ||
+    std::stoul(digits) > max_numpy_string_width)
+    throw std::runtime_error(
+      "TypeError: numpy string width " + digits + " is not supported");
+  return name;
+}
+
+// Reduces a dtype spelling to its canonical name; a spelling it does not know
+// is returned as written. A code or width NumPy accepts but the model does not
+// is rejected specifically, never read as another dtype.
 static std::string normalize_numpy_dtype_name(const std::string &dtype)
 {
-  if (dtype == "bool" || dtype == "bool_")
-    return "bool";
-  if (dtype == "int" || dtype == "int_")
-    return "int64";
-  if (dtype == "uint" || dtype == "uint_")
-    return "uint64";
-  if (dtype == "float" || dtype == "float_")
-    return "float64";
-  if (dtype == "complex" || dtype == "complex_")
-    return "complex128";
-  if (dtype == "str_" || dtype == "unicode")
-    return "str";
-  if (dtype == "object_" || dtype == "O")
-    return "object";
-  return dtype;
+  static const std::map<std::string, std::string> aliases = {
+    {"bool_", "bool"},
+    {"?", "bool"},
+    {"b1", "bool"},
+    {"int", "int64"},
+    {"int_", "int64"},
+    {"i8", "int64"},
+    {"l", "int64"},
+    {"q", "int64"},
+    {"intp", "int64"},
+    {"longlong", "int64"},
+    {"long", "int64"},
+    {"uint", "uint64"},
+    {"uint_", "uint64"},
+    {"u8", "uint64"},
+    {"L", "uint64"},
+    {"Q", "uint64"},
+    {"uintp", "uint64"},
+    {"ulonglong", "uint64"},
+    {"ulong", "uint64"},
+    {"i1", "int8"},
+    {"b", "int8"},
+    {"byte", "int8"},
+    {"i2", "int16"},
+    {"h", "int16"},
+    {"short", "int16"},
+    {"i4", "int32"},
+    {"i", "int32"},
+    {"intc", "int32"},
+    {"u1", "uint8"},
+    {"B", "uint8"},
+    {"ubyte", "uint8"},
+    {"u2", "uint16"},
+    {"H", "uint16"},
+    {"ushort", "uint16"},
+    {"u4", "uint32"},
+    {"I", "uint32"},
+    {"uintc", "uint32"},
+    {"float", "float64"},
+    {"float_", "float64"},
+    {"f8", "float64"},
+    {"d", "float64"},
+    {"double", "float64"},
+    {"f4", "float32"},
+    {"f", "float32"},
+    {"single", "float32"},
+    {"f2", "float16"},
+    {"e", "float16"},
+    {"half", "float16"},
+    {"complex", "complex128"},
+    {"complex_", "complex128"},
+    {"c16", "complex128"},
+    {"D", "complex128"},
+    {"cdouble", "complex128"},
+    {"c8", "complex64"},
+    {"F", "complex64"},
+    {"csingle", "complex64"},
+    {"str_", "str"},
+    {"unicode", "str"},
+    {"U", "str"},
+    {"object_", "object"},
+    {"O", "object"}};
+  std::string name = dtype;
+  if (name.size() > 1 && (name[0] == '<' || name[0] == '=' || name[0] == '|'))
+    name = name.substr(1);
+  else if (name.size() > 1 && name[0] == '>')
+    throw std::runtime_error(
+      "TypeError: a non-native numpy byte order is not supported");
+  if (name.empty())
+    return name;
+  if (std::optional<std::string> sized = sized_numpy_dtype(name))
+    return *sized;
+  const auto alias = aliases.find(name);
+  return alias == aliases.end() ? name : alias->second;
 }
 
 // The scalar dtypes a constructor can store, plus object, which every
 // constructor rejects with its own diagnostic further on.
 static bool is_named_numpy_dtype(const std::string &dtype)
 {
+  if (numpy_dtype_from_name(dtype))
+    return true;
   static const std::set<std::string> names = {
     "bool",
     "int8",
@@ -5139,6 +5180,70 @@ literal_shape_dims(const nlohmann::json &elts, const std::string &function)
   return dims;
 }
 
+static bool assigns_name(
+  const nlohmann::json &node,
+  const std::string &kind,
+  const std::string &name)
+{
+  if (kind == "AnnAssign")
+    return node["target"].value("id", "") == name;
+  return kind == "Assign" && node["targets"].size() == 1 &&
+         node["targets"][0].value("id", "") == name;
+}
+
+static void count_name_bindings(
+  const nlohmann::json &node,
+  const std::string &name,
+  std::size_t &bindings,
+  const nlohmann::json *&value)
+{
+  if (node.is_object())
+  {
+    const std::string kind = node.value("_type", "");
+    if (kind == "arg" && node.value("arg", "") == name)
+      ++bindings;
+    if (
+      kind == "Name" && node.value("id", "") == name && node.contains("ctx") &&
+      node["ctx"].value("_type", "") != "Load")
+      ++bindings;
+    if (assigns_name(node, kind, name))
+      value = &node["value"];
+  }
+  if (node.is_object() || node.is_array())
+    for (const auto &child : node)
+      count_name_bindings(child, name, bindings, value);
+}
+
+// What `dt = np.int8` binds, when the program binds @p name nowhere else and to
+// a spelling reading it twice cannot evaluate anything.
+static const nlohmann::json *
+stable_dtype_binding(const nlohmann::json &ast, const std::string &name)
+{
+  std::size_t bindings = 0;
+  const nlohmann::json *value = nullptr;
+  count_name_bindings(ast, name, bindings, value);
+  if (bindings != 1 || value == nullptr)
+    return nullptr;
+  const std::string kind = value->value("_type", "");
+  return kind == "Name" || kind == "Attribute" || kind == "Constant" ? value
+                                                                     : nullptr;
+}
+
+static std::string
+dtype_of_name(const std::string &id, const nlohmann::json &ast)
+{
+  const std::string name = normalize_numpy_dtype_name(id);
+  // A program's own binding shadows a dtype code: `f = np.int8` is not float32.
+  std::size_t bindings = 0;
+  const nlohmann::json *value = nullptr;
+  count_name_bindings(ast, id, bindings, value);
+  if (bindings == 0 && is_named_numpy_dtype(name))
+    return name;
+  if (const nlohmann::json *bound = stable_dtype_binding(ast, id))
+    return extract_numpy_dtype_name(*bound, ast);
+  throw std::runtime_error("Unsupported dtype value: " + name);
+}
+
 // The single normalization of a dtype= argument: a scalar type named by a
 // builtin, a numpy attribute or a string, or a specific rejection.
 std::string extract_numpy_dtype_name(
@@ -5167,20 +5272,19 @@ std::string extract_numpy_dtype_name(
   if (node_type != "Name")
     throw std::runtime_error(
       "TypeError: numpy dtype= must name a scalar type literally");
-  const std::string name = normalize_numpy_dtype_name(dtype_node["id"]);
-  if (is_named_numpy_dtype(name))
-    return name;
-  throw std::runtime_error("Unsupported dtype value: " + name);
+  return dtype_of_name(dtype_node["id"], ast);
 }
 
 static bool is_numpy_integer_dtype(const std::string &dtype)
 {
-  return dtype.find("int") != std::string::npos;
+  const auto parsed = numpy_dtype_from_name(dtype);
+  return parsed && parsed->is_integer();
 }
 
 static bool is_numpy_float_dtype(const std::string &dtype)
 {
-  return dtype.find("float") != std::string::npos;
+  const auto parsed = numpy_dtype_from_name(dtype);
+  return parsed && parsed->kind == numpy_dtypet::kindt::floating;
 }
 
 static bool is_numpy_complex_dtype(const std::string &dtype)
@@ -5192,8 +5296,9 @@ static bool is_numpy_complex_dtype(const std::string &dtype)
 static bool
 numpy_integer_dtype_holds(long double value, const std::string &dtype)
 {
-  const int bits = std::stoi(dtype.substr(dtype.find("int") + 3));
-  const bool is_unsigned = dtype[0] == 'u';
+  const numpy_dtypet parsed = *numpy_dtype_from_name(dtype);
+  const int bits = parsed.bits;
+  const bool is_unsigned = parsed.kind == numpy_dtypet::kindt::unsigned_integer;
   const long double low = is_unsigned ? 0.0L : -std::ldexp(1.0L, bits - 1);
   const long double high = std::ldexp(1.0L, is_unsigned ? bits : bits - 1);
   return value >= low && value < high;
@@ -5230,10 +5335,18 @@ static nlohmann::json make_numpy_typed_constant(
   if (normalized.empty())
     return {{"_type", "Constant"}, {"value", value.value.real()}};
 
-  if (normalized == "str")
-    throw std::runtime_error(
-      "TypeError: converting numbers to a numpy string dtype is not "
-      "supported");
+  const auto parsed_target = numpy_dtype_from_name(normalized);
+  if (parsed_target && parsed_target->kind == numpy_dtypet::kindt::string)
+  {
+    // Only an integer has one decimal spelling a bound can be put on.
+    if (!integral)
+      throw std::runtime_error(
+        "TypeError: converting numbers to a numpy string dtype is not "
+        "supported");
+    return {
+      {"_type", "Constant"},
+      {"value", std::to_string(static_cast<long long>(value.value.real()))}};
+  }
 
   if (normalized == "bool")
   {
@@ -5306,7 +5419,9 @@ static nlohmann::json cast_numpy_literal_to_dtype(
 
   if (is_numpy_string_literal(node))
   {
-    if (normalize_numpy_dtype_name(dtype) == "str")
+    const auto parsed =
+      numpy_dtype_from_name(normalize_numpy_dtype_name(dtype));
+    if (parsed && parsed->kind == numpy_dtypet::kindt::string)
       return node;
     throw std::runtime_error(
       "TypeError: converting a string to a numeric numpy dtype is not "
@@ -5324,6 +5439,13 @@ static nlohmann::json cast_numpy_literal_to_dtype(
 
   throw std::runtime_error(
     "TypeError: np.array(..., dtype=...) requires literal numeric elements");
+}
+
+static bool has_complex_leaf(const nlohmann::json &list);
+
+bool numpy_literal_call_is_complex(const nlohmann::json &call)
+{
+  return !call["args"].empty() && has_complex_leaf(call["args"][0]);
 }
 
 nlohmann::json
@@ -5378,16 +5500,204 @@ make_numpy_linspace_constant(double value, const std::string &dtype)
   return out;
 }
 
-// np.full with a fill computed at run time: the fill is evaluated once, into
-// a temporary every element then holds.
+// The extents of a literal fill, outermost first; nullopt unless every leaf is
+// a literal number, which reading once per element cannot evaluate twice.
+static std::optional<std::vector<std::size_t>>
+literal_fill_shape(const nlohmann::json &fill)
+{
+  if (!is_sequence_literal(fill))
+  {
+    scalar_value value;
+    return try_extract_scalar_constant(fill, value)
+             ? std::optional<std::vector<std::size_t>>(
+                 std::vector<std::size_t>())
+             : std::nullopt;
+  }
+  std::optional<std::vector<std::size_t>> inner;
+  for (const auto &element : fill["elts"])
+  {
+    auto shape = literal_fill_shape(element);
+    if (!shape || (inner && *inner != *shape))
+      return std::nullopt;
+    inner = std::move(shape);
+  }
+  std::vector<std::size_t> result = inner.value_or(std::vector<std::size_t>());
+  result.insert(result.begin(), fill["elts"].size());
+  return result;
+}
+
+// The element of the broadcast fill on the trailing axes from @p axis of
+// @p dims: NumPy aligns the fill's shape with the last axes, an extent of 1
+// repeating along its axis.
+static nlohmann::json broadcast_fill_axis(
+  const std::vector<std::size_t> &dims,
+  std::size_t axis,
+  const std::vector<std::size_t> &fill_shape,
+  const nlohmann::json &fill)
+{
+  if (axis == dims.size())
+    return fill;
+  const std::size_t remaining = dims.size() - axis;
+  const bool fill_has_axis = fill_shape.size() >= remaining;
+  nlohmann::json list = {{"_type", "List"}, {"elts", nlohmann::json::array()}};
+  for (std::size_t i = 0; i < dims[axis]; ++i)
+  {
+    const bool repeats = !fill_has_axis || fill["elts"].size() == 1;
+    const nlohmann::json &row =
+      !fill_has_axis ? fill : fill["elts"][repeats ? 0 : i];
+    std::vector<std::size_t> row_shape = fill_shape;
+    if (fill_has_axis)
+      row_shape.erase(row_shape.begin());
+    list["elts"].push_back(broadcast_fill_axis(dims, axis + 1, row_shape, row));
+  }
+  return list;
+}
+
+static nlohmann::json broadcast_full_fill(
+  const std::vector<std::size_t> &dims,
+  const std::vector<std::size_t> &fill_shape,
+  const nlohmann::json &fill)
+{
+  const std::string shape_text = [&] {
+    std::string text;
+    for (std::size_t extent : fill_shape)
+      text += std::to_string(extent) + ",";
+    return text;
+  }();
+  bool compatible = fill_shape.size() <= dims.size();
+  for (std::size_t i = 1; compatible && i <= fill_shape.size(); ++i)
+  {
+    const std::size_t extent = fill_shape[fill_shape.size() - i];
+    compatible = extent == 1 || extent == dims[dims.size() - i];
+  }
+  if (!compatible)
+    throw std::runtime_error(
+      "ValueError: could not broadcast numpy.full() fill of shape (" +
+      shape_text + ") into the array shape");
+  return broadcast_fill_axis(dims, 0, fill_shape, fill);
+}
+
+std::optional<numpy_dtypet> numpy_call_expr::runtime_fill_dtype() const
+{
+  const auto dtype = numpy_dtype_from_name(get_dtype());
+  if (
+    dtype && (dtype->kind == numpy_dtypet::kindt::complex ||
+              dtype->kind == numpy_dtypet::kindt::string))
+    throw std::runtime_error(
+      "TypeError: numpy.full() with a complex or string dtype= and a "
+      "non-literal fill value is not supported");
+  return dtype;
+}
+
+static void reject_unbroadcastable_fill(
+  const std::vector<std::size_t> &shape,
+  const std::vector<std::size_t> &dims)
+{
+  bool fits = shape.size() <= dims.size();
+  for (std::size_t axis = 0; fits && axis < shape.size(); ++axis)
+    fits = shape[axis] == 1 ||
+           shape[axis] == dims[dims.size() - shape.size() + axis];
+  if (!fits)
+    throw std::runtime_error(
+      "ValueError: could not broadcast numpy.full() fill into the array shape");
+}
+
+static void reject_array_fill_dtype(const std::optional<numpy_dtypet> &dtype)
+{
+  if (
+    dtype && (dtype->kind == numpy_dtypet::kindt::string ||
+              dtype->kind == numpy_dtypet::kindt::complex))
+    throw std::runtime_error(
+      "TypeError: numpy.full() of an array fill with a string or complex "
+      "dtype= is not supported");
+}
+
+static void advance_row_major_index(
+  std::vector<std::size_t> &index,
+  const std::vector<std::size_t> &dims)
+{
+  for (std::size_t axis = index.size(); axis-- > 0;)
+  {
+    if (++index[axis] < dims[axis])
+      break;
+    index[axis] = 0;
+  }
+}
+
+// A fill computed as an array: bound once, then each cell of the shape reads
+// the element broadcasting gives it, cast to dtype=.
+std::optional<exprt> numpy_call_expr::full_of_array_fill(
+  const std::vector<std::size_t> &dims,
+  const nlohmann::json &fill_node)
+{
+  const std::string kind = fill_node.value("_type", "");
+  const bool constructed =
+    kind == "Call" && fill_node["func"].value("attr", "") == "array";
+  if (kind != "Name" && !constructed)
+    return std::nullopt;
+  const nlohmann::json fill =
+    constructed ? converter_.bind_to_fresh_name(fill_node, "ESBMC_full_fill_")
+                : fill_node;
+  const typet type = converter_.ns.follow(converter_.get_expr(fill).type());
+  const typet leaf = type_utils::array_scalar_type(type);
+  if (!type.is_array() || type_utils::is_char_storage(leaf))
+    return std::nullopt;
+  const auto extents = type_handler_.get_array_type_shape(type);
+  const std::vector<std::size_t> shape(extents.begin(), extents.end());
+  reject_unbroadcastable_fill(shape, dims);
+  const std::size_t skipped = dims.size() - shape.size();
+  const auto dtype = numpy_dtype_from_name(get_dtype());
+  reject_array_fill_dtype(dtype);
+  const typet element = dtype ? dtype->element_type() : leaf;
+  std::vector<exprt> cells;
+  std::vector<std::size_t> index(dims.size(), 0);
+  std::size_t count = 1;
+  for (const std::size_t extent : dims)
+    count *= extent;
+  for (; count > 0; --count)
+  {
+    exprt read = converter_.get_expr(fill);
+    for (std::size_t axis = 0; axis < shape.size(); ++axis)
+      read = index_exprt(
+        read,
+        from_integer(shape[axis] == 1 ? 0 : index[skipped + axis], size_type()),
+        read.type().subtype());
+    cells.push_back(
+      read.type() == element ? read : typecast_exprt(read, element));
+    advance_row_major_index(index, dims);
+  }
+  return converter_.materialize_numpy_elements(call_, dims, cells, element);
+}
+
+exprt numpy_call_expr::full_of_literal_array(
+  const std::vector<std::size_t> &dims,
+  const nlohmann::json &fill)
+{
+  const auto fill_shape = literal_fill_shape(fill);
+  if (!fill_shape)
+    throw std::runtime_error(
+      "TypeError: numpy.full() with an array fill value is not supported");
+  const nlohmann::json list = broadcast_full_fill(dims, *fill_shape, fill);
+  const bool any_float = list.dump().find('.') != std::string::npos;
+  return literal_constructor_expr(apply_constructor_dtype(
+    get_dtype().empty() && any_float
+      ? cast_numpy_literal_to_dtype(list, "float64")
+      : list));
+}
+
+// np.full with a fill that is not one literal number: a literal array is
+// broadcast over the shape, and a fill computed at run time is evaluated once,
+// into a temporary every element then holds, cast to dtype=.
 exprt numpy_call_expr::full_of_runtime_fill(
   const std::vector<std::size_t> &dims)
 {
-  if (!get_dtype().empty())
-    throw std::runtime_error(
-      "TypeError: numpy.full() with dtype= and a non-literal fill value is "
-      "not supported");
-  const exprt fill = converter_.get_expr(call_["args"][1]);
+  const nlohmann::json &fill_node = call_["args"][1];
+  if (is_sequence_literal(fill_node))
+    return full_of_literal_array(dims, fill_node);
+  if (const auto array = full_of_array_fill(dims, fill_node))
+    return *array;
+  const auto dtype = runtime_fill_dtype();
+  const exprt fill = converter_.get_expr(fill_node);
   const typet type = fill.type();
   if (
     !type.is_signedbv() && !type.is_unsignedbv() && !type.is_floatbv() &&
@@ -5413,10 +5723,16 @@ exprt numpy_call_expr::full_of_runtime_fill(
     assign.location() = location;
     converter_.current_block->copy_to_operands(assign);
   }
-  typet shape = type;
+  const typet element = dtype ? dtype->element_type() : type;
+  typet shape = element;
   for (auto dim = dims.rbegin(); dim != dims.rend(); ++dim)
     shape = type_handler_.build_array(shape, *dim);
-  const exprt value = filled_array(shape, symbol_expr(tmp));
+  if (type.is_signedbv() && dtype)
+    converter_.raise_if_outside_numpy_integer(
+      symbol_expr(tmp), element, shape, location);
+  const exprt read = symbol_expr(tmp);
+  const exprt value = filled_array(
+    shape, element == type ? read : exprt(typecast_exprt(read, element)));
   symbolt &literal =
     converter_.create_tmp_symbol(call_, "$compound-literal$", shape, value);
   code_declt literal_decl(symbol_expr(literal));
@@ -5488,31 +5804,13 @@ std::string numpy_call_expr::get_dtype() const
 
 size_t numpy_call_expr::get_dtype_size() const
 {
-  static const std::unordered_map<std::string, size_t> dtype_sizes = {
-    {"int8", sizeof(int8_t)},
-    {"uint8", sizeof(uint8_t)},
-    {"int16", sizeof(int16_t)},
-    {"uint16", sizeof(uint16_t)},
-    {"int32", sizeof(int32_t)},
-    {"uint32", sizeof(uint32_t)},
-    {"int64", sizeof(int64_t)},
-    {"uint64", sizeof(uint64_t)},
-    {"float16", 2},
-    {"float32", sizeof(float)},
-    {"float64", sizeof(double)}};
-
   const std::string dtype = get_dtype();
-  if (dtype == "bool" || is_numpy_complex_dtype(dtype))
+  if (dtype.empty() || dtype == "bool" || is_numpy_complex_dtype(dtype))
     return 0;
-
-  if (!dtype.empty())
-  {
-    auto it = dtype_sizes.find(dtype);
-    if (it != dtype_sizes.end())
-      return it->second * 8;
+  const auto parsed = numpy_dtype_from_name(dtype);
+  if (!parsed || parsed->kind == numpy_dtypet::kindt::string)
     throw std::runtime_error("Unsupported dtype value: " + dtype);
-  }
-  return 0;
+  return parsed->bits;
 }
 
 size_t count_effective_bits(const std::string &binary)
@@ -6938,23 +7236,8 @@ exprt numpy_call_expr::numpy_math_list(
 
 typet numpy_call_expr::get_typet_from_dtype() const
 {
-  std::string dtype = get_dtype();
-  if (dtype == "bool")
-    return bool_type();
-  if (dtype.find("int") != std::string::npos)
-  {
-    if (dtype[0] == 'u')
-      return unsignedbv_typet(get_dtype_size());
-    return signedbv_typet(get_dtype_size());
-  }
-  if (dtype.find("float") != std::string::npos)
-    return build_float_type(get_dtype_size());
-  if (dtype == "complex64")
-    return get_complex_struct_type();
-  if (dtype == "complex128" || dtype == "complex")
-    return get_complex_struct_type();
-
-  return {};
+  const auto parsed = numpy_dtype_from_name(get_dtype());
+  return parsed ? parsed->element_type() : typet();
 }
 
 // The longest string at the leaves of @p list, at least 1, which NumPy
@@ -6970,7 +7253,16 @@ static std::optional<std::size_t> numpy_string_width(const nlohmann::json &list)
     if (elt.value("_type", std::string()) == "List")
       leaf = numpy_string_width(elt);
     else if (is_numpy_string_literal(elt))
-      leaf = elt["value"].get<std::string>().size();
+    {
+      const std::string text = elt["value"].get<std::string>();
+      if (std::any_of(text.begin(), text.end(), [](unsigned char c) {
+            return c == 0 || c > 127;
+          }))
+        throw std::runtime_error(
+          "TypeError: a numpy string array of non-ASCII or NUL characters is "
+          "not supported");
+      leaf = text.size();
+    }
     if (!leaf)
       return std::nullopt;
     width = std::max(width, *leaf);
@@ -6978,6 +7270,37 @@ static std::optional<std::size_t> numpy_string_width(const nlohmann::json &list)
   }
   return any ? std::optional<std::size_t>(std::max<std::size_t>(width, 1))
              : std::nullopt;
+}
+
+// `float("nan") + 1j`: a complex leaf with no constant value.
+static bool has_computed_complex_leaf(const nlohmann::json &list)
+{
+  const auto &elts = list.value("elts", nlohmann::json::array());
+  return std::any_of(elts.begin(), elts.end(), [](const nlohmann::json &elt) {
+    scalar_value value;
+    if (elt.value("_type", std::string()) == "List")
+      return has_computed_complex_leaf(elt);
+    return elt.value("_type", std::string()) == "BinOp" &&
+           json_utils::ast_contains_call(elt) &&
+           !try_extract_scalar_constant(elt, value);
+  });
+}
+
+static bool has_string_leaf(const nlohmann::json &list)
+{
+  const auto &elts = list.value("elts", nlohmann::json::array());
+  return std::any_of(elts.begin(), elts.end(), [](const nlohmann::json &elt) {
+    return elt.value("_type", std::string()) == "List"
+             ? has_string_leaf(elt)
+             : is_numpy_string_literal(elt);
+  });
+}
+
+std::optional<std::size_t>
+numpy_literal_string_width(const nlohmann::json &call)
+{
+  return call["args"].empty() ? std::nullopt
+                              : numpy_string_width(call["args"][0]);
 }
 
 static bool has_complex_leaf(const nlohmann::json &list)
@@ -7026,14 +7349,41 @@ complex_literal_leaves(const nlohmann::json &list)
 // Numbers keep the literal's 64-bit storage: an int8 array would read as a
 // string, and NumPy compares a float32 element with a Python float in
 // float32, which a narrower storage alone would not reproduce.
+// A string literal's element: an explicit `U<n>` fixes the width, and
+// np.full(n, fill, dtype=str) stores in `<U1`, as NumPy takes the width from
+// the empty descriptor rather than the fill.
+typet numpy_call_expr::string_element_type(std::size_t literal_width) const
+{
+  const auto parsed = numpy_dtype_from_name(get_dtype());
+  const bool is_string = parsed && parsed->kind == numpy_dtypet::kindt::string;
+  if (is_string && parsed->bits)
+    return type_handler_.build_array(char_type(), parsed->bits / 32 + 1);
+  const bool full_without_width =
+    is_string && call_["func"].value("attr", "") == "full";
+  return type_handler_.build_array(
+    char_type(), full_without_width ? 2 : literal_width + 1);
+}
+
 typet numpy_call_expr::constructor_element_type(
   const nlohmann::json &list) const
 {
   if (std::optional<std::size_t> width = numpy_string_width(list))
-    return type_handler_.build_array(char_type(), *width + 1);
-  if (has_complex_leaf(list))
-    return get_complex_struct_type();
-  return typet();
+    return string_element_type(*width);
+  if (has_computed_complex_leaf(list))
+    throw std::runtime_error(
+      "TypeError: a numpy array of computed complex elements is not supported");
+  if (has_string_leaf(list))
+    throw std::runtime_error(
+      "TypeError: a numpy array mixing strings with numbers is not supported");
+  const std::string dtype = get_dtype();
+  if (has_complex_leaf(list) || is_numpy_complex_dtype(dtype))
+    return dtype == "complex64" ? typet(get_complex64_struct_type())
+                                : typet(get_complex_struct_type());
+  // int64, float64 and bool are what the literal already converts to.
+  if (
+    dtype.empty() || dtype == "int64" || dtype == "float64" || dtype == "bool")
+    return typet();
+  return get_typet_from_dtype();
 }
 
 exprt numpy_call_expr::with_element_type(
@@ -10916,19 +11266,83 @@ std::optional<exprt> numpy_call_expr::try_hoist_array_arg()
 
 // Complex arrays are stored, indexed and copied; the reducers read their
 // elements as real numbers.
-void numpy_call_expr::reject_complex_array_operands(
+void numpy_call_expr::reject_array_copy_with_dtype(
   const std::string &function) const
 {
-  static const std::set<std::string> reducers = {
-    "sum",
-    "prod",
-    "mean",
+  const auto &args = call_.value("args", nlohmann::json::array());
+  if (
+    function == "array" && !args.empty() &&
+    args[0].value("_type", "") == "Name" &&
+    !constructor_dtype_name(call_, converter_.ast()).empty() &&
+    converter_.numpy_array_symbols_.count(
+      converter_.resolve_name_symbol_id(args[0].value("id", ""))) != 0)
+    throw std::runtime_error(
+      "TypeError: numpy.array() of an array with dtype= is not supported");
+}
+
+// NumPy accumulates a float32 mean in float32; the model does not.
+void numpy_call_expr::reject_narrow_float_mean(
+  const std::string &function,
+  const nlohmann::json &arg) const
+{
+  if (function != "mean")
+    return;
+  const auto dtype =
+    arg.value("_type", "") == "Call"
+      ? numpy_dtype_from_name(constructor_dtype_name(arg, converter_.ast()))
+      : converter_.numpy_array_dtype(arg);
+  if (
+    !dtype || dtype->kind != numpy_dtypet::kindt::floating ||
+    dtype->bits == 64 || (dtype->bits == 32 && narrow_float_mean_nodes(arg)))
+    return;
+  // NumPy accumulates float16 in float32.
+  throw std::runtime_error(
+    "TypeError: numpy.mean() over float16, or over 8 or more float32 elements, "
+    "is not supported");
+}
+
+// Below 8 elements NumPy accumulates in order, at the dtype's width; above, its
+// pairwise summation groups them differently.
+std::optional<std::vector<nlohmann::json>>
+numpy_call_expr::narrow_float_mean_nodes(const nlohmann::json &operand) const
+{
+  if (operand.value("_type", "") != "Name")
+    return std::nullopt;
+  auto nodes =
+    const_cast<numpy_call_expr *>(this)->complex_element_nodes(operand);
+  if (!nodes || nodes->empty() || nodes->size() >= 8)
+    return std::nullopt;
+  return nodes;
+}
+
+std::optional<exprt> numpy_call_expr::try_narrow_float_mean()
+{
+  const auto &args = call_.value("args", nlohmann::json::array());
+  const nlohmann::json &func = call_["func"];
+  if (args.empty() && func.value("_type", "") != "Attribute")
+    return std::nullopt;
+  const nlohmann::json &operand = args.empty() ? func["value"] : args[0];
+  if (operand.value("_type", "") != "Name")
+    return std::nullopt;
+  const auto dtype = converter_.numpy_array_dtype(operand);
+  if (
+    !dtype || dtype->kind != numpy_dtypet::kindt::floating || dtype->bits == 64)
+    return std::nullopt;
+  reject_narrow_float_mean("mean", operand);
+  if (converter_.in_rhs_type_probe_)
+    return gen_zero(dtype->element_type());
+  return complex_value_reduce("mean", *narrow_float_mean_nodes(operand));
+}
+
+void numpy_call_expr::reject_unmodelled_operands(
+  const std::string &function) const
+{
+  using kindt = numpy_dtypet::kindt;
+  static const std::set<std::string> over_complex_numbers = {
     "min",
     "max",
     "argmin",
     "argmax",
-    "any",
-    "all",
     "std",
     "var",
     "median",
@@ -10936,13 +11350,57 @@ void numpy_call_expr::reject_complex_array_operands(
     "cumprod",
     "sort",
     "argsort"};
-  if (!reducers.count(function))
-    return;
+  reject_array_copy_with_dtype(function);
+  const auto reject = [&function](kindt kind) {
+    throw std::runtime_error(
+      "TypeError: numpy." + function + "() over a " + numpy_kind_name(kind) +
+      " array is not supported");
+  };
   for (const auto &arg : call_.value("args", nlohmann::json::array()))
-    if (is_complex_operand(arg))
-      throw std::runtime_error(
-        "TypeError: numpy." + function +
-        "() over a complex array is not supported");
+  {
+    const std::string type = arg.value("_type", "");
+    reject_narrow_float_mean(function, arg);
+    const bool array =
+      type == "Name" || type == "List" || type == "Call" || type == "Subscript";
+    if (
+      is_string_operand(arg) &&
+      (!numpy_consumer_is_modelled(kindt::string, function) ||
+       (function == "array" && type != "List")))
+      reject(kindt::string);
+    if (
+      is_complex_operand(arg) &&
+      (array ? !numpy_consumer_is_modelled(kindt::complex, function)
+             : over_complex_numbers.count(function) != 0))
+      reject(kindt::complex);
+  }
+}
+
+// Whether the operand @p arg holds strings; see is_complex_operand.
+bool numpy_call_expr::is_string_operand(const nlohmann::json &arg) const
+{
+  const std::string type = arg.value("_type", std::string());
+  if (type == "Subscript")
+    return is_string_operand(arg["value"]);
+  if (type == "List")
+    return numpy_string_width(arg).has_value();
+  if (type == "Call")
+  {
+    const auto &args = arg.value("args", nlohmann::json::array());
+    const auto dtype =
+      numpy_dtype_from_name(constructor_dtype_name(arg, converter_.ast()));
+    return (dtype && dtype->kind == numpy_dtypet::kindt::string) ||
+           (arg["func"].value("attr", "") == "full" && args.size() > 1 &&
+            is_numpy_string_literal(args[1])) ||
+           std::any_of(
+             args.begin(), args.end(), [this](const nlohmann::json &a) {
+               return is_string_operand(a);
+             });
+  }
+  if (type != "Name")
+    return false;
+  const symbolt *symbol = converter_.find_symbol(
+    converter_.resolve_name_symbol_id(arg["id"].get<std::string>()));
+  return symbol && type_utils::is_numpy_string_array(symbol->get_type());
 }
 
 // Whether the operand @p arg holds complex numbers: a name bound to a complex
@@ -10971,7 +11429,13 @@ bool numpy_call_expr::is_complex_operand(const nlohmann::json &arg) const
     return try_extract_scalar_constant(arg, scalar) && scalar.is_complex;
   const symbolt *symbol = converter_.find_symbol(
     converter_.resolve_name_symbol_id(arg["id"].get<std::string>()));
-  return symbol && type_utils::is_numpy_complex_array(symbol->get_type());
+  if (!symbol)
+    return false;
+  const typet &storage = symbol->get_type();
+  return type_utils::is_numpy_complex_array(storage) ||
+         (storage.is_pointer() &&
+          converter_.find_numpy_pointer_view_info(arg.value("id", "")) &&
+          is_complex_type(type_utils::array_scalar_type(storage.subtype())));
 }
 
 // numpy.round(x, decimals): round half to even, for decimals zero or
@@ -11080,7 +11544,7 @@ std::optional<exprt> numpy_call_expr::fold_scalar_binary(
   const std::string dtype = get_dtype();
   const std::size_t bits = get_dtype_size();
   const bool is_unsigned = !dtype.empty() && dtype[0] == 'u';
-  if (dtype.find("int") != std::string::npos)
+  if (is_numpy_integer_dtype(dtype))
   {
     const std::optional<BigInt> exact =
       lhs.is_int && rhs.is_int
@@ -11182,10 +11646,299 @@ const std::string &numpy_call_expr::canonical_function()
   return function_id_.get_function();
 }
 
+// The dtype= of an inline `np.array(..., dtype=...)` or the like, read without
+// converting the call.
+static std::optional<numpy_dtypet>
+inline_constructor_dtype(const nlohmann::json &arg, const nlohmann::json &ast)
+{
+  if (arg.value("_type", "") != "Call")
+    return std::nullopt;
+  for (const auto &kw : arg.value("keywords", nlohmann::json::array()))
+    if (kw.value("arg", "") == "dtype")
+      return numpy_dtype_from_name(extract_numpy_dtype_name(kw["value"], ast));
+  return std::nullopt;
+}
+
+// Stored narrower than the 64 bits the operational models and the list-based
+// folds read; uint64 too, which they read as signed.
+bool numpy_call_expr::is_narrow_operand(const nlohmann::json &arg) const
+{
+  auto dtype = inline_constructor_dtype(arg, converter_.ast());
+  if (!dtype && arg.value("_type", "") != "Call")
+    dtype = converter_.numpy_array_dtype(arg);
+  if (
+    !dtype ||
+    (!dtype->is_integer() && dtype->kind != numpy_dtypet::kindt::floating))
+    return false;
+  return dtype->bits < 64 ||
+         dtype->kind == numpy_dtypet::kindt::unsigned_integer;
+}
+
+bool numpy_call_expr::has_narrow_operand() const
+{
+  const auto &args = call_.value("args", nlohmann::json::array());
+  const auto narrow = [this](const nlohmann::json &arg) {
+    return is_narrow_operand(arg);
+  };
+  if (std::any_of(args.begin(), args.end(), narrow))
+    return true;
+  const nlohmann::json &func = call_["func"];
+  return func.value("_type", "") == "Attribute" &&
+         func["value"].value("_type", "") != "Call" &&
+         !is_imported_numpy_module_alias(
+           converter_.ast(), func["value"].value("id", "")) &&
+         is_narrow_operand(func["value"]);
+}
+
+// A binary ufunc over a narrow operand, as its operator.
+std::optional<exprt>
+numpy_call_expr::narrow_ufunc_as_operator(const std::string &function)
+{
+  static const std::map<std::string, std::string> operators = {
+    {"add", "Add"},
+    {"subtract", "Sub"},
+    {"multiply", "Mult"},
+    {"divide", "Div"},
+    {"true_divide", "Div"},
+    {"floor_divide", "FloorDiv"},
+    {"mod", "Mod"},
+    {"remainder", "Mod"},
+    {"power", "Pow"},
+    {"bitwise_and", "BitAnd"},
+    {"bitwise_or", "BitOr"},
+    {"bitwise_xor", "BitXor"},
+    {"left_shift", "LShift"},
+    {"right_shift", "RShift"}};
+  const auto op = operators.find(function);
+  const auto &args = call_.value("args", nlohmann::json::array());
+  if (
+    op == operators.end() || args.size() != 2 ||
+    !call_.value("keywords", nlohmann::json::array()).empty())
+    return std::nullopt;
+  nlohmann::json binop = call_;
+  binop["_type"] = "BinOp";
+  binop["left"] = args[0];
+  binop["right"] = args[1];
+  binop["op"] = {{"_type", op->second}};
+  exprt result = converter_.get_expr(binop);
+  if (converter_.current_lhs)
+  {
+    converter_.current_lhs->type() = result.type();
+    converter_.update_symbol(*converter_.current_lhs);
+  }
+  return result;
+}
+
+// The literal folds read an inline constructor without its dtype, so a call
+// yielding an array binds it to a name first; a reducer's value is unaffected.
+std::optional<exprt> numpy_call_expr::call_with_narrow_constructors_bound(
+  const std::string &function)
+{
+  static const std::set<std::string> yields_scalar = {
+    "sum",
+    "prod",
+    "mean",
+    "min",
+    "max",
+    "any",
+    "all",
+    "argmin",
+    "argmax",
+    "searchsorted",
+    "trace"};
+  if (yields_scalar.count(function) || converter_.in_rhs_type_probe_)
+    return std::nullopt;
+  nlohmann::json bound = call_;
+  bool rebound = false;
+  for (auto &arg : bound["args"])
+    if (arg.value("_type", "") == "Call" && is_narrow_operand(arg))
+    {
+      if (!converter_.can_emit_operand_statement())
+        throw std::runtime_error(
+          "TypeError: a narrow numpy constructor called as an argument where "
+          "nothing can be bound first is not supported");
+      arg = converter_.bind_to_fresh_name(arg, "ESBMC_constructor_arg_");
+      rebound = true;
+    }
+  if (!rebound)
+    return std::nullopt;
+  return converter_.get_expr(bound);
+}
+
+// The elements of a complex array or view, as subscripts of @p operand in C
+// order; nullopt for a run-time layout.
+std::optional<std::vector<nlohmann::json>>
+numpy_call_expr::complex_element_nodes(const nlohmann::json &operand)
+{
+  const exprt storage =
+    converter_.numpy_param_as_array(converter_.get_expr(operand));
+  std::vector<std::size_t> shape;
+  if (storage.type().is_array())
+  {
+    const auto extents = type_handler_.get_array_type_shape(storage.type());
+    shape.assign(extents.begin(), extents.end());
+  }
+  else if (operand.value("_type", "") == "Name")
+  {
+    const auto *info =
+      converter_.find_numpy_pointer_view_info(operand.value("id", ""));
+    if (!info || info->is_symbolic())
+      return std::nullopt;
+    shape.assign(info->shape.begin(), info->shape.end());
+  }
+  std::vector<nlohmann::json> nodes = {operand};
+  for (const std::size_t extent : shape)
+  {
+    std::vector<nlohmann::json> next;
+    for (const nlohmann::json &node : nodes)
+      for (std::size_t i = 0; i < extent; ++i)
+      {
+        nlohmann::json index = {{"_type", "Constant"}, {"value", i}};
+        nlohmann::json item = {
+          {"_type", "Subscript"}, {"value", node}, {"slice", index}};
+        converter_.copy_location_fields_from_decl(call_, item);
+        converter_.copy_location_fields_from_decl(call_, item["slice"]);
+        next.push_back(std::move(item));
+      }
+    nodes = std::move(next);
+  }
+  return nodes;
+}
+
+// any/all over complex elements, each read for its truth.
+exprt numpy_call_expr::complex_truth_reduce(
+  const std::string &function,
+  const std::vector<nlohmann::json> &nodes)
+{
+  exprt result = gen_boolean(function == "all");
+  for (const nlohmann::json &node : nodes)
+  {
+    const exprt truth =
+      complex_to_bool_expr(promote_to_complex(converter_.get_expr(node)));
+    result = function == "all" ? exprt(and_exprt(result, truth))
+                               : exprt(or_exprt(result, truth));
+  }
+  return result;
+}
+
+// sum, prod and mean over complex elements, as the operators in turn.
+exprt numpy_call_expr::complex_value_reduce(
+  const std::string &function,
+  const std::vector<nlohmann::json> &nodes)
+{
+  const auto located = [&](nlohmann::json node) {
+    converter_.copy_location_fields_from_decl(call_, node);
+    return node;
+  };
+  const auto binary =
+    [&](const char *op, nlohmann::json left, nlohmann::json right) {
+      return located(
+        {{"_type", "BinOp"},
+         {"left", std::move(left)},
+         {"op", {{"_type", op}}},
+         {"right", std::move(right)}});
+    };
+  nlohmann::json total = nodes.front();
+  for (std::size_t i = 1; i < nodes.size(); ++i)
+    total = binary(function == "prod" ? "Mult" : "Add", total, nodes[i]);
+  if (function == "mean")
+    total = binary(
+      "Div", total, located({{"_type", "Constant"}, {"value", nodes.size()}}));
+  return retype_current_lhs_and_return(converter_, converter_.get_expr(total));
+}
+
+// The complex array a reducer call reads; nullopt when it reads something else.
+std::optional<nlohmann::json>
+numpy_call_expr::complex_reducer_operand(const std::string &function) const
+{
+  const auto &args = call_.value("args", nlohmann::json::array());
+  const nlohmann::json &func = call_["func"];
+  const bool method = args.empty() && func.value("_type", "") == "Attribute";
+  if (args.empty() && !method)
+    return std::nullopt;
+  const nlohmann::json &operand = method ? func["value"] : args[0];
+  if (!is_complex_operand(operand))
+    return std::nullopt;
+  if (
+    args.size() > 1 ||
+    !call_.value("keywords", nlohmann::json::array()).empty())
+    throw std::runtime_error(
+      "TypeError: numpy." + function +
+      "() over a complex array with axis or keywords is not supported");
+  return operand;
+}
+
+// np.sum and the like over complex numbers; nullopt for any other call.
+std::optional<exprt>
+numpy_call_expr::try_complex_reducer(const std::string &function)
+{
+  static const std::set<std::string> reducers = {
+    "sum", "prod", "mean", "any", "all"};
+  if (reducers.count(function) == 0)
+    return std::nullopt;
+  std::optional<nlohmann::json> reduced = complex_reducer_operand(function);
+  if (!reduced)
+    return std::nullopt;
+  nlohmann::json operand = std::move(*reduced);
+  const bool logical = function == "any" || function == "all";
+  if (converter_.in_rhs_type_probe_)
+    return logical
+             ? exprt(gen_boolean(false))
+             : make_complex(gen_zero(double_type()), gen_zero(double_type()));
+  if (operand.value("_type", "") == "Call")
+    operand = converter_.bind_to_fresh_name(operand, "ESBMC_constructor_arg_");
+  const auto nodes = complex_element_nodes(operand);
+  if (!nodes || nodes->empty())
+    throw std::runtime_error(
+      "TypeError: numpy." + function +
+      "() over this complex array is not supported");
+  return logical ? complex_truth_reduce(function, *nodes)
+                 : complex_value_reduce(function, *nodes);
+}
+
+// A call over a narrow operand: a function not known to read the element type
+// rejects rather than misreading the storage.
+std::optional<exprt>
+numpy_call_expr::try_narrow_operand_call(const std::string &function)
+{
+  if (std::optional<exprt> reduced = try_complex_reducer(function))
+    return reduced;
+  if (function == "mean")
+    if (std::optional<exprt> mean = try_narrow_float_mean())
+      return mean;
+  static const std::set<std::string> reads_element_type = {
+    "array",        "asarray",      "copy",     "zeros_like", "ones_like",
+    "empty_like",   "sum",          "prod",     "mean",       "min",
+    "max",          "any",          "all",      "argmin",     "argmax",
+    "sort",         "searchsorted", "ravel",    "flatten",    "reshape",
+    "transpose",    "swapaxes",     "moveaxis", "squeeze",    "expand_dims",
+    "broadcast_to", "tolist",       "nditer",   "shape",      "size",
+    "ndim",         "astype",       "trace"};
+  const auto &args = call_.value("args", nlohmann::json::array());
+  const bool complex_array =
+    std::any_of(args.begin(), args.end(), [this](const nlohmann::json &arg) {
+      if (arg.value("_type", "") == "Call")
+        return false;
+      const auto dtype = converter_.numpy_array_dtype(arg);
+      return dtype && dtype->kind == numpy_dtypet::kindt::complex;
+    });
+  if (complex_array)
+    return narrow_ufunc_as_operator(function);
+  if (!has_narrow_operand())
+    return std::nullopt;
+  if (std::optional<exprt> binop = narrow_ufunc_as_operator(function))
+    return binop;
+  if (reads_element_type.count(function) == 0)
+    throw std::runtime_error(
+      "TypeError: numpy." + function +
+      "() over a dtype narrower than 64 bits is not supported");
+  return call_with_narrow_constructors_bound(function);
+}
+
 exprt numpy_call_expr::get()
 {
   const std::string &function = canonical_function();
-  reject_complex_array_operands(function);
+  reject_unmodelled_operands(function);
 
   if (std::optional<exprt> permuted = try_build_axis_permutation_view())
     return *permuted;
@@ -11681,10 +12434,10 @@ exprt numpy_call_expr::get()
     {
       auto shape = get_arg(0);
       auto fill = get_arg(1);
-      reject_array_full_fill(fill);
       auto dims = parse_shape(shape);
       if (!dims.empty() && !is_literal_full_fill(fill))
         return full_of_runtime_fill(dims);
+      reject_array_full_fill(fill);
       if (dims.empty())
       {
         // Try symbolic 1-D shape: evaluate the size expression at runtime.

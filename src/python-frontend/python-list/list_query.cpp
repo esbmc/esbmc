@@ -831,7 +831,9 @@ exprt python_list::contains(const exprt &item, const exprt &list)
         const typet &stored_type = stored_entry.second;
 
         // Check if stored type is a char array (string)
-        if (stored_type.is_array() && stored_type.subtype() == char_type())
+        if (
+          stored_type.is_array() &&
+          type_utils::is_char_storage(stored_type.subtype()))
         {
           // Use the stored string array type instead of void pointer type
           const type_handler type_handler_ = converter_.get_type_handler();
@@ -986,7 +988,7 @@ exprt python_list::build_count_index_list_call(
   exprt element_arg;
   if (
     elem_info.elem_symbol->get_type().is_pointer() &&
-    elem_info.elem_symbol->get_type().subtype() == char_type())
+    type_utils::is_char_storage(elem_info.elem_symbol->get_type().subtype()))
     element_arg = build_symbol(*elem_info.elem_symbol);
   else
     element_arg = build_address_of(build_symbol(*elem_info.elem_symbol));
@@ -1033,7 +1035,7 @@ exprt python_list::build_index_list_call(
   exprt element_arg;
   if (
     elem_info.elem_symbol->get_type().is_pointer() &&
-    elem_info.elem_symbol->get_type().subtype() == char_type())
+    type_utils::is_char_storage(elem_info.elem_symbol->get_type().subtype()))
     element_arg = build_symbol(*elem_info.elem_symbol);
   else
     element_arg = build_address_of(build_symbol(*elem_info.elem_symbol));
@@ -1096,7 +1098,7 @@ exprt python_list::build_index_range_list_call(
   exprt element_arg;
   if (
     elem_info.elem_symbol->get_type().is_pointer() &&
-    elem_info.elem_symbol->get_type().subtype() == char_type())
+    type_utils::is_char_storage(elem_info.elem_symbol->get_type().subtype()))
     element_arg = build_symbol(*elem_info.elem_symbol);
   else
     element_arg = build_address_of(build_symbol(*elem_info.elem_symbol));

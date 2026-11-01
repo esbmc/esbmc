@@ -1268,7 +1268,7 @@ void python_converter::retype_resized_str(
   exprt &rhs)
 {
   auto is_char_array = [](const typet &t) {
-    return t.is_array() && t.subtype() == char_type();
+    return t.is_array() && type_utils::is_char_storage(t.subtype());
   };
   const bool may_join = block_nesting_ != function_body_depth_ + 1 ||
                         !symbol.get_value().is_constant();
@@ -2714,7 +2714,16 @@ std::optional<exprt> python_converter::build_numpy_descriptor_materialized_list(
     return std::nullopt;
 
   const std::vector<std::size_t> &shape = materialized->first;
-  const std::vector<exprt> &elems = materialized->second;
+  // tolist() gives Python numbers, whatever the array's dtype.
+  std::vector<exprt> elems = materialized->second;
+  for (exprt &element : elems)
+    if (is_complex64_type(element.type()))
+      element = make_complex(
+        complex_part(element, "real"), complex_part(element, "imag"));
+    else if (type_utils::is_numpy_scalar_type(element.type()))
+      element = typecast_exprt(
+        element,
+        element.type().is_floatbv() ? double_type() : long_long_int_type());
 
   nlohmann::json list_node{
     {"_type", "List"}, {"elts", nlohmann::json::array()}};
@@ -3483,9 +3492,16 @@ bool python_converter::return_call_only_references_params_or_modules(
 /// not intercepted here updates its char array with a whole string value, which
 /// trips with2t::assert_consistency and aborts instead of reporting anything.
 bool python_converter::reject_immutable_item_assignment(
-  const typet &container_type,
+  const exprt &container,
   codet &target_block)
 {
+  // A numpy string array parameter is a pointer to its fixed-width elements,
+  // which is mutable, unlike the pointer to chars of a str.
+  const typet &container_type = container.type();
+  if (
+    !container_type.is_array() &&
+    numpy_param_as_array(container).type().is_array())
+    return false;
   const char *kind = tuple_handler_->is_tuple_type(container_type) ? "tuple"
                      : type_utils::is_string_type(container_type)  ? "str"
                                                                    : nullptr;
@@ -4581,7 +4597,7 @@ std::string python_converter::infer_type_from_any_annotation(
     // annotated with a scalar type (e.g. y: int = f() where f() -> str),
     // use the actual return type so comparisons like y == "x" work correctly.
     bool ret_is_charptr =
-      ret_type.is_pointer() && ret_type.subtype() == char_type();
+      ret_type.is_pointer() && type_utils::is_char_storage(ret_type.subtype());
     bool lhs_is_scalar =
       !current_element_type.is_pointer() && !current_element_type.is_array() &&
       !current_element_type.is_struct() && !current_element_type.id().empty();
@@ -7133,9 +7149,30 @@ bool python_converter::try_dedicated_assign(
 static void fit_numpy_string_store(const exprt &lhs, exprt &rhs)
 {
   if (
-    lhs.id() != "index" || !lhs.type().is_array() || !rhs.type().is_array() ||
-    lhs.type().subtype() != char_type() ||
-    rhs.type().subtype() != char_type() || lhs.type() == rhs.type())
+    (lhs.id() != "index" && lhs.id() != "dereference") ||
+    !lhs.type().is_array() ||
+    !type_utils::is_char_storage(lhs.type().subtype()))
+    return;
+  if (rhs.type().is_pointer())
+    throw std::runtime_error(
+      "TypeError: storing a string of unknown width into a numpy string array "
+      "is not supported");
+  if (!rhs.type().is_array())
+    return;
+  // Storage holds one byte per character, so a non-ASCII or bytes value would
+  // read back with another length.
+  const bool storable =
+    type_utils::is_char_storage(rhs.type().subtype()) &&
+    std::none_of(
+      rhs.operands().begin(), rhs.operands().end(), [](const exprt &c) {
+        BigInt code;
+        return c.is_constant() && !to_integer(c, code) && code < 0;
+      });
+  if (!storable)
+    throw std::runtime_error(
+      "TypeError: storing a bytes or non-ASCII value into a numpy string "
+      "array is not supported");
+  if (lhs.type() == rhs.type())
     return;
   if (!rhs.is_constant())
     throw std::runtime_error(
@@ -7150,16 +7187,56 @@ static void fit_numpy_string_store(const exprt &lhs, exprt &rhs)
 
 // NumPy truncates a float stored into an integer array, raising for NaN and
 // infinity as int() does.
+static bool is_real_number_type(const typet &type)
+{
+  return type.is_signedbv() || type.is_unsignedbv() || type.is_floatbv();
+}
+
+static exprt fit_numpy_complex_store(const exprt &rhs, const typet &element)
+{
+  const exprt complex_rhs = promote_to_complex(rhs);
+  return complex_as_element(
+    complex_part(complex_rhs, "real"),
+    complex_part(complex_rhs, "imag"),
+    element);
+}
+
+// NEP 50: a Python integer out of the dtype's range raises at the store.
+exprt python_converter::raise_if_weak_store_outside(
+  const exprt &rhs,
+  const typet &element,
+  const nlohmann::json &value)
+{
+  if (
+    (!rhs.type().is_signedbv() && !rhs.type().is_unsignedbv()) ||
+    !is_weak_numpy_operand(value, rhs.type()))
+    return nil_exprt();
+  return raise_if_outside_numpy_integer(
+    rhs, element, element, get_location_from_decl(value));
+}
+
 exprt python_converter::fit_numpy_integer_store(
   const exprt &lhs,
   const exprt &rhs,
   const nlohmann::json &value)
 {
-  if (
-    lhs.id() != "index" || !lhs.op0().type().is_array() ||
-    lhs.type() != long_long_int_type() || !rhs.type().is_floatbv())
+  if (lhs.id() != "index" || !lhs.op0().type().is_array())
     return rhs;
-  return typecast_exprt(guard_nonfinite_float_to_int(rhs, value), lhs.type());
+  const typet &element = lhs.type();
+  if (is_complex_type(element))
+    return fit_numpy_complex_store(rhs, element);
+  const bool integer = element.is_signedbv() || element.is_unsignedbv();
+  if (integer && rhs.type().is_floatbv())
+    return typecast_exprt(guard_nonfinite_float_to_int(rhs, value), element);
+  const exprt raised = raise_if_weak_store_outside(rhs, element, value);
+  if (!raised.is_nil())
+    return raised;
+  // A wider result is cast once, at the store, to the array's own width.
+  if (
+    (integer || element.is_floatbv()) && is_real_number_type(rhs.type()) &&
+    rhs.type() != element)
+    return typecast_exprt(rhs, element);
+  return rhs;
 }
 
 // `it = np.nditer(...)`, and the names bound to what an iterator yields; a
@@ -7262,6 +7339,8 @@ void python_converter::get_var_assign(
   const nlohmann::json &ast_node,
   codet &target_block)
 {
+  reject_numpy_scalars_in_container(ast_node);
+
   if (try_dedicated_assign(ast_node, target_block))
     return;
 
@@ -7470,7 +7549,7 @@ void python_converter::get_var_assign(
     exprt container_expr = get_expr(target["value"]);
     typet container_type = container_expr.type();
 
-    if (reject_immutable_item_assignment(container_type, target_block))
+    if (reject_immutable_item_assignment(container_expr, target_block))
       return;
 
     // Handle object subscript assignment via __setitem__:
@@ -7630,7 +7709,7 @@ void python_converter::get_var_assign(
     // is_pointer() is false, so no extra nil guard is needed.
     if (
       current_element_type == any_type() && rhs.type().is_pointer() &&
-      rhs.type().subtype() == char_type())
+      type_utils::is_char_storage(rhs.type().subtype()))
     {
       current_element_type = rhs.type();
     }
@@ -7930,10 +8009,14 @@ void python_converter::get_var_assign(
 
     converted_value = true;
 
+    reject_unsafe_numpy_string_binding(effective_ast_node["value"], lhs);
+
     // Handle string literal conversion
     rhs = handle_string_literal_rhs(effective_ast_node, lhs_type, rhs);
     fit_numpy_string_store(lhs, rhs);
+    reject_numpy_scalar_in_attribute(lhs, rhs);
     rhs = fit_numpy_integer_store(lhs, rhs, effective_ast_node["value"]);
+    bind_numpy_scalar_name(target, lhs_symbol, lhs, rhs);
   }
 
   if (converted_value && rhs != exprt("_init_undefined"))
@@ -8453,6 +8536,12 @@ python_converter::find_symbol_in_enclosing_scopes(const std::string &name)
   return nullptr;
 }
 
+static bool is_char_sequence(const typet &type)
+{
+  return (type.is_array() || type.is_pointer()) &&
+         type_utils::is_char_storage(type.subtype());
+}
+
 void python_converter::get_compound_assign(
   const nlohmann::json &ast_node,
   codet &target_block)
@@ -8545,19 +8634,8 @@ void python_converter::get_compound_assign(
   bool is_string_concat = false;
   if (op == "Add")
   {
-    // Standard array-based string concatenation
-    if (
-      (lhs.type().is_array() && lhs.type().subtype() == char_type()) ||
-      (current_element_type.is_array() &&
-       current_element_type.subtype() == char_type()))
-    {
-      is_string_concat = true;
-    }
-    // Pointer-based string
-    else if (
-      (lhs.type().is_pointer() && lhs.type().subtype() == char_type()) ||
-      (current_element_type.is_pointer() &&
-       current_element_type.subtype() == char_type()))
+    // Array- or pointer-based string concatenation
+    if (is_char_sequence(lhs.type()) || is_char_sequence(current_element_type))
     {
       is_string_concat = true;
     }
@@ -8589,9 +8667,10 @@ void python_converter::get_compound_assign(
     // Update the variable's type to match the concatenated result
     // Handle both array and pointer results
     if (
-      !var_name.empty() && (concatenated.type().is_array() ||
-                            (concatenated.type().is_pointer() &&
-                             concatenated.type().subtype() == char_type())))
+      !var_name.empty() &&
+      (concatenated.type().is_array() ||
+       (concatenated.type().is_pointer() &&
+        type_utils::is_char_storage(concatenated.type().subtype()))))
     {
       symbol_id sid = create_symbol_id();
       sid.set_object(var_name);
@@ -8625,6 +8704,9 @@ void python_converter::get_compound_assign(
 
   // Reset RHS flag
   is_converting_rhs = false;
+
+  if (store_through_numpy_view(ast_node["target"], lhs, rhs, loc, target_block))
+    return;
 
   // P27: Promote real RHS to complex when LHS is complex (AugAssign path).
   // adjust_statement_types() is NOT called on this path, so without this
@@ -8691,12 +8773,14 @@ typet resolve_ternary_type(
 
   // String handling: use pointer type for consistency
   // Handles: array+array, array+pointer, pointer+array
-  bool then_is_string =
-    (then_type.is_array() && then_type.subtype() == char_type()) ||
-    (then_type.is_pointer() && then_type.subtype() == char_type());
-  bool else_is_string =
-    (else_type.is_array() && else_type.subtype() == char_type()) ||
-    (else_type.is_pointer() && else_type.subtype() == char_type());
+  bool then_is_string = (then_type.is_array() &&
+                         type_utils::is_char_storage(then_type.subtype())) ||
+                        (then_type.is_pointer() &&
+                         type_utils::is_char_storage(then_type.subtype()));
+  bool else_is_string = (else_type.is_array() &&
+                         type_utils::is_char_storage(else_type.subtype())) ||
+                        (else_type.is_pointer() &&
+                         type_utils::is_char_storage(else_type.subtype()));
 
   if (then_is_string && else_is_string)
     return gen_pointer_type(char_type());
@@ -9870,6 +9954,7 @@ void python_converter::get_return_statements(
   const nlohmann::json &ast_node,
   codet &target_block)
 {
+  reject_numpy_scalar_return(ast_node["value"]);
   if (ast_node["value"].is_null())
   {
     // Handle bare return statement (return with no value)
@@ -10620,6 +10705,12 @@ static typet numpy_typed_shape(
 // NUL padding to the array's fixed width for a string.
 static exprt as_numpy_element(const exprt &value, const typet &element)
 {
+  if (is_complex_type(element) && !element.is_array())
+  {
+    const exprt promoted = promote_to_complex(value);
+    return complex_as_element(
+      complex_part(promoted, "real"), complex_part(promoted, "imag"), element);
+  }
   if (value.type() == element || !element.is_array())
     return value.type() == element ? value : typecast_exprt(value, element);
   exprt padded = gen_zero(element);
@@ -10631,7 +10722,8 @@ static exprt as_numpy_element(const exprt &value, const typet &element)
     padded.operands().at(0) = typecast_exprt(value, element.subtype());
     return padded;
   }
-  for (std::size_t i = 0; i < value.operands().size(); ++i)
+  const std::size_t width = padded.operands().size() - 1;
+  for (std::size_t i = 0; i < value.operands().size() && i < width; ++i)
     padded.operands().at(i) = value.operands()[i];
   return padded;
 }

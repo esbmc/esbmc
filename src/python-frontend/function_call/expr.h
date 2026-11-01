@@ -629,6 +629,9 @@ private:
   exprt handle_list_count() const;
   exprt handle_list_index() const;
 
+  std::optional<exprt> try_builtin_sum_over_numpy_scalars();
+  std::optional<exprt> try_int_of_numpy_scalar();
+
   // numpy ndarray.astype(dtype): runtime element-wise dtype cast.
   bool is_numpy_astype_call() const;
   exprt handle_numpy_astype() const;
@@ -915,6 +918,11 @@ private:
    */
   std::optional<exprt> try_fold_identity_array_return();
 
+  exprt numpy_astype_to_string(
+    const nlohmann::json &receiver,
+    const exprt &source,
+    std::size_t width) const;
+
   /**
    * Suffix selecting the models/random.py variant that matches a sequence
    * argument's type: "_float" or "_str" for a list of those, "_chars" for a
@@ -1082,6 +1090,10 @@ private:
     const symbolt &callee,
     size_t param_idx,
     bool is_bytes_literal) const;
+  void reject_scalar_crossing_into_parameter(
+    const typet &arg_type,
+    const code_typet::argumentst &params,
+    std::size_t param_idx) const;
   void reject_list_for_numpy_parameter(
     const typet &arg_type,
     const code_typet::argumentst &params,

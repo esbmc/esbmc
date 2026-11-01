@@ -1,3 +1,4 @@
+#include <python-frontend/numpy/numpy_reducer_shared.h>
 #include "python_list_internal.h"
 #include <python-frontend/python-dict/python_dict_handler.h>
 #include <algorithm>
@@ -249,13 +250,94 @@ exprt python_list::bind_list_element(const exprt &list_at_call)
   return build_symbol(elem_obj);
 }
 
+// The bound of a string slice, read as a literal; @p fallback when absent.
+static long long string_slice_bound(
+  const nlohmann::json &bound,
+  long long fallback,
+  bool &literal)
+{
+  if (bound.is_null())
+    return fallback;
+  numeric_value value;
+  if (!try_extract_numeric_constant(bound, value) || !value.is_int)
+  {
+    literal = false;
+    return fallback;
+  }
+  return value.int_value;
+}
+
+// A slice of a fixed-width string array, as a copy of its elements. The caller
+// registers the copy against its source, so a write through either rejects
+// instead of diverging from NumPy's shared storage (ADR-NP-003, step 1).
+exprt python_list::numpy_string_slice_copy(
+  const exprt &array,
+  const nlohmann::json &slice_node)
+{
+  BigInt extent;
+  if (to_integer(to_array_type(array.type()).size(), extent))
+    throw std::runtime_error(
+      "TypeError: slicing a numpy string array of run-time length is not "
+      "supported");
+  const long long n = extent.to_int64();
+  bool literal = true;
+  const long long step = string_slice_bound(slice_node["step"], 1, literal);
+  if (step == 0)
+    throw std::runtime_error("ValueError: slice step cannot be zero");
+  long long lo =
+    string_slice_bound(slice_node["lower"], step > 0 ? 0 : n - 1, literal);
+  long long hi =
+    string_slice_bound(slice_node["upper"], step > 0 ? n : -n - 1, literal);
+  if (!literal)
+    throw std::runtime_error(
+      "TypeError: slicing a numpy string array with run-time bounds is not "
+      "supported");
+  const auto clamp = [&](long long bound) {
+    if (bound < 0)
+      bound += n;
+    const long long low = step > 0 ? 0 : -1;
+    const long long high = step > 0 ? n : n - 1;
+    return bound < low ? low : (bound > high ? high : bound);
+  };
+  lo = clamp(lo);
+  hi = clamp(hi);
+  std::vector<exprt> elements;
+  for (long long i = lo; step > 0 ? i < hi : i > hi; i += step)
+    elements.push_back(
+      index_exprt(array, from_integer(i, size_type()), array.type().subtype()));
+  const typet type = converter_.get_type_handler().build_array(
+    array.type().subtype(), elements.size());
+  exprt copy = gen_zero(type);
+  copy.operands() = exprt::operandst(elements.begin(), elements.end());
+  symbolt &tmp = converter_.create_tmp_symbol(
+    list_value_, "$numpy_string_slice$", type, copy);
+  code_declt decl(build_symbol(tmp));
+  decl.operands().push_back(copy);
+  converter_.add_instruction(decl);
+  if (converter_.current_lhs)
+  {
+    converter_.current_lhs->type() = type;
+    converter_.update_symbol(*converter_.current_lhs);
+  }
+  return build_symbol(tmp);
+}
+
 exprt python_list::index(const exprt &array, const nlohmann::json &slice_node)
 {
   if (slice_node["_type"] == "Slice") // arr[lower:upper]
   {
-    if (type_utils::is_numpy_string_array(array.type()))
+    if (
+      array.type().is_pointer() && array.type().subtype().is_array() &&
+      type_utils::is_char_storage(
+        type_utils::array_scalar_type(array.type().subtype())))
       throw std::runtime_error(
-        "TypeError: slicing a numpy string array is not supported");
+        "TypeError: a slice of a numpy string array parameter is not "
+        "supported");
+    if (type_utils::is_numpy_string_array(array.type()))
+    {
+      converter_.reject_unsafe_numpy_string_slice(list_value_["value"]);
+      return numpy_string_slice_copy(array, slice_node);
+    }
     return handle_range_slice(array, slice_node);
   }
   else
@@ -2040,7 +2122,8 @@ exprt python_list::emit_ll_temp(
 // np.eye/np.full can bind list objects; only numeric storage is strided.
 static bool is_numeric_storage(const typet &elem_type)
 {
-  return is_number(elem_type) || elem_type.is_bool();
+  return is_number(elem_type) || elem_type.is_bool() ||
+         is_complex_type(elem_type);
 }
 
 std::optional<python_list::strided_view_desc> python_list::contiguous_view_desc(
@@ -3394,7 +3477,7 @@ std::optional<exprt> python_list::try_build_numpy_param_slice_view(
 {
   if (
     !array.is_symbol() || !resolved_array_type.is_pointer() ||
-    resolved_array_type.subtype() == char_type())
+    type_utils::is_char_storage(resolved_array_type.subtype()))
     return std::nullopt;
   const std::string id = array.identifier().as_string();
   if (
@@ -3412,7 +3495,7 @@ bool python_list::is_runtime_numpy_slice(
   const typet &elem_type,
   const nlohmann::json &slice_node) const
 {
-  if (elem_type == char_type())
+  if (type_utils::is_char_storage(elem_type))
     return false;
   if (!get_slice_step_info(slice_node).literal)
     return true;
@@ -3436,10 +3519,11 @@ exprt python_list::handle_range_slice(
   // Handle regular array/string slicing (not list slicing)
   // String parameters come as pointer-to-char, so handle both arrays and char
   // pointers
-  bool is_string_slice = (resolved_array_type != resolved_list_type &&
-                          resolved_array_type.is_array()) ||
-                         (resolved_array_type.is_pointer() &&
-                          resolved_array_type.subtype() == char_type());
+  bool is_string_slice =
+    (resolved_array_type != resolved_list_type &&
+     resolved_array_type.is_array()) ||
+    (resolved_array_type.is_pointer() &&
+     type_utils::is_char_storage(resolved_array_type.subtype()));
 
   // Determine step value (default 1).
   const slice_step_info step_info = get_slice_step_info(slice_node);
@@ -3473,7 +3557,7 @@ exprt python_list::handle_range_slice(
     // which uses __ESBMC_alloca and survives function returns.
     if (
       resolved_array_type.is_pointer() &&
-      resolved_array_type.subtype() == char_type())
+      type_utils::is_char_storage(resolved_array_type.subtype()))
     {
       const symbolt &slice_func_ref = get_str_slice_sym();
 
@@ -3554,7 +3638,7 @@ exprt python_list::handle_range_slice(
       elem_type = src_type.subtype();
       array_len = to_size_expr(src_type.size());
       // For char arrays (strings), exclude null terminator from logical length
-      logical_len = (elem_type == char_type())
+      logical_len = (type_utils::is_char_storage(elem_type))
                       ? size_sub(array_len, gen_one(size_type()))
                       : array_len;
     }
@@ -3614,7 +3698,7 @@ exprt python_list::handle_range_slice(
     // arrays (e.g. bytes, modelled as wide-int arrays) must NOT carry a phantom
     // null element: len() counts elements there, so an extra slot would
     // over-count. Size the result accordingly.
-    const bool needs_null_term = (elem_type == char_type());
+    const bool needs_null_term = (type_utils::is_char_storage(elem_type));
     exprt result_size = slice_len;
     if (step_info.literal)
     {
@@ -4823,7 +4907,7 @@ void python_list::normalize_index_access_position(
       BigInt s = binary2integer(t.size().value().c_str(), true);
 
       // For char arrays (strings), exclude null terminator from logical length
-      if (t.subtype() == char_type())
+      if (type_utils::is_char_storage(t.subtype()))
         s -= 1;
 
       v += s;
@@ -4903,10 +4987,12 @@ exprt python_list::handle_index_access(
     array, slice_node, list_node, pos_expr, index);
 
   // Handle different array types
-  const bool is_char_array = resolved_array_type.is_array() &&
-                             resolved_array_type.subtype() == char_type();
-  const bool is_char_ptr = resolved_array_type.is_pointer() &&
-                           resolved_array_type.subtype() == char_type();
+  const bool is_char_array =
+    resolved_array_type.is_array() &&
+    type_utils::is_char_storage(resolved_array_type.subtype());
+  const bool is_char_ptr =
+    resolved_array_type.is_pointer() &&
+    type_utils::is_char_storage(resolved_array_type.subtype());
 
   if (
     (array.type().is_symbol() || array.type().subtype().is_symbol()) &&
@@ -5741,7 +5827,8 @@ exprt python_list::extract_pyobject_value(
   // value. For all other types, the void* contains a pointer to the value.
   if (
     elem_type.is_pointer() &&
-    (elem_type.subtype() == char_type() || elem_type.subtype() == bool_type()))
+    (type_utils::is_char_storage(elem_type.subtype()) ||
+     elem_type.subtype() == bool_type()))
   {
     // String and None case: cast void* directly to the pointer type (no
     // dereference needed)
