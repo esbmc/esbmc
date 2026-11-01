@@ -2980,6 +2980,17 @@ std::string python_annotation<Json>::get_type_from_method(const Json &call)
       return obj_type;
   }
 
+  // d.copy() has the type of d, so the copy's keys and values stay typed.
+  if (
+    call["func"].value("attr", std::string()) == "copy" &&
+    call["args"].empty() && call["func"].contains("value") &&
+    call["func"]["value"].value("_type", std::string()) == "Name")
+  {
+    const std::string receiver = get_argument_type(call["func"]["value"]);
+    if (receiver.rfind("dict[", 0) == 0)
+      return receiver;
+  }
+
   // Inline dict-literal method calls, e.g. `{"a":1}.get("x", 3)`.
   // The receiver has no symbol name, so resolve the types we model here
   // (get/setdefault/pop/keys/values/items)
