@@ -1,4 +1,5 @@
 CORE
 main.cpp
 --loop-invariant-check
+^  loop invariant inductive step$
 ^VERIFICATION FAILED$

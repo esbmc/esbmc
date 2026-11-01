@@ -1,4 +1,5 @@
 CORE
 main.c
---force-malloc-success --loop-invariant-check --loop-frame-rule
+--force-malloc-success --loop-invariant-check --loop-frame-rule --multi-property
+^  UNKNOWN\s+\[main\.assertion\.\d+\]\s+line\s+12\s+bad \(loop invariant too weak
 ^VERIFICATION UNKNOWN$

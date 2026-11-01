@@ -120,8 +120,9 @@ protected:
    * that define temporaries used in the invariant.  Remove them from the GOTO
    * program and place them in @p side_effects_out for re-insertion before each
    * ASSERT/ASSUME so they are re-evaluated with the havoc'd variables.
+   * False when the invariant is declined and the loop left unchecked.
    */
-  void extract_and_remove_side_effects(
+  bool extract_and_remove_side_effects(
     goto_programt::targett loop_head,
     const loopst &loop,
     const std::vector<expr2tc> &invariants,

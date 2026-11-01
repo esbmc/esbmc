@@ -54,6 +54,18 @@
 #include <set>
 #include <string>
 
+/// Snapshot, into a fresh array, the rest of the object \p ptr addresses as
+/// elements of \p elem_type: a quantified assume, so a symbolic size adds no
+/// unwinding. Shared by __ESBMC_old in contracts and in loop invariants.
+expr2tc snapshot_object_from(
+  const expr2tc &ptr,
+  const type2tc &elem_type,
+  goto_programt &dest,
+  const std::string &tag,
+  const locationt &location,
+  contextt &context,
+  const namespacet &ns);
+
 /// \brief Basic contract handling class
 /// Provides contract checking and replacement functionality at goto function
 /// level
@@ -68,18 +80,6 @@
 ///
 /// Contracts enable modular verification by allowing functions to be verified
 /// independently and then used as abstractions in system-level verification.
-/// Snapshot, into a fresh array, the rest of the object \p ptr addresses as
-/// elements of \p elem_type: a quantified assume, so a symbolic size adds no
-/// unwinding. Shared by __ESBMC_old in contracts and in loop invariants.
-expr2tc snapshot_object_from(
-  const expr2tc &ptr,
-  const type2tc &elem_type,
-  goto_programt &dest,
-  const std::string &tag,
-  const locationt &location,
-  contextt &context,
-  const namespacet &ns);
-
 class code_contractst
 {
 public:

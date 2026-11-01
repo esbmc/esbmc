@@ -8,4 +8,5 @@ int main() {
   __ESBMC_loop_invariant(i <= n && s == __ESBMC_loop_entry(s) + i && d == __ESBMC_loop_entry(d) + i &&
     __ESBMC_forall(&j, !(j < i) || (d - i)[j] == (s - i)[j]));
   while (i < n) { *d = *s; d++; s++; i++; }
+  __ESBMC_assert(dst[0] == src[0] && dst[n - 1] == src[n - 1], "copied");
 }

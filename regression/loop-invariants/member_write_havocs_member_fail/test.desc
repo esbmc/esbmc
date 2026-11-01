@@ -1,4 +1,5 @@
 CORE
 main.c
 --function f --enforce-contract f --loop-invariant-check --loop-frame-rule
-^VERIFICATION (FAILED|UNKNOWN)$
+^  UNKNOWN\s+\[global\.assertion\.\d+\]\s+line\s+3\s+contract ensures \(loop invariant too weak
+^VERIFICATION UNKNOWN$

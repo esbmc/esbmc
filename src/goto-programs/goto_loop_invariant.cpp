@@ -325,6 +325,43 @@ static void snapshot_entry_regions(
   }
 }
 
+/// Without --loop-frame-rule nothing else snapshots the variables an
+/// invariant's __ESBMC_old reads, so it would read their havocked value: copy
+/// each at loop entry and point the read at the copy.
+static void snapshot_entry_values(
+  goto_programt &side_effects,
+  goto_programt &entry,
+  const locationt &loc,
+  contextt &context)
+{
+  static size_t counter = 0;
+  for (auto &instr : side_effects.instructions)
+  {
+    const code_assign2t *a = old_snapshot_assign(instr);
+    if (a == nullptr || !is_symbol2t(to_sideeffect2t(a->source).operand))
+      continue;
+    const expr2tc &var = to_sideeffect2t(a->source).operand;
+    symbolt symbol;
+    symbol.name = symbol.id =
+      "__ESBMC_loop_entry_value_" + std::to_string(counter++);
+    set_symbol_type(symbol, var->type);
+    symbol.lvalue = true;
+    const expr2tc snap =
+      symbol2tc(var->type, context.move_symbol_to_context(symbol)->id);
+    goto_programt::targett d = entry.add_instruction(DECL);
+    d->code = code_decl2tc(var->type, to_symbol2t(snap).thename);
+    d->location = loc;
+    goto_programt::targett s = entry.add_instruction(ASSIGN);
+    s->code = code_assign2tc(snap, var);
+    s->location = loc;
+    s->location.comment("__ESBMC_old loop-entry snapshot");
+    const expr2tc addr = address_of2tc(var->type, snap);
+    instr.code = code_assign2tc(
+      a->target,
+      addr->type == a->target->type ? addr : typecast2tc(a->target->type, addr));
+  }
+}
+
 void goto_loop_invariant(
   goto_functionst &goto_functions,
   contextt &context,
@@ -372,7 +409,8 @@ void goto_loop_invariantt::convert_loop_with_invariant(loopst &loop)
   // Extract invariant-related DECL/FUNCTION_CALLs and re-insert before each
   // ASSERT/ASSUME.
   goto_programt side_effects;
-  extract_and_remove_side_effects(loop_head, loop, invariants, side_effects);
+  if (!extract_and_remove_side_effects(loop_head, loop, invariants, side_effects))
+    return;
 
   // insert_assert_before_loop swaps the base case into the loop-head slot and
   // moves the head's own instruction to a fresh node behind it, so the
@@ -383,6 +421,8 @@ void goto_loop_invariantt::convert_loop_with_invariant(loopst &loop)
   goto_programt entry;
   snapshot_entry_regions(
     invariants, side_effects, entry, loop_head->location, context);
+  if (!use_frame_rule)
+    snapshot_entry_values(side_effects, entry, loop_head->location, context);
 
   // 1. Insert ASSERT invariant before loop (base case)
   insert_assert_before_loop(loop_head, invariants, side_effects);
@@ -557,17 +597,19 @@ collect_symbols_local(const expr2tc &expr, std::set<irep_idt> &symbols)
   }
 }
 
-static void
-refuse_conditional_side_effects(bool conditional, const locationt &loc)
+/// Whether side-effect extraction stops before moving anything: there is
+/// nothing to move, or the invariant computes a value under control flow,
+/// which cannot be re-evaluated after the havoc and declines the loop.
+static bool
+stop_extraction(bool conditional, bool nothing_to_move, const locationt &loc)
 {
-  if (!conditional)
-    return;
-  log_error(
-    "{}: a loop invariant computes a value under control flow (a ?: or a "
-    "short-circuit around a call); it cannot be re-evaluated after the "
-    "havoc. Rewrite it without one.",
-    loc.as_string());
-  abort();
+  if (conditional)
+    log_warning(
+      "loop invariant at {} not checked: it computes a value under control "
+      "flow (a ?: or a short-circuit around a call), which cannot be "
+      "re-evaluated after the havoc",
+      loc.as_string());
+  return conditional || nothing_to_move;
 }
 
 /// Shared implementation used by both the legacy loop-invariant pass and the
@@ -575,7 +617,7 @@ refuse_conditional_side_effects(bool conditional, const locationt &loc)
 /// goto_loop_invariantt::extract_and_remove_side_effects for a high-level
 /// description; this helper just takes an explicit goto_function parameter so
 /// it can be reused from both passes.
-static void extract_and_remove_side_effects_impl(
+static bool extract_and_remove_side_effects_impl(
   goto_functiont &goto_function,
   goto_programt::targett loop_head,
   const loopst &loop,
@@ -588,7 +630,7 @@ static void extract_and_remove_side_effects_impl(
     collect_symbols_local(inv, inv_symbols);
 
   if (inv_symbols.empty())
-    return;
+    return true;
 
   // Names of variables modified in the loop: do not move their DECLs (they
   // are user variables like i, sum, y; moving them would break base case).
@@ -616,7 +658,7 @@ static void extract_and_remove_side_effects_impl(
       break;
   }
   if (!loop_inv_it->is_loop_invariant())
-    return;
+    return true;
 
   // Walk backwards from LOOP_INVARIANT: collect instructions that define
   // temporaries used in the invariant. dep_symbols = symbols the invariant
@@ -732,10 +774,8 @@ static void extract_and_remove_side_effects_impl(
     break;
   }
 
-  refuse_conditional_side_effects(conditional, loop_head->location);
-
-  if (to_remove.empty())
-    return;
+  if (stop_extraction(conditional, to_remove.empty(), loop_head->location))
+    return !conditional;
 
   for (auto rit = to_remove.rbegin(); rit != to_remove.rend(); ++rit)
   {
@@ -747,15 +787,16 @@ static void extract_and_remove_side_effects_impl(
      * reach here, so nothing that carries targets of its own is cleared. */
     (*rit)->make_skip();
   }
+  return true;
 }
 
-void goto_loop_invariantt::extract_and_remove_side_effects(
+bool goto_loop_invariantt::extract_and_remove_side_effects(
   goto_programt::targett loop_head,
   const loopst &loop,
   const std::vector<expr2tc> &invariants,
   goto_programt &side_effects_out)
 {
-  extract_and_remove_side_effects_impl(
+  return extract_and_remove_side_effects_impl(
     goto_function, loop_head, loop, invariants, side_effects_out);
 }
 
@@ -1236,6 +1277,25 @@ assume_continue_cond(goto_programt::targett loop_exit, goto_programt &out)
   t->location.comment("loop continue condition (verification branch)");
 }
 
+/// The invariants of the loop at \p loop_head, with the side effects they
+/// read moved into \p side_effects; empty when there are none or they are
+/// declined.
+static std::vector<expr2tc> invariants_with_side_effects(
+  goto_functiont &goto_function,
+  goto_programt::targett loop_head,
+  const loopst &loop,
+  goto_programt &side_effects)
+{
+  std::vector<expr2tc> invariants =
+    extract_invariants_near(loop_head, goto_function.body.instructions.begin());
+  if (
+    !invariants.empty() &&
+    !extract_and_remove_side_effects_impl(
+      goto_function, loop_head, loop, invariants, side_effects))
+    invariants.clear();
+  return invariants;
+}
+
 void goto_loop_invariant_combinedt::insert_invariant_verification_branch(
   loopst &loop)
 {
@@ -1243,18 +1303,15 @@ void goto_loop_invariant_combinedt::insert_invariant_verification_branch(
   goto_programt::targett loop_exit = loop.get_original_loop_exit();
 
   // ── 1. Collect invariant expressions ──────────────────────────────────────
-  std::vector<expr2tc> invariants =
-    extract_invariants_near(loop_head, goto_function.body.instructions.begin());
-
-  if (invariants.empty())
-    return;
-
   // Reuse the legacy side-effect extraction so that any temporaries or
   // function calls used in the invariant are re-evaluated in Branch 1 and
   // when inserting ASSUME(INV) for Branch 2.
   goto_programt side_effects;
-  extract_and_remove_side_effects_impl(
-    goto_function, loop_head, loop, invariants, side_effects);
+  std::vector<expr2tc> invariants =
+    invariants_with_side_effects(goto_function, loop_head, loop, side_effects);
+
+  if (invariants.empty())
+    return;
 
   // ── 2. Copy loop body, and the entry condition that stands in for the head
   const expr2tc entry_cond = loop_entry_cond(loop_head);

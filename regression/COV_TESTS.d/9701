@@ -1,0 +1,15 @@
+regression/esbmc/synth_loop_invariant_calleeinv_ternary
+regression/loop-invariants/cpp_reference_param_locals_havocked
+regression/loop-invariants/github_7502_callee
+regression/loop-invariants/github_7502_callee_fail
+regression/loop-invariants/github_7502_counter
+regression/loop-invariants/github_7502_counter_fail
+regression/loop-invariants/heap_write_havocs_whole_object
+regression/loop-invariants/invariant_ternary_refused
+regression/loop-invariants/loop_entry_in_place
+regression/loop-invariants/loop_entry_in_place_unknown
+regression/loop-invariants/loop_entry_pointer_advance
+regression/loop-invariants/loop_entry_pointer_advance_no_frame_rule
+regression/loop-invariants/loop_entry_pointer_advance_unknown
+regression/loop-invariants/member_write_havocs_member
+regression/loop-invariants/member_write_havocs_member_fail
