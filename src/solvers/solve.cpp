@@ -74,7 +74,7 @@ static const std::string all_solvers[] = {
   "mathsat",
   "yices"};
 
-static std::string pick_default_solver()
+static std::string first_builtin_solver()
 {
   for (const std::string &name : all_solvers)
   {
@@ -84,6 +84,16 @@ static std::string pick_default_solver()
       name == "smtlib" || name == "bitwuzllob" || name == "neurosym" ||
       !esbmc_solvers.count(name))
       continue;
+    return name;
+  }
+  return "";
+}
+
+static std::string pick_default_solver()
+{
+  std::string name = first_builtin_solver();
+  if (!name.empty())
+  {
     log_status("No solver specified; defaulting to {}", name);
     return name;
   }
@@ -113,6 +123,33 @@ static std::string resolve_user_solver_choice(const optionst &options)
     solver_name = options.get_option("default-solver");
 
   return solver_name;
+}
+
+std::string effective_solver_name(const optionst &options)
+{
+  std::string name = resolve_user_solver_choice(options);
+#ifdef Z3
+  if (
+    name.empty() && options.get_bool_option("int-encoding") &&
+    esbmc_solvers.count("z3"))
+    return "z3";
+#endif
+  return name.empty() ? first_builtin_solver() : name;
+}
+
+bool solver_supports_fp_format(
+  const std::string &solver_name,
+  unsigned exponent,
+  unsigned fraction)
+{
+  if (solver_name != "bitwuzla")
+    return true;
+  /* Bitwuzla is built without --fpexp, so only the IEEE interchange formats
+   * Float16, Float32, Float64 and Float128 are available. */
+  return (exponent == 5 && fraction == 10) ||
+         (exponent == 8 && fraction == 23) ||
+         (exponent == 11 && fraction == 52) ||
+         (exponent == 15 && fraction == 112);
 }
 
 void check_solver_availability(const optionst &options)
