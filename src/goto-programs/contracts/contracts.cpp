@@ -5391,8 +5391,20 @@ void code_contractst::replace_calls(const std::set<std::string> &to_replace)
 void code_contractst::remove_inactive_clauses()
 {
   Forall_goto_functions (it, goto_functions)
-    if (it->second.body_available)
-      remove_clause_assumes(it->second.body);
+  {
+    if (!it->second.body_available)
+      continue;
+    remove_clause_assumes(it->second.body);
+    // An assigns marker evaluates its target (`*(T *)p` for __ESBMC_object),
+    // so left in a body that runs it raises dereference claims of its own.
+    Forall_goto_program_instructions (i, it->second.body)
+      if (
+        i->is_assign() && is_code_assign2t(i->code) &&
+        is_sideeffect2t(to_code_assign2t(i->code).source) &&
+        to_sideeffect2t(to_code_assign2t(i->code).source).kind ==
+          sideeffect2t::allockind::assigns_target)
+        i->make_skip();
+  }
   goto_functions.update();
 }
 
