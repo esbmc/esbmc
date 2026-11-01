@@ -101,6 +101,16 @@ and its stages, ADR-NP-004 the SMT-array scalability decision, and "principle
 
 ---
 
+10. **A default-dtype scalar that left its array reads as a Python number.**
+    `l = [a[0]]`, then `c + l[0]` with an `int8` array `c`, applies the weak
+    scalar rule where NumPy promotes to `int64`, so the verdict can be wrong.
+    The name-bound form `x = a[0]` is tracked; a container or a return is not.
+
+11. **Results NumPy leaves to the platform follow one model.** A float out of
+    an integer dtype's range under `astype` is undefined in C, and complex64
+    multiplication that overflows follows the plain formula (NaN), where a
+    NumPy build using fused multiply-add can return an infinity.
+
 ## Community testing readiness
 
 ESBMC's standard across every frontend (C, C++, Solidity, Java/Kotlin) is
