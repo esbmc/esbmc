@@ -1,0 +1,5 @@
+CORE
+main.c
+--loop-invariant-check --unwind 5
+not checked: it computes a value under control flow
+^VERIFICATION SUCCESSFUL$

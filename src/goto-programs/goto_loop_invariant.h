@@ -76,7 +76,7 @@ public:
     goto_functiont &_goto_function,
     contextt &_context,
     bool _use_frame_rule)
-    : goto_loopst(_function_name, _goto_functions, _goto_function),
+    : goto_loopst(_function_name, _goto_functions, _goto_function, true),
       context(_context),
       use_frame_rule(_use_frame_rule)
   {
@@ -120,8 +120,9 @@ protected:
    * that define temporaries used in the invariant.  Remove them from the GOTO
    * program and place them in @p side_effects_out for re-insertion before each
    * ASSERT/ASSUME so they are re-evaluated with the havoc'd variables.
+   * False when the invariant is declined and the loop left unchecked.
    */
-  void extract_and_remove_side_effects(
+  bool extract_and_remove_side_effects(
     goto_programt::targett loop_head,
     const loopst &loop,
     const std::vector<expr2tc> &invariants,

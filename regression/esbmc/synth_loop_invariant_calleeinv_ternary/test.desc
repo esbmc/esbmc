@@ -1,6 +1,4 @@
 CORE
 main.c
 --synthesise-loop-invariants --unwind 6 --multi-property --result-only
-\A(?![\s\S]*Synthesised loop invariants)[\s\S]*\Z
-^  PASSED       \[main\.assertion\.1\]  line 23  loop invariant base case$
-^VERIFICATION UNKNOWN$
+cannot be re-evaluated after the

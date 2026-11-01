@@ -45,7 +45,7 @@ static expr2tc extract_queried_pointer(const expr2tc &expr)
   return expr2tc();
 }
 
-bool check_var_name(const expr2tc &expr)
+bool check_var_name(const expr2tc &expr, bool dollar_in_name_only)
 {
   if (!is_symbol2t(expr))
     return false;
@@ -65,8 +65,12 @@ bool check_var_name(const expr2tc &expr)
   if (found != std::string::npos)
     return false;
 
-  // Don't add variables that we created for k-induction
-  found = identifier.find("$");
+  // Don't add variables that we created for k-induction. With
+  // dollar_in_name_only, only the name itself: a C++ function's USR, which
+  // prefixes its locals, has a '$' for a class-reference parameter
+  // (`f#&$@S@T#@i`), and a loop invariant must havoc those locals.
+  found =
+    identifier.find('$', dollar_in_name_only ? identifier.rfind('@') + 1 : 0);
   if (found != std::string::npos)
     return false;
 
@@ -321,7 +325,7 @@ void goto_loopst::collect_loop_symbols(
   expr->foreach_operand(
     [this, &out](const expr2tc &e) { collect_loop_symbols(e, out); });
 
-  if (is_symbol2t(expr) && check_var_name(expr))
+  if (is_symbol2t(expr) && check_var_name(expr, invariant_mode))
     out.insert(expr);
 }
 
@@ -355,7 +359,7 @@ void goto_loopst::collect_lhs_symbols(
   expr->foreach_operand(
     [this, &out](const expr2tc &e) { collect_lhs_symbols(e, out); });
 
-  if (is_symbol2t(expr) && check_var_name(expr))
+  if (is_symbol2t(expr) && check_var_name(expr, invariant_mode))
     out.modified.insert(expr);
 }
 
@@ -552,8 +556,10 @@ void goto_loopst::apply_callee_summary(
   if (summary.unnamed_write)
     loop.set_unnamed_pointer_write();
   // Havocking through the call's arguments cannot cover an element the
-  // callee writes past them (#5230).
-  if (summary.modifies_pointer_array)
+  // callee writes past them (#5230), unless the havoc takes the whole object
+  // an argument points into: pointer arithmetic cannot leave it. A pointer the
+  // callee did not get as an argument is pointer_write_unresolvable above.
+  if (summary.modifies_pointer_array && !invariant_mode)
     loop.set_pointer_array_write_unresolvable();
 }
 
@@ -622,6 +628,25 @@ void goto_loopst::get_modified_variables(
   }
 }
 
+/// `p->f = ...` through a pointer symbol p: record the member write and read
+/// p. False for any other write.
+bool goto_loopst::add_pointer_member_write(loopst &loop, const expr2tc &expr)
+{
+  if (!is_member2t(expr))
+    return false;
+  expr2tc base = expr;
+  while (is_member2t(base))
+    base = to_member2t(base).source_value;
+  if (!is_dereference2t(base))
+    return false;
+  const expr2tc ptr = extract_queried_pointer(base);
+  if (is_nil_expr(ptr) || !is_symbol2t(ptr))
+    return false;
+  loop.add_pointer_member_write(expr, ptr);
+  add_loop_var(loop, to_dereference2t(base).value, false);
+  return true;
+}
+
 void goto_loopst::add_loop_var(
   loopst &loop,
   const expr2tc &expr,
@@ -651,6 +676,8 @@ void goto_loopst::add_loop_var(
     add_loop_var(loop, to_dereference2t(expr).value, false);
     return;
   }
+  if (is_modified && add_pointer_member_write(loop, expr))
+    return;
   if (is_modified && is_index2t(expr))
   {
     const index2t &idx = to_index2t(expr);
@@ -674,7 +701,7 @@ void goto_loopst::add_loop_var(
     add_loop_var(loop, e, is_modified);
   });
 
-  if (is_symbol2t(expr) && check_var_name(expr))
+  if (is_symbol2t(expr) && check_var_name(expr, invariant_mode))
   {
     if (is_modified)
       loop.add_modified_var_to_loop(expr);

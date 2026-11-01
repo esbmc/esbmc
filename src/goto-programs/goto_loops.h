@@ -10,12 +10,15 @@
 /// internals, return-value temporaries, k-induction-generated names, etc.
 /// Defined in goto_loops.cpp; declared here so the k-induction pass can
 /// reuse it when filtering value-set objects (issue #5230).
-bool check_var_name(const expr2tc &expr);
+bool check_var_name(const expr2tc &expr, bool dollar_in_name_only = false);
 
 class goto_loopst
 {
 protected:
   irep_idt function_name;
+  // Set by the loop-invariant pass, whose havoc covers a whole object; see
+  // check_var_name and apply_callee_summary.
+  bool invariant_mode = false;
   goto_functionst &goto_functions;
   goto_functiont &goto_function;
 
@@ -95,7 +98,7 @@ protected:
     function_summaryt &local,
     std::vector<expr2tc> &written_ptrs);
 
-  static void apply_callee_summary(
+  void apply_callee_summary(
     loopst &loop,
     const function_summaryt &summary,
     const code_function_call2t &call);
@@ -116,13 +119,16 @@ protected:
   void add_unmodified_var(loopst &loop, const expr2tc &expr);
 
   void add_loop_var(loopst &loop, const expr2tc &expr, bool is_modified);
+  bool add_pointer_member_write(loopst &loop, const expr2tc &expr);
 
 public:
   goto_loopst(
     const irep_idt &_function_name,
     goto_functionst &_goto_functions,
-    goto_functiont &_goto_function)
+    goto_functiont &_goto_function,
+    bool _invariant_mode = false)
     : function_name(_function_name),
+      invariant_mode(_invariant_mode),
       goto_functions(_goto_functions),
       goto_function(_goto_function)
   {

@@ -30,6 +30,8 @@
  * variables.
  */
 
+#include <goto-programs/contracts/contracts.h>
+#include <goto-programs/goto_k_induction.h>
 #include <goto-programs/goto_loop_invariant.h>
 #include <goto-programs/frame_enforcer.h>
 #include <goto-programs/remove_no_op.h>
@@ -201,6 +203,165 @@ static std::vector<expr2tc> extract_invariants_near(
   return invariants;
 }
 
+/// *(base + j) where base, under casts and one dereference, is \p tmp: the
+/// shape __ESBMC_old(p[j]) takes once the frontend lifts it over a bound j.
+static bool is_region_read(const expr2tc &e, const std::string &tmp, expr2tc &j)
+{
+  if (!is_dereference2t(e))
+    return false;
+  expr2tc p = to_dereference2t(e).value;
+  while (is_typecast2t(p))
+    p = to_typecast2t(p).from;
+  if (!is_add2t(p))
+    return false;
+  expr2tc b = to_add2t(p).side_1;
+  while (is_typecast2t(b))
+    b = to_typecast2t(b).from;
+  if (!is_dereference2t(b))
+    return false;
+  b = to_dereference2t(b).value;
+  while (is_typecast2t(b))
+    b = to_typecast2t(b).from;
+  if (!is_symbol2t(b) || to_symbol2t(b).get_symbol_name() != tmp)
+    return false;
+  j = to_add2t(p).side_2;
+  return true;
+}
+
+static void
+find_region_read(const expr2tc &e, const std::string &tmp, type2tc &t)
+{
+  if (is_nil_expr(e) || !is_nil_type(t))
+    return;
+  expr2tc j;
+  if (is_region_read(e, tmp, j))
+  {
+    t = e->type;
+    return;
+  }
+  e->foreach_operand([&](const expr2tc &op) { find_region_read(op, tmp, t); });
+}
+
+static expr2tc replace_region_read(
+  const expr2tc &e,
+  const std::string &tmp,
+  const expr2tc &snap)
+{
+  if (is_nil_expr(e))
+    return e;
+  expr2tc j;
+  if (is_region_read(e, tmp, j))
+    return index2tc(e->type, snap, j);
+  expr2tc r = e->clone();
+  r->Foreach_operand(
+    [&](expr2tc &op) { op = replace_region_read(op, tmp, snap); });
+  return r;
+}
+
+/// The assignment of an __ESBMC_old snapshot to a temp, else null.
+static const code_assign2t *
+old_snapshot_assign(const goto_programt::instructiont &instr)
+{
+  if (!instr.is_assign() || !is_code_assign2t(instr.code))
+    return nullptr;
+  const code_assign2t &a = to_code_assign2t(instr.code);
+  if (
+    !is_symbol2t(a.target) || !is_sideeffect2t(a.source) ||
+    to_sideeffect2t(a.source).kind != sideeffect2t::allockind::old_snapshot)
+    return nullptr;
+  return &a;
+}
+
+static void for_each_assign_source(
+  goto_programt &program,
+  const std::function<void(expr2tc &)> &f)
+{
+  for (auto &instr : program.instructions)
+    if (instr.is_assign() && is_code_assign2t(instr.code))
+      f(to_code_assign2t(instr.code).source);
+}
+
+/// __ESBMC_old(p[j]) in an invariant reads the memory p addressed at loop
+/// entry. The pointer value alone is not enough once the loop writes through
+/// p, so snapshot the object here and read the snapshot.
+static void snapshot_entry_regions(
+  std::vector<expr2tc> &invariants,
+  goto_programt &side_effects,
+  goto_programt &entry,
+  const locationt &loc,
+  contextt &context)
+{
+  const namespacet ns(context);
+  static size_t counter = 0;
+  for (const auto &instr : side_effects.instructions)
+  {
+    const code_assign2t *a = old_snapshot_assign(instr);
+    if (a == nullptr)
+      continue;
+    const expr2tc &ptr = to_sideeffect2t(a->source).operand;
+    const std::string tmp = to_symbol2t(a->target).get_symbol_name();
+    // Quantified conjuncts are bound to temps in the side effects.
+    type2tc elem;
+    for (const auto &inv : invariants)
+      find_region_read(inv, tmp, elem);
+    for_each_assign_source(side_effects, [&](expr2tc &source) {
+      find_region_read(source, tmp, elem);
+    });
+    if (!is_pointer_type(ptr->type) || is_nil_type(elem))
+      continue;
+    const expr2tc snap = snapshot_object_from(
+      ptr,
+      elem,
+      entry,
+      "loop_entry_" + std::to_string(counter++),
+      loc,
+      context,
+      ns);
+    for (auto &inv : invariants)
+      inv = replace_region_read(inv, tmp, snap);
+    for_each_assign_source(side_effects, [&](expr2tc &source) {
+      source = replace_region_read(source, tmp, snap);
+    });
+  }
+}
+
+/// Without --loop-frame-rule nothing else snapshots the variables an
+/// invariant's __ESBMC_old reads, so it would read their havocked value: copy
+/// each at loop entry and point the read at the copy.
+static void snapshot_entry_values(
+  goto_programt &side_effects,
+  goto_programt &entry,
+  const locationt &loc,
+  contextt &context)
+{
+  static size_t counter = 0;
+  for (auto &instr : side_effects.instructions)
+  {
+    const code_assign2t *a = old_snapshot_assign(instr);
+    if (a == nullptr || !is_symbol2t(to_sideeffect2t(a->source).operand))
+      continue;
+    const expr2tc &var = to_sideeffect2t(a->source).operand;
+    symbolt symbol;
+    symbol.name = symbol.id =
+      "__ESBMC_loop_entry_value_" + std::to_string(counter++);
+    set_symbol_type(symbol, var->type);
+    symbol.lvalue = true;
+    const expr2tc snap =
+      symbol2tc(var->type, context.move_symbol_to_context(symbol)->id);
+    goto_programt::targett d = entry.add_instruction(DECL);
+    d->code = code_decl2tc(var->type, to_symbol2t(snap).thename);
+    d->location = loc;
+    goto_programt::targett s = entry.add_instruction(ASSIGN);
+    s->code = code_assign2tc(snap, var);
+    s->location = loc;
+    s->location.comment("__ESBMC_old loop-entry snapshot");
+    const expr2tc addr = address_of2tc(var->type, snap);
+    instr.code = code_assign2tc(
+      a->target,
+      addr->type == a->target->type ? addr : typecast2tc(a->target->type, addr));
+  }
+}
+
 void goto_loop_invariant(
   goto_functionst &goto_functions,
   contextt &context,
@@ -248,7 +409,8 @@ void goto_loop_invariantt::convert_loop_with_invariant(loopst &loop)
   // Extract invariant-related DECL/FUNCTION_CALLs and re-insert before each
   // ASSERT/ASSUME.
   goto_programt side_effects;
-  extract_and_remove_side_effects(loop_head, loop, invariants, side_effects);
+  if (!extract_and_remove_side_effects(loop_head, loop, invariants, side_effects))
+    return;
 
   // insert_assert_before_loop swaps the base case into the loop-head slot and
   // moves the head's own instruction to a fresh node behind it, so the
@@ -256,8 +418,17 @@ void goto_loop_invariantt::convert_loop_with_invariant(loopst &loop)
   // instruction that follows it, which no insertion before the head can move.
   goto_programt::targett after_head = std::next(loop_head);
 
+  goto_programt entry;
+  snapshot_entry_regions(
+    invariants, side_effects, entry, loop_head->location, context);
+  if (!use_frame_rule)
+    snapshot_entry_values(side_effects, entry, loop_head->location, context);
+
   // 1. Insert ASSERT invariant before loop (base case)
   insert_assert_before_loop(loop_head, invariants, side_effects);
+  // ...behind the entry snapshots: loop_head now names the base case's slot.
+  if (!entry.instructions.empty())
+    goto_function.body.insert_swap(loop_head, entry);
 
   // A write through a dereference has no named symbol for the havoc to cover,
   // so resolve the pointer to the objects it may reference and havoc those
@@ -426,12 +597,27 @@ collect_symbols_local(const expr2tc &expr, std::set<irep_idt> &symbols)
   }
 }
 
+/// Whether side-effect extraction stops before moving anything: there is
+/// nothing to move, or the invariant computes a value under control flow,
+/// which cannot be re-evaluated after the havoc and declines the loop.
+static bool
+stop_extraction(bool conditional, bool nothing_to_move, const locationt &loc)
+{
+  if (conditional)
+    log_warning(
+      "loop invariant at {} not checked: it computes a value under control "
+      "flow (a ?: or a short-circuit around a call), which cannot be "
+      "re-evaluated after the havoc",
+      loc.as_string());
+  return conditional || nothing_to_move;
+}
+
 /// Shared implementation used by both the legacy loop-invariant pass and the
 /// combined loop-invariant + k-induction pass.  See the declaration of
 /// goto_loop_invariantt::extract_and_remove_side_effects for a high-level
 /// description; this helper just takes an explicit goto_function parameter so
 /// it can be reused from both passes.
-static void extract_and_remove_side_effects_impl(
+static bool extract_and_remove_side_effects_impl(
   goto_functiont &goto_function,
   goto_programt::targett loop_head,
   const loopst &loop,
@@ -444,7 +630,7 @@ static void extract_and_remove_side_effects_impl(
     collect_symbols_local(inv, inv_symbols);
 
   if (inv_symbols.empty())
-    return;
+    return true;
 
   // Names of variables modified in the loop: do not move their DECLs (they
   // are user variables like i, sum, y; moving them would break base case).
@@ -472,7 +658,7 @@ static void extract_and_remove_side_effects_impl(
       break;
   }
   if (!loop_inv_it->is_loop_invariant())
-    return;
+    return true;
 
   // Walk backwards from LOOP_INVARIANT: collect instructions that define
   // temporaries used in the invariant. dep_symbols = symbols the invariant
@@ -485,6 +671,10 @@ static void extract_and_remove_side_effects_impl(
   std::vector<goto_programt::targett> to_remove;
   std::set<irep_idt> dep_symbols = inv_symbols;
   std::set<irep_idt> fc_return_syms;
+  // A definition past a jump (walking back) is conditional, as `c ? f(x) : y`
+  // lowers: the side effects cannot be replayed in order, and a constant
+  // left behind (`tmp = 1`) is only one of the values.
+  bool crossed_goto = false, conditional = false;
 
   goto_programt::targett search = loop_inv_it;
   while (search != goto_function.body.instructions.begin())
@@ -501,6 +691,7 @@ static void extract_and_remove_side_effects_impl(
         break;
       if (!is_likely_compiler_temp(lhs_sym))
         break;
+      conditional |= crossed_goto;
       if (is_trivial_rhs(assign.source))
         continue;
       to_remove.push_back(search);
@@ -518,6 +709,7 @@ static void extract_and_remove_side_effects_impl(
         irep_idt sym = to_symbol2t(fc.ret).get_symbol_name();
         if (dep_symbols.count(sym))
         {
+          conditional |= crossed_goto;
           fc_return_syms.insert(sym);
           to_remove.push_back(search);
           continue;
@@ -565,6 +757,7 @@ static void extract_and_remove_side_effects_impl(
 
     if (search->is_goto())
     {
+      crossed_goto = true;
       continue;
     }
 
@@ -581,8 +774,8 @@ static void extract_and_remove_side_effects_impl(
     break;
   }
 
-  if (to_remove.empty())
-    return;
+  if (stop_extraction(conditional, to_remove.empty(), loop_head->location))
+    return !conditional;
 
   for (auto rit = to_remove.rbegin(); rit != to_remove.rend(); ++rit)
   {
@@ -594,15 +787,16 @@ static void extract_and_remove_side_effects_impl(
      * reach here, so nothing that carries targets of its own is cleared. */
     (*rit)->make_skip();
   }
+  return true;
 }
 
-void goto_loop_invariantt::extract_and_remove_side_effects(
+bool goto_loop_invariantt::extract_and_remove_side_effects(
   goto_programt::targett loop_head,
   const loopst &loop,
   const std::vector<expr2tc> &invariants,
   goto_programt &side_effects_out)
 {
-  extract_and_remove_side_effects_impl(
+  return extract_and_remove_side_effects_impl(
     goto_function, loop_head, loop, invariants, side_effects_out);
 }
 
@@ -679,14 +873,97 @@ void goto_loop_invariantt::havoc_pointees(
 {
   const namespacet ns(context);
 
-  for (const expr2tc &ptr : loop.get_pointer_array_write_ptrs())
+  // `p->f = ...` with p fixed across the loop changes that member only;
+  // havocking more would also lose the rest of the object's value set.
+  // A p the loop reassigns can reach other objects: havoc the whole one.
+  std::set<expr2tc> whole(
+    loop.get_pointer_array_write_ptrs().begin(),
+    loop.get_pointer_array_write_ptrs().end());
+  for (const auto &[lvalue, ptr] : loop.get_pointer_member_writes())
   {
-    const type2tc pointee = havoc_pointee_type(ptr, ns);
+    if (loop.get_modified_loop_vars().count(ptr))
+    {
+      whole.insert(ptr);
+      continue;
+    }
     goto_programt::targett t = dest.add_instruction(ASSIGN);
-    t->code = code_assign2tc(dereference2tc(pointee, ptr), gen_nondet(pointee));
+    t->code = code_assign2tc(lvalue, gen_nondet(lvalue->type));
     t->location = loc;
     t->location.comment("loop invariant havoc");
   }
+
+  // The whole object: `p[i] = ...` reaches every element of p's object over
+  // the iterations, not only the one *p names at loop entry.
+  for (const expr2tc &ptr : whole)
+  {
+    goto_programt::targett t = dest.add_instruction(FUNCTION_CALL);
+    t->code = code_function_call2tc(
+      expr2tc(), havoc_object_function(), std::vector<expr2tc>{ptr});
+    t->location = loc;
+    t->location.comment("loop invariant havoc");
+  }
+}
+
+/// The symbol \p instr defines: an assignment's or a call result's, else
+/// empty.
+static irep_idt defined_symbol(const goto_programt::instructiont &instr)
+{
+  expr2tc target;
+  if (instr.is_assign() && is_code_assign2t(instr.code))
+    target = to_code_assign2t(instr.code).target;
+  else if (instr.is_function_call() && is_code_function_call2t(instr.code))
+    target = to_code_function_call2t(instr.code).ret;
+  return !is_nil_expr(target) && is_symbol2t(target)
+           ? to_symbol2t(target).get_symbol_name()
+           : irep_idt();
+}
+
+static bool reads_any(const expr2tc &e, const std::set<irep_idt> &syms)
+{
+  std::set<irep_idt> read;
+  collect_symbols_local(e, read);
+  for (const auto &s : read)
+    if (syms.count(s))
+      return true;
+  return false;
+}
+
+static bool has_dereference(const expr2tc &e)
+{
+  if (is_nil_expr(e))
+    return false;
+  if (is_dereference2t(e))
+    return true;
+  bool found = false;
+  e->foreach_operand(
+    [&](const expr2tc &op) { found = found || has_dereference(op); });
+  return found;
+}
+
+/// A conjunct that dereferences reads through pointers the havoc just made
+/// nondet, so it goes after the conjuncts that pin them, in written order.
+static bool
+uses_side_effect(const expr2tc &conjunct, const std::set<irep_idt> &defs)
+{
+  return has_dereference(conjunct) || reads_any(conjunct, defs);
+}
+
+/// A nondet value for the loop variable \p lhs. A bare nondet pointer has an
+/// empty value set, so the body could not dereference it; also let it land
+/// anywhere in the object it addressed at loop entry.
+static expr2tc havoc_value(const expr2tc &lhs)
+{
+  const expr2tc rhs = gen_nondet(lhs->type);
+  if (!is_pointer_type(lhs->type))
+    return rhs;
+  const type2tc bytes = pointer_type2tc(get_uint8_type());
+  return if2tc(
+    lhs->type,
+    gen_nondet(get_bool_type()),
+    typecast2tc(
+      lhs->type,
+      add2tc(bytes, typecast2tc(bytes, lhs), gen_nondet(get_int64_type()))),
+    rhs);
 }
 
 void goto_loop_invariantt::insert_havoc_and_assume_before_condition(
@@ -751,12 +1028,9 @@ void goto_loop_invariantt::insert_havoc_and_assume_before_condition(
       is_pointer_type(lhs))
       continue;
 
-    // Generate a nondeterministic value for the loop variable
-    expr2tc rhs = gen_nondet(lhs->type);
-
     // Create an assignment instruction for the nondeterministic value
     goto_programt::targett t = dest.add_instruction(ASSIGN);
-    t->code = code_assign2tc(lhs, rhs);
+    t->code = code_assign2tc(lhs, havoc_value(lhs));
     t->location = loop_head->location;
     t->location.comment("loop invariant havoc");
     t->loop_invariant_havoc = true;
@@ -783,29 +1057,8 @@ void goto_loop_invariantt::insert_havoc_and_assume_before_condition(
   // spuriously (issue #6189).
   std::set<irep_idt> side_effect_defs;
   for (const auto &instr : side_effects.instructions)
-  {
-    if (instr.is_assign() && is_code_assign2t(instr.code))
-    {
-      const code_assign2t &a = to_code_assign2t(instr.code);
-      if (is_symbol2t(a.target))
-        side_effect_defs.insert(to_symbol2t(a.target).get_symbol_name());
-    }
-    else if (instr.is_function_call() && is_code_function_call2t(instr.code))
-    {
-      const code_function_call2t &fc = to_code_function_call2t(instr.code);
-      if (!is_nil_expr(fc.ret) && is_symbol2t(fc.ret))
-        side_effect_defs.insert(to_symbol2t(fc.ret).get_symbol_name());
-    }
-  }
-
-  auto uses_side_effect = [&side_effect_defs](const expr2tc &conjunct) {
-    std::set<irep_idt> syms;
-    collect_symbols_local(conjunct, syms);
-    for (const auto &s : syms)
-      if (side_effect_defs.count(s))
-        return true;
-    return false;
-  };
+    side_effect_defs.insert(defined_symbol(instr));
+  side_effect_defs.erase(irep_idt());
 
   // Flatten top-level conjunctions so a pure conjunct can be split out even
   // when the frontend folded it together with a side-effecting one into `a &&
@@ -820,7 +1073,7 @@ void goto_loop_invariantt::insert_havoc_and_assume_before_condition(
       partition(to_and2t(e).side_2);
     }
     else
-      (uses_side_effect(e) ? impure : pure).push_back(e);
+      (uses_side_effect(e, side_effect_defs) ? impure : pure).push_back(e);
   };
   for (const auto &invariant : invariants)
     partition(invariant);
@@ -840,10 +1093,20 @@ void goto_loop_invariantt::insert_havoc_and_assume_before_condition(
   // assume the side-effect-dependent conjuncts.
   for (const auto &conjunct : pure)
     emit_assume(conjunct);
+  // Assume each remaining conjunct, in written order, as soon as the side
+  // effects it reads are defined: a quantifier hoisted into the side effects
+  // then dereferences pointers the earlier conjuncts have already pinned.
+  std::set<irep_idt> pending = side_effect_defs;
+  size_t next = 0;
   for (const auto &instr : side_effects.instructions)
+  {
+    while (next < impure.size() && !reads_any(impure[next], pending))
+      emit_assume(impure[next++]);
     dest.instructions.push_back(instr);
-  for (const auto &conjunct : impure)
-    emit_assume(conjunct);
+    pending.erase(defined_symbol(instr));
+  }
+  while (next < impure.size())
+    emit_assume(impure[next++]);
 
   // Note: active_frame_enforcer is NOT deleted here.
   // It is reused in insert_inductive_step_and_termination for the ASSERT
@@ -1014,6 +1277,25 @@ assume_continue_cond(goto_programt::targett loop_exit, goto_programt &out)
   t->location.comment("loop continue condition (verification branch)");
 }
 
+/// The invariants of the loop at \p loop_head, with the side effects they
+/// read moved into \p side_effects; empty when there are none or they are
+/// declined.
+static std::vector<expr2tc> invariants_with_side_effects(
+  goto_functiont &goto_function,
+  goto_programt::targett loop_head,
+  const loopst &loop,
+  goto_programt &side_effects)
+{
+  std::vector<expr2tc> invariants =
+    extract_invariants_near(loop_head, goto_function.body.instructions.begin());
+  if (
+    !invariants.empty() &&
+    !extract_and_remove_side_effects_impl(
+      goto_function, loop_head, loop, invariants, side_effects))
+    invariants.clear();
+  return invariants;
+}
+
 void goto_loop_invariant_combinedt::insert_invariant_verification_branch(
   loopst &loop)
 {
@@ -1021,18 +1303,15 @@ void goto_loop_invariant_combinedt::insert_invariant_verification_branch(
   goto_programt::targett loop_exit = loop.get_original_loop_exit();
 
   // ── 1. Collect invariant expressions ──────────────────────────────────────
-  std::vector<expr2tc> invariants =
-    extract_invariants_near(loop_head, goto_function.body.instructions.begin());
-
-  if (invariants.empty())
-    return;
-
   // Reuse the legacy side-effect extraction so that any temporaries or
   // function calls used in the invariant are re-evaluated in Branch 1 and
   // when inserting ASSUME(INV) for Branch 2.
   goto_programt side_effects;
-  extract_and_remove_side_effects_impl(
-    goto_function, loop_head, loop, invariants, side_effects);
+  std::vector<expr2tc> invariants =
+    invariants_with_side_effects(goto_function, loop_head, loop, side_effects);
+
+  if (invariants.empty())
+    return;
 
   // ── 2. Copy loop body, and the entry condition that stands in for the head
   const expr2tc entry_cond = loop_entry_cond(loop_head);
