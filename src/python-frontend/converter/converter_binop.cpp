@@ -3806,7 +3806,8 @@ static void reject_unsafe_in_place_cast(
   };
   if (
     element.value("_type", "") == "AugAssign" && lhs.is_array() &&
-    rank(leaf_of(rhs)) > rank(leaf_of(lhs)))
+    rank(leaf_of(rhs)) > rank(leaf_of(lhs)) &&
+    (rhs.is_array() || is_complex_type(rhs)))
     throw std::runtime_error(
       "TypeError: an in-place numpy operation that cannot cast its result to "
       "the array's dtype is not supported");

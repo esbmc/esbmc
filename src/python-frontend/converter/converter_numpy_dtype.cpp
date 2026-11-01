@@ -959,7 +959,7 @@ void python_converter::bind_numpy_scalar_name(
   const typet rhs_leaf = type_utils::array_scalar_type(rhs.type());
   if (
     symbol && target.value("_type", "") == "Name" && rhs.type().is_array() &&
-    !lhs.type().is_array() &&
+    !lhs.type().is_array() && !lhs.type().is_pointer() &&
     (is_complex_type(rhs_leaf) || rhs_leaf.is_floatbv() ||
      rhs_leaf.is_signedbv() || rhs_leaf.is_unsignedbv() ||
      rhs_leaf.is_bool()) &&

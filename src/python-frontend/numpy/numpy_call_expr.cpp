@@ -11275,10 +11275,11 @@ void numpy_call_expr::reject_narrow_float_mean(
       : converter_.numpy_array_dtype(arg);
   if (
     !dtype || dtype->kind != numpy_dtypet::kindt::floating ||
-    dtype->bits == 64 || narrow_float_mean_nodes(arg))
+    dtype->bits == 64 || (dtype->bits == 32 && narrow_float_mean_nodes(arg)))
     return;
+  // NumPy accumulates float16 in float32.
   throw std::runtime_error(
-    "TypeError: numpy.mean() over 8 or more elements of a narrow float dtype "
+    "TypeError: numpy.mean() over float16, or over 8 or more float32 elements, "
     "is not supported");
 }
 
