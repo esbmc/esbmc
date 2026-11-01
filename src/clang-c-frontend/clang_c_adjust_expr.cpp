@@ -651,6 +651,116 @@ static std::pair<exprt, exprt> lower_real_complex(
   return {apply(zr), zi};
 }
 
+// C17 G.5.1p4: where the usual formulas give NaN + NaN i, recover the
+// infinity or zero that * and / must yield, as the informative _Cmultd and
+// _Cdivd of G.5.1 do. The zero-divisor test is on the parts rather than on
+// br^2 + bi^2, which underflows to zero for tiny parts that _Cdivd's scaling
+// keeps nonzero.
+static void recover_complex_infinities(
+  const irep_idt &op,
+  const exprt &a,
+  const exprt &b,
+  const exprt &c,
+  const exprt &d,
+  std::pair<exprt, exprt> &parts,
+  const typet &elem_t)
+{
+  auto make_op = [&elem_t](const irep_idt &id, const exprt &l, const exprt &r) {
+    return complex_part_op(id, l, r, elem_t);
+  };
+  auto pred = [](const irep_idt &id, const exprt &v) {
+    exprt e(id, bool_type());
+    e.copy_to_operands(v);
+    return e;
+  };
+  const ieee_float_spect spec(to_floatbv_type(elem_t));
+  auto constant = [&spec](int v) {
+    ieee_floatt f(spec);
+    f.from_integer(v);
+    return f.to_expr();
+  };
+  const exprt inf = ieee_floatt::plus_infinity(spec).to_expr();
+  auto is_negative = [](const exprt &v) {
+    exprt signbit("signbit", int_type());
+    signbit.copy_to_operands(v);
+    exprt e("notequal", bool_type());
+    e.copy_to_operands(signbit, gen_zero(int_type()));
+    return e;
+  };
+  auto copysign = [&](const exprt &magnitude, const exprt &sign) {
+    exprt negated("unary-", elem_t);
+    negated.copy_to_operands(magnitude);
+    return if_exprt(is_negative(sign), negated, magnitude);
+  };
+  // copysign(isinf(v) ? 1 : 0, v)
+  auto box = [&](const exprt &v) {
+    return copysign(if_exprt(pred("isinf", v), constant(1), constant(0)), v);
+  };
+  // isnan(v) ? copysign(0, v) : v
+  auto nan_to_zero = [&](const exprt &v) {
+    return if_exprt(pred("isnan", v), copysign(constant(0), v), v);
+  };
+  const exprt z_inf = or_exprt(pred("isinf", a), pred("isinf", b));
+  const exprt w_inf = or_exprt(pred("isinf", c), pred("isinf", d));
+  const exprt both_nan =
+    and_exprt(pred("isnan", parts.first), pred("isnan", parts.second));
+  auto recover = [&](const exprt &cond, const exprt &re, const exprt &im) {
+    parts.first = if_exprt(and_exprt(both_nan, cond), re, parts.first);
+    parts.second = if_exprt(and_exprt(both_nan, cond), im, parts.second);
+  };
+
+  if (op == "*")
+  {
+    const exprt overflow = or_exprt(
+      or_exprt(
+        pred("isinf", make_op("*", a, c)), pred("isinf", make_op("*", b, d))),
+      or_exprt(
+        pred("isinf", make_op("*", a, d)), pred("isinf", make_op("*", b, c))));
+    const exprt a1 = if_exprt(z_inf, box(a), nan_to_zero(a));
+    const exprt b1 = if_exprt(z_inf, box(b), nan_to_zero(b));
+    const exprt c1 = if_exprt(w_inf, box(c), nan_to_zero(c));
+    const exprt d1 = if_exprt(w_inf, box(d), nan_to_zero(d));
+    recover(
+      or_exprt(or_exprt(z_inf, w_inf), overflow),
+      make_op(
+        "*", inf, make_op("-", make_op("*", a1, c1), make_op("*", b1, d1))),
+      make_op(
+        "*", inf, make_op("+", make_op("*", a1, d1), make_op("*", b1, c1))));
+    return;
+  }
+
+  auto is_zero = [&](const exprt &v) {
+    exprt e("=", bool_type());
+    e.copy_to_operands(v, constant(0));
+    return e;
+  };
+  auto finite = [&](const exprt &x, const exprt &y) {
+    return and_exprt(pred("isfinite", x), pred("isfinite", y));
+  };
+  // Applied in reverse of _Cdivd's if / else if order, so the first case wins.
+  const exprt c1 = box(c), d1 = box(d);
+  recover(
+    and_exprt(w_inf, finite(a, b)),
+    make_op(
+      "*", constant(0), make_op("+", make_op("*", a, c1), make_op("*", b, d1))),
+    make_op(
+      "*",
+      constant(0),
+      make_op("-", make_op("*", b, c1), make_op("*", a, d1))));
+  const exprt a1 = box(a), b1 = box(b);
+  recover(
+    and_exprt(z_inf, finite(c, d)),
+    make_op("*", inf, make_op("+", make_op("*", a1, c), make_op("*", b1, d))),
+    make_op("*", inf, make_op("-", make_op("*", b1, c), make_op("*", a1, d))));
+  const exprt signed_inf = copysign(inf, c);
+  recover(
+    and_exprt(
+      and_exprt(is_zero(c), is_zero(d)),
+      or_exprt(not_exprt(pred("isnan", a)), not_exprt(pred("isnan", b)))),
+    make_op("*", signed_inf, a),
+    make_op("*", signed_inf, b));
+}
+
 // (ar + ai i) op (br + bi i) by the usual formulas.
 static std::pair<exprt, exprt> lower_complex_complex(
   const irep_idt &op,
@@ -668,19 +778,26 @@ static std::pair<exprt, exprt> lower_complex_complex(
 
   if (op == "+" || op == "-")
     return {make_op(op, ar, br), make_op(op, ai, bi)};
+  std::pair<exprt, exprt> parts;
   if (op == "*")
     // (ar*br - ai*bi) + (ar*bi + ai*br)i
-    return {
+    parts = {
       make_op("-", make_op("*", ar, br), make_op("*", ai, bi)),
       make_op("+", make_op("*", ar, bi), make_op("*", ai, br))};
-  // denom = br^2 + bi^2
-  exprt denom = make_op("+", make_op("*", br, br), make_op("*", bi, bi));
-  // real = (ar*br + ai*bi) / denom, imag = (ai*br - ar*bi) / denom
-  return {
-    make_op(
-      "/", make_op("+", make_op("*", ar, br), make_op("*", ai, bi)), denom),
-    make_op(
-      "/", make_op("-", make_op("*", ai, br), make_op("*", ar, bi)), denom)};
+  else
+  {
+    // denom = br^2 + bi^2
+    exprt denom = make_op("+", make_op("*", br, br), make_op("*", bi, bi));
+    // real = (ar*br + ai*bi) / denom, imag = (ai*br - ar*bi) / denom
+    parts = {
+      make_op(
+        "/", make_op("+", make_op("*", ar, br), make_op("*", ai, bi)), denom),
+      make_op(
+        "/", make_op("-", make_op("*", ai, br), make_op("*", ar, bi)), denom)};
+  }
+  if (elem_t.is_floatbv())
+    recover_complex_infinities(op, ar, ai, br, bi, parts, elem_t);
+  return parts;
 }
 
 bool clang_c_adjust::lower_complex_binary_arithmetic(exprt &expr)
