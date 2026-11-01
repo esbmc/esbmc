@@ -446,6 +446,7 @@ static bool is_reissued_clause_call(const irep_idt &id)
 {
   const std::string &s = id2string(id);
   return s == "c:@F@__ESBMC_get_object_size" ||
+         s == "c:@F@__ESBMC_builtin_object_size" ||
          s.rfind("c:@F@__ESBMC_uninterpreted_", 0) == 0;
 }
 
