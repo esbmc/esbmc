@@ -63,6 +63,11 @@ __ESBMC_values_equal(const void *a, const void *b, size_t size)
     return true;
   // Direct comparison for common sizes - no loop needed
   // Python frontend maps: int/float -> 8 bytes, bool -> 1 byte
+  // A float lives in the double buffer. Comparing it as a double folds for
+  // constants, where a bit-wise read does not, and equates 0.0 with -0.0 as
+  // Python does (#9635).
+  if (size == 8 && __ESBMC_same_object(a, __ESBMC_float_buf))
+    return *(const double *)a == *(const double *)b;
   if (size == 8)
     return __ESBMC_load_u64(a) == __ESBMC_load_u64(b);
   if (size == 1)
