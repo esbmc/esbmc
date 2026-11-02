@@ -1,0 +1,8 @@
+regression/python/github_9725_from_rebind
+regression/python/github_9725_from_rebind_fail
+regression/python/github_9725_global_fail
+regression/python/github_9725_global_pass
+regression/python/github_9725_guard_fail
+regression/python/github_9725_guard_pass
+regression/python/github_9725_helper_name
+regression/python/github_9725_loop_target
