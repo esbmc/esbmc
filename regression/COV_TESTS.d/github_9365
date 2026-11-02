@@ -1,0 +1,4 @@
+regression/python/github_9365_fstring_list_fail
+regression/python/github_9365_fstring_none
+regression/python/github_9365_fstring_none_fail
+regression/python/github_9365_fstring_tuple_fail
