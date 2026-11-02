@@ -3,5 +3,6 @@ regression/python/github_9737_fail
 regression/python/github_9737_float
 regression/python/github_9737_mixed
 regression/python/github_9737_module
+regression/python/github_9737_module_fail
 regression/python/github_9737_str
 regression/python/github_9737_value_fail

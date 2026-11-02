@@ -1,10 +1,8 @@
 def f(c):
     q = [1.5, 2.5] if c else [3.5]
-    return q
+    assert isinstance(q[0], float)
+    return len(q)
 
 
-a = f(True)
-b = f(False)
-assert isinstance(a[1], float)
-assert isinstance(b[0], float)
-assert len(a) == 2
+assert f(True) == 2
+assert f(False) == 1

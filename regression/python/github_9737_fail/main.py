@@ -1,7 +1,7 @@
 def f(c):
     q = [3] if c else [2]
-    return q
+    assert isinstance(q[0], str)
+    return len(q)
 
 
-a = f(True)
-assert isinstance(a[0], str)
+assert f(True) == 1
