@@ -2777,6 +2777,8 @@ class LoopMixin:
 
     def _infer_type_from_call(self, call_node):
         """Infer type from function call nodes"""
+        if self._copied_dict_name(call_node) is not None:
+            return "dict"
         if not isinstance(call_node.func, ast.Name):
             return "Any"
 
@@ -2926,8 +2928,29 @@ class LoopMixin:
         if isinstance(value, ast.Subscript):
             return self._create_subscript_annotation(value)
         if isinstance(value, ast.Call):
-            return self._create_annotation_from_call(value)
+            return self._create_annotation_from_call(value) or self._dict_copy_annotation(value)
         return None
+
+    def _copied_dict_name(self, call_node):
+        """The receiver of `d.copy()` when `d` is known to be a dict, else None.
+
+        A dict literal with heterogeneous keys or values is iterated per key,
+        which a copy does not inherit, so its copy is not treated as a dict.
+        """
+        func = call_node.func
+        if not (isinstance(func, ast.Attribute) and func.attr == "copy" and isinstance(
+                func.value, ast.Name) and not call_node.args and not call_node.keywords):
+            return None
+        name = func.value.id
+        if name in self.het_dict_literals or name in self.het_value_dict_literals:
+            return None
+        return name if self._is_known_dict_name(name) else None
+
+    def _dict_copy_annotation(self, call_node):
+        """The receiver's annotation for `d.copy()` on a dict `d`, else None."""
+        name = self._copied_dict_name(call_node)
+        ann = self.variable_annotations.get(name)
+        return copy.deepcopy(ann) if name is not None and ann is not None else None
 
     # Element/key/value types covered by the monomorphic builders in
     # models/nondet.py.  A type outside these is rejected rather than silently
