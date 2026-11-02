@@ -412,7 +412,9 @@ bool clang_c_languaget::parse(const std::string &path)
     clang_c_lexert lexer;
     for (auto &wp : waypoints)
     {
-      if (wp.format != "ext_c_expression" && wp.format != "acsl_expression")
+      if (
+        wp.type != waypoint::function_return &&
+        wp.format != "ext_c_expression" && wp.format != "acsl_expression")
         continue;
       expr2tc e = lexer.parse_expr(wp.value);
       if (e)
