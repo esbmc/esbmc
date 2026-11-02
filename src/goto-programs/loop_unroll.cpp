@@ -205,6 +205,7 @@ static bool is_loop_preamble(
   switch (instruction.type)
   {
   case DECL:
+  case DEAD: // a C++ temporary of the initialiser ending its life
   case ASSIGN:
   case FUNCTION_CALL:
   case SKIP:
