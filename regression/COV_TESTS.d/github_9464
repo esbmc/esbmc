@@ -1,0 +1,5 @@
+regression/python/github_9464_raise
+regression/python/github_9464_raise_fail
+regression/python/github_9464_outside_raise_refused
+regression/python/github_9464_known_class
+regression/python/github_9464_raise_call
