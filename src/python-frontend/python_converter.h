@@ -645,6 +645,20 @@ public:
     exprt &rhs,
     const nlohmann::json &element);
 
+  /// `lhs op rhs` by exact value when one operand is an int and the other a
+  /// float; nil for any other pair or op.
+  static expr2tc exact_int_float_relation(
+    const std::string &op,
+    const exprt &lhs,
+    const exprt &rhs,
+    bool pure_reads = false);
+
+  exprt int_float_comparison(
+    const std::string &op,
+    exprt &lhs,
+    exprt &rhs,
+    const nlohmann::json &element);
+
   bool scalar_order(
     exprt a,
     exprt b,
