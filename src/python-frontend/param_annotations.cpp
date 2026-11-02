@@ -101,6 +101,8 @@ bool is_none_constant(const nlohmann::json &node)
 /// The type a tuple element names: a constant's type, or the `int`, `float`
 /// or `str` annotation of a parameter or variable that @p scope (the innermost
 /// enclosing def or the module, or null) binds exactly once. "" otherwise.
+/// The variable's assignment must be a statement of the scope's own body: one
+/// under an `if` or `try` may not run, leaving the name unbound.
 std::string
 element_type_name(const nlohmann::json &elt, const nlohmann::json *scope)
 {
@@ -111,6 +113,12 @@ element_type_name(const nlohmann::json &elt, const nlohmann::json *scope)
   if (json_utils::count_name_bindings(*scope, id) != 1)
     return "";
   const nlohmann::json decl = json_utils::find_var_in_function(id, *scope);
+  const nlohmann::json &body = (*scope)["body"];
+  if (
+    !decl.is_object() ||
+    (!decl.contains("arg") &&
+     std::find(body.begin(), body.end(), decl) == body.end()))
+    return "";
   const nlohmann::json &annotation = decl.value("annotation", nlohmann::json());
   const std::string type =
     is_node(annotation, "Name") ? annotation["id"].get<std::string>() : "";
