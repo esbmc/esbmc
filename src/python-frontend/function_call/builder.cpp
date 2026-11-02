@@ -1094,8 +1094,7 @@ symbol_id function_call_builder::build_function_id() const
 
       if (!obj_type.id().empty())
       {
-        converter_.build_forward_class(
-          obj_type.is_pointer() ? obj_type.subtype() : obj_type);
+        converter_.build_forward_class(obj_type);
 
         // If the resolved type is a list (e.g. class-level mutable_attr = []),
         // map directly to the "list" builtin name.

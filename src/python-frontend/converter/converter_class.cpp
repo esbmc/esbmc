@@ -1513,6 +1513,11 @@ void python_converter::process_forward_reference(
 
 void python_converter::build_forward_class(const typet &type)
 {
+  if (type.is_pointer())
+  {
+    build_forward_class(type.subtype());
+    return;
+  }
   const std::string tag = type.identifier().as_string();
   if (
     type.id() != "symbol" || tag.rfind("tag-", 0) != 0 ||
