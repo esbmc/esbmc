@@ -562,21 +562,15 @@ static bool printf_args_are_direct(printf_kindt kind)
 {
   switch (kind)
   {
-  case printf_kindt::PRINTF:
-  case printf_kindt::FPRINTF:
-  case printf_kindt::DPRINTF:
-  case printf_kindt::SPRINTF:
-  case printf_kindt::SNPRINTF:
-  case printf_kindt::ASPRINTF:
-    return true;
   case printf_kindt::VPRINTF:
   case printf_kindt::VFPRINTF:
   case printf_kindt::VSPRINTF:
   case printf_kindt::VSNPRINTF:
   case printf_kindt::VASPRINTF:
     return false;
+  default:
+    return true;
   }
-  return false;
 }
 
 void goto_symext::check_printf_pointer_arg(
