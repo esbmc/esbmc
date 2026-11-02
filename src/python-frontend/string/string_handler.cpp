@@ -1649,6 +1649,10 @@ exprt string_handler::convert_to_string(const exprt &expr)
 
   if (expr.is_constant())
   {
+    // str(None) is repr(None): NoneType inherits object.__str__.
+    if (t == none_type())
+      return converter_.get_string_builder().build_string_literal("None");
+
     exprt folded = constant_to_string(expr);
     if (folded.is_not_nil())
       return folded;
@@ -1660,6 +1664,10 @@ exprt string_handler::convert_to_string(const exprt &expr)
   // causing a type mismatch when nested inside __python_str_concat.
   if (t.is_pointer() && !expr.is_code())
   {
+    // A list or a class instance, not the bytes of a str.
+    if (t.subtype().id() == typet::t_symbol)
+      return build_nondet_string_fallback(expr.location());
+
     typet char_ptr = gen_pointer_type(char_type());
     if (t != char_ptr)
       return build_typecast(expr, char_ptr);
@@ -1735,14 +1743,9 @@ exprt string_handler::convert_to_string(const exprt &expr)
     return build_symbol(result_sym);
   }
 
-  // Anything else (struct, array of non-char, etc.) is currently unsupported.
-  std::string placeholder = "<expr>";
-  typet string_type =
-    type_handler_.build_array(char_type(), placeholder.size() + 1);
-  std::vector<unsigned char> chars(placeholder.begin(), placeholder.end());
-  chars.push_back('\0');
-
-  return make_char_array_expr(chars, string_type);
+  // The str of anything else (a list, tuple, dict, instance...) is not
+  // modelled, so it is any string.
+  return build_nondet_string_fallback(expr.location());
 }
 
 exprt string_handler::format_fstring_part(const nlohmann::json &value)
