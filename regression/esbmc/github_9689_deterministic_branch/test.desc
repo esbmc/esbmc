@@ -1,0 +1,6 @@
+CORE
+main.c
+--witness-output-yaml - --no-unwinding-assertions --unwind 10
+^VERIFICATION FAILED$
+type: "target"
+(?s)\A(?!.*type: "branching")
