@@ -2911,6 +2911,8 @@ class LoopMixin:
             target_copy = copy.deepcopy(target_node)
             individual_assign = self._create_individual_assignment(target_copy, staged, source_node)
             self._update_variable_types_simple(target_copy, value_node)
+            if isinstance(target_copy, ast.Name):
+                self._update_name_target_assignment_metadata(target_copy.id, individual_assign)
             assignments.append(individual_assign)
 
         return assignments
