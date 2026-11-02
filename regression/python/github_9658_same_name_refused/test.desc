@@ -1,4 +1,0 @@
-CORE
-main.py
-
-^ERROR: .*unsupported: calling method .f. on a value whose class is not known$

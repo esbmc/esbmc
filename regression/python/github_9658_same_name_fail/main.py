@@ -1,4 +1,3 @@
-# KNOWNBUG: CPython fails the assertion; ESBMC refuses because the receiver class is not known (#9658).
 class A:
     def f(self, x):
         return x + 3
