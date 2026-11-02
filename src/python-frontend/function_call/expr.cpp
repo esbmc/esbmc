@@ -1062,26 +1062,26 @@ static bool rebinds_repr_attribute(const nlohmann::json &node)
   return false;
 }
 
-/// Whether neither @p name, a class of @p ast, nor a base of it other than
-/// object defines __str__ or __repr__.
-static bool
-inherits_object_repr(const std::string &name, const nlohmann::json &ast)
+/// Whether @p name, a class of @p ast, or a base of it other than object may
+/// define @p dunder: a class not found in @p ast counts as defining it.
+static bool mro_defines(
+  const std::string &name,
+  const nlohmann::json &ast,
+  const std::string &dunder)
 {
   const nlohmann::json cls = find_class(ast["body"], name);
-  if (
-    cls.empty() || count_bindings(cls, "__str__") ||
-    count_bindings(cls, "__repr__"))
-    return false;
-  return std::all_of(
+  if (cls.empty() || count_bindings(cls, dunder))
+    return true;
+  return std::any_of(
     cls["bases"].begin(), cls["bases"].end(), [&](const nlohmann::json &b) {
       const std::string base = b.value("id", "");
-      return base == "object" || inherits_object_repr(base, ast);
+      return base != "object" && mro_defines(base, ast, dunder);
     });
 }
 
-/// The class whose default repr str() of @p value gives, or "" when that is
-/// not known: a plain class of the main module with no subclass, so the
-/// static type is the runtime class.
+/// The class whose __repr__ or default repr applies to @p value, or "" when
+/// that is not known: a plain class of the main module with no subclass, so
+/// the static type is the runtime class.
 static std::string
 default_repr_class(const exprt &value, const python_converter &converter)
 {
@@ -1098,7 +1098,7 @@ default_repr_class(const exprt &value, const python_converter &converter)
   if (
     converter.python_file() != converter.main_python_filename() ||
     !is_plain_class(name, ast) || json_utils::has_subclass(name, ast) ||
-    rebinds_repr_attribute(ast) || !inherits_object_repr(name, ast))
+    rebinds_repr_attribute(ast))
     return "";
   return name;
 }
@@ -1130,26 +1130,10 @@ exprt function_call_expr::str_of_object(exprt &value, const nlohmann::json &arg)
   {
     exprt dunder =
       converter_.dispatch_unary_dunder_operator("str", value, location);
-    const std::string cls = default_repr_class(value, converter_);
-    if (!dunder.is_nil() || cls.empty())
+    if (!dunder.is_nil())
       return dunder;
-    if (value.id() == "sideeffect")
-    {
-      code_expressiont call(value);
-      call.location() = location;
-      converter_.add_instruction(call);
-    }
-    const exprt repr =
-      converter_.get_string_handler().build_default_object_repr(
-        "<__main__." + cls + " object at 0x", location);
-    if (value.id() == "sideeffect" || !value.type().is_pointer())
-      return repr;
-    const exprt none =
-      converter_.get_string_builder().build_string_literal("None");
-    return if_exprt(
-      equality_exprt(value, gen_zero(value.type())),
-      build_address_of(build_index(none, from_integer(0, size_type()))),
-      repr);
+    // object.__str__ returns repr() of the instance.
+    return repr_of_object(value);
   }
   const std::string text =
     class_object_str(value.get_string("value"), arg, converter_);
@@ -1157,6 +1141,71 @@ exprt function_call_expr::str_of_object(exprt &value, const nlohmann::json &arg)
     return converter_.get_string_handler().build_nondet_string_fallback(
       location);
   return converter_.get_string_builder().build_string_literal(text);
+}
+
+exprt function_call_expr::repr_of_object(exprt &value) const
+{
+  const std::string cls = default_repr_class(value, converter_);
+  if (cls.empty())
+    return nil_exprt();
+  const locationt location = converter_.get_location_from_decl(call_);
+  exprt dunder =
+    converter_.dispatch_unary_dunder_operator("repr", value, location);
+  if (!dunder.is_nil())
+    return dunder;
+  if (mro_defines(cls, converter_.get_ast_json(), "__repr__"))
+    return nil_exprt();
+  if (value.id() == "sideeffect")
+  {
+    code_expressiont call(value);
+    call.location() = location;
+    converter_.add_instruction(call);
+  }
+  const exprt repr = converter_.get_string_handler().build_default_object_repr(
+    "<__main__." + cls + " object at 0x", location);
+  if (value.id() == "sideeffect" || !value.type().is_pointer())
+    return repr;
+  const exprt none =
+    converter_.get_string_builder().build_string_literal("None");
+  return if_exprt(
+    equality_exprt(value, gen_zero(value.type())),
+    build_address_of(build_index(none, from_integer(0, size_type()))),
+    repr);
+}
+
+exprt function_call_expr::handle_repr_call()
+{
+  const auto &arg = call_["args"][0];
+  double real_val = 0.0, imag_val = 0.0;
+  if (
+    try_extract_complex_parts_from_json(
+      arg,
+      converter_.ast(),
+      converter_.current_function_name(),
+      real_val,
+      imag_val))
+  {
+    return converter_.get_string_builder().build_string_literal(
+      format_complex_string(real_val, imag_val));
+  }
+  exprt value_expr = converter_.get_expr(arg);
+  if (!value_expr.is_nil() && value_expr.statement() != "cpp-throw")
+  {
+    if (is_complex_type(value_expr.type()))
+      return handle_complex_to_str();
+    exprt object_value = value_expr;
+    converter_.convert_function_call_to_side_effect(object_value);
+    exprt object_repr = repr_of_object(object_value);
+    if (object_repr.is_not_nil())
+      return object_repr;
+    // Types without a repr model keep the general-call fallback: a clean
+    // error, never a wrong fold.
+    exprt repr = converter_.get_string_handler().build_repr(
+      value_expr, converter_.get_location_from_decl(call_));
+    if (repr.is_not_nil())
+      return repr;
+  }
+  return handle_general_function_call();
 }
 
 // float() ignores outer whitespace: str.isspace(), which also counts \x1c-\x1f.
@@ -4500,6 +4549,32 @@ bool function_call_expr::is_math_function_dispatch_call() const
          bounded_math_import().has_value();
 }
 
+static bool is_math_number(const typet &t)
+{
+  return t.is_floatbv() || t.is_signedbv() || t.is_unsignedbv() || t.is_bool();
+}
+
+static bool overflows(const std::string &f)
+{
+  return f == "exp" || f == "exp2" || f == "expm1" || f == "sinh" ||
+         f == "cosh";
+}
+
+static bool is_finite_constant(const exprt &e)
+{
+  return e.is_constant() && e.type().is_floatbv() &&
+         ieee_floatt(to_constant_expr(e)).is_finite();
+}
+
+static bool is_numeric_literal(const nlohmann::json &node)
+{
+  if (node.value("_type", "") == "UnaryOp")
+    return is_numeric_literal(node["operand"]);
+  const nlohmann::json &value = node.value("value", nlohmann::json());
+  return node.value("_type", "") == "Constant" &&
+         (value.is_number() || value.is_boolean());
+}
+
 static bool is_number_literal(const nlohmann::json &node)
 {
   const std::string type = node.value("_type", "");
@@ -4534,8 +4609,7 @@ function_call_expr::try_bounded_math_call(const std::string &func_name)
   const exprt x = converter_.get_expr(arg);
   if (is_cpp_throw_expr(x))
     return x;
-  const typet &t = x.type();
-  if (!t.is_floatbv() && !t.is_signedbv() && !t.is_unsignedbv() && !t.is_bool())
+  if (!is_math_number(x.type()))
   {
     if (!json_utils::ast_contains_call(arg))
       return std::nullopt;
@@ -4559,7 +4633,45 @@ exprt function_call_expr::dispatch_math_call()
     std::optional<exprt> bounded =
       try_bounded_math_call(math_function_name(function_id_.get_function())))
     return *bounded;
-  return handle_math_function_dispatch();
+  const std::string func_name = math_function_name(function_id_.get_function());
+  if (calls_overflow_model(func_name))
+    return handle_general_function_call();
+  const exprt result = handle_math_function_dispatch();
+  return may_overflow(func_name, result) ? handle_general_function_call()
+                                         : result;
+}
+
+// These math.py models raise OverflowError themselves; as calls they also
+// keep short-circuit evaluation of the expression around them. A literal
+// argument is folded instead (may_overflow), and exp/sinh/cosh of a run-time
+// number take bounded_math, which raises too.
+bool function_call_expr::calls_overflow_model(const std::string &f) const
+{
+  const nlohmann::json &args = call_["args"];
+  const bool modelled =
+    f == "ldexp" || ((f == "expm1" || f == "exp2") && args.size() == 1 &&
+                     !is_number_literal(args[0]));
+  if (!modelled || converter_.is_model_file(call_))
+    return false;
+  if (
+    math_guard_utils::call_has_complex_in_args_or_keywords(
+      call_, converter_, type_handler_, converter_.current_function_name()))
+    return false;
+  // A call in an argument is converted once, by the model call; any other
+  // argument must be a number, as the models compare it with floats.
+  return std::all_of(args.begin(), args.end(), [&](const nlohmann::json &a) {
+    return json_utils::ast_contains_call(a) ||
+           is_math_number(converter_.get_expr(a).type());
+  });
+}
+
+// Only a finite folded result of a number literal is known not to overflow.
+bool function_call_expr::may_overflow(const std::string &f, const exprt &result)
+  const
+{
+  const nlohmann::json &args = call_["args"];
+  return overflows(f) && !converter_.is_model_file(call_) && args.size() == 1 &&
+         is_numeric_literal(args[0]) && !is_finite_constant(result);
 }
 
 exprt function_call_expr::handle_math_function_dispatch()
@@ -4579,6 +4691,7 @@ exprt function_call_expr::handle_math_function_dispatch()
     return math_guard_utils::call_has_complex_in_args_or_keywords(
       call_, converter_, type_handler_, converter_.current_function_name());
   };
+
   auto require_one_arg = [&]() -> exprt {
     if (args.size() != 1)
       throw std::runtime_error(func_name + "() expects exactly 1 argument");
@@ -5182,34 +5295,7 @@ function_call_expr::get_dispatch_table()
     {[this]() {
        return function_id_.get_function() == "repr" && !call_["args"].empty();
      },
-     [this]() {
-       const auto &arg = call_["args"][0];
-       double real_val = 0.0, imag_val = 0.0;
-       if (
-         try_extract_complex_parts_from_json(
-           arg,
-           converter_.ast(),
-           converter_.current_function_name(),
-           real_val,
-           imag_val))
-       {
-         return converter_.get_string_builder().build_string_literal(
-           format_complex_string(real_val, imag_val));
-       }
-       exprt value_expr = converter_.get_expr(arg);
-       if (!value_expr.is_nil() && value_expr.statement() != "cpp-throw")
-       {
-         if (is_complex_type(value_expr.type()))
-           return handle_complex_to_str();
-         // Types without a repr model keep the general-call fallback: a clean
-         // error, never a wrong fold.
-         exprt repr = converter_.get_string_handler().build_repr(
-           value_expr, converter_.get_location_from_decl(call_));
-         if (repr.is_not_nil())
-           return repr;
-       }
-       return handle_general_function_call();
-     },
+     [this]() { return handle_repr_call(); },
      "repr()"},
 
     // bytes.fromhex("..") classmethod — fold a constant hex string to bytes

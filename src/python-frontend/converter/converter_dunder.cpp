@@ -412,6 +412,7 @@ exprt python_converter::dispatch_unary_dunder_operator(
     {"index", "__index__"},
     {"len", "__len__"},
     {"str", "__str__"},
+    {"repr", "__repr__"},
   };
   auto it = unary_dunder_map.find(op);
   if (it == unary_dunder_map.end())

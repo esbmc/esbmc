@@ -99,7 +99,11 @@ class _Lowering:
     def __init__(self, module, module_name):
         self.module = module
         self.module_name = module_name
-        self.counts = Counter(b for n in ast.walk(module) for b in _bound_names(n))
+        self.counts = Counter(b for n in _scope_nodes(module.body) for b in _bound_names(n))
+        for n in ast.walk(module):
+            if isinstance(n, ast.Global):
+                self.counts.update({name: 2 for name in n.names})
+        self.local_names = []
         self.origins, self.star_modules = _imports(module)
         self.classes = {s.name: s for s in module.body if isinstance(s, ast.ClassDef)}
         self.fresh = 0
@@ -115,6 +119,8 @@ class _Lowering:
         if not isinstance(expr, ast.Name):
             return None
         root = expr.id
+        if any(root in names for names in self.local_names):
+            return None
         if self.counts[root] == 1 and root in self.origins:
             return self.origins[root] + path
         if self.counts[root] == 1 and root in self.classes:
@@ -299,6 +305,17 @@ class _CallSites(ast.NodeTransformer):
         if isinstance(node.value, ast.Call) and self.lowering.is_function(node.value.func):
             return self.lowering.lower(node)
         return self.generic_visit(node)
+
+    def visit_FunctionDef(self, node):
+        names = {b for n in ast.walk(node.args) for b in _bound_names(n)}
+        names |= {b for n in _scope_nodes(node.body) for b in _bound_names(n)}
+        self.lowering.local_names.append(names)
+        try:
+            return self.generic_visit(node)
+        finally:
+            self.lowering.local_names.pop()
+
+    visit_AsyncFunctionDef = visit_FunctionDef
 
     def visit_Name(self, node):
         return self.refuse_other_use(node)
