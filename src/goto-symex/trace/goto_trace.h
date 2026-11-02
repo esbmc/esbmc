@@ -59,6 +59,10 @@ public:
   // for assume, assert, goto
   bool guard;
 
+  /* For a branching step: whether its condition reads a nondet value or a
+   * symbol no earlier step computed from constants. */
+  bool nondet_dependent = true;
+
   // for assert
   std::string comment;
 
