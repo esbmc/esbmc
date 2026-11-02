@@ -687,6 +687,15 @@ expr2tc goto_symext::symex_mem(
   {
     cur_state->rename(size);
 
+    // A wrapper's malloc(n) sees its caller's sizeof(T) through n: type the
+    // object T, as malloc(sizeof(T)) is, so pointers in it are not stored and
+    // read back as bytes (#9693).
+    if (is_sizeof2t(size) && type == char_type2())
+    {
+      type = to_sizeof2t(size).sizeof_type;
+      size = gen_one(size->type);
+    }
+
     // Classify the request on unconditionally simplified copies: --no-simplify
     // must not blind the checks below, because an unsatisfiable request that
     // reaches the address-space model is encoded as a contradiction rather

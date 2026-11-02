@@ -561,7 +561,9 @@ void goto_symext::symex_assign_symbol(
     rhs = if2tc(rhs->type, guard.as_expr(), rhs, lhs);
 
   cur_state->rename(rhs);
-  do_simplify(rhs);
+  // Kept whole so a size passed on to malloc still types the object.
+  if (!is_sizeof2t(rhs))
+    do_simplify(rhs);
 
   if (!is_nil_expr(full_rhs))
   {
