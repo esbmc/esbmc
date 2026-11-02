@@ -1,0 +1,10 @@
+regression/esbmc-cpp/cpp/deref_list_iterator_beside_map
+regression/esbmc-cpp/cpp/deref_list_iterator_beside_map_fail
+regression/esbmc/deref_member_no_bounds_check_fail
+regression/esbmc/deref_member_symbolic_index
+regression/esbmc/deref_member_symbolic_index_fail
+regression/esbmc/deref_typed_subobject
+regression/esbmc/deref_typed_subobject_byte_array
+regression/esbmc/deref_typed_subobject_confusion_fail
+regression/esbmc/deref_typed_subobject_fail
+regression/esbmc/deref_typed_subobject_no_pointer_check_fail
