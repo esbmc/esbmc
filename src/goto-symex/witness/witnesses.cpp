@@ -117,6 +117,8 @@ void yamlt::generate_yaml(
       yaml_emitter << YAML::Key << "segment" << YAML::Value << YAML::BeginSeq;
 
       create_waypoint(waypoint, yaml_emitter);
+      if (racing_target && &waypoint == &this->segments.back())
+        create_waypoint(*racing_target, yaml_emitter);
 
       yaml_emitter << YAML::EndSeq;
       yaml_emitter << YAML::EndMap;

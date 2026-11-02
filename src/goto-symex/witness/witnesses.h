@@ -8,6 +8,7 @@
 #include <goto-symex/trace/goto_trace.h>
 #include <goto-symex/equation/symex_target_equation.h>
 #include <goto-symex/waypoint.h>
+#include <optional>
 #include <string>
 #include <regex>
 #include <vector>
@@ -140,6 +141,9 @@ public:
   typet witness_type;
   std::string verified_file;
   std::vector<waypoint> segments;
+  /// The earlier of two racing accesses; written beside the last waypoint
+  /// in a final segment of two targets, as a no-data-race witness requires.
+  std::optional<waypoint> racing_target;
   std::vector<invariant> invariants;
 
   yamlt(typet t)

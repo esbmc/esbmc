@@ -1,0 +1,5 @@
+CORE
+main.c
+--data-races-check --no-assertions --witness-output-yaml -
+^VERIFICATION FAILED$
+(?s)segment:\s+- waypoint:\s+type: "target"[^\n]*\n[^\n]*\n\s+location:[^\n]*\n[^\n]*\n\s+line: (?:5|12)\b.*?- waypoint:\s+type: "target"[^\n]*\n[^\n]*\n\s+location:[^\n]*\n[^\n]*\n\s+line: (?:5|12)\b

@@ -349,6 +349,35 @@ static waypoint witness_target_waypoint(
   return wp;
 }
 
+/* The earlier access of a race: the latest write to the raced variable by
+   another thread before the failed assertion, whose comment ends in the
+   variable's name ("W/W data race on c:@g"). */
+static std::optional<waypoint> witness_racing_target(
+  const goto_tracet &goto_trace,
+  const goto_trace_stept &failed,
+  const std::string &verified_file,
+  optionst &options)
+{
+  if (!options.get_bool_option("data-races-check"))
+    return {};
+
+  const std::string &comment = failed.comment;
+  const size_t on = comment.rfind(" on ");
+  if (on == std::string::npos)
+    return {};
+  const std::string variable = comment.substr(on + 4);
+
+  for (auto it = goto_trace.steps.rbegin(); it != goto_trace.steps.rend(); ++it)
+  {
+    if (
+      it->step_nr < failed.step_nr && it->type == symex_targett::ASSIGNMENT &&
+      it->thread_nr != failed.thread_nr && is_symbol2t(it->lhs) &&
+      to_symbol2t(it->lhs).thename.as_string() == variable)
+      return witness_target_waypoint(*it, verified_file, options);
+  }
+  return {};
+}
+
 void show_state_header(
   std::ostream &out,
   const goto_trace_stept &state,
@@ -522,6 +551,8 @@ void violation_yaml_goto_trace(
       {
         yml.segments.push_back(
           witness_target_waypoint(step, yml.verified_file, options));
+        yml.racing_target =
+          witness_racing_target(goto_trace, step, yml.verified_file, options);
 
         /* having printed a property violation, don't print more steps. */
 
