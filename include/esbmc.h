@@ -36,9 +36,8 @@
 /* Assert cond, reporting msg when it is violated. */
 #define ESBMC_assert(cond, msg) __ESBMC_assert((cond), (msg))
 
-/* No ESBMC_cover: __ESBMC_cover is declared for C but implemented only in the
- * Python frontend, so a C call to it aborts with "Function call to
- * non-intrinsic prefixed with __ESBMC". */
+/* Cover property: failure (counterexample) means the condition is satisfiable. */
+#define ESBMC_cover(cond) __ESBMC_cover((cond))
 
 /* Allocate size bytes with the lifetime of the enclosing function. */
 #define ESBMC_alloca(size) __ESBMC_alloca((size))
