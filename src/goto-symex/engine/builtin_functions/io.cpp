@@ -360,6 +360,30 @@ expr2tc goto_symext::string_length(const expr2tc &ptr, size_t &max_len)
                               : if2tc(len_type, points_here, len, unknown);
 }
 
+void goto_symext::claim_nul_terminated(const expr2tc &ptr)
+{
+  expr2tc object;
+  uint64_t offset, avail;
+  if (
+    !memcmp_resolve_operand(ptr, 0, object, offset, avail) ||
+    avail > max_stored_output || !is_array_type(object) ||
+    !is_byte_type(to_array_type(object->type).subtype))
+    return;
+  expr2tc points_here = internal_deref_items.front().guard;
+  cur_state->rename(points_here);
+
+  const type2tc &elem = to_array_type(object->type).subtype;
+  expr2tc terminated = gen_false_expr();
+  for (uint64_t k = 0; k < avail; k++)
+    terminated = or2tc(
+      terminated,
+      equality2tc(
+        index2tc(elem, object, gen_ulong(offset + k)), gen_zero(elem)));
+  claim(
+    implies2tc(points_here, terminated),
+    "printf %s argument is not NUL-terminated within its object");
+}
+
 expr2tc goto_symext::printf_output_length(
   const code_printf2t &call,
   size_t fmt_idx,
@@ -775,6 +799,12 @@ void goto_symext::symex_printf(const expr2tc &lhs, expr2tc &rhs)
   if (options.get_bool_option("printf-check"))
   {
     const code_printf2t &original_rhs = to_code_printf2t(rhs);
+    const bool args_are_direct = new_rhs.kind == printf_kindt::PRINTF ||
+                                 new_rhs.kind == printf_kindt::FPRINTF ||
+                                 new_rhs.kind == printf_kindt::DPRINTF ||
+                                 new_rhs.kind == printf_kindt::SPRINTF ||
+                                 new_rhs.kind == printf_kindt::SNPRINTF ||
+                                 new_rhs.kind == printf_kindt::ASPRINTF;
     std::string format_str = fmt.as_string();
     size_t arg_idx = 0;
 
@@ -797,7 +827,9 @@ void goto_symext::symex_printf(const expr2tc &lhs, expr2tc &rhs)
           i++;
         while (i < format_str.length() && isdigit(format_str[i]))
           i++;
-        if (i < format_str.length() && format_str[i] == '.')
+        const bool has_precision =
+          i < format_str.length() && format_str[i] == '.';
+        if (has_precision)
         {
           i++;
           while (i < format_str.length() && isdigit(format_str[i]))
@@ -805,6 +837,7 @@ void goto_symext::symex_printf(const expr2tc &lhs, expr2tc &rhs)
         }
 
         // Skip length modifiers
+        const size_t length_start = i;
         while (i < format_str.length() &&
                (format_str[i] == 'h' || format_str[i] == 'l' ||
                 format_str[i] == 'L' || format_str[i] == 'z' ||
@@ -844,6 +877,12 @@ void goto_symext::symex_printf(const expr2tc &lhs, expr2tc &rhs)
                         : "printf format specifier %p requires pointer "
                           "argument");
                   }
+                  // A precision bounds the read, and a length modifier makes
+                  // it a wide string (C11 7.21.6.1p8).
+                  else if (
+                    spec == 's' && !has_precision && i == length_start &&
+                    args_are_direct)
+                    claim_nul_terminated(arg);
                 }
               }
             }

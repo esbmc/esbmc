@@ -1500,6 +1500,10 @@ protected:
    *  `ptr`, adding its largest value to `max_len`; nil unless `ptr` resolves
    *  to one byte array at a constant offset. */
   expr2tc string_length(const expr2tc &ptr, size_t &max_len);
+  /** Claim that the byte array the unrenamed char pointer `ptr` resolves to
+   *  holds a NUL at or after its offset; nothing unless it resolves to one
+   *  byte array at a constant offset. */
+  void claim_nul_terminated(const expr2tc &ptr);
   /** Store an unrenamed sprintf-family call's output and return the length
    *  that call returns: the stored length, or for printf, fprintf and dprintf
    *  with a used result, printf_output_length. Nil when unknown. */
