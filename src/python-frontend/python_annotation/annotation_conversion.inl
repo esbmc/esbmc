@@ -3678,6 +3678,16 @@ InferResult python_annotation<Json>::infer_type_from_ifexp(
     if (body_type == orelse_type)
     {
       inferred_type = body_type;
+      // Two list literals of one element type give `list[T]`, as a single
+      // list literal does.
+      if (body_type == "list")
+      {
+        const std::string body_list = get_argument_type(ifexp_node["body"]);
+        if (
+          body_list.rfind("list[", 0) == 0 &&
+          body_list == get_argument_type(ifexp_node["orelse"]))
+          inferred_type = body_list;
+      }
       return InferResult::OK;
     }
 
