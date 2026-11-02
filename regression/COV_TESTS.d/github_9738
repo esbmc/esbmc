@@ -2,7 +2,6 @@ regression/python/github_9738
 regression/python/github_9738_and_empty
 regression/python/github_9738_chain
 regression/python/github_9738_fail
-regression/python/github_9738_name_operand
 regression/python/github_9738_or_empty
 regression/python/github_9738_or_fail
 regression/python/github_9738_or_nonempty
