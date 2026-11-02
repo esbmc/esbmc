@@ -1553,8 +1553,20 @@ void python_converter::handle_assignment_type_adjustments(
       !(tuple_handler_->is_tuple_type(lhs_symbol->get_type()) &&
         !tuple_handler_->is_tuple_type(rhs.type())))
     {
+      const bool struct_to_reference = is_user_class_struct_type(lhs.type()) &&
+                                       is_user_class_pointer(rhs.type());
       lhs_symbol->set_type(migrate_type(rhs.type()));
       lhs.type() = rhs.type();
+      // `x = x.method()` passed `&x` as the receiver while `x` held the
+      // struct; now that `x` holds the reference, pass it as is (#9624).
+      if (
+        struct_to_reference && rhs.is_code() &&
+        rhs.statement() == "function_call")
+        for (exprt &arg : to_code_function_call(to_code(rhs)).arguments())
+          if (
+            arg.is_address_of() && arg.op0().is_symbol() &&
+            arg.op0().identifier() == lhs.identifier())
+            arg = lhs;
     }
 
     // Legacy: migrate_expr drops the `value` that marks a class object
