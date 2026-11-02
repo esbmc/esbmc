@@ -1180,6 +1180,23 @@ std::string python_annotation<Json>::get_argument_type(const Json &arg)
   {
     if (arg.contains("values") && arg["values"].is_array())
     {
+      // and/or evaluates to one of its operands, so operands of one type
+      // give that type, and containers of one kind (list, list[int]) that
+      // kind.
+      std::set<std::string> operand_types, operand_bases;
+      for (const auto &val : arg["values"])
+      {
+        const std::string t = get_argument_type(val);
+        operand_types.insert(t);
+        operand_bases.insert(t.substr(0, t.find('[')));
+      }
+      if (operand_types.size() == 1 && !operand_types.begin()->empty())
+        return *operand_types.begin();
+      static const std::set<std::string> containers = {
+        "list", "dict", "set", "tuple"};
+      if (operand_bases.size() == 1 && containers.count(*operand_bases.begin()))
+        return *operand_bases.begin();
+
       for (const auto &val : arg["values"])
       {
         if (
