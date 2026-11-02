@@ -1558,10 +1558,15 @@ exprt string_handler::char_to_string(const exprt &expr)
   return str;
 }
 
-/// The str of a constant int, float or bool, or nil for any other constant.
+/// The str of a constant None, int, float or bool, or nil for any other
+/// constant.
 exprt string_handler::constant_to_string(const exprt &expr)
 {
   const typet &t = expr.type();
+  // str(None) is repr(None): NoneType inherits object.__str__.
+  if (t == none_type())
+    return converter_.get_string_builder().build_string_literal("None");
+
   if (type_utils::is_integer_type(t))
   {
     BigInt value = binary2integer(expr.value().as_string(), t.is_signedbv());
@@ -1628,6 +1633,19 @@ exprt string_handler::symbol_to_string(const exprt &expr)
   return nil_exprt();
 }
 
+/// A str held as a pointer, or any string for a pointer to a list or a class
+/// instance, whose bytes are not a str.
+exprt string_handler::pointer_to_string(const exprt &expr)
+{
+  if (expr.type().subtype().id() == typet::t_symbol)
+    return build_nondet_string_fallback(expr.location());
+
+  const typet char_ptr = gen_pointer_type(char_type());
+  if (expr.type() != char_ptr)
+    return build_typecast(expr, char_ptr);
+  return expr;
+}
+
 exprt string_handler::convert_to_string(const exprt &expr)
 {
   const typet &t = expr.type();
@@ -1649,10 +1667,6 @@ exprt string_handler::convert_to_string(const exprt &expr)
 
   if (expr.is_constant())
   {
-    // str(None) is repr(None): NoneType inherits object.__str__.
-    if (t == none_type())
-      return converter_.get_string_builder().build_string_literal("None");
-
     exprt folded = constant_to_string(expr);
     if (folded.is_not_nil())
       return folded;
@@ -1663,16 +1677,7 @@ exprt string_handler::convert_to_string(const exprt &expr)
   // return type may be a zero-length array that migrates to empty_type2t,
   // causing a type mismatch when nested inside __python_str_concat.
   if (t.is_pointer() && !expr.is_code())
-  {
-    // A list or a class instance, not the bytes of a str.
-    if (t.subtype().id() == typet::t_symbol)
-      return build_nondet_string_fallback(expr.location());
-
-    typet char_ptr = gen_pointer_type(char_type());
-    if (t != char_ptr)
-      return build_typecast(expr, char_ptr);
-    return expr;
-  }
+    return pointer_to_string(expr);
 
   // Non-constant scalars: dispatch to the matching __python_*_to_str
   // operational model in src/c2goto/library/python/string.c. The model
