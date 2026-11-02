@@ -16,22 +16,36 @@
 #include <functional>
 #include <util/expr/array2string.h>
 
-bool goto_symext::recover_va_list_args(
-  const code_printf2t &call,
-  size_t fmt_idx,
-  std::list<expr2tc> &out)
+static bool takes_va_list(printf_kindt kind)
 {
-  switch (call.kind)
+  // Exhaustive over printf_kindt (no default) so a future va_list kind must
+  // be classified here rather than silently inheriting the direct-call default.
+  switch (kind)
   {
   case printf_kindt::VPRINTF:
   case printf_kindt::VFPRINTF:
   case printf_kindt::VSPRINTF:
   case printf_kindt::VSNPRINTF:
   case printf_kindt::VASPRINTF:
-    break;
-  default:
+    return true;
+  case printf_kindt::PRINTF:
+  case printf_kindt::FPRINTF:
+  case printf_kindt::DPRINTF:
+  case printf_kindt::SPRINTF:
+  case printf_kindt::SNPRINTF:
+  case printf_kindt::ASPRINTF:
     return false;
   }
+  return false;
+}
+
+bool goto_symext::recover_va_list_args(
+  const code_printf2t &call,
+  size_t fmt_idx,
+  std::list<expr2tc> &out)
+{
+  if (!takes_va_list(call.kind))
+    return false;
 
   // Every v* signature takes the va_list as its last operand, right after
   // the format string.
@@ -983,9 +997,15 @@ void goto_symext::symex_printf(const expr2tc &lhs, expr2tc &rhs)
     idx = fmt_idx;
   }
 
+  // A v* call's only operand after the format is its va_list, which is
+  // neither a printf argument nor a pointer printf dereferences.
+  const bool args_behind_va_list = takes_va_list(new_rhs.kind);
+  const bool printf_check =
+    options.get_bool_option("printf-check") && !args_behind_va_list;
+
   // Check format specifiers against original operands before
   // renaming/conversion
-  if (options.get_bool_option("printf-check"))
+  if (printf_check)
   {
     const code_printf2t &original_rhs = to_code_printf2t(rhs);
     std::string format_str = fmt.as_string();
@@ -1068,7 +1088,7 @@ void goto_symext::symex_printf(const expr2tc &lhs, expr2tc &rhs)
   }
 
   // Only perform dereference checks if printf-check is enabled
-  if (options.get_bool_option("printf-check"))
+  if (printf_check)
   {
     // Dereference check all pointer arguments after the format string
     for (size_t i = idx; i < new_rhs.operands.size(); i++)
@@ -1184,26 +1204,7 @@ void goto_symext::symex_printf(const expr2tc &lhs, expr2tc &rhs)
     // the operand at a %s position is the va_list pointer, not the string. Mark
     // the operands unreliable so the formatter does not derive an (unsound)
     // object-size bound from them; %s stays unbounded until va_list recovery.
-    // Exhaustive over printf_kindt (no default) so a future va_list kind must
-    // be classified here rather than silently inheriting the reliable default.
-    switch (new_rhs.kind)
-    {
-    case printf_kindt::VPRINTF:
-    case printf_kindt::VFPRINTF:
-    case printf_kindt::VSPRINTF:
-    case printf_kindt::VSNPRINTF:
-    case printf_kindt::VASPRINTF:
-      printf_formatter.args_reliable = false;
-      break;
-    case printf_kindt::PRINTF:
-    case printf_kindt::FPRINTF:
-    case printf_kindt::DPRINTF:
-    case printf_kindt::SPRINTF:
-    case printf_kindt::SNPRINTF:
-    case printf_kindt::ASPRINTF:
-      printf_formatter.args_reliable = true;
-      break;
-    }
+    printf_formatter.args_reliable = !args_behind_va_list;
     // A successful recovery replaced the va_list with the actual arguments,
     // so they are exactly as reliable as a direct call's.
     if (va_recovered)
