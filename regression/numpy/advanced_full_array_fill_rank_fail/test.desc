@@ -1,4 +1,0 @@
-CORE
-main.py
---incremental-bmc
-^ERROR: ValueError: could not broadcast numpy\.full\(\) fill into the array shape$

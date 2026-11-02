@@ -3256,6 +3256,7 @@ private:
     const nlohmann::json &right,
     const locationt &location);
   bool is_numpy_valued_node(const nlohmann::json &node) const;
+  void reject_rebound_numpy_scalar_name(const nlohmann::json &node) const;
   bool
   is_weak_numpy_operand(const nlohmann::json &node, const typet &type) const;
   exprt raise_if_outside_numpy_integer(

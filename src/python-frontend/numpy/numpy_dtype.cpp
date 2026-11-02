@@ -4,12 +4,10 @@
 #include <cctype>
 #include <set>
 
-#include <python-frontend/type/type_handler.h>
 #include <python-frontend/type/type_utils.h>
 #include <util/lang/c_types.h>
 #include <util/irep/std_types.h>
 
-#include <algorithm>
 #include <map>
 
 std::string numpy_dtypet::name() const

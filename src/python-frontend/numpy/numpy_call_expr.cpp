@@ -5553,28 +5553,40 @@ static nlohmann::json broadcast_fill_axis(
   return list;
 }
 
+// The axes of a fill above the array's rank, which NumPy drops when of size 1.
+static std::size_t dropped_fill_axes(
+  const std::vector<std::size_t> &shape,
+  const std::vector<std::size_t> &dims)
+{
+  const std::size_t dropped =
+    shape.size() > dims.size() ? shape.size() - dims.size() : 0;
+  bool fits =
+    std::all_of(shape.begin(), shape.begin() + dropped, [](std::size_t extent) {
+      return extent == 1;
+    });
+  for (std::size_t i = 1; fits && i <= shape.size() - dropped; ++i)
+  {
+    const std::size_t extent = shape[shape.size() - i];
+    fits = extent == 1 || extent == dims[dims.size() - i];
+  }
+  if (!fits)
+    throw std::runtime_error(
+      "ValueError: could not broadcast numpy.full() fill into the array shape");
+  return dropped;
+}
+
 static nlohmann::json broadcast_full_fill(
   const std::vector<std::size_t> &dims,
   const std::vector<std::size_t> &fill_shape,
   const nlohmann::json &fill)
 {
-  const std::string shape_text = [&] {
-    std::string text;
-    for (std::size_t extent : fill_shape)
-      text += std::to_string(extent) + ",";
-    return text;
-  }();
-  bool compatible = fill_shape.size() <= dims.size();
-  for (std::size_t i = 1; compatible && i <= fill_shape.size(); ++i)
-  {
-    const std::size_t extent = fill_shape[fill_shape.size() - i];
-    compatible = extent == 1 || extent == dims[dims.size() - i];
-  }
-  if (!compatible)
-    throw std::runtime_error(
-      "ValueError: could not broadcast numpy.full() fill of shape (" +
-      shape_text + ") into the array shape");
-  return broadcast_fill_axis(dims, 0, fill_shape, fill);
+  const std::size_t dropped = dropped_fill_axes(fill_shape, dims);
+  const nlohmann::json *kept = &fill;
+  for (std::size_t axis = 0; axis < dropped; ++axis)
+    kept = &(*kept)["elts"][0];
+  const std::vector<std::size_t> kept_shape(
+    fill_shape.begin() + dropped, fill_shape.end());
+  return broadcast_fill_axis(dims, 0, kept_shape, *kept);
 }
 
 std::optional<numpy_dtypet> numpy_call_expr::runtime_fill_dtype() const
@@ -5587,19 +5599,6 @@ std::optional<numpy_dtypet> numpy_call_expr::runtime_fill_dtype() const
       "TypeError: numpy.full() with a complex or string dtype= and a "
       "non-literal fill value is not supported");
   return dtype;
-}
-
-static void reject_unbroadcastable_fill(
-  const std::vector<std::size_t> &shape,
-  const std::vector<std::size_t> &dims)
-{
-  bool fits = shape.size() <= dims.size();
-  for (std::size_t axis = 0; fits && axis < shape.size(); ++axis)
-    fits = shape[axis] == 1 ||
-           shape[axis] == dims[dims.size() - shape.size() + axis];
-  if (!fits)
-    throw std::runtime_error(
-      "ValueError: could not broadcast numpy.full() fill into the array shape");
 }
 
 static void reject_array_fill_dtype(const std::optional<numpy_dtypet> &dtype)
@@ -5644,8 +5643,8 @@ std::optional<exprt> numpy_call_expr::full_of_array_fill(
     return std::nullopt;
   const auto extents = type_handler_.get_array_type_shape(type);
   const std::vector<std::size_t> shape(extents.begin(), extents.end());
-  reject_unbroadcastable_fill(shape, dims);
-  const std::size_t skipped = dims.size() - shape.size();
+  const std::size_t dropped = dropped_fill_axes(shape, dims);
+  const std::size_t skipped = dims.size() - (shape.size() - dropped);
   const auto dtype = numpy_dtype_from_name(get_dtype());
   reject_array_fill_dtype(dtype);
   const typet element = dtype ? dtype->element_type() : leaf;
@@ -5660,7 +5659,8 @@ std::optional<exprt> numpy_call_expr::full_of_array_fill(
     for (std::size_t axis = 0; axis < shape.size(); ++axis)
       read = index_exprt(
         read,
-        from_integer(shape[axis] == 1 ? 0 : index[skipped + axis], size_type()),
+        from_integer(
+          shape[axis] == 1 ? 0 : index[skipped + axis - dropped], size_type()),
         read.type().subtype());
     cells.push_back(
       read.type() == element ? read : typecast_exprt(read, element));
@@ -11280,12 +11280,13 @@ void numpy_call_expr::reject_array_copy_with_dtype(
       "TypeError: numpy.array() of an array with dtype= is not supported");
 }
 
-// NumPy accumulates a float32 mean in float32; the model does not.
+// NumPy sums float16 through float32, and 8 or more elements pairwise; the
+// model adds in order at the dtype's width.
 void numpy_call_expr::reject_narrow_float_mean(
   const std::string &function,
   const nlohmann::json &arg) const
 {
-  if (function != "mean")
+  if (function != "mean" && function != "sum")
     return;
   const auto dtype =
     arg.value("_type", "") == "Call"
@@ -11295,10 +11296,9 @@ void numpy_call_expr::reject_narrow_float_mean(
     !dtype || dtype->kind != numpy_dtypet::kindt::floating ||
     dtype->bits == 64 || (dtype->bits == 32 && narrow_float_mean_nodes(arg)))
     return;
-  // NumPy accumulates float16 in float32.
   throw std::runtime_error(
-    "TypeError: numpy.mean() over float16, or over 8 or more float32 elements, "
-    "is not supported");
+    "TypeError: numpy." + function +
+    "() over float16, or over 8 or more float32 elements, is not supported");
 }
 
 // Below 8 elements NumPy accumulates in order, at the dtype's width; above, its
@@ -11308,14 +11308,14 @@ numpy_call_expr::narrow_float_mean_nodes(const nlohmann::json &operand) const
 {
   if (operand.value("_type", "") != "Name")
     return std::nullopt;
-  auto nodes =
-    const_cast<numpy_call_expr *>(this)->complex_element_nodes(operand);
+  auto nodes = complex_element_nodes(operand);
   if (!nodes || nodes->empty() || nodes->size() >= 8)
     return std::nullopt;
   return nodes;
 }
 
-std::optional<exprt> numpy_call_expr::try_narrow_float_mean()
+std::optional<exprt>
+numpy_call_expr::try_narrow_float_reduce(const std::string &function)
 {
   const auto &args = call_.value("args", nlohmann::json::array());
   const nlohmann::json &func = call_["func"];
@@ -11328,10 +11328,10 @@ std::optional<exprt> numpy_call_expr::try_narrow_float_mean()
   if (
     !dtype || dtype->kind != numpy_dtypet::kindt::floating || dtype->bits == 64)
     return std::nullopt;
-  reject_narrow_float_mean("mean", operand);
+  reject_narrow_float_mean(function, operand);
   if (converter_.in_rhs_type_probe_)
     return gen_zero(dtype->element_type());
-  return complex_value_reduce("mean", *narrow_float_mean_nodes(operand));
+  return complex_value_reduce(function, *narrow_float_mean_nodes(operand));
 }
 
 void numpy_call_expr::reject_unmodelled_operands(
@@ -11768,7 +11768,7 @@ std::optional<exprt> numpy_call_expr::call_with_narrow_constructors_bound(
 // The elements of a complex array or view, as subscripts of @p operand in C
 // order; nullopt for a run-time layout.
 std::optional<std::vector<nlohmann::json>>
-numpy_call_expr::complex_element_nodes(const nlohmann::json &operand)
+numpy_call_expr::complex_element_nodes(const nlohmann::json &operand) const
 {
   const exprt storage =
     converter_.numpy_param_as_array(converter_.get_expr(operand));
@@ -11903,9 +11903,9 @@ numpy_call_expr::try_narrow_operand_call(const std::string &function)
 {
   if (std::optional<exprt> reduced = try_complex_reducer(function))
     return reduced;
-  if (function == "mean")
-    if (std::optional<exprt> mean = try_narrow_float_mean())
-      return mean;
+  if (function == "mean" || function == "sum")
+    if (std::optional<exprt> reduced = try_narrow_float_reduce(function))
+      return reduced;
   static const std::set<std::string> reads_element_type = {
     "array",        "asarray",      "copy",     "zeros_like", "ones_like",
     "empty_like",   "sum",          "prod",     "mean",       "min",

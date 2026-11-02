@@ -3638,8 +3638,10 @@ bool python_converter::is_weak_numpy_operand(
   const nlohmann::json &node,
   const typet &type) const
 {
-  return !type.is_array() && !type_utils::is_numpy_scalar_type(type) &&
-         !is_numpy_valued_node(node);
+  if (type.is_array() || type_utils::is_numpy_scalar_type(type))
+    return false;
+  reject_rebound_numpy_scalar_name(node);
+  return !is_numpy_valued_node(node);
 }
 
 // NumPy raises OverflowError for a Python integer the integer result cannot

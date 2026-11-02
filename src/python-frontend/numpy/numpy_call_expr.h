@@ -156,13 +156,13 @@ private:
     const nlohmann::json &fill_node);
   std::optional<std::vector<nlohmann::json>>
   narrow_float_mean_nodes(const nlohmann::json &operand) const;
-  std::optional<exprt> try_narrow_float_mean();
+  std::optional<exprt> try_narrow_float_reduce(const std::string &function);
   exprt full_of_literal_array(
     const std::vector<std::size_t> &dims,
     const nlohmann::json &fill);
   std::optional<exprt> try_narrow_operand_call(const std::string &function);
   std::optional<std::vector<nlohmann::json>>
-  complex_element_nodes(const nlohmann::json &operand);
+  complex_element_nodes(const nlohmann::json &operand) const;
   std::optional<nlohmann::json>
   complex_reducer_operand(const std::string &function) const;
   std::optional<exprt> try_complex_reducer(const std::string &function);

@@ -1045,6 +1045,52 @@ static bool is_retyped_numpy_array(const typet &type)
          leaf.is_unsignedbv() || leaf.is_bool();
 }
 
+static bool binds_name_to(
+  const nlohmann::json &node,
+  const std::string &name,
+  const std::function<bool(const nlohmann::json &)> &matches)
+{
+  if (!node.is_object() && !node.is_array())
+    return false;
+  const nlohmann::json *target =
+    node.is_object() ? single_assign_target(node) : nullptr;
+  if (
+    target && target->value("id", "") == name && node.contains("value") &&
+    node["value"].is_object() && matches(node["value"]))
+    return true;
+  return std::any_of(
+    node.begin(), node.end(), [&](const nlohmann::json &child) {
+      return binds_name_to(child, name, matches);
+    });
+}
+
+// Whether an operand is weak under NEP 50 depends on the binding that reaches
+// it, and the declaration lookup only sees the first.
+void python_converter::reject_rebound_numpy_scalar_name(
+  const nlohmann::json &node) const
+{
+  if (node.value("_type", "") != "Name")
+    return;
+  const std::string name = node.value("id", "");
+  const std::string function = current_function_name();
+  const nlohmann::json scope =
+    function.empty()
+      ? nlohmann::json()
+      : json_utils::try_find_function((*ast_json)["body"], function);
+  const nlohmann::json &body = scope.is_object() && scope.contains("body") &&
+                                   stores_to(scope["body"], name)
+                                 ? scope["body"]
+                                 : (*ast_json)["body"];
+  if (
+    stores_to(body, name) > 1 &&
+    binds_name_to(body, name, [this](const nlohmann::json &value) {
+      return is_numpy_valued_node(value);
+    }))
+    throw std::runtime_error(
+      "TypeError: rebinding a name that holds a numpy scalar is not supported "
+      "as an operand of a numpy operation");
+}
+
 void python_converter::bind_numpy_scalar_name(
   const nlohmann::json &target,
   symbolt *symbol,
