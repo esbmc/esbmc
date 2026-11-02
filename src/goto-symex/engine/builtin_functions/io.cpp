@@ -384,6 +384,45 @@ void goto_symext::claim_nul_terminated(const expr2tc &ptr)
     "printf %s argument is not NUL-terminated within its object");
 }
 
+// Only a direct call's operands are its arguments; a v* call passes a va_list.
+static bool printf_args_are_direct(printf_kindt kind)
+{
+  switch (kind)
+  {
+  case printf_kindt::PRINTF:
+  case printf_kindt::FPRINTF:
+  case printf_kindt::DPRINTF:
+  case printf_kindt::SPRINTF:
+  case printf_kindt::SNPRINTF:
+  case printf_kindt::ASPRINTF:
+    return true;
+  case printf_kindt::VPRINTF:
+  case printf_kindt::VFPRINTF:
+  case printf_kindt::VSPRINTF:
+  case printf_kindt::VSNPRINTF:
+  case printf_kindt::VASPRINTF:
+    return false;
+  }
+  return false;
+}
+
+void goto_symext::check_printf_pointer_arg(
+  printf_kindt kind,
+  char spec,
+  bool reads_to_nul,
+  const expr2tc &arg)
+{
+  if (spec != 's' && spec != 'p')
+    return;
+  if (!is_pointer_type(arg->type))
+    claim(
+      gen_false_expr(),
+      spec == 's' ? "printf format specifier %s requires pointer argument"
+                  : "printf format specifier %p requires pointer argument");
+  else if (spec == 's' && reads_to_nul && printf_args_are_direct(kind))
+    claim_nul_terminated(arg);
+}
+
 expr2tc goto_symext::printf_output_length(
   const code_printf2t &call,
   size_t fmt_idx,
@@ -799,12 +838,6 @@ void goto_symext::symex_printf(const expr2tc &lhs, expr2tc &rhs)
   if (options.get_bool_option("printf-check"))
   {
     const code_printf2t &original_rhs = to_code_printf2t(rhs);
-    const bool args_are_direct = new_rhs.kind == printf_kindt::PRINTF ||
-                                 new_rhs.kind == printf_kindt::FPRINTF ||
-                                 new_rhs.kind == printf_kindt::DPRINTF ||
-                                 new_rhs.kind == printf_kindt::SPRINTF ||
-                                 new_rhs.kind == printf_kindt::SNPRINTF ||
-                                 new_rhs.kind == printf_kindt::ASPRINTF;
     std::string format_str = fmt.as_string();
     size_t arg_idx = 0;
 
@@ -827,22 +860,26 @@ void goto_symext::symex_printf(const expr2tc &lhs, expr2tc &rhs)
           i++;
         while (i < format_str.length() && isdigit(format_str[i]))
           i++;
-        const bool has_precision =
-          i < format_str.length() && format_str[i] == '.';
-        if (has_precision)
+        // A precision bounds what %s reads, and a length modifier makes it
+        // a wide string (C11 7.21.6.1p8).
+        bool reads_to_nul = true;
+        if (i < format_str.length() && format_str[i] == '.')
         {
+          reads_to_nul = false;
           i++;
           while (i < format_str.length() && isdigit(format_str[i]))
             i++;
         }
 
         // Skip length modifiers
-        const size_t length_start = i;
         while (i < format_str.length() &&
                (format_str[i] == 'h' || format_str[i] == 'l' ||
                 format_str[i] == 'L' || format_str[i] == 'z' ||
                 format_str[i] == 'j' || format_str[i] == 't'))
+        {
+          reads_to_nul = false;
           i++;
+        }
 
         // Check conversion specifier against original operands
         if (i < format_str.length())
@@ -864,27 +901,7 @@ void goto_symext::symex_printf(const expr2tc &lhs, expr2tc &rhs)
               const expr2tc &arg = original_rhs.operands[actual_arg_idx];
 
               if (arg)
-              {
-                if (spec == 's' || spec == 'p')
-                {
-                  // %s and %p require pointer types
-                  if (!is_pointer_type(arg->type))
-                  {
-                    claim(
-                      gen_false_expr(),
-                      spec == 's'
-                        ? "printf format specifier %s requires pointer argument"
-                        : "printf format specifier %p requires pointer "
-                          "argument");
-                  }
-                  // A precision bounds the read, and a length modifier makes
-                  // it a wide string (C11 7.21.6.1p8).
-                  else if (
-                    spec == 's' && !has_precision && i == length_start &&
-                    args_are_direct)
-                    claim_nul_terminated(arg);
-                }
-              }
+                check_printf_pointer_arg(new_rhs.kind, spec, reads_to_nul, arg);
             }
             arg_idx++;
           }

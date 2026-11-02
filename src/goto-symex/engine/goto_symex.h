@@ -1504,6 +1504,14 @@ protected:
    *  holds a NUL at or after its offset; nothing unless it resolves to one
    *  byte array at a constant offset. */
   void claim_nul_terminated(const expr2tc &ptr);
+  /** --printf-check claims for the original operand `arg` of a %s or %p
+   *  conversion; `reads_to_nul` is false when a precision or length modifier
+   *  changes what %s reads. */
+  void check_printf_pointer_arg(
+    printf_kindt kind,
+    char spec,
+    bool reads_to_nul,
+    const expr2tc &arg);
   /** Store an unrenamed sprintf-family call's output and return the length
    *  that call returns: the stored length, or for printf, fprintf and dprintf
    *  with a used result, printf_output_length. Nil when unknown. */
