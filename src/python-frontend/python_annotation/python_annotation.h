@@ -69,7 +69,11 @@ public:
   // Entry points exercised by callers outside python_annotation.h.
   bool preprocess_constructor_calls(Json &node);
   void preprocess_method_calls(const Json &node);
-  void preprocess_receiver_method_calls();
+  std::vector<std::pair<std::string, std::string>>
+  preprocess_receiver_method_calls(bool inside_functions = false);
+  void retype_methods_called_on_receivers();
+  bool preprocess_self_method_calls();
+  std::string self_call_arg_type(const Json &arg, const Json &caller);
   bool is_instance_call(const Json &func) const;
   Json *class_method(const std::string &cls, const Json &method);
   /// Sentinel recorded for a call-site argument this pass cannot type; never
@@ -210,6 +214,12 @@ private:
   std::string list_copy_type(const std::string &func_name, const Json &call);
   std::string dict_view_list_type(const Json &call);
   std::string get_type_from_binary_expr(const Json &stmt, const Json &body);
+  Json annotated_declaration(const std::string &name, const Json &body);
+  std::string array_operand_result_type(
+    const Json &stmt,
+    const Json &lhs,
+    const Json &rhs,
+    const Json &body);
   bool is_array_operand(const Json &operand, const Json &body);
   std::string operand_annotation_type(const Json &decl);
   std::string get_type_from_rhs_variable(const Json &element, const Json &body);
@@ -415,6 +425,8 @@ private:
     const Json &element,
     const std::string &inferred_type);
   std::string optional_scalar_of(const std::string &name, const Json &scope);
+  bool is_missing_method_call(const Json &value);
+  bool stores_call_on_unannotated_param(const Json &element);
   std::string returned_optional_scalar(const Json &function, const Json &body);
   void collect_name_stores(
     const std::string &name,
@@ -457,6 +469,8 @@ private:
     size_t param_index;
     std::vector<std::string> class_types;
   };
+  // Functions whose None stores wait for a parameter class (#9338).
+  std::set<std::string> deferred_none_functions_;
   std::vector<pending_specializationt> pending_specializations_;
   void retype_builtin_copy(
     Json &fn,

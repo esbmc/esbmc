@@ -20,6 +20,7 @@ extern "C"
 #include <esbmc/esbmc_parseoptions.h>
 #include <goto-symex/engine/goto_symex.h>
 #include <goto-symex/trace/goto_trace.h>
+#include <optional>
 #include <goto-symex/trace/sarif.h>
 #include <util/base/cwe_mapping.h>
 #include <solvers/smt/smt_result.h>
@@ -91,39 +92,9 @@ extern "C"
 #  include <goto-programs/goto_contractor.h>
 #endif
 
-// Emit CWE-835 (non-termination / infinite loop) into the structured
-// outputs when --termination refutes the termination property.
-//
-// A non-termination verdict is proven by UNSAT at a loop exit marker, so
-// unlike a normal property violation it has no counterexample trace to
-// drive the structured emitters. We synthesise a single-step trace
-// anchored to a real termination-marker ASSERT instruction: that gives a
-// valid `pc` and a source location, and lets the existing emitters reuse
-// the util/cwe_mapping single source of truth (@p comment matches the
-// "non-terminating execution" rule -> CWE-835).
-//
-// CWE-835 is a loop weakness, so a per-loop marker is preferred as the
-// anchor; an abort-call marker is only a fallback. Markers in library
-// helpers (body.hide) rank below both, so the anchor never lands in
-// ESBMC's own installed sources. The inductive-step verdict is a
-// whole-program property, so with several loops present the chosen
-// marker is a best-effort representative location — only the CWE id
-// (835) is guaranteed, not that it is the specific non-terminating loop.
-static void report_non_termination_cwe(
-  optionst &options,
-  const namespacet &ns,
-  const goto_functionst &goto_functions,
-  const std::string &comment)
+static std::optional<goto_programt::const_targett>
+find_termination_marker(const goto_functionst &goto_functions)
 {
-  // The YAML (SV-COMP 2.0) witness format has no CWE field — CWE support is
-  // GraphML-only — so it is deliberately not emitted here.
-  const bool want_sarif = !options.get_option("sarif-output").empty();
-  const bool want_graphml =
-    !options.get_option("witness-output-graphml").empty();
-  const bool want_json = options.get_bool_option("generate-json-report");
-  if (!(want_sarif || want_graphml || want_json))
-    return;
-
   // Anchor candidates, best first. A user-source location always beats a
   // library helper: goto_termination inserts per-loop markers into helpers
   // too (see the marker pass there), and __ESBMC_atexit_handler's
@@ -171,6 +142,45 @@ static void report_non_termination_cwe(
       break;
   }
   if (best == NO_ANCHOR)
+    return std::nullopt;
+  return marker;
+}
+
+// Emit CWE-835 (non-termination / infinite loop) into the structured
+// outputs when --termination refutes the termination property.
+//
+// A non-termination verdict is proven by UNSAT at a loop exit marker, so
+// unlike a normal property violation it has no counterexample trace to
+// drive the structured emitters. We synthesise a single-step trace
+// anchored to a real termination-marker ASSERT instruction: that gives a
+// valid `pc` and a source location, and lets the existing emitters reuse
+// the util/cwe_mapping single source of truth (@p comment matches the
+// "non-terminating execution" rule -> CWE-835).
+//
+// CWE-835 is a loop weakness, so a per-loop marker is preferred as the
+// anchor; an abort-call marker is only a fallback. Markers in library
+// helpers (body.hide) rank below both, so the anchor never lands in
+// ESBMC's own installed sources. The inductive-step verdict is a
+// whole-program property, so with several loops present the chosen
+// marker is a best-effort representative location — only the CWE id
+// (835) is guaranteed, not that it is the specific non-terminating loop.
+static void report_non_termination_cwe(
+  optionst &options,
+  const namespacet &ns,
+  const goto_functionst &goto_functions,
+  const std::string &comment)
+{
+  // The YAML witness has no CWE field, so it carries only the cycle waypoint.
+  const bool want_yaml = !options.get_option("witness-output-yaml").empty();
+  const bool want_sarif = !options.get_option("sarif-output").empty();
+  const bool want_graphml =
+    !options.get_option("witness-output-graphml").empty();
+  const bool want_json = options.get_bool_option("generate-json-report");
+  if (!(want_sarif || want_graphml || want_json || want_yaml))
+    return;
+
+  const auto marker = find_termination_marker(goto_functions);
+  if (!marker)
     return;
 
   goto_tracet trace;
@@ -179,12 +189,14 @@ static void report_non_termination_cwe(
   step.thread_nr = 0;
   step.type = symex_targett::ASSERT;
   step.guard = false; // a violated assert
-  step.pc = marker;
+  step.pc = *marker;
   step.comment = comment;
   trace.steps.push_back(step);
 
   if (want_graphml)
     violation_graphml_goto_trace(options, ns, trace);
+  if (want_yaml)
+    non_termination_yaml_goto_trace(options, (*marker)->location);
   if (want_json)
     generate_json_report("1", ns, trace);
   if (want_sarif)
@@ -401,6 +413,8 @@ int esbmc_parseoptionst::do_bmc_strategy(
       // report success immediately without unwinding.
       if (options.get_bool_option("termination-ranking-proved"))
       {
+        write_correctness_witnesses(
+          options, namespacet(context), goto_tracet());
         log_success(
           "\nRanking function shows all executions terminate\n"
           "VERIFICATION SUCCESSFUL");
