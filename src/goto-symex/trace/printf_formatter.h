@@ -10,6 +10,9 @@
  *  "z" or "t". Nil for any other modifier. */
 type2tc printf_int_type(bool is_signed, const std::string &mod);
 
+/** True if `e` points to the first character of a string literal. */
+bool is_literal_string_start(const expr2tc &e);
+
 class printf_formattert
 {
 public:

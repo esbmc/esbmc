@@ -1,0 +1,5 @@
+CORE
+main.c
+
+^  FAILED       \[main\.array-bounds-violated\.1\]  line 12  dereference failure: array bounds violated$
+^VERIFICATION FAILED$
