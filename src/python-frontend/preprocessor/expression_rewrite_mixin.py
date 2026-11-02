@@ -866,3 +866,32 @@ for {i} in range(0, len({seq})):
     def visit_Compare(self, node):
         node = self.generic_visit(node)
         return node
+
+    @staticmethod
+    def _literal_list_truth(node):
+        """Whether a list literal of constants is truthy, or None for any other operand."""
+        if isinstance(node, ast.List) and all(isinstance(e, ast.Constant) for e in node.elts):
+            return bool(node.elts)
+        return None
+
+    def visit_BoolOp(self, node):
+        """Fold the operands decided by a list literal on the left: `[1] and x` is `x`,
+        `[] and x` is `[]`, `[1] or x` is `[1]` and `[] or x` is `x`, so the result has the
+        type of the operand that is kept."""
+        node = self.generic_visit(node)
+        is_and = isinstance(node.op, ast.And)
+        values = list(node.values)
+        while len(values) > 1:
+            truth = self._literal_list_truth(values[0])
+            if truth is None:
+                break
+            if truth == is_and:
+                values = values[1:]
+            else:
+                values = values[:1]
+        if len(values) == len(node.values):
+            return node
+        if len(values) == 1:
+            return values[0]
+        node.values = values
+        return node

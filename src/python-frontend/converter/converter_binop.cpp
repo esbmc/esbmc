@@ -561,6 +561,89 @@ static bool has_side_effect(const exprt &e)
   return false;
 }
 
+/// Whether the int of an int/float pair is \p lhs, or nullopt when the
+/// operands are no such pair or one has a side effect, which the exact
+/// comparison would evaluate twice; \p pure_reads says the side effects are
+/// reads that may repeat.
+static std::optional<bool>
+int_float_pair(const exprt &lhs, const exprt &rhs, bool pure_reads)
+{
+  auto is_int = [](const typet &t) {
+    return t.is_signedbv() || t.is_unsignedbv();
+  };
+  const bool int_lhs = is_int(lhs.type()) && rhs.type().is_floatbv();
+  if (
+    (!int_lhs && !(lhs.type().is_floatbv() && is_int(rhs.type()))) ||
+    (!pure_reads && (has_side_effect(lhs) || has_side_effect(rhs))))
+    return std::nullopt;
+  return int_lhs;
+}
+
+/// i \p rel f, given the int rounded \p down and \p up to the float type.
+static expr2tc bracketed_relation(
+  const std::string &rel,
+  const expr2tc &down,
+  const expr2tc &up,
+  const expr2tc &f)
+{
+  if (rel == "Lt")
+    return lessthan2tc(down, f);
+  if (rel == "LtE")
+    return lessthanequal2tc(up, f);
+  if (rel == "Gt")
+    return greaterthan2tc(up, f);
+  if (rel == "GtE")
+    return greaterthanequal2tc(down, f);
+  const expr2tc eq = and2tc(equality2tc(down, f), equality2tc(up, f));
+  return rel == "Eq" ? eq : not2tc(eq);
+}
+
+/// Python compares an int with a float by exact value, so promoting the int to
+/// the float type first, which rounds it, decides `2**53 + 1 == 2.0**53`
+/// wrongly (#9359). The int rounded down and rounded up are the nearest floats
+/// on either side of it: i < f iff down < f, i <= f iff up <= f, and i == f iff
+/// both equal f. Nil when int_float_pair refuses the operands, and when
+/// promoting is already exact (a constant int the float type holds).
+expr2tc python_converter::exact_int_float_relation(
+  const std::string &op,
+  const exprt &lhs,
+  const exprt &rhs,
+  bool pure_reads)
+{
+  const std::optional<bool> int_lhs = int_float_pair(lhs, rhs, pure_reads);
+  if (!int_lhs)
+    return expr2tc();
+
+  // The relation as seen with the int on the left.
+  static const std::map<std::string, std::string> mirrored = {
+    {"Lt", "Gt"},
+    {"LtE", "GtE"},
+    {"Gt", "Lt"},
+    {"GtE", "LtE"},
+    {"Eq", "Eq"},
+    {"NotEq", "NotEq"}};
+  const auto it = mirrored.find(op);
+  if (it == mirrored.end())
+    return expr2tc();
+
+  expr2tc i, f;
+  migrate_expr(*int_lhs ? lhs : rhs, i);
+  migrate_expr(*int_lhs ? rhs : lhs, f);
+  auto rounded = [&](ieee_floatt::rounding_modet rm) {
+    return typecast2tc(
+      f->type, i, constant_int2tc(get_int32_type(), BigInt(rm)));
+  };
+  const expr2tc down = rounded(ieee_floatt::ROUND_TO_MINUS_INF);
+  const expr2tc up = rounded(ieee_floatt::ROUND_TO_PLUS_INF);
+  expr2tc down_value = down, up_value = up;
+  simplify(down_value);
+  simplify(up_value);
+  if (is_constant_floatbv2t(down_value) && down_value == up_value)
+    return expr2tc();
+
+  return bracketed_relation(*int_lhs ? op : it->second, down, up, f);
+}
+
 static exprt *find_subexpr(exprt &e, const exprt &what)
 {
   if (e == what)
@@ -1296,6 +1379,11 @@ exprt python_converter::handle_chained_comparisons_logic(
         op1 = typecast_exprt(op1, op2.type());
       else if (op2.type().is_pointer() && is_integer(op1.type()))
         op2 = typecast_exprt(op2, op1.type());
+      if (const expr2tc exact = exact_int_float_relation(op, op1, op2); exact)
+      {
+        conjuncts.push_back(migrate_expr_back(exact));
+        continue;
+      }
       exprt logical_expr(
         python_frontend::map_operator(op, bool_type()), bool_type());
       logical_expr.copy_to_operands(op1, op2);
@@ -3712,8 +3800,8 @@ exprt python_converter::handle_array_operations(
 }
 
 /// The strict order and equality of two tuple components that are numbers (a
-/// mixed int/float pair compares as doubles, as Python promotes int to float)
-/// or strs (by content). False for any other pair.
+/// mixed int/float pair by exact value) or strs (by content). False for any
+/// other pair.
 bool python_converter::scalar_order(
   exprt a,
   exprt b,
@@ -3727,6 +3815,10 @@ bool python_converter::scalar_order(
   };
   if (is_num(a.type()) && is_num(b.type()))
   {
+    lt = exact_int_float_relation("Lt", a, b);
+    eq = exact_int_float_relation("Eq", a, b);
+    if (lt)
+      return true;
     if (a.type() != b.type())
     {
       a = typecast_exprt(a, double_type());
@@ -4013,8 +4105,8 @@ exprt python_converter::handle_tuple_operations(
   // trips an is_signedbv assertion):
   //   (a0,a1,..) < (b0,b1,..)
   //     == a0<b0 or (a0==b0 and (a1<b1 or (a1==b1 and ...)))
-  // Components may be integer/bool/float scalars (mixed int/float promote to
-  // double, matching Python's numeric tower) or nested tuples (compared
+  // Components may be integer/bool/float scalars (a mixed int/float pair is
+  // compared by exact value, as in Python) or nested tuples (compared
   // recursively). Tuples of differing arity compare on the common prefix, with
   // the shorter tuple ordered first if the prefix is equal. Gt/LtE compare the
   // swapped operands; LtE/GtE negate the strict result. A str component
@@ -4148,18 +4240,8 @@ exprt python_converter::handle_tuple_operations(
       }
       else if (is_num(li.type()) && is_num(ri.type()))
       {
-        // Promote a mixed int/float pair to double (Python int->float).
-        // Ints >= 2^53 conflate with nearby floats under this promotion —
-        // the same documented limitation as __ESBMC_list_eq (PR #5207).
-        if (li.type() != ri.type())
-        {
-          li = typecast_exprt(li, double_type());
-          ri = typecast_exprt(ri, double_type());
-        }
-        expr2tc l2, r2;
-        migrate_expr(li, l2);
-        migrate_expr(ri, r2);
-        eq2 = equality2tc(l2, r2);
+        expr2tc lt2;
+        scalar_order(li, ri, element, lt2, eq2);
       }
       else if (li.type() == ri.type())
       {
@@ -4372,12 +4454,32 @@ exprt python_converter::handle_relational_type_mismatches(
     return handle_float_vs_string(binary_expr, op);
   }
 
-  // Float vs integer: Python promotes int to float for all comparisons.
-  // e.g., 3.0 == 3  →  3.0 == 3.0  (True)
-  if (lhs_is_float && (rhs.type().is_signedbv() || rhs.type().is_unsignedbv()))
+  return int_float_comparison(op, lhs, rhs, element);
+}
+
+/// A comparison of an int with a float, by exact value. For and/or the int is
+/// promoted to the float type instead and nil is returned, as for any other
+/// pair of operands.
+exprt python_converter::int_float_comparison(
+  const std::string &op,
+  exprt &lhs,
+  exprt &rhs,
+  const nlohmann::json &element)
+{
+  if (const expr2tc exact = exact_int_float_relation(op, lhs, rhs); exact)
+  {
+    exprt result = migrate_expr_back(exact);
+    if (element.contains("comparators") && element["comparators"].size() > 1)
+      return handle_chained_comparisons_logic(element, result);
+    return result;
+  }
+
+  auto is_int = [](const typet &t) {
+    return t.is_signedbv() || t.is_unsignedbv();
+  };
+  if (lhs.type().is_floatbv() && is_int(rhs.type()))
     rhs = typecast_exprt(rhs, lhs.type());
-  else if (
-    rhs_is_float && (lhs.type().is_signedbv() || lhs.type().is_unsignedbv()))
+  else if (rhs.type().is_floatbv() && is_int(lhs.type()))
     lhs = typecast_exprt(lhs, rhs.type());
 
   return nil_exprt();
