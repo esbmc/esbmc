@@ -55,14 +55,17 @@ public:
 
     // Make members public for compatibility
     value_type* data_;
+    const unsigned long long* dead_;
     size_t pos_;
     size_t size_;
 
     // Constructors
-    esbmc_unordered_map_iterator() : data_(nullptr), pos_(0), size_(0) {}
-    
-    esbmc_unordered_map_iterator(value_type* data, size_t position, size_t size)
-        : data_(data), pos_(position), size_(size) {}
+    esbmc_unordered_map_iterator()
+        : data_(nullptr), dead_(nullptr), pos_(0), size_(0) {}
+
+    esbmc_unordered_map_iterator(value_type* data, const unsigned long long* dead,
+                                 size_t position, size_t size)
+        : data_(data), dead_(dead), pos_(position), size_(size) {}
 
     // Dereference operators
     reference operator*() const {
@@ -77,6 +80,9 @@ public:
     esbmc_unordered_map_iterator& operator++() {
         if (pos_ < size_) {
             ++pos_;
+            while (pos_ < size_ && ((*dead_ >> pos_) & 1)) {
+                ++pos_;
+            }
         }
         return *this;
     }
@@ -112,18 +118,22 @@ public:
 
     // Make members public for compatibility
     const value_type* data_;
+    const unsigned long long* dead_;
     size_t pos_;
     size_t size_;
 
     // Constructors
-    esbmc_unordered_map_const_iterator() : data_(nullptr), pos_(0), size_(0) {}
-    
-    esbmc_unordered_map_const_iterator(const value_type* data, size_t position, size_t size)
-        : data_(data), pos_(position), size_(size) {}
+    esbmc_unordered_map_const_iterator()
+        : data_(nullptr), dead_(nullptr), pos_(0), size_(0) {}
+
+    esbmc_unordered_map_const_iterator(const value_type* data, const unsigned long long* dead,
+                                       size_t position, size_t size)
+        : data_(data), dead_(dead), pos_(position), size_(size) {}
     
     // Conversion from non-const iterator
     esbmc_unordered_map_const_iterator(const esbmc_unordered_map_iterator<Key, Value, Hash, KeyEqual>& other)
-        : data_(other.data_), pos_(other.pos_), size_(other.size_) {}
+        : data_(other.data_), dead_(other.dead_), pos_(other.pos_),
+          size_(other.size_) {}
 
     // Dereference operators
     reference operator*() const {
@@ -138,6 +148,9 @@ public:
     esbmc_unordered_map_const_iterator& operator++() {
         if (pos_ < size_) {
             ++pos_;
+            while (pos_ < size_ && ((*dead_ >> pos_) & 1)) {
+                ++pos_;
+            }
         }
         return *this;
     }
@@ -186,99 +199,145 @@ private:
     // 64 slots keeps the inline data_ array small: with std::string's inline
     // buffer, 1024 slots made one map ~140KB and solver encodings timed out.
     static const size_t MAX_SIZE = 64;
+    // [unord.req]: erase invalidates only the erased elements, so erase
+    // sets the slot's bit in dead_ instead of moving the later elements down
+    // (one bit per slot, so MAX_SIZE is at most 64). size_ counts the slots
+    // in use, erased ones included; erased_ the erased ones.
     value_type data_[MAX_SIZE];
     size_type size_;
+    size_type erased_;
+    unsigned long long dead_;
     hasher hash_function_;
     key_equal equal_function_;
 
     // Find index of key, or MAX_SIZE if not found
     size_type find_index(const Key& key) const {
         for (size_type i = 0; i < size_; ++i) {
-            if (equal_function_(data_[i].first, key)) {
+            if (is_live(i) && equal_function_(data_[i].first, key)) {
                 return i;
             }
         }
         return MAX_SIZE;
     }
 
+    bool is_live(size_type i) const {
+        return !((dead_ >> i) & 1);
+    }
+
+    size_type first_live(size_type i) const {
+        while (i < size_ && !is_live(i)) {
+            ++i;
+        }
+        return i;
+    }
+
+    // An erased slot, or else the next unused one.
+    size_type free_slot() const {
+        return erased_ == 0 ? size_ : first_dead();
+    }
+
+    void occupy(size_type slot) {
+        if (slot == size_) {
+            ++size_;
+        } else {
+            dead_ &= ~(1ULL << slot);
+            --erased_;
+        }
+    }
+
+    // Only called with an erased slot, so dead_ is nonzero.
+    size_type first_dead() const {
+        return __builtin_ctzll(dead_);
+    }
+
+    iterator make_iterator(size_type idx) {
+        return iterator(data_, &dead_, idx, size_);
+    }
+
+    const_iterator make_iterator(size_type idx) const {
+        return const_iterator(data_, &dead_, idx, size_);
+    }
+
+    void copy_elements(const unordered_map& other) {
+        size_ = other.size_;
+        erased_ = other.erased_;
+        dead_ = other.dead_;
+        for (size_type i = 0; i < size_; ++i) {
+            data_[i] = other.data_[i];
+        }
+    }
+
 public:
     // Constructors
-    unordered_map() : size_(0) {}
+    unordered_map() : size_(0), erased_(0), dead_(0) {}
 
     ~unordered_map() { size_ = 0; }
 
-    explicit unordered_map(size_type /*bucket_count*/) : size_(0) {}
+    explicit unordered_map(size_type /*bucket_count*/)
+        : size_(0), erased_(0), dead_(0) {}
 
-    unordered_map(std::initializer_list<value_type> init) : size_(0) {
+    unordered_map(std::initializer_list<value_type> init)
+        : size_(0), erased_(0), dead_(0) {
         insert(init.begin(), init.end());
     }
     
     // Iterator range constructor
     template<typename InputIterator>
-    unordered_map(InputIterator first, InputIterator last) : size_(0) {
+    unordered_map(InputIterator first, InputIterator last)
+        : size_(0), erased_(0), dead_(0) {
         insert(first, last);
     }
     
     // Copy constructor
     unordered_map(const unordered_map& other) 
-        : size_(other.size_), hash_function_(other.hash_function_), 
+        : hash_function_(other.hash_function_), 
           equal_function_(other.equal_function_) {
-        for (size_type i = 0; i < size_; ++i) {
-            data_[i] = other.data_[i];
-        }
+        copy_elements(other);
     }
     
     // Move constructor
     unordered_map(unordered_map&& other) noexcept
-        : size_(other.size_), hash_function_(other.hash_function_), 
+        : hash_function_(other.hash_function_), 
           equal_function_(other.equal_function_) {
-        for (size_type i = 0; i < size_; ++i) {
-            data_[i] = other.data_[i];
-        }
-        other.size_ = 0;
+        copy_elements(other);
+        other.clear();
     }
 
     // Assignment operators
     unordered_map& operator=(const unordered_map& other) {
         if (this != &other) {
-            size_ = other.size_;
             hash_function_ = other.hash_function_;
             equal_function_ = other.equal_function_;
-            for (size_type i = 0; i < size_; ++i) {
-                data_[i] = other.data_[i];
-            }
+            copy_elements(other);
         }
         return *this;
     }
     
     unordered_map& operator=(unordered_map&& other) noexcept {
         if (this != &other) {
-            size_ = other.size_;
             hash_function_ = other.hash_function_;
             equal_function_ = other.equal_function_;
-            for (size_type i = 0; i < size_; ++i) {
-                data_[i] = other.data_[i];
-            }
-            other.size_ = 0;
+            copy_elements(other);
+            other.clear();
         }
         return *this;
     }
 
     // Iterators
     iterator begin() {
-        return iterator(data_, 0, size_);
+        return make_iterator(first_live(0));
     }
     
     const_iterator begin() const {
-        return const_iterator(data_, 0, size_);
+        return make_iterator(first_live(0));
     }
     
     iterator end() {
-        return iterator(data_, size_, size_);
+        return make_iterator(size_);
     }
     
     const_iterator end() const {
-        return const_iterator(data_, size_, size_);
+        return make_iterator(size_);
     }
     
     const_iterator cbegin() const {
@@ -291,11 +350,11 @@ public:
 
     // Capacity
     bool empty() const noexcept {
-        return size_ == 0;
+        return size_ == erased_;
     }
     
     size_type size() const noexcept {
-        return size_;
+        return size_ - erased_;
     }
     
     size_type max_size() const noexcept {
@@ -326,9 +385,11 @@ public:
             return data_[idx].second;
         }
         
-        __ESBMC_assert(size_ < MAX_SIZE, "unordered_map capacity exceeded");
-        data_[size_] = std::make_pair(key, Value());
-        return data_[size_++].second;
+        size_type slot = free_slot();
+        __ESBMC_assert(slot < MAX_SIZE, "unordered_map capacity exceeded");
+        occupy(slot);
+        data_[slot] = std::make_pair(key, Value());
+        return data_[slot].second;
     }
 
     // Modifiers
@@ -338,15 +399,14 @@ public:
         size_type idx = find_index(pair.first);
         if (idx != MAX_SIZE) {
             // Already exists
-            return std::make_pair(iterator(data_, idx, size_), false);
+            return std::make_pair(make_iterator(idx), false);
         }
         
-        __ESBMC_assert(size_ < MAX_SIZE, "unordered_map capacity exceeded");
-        // Insert new element
-        data_[size_] = pair;
-        iterator result(data_, size_, size_ + 1);
-        ++size_;
-        return std::make_pair(result, true);
+        size_type slot = free_slot();
+        __ESBMC_assert(slot < MAX_SIZE, "unordered_map capacity exceeded");
+        occupy(slot);
+        data_[slot] = pair;
+        return std::make_pair(make_iterator(slot), true);
     }
     
     // Insert with move semantics
@@ -368,7 +428,7 @@ public:
         if (idx != MAX_SIZE) {
             // Key exists, update value
             data_[idx].second = value;
-            return std::make_pair(iterator(data_, idx, size_), false);
+            return std::make_pair(make_iterator(idx), false);
         }
         
         // Key doesn't exist, insert new pair
@@ -388,15 +448,14 @@ public:
         size_type idx = find_index(key);
         if (idx != MAX_SIZE) {
             // Key already exists
-            return std::make_pair(iterator(data_, idx, size_), false);
+            return std::make_pair(make_iterator(idx), false);
         }
         
-        __ESBMC_assert(size_ < MAX_SIZE, "unordered_map capacity exceeded");
-        // Construct new element
-        data_[size_] = std::make_pair(key, Value(args...));
-        iterator result(data_, size_, size_ + 1);
-        ++size_;
-        return std::make_pair(result, true);
+        size_type slot = free_slot();
+        __ESBMC_assert(slot < MAX_SIZE, "unordered_map capacity exceeded");
+        occupy(slot);
+        data_[slot] = std::make_pair(key, Value(args...));
+        return std::make_pair(make_iterator(slot), true);
     }
     
     // Erase by key
@@ -406,11 +465,8 @@ public:
             return 0; // Not found
         }
         
-        // Shift elements down
-        for (size_type i = idx; i < size_ - 1; ++i) {
-            data_[i] = data_[i + 1];
-        }
-        --size_;
+        dead_ |= 1ULL << idx;
+        ++erased_;
         return 1;
     }
     
@@ -420,52 +476,33 @@ public:
             return end();
         }
         
-        // Calculate index from iterator position
         size_type idx = position.pos_;
-        if (idx >= size_) {
+        if (idx >= size_ || !is_live(idx)) {
             return end();
         }
         
-        // Shift elements down
-        for (size_type i = idx; i < size_ - 1; ++i) {
-            data_[i] = data_[i + 1];
-        }
-        --size_;
-        
-        // Return iterator to next element (or end if we removed the last)
-        return iterator(data_, idx, size_);
+        dead_ |= 1ULL << idx;
+        ++erased_;
+        return make_iterator(first_live(idx + 1));
     }
     
     // Erase range
     iterator erase(const_iterator first, const_iterator last) {
-        if (first == last) {
-            return iterator(data_, first.pos_, size_);
+        size_type end_idx = last.pos_ < size_ ? last.pos_ : size_;
+        for (size_type i = first.pos_; i < end_idx; ++i) {
+            if (is_live(i)) {
+                dead_ |= 1ULL << i;
+                ++erased_;
+            }
         }
-        
-        // Erase elements one by one from the beginning
-        // Since we're shifting elements, we need to be careful about indices
-        size_type start_idx = first.pos_;
-        size_type end_idx = last.pos_;
-        
-        if (end_idx > size_) {
-            end_idx = size_;
-        }
-        
-        // Number of elements to remove
-        size_type num_to_remove = end_idx - start_idx;
-        
-        // Shift remaining elements down
-        for (size_type i = start_idx; i + num_to_remove < size_; ++i) {
-            data_[i] = data_[i + num_to_remove];
-        }
-        
-        size_ -= num_to_remove;
-        return iterator(data_, start_idx, size_);
+        return make_iterator(end_idx);
     }
     
     // Clear all elements
     void clear() noexcept {
         size_ = 0;
+        erased_ = 0;
+        dead_ = 0;
     }
 
     // Lookup operations
@@ -474,7 +511,7 @@ public:
     iterator find(const Key& key) {
         size_type idx = find_index(key);
         if (idx != MAX_SIZE) {
-            return iterator(data_, idx, size_);
+            return make_iterator(idx);
         }
         return end();
     }
@@ -482,7 +519,7 @@ public:
     const_iterator find(const Key& key) const {
         size_type idx = find_index(key);
         if (idx != MAX_SIZE) {
-            return const_iterator(data_, idx, size_);
+            return make_iterator(idx);
         }
         return end();
     }
@@ -503,7 +540,7 @@ public:
     }
     
     size_type bucket_size(size_type /*bucket_index*/) const {
-        return size_;
+        return size_ - erased_;
     }
     
     size_type bucket(const Key& /*key*/) const {
@@ -512,7 +549,7 @@ public:
 
     // Hash policy
     double load_factor() const noexcept {
-        return static_cast<double>(size_) / MAX_SIZE;
+        return static_cast<double>(size_ - erased_) / MAX_SIZE;
     }
     
     double max_load_factor() const noexcept {
@@ -534,12 +571,15 @@ public:
 
     // Comparison operators
     bool operator==(const unordered_map& other) const {
-        if (size_ != other.size_) {
+        if (size() != other.size()) {
             return false;
         }
         
         // Check that all key-value pairs in this map exist in other
         for (size_type i = 0; i < size_; ++i) {
+            if (!is_live(i)) {
+                continue;
+            }
             const_iterator it = other.find(data_[i].first);
             if (it == other.end() || !(it->second == data_[i].second)) {
                 return false;
@@ -580,74 +620,114 @@ public:
 private:
     // 64 slots, for the reason unordered_map above records.
     static const size_t MAX_SIZE = 64;
+    // Erased slots stay in place, as in unordered_map above.
     value_type data_[MAX_SIZE];
     size_type size_;
+    size_type erased_;
+    unsigned long long dead_;
     hasher hash_function_;
     key_equal equal_function_;
 
     size_type find_index(const Key& key) const {
         for (size_type i = 0; i < size_; ++i) {
-            if (equal_function_(data_[i].first, key)) {
+            if (is_live(i) && equal_function_(data_[i].first, key)) {
                 return i;
             }
         }
         return MAX_SIZE;
     }
 
-public:
-    unordered_multimap() : size_(0) {}
-
-    ~unordered_multimap() { size_ = 0; }
-
-    explicit unordered_multimap(size_type /*bucket_count*/) : size_(0) {}
-
-    unordered_multimap(std::initializer_list<value_type> init) : size_(0) {
-        insert(init.begin(), init.end());
+    bool is_live(size_type i) const {
+        return !((dead_ >> i) & 1);
     }
 
-    template<typename InputIterator>
-    unordered_multimap(InputIterator first, InputIterator last) : size_(0) {
-        insert(first, last);
+    size_type first_live(size_type i) const {
+        while (i < size_ && !is_live(i)) {
+            ++i;
+        }
+        return i;
     }
 
-    unordered_multimap(const unordered_multimap& other)
-        : size_(other.size_), hash_function_(other.hash_function_),
-          equal_function_(other.equal_function_) {
+    // Only called with an erased slot, so dead_ is nonzero.
+    size_type first_dead() const {
+        return __builtin_ctzll(dead_);
+    }
+
+    iterator make_iterator(size_type idx) {
+        return iterator(data_, &dead_, idx, size_);
+    }
+
+    const_iterator make_iterator(size_type idx) const {
+        return const_iterator(data_, &dead_, idx, size_);
+    }
+
+    void copy_elements(const unordered_multimap& other) {
+        size_ = other.size_;
+        erased_ = other.erased_;
+        dead_ = other.dead_;
         for (size_type i = 0; i < size_; ++i) {
             data_[i] = other.data_[i];
         }
     }
 
+public:
+    unordered_multimap() : size_(0), erased_(0), dead_(0) {}
+
+    ~unordered_multimap() { size_ = 0; }
+
+    explicit unordered_multimap(size_type /*bucket_count*/)
+        : size_(0), erased_(0), dead_(0) {}
+
+    unordered_multimap(std::initializer_list<value_type> init)
+        : size_(0), erased_(0), dead_(0) {
+        insert(init.begin(), init.end());
+    }
+
+    template<typename InputIterator>
+    unordered_multimap(InputIterator first, InputIterator last)
+        : size_(0), erased_(0), dead_(0) {
+        insert(first, last);
+    }
+
+    unordered_multimap(const unordered_multimap& other)
+        : hash_function_(other.hash_function_),
+          equal_function_(other.equal_function_) {
+        copy_elements(other);
+    }
+
     unordered_multimap& operator=(const unordered_multimap& other) {
         if (this != &other) {
-            size_ = other.size_;
             hash_function_ = other.hash_function_;
             equal_function_ = other.equal_function_;
-            for (size_type i = 0; i < size_; ++i) {
-                data_[i] = other.data_[i];
-            }
+            copy_elements(other);
         }
         return *this;
     }
 
-    iterator begin() { return iterator(data_, 0, size_); }
-    iterator end() { return iterator(data_, size_, size_); }
-    const_iterator begin() const { return const_iterator(data_, 0, size_); }
-    const_iterator end() const { return const_iterator(data_, size_, size_); }
+    iterator begin() { return make_iterator(first_live(0)); }
+    iterator end() { return make_iterator(size_); }
+    const_iterator begin() const { return make_iterator(first_live(0)); }
+    const_iterator end() const { return make_iterator(size_); }
     const_iterator cbegin() const { return begin(); }
     const_iterator cend() const { return end(); }
 
-    bool empty() const { return size_ == 0; }
-    size_type size() const { return size_; }
+    bool empty() const { return size_ == erased_; }
+    size_type size() const { return size_ - erased_; }
     size_type max_size() const { return MAX_SIZE; }
 
     // Unlike unordered_map::insert, an equivalent key is always added, so this
     // returns a plain iterator rather than a pair.
     iterator insert(const value_type& value) {
-        __ESBMC_assert(size_ < MAX_SIZE, "unordered_multimap capacity exceeded");
-        data_[size_] = value;
-        ++size_;
-        return iterator(data_, size_ - 1, size_);
+        size_type slot = erased_ == 0 ? size_ : first_dead();
+        if (slot == size_) {
+            __ESBMC_assert(size_ < MAX_SIZE, "unordered_multimap capacity exceeded");
+            ++size_;
+        } else {
+            dead_ &= ~(1ULL << slot);
+            --erased_;
+        }
+        data_[slot] = value;
+        return make_iterator(slot);
     }
 
     template<typename InputIterator>
@@ -664,30 +744,25 @@ public:
 
     // [unord.multimap] erase(k) removes every equivalent key.
     size_type erase(const key_type& key) {
-        // key may refer to an element that the compaction overwrites.
-        const key_type k = key;
         size_type removed = 0;
-        size_type out = 0;
         for (size_type i = 0; i < size_; ++i) {
-            if (equal_function_(data_[i].first, k)) {
+            if (is_live(i) && equal_function_(data_[i].first, key)) {
+                dead_ |= 1ULL << i;
                 ++removed;
-            } else {
-                data_[out] = data_[i];
-                ++out;
             }
         }
-        size_ = out;
+        erased_ += removed;
         return removed;
     }
 
-    void clear() { size_ = 0; }
+    void clear() { size_ = 0; erased_ = 0; dead_ = 0; }
 
     iterator find(const key_type& key) {
         size_type idx = find_index(key);
         if (idx == MAX_SIZE) {
             return end();
         }
-        return iterator(data_, idx, size_);
+        return make_iterator(idx);
     }
 
     const_iterator find(const key_type& key) const {
@@ -695,13 +770,13 @@ public:
         if (idx == MAX_SIZE) {
             return end();
         }
-        return const_iterator(data_, idx, size_);
+        return make_iterator(idx);
     }
 
     size_type count(const key_type& key) const {
         size_type n = 0;
         for (size_type i = 0; i < size_; ++i) {
-            if (equal_function_(data_[i].first, key)) {
+            if (is_live(i) && equal_function_(data_[i].first, key)) {
                 ++n;
             }
         }
