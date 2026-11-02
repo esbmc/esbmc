@@ -791,7 +791,7 @@ void _create_yaml_metadata_emitter(
 {
   metadata << YAML::BeginMap;
   metadata << YAML::Key << "format_version" << YAML::Value << YAML::DoubleQuoted
-           << "2.0";
+           << "2.1";
 
   std::string uuid =
     boost::uuids::to_string(boost::uuids::random_generator()());

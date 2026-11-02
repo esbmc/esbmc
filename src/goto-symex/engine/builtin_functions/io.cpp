@@ -195,21 +195,6 @@ bool goto_symext::recover_va_list_args(
   return true;
 }
 
-static bool is_literal_string_start(const expr2tc &e)
-{
-  if (is_typecast2t(e))
-    return is_literal_string_start(to_typecast2t(e).from);
-  if (!is_address_of2t(e))
-    return false;
-  const expr2tc &obj = to_address_of2t(e).ptr_obj;
-  if (is_constant_string2t(obj))
-    return true;
-  return is_index2t(obj) &&
-         is_constant_string2t(to_index2t(obj).source_value) &&
-         is_constant_int2t(to_index2t(obj).index) &&
-         to_constant_int2t(to_index2t(obj).index).value.is_zero();
-}
-
 std::vector<expr2tc>
 goto_symext::printf_args(const code_printf2t &call, size_t fmt_idx)
 {
