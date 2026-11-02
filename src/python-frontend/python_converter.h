@@ -1028,6 +1028,13 @@ private:
   // classes.
   bool is_user_class_pointer(const typet &t);
 
+  // After `x` is retyped from a class struct to the class reference by
+  // `x = call(...)`, pass `x` itself where the call took `&x` (#9624).
+  void pass_reference_receiver(
+    exprt &rhs,
+    const exprt &lhs,
+    const typet &old_lhs_type);
+
   // Widen a symbol rebound from a non-class placeholder (None, Any, a bare
   // scalar) to a class-pointer binding. Only those types are widened: a
   // struct-shaped one may already back an expression built elsewhere.
