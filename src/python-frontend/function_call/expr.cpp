@@ -3588,13 +3588,7 @@ bool function_call_expr::receiver_class_defines_method(
          json_utils::class_defines_method((*module)["body"], cls, method_name);
 }
 
-/// Refuse a call whose receiver class is not known when some module of the
-/// program defines a class with a method named @p method_name. Such a method
-/// may write to its receiver, so the null fallback would drop those writes and
-/// prove what Python fails (#8915). A literal display is never such an
-/// instance.
-void function_call_expr::reject_unresolved_user_method(
-  const std::string &method_name) const
+bool function_call_expr::receiver_is_literal() const
 {
   static const std::unordered_set<std::string> literal_kinds = {
     "Constant",
@@ -3606,7 +3600,18 @@ void function_call_expr::reject_unresolved_user_method(
     "ListComp",
     "SetComp",
     "DictComp"};
-  if (literal_kinds.count(call_["func"]["value"].value("_type", "")))
+  return literal_kinds.count(call_["func"]["value"].value("_type", "")) != 0;
+}
+
+/// Refuse a call whose receiver class is not known when some module of the
+/// program defines a class with a method named @p method_name. Such a method
+/// may write to its receiver, so the null fallback would drop those writes and
+/// prove what Python fails (#8915). A literal display is never such an
+/// instance.
+void function_call_expr::reject_unresolved_user_method(
+  const std::string &method_name) const
+{
+  if (receiver_is_literal())
     return;
 
   const auto defines = [&](const nlohmann::json &module) {
@@ -3622,6 +3627,23 @@ void function_call_expr::reject_unresolved_user_method(
     throw std::runtime_error(
       "unsupported: calling method '" + method_name +
       "' on a value whose class is not known");
+}
+
+/// The null fallback for an unresolved method drops whatever the call would
+/// raise (#9530), so a reachable call is reported rather than proved.
+void function_call_expr::flag_unresolved_method_call(
+  const std::string &method_name,
+  const locationt &location) const
+{
+  if (receiver_is_literal())
+    return;
+  code_assertt check(migrate_expr_back(gen_false_expr()));
+  check.location() = location;
+  check.location().user_provided(true);
+  check.location().comment(
+    "Unsupported: calling method '" + method_name +
+    "' on a value whose class is not known");
+  converter_.current_block->copy_to_operands(check);
 }
 
 bool function_call_expr::is_list_method_call() const
@@ -7270,6 +7292,7 @@ std::optional<exprt> function_call_expr::resolve_missing_function_symbol(
           {
             reject_unresolved_user_method(method_name);
             locationt location = converter_.get_location_from_decl(call_);
+            flag_unresolved_method_call(method_name, location);
             exprt zero_fallback =
               migrate_expr_back(gen_zero(migrate_type(any_type())));
             zero_fallback.set(PYTHON_UNRESOLVED_CALL_ATTR, true);
