@@ -511,6 +511,23 @@ static std::optional<waypoint> witness_nondet_waypoint(
   return wp;
 }
 
+/* The failed assertion's access, and for a data race the access it raced
+   with. */
+static void push_violation_targets(
+  yamlt &yml,
+  const goto_trace_stept &step,
+  optionst &options)
+{
+  yml.segments.push_back(witness_target_waypoint(
+    step.pc, step.stack_trace, yml.verified_file, options));
+  if (step.racing_access)
+    yml.racing_target = witness_target_waypoint(
+      step.racing_access->pc,
+      step.racing_access->stack_trace,
+      yml.verified_file,
+      options);
+}
+
 void violation_yaml_goto_trace(
   optionst &options,
   const namespacet &ns,
@@ -528,14 +545,7 @@ void violation_yaml_goto_trace(
     case symex_targett::ASSERT:
       if (!step.guard)
       {
-        yml.segments.push_back(witness_target_waypoint(
-          step.pc, step.stack_trace, yml.verified_file, options));
-        if (step.racing_access)
-          yml.racing_target = witness_target_waypoint(
-            step.racing_access->pc,
-            step.racing_access->stack_trace,
-            yml.verified_file,
-            options);
+        push_violation_targets(yml, step, options);
 
         /* having printed a property violation, don't print more steps. */
 
