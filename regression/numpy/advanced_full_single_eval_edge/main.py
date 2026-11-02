@@ -45,3 +45,8 @@ d_m2 = np.full((2, 3), [1.5, 2.5, 3.5], dtype=np.float32)
 assert d_m2[1][2] == 3.5 and d_m2.nbytes == 24
 e_m2 = np.full(2, [1.5])
 assert e_m2[1] == 1.5
+
+rank_fill = np.array([[1, 2]])
+dropped = np.full(2, rank_fill)
+assert dropped[0] == 1 and dropped[1] == 2
+assert np.full(2, [[1, 2]])[1] == 2
