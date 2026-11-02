@@ -162,6 +162,20 @@ private:
         return i;
     }
 
+    // An erased slot, or else the next unused one.
+    size_type free_slot() const {
+        return erased_ == 0 ? size_ : first_dead();
+    }
+
+    void occupy(size_type slot) {
+        if (slot == size_) {
+            ++size_;
+        } else {
+            dead_ &= ~(1ULL << slot);
+            --erased_;
+        }
+    }
+
     // Only called with an erased slot, so dead_ is nonzero.
     size_type first_dead() const {
         return __builtin_ctzll(dead_);
@@ -284,15 +298,9 @@ public:
             return std::make_pair(make_iterator(idx), false);
         }
         
-        // Reuse an erased slot, or append one.
-        size_type slot = erased_ == 0 ? size_ : first_dead();
-        if (slot == size_) {
-            __ESBMC_assert(size_ < MAX_SIZE, "unordered_set capacity exceeded");
-            ++size_;
-        } else {
-            dead_ &= ~(1ULL << slot);
-            --erased_;
-        }
+        size_type slot = free_slot();
+        __ESBMC_assert(slot < MAX_SIZE, "unordered_set capacity exceeded");
+        occupy(slot);
         data_[slot] = key;
         return std::make_pair(make_iterator(slot), true);
     }
@@ -503,6 +511,20 @@ private:
         return i;
     }
 
+    // An erased slot, or else the next unused one.
+    size_type free_slot() const {
+        return erased_ == 0 ? size_ : first_dead();
+    }
+
+    void occupy(size_type slot) {
+        if (slot == size_) {
+            ++size_;
+        } else {
+            dead_ &= ~(1ULL << slot);
+            --erased_;
+        }
+    }
+
     // Only called with an erased slot, so dead_ is nonzero.
     size_type first_dead() const {
         return __builtin_ctzll(dead_);
@@ -567,14 +589,9 @@ public:
     // Unlike unordered_set::insert, an equivalent key is always added, so this
     // returns a plain iterator rather than a pair.
     iterator insert(const value_type& value) {
-        size_type slot = erased_ == 0 ? size_ : first_dead();
-        if (slot == size_) {
-            __ESBMC_assert(size_ < MAX_SIZE, "unordered_multiset capacity exceeded");
-            ++size_;
-        } else {
-            dead_ &= ~(1ULL << slot);
-            --erased_;
-        }
+        size_type slot = free_slot();
+        __ESBMC_assert(slot < MAX_SIZE, "unordered_multiset capacity exceeded");
+        occupy(slot);
         data_[slot] = value;
         return make_iterator(slot);
     }

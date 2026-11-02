@@ -27,5 +27,16 @@ int main()
   std::unordered_map<int, int> c = m;
   m.erase(m.begin(), m.end());
   assert(m.empty() && c.size() == 2 && c.at(4) == 40);
+
+  std::unordered_map<int, int> w{{1, 1}, {2, 2}, {3, 3}};
+  w.erase(2);
+  int keys = 0;
+  for (const auto &p : w)
+    keys += p.first;
+  assert(keys == 4);
+  std::unordered_map<int, int> wc = w;
+  assert(wc == w && wc.size() == 2);
+  w.erase(w.begin(), w.find(3));
+  assert(w.count(3) == 1 && w.count(2) == 0);
   return 0;
 }
