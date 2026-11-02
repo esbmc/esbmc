@@ -1,0 +1,5 @@
+CORE
+main.cpp
+
+false: stored 1
+^VERIFICATION FAILED$

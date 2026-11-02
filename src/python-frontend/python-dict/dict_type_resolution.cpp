@@ -109,6 +109,67 @@ typet python_dict_handler::get_dict_value_type_from_annotation(
   return empty_typet();
 }
 
+/// Whether `node` builds an empty dict: `{}` or `dict()`.
+static bool is_empty_dict_init(const nlohmann::json &node)
+{
+  if (!node.is_object())
+    return false;
+  const std::string type = node.value("_type", std::string());
+  if (type == "Dict")
+    return !node.contains("values") || !node["values"].is_array() ||
+           node["values"].empty();
+  return type == "Call" && node.contains("func") && node["func"].is_object() &&
+         node["func"].value("id", std::string()) == "dict" &&
+         node.value("args", nlohmann::json::array()).empty() &&
+         node.value("keywords", nlohmann::json::array()).empty();
+}
+
+/// The kind of the literal that the statement `stmt` stores into the dict
+/// `name` by subscript, "?" for any other value, and "" if it stores nothing.
+static std::string
+stored_literal_kind(const nlohmann::json &stmt, const std::string &name)
+{
+  if (
+    stmt.value("_type", "") != "Assign" || !stmt.contains("targets") ||
+    stmt["targets"].empty())
+    return "";
+  const auto &target = stmt["targets"][0];
+  if (
+    !target.is_object() || target.value("_type", "") != "Subscript" ||
+    !target["value"].is_object() || target["value"].value("id", "") != name)
+    return "";
+  const auto &rhs = stmt["value"];
+  return rhs.value("_type", "") == "Constant" ? rhs["value"].type_name() : "?";
+}
+
+/// Whether every statement of `body` that stores into the dict `name` by
+/// subscript stores a literal of one kind, so the last store names the type.
+static bool stores_one_literal_kind(
+  const nlohmann::json &body,
+  const std::string &name,
+  std::string &kind)
+{
+  if (!body.is_array())
+    return true;
+  for (const auto &stmt : body)
+  {
+    if (!stmt.is_object())
+      continue;
+    const std::string type = stmt.value("_type", "");
+    if (type == "FunctionDef" || type == "ClassDef" || type == "Lambda")
+      continue;
+    const std::string stored = stored_literal_kind(stmt, name);
+    if (stored == "?" || (!stored.empty() && !kind.empty() && stored != kind))
+      return false;
+    if (!stored.empty())
+      kind = stored;
+    for (const char *key : {"body", "orelse", "finalbody"})
+      if (stmt.contains(key) && !stores_one_literal_kind(stmt[key], name, kind))
+        return false;
+  }
+  return true;
+}
+
 typet python_dict_handler::resolve_expected_type_for_dict_subscript(
   const exprt &dict_expr)
 {
@@ -255,19 +316,22 @@ typet python_dict_handler::resolve_expected_type_for_dict_subscript(
     // A later `d = {}` re-init resets the candidate so the next assignment
     // dominates — keeps the inferred type aligned with the live dict.
     // Without it, d[k] reads on an empty literal default to char*.
-    if (
-      var_decl.contains("value") && var_decl["value"].is_object() &&
-      var_decl["value"].value("_type", std::string()) == "Dict" &&
-      (!var_decl["value"].contains("values") ||
-       !var_decl["value"]["values"].is_array() ||
-       var_decl["value"]["values"].empty()))
+    if (var_decl.contains("value") && is_empty_dict_init(var_decl["value"]))
     {
       std::vector<std::string> fn_path =
         json_utils::split_function_path(converter_.get_current_func_name());
-      if (!fn_path.empty())
+      std::string store_kind;
+      if (
+        !fn_path.empty() ||
+        stores_one_literal_kind(
+          converter_.get_ast_json()["body"], var_name, store_kind))
       {
-        const auto &func_node =
-          json_utils::find_function_by_path(converter_.get_ast_json(), fn_path);
+        const nlohmann::json function =
+          fn_path.empty() ? nlohmann::json()
+                          : json_utils::find_function_by_path(
+                              converter_.get_ast_json(), fn_path);
+        const nlohmann::json &func_node =
+          fn_path.empty() ? converter_.get_ast_json() : function;
         if (
           !func_node.empty() && func_node.contains("body") &&
           func_node["body"].is_array())
@@ -342,11 +406,7 @@ typet python_dict_handler::resolve_expected_type_for_dict_subscript(
             if (
               tgt.is_object() && tgt.value("_type", std::string()) == "Name" &&
               tgt.value("id", std::string()) == var_name &&
-              stmt.contains("value") && stmt["value"].is_object() &&
-              stmt["value"].value("_type", std::string()) == "Dict" &&
-              (!stmt["value"].contains("values") ||
-               !stmt["value"]["values"].is_array() ||
-               stmt["value"]["values"].empty()))
+              stmt.contains("value") && is_empty_dict_init(stmt["value"]))
             {
               have_candidate = false;
               return;

@@ -936,6 +936,15 @@ typet python_converter::infer_tuple_struct_from_value(
   return tuple_handler_->create_tuple_struct_type(elem_types);
 }
 
+/// A str operand of any length decays to a char pointer, as in an IfExp.
+static bool decay_str_operand(typet &type)
+{
+  if (!type.is_array() || !type_utils::is_string_type(type))
+    return false;
+  type = pointer_typet(type.subtype());
+  return true;
+}
+
 exprt python_converter::extract_type_from_boolean_op(const exprt &bool_op)
 {
   // Only OR and AND are special
@@ -951,6 +960,7 @@ exprt python_converter::extract_type_from_boolean_op(const exprt &bool_op)
   typet found_type = empty_typet();
   assert(found_type.is_empty());
 
+  bool has_bool = false, has_str = false;
   for (exprt e : bool_op.operands())
   {
     // First, try to solve the underlying type...
@@ -958,11 +968,11 @@ exprt python_converter::extract_type_from_boolean_op(const exprt &bool_op)
       e = extract_type_from_boolean_op(e);
 
     typet operand_type = e.type();
+    has_bool |= operand_type.is_bool();
     if (operand_type.is_empty() || operand_type.is_bool())
       continue;
 
-    // Arrays are special, they have a length property which we don't care about
-    // right now
+    has_str |= decay_str_operand(operand_type);
     if (operand_type.is_array())
       return gen_zero(any_type());
 
@@ -977,5 +987,8 @@ exprt python_converter::extract_type_from_boolean_op(const exprt &bool_op)
     }
   }
 
+  // A bool operand can be the result, and a bool is not a char pointer.
+  if (has_str && has_bool)
+    return gen_zero(any_type());
   return found_type.is_empty() ? gen_zero(any_type()) : gen_zero(found_type);
 }

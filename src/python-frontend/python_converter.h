@@ -645,6 +645,20 @@ public:
     exprt &rhs,
     const nlohmann::json &element);
 
+  /// `lhs op rhs` by exact value when one operand is an int and the other a
+  /// float; nil for any other pair or op.
+  static expr2tc exact_int_float_relation(
+    const std::string &op,
+    const exprt &lhs,
+    const exprt &rhs,
+    bool pure_reads = false);
+
+  exprt int_float_comparison(
+    const std::string &op,
+    exprt &lhs,
+    exprt &rhs,
+    const nlohmann::json &element);
+
   bool scalar_order(
     exprt a,
     exprt b,
@@ -704,6 +718,11 @@ private:
     const nlohmann::json &element,
     const std::string &prefix,
     const std::function<void(const expr2tc &, const locationt &)> &emit_guards);
+
+  // Functions whose return type is a guess from their return statements (an
+  // expression counts as a double).
+  std::set<std::string> guessed_return_functions_;
+  void note_guessed_return(const nlohmann::json &function_node);
 
   friend class bounded_math;
   friend class complex_handler;
@@ -1022,6 +1041,11 @@ private:
   // None-keeps-Class* and dunder-dispatch-through-pointer paths to real
   // classes.
   bool is_user_class_pointer(const typet &t);
+
+  // The preprocessor lowers list() of an instance it can type to a
+  // comprehension; the generic builder would reinterpret any other instance
+  // as a list, so refuse it.
+  void refuse_list_of_instance(const typet &t);
 
   // Widen a symbol rebound from a non-class placeholder (None, Any, a bare
   // scalar) to a class-pointer binding. Only those types are widened: a
@@ -2863,6 +2887,13 @@ private:
     const exprt &value,
     codet &target_block);
 
+  exprt tuple_member_list_source(const exprt &value) const;
+
+  void bind_tuple_member_list_types(
+    const nlohmann::json &ast_node,
+    const exprt &lhs,
+    const exprt &rhs);
+
   exprt hold_tuple_member_list(
     const nlohmann::json &ast_node,
     const exprt &value,
@@ -3419,6 +3450,10 @@ private:
   /// Throws on a tagged operand of an `and`/`or` whose value is used.
   void refuse_tagged_boolop_operand(const exprt &operand) const;
 
+  /// The truthiness of a str and/or operand: false for None or "", else true.
+  /// Any other value comes back unchanged.
+  exprt boolop_string_truthiness(const exprt &value, const locationt &location);
+
   /// Rewrite a string @p str into `strlen(str) != 0`, its truthiness; any
   /// other value comes back unchanged.
   exprt apply_string_truthiness(const exprt &str, const locationt &location);
@@ -3927,7 +3962,10 @@ private:
   std::unordered_set<std::string> numpy_view_param_symbols_;
   bool is_loading_models = false;
   bool is_importing_module = false;
-  bool base_ctor_called = false;
+  /// The classes whose constructor was found in a base class by the call
+  /// being converted, until its assignment reads them. A constructor call in
+  /// an argument adds its class too.
+  std::set<std::string> base_ctor_called;
   bool build_static_lists = false;
   /// The element type a numpy constructor's dtype= gives the static array
   /// get_static_array builds; empty when the literal's own type is used.

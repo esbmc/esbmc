@@ -29,4 +29,16 @@ smt_convt *create_solver(
 /// will choose from whatever is built in at solver-creation time).
 void check_solver_availability(const optionst &options);
 
+/// The solver create_solver("", ...) will use for these options, without
+/// logging the choice; "" if no backend can be picked implicitly.
+std::string effective_solver_name(const optionst &options);
+
+/// Whether \p solver_name's native floating-point theory has the format with
+/// \p exponent exponent bits and \p fraction fraction bits (hidden bit
+/// excluded). Solvers without such a restriction answer true.
+bool solver_supports_fp_format(
+  const std::string &solver_name,
+  unsigned exponent,
+  unsigned fraction);
+
 #endif
