@@ -1028,6 +1028,11 @@ private:
   // classes.
   bool is_user_class_pointer(const typet &t);
 
+  // The preprocessor lowers list() of an instance it can type to a
+  // comprehension; the generic builder would reinterpret any other instance
+  // as a list, so refuse it.
+  void refuse_list_of_instance(const typet &t);
+
   // Widen a symbol rebound from a non-class placeholder (None, Any, a bare
   // scalar) to a class-pointer binding. Only those types are widened: a
   // struct-shaped one may already back an expression built elsewhere.
