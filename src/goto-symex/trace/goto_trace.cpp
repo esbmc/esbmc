@@ -358,6 +358,9 @@ static std::optional<waypoint> witness_racing_target(
   const std::string &verified_file,
   optionst &options)
 {
+  if (!options.get_bool_option("data-races-check"))
+    return {};
+
   const std::string &comment = failed.comment;
   const size_t on = comment.rfind(" on ");
   if (on == std::string::npos)
@@ -548,9 +551,8 @@ void violation_yaml_goto_trace(
       {
         yml.segments.push_back(
           witness_target_waypoint(step, yml.verified_file, options));
-        if (options.get_bool_option("data-races-check"))
-          yml.racing_target =
-            witness_racing_target(goto_trace, step, yml.verified_file, options);
+        yml.racing_target =
+          witness_racing_target(goto_trace, step, yml.verified_file, options);
 
         /* having printed a property violation, don't print more steps. */
 
