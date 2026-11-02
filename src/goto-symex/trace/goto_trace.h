@@ -6,6 +6,7 @@
 #include <goto-symex/equation/symex_target.h>
 
 #include <map>
+#include <optional>
 #include <irep2/irep2.h>
 #include <util/irep/migrate.h>
 #include <util/config/cmdline.h>
@@ -80,6 +81,15 @@ public:
    * each paired with its value in this counterexample. A witness has nothing
    * else to record them from (#7858). */
   std::list<std::pair<expr2tc, expr2tc>> nondet_reads;
+
+  /* For a violated data race assert: the access by another thread that set the
+   * race flag slot the assert reads, i.e. the other half of the race. */
+  struct accesst
+  {
+    goto_programt::const_targett pc;
+    std::vector<stack_framet> stack_trace;
+  };
+  std::optional<accesst> racing_access;
 
   // for OUTPUT
   std::string format_string;

@@ -317,12 +317,14 @@ static waypoint witness_waypoint(
 /* README-YAML.md requires a waypoint's file_name to be one of the task's input
    files, so a step inside a header or an operational model is reported at its
    innermost call site that is one. Null when no frame qualifies. */
-static const locationt *witness_input_location(const goto_trace_stept &step)
+static const locationt *witness_input_location(
+  goto_programt::const_targett pc,
+  const std::vector<stack_framet> &stack_trace)
 {
-  if (input_file_check(step.pc->location))
-    return &step.pc->location;
+  if (input_file_check(pc->location))
+    return &pc->location;
 
-  for (const auto &frame : step.stack_trace)
+  for (const auto &frame : stack_trace)
     if (
       frame.src != nullptr && frame.src->is_set &&
       input_file_check(frame.src->pc->location))
@@ -336,46 +338,18 @@ static const locationt *witness_input_location(const goto_trace_stept &step)
    than dropped: a file_name the validator was never given makes the witness
    ill-formed, while a line it cannot match only costs confirmation. */
 static waypoint witness_target_waypoint(
-  const goto_trace_stept &step,
+  goto_programt::const_targett pc,
+  const std::vector<stack_framet> &stack_trace,
   const std::string &verified_file,
   optionst &options)
 {
-  const locationt *loc = witness_input_location(step);
+  const locationt *loc = witness_input_location(pc, stack_trace);
   waypoint wp =
-    witness_waypoint(loc ? *loc : step.pc->location, verified_file, options);
+    witness_waypoint(loc ? *loc : pc->location, verified_file, options);
   wp.type = waypoint::target;
   if (loc == nullptr)
     wp.file = verified_file;
   return wp;
-}
-
-/* The earlier access of a race: the latest write to the raced variable by
-   another thread before the failed assertion, whose comment ends in the
-   variable's name ("W/W data race on c:@g"). */
-static std::optional<waypoint> witness_racing_target(
-  const goto_tracet &goto_trace,
-  const goto_trace_stept &failed,
-  const std::string &verified_file,
-  optionst &options)
-{
-  if (!options.get_bool_option("data-races-check"))
-    return {};
-
-  const std::string &comment = failed.comment;
-  const size_t on = comment.rfind(" on ");
-  if (on == std::string::npos)
-    return {};
-  const std::string variable = comment.substr(on + 4);
-
-  for (auto it = goto_trace.steps.rbegin(); it != goto_trace.steps.rend(); ++it)
-  {
-    if (
-      it->step_nr < failed.step_nr && it->type == symex_targett::ASSIGNMENT &&
-      it->thread_nr != failed.thread_nr && is_symbol2t(it->lhs) &&
-      to_symbol2t(it->lhs).thename.as_string() == variable)
-      return witness_target_waypoint(*it, verified_file, options);
-  }
-  return {};
 }
 
 void show_state_header(
@@ -554,10 +528,14 @@ void violation_yaml_goto_trace(
     case symex_targett::ASSERT:
       if (!step.guard)
       {
-        yml.segments.push_back(
-          witness_target_waypoint(step, yml.verified_file, options));
-        yml.racing_target =
-          witness_racing_target(goto_trace, step, yml.verified_file, options);
+        yml.segments.push_back(witness_target_waypoint(
+          step.pc, step.stack_trace, yml.verified_file, options));
+        if (step.racing_access)
+          yml.racing_target = witness_target_waypoint(
+            step.racing_access->pc,
+            step.racing_access->stack_trace,
+            yml.verified_file,
+            options);
 
         /* having printed a property violation, don't print more steps. */
 
