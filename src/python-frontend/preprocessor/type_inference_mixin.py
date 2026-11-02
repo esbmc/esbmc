@@ -2,6 +2,10 @@ import ast
 # pylint: disable=too-many-nested-blocks,too-many-branches
 
 
+def _names_plain_base(base, plain):
+    return isinstance(base, ast.Name) and (base.id == "object" or base.id in plain)
+
+
 class TypeInferenceMixin:
 
     def _extract_dict_method_element_type(self, iterable_node):
@@ -101,6 +105,22 @@ class TypeInferenceMixin:
         for name in poisoned:
             var_classes.pop(name, None)
         return class_names, var_classes
+
+    @staticmethod
+    def _plain_user_classes(module):
+        """Classes whose every ancestor is a module class or object, with no
+        metaclass keyword. A name defined more than once is left out."""
+        defs = [n for n in ast.walk(module) if isinstance(n, ast.ClassDef)]
+        names = [d.name for d in defs]
+        candidates = {d.name: d for d in defs if names.count(d.name) == 1 and not d.keywords}
+        plain = set()
+        pending = list(candidates.values())
+        while True:
+            ready = [cls for cls in pending if all(_names_plain_base(b, plain) for b in cls.bases)]
+            if not ready:
+                return plain
+            plain.update(cls.name for cls in ready)
+            pending = [cls for cls in pending if cls not in ready]
 
     def _element_instance_class(self, elt):
         """Return the user-class name of a list element when it is a class
