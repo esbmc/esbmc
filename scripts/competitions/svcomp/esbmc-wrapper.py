@@ -449,7 +449,9 @@ def get_command_line(strat, prop, arch, benchmark, concurrency, dargs, esbmc_ci,
     # --smt-symex-guard also turns on --smt-during-symex, which is what makes
     # sibling schedules share a solver context (issue #6831, #7043); do not add
     # it separately, and do not drop the guard without re-measuring.
-    command_line += " --smt-symex-guard --bitwuzla --cswitch-skip-readonly-globals "
+    # Not Bitwuzla: its SAT state outlives pop(1), so memory grows with every
+    # interleaving and passes 3 GB within seconds (issue #9692).
+    command_line += " --smt-symex-guard --z3 --cswitch-skip-readonly-globals "
     # Unlike --max-context-bound, a truncated schedule space still reports
     # SUCCESSFUL, so this trades soundness of "true" verdicts for coverage.
     command_line += "--context-bound 3 "
