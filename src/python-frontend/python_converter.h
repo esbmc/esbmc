@@ -1042,6 +1042,13 @@ private:
   // classes.
   bool is_user_class_pointer(const typet &t);
 
+  // After `x` is retyped from a class struct to the class reference by
+  // `x = call(...)`, pass `x` itself where the call took `&x` (#9624).
+  void pass_reference_receiver(
+    exprt &rhs,
+    const exprt &lhs,
+    const typet &old_lhs_type);
+
   // The preprocessor lowers list() of an instance it can type to a
   // comprehension; the generic builder would reinterpret any other instance
   // as a list, so refuse it.
