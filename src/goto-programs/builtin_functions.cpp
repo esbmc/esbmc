@@ -1772,6 +1772,34 @@ void goto_convertt::do_function_call_symbol(
       abort();
     }
   }
+  else if (base_name == "__ESBMC_cover")
+  {
+    if (arguments.size() != 1)
+    {
+      log_error("`{}' expected to have one argument", id2string(base_name));
+      abort();
+    }
+
+    if (options.get_bool_option("no-assertions"))
+      return;
+
+    goto_programt::targett t = dest.add_instruction(ASSERT);
+    migrate_expr(arguments[0], t->guard);
+    
+    // cover(cond) behaves as assert(!cond)
+    t->guard = gen_not(t->guard);
+
+    t->location = function.location();
+    t->location.user_provided(true);
+    t->location.property("cover");
+    t->location.comment("ESBMC cover");
+
+    if (lhs.is_not_nil())
+    {
+      log_error("{} expected not to have LHS", id2string(base_name));
+      abort();
+    }
+  }
   else if (
     base_name == "__VERIFIER_error" || base_name == "reach_error" ||
     base_name == "__builtin_unreachable")
