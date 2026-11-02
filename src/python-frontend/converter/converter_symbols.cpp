@@ -1121,6 +1121,12 @@ bool python_converter::import_hides_builtin(
 static std::optional<std::string>
 imported_module_name(const nlohmann::json &obj, const std::string &lookup_name)
 {
+  // Every module binds its own __name__ and __file__; only an explicit
+  // `from m import __name__` rebinds them in the importer (#9725).
+  const bool module_dunder =
+    lookup_name == "__name__" || lookup_name == "__file__";
+  if (obj["_type"] == "Import" && module_dunder)
+    return std::nullopt;
   if (
     obj["_type"] != "ImportFrom" || !obj.contains("names") ||
     lookup_name.empty())
@@ -1128,7 +1134,7 @@ imported_module_name(const nlohmann::json &obj, const std::string &lookup_name)
   for (const auto &name : obj["names"])
   {
     const std::string &n = name["name"].get<std::string>();
-    if (n == "*" || n == lookup_name)
+    if ((n == "*" && !module_dunder) || n == lookup_name)
       return lookup_name;
     if (
       name.contains("asname") && !name["asname"].is_null() &&
