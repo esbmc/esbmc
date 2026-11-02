@@ -650,7 +650,8 @@ public:
   static expr2tc exact_int_float_relation(
     const std::string &op,
     const exprt &lhs,
-    const exprt &rhs);
+    const exprt &rhs,
+    bool pure_reads = false);
 
   exprt int_float_comparison(
     const std::string &op,

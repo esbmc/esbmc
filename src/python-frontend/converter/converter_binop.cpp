@@ -551,21 +551,67 @@ std::optional<nlohmann::json> percent_format_as_fstring(
 }
 } // namespace
 
-/// Python compares an int with a float by exact value, so promoting the int to
-/// the float type first, which rounds it, decides `2**53 + 1 == 2.0**53`
-/// wrongly (#9359). The int rounded down and rounded up are the nearest floats
-/// on either side of it: i < f iff down < f, i <= f iff up <= f, and i == f iff
-/// both equal f. Nil unless one operand is an int and the other a floatbv.
-expr2tc python_converter::exact_int_float_relation(
-  const std::string &op,
-  const exprt &lhs,
-  const exprt &rhs)
+static bool has_side_effect(const exprt &e)
+{
+  if (e.id() == "sideeffect")
+    return true;
+  for (const exprt &sub : e.operands())
+    if (has_side_effect(sub))
+      return true;
+  return false;
+}
+
+/// Whether the int of an int/float pair is \p lhs, or nullopt when the
+/// operands are no such pair or one has a side effect, which the exact
+/// comparison would evaluate twice; \p pure_reads says the side effects are
+/// reads that may repeat.
+static std::optional<bool>
+int_float_pair(const exprt &lhs, const exprt &rhs, bool pure_reads)
 {
   auto is_int = [](const typet &t) {
     return t.is_signedbv() || t.is_unsignedbv();
   };
   const bool int_lhs = is_int(lhs.type()) && rhs.type().is_floatbv();
-  if (!int_lhs && !(lhs.type().is_floatbv() && is_int(rhs.type())))
+  if (
+    (!int_lhs && !(lhs.type().is_floatbv() && is_int(rhs.type()))) ||
+    (!pure_reads && (has_side_effect(lhs) || has_side_effect(rhs))))
+    return std::nullopt;
+  return int_lhs;
+}
+
+/// i \p rel f, given the int rounded \p down and \p up to the float type.
+static expr2tc bracketed_relation(
+  const std::string &rel,
+  const expr2tc &down,
+  const expr2tc &up,
+  const expr2tc &f)
+{
+  if (rel == "Lt")
+    return lessthan2tc(down, f);
+  if (rel == "LtE")
+    return lessthanequal2tc(up, f);
+  if (rel == "Gt")
+    return greaterthan2tc(up, f);
+  if (rel == "GtE")
+    return greaterthanequal2tc(down, f);
+  const expr2tc eq = and2tc(equality2tc(down, f), equality2tc(up, f));
+  return rel == "Eq" ? eq : not2tc(eq);
+}
+
+/// Python compares an int with a float by exact value, so promoting the int to
+/// the float type first, which rounds it, decides `2**53 + 1 == 2.0**53`
+/// wrongly (#9359). The int rounded down and rounded up are the nearest floats
+/// on either side of it: i < f iff down < f, i <= f iff up <= f, and i == f iff
+/// both equal f. Nil when int_float_pair refuses the operands, and when
+/// promoting is already exact (a constant int the float type holds).
+expr2tc python_converter::exact_int_float_relation(
+  const std::string &op,
+  const exprt &lhs,
+  const exprt &rhs,
+  bool pure_reads)
+{
+  const std::optional<bool> int_lhs = int_float_pair(lhs, rhs, pure_reads);
+  if (!int_lhs)
     return expr2tc();
 
   // The relation as seen with the int on the left.
@@ -579,38 +625,23 @@ expr2tc python_converter::exact_int_float_relation(
   const auto it = mirrored.find(op);
   if (it == mirrored.end())
     return expr2tc();
-  const std::string &rel = int_lhs ? op : it->second;
 
   expr2tc i, f;
-  migrate_expr(int_lhs ? lhs : rhs, i);
-  migrate_expr(int_lhs ? rhs : lhs, f);
+  migrate_expr(*int_lhs ? lhs : rhs, i);
+  migrate_expr(*int_lhs ? rhs : lhs, f);
   auto rounded = [&](ieee_floatt::rounding_modet rm) {
     return typecast2tc(
       f->type, i, constant_int2tc(get_int32_type(), BigInt(rm)));
   };
   const expr2tc down = rounded(ieee_floatt::ROUND_TO_MINUS_INF);
   const expr2tc up = rounded(ieee_floatt::ROUND_TO_PLUS_INF);
+  expr2tc down_value = down, up_value = up;
+  simplify(down_value);
+  simplify(up_value);
+  if (is_constant_floatbv2t(down_value) && down_value == up_value)
+    return expr2tc();
 
-  if (rel == "Lt")
-    return lessthan2tc(down, f);
-  if (rel == "LtE")
-    return lessthanequal2tc(up, f);
-  if (rel == "Gt")
-    return greaterthan2tc(up, f);
-  if (rel == "GtE")
-    return greaterthanequal2tc(down, f);
-  const expr2tc eq = and2tc(equality2tc(down, f), equality2tc(up, f));
-  return rel == "Eq" ? eq : not2tc(eq);
-}
-
-static bool has_side_effect(const exprt &e)
-{
-  if (e.id() == "sideeffect")
-    return true;
-  for (const exprt &sub : e.operands())
-    if (has_side_effect(sub))
-      return true;
-  return false;
+  return bracketed_relation(*int_lhs ? op : it->second, down, up, f);
 }
 
 static exprt *find_subexpr(exprt &e, const exprt &what)

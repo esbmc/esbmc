@@ -80,7 +80,7 @@ std::optional<expr2tc> python_list::fast_elem_equality(
   }
   else if (
     expr2tc exact =
-      python_converter::exact_int_float_relation("Eq", lhs_val, rhs_val))
+      python_converter::exact_int_float_relation("Eq", lhs_val, rhs_val, true))
     return exact;
   else if (is_numeric(lhs_type) && is_numeric(rhs_type))
   {
