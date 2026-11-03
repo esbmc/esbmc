@@ -4,3 +4,4 @@ for v in c.values():
 c[1] = "x"
 for v in c.values():
     assert isinstance(v, int)
+# KNOWNBUG: isinstance answers the dict value type, not the stored str (#9790)
