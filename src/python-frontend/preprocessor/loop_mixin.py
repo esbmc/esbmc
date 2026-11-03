@@ -226,11 +226,32 @@ class LoopMixin:
         if self._nditer_source(node.iter) is not None:
             for_else_pre, for_else_post = self._lower_for_else(node)
             return for_else_pre + self._lower_nditer_for(node) + for_else_post
+        node.iter = self._inline_stored_range(node.iter)
         for_else_pre, for_else_post = self._lower_for_else(node)
         result = self._visit_for_inner(node)
         if not isinstance(result, list):
             result = [result]
         return for_else_pre + result + for_else_post
+
+    def _inline_stored_range(self, iterable):
+        """The `range(...)` call that `iterable` names when it is a name bound
+        once to one, whose arguments are literals or names bound once, so the
+        loop iterates the range directly (#9772).
+
+        A range kept in a variable is otherwise a list that has a size but no
+        items when a bound is not a constant.
+        """
+        origin = self._assignment_call_origins.get(iterable.id) if isinstance(iterable,
+                                                                              ast.Name) else None
+        if not (isinstance(origin, ast.Call) and isinstance(origin.func, ast.Name)
+                and origin.func.id == "range" and not origin.keywords):
+            return iterable
+        scope = id(self._vararg_scope_stack[-1]) if self._vararg_scope_stack else None
+        _, counts = self.scope_binding_counts.get(scope, (None, {}))
+        fixed = all(
+            isinstance(arg, ast.Constant) or (isinstance(arg, ast.Name) and counts.get(arg.id) == 1)
+            for arg in origin.args)
+        return copy.deepcopy(origin) if counts.get(iterable.id) == 1 and fixed else iterable
 
     def _forget_literals_changed_in_loop(self, loop):
         """Drop the tracked literals that @p loop rebinds or mutates anywhere.
