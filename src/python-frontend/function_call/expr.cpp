@@ -1143,12 +1143,42 @@ exprt function_call_expr::str_of_object(exprt &value, const nlohmann::json &arg)
   return converter_.get_string_builder().build_string_literal(text);
 }
 
+exprt function_call_expr::none_or(const exprt &value, const exprt &other) const
+{
+  const locationt location = converter_.get_location_from_decl(call_);
+  const exprt none =
+    converter_.get_string_builder().build_string_literal("None");
+  // Symex bounds a string model's loops only over a named object (#7559).
+  symbolt &tmp =
+    converter_.create_tmp_symbol(call_, "$none_str$", none.type(), exprt());
+  code_declt decl(symbol_expr(tmp));
+  decl.location() = location;
+  converter_.add_instruction(decl);
+  code_assignt assign(symbol_expr(tmp), none);
+  assign.location() = location;
+  converter_.add_instruction(assign);
+  return if_exprt(
+    equality_exprt(value, gen_zero(value.type())),
+    build_address_of(
+      build_index(symbol_expr(tmp), from_integer(0, size_type()))),
+    other);
+}
+
 exprt function_call_expr::repr_of_object(exprt &value) const
 {
+  const locationt location = converter_.get_location_from_decl(call_);
+  // Only a null name is None: a None-typed slot holding 0 or False is null
+  // too. str(x, encoding) decodes, which raises TypeError for None.
+  const bool one_arg =
+    call_["args"].size() == 1 &&
+    (!call_.contains("keywords") || call_["keywords"].empty());
+  if (one_arg && value.is_symbol() && value.type() == none_type())
+    return none_or(
+      value,
+      converter_.get_string_handler().build_nondet_string_fallback(location));
   const std::string cls = default_repr_class(value, converter_);
   if (cls.empty())
     return nil_exprt();
-  const locationt location = converter_.get_location_from_decl(call_);
   exprt dunder =
     converter_.dispatch_unary_dunder_operator("repr", value, location);
   if (!dunder.is_nil())
@@ -1165,12 +1195,7 @@ exprt function_call_expr::repr_of_object(exprt &value) const
     "<__main__." + cls + " object at 0x", location);
   if (value.id() == "sideeffect" || !value.type().is_pointer())
     return repr;
-  const exprt none =
-    converter_.get_string_builder().build_string_literal("None");
-  return if_exprt(
-    equality_exprt(value, gen_zero(value.type())),
-    build_address_of(build_index(none, from_integer(0, size_type()))),
-    repr);
+  return none_or(value, repr);
 }
 
 exprt function_call_expr::handle_repr_call()
