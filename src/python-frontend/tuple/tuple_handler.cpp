@@ -922,7 +922,9 @@ typet tuple_handler::tuple_member_type_from_annotation(
     if (id == "bytes")
       throw std::runtime_error(
         "tuple[bytes, ...] annotations are not supported");
-    return type_handler_.get_typet(id);
+    // A tuple stores an instance by reference, as get_tuple_expr builds it.
+    const typet t = type_handler_.get_typet(id);
+    return converter_.is_heap_migrated_class_type(t) ? gen_pointer_type(t) : t;
   }
   // get_typet(json) unwraps list[int] to the bare name `list`, which it
   // then looks up as a variable and types void (#8511).

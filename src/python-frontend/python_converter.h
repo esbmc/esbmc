@@ -3010,6 +3010,9 @@ private:
     exprt &lhs,
     const exprt &rhs,
     bool is_ctor_call);
+  // Retype a plain symbol target typed as a class struct to the `Cls*`
+  // reference it is assigned, so the reference is bound, not copied.
+  void bind_class_reference(symbolt *lhs_symbol, exprt &lhs, const exprt &rhs);
   void handle_function_call_rhs(
     const nlohmann::json &ast_node,
     symbolt *lhs_symbol,
