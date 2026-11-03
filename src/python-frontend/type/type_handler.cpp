@@ -219,7 +219,7 @@ std::string type_handler::type_to_string(const typet &t) const
 
     const typet &elem_type = arr_type.subtype();
 
-    if (elem_type == char_type())
+    if (type_utils::is_char_storage(elem_type))
       return "str";
 
     if (elem_type == int_type())
@@ -230,7 +230,7 @@ std::string type_handler::type_to_string(const typet &t) const
       return type_to_string(elem_type);
   }
 
-  if (t.is_pointer() && t.subtype() == char_type())
+  if (t.is_pointer() && type_utils::is_char_storage(t.subtype()))
     return "str";
 
   return "";
@@ -246,7 +246,9 @@ std::string type_handler::get_python_type_name(const typet &t) const
     return "float";
   if (t.is_signedbv() || t.is_unsignedbv())
     return "int";
-  if ((t.is_array() || t.is_pointer()) && t.subtype() == char_type())
+  if (
+    (t.is_array() || t.is_pointer()) &&
+    type_utils::is_char_storage(t.subtype()))
     return "str";
 
   // Internal model aggregates know their Python kind; without this a tuple
@@ -423,7 +425,7 @@ typet type_handler::get_canonical_string_type(const typet &t) const
   if (t.is_array())
   {
     const array_typet &arr_type = to_array_type(t);
-    if (arr_type.subtype() == char_type())
+    if (type_utils::is_char_storage(arr_type.subtype()))
     {
       // Return a canonical string type (size 0 array indicates variable length
       // string)
@@ -918,7 +920,7 @@ type_handler::scalar_array_element_type(const nlohmann::json &elem) const
     !subtype.is_signedbv() && !subtype.is_unsignedbv() &&
     !subtype.is_floatbv() && !subtype.is_bool())
     return std::nullopt;
-  if (subtype == char_type())
+  if (type_utils::is_char_storage(subtype))
     return std::nullopt;
   return subtype;
 }
@@ -1333,7 +1335,8 @@ exprt type_handler::tagged_scalar_byte_size(const exprt &value) const
 
 bool type_handler::is_string_type(const typet &t) const
 {
-  return (t.is_array() || t.is_pointer()) && t.subtype() == char_type();
+  return (t.is_array() || t.is_pointer()) &&
+         type_utils::is_char_storage(t.subtype());
 }
 
 bool type_handler::is_numeric_scalar_type(const typet &t) const

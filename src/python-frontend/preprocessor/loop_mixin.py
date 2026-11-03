@@ -3349,6 +3349,35 @@ class LoopMixin:
         typed_elts = [(self._infer_constant_type(v), v) for v in dict_node.values]
         return self._unroll_het_for(node, typed_elts)
 
+    def _fixed_literal_type(self, node):
+        """Type name of a number or str expression whose type cannot vary.
+
+        A literal, a name bound once in the module to a literal, or ``+``,
+        ``-``, ``*`` and unary ``-`` over such numbers; else None.
+        """
+        if isinstance(node, ast.Constant):
+            return type(node.value).__name__ if isinstance(node.value, (int, float, str)) else None
+        if isinstance(node, ast.UnaryOp) and isinstance(node.op, (ast.UAdd, ast.USub)):
+            operand = self._fixed_literal_type(node.operand)
+            return "int" if operand == "bool" else operand if operand in ("int", "float") else None
+        if isinstance(node, ast.Name) and node.id in self.once_bound_names:
+            return self._once_bound_literal_type(node.id)
+        if isinstance(node, ast.BinOp) and isinstance(node.op, (ast.Add, ast.Sub, ast.Mult)):
+            operands = {self._fixed_literal_type(node.left), self._fixed_literal_type(node.right)}
+            if operands <= {"int", "float"}:
+                return "float" if "float" in operands else "int"
+        return None
+
+    def _once_bound_literal_type(self, name):
+        """Type of the number or str that the module binds `name` to, else None."""
+        for stmt in self.module_statements.values():
+            target = (stmt.targets[0] if isinstance(stmt, ast.Assign) and len(stmt.targets) == 1
+                      else stmt.target if isinstance(stmt, ast.AnnAssign) else None)
+            if isinstance(target, ast.Name) and target.id == name and isinstance(
+                    stmt.value, ast.Constant):
+                return self._fixed_literal_type(stmt.value)
+        return None
+
     def _infer_dict_key_type(self, key_node):
         """Infer key type from dict literal's first key"""
         if isinstance(key_node, ast.Constant):
@@ -3356,6 +3385,8 @@ class LoopMixin:
                 return "str"
             if isinstance(key_node.value, int):
                 return "int"
+        if self._fixed_literal_type(key_node) in ("int", "str"):
+            return self._fixed_literal_type(key_node)
         if isinstance(key_node, ast.Tuple):
             return "tuple"
         return "Any"
@@ -3369,7 +3400,8 @@ class LoopMixin:
         if isinstance(value_node, ast.Constant):
             const_type = type(value_node.value).__name__
             return ast.Name(id=const_type, ctx=ast.Load())
-        return None
+        fixed = self._fixed_literal_type(value_node)
+        return ast.Name(id=fixed, ctx=ast.Load()) if fixed else None
 
     def _create_subscript_annotation(self, subscript_node):
         """Extract annotation from subscript operation (e.g., d["key"])"""

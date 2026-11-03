@@ -16,22 +16,36 @@
 #include <functional>
 #include <util/expr/array2string.h>
 
-bool goto_symext::recover_va_list_args(
-  const code_printf2t &call,
-  size_t fmt_idx,
-  std::list<expr2tc> &out)
+static bool takes_va_list(printf_kindt kind)
 {
-  switch (call.kind)
+  // Exhaustive over printf_kindt (no default) so a future va_list kind must
+  // be classified here rather than silently inheriting the direct-call default.
+  switch (kind)
   {
   case printf_kindt::VPRINTF:
   case printf_kindt::VFPRINTF:
   case printf_kindt::VSPRINTF:
   case printf_kindt::VSNPRINTF:
   case printf_kindt::VASPRINTF:
-    break;
-  default:
+    return true;
+  case printf_kindt::PRINTF:
+  case printf_kindt::FPRINTF:
+  case printf_kindt::DPRINTF:
+  case printf_kindt::SPRINTF:
+  case printf_kindt::SNPRINTF:
+  case printf_kindt::ASPRINTF:
     return false;
   }
+  return false;
+}
+
+bool goto_symext::recover_va_list_args(
+  const code_printf2t &call,
+  size_t fmt_idx,
+  std::list<expr2tc> &out)
+{
+  if (!takes_va_list(call.kind))
+    return false;
 
   // Every v* signature takes the va_list as its last operand, right after
   // the format string.
@@ -533,6 +547,63 @@ expr2tc goto_symext::string_length(
                               : if2tc(len_type, points_here, len, unknown);
 }
 
+void goto_symext::claim_nul_terminated(const expr2tc &ptr)
+{
+  expr2tc object;
+  uint64_t offset, avail;
+  if (
+    !memcmp_resolve_operand(ptr, 0, object, offset, avail) ||
+    avail > max_stored_output || !is_array_type(object) ||
+    !is_byte_type(to_array_type(object->type).subtype))
+    return;
+  expr2tc points_here = internal_deref_items.front().guard;
+  cur_state->rename(points_here);
+
+  const type2tc &elem = to_array_type(object->type).subtype;
+  expr2tc terminated = gen_false_expr();
+  for (uint64_t k = 0; k < avail; k++)
+    terminated = or2tc(
+      terminated,
+      equality2tc(
+        index2tc(elem, object, gen_ulong(offset + k)), gen_zero(elem)));
+  claim(
+    implies2tc(points_here, terminated),
+    "printf %s argument is not NUL-terminated within its object");
+}
+
+// Only a direct call's operands are its arguments; a v* call passes a va_list.
+static bool printf_args_are_direct(printf_kindt kind)
+{
+  switch (kind)
+  {
+  case printf_kindt::VPRINTF:
+  case printf_kindt::VFPRINTF:
+  case printf_kindt::VSPRINTF:
+  case printf_kindt::VSNPRINTF:
+  case printf_kindt::VASPRINTF:
+    return false;
+  default:
+    return true;
+  }
+}
+
+void goto_symext::check_printf_pointer_arg(
+  printf_kindt kind,
+  char spec,
+  bool reads_to_nul,
+  const expr2tc &arg)
+{
+  if (spec != 's' && spec != 'p')
+    return;
+  if (!is_pointer_type(arg->type))
+    claim(
+      gen_false_expr(),
+      spec == 's' ? "printf format specifier %s requires pointer argument"
+                  : "printf format specifier %p requires pointer argument");
+  else if (spec == 's' && reads_to_nul && printf_args_are_direct(kind))
+    claim_nul_terminated(arg);
+}
+
 expr2tc goto_symext::printf_field_length(
   const std::string &f,
   size_t &i,
@@ -983,9 +1054,15 @@ void goto_symext::symex_printf(const expr2tc &lhs, expr2tc &rhs)
     idx = fmt_idx;
   }
 
+  // A v* call's only operand after the format is its va_list, which is
+  // neither a printf argument nor a pointer printf dereferences.
+  const bool args_behind_va_list = takes_va_list(new_rhs.kind);
+  const bool printf_check =
+    options.get_bool_option("printf-check") && !args_behind_va_list;
+
   // Check format specifiers against original operands before
   // renaming/conversion
-  if (options.get_bool_option("printf-check"))
+  if (printf_check)
   {
     const code_printf2t &original_rhs = to_code_printf2t(rhs);
     std::string format_str = fmt.as_string();
@@ -1010,8 +1087,12 @@ void goto_symext::symex_printf(const expr2tc &lhs, expr2tc &rhs)
           i++;
         while (i < format_str.length() && isdigit(format_str[i]))
           i++;
+        // A precision bounds what %s reads, and a length modifier makes it
+        // a wide string (C11 7.21.6.1p8).
+        bool reads_to_nul = true;
         if (i < format_str.length() && format_str[i] == '.')
         {
+          reads_to_nul = false;
           i++;
           while (i < format_str.length() && isdigit(format_str[i]))
             i++;
@@ -1022,7 +1103,10 @@ void goto_symext::symex_printf(const expr2tc &lhs, expr2tc &rhs)
                (format_str[i] == 'h' || format_str[i] == 'l' ||
                 format_str[i] == 'L' || format_str[i] == 'z' ||
                 format_str[i] == 'j' || format_str[i] == 't'))
+        {
+          reads_to_nul = false;
           i++;
+        }
 
         // Check conversion specifier against original operands
         if (i < format_str.length())
@@ -1044,21 +1128,7 @@ void goto_symext::symex_printf(const expr2tc &lhs, expr2tc &rhs)
               const expr2tc &arg = original_rhs.operands[actual_arg_idx];
 
               if (arg)
-              {
-                if (spec == 's' || spec == 'p')
-                {
-                  // %s and %p require pointer types
-                  if (!is_pointer_type(arg->type))
-                  {
-                    claim(
-                      gen_false_expr(),
-                      spec == 's'
-                        ? "printf format specifier %s requires pointer argument"
-                        : "printf format specifier %p requires pointer "
-                          "argument");
-                  }
-                }
-              }
+                check_printf_pointer_arg(new_rhs.kind, spec, reads_to_nul, arg);
             }
             arg_idx++;
           }
@@ -1068,7 +1138,7 @@ void goto_symext::symex_printf(const expr2tc &lhs, expr2tc &rhs)
   }
 
   // Only perform dereference checks if printf-check is enabled
-  if (options.get_bool_option("printf-check"))
+  if (printf_check)
   {
     // Dereference check all pointer arguments after the format string
     for (size_t i = idx; i < new_rhs.operands.size(); i++)
@@ -1184,26 +1254,7 @@ void goto_symext::symex_printf(const expr2tc &lhs, expr2tc &rhs)
     // the operand at a %s position is the va_list pointer, not the string. Mark
     // the operands unreliable so the formatter does not derive an (unsound)
     // object-size bound from them; %s stays unbounded until va_list recovery.
-    // Exhaustive over printf_kindt (no default) so a future va_list kind must
-    // be classified here rather than silently inheriting the reliable default.
-    switch (new_rhs.kind)
-    {
-    case printf_kindt::VPRINTF:
-    case printf_kindt::VFPRINTF:
-    case printf_kindt::VSPRINTF:
-    case printf_kindt::VSNPRINTF:
-    case printf_kindt::VASPRINTF:
-      printf_formatter.args_reliable = false;
-      break;
-    case printf_kindt::PRINTF:
-    case printf_kindt::FPRINTF:
-    case printf_kindt::DPRINTF:
-    case printf_kindt::SPRINTF:
-    case printf_kindt::SNPRINTF:
-    case printf_kindt::ASPRINTF:
-      printf_formatter.args_reliable = true;
-      break;
-    }
+    printf_formatter.args_reliable = !args_behind_va_list;
     // A successful recovery replaced the va_list with the actual arguments,
     // so they are exactly as reliable as a direct call's.
     if (va_recovered)
