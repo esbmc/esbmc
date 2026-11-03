@@ -734,7 +734,7 @@ void goto_termination(
   // there; library helpers (body.hide) DO have loops but those are
   // explicitly skipped in the per-function pass below.
   goto_k_induction(
-    goto_functions, ns, options.get_bool_option("multi-property"));
+    goto_functions, ns, options.get_bool_option("multi-property"), false);
 
   // Per-function pass: inject no-op-cycle ASSUMEs, gate IS for loops
   // that would make IS UNSAT unsound, and insert termination

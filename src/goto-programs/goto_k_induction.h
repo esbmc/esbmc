@@ -20,9 +20,14 @@
 /// @p continue_past_failed_assertions is set when claims past a violation are
 /// still checked (--multi-property, coverage), so that a path through a failed
 /// assertion still counts as entering the loop (#7900).
+/// @p zero_trip_bypass lets an execution that does not enter a loop skip its
+/// havoc and entry-condition ASSUME, so the inductive step still checks the
+/// claims past that loop. --termination clears it: its IS UNSAT is a
+/// non-termination witness only when the ASSUME pins every path in the loop.
 bool goto_k_induction(
   goto_functionst &goto_functions,
   const namespacet &ns,
-  bool continue_past_failed_assertions);
+  bool continue_past_failed_assertions,
+  bool zero_trip_bypass = true);
 
 #endif /* GOTO_PROGRAMS_GOTO_K_INDUCTION_H_ */

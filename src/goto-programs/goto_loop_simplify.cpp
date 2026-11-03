@@ -41,18 +41,30 @@ void collect_symbol_names(const expr2tc &expr, name_set &out)
 /// silently see the synthesized value. The check scans the function's
 /// instructions linearly, which is acceptable here because the pass
 /// runs once over each function.
+///
+/// The one exception is goto_k_induction's zero-trip bypass: a GOTO that
+/// jumps over the havocs and entry ASSUME placed in front of the head, all of
+/// them inductive-step-only. It reaches the head with the fall-through path's
+/// pre-state minus that instrumentation, and base case and forward condition
+/// skip it, so the rewrite stays exact on both paths.
 bool loop_head_has_only_backedge_predecessor(
   const goto_programt &body,
   inst_iter loop_head,
   inst_iter body_last)
 {
-  for (const auto &ins : body.instructions)
+  for (auto it = body.instructions.begin(); it != body.instructions.end(); ++it)
   {
-    if (!ins.is_goto())
+    if (!it->is_goto() || it == body_last)
       continue;
-    for (const auto &t : ins.targets)
+    for (const auto &t : it->targets)
     {
-      if (t == loop_head && &ins != &*body_last)
+      if (t != loop_head)
+        continue;
+      auto between = it;
+      while (between != loop_head && between != body.instructions.end() &&
+             between->inductive_step_instruction)
+        ++between;
+      if (between != loop_head)
         return false;
     }
   }
