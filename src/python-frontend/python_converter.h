@@ -645,6 +645,20 @@ public:
     exprt &rhs,
     const nlohmann::json &element);
 
+  /// `lhs op rhs` by exact value when one operand is an int and the other a
+  /// float; nil for any other pair or op.
+  static expr2tc exact_int_float_relation(
+    const std::string &op,
+    const exprt &lhs,
+    const exprt &rhs,
+    bool pure_reads = false);
+
+  exprt int_float_comparison(
+    const std::string &op,
+    exprt &lhs,
+    exprt &rhs,
+    const nlohmann::json &element);
+
   bool scalar_order(
     exprt a,
     exprt b,
@@ -1027,6 +1041,18 @@ private:
   // None-keeps-Class* and dunder-dispatch-through-pointer paths to real
   // classes.
   bool is_user_class_pointer(const typet &t);
+
+  // After `x` is retyped from a class struct to the class reference by
+  // `x = call(...)`, pass `x` itself where the call took `&x` (#9624).
+  void pass_reference_receiver(
+    exprt &rhs,
+    const exprt &lhs,
+    const typet &old_lhs_type);
+
+  // The preprocessor lowers list() of an instance it can type to a
+  // comprehension; the generic builder would reinterpret any other instance
+  // as a list, so refuse it.
+  void refuse_list_of_instance(const typet &t);
 
   // Widen a symbol rebound from a non-class placeholder (None, Any, a bare
   // scalar) to a class-pointer binding. Only those types are widened: a
@@ -2984,6 +3010,9 @@ private:
     exprt &lhs,
     const exprt &rhs,
     bool is_ctor_call);
+  // Retype a plain symbol target typed as a class struct to the `Cls*`
+  // reference it is assigned, so the reference is bound, not copied.
+  void bind_class_reference(symbolt *lhs_symbol, exprt &lhs, const exprt &rhs);
   void handle_function_call_rhs(
     const nlohmann::json &ast_node,
     symbolt *lhs_symbol,
