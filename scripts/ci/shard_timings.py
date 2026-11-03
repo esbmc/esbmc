@@ -2,9 +2,9 @@
 """Per-test durations from a CTest log, and the shard layout they imply.
 
 Reads the `N/M Test #i: name ... Passed  X sec` lines a CTest run prints,
-splits the tests into the Python and native families of ci_selection,
-stripes each family as `ctest -I i,,k` does, and simulates CTest's parallel
-slots with a greedy scheduler in index order. Simulated minutes are an
+splits the tests into the modules of ci_selection, stripes each module as
+`ctest -I i,,k` does, and simulates CTest's parallel slots with a greedy
+scheduler in index order. Simulated minutes are an
 estimate, not a CI measurement.
 """
 
@@ -32,14 +32,14 @@ def read_durations(lines):
     return [(index, *found[index]) for index in sorted(found)]
 
 
-def family(name):
-    """The executor family of a test, from its regression suite."""
+def module(name):
+    """The executor module of a test, from the suite label its name encodes."""
     if not name.startswith("regression/"):
         return "producer"
-    suite = name.split("/")[1] + "/"
-    if suite == ci_selection.INTENSIVE_LABEL:
+    label = "/".join(name.split("/")[1:-1]) + "/"
+    if label == ci_selection.INTENSIVE_LABEL:
         return "excluded"
-    return "python" if suite in ci_selection.PYTHON_LABELS else "native"
+    return ci_selection.module_of([label])
 
 
 def makespan(durations, slots):
@@ -50,13 +50,14 @@ def makespan(durations, slots):
     return max(finish)
 
 
-def shard_seconds(tests, shard_counts, slots):
-    """executor -> simulated seconds, striping each family as `-I i,,k` does."""
+def shard_seconds(tests, slots):
+    """executor -> simulated seconds, striping each module as `-I i,,k` does."""
     result = {}
-    for name, count in shard_counts:
-        durations = [seconds for _, test, seconds in tests if family(test) == name]
-        for i in range(count):
-            result[f"{name}-{i + 1}"] = makespan(durations[i::count], slots)
+    for name, _, shards in ci_selection.MODULES:
+        durations = [seconds for _, test, seconds in tests if module(test) == name]
+        for i in range(shards):
+            executor = name if shards == 1 else f"{name}-{i + 1}"
+            result[executor] = makespan(durations[i::shards], slots)
     return result
 
 
@@ -64,20 +65,13 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("log", help="CTest output, such as a GitHub job log")
     parser.add_argument("--jobs", type=int, default=2)
-    parser.add_argument("--python-shards",
-                        type=int,
-                        default=dict(ci_selection.SHARD_COUNTS)["python"])
-    parser.add_argument("--native-shards",
-                        type=int,
-                        default=dict(ci_selection.SHARD_COUNTS)["native"])
     args = parser.parse_args(argv)
     with open(args.log, encoding="utf-8", errors="replace") as fp:
         tests = read_durations(fp)
     total = sum(seconds for _, _, seconds in tests)
     print(f"{len(tests)} tests, {total:.2f}s of test time; monolithic -j{args.jobs} simulated "
           f"{makespan([s for _, _, s in tests], args.jobs):.2f}s")
-    layout = (("python", args.python_shards), ("native", args.native_shards))
-    for executor, seconds in shard_seconds(tests, layout, args.jobs).items():
+    for executor, seconds in shard_seconds(tests, args.jobs).items():
         print(f"{executor}: {seconds / 60:.2f} min simulated")
     return 0
 

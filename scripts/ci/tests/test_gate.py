@@ -77,7 +77,7 @@ class CompareTest(ReportsFixture):
         code, text = self.compare()
         self.assertEqual(code, 0, text)
         self.assertIn("passed", text)
-        self.assertIn("| native-1 |", text)
+        self.assertIn("| c-and-tools |", text)
 
     def test_a_status_that_differs_from_the_baseline_fails(self):
         self.set_tool_exit(1)
@@ -87,10 +87,10 @@ class CompareTest(ReportsFixture):
         self.assertIn("baseline failed, shards passed", text)
 
     def test_a_missing_shard_report_fails(self):
-        shutil.rmtree(os.path.join(self.results, "linux-result-native-2-1"))
+        shutil.rmtree(os.path.join(self.results, "linux-result-cpp-1"))
         code, text = self.compare()
         self.assertEqual(code, 1)
-        self.assertIn("native-2 published no report", text)
+        self.assertIn("cpp published no report", text)
 
     def test_a_report_of_another_bundle_fails(self):
         self.run_executor("python-2", attempt=2, bundle="c" * 64)
@@ -104,17 +104,17 @@ class CompareTest(ReportsFixture):
         plan["digest"] = "f" * 64
         with open(self.plan_path, "w", encoding="utf-8") as fp:
             json.dump(plan, fp)
-        self.run_executor("python-3", attempt=2)
+        self.run_executor("numpy-1", attempt=2)
         code, text = self.compare()
         self.assertEqual(code, 1)
-        self.assertIn("python-3 ran plan " + "f" * 64, text)
+        self.assertIn("numpy-1 ran plan " + "f" * 64, text)
 
     def test_the_latest_attempt_wins_even_when_it_fails(self):
         self.set_tool_exit(1)
-        self.run_executor("native-1", attempt=2)
+        self.run_executor("c-and-tools", attempt=2)
         code, text = self.compare()
         self.assertEqual(code, 1)
-        self.assertIn("native-1: ctest exited", text)
+        self.assertIn("c-and-tools: ctest exited", text)
 
     def test_a_failed_or_cancelled_job_fails(self):
         code, text = self.compare(needs(shards="cancelled"))
@@ -148,7 +148,7 @@ class SummaryTest(ReportsFixture):
         self.assertEqual(self.summary("parallel", pr_needs("parallel")), 0)
         self.assertEqual(
             self.summary("parallel", pr_needs("parallel", **{"cpython-check": "skipped"})), 1)
-        shutil.rmtree(os.path.join(self.results, "linux-result-python-4-1"))
+        shutil.rmtree(os.path.join(self.results, "linux-result-numpy-2-1"))
         self.assertEqual(self.summary("parallel", pr_needs("parallel")), 1)
 
     def test_a_missing_mode_fails(self):

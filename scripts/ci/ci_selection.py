@@ -1,8 +1,8 @@
 """CTest selections of the Linux PR regression, and proof that they partition it.
 
 The PR baseline is `ctest -LE python-intensive`. The producer runs the tests
-without the `regression` label; the regression is split into a Python and a
-native family, each striped into shards with `ctest -I i,,k`.
+without the `regression` label; the regression is split into modules of
+suites, and the heaviest modules are striped into shards with `ctest -I i,,k`.
 """
 
 import hashlib
@@ -10,11 +10,12 @@ import json
 import re
 import subprocess
 
-PYTHON_LABELS = ("python/", "numpy/", "quixbugs/", "humaneval/", "mopsa/", "consensus/",
-                 "ai-generated-code/", "python-coverage/", "python-contracts/")
 INTENSIVE_LABEL = "python-intensive/"
 REGRESSION_LABEL = "regression"
-SHARD_COUNTS = (("python", 4), ("native", 2))
+PYTHON_BENCHMARK_LABELS = ("quixbugs/", "humaneval/", "mopsa/", "consensus/", "ai-generated-code/",
+                           "python-coverage/", "python-contracts/")
+# Every C++ suite: esbmc-cpp/<suite>/ and esbmc-cpp11/<suite>/ to esbmc-cpp23/<suite>/.
+CPP_LABELS = "^esbmc-cpp[0-9]*/.*$"
 
 # Properties that make a test depend on another one or on a shared resource;
 # striping assumes every test runs on its own, so any of them needs a review.
@@ -42,20 +43,48 @@ def anchored(labels):
     return "^(" + "|".join(labels) + ")$"
 
 
+# (module, regex of its suite labels, shards), sized from the PR job's
+# timings (docs/ci/linux-regression.md). The last module has no regex: it
+# takes every other regression test, so a new suite is never left out.
+MODULES = (
+    ("numpy", anchored(["numpy/"]), 2),
+    ("python", anchored(["python/"]), 2),
+    ("python-benchmarks", anchored(PYTHON_BENCHMARK_LABELS), 1),
+    ("cpp", CPP_LABELS, 1),
+    ("c-and-tools", None, 1),
+)
+
+
+def _module_args(regex):
+    if regex is not None:
+        return ["-L", regex, "-LE", anchored([INTENSIVE_LABEL])]
+    others = [r for _, r, _ in MODULES if r] + [anchored([INTENSIVE_LABEL])]
+    return ["-L", anchored([REGRESSION_LABEL]), "-LE", "|".join(others)]
+
+
+def _shard_args():
+    """executor -> CTest options, one executor per shard of each module."""
+    table = {}
+    for name, regex, shards in MODULES:
+        args = _module_args(regex)
+        if shards == 1:
+            table[name] = args
+            continue
+        for i in range(1, shards + 1):
+            table[f"{name}-{i}"] = args + ["-I", f"{i},,{shards}"]
+    return table
+
+
 def shard_executors():
-    return [f"{family}-{i}" for family, count in SHARD_COUNTS for i in range(1, count + 1)]
+    return list(_shard_args())
 
 
-def _family_args(family):
-    if family == "python":
-        return ["-L", anchored(PYTHON_LABELS), "-LE", anchored([INTENSIVE_LABEL])]
-    if family == "native":
-        return [
-            "-L",
-            anchored([REGRESSION_LABEL]), "-LE",
-            anchored(PYTHON_LABELS + (INTENSIVE_LABEL, ))
-        ]
-    raise SelectionError(f"unknown family {family!r}")
+def module_of(labels):
+    """The module whose shards run a regression test with these labels."""
+    for name, regex, _ in MODULES:
+        if regex is None or any(re.match(regex, label) for label in labels):
+            return name
+    raise SelectionError(f"no module for labels {labels}")
 
 
 def selection_args(executor):
@@ -66,11 +95,10 @@ def selection_args(executor):
         return ["-LE", anchored([REGRESSION_LABEL])]
     if executor == "baseline":
         return ["-L", anchored([REGRESSION_LABEL]), "-LE", anchored([INTENSIVE_LABEL])]
-    family, _, index = executor.rpartition("-")
-    counts = dict(SHARD_COUNTS)
-    if family not in counts or not index.isdigit() or not 1 <= int(index) <= counts[family]:
+    table = _shard_args()
+    if executor not in table:
         raise SelectionError(f"unknown executor {executor!r}")
-    return _family_args(family) + ["-I", f"{index},,{counts[family]}"]
+    return table[executor]
 
 
 def show_only(build_dir, args):

@@ -20,8 +20,12 @@ def pr_suite():
         ci_fixture.regression("regression/esbmc/a[z3]", "esbmc/", extra_labels=["cov-regression"]),
         ci_fixture.regression("regression/floats-regression/b", "floats-regression/"),
         ci_fixture.regression("regression/esbmc-cpp/cpp/c", "esbmc-cpp/cpp/"),
+        ci_fixture.regression("regression/esbmc-cpp11/lambda/d", "esbmc-cpp11/lambda/"),
     ]
-    for label in ci_selection.PYTHON_LABELS:
+    for label in ("numpy/", "python/"):
+        for test in ("t", "u"):
+            tests.append(ci_fixture.regression(f"regression/{label}{test}", label))
+    for label in ci_selection.PYTHON_BENCHMARK_LABELS:
         tests.append(ci_fixture.regression(f"regression/{label}t", label))
     return tests
 
@@ -41,47 +45,49 @@ class PlanTest(unittest.TestCase):
         self.assertEqual(set(names), set(plan["tests"]))
         self.assertNotIn("regression/python/intensive_a", names)
         self.assertEqual(plan["executors"]["producer"], ["unit: parses [x]", "csmith-kind"])
-        native = plan["executors"]["native-1"] + plan["executors"]["native-2"]
-        self.assertIn("regression/floats-regression/b", native)
-        self.assertIn("regression/esbmc/a[z3]", native)
-        self.assertEqual(
-            sorted(plan["baseline"]),
-            sorted(native + [
-                n for e in ci_selection.shard_executors() if e.startswith("python")
-                for n in plan["executors"][e]
-            ]))
+        executors = plan["executors"]
+        self.assertEqual(sorted(executors["c-and-tools"]),
+                         ["regression/esbmc/a[z3]", "regression/floats-regression/b"])
+        self.assertEqual(sorted(executors["cpp"]),
+                         ["regression/esbmc-cpp/cpp/c", "regression/esbmc-cpp11/lambda/d"])
+        self.assertEqual(sorted(executors["numpy-1"] + executors["numpy-2"]),
+                         ["regression/numpy/t", "regression/numpy/u"])
+        self.assertEqual(len(executors["python-benchmarks"]),
+                         len(ci_selection.PYTHON_BENCHMARK_LABELS))
+        self.assertEqual(sorted(plan["baseline"]),
+                         sorted(n for e in ci_selection.shard_executors() for n in executors[e]))
 
     def test_a_missing_shard_breaks_the_partition(self):
         plan = ci_selection.make_plan(self.build)
         parts = dict(plan["executors"])
-        del parts["native-2"]
+        del parts["cpp"]
         with self.assertRaisesRegex(SelectionError, "miss"):
             ci_selection.check_partition(plan["tests"], list(parts), parts)
 
     def test_a_duplicate_hiding_an_omission_is_caught(self):
         plan = ci_selection.make_plan(self.build)
         parts = {e: list(n) for e, n in plan["executors"].items()}
-        parts["native-1"].append(parts["native-2"][0])
-        parts["native-2"] = parts["native-2"][1:] or [parts["native-1"][0]]
+        # Same count, but one test twice and another not at all.
+        parts["c-and-tools"] = parts["c-and-tools"][1:] + [parts["cpp"][0]]
         with self.assertRaisesRegex(SelectionError, "selected by"):
             ci_selection.check_partition(plan["tests"], list(parts), parts)
 
     def test_two_exclusion_options_are_anded(self):
-        # Why the native family needs one union regex: two -LE exclude nothing.
+        # Why c-and-tools needs one union regex: two -LE exclude nothing.
         anded = ci_selection.show_only(self.build, ["-LE", "^numpy/$", "-LE", "^python/$"])
         union = ci_selection.show_only(self.build, ["-LE", "^(numpy/|python/)$"])
         self.assertEqual(len(anded), len(pr_suite()))
-        self.assertEqual(len(union), len(pr_suite()) - 2)
+        self.assertEqual(len(union), len(pr_suite()) - 4)
 
     def test_restored_build_must_match_the_plan(self):
         plan = ci_selection.make_plan(self.build)
-        ci_selection.check_restored(plan, self.build, "native-1")
+        ci_selection.check_restored(plan, self.build, "c-and-tools")
         changed = pr_suite()
         changed[3]["command"] = ["/bin/false"]
         ci_fixture.write_project(self.tmp.name, changed)
         ci_fixture.configure(self.tmp.name)
         with self.assertRaisesRegex(SelectionError, "differs"):
-            ci_selection.check_restored(plan, self.build, "native-1")
+            ci_selection.check_restored(plan, self.build, "c-and-tools")
 
 
 class InventoryTest(unittest.TestCase):
@@ -103,24 +109,29 @@ class InventoryTest(unittest.TestCase):
         with self.assertRaisesRegex(SelectionError, "RUN_SERIAL"):
             self.plan_of(tests)
 
-    def test_a_family_smaller_than_its_shard_count_is_rejected(self):
-        # With three Python tests, CTest's `-I 4,,4` does not select nothing:
-        # it repeats tests another shard already has.
-        dropped = ci_selection.PYTHON_LABELS[3:]
-        tests = [t for t in pr_suite() if not t.get("labels") or t["labels"][1] not in dropped]
-        with self.assertRaisesRegex(SelectionError, "selected by python-"):
+    def test_a_module_smaller_than_its_shard_count_is_rejected(self):
+        # With one NumPy test, CTest's `-I 2,,2` does not select nothing: it
+        # repeats the test the first shard already has.
+        tests = [t for t in pr_suite() if t["name"] != "regression/numpy/u"]
+        with self.assertRaisesRegex(SelectionError, "selected by numpy-"):
             self.plan_of(tests)
 
     def test_an_empty_executor_is_rejected(self):
-        parts = {"producer": ["a"], "native-1": []}
-        with self.assertRaisesRegex(SelectionError, "native-1 selects no test"):
+        parts = {"producer": ["a"], "cpp": []}
+        with self.assertRaisesRegex(SelectionError, "cpp selects no test"):
             ci_selection.check_partition(["a"], list(parts), parts)
 
-    def test_a_new_suite_lands_in_the_native_family(self):
+    def test_a_new_suite_lands_in_c_and_tools(self):
         tests = pr_suite() + [ci_fixture.regression("regression/brand-new/x", "brand-new/")]
         plan = self.plan_of(tests)
-        native = plan["executors"]["native-1"] + plan["executors"]["native-2"]
-        self.assertIn("regression/brand-new/x", native)
+        self.assertIn("regression/brand-new/x", plan["executors"]["c-and-tools"])
+
+    def test_a_new_cpp_standard_lands_in_cpp(self):
+        tests = pr_suite() + [
+            ci_fixture.regression("regression/esbmc-cpp26/cpp/x", "esbmc-cpp26/cpp/")
+        ]
+        plan = self.plan_of(tests)
+        self.assertIn("regression/esbmc-cpp26/cpp/x", plan["executors"]["cpp"])
 
     def test_labels_with_regex_characters_are_refused(self):
         with self.assertRaises(SelectionError):

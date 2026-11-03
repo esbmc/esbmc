@@ -28,7 +28,7 @@ class PreflightTest(unittest.TestCase):
     def tearDown(self):
         self.tmp.cleanup()
 
-    def preflight(self, digest=None, executor="native-1"):
+    def preflight(self, digest=None, executor="c-and-tools"):
         return linux_tests.main([
             "preflight", "--build-dir", self.build, "--plan", self.paths["plan"], "--plan-digest",
             digest or self.plan["digest"], "--probes", self.paths["probes"], "--executor", executor
@@ -37,13 +37,13 @@ class PreflightTest(unittest.TestCase):
     def test_a_matching_runner_passes(self):
         self.assertTrue(self.probes)
         self.assertEqual(self.preflight(), 0)
-        self.assertEqual(self.preflight(executor="python-4"), 0)
+        self.assertEqual(self.preflight(executor="numpy-2"), 0)
 
     def test_another_producer_plan_is_refused(self):
         self.assertEqual(self.preflight(digest="0" * 64), 1)
 
     def test_an_edited_plan_is_refused(self):
-        self.plan["executors"]["native-1"].append("regression/extra")
+        self.plan["executors"]["c-and-tools"].append("regression/extra")
         with open(self.paths["plan"], "w", encoding="utf-8") as fp:
             json.dump(self.plan, fp)
         self.assertEqual(self.preflight(), 1)

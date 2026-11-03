@@ -25,11 +25,13 @@ class ShardTimingsTest(unittest.TestCase):
         self.assertEqual(tests[5], (6, " starts with a space", 0.01))
         self.assertEqual(tests[6], (7, "regression/esbmc/skip", 0.07))
 
-    def test_families_follow_the_selection_labels(self):
-        self.assertEqual(shard_timings.family("csmith-kind"), "producer")
-        self.assertEqual(shard_timings.family("regression/numpy/b"), "python")
-        self.assertEqual(shard_timings.family("regression/esbmc/c"), "native")
-        self.assertEqual(shard_timings.family("regression/python-intensive/d"), "excluded")
+    def test_modules_follow_the_selection_labels(self):
+        self.assertEqual(shard_timings.module("csmith-kind"), "producer")
+        self.assertEqual(shard_timings.module("regression/numpy/b"), "numpy")
+        self.assertEqual(shard_timings.module("regression/quixbugs/q"), "python-benchmarks")
+        self.assertEqual(shard_timings.module("regression/esbmc-cpp11/lambda/l"), "cpp")
+        self.assertEqual(shard_timings.module("regression/esbmc/c"), "c-and-tools")
+        self.assertEqual(shard_timings.module("regression/python-intensive/d"), "excluded")
 
     def test_slots_take_the_next_test_when_they_free_up(self):
         self.assertEqual(shard_timings.makespan([4, 1, 1, 1], 2), 4)
@@ -37,8 +39,11 @@ class ShardTimingsTest(unittest.TestCase):
 
     def test_shards_stripe_their_family(self):
         tests = shard_timings.read_durations(LOG.splitlines())
-        seconds = shard_timings.shard_seconds(tests, (("python", 2), ("native", 1)), 1)
-        self.assertEqual(seconds, {"python-1": 4.0, "python-2": 6.0, "native-1": 1.57})
+        seconds = shard_timings.shard_seconds(tests, 1)
+        self.assertEqual(seconds["numpy-1"], 6.0)
+        self.assertEqual(seconds["numpy-2"], 0.0)
+        self.assertEqual(seconds["python-1"], 4.0)
+        self.assertEqual(seconds["c-and-tools"], 1.57)
 
 
 if __name__ == "__main__":
