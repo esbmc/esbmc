@@ -1,9 +1,10 @@
+# ci_fixture puts scripts/ci on sys.path, so it comes first.
+import ci_fixture  # pylint: disable=wrong-import-order
 import os
 import subprocess
 import tempfile
 import unittest
 
-import ci_fixture
 import ci_results
 import ci_selection
 from ci_results import FAILED, INVALID, PASSED, SKIPPED

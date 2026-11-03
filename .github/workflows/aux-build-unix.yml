@@ -33,13 +33,58 @@ on:
         required: false
         default: auto
         type: string
+      linux-test-layout:
+        description: "legacy runs the tests here; pr-bundle runs the non-regression tests and exports the Linux PR regression bundle"
+        required: false
+        default: legacy
+        type: string
+      check-python-regressions:
+        description: "Run scripts/check_python_tests.sh here; false when the caller runs it in its own job"
+        required: false
+        default: true
+        type: boolean
+      collect-test-metrics:
+        description: "Record JUnit and memory metrics of the tests run here"
+        required: false
+        default: false
+        type: boolean
+      restore-build-cache:
+        description: "Restore the ccache; false builds from an empty ccache to measure a cold build"
+        required: false
+        default: true
+        type: boolean
+      checkout-ref:
+        description: "Commit to build; empty builds the triggering commit"
+        required: false
+        default: ''
+        type: string
+    outputs:
+      bundle-artifact:
+        description: "Name of the Linux regression bundle artifact (pr-bundle)"
+        value: ${{ jobs.build.outputs.bundle-artifact }}
+      bundle-sha256:
+        description: "SHA-256 of the bundle file"
+        value: ${{ jobs.build.outputs.bundle-sha256 }}
+      plan-digest:
+        description: "Digest of the selection plan inside the bundle"
+        value: ${{ jobs.build.outputs.plan-digest }}
+      shard-executors:
+        description: "JSON list of the shard executors the plan defines"
+        value: ${{ jobs.build.outputs.shard-executors }}
 
 jobs:
   build:
     name: Build ESBMC (${{ inputs.operating-system }})
     runs-on: ${{ inputs.operating-system }}
+    # The legacy layout runs the whole suite here, under the runner's 6 h limit.
+    timeout-minutes: ${{ inputs.linux-test-layout == 'pr-bundle' && 180 || 360 }}
+    outputs:
+      bundle-artifact: ${{ steps.bundle.outputs.bundle-artifact }}
+      bundle-sha256: ${{ steps.bundle.outputs.bundle-sha256 }}
+      plan-digest: ${{ steps.bundle.outputs.plan-digest }}
+      shard-executors: ${{ steps.bundle.outputs.shard-executors }}
     env:
-      CCACHE_DIR: ${{ github.workspace }}/.cache/ccache
+      CCACHE_DIR: ${{ github.workspace }}/.cache/${{ inputs.restore-build-cache && 'ccache' || 'ccache-cold' }}
       CCACHE_BASEDIR: ${{ github.workspace }}
       # Runner images are rebuilt weekly; mtime would invalidate every entry.
       CCACHE_COMPILERCHECK: content
@@ -48,9 +93,38 @@ jobs:
       CCACHE_SLOPPINESS: pch_defines,time_macros,include_file_mtime,include_file_ctime
       CCACHE_KEY: ccache-${{ inputs.operating-system }}-${{ inputs.build-flags }}
     steps:
+    - name: Check the test layout inputs
+      env:
+        LAYOUT: ${{ inputs.linux-test-layout }}
+        OS: ${{ inputs.operating-system }}
+        TESTING: ${{ inputs.testing }}
+        RESTORE: ${{ inputs.restore-build-cache }}
+        SAVE: ${{ inputs.save-cache }}
+      run: |
+        case "$LAYOUT" in legacy|pr-bundle) ;; *)
+          echo "::error::linux-test-layout must be legacy or pr-bundle, not '$LAYOUT'"; exit 1 ;;
+        esac
+        if [[ "$LAYOUT" == pr-bundle && ( "$OS" != ubuntu* || "$TESTING" != true ) ]]; then
+          echo "::error::pr-bundle needs a Linux runner and testing: true"; exit 1
+        fi
+        if [[ "$RESTORE" == false && ( "$LAYOUT" != pr-bundle || "$SAVE" == true ) ]]; then
+          echo "::error::restore-build-cache: false needs pr-bundle and save-cache: false"; exit 1
+        fi
+
     - uses: actions/checkout@v6
+      with:
+        ref: ${{ inputs.checkout-ref || github.sha }}
+
+    - name: Check that the cold ccache is empty
+      if: ${{ !inputs.restore-build-cache }}
+      run: |
+        if [ -e "$CCACHE_DIR" ] && [ -n "$(ls -A "$CCACHE_DIR")" ]; then
+          echo "::error::$CCACHE_DIR is not empty, so the build would not be cold"; exit 1
+        fi
+        echo "Cold build: $CCACHE_DIR is empty and no cache is restored or saved."
 
     - name: Restore ccache
+      if: ${{ inputs.restore-build-cache }}
       uses: actions/cache/restore@v6
       with:
         path: .cache/ccache
@@ -103,7 +177,7 @@ jobs:
         path: esbmc-${{ env.PLATFORM }}.zip
     
     - name: Check Python regression tests
-      if: ${{ inputs.testing == true }}
+      if: ${{ inputs.testing == true && inputs.check-python-regressions }}
       run: |
         # Set PATH to include Python 3.12 and user-installed tools (mypy, meson, etc.)
         export PATH="$(brew --prefix python@3.12)/bin:$HOME/Library/Python/3.12/bin:$PATH"
@@ -111,7 +185,7 @@ jobs:
         ./scripts/check_python_tests.sh
 
     - name: Run tests
-      if: ${{ inputs.testing == true }}
+      if: ${{ inputs.testing == true && inputs.linux-test-layout == 'legacy' }}
       run: |
         # Set PATH to include Python 3.12 and user-installed tools (mypy, meson, etc.)
         export PATH="$(brew --prefix python@3.12)/bin:$HOME/Library/Python/3.12/bin:$PATH"
@@ -140,10 +214,79 @@ jobs:
         # "runner received a shutdown signal" (OOM). Run the Linux legs with -j2
         # to bound peak concurrent memory. The macOS leg runs the light python/
         # suite plus a handful of platform-sensitive tests, and keeps -j4.
-        if [[ "${{ inputs.operating-system }}" =~ ^macos ]]; then
-          ctest -j4 --output-on-failure --progress -L '^python/$|^platform-sensitive$'
-        elif [[ "${{ github.event_name }}" == "pull_request" ]]; then
-          ctest -j2 --output-on-failure --progress -LE python-intensive .
-        else
-          ctest -j2 --output-on-failure --progress .
+        #
+        # collect-test-metrics wraps ctest to record JUnit and the job's
+        # memory, without changing what runs.
+        metrics=()
+        junit=()
+        if [[ "${{ inputs.collect-test-metrics }}" == "true" ]]; then
+          mkdir -p ../ci-results/legacy
+          metrics=(python3 ../scripts/ci/linux_tests.py measure --out ../ci-results/legacy/metrics.json --)
+          junit=(--output-junit "$PWD/../ci-results/legacy/junit.xml")
         fi
+        if [[ "${{ inputs.operating-system }}" =~ ^macos ]]; then
+          "${metrics[@]}" ctest -j4 --output-on-failure --progress -L '^python/$|^platform-sensitive$' "${junit[@]}"
+        elif [[ "${{ github.event_name }}" == "pull_request" ]]; then
+          "${metrics[@]}" ctest -j2 --output-on-failure --progress -LE python-intensive . "${junit[@]}"
+        else
+          "${metrics[@]}" ctest -j2 --output-on-failure --progress . "${junit[@]}"
+        fi
+
+    - name: Upload legacy test metrics
+      if: ${{ always() && inputs.testing == true && inputs.collect-test-metrics && inputs.linux-test-layout == 'legacy' }}
+      uses: actions/upload-artifact@v7
+      with:
+        name: linux-legacy-metrics-${{ github.run_attempt }}
+        path: |
+          ci-results/legacy
+          build/Testing/Temporary/LastTest.log
+        if-no-files-found: warn
+        retention-days: 7
+
+    # pr-bundle: run what the shards do not (tests without the regression label)
+    # under the PR's 120s budget, and export the regression to the shards.
+    - name: Plan and run the producer's tests
+      if: ${{ inputs.linux-test-layout == 'pr-bundle' }}
+      run: |
+        cmake --version | head -1
+        ctest --version | head -1
+        cmake -DESBMC_REGRESS_TIMEOUT=120 build
+        mkdir -p ci-bundle ci-results/producer
+        python3 scripts/ci/linux_tests.py plan --build-dir build --out ci-bundle/plan.json
+        python3 scripts/ci/linux_tests.py probe --plan ci-bundle/plan.json --out ci-bundle/probes.json
+        python3 scripts/ci/linux_tests.py run --build-dir build --plan ci-bundle/plan.json \
+          --probes ci-bundle/probes.json --executor producer --jobs 2 --out-dir ci-results/producer
+
+    - name: Package the regression bundle
+      id: bundle
+      if: ${{ inputs.linux-test-layout == 'pr-bundle' }}
+      env:
+        ARTIFACT: linux-regression-bundle-${{ github.run_id }}-${{ github.run_attempt }}
+      run: |
+        python3 scripts/ci/linux_tests.py bundle --workspace "$GITHUB_WORKSPACE" \
+          --build-dir build --plan ci-bundle/plan.json \
+          --out "$RUNNER_TEMP/linux-regression-bundle.tar.zst" --github-output "$GITHUB_OUTPUT"
+        echo "bundle-artifact=$ARTIFACT" >> "$GITHUB_OUTPUT"
+        ls -l "$RUNNER_TEMP/linux-regression-bundle.tar.zst"
+
+    - name: Upload the regression bundle
+      if: ${{ inputs.linux-test-layout == 'pr-bundle' }}
+      uses: actions/upload-artifact@v7
+      with:
+        name: ${{ steps.bundle.outputs.bundle-artifact }}
+        path: ${{ runner.temp }}/linux-regression-bundle.tar.zst
+        if-no-files-found: error
+        compression-level: 0
+        retention-days: 7
+
+    - name: Upload the producer's results
+      if: ${{ always() && inputs.linux-test-layout == 'pr-bundle' }}
+      uses: actions/upload-artifact@v7
+      with:
+        name: linux-result-producer-${{ github.run_attempt }}
+        path: |
+          ci-results/producer
+          ci-bundle/plan.json
+          ci-bundle/probes.json
+        if-no-files-found: warn
+        retention-days: 7
