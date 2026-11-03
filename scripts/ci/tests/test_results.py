@@ -72,6 +72,7 @@ class SkipAndRunTest(unittest.TestCase):
         ci_fixture.write_case(self.suite, "needs_z3", "CORE", requires=["z3_binary"])
         ci_fixture.write_case(self.suite, "needs_headers", "CORE", requires=["host_cxx_headers"])
         ci_fixture.write_case(self.suite, "plain", "CORE")
+        ci_fixture.write_case(self.suite, "needs_long", "CORE", requires=["long_timeout"])
 
     def tearDown(self):
         self.tmp.cleanup()
@@ -101,6 +102,28 @@ class SkipAndRunTest(unittest.TestCase):
 
     def test_skips_the_harness_explains_pass(self):
         self.assertEqual(self.evaluate([self.case("thorough"), self.case("needs_z3")]), [])
+
+    def long_timeout_case(self, environment):
+        test = self.case("needs_long", capabilities="lp64_host,long_timeout")
+        test["props"]["ENVIRONMENT"] = environment
+        return test
+
+    def test_a_timeout_cap_explains_a_long_timeout_skip(self):
+        # The harness drops long_timeout once ESBMC_REGRESS_TIMEOUT_MAX narrows
+        # the 1200s budget below 600s, from the test's environment or the run's.
+        long_budget = "ESBMC_REGRESS_TIMEOUT=1200"
+        self.assertTrue(self.evaluate([self.long_timeout_case(long_budget)]))
+        capped = long_budget + ";ESBMC_REGRESS_TIMEOUT_MAX=45"
+        self.assertEqual(self.evaluate([self.long_timeout_case(capped)]), [])
+        saved = os.environ.get("ESBMC_REGRESS_TIMEOUT_MAX")
+        os.environ["ESBMC_REGRESS_TIMEOUT_MAX"] = "45"
+        try:
+            self.assertEqual(self.evaluate([self.long_timeout_case(long_budget)]), [])
+        finally:
+            if saved is None:
+                del os.environ["ESBMC_REGRESS_TIMEOUT_MAX"]
+            else:
+                os.environ["ESBMC_REGRESS_TIMEOUT_MAX"] = saved
 
     def test_an_unexplained_skip_fails(self):
         problems = self.evaluate([self.case("plain")])
