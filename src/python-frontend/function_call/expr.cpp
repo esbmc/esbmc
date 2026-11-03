@@ -2391,30 +2391,9 @@ function_call_expr::get_object_list_symbol(std::string &display_name) const
     // dispatch below, which can also resolve dict-subscript receivers.
     if (base_sym->get_type() == list_type)
     {
-      // Constant index: resolve directly from the registry.
-      if (
-        slice_node["_type"] == "Constant" &&
-        slice_node["value"].is_number_integer())
-      {
-        const size_t index = slice_node["value"].get<size_t>();
-
-        const std::string inner_id =
-          converter_.get_element_type_registry().element_id(base_id, index);
-        if (
-          converter_.get_element_type_registry().element_type(base_id, index) ==
-            list_type &&
-          !inner_id.empty())
-        {
-          display_name = base_name + "[" + std::to_string(index) + "]";
-          return converter_.find_symbol(inner_id);
-        }
-      }
-
-      // Non-constant index (e.g. nested[i].append(v)): delegate to the existing
-      // subscript handler.  For comprehension-generated nested lists the
-      // handler hits the registry early-return path and yields the template
-      // inner list symbol (the element produced inside the loop body) without
-      // emitting any runtime instructions.
+      // The inner list is read at runtime: the symbol the registry recorded
+      // for the element may since have been rebound, as the one created in
+      // a comprehension or loop body is on every iteration (#9766).
       const exprt subscript_expr = converter_.get_expr(func_value);
       if (subscript_expr.is_symbol())
       {
@@ -2422,9 +2401,22 @@ function_call_expr::get_object_list_symbol(std::string &display_name) const
           converter_.find_symbol(subscript_expr.identifier().as_string());
         if (sym && sym->get_type() == list_type)
         {
-          const std::string idx_str = slice_node.contains("id")
-                                        ? slice_node["id"].get<std::string>()
-                                        : "(expr)";
+          std::string idx_str = "(expr)";
+          if (slice_node.contains("id"))
+            idx_str = slice_node["id"].get<std::string>();
+          else if (
+            slice_node["_type"] == "Constant" &&
+            slice_node["value"].is_number_integer())
+          {
+            const size_t index = slice_node["value"].get<size_t>();
+            idx_str = std::to_string(index);
+            // Element types the method records on sym stay visible to
+            // later reads of base[index].
+            element_type_registry &registry =
+              converter_.get_element_type_registry();
+            if (!registry.element_id(base_id, index).empty())
+              registry.replace(base_id, index, sym->id.as_string(), list_type);
+          }
           display_name = base_name + "[" + idx_str + "]";
           return sym;
         }
