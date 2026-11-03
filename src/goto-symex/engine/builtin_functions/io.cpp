@@ -533,6 +533,63 @@ expr2tc goto_symext::string_length(
                               : if2tc(len_type, points_here, len, unknown);
 }
 
+void goto_symext::claim_nul_terminated(const expr2tc &ptr)
+{
+  expr2tc object;
+  uint64_t offset, avail;
+  if (
+    !memcmp_resolve_operand(ptr, 0, object, offset, avail) ||
+    avail > max_stored_output || !is_array_type(object) ||
+    !is_byte_type(to_array_type(object->type).subtype))
+    return;
+  expr2tc points_here = internal_deref_items.front().guard;
+  cur_state->rename(points_here);
+
+  const type2tc &elem = to_array_type(object->type).subtype;
+  expr2tc terminated = gen_false_expr();
+  for (uint64_t k = 0; k < avail; k++)
+    terminated = or2tc(
+      terminated,
+      equality2tc(
+        index2tc(elem, object, gen_ulong(offset + k)), gen_zero(elem)));
+  claim(
+    implies2tc(points_here, terminated),
+    "printf %s argument is not NUL-terminated within its object");
+}
+
+// Only a direct call's operands are its arguments; a v* call passes a va_list.
+static bool printf_args_are_direct(printf_kindt kind)
+{
+  switch (kind)
+  {
+  case printf_kindt::VPRINTF:
+  case printf_kindt::VFPRINTF:
+  case printf_kindt::VSPRINTF:
+  case printf_kindt::VSNPRINTF:
+  case printf_kindt::VASPRINTF:
+    return false;
+  default:
+    return true;
+  }
+}
+
+void goto_symext::check_printf_pointer_arg(
+  printf_kindt kind,
+  char spec,
+  bool reads_to_nul,
+  const expr2tc &arg)
+{
+  if (spec != 's' && spec != 'p')
+    return;
+  if (!is_pointer_type(arg->type))
+    claim(
+      gen_false_expr(),
+      spec == 's' ? "printf format specifier %s requires pointer argument"
+                  : "printf format specifier %p requires pointer argument");
+  else if (spec == 's' && reads_to_nul && printf_args_are_direct(kind))
+    claim_nul_terminated(arg);
+}
+
 expr2tc goto_symext::printf_field_length(
   const std::string &f,
   size_t &i,
@@ -1010,8 +1067,12 @@ void goto_symext::symex_printf(const expr2tc &lhs, expr2tc &rhs)
           i++;
         while (i < format_str.length() && isdigit(format_str[i]))
           i++;
+        // A precision bounds what %s reads, and a length modifier makes it
+        // a wide string (C11 7.21.6.1p8).
+        bool reads_to_nul = true;
         if (i < format_str.length() && format_str[i] == '.')
         {
+          reads_to_nul = false;
           i++;
           while (i < format_str.length() && isdigit(format_str[i]))
             i++;
@@ -1022,7 +1083,10 @@ void goto_symext::symex_printf(const expr2tc &lhs, expr2tc &rhs)
                (format_str[i] == 'h' || format_str[i] == 'l' ||
                 format_str[i] == 'L' || format_str[i] == 'z' ||
                 format_str[i] == 'j' || format_str[i] == 't'))
+        {
+          reads_to_nul = false;
           i++;
+        }
 
         // Check conversion specifier against original operands
         if (i < format_str.length())
@@ -1044,21 +1108,7 @@ void goto_symext::symex_printf(const expr2tc &lhs, expr2tc &rhs)
               const expr2tc &arg = original_rhs.operands[actual_arg_idx];
 
               if (arg)
-              {
-                if (spec == 's' || spec == 'p')
-                {
-                  // %s and %p require pointer types
-                  if (!is_pointer_type(arg->type))
-                  {
-                    claim(
-                      gen_false_expr(),
-                      spec == 's'
-                        ? "printf format specifier %s requires pointer argument"
-                        : "printf format specifier %p requires pointer "
-                          "argument");
-                  }
-                }
-              }
+                check_printf_pointer_arg(new_rhs.kind, spec, reads_to_nul, arg);
             }
             arg_idx++;
           }
