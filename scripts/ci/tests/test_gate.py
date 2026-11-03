@@ -153,6 +153,16 @@ class SummaryTest(ReportsFixture):
 
     def test_a_missing_mode_fails(self):
         self.assertEqual(self.summary("", pr_needs("legacy")), 1)
+        self.assertEqual(self.summary("invalid", pr_needs("legacy")), 1)
+
+    def test_parallel_without_the_producer_digests_fails(self):
+        out = os.path.join(self.tmp.name, "summary.md")
+        code = linux_tests.main([
+            "summary", "--mode", "parallel", "--needs",
+            pr_needs("parallel"), "--results-dir", self.results, "--plan-digest", self.digest,
+            "--bundle-sha256", "", "--summary", out
+        ])
+        self.assertEqual(code, 1)
 
 
 class ResolveModeTest(unittest.TestCase):
@@ -162,6 +172,16 @@ class ResolveModeTest(unittest.TestCase):
         self.assertEqual(ci_gate.resolve_mode("parallel", ""), "parallel")
         self.assertEqual(ci_gate.resolve_mode("parallel", "legacy"), "legacy")
         self.assertEqual(ci_gate.resolve_mode("legacy", "parallel"), "parallel")
+
+    def test_an_invalid_override_is_published_not_raised(self):
+        # `changes` must succeed, or every job gated on it would be skipped.
+        with tempfile.TemporaryDirectory() as tmp:
+            out = os.path.join(tmp, "output")
+            code = linux_tests.main([
+                "resolve-mode", "--default", "legacy", "--override", "bogus", "--github-output", out
+            ])
+            with open(out, encoding="utf-8") as fp:
+                self.assertEqual((code, fp.read()), (0, "linux-test-mode=invalid\n"))
 
     def test_invalid_values_fail(self):
         with self.assertRaises(ci_gate.ModeError):

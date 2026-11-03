@@ -114,15 +114,7 @@ jobs:
   cpython-check:
     needs: changes
     if: ${{ needs.changes.outputs.linux-test-mode == 'parallel' }}
-    name: Check Python regression tests
-    runs-on: ubuntu-24.04
-    timeout-minutes: 30
-    steps:
-    - uses: actions/checkout@v6
-    - name: Install the Python runtime
-      run: scripts/ci/linux-runtime.sh python
-    - name: Check Python regression tests
-      run: ./scripts/check_python_tests.sh
+    uses: ./.github/workflows/aux-cpython-check.yml
 
   # The required check of the Linux tests in both modes. It always runs and
   # fails unless every job its mode requires succeeded and, in parallel mode,
@@ -135,7 +127,6 @@ jobs:
     timeout-minutes: 10
     permissions:
       contents: read
-      actions: read
     steps:
     - uses: actions/checkout@v6
     - name: Download the reports

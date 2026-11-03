@@ -34,10 +34,6 @@ on:
         default: 150
         type: number
 
-permissions:
-  contents: read
-  actions: read
-
 jobs:
   run:
     name: ${{ matrix.executor }}

@@ -132,6 +132,13 @@ def restore(tar_path, expected_sha256, workspace):
     if meta["workspace"] != os.path.abspath(workspace):
         raise BundleError(f"bundle was built in {meta['workspace']}, CTest needs that path; "
                           f"this runner restores into {os.path.abspath(workspace)}")
+    head = subprocess.run(["git", "-C", workspace, "rev-parse", "HEAD"],
+                          capture_output=True,
+                          text=True,
+                          check=False).stdout.strip()
+    if not meta.get("checkout_sha") or meta["checkout_sha"] != head:
+        raise BundleError(f"bundle was built from {meta.get('checkout_sha')!r}, but the sources "
+                          f"here are {head!r}")
     for executable in meta["executables"]:
         path = os.path.join(workspace, executable)
         if not os.access(path, os.X_OK):
