@@ -76,13 +76,29 @@ def harness_arguments(command):
     return args
 
 
-def _static_capabilities(args, environment):
+def _effective_timeout(environment, harness):
+    """The budget the harness runs a test under, ESBMC_REGRESS_TIMEOUT_MAX applied.
+
+    The test's ENVIRONMENT property wins over the runner's, as it does for the
+    harness process. An invalid cap makes the harness exit, so no skip follows.
+    """
+    # pylint: disable=protected-access
+    values = dict(e.split("=", 1) for e in environment if "=" in e)
+    budget = values.get(harness._TIMEOUT_ENVVAR)
+    budget = int(budget) if budget else None
+    cap = values.get(harness._TIMEOUT_CAP_ENVVAR, os.environ.get(harness._TIMEOUT_CAP_ENVVAR,
+                                                                 "")).strip()
+    if cap.isdigit() and int(cap) > 0 and (budget is None or budget > int(cap)):
+        return int(cap)
+    return budget
+
+
+def _static_capabilities(args, environment, harness):
     if "capabilities" not in args:
         return None
     capabilities = {c for c in args["capabilities"].replace(";", ",").split(",") if c}
-    timeout = next((int(e.split("=", 1)[1])
-                    for e in environment if e.startswith("ESBMC_REGRESS_TIMEOUT=")), None)
-    if timeout is not None and timeout < 600:
+    timeout = _effective_timeout(environment, harness)
+    if timeout is not None and timeout < harness._LONG_TIMEOUT_SECONDS:  # pylint: disable=protected-access
         capabilities.discard("long_timeout")
     return capabilities
 
@@ -100,7 +116,7 @@ def skip_reason(record, probes, harness):
     case = harness.TestCase(os.path.join(args["regression"], args["file"]), args["file"])
     if case.test_mode not in args["modes"]:
         return f"mode {case.test_mode} is not in {args['modes']}"
-    static = _static_capabilities(args, record["environment"])
+    static = _static_capabilities(args, record["environment"], harness)
     tool_probes = probes.get(args.get("tool", ""), {})
     missing = [
         c for c in case.requires
