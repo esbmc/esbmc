@@ -1,0 +1,5 @@
+CORE
+main.cpp
+--std c++17 --unwind 20
+^  assertion r == o \+ 4 && o\[2\] == 3$
+^VERIFICATION FAILED$

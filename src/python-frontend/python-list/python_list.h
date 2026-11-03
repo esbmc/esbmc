@@ -82,14 +82,18 @@ public:
    * @param elem_type  IRep2 type of @p fill_value, recorded in the registry.
    * @param index_base When non-null, each element is @p index_base plus the
    *        loop index rather than @p fill_value, which is what a range needs.
+   * @param index_step When non-null, the loop index is scaled by it first.
    */
   exprt build_symbolic_fill_list(
     const exprt &size,
     const exprt &fill_value,
     const typet &elem_type,
-    const exprt *index_base = nullptr);
+    const exprt *index_base = nullptr,
+    const exprt *index_step = nullptr);
 
   exprt index(const exprt &array, const nlohmann::json &slice_node);
+  exprt
+  numpy_string_slice_copy(const exprt &array, const nlohmann::json &slice_node);
 
   /**
    * @brief Lower boolean-mask indexing `a[mask]` to a runtime loop that
@@ -561,6 +565,12 @@ public:
 
   exprt contains(const exprt &item, const exprt &list);
 
+  std::optional<exprt> repeat_variable_list(
+    const nlohmann::json &left_node,
+    const nlohmann::json &right_node,
+    const exprt &lhs,
+    const exprt &rhs);
+  exprt repeat_at_runtime(const exprt &source, const exprt &count);
   exprt list_repetition(
     const nlohmann::json &left_node,
     const nlohmann::json &right_node,

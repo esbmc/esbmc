@@ -636,6 +636,9 @@ bool goto_convert_functionst::convert_native_rec(
       to_sideeffect2t(assign.source).kind ==
         sideeffect2t::allockind::function_call)
     {
+      if (options.get_bool_option("validate-violation-witness"))
+        return delegate_to_legacy();
+
       const sideeffect2t &se = to_sideeffect2t(assign.source);
       if (has_sideeffect(se.operand) || is_ternary(se.operand))
         return delegate_to_legacy();

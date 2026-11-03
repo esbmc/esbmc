@@ -844,6 +844,67 @@ exprt string_handler::build_nondet_string_fallback(const locationt &location)
   return build_nondet_string(location);
 }
 
+exprt string_handler::build_default_object_repr(
+  const std::string &prefix,
+  const locationt &location)
+{
+  constexpr int max_digits = 16;
+  const int start = prefix.size();
+  const typet array_type =
+    array_typet(char_type(), from_integer(start + max_digits + 2, size_type()));
+  symbolt &repr = converter_.create_tmp_symbol(
+    location, "$object_repr$", array_type, exprt());
+  const exprt text = symbol_expr(repr);
+
+  auto add = [&](codet code) {
+    code.location() = location;
+    converter_.add_instruction(code);
+  };
+  auto at = [&](const exprt &index) { return build_index(text, index); };
+  auto chr = [](char c) { return from_integer(c, char_type()); };
+
+  add(code_declt(text));
+  add(code_assignt(text, side_effect_expr_nondett(array_type)));
+  for (int i = 0; i < start; ++i)
+    add(code_assignt(at(from_integer(i, size_type())), chr(prefix[i])));
+
+  symbolt &count = converter_.create_tmp_symbol(
+    location, "$repr_digits$", size_type(), exprt());
+  const exprt digits = symbol_expr(count);
+  add(code_declt(digits));
+  add(code_assignt(digits, side_effect_expr_nondett(size_type())));
+  add(code_assumet(and_exprt(
+    binary_relation_exprt(digits, ">=", from_integer(1, size_type())),
+    binary_relation_exprt(
+      digits, "<=", from_integer(max_digits, size_type())))));
+
+  // Concrete indices only, so a terminator stays at a known position and a
+  // later strlen() stops unwinding.
+  for (int i = 0; i <= max_digits; ++i)
+  {
+    const exprt pos = from_integer(i, size_type());
+    const exprt c = at(from_integer(start + i, size_type()));
+    auto in = [&](char lo, char hi) {
+      return and_exprt(
+        binary_relation_exprt(c, ">=", chr(lo)),
+        binary_relation_exprt(c, "<=", chr(hi)));
+    };
+    const exprt is_digit = binary_relation_exprt(pos, "<", digits);
+    if (i < max_digits)
+      add(code_assumet(
+        or_exprt(not_exprt(is_digit), or_exprt(in('0', '9'), in('a', 'f')))));
+    add(code_assignt(
+      c,
+      if_exprt(
+        is_digit,
+        c,
+        if_exprt(equality_exprt(pos, digits), chr('>'), chr('\0')))));
+  }
+  add(code_assignt(
+    at(from_integer(start + max_digits + 1, size_type())), chr('\0')));
+  return build_address_of(at(from_integer(0, size_type())));
+}
+
 BigInt string_handler::get_string_size(const exprt &expr)
 {
   if (!expr.type().is_array())
@@ -1497,10 +1558,15 @@ exprt string_handler::char_to_string(const exprt &expr)
   return str;
 }
 
-/// The str of a constant int, float or bool, or nil for any other constant.
+/// The str of a constant None, int, float or bool, or nil for any other
+/// constant.
 exprt string_handler::constant_to_string(const exprt &expr)
 {
   const typet &t = expr.type();
+  // str(None) is repr(None): NoneType inherits object.__str__.
+  if (t == none_type())
+    return converter_.get_string_builder().build_string_literal("None");
+
   if (type_utils::is_integer_type(t))
   {
     BigInt value = binary2integer(expr.value().as_string(), t.is_signedbv());
@@ -1567,6 +1633,19 @@ exprt string_handler::symbol_to_string(const exprt &expr)
   return nil_exprt();
 }
 
+/// A str held as a pointer, or any string for a pointer to a list or a class
+/// instance, whose bytes are not a str.
+exprt string_handler::pointer_to_string(const exprt &expr)
+{
+  if (expr.type().subtype().id() == typet::t_symbol)
+    return build_nondet_string_fallback(expr.location());
+
+  const typet char_ptr = gen_pointer_type(char_type());
+  if (expr.type() != char_ptr)
+    return build_typecast(expr, char_ptr);
+  return expr;
+}
+
 exprt string_handler::convert_to_string(const exprt &expr)
 {
   const typet &t = expr.type();
@@ -1598,12 +1677,7 @@ exprt string_handler::convert_to_string(const exprt &expr)
   // return type may be a zero-length array that migrates to empty_type2t,
   // causing a type mismatch when nested inside __python_str_concat.
   if (t.is_pointer() && !expr.is_code())
-  {
-    typet char_ptr = gen_pointer_type(char_type());
-    if (t != char_ptr)
-      return build_typecast(expr, char_ptr);
-    return expr;
-  }
+    return pointer_to_string(expr);
 
   // Non-constant scalars: dispatch to the matching __python_*_to_str
   // operational model in src/c2goto/library/python/string.c. The model
@@ -1674,14 +1748,9 @@ exprt string_handler::convert_to_string(const exprt &expr)
     return build_symbol(result_sym);
   }
 
-  // Anything else (struct, array of non-char, etc.) is currently unsupported.
-  std::string placeholder = "<expr>";
-  typet string_type =
-    type_handler_.build_array(char_type(), placeholder.size() + 1);
-  std::vector<unsigned char> chars(placeholder.begin(), placeholder.end());
-  chars.push_back('\0');
-
-  return make_char_array_expr(chars, string_type);
+  // The str of anything else (a list, tuple, dict, instance...) is not
+  // modelled, so it is any string.
+  return build_nondet_string_fallback(expr.location());
 }
 
 exprt string_handler::format_fstring_part(const nlohmann::json &value)
@@ -2608,7 +2677,7 @@ exprt string_handler::handle_int_conversion(
   // If argument is a float, truncate to integer
   if (arg.type().is_floatbv())
   {
-    return build_typecast(arg, int_type());
+    return build_typecast(arg, long_long_int_type());
   }
 
   // If argument is a boolean, convert to 0 or 1
@@ -3067,10 +3136,17 @@ exprt string_handler::read_tagged_str_receiver(
     return receiver;
 
   // The receiver is read twice, so only a symbol qualifies, and the guard
-  // must run exactly where the call is evaluated.
-  if (
-    !receiver.is_symbol() || !type_utils::is_str_only_method(method) ||
-    !converter_.can_emit_runtime_guard())
+  // must run exactly where the call is evaluated. A type probe is discarded,
+  // so it only needs the type of the str the real conversion reads.
+  if (!receiver.is_symbol() || !type_utils::is_str_only_method(method))
+    throw std::runtime_error(
+      "calling '" + method +
+      "' on a dynamically-typed variable is not yet supported");
+  if (converter_.in_type_probe())
+    return build_typecast(
+      build_member(receiver, "value", pointer_typet(empty_typet())),
+      pointer_typet(char_type()));
+  if (!converter_.can_emit_runtime_guard())
     throw std::runtime_error(
       "calling '" + method +
       "' on a dynamically-typed variable is not yet supported");

@@ -106,15 +106,30 @@ assigned_value(const nlohmann::json &n, const std::string &name)
 
 value_kinds::value_kinds(const nlohmann::json &module) : module_(module)
 {
+  index(module_, &module_);
 }
 
-bool value_kinds::diverges(
+void value_kinds::index(const nlohmann::json &node, const nlohmann::json *scope)
+{
+  for (const auto &child : node)
+  {
+    if (!child.is_structured())
+      continue;
+    if (child.is_object())
+      scope_[&child] = scope;
+    if (node_type(child) == "Call")
+      calls_.push_back(&child);
+    index(child, is_function(child) ? &child : scope);
+  }
+}
+
+bool value_kinds::may_be_non_number(
   const nlohmann::json &expr,
   const nlohmann::json &scope)
 {
   std::set<std::string> kinds;
   kinds_of(expr, scope, kinds, 0);
-  return kinds.size() > 1;
+  return kinds.size() > 1 || kinds.count("str") || kinds.count("none");
 }
 
 const nlohmann::json &
@@ -132,21 +147,11 @@ const nlohmann::json *value_kinds::top_level_def(const std::string &name) const
   return nullptr;
 }
 
-const nlohmann::json *
-value_kinds::enclosing_scope(const nlohmann::json &call) const
+const nlohmann::json &
+value_kinds::enclosing_scope(const nlohmann::json &node) const
 {
-  for (const auto &stmt : module_["body"])
-  {
-    if (node_type(stmt) != "FunctionDef")
-      continue;
-    bool found = false;
-    walk_scope(stmt["body"], [&](const nlohmann::json &n) {
-      found = found || &n == &call;
-    });
-    if (found)
-      return &stmt;
-  }
-  return &module_;
+  auto it = scope_.find(&node);
+  return it == scope_.end() ? module_ : *it->second;
 }
 
 void value_kinds::parameter_values(
@@ -164,45 +169,67 @@ void value_kinds::parameter_values(
   const size_t index = it - ps.begin();
   const nlohmann::json &defaults = def["args"]["defaults"];
   const size_t first_default = ps.size() - defaults.size();
-  const std::string fname = def.value("name", "");
+  for (const nlohmann::json *call : callers(def))
+  {
+    const nlohmann::json &n = *call;
+    const nlohmann::json *scope = &enclosing_scope(n);
+    if (index < n["args"].size())
+    {
+      if (node_type(n["args"][index]) != "Starred")
+        out.emplace_back(&n["args"][index], scope);
+      continue;
+    }
+    const auto kw =
+      std::find_if(n["keywords"].begin(), n["keywords"].end(), [&](auto &k) {
+        return k.value("arg", "") == name;
+      });
+    if (kw != n["keywords"].end())
+      out.emplace_back(&(*kw)["value"], scope);
+    else if (index >= first_default)
+      out.emplace_back(&defaults[index - first_default], &module_);
+  }
+}
 
-  std::function<void(const nlohmann::json &)> visit =
-    [&](const nlohmann::json &n) {
-      if (
-        node_type(n) != "Call" || node_type(n["func"]) != "Name" ||
-        n["func"].value("id", "") != fname)
-        return;
-      const nlohmann::json *scope = enclosing_scope(n);
-      if (index < n["args"].size())
-      {
-        if (node_type(n["args"][index]) != "Starred")
-          out.emplace_back(&n["args"][index], scope);
-        return;
-      }
-      for (const auto &kw : n["keywords"])
-        if (kw.value("arg", "") == name)
-        {
-          out.emplace_back(&kw["value"], scope);
-          return;
-        }
-      if (index >= first_default)
-        out.emplace_back(&defaults[index - first_default], &module_);
-    };
-  std::function<void(const nlohmann::json &)> all =
-    [&](const nlohmann::json &n) {
-      visit(n);
-      for (const auto &child : n)
-        if (child.is_structured())
-          all(child);
-    };
-  all(module_);
+/// The calls that may reach `def`, by its name or through a value holding it.
+/// While they are being found, `def` has none, so a cycle through it ends;
+/// only a list found with no other def in progress is complete and kept.
+std::vector<const nlohmann::json *>
+value_kinds::callers(const nlohmann::json &def) const
+{
+  if (auto it = callers_.find(&def); it != callers_.end())
+    return it->second;
+  if (!finding_callers_.insert(&def).second)
+    return {};
+  const std::string fname = def.value("name", "");
+  std::vector<const nlohmann::json *> found;
+  for (const nlohmann::json *call : calls_)
+  {
+    const nlohmann::json &func = (*call)["func"];
+    bool reaches = node_type(func) == "Name" && func.value("id", "") == fname;
+    if (!reaches)
+    {
+      const auto fns = callees(func, enclosing_scope(*call), 0);
+      reaches = std::any_of(fns.begin(), fns.end(), [&](const scoped &fn) {
+        return fn.first == &def;
+      });
+    }
+    if (reaches)
+      found.push_back(call);
+  }
+  finding_callers_.erase(&def);
+  if (finding_callers_.empty())
+    callers_[&def] = found;
+  return found;
 }
 
 std::vector<value_kinds::scoped> value_kinds::name_values(
   const std::string &name,
-  const nlohmann::json &scope) const
+  const nlohmann::json &scope,
+  unsigned depth) const
 {
   std::vector<scoped> out;
+  if (depth > max_depth)
+    return out;
   if (is_function(scope))
   {
     const nlohmann::json &ps = params(scope);
@@ -216,8 +243,9 @@ std::vector<value_kinds::scoped> value_kinds::name_values(
     }
   }
 
+  // A name a function does not bind is read from the scope enclosing it.
   if (node_type(scope) == "Lambda")
-    return name_values(name, module_);
+    return name_values(name, enclosing_scope(scope), depth + 1);
   walk_scope(scope["body"], [&](const nlohmann::json &n) {
     if (node_type(n) == "FunctionDef" && n.value("name", "") == name)
       out.emplace_back(&n, &n);
@@ -225,7 +253,7 @@ std::vector<value_kinds::scoped> value_kinds::name_values(
       out.emplace_back(value, &scope);
   });
   if (out.empty() && &scope != &module_)
-    return name_values(name, module_);
+    return name_values(name, enclosing_scope(scope), depth + 1);
   return out;
 }
 
@@ -242,13 +270,63 @@ std::vector<value_kinds::scoped> value_kinds::callees(
     out.emplace_back(&callee, &callee);
     return out;
   }
+  if (node_type(callee) == "Call")
+    return returned_functions(callee, scope, depth + 1);
   if (node_type(callee) != "Name")
     return out;
   for (const auto &[value, value_scope] :
-       name_values(callee.value("id", ""), scope))
+       name_values(callee.value("id", ""), scope, depth + 1))
   {
     const auto more = callees(*value, *value_scope, depth + 1);
     out.insert(out.end(), more.begin(), more.end());
+  }
+  return out;
+}
+
+/// The values `fn` returns, null for a bare `return`; a lambda returns its
+/// body.
+std::vector<const nlohmann::json *> value_kinds::return_values(
+  const nlohmann::json &fn,
+  bool &returns,
+  bool &yields) const
+{
+  std::vector<const nlohmann::json *> values;
+  returns = yields = false;
+  if (node_type(fn) == "Lambda")
+  {
+    returns = true;
+    values.push_back(&fn["body"]);
+    return values;
+  }
+  walk_scope(fn["body"], [&](const nlohmann::json &n) {
+    const std::string t = node_type(n);
+    yields = yields || t == "Yield" || t == "YieldFrom";
+    if (t != "Return")
+      return;
+    returns = true;
+    values.push_back(
+      n.contains("value") && !n["value"].is_null() ? &n["value"] : nullptr);
+  });
+  return values;
+}
+
+/// The functions `call` may return, read from what its callees return.
+std::vector<value_kinds::scoped> value_kinds::returned_functions(
+  const nlohmann::json &call,
+  const nlohmann::json &scope,
+  unsigned depth) const
+{
+  std::vector<scoped> out;
+  for (const auto &[fn, fn_scope] : callees(call["func"], scope, depth + 1))
+  {
+    bool returns, yields;
+    for (const nlohmann::json *value : return_values(*fn, returns, yields))
+    {
+      if (!value)
+        continue;
+      const auto more = callees(*value, *fn, depth + 1);
+      out.insert(out.end(), more.begin(), more.end());
+    }
   }
   return out;
 }
@@ -272,23 +350,14 @@ void value_kinds::call_kinds(
 
   for (const auto &[fn, fn_scope] : callees(func, scope, depth))
   {
-    if (node_type(*fn) == "Lambda")
+    bool returns, yields;
+    for (const nlohmann::json *value : return_values(*fn, returns, yields))
     {
-      kinds_of((*fn)["body"], *fn, out, depth + 1);
-      continue;
-    }
-    bool returns = false, yields = false;
-    walk_scope((*fn)["body"], [&](const nlohmann::json &n) {
-      const std::string t = node_type(n);
-      yields = yields || t == "Yield" || t == "YieldFrom";
-      if (t != "Return")
-        return;
-      returns = true;
-      if (n.contains("value") && !n["value"].is_null())
-        kinds_of(n["value"], *fn_scope, out, depth + 1);
+      if (value)
+        kinds_of(*value, *fn_scope, out, depth + 1);
       else
         out.insert("none");
-    });
+    }
     if (!returns && !yields)
       out.insert("none");
   }
@@ -308,7 +377,7 @@ void value_kinds::kinds_of(
   else if (t == "Name")
   {
     for (const auto &[value, value_scope] :
-         name_values(expr.value("id", ""), scope))
+         name_values(expr.value("id", ""), scope, depth + 1))
       if (!is_function(*value))
         kinds_of(*value, *value_scope, out, depth + 1);
   }

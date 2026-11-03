@@ -1,0 +1,4 @@
+CORE
+main.py
+--incremental-bmc
+^ERROR: numpy.linalg.LinAlgError: 0-dimensional array given. Array must be at least two-dimensional$

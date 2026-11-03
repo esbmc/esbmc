@@ -157,7 +157,7 @@ exprt tuple_handler::get_tuple_expr(const nlohmann::json &element)
     // pad_string_element). Symbolic char* strings are left as-is.
     if (
       (elem_expr.type().is_array() &&
-       elem_expr.type().subtype() == char_type()) ||
+       type_utils::is_char_storage(elem_expr.type().subtype())) ||
       type_utils::is_char_type(elem_expr.type()))
       elem_expr = pad_string_element(elem_expr);
 
@@ -276,7 +276,8 @@ static bool is_coercible_member(const typet &from, const typet &to)
   if (from == to)
     return true;
   if (from.is_pointer() && to.is_array())
-    return from.subtype() == char_type() && to.subtype() == char_type() &&
+    return type_utils::is_char_storage(from.subtype()) &&
+           type_utils::is_char_storage(to.subtype()) &&
            to_array_type(to).size().is_constant();
   auto is_int = [](const typet &t) {
     return t.id() == "signedbv" || t.id() == "unsignedbv";
@@ -720,11 +721,28 @@ void tuple_handler::handle_tuple_unpacking(
       converter_.get_location_from_decl(ast_node),
       target_block);
     // A list taken out of a tuple literal keeps its element types (#8928).
-    if (rhs.id() == "struct" && rhs.operands()[i].is_symbol())
+    const exprt source = unpacked_list_source(rhs, i);
+    if (source.is_symbol())
       converter_.get_element_type_registry().assign_from(
-        rhs.operands()[i].identifier().as_string(),
-        target.identifier().as_string());
+        source.identifier().as_string(), target.identifier().as_string());
   }
+}
+
+// The list a tuple's element @p i was built from: the literal's own operand,
+// or for a tuple variable bound once to a literal and read once, the operand of
+// that literal.
+exprt tuple_handler::unpacked_list_source(const exprt &rhs, size_t i) const
+{
+  if (rhs.id() == "struct")
+    return rhs.operands()[i];
+  if (!rhs.is_symbol() || !converter_.unpack_record_in_force())
+    return nil_exprt();
+  const symbolt *tuple = converter_.find_symbol(rhs.identifier().as_string());
+  if (
+    !tuple || tuple->get_value().id() != "struct" ||
+    tuple->get_value().operands().size() <= i)
+    return nil_exprt();
+  return tuple->get_value().operands()[i];
 }
 
 // A str element of a tuple held in a list or dict (reached through a
@@ -905,7 +923,9 @@ typet tuple_handler::tuple_member_type_from_annotation(
     if (id == "bytes")
       throw std::runtime_error(
         "tuple[bytes, ...] annotations are not supported");
-    return type_handler_.get_typet(id);
+    // A tuple stores an instance by reference, as get_tuple_expr builds it.
+    const typet t = type_handler_.get_typet(id);
+    return converter_.is_heap_migrated_class_type(t) ? gen_pointer_type(t) : t;
   }
   // get_typet(json) unwraps list[int] to the bare name `list`, which it
   // then looks up as a variable and types void (#8511).

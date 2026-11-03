@@ -1,9 +1,7 @@
-regression/python/github_8971_is_alias_knownbug
 regression/python/github_8971_is_class_fail
 regression/python/github_8971_is_fold
 regression/python/github_8971_is_native_unsupported
 regression/python/github_8971_is_self_fail
-regression/python/github_8971_is_two_tagged_unsupported
 regression/python/github_8971_truth
 regression/python/github_8971_truth_and
 regression/python/github_8971_truth_fail

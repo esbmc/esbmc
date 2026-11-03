@@ -995,6 +995,16 @@ class CoreVisitorsMixin:
     def _display_name(function_name):
         return function_name.split(".")[-1] if "." in function_name else function_name
 
+    def _validate_unexpected_keywords(self, function_name, expected_args, kwonly_args, keywords):
+        if function_name in self.functionAnyKeywords:
+            return
+        unexpected = next(
+            (name for name in keywords
+             if name is not None and name not in expected_args and name not in kwonly_args), None)
+        if unexpected is not None:
+            raise CallBindingError(f"{self._display_name(function_name)}() got an unexpected "
+                                   f"keyword argument '{unexpected}'")
+
     def _validate_kwonly_args(self, function_name, kwonly_args, keywords):
         missing_kwonly = [
             kwarg for kwarg in kwonly_args
@@ -1217,7 +1227,14 @@ class CoreVisitorsMixin:
             raise NotImplementedError(
                 f"Unpacking *x into {self._display_name(function_name)}() is supported only "
                 "when x is a list or tuple of statically known length")
+        if self._forwards_own_kwargs(node):
+            return False
+        if any(kw.arg is None for kw in node.keywords):
+            raise NotImplementedError(
+                f"Unpacking **x into {self._display_name(function_name)}() is supported only "
+                "when x is a dict of constant str keys the callee takes")
         keywords = self._build_keyword_map(node)
+        self._validate_unexpected_keywords(function_name, expected_args, kwonly_args, keywords)
         self._validate_kwonly_args(function_name, kwonly_args, keywords)
         self._validate_positional_call_arity(node, function_name, expected_args)
         self._validate_duplicate_positional_keyword(node, expected_args, keywords)
@@ -1868,6 +1885,31 @@ class CoreVisitorsMixin:
         ast.fix_missing_locations(rewritten)
         return self.visit(rewritten)
 
+    def _maybe_rewrite_list_over_instance(self, node):
+        """list(x) of a user-class instance -> [v for v in x].
+
+        The generic call builder reinterprets the instance struct as a list,
+        so list() of a non-iterable instance verified where CPython raises
+        TypeError. The comprehension iterates through the class's own protocol.
+        """
+        if not (isinstance(node.func, ast.Name) and node.func.id == "list" and len(node.args) == 1
+                and not node.keywords):
+            return None
+        plain_classes = getattr(self, "plain_user_classes", ())
+        if self._element_instance_class(node.args[0]) not in plain_classes:
+            return None
+        elem = f"__esbmc_list_elem_{node.lineno}_{node.col_offset}"
+        listcomp = ast.ListComp(elt=self._load_name(elem),
+                                generators=[
+                                    ast.comprehension(target=self._load_name(elem, ast.Store()),
+                                                      iter=node.args[0],
+                                                      ifs=[],
+                                                      is_async=0)
+                                ])
+        ast.copy_location(listcomp, node)
+        ast.fix_missing_locations(listcomp)
+        return self.visit(listcomp)
+
     _OPERATOR_DUNDERS = {"__getitem__": 1, "__len__": 0, "__contains__": 1}
 
     def _maybe_rewrite_operator_dunder_call(self, node):
@@ -1913,6 +1955,9 @@ class CoreVisitorsMixin:
         rewritten_iter_list = self._maybe_rewrite_list_over_iterator(node)
         if rewritten_iter_list is not None:
             return rewritten_iter_list
+        rewritten_instance_list = self._maybe_rewrite_list_over_instance(node)
+        if rewritten_instance_list is not None:
+            return rewritten_instance_list
         rewritten_newtype = self._maybe_rewrite_newtype_call(node)
         if rewritten_newtype is not None:
             return rewritten_newtype

@@ -110,14 +110,20 @@ public:
   }
 
   // Operations
+  // [string.view.ops]: copy() and substr() throw out_of_range for
+  // pos > size().
   size_t copy(CharT *dest, size_t count, size_t pos = 0) const
   {
+    if (pos > len)
+      throw typename __sv_detail::dependent<out_of_range, CharT>::type();
     size_t n = __sv_detail::min(count, len - pos);
     Traits::copy(dest, str + pos, n);
     return n;
   }
   basic_string_view substr(size_t pos = 0, size_t count = npos) const
   {
+    if (pos > len)
+      throw typename __sv_detail::dependent<out_of_range, CharT>::type();
     return basic_string_view(str + pos, __sv_detail::min(count, len - pos));
   }
   int compare(basic_string_view sv) const noexcept

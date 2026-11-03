@@ -416,6 +416,7 @@ public:
    * @param dict_expr The dictionary expression (must be a symbol)
    */
   typet recorded_tuple_value_type(const exprt &dict_expr) const;
+  typet recorded_value_type(const exprt &dict_expr) const;
 
   /// Whether a read of @p dict_expr yields the stored item as a tagged scalar.
   bool reads_value_as_tagged(
@@ -754,6 +755,16 @@ private:
     const symbolt &values_list,
     const exprt &value_expr,
     const locationt &location);
+
+  /// Append to \p target_block a heap copy of the dict \p value; returns the
+  /// pointer to it.
+  const symbolt &heap_copy_dict(
+    const nlohmann::json &node,
+    const exprt &value,
+    const locationt &location,
+    codet &target_block);
+
+  constant_exprt nested_dict_type_hash(const typet &dict_type);
 
   /**
    * @brief Store the dict v of `d[k] = v` by pointer to a heap copy, as

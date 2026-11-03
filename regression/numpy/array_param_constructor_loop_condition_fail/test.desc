@@ -1,0 +1,4 @@
+CORE
+main.py
+--incremental-bmc
+^ERROR: TypeError: a numpy constructor called as an argument where nothing can be bound first, such as a loop condition, is not supported$

@@ -1008,8 +1008,8 @@ void clang_c_adjust_irep2::adjust_plain_assignment(expr2tc &expr)
       sideeffect_assign2tc(target, a.op, a.lhs, rhs, a.location, a.member_init);
 }
 
-/// The shift spellings clang_c_adjust returns early on: it promotes only the
-/// right operand there, which the corpus shows is already the migrated shape.
+/// The shift spellings clang_c_adjust promotes operand by operand (C11 6.5.7p3)
+/// instead of applying the usual arithmetic conversions.
 static bool is_shift_assignment(const irep_idt &op)
 {
   return op == "assign_shl" || op == "assign_shr" || op == "assign_lshr" ||
@@ -1036,10 +1036,19 @@ void clang_c_adjust_irep2::adjust_compound_assignment(expr2tc &expr)
     }
   }
 
-  if (a.op == "assign" || is_shift_assignment(a.op))
+  if (a.op == "assign" || is_nil_expr(a.lhs) || is_nil_expr(a.rhs))
     return;
-  if (is_nil_expr(a.lhs) || is_nil_expr(a.rhs))
+
+  if (is_shift_assignment(a.op))
+  {
+    // The converter already promoted the count; promote E1 too (#9436).
+    expr2tc lhs = a.lhs;
+    c_typecastt(ns).implicit_typecast_arithmetic(lhs);
+    if (lhs != a.lhs)
+      expr = sideeffect_assign2tc(
+        expr->type, a.op, lhs, a.rhs, a.location, a.member_init);
     return;
+  }
 
   if (is_complex_type(a.lhs->type) || is_complex_type(a.rhs->type))
   {
@@ -1115,6 +1124,12 @@ void clang_c_adjust_irep2::adjust_relational(expr2tc &expr)
   expr2tc op1 = *expr->get_sub_expr(1);
   if (is_nil_expr(op0) || is_nil_expr(op1))
     return;
+
+  if (is_complex_type(op0->type) || is_complex_type(op1->type))
+  {
+    adjust_complex_equality(expr);
+    return;
+  }
 
   const expr2tc before0 = op0, before1 = op1;
   c_implicit_typecast_arithmetic(op0, op1, ns);
@@ -1652,6 +1667,34 @@ void clang_c_adjust_irep2::adjust_complex_arith(expr2tc &expr)
   }
 
   expr = constant_struct2tc(ct, std::vector<expr2tc>{re, im});
+}
+
+/// IREP2 form of clang_c_adjust::lower_complex_equality (C17 6.5.9p4).
+void clang_c_adjust_irep2::adjust_complex_equality(expr2tc &expr)
+{
+  const expr2tc op0 = *expr->get_sub_expr(0);
+  const expr2tc op1 = *expr->get_sub_expr(1);
+
+  // Same double-evaluation decline as adjust_complex_arith (§88.2).
+  if (
+    (!is_equality2t(expr) && !is_notequal2t(expr)) ||
+    contains_sideeffect(op0) || contains_sideeffect(op1))
+    return;
+
+  auto part = [](const expr2tc &e, const irep_idt &name) -> expr2tc {
+    if (is_complex_type(e->type))
+      return member2tc(to_complex_type(e->type).subtype, e, name);
+    return name == "imag" ? gen_zero(e->type) : e;
+  };
+
+  auto part_equal = [&](const irep_idt &name) -> expr2tc {
+    expr2tc l = part(op0, name), r = part(op1, name);
+    c_implicit_typecast_arithmetic(l, r, ns);
+    return equality2tc(l, r);
+  };
+
+  const expr2tc eq = and2tc(part_equal("real"), part_equal("imag"));
+  expr = is_notequal2t(expr) ? expr2tc(not2tc(eq)) : eq;
 }
 
 /// C11 6.5.3.3: the operand of unary `-` and `~` undergoes integer promotion,

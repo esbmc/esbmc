@@ -5,4 +5,4 @@ main.py
 PASSED +\[global\.assertion\.1\] +line 26
 PASSED +\[global\.assertion\.2\] +line 28
 PASSED +\[global\.assertion\.3\] +line 30
-FAILED +\[h\.assertion\.1\] +line 18 +Unsupported function 'islink' is reached
+FAILED +\[h\.assertion\.1\] +line 18 +Unsupported function 'ismount' is reached

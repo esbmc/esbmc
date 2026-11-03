@@ -609,6 +609,23 @@ bool python_converter::function_is_generator(
   return scan(function_node["body"]);
 }
 
+/// Whether @p value is `|`, `&`, `^`, `<<` or `>>`, which Python defines for
+/// ints and not for floats.
+static bool is_bitwise_binop(const nlohmann::json &value)
+{
+  static const std::set<std::string> bitwise{
+    "BitOr", "BitAnd", "BitXor", "LShift", "RShift"};
+  return value["_type"] == "BinOp" &&
+         bitwise.count(value["op"].value("_type", "")) != 0;
+}
+
+/// An arithmetic return is taken for a double, a bit operation for an int.
+static void
+note_expression_return(TypeFlags &flags, const nlohmann::json &value)
+{
+  (is_bitwise_binop(value) ? flags.has_int : flags.has_float) = true;
+}
+
 TypeFlags
 python_converter::infer_types_from_returns(const nlohmann::json &function_body)
 {
@@ -665,7 +682,7 @@ python_converter::infer_types_from_returns(const nlohmann::json &function_body)
         }
         else if (val["_type"] == "BinOp" || val["_type"] == "UnaryOp")
         {
-          flags.has_float = true; // Default for expressions
+          note_expression_return(flags, val);
         }
         else if (val["_type"] == "Call")
         {
@@ -1495,6 +1512,50 @@ static bool numpy_array_literal_return(
 
   out_literal_call = *first_call;
   return true;
+}
+
+static bool is_number_literal(const nlohmann::json &node)
+{
+  const nlohmann::json &value =
+    node.value("_type", "") == "UnaryOp" ? node["operand"] : node;
+  return value.value("_type", "") == "Constant" && value.contains("value") &&
+         value["value"].is_number();
+}
+
+// The function's only return when it is `a / 2` over a literal array, written
+// inline or bound once to a local.
+static const nlohmann::json *elementwise_return(const nlohmann::json &func_def)
+{
+  std::vector<const nlohmann::json *> returns;
+  collect_reachable_returns(func_def["body"], returns);
+  if (returns.size() != 1 || !returns[0]->contains("value"))
+    return nullptr;
+  const nlohmann::json &value = (*returns[0])["value"];
+  return value.value("_type", "") == "BinOp" &&
+             (is_number_literal(value["left"]) ||
+              is_number_literal(value["right"]))
+           ? &value
+           : nullptr;
+}
+
+static typet with_element_type(const typet &type, const typet &element)
+{
+  if (!type.is_array())
+    return element;
+  array_typet array = to_array_type(type);
+  array.subtype() = with_element_type(array.subtype(), element);
+  return array;
+}
+
+static bool yields_float(const nlohmann::json &binop)
+{
+  const auto is_float = [](const nlohmann::json &node) {
+    const nlohmann::json &value =
+      node.value("_type", "") == "UnaryOp" ? node["operand"] : node;
+    return value.contains("value") && value["value"].is_number_float();
+  };
+  return binop["op"].value("_type", "") == "Div" || is_float(binop["left"]) ||
+         is_float(binop["right"]);
 }
 
 static void collect_call_sites(
@@ -2448,11 +2509,76 @@ static nlohmann::json zero_literal(
 
 // The array type of a literal np.array call, or of another constructor with
 // literal arguments: the type of a literal of the same shape and dtype.
+static bool stores_real_numbers(const numpy_dtypet &dtype)
+{
+  return dtype.kind != numpy_dtypet::kindt::complex &&
+         dtype.kind != numpy_dtypet::kindt::string;
+}
+
+static typet
+in_real_dtype(const typet &type, const std::optional<numpy_dtypet> &dtype)
+{
+  return dtype && stores_real_numbers(*dtype)
+           ? with_element_type(type, dtype->element_type())
+           : type;
+}
+
+static bool has_dtype_keyword(const nlohmann::json &call)
+{
+  const auto &keywords = call.value("keywords", nlohmann::json::array());
+  return std::any_of(
+    keywords.begin(), keywords.end(), [](const nlohmann::json &kw) {
+      return kw.value("arg", "") == "dtype";
+    });
+}
+
+std::optional<numpy_dtypet>
+python_converter::constructor_keyword_dtype(const nlohmann::json &call) const
+{
+  for (const auto &kw : call.value("keywords", nlohmann::json::array()))
+    if (kw.value("arg", "") == "dtype")
+      return numpy_dtype_from_name(
+        extract_numpy_dtype_name(kw["value"], *ast_json));
+  return std::nullopt;
+}
+
+// A literal's type from its nesting alone: its leaves, which may be strings or
+// complex numbers, say nothing about the storage of one element.
+static typet literal_list_type(
+  const nlohmann::json &list,
+  const typet &element,
+  const type_handler &types)
+{
+  if (list.value("_type", "") != "List" || list["elts"].empty())
+    return element;
+  return types.build_array(
+    literal_list_type(list["elts"][0], element, types), list["elts"].size());
+}
+
+typet python_converter::literal_call_array_type(
+  const nlohmann::json &call,
+  const std::optional<numpy_dtypet> &dtype) const
+{
+  const nlohmann::json &list = call["args"][0];
+  if (dtype && dtype->kind == numpy_dtypet::kindt::complex)
+    return literal_list_type(list, dtype->element_type(), type_handler_);
+  if (numpy_literal_call_is_complex(call))
+    return literal_list_type(list, get_complex_struct_type(), type_handler_);
+  if (
+    const auto width = numpy_literal_string_width(call);
+    width && (!dtype || !dtype->bits))
+    return literal_list_type(
+      list, type_handler_.build_array(char_type(), *width + 1), type_handler_);
+  return in_real_dtype(
+    type_handler_.get_typet(numpy_literal_with_dtype(call, *ast_json)), dtype);
+}
+
 std::optional<typet>
 python_converter::literal_numpy_array_type(const nlohmann::json &call) const
 {
+  const std::optional<numpy_dtypet> dtype = constructor_keyword_dtype(call);
   if (is_numpy_array_literal_call(call))
-    return type_handler_.get_typet(numpy_literal_with_dtype(call, *ast_json));
+    return literal_call_array_type(call, dtype);
   auto layout = literal_constructor_layout(call);
   if (!layout || layout->first.empty())
     return std::nullopt;
@@ -2460,22 +2586,13 @@ python_converter::literal_numpy_array_type(const nlohmann::json &call) const
     if (dim <= 0)
       return std::nullopt;
   for (const auto &kw : call.value("keywords", nlohmann::json::array()))
-  {
-    const std::string dtype =
-      kw.value("arg", "") == "dtype"
-        ? extract_numpy_dtype_name(kw["value"], *ast_json)
-        : "";
-    if (dtype == "bool")
-      layout->second = "bool";
-    else if (dtype.find("int") != std::string::npos)
-      layout->second = "int";
-    else if (dtype.find("float") != std::string::npos)
-      layout->second = "float";
-    else if (!dtype.empty() || kw.value("arg", "") != "dtype")
+    if (kw.value("arg", "") != "dtype")
       return std::nullopt;
-  }
-  return type_handler_.get_typet(
-    zero_literal(layout->first, 0, layout->second));
+  if (has_dtype_keyword(call) && (!dtype || !stores_real_numbers(*dtype)))
+    return std::nullopt;
+  return in_real_dtype(
+    type_handler_.get_typet(zero_literal(layout->first, 0, layout->second)),
+    dtype);
 }
 
 // `f(np.eye(2))`: a constructor written as an argument is bound to a name
@@ -2485,23 +2602,253 @@ python_converter::bind_numpy_constructor_argument(const nlohmann::json &arg)
 {
   if (!is_numpy_literal_constructor(arg) || in_rhs_type_probe_)
     return arg;
-  if (!can_emit_runtime_guard())
+  if (!can_emit_operand_statement())
     throw std::runtime_error(
-      "TypeError: a numpy constructor called as an argument inside a lambda, "
-      "a short-circuit operand or a contract is not supported");
+      "TypeError: a numpy constructor called as an argument where nothing can "
+      "be bound first, such as a loop condition, is not supported");
+  return bind_to_fresh_name(arg, "ESBMC_constructor_arg_");
+}
+
+// `value` bound to a new name ahead of the current statement, and that name.
+nlohmann::json python_converter::bind_to_fresh_name(
+  const nlohmann::json &value,
+  const std::string &prefix)
+{
   nlohmann::json name = {
     {"_type", "Name"},
-    {"id", "ESBMC_constructor_arg_" + std::to_string(++nditer_counter_)},
+    {"id", prefix + std::to_string(++nditer_counter_)},
     {"ctx", {{"_type", "Store"}}}};
-  copy_location_fields_from_decl(arg, name);
+  copy_location_fields_from_decl(value, name);
   nlohmann::json bind = {
     {"_type", "Assign"},
     {"targets", nlohmann::json::array({name})},
-    {"value", arg}};
-  copy_location_fields_from_decl(arg, bind);
+    {"value", value}};
+  copy_location_fields_from_decl(value, bind);
   emit_statement_into_current_block(bind);
   name["ctx"] = {{"_type", "Load"}};
   return name;
+}
+
+static const nlohmann::json *
+sole_local_numpy_literal(const nlohmann::json &def, const std::string &name);
+
+static bool any_return(
+  const nlohmann::json &stmts,
+  const std::function<bool(const nlohmann::json &)> &pred);
+
+static const nlohmann::json *module_numpy_literal(
+  const nlohmann::json &module_body,
+  const std::string &name);
+
+// The narrow scalar `array` holds @p depth subscripts down.
+static std::optional<typet>
+narrow_element_at_depth(const typet &array, std::size_t depth)
+{
+  typet element = array;
+  for (; depth > 0; --depth)
+  {
+    if (!element.is_array())
+      return std::nullopt;
+    element = element.subtype();
+  }
+  const bool python_integer_width =
+    element.is_signedbv() && to_signedbv_type(element).get_width() == 64;
+  if (
+    element.is_array() || !type_utils::is_numpy_scalar_type(element) ||
+    python_integer_width)
+    return std::nullopt;
+  return element;
+}
+
+// `make()` returning `a / 2`: the result has a's shape and the promoted dtype.
+static bool returns_are_synthesized(const nlohmann::json &function_node)
+{
+  const nlohmann::json &returns = function_node["returns"];
+  return returns.is_null() || returns.value("_inferred_annotation", false);
+}
+
+// The narrow element a read of `a[i]` gives; nullopt for any other argument.
+std::optional<typet> python_converter::numpy_narrow_read_type(
+  const nlohmann::json &arg,
+  const std::string &enclosing) const
+{
+  std::size_t depth = 0;
+  const nlohmann::json *root = &arg;
+  while (root->value("_type", "") == "Subscript")
+  {
+    if ((*root)["slice"].value("_type", "") == "Slice")
+      return std::nullopt;
+    ++depth;
+    root = &(*root)["value"];
+  }
+  if (depth == 0 || root->value("_type", "") != "Name")
+    return std::nullopt;
+  const nlohmann::json &module_body = (*ast_json)["body"];
+  const nlohmann::json *def =
+    enclosing.empty() ? nullptr : find_function_def(module_body, enclosing);
+  const std::string name = root->value("id", "");
+  const nlohmann::json *literal = def ? sole_local_numpy_literal(*def, name)
+                                      : module_numpy_literal(module_body, name);
+  const std::optional<typet> array =
+    literal ? literal_numpy_array_type(*literal) : std::nullopt;
+  return array ? narrow_element_at_depth(*array, depth) : std::nullopt;
+}
+
+// A parameter every call passes a narrow element of the same dtype for keeps
+// that dtype: a Python number would stop wrapping at its width.
+std::optional<typet> python_converter::numpy_scalar_param_type(
+  const std::string &func_name,
+  std::size_t param_index) const
+{
+  std::vector<numpy_param_call_site> call_sites;
+  collect_call_sites(*ast_json, "", call_sites);
+  std::optional<typet> resolved;
+  for (const numpy_param_call_site &site : call_sites)
+  {
+    const nlohmann::json &call = *site.call;
+    if (
+      call.value("func", nlohmann::json::object()).value("id", "") != func_name)
+      continue;
+    if (!call.contains("args") || call["args"].size() <= param_index)
+      return std::nullopt;
+    const auto read = numpy_narrow_read_type(
+      call["args"][param_index], site.enclosing_function);
+    if (!read || (resolved && *resolved != *read))
+      return std::nullopt;
+    resolved = read;
+  }
+  return resolved;
+}
+
+static std::optional<std::size_t>
+parameter_index(const nlohmann::json &function_node, const std::string &name)
+{
+  const nlohmann::json &params = function_node["args"]["args"];
+  std::optional<std::size_t> found;
+  for (std::size_t i = 0; i < params.size(); ++i)
+    if (params[i].value("arg", "") == name)
+      found = i;
+  return found;
+}
+
+std::optional<typet> python_converter::numpy_scalar_of_returned(
+  const nlohmann::json &function_node,
+  const nlohmann::json &value) const
+{
+  const std::string kind = value.value("_type", "");
+  if (kind == "Name")
+  {
+    const auto index = parameter_index(function_node, value.value("id", ""));
+    return index
+             ? numpy_scalar_param_type(function_node.value("name", ""), *index)
+             : std::nullopt;
+  }
+  if (kind == "BinOp" && value["op"].value("_type", "") != "Div")
+    return numpy_scalar_of_binop(function_node, value);
+  return kind == "Subscript" ? numpy_scalar_of_element(function_node, value)
+                             : std::nullopt;
+}
+
+std::optional<typet> python_converter::numpy_scalar_of_binop(
+  const nlohmann::json &function_node,
+  const nlohmann::json &value) const
+{
+  const auto left = numpy_scalar_of_returned(function_node, value["left"]);
+  const auto right = numpy_scalar_of_returned(function_node, value["right"]);
+  if (left && right)
+    return *left == *right ? left : std::nullopt;
+  if (left && is_number_literal(value["right"]))
+    return left;
+  if (right && is_number_literal(value["left"]))
+    return right;
+  return std::nullopt;
+}
+
+std::optional<typet> python_converter::numpy_scalar_of_element(
+  const nlohmann::json &function_node,
+  const nlohmann::json &value) const
+{
+  std::size_t depth = 0;
+  const nlohmann::json *root = &value;
+  while (root->value("_type", "") == "Subscript")
+  {
+    if ((*root)["slice"].value("_type", "") == "Slice")
+      return std::nullopt;
+    ++depth;
+    root = &(*root)["value"];
+  }
+  const auto index = parameter_index(function_node, root->value("id", ""));
+  typet array;
+  std::set<std::string> visiting;
+  if (
+    !index || !try_infer_numpy_param_type(
+                function_node.value("name", ""), *index, array, visiting))
+    return std::nullopt;
+  return narrow_element_at_depth(array, depth);
+}
+
+void python_converter::record_numpy_scalar_return(
+  const nlohmann::json &function_node,
+  code_typet &type,
+  symbolt &function)
+{
+  if (!returns_are_synthesized(function_node))
+    return;
+  const auto scalar = numpy_scalar_return_type(function_node);
+  if (!scalar)
+    return;
+  type.return_type() = *scalar;
+  python_expr::set_function_type(function, type);
+  numpy_scalar_returns_[function_node.value("name", "")] = *scalar;
+}
+
+void python_converter::apply_numpy_scalar_param_type(
+  const std::string &arg_name,
+  bool numpy_array_param,
+  const std::string &function,
+  std::size_t index,
+  typet &arg_type) const
+{
+  if (arg_name == "self" || arg_name == "cls" || numpy_array_param)
+    return;
+  if (const auto scalar = numpy_scalar_param_type(function, index))
+    arg_type = *scalar;
+}
+
+std::optional<typet> python_converter::numpy_scalar_return_type(
+  const nlohmann::json &function_node) const
+{
+  std::optional<typet> resolved;
+  bool every_return_is_narrow = true;
+  any_return(function_node["body"], [&](const nlohmann::json &value) {
+    const auto scalar = value.is_object()
+                          ? numpy_scalar_of_returned(function_node, value)
+                          : std::nullopt;
+    if (!scalar || (resolved && *resolved != *scalar))
+      every_return_is_narrow = false;
+    resolved = scalar;
+    return false;
+  });
+  return every_return_is_narrow ? resolved : std::nullopt;
+}
+
+std::optional<typet> python_converter::numpy_elementwise_return_type(
+  const nlohmann::json &func_def) const
+{
+  const nlohmann::json *binop = elementwise_return(func_def);
+  if (!binop)
+    return std::nullopt;
+  const nlohmann::json &operand =
+    is_number_literal((*binop)["left"]) ? (*binop)["right"] : (*binop)["left"];
+  const nlohmann::json *source =
+    operand.value("_type", "") == "Name"
+      ? sole_local_numpy_literal(func_def, operand.value("id", ""))
+      : (is_numpy_array_literal_call(operand) ? &operand : nullptr);
+  std::optional<typet> type =
+    source ? literal_numpy_array_type(*source) : std::nullopt;
+  if (type && yields_float(*binop))
+    return with_element_type(*type, double_type());
+  return type;
 }
 
 std::optional<typet> python_converter::try_infer_numpy_array_arg_type(
@@ -2522,13 +2869,12 @@ std::optional<typet> python_converter::try_infer_numpy_array_arg_type(
   const nlohmann::json *callee_def =
     find_function_def(module_body, callee_func.value("id", ""));
   nlohmann::json literal_call;
-  if (
-    callee_def == nullptr ||
-    !numpy_array_literal_return(*callee_def, literal_call, type_handler_))
+  if (callee_def == nullptr)
     return std::nullopt;
+  if (!numpy_array_literal_return(*callee_def, literal_call, type_handler_))
+    return numpy_elementwise_return_type(*callee_def);
 
-  return type_handler_.get_typet(
-    numpy_literal_with_dtype(literal_call, *ast_json));
+  return literal_numpy_array_type(literal_call);
 }
 
 // True when `node` (or, recursively, any of its descendants) reads one of
@@ -3408,6 +3754,28 @@ receiver_class(const nlohmann::json &receiver, const nlohmann::json &body)
   return is_module_class(body, name) ? name : "";
 }
 
+// `func` is `Class.method`, where `method` is a `@staticmethod` of the
+// module-level `cls`, so the call passes no `self`.
+static bool is_static_method_call(
+  const nlohmann::json &func,
+  const nlohmann::json &module_body,
+  const std::string &cls,
+  const std::string &method)
+{
+  if (
+    func.value("_type", "") != "Attribute" ||
+    func.value("attr", "") != method ||
+    func["value"].value("_type", "") != "Name" || func["value"]["id"] != cls)
+    return false;
+  const nlohmann::json *def = find_method_def(module_body, cls, method);
+  if (def == nullptr)
+    return false;
+  for (const auto &decorator : (*def)["decorator_list"])
+    if (decorator.value("id", "") == "staticmethod")
+      return true;
+  return false;
+}
+
 // Whether `call` calls the callee `callee` names, and how many parameters
 // the call does not pass: `self` for a method or a constructor.
 static std::optional<std::size_t> callee_parameter_offset(
@@ -3423,6 +3791,10 @@ static std::optional<std::size_t> callee_parameter_offset(
              : std::nullopt;
   const std::string cls = callee.substr(0, dot);
   const std::string method = callee.substr(dot + 1);
+  if (
+    method != "__init__" &&
+    is_static_method_call(func, module_body, cls, method))
+    return 0;
   const bool matches =
     method == "__init__"
       ? func.value("_type", "") == "Name" && func.value("id", "") == cls
@@ -4175,14 +4547,16 @@ references_name(const nlohmann::json &node, const std::string &param_name)
   return false;
 }
 
-// Safe only as a `Compare` (always bool); anything else, e.g. `v + v`, may
-// itself evaluate to a tagged value the fixed return type can't hold.
+// Safe as a `Compare` (always bool) or as the parameter itself, which the
+// function then returns tagged. Anything else, e.g. `v + v`, may itself
+// evaluate to a tagged value the fixed return type can't hold.
 static bool return_value_safe_for_tagged_param(
   const nlohmann::json &value,
   const std::string &param_name)
 {
-  return !references_name(value, param_name) ||
-         value.value("_type", std::string()) == "Compare";
+  const std::string kind = value.value("_type", std::string());
+  return !references_name(value, param_name) || kind == "Compare" ||
+         (kind == "Name" && value.value("id", std::string()) == param_name);
 }
 
 // True if some `return` statement anywhere in 'body' would be unsafe once
@@ -4209,6 +4583,52 @@ static bool any_return_unsafe_for_tagged_param(
         return true;
   }
   return false;
+}
+
+// Counts the value-carrying returns in `body` that are the bare parameter and
+// those that are anything else.
+static void count_param_returns(
+  const nlohmann::json &body,
+  const std::string &param_name,
+  size_t &bare,
+  size_t &other)
+{
+  if (!body.is_array())
+    return;
+  for (const auto &stmt : body)
+  {
+    if (!stmt.is_object())
+      continue;
+    if (
+      stmt.value("_type", std::string()) == "Return" &&
+      stmt.contains("value") && !stmt["value"].is_null())
+    {
+      const nlohmann::json &value = stmt["value"];
+      const bool is_param = value.value("_type", std::string()) == "Name" &&
+                            value.value("id", std::string()) == param_name;
+      (is_param ? bare : other)++;
+    }
+    for (const char *key : {"body", "orelse"})
+      if (stmt.contains(key))
+        count_param_returns(stmt[key], param_name, bare, other);
+  }
+}
+
+// Tagging `param_name` would leak into the fixed return type of `func_def`.
+// Returning the parameter itself is safe only when nothing else is returned
+// and the parameter is never rebound, so the return type is simply the tag.
+static bool tagged_param_return_unsafe(
+  const nlohmann::json &func_def,
+  const std::string &param_name)
+{
+  if (!func_def.contains("body"))
+    return false;
+  if (any_return_unsafe_for_tagged_param(func_def["body"], param_name))
+    return true;
+  size_t bare = 0;
+  size_t other = 0;
+  count_param_returns(func_def["body"], param_name, bare, other);
+  return bare > 0 && (other > 0 || count_bindings(func_def, param_name) > 1);
 }
 
 // `C.__init__` plus the same name for every module class that reaches it
@@ -4249,53 +4669,203 @@ static std::vector<std::string> constructor_callees(
   return callees;
 }
 
+// A call with the function and class it sits in.
+struct call_context
+{
+  const nlohmann::json *call;
+  const nlohmann::json *function;
+  std::string cls;
+};
+
+static void collect_call_contexts(
+  const nlohmann::json &node,
+  const nlohmann::json *function,
+  const std::string &cls,
+  std::vector<call_context> &out)
+{
+  if (node.is_array())
+  {
+    for (const auto &elem : node)
+      collect_call_contexts(elem, function, cls, out);
+    return;
+  }
+  if (!node.is_object())
+    return;
+
+  const std::string type = node.value("_type", "");
+  if (type == "Call")
+    out.push_back({&node, function, cls});
+  if (type == "FunctionDef")
+    function = &node;
+  std::string next_cls = cls;
+  if (type == "ClassDef")
+  {
+    function = nullptr;
+    next_cls = node.value("name", "");
+  }
+  for (auto it = node.begin(); it != node.end(); ++it)
+    if (it.value().is_object() || it.value().is_array())
+      collect_call_contexts(it.value(), function, next_cls, out);
+}
+
+// The call is a statement of its function's own body, so it runs on every
+// path. A conditional base constructor leaves the attributes it sets unset on
+// the other paths, and a read of one would raise AttributeError.
+static bool runs_on_every_path(const call_context &site)
+{
+  if (site.function == nullptr)
+    return false;
+  for (const auto &stmt : (*site.function)["body"])
+    if (
+      stmt.value("_type", "") == "Expr" && stmt.contains("value") &&
+      &stmt["value"] == site.call)
+      return true;
+  return false;
+}
+
+static bool is_super_init_call(const nlohmann::json &call)
+{
+  const nlohmann::json &func = call.value("func", nlohmann::json());
+  return func.value("attr", "") == "__init__" && func.contains("value") &&
+         func["value"].value("_type", "") == "Call" &&
+         func["value"]["func"].value("id", "") == "super";
+}
+
+static bool derives_from(
+  const nlohmann::json &module_body,
+  const std::string &cls,
+  const std::string &base)
+{
+  for (const auto &stmt : module_body)
+    if (stmt.value("_type", "") == "ClassDef" && stmt.value("name", "") == cls)
+      for (const auto &parent : stmt["bases"])
+        if (parent.value("_type", "") == "Name" && parent["id"] == base)
+          return true;
+  return false;
+}
+
+// What `super().__init__(...)` passes for parameter `param_index` of
+// `base.__init__`, when the class around the call derives from `base`.
+static const nlohmann::json *super_init_argument(
+  const call_context &site,
+  const nlohmann::json &module_body,
+  const std::string &base,
+  size_t param_index)
+{
+  if (
+    !is_super_init_call(*site.call) || param_index < 1 ||
+    !runs_on_every_path(site) || !derives_from(module_body, site.cls, base) ||
+    site.call->value("args", nlohmann::json::array()).size() < param_index)
+    return nullptr;
+  return &(*site.call)["args"][param_index - 1];
+}
+
+// The argument `site` passes for parameter `param_index` of `callee`.
+static const nlohmann::json *site_argument(
+  const call_context &site,
+  const nlohmann::json &module_body,
+  const std::string &callee,
+  size_t param_index)
+{
+  if (
+    const nlohmann::json *arg =
+      call_site_argument(*site.call, module_body, callee, param_index))
+    return arg;
+  const std::string suffix = ".__init__";
+  const bool constructor =
+    callee.size() > suffix.size() &&
+    callee.compare(callee.size() - suffix.size(), suffix.size(), suffix) == 0;
+  return constructor ? super_init_argument(
+                         site,
+                         module_body,
+                         callee.substr(0, callee.size() - suffix.size()),
+                         param_index)
+                     : nullptr;
+}
+
+// `f` for a function, `C.m` for a method, as callee names are spelt.
+static std::string callee_name_of(const call_context &site)
+{
+  const std::string name = site.function->value("name", "");
+  return site.cls.empty() ? name : site.cls + "." + name;
+}
+
+// Tagging the parameter could leak into an already-fixed return type (e.g.
+// `return v + v`).
+static bool tagging_leaks_into_return(
+  const nlohmann::json &module_body,
+  const std::string &callee,
+  const std::string &param_name)
+{
+  const nlohmann::json *func_def = find_callee_def(module_body, callee);
+  return func_def != nullptr &&
+         tagged_param_return_unsafe(*func_def, param_name);
+}
+
 bool python_converter::try_infer_dynamic_param_type(
   const std::string &callee,
   const std::string &param_name,
   size_t param_index) const
 {
+  std::set<std::string> visiting;
+  return infer_dynamic_param_forwarded(
+    callee, param_name, param_index, visiting);
+}
+
+bool python_converter::infer_dynamic_param_forwarded(
+  const std::string &callee,
+  const std::string &param_name,
+  size_t param_index,
+  std::set<std::string> &visiting) const
+{
   const nlohmann::json &module_body = (*ast_json)["body"];
 
-  // Refuse when tagging this param could leak into an already-fixed
-  // return type (e.g. `return v + v`).
-  const nlohmann::json *func_def = find_callee_def(module_body, callee);
-  if (
-    func_def != nullptr && func_def->contains("body") &&
-    any_return_unsafe_for_tagged_param((*func_def)["body"], param_name))
+  if (tagging_leaks_into_return(module_body, callee, param_name))
     return false;
 
-  std::vector<numpy_param_call_site> call_sites;
-  collect_call_sites(*ast_json, "", call_sites);
+  const std::string key = callee + "#" + std::to_string(param_index);
+  if (!visiting.insert(key).second)
+    return false;
 
-  auto scope_body_for =
-    [&](const numpy_param_call_site &site) -> const nlohmann::json * {
-    if (site.enclosing_function.empty())
-      return &module_body;
-    const nlohmann::json *enclosing_def =
-      find_function_def(module_body, site.enclosing_function);
-    return enclosing_def == nullptr ? nullptr : &(*enclosing_def)["body"];
-  };
+  std::vector<call_context> call_sites;
+  collect_call_contexts(module_body, nullptr, "", call_sites);
+  const nlohmann::json callables = kind_module_body();
 
-  const nlohmann::json callables = callable_function_stubs();
-  auto diverges_at_site =
-    [&](const nlohmann::json &value_node, const numpy_param_call_site &site) {
-      if (value_node.value("_type", "") != "Name")
-        return false;
-      const nlohmann::json *scope_body = scope_body_for(site);
-      return scope_body != nullptr &&
-             dynamic_type_handler_.scope_assigns_divergent_literal_types(
-               value_node.value("id", ""), *scope_body, callables);
+  // A parameter of the call's own function that is tagged in turn.
+  auto forwards_tagged_param =
+    [&](const nlohmann::json &arg, const call_context &site) {
+      const std::string name = arg.value("id", "");
+      const auto &params = (*site.function)["args"]["args"];
+      for (size_t i = 0; i < params.size(); ++i)
+        if (params[i].value("arg", "") == name)
+          return count_bindings(*site.function, name) <= 1 &&
+                 infer_dynamic_param_forwarded(
+                   callee_name_of(site), name, i, visiting);
+      return false;
     };
 
+  auto diverges_at_site =
+    [&](const nlohmann::json &value_node, const call_context &site) {
+      if (value_node.value("_type", "") != "Name")
+        return false;
+      const nlohmann::json &scope_body =
+        site.function == nullptr ? module_body : (*site.function)["body"];
+      return dynamic_type_handler_.scope_assigns_divergent_literal_types(
+               value_node.value("id", ""), scope_body, callables) ||
+             (site.function != nullptr &&
+              forwards_tagged_param(value_node, site));
+    };
+
+  bool tagged = false;
   for (const std::string &name : constructor_callees(module_body, callee))
-    for (const numpy_param_call_site &site : call_sites)
+    for (const call_context &site : call_sites)
     {
       const nlohmann::json *arg =
-        call_site_argument(*site.call, module_body, name, param_index);
-      if (arg != nullptr && diverges_at_site(*arg, site))
-        return true;
+        site_argument(site, module_body, name, param_index);
+      tagged = tagged || (arg != nullptr && diverges_at_site(*arg, site));
     }
-  return false;
+  visiting.erase(key);
+  return tagged;
 }
 
 std::optional<typet> python_converter::try_infer_bytes_param_size(
@@ -4735,6 +5305,13 @@ std::string python_converter::numpy_view_callee_of(const nlohmann::json &call)
   return func.value("_type", "") == "Name" ? func.value("id", "") : "";
 }
 
+/// `self` and `cls` name the receiver only inside a class (#9660).
+static bool
+names_class_receiver(const std::string &arg_name, const std::string &class_name)
+{
+  return (arg_name == "self" || arg_name == "cls") && !class_name.empty();
+}
+
 size_t python_converter::register_function_argument(
   const nlohmann::json &element,
   code_typet &type,
@@ -4750,7 +5327,7 @@ size_t python_converter::register_function_argument(
   std::string arg_name = element["arg"].get<std::string>();
   typet arg_type;
 
-  if (arg_name == "self" || arg_name == "cls")
+  if (names_class_receiver(arg_name, current_class_name_))
     arg_type = gen_pointer_type(type_handler_.get_typet(current_class_name_));
   else
   {
@@ -4812,6 +5389,12 @@ size_t python_converter::register_function_argument(
       numpy_array_param = true;
     }
   }
+  apply_numpy_scalar_param_type(
+    arg_name,
+    numpy_array_param,
+    id.get_function(),
+    type.arguments().size(),
+    arg_type);
   reject_if_symbolic_shape_param(
     numpy_array_param,
     arg_type,
@@ -5518,11 +6101,52 @@ void python_converter::reject_incompatible_numpy_local_return_branches(
 // function_node["returns"] otherwise. Split out so the ternary it needs
 // doesn't add a decision point to get_function_definition itself, which is
 // already far over the complexity gate.
+// `return x[i]` as the last statement, `x` a parameter a call site passes a
+// numpy string or complex array for: the annotation of the element it returns.
+const nlohmann::json *python_converter::numpy_element_annotation(
+  const nlohmann::json &function_node) const
+{
+  static const nlohmann::json str_annotation = {
+    {"_type", "Name"}, {"id", "str"}};
+  static const nlohmann::json complex_annotation = {
+    {"_type", "Name"}, {"id", "complex"}};
+  const nlohmann::json &body = function_node["body"];
+  if (
+    is_loading_models || body.empty() ||
+    body.back().value("_type", "") != "Return")
+    return nullptr;
+  const nlohmann::json &value = body.back()["value"];
+  if (
+    !value.is_object() || value.value("_type", "") != "Subscript" ||
+    value["value"].value("_type", "") != "Name" ||
+    value["slice"].value("_type", "") == "Slice")
+    return nullptr;
+  const nlohmann::json &params = function_node["args"]["args"];
+  for (std::size_t i = 0; i < params.size(); ++i)
+  {
+    typet type;
+    std::set<std::string> visiting;
+    if (
+      params[i].value("arg", "") != value["value"].value("id", "") ||
+      !try_infer_numpy_param_type(
+        function_node.value("name", ""), i, type, visiting))
+      continue;
+    if (type_utils::is_numpy_string_array(type))
+      return &str_annotation;
+    if (type.is_array() && is_complex_type(type.subtype()))
+      return &complex_annotation;
+  }
+  return nullptr;
+}
+
 const nlohmann::json &python_converter::resolve_return_annotation_node(
   const nlohmann::json &function_node) const
 {
   static const nlohmann::json null_return_annotation = nullptr;
   const nlohmann::json &returns = function_node["returns"];
+  // A class of a module with no model says no more than no annotation.
+  if (returns.is_object() && returns.value("unmodelled_class", false))
+    return null_return_annotation;
 
   // Only bypass an annotation the annotator itself produced (absent, or
   // marked _inferred_annotation) -- an annotation the user actually wrote
@@ -5531,6 +6155,9 @@ const nlohmann::json &python_converter::resolve_return_annotation_node(
   // shape. A synthesized one also gives way to a tagged return (#8890).
   bool is_synthesized =
     returns.is_null() || returns.value("_inferred_annotation", false);
+  if (is_synthesized)
+    if (const nlohmann::json *element = numpy_element_annotation(function_node))
+      return *element;
   if (
     is_synthesized &&
     (local_var_numpy_array_return(function_node) ||
@@ -5567,6 +6194,29 @@ static bool any_return(
   return false;
 }
 
+/// The `return` statements in \p node, those of nested scopes excluded.
+static size_t count_returns(const nlohmann::json &node)
+{
+  if (node.is_array())
+  {
+    size_t count = 0;
+    for (const auto &child : node)
+      count += count_returns(child);
+    return count;
+  }
+  if (!node.is_object())
+    return 0;
+  const std::string type = node.value("_type", "");
+  if (
+    type == "FunctionDef" || type == "AsyncFunctionDef" || type == "ClassDef" ||
+    type == "Lambda")
+    return 0;
+  size_t count = type == "Return";
+  for (const auto &child : node)
+    count += count_returns(child);
+  return count;
+}
+
 bool python_converter::is_numpy_param_operand(
   const nlohmann::json &node,
   const nlohmann::json &func_def) const
@@ -5596,6 +6246,7 @@ bool python_converter::is_numpy_arithmetic_node(
     if (
       is_numpy_array_constructor_expr(node[side]) ||
       is_numpy_param_operand(node[side], func_def) ||
+      sole_local_numpy_literal(func_def, node[side].value("id", "")) ||
       is_numpy_arithmetic_node(node[side], func_def))
       return true;
   return false;
@@ -5896,6 +6547,30 @@ exprt python_converter::get_function_body_or_unsupported(
   }
 }
 
+/// Records a function whose return statements give an arithmetic result,
+/// which infer_types_from_returns takes for a double whatever the operands are.
+void python_converter::note_guessed_return(const nlohmann::json &function_node)
+{
+  std::function<bool(const nlohmann::json &)> arithmetic =
+    [&](const nlohmann::json &body) {
+      return std::any_of(body.begin(), body.end(), [&](const auto &stmt) {
+        const std::string kind = stmt["_type"];
+        const bool returns_expression = kind == "Return" &&
+                                        !stmt["value"].is_null() &&
+                                        ((stmt["value"]["_type"] == "BinOp" &&
+                                          !is_bitwise_binop(stmt["value"])) ||
+                                         stmt["value"]["_type"] == "UnaryOp");
+        return returns_expression ||
+               (stmt.contains("body") && stmt["body"].is_array() &&
+                arithmetic(stmt["body"])) ||
+               (stmt.contains("orelse") && stmt["orelse"].is_array() &&
+                arithmetic(stmt["orelse"]));
+      });
+    };
+  if (arithmetic(function_node["body"]))
+    guessed_return_functions_.insert(function_node["name"].get<std::string>());
+}
+
 void python_converter::get_function_definition(
   const nlohmann::json &function_node)
 {
@@ -5934,6 +6609,7 @@ void python_converter::get_function_definition(
 
     if (return_type == "Any")
     {
+      note_guessed_return(function_node);
       // Infer type from return statements
       TypeFlags flags = infer_types_from_returns(function_node["body"]);
 
@@ -6157,11 +6833,17 @@ void python_converter::get_function_definition(
     }
   }
 
+  record_numpy_scalar_return(function_node, type, *added_symbol);
+
   // Save function return type for use in get_return_statements
   typet saved_func_return_type = current_func_return_type_;
   current_func_return_type_ = type.return_type();
+  const typet saved_func_dict_value_type = current_func_dict_value_type_;
+  current_func_dict_value_type_ = dict_annotation_value_type(return_node);
   const bool saved_func_annotated_int = current_func_annotated_int_;
   current_func_annotated_int_ = is_written_int_annotation(return_node);
+  const bool saved_func_single_return = current_func_single_return_;
+  current_func_single_return_ = count_returns(function_node["body"]) == 1;
 
   // Nondet stub functions (nondet_int/char/bool/float/str/complex and their
   // __VERIFIER_nondet_* aliases) are intercepted at their call sites by
@@ -6226,7 +6908,9 @@ void python_converter::get_function_definition(
 
   // Restore saved function return type (for nested function defs)
   current_func_return_type_ = saved_func_return_type;
+  current_func_dict_value_type_ = saved_func_dict_value_type;
   current_func_annotated_int_ = saved_func_annotated_int;
+  current_func_single_return_ = saved_func_single_return;
 
   // If return type is empty/unannotated, try to infer from return statements
   if (type.return_type().is_empty())

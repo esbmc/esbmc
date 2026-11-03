@@ -1,0 +1,2 @@
+regression/esbmc/vsprintf_va_list_args
+regression/esbmc/vsprintf_va_list_args_fail

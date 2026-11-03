@@ -1,0 +1,6 @@
+CORE
+main.c
+--overflow-check --no-assertions --witness-output-yaml -
+^    format_version: "2\.1"$
+^              format: "ext_c_expression"$
+^VERIFICATION FAILED$

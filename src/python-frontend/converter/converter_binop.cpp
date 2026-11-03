@@ -152,6 +152,22 @@ std::string apply_sign_flags(const std::string &s, bool plus, bool space)
   return s;
 }
 
+// str() of a bool, None or str constant, as %s renders it.
+std::optional<std::string> py_const_str(const nlohmann::json &a)
+{
+  if (a.value("_type", "") != "Constant" || !a.contains("value"))
+    return std::nullopt;
+  const nlohmann::json &v = a["value"];
+  // CPython renders bool via str(): "True"/"False", not "1"/"0".
+  if (v.is_boolean())
+    return v.get<bool>() ? "True" : "False";
+  if (v.is_null())
+    return "None";
+  if (v.is_string())
+    return v.get<std::string>();
+  return std::nullopt;
+}
+
 // Constant-fold a printf-style ``str % args`` formatting, matching CPython for
 // the supported conversions. Throws std::runtime_error for any unsupported
 // conversion, flag/width/precision, or non-constant argument, so the caller
@@ -340,15 +356,8 @@ std::string py_percent_format(
     {
       const nlohmann::json &a = next_arg();
       long long v;
-      if (
-        a.value("_type", "") == "Constant" && a.contains("value") &&
-        a["value"].is_boolean())
-        // CPython renders bool via str(): "True"/"False", not "1"/"0".
-        body = a["value"].get<bool>() ? "True" : "False";
-      else if (
-        a.value("_type", "") == "Constant" && a.contains("value") &&
-        a["value"].is_string())
-        body = a["value"].get<std::string>();
+      if (const auto str = py_const_str(a))
+        body = *str;
       else if (py_const_int(a, v))
         body = std::to_string(v);
       else
@@ -550,6 +559,89 @@ static bool has_side_effect(const exprt &e)
     if (has_side_effect(sub))
       return true;
   return false;
+}
+
+/// Whether the int of an int/float pair is \p lhs, or nullopt when the
+/// operands are no such pair or one has a side effect, which the exact
+/// comparison would evaluate twice; \p pure_reads says the side effects are
+/// reads that may repeat.
+static std::optional<bool>
+int_float_pair(const exprt &lhs, const exprt &rhs, bool pure_reads)
+{
+  auto is_int = [](const typet &t) {
+    return t.is_signedbv() || t.is_unsignedbv();
+  };
+  const bool int_lhs = is_int(lhs.type()) && rhs.type().is_floatbv();
+  if (
+    (!int_lhs && !(lhs.type().is_floatbv() && is_int(rhs.type()))) ||
+    (!pure_reads && (has_side_effect(lhs) || has_side_effect(rhs))))
+    return std::nullopt;
+  return int_lhs;
+}
+
+/// i \p rel f, given the int rounded \p down and \p up to the float type.
+static expr2tc bracketed_relation(
+  const std::string &rel,
+  const expr2tc &down,
+  const expr2tc &up,
+  const expr2tc &f)
+{
+  if (rel == "Lt")
+    return lessthan2tc(down, f);
+  if (rel == "LtE")
+    return lessthanequal2tc(up, f);
+  if (rel == "Gt")
+    return greaterthan2tc(up, f);
+  if (rel == "GtE")
+    return greaterthanequal2tc(down, f);
+  const expr2tc eq = and2tc(equality2tc(down, f), equality2tc(up, f));
+  return rel == "Eq" ? eq : not2tc(eq);
+}
+
+/// Python compares an int with a float by exact value, so promoting the int to
+/// the float type first, which rounds it, decides `2**53 + 1 == 2.0**53`
+/// wrongly (#9359). The int rounded down and rounded up are the nearest floats
+/// on either side of it: i < f iff down < f, i <= f iff up <= f, and i == f iff
+/// both equal f. Nil when int_float_pair refuses the operands, and when
+/// promoting is already exact (a constant int the float type holds).
+expr2tc python_converter::exact_int_float_relation(
+  const std::string &op,
+  const exprt &lhs,
+  const exprt &rhs,
+  bool pure_reads)
+{
+  const std::optional<bool> int_lhs = int_float_pair(lhs, rhs, pure_reads);
+  if (!int_lhs)
+    return expr2tc();
+
+  // The relation as seen with the int on the left.
+  static const std::map<std::string, std::string> mirrored = {
+    {"Lt", "Gt"},
+    {"LtE", "GtE"},
+    {"Gt", "Lt"},
+    {"GtE", "LtE"},
+    {"Eq", "Eq"},
+    {"NotEq", "NotEq"}};
+  const auto it = mirrored.find(op);
+  if (it == mirrored.end())
+    return expr2tc();
+
+  expr2tc i, f;
+  migrate_expr(*int_lhs ? lhs : rhs, i);
+  migrate_expr(*int_lhs ? rhs : lhs, f);
+  auto rounded = [&](ieee_floatt::rounding_modet rm) {
+    return typecast2tc(
+      f->type, i, constant_int2tc(get_int32_type(), BigInt(rm)));
+  };
+  const expr2tc down = rounded(ieee_floatt::ROUND_TO_MINUS_INF);
+  const expr2tc up = rounded(ieee_floatt::ROUND_TO_PLUS_INF);
+  expr2tc down_value = down, up_value = up;
+  simplify(down_value);
+  simplify(up_value);
+  if (is_constant_floatbv2t(down_value) && down_value == up_value)
+    return expr2tc();
+
+  return bracketed_relation(*int_lhs ? op : it->second, down, up, f);
 }
 
 static exprt *find_subexpr(exprt &e, const exprt &what)
@@ -861,15 +953,41 @@ void python_converter::refuse_tagged_boolop_operand(const exprt &operand) const
       "used is not yet supported");
 }
 
+exprt python_converter::boolop_string_truthiness(
+  const exprt &value,
+  const locationt &location)
+{
+  exprt cond = apply_string_truthiness(value, location);
+  // A str parameter may hold None, which is false; strlen must not read it.
+  if (!cond.is_boolean() || !value.type().is_pointer())
+    return cond;
+  expr2tc value2, cond2;
+  migrate_expr(value, value2);
+  migrate_expr(cond, cond2);
+  exprt guarded = migrate_expr_back(
+    and2tc(notequal2tc(value2, gen_zero(value2->type)), cond2));
+  guarded.location() = location;
+  return guarded;
+}
+
+// A chained comparison's own bindings are planted in each operand's block.
+void python_converter::reject_walrus_in_boolop(const nlohmann::json &element)
+{
+  const bool own_bindings = std::exchange(lowering_chained_compare_, false);
+  if (
+    !own_bindings && element.contains("values") &&
+    contains_named_expr(element["values"]))
+    throw std::runtime_error(
+      "Walrus operator ':=' in a boolean (and/or) operand is not supported");
+}
+
 exprt python_converter::get_logical_operator_expr(const nlohmann::json &element)
 {
   // `and`/`or` short-circuit: a later operand may not execute. get_named_expr
   // emits a walrus binding unconditionally, so a walrus inside any operand
   // would bind even when Python would skip it. Refuse with a clean diagnostic
   // rather than return an unsound verdict.
-  if (element.contains("values") && contains_named_expr(element["values"]))
-    throw std::runtime_error(
-      "Walrus operator ':=' in a boolean (and/or) operand is not supported");
+  reject_walrus_in_boolop(element);
 
   std::string op(element["op"]["_type"].get<std::string>());
   exprt logical_expr(
@@ -904,7 +1022,8 @@ exprt python_converter::get_logical_operator_expr(const nlohmann::json &element)
       return cond;
     }
 
-    return value_expr;
+    return boolop_string_truthiness(
+      value_expr, get_location_from_decl(element));
   };
 
   // Mark that we're processing operands in an expression context
@@ -1260,6 +1379,11 @@ exprt python_converter::handle_chained_comparisons_logic(
         op1 = typecast_exprt(op1, op2.type());
       else if (op2.type().is_pointer() && is_integer(op1.type()))
         op2 = typecast_exprt(op2, op1.type());
+      if (const expr2tc exact = exact_int_float_relation(op, op1, op2); exact)
+      {
+        conjuncts.push_back(migrate_expr_back(exact));
+        continue;
+      }
       exprt logical_expr(
         python_frontend::map_operator(op, bool_type()), bool_type());
       logical_expr.copy_to_operands(op1, op2);
@@ -1649,14 +1773,25 @@ exprt python_converter::handle_membership_operator(
 // inside a clause, which is a specification rather than code. A lambda body
 // is converted while the enclosing block is current, so its guard goes into a
 // statement expression evaluated with the division (#8889).
-bool python_converter::needs_zero_division_guard(
+//
+// A negative shift count raises a catchable ValueError the same way.
+static bool is_shift_op(const std::string &op)
+{
+  return op == "LShift" || op == "RShift";
+}
+
+bool python_converter::needs_operand_guard(
   const std::string &op,
   const exprt &rhs) const
 {
-  if (op != "Div" && op != "FloorDiv" && op != "Mod")
+  if (is_shift_op(op))
+  {
+    if (!rhs.type().is_signedbv())
+      return false;
+  }
+  else if (op != "Div" && op != "FloorDiv" && op != "Mod")
     return false;
-
-  if (
+  else if (
     !rhs.type().is_signedbv() && !rhs.type().is_unsignedbv() &&
     !rhs.type().is_floatbv())
     return false;
@@ -1664,29 +1799,60 @@ bool python_converter::needs_zero_division_guard(
   return !in_rhs_type_probe_ && !in_contract_clause_;
 }
 
+/// `is` between two tagged values holds when their payloads are one object.
+/// A differing payload proves nothing, since CPython may share an int or str
+/// between two objects, so that path reports an unsupported property, which
+/// the SV-COMP wrapper reads as unknown. The assertion is neither an assume
+/// nor a False answer.
+exprt python_converter::tagged_identity_by_payload(
+  const std::string &op,
+  const exprt &lhs,
+  const exprt &rhs,
+  const nlohmann::json &element)
+{
+  if (!can_emit_runtime_guard())
+    return nil_exprt();
+  const typet payload = pointer_typet(empty_typet());
+  code_assertt check(
+    python_expr::build_equal(
+      python_expr::build_member(lhs, "value", payload),
+      python_expr::build_member(rhs, "value", payload)));
+  check.location() = get_location_from_decl(element);
+  check.location().user_provided(true);
+  check.location().comment(
+    "Unsupported: 'is' between two dynamically-typed values that are not "
+    "known to be one object");
+  current_block->copy_to_operands(check);
+  return migrate_expr_back(op == "Is" ? gen_true_expr() : gen_false_expr());
+}
+
 /// `is` between a tagged value and a name whose identity the tag cannot
 /// affect. A tag holds only a number or a str, so it is never a class or a def,
-/// and a name is identical to itself. Between two other values `is` on numbers
-/// or strs is up to CPython's interning, so those stay unfolded.
+/// and a name is identical to itself. Between two tags it follows the payload.
 exprt python_converter::fold_tagged_identity(
   const std::string &op,
   const exprt &lhs,
   const exprt &rhs,
   const nlohmann::json &left,
-  const nlohmann::json &right)
+  const nlohmann::json &right,
+  const nlohmann::json &element)
 {
   const bool lhs_tagged = type_handler_.is_tagged_scalar_type(lhs.type());
+  const bool both_tagged =
+    lhs_tagged && type_handler_.is_tagged_scalar_type(rhs.type());
+  const bool same_name = left.value("_type", "") == "Name" &&
+                         right.value("_type", "") == "Name" &&
+                         left["id"] == right["id"];
+  if (both_tagged && !same_name)
+    return tagged_identity_by_payload(op, lhs, rhs, element);
+
   const nlohmann::json &other = lhs_tagged ? right : left;
   if (other.value("_type", "") != "Name")
     return nil_exprt();
 
   bool same = false;
-  if (lhs_tagged && type_handler_.is_tagged_scalar_type(rhs.type()))
-  {
-    if (left.value("_type", "") != "Name" || left["id"] != right["id"])
-      return nil_exprt();
+  if (both_tagged)
     same = true;
-  }
   else
   {
     const std::string name = other["id"].get<std::string>();
@@ -1734,7 +1900,7 @@ exprt python_converter::handle_tagged_scalar_binop(
   if (op == "Is" || op == "IsNot")
   {
     if (
-      exprt folded = fold_tagged_identity(op, lhs, rhs, left, right);
+      exprt folded = fold_tagged_identity(op, lhs, rhs, left, right, element);
       folded.is_not_nil())
       return folded;
     const auto &other =
@@ -1829,16 +1995,6 @@ exprt python_converter::get_right_operand_expr(
                                                  : get_expr(right);
 }
 
-static void
-reject_numpy_string_membership(const std::string &op, const exprt &rhs)
-{
-  if (
-    (op == "In" || op == "NotIn") &&
-    type_utils::is_numpy_string_array(rhs.type()))
-    throw std::runtime_error(
-      "TypeError: membership in a numpy string array is not supported");
-}
-
 // An exponent named by a variable bound once to a small int constant is that
 // constant, so `2 ** n` is an int as `2 ** 3` is (#8944). A larger one would
 // overflow an int anyway and keeps the pow() path.
@@ -1861,7 +2017,7 @@ exprt python_converter::once_bound_exponent(
 
 exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
 {
-  if (std::optional<exprt> bound = try_bound_method_compare(element))
+  if (std::optional<exprt> bound = try_lowered_compare(element))
     return *bound;
 
   // Extract left and right operands from AST
@@ -1898,6 +2054,7 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
     lhs = numpy_param_as_array(lhs);
     rhs = numpy_param_as_array(rhs);
   }
+  numpy_view_operands_as_arrays(element, left, right, lhs, rhs);
 
   // Resolve dictionary subscript types for proper comparison
   dict_handler_->resolve_dict_subscript_types(left, right, lhs, rhs);
@@ -1991,6 +2148,87 @@ bool python_converter::may_rebind_left(
   return left.value("_type", "") == "Name" && calls_user_code(right);
 }
 
+std::optional<exprt>
+python_converter::try_lowered_compare(const nlohmann::json &element)
+{
+  std::optional<exprt> bound = try_numpy_dtype_compare(element);
+  if (!bound)
+    bound = try_numpy_string_membership(element);
+  if (!bound)
+    bound = try_bound_method_compare(element);
+  return bound ? bound : try_chained_compare_with_call(element);
+}
+
+// A call inside a larger comparator: the pairs convert the term separately, and
+// only a term that is itself a call is bound for both of them.
+static bool has_call_in_expression(const nlohmann::json &comparator)
+{
+  return comparator.value("_type", "") != "Call" && contains_call(comparator);
+}
+
+// `a < g + bump() < c` as `a < (t := g + bump()) and t < c`: each term runs
+// once, in order, and only if the pairs before it held. An and/or operand
+// plants the binding in its own block, which keeps that short-circuit.
+std::optional<exprt>
+python_converter::try_chained_compare_with_call(const nlohmann::json &element)
+{
+  if (
+    element.value("_type", "") != "Compare" ||
+    element["comparators"].size() < 2 || in_rhs_type_probe_ ||
+    contains_named_expr(element) ||
+    std::none_of(
+      element["comparators"].begin(),
+      element["comparators"].end(),
+      has_call_in_expression))
+    return std::nullopt;
+  if (!can_emit_operand_statement() || conditional_expr_depth_ != 0)
+    throw std::runtime_error(
+      "TypeError: a call inside a term of a chained comparison where nothing "
+      "can be bound first, such as a loop condition, is not supported");
+  const nlohmann::json pairs = chained_compare_as_pairs(element);
+  lowering_chained_compare_ = true;
+  return get_expr(pairs);
+}
+
+nlohmann::json
+python_converter::chained_compare_as_pairs(const nlohmann::json &element)
+{
+  const nlohmann::json &comparators = element["comparators"];
+  nlohmann::json previous =
+    element["left"].value("_type", "") == "Constant"
+      ? element["left"]
+      : bind_to_fresh_name(element["left"], "ESBMC_chained_");
+  nlohmann::json pairs = nlohmann::json::array();
+  for (std::size_t i = 0; i < comparators.size(); ++i)
+  {
+    nlohmann::json term = comparators[i];
+    nlohmann::json next = term;
+    if (term.value("_type", "") != "Constant")
+    {
+      next = {
+        {"_type", "Name"},
+        {"id", "ESBMC_chained_" + std::to_string(++nditer_counter_)},
+        {"ctx", {{"_type", "Store"}}}};
+      copy_location_fields_from_decl(comparators[i], next);
+      term = {{"_type", "NamedExpr"}, {"target", next}, {"value", term}};
+      copy_location_fields_from_decl(comparators[i], term);
+      next["ctx"] = {{"_type", "Load"}};
+    }
+    nlohmann::json pair = {
+      {"_type", "Compare"},
+      {"left", previous},
+      {"ops", nlohmann::json::array({element["ops"][i]})},
+      {"comparators", nlohmann::json::array({term})}};
+    copy_location_fields_from_decl(element, pair);
+    pairs.push_back(pair);
+    previous = next;
+  }
+  nlohmann::json all = {
+    {"_type", "BoolOp"}, {"op", {{"_type", "And"}}}, {"values", pairs}};
+  copy_location_fields_from_decl(element, all);
+  return all;
+}
+
 // Python reads the left operand before it runs a call in the right one,
 // which may rebind what the left operand reads (`g + bump()`).
 exprt python_converter::snapshot_left_operand(
@@ -2003,14 +2241,9 @@ exprt python_converter::snapshot_left_operand(
   // that cannot fail is taken out of it.
   const bool safe = lhs.is_symbol() || is_in_bounds_constant_index(lhs) ||
                     conditional_expr_depth_ == 0;
-  // An and/or operand after the first plants its statements in a block of its
-  // own, which runs only where the operand is evaluated.
-  const bool can_emit =
-    can_emit_runtime_guard() || (in_operand_effects_block_ && current_block &&
-                                 safe_to_emit_side_effecting_statement());
   if (
-    !can_emit || !is_read_ahead_type(type) || !safe || lhs.is_constant() ||
-    !may_rebind_left(left, lhs, right))
+    !can_emit_operand_statement() || !is_read_ahead_type(type) || !safe ||
+    lhs.is_constant() || !may_rebind_left(left, lhs, right))
     return lhs;
   exprt value = lhs;
   if (value.is_function_call())
@@ -2092,7 +2325,7 @@ exprt python_converter::checked_erased_int(
   // Only a value that can come from sources of different known kinds can be
   // anything but the int the cast below assumes.
   value_kinds kinds(*ast_json);
-  if (!kinds.diverges(node, kinds.scope_of(current_func_name_)))
+  if (!kinds.may_be_non_number(node, kinds.scope_of(current_func_name_)))
     return operand;
 
   const locationt location = get_location_from_decl(element);
@@ -2123,6 +2356,19 @@ exprt python_converter::checked_erased_int(
   current_block->copy_to_operands(check);
   return operand;
 }
+
+// A None operand outside `str % None`, which is formatting, not arithmetic.
+static bool
+is_none_arithmetic(const std::string &op, const exprt &lhs, const exprt &rhs)
+{
+  return (lhs.type() == none_type() || rhs.type() == none_type()) &&
+         !(op == "Mod" && type_utils::is_string_type(lhs.type()));
+}
+
+static void reject_opaque_array_operator(
+  const std::string &op,
+  const typet &lhs,
+  const typet &rhs);
 
 exprt python_converter::get_binary_operator_expr(
   const nlohmann::json &element,
@@ -2167,7 +2413,7 @@ exprt python_converter::get_binary_operator_expr(
 
   guard_none_typed_container(op, rhs, element);
 
-  if (lhs.type() == none_type() || rhs.type() == none_type())
+  if (is_none_arithmetic(op, lhs, rhs))
   {
     // A direct call like `f() is None` arrives as code_function_callt — a
     // statement, not a value. Promote to side_effect_expr_function_callt so
@@ -2188,6 +2434,8 @@ exprt python_converter::get_binary_operator_expr(
   attach_symbol_location(lhs, symbol_table());
   attach_symbol_location(rhs, symbol_table());
   type_untyped_nondet_operand(op, lhs, rhs);
+  if (const auto compared = numpy_equality_result(op, element, lhs, rhs))
+    return *compared;
 
   // Python rule: cross-type `==`/`!=` returns False/True without coercion,
   // except within the numeric tower (bool/int/float/complex). Fold here, before
@@ -2297,7 +2545,6 @@ exprt python_converter::get_binary_operator_expr(
     return dict_result;
 
   // Handle membership operators
-  reject_numpy_string_membership(op, rhs);
   if (op == "In")
     return handle_membership_operator(lhs, rhs, element, false);
   if (op == "NotIn")
@@ -2321,7 +2568,10 @@ exprt python_converter::get_binary_operator_expr(
   // Intercept complex arithmetic/comparison before generic binary expression
   // building, which cannot operate directly on struct operands.
   if (is_complex_type(lhs.type()) || is_complex_type(rhs.type()))
+  {
+    hoist_complex_view_reads(lhs, rhs);
     return complex_handler_.handle_binary_op(op, lhs, rhs, element);
+  }
 
   // Python ``str % args`` is string formatting, not numeric modulo. The generic
   // arithmetic path builds ``str_ptr % int``, mistypes the result, and crashes
@@ -2368,13 +2618,11 @@ exprt python_converter::get_binary_operator_expr(
       left, args, mapping, percent_arg_types(right, rhs));
   }
 
-  // Handle array/string operations
-  if (lhs.type().is_array() || rhs.type().is_array())
-  {
-    exprt result = handle_array_operations(op, lhs, rhs, left, right, element);
-    if (!result.is_nil())
-      return result;
-  }
+  // Handle numpy scalar and array/string operations
+  const exprt array_result =
+    numpy_or_array_operation(op, lhs, rhs, left, right, element);
+  if (!array_result.is_nil())
+    return array_result;
 
   // Handle dictionary comparison
   if (
@@ -2558,7 +2806,8 @@ exprt python_converter::get_binary_operator_expr(
       return t.is_pointer() && t.subtype().id() == "empty";
     };
     auto is_string_like = [](const typet &t) {
-      return (t.is_array() || t.is_pointer()) && t.subtype() == char_type();
+      return (t.is_array() || t.is_pointer()) &&
+             type_utils::is_char_storage(t.subtype());
     };
     const bool lhs_void = is_void_ptr(lhs.type());
     const bool rhs_void = is_void_ptr(rhs.type());
@@ -2638,8 +2887,8 @@ exprt python_converter::get_binary_operator_expr(
     if (is_any_ptr(lhs) && is_any_ptr(rhs))
     {
       const typet int_type = type_handler_.get_typet("int", 0);
-      lhs = typecast_exprt(lhs, int_type);
-      rhs = typecast_exprt(rhs, int_type);
+      lhs = typecast_exprt(checked_erased_int(lhs, left, element), int_type);
+      rhs = typecast_exprt(checked_erased_int(rhs, right, element), int_type);
     }
     else if (is_any_ptr(lhs) && is_integer(rhs))
       lhs = typecast_exprt(checked_erased_int(lhs, left, element), rhs.type());
@@ -2722,9 +2971,6 @@ exprt python_converter::get_binary_operator_expr(
   if (op == "Pow" || op == "power")
     return math_handler_.handle_power(lhs, once_bound_exponent(right, rhs));
 
-  if (op == "Mod" && (lhs.type().is_floatbv() || rhs.type().is_floatbv()))
-    return math_handler_.handle_modulo(lhs, rhs, element);
-
   if (type_utils::is_relational_op(op))
   {
     const locationt loc = get_location_from_decl(element);
@@ -2743,16 +2989,16 @@ exprt python_converter::get_binary_operator_expr(
       return fallback;
   }
 
-  return build_division_guarded_binop(op, lhs, rhs, element);
+  return build_guarded_binop(op, lhs, rhs, element);
 }
 
-exprt python_converter::build_division_guarded_binop(
+exprt python_converter::build_guarded_binop(
   const std::string &op,
   exprt lhs,
   exprt rhs,
   const nlohmann::json &element)
 {
-  if (!needs_zero_division_guard(op, rhs))
+  if (!needs_operand_guard(op, rhs))
     return build_arithmetic_binop(op, lhs, rhs, element);
 
   // An and/or tail, a chained-comparison tail or a while test is evaluated
@@ -2775,13 +3021,26 @@ exprt python_converter::build_division_guarded_binop(
   lhs = hoist_side_effecting_operand(lhs, element, "$div_lhs$");
   rhs = hoist_side_effecting_operand(rhs, element, "$div_rhs$");
 
-  exprt is_zero("=", bool_type());
-  is_zero.copy_to_operands(rhs, gen_zero(rhs.type()));
-  emit_guarded_raise(
-    is_zero,
-    "ZeroDivisionError",
-    "division by zero",
-    get_location_from_decl(element));
+  if (is_shift_op(op))
+  {
+    exprt is_negative("<", bool_type());
+    is_negative.copy_to_operands(rhs, gen_zero(rhs.type()));
+    emit_guarded_raise(
+      is_negative,
+      "ValueError",
+      "negative shift count",
+      get_location_from_decl(element));
+  }
+  else
+  {
+    exprt is_zero("=", bool_type());
+    is_zero.copy_to_operands(rhs, gen_zero(rhs.type()));
+    emit_guarded_raise(
+      is_zero,
+      "ZeroDivisionError",
+      "division by zero",
+      get_location_from_decl(element));
+  }
   current_block = saved_block;
 
   exprt result = build_arithmetic_binop(op, lhs, rhs, element);
@@ -2804,6 +3063,9 @@ exprt python_converter::build_arithmetic_binop(
   exprt rhs,
   const nlohmann::json &element)
 {
+  if (op == "Mod" && (lhs.type().is_floatbv() || rhs.type().is_floatbv()))
+    return math_handler_.handle_modulo(lhs, rhs, element);
+
   // Build the binary expression
   exprt bin_expr = build_binary_expression(op, lhs, rhs);
 
@@ -2817,7 +3079,7 @@ exprt python_converter::build_arithmetic_binop(
 
   // Python integer modulo `%` is floored (result takes the sign of the
   // divisor), unlike C's truncated remainder. Correct it for integer operands;
-  // float `%` was already handled above via handle_modulo.
+  // float `%` was already handled above.
   if (
     op == "Mod" && (lhs.type().is_signedbv() || lhs.type().is_unsignedbv()) &&
     (rhs.type().is_signedbv() || rhs.type().is_unsignedbv()))
@@ -2929,13 +3191,18 @@ exprt python_converter::build_bytes_concat(const exprt &lhs, const exprt &rhs)
 }
 
 // Complex arrays are stored and indexed; no arithmetic over them is modelled.
-static void reject_complex_array_arithmetic(const exprt &lhs, const exprt &rhs)
+// Over complex numbers only the four operations have a NumPy rule modelled
+// here.
+static void reject_unmodelled_complex_operator(
+  const std::string &op,
+  const typet &result_leaf)
 {
   if (
-    type_utils::is_numpy_complex_array(lhs.type()) ||
-    type_utils::is_numpy_complex_array(rhs.type()))
+    is_complex_type(result_leaf) && op != "Add" && op != "Sub" &&
+    op != "Mult" && op != "Div")
     throw std::runtime_error(
-      "TypeError: arithmetic on a numpy complex array is not supported");
+      "TypeError: numpy element-wise '" + op +
+      "' over complex numbers is not supported");
 }
 
 static exprt cast_to(const exprt &value, const typet &type)
@@ -2945,12 +3212,15 @@ static exprt cast_to(const exprt &value, const typet &type)
 
 static bool is_numeric_scalar_type(const typet &type)
 {
-  return type.is_signedbv() || type.is_unsignedbv() || type.is_floatbv();
+  return type.is_signedbv() || type.is_unsignedbv() || type.is_floatbv() ||
+         is_complex_type(type);
 }
 
 // Characters are 8-bit integers, as in the frontend's string arrays.
 static bool is_char_element(const typet &type)
 {
+  if (type_utils::is_numpy_numeric_element(type))
+    return false;
   return (type.is_signedbv() && to_signedbv_type(type).get_width() == 8) ||
          (type.is_unsignedbv() && to_unsignedbv_type(type).get_width() == 8);
 }
@@ -2989,19 +3259,25 @@ static typet shaped_type(const typet &leaf, const std::vector<long long> &shape)
   return type;
 }
 
-// NumPy's result dtype: true division and any float operand give float64,
-// otherwise the array's integer type.
+// The operation's result element, by the table numpy_promote applies; true
+// division of integers gives float64.
 static typet elementwise_result_type(
   const std::string &op,
-  const typet &array_elem,
-  const typet &lhs_elem,
-  const typet &rhs_elem)
+  const numpy_operandt &lhs,
+  const numpy_operandt &rhs)
 {
-  if (op == "Div")
+  const numpy_dtypet result = numpy_promote(lhs, rhs);
+  if (
+    op == "Div" &&
+    (result.is_integer() || result.kind == numpy_dtypet::kindt::boolean))
     return double_type();
-  if (lhs_elem.is_floatbv())
-    return lhs_elem;
-  return rhs_elem.is_floatbv() ? rhs_elem : array_elem;
+  if (result.kind == numpy_dtypet::kindt::floating && result.bits == 64)
+    return double_type();
+  if (
+    result.is_integer() && result.bits == 64 &&
+    result.kind == numpy_dtypet::kindt::signed_integer)
+    return long_long_int_type();
+  return result.element_type();
 }
 
 static const std::set<std::string> &bitwise_ops()
@@ -3061,9 +3337,11 @@ elementwise_shapes(const std::string &op, const exprt &lhs, const exprt &rhs)
 {
   const auto lhs_shape = operand_shape(lhs.type());
   const auto rhs_shape = operand_shape(rhs.type());
+  const bool numpy_scalar = type_utils::is_numpy_scalar_type(lhs.type()) ||
+                            type_utils::is_numpy_scalar_type(rhs.type());
   if (
     !is_elementwise_op(op) || !lhs_shape || !rhs_shape ||
-    (lhs_shape->empty() && rhs_shape->empty()))
+    (lhs_shape->empty() && rhs_shape->empty() && !numpy_scalar))
     return std::nullopt;
   return std::make_pair(*lhs_shape, *rhs_shape);
 }
@@ -3133,6 +3411,99 @@ exprt python_converter::numpy_element_op(
     equality_exprt(y, from_integer(0, type)), from_integer(0, type), raw);
 }
 
+static exprt real_part(const exprt &value)
+{
+  return complex_part(value, "real");
+}
+
+static exprt imag_part(const exprt &value)
+{
+  return complex_part(value, "imag");
+}
+
+// NumPy's complex division (Smith's algorithm), whose zero divisor gives
+// infinities and NaNs in IEEE arithmetic rather than Python's exception.
+exprt python_converter::numpy_complex_quotient(
+  const exprt &x,
+  const exprt &y,
+  const typet &dt)
+{
+  const nlohmann::json no_node;
+  const auto op = [&](const char *name, const exprt &a, const exprt &b) {
+    return numpy_element_op(name, a, b, dt);
+  };
+  const exprt a = cast_to(real_part(x), dt), b = cast_to(imag_part(x), dt);
+  const exprt c = cast_to(real_part(y), dt), d = cast_to(imag_part(y), dt);
+  const exprt abs_c = cast_to(math_handler_.handle_fabs(c, no_node), dt);
+  const exprt abs_d = cast_to(math_handler_.handle_fabs(d, no_node), dt);
+  // from_double keeps double precision whatever the type it is given.
+  const exprt one = cast_to(from_double(1.0, double_type()), dt);
+  const exprt ratio_c = op("Div", d, c);
+  const exprt scale_c = op("Div", one, op("Add", c, op("Mult", d, ratio_c)));
+  const exprt ratio_d = op("Div", c, d);
+  const exprt scale_d = op("Div", one, op("Add", d, op("Mult", c, ratio_d)));
+  const exprt c_larger = binary_relation_exprt(abs_c, ">=", abs_d);
+  const exprt zero_divisor = and_exprt(
+    equality_exprt(abs_c, gen_zero(dt)), equality_exprt(abs_d, gen_zero(dt)));
+  const exprt real = if_exprt(
+    zero_divisor,
+    op("Div", a, abs_c),
+    if_exprt(
+      c_larger,
+      op("Mult", op("Add", a, op("Mult", b, ratio_c)), scale_c),
+      op("Mult", op("Add", op("Mult", a, ratio_d), b), scale_d)));
+  const exprt imag = if_exprt(
+    zero_divisor,
+    op("Div", b, abs_c),
+    if_exprt(
+      c_larger,
+      op("Mult", op("Sub", b, op("Mult", a, ratio_c)), scale_c),
+      op("Mult", op("Sub", op("Mult", b, ratio_d), a), scale_d)));
+  return make_complex(real, imag);
+}
+
+// `x op y` for one complex element pair, rounded to the result's type.
+exprt python_converter::numpy_complex_element_op(
+  const std::string &op,
+  const exprt &lhs,
+  const exprt &rhs,
+  const typet &type)
+{
+  // complex64 computes at its component width: a double result would overflow
+  // and round where NumPy's does not.
+  const typet dt =
+    is_complex64_type(type) ? typet(float_type()) : typet(double_type());
+  const exprt x = promote_to_complex(lhs);
+  const exprt y = promote_to_complex(rhs);
+  const auto real_op = [&](const char *name, const exprt &a, const exprt &b) {
+    return numpy_element_op(name, cast_to(a, dt), cast_to(b, dt), dt);
+  };
+  // Negation is by component: a product with -1 would turn an infinity to NaN.
+  if (op == "USub" || op == "UAdd")
+    return complex_as_element(
+      real_part(complex_handler_.handle_unary_op(op, x)),
+      imag_part(complex_handler_.handle_unary_op(op, x)),
+      type);
+  exprt result;
+  if (op == "Div")
+    result = numpy_complex_quotient(x, y, dt);
+  else if (op == "Mult")
+    result = make_complex(
+      real_op(
+        "Sub",
+        real_op("Mult", real_part(x), real_part(y)),
+        real_op("Mult", imag_part(x), imag_part(y))),
+      real_op(
+        "Add",
+        real_op("Mult", real_part(x), imag_part(y)),
+        real_op("Mult", imag_part(x), real_part(y))));
+  else
+    result = make_complex(
+      real_op(op.c_str(), real_part(x), real_part(y)),
+      real_op(op.c_str(), imag_part(x), imag_part(y)));
+  return complex_as_element(real_part(result), imag_part(result), type);
+}
+
 // `lhs op rhs` into an array of `type`, row by row; a number operand is
 // applied to every element.
 exprt python_converter::numpy_elementwise(
@@ -3141,8 +3512,25 @@ exprt python_converter::numpy_elementwise(
   const exprt &rhs,
   const typet &type)
 {
+  if (is_complex_type(type))
+    return numpy_complex_element_op(op, lhs, rhs, type);
   if (!type.is_array())
-    return numpy_element_op(op, cast_to(lhs, type), cast_to(rhs, type), type);
+  {
+    // Narrow integers are computed at 64 bits and wrapped by the cast back, as
+    // the operators would otherwise promote them to `int` under the array.
+    const bool narrow =
+      (type.is_signedbv() || type.is_unsignedbv()) && bv_width(type) < 64;
+    if (!narrow)
+      return numpy_element_op(op, cast_to(lhs, type), cast_to(rhs, type), type);
+    const typet wide = long_long_int_type();
+    return typecast_exprt(
+      numpy_element_op(
+        op,
+        cast_to(cast_to(lhs, type), wide),
+        cast_to(cast_to(rhs, type), wide),
+        wide),
+      type);
+  }
   BigInt length;
   to_integer(to_array_type(type).size(), length);
   const typet index_type = size_type();
@@ -3209,6 +3597,113 @@ void python_converter::guard_negative_exponents(
     location);
 }
 
+// Whether a 64-bit scalar @p node came out of NumPy, its value bound to a name
+// at most through Python arithmetic.
+bool python_converter::is_numpy_valued_node(const nlohmann::json &node) const
+{
+  const std::string kind = node.value("_type", "");
+  if (kind == "Subscript")
+  {
+    const nlohmann::json *base = &node["value"];
+    while (base->value("_type", "") == "Subscript")
+      base = &(*base)["value"];
+    return base->value("_type", "") == "Name" &&
+           numpy_array_symbols_.count(
+             resolve_name_symbol_id(base->value("id", ""))) != 0;
+  }
+  if (kind == "Call")
+  {
+    const nlohmann::json &func = node["func"];
+    return func.value("_type", "") == "Attribute" &&
+           (is_numpy_valued_node(func["value"]) ||
+            (func["value"].value("_type", "") == "Name" &&
+             (is_imported_numpy_module_alias(
+                *ast_json, func["value"].value("id", "")) ||
+              numpy_array_symbols_.count(
+                resolve_name_symbol_id(func["value"].value("id", ""))) != 0)));
+  }
+  if (kind == "BinOp")
+    return is_numpy_valued_node(node["left"]) ||
+           is_numpy_valued_node(node["right"]);
+  if (kind != "Name")
+    return false;
+  const nlohmann::json decl = json_utils::find_var_decl(
+    node.value("id", ""), current_function_name(), *ast_json);
+  return decl.contains("value") && decl["value"].is_object() &&
+         decl["value"].value("id", "") != node.value("id", "") &&
+         is_numpy_valued_node(decl["value"]);
+}
+
+bool python_converter::is_weak_numpy_operand(
+  const nlohmann::json &node,
+  const typet &type) const
+{
+  if (type.is_array() || type_utils::is_numpy_scalar_type(type))
+    return false;
+  reject_rebound_numpy_scalar_name(node);
+  return !is_numpy_valued_node(node);
+}
+
+// NumPy raises OverflowError for a Python integer the integer result cannot
+// hold (NEP 50). Nil when the value fits or the check runs at run time.
+exprt python_converter::raise_if_outside_numpy_integer(
+  const exprt &value,
+  const typet &element,
+  const typet &result_type,
+  const locationt &location)
+{
+  const auto dtype = numpy_dtype_of_element(element);
+  if (!dtype || !dtype->is_integer() || dtype->bits == 64)
+    return nil_exprt();
+  const bool is_signed = dtype->kind == numpy_dtypet::kindt::signed_integer;
+  const BigInt span =
+    power(BigInt(2), is_signed ? dtype->bits - 1 : dtype->bits);
+  const BigInt low = is_signed ? -span : BigInt(0);
+  const std::string message =
+    "Python integer out of bounds for " + dtype->name();
+  BigInt constant;
+  if (!to_integer(value, constant))
+    return constant < low || constant >= span
+             ? raise_in_expression("OverflowError", message, result_type)
+             : exprt(nil_exprt());
+  if (!can_emit_runtime_guard())
+    throw std::runtime_error(
+      "TypeError: a Python integer operand of a narrow numpy integer is only "
+      "supported where its range check can run");
+  const typet wide = long_long_int_type();
+  const exprt wide_value = cast_to(value, wide);
+  emit_guarded_raise(
+    or_exprt(
+      binary_relation_exprt(wide_value, "<", from_integer(low, wide)),
+      binary_relation_exprt(wide_value, ">=", from_integer(span, wide))),
+    "OverflowError",
+    message,
+    location);
+  return nil_exprt();
+}
+
+// NumPy compares a narrow float with a Python float in the narrow type.
+void python_converter::cast_weak_float_compare(
+  const std::string &op,
+  exprt &lhs,
+  exprt &rhs,
+  const nlohmann::json &left,
+  const nlohmann::json &right) const
+{
+  static const std::set<std::string> comparisons = {
+    "Eq", "NotEq", "Lt", "LtE", "Gt", "GtE"};
+  if (comparisons.count(op) == 0)
+    return;
+  if (
+    lhs.type().is_floatbv() && type_utils::is_numpy_scalar_type(lhs.type()) &&
+    rhs.type().is_floatbv() && is_weak_numpy_operand(right, rhs.type()))
+    rhs = cast_to(rhs, lhs.type());
+  else if (
+    rhs.type().is_floatbv() && type_utils::is_numpy_scalar_type(rhs.type()) &&
+    lhs.type().is_floatbv() && is_weak_numpy_operand(left, lhs.type()))
+    lhs = cast_to(lhs, rhs.type());
+}
+
 // Element-wise arithmetic, `%`, `**` and bitwise operators between numeric
 // NumPy arrays and numbers, broadcast as NumPy does. Nil for any other
 // operand pair.
@@ -3216,6 +3711,8 @@ exprt python_converter::numpy_array_arithmetic(
   const std::string &op,
   const exprt &lhs,
   const exprt &rhs,
+  const nlohmann::json &left,
+  const nlohmann::json &right,
   const locationt &location)
 {
   const auto shapes = elementwise_shapes(op, lhs, rhs);
@@ -3231,12 +3728,30 @@ exprt python_converter::numpy_array_arithmetic(
       lhs.type().is_array() ? lhs.type() : rhs.type());
   const typet &lhs_leaf = leaf_type(lhs.type());
   const typet &rhs_leaf = leaf_type(rhs.type());
-  const typet result_leaf = elementwise_result_type(
-    op, lhs.type().is_array() ? lhs_leaf : rhs_leaf, lhs_leaf, rhs_leaf);
+  const numpy_operandt lhs_operand{
+    *numpy_dtype_of_element(lhs_leaf), is_weak_numpy_operand(left, lhs.type())};
+  const numpy_operandt rhs_operand{
+    *numpy_dtype_of_element(rhs_leaf),
+    is_weak_numpy_operand(right, rhs.type())};
+  const typet result_leaf =
+    elementwise_result_type(op, lhs_operand, rhs_operand);
   const typet result_type = shaped_type(result_leaf, *shape);
+  for (const auto *weak : {&lhs_operand, &rhs_operand})
+  {
+    const exprt &value = weak == &lhs_operand ? lhs : rhs;
+    if (!weak->weak || !weak->dtype.is_integer())
+      continue;
+    const exprt raised =
+      raise_if_outside_numpy_integer(value, result_leaf, result_type, location);
+    if (!raised.is_nil())
+      return raised;
+  }
+  reject_unmodelled_complex_operator(op, result_leaf);
   if (op == "Pow" && !result_leaf.is_floatbv())
     guard_negative_exponents(rhs, location);
-  if (bitwise_ops().count(op) && result_leaf.is_floatbv())
+  if (
+    bitwise_ops().count(op) &&
+    (result_leaf.is_floatbv() || is_complex_type(result_leaf)))
     return raise_in_expression(
       "TypeError",
       "ufunc '" + bitwise_ufunc(op) + "' not supported for the input types",
@@ -3259,6 +3774,194 @@ exprt python_converter::raise_in_expression(
   side_effect_exprt value("statement_expression", type);
   value.copy_to_operands(block);
   return value;
+}
+
+static const typet &leaf_of(const typet &type)
+{
+  const typet *leaf = &type;
+  while (leaf->is_array() || leaf->is_pointer())
+    leaf = &leaf->subtype();
+  return *leaf;
+}
+
+// A string array has no arithmetic, and a comparison of two complex arrays is
+// element by element, which the scalar comparison below would not read.
+static void reject_opaque_array_operator(
+  const std::string &op,
+  const typet &lhs,
+  const typet &rhs)
+{
+  static const std::set<std::string> comparisons = {
+    "Eq", "NotEq", "Lt", "LtE", "Gt", "GtE"};
+  const bool strings = type_utils::is_numpy_string_array(lhs) ||
+                       type_utils::is_numpy_string_array(rhs);
+  const bool complex = type_utils::is_numpy_complex_array(lhs) ||
+                       type_utils::is_numpy_complex_array(rhs);
+  if (strings || (complex && comparisons.count(op)))
+    throw std::runtime_error(
+      "TypeError: numpy element-wise '" + op + "' over a " +
+      (strings ? "string" : "complex") + " array is not supported");
+}
+
+static void reject_narrow_view_operand(const std::string &op, const typet &type)
+{
+  if (type.is_pointer() && type_utils::is_numpy_scalar_type(leaf_of(type)))
+    throw std::runtime_error(
+      "TypeError: numpy element-wise '" + op +
+      "' over a view of a narrow dtype is not supported");
+}
+
+static bool is_numpy_uint64(const typet &type)
+{
+  return type.is_unsignedbv() && type_utils::is_numpy_numeric_element(type) &&
+         bv_width(type) == 64;
+}
+
+static bool is_non_negative_constant(const exprt &value)
+{
+  BigInt constant;
+  return !to_integer(value, constant) && constant >= 0;
+}
+
+// uint64 is stored as such but computed like int64 once it meets anything else.
+static void reject_uint64_operator(
+  const std::string &op,
+  const exprt &lhs,
+  const exprt &rhs)
+{
+  const bool left = is_numpy_uint64(leaf_of(lhs.type()));
+  const bool right = is_numpy_uint64(leaf_of(rhs.type()));
+  if (!left && !right)
+    return;
+  if (
+    op == "LShift" || op == "RShift" ||
+    (!(left && right) && !is_non_negative_constant(lhs) &&
+     !is_non_negative_constant(rhs)))
+    throw std::runtime_error(
+      "TypeError: numpy element-wise '" + op +
+      "' mixing uint64 with another type or shifting it is not supported");
+}
+
+// Operand pairs whose NumPy semantics the 64-bit lowering does not give.
+static void reject_unmodelled_numeric_operator(
+  const std::string &op,
+  const exprt &lhs,
+  const exprt &rhs)
+{
+  reject_narrow_view_operand(op, lhs.type());
+  reject_narrow_view_operand(op, rhs.type());
+  static const std::set<std::string> no_bool_form = {
+    "Sub", "Mult", "Mod", "FloorDiv", "LShift", "RShift", "Pow"};
+  if (
+    leaf_of(lhs.type()).is_bool() && leaf_of(rhs.type()).is_bool() &&
+    no_bool_form.count(op) && (lhs.type().is_array() || rhs.type().is_array()))
+    throw std::runtime_error(
+      "TypeError: numpy element-wise '" + op +
+      "' over two bool arrays is not supported");
+  reject_uint64_operator(op, lhs, rhs);
+}
+
+// `a += b` keeps a's dtype and raises unless NumPy's same_kind rule allows it.
+static void reject_unsafe_in_place_cast(
+  const nlohmann::json &element,
+  const typet &lhs,
+  const typet &rhs)
+{
+  const auto rank = [](const typet &leaf) {
+    if (is_complex_type(leaf))
+      return 4;
+    if (leaf.is_floatbv())
+      return 3;
+    if (leaf.is_signedbv())
+      return 2;
+    return leaf.is_unsignedbv() ? 1 : 0;
+  };
+  if (
+    element.value("_type", "") == "AugAssign" && lhs.is_array() &&
+    rank(leaf_of(rhs)) > rank(leaf_of(lhs)) &&
+    (rhs.is_array() || is_complex_type(rhs)))
+    throw std::runtime_error(
+      "TypeError: an in-place numpy operation that cannot cast its result to "
+      "the array's dtype is not supported");
+}
+
+// An array a method returns does not carry the receiver's element type.
+void python_converter::reject_narrow_method_result_operands(
+  const std::string &op,
+  const exprt &lhs,
+  const exprt &rhs,
+  const nlohmann::json &left,
+  const nlohmann::json &right)
+{
+  for (const nlohmann::json *operand : {&left, &right})
+  {
+    const exprt &value = operand == &left ? lhs : rhs;
+    if (
+      !value.type().is_array() || operand->value("_type", "") != "Call" ||
+      (*operand)["func"].value("_type", "") != "Attribute" ||
+      (*operand)["func"]["value"].value("_type", "") != "Name" ||
+      !numpy_array_symbols_.count(
+        resolve_name_symbol_id((*operand)["func"]["value"].value("id", ""))))
+      continue;
+    const auto dtype = numpy_array_dtype((*operand)["func"]["value"]);
+    if (dtype && dtype->is_integer() && dtype->bits < 64)
+      throw std::runtime_error(
+        "TypeError: numpy element-wise '" + op +
+        "' over a method call on a narrow dtype is not supported");
+  }
+}
+
+std::optional<exprt> python_converter::numpy_equality_result(
+  const std::string &op,
+  const nlohmann::json &element,
+  const exprt &lhs,
+  const exprt &rhs)
+{
+  if (op != "Eq" && op != "NotEq")
+    return std::nullopt;
+  if (element.value("numpy_array_result", false))
+    if (
+      const auto compared = numpy_string_elementwise_compare(element, lhs, rhs))
+      return compared;
+  reject_opaque_array_operator(op, lhs.type(), rhs.type());
+  return std::nullopt;
+}
+
+// A read through a view stays out of the component-wise structure the complex
+// handler builds, which symex would not dereference inside an assertion.
+void python_converter::hoist_complex_view_reads(exprt &lhs, exprt &rhs)
+{
+  if (lhs.id() == "dereference")
+    lhs = hoist_numpy_element(lhs);
+  if (rhs.id() == "dereference")
+    rhs = hoist_numpy_element(rhs);
+}
+
+exprt python_converter::numpy_or_array_operation(
+  const std::string &op,
+  exprt &lhs,
+  exprt &rhs,
+  const nlohmann::json &left,
+  const nlohmann::json &right,
+  const nlohmann::json &element)
+{
+  cast_weak_float_compare(op, lhs, rhs, left, right);
+  reject_opaque_array_operator(op, lhs.type(), rhs.type());
+  reject_narrow_method_result_operands(op, lhs, rhs, left, right);
+  reject_unmodelled_numeric_operator(op, lhs, rhs);
+  reject_unsafe_in_place_cast(element, lhs.type(), rhs.type());
+  if (
+    type_utils::is_numpy_scalar_type(lhs.type()) ||
+    type_utils::is_numpy_scalar_type(rhs.type()))
+  {
+    const exprt scalar = numpy_array_arithmetic(
+      op, lhs, rhs, left, right, get_location_from_decl(element));
+    if (!scalar.is_nil())
+      return scalar;
+  }
+  if (lhs.type().is_array() || rhs.type().is_array())
+    return handle_array_operations(op, lhs, rhs, left, right, element);
+  return nil_exprt();
 }
 
 // An element-wise operator between a numeric array and an operand
@@ -3291,7 +3994,6 @@ exprt python_converter::handle_array_operations(
   const nlohmann::json &right,
   const nlohmann::json &element)
 {
-  reject_complex_array_arithmetic(lhs, rhs);
   if (!lhs.type().is_array() && !rhs.type().is_array())
   {
     if (
@@ -3336,12 +4038,7 @@ exprt python_converter::handle_array_operations(
   };
 
   auto is_char_array = [](const typet &t) {
-    if (!t.is_array())
-      return false;
-    const typet &elt = t.subtype();
-    return elt == char_type() ||
-           (elt.is_signedbv() && to_signedbv_type(elt).get_width() == 8) ||
-           (elt.is_unsignedbv() && to_unsignedbv_type(elt).get_width() == 8);
+    return t.is_array() && is_char_element(t.subtype());
   };
   auto is_list_model_type = [this](const typet &t) {
     const typet list_type = type_handler_.get_list_type();
@@ -3352,8 +4049,8 @@ exprt python_converter::handle_array_operations(
     return false;
   };
 
-  const exprt elementwise =
-    numpy_array_arithmetic(op, lhs, rhs, get_location_from_decl(element));
+  const exprt elementwise = numpy_array_arithmetic(
+    op, lhs, rhs, left, right, get_location_from_decl(element));
   if (!elementwise.is_nil())
     return elementwise;
 
@@ -3541,8 +4238,8 @@ exprt python_converter::handle_array_operations(
 }
 
 /// The strict order and equality of two tuple components that are numbers (a
-/// mixed int/float pair compares as doubles, as Python promotes int to float)
-/// or strs (by content). False for any other pair.
+/// mixed int/float pair by exact value) or strs (by content). False for any
+/// other pair.
 bool python_converter::scalar_order(
   exprt a,
   exprt b,
@@ -3556,6 +4253,10 @@ bool python_converter::scalar_order(
   };
   if (is_num(a.type()) && is_num(b.type()))
   {
+    lt = exact_int_float_relation("Lt", a, b);
+    eq = exact_int_float_relation("Eq", a, b);
+    if (lt)
+      return true;
     if (a.type() != b.type())
     {
       a = typecast_exprt(a, double_type());
@@ -3842,8 +4543,8 @@ exprt python_converter::handle_tuple_operations(
   // trips an is_signedbv assertion):
   //   (a0,a1,..) < (b0,b1,..)
   //     == a0<b0 or (a0==b0 and (a1<b1 or (a1==b1 and ...)))
-  // Components may be integer/bool/float scalars (mixed int/float promote to
-  // double, matching Python's numeric tower) or nested tuples (compared
+  // Components may be integer/bool/float scalars (a mixed int/float pair is
+  // compared by exact value, as in Python) or nested tuples (compared
   // recursively). Tuples of differing arity compare on the common prefix, with
   // the shorter tuple ordered first if the prefix is equal. Gt/LtE compare the
   // swapped operands; LtE/GtE negate the strict result. A str component
@@ -3977,18 +4678,8 @@ exprt python_converter::handle_tuple_operations(
       }
       else if (is_num(li.type()) && is_num(ri.type()))
       {
-        // Promote a mixed int/float pair to double (Python int->float).
-        // Ints >= 2^53 conflate with nearby floats under this promotion —
-        // the same documented limitation as __ESBMC_list_eq (PR #5207).
-        if (li.type() != ri.type())
-        {
-          li = typecast_exprt(li, double_type());
-          ri = typecast_exprt(ri, double_type());
-        }
-        expr2tc l2, r2;
-        migrate_expr(li, l2);
-        migrate_expr(ri, r2);
-        eq2 = equality2tc(l2, r2);
+        expr2tc lt2;
+        scalar_order(li, ri, element, lt2, eq2);
       }
       else if (li.type() == ri.type())
       {
@@ -4201,12 +4892,32 @@ exprt python_converter::handle_relational_type_mismatches(
     return handle_float_vs_string(binary_expr, op);
   }
 
-  // Float vs integer: Python promotes int to float for all comparisons.
-  // e.g., 3.0 == 3  →  3.0 == 3.0  (True)
-  if (lhs_is_float && (rhs.type().is_signedbv() || rhs.type().is_unsignedbv()))
+  return int_float_comparison(op, lhs, rhs, element);
+}
+
+/// A comparison of an int with a float, by exact value. For and/or the int is
+/// promoted to the float type instead and nil is returned, as for any other
+/// pair of operands.
+exprt python_converter::int_float_comparison(
+  const std::string &op,
+  exprt &lhs,
+  exprt &rhs,
+  const nlohmann::json &element)
+{
+  if (const expr2tc exact = exact_int_float_relation(op, lhs, rhs); exact)
+  {
+    exprt result = migrate_expr_back(exact);
+    if (element.contains("comparators") && element["comparators"].size() > 1)
+      return handle_chained_comparisons_logic(element, result);
+    return result;
+  }
+
+  auto is_int = [](const typet &t) {
+    return t.is_signedbv() || t.is_unsignedbv();
+  };
+  if (lhs.type().is_floatbv() && is_int(rhs.type()))
     rhs = typecast_exprt(rhs, lhs.type());
-  else if (
-    rhs_is_float && (lhs.type().is_signedbv() || lhs.type().is_unsignedbv()))
+  else if (rhs.type().is_floatbv() && is_int(lhs.type()))
     lhs = typecast_exprt(lhs, rhs.type());
 
   return nil_exprt();

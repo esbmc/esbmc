@@ -474,11 +474,9 @@ function_values::function_values(
 {
 }
 
-std::optional<std::vector<function_values::candidate>>
-function_values::of(const json &expr)
+const json *function_values::locate(const json &expr, chaint &found_chain)
 {
   const json *found = nullptr;
-  chaint found_chain;
   bool ambiguous = false;
   chaint chain{&module_};
   walk(module_["body"], chain, [&](const json &node, const chaint &scopes) {
@@ -488,11 +486,42 @@ function_values::of(const json &expr)
     found = &node;
     found_chain = scopes;
   });
+  return ambiguous ? nullptr : found;
+}
+
+std::optional<std::vector<function_values::candidate>>
+function_values::of(const json &expr)
+{
+  chaint chain;
+  const json *found = locate(expr, chain);
   std::vector<candidate> out;
-  if (!found || ambiguous || !resolve(*found, found_chain, out, 0))
+  if (!found || !resolve(*found, chain, out, 0))
     return std::nullopt;
   if (out.empty())
     return std::nullopt;
+  return out;
+}
+
+std::optional<std::vector<const json *>>
+function_values::parameter_arguments(const json &name)
+{
+  chaint chain;
+  const json *found = locate(name, chain);
+  std::vector<valuet> values;
+  if (
+    !found || kind(*found) != "Name" || !is_load(*found) || chain.size() != 2 ||
+    kind(*chain.back()) != "FunctionDef")
+    return std::nullopt;
+  const std::string id = found->value("id", "");
+  // Only indexed, so the def passes it to nothing that could add to it.
+  if (
+    !is_parameter(*chain.back(), id) ||
+    !every_load_is((*chain.back())["body"], id, "Subscript", "value") ||
+    !local_values(*found, chain, values))
+    return std::nullopt;
+  std::vector<const json *> out;
+  for (const valuet &value : values)
+    out.push_back(value.first);
   return out;
 }
 

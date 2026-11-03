@@ -1,0 +1,4 @@
+CORE
+main.py
+
+^ERROR: except with a dotted/attribute exception type is not supported$

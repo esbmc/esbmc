@@ -654,6 +654,11 @@ set(_slow_regression_tests
     # powerset_fail reaches VERIFICATION FAILED since #8537 but takes 91-124s
     # on the DebugOpt Linux runner, so the 120s cap kills it intermittently.
     "regression/quixbugs/powerset_fail"
+    # Both verify with the expected verdict but slowed 2.5-5x after #9294
+    # (#9516): 44s to over 120s and 101-116s on the DebugOpt Linux runner, so
+    # the 120s cap kills them intermittently on unrelated PRs.
+    "regression/esbmc-cpp/cpp/vector_reserve_realloc_nested"
+    "regression/esbmc/github_1352"
     # depth_first_search_fail builds a small Node graph and recurses over each
     # node's `successors` list. Under the object-model migration (#3067) every
     # instance is a heap Class* and a Class* read out of a list into a recursive

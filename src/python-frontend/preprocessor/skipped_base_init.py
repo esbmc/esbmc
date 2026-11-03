@@ -1,10 +1,11 @@
 """Refuse a read of an attribute only a skipped base `__init__` sets (#8844).
 
-When a class defines `__init__` without calling its base's, an attribute that
-only the base `__init__` sets is missing on its instances, and reading it
-raises AttributeError. The converter lays out one struct per class with every
-inherited attribute, so the read gets a value instead. Such a program is
-refused at the class's instantiation when the attribute is read anywhere.
+When a class defines `__init__` without calling its base's on every path, an
+attribute that only the base `__init__` sets is missing on its instances, and
+reading it raises AttributeError. The converter lays out one struct per class
+with every inherited attribute, so the read gets a value instead. Such a
+program is refused at the class's instantiation when the attribute is read
+anywhere.
 """
 
 import ast
@@ -27,10 +28,28 @@ def _init(cls):
                 None)
 
 
-def _calls_an_init(fn):
-    return any(
-        isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute) and n.func.attr == "__init__"
-        for n in ast.walk(fn))
+def _is_init_call(stmt):
+    return (isinstance(stmt, ast.Expr) and isinstance(stmt.value, ast.Call)
+            and isinstance(stmt.value.func, ast.Attribute) and stmt.value.func.attr == "__init__")
+
+
+def _returns(stmt):
+    return not isinstance(stmt, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)) and any(
+        isinstance(n, ast.Return) for n in ast.walk(stmt))
+
+
+def _always_calls_an_init(body):
+    """Whether `body` calls an `__init__` or raises before it can return, on
+    every path (#9308)."""
+    for stmt in body:
+        if _is_init_call(stmt) or isinstance(stmt, ast.Raise):
+            return True
+        if (isinstance(stmt, ast.If) and _always_calls_an_init(stmt.body)
+                and _always_calls_an_init(stmt.orelse)):
+            return True
+        if _returns(stmt):
+            return False
+    return False
 
 
 def _ancestors(cls, classes):
@@ -54,7 +73,7 @@ def _missing_attributes(cls, classes, outside_stores):
     """Attributes only a base `__init__` that `cls` skips would set."""
     init = _init(cls)
     ancestors = _ancestors(cls, classes)
-    if init is None or _calls_an_init(init) or not ancestors:
+    if init is None or _always_calls_an_init(init.body) or not ancestors:
         return set()
     from_bases = set()
     for parent in ancestors:
@@ -100,7 +119,7 @@ def refuse_skipped_base_init(module, module_name):
         attr = sorted(missing)[0]
         exc = NotImplementedError(
             f"unsupported: '{name}.__init__' does not call the base __init__ that sets "
-            f"'{attr}', so reading '{attr}' on a '{name}' instance raises AttributeError, "
-            "which is not modelled")
+            f"'{attr}' on every path, so reading '{attr}' on a '{name}' instance raises "
+            "AttributeError, which is not modelled")
         exc.esbmc_location = (module_name, calls[0].lineno, calls[0].col_offset)
         raise exc

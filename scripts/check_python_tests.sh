@@ -38,6 +38,10 @@ ignored_dirs=(
   "bytes_param_harness_backing_fail"
   # --function harness: CPython never calls f, so the _fail half exits 0.
   "harness_bytes_param_len_bound_fail"
+  # `import importlib` exposes importlib.machinery only when something, such
+  # as a site .pth hook, imported it at startup, so CPython may not raise.
+  "github_9161_submodule_base_fail"
+  "github_9204_submodule_fail"
   "len_bytes_alias_dispatch"
   "len_bytes_alias_dispatch_fail"
   "decimal"

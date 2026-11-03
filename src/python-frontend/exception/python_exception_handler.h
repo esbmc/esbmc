@@ -91,6 +91,11 @@ public:
     const nlohmann::json &type_node,
     codet &block);
 
+  // Class named by a raise's exception expression read at @p use, or "" when
+  // unknown.
+  std::string
+  raised_class_name(const nlohmann::json &exc, const nlohmann::json &use) const;
+
   // -----------------------------------------------------------------------
   // Assertion helpers (previously python_converter private methods)
   // -----------------------------------------------------------------------
@@ -160,6 +165,14 @@ private:
   /// builtin exceptions: a struct holding the message pointer.
   exprt
   build_builtin_exception(const nlohmann::json &exc, const typet &type) const;
+
+  /// The class name in `module.Class` read at @p use, or empty unless the
+  /// receiver is bound only by `import` of one module, imported at the top of
+  /// the file before @p use, and that module's class is the program's only
+  /// binding of the name.
+  std::string module_class_name(
+    const nlohmann::json &node,
+    const nlohmann::json &use) const;
 
   /// True when `raise <exc>` names a variable holding an exception instance
   /// rather than an exception class.

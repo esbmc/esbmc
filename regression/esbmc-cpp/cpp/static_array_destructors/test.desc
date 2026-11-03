@@ -1,0 +1,4 @@
+CORE
+main.cpp
+--memory-leak-check --std c++17
+^VERIFICATION SUCCESSFUL$

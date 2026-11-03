@@ -5,6 +5,7 @@
 #include <cfloat>
 #include <cmath>
 #include <map>
+#include <numbers>
 #include <set>
 #include <stdexcept>
 
@@ -30,7 +31,7 @@ struct math_spec
 
 const std::map<std::string, math_spec> &specs()
 {
-  static const double pi = M_PI, half_pi = M_PI_2;
+  static const double pi = std::numbers::pi, half_pi = pi / 2;
   static const std::map<std::string, math_spec> table = {
     {"exp", {-inf, inf, 0.0, inf, {}, false}},
     {"log", {DBL_TRUE_MIN, inf, -inf, inf, {}, false, {}, 0.0}},

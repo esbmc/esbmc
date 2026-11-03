@@ -1554,6 +1554,16 @@ void goto_convertt::convert_assign(
       abort();
     }
 
+    if (options.get_bool_option("validate-violation-witness"))
+    {
+      // Witness return waypoints are applied to the call's return temporary.
+      remove_function_call(rhs, dest, true);
+      code_assignt assignment(lhs, rhs);
+      assignment.location() = code.location();
+      convert_assign(assignment, dest);
+      return;
+    }
+
     Forall_operands (it, rhs)
       remove_sideeffects(*it, dest);
 

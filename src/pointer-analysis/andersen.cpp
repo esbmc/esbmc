@@ -71,15 +71,20 @@ bool may_carry_pointer(const type2tc &t)
 
 /// Whether an object of this type can hold an address: anything that can hold
 /// a pointer, and an integer, which CIL-style code uses for every field access
-/// (`*(T *)((unsigned long)p + off)`), including inside an aggregate.
+/// (`*(T *)((unsigned long)p + off)`), including inside an aggregate. A
+/// floating-point value converts back to the address it was built from too.
 bool may_hold_address(const type2tc &t)
 {
   if (is_nil_type(t))
     return false;
-  if (may_carry_pointer(t) || is_bv_type(t) || is_bool_type(t))
+  if (
+    may_carry_pointer(t) || is_bv_type(t) || is_bool_type(t) ||
+    is_fractional_type(t))
     return true;
   if (is_array_type(t))
     return may_hold_address(to_array_type(t).subtype);
+  if (is_vector_type(t))
+    return may_hold_address(to_vector_type(t).subtype);
   if (is_struct_type(t) || is_union_type(t))
   {
     const std::vector<type2tc> &members =
@@ -499,6 +504,7 @@ void andersent::solve()
   // The nondet sentinel is inert; see nondet_object_name.
   const node_id *found = find_node(nondet_object_expr());
   const node_id nondet = found ? *found : TOP;
+  std::vector<bool> addressed(pts.size(), false);
 
   while (!worklist.empty())
   {
@@ -508,36 +514,22 @@ void andersent::solve()
 
     // Snapshot: resolving a dereference through n can grow pts[n] itself.
     const std::unordered_set<node_id> targets = pts[n];
-    const bool anywhere = targets.count(TOP) != 0;
+
+    // A pointer that may point anywhere reaches every object whose address
+    // the program forms, so each one holds what is stored through it.
+    for (node_id o : targets)
+      if (o != TOP && o != nondet && !addressed[o])
+      {
+        addressed[o] = true;
+        if (add_copy_edge(TOP, o))
+          enqueue(o);
+      }
 
     for (node_id p : loads[n]) // p = *n
-    {
-      // There are no nameable objects "inside" TOP to draw an edge from, so a
-      // load through a may-point-anywhere pointer yields an unknown value.
-      if (anywhere && pts[p].insert(TOP).second)
-        enqueue(p);
-
-      for (node_id o : targets)
-        if (o == nondet)
-        {
-          if (pts[p].insert(o).second)
-            enqueue(p);
-        }
-        else if (o != TOP && add_copy_edge(o, p))
-          enqueue(p);
-    }
+      propagate_load(p, targets, nondet, enqueue);
 
     for (node_id q : stores[n]) // *n = q
-    {
-      // Symmetrically, a store through such a pointer writes to an unknown
-      // object; pts[TOP] is the conservative sink.
-      if (anywhere && join(TOP, q))
-        enqueue(TOP);
-
-      for (node_id o : targets)
-        if (o != TOP && o != nondet && add_copy_edge(q, o))
-          enqueue(o);
-    }
+      propagate_store(q, targets, nondet, enqueue);
 
     for (node_id m : copy_edges[n])
       if (join(m, n))
@@ -545,6 +537,43 @@ void andersent::solve()
   }
 
   solved = true;
+}
+
+void andersent::propagate_load(
+  node_id p,
+  const std::unordered_set<node_id> &targets,
+  node_id nondet,
+  const std::function<void(node_id)> &enqueue)
+{
+  // There are no nameable objects "inside" TOP to draw an edge from, so a
+  // load through a may-point-anywhere pointer yields an unknown value.
+  if (targets.count(TOP) && pts[p].insert(TOP).second)
+    enqueue(p);
+
+  for (node_id o : targets)
+    if (o == nondet)
+    {
+      if (pts[p].insert(o).second)
+        enqueue(p);
+    }
+    else if (o != TOP && add_copy_edge(o, p))
+      enqueue(p);
+}
+
+void andersent::propagate_store(
+  node_id q,
+  const std::unordered_set<node_id> &targets,
+  node_id nondet,
+  const std::function<void(node_id)> &enqueue)
+{
+  // A store through such a pointer writes to an unknown object: pts[TOP]
+  // collects it for the objects that may be addressed through it.
+  if (targets.count(TOP) && join(TOP, q))
+    enqueue(TOP);
+
+  for (node_id o : targets)
+    if (o != TOP && o != nondet && add_copy_edge(q, o))
+      enqueue(o);
 }
 
 const std::unordered_set<andersent::node_id> &
@@ -721,7 +750,8 @@ andersent::node_id andersent::eval_value(const expr2tc &r, unsigned loc)
     is_symbol2t(base) || is_dynamic_object2t(base))
     return get_node(base);
 
-  if (is_bv_type(r->type) || is_bool_type(r->type))
+  if (
+    is_bv_type(r->type) || is_bool_type(r->type) || is_fractional_type(r->type))
     return eval_integer(r, loc);
 
   if (
@@ -729,10 +759,20 @@ andersent::node_id andersent::eval_value(const expr2tc &r, unsigned loc)
     is_constant_array2t(r) || is_constant_array_of2t(r))
     return eval_constant_aggregate(r, loc);
 
-  // Anything else is a value this frontend does not model.  Leaving the set
-  // empty would be an unsound under-approximation; TOP is the safe answer.
+  return opaque(r, loc);
+}
+
+andersent::node_id andersent::opaque(const expr2tc &r, unsigned loc)
+{
+  // A value this frontend does not model.  Leaving the set empty would be an
+  // unsound under-approximation; TOP is the safe answer.  The addresses its
+  // operands hold still enter the set, so a store through TOP reaches them.
   const node_id t = fresh_node();
   points_to_top(t);
+  r->foreach_operand([this, t, loc](const expr2tc &op) {
+    if (!is_nil_expr(op))
+      add_constraint(constraint_kindt::COPY, t, eval_rhs(op, loc));
+  });
   return t;
 }
 
@@ -820,7 +860,7 @@ void andersent::handle_assign(
   if (!may_hold_address(lhs->type))
   {
     if (mentions_pointer(r))
-      assign_top(lhs, loc);
+      assign_node(lhs, opaque(r, loc), loc);
     return;
   }
   if (!may_carry_pointer(lhs->type) && is_constant_int2t(r))
@@ -1021,9 +1061,20 @@ void andersent::handle_other(const expr2tc &code, unsigned loc)
 
 void andersent::collect_constraints(const goto_functionst &goto_functions)
 {
+  // Code the entry point never reaches cannot write anything; a linked model
+  // such as pthread_lib.c would otherwise store through TOP in every program.
+  // Without an entry point every body counts.
+  const bool has_entry =
+    goto_functions.function_map.count(goto_functions.main_id()) != 0;
+  const auto reachable = has_entry
+                           ? reachable_functions(goto_functions)
+                           : std::unordered_set<irep_idt, irep_id_hash>();
+
   forall_goto_functions (f_it, goto_functions)
   {
-    if (!f_it->second.body_available)
+    if (
+      !f_it->second.body_available ||
+      (has_entry && !reachable.count(f_it->first)))
       continue;
 
     forall_goto_program_instructions (i_it, f_it->second.body)
@@ -1118,6 +1169,27 @@ void andersent::get_values(locationt l, const expr2tc &expr, valuest &dest)
     else
       dest.push_back(
         object_descriptor2tc(obj->type, obj, gen_zero(index_type2()), 0));
+    return;
+  }
+
+  // A load `*q` has no node of its own: it holds what the objects q points to
+  // hold, as the LOAD rule in solve() gives it.
+  if (const expr2tc base = base_object(e); is_dereference2t(base))
+  {
+    valuest objects;
+    get_values(l, to_dereference2t(base).value, objects);
+    for (const expr2tc &v : objects)
+    {
+      const expr2tc object = is_object_descriptor2t(v)
+                               ? to_object_descriptor2t(v).object
+                               : expr2tc();
+      if (is_nil_expr(object))
+        dest.push_back(unknown2tc(pointer_type2()));
+      else if (is_nondet_object(object))
+        dest.push_back(v);
+      else
+        get_values(l, object, dest);
+    }
     return;
   }
 

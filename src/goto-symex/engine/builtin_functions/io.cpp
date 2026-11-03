@@ -16,22 +16,36 @@
 #include <functional>
 #include <util/expr/array2string.h>
 
-bool goto_symext::recover_va_list_args(
-  const code_printf2t &call,
-  size_t fmt_idx,
-  std::list<expr2tc> &out)
+static bool takes_va_list(printf_kindt kind)
 {
-  switch (call.kind)
+  // Exhaustive over printf_kindt (no default) so a future va_list kind must
+  // be classified here rather than silently inheriting the direct-call default.
+  switch (kind)
   {
   case printf_kindt::VPRINTF:
   case printf_kindt::VFPRINTF:
   case printf_kindt::VSPRINTF:
   case printf_kindt::VSNPRINTF:
   case printf_kindt::VASPRINTF:
-    break;
-  default:
+    return true;
+  case printf_kindt::PRINTF:
+  case printf_kindt::FPRINTF:
+  case printf_kindt::DPRINTF:
+  case printf_kindt::SPRINTF:
+  case printf_kindt::SNPRINTF:
+  case printf_kindt::ASPRINTF:
     return false;
   }
+  return false;
+}
+
+bool goto_symext::recover_va_list_args(
+  const code_printf2t &call,
+  size_t fmt_idx,
+  std::list<expr2tc> &out)
+{
+  if (!takes_va_list(call.kind))
+    return false;
 
   // Every v* signature takes the va_list as its last operand, right after
   // the format string.
@@ -195,29 +209,19 @@ bool goto_symext::recover_va_list_args(
   return true;
 }
 
-static bool is_literal_string_start(const expr2tc &e)
+std::vector<expr2tc>
+goto_symext::printf_args(const code_printf2t &call, size_t fmt_idx)
 {
-  if (is_typecast2t(e))
-    return is_literal_string_start(to_typecast2t(e).from);
-  if (!is_address_of2t(e))
-    return false;
-  const expr2tc &obj = to_address_of2t(e).ptr_obj;
-  if (is_constant_string2t(obj))
-    return true;
-  return is_index2t(obj) &&
-         is_constant_string2t(to_index2t(obj).source_value) &&
-         is_constant_int2t(to_index2t(obj).index) &&
-         to_constant_int2t(to_index2t(obj).index).value.is_zero();
-}
-
-// One past a printf-family call's last argument operand. A v* call's arguments
-// sit behind its va_list, its last operand; leaving it out makes any
-// conversion that needs an argument unbounded.
-static size_t printf_args_end(const code_printf2t &call)
-{
-  const bool takes_va_list =
-    call.kind == printf_kindt::VSPRINTF || call.kind == printf_kindt::VSNPRINTF;
-  return call.operands.size() - (takes_va_list ? 1 : 0);
+  // A v* call's arguments sit behind its va_list, its last operand. When they
+  // cannot be recovered, a conversion that needs one is unbounded.
+  if (
+    call.kind == printf_kindt::VSPRINTF || call.kind == printf_kindt::VSNPRINTF)
+  {
+    std::list<expr2tc> recovered;
+    recover_va_list_args(call, fmt_idx, recovered);
+    return {recovered.begin(), recovered.end()};
+  }
+  return {call.operands.begin() + fmt_idx + 1, call.operands.end()};
 }
 
 bool goto_symext::format_printf_output(
@@ -233,11 +237,9 @@ bool goto_symext::format_printf_output(
     return false;
 
   constant_args = true;
-  const size_t end = printf_args_end(call);
   std::list<expr2tc> args;
-  for (size_t i = fmt_idx + 1; i < end; i++)
+  for (expr2tc arg : printf_args(call, fmt_idx))
   {
-    expr2tc arg = call.operands[i];
     cur_state->rename(arg);
     do_simplify(arg);
     constant_args &= is_constant_int2t(arg) || is_literal_string_start(arg);
@@ -305,13 +307,19 @@ static expr2tc integer_length(
   return digits_length(typecast2tc(target, v), base, max_len);
 }
 
-// Skip the '-' and '0' flags and read the field width of the conversion at
-// `i`, false when the width is past what a sprintf call stores. The flags
-// only choose the padding (C11 7.21.6.1p4).
-static bool parse_field_width(const std::string &f, size_t &i, size_t &width)
+// Read the '-' and '0' flags and the field width of the conversion at `i`,
+// false when the width is past what a sprintf call stores. The flags only
+// choose the padding (C11 7.21.6.1p4).
+static bool parse_field_width(
+  const std::string &f,
+  size_t &i,
+  size_t &width,
+  bool &left,
+  bool &zero)
 {
+  left = zero = false;
   while (i < f.size() && (f[i] == '-' || f[i] == '0'))
-    i++;
+    (f[i++] == '-' ? left : zero) = true;
   width = 0;
   while (i < f.size() && std::isdigit((unsigned char)f[i]))
     if ((width = width * 10 + (f[i++] - '0')) > max_stored_output)
@@ -335,7 +343,164 @@ static expr2tc pad_to_width(
   return if2tc(len->type, lessthan2tc(len, min_len), min_len, len);
 }
 
-expr2tc goto_symext::string_length(const expr2tc &ptr, size_t &max_len)
+// The character an output field prints at a position below its length, as
+// an int; empty when only the field's length is known.
+using printf_charst = std::function<expr2tc(const expr2tc &)>;
+
+static expr2tc select_char(
+  const expr2tc &pos,
+  const std::vector<expr2tc> &by_pos,
+  const expr2tc &otherwise)
+{
+  expr2tc out = otherwise;
+  for (size_t k = by_pos.size(); k-- > 0;)
+    out = if2tc(
+      out->type,
+      equality2tc(pos, constant_int2tc(pos->type, BigInt(k))),
+      by_pos[k],
+      out);
+  return out;
+}
+
+static printf_charst text_chars(const std::string &text)
+{
+  std::vector<expr2tc> by_pos;
+  for (const char c : text)
+    by_pos.push_back(constant_int2tc(int_type2(), BigInt((unsigned char)c)));
+  return [by_pos](const expr2tc &pos) {
+    return select_char(pos, by_pos, gen_zero(int_type2()));
+  };
+}
+
+// The digit characters of the unsigned `mag` in `base`, least significant
+// first, `count` of them.
+static std::vector<expr2tc>
+digit_chars(const expr2tc &mag, unsigned base, char conv, size_t count)
+{
+  const type2tc pos_type = int_type2();
+  const type2tc &utype = mag->type;
+  const unsigned shift = base == 8 ? 3 : base == 16 ? 4 : 0;
+  std::vector<expr2tc> digits;
+  BigInt place = 1;
+  for (size_t k = 0; k < count; k++, place *= base)
+  {
+    expr2tc d = shift
+                  ? bitand2tc(
+                      utype,
+                      lshr2tc(utype, mag, constant_int2tc(utype, k * shift)),
+                      constant_int2tc(utype, BigInt(base - 1)))
+                  : modulus2tc(
+                      utype,
+                      div2tc(utype, mag, constant_int2tc(utype, place)),
+                      constant_int2tc(utype, BigInt(base)));
+    d = typecast2tc(pos_type, d);
+    expr2tc c = add2tc(pos_type, d, constant_int2tc(pos_type, BigInt('0')));
+    if (base == 16)
+      c = if2tc(
+        pos_type,
+        lessthan2tc(d, constant_int2tc(pos_type, BigInt(10))),
+        c,
+        add2tc(
+          pos_type,
+          d,
+          constant_int2tc(pos_type, BigInt((conv == 'X' ? 'A' : 'a') - 10))));
+    digits.push_back(c);
+  }
+  return digits;
+}
+
+// What an integer conversion prints for `v`, already converted to the
+// conversion's type, padded to `width` with spaces on the left, zeros after
+// the sign (`zero`) or spaces on the right (`left`) (C11 7.21.6.1p6, p8).
+static printf_charst
+integer_chars(expr2tc v, char conv, bool left, bool zero, size_t width)
+{
+  if (v->type->get_width() < int_type2()->get_width())
+    v = typecast2tc(int_type2(), v);
+  const type2tc pos_type = int_type2();
+  const type2tc utype = get_uint_type(v->type->get_width());
+  const unsigned base = conv == 'o' ? 8 : conv == 'x' || conv == 'X' ? 16 : 10;
+  const expr2tc neg =
+    is_signedbv_type(v) ? lessthan2tc(v, gen_zero(v->type)) : gen_false_expr();
+  const expr2tc as_unsigned = typecast2tc(utype, v);
+  const expr2tc mag =
+    if2tc(utype, neg, neg2tc(utype, as_unsigned), as_unsigned);
+  size_t max_digits = 0;
+  const expr2tc digits_len = digits_length(mag, base, max_digits);
+  const std::vector<expr2tc> digits = digit_chars(mag, base, conv, max_digits);
+
+  const expr2tc one = gen_one(pos_type), nought = gen_zero(pos_type);
+  const expr2tc sign = if2tc(pos_type, neg, one, nought);
+  const expr2tc core = add2tc(pos_type, sign, digits_len);
+  const expr2tc w = constant_int2tc(pos_type, BigInt(width));
+  const expr2tc pad =
+    if2tc(pos_type, lessthan2tc(core, w), sub2tc(pos_type, w, core), nought);
+  const bool zeros = zero && !left;
+  const expr2tc sign_at = left || zeros ? nought : pad;
+  const expr2tc first = left ? sign : add2tc(pos_type, pad, sign);
+  const expr2tc filler = constant_int2tc(pos_type, BigInt(zeros ? '0' : ' '));
+  return [=](const expr2tc &pos) {
+    const expr2tc after_first = sub2tc(pos_type, pos, first);
+    const expr2tc place_of =
+      sub2tc(pos_type, sub2tc(pos_type, digits_len, one), after_first);
+    const expr2tc in_digits = and2tc(
+      greaterthanequal2tc(after_first, nought),
+      lessthan2tc(after_first, digits_len));
+    return if2tc(
+      pos_type,
+      and2tc(neg, equality2tc(pos, sign_at)),
+      constant_int2tc(pos_type, BigInt('-')),
+      if2tc(
+        pos_type, in_digits, select_char(place_of, digits, filler), filler));
+  };
+}
+
+// The most output characters stored as exact values rather than unknown
+// nonzero ones; each costs a selection over every field.
+static const size_t max_exact_output = 64;
+
+// The `max_len` characters of `char_type` the fields print one after another,
+// or none unless each field's characters are known.
+static std::vector<expr2tc> output_chars(
+  const std::vector<std::pair<expr2tc, printf_charst>> &fields,
+  size_t max_len,
+  const type2tc &char_type)
+{
+  std::vector<expr2tc> chars;
+  if (
+    max_len > max_exact_output ||
+    !std::all_of(fields.begin(), fields.end(), [](const auto &field) {
+      return bool(field.second);
+    }))
+    return chars;
+  const type2tc pos_type = int_type2();
+  for (size_t i = 0; i < max_len; i++)
+  {
+    const expr2tc pos = constant_int2tc(pos_type, BigInt(i));
+    std::vector<std::pair<expr2tc, expr2tc>> cases;
+    expr2tc start = gen_zero(pos_type);
+    for (const auto &[field_len, field_chars] : fields)
+    {
+      const expr2tc rel = sub2tc(pos_type, pos, start);
+      cases.emplace_back(
+        and2tc(
+          greaterthanequal2tc(rel, gen_zero(pos_type)),
+          lessthan2tc(rel, field_len)),
+        field_chars(rel));
+      start = add2tc(pos_type, start, field_len);
+    }
+    expr2tc c = gen_zero(pos_type);
+    for (size_t k = cases.size(); k-- > 0;)
+      c = if2tc(pos_type, cases[k].first, cases[k].second, c);
+    chars.push_back(typecast2tc(char_type, c));
+  }
+  return chars;
+}
+
+expr2tc goto_symext::string_length(
+  const expr2tc &ptr,
+  size_t &max_len,
+  std::function<expr2tc(const expr2tc &)> *chars)
 {
   expr2tc object;
   uint64_t offset, avail;
@@ -368,14 +533,125 @@ expr2tc goto_symext::string_length(const expr2tc &ptr, size_t &max_len)
       constant_int2tc(len_type, BigInt(k)),
       len);
   max_len += avail - 1;
+  if (chars && is_true(points_here))
+    *chars = [object, offset, elem](const expr2tc &pos) {
+      return typecast2tc(
+        int_type2(),
+        index2tc(
+          elem,
+          object,
+          add2tc(
+            size_type2(), gen_ulong(offset), typecast2tc(size_type2(), pos))));
+    };
   return is_true(points_here) ? len
                               : if2tc(len_type, points_here, len, unknown);
+}
+
+void goto_symext::claim_nul_terminated(const expr2tc &ptr)
+{
+  expr2tc object;
+  uint64_t offset, avail;
+  if (
+    !memcmp_resolve_operand(ptr, 0, object, offset, avail) ||
+    avail > max_stored_output || !is_array_type(object) ||
+    !is_byte_type(to_array_type(object->type).subtype))
+    return;
+  expr2tc points_here = internal_deref_items.front().guard;
+  cur_state->rename(points_here);
+
+  const type2tc &elem = to_array_type(object->type).subtype;
+  expr2tc terminated = gen_false_expr();
+  for (uint64_t k = 0; k < avail; k++)
+    terminated = or2tc(
+      terminated,
+      equality2tc(
+        index2tc(elem, object, gen_ulong(offset + k)), gen_zero(elem)));
+  claim(
+    implies2tc(points_here, terminated),
+    "printf %s argument is not NUL-terminated within its object");
+}
+
+// Only a direct call's operands are its arguments; a v* call passes a va_list.
+static bool printf_args_are_direct(printf_kindt kind)
+{
+  switch (kind)
+  {
+  case printf_kindt::VPRINTF:
+  case printf_kindt::VFPRINTF:
+  case printf_kindt::VSPRINTF:
+  case printf_kindt::VSNPRINTF:
+  case printf_kindt::VASPRINTF:
+    return false;
+  default:
+    return true;
+  }
+}
+
+void goto_symext::check_printf_pointer_arg(
+  printf_kindt kind,
+  char spec,
+  bool reads_to_nul,
+  const expr2tc &arg)
+{
+  if (spec != 's' && spec != 'p')
+    return;
+  if (!is_pointer_type(arg->type))
+    claim(
+      gen_false_expr(),
+      spec == 's' ? "printf format specifier %s requires pointer argument"
+                  : "printf format specifier %p requires pointer argument");
+  else if (spec == 's' && reads_to_nul && printf_args_are_direct(kind))
+    claim_nul_terminated(arg);
+}
+
+expr2tc goto_symext::printf_field_length(
+  const std::string &f,
+  size_t &i,
+  const std::vector<expr2tc> &args,
+  size_t &arg,
+  size_t &max_len,
+  std::function<expr2tc(const expr2tc &)> &chars)
+{
+  const size_t spec = i;
+  size_t width;
+  bool left, zero;
+  if (!parse_field_width(f, i, width, left, zero))
+    return expr2tc();
+  const size_t conv = i;
+  while (i < f.size() && std::string("jlzt").find(f[i]) != std::string::npos)
+    i++;
+  if (i == f.size() || arg == args.size())
+    return expr2tc();
+  expr2tc v = args[arg++];
+  expr2tc len;
+  const size_t max_before = max_len;
+  // A length modifier on %s makes it a wide string.
+  if (f[i] == 's' && i == spec)
+    len = string_length(v, max_len, &chars);
+  else if (std::string("diuoxX").find(f[i]) != std::string::npos)
+  {
+    cur_state->rename(v);
+    const std::string mod = f.substr(conv, i - conv);
+    len = integer_length(v, f[i], mod, max_len);
+    if (!is_nil_expr(len))
+      chars = integer_chars(
+        typecast2tc(printf_int_type(f[i] == 'd' || f[i] == 'i', mod), v),
+        f[i],
+        left,
+        zero,
+        width);
+  }
+  if (is_nil_expr(len))
+    return expr2tc();
+  return pad_to_width(len, width, max_before, max_len);
 }
 
 expr2tc goto_symext::printf_output_length(
   const code_printf2t &call,
   size_t fmt_idx,
-  size_t &max_len)
+  size_t &max_len,
+  const type2tc &char_type,
+  std::vector<expr2tc> *chars)
 {
   expr2tc fmt = call.operands[fmt_idx];
   cur_state->rename(fmt);
@@ -384,50 +660,45 @@ expr2tc goto_symext::printf_output_length(
     return expr2tc();
   const std::string f = to_constant_string2t(fmt_str).value.as_string();
 
-  size_t text = 0;
+  // Each field's length, and the characters it prints when known.
+  std::vector<std::pair<expr2tc, printf_charst>> fields;
+  std::string text;
+  size_t text_len = 0;
+  const auto end_text = [&]() {
+    if (!text.empty())
+      fields.emplace_back(
+        constant_int2tc(int_type2(), BigInt(text.size())), text_chars(text));
+    text.clear();
+  };
   max_len = 0;
-  expr2tc len = gen_zero(int_type2());
-  size_t arg = fmt_idx + 1;
+  const std::vector<expr2tc> args = printf_args(call, fmt_idx);
+  size_t arg = 0;
   for (size_t i = 0; i < f.size(); i++)
   {
-    if (f[i] != '%')
+    if (f[i] != '%' || (++i < f.size() && f[i] == '%'))
     {
-      text++;
+      text += f[i];
+      text_len++;
       continue;
     }
-    if (++i < f.size() && f[i] == '%')
-    {
-      text++;
-      continue;
-    }
-    const size_t spec = i;
-    size_t width;
-    if (!parse_field_width(f, i, width))
-      return expr2tc();
-    const size_t conv = i;
-    while (i < f.size() && std::string("jlzt").find(f[i]) != std::string::npos)
-      i++;
-    if (i == f.size() || arg == printf_args_end(call))
-      return expr2tc();
-    expr2tc v = call.operands[arg++];
-    expr2tc conv_len;
-    const size_t max_before = max_len;
-    // A length modifier on %s makes it a wide string.
-    if (f[i] == 's' && i == spec)
-      conv_len = string_length(v, max_len);
-    else if (std::string("diuoxX").find(f[i]) != std::string::npos)
-    {
-      cur_state->rename(v);
-      conv_len = integer_length(v, f[i], f.substr(conv, i - conv), max_len);
-    }
+    end_text();
+    printf_charst conv_chars;
+    const expr2tc conv_len =
+      printf_field_length(f, i, args, arg, max_len, conv_chars);
     if (is_nil_expr(conv_len))
       return expr2tc();
-    len = add2tc(
-      len->type, len, pad_to_width(conv_len, width, max_before, max_len));
+    fields.emplace_back(conv_len, conv_chars);
   }
-  max_len += text;
-  len = add2tc(len->type, len, constant_int2tc(len->type, BigInt(text)));
+  end_text();
+  max_len += text_len;
+
+  expr2tc len = gen_zero(int_type2());
+  for (const auto &field : fields)
+    len = add2tc(len->type, len, field.first);
   do_simplify(len);
+  if (chars)
+    for (expr2tc &c : *chars = output_chars(fields, max_len, char_type))
+      do_simplify(c);
   return len;
 }
 
@@ -453,10 +724,12 @@ expr2tc goto_symext::sprintf_output(
     return constant_int2tc(int_type2(), BigInt(out.size()));
   }
 
-  // Text and integer conversions print no NUL, so each character is only
-  // known to be nonzero.
+  // Text, %s and integer conversions print no NUL, so a character not known
+  // exactly is known to be nonzero.
   size_t max_len;
-  expr2tc len = printf_output_length(call, fmt_idx, max_len);
+  expr2tc len = printf_output_length(call, fmt_idx, max_len, char_type, &chars);
+  if (!is_nil_expr(len) && !chars.empty())
+    return len;
   if (!is_nil_expr(len))
   {
     for (size_t i = 0; i < max_len; i++)
@@ -647,6 +920,85 @@ void goto_symext::symex_asprintf_buffer(
     notequal2tc(buf, symbol2tc(char_ptr_type, "NULL"))));
 }
 
+// The formatter computes the return value, and also the %n counts, which are
+// written even when the result is discarded.
+static bool printf_needs_formatter(
+  const expr2tc &lhs,
+  bool format_is_constant,
+  const irep_idt &fmt)
+{
+  return !is_nil_expr(lhs) ||
+         (format_is_constant && fmt.as_string().find('n') != std::string::npos);
+}
+
+void goto_symext::fold_printf_char_arrays(std::list<expr2tc> &args)
+{
+  for (auto &arg : args)
+  {
+    const expr2tc &base_expr = get_base_object(arg);
+    if (!is_constant_string2t(base_expr) && is_array_type(base_expr))
+    {
+      if (!is_symbol2t(base_expr))
+      {
+        log_debug(
+          "printf",
+          "symex_printf: array base is not a symbol (id={}), skipping "
+          "array->string conversion",
+          get_expr_id(base_expr));
+        continue;
+      }
+      const symbolt &s = *ns.lookup(to_symbol2t(base_expr).thename);
+      // Only fold to a string constant when the array has compile-time
+      // content. A nondet / runtime-filled array has no static initializer;
+      // leaving it as an array lets the formatter apply a sound object-size
+      // length bound (strlen <= size-1) instead of under-approximating the
+      // %s contribution to "" (length 0).
+      const exprt &val = s.get_value();
+      if (val.is_nil() || val.operands().empty())
+        continue;
+      exprt dest;
+      if (array2string(s, dest))
+        continue;
+      migrate_expr(dest, arg);
+    }
+  }
+}
+
+void goto_symext::assign_printf_percent_n(const printf_formattert &formatter)
+{
+  // Behind an unrecovered va_list the operand is not the %n pointer.
+  if (!formatter.args_reliable)
+    return;
+  for (const printf_formattert::percent_nt &pn : formatter.percent_n)
+  {
+    if (!is_pointer_type(pn.target->type))
+      continue;
+    const type2tc &count_type = to_pointer_type(pn.target->type).subtype;
+    if (!is_bv_type(count_type))
+      continue;
+    expr2tc count;
+    if (pn.bounded && pn.min_outlen == pn.max_outlen)
+      count = constant_int2tc(count_type, BigInt(pn.min_outlen));
+    else
+    {
+      expr2tc nondet = sideeffect2tc(
+        int_type2(),
+        expr2tc(),
+        expr2tc(),
+        std::vector<expr2tc>(),
+        type2tc(),
+        sideeffect2t::allockind::nondet);
+      replace_nondet(nondet);
+      if (pn.bounded)
+        assume_printf_range(nondet, pn.min_outlen, pn.max_outlen, false);
+      else
+        assume(greaterthanequal2tc(nondet, gen_zero(int_type2())));
+      count = typecast2tc(count_type, nondet);
+    }
+    symex_assign(code_assign2tc(dereference2tc(count_type, pn.target), count));
+  }
+}
+
 void goto_symext::symex_printf(const expr2tc &lhs, expr2tc &rhs)
 {
   assert(is_code_printf2t(rhs));
@@ -702,9 +1054,15 @@ void goto_symext::symex_printf(const expr2tc &lhs, expr2tc &rhs)
     idx = fmt_idx;
   }
 
+  // A v* call's only operand after the format is its va_list, which is
+  // neither a printf argument nor a pointer printf dereferences.
+  const bool args_behind_va_list = takes_va_list(new_rhs.kind);
+  const bool printf_check =
+    options.get_bool_option("printf-check") && !args_behind_va_list;
+
   // Check format specifiers against original operands before
   // renaming/conversion
-  if (options.get_bool_option("printf-check"))
+  if (printf_check)
   {
     const code_printf2t &original_rhs = to_code_printf2t(rhs);
     std::string format_str = fmt.as_string();
@@ -729,8 +1087,12 @@ void goto_symext::symex_printf(const expr2tc &lhs, expr2tc &rhs)
           i++;
         while (i < format_str.length() && isdigit(format_str[i]))
           i++;
+        // A precision bounds what %s reads, and a length modifier makes it
+        // a wide string (C11 7.21.6.1p8).
+        bool reads_to_nul = true;
         if (i < format_str.length() && format_str[i] == '.')
         {
+          reads_to_nul = false;
           i++;
           while (i < format_str.length() && isdigit(format_str[i]))
             i++;
@@ -741,7 +1103,10 @@ void goto_symext::symex_printf(const expr2tc &lhs, expr2tc &rhs)
                (format_str[i] == 'h' || format_str[i] == 'l' ||
                 format_str[i] == 'L' || format_str[i] == 'z' ||
                 format_str[i] == 'j' || format_str[i] == 't'))
+        {
+          reads_to_nul = false;
           i++;
+        }
 
         // Check conversion specifier against original operands
         if (i < format_str.length())
@@ -763,21 +1128,7 @@ void goto_symext::symex_printf(const expr2tc &lhs, expr2tc &rhs)
               const expr2tc &arg = original_rhs.operands[actual_arg_idx];
 
               if (arg)
-              {
-                if (spec == 's' || spec == 'p')
-                {
-                  // %s and %p require pointer types
-                  if (!is_pointer_type(arg->type))
-                  {
-                    claim(
-                      gen_false_expr(),
-                      spec == 's'
-                        ? "printf format specifier %s requires pointer argument"
-                        : "printf format specifier %p requires pointer "
-                          "argument");
-                  }
-                }
-              }
+                check_printf_pointer_arg(new_rhs.kind, spec, reads_to_nul, arg);
             }
             arg_idx++;
           }
@@ -787,7 +1138,7 @@ void goto_symext::symex_printf(const expr2tc &lhs, expr2tc &rhs)
   }
 
   // Only perform dereference checks if printf-check is enabled
-  if (options.get_bool_option("printf-check"))
+  if (printf_check)
   {
     // Dereference check all pointer arguments after the format string
     for (size_t i = idx; i < new_rhs.operands.size(); i++)
@@ -872,18 +1223,21 @@ void goto_symext::symex_printf(const expr2tc &lhs, expr2tc &rhs)
   // failure path.
   expr2tc retval;
 
-  if (!is_nil_expr(lhs))
+  if (printf_needs_formatter(lhs, format_is_constant, fmt))
   {
     // get the return value from code_printf2tc
     // 1. covert code_printf2tc back to sideeffect2tc
-    exprt rhs_expr = migrate_expr_back(rhs);
-    exprt printf_code("sideeffect", migrate_type_back(lhs->type));
+    if (!is_nil_expr(lhs))
+    {
+      exprt rhs_expr = migrate_expr_back(rhs);
+      exprt printf_code("sideeffect", migrate_type_back(lhs->type));
 
-    printf_code.statement("printf2");
-    printf_code.operands() = rhs_expr.operands();
-    printf_code.location() = rhs_expr.location();
+      printf_code.statement("printf2");
+      printf_code.operands() = rhs_expr.operands();
+      printf_code.location() = rhs_expr.location();
 
-    migrate_expr(printf_code, rhs);
+      migrate_expr(printf_code, rhs);
+    }
 
     // With a successful va_list recovery the single va_list operand is
     // replaced by the actual variadic arguments, restoring the direct-call
@@ -891,37 +1245,8 @@ void goto_symext::symex_printf(const expr2tc &lhs, expr2tc &rhs)
     if (va_recovered)
       args = recovered_args;
 
-    // 2 check if it is a char array. if so, convert it to a string
-    // this is due to printf_formatter does not handle the char array.
-    for (auto &arg : args)
-    {
-      const expr2tc &base_expr = get_base_object(arg);
-      if (!is_constant_string2t(base_expr) && is_array_type(base_expr))
-      {
-        if (!is_symbol2t(base_expr))
-        {
-          log_debug(
-            "printf",
-            "symex_printf: array base is not a symbol (id={}), skipping "
-            "array->string conversion",
-            get_expr_id(base_expr));
-          continue;
-        }
-        const symbolt &s = *ns.lookup(to_symbol2t(base_expr).thename);
-        // Only fold to a string constant when the array has compile-time
-        // content. A nondet / runtime-filled array has no static initializer;
-        // leaving it as an array lets the formatter apply a sound object-size
-        // length bound (strlen <= size-1) instead of under-approximating the
-        // %s contribution to "" (length 0).
-        const exprt &val = s.get_value();
-        if (val.is_nil() || val.operands().empty())
-          continue;
-        exprt dest;
-        if (array2string(s, dest))
-          continue;
-        migrate_expr(dest, arg);
-      }
-    }
+    // 2 printf_formatter does not handle char arrays: fold them to strings.
+    fold_printf_char_arrays(args);
 
     // 3 get the number of characters output (return value)
     printf_formattert printf_formatter;
@@ -929,26 +1254,7 @@ void goto_symext::symex_printf(const expr2tc &lhs, expr2tc &rhs)
     // the operand at a %s position is the va_list pointer, not the string. Mark
     // the operands unreliable so the formatter does not derive an (unsound)
     // object-size bound from them; %s stays unbounded until va_list recovery.
-    // Exhaustive over printf_kindt (no default) so a future va_list kind must
-    // be classified here rather than silently inheriting the reliable default.
-    switch (new_rhs.kind)
-    {
-    case printf_kindt::VPRINTF:
-    case printf_kindt::VFPRINTF:
-    case printf_kindt::VSPRINTF:
-    case printf_kindt::VSNPRINTF:
-    case printf_kindt::VASPRINTF:
-      printf_formatter.args_reliable = false;
-      break;
-    case printf_kindt::PRINTF:
-    case printf_kindt::FPRINTF:
-    case printf_kindt::DPRINTF:
-    case printf_kindt::SPRINTF:
-    case printf_kindt::SNPRINTF:
-    case printf_kindt::ASPRINTF:
-      printf_formatter.args_reliable = true;
-      break;
-    }
+    printf_formatter.args_reliable = !args_behind_va_list;
     // A successful recovery replaced the va_list with the actual arguments,
     // so they are exactly as reliable as a direct call's.
     if (va_recovered)
@@ -972,39 +1278,44 @@ void goto_symext::symex_printf(const expr2tc &lhs, expr2tc &rhs)
     //    arithmetic requires used to exceed INT_MAX/2, which in turn demands a
     //    >1 GB formatted string — infeasible in practice. Tightening further
     //    would risk masking real overflows; see also GitHub #4976-#4979.
-    const bool sound_bound = format_is_constant && printf_formatter.bounded;
-    if (
-      sound_bound && !is_allocating &&
-      printf_formatter.min_outlen == printf_formatter.max_outlen)
+    assign_printf_percent_n(printf_formatter);
+
+    if (!is_nil_expr(lhs))
     {
-      retval =
-        constant_int2tc(int_type2(), BigInt(printf_formatter.max_outlen));
-      symex_assign(code_assign2tc(lhs, retval));
-    }
-    else
-    {
-      expr2tc nondet = sideeffect2tc(
-        int_type2(),
-        expr2tc(),
-        expr2tc(),
-        std::vector<expr2tc>(),
-        type2tc(),
-        sideeffect2t::allockind::nondet);
-      replace_nondet(nondet);
-      retval = nondet;
-      if (sound_bound)
-        assume_printf_range(
-          nondet,
-          printf_formatter.min_outlen,
-          printf_formatter.max_outlen,
-          is_allocating);
-      else if (is_allocating)
-        // -1 on allocation failure; cap success side at INT_MAX/2.
-        assume_printf_range(nondet, -1, INT_MAX / 2, false);
+      const bool sound_bound = format_is_constant && printf_formatter.bounded;
+      if (
+        sound_bound && !is_allocating &&
+        printf_formatter.min_outlen == printf_formatter.max_outlen)
+      {
+        retval =
+          constant_int2tc(int_type2(), BigInt(printf_formatter.max_outlen));
+        symex_assign(code_assign2tc(lhs, retval));
+      }
       else
-        assume(
-          greaterthanequal2tc(nondet, constant_int2tc(int_type2(), BigInt(0))));
-      symex_assign(code_assign2tc(lhs, nondet));
+      {
+        expr2tc nondet = sideeffect2tc(
+          int_type2(),
+          expr2tc(),
+          expr2tc(),
+          std::vector<expr2tc>(),
+          type2tc(),
+          sideeffect2t::allockind::nondet);
+        replace_nondet(nondet);
+        retval = nondet;
+        if (sound_bound)
+          assume_printf_range(
+            nondet,
+            printf_formatter.min_outlen,
+            printf_formatter.max_outlen,
+            is_allocating);
+        else if (is_allocating)
+          // -1 on allocation failure; cap success side at INT_MAX/2.
+          assume_printf_range(nondet, -1, INT_MAX / 2, false);
+        else
+          assume(greaterthanequal2tc(
+            nondet, constant_int2tc(int_type2(), BigInt(0))));
+        symex_assign(code_assign2tc(lhs, nondet));
+      }
     }
   }
 

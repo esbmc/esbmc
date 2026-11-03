@@ -11,6 +11,95 @@
 // and the annotation pre-pass (which has no symbol table to check against).
 namespace dynamic_type_detail
 {
+inline bool
+field_is(const nlohmann::json &node, const char *field, const std::string &name)
+{
+  return node.contains(field) && node[field].is_string() &&
+         node[field].get<std::string>() == name;
+}
+
+inline std::string context_of(const nlohmann::json &node)
+{
+  if (!node.contains("ctx") || !node["ctx"].is_object())
+    return "";
+  return node["ctx"].value("_type", "");
+}
+
+inline bool lists_name(const nlohmann::json &node, const std::string &name)
+{
+  if (!node.contains("names") || !node["names"].is_array())
+    return false;
+  for (const auto &listed : node["names"])
+    if (listed.is_string() && listed.get<std::string>() == name)
+      return true;
+  return false;
+}
+
+// `node` binds `name` by assignment, parameter, def, class, import, pattern,
+// `global`, `nonlocal`, `except`, `del` or any other target.
+inline bool binds_name_at(const nlohmann::json &node, const std::string &name)
+{
+  const std::string type = node.value("_type", "");
+  if (type == "Name")
+    return field_is(node, "id", name) && context_of(node) != "Load";
+  if (type == "arg")
+    return field_is(node, "arg", name);
+  return field_is(node, "name", name) || field_is(node, "asname", name) ||
+         field_is(node, "rest", name) || lists_name(node, name);
+}
+
+inline size_t
+count_bindings(const nlohmann::json &node, const std::string &name)
+{
+  if (!node.is_structured())
+    return 0;
+  size_t count = node.is_object() && binds_name_at(node, name);
+  for (const auto &child : node)
+    count += count_bindings(child, name);
+  return count;
+}
+
+// The value `node` binds to `name` when it is `name = value`.
+inline const nlohmann::json *
+assigned_value_at(const nlohmann::json &node, const std::string &name)
+{
+  const std::string type = node.value("_type", "");
+  if (
+    type == "Assign" && node["targets"].size() == 1 &&
+    node["targets"][0].value("id", "") == name)
+    return &node["value"];
+  if (
+    type == "AnnAssign" && node["target"].value("id", "") == name &&
+    node.contains("value") && !node["value"].is_null())
+    return &node["value"];
+  return nullptr;
+}
+
+inline const nlohmann::json *
+assigned_value_in(const nlohmann::json &node, const std::string &name)
+{
+  if (!node.is_structured())
+    return nullptr;
+  if (node.is_object())
+    if (const nlohmann::json *value = assigned_value_at(node, name))
+      return value;
+  for (const auto &child : node)
+    if (const nlohmann::json *found = assigned_value_in(child, name))
+      return found;
+  return nullptr;
+}
+
+// The value `name = value` binds, when that is the only binding of `name`
+// anywhere in the module.
+inline const nlohmann::json *single_assigned_value(
+  const nlohmann::json &module_body,
+  const std::string &name)
+{
+  return count_bindings(module_body, name) == 1
+           ? assigned_value_in(module_body, name)
+           : nullptr;
+}
+
 // The name a call's `func` spells, `m.f` for an attribute of a name, and
 // its last component; both "" for any other shape.
 inline std::pair<std::string, std::string>
@@ -59,21 +148,35 @@ inline std::string constant_kind(const nlohmann::json &lit)
 // pre-pass).
 inline std::string classify_literal_value_kind(
   const nlohmann::json &value,
-  const nlohmann::json &module_body = nlohmann::json())
+  const nlohmann::json &module_body = nlohmann::json(),
+  unsigned depth = 0);
+
+// The kind a builtin conversion or measure returns, "" for any other name.
+inline std::string builtin_call_kind(const std::string &callee)
 {
-  if (value.value("_type", "") == "Constant" && value.contains("value"))
-  {
-    return constant_kind(value["value"]);
-  }
+  static const std::unordered_map<std::string, std::string> kinds = {
+    {"str", "str"}, {"int", "num"}, {"len", "num"}, {"float", "float"}};
+  const auto it = kinds.find(callee);
+  return it == kinds.end() ? "" : it->second;
+}
 
-  if (value.value("_type", "") != "Call" || !value.contains("func"))
-    return "";
+// The kind of `left op right` for integer arithmetic; "" for any other
+// operands, whose result depends on the values.
+inline std::string binop_kind(
+  const std::string &op,
+  const std::string &left,
+  const std::string &right)
+{
+  static const std::unordered_set<std::string> integer_ops = {
+    "Add", "Sub", "Mult", "Mod", "FloorDiv"};
+  return left == "num" && right == "num" && integer_ops.count(op) ? "num" : "";
+}
 
-  const auto [callee, leaf] = callee_names(value["func"]);
-  const std::string nondet_kind = nondet_leaf_kind(leaf);
-  if (!nondet_kind.empty())
-    return nondet_kind;
-
+// The kind a module-level def named `callee` returns, by its annotation.
+inline std::string annotated_return_kind(
+  const std::string &callee,
+  const nlohmann::json &module_body)
+{
   if (module_body.is_array())
   {
     for (const auto &stmt : module_body)
@@ -92,6 +195,198 @@ inline std::string classify_literal_value_kind(
   }
 
   return "";
+}
+
+// The kind `self.<name>()` returns: every class defining `name` must agree on
+// one scalar return annotation, as `self` may be an instance of any of them.
+inline std::string
+method_return_kind(const std::string &name, const nlohmann::json &module_body)
+{
+  std::string agreed;
+  if (!module_body.is_array())
+    return agreed;
+  for (const auto &cls : module_body)
+  {
+    if (!cls.is_object() || cls.value("_type", "") != "ClassDef")
+      continue;
+    for (const auto &stmt : cls["body"])
+    {
+      if (
+        stmt.value("_type", "") != "FunctionDef" ||
+        stmt.value("name", "") != name)
+        continue;
+      const std::string kind =
+        stmt.contains("returns") && stmt["returns"].is_object()
+          ? scalar_name_kind(stmt["returns"].value("id", ""))
+          : "";
+      if (kind.empty() || (!agreed.empty() && kind != agreed))
+        return "";
+      agreed = kind;
+    }
+  }
+  return agreed;
+}
+
+// Whether some `global` statement declares `name`.
+inline bool declares_global(const nlohmann::json &node, const std::string &name)
+{
+  if (!node.is_structured())
+    return false;
+  if (node.is_object() && node.value("_type", "") == "Global")
+    for (const auto &declared : node["names"])
+      if (declared == name)
+        return true;
+  for (const auto &child : node)
+    if (declares_global(child, name))
+      return true;
+  return false;
+}
+
+// The value of the one module-level `name = value`, where no function can
+// rebind `name`; a parameter or local of the same name elsewhere is another
+// variable.
+inline const nlohmann::json *module_instance_value(
+  const nlohmann::json &module_body,
+  const std::string &name)
+{
+  if (!module_body.is_array() || declares_global(module_body, name))
+    return nullptr;
+  const nlohmann::json *bound = nullptr;
+  for (const auto &stmt : module_body)
+  {
+    if (!stmt.is_object())
+      continue;
+    const std::string type = stmt.value("_type", "");
+    if (
+      (type == "FunctionDef" || type == "ClassDef") &&
+      stmt.value("name", "") == name)
+      return nullptr;
+    if (const nlohmann::json *value = assigned_value_at(stmt, name))
+    {
+      if (bound)
+        return nullptr;
+      bound = value;
+    }
+  }
+  return bound;
+}
+
+// Whether `callee` spells `self.<leaf>` or `<name>.<leaf>` for a module-level
+// `name = Class(...)` of a class defined in the module.
+inline bool is_instance_call(
+  const std::string &callee,
+  const std::string &leaf,
+  const nlohmann::json &module_body)
+{
+  if (callee.size() <= leaf.size() + 1)
+    return false;
+  const std::string receiver =
+    callee.substr(0, callee.size() - leaf.size() - 1);
+  if (receiver == "self")
+    return true;
+  const nlohmann::json *bound = module_instance_value(module_body, receiver);
+  if (
+    !bound || !bound->is_object() || bound->value("_type", "") != "Call" ||
+    !bound->contains("func") || (*bound)["func"].value("_type", "") != "Name")
+    return false;
+  const std::string cls = (*bound)["func"].value("id", "");
+  for (const auto &stmt : module_body)
+    if (
+      stmt.is_object() && stmt.value("_type", "") == "ClassDef" &&
+      stmt.value("name", "") == cls)
+      return true;
+  return false;
+}
+
+// The kind of an unannotated module-level def whose body is one `return`.
+inline std::string forwarded_return_kind(
+  const std::string &callee,
+  const nlohmann::json &module_body,
+  unsigned depth)
+{
+  if (!module_body.is_array())
+    return "";
+  for (const auto &stmt : module_body)
+  {
+    if (
+      !stmt.is_object() || stmt.value("_type", "") != "FunctionDef" ||
+      stmt.value("name", "") != callee)
+      continue;
+    const auto body = stmt.find("body");
+    if (body == stmt.end() || !body->is_array() || body->size() != 1)
+      return "";
+    const nlohmann::json &ret = body->front();
+    if (
+      !ret.is_object() || ret.value("_type", "") != "Return" ||
+      !ret.contains("value") || !ret["value"].is_object())
+      return "";
+    return classify_literal_value_kind(ret["value"], module_body, depth + 1);
+  }
+  return "";
+}
+
+// The kind of a call: a nondet_<type> function, a builtin conversion, abs of
+// a number, or a function with a scalar return annotation.
+inline std::string classify_call_kind(
+  const nlohmann::json &call,
+  const nlohmann::json &module_body,
+  unsigned depth)
+{
+  const auto [callee, leaf] = callee_names(call["func"]);
+  const std::string nondet_kind = nondet_leaf_kind(leaf);
+  if (!nondet_kind.empty())
+    return nondet_kind;
+
+  const std::string builtin_kind = builtin_call_kind(callee);
+  if (!builtin_kind.empty())
+    return builtin_kind;
+
+  if (callee == "abs" && call.contains("args") && call["args"].size() == 1)
+  {
+    const std::string kind =
+      classify_literal_value_kind(call["args"][0], module_body, depth + 1);
+    return kind == "num" || kind == "float" ? kind : "";
+  }
+
+  const std::string kind = annotated_return_kind(callee, module_body);
+  if (!kind.empty())
+    return kind;
+  const std::string method_kind = is_instance_call(callee, leaf, module_body)
+                                    ? method_return_kind(leaf, module_body)
+                                    : "";
+  return method_kind.empty() ? forwarded_return_kind(callee, module_body, depth)
+                             : method_kind;
+}
+
+inline std::string classify_literal_value_kind(
+  const nlohmann::json &value,
+  const nlohmann::json &module_body,
+  unsigned depth)
+{
+  const std::string type = value.value("_type", "");
+  if (type == "Constant" && value.contains("value"))
+    return constant_kind(value["value"]);
+
+  if (depth >= 8)
+    return "";
+
+  if (type == "Name" && module_body.is_array())
+  {
+    const nlohmann::json *bound =
+      single_assigned_value(module_body, value.value("id", ""));
+    return bound ? classify_literal_value_kind(*bound, module_body, depth + 1)
+                 : "";
+  }
+
+  if (type == "BinOp" && value.contains("left") && value.contains("right"))
+    return binop_kind(
+      value["op"].value("_type", ""),
+      classify_literal_value_kind(value["left"], module_body, depth + 1),
+      classify_literal_value_kind(value["right"], module_body, depth + 1));
+
+  return type == "Call" && value.contains("func")
+           ? classify_call_kind(value, module_body, depth)
+           : "";
 }
 
 // Whether a name joining these literal kinds has a type that depends on the

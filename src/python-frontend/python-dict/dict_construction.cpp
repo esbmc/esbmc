@@ -611,6 +611,8 @@ exprt python_dict_handler::create_dict_from_literal(
 
   // An Optional[T] value type stores each value wrapped, as a read expects.
   const typet expected_value = literal_value_type(target_symbol);
+  // The hint is for this literal only, not for a dict literal among its values.
+  literal_value_type_hint = typet();
 
   for (size_t i = 0; i < keys.size(); ++i)
   {
@@ -635,9 +637,10 @@ exprt python_dict_handler::create_dict_from_literal(
       value_expr = build_address_of(value_expr);
 
     // Check if this is a nested dict that needs special pointer storage
-    if (value_expr.type().is_struct() && is_dict_type(value_expr.type()))
+    if (value_expr.type().is_struct() && holds_dict_lists(value_expr.type()))
     {
-      // Nested dict: store pointer to dict (reference semantics)
+      // Nested dict, bare or Optional-wrapped: store pointer to it
+      // (reference semantics)
       store_nested_dict_value(element, values_list, value_expr, location);
     }
     else

@@ -1,0 +1,2 @@
+class E(Exception):
+    pass

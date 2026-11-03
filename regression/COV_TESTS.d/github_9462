@@ -1,0 +1,6 @@
+regression/python/github_9462
+regression/python/github_9462_fail
+regression/python/github_9462_local_copy
+regression/python/github_9462_local_copy_fail
+regression/python/github_9462_module_level
+regression/python/github_9462_literal_attr

@@ -218,9 +218,23 @@ class GeneratorMixin:
                 best_idx = i
         return best_idx
 
+    @staticmethod
+    def _outer_stored_names(module):
+        """The names that @p module stores other than as a comprehension target."""
+        in_comprehension = {}
+        stored = {}
+        for node in ast.walk(module):
+            if isinstance(node, ast.comprehension):
+                for name in ast.walk(node.target):
+                    if isinstance(name, ast.Name):
+                        in_comprehension[name.id] = in_comprehension.get(name.id, 0) + 1
+            if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Store):
+                stored[node.id] = stored.get(node.id, 0) + 1
+        return {name for name, count in stored.items() if count > in_comprehension.get(name, 0)}
+
     def _rename_shadowing_targets(self, node):
-        """Rename a comprehension target that shadows a known outer variable
-        or the target of an earlier comprehension.
+        """Rename a comprehension target that shadows an outer variable, bound
+        before or after it, or the target of an earlier comprehension.
 
         Python 3 scopes a comprehension's target to the comprehension, so the
         rename is semantically free. Without it the outer and inner bindings
@@ -232,7 +246,8 @@ class GeneratorMixin:
             if not isinstance(generator.target, ast.Name):
                 continue
             old = generator.target.id
-            if old not in self.known_variable_types and old not in self.comprehension_targets:
+            if (old not in self.known_variable_types and old not in self.comprehension_targets
+                    and old not in self.outer_stored_names):
                 self.comprehension_targets.add(old)
                 continue
 

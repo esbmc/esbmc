@@ -168,6 +168,8 @@ private:
   exprt pad_string_element(const exprt &elem) const;
 
   /// Index of the Starred node in @p targets, or targets.size() if none.
+  exprt unpacked_list_source(const exprt &rhs, size_t i) const;
+
   size_t starred_target_index(const nlohmann::json &targets) const;
 
   /// The symbol a Name unpacking target denotes, created with @p type if new

@@ -4,11 +4,11 @@ import os
 
 
 def f(p: str) -> bool:
-    return not os.path.islink(p)
+    return not os.path.ismount(p)
 
 
 def g(p: str) -> int:
-    if os.path.islink(p):
+    if os.path.ismount(p):
         return 1
     return 0
 

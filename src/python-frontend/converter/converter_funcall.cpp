@@ -574,6 +574,7 @@ exprt python_converter::get_call_expr(const nlohmann::json &element)
       return *call;
   reject_numpy_view_callee(element);
   reject_inline_runtime_numpy_slice(element);
+  reject_unmodelled_class_call(element);
   if (std::optional<nlohmann::json> folded = fold_numpy_view_call(element))
     return get_expr(*folded);
   if (std::optional<exprt> call = call_returned_function(element))
@@ -587,6 +588,18 @@ exprt python_converter::get_call_expr(const nlohmann::json &element)
   if (numpy_random::is_random_call(element, *ast_json))
     return numpy_random(*this, element).get();
   return get_function_call(element);
+}
+
+/// The parser marks a call of a class from a module with no model, whose
+/// instance the converter has no type for.
+void python_converter::reject_unmodelled_class_call(
+  const nlohmann::json &call) const
+{
+  if (call.value("unmodelled_class", false))
+    throw std::runtime_error(
+      "unsupported: creating an instance of " +
+      json_utils::dotted_name(call["func"]) +
+      ", a class of a module that is not modelled");
 }
 
 // `obj.prop()` on a @property: CPython runs the getter, then calls the value
@@ -1126,6 +1139,16 @@ bool python_converter::dict_values(
         !returned_dict_values(*ast_json, v, out))
         out.push_back(v);
     }
+    // A parameter holds what its callers pass (#9211). Only a dict literal
+    // is taken: a named dict may be changed through an alias.
+    function_values values(*ast_json, {});
+    if (const auto args = values.parameter_arguments(container))
+      for (const nlohmann::json *arg : *args)
+      {
+        if (arg->value("_type", "") != "Dict")
+          return false;
+        push_dict_values(*arg, out);
+      }
   }
   else if (type == "Subscript")
   {
@@ -1323,6 +1346,7 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
   // every other expression context (assert, nested expressions, call
   // arguments, ...), which otherwise fall through to an unrelated builtin
   // or class-method lookup for the same method name.
+  reject_unmodelled_array_method(element);
   if (
     std::optional<nlohmann::json> rewritten =
       rewrite_numpy_method_call_node(element))
@@ -1435,7 +1459,7 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
     // is an int array (not char), so it correctly falls through to the error.
     const typet &arg_t = arg_expr.type();
     const bool is_string_operand = (arg_t.is_array() || arg_t.is_pointer()) &&
-                                   arg_t.subtype() == char_type();
+                                   type_utils::is_char_storage(arg_t.subtype());
     std::string str_val;
     if (
       is_string_operand &&
@@ -1450,11 +1474,12 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
     // mistypes it as a list pointer (out-of-bounds dereference / migrate
     // failure). This pins the str-only boundary of the fold above.
     if (
-      arg_t.is_array() && arg_t.subtype() != char_type() &&
+      arg_t.is_array() && !type_utils::is_char_storage(arg_t.subtype()) &&
       string_handler::extract_constant_string(list_arg, *this, str_val))
       throw std::runtime_error(
         "list() over a bytes object is not supported; bytes elements are "
         "integers, not characters");
+    refuse_list_of_instance(arg_t);
     // Fall through to the generic function-call builder below for non-list
     // iterables (e.g. list(42) or a non-constant string).
   }
@@ -2336,7 +2361,8 @@ exprt python_converter::materialize_list_function_call(
   // inline, e.g. `f()[0:8]`, and a dict when read as `f()[k]`).
   if (
     call.type() != type_handler_.get_list_type() && !call.type().is_array() &&
-    !dict_handler_->is_dict_type(ns.follow(call.type())))
+    !dict_handler_->is_dict_type(ns.follow(call.type())) &&
+    !tuple_handler_->is_tuple_type(ns.follow(call.type())))
     return expr;
 
   locationt location = get_location_from_decl(element);
@@ -2359,6 +2385,16 @@ exprt python_converter::materialize_list_function_call(
   new_call.location() = location;
 
   target_block.copy_to_operands(new_call);
+
+  if (
+    call.type() == type_handler_.get_list_type() && call.function().is_symbol())
+  {
+    const exprt ret =
+      get_return_from_func(call.function().identifier().c_str());
+    if (!ret.is_nil() && ret.operands().size() == 1 && ret.op0().is_symbol())
+      element_type_registry_.assign_from(
+        ret.op0().identifier().as_string(), tmp_var_symbol.id.as_string());
+  }
 
   // Return reference to the temp variable
   return symbol_expr(tmp_var_symbol);

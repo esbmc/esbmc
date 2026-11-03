@@ -30,6 +30,7 @@ class PreprocessorStateMixin:
         self._vararg_alias_stmts = []
         self._redefined_names = set()
         self.functionVarargs = set()
+        self.functionAnyKeywords = set()
         self._vararg_func_defs = {}
         self._vararg_module_defs = set()
         self._vararg_callee_defs = {}
@@ -53,6 +54,7 @@ class PreprocessorStateMixin:
         self.exported_type_specs = {}
         self.listcomp_counter = 0
         self.comprehension_targets = set()
+        self.outer_stored_names = set()
         self.functools_reduce_names = set()
         self.functools_module_names = set()
         self.minmax_key_counter = 0
