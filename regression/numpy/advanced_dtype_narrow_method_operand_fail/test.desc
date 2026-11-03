@@ -1,0 +1,4 @@
+CORE
+main.py
+--incremental-bmc
+^ERROR: TypeError: numpy element-wise 'Add' over a method call on a narrow dtype is not supported$
