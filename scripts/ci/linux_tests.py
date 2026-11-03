@@ -145,6 +145,8 @@ def _run_problems(args, consumers):
     """Problems of the run's jobs and of the producer's and consumers' reports."""
     reports = ci_gate.latest_reports(args.results_dir)
     problems = ci_gate.job_problems(json.loads(args.needs), args.required.split(","))
+    if not args.plan_digest or not args.bundle_sha256:
+        problems.append("the producer published no plan digest or bundle digest")
     problems += ci_gate.report_problems(reports, ["producer"], args.plan_digest, None)
     problems += ci_gate.report_problems(reports, consumers, args.plan_digest, args.bundle_sha256)
     return reports, problems
@@ -172,7 +174,16 @@ def cmd_compare(args):
 
 
 def cmd_resolve_mode(args):
-    mode = ci_gate.resolve_mode(args.default, args.override)
+    """Always succeeds: jobs gated on `changes` must not skip over a bad mode.
+
+    An invalid mode is published as `invalid`, which runs build-ubuntu and
+    fails linux-test-summary.
+    """
+    try:
+        mode = ci_gate.resolve_mode(args.default, args.override)
+    except ci_gate.ModeError as error:
+        print(f"::error::{error}")
+        mode = "invalid"
     print(f"default {args.default}, override {'set' if args.override else 'empty'}: {mode}")
     if args.github_output:
         with open(args.github_output, "a", encoding="utf-8") as fp:

@@ -23,8 +23,10 @@ permissions:
   contents: read
   actions: read
 
+# One group per run: comparisons queued for the same SHA must not cancel each
+# other, and none of them may cancel a PR run.
 concurrency:
-  group: linux-regression-compare-${{ inputs.candidate-sha }}
+  group: linux-regression-compare-${{ github.run_id }}
   cancel-in-progress: false
 
 jobs:
@@ -88,17 +90,9 @@ jobs:
 
   cpython-check:
     needs: validate
-    name: Check Python regression tests
-    runs-on: ubuntu-24.04
-    timeout-minutes: 30
-    steps:
-    - uses: actions/checkout@v6
-      with:
-        ref: ${{ inputs.candidate-sha }}
-    - name: Install the Python runtime
-      run: scripts/ci/linux-runtime.sh python
-    - name: Check Python regression tests
-      run: ./scripts/check_python_tests.sh
+    uses: ./.github/workflows/aux-cpython-check.yml
+    with:
+      checkout-ref: ${{ inputs.candidate-sha }}
 
   comparison-summary:
     name: Compare baseline and shards

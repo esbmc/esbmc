@@ -36,13 +36,25 @@ def tool_project(tool_mode="OWNER_READ OWNER_WRITE OWNER_EXECUTE"):
     ]
     ci_fixture.write_project(tmp.name, tests, extra)
     ci_fixture.configure(tmp.name)
-    subprocess.run(["git", "init", "-q", tmp.name], check=True)
+    commit_all(tmp.name)
+    return tmp, build
+
+
+def commit_all(root):
+    """A checkout for the bundle's provenance check."""
+    subprocess.run(["git", "init", "-q", root], check=True)
     subprocess.run([
-        "git", "-C", tmp.name, "-c", "user.email=ci@example.com", "-c", "user.name=ci", "commit",
-        "-q", "--allow-empty", "-m", "fixture"
+        "git", "-C", root, "-c", "user.email=ci@example.com", "-c", "user.name=ci", "commit", "-q",
+        "--allow-empty", "-m", "fixture"
     ],
                    check=True)
-    return tmp, build
+
+
+def head(root):
+    return subprocess.run(["git", "-C", root, "rev-parse", "HEAD"],
+                          check=True,
+                          capture_output=True,
+                          text=True).stdout.strip()
 
 
 class BundleTest(unittest.TestCase):
@@ -53,8 +65,8 @@ class BundleTest(unittest.TestCase):
         self.plan = ci_selection.make_plan(self.build)
         self.tar = os.path.join(tempfile.mkdtemp(), "bundle.tar.zst")
         self.addCleanup(shutil.rmtree, os.path.dirname(self.tar))
-        self.sha = ci_bundle.create(self.workspace, self.build, self.plan, {"checkout_sha": "x"},
-                                    self.tar)
+        self.sha = ci_bundle.create(self.workspace, self.build, self.plan,
+                                    {"checkout_sha": head(self.workspace)}, self.tar)
 
     def tearDown(self):
         self.tmp.cleanup()
@@ -97,6 +109,15 @@ class BundleTest(unittest.TestCase):
             with self.assertRaisesRegex(BundleError, "CTest needs that path"):
                 ci_bundle.restore(self.tar, self.sha, other)
 
+    def test_sources_of_another_commit_are_refused(self):
+        subprocess.run([
+            "git", "-C", self.workspace, "-c", "user.email=ci@example.com", "-c", "user.name=ci",
+            "commit", "-q", "--allow-empty", "-m", "later"
+        ],
+                       check=True)
+        with self.assertRaisesRegex(BundleError, "sources here"):
+            ci_bundle.restore(self.tar, self.sha, self.workspace)
+
     def test_member_paths_may_not_escape_the_workspace(self):
         evil = os.path.join(os.path.dirname(self.tar), "evil.tar.zst")
         subprocess.run([
@@ -115,7 +136,7 @@ class PermissionTest(unittest.TestCase):
         self.addCleanup(tmp.cleanup)
         plan = ci_selection.make_plan(build)
         tar = os.path.join(tmp.name, "b.tar.zst")
-        sha = ci_bundle.create(tmp.name, build, plan, {}, tar)
+        sha = ci_bundle.create(tmp.name, build, plan, {"checkout_sha": head(tmp.name)}, tar)
         with self.assertRaisesRegex(BundleError, "not executable"):
             ci_bundle.restore(tar, sha, tmp.name)
 
@@ -141,10 +162,11 @@ class SharedLibraryTest(unittest.TestCase):
         ])
         ci_fixture.configure(root)
         subprocess.run(["cmake", "--build", self.build], check=True, capture_output=True)
-        subprocess.run(["git", "init", "-q", root], check=True)
+        commit_all(root)
         self.plan = ci_selection.make_plan(self.build)
         self.tar = os.path.join(root, "b.tar.zst")
-        self.sha = ci_bundle.create(root, self.build, self.plan, {}, self.tar)
+        self.sha = ci_bundle.create(root, self.build, self.plan, {"checkout_sha": head(root)},
+                                    self.tar)
 
     def tearDown(self):
         self.tmp.cleanup()

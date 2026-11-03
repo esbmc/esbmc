@@ -104,8 +104,9 @@ jobs:
         case "$LAYOUT" in legacy|pr-bundle) ;; *)
           echo "::error::linux-test-layout must be legacy or pr-bundle, not '$LAYOUT'"; exit 1 ;;
         esac
-        if [[ "$LAYOUT" == pr-bundle && ( "$OS" != ubuntu* || "$TESTING" != true ) ]]; then
-          echo "::error::pr-bundle needs a Linux runner and testing: true"; exit 1
+        # The shards (aux-test-linux.yml) run on ubuntu-24.04 x86.
+        if [[ "$LAYOUT" == pr-bundle && ( "$OS" != ubuntu-24.04 || "$TESTING" != true ) ]]; then
+          echo "::error::pr-bundle needs ubuntu-24.04, where the shards run, and testing: true"; exit 1
         fi
         if [[ "$RESTORE" == false && ( "$LAYOUT" != pr-bundle || "$SAVE" == true ) ]]; then
           echo "::error::restore-build-cache: false needs pr-bundle and save-cache: false"; exit 1
