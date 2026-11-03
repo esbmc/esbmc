@@ -1,0 +1,4 @@
+CORE
+main.py
+--incremental-bmc
+^ERROR: TypeError: storing a bytes or non-ASCII value into a numpy string array is not supported$

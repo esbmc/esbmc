@@ -1,0 +1,4 @@
+CORE
+main.py
+--incremental-bmc
+^ERROR: TypeError: \.dot\(\) of a numpy complex array is not supported$
