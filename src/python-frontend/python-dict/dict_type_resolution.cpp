@@ -599,6 +599,23 @@ typet python_dict_handler::resolve_expected_type_for_dict_subscript(
   return result;
 }
 
+/// The type every value of a literal dict was stored with, recorded at
+/// construction; nil when the dict was not built from a literal or its values
+/// differ in type. A float is left out: a value the literal's AST does not
+/// show to be a float is stored by bit pattern, not in the float buffer a
+/// float list read uses.
+typet python_dict_handler::recorded_value_type(const exprt &dict_expr) const
+{
+  const std::string &vals_id =
+    get_internal_list_id(dict_expr.identifier().as_string(), false);
+  if (vals_id.empty())
+    return typet();
+  const typet uniform =
+    converter_.get_element_type_registry().uniform_element_type(
+      vals_id, type_slot::dict_value_types);
+  return uniform.is_floatbv() ? typet() : uniform;
+}
+
 /// Homogeneous tuple values: the struct type recorded at construction
 /// (tagged and string-padded), which neither an annotation nor an AST
 /// literal peek reproduces. Empty when the dict was not built from a
@@ -606,17 +623,7 @@ typet python_dict_handler::resolve_expected_type_for_dict_subscript(
 typet python_dict_handler::recorded_tuple_value_type(
   const exprt &dict_expr) const
 {
-  const std::string &vals_id =
-    get_internal_list_id(dict_expr.identifier().as_string(), false);
-  if (vals_id.empty())
-    return empty_typet();
-
-  const typet uniform =
-    converter_.get_element_type_registry().uniform_element_type(
-      vals_id, type_slot::dict_value_types);
-  if (uniform == typet())
-    return empty_typet();
-
+  const typet uniform = recorded_value_type(dict_expr);
   return converter_.get_tuple_handler().is_tuple_type(uniform)
            ? uniform
            : static_cast<typet>(empty_typet());

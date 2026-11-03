@@ -939,6 +939,8 @@ private:
 
   exprt constant_to_string(const exprt &expr);
 
+  exprt pointer_to_string(const exprt &expr);
+
   exprt build_string_index_result(
     const nlohmann::json &call,
     const exprt &find_expr,

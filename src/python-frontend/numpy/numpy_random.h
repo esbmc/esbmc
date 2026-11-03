@@ -97,6 +97,7 @@ private:
   void validate();
   void validate_randint();
   exprt sample();
+  typet integer_sample_type() const;
   exprt sample_integer();
   exprt sample_real();
   exprt nan_from_parameters(const exprt &sample);
