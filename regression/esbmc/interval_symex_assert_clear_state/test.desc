@@ -1,0 +1,5 @@
+CORE
+main.c
+--interval-symex-assert
+^ +FAILED .*line 14 +y still 3$
+^VERIFICATION FAILED$

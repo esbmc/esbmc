@@ -1,0 +1,5 @@
+CORE
+main.c
+
+^  dereference failure on memcpy: reading memory segment of size 2 with 4 bytes$
+^VERIFICATION FAILED$

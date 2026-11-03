@@ -1,0 +1,4 @@
+CORE
+main.py
+
+^ERROR: .*main\.py:18:4: unsupported: a function passed here may be 's' or 'i', which return different types \(str and int\)$

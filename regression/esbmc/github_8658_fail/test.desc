@@ -1,0 +1,5 @@
+CORE
+main.c
+--overflow-check --z3
+^  FAILED .*arithmetic overflow on add
+^VERIFICATION FAILED$

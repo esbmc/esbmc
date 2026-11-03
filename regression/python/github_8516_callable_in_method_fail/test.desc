@@ -1,0 +1,5 @@
+CORE
+main.py
+--no-pointer-check
+^VERIFICATION FAILED$
+FAILED.*line\s+30\s+assertion

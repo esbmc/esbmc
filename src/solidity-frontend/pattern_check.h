@@ -24,7 +24,8 @@ class pattern_checker
   //  - pattern-based vulnerability (e.g. Authorization via TxOrigin)
   //  - reasoning-based vulnerability (e.g. array out-of-bound access)
   // This class implements the detection of pattern-based vulnerability.
-  // The reasoning-based vulnerability is handled by ESBMC verification pipeline.
+  // The reasoning-based vulnerability is handled by ESBMC verification
+  // pipeline.
 public:
   pattern_checker(
     const nlohmann::json &_ast_nodes,

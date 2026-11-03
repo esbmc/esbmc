@@ -1,0 +1,4 @@
+CORE
+main.py
+--incremental-bmc
+^ERROR: using method 'B.func2' as a value is not supported$

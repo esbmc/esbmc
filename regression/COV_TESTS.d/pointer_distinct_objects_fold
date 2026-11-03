@@ -1,0 +1,2 @@
+regression/esbmc/pointer_distinct_objects_fold
+regression/esbmc/pointer_distinct_objects_fold_fail

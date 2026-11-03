@@ -1,0 +1,12 @@
+format_version: "0.1"
+properties:
+  # v is go while the edge contact runs and is reset after it, so v ends every
+  # scan low. The contact compares with v at its own previous evaluation, which
+  # is the previous go (#8211), so hit cannot hold in two consecutive scans. A
+  # sample taken at the end of the scan would always read low and make hit
+  # follow go.
+  - id: P1
+    kind: invariant
+    expression: "!(hit && hp)"
+    description: "The edge contact on v never fires in two consecutive scans"
+    justification: "go cannot rise in two consecutive scans"

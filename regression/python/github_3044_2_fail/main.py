@@ -3,5 +3,7 @@ def foo() -> tuple[int, int]:
 
 t: tuple[int, int] = foo()
 (x, y) = t
-assert x == 2
-assert y == 1
+if nondet_bool():
+    assert x == 2
+if nondet_bool():
+    assert y == 1

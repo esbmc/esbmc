@@ -1,0 +1,1 @@
+assert isinstance(int, str)

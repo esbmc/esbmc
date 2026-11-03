@@ -1,0 +1,6 @@
+CORE
+main.py
+--multi-property --unwind 8 --no-unwinding-assertions
+^\s+PASSED\s+\[same\.assertion\.1\]\s+line\s+4\s+
+^\s+FAILED\s+\[differ\.assertion\.1\]\s+line\s+8\s+
+^VERIFICATION FAILED$

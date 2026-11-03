@@ -2,7 +2,7 @@
 
 #include <cstdint>
 #include <string>
-#include <util/ssa/algorithms.h>
+#include <goto-symex/equation/symex_target_equation.h>
 
 /**
  * @brief Normalisation applied to SSA symbols before a claim's cone is

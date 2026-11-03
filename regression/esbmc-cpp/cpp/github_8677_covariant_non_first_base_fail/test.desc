@@ -1,0 +1,5 @@
+CORE
+main.cpp
+
+^VERIFICATION FAILED$
+^\s*FAILED\s+\[main\.assertion\.1\]\s+line\s+13\s+assertion b->make\(\)->y == 1$

@@ -1,8 +1,8 @@
 /// \file frame_enforcer.h
-/// \brief Operational Frame Rule enforcement for verification.
+/// \brief Observational frame-rule enforcement for verification.
 ///
-/// This module implements the "Snapshot → Havoc → Assume/Assert(Unchanged == Snapshot)"
-/// pattern used in two contexts:
+/// This module implements the "Snapshot → Havoc → Assume/Assert(Unchanged ==
+/// Snapshot)" pattern used in two contexts:
 ///
 /// 1. Loop invariants (ASSUME mode): Bridges the inductive gap in k-induction
 ///    by assuming unassigned variables retain pre-havoc values.
@@ -27,7 +27,8 @@
 #include <set>
 #include <vector>
 
-/// Enforcement mode: ASSUME constrains search space (loops), ASSERT checks compliance (contracts)
+/// Enforcement mode: ASSUME constrains search space (loops), ASSERT checks
+/// compliance (contracts)
 enum class frame_modet
 {
   ASSUME,
@@ -41,8 +42,8 @@ public:
   struct snapshot_entryt
   {
     expr2tc original_expr; ///< The variable being snapshotted (e.g., "i")
-    expr2tc
-      snapshot_sym; ///< The snapshot symbol (e.g., "__ESBMC_frame_snap_loop_0_i")
+    expr2tc snapshot_sym;  ///< The snapshot symbol (e.g.,
+                           ///< "__ESBMC_frame_snap_loop_0_i")
   };
 
   frame_enforcert(contextt &_context);
@@ -54,7 +55,8 @@ public:
   /// \param vars_to_snapshot Variables to create snapshots for
   /// \param dest GOTO program to append snapshot instructions to
   /// \param loc Source location for generated instructions
-  /// \param scope_prefix Unique prefix for snapshot symbol names (e.g., "loop_0")
+  /// \param scope_prefix Unique prefix for snapshot symbol names (e.g.,
+  /// "loop_0")
   void materialize_snapshots(
     const std::vector<expr2tc> &vars_to_snapshot,
     goto_programt &dest,
@@ -93,7 +95,8 @@ public:
   /// an assigns target.
   expr2tc in_pre_state(const expr2tc &expr) const;
 
-  /// \brief Patch old_snapshot side effects in a GOTO program to use frame snapshots.
+  /// \brief Patch old_snapshot side effects in a GOTO program to use frame
+  /// snapshots.
   ///
   /// Scans all ASSIGN instructions in \p prog for the pattern:
   ///   return_value$___ESBMC_old_raw$N = old_snapshot(var)
@@ -101,7 +104,8 @@ public:
   ///   (void*)&snapshot_of_var
   /// so that *(T*)return_value$... naturally dereferences the snapshot value.
   ///
-  /// Must be called after materialize_snapshots() has populated active_snapshots.
+  /// Must be called after materialize_snapshots() has populated
+  /// active_snapshots.
   void patch_old_snapshot_assigns(goto_programt &prog) const;
 
   /// \brief Get the active snapshots (for debugging/inspection)
@@ -118,10 +122,10 @@ public:
   /// \return Vector of symbol2tc expressions for global variables
   static std::vector<expr2tc> collect_global_variables(const contextt &context);
 
-  /// \brief Classification of assigns targets into direct, pointer, and struct-field categories.
-  /// Used to separate structurally-matchable targets from pointer-typed targets
-  /// that require aliasing disjunctions, and from direct struct field targets
-  /// that require per-field compliance checking.
+  /// \brief Classification of assigns targets into direct, pointer, and
+  /// struct-field categories. Used to separate structurally-matchable targets
+  /// from pointer-typed targets that require aliasing disjunctions, and from
+  /// direct struct field targets that require per-field compliance checking.
   struct classified_assignst
   {
     std::vector<expr2tc>
@@ -131,11 +135,13 @@ public:
     /// Direct struct field targets: maps global struct symbol name to the set
     /// of field names explicitly assigned.  Used to generate per-field
     /// compliance assertions instead of a coarse whole-struct assertion.
-    /// Example: __ESBMC_assigns(global_pt.x) → struct_field_targets["global_pt"] = {"x"}
+    /// Example: __ESBMC_assigns(global_pt.x) →
+    /// struct_field_targets["global_pt"] = {"x"}
     std::map<irep_idt, std::set<irep_idt>> struct_field_targets;
     /// Pointer-struct-field targets: maps pointer symbol name to the set of
     /// field names explicitly assigned through that pointer.
-    /// Example: __ESBMC_assigns(ctx->count) → ptr_field_targets["ctx"] = {"count"}
+    /// Example: __ESBMC_assigns(ctx->count) → ptr_field_targets["ctx"] =
+    /// {"count"}
     std::map<irep_idt, std::set<irep_idt>> ptr_field_targets;
     /// Array-element targets: maps an array symbol name to the indices the
     /// clause names. Used to assert every *other* element unchanged instead of
@@ -145,7 +151,8 @@ public:
   };
 
   /// \brief Classify assigns targets into direct and pointer categories.
-  /// - Pointer-typed symbols (from Clang simplifying &(*ptr) to ptr) → pointer_targets
+  /// - Pointer-typed symbols (from Clang simplifying &(*ptr) to ptr) →
+  /// pointer_targets
   /// - Dereference expressions → extract pointer operand → pointer_targets
   /// - Everything else → direct_targets
   static classified_assignst

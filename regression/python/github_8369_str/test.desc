@@ -1,0 +1,4 @@
+CORE
+main.py
+
+^ERROR: Variable 's' is read before its binding at line 8 as a different type than that binding gives it$

@@ -1,0 +1,4 @@
+CORE
+timer.ld
+--ld-props props.yaml --unwind 6 --no-unwinding-assertions
+^ERROR: .*wired ENO on block TON

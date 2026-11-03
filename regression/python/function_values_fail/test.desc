@@ -1,0 +1,15 @@
+CORE
+main.py
+--unwind 8 --no-unwinding-assertions --multi-property
+^VERIFICATION FAILED$
+FAILED .* line +141 +assertion
+FAILED .* line +143 +assertion
+FAILED .* line +145 +assertion
+FAILED .* line +147 +assertion
+FAILED .* line +149 +assertion
+FAILED .* line +151 +assertion
+FAILED .* line +153 +assertion
+FAILED .* line +155 +assertion
+FAILED .* line +157 +assertion
+FAILED .* line +159 +assertion
+FAILED .* line +161 +assertion

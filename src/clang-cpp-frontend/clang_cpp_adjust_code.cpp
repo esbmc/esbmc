@@ -1,4 +1,5 @@
 #include <functional>
+#include <utility>
 
 #include <clang-cpp-frontend/clang_cpp_adjust.h>
 #include <clang-c-frontend/typecast.h>
@@ -27,6 +28,19 @@ void clang_cpp_adjust::adjust_code(codet &code)
   if (statement == "cpp-catch")
   {
     adjust_catch(code);
+  }
+  else if (
+    statement == "cpp-throw" && code.find("exception_list").get_sub().empty())
+  {
+    // A throw side effect that went through an IREP2 round-trip before
+    // adjustment (e.g. the Python frontend's guard inside a statement
+    // expression) comes back in this code form; derive its exception_list
+    // as for the side effect, or remove_exceptions reads an empty one.
+    side_effect_exprt throw_expr("cpp-throw");
+    throw_expr.operands() = code.operands();
+    adjust_side_effect_throw(throw_expr);
+    code.operands() = throw_expr.operands();
+    code.set("exception_list", throw_expr.find("exception_list"));
   }
   else
     clang_c_adjust::adjust_code(code);
@@ -105,6 +119,9 @@ void clang_cpp_adjust::adjust_switch_case_ops(
     code_switch_caset &sc = to_code_switch_case(c);
     if (!sc.is_default() && sc.case_op().type() != switch_type)
       gen_typecast(ns, sc.case_op(), switch_type);
+    const exprt &range_hi = std::as_const(sc).case_range_hi();
+    if (range_hi.is_not_nil() && range_hi.type() != switch_type)
+      gen_typecast(ns, sc.case_range_hi(), switch_type);
 
     adjust_switch_case_ops(sc.code(), switch_type);
     return;
@@ -246,9 +263,9 @@ void clang_cpp_adjust::adjust_decl_block(codet &code)
     // initialisers instead, and must NOT be fanned out (that would construct
     // every element with element 0's arguments).
     // Static-storage locals (function-local statics, e.g. `static B a[2];`)
-    // are constructed by static_lifetime_init, not from the function body, so
-    // leave their declaration untouched -- expanding here would construct them
-    // a second time on every call.
+    // are constructed once, by static_lifetime_init or by goto_convert's
+    // guarded first-pass initialisation, so leave their declaration untouched
+    // -- expanding here would construct them again on every call.
     const bool is_static_local = code_decl.op0().is_symbol() && [&] {
       const symbolt *s =
         ns.lookup(to_symbol_expr(code_decl.op0()).get_identifier());

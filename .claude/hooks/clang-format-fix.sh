@@ -26,18 +26,18 @@ case "$file" in
     ;;
 esac
 
-# Prefer the clang-format 11 / git-clang-format pair pinned by
+# Prefer the clang-format 23 / git-clang-format pair pinned by
 # scripts/install-format-hook.sh, since that's the exact version CI's
 # code-style check uses, and git-clang-format lets us format only the lines
 # Claude just touched instead of rewriting the whole file (matching CI's and
 # install-format-hook.sh's changed-lines-only scope).
-cache_dir="$CLAUDE_PROJECT_DIR/.cache/clang-format-11/bin"
+cache_dir="$CLAUDE_PROJECT_DIR/.cache/clang-format-23/bin"
 cf="$cache_dir/clang-format"
 gcf="$cache_dir/git-clang-format"
 
 [ -x "$cf" ] || cf=$(command -v clang-format || true)
-if [ -z "$cf" ] || ! "$cf" --version 2>/dev/null | grep -q 'version 11\.'; then
-  echo "clang-format-fix: no clang-format 11 available; run scripts/install-format-hook.sh to install the pinned version." >&2
+if [ -z "$cf" ] || ! "$cf" --version 2>/dev/null | grep -q 'version 23\.'; then
+  echo "clang-format-fix: no clang-format 23 available; run scripts/install-format-hook.sh to install the pinned version." >&2
   exit 0
 fi
 

@@ -1,0 +1,6 @@
+regression/python/github_8970_returned_local
+regression/python/github_8970_returned_local_fail
+regression/python/github_8970_returned_local_same_kind
+regression/python/github_8970_returned_local_rebound_refused
+regression/python/github_8970_returned_passthrough
+regression/python/github_8970_returned_passthrough_fail

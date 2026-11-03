@@ -1,0 +1,8 @@
+properties:
+  # With Run on, the normally-closed reset contact is open, so two pulses reach
+  # the preset (2) and set Done. Reading the contact's variable instead of its
+  # power flow would reset the counter whenever Run is on and keep Done off.
+  - id: P1
+    kind: invariant
+    expression: "!(Run && Done)"
+    description: "Deliberately false: the counter reaches its preset while Run is on"

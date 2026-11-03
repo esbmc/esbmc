@@ -1,0 +1,4 @@
+CORE
+main.py
+--incremental-bmc
+^ERROR: using method 'C.one' as a value is not supported$

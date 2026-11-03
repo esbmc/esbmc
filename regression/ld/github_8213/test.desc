@@ -1,0 +1,5 @@
+CORE
+mul.ld
+--ld-props props.yaml --unwind 2 --no-unwinding-assertions
+^ERROR: property 'P1': variable 'P' is not BOOL$
+^ERROR: CONVERSION ERROR$

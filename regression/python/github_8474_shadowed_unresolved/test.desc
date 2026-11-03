@@ -1,0 +1,4 @@
+CORE
+main.py
+--unwind 8 --no-unwinding-assertions
+^ERROR: calling the result of a call is only supported through a module function that returns a function$

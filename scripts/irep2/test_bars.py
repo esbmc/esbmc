@@ -61,6 +61,12 @@ class TestRefinement(unittest.TestCase):
     def test_an_irep2_only_helper_does_not_count(self):
         self.assertEqual(count("sym.set_value(gen_false_expr());"), (1, 0))
 
+    def test_an_irep2_type_getter_does_not_count(self):
+        self.assertEqual(count("sym.set_type(get_bool_type());"), (1, 0))
+
+    def test_a_legacy_type_builder_still_counts(self):
+        self.assertEqual(count("sym.set_type(bool_type());"), (1, 1))
+
     def test_a_helper_with_a_legacy_namesake_still_counts(self):
         self.assertEqual(count("sym.set_value(gen_zero(t, true));"), (1, 1))
 

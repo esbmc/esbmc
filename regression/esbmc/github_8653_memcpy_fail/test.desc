@@ -1,0 +1,6 @@
+CORE
+main.c
+--no-pointer-check --multi-property
+FAILED +\[main\.assertion\.1\] +line +19 +assertion dst\[0\] == 0
+^\*\* 1 of 1 properties failed$
+^VERIFICATION FAILED$

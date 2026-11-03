@@ -1,0 +1,5 @@
+CORE
+main.py
+--incremental-bmc
+^  assertion .*->value == 3$
+^VERIFICATION FAILED$

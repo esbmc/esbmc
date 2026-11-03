@@ -7,6 +7,7 @@
 #include <langapi/language_util.h>
 #include <goto-symex/trace/goto_trace.h>
 #include <goto-symex/equation/symex_target_equation.h>
+#include <goto-symex/waypoint.h>
 #include <string>
 #include <regex>
 #include <vector>
@@ -14,8 +15,6 @@
 #include <yaml-cpp/yaml.h>
 
 typedef boost::property_tree::ptree xmlnodet;
-
-#define c_nonset -1
 
 class nodet
 {
@@ -75,49 +74,6 @@ public:
     this->from_node = from_node;
     this->to_node = to_node;
   }
-};
-
-class waypoint
-{
-public:
-  enum Type
-  {
-    assumption,
-    target,
-    function_enter,
-    function_return,
-    branching,
-    unknown
-  };
-
-  enum Action
-  {
-    follow, // must be passed exactly once
-    avoid,  // must never be passed
-    cycle   // must be passed infinitely
-  };
-
-  // Parsed \result constraint for function_return waypoints.
-  // expr is an IRep2 expression tree with symbol2tc("\\result") as placeholder.
-  struct parsed_constraintt
-  {
-    expr2tc expr;
-    bool valid = false;
-  };
-
-  Type type = unknown;
-  Action action = follow;
-  size_t segment_idx = 0;
-  std::string file;
-  std::string value;
-  std::string format;
-  BigInt line = c_nonset;
-  BigInt column = c_nonset;
-  std::string function;
-  irep_idt line_id;
-  irep_idt column_id;
-  irep_idt function_id;
-  parsed_constraintt parsed_cond;
 };
 
 class invariant
@@ -310,10 +266,12 @@ struct collected_nondet_value
   type2tc type;            // The type
 };
 
-/// Collect all nondet values from SSA
+/// Collect all nondet values from SSA. `harness_inputs_only` drops the
+/// nondet values of uninitialised locals, which a test harness cannot feed.
 std::vector<collected_nondet_value> collect_nondet_values(
   const symex_target_equationt &target,
-  smt_convt &smt_conv);
+  smt_convt &smt_conv,
+  bool harness_inputs_only = false);
 
 /// Build a blocking clause that excludes the given input tuple from future
 /// solver queries: NOT (sym_1 == val_1 AND sym_2 == val_2 AND ...).

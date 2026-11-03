@@ -28,16 +28,15 @@ struct equation_conversion_statet
 };
 
 void pre_register_addresses(
+  const namespacet &ns,
   smt_convt &smt_conv,
   symex_target_equationt::SSA_stepst::iterator begin,
   symex_target_equationt::SSA_stepst::iterator end)
 {
-  // Only pre-register address_of of compile-time constants (string and
-  // array literals).  These have static lifetime and exist throughout the
-  // program, so including them early in the address space cannot produce
-  // spurious candidate matches for int-to-ptr casts -- any int-to-ptr
-  // cast could legitimately reach them regardless of where the literal's
-  // use happens to appear in the source.  Dynamic/automatic objects keep
+  // Only pre-register address_of of objects with static storage duration
+  // (literals, static variables and functions).  They exist throughout the
+  // program, so any int-to-ptr cast could legitimately reach them regardless of
+  // where their address first appears (#1539).  Dynamic/automatic objects keep
   // their original lazy registration to avoid exposing later-allocated
   // memory to earlier casts.
   // Shared subexpressions make an SSA step a DAG, not a tree -- a propagated
@@ -56,7 +55,12 @@ void pre_register_addresses(
       while (is_index2t(obj) || is_member2t(obj))
         obj = is_index2t(obj) ? to_index2t(obj).source_value
                               : to_member2t(obj).source_value;
-      if (is_constant_string2t(obj) || is_constant_array2t(obj))
+      const symbolt *sym =
+        is_symbol2t(obj) ? ns.lookup(to_symbol2t(obj).thename) : nullptr;
+      if (
+        is_constant_string2t(obj) || is_constant_array2t(obj) ||
+        (sym && (sym->static_lifetime || is_code_type(obj)) &&
+         !sym->is_thread_local))
         smt_conv.convert_ast(e);
     }
     e->foreach_operand([&](const expr2tc &op) { walk(op); });
@@ -126,7 +130,7 @@ void convert_internal_step(
     log_status("{}", oss.str());
   }
 
-  smt_conv.convert_ast(step.guard);
+  smt_conv.begin_step(step.guard, step.cond);
 
   if (step.is_assume() || step.is_assert() || step.is_branching())
   {
@@ -136,6 +140,7 @@ void convert_internal_step(
   }
   else if (step.is_assignment())
   {
+    smt_conv.note_assignment(step.lhs, step.rhs);
     smt_conv.convert_assign(step.cond);
     if (ssa_smt_trace)
       smt_conv.dump_expr(step.cond);
@@ -167,6 +172,7 @@ void convert_internal_step(
   {
     assert(0 && "Unexpected SSA step type in conversion");
   }
+  smt_conv.end_step();
 
   if (step.is_assert())
   {
@@ -213,7 +219,7 @@ void symex_target_equationt::assignment(
   SSA_step.rhs = rhs;
   SSA_step.hidden = hidden;
   SSA_step.cond = equality2tc(lhs, rhs);
-  SSA_step.type = goto_trace_stept::ASSIGNMENT;
+  SSA_step.type = symex_targett::ASSIGNMENT;
   SSA_step.source = source;
   if (!stack_trace.empty())
     SSA_step.stack_trace_payload() = std::move(stack_trace);
@@ -233,7 +239,7 @@ void symex_target_equationt::output(
   SSA_stept &SSA_step = SSA_steps.back();
 
   SSA_step.guard = guard;
-  SSA_step.type = goto_trace_stept::OUTPUT;
+  SSA_step.type = symex_targett::OUTPUT;
   SSA_step.source = source;
   auto &od = SSA_step.output_payload();
   od.output_args = args;
@@ -256,7 +262,7 @@ void symex_target_equationt::branching(
   SSA_step.guard = guard;
   SSA_step.cond = cond;
   SSA_step.hidden = hidden;
-  SSA_step.type = goto_trace_stept::BREANCHING;
+  SSA_step.type = symex_targett::BREANCHING;
   SSA_step.source = source;
   SSA_step.loop_number = loop_number;
 
@@ -275,7 +281,7 @@ void symex_target_equationt::assumption(
 
   SSA_step.guard = guard;
   SSA_step.cond = cond;
-  SSA_step.type = goto_trace_stept::ASSUME;
+  SSA_step.type = symex_targett::ASSUME;
   SSA_step.source = source;
   SSA_step.loop_number = loop_number;
 
@@ -298,7 +304,7 @@ void symex_target_equationt::assertion(
   SSA_step.guard = guard;
   SSA_step.cond = cond;
   SSA_step.cond_neg = cond_neg;
-  SSA_step.type = goto_trace_stept::ASSERT;
+  SSA_step.type = symex_targett::ASSERT;
   SSA_step.source = source;
   SSA_step.comment = msg;
   if (!stack_trace.empty())
@@ -323,7 +329,7 @@ void symex_target_equationt::renumber(
   SSA_step.guard = guard;
   SSA_step.lhs = symbol;
   SSA_step.rhs = size;
-  SSA_step.type = goto_trace_stept::RENUMBER;
+  SSA_step.type = symex_targett::RENUMBER;
   SSA_step.source = source;
 
   if (debug_print)
@@ -332,19 +338,26 @@ void symex_target_equationt::renumber(
 
 void symex_target_equationt::convert(smt_convt &smt_conv, assertion_modet mode)
 {
-  // Pre-register address-of'd string/array literals so int-to-ptr casts see
-  // them regardless of source-level declaration order (see
+  // Pre-register address-of'd static objects so int-to-ptr casts see them
+  // regardless of source-level declaration order (see
   // pre_register_addresses for scope).
-  pre_register_addresses(smt_conv, SSA_steps.begin(), SSA_steps.end());
+  pre_register_addresses(ns, smt_conv, SSA_steps.begin(), SSA_steps.end());
 
   // Show the solver every division's operand pair up front: the
   // modulus conversion lowers a remainder compositionally only when
-  // the same operands are divided somewhere in the formula.
-  for (const auto &SSA_step : SSA_steps)
+  // the same operands are divided somewhere in the formula. One visited set
+  // for all steps, as they share subterms and extend each other's guards
+  // (#9150).
   {
-    smt_conv.note_division_operands(SSA_step.guard);
-    smt_conv.note_division_operands(SSA_step.rhs);
-    smt_conv.note_division_operands(SSA_step.cond);
+    std::unordered_set<const expr2t *> division_seen;
+    for (const auto &SSA_step : SSA_steps)
+    {
+      if (SSA_step.ignore)
+        continue;
+      smt_conv.note_division_operands(SSA_step.guard, division_seen);
+      smt_conv.note_division_operands(SSA_step.rhs, division_seen);
+      smt_conv.note_division_operands(SSA_step.cond, division_seen);
+    }
   }
 
   equation_conversion_statet state;
@@ -407,30 +420,30 @@ void symex_target_equationt::SSA_stept::output(
 
   switch (type)
   {
-  case goto_trace_stept::ASSERT:
+  case symex_targett::ASSERT:
     out << "ASSERT"
         << "\n";
     break;
-  case goto_trace_stept::ASSUME:
+  case symex_targett::ASSUME:
     out << "ASSUME"
         << "\n";
     break;
-  case goto_trace_stept::OUTPUT:
+  case symex_targett::OUTPUT:
     out << "OUTPUT"
         << "\n";
     break;
-  case goto_trace_stept::BREANCHING:
+  case symex_targett::BREANCHING:
     out << "BRANCHING"
         << "\n";
     break;
-  case goto_trace_stept::ASSIGNMENT:
+  case symex_targett::ASSIGNMENT:
     out << "ASSIGNMENT (";
     out << (hidden ? "HIDDEN" : "") << ")\n";
     break;
 
   default:
     assert(
-      type == goto_trace_stept::SKIP && config.options.get_bool_option("ltl"));
+      type == symex_targett::SKIP && config.options.get_bool_option("ltl"));
   }
 
   if (is_assert() || is_assume() || is_assignment() || is_branching())
@@ -505,7 +518,7 @@ unsigned int symex_target_equationt::clear_assertions()
 
   for (SSA_stepst::iterator it = SSA_steps.begin(); it != SSA_steps.end(); ++it)
   {
-    if (it->type == goto_trace_stept::ASSERT)
+    if (it->type == symex_targett::ASSERT)
     {
       SSA_stepst::iterator it2 = it;
       --it;
@@ -595,10 +608,10 @@ void runtime_encoded_equationt::flush_latest_instructions()
     }
   }
 
-  // Pre-register address-of'd string/array literals so int-to-ptr casts see
-  // them regardless of source-level declaration order (see
+  // Pre-register address-of'd static objects so int-to-ptr casts see them
+  // regardless of source-level declaration order (see
   // pre_register_addresses for scope).
-  pre_register_addresses(conv, run_it, SSA_steps.end());
+  pre_register_addresses(ns, conv, run_it, SSA_steps.end());
 
   // Now iterate from the start insn to convert, to the end of the list.
   for (; run_it != SSA_steps.end(); ++run_it)

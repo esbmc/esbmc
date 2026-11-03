@@ -1,0 +1,4 @@
+CORE
+main.py
+--unwind 8 --no-unwinding-assertions
+^ERROR: Variable 'a' is not defined at line 4.$

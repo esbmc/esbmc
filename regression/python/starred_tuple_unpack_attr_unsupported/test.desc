@@ -1,0 +1,4 @@
+CORE
+main.py
+
+^ERROR: Starred unpacking only supports simple names, not Attribute$

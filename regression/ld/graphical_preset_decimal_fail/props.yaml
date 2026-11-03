@@ -1,0 +1,7 @@
+properties:
+  # Reading 1.5 as 1 builds a timer the program does not contain; the literal
+  # must be refused rather than truncated.
+  - id: P1
+    kind: invariant
+    expression: "!x || a"
+    description: "A TON output is on only while its input is"

@@ -1,0 +1,21 @@
+- entry_type: violation_sequence
+  metadata:
+    format_version: '2.0'
+  content:
+  - segment:
+    - waypoint:
+        type: function_return
+        action: follow
+        constraint:
+          format: acsl_expression
+          value: \result == 1
+        location:
+          file_name: main.c
+          line: 5
+  - segment:
+    - waypoint:
+        type: target
+        action: follow
+        location:
+          file_name: main.c
+          line: 6

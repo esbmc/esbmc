@@ -285,7 +285,7 @@ public:
   }
 
   /// Retire a name whose storage has gone out of scope. L1 names are never
-  /// reused (symex_decl draws from a monotone per-identifier counter), so a
+  /// reused across frames (symex_decl's counter is monotone), so a
   /// popped frame's local can still be named -- through a dangling pointer --
   /// after teardown. Erasing the record restarts the counter, letting such a
   /// write re-issue an index the declaration already defined and so define one

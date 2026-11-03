@@ -44,6 +44,7 @@
 #include <goto-programs/remove_unreachable.h>
 #include <goto-programs/remove_library_assertions.h>
 #include <goto-programs/remove_exceptions.h>
+#include <goto-programs/lower_longjmp.h>
 #include <goto-programs/set_claims.h>
 #include <goto-programs/show_claims.h>
 #include <goto-programs/loop_unroll.h>
@@ -174,6 +175,31 @@ apply_rounding_mode(goto_functionst &goto_functions, const cmdlinet &cmdline)
   return false;
 }
 
+static void apply_gcse(
+  goto_functionst &goto_functions,
+  contextt &context,
+  const cmdlinet &cmdline)
+{
+  // The available-expressions analysis is sequential: another thread may
+  // write between two reads it treats as equal (#8007).
+  if (spawns_threads(goto_functions))
+  {
+    log_warning("--gcse is ignored: the program may create threads");
+    return;
+  }
+
+  auto andersen = std::make_shared<andersent>();
+  log_status("Computing points-to analysis (Andersen)");
+  (*andersen)(goto_functions);
+  std::shared_ptr<value_setst> points_to = andersen;
+
+  if (cmdline.isset("no-library"))
+    log_warning("Using CSE with --no-library might cause huge slowdowns!");
+
+  goto_cse cse(context, points_to);
+  cse.run(goto_functions);
+}
+
 // This method performs various analyses and transformations
 // on the given GOTO program. They involve all the techniques that we class
 // as "static analyses" - performed on the given GOTO program before it is
@@ -187,6 +213,81 @@ apply_rounding_mode(goto_functionst &goto_functions, const cmdlinet &cmdline)
 //
 // \param options - various options used by the processing methods,
 // \param goto_functions - reference to the GOTO program to be processed.
+// Exceptions whose escape is not reported as a failed property.
+static std::set<irep_idt> unreported_exceptions(const optionst &options)
+{
+  if (options.get_bool_option("python-ignore-assertions"))
+    return {"AssertionError"};
+  return {};
+}
+
+static void configure_branch_instrumentation(
+  const cmdlinet &cmdline,
+  goto_coveraget &coverage)
+{
+  if (cmdline.isset("function"))
+    coverage.set_target(cmdline.getval("function"));
+  if (cmdline.isset("coverage-covered-set"))
+    coverage.covered_set_path = cmdline.getval("coverage-covered-set");
+  coverage.cov_assume_asserts = cmdline.isset("cov-assume-asserts");
+}
+
+static bool has_unsupported_fp_format(const type2tc &t, const std::string &s)
+{
+  if (is_floatbv_type(t))
+    return !solver_supports_fp_format(
+      s, to_floatbv_type(t).exponent, to_floatbv_type(t).fraction);
+  if (is_array_or_vector_type(t))
+    return has_unsupported_fp_format(array_or_vector_subtype(t), s);
+  if (!is_structure_type(t))
+    return false;
+  const std::vector<type2tc> &members =
+    is_struct_type(t) ? to_struct_type(t).members : to_union_type(t).members;
+  for (const type2tc &m : members)
+    if (has_unsupported_fp_format(m, s))
+      return true;
+  return false;
+}
+
+/* x87 long double under --32 is a 96-bit float that Bitwuzla's native FP
+ * theory cannot represent (it aborts on the sort). If reachable code uses
+ * such a format, encode floating point as bit-vectors instead (#8097). */
+static void use_fp2bv_for_unsupported_formats(
+  optionst &options,
+  const goto_functionst &goto_functions)
+{
+  if (options.get_bool_option("fp2bv") || options.get_bool_option("fixedbv"))
+    return;
+  const std::string solver = effective_solver_name(options);
+  bool found = false;
+  std::function<void(const expr2tc &)> visit = [&](const expr2tc &e) {
+    if (found || is_nil_expr(e))
+      return;
+    found = has_unsupported_fp_format(e->type, solver);
+    e->foreach_operand(visit);
+  };
+  for (const irep_idt &id : reachable_functions(goto_functions))
+  {
+    auto it = goto_functions.function_map.find(id);
+    if (it == goto_functions.function_map.end())
+      continue;
+    for (const auto &instr : it->second.body.instructions)
+    {
+      visit(instr.code);
+      visit(instr.guard);
+    }
+    if (found)
+      break;
+  }
+  if (!found)
+    return;
+  log_status(
+    "The program uses a floating-point format {} does not support "
+    "natively; encoding floating-point as bit-vectors",
+    solver);
+  options.set_option("fp2bv", true);
+}
+
 bool esbmc_parseoptionst::process_goto_program(
   optionst &options,
   goto_functionst &goto_functions)
@@ -199,6 +300,8 @@ bool esbmc_parseoptionst::process_goto_program(
       apply_rounding_mode(goto_functions, cmdline) ||
       apply_taylor_terms(goto_functions, cmdline))
       return true;
+
+    use_fp2bv_for_unsupported_formats(options, goto_functions);
 
     is_coverage = cmdline.isset("assertion-coverage") ||
                   cmdline.isset("assertion-coverage-claims") ||
@@ -232,12 +335,12 @@ bool esbmc_parseoptionst::process_goto_program(
       for (size_t i = 1; i < cmdline.args.size(); i++)
         config.ansi_c.include_files.push_back(cmdline.args[i]);
 
-    // For Solidity coverage mode: neutralize the multi-transaction harness loop.
-    // The _ESBMC_Main_* functions contain a while(nondet_bool()) loop that calls
-    // user functions repeatedly. This causes massive symex overhead in coverage
-    // mode where we only need each function executed once. Convert backward GOTOs
-    // (loop back-edges) in _ESBMC_Main* functions to SKIPs so the loop body
-    // executes exactly once.
+    // For Solidity coverage mode: neutralize the multi-transaction harness
+    // loop. The _ESBMC_Main_* functions contain a while(nondet_bool()) loop
+    // that calls user functions repeatedly. This causes massive symex overhead
+    // in coverage mode where we only need each function executed once. Convert
+    // backward GOTOs (loop back-edges) in _ESBMC_Main* functions to SKIPs so
+    // the loop body executes exactly once.
     if (is_coverage)
     {
       bool is_sol = cmdline.isset("sol");
@@ -291,7 +394,8 @@ bool esbmc_parseoptionst::process_goto_program(
     if (!(cmdline.isset("no-remove-no-op")))
       remove_no_op(goto_functions);
 
-    // We should skip this 'remove-unreachable' removal in goto-cov and multi-property
+    // We should skip this 'remove-unreachable' removal in goto-cov and
+    // multi-property
     // - multi-property wants to find all the bugs in the src code
     // - assertion-coverage wants to find out unreached codes (asserts)
     // - however, the optimization below will remove codes during the Goto stage
@@ -299,7 +403,7 @@ bool esbmc_parseoptionst::process_goto_program(
       !(cmdline.isset("no-remove-unreachable") || checks_past_violation) ||
       cmdline.isset("condition-coverage-rm") ||
       cmdline.isset("condition-coverage-claims-rm"))
-      remove_unreachable(goto_functions);
+      remove_unreachable(goto_functions, checks_past_violation);
 
     // Apply all the initialized algorithms
     for (auto &algorithm : goto_preprocess_algorithms)
@@ -320,12 +424,19 @@ bool esbmc_parseoptionst::process_goto_program(
           adv.comment,
           format_cwe_list(cwe_for(adv.comment)));
 
+    lower_longjmp(goto_functions, context, options);
+
     // Lower throw/catch to symbolic guarded control flow (#5075). Run before
     // inlining so per-call-site exception propagation is still explicit. This
     // is now the only exception path: a program the pass cannot lower is
     // reported as an error rather than silently miscompiled (the legacy
     // imperative path in symex was removed once the lowered subset covered it).
-    remove_exceptions(goto_functions, context, ns);
+    remove_exceptions(
+      goto_functions,
+      context,
+      ns,
+      unreported_exceptions(options),
+      python_checked_exceptions(options));
 
     // do partial inlining
     if (!cmdline.isset("no-inlining"))
@@ -337,24 +448,13 @@ bool esbmc_parseoptionst::process_goto_program(
     }
 
     if (cmdline.isset("gcse"))
-    {
-      auto andersen = std::make_shared<andersent>();
-      log_status("Computing points-to analysis (Andersen)");
-      (*andersen)(goto_functions);
-      std::shared_ptr<value_setst> points_to = andersen;
-
-      if (cmdline.isset("no-library"))
-        log_warning("Using CSE with --no-library might cause huge slowdowns!");
-
-      goto_cse cse(context, points_to);
-      cse.run(goto_functions);
-    }
+      apply_gcse(goto_functions, context, cmdline);
 
     // Under --termination, goto_termination does its own havoc, so
     // goto_k_induction must not also run (#6031).
     bool is_k_induction =
       (cmdline.isset("inductive-step") || cmdline.isset("k-induction") ||
-       cmdline.isset("k-induction-parallel")) &&
+       cmdline.isset("k-induction-parallel") || ts_strategy_requested()) &&
       !options.get_bool_option("termination");
 
     // --termination reuses k-induction's havoc machinery via
@@ -392,18 +492,13 @@ bool esbmc_parseoptionst::process_goto_program(
       goto_loop_invariant_combined(goto_functions);
     }
 
-    // goto_k_induction returns true when a loop writes an array element
-    // through a pointer, which the inductive-step havoc cannot soundly
-    // generalise. Disable the inductive step in that case so its UNSAT is
-    // not reported as proof (#5224); base case and forward condition run.
+    // goto_k_induction returns true, and logs why, when the inductive step
+    // would be unsound: e.g. a loop writes through a pointer to storage its
+    // havoc cannot name (#5224). Disable the step then so its UNSAT is not
+    // reported as proof; base case and forward condition run.
     auto disable_is_if_unsound = [&](bool unsound) {
       if (unsound)
-      {
-        log_warning(
-          "k-induction does not support loops that write array elements "
-          "through a pointer yet. Disabling inductive step");
         options.set_option("disable-inductive-step", true);
-      }
     };
 
     if (cmdline.isset("loop-invariant"))
@@ -525,12 +620,13 @@ bool esbmc_parseoptionst::process_goto_program(
     bool has_replace_all = cmdline.isset("replace-all-contracts");
     if (has_enforce || has_replace || has_enforce_all || has_replace_all)
     {
-      if (process_function_contracts(
-            goto_functions,
-            has_replace,
-            has_enforce,
-            has_enforce_all,
-            has_replace_all))
+      if (
+        process_function_contracts(
+          goto_functions,
+          has_replace,
+          has_enforce,
+          has_enforce_all,
+          has_replace_all))
         return true;
     }
 
@@ -556,7 +652,7 @@ bool esbmc_parseoptionst::process_goto_program(
 
     if (!(cmdline.isset("no-remove-unreachable") || checks_past_violation ||
           skip_cleanup_for_termination))
-      remove_unreachable(goto_functions);
+      remove_unreachable(goto_functions, false);
 
     goto_functions.update();
 
@@ -628,11 +724,12 @@ bool esbmc_parseoptionst::process_goto_program(
       options.set_option("goto-instrumented", false);
 
       //?:
-      // if we do not want expressions like 'if(2 || 3)' get simplified to 'if(1||1)'
-      // we need to enable the options below:
+      // if we do not want expressions like 'if(2 || 3)' get simplified to
+      // 'if(1||1)' we need to enable the options below:
       //    options.set_option("no-simplify", true);
       //    options.set_option("no-propagation", true);
-      // however, this will affect the performance, thus they are not enabled by default
+      // however, this will affect the performance, thus they are not enabled by
+      // default
 
       std::string filename = cmdline.args[0];
       goto_coveraget tmp(ns, goto_functions, filename);
@@ -652,8 +749,10 @@ bool esbmc_parseoptionst::process_goto_program(
       tmp.condition_coverage();
 
       // redo conversion to remove_sideeffect
-      // Due to that we deliberately skip some of the sideeffects removal process when generating the Goto program.
-      // This is to keep the condition/guards format and avoid introducing auxiliary variables, which will affect the coverage calculation.
+      // Due to that we deliberately skip some of the sideeffects removal
+      // process when generating the Goto program. This is to keep the
+      // condition/guards format and avoid introducing auxiliary variables,
+      // which will affect the coverage calculation.
       goto_coverage_rm temp(context, options, goto_functions);
       temp.remove_sideeffect();
     }
@@ -680,10 +779,7 @@ bool esbmc_parseoptionst::process_goto_program(
 
       std::string filename = cmdline.args[0];
       goto_coveraget tmp(ns, goto_functions, filename);
-      // for function mode
-      if (cmdline.isset("function"))
-        tmp.set_target(cmdline.getval("function"));
-      tmp.cov_assume_asserts = cmdline.isset("cov-assume-asserts");
+      configure_branch_instrumentation(cmdline, tmp);
       tmp.branch_coverage();
     }
     if (

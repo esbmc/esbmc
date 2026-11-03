@@ -1,0 +1,5 @@
+CORE
+main.py
+
+^VERIFICATION FAILED$
+^  file .*main\.py line 13 column 0( function f)?$

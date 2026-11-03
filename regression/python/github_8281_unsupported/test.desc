@@ -1,0 +1,4 @@
+CORE
+main.py
+--unwind 5
+^ERROR: .*main\.py:5:18: unsupported: _sv_verifier\.check_type with the hint 'hint', which is neither a class, None, Any, a union of hints, nor list, set, tuple or dict of hints$

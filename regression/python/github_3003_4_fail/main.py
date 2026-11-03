@@ -3,7 +3,8 @@ class Foo:
         pass
     
     def foo(self, l: list[str] | None = None) -> None:
-        assert isinstance(l, list)
+        if nondet_bool():
+            assert isinstance(l, list)
         for s in l:
             assert isinstance(s, str)
 

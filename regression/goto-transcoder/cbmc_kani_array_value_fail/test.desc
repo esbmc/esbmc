@@ -1,0 +1,5 @@
+CORE
+cbmc_kani_array_value_fail.goto
+--binary --function _RNvCseecsIWrBmPP_14arr_value_fail7harness --ignore-property-class reachability_check --ignore-property-class cover
+assertion failed: raw\[0\] == 7 && raw\[4\] == 8
+^VERIFICATION FAILED$

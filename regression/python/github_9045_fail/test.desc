@@ -1,0 +1,5 @@
+CORE
+main.py
+--unwind 5
+^\s+assertion ISINSTANCE\(e, 
+^VERIFICATION FAILED$

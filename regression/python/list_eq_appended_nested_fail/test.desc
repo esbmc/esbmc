@@ -1,0 +1,5 @@
+CORE
+main.py
+--unwind 2 --no-unwinding-assertions
+^VERIFICATION FAILED$
+^  file .*main\.py line 8 column 0$

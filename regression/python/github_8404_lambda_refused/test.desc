@@ -1,0 +1,4 @@
+CORE
+main.py
+
+^ERROR: .*main\.py:3:11: unsupported: this call may be 'the lambda on line 7' or 'the lambda on line 10', which return different types \(int or float and str\)$

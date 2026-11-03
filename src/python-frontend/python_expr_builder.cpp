@@ -42,6 +42,22 @@ void set_symbol_type_if_carried(symbolt &sym, const typet &t)
     sym.set_type(migrate_type(t));
 }
 
+void set_function_type(symbolt &sym, const typet &t)
+{
+  type2tc t2 = migrate_type(t);
+  typet expected = t;
+  typet &code = expected.is_pointer() ? expected.subtype() : expected;
+  for (code_typet::argumentt &arg : to_code_type(code).arguments())
+  {
+    arg.remove("identifier");
+    arg.remove("#location");
+  }
+  if (full_eq(migrate_type_back(t2), expected))
+    sym.set_type(t2);
+  else
+    sym.set_type(t);
+}
+
 exprt build_symbol(const symbolt &sym)
 {
   if (contains_dyn_array(sym.get_type()))
@@ -264,11 +280,21 @@ exprt build_xor(const exprt &a, const exprt &b)
     a, b, [](const expr2tc &x, const expr2tc &y) { return xor2tc(x, y); });
 }
 
+// Float arithmetic is built as the IEEE node in the program's rounding mode,
+// c:@__ESBMC_rounding_mode (0, round to nearest). Left as a plain add, the C
+// adjuster names the mode `__ESBMC_rounding_mode` (CPROVER_PREFIX), which no
+// assignment reaches, so the solver could pick any rounding.
+static expr2tc rounding_mode()
+{
+  return symbol2tc(get_int32_type(), "c:@__ESBMC_rounding_mode");
+}
+
 exprt build_add(const exprt &a, const exprt &b, const typet &t)
 {
   return migrate_typed_binary(
     a, b, t, [](const type2tc &ty, const expr2tc &x, const expr2tc &y) {
-      return add2tc(ty, x, y);
+      return is_floatbv_type(ty) ? ieee_add2tc(ty, x, y, rounding_mode())
+                                 : add2tc(ty, x, y);
     });
 }
 
@@ -276,7 +302,8 @@ exprt build_sub(const exprt &a, const exprt &b, const typet &t)
 {
   return migrate_typed_binary(
     a, b, t, [](const type2tc &ty, const expr2tc &x, const expr2tc &y) {
-      return sub2tc(ty, x, y);
+      return is_floatbv_type(ty) ? ieee_sub2tc(ty, x, y, rounding_mode())
+                                 : sub2tc(ty, x, y);
     });
 }
 
@@ -284,7 +311,8 @@ exprt build_mul(const exprt &a, const exprt &b, const typet &t)
 {
   return migrate_typed_binary(
     a, b, t, [](const type2tc &ty, const expr2tc &x, const expr2tc &y) {
-      return mul2tc(ty, x, y);
+      return is_floatbv_type(ty) ? ieee_mul2tc(ty, x, y, rounding_mode())
+                                 : mul2tc(ty, x, y);
     });
 }
 

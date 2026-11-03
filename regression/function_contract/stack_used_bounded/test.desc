@@ -1,0 +1,4 @@
+CORE
+main.c
+--enforce-contract rec --replace-call-with-contract rec
+^VERIFICATION SUCCESSFUL$

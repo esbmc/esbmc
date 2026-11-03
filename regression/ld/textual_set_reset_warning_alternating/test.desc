@@ -1,0 +1,5 @@
+CORE
+latch.ld
+--ld-props props.yaml --k-induction --unlimited-k-steps
+^.*LD: 'm' has both set and reset coils; in a scan where several are powered, the last powered one in rung order wins$
+^VERIFICATION SUCCESSFUL$

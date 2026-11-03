@@ -39,12 +39,17 @@ typet double_type();
 type2tc double_type2();
 
 typet long_double_type();
+/// The C literal suffix of a floating-point type: "f", "l" or "".
+const char *c_float_literal_suffix(const typet &type);
 type2tc long_double_type2();
 
 typet pointer_type();
 type2tc pointer_type2();
 
 type2tc ptraddr_type2();
+BigInt max_object_size();
+BigInt first_object_address();
+BigInt max_layable_size();
 
 type2tc bitsize_type2();
 

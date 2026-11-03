@@ -1,0 +1,5 @@
+CORE
+main.c
+--interval-symex-assert
+^ +PASSED .*line 11 +x at most 10 \(interval\)$
+^VERIFICATION SUCCESSFUL$

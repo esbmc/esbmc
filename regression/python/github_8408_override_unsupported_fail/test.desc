@@ -1,0 +1,4 @@
+CORE
+main.py
+--unwind 5 --multi-property
+^ERROR: .*main.py:18:8: .a\.func., where .a. holds an instance of Base or Sub depending on the path, is not supported$

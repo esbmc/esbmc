@@ -1,0 +1,4 @@
+CORE
+timers.ld
+--ld-props props.yaml
+^ERROR: .*PT and ET ports must be distinct variables

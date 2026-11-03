@@ -1,0 +1,5 @@
+CORE
+main.c
+
+FAILED +\[memset\.assertion\.1\].*trying to deref a ptr code
+^VERIFICATION FAILED$

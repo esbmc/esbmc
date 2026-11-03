@@ -141,17 +141,7 @@ __ESBMC_HIDE:;
 void call_once(once_flag *flag, void (*func)(void))
 {
 __ESBMC_HIDE:;
-  /* pthread_once has no operational model, so the flag is tested and set
-   * directly. The read-modify-write must be atomic, otherwise two racing
-   * callers could both observe the flag clear and run func twice. */
-  __ESBMC_atomic_begin();
-  _Bool run = (*flag == 0);
-  if (run)
-    *flag = 1;
-  __ESBMC_atomic_end();
-
-  if (run)
-    func();
+  pthread_once(flag, func);
 }
 
 int cnd_init(cnd_t *cond)

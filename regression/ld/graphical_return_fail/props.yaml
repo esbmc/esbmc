@@ -1,0 +1,5 @@
+properties:
+  - id: P1
+    kind: invariant
+    expression: "!y"
+    description: "the return ends the body before the rung that sets y; the network is refused because of the return"

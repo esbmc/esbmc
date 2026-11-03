@@ -1,0 +1,6 @@
+CORE
+main.c
+--replace-call-with-contract add --unwind 5
+^VERIFICATION FAILED$
+^  contract requires$
+^  &r != 0 && \(__ESBMC_forall\(\(void \*\)\(&j_bound\), !\(j_bound < 4\) \|\| .*\)\)$

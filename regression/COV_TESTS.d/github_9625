@@ -1,0 +1,6 @@
+regression/python/github_9625_get_str
+regression/python/github_9625_get_str_fail
+regression/python/github_9625_pop_str
+regression/python/github_9625_pop_float_key
+regression/python/github_9625_mixed_values
+regression/python/github_9625_dict_call

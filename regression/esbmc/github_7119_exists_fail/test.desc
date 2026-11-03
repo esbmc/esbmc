@@ -1,0 +1,5 @@
+CORE
+main.c
+
+^VERIFICATION FAILED$
+^  __ESBMC_exists\(\(void \*\)\(&i\), i > 0 && i < 0\)$

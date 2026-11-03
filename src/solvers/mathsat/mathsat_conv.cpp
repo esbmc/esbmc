@@ -1039,7 +1039,7 @@ smt_astt mathsat_convt::mk_smt_fpbv_rem(smt_astt lhs, smt_astt rhs)
 void mathsat_convt::print_model()
 {
   /* we use a model iterator to retrieve the model values for all the
-     * variables, and the necessary function instantiations */
+   * variables, and the necessary function instantiations */
   msat_model_iterator iter = msat_create_model_iterator(env);
   assert(!MSAT_ERROR_MODEL_ITERATOR(iter));
 

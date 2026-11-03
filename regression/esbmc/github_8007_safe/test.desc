@@ -1,0 +1,5 @@
+CORE
+main.c
+--gcse
+^WARNING: --gcse is ignored: the program may create threads$
+^VERIFICATION SUCCESSFUL$

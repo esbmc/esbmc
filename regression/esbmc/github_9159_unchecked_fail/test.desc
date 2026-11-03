@@ -1,0 +1,5 @@
+CORE
+main.c
+--64
+^\s*dereference failure: NULL pointer$
+^VERIFICATION FAILED$

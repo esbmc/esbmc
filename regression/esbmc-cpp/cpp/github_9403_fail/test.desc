@@ -1,0 +1,5 @@
+CORE
+main.cpp
+--std c++17 --unwind 20
+^VERIFICATION FAILED$
+assertion m.size\(\) == 2

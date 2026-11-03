@@ -1,0 +1,4 @@
+CORE
+main.py
+--unwind 8 --no-unwinding-assertions
+^ERROR: Reading an element of a list whose elements have different types is supported only at a constant index

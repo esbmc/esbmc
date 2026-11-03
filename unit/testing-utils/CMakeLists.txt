@@ -14,3 +14,8 @@ target_link_libraries(build_id_obj PRIVATE util_esbmc)
 
 add_library(test_goto_factory goto_factory.cpp)
 target_link_libraries(test_goto_factory PUBLIC esbmc_common irep2 clangcfrontend clangcppfrontend clibs)
+target_include_directories(test_goto_factory
+    PUBLIC ${Boost_INCLUDE_DIRS}
+)
+
+new_unit_test(goto-factory-test "goto_factory.test.cpp" "test_goto_factory;clangcppfrontend;clibs;filesystem;langapi")

@@ -30,12 +30,12 @@ symbolt python_converter::create_symbol(
   symbol.mode = "Python";
   symbol.module = module;
   symbol.location = location;
-  // Legacy where the seam loses data: a function type, or a pointer to one,
-  // keeps its arguments' plain identifiers (scope-python-irep2.md §11), a class
-  // struct its methods and its components' access, and a `bytes` array its
-  // #cpp_type tag, which migrate_type_back does not restore on arrays.
-  if (
-    type.is_code() || (type.is_pointer() && type.subtype().is_code()) ||
+  // Legacy where the seam loses data: a class struct its methods and its
+  // components' access, and a `bytes` array its #cpp_type tag, which
+  // migrate_type_back does not restore on arrays.
+  if (type.is_code() || (type.is_pointer() && type.subtype().is_code()))
+    python_expr::set_function_type(symbol, type);
+  else if (
     type.is_struct() || type.is_union() || type_utils::is_bytes_array(type))
     symbol.set_type(type);
   else

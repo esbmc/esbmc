@@ -1,0 +1,4 @@
+CORE
+u.ld
+--ld-props props.yaml
+^ERROR: .*type UINT

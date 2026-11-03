@@ -1,0 +1,6 @@
+regression/python/github_9161_import_after_fail
+regression/python/github_9161_imported
+regression/python/github_9161_imported_fail
+regression/python/github_9161_missing_base_fail
+regression/python/github_9161_mro_fail
+regression/python/github_9161_star_import_fail

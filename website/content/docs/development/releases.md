@@ -22,18 +22,6 @@ case:
 git switch -c v8.1
 ```
 
-### Update the Release Notes
-
-Update the release notes in `/scripts/release-notes.txt` to reflect the changes
-included in the new version.
-
-> [!TIP] Tip
->
-> You can use Claude or any other LLM for this, just use this command to get the
-> differences from the last tag
-> `git log v8.0..master --oneline > /tmp/commits-for-release.txt` (in this case
-> being `v8.0`) and instruct it to update the file for the next version.
-
 ### Update the Project Version
 
 Update the project version by modifying `/CMakeLists.txt`. Specifically the
@@ -46,7 +34,7 @@ Commit the changes and push them to the branch created earlier. Then submit a
 PR. Name the commit appropriately, in this case `update: bump version to v8.1`.
 
 ```sh
-git add scripts/release-notes.txt CMakeLists.txt
+git add CMakeLists.txt
 git commit -m "update: bump version to v8.1"
 git push
 ```
@@ -63,7 +51,7 @@ Make sure to change the title and body to your version number.
 ```sh
 gh pr create \
     --title "update: bump version to v8.1" \
-    --body "Bump version to v8.1 and update release notes."
+    --body "Bump version to v8.1."
 ```
 
 ### Await PR to be Merged
@@ -107,12 +95,15 @@ release the workflow created for your tag.
    `esbmc.info`.
 2. Adjust the title if needed — the draft is created as `ESBMC v8.1`; past
    releases use "Release 8.1" (note the missing v).
-3. Replace the placeholder description with a markdown version of the content
-   written in `/scripts/release-notes.txt` from earlier.
+3. Replace the placeholder description with release notes describing the
+   changes included in the new version.
 4. Publish the release.
 
 > [!TIP]
 >
-> You can use Claude or any other LLM to prepare the release description.
+> You can use Claude or any other LLM to prepare the release description. To get
+> the differences from the last tag, run
+> `git log v8.0..master --oneline > /tmp/commits-for-release.txt` (in this case
+> being `v8.0`) and let it write the notes from that.
 
 {{% /steps %}}

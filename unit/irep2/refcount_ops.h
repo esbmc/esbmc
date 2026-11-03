@@ -33,7 +33,8 @@ inline bool conservation_holds(const std::vector<expr2tc> &slots)
   return true;
 }
 
-// Returns false iff a step leaves some node's refcount != its live-handle count.
+// Returns false iff a step leaves some node's refcount != its live-handle
+// count.
 inline bool run_ops(const uint8_t *data, size_t size, size_t slot_count = 5)
 {
   config.ansi_c.word_size = 32;

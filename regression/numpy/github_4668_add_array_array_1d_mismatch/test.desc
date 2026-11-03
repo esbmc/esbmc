@@ -1,4 +1,5 @@
 CORE
 main.py
 --incremental-bmc
-^ERROR: TypeError: arithmetic on numeric arrays is not supported
+^VERIFICATION FAILED$
+^  uncaught exception: ValueError$

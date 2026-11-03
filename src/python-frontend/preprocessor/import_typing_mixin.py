@@ -98,6 +98,8 @@ class ImportTypingMixin:
 
         if isinstance(annotation, ast.Attribute):
             resolved_value = self._resolve_annotation_aliases(annotation.value)
+            if resolved_value is annotation.value:
+                return annotation
             return ast.Attribute(value=resolved_value, attr=annotation.attr, ctx=ast.Load())
 
         return annotation
@@ -154,6 +156,7 @@ class ImportTypingMixin:
             self._typing_classvar_names.add(alias.asname or alias.name)
 
     def visit_ImportFrom(self, node):
+        self._record_numpy_import(node)
         if node.module == "decimal":
             for alias in node.names:
                 self._handle_decimal_importfrom(alias)
@@ -170,6 +173,7 @@ class ImportTypingMixin:
         return node
 
     def visit_Import(self, node):
+        self._record_numpy_import(node)
         for alias in node.names:
             if alias.name == "decimal":
                 self.decimal_module_imported = True

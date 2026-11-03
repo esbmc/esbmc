@@ -1,0 +1,5 @@
+CORE
+main.cpp
+--std=c++20
+^VERIFICATION FAILED$
+FAILED .*\[main\.assertion\.1\] .*assertion b\.p\.use_count\(\) == 1$

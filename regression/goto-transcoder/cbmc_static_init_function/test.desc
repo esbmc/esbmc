@@ -1,0 +1,4 @@
+CORE
+cbmc_static_init_function.goto
+--binary --function harness
+^VERIFICATION SUCCESSFUL$

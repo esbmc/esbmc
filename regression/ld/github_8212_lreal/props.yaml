@@ -1,0 +1,5 @@
+properties:
+  - id: P1
+    kind: invariant
+    expression: "Safe"
+    description: "#8212: LREAL is binary64, so 16777216.0 + 1.0 is exact"

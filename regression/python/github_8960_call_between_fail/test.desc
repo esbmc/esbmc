@@ -1,0 +1,4 @@
+CORE
+main.py
+--unwind 8 --no-unwinding-assertions
+^ERROR: Variable 'h' is not defined in function 'func@F@g'

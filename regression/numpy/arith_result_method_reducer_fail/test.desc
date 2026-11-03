@@ -1,0 +1,5 @@
+CORE
+main.py
+--incremental-bmc
+^VERIFICATION FAILED$
+  assertion IEEE_ADD\(b\[0\], b\[1\]\) == 5\.0$

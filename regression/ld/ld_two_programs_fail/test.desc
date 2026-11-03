@@ -1,0 +1,5 @@
+CORE
+mode.ld
+--ld-props props.yaml --incremental-bmc --max-k-step 5
+^ERROR: UnsupportedConstruct\(more than one program POU, tier=2\)$
+^ERROR: PARSING ERROR$

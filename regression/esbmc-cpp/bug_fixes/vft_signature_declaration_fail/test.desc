@@ -1,0 +1,5 @@
+CORE
+main.cpp
+--std c++11
+^VERIFICATION FAILED$
+^\s*FAILED\s+\[main\.assertion\.[0-9]+\].*assertion value != 7$

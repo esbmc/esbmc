@@ -1,0 +1,4 @@
+CORE
+main.py
+
+^ERROR: unsupported: creating an instance of ast.Import, a class of a module that is not modelled$

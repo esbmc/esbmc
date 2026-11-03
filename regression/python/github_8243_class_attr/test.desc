@@ -1,0 +1,5 @@
+CORE
+main.py
+--multi-property --unwind 8 --no-unwinding-assertions
+PASSED +\[global.assertion.1\] +line 10 +assertion v == 3$
+^VERIFICATION SUCCESSFUL$

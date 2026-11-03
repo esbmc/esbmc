@@ -650,10 +650,11 @@ smt_astt fp_convt::mk_to_bv(smt_astt x, bool is_signed, std::size_t width)
   smt_astt x_is_zero = mk_smt_fpbv_is_zero(x);
   smt_astt x_is_neg = mk_is_neg(x);
 
-  // NaN, Inf, or negative (except -0) -> unspecified
+  // NaN, Inf, or negative (except -0) -> unspecified. Each conversion gets its
+  // own value: C leaves out-of-range conversions undefined (C11 6.3.1.4p1),
+  // so two of them need not agree (#9448).
   smt_astt c1 = ctx->mk_or(x_is_nan, x_is_inf);
-  smt_astt unspec_v = ctx->mk_smt_symbol(
-    "UNSPEC_FP" + std::to_string(width), ctx->mk_bv_sort(width));
+  smt_astt unspec_v = ctx->mk_fresh(ctx->mk_bv_sort(width), "UNSPEC_FP::");
   assert(unspec_v->sort->get_data_width() == width);
   smt_astt v1 = unspec_v;
 
@@ -926,13 +927,15 @@ smt_astt
 fp_convt::mk_smt_typecast_ubv_to_fpbv(smt_astt x, smt_sortt to, smt_astt rm)
 {
   // This is a conversion from unsigned bitvector to float:
-  // ((_ to_fp_unsigned eb sb) RoundingMode (_ BitVec m) (_ FloatingPoint eb sb))
-  // Semantics:
-  //    Let b in[[(_ BitVec m)]] and let n be the unsigned integer represented by b.
+  // ((_ to_fp_unsigned eb sb) RoundingMode (_ BitVec m) (_ FloatingPoint eb
+  // sb)) Semantics:
+  //    Let b in[[(_ BitVec m)]] and let n be the unsigned integer represented
+  //    by b.
   //    [[(_ to_fp_unsigned eb sb)]](r, x) = +infinity if n is too large to be
   //    represented as a finite number of[[(_ FloatingPoint eb sb)]];
-  //    [[(_ to_fp_unsigned eb sb)]](r, x) = y otherwise, where y is the finite number
-  //    such that[[fp.to_real]](y) is closest to n according to rounding mode r.
+  //    [[(_ to_fp_unsigned eb sb)]](r, x) = y otherwise, where y is the finite
+  //    number such that[[fp.to_real]](y) is closest to n according to rounding
+  //    mode r.
 
   unsigned ebits = to->get_exponent_width();
   unsigned sbits = to->get_significand_width();
@@ -1030,13 +1033,15 @@ smt_astt
 fp_convt::mk_smt_typecast_sbv_to_fpbv(smt_astt x, smt_sortt to, smt_astt rm)
 {
   // This is a conversion from unsigned bitvector to float:
-  // ((_ to_fp_unsigned eb sb) RoundingMode (_ BitVec m) (_ FloatingPoint eb sb))
-  // Semantics:
-  //    Let b in[[(_ BitVec m)]] and let n be the unsigned integer represented by b.
+  // ((_ to_fp_unsigned eb sb) RoundingMode (_ BitVec m) (_ FloatingPoint eb
+  // sb)) Semantics:
+  //    Let b in[[(_ BitVec m)]] and let n be the unsigned integer represented
+  //    by b.
   //    [[(_ to_fp_unsigned eb sb)]](r, x) = +infinity if n is too large to be
   //    represented as a finite number of[[(_ FloatingPoint eb sb)]];
-  //    [[(_ to_fp_unsigned eb sb)]](r, x) = y otherwise, where y is the finite number
-  //    such that[[fp.to_real]](y) is closest to n according to rounding mode r.
+  //    [[(_ to_fp_unsigned eb sb)]](r, x) = y otherwise, where y is the finite
+  //    number such that[[fp.to_real]](y) is closest to n according to rounding
+  //    mode r.
 
   unsigned ebits = to->get_exponent_width();
   unsigned sbits = to->get_significand_width();
@@ -2008,9 +2013,10 @@ void fp_convt::round(
   unsigned sbits,
   smt_astt &result)
 {
-  // Assumptions: sig is of the form f[-1:0] . f[1:sbits-1] [guard,round,sticky],
-  // i.e., it has 2 + (sbits-1) + 3 = sbits + 4 bits, where the first one is in sgn.
-  // Furthermore, note that sig is an unsigned bit-vector, while exp is signed.
+  // Assumptions: sig is of the form f[-1:0] . f[1:sbits-1]
+  // [guard,round,sticky], i.e., it has 2 + (sbits-1) + 3 = sbits + 4 bits,
+  // where the first one is in sgn. Furthermore, note that sig is an unsigned
+  // bit-vector, while exp is signed.
 
   assert(rm->sort->get_data_width() == 3);
   assert(sgn->sort->get_data_width() == 1);

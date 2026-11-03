@@ -1,0 +1,5 @@
+CORE
+main.c
+--little-endian
+^VERIFICATION FAILED$
+^  assertion n < 4 \|\| words\[2\] == 0x01020304u$

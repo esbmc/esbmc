@@ -1,4 +1,0 @@
-CORE
-main.py
---incremental-bmc
-^ERROR: TypeError: numpy.ndarray.tolist\(\) currently supports rank 1 or 2 arrays$

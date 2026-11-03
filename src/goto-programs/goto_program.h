@@ -90,7 +90,7 @@ public:
   bool hide;
 
   /*! \brief Container for an instruction of the goto-program
-  */
+   */
   class instructiont
   {
   public:
@@ -166,7 +166,8 @@ public:
 
     // Set by optimize_guarded_gotos when "IF !cond GOTO skip; GOTO target" is
     // folded into "IF cond GOTO target". The guard is then the positive source
-    // condition, so GOTO-taken means the branch body (original target) IS reached.
+    // condition, so GOTO-taken means the branch body (original target) IS
+    // reached.
     bool flipped_guard;
 
     // Set on the nondet assignments the standalone --loop-invariant-check

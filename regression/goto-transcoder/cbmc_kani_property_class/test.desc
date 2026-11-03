@@ -1,0 +1,4 @@
+CORE
+cbmc_kani_property_class.goto
+--binary --function _RNvCsoRd8AjMCxu_4pass7harness --ignore-property-class reachability_check --ignore-property-class cover
+^VERIFICATION SUCCESSFUL$

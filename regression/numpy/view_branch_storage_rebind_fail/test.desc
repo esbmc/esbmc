@@ -1,0 +1,4 @@
+CORE
+main.py
+--incremental-bmc
+^ERROR: TypeError: rebinding a numpy array while a view bound to different arrays on different paths is alive is not supported$

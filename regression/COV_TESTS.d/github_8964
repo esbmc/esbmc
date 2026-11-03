@@ -1,0 +1,5 @@
+regression/python/github_8964
+regression/python/github_8964_fail
+regression/python/github_8964_hasattr
+regression/python/github_8964_hasattr_fail
+regression/python/github_8964_loop

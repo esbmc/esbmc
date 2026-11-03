@@ -1,0 +1,5 @@
+regression/python/github_9469
+regression/python/github_9469_base_init
+regression/python/github_9469_fail
+regression/python/github_9469_inherited_ctor
+regression/python/github_9469_inherited_ctor_fail

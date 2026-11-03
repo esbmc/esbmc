@@ -1,8 +1,3 @@
-# `for` over a class instance no longer silently skips the body. The loop
-# bound is len(obj), and a class with no __len__ has no length, so the run is
-# refused instead of proving a dead loop. Once the iterator protocol lands
-# this should report the AssertionError from the body instead.
-
 class C:
     def __init__(self) -> None:
         self.i: int = 0

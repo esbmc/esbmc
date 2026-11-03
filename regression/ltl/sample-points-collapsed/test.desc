@@ -1,0 +1,5 @@
+CORE
+prog.c
+--ltl notphi.c --ltl-sample-points -DLTL_PREFIX_BOUND=5
+^Final lowest outcome: LTL_SUCCEEDING$
+^VERIFICATION SUCCESSFUL$

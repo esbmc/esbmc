@@ -18,7 +18,9 @@ A PLC executes its program in an endless loop called the *scan cycle*:
 
 The frontend reproduces this faithfully. Each scan re-samples every input
 variable non-deterministically, so verification explores *all* possible input
-sequences rather than a single fixed trace. The rung logic and the retained
+sequences rather than a single fixed trace. `VAR_IN_OUT`, `VAR_EXTERNAL` and
+`%M` variables, which something outside the program may write, are re-sampled
+the same way unless `--ld-closed-world` is given. The rung logic and the retained
 state of timers and counters are evaluated exactly as a PLC would, and the whole
 body sits inside a `while(true)` scan loop. Properties are appended to the scan
 body, so they are checked once per cycle, for every reachable state.

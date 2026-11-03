@@ -1,4 +1,5 @@
 CORE
 main.py
 --incremental-bmc
-^.*takes 1 positional argument but 2 were given.*$
+^VERIFICATION FAILED$
+^  uncaught exception: TypeError$

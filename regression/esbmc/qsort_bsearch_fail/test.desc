@@ -1,0 +1,6 @@
+CORE
+main.c
+--multi-property
+^VERIFICATION FAILED$
+PASSED\s+\[main.assertion.1\].*bsearch
+FAILED\s+\[main.assertion.2\].*a\[0\] == 3

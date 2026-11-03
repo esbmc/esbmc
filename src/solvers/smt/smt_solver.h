@@ -10,6 +10,7 @@
 #include <mutex>
 #include <set>
 #include <utility>
+#include <unordered_map>
 #include <unordered_set>
 #include <solvers/prop/literal.h>
 #include <solvers/prop/pointer_logic.h>
@@ -94,6 +95,34 @@
 class fp_convt;
 class ir_ieee_convt;
 class smt_solver_baset;
+
+/** The bit a byte update with a symbolic offset writes at, in bit-vector mode:
+ *  the offset scaled to bits, in the width of the updated value. */
+expr2tc byte_update_bit_offset(const byte_update2t &data);
+
+/** Whether an object's lowest address sits in the most significant bits of its
+ *  bit-vector encoding: true on a big-endian target, so the bit-vector reads
+ *  as the object's bytes in memory order, as byte_extract assumes. */
+bool lowest_address_high();
+
+/** Lowest bit of the @p width bits at bit offset @p offset of a @p total bit
+ *  object's bit-vector encoding. */
+unsigned flattened_position(unsigned offset, unsigned width, unsigned total);
+
+/** The @p width bits of a union member within the union's bits @p bits: those
+ *  at the union's lowest address. */
+expr2tc union_member_bits(const expr2tc &bits, unsigned width);
+
+/** The @p bits wide bits of a union whose lowest-addressed bits hold
+ *  @p member and whose other bits are those of @p rest. */
+expr2tc union_bits_with_member(
+  const expr2tc &rest,
+  const expr2tc &member,
+  unsigned bits);
+
+/** A union member's bits @p member widened to the union's @p bits, as the
+ *  bits at the union's lowest address; zero-extension is left to the caller. */
+expr2tc union_bits_of_member(const expr2tc &member, unsigned bits);
 class ra_apit;
 
 #include <solvers/smt/smt_array.h>
@@ -222,6 +251,12 @@ public:
     struct expr_op_convert ops);
 
   smt_astt convert_assign(const expr2tc &expr);
+  /** Bind the symbol on the left of an equality to its right-hand side
+   *  without asserting anything: later conversions of the symbol yield the
+   *  right-hand side, so only definitions something asserted depends on reach
+   *  the solver. Falls back to convert_assign for aggregates or a symbol that
+   *  was already converted. */
+  void define(const expr2tc &expr);
 
   /** Convert @p expr and dump the resulting SMT AST in SMT format. Used by
    *  --ssa-smt-trace so callers outside the solver layer can request the
@@ -256,6 +291,14 @@ public:
    *  an error occurred.
    *  @return Result code of the call to the solver. */
   virtual smt_resultt dec_solve() = 0;
+
+  /** Solve with each boolean ast in @p assumptions held true for this query
+   *  only. Backends without support abort; check supports_assumptions(). */
+  virtual smt_resultt dec_solve_assuming(const ast_vec &assumptions);
+  virtual bool supports_assumptions() const
+  {
+    return false;
+  }
 
   void pre_solve();
 
@@ -741,6 +784,11 @@ public:
    *  multiplications or casting is required to honor the C semantics of
    *  pointer arith. */
   smt_astt convert_pointer_arith(const expr2tc &expr, const type2tc &t);
+  /** The quotient of a signed byte difference by an element size, truncated
+   *  toward zero. A size of 2^k is an arithmetic shift of the difference,
+   *  biased by 2^k - 1 when negative since the shift rounds toward -inf;
+   *  k < width - 1 keeps the divisor positive when read signed. */
+  smt_astt divide_by_element_size(const expr2tc &diff, const expr2tc &size);
   /** Compare two pointers. This attempts to optimize cases where we can avoid
    *  comparing the integer representation of a pointer, as that's hugely
    *  inefficient sometimes (and gets bitblasted).
@@ -775,10 +823,13 @@ public:
     const std::string &sym,
     const typet *type);
 
+  /** @param may_be_freed The object is heap-allocated: once freed it stops
+   *  keeping later objects off its addresses. */
   smt_astt init_pointer_obj(
     unsigned int obj_num,
     const expr2tc &size,
-    const typet *type);
+    const typet *type,
+    bool may_be_freed);
 
   /** Checks for equality with NaN representation. */
   smt_astt convert_is_nan(const expr2tc &expr);
@@ -840,12 +891,10 @@ public:
   smt_astt
   convert_bitcast_to_struct(const expr2tc &from, const type2tc &to_type);
   /** Flatten a pointer to the machine representation a bitcast reinterprets,
-   *  and rebuild it from one. Both record the pointer so that later flattened
-   *  pointers are tied to it; see the comment on the definitions in
+   *  and rebuild it from one; see the comment on the definitions in
    *  smt_bitcast.cpp. */
   smt_astt encode_pointer_repr(const expr2tc &ptr, const type2tc &to_type);
   smt_astt decode_pointer_repr(const expr2tc &repr, const type2tc &to_type);
-  void record_flattened_pointer(smt_astt address, smt_astt pointer);
   /** True when @p ptr_type's representation occupies @p bv_type exactly, so
    *  the bits read back are the bits that were written. */
   bool pointer_repr_applies(const type2tc &ptr_type, const type2tc &bv_type);
@@ -855,13 +904,16 @@ public:
    *  convert_modulus lowers a remainder compositionally only when its
    *  operands appear here; unconditional lowering costs 3-5x on
    *  rem-heavy proofs. */
-  void note_division_operands(const expr2tc &expr);
   void note_division_operands(
     const expr2tc &expr,
     std::unordered_set<const expr2t *> &seen);
   /** Encode a remainder: compositional via the matching division when
    *  one exists in the formula, the solver's rem primitive otherwise. */
   smt_astt convert_modulus(const modulus2t &m, smt_astt a, smt_astt b);
+  /** C's / and % of signed @p type on Int-sorted operands, from the
+   *  solver's Euclidean div/mod (#8662). */
+  smt_astt mk_truncated_div(const type2tc &type, smt_astt a, smt_astt b);
+  smt_astt mk_truncated_rem(const type2tc &type, smt_astt a, smt_astt b);
   /** Convert constant_array2tc's and constant_array_of2tc's */
   smt_astt array_create(const expr2tc &expr);
 
@@ -880,6 +932,27 @@ public:
   void bump_addrspace_array(unsigned int idx, const expr2tc &val);
   /** Get the symbol name for the current address-allocation record array. */
   std::string get_cur_addrspace_ident();
+  /** The address-space version every other one is stored over. */
+  expr2tc base_addrspace_array() const;
+  void tie_base_addrspace(unsigned int idx, const expr2tc &val);
+  /** Gives the base version every object's range, now and on registration,
+   *  for convert_typecast_to_ptr(), the only reader of a slot before it is
+   *  stored. */
+  void tie_base_addrspace_to_objects();
+  /** The context level the base version was tied at; empty when no cast to a
+   *  pointer needed it. */
+  std::optional<unsigned int> base_addrspace_tied;
+  /** The object of a pointer convert_typecast_to_ptr() made, the context
+   *  level it was made at, and the one close_int_to_ptr_objects() closed it
+   *  at. */
+  struct int_to_ptr_objectt
+  {
+    smt_astt object;
+    unsigned int level;
+    std::optional<unsigned int> closed_at;
+  };
+  std::vector<int_to_ptr_objectt> int_to_ptr_objects;
+  void close_int_to_ptr_objects();
 
   /** Operand pairs of every division seen by note_division_operands. */
   std::set<std::pair<expr2tc, expr2tc>> divided_operand_pairs;
@@ -903,6 +976,16 @@ public:
   smt_astt convert_typecast_to_ints_from_bool(const typecast2t &cast);
   /** Typecast something (i.e. an integer) to a pointer */
   smt_astt convert_typecast_to_ptr(const typecast2t &cast);
+  smt_astt name_object_by_value(
+    const expr2tc &ptr,
+    const expr2tc &target,
+    smt_astt not_matched,
+    bool from_byte_update);
+  smt_astt address_holds(
+    const expr2tc &ptr,
+    const expr2tc &addrspace,
+    const expr2tc &target,
+    bool in_range);
   /** Typecast a pointer to an integer */
   smt_astt convert_typecast_from_ptr(const typecast2t &cast);
   /** Typecast structs to other structs */
@@ -941,9 +1024,6 @@ public:
    *  array. This works by concatenating the domain widths together into one
    *  large domain. */
   type2tc flatten_array_type(const type2tc &type);
-  /** For a multi-dimensional constant array, flatten the actual definition of
-   *  it down to a single dimension */
-  expr2tc flatten_array_body(const expr2tc &expr);
   /** Get the base subtype of an array, delving through any intermediate
    *  multidimensional arrays. */
   type2tc get_flattened_array_subtype(const type2tc &type);
@@ -972,9 +1052,9 @@ public:
 
   /** Name every element of a row being written whole as a store of the
    *  corresponding read out of it, at @p offset in the flattened array.
-   *  Requires the row's flattened size to be a compile-time constant, which
-   *  both call sites establish; false when a nested row's is not. */
-  bool expand_row_stores(
+   *  Requires the row's stride to be a compile-time constant, which both
+   *  call sites establish. */
+  void expand_row_stores(
     const expr2tc &row,
     const expr2tc &offset,
     std::vector<flat_storet> &stores);
@@ -1108,18 +1188,45 @@ public:
   /** Counter for the fresh result symbols minted by the Ackermann fallback. */
   size_t uf_ackermann_counter = 0;
 
-  /** One pointer flattened to, or rebuilt from, its machine representation by
-   *  a bitcast. See convert_bitcast()'s helpers in smt_bitcast.cpp. */
+  /** One pointer flattened to its machine representation by a bitcast. See
+   *  convert_bitcast()'s helpers in smt_bitcast.cpp. */
   struct ptr_flatten_entry
   {
     smt_astt address;
     smt_astt pointer;
+    /** The flattening step's guard: an unexecuted step can flatten any
+     *  pointer. */
+    smt_astt guard;
     unsigned int level;
+    size_t id;
   };
-  /** Every such pointer in this context, tied pairwise so that two flattened
-   *  pointers sharing an address are the same pointer. Pruned on pop_ctx like
+  /** Every flattened pointer in this context. Pruned on pop_ctx like
    *  uf_ackermann_history, whose asts have the same lifetime. */
   std::vector<ptr_flatten_entry> ptr_flatten_history;
+  /** The most flattens one rebuilt pointer is defined over; see
+   *  decode_pointer_repr(). */
+  static constexpr size_t max_rebuild_sources = 32;
+  /** Each flattening bitcast converted so far, for steps that hit it in the
+   *  conversion cache. */
+  std::unordered_map<expr2tc, ptr_flatten_entry, irep2_hash> flattened;
+  void record_flattened_pointer(smt_astt address, smt_astt pointer);
+
+  /** The SSA step being converted: its guard, the flattens its operands may
+   *  hold (all a rebuild in it reads), those it makes, and the symbol it
+   *  assigns. Null and empty outside a step. */
+  smt_astt step_guard = nullptr;
+  std::set<size_t> step_sources;
+  std::set<size_t> step_flattens;
+  std::string step_assigned;
+  expr2tc step_overwritten;
+  size_t flatten_count = 0;
+  /** The flattens each SSA symbol's value may hold, and the context level it
+   *  was recorded at. */
+  std::unordered_map<std::string, std::pair<unsigned int, std::set<size_t>>>
+    ptr_flow;
+  void begin_step(const expr2tc &guard, const expr2tc &cond);
+  void note_assignment(const expr2tc &lhs, const expr2tc &rhs);
+  void end_step();
 
   /** Map from SSA symbol name to its forall/exists irep2 expression.
    *  Populated in convert_assign when a symbol is assigned a quantifier
@@ -1143,19 +1250,13 @@ public:
   type2tc addr_space_type;
   /** Type of the array of address space allocation records. */
   type2tc addr_space_arr_type;
-  /** List of address space allocation sizes. A map from the object number to
-   *  the nubmer of bytes allocated. In a list to support pushing and
-   *  popping. */
-  std::list<std::map<unsigned, unsigned>> addr_space_data;
+  /** The objects given an address so far, each mapped to whether it is a heap
+   *  object that may be freed. In a list to support pushing and popping. */
+  std::list<std::map<unsigned, bool>> addr_space_data;
 
   /** Holds the `__ESBMC_alloc` symbol convert_terminal() was last invoked with.
    */
   expr2tc current_valid_objects_sym;
-
-  /** Holds the `__ESBMC_is_dynamic` symbol convert_terminal() was last invoked
-   * with.
-   */
-  expr2tc cur_dynamic;
 
   // XXX - push-pop will break here.
   typedef std::map<std::string, smt_astt> renumber_mapt;

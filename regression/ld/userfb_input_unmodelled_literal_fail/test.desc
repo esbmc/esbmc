@@ -1,0 +1,6 @@
+CORE
+lit.ld
+--ld-props props.yaml --incremental-bmc
+^.*user FB .c0. input A is fed by something not modelled.*$
+^.*user FB .c0. input R is fed by something not modelled.*$
+^VERIFICATION FAILED$

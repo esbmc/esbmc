@@ -52,6 +52,24 @@ warn_if_monitor_never_switches_back(const goto_functionst &goto_functions)
     "esbmc/esbmc#6546");
 }
 
+/* Under --ltl-sample-points the monitor steps only where the program calls
+ * __ESBMC_ltl_sample(), which the C library otherwise defines as a no-op. */
+static void step_monitor_at_sample_points(goto_programt &prog)
+{
+  Forall_goto_program_instructions (it, prog)
+  {
+    if (!it->is_function_call())
+      continue;
+
+    code_function_call2t &call = to_code_function_call2t(it->code);
+    if (
+      is_symbol2t(call.function) &&
+      to_symbol2t(call.function).thename == "c:@F@__ESBMC_ltl_sample")
+      call.function =
+        symbol2tc(get_empty_type(), "c:@F@__ESBMC_switch_to_monitor");
+  }
+}
+
 void esbmc_parseoptionst::add_property_monitors(
   goto_functionst &goto_functions,
   namespacet &ns [[maybe_unused]])
@@ -78,6 +96,12 @@ void esbmc_parseoptionst::add_property_monitors(
 
   Forall_goto_functions (f_it, goto_functions)
   {
+    if (cmdline.isset("ltl-sample-points"))
+    {
+      step_monitor_at_sample_points(f_it->second.body);
+      continue;
+    }
+
     /* do not instrument global entry function */
     if (f_it->first == "__ESBMC_main")
       continue;

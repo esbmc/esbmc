@@ -1,0 +1,4 @@
+CORE
+main.py
+--incremental-bmc
+^ERROR: class 'Shape' is defined in both .*shapes\.py. and .*main\.py.; ESBMC keys a class symbol by name alone

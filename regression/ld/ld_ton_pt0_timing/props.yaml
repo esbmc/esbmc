@@ -1,0 +1,5 @@
+properties:
+  - id: P1
+    kind: invariant
+    expression: "(Q1 && (H1 && H2)) || (!Q1 && !(H1 && H2))"
+    description: "Q rises the scan after IN rises, as in MATIEC"

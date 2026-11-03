@@ -1,0 +1,5 @@
+CORE
+preset.ld
+--ld-props props.yaml --k-induction --unlimited-k-steps
+^ERROR: UnsupportedConstruct\(initial value ' ' of PV, tier=2\)$
+^ERROR: PARSING ERROR$

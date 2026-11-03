@@ -1,0 +1,4 @@
+CORE
+cbmc_vector.goto
+--binary
+^VERIFICATION SUCCESSFUL$

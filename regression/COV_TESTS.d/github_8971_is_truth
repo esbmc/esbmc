@@ -1,0 +1,12 @@
+regression/python/github_8971_is_class_fail
+regression/python/github_8971_is_fold
+regression/python/github_8971_is_native_unsupported
+regression/python/github_8971_is_self_fail
+regression/python/github_8971_truth
+regression/python/github_8971_truth_and
+regression/python/github_8971_truth_fail
+regression/python/github_8971_truth_float
+regression/python/github_8971_truth_float_fail
+regression/python/github_8971_truth_param
+regression/python/github_8971_truth_value_unsupported
+regression/python/github_8971_truth_while

@@ -1,0 +1,4 @@
+CORE
+mode.ld
+--ld-props props.yaml --ld-closed-world --unwind 6 --no-unwinding-assertions
+^VERIFICATION SUCCESSFUL$

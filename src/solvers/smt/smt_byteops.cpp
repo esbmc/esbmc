@@ -182,14 +182,14 @@ smt_astt smt_solver_baset::convert_byte_extract_bv_mode(
   unsigned int upper, lower;
   if (!data.big_endian)
   {
-    lower = intref.value.to_uint64() * 8; //i*8
-    upper = lower + out_width - 1;        //i*8 + w - 1
+    lower = intref.value.to_uint64() * 8; // i*8
+    upper = lower + out_width - 1;        // i*8 + w - 1
   }
   else
   {
     unsigned int max = width - 1;
-    upper = max - (intref.value.to_uint64() * 8); //max-(i*8)
-    lower = upper - (out_width - 1);              //upper-(w-1)
+    upper = max - (intref.value.to_uint64() * 8); // max-(i*8)
+    lower = upper - (out_width - 1);              // upper-(w-1)
   }
 
   if (width <= upper)
@@ -225,7 +225,8 @@ smt_solver_baset::create_int_right_shift(expr2tc source, expr2tc shift_amount)
 
   expr2tc result = source;
 
-  // Create conditional chain for shift amounts up to pointer width (architecture-dependent)
+  // Create conditional chain for shift amounts up to pointer width
+  // (architecture-dependent)
   for (size_t i = config.ansi_c.char_width; i <= config.ansi_c.pointer_width();
        i += config.ansi_c.char_width) // Only byte-aligned shifts for efficiency
   {
@@ -366,8 +367,8 @@ expr2tc smt_solver_baset::convert_byte_update_int_mode_expr(
     // Calculate bit offset for this byte position
     unsigned int shift_amount = byte_pos * config.ansi_c.char_width;
 
-    // For integer encoding, we use mathematical operations instead of bitwise operations
-    // to clear and set bytes
+    // For integer encoding, we use mathematical operations instead of bitwise
+    // operations to clear and set bytes
 
     // Calculate the value of the byte at the target position
     expr2tc byte_divisor;
@@ -411,6 +412,19 @@ expr2tc smt_solver_baset::convert_byte_update_int_mode_expr(
   return result;
 }
 
+expr2tc byte_update_bit_offset(const byte_update2t &data)
+{
+  const type2tc t = get_uint_type(data.source_value->type->get_width());
+  expr2tc offs = typecast2tc(t, data.source_offset);
+
+  // Endian-ness: if we're in non-"native" endian-ness mode, then flip the
+  // offset distance. The rest of these calculations will still apply.
+  if (data.big_endian)
+    offs = sub2tc(t, constant_int2tc(t, type_byte_size(t) - 1), offs);
+
+  return mul2tc(t, offs, constant_int2tc(t, BigInt(8)));
+}
+
 smt_astt
 smt_solver_baset::convert_byte_update_bv_mode(const byte_update2t &data)
 {
@@ -442,19 +456,7 @@ smt_solver_baset::convert_byte_update_bv_mode(const byte_update2t &data)
       source = bitcast2tc(get_uint_type(src_width), source);
     }
 
-    expr2tc offs = data.source_offset;
-    if (!is_unsignedbv_type(offs) || offs->type->get_width() != src_width)
-      offs = typecast2tc(get_uint_type(src_width), offs);
-
-    // Endian-ness: if we're in non-"native" endian-ness mode, then flip the
-    // offset distance. The rest of these calculations will still apply.
-    if (data.big_endian)
-    {
-      auto data_size = type_byte_size(source->type);
-      expr2tc data_size_expr = constant_int2tc(source->type, data_size - 1);
-      expr2tc sub = sub2tc(source->type, data_size_expr, offs);
-      offs = sub;
-    }
+    expr2tc offs = byte_update_bit_offset(data);
 
     expr2tc update = data.update_value;
     if (!is_unsignedbv_type(update) || update->type->get_width() != src_width)
@@ -464,9 +466,7 @@ smt_solver_baset::convert_byte_update_bv_mode(const byte_update2t &data)
 
     // The approach: mask, shift and or. Quite inefficient.
 
-    expr2tc eight = constant_int2tc(get_uint_type(src_width), BigInt(8));
-    expr2tc effs = constant_int2tc(eight->type, BigInt(255));
-    offs = mul2tc(eight->type, offs, eight);
+    expr2tc effs = constant_int2tc(offs->type, BigInt(255));
 
     expr2tc shl = shl2tc(offs->type, effs, offs);
     expr2tc noteffs = bitnot2tc(effs->type, shl);

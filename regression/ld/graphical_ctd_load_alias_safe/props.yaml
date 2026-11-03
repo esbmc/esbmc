@@ -1,0 +1,7 @@
+properties:
+  # LOAD is read as the load pin, so a load puts CV back at the preset (2) and
+  # takes Empty low in the same scan. Ignoring LOAD leaves Empty on during a load.
+  - id: P1
+    kind: invariant
+    expression: "!(Empty && Load)"
+    description: "Load is dominant: Empty and Load never hold together"

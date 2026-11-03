@@ -1,0 +1,5 @@
+properties:
+  - id: P1
+    kind: invariant
+    expression: "!Done || Enable"
+    description: "Would hold if the contact gated the timer; the rung is refused instead"

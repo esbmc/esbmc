@@ -1,6 +1,14 @@
 #if defined(__unix__) || defined(__APPLE__) || defined(__MACH__)
 #  include <strings.h>
+#  include <locale.h>
+#  if defined(__APPLE__)
+#    include <xlocale.h>
+#  endif
 #endif
+#include <ctype.h>
+#include <stddef.h>
+
+#undef tolower
 
 /* Each of these scans on the unsigned counterpart: right-shifting a negative
  * signed value is implementation-defined (C11 6.5.7p5), and the conversion is
@@ -56,3 +64,39 @@ __ESBMC_HIDE:;
 
   return pos;
 }
+
+int strncasecmp(const char *s1, const char *s2, size_t n)
+{
+__ESBMC_HIDE:;
+  const unsigned char *p1 = (const unsigned char *)s1;
+  const unsigned char *p2 = (const unsigned char *)s2;
+  for (size_t i = 0; i < n; i++)
+  {
+    int c1 = tolower(p1[i]);
+    int c2 = tolower(p2[i]);
+    if (c1 != c2 || c1 == 0)
+      return c1 - c2;
+  }
+  return 0;
+}
+
+int strcasecmp(const char *s1, const char *s2)
+{
+__ESBMC_HIDE:;
+  return strncasecmp(s1, s2, (size_t)-1);
+}
+
+#if defined(__unix__) || defined(__APPLE__) || defined(__MACH__)
+/* Only the C locale is modelled, as for tolower. */
+int strncasecmp_l(const char *s1, const char *s2, size_t n, locale_t loc)
+{
+__ESBMC_HIDE:;
+  return strncasecmp(s1, s2, n);
+}
+
+int strcasecmp_l(const char *s1, const char *s2, locale_t loc)
+{
+__ESBMC_HIDE:;
+  return strncasecmp(s1, s2, (size_t)-1);
+}
+#endif

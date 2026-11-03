@@ -19,6 +19,7 @@ typedef struct {
 } Fib;
 
 void fib_reaction_timer(Fib *self) {
+    __ESBMC_requires(__ESBMC_is_fresh(self, sizeof(*self)));
     __ESBMC_requires(self != NULL);
     
     __ESBMC_assigns(self->result);

@@ -1,0 +1,6 @@
+CORE
+main.py
+--unwind 5 --multi-property
+uncaught exception: ZeroDivisionError
+^\*\* 1 of 3 properties failed
+^VERIFICATION FAILED$

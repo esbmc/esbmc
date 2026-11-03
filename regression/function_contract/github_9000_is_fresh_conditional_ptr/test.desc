@@ -1,0 +1,5 @@
+CORE
+main.c
+--replace-call-with-contract g --multi-property
+^ +PASSED.*contract requires$
+^VERIFICATION SUCCESSFUL$

@@ -1,16 +1,8 @@
-// KNOWNBUG. Copying a class that holds a shared_ptr member reports
-// "invalidated dynamic object" inside shared_ptr's __release: the implicit
-// copy constructor does not keep the control block alive, so the shared
-// object is treated as freed while a live owner still refers to it.
-// g++ runs this program with the assertion holding.
-//
-// It is the copy of the WRAPPER, not shared_ptr itself -- shared_ptr_copy_controls
-// pins the neighbouring shapes that work: copying a shared_ptr directly,
-// returning a wrapper by value from a function, and returning a bare
-// shared_ptr.
-//
-// Any class holding a shared_ptr by value hits this, which is the ordinary way
-// shared ownership is written.
+// Copying a class that holds a shared_ptr member keeps the control block
+// alive. The aggregate initialisation used to destroy the temporary
+// shared_ptr as well as the member, a second __release that freed the shared
+// object while an owner still referred to it. g++ runs this program with the
+// assertion holding.
 #include <memory>
 #include <cassert>
 

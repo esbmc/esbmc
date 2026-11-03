@@ -2,6 +2,7 @@
 
 #include <util/irep/expr.h>
 #include <util/irep/type.h>
+#include <util/irep/std_types.h>
 #include <util/symtab/symbol.h>
 #include <vector>
 
@@ -30,6 +31,11 @@ bool contains_dyn_array(const typet &t);
 // Store `t` as `sym`'s type IREP2-side, or legacy when `t` holds a
 // dyn-sized array (docs/roadmap/scope-python-irep2.md §10.4).
 void set_symbol_type(symbolt &sym, const typet &t);
+
+// Store a function type, or a pointer to one, IREP2-side only when the seam
+// round-trips it up to an argument's plain `identifier` and `#location`
+// (docs/roadmap/scope-python-irep2.md §11.4).
+void set_function_type(symbolt &sym, const typet &t);
 
 // Store `t` as `sym`'s type IREP2-side unless migrate_type would lose it: a
 // nil type or a dyn-sized array (docs/roadmap/scope-python-irep2.md §10.4).
@@ -77,7 +83,8 @@ exprt build_not(const exprt &op);
 // `a < b` over same-width operands (lessthan2t asserts width consistency).
 exprt build_less_than(const exprt &a, const exprt &b);
 
-// `a <= b` over same-width operands (lessthanequal2t asserts width consistency).
+// `a <= b` over same-width operands (lessthanequal2t asserts width
+// consistency).
 exprt build_less_equal(const exprt &a, const exprt &b);
 
 // `a > b` over same-width operands (greaterthan2t asserts width consistency).

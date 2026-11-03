@@ -17,6 +17,7 @@
 #include <util/base/prefix.h>
 #include <util/irep/std_code.h>
 #include <util/expr/type_byte_size.h>
+#include <unordered_set>
 
 clang_c_adjust::clang_c_adjust(contextt &_context)
   : context(_context), ns(namespacet(context))
@@ -274,10 +275,6 @@ void clang_c_adjust::adjust_ptr_mem(exprt &expr)
     expr.swap(func);
   }
 }
-
-
-
-
 
 static bool has_side_effect(const exprt &expr)
 {
@@ -567,13 +564,20 @@ static bool contains_sideeffect(const exprt &expr)
 // temporary; finish_complex_lowering then wraps the lowered result and the
 // bindings in a statement expression, whose goto conversion
 // (remove_statement_expression) evaluates the block exactly once and declares
-// the temporaries per frame (so recursion is safe too).
-void clang_c_adjust::bind_sideeffect_operands(exprt &expr, code_blockt &block)
+// the temporaries per frame (so recursion is safe too). With `bind_compound`,
+// every operand but a symbol or a constant is bound too: the Annex G recovery
+// of * and / copies each operand some thirty times, so a chain of them would
+// otherwise grow exponentially.
+void clang_c_adjust::bind_sideeffect_operands(
+  exprt &expr,
+  code_blockt &block,
+  bool bind_compound)
 {
   Forall_operands (it, expr)
   {
     exprt &op = *it;
-    if (!contains_sideeffect(op))
+    const bool compound = bind_compound && !op.is_symbol() && !op.is_constant();
+    if (!compound && !contains_sideeffect(op))
       continue;
     // Embed file:line in the name and mark the symbol file_local with a
     // module, like the compound-literal symbols (clang_c_convert.cpp): each
@@ -614,101 +618,239 @@ void clang_c_adjust::finish_complex_lowering(
   expr.swap(stmt_expr);
 }
 
+// A component-level binary expr, mapped to the ieee op for a floatbv.
+static exprt complex_part_op(
+  const irep_idt &id,
+  const exprt &lhs,
+  const exprt &rhs,
+  const typet &elem_t)
+{
+  static const std::map<irep_idt, irep_idt> ieee_ops = {
+    {"+", "ieee_add"}, {"-", "ieee_sub"}, {"*", "ieee_mul"}, {"/", "ieee_div"}};
+  exprt e(elem_t.is_floatbv() ? ieee_ops.at(id) : id, elem_t);
+  e.copy_to_operands(lhs, rhs);
+  return e;
+}
+
+// C17 G.5.1p2-3 and G.5.2p2: the real operand x applies to each part of z,
+// on the left of `op` when `x_first`.
+static std::pair<exprt, exprt> lower_real_complex(
+  const irep_idt &op,
+  const exprt &x,
+  const exprt &z,
+  bool x_first,
+  const typet &elem_t)
+{
+  const exprt zr = member_exprt(z, "real", elem_t);
+  const exprt zi = member_exprt(z, "imag", elem_t);
+  auto apply = [&](const exprt &part) {
+    return x_first ? complex_part_op(op, x, part, elem_t)
+                   : complex_part_op(op, part, x, elem_t);
+  };
+  if (op == "*" || op == "/")
+    return {apply(zr), apply(zi)};
+  if (x_first && op == "-")
+  {
+    exprt neg("unary-", elem_t);
+    neg.copy_to_operands(zi);
+    return {apply(zr), neg};
+  }
+  return {apply(zr), zi};
+}
+
+// C17 G.5.1p4: where the usual formulas give NaN + NaN i, recover the
+// infinity or zero that * and / must yield, as the informative _Cmultd and
+// _Cdivd of G.5.1 do. The zero-divisor test is on the parts rather than on
+// br^2 + bi^2, which underflows to zero for tiny parts that _Cdivd's scaling
+// keeps nonzero.
+static void recover_complex_infinities(
+  const irep_idt &op,
+  const exprt &a,
+  const exprt &b,
+  const exprt &c,
+  const exprt &d,
+  std::pair<exprt, exprt> &parts,
+  const typet &elem_t)
+{
+  auto make_op = [&elem_t](const irep_idt &id, const exprt &l, const exprt &r) {
+    return complex_part_op(id, l, r, elem_t);
+  };
+  auto pred = [](const irep_idt &id, const exprt &v) {
+    exprt e(id, bool_type());
+    e.copy_to_operands(v);
+    return e;
+  };
+  const ieee_float_spect spec(to_floatbv_type(elem_t));
+  auto constant = [&spec](int v) {
+    ieee_floatt f(spec);
+    f.from_integer(v);
+    return f.to_expr();
+  };
+  const exprt inf = ieee_floatt::plus_infinity(spec).to_expr();
+  auto is_negative = [](const exprt &v) {
+    exprt signbit("signbit", int_type());
+    signbit.copy_to_operands(v);
+    exprt e("notequal", bool_type());
+    e.copy_to_operands(signbit, gen_zero(int_type()));
+    return e;
+  };
+  auto copysign = [&](const exprt &magnitude, const exprt &sign) {
+    exprt negated("unary-", elem_t);
+    negated.copy_to_operands(magnitude);
+    return if_exprt(is_negative(sign), negated, magnitude);
+  };
+  auto box = [&](const exprt &v) {
+    return copysign(if_exprt(pred("isinf", v), constant(1), constant(0)), v);
+  };
+  auto nan_to_zero = [&](const exprt &v) {
+    return if_exprt(pred("isnan", v), copysign(constant(0), v), v);
+  };
+  const exprt z_inf = or_exprt(pred("isinf", a), pred("isinf", b));
+  const exprt w_inf = or_exprt(pred("isinf", c), pred("isinf", d));
+  const exprt both_nan =
+    and_exprt(pred("isnan", parts.first), pred("isnan", parts.second));
+  auto recover = [&](const exprt &cond, const exprt &re, const exprt &im) {
+    parts.first = if_exprt(and_exprt(both_nan, cond), re, parts.first);
+    parts.second = if_exprt(and_exprt(both_nan, cond), im, parts.second);
+  };
+
+  if (op == "*")
+  {
+    const exprt overflow = or_exprt(
+      or_exprt(
+        pred("isinf", make_op("*", a, c)), pred("isinf", make_op("*", b, d))),
+      or_exprt(
+        pred("isinf", make_op("*", a, d)), pred("isinf", make_op("*", b, c))));
+    const exprt a1 = if_exprt(z_inf, box(a), nan_to_zero(a));
+    const exprt b1 = if_exprt(z_inf, box(b), nan_to_zero(b));
+    const exprt c1 = if_exprt(w_inf, box(c), nan_to_zero(c));
+    const exprt d1 = if_exprt(w_inf, box(d), nan_to_zero(d));
+    recover(
+      or_exprt(or_exprt(z_inf, w_inf), overflow),
+      make_op(
+        "*", inf, make_op("-", make_op("*", a1, c1), make_op("*", b1, d1))),
+      make_op(
+        "*", inf, make_op("+", make_op("*", a1, d1), make_op("*", b1, c1))));
+    return;
+  }
+
+  auto is_zero = [&](const exprt &v) {
+    exprt e("=", bool_type());
+    e.copy_to_operands(v, constant(0));
+    return e;
+  };
+  auto finite = [&](const exprt &x, const exprt &y) {
+    return and_exprt(pred("isfinite", x), pred("isfinite", y));
+  };
+  // Applied in reverse of _Cdivd's if / else if order, so the first case wins.
+  const exprt c1 = box(c), d1 = box(d);
+  recover(
+    and_exprt(w_inf, finite(a, b)),
+    make_op(
+      "*", constant(0), make_op("+", make_op("*", a, c1), make_op("*", b, d1))),
+    make_op(
+      "*",
+      constant(0),
+      make_op("-", make_op("*", b, c1), make_op("*", a, d1))));
+  const exprt a1 = box(a), b1 = box(b);
+  recover(
+    and_exprt(z_inf, finite(c, d)),
+    make_op("*", inf, make_op("+", make_op("*", a1, c), make_op("*", b1, d))),
+    make_op("*", inf, make_op("-", make_op("*", b1, c), make_op("*", a1, d))));
+  const exprt signed_inf = copysign(inf, c);
+  recover(
+    and_exprt(
+      and_exprt(is_zero(c), is_zero(d)),
+      or_exprt(not_exprt(pred("isnan", a)), not_exprt(pred("isnan", b)))),
+    make_op("*", signed_inf, a),
+    make_op("*", signed_inf, b));
+}
+
+// (ar + ai i) op (br + bi i) by the usual formulas, with the Annex G
+// recovery for floating parts.
+static std::pair<exprt, exprt> lower_complex_complex(
+  const irep_idt &op,
+  const exprt &a,
+  const exprt &b,
+  const typet &elem_t)
+{
+  auto make_op = [&elem_t](const irep_idt &id, const exprt &l, const exprt &r) {
+    return complex_part_op(id, l, r, elem_t);
+  };
+  exprt ar = member_exprt(a, "real", elem_t);
+  exprt ai = member_exprt(a, "imag", elem_t);
+  exprt br = member_exprt(b, "real", elem_t);
+  exprt bi = member_exprt(b, "imag", elem_t);
+
+  if (op == "+" || op == "-")
+    return {make_op(op, ar, br), make_op(op, ai, bi)};
+  std::pair<exprt, exprt> parts;
+  if (op == "*")
+    // (ar*br - ai*bi) + (ar*bi + ai*br)i
+    parts = {
+      make_op("-", make_op("*", ar, br), make_op("*", ai, bi)),
+      make_op("+", make_op("*", ar, bi), make_op("*", ai, br))};
+  else
+  {
+    // denom = br^2 + bi^2
+    exprt denom = make_op("+", make_op("*", br, br), make_op("*", bi, bi));
+    // real = (ar*br + ai*bi) / denom, imag = (ai*br - ar*bi) / denom
+    parts = {
+      make_op(
+        "/", make_op("+", make_op("*", ar, br), make_op("*", ai, bi)), denom),
+      make_op(
+        "/", make_op("-", make_op("*", ai, br), make_op("*", ar, bi)), denom)};
+  }
+  if (elem_t.is_floatbv())
+    recover_complex_infinities(op, ar, ai, br, bi, parts, elem_t);
+  return parts;
+}
+
 bool clang_c_adjust::lower_complex_binary_arithmetic(exprt &expr)
 {
   exprt &op0 = expr.op0();
   exprt &op1 = expr.op1();
+  const bool real0 = op0.type().id() != "complex";
+  const bool real1 = op1.type().id() != "complex";
+  if (real0 && real1)
+    return false;
 
-  if (op0.type().id() == "complex" || op1.type().id() == "complex")
+  const irep_idt &op = expr.id();
+  if (op != "+" && op != "-" && op != "*" && op != "/")
   {
-    code_blockt bind_block;
-    bind_sideeffect_operands(expr, bind_block);
-
-    const typet &complex_t =
-      op0.type().id() == "complex" ? op0.type() : op1.type();
-    const typet &elem_t = to_complex_type(complex_t).base_type();
-
-    // Promote non-complex operand to {val, 0}
-    auto promote = [&](exprt &e) {
-      if (e.type().id() != "complex")
-      {
-        struct_exprt promoted(complex_t);
-        promoted.operands().push_back(e);
-        promoted.operands().push_back(gen_zero(elem_t));
-        e = promoted;
-      }
-    };
-    promote(op0);
-    promote(op1);
-
-    // Build a component-level binary expr, mapping to ieee ops for floatbv
-    auto make_op = [&](const irep_idt &id, const exprt &lhs, const exprt &rhs) {
-      irep_idt actual_id = id;
-      if (elem_t.is_floatbv())
-      {
-        if (id == "+")
-          actual_id = "ieee_add";
-        else if (id == "-")
-          actual_id = "ieee_sub";
-        else if (id == "*")
-          actual_id = "ieee_mul";
-        else if (id == "/")
-          actual_id = "ieee_div";
-      }
-      exprt e(actual_id, elem_t);
-      e.copy_to_operands(lhs, rhs);
-      return e;
-    };
-
-    exprt ar = member_exprt(op0, "real", elem_t);
-    exprt ai = member_exprt(op0, "imag", elem_t);
-    exprt br = member_exprt(op1, "real", elem_t);
-    exprt bi = member_exprt(op1, "imag", elem_t);
-
-    exprt new_real, new_imag;
-    const irep_idt &op = expr.id();
-
-    if (op == "+")
-    {
-      new_real = make_op("+", ar, br);
-      new_imag = make_op("+", ai, bi);
-    }
-    else if (op == "-")
-    {
-      new_real = make_op("-", ar, br);
-      new_imag = make_op("-", ai, bi);
-    }
-    else if (op == "*")
-    {
-      // (ar*br - ai*bi) + (ar*bi + ai*br)i
-      new_real = make_op("-", make_op("*", ar, br), make_op("*", ai, bi));
-      new_imag = make_op("+", make_op("*", ar, bi), make_op("*", ai, br));
-    }
-    else if (op == "/")
-    {
-      // denom = br^2 + bi^2
-      exprt denom = make_op("+", make_op("*", br, br), make_op("*", bi, bi));
-      // real = (ar*br + ai*bi) / denom
-      new_real = make_op(
-        "/", make_op("+", make_op("*", ar, br), make_op("*", ai, bi)), denom);
-      // imag = (ai*br - ar*bi) / denom
-      new_imag = make_op(
-        "/", make_op("-", make_op("*", ai, br), make_op("*", ar, bi)), denom);
-    }
-    else
-    {
-      log_error("unsupported complex arithmetic operator: {}", op);
-      abort();
-    }
-
-    struct_exprt result(complex_t);
-    result.operands().push_back(new_real);
-    result.operands().push_back(new_imag);
-    finish_complex_lowering(expr, result, bind_block);
-    return true;
+    log_error("unsupported complex arithmetic operator: {}", op);
+    abort();
   }
 
-  return false;
+  code_blockt bind_block;
+  bind_sideeffect_operands(expr, bind_block, op == "*" || op == "/");
+
+  const typet &complex_t = real0 ? op1.type() : op0.type();
+  const typet &elem_t = to_complex_type(complex_t).base_type();
+
+  std::pair<exprt, exprt> parts;
+  if (real1)
+    parts = lower_real_complex(op, op1, op0, false, elem_t);
+  else if (real0 && op != "/")
+    parts = lower_real_complex(op, op0, op1, true, elem_t);
+  else
+  {
+    if (real0)
+    {
+      // x / (u + iv) divides {x, 0} by the complex divisor.
+      struct_exprt promoted(complex_t);
+      promoted.operands().push_back(op0);
+      promoted.operands().push_back(gen_zero(elem_t));
+      op0 = promoted;
+    }
+    parts = lower_complex_complex(op, op0, op1, elem_t);
+  }
+
+  struct_exprt result(complex_t);
+  result.operands().push_back(parts.first);
+  result.operands().push_back(parts.second);
+  finish_complex_lowering(expr, result, bind_block);
+  return true;
 }
 
 void clang_c_adjust::adjust_expr_binary_arithmetic(exprt &expr)
@@ -841,10 +983,50 @@ void clang_c_adjust::adjust_expr_rel(exprt &expr)
 
   expr.type() = bool_type();
 
+  if (lower_complex_equality(expr))
+    return;
+
   exprt &op0 = expr.op0();
   exprt &op1 = expr.op1();
 
   gen_typecast_arithmetic(ns, op0, op1);
+}
+
+// C17 6.5.9p4: complex values are equal iff their real parts and their
+// imaginary parts are equal, each compared as a real (so +0 == -0 and a NaN
+// part is unequal), not by representation.
+bool clang_c_adjust::lower_complex_equality(exprt &expr)
+{
+  if (
+    (expr.id() != "=" && expr.id() != "notequal") ||
+    (expr.op0().type().id() != "complex" &&
+     expr.op1().type().id() != "complex"))
+    return false;
+
+  code_blockt bind_block;
+  bind_sideeffect_operands(expr, bind_block);
+
+  auto part = [this](const exprt &e, const irep_idt &name) -> exprt {
+    if (e.type().id() == "complex")
+      return member_exprt(e, name, to_complex_type(e.type()).base_type());
+    if (name == "imag")
+      return gen_zero(e.type());
+    return e;
+  };
+
+  auto part_equal = [&](const irep_idt &name) {
+    exprt eq("=", bool_type());
+    eq.copy_to_operands(part(expr.op0(), name), part(expr.op1(), name));
+    gen_typecast_arithmetic(ns, eq.op0(), eq.op1());
+    return eq;
+  };
+
+  exprt result = and_exprt(part_equal("real"), part_equal("imag"));
+  if (expr.id() == "notequal")
+    result = not_exprt(result);
+
+  finish_complex_lowering(expr, result, bind_block);
+  return true;
 }
 
 void clang_c_adjust::adjust_float_arith(exprt &expr)
@@ -1145,6 +1327,8 @@ void clang_c_adjust::adjust_side_effect_assignment(exprt &expr)
     statement == "assign_shl" || statement == "assign_shr" ||
     statement == "assign_lshr" || statement == "assign_ashr")
   {
+    // C11 6.5.7p3: each operand is promoted on its own (#9436).
+    gen_typecast_arithmetic(ns, op0);
     gen_typecast_arithmetic(ns, op1);
 
     if (is_number(op1.type()))
@@ -1181,9 +1365,10 @@ void clang_c_adjust::adjust_side_effect_function_call(
   if (f_op.is_symbol())
   {
     const irep_idt &identifier = f_op.identifier();
-    if (exprt poly = declare_gcc_polymorphic_builtin(
-          to_symbol_expr(f_op), expr.arguments(), expr.location(), context);
-        poly.is_not_nil())
+    if (
+      exprt poly = declare_gcc_polymorphic_builtin(
+        to_symbol_expr(f_op), expr.arguments(), expr.location(), context);
+      poly.is_not_nil())
     {
       f_op = std::move(poly);
     }
@@ -1395,6 +1580,19 @@ bool clang_c_adjust::shadows_user_definition(
     context, identifier, to_symbol_expr(f_op).get_identifier());
 }
 
+static bool is_popcount_builtin(const irep_idt &identifier)
+{
+  static const std::unordered_set<std::string> names = {
+    "__popcnt16",
+    "__popcnt",
+    "__popcnt64",
+    "__builtin_popcount",
+    "__builtin_popcountl",
+    "__builtin_popcountll",
+    "__builtin_popcountg"};
+  return names.count(identifier.as_string()) != 0;
+}
+
 void clang_c_adjust::do_special_functions(side_effect_expr_function_callt &expr)
 {
   const exprt &f_op = expr.function();
@@ -1531,11 +1729,7 @@ void clang_c_adjust::do_special_functions(side_effect_expr_function_callt &expr)
       sign_expr.operands() = expr.arguments();
       expr.swap(sign_expr);
     }
-    else if (
-      identifier == "__popcnt16" || identifier == "__popcnt" ||
-      identifier == "__popcnt64" || identifier == "__builtin_popcount" ||
-      identifier == "__builtin_popcountl" ||
-      identifier == "__builtin_popcountll")
+    else if (is_popcount_builtin(identifier))
     {
       exprt popcount_expr("popcount", int_type());
       popcount_expr.operands() = expr.arguments();

@@ -1,0 +1,10 @@
+CORE
+main.c
+--branch-coverage-claims --no-assertions --coverage-covered-set covered.json
+^Branches : 2$
+^Reached : 2$
+^Branch Coverage: 100%$
+SEED_FILE covered.json {"version":1,"covered":[{"cond":"unrelated","loc":"unrelated"}]}
+CHECK_JSON covered.json $.version == 1
+CHECK_FILE covered.json contains unrelated
+CHECK_FILE covered.json contains main.c

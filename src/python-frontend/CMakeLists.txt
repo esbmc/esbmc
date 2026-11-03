@@ -18,9 +18,15 @@ add_library(pythonfrontend STATIC
             converter/converter_compare.cpp
             converter/converter_dunder.cpp
             converter/converter_expr.cpp
+            converter/converter_numpy_dtype.cpp
+            converter/value_kinds.cpp
             converter/converter_funcall.cpp
             converter/converter_funcdef.cpp
             converter/converter_stmt.cpp
+            converter/converter_view_escape.cpp
+            converter/converter_view_builtins.cpp
+            converter/converter_view_hoist.cpp
+            converter/converter_view_rebind.cpp
             converter/converter_symbols.cpp
             converter/converter_types.cpp
             converter/converter_unop.cpp
@@ -45,11 +51,13 @@ add_library(pythonfrontend STATIC
             python-list/list_construction.cpp
             python-list/list_mutation.cpp
             python-list/list_access.cpp
+            python-list/list_strided_consumers.cpp
             python-list/list_query.cpp
             python-list/list_string_ops.cpp
             python-list/list_comprehension.cpp
             python-list/list_set_ops.cpp
             math/python_math.cpp
+            math/bounded_math.cpp
             set/python_set.cpp
             type/python_typechecking.cpp
             pythonastgen.c
@@ -58,6 +66,7 @@ add_library(pythonfrontend STATIC
             python_annotation/annotation_intrinsics.cpp
             python_annotation/annotation_parser.cpp
             python_annotation/annotation_utils.cpp
+            python_annotation/function_values.cpp
             symbol_id.cpp
             type/element_type_registry.cpp
             type/type_handler.cpp
@@ -68,7 +77,10 @@ add_library(pythonfrontend STATIC
             function_call/expr.cpp
             function_call/str_conv.cpp
             numpy/numpy_call_expr.cpp
-            numpy/ndarray_descriptor.cpp
+            numpy/numpy_dtype.cpp
+            numpy/numpy_random.cpp
+            numpy/numpy_nditer.cpp
+            numpy/ndarray_shape.cpp
             function_call/builder.cpp
             string/string_builder.cpp
             string/string_handler.cpp

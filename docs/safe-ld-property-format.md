@@ -53,7 +53,7 @@ in the verification result JSON).
 
 ### `mutual_exclusion`
 
-Asserts that two or more BOOL variables are never simultaneously `TRUE`.
+Asserts that at most one of two or more BOOL variables is `TRUE` at a time: no two of them are ever `TRUE` together.
 
 ```yaml
 - id: P1
@@ -62,7 +62,7 @@ Asserts that two or more BOOL variables are never simultaneously `TRUE`.
   description: "Forward and Reverse coils must never be energised simultaneously"
 ```
 
-**GOTO IR emitted:** `code_assertt(not_exprt(and_exprt(A, B, ...)))`
+**GOTO IR emitted:** `code_assertt(not_exprt(or_exprt(and_exprt(A, B), and_exprt(A, C), ...)))`, one `and_exprt` for each pair of listed variables.
 
 **Guarantees:** Sound and complete. Checked at every scan iteration.
 
@@ -176,7 +176,6 @@ established.
   | Form | Names |
   |---|---|
   | `<instance>__<pin>` | a function-block pin — `TOF0__Q`, `TOF0__ET`, `CTU1__CV`. The instance is the block's `instanceName`, or `blk<localId>` when it has none |
-  | `<var>__prev` | the entry-value snapshot of a variable read and written in the same network (SOS §6.3) |
   | `<var>__pf<n>` | the accumulator OR-ing parallel paths into a sink; an implementation detail, not intended for use in properties |
 
   Naming a pin is the only way to state a property about a timer or counter

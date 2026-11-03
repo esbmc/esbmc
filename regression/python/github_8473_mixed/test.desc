@@ -1,0 +1,4 @@
+CORE
+main.py
+
+^ERROR: 'is' with an operand that lost its object type, which ESBMC cannot compare by identity$

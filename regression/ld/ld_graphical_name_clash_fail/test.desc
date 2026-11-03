@@ -1,0 +1,4 @@
+CORE
+collide.ld
+--ld-props props.yaml
+^ERROR: UnsupportedConstruct\(variable pf1 clashes with a name the resolver generates, tier=2\)

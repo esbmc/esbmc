@@ -1,0 +1,5 @@
+CORE
+main.c
+--loop-invariant-check --k-induction-parallel
+^Bug found by the base case \(k = 1\)$
+^VERIFICATION FAILED$

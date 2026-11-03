@@ -31,7 +31,9 @@ private:
 
   symbolt *ensure_sym(const std::string &name);
 
-  bool get_bases(struct_typet &st);
+  bool is_unmodelled_base(const std::string &base) const;
+
+  bool get_bases(struct_typet &st, codet &out);
 
   /// Add the converted method \p sid to \p st's method table, reporting
   /// whether it could be. A method that was not converted has no symbol, and

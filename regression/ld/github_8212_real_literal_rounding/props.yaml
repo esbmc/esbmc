@@ -1,0 +1,5 @@
+properties:
+  - id: P1
+    kind: invariant
+    expression: "Safe"
+    description: "#8212: a literal just below a binary32 midpoint rounds once, down to 1 + 2^-23"

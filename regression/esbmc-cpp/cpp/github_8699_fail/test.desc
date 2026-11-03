@@ -1,0 +1,6 @@
+CORE
+main.cpp
+--std c++17 --multi-property
+^  FAILED +\[main\.assertion\.[0-9]+\] +line 14 +assertion s\[1\] == .x.$
+^\*\* 1 of [0-9]+ properties failed
+^VERIFICATION FAILED$

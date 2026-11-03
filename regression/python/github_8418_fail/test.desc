@@ -1,0 +1,9 @@
+CORE
+main.py
+--unwind 5 --multi-property
+^VERIFICATION FAILED$
+^\s+FAILED\s+\[global\.assertion\.[0-9]+\]\s+line\s+48\s+assertion
+^\s+FAILED\s+\[global\.assertion\.[0-9]+\]\s+line\s+50\s+assertion
+^\s+FAILED\s+\[global\.assertion\.[0-9]+\]\s+line\s+52\s+assertion
+^\s+FAILED\s+\[global\.assertion\.[0-9]+\]\s+line\s+54\s+assertion
+^\*\* 4 of [0-9]+ properties failed

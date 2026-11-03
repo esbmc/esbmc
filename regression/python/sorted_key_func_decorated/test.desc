@@ -1,4 +1,4 @@
 CORE
 main.py
 
-^ERROR: sorted\(\) with key= is only supported over a constant iterable
+^ERROR: .*main.py:5:1: the decorator @flip, which returns a lambda, is not supported$

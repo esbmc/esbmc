@@ -1,0 +1,8 @@
+properties:
+  # p0.A reads blk5__Q, the anonymous counter's output, so Y follows Done. An
+  # input the parser cannot name falls back to a nondeterministic value and
+  # lets Y and Done disagree.
+  - id: P1
+    kind: invariant
+    expression: "(!Y || Done) && (Y || !Done)"
+    description: "p0.A is wired to the anonymous CTU's Q"

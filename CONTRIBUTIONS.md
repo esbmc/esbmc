@@ -9,7 +9,7 @@ Here are some steps to contributing to the code base:
 3. Clone the repository: git clone git@github.com:YOURNAME/esbmc.git
 4. Create a branch from the master branch (default branch)
 5. Make your changes
-6. Check the formatting with clang-format (use Clang 11)
+6. Check the formatting with clang-format 23 (`scripts/install-format-hook.sh` installs it)
 7. Push your changes to your branch
 8. Create a Pull Request targeting the master branch
 

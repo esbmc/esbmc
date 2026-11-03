@@ -1,0 +1,4 @@
+CORE
+main.py
+
+^ERROR: .*main\.py:10:11: unsupported: this call may be 'text' or 'one', which return different types \(str and int\)$

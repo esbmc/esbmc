@@ -178,6 +178,26 @@ static exprt dunder_ref_arg(const exprt &operand)
   return gen_address_of(operand);
 }
 
+// The other argument of a dunder call. A number goes by value to a number
+// parameter, so `3 * V(2)` passes 3 to `__rmul__(self, k: int)`.
+static exprt
+dunder_other_arg(const exprt &operand, const code_typet &method_type)
+{
+  const auto &params = method_type.arguments();
+  if (params.size() < 2 || !is_number(operand.type()))
+    return dunder_ref_arg(operand);
+  const typet &param_type = params[1].type();
+  if (is_number(param_type))
+    return typecast_exprt(operand, param_type);
+  // An unannotated parameter is `Any`; a plain method call passes an int to it
+  // by value too. A float would be truncated, so it is not passed this way.
+  if (
+    param_type == any_type() &&
+    (operand.type().is_signedbv() || operand.type().is_unsignedbv()))
+    return typecast_exprt(operand, param_type);
+  return dunder_ref_arg(operand);
+}
+
 // Check whether the argument type matches the "other" parameter type.
 // In case the user annotates it with a concrete class type.
 static bool is_other_param_compatible(
@@ -234,6 +254,15 @@ bool python_converter::is_heap_migrated_class_type(const typet &t)
 bool python_converter::is_user_class_pointer(const typet &t)
 {
   return t.is_pointer() && is_user_class_struct_type(t.subtype());
+}
+
+void python_converter::refuse_list_of_instance(const typet &t)
+{
+  const typet &cls = t.is_pointer() ? t.subtype() : t;
+  if (is_user_class_struct_type(cls))
+    throw std::runtime_error(
+      "list() of an instance of class '" + class_name_of(cls) +
+      "' is not supported here");
 }
 
 bool python_converter::is_class_instance(const nlohmann::json &value_node)
@@ -319,7 +348,7 @@ exprt python_converter::dispatch_dunder_operator(
             exprt call = build_call_expr(
               *method,
               method_type.return_type(),
-              {dunder_ref_arg(lhs), dunder_ref_arg(rhs)});
+              {dunder_ref_arg(lhs), dunder_other_arg(rhs, method_type)});
             call.location() = loc;
             return call;
           }
@@ -349,7 +378,7 @@ exprt python_converter::dispatch_dunder_operator(
             exprt call = build_call_expr(
               *method,
               method_type.return_type(),
-              {dunder_ref_arg(rhs), dunder_ref_arg(lhs)});
+              {dunder_ref_arg(rhs), dunder_other_arg(lhs, method_type)});
             call.location() = loc;
             return call;
           }
@@ -361,11 +390,37 @@ exprt python_converter::dispatch_dunder_operator(
   return nil_exprt();
 }
 
+static void
+reject_unmodelled_numpy_unary(const std::string &op, const typet &type)
+{
+  const bool strings = type_utils::is_numpy_string_array(type);
+  const bool complex_view =
+    type.is_pointer() &&
+    is_complex_type(type_utils::array_scalar_type(type.subtype()));
+  if (
+    strings || complex_view ||
+    (type_utils::is_numpy_complex_array(type) && op != "USub" && op != "UAdd"))
+    throw std::runtime_error(
+      "TypeError: numpy unary '" + op + "' over a " +
+      (strings ? "string" : "complex") + " array is not supported");
+  if (
+    op == "abs" && type.is_array() &&
+    type_utils::is_numpy_scalar_type(type_utils::array_scalar_type(type)))
+    throw std::runtime_error(
+      "TypeError: numpy.abs() over a dtype narrower than 64 bits is not "
+      "supported");
+}
+
 exprt python_converter::dispatch_unary_dunder_operator(
   const std::string &op,
   exprt &operand,
   const locationt &loc)
 {
+  reject_unmodelled_numpy_unary(op, operand.type());
+  const exprt narrow = numpy_narrow_unary(op, operand);
+  if (!narrow.is_nil())
+    return narrow;
+
   // Resolve the operand to its (pointee) struct. Under the object-model
   // migration (#3067/#4773) a class instance is a `Class*` pointer, so follow
   // it to the struct exactly as the binary dispatch does — otherwise str(obj),
@@ -392,6 +447,7 @@ exprt python_converter::dispatch_unary_dunder_operator(
     {"index", "__index__"},
     {"len", "__len__"},
     {"str", "__str__"},
+    {"repr", "__repr__"},
   };
   auto it = unary_dunder_map.find(op);
   if (it == unary_dunder_map.end())

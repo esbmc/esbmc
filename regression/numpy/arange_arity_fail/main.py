@@ -1,6 +1,6 @@
 import numpy as np
 
-# Wrong argument counts must raise the specific arity message rather than
-# falling through to the generic "non-constant inputs" TypeError.
+# A fourth positional argument is the dtype, as in NumPy, so 4 is rejected
+# as a dtype rather than read as a fourth bound.
 a = np.arange(1, 2, 3, 4)
 assert len(a) == 0

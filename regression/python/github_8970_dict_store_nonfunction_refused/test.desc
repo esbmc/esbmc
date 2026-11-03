@@ -1,0 +1,4 @@
+CORE
+main.py
+
+^ERROR: unsupported: a dict holds functions with different return types, so the type of a call through it is not known$

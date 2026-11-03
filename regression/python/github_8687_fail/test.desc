@@ -1,0 +1,5 @@
+CORE
+main.py
+
+^  FAILED .*line 3  assertion x < 0.0$
+^VERIFICATION FAILED$

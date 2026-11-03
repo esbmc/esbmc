@@ -1,0 +1,8 @@
+properties:
+  # OUT is A AND B AND IO through the temporary T. With T and IO typed int32
+  # the Boolean operators on them threw and the body was dropped, leaving OUT
+  # at FALSE (#7579).
+  - id: P1
+    kind: invariant
+    expression: "(!g0__OUT || (g0__A && g0__B && g0__IO)) && (g0__OUT || !(g0__A && g0__B && g0__IO))"
+    description: "OUT follows A AND B AND IO"

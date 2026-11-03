@@ -1,0 +1,5 @@
+CORE
+mul.ld
+--ld-props props.yaml --unwind 2 --no-unwinding-assertions
+FAILED\s+\[global\.assertion\.1\]\s+line 0\s+P1$
+^VERIFICATION FAILED$

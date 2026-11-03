@@ -1,0 +1,6 @@
+CORE
+main.c
+--multi-property
+^VERIFICATION FAILED$
+^  FAILED .*assertion strcasecmp_l\("b", "A", c\) < 0$
+^  FAILED .*assertion strncasecmp_l\("AbX", "abY", 3, c\) == 0$

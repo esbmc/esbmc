@@ -1,0 +1,5 @@
+properties:
+  - id: P1
+    kind: invariant
+    expression: "(Q1 && (H1)) || (!Q1 && !(H1))"
+    description: "Old timing: Q follows IN on the scan it rises"

@@ -30,18 +30,22 @@ __ESBMC_HIDE:;
 inline int fesetround(int rounding_mode)
 {
 __ESBMC_HIDE:;
-  __ESBMC_rounding_mode =
-    (rounding_mode == FE_DOWNWARD || rounding_mode == __ESBMC_FE_X86_DOWNWARD ||
-     rounding_mode == __ESBMC_FE_ARM_DOWNWARD)
-      ? 3
-    : rounding_mode == FE_TONEAREST ? 0
-    : (rounding_mode == FE_TOWARDZERO ||
-       rounding_mode == __ESBMC_FE_X86_TOWARDZERO ||
-       rounding_mode == __ESBMC_FE_ARM_TOWARDZERO)
-      ? 4
-    : (rounding_mode == FE_UPWARD || rounding_mode == __ESBMC_FE_X86_UPWARD ||
-       rounding_mode == __ESBMC_FE_ARM_UPWARD)
-      ? 2
-      : 0;
-  return 0; // we never fail
+  if (
+    rounding_mode == FE_DOWNWARD || rounding_mode == __ESBMC_FE_X86_DOWNWARD ||
+    rounding_mode == __ESBMC_FE_ARM_DOWNWARD)
+    __ESBMC_rounding_mode = 3;
+  else if (rounding_mode == FE_TONEAREST)
+    __ESBMC_rounding_mode = 0;
+  else if (
+    rounding_mode == FE_TOWARDZERO ||
+    rounding_mode == __ESBMC_FE_X86_TOWARDZERO ||
+    rounding_mode == __ESBMC_FE_ARM_TOWARDZERO)
+    __ESBMC_rounding_mode = 4;
+  else if (
+    rounding_mode == FE_UPWARD || rounding_mode == __ESBMC_FE_X86_UPWARD ||
+    rounding_mode == __ESBMC_FE_ARM_UPWARD)
+    __ESBMC_rounding_mode = 2;
+  else
+    return 1; // C11 7.6.3.2p2: an unrecognised mode is not applied
+  return 0;
 }

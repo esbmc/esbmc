@@ -26,7 +26,7 @@ void convert(const namespacet &ns, const goto_tracet &goto_trace, xmlt &xml)
 
     switch (step.type)
     {
-    case goto_trace_stept::ASSERT:
+    case symex_targett::ASSERT:
       if (!step.guard)
       {
         xmlt &xml_failure = xml.new_element("failure");
@@ -40,7 +40,7 @@ void convert(const namespacet &ns, const goto_tracet &goto_trace, xmlt &xml)
       }
       break;
 
-    case goto_trace_stept::ASSIGNMENT:
+    case symex_targett::ASSIGNMENT:
     {
       irep_idt identifier;
 
@@ -100,7 +100,7 @@ void convert(const namespacet &ns, const goto_tracet &goto_trace, xmlt &xml)
     }
     break;
 
-    case goto_trace_stept::OUTPUT:
+    case symex_targett::OUTPUT:
     {
       printf_formattert printf_formatter;
       printf_formatter(step.format_string, step.output_args);

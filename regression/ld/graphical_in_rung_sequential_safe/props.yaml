@@ -1,0 +1,12 @@
+properties:
+  # The toggle rung sets lights_buttons_state and then, in the same scan, resets
+  # it through a contact on the value just written. Beremiz compiles the rung to
+  # exactly that sequence, so on OpenPLC a button press never leaves the toggle
+  # on (#7352). A resolver that read the value from the start of the scan would
+  # let the toggle latch. Bounded: k-induction does not prove this state
+  # invariant, because its inductive step does not assume the property on
+  # earlier scans.
+  - id: P1
+    kind: invariant
+    expression: "!lights_buttons_state"
+    description: "The manual toggle never stays on"

@@ -1,4 +1,4 @@
 CORE
 main.c
 --goto-functions-only
-DECL union [^\n]*compound-literal\$1;\n\s+// \d+ \n\s+ASSIGN
+// \d+ no location\n\s+DECL union [^\n]*compound-literal\$1;\n\s+// \d+ file [^\n]*main.c line 12 [^\n]*\n\s+ASSIGN

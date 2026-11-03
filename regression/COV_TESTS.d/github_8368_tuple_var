@@ -1,0 +1,4 @@
+regression/python/github_8368_tuple_var_inner_list_fail
+regression/python/github_8368_tuple_var_inner_list_function
+regression/python/github_8368_tuple_var_inner_list_function_fail
+regression/python/github_8368_tuple_var_mutated_unsupported

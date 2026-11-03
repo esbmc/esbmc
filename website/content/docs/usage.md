@@ -393,6 +393,43 @@ algorithm works, see
 `--max-k-step N` caps the unwind bound (default 50); `--k-step N` changes the
 increment granularity.
 
+### Extracting a transition system (experimental)
+
+```sh
+esbmc file.c --ts-check
+esbmc file.c --ts-check --ts-dump
+```
+
+`--ts-check` applies the k-induction transformation, recognises a single
+unbounded loop in `main`, and extracts it as a transition system: the initial
+state, a one-iteration step relation, the loop's inputs and the bad-state
+conditions, sliced to what the properties depend on. It prints one `TS-CHECK`
+line saying whether extraction succeeded (`TS-CHECK accepted ...` or
+`TS-CHECK rejected`) and stops with `VERIFICATION UNKNOWN`; it proves nothing
+([#8081](https://github.com/esbmc/esbmc/pull/8081)).
+
+```sh
+esbmc file.c --ts-bmc --max-k-step 20
+```
+
+`--ts-bmc` runs bounded model checking over the extracted system: it unrolls
+the step relation one bound at a time, up to `--max-k-step` (or without limit
+under `--unlimited-k-steps`), and reports `VERIFICATION FAILED` with a
+counterexample at the first bound that reaches a bad state. A run that passes
+the last bound without one ends `VERIFICATION UNKNOWN`. A program that is not a
+transition system falls back to the ordinary BMC strategy
+([#8655](https://github.com/esbmc/esbmc/pull/8655)). Related options:
+
+- `--ts-no-fallback` — report `VERIFICATION UNKNOWN` instead of falling back
+  when the program is not a transition system.
+- `--ts-no-live-filter` — keep every havocked variable as state rather than
+  slicing the system to the properties' cone of influence.
+- `--ts-fresh-solver` — solve each bound as one formula in a new solver,
+  instead of one incremental solver queried under assumptions.
+- `--ts-push-pop` — query the incremental solver with push/pop instead of
+  assumptions; meant as a cross-check.
+- `--ts-dump` — with any other `--ts` option, also print the extracted system.
+
 ## Reusing common subexpressions
 
 `--gcse` precomputes a subexpression shared between assignments into an
@@ -403,6 +440,11 @@ analysis over the GOTO program. The analysis is deliberately imprecise —
 symbolic execution supplies the real precision — and abstains on any expression
 whose targets it cannot determine, in which case the rewrite is not made. The
 flag is off by default.
+
+The available-expressions analysis is sequential, so `--gcse` is skipped with a
+warning on a program that may create threads: another thread can write a
+variable between two reads that the analysis treats as equal
+([#8072](https://github.com/esbmc/esbmc/pull/8072)).
 
 ## Selecting the floating-point rounding mode
 
@@ -524,6 +566,29 @@ arithmetic overflow on mul
 VERIFICATION FAILED
 ```
 
+## Reading a CBMC goto-binary
+
+`--binary` reads a goto-binary instead of source code, including one written by
+CBMC or by a tool built on it, such as Kani. ESBMC's own additions are linked in
+unless `--no-cprover-additions` is given.
+
+Kani tags its informational assertions with the `reachability_check` and
+`cover` property classes; CBMC reports them as failures and Kani's driver
+discounts them. `--ignore-property-class CLASS` skips the assertions tagged with
+`CLASS`, and may be repeated. Without it ESBMC keeps CBMC's verdict
+([#8157](https://github.com/esbmc/esbmc/pull/8157)):
+
+```sh
+esbmc harness.goto --binary --function <harness> \
+  --ignore-property-class reachability_check --ignore-property-class cover
+```
+
+`--reserve-first-page` places no object below address 4096, as CBMC does, so a
+pointer made from a small integer never aliases a real object. It is off by
+default, because some SV-COMP harnesses accept an allocation only at a low
+address; a Kani or verify-rust-std run needs it
+([#8288](https://github.com/esbmc/esbmc/pull/8288)).
+
 ## Checking `restrict` pointer aliasing
 
 The C `restrict` qualifier is a promise to the compiler that, for the lifetime of
@@ -639,6 +704,19 @@ after it were never decided, and saying they passed would be wrong:
 Adding `--multi-property` decides all three, and appends the solver and its
 decision-procedure time to the summary.
 
+A claim that no path reaches within the bound is left out of the table by
+default. `--report-unreached-claims` lists each one as passed, marks it
+`(never reached)` and counts it in the summary, so an assertion that is dead
+under the bound is not mistaken for a proved one
+([#8875](https://github.com/esbmc/esbmc/pull/8875)):
+
+```
+  PASSED       [main.assertion.1]  line 6  assertion 0 (never reached)
+  PASSED       [main.assertion.2]  line 7  assertion x == 0
+
+** 0 of 2 properties failed, 2 passed (1 never reached)
+```
+
 ## Bounding the stack
 
 ```sh
@@ -711,8 +789,13 @@ recorded ends `VERIFICATION FAILED` ([#7913](https://github.com/esbmc/esbmc/pull
 a run that neither violated nor proved anything ends `VERIFICATION UNKNOWN`.
 `--falsification` does not stop after a violation, because a larger k can raise
 claims that no smaller k did; with `--unlimited-k-steps` it runs until killed
-and prints no table, so give it `--max-k-step`. Claims with the same
-comment at the same location still share one row
+and prints no table, so give it `--max-k-step`.
+
+Two assertions at the same position with the same description, such as the two
+bound checks of `a[i] + a[j]`, get one row each, and rows that would otherwise
+read the same end with their condition, e.g. `[(signed long int)j < 4]`
+([#7923](https://github.com/esbmc/esbmc/pull/7923)). Two claims that symbolic
+execution raises at one instruction still share a row
 ([#7900](https://github.com/esbmc/esbmc/discussions/7900)).
 
 ### Enumerating all violating inputs
@@ -876,6 +959,12 @@ formula file), and counterexamples are reconstructed by a local interactive
 SMT-LIB2 solver given via `--bitwuzllob-model-prog CMD` /
 `--neurosym-model-prog CMD` (e.g. `"z3 -in"`). Neither backend is ever picked
 implicitly, and NeuroSym rejects `--ir` and incremental strategies.
+
+`--bitwuzla-opt name=value` passes an option to Bitwuzla, spelled as on
+Bitwuzla's command line without the leading dashes, e.g.
+`--bitwuzla-opt rewrite-level=1`. It may be repeated, and an option Bitwuzla
+does not recognise is reported as a Bitwuzla error
+([#8655](https://github.com/esbmc/esbmc/pull/8655)).
 
 Floating-point arithmetic is encoded with the SMT floating-point theory
 (`fp.add`, `fp.lt`, …) on every backend that offers it — Bitwuzla, Z3, MathSAT,

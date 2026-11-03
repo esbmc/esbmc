@@ -1,0 +1,4 @@
+CORE
+main.py
+--unwind 5
+^ERROR: .*main\.py:5:4: using the coroutine returned by 'f' without awaiting it is not supported$

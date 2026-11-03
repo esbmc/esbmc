@@ -11,9 +11,9 @@
 // i.e. back-migrating an IREP2 node to legacy and re-migrating yields an equal
 // IREP2 node. The symbol-table migration (Phase 4) derives the legacy
 // symbolt::type/value from IREP2 shadow fields via migrate_*_back; this
-// idempotence is what makes that derivation lossless. We assert IREP2 round-trip
-// (not legacy byte-equality) because migrate_type/expr deliberately canonicalise
-// some legacy forms, so the IREP2 side is the stable reference.
+// idempotence is what makes that derivation lossless. We assert IREP2
+// round-trip (not legacy byte-equality) because migrate_type/expr deliberately
+// canonicalise some legacy forms, so the IREP2 side is the stable reference.
 
 #define CATCH_CONFIG_MAIN
 #include <catch2/catch.hpp>
@@ -1261,6 +1261,22 @@ TEST_CASE("migrating an unresolvable C++ symbol id", "[migrate]")
     INFO("thename = " << to_symbol2t(e).thename);
     REQUIRE(to_symbol2t(e).thename == irep_idt("c:@U@U@F@U#&1$@U@U#::ref"));
   }
+
+  SECTION("a renamed '#'-bearing local keeps its renaming level and numbers")
+  {
+    const irep_idt local = "c:t.cpp@73@F@main#@n";
+    const type2tc it = get_int_type(32);
+    for (auto level :
+         {symbol_renaming_level::level1, symbol_renaming_level::level2})
+    {
+      const unsigned l2 = level == symbol_renaming_level::level2 ? 3 : 0;
+      const expr2tc sym = symbol2tc(it, local, level, 1, l2, 0, 0);
+      expr2tc e;
+      migrate_expr(migrate_expr_back(sym), e);
+      INFO("back = " << migrate_expr_back(sym).identifier());
+      REQUIRE(e == sym);
+    }
+  }
 }
 
 // A literal's `#cformat` is how the source wrote it, and c_expr2string prefers
@@ -1668,5 +1684,38 @@ TEST_CASE("a struct keeps its Python aggregate kind", "[migrate]")
     set_python_aggregate_kind(marked, "tuple");
     REQUIRE(migrate_type(marked) == migrate_type(tuple));
     REQUIRE(migrate_type(marked)->crc() == migrate_type(tuple)->crc());
+  }
+}
+
+// A class's `bases` list is no part of its type's identity, but exception
+// dispatch and base_type.cpp read the class hierarchy from it.
+TEST_CASE("a struct keeps its bases", "[migrate]")
+{
+  struct_typet cls;
+  cls.components().emplace_back("x", "x", signedbv_typet(64));
+  cls.tag("tag-D");
+
+  SECTION("the bases round-trip")
+  {
+    cls.add("bases").get_sub().emplace_back("tag-B");
+    REQUIRE(full_eq(migrate_type_back(migrate_type(cls)), cls));
+  }
+
+  SECTION("an empty list stays distinct from none")
+  {
+    cls.add("bases");
+    REQUIRE(migrate_type_back(migrate_type(cls)).find("bases").is_not_nil());
+  }
+
+  SECTION("no bases gains no key")
+  {
+    REQUIRE(migrate_type_back(migrate_type(cls)).find("bases").is_nil());
+  }
+
+  SECTION("the bases are no part of the type's identity")
+  {
+    struct_typet derived = cls;
+    derived.add("bases").get_sub().emplace_back("tag-B");
+    REQUIRE(migrate_type(derived) == migrate_type(cls));
   }
 }

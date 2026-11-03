@@ -115,7 +115,7 @@ __ESBMC_HIDE:;
 
   /* Special handling for fractional exponents that represent perfect roots.
    * This compensates for precision loss in Taylor series approximations
-   * and matches Python's behavior for cases such as 8**(1/3) == 2.0, 
+   * and matches Python's behavior for cases such as 8**(1/3) == 2.0,
    * 27**(1/3) == 3.0, etc. */
   if (!is_int && fabs(y) > 0.0 && fabs(y) <= 1.0)
   {

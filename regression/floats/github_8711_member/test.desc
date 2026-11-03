@@ -1,0 +1,7 @@
+CORE
+main.c
+--multi-property
+^  PASSED .*assertion s\.f == 1\.0f$
+^  PASSED .*assertion s\.d == 1\.0$
+^  PASSED .*assertion arr\[1\] == 1\.0f$
+^VERIFICATION SUCCESSFUL$

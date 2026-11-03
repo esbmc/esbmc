@@ -76,6 +76,62 @@ smt_astt smt_tuple_node_flattener::mk_tuple_array_symbol(const expr2tc &expr)
   return array_conv.mk_array_symbol(name, sort, subtype);
 }
 
+/** Reads an unbounded constant array of structs whose members are all
+ *  bit-vectors through one native solver array per member, each a chain of
+ *  stores over that member's values, so a read is one select per member.
+ *  Returns false, and does nothing, when the solver has no native arrays or a
+ *  member is not a bit-vector. */
+static bool read_through_member_arrays(
+  smt_tuple_node_flattener &flat,
+  smt_solver_baset *ctx,
+  array_convt &array_conv,
+  smt_astt array,
+  smt_astt *vals,
+  unsigned int sz,
+  smt_sortt subtype)
+{
+  if (
+    ctx->array_api == nullptr ||
+    dynamic_cast<array_convt *>(ctx->array_api) != nullptr ||
+    ctx->int_encoding || sz == 0)
+    return false;
+
+  size_t n = struct_union_members(subtype->get_tuple_type()).size();
+  for (size_t m = 0; m < n; m++)
+  {
+    smt_sortt ms = vals[0]->project(ctx, m)->sort;
+    if (ms->id != SMT_SORT_BV && ms->id != SMT_SORT_FIXEDBV)
+      return false;
+  }
+
+  size_t dom_width = array->sort->get_domain_width();
+  smt_sortt dom_sort = ctx->mk_int_bv_sort(dom_width);
+  std::vector<smt_astt> arrays;
+  for (size_t m = 0; m < n; m++)
+  {
+    smt_sortt ms = vals[0]->project(ctx, m)->sort;
+    smt_astt a = ctx->array_api->mk_array_symbol(
+      ctx->mk_fresh_name("tuple_array_member::"),
+      ctx->mk_array_sort(dom_sort, ms),
+      ms);
+    for (unsigned int i = 0; i < sz; i++)
+      a = ctx->mk_store(
+        a, ctx->mk_smt_bv(BigInt(i), dom_width), vals[i]->project(ctx, m));
+    arrays.push_back(a);
+  }
+
+  array_conv.set_initial_reader(
+    array, [&flat, ctx, subtype, arrays](const expr2tc &idx) -> smt_astt {
+      smt_astt real_idx = ctx->convert_ast(idx);
+      std::string name = ctx->mk_fresh_name("tuple_array_member_read::") + ".";
+      auto *res = new tuple_node_smt_ast(flat, ctx, subtype, name);
+      for (smt_astt a : arrays)
+        res->elements.push_back(ctx->mk_select(a, real_idx));
+      return res;
+    });
+  return true;
+}
+
 smt_astt smt_tuple_node_flattener::tuple_array_create(
   const type2tc &array_type,
   smt_astt *inputargs,
@@ -86,7 +142,6 @@ smt_astt smt_tuple_node_flattener::tuple_array_create(
   // either we have an array_of or a constant_array. Handle this by creating
   // a fresh tuple array symbol, then repeatedly updating it with tuples at each
   // index. Ignore infinite arrays, they're "not for you".
-  // XXX - probably more efficient to update each member array, but not now.
   smt_sortt sort = ctx->convert_sort(array_type);
   smt_sortt subtype = ctx->convert_sort(to_array_type(array_type).subtype);
 
@@ -115,6 +170,15 @@ smt_astt smt_tuple_node_flattener::tuple_array_create(
   const constant_int2t &thesize = to_constant_int2t(arr_type.array_size);
   unsigned int sz = thesize.value.to_uint64();
 
+  // Above the bounded-array cutoff, the array flattener re-executes each
+  // update at every index the array is read at, which is quadratic in the
+  // number of elements. Read through native member arrays instead if we can.
+  if (
+    is_unbounded_array(sort) &&
+    read_through_member_arrays(
+      *this, ctx, array_conv, newsym, inputargs, sz, subtype))
+    return newsym;
+
   // Repeatedly store operands into this.
   for (unsigned int i = 0; i < sz; i++)
   {
@@ -129,9 +193,10 @@ expr2tc smt_tuple_node_flattener::tuple_get(const type2tc &, smt_astt sym)
   return tuple_get_rec(to_tuple_node_ast(sym));
 }
 
+/* Unlike the symbol flattener, a tuple node is read from its AST, so a member
+ * of complex type in a counterexample needs no symbol name. */
 expr2tc smt_tuple_node_flattener::tuple_get(const expr2tc &expr)
 {
-  assert(is_symbol2t(expr) && "Non-symbol in smtlib expr get()");
   tuple_node_smt_astt a = to_tuple_node_ast(ctx->convert_ast(expr));
   return tuple_get_rec(a);
 }
@@ -169,7 +234,7 @@ expr2tc smt_tuple_node_flattener::tuple_get_rec(tuple_node_smt_astt tuple)
     {
       res = ctx->get_by_ast(it, tuple->elements[i]);
     }
-    else if (is_array_type(it))
+    else if (is_array_type(it) || is_vector_type(it))
     {
       // this will eventually jump to get_array()
       res = ctx->get_by_ast(it, tuple->elements[i]);

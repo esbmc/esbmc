@@ -1,0 +1,5 @@
+regression/python/github_9165
+regression/python/github_9165_fail
+regression/python/dead_local_value_set_read
+regression/python/dead_local_value_set_read_fail
+regression/python/dead_local_value_set_read_loop

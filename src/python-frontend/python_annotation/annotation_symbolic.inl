@@ -3,9 +3,12 @@
 // specialisation:
 //
 //   - are_all_user_classes
+//   - are_specializable_types
+//   - is_specialization_pending
 //   - build_specialized_function_name
 //   - resolve_name_assigned_class
 //   - rewrite_specialized_calls
+//   - retype_builtin_copy
 //   - apply_pending_specializations
 //   - get_class_ancestors
 //   - find_common_ancestor
@@ -33,12 +36,73 @@ bool python_annotation<Json>::are_all_user_classes(
   return true;
 }
 
+// Lists whose element types differ between call sites, e.g. list[str] and
+// list[int]: no one annotation types the parameter (#9545).
+template <class Json>
+bool python_annotation<Json>::are_scalar_list_types(
+  const std::vector<std::string> &types)
+{
+  static const std::set<std::string> scalar_lists = {
+    "list[int]", "list[float]", "list[str]", "list[bool]"};
+  return std::all_of(types.begin(), types.end(), [](const std::string &t) {
+    return scalar_lists.count(t) != 0;
+  });
+}
+
+// Whether call sites passing `types` get a copy of the function per type.
+// Besides user classes, a parameter given an int at one call and a float at
+// another gets one: widening it to float gives the int call a float result,
+// which then fails isinstance(..., int) (#8627).
+template <class Json>
+bool python_annotation<Json>::are_specializable_types(
+  const std::vector<std::string> &types) const
+{
+  if (are_all_user_classes(types) || are_scalar_list_types(types))
+    return true;
+  bool has_int = false, has_float = false, has_str = false;
+  for (const auto &t : types)
+  {
+    if (t != "int" && t != "float" && t != "str" && t != "bool")
+      return false;
+    has_int |= t == "int";
+    has_float |= t == "float";
+    has_str |= t == "str";
+  }
+  // A str among numbers would otherwise leave the parameter void *, which a
+  // str comparison then dereferences as a pointer (#9284, #8314).
+  return (has_int && has_float) || (has_str && (has_int || has_float));
+}
+
+// Whether `func_name` already has a specialization pending that covers
+// parameter `param_index`. Copies made for builtin types annotate every
+// parameter from their own calls, so one such specialization per function
+// suffices.
+template <class Json>
+bool python_annotation<Json>::is_specialization_pending(
+  const std::string &func_name,
+  size_t param_index,
+  const std::vector<std::string> &types) const
+{
+  for (const auto &spec : pending_specializations_)
+    if (
+      spec.function_name == func_name &&
+      (spec.param_index == param_index || !are_all_user_classes(types)))
+      return true;
+  return false;
+}
+
 template <class Json>
 std::string python_annotation<Json>::build_specialized_function_name(
   const std::string &base_name,
   const std::string &class_name) const
 {
-  return base_name + "__esbmc_poly_" + class_name;
+  std::string suffix = class_name;
+  std::replace_if(
+    suffix.begin(),
+    suffix.end(),
+    [](unsigned char c) { return !std::isalnum(c); },
+    '_');
+  return base_name + "__esbmc_poly_" + suffix;
 }
 
 template <class Json>
@@ -136,6 +200,50 @@ void python_annotation<Json>::rewrite_specialized_calls(
   }
 }
 
+// Retype `fn`, specialized for the builtin `type` of one parameter, from the
+// calls that pass a `type` there (#8627). Each other parameter left
+// unannotated, because its calls disagree on its type, takes the type those
+// calls agree on. The return type inferred for the original came from all
+// calls, so it is dropped and the converter infers it from the copy's body.
+template <class Json>
+void python_annotation<Json>::retype_builtin_copy(
+  Json &fn,
+  const pending_specializationt &spec,
+  const std::string &type,
+  const std::vector<Json> &calls)
+{
+  if (are_all_user_classes(spec.class_types))
+    return;
+  const size_t param_index = spec.param_index;
+  std::vector<Json> reaching;
+  for (const Json &call : calls)
+    if (
+      param_index < call["args"].size() &&
+      get_argument_type(call["args"][param_index]) == type)
+      reaching.push_back(call);
+
+  Json &params = fn["args"]["args"];
+  for (size_t j = 0; j < params.size(); ++j)
+  {
+    if (
+      j == param_index ||
+      (params[j].contains("annotation") && !params[j]["annotation"].is_null()))
+      continue;
+    const std::vector<std::string> types =
+      collect_parameter_types_from_calls(j, reaching);
+    if (types.size() > 1)
+      throw std::runtime_error(
+        "unsupported: function '" + fn["name"].template get<std::string>() +
+        "' is called with differing types in more than one parameter");
+    if (types.size() == 1)
+      add_parameter_annotation(params[j], types.front());
+  }
+  if (
+    fn["returns"].is_object() &&
+    fn["returns"].value("_inferred_annotation", false))
+    fn["returns"] = nullptr;
+}
+
 template <class Json>
 void python_annotation<Json>::apply_pending_specializations()
 {
@@ -165,7 +273,12 @@ void python_annotation<Json>::apply_pending_specializations()
     if (!found)
       continue;
 
-    if (!spec.class_types.empty())
+    const std::vector<Json> calls =
+      find_function_calls(func_name, ast_["body"]);
+    // A call the rewrite below misses, e.g. through an alias of the function,
+    // must not reach a list parameter typed for another call's elements, so
+    // a list specialization leaves the original as its calls typed it.
+    if (!spec.class_types.empty() && !are_scalar_list_types(spec.class_types))
     {
       for (auto &node : ast_["body"])
       {
@@ -178,6 +291,7 @@ void python_annotation<Json>::apply_pending_specializations()
         {
           Json &param = node["args"]["args"][param_index];
           add_parameter_annotation(param, spec.class_types.front());
+          retype_builtin_copy(node, spec, spec.class_types.front(), calls);
           break;
         }
       }
@@ -200,6 +314,7 @@ void python_annotation<Json>::apply_pending_specializations()
       {
         Json &param = specialized["args"]["args"][param_index];
         add_parameter_annotation(param, class_name);
+        retype_builtin_copy(specialized, spec, class_name, calls);
       }
 
       specialized_names[class_name] = specialized_name;
@@ -213,6 +328,23 @@ void python_annotation<Json>::apply_pending_specializations()
 
     rewrite_specialized_calls(
       func_name, param_index, specialized_names, ast_);
+
+    if (deferred_none_functions_.count(func_name) != 0)
+      for (Json &node : ast_["body"])
+      {
+        const std::string name = node.value("name", "");
+        const bool is_copy = std::any_of(
+          specialized_names.begin(),
+          specialized_names.end(),
+          [&](const auto &entry) { return entry.second == name; });
+        if (
+          node.value("_type", "") == "FunctionDef" &&
+          (name == func_name || is_copy))
+        {
+          node["returns"] = nullptr;
+          annotate_function(node);
+        }
+      }
   }
 
   pending_specializations_.clear();

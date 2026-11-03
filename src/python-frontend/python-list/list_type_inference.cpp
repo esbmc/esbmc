@@ -60,6 +60,26 @@ int get_list_compare_depth()
   return DEFAULT_LIST_COMPARE_DEPTH;
 }
 
+const nlohmann::json &unwrap_optional_annotation(const nlohmann::json &ann)
+{
+  if (
+    ann.is_object() && ann.contains("value") && ann["value"].is_object() &&
+    ann["value"].value("id", "") == "Optional" && ann.contains("slice"))
+    return ann["slice"];
+  return ann;
+}
+
+/// The name a nested container element resolves by: its base, or the whole
+/// "Optional[T]", whose Optional<T> struct a bare "Optional" does not name
+/// (#8016).
+static std::string container_spelling(const nlohmann::json &slice)
+{
+  const std::string base = slice["value"]["id"].get<std::string>();
+  if (base == "Optional" && slice["slice"].contains("id"))
+    return base + "[" + slice["slice"]["id"].get<std::string>() + "]";
+  return base;
+}
+
 // Extract element type from annotation
 typet get_elem_type_from_annotation(
   const nlohmann::json &node,
@@ -95,7 +115,7 @@ typet get_elem_type_from_annotation(
       slice.contains("value") && slice["value"].is_object() &&
       slice["value"].contains("id") && slice["value"]["id"].is_string())
     {
-      return type_handler_.get_typet(slice["value"]["id"].get<std::string>());
+      return type_handler_.get_typet(container_spelling(slice));
     }
 
     return typet();
@@ -104,7 +124,7 @@ typet get_elem_type_from_annotation(
   if (!node.contains("annotation") || !node["annotation"].is_object())
     return typet();
 
-  const auto &annotation = node["annotation"];
+  const auto &annotation = unwrap_optional_annotation(node["annotation"]);
 
   // Case 1: Direct subscript annotation like list[str]
   if (annotation.is_object() && annotation.contains("slice"))
@@ -144,7 +164,12 @@ typet get_elem_type_from_annotation(
 
   // Case 3: Direct type annotation such as str, int
   if (annotation.contains("id") && annotation["id"].is_string())
-    return type_handler_.get_typet(annotation["id"].get<std::string>());
+  {
+    std::string id = annotation["id"].get<std::string>();
+    if (id == "list" || id == "dict" || id == "set" || id == "tuple")
+      return typet();
+    return type_handler_.get_typet(id);
+  }
 
   // Return empty type if annotation structure is not recognized
   return typet();
@@ -217,6 +242,52 @@ typet infer_elem_type_from_call_return(
 
 } // namespace python_list_detail
 
+/// The type a list stores the module function \p elem names as: its address,
+/// as python_list::get stores it. \p fallback when \p elem names none.
+static typet function_element_type(
+  const python_converter &converter,
+  const nlohmann::json &elem,
+  const typet &fallback)
+{
+  if (!elem.is_object() || elem.value("_type", "") != "Name")
+    return fallback;
+  const symbolt *func = converter.find_symbol(
+    symbol_id(converter.python_file(), "", elem.value("id", "")).to_string());
+  if (!func || !func->get_type().is_code())
+    return fallback;
+  return pointer_typet(func->get_type());
+}
+
+// The element type of one literal element. A call to a user function has no
+// name-derived type; it is left to the recorded element types and flagged.
+static typet literal_element_type(
+  const type_handler &th,
+  const nlohmann::json &elem,
+  bool &unresolved_call)
+{
+  if (const std::optional<typet> element = th.scalar_array_element_type(elem))
+    return *element;
+  try
+  {
+    return th.get_typet(elem);
+  }
+  catch (const std::runtime_error &)
+  {
+    if (elem.value("_type", "") != "Call")
+      throw;
+    unresolved_call = true;
+    return typet();
+  }
+}
+
+// A typed first element beside an unnamed call would read both at one type.
+static void
+reject_mixed_unresolved_call(bool unresolved_call, const typet &first)
+{
+  if (unresolved_call && first != typet())
+    throw std::runtime_error("Invalid type");
+}
+
 typet python_list::infer_literal_element_type(
   const nlohmann::json &list_literal)
 {
@@ -225,6 +296,11 @@ typet python_list::infer_literal_element_type(
     return typet();
 
   const type_handler &th = converter_.get_type_handler();
+  bool unresolved_call = false;
+  // `a[i]` over a NumPy array or view has the array's element type.
+  auto element_type = [&](const nlohmann::json &elem) {
+    return literal_element_type(th, elem, unresolved_call);
+  };
 
   // A heterogeneous int/float literal is promoted to a homogeneous double list
   // at construction (python_list::get, promote_ints), so every element is a
@@ -237,7 +313,7 @@ typet python_list::infer_literal_element_type(
     bool has_int = false, has_float = false;
     for (const auto &e : list_literal["elts"])
     {
-      const typet t = th.get_typet(e);
+      const typet t = element_type(e);
       if (t.is_floatbv())
         has_float = true;
       else if (t.is_signedbv() || t.is_unsignedbv() || t.is_bool())
@@ -247,5 +323,10 @@ typet python_list::infer_literal_element_type(
       return double_type();
   }
 
-  return th.get_typet(first_elem);
+  const typet first_type = element_type(first_elem);
+  reject_mixed_unresolved_call(unresolved_call, first_type);
+  // A name with no variable binding may be a function
+  if (first_type.is_empty())
+    return function_element_type(converter_, first_elem, first_type);
+  return first_type;
 }

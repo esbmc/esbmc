@@ -23,6 +23,24 @@ preserves every per-stage plan and decision rationale.
 > is independent of the goal change: **§V.1's W1 row was stale** and is fixed
 > in place below.
 
+> **Status at 2026-10-01: closed record.** Nothing in this document is a live
+> work item; the current state of every frontend is the status block at the top
+> of `frontends-to-irep2.md`. Several statements below are now superseded, and
+> are left in place because source comments cite these sections:
+>
+> - Part II and Part III open with "Status: planning"; Part II concluded at §11
+>   and Part III at §14 (and reopened as Phase 8 of the forward plan).
+> - Part III F2's "no structured CF kinds" is stale for the same reason as the
+>   W1 row (#5265).
+> - `#member_name` has no reader any more; `#cpp_type` and `#cformat` now cross
+>   the seam (`migrate.cpp`), so the V.2 "carriage stays legacy" row no longer
+>   holds.
+> - The Python hop-off census figures (Part V F-A1/F-B) are superseded by
+>   `scope-python-irep2.md` (5 077 of 5 078 agree); the flag is still default off.
+> - Links to `scope-v2-w3-attribute-carriage.md`, `scope-v1k-adjuster.md`
+>   (deleted 2026-08-03) and `spike-v1k-w1loc.md` (deleted 2026-07-30) resolve
+>   only in git history. V.5's only record is this document.
+
 ## Headline
 
 `symbolt::type` and `symbolt::value` are now stored as `type2tc` /
@@ -247,10 +265,10 @@ durable boundary.
 
 | What | Where |
 |------|-------|
-| Symbol storage layout | `src/util/symbol.h` |
-| Lazy cache implementation | `src/util/symbol.cpp` |
-| Migration layer (forward, back, chokepoints) | `src/util/migrate.{h,cpp}` |
-| `migrate_expr_back` switch (all 109 kinds covered after V1) | `src/util/migrate.cpp` (~line 2486 onwards) |
+| Symbol storage layout | `src/util/symtab/symbol.h` |
+| Lazy cache implementation | `src/util/symtab/symbol.cpp` |
+| Migration layer (forward, back, chokepoints) | `src/util/irep/migrate.{h,cpp}` |
+| `migrate_expr_back` switch (all 109 kinds covered after V1) | `src/util/irep/migrate.cpp`, `migrate_expr_back` |
 | IREP2 kind manifest | `src/irep2/expr_kinds.inc`, `src/irep2/type_kinds.inc` |
 | Round-trip unit tests | `unit/util/migrate.test.cpp`, `unit/util/symbol.test.cpp` |
 | rw_set IREP2 paths + tests | `src/goto-programs/rw_set.{h,cpp}`, `unit/goto-programs/rw_set.test.cpp` |
@@ -284,7 +302,10 @@ issue, not under the umbrella that closed with this retrospective.
 
 # Part II — `util/` analysis & helper migration (forward plan)
 
-> **Status: planning.** Part I above is a closed retrospective of the
+> **Status: concluded (§11, Phase 2 at the frontend boundary).** The
+> paragraph below is the plan as written before any of it landed.
+>
+> Part I above is a closed retrospective of the
 > symbol-table boundary (B1–B6). This part is the *focused follow-on*
 > that the retrospective anticipated ("future incremental work … should
 > live under its own focused tracking issue"). It is a plan, not a
@@ -795,7 +816,13 @@ scope — and so belongs to its own, much larger tracking effort.
 
 # Part III — Solidity frontend → IREP2 (forward plan)
 
-> **Status: planning.** Parts I and II are closed records. This part is a
+> **Status: concluded at the accessor milestone (§14); reopened as Phase 8 of
+> `frontends-to-irep2.md`, tracked in `scope-solidity-irep2.md`.** The two raw
+> `#sol_*` writes §14 left (`solidity_convert_modifier.cpp`,
+> `solidity_convert_stmt.cpp`) are still there. The paragraph below is the plan
+> as written.
+>
+> Parts I and II are closed records. This part is a
 > *forward plan* that deliberately **reopens boundary B1** ("Frontend →
 > goto input", marked *Deferred indefinitely* in Part I) for **one
 > frontend only — Solidity**. Nothing here has landed. Tracking issue:
@@ -1272,7 +1299,7 @@ Reuse the Part II universal gate, specialized for Solidity. The suite is
    `unit/solidity-frontend/` `sol_typeinfo` equivalence tests.
 5. **Run subset first, full last.** CORE subset (`ctest -L esbmc-solidity
    -R '<subset>'`) on every commit; the full 512 (THOROUGH included) on
-   phase close. Respect the project 5-minute full-suite cap — narrow scope
+   phase close. Respect the project 10-minute full-suite cap — narrow scope
    per commit; the full THOROUGH run is a phase-boundary activity.
 
 **Phase-3.1-specific equivalence test (the load-bearing one):** a unit
@@ -2038,7 +2065,7 @@ moves fast (§1, RP1), keep each phase short-lived and rebase frequently.
 ### Phase 4.0 — Baseline & harness (no behaviour change) — **LANDED (#4992)**
 1. Capture the golden **verdict + matched-text** set over a stratified
    `regression/python` subset (the suite has **3558 test dirs** — full runs
-   exceed the 5-minute cap; §10) on clean `master`, on an **asserts-enabled
+   exceed the 10-minute cap; §10) on clean `master`, on an **asserts-enabled
    build** (keeps the `migrate.cpp` symbol cross-check live). Record
    pre-existing failures (platform/solver/`ast2json` baseline — note the
    `ast2json` dependency, AGENTS.md "Testing").
@@ -2079,7 +2106,8 @@ separately in PR #4997 (commit `f621558a3a`) as dead-but-tested infrastructure
 5. Resolve the string/`bytes` decoder question (Q-P4): port `mb_value` onto
    `constant_string2t` verbatim (R10) *or* decide string-literal lowering
    stays legacy at the seam. Land with property tests against the existing
-   CPython oracle (`unit/python-frontend/`, AGENTS.md "Hypothesis tests").
+   CPython oracle (`unit/python-frontend/`, `docs/agents/debugging.md`
+   "Hypothesis tests").
 
 ### Phase 4.3 — Migrate **type** construction to `type2tc` (internal) — **LANDED for elementary/float/array/pointer/Callable (#5000–#5018); struct families deferred to 4.5**
 6. Rewrite `type_handler`'s builders (`get_typet`, `python_int_typet`,
@@ -2163,7 +2191,7 @@ separately in PR #4997 (commit `f621558a3a`) as dead-but-tested infrastructure
 The bar for **every** phase: identical pass/fail set and identical matched
 output text under **both Bitwuzla and Z3**, on an asserts-enabled build,
 over the stratified `regression/python` corpus (full suite at phase
-boundaries, respecting the 5-minute cap by narrowing per commit).
+boundaries, respecting the 10-minute cap by narrowing per commit).
 
 ## 7.2 Phase 4.4 execution guide (per-file, ordered) — the remaining bulk
 
@@ -2448,11 +2476,11 @@ symex — which is exactly why the migration is done with asserts on.
 | RP5 | soundness | Operational-model `.py` files (§3.1) are themselves converter input; a converter regression breaks *every* program importing that model, not just one test. | high | The model `.py` corpus is in the regression set; run `numpy`/`dataclasses`/`decimal`/`collections` tests every commit, not just at phase close. |
 | RP6 | correctness | `code_type2t` arity assertion (`args.size()==names.size()`, `irep2_type.h:240`) — Python builds function types without parameter names in places. | med | Supply synthesized names in 4.3; asserts build catches it. |
 | RP7 | soundness | `complex` is modelled as a `struct` with `#member_name`-tagged components and a cached static `struct_typet` (`type_handler.h:18-34`); IREP2-building it must reproduce the exact tag/component layout or `migrate_type` produces a different `struct_type2t`. | high | Unit-pin the `complex` struct layout; the existing `unit/python-frontend/complex_type_test.cpp` is the oracle — extend it for the IREP2 path. |
-| RP8 | soundness | `str`/`bytes` decode (`mb_value`, UTF-8/wide/endianness) lives only on the legacy class (Part II R10) and is the trickiest logic; an IREP2 port can diverge. | med | Carry the decoder **verbatim**; property-test against CPython (AGENTS.md "Hypothesis tests"); or keep literal lowering legacy at the seam (Q-P4). |
+| RP8 | soundness | `str`/`bytes` decode (`mb_value`, UTF-8/wide/endianness) lives only on the legacy class (Part II R10) and is the trickiest logic; an IREP2 port can diverge. | med | Carry the decoder **verbatim**; property-test against CPython (`docs/agents/debugging.md` "Hypothesis tests"); or keep literal lowering legacy at the seam (Q-P4). |
 | RP9 | soundness | Name-identical legacy/IREP2 overloads (`gen_zero`, `member`, `symbol_expr` vs `symbol2tc`) — both compile, wrong one binds (Part II R12). | med | Per-site review; `-Werror`; unit equivalence tests. |
 | RP10 | compatibility | Counterexample text: Python `test.desc` regexes match function names, line numbers, sometimes coverage counts. A construction change that alters symbol naming or pretty-printed types breaks them. | high | §10 captures matched text, not just verdict; keep the legacy C printer (Part II 2.7 out of scope). |
 | RP11 | scope-creep | The "real" migration tempts touching P1 (goto-convert) / P2 (adjust); doing so blows blast radius across all frontends. | med | P1/P2 are separate tracking issues; Part IV stops at the body seam (4.5). |
-| RP12 | environment | Python tests require `ast2json` and spawn an external `python3`; a stale/absent interpreter masquerades as a verdict regression. | med | Pin the baseline `ast2json`/interpreter; run inside the project venv (AGENTS.md); treat parse failures as infra, not migration, regressions. |
+| RP12 | environment | Python tests require `ast2json` and spawn an external `python3`; a stale/absent interpreter masquerades as a verdict regression. | med | Pin the baseline `ast2json`/interpreter; run inside the project venv; treat parse failures as infra, not migration, regressions. |
 | RP13 | correctness/effort | **Heavy raw irep operand surgery** (§15 census: 576 `move/copy_to_operands`, 166 `.operands()`, 142 `.id()`, 161 `.find(`), concentrated in `python_list`/`python_set`/`python_dict_handler`/`converter_stmt`. Each `.operands()[i]`/`.id()==…`/`.find("…")` site must be hand-translated to typed `*2t` field access; a mis-indexed operand or a missed `.id()` branch silently builds the wrong node. | **high** | Phase 4.4 split per handler, one commit each; per-site review (RP9 overload hazard compounds here); the §10 verdict+text gate after every handler; the OM-handler files (`python_list` etc.) are the highest-risk and run their regression stratum every commit (RP5). |
 
 ## 10. Validation, regression & equivalence strategy
@@ -2460,8 +2488,9 @@ symex — which is exactly why the migration is done with asserts on.
 Reuse the Part II universal gate, specialized for Python. The suite is
 `regression/python` (**3558 test dirs**) plus `regression/python-coverage`
 and `regression/python-intensive`; label `python` (registered when
-`-DENABLE_PYTHON_FRONTEND=On`). Per AGENTS.md, Python tests need `ast2json`
-in the invoked `python3`, and each test spawns the external parser.
+`-DENABLE_PYTHON_FRONTEND=On`). Per AGENTS.md "Testing",
+Python tests need `python3` on `PATH` (`ast2json` is vendored), and each test
+spawns the external parser.
 
 **Per-phase gate (all must hold, both Bitwuzla and Z3):**
 1. **Verdict set identical** to the 4.0 baseline. Verdicts are immune to
@@ -2481,10 +2510,11 @@ in the invoked `python3`, and each test spawns the external parser.
    extended `complex_type_test.cpp` (RP7).
 5. **Run subset first, full last.** Stratified CORE subset on every commit;
    `python-intensive` / full 3558 at phase boundaries only. Respect the
-   project 5-minute full-suite cap — narrow scope per commit (the full suite
+   project 10-minute full-suite cap — narrow scope per commit (the full suite
    far exceeds it; pick a representative stratum covering int/float/str/
    list/dict/set/class/complex/numpy/overflow). Clean
-   `/tmp/esbmc-headers-*` after runs (AGENTS.md "/tmp disk space").
+   `/tmp/esbmc*` after runs (`docs/agents/regression-tests.md` "/tmp disk
+   space").
 
 **Phase-4.3-specific equivalence test (the load-bearing one):** for a
 representative corpus of annotated JSON type nodes, assert
@@ -5198,7 +5228,7 @@ parity, asserts build (live `migrate.cpp` cross-check), over the full
 `regression/python` strata **and** the model `.py` corpus — **plus** `esbmc-cpp`
 (and a Solidity/CUDA stratum) for any phase that touches shared passes (V.2,
 V.4, V.5). GOTO-output byte-identity is an additional V.4 gate. Respect the
-5-minute per-run cap by stratifying; full suite at phase boundaries.
+10-minute per-run cap by stratifying; full suite at phase boundaries.
 
 ## V.6 Honest estimate and recommendation
 

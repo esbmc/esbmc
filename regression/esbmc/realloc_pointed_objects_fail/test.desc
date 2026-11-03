@@ -1,0 +1,5 @@
+CORE
+main.c
+
+^VERIFICATION FAILED$
+^\s+assertion pick_b \|\| q\[0\] != 1$

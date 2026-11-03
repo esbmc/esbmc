@@ -2,13 +2,16 @@
 
 #include <util/lang/c_types.h>
 #include <util/irep/expr.h>
+#include <util/irep/std_types.h>
 #include <util/expr/expr_util.h>
 #include <util/irep/type.h>
+#include <python-frontend/type/type_handler.h>
 
 #include <nlohmann/json.hpp>
 
 #include <cctype>
 #include <map>
+#include <set>
 #include <string>
 
 enum class StatementType
@@ -30,6 +33,7 @@ enum class StatementType
   RAISE,
   UNKNOWN,
   GLOBAL,
+  NONLOCAL,
   TRY,
   EXCEPTHANDLER,
   DELETE_STATEMENT
@@ -49,7 +53,8 @@ enum class ExpressionType
   UNKNOWN,
   FSTRING,
   TUPLE,
-  SLICE
+  SLICE,
+  CLASS_MRO
 };
 
 struct TypeFlags
@@ -68,6 +73,16 @@ struct TypeFlags
 class type_utils
 {
 public:
+  /// A parameter's id, preferring `#identifier`: frontends disagree on which
+  /// key holds it and only `#identifier` crosses the IREP2 seam
+  /// (clang_cpp_convert.cpp:2880 sets the plain key alone).
+  static const irep_idt &
+  argument_identifier(const code_typet::argumentt &argument)
+  {
+    return argument.get_identifier().empty() ? argument.identifier()
+                                             : argument.get_identifier();
+  }
+
   static bool is_builtin_type(const std::string &name)
   {
     return (
@@ -78,6 +93,24 @@ public:
       name == "bytearray" || name == "range" || name == "complex" ||
       name == "type" || name == "object" || name == "abs" || name == "None" ||
       name == "divmod" || name == "slice");
+  }
+
+  /// A method of str that int and float lack: set(dir(str)) - set(dir(int))
+  /// - set(dir(float)), public names only.
+  static bool is_str_only_method(const std::string &name)
+  {
+    static const std::set<std::string> str_only_methods = {
+      "capitalize",   "casefold",     "center",    "count",     "encode",
+      "endswith",     "expandtabs",   "find",      "format",    "format_map",
+      "index",        "isalnum",      "isalpha",   "isascii",   "isdecimal",
+      "isdigit",      "isidentifier", "islower",   "isnumeric", "isprintable",
+      "isspace",      "istitle",      "isupper",   "join",      "ljust",
+      "lower",        "lstrip",       "maketrans", "partition", "removeprefix",
+      "removesuffix", "replace",      "rfind",     "rindex",    "rjust",
+      "rpartition",   "rsplit",       "rstrip",    "split",     "splitlines",
+      "startswith",   "strip",        "swapcase",  "title",     "translate",
+      "upper",        "zfill"};
+    return str_only_methods.count(name) > 0;
   }
 
   static bool is_consensus_type(const std::string &name)
@@ -136,15 +169,21 @@ public:
 
   static bool is_python_exceptions(const std::string &name)
   {
-    return (
-      name == "BaseException" || name == "Exception" || name == "ValueError" ||
-      name == "TypeError" || name == "AttributeError" || name == "IndexError" ||
-      name == "KeyError" || name == "ZeroDivisionError" ||
-      name == "AssertionError" || name == "NameError" || name == "OSError" ||
-      name == "FileNotFoundError" || name == "FileExistsError" ||
-      name == "PermissionError" || name == "NotImplementedError" ||
-      name == "ImportError" || name == "ModuleNotFoundError" ||
-      name == "RuntimeError" || name == "StopIteration" || name == "EOFError");
+    static const std::unordered_set<std::string> exceptions = {
+      "BaseException",     "Exception",
+      "ValueError",        "TypeError",
+      "AttributeError",    "IndexError",
+      "KeyError",          "ZeroDivisionError",
+      "OverflowError",     "AssertionError",
+      "NameError",         "OSError",
+      "FileNotFoundError", "FileExistsError",
+      "PermissionError",   "NotImplementedError",
+      "ImportError",       "ModuleNotFoundError",
+      "RuntimeError",      "StopIteration",
+      "EOFError",          "UnboundLocalError",
+      "ArithmeticError",   "FloatingPointError",
+      "LookupError",       "LinAlgError"};
+    return exceptions.count(name) != 0;
   }
 
   static bool is_c_model_func(const std::string &func_name)
@@ -205,6 +244,28 @@ public:
   static void remove_member_name(typet &t)
   {
     t.remove_member_name();
+  }
+
+  // A scalar T whose `Optional[T]` is the Optional<T> struct, not a T*.
+  static bool is_optional_scalar(const typet &t)
+  {
+    return t == long_long_int_type() || t == long_long_uint_type() ||
+           t == double_type() || t == bool_type();
+  }
+
+  // The Optional<T> struct type_handler::build_optional_type makes.
+  static bool is_optional_struct(const typet &t)
+  {
+    return t.is_struct() &&
+           to_struct_type(t).tag().as_string().starts_with("tag-Optional_");
+  }
+
+  // Optional[str]: a pointer to an unsized char array, NULL for None.
+  static bool is_optional_str_pointer(const typet &t)
+  {
+    return t.is_pointer() && t.subtype().is_array() &&
+           is_char_storage(t.subtype().subtype()) &&
+           to_array_type(t.subtype()).size().is_zero();
   }
 
   static bool is_char_type(const typet &t)
@@ -313,25 +374,123 @@ public:
     return flags;
   }
 
+  // Whether an annotation spells a union with None (`T | None`,
+  // `Union[T, None]`).
+  static bool annotation_admits_none(const nlohmann::json &ann)
+  {
+    if (!ann.is_object())
+      return false;
+    if (ann.value("_type", "") == "BinOp")
+      return type_utils::extract_binop_union_types(ann).has_none;
+    if (
+      ann.value("_type", "") != "Subscript" ||
+      ann["value"].value("id", "") != "Union")
+      return false;
+    const nlohmann::json &slice = ann["slice"];
+    for (const auto &elt : slice.value("elts", nlohmann::json::array()))
+      if (elt.value("_type", "") == "Constant" && elt["value"].is_null())
+        return true;
+    return false;
+  }
+
+  /// The name `T` of an annotation `Optional[T]`, `T | None` or `None | T`;
+  /// "" otherwise.
+  static std::string optional_inner_name(const nlohmann::json &ann)
+  {
+    if (!ann.is_object())
+      return "";
+    if (
+      ann.value("_type", "") == "Subscript" && ann.contains("value") &&
+      ann["value"].value("id", "") == "Optional" && ann.contains("slice"))
+      return ann["slice"].value("id", "");
+    if (
+      ann.value("_type", "") != "BinOp" || !ann.contains("op") ||
+      ann["op"].value("_type", "") != "BitOr" || !ann.contains("left") ||
+      !ann.contains("right"))
+      return "";
+    auto is_none = [](const nlohmann::json &n) {
+      return n.value("_type", "") == "Constant" && n.contains("value") &&
+             n["value"].is_null();
+    };
+    if (is_none(ann["right"]))
+      return ann["left"].value("id", "");
+    if (is_none(ann["left"]))
+      return ann["right"].value("id", "");
+    return "";
+  }
+
   static bool is_integer_type(const typet &type)
   {
     return type.is_signedbv() || type.is_unsignedbv();
   }
 
+  /// A numpy array of fixed-width strings: arrays of char arrays.
+  static bool is_numpy_string_array(const typet &type)
+  {
+    if (!type.is_array() || !type.subtype().is_array())
+      return false;
+    return is_char_storage(type.subtype().subtype()) ||
+           is_numpy_string_array(type.subtype());
+  }
+
+  /// @p integer as a numeric NumPy element. An 8-bit one would otherwise equal
+  /// char_type(), and the array would read as a string.
+  static typet numpy_integer_type(typet integer)
+  {
+    integer.cpp_type("numpy_numeric");
+    return integer;
+  }
+
+  /// An element tagged by numpy_integer_type.
+  static bool is_numpy_numeric_element(const typet &type)
+  {
+    return type.cpp_type() == "numpy_numeric";
+  }
+
+  /// A scalar a NumPy operation reads at its dtype: a tagged integer, or a
+  /// float narrower than a Python float.
+  static bool is_numpy_scalar_type(const typet &type)
+  {
+    if (type.is_floatbv())
+      return to_floatbv_type(type).get_width() < 64;
+    return is_numpy_numeric_element(type) || is_complex64_type(type);
+  }
+
+  /// A character of a string's storage, which a numeric 8-bit element is not.
+  static bool is_char_storage(const typet &type)
+  {
+    return type == char_type() && !is_numpy_numeric_element(type);
+  }
+
+  /// The scalar type at the leaves of the (possibly nested) array @p type.
+  static typet array_scalar_type(const typet &type)
+  {
+    typet scalar = type;
+    while (scalar.is_array())
+      scalar = scalar.subtype();
+    return scalar;
+  }
+
+  /// A numpy array of complex numbers.
+  static bool is_numpy_complex_array(const typet &type)
+  {
+    return type.is_array() && is_complex_type(array_scalar_type(type));
+  }
+
   static bool is_string_type(const typet &type)
   {
     // String types are represented as arrays or pointers to char
-    if (type.is_array() && type.subtype() == char_type())
+    if (type.is_array() && is_char_storage(type.subtype()))
       return true;
 
     if (type.is_pointer())
     {
       const typet &subtype = type.subtype();
       // Direct pointer to char: char*
-      if (subtype == char_type())
+      if (is_char_storage(subtype))
         return true;
       // Pointer to char array: char(*)[N] (string literals)
-      if (subtype.is_array() && subtype.subtype() == char_type())
+      if (subtype.is_array() && is_char_storage(subtype.subtype()))
         return true;
     }
 
@@ -358,7 +517,8 @@ public:
       "type",
       "object",
       "complex",
-      "frozenset"};
+      "frozenset",
+      "NoneType"};
     return type_identifiers.find(name) != type_identifiers.end();
   }
 

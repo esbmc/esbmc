@@ -1,0 +1,6 @@
+format_version: "0.1"
+properties:
+  - id: P1
+    kind: invariant
+    expression: "Ok"
+    justification: "Small + Large is 99997 and Copy is -3, nonzero: an INT and a DINT operand meet at 32 bits."

@@ -1,0 +1,8 @@
+properties:
+  # AND on the INT input N is rejected, so the body is not translated and OUT
+  # takes any value each scan. Skipping the body instead would keep OUT at its
+  # initial FALSE and make this hold.
+  - id: P1
+    kind: invariant
+    expression: "!m0__OUT"
+    description: "Unprovable: an untranslated body does not keep its outputs"

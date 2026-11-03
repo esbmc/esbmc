@@ -1,0 +1,7 @@
+CORE
+main.c
+--multi-property
+^  FAILED +\[main\.assertion\.1\] +line 42  assertion copy_first\(1, 3, 4\) == 34$
+^  FAILED +\[main\.assertion\.2\] +line 43  assertion restart\(1, 3, 4\) == 34$
+^  FAILED +\[main\.assertion\.3\] +line 44  assertion two_lists\(1, 5, 6\) == 56$
+^VERIFICATION FAILED$

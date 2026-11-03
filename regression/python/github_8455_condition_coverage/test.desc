@@ -1,0 +1,5 @@
+CORE
+main.py
+--condition-coverage
+^- UNREACHED: .uncaught exception: IndexError at file .*main.py line 2
+^COVERAGE ANALYSIS COMPLETE$

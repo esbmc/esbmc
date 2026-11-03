@@ -107,6 +107,23 @@ smt_resultt yices_convt::dec_solve()
   return P_ERROR;
 }
 
+smt_resultt yices_convt::dec_solve_assuming(const ast_vec &assumptions)
+{
+  pre_solve();
+
+  std::vector<term_t> terms;
+  for (smt_astt a : assumptions)
+    terms.push_back(to_solver_smt_ast<yices_smt_ast>(a)->a);
+
+  smt_status_t result = yices_check_context_with_assumptions(
+    yices_ctx, nullptr, terms.size(), terms.data());
+  if (result == STATUS_SAT)
+    return P_SATISFIABLE;
+  if (result == STATUS_UNSAT)
+    return P_UNSATISFIABLE;
+  return P_ERROR;
+}
+
 const std::string yices_convt::solver_text()
 {
   std::stringstream ss;
@@ -1079,11 +1096,12 @@ expr2tc yices_convt::tuple_get(const type2tc &type, smt_astt sym)
   unsigned int i = 0;
   for (auto const &it : members)
   {
-    outmem.push_back(smt_solver_baset::get_by_ast(
-      it,
-      new_ast(
-        yices_select(1 + i, to_solver_smt_ast<yices_smt_ast>(sym)->a),
-        convert_sort(it))));
+    outmem.push_back(
+      smt_solver_baset::get_by_ast(
+        it,
+        new_ast(
+          yices_select(1 + i, to_solver_smt_ast<yices_smt_ast>(sym)->a),
+          convert_sort(it))));
     i++;
   }
 

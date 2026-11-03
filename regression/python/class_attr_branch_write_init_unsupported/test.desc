@@ -1,0 +1,4 @@
+CORE
+main.py
+
+^ERROR: Unsupported: '.*' is read after an instance write that may not have run

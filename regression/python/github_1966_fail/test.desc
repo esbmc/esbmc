@@ -1,0 +1,5 @@
+CORE
+main.py
+
+^VERIFICATION FAILED$
+a function annotated to return int returns a float that int cannot hold

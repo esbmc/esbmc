@@ -1,0 +1,4 @@
+CORE
+main.c
+--bitwuzla --no-pointer-check --no-bounds-check --error-label ERROR --ts-bmc --max-k-step 8
+^VERIFICATION UNKNOWN$

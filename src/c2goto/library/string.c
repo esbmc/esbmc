@@ -7,6 +7,7 @@
 #undef strcat
 #undef strncat
 #undef strlen
+#undef strnlen
 #undef strcmp
 #undef strncmp
 #undef strchr
@@ -90,6 +91,15 @@ size_t strlen(const char *s)
 __ESBMC_HIDE:;
   size_t len = 0;
   while (s[len] != 0)
+    len++;
+  return len;
+}
+
+size_t strnlen(const char *s, size_t maxlen)
+{
+__ESBMC_HIDE:;
+  size_t len = 0;
+  while (len < maxlen && s[len] != 0)
     len++;
   return len;
 }
@@ -292,6 +302,25 @@ __ESBMC_HIDE:;
   return cpy;
 }
 
+char *strndup(const char *str, size_t n)
+{
+__ESBMC_HIDE:;
+  size_t len = 0;
+  while (len < n && str[len] != '\0')
+    ++len;
+  char *cpy = (char *)malloc(len + 1);
+  if (cpy == ((void *)0))
+    return 0;
+  size_t i = 0;
+  while (i < n && str[i] != '\0')
+  {
+    cpy[i] = str[i];
+    ++i;
+  }
+  cpy[i] = '\0';
+  return cpy;
+}
+
 void *__memcpy_impl(void *dst, const void *src, size_t n)
 {
 __ESBMC_HIDE:;
@@ -370,6 +399,14 @@ int __memcmp_impl(const void *s1, const void *s2, size_t n)
 __ESBMC_HIDE:;
   int res = 0;
   const unsigned char *sc1 = s1, *sc2 = s2;
+  // C17 7.24.4.1p2 compares the first n characters of both objects, with no
+  // early stop as strncmp has, so all n bytes must be readable (#9449).
+  if (n != 0)
+  {
+    unsigned char last1 = sc1[n - 1], last2 = sc2[n - 1];
+    (void)last1;
+    (void)last2;
+  }
   while (n != 0)
   {
     res = (*sc1++) - (*sc2++);

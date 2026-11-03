@@ -1,0 +1,4 @@
+CORE
+strong.c
+../github_7451_weak_var/weak.c -DEXPECTED=0
+^VERIFICATION SUCCESSFUL$

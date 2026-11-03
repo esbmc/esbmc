@@ -1,0 +1,5 @@
+CORE
+main.c
+
+^VERIFICATION FAILED$
+^\s+assertion a\[i\].v\[2\] == 4$

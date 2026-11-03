@@ -1,0 +1,5 @@
+CORE
+cbmc_kani_dyn_vtable_fail.goto
+--binary --function _RNvCs7IM6zvmhqRJ_13dyn_call_fail7harness --ignore-property-class reachability_check --ignore-property-class cover
+^VERIFICATION FAILED$
+assertion failed: v.value\(\) == 8$
