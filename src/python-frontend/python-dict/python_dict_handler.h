@@ -416,6 +416,7 @@ public:
    * @param dict_expr The dictionary expression (must be a symbol)
    */
   typet recorded_tuple_value_type(const exprt &dict_expr) const;
+  typet recorded_value_type(const exprt &dict_expr) const;
 
   /// Whether a read of @p dict_expr yields the stored item as a tagged scalar.
   bool reads_value_as_tagged(

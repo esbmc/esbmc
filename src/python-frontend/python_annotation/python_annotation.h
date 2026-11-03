@@ -320,6 +320,7 @@ private:
   // ----- class inheritance and specialisation (annotation_symbolic.inl) -----
   bool are_all_user_classes(const std::vector<std::string> &types) const;
   bool are_specializable_types(const std::vector<std::string> &types) const;
+  static bool are_scalar_list_types(const std::vector<std::string> &types);
   bool is_specialization_pending(
     const std::string &func_name,
     size_t param_index,

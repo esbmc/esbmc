@@ -266,10 +266,12 @@ struct collected_nondet_value
   type2tc type;            // The type
 };
 
-/// Collect all nondet values from SSA
+/// Collect all nondet values from SSA. `harness_inputs_only` drops the
+/// nondet values of uninitialised locals, which a test harness cannot feed.
 std::vector<collected_nondet_value> collect_nondet_values(
   const symex_target_equationt &target,
-  smt_convt &smt_conv);
+  smt_convt &smt_conv,
+  bool harness_inputs_only = false);
 
 /// Build a blocking clause that excludes the given input tuple from future
 /// solver queries: NOT (sym_1 == val_1 AND sym_2 == val_2 AND ...).

@@ -446,6 +446,11 @@ void violation_graphml_goto_trace(
         (step.pc->is_other() && is_nil_expr(step.lhs)) ||
         step.pc->is_function_call())
       {
+        /* The argv setup in __ESBMC_main has no line; an edge for it would
+           carry startline 0 (#9677). */
+        if (step.pc->location.get_line().empty())
+          break;
+
         std::string assignment = get_formated_assignment(ns, step, false);
 
         graph.check_create_new_thread(step.thread_nr, prev_node);
@@ -503,6 +508,11 @@ static std::optional<waypoint> witness_nondet_waypoint(
   return wp;
 }
 
+/* Branches in a recursive trace number in the hundreds of thousands (#9689),
+   and a witness that size cannot be loaded by the validator. Dropping a
+   branching waypoint only weakens guidance. */
+static constexpr size_t max_branching_waypoints = 1000;
+
 void violation_yaml_goto_trace(
   optionst &options,
   const namespacet &ns,
@@ -513,6 +523,7 @@ void violation_yaml_goto_trace(
   yml.verified_file = options.get_option("input-file");
   log_progress("Generating Violation Yaml Witness for: {}", yml.verified_file);
 
+  size_t branching_waypoints = 0;
   for (const auto &step : goto_trace.steps)
   {
     switch (step.type)
@@ -535,17 +546,16 @@ void violation_yaml_goto_trace(
       {
         /* A validator cannot match a follow waypoint against a file it was
            not given; dropping one only weakens guidance. witnesslint also
-           rejects line 0, e.g. the argv setup in __ESBMC_main (#9650). */
+           rejects line 0, e.g. the argv setup in __ESBMC_main (#9650). A
+           branch fixed by the program text needs no waypoint either: on deep
+           recursion they number in the hundreds of thousands (#9689). */
         if (
+          branching_waypoints >= max_branching_waypoints ||
           !input_file_check(step.pc->location) ||
-          step.pc->location.get_line().empty())
+          step.pc->location.get_line().empty() || !step.nondet_dependent)
           break;
 
-        /* Generated branches, such as the argv set-up of main(argc, argv),
-           have no line, and witnesslint rejects line 0. */
-        if (step.pc->location.get_line().empty())
-          break;
-
+        ++branching_waypoints;
         waypoint wp =
           witness_waypoint(step.pc->location, yml.verified_file, options);
         wp.type = waypoint::branching;
