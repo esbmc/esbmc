@@ -1,4 +1,0 @@
-CORE
-main.py
-
-^ERROR: NameError: name 't' is not defined

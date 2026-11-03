@@ -1,0 +1,5 @@
+regression/python/github_9031_str_float
+regression/python/github_9031_str_float_fail
+regression/python/github_9031_literal
+regression/python/github_9031_float_arith
+regression/python/github_9031_float_arith_fail

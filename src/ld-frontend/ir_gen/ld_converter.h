@@ -4,7 +4,6 @@
 #include <util/symtab/context.h>
 #include <util/irep/std_code.h>
 #include <util/irep/std_expr.h>
-#include <map>
 #include <optional>
 #include <string>
 
@@ -39,11 +38,8 @@ private:
   const LdIR &ir_;
   bool fault_injection_ = false;
 
-  // Operands sensed by an edge contact, mapped to their previous-scan shadow.
-  // The shadows are updated once at the end of the scan body so that every
-  // edge contact in the scan compares against the same previous-scan sample,
-  // independently of rung order.
-  std::map<std::string, symbol_exprt> edge_shadows_;
+  // Edge contact evaluations so far; each keeps its own previous sample.
+  unsigned edge_contacts_ = 0;
 
   typet bool_t() const;
   typet dint_type() const;
@@ -58,7 +54,7 @@ private:
 
   code_blockt build_scan_body(const exprt &pf_in);
 
-  codet translate_contact(const LdIRNode &n, const exprt &pf_in, exprt &pf_out);
+  exprt translate_contact(const LdIRNode &n, code_blockt &blk);
   codet translate_coil(const LdIRNode &n, const exprt &pf);
   codet translate_timer(const LdIRNode &n);
   codet translate_counter(const LdIRNode &n);

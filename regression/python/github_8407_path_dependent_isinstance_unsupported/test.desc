@@ -1,4 +1,0 @@
-CORE
-main.py
---multi-property --unwind 8 --no-unwinding-assertions
-^ERROR: .*main.py:14:7: isinstance\(\) on .b., which holds an instance of B or C depending on the path, is not supported$

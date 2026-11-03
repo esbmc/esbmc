@@ -1567,34 +1567,36 @@ void goto_symext::intrinsic_memchr(
       return;
     }
 
-    // Reading the first n bytes must stay within the object.
-    const bool is_out_bounds =
-      (number_of_offset > type_size) ||
-      ((type_size - number_of_offset) < number_of_bytes);
-    if (
-      is_out_bounds && !options.get_bool_option("no-pointer-check") &&
-      !options.get_bool_option("no-bounds-check"))
-    {
-      std::string error_msg = fmt::format(
-        "dereference failure on memchr: reading memory segment of size {} with "
-        "{} bytes",
-        type_size - number_of_offset,
-        number_of_bytes);
-      expr2tc check = implies2tc(item.guard, gen_false_expr());
-      claim(check, error_msg);
-      continue;
-    }
-
-    // Fold the n candidate bytes into a nested-ite pointer, from the last
-    // position outward so the first match wins.
+    // Fold the candidate bytes inside the object into a nested-ite pointer,
+    // from the last position outward so the first match wins.
+    const uint64_t available =
+      number_of_offset > type_size ? 0 : type_size - number_of_offset;
+    const uint64_t in_bounds = std::min<uint64_t>(number_of_bytes, available);
     expr2tc result = null_result;
-    for (unsigned long k = number_of_bytes; k-- > 0;)
+    expr2tc any_match = gen_false_expr();
+    for (uint64_t k = in_bounds; k-- > 0;)
     {
       expr2tc byte =
         object_byte(item_object, number_of_offset + k, is_big_endian);
       expr2tc match = equality2tc(byte, ch_byte);
       expr2tc hit = add2tc(ret_type, buf_arg, gen_ulong(k));
       result = if2tc(ret_type, match, hit, result);
+      any_match = or2tc(match, any_match);
+    }
+
+    // memchr stops at the first match (C17 7.24.5.1p2), so it reads past the
+    // object only when none of the bytes inside it matches (#9439).
+    if (
+      in_bounds < number_of_bytes &&
+      !options.get_bool_option("no-pointer-check") &&
+      !options.get_bool_option("no-bounds-check"))
+    {
+      std::string error_msg = fmt::format(
+        "dereference failure on memchr: reading memory segment of size {} with "
+        "{} bytes",
+        available,
+        number_of_bytes);
+      claim(implies2tc(item.guard, any_match), error_msg);
     }
 
     symex_assign(code_assign2tc(ret_ref, result), false, guard);

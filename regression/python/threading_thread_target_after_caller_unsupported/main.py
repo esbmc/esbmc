@@ -7,6 +7,9 @@ def caller() -> None:
     t.join()
 
 
+_gap = 0
+
+
 def later(x: int) -> None:
     pass
 

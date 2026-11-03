@@ -1,0 +1,4 @@
+CORE
+main.py
+--incremental-bmc
+^ERROR: ValueError: numpy.linalg.solve: the matrix rows have different lengths$

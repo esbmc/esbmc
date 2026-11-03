@@ -51,7 +51,9 @@ public:
    * len() of an operand that lowered to a bitvector: length 1 for a single
    * character, TypeError for a number, which defines no __len__ (#6261).
    */
-  exprt len_of_bitvector_operand(const nlohmann::json &arg) const;
+  exprt len_of_bitvector_operand(
+    const nlohmann::json &arg,
+    const typet &lowered_type) const;
 
   /*
    * Checks if a NumPy function is being invoked.
@@ -158,6 +160,15 @@ private:
    * method can then be chosen statically.
    */
   std::string subscript_receiver_class(const nlohmann::json &receiver) const;
+
+  /**
+   * The type of a method call's receiver that is the call @p inner_call. For
+   * `d.pop(k)` on a dict name whose values are class instances it is their
+   * class: pop without a default returns a stored value or raises KeyError,
+   * while a default or get() may yield None or another type. Otherwise it is
+   * the type get_operand_type infers.
+   */
+  std::string call_receiver_class(const nlohmann::json &inner_call) const;
 
   python_converter &converter_;
   const nlohmann::json &call_;

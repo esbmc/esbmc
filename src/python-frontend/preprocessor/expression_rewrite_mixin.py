@@ -278,9 +278,10 @@ for {i} in range(0, len({seq})):
     class _ListCompExpressionLowerer(ast.NodeTransformer):
         """Utility transformer that lowers list comprehensions, any(genexpr), and all(genexpr) inside an expression."""
 
-        def __init__(self, preprocessor):
+        def __init__(self, preprocessor, root):
             super().__init__()
             self.preprocessor = preprocessor
+            self.root = root
             self.statements = []
             # Prefix statements run unconditionally, so an expression that
             # might not be evaluated must not be lowered into them.
@@ -334,6 +335,41 @@ for {i} in range(0, len({seq})):
         def visit_GeneratorExp(self, node):
             """Lower a genexp not already handled above (any/all/join/...)."""
             return self._lower_as_listcomp(node)
+
+        def _other_code_may_run(self, comp):
+            """True when the expression may run code outside @p comp other than
+            the calls enclosing it, which hoisting @p comp would reorder."""
+            parents = {
+                id(child): parent
+                for parent in ast.walk(self.root)
+                for child in ast.iter_child_nodes(parent)
+            }
+            exempt = {id(n) for n in ast.walk(comp)}
+            node = comp
+            while id(node) in parents:
+                node = parents[id(node)]
+                exempt.add(id(node))
+            return any(
+                isinstance(n, (ast.Call, ast.NamedExpr, ast.Await, ast.Yield,
+                               ast.YieldFrom)) and id(n) not in exempt for n in ast.walk(self.root))
+
+        def visit_DictComp(self, node):
+            """Hoist a dict comprehension over a dict into a temp, so it takes
+            the for-loop lowering an assigned one gets (#5444)."""
+            if self.conditional_depth or self._other_code_may_run(node):
+                return self.generic_visit(node)
+            # pylint: disable=protected-access
+            tmp_id = f"ESBMC_dictcomp_{self.preprocessor.listcomp_counter}"
+            assign = ast.Assign(targets=[ast.Name(id=tmp_id, ctx=ast.Store())], value=node)
+            ast.copy_location(assign, node)
+            lowered = self.preprocessor._maybe_lower_dictcomp_over_items(assign)
+            if lowered is None:
+                return self.generic_visit(node)
+            self.preprocessor.listcomp_counter += 1
+            self.statements.extend(lowered)
+            result = ast.Name(id=tmp_id, ctx=ast.Load())
+            ast.copy_location(result, node)
+            return result
 
         def visit_Call(self, node):  # pylint: disable=protected-access,too-many-locals,too-many-boolean-expressions,too-many-statements
             if (isinstance(node.func, ast.Attribute) and node.func.attr == "join"
@@ -533,9 +569,26 @@ for {i} in range(0, len({seq})):
         if node.value is not None:
             dd_inits, node.value = self._lower_defaultdict_reads_in_expr(node.value, node)
             prefix = dd_inits + prefix
+        prefix = prefix + self._name_returned_sorted(node)
         if prefix:
             return prefix + [node]
         return node
+
+    def _name_returned_sorted(self, node):
+        """Bind `return sorted(x)` to a name first: the elements of a returned name's
+        value keep their types where those of a returned call do not (#9736)."""
+        value = node.value
+        if not (isinstance(value, ast.Call) and isinstance(value.func, ast.Name)
+                and value.func.id == "sorted"):
+            return []
+        name = f"ESBMC_sorted_ret_{self._next_unpack_tmp_id()}"
+        assign = ast.Assign(targets=[ast.Name(id=name, ctx=ast.Store())], value=value)
+        ast.copy_location(assign, node)
+        ast.copy_location(assign.targets[0], node)
+        node.value = ast.Name(id=name, ctx=ast.Load())
+        ast.copy_location(node.value, node)
+        ast.fix_missing_locations(assign)
+        return [assign]
 
     def visit_Attribute(self, node):
         node = self.generic_visit(node)
@@ -592,6 +645,9 @@ for {i} in range(0, len({seq})):
                             elt.op, (ast.UAdd, ast.USub)) and isinstance(elt.operand, ast.Constant))
                     if is_pure_literal:
                         folded = copy.deepcopy(elt)
+                        # Each fold is a fresh copy, so record which element it
+                        # reads for `is` to compare by identity (#8412).
+                        folded.esbmc_list_element = f"{node.value.id}[{idx}]"
                         self.ensure_all_locations(folded, node)
                         ast.fix_missing_locations(folded)
                         return folded
@@ -826,4 +882,33 @@ for {i} in range(0, len({seq})):
 
     def visit_Compare(self, node):
         node = self.generic_visit(node)
+        return node
+
+    @staticmethod
+    def _literal_list_truth(node):
+        """Whether a list literal of constants is truthy, or None for any other operand."""
+        if isinstance(node, ast.List) and all(isinstance(e, ast.Constant) for e in node.elts):
+            return bool(node.elts)
+        return None
+
+    def visit_BoolOp(self, node):
+        """Fold the operands decided by a list literal on the left: `[1] and x` is `x`,
+        `[] and x` is `[]`, `[1] or x` is `[1]` and `[] or x` is `x`, so the result has the
+        type of the operand that is kept."""
+        node = self.generic_visit(node)
+        is_and = isinstance(node.op, ast.And)
+        values = list(node.values)
+        while len(values) > 1:
+            truth = self._literal_list_truth(values[0])
+            if truth is None:
+                break
+            if truth == is_and:
+                values = values[1:]
+            else:
+                values = values[:1]
+        if len(values) == len(node.values):
+            return node
+        if len(values) == 1:
+            return values[0]
+        node.values = values
         return node

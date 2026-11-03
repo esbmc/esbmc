@@ -1,0 +1,6 @@
+regression/python/github_8970_arity
+regression/python/github_8970_arity_argument_refused
+regression/python/github_8970_arity_default_refused
+regression/python/github_8970_arity_fail
+regression/python/github_8970_arity_index_fail
+regression/python/github_8970_arity_wrong_count_fail

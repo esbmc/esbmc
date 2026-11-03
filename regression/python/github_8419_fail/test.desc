@@ -1,0 +1,12 @@
+CORE
+main.py
+--multi-property
+^VERIFICATION FAILED$
+FAILED .* line +86 +assertion
+FAILED .* line +88 +assertion
+FAILED .* line +90 +assertion
+FAILED .* line +92 +assertion
+FAILED .* line +94 +assertion
+FAILED .* line +96 +assertion
+FAILED .* line +98 +assertion
+FAILED .* line +100 +assertion

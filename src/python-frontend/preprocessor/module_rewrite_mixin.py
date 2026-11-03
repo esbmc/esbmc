@@ -2,13 +2,26 @@ import ast
 import copy
 from collections import Counter
 
+from preprocessor.binding_sites import binding_sites
 from preprocessor.bound_method_dispatch import dispatch_rebound_methods
+from preprocessor.bound_method_values import lower_method_values
+from preprocessor.check_type_lowering import lower_check_type
+from preprocessor.dotted_imports import alias_dotted_imports
+from preprocessor.decorator_lowering import lower_user_decorators
+from preprocessor.dict_splat import spell_out_dict_splats
 from preprocessor.itertools_lowering import lower_itertools
+from preprocessor.coroutine_lowering import lower_coroutines
 from preprocessor.match_lowering import lower_match_statements
 from preprocessor.namedtuple_lowering import lower_namedtuples
+from preprocessor.open_lowering import lower_builtin_open
+from preprocessor.function_value_dispatch import dispatch_mixed_function_values
 from preprocessor.function_value_types import reject_mixed_function_values
+from preprocessor.iter_next_lowering import lower_iter_next
 from preprocessor.receiver_classes import refuse_path_dependent_receivers
+from preprocessor.class_value_calls import dispatch_class_value_calls
+from preprocessor.sibling_defs import define_read_siblings_first
 from preprocessor.skipped_base_init import refuse_skipped_base_init
+from preprocessor.zip_lowering import inline_zip_names, lower_zip_builds
 from preprocessor.unbound_locals import guard_unbound_locals
 # pylint: disable=too-many-branches,too-many-boolean-expressions
 
@@ -64,6 +77,18 @@ def _rename_shadowed_classes(module):
                 taken.add(renamed)
                 stmt.name = renamed
                 break
+
+
+def _referenced_names(module):
+    """The names `module` reads, deletes or updates in place."""
+    return {
+        n.id
+        for n in ast.walk(module) if isinstance(n, ast.Name) and not isinstance(n.ctx, ast.Store)
+    } | {
+        n.target.id
+        for n in ast.walk(module)
+        if isinstance(n, ast.AugAssign) and isinstance(n.target, ast.Name)
+    }
 
 
 class ModuleRewriteMixin:
@@ -480,24 +505,7 @@ class ModuleRewriteMixin:
             return names
         return None
 
-    @staticmethod
-    def _binding_sites(module_node):
-        """How many places anywhere in *module_node* bind or declare each name."""
-        sites = Counter()
-        for n in ast.walk(module_node):
-            if isinstance(n, ast.Name) and not isinstance(n.ctx, ast.Load):
-                sites[n.id] += 1
-            elif isinstance(n, ast.alias):
-                sites[n.asname or n.name.split(".")[0]] += 1
-            elif isinstance(n, ast.arg):
-                sites[n.arg] += 1
-            elif isinstance(n, (ast.Global, ast.Nonlocal)):
-                sites.update(n.names)
-            elif isinstance(getattr(n, "name", None), str):
-                sites[n.name] += 1
-            elif isinstance(n, ast.MatchMapping) and n.rest:
-                sites[n.rest] += 1
-        return sites
+    _binding_sites = staticmethod(binding_sites)
 
     @staticmethod
     def _appears_before(module_node, name, stmt):
@@ -505,6 +513,17 @@ class ModuleRewriteMixin:
         positions = ((getattr(n, "lineno", 0), getattr(n, "col_offset", 0))
                      for n in ast.walk(module_node) if isinstance(n, ast.Name) and n.id == name)
         return any(p < (stmt.lineno, stmt.col_offset) for p in positions)
+
+    def _call_raised_classes(self, module_node):
+        """Rewrite `raise C` into `raise C()`, which is what it raises, so the
+        call is bound and checked like any other constructor call (#9642).
+        Only for a class bound solely by its class statement."""
+        sites = self._binding_sites(module_node)
+        for n in ast.walk(module_node):
+            if (isinstance(n, ast.Raise) and isinstance(n.exc, ast.Name)
+                    and n.exc.id in self.module_class_names and sites[n.exc.id] == 1):
+                call = ast.Call(func=n.exc, args=[], keywords=[])
+                n.exc = ast.fix_missing_locations(ast.copy_location(call, n.exc))
 
     def _rewrite_module_aliases(self, module_node):
         """Rewrite a top-level `alias = mod` into `import <module> as alias`.
@@ -530,13 +549,32 @@ class ModuleRewriteMixin:
             imp = ast.Import(names=[ast.alias(name=modules[name], asname=alias)])
             module_node.body[i] = ast.fix_missing_locations(ast.copy_location(imp, stmt))
 
-    def prepare_module(self, node, alias_seed=frozenset(), wrapper_seed=None):
-        """Run pre-visit analyses and range-alias/wrapper canonicalization."""
+    def prepare_module(self, node, alias_seed=frozenset(), wrapper_seed=None, entry=False):
+        """Run pre-visit analyses and range-alias/wrapper canonicalization.
+
+        `entry` marks the program itself, whose module-level names no other
+        module imports."""
+        lower_coroutines(node, self.module_name)
+        lower_check_type(node, self.module_name)
+        lower_builtin_open(node, self.module_name)
         _rename_shadowed_classes(node)
+        alias_dotted_imports(node)
+        spell_out_dict_splats(node)
+        inline_zip_names(node)
+        lower_iter_next(node)
+        lower_zip_builds(node)
+        self._scan_fixed_receivers(node)
+        lower_method_values(node, self.fixed_receivers)
+        if entry:
+            dispatch_mixed_function_values(node, self.module_name)
         reject_mixed_function_values(node, self.module_name)
         lower_match_statements(node)
         lower_itertools(node)
         lower_namedtuples(node, self.module_name)
+        lower_user_decorators(node, self.module_name)
+        define_read_siblings_first(node)
+        if entry:
+            dispatch_class_value_calls(node)
         refuse_path_dependent_receivers(node, self.module_name)
         refuse_skipped_base_init(node, self.module_name)
         self.expand_unittest_main(node)
@@ -552,6 +590,8 @@ class ModuleRewriteMixin:
         for n in ast.walk(node):
             if isinstance(n, ast.Call) and isinstance(n.func, ast.Name):
                 self.called_names.add(n.func.id)
+        self.referenced_names = _referenced_names(node)
+        self.outer_stored_names = self._outer_stored_names(node)
         self._scan_fixed_receivers(node)
         self.variable_names = self._variable_names(node)
         self.scope_binding_counts = self._scope_binding_counts(node)
@@ -576,6 +616,9 @@ class ModuleRewriteMixin:
         self._scan_dict_literal_bindings_and_calls(node)
         self.module_class_names, self.instance_var_classes = \
             self._build_var_class_map(node)
+        self.plain_user_classes = self._plain_user_classes(node)
+        self.factory_classes = self._scan_factory_classes(node, self.module_class_names)
+        self._call_raised_classes(node)
         self.attr_list_element_classes = self._scan_attr_list_element_classes(node)
         self.list_var_element_classes = self._scan_list_var_element_classes(node)
         self.module_dunder_all = self._capture_dunder_all(node)

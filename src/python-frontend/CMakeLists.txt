@@ -18,6 +18,7 @@ add_library(pythonfrontend STATIC
             converter/converter_compare.cpp
             converter/converter_dunder.cpp
             converter/converter_expr.cpp
+            converter/converter_numpy_dtype.cpp
             converter/value_kinds.cpp
             converter/converter_funcall.cpp
             converter/converter_funcdef.cpp
@@ -56,6 +57,7 @@ add_library(pythonfrontend STATIC
             python-list/list_comprehension.cpp
             python-list/list_set_ops.cpp
             math/python_math.cpp
+            math/bounded_math.cpp
             set/python_set.cpp
             type/python_typechecking.cpp
             pythonastgen.c
@@ -75,6 +77,9 @@ add_library(pythonfrontend STATIC
             function_call/expr.cpp
             function_call/str_conv.cpp
             numpy/numpy_call_expr.cpp
+            numpy/numpy_dtype.cpp
+            numpy/numpy_random.cpp
+            numpy/numpy_nditer.cpp
             numpy/ndarray_shape.cpp
             function_call/builder.cpp
             string/string_builder.cpp

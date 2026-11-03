@@ -399,6 +399,14 @@ int __memcmp_impl(const void *s1, const void *s2, size_t n)
 __ESBMC_HIDE:;
   int res = 0;
   const unsigned char *sc1 = s1, *sc2 = s2;
+  // C17 7.24.4.1p2 compares the first n characters of both objects, with no
+  // early stop as strncmp has, so all n bytes must be readable (#9449).
+  if (n != 0)
+  {
+    unsigned char last1 = sc1[n - 1], last2 = sc2[n - 1];
+    (void)last1;
+    (void)last2;
+  }
   while (n != 0)
   {
     res = (*sc1++) - (*sc2++);

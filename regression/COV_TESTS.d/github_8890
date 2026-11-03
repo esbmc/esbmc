@@ -1,0 +1,4 @@
+regression/python/github_8890_nested_mixed_return_nondet
+regression/python/github_8890_nested_mixed_return_nondet_fail
+regression/python/github_8890_two_wrappers_fail
+regression/python/github_8890_wrapper_mixed_return

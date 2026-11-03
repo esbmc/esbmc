@@ -5,6 +5,7 @@
 #include <vector>
 
 #include <util/arith/arith_tools.h>
+#include <util/config/config.h>
 #include <util/expr/base_type.h>
 #include <util/lang/c_types.h>
 #include <util/expr/expr_reassociate.h>
@@ -1511,6 +1512,22 @@ expr2tc with2t::do_simplify() const
     // only ever contain one member, and it's the member most recently written.
     if (thetype.members[no] != update_value->type)
       return expr2tc();
+
+    // A literal of the written member alone would zero the bytes of the old
+    // member that the write leaves untouched, unless it covers all of them.
+    try
+    {
+      if (
+        !c_union.datatype_members.empty() &&
+        type_byte_size_bits(update_value->type, migrate_namespace_lookup) <
+          type_byte_size_bits(
+            c_union.datatype_members[0]->type, migrate_namespace_lookup))
+        return expr2tc();
+    }
+    catch (const array_type2t::array_size_excp &)
+    {
+      return expr2tc();
+    }
 
     if (
       c_union.init_field == thetype.member_names[no] &&
@@ -4546,27 +4563,13 @@ static expr2tc cancel_common_unary_operand(
   return expr2tc();
 }
 
-// Returns a Boolean constant when a pointer comparison against NULL is
-// decidable, nil otherwise. `eq` selects the polarity. A pointer value
-// is an (object, offset) pair and no object lives at address zero, so
-// the non-null side peels casts and constant ± offsets down to its
-// root before the address_of root check: `(T *)(&sym + k) == NULL`
-// folds exactly like `&sym == NULL`.
-static expr2tc
-simplify_pointer_null_cmp(const expr2tc &s1, const expr2tc &s2, bool eq)
+// Peels pointer casts and constant ± offsets, which keep the object a
+// pointer refers to. Only pointer-typed links preserve nullness: a cast
+// through an integer type may truncate, and integer arithmetic can wrap
+// to zero, so the peel stops at the first non-pointer node.
+static const expr2tc &peel_pointer_offsets(const expr2tc &e)
 {
-  if (!is_pointer_type(s1) && !is_pointer_type(s2))
-    return expr2tc();
-  bool n1 = is_null_pointer_value(s1);
-  bool n2 = is_null_pointer_value(s2);
-  if (n1 && n2)
-    return eq ? gen_true_expr() : gen_false_expr();
-  if (n1 == n2)
-    return expr2tc();
-  // Only pointer-typed links preserve nullness: a cast through an
-  // integer type may truncate, and integer arithmetic can wrap to
-  // zero, so the peel stops at the first non-pointer node.
-  const expr2tc *p = n1 ? &s2 : &s1;
+  const expr2tc *p = &e;
   while (is_pointer_type((*p)->type))
   {
     if (is_typecast2t(*p) && is_pointer_type(to_typecast2t(*p).from->type))
@@ -4580,9 +4583,50 @@ simplify_pointer_null_cmp(const expr2tc &s1, const expr2tc &s2, bool eq)
     else
       break;
   }
-  if (address_of_is_provably_non_null(*p))
+  return *p;
+}
+
+static expr2tc obj_equals_addr_of(const expr2tc &a, const expr2tc &b);
+
+// `&a + j == &b + k` with a and b provably distinct objects, or nil.
+static expr2tc
+fold_distinct_objects_cmp(const expr2tc &s1, const expr2tc &s2, bool eq)
+{
+  const expr2tc &p1 = peel_pointer_offsets(s1);
+  const expr2tc &p2 = peel_pointer_offsets(s2);
+  if (!is_address_of2t(p1) || !is_address_of2t(p2))
+    return expr2tc();
+  expr2tc same = obj_equals_addr_of(
+    to_address_of2t(p1).ptr_obj, to_address_of2t(p2).ptr_obj);
+  if (
+    !is_nil_expr(same) && is_constant_bool2t(same) &&
+    !to_constant_bool2t(same).value)
     return eq ? gen_false_expr() : gen_true_expr();
   return expr2tc();
+}
+
+// Returns a Boolean constant when a pointer comparison is decidable,
+// nil otherwise. `eq` selects the polarity. A pointer value is an
+// (object, offset) pair. No object lives at address zero, so
+// `(T *)(&sym + k) == NULL` folds exactly like `&sym == NULL`. Two
+// addresses rooted in different objects differ in the object, so
+// `&a + j == &b + k` folds false whatever the offsets.
+static expr2tc
+simplify_pointer_cmp(const expr2tc &s1, const expr2tc &s2, bool eq)
+{
+  if (!is_pointer_type(s1) && !is_pointer_type(s2))
+    return expr2tc();
+  bool n1 = is_null_pointer_value(s1);
+  bool n2 = is_null_pointer_value(s2);
+  if (n1 && n2)
+    return eq ? gen_true_expr() : gen_false_expr();
+  if (n1 != n2)
+  {
+    if (address_of_is_provably_non_null(peel_pointer_offsets(n1 ? s2 : s1)))
+      return eq ? gen_false_expr() : gen_true_expr();
+    return expr2tc();
+  }
+  return fold_distinct_objects_cmp(s1, s2, eq);
 }
 
 /// (x * c) == 0 -> x == 0 when c is odd, or nothing. Restricted to odd
@@ -4620,7 +4664,7 @@ expr2tc equality2t::do_simplify() const
   if (side_1 == side_2 && !is_floatbv_type(side_1) && !is_floatbv_type(side_2))
     return gen_true_expr();
 
-  if (expr2tc r = simplify_pointer_null_cmp(side_1, side_2, true))
+  if (expr2tc r = simplify_pointer_cmp(side_1, side_2, true))
     return r;
 
   // If we're dealing with floatbvs, call IEEE_equalitytor instead
@@ -4715,7 +4759,7 @@ expr2tc notequal2t::do_simplify() const
   if (side_1 == side_2 && !is_floatbv_type(side_1) && !is_floatbv_type(side_2))
     return gen_false_expr();
 
-  if (expr2tc r = simplify_pointer_null_cmp(side_1, side_2, false))
+  if (expr2tc r = simplify_pointer_cmp(side_1, side_2, false))
     return r;
 
   // If we're dealing with floatbvs, call IEEE_notequalitytor instead
@@ -4798,12 +4842,19 @@ struct Lessthantor
   }
 };
 
+/// Under --ir an integer is unbounded, so its type does not bound its value
+/// and folds that rely on the type's range are unsound (#9534).
+static bool type_bounds_value()
+{
+  return !config.options.get_bool_option("int-encoding");
+}
+
 /// Type-extreme detector. For an integer constant @p c against bv type @p t,
 /// reports whether the constant equals the type's representable max or min.
 /// Used to short-circuit ordered comparisons against the bounds of the type.
 static bool is_type_max(const BigInt &c, const type2tc &t)
 {
-  if (!is_bv_type(t))
+  if (!is_bv_type(t) || !type_bounds_value())
     return false;
   unsigned w = t->get_width();
   if (is_signedbv_type(t))
@@ -4813,7 +4864,7 @@ static bool is_type_max(const BigInt &c, const type2tc &t)
 
 static bool is_type_min(const BigInt &c, const type2tc &t)
 {
-  if (!is_bv_type(t))
+  if (!is_bv_type(t) || !type_bounds_value())
     return false;
   if (is_signedbv_type(t))
     return c == -BigInt::power2(t->get_width() - 1);
@@ -4825,6 +4876,8 @@ static bool is_type_min(const BigInt &c, const type2tc &t)
 // (the C promotion `(int)a_u16` shape — the sign bit is never set).
 static bool is_provably_nonneg(const expr2tc &e)
 {
+  if (!type_bounds_value())
+    return false;
   if (is_unsignedbv_type(e))
     return true;
   if (is_typecast2t(e))
@@ -5468,8 +5521,6 @@ expr2tc overflow2t::do_simplify() const
   return expr2tc();
 }
 
-static expr2tc obj_equals_addr_of(const expr2tc &a, const expr2tc &b);
-
 static expr2tc handle_symmetric_cases(const expr2tc &a, const expr2tc &b)
 {
   // Array element vs base symbol
@@ -5957,19 +6008,10 @@ struct Signbittor
   }
 };
 
+// No fold of signbit(neg(x)) or signbit(abs(x)): under --fixedbv and --ir
+// neither flips or clears the sign the way IEEE 754 does.
 expr2tc signbit2t::do_simplify() const
 {
-  // signbit(abs(x)) = false. IEEE 754 absoluteValue clears the sign bit
-  // unconditionally, including for NaN payloads.
-  if (is_abs2t(operand))
-    return gen_false_expr();
-
-  // signbit(neg(x)) = !signbit(x). IEEE 754 negate flips the sign bit
-  // unconditionally — same caveat for NaN, but the bit flip is
-  // architecture-independent at the IR level.
-  if (is_neg2t(operand))
-    return not2tc(signbit2tc(to_neg2t(operand).value));
-
   return simplify_floatbv_1op<Signbittor, signbit2t>(type, operand);
 }
 
@@ -6038,6 +6080,14 @@ expr2tc bswap2t::do_simplify() const
   // For a signedbv result type, from_integer will reinterpret the
   // unsigned bit pattern as signed via the same binary round-trip.
   return from_integer(new_value, type);
+}
+
+/// The 2-op float functors fold into a copy of the first operand; drop its
+/// source spelling, which c_expr2string would print in place of the value.
+static void drop_float_cformat(expr2tc &e)
+{
+  if (is_constant_floatbv2t(e))
+    to_constant_floatbv2t(e).cformat = irep_idt();
 }
 
 template <template <typename> class TFunctor, typename constructor>
@@ -6158,6 +6208,7 @@ static expr2tc simplify_floatbv_2ops(
       rounding_mode,
       is_constant,
       get_value);
+    drop_float_cformat(simpl_res);
   }
   else
   {
@@ -6425,6 +6476,26 @@ expr2tc ieee_rem2t::do_simplify() const
   return expr2tc();
 }
 
+// Whether fma(x, y, z) is a NaN whatever the rounding mode.
+static bool
+fma_yields_nan(const ieee_floatt &x, const ieee_floatt &y, const ieee_floatt &z)
+{
+  // A NaN operand gives NaN. So does 0 * Inf or Inf * 0, which is a domain
+  // error whether or not z is a NaN.
+  if (x.is_NaN() || y.is_NaN() || z.is_NaN())
+    return true;
+  if ((x.is_zero() && y.is_infinity()) || (y.is_zero() && x.is_infinity()))
+    return true;
+
+  // If x*y is an exact infinity and z is an infinity with the opposite sign,
+  // NaN is returned and FE_INVALID is raised. The exact product of two finite
+  // operands is finite even when rounding it alone would overflow, so test the
+  // operands rather than a rounded x * y (#9426).
+  const bool product_sign = x.get_sign() != y.get_sign();
+  return (x.is_infinity() || y.is_infinity()) && z.is_infinity() &&
+         product_sign != z.get_sign();
+}
+
 expr2tc ieee_fma2t::do_simplify() const
 {
   assert(is_floatbv_type(type));
@@ -6443,44 +6514,10 @@ expr2tc ieee_fma2t::do_simplify() const
   ieee_floatt n2 = to_constant_floatbv2t(value_2).value;
   ieee_floatt n3 = to_constant_floatbv2t(value_3).value;
 
-  // If x or y are NaN, NaN is returned
-  if (n1.is_NaN() || n2.is_NaN())
-  {
-    n1.make_NaN();
-    return constant_floatbv2tc(n1);
-  }
-
-  // If x is zero and y is infinite or if x is infinite and y is zero,
-  // and z is not a NaN, a domain error shall occur, and either a NaN,
-  // or an implementation-defined value shall be returned.
-
-  // If x is zero and y is infinite or if x is infinite and y is zero,
-  // and z is a NaN, then NaN is returned and FE_INVALID may be raised
-  if ((n1.is_zero() && n2.is_infinity()) || (n2.is_zero() && n1.is_infinity()))
-  {
-    n1.make_NaN();
-    return constant_floatbv2tc(n1);
-  }
-
-  // If z is NaN, and x*y aren't 0*Inf or Inf*0, then NaN is returned
-  // (without FE_INVALID)
-  if (n3.is_NaN())
-  {
-    n1.make_NaN();
-    return constant_floatbv2tc(n1);
-  }
-
-  // If x*y is an exact infinity and z is an infinity with the opposite sign,
-  // NaN is returned and FE_INVALID is raised
-  n1 *= n2;
-  if (
-    (n1.is_infinity() && n3.is_infinity()) && (n1.get_sign() != n3.get_sign()))
-  {
-    n1.make_NaN();
-    return constant_floatbv2tc(n1);
-  }
-
-  return expr2tc();
+  if (!fma_yields_nan(n1, n2, n3))
+    return expr2tc();
+  n1.make_NaN();
+  return constant_floatbv2tc(n1);
 }
 
 expr2tc ieee_sqrt2t::do_simplify() const

@@ -7,10 +7,100 @@ exprt python_dict_handler::get_key_expr(const nlohmann::json &slice_node)
   return converter_.get_expr(slice_node);
 }
 
+void python_dict_handler::check_value_type(
+  bool enabled,
+  const exprt &obj,
+  const typet &type,
+  const locationt &location)
+{
+  if (!enabled)
+    return;
+  code_assertt check(equality_exprt(
+    build_member(obj, "type_id", size_type()),
+    type_handler_.tagged_scalar_type_id(type)));
+  check.location() = location;
+  check.location().user_provided(true);
+  check.location().comment(
+    "Unsupported: a dict value whose type differs from the one inferred");
+  converter_.add_instruction(check);
+}
+
+/// The float_type_id argument of a push or set: an element's own type id
+/// routes a float into the real-sorted __ESBMC_float_buf (and records its
+/// float_idx) so a typed read finds it there (#5501); 0 copies the bytes.
+static exprt float_type_id_arg(const list_elem_info &info)
+{
+  if (info.elem_symbol->get_type().is_floatbv())
+    return build_symbol(*info.elem_type_sym);
+  return from_integer(BigInt(0), size_type());
+}
+
+static char scalar_kind(const typet &t)
+{
+  if (type_utils::is_string_type(t))
+    return 's';
+  return t.is_signedbv() || t.is_unsignedbv() || t.is_floatbv() || t.is_bool()
+           ? 'n'
+           : '\0';
+}
+
+/// 's' or 'n' when @p dict_expr is written `dict[K, V]` with a str or number
+/// V, else '\0'. The preprocessor's guess from a literal's first value is no
+/// annotation.
+char python_dict_handler::annotated_value_kind(const exprt &dict_expr)
+{
+  const symbolt *sym = symbol_table_.find_symbol(dict_expr.identifier());
+  assert(sym && "a dict with recorded values has a symbol");
+  const nlohmann::json var_decl = json_utils::find_var_decl(
+    sym->name.as_string(),
+    converter_.get_current_func_name(),
+    converter_.get_ast_json());
+  if (
+    var_decl.empty() || var_decl.value("_inferred_annotation", false) ||
+    !var_decl.contains("annotation") ||
+    !var_decl["annotation"].contains("slice"))
+    return '\0';
+  return scalar_kind(
+    get_dict_value_type_from_annotation(var_decl["annotation"]));
+}
+
+/// Whether a read of @p dict_expr at @p slice_node, whose recorded values are
+/// @p entries, yields the stored item as a tagged scalar: every value is
+/// tagged, or the read's constant key was written a string where the written
+/// `dict[K, V]` annotation has a number V, or the reverse. The latter is read
+/// like an element of a list mixing strings and numbers (#4797): its type_id,
+/// not V, then answers isinstance. A key not known statically, at the read or
+/// the write, leaves the read typed V.
+bool python_dict_handler::reads_value_as_tagged(
+  const exprt &dict_expr,
+  const nlohmann::json &slice_node,
+  const element_type_registry::entries &entries)
+{
+  if (
+    std::all_of(
+      entries.begin(),
+      entries.end(),
+      [this](const element_type_registry::entry &e) {
+        return type_handler_.is_tagged_scalar_type(e.second);
+      }))
+    return true;
+  const char annotated = annotated_value_kind(dict_expr);
+  const std::string key = dict_key_id(slice_node, converter_.get_ast_json());
+  return annotated && std::any_of(
+                        entries.begin(),
+                        entries.end(),
+                        [&](const element_type_registry::entry &e) {
+                          const char stored = scalar_kind(e.second);
+                          return stored && stored != annotated &&
+                                 !key.empty() && e.first == key;
+                        });
+}
+
 exprt python_dict_handler::handle_dict_subscript(
   const exprt &dict_expr,
   const nlohmann::json &slice_node,
-  const typet &expected_type)
+  const typet &expected_type,
+  bool check_type)
 {
   locationt location = converter_.get_location_from_decl(slice_node);
   typet list_type = type_handler_.get_list_type();
@@ -167,6 +257,8 @@ exprt python_dict_handler::handle_dict_subscript(
   exprt obj_value =
     build_member(deref_obj, "value", pointer_typet(empty_typet()));
 
+  check_value_type(check_type, deref_obj, resolved_type, location);
+
   // A tagged value is already a PyObject header, unlike other values whose
   // item->value points at a nested payload. resolved_type can't be trusted
   // here: it comes from static inference, which misses dynamic typing.
@@ -183,12 +275,7 @@ exprt python_dict_handler::handle_dict_subscript(
           vals_id, type_slot::dict_value_types);
       if (
         entries && !entries->empty() &&
-        std::all_of(
-          entries->begin(),
-          entries->end(),
-          [this](const element_type_registry::entry &e) {
-            return type_handler_.is_tagged_scalar_type(e.second);
-          }))
+        reads_value_as_tagged(dict_expr, slice_node, *entries))
         // element_type was resolved to the struct above; is_tagged_scalar_type
         // matches on the symbol_typet identity instead.
         return build_dereference(
@@ -398,20 +485,11 @@ exprt python_dict_handler::handle_dict_subscript(
     return result;
   }
 
-  // Class-struct value: cast stored void* to the struct type and dereference.
+  if (!is_dict_type(converter_.name_space().follow(resolved_type)))
   {
-    namespacet ns(symbol_table_);
-    typet underlying = resolved_type;
-    if (underlying.id() == "symbol")
-      underlying = ns.follow(underlying);
-    if (underlying.is_struct() && !is_dict_type(underlying))
-    {
-      exprt value_as_struct_ptr =
-        build_typecast(obj_value, pointer_typet(underlying));
-      exprt result = build_dereference(value_as_struct_ptr, underlying);
-      result.type() = underlying;
-      return result;
-    }
+    exprt struct_value = read_struct_value(obj_value, resolved_type);
+    if (!struct_value.is_nil())
+      return struct_value;
   }
 
   // Default: cast void* to char* for string values
@@ -420,15 +498,45 @@ exprt python_dict_handler::handle_dict_subscript(
   return value_as_string;
 }
 
+exprt python_dict_handler::read_struct_value(
+  const exprt &obj_value,
+  const typet &type)
+{
+  const typet underlying = converter_.name_space().follow(type);
+  if (!underlying.is_struct())
+    return nil_exprt();
+
+  const pointer_typet ref_type(underlying);
+  exprt object =
+    converter_.is_heap_migrated_class_type(underlying)
+      ? build_dereference(
+          build_typecast(obj_value, gen_pointer_type(ref_type)), ref_type)
+      : build_typecast(obj_value, ref_type);
+  exprt result = build_dereference(object, underlying);
+  result.type() = underlying;
+  return result;
+}
+
 void python_dict_handler::handle_dict_subscript_assign(
   const exprt &dict_expr,
   const exprt &key_expr,
-  const exprt &value,
+  const exprt &assigned_value,
   const locationt &location,
   const nlohmann::json &node,
   codet &target_block)
 {
   typet list_type = type_handler_.get_list_type();
+
+  // A constructed instance arrives as a value struct; store a reference to a
+  // heap copy, as a dict literal and a list do, so reads see one layout.
+  const exprt value =
+    converter_.is_heap_migrated_class_type(assigned_value.type())
+      ? converter_.box_value_on_heap(
+          assigned_value,
+          location,
+          *converter_.current_block,
+          gen_pointer_type(assigned_value.type()))
+      : assigned_value;
 
   exprt keys_member = build_member(dict_expr, "keys", list_type);
   exprt values_member = build_member(dict_expr, "values", list_type);
@@ -467,7 +575,10 @@ void python_dict_handler::handle_dict_subscript_assign(
       get_internal_list_id(dict_expr.identifier().as_string(), false);
     if (!vals_id.empty())
       converter_.get_element_type_registry().record(
-        vals_id, std::string(), value.type(), type_slot::dict_value_types);
+        vals_id,
+        dict_key_id(node, converter_.get_ast_json()),
+        assigned_value.type(),
+        type_slot::dict_value_types);
   }
 
   symbolt &index_var = converter_.create_tmp_symbol(
@@ -479,6 +590,17 @@ void python_dict_handler::handle_dict_subscript_assign(
 
   // Get element info for the key
   list_elem_info key_info = list_handler.get_list_element_info(node, key_expr);
+
+  // A loop over the dict reads its keys with the recorded type; without one
+  // it reads each key as an untyped pointer (#9246).
+  if (dict_expr.is_symbol())
+  {
+    const std::string keys_id =
+      get_internal_list_id(dict_expr.identifier().as_string(), true);
+    if (!keys_id.empty())
+      converter_.get_element_type_registry().record(
+        keys_id, key_info.elem_symbol->id.as_string(), key_expr.type());
+  }
 
   // Call find_index(keys, key, type_hash, size) to get the index
   code_function_callt find_call;
@@ -517,13 +639,7 @@ void python_dict_handler::handle_dict_subscript_assign(
   else
     value_arg = build_address_of(build_symbol(*value_info.elem_symbol));
 
-  // float_type_id: route a float value into the real-sorted __ESBMC_float_buf
-  // (and record its float_idx) so .values()/.items() reads it back correctly
-  // rather than as float_buf[0] (#5501). Mirrors the dict-literal value push.
-  exprt value_float_type_id =
-    value_info.elem_symbol->get_type().is_floatbv()
-      ? static_cast<exprt>(build_symbol(*value_info.elem_type_sym))
-      : static_cast<exprt>(from_integer(BigInt(0), size_type()));
+  const exprt value_float_type_id = float_type_id_arg(value_info);
 
   set_value_call.arguments().push_back(value_arg);
   set_value_call.arguments().push_back(build_symbol(*value_info.elem_type_sym));
@@ -534,7 +650,6 @@ void python_dict_handler::handle_dict_subscript_assign(
       value_arg, value_info.elem_symbol->get_type()));
   set_value_call.type() = bool_type();
   set_value_call.location() = location;
-  update_block.copy_to_operands(set_value_call);
 
   // Create the "key doesn't exist" branch: push new key-value pair
   code_blockt insert_block;
@@ -551,7 +666,7 @@ void python_dict_handler::handle_dict_subscript_assign(
   push_key_call.arguments().push_back(key_arg);
   push_key_call.arguments().push_back(build_symbol(*key_info.elem_type_sym));
   push_key_call.arguments().push_back(key_info.elem_size);
-  push_key_call.arguments().push_back(from_integer(BigInt(0), size_type()));
+  push_key_call.arguments().push_back(float_type_id_arg(key_info));
   push_key_call.arguments().push_back(
     converter_.get_type_handler().ptr_free_arg(
       key_arg, key_info.elem_symbol->get_type()));
@@ -573,6 +688,19 @@ void python_dict_handler::handle_dict_subscript_assign(
       value_arg, value_info.elem_symbol->get_type()));
   push_value_call.type() = bool_type();
   push_value_call.location() = location;
+
+  if (holds_dict_lists(value.type()))
+    store_dict_value_by_pointer(
+      node,
+      value,
+      values_member,
+      build_symbol(index_var),
+      location,
+      target_block,
+      set_value_call,
+      push_value_call);
+
+  update_block.copy_to_operands(set_value_call);
   insert_block.copy_to_operands(push_value_call);
 
   // Create if-then-else: if (key_exists) { update } else { insert }

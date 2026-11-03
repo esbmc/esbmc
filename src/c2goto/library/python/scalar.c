@@ -192,6 +192,21 @@ __ESBMC_HIDE:;
   return (a->size > b->size) - (a->size < b->size);
 }
 
+// Python truthiness of a tagged scalar: a str is falsy iff empty, a float iff
+// 0.0, an int or bool iff 0.
+int __python_scalar_truthy(
+  const PyObject *tagged,
+  size_t str_type_id,
+  size_t float_type_id)
+{
+__ESBMC_HIDE:;
+  if (tagged->type_id == str_type_id)
+    return *(const char *)tagged->value != '\0';
+  if (tagged->type_id == float_type_id)
+    return *(const double *)tagged->value != 0.0;
+  return *(const long long *)tagged->value != 0;
+}
+
 // Bounded strlen for a runtime string pointer -- a plain strlen never
 // finishes unwinding over a symbolic buffer.
 size_t __python_scalar_strlen_bounded(const char *s)

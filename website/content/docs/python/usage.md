@@ -34,6 +34,9 @@ esbmc main.py --unwind 10
 | `--strict-types` | Enable strict type checking for function arguments at verification time |
 | `--python-typecheck` | Type-check the input with `mypy --strict` and print the report. The check is opt-in: it used to run on every verification whether or not it was wanted |
 | `--python-no-fold` | Disable NumPy constant folding in the Python frontend, forcing SMT encoding (useful for differential testing of the folding paths) |
+| `--python-ignore-assertions` | Treat the program's own `assert` statements as assumptions, while keeping the exception checks of the frontend and the operational models. `--no-assertions` drops both |
+| `--python-check-exceptions T1,T2,...` | Report only an uncaught exception whose type is one of the listed types or a subclass of one, as `except` would match it. Any other uncaught exception ends its path unreported, and the program's `assert` statements become assumptions unless `AssertionError` is covered |
+| `--python-math-ulps N` | How many ulps the result of a `math` or NumPy transcendental function (`exp`, `log`, `sin`, …) of a run-time argument may lie from the C library's value (default 8). `0` assumes a correctly rounded C library (see [Supported Features — Math](/docs/python/supported-features#math-module-math)) |
 | `--branch-coverage` | Instrument branch-coverage properties (useful with `--generate-pytest-testcase`) |
 | `--k-path-coverage[=N]` | Instrument k-path coverage with prefix length `N` (see [Coverage](/docs/coverage#k-path-coverage)). Use with `--generate-pytest-testcase` for higher-coverage test discovery. |
 | `--k-path-witness-depth=D` | Cap post-simplification guard depth for k-path witnesses (default 8). |
@@ -194,6 +197,41 @@ Violated property:
 
 VERIFICATION FAILED
 ```
+
+Without `--multi-property`, a run stops at the first exception that can escape,
+so other exception types are left `NOT CHECKED`. `--python-check-exceptions`
+asks about one family at a time
+([#8522](https://github.com/esbmc/esbmc/pull/8522)):
+
+```python
+def f(xs: list[int], i: int, d: int) -> int:
+    assert i >= 0
+    return xs[i] // d
+
+def main() -> None:
+    i: int = nondet_int()
+    d: int = nondet_int()
+    __ESBMC_assume(i >= -1 and i <= 3)
+    f([1, 2, 3], i, d)
+
+main()
+```
+
+```bash
+esbmc main.py --python-check-exceptions ZeroDivisionError
+```
+
+```
+Violated property:
+  file main.py line 3 column 11 function f
+  uncaught exception: ZeroDivisionError
+```
+
+With `--python-check-exceptions LookupError` the same run reports the
+`IndexError`, a subclass. The `assert` on line 2 is reported only when
+`AssertionError` is in the list; `--python-ignore-assertions` turns it into an
+assumption while every exception type stays checked
+([#8287](https://github.com/esbmc/esbmc/pull/8287)).
 
 ---
 

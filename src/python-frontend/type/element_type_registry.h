@@ -42,9 +42,9 @@ enum class type_slot
 /// shared map, so a new operation has one place to preserve type information.
 ///
 /// Invariant: an instance is either absent or has at least one recorded entry.
-/// Only record()/assign_from()/append_from() create entries and each adds at
-/// least one, so queries never observe a present-but-empty instance. find()
-/// therefore answers both "is anything recorded?" and "is this known?".
+/// Only record()/assign()/assign_from()/append_from() create entries and each
+/// adds at least one, so queries never observe a present-but-empty instance.
+/// find() therefore answers both "is anything recorded?" and "is this known?".
 class element_type_registry
 {
 public:
@@ -63,6 +63,13 @@ public:
   void set_element_type(
     const std::string &id,
     size_t index,
+    const typet &elem_type,
+    type_slot slot = type_slot::elements);
+
+  /// Replaces @p id's entries with one entry of @p elem_type, which index
+  /// lookups past it reuse as the type of every element.
+  void assign(
+    const std::string &id,
     const typet &elem_type,
     type_slot slot = type_slot::elements);
 

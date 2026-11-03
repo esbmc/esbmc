@@ -5,7 +5,9 @@
 #include <util/irep/std_code.h>
 #include <util/irep/location.h>
 #include <util/symtab/symbol.h>
+#include <python-frontend/symbol_id.h>
 #include <nlohmann/json.hpp>
+#include <optional>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
@@ -22,7 +24,9 @@ public:
   /**
    * @brief Names assigned genuinely incompatible literal types across
    * every branch of `if_node`, following nested if/else (including elif)
-   * on either side; a name must be assigned in every branch to qualify
+   * on either side; a name must be assigned in every branch to qualify. The
+   * value a name holds before the `if` counts as one more branch, and a
+   * name `C.v` stands for class C's own attribute v
    */
   std::unordered_set<std::string>
   detect_dynamic_type_names(const nlohmann::json &if_node) const;
@@ -50,6 +54,12 @@ public:
   std::string tagged_symbol_id(const std::string &name) const;
 
   /**
+   * @brief The id of the symbol `name` binds in the scope being converted:
+   * a variable, or class C's own attribute v for a name `C.v`
+   */
+  symbol_id bound_symbol_id(const std::string &name) const;
+
+  /**
    * @brief True if `op` on two tagged operands can produce either scalar
    * type at runtime (only '+' today); an untagged assignment target then
    * needs to become tagged too
@@ -58,13 +68,14 @@ public:
 
   /**
    * @brief Fills in the tagged-object fields for `name` from an
-   * already-converted value
+   * already-converted value; `value_node` is the source `rhs` came from
    */
   void assign(
     const exprt &rhs,
     const locationt &location,
     const std::string &name,
-    codet &target_block);
+    codet &target_block,
+    const nlohmann::json &value_node);
 
   /**
    * @brief Redirects `symbol` to its tagged-object alias, if a pre-existing
@@ -116,6 +127,9 @@ public:
     const std::string &type_name,
     bool type_is_user_class) const;
 
+  /// Python truthiness of a tagged value, decided by its runtime type.
+  exprt build_truthiness(const exprt &tagged);
+
   /**
    * @brief True if a function's top-level if/elif/else chain -- including
    * an early return with no else, falling through to the next statement --
@@ -123,6 +137,10 @@ public:
    * scalar-annotated parameters
    */
   bool detect_dynamic_return_type(const nlohmann::json &function_node) const;
+
+  /// `call` goes through a parameter of the current function, and every call
+  /// of that function passes a def returning a dynamic value (#9030).
+  bool parameter_call_returns_tagged(const nlohmann::json &call) const;
 
   /**
    * @brief True if some top-level `If` in `scope_body` (a function body or
@@ -142,6 +160,20 @@ public:
     const exprt &value,
     const locationt &location,
     codet &target_block);
+
+  /**
+   * @brief int(@p tagged) or float(@p tagged), as @p result_type says: a str
+   * is parsed at runtime and raises ValueError when it does not parse, a
+   * number converts by value
+   */
+  exprt build_numeric_conversion(
+    const exprt &tagged,
+    const typet &result_type,
+    const locationt &location);
+
+  /// Throws when a tag may hold a float and `lhs op rhs` is not a str
+  /// operation.
+  void refuse_float_tag_operation(const exprt &lhs, const exprt &rhs) const;
 
   /// Throws the shared "tagged argument, no known parameter type" refusal.
   [[noreturn]] void refuse_tagged_argument() const;
@@ -180,12 +212,36 @@ private:
    * fields (value/type_id/size/float_idx) from an already-converted value.
    * Shared by assign() (literal or non-literal reassignment) and
    * declare_dynamic_type_names() (initializing a pre-existing alias from
-   * its prior value)
+   * its prior value). `interned_text` is set when `rhs` is an interned str
+   * literal, whose tags then share one payload
    */
   std::vector<codet> build_tag_field_assigns(
     symbolt &tag_symbol,
     const exprt &rhs,
-    const locationt &location);
+    const locationt &location,
+    const std::optional<std::string> &interned_text = std::nullopt);
+
+  /// The static object of a module name @p rhs bound once, nil for any other
+  /// value; sets @p elem_size.
+  exprt module_name_payload(
+    const exprt &rhs,
+    const locationt &location,
+    std::vector<codet> &instructions,
+    exprt &elem_size);
+
+  /// A fresh copy of @p rhs as a tag's `.value`; sets @p elem_size.
+  exprt build_scalar_payload(
+    const exprt &rhs,
+    const locationt &location,
+    std::vector<codet> &instructions,
+    exprt &elem_size);
+
+  /// The one static object holding the interned str @p text; sets
+  /// @p elem_size.
+  exprt interned_str_payload(
+    const std::string &text,
+    const exprt &rhs,
+    exprt &elem_size);
 
   /**
    * @brief Resolves `name` to its tagged-object symbol, following `aliases_`
@@ -193,6 +249,16 @@ private:
    * assign_tagged_object(); asserts if the symbol isn't declared yet
    */
   symbolt *find_tag_symbol(const std::string &name) const;
+
+  /**
+   * @brief Whether `name`, assigned `kinds` on every branch of an `if`,
+   * holds a num on one path and a str on another after it; `keeps_value`
+   * says the `if` has no else
+   */
+  bool joins_divergent_kinds(
+    const std::string &name,
+    std::unordered_set<std::string> &kinds,
+    bool keeps_value) const;
 
   /**
    * @brief Calls the num/str helper matching `literal`'s type (dispatch and

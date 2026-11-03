@@ -1,0 +1,5 @@
+CORE
+main.py
+--unwind 12 --nondet-str-length 4
+FAILED\s+\[global\.assertion\.1\]\s+line\s+5\s
+^VERIFICATION FAILED$

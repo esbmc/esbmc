@@ -129,6 +129,21 @@ __ESBMC_HIDE:;
   return 1;
 }
 
+// Python string isascii - true iff every byte is below 0x80. A UTF-8 byte at
+// or above 0x80 belongs to a non-ASCII code point, so this matches CPython's
+// per-code-point check. True on the empty string.
+_Bool __python_str_isascii(const char *s)
+{
+__ESBMC_HIDE:;
+  while (*s)
+  {
+    if ((unsigned char)*s >= 0x80)
+      return 0;
+    s++;
+  }
+  return 1;
+}
+
 // Python string isalnum - true iff the string is non-empty and every
 // character is a letter (ASCII A-Z / a-z) or a digit (0-9). Matches
 // Python's CPython behaviour on the ASCII subset; broader Unicode
@@ -1421,12 +1436,6 @@ __ESBMC_HIDE:;
     return (char *)0;
   }
 
-  if (codepoint >= 0xD800 && codepoint <= 0xDFFF)
-  {
-    __ESBMC_assert(0, "chr() arg is a surrogate code point");
-    return (char *)0;
-  }
-
   char *buffer = __ESBMC_alloca(5);
 
   if (codepoint <= 0x7F)
@@ -1444,6 +1453,8 @@ __ESBMC_HIDE:;
     return buffer;
   }
 
+  // CPython's chr() accepts a surrogate (U+D800..U+DFFF); it takes the
+  // 3-byte form like any other BMP code point, which ord() decodes back.
   if (codepoint <= 0xFFFF)
   {
     buffer[0] = (char)(0xE0 | (codepoint >> 12));

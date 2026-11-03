@@ -473,8 +473,11 @@ FwdIt search_n(FwdIt first, FwdIt last, Diff count, const Ty &value)
   FwdIt it, limit;
   size_t i;
 
-  limit = last;
-  limit = limit - count;
+  if (count <= 0)
+    return first;
+  if (last - first < count)
+    return last;
+  limit = last - count + 1;
 
   while (first != limit)
   {
@@ -497,8 +500,11 @@ FwdIt search_n(FwdIt first, FwdIt last, Diff count, const Ty &val, Pr pred)
   FwdIt it, limit;
   size_t i;
 
-  limit = last;
-  limit = limit - count;
+  if (count <= 0)
+    return first;
+  if (last - first < count)
+    return last;
+  limit = last - count + 1;
 
   while (first != limit)
   {
@@ -1097,155 +1103,71 @@ void stable_sort(BidIt begin, BidIt end, Pr pred)
 template <class RanIt>
 void partial_sort(RanIt first, RanIt mid, RanIt last)
 {
-  RanIt pilgrim, pos;
-  mid--;
-  swap(*first, *mid);
-  mid = first;
-  for (pilgrim = first + 1; pilgrim < last; pilgrim++)
+  for (RanIt j = first; j < mid; ++j)
   {
-    if (*pilgrim < *mid)
-    {
-      swap(*pilgrim, *mid);
-      mid = pilgrim;
-      pos = mid - 1;
-      while (*mid < *pos)
-      {
-        swap(*mid, *pos);
-        mid = pos;
-        pos--;
-      }
-    }
-  }
-  RanIt i, j;
-  RanIt iMin;
-  for (j = first; j < mid - 1; j++)
-  {
-    iMin = j;
-    for (i = j + 1; i < mid; i++)
-    {
+    RanIt iMin = j;
+    for (RanIt i = j + 1; i < last; ++i)
       if (*i < *iMin)
-      {
         iMin = i;
-      }
-    }
     if (iMin != j)
-    {
       swap(*j, *iMin);
-    }
   }
 }
 
 template <class RanIt, class Pr>
 void partial_sort(RanIt first, RanIt mid, RanIt last, Pr pred)
 {
-  RanIt pilgrim, pos;
-  mid--;
-  swap(*first, *mid);
-  mid = first;
-  for (pilgrim = first + 1; pilgrim < last; pilgrim++)
+  for (RanIt j = first; j < mid; ++j)
   {
-    if (pred(*pilgrim, *mid))
-    {
-      swap(*pilgrim, *mid);
-      mid = pilgrim;
-      pos = mid - 1;
-      while (pred(*mid, *pos))
-      {
-        swap(*mid, *pos);
-        mid = pos;
-        pos--;
-      }
-    }
-  }
-  RanIt i, j;
-  RanIt iMin;
-  for (j = first; j < mid - 1; j++)
-  {
-    iMin = j;
-    for (i = j + 1; i < mid; i++)
-    {
+    RanIt iMin = j;
+    for (RanIt i = j + 1; i < last; ++i)
       if (pred(*i, *iMin))
-      {
         iMin = i;
-      }
-    }
     if (iMin != j)
-    {
       swap(*j, *iMin);
-    }
   }
 }
 
 template <class InIt, class RanIt>
 RanIt partial_sort_copy(InIt first1, InIt last1, RanIt first2, RanIt last2)
 {
-  InIt pilgrim1 = first1;
-  RanIt pilgrim2 = first2;
-  while (pilgrim2 < last2)
-    *pilgrim2++ = *pilgrim1++;
-  RanIt i, j;
-  for (i = first2; i != last2; i++)
-  {
-    j = i;
-    while ((j != first2) && (*j < *(j - 1)))
-    {
+  RanIt r = first2;
+  for (; first1 != last1 && r != last2; ++first1, ++r)
+    *r = *first1;
+  if (r == first2)
+    return r;
+  for (RanIt i = first2; i != r; ++i)
+    for (RanIt j = i; j != first2 && *j < *(j - 1); --j)
       std::swap(*j, *(j - 1));
-      j--;
-    }
-  }
-  pilgrim2--;
-  while (pilgrim1 != last1)
-    if (*pilgrim1 < *pilgrim2)
+  for (; first1 != last1; ++first1)
+    if (*first1 < *(r - 1))
     {
-      *pilgrim2 = *pilgrim1;
-      for (i = first2; i != last2; i++)
-      {
-        j = i;
-        while ((j != first2) && (*j < *(j - 1)))
-        {
-          std::swap(*j, *(j - 1));
-          j--;
-        }
-      }
-      pilgrim1++;
+      *(r - 1) = *first1;
+      for (RanIt j = r - 1; j != first2 && *j < *(j - 1); --j)
+        std::swap(*j, *(j - 1));
     }
-  return pilgrim2;
+  return r;
 }
 
 template <class InIt, class RanIt>
 RanIt partial_sort_copy(InIt *first1, InIt *last1, RanIt first2, RanIt last2)
 {
-  InIt *pilgrim1 = first1;
-  RanIt pilgrim2 = first2;
-  while (pilgrim2 < last2)
-    *pilgrim2++ = *pilgrim1++;
-  RanIt i, j;
-  for (i = first2; i != last2; i++)
-  {
-    j = i;
-    while ((j != first2) && (*j < *(j - 1)))
-    {
+  RanIt r = first2;
+  for (; first1 != last1 && r != last2; ++first1, ++r)
+    *r = *first1;
+  if (r == first2)
+    return r;
+  for (RanIt i = first2; i != r; ++i)
+    for (RanIt j = i; j != first2 && *j < *(j - 1); --j)
       std::swap(*j, *(j - 1));
-      j--;
-    }
-  }
-  pilgrim2--;
-  while (pilgrim1 != last1)
-    if (*pilgrim1 < *pilgrim2)
+  for (; first1 != last1; ++first1)
+    if (*first1 < *(r - 1))
     {
-      *pilgrim2 = *pilgrim1;
-      for (i = first2; i != last2; i++)
-      {
-        j = i;
-        while ((j != first2) && (*j < *(j - 1)))
-        {
-          std::swap(*j, *(j - 1));
-          j--;
-        }
-      }
-      pilgrim1++;
+      *(r - 1) = *first1;
+      for (RanIt j = r - 1; j != first2 && *j < *(j - 1); --j)
+        std::swap(*j, *(j - 1));
     }
-  return pilgrim2;
+  return r;
 }
 
 template <class InIt, class RanIt, class Pr>
@@ -1256,37 +1178,22 @@ RanIt partial_sort_copy(
   RanIt last2,
   Pr pred)
 {
-  InIt pilgrim1 = first1;
-  RanIt pilgrim2 = first2;
-  while (pilgrim2 < last2)
-    *pilgrim2++ = *pilgrim1++;
-  RanIt i, j;
-  for (i = first2; i != last2; i++)
-  {
-    j = i;
-    while ((j != first2) && pred(*j, *(j - 1)))
-    {
+  RanIt r = first2;
+  for (; first1 != last1 && r != last2; ++first1, ++r)
+    *r = *first1;
+  if (r == first2)
+    return r;
+  for (RanIt i = first2; i != r; ++i)
+    for (RanIt j = i; j != first2 && pred(*j, *(j - 1)); --j)
       std::swap(*j, *(j - 1));
-      j--;
-    }
-  }
-  pilgrim2--;
-  while (pilgrim1 != last1)
-    if (pred(*pilgrim1, *pilgrim2))
+  for (; first1 != last1; ++first1)
+    if (pred(*first1, *(r - 1)))
     {
-      *pilgrim2 = *pilgrim1;
-      for (i = first2; i != last2; i++)
-      {
-        j = i;
-        while ((j != first2) && pred(*j, *(j - 1)))
-        {
-          std::swap(*j, *(j - 1));
-          j--;
-        }
-      }
-      pilgrim1++;
+      *(r - 1) = *first1;
+      for (RanIt j = r - 1; j != first2 && pred(*j, *(j - 1)); --j)
+        std::swap(*j, *(j - 1));
     }
-  return pilgrim2;
+  return r;
 }
 
 template <class InIt, class RanIt, class Pr>
@@ -1297,37 +1204,22 @@ RanIt partial_sort_copy(
   RanIt last2,
   Pr pred)
 {
-  InIt *pilgrim1 = first1;
-  RanIt pilgrim2 = first2;
-  while (pilgrim2 < last2)
-    *pilgrim2++ = *pilgrim1++;
-  RanIt i, j;
-  for (i = first2; i != last2; i++)
-  {
-    j = i;
-    while ((j != first2) && pred(*j, *(j - 1)))
-    {
+  RanIt r = first2;
+  for (; first1 != last1 && r != last2; ++first1, ++r)
+    *r = *first1;
+  if (r == first2)
+    return r;
+  for (RanIt i = first2; i != r; ++i)
+    for (RanIt j = i; j != first2 && pred(*j, *(j - 1)); --j)
       std::swap(*j, *(j - 1));
-      j--;
-    }
-  }
-  pilgrim2--;
-  while (pilgrim1 != last1)
-    if (pred(*pilgrim1, *pilgrim2))
+  for (; first1 != last1; ++first1)
+    if (pred(*first1, *(r - 1)))
     {
-      *pilgrim2 = *pilgrim1;
-      for (i = first2; i != last2; i++)
-      {
-        j = i;
-        while ((j != first2) && pred(*j, *(j - 1)))
-        {
-          std::swap(*j, *(j - 1));
-          j--;
-        }
-      }
-      pilgrim1++;
+      *(r - 1) = *first1;
+      for (RanIt j = r - 1; j != first2 && pred(*j, *(j - 1)); --j)
+        std::swap(*j, *(j - 1));
     }
-  return pilgrim2;
+  return r;
 }
 
 /* [alg.nth.element]: the element at nth ends up where it would be if the
@@ -1439,11 +1331,9 @@ pair<FwdIt, FwdIt> equal_range(FwdIt first, FwdIt last, const Ty &val, Pr pred)
 template <class FwdIt, class Ty>
 bool binary_search(FwdIt first, FwdIt last, const Ty &val)
 {
-  //first = lower_bound(first, last, val);
-  //return (first != last && !(val < *first));
-
-  for (; first != last; first++)
-    if (*first == val)
+  // [binary.search]: true iff some *i is equivalent to val under <, not ==.
+  for (; first != last; ++first)
+    if (!(*first < val) && !(val < *first))
       return true;
   return false;
 }
@@ -1451,17 +1341,8 @@ bool binary_search(FwdIt first, FwdIt last, const Ty &val)
 template <class FwdIt, class Ty, class Pr>
 bool binary_search(FwdIt first, FwdIt last, const Ty &val, Pr pred)
 {
-  //	int size = distance(first, last), start = 1;
-  //	while(start < size)
-  //	{
-  //		int mid = (size - start)/2;
-  //		if(*(first+mid) == val) return true;
-  //		else if(pred(*(first+mid), val)) size = mid;
-  //		else start = mid + 1;
-  //	}
-  //	return false;
-  for (; first != last; first++)
-    if (*first == val)
+  for (; first != last; ++first)
+    if (!pred(*first, val) && !pred(val, *first))
       return true;
   return false;
 }
@@ -1469,15 +1350,15 @@ bool binary_search(FwdIt first, FwdIt last, const Ty &val, Pr pred)
 template <class InIt1, class InIt2, class OutIt>
 OutIt merge(InIt1 first1, InIt1 last1, InIt2 first2, InIt2 last2, OutIt dest)
 {
-  InIt1 pilgrim1 = first1;
-  InIt2 pilgrim2 = first2;
-  while (pilgrim1 != last1)
-    if (*pilgrim2 < *pilgrim1)
-      *dest++ = *pilgrim2++;
+  while (first1 != last1 && first2 != last2)
+    if (*first2 < *first1)
+      *dest++ = *first2++;
     else
-      *dest++ = *pilgrim1++;
-  while (pilgrim2 < last2)
-    *dest++ = *pilgrim2++;
+      *dest++ = *first1++;
+  while (first1 != last1)
+    *dest++ = *first1++;
+  while (first2 != last2)
+    *dest++ = *first2++;
   return dest;
 }
 
@@ -1489,15 +1370,15 @@ OutIt merge(
   InIt2 *last2,
   OutIt source)
 {
-  InIt1 *pilgrim1 = first1;
-  InIt2 *pilgrim2 = first2;
-  while (pilgrim1 != last1)
-    if (*pilgrim2 < *pilgrim1)
-      *source++ = *pilgrim2++;
+  while (first1 != last1 && first2 != last2)
+    if (*first2 < *first1)
+      *source++ = *first2++;
     else
-      *source++ = *pilgrim1++;
-  while (pilgrim2 < last2)
-    *source++ = *pilgrim2++;
+      *source++ = *first1++;
+  while (first1 != last1)
+    *source++ = *first1++;
+  while (first2 != last2)
+    *source++ = *first2++;
   return source;
 }
 
@@ -1510,68 +1391,74 @@ OutIt merge(
   OutIt source,
   Pr pred)
 {
-  InIt1 pilgrim1 = first1;
-  InIt2 pilgrim2 = first2;
-  while (pilgrim1 != last1)
-    if (pred(*pilgrim2, *pilgrim1))
-      *source++ = *pilgrim2++;
+  while (first1 != last1 && first2 != last2)
+    if (pred(*first2, *first1))
+      *source++ = *first2++;
     else
-      *source++ = *pilgrim1++;
-  while (pilgrim2 < last2)
-    *source++ = *pilgrim2++;
+      *source++ = *first1++;
+  while (first1 != last1)
+    *source++ = *first1++;
+  while (first2 != last2)
+    *source++ = *first2++;
   return source;
 }
 
+// Insert each element of [mid, last) after its equivalents in [first, mid):
+// [alg.merge]/8 requires a stable merge, which sort() is not.
 template <class BidIt>
 void inplace_merge(BidIt first, BidIt mid, BidIt last)
 {
-  sort(first, last);
+  for (; mid != last; ++mid)
+    for (BidIt j = mid; j != first;)
+    {
+      BidIt prev = j;
+      --prev;
+      if (!(*j < *prev))
+        break;
+      swap(*j, *prev);
+      j = prev;
+    }
 }
 
 template <class BidIt, class Pr>
 void inplace_merge(BidIt first, BidIt mid, BidIt last, Pr pred)
 {
-  sort(first, last, pred);
+  for (; mid != last; ++mid)
+    for (BidIt j = mid; j != first;)
+    {
+      BidIt prev = j;
+      --prev;
+      if (!pred(*j, *prev))
+        break;
+      swap(*j, *prev);
+      j = prev;
+    }
 }
 
 template <class InIt1, class InIt2>
 bool includes(InIt1 first1, InIt1 last1, InIt2 first2, InIt2 last2)
 {
-  while (first1 != last1)
+  for (; first2 != last2; ++first1)
   {
-    if (*first2 < *first1)
-      break;
-    else if (*first1 < *first2)
-      ++first1;
-    else
-    {
-      ++first1;
+    if (first1 == last1 || *first2 < *first1)
+      return false;
+    if (!(*first1 < *first2))
       ++first2;
-    }
-    if (first2 == last2)
-      return true;
   }
-  return false;
+  return true;
 }
 
 template <class InIt1, class InIt2, class Pr>
 bool includes(InIt1 first1, InIt1 last1, InIt2 first2, InIt2 last2, Pr pred)
 {
-  while (first1 != last1)
+  for (; first2 != last2; ++first1)
   {
-    if (pred(*first2, *first1))
-      break;
-    else if (pred(*first1, *first2))
-      ++first1;
-    else
-    {
-      ++first1;
+    if (first1 == last1 || pred(*first2, *first1))
+      return false;
+    if (!pred(*first1, *first2))
       ++first2;
-    }
-    if (first2 == last2)
-      return true;
   }
-  return false;
+  return true;
 }
 
 template <class InIt1, class InIt2, class OutIt>
@@ -1712,7 +1599,7 @@ OutIt set_union(
     }
     if (pred(*first1, *first2))
       *dest++ = *first1++;
-    else if (pred(*first2 < *first1))
+    else if (pred(*first2, *first1))
       *dest++ = *first2++;
     else
     {
@@ -1913,7 +1800,7 @@ OutIt set_difference(
 {
   while (first1 != last1 && first2 != last2)
   {
-    if (*first1 < *first2)
+    if (pred(*first1, *first2))
       *dest++ = *first1++;
     else if (pred(*first2, *first1))
       first2++;
@@ -1946,8 +1833,8 @@ OutIt set_symmetric_difference(
     }
     if (first2 == last2)
     {
-      while (first2 != last2)
-        *dest++ = *first2++;
+      while (first1 != last1)
+        *dest++ = *first1++;
       return dest;
     }
 
@@ -1997,8 +1884,8 @@ OutIt *set_symmetric_difference(
     }
     if (first2 == last2)
     {
-      while (first2 != last2)
-        *dest++ = *first2++;
+      while (first1 != last1)
+        *dest++ = *first1++;
       return dest;
     }
 
@@ -2037,8 +1924,8 @@ OutIt set_symmetric_difference(
     }
     if (first2 == last2)
     {
-      while (first2 != last2)
-        *dest++ = *first2++;
+      while (first1 != last1)
+        *dest++ = *first1++;
       return dest;
     }
 
@@ -2078,8 +1965,8 @@ OutIt set_symmetric_difference(
     }
     if (first2 == last2)
     {
-      while (first2 != last2)
-        *dest++ = *first2++;
+      while (first1 != last1)
+        *dest++ = *first1++;
       return dest;
     }
 
@@ -2289,26 +2176,17 @@ void sort_heap(RanIt first, RanIt last, Pr pred)
 
 const double max(const double left, const double right)
 {
-  if (left > right)
-    return left;
-  else
-    return right;
+  return (left < right) ? right : left;
 }
 
 const int max(const int left, const int right)
 {
-  if (left > right)
-    return left;
-  else
-    return right;
+  return (left < right) ? right : left;
 }
 
 const char max(const char left, const char right)
 {
-  if (left > right)
-    return left;
-  else
-    return right;
+  return (left < right) ? right : left;
 }
 
 template <class Ty, class Pr>
@@ -2316,26 +2194,17 @@ const Ty &min(const Ty &left, const Ty &right, Pr pred);
 
 const int min(const int left, const int right)
 {
-  if (left < right)
-    return left;
-  else
-    return right;
+  return (right < left) ? right : left;
 }
 
 const double min(const double left, const double right)
 {
-  if (left < right)
-    return left;
-  else
-    return right;
+  return (right < left) ? right : left;
 }
 
 const char min(const char left, const char right)
 {
-  if (left < right)
-    return left;
-  else
-    return right;
+  return (right < left) ? right : left;
 }
 
 // Returns by value (T) rather than the standard's `const T&` to avoid an IR

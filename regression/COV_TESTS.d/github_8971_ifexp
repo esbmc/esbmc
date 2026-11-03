@@ -1,0 +1,5 @@
+regression/python/github_8971_ifexp
+regression/python/github_8971_ifexp_fail
+regression/python/github_8971_ifexp_literal
+regression/python/github_8971_ifexp_number_join
+regression/python/github_8971_ifexp_number_join_fail

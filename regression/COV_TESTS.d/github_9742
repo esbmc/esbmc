@@ -1,0 +1,9 @@
+regression/python/github_9742
+regression/python/github_9742_chain
+regression/python/github_9742_fail
+regression/python/github_9742_literal_right
+regression/python/github_9742_nondet
+regression/python/github_9742_nondet_fail
+regression/python/github_9742_or
+regression/python/github_9742_or_fail
+regression/python/github_9742_untyped

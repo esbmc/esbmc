@@ -1,0 +1,5 @@
+CORE
+main.c
+--no-simplify
+^\s*assertion b == \(p == 0\)$
+^VERIFICATION FAILED$

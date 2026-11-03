@@ -34,3 +34,29 @@ __ESBMC_HIDE:;
   __ESBMC_longjmp_value = status ? status : 1;
   __ESBMC_longjmp_pending = 1;
 }
+
+#undef sigsetjmp
+int sigsetjmp(sigjmp_buf env, int savemask)
+{
+__ESBMC_HIDE:;
+  return setjmp(env);
+}
+
+// glibc's sigsetjmp is a macro for this
+int __sigsetjmp(sigjmp_buf env, int savemask)
+{
+__ESBMC_HIDE:;
+  return setjmp(env);
+}
+
+_Noreturn void _longjmp(jmp_buf env, int status)
+{
+__ESBMC_HIDE:;
+  longjmp(env, status);
+}
+
+_Noreturn void siglongjmp(sigjmp_buf env, int status)
+{
+__ESBMC_HIDE:;
+  longjmp(env, status);
+}

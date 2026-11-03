@@ -1,4 +1,4 @@
 CORE
 main.py
 
-^ERROR: Cannot unpack non-tuple element into nested target$
+^ERROR: rebinding 'xs' to a list of other element types on one path is not supported$

@@ -107,6 +107,12 @@ public:
   /// A bounded, NUL-terminated str of nondet content, as nondet_str() gives.
   exprt build_nondet_string(const locationt &location);
 
+  /// CPython's default object repr, @p prefix followed by the address as 1 to
+  /// 16 nondet lowercase hex digits and ">".
+  exprt build_default_object_repr(
+    const std::string &prefix,
+    const locationt &location);
+
   /// The nondet str buffer size: --nondet-str-length plus the NUL.
   static int nondet_str_buffer_size();
 
@@ -290,6 +296,16 @@ public:
   exprt handle_string_attribute_call(const nlohmann::json &call_json);
 
   /**
+   * @brief The str a tagged receiver of str-only method `method` holds,
+   * after raising AttributeError on the paths where it holds another type.
+   * Any other receiver is returned unchanged.
+   */
+  exprt read_tagged_str_receiver(
+    const exprt &receiver,
+    const std::string &method,
+    const nlohmann::json &call_json);
+
+  /**
    * @brief Try fast-path folding for len() when argument is string-like.
    *
    * Returns non-nil when a compile-time or cheap symbolic shortcut is
@@ -359,6 +375,9 @@ public:
    */
   exprt
   handle_string_isdigit(const exprt &string_obj, const locationt &location);
+
+  exprt
+  handle_string_isascii(const exprt &string_obj, const locationt &location);
 
   /**
    * @brief Handle str.isalpha() method
@@ -919,6 +938,8 @@ private:
   exprt char_to_string(const exprt &expr);
 
   exprt constant_to_string(const exprt &expr);
+
+  exprt pointer_to_string(const exprt &expr);
 
   exprt build_string_index_result(
     const nlohmann::json &call,

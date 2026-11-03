@@ -1,4 +1,5 @@
 # The list holds functions returning int and str, called at a nondet index.
+# The call is dispatched per function (#8970).
 def f1():
     return 42
 

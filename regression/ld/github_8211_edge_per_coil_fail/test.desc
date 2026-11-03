@@ -1,0 +1,5 @@
+CORE
+edge.ld
+--ld-props props.yaml --incremental-bmc
+^Bug found \(k = 2\)$
+^VERIFICATION FAILED$

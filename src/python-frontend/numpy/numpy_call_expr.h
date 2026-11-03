@@ -1,8 +1,12 @@
 #pragma once
 
+#include <python-frontend/numpy/numpy_dtype.h>
+#include <python-frontend/numpy/numpy_reducer_shared.h>
+
 #include <python-frontend/function_call/expr.h>
 #include <python-frontend/python-list/python_list.h>
 #include <nlohmann/json.hpp>
+#include <functional>
 #include <optional>
 #include <utility>
 #include <vector>
@@ -11,6 +15,24 @@ class symbol_id;
 class exprt;
 class typet;
 class python_converter;
+
+/// The normalized scalar dtype a dtype= argument names, or a specific
+/// rejection when it names none.
+std::string extract_numpy_dtype_name(
+  const nlohmann::json &dtype_node,
+  const nlohmann::json &ast);
+
+/// Whether the literal of `np.array(literal)` holds a complex number.
+bool numpy_literal_call_is_complex(const nlohmann::json &call);
+std::optional<std::size_t>
+numpy_literal_string_width(const nlohmann::json &call);
+
+/// The literal `np.array(literal, dtype=...)` stores, cast to its dtype.
+nlohmann::json
+numpy_literal_with_dtype(const nlohmann::json &call, const nlohmann::json &ast);
+
+enum class norm_order;
+struct norm_value;
 
 class numpy_call_expr : public function_call_expr
 {
@@ -50,6 +72,13 @@ private:
   // exists only in the GOTO IR).
   std::optional<exprt>
   try_hoist_call_arg_for_view_method(const std::string &function);
+
+  // The array a reducer receives, when only a name can carry it (see
+  // is_hoistable_array_arg), evaluated once into a named temporary that the
+  // reducer reads like any bound array. nullopt for any other argument.
+  std::optional<exprt> try_hoist_array_arg();
+  bool is_hoistable_array_arg(const nlohmann::json &call) const;
+  static exprt reduce_scalar(const std::string &function, const exprt &value);
 
   // A dispatch whose result shape the static annotator cannot model (e.g.
   // ravel()/flatten(), always 1-D of size = product of the input's dims)
@@ -94,7 +123,12 @@ private:
   // The element type of the array built from the literal @p list: a fixed-width
   // string, or empty for the literal's own.
   typet constructor_element_type(const nlohmann::json &list) const;
-  void reject_complex_array_operands(const std::string &function) const;
+  void reject_unmodelled_operands(const std::string &function) const;
+  void reject_array_copy_with_dtype(const std::string &function) const;
+  void reject_narrow_float_mean(
+    const std::string &function,
+    const nlohmann::json &arg) const;
+  bool is_string_operand(const nlohmann::json &arg) const;
   bool is_complex_operand(const nlohmann::json &arg) const;
   // @p build run with constructor_element_type(@p list) at the leaves of
   // the static arrays it builds.
@@ -115,6 +149,34 @@ private:
 
   std::string get_dtype() const;
   typet get_typet_from_dtype() const;
+  std::optional<numpy_dtypet> runtime_fill_dtype() const;
+  typet string_element_type(std::size_t literal_width) const;
+  std::optional<exprt> full_of_array_fill(
+    const std::vector<std::size_t> &dims,
+    const nlohmann::json &fill_node);
+  std::optional<std::vector<nlohmann::json>>
+  narrow_float_mean_nodes(const nlohmann::json &operand) const;
+  std::optional<exprt> try_narrow_float_reduce(const std::string &function);
+  exprt full_of_literal_array(
+    const std::vector<std::size_t> &dims,
+    const nlohmann::json &fill);
+  std::optional<exprt> try_narrow_operand_call(const std::string &function);
+  std::optional<std::vector<nlohmann::json>>
+  complex_element_nodes(const nlohmann::json &operand) const;
+  std::optional<nlohmann::json>
+  complex_reducer_operand(const std::string &function) const;
+  std::optional<exprt> try_complex_reducer(const std::string &function);
+  exprt complex_truth_reduce(
+    const std::string &function,
+    const std::vector<nlohmann::json> &nodes);
+  exprt complex_value_reduce(
+    const std::string &function,
+    const std::vector<nlohmann::json> &nodes);
+  bool is_narrow_operand(const nlohmann::json &arg) const;
+  bool has_narrow_operand() const;
+  std::optional<exprt> narrow_ufunc_as_operator(const std::string &function);
+  std::optional<exprt>
+  call_with_narrow_constructors_bound(const std::string &function);
   size_t get_dtype_size() const;
 
   // `*_like`'s element type from dtype= (an override) or the base array's
@@ -243,6 +305,77 @@ private:
     const std::pair<std::vector<std::size_t>, std::vector<exprt>>
       &materialized);
   void reject_unsupported_nditer_keywords(const nlohmann::json &arg) const;
+  bool is_runtime_layout_view(const nlohmann::json &arg) const;
+  exprt get_nditer_list(const nlohmann::json &arg);
+  exprt scalar_binary_call(const std::string &function, bool allow_numpy_fold);
+  exprt lapack_value(double exact, double radius);
+  exprt numpy_math_value(const std::string &function, double x);
+  std::optional<exprt> try_numpy_math_constant();
+  std::optional<exprt> try_runtime_math(const std::string &function);
+  const std::string &canonical_function();
+  std::optional<exprt>
+  copy_of_view(const std::string &function, const exprt &operand);
+  void
+  reject_non_numeric_elements(const std::string &function, const typet &type);
+  exprt bind_array_once(const exprt &array);
+  exprt runtime_math_array(const std::string &function, const exprt &value);
+  exprt numpy_math_list(const std::string &function, const nlohmann::json &arg);
+  std::vector<std::vector<double>>
+  linalg_matrix(const std::function<void(nlohmann::json &)> &unwrap);
+  exprt nondet_bool();
+  exprt eigenvalues(const std::vector<std::vector<double>> &m);
+  exprt eigen_decomposition(const std::vector<std::vector<double>> &m);
+  std::vector<exprt> in_any_order(const std::vector<exprt> &values);
+  void eigen_pair_2x2(
+    const std::vector<std::vector<double>> &m,
+    std::vector<exprt> &values,
+    std::vector<std::vector<exprt>> &columns);
+  std::vector<exprt>
+  signed_column(const std::vector<double> &exact, double radius);
+  exprt linalg_tuple(const std::vector<exprt> &parts);
+  std::vector<exprt> eigenvalue_pair(const std::vector<std::vector<double>> &m);
+  exprt singular_values(const std::vector<std::vector<double>> &m);
+  bool svd_values_only() const;
+  exprt linalg_decomposition(
+    const std::string &function,
+    const std::vector<std::vector<double>> &m);
+  void assume_singular_order(const std::vector<exprt> &sigmas);
+  exprt linalg_inverse(const std::vector<std::vector<double>> &m);
+  exprt bounded_inverse(const std::vector<std::vector<double>> &m);
+  void raise_singular_matrix();
+  exprt bounded_solve(
+    const std::string &function,
+    const std::vector<std::vector<double>> &m,
+    const std::vector<double> &b);
+  void unwrap_linalg_operand(nlohmann::json &arg) const;
+  std::vector<std::vector<exprt>>
+  runtime_entries(const nlohmann::json &arg, std::size_t &rank);
+  exprt within_radius(const exprt &value, const exprt &radius);
+  exprt symbolic_det(const nlohmann::json &arg, bool strings);
+  exprt symbolic_norm(const nlohmann::json &arg, norm_order order);
+  exprt linalg_norm(const std::function<void(nlohmann::json &)> &unwrap);
+  exprt norm_array(const std::vector<std::vector<exprt>> &rows, bool as_matrix);
+  exprt bounded_norm(const norm_value &norm);
+  exprt linalg_solve(
+    const std::string &function,
+    const std::vector<std::vector<double>> &m,
+    const std::vector<double> &b);
+  exprt svd_factors(const std::vector<std::vector<double>> &m);
+  exprt lapack_vector(const std::vector<double> &exact, double radius);
+  exprt
+  lapack_matrix(const std::vector<std::vector<double>> &exact, double radius);
+  void report_integer_overflow();
+  typet scalar_dtype_result();
+  std::optional<exprt> fold_scalar_binary(
+    const std::string &function,
+    const numeric_value &lhs,
+    const numeric_value &rhs,
+    const typet &t);
+  exprt unfolded_scalar_binary(
+    const std::string &function,
+    const numeric_value &lhs,
+    const numeric_value &rhs,
+    const typet &t);
   void reject_unsupported_transpose_axes_rank(const std::string &function);
 
   // sum/prod/min/max/mean/argmin/argmax's flattened fallback path (a
@@ -281,6 +414,7 @@ private:
   // dispatch guard for the same reason as get_arange_expr()/
   // try_get_pointer_view_call_result().
   std::optional<exprt> try_any_all_result(const std::string &function);
+  std::optional<exprt> try_early_result(const std::string &function);
 
   // Resolves median/percentile/argsort/searchsorted's array argument to a
   // literal List node: a List stays as-is; a Name is followed to its own

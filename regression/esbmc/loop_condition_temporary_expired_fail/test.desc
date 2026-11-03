@@ -1,0 +1,5 @@
+CORE
+main.c
+
+accessed expired variable pointer `main::\$tmp::return_value\$_f\$1'
+^VERIFICATION FAILED$

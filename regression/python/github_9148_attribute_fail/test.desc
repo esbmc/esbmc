@@ -1,0 +1,5 @@
+CORE
+main.py
+--unwind 4
+^  FAILED .* line +6  uncaught exception: AttributeError$
+^VERIFICATION FAILED$

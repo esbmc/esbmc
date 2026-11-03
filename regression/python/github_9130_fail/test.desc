@@ -1,0 +1,6 @@
+CORE
+main.py
+
+^VERIFICATION FAILED$
+line 8 column 8
+assertion !\(r\.type_id == 

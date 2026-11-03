@@ -1,3 +1,6 @@
+# KNOWNBUG (#8915): the receiver of publish() is read from a dict and has no
+# known class, so the call is refused. Lowering it to a null constant skipped
+# publish() entirely: SUCCESSFUL held even with assert False in its body.
 from typing import Dict, Any
 import stubs.ros_mock as rospy
 from stubs.ros_mock import Twist

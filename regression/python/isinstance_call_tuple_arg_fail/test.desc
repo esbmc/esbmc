@@ -1,0 +1,5 @@
+CORE
+main.py
+
+line 2 column 4 function first
+^VERIFICATION FAILED$

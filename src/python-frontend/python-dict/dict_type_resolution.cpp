@@ -2,14 +2,23 @@
 
 using namespace python_expr;
 
+/// A subscript whose base can be converted again to retype the read. A call
+/// to a module-level function was typed by its first conversion, and
+/// converting it again would call it twice.
+bool python_dict_handler::is_retypable_subscript(const nlohmann::json &node)
+{
+  return type_utils::is_dict_subscript(node) &&
+         !converter_.call_dict_value_type(node["value"]).has_value();
+}
+
 void python_dict_handler::resolve_dict_subscript_types(
   const nlohmann::json &left,
   const nlohmann::json &right,
   exprt &lhs,
   exprt &rhs)
 {
-  bool lhs_is_dict_subscript = type_utils::is_dict_subscript(left);
-  bool rhs_is_dict_subscript = type_utils::is_dict_subscript(right);
+  bool lhs_is_dict_subscript = is_retypable_subscript(left);
+  bool rhs_is_dict_subscript = is_retypable_subscript(right);
 
   bool lhs_is_ptr = lhs.type().is_pointer();
   bool rhs_is_ptr = rhs.type().is_pointer();
@@ -98,6 +107,67 @@ typet python_dict_handler::get_dict_value_type_from_annotation(
   }
 
   return empty_typet();
+}
+
+/// Whether `node` builds an empty dict: `{}` or `dict()`.
+static bool is_empty_dict_init(const nlohmann::json &node)
+{
+  if (!node.is_object())
+    return false;
+  const std::string type = node.value("_type", std::string());
+  if (type == "Dict")
+    return !node.contains("values") || !node["values"].is_array() ||
+           node["values"].empty();
+  return type == "Call" && node.contains("func") && node["func"].is_object() &&
+         node["func"].value("id", std::string()) == "dict" &&
+         node.value("args", nlohmann::json::array()).empty() &&
+         node.value("keywords", nlohmann::json::array()).empty();
+}
+
+/// The kind of the literal that the statement `stmt` stores into the dict
+/// `name` by subscript, "?" for any other value, and "" if it stores nothing.
+static std::string
+stored_literal_kind(const nlohmann::json &stmt, const std::string &name)
+{
+  if (
+    stmt.value("_type", "") != "Assign" || !stmt.contains("targets") ||
+    stmt["targets"].empty())
+    return "";
+  const auto &target = stmt["targets"][0];
+  if (
+    !target.is_object() || target.value("_type", "") != "Subscript" ||
+    !target["value"].is_object() || target["value"].value("id", "") != name)
+    return "";
+  const auto &rhs = stmt["value"];
+  return rhs.value("_type", "") == "Constant" ? rhs["value"].type_name() : "?";
+}
+
+/// Whether every statement of `body` that stores into the dict `name` by
+/// subscript stores a literal of one kind, so the last store names the type.
+static bool stores_one_literal_kind(
+  const nlohmann::json &body,
+  const std::string &name,
+  std::string &kind)
+{
+  if (!body.is_array())
+    return true;
+  for (const auto &stmt : body)
+  {
+    if (!stmt.is_object())
+      continue;
+    const std::string type = stmt.value("_type", "");
+    if (type == "FunctionDef" || type == "ClassDef" || type == "Lambda")
+      continue;
+    const std::string stored = stored_literal_kind(stmt, name);
+    if (stored == "?" || (!stored.empty() && !kind.empty() && stored != kind))
+      return false;
+    if (!stored.empty())
+      kind = stored;
+    for (const char *key : {"body", "orelse", "finalbody"})
+      if (stmt.contains(key) && !stores_one_literal_kind(stmt[key], name, kind))
+        return false;
+  }
+  return true;
 }
 
 typet python_dict_handler::resolve_expected_type_for_dict_subscript(
@@ -246,19 +316,22 @@ typet python_dict_handler::resolve_expected_type_for_dict_subscript(
     // A later `d = {}` re-init resets the candidate so the next assignment
     // dominates — keeps the inferred type aligned with the live dict.
     // Without it, d[k] reads on an empty literal default to char*.
-    if (
-      var_decl.contains("value") && var_decl["value"].is_object() &&
-      var_decl["value"].value("_type", std::string()) == "Dict" &&
-      (!var_decl["value"].contains("values") ||
-       !var_decl["value"]["values"].is_array() ||
-       var_decl["value"]["values"].empty()))
+    if (var_decl.contains("value") && is_empty_dict_init(var_decl["value"]))
     {
       std::vector<std::string> fn_path =
         json_utils::split_function_path(converter_.get_current_func_name());
-      if (!fn_path.empty())
+      std::string store_kind;
+      if (
+        !fn_path.empty() ||
+        stores_one_literal_kind(
+          converter_.get_ast_json()["body"], var_name, store_kind))
       {
-        const auto &func_node =
-          json_utils::find_function_by_path(converter_.get_ast_json(), fn_path);
+        const nlohmann::json function =
+          fn_path.empty() ? nlohmann::json()
+                          : json_utils::find_function_by_path(
+                              converter_.get_ast_json(), fn_path);
+        const nlohmann::json &func_node =
+          fn_path.empty() ? converter_.get_ast_json() : function;
         if (
           !func_node.empty() && func_node.contains("body") &&
           func_node["body"].is_array())
@@ -333,11 +406,7 @@ typet python_dict_handler::resolve_expected_type_for_dict_subscript(
             if (
               tgt.is_object() && tgt.value("_type", std::string()) == "Name" &&
               tgt.value("id", std::string()) == var_name &&
-              stmt.contains("value") && stmt["value"].is_object() &&
-              stmt["value"].value("_type", std::string()) == "Dict" &&
-              (!stmt["value"].contains("values") ||
-               !stmt["value"]["values"].is_array() ||
-               stmt["value"]["values"].empty()))
+              stmt.contains("value") && is_empty_dict_init(stmt["value"]))
             {
               have_candidate = false;
               return;
@@ -530,6 +599,23 @@ typet python_dict_handler::resolve_expected_type_for_dict_subscript(
   return result;
 }
 
+/// The type every value of a literal dict was stored with, recorded at
+/// construction; nil when the dict was not built from a literal or its values
+/// differ in type. A float is left out: a value the literal's AST does not
+/// show to be a float is stored by bit pattern, not in the float buffer a
+/// float list read uses.
+typet python_dict_handler::recorded_value_type(const exprt &dict_expr) const
+{
+  const std::string &vals_id =
+    get_internal_list_id(dict_expr.identifier().as_string(), false);
+  if (vals_id.empty())
+    return typet();
+  const typet uniform =
+    converter_.get_element_type_registry().uniform_element_type(
+      vals_id, type_slot::dict_value_types);
+  return uniform.is_floatbv() ? typet() : uniform;
+}
+
 /// Homogeneous tuple values: the struct type recorded at construction
 /// (tagged and string-padded), which neither an annotation nor an AST
 /// literal peek reproduces. Empty when the dict was not built from a
@@ -537,20 +623,37 @@ typet python_dict_handler::resolve_expected_type_for_dict_subscript(
 typet python_dict_handler::recorded_tuple_value_type(
   const exprt &dict_expr) const
 {
-  const std::string &vals_id =
-    get_internal_list_id(dict_expr.identifier().as_string(), false);
-  if (vals_id.empty())
-    return empty_typet();
-
-  const typet uniform =
-    converter_.get_element_type_registry().uniform_element_type(
-      vals_id, type_slot::dict_value_types);
-  if (uniform == typet())
-    return empty_typet();
-
+  const typet uniform = recorded_value_type(dict_expr);
   return converter_.get_tuple_handler().is_tuple_type(uniform)
            ? uniform
            : static_cast<typet>(empty_typet());
+}
+
+typet python_dict_handler::uniform_list_dict_value_type(
+  const std::string &list_id) const
+{
+  const element_type_registry &registry =
+    converter_.get_element_type_registry();
+  const element_type_registry::entries *dicts = registry.find(list_id);
+  if (!dicts)
+    return empty_typet();
+
+  typet value_type;
+  for (const auto &dict : *dicts)
+  {
+    const std::string &vals_id = get_internal_list_id(dict.first, false);
+    const typet uniform =
+      vals_id.empty()
+        ? typet()
+        : registry.uniform_element_type(vals_id, type_slot::dict_value_types);
+    if (uniform == typet() || (value_type != typet() && uniform != value_type))
+      return empty_typet();
+    value_type = uniform;
+  }
+  // Aggregates share the empty type name, so their type_id cannot be checked.
+  return type_handler_.type_to_string(value_type).empty()
+           ? static_cast<typet>(empty_typet())
+           : value_type;
 }
 
 typet python_dict_handler::get_dict_key_type_from_annotation(

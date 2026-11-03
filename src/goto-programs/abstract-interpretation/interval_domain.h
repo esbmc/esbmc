@@ -220,6 +220,11 @@ public:
    * @param expr
    */
   void havoc_rec(const expr2tc &expr);
+  void havoc_arguments(const irep_idt &function_id, const namespacet &ns);
+  void apply_return(
+    goto_programt::const_targett call,
+    const ai_baset &ai,
+    const namespacet &ns);
 
   /// Forget what a body-less call that symex models may write through its
   /// pointer arguments (#8083).

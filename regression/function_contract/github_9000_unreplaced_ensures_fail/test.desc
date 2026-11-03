@@ -1,0 +1,5 @@
+CORE
+main.c
+--replace-call-with-contract f
+^  g==5 reachable$
+^VERIFICATION FAILED$

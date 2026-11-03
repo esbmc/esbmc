@@ -1,0 +1,5 @@
+CORE
+main.cpp
+--std c++17 --unwind 4
+^  assertion r == 2$
+^VERIFICATION FAILED$

@@ -98,6 +98,8 @@ class ImportTypingMixin:
 
         if isinstance(annotation, ast.Attribute):
             resolved_value = self._resolve_annotation_aliases(annotation.value)
+            if resolved_value is annotation.value:
+                return annotation
             return ast.Attribute(value=resolved_value, attr=annotation.attr, ctx=ast.Load())
 
         return annotation

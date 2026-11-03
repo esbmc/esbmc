@@ -62,19 +62,12 @@ expr2tc find_symbol(
   return found;
 }
 
-/// The set of pointees the analysis reports for a local, as their symbol
-/// names.  An `unknown` (TOP) target is reported as "*".
-std::set<std::string> targets_of(
-  andersent &a,
-  const goto_functionst &functions,
-  const char *func,
-  const char *name)
+/// The set of pointees the analysis reports for \p e, as their symbol names.
+/// An `unknown` (TOP) target is reported as "*".
+std::set<std::string> targets_of(andersent &a, const expr2tc &e)
 {
-  const expr2tc sym = find_symbol(functions, func, name);
-  REQUIRE(!is_nil_expr(sym));
-
   value_setst::valuest values;
-  a.get_values(goto_programt::const_targett(), sym, values);
+  a.get_values(goto_programt::const_targett(), e, values);
 
   std::set<std::string> result;
   for (const expr2tc &v : values)
@@ -96,6 +89,17 @@ std::set<std::string> targets_of(
       result.insert("?");
   }
   return result;
+}
+
+std::set<std::string> targets_of(
+  andersent &a,
+  const goto_functionst &functions,
+  const char *func,
+  const char *name)
+{
+  const expr2tc sym = find_symbol(functions, func, name);
+  REQUIRE(!is_nil_expr(sym));
+  return targets_of(a, sym);
 }
 
 goto_functionst compile(std::string src)
@@ -160,6 +164,87 @@ TEST_CASE("andersen frontend lowers load and store", "[andersen][goto]")
   REQUIRE(
     targets_of(andersen, functions, "main", "s") ==
     std::set<std::string>{"a", "b"});
+}
+
+TEST_CASE("andersen query answers what a load holds", "[andersen][goto]")
+{
+  // *t is a load with no node of its own: it holds what tbl's elements point
+  // to, not tbl itself.
+  std::string src = R"(
+    int a, b;
+    int *tbl[2] = {&a, &b};
+    int main(void)
+    {
+      int **t = tbl;
+      return 0;
+    }
+  )";
+
+  goto_functionst functions = compile(src);
+  andersent andersen;
+  andersen(functions);
+
+  const expr2tc t = find_symbol(functions, "main", "t");
+  REQUIRE(!is_nil_expr(t));
+  const expr2tc i = symbol2tc(get_uint32_type(), "i");
+  const expr2tc load =
+    dereference2tc(to_pointer_type(t->type).subtype, add2tc(t->type, t, i));
+  REQUIRE(targets_of(andersen, load) == std::set<std::string>{"a", "b"});
+}
+
+TEST_CASE(
+  "andersen query passes TOP and the nondet sentinel through a load",
+  "[andersen][goto]")
+{
+  // *u loads from the sentinel, which yields another unconstrained pointer;
+  // *w loads from anywhere, so it may hold anything.
+  std::string src = R"(
+    int **ext(void);
+    int **__ESBMC_ext(void);
+    int main(void)
+    {
+      int **u = ext();
+      int **w = __ESBMC_ext();
+      return 0;
+    }
+  )";
+
+  goto_functionst functions = compile(src);
+  andersent andersen;
+  andersen(functions);
+
+  const auto load = [&](const char *name) {
+    const expr2tc p = find_symbol(functions, "main", name);
+    REQUIRE(!is_nil_expr(p));
+    return dereference2tc(to_pointer_type(p->type).subtype, p);
+  };
+  REQUIRE(
+    targets_of(andersen, load("u")) ==
+    std::set<std::string>{andersent::nondet_object_name});
+  REQUIRE(targets_of(andersen, load("w")) == std::set<std::string>{"*"});
+}
+
+TEST_CASE(
+  "andersen frontend skips what the entry point cannot reach",
+  "[andersen][goto]")
+{
+  std::string src = R"(
+    int a;
+    int *p;
+    void never(void) { p = &a; }
+    int main(void) { return 0; }
+  )";
+
+  goto_functionst functions = compile(src);
+  REQUIRE(functions.function_map.count(functions.main_id()) == 1);
+  andersent reached;
+  reached(functions);
+  REQUIRE(targets_of(reached, functions, "", "p").empty());
+
+  functions.function_map.erase(functions.main_id());
+  andersent whole;
+  whole(functions);
+  REQUIRE(targets_of(whole, functions, "", "p") == std::set<std::string>{"a"});
 }
 
 TEST_CASE(

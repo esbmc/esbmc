@@ -1,0 +1,5 @@
+CORE
+main.py
+--unwind 4
+^  file .*main.py line 20 column 8.*$
+^VERIFICATION FAILED$

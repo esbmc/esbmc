@@ -910,6 +910,28 @@ std::vector<std::optional<typet>> python_lambda::call_site_argument_types(
   return types;
 }
 
+std::vector<std::optional<typet>> python_lambda::narrowed_parameter_types(
+  const nlohmann::json &call,
+  const nlohmann::json &scope,
+  const code_typet &signature) const
+{
+  const auto &params = signature.arguments();
+  if (call["args"].size() != params.size())
+    return {};
+  std::vector<std::optional<typet>> types;
+  bool narrowed = false;
+  for (size_t i = 0; i < params.size(); ++i)
+  {
+    const std::optional<typet> arg =
+      scalar_argument_type(call["args"][i], scope, type_handler_);
+    const bool narrows =
+      arg && arg->is_signedbv() && params[i].type().is_floatbv();
+    narrowed |= narrows;
+    types.push_back(narrows ? *arg : params[i].type());
+  }
+  return narrowed ? types : std::vector<std::optional<typet>>();
+}
+
 // The `double` default rejects any body that indexes its parameter (#7328), so
 // the call site is consulted when neither an annotation nor string usage says
 // otherwise.
@@ -1055,8 +1077,8 @@ exprt python_lambda::process_lambda_body(
   const nlohmann::json &body_node,
   const locationt &location)
 {
-  // Get the body expression through the converter
-  exprt body_expr = converter_.get_expr(body_node);
+  code_blockt lambda_block;
+  exprt body_expr = converter_.get_lambda_body_expr(body_node, lambda_block);
 
   // If the body is a nested lambda (inner function), take its address so
   // the outer lambda returns a function pointer, not a bare code symbol.
@@ -1068,8 +1090,6 @@ exprt python_lambda::process_lambda_body(
   return_stmt.return_value() = body_expr;
   return_stmt.location() = location;
 
-  // Wrap in a block
-  code_blockt lambda_block;
   lambda_block.copy_to_operands(return_stmt);
 
   return lambda_block;
@@ -1165,11 +1185,11 @@ exprt python_lambda::get_lambda_expr(
 
     // Callers (e.g. g = f(5); g(10)) read the declared return type, so it
     // follows the body where declares_body_return_type says so.
-    // The RETURN statement is lambda_body.operands()[0] at this point (before
-    // we prepend the closure assignments below).
+    // The RETURN statement is the last one at this point (before we prepend
+    // the closure assignments below).
     if (!lambda_body.operands().empty())
     {
-      const exprt &ret_stmt = lambda_body.operands()[0];
+      const exprt &ret_stmt = lambda_body.operands().back();
       if (
         ret_stmt.id() == "code" && ret_stmt.get("statement") == "return" &&
         !ret_stmt.operands().empty())

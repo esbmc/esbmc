@@ -163,7 +163,7 @@ program goto_factory::get_goto_functions(cmdlinet &cmd, optionst &opts)
     remove_no_op(goto_functions);
 
     // Remove unreachable code
-    remove_unreachable(goto_functions);
+    remove_unreachable(goto_functions, false);
 
     // recalculate numbers, etc.
     goto_functions.update();

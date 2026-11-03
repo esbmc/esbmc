@@ -47,6 +47,16 @@
  *  takes a variable and returns the set of things it might point at.
  */
 
+/* Index of, and bytes spanned by, the leading component of a value-set suffix
+ * `rest` (with its '.' already dropped) among the member @p names. Member
+ * names are not identifiers -- clang spells an anonymous member
+ * "S::(anonymous at f.c:4:9)", which contains '.' -- so the component is the
+ * longest declared name `rest` continues on a component boundary, never
+ * whatever precedes the next '.' or '['. */
+std::optional<std::pair<size_t, size_t>> match_leading_component(
+  const std::vector<irep_idt> &names,
+  const std::string &rest);
+
 typedef hash_numbering<expr2tc, irep2_hash> object_numberingt;
 typedef hash_numbering<unsigned, std::hash<unsigned>> object_number_numberingt;
 
@@ -447,6 +457,15 @@ public:
   {
     return values.erase(name);
   }
+
+  /** Remove the value sets of an object of @p type named @p id: its own and
+   *  those of its members and elements, keyed by @p id plus a `.member` or
+   *  `[]` suffix. Linear in the type, where scanning the map for @p id would
+   *  be linear in every tracked variable. */
+  void erase_object(
+    const std::string &id,
+    const type2tc &type,
+    const std::string &suffix = "");
 
   /** Get the set of things that an expression might point at. Interprets the
    *  given expression, making note of all the pointer variables used by it,

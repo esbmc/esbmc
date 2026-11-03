@@ -1,10 +1,24 @@
 #include <goto-programs/goto_coverage.h>
+#include <goto-programs/goto_functions.h>
+#include <goto-programs/goto_inline.h>
+#include <util/arith/arith_tools.h>
 #include <goto-programs/k_path_spanning.h>
+#include <goto-programs/remove_no_op.h>
 #include <irep2/irep2_utils.h>
+#include <util/base/i2string.h>
+#include <util/config/options.h>
+#include <util/irep/std_types.h>
+
+#include <nlohmann/json.hpp>
 
 #include <algorithm>
 #include <cassert>
+#include <cstdio>
+#include <cstdlib>
 #include <deque>
+#include <fstream>
+#include <functional>
+#include <iterator>
 #include <map>
 #include <set>
 #include <vector>
@@ -35,6 +49,41 @@ std::set<std::pair<std::string, std::string>>
 std::set<std::pair<std::string, std::string>> goto_coveraget::all_claims;
 std::map<std::pair<std::string, std::string>, std::string>
   goto_coveraget::claim_negation;
+std::set<std::pair<std::string, std::string>> goto_coveraget::covered_set;
+std::string goto_coveraget::covered_set_outpath;
+std::atomic<bool> goto_coveraget::branch_cov_active{false};
+std::atomic<size_t> goto_coveraget::total_branch_atomic{0};
+std::atomic<bool> goto_coveraget::covered_set_mode{false};
+std::atomic<size_t> goto_coveraget::live_reached{0};
+std::atomic<size_t> goto_coveraget::covered_run{0};
+std::atomic<size_t> goto_coveraget::live_decided{0};
+std::atomic<size_t> goto_coveraget::claims_total_atomic{0};
+
+void goto_coveraget::write_covered_set_atomic()
+{
+  if (covered_set_outpath.empty())
+    return;
+  nlohmann::json out;
+  out["version"] = 1;
+  out["covered"] = nlohmann::json::array();
+  for (const auto &[cond, loc] : covered_set)
+    out["covered"].push_back({{"cond", cond}, {"loc", loc}});
+  const std::string tmp = covered_set_outpath + ".tmp";
+  {
+    std::ofstream f(tmp);
+    if (!f)
+    {
+      log_warning("coverage-covered-set: cannot write {}", tmp);
+      return;
+    }
+    f << out.dump(2) << "\n";
+  }
+  // Atomic publish: a kill between the two writes leaves the previous
+  // valid file intact (never a truncated/corrupt covered-set).
+  if (std::rename(tmp.c_str(), covered_set_outpath.c_str()) != 0)
+    log_warning(
+      "coverage-covered-set: atomic rename to {} failed", covered_set_outpath);
+}
 
 std::string goto_coveraget::get_filename_from_path(std::string path)
 {
@@ -254,10 +303,264 @@ void goto_coveraget::branch_function_coverage()
   goto_functions.update();
 }
 
+// Walk an ASSIGN rhs / RETURN operand for short-circuit operators that
+// the frontend did NOT lower to control flow. goto_sideeffects.cpp:160
+// rewrites `||`/`&&` into an if-then-else GOTO chain ONLY when an
+// operand has a side effect; with side-effect-free operands the `or`/
+// `and` stays a flat boolean expression in one instruction and carries
+// no GOTO guard, so the `it->is_goto()` arm below never sees it
+// (ESBMC: "No branch detected" where solc instruments the operator as
+// a 2-arm decision). For each such operator, emit the same 2-arm
+// decision the GOTO arm produces, keyed on the short-circuit operand
+// (side_1 — the operand that decides whether the rest is evaluated),
+// recursing both sides to reach nested operators.
+// Max folded short-circuit/ternary operands treated as decisions at ONE site.
+// Phase 1 (runtime snapshots into tr/cnt) and Phase 2 (offline enumeration of
+// the 2^K combinations) MUST apply this identically: if Phase 1 snapshots K
+// operands that Phase 2 does not enumerate, the emitted path carries a depth
+// that is short by K, so `cnt != depth` holds on EVERY real execution and the
+// path becomes permanently uncoverable — and is then reported as PASSED, i.e.
+// a false proof of unreachability. 2^12 = 4096 combinations per site is already
+// far beyond any real Solidity expression; sites above it are left out of the
+// decision set entirely (and reported) rather than half-instrumented.
+static constexpr size_t SC_DECISION_MAX = 12;
+
+static void collect_short_circuit_decisions(
+  const expr2tc &e,
+  const std::function<void(const expr2tc &)> &emit)
+{
+  if (is_nil_expr(e))
+    return;
+  if (is_or2t(e))
+    emit(to_or2t(e).side_1);
+  else if (is_and2t(e))
+    emit(to_and2t(e).side_1);
+  else if (is_if2t(e))
+    // Solidity ternary `cond ? a : b`: lowered to a flat if2t SELECT
+    // when both arms are side-effect-free.  solc-coverage instruments
+    // the ternary's `cond` as a 2-arm decision; mirror that by emitting
+    // the cond expression as a probe keyed on the same location.
+    emit(to_if2t(e).cond);
+  for (size_t i = 0; i < e->get_num_sub_exprs(); ++i)
+  {
+    const expr2tc *sub = e->get_sub_expr(i);
+    if (sub != nullptr)
+      collect_short_circuit_decisions(*sub, emit);
+  }
+}
+
+bool goto_coveraget::edge_reaches_error_revert(
+  goto_programt::const_targett it,
+  goto_programt::const_targett end) const
+{
+  // Bounded straight-line walk. Stop at anything that changes control flow or
+  // merges another edge in; only an unbroken run of straight-line instructions
+  // that reaches an error call proves THIS edge reverts.
+  for (size_t steps = 0; it != end && steps < 256; ++it, ++steps)
+  {
+    // A downstream join (some other edge targets this instruction) means we can
+    // no longer attribute a later terminator to this edge alone.
+    if (steps > 0 && it->is_target())
+      return false;
+    // Control-flow / terminating instructions break the straight-line run.
+    if (
+      it->is_goto() || it->is_return() || it->is_end_function() ||
+      it->is_throw() || it->is_catch())
+      return false;
+    // A lowered `revert CustomError(...)` is a call to a `#sol_error` function.
+    if (it->is_function_call() && is_code_function_call2t(it->code))
+    {
+      const expr2tc &fn = to_code_function_call2t(it->code).function;
+      if (is_symbol2t(fn))
+      {
+        const symbolt *s = ns.lookup(to_symbol2t(fn).thename);
+        if (s && !s->get_type().get("#sol_error").as_string().empty())
+          return true;
+      }
+      // A non-error call is straight-line; keep walking.
+    }
+    // ASSIGN / DECL / DEAD / SKIP / LOCATION / OTHER / ATOMIC / ASSUME are
+    // straight-line: keep walking.
+  }
+  return false;
+}
+
+void goto_coveraget::load_covered_set()
+{
+  // Cross-run covered-set (Item 2): load the persisted edge keys. A
+  // missing/unreadable/empty file is treated as "nothing covered yet"
+  // (first run). The path is still recorded so the run-end report
+  // (bmc.cpp) merge-writes the accumulated set back.
+  if (!covered_set_path.empty())
+  {
+    covered_set_outpath = covered_set_path;
+    std::ifstream in(covered_set_path);
+    if (in)
+    {
+      try
+      {
+        nlohmann::json j;
+        in >> j;
+        for (const auto &e : j.value("covered", nlohmann::json::array()))
+          covered_set.emplace(
+            e.at("cond").get<std::string>(), e.at("loc").get<std::string>());
+      }
+      catch (const std::exception &ex)
+      {
+        log_warning(
+          "coverage-covered-set: ignoring unparseable {} ({})",
+          covered_set_path,
+          ex.what());
+        covered_set.clear();
+      }
+    }
+  }
+}
+
+void goto_coveraget::instrument_decision(
+  goto_programt &goto_program,
+  goto_programt::targett &it,
+  const expr2tc &cond,
+  bool cond_reverts,
+  bool neg_reverts)
+{
+  // Per-contract scoping (--contract C, Solidity): only instrument
+  // decisions lexically declared inside contract C. The frontend
+  // stamps each statement location with "sol_decl_contract" (its
+  // declaring ContractDefinition, invariant across inheritance
+  // merge-by-copy). Skipping the assert pair for C-foreign
+  // decisions auto-scopes BOTH the denominator
+  // (get_total_cond_assert counts instrumented asserts only) and
+  // the numerator (reached_claims can only hit instrumented
+  // asserts), so the percentage stays correct by construction.
+  if (
+    !scope_contract.empty() &&
+    it->location.get("sol_decl_contract").as_string() != scope_contract)
+    return;
+
+  // Item 5-d: dependency exclusion. Drop the decision BEFORE the
+  // all_claims.insert below, so an excluded contract's decisions
+  // leave BOTH the denominator (static universe) and the
+  // numerator (no assert => reached_claims can never hit it) —
+  // exactly the "OZ in no denominator, no numerator" property.
+  // Default mode never reaches here for foreign code (scope
+  // filter above already skipped it), so this is a no-op there.
+  if (
+    !exclude_contracts.empty() &&
+    exclude_contracts.count(it->location.get("sol_decl_contract").as_string()))
+    return;
+
+  // Edge keys (guard_str, location.as_string()) — exactly the
+  // identity get_total_cond_assert() and the numerator
+  // (bmc.cpp claim_sig) use, so universe / denominator /
+  // numerator stay key-aligned. as_string() excludes custom
+  // irep fields, so inheritance/modifier copies fold to one.
+  const expr2tc neg = gen_not_expr(cond);
+  const std::string loc = it->location.as_string();
+  const std::pair<std::string, std::string> k_g(from_expr(ns, "", cond), loc);
+  const std::pair<std::string, std::string> k_ng(from_expr(ns, "", neg), loc);
+
+  // Static universe (Item 2c): every in-scope edge counts in
+  // the denominator regardless of the covered-set skip below,
+  // so skipping can never inflate coverage.
+  all_claims.insert(k_g);
+  all_claims.insert(k_ng);
+  // The direction --dead-code-check reports dead when a probe is
+  // never violated, as get_total_cond_assert() records it.
+  claim_negation[k_g] = from_expr(ns, "", neg);
+  claim_negation[k_ng] = from_expr(ns, "", gen_not_expr(neg));
+
+  // Item 2b: an edge already witnessed P_SATISFIABLE in a prior
+  // run (covered_set) is not re-instrumented — fewer SMT
+  // obligations on re-runs. Sound: an instrumented assert is a
+  // property obligation, not a path constraint, so omitting it
+  // removes one observation only and perturbs no other branch;
+  // the cross-run cover is monotone-∃ (a real witness stays
+  // valid). Only true P_SATISFIABLE is ever written back.
+  if (!covered_set.count(k_g))
+  {
+    insert_assert(goto_program, it, cond);
+    if (cond_reverts)
+      std::prev(it)->location.set("sol_revert_edge", true);
+  }
+  if (!covered_set.count(k_ng))
+  {
+    insert_assert(goto_program, it, neg);
+    if (neg_reverts)
+      std::prev(it)->location.set("sol_revert_edge", true);
+  }
+}
+
+void goto_coveraget::instrument_branch_instruction(
+  goto_programt &goto_program,
+  goto_programt::targett &it)
+{
+  auto emit_decision = [&](
+                         const expr2tc &cond,
+                         bool cond_reverts = false,
+                         bool neg_reverts = false) {
+    instrument_decision(goto_program, it, cond, cond_reverts, neg_reverts);
+  };
+
+  // convert assertions to true (or assume)
+  if (
+    it->is_assert() &&
+    it->location.property().as_string() != "replaced assertion" &&
+    it->location.property().as_string() != "instrumented assertion")
+  {
+    if (cov_assume_asserts)
+      replace_assert_to_assume(it);
+    else
+      replace_assert_to_guard(gen_true_expr(), it, false);
+  }
+
+  // e.g. IF !(a > 1) THEN GOTO 3
+  else if (
+    it->is_goto() && !is_true(it->guard) && !guard_folds_to_constant(it->guard))
+  {
+    if (it->is_target())
+      target_num = it->target_number;
+    // Revert fidelity: classify which edge reverts BEFORE instrumenting
+    // (target/fall-through still point at the original successors). A
+    // probe assert(P) fails when P is false, so assert(it->guard) covers
+    // the FALL-THROUGH edge and assert(!it->guard) the GOTO-taken edge.
+    const bool taken_reverts = edge_reaches_error_revert(
+      it->get_target(), goto_program.instructions.end());
+    const bool fall_reverts =
+      edge_reaches_error_revert(std::next(it), goto_program.instructions.end());
+    // Only tag when exactly one edge reverts (both/neither -> no tag).
+    emit_decision(
+      it->guard,
+      /*cond_reverts=*/fall_reverts && !taken_reverts,
+      /*neg_reverts=*/taken_reverts && !fall_reverts);
+  }
+
+  // Pure short-circuit ||/&& folded into an ASSIGN rhs / RETURN
+  // operand (no GOTO — see collect_short_circuit_decisions above).
+  // solc instruments every such operator as a 2-arm decision;
+  // without this ESBMC reports "No branch detected" for e.g.
+  // `return a == 0 || b == 1;`.
+  else if (it->is_assign())
+    collect_short_circuit_decisions(
+      to_code_assign2t(it->code).source, emit_decision);
+
+  else if (it->is_return())
+    collect_short_circuit_decisions(
+      to_code_return2t(it->code).operand, emit_decision);
+}
+
 void goto_coveraget::branch_coverage()
 {
   log_progress("Adding false assertions...");
   total_branch = 0;
+  // all_claims is the no-skip static universe, rebuilt every call
+  // (Item 2c). covered_set/outpath start clean unless a path is given.
+  all_claims.clear();
+  claim_negation.clear();
+  covered_set.clear();
+  covered_set_outpath.clear();
+
+  load_covered_set();
 
   std::unordered_set<std::string> location_pool = {};
   // cmdline.arg[0]
@@ -286,35 +589,35 @@ void goto_coveraget::branch_coverage()
           // this stands for the auxiliary condition/branch we added.
           continue;
 
-        // convert assertions to true (or assume)
-        if (
-          it->is_assert() &&
-          it->location.property().as_string() != "replaced assertion" &&
-          it->location.property().as_string() != "instrumented assertion")
-        {
-          if (cov_assume_asserts)
-            replace_assert_to_assume(it);
-          else
-            replace_assert_to_guard(gen_true_expr(), it, false);
-        }
-
-        // e.g. IF !(a > 1) THEN GOTO 3
-        else if (
-          it->is_goto() && !is_true(it->guard) &&
-          !guard_folds_to_constant(it->guard))
-        {
-          if (it->is_target())
-            target_num = it->target_number;
-          // assert(!(a > 1));
-          // assert(a > 1);
-          insert_assert(goto_program, it, it->guard);
-          insert_assert(goto_program, it, gen_not_expr(it->guard));
-        }
+        instrument_branch_instruction(goto_program, it);
       }
     }
 
-  total_branch = get_total_instrument();
-  all_claims = get_total_cond_assert();
+  // Denominator = the no-skip static universe built in the loop above:
+  // every in-scope decision edge keyed by (condition,
+  // location.as_string()) in a std::set, so inheritance/modifier
+  // physical copies fold to one source identity and override/sibling
+  // decisions stay distinct (different source line). This decouples the
+  // denominator from what was actually instrumented (Item 2c): when the
+  // covered-set skip omits an assert, all_claims is unaffected, so
+  // coverage % can never be spuriously inflated. The numerator
+  // (reached_claims, matched against all_claims) uses the same key.
+  // When no covered-set is given this is identical to the previous
+  // get_total_cond_assert() result (same keys, same dedup), so the
+  // no-path path is behaviour-preserving. Other coverage modes
+  // (assertion/k-path/branch-function) keep get_total_cond_assert() /
+  // get_total_instrument() by design.
+  total_branch = static_cast<size_t>(all_claims.size());
+  // Signal-safe snapshot for the timeout/term handlers ("data even on
+  // UNKNOWN"). Set here, at instrumentation time, before any solve can
+  // be killed. covered_set_outpath is set during option parsing (well
+  // before this), so covered_set_mode is final here.
+  total_branch_atomic.store(total_branch, std::memory_order_relaxed);
+  covered_set_mode.store(
+    !covered_set_outpath.empty(), std::memory_order_relaxed);
+  live_reached.store(0, std::memory_order_relaxed);
+  covered_run.store(0, std::memory_order_relaxed);
+  branch_cov_active.store(true, std::memory_order_relaxed);
 
   // avoid Assertion `call_stack.back().goto_state_map.size() == 0' failed
   goto_functions.update();
@@ -836,7 +1139,6 @@ void goto_coveraget::k_path_coverage()
 
   goto_functions.update();
 }
-
 void goto_coveraget::insert_assert(
   goto_programt &goto_program,
   goto_programt::targett &it,
@@ -1005,6 +1307,13 @@ void goto_coveraget::condition_coverage()
         // express path constraints, not program logic, so their guards
         // must not contribute to condition-coverage claims (issue #4291).
         if (it->is_assume())
+          continue;
+
+        // Skip the uncaught-exception and exception-specification checks that
+        // remove_exceptions synthesizes: they are ESBMC's properties, not the
+        // program's conditions, and a library model that may throw would add
+        // them to every caller (#9418).
+        if (it->is_assert() && it->location.property() == "exception")
           continue;
 
         // e.g. assert(a == 1);
@@ -1422,24 +1731,123 @@ bool goto_coveraget::is_target_func(
   return false;
 }
 
+// Parse the --negating-property spec "[contract:]function[:line]".
+//   1 token  -> function
+//   2 tokens -> last all-digits: function:line ; else contract:function
+//   3 tokens -> contract:function:line
+// A malformed spec (>3 tokens or empty function) degrades to treating the
+// whole string as the function name (backward compatible). `line` stays
+// empty when no line is given; it is kept as a string so it can be compared
+// directly against the instruction location, with no integer parsing.
+static void parse_negate_spec(
+  const std::string &spec,
+  std::string &contract,
+  std::string &fname,
+  std::string &line)
+{
+  contract.clear();
+  line.clear();
+
+  auto all_digits = [](const std::string &s) {
+    return !s.empty() && s.find_first_not_of("0123456789") == std::string::npos;
+  };
+
+  std::vector<std::string> tok;
+  size_t start = 0;
+  for (size_t pos = spec.find(':'); pos != std::string::npos;
+       pos = spec.find(':', start))
+  {
+    tok.push_back(spec.substr(start, pos - start));
+    start = pos + 1;
+  }
+  tok.push_back(spec.substr(start));
+
+  if (tok.size() == 1)
+    fname = tok[0];
+  else if (tok.size() == 2)
+  {
+    if (all_digits(tok[1]))
+    {
+      fname = tok[0];
+      line = tok[1];
+    }
+    else
+    {
+      contract = tok[0];
+      fname = tok[1];
+    }
+  }
+  else if (tok.size() == 3)
+  {
+    contract = tok[0];
+    fname = tok[1];
+    if (all_digits(tok[2]))
+      line = tok[2];
+  }
+  else
+  {
+    log_warning(
+      "--negating-property: malformed spec '{}', treating it as a plain "
+      "function name",
+      spec);
+    fname = spec;
+  }
+
+  if (fname.empty())
+  {
+    log_warning(
+      "--negating-property: empty function name in spec '{}', treating it as "
+      "a plain function name",
+      spec);
+    contract.clear();
+    line.clear();
+    fname = spec;
+  }
+}
+
+// Extract the contract name from a Solidity mangled id of the form
+// "sol:@C@<Contract>@F@...". Returns "" for non-contract / non-Solidity ids.
+static std::string contract_of(const std::string &mangled_id)
+{
+  const std::string c_tag = "@C@";
+  const std::string f_tag = "@F@";
+  size_t cpos = mangled_id.find(c_tag);
+  if (cpos == std::string::npos)
+    return "";
+  cpos += c_tag.size();
+  size_t fpos = mangled_id.find(f_tag, cpos);
+  if (fpos == std::string::npos || fpos <= cpos)
+    return "";
+  return mangled_id.substr(cpos, fpos - cpos);
+}
+
 // negate the condition inside the assertion
 // The idea is that, if the claim is verified safe, and its negated claim is
 // also verified safe, then we say this claim is unreachable
-void goto_coveraget::negating_asserts(const std::string &tgt_fname)
+void goto_coveraget::negating_asserts(const std::string &tgt_spec)
 {
+  std::string contract, fname, target_line;
+  parse_negate_spec(tgt_spec, contract, fname, target_line);
+
   std::string old = target_function;
-  target_function = tgt_fname;
+  target_function = fname;
 
   std::unordered_set<std::string> location_pool = {};
   location_pool.insert(get_filename_from_path(filename));
   for (auto const &inc : config.ansi_c.include_files)
     location_pool.insert(get_filename_from_path(inc));
 
+  // First pass: collect candidate asserts in functions matching the
+  // function-name filter (and the optional case-sensitive contract filter),
+  // restricted to the user source files.
+  std::vector<goto_programt::instructiont::targett> candidates;
   Forall_goto_functions (f_it, goto_functions)
     if (f_it->second.body_available && f_it->first != "__ESBMC_main")
     {
       goto_programt &goto_program = f_it->second.body;
       if (filter(f_it->first, goto_program))
+        continue;
+      if (!contract.empty() && contract_of(f_it->first.as_string()) != contract)
         continue;
 
       Forall_goto_program_instructions (it, goto_program)
@@ -1450,12 +1858,40 @@ void goto_coveraget::negating_asserts(const std::string &tgt_fname)
           continue;
 
         if (it->is_assert())
-        {
-          expr2tc guard = it->guard;
-          replace_assert_to_guard(gen_not_expr(guard), it, false);
-        }
+          candidates.push_back(it);
       }
     }
+
+  // Select the asserts to negate. When a line is given, keep only those on
+  // that source line; if none match, silently fall back to whole-function
+  // negation (all candidates).
+  std::vector<goto_programt::instructiont::targett> matched;
+  if (!target_line.empty())
+  {
+    std::copy_if(
+      candidates.begin(),
+      candidates.end(),
+      std::back_inserter(matched),
+      [&target_line](const auto &it) {
+        return it->location.get_line().as_string() == target_line;
+      });
+    if (matched.empty())
+    {
+      log_debug(
+        "coverage",
+        "--negating-property: no assert at line {} in '{}', falling back to "
+        "whole-function negation",
+        target_line,
+        fname);
+      matched = candidates;
+    }
+  }
+  else
+    matched = candidates;
+
+  for (auto &it : matched)
+    replace_assert_to_guard(gen_not_expr(it->guard), it, false);
+
   target_function = old;
 }
 

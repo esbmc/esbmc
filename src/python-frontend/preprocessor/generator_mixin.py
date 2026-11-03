@@ -10,6 +10,8 @@ import copy
 # pylint: disable=too-many-locals,too-many-branches,too-many-statements
 import sys
 
+from preprocessor.rejection import attach_location
+
 CONTRACT_CLAUSES = ("__ESBMC_requires", "__ESBMC_ensures")
 
 
@@ -101,6 +103,51 @@ class _GeneratorConsumerScan:
 
 class GeneratorMixin:
 
+    class _YieldFromToFor(ast.NodeTransformer):
+        """Rewrite a statement `yield from it` into `for v in it: yield v`.
+
+        The two differ only in forwarding send()/throw() and in the value of
+        the `yield from` expression; neither is modelled, and an expression
+        `yield from` is left to the existing refusal.
+        """
+
+        def __init__(self, preprocessor):
+            self.preprocessor = preprocessor
+            self.depth = 0
+
+        def _visit_scope(self, node):
+            if self.depth > 0:
+                return node
+            self.depth += 1
+            self.generic_visit(node)
+            self.depth -= 1
+            return node
+
+        visit_FunctionDef = _visit_scope  # noqa: N815
+        visit_AsyncFunctionDef = _visit_scope  # noqa: N815
+
+        def visit_Lambda(self, node):
+            return node
+
+        def visit_ClassDef(self, node):
+            return node
+
+        def visit_Expr(self, node):
+            if not isinstance(node.value, ast.YieldFrom):
+                return node
+            var = f"ESBMC_yieldfrom_{self.preprocessor.listcomp_counter}"
+            self.preprocessor.listcomp_counter += 1
+            loop = ast.For(
+                target=ast.Name(id=var, ctx=ast.Store()),
+                iter=node.value.value,
+                body=[ast.Expr(value=ast.Yield(value=ast.Name(id=var, ctx=ast.Load())))],
+                orelse=[],
+            )
+            ast.copy_location(loop, node)
+            self.preprocessor.ensure_all_locations(loop, node)
+            ast.fix_missing_locations(loop)
+            return loop
+
     class _YieldToAppend(ast.NodeTransformer):
 
         def __init__(self, result_var, source_node):
@@ -171,32 +218,54 @@ class GeneratorMixin:
                 best_idx = i
         return best_idx
 
+    @staticmethod
+    def _outer_stored_names(module):
+        """The names that @p module stores other than as a comprehension target."""
+        in_comprehension = {}
+        stored = {}
+        for node in ast.walk(module):
+            if isinstance(node, ast.comprehension):
+                for name in ast.walk(node.target):
+                    if isinstance(name, ast.Name):
+                        in_comprehension[name.id] = in_comprehension.get(name.id, 0) + 1
+            if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Store):
+                stored[node.id] = stored.get(node.id, 0) + 1
+        return {name for name, count in stored.items() if count > in_comprehension.get(name, 0)}
+
     def _rename_shadowing_targets(self, node):
-        """Rename a comprehension target that shadows a known outer variable.
+        """Rename a comprehension target that shadows an outer variable, bound
+        before or after it, or the target of an earlier comprehension.
 
         Python 3 scopes a comprehension's target to the comprehension, so the
         rename is semantically free. Without it the outer and inner bindings
         share one symbol, and an outer object rebound to elements aborts the
-        converter in member2t.
+        converter in member2t; two comprehensions over elements of different
+        types give that symbol two types and crash the solver (#9126).
         """
         for generator in node.generators:
             if not isinstance(generator.target, ast.Name):
                 continue
             old = generator.target.id
-            if old not in self.known_variable_types:
+            if (old not in self.known_variable_types and old not in self.comprehension_targets
+                    and old not in self.outer_stored_names):
+                self.comprehension_targets.add(old)
                 continue
 
             new = f"ESBMC_compvar_{self.listcomp_counter}_{old}"
             self.listcomp_counter += 1
             index = node.generators.index(generator)
-            scopes = [node.elt] + list(generator.ifs)
+            scopes = list(generator.ifs)
+            shadowed = False
             for later in node.generators[index + 1:]:
                 scopes.append(later.iter)
+                if old in self._bound_target_names(later.target):
+                    shadowed = True
+                    break
                 scopes.extend(later.ifs)
+            if not shadowed:
+                scopes.append(node.elt)
             for scope in scopes:
-                for name in ast.walk(scope):
-                    if isinstance(name, ast.Name) and name.id == old:
-                        name.id = new
+                self._rename_free_name(scope, old, new)
             generator.target.id = new
         return node
 
@@ -701,18 +770,22 @@ class GeneratorMixin:
         (otherwise an unrelated nested helper that happens to reference the
         outer name triggers a false-positive recursive-generator transform).
         """
+        return any(True for _ in GeneratorMixin._recursive_calls(func_name, body))
+
+    @staticmethod
+    def _recursive_calls(func_name, body):
+        """Yield (call, parent) for each direct call to func_name in *body*."""
 
         def walk(node):
             if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)):
                 return
-            if (isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
-                    and node.func.id == func_name):
-                yield node
             for child in ast.iter_child_nodes(node):
+                if (isinstance(child, ast.Call) and isinstance(child.func, ast.Name)
+                        and child.func.id == func_name):
+                    yield child, node
                 yield from walk(child)
 
-        module = ast.Module(body=body, type_ignores=[])
-        return any(True for _ in walk(module))
+        yield from walk(ast.Module(body=body, type_ignores=[]))
 
     def _transform_recursive_generator(self, node):
         """Transform a recursive generator function to accumulate-and-return.
@@ -733,6 +806,17 @@ class GeneratorMixin:
         """
         result_var = "ESBMC_gen_result"
         template = node.body[0] if node.body else node
+
+        # The transform runs every recursive call eagerly, which matches
+        # CPython only when the call's generator is iterated in place.
+        # Elsewhere CPython keeps an unstarted generator object (#4786).
+        for call, parent in self._recursive_calls(node.name, node.body):
+            if not (isinstance(parent, (ast.For, ast.comprehension)) and parent.iter is call):
+                err = NotImplementedError(
+                    f"using the generator returned by recursive generator '{node.name}' "
+                    "other than as a for-loop iterable is not supported")
+                attach_location(err, call, self.module_name)
+                raise err
 
         # Annotate unannotated parameters as list[Any].  Without this the C++
         # annotator infers Any from the recursive call site (flatten(x) where
@@ -1151,7 +1235,7 @@ class GeneratorMixin:
             # clause naming a temporary the contract wrapper never declares.
             # Leave it as written; the frontend's clause check rejects by name.
             return [], expr, "Any"
-        lowerer = self._ListCompExpressionLowerer(self)
+        lowerer = self._ListCompExpressionLowerer(self, expr)
         new_expr = lowerer.visit(expr)
         result_type = self._infer_type_from_value(new_expr)
         return lowerer.statements, new_expr, result_type
@@ -1878,7 +1962,19 @@ class GeneratorMixin:
                 and node.func.id in ("abs", "len") and len(node.args) == 1 and not node.keywords):
             return self._apply_builtin(node.func.id,
                                        self._eval_key_body(node.args[0], param, element))
-        return None
+        return self._const_dict_entry(node, param, element)
+
+    def _const_dict_entry(self, node, param, element):
+        """Constant value of ``param["k"]`` over a dict literal of constants, else None."""
+        if not (isinstance(element, ast.Dict) and isinstance(node, ast.Subscript)
+                and isinstance(node.value, ast.Name) and node.value.id == param
+                and isinstance(node.slice, ast.Constant) and isinstance(node.slice.value, str)):
+            return None
+        keys = [None if k is None else self._const_scalar_value(k) for k in element.keys]
+        values = [self._const_element_value(v) for v in element.values]
+        if None in keys or None in values or node.slice.value not in keys:
+            return None
+        return dict(zip(keys, values))[node.slice.value]
 
     @staticmethod
     def _param_subscript_index(node, param):

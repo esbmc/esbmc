@@ -1,0 +1,4 @@
+CORE
+main.py
+--goto-functions-only
+\A(?![\s\S]*DEAD python_converter::(\S*main\.py:\d+\$py_list\$\d+)\n[\s\S]*\(\1\))[\s\S]*list_size\(\S*main\.py:\d+\$py_list\$\d+\)

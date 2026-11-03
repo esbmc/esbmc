@@ -39,6 +39,9 @@ double atan(double x)
 __ESBMC_HIDE:;
   double a;
 
+  // C11 F.10.1.3: atan(±0) returns ±0, which the x < 0.0 test below misses.
+  if (x == 0.0)
+    return x;
   a = x < 0.0 ? -x : x;
   if (a > 1.0)
     a = _atan(1.0 / a, 2);

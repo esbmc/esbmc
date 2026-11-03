@@ -118,11 +118,37 @@ def _assigned_value(target, parents):
     return None
 
 
-def _constructed_class(site, parents, classes):
-    """The class N when @p site is the target of `name = N(...)`, else None."""
+def _returns(node):
+    """The return statements of the function @p node, outside nested scopes."""
+    for child in ast.iter_child_nodes(node):
+        if isinstance(child, ast.Return):
+            yield child
+        if not isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda, ast.ClassDef)):
+            yield from _returns(child)
+
+
+def _returned_class(func, classes):
+    """The class N when every return of @p func, which cannot fall off its end,
+    is `return N(...)` (#8969), else None."""
+    if not func.body or not isinstance(func.body[-1], ast.Return):
+        return None
+    returned = {
+        r.value.func.id if isinstance(r.value, ast.Call) and isinstance(r.value.func, ast.Name)
+        and r.value.func.id in classes else None
+        for r in _returns(func)
+    }
+    return returned.pop() if len(returned) == 1 else None
+
+
+def _constructed_class(site, parents, classes, functions):
+    """The class N when @p site is the target of `name = N(...)`, or of a call
+    to a function that always returns one, else None."""
     value = _assigned_value(site, parents) if isinstance(site, ast.Name) else None
     if isinstance(value, ast.Call) and isinstance(value.func, ast.Name):
-        return value.func.id if value.func.id in classes else None
+        if value.func.id in classes:
+            return value.func.id
+        func = functions.get(value.func.id)
+        return _returned_class(func, classes) if func else None
     return None
 
 
@@ -137,9 +163,13 @@ def _instance_names(module, classes, bound):
     if _has_star_import(module):
         return {}
     parents = {id(child): node for node in ast.walk(module) for child in ast.iter_child_nodes(node)}
+    functions = {
+        s.name: s
+        for s in module.body if isinstance(s, ast.FunctionDef) and len(bound[s.name]) == 1
+    }
     instances = {}
     for name, sites in bound.items():
-        constructed = {_constructed_class(site, parents, classes) for site in sites}
+        constructed = {_constructed_class(site, parents, classes, functions) for site in sites}
         if len(constructed) == 1 and None not in constructed and not hasattr(builtins, name):
             instances[name] = constructed.pop()
     return instances

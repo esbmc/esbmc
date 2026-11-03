@@ -1,0 +1,4 @@
+regression/python/github_8979_lambda_arg_nondet
+regression/python/github_8979_lambda_arg_nondet_fail
+regression/numpy/view_param_lambda_module_level
+regression/numpy/view_param_lambda_module_level_fail

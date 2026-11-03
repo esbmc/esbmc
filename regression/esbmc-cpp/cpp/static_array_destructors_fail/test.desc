@@ -1,0 +1,6 @@
+CORE
+main.cpp
+--multi-property --std c++17
+^VERIFICATION FAILED$
+^  assertion id != 1$
+^  assertion id != 2$

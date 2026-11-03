@@ -1,0 +1,4 @@
+CORE
+main.py
+
+ERROR: type\(\) of a value whose class is not known statically is only supported as an operand of is, is not, == or !=

@@ -1,6 +1,7 @@
 #include <solvers/smt/smt_solver.h>
 #include <util/expr/type_byte_size.h>
 #include <functional>
+#include <map>
 
 /**
  * Constructs the tree-like concatenation of expressions from a sequence.
@@ -419,19 +420,41 @@ smt_astt smt_solver_baset::decode_pointer_repr(
 
   smt_astt address = convert_ast(repr);
   smt_astt pointer = convert_ast(typecast2tc(to_type, repr));
-  std::vector<const ptr_flatten_entry *> sources;
-  for (const ptr_flatten_entry &flat : ptr_flatten_history)
-    if (step_sources.count(flat.id))
-      sources.push_back(&flat);
-  /* Past the cap the rebuilt pointer is the address-space reconstruction
-   * alone, as before #7895: each source adds an ite over pointer tuples, and
-   * data flow can hand one rebuild hundreds, which ran the C++ stream and map
-   * suites out of memory. The reconstruction is not tied, so #7965 cannot
-   * recur; what is lost is the flattened pointer's provenance. */
-  if (sources.size() <= max_rebuild_sources)
-    for (const ptr_flatten_entry *flat : sources)
-      pointer = flat->pointer->ite(
-        this, mk_and(flat->guard, mk_eq(address, flat->address)), pointer);
+  /* begin_step() re-records a flatten under every later step that reuses it,
+   * so one pointer at one address reaches a rebuild as many sources; they get
+   * one ite, under any of their guards. Only the latest max_rebuild_sources
+   * pointers are kept: each adds an ite over pointer tuples, and data flow can
+   * hand one rebuild hundreds, which ran the C++ stream and map suites out of
+   * memory. An address only a dropped source holds gets the address-space
+   * reconstruction, as before #7895. */
+  struct source_groupt
+  {
+    const ptr_flatten_entry *flat;
+    ast_vec guards;
+  };
+  std::vector<source_groupt> groups;
+  std::map<std::pair<smt_astt, smt_astt>, size_t> group_of;
+  for (auto it = ptr_flatten_history.rbegin(); it != ptr_flatten_history.rend();
+       ++it)
+  {
+    if (!step_sources.count(it->id))
+      continue;
+    const std::pair key{it->address, it->pointer};
+    auto found = group_of.find(key);
+    if (found == group_of.end())
+    {
+      if (groups.size() == max_rebuild_sources)
+        continue;
+      found = group_of.emplace(key, groups.size()).first;
+      groups.push_back({&*it, {}});
+    }
+    groups[found->second].guards.push_back(it->guard);
+  }
+  for (auto g = groups.rbegin(); g != groups.rend(); ++g)
+    pointer = g->flat->pointer->ite(
+      this,
+      mk_and(make_n_ary_or(g->guards), mk_eq(address, g->flat->address)),
+      pointer);
   if (same.pointer)
     pointer = original->ite(this, convert_ast(same.untouched), pointer);
   return pointer;

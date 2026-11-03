@@ -1,0 +1,5 @@
+CORE
+main.py
+
+^  FAILED .* line 12  assertion !\(HASATTR\(
+^VERIFICATION FAILED$

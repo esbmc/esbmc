@@ -1,0 +1,4 @@
+CORE
+main.py
+--incremental-bmc
+population must be a literal sequence or a numpy array

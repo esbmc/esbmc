@@ -1,0 +1,5 @@
+CORE
+main.py
+--unwind 5
+assertion return_value\$_f\$1 == 1
+^VERIFICATION FAILED$

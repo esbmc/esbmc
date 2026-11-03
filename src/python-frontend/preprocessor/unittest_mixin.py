@@ -1,8 +1,82 @@
-"""Expansion of unittest.main() into the calls its runner would make."""
+"""Expansion of unittest.main() and inlining of TestCase assertions."""
 
 import ast
+import copy
 
 _CASE_VAR_PREFIX = "__ESBMC_unittest_case_"
+_ARG_VAR_PREFIX = "__ESBMC_unittest_arg_"
+_SCOPES = (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)
+
+
+def _compare(op):
+    return lambda a, b: [ast.Compare(left=a, ops=[op()], comparators=[b])]
+
+
+def _compare_none(op):
+    return lambda a: _compare(op)(a, ast.Constant(value=None))
+
+
+def _isinstance(obj, cls):
+    return ast.Call(func=ast.Name(id="isinstance", ctx=ast.Load()), args=[obj, cls], keywords=[])
+
+
+def _typed_equal(type_name):
+    # assertListEqual and the like fail unless both operands have the type.
+    def build(a, b):
+        cls = ast.Name(id=type_name, ctx=ast.Load())
+        checks = [_isinstance(a, cls), _isinstance(b, copy.deepcopy(cls))]
+        return checks + _compare(ast.Eq)(copy.deepcopy(a), copy.deepcopy(b))
+
+    return build
+
+
+def _not(expr):
+    return ast.UnaryOp(op=ast.Not(), operand=expr)
+
+
+# assertX -> (CPython's parameters before msg, the claims TestCase checks).
+_ASSERTIONS = {
+    "assertEqual": (("first", "second"), _compare(ast.Eq)),
+    "assertNotEqual": (("first", "second"), _compare(ast.NotEq)),
+    "assertTrue": (("expr", ), lambda e: [e]),
+    "assertFalse": (("expr", ), lambda e: [_not(e)]),
+    "assertIs": (("expr1", "expr2"), _compare(ast.Is)),
+    "assertIsNot": (("expr1", "expr2"), _compare(ast.IsNot)),
+    "assertIsNone": (("obj", ), _compare_none(ast.Is)),
+    "assertIsNotNone": (("obj", ), _compare_none(ast.IsNot)),
+    "assertIn": (("member", "container"), _compare(ast.In)),
+    "assertNotIn": (("member", "container"), _compare(ast.NotIn)),
+    "assertLess": (("a", "b"), _compare(ast.Lt)),
+    "assertLessEqual": (("a", "b"), _compare(ast.LtE)),
+    "assertGreater": (("a", "b"), _compare(ast.Gt)),
+    "assertGreaterEqual": (("a", "b"), _compare(ast.GtE)),
+    "assertIsInstance": (("obj", "cls"), lambda o, c: [_isinstance(o, c)]),
+    "assertNotIsInstance": (("obj", "cls"), lambda o, c: [_not(_isinstance(o, c))]),
+    "assertListEqual": (("list1", "list2"), _typed_equal("list")),
+    "assertTupleEqual": (("tuple1", "tuple2"), _typed_equal("tuple")),
+    "assertDictEqual": (("d1", "d2"), _typed_equal("dict")),
+    "assertMultiLineEqual": (("first", "second"), _typed_equal("str")),
+    "fail": ((), lambda: [ast.Constant(value=False)]),
+}
+
+
+def _is_names(expr):
+    if isinstance(expr, ast.Tuple):
+        return all(isinstance(e, ast.Name) for e in expr.elts)
+    return isinstance(expr, ast.Name)
+
+
+def _bind_arguments(call, params):
+    """Map *call*'s arguments to *params* and msg, or None if they do not fit."""
+    names = params + ("msg", )
+    if len(call.args) > len(names) or any(isinstance(a, ast.Starred) for a in call.args):
+        return None
+    bound = dict(zip(names, call.args))
+    for keyword in call.keywords:
+        if keyword.arg not in names or keyword.arg in bound:
+            return None
+        bound[keyword.arg] = keyword.value
+    return bound if all(p in bound for p in params) else None
 
 
 class UnittestMixin:
@@ -18,6 +92,7 @@ class UnittestMixin:
     def expand_unittest_main(self, module_node):
         """Replace every unittest.main() with its discovered test-method calls."""
         modules, mains, case_names = self._unittest_bindings(module_node)
+        self._inline_assertions(module_node, modules, case_names)
         if not modules and not mains:
             return
         cases = self._collect_test_cases(module_node, modules, case_names)
@@ -128,6 +203,110 @@ class UnittestMixin:
             self.ensure_all_locations(stmt, source)
             ast.fix_missing_locations(stmt)
         return run, index
+
+    def _inline_assertions(self, module_node, modules, case_names):
+        """Lower `self.assertX(...)` in a TestCase subclass to plain asserts.
+
+        The model's assertX parameters are Any, which erases a container's type
+        (`first == second` compares two lists by address), so each claim is
+        typed at the call site instead. A call that may reach another assertX
+        -- a name some class here binds or some attribute store sets, or a
+        class with a base, decorator or metaclass outside this module -- stays.
+        """
+        if not modules and not case_names:
+            return
+        known = set(case_names)
+        overridden = self._rebound_names(module_node)
+        for stmt in module_node.body:
+            if self._is_plain_test_case(stmt, modules, known):
+                known.add(stmt.name)
+                for method in stmt.body:
+                    self._inline_method_assertions(method, overridden)
+
+    def _rebound_names(self, module_node):
+        """Names a class here binds, and attributes some store sets."""
+        names = {
+            name
+            for c in ast.walk(module_node) if isinstance(c, ast.ClassDef) for n in ast.walk(c)
+            for name in self._names_bound_by(n)
+        }
+        names.update(n.attr for n in ast.walk(module_node)
+                     if isinstance(n, ast.Attribute) and not isinstance(n.ctx, ast.Load))
+        return names
+
+    def _is_plain_test_case(self, stmt, modules, known):
+        return (isinstance(stmt, ast.ClassDef) and stmt.bases and not stmt.decorator_list
+                and not stmt.keywords
+                and all(self._is_test_case_base(b, modules, known) for b in stmt.bases))
+
+    def _inline_method_assertions(self, method, overridden):
+        if not isinstance(method, ast.FunctionDef) or method.decorator_list or not method.args.args:
+            return
+        receiver = method.args.args[0]
+        if self._binds_name(method, receiver.arg, receiver):
+            return
+        self._inline_in_body(method.body, receiver.arg, overridden)
+
+    def _inline_in_body(self, body, receiver, overridden):
+        lowered = []
+        for stmt in body:
+            claims = self._assertion_claims(stmt, receiver, overridden)
+            if claims is None and not isinstance(stmt, _SCOPES):
+                for field in ("body", "orelse", "finalbody"):
+                    self._inline_in_body(getattr(stmt, field, []), receiver, overridden)
+                for handler in getattr(stmt, "handlers", []):
+                    self._inline_in_body(handler.body, receiver, overridden)
+            if claims is None:
+                lowered.append(stmt)
+                continue
+            for claim in claims:
+                self.ensure_all_locations(claim, stmt)
+                ast.fix_missing_locations(claim)
+            lowered.extend(claims)
+        body[:] = lowered
+
+    @staticmethod
+    def _assertion_call(stmt, receiver, overridden):
+        """The `receiver.assertX(...)` call *stmt* consists of, or None."""
+        if not isinstance(stmt, ast.Expr) or not isinstance(stmt.value, ast.Call):
+            return None
+        func = stmt.value.func
+        if (isinstance(func, ast.Attribute) and func.attr in _ASSERTIONS
+                and func.attr not in overridden and isinstance(func.value, ast.Name)
+                and func.value.id == receiver):
+            return stmt.value
+        return None
+
+    def _assertion_claims(self, stmt, receiver, overridden):
+        """The statements that replace an assertX call statement, or None."""
+        call = self._assertion_call(stmt, receiver, overridden)
+        if call is None:
+            return None
+        params, build = _ASSERTIONS[call.func.attr]
+        bound = _bind_arguments(call, params)
+        if bound is None:
+            return None
+        staged, temps = self._stage_arguments(call)
+        operands = (ast.Name(id=temps[id(bound[p])], ctx=ast.Load())
+                    if id(bound[p]) in temps else bound[p] for p in params)
+        return staged + [ast.Assert(test=t, msg=None) for t in build(*operands)]
+
+    def _stage_arguments(self, call):
+        """Evaluate each argument once, in source order, as the call would.
+
+        A constant, and a last argument made of names (isinstance's classes),
+        stay inline: nothing evaluated after them can change their value.
+        """
+        args = call.args + [k.value for k in call.keywords]
+        temps = {}
+        staged = []
+        for i, arg in enumerate(args):
+            if isinstance(arg, ast.Constant) or (i == len(args) - 1 and _is_names(arg)):
+                continue
+            name = f"{_ARG_VAR_PREFIX}{self._next_unpack_tmp_id()}"
+            temps[id(arg)] = name
+            staged.append(ast.Assign(targets=[ast.Name(id=name, ctx=ast.Store())], value=arg))
+        return staged, temps
 
     @staticmethod
     def _call(func):

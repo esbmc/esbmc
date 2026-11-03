@@ -1,0 +1,6 @@
+CORE
+main.py
+
+^  file .*main\.py line 9 column 11 function raw$
+^  ISINSTANCE\(a, 0\)$
+^VERIFICATION FAILED$

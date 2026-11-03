@@ -1,0 +1,4 @@
+CORE
+main.py
+--multi-property --unwind 8 --no-unwinding-assertions
+^ERROR: unsupported: attribute .c. is assigned a .C. or a .D. depending on the path; an attribute holding instances of different classes is not modelled$

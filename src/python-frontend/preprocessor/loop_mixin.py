@@ -219,9 +219,13 @@ class LoopMixin:
         """
         self._update_assignment_call_origins([node.target], None)
         self._forget_literals_changed_in_loop(node)
+        node.iter = self._unwrap_nditer_iter(node.iter)
         lowered = self._lower_iterator_protocol_for(node)
         if lowered is not None:
             return lowered
+        if self._nditer_source(node.iter) is not None:
+            for_else_pre, for_else_post = self._lower_for_else(node)
+            return for_else_pre + self._lower_nditer_for(node) + for_else_post
         for_else_pre, for_else_post = self._lower_for_else(node)
         result = self._visit_for_inner(node)
         if not isinstance(result, list):
@@ -301,6 +305,98 @@ class LoopMixin:
         ast.fix_missing_locations(init)
         ast.fix_missing_locations(loop)
         return [self.visit(init), self.visit(loop)]
+
+    def _is_nditer_call(self, expr):
+        return (isinstance(expr, ast.Call) and isinstance(expr.func, ast.Attribute)
+                and expr.func.attr == "nditer" and isinstance(expr.func.value, ast.Name)
+                and expr.func.value.id in self.numpy_module_names)
+
+    def _nditer_source(self, expr):
+        """The `np.nditer(...)` call `expr` is, or the one a name was last
+        bound to; None otherwise."""
+        if isinstance(expr, ast.Name):
+            expr = self._assignment_call_origins.get(expr.id)
+        return expr if self._is_nditer_call(expr) else None
+
+    def _unwrap_nditer_iter(self, expr):
+        """`iter(it)` of an nditer is the iterator itself."""
+        if (isinstance(expr, ast.Call) and isinstance(expr.func, ast.Name)
+                and expr.func.id == "iter" and len(expr.args) == 1 and not expr.keywords
+                and self._nditer_source(expr.args[0]) is not None):
+            return expr.args[0]
+        return expr
+
+    def _record_nditer_with_targets(self, node):
+        """`with np.nditer(...) as it:` binds `it` to the iterator itself."""
+        for item in node.items:
+            if isinstance(item.optional_vars, ast.Name) and self._is_nditer_call(item.context_expr):
+                self._assignment_call_origins[item.optional_vars.id] = item.context_expr
+
+    def _lower_nditer_for(self, node):
+        """Lower `for x in <nditer>` to the iterator's own protocol, so the
+        converter tracks its position (`multi_index`, write-back, exhaustion):
+
+            it = np.nditer(...)              # when the loop iterates a call
+            while True:
+                it._esbmc_nditer_advance()
+                if it.finished:
+                    break
+                x = it._esbmc_nditer_item()  # x = it[0]; y = it[1] for x, y
+                <body>
+        """
+        stmts = []
+        if isinstance(node.iter, ast.Name):
+            it_name = node.iter.id
+        else:
+            self._iter_counter += 1
+            it_name = f"ESBMC_nditer_{self._iter_counter}"
+            stmts.append(
+                ast.Assign(targets=[ast.Name(id=it_name, ctx=ast.Store())], value=node.iter))
+
+        def it_ref():
+            return ast.Name(id=it_name, ctx=ast.Load())
+
+        def call(attr):
+            return ast.Call(func=ast.Attribute(value=it_ref(), attr=attr, ctx=ast.Load()),
+                            args=[],
+                            keywords=[])
+
+        if isinstance(node.target, ast.Tuple):
+            unpack = ast.Call(func=ast.Attribute(value=it_ref(),
+                                                 attr="_esbmc_nditer_unpack",
+                                                 ctx=ast.Load()),
+                              args=[ast.Constant(value=len(node.target.elts))],
+                              keywords=[])
+            binds = [ast.Expr(value=unpack)] + [
+                ast.Assign(targets=[elt],
+                           value=ast.Subscript(
+                               value=it_ref(), slice=ast.Constant(value=i), ctx=ast.Load()))
+                for i, elt in enumerate(node.target.elts)
+            ]
+        else:
+            binds = [ast.Assign(targets=[node.target], value=call("_esbmc_nditer_item"))]
+        loop = ast.While(
+            test=ast.Constant(value=True),
+            body=[
+                ast.Expr(value=call("_esbmc_nditer_advance")),
+                ast.If(test=ast.Attribute(value=it_ref(), attr="finished", ctx=ast.Load()),
+                       body=[ast.Break()],
+                       orelse=[]),
+            ] + binds + node.body,
+            orelse=[])
+        stmts.append(loop)
+        if not isinstance(node.iter, ast.Name):
+            # The iterator the loop created is freed after it; NumPy drops
+            # what it buffered and not yet wrote back.
+            stmts.append(ast.Expr(value=call("_esbmc_nditer_release")))
+        for new in stmts:
+            ast.copy_location(new, node)
+            ast.fix_missing_locations(new)
+        lowered = []
+        for new in stmts:
+            visited = self.visit(new)
+            lowered.extend(visited if isinstance(visited, list) else [visited])
+        return lowered
 
     def _constructs_iterator_class(self, expr):
         """Whether `expr` is `Cls(...)`, or a name bound only by `x = Cls(...)`
@@ -662,6 +758,32 @@ class LoopMixin:
             ast.fix_missing_locations(stmt)
         return unrolled
 
+    def _with_manager_class(self, ctx_expr):
+        """The class of this module that a `with NAME(...)` manager is: NAME
+        itself, or the class a module function NAME is annotated to return.
+        None otherwise, e.g. for a function imported from another module."""
+        if not (isinstance(ctx_expr, ast.Call) and isinstance(ctx_expr.func, ast.Name)):
+            return None
+        name = ctx_expr.func.id
+        name = getattr(self, "factory_classes", {}).get(name, name)
+        return name if name in getattr(self, "module_class_names", set()) else None
+
+    @staticmethod
+    def _scan_factory_classes(module, class_names):
+        """Per module function annotated to return a class of this module,
+        that class."""
+        factories = {}
+        for stmt in module.body:
+            if not isinstance(stmt, ast.FunctionDef) or stmt.name in class_names:
+                continue
+            ret = stmt.returns
+            if isinstance(ret, ast.Name) and ret.id in class_names:
+                factories[stmt.name] = ret.id
+            elif (isinstance(ret, ast.Constant) and isinstance(ret.value, str)
+                  and ret.value in class_names):
+                factories[stmt.name] = ret.value
+        return factories
+
     def visit_With(self, node):  # pylint: disable=too-many-locals
         """Desugar 'with EXPR as VAR: BODY' into __enter__/__exit__ calls.
 
@@ -674,6 +796,7 @@ class LoopMixin:
         Multiple items are expanded left-to-right; __exit__ is called in reverse order.
         AsyncWith is handled identically via the class-level alias below.
         """
+        self._record_nditer_with_targets(node)
         node = self.generic_visit(node)
         result = []
         exit_start = self._with_counter
@@ -683,8 +806,8 @@ class LoopMixin:
             self._with_counter += 1
             ctx_expr = item.context_expr
 
-            if isinstance(ctx_expr, ast.Call) and isinstance(ctx_expr.func, ast.Name):
-                class_name = ctx_expr.func.id
+            class_name = self._with_manager_class(ctx_expr)
+            if class_name is not None:
                 type_ann = ast.Name(id=class_name, ctx=ast.Load())
                 mgr_assign = ast.AnnAssign(
                     target=ast.Name(id=mgr_name, ctx=ast.Store()),
@@ -751,8 +874,8 @@ class LoopMixin:
         # falsy re-raises via bare `raise`.  Managers without a tracked class
         # (e.g. `open(...)`) fall back to today's unwrapped lowering.
         wrap = (hasattr(self, "_classes_with_exit") and len(node.items) > 0 and all(
-            isinstance(item.context_expr, ast.Call) and isinstance(item.context_expr.func, ast.Name)
-            and item.context_expr.func.id in self._classes_with_exit for item in node.items))
+            self._with_manager_class(item.context_expr) in self._classes_with_exit
+            for item in node.items))
 
         if wrap:
             handler_body = [
@@ -1217,6 +1340,7 @@ class LoopMixin:
             value=subscript,
             simple=1,
         )
+        user_value_assign.esbmc_synthesized = True
         self.ensure_all_locations(user_value_assign, node)
         # Propagate type so downstream visitors (e.g. _lower_tuple_sorted_pair_call)
         # can infer the scalar type of variables derived from this loop variable.
@@ -2032,6 +2156,7 @@ class LoopMixin:
                                annotation=ann,
                                value=current,
                                simple=1)
+        assign.esbmc_synthesized = True
         self.ensure_all_locations(assign, node)
         out = [assign]
         if isinstance(target, (ast.Tuple, ast.List)):
@@ -2553,6 +2678,7 @@ class LoopMixin:
             value=current_item,
             simple=1,
         )
+        target_assign.esbmc_synthesized = True
         self.ensure_all_locations(target_assign, node)
 
         # Create: index += 1
@@ -2785,6 +2911,8 @@ class LoopMixin:
             target_copy = copy.deepcopy(target_node)
             individual_assign = self._create_individual_assignment(target_copy, staged, source_node)
             self._update_variable_types_simple(target_copy, value_node)
+            if isinstance(target_copy, ast.Name):
+                self._update_name_target_assignment_metadata(target_copy.id, individual_assign)
             assignments.append(individual_assign)
 
         return assignments
@@ -2848,6 +2976,50 @@ class LoopMixin:
                     return suffix
         return None
 
+    def _is_user_nondet_generator(self, node):
+        """Whether `node` names a function the module defines once, at top level."""
+        return isinstance(node, ast.Name) and node.id in self.once_bound_names and any(
+            isinstance(stmt, ast.FunctionDef) and stmt.name == node.id
+            for stmt in self.module_statements.values())
+
+    def _is_nondet_generator(self, node):
+        return self._nondet_generator_type(node) is not None or self._is_user_nondet_generator(node)
+
+    def _nondet_list_builder(self, elem_node, resolve):
+        """The builder for a list of `elem_node`'s elements.
+
+        A user function is its own builder: the rewrite calls it once per
+        element (#8965).
+        """
+        if self._is_user_nondet_generator(elem_node):
+            return elem_node.id
+        return f"_nondet_list_{resolve(elem_node, self._NONDET_LIST_ELEM_TYPES, 'elem_type')}"
+
+    @staticmethod
+    def _nondet_builder_call(builder, max_size_node):
+        """``builder(max_size)``, or ``[builder() for _ in range(_nondet_size(max_size))]``
+        for a user function."""
+        if builder.startswith(("_nondet_list_", "_nondet_dict_")):
+            return ast.Call(func=ast.Name(id=builder, ctx=ast.Load()),
+                            args=[max_size_node],
+                            keywords=[])
+        size = ast.Call(func=ast.Name(id="_nondet_size", ctx=ast.Load()),
+                        args=[max_size_node],
+                        keywords=[])
+        return ast.ListComp(elt=ast.Call(func=ast.Name(id=builder, ctx=ast.Load()),
+                                         args=[],
+                                         keywords=[]),
+                            generators=[
+                                ast.comprehension(target=ast.Name(id="_nondet_list_index",
+                                                                  ctx=ast.Store()),
+                                                  iter=ast.Call(func=ast.Name(id="range",
+                                                                              ctx=ast.Load()),
+                                                                args=[size],
+                                                                keywords=[]),
+                                                  ifs=[],
+                                                  is_async=0)
+                            ])
+
     def _resolve_nondet_type(self, node, allowed, func_name, role):
         expected = ", ".join(f"nondet_{t}()" for t in allowed)
         type_name = self._nondet_generator_type(node)
@@ -2898,8 +3070,7 @@ class LoopMixin:
         # SV-COMP passes the generator first -- nondet_list(nondet_int),
         # nondet_dict(nondet_key, nondet_value) -- so a leading generator is an
         # element type, not a size, and the default bound stands.
-        leading_generator = bool(positional) and \
-            self._nondet_generator_type(positional[0]) is not None
+        leading_generator = bool(positional) and self._is_nondet_generator(positional[0])
 
         max_size_node = None
         if positional and not leading_generator:
@@ -2928,8 +3099,7 @@ class LoopMixin:
                               f"{len(positional)}: {', '.join(ast.unparse(a) for a in positional)}")
 
         if func_name == "nondet_list":
-            elem = resolve(slot(0, "elem_type"), self._NONDET_LIST_ELEM_TYPES, "elem_type")
-            return f"_nondet_list_{elem}", max_size_node
+            return self._nondet_list_builder(slot(0, "elem_type"), resolve), max_size_node
 
         key = resolve(slot(0, "key_type"), self._NONDET_DICT_KEY_TYPES, "key_type")
         val = resolve(slot(1, "value_type"), self._NONDET_DICT_VALUE_TYPES, "value_type")
@@ -2948,11 +3118,7 @@ class LoopMixin:
             return None
         builder, max_size_node = parsed
         self.ensure_all_locations(max_size_node, call)
-        new_call = ast.Call(
-            func=ast.Name(id=builder, ctx=ast.Load()),
-            args=[max_size_node],
-            keywords=[],
-        )
+        new_call = self._nondet_builder_call(builder, max_size_node)
         self.ensure_all_locations(new_call, call)
         ast.fix_missing_locations(new_call)
         return new_call
@@ -3160,6 +3326,35 @@ class LoopMixin:
         typed_elts = [(self._infer_constant_type(v), v) for v in dict_node.values]
         return self._unroll_het_for(node, typed_elts)
 
+    def _fixed_literal_type(self, node):
+        """Type name of a number or str expression whose type cannot vary.
+
+        A literal, a name bound once in the module to a literal, or ``+``,
+        ``-``, ``*`` and unary ``-`` over such numbers; else None.
+        """
+        if isinstance(node, ast.Constant):
+            return type(node.value).__name__ if isinstance(node.value, (int, float, str)) else None
+        if isinstance(node, ast.UnaryOp) and isinstance(node.op, (ast.UAdd, ast.USub)):
+            operand = self._fixed_literal_type(node.operand)
+            return "int" if operand == "bool" else operand if operand in ("int", "float") else None
+        if isinstance(node, ast.Name) and node.id in self.once_bound_names:
+            return self._once_bound_literal_type(node.id)
+        if isinstance(node, ast.BinOp) and isinstance(node.op, (ast.Add, ast.Sub, ast.Mult)):
+            operands = {self._fixed_literal_type(node.left), self._fixed_literal_type(node.right)}
+            if operands <= {"int", "float"}:
+                return "float" if "float" in operands else "int"
+        return None
+
+    def _once_bound_literal_type(self, name):
+        """Type of the number or str that the module binds `name` to, else None."""
+        for stmt in self.module_statements.values():
+            target = (stmt.targets[0] if isinstance(stmt, ast.Assign) and len(stmt.targets) == 1
+                      else stmt.target if isinstance(stmt, ast.AnnAssign) else None)
+            if isinstance(target, ast.Name) and target.id == name and isinstance(
+                    stmt.value, ast.Constant):
+                return self._fixed_literal_type(stmt.value)
+        return None
+
     def _infer_dict_key_type(self, key_node):
         """Infer key type from dict literal's first key"""
         if isinstance(key_node, ast.Constant):
@@ -3167,6 +3362,8 @@ class LoopMixin:
                 return "str"
             if isinstance(key_node.value, int):
                 return "int"
+        if self._fixed_literal_type(key_node) in ("int", "str"):
+            return self._fixed_literal_type(key_node)
         if isinstance(key_node, ast.Tuple):
             return "tuple"
         return "Any"
@@ -3180,7 +3377,8 @@ class LoopMixin:
         if isinstance(value_node, ast.Constant):
             const_type = type(value_node.value).__name__
             return ast.Name(id=const_type, ctx=ast.Load())
-        return None
+        fixed = self._fixed_literal_type(value_node)
+        return ast.Name(id=fixed, ctx=ast.Load()) if fixed else None
 
     def _create_subscript_annotation(self, subscript_node):
         """Extract annotation from subscript operation (e.g., d["key"])"""

@@ -16,6 +16,8 @@
 //
 // As a result, this particular class is due for some serious maintenance.
 
+#include <functional>
+#include <map>
 #include <set>
 #include <solvers/smt/smt_solver.h>
 #include <irep2/irep2.h>
@@ -144,6 +146,12 @@ public:
     smt_astt init_val,
     unsigned long domain_width,
     smt_sortt arr_sort);
+  /** Gives the initial value of an array at an index, as a function of that
+   *  index. */
+  typedef std::function<smt_astt(const expr2tc &idx)> initial_readert;
+  /** Makes @p reader the source of @p array's initial value at each index
+   *  it is accessed at, in place of a free variable. */
+  void set_initial_reader(smt_astt array, initial_readert reader);
   unsigned int new_array_id();
   void convert_array_assign(const array_ast *src, smt_astt sym);
   smt_astt mk_select(
@@ -228,7 +236,8 @@ public:
     unsigned int array_update_no,
     const smt_sort *subtype,
     unsigned int start_point,
-    smt_astt init_val = nullptr);
+    smt_astt init_val = nullptr,
+    const initial_readert *reader = nullptr);
   void add_initial_ackerman_constraints(
     const ast_vect &vals,
     const index_map_containert &idx_map,
@@ -416,6 +425,10 @@ public:
     array_of_val_containert;
 
   array_of_val_containert array_of_vals;
+
+  // Map between base array identifiers and the readers that give their
+  // initial values, from set_initial_reader.
+  std::map<unsigned int, initial_readert> initial_readers;
 
   // Index map, between index expressions, and where the value for that index
   // actually sits in ast vectors.

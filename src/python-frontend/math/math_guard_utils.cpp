@@ -148,13 +148,13 @@ namespace math_guard_utils
 const std::unordered_set<std::string> &math_wrapper_function_names()
 {
   static const std::unordered_set<std::string> names = {
-    "__ESBMC_sin",   "__ESBMC_cos",      "__ESBMC_sqrt", "__ESBMC_exp",
-    "__ESBMC_log",   "__ESBMC_acos",     "__ESBMC_atan", "__ESBMC_atan2",
-    "__ESBMC_log2",  "__ESBMC_pow",      "__ESBMC_fabs", "__ESBMC_trunc",
-    "__ESBMC_fmod",  "__ESBMC_copysign", "__ESBMC_tan",  "__ESBMC_asin",
-    "__ESBMC_sinh",  "__ESBMC_cosh",     "__ESBMC_tanh", "__ESBMC_log10",
-    "__ESBMC_expm1", "__ESBMC_log1p",    "__ESBMC_exp2", "__ESBMC_asinh",
-    "__ESBMC_acosh", "__ESBMC_atanh",    "__ESBMC_hypot"};
+    "__ESBMC_sin",   "__ESBMC_cos",      "__ESBMC_sqrt",  "__ESBMC_exp",
+    "__ESBMC_log",   "__ESBMC_acos",     "__ESBMC_atan",  "__ESBMC_atan2",
+    "__ESBMC_log2",  "__ESBMC_pow",      "__ESBMC_fabs",  "__ESBMC_trunc",
+    "__ESBMC_fmod",  "__ESBMC_copysign", "__ESBMC_tan",   "__ESBMC_asin",
+    "__ESBMC_sinh",  "__ESBMC_cosh",     "__ESBMC_tanh",  "__ESBMC_log10",
+    "__ESBMC_expm1", "__ESBMC_log1p",    "__ESBMC_exp2",  "__ESBMC_asinh",
+    "__ESBMC_acosh", "__ESBMC_atanh",    "__ESBMC_hypot", "__ESBMC_ldexp"};
   return names;
 }
 

@@ -1,0 +1,5 @@
+CORE
+main.c
+--unwind 3 --no-unwinding-assertions --program-only --no-slice
+\bt\?1!0&0#\d+ == \{
+\A(?![\s\S]*\bt\?(?!1!)\d)

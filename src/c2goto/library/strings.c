@@ -1,5 +1,9 @@
 #if defined(__unix__) || defined(__APPLE__) || defined(__MACH__)
 #  include <strings.h>
+#  include <locale.h>
+#  if defined(__APPLE__)
+#    include <xlocale.h>
+#  endif
 #endif
 #include <ctype.h>
 #include <stddef.h>
@@ -81,3 +85,18 @@ int strcasecmp(const char *s1, const char *s2)
 __ESBMC_HIDE:;
   return strncasecmp(s1, s2, (size_t)-1);
 }
+
+#if defined(__unix__) || defined(__APPLE__) || defined(__MACH__)
+/* Only the C locale is modelled, as for tolower. */
+int strncasecmp_l(const char *s1, const char *s2, size_t n, locale_t loc)
+{
+__ESBMC_HIDE:;
+  return strncasecmp(s1, s2, n);
+}
+
+int strcasecmp_l(const char *s1, const char *s2, locale_t loc)
+{
+__ESBMC_HIDE:;
+  return strncasecmp(s1, s2, (size_t)-1);
+}
+#endif

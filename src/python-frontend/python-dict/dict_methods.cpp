@@ -99,7 +99,7 @@ exprt python_dict_handler::handle_dict_get(
   // Get element info for the key
   python_list list_handler(converter_, call_node);
   list_elem_info key_info =
-    list_handler.get_list_element_info(call_node, key_expr);
+    list_handler.get_erased_key_info(call_node, key_expr);
 
   // Call try_find_index (returns SIZE_MAX if not found)
   code_function_callt try_find_call;
@@ -197,26 +197,11 @@ exprt python_dict_handler::handle_dict_get(
   }
   else
   {
-    namespacet ns(symbol_table_);
-    typet underlying = result_type;
-    if (underlying.id() == "symbol")
-      underlying = ns.follow(underlying);
-    if (underlying.is_struct())
-    {
-      // A struct value (e.g. a tuple) is stored by address; casting the
-      // void* payload directly to the struct type builds an ill-formed
-      // scalar typecast that aborts the value-set walker. Cast to a struct
-      // pointer and dereference instead (mirrors handle_dict_subscript).
-      exprt value_as_struct_ptr =
-        build_typecast(obj_value, pointer_typet(underlying));
-      retrieved_value = build_dereference(value_as_struct_ptr, underlying);
-      retrieved_value.type() = underlying;
-    }
-    else
-    {
-      exprt value_as_typed = build_typecast(obj_value, result_type);
-      retrieved_value = value_as_typed;
-    }
+    // Casting the void* payload directly to a struct type builds an
+    // ill-formed scalar typecast that aborts the value-set walker.
+    retrieved_value = read_struct_value(obj_value, result_type);
+    if (retrieved_value.is_nil())
+      retrieved_value = build_typecast(obj_value, result_type);
   }
 
   exprt then_value =
@@ -454,26 +439,11 @@ exprt python_dict_handler::handle_dict_setdefault(
   }
   else
   {
-    namespacet ns(symbol_table_);
-    typet underlying = result_type;
-    if (underlying.id() == "symbol")
-      underlying = ns.follow(underlying);
-    if (underlying.is_struct())
-    {
-      // A struct value (e.g. a tuple) is stored by address; casting the
-      // void* payload directly to the struct type builds an ill-formed
-      // scalar typecast that aborts the value-set walker. Cast to a struct
-      // pointer and dereference instead (mirrors handle_dict_subscript).
-      exprt value_as_struct_ptr =
-        build_typecast(obj_value, pointer_typet(underlying));
-      retrieved_value = build_dereference(value_as_struct_ptr, underlying);
-      retrieved_value.type() = underlying;
-    }
-    else
-    {
-      exprt value_as_typed = build_typecast(obj_value, result_type);
-      retrieved_value = value_as_typed;
-    }
+    // Casting the void* payload directly to a struct type builds an
+    // ill-formed scalar typecast that aborts the value-set walker.
+    retrieved_value = read_struct_value(obj_value, result_type);
+    if (retrieved_value.is_nil())
+      retrieved_value = build_typecast(obj_value, result_type);
   }
 
   code_assignt value_assign(build_symbol(result_var), retrieved_value);
@@ -681,8 +651,10 @@ bool python_dict_handler::is_value_returning_method(
 
 // Retrieve a typed value from a PyObj's void* value field.
 // Used by both handle_dict_pop and handle_dict_popitem.
-static exprt
-retrieve_list_value(const exprt &obj_value, const typet &result_type)
+static exprt retrieve_list_value(
+  python_dict_handler &handler,
+  const exprt &obj_value,
+  const typet &result_type)
 {
   if (result_type.is_pointer() && result_type.subtype() == char_type())
     return build_typecast(obj_value, gen_pointer_type(char_type()));
@@ -695,7 +667,9 @@ retrieve_list_value(const exprt &obj_value, const typet &result_type)
   if (result_type.is_bool())
     return build_dereference(
       build_typecast(obj_value, pointer_typet(bool_type())), bool_type());
-  return build_typecast(obj_value, result_type);
+  const exprt struct_value = handler.read_struct_value(obj_value, result_type);
+  return struct_value.is_nil() ? build_typecast(obj_value, result_type)
+                               : struct_value;
 }
 
 exprt python_dict_handler::handle_dict_pop(
@@ -820,7 +794,7 @@ exprt python_dict_handler::handle_dict_pop(
     "value",
     pointer_typet(empty_typet()));
 
-  exprt retrieved_value = retrieve_list_value(obj_value, result_type);
+  exprt retrieved_value = retrieve_list_value(*this, obj_value, result_type);
 
   code_assignt value_assign(build_symbol(result_var), retrieved_value);
   value_assign.location() = location;
@@ -1102,7 +1076,7 @@ exprt python_dict_handler::handle_dict_popitem(
     exprt key_field =
       build_member(build_symbol(result_var), "element_0", key_type);
     code_assignt key_assign(
-      key_field, retrieve_list_value(key_obj_value, key_type));
+      key_field, retrieve_list_value(*this, key_obj_value, key_type));
     key_assign.location() = location;
     nonempty_block.copy_to_operands(key_assign);
 
@@ -1131,7 +1105,7 @@ exprt python_dict_handler::handle_dict_popitem(
     exprt val_field =
       build_member(build_symbol(result_var), "element_1", val_type);
     code_assignt val_assign(
-      val_field, retrieve_list_value(val_obj_value, val_type));
+      val_field, retrieve_list_value(*this, val_obj_value, val_type));
     val_assign.location() = location;
     nonempty_block.copy_to_operands(val_assign);
 

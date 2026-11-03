@@ -51,7 +51,7 @@ void python_class::parse(const json &class_def)
     {
       std::string base_name = json_utils::dotted_name(b);
       if (!base_name.empty())
-        bases_.insert(base_name);
+        bases_.push_back(base_name);
     }
   }
 }

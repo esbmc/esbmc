@@ -1,0 +1,4 @@
+CORE
+main.py
+
+^ERROR: .*main\.py:13:8: unsupported: this call may be 'f' or 'g', which return different types \(str and int\)$

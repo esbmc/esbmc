@@ -1,0 +1,7 @@
+regression/python/async_def_await
+regression/python/async_def_await_fail
+regression/python/async_def_await_other_refused
+regression/python/async_def_coroutine_value_refused
+regression/python/async_def_decorated_refused
+regression/python/async_def_unawaited
+regression/python/async_def_unawaited_args_fail
