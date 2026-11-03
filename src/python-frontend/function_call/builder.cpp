@@ -831,6 +831,39 @@ static std::set<std::string> recorded_element_classes(
   return classes;
 }
 
+/// The module-level statements that can run before @p call. A call in a
+/// top-level statement runs once, so a later statement cannot change the list
+/// it reads; that statement is kept whole, since a loop in it may run again. A
+/// def may run at any time, so each is kept whole, and a call inside one keeps
+/// every statement.
+static nlohmann::json
+statements_before_call(const nlohmann::json &body, const nlohmann::json &call)
+{
+  const auto is_def = [](const nlohmann::json &stmt) {
+    const std::string kind = stmt.value("_type", "");
+    return kind == "FunctionDef" || kind == "AsyncFunctionDef" ||
+           kind == "ClassDef";
+  };
+  const auto number = [](const nlohmann::json &stmt, const char *key) {
+    return stmt.contains(key) && stmt[key].is_number() ? stmt[key].get<int>()
+                                                       : 0;
+  };
+  const int line = number(call, "lineno");
+  bool in_top_level_statement = false;
+  for (const auto &stmt : body)
+    if (
+      !is_def(stmt) && number(stmt, "lineno") <= line &&
+      line <= number(stmt, "end_lineno"))
+      in_top_level_statement = true;
+  if (!in_top_level_statement)
+    return body;
+  nlohmann::json before = nlohmann::json::array();
+  for (const auto &stmt : body)
+    if (is_def(stmt) || number(stmt, "lineno") <= line)
+      before.push_back(stmt);
+  return before;
+}
+
 std::string function_call_builder::subscript_receiver_class(
   const nlohmann::json &receiver) const
 {
@@ -870,7 +903,8 @@ std::string function_call_builder::subscript_receiver_class(
   // a parameter annotated with that class), no item stores and no aliases.
   const std::string &cls = *classes.begin();
   list_name_uses uses;
-  scan_list_uses(converter_.ast()["body"], name, uses);
+  scan_list_uses(
+    statements_before_call(converter_.ast()["body"], call_), name, uses);
   const bool tracked =
     !uses.escapes &&
     ((uses.bindings == 1 && uses.params.empty()) ||
@@ -1181,7 +1215,10 @@ symbol_id function_call_builder::build_function_id() const
           if (base_type.is_pointer())
             base_type = base_type.subtype();
           if (base_type.id() == "symbol")
+          {
+            converter_.build_forward_class(base_type);
             base_type = converter_.ns.follow(base_type);
+          }
 
           // Look up the member in the struct
           if (base_type.is_struct())
@@ -1208,6 +1245,8 @@ symbol_id function_call_builder::build_function_id() const
 
       if (!obj_type.id().empty())
       {
+        converter_.build_forward_class(obj_type);
+
         // If the resolved type is a list (e.g. class-level mutable_attr = []),
         // map directly to the "list" builtin name.
         if (is_pylist_object_type(obj_type, converter_.ns))

@@ -1,5 +1,6 @@
 #include "irep2/irep2_expr.h"
 #include <goto-symex/witness/witnesses.h>
+#include <util/base/filesystem.h>
 #include <ac_config.h>
 #include <boost/property_tree/ptree.hpp>
 #include <fstream>
@@ -1300,8 +1301,10 @@ static expr2tc zero_fill_aggregate(
 }
 
 // Shared nondet collection logic (used by both TestComp and CTest)
-std::vector<collected_nondet_value>
-collect_nondet_values(const symex_target_equationt &target, smt_convt &smt_conv)
+std::vector<collected_nondet_value> collect_nondet_values(
+  const symex_target_equationt &target,
+  smt_convt &smt_conv,
+  bool harness_inputs_only)
 {
   std::vector<collected_nondet_value> results;
   std::unordered_set<std::string> seen_nondets;
@@ -1321,6 +1324,15 @@ collect_nondet_values(const symex_target_equationt &target, smt_convt &smt_conv)
       if (!has_prefix(sym.thename.as_string(), "nondet$"))
         continue;
 
+      // Nondet initialisation of an uninitialised local (inserted by
+      // mark_decl_as_non_det) is not a program input: the test harness only
+      // feeds values to __VERIFIER_nondet_*() calls, so emitting it would
+      // shift every following input.
+      if (
+        harness_inputs_only &&
+        SSA_step.source.pc->location.get_bool("#decl_nondet"))
+        continue;
+
       // Skip system library nondets (stdin, stdout, stderr, etc.)
       // These are from /usr/include/ or other system paths
       std::string file_path = SSA_step.source.pc->location.file().as_string();
@@ -1330,6 +1342,11 @@ collect_nondet_values(const symex_target_equationt &target, smt_convt &smt_conv)
       {
         continue;
       }
+
+      // Likewise for nondets from ESBMC's own library and operational
+      // models, e.g. the uninitialised `errno` global in libc/library/stdlib.c.
+      if (file_operations::is_bundled_source(file_path))
+        continue;
 
       // Deduplicate by symbol name
       if (seen_nondets.count(sym.thename.as_string()))
@@ -1434,7 +1451,7 @@ void generate_testcase(
             << "\n";
 
   // Use the SHARED collection logic
-  auto collected_values = collect_nondet_values(target, smt_conv);
+  auto collected_values = collect_nondet_values(target, smt_conv, true);
 
   // Output collected values to XML
   for (const auto &val : collected_values)
