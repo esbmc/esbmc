@@ -620,7 +620,11 @@ private:
   /// The callee's symbol. An instance method of no known class has none: it
   /// must not bind to a module function of the same name (#9658).
   const symbolt *find_callee_symbol(const std::string &func_symbol_id);
+  bool receiver_is_literal() const;
   void reject_unresolved_user_method(const std::string &method_name) const;
+  void flag_unresolved_method_call(
+    const std::string &method_name,
+    const locationt &location) const;
   bool is_list_method_call() const;
   exprt handle_list_method() const;
   exprt handle_list_append() const;
