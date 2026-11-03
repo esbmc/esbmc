@@ -221,7 +221,7 @@ class RunCommandTest(unittest.TestCase):
             return code, json.load(fp)
 
     def test_a_passing_shard_reports_no_problem(self):
-        code, report = self.run_executor("native-1")
+        code, report = self.run_executor("c-and-tools")
         self.assertEqual((code, report["problems"]), (0, []))
         self.assertEqual(report["exit_code"], 0)
         self.assertIn("seconds", report["metrics"])
