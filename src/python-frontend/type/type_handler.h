@@ -36,6 +36,22 @@ inline const struct_typet &get_complex_struct_type()
   return instance;
 }
 
+// complex64: two float32 components. Its readers go through complex_part, which
+// widens them, so the handlers over complex stay in double.
+inline const struct_typet &get_complex64_struct_type()
+{
+  static const struct_typet instance = []() {
+    struct_typet t;
+    t.tag("complex64");
+    t.components().push_back(
+      struct_typet::componentt("real", "real", float_type()));
+    t.components().push_back(
+      struct_typet::componentt("imag", "imag", float_type()));
+    return t;
+  }();
+  return instance;
+}
+
 inline bool is_complex_type(const typet &type)
 {
   if (type.id() == "symbol")
@@ -46,7 +62,34 @@ inline bool is_complex_type(const typet &type)
 
   const struct_typet &struct_type = to_struct_type(type);
   const std::string tag = struct_type.tag().as_string();
-  return tag == "complex" || tag == "tag-complex";
+  return tag == "complex" || tag == "tag-complex" || tag == "complex64";
+}
+
+inline bool is_complex64_type(const typet &type)
+{
+  return type.is_struct() && to_struct_type(type).tag() == "complex64";
+}
+
+/// A component of the complex value @p value, as a double.
+inline expr2tc complex_part(const expr2tc &value, const irep_idt &component)
+{
+  const type2tc wide = migrate_type(cached_double_type());
+  if (
+    is_struct_type(value->type) &&
+    to_struct_type(value->type).name.as_string().find("complex64") !=
+      std::string::npos)
+    return typecast2tc(
+      wide, member2tc(migrate_type(build_float_type(32)), value, component));
+  return member2tc(wide, value, component);
+}
+
+inline exprt complex_part(const exprt &value, const irep_idt &component)
+{
+  if (is_complex64_type(value.type()))
+    return typecast_exprt(
+      member_exprt(value, component, build_float_type(32)),
+      cached_double_type());
+  return member_exprt(value, component, cached_double_type());
 }
 
 inline exprt make_complex(const exprt &real, const exprt &imag)
@@ -68,6 +111,23 @@ inline exprt make_complex(const exprt &real, const exprt &imag)
   std::vector<expr2tc> members{to_double2(real), to_double2(imag)};
   return migrate_expr_back(
     constant_struct2tc(migrate_type(get_complex_struct_type()), members));
+}
+
+/// @p value, real or complex, stored as an element of the complex type @p type.
+inline exprt
+complex_as_element(const exprt &real, const exprt &imag, const typet &type)
+{
+  const type2tc dt = migrate_type(cached_double_type());
+  const auto component = [&](const exprt &part) -> expr2tc {
+    expr2tc value;
+    migrate_expr(part, value);
+    if (!is_complex64_type(type))
+      return part.type() == cached_double_type() ? value
+                                                 : typecast2tc(dt, value);
+    return typecast2tc(migrate_type(build_float_type(32)), value);
+  };
+  std::vector<expr2tc> members{component(real), component(imag)};
+  return migrate_expr_back(constant_struct2tc(migrate_type(type), members));
 }
 
 inline exprt promote_to_complex(const exprt &value)
@@ -102,10 +162,8 @@ inline exprt complex_to_bool_expr(const exprt &complex_expr)
   expr2tc zero2;
   migrate_expr(from_double(0.0, dt), zero2);
 
-  expr2tc real_nz =
-    not2tc(equality2tc(member2tc(dt2, complex2, "real"), zero2));
-  expr2tc imag_nz =
-    not2tc(equality2tc(member2tc(dt2, complex2, "imag"), zero2));
+  expr2tc real_nz = not2tc(equality2tc(complex_part(complex2, "real"), zero2));
+  expr2tc imag_nz = not2tc(equality2tc(complex_part(complex2, "imag"), zero2));
   return migrate_expr_back(or2tc(real_nz, imag_nz));
 }
 

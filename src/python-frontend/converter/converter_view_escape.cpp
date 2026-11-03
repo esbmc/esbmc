@@ -224,7 +224,8 @@ bool is_shape_query(const nlohmann::json &node)
     return false;
   if (node.value("_type", "") == "Attribute")
   {
-    static const std::set<std::string> attrs = {"shape", "ndim", "size"};
+    static const std::set<std::string> attrs = {
+      "shape", "ndim", "size", "itemsize", "nbytes", "dtype"};
     return attrs.count(node.value("attr", "")) != 0 && is_name(node["value"]);
   }
   return is_named_call(node) && node["func"]["id"] == "len" &&
