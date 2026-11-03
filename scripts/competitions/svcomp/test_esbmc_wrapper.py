@@ -339,10 +339,10 @@ class IntegerEncodingConfirmationTest(unittest.TestCase):
         self.assertEqual(verdict, "Unknown")
         self.assertEqual(calls[1][1], wrapper.IR_RERUN_TIMEOUT)
 
-    def test_a_first_run_past_the_threshold_keeps_false_without_a_rerun(self):
+    def test_a_first_run_past_the_threshold_is_unknown_without_a_rerun(self):
         elapsed = wrapper.TOTAL_BUDGET - wrapper.MIN_RERUN_BUDGET + 1
         verdict, calls = self.verify(wrapper.Property.py_assertion, PY_ASSERTION, self.PASSED, elapsed=elapsed)
-        self.assertEqual(verdict, "FALSE")
+        self.assertEqual(verdict, "Unknown")
         self.assertEqual(len(calls), 1)
 
     def test_a_first_run_at_the_threshold_is_still_rerun(self):

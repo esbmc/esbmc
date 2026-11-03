@@ -1,0 +1,4 @@
+CORE
+main.py
+--incremental-bmc
+^ERROR: TypeError: a numpy string array of non-ASCII or NUL characters is not supported$
