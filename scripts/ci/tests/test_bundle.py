@@ -24,7 +24,7 @@ def tool_project(tool_mode="OWNER_READ OWNER_WRITE OWNER_EXECUTE"):
     tests = pr_suite()
     for test in tests:
         if "regression" in test.get("labels", []):
-            test["command"] = [tool, "--flag"]
+            test["command"] = [tool, f"--tool={tool}"]
     tests.append({"name": "unit-huge", "command": [os.path.join(build, "unit", "huge")]})
     extra = [
         f'file(WRITE "{tool}" "#!/bin/sh\\nexit 0\\n")',

@@ -86,6 +86,19 @@ def cmd_run(args):
     return 1 if report["problems"] else 0
 
 
+def cmd_preflight(args):
+    """Refuse to run a shard whose bundle, selection or runtime is not the producer's."""
+    plan = _read_json(args.plan)
+    if plan["digest"] != args.plan_digest or ci_selection.plan_digest(plan) != plan["digest"]:
+        raise ci_selection.SelectionError(
+            f"plan {plan['digest']} is not the producer's {args.plan_digest}")
+    ci_selection.check_restored(plan, args.build_dir, args.executor)
+    ci_results.check_runtime(plan, _read_json(args.probes), ci_results.load_testing_tool())
+    print(f"{args.executor}: {len(_expected(plan, args.executor))} tests match the producer; "
+          f"{_tool_version('ctest')}")
+    return 0
+
+
 def cmd_measure(args):
     command = args.argv[1:] if args.argv[:1] == ["--"] else args.argv
     exit_code, record = ci_metrics.measure(command)
@@ -154,6 +167,8 @@ def parser():
     bundle.add_argument("--github-output")
     _add(commands, "restore", cmd_restore, "check and extract the bundle", "tar", "sha256",
          "workspace")
+    _add(commands, "preflight", cmd_preflight, "check a restored bundle before a shard runs",
+         "build-dir", "plan", "plan-digest", "probes", "executor")
     return top
 
 
@@ -161,7 +176,8 @@ def main(argv=None):
     args = parser().parse_args(argv)
     try:
         return args.run(args)
-    except (ci_selection.SelectionError, ci_bundle.BundleError) as error:
+    except (ci_selection.SelectionError, ci_bundle.BundleError,
+            ci_results.RuntimeMismatch) as error:
         print(f"::error::{error}")
         return 1
 

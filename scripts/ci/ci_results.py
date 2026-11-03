@@ -8,6 +8,7 @@ counts a test whose executable is missing as skipped.
 import hashlib
 import importlib.util
 import os
+import shutil
 import xml.etree.ElementTree as ET
 
 PASSED, SKIPPED, FAILED, INVALID = "passed", "skipped", "failed", "invalid"
@@ -120,6 +121,26 @@ def probe_capabilities(plan, harness):
         }
         for tool in sorted(t for t in tools if t)
     }
+
+
+class RuntimeMismatch(Exception):
+    """The runner cannot run the tests as the producer's build expects."""
+
+
+def check_runtime(plan, producer_probes, harness):
+    """This runner must answer the harness's capability questions as the producer did.
+
+    A difference would turn a test into a new skip, or a skip into a failure,
+    for a reason that has nothing to do with the change under test.
+    """
+    here = probe_capabilities(plan, harness)
+    if here != producer_probes:
+        raise RuntimeMismatch(f"dynamic capabilities differ: producer {producer_probes}, "
+                              f"this runner {here}")
+    needs_z3 = any("z3_binary" in harness_arguments(r["command"]).get("capabilities", "")
+                   for r in plan["tests"].values())
+    if needs_z3 and not shutil.which("z3"):
+        raise RuntimeMismatch("the build granted z3_binary, but no z3 is on PATH")
 
 
 def evaluate_run(expected, junit_results, exit_code, plan, probes, harness):

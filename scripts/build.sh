@@ -438,7 +438,7 @@ install_gmp_linux() {
 
 install_python_deps_linux() {
   log "Installing Python dependencies"
-  python3 -m pip install --user --break-system-packages meson mypy pyparsing toml tomli pytest hypothesis
+  "$ROOT_DIR/scripts/ci/linux-runtime.sh" python
   meson --version
 }
 
