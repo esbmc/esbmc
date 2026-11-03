@@ -54,6 +54,7 @@ class PreprocessorStateMixin:
         self.exported_type_specs = {}
         self.listcomp_counter = 0
         self.comprehension_targets = set()
+        self.outer_stored_names = set()
         self.functools_reduce_names = set()
         self.functools_module_names = set()
         self.minmax_key_counter = 0

@@ -661,6 +661,24 @@ BigInt access_alignment(const BigInt &bytes)
   return bytes == 8 && abi != 0 && abi < 8 ? BigInt(abi) : bytes;
 }
 
+bool raises_record_alignment(const struct_union_typet::componentt &c)
+{
+  // Padding members carry no alignment demand of their own.
+  return !c.get_is_padding() && (!c.get_is_unnamed_bitfield() ||
+                                 config.ansi_c.unnamed_bitfield_aligns);
+}
+
+// The max over members (should really be the smallest common denominator).
+static BigInt
+max_member_alignment(const struct_union_typet &type, const namespacet &ns)
+{
+  BigInt result = 1;
+  for (const auto &c : type.components())
+    if (raises_record_alignment(c))
+      result = std::max(result, alignment(c.type(), ns));
+  return result;
+}
+
 BigInt alignment(const typet &type, const namespacet &ns)
 {
   // we need to consider a number of different cases:
@@ -698,14 +716,7 @@ BigInt alignment(const typet &type, const namespacet &ns)
   if (aligns_as_subtype(type))
     result = alignment(type.subtype(), ns);
   else if (type.id() == typet::t_struct || type.id() == typet::t_union)
-  {
-    result = 1;
-
-    // get the max
-    // (should really be the smallest common denominator)
-    for (const auto &c : to_struct_union_type(type).components())
-      result = std::max(result, alignment(c.type(), ns));
-  }
+    result = max_member_alignment(to_struct_union_type(type), ns);
   else if (type.get_bool("#bitfield"))
   {
     // we align these according to the 'underlying type'

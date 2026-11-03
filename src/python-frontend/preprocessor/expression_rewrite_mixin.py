@@ -569,9 +569,26 @@ for {i} in range(0, len({seq})):
         if node.value is not None:
             dd_inits, node.value = self._lower_defaultdict_reads_in_expr(node.value, node)
             prefix = dd_inits + prefix
+        prefix = prefix + self._name_returned_sorted(node)
         if prefix:
             return prefix + [node]
         return node
+
+    def _name_returned_sorted(self, node):
+        """Bind `return sorted(x)` to a name first: the elements of a returned name's
+        value keep their types where those of a returned call do not (#9736)."""
+        value = node.value
+        if not (isinstance(value, ast.Call) and isinstance(value.func, ast.Name)
+                and value.func.id == "sorted"):
+            return []
+        name = f"ESBMC_sorted_ret_{self._next_unpack_tmp_id()}"
+        assign = ast.Assign(targets=[ast.Name(id=name, ctx=ast.Store())], value=value)
+        ast.copy_location(assign, node)
+        ast.copy_location(assign.targets[0], node)
+        node.value = ast.Name(id=name, ctx=ast.Load())
+        ast.copy_location(node.value, node)
+        ast.fix_missing_locations(assign)
+        return [assign]
 
     def visit_Attribute(self, node):
         node = self.generic_visit(node)
@@ -865,4 +882,33 @@ for {i} in range(0, len({seq})):
 
     def visit_Compare(self, node):
         node = self.generic_visit(node)
+        return node
+
+    @staticmethod
+    def _literal_list_truth(node):
+        """Whether a list literal of constants is truthy, or None for any other operand."""
+        if isinstance(node, ast.List) and all(isinstance(e, ast.Constant) for e in node.elts):
+            return bool(node.elts)
+        return None
+
+    def visit_BoolOp(self, node):
+        """Fold the operands decided by a list literal on the left: `[1] and x` is `x`,
+        `[] and x` is `[]`, `[1] or x` is `[1]` and `[] or x` is `x`, so the result has the
+        type of the operand that is kept."""
+        node = self.generic_visit(node)
+        is_and = isinstance(node.op, ast.And)
+        values = list(node.values)
+        while len(values) > 1:
+            truth = self._literal_list_truth(values[0])
+            if truth is None:
+                break
+            if truth == is_and:
+                values = values[1:]
+            else:
+                values = values[:1]
+        if len(values) == len(node.values):
+            return node
+        if len(values) == 1:
+            return values[0]
+        node.values = values
         return node

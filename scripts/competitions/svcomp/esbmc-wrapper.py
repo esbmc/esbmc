@@ -532,11 +532,12 @@ MIN_RERUN_BUDGET = 30
 def confirmed_by_integer_encoding(esbmc_command_line, the_output, prop, elapsed):
   """Does a --ir re-run violate the same property at the same file and line?
 
-  A first run that leaves too little of the budget keeps its FALSE unchecked.
+  A first run that leaves too little of the budget for the re-run is not
+  confirmed.
   """
   budget = min(IR_RERUN_TIMEOUT, TOTAL_BUDGET - elapsed)
   if budget < MIN_RERUN_BUDGET:
-    return True
+    return False
   site = violation_site(the_output)
   if site is None:
     return False
@@ -545,6 +546,9 @@ def confirmed_by_integer_encoding(esbmc_command_line, the_output, prop, elapsed)
 
 
 def verify(strat, prop, arch, benchmark, concurrency, dargs, esbmc_ci, witness_path, validate_mode):
+  if witness_path and validate_mode == "violation":
+    strat = "incr"
+
   esbmc_command_line = get_command_line(strat, prop, arch, benchmark, concurrency, dargs, esbmc_ci, validate=bool(witness_path))
 
   if witness_path:
