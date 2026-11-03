@@ -74,6 +74,9 @@ void goto_convertt::declare_skipped_locals(
     {
       code_declt decl(stack[k].op0());
       decl.location() = location;
+      // mark_decl_as_non_det must give it a nondet value even when the
+      // symbol has an initializer: the jump bypasses that initializer.
+      decl.location().set("#skipped_init", true);
       copy(decl, DECL, dest);
     }
 }
