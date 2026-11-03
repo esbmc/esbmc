@@ -56,11 +56,11 @@ def write_case(suite, name, mode, requires=()):
         fp.write("\n".join(body) + "\n")
 
 
-def harness_command(exit_code, suite, name, modes=("CORE", ), capabilities="", tool="esbmc"):
+def harness_command(exit_code, suite, name, capabilities="", tool="esbmc"):
     """A command shaped like add_esbmc_regression_test's, exiting with `exit_code`."""
     return [
         "/bin/sh", "-c", f"exit {exit_code}", "--", f"--tool={tool}", f"--regression={suite}",
-        "--modes", *modes, f"--file={name}", f"--capabilities={capabilities}"
+        "--modes", "CORE", f"--file={name}", f"--capabilities={capabilities}"
     ]
 
 

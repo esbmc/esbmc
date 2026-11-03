@@ -10,6 +10,7 @@ import ci_selection
 from ci_results import FAILED, INVALID, PASSED, SKIPPED
 
 HARNESS = ci_results.load_testing_tool()
+NO_CONTEXT = ci_results.RunContext({}, {}, HARNESS)
 
 
 def run_ctest(build, junit):
@@ -97,8 +98,8 @@ class SkipAndRunTest(unittest.TestCase):
             },
         }
         expected = [t["name"] for t in tests]
-        return ci_results.evaluate_run(expected, ci_results.read_junit(junit), exit_code, plan,
-                                       probes or {}, HARNESS)
+        return ci_results.evaluate_run(expected, ci_results.read_junit(junit), exit_code,
+                                       ci_results.RunContext(plan, probes or {}, HARNESS))
 
     def test_skips_the_harness_explains_pass(self):
         self.assertEqual(self.evaluate([self.case("thorough"), self.case("needs_z3")]), [])
@@ -145,12 +146,12 @@ class SkipAndRunTest(unittest.TestCase):
         self.assertTrue(any("failed" in p for p in problems), problems)
 
     def test_a_missing_result_fails(self):
-        problems = ci_results.evaluate_run(["a", "b"], {"a": (PASSED, "")}, 0, {}, {}, HARNESS)
+        problems = ci_results.evaluate_run(["a", "b"], {"a": (PASSED, "")}, 0, NO_CONTEXT)
         self.assertEqual(problems, ["1 selected tests have no JUnit result: ['b']"])
 
     def test_an_unselected_result_fails(self):
         results = {"a": (PASSED, ""), "z": (PASSED, "")}
-        problems = ci_results.evaluate_run(["a"], results, 0, {}, {}, HARNESS)
+        problems = ci_results.evaluate_run(["a"], results, 0, NO_CONTEXT)
         self.assertEqual(problems, ["1 JUnit results were not selected: ['z']"])
 
 
@@ -159,13 +160,13 @@ class ReportTest(unittest.TestCase):
     def test_missing_and_truncated_junit_fail(self):
         plan = {"digest": "d", "tests": {}}
         with tempfile.TemporaryDirectory() as tmp:
-            absent = ci_results.run_report("native-1", ["a"], os.path.join(tmp, "x.xml"), 0, plan,
-                                           {}, HARNESS)
+            context = ci_results.RunContext(plan, {}, HARNESS)
+            absent = ci_results.run_report("cpp", ["a"], os.path.join(tmp, "x.xml"), 0, context)
             self.assertEqual(absent["problems"], ["no JUnit file"])
             truncated = os.path.join(tmp, "t.xml")
             with open(truncated, "w", encoding="utf-8") as fp:
                 fp.write('<testsuite><testcase name="a" status="run">')
-            report = ci_results.run_report("native-1", ["a"], truncated, 0, plan, {}, HARNESS)
+            report = ci_results.run_report("cpp", ["a"], truncated, 0, context)
             self.assertTrue(report["problems"][0].startswith("incomplete JUnit"))
             self.assertIsNotNone(report["junit_digest"])
 

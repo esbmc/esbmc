@@ -181,8 +181,9 @@ class ExpectedFailureVerdictTest(unittest.TestCase):
         plan = {"tests": {test["name"]: ci_selection.test_record(test)}}
         self.assertEqual(code, 0)
         self.assertEqual(
-            ci_results.evaluate_run([test["name"]], ci_results.read_junit(junit), code, plan, {},
-                                    ci_results.load_testing_tool()), [])
+            ci_results.evaluate_run([test["name"]], ci_results.read_junit(junit), code,
+                                    ci_results.RunContext(plan, {},
+                                                          ci_results.load_testing_tool())), [])
 
 
 if __name__ == "__main__":

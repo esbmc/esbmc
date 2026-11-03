@@ -55,8 +55,9 @@ def cmd_probe(args):
 
 
 def _report(args, plan, junit, exit_code):
+    context = ci_results.RunContext(plan, _read_json(args.probes), ci_results.load_testing_tool())
     report = ci_results.run_report(args.executor, _expected(plan, args.executor), junit, exit_code,
-                                   plan, _read_json(args.probes), ci_results.load_testing_tool())
+                                   context)
     for problem in report["problems"]:
         print(f"::error::{args.executor}: {problem}")
     return report
