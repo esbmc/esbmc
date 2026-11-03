@@ -1852,7 +1852,8 @@ class LoopMixin:
     # the solver as a mismatched bitvector width, a tuple member emits a bare
     # inner `tuple` -- the very #5444 erosion this annotation avoids -- and a
     # bool member mismatches the tuple AST, so anything outside this set leaves
-    # the literal unannotated and the unpack refused.
+    # the literal unannotated. The converter then reads each element at the
+    # type it was pushed with, or refuses the unpack for a bool member.
     _SIZABLE_TUPLE_MEMBER_TYPES = frozenset({"int", "float"})
 
     def _literal_tuple_annotation_node(self, iterable_node):
