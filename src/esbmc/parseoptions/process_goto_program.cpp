@@ -232,6 +232,62 @@ static void configure_branch_instrumentation(
   coverage.cov_assume_asserts = cmdline.isset("cov-assume-asserts");
 }
 
+static bool has_unsupported_fp_format(const type2tc &t, const std::string &s)
+{
+  if (is_floatbv_type(t))
+    return !solver_supports_fp_format(
+      s, to_floatbv_type(t).exponent, to_floatbv_type(t).fraction);
+  if (is_array_or_vector_type(t))
+    return has_unsupported_fp_format(array_or_vector_subtype(t), s);
+  if (!is_structure_type(t))
+    return false;
+  const std::vector<type2tc> &members =
+    is_struct_type(t) ? to_struct_type(t).members : to_union_type(t).members;
+  for (const type2tc &m : members)
+    if (has_unsupported_fp_format(m, s))
+      return true;
+  return false;
+}
+
+/* x87 long double under --32 is a 96-bit float that Bitwuzla's native FP
+ * theory cannot represent (it aborts on the sort). If reachable code uses
+ * such a format, encode floating point as bit-vectors instead (#8097). */
+static void use_fp2bv_for_unsupported_formats(
+  optionst &options,
+  const goto_functionst &goto_functions)
+{
+  if (options.get_bool_option("fp2bv") || options.get_bool_option("fixedbv"))
+    return;
+  const std::string solver = effective_solver_name(options);
+  bool found = false;
+  std::function<void(const expr2tc &)> visit = [&](const expr2tc &e) {
+    if (found || is_nil_expr(e))
+      return;
+    found = has_unsupported_fp_format(e->type, solver);
+    e->foreach_operand(visit);
+  };
+  for (const irep_idt &id : reachable_functions(goto_functions))
+  {
+    auto it = goto_functions.function_map.find(id);
+    if (it == goto_functions.function_map.end())
+      continue;
+    for (const auto &instr : it->second.body.instructions)
+    {
+      visit(instr.code);
+      visit(instr.guard);
+    }
+    if (found)
+      break;
+  }
+  if (!found)
+    return;
+  log_status(
+    "The program uses a floating-point format {} does not support "
+    "natively; encoding floating-point as bit-vectors",
+    solver);
+  options.set_option("fp2bv", true);
+}
+
 bool esbmc_parseoptionst::process_goto_program(
   optionst &options,
   goto_functionst &goto_functions)
@@ -244,6 +300,8 @@ bool esbmc_parseoptionst::process_goto_program(
       apply_rounding_mode(goto_functions, cmdline) ||
       apply_taylor_terms(goto_functions, cmdline))
       return true;
+
+    use_fp2bv_for_unsupported_formats(options, goto_functions);
 
     is_coverage = cmdline.isset("assertion-coverage") ||
                   cmdline.isset("assertion-coverage-claims") ||

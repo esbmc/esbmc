@@ -563,6 +563,12 @@ public:
 
   exprt contains(const exprt &item, const exprt &list);
 
+  std::optional<exprt> repeat_variable_list(
+    const nlohmann::json &left_node,
+    const nlohmann::json &right_node,
+    const exprt &lhs,
+    const exprt &rhs);
+  exprt repeat_at_runtime(const exprt &source, const exprt &count);
   exprt list_repetition(
     const nlohmann::json &left_node,
     const nlohmann::json &right_node,

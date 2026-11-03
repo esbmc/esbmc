@@ -5998,19 +5998,10 @@ struct Signbittor
   }
 };
 
+// No fold of signbit(neg(x)) or signbit(abs(x)): under --fixedbv and --ir
+// neither flips or clears the sign the way IEEE 754 does.
 expr2tc signbit2t::do_simplify() const
 {
-  // signbit(abs(x)) = false. IEEE 754 absoluteValue clears the sign bit
-  // unconditionally, including for NaN payloads.
-  if (is_abs2t(operand))
-    return gen_false_expr();
-
-  // signbit(neg(x)) = !signbit(x). IEEE 754 negate flips the sign bit
-  // unconditionally — same caveat for NaN, but the bit flip is
-  // architecture-independent at the IR level.
-  if (is_neg2t(operand))
-    return not2tc(signbit2tc(to_neg2t(operand).value));
-
   return simplify_floatbv_1op<Signbittor, signbit2t>(type, operand);
 }
 
@@ -6079,6 +6070,14 @@ expr2tc bswap2t::do_simplify() const
   // For a signedbv result type, from_integer will reinterpret the
   // unsigned bit pattern as signed via the same binary round-trip.
   return from_integer(new_value, type);
+}
+
+/// The 2-op float functors fold into a copy of the first operand; drop its
+/// source spelling, which c_expr2string would print in place of the value.
+static void drop_float_cformat(expr2tc &e)
+{
+  if (is_constant_floatbv2t(e))
+    to_constant_floatbv2t(e).cformat = irep_idt();
 }
 
 template <template <typename> class TFunctor, typename constructor>
@@ -6199,6 +6198,7 @@ static expr2tc simplify_floatbv_2ops(
       rounding_mode,
       is_constant,
       get_value);
+    drop_float_cformat(simpl_res);
   }
   else
   {

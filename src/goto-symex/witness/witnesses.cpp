@@ -1,5 +1,6 @@
 #include "irep2/irep2_expr.h"
 #include <goto-symex/witness/witnesses.h>
+#include <util/base/filesystem.h>
 #include <ac_config.h>
 #include <boost/property_tree/ptree.hpp>
 #include <fstream>
@@ -201,7 +202,7 @@ void create_waypoint(const waypoint &wp, YAML::Emitter &waypoint)
              << "branching";
 
   waypoint << YAML::Key << "action" << YAML::Value << YAML::DoubleQuoted
-           << "follow";
+           << (wp.action == waypoint::cycle ? "cycle" : "follow");
 
   if (wp.type == waypoint::assumption)
   {
@@ -738,6 +739,8 @@ void _create_graph_node(
   }
   else if (options.get_bool_option("data-races-check"))
     pDataSpecification.put_value("CHECK( init(main()), LTL(G ! data-race) )");
+  else if (options.get_bool_option("termination"))
+    pDataSpecification.put_value("CHECK( init(main()), LTL(F end) )");
   else
     pDataSpecification.put_value(
       "CHECK( init(main()), LTL(G ! call(__VERIFIER_error())) )");
@@ -760,6 +763,28 @@ void _create_graph_node(
   graphnode.add_child("data", p_creationTime);
 }
 
+static std::string yaml_specification(const optionst &options)
+{
+  std::string spec;
+  if (options.get_bool_option("overflow-check"))
+    spec = "G ! overflow";
+  else if (options.get_bool_option("memory-leak-check"))
+  {
+    if (options.get_bool_option("no-reachable-memory-leak"))
+      spec = "G valid-free|valid-deref|valid-memtrack";
+    else
+      spec = "G valid-memcleanup";
+  }
+  else if (options.get_bool_option("data-races-check"))
+    spec = "G ! data-race";
+  else if (options.get_bool_option("termination"))
+    spec = "F end";
+  else
+    spec = "G ! call(reach_error())";
+
+  return spec;
+}
+
 void _create_yaml_metadata_emitter(
   const std::string &verifiedfile,
   const optionst &options,
@@ -767,7 +792,7 @@ void _create_yaml_metadata_emitter(
 {
   metadata << YAML::BeginMap;
   metadata << YAML::Key << "format_version" << YAML::Value << YAML::DoubleQuoted
-           << "2.0";
+           << "2.1";
 
   std::string uuid =
     boost::uuids::to_string(boost::uuids::random_generator()());
@@ -830,20 +855,7 @@ void _create_yaml_metadata_emitter(
   }
   metadata << YAML::EndMap;
 
-  std::string spec;
-  if (options.get_bool_option("overflow-check"))
-    spec = "G ! overflow";
-  else if (options.get_bool_option("memory-leak-check"))
-  {
-    if (options.get_bool_option("no-reachable-memory-leak"))
-      spec = "G valid-free|valid-deref|valid-memtrack";
-    else
-      spec = "G valid-memcleanup";
-  }
-  else if (options.get_bool_option("data-races-check"))
-    spec = "G ! data-race";
-  else
-    spec = "G ! call(reach_error())";
+  const std::string spec = yaml_specification(options);
 
   metadata << YAML::Key << "specification" << YAML::Value << YAML::DoubleQuoted
            << spec;
@@ -1289,8 +1301,10 @@ static expr2tc zero_fill_aggregate(
 }
 
 // Shared nondet collection logic (used by both TestComp and CTest)
-std::vector<collected_nondet_value>
-collect_nondet_values(const symex_target_equationt &target, smt_convt &smt_conv)
+std::vector<collected_nondet_value> collect_nondet_values(
+  const symex_target_equationt &target,
+  smt_convt &smt_conv,
+  bool harness_inputs_only)
 {
   std::vector<collected_nondet_value> results;
   std::unordered_set<std::string> seen_nondets;
@@ -1310,6 +1324,15 @@ collect_nondet_values(const symex_target_equationt &target, smt_convt &smt_conv)
       if (!has_prefix(sym.thename.as_string(), "nondet$"))
         continue;
 
+      // Nondet initialisation of an uninitialised local (inserted by
+      // mark_decl_as_non_det) is not a program input: the test harness only
+      // feeds values to __VERIFIER_nondet_*() calls, so emitting it would
+      // shift every following input.
+      if (
+        harness_inputs_only &&
+        SSA_step.source.pc->location.get_bool("#decl_nondet"))
+        continue;
+
       // Skip system library nondets (stdin, stdout, stderr, etc.)
       // These are from /usr/include/ or other system paths
       std::string file_path = SSA_step.source.pc->location.file().as_string();
@@ -1319,6 +1342,11 @@ collect_nondet_values(const symex_target_equationt &target, smt_convt &smt_conv)
       {
         continue;
       }
+
+      // Likewise for nondets from ESBMC's own library and operational
+      // models, e.g. the uninitialised `errno` global in libc/library/stdlib.c.
+      if (file_operations::is_bundled_source(file_path))
+        continue;
 
       // Deduplicate by symbol name
       if (seen_nondets.count(sym.thename.as_string()))
@@ -1423,7 +1451,7 @@ void generate_testcase(
             << "\n";
 
   // Use the SHARED collection logic
-  auto collected_values = collect_nondet_values(target, smt_conv);
+  auto collected_values = collect_nondet_values(target, smt_conv, true);
 
   // Output collected values to XML
   for (const auto &val : collected_values)

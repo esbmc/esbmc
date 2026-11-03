@@ -59,6 +59,10 @@ public:
   // for assume, assert, goto
   bool guard;
 
+  /* For a branching step: whether its condition reads a nondet value or a
+   * symbol no earlier step computed from constants. */
+  bool nondet_dependent = true;
+
   // for assert
   std::string comment;
 
@@ -145,12 +149,22 @@ void violation_yaml_goto_trace(
   const goto_tracet &goto_trace,
   const std::string &output_path_override = "");
 
+/// Write a YAML violation witness for a non-terminating execution: one cycle
+/// waypoint at the loop that the termination marker @p loc belongs to.
+void non_termination_yaml_goto_trace(optionst &options, const locationt &loc);
+
 void correctness_graphml_goto_trace(
   optionst &options,
   const namespacet &ns,
   const goto_tracet &goto_trace);
 
 void correctness_yaml_goto_trace(
+  optionst &options,
+  const namespacet &ns,
+  const goto_tracet &goto_trace);
+
+/// Write the correctness witnesses (GraphML and/or YAML) the options request.
+void write_correctness_witnesses(
   optionst &options,
   const namespacet &ns,
   const goto_tracet &goto_trace);

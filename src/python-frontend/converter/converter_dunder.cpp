@@ -256,6 +256,15 @@ bool python_converter::is_user_class_pointer(const typet &t)
   return t.is_pointer() && is_user_class_struct_type(t.subtype());
 }
 
+void python_converter::refuse_list_of_instance(const typet &t)
+{
+  const typet &cls = t.is_pointer() ? t.subtype() : t;
+  if (is_user_class_struct_type(cls))
+    throw std::runtime_error(
+      "list() of an instance of class '" + class_name_of(cls) +
+      "' is not supported here");
+}
+
 bool python_converter::is_class_instance(const nlohmann::json &value_node)
 {
   const std::string node_type = value_node.value("_type", "");
@@ -412,6 +421,7 @@ exprt python_converter::dispatch_unary_dunder_operator(
     {"index", "__index__"},
     {"len", "__len__"},
     {"str", "__str__"},
+    {"repr", "__repr__"},
   };
   auto it = unary_dunder_map.find(op);
   if (it == unary_dunder_map.end())

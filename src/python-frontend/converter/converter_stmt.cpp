@@ -1304,6 +1304,39 @@ bool python_converter::store_optional_str(
   return true;
 }
 
+// `x = x.method()` built its receiver as `&x` while `x` held the struct.
+void python_converter::pass_reference_receiver(
+  exprt &rhs,
+  const exprt &lhs,
+  const typet &old_lhs_type)
+{
+  if (
+    !is_user_class_struct_type(old_lhs_type) ||
+    !is_user_class_pointer(lhs.type()) || !rhs.is_code() ||
+    rhs.statement() != "function_call")
+    return;
+  for (exprt &arg : to_code_function_call(to_code(rhs)).arguments())
+    if (
+      arg.is_address_of() && arg.op0().is_symbol() &&
+      arg.op0().identifier() == lhs.identifier())
+      arg = lhs;
+}
+
+// Indexing a str yields a bare char; a variable holding its string as a char
+// array takes it as the one-character string (#9446).
+static exprt char_as_string(const exprt &rhs, const typet &target)
+{
+  if (
+    !target.is_array() || target.subtype() != char_type() ||
+    rhs.type() != char_type())
+    return rhs;
+  exprt str = gen_zero(target);
+  if (str.operands().size() < 2)
+    return rhs;
+  str.operands()[0] = rhs;
+  return str;
+}
+
 void python_converter::handle_assignment_type_adjustments(
   symbolt *lhs_symbol,
   exprt &lhs,
@@ -1321,6 +1354,8 @@ void python_converter::handle_assignment_type_adjustments(
     return;
 
   rhs = wrap_stored_if_optional(rhs, lhs.type());
+
+  rhs = char_as_string(rhs, lhs.type());
 
   // Assigning to a struct member (self.attr = value): an unannotated parameter
   // is typed as the any-type carrier (void*, i.e. a pointer whose subtype is
@@ -1553,8 +1588,10 @@ void python_converter::handle_assignment_type_adjustments(
       !(tuple_handler_->is_tuple_type(lhs_symbol->get_type()) &&
         !tuple_handler_->is_tuple_type(rhs.type())))
     {
+      const typet old_lhs_type = lhs.type();
       lhs_symbol->set_type(migrate_type(rhs.type()));
       lhs.type() = rhs.type();
+      pass_reference_receiver(rhs, lhs, old_lhs_type);
     }
 
     // Legacy: migrate_expr drops the `value` that marks a class object
@@ -5059,32 +5096,60 @@ bool python_converter::unpack_record_is_trusted(
   return true;
 }
 
-// A list read from a tuple variable, `t.element_i`, is held in a temporary
-// that takes the element types recorded for the list the tuple was assigned.
-// The symbol's value is that assignment's literal; under a trusted record the
-// tuple is bound once and read only here, so it is still current.
-exprt python_converter::hold_tuple_member_list(
-  const nlohmann::json &ast_node,
-  const exprt &value,
-  codet &target_block)
+// The list a tuple variable's member @p value, `t.element_i`, was built from:
+// the operand of the literal the tuple was assigned, or nil. The symbol's value
+// is that literal; under a trusted record the tuple is bound once and read only
+// at @p value, so it is still current.
+exprt python_converter::tuple_member_list_source(const exprt &value) const
 {
   if (
-    !unpack_record_trusted_ || value.id() != "member" ||
-    !value.op0().is_symbol() ||
-    value.type() != get_type_handler().get_list_type())
-    return value;
+    value.id() != "member" || !value.op0().is_symbol() ||
+    value.type() != type_handler_.get_list_type())
+    return nil_exprt();
   const symbolt *tuple = find_symbol(value.op0().identifier().as_string());
   const typet tuple_type = ns.follow(value.op0().type());
   if (
     !tuple || tuple->get_value().id() != "struct" ||
     !tuple_handler_->is_tuple_type(tuple_type))
-    return value;
+    return nil_exprt();
   const std::size_t i =
     to_struct_type(tuple_type).component_number(value.get("component_name"));
   const exprt &source = tuple->get_value().operands().at(i);
   if (
     !source.is_symbol() ||
     !element_type_registry_.find(source.identifier().as_string()))
+    return nil_exprt();
+  return source;
+}
+
+// `p = t[i]` takes the element types of the list the tuple was built with, as
+// `r, p = t` does. The registry is flow-insensitive, so only an unconditional
+// binding may replace them.
+void python_converter::bind_tuple_member_list_types(
+  const nlohmann::json &ast_node,
+  const exprt &lhs,
+  const exprt &rhs)
+{
+  const exprt source = tuple_member_list_source(rhs);
+  if (
+    source.is_not_nil() && lhs.is_symbol() &&
+    block_nesting_ == function_body_depth_ + 1 &&
+    unpack_record_is_trusted(ast_node["value"]))
+    element_type_registry_.assign_from(
+      source.identifier().as_string(), lhs.identifier().as_string());
+}
+
+// A list read from a tuple variable is held in a temporary that takes the
+// element types recorded for the list the tuple was assigned.
+exprt python_converter::hold_tuple_member_list(
+  const nlohmann::json &ast_node,
+  const exprt &value,
+  codet &target_block)
+{
+  if (!unpack_record_trusted_)
+    return value;
+  const exprt source = tuple_member_list_source(value);
+  if (source.is_nil())
     return value;
 
   symbolt &held =
@@ -5551,12 +5616,12 @@ void python_converter::handle_function_call_rhs(
   {
     std::string func_name = ast_node_name(ast_node["value"]["func"]);
 
-    if (base_ctor_called)
+    if (base_ctor_called.count(func_name))
     {
       auto class_node = json_utils::find_class((*ast_json)["body"], func_name);
       func_name = ast_node_name(class_node["bases"][0], func_name);
-      base_ctor_called = false;
     }
+    base_ctor_called.clear();
 
     update_instance_from_self(func_name, func_name, lhs_symbol->id.as_string());
   }
@@ -5619,13 +5684,8 @@ void python_converter::handle_function_call_rhs(
   // while `lhs` is the element/member expression, so retyping `lhs_symbol`
   // would corrupt the whole container — the sibling migrations guard on a Name
   // target for the same reason.
-  if (
-    !is_ctor_call && lhs_symbol && lhs.is_symbol() &&
-    is_user_class_pointer(rhs.type()) && is_user_class_struct_type(lhs.type()))
-  {
-    lhs.type() = rhs.type();
-    lhs_symbol->set_type(migrate_type(rhs.type()));
-  }
+  if (!is_ctor_call)
+    bind_class_reference(lhs_symbol, lhs, rhs);
 
   widen_int_target_for_float_call(lhs, rhs, is_ctor_call);
 
@@ -6315,6 +6375,20 @@ std::string python_converter::alias_rhs_class(const nlohmann::json &rhs)
            : "";
 }
 
+void python_converter::bind_class_reference(
+  symbolt *lhs_symbol,
+  exprt &lhs,
+  const exprt &rhs)
+{
+  if (
+    lhs_symbol && lhs.is_symbol() && is_user_class_pointer(rhs.type()) &&
+    is_user_class_struct_type(lhs.type()))
+  {
+    lhs.type() = rhs.type();
+    lhs_symbol->set_type(migrate_type(rhs.type()));
+  }
+}
+
 std::string python_converter::call_return_class(const nlohmann::json &rhs) const
 {
   if (
@@ -6783,18 +6857,17 @@ void python_converter::propagate_dict_member_list_type_info(
 
   element_type_registry_.assign_from(src, lhs_identifier);
 
-  // Tuple values are recorded under the $dict_value_types$ key, not the
+  // Value types are recorded under the $dict_value_types$ key, not the
   // values-list id (github_3719_4), so the copy above is a no-op for them.
-  // Propagate the stored tuple struct type so the generic list tuple-element
-  // read resolves it.
+  // Propagate the stored type so the generic list element read resolves it.
   if (component != "values")
     return;
 
-  typet tuple_t = dict_handler_->recorded_tuple_value_type(dict_sym);
+  const typet value_t = dict_handler_->recorded_value_type(dict_sym);
   if (
-    !tuple_t.is_nil() && !tuple_t.is_empty() &&
+    !value_t.is_nil() && !value_t.is_empty() &&
     element_type_registry_.size(lhs_identifier) == 0)
-    element_type_registry_.record(lhs_identifier, std::string(), tuple_t);
+    element_type_registry_.record(lhs_identifier, std::string(), value_t);
 }
 
 /// "s" or "n" when every recorded element of list @p id is a str or a
@@ -8210,6 +8283,8 @@ void python_converter::get_var_assign(
       return;
     }
 
+    // A tuple member read (`b = t[1]`) yields the stored `Cls*`.
+    bind_class_reference(lhs_symbol, lhs, rhs);
     adjust_statement_types(lhs, rhs);
 
     // Handle list type info propagation. A subscript store rebinds an element,
@@ -8219,7 +8294,10 @@ void python_converter::get_var_assign(
     if (
       lhs.type() == rhs.type() && lhs.type() == type_handler_.get_list_type() &&
       !assignment_target_is_subscript(ast_node))
+    {
       propagate_list_type_info(lhs, rhs, lhs_symbol);
+      bind_tuple_member_list_types(ast_node, lhs, rhs);
+    }
     else if (
       rhs.type() != lhs.type() && lhs.type().is_array() &&
       !rhs.type().is_code())
@@ -8780,6 +8858,16 @@ exprt python_converter::apply_string_truthiness(
     notequal2tc(strlen_call2, gen_zero(migrate_type(size_type()))));
   cond.location() = location;
   cond.op0().location() = location;
+  // An Optional[str] holding None is a null pointer, which strlen must not
+  // read. Only a symbol is guarded: copying a call would evaluate it twice.
+  if (is_pointer_type(strlen_arg2) && is_symbol2t(strlen_arg2))
+  {
+    cond = if_exprt(
+      migrate_expr_back(notequal2tc(strlen_arg2, gen_zero(strlen_arg2->type))),
+      cond,
+      false_exprt());
+    cond.location() = location;
+  }
   return cond;
 }
 
