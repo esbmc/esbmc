@@ -1,0 +1,4 @@
+CORE
+main.py
+--incremental-bmc
+^ERROR: TypeError: a slice of a numpy string array that is written, aliased or passed to a function is not supported$
