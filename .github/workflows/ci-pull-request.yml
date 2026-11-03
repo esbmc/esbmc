@@ -9,14 +9,6 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
-env:
-  # How the Linux tests run: legacy (one job builds and runs the whole suite)
-  # or parallel (one build, regression shards). The repository variable
-  # LINUX_TEST_MODE overrides it when set; a run that does not receive the
-  # variable, as a fork's may not, uses this versioned default. Rolling back
-  # every PR means setting this to legacy. See docs/ci/linux-regression.md.
-  LINUX_TEST_DEFAULT_MODE: parallel
-
 jobs:
   changes:
     name: Detect changed paths
@@ -24,18 +16,10 @@ jobs:
     outputs:
       doxygen: ${{ steps.classify.outputs.doxygen }}
       ld: ${{ steps.classify.outputs.ld }}
-      linux-test-mode: ${{ steps.mode.outputs.linux-test-mode }}
     steps:
       - uses: actions/checkout@v6
         with:
           fetch-depth: 0
-      - name: Resolve the Linux test mode
-        id: mode
-        env:
-          OVERRIDE: ${{ vars.LINUX_TEST_MODE }}
-        run: |
-          python3 scripts/ci/linux_tests.py resolve-mode --default "$LINUX_TEST_DEFAULT_MODE" \
-            --override "$OVERRIDE" --github-output "$GITHUB_OUTPUT"
       - name: Classify the changed paths
         id: classify
         env:
@@ -74,24 +58,10 @@ jobs:
     - name: Run the helper tests
       run: python3 -m unittest discover -s scripts/ci/tests -p 'test_*.py' -v
 
-  # Legacy mode: one job builds, runs the CPython check and the whole suite.
-  # TEMPORARY: it also runs in parallel mode while this PR compares both
-  # paths in the same run; it is removed once the parallel run is accepted.
-  build-ubuntu:
-    needs: changes
-    if: ${{ !cancelled() }}
-    uses: ./.github/workflows/aux-build-unix.yml
-    name: static llvm-22 DebugOpt
-    with:
-      operating-system: ubuntu-24.04
-      build-flags: '-b DebugOpt -e ON'
-      testing: true
-      collect-test-metrics: true
-
-  # Parallel mode: one build exports the regression bundle; the shards run it.
+  # The Linux tests: one build exports the regression bundle while the CPython
+  # check runs; once both pass, the module jobs run the regression from the
+  # bundle. See docs/ci/linux-regression.md.
   linux-build:
-    needs: changes
-    if: ${{ needs.changes.outputs.linux-test-mode == 'parallel' }}
     uses: ./.github/workflows/aux-build-unix.yml
     name: Linux regression producer
     with:
@@ -113,16 +83,14 @@ jobs:
       plan-digest: ${{ needs.linux-build.outputs.plan-digest }}
 
   cpython-check:
-    needs: changes
-    if: ${{ needs.changes.outputs.linux-test-mode == 'parallel' }}
     uses: ./.github/workflows/aux-cpython-check.yml
 
-  # The required check of the Linux tests in both modes. It always runs and
-  # fails unless every job its mode requires succeeded and, in parallel mode,
-  # every shard reported the producer's plan and bundle with no problem.
+  # The required check of the Linux tests. It always runs and fails unless the
+  # build, the CPython check and every module job succeeded, and every report
+  # carries the producer's plan and bundle with no problem.
   linux-test-summary:
     name: linux-test-summary
-    needs: [changes, build-ubuntu, linux-build, linux-regression, cpython-check]
+    needs: [linux-build, linux-regression, cpython-check]
     if: ${{ always() }}
     runs-on: ubuntu-slim
     timeout-minutes: 10
@@ -131,20 +99,18 @@ jobs:
     steps:
     - uses: actions/checkout@v6
     - name: Download the reports
-      if: ${{ needs.changes.outputs.linux-test-mode == 'parallel' }}
       uses: actions/download-artifact@v8
       with:
         pattern: linux-result-*
         path: results
     - name: Judge the Linux tests
       env:
-        MODE: ${{ needs.changes.outputs.linux-test-mode }}
         NEEDS: ${{ toJSON(needs) }}
         PLAN_DIGEST: ${{ needs.linux-build.outputs.plan-digest }}
         SHA256: ${{ needs.linux-build.outputs.bundle-sha256 }}
       run: |
         mkdir -p results
-        python3 scripts/ci/linux_tests.py summary --mode "$MODE" --needs "$NEEDS" \
+        python3 scripts/ci/linux_tests.py summary --needs "$NEEDS" \
           --results-dir results --plan-digest "$PLAN_DIGEST" --bundle-sha256 "$SHA256" \
           --summary "$GITHUB_STEP_SUMMARY"
 
