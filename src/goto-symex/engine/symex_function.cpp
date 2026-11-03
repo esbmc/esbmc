@@ -634,15 +634,7 @@ void goto_symext::symex_function_call_code(const expr2tc &expr)
      *       calls to this function have the same number of parameters and that
      *       they - after type promotion - are compatible. */
 
-    if (!is_nil_expr(call.ret))
-    {
-      unsigned int &nondet_count = get_nondet_counter();
-      expr2tc rhs =
-        symbol2tc(call.ret->type, "nondet$symex::" + i2string(nondet_count++));
-
-      symex_assign(code_assign2tc(call.ret, rhs));
-    }
-
+    assign_nondet_call_result(call.ret);
     cur_state->source.pc++;
     return;
   }
@@ -798,6 +790,15 @@ get_function_list(const expr2tc &expr)
   return l;
 }
 
+void goto_symext::assign_nondet_call_result(const expr2tc &ret)
+{
+  if (is_nil_expr(ret))
+    return;
+  symex_assign(code_assign2tc(
+    ret,
+    symbol2tc(ret->type, "nondet$symex::" + i2string(get_nondet_counter()++))));
+}
+
 void goto_symext::symex_function_call_deref(const expr2tc &expr)
 {
   const code_function_call2t &call = to_code_function_call2t(expr);
@@ -861,12 +862,8 @@ void goto_symext::symex_function_call_deref(const expr2tc &expr)
     // such call can happen and the path is dead (esbmc/esbmc#604).
     if (options.get_bool_option("closed-world-fnptr"))
       assume(gen_false_expr());
-    else if (!is_nil_expr(call.ret))
-      symex_assign(code_assign2tc(
-        call.ret,
-        symbol2tc(
-          call.ret->type,
-          "nondet$symex::" + i2string(get_nondet_counter()++))));
+    else
+      assign_nondet_call_result(call.ret);
     cur_state->source.pc++;
     return;
   }
