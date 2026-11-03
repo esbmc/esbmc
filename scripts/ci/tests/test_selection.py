@@ -1,6 +1,7 @@
+# ci_fixture puts scripts/ci on sys.path, so it comes first.
+import ci_fixture  # pylint: disable=wrong-import-order
 import unittest
 
-import ci_fixture
 import ci_selection
 from ci_selection import SelectionError
 

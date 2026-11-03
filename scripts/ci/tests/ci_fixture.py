@@ -12,9 +12,12 @@ def cmake_list(items):
     return ";".join(items)
 
 
-def write_project(root, tests):
+def write_project(root, tests, extra=()):
     """A CMake project registering `tests`: dicts of name, command, labels, props."""
-    lines = ["cmake_minimum_required(VERSION 3.19)", "project(ci_fixture NONE)", "enable_testing()"]
+    lines = [
+        "cmake_minimum_required(VERSION 3.19)", "project(ci_fixture NONE)", "enable_testing()",
+        *extra
+    ]
     for test in tests:
         command = " ".join(f'"{part}"' for part in test["command"])
         lines.append(f'add_test(NAME "{test["name"]}" COMMAND {command})')
@@ -33,10 +36,10 @@ def configure(root):
     return build
 
 
-def project(tests):
+def project(tests, extra=()):
     """A configured project in a fresh directory: (tempdir handle, build dir)."""
     tmp = tempfile.TemporaryDirectory()
-    write_project(tmp.name, tests)
+    write_project(tmp.name, tests, extra)
     return tmp, configure(tmp.name)
 
 

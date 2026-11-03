@@ -47,6 +47,17 @@ jobs:
     - name: Runs testing tool unit test
       run: cd regression && python3 testing_tool_test.py
 
+  # Integration tests of the Linux CI helpers in scripts/ci (real CMake
+  # projects, so the runner needs cmake, ctest and zstd).
+  ci-helpers:
+    name: Linux CI helper tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+    - uses: actions/checkout@v6
+    - name: Run the helper tests
+      run: python3 -m unittest discover -s scripts/ci/tests -p 'test_*.py' -v
+
   build-ubuntu:
     uses: ./.github/workflows/aux-build-unix.yml
     name: static llvm-22 DebugOpt
@@ -54,6 +65,7 @@ jobs:
       operating-system: ubuntu-24.04
       build-flags: '-b DebugOpt -e ON'
       testing: true
+      collect-test-metrics: true
 
   # Check project with clang-format. This job no longer auto-commits fixes:
   # it only *checks* that the lines changed in the PR are formatted, and on
