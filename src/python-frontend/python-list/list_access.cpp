@@ -3350,14 +3350,14 @@ void python_list::copy_dict_view_elem_types(
   if (!src.empty())
     elem_types().assign_from(src, sliced_id);
 
-  // Tuple values live in the dict_value_types slot rather than the
-  // values-list's elements slot, so the copy above is a no-op for them.
+  // Values live in the dict_value_types slot rather than the values-list's
+  // elements slot, so the copy above is a no-op for them.
   if (component == "values" && elem_types().size(sliced_id) == 0)
   {
-    const typet tuple_t =
-      converter_.get_dict_handler()->recorded_tuple_value_type(dict_sym);
-    if (!tuple_t.is_nil() && !tuple_t.is_empty())
-      elem_types().record(sliced_id, std::string(), tuple_t);
+    const typet value_t =
+      converter_.get_dict_handler()->recorded_value_type(dict_sym);
+    if (!value_t.is_nil() && !value_t.is_empty())
+      elem_types().record(sliced_id, std::string(), value_t);
   }
 }
 
