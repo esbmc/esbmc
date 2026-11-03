@@ -2431,7 +2431,8 @@ function_call_expr::get_object_list_symbol(std::string &display_name) const
           !inner_id.empty())
         {
           display_name = base_name + "[" + std::to_string(index) + "]";
-          return converter_.find_symbol(inner_id);
+          return bind_registered_inner_list(
+            converter_.find_symbol(inner_id), func_value);
         }
       }
 
@@ -2537,6 +2538,25 @@ function_call_expr::get_object_list_symbol(std::string &display_name) const
   symbol_id list_symbol_id = converter_.create_symbol_id();
   list_symbol_id.set_object(display_name);
   return converter_.find_symbol(list_symbol_id.to_string());
+}
+
+// The registry names one symbol for the inner list at a constant index, but a
+// list built in a loop (`[[] for _ in range(n)]`) holds a different list at
+// each index while that symbol keeps only the last. Point it at the list the
+// subscript reads at run time, so the mutation reaches the right one (#9766).
+const symbolt *function_call_expr::bind_registered_inner_list(
+  const symbolt *inner,
+  const nlohmann::json &subscript) const
+{
+  if (!inner)
+    return inner;
+  const exprt runtime = converter_.get_expr(subscript);
+  if (
+    runtime.is_symbol() &&
+    runtime.type() == converter_.get_type_handler().get_list_type() &&
+    runtime.identifier() != inner->id)
+    converter_.add_instruction(code_assignt(build_symbol(*inner), runtime));
+  return inner;
 }
 
 // Emit the IR declaration for an instance-attribute list temp symbol.

@@ -289,6 +289,10 @@ private:
   std::optional<exprt> fold_constant_list_query() const;
   void materialize_list_symbol(const symbolt *sym) const;
 
+  const symbolt *bind_registered_inner_list(
+    const symbolt *inner,
+    const nlohmann::json &subscript) const;
+
   /*
    * Handles int-to-str conversions (e.g., str(65)) by generating
    * the appropriate cast expression.

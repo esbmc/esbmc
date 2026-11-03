@@ -1209,6 +1209,24 @@ std::string python_annotation<Json>::get_argument_type(const Json &arg)
             return it->second;
         }
       }
+      // `x and y` and `x or y` give one of their operands, so lists give a
+      // list, not a bool (#9742).
+      std::string list_type;
+      bool all_lists = true;
+      for (const auto &val : arg["values"])
+      {
+        const std::string type = get_argument_type(val);
+        if (type.empty())
+          continue;
+        if (
+          type.rfind("list", 0) != 0 ||
+          (!list_type.empty() && type != list_type))
+          all_lists = false;
+        else
+          list_type = type;
+      }
+      if (all_lists && !list_type.empty())
+        return list_type;
     }
     return "bool";
   }
