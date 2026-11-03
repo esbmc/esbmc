@@ -122,72 +122,33 @@ class CompareTest(ReportsFixture):
         self.assertIn("job shards is cancelled", text)
 
 
-def pr_needs(mode, **overrides):
-    jobs = {job: {"result": "skipped"} for job in sum(map(list, REQUIRED.values()), [])}
-    jobs.update({job: {"result": "success"} for job in REQUIRED[mode]})
+def pr_needs(**overrides):
+    jobs = {job: {"result": "success"} for job in REQUIRED}
     jobs.update({job: {"result": result} for job, result in overrides.items()})
     return json.dumps(jobs)
 
 
 class SummaryTest(ReportsFixture):
 
-    def summary(self, mode, needs_json):
+    def summary(self, needs_json, bundle="b" * 64):
         out = os.path.join(self.tmp.name, "summary.md")
         return linux_tests.main([
-            "summary", "--mode", mode, "--needs", needs_json, "--results-dir", self.results,
-            "--plan-digest", self.digest, "--bundle-sha256", "b" * 64, "--summary", out
+            "summary", "--needs", needs_json, "--results-dir", self.results, "--plan-digest",
+            self.digest, "--bundle-sha256", bundle, "--summary", out
         ])
 
-    def test_legacy_needs_only_build_ubuntu_and_the_mode(self):
-        self.assertEqual(self.summary("legacy", pr_needs("legacy")), 0)
-        self.assertEqual(self.summary("legacy", pr_needs("legacy", **{"build-ubuntu": "failure"})),
-                         1)
-        self.assertEqual(self.summary("legacy", pr_needs("legacy", changes="failure")), 1)
+    def test_every_module_and_the_cpython_check_are_required(self):
+        self.assertEqual(self.summary(pr_needs()), 0)
+        self.assertEqual(self.summary(pr_needs(**{"cpython-check": "failure"})), 1)
+        self.assertEqual(self.summary(pr_needs(**{"linux-build": "cancelled"})), 1)
+        self.assertEqual(self.summary(pr_needs(**{"linux-regression": "skipped"})), 1)
 
-    def test_parallel_needs_every_shard_and_the_cpython_check(self):
-        self.assertEqual(self.summary("parallel", pr_needs("parallel")), 0)
-        self.assertEqual(
-            self.summary("parallel", pr_needs("parallel", **{"cpython-check": "skipped"})), 1)
+    def test_a_missing_module_report_fails(self):
         shutil.rmtree(os.path.join(self.results, "linux-result-numpy-2-1"))
-        self.assertEqual(self.summary("parallel", pr_needs("parallel")), 1)
+        self.assertEqual(self.summary(pr_needs()), 1)
 
-    def test_a_missing_mode_fails(self):
-        self.assertEqual(self.summary("", pr_needs("legacy")), 1)
-        self.assertEqual(self.summary("invalid", pr_needs("legacy")), 1)
-
-    def test_parallel_without_the_producer_digests_fails(self):
-        out = os.path.join(self.tmp.name, "summary.md")
-        code = linux_tests.main([
-            "summary", "--mode", "parallel", "--needs",
-            pr_needs("parallel"), "--results-dir", self.results, "--plan-digest", self.digest,
-            "--bundle-sha256", "", "--summary", out
-        ])
-        self.assertEqual(code, 1)
-
-
-class ResolveModeTest(unittest.TestCase):
-
-    def test_the_versioned_default_rules_unless_overridden(self):
-        self.assertEqual(ci_gate.resolve_mode("legacy", ""), "legacy")
-        self.assertEqual(ci_gate.resolve_mode("parallel", ""), "parallel")
-        self.assertEqual(ci_gate.resolve_mode("parallel", "legacy"), "legacy")
-        self.assertEqual(ci_gate.resolve_mode("legacy", "parallel"), "parallel")
-
-    def test_an_invalid_override_is_published_not_raised(self):
-        # `changes` must succeed, or every job gated on it would be skipped.
-        with tempfile.TemporaryDirectory() as tmp:
-            out = os.path.join(tmp, "output")
-            code = linux_tests.main([
-                "resolve-mode", "--default", "legacy", "--override", "bogus", "--github-output", out
-            ])
-            with open(out, encoding="utf-8") as fp:
-                self.assertEqual((code, fp.read()), (0, "linux-test-mode=invalid\n"))
-
-    def test_invalid_values_fail(self):
-        with self.assertRaises(ci_gate.ModeError):
-            ci_gate.resolve_mode("legacy", "Parallel")
-        with self.assertRaises(ci_gate.ModeError):
-            ci_gate.resolve_mode("", "")
+    def test_missing_producer_digests_fail(self):
+        self.assertEqual(self.summary(pr_needs(), bundle=""), 1)
 
 
 class ExpectedFailureVerdictTest(unittest.TestCase):

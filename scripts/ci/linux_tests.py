@@ -173,35 +173,11 @@ def cmd_compare(args):
                     problems)
 
 
-def cmd_resolve_mode(args):
-    """Always succeeds: jobs gated on `changes` must not skip over a bad mode.
-
-    An invalid mode is published as `invalid`, which runs build-ubuntu and
-    fails linux-test-summary.
-    """
-    try:
-        mode = ci_gate.resolve_mode(args.default, args.override)
-    except ci_gate.ModeError as error:
-        print(f"::error::{error}")
-        mode = "invalid"
-    print(f"default {args.default}, override {'set' if args.override else 'empty'}: {mode}")
-    if args.github_output:
-        with open(args.github_output, "a", encoding="utf-8") as fp:
-            fp.write(f"linux-test-mode={mode}\n")
-    return 0
-
-
 def cmd_summary(args):
-    """linux-test-summary: the required check of the Linux PR tests, in either mode."""
-    if args.mode not in ci_gate.MODES:
-        return _publish(args.summary, "Linux tests", "",
-                        [f"no valid Linux test mode was resolved ({args.mode!r})"])
-    args.required = ",".join(ci_gate.REQUIRED_JOBS[args.mode])
-    if args.mode == "legacy":
-        problems = ci_gate.job_problems(json.loads(args.needs), args.required.split(","))
-        return _publish(args.summary, "Linux tests (legacy)", "", problems)
+    """linux-test-summary: the required check of the Linux PR tests."""
+    args.required = ",".join(ci_gate.REQUIRED_JOBS)
     reports, problems = _run_problems(args, ci_selection.shard_executors())
-    return _publish(args.summary, "Linux tests (parallel)", ci_gate.timing_table(reports), problems)
+    return _publish(args.summary, "Linux tests", ci_gate.timing_table(reports), problems)
 
 
 def _add(commands, name, handler, help_text, *options):
@@ -234,11 +210,7 @@ def parser():
     compare = _add(commands, "compare", cmd_compare, "compare the baseline with the shards",
                    "results-dir", "needs", "required", "plan-digest", "bundle-sha256")
     compare.add_argument("--summary")
-    resolve = _add(commands, "resolve-mode", cmd_resolve_mode, "pick the PR's Linux test mode",
-                   "default")
-    resolve.add_argument("--override", default="")
-    resolve.add_argument("--github-output")
-    summary = _add(commands, "summary", cmd_summary, "judge the Linux PR tests", "mode", "needs",
+    summary = _add(commands, "summary", cmd_summary, "judge the Linux PR tests", "needs",
                    "results-dir")
     summary.add_argument("--plan-digest", default="")
     summary.add_argument("--bundle-sha256", default="")
@@ -252,8 +224,8 @@ def main(argv=None):
     args = parser().parse_args(argv)
     try:
         return args.run(args)
-    except (ci_selection.SelectionError, ci_bundle.BundleError, ci_results.RuntimeMismatch,
-            ci_gate.ModeError) as error:
+    except (ci_selection.SelectionError, ci_bundle.BundleError,
+            ci_results.RuntimeMismatch) as error:
         print(f"::error::{error}")
         return 1
 
