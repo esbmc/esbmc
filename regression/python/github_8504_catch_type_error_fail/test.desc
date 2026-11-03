@@ -1,0 +1,6 @@
+CORE
+main.py
+--unwind 8 --no-unwinding-assertions --multi-property
+^  FAILED .* assertion s == -1$
+^\*\* 1 of [0-9]+ properties failed
+^VERIFICATION FAILED$

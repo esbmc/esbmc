@@ -1,0 +1,5 @@
+CORE
+calc.ld
+--ld-props props.yaml --k-induction --unlimited-k-steps
+^Bug found \(k = 1\)$
+^VERIFICATION FAILED$

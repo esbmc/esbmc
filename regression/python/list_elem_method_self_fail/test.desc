@@ -1,0 +1,5 @@
+CORE
+main.py
+
+^VERIFICATION FAILED$
+^ +FAILED .*line +12 +assertion .*->n != 12$

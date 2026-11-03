@@ -3,6 +3,9 @@
 #include <goto-symex/state/renaming.h>
 #include <goto-symex/witness/witnesses.h>
 #include <solvers/smt/smt_conv.h>
+#include <unordered_set>
+
+static bool reads_through_dereference(const expr2tc &e);
 
 expr2tc build_lhs(smt_convt &smt_conv, const expr2tc &lhs)
 {
@@ -19,7 +22,11 @@ expr2tc build_lhs(smt_convt &smt_conv, const expr2tc &lhs)
     // Build new source value, it might be an index, in case of
     // multidimensional arrays
     expr2tc new_source_value = build_lhs(smt_conv, index.source_value);
-    expr2tc new_value = smt_conv.get(index.index);
+    // Symex renames this index but leaves its dereference in place, which the
+    // solver cannot evaluate.
+    expr2tc new_value = reads_through_dereference(index.index)
+                          ? index.index
+                          : smt_conv.get(index.index);
     new_lhs = index2tc(new_lhs->type, new_source_value, new_value);
     break;
   }
@@ -124,7 +131,9 @@ static expr2tc rebase_on_ssa_lhs(
   {
     const index2t &index = to_index2t(lvalue);
     expr2tc src = rebase_on_ssa_lhs(smt_conv, index.source_value, ssa_lhs);
-    if (is_nil_expr(src) || !is_array_type(src->type))
+    if (
+      is_nil_expr(src) || !is_array_type(src->type) ||
+      reads_through_dereference(index.index))
       return expr2tc();
 
     expr2tc idx = smt_conv.get(index.index);
@@ -277,12 +286,53 @@ static void record_violated_reads(
   collect_nondet_reads(smt_conv, step.pc->guard, ssa_cond, step.nondet_reads);
 }
 
+/* Tracks which SSA symbols were computed from constants alone. A branch whose
+ * condition reads only such symbols is fixed by the program text, so a witness
+ * need not name its direction. */
+struct input_trackert
+{
+  std::unordered_set<std::string> computed;
+
+  /* Whether @p e reads a nondet value or a symbol no earlier assignment
+   * computed from constants. */
+  bool reads_input(const expr2tc &e) const
+  {
+    if (is_nil_expr(e))
+      return false;
+    if (is_sideeffect2t(e))
+      return true;
+    if (is_symbol2t(e))
+      return find_nondet_in_expr(e) ||
+             !computed.count(to_symbol2t(e).get_symbol_name());
+
+    bool found = false;
+    e->foreach_operand(
+      [&](const expr2tc &op) { found = found || reads_input(op); });
+    return found;
+  }
+
+  void note_assignment(const symex_target_equationt::SSA_stept &step)
+  {
+    if (step.is_assignment() && is_symbol2t(step.lhs) && !reads_input(step.rhs))
+      computed.insert(to_symbol2t(step.lhs).get_symbol_name());
+  }
+
+  void annotate_branch(
+    const symex_target_equationt::SSA_stept &step,
+    goto_trace_stept &trace_step) const
+  {
+    if (step.is_branching())
+      trace_step.nondet_dependent = reads_input(step.cond);
+  }
+};
+
 void build_goto_trace(
   const symex_target_equationt &target,
   smt_convt &smt_conv,
   goto_tracet &goto_trace)
 {
   unsigned step_nr = 0;
+  input_trackert inputs;
 
   // l_get() memoises against the current model internally (the cache is
   // cleared on every solve / context change), so the thousands of repeated
@@ -290,6 +340,8 @@ void build_goto_trace(
   // without any explicit scope management here.
   for (auto const &SSA_step : target.SSA_steps)
   {
+    inputs.note_assignment(SSA_step);
+
     // Hidden steps are internal SSA bookkeeping (e.g. phi-merge nodes at
     // control-flow joins). They carry a synthesised value and a source
     // location borrowed from a branch, so surfacing them in the trace yields
@@ -373,6 +425,8 @@ void build_goto_trace(
     // swap one invented branch direction for another.
     else if (SSA_step.is_assume() || SSA_step.is_branching())
       goto_trace_step.guard = !smt_conv.l_get(SSA_step.cond).is_false();
+
+    inputs.annotate_branch(SSA_step, goto_trace_step);
 
     goto_trace.steps.push_back(goto_trace_step);
   }

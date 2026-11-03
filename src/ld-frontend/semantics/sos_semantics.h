@@ -24,18 +24,17 @@ enum class SosRule
 
   // Timer rules (fixed-tick model). Every timer starts with Q false: at
   // power-up it has not run, so ET must not read as an expired interval.
-  TON_Step, // [TON] if IN then ET++ else ET:=0; Q := IN and ET >= PT
-  TOF_Step, // [TOF] if IN then {ET:=0; Q:=T} elif Q then {ET++; Q := ET < PT}
+  TON_Step, // [TON] if IN and IN_prev then ET++ else ET:=0;
+            //       Q := IN and IN_prev and ET >= PT
+  TOF_Step, // [TOF] if IN then {ET:=0; Q:=T}
+            //       elif Q and not IN_prev then {ET++; Q := ET < PT}
   TP_Step,  // [TP]  if Q then {ET++; Q := ET < PT}
             //       elif rising IN then {ET:=0; Q:=T}
 
   // Counter rules
-  CTU_Step, // [CTU]    rising CU => CV++; Q := (CV >= PV); R => CV:=0
-  CTD_Step, // [CTD]    rising CD => CV--; Q := (CV <= 0); LD => CV:=PV
+  CTU_Step, // [CTU]    rising CU, CV < PV => CV++; Q := (CV >= PV); R => CV:=0
+  CTD_Step, // [CTD]    rising CD, CV > 0 => CV--; Q := (CV <= 0); LD => CV:=PV
 
   // Arithmetic rules
   Arith_Step, // [ARITH]  OUT := IN1 op IN2
-
-  // Network rules
-  Feedback_Snapshot, // [FEEDBACK] prev(var) := var, before any rung runs
 };

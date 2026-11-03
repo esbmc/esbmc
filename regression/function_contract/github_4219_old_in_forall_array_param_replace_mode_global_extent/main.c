@@ -7,7 +7,8 @@
 // without rewriting, the same way it resolves inside the callee's own
 // is_fresh clause. This test's required pattern below fails if a future
 // change makes the substitution loop try to rewrite or drop such a name
-// instead of leaving it alone.
+// instead of leaving it alone. The forall ensures is what reads the region
+// snapshot; without a reader it is not built (#7627).
 unsigned g_extent = 5 * sizeof(int);
 
 void bump(int r[], int c)
@@ -19,6 +20,8 @@ void bump(int r[], int c)
   __ESBMC_ensures(r[2] == __ESBMC_old(r[2]) + c);
   __ESBMC_ensures(r[3] == __ESBMC_old(r[3]) + c);
   __ESBMC_ensures(r[4] == __ESBMC_old(r[4]) + c);
+  __ESBMC_ensures(
+    __ESBMC_forall(&k, !(k < 5) || r[k] == __ESBMC_old(r[k]) + c));
   __ESBMC_assigns(r[0], r[1], r[2], r[3], r[4]);
 
   unsigned i;

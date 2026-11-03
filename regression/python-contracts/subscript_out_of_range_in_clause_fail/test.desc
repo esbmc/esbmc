@@ -1,0 +1,5 @@
+CORE
+main.py
+--enforce-contract f
+^  dereference failure: NULL pointer$
+^VERIFICATION FAILED$

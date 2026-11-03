@@ -7,11 +7,13 @@
 #include <util/irep/migrate.h>
 #include <irep2/irep2_utils.h>
 #include <nlohmann/json.hpp>
+#include <optional>
 
 class python_converter;
 
-// P26: Cached double type — avoids constructing a new floatbv_typet on every call.
-// Initialized once on first use; thread-safe (C++11 static local semantics).
+// P26: Cached double type — avoids constructing a new floatbv_typet on every
+// call. Initialized once on first use; thread-safe (C++11 static local
+// semantics).
 inline const typet &cached_double_type()
 {
   static const typet instance = double_type();
@@ -34,6 +36,22 @@ inline const struct_typet &get_complex_struct_type()
   return instance;
 }
 
+// complex64: two float32 components. Its readers go through complex_part, which
+// widens them, so the handlers over complex stay in double.
+inline const struct_typet &get_complex64_struct_type()
+{
+  static const struct_typet instance = []() {
+    struct_typet t;
+    t.tag("complex64");
+    t.components().push_back(
+      struct_typet::componentt("real", "real", float_type()));
+    t.components().push_back(
+      struct_typet::componentt("imag", "imag", float_type()));
+    return t;
+  }();
+  return instance;
+}
+
 inline bool is_complex_type(const typet &type)
 {
   if (type.id() == "symbol")
@@ -44,7 +62,34 @@ inline bool is_complex_type(const typet &type)
 
   const struct_typet &struct_type = to_struct_type(type);
   const std::string tag = struct_type.tag().as_string();
-  return tag == "complex" || tag == "tag-complex";
+  return tag == "complex" || tag == "tag-complex" || tag == "complex64";
+}
+
+inline bool is_complex64_type(const typet &type)
+{
+  return type.is_struct() && to_struct_type(type).tag() == "complex64";
+}
+
+/// A component of the complex value @p value, as a double.
+inline expr2tc complex_part(const expr2tc &value, const irep_idt &component)
+{
+  const type2tc wide = migrate_type(cached_double_type());
+  if (
+    is_struct_type(value->type) &&
+    to_struct_type(value->type).name.as_string().find("complex64") !=
+      std::string::npos)
+    return typecast2tc(
+      wide, member2tc(migrate_type(build_float_type(32)), value, component));
+  return member2tc(wide, value, component);
+}
+
+inline exprt complex_part(const exprt &value, const irep_idt &component)
+{
+  if (is_complex64_type(value.type()))
+    return typecast_exprt(
+      member_exprt(value, component, build_float_type(32)),
+      cached_double_type());
+  return member_exprt(value, component, cached_double_type());
 }
 
 inline exprt make_complex(const exprt &real, const exprt &imag)
@@ -66,6 +111,23 @@ inline exprt make_complex(const exprt &real, const exprt &imag)
   std::vector<expr2tc> members{to_double2(real), to_double2(imag)};
   return migrate_expr_back(
     constant_struct2tc(migrate_type(get_complex_struct_type()), members));
+}
+
+/// @p value, real or complex, stored as an element of the complex type @p type.
+inline exprt
+complex_as_element(const exprt &real, const exprt &imag, const typet &type)
+{
+  const type2tc dt = migrate_type(cached_double_type());
+  const auto component = [&](const exprt &part) -> expr2tc {
+    expr2tc value;
+    migrate_expr(part, value);
+    if (!is_complex64_type(type))
+      return part.type() == cached_double_type() ? value
+                                                 : typecast2tc(dt, value);
+    return typecast2tc(migrate_type(build_float_type(32)), value);
+  };
+  std::vector<expr2tc> members{component(real), component(imag)};
+  return migrate_expr_back(constant_struct2tc(migrate_type(type), members));
 }
 
 inline exprt promote_to_complex(const exprt &value)
@@ -91,18 +153,17 @@ inline exprt complex_to_bool_expr(const exprt &complex_expr)
   // V.3: build `z.real != 0.0 || z.imag != 0.0` in IREP2, back-migrating once.
   // member2t over a complex source is exactly the node migrate_expr builds for
   // the legacy member access at goto-convert (util/migrate.cpp:1580), and the
-  // not(equal) shape mirrors the legacy or_exprt(not_exprt(equality_exprt(...)))
-  // verbatim, so the back-migrated tree is byte-identical to the old one.
+  // not(equal) shape mirrors the legacy
+  // or_exprt(not_exprt(equality_exprt(...))) verbatim, so the back-migrated
+  // tree is byte-identical to the old one.
   const type2tc dt2 = migrate_type(dt);
   expr2tc complex2;
   migrate_expr(complex_expr, complex2);
   expr2tc zero2;
   migrate_expr(from_double(0.0, dt), zero2);
 
-  expr2tc real_nz =
-    not2tc(equality2tc(member2tc(dt2, complex2, "real"), zero2));
-  expr2tc imag_nz =
-    not2tc(equality2tc(member2tc(dt2, complex2, "imag"), zero2));
+  expr2tc real_nz = not2tc(equality2tc(complex_part(complex2, "real"), zero2));
+  expr2tc imag_nz = not2tc(equality2tc(complex_part(complex2, "imag"), zero2));
   return migrate_expr_back(or2tc(real_nz, imag_nz));
 }
 
@@ -115,7 +176,7 @@ public:
    * Checks if the AST node represents a constructor call.
    * @param json AST node in JSON format corresponding to a function call.
    * @return true if the node is a constructor call, false otherwise.
-  */
+   */
   bool is_constructor_call(const nlohmann::json &json) const;
 
   /*
@@ -126,6 +187,21 @@ public:
    * ESBMC's byte-encoding.
    */
   bool is_pointer_free(const typet &t) const;
+
+  /*
+   * True iff `t` is a struct whose every component is a pointer.
+   */
+  bool is_pointer_record(const typet &t) const;
+
+  /*
+   * The `ptr_free` argument of a list-model store whose payload argument is
+   * `payload` and whose element has type `elem_type`. 2 when the payload is
+   * the address of a pointer -- a nested list or an object reference -- so
+   * the model copies it as a pointer and the stored element still names its
+   * object; 1 when is_pointer_free(elem_type); 3 when
+   * is_pointer_record(elem_type); otherwise 0.
+   */
+  exprt ptr_free_arg(const exprt &payload, const typet &elem_type) const;
 
   /*
    * Converts a typet to its string representation.
@@ -162,10 +238,17 @@ public:
   /*
    * Creates a typet based on a Python type.
    * @param ast_type The name of the Python type (e.g., "int", "str").
-   * @param type_size The size used for container types like arrays and lists (default is 0).
+   * @param type_size The size used for container types like arrays and lists
+   * (default is 0).
    * @return The corresponding typet.
    */
   typet get_typet(const std::string &ast_type, size_t type_size = 0) const;
+
+  /// A class used as a value that is not known statically, as a variable
+  /// bound to one of several classes is: a struct holding the class's id, so
+  /// two such values compare by id (#8390).
+  static typet class_value_type();
+  static bool is_class_value_type(const typet &type);
 
   /**
    * Lowering for Python `int` — arbitrarily large in the language spec.
@@ -188,6 +271,11 @@ public:
    */
   typet get_typet(const nlohmann::json &elem) const;
 
+  // The element type of `a[i]` when `a` names an array of non-char scalars or
+  // a pointer to one (a NumPy view).
+  std::optional<typet>
+  scalar_array_element_type(const nlohmann::json &elem) const;
+
   /*
    * Checks if a container contains elements of different types.
    * @param container The JSON node representing the container.
@@ -196,7 +284,8 @@ public:
   bool has_multiple_types(const nlohmann::json &container) const;
 
   /*
-   * Builds an array_typet from a list of JSON elements by detecting the elements' subtypes and size.
+   * Builds an array_typet from a list of JSON elements by detecting the
+   * elements' subtypes and size.
    * @param list_value The list of elements of an array.
    * @return The array_typet capable of holding the list's values.
    */
@@ -270,7 +359,11 @@ public:
    */
   size_t get_type_width(const typet &type) const;
 
-  typet build_optional_type(const typet &base_type);
+  typet get_generic_typet(
+    const std::string &ast_type,
+    size_t bracket_pos,
+    size_t type_size) const;
+  typet build_optional_type(const typet &base_type) const;
 
   /*
    * Returns true if `class_name` is the same as, or derives (directly or

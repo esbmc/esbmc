@@ -1,0 +1,2 @@
+class R:
+    pass

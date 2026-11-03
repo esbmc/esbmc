@@ -1,0 +1,7 @@
+properties:
+  # With PT = n + 5 the on-delay holds x off while a is on. Reading the ADD
+  # output as 0 makes x follow a, so this would hold; the pin must be refused.
+  - id: P1
+    kind: invariant
+    expression: "!a || x"
+    description: "Deliberately false: the on-delay holds x off while a is on"

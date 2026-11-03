@@ -1,0 +1,5 @@
+CORE
+main.cpp
+--std c++17 --unwind 8
+^VERIFICATION FAILED$
+^\s+assertion p\[1\]\[2\]\.a == 0 \|\| p\[1\]\[2\]\.b != 0$

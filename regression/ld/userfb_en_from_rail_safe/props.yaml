@@ -1,0 +1,5 @@
+properties:
+  - id: PASS
+    kind: invariant
+    expression: "(!Y || GO) && (Y || !GO)"
+    description: "Y follows GO"

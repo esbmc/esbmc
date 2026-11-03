@@ -1,0 +1,14 @@
+properties:
+  # Two response properties named R1 would share one monitor counter.
+  - id: R1
+    kind: response
+    trigger: Start
+    response: Out
+    max_scans: 2
+    justification: "direct coil; Out tracks Start in the same scan"
+  - id: R1
+    kind: response
+    trigger: Start
+    response: Out
+    max_scans: 0
+    justification: "a second property reusing the id"

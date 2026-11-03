@@ -13,7 +13,8 @@ int main() {
     struct Outer outer;
     
     assert(__builtin_object_size(&outer, 0) == sizeof(struct Outer));
-    assert(__builtin_object_size(&outer.inner, 0) == sizeof(struct Inner));
+    // Type 0 measures the whole object, not the member (#8660)
+    assert(__builtin_object_size(&outer.inner, 0) == sizeof(struct Outer));
     
     return 0;
 }

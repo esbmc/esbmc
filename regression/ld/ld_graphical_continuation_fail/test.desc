@@ -1,0 +1,4 @@
+CORE
+cont.ld
+--ld-props props.yaml
+^ERROR: UnsupportedConstruct\(continuation, tier=2\)

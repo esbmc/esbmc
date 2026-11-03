@@ -60,6 +60,22 @@ void symex_slicet::collect_dependencies(const expr2tc &expr)
       if (!is_nil_expr(e))
         worklist.push_back(FrameT{e, false});
     });
+    // A variable-length array's size is read through the type of every
+    // expression that indexes it, so its definition is a dependency too.
+    for (type2tc t = cur->type; !is_nil_type(t);)
+    {
+      if (is_array_type(t))
+      {
+        const array_type2t &arr = to_array_type(t);
+        if (!is_nil_expr(arr.array_size))
+          worklist.push_back(FrameT{arr.array_size, false});
+        t = arr.subtype;
+      }
+      else if (is_pointer_type(t))
+        t = to_pointer_type(t).subtype;
+      else
+        break;
+    }
   }
 }
 
@@ -436,6 +452,10 @@ expr2tc symex_slicet::get_nondet_symbol(const expr2tc &expr)
 
   case expr2t::byte_extract_id:
     return get_nondet_symbol(to_byte_extract2t(expr).source_value);
+
+  // e.g. `x[i] = __VERIFIER_nondet_int()` on a VLA is encoded byte-wise
+  case expr2t::byte_update_id:
+    return get_nondet_symbol(to_byte_update2t(expr).update_value);
 
   case expr2t::typecast_id:
     return get_nondet_symbol(to_typecast2t(expr).from);

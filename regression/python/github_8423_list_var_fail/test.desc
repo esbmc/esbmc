@@ -1,0 +1,5 @@
+CORE
+main.py
+--unwind 16
+^  TypeError: sequence item: expected str instance$
+^VERIFICATION FAILED$

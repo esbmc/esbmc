@@ -1,0 +1,4 @@
+CORE
+dup.ld
+--ld-props props.yaml --unwind 6 --no-unwinding-assertions
+^ERROR: .*variable x is declared more than once

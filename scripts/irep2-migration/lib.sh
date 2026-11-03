@@ -102,8 +102,3 @@ irep2_symtab_dump() {
   ( "$esbmc" ${argv[@]+"${argv[@]}"} --symbol-table-only "$dir/$src" 2>&1 \
     || true ) | irep2_canon "$repo"
 }
-
-# Remove per-run header temp dirs (CLAUDE.md hygiene rule).
-irep2_cleanup_tmp() {
-  rm -rf /tmp/esbmc-headers-* 2>/dev/null || true
-}

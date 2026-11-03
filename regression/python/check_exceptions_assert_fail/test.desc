@@ -1,0 +1,5 @@
+CORE
+main.py
+--python-check-exceptions Exception
+^VERIFICATION FAILED$
+assertion

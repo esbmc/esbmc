@@ -1,0 +1,5 @@
+CORE
+main.c
+--enforce-contract f
+^  half needs a positive argument$
+^VERIFICATION FAILED$

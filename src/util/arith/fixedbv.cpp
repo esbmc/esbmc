@@ -164,7 +164,7 @@ std::string fixedbvt::format(const format_spect &format_spec) const
   unsigned fraction_bits = spec.get_fraction_bits();
 
   BigInt int_value = v;
-  BigInt factor = power(2, fraction_bits); //BigInt(1)<<fraction_bits;
+  BigInt factor = power(2, fraction_bits); // BigInt(1)<<fraction_bits;
 
   if (int_value.is_negative())
   {

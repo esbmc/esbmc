@@ -1,0 +1,5 @@
+CORE
+main.c
+--memory-leak-check --no-reachable-memory-leak --incremental-bmc
+forgotten memory: realloc_\d+_array$
+^VERIFICATION FAILED$

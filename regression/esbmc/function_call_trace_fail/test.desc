@@ -1,0 +1,5 @@
+CORE
+main.c
+--show-funccall-trace
+Function call trace:
+^VERIFICATION FAILED$

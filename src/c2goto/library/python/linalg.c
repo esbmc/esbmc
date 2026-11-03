@@ -1,12 +1,13 @@
-// NumPy documentation: https://numpy.org/doc/stable/reference/routines.linalg.html
+// NumPy documentation:
+// https://numpy.org/doc/stable/reference/routines.linalg.html
 
 #include <math.h>
 #include <stdint.h>
 
 // Generic dot product for int64_t arrays
-// A: m×n matrix, B: n×p matrix, C: m×p output matrix (all stored as flat arrays)
-// All arrays are stored row-major contiguous in memory
-// bits: operand dtype width (e.g. 32 for int32, 64 for int64)
+// A: m×n matrix, B: n×p matrix, C: m×p output matrix (all stored as flat
+// arrays) All arrays are stored row-major contiguous in memory bits: operand
+// dtype width (e.g. 32 for int32, 64 for int64)
 void dot(
   int64_t *A,
   int64_t *B,

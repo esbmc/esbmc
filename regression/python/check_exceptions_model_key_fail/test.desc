@@ -1,0 +1,5 @@
+CORE
+main.py
+--python-check-exceptions KeyError,ZeroDivisionError
+^VERIFICATION FAILED$
+KeyError

@@ -1,0 +1,4 @@
+CORE
+main.py
+
+^ERROR: .*main\.py:22:.*'f' is bound to a method and also bound another way$

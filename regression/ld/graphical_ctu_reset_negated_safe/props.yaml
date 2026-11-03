@@ -1,0 +1,9 @@
+properties:
+  # The CTU's R pin is wired to a normally-closed contact on Run, so the counter
+  # is held at 0, and Done (CV >= PV = 2) is off, whenever Run is off. Reading
+  # the contact's variable instead of its power flow would drop the negation
+  # and reset only while Run is on.
+  - id: P1
+    kind: invariant
+    expression: "Run || !Done"
+    description: "The counter output stays off while Run is off"

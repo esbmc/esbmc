@@ -40,14 +40,14 @@ void __ESBMC_set_thread_internal_data(
 #define __ESBMC_spin_waiters(a) ((a)->__waiters)
 
 /* Global tracking data. Should all initialize to 0 / false */
-__attribute__((annotate("__ESBMC_inf_size")))
-_Bool __ESBMC_pthread_thread_running[1];
+__attribute__((
+  annotate("__ESBMC_inf_size"))) _Bool __ESBMC_pthread_thread_running[1];
 
-__attribute__((annotate("__ESBMC_inf_size")))
-_Bool __ESBMC_pthread_thread_ended[1];
+__attribute__((
+  annotate("__ESBMC_inf_size"))) _Bool __ESBMC_pthread_thread_ended[1];
 
-__attribute__((annotate("__ESBMC_inf_size")))
-_Bool __ESBMC_pthread_thread_detach[1];
+__attribute__((
+  annotate("__ESBMC_inf_size"))) _Bool __ESBMC_pthread_thread_detach[1];
 
 /* Threads currently blocked in pthread_join waiting for thread[i] to end. */
 __attribute__((
@@ -83,8 +83,8 @@ __ESBMC_HIDE:;
  *   cancel_requested = false
  *   cancelstate      = PTHREAD_CANCEL_ENABLE  (0)
  *   canceltype       = PTHREAD_CANCEL_DEFERRED (0) */
-__attribute__((annotate("__ESBMC_inf_size")))
-_Bool __ESBMC_pthread_cancel_requested[1];
+__attribute__((
+  annotate("__ESBMC_inf_size"))) _Bool __ESBMC_pthread_cancel_requested[1];
 
 __attribute__((
   annotate("__ESBMC_inf_size"))) int __ESBMC_pthread_cancelstate[1];
@@ -120,53 +120,21 @@ void __esbmc_set_cleanup_level(int level)
   __esbmc_cleanup_level[tid] = level;
 }
 
-/************************** Infinite Array Implementation **************************/
+/************************** Infinite Array Implementation
+ * **************************/
 
-/* These internal functions insert_key_value(), search_key() and delete_key()
- * need to be called in an atomic context. */
+/* Thread-specific data: one value per (thread, key), NULL until set, as a
+ * newly created key holds NULL in every thread (#9433). Keys are never
+ * reused, so at most __ESBMC_TSD_KEYS_MAX (glibc's PTHREAD_KEYS_MAX) exist. */
+#define __ESBMC_TSD_KEYS_MAX 1024
 
-typedef struct thread_key
-{
-  pthread_t thread;
-  pthread_key_t key;
-  const void *value;
-} __ESBMC_thread_key;
+__attribute__((
+  annotate("__ESBMC_inf_size"))) static void *__ESBMC_pthread_tsd[1];
 
-__attribute__((annotate(
-  "__ESBMC_inf_size"))) static __ESBMC_thread_key __ESBMC_pthread_thread_key[1];
-
-static void insert_key_value(pthread_key_t key, const void *value)
+static unsigned long tsd_index(pthread_key_t key)
 {
 __ESBMC_HIDE:;
-  pthread_t thread = __ESBMC_get_thread_id();
-  __ESBMC_pthread_thread_key[thread].thread = thread;
-  __ESBMC_pthread_thread_key[thread].key = key;
-  __ESBMC_pthread_thread_key[thread].value = value;
-}
-
-static __ESBMC_thread_key *search_key(pthread_key_t key)
-{
-__ESBMC_HIDE:;
-  pthread_t thread = __ESBMC_get_thread_id();
-  if (
-    __ESBMC_pthread_thread_key[thread].thread == thread &&
-    __ESBMC_pthread_thread_key[thread].key == key)
-  {
-    return &__ESBMC_pthread_thread_key[thread];
-  }
-  return NULL;
-}
-
-static int delete_key(__ESBMC_thread_key *l)
-{
-__ESBMC_HIDE:;
-  pthread_t thread = __ESBMC_get_thread_id();
-  if (&__ESBMC_pthread_thread_key[thread] == l)
-  {
-    __ESBMC_pthread_thread_key[thread].thread = 0; // Mark as empty
-    return 0;
-  }
-  return -1;
+  return (unsigned long)__ESBMC_get_thread_id() * __ESBMC_TSD_KEYS_MAX + key;
 }
 
 /************************** Thread creation and exit **************************/
@@ -191,26 +159,33 @@ __ESBMC_HIDE:;
   __ESBMC_num_threads_running--;
 }
 
+static _Bool tsd_destructor_pass(void)
+{
+__ESBMC_HIDE:;
+  _Bool called = 0;
+  for (unsigned long i = 0; i < __ESBMC_next_thread_key; ++i)
+  {
+    void *value = __ESBMC_pthread_tsd[tsd_index(i)];
+    if (__ESBMC_thread_key_destructors[i] && value)
+    {
+      __ESBMC_pthread_tsd[tsd_index(i)] = NULL;
+      __ESBMC_thread_key_destructors[i](value);
+      called = 1;
+    }
+  }
+  return called;
+}
+
 void pthread_exec_key_destructors(void)
 {
 __ESBMC_HIDE:;
   __ESBMC_atomic_begin();
-  // At thread exit, if a key value has a non-NULL destructor pointer,
-  // and the thread has a non-NULL value associated with that key,
-  // the value of the key is set to NULL, and then the function pointed to
-  // is called with the previously associated value as its sole argument.
-  // The order of destructor calls is unspecified if more than one destructor
-  // exists for a thread when it exits.
-  // source: https://linux.die.net/man/3/pthread_key_create
-  for (unsigned long i = 0; i < __ESBMC_next_thread_key; ++i)
-  {
-    __ESBMC_thread_key *l = search_key(i);
-    if (__ESBMC_thread_key_destructors[i] && l->value)
-    {
-      __ESBMC_thread_key_destructors[i]((void *)l->value);
-      delete_key(l);
-    }
-  }
+  // POSIX.1-2017 pthread_key_create: clear each non-NULL value, then call its
+  // destructor; repeat while destructors ran, for at most
+  // PTHREAD_DESTRUCTOR_ITERATIONS (4) passes. Unrolled rather than looped so
+  // that an unwind bound never truncates thread exit.
+  if (tsd_destructor_pass() && tsd_destructor_pass() && tsd_destructor_pass())
+    tsd_destructor_pass();
   __ESBMC_atomic_end();
 }
 
@@ -282,12 +257,11 @@ void pthread_exit(void *retval)
 __ESBMC_HIDE:;
   __ESBMC_atomic_begin();
 
-  // Run key destructors first
-  pthread_exec_key_destructors();
-
-  // Run cleanup handlers
+  // POSIX.1-2017 pthread_exit: cleanup handlers run before TSD destructors.
   while (pthread_cleanup_enabled && __esbmc_get_cleanup_level() > 0)
     pthread_cleanup_pop(1); // 1 means execute the handler
+
+  pthread_exec_key_destructors();
 
   pthread_t threadid = __ESBMC_get_thread_id();
   __ESBMC_pthread_end_values[threadid] = retval;
@@ -602,6 +576,8 @@ __ESBMC_HIDE:;
   _Bool denied = __ESBMC_mutex_unlock_denied(mutex);
   if (!denied)
     __ESBMC_mutex_release(mutex);
+  /* Release must be a switch point: sync-typed fields are not (#9653). */
+  __ESBMC_yield();
   __ESBMC_atomic_end();
   return denied ? EPERM : 0;
 }
@@ -615,6 +591,8 @@ __ESBMC_HIDE:;
     denied || __ESBMC_mutex_lock_field(*mutex), "must hold lock upon unlock");
   if (!denied)
     __ESBMC_mutex_release(mutex);
+  /* Release must be a switch point: sync-typed fields are not (#9653). */
+  __ESBMC_yield();
   __ESBMC_atomic_end();
   return denied ? EPERM : 0;
 }
@@ -674,6 +652,8 @@ __ESBMC_HIDE:;
     __ESBMC_release_blocked_threads(__ESBMC_mutex_waiters(*mutex));
     __ESBMC_mutex_waiters(*mutex) = 0;
   }
+  /* Release must be a switch point: sync-typed fields are not (#9653). */
+  __ESBMC_yield();
   __ESBMC_atomic_end();
   return denied ? EPERM : 0;
 }
@@ -743,6 +723,9 @@ int pthread_rwlock_destroy(pthread_rwlock_t *lock)
 
 /************************ rwlock mainpulation routines ************************/
 
+/* Lock fields are sync-typed and no switch point, so every acquire yields
+ * (#9680). */
+
 int pthread_rwlock_init(
   pthread_rwlock_t *lock,
   const pthread_rwlockattr_t *attr)
@@ -763,6 +746,7 @@ __ESBMC_HIDE:;
   __ESBMC_atomic_begin();
   __ESBMC_assume(!__ESBMC_rwlock_writer(lock));
   __ESBMC_rwlock_readers(lock)++;
+  __ESBMC_yield();
   __ESBMC_atomic_end();
   return 0;
 }
@@ -777,6 +761,7 @@ __ESBMC_HIDE:;
   if (acquired)
   {
     __ESBMC_rwlock_readers(lock)++;
+    __ESBMC_yield();
   }
   else
   {
@@ -799,30 +784,30 @@ int pthread_rwlock_tryrdlock(pthread_rwlock_t *lock)
 __ESBMC_HIDE:;
   __ESBMC_atomic_begin();
 
-  if (__ESBMC_rwlock_writer(lock) != 0)
+  int res = EBUSY;
+  if (!__ESBMC_rwlock_writer(lock))
   {
-    __ESBMC_atomic_end();
-    return EBUSY;
-  }
-  else
     __ESBMC_rwlock_readers(lock)++;
+    __ESBMC_yield();
+    res = 0;
+  }
   __ESBMC_atomic_end();
-
-  return 0;
+  return res;
 }
 
 int pthread_rwlock_trywrlock(pthread_rwlock_t *lock)
 {
 __ESBMC_HIDE:;
   __ESBMC_atomic_begin();
-  if (__ESBMC_rwlock_writer(lock) != 0 || __ESBMC_rwlock_readers(lock) != 0)
+  int res = EBUSY;
+  if (!(__ESBMC_rwlock_writer(lock) || __ESBMC_rwlock_readers(lock)))
   {
-    __ESBMC_atomic_end();
-    return EBUSY;
+    __ESBMC_rwlock_writer(lock) = 1;
+    __ESBMC_yield();
+    res = 0;
   }
-  __ESBMC_rwlock_writer(lock) = 1;
   __ESBMC_atomic_end();
-  return 0;
+  return res;
 }
 
 int pthread_rwlock_unlock(pthread_rwlock_t *lock)
@@ -841,6 +826,8 @@ __ESBMC_HIDE:;
     __ESBMC_release_blocked_threads(__ESBMC_rwlock_waiters(lock));
     __ESBMC_rwlock_waiters(lock) = 0;
   }
+  /* Release must be a switch point: sync-typed fields are not (#9653). */
+  __ESBMC_yield();
   __ESBMC_atomic_end();
   return 0;
 }
@@ -852,6 +839,7 @@ __ESBMC_HIDE:;
   __ESBMC_assume(
     !(__ESBMC_rwlock_writer(lock) || __ESBMC_rwlock_readers(lock)));
   __ESBMC_rwlock_writer(lock) = 1;
+  __ESBMC_yield();
   __ESBMC_atomic_end();
   return 0;
 }
@@ -867,6 +855,7 @@ __ESBMC_HIDE:;
   if (acquired)
   {
     __ESBMC_rwlock_writer(lock) = 1;
+    __ESBMC_yield();
   }
   else
   {
@@ -941,7 +930,8 @@ __ESBMC_HIDE:;
   return 0;
 }
 
-int pthread_barrier_wait(pthread_barrier_t *barrier)
+static int
+__ESBMC_barrier_wait_impl(pthread_barrier_t *barrier, _Bool deadlock_check)
 {
 __ESBMC_HIDE:;
   __ESBMC_atomic_begin();
@@ -962,11 +952,14 @@ __ESBMC_HIDE:;
   }
   else
   {
+    // Barrier fields are sync-typed, so no switch point occurs here (#9648).
+    __ESBMC_yield();
     __ESBMC_barrier_waiters(barrier)++;
     __ESBMC_blocked_threads_count++;
-    __ESBMC_assert(
-      __ESBMC_blocked_threads_count != __ESBMC_num_threads_running,
-      "Deadlocked state in pthread_barrier_wait");
+    if (deadlock_check)
+      __ESBMC_assert(
+        __ESBMC_blocked_threads_count != __ESBMC_num_threads_running,
+        "Deadlocked state in pthread_barrier_wait");
   }
 
   __ESBMC_atomic_end();
@@ -975,6 +968,18 @@ __ESBMC_HIDE:;
   __ESBMC_assume(__ESBMC_barrier_generation(barrier) != generation);
 
   return res;
+}
+
+int pthread_barrier_wait(pthread_barrier_t *barrier)
+{
+__ESBMC_HIDE:;
+  return __ESBMC_barrier_wait_impl(barrier, 0);
+}
+
+int pthread_barrier_wait_check(pthread_barrier_t *barrier)
+{
+__ESBMC_HIDE:;
+  return __ESBMC_barrier_wait_impl(barrier, 1);
 }
 
 /*********************** spinlock mainpulation routines ***********************/
@@ -995,7 +1000,8 @@ int pthread_spin_destroy(pthread_spinlock_t *lock)
   return 0;
 }
 
-int pthread_spin_lock(pthread_spinlock_t *lock)
+static int
+__ESBMC_spin_lock_impl(pthread_spinlock_t *lock, _Bool deadlock_check)
 {
 __ESBMC_HIDE:;
   __ESBMC_atomic_begin();
@@ -1012,9 +1018,10 @@ __ESBMC_HIDE:;
     // deadlock exactly as it is for a blocking mutex.
     __ESBMC_spin_waiters(lock)++;
     __ESBMC_blocked_threads_count++;
-    __ESBMC_assert(
-      __ESBMC_blocked_threads_count != __ESBMC_num_threads_running,
-      "Deadlocked state in pthread_spin_lock");
+    if (deadlock_check)
+      __ESBMC_assert(
+        __ESBMC_blocked_threads_count != __ESBMC_num_threads_running,
+        "Deadlocked state in pthread_spin_lock");
   }
 
   __ESBMC_atomic_end();
@@ -1022,6 +1029,18 @@ __ESBMC_HIDE:;
   __ESBMC_assume(acquired);
 
   return 0;
+}
+
+int pthread_spin_lock(pthread_spinlock_t *lock)
+{
+__ESBMC_HIDE:;
+  return __ESBMC_spin_lock_impl(lock, 0);
+}
+
+int pthread_spin_lock_check(pthread_spinlock_t *lock)
+{
+__ESBMC_HIDE:;
+  return __ESBMC_spin_lock_impl(lock, 1);
 }
 
 int pthread_spin_trylock(pthread_spinlock_t *lock)
@@ -1049,6 +1068,8 @@ __ESBMC_HIDE:;
   __ESBMC_spin_lock_field(lock) = 0;
   __ESBMC_release_blocked_threads(__ESBMC_spin_waiters(lock));
   __ESBMC_spin_waiters(lock) = 0;
+  /* Release must be a switch point: sync-typed fields are not (#9653). */
+  __ESBMC_yield();
   __ESBMC_atomic_end();
   return 0;
 }
@@ -1145,18 +1166,18 @@ __ESBMC_HIDE:;
   _Bool signalled = __ESBMC_cond_lock_field(*cond) == 0;
 
   /**
-  * NOTE:
-  *
-  * When using condition variables there is always a boolean predicate
-  * involving shared variables associated with each condition wait that
-  * is true if the thread should proceed.
-  *
-  * Spurious wakeups from the pthread_cond_wait() or pthread_cond_timedwait()
-  * functions may occur. Since the return from pthread_cond_wait() or pthread_cond_timedwait()
-  * does not imply anything about the value of this predicate, the predicate should be re-evaluated
-  * upon such return.
-  *
-  */
+   * NOTE:
+   *
+   * When using condition variables there is always a boolean predicate
+   * involving shared variables associated with each condition wait that
+   * is true if the thread should proceed.
+   *
+   * Spurious wakeups from the pthread_cond_wait() or pthread_cond_timedwait()
+   * functions may occur. Since the return from pthread_cond_wait() or
+   * pthread_cond_timedwait() does not imply anything about the value of this
+   * predicate, the predicate should be re-evaluated upon such return.
+   *
+   */
   _Bool spurious_wakeup = nondet_bool();
   signalled |= spurious_wakeup;
 
@@ -1205,13 +1226,16 @@ __ESBMC_HIDE:;
   __ESBMC_assert(
     key != NULL,
     "In pthread_key_create, key parameter must be different than NULL.");
-  // the value NULL shall be associated with the new key in all active threads
-  insert_key_value(__ESBMC_next_thread_key, NULL);
-  __ESBMC_thread_key_destructors[__ESBMC_next_thread_key] = destructor;
-  // store the newly created key value at *key
-  *key = __ESBMC_next_thread_key++;
+  int result = EAGAIN;
+  if (__ESBMC_next_thread_key < __ESBMC_TSD_KEYS_MAX)
+  {
+    __ESBMC_thread_key_destructors[__ESBMC_next_thread_key] = destructor;
+    // store the newly created key value at *key
+    *key = __ESBMC_next_thread_key++;
+    result = 0;
+  }
   __ESBMC_atomic_end();
-  return 0;
+  return result;
 }
 
 // The pthread_getspecific() function shall return
@@ -1225,13 +1249,8 @@ __ESBMC_HIDE:;
   // If no thread-specific data value is associated with key,
   // then the value NULL shall be returned.
   void *result = NULL;
-  if (key <= __ESBMC_next_thread_key)
-  {
-    // Return the thread-specific data value associated
-    // with the given key.
-    __ESBMC_thread_key *l = search_key(key);
-    result = (l == NULL) ? NULL : (void *)l->value;
-  }
+  if (key < __ESBMC_next_thread_key)
+    result = __ESBMC_pthread_tsd[tsd_index(key)];
   __ESBMC_atomic_end();
   // No errors are returned from pthread_getspecific().
   return result;
@@ -1245,11 +1264,10 @@ int pthread_setspecific(pthread_key_t key, const void *value)
 {
 __ESBMC_HIDE:;
   __ESBMC_atomic_begin();
-  insert_key_value(key, value);
-  // The key value is invalid when value is NULL.
-  int result = (value == NULL) ? EINVAL : 0;
+  __ESBMC_pthread_tsd[tsd_index(key)] = (void *)value;
   __ESBMC_atomic_end();
-  return result;
+  // A NULL value is valid; POSIX's only mandatory error is ENOMEM.
+  return 0;
 }
 
 // The pthread_equal() function compares two thread identifiers.
@@ -1265,6 +1283,35 @@ __ESBMC_HIDE:;
   __ESBMC_atomic_end();
   // This function always succeeds.
   return res;
+}
+
+/************************ once routine ***********************/
+
+#define __ESBMC_ONCE_RUNNING 1
+#define __ESBMC_ONCE_DONE 2
+
+// Exactly one caller runs init_routine; every other caller returns only after
+// it has completed (POSIX pthread_once).
+int pthread_once(pthread_once_t *once_control, void (*init_routine)(void))
+{
+__ESBMC_HIDE:;
+  __ESBMC_atomic_begin();
+  _Bool run = *once_control == PTHREAD_ONCE_INIT;
+  if (run)
+    *once_control = __ESBMC_ONCE_RUNNING;
+  __ESBMC_atomic_end();
+
+  if (run)
+  {
+    init_routine();
+    __ESBMC_atomic_begin();
+    *once_control = __ESBMC_ONCE_DONE;
+    __ESBMC_atomic_end();
+  }
+  else
+    __ESBMC_assume(*once_control == __ESBMC_ONCE_DONE);
+
+  return 0;
 }
 
 /************************ detach routine ***********************/
@@ -1301,8 +1348,9 @@ __ESBMC_HIDE:;
  * to be called later if pthread_cleanup_pop is invoked with execute != 0.
  *
  * The cleanup handlers are stored in a large symbolic array divided into
- * chunks of size CLEANUP_STACK_CHUNK_SIZE per thread to avoid overlap between threads.
- * 
+ * chunks of size CLEANUP_STACK_CHUNK_SIZE per thread to avoid overlap between
+ * threads.
+ *
  * @param function Pointer to the cleanup function to be called.
  * @param arg      Argument to pass to the cleanup function.
  */
@@ -1318,8 +1366,9 @@ void pthread_cleanup_push(void (*function)(void *), void *arg)
   size_t cleanup_level = __esbmc_get_cleanup_level();
 
   // Calculate the index for the cleanup entry in the symbolic infinite array.
-  // Each thread gets a separate chunk of CLEANUP_STACK_CHUNK_SIZE slots to avoid interference.
-  // Within the chunk, cleanup_level indexes the next free slot.
+  // Each thread gets a separate chunk of CLEANUP_STACK_CHUNK_SIZE slots to
+  // avoid interference. Within the chunk, cleanup_level indexes the next free
+  // slot.
   size_t index = tid * CLEANUP_STACK_CHUNK_SIZE + cleanup_level;
 
   // Store the cleanup function pointer and its argument at the calculated index
@@ -1331,10 +1380,12 @@ void pthread_cleanup_push(void (*function)(void *), void *arg)
 }
 
 /**
- * Pop a cleanup handler from the current thread's cleanup stack and optionally execute it.
+ * Pop a cleanup handler from the current thread's cleanup stack and optionally
+ * execute it.
  *
  * This function removes the most recently pushed cleanup handler.
- * If execute is non-zero, it calls the cleanup function with the stored argument.
+ * If execute is non-zero, it calls the cleanup function with the stored
+ * argument.
  *
  * @param execute If non-zero, execute the popped cleanup handler.
  */
@@ -1360,7 +1411,8 @@ void pthread_cleanup_pop(int execute)
 
   if (execute)
   {
-    // Calculate the index in the infinite symbolic cleanup stack for this thread and level
+    // Calculate the index in the infinite symbolic cleanup stack for this
+    // thread and level
     size_t index = tid * CLEANUP_STACK_CHUNK_SIZE + cleanup_level;
 
     // Retrieve the stored cleanup function and argument

@@ -1,0 +1,9 @@
+properties:
+  # The TON's output drives nothing, so it steps after every coil. Beremiz emits
+  # "IF s THEN v := TRUE; ... IF v THEN v := FALSE; ... TON0(IN := v, ...)", so
+  # the timer's enable reads v after the reset and is never energised. Reusing
+  # the contact's power flow from an earlier coil would read v before the reset.
+  - id: P1
+    kind: invariant
+    expression: "!TON0__IN"
+    description: "The timer's enable reads v after the reset coil has cleared it"

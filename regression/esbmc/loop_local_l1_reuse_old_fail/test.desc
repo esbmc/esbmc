@@ -1,0 +1,5 @@
+CORE
+main.c
+--unwind 3
+accessed expired variable pointer `x'
+^VERIFICATION FAILED$

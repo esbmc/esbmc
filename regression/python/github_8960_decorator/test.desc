@@ -1,0 +1,4 @@
+CORE
+main.py
+--unwind 8 --no-unwinding-assertions
+a decorator a function body defines is not supported

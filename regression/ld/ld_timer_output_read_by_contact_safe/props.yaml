@@ -1,0 +1,5 @@
+properties:
+  - id: P1
+    kind: invariant
+    expression: "!Out"
+    description: "A timer that is never started keeps Q false"

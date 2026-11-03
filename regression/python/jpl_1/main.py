@@ -1,3 +1,6 @@
+# KNOWNBUG (#8915): the receiver of candidate.pre() in the lambda has no known class,
+# so the call is refused. Lowering it to a null constant had made every action
+# disabled, and the SUCCESSFUL verdict held even with a failing assert in act().
 import random
 def list_comp(actions, condition):
     result = []

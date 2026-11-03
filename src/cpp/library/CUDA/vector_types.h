@@ -118,9 +118,9 @@ extern "C"
   };
 
   __cuda_builtin_vector_align8(short4, short x; short y; short z; short w;);
-  __cuda_builtin_vector_align8(ushort4, unsigned short x; unsigned short y;
-                               unsigned short z;
-                               unsigned short w;);
+  __cuda_builtin_vector_align8(
+    ushort4, unsigned short x; unsigned short y; unsigned short z;
+    unsigned short w;);
 
   struct __device_builtin__ int1
   {
@@ -167,8 +167,8 @@ extern "C"
 
 #  if defined(_WIN32)
   __cuda_builtin_vector_align8(long2, long int x; long int y;);
-  __cuda_builtin_vector_align8(ulong2, unsigned long int x;
-                               unsigned long int y;);
+  __cuda_builtin_vector_align8(
+    ulong2, unsigned long int x; unsigned long int y;);
 #  else /* _WIN32 */
 
 struct __device_builtin__ __align__(2 * sizeof(long int)) long2
@@ -224,12 +224,12 @@ struct __device_builtin__ __align__(2 * sizeof(unsigned long int)) ulong2
 #    pragma GCC poison __cuda_gnu_arm_ice_workaround
 #    pragma GCC diagnostic pop
 
-#  else /* !__CUDACC__ && !__CUDABE__ && __arm__ && __ARM_PCS_VFP &&
+#  else /* !__CUDACC__ && !__CUDABE__ && __arm__ && __ARM_PCS_VFP &&           \
          __GNUC__ == 4&& __GNUC_MINOR__ == 6 */
 
 __cuda_builtin_vector_align8(float2, float x; float y;);
 
-#  endif /* !__CUDACC__ && !__CUDABE__ && __arm__ && __ARM_PCS_VFP &&
+#  endif /* !__CUDACC__ && !__CUDABE__ && __arm__ && __ARM_PCS_VFP &&          \
           __GNUC__ == 4&& __GNUC_MINOR__ == 6 */
 
   struct __device_builtin__ float3

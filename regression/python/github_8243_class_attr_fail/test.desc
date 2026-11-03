@@ -1,0 +1,5 @@
+CORE
+main.py
+--multi-property --unwind 8 --no-unwinding-assertions
+FAILED +\[global.assertion.1\] +line 11 +assertion v == 0$
+^VERIFICATION FAILED$

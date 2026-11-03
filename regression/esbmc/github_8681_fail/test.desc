@@ -1,0 +1,6 @@
+CORE
+main.c
+--multi-property
+^\s+FAILED\s+\[main\.array-bounds-violated\.1\]\s+line\s+8\s
+^\s+FAILED\s+\[main\.division-by-zero\.1\]\s+line\s+8\s
+^VERIFICATION FAILED$

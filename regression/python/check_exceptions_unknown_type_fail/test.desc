@@ -1,0 +1,4 @@
+CORE
+main.py
+--python-check-exceptions BufferError
+^ERROR: --python-check-exceptions: no type named BufferError$

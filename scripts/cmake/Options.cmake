@@ -27,6 +27,7 @@ option(ENABLE_JIMPLE_FRONTEND "Enable Jimple language frontend (default: OFF)" O
 option(ENABLE_PYTHON_FRONTEND "Enable Python language frontend (default: OFF)" OFF)
 option(ENABLE_LD_FRONTEND "Enable SAFE-LD IEC 61131-3 Ladder Diagram front-end (default: OFF)" OFF)
 option(ENABLE_SIMPLIFIER_EQUIVALENCE_CHECK "Prove each simplifier rewrite with an SMT solver (default: OFF)" OFF)
+option(ENABLE_LLM "Build LLM integration module (default: OFF)" OFF)
 
 #############################
 # SOLVERS

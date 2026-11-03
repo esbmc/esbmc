@@ -2,19 +2,31 @@
 
 **Status:** PLANNING — WP2 largely implemented (skeleton #5280, property pipeline #5289, ld-verify runner + fault injection #5294, industrial benchmarks #5427, user-FB/REAL/watchdog #5620, graphical-LD soundness fixes + WP1 SOS spec)  
 **Project:** APP113435 — ESBMC-PLC (EPSRC Standard Research Grant)  
-**Tracking:** umbrella issue TBD  
-**Date:** 2026-06-09 (status refreshed 2026-07-30)
+**Tracking:** no umbrella issue; open work carries the `ld-frontend` label (#7371, #7381, #7483, #7577, #7578, and PR #8065 on 2026-10-01)  
+**Date:** 2026-06-09 (status refreshed 2026-10-01)
 
 > **Implementation note.** The boolean/combinational Tier-1 subset, the
 > integer-arithmetic constructs (TON/TOF/TP timers, CTU/CTD counters, and the
 > `response` property), and — beyond the original Tier-1 scope — user-defined
 > function-block bodies, REAL/analog process variables, and an optional
 > scan-watchdog all now lower to GOTO IR and verify end-to-end (see §10). The
-> suite under `regression/ld/` has grown to 37 CTest cases, plus 10 for the
+> suite under `regression/ld/` has grown to 115 CTest cases, plus 11 for the
 > `ld-verify` runner, and CI now actually runs them. All four curated
 > benchmarks have validated verdicts and are wired as regression tests. The WP1
 > SOS specification exists as `docs/safe-ld-sos-semantics.md`; its independent
 > M1 review is still outstanding.
+>
+> **Since the 2026-07-30 refresh** (#6549, #7365, #8033–#8036, #8063, #8064,
+> #8066, #8079, #8080): the graphical resolver accumulates per node instead of
+> enumerating paths; rungs evaluate sequentially, replacing the entry-snapshot
+> rule; a counter's reset and load pins take power flow (#8033); a preset the
+> front end cannot model is refused as `UnsupportedConstruct` instead of
+> falling back (#8064); and CTU stops at its preset and CTD at 0, as MATIEC
+> does (#8066). §10 below is corrected where those changed it. #7577 (parallel
+> branches feeding one coil are not OR-combined, a missed-bug report) is open
+> and contradicts §10's "parallel paths are OR-combined"; it has not been
+> re-measured here. #7381 is still open although #8034 and #8035 say they fix
+> it together.
 
 ---
 
@@ -243,8 +255,8 @@ following the SOS state-transition rules:
 | Set coil `--( S )--` | `code_ifthenelset(pf, code_assignt(var, true_exprt()))` |
 | Reset coil `--( R )--` | `code_ifthenelset(pf, code_assignt(var, false_exprt()))` |
 | Rising-edge contact `--[P]--` | `and_exprt(pf_in, and_exprt(var, not_exprt(prev)))`, with `prev` latched in the scan epilogue |
-| TON timer *(fixed-tick model)* | `code_ifthenelset(IN, ET := ET+1, ET := 0)`; `code_assignt(Q, and_exprt(IN, geq_exprt(ET, PT)))` — fires deterministically after exactly `PT` scan ticks |
-| TOF timer *(fixed-tick model)* | `code_ifthenelset(IN, {ET := 0; Q := true}, code_ifthenelset(Q, {ET := ET+1; Q := ET < PT}))` — holds `Q` for `PT` ticks after `IN` drops, and stays off until first enabled |
+| TON timer *(fixed-tick model)* | `code_ifthenelset(IN && prev, ET := ET+1, ET := 0)`; `code_assignt(Q, IN && prev && ET >= PT)`; `prev := IN` — fires `PT` scan ticks after the scan `IN` rises (one tick when `PT` is 0), as MATIEC's TON |
+| TOF timer *(fixed-tick model)* | `code_ifthenelset(IN, {ET := 0; Q := true}, code_ifthenelset(Q && !prev, {ET := ET+1; Q := ET < PT}))`; `prev := IN` — holds `Q` for max(`PT`, 1) scans counting the one `IN` drops, and stays off until first enabled |
 | CTU counter *(per-scan step)* | `code_ifthenelset` on rising edge → increment `CV`; `code_assignt` of `Q = (CV >= PV)` |
 
 The full step functions, and the rules for graphical-network resolution and
@@ -287,7 +299,7 @@ Property kinds (WP1 taxonomy):
 
 | Kind | IEC 61508 class | GOTO IR node emitted |
 |---|---|---|
-| `mutual_exclusion` | Safety integrity (independence) | `code_assertt(not_exprt(and_exprt(A, B)))` |
+| `mutual_exclusion` | Safety integrity (independence) | `code_assertt(not_exprt(or_exprt(and_exprt(A, B), ...)))`, one `and_exprt` per pair |
 | `invariant` | Safety function activation | `code_assertt(expr)` |
 | `response` | Activation time | auxiliary scan-counter `symbolt` + `code_assertt` on counter bound |
 | `absence` | Safe state persistence | `code_assertt(not_exprt(expr))` |
@@ -623,7 +635,7 @@ category proposal (T4.5).
 
 ### Unit Tests
 
-Each pipeline stage has a dedicated unit-test suite under `regression/ld/unit/`:
+Each pipeline stage has a dedicated unit-test suite under `unit/ld-frontend/`:
 
 - **Parser:** round-trip tests (parse → serialise → compare); malformed XML rejection;
   schema normalisation for each vendor export format.
@@ -790,7 +802,7 @@ prose in §3 is not mistaken for delivered functionality.
   pinned as `esd_manual_reset_fail`, with the corrected program as
   `emergency_shutdown_safe`. The conveyor's failure was a `response` property
   whose bound ignored a free `Stop_Button` input, plus the unparsed preset.
-- **Regression suite `regression/ld/`** now holds **37 CTest cases** (guarded by
+- **Regression suite `regression/ld/`** now holds **115 CTest cases** (guarded by
   `ENABLE_LD_FRONTEND`, with the `benchmarks/` dataset excluded from CTest —
   `regression/CMakeLists.txt`), covering all five property kinds plus
   fault-injection, user-FB, watchdog, REAL-arithmetic, and the `stairs_light` /
@@ -818,7 +830,7 @@ GOTO IR and verify under both k-induction and bounded BMC.
 `unit/ld-frontend/` or `src/esbmc/options.cpp`:
 
 - `regression-ld` builds with `BUILD_TESTING=On` / `ENABLE_REGRESSION=On` and
-  runs `regression/ld/` (37 cases), the `ld-verify` runner suite (10 cases) and
+  runs `regression/ld/` (115 cases), the `ld-verify` runner suite (11 cases) and
   the three LD unit binaries.
 - `build-linux-amd64` builds the release binary, smoke-tests that it advertises
   `--ld-props`, and publishes it as an artifact.
@@ -835,16 +847,17 @@ is the only gate on the front-end.
   reset dominance, and the scope of the feedback rule).
 - **WRITE_OUTPUTS** is not modelled as a distinct step; output coils are plain
   variable assignments (sufficient for the current property checks).
-- **Timer/counter integer width — now saturating.** CTU/CTD saturate CV at the
-  configured integer type's bound and TON bounds ET by PT, so neither wraps.
-  Before this, `CV + 1` on a counter at INTmax was reachable undefined behaviour
-  (`--overflow-check` reports `arithmetic overflow on add`) and the wrap dropped
-  Q back to false, losing violations; `counter_saturate_at_max` pins it, and
-  `counter_counts_fail` pins that the bound does not stop the counter counting.
-  Whether IEC saturates CV at the type bound or at PV is recorded as open item 4
-  for the M1 review in `docs/safe-ld-sos-semantics.md` §10 — the two agree on Q
-  and differ only above the preset, and the type bound is the over-approximating
-  (so non-hiding) choice.
+- **Timer/counter integer width — counters stop at the preset.** CTU stops at
+  PV and CTD at 0, as MATIEC's bodies do (#8066), and TON bounds ET by PT, so
+  none wraps. Before saturation existed, `CV + 1` on a counter at INTmax was
+  reachable undefined behaviour (`--overflow-check` reports `arithmetic overflow
+  on add`) and the wrap dropped Q back to false, losing violations;
+  `counter_above_preset_no_overflow` pins it, and `counter_counts_fail` pins
+  that the bound does not stop the counter counting. An earlier version
+  saturated at the integer type's bound instead (`counter_saturate_at_max`,
+  removed by #8066). Which of the two IEC intends is open item 4 for the M1
+  review in `docs/safe-ld-sos-semantics.md` §10; they agree on Q and differ only
+  above the preset.
 - **Graphical path enumeration replaced by per-node accumulation.** The
   resolver used to enumerate every simple rail-to-sink path, so cost grew as 2^N
   in re-convergent parallel branches: 18 fully-connected 2-wide stages — just 36
@@ -891,8 +904,8 @@ is the only gate on the front-end.
   coil got no incoming edge, `paths_to` returned nothing, and the coil was left
   unassigned — a `VERIFICATION SUCCESSFUL` verdict on a program whose rung had
   silently vanished (`graphical_unsupported_block_fail` pins this).
-- **Counter reset from a contact chain** is diagnosed and left unconnected;
-  only a reset pin wired to a variable is modelled.
+- **Counter reset from a contact chain** is modelled since #8033: CTU's R and
+  CTD's LD take power flow (`graphical_ctu_reset_*`).
 - **Non-numeric presets used to terminate the process.** `literal_to_ticks`
   converted with `std::stoll` and relied on catching `std::invalid_argument`, but
   the catch did not fire: a block data pin wired to a named variable via
@@ -900,8 +913,10 @@ is the only gate on the front-end.
   uncaught exception. Both of the callers' fallback paths — the identifier
   reference in `resolve_data_pin` and the "unrecognised initial value" warning in
   `parse_var_decl` — were therefore unreachable. It now validates with `strtoll`
-  and errno instead of converting and catching; `ld_preset_named_pin_safe` and
-  `graphical_timer_path_fail` pin the two paths. Why the handler was skipped is
+  and errno instead of converting and catching. Since #8064 neither fallback
+  exists: such a preset is refused as `UnsupportedConstruct`, pinned by
+  `ld_preset_unparsable_init_fail`, `ld_preset_blank_init_fail` and
+  `graphical_preset_from_block_fail` (`ld_preset_named_pin_safe` was removed). Why the handler was skipped is
   not established, so the same convert-and-catch pattern elsewhere in ESBMC
   (~20 `std::sto*` call sites, several on user input) should not be assumed safe.
 
@@ -960,11 +975,14 @@ second, and the GOTO shows `m__prev = m` emitted before any rung, so the reader
 sees the entry value and the scan in which `a` rises leaves `q` off. Reading `m`
 immediately would make `q` track `a` and the state unreachable.
 
+The entry-snapshot rule was later replaced by sequential evaluation (issue #7352, PR #8036), and
+this test became `graphical_cross_rung_read_safe`; see SOS §6.3.
+
 Note the textual-`<rung>` tests (`counter_*`, `function_blocks_*`, `userfb_*`)
 bypass the graphical resolver entirely and are not cover for it.
 
-**Together the oracle and these tests are the intended safety net for replacing
-the resolver** (next increment 2): 101 generated programs for the combinational
+**Together the oracle and these tests were the safety net for replacing
+the resolver** (done in #6549; the enumeration bound went with it): 101 generated programs for the combinational
 algebra, plus one discriminating test per stateful construct — edge rising and
 falling with a level complement, a timer on a rung path, set-coil latching, sink
 emission order, multi-coil sub-network sharing, and the feedback snapshot — plus

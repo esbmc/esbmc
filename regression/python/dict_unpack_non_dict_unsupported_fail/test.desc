@@ -1,0 +1,4 @@
+CORE
+main.py
+
+^ERROR: dict unpacking \(\{\*\*d\}\) is only supported for a dict$

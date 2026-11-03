@@ -12,6 +12,7 @@ public:
   // adjusting the object initialization
   void adjust_init(code_assignt &assignment, codet &adjusted) override;
   void convert_expression_to_code(exprt &expr);
+  void static_lifetime_destroy(codet &dest) override;
 };
 
 #endif /* CLANG_CPP_FRONTEND_CLANG_CPP_MAIN_H_ */

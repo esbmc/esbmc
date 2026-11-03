@@ -1,11 +1,12 @@
 /* Quantified postcondition over an array filled by the loop (GitHub #6217).
  * __ESBMC_forall(&i, !(i < N) || ...) needs i == N at exit, so it is exit
  * reasoning and wants --loop-invariant-check.  The loop is cut rather than
- * unrolled, so --unwind only has to cover the rest of the function and the
- * cost is independent of N. */
+ * unrolled, so --unwind only has to cover the rest of the function.  N stays
+ * within the pointee width the havoc covers; a wider poly leaves the loop to
+ * the unwinder. */
 #include <stdint.h>
 
-#define N 1024
+#define N 64
 #define Q 3329
 
 typedef struct

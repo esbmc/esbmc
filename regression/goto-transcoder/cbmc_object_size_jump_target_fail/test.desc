@@ -1,0 +1,5 @@
+CORE
+cbmc_object_size_jump_target_fail.goto
+--binary
+size at a jump target
+^VERIFICATION FAILED$

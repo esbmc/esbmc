@@ -105,9 +105,8 @@ call shape works.
   execution terminates. The cap is an *assumption* rather than an assertion, so
   a defect needing more entries than it allows is excluded silently, where the
   container models assert instead and report `capacity exceeded`.
-- `std::ilogb`, `std::logb` and `std::nexttoward` resolve as overloads but have
-  no model in ESBMC's libc, so they return a nondeterministic value rather than
-  the C99 result.
+- `std::nexttoward` resolves as an overload but has no model in ESBMC's libc,
+  so it returns a nondeterministic value rather than the C99 result.
 
 ## Time and clocks
 

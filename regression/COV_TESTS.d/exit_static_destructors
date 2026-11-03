@@ -1,0 +1,3 @@
+regression/esbmc-cpp/cpp/exit_static_destructors
+regression/esbmc-cpp/cpp/exit_static_destructors_fail
+regression/esbmc-cpp/cpp/static_storage_exit_destructors_no_library_fail

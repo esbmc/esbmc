@@ -1,0 +1,7 @@
+regression/python/github_8959
+regression/python/github_8959_fail
+regression/python/github_8959_imported_alias
+regression/python/github_8959_starred_param
+regression/python/github_8959_starred_param_fail
+regression/python/github_8959_starred_param_lengths_differ
+regression/python/github_8959_starred_param_two_calls

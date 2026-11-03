@@ -1,0 +1,5 @@
+CORE
+main.c
+--generate-testcase --unwind 3 --no-unwinding-assertions
+^VERIFICATION FAILED$
+CHECK_FILE testcase.xml contains <testcase coversError="true">\n<input>2</input>\n<input>-?[0-9]+</input>\n<input>5</input>\n</testcase>

@@ -1,0 +1,5 @@
+CORE
+cbmc_kani_array_too_large_fail.goto
+--binary --function _RNvCsKeWNGEHdu0_13arr_too_large7harness --ignore-property-class reachability_check --ignore-property-class cover
+Array too large to construct element by element
+^VERIFICATION FAILED$

@@ -21,7 +21,7 @@ This provides the tool with modularization opportunities.
 
 - Value Set Analysis
 
-## GOTO Functions Algorithm (`algorithms/algorithm.h`).
+## GOTO Functions Algorithm (`goto-programs/goto_functions_algorithm.h`).
 
 ![classgoto__functions__algorithm](https://user-images.githubusercontent.com/8601807/195880520-f4d333c4-a0f9-4fca-8645-c3d329f23d09.png)
 
@@ -44,7 +44,7 @@ There are few algorithms that could be turned into explicit algorithms. However,
 
 # SSA Algorithms
 
-ESBMC uses a modular algorithm system for processing SSA (Static Single Assignment) steps during verification. The core architecture is built around the `ssa_step_algorithm` base class defined in `src/util/ssa/algorithms.h`.
+ESBMC uses a modular algorithm system for processing SSA (Static Single Assignment) steps during verification. The core architecture is built around the `ssa_step_algorithm` base class defined in `src/goto-symex/equation/ssa_step_algorithm.h`.
 
 ## Algorithm Architecture
 

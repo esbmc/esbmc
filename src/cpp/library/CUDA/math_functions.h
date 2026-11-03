@@ -7,13 +7,13 @@
 #define NEPERIANO 2.718281828
 #define PREC 1e-16
 
-//Module Single Precision Mathematical Functions
+// Module Single Precision Mathematical Functions
 
 __device__ float exp10f(float x);
 
 __device__ float powf_gpu(
   float x,
-  float y); //powf_gpu para não confundir com pow definida por c++ em math.h
+  float y); // powf_gpu para não confundir com pow definida por c++ em math.h
 
 float __exp10f(float x);
 

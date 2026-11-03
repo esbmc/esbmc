@@ -50,8 +50,10 @@ int256_t _min(unsigned int bitwidth, bool is_signed)
 __ESBMC_HIDE:;
   if (is_signed)
   {
-    __ESBMC_assume(bitwidth > 0 && bitwidth <= 256);
-    return -((int256_t)1 << (bitwidth - 1)); // -2^(N-1)
+    __ESBMC_assume(bitwidth > 1 && bitwidth <= 256);
+    /* -2^(N-1), without negating 2^(N-1), which overflows for N = 256 */
+    int256_t half = (int256_t)1 << (bitwidth - 2);
+    return -half - half;
   }
   else
   {

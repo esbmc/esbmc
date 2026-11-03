@@ -1,0 +1,7 @@
+properties:
+  # With Clear off the counter reaches its preset, so Done can be on. An R pin
+  # bound to anything that is always true would hold the counter at 0.
+  - id: P1
+    kind: invariant
+    expression: "!Done"
+    description: "Deliberately false: the counter reaches its preset while Clear is off"

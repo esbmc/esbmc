@@ -298,7 +298,8 @@ __curand_hilouint32AsDouble(unsigned int hi, unsigned int lo)
 }
 
 /*
-QUALIFIERS double __curand_hilouint32_as_double(unsigned int hi, unsigned int lo)
+QUALIFIERS double __curand_hilouint32_as_double(unsigned int hi, unsigned int
+lo)
 {
 #if __CUDA_ARCH__ > 0
     return __hiloint2double(hi, lo);
@@ -387,7 +388,8 @@ _skipahead_scratch(unsigned long long x, T *state, unsigned int *scratch)
       __curand_matvec(
         vector, precalc_xorwow_offset_matrix[matrix_num], result, n);
 #  else
-//            __curand_matvec(vector, precalc_xorwow_offset_matrix_host[matrix_num], result, n);
+//            __curand_matvec(vector,
+//            precalc_xorwow_offset_matrix_host[matrix_num], result, n);
 #  endif
       __curand_veccopy(vector, result, n);
     }
@@ -402,8 +404,10 @@ _skipahead_scratch(unsigned long long x, T *state, unsigned int *scratch)
     __curand_matcopy(
       matrixA, precalc_xorwow_offset_matrix[PRECALC_NUM_MATRICES - 1], n);
 #  else
-//        __curand_matcopy(matrix, precalc_xorwow_offset_matrix_host[PRECALC_NUM_MATRICES - 1], n);
-//        __curand_matcopy(matrixA, precalc_xorwow_offset_matrix_host[PRECALC_NUM_MATRICES - 1], n);
+//        __curand_matcopy(matrix,
+//        precalc_xorwow_offset_matrix_host[PRECALC_NUM_MATRICES - 1], n);
+//        __curand_matcopy(matrixA,
+//        precalc_xorwow_offset_matrix_host[PRECALC_NUM_MATRICES - 1], n);
 #  endif
   }
   while (p)
@@ -457,7 +461,8 @@ template <typename T, int n>
 #  ifdef __CUDA_ARCH__
       __curand_matvec(vector, precalc_xorwow_matrix[matrix_num], result, n);
 #  else
-//            __curand_matvec(vector, precalc_xorwow_matrix_host[matrix_num], result, n);
+//            __curand_matvec(vector, precalc_xorwow_matrix_host[matrix_num],
+//            result, n);
 #  endif
       __curand_veccopy(vector, result, n);
     }
@@ -472,8 +477,10 @@ template <typename T, int n>
     __curand_matcopy(
       matrixA, precalc_xorwow_matrix[PRECALC_NUM_MATRICES - 1], n);
 #  else
-//        __curand_matcopy(matrix, precalc_xorwow_matrix_host[PRECALC_NUM_MATRICES - 1], n);
-//        __curand_matcopy(matrixA, precalc_xorwow_matrix_host[PRECALC_NUM_MATRICES - 1], n);
+//        __curand_matcopy(matrix,
+//        precalc_xorwow_matrix_host[PRECALC_NUM_MATRICES - 1], n);
+//        __curand_matcopy(matrixA,
+//        precalc_xorwow_matrix_host[PRECALC_NUM_MATRICES - 1], n);
 #  endif
   }
   while (p)
@@ -521,7 +528,8 @@ template <typename T, int n>
  * \brief Update XORWOW state to skip ahead \p n subsequences.
  *
  * Update the XORWOW state in \p state to skip ahead \p n subsequences.  Each
- * subsequence is \f$ 2^{67} \f$ elements long, so this means the function will skip ahead
+ * subsequence is \f$ 2^{67} \f$ elements long, so this means the function will
+ * skip ahead
  * \f$ 2^{67} \cdot n\f$ elements.
  *
  * All values of \p n are valid.  Large values require more computation and so
@@ -602,7 +610,8 @@ skipahead_sequence(unsigned long long n, curandStateXORWOW_t *state)
  *
  * \param state - Pointer to state to update
  *
- * \return 32-bits of pseudorandomness as an unsigned int, all bits valid to use.
+ * \return 32-bits of pseudorandomness as an unsigned int, all bits valid to
+ * use.
  */
 /*QUALIFIERS*/ unsigned int curand(curandStateXORWOW_t *state)
 {
@@ -617,7 +626,7 @@ skipahead_sequence(unsigned long long n, curandStateXORWOW_t *state)
   return state->v[4] + state->d;
 }
 
-//#############
+// #############
 
 /**
  * \brief Update Sobol32 state to skip \p n elements.
@@ -676,14 +685,15 @@ template <typename T>
 /**
  * \brief Initialize Sobol32 state.
  *
- * Initialize Sobol32 state in \p state with the given \p direction \p vectors and
+ * Initialize Sobol32 state in \p state with the given \p direction \p vectors
+ * and
  * \p offset.
  *
  * The direction vector is a device pointer to an array of 32 unsigned ints.
  * All input values of \p offset are legal.
  *
- * \param direction_vectors - Pointer to array of 32 unsigned ints representing the
- * direction vectors for the desired dimension
+ * \param direction_vectors - Pointer to array of 32 unsigned ints representing
+ * the direction vectors for the desired dimension
  * \param offset - Absolute offset into sequence
  * \param state - Pointer to state to initialize
  */
@@ -704,14 +714,15 @@ template <typename T>
 /**
  * \brief Initialize Scrambled Sobol32 state.
  *
- * Initialize Sobol32 state in \p state with the given \p direction \p vectors and
+ * Initialize Sobol32 state in \p state with the given \p direction \p vectors
+ and
  * \p offset.
  *
  * The direction vector is a device pointer to an array of 32 unsigned ints.
  * All input values of \p offset are legal.
  *
- * \param direction_vectors - Pointer to array of 32 unsigned ints representing the
- direction vectors for the desired dimension
+ * \param direction_vectors - Pointer to array of 32 unsigned ints representing
+ the direction vectors for the desired dimension
  * \param scramble_c Scramble constant
  * \param offset - Absolute offset into sequence
  * \param state - Pointer to state to initialize
@@ -721,7 +732,8 @@ template <typename T>
 /*QUALIFIERS void curand_init(curandDirectionVectors32_t direction_vectors,
                                             unsigned int scramble_c,
                                             unsigned int offset,
-                                            curandStateScrambledSobol32_t *state)
+                                            curandStateScrambledSobol32_t
+*state)
 {
     state->i = 0;
     for(int i = 0; i < 32; i++) {
@@ -752,14 +764,16 @@ template <typename XT>
 /**
  * \brief Initialize Sobol64 state.
  *
- * Initialize Sobol64 state in \p state with the given \p direction \p vectors and
+ * Initialize Sobol64 state in \p state with the given \p direction \p vectors
+ and
  * \p offset.
  *
- * The direction vector is a device pointer to an array of 64 unsigned long longs.
+ * The direction vector is a device pointer to an array of 64 unsigned long
+ longs.
  * All input values of \p offset are legal.
  *
- * \param direction_vectors - Pointer to array of 64 unsigned long longs representing the
- direction vectors for the desired dimension
+ * \param direction_vectors - Pointer to array of 64 unsigned long longs
+ representing the direction vectors for the desired dimension
  * \param offset - Absolute offset into sequence
  * \param state - Pointer to state to initialize
  */
@@ -792,14 +806,16 @@ template <typename PT>
 /**
  * \brief Initialize Scrambled Sobol64 state.
  *
- * Initialize Sobol64 state in \p state with the given \p direction \p vectors and
+ * Initialize Sobol64 state in \p state with the given \p direction \p vectors
+ and
  * \p offset.
  *
- * The direction vector is a device pointer to an array of 64 unsigned long longs.
+ * The direction vector is a device pointer to an array of 64 unsigned long
+ longs.
  * All input values of \p offset are legal.
  *
- * \param direction_vectors - Pointer to array of 64 unsigned long longs representing the
- direction vectors for the desired dimension
+ * \param direction_vectors - Pointer to array of 64 unsigned long longs
+ representing the direction vectors for the desired dimension
  * \param scramble_c Scramble constant
  * \param offset - Absolute offset into sequence
  * \param state - Pointer to state to initialize
@@ -845,8 +861,8 @@ template <typename PT>
 /**
  * \brief Return 32-bits of quasirandomness from a scrambled Sobol32 generator.
  *
- * Return 32-bits of quasirandomness from the scrambled Sobol32 generator in \p state,
- * increment position of generator by one.
+ * Return 32-bits of quasirandomness from the scrambled Sobol32 generator in \p
+ * state, increment position of generator by one.
  *
  * \param state - Pointer to state to update
  *
@@ -872,7 +888,8 @@ template <typename PT>
  *
  * \param state - Pointer to state to update
  *
- * \return 64-bits of quasirandomness as an unsigned long long, all bits valid to use.
+ * \return 64-bits of quasirandomness as an unsigned long long, all bits valid
+ * to use.
  */
 
 /*QUALIFIERS*/ unsigned long long curand(curandStateSobol64_t *state)
@@ -889,12 +906,13 @@ template <typename PT>
 /**
  * \brief Return 64-bits of quasirandomness from a scrambled Sobol64 generator.
  *
- * Return 64-bits of quasirandomness from the scrambled Sobol32 generator in \p state,
- * increment position of generator by one.
+ * Return 64-bits of quasirandomness from the scrambled Sobol32 generator in \p
+ * state, increment position of generator by one.
  *
  * \param state - Pointer to state to update
  *
- * \return 64-bits of quasirandomness as an unsigned long long, all bits valid to use.
+ * \return 64-bits of quasirandomness as an unsigned long long, all bits valid
+ * to use.
  */
 
 /*QUALIFIERS*/ unsigned long long curand(curandStateScrambledSobol64_t *state)
@@ -1041,12 +1059,13 @@ template <typename PT>
   return _curand_uniform_double(curand(state));
 }
 /**
- * \brief Return a uniformly distributed float from a scrambled Sobol32 generator.
+ * \brief Return a uniformly distributed float from a scrambled Sobol32
+ * generator.
  *
  * Return a uniformly distributed float between \p 0.0f and \p 1.0f
- * from the scrambled Sobol32 generator in \p state, increment position of generator.
- * Output range excludes \p 0.0f but includes \p 1.0f.  Denormalized floating
- * point outputs are never returned.
+ * from the scrambled Sobol32 generator in \p state, increment position of
+ * generator. Output range excludes \p 0.0f but includes \p 1.0f.  Denormalized
+ * floating point outputs are never returned.
  *
  * The implementation is guaranteed to use a single call to \p curand().
  *
@@ -1060,12 +1079,13 @@ template <typename PT>
 }
 
 /**
- * \brief Return a uniformly distributed double from a scrambled Sobol32 generator.
+ * \brief Return a uniformly distributed double from a scrambled Sobol32
+ * generator.
  *
  * Return a uniformly distributed double between \p 0.0 and \p 1.0
- * from the scrambled Sobol32 generator in \p state, increment position of generator.
- * Output range excludes \p 0.0 but includes \p 1.0.  Denormalized floating
- * point outputs are never returned.
+ * from the scrambled Sobol32 generator in \p state, increment position of
+ * generator. Output range excludes \p 0.0 but includes \p 1.0.  Denormalized
+ * floating point outputs are never returned.
  *
  * The implementation is guaranteed to use a single call to \p curand()
  * to preserve the quasirandom properties of the sequence.
@@ -1118,12 +1138,13 @@ curand_uniform_double(curandStateScrambledSobol32_t *state)
   return _curand_uniform_double(curand(state));
 }
 /**
- * \brief Return a uniformly distributed float from a scrambled Sobol64 generator.
+ * \brief Return a uniformly distributed float from a scrambled Sobol64
+ * generator.
  *
  * Return a uniformly distributed float between \p 0.0f and \p 1.0f
- * from the scrambled Sobol64 generator in \p state, increment position of generator.
- * Output range excludes \p 0.0f but includes \p 1.0f.  Denormalized floating
- * point outputs are never returned.
+ * from the scrambled Sobol64 generator in \p state, increment position of
+ * generator. Output range excludes \p 0.0f but includes \p 1.0f.  Denormalized
+ * floating point outputs are never returned.
  *
  * The implementation is guaranteed to use a single call to \p curand().
  *
@@ -1137,12 +1158,13 @@ curand_uniform_double(curandStateScrambledSobol32_t *state)
 }
 
 /**
- * \brief Return a uniformly distributed double from a scrambled Sobol64 generator.
+ * \brief Return a uniformly distributed double from a scrambled Sobol64
+ * generator.
  *
  * Return a uniformly distributed double between \p 0.0 and \p 1.0
- * from the scrambled Sobol64 generator in \p state, increment position of generator.
- * Output range excludes \p 0.0 but includes \p 1.0.  Denormalized floating
- * point outputs are never returned.
+ * from the scrambled Sobol64 generator in \p state, increment position of
+ * generator. Output range excludes \p 0.0 but includes \p 1.0.  Denormalized
+ * floating point outputs are never returned.
  *
  * The implementation is guaranteed to use a single call to \p curand()
  * to preserve the quasirandom properties of the sequence.

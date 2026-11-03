@@ -1,0 +1,4 @@
+CORE
+main.c
+--32 --multi-property
+^VERIFICATION SUCCESSFUL$

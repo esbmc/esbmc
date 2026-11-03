@@ -1,4 +1,0 @@
-CORE
-main.py
---incremental-bmc
-^ERROR: TypeError: numpy.linalg.det supports only 2x2 and 3x3 matrices$

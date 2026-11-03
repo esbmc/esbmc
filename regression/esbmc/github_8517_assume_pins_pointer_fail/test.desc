@@ -1,0 +1,5 @@
+CORE
+main.c
+--unwind 2
+^VERIFICATION FAILED$
+assertion unpack\(d\) == 2

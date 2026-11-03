@@ -1,0 +1,4 @@
+CORE
+main.py
+
+^ERROR: calling attribute 'child' on a 'A' receiver, which may be a subclass instance holding it, is not supported$

@@ -77,11 +77,16 @@ struct sockaddr_storage {
     char        __ss_pad2[112]; // cppcheck-suppress unusedStructMember
 };
 
+#ifndef __iovec_defined
+#define __iovec_defined 1
+
 /* I/O vector for scatter/gather I/O */
 struct iovec {
     void  *iov_base; // cppcheck-suppress unusedStructMember
     size_t iov_len; // cppcheck-suppress unusedStructMember
 };
+
+#endif /* __iovec_defined */
 
 struct msghdr {
     void         *msg_name; // cppcheck-suppress unusedStructMember

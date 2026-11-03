@@ -1,0 +1,4 @@
+CORE
+main.py
+
+^ERROR: file .*main.py line 16 column 0: calling C\.setc on an instance of D, whose 'c' is not where C keeps it, is not supported$

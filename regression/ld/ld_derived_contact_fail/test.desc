@@ -1,0 +1,4 @@
+CORE
+mode.ld
+--ld-props props.yaml --unwind 6 --no-unwinding-assertions
+^ERROR: .*variable m of type Mode used as a Boolean operand

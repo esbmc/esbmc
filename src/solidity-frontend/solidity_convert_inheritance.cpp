@@ -148,7 +148,8 @@ void solidity_convertert::merge_inheritance_ast(
                  B   C
                   \ /
                    D
-                  for cases above, there must be an override inside D if B and C both override A.
+                  for cases above, there must be an override inside D if B and C
+                 both override A.
                 */
                 is_conflict = true;
                 if (c_i.contains("id") && i.contains("id"))

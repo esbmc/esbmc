@@ -2,3 +2,4 @@ CORE
 main.c
 --32
 ^VERIFICATION SUCCESSFUL$
+REQUIRES x87_long_double

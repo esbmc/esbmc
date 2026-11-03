@@ -41,7 +41,8 @@
 
 namespace
 {
-// (1) IREP2 representation of a Python type is stable under a legacy round-trip.
+// (1) IREP2 representation of a Python type is stable under a legacy
+// round-trip.
 void require_irep2_stable(const typet &t)
 {
   const type2tc t2 = migrate_type(t);
@@ -298,9 +299,10 @@ TEST_CASE(
   python_converter converter(context, &ast, gs);
   const type_handler &th = converter.get_type_handler();
 
-  // NoneType / Optional: get_typet now builds the pointer-width unsigned integer
-  // IREP2-internal (unsignedbv_type2tc) and lowers at the seam. The legacy
-  // result must be byte-identical to the pointer_type() helper it replaced.
+  // NoneType / Optional: get_typet now builds the pointer-width unsigned
+  // integer IREP2-internal (unsignedbv_type2tc) and lowers at the seam. The
+  // legacy result must be byte-identical to the pointer_type() helper it
+  // replaced.
   REQUIRE(th.get_typet(std::string("NoneType")) == pointer_type());
   REQUIRE(th.get_typet(std::string("Optional")) == pointer_type());
 

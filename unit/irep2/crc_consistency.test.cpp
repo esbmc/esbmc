@@ -129,9 +129,30 @@ TEST_CASE("crc is deterministic across construction (H-B2)", "[core][irep2]")
   REQUIRE(a->crc() == b->crc());
 
   // Deterministic spot-check (not the probabilistic a!=b=>distinct-crc law that
-  // the sweep above only WARNs on): these two fixed structures must not collide,
-  // confirming the chain length is actually mixed into the hash.
+  // the sweep above only WARNs on): these two fixed structures must not
+  // collide, confirming the chain length is actually mixed into the hash.
   expr2tc shorter = deep_add_chain(1999);
   REQUIRE(a != shorter);
   REQUIRE(a->crc() != shorter->crc());
+}
+
+// expr2t::cmp rejects on differing cached CRCs, so a copy edited in place (as
+// the simplifier's copy-then-edit sites do) must not inherit its source's
+// cached CRC.
+TEST_CASE("an edited copy compares equal to its fresh twin", "[core][irep2]")
+{
+  config.ansi_c.word_size = 32;
+  const type2tc u32 = get_uint_type(32);
+  const expr2tc one = constant_int2tc(u32, BigInt(1));
+  const expr2tc two = constant_int2tc(u32, BigInt(2));
+
+  const expr2tc source = add2tc(u32, one, one);
+  source->crc();
+  add2t copy = to_add2t(source);
+  copy.side_2 = two;
+  const expr2tc edited = add2tc(std::move(copy));
+  const expr2tc twin = add2tc(u32, one, two);
+  twin->crc();
+
+  REQUIRE(edited == twin);
 }

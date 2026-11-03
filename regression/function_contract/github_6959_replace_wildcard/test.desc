@@ -1,0 +1,4 @@
+CORE
+main.c
+--replace-call-with-contract "*"
+^ERROR: --replace-call-with-contract: cannot use 'c:@F@f': a contract clause calls 'c:@F@helper', whose result the clause cannot name outside the function body$

@@ -39,10 +39,10 @@ ends_with(std::string const &value, std::string const &ending)
   return std::equal(ending.rbegin(), ending.rend(), value.rbegin());
 }
 
-/// Value of a __builtin_clz*/ctz*/ffs* call. One encoding covers every
+/// Value of a __builtin_clz*/ctz*/ffs*/clrsb* call. One encoding covers every
 /// spelling: the operand type fixes the bit width, and the directions differ
 /// only in which way the smear shifts. Zero is undefined for every form but the
-/// two-argument clzg/ctzg and ffs; the optional UB assertion is added in
+/// two-argument clzg/ctzg, ffs and clrsb; the optional UB assertion is added in
 /// goto-check (--clz-zero-check), with the other UB checks. See #4606, #6925,
 /// #183.
 static expr2tc
@@ -51,14 +51,20 @@ build_bit_scan(const code_function_call2t &func_call, bit_scan_endt end)
   const expr2tc &arg = func_call.operands[0];
   const type2tc &t = arg->type;
   const unsigned width = t->get_width();
-  const bool leading = end == bit_scan_endt::leading;
+  const bool leading =
+    end == bit_scan_endt::leading || end == bit_scan_endt::redundant_sign;
 
   // clz(x) = width - popcount(x with every bit below the most-significant set
   // bit smeared down); ctz mirrors it, smearing up from the least-significant
   // set bit. Reusing the popcount irep means a constant argument folds to a
   // constant (popcount has a simplifier), while a symbolic argument is handled
   // exactly by the backend's popcount encoding.
+  // clrsb(x) is clz(x ^ (x >> (width - 1))) - 1: the xor clears every
+  // leading copy of the sign bit, and a zero result gives width - 1.
   expr2tc smeared = arg;
+  if (end == bit_scan_endt::redundant_sign)
+    smeared =
+      bitxor2tc(t, arg, ashr2tc(t, arg, constant_int2tc(t, BigInt(width - 1))));
   for (unsigned shift = 1; shift < width; shift <<= 1)
   {
     expr2tc offset = constant_int2tc(t, shift);
@@ -72,6 +78,10 @@ build_bit_scan(const code_function_call2t &func_call, bit_scan_endt end)
     get_int32_type(),
     constant_int2tc(get_int32_type(), width),
     popcount2tc(smeared));
+
+  if (end == bit_scan_endt::redundant_sign)
+    count = sub2tc(
+      get_int32_type(), count, constant_int2tc(get_int32_type(), BigInt(1)));
 
   // ffs counts the same trailing zeros but reports a one-based index, and is
   // defined at zero as 0 rather than left undefined there (POSIX).
@@ -94,6 +104,100 @@ build_bit_scan(const code_function_call2t &func_call, bit_scan_endt end)
   return count;
 }
 
+/// Value of a __builtin_rotateleft{8,16,32,64}/__builtin_rotateright* call.
+/// The distance is taken modulo the width, and so is its complement, so a zero
+/// distance gives (x << 0) | (x >> 0) == x rather than a full-width shift.
+static expr2tc build_rotate(const code_function_call2t &func_call, bool left)
+{
+  const expr2tc &x = func_call.operands[0];
+  const type2tc &t = x->type;
+  const unsigned width = t->get_width();
+  const expr2tc mask = constant_int2tc(t, width - 1);
+  const expr2tc d = bitand2tc(t, typecast2tc(t, func_call.operands[1]), mask);
+  const expr2tc co =
+    bitand2tc(t, sub2tc(t, constant_int2tc(t, width), d), mask);
+  return left ? bitor2tc(t, shl2tc(t, x, d), lshr2tc(t, x, co))
+              : bitor2tc(t, lshr2tc(t, x, d), shl2tc(t, x, co));
+}
+
+/// Value of a __builtin_bitreverse{8,16,32,64} call: swap adjacent bits, then
+/// 2-bit groups, then 4-bit groups, doubling until the halves are swapped.
+static expr2tc build_bitreverse(const code_function_call2t &func_call)
+{
+  expr2tc acc = func_call.operands[0];
+  const type2tc &t = acc->type;
+  const unsigned width = t->get_width();
+  for (unsigned k = 1; k < width; k <<= 1)
+  {
+    // The low k bits of every 2k-bit block.
+    BigInt m = 0;
+    for (unsigned pos = 0; pos < width; pos += 2 * k)
+      m += BigInt::power2m1(k) * BigInt::power2(pos);
+    const expr2tc mask = constant_int2tc(t, m);
+    const expr2tc shift = constant_int2tc(t, k);
+    acc = bitor2tc(
+      t,
+      shl2tc(t, bitand2tc(t, acc, mask), shift),
+      bitand2tc(t, lshr2tc(t, acc, shift), mask));
+  }
+  return acc;
+}
+
+/// Value of a bit-counting, rotating or bit-reversing builtin call, or nil if
+/// \p symname is not one.
+static expr2tc build_bit_builtin(
+  const code_function_call2t &func_call,
+  const std::string &symname)
+{
+  if (
+    const bit_scan_endt end = bit_scan_builtin(symname);
+    end != bit_scan_endt::none)
+  {
+    assert(
+      !func_call.operands.empty() && func_call.operands.size() <= 2 &&
+      "__builtin_clz*/__builtin_ctz* take one or two arguments");
+    return build_bit_scan(func_call, end);
+  }
+
+  for (const bool left : {true, false})
+    for (const char *width : {"8", "16", "32", "64"})
+      if (
+        symname == std::string("c:@F@__builtin_rotate") +
+                     (left ? "left" : "right") + width)
+        return build_rotate(func_call, left);
+
+  for (const char *width : {"8", "16", "32", "64"})
+    if (symname == std::string("c:@F@__builtin_bitreverse") + width)
+      return build_bitreverse(func_call);
+
+  return expr2tc();
+}
+
+// A void operand, such as a call to a void function, arrives as nil.
+static bool is_constant_operand(const expr2tc &op)
+{
+  return !is_nil_expr(op) && is_constant_int2t(op);
+}
+
+/// The operation of a __builtin_{s,u}{add,sub,mul}*_overflow call.
+static expr2tc overflow_operation(
+  const code_function_call2t &func_call,
+  const std::string &symname)
+{
+  const type2tc &type = to_code_type(func_call.function->type).arguments[0];
+  const expr2tc &lhs = func_call.operands[0];
+  const expr2tc &rhs = func_call.operands[1];
+  const std::string op = symname.substr(std::string("c:@F@__builtin_s").size());
+  if (has_prefix(op, "mul"))
+    return mul2tc(type, lhs, rhs);
+  if (has_prefix(op, "add"))
+    return add2tc(type, lhs, rhs);
+  if (has_prefix(op, "sub"))
+    return sub2tc(type, lhs, rhs);
+  log_error("Unknown overflow intrinsics");
+  abort();
+}
+
 bool goto_symext::run_builtin(
   const code_function_call2t &func_call,
   const std::string &symname)
@@ -109,32 +213,12 @@ bool goto_symext::run_builtin(
     assert(ends_with(symname, "_overflow"));
     assert(func_call.operands.size() == 3);
 
-    const auto &func_type = to_code_type(func_call.function->type);
+    [[maybe_unused]] const auto &func_type =
+      to_code_type(func_call.function->type);
     assert(func_type.arguments[0] == func_type.arguments[1]);
     assert(is_pointer_type(func_type.arguments[2]));
 
-    bool is_mult = has_prefix(symname, "c:@F@__builtin_smul") ||
-                   has_prefix(symname, "c:@F@__builtin_umul");
-    bool is_add = has_prefix(symname, "c:@F@__builtin_sadd") ||
-                  has_prefix(symname, "c:@F@__builtin_uadd");
-    bool is_sub = has_prefix(symname, "c:@F@__builtin_ssub") ||
-                  has_prefix(symname, "c:@F@__builtin_usub");
-
-    expr2tc op;
-    if (is_mult)
-      op = mul2tc(
-        func_type.arguments[0], func_call.operands[0], func_call.operands[1]);
-    else if (is_add)
-      op = add2tc(
-        func_type.arguments[0], func_call.operands[0], func_call.operands[1]);
-    else if (is_sub)
-      op = sub2tc(
-        func_type.arguments[0], func_call.operands[0], func_call.operands[1]);
-    else
-    {
-      log_error("Unknown overflow intrinsics");
-      abort();
-    }
+    const expr2tc op = overflow_operation(func_call, symname);
 
     // Perform overflow check and assign it to the return object
     if (!is_nil_expr(func_call.ret))
@@ -150,6 +234,12 @@ bool goto_symext::run_builtin(
     return true;
   }
 
+  if (has_prefix(symname, "c:@F@__builtin_bounded_"))
+  {
+    symex_bounded_math(
+      func_call, symname.substr(std::string("c:@F@__builtin_bounded_").size()));
+    return true;
+  }
   if (has_prefix(symname, "c:@F@__builtin_constant_p"))
   {
     expr2tc op1 = func_call.operands[0];
@@ -157,39 +247,34 @@ bool goto_symext::run_builtin(
     if (!is_nil_expr(func_call.ret))
       symex_assign(code_assign2tc(
         func_call.ret,
-        is_constant_int2t(op1) ? gen_one(int_type2()) : gen_zero(int_type2())));
+        is_constant_operand(op1) ? gen_one(int_type2())
+                                 : gen_zero(int_type2())));
     return true;
   }
 
-  if (const bit_scan_endt end = bit_scan_builtin(symname);
-      end != bit_scan_endt::none)
+  if (
+    const expr2tc value = build_bit_builtin(func_call, symname);
+    !is_nil_expr(value))
   {
-    assert(
-      !func_call.operands.empty() && func_call.operands.size() <= 2 &&
-      "__builtin_clz*/__builtin_ctz* take one or two arguments");
-
     const expr2tc &ret = func_call.ret;
     if (!is_nil_expr(ret))
-      symex_assign(code_assign2tc(
-        ret, typecast2tc(ret->type, build_bit_scan(func_call, end))));
+      symex_assign(code_assign2tc(ret, typecast2tc(ret->type, value)));
 
     return true;
   }
 
   // va_start/va_copy are kept in the GOTO program purely so that symex can
-  // track which va_lists have been initialised; a va_arg on an unstarted
-  // va_list is then flagged in symex_va_arg. The vararg values themselves
-  // are resolved positionally via the frame's va_cursor.
+  // track which va_lists have been initialised, and where each reads; a
+  // va_arg on an unstarted va_list is then flagged in symex_va_arg.
   if (symname == "c:@F@__builtin_va_start" && !func_call.operands.empty())
   {
-    va_list_mark_started(func_call.operands[0], true);
+    va_list_start(func_call.operands[0]);
     return true;
   }
 
   if (symname == "c:@F@__builtin_va_copy" && func_call.operands.size() == 2)
   {
-    va_list_mark_started(
-      func_call.operands[0], va_list_is_started(func_call.operands[1]));
+    va_list_copy(func_call.operands[0], func_call.operands[1]);
     return true;
   }
 

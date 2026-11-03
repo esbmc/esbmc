@@ -1,0 +1,6 @@
+CORE
+main.c
+--memory-leak-check --no-reachable-memory-leak --force-malloc-success
+^VERIFICATION FAILED$
+^  dereference failure: forgotten memory: dynamic_1_value$
+^  PASSED +\[main.memory-leak.2\] .*forgotten memory: dynamic_2_value$

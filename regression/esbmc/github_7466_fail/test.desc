@@ -1,0 +1,5 @@
+CORE
+main.c
+--std gnu17
+^VERIFICATION FAILED$
+line 21 +assertion

@@ -1,0 +1,4 @@
+CORE
+cycle.ld
+--ld-props props.yaml
+^ERROR: graphical LD: power flow into localId 3 is cyclic

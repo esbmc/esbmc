@@ -1,0 +1,4 @@
+CORE
+main.py
+
+^ERROR: .*main\.py:8:4: unsupported: this call may be 'pkg\.func' or 'pkg\.sub\.func', which return different types \(None and int\)$

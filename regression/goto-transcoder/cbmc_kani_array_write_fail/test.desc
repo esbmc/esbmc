@@ -1,0 +1,5 @@
+CORE
+cbmc_kani_array_write_fail.goto
+--binary --function _RNvCskcT8BkV4iXZ_15arr_write_wrong7harness --ignore-property-class reachability_check --ignore-property-class cover
+assertion failed: halves\[0\] == 0x0202
+^VERIFICATION FAILED$

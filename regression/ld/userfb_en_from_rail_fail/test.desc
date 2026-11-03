@@ -1,0 +1,6 @@
+CORE
+relay.ld
+--ld-props props.yaml --unwind 3 --no-unwinding-assertions
+^  ENABLE = 0$
+^  Y = 1$
+^VERIFICATION FAILED$

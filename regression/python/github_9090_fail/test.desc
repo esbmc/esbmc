@@ -1,0 +1,5 @@
+CORE
+main.py
+--unwind 5 --multi-property --no-pointer-check --no-align-check
+FAILED +\[main\.assertion\.1\] +line 9 +assertion !\(ISNONE\(text, 0\)\)
+^VERIFICATION FAILED$

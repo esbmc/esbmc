@@ -1,0 +1,4 @@
+CORE
+main.py
+--unwind 8 --no-unwinding-assertions
+^ERROR: adding a dynamically-typed variable to this literal type is not yet supported

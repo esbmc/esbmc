@@ -40,8 +40,9 @@ execution_statet::execution_statet(
   monitor_tid = 0;
   mon_from_tid = false;
   monitor_from_tid = 0;
-  guard_execution = "execution_statet::\\guard_exec";
+  guard_execution = guard_execution_name;
   interleaving_unviable = false;
+  main_returned = false;
   symex_trace = options.get_bool_option("symex-trace");
   smt_during_symex = options.get_bool_option("smt-during-symex");
   smt_thread_guard = options.get_bool_option("smt-thread-guard");
@@ -150,6 +151,7 @@ void execution_statet::copy_derived_from(const execution_statet &ex)
   nondet_count = ex.nondet_count;
   node_id = ex.node_id;
   interleaving_unviable = ex.interleaving_unviable;
+  main_returned = ex.main_returned;
 
   monitor_tid = ex.monitor_tid;
   tid_is_set = ex.tid_is_set;
@@ -241,6 +243,73 @@ static bool mpor_set_conflicts(const std::set<expr2tc> &s, const expr2tc &key)
   return false;
 }
 
+/// Whether __ESBMC_main has exit-time code (atexit handlers, static
+/// destructors) to run between main's return at \p call and the end hook.
+static bool exit_code_follows(goto_programt::const_targett call)
+{
+  const goto_programt::instructiont &next = *std::next(call);
+  if (next.function != "__ESBMC_main" || !next.is_function_call())
+    return false;
+  const expr2tc &function = to_code_function_call2t(next.code).function;
+  return !is_symbol2t(function) ||
+         to_symbol2t(function).thename != "c:@F@__ESBMC_pthread_end_main_hook";
+}
+
+void execution_statet::symex_end_function(
+  reachability_treet &art,
+  const goto_programt::instructiont &instruction)
+{
+  const bool main_ends = (instruction.function == "c:@F@main" ||
+                          instruction.function == "c:@F@main#") &&
+                         !options.get_bool_option("memory-leak-check") &&
+                         !options.get_bool_option("termination");
+
+  if (instruction.function == "__ESBMC_main")
+    end_thread();
+  else if (
+    main_ends &&
+    exit_code_follows(get_active_state().top().calling_location.pc))
+  {
+    // Returning from main is a call to exit() (C11 5.1.2.2.3), which runs
+    // the atexit functions and, in C++, destroys objects with static
+    // storage duration ([basic.start.term]) before the process ends.
+    // __ESBMC_main does both before __ESBMC_pthread_end_main_hook; run them
+    // atomically and end the path when that hook returns.
+    main_returned = true;
+    increment_active_atomic_number();
+    goto_symext::symex_step(art);
+  }
+  else if (
+    main_ends || (main_returned &&
+                  instruction.function == "c:@F@__ESBMC_pthread_end_main_hook"))
+  {
+    // End the main thread to avoid exploring further interleavings.
+    // TODO: we should support verifying memory leaks in multi-threaded C
+    // programs.
+    //
+    // Returning from main is a call to exit(): the process terminates and
+    // every other thread is torn down (C11 5.1.2.2.3), so a thread still
+    // waiting on a lock main held is not deadlocked. This point is reached
+    // only after a real return -- pthread_exit() ends in
+    // __ESBMC_assume(0) -- so a program whose threads outlive main via
+    // pthread_exit keeps being explored under --deadlock-check (#6479).
+    //
+    // Skipped under --termination: the strategy inserts an
+    // `assert(false)` after the main() call in __ESBMC_main to
+    // detect terminating paths. The assume(false) here would kill
+    // the path before reaching that marker; the assertion would
+    // never become a VCC.
+    assume(gen_false_expr());
+    end_thread();
+    interleaving_unviable = true;
+  }
+  else
+  {
+    // Fall through to base class
+    goto_symext::symex_step(art);
+  }
+}
+
 void execution_statet::symex_step(reachability_treet &art)
 {
   statet &state = get_active_state();
@@ -295,42 +364,7 @@ void execution_statet::symex_step(reachability_treet &art)
   switch (instruction.type)
   {
   case END_FUNCTION:
-    if (instruction.function == "__ESBMC_main")
-      end_thread();
-    else if (
-      (instruction.function == "c:@F@main" ||
-       instruction.function == "c:@F@main#") &&
-      !options.get_bool_option("memory-leak-check") &&
-      !options.get_bool_option("termination"))
-    {
-      // check whether we reached the end of the main function and
-      // whether we are not checking for memory leaks.
-      // We should end the main thread to avoid exploring further interleavings
-      // TODO: once we support at_exit, we should check this code
-      // TODO: we should support verifying memory leaks in multi-threaded C
-      // programs.
-      //
-      // Returning from main is a call to exit(): the process terminates and
-      // every other thread is torn down (C11 5.1.2.2.3), so a thread still
-      // waiting on a lock main held is not deadlocked. This END_FUNCTION is
-      // reached only on a real return -- pthread_exit() ends in
-      // __ESBMC_assume(0) -- so a program whose threads outlive main via
-      // pthread_exit keeps being explored under --deadlock-check (#6479).
-      //
-      // Skipped under --termination: the strategy inserts an
-      // `assert(false)` after the main() call in __ESBMC_main to
-      // detect terminating paths. The assume(false) here would kill
-      // the path before reaching that marker; the assertion would
-      // never become a VCC.
-      assume(gen_false_expr());
-      end_thread();
-      interleaving_unviable = true;
-    }
-    else
-    {
-      // Fall through to base class
-      goto_symext::symex_step(art);
-    }
+    symex_end_function(art, instruction);
     break;
   case ATOMIC_BEGIN:
     state.source.pc++;
@@ -412,6 +446,14 @@ void execution_statet::record_parked_path(
 void execution_statet::assume(const expr2tc &assumption)
 {
   goto_symext::assume(assumption);
+
+  if (threads_state.size() >= thread_cswitch_threshold)
+    analyze_read(assumption);
+}
+
+void execution_statet::defer_assumption(const expr2tc &assumption)
+{
+  goto_symext::defer_assumption(assumption);
 
   if (threads_state.size() >= thread_cswitch_threshold)
     analyze_read(assumption);
@@ -871,8 +913,9 @@ unsigned int execution_statet::add_thread(const goto_programt *prog)
 
   // While we've recorded the new thread as starting in the designated program,
   // it might not run immediately, thus must have it's path preserved:
-  preserved_paths[thread_nr].push_back(std::make_pair(
-    prog->instructions.begin(), merge_statet(threads_state[thread_nr])));
+  preserved_paths[thread_nr].push_back(
+    std::make_pair(
+      prog->instructions.begin(), merge_statet(threads_state[thread_nr])));
 
   return threads_state.size() - 1; // thread ID, zero based
 }
@@ -923,7 +966,8 @@ expr2tc execution_statet::resolve_pointer_target(
   const namespacet &ns,
   const expr2tc &ptr,
   bool &to_global,
-  bool through_deref)
+  bool through_deref,
+  std::vector<expr2tc> *all_shared)
 {
   expr2tc tmp = ptr;
   /* Rename it so that it can be dereferenced in current state */
@@ -939,7 +983,7 @@ expr2tc execution_statet::resolve_pointer_target(
   value_setst::valuest dest;
   cur_state->value_set.get_reference_set(deref, dest);
 
-  expr2tc found;
+  expr2tc found, first_shared;
   for (const auto &obj : dest)
   {
     if (
@@ -955,8 +999,9 @@ expr2tc execution_statet::resolve_pointer_target(
     if (is_esbmc_internal_symbol(n))
       continue;
 
-    to_global = through_deref ? art1->is_shared_storage(*s)
-                              : reachability_treet::has_shared_lifetime(*s);
+    const bool shared = through_deref
+                          ? art1->is_shared_storage(*s)
+                          : reachability_treet::has_shared_lifetime(*s);
     found = to_object_descriptor2t(obj).object;
     /* Distinguish the elements of a lock array. Both `&m[0]` and `&m[1]`
      * resolve to the base symbol `m`, which makes MPOR treat every lock in the
@@ -975,11 +1020,18 @@ expr2tc execution_statet::resolve_pointer_target(
         found =
           mpor_lock_array_key(found, to_constant_int2t(off).value / esize);
     }
-    /* Stop when the global symbol is found */
-    if (to_global)
+    if (!shared)
+      continue;
+    if (is_nil_expr(first_shared))
+      first_shared = found;
+    /* A pointer may reach several shared objects; keying it by one of them
+     * lets MPOR call it independent of an access to another. */
+    if (!all_shared)
       break;
+    all_shared->push_back(found);
   }
-  return found;
+  to_global = !is_nil_expr(first_shared);
+  return to_global ? first_shared : found;
 }
 
 void execution_statet::record_access_key(
@@ -1078,12 +1130,13 @@ void execution_statet::record_aggregate_held_target(
     return;
 
   bool to_global = false;
-  expr2tc target = resolve_pointer_target(ns, ptr, to_global, true);
-  if (is_nil_expr(target) || !to_global)
-    return;
-
-  cur_state->top().level1.rename(target);
-  record_access_key(target, globals_list, kind);
+  std::vector<expr2tc> targets;
+  resolve_pointer_target(ns, ptr, to_global, true, &targets);
+  for (expr2tc target : targets)
+  {
+    cur_state->top().level1.rename(target);
+    record_access_key(target, globals_list, kind);
+  }
 }
 
 void execution_statet::get_expr_globals(
@@ -1129,9 +1182,14 @@ void execution_statet::get_expr_globals(
     std::vector<expr2tc> deeper_targets;
     if (symbol->get_type().is_pointer() && symbol->name != "invalid_object")
     {
-      p = resolve_pointer_target(ns, expr, point_to_global, under_deref);
+      std::vector<expr2tc> others;
+      p =
+        resolve_pointer_target(ns, expr, point_to_global, under_deref, &others);
       if (is_nil_expr(p))
         p = expr;
+      for (const expr2tc &other : others)
+        if (other != p)
+          deeper_targets.push_back(other);
 
       // Follow the rest of the chain. Resolving a single level records the
       // *intermediate* pointer for an access spelled `*(*pp)`, so a thread
@@ -1146,13 +1204,15 @@ void execution_statet::get_expr_globals(
              seen.insert(to_symbol2t(cursor).thename.as_string()).second)
       {
         bool deeper_is_global = false;
-        expr2tc next =
-          resolve_pointer_target(ns, cursor, deeper_is_global, under_deref);
+        std::vector<expr2tc> shared_next;
+        expr2tc next = resolve_pointer_target(
+          ns, cursor, deeper_is_global, under_deref, &shared_next);
         if (is_nil_expr(next))
           break;
         if (deeper_is_global)
         {
-          deeper_targets.push_back(next);
+          deeper_targets.insert(
+            deeper_targets.end(), shared_next.begin(), shared_next.end());
           point_to_global = true;
         }
         cursor = next;

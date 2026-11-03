@@ -22,6 +22,11 @@ public:
   ~cvc5_convt() override = default;
 
   smt_resultt dec_solve() override;
+  smt_resultt dec_solve_assuming(const ast_vec &assumptions) override;
+  bool supports_assumptions() const override
+  {
+    return true;
+  }
   const std::string solver_text() override;
 
   tvt get_bool(smt_astt a) override;

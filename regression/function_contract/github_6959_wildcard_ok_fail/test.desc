@@ -1,0 +1,5 @@
+CORE
+main.c
+--enforce-contract "*" --function f
+^VERIFICATION FAILED$
+^  contract ensures$

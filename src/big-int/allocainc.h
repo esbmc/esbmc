@@ -35,4 +35,4 @@
 
 #endif
 
-#endif //ndef ALLOCAINC_H
+#endif // ndef ALLOCAINC_H

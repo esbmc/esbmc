@@ -1,0 +1,6 @@
+CORE
+main.c
+--smtlib --smt-formula-only --output out.smt2 --64
+^SMT formula written to output file out\.smt2$
+CHECK_FILE out.smt2 contains bvashr
+CHECK_FILE out.smt2 absent bvsdiv

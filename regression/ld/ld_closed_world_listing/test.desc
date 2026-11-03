@@ -1,0 +1,5 @@
+CORE
+mode.ld
+--ld-props props.yaml --ld-closed-world --k-induction --unlimited-k-steps
+^LD: --ld-closed-world: assuming only the program writes mode$
+^VERIFICATION SUCCESSFUL$

@@ -1,0 +1,5 @@
+CORE
+main.cpp
+--std c++17 --unwind 8 --no-unwinding-assertions
+^\s*uncaught exception: (class )?std::out_of_range$
+^VERIFICATION FAILED$

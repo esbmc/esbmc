@@ -47,7 +47,9 @@ symbolt &python_list::create_list()
 exprt python_list::build_symbolic_fill_list(
   const exprt &size,
   const exprt &fill_value,
-  const typet &elem_type)
+  const typet &elem_type,
+  const exprt *index_base,
+  const exprt *index_step)
 {
   using namespace python_list_detail;
   locationt location = converter_.get_location_from_decl(list_value_);
@@ -94,13 +96,40 @@ exprt python_list::build_symbolic_fill_list(
   size_assign.location() = location;
   converter_.add_instruction(size_assign);
 
+  // Same reason as the size above: the base may be a call, so evaluate it
+  // once rather than on every iteration.
+  exprt base;
+  if (index_base)
+  {
+    symbolt &base_sym = converter_.create_tmp_symbol(
+      list_value_, "$sfill_b$", elem_type, gen_zero(elem_type));
+    base = build_symbol(base_sym);
+
+    code_declt base_decl(base);
+    base_decl.location() = location;
+    converter_.add_instruction(base_decl);
+
+    code_assignt base_assign(base, build_typecast(*index_base, elem_type));
+    base_assign.location() = location;
+    converter_.add_instruction(base_assign);
+  }
+
   // Build loop body in current_block-redirect pattern so that
   // build_push_list_call's internal declarations land inside the loop.
   code_blockt loop_body;
   code_blockt *saved_block = converter_.current_block;
   converter_.current_block = &loop_body;
 
-  exprt push_call = build_push_list_call(result, list_value_, fill_value);
+  exprt pushed = fill_value;
+  if (index_base)
+  {
+    exprt offset = build_typecast(build_symbol(index_var), elem_type);
+    if (index_step)
+      offset = build_mul(offset, *index_step, elem_type);
+    pushed = build_add(base, offset, elem_type);
+  }
+
+  exprt push_call = build_push_list_call(result, list_value_, pushed);
 
   converter_.current_block = saved_block;
   loop_body.copy_to_operands(push_call);
@@ -162,11 +191,13 @@ exprt python_list::get()
 
   // Convert every element once, recording whether the literal mixes integer and
   // floating-point values. Python promotes such a list to a homogeneous float
-  // list (e.g. [4.0, 3] is [4.0, 3.0]); storing the ints unconverted would leave
-  // their float_buf slot unset and read back as a stale float (issue #5156).
+  // list (e.g. [4.0, 3] is [4.0, 3.0]); storing the ints unconverted would
+  // leave their float_buf slot unset and read back as a stale float (issue
+  // #5156). A literal holding any other kind is heterogeneous and keeps each
+  // element's own type (#8629).
   std::vector<exprt> elems;
   elems.reserve(list_value_["elts"].size());
-  bool has_int = false, has_float = false;
+  bool has_int = false, has_float = false, has_other = false;
   for (auto &e : list_value_["elts"])
   {
     // Clear current_lhs so that constructor calls inside list elements
@@ -182,9 +213,11 @@ exprt python_list::get()
       has_float = true;
     else if (t.is_signedbv() || t.is_unsignedbv() || t.is_bool())
       has_int = true; // bool is int-like in Python (True == 1)
+    else
+      has_other = true;
   }
 
-  const bool promote_ints = has_int && has_float;
+  const bool promote_ints = has_int && has_float && !has_other;
 
   for (exprt &elem : elems)
   {
@@ -217,7 +250,10 @@ exprt python_list::build_list_from_exprs(const std::vector<exprt> &elems)
     // the element type-id from its type, and copies it into the list storage.
     exprt push_call = build_push_list_call(list_symbol, list_value_, elem);
     converter_.add_instruction(push_call);
-    elem_types().record(list_id, std::string(), elem.type());
+    elem_types().record(
+      list_id,
+      elem.is_symbol() ? elem.identifier().as_string() : "",
+      elem.type());
   }
 
   return build_symbol(list_symbol);
@@ -282,7 +318,8 @@ exprt python_list::create_vla(
 exprt python_list::build_list_from_range(
   python_converter &converter,
   const nlohmann::json &range_args,
-  const nlohmann::json &element)
+  const nlohmann::json &element,
+  bool materialise_elements)
 {
   // Validate argument count
   if (range_args.empty() || range_args.size() > 3)
@@ -332,7 +369,8 @@ exprt python_list::build_list_from_range(
   // Handle symbolic (non-constant) case
   if (!all_constant)
   {
-    return handle_symbolic_range(converter, range_args, element);
+    return handle_symbolic_range(
+      converter, range_args, element, materialise_elements);
   }
 
   // All arguments are constant
@@ -353,40 +391,6 @@ exprt python_list::build_list_from_tuple(
       build_member(tuple_expr, comp.get_name(), comp.type()));
 
   return helper.build_list_from_exprs(components);
-}
-
-exprt python_list::handle_symbolic_range(
-  python_converter &converter,
-  const nlohmann::json &range_args,
-  const nlohmann::json &element)
-{
-  if (range_args.size() == 1)
-  {
-    // range(n) case: create list with symbolic size n
-    exprt n_expr = converter.get_expr(range_args[0]);
-
-    // Create an empty list using existing create_list infrastructure
-    nlohmann::json list_node;
-    list_node["_type"] = "List";
-    list_node["elts"] = nlohmann::json::array();
-    converter.copy_location_fields_from_decl(element, list_node);
-
-    python_list temp_list(converter, list_node);
-    exprt list_expr = temp_list.get();
-
-    // Set symbolic size using helper method
-    set_list_symbolic_size(converter, list_expr, n_expr, element);
-
-    return list_expr;
-  }
-
-  // For multi-argument symbolic ranges, return empty list
-  nlohmann::json empty_list_node;
-  empty_list_node["_type"] = "List";
-  empty_list_node["elts"] = nlohmann::json::array();
-  converter.copy_location_fields_from_decl(element, empty_list_node);
-  python_list list(converter, empty_list_node);
-  return list.get();
 }
 
 void python_list::set_list_symbolic_size(
@@ -429,6 +433,116 @@ void python_list::set_list_symbolic_size(
       break;
     }
   }
+}
+
+static exprt build_div(const exprt &a, const exprt &b, const typet &t)
+{
+  exprt div(exprt::div, t);
+  div.copy_to_operands(a, b);
+  return div;
+}
+
+// The number of elements range(start, stop, step) yields: the ceiling of
+// (stop - start) / step, or zero when the range runs the other way.
+static exprt range_count(
+  const exprt &start,
+  const exprt &stop,
+  const exprt &step,
+  const typet &t)
+{
+  const exprt zero = gen_zero(t);
+  const exprt one = gen_one(t);
+  const exprt neg_step = build_sub(zero, step, t);
+  const exprt up = build_div(
+    build_sub(build_add(build_sub(stop, start, t), step, t), one, t), step, t);
+  const exprt down = build_div(
+    build_sub(build_add(build_sub(start, stop, t), neg_step, t), one, t),
+    neg_step,
+    t);
+  return build_if(
+    build_less_than(zero, step),
+    build_if(build_less_than(start, stop), up, zero),
+    build_if(
+      build_less_than(step, zero),
+      build_if(build_less_than(stop, start), down, zero),
+      zero));
+}
+
+static void raise_on_zero_step(
+  python_converter &converter,
+  const exprt &step,
+  const nlohmann::json &element)
+{
+  exprt raise = converter.get_exception_handler().gen_exception_raise(
+    "ValueError", "range() arg 3 must not be zero");
+  codet throw_code("expression");
+  throw_code.operands().push_back(raise);
+  code_ifthenelset guard;
+  guard.cond() = build_equal(step, gen_zero(step.type()));
+  guard.then_case() = throw_code;
+  guard.location() = converter.get_location_from_decl(element);
+  converter.add_instruction(guard);
+}
+
+exprt python_list::handle_symbolic_range(
+  python_converter &converter,
+  const nlohmann::json &range_args,
+  const nlohmann::json &element,
+  bool materialise_elements)
+{
+  using namespace python_list_detail;
+
+  nlohmann::json list_node;
+  list_node["_type"] = "List";
+  list_node["elts"] = nlohmann::json::array();
+  converter.copy_location_fields_from_decl(element, list_node);
+  python_list builder(converter, list_node);
+
+  const bool has_start = range_args.size() >= 2;
+  exprt stop = converter.get_expr(range_args[has_start ? 1 : 0]);
+  const typet elem_type = stop.type();
+
+  // The count arithmetic below needs integer operands. When type inference
+  // could not give the bound an integer type (e.g. the argument came through
+  // a function whose return type stayed unresolved, github_4525), fall back
+  // to the empty list this path produced before rather than building a
+  // malformed subtraction.
+  if (!elem_type.is_signedbv() && !elem_type.is_unsignedbv())
+    return builder.get();
+  exprt start = has_start
+                  ? build_typecast(converter.get_expr(range_args[0]), elem_type)
+                  : gen_zero(elem_type);
+
+  const exprt step =
+    range_args.size() == 3
+      ? build_typecast(converter.get_expr(range_args[2]), elem_type)
+      : gen_one(elem_type);
+  if (range_args.size() == 3)
+    raise_on_zero_step(converter, step, element);
+
+  // Python gives an empty list when the range runs backwards, so the count is
+  // clamped rather than letting a negative size reach the fill loop.
+  const exprt count = range_args.size() == 3
+                        ? range_count(start, stop, step, elem_type)
+                        : build_if(
+                            build_less_than(start, stop),
+                            build_sub(stop, start, elem_type),
+                            gen_zero(elem_type));
+
+  if (materialise_elements)
+    return builder.build_symbolic_fill_list(
+      build_typecast(count, size_type()),
+      gen_zero(elem_type),
+      elem_type,
+      &start,
+      &step);
+
+  // A bare `range(...)` records its length but not its elements:
+  // materialising them would cost `len(range(n))` a loop that a fixed
+  // --unwind cannot afford, so its elements read as unconstrained values.
+  exprt list_expr = builder.get();
+  set_list_symbolic_size(converter, list_expr, count, element);
+  return list_expr;
 }
 
 exprt python_list::build_concrete_range(

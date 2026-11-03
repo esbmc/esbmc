@@ -1,0 +1,5 @@
+CORE
+main.py
+--sv-comp --k-induction --max-inductive-step 3 --k-step 2 --unlimited-k-steps --python-check-exceptions AssertionError
+^VERIFICATION FAILED$
+FAILED +\[global\.assertion\.[0-9]+\] +line +5 +assertion

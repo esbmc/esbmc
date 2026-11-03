@@ -6,6 +6,7 @@
 typedef struct { int coeffs[4]; } P;
 extern P *g;
 void f(P *b) {
+  __ESBMC_requires(b == 0 || __ESBMC_is_fresh(b, sizeof(*b)));
   __ESBMC_requires(b != 0);
   __ESBMC_requires(__ESBMC_is_fresh(g, sizeof(P)));
   __ESBMC_assigns(g);

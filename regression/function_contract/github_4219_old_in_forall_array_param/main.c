@@ -14,8 +14,8 @@
 // the named-array case (github_4219_old_in_forall_array_base) uses.
 //
 // See also github_4219_old_in_forall_array_param_fail (same contract, a
-// broken implementation) and github_4219_old_in_forall_ptr_to_array_knownbug
-// (the related but distinct `int (*r)[N]` shape, still open).
+// broken implementation) and github_4219_old_in_forall_ptr_to_array
+// (the related but distinct `int (*r)[N]` shape).
 #define N 4
 #define BOUND 100
 

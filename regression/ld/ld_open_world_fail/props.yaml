@@ -1,0 +1,5 @@
+properties:
+  - id: P1
+    kind: invariant
+    expression: "!(r && q)"
+    description: "Unprovable: an outside write can set mode again; the program clears mode whenever q is on"

@@ -1,0 +1,8 @@
+properties:
+  # The right rail lists no coils, so the resolver falls back to drawing order.
+  # The set coil is drawn above the reset coil but has the larger localId, so an
+  # order taken from localId or from hashing would run the set last (#7352).
+  - id: P1
+    kind: invariant
+    expression: "!b || !q"
+    description: "The reset path, drawn last, wins in the scan it is energised"

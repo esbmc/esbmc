@@ -1,0 +1,5 @@
+CORE
+main.py
+--unwind 5 --multi-property
+^VERIFICATION FAILED$
+^\*\* 1 of [0-9]+ properties failed

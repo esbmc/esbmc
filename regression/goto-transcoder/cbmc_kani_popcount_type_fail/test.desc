@@ -1,0 +1,5 @@
+CORE
+cbmc_kani_popcount_type_fail.goto
+--binary --function _RNvCslrm0vhWY1WF_7popfail7harness --ignore-property-class reachability_check --ignore-property-class cover
+assertion failed: x <= 2
+^VERIFICATION FAILED$

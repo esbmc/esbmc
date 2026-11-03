@@ -1,0 +1,4 @@
+CORE
+main.c
+--no-bounds-check --no-vla-size-check --error-label ERROR --unwind 3 --no-unwinding-assertions
+^VERIFICATION FAILED$

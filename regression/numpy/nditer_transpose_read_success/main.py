@@ -7,4 +7,4 @@ acc = 0
 for x in np.nditer(t):
     acc = acc * 10 + x
 
-assert acc == 1324
+assert acc == 1234

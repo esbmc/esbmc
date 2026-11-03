@@ -1,0 +1,4 @@
+CORE
+main.py
+
+^ERROR: .*main\.py:16:11: unsupported: this call may be 'g' or 'f2', which return different types \(int and str\)$

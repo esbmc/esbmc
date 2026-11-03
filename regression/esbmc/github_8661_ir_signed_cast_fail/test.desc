@@ -1,0 +1,5 @@
+CORE
+main.c
+--ir --overflow-check
+^  Cast arithmetic overflow on typecast$
+^VERIFICATION FAILED$

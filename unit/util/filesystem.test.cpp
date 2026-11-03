@@ -4,7 +4,8 @@ Author: Rafael Sá Menezes
 
 \*******************************************************************/
 
-#define CATCH_CONFIG_MAIN // This tells Catch to provide a main() - only do this in one cpp file
+#define CATCH_CONFIG_MAIN // This tells Catch to provide a main() - only do this
+                          // in one cpp file
 #include <catch2/catch.hpp>
 #include <util/base/filesystem.h>
 #include <boost/filesystem.hpp>
@@ -328,11 +329,9 @@ TEST_CASE(
   namespace fs = boost::filesystem;
   auto dir = file_operations::create_tmp_dir("esbmc-test-excl-%%%%");
 
-  // create_tmp_file() resolves the temp directory per call, so TMPDIR confines
-  // this test to `dir` and keeps it off the shared /tmp.
-  const char *saved = getenv("TMPDIR");
-  const std::string old_tmpdir = saved ? saved : "";
-  setenv("TMPDIR", dir.path().c_str(), 1);
+  // create_tmp_file() resolves the temp directory per call, so the override
+  // confines this test to `dir` and keeps it off the shared /tmp.
+  file_operations::tmp_dir_override tmpdir(dir.path());
 
   const std::string free_name = "esbmc-test-slot-a";
   for (const char *d = "0123456789abcdef"; *d; ++d)
@@ -358,11 +357,6 @@ TEST_CASE(
       continue;
     REQUIRE(fs::file_size(occupied) == 8);
   }
-
-  if (saved)
-    setenv("TMPDIR", old_tmpdir.c_str(), 1);
-  else
-    unsetenv("TMPDIR");
 }
 #endif
 

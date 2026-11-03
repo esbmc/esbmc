@@ -1,7 +1,7 @@
 /*
 
 ESBMC PARAMETERS
---no-unwinding-assertions --unwind 15 --partial-loops --ssa-full-names --full-inlining --state-hashing --no-library --no-return-value-opt --no-assertions --k-induction --tuple-sym-flattener
+--no-unwinding-assertions --unwind 15 --partial-loops --full-inlining --state-hashing --no-library --no-return-value-opt --no-assertions --k-induction --tuple-sym-flattener
 
  * This is a RANDOMLY GENERATED PROGRAM.
  *

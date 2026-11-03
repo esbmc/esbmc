@@ -1,0 +1,5 @@
+CORE
+main.py
+--unwind 4
+^  FAILED\s+\[global\.assertion\.\d+\]\s+line\s+4\s+assertion
+^VERIFICATION FAILED$

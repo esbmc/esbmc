@@ -1,0 +1,4 @@
+CORE
+cbmc_union_partial_byte_update.goto
+--binary
+^ERROR: byte_update of a value that is not a whole number of bytes$

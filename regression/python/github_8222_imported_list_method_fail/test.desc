@@ -1,0 +1,5 @@
+CORE
+main.py
+
+^  file .*main.py line 7 column 0$
+^VERIFICATION FAILED$

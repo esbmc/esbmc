@@ -2,6 +2,16 @@
 #define CPROVER_PRINTF_FORMATTER
 
 #include <irep2/irep2_expr.h>
+#include <optional>
+#include <vector>
+
+/** The type a %d or %i (`is_signed`) or %u conversion converts its argument
+ *  to under the length modifier `mod`: one of "", "hh", "h", "l", "ll", "j",
+ *  "z" or "t". Nil for any other modifier. */
+type2tc printf_int_type(bool is_signed, const std::string &mod);
+
+/** True if `e` points to the first character of a string literal. */
+bool is_literal_string_start(const expr2tc &e);
 
 class printf_formattert
 {
@@ -25,6 +35,11 @@ public:
    *  a format whose conversions are all constant-bounded. */
   bool bounded = true;
 
+  /** False when a '#' flag outside %o, %x and %X or a conversion (%p, an
+   *  unknown one) the formatter does not model appeared, so the text it
+   *  produced may differ from the real output. */
+  bool exact = true;
+
   /** True when `operands` are the call's actual arguments, so a non-literal
    *  %s operand may be used to derive a sound object-size length bound. For
    *  the v* variants (vprintf/vsprintf/vsnprintf/vasprintf/vfprintf) the
@@ -32,6 +47,17 @@ public:
    *  the va_list itself, not the string — deriving a size bound from it would
    *  be unsound, so callers set this false and %s stays unbounded. */
   bool args_reliable = true;
+
+  /** One entry per %n, in format order: its pointer operand and the output
+   *  length so far, which C11 7.21.6.1p8 says the call writes through it. */
+  struct percent_nt
+  {
+    expr2tc target;
+    size_t min_outlen;
+    size_t max_outlen;
+    bool bounded;
+  };
+  std::vector<percent_nt> percent_n;
 
 protected:
   std::string format;
@@ -56,6 +82,10 @@ protected:
 
   void process_char(std::ostream &out);
   void process_format(std::ostream &out);
+  std::optional<int64_t> star_operand();
+  char parse_width(char ch, unsigned &width, bool &left);
+  char parse_precision(char ch, std::optional<unsigned> &precision);
+  void record_percent_n();
 
   const expr2tc make_type(const expr2tc &src, const type2tc &dest);
 };

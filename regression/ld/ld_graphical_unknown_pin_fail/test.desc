@@ -1,0 +1,5 @@
+CORE
+ton.ld
+--unwind 6 --no-unwinding-assertions
+^ERROR: UnsupportedConstruct\(TON T0 pin PTT, tier=2\)$
+^ERROR: PARSING ERROR$

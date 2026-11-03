@@ -1,0 +1,4 @@
+CORE
+main.py
+--incremental-bmc
+^ERROR: OverflowError: Python integer 256 out of bounds for uint8$

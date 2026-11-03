@@ -2,3 +2,4 @@ CORE
 main.cpp
 --std=c++20 --incremental-bmc
 ^VERIFICATION FAILED$
+^\s+assertion a\[1\]\[2\] != 0$

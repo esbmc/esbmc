@@ -1,0 +1,5 @@
+CORE
+main.py
+--unwind 5 --no-unwinding-assertions
+uncaught exception: ValueError
+^VERIFICATION FAILED$

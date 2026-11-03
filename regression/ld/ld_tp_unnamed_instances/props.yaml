@@ -1,0 +1,5 @@
+properties:
+  - id: P1
+    kind: invariant
+    expression: "(QB && H1 && !H2) || (!QB && !(H1 && !H2))"
+    description: "Each unnamed TP pulses for the one scan its own input rises"

@@ -1,0 +1,5 @@
+CORE
+main.py
+--enforce-contract bump
+^.*assigns compliance: .*c->m not in assigns clause$
+^VERIFICATION FAILED$

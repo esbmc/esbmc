@@ -1,0 +1,5 @@
+CORE
+../github_7451_weak_var/strong.c
+../github_7451_weak_var/weak.c -DEXPECTED=999
+^\s+FAILED\s+\[main\.assertion\.1\]\s+line 8\s+assertion global == EXPECTED$
+^VERIFICATION FAILED$

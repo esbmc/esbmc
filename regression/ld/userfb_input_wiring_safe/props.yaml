@@ -1,0 +1,19 @@
+properties:
+  # Each FB input takes the value it is wired to. An input sampled
+  # nondeterministically regardless of its wiring (#7580) breaks every one.
+  - id: VAR
+    kind: invariant
+    expression: "(!Y || X) && (Y || !X)"
+    description: "p0.A is wired to the program input X"
+  - id: BLOCK
+    kind: invariant
+    expression: "(!Z || X) && (Z || !X)"
+    description: "p1.A is wired to p0.Q"
+  - id: BOOL
+    kind: invariant
+    expression: "W"
+    description: "p2.A is wired to TRUE"
+  - id: INT
+    kind: invariant
+    expression: "p0__BIG && !p1__BIG"
+    description: "p0.N is wired to 5 and p1.N to -3"

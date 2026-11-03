@@ -16,6 +16,7 @@ add_library(symex
   engine/builtin_functions/memory_ops.cpp
   engine/builtin_functions/object_size.cpp
   engine/builtin_functions/run_builtin.cpp
+  engine/builtin_functions/bounded_math.cpp
   engine/builtin_functions/python_builtins.cpp
   engine/builtin_functions/misc.cpp
   engine/builtin_functions/witness.cpp
@@ -32,6 +33,7 @@ add_library(symex
   equation/slice.cpp
   equation/symex_symmetry.cpp
   equation/features.cpp
+  equation/ssa_step_algorithm.cpp
 
   trace/goto_trace.cpp
   trace/build_goto_trace.cpp

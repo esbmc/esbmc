@@ -1,0 +1,5 @@
+CORE
+mode.ld
+--ld-props props.yaml --incremental-bmc --max-k-step 5
+^ERROR: UnsupportedConstruct\(LD body of POU 'PASS', tier=2\)$
+^ERROR: PARSING ERROR$

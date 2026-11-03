@@ -6,4 +6,4 @@ def f():
     return None
 
 r = f()
-assert A[r] != 1 or A[r] == 1
+assert r is None or A[r] != 1 or A[r] == 1

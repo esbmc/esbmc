@@ -1,0 +1,5 @@
+CORE
+main.c
+
+^  dereference failure: Data object accessed with code type$
+^VERIFICATION FAILED$

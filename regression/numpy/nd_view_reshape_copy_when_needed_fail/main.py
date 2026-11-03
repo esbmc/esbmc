@@ -1,0 +1,9 @@
+import numpy as np
+
+a = np.array([[0, 1, 2, 3, 4, 5], [6, 7, 8, 9, 10, 11]])
+t = a.T
+r = t.reshape(12)
+r[1] = 99
+assert a[1][0] == 6
+assert r[2] == 6
+assert r[0] == 0

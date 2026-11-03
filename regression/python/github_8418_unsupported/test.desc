@@ -1,0 +1,4 @@
+CORE
+main.py
+--unwind 5
+^ERROR: reading .a. is not supported: it holds an int or a float depending on the path, and the int is not stored exactly$

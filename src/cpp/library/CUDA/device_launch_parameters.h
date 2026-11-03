@@ -41,10 +41,10 @@ extern "C"
     __ESBMC_atomic_begin();
     int i;
 
-    //for(i = 0; i < GPU_threads; i++)
+    // for(i = 0; i < GPU_threads; i++)
     for (i = 0; i < 2; i++)
       indexOfBlock[i] = getBlockIdx_table(i);
-    //for(i = 0; i < GPU_threads; i++)
+    // for(i = 0; i < GPU_threads; i++)
     for (i = 0; i < 2; i++)
       indexOfThread[i] = getThreadIdx_table(i);
 
@@ -95,7 +95,7 @@ extern "C"
   }
 
   /**
-   * Apply a lookup table to drastically reduce validation time 
+   * Apply a lookup table to drastically reduce validation time
    * while retaining the same behavior
    */
   uint3 getThreadIdx_table(unsigned int id)

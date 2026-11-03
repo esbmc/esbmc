@@ -1,0 +1,4 @@
+CORE
+dint.ld
+--ld-props props.yaml
+^ERROR: .*initial value 3000000000 of 'K' is outside DINT

@@ -1,0 +1,5 @@
+CORE
+main.py
+--incremental-bmc --overflow-check
+^VERIFICATION FAILED$
+Integer overflow detected in add\(\) call

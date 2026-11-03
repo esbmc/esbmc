@@ -1,0 +1,5 @@
+CORE
+jump.ld
+--ld-props props.yaml --k-induction --unlimited-k-steps
+^ERROR: UnsupportedConstruct\(jump, tier=2\)$
+^ERROR: PARSING ERROR$

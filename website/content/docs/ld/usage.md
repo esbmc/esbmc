@@ -69,14 +69,29 @@ Violated property:
 ## User function-block translation
 
 When a program contains user-defined function blocks with Structured Text (ST)
-bodies, the frontend translates and inlines them into the scan. Two flags tune
+bodies, the frontend translates and inlines them into the scan. One flag tunes
 this:
 
 - `--ld-sound-mode` — translate ST bodies in sound Boolean/integer mode:
-  constructs the translator cannot lower (function calls, member access) make
-  the block body fall back to a **no-op** instead of an over-approximated
-  nondeterministic result. This removes over-approximation and yields zero false
-  positives, at the cost of not modelling the unsupported construct's effect.
+  constructs the translator cannot lower (function calls, member access) leave
+  the whole body untranslated, so the block's outputs take any value each scan,
+  instead of only those constructs being over-approximated.
+
+A body that cannot be translated is never skipped: its outputs and in/out pins
+become nondeterministic every scan, so a property over them is not proved on
+the strength of stale values.
+
+## Variables written outside the program
+
+By default the program's `VAR_IN_OUT`, `VAR_EXTERNAL` and `%M` marker variables
+take any value at the start of each scan, because a caller, an HMI or a fieldbus
+can write them between scans. The run lists them:
+
+```
+LD: sampling each scan, as writable outside the program: mode ...
+```
+
+- `--ld-closed-world` — assume only the program writes these variables.
 
 ## Scan-overrun watchdog
 

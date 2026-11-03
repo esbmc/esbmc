@@ -148,7 +148,8 @@ expr2tc do_parse_comparison(ParseState &ps)
     return inner;
   }
 
-  // '\result' lexes as tok::unknown ('\') followed by tok::raw_identifier ('result').
+  // '\result' lexes as tok::unknown ('\') followed by tok::raw_identifier
+  // ('result').
   if (!ps.is(clang::tok::unknown))
     return expr2tc();
   ps.advance();

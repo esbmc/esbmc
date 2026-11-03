@@ -1,0 +1,7 @@
+properties:
+  # Twin of userfb_input_unmodelled_literal_safe with R wired to 2.5, a literal
+  # the wiring does not model: R is sampled nondeterministically, so OK can hold.
+  - id: P1
+    kind: invariant
+    expression: "!Y"
+    description: "Deliberately unprovable: the REAL literal is not modelled"

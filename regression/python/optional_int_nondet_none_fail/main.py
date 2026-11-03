@@ -1,5 +1,5 @@
-# Optional[int] is encoded as an int pointer holding the value, so a zero value
-# and None coincide and `is None` cannot be decided from it.
+# Optional[int] takes the Optional<T> struct `int | None` does, so a zero value
+# and None stay apart and `is None` is decidable (#8016).
 from typing import Optional
 
 

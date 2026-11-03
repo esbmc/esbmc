@@ -51,7 +51,6 @@ for corpus in "$@"; do
   done < <(find "$corpus" -name test.desc | sort)
 done
 
-irep2_cleanup_tmp
 sort -o "$manifest" "$manifest"
 echo "captured $count goto dumps into $OUT"
 echo "manifest: $manifest"

@@ -1,4 +1,4 @@
 import numpy as np
 
 a = np.array([[1.0, 2.0], [3.0, 4.0], [5.0, 6.0]])
-sigma = np.linalg.svd(a)
+sigma = np.linalg.svd(a, compute_uv=False)

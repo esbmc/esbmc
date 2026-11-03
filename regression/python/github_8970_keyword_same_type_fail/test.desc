@@ -1,0 +1,5 @@
+CORE
+main.py
+
+^  FAILED .* line 22  assertion .* == 2$
+^VERIFICATION FAILED$

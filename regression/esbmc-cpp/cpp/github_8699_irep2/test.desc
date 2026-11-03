@@ -1,0 +1,4 @@
+CORE
+main.cpp
+--std c++17 --clang-cpp-irep2-adjust-only
+^VERIFICATION SUCCESSFUL$

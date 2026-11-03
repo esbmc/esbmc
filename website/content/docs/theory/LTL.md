@@ -36,7 +36,7 @@ the implementation diverges from [1].
 | Incompatible strategies | `--k-induction`, `--incremental-bmc`, `--termination` |
 | Monitor prefix bound | `-DLTL_PREFIX_BOUND=N`, **required in practice** (default is 2³¹) |
 | Other properties in the same run | **None** — safety and unwinding assertions are masked |
-| Regression coverage | 13 `CORE` tests in `regression/ltl/`, run on Linux, macOS and Windows |
+| Regression coverage | 18 `CORE` tests in `regression/ltl/`, run on Linux, macOS and Windows |
 | Minimum translator version | libltl2ba `master` at [`b810033`](https://github.com/esbmc/libltl2ba/commit/b81003333b5cf2505aeeee1df9355bd97b586ad7) or later ([libltl2ba#4](https://github.com/esbmc/libltl2ba/pull/4)) — **later than the v2.1 tag** |
 
 ## The four-valued verdict
@@ -202,6 +202,33 @@ yet topped up, and stuttering that final state forever violates
 `F {charge > min}` — but a longer trace could still satisfy it. The ⊥ᵖ verdict
 maps onto the process result, so the run prints the satisfying trace as a
 `[Counterexample]` and exits non-zero.
+
+### Sampling only at designated points
+
+By default the monitor steps after every update of a global its propositions
+read, so it also sees the states between two assignments of one function call.
+For a sampled program, such as code generated for a synchronous model whose
+`model_step()` a harness calls once per period, those intermediate states never
+exist in the model, and a verdict drawn from them depends on the order of
+assignments inside the step.
+
+`--ltl-sample-points` turns that instrumentation off. The monitor then steps
+once when it starts and once at each call to the `__ESBMC_ltl_sample()`
+intrinsic, which the harness places at the step boundaries:
+
+```c
+for (int i = 0; i < N; i++)
+{
+  model_step();
+  __ESBMC_ltl_sample();
+}
+```
+
+Without the flag `__ESBMC_ltl_sample()` does nothing, so one harness serves
+both modes. `LTL_PREFIX_BOUND` must cover one step more than the number of
+sample calls executed. The final `LTL_FAILING` check still reads the state at
+the `return` of `main`, so call `__ESBMC_ltl_sample()` last if that state is to
+be a sample point.
 
 ## How it works
 
@@ -429,7 +456,7 @@ Check safety properties and bound adequacy in a separate run without `--ltl`.
   the version, but it does warn when the monitor is missing the
   `__ESBMC_switch_from_monitor()` call the older releases comment out, so the
   resulting `VERIFICATION UNKNOWN` names its cause.
-- **Test coverage is thin.** `regression/ltl/` holds thirteen tests. The two
+- **Test coverage is thin.** `regression/ltl/` holds eighteen tests. The two
   automata shipped by the original three exercise only ⊥ᵖ, ⊤ᵖ and the
   no-verdict cases, because both formulas have an empty bad-prefix state set
   and mark every state as excluded from being a good prefix; `github_6546`
@@ -488,8 +515,13 @@ against the program in [Limitations](#violations-were-missed-fixed-in-840).
 | `regression/ltl/basic-no-monitor` | none | `VERIFICATION UNKNOWN` |
 | `regression/ltl/basic-truncated-unwind` | same automaton, `--unwind 1` | `VERIFICATION UNKNOWN` |
 | `regression/ltl/uninstrumented-unknown` | same automaton, `--k-induction` | `VERIFICATION UNKNOWN` |
+| `regression/ltl/main-loop-assign` | a monitored assignment directly in a loop of `main` | `LTL_BAD`, `VERIFICATION FAILED` |
+| `regression/ltl/sample-points` | `--ltl-sample-points`, proposition reads a copy taken before the step | `LTL_BAD`, `VERIFICATION FAILED` |
+| `regression/ltl/sample-points-collapsed` | `--ltl-sample-points`, proposition reads the state after the step | `LTL_SUCCEEDING`, `VERIFICATION SUCCESSFUL` |
+| `regression/ltl/sample-points-collapsed-default` | the same without `--ltl-sample-points`: the monitor sees the mid-step state | `LTL_BAD`, `VERIFICATION FAILED` |
+| `regression/ltl/sample-points-no-ltl` | `__ESBMC_ltl_sample()` in a run without `--ltl` | `VERIFICATION SUCCESSFUL` |
 
-All thirteen are `CORE` and pass:
+All eighteen are `CORE` and pass:
 
 ```bash
 ctest -R "regression/ltl/" --output-on-failure

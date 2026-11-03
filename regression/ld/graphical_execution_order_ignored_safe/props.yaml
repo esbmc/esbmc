@@ -1,0 +1,9 @@
+properties:
+  # The set coil carries executionOrderId 1 and is drawn below the reset coil.
+  # Beremiz orders coils by position alone, so it emits the reset first and the
+  # set wins when a and b are both on; executionOrderId would run it the other
+  # way (#7352).
+  - id: P1
+    kind: invariant
+    expression: "!(a && b) || q"
+    description: "The set coil, drawn last, wins in the scan it is energised"

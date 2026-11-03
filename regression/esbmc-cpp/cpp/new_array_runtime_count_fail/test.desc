@@ -1,0 +1,5 @@
+CORE
+main.cpp
+--std c++17 --unwind 5
+^VERIFICATION FAILED$
+^\s+assertion p\[0\].b != 2$

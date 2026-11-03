@@ -23,8 +23,8 @@ reachability_treet::reachability_treet(
   // Put a few useful symbols in the symbol table.
   symbolt sym;
   sym.set_type(bool_typet());
-  sym.id = "execution_statet::\\guard_exec";
-  sym.name = "execution_statet::\\guard_exec";
+  sym.id = execution_statet::guard_execution_name;
+  sym.name = execution_statet::guard_execution_name;
   context.move(sym);
 
   CS_bound = atoi(options.get_option("context-bound").c_str());
@@ -147,6 +147,11 @@ static void collect_address_taken(
 
   if (is_address_of2t(e))
     collect_object_root(to_address_of2t(e).ptr_obj, ns, globals, locals);
+  // symex takes the operand's address when it runs __ESBMC_old.
+  else if (
+    is_sideeffect2t(e) &&
+    to_sideeffect2t(e).kind == sideeffect2t::allockind::old_snapshot)
+    collect_object_root(to_sideeffect2t(e).operand, ns, globals, locals);
 
   e->foreach_operand([&](const expr2tc &sub) {
     collect_address_taken(sub, ns, globals, locals);
@@ -902,6 +907,7 @@ goto_symext::symex_resultt reachability_treet::get_next_formula()
   has_complete_formula = false;
   ++reduction_stats.schedules_explored;
 
+  get_cur_state().release_symex_caches();
   return get_cur_state().get_symex_result();
 }
 

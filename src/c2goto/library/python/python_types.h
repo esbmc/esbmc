@@ -1,6 +1,7 @@
 #ifndef PYTHON_TYPES_H
 #define PYTHON_TYPES_H
 
+#include <stdbool.h>
 #include <stddef.h>
 
 // Bounded string length used by Python frontend/runtime helpers.
@@ -55,6 +56,7 @@ typedef struct __ESBMC_PyListObj
   PyType *type;    /**< &PyListType */
   PyObject *items; /**< Array of PyObject items (SMT infinite array concept) */
   size_t size;     /**< Number of elements currently in use */
+  bool is_tuple;   /**< Built by tuple(x), which the model keeps as a list */
 } PyListObject;
 
 /**

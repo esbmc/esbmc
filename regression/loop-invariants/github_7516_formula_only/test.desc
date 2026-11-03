@@ -1,0 +1,5 @@
+CORE
+main.c
+--k-induction --max-k-step 2 --smtlib --smt-formula-only --output phase.smt2
+^Checking forward condition, k = 1$
+^Checking inductive step, k = 2$

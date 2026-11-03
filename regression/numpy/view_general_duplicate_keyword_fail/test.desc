@@ -1,0 +1,4 @@
+CORE
+main.py
+--incremental-bmc
+^ERROR: .*main.py:10:4: Multiple values for argument 'w'$

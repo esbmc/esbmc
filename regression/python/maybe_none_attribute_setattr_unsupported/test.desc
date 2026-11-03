@@ -1,0 +1,4 @@
+CORE
+main.py
+--unwind 5 --multi-property
+^ERROR: arithmetic on .result., which may hold None or a value whose type is not known, is not supported$

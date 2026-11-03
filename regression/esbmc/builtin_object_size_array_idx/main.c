@@ -11,7 +11,7 @@ int main()
   int a[10];
   size_t s = __builtin_object_size(&a[2], 0);
 
-  // GCC returns the full size of the enclosing array for type 0.
-  assert(s == 10 * sizeof(int));
+  // Type 0 counts from the pointer to the end of the whole array (#8660).
+  assert(s == 8 * sizeof(int));
   return 0;
 }

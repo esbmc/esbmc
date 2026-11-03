@@ -1,0 +1,5 @@
+CORE
+main.py
+
+^  FAILED +\[global\.assertion\.1\] +line 12 +assertion ISINSTANCE\(a, 
+^VERIFICATION FAILED$

@@ -1,0 +1,4 @@
+CORE
+main.py
+--incremental-bmc
+^ERROR: calling attribute 'child' before the functions it holds are defined is not supported$

@@ -1,0 +1,5 @@
+CORE
+main.py
+--incremental-bmc
+^VERIFICATION FAILED$
+  assertion p\[2\] == 6$

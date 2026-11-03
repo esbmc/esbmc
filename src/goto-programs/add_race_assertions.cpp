@@ -662,6 +662,17 @@ static void store_call_result_via_local(
   t->location = original.location;
 }
 
+static goto_programt::instructiont
+yield_instruction(contextt &context, const locationt &location)
+{
+  goto_programt::instructiont yield(FUNCTION_CALL);
+  code_function_callt call;
+  call.function() = symbol_expr(*context.find_symbol("c:@F@__ESBMC_yield"));
+  migrate_expr(call, yield.code);
+  yield.location = location;
+  return yield;
+}
+
 void add_race_assertions(
   contextt &context,
   goto_programt &goto_program,
@@ -817,13 +828,7 @@ void add_race_assertions(
 
       {
         goto_programt::targett t = goto_program.insert(i_it);
-        t->type = FUNCTION_CALL;
-        code_function_callt call;
-        call.function() =
-          symbol_expr(*context.find_symbol("c:@F@__ESBMC_yield"));
-
-        migrate_expr(call, t->code);
-        t->location = original_instruction.location;
+        *t = yield_instruction(context, original_instruction.location);
         i_it = ++t;
       }
 
@@ -886,13 +891,7 @@ void add_race_assertions(
       if (races_only)
       {
         goto_programt::targett t = goto_program.insert(i_it);
-        t->type = FUNCTION_CALL;
-        code_function_callt call;
-        call.function() =
-          symbol_expr(*context.find_symbol("c:@F@__ESBMC_yield"));
-
-        migrate_expr(call, t->code);
-        t->location = original_instruction.location;
+        *t = yield_instruction(context, original_instruction.location);
         i_it = ++t;
       }
 
@@ -937,12 +936,7 @@ void add_race_assertions(
         goto_programt::targett after = i_it;
         ++after;
         goto_programt::targett t = goto_program.insert(after);
-        t->type = FUNCTION_CALL;
-        code_function_callt call;
-        call.function() =
-          symbol_expr(*context.find_symbol("c:@F@__ESBMC_yield"));
-        migrate_expr(call, t->code);
-        t->location = instruction.location;
+        *t = yield_instruction(context, instruction.location);
         i_it = t; // loop's ++ advances past the inserted yield
 
         // Reset the write flags of shared writes performed inside this atomic

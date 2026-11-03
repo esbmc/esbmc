@@ -1,0 +1,5 @@
+CORE
+mutex3.ld
+--ld-props props.yaml --k-induction
+^VERIFICATION FAILED$
+At most one of X, Y and Z is energised

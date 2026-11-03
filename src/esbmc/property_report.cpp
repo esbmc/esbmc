@@ -22,6 +22,8 @@ std::string property_class(const std::string &description)
 /// The last enumerator falls out to the return below rather than returning in
 /// its own arm, so the function needs no unreachable trailing statement to
 /// satisfy -Wreturn-type.
+const char *const unreached_claim_note = "never reached";
+
 const char *verdict_label(property_verdictt verdict)
 {
   switch (verdict)
@@ -58,6 +60,8 @@ property_countst count_properties(const std::vector<property_rowt> &rows)
       ++counts.failed;
       break;
     }
+    if (row.note == unreached_claim_note)
+      ++counts.unreached;
     counts.id_width = std::max(counts.id_width, row.id.size() + 2); // brackets
     counts.line_width =
       std::max(counts.line_width, std::to_string(row.line).size());

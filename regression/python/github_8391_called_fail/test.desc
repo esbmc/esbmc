@@ -1,0 +1,4 @@
+CORE
+main.py
+
+^ERROR: match statements with sequence, mapping or class patterns, or with a guard that has a nested scope, are not supported$

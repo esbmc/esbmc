@@ -1,5 +1,5 @@
-# The import rebinds Shape after the local class, so the rename would bind
-# the wrong class; the collision stays refused (#7397).
+# The import rebinds Shape before anything reads the local class, so every
+# use of Shape is the imported class, as in CPython (#7397, #8343).
 class Shape:
     def __init__(self) -> None:
         self.edges: int = 3

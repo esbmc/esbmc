@@ -238,6 +238,10 @@ public:
    */
   void symex_step(reachability_treet &art) override;
 
+  void symex_end_function(
+    reachability_treet &art,
+    const goto_programt::instructiont &instruction);
+
   /**
    *  Symbolically assign a value.
    *  Entirely handed off to goto_symext::symex_assign. However this method
@@ -282,6 +286,9 @@ public:
    *  @param assumption Expression of the thing we're assuming to be true.
    */
   void assume(const expr2tc &assumption) override;
+
+  /** As assume(), the deferred assumption reads its condition now. */
+  void defer_assumption(const expr2tc &assumption) override;
 
   /**
    *  Implemented by goto_symext::symex_printf. Overridden only to record the
@@ -483,12 +490,15 @@ public:
    *  an address-taken local count as shared: copying a pointer to it accesses
    *  nothing. Intrinsics that read through a pointer argument are keyed where
    *  symex dispatches them.
+   *  @param all_shared When non-null, receives every shared object the pointer
+   *  may reach; the result is still the first of them.
    */
   expr2tc resolve_pointer_target(
     const namespacet &ns,
     const expr2tc &ptr,
     bool &to_global,
-    bool through_deref);
+    bool through_deref,
+    std::vector<expr2tc> *all_shared = nullptr);
 
   /**
    *  Record what a dereference reaches when the pointer it goes through is not
@@ -666,6 +676,9 @@ public:
   value_sett global_value_set;
   /** Current active states thread ID. */
   unsigned int active_thread;
+  /** Name of the top-level execution guard symbol. */
+  static constexpr const char *guard_execution_name =
+    "execution_statet::\\guard_exec";
   /** Name prefix for execution guard. */
   irep_idt guard_execution;
   /** Number of nondeterministic symbols in this state. */
@@ -680,6 +693,8 @@ public:
    *  Means that there is no path from here on where any assertion may
    *  become satisfiable. */
   bool interleaving_unviable;
+  /** True once main has returned and the exit-time code is running. */
+  bool main_returned;
   /** TID of monitor thread, for monitor intrinsics. */
   unsigned int monitor_tid;
   /** Whether monitor_tid is set. */
@@ -786,7 +801,7 @@ public:
           ? std::shared_ptr<state_hashing_level2t>(
               new state_hashing_level2t(*this))
           : std::shared_ptr<ex_state_level2t>(new ex_state_level2t(*this)),
-        options){};
+        options) {};
 
   dfs_execution_statet(const dfs_execution_statet &ref) = default;
   std::shared_ptr<execution_statet> clone() const override;

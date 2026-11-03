@@ -6,6 +6,34 @@ start with its own scope doc: census, phased decomposition, gates, risks. Phase
 `scope-clang-c-irep2.md`; Phase 7 (clang-cpp) is `scope-clang-cpp-irep2.md` and
 is **not** closed, which matters here for the reason §2 gives.
 
+## Status at 2026-10-01 (`791ed8d1b8`)
+
+Phase 8 is **open**. S.1 (#7753) and S.2 are done, and the adjust-and-seam half
+agreed on 507 of 507 rows on 2026-09-13 (§7.38). Solidity shares the C++
+adjuster flag, so the static-local divergence recorded at the top of
+`scope-clang-cpp-irep2.md` applies to this path too. It has not been
+re-measured here.
+
+- B-2* is 44 (§20); B-1 is 1 413 lines, against 1 420 at the start. S.3, the
+  converter, has not started.
+- Five `#sol_*` attributes are live (`#sol_type`, `#sol_array_size`,
+  `#sol_bytesn_size`, `#sol_mapping_array`, `#sol_dynarray_state`). The six
+  others are retired. §13.2's recommendation, to treat `#sol_type` as a design
+  decision, is not yet taken, and it blocks most of the 44.
+- Durable IREP2 storage waits on the default adjuster flipping (§19.3), which
+  waits on Phase 7's flip and an SV-COMP run.
+- #7726 was closed unmerged; its content reached master through #7742. Where
+  §7.8–§7.26 say "#7726 merged" or "still open", read that.
+- Small items still open: §4.3a's cast defect on `nested_array_mixed_1`, the
+  two §19.4 defects (the relational built with its operand's type is now at
+  `solidity_convert_call.cpp:3228`), §15.4's untested `S s = m[k]` path, and
+  flipping the two XPASS KNOWNBUG rows of §1.1 (`delegate_shadow_3`,
+  `nested_array_deep_1`).
+
+The sections below are in the order written: two §7 series ("B-2 censused", then
+"S.1 executed") and two §4s. Source comments cite §2, §3, §7.21, §7.37, §8,
+§10, §11 and §16.1, so they are not renumbered.
+
 ## 1. Census
 
 ### 1.1 The blocker the parent records is stale
@@ -125,7 +153,7 @@ write-back discipline than it was written against, and any seam loss on a
 library body would be masked by the restore rather than observed. This wants a
 measurement before the flag is wired, not after.
 
-## 3. Proposed decomposition (not yet executed)
+## 3. Proposed decomposition (S.1 and S.2 executed; S.3 not started)
 
 1. **S.1** Wire `clang-cpp-irep2-adjust-only` into
    `solidity_languaget::typecheck` and report the divergence count over the
@@ -171,6 +199,7 @@ The parent's §7 gates apply unchanged. Two are worth restating for this phase:
 ## 6. Next
 
 S.1 and S.2, in that order, each as its own change. Neither ports anything.
+(Both done; see the status block.)
 
 ## 7. B-2 censused by measurement, and the wall it hits (2026-09-15)
 
@@ -540,8 +569,6 @@ types stay legacy; give IREP2 a Solidity type kind, which the closed-type-system
 exists to prevent; or carry a `SolType` beside every expression in the frontend's own
 structures, which is the honest fix and a large refactor. Choosing among them is not a
 measurement, and Phase 8 should not spend more ticks pretending otherwise.
-S.3, the converter's own 1 685 sites. §7.22's padding row is the one open
-defect in the adjust and seam half; §7.23 has the corpus figures.
 
 ## 7. S.1 executed: the baseline, and it is one cause (2026-09-11)
 
@@ -1485,15 +1512,16 @@ to this section:
 | port the callers too, so no round trip happens | pushes the boundary into `solidity_convert_expr.cpp` (250 sites) |
 | accept the printed-output change | needs an SV-COMP run and a sweep of tests that pin literal spellings |
 
-This is the same shape as the spelling carriage `scope-c-spelling-carriage.md`
-records, arrived at from a different direction. Worth knowing before 1 685
+This is the same shape as the C spelling carriage (`frontends-to-irep2.md`
+§33.4), arrived at from a different direction. `#cformat` has since been carried
+through the seam (#7864). Worth knowing before 1 685
 sites are ranked: the smallest file in the phase is blocked on a seam question,
 so "mechanical" in §7.24 means *representable*, not *free*.
 ### 7.26 504 of 507, measured on the merged tree (2026-09-12)
 
 #7717 and #7742 landed on master, and #7742's merge carried the stacked #7726
-content with it — `cpp_new_size` is on master although #7726 is still open as a
-PR. So the fix §7.20 measured on a scratch branch is now the shipped one.
+content with it — `cpp_new_size` is on master although #7726 was never merged
+(it was later closed). So the fix §7.20 measured on a scratch branch is now the shipped one.
 
 That had to be re-measured rather than carried across: what landed is #7726's
 fuller restructuring of the cast arms and pre-dispatch forms *around* the

@@ -39,6 +39,9 @@ double atan(double x)
 __ESBMC_HIDE:;
   double a;
 
+  // C11 F.10.1.3: atan(±0) returns ±0, which the x < 0.0 test below misses.
+  if (x == 0.0)
+    return x;
   a = x < 0.0 ? -x : x;
   if (a > 1.0)
     a = _atan(1.0 / a, 2);
@@ -61,9 +64,16 @@ double atan2(double v, double u)
 __ESBMC_HIDE:;
   double au, av, f;
 
+  // C11 F.10.1.4: a NaN argument gives NaN, and the signs of zero and
+  // infinite arguments select the quadrant.
+  if (isnan(v) || isnan(u))
+    return v + u;
+
   av = v < 0.0 ? -v : v;
   au = u < 0.0 ? -u : u;
-  if (u != 0.0)
+  if (isinf(av) && isinf(au))
+    f = M_PI_4;
+  else if (u != 0.0)
   {
     if (av > au)
     {
@@ -89,7 +99,7 @@ __ESBMC_HIDE:;
       f = 0.0;
     }
   }
-  if (u < 0.0)
+  if (signbit(u))
     f = M_PI - f;
-  return (v < 0.0 ? -f : f);
+  return signbit(v) ? -f : f;
 }

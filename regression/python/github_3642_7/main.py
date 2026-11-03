@@ -6,5 +6,6 @@ class TrafficLight(Enum):
 
 
 def test_invalid_attribute():
-    # Should fail verification
+    # Never called, so its unconvertible body does not stop verification
+    # (#8391).
     assert TrafficLight.RED.invalid == 0

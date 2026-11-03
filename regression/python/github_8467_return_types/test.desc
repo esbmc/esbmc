@@ -1,0 +1,4 @@
+CORE
+main.py
+
+^ERROR: .*main\.py:20:.*the methods 'f' is bound to may return different types$

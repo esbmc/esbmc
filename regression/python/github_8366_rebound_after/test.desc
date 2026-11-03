@@ -1,0 +1,4 @@
+CORE
+main.py
+
+^ERROR: Type inference failed at line 4. Variable num not found$

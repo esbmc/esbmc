@@ -10,9 +10,12 @@
 /**
  * clang C adjuster class for:
  *  - symbol adjustment, dealing with ESBMC-IR `symbolt`
- *  - type adjustment, dealing with ESBMC-IR `typet` or other IRs derived from typet
- *  - expression adjustment, dealing with ESBMC-IR `exprt` or other IRs derived from exprt
- *  - code adjustment, dealing with ESBMC-IR `codet` or other IRs derived from codet
+ *  - type adjustment, dealing with ESBMC-IR `typet` or other IRs derived from
+ * typet
+ *  - expression adjustment, dealing with ESBMC-IR `exprt` or other IRs derived
+ * from exprt
+ *  - code adjustment, dealing with ESBMC-IR `codet` or other IRs derived from
+ * codet
  */
 class clang_c_adjust
 {
@@ -90,8 +93,12 @@ protected:
    *  returns false when neither is complex, leaving @p expr untouched. */
   bool lower_complex_binary_arithmetic(exprt &expr);
   bool lower_complex_compound_assignment(exprt &expr);
+  bool lower_complex_equality(exprt &expr);
   void adjust_expr_unary_complex(exprt &expr);
-  void bind_sideeffect_operands(exprt &expr, code_blockt &block);
+  void bind_sideeffect_operands(
+    exprt &expr,
+    code_blockt &block,
+    bool bind_compound = false);
   void finish_complex_lowering(exprt &expr, exprt &result, code_blockt &block);
   void adjust_expr_shifts(exprt &expr);
   void adjust_expr_unary_boolean(exprt &expr);
@@ -123,7 +130,8 @@ protected:
   virtual void adjust_switch(codet &code);
   void adjust_assign(codet &code);
   void adjust_decl(codet &code);
-  // For class instantiation in C++, we need to adjust the side-effect of constructor
+  // For class instantiation in C++, we need to adjust the side-effect of
+  // constructor
   virtual void adjust_decl_block(codet &code);
 
   static exprt is_gcc_polymorphic_builtin(

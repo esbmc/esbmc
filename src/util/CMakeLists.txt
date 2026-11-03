@@ -1,12 +1,9 @@
-add_library(algorithms ssa/algorithms.cpp)
-target_link_libraries(algorithms PUBLIC esbmc_common)
-
 add_library(cache ssa/cache.cpp ssa/fingerprint.cpp ssa/proof_cache.cpp)
 # fingerprint.cpp digests SSA steps, so cache now depends on irep2 and the
 # util core. Declared here rather than at each consumer: without it the Linux
 # linker, which does not revisit an archive, leaves the irep2 vtables and
 # irept::remove_ref undefined in anything that links cache.
-target_link_libraries(cache PUBLIC algorithms irep2 util_esbmc esbmc_common)
+target_link_libraries(cache PUBLIC symex irep2 util_esbmc esbmc_common)
 
 add_library(filesystem base/filesystem.cpp)
 target_link_libraries(filesystem PUBLIC esbmc_common ESBMC::boost)
@@ -33,7 +30,7 @@ add_library(util_esbmc irep/xml_irep.cpp base/xml.cpp
         irep/irep_serialization.cpp symtab/symbol_serialization.cpp arith/fixedbv.cpp
         base/signal_catcher.cpp irep/migrate.cpp symtab/show_symbol_table.cpp
         expr/type_byte_size.cpp ssa/goto_expr_factory.cpp
-        expr/string_constant.cpp lang/c_types.cpp lang/python_types.cpp arith/ieee_float.cpp lang/c_qualifiers.cpp
+        expr/string_constant.cpp lang/c_types.cpp lang/python_types.cpp arith/ieee_float.cpp arith/transcendental.cpp lang/c_qualifiers.cpp
         lang/c_sizeof.cpp lang/c_link.cpp lang/c_typecast.cpp symtab/fix_symbol.cpp
         lang/c_expr2string.cpp lang/cpp_expr2string.cpp expr/type2name.cpp
         lang/exception_specification.cpp
@@ -49,4 +46,3 @@ target_link_libraries(util_esbmc
         PUBLIC esbmc_common irep2 fmt::fmt string_pool yaml-cpp::yaml-cpp ESBMC::boost
         PRIVATE langapi)
 
-target_link_libraries(algorithms PUBLIC gotoprograms)

@@ -1,0 +1,6 @@
+CORE
+main.c
+--multi-property
+^  FAILED .* assertion \(\*\*pp\)\[m - 1\] == 8$
+^\*\* 1 of [0-9]+ properties failed
+^VERIFICATION FAILED$

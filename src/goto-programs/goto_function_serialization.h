@@ -12,7 +12,7 @@ private:
 
 public:
   goto_function_serializationt(irep_serializationt::ireps_containert &ic)
-    : gpconverter(ic){};
+    : gpconverter(ic) {};
 
   void convert(std::istream &, irept &);
   void convert(const goto_functiont &, std::ostream &);

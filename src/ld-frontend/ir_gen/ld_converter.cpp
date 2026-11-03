@@ -1,11 +1,17 @@
 #include <ld-frontend/ir_gen/ld_converter.h>
 #include <ld-frontend/ir_gen/st_fb_translator.h>
+#include <cctype>
+#include <algorithm>
 #include <util/arith/arith_tools.h>
+#include <util/arith/ieee_float.h>
+#include <util/arith/mp_arith.h>
+#include <util/config/config.h>
 #include <util/lang/c_types.h>
 #include <util/expr/expr_util.h>
 #include <util/message/message.h>
 #include <util/symtab/symbol.h>
 #include <map>
+#include <set>
 #include <stdexcept>
 
 ld_converter::ld_converter(contextt &context, const LdIR &ir)
@@ -22,7 +28,7 @@ typet ld_converter::bool_t() const
   return typet("bool");
 }
 
-typet ld_converter::int32_t_() const
+typet ld_converter::dint_type() const
 {
   return int_type();
 }
@@ -34,30 +40,33 @@ typet ld_converter::type_of_kind(VarKind kind) const
   case VarKind::BOOL:
     return bool_t();
   case VarKind::REAL:
+    return float_type(); // IEC 61131-3 Table 10: REAL is 32 bits
+  case VarKind::LREAL:
     return double_type();
   case VarKind::INT:
+    return signedbv_typet(16); // IEC INT, and MATIEC's IEC_INT
   case VarKind::DINT:
   case VarKind::TIME:
     break;
   }
-  return int32_t_();
+  return dint_type();
 }
 
-exprt ld_converter::int_const(long long value) const
+exprt ld_converter::int_const(long long value, const typet &type) const
 {
-  return from_integer(BigInt(value), int32_t_());
+  return from_integer(BigInt(value), type);
 }
 
-// Saturation bounds for CV, taken from the configured integer width rather than
-// assumed to be 32-bit.
-exprt ld_converter::int_max() const
+// The type an operation between integers of types a and b is carried out in:
+// INT is 16 bits and DINT and TIME are 32, so the wider of the two.
+static typet common_int_type(const typet &a, const typet &b)
 {
-  return to_signedbv_type(int32_t_()).largest_expr();
+  return a == b ? a : int_type();
 }
 
-exprt ld_converter::int_min() const
+static exprt cast_to(const exprt &e, const typet &type)
 {
-  return to_signedbv_type(int32_t_()).smallest_expr();
+  return e.type() == type ? e : static_cast<exprt>(typecast_exprt(e, type));
 }
 
 static std::string ld_name(const std::string &var)
@@ -105,13 +114,17 @@ symbol_exprt ld_converter::declare_variable(const VarDecl &v)
     sym.set_value(v.init_value ? exprt(true_exprt()) : exprt(false_exprt()));
     break;
   case VarKind::REAL:
-    sym.set_value(
-      from_double(static_cast<double>(v.init_value), double_type()));
+  case VarKind::LREAL:
+  {
+    ieee_floatt f(ieee_float_spect(to_floatbv_type(sym.get_type())));
+    f.from_integer(BigInt(v.init_value));
+    sym.set_value(f.to_expr());
     break;
+  }
   case VarKind::INT:
   case VarKind::DINT:
   case VarKind::TIME:
-    sym.set_value(int_const(v.init_value));
+    sym.set_value(int_const(v.init_value, sym.get_type()));
     break;
   }
 
@@ -196,10 +209,7 @@ exprt ld_converter::bool_value_of(const symbol_exprt &var) const
   return not_exprt(equality_exprt(var, gen_zero(var.type())));
 }
 
-codet ld_converter::translate_contact(
-  const LdIRNode &n,
-  const exprt &pf_in,
-  exprt &pf_out)
+exprt ld_converter::translate_contact(const LdIRNode &n, code_blockt &blk)
 {
   symbol_exprt var = var_expr(n.variable);
   ContactKind eff_kind = n.contact_kind;
@@ -209,25 +219,25 @@ codet ld_converter::translate_contact(
                  : ContactKind::NormallyOpen;
 
   exprt base = bool_value_of(var);
-  // Transition-sensing contact (IEC 61131-3 §2.5.1.1): the edge is sensed on
-  // the operand, and the contact's polarity is applied to the result. The
-  // shadow holding the previous-scan sample is updated in the scan epilogue,
-  // not here, so every contact sensing the same operand agrees within a scan.
+  // IEC 61131-3 Ed. 3 Table 75 senses the edge "from one evaluation of this
+  // element to the next": like the R_TRIG/F_TRIG Beremiz emits for each coil
+  // a contact feeds, every evaluation keeps its own previous sample.
   if (n.contact_edge != ContactEdge::None)
   {
-    symbol_exprt prev =
-      declare_bool_shadow(ld_name("__edge_prev_" + n.variable));
-    edge_shadows_.insert({n.variable, prev});
-    base = (n.contact_edge == ContactEdge::Rising)
-             ? and_exprt(base, not_exprt(prev))
-             : and_exprt(not_exprt(base), prev);
+    const std::string id = std::to_string(edge_contacts_++) + "_" + n.variable;
+    symbol_exprt prev = declare_bool_shadow(ld_name("__edge_prev_" + id));
+    symbol_exprt q = declare_bool_shadow(ld_name("__edge_q_" + id));
+    exprt edge = (n.contact_edge == ContactEdge::Rising)
+                   ? and_exprt(base, not_exprt(prev))
+                   : and_exprt(not_exprt(base), prev);
+    blk.copy_to_operands(code_assignt(q, edge));
+    blk.copy_to_operands(code_assignt(prev, base));
+    base = q;
   }
 
-  exprt contact_val = (eff_kind == ContactKind::NormallyClosed)
-                        ? static_cast<exprt>(not_exprt(base))
-                        : base;
-  pf_out = and_exprt(pf_in, contact_val);
-  return code_skipt();
+  return (eff_kind == ContactKind::NormallyClosed)
+           ? static_cast<exprt>(not_exprt(base))
+           : base;
 }
 
 codet ld_converter::translate_coil(const LdIRNode &n, const exprt &pf)
@@ -269,12 +279,24 @@ codet ld_converter::translate_coil(const LdIRNode &n, const exprt &pf)
   return blk;
 }
 
+// A textual block may omit instanceName; its Q variable still names it, so
+// unnamed blocks do not share one previous-input shadow.
+static const std::string &
+shadow_key(const std::string &instance, const std::string &q)
+{
+  return instance.empty() ? q : instance;
+}
+
 // TimerStep: synchronous fixed-tick model (§3.3) — one scan advances ET by one
 // tick, so PT is a dimensionless scan count. IEC 61131-3 §2.5.2.3.
 //
 //   TON: ET counts while IN holds; Q rises once ET reaches PT.
 //   TOF: Q follows IN up, then holds for PT scans after IN drops.
 //   TP:  a rising IN starts a PT-scan pulse that ignores IN until it expires.
+//
+// As in MATIEC (lib/timer.txt), the scan on which IN starts the interval (TON
+// rising, TOF falling) counts as no elapsed time, so Q does not change on that
+// scan even when PT is 0 (#8178).
 //
 // Every timer starts with Q false: at power-up the timer has not run, so the
 // elapsed count must not be read as an already-expired interval.
@@ -285,8 +307,13 @@ codet ld_converter::translate_timer(const LdIRNode &n)
   symbol_exprt q_sym = var_expr(n.timer_Q);
   symbol_exprt in_sym = var_expr(n.timer_IN);
 
-  exprt one = gen_one(int32_t_());
-  exprt zero = gen_zero(int32_t_());
+  const typet cmp_t = common_int_type(et_sym.type(), pt_sym.type());
+  auto et_pt = [&](const char *rel) {
+    return binary_relation_exprt(
+      cast_to(et_sym, cmp_t), rel, cast_to(pt_sym, cmp_t));
+  };
+  exprt one = gen_one(et_sym.type());
+  exprt zero = gen_zero(et_sym.type());
   exprt in_val = bool_value_of(in_sym);
   exprt q_val = bool_value_of(q_sym);
 
@@ -294,23 +321,26 @@ codet ld_converter::translate_timer(const LdIRNode &n)
   // interval is up. Without the bound ET rises every scan IN holds and
   // eventually overflows, which is UB and flips Q back to false.
   code_ifthenelset advance_et;
-  advance_et.cond() = binary_relation_exprt(et_sym, "<", pt_sym);
+  advance_et.cond() = et_pt("<");
   advance_et.then_case() =
-    code_assignt(et_sym, make_arith(exprt::plus, et_sym, one, int32_t_()));
-  auto q_while_pending =
-    code_assignt(q_sym, binary_relation_exprt(et_sym, "<", pt_sym));
+    code_assignt(et_sym, make_arith(exprt::plus, et_sym, one, et_sym.type()));
+  auto q_while_pending = code_assignt(q_sym, et_pt("<"));
+
+  symbol_exprt in_prev = declare_bool_shadow(
+    ld_name("__timer_prev_" + shadow_key(n.timer_instance, n.timer_Q)));
+  exprt in_held = and_exprt(in_val, in_prev);
 
   code_blockt blk;
 
   if (n.timer_kind == FBKind::TON)
   {
     code_ifthenelset et_step;
-    et_step.cond() = in_val;
+    et_step.cond() = in_held;
     et_step.then_case() = advance_et;
     et_step.else_case() = code_assignt(et_sym, zero);
     blk.copy_to_operands(et_step);
-    blk.copy_to_operands(code_assignt(
-      q_sym, and_exprt(in_val, binary_relation_exprt(et_sym, ">=", pt_sym))));
+    blk.copy_to_operands(code_assignt(q_sym, and_exprt(in_held, et_pt(">="))));
+    blk.copy_to_operands(code_assignt(in_prev, in_val));
     return blk;
   }
 
@@ -331,19 +361,17 @@ codet ld_converter::translate_timer(const LdIRNode &n)
     step.then_case() = energise;
 
     code_ifthenelset hold;
-    hold.cond() = q_val;
+    hold.cond() = and_exprt(q_val, not_exprt(in_prev));
     hold.then_case() = countdown;
     step.else_case() = hold;
 
     blk.copy_to_operands(step);
+    blk.copy_to_operands(code_assignt(in_prev, in_val));
     return blk;
   }
 
   // TP: retriggerable only once the pulse has expired, so the pulse start is
   // gated on a rising edge of IN rather than on its level.
-  symbol_exprt in_prev =
-    declare_bool_shadow(ld_name("__timer_prev_" + n.timer_instance));
-
   code_blockt start;
   start.copy_to_operands(code_assignt(et_sym, zero));
   start.copy_to_operands(code_assignt(q_sym, true_exprt()));
@@ -363,28 +391,35 @@ codet ld_converter::translate_timer(const LdIRNode &n)
 }
 
 // CounterStep: IEC 61131-3 §2.5.2.3 — edge-triggered on rising CU/CD.
-//   CTU: if (CU && !CU_prev) CV++;  if (R) CV:=0;  CU_prev:=CU; Q:=(CV>=PV)
-//   CTD: if (CD && !CD_prev) CV--;  CD_prev:=CD; Q:=(CV<=0)
+//   CTU: if (CU && !CU_prev && CV<PV) CV++;  if (R) CV:=0;  CU_prev:=CU;
+//        Q:=(CV>=PV)
+//   CTD: if (LD) CV:=PV; else if (CD && !CD_prev && CV>0) CV--;  CD_prev:=CD;
+//        Q:=(CV<=0)
+// The bounds are MATIEC's (lib/counter.txt): CV stops at PV and at 0.
 codet ld_converter::translate_counter(const LdIRNode &n)
 {
   code_blockt blk;
-  exprt one = gen_one(int32_t_());
-  exprt zero = gen_zero(int32_t_());
+  symbol_exprt cv = var_expr(n.ctr_CV);
+  exprt one = gen_one(cv.type());
+  exprt zero = gen_zero(cv.type());
+  symbol_exprt q = var_expr(n.ctr_Q);
+  const std::string prev_id =
+    ld_name("__ctr_prev_" + shadow_key(n.ctr_instance, n.ctr_Q));
+  const exprt pv = n.ctr_PV.empty() ? zero : exprt(var_expr(n.ctr_PV));
+  const typet cmp_t = common_int_type(cv.type(), pv.type());
+  auto cv_pv = [&](const char *rel) {
+    return binary_relation_exprt(cast_to(cv, cmp_t), rel, cast_to(pv, cmp_t));
+  };
 
   if (n.ctr_kind == FBKind::CTU)
   {
     symbol_exprt cu = var_expr(n.ctr_CU);
-    symbol_exprt cv = var_expr(n.ctr_CV);
-    symbol_exprt q = var_expr(n.ctr_Q);
-    symbol_exprt cu_prev =
-      declare_bool_shadow(ld_name("__ctr_prev_" + n.ctr_instance));
+    symbol_exprt cu_prev = declare_bool_shadow(prev_id);
 
     code_ifthenelset cu_step;
-    cu_step.cond() = and_exprt(
-      and_exprt(cu, not_exprt(cu_prev)),
-      binary_relation_exprt(cv, "<", int_max()));
+    cu_step.cond() = and_exprt(and_exprt(cu, not_exprt(cu_prev)), cv_pv("<"));
     cu_step.then_case() =
-      code_assignt(cv, make_arith(exprt::plus, cv, one, int32_t_()));
+      code_assignt(cv, make_arith(exprt::plus, cv, one, cv.type()));
     blk.copy_to_operands(cu_step);
 
     if (!n.ctr_R.empty())
@@ -398,29 +433,30 @@ codet ld_converter::translate_counter(const LdIRNode &n)
 
     blk.copy_to_operands(code_assignt(cu_prev, cu));
 
-    if (!n.ctr_PV.empty())
-      blk.copy_to_operands(
-        code_assignt(q, binary_relation_exprt(cv, ">=", var_expr(n.ctr_PV))));
-    else
-      blk.copy_to_operands(
-        code_assignt(q, binary_relation_exprt(cv, ">=", zero)));
+    blk.copy_to_operands(code_assignt(q, cv_pv(">=")));
   }
   else // CTD
   {
     symbol_exprt cd = var_expr(n.ctr_CD);
-    symbol_exprt cv = var_expr(n.ctr_CV);
-    symbol_exprt q = var_expr(n.ctr_Q);
-    exprt neg_one = from_integer(BigInt(-1), int32_t_());
-    symbol_exprt cd_prev =
-      declare_bool_shadow(ld_name("__ctr_prev_" + n.ctr_instance));
+    exprt neg_one = from_integer(BigInt(-1), cv.type());
+    symbol_exprt cd_prev = declare_bool_shadow(prev_id);
 
     code_ifthenelset cd_step;
     cd_step.cond() = and_exprt(
-      and_exprt(cd, not_exprt(cd_prev)),
-      binary_relation_exprt(cv, ">", int_min()));
+      and_exprt(cd, not_exprt(cd_prev)), binary_relation_exprt(cv, ">", zero));
     cd_step.then_case() =
-      code_assignt(cv, make_arith(exprt::plus, cv, neg_one, int32_t_()));
-    blk.copy_to_operands(cd_step);
+      code_assignt(cv, make_arith(exprt::plus, cv, neg_one, cv.type()));
+
+    if (n.ctr_LD.empty())
+      blk.copy_to_operands(cd_step);
+    else
+    {
+      code_ifthenelset load;
+      load.cond() = var_expr(n.ctr_LD);
+      load.then_case() = code_assignt(cv, cast_to(pv, cv.type()));
+      load.else_case() = cd_step;
+      blk.copy_to_operands(load);
+    }
 
     blk.copy_to_operands(code_assignt(cd_prev, cd));
     blk.copy_to_operands(
@@ -434,37 +470,111 @@ codet ld_converter::translate_arith(const LdIRNode &n)
   symbol_exprt in1 = var_expr(n.arith_IN1);
   symbol_exprt out = var_expr(n.arith_OUT);
 
+  if (n.arith_kind == FBKind::MOVE)
+    return code_assignt(out, cast_to(in1, out.type()));
+
+  symbol_exprt in2 = var_expr(n.arith_IN2);
+  const typet t = common_int_type(in1.type(), in2.type());
+  const exprt a = cast_to(in1, t);
+  const exprt b = cast_to(in2, t);
+
   exprt op_expr;
   switch (n.arith_kind)
   {
   case FBKind::ADD:
-    op_expr = make_arith(exprt::plus, in1, var_expr(n.arith_IN2), int32_t_());
+    op_expr = make_arith(exprt::plus, a, b, t);
     break;
   case FBKind::SUB:
-    op_expr = make_arith(exprt::minus, in1, var_expr(n.arith_IN2), int32_t_());
+    op_expr = make_arith(exprt::minus, a, b, t);
     break;
   case FBKind::MUL:
-    op_expr = make_arith(exprt::mult, in1, var_expr(n.arith_IN2), int32_t_());
+    op_expr = make_arith(exprt::mult, a, b, t);
     break;
   case FBKind::DIV:
-    op_expr = make_arith(exprt::div, in1, var_expr(n.arith_IN2), int32_t_());
+    op_expr = make_arith(exprt::div, a, b, t);
     break;
-  case FBKind::MOVE:
   default:
-    op_expr = in1;
-    break;
+    throw std::runtime_error("ld_converter: not an arithmetic block");
   }
-  return code_assignt(out, op_expr);
+  return code_assignt(out, cast_to(op_expr, out.type()));
 }
 
-// Execute a user-defined FB body once per scan.  Inputs are sampled
-// nondeterministically (the open-world sensor model: the dataset's FB inputs
-// are program inputs), FB-local symbols are instance-scoped, and the body is
-// translated to native codet — crucially the WHILE stays a real loop so a
-// non-terminating Ladder Logic Bomb trips ESBMC's unwinding assertion.
-// On any translation failure the body is over-approximated (skipped), matching
-// the pre-existing "unsupported FB" behaviour (no regression).
-codet ld_converter::translate_user_fb(const UserFBExec &ex)
+// The value an FB input wire carries: a declared symbol (a program variable, or
+// another block's "<inst>__<pin>"), or a BOOL or integer literal.
+std::optional<exprt>
+ld_converter::wire_source(const std::string &source, const typet &type) const
+{
+  if (source.empty())
+    return std::nullopt;
+  const symbolt *sym = context_.find_symbol("ld::" + source);
+  if (sym && !sym->get_type().is_code())
+  {
+    exprt e = symbol_exprt("ld::" + source, sym->get_type());
+    return e.type() == type ? e : typecast_exprt(e, type);
+  }
+  std::string upper;
+  for (char c : source)
+    upper += static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
+  if (upper == "TRUE" || upper == "FALSE")
+  {
+    exprt b = upper == "TRUE" ? exprt(true_exprt()) : exprt(false_exprt());
+    return b.type() == type ? b : typecast_exprt(b, type);
+  }
+  const size_t sign = source[0] == '-' ? 1 : 0;
+  if (
+    source.size() <= sign ||
+    source.find_first_not_of("0123456789", sign) != std::string::npos)
+    return std::nullopt;
+  const BigInt value = string2integer(source);
+  if (!value.is_int64())
+    return std::nullopt;
+  // Built as a 64-bit integer and cast, so a BOOL or REAL pin converts it
+  // rather than receiving a constant from_integer cannot express in its type.
+  return typecast_exprt(from_integer(value, signedbv_typet(64)), type);
+}
+
+// The value an FB input takes each scan: what its wire carries, or a
+// nondeterministic value when it is unwired or fed by something not modelled.
+exprt ld_converter::input_value(
+  const UserFBExec &ex,
+  const std::string &pin,
+  const typet &type) const
+{
+  auto w = std::find_if(
+    ex.in_wires.begin(), ex.in_wires.end(), [&](const FBInWire &in) {
+      return in.pin == pin;
+    });
+  if (w == ex.in_wires.end() || !w->connected)
+    return side_effect_expr_nondett(type);
+  if (auto bound = wire_source(w->source, type))
+    return *bound;
+  log_warning(
+    "user FB '{}' input {} is fed by something not modelled; sampling it "
+    "nondeterministically.",
+    ex.instance_name,
+    pin);
+  return side_effect_expr_nondett(type);
+}
+
+// Declare every FB instance's interface before any body runs, so a wire from a
+// block that runs later reads that block's previous-scan value (#7580).
+void ld_converter::declare_user_fb_interfaces()
+{
+  for (const auto &ex : ir_.user_fbs)
+  {
+    const std::string prefix = "ld::" + ex.instance_name + "__";
+    for (const auto &v : ex.input_vars)
+      declare_scoped(prefix + v.name, type_of_kind(v.kind));
+    for (const auto &v : ex.local_vars)
+      declare_scoped(prefix + v.name, type_of_kind(v.kind));
+    for (const auto &v : ex.output_vars)
+      declare_scoped(prefix + v.name, type_of_kind(v.kind));
+  }
+}
+
+// Translate an FB's Structured Text body into its instance's symbols, or
+// nothing when the body uses constructs outside the supported ST subset.
+std::optional<code_blockt> ld_converter::translate_fb_body(const UserFBExec &ex)
 {
   const std::string prefix = "ld::" + ex.instance_name + "__";
 
@@ -476,7 +586,8 @@ codet ld_converter::translate_user_fb(const UserFBExec &ex)
     declared_kinds[v.name] = v.kind;
   for (const auto &v : ex.local_vars)
     declared_kinds[v.name] = v.kind;
-  declared_kinds[ex.output_var] = ex.output_kind;
+  for (const auto &v : ex.output_vars)
+    declared_kinds[v.name] = v.kind;
 
   st_fb_translator::resolver_t resolve =
     [this, prefix, &declared_kinds](const std::string &nm) -> symbol_exprt {
@@ -485,49 +596,69 @@ codet ld_converter::translate_user_fb(const UserFBExec &ex)
       return symbol_exprt(prefix + nm, s->get_type());
     auto it = declared_kinds.find(nm);
     const typet t =
-      (it != declared_kinds.end()) ? type_of_kind(it->second) : int32_t_();
+      (it != declared_kinds.end()) ? type_of_kind(it->second) : dint_type();
     return declare_scoped(prefix + nm, t);
   };
-
-  // Declare the formal output with its declared type (REAL outputs stay
-  // double); other locals are declared on demand by the resolver above.
-  declare_scoped(prefix + ex.output_var, type_of_kind(ex.output_kind));
-
-  // Translate the body first.  If it uses constructs outside the supported ST
-  // subset (nested FB calls, REAL, MOD, library functions), it throws and we
-  // emit NOTHING — preserving the pre-existing "unsupported FB" behaviour
-  // exactly (no regression on benchmarks whose FBs we cannot model).
-  code_blockt body;
   try
   {
     st_fb_translator translator(resolve);
-    body = translator.translate(ex.st_body);
+    return translator.translate(ex.st_body);
   }
   catch (const std::exception &e)
   {
     log_warning(
-      "user FB '{}' body not translated ({}); over-approximating (no-op).",
+      "user FB '{}' body not translated ({}); its outputs are "
+      "nondeterministic.",
       ex.type_name,
       e.what());
-    return code_skipt();
   }
   catch (...)
   {
     log_warning(
-      "user FB '{}' body not translated; over-approximating (no-op).",
+      "user FB '{}' body not translated; its outputs are nondeterministic.",
       ex.type_name);
-    return code_skipt();
   }
+  return std::nullopt;
+}
 
-  // Success: sample inputs nondeterministically at scan entry, then run body.
+// Execute a user-defined FB body once per scan.  Inputs take the values they
+// are wired to (nondeterministic when unwired), FB-local symbols are
+// instance-scoped, and the body is translated to native codet — crucially the
+// WHILE stays a real loop so a non-terminating Ladder Logic Bomb trips ESBMC's
+// unwinding assertion.
+codet ld_converter::translate_user_fb(const UserFBExec &ex)
+{
+  const std::string prefix = "ld::" + ex.instance_name + "__";
   code_blockt blk;
-  for (const auto &iv : ex.input_vars)
+  const std::optional<code_blockt> body = translate_fb_body(ex);
+  if (!body)
   {
-    symbol_exprt s = resolve(iv.name);
-    blk.copy_to_operands(code_assignt(s, side_effect_expr_nondett(s.type())));
+    // Skipping the body would leave the outputs, and the in/out pins held in
+    // input_vars, at stale values; any value over-approximates the body.
+    std::vector<FBVarDecl> pins = ex.input_vars;
+    pins.insert(pins.end(), ex.output_vars.begin(), ex.output_vars.end());
+    for (const auto &v : pins)
+    {
+      const symbol_exprt out(
+        prefix + v.name, context_.find_symbol(prefix + v.name)->get_type());
+      blk.copy_to_operands(
+        code_assignt(out, side_effect_expr_nondett(out.type())));
+    }
   }
-  for (const auto &op : body.operands())
-    blk.copy_to_operands(static_cast<const codet &>(op));
+  else
+  {
+    // Bind each input to what it is wired to, then run the body. An unwired
+    // input, or one fed by something not modelled, is sampled
+    // nondeterministically, which over-approximates it.
+    for (const auto &iv : ex.input_vars)
+    {
+      const symbol_exprt s(
+        prefix + iv.name, context_.find_symbol(prefix + iv.name)->get_type());
+      blk.copy_to_operands(code_assignt(s, input_value(ex, iv.name, s.type())));
+    }
+    for (const auto &op : body->operands())
+      blk.copy_to_operands(static_cast<const codet &>(op));
+  }
 
   // Wire FB output pins to the program variables that consume them, so a forged
   // FB output (value/actuator-manipulation bomb) propagates into the program.
@@ -551,6 +682,29 @@ codet ld_converter::translate_user_fb(const UserFBExec &ex)
 // Scan body construction
 // -----------------------------------------------------------------------
 
+// State in the verdict which variables the model lets the environment write.
+static void
+report_shared(const std::vector<VarDecl> &variables, bool closed_world)
+{
+  std::string names;
+  for (const auto &v : variables)
+    if (
+      v.shared && !v.is_input &&
+      names.find(" " + v.name + ",") == std::string::npos)
+      names += " " + v.name + ",";
+  if (names.empty())
+    return;
+  names.pop_back();
+  if (closed_world)
+    log_status(
+      "LD: --ld-closed-world: assuming only the program writes{}", names);
+  else
+    log_status(
+      "LD: sampling each scan, as writable outside the program:{} "
+      "(--ld-closed-world assumes otherwise)",
+      names);
+}
+
 code_blockt ld_converter::build_scan_body(const exprt &)
 {
   code_blockt scan_body;
@@ -559,9 +713,11 @@ code_blockt ld_converter::build_scan_body(const exprt &)
   // iteration each physical input is re-sampled nondeterministically.  Without
   // this the inputs stay frozen at their initial value and every property
   // verifies vacuously.
+  const bool closed_world = config.options.get_bool_option("ld-closed-world");
+  report_shared(ir_.variables, closed_world);
   for (const auto &v : ir_.variables)
   {
-    if (!v.is_input)
+    if (!v.is_input && (!v.shared || closed_world))
       continue;
     symbol_exprt input = var_expr(v.name);
     scan_body.copy_to_operands(
@@ -571,24 +727,22 @@ code_blockt ld_converter::build_scan_body(const exprt &)
   for (const auto &rung : ir_.rungs)
   {
     code_blockt rung_blk;
-    exprt rung_pf = true_exprt();
+    std::vector<const LdIRNode *> contacts;
 
     for (const auto &node : rung.nodes)
     {
       switch (node.kind)
       {
       case LdIRNodeKind::ContactEval:
-      {
-        exprt pf_out;
-        codet c = translate_contact(node, rung_pf, pf_out);
-        if (c.get_statement() != "skip")
-          rung_blk.copy_to_operands(c);
-        rung_pf = pf_out;
+        contacts.push_back(&node);
         break;
-      }
       case LdIRNodeKind::CoilAssign:
       {
-        codet c = translate_coil(node, rung_pf);
+        // Each coil re-reads the contacts before it, after earlier writes.
+        exprt pf = true_exprt();
+        for (const LdIRNode *contact : contacts)
+          pf = and_exprt(pf, translate_contact(*contact, rung_blk));
+        codet c = translate_coil(node, pf);
         rung_blk.move_to_operands(c);
         break;
       }
@@ -616,19 +770,14 @@ code_blockt ld_converter::build_scan_body(const exprt &)
     scan_body.move_to_operands(rung_blk);
   }
 
+  declare_user_fb_interfaces();
+
   // Execute user-defined FB bodies (carriers of hidden logic / LLBs).
   for (const auto &ex : ir_.user_fbs)
   {
     codet fb = translate_user_fb(ex);
     scan_body.move_to_operands(fb);
   }
-
-  // Latch the operands sensed by edge contacts for the next scan's comparison.
-  // This runs after every rung so an edge contact sees the operand's value at
-  // the previous scan boundary rather than a mid-scan update.
-  for (const auto &[name, shadow] : edge_shadows_)
-    scan_body.copy_to_operands(
-      code_assignt(shadow, bool_value_of(var_expr(name))));
 
   return scan_body;
 }
@@ -664,6 +813,13 @@ void ld_converter::emit_scan_function(const code_blockt &scan_body)
   loop.body() = scan_body;
 
   code_blockt body;
+  // Even when only the program writes them, the value a caller or the
+  // configuration gives these variables is not in the file.
+  if (config.options.get_bool_option("ld-closed-world"))
+    for (const auto &v : ir_.variables)
+      if (v.shared && !v.is_input)
+        body.copy_to_operands(code_assignt(
+          var_expr(v.name), side_effect_expr_nondett(var_expr(v.name).type())));
   body.copy_to_operands(loop);
   scan_sym.set_value(body);
   context_.move_symbol_to_context(scan_sym);
@@ -729,6 +885,40 @@ void ld_converter::prepend_static_init()
 // Top-level convert()
 // -----------------------------------------------------------------------
 
+// A variable with both a set and a reset coil ends each scan in whichever of
+// them runs later, when both are powered: defined, but easy to misread.
+static void warn_set_and_reset(const LdIR &ir)
+{
+  std::set<std::string> internal;
+  for (const auto &v : ir.variables)
+    if (v.synthesized)
+      internal.insert(v.name);
+  std::map<std::string, CoilKind> last;
+  std::map<std::string, int> changes;
+  for (const auto &rung : ir.rungs)
+    for (const auto &n : rung.nodes)
+    {
+      if (
+        n.kind != LdIRNodeKind::CoilAssign ||
+        (n.coil_kind != CoilKind::Set && n.coil_kind != CoilKind::Reset) ||
+        internal.count(n.variable))
+        continue;
+      auto it = last.find(n.variable);
+      if (it != last.end() && it->second != n.coil_kind)
+        ++changes[n.variable];
+      last[n.variable] = n.coil_kind;
+    }
+  for (const auto &[var, n] : changes)
+    log_warning(
+      "LD: '{}' has both set and reset coils; in a scan where several are "
+      "powered, {}",
+      var,
+      n > 1 ? std::string("the last powered one in rung order wins")
+      : last[var] == CoilKind::Set
+        ? std::string("the set coil runs later and wins")
+        : std::string("the reset coil runs later and wins"));
+}
+
 void ld_converter::convert()
 {
   // REAL function-block arithmetic emits ieee_* operators, which reference
@@ -753,14 +943,16 @@ void ld_converter::convert()
     rm.static_lifetime = true;
     rm.file_local = false;
     rm.is_extern = false;
-    rm.set_type(int32_t_());
-    rm.set_value(int_const(0));
+    rm.set_type(dint_type());
+    rm.set_value(int_const(0, dint_type()));
     context_.move_symbol_to_context(rm);
   }
 
   for (const auto &v : ir_.variables)
     declare_variable(v);
 
+  if (!fault_injection_) // every coil is a plain one then
+    warn_set_and_reset(ir_);
   code_blockt scan_body = build_scan_body(true_exprt());
   emit_scan_function(scan_body);
   emit_main_function();

@@ -147,7 +147,8 @@ inline void instrument_symbol_constraints(
 }
 
 /**
- * Instrument loops with all variables that are affected by it (not only the guards)
+ * Instrument loops with all variables that are affected by it (not only the
+ * guards)
  *
  * Before:
  * before-loop
@@ -245,6 +246,30 @@ struct scoped_skip_inductive
   }
 };
 } // namespace
+
+/// The interval state at loop head \p head, or null when it is missing or
+/// proves that the loop body is never entered: \p head is a forward
+/// conditional jump out of the loop (past \p back_edge) whose negated guard is
+/// infeasible. Bounding the variables there would contradict k-induction's
+/// entry-condition assume and make the inductive step vacuously true.
+static const interval_domaint *loop_head_state(
+  const ait<interval_domaint> &interval_analysis,
+  const goto_programt::targett &head,
+  const goto_programt::targett &back_edge)
+{
+  auto state_iterator = interval_analysis.state_map.find(head);
+  if (state_iterator == interval_analysis.state_map.end())
+    return nullptr;
+  const interval_domaint &d = state_iterator->second;
+  const bool exits_loop =
+    head->is_goto() && head->targets.size() == 1 &&
+    head->targets.front()->location_number > back_edge->location_number;
+  if (!exits_loop)
+    return &d;
+  interval_domaint entered = d;
+  entered.assume(not2tc(head->guard));
+  return entered.is_bottom() ? nullptr : &d;
+}
 
 void instrument_loop_bounds_after_kind(
   goto_functionst &goto_functions,
@@ -346,10 +371,11 @@ void instrument_loop_bounds_after_kind(
       // Build the bounds expression at the insert position from the
       // (transparency-aware) interval domain state.
       std::vector<expr2tc> symbol_constraints;
-      auto state_iterator = interval_analysis.state_map.find(insert_pos);
-      if (state_iterator == interval_analysis.state_map.end())
+      const interval_domaint *state =
+        loop_head_state(interval_analysis, insert_pos, b_it);
+      if (!state)
         continue;
-      const interval_domaint &d = state_iterator->second;
+      const interval_domaint &d = *state;
       for (const auto &symbol_expr : symbols)
       {
         expr2tc tmp = d.make_expression(symbol_expr);

@@ -1,8 +1,10 @@
 #include <python-frontend/string/char_utils.h>
 #include <python-frontend/exception/exception_utils.h>
+#include <python-frontend/exception/python_exception_handler.h>
+#include <python-frontend/json_utils.h>
 #include <python-frontend/math/python_int_overflow.h>
 #include <python-frontend/python-list/python_list.h>
-#include <python-frontend/math/round_to_nearest_guard.h>
+#include <util/base/host_rounding_mode.h>
 #include <python-frontend/string/string_method_dispatch.h>
 #include <python-frontend/string/string_handler.h>
 #include <python-frontend/string/string_handler_utils.h>
@@ -378,7 +380,7 @@ std::string apply_format_spec(
     // A typeless float spec ("{:8}", "{:.2}") uses CPython's general format,
     // which is not faithfully snprintf-expressible (e.g. 1.0 -> "1.0", not
     // "1"); it is left to the nondet fallback via the final throw below.
-    const round_to_nearest_guard rounding_guard;
+    const host_rounding_mode rounding_guard(FE_TONEAREST);
     const int pr = prec >= 0 ? prec : 6;
     const char t = type;
     int n = 0;
@@ -415,7 +417,7 @@ std::string apply_format_spec(
   {
     // {:%} multiplies by 100, formats like 'f' (default precision 6), and
     // appends a literal '%'.
-    const round_to_nearest_guard rounding_guard;
+    const host_rounding_mode rounding_guard(FE_TONEAREST);
     const int pr = prec >= 0 ? prec : 6;
     const double pct = dval * 100.0;
     int n = std::snprintf(nullptr, 0, "%.*f", pr, pct);
@@ -660,6 +662,35 @@ struct split_method_argst
 
 static bool is_none_literal_json(const nlohmann::json &node);
 
+/// Reads the constant sep of split()/rsplit() into \p separator, "" when it is
+/// omitted or None. An explicit empty sep yields the ValueError CPython raises.
+static std::optional<exprt> read_split_separator(
+  const std::string &method_name,
+  const nlohmann::json *sep_node,
+  const nlohmann::json &receiver_json,
+  python_converter &converter,
+  std::string &separator)
+{
+  if (sep_node == nullptr || is_none_literal_json(*sep_node))
+  {
+    separator = "";
+    return std::nullopt;
+  }
+  if (!string_handler::extract_constant_string(*sep_node, converter, separator))
+    throw std::runtime_error(
+      method_name + "() only supports constant sep in minimal support");
+  if (!separator.empty())
+    return std::nullopt;
+
+  // Raising here would drop the calls in the receiver, which CPython
+  // evaluates before split() rejects the separator.
+  if (json_utils::ast_contains_call(receiver_json))
+    throw std::runtime_error(
+      method_name + "() with an empty sep on a call receiver is unsupported");
+  return converter.get_exception_handler().gen_exception_raise(
+    "ValueError", "empty separator");
+}
+
 std::optional<exprt> dispatch_split_method(
   const std::string &method_name,
   const nlohmann::json &receiver_json,
@@ -690,16 +721,10 @@ std::optional<exprt> dispatch_split_method(
   const nlohmann::json *maxsplit_node = resolve_positional_or_keyword_arg(
     method_name, args, keyword_values, "maxsplit", 1, false);
 
-  if (sep_node == nullptr || is_none_literal_json(*sep_node))
-  {
-    parsed.separator = "";
-  }
-  else if (!string_handler::extract_constant_string(
-             *sep_node, converter, parsed.separator))
-  {
-    throw std::runtime_error(
-      method_name + "() only supports constant sep in minimal support");
-  }
+  if (
+    std::optional<exprt> raise = read_split_separator(
+      method_name, sep_node, receiver_json, converter, parsed.separator))
+    return raise;
 
   if (maxsplit_node != nullptr)
   {
@@ -726,8 +751,9 @@ std::optional<exprt> dispatch_split_method(
     {
       bool safe_boundary = true;
       std::string left_const;
-      if (string_handler::extract_constant_string(
-            binop["left"], converter, left_const))
+      if (
+        string_handler::extract_constant_string(
+          binop["left"], converter, left_const))
         safe_boundary = left_const.find(parsed.separator) == std::string::npos;
 
       if (safe_boundary)
@@ -782,13 +808,14 @@ std::optional<exprt> dispatch_no_arg_string_methods(
 {
   using no_arg_handler_t =
     exprt (string_handler::*)(const exprt &, const locationt &);
-  static constexpr std::array<std::pair<const char *, no_arg_handler_t>, 13>
+  static constexpr std::array<std::pair<const char *, no_arg_handler_t>, 14>
     no_arg_handlers = {{
       {"capitalize", &string_handler::handle_string_capitalize},
       {"title", &string_handler::handle_string_title},
       {"swapcase", &string_handler::handle_string_swapcase},
       {"casefold", &string_handler::handle_string_casefold},
       {"isdigit", &string_handler::handle_string_isdigit},
+      {"isascii", &string_handler::handle_string_isascii},
       {"isalnum", &string_handler::handle_string_isalnum},
       {"isupper", &string_handler::handle_string_isupper},
       {"isnumeric", &string_handler::handle_string_isnumeric},
@@ -1079,8 +1106,8 @@ static bool is_ascii_compatible_encoding_json(const nlohmann::json &node)
 
 // True for a strict ASCII encoding literal ("ascii"/"us-ascii"), which — unlike
 // utf-8 — cannot encode a non-ASCII character (CPython raises
-// UnicodeEncodeError). Callers that fold an encode round-trip must require ASCII
-// content when this holds.
+// UnicodeEncodeError). Callers that fold an encode round-trip must require
+// ASCII content when this holds.
 static bool is_strict_ascii_encoding_json(const nlohmann::json &node)
 {
   if (!(node.contains("_type") && node["_type"] == "Constant" &&
@@ -1196,8 +1223,9 @@ std::optional<exprt> dispatch_decode_join_method(
     std::vector<uint8_t> bytes;
     if (decode_utf8 && extract_constant_bytes(converter, receiver_json, bytes))
     {
-      if (std::all_of(
-            bytes.begin(), bytes.end(), [](uint8_t b) { return b < 0x80; }))
+      if (std::all_of(bytes.begin(), bytes.end(), [](uint8_t b) {
+            return b < 0x80;
+          }))
         return converter.get_string_builder().build_string_literal(
           std::string(bytes.begin(), bytes.end()));
     }
@@ -1720,6 +1748,33 @@ exprt string_handler::handle_string_isdigit(
   isdigit_call.location() = location;
 
   return isdigit_call;
+}
+
+exprt string_handler::handle_string_isascii(
+  const exprt &string_obj,
+  const locationt &location)
+{
+  if (string_obj.type().is_unsignedbv() || string_obj.type().is_signedbv())
+  {
+    exprt byte = typecast_exprt(string_obj, unsignedbv_typet(8));
+    exprt result("<", bool_type());
+    result.copy_to_operands(byte, from_integer(0x80, unsignedbv_typet(8)));
+    result.location() = location;
+    return result;
+  }
+
+  exprt string_copy = string_obj;
+  exprt str_addr =
+    get_array_base_address(ensure_null_terminated_string(string_copy));
+  symbolt *isascii_symbol =
+    find_cached_c_function_symbol("c:@F@__python_str_isascii");
+  if (!isascii_symbol)
+    throw std::runtime_error(
+      "__python_str_isascii function not found in symbol table");
+
+  exprt call = build_call_expr(*isascii_symbol, bool_type(), {str_addr});
+  call.location() = location;
+  return call;
 }
 
 exprt string_handler::handle_string_isalpha(
@@ -2648,21 +2703,16 @@ exprt string_handler::handle_string_replace(
       return str_expr;
   }
 
-  // Try to extract constant string values for compile-time replacement
-  std::string src_str = extract_string_from_array_operands(str_expr);
-  std::string old_str = extract_string_from_array_operands(old_expr);
-  std::string new_str = extract_string_from_array_operands(new_expr);
+  auto is_literal = [](const exprt &e) {
+    return e.is_constant() && e.type().is_array();
+  };
 
-  // If we can extract all strings as constants, do replacement at compile time
-  if (!src_str.empty() || str_expr.operands().size() > 0)
+  if (is_literal(str_expr) && is_literal(old_expr) && is_literal(new_expr))
   {
-    // Handle the case where source string might be empty but valid
-    if (str_expr.type().is_array() && str_expr.operands().size() > 0)
-    {
-      src_str = extract_string_from_array_operands(str_expr);
-    }
+    const std::string src_str = extract_string_from_array_operands(str_expr);
+    const std::string old_str = extract_string_from_array_operands(old_expr);
+    const std::string new_str = extract_string_from_array_operands(new_expr);
 
-    // Perform the replacement
     std::string result;
     int64_t replacements_done = 0;
 
