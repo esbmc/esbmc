@@ -12,6 +12,7 @@ import subprocess
 import sys
 
 import ci_bundle
+import ci_gate
 import ci_metrics
 import ci_results
 import ci_selection
@@ -140,6 +141,36 @@ def cmd_restore(args):
     return 0
 
 
+def _run_problems(args, consumers):
+    """Problems of the run's jobs and of the producer's and consumers' reports."""
+    reports = ci_gate.latest_reports(args.results_dir)
+    problems = ci_gate.job_problems(json.loads(args.needs), args.required.split(","))
+    problems += ci_gate.report_problems(reports, ["producer"], args.plan_digest, None)
+    problems += ci_gate.report_problems(reports, consumers, args.plan_digest, args.bundle_sha256)
+    return reports, problems
+
+
+def _publish(path, title, body, problems):
+    for problem in problems:
+        print(f"::error::{problem}")
+    verdict = "passed" if not problems else f"failed ({len(problems)} problems)"
+    lines = [f"## {title}: {verdict}", "", body, ""] + [f"- {p}" for p in problems[:200]]
+    if path:
+        with open(path, "a", encoding="utf-8") as fp:
+            fp.write("\n".join(lines) + "\n")
+    return 1 if problems else 0
+
+
+def cmd_compare(args):
+    """The manual comparison: the monolithic baseline against the shards, same bundle."""
+    shards = ci_selection.shard_executors()
+    reports, problems = _run_problems(args, shards + ["baseline"])
+    if "baseline" in reports and all(e in reports for e in shards):
+        problems += ci_gate.compare_outcomes(reports["baseline"], [reports[e] for e in shards])
+    return _publish(args.summary, "Linux regression comparison", ci_gate.timing_table(reports),
+                    problems)
+
+
 def _add(commands, name, handler, help_text, *options):
     sub = commands.add_parser(name, help=help_text)
     for option in options:
@@ -167,6 +198,9 @@ def parser():
     bundle.add_argument("--github-output")
     _add(commands, "restore", cmd_restore, "check and extract the bundle", "tar", "sha256",
          "workspace")
+    compare = _add(commands, "compare", cmd_compare, "compare the baseline with the shards",
+                   "results-dir", "needs", "required", "plan-digest", "bundle-sha256")
+    compare.add_argument("--summary")
     _add(commands, "preflight", cmd_preflight, "check a restored bundle before a shard runs",
          "build-dir", "plan", "plan-digest", "probes", "executor")
     return top
