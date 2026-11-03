@@ -1108,47 +1108,6 @@ expr2tc yices_convt::tuple_get(const type2tc &type, smt_astt sym)
   return constant_struct2tc(type, std::move(outmem));
 }
 
-expr2tc yices_convt::tuple_get(const expr2tc &expr)
-{
-  const type2tc &t = is_pointer_type(expr->type) ? pointer_struct : expr->type;
-  const std::vector<type2tc> &members = struct_union_members(t);
-
-  if (is_pointer_type(expr->type))
-  {
-    // Pointer have two fields, a base address and an offset, so we just
-    // need to get the two numbers and call the pointer API
-
-    smt_astt sym = convert_ast(expr);
-
-    auto s1 = convert_sort(members[0]);
-    smt_astt object =
-      new_ast(yices_select(1, to_solver_smt_ast<yices_smt_ast>(sym)->a), s1);
-
-    auto s2 = convert_sort(members[1]);
-    smt_astt offset =
-      new_ast(yices_select(2, to_solver_smt_ast<yices_smt_ast>(sym)->a), s2);
-
-    unsigned int num = get_bv(object, is_signedbv_type(members[0])).to_uint64();
-    unsigned int offs =
-      get_bv(offset, is_signedbv_type(members[1])).to_uint64();
-    pointer_logict::pointert p(num, BigInt(offs));
-    return pointer_logic.back().pointer_expr(p, expr->type);
-  }
-
-  // Otherwise, run through all fields and despatch to 'get' again.
-  const std::vector<irep_idt> &member_names = struct_union_member_names(t);
-  std::vector<expr2tc> outmem;
-  unsigned int i = 0;
-  for (auto const &it : members)
-  {
-    expr2tc memb = member2tc(it, expr, member_names[i]);
-    outmem.push_back(get(memb));
-    i++;
-  }
-
-  return constant_struct2tc(expr->type, std::move(outmem));
-}
-
 void yices_convt::print_model()
 {
   yices_print_model(messaget::state.out, yices_get_model(yices_ctx, 1));
