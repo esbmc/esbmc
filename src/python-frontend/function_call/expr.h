@@ -343,6 +343,9 @@ private:
     const nlohmann::json &obj_arg,
     const std::vector<nlohmann::json> &types) const;
   void plant_unsupported(const std::string &message) const;
+  void refuse_abs_unless(const exprt &representable) const;
+  exprt refuse_unrepresentable_abs(exprt operand) const;
+  nlohmann::json abs_of_int_literal(const nlohmann::json &value) const;
   nlohmann::json bound_value(const nlohmann::json &name) const;
   bool is_symbolic_int_power(const nlohmann::json &node) const;
   void refuse_type_of_symbolic_int_power(
