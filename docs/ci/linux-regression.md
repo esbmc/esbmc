@@ -7,10 +7,11 @@ tests in both.
 | Mode | Jobs | CPython check |
 |---|---|---|
 | `legacy` | `build-ubuntu` builds and runs `ctest -LE python-intensive` in one job | inside `build-ubuntu` |
-| `parallel` | `linux-build` builds once and exports a bundle; `linux-regression` runs six shards from it | separate `cpython-check` job |
+| `parallel` | `linux-build` builds once and exports a bundle while `cpython-check` runs; once both pass, `linux-regression` runs seven module jobs from the bundle | separate `cpython-check` job |
 
-`legacy` is the default until the parallel path has been compared and
-accepted (see [Activation](#activation)).
+The default is `parallel`. While the parallel path is being accepted,
+`build-ubuntu` also runs in parallel mode, so one run compares both paths; it
+is removed once the parallel run is accepted.
 
 ## Selecting the mode
 
@@ -38,18 +39,23 @@ exceptions in `regression/CMakeLists.txt` and the 30s CTest grace.
 | Executor | CTest selection |
 |---|---|
 | `producer` (in `linux-build`) | `-LE '^(regression)$'`: unit tests and other tests without the `regression` label |
-| `python-1`..`python-4` | `-L` the Python suite labels, `-LE '^(python-intensive/)$'`, `-I i,,4` |
-| `native-1`..`native-2` | `-L '^(regression)$'`, `-LE` the Python labels and `python-intensive/`, `-I i,,2` |
+| `numpy-1`, `numpy-2` | `-L '^(numpy/)$'`, `-I i,,2` |
+| `python-1`, `python-2` | `-L '^(python/)$'`, `-I i,,2` |
+| `python-benchmarks` | quixbugs, humaneval, mopsa, consensus, ai-generated-code, python-coverage, python-contracts |
+| `cpp` | `-L '^esbmc-cpp[0-9]*/.*$'`: every `esbmc-cpp*` suite |
+| `c-and-tools` | every other `regression` test, so a new suite is never left out |
 | `baseline` (comparison only) | `-L '^(regression)$' -LE '^(python-intensive/)$'` |
 
-The Python labels and shard counts live in `scripts/ci/ci_selection.py`.
+Every module also excludes `python-intensive/`. The modules and their shard
+counts live in `MODULES` in `scripts/ci/ci_selection.py`; NumPy and Python
+are split in two because they hold most of the test time.
 `linux_tests.py plan` asks CTest for each selection and fails unless the
 producer and the shards cover the baseline exactly once; it also fails on a
 test with `DEPENDS`, `FIXTURES_*`, `RESOURCE_*`, `RUN_SERIAL` or `PROCESSORS`,
 which striping ignores. Several `-LE` options are ANDed by CTest, which is why
 each exclusion is one anchored regex.
 
-CTest's `-I i,,k` does not select nothing when a family has fewer than `k`
+CTest's `-I i,,k` does not select nothing when a module has fewer than `k`
 tests: it repeats tests of another shard. The partition check rejects that.
 
 ## The bundle
@@ -110,7 +116,7 @@ bundle means a new run.
 `.github/workflows/ci-linux-regression-compare.yml` (Actions >
 "Linux regression comparison" > Run workflow) takes a full `candidate-sha`
 and an optional `cold-build`. One build of the candidate feeds the
-monolithic `baseline` and the six shards; `compare` fails on any test whose
+monolithic `baseline` and the module jobs; `compare` fails on any test whose
 outcome differs, on a missing report and on reports of another plan or
 bundle, and publishes CTest seconds and memory per executor.
 
@@ -125,7 +131,7 @@ branch, so the comparison is available after the infrastructure merges.
 
 ## Activation
 
-Switching the default to `parallel` needs, in this order:
+Retiring `build-ubuntu` and the legacy mode needs, in this order:
 
 1. three comparisons on at least two SHAs, two warm and one cold, with equal
    names, outcomes and skips, no OOM or `oom_kill`, and the cold producer
@@ -134,7 +140,7 @@ Switching the default to `parallel` needs, in this order:
    still required, and a control PR showing that a failing CPython check,
    a cancellation and a missing summary block the merge;
 3. open PRs updated so they run the new workflow; then the old check removed;
-4. the commit that sets `LINUX_TEST_DEFAULT_MODE: parallel`.
+4. the commit that removes `build-ubuntu` from parallel runs.
 
 ## Rollback
 
@@ -148,11 +154,19 @@ Switching the default to `parallel` needs, in this order:
 ## Measurements
 
 `scripts/ci/shard_timings.py <ctest log>` reads per-test durations from a
-CTest log and simulates the shards as `-I i,,k` stripes them. On the PR job
-112391675659 (`Run tests` 4h46m45s, 23,067 tests) it simulates 51.9, 52.8,
-56.5 and 53.8 minutes for the Python shards and 38.8 and 33.6 for the native
-ones at `-j2`. These are simulations: queueing, runtime setup, bundle
-transfer and the contention of a family run alone are not in them.
+CTest log and simulates the modules as `-I i,,k` stripes them. On the PR job
+112391675659 (`Run tests` 4h46m45s, 23,067 tests) it simulates, at `-j2`:
+
+| Module job | Simulated minutes |
+|---|---|
+| `numpy-1`, `numpy-2` | 53.8, 53.8 |
+| `python-1`, `python-2` | 38.7, 38.3 |
+| `c-and-tools` | 48.0 |
+| `python-benchmarks` | 26.6 |
+| `cpp` | 24.3 |
+
+These are simulations: queueing, runtime setup, bundle transfer and the
+contention of a module run alone are not in them.
 
 ## Commands
 
