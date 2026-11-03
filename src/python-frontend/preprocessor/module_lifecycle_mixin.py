@@ -78,10 +78,10 @@ class ModuleLifecycleMixin:
             #print("Before pytype module annotations:")
             #print(ast.unparse(node))
 
-            node =  pytype_infer.annotate_tree(node)  
+            node = pytype_infer.annotate_tree(node)
 
             print("After pytype annotation module:")
-            print(ast.unparse(node))                   
+            print(ast.unparse(node))
 
             if self._needs_dataclass_initvar_import:
                 self._ensure_dataclass_initvar_import(node)
