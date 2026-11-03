@@ -1,0 +1,4 @@
+CORE
+main.py
+--incremental-bmc
+^ERROR: TypeError: slicing a numpy string array with run-time bounds is not supported$

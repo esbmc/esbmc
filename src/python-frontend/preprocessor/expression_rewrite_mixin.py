@@ -569,9 +569,26 @@ for {i} in range(0, len({seq})):
         if node.value is not None:
             dd_inits, node.value = self._lower_defaultdict_reads_in_expr(node.value, node)
             prefix = dd_inits + prefix
+        prefix = prefix + self._name_returned_sorted(node)
         if prefix:
             return prefix + [node]
         return node
+
+    def _name_returned_sorted(self, node):
+        """Bind `return sorted(x)` to a name first: the elements of a returned name's
+        value keep their types where those of a returned call do not (#9736)."""
+        value = node.value
+        if not (isinstance(value, ast.Call) and isinstance(value.func, ast.Name)
+                and value.func.id == "sorted"):
+            return []
+        name = f"ESBMC_sorted_ret_{self._next_unpack_tmp_id()}"
+        assign = ast.Assign(targets=[ast.Name(id=name, ctx=ast.Store())], value=value)
+        ast.copy_location(assign, node)
+        ast.copy_location(assign.targets[0], node)
+        node.value = ast.Name(id=name, ctx=ast.Load())
+        ast.copy_location(node.value, node)
+        ast.fix_missing_locations(assign)
+        return [assign]
 
     def visit_Attribute(self, node):
         node = self.generic_visit(node)

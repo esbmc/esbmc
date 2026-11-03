@@ -2509,11 +2509,76 @@ static nlohmann::json zero_literal(
 
 // The array type of a literal np.array call, or of another constructor with
 // literal arguments: the type of a literal of the same shape and dtype.
+static bool stores_real_numbers(const numpy_dtypet &dtype)
+{
+  return dtype.kind != numpy_dtypet::kindt::complex &&
+         dtype.kind != numpy_dtypet::kindt::string;
+}
+
+static typet
+in_real_dtype(const typet &type, const std::optional<numpy_dtypet> &dtype)
+{
+  return dtype && stores_real_numbers(*dtype)
+           ? with_element_type(type, dtype->element_type())
+           : type;
+}
+
+static bool has_dtype_keyword(const nlohmann::json &call)
+{
+  const auto &keywords = call.value("keywords", nlohmann::json::array());
+  return std::any_of(
+    keywords.begin(), keywords.end(), [](const nlohmann::json &kw) {
+      return kw.value("arg", "") == "dtype";
+    });
+}
+
+std::optional<numpy_dtypet>
+python_converter::constructor_keyword_dtype(const nlohmann::json &call) const
+{
+  for (const auto &kw : call.value("keywords", nlohmann::json::array()))
+    if (kw.value("arg", "") == "dtype")
+      return numpy_dtype_from_name(
+        extract_numpy_dtype_name(kw["value"], *ast_json));
+  return std::nullopt;
+}
+
+// A literal's type from its nesting alone: its leaves, which may be strings or
+// complex numbers, say nothing about the storage of one element.
+static typet literal_list_type(
+  const nlohmann::json &list,
+  const typet &element,
+  const type_handler &types)
+{
+  if (list.value("_type", "") != "List" || list["elts"].empty())
+    return element;
+  return types.build_array(
+    literal_list_type(list["elts"][0], element, types), list["elts"].size());
+}
+
+typet python_converter::literal_call_array_type(
+  const nlohmann::json &call,
+  const std::optional<numpy_dtypet> &dtype) const
+{
+  const nlohmann::json &list = call["args"][0];
+  if (dtype && dtype->kind == numpy_dtypet::kindt::complex)
+    return literal_list_type(list, dtype->element_type(), type_handler_);
+  if (numpy_literal_call_is_complex(call))
+    return literal_list_type(list, get_complex_struct_type(), type_handler_);
+  if (
+    const auto width = numpy_literal_string_width(call);
+    width && (!dtype || !dtype->bits))
+    return literal_list_type(
+      list, type_handler_.build_array(char_type(), *width + 1), type_handler_);
+  return in_real_dtype(
+    type_handler_.get_typet(numpy_literal_with_dtype(call, *ast_json)), dtype);
+}
+
 std::optional<typet>
 python_converter::literal_numpy_array_type(const nlohmann::json &call) const
 {
+  const std::optional<numpy_dtypet> dtype = constructor_keyword_dtype(call);
   if (is_numpy_array_literal_call(call))
-    return type_handler_.get_typet(numpy_literal_with_dtype(call, *ast_json));
+    return literal_call_array_type(call, dtype);
   auto layout = literal_constructor_layout(call);
   if (!layout || layout->first.empty())
     return std::nullopt;
@@ -2521,22 +2586,13 @@ python_converter::literal_numpy_array_type(const nlohmann::json &call) const
     if (dim <= 0)
       return std::nullopt;
   for (const auto &kw : call.value("keywords", nlohmann::json::array()))
-  {
-    const std::string dtype =
-      kw.value("arg", "") == "dtype"
-        ? extract_numpy_dtype_name(kw["value"], *ast_json)
-        : "";
-    if (dtype == "bool")
-      layout->second = "bool";
-    else if (dtype.find("int") != std::string::npos)
-      layout->second = "int";
-    else if (dtype.find("float") != std::string::npos)
-      layout->second = "float";
-    else if (!dtype.empty() || kw.value("arg", "") != "dtype")
+    if (kw.value("arg", "") != "dtype")
       return std::nullopt;
-  }
-  return type_handler_.get_typet(
-    zero_literal(layout->first, 0, layout->second));
+  if (has_dtype_keyword(call) && (!dtype || !stores_real_numbers(*dtype)))
+    return std::nullopt;
+  return in_real_dtype(
+    type_handler_.get_typet(zero_literal(layout->first, 0, layout->second)),
+    dtype);
 }
 
 // `f(np.eye(2))`: a constructor written as an argument is bound to a name
@@ -2576,7 +2632,206 @@ nlohmann::json python_converter::bind_to_fresh_name(
 static const nlohmann::json *
 sole_local_numpy_literal(const nlohmann::json &def, const std::string &name);
 
+static bool any_return(
+  const nlohmann::json &stmts,
+  const std::function<bool(const nlohmann::json &)> &pred);
+
+static const nlohmann::json *module_numpy_literal(
+  const nlohmann::json &module_body,
+  const std::string &name);
+
+// The narrow scalar `array` holds @p depth subscripts down.
+static std::optional<typet>
+narrow_element_at_depth(const typet &array, std::size_t depth)
+{
+  typet element = array;
+  for (; depth > 0; --depth)
+  {
+    if (!element.is_array())
+      return std::nullopt;
+    element = element.subtype();
+  }
+  const bool python_integer_width =
+    element.is_signedbv() && to_signedbv_type(element).get_width() == 64;
+  if (
+    element.is_array() || !type_utils::is_numpy_scalar_type(element) ||
+    python_integer_width)
+    return std::nullopt;
+  return element;
+}
+
 // `make()` returning `a / 2`: the result has a's shape and the promoted dtype.
+static bool returns_are_synthesized(const nlohmann::json &function_node)
+{
+  const nlohmann::json &returns = function_node["returns"];
+  return returns.is_null() || returns.value("_inferred_annotation", false);
+}
+
+// The narrow element a read of `a[i]` gives; nullopt for any other argument.
+std::optional<typet> python_converter::numpy_narrow_read_type(
+  const nlohmann::json &arg,
+  const std::string &enclosing) const
+{
+  std::size_t depth = 0;
+  const nlohmann::json *root = &arg;
+  while (root->value("_type", "") == "Subscript")
+  {
+    if ((*root)["slice"].value("_type", "") == "Slice")
+      return std::nullopt;
+    ++depth;
+    root = &(*root)["value"];
+  }
+  if (depth == 0 || root->value("_type", "") != "Name")
+    return std::nullopt;
+  const nlohmann::json &module_body = (*ast_json)["body"];
+  const nlohmann::json *def =
+    enclosing.empty() ? nullptr : find_function_def(module_body, enclosing);
+  const std::string name = root->value("id", "");
+  const nlohmann::json *literal = def ? sole_local_numpy_literal(*def, name)
+                                      : module_numpy_literal(module_body, name);
+  const std::optional<typet> array =
+    literal ? literal_numpy_array_type(*literal) : std::nullopt;
+  return array ? narrow_element_at_depth(*array, depth) : std::nullopt;
+}
+
+// A parameter every call passes a narrow element of the same dtype for keeps
+// that dtype: a Python number would stop wrapping at its width.
+std::optional<typet> python_converter::numpy_scalar_param_type(
+  const std::string &func_name,
+  std::size_t param_index) const
+{
+  std::vector<numpy_param_call_site> call_sites;
+  collect_call_sites(*ast_json, "", call_sites);
+  std::optional<typet> resolved;
+  for (const numpy_param_call_site &site : call_sites)
+  {
+    const nlohmann::json &call = *site.call;
+    if (
+      call.value("func", nlohmann::json::object()).value("id", "") != func_name)
+      continue;
+    if (!call.contains("args") || call["args"].size() <= param_index)
+      return std::nullopt;
+    const auto read = numpy_narrow_read_type(
+      call["args"][param_index], site.enclosing_function);
+    if (!read || (resolved && *resolved != *read))
+      return std::nullopt;
+    resolved = read;
+  }
+  return resolved;
+}
+
+static std::optional<std::size_t>
+parameter_index(const nlohmann::json &function_node, const std::string &name)
+{
+  const nlohmann::json &params = function_node["args"]["args"];
+  std::optional<std::size_t> found;
+  for (std::size_t i = 0; i < params.size(); ++i)
+    if (params[i].value("arg", "") == name)
+      found = i;
+  return found;
+}
+
+std::optional<typet> python_converter::numpy_scalar_of_returned(
+  const nlohmann::json &function_node,
+  const nlohmann::json &value) const
+{
+  const std::string kind = value.value("_type", "");
+  if (kind == "Name")
+  {
+    const auto index = parameter_index(function_node, value.value("id", ""));
+    return index
+             ? numpy_scalar_param_type(function_node.value("name", ""), *index)
+             : std::nullopt;
+  }
+  if (kind == "BinOp" && value["op"].value("_type", "") != "Div")
+    return numpy_scalar_of_binop(function_node, value);
+  return kind == "Subscript" ? numpy_scalar_of_element(function_node, value)
+                             : std::nullopt;
+}
+
+std::optional<typet> python_converter::numpy_scalar_of_binop(
+  const nlohmann::json &function_node,
+  const nlohmann::json &value) const
+{
+  const auto left = numpy_scalar_of_returned(function_node, value["left"]);
+  const auto right = numpy_scalar_of_returned(function_node, value["right"]);
+  if (left && right)
+    return *left == *right ? left : std::nullopt;
+  if (left && is_number_literal(value["right"]))
+    return left;
+  if (right && is_number_literal(value["left"]))
+    return right;
+  return std::nullopt;
+}
+
+std::optional<typet> python_converter::numpy_scalar_of_element(
+  const nlohmann::json &function_node,
+  const nlohmann::json &value) const
+{
+  std::size_t depth = 0;
+  const nlohmann::json *root = &value;
+  while (root->value("_type", "") == "Subscript")
+  {
+    if ((*root)["slice"].value("_type", "") == "Slice")
+      return std::nullopt;
+    ++depth;
+    root = &(*root)["value"];
+  }
+  const auto index = parameter_index(function_node, root->value("id", ""));
+  typet array;
+  std::set<std::string> visiting;
+  if (
+    !index || !try_infer_numpy_param_type(
+                function_node.value("name", ""), *index, array, visiting))
+    return std::nullopt;
+  return narrow_element_at_depth(array, depth);
+}
+
+void python_converter::record_numpy_scalar_return(
+  const nlohmann::json &function_node,
+  code_typet &type,
+  symbolt &function)
+{
+  if (!returns_are_synthesized(function_node))
+    return;
+  const auto scalar = numpy_scalar_return_type(function_node);
+  if (!scalar)
+    return;
+  type.return_type() = *scalar;
+  python_expr::set_function_type(function, type);
+  numpy_scalar_returns_[function_node.value("name", "")] = *scalar;
+}
+
+void python_converter::apply_numpy_scalar_param_type(
+  const std::string &arg_name,
+  bool numpy_array_param,
+  const std::string &function,
+  std::size_t index,
+  typet &arg_type) const
+{
+  if (arg_name == "self" || arg_name == "cls" || numpy_array_param)
+    return;
+  if (const auto scalar = numpy_scalar_param_type(function, index))
+    arg_type = *scalar;
+}
+
+std::optional<typet> python_converter::numpy_scalar_return_type(
+  const nlohmann::json &function_node) const
+{
+  std::optional<typet> resolved;
+  bool every_return_is_narrow = true;
+  any_return(function_node["body"], [&](const nlohmann::json &value) {
+    const auto scalar = value.is_object()
+                          ? numpy_scalar_of_returned(function_node, value)
+                          : std::nullopt;
+    if (!scalar || (resolved && *resolved != *scalar))
+      every_return_is_narrow = false;
+    resolved = scalar;
+    return false;
+  });
+  return every_return_is_narrow ? resolved : std::nullopt;
+}
+
 std::optional<typet> python_converter::numpy_elementwise_return_type(
   const nlohmann::json &func_def) const
 {
@@ -2619,8 +2874,7 @@ std::optional<typet> python_converter::try_infer_numpy_array_arg_type(
   if (!numpy_array_literal_return(*callee_def, literal_call, type_handler_))
     return numpy_elementwise_return_type(*callee_def);
 
-  return type_handler_.get_typet(
-    numpy_literal_with_dtype(literal_call, *ast_json));
+  return literal_numpy_array_type(literal_call);
 }
 
 // True when `node` (or, recursively, any of its descendants) reads one of
@@ -5135,6 +5389,12 @@ size_t python_converter::register_function_argument(
       numpy_array_param = true;
     }
   }
+  apply_numpy_scalar_param_type(
+    arg_name,
+    numpy_array_param,
+    id.get_function(),
+    type.arguments().size(),
+    arg_type);
   reject_if_symbolic_shape_param(
     numpy_array_param,
     arg_type,
@@ -5841,6 +6101,44 @@ void python_converter::reject_incompatible_numpy_local_return_branches(
 // function_node["returns"] otherwise. Split out so the ternary it needs
 // doesn't add a decision point to get_function_definition itself, which is
 // already far over the complexity gate.
+// `return x[i]` as the last statement, `x` a parameter a call site passes a
+// numpy string or complex array for: the annotation of the element it returns.
+const nlohmann::json *python_converter::numpy_element_annotation(
+  const nlohmann::json &function_node) const
+{
+  static const nlohmann::json str_annotation = {
+    {"_type", "Name"}, {"id", "str"}};
+  static const nlohmann::json complex_annotation = {
+    {"_type", "Name"}, {"id", "complex"}};
+  const nlohmann::json &body = function_node["body"];
+  if (
+    is_loading_models || body.empty() ||
+    body.back().value("_type", "") != "Return")
+    return nullptr;
+  const nlohmann::json &value = body.back()["value"];
+  if (
+    !value.is_object() || value.value("_type", "") != "Subscript" ||
+    value["value"].value("_type", "") != "Name" ||
+    value["slice"].value("_type", "") == "Slice")
+    return nullptr;
+  const nlohmann::json &params = function_node["args"]["args"];
+  for (std::size_t i = 0; i < params.size(); ++i)
+  {
+    typet type;
+    std::set<std::string> visiting;
+    if (
+      params[i].value("arg", "") != value["value"].value("id", "") ||
+      !try_infer_numpy_param_type(
+        function_node.value("name", ""), i, type, visiting))
+      continue;
+    if (type_utils::is_numpy_string_array(type))
+      return &str_annotation;
+    if (type.is_array() && is_complex_type(type.subtype()))
+      return &complex_annotation;
+  }
+  return nullptr;
+}
+
 const nlohmann::json &python_converter::resolve_return_annotation_node(
   const nlohmann::json &function_node) const
 {
@@ -5857,6 +6155,9 @@ const nlohmann::json &python_converter::resolve_return_annotation_node(
   // shape. A synthesized one also gives way to a tagged return (#8890).
   bool is_synthesized =
     returns.is_null() || returns.value("_inferred_annotation", false);
+  if (is_synthesized)
+    if (const nlohmann::json *element = numpy_element_annotation(function_node))
+      return *element;
   if (
     is_synthesized &&
     (local_var_numpy_array_return(function_node) ||
@@ -6531,6 +6832,8 @@ void python_converter::get_function_definition(
       python_expr::set_function_type(*added_symbol, type);
     }
   }
+
+  record_numpy_scalar_return(function_node, type, *added_symbol);
 
   // Save function return type for use in get_return_statements
   typet saved_func_return_type = current_func_return_type_;

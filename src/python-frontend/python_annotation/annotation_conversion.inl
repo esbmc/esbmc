@@ -1180,6 +1180,23 @@ std::string python_annotation<Json>::get_argument_type(const Json &arg)
   {
     if (arg.contains("values") && arg["values"].is_array())
     {
+      // and/or evaluates to one of its operands, so operands of one type
+      // give that type, and containers of one kind (list, list[int]) that
+      // kind.
+      std::set<std::string> operand_types, operand_bases;
+      for (const auto &val : arg["values"])
+      {
+        const std::string t = get_argument_type(val);
+        operand_types.insert(t);
+        operand_bases.insert(t.substr(0, t.find('[')));
+      }
+      if (operand_types.size() == 1 && !operand_types.begin()->empty())
+        return *operand_types.begin();
+      static const std::set<std::string> containers = {
+        "list", "dict", "set", "tuple"};
+      if (operand_bases.size() == 1 && containers.count(*operand_bases.begin()))
+        return *operand_bases.begin();
+
       for (const auto &val : arg["values"])
       {
         if (
@@ -1192,6 +1209,24 @@ std::string python_annotation<Json>::get_argument_type(const Json &arg)
             return it->second;
         }
       }
+      // `x and y` and `x or y` give one of their operands, so lists give a
+      // list, not a bool (#9742).
+      std::string list_type;
+      bool all_lists = true;
+      for (const auto &val : arg["values"])
+      {
+        const std::string type = get_argument_type(val);
+        if (type.empty())
+          continue;
+        if (
+          type.rfind("list", 0) != 0 ||
+          (!list_type.empty() && type != list_type))
+          all_lists = false;
+        else
+          list_type = type;
+      }
+      if (all_lists && !list_type.empty())
+        return list_type;
     }
     return "bool";
   }
@@ -3678,6 +3713,16 @@ InferResult python_annotation<Json>::infer_type_from_ifexp(
     if (body_type == orelse_type)
     {
       inferred_type = body_type;
+      // Two list literals of one element type give `list[T]`, as a single
+      // list literal does.
+      if (body_type == "list")
+      {
+        const std::string body_list = get_argument_type(ifexp_node["body"]);
+        if (
+          body_list.rfind("list[", 0) == 0 &&
+          body_list == get_argument_type(ifexp_node["orelse"]))
+          inferred_type = body_list;
+      }
       return InferResult::OK;
     }
 
@@ -5512,15 +5557,23 @@ void python_annotation<Json>::infer_parameter_types(Json &function_element)
 
         if (
           parent_func == nullptr && call_types.size() > 1 &&
-          specializable_at_call_sites(func_name, i, call_types, search_context))
+          specializable_at_call_sites(
+            func_name, i, call_types, search_context) &&
+          (!are_scalar_list_types(call_types) ||
+           function_values(ast_, extra_subscript_inference_asts_)
+             .only_called(function_element, ast_)))
         {
+          // A list specialization leaves the original typed from all its
+          // calls; see apply_pending_specializations.
+          const bool keep_original = are_scalar_list_types(call_types);
           if (!is_specialization_pending(func_name, i, call_types))
           {
             pending_specializations_.push_back(
               {func_name, i, std::move(call_types)});
           }
 
-          continue;
+          if (!keep_original)
+            continue;
         }
 
         std::string saved_ctx = current_func_name_context_;

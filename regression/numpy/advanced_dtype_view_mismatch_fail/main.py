@@ -1,5 +1,6 @@
 import numpy as np
 
-a = np.array([1.9, 2.9], dtype=np.int32)
-v = a[1:]
-assert v[0] == 2.9
+a = np.array([100, -100], dtype=np.int8)
+first = a[0]
+twice = first + first
+assert twice == 200
