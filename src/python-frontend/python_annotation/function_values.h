@@ -39,6 +39,10 @@ public:
   std::optional<std::vector<const nlohmann::json *>>
   parameter_arguments(const nlohmann::json &name);
 
+  /// Whether every use of `def` is a call `module` makes.
+  bool
+  only_called(const nlohmann::json &def, const nlohmann::json &module) const;
+
 private:
   /// The module, then each function the expression is nested in.
   using chaint = std::vector<const nlohmann::json *>;
@@ -86,9 +90,6 @@ private:
     std::size_t index,
     const std::string &name,
     std::vector<valuet> &values) const;
-  /// Whether every use of `def` is a call `module` makes.
-  bool
-  only_called(const nlohmann::json &def, const nlohmann::json &module) const;
   bool element_values(
     const nlohmann::json &subscript,
     const chaint &chain,
