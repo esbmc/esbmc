@@ -1013,6 +1013,12 @@ std::optional<exprt> python_converter::try_get_numpy_pointer_view_shape_attr(
   const symbolt &symbol,
   const std::string &attr_name)
 {
+  const nlohmann::json name = {
+    {"_type", "Name"}, {"id", symbol.name.as_string()}};
+  if (
+    std::optional<exprt> storage = try_get_numpy_storage_attr(name, attr_name))
+    return storage;
+
   auto it = numpy_pointer_view_info_.find(symbol.id.as_string());
   if (it == numpy_pointer_view_info_.end() && !symbol.name.empty())
     it = numpy_pointer_view_info_.find(symbol.name.as_string());
@@ -1203,6 +1209,45 @@ exprt python_converter::numpy_param_as_array(const exprt &operand) const
   return dereference_exprt(typecast_exprt(operand, pointer), pointer);
 }
 
+// An arithmetic operand naming a view reads its elements: the view's pointer
+// would otherwise add as an address.
+void python_converter::numpy_view_operands_as_arrays(
+  const nlohmann::json &element,
+  const nlohmann::json &left,
+  const nlohmann::json &right,
+  exprt &lhs,
+  exprt &rhs)
+{
+  const std::string kind = element.value("_type", "");
+  if (kind != "BinOp" && kind != "AugAssign")
+    return;
+  lhs = numpy_view_operand_as_array(left, lhs);
+  rhs = numpy_view_operand_as_array(right, rhs);
+}
+
+exprt python_converter::numpy_view_operand_as_array(
+  const nlohmann::json &node,
+  const exprt &operand)
+{
+  if (
+    node.value("_type", "") != "Name" || !operand.is_symbol() ||
+    !operand.type().is_pointer() ||
+    numpy_pointer_view_info_.count(operand.identifier().as_string()) == 0)
+    return operand;
+  const auto materialized = build_numpy_descriptor_materialized_elements(
+    node, "TypeError: arithmetic over this numpy view is not supported");
+  if (!materialized || materialized->second.empty())
+    return operand;
+  const bool was_fresh_copy = numpy_result_is_fresh_copy_;
+  const exprt array = materialize_numpy_elements(
+    node,
+    materialized->first,
+    materialized->second,
+    materialized->second.front().type());
+  numpy_result_is_fresh_copy_ = was_fresh_copy;
+  return array;
+}
+
 std::optional<std::vector<std::size_t>>
 python_converter::numpy_shape_from_indexed_decl(const std::string &name) const
 {
@@ -1341,7 +1386,7 @@ std::optional<exprt> python_converter::try_get_numpy_value_shape_attr(
   const std::string &attr_name)
 {
   if (attr_name != "shape" && attr_name != "ndim" && attr_name != "size")
-    return std::nullopt;
+    return try_get_numpy_storage_attr(base_node, attr_name);
 
   if (
     std::optional<exprt> tracked_attr =
@@ -2387,6 +2432,22 @@ void python_converter::reject_attribute_added_on_some_paths(
 // referenced from synthesized source; and reads through an np.nditer (an
 // attribute or operand of the iterator, a name bound to what it yields).
 std::optional<exprt>
+python_converter::try_numpy_attribute_expr(const nlohmann::json &element)
+{
+  const nlohmann::json &value = element["value"];
+  const std::string kind = value.value("_type", "");
+  if (kind == "Attribute")
+    return try_get_numpy_storage_attr(
+      value, element["attr"].get<std::string>());
+  if (kind != "BinOp" || !is_numpy_valued_node(value))
+    return std::nullopt;
+  // The operation runs once, and its array answers like any other.
+  nlohmann::json attribute = element;
+  attribute["value"] = bind_to_fresh_name(value, "ESBMC_numpy_operand_");
+  return get_expr(attribute);
+}
+
+std::optional<exprt>
 python_converter::get_intercepted_expr(const nlohmann::json &element)
 {
   if (!element.is_object())
@@ -2396,6 +2457,9 @@ python_converter::get_intercepted_expr(const nlohmann::json &element)
     return get_named_expr(element);
   if (type == "EsbmcExpr")
     return prebuilt_exprs_.at(element["slot"].get<std::size_t>());
+  if (type == "Attribute")
+    if (auto attribute = try_numpy_attribute_expr(element))
+      return attribute;
   if (numpy_nditers_.empty())
     return std::nullopt;
   numpy_nditer nditer(*this);
@@ -2507,6 +2571,15 @@ exprt python_converter::get_module_member(
   symbolt *symbol = find_symbol(module_sid.to_string());
   if (!symbol)
   {
+    // `dt = np.int8` binds a dtype; only its spelling is ever read, by
+    // extract_numpy_dtype_name through the binding.
+    if (
+      is_imported_numpy_module_alias(*ast_json, var_name) &&
+      numpy_dtype_from_name(attr_name))
+    {
+      nlohmann::json spelling = {{"_type", "Constant"}, {"value", attr_name}};
+      return get_expr(spelling);
+    }
     throw std::runtime_error(
       fmt::format(
         "Module member '{}' not found in module '{}'", attr_name, var_name));
@@ -2517,6 +2590,8 @@ exprt python_converter::get_module_member(
 exprt python_converter::get_expr(const nlohmann::json &element)
 {
   get_expr_depth_guard depth_guard(*this);
+
+  reject_subscript_of_unmodelled_method(element);
 
   // Walrus operator `(target := value)` — assign as a side effect, evaluate to
   // the bound value. Handled before the type switch since NamedExpr is not in
@@ -3189,7 +3264,9 @@ exprt python_converter::get_expr(const nlohmann::json &element)
                                    : symbol->get_type();
 
       // Handle union types
-      if (symbol_type.is_array() && symbol_type.subtype() == char_type())
+      if (
+        symbol_type.is_array() &&
+        type_utils::is_char_storage(symbol_type.subtype()))
       {
         // For union types, we need to infer which concrete type to use.
         // Strategy: Look for isinstance checks in the current scope to

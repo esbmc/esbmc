@@ -511,6 +511,11 @@ static std::optional<waypoint> witness_nondet_waypoint(
   return wp;
 }
 
+/* Branches in a recursive trace number in the hundreds of thousands (#9689),
+   and a witness that size cannot be loaded by the validator. Dropping a
+   branching waypoint only weakens guidance. */
+static constexpr size_t max_branching_waypoints = 1000;
+
 /* The failed assertion's access, and for a data race the access it raced
    with. */
 static void push_violation_targets(
@@ -538,6 +543,7 @@ void violation_yaml_goto_trace(
   yml.verified_file = options.get_option("input-file");
   log_progress("Generating Violation Yaml Witness for: {}", yml.verified_file);
 
+  size_t branching_waypoints = 0;
   for (const auto &step : goto_trace.steps)
   {
     switch (step.type)
@@ -563,10 +569,12 @@ void violation_yaml_goto_trace(
            branch fixed by the program text needs no waypoint either: on deep
            recursion they number in the hundreds of thousands (#9689). */
         if (
+          branching_waypoints >= max_branching_waypoints ||
           !input_file_check(step.pc->location) ||
           step.pc->location.get_line().empty() || !step.nondet_dependent)
           break;
 
+        ++branching_waypoints;
         waypoint wp =
           witness_waypoint(step.pc->location, yml.verified_file, options);
         wp.type = waypoint::branching;
