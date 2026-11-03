@@ -302,10 +302,15 @@ void clang_c_adjust::adjust_derived_to_base(
   if (!base_displacement(ns, derived, base_id, offset) || offset == 0)
     return;
 
-  // The null guard below names a pointer operand twice, and side effects are
-  // not lifted out until remove_sideeffects, so a side-effecting one (`f()`,
-  // `new C`, `p++`) is evaluated once into a temporary (#9373). A value-form
-  // operand is named once, but binding it would copy the object; decline.
+  // [conv.ptr]/3: a null pointer operand converts to a null pointer, so the
+  // displacement must not be applied to it. An address (of a materialized
+  // temporary, say) and a value-form operand, an lvalue, are never null.
+  const bool guard = ptr_mode && !expr.is_address_of();
+
+  // The guard names the operand twice, and side effects are not lifted out
+  // until remove_sideeffects, so a side-effecting operand (`f()`, `new C`,
+  // `p++`) is evaluated once into a temporary (#9373). A value-form operand
+  // is named once, but binding it would copy the object; decline.
   const bool side_effect = has_side_effect(expr);
   if (side_effect && !ptr_mode)
   {
@@ -319,7 +324,7 @@ void clang_c_adjust::adjust_derived_to_base(
   const typet base_ptr = pointer_typet(symbol_typet(base_id));
   code_blockt block;
   exprt src = expr;
-  if (side_effect)
+  if (side_effect && guard)
   {
     // A reference-typed temporary would be read as its referent, not as the
     // address it holds.
@@ -338,15 +343,19 @@ void clang_c_adjust::adjust_derived_to_base(
   adjusted.type() = char_ptr;
   gen_typecast(ns, adjusted, base_ptr);
 
-  // [conv.ptr]/3: a null pointer operand converts to a null pointer, so the
-  // displacement must not be applied to it. A value-form operand is an lvalue
-  // and can never be null, so only the pointer form needs the guard.
-  if (ptr_mode)
+  if (guard)
   {
     exprt guarded = if_exprt(
       equality_exprt(src, gen_zero(src.type())), gen_zero(base_ptr), adjusted);
     guarded.location() = expr.location();
     finish_complex_lowering(expr, guarded, block);
+    return;
+  }
+
+  if (ptr_mode)
+  {
+    adjusted.location() = expr.location();
+    expr = adjusted;
     return;
   }
 
