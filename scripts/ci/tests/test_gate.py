@@ -8,6 +8,7 @@ import sys
 import tempfile
 import unittest
 
+import ci_gate
 import ci_results
 import ci_selection
 import linux_tests
@@ -15,6 +16,7 @@ from test_bundle import tool_project
 
 SHARDS = ci_selection.shard_executors()
 COMPARE_JOBS = "validate,build,shards,baseline,cpython-check"
+REQUIRED = ci_gate.REQUIRED_JOBS
 
 
 def needs(**overrides):
@@ -23,7 +25,7 @@ def needs(**overrides):
     return json.dumps(jobs)
 
 
-class CompareTest(unittest.TestCase):
+class ReportsFixture(unittest.TestCase):
     """Reports produced by real CTest runs, laid out as downloaded artifacts."""
 
     def setUp(self):
@@ -67,6 +69,9 @@ class CompareTest(unittest.TestCase):
         ])
         with open(summary, encoding="utf-8") as fp:
             return code, fp.read()
+
+
+class CompareTest(ReportsFixture):
 
     def test_equal_runs_of_the_same_bundle_pass(self):
         code, text = self.compare()
@@ -115,6 +120,54 @@ class CompareTest(unittest.TestCase):
         code, text = self.compare(needs(shards="cancelled"))
         self.assertEqual(code, 1)
         self.assertIn("job shards is cancelled", text)
+
+
+def pr_needs(mode, **overrides):
+    jobs = {job: {"result": "skipped"} for job in sum(map(list, REQUIRED.values()), [])}
+    jobs.update({job: {"result": "success"} for job in REQUIRED[mode]})
+    jobs.update({job: {"result": result} for job, result in overrides.items()})
+    return json.dumps(jobs)
+
+
+class SummaryTest(ReportsFixture):
+
+    def summary(self, mode, needs_json):
+        out = os.path.join(self.tmp.name, "summary.md")
+        return linux_tests.main([
+            "summary", "--mode", mode, "--needs", needs_json, "--results-dir", self.results,
+            "--plan-digest", self.digest, "--bundle-sha256", "b" * 64, "--summary", out
+        ])
+
+    def test_legacy_needs_only_build_ubuntu_and_the_mode(self):
+        self.assertEqual(self.summary("legacy", pr_needs("legacy")), 0)
+        self.assertEqual(self.summary("legacy", pr_needs("legacy", **{"build-ubuntu": "failure"})),
+                         1)
+        self.assertEqual(self.summary("legacy", pr_needs("legacy", changes="failure")), 1)
+
+    def test_parallel_needs_every_shard_and_the_cpython_check(self):
+        self.assertEqual(self.summary("parallel", pr_needs("parallel")), 0)
+        self.assertEqual(
+            self.summary("parallel", pr_needs("parallel", **{"cpython-check": "skipped"})), 1)
+        shutil.rmtree(os.path.join(self.results, "linux-result-python-4-1"))
+        self.assertEqual(self.summary("parallel", pr_needs("parallel")), 1)
+
+    def test_a_missing_mode_fails(self):
+        self.assertEqual(self.summary("", pr_needs("legacy")), 1)
+
+
+class ResolveModeTest(unittest.TestCase):
+
+    def test_the_versioned_default_rules_unless_overridden(self):
+        self.assertEqual(ci_gate.resolve_mode("legacy", ""), "legacy")
+        self.assertEqual(ci_gate.resolve_mode("parallel", ""), "parallel")
+        self.assertEqual(ci_gate.resolve_mode("parallel", "legacy"), "legacy")
+        self.assertEqual(ci_gate.resolve_mode("legacy", "parallel"), "parallel")
+
+    def test_invalid_values_fail(self):
+        with self.assertRaises(ci_gate.ModeError):
+            ci_gate.resolve_mode("legacy", "Parallel")
+        with self.assertRaises(ci_gate.ModeError):
+            ci_gate.resolve_mode("", "")
 
 
 class ExpectedFailureVerdictTest(unittest.TestCase):

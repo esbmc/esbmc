@@ -10,6 +10,32 @@ import os
 import re
 
 _RESULT_DIR = re.compile(r"^linux-result-(?P<executor>.+)-(?P<attempt>\d+)$")
+MODES = ("legacy", "parallel")
+
+# Jobs each PR mode requires; legacy runs the CPython check inside build-ubuntu.
+REQUIRED_JOBS = {
+    "legacy": ("changes", "build-ubuntu"),
+    "parallel": ("changes", "linux-build", "linux-regression", "cpython-check"),
+}
+
+
+class ModeError(Exception):
+    pass
+
+
+def resolve_mode(default, override):
+    """The versioned default, unless the repository variable names another mode.
+
+    An empty override is what a run gets when the variable is unset, or when
+    it does not reach the run at all, so it always leaves a valid mode.
+    """
+    if default not in MODES:
+        raise ModeError(f"the workflow's default mode {default!r} is not one of {MODES}")
+    if not override:
+        return default
+    if override not in MODES:
+        raise ModeError(f"LINUX_TEST_MODE={override!r} is not one of {MODES}")
+    return override
 
 
 def job_problems(needs, required):
