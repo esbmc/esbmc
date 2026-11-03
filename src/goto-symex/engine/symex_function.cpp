@@ -875,6 +875,12 @@ void goto_symext::symex_function_call_deref(const expr2tc &expr)
     // such call can happen and the path is dead (esbmc/esbmc#604).
     if (options.get_bool_option("closed-world-fnptr"))
       assume(gen_false_expr());
+    else if (!is_nil_expr(call.ret))
+      symex_assign(code_assign2tc(
+        call.ret,
+        symbol2tc(
+          call.ret->type,
+          "nondet$symex::" + i2string(get_nondet_counter()++))));
     cur_state->source.pc++;
     return;
   }
