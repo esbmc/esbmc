@@ -208,6 +208,9 @@ private:
   /// when its runtime class is its static class; nil otherwise.
   exprt repr_of_object(exprt &value) const;
 
+  /// "None" where the object pointer @p value is null, @p other elsewhere.
+  exprt none_or(const exprt &value, const exprt &other) const;
+
   /// repr(x): complex, instance, or modelled str/number repr; otherwise the
   /// general call.
   exprt handle_repr_call();
