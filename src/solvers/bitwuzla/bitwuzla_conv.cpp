@@ -1,5 +1,6 @@
 #include <bitwuzla_conv.h>
 #include <cstdio>
+#include <optional>
 #include <sstream>
 
 #define new_ast new_solver_ast<bitw_smt_ast>
@@ -467,14 +468,38 @@ smt_astt bitwuzla_convt::mk_bvsge(smt_astt a, smt_astt b)
     boolean_sort);
 }
 
+// If `t` is a CONST_ARRAY term, return its initialiser. mk_eq / mk_neq use
+// it to rewrite `(= ca(v1) ca(v2))` into `(= v1 v2)`, so Bitwuzla's
+// incomplete "Equality over constant arrays" reasoning never has to fire.
+static std::optional<bitwuzla::Term> const_array_init(const bitwuzla::Term &t)
+{
+  if (t.kind() != bitwuzla::Kind::CONST_ARRAY || t.num_children() != 1)
+    return std::nullopt;
+  return t[0];
+}
+
+// Build `kind(a, b)` for EQUAL / DISTINCT, comparing the initialisers when
+// both operands are constant arrays.
+bitwuzla::Term bitwuzla_convt::mk_equality(
+  bitwuzla::Kind kind,
+  const bitwuzla::Term &a,
+  const bitwuzla::Term &b)
+{
+  const auto va = const_array_init(a);
+  const auto vb = const_array_init(b);
+  if (va && vb)
+    return tm.mk_term(kind, {*va, *vb});
+  return tm.mk_term(kind, {a, b});
+}
+
 smt_astt bitwuzla_convt::mk_eq(smt_astt a, smt_astt b)
 {
   assert(a->sort->get_data_width() == b->sort->get_data_width());
   return new_ast(
-    tm.mk_term(
+    mk_equality(
       bitwuzla::Kind::EQUAL,
-      {to_solver_smt_ast<bitw_smt_ast>(a)->a,
-       to_solver_smt_ast<bitw_smt_ast>(b)->a}),
+      to_solver_smt_ast<bitw_smt_ast>(a)->a,
+      to_solver_smt_ast<bitw_smt_ast>(b)->a),
     boolean_sort);
 }
 
@@ -482,10 +507,10 @@ smt_astt bitwuzla_convt::mk_neq(smt_astt a, smt_astt b)
 {
   assert(a->sort->get_data_width() == b->sort->get_data_width());
   return new_ast(
-    tm.mk_term(
+    mk_equality(
       bitwuzla::Kind::DISTINCT,
-      {to_solver_smt_ast<bitw_smt_ast>(a)->a,
-       to_solver_smt_ast<bitw_smt_ast>(b)->a}),
+      to_solver_smt_ast<bitw_smt_ast>(a)->a,
+      to_solver_smt_ast<bitw_smt_ast>(b)->a),
     boolean_sort);
 }
 

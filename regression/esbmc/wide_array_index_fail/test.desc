@@ -1,0 +1,4 @@
+CORE
+main.c
+--cvc5 --no-bounds-check
+^VERIFICATION FAILED$

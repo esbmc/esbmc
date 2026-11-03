@@ -501,11 +501,13 @@ private:
     const type2tc &type,
     const guard2tc &guard,
     modet mode);
-  /** \p object is the object being accessed, or nil where the caller does not
-   *  know it yet -- then the base is assumed to carry the access width, as it
-   *  does for everything but a type that declines alignment. */
+  /** \p type is the type accessed, \p minwidth its width in bits. \p object
+   *  is the object being accessed, or nil where the caller does not know it
+   *  yet -- then the base is assumed to carry the access width, as it does for
+   *  everything but a type that declines alignment. */
   void check_alignment(
     BigInt minwidth,
+    const type2tc &type,
     const expr2tc &offset,
     const guard2tc &guard,
     const expr2tc &object);

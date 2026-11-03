@@ -1,0 +1,2 @@
+regression/esbmc/bitint_wide_align_pass
+regression/esbmc/bitint_wide_align_fail

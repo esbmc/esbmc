@@ -712,6 +712,16 @@ clang_c_convertert::elided_copy_source(const clang::Expr &init)
   return init;
 }
 
+static void set_array_index_width(typet &type, const std::string &annotation)
+{
+  // The optional :N suffix declares the index width in bits.
+  if (annotation.size() > 16 && annotation[16] == ':')
+  {
+    const unsigned width = std::stoul(annotation.substr(17));
+    type.set("#esbmc_index_width", std::to_string(width));
+  }
+}
+
 bool clang_c_convertert::get_var(const clang::VarDecl &vd, exprt &new_expr)
 {
   // Get type
@@ -728,10 +738,11 @@ bool clang_c_convertert::get_var(const clang::VarDecl &vd, exprt &new_expr)
       if (const auto *a = llvm::dyn_cast<clang::AnnotateAttr>(attr))
       {
         const std::string &name = a->getAnnotation().str();
-        if (name == "__ESBMC_inf_size")
+        if (name.compare(0, 16, "__ESBMC_inf_size") == 0)
         {
           assert(t.is_array());
           t.size(exprt("infinity", size_type()));
+          set_array_index_width(t, name);
         }
         else if (name == "__ESBMC_no_slice")
           no_slice = true;

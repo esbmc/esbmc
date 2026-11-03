@@ -104,8 +104,19 @@ void tuple_node_smt_ast::assign(smt_solver_baset *ctx, smt_astt sym) const
   const_cast<tuple_node_smt_ast *>(this)->make_free(ctx);
 
   tuple_node_smt_astt target = to_tuple_node_ast(sym);
-  assert(
-    target->elements.size() == 0 && "tuple smt assign with elems populated");
+
+  // a struct-of-arrays symbol target (mk_tuple_array_symbol) has
+  // its per-field native arrays already materialised — it is not a free
+  // placeholder, so the copy-elements fast path does not apply.  Assert
+  // the field-wise equality instead (exactly what tuple_node::eq emits;
+  // == the default smt_ast::assign), so subsequent reads of the named
+  // per-field arrays observe the assigned value.  The historical K=1
+  // path (array_conv, not a tuple_node) never reaches here.
+  if (target->elements.size() != 0)
+  {
+    ctx->assert_ast(eq(ctx, sym));
+    return;
+  }
 
   tuple_node_smt_ast *destination = const_cast<tuple_node_smt_ast *>(target);
 
@@ -159,6 +170,29 @@ smt_astt tuple_node_smt_ast::update(
   unsigned int idx,
   const expr2tc &idx_expr [[maybe_unused]] /*ndebug*/) const
 {
+  // struct-of-arrays array store.  A non-nil idx_expr on a
+  // tuple_node whose elements are solver-native arrays is an array
+  // `with` into the K>=2 per-field representation built by
+  // mk_tuple_array_symbol / the constant builder: distribute the store
+  // over each per-field native array.  `value` is the field-aligned
+  // per-field tuple_node for the stored element (one dimension lower,
+  // or the scalar leaf struct at the innermost level).  The historical
+  // K=1 array-of-struct path uses array_conv (an array_sym ast, not a
+  // tuple_node) and never reaches here -> byte-identical.
+  if (
+    !is_nil_expr(idx_expr) && !elements.empty() &&
+    elements[0]->sort->id == SMT_SORT_ARRAY)
+  {
+    tuple_node_smt_astt v = to_tuple_node_ast(value);
+    std::string name = ctx->mk_fresh_name("tuple_array_update::") + ".";
+    tuple_node_smt_ast *result = new tuple_node_smt_ast(flat, ctx, sort, name);
+    result->elements.resize(elements.size());
+    for (unsigned int i = 0; i < elements.size(); i++)
+      result->elements[i] =
+        elements[i]->update(ctx, v->project(ctx, i), 0, idx_expr);
+    return result;
+  }
+
   smt_solver_baset::ast_vec eqs;
   assert(
     is_nil_expr(idx_expr) &&
@@ -184,10 +218,28 @@ smt_astt tuple_node_smt_ast::update(
   return result;
 }
 
-smt_astt tuple_node_smt_ast::select(
-  smt_solver_baset *ctx [[maybe_unused]],
-  const expr2tc &idx [[maybe_unused]]) const
+smt_astt
+tuple_node_smt_ast::select(smt_solver_baset *ctx, const expr2tc &idx) const
 {
+  // struct-of-arrays array select.  A select on a tuple_node
+  // whose elements are solver-native arrays is an array index into the
+  // K>=2 per-field representation: distribute the select over each
+  // per-field native array, yielding a tuple_node of the same leaf
+  // struct whose fields are the one-dimension-lower native arrays (or
+  // the scalar leaf at the innermost level).  Projection-before-select
+  // therefore never aborts.  Reached only via the K>=2
+  // representation; the historical K=1 array-of-struct path uses
+  // array_conv (not a tuple_node) and never enters here.
+  if (!elements.empty() && elements[0]->sort->id == SMT_SORT_ARRAY)
+  {
+    std::string name = ctx->mk_fresh_name("tuple_select::") + ".";
+    tuple_node_smt_ast *result = new tuple_node_smt_ast(flat, ctx, sort, name);
+    result->elements.resize(elements.size());
+    for (unsigned int i = 0; i < elements.size(); i++)
+      result->elements[i] = elements[i]->select(ctx, idx);
+    return result;
+  }
+
   log_error("Select operation applied to tuple");
   abort();
 }

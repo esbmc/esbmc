@@ -536,6 +536,14 @@ array_convt::get_array_elem(smt_astt a, uint64_t index, const type2tc &subtype)
     if (is_nil_expr(e2))
       continue;
 
+    // The SMT model may return a non-constant expression (free variable
+    // remained, or partial substitution) — skip it rather than blindly
+    // casting to constant_int2t and reading garbage at the BigInt offset
+    // (which previously SIGSEGV'd downstream in to_uint64).  Likewise,
+    // skip values that don't fit in uint64: by definition they cannot
+    // equal the uint64 `index` argument.
+    if (!is_constant_int2t(e2))
+      continue;
     const constant_int2t &intval = to_constant_int2t(e2);
     if (intval.value.is_uint64() && intval.value.to_uint64() == index)
       break;

@@ -1,6 +1,8 @@
 #ifndef SOLVERS_SMT_SMT_SORT_H_
 #define SOLVERS_SMT_SMT_SORT_H_
 
+#include <cstdio>
+#include <cstdlib>
 #include <irep2/irep2_type.h>
 
 /** Identifier for SMT sort kinds
@@ -132,7 +134,27 @@ public:
     return tupletype;
   }
 
+  /** True iff this sort is a `solver_smt_sort<S>` carrying a per-solver
+   *  native sort handle in its `s` field — i.e. safe to feed to
+   *  `to_solver_smt_sort<S>` and then to a backend's mk_array_sort,
+   *  mk_const, mk_array_symbol, etc.  False for the bare `smt_sort`
+   *  instances that the tuple flatteners (smt_tuple_node.cpp,
+   *  smt_tuple_sym.cpp) construct for SMT_SORT_STRUCT and
+   *  SMT_SORT_ARRAY-of-tuple sorts; those should only flow back
+   *  through the tuple_api codepath.
+   *
+   *  Used by to_solver_smt_sort below to convert a silent SIGSEGV
+   *  (downcasting a bare smt_sort and reading garbage at the `s`
+   *  field offset) into a labeled abort. */
+  bool is_solver_native() const
+  {
+    return solver_native;
+  }
+
   virtual ~smt_sort() = default;
+
+protected:
+  bool solver_native = false;
 
 private:
   /** Data size of the sort.
@@ -164,16 +186,19 @@ class solver_smt_sort : public smt_sort
 public:
   solver_smt_sort(smt_sort_kind i, solver_sort _s) : smt_sort(i), s(_s)
   {
+    this->solver_native = true;
   }
 
   solver_smt_sort(smt_sort_kind i, solver_sort _s, const type2tc &_tupletype)
     : smt_sort(i, _tupletype), s(_s)
   {
+    this->solver_native = true;
   }
 
   solver_smt_sort(smt_sort_kind i, solver_sort _s, unsigned int w)
     : smt_sort(i, w), s(_s)
   {
+    this->solver_native = true;
   }
 
   solver_smt_sort(
@@ -183,6 +208,7 @@ public:
     unsigned int sw)
     : smt_sort(i, w, sw), s(_s)
   {
+    this->solver_native = true;
   }
 
   solver_smt_sort(
@@ -192,6 +218,7 @@ public:
     const smt_sort *_rangesort)
     : smt_sort(i, dw, _rangesort), s(_s)
   {
+    this->solver_native = true;
   }
 
   solver_smt_sort(
@@ -202,6 +229,7 @@ public:
     smt_sortt range_sort)
     : smt_sort(i, type, width, range_sort), s(_s)
   {
+    this->solver_native = true;
   }
 
   ~solver_smt_sort() override = default;
@@ -215,6 +243,27 @@ public:
 template <typename T>
 const solver_smt_sort<T> *to_solver_smt_sort(smt_sortt s)
 {
+  /* Phase-0 diagnostic floor: a bare smt_sort (created by the tuple
+   * flatteners in src/solvers/smt/tuple/) carries no `s` field.  In a
+   * NDEBUG build the dynamic_cast macro reduces to static_cast and the
+   * unsafe downcast silently reads garbage where `s` would be in the
+   * derived layout — bitwuzla/cvc5/etc. then dereference the garbage
+   * and SIGSEGV.  Check the discriminator FIRST so the failure mode is
+   * a labeled abort instead of a stack-walk-from-null.  */
+  if (!s->is_solver_native())
+  {
+    std::fprintf(
+      stderr,
+      "ESBMC internal error: bare smt_sort (id=%d) reached "
+      "to_solver_smt_sort<>; this sort was produced by the tuple "
+      "flattener and must only flow back through the tuple_api "
+      "codepath, not into a backend's mk_array_sort/mk_const/"
+      "mk_array_symbol.  Either the carve-out at smt_conv.cpp's "
+      "array_id case is missing a shape, or a new bare-sort producer "
+      "was added without a matching consumer-side route.\n",
+      static_cast<int>(s->id));
+    std::abort();
+  }
   const solver_smt_sort<T> *r = dynamic_cast<const solver_smt_sort<T> *>(s);
   assert(r);
   return r;
