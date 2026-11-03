@@ -9,7 +9,8 @@ import hashlib
 import importlib.util
 import os
 import shutil
-import xml.etree.ElementTree as ET
+from typing import NamedTuple
+from xml.etree import ElementTree
 
 PASSED, SKIPPED, FAILED, INVALID = "passed", "skipped", "failed", "invalid"
 SKIP_MESSAGE = "SKIP_RETURN_CODE=10"
@@ -44,7 +45,7 @@ def classify_case(case):
 def read_junit(path):
     """name -> (outcome, message). A repeated name is itself an invalid result."""
     results = {}
-    for case in ET.parse(path).getroot().iter("testcase"):
+    for case in ElementTree.parse(path).getroot().iter("testcase"):
         name = case.get("name")
         if name in results:
             results[name] = (INVALID, "reported more than once")
@@ -159,7 +160,14 @@ def check_runtime(plan, producer_probes, harness):
         raise RuntimeMismatch("the build granted z3_binary, but no z3 is on PATH")
 
 
-def evaluate_run(expected, junit_results, exit_code, plan, probes, harness):
+class RunContext(NamedTuple):
+    """What judging a run needs besides its own results."""
+    plan: dict
+    probes: dict
+    harness: object
+
+
+def evaluate_run(expected, junit_results, exit_code, context):
     """Problems that keep a run from proving its tests passed; empty when it does."""
     problems = []
     if exit_code != 0:
@@ -175,16 +183,17 @@ def evaluate_run(expected, junit_results, exit_code, plan, probes, harness):
         outcome, message = junit_results.get(name, (PASSED, ""))
         if outcome in (FAILED, INVALID):
             problems.append(f"{name}: {outcome} {message}".rstrip())
-        elif outcome == SKIPPED and not skip_reason(plan["tests"][name], probes, harness):
+        elif outcome == SKIPPED and not skip_reason(context.plan["tests"][name], context.probes,
+                                                    context.harness):
             problems.append(f"{name}: skipped with no reason the harness would give")
     return problems
 
 
-def run_report(executor, expected, junit_path, exit_code, plan, probes, harness):
+def run_report(executor, expected, junit_path, exit_code, context):
     """The verdict of one run, tied to its plan and its JUnit file."""
     report = {
         "executor": executor,
-        "plan_digest": plan["digest"],
+        "plan_digest": context.plan["digest"],
         "exit_code": exit_code,
         "expected": len(expected),
         "junit_digest": None,
@@ -197,9 +206,9 @@ def run_report(executor, expected, junit_path, exit_code, plan, probes, harness)
     report["junit_digest"] = file_digest(junit_path)
     try:
         results = read_junit(junit_path)
-    except ET.ParseError as error:
+    except ElementTree.ParseError as error:
         report["problems"].append(f"incomplete JUnit: {error}")
         return report
     report["outcomes"] = {name: outcome for name, (outcome, _) in results.items()}
-    report["problems"] = evaluate_run(expected, results, exit_code, plan, probes, harness)
+    report["problems"] = evaluate_run(expected, results, exit_code, context)
     return report
