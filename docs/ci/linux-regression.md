@@ -1,34 +1,23 @@
 # Linux PR regression CI
 
-The Linux leg of the PR workflow (`.github/workflows/ci-pull-request.yml`) runs
-in one of two modes. `linux-test-summary` is the check that decides the Linux
-tests in both.
+The Linux tests of the PR workflow (`.github/workflows/ci-pull-request.yml`)
+run as:
 
-| Mode | Jobs | CPython check |
-|---|---|---|
-| `legacy` | `build-ubuntu` builds and runs `ctest -LE python-intensive` in one job | inside `build-ubuntu` |
-| `parallel` | `linux-build` builds once and exports a bundle while `cpython-check` runs; once both pass, `linux-regression` runs seven module jobs from the bundle | separate `cpython-check` job |
+```
+linux-build (build, tests without the regression label, bundle) ─┐
+cpython-check (scripts/check_python_tests.sh) ────────────────────┴─► 7 module jobs ─► linux-test-summary
+```
 
-The default is `parallel`. While the parallel path is being accepted,
-`build-ubuntu` also runs in parallel mode, so one run compares both paths; it
-is removed once the parallel run is accepted.
+- `linux-build` and `cpython-check` start together.
+- The module jobs (`linux-regression`) start only when both passed, and run
+  the regression from the bundle `linux-build` exported, without rebuilding.
+- `linux-test-summary` always runs and is the required check of the Linux
+  tests. It fails unless the build, the CPython check and every module job
+  succeeded, and every report holds the producer's plan and bundle with no
+  problem.
 
-## Selecting the mode
-
-`changes` resolves the mode once per run with
-`scripts/ci/linux_tests.py resolve-mode`:
-
-- `LINUX_TEST_DEFAULT_MODE`, in the workflow's `env:`, is the versioned
-  default;
-- the repository variable `LINUX_TEST_MODE`, when set to `legacy` or
-  `parallel`, overrides it;
-- a run that receives no variable, as a fork's may not, uses the default.
-
-Any other value is published as the mode `invalid` instead of failing
-`changes`, so the jobs gated on `changes` (doxygen, LD) still run.
-`build-ubuntu` runs for every mode but `parallel`, so an invalid mode or a
-failed `changes` never leaves a PR without tests; `linux-test-summary` fails
-in both cases.
+This replaces the `static llvm-22 DebugOpt / Build ESBMC (ubuntu-24.04)` job,
+which built and ran the whole suite in one job.
 
 ## What runs where
 
@@ -103,9 +92,9 @@ A failure, a `Timeout`, a "Not Run" (missing executable), a repeated name or a
 truncated file fails it. The JUnit counters are not used: CTest counts a
 missing executable as skipped.
 
-`linux-test-summary` (always runs) fails unless the jobs of the mode
-succeeded and, in parallel mode, the producer published its plan and bundle
-digests and the latest report of the producer and of
+`linux-test-summary` fails unless the build, the CPython check and every
+module job succeeded, the producer published its plan and bundle digests,
+and the latest report of the producer and of
 every shard carries the producer's plan digest and bundle digest with no
 problem. Re-running a failed shard reuses the producer's bundle and publishes
 a new attempt; the latest attempt counts even when it fails. An expired
@@ -129,27 +118,11 @@ cancels a PR run. The CPython check of both workflows is
 A `workflow_dispatch` workflow can only be run once it is on the default
 branch, so the comparison is available after the infrastructure merges.
 
-## Activation
+## Required check and rollback
 
-Retiring `build-ubuntu` and the legacy mode needs, in this order:
-
-1. three comparisons on at least two SHAs, two warm and one cold, with equal
-   names, outcomes and skips, no OOM or `oom_kill`, and the cold producer
-   within its 180-minute limit;
-2. an administrator requiring `linux-test-summary` while the old check is
-   still required, and a control PR showing that a failing CPython check,
-   a cancellation and a missing summary block the merge;
-3. open PRs updated so they run the new workflow; then the old check removed;
-4. the commit that removes `build-ubuntu` from parallel runs.
-
-## Rollback
-
-- Repository runs: set `LINUX_TEST_MODE=legacy` and start new runs.
-- Every PR, forks included: commit `LINUX_TEST_DEFAULT_MODE: legacy`, update
-  the PR branches and start new runs. Re-runs of old runs keep their old
-  workflow and inputs.
-
-`linux-test-summary` stays required in both modes.
+Branch protection must require `linux-test-summary` instead of
+`static llvm-22 DebugOpt / Build ESBMC (ubuntu-24.04)`, which no longer runs.
+Rolling back means reverting the commits that replaced that job.
 
 ## Measurements
 
