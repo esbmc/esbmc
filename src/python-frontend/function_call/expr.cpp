@@ -4886,8 +4886,8 @@ exprt function_call_expr::math_log_of(const nlohmann::json &arg)
   code_expressiont raise_code(raise_expr);
   raise_code.location() = loc;
   code_ifthenelset guard;
-  guard.cond() = migrate_expr_back(
-    lessthanequal2tc(fp_operand, gen_zero(fp_operand->type)));
+  guard.cond() =
+    migrate_expr_back(lessthanequal2tc(fp_operand, gen_zero(fp_operand->type)));
   guard.then_case() = raise_code;
   guard.location() = loc;
   guard.location().property("skipped");
