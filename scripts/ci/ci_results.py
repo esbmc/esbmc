@@ -164,8 +164,9 @@ def evaluate_run(expected, junit_results, exit_code, plan, probes, harness):
     problems = []
     if exit_code != 0:
         problems.append(f"ctest exited with {exit_code}")
+    expected_names = set(expected)
     missing = [n for n in expected if n not in junit_results]
-    extra = [n for n in junit_results if n not in set(expected)]
+    extra = [n for n in junit_results if n not in expected_names]
     if missing:
         problems.append(f"{len(missing)} selected tests have no JUnit result: {missing[:5]}")
     if extra:
