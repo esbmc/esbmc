@@ -1,6 +1,7 @@
 #include <util/base/string_pool.h>
 
-#include <cassert>
+#include <cstdio>
+#include <cstdlib>
 #include <mutex>
 #include <shared_mutex>
 
@@ -23,7 +24,13 @@ unsigned string_pool::get(std::string_view s)
   size_t no = hash_table.size();
   size_t chunk_idx = no >> CHUNK_SHIFT;
   size_t slot_idx = no & CHUNK_MASK;
-  assert(chunk_idx < MAX_CHUNKS);
+  // Checked in release builds too: past this, chunk_storage is written out of
+  // bounds.
+  if (chunk_idx >= MAX_CHUNKS)
+  {
+    fprintf(stderr, "ERROR: string pool is full\n");
+    abort();
+  }
 
   if (slot_idx == 0)
   {
