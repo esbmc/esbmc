@@ -1304,6 +1304,24 @@ bool python_converter::store_optional_str(
   return true;
 }
 
+// `x = x.method()` built its receiver as `&x` while `x` held the struct.
+void python_converter::pass_reference_receiver(
+  exprt &rhs,
+  const exprt &lhs,
+  const typet &old_lhs_type)
+{
+  if (
+    !is_user_class_struct_type(old_lhs_type) ||
+    !is_user_class_pointer(lhs.type()) || !rhs.is_code() ||
+    rhs.statement() != "function_call")
+    return;
+  for (exprt &arg : to_code_function_call(to_code(rhs)).arguments())
+    if (
+      arg.is_address_of() && arg.op0().is_symbol() &&
+      arg.op0().identifier() == lhs.identifier())
+      arg = lhs;
+}
+
 // Indexing a str yields a bare char; a variable holding its string as a char
 // array takes it as the one-character string (#9446).
 static exprt char_as_string(const exprt &rhs, const typet &target)
@@ -1570,8 +1588,10 @@ void python_converter::handle_assignment_type_adjustments(
       !(tuple_handler_->is_tuple_type(lhs_symbol->get_type()) &&
         !tuple_handler_->is_tuple_type(rhs.type())))
     {
+      const typet old_lhs_type = lhs.type();
       lhs_symbol->set_type(migrate_type(rhs.type()));
       lhs.type() = rhs.type();
+      pass_reference_receiver(rhs, lhs, old_lhs_type);
     }
 
     // Legacy: migrate_expr drops the `value` that marks a class object
@@ -5664,13 +5684,8 @@ void python_converter::handle_function_call_rhs(
   // while `lhs` is the element/member expression, so retyping `lhs_symbol`
   // would corrupt the whole container — the sibling migrations guard on a Name
   // target for the same reason.
-  if (
-    !is_ctor_call && lhs_symbol && lhs.is_symbol() &&
-    is_user_class_pointer(rhs.type()) && is_user_class_struct_type(lhs.type()))
-  {
-    lhs.type() = rhs.type();
-    lhs_symbol->set_type(migrate_type(rhs.type()));
-  }
+  if (!is_ctor_call)
+    bind_class_reference(lhs_symbol, lhs, rhs);
 
   widen_int_target_for_float_call(lhs, rhs, is_ctor_call);
 
@@ -6360,6 +6375,20 @@ std::string python_converter::alias_rhs_class(const nlohmann::json &rhs)
            : "";
 }
 
+void python_converter::bind_class_reference(
+  symbolt *lhs_symbol,
+  exprt &lhs,
+  const exprt &rhs)
+{
+  if (
+    lhs_symbol && lhs.is_symbol() && is_user_class_pointer(rhs.type()) &&
+    is_user_class_struct_type(lhs.type()))
+  {
+    lhs.type() = rhs.type();
+    lhs_symbol->set_type(migrate_type(rhs.type()));
+  }
+}
+
 std::string python_converter::call_return_class(const nlohmann::json &rhs) const
 {
   if (
@@ -6828,18 +6857,17 @@ void python_converter::propagate_dict_member_list_type_info(
 
   element_type_registry_.assign_from(src, lhs_identifier);
 
-  // Tuple values are recorded under the $dict_value_types$ key, not the
+  // Value types are recorded under the $dict_value_types$ key, not the
   // values-list id (github_3719_4), so the copy above is a no-op for them.
-  // Propagate the stored tuple struct type so the generic list tuple-element
-  // read resolves it.
+  // Propagate the stored type so the generic list element read resolves it.
   if (component != "values")
     return;
 
-  typet tuple_t = dict_handler_->recorded_tuple_value_type(dict_sym);
+  const typet value_t = dict_handler_->recorded_value_type(dict_sym);
   if (
-    !tuple_t.is_nil() && !tuple_t.is_empty() &&
+    !value_t.is_nil() && !value_t.is_empty() &&
     element_type_registry_.size(lhs_identifier) == 0)
-    element_type_registry_.record(lhs_identifier, std::string(), tuple_t);
+    element_type_registry_.record(lhs_identifier, std::string(), value_t);
 }
 
 /// "s" or "n" when every recorded element of list @p id is a str or a
@@ -8255,6 +8283,8 @@ void python_converter::get_var_assign(
       return;
     }
 
+    // A tuple member read (`b = t[1]`) yields the stored `Cls*`.
+    bind_class_reference(lhs_symbol, lhs, rhs);
     adjust_statement_types(lhs, rhs);
 
     // Handle list type info propagation. A subscript store rebinds an element,

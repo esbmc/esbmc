@@ -1,0 +1,4 @@
+CORE
+main.py
+
+^ERROR: comparing a dynamically-typed variable against this literal type is not yet supported$

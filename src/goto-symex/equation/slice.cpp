@@ -453,6 +453,10 @@ expr2tc symex_slicet::get_nondet_symbol(const expr2tc &expr)
   case expr2t::byte_extract_id:
     return get_nondet_symbol(to_byte_extract2t(expr).source_value);
 
+  // e.g. `x[i] = __VERIFIER_nondet_int()` on a VLA is encoded byte-wise
+  case expr2t::byte_update_id:
+    return get_nondet_symbol(to_byte_update2t(expr).update_value);
+
   case expr2t::typecast_id:
     return get_nondet_symbol(to_typecast2t(expr).from);
 
