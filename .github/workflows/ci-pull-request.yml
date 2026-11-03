@@ -15,7 +15,7 @@ env:
   # LINUX_TEST_MODE overrides it when set; a run that does not receive the
   # variable, as a fork's may not, uses this versioned default. Rolling back
   # every PR means setting this to legacy. See docs/ci/linux-regression.md.
-  LINUX_TEST_DEFAULT_MODE: legacy
+  LINUX_TEST_DEFAULT_MODE: parallel
 
 jobs:
   changes:
@@ -75,11 +75,11 @@ jobs:
       run: python3 -m unittest discover -s scripts/ci/tests -p 'test_*.py' -v
 
   # Legacy mode: one job builds, runs the CPython check and the whole suite.
-  # It also runs when no mode was resolved, so a broken resolver never leaves
-  # the PR without its tests; linux-test-summary then fails on `changes`.
+  # TEMPORARY: it also runs in parallel mode while this PR compares both
+  # paths in the same run; it is removed once the parallel run is accepted.
   build-ubuntu:
     needs: changes
-    if: ${{ !cancelled() && needs.changes.outputs.linux-test-mode != 'parallel' }}
+    if: ${{ !cancelled() }}
     uses: ./.github/workflows/aux-build-unix.yml
     name: static llvm-22 DebugOpt
     with:
@@ -102,8 +102,9 @@ jobs:
       check-python-regressions: false
       collect-test-metrics: true
 
+  # The modules start only once the build and the CPython check both passed.
   linux-regression:
-    needs: linux-build
+    needs: [linux-build, cpython-check]
     uses: ./.github/workflows/aux-test-linux.yml
     with:
       executors: ${{ needs.linux-build.outputs.shard-executors }}
