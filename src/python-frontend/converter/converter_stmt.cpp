@@ -8247,6 +8247,8 @@ void python_converter::get_var_assign(
     reject_one_sided_tagged_store(lhs, rhs);
     adopt_tagged_element(lhs_symbol, lhs, rhs);
 
+    rhs = coerce_optional_tuple_payload(
+      rhs, lhs.type(), get_location_from_decl(ast_node), target_block);
     // Handle type adjustments
     handle_assignment_type_adjustments(
       lhs_symbol, lhs, rhs, lhs_type, ast_node, is_ctor_call);

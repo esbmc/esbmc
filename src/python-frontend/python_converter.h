@@ -3460,6 +3460,12 @@ private:
   /// None, a literal or a scalar stored into an Optional<T> variable, wrapped
   /// (#8016, #8248).
   exprt wrap_stored_if_optional(const exprt &value, const typet &type);
+  /// A tuple stored into an Optional[tuple], retyped as its payload (#9843).
+  exprt coerce_optional_tuple_payload(
+    const exprt &value,
+    const typet &type,
+    const locationt &loc,
+    codet &target_block);
   typet optional_ternary_type(exprt &then, exprt &else_expr, bool then_is_none);
   exprt get_return_value(const nlohmann::json &value);
   typet subscript_annotation_type(

@@ -121,6 +121,21 @@ exprt python_converter::wrap_stored_if_optional(
   return wrap_in_optional(typecast_exprt(value, value_type), type);
 }
 
+exprt python_converter::coerce_optional_tuple_payload(
+  const exprt &value,
+  const typet &type,
+  const locationt &loc,
+  codet &target_block)
+{
+  if (!type_utils::is_optional_struct(type))
+    return value;
+  return tuple_handler_->coerce_to_tuple_type(
+    value,
+    to_struct_type(type).get_component("value").type(),
+    loc,
+    target_block);
+}
+
 // Extract non-None type from union
 std::string
 python_converter::extract_non_none_type(const nlohmann::json &annotation_node)
