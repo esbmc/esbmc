@@ -904,8 +904,14 @@ std::string python_annotation<Json>::module_call_type(const Json &call)
 {
   const Json &func = call["func"];
   if (
-    func["_type"] != "Attribute" || func["value"].value("_type", "") != "Name" ||
-    !is_imported_name(func["value"]["id"].template get<std::string>()))
+    func["_type"] != "Attribute" || func["value"].value("_type", "") != "Name")
+    return "";
+  // numpy calls build arrays, which the converter types on its own.
+  const std::string module = func["value"]["id"].template get<std::string>();
+  if (
+    !is_imported_name(module) ||
+    is_imported_numpy_module_alias(
+      static_cast<const nlohmann::json &>(ast_), module))
     return "";
   try
   {
