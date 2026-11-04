@@ -868,8 +868,8 @@ void goto_symext::symex_function_call_deref(const expr2tc &expr)
     return;
   }
 
-  // Only a call with a target: one with none is skipped above the same way in
-  // the base case and the inductive step (#9786).
+  // A call with a target is not modelled by the inductive step; a call with
+  // none is skipped the same way in both steps and costs the proof nothing.
   if (
     (k_induction || inductive_step) &&
     !options.get_bool_option("disable-inductive-step"))
