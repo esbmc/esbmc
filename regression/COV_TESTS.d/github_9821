@@ -1,2 +1,5 @@
 regression/python/github_9821
 regression/python/github_9821_subscript
+regression/python/github_9821_update
+regression/python/github_9821_rebound
+regression/python/github_9821_nested

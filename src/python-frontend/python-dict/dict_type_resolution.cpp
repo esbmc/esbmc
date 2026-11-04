@@ -124,31 +124,58 @@ static bool is_empty_dict_init(const nlohmann::json &node)
          node.value("keywords", nlohmann::json::array()).empty();
 }
 
-/// Whether `read` reads a value out of the dict `name`: `name[k]` or
-/// `name.pop(k)`.
-static bool reads_from_dict(const nlohmann::json &read, const std::string &name)
+/// Whether `node` is the Name `name`.
+static bool is_name(const nlohmann::json &node, const std::string &name)
 {
-  const auto names_dict = [&](const nlohmann::json &node) {
-    return node.is_object() && node.value("_type", "") == "Name" &&
-           node.value("id", "") == name;
-  };
-  const std::string kind = read.value("_type", "");
-  if (kind == "Subscript")
-    return names_dict(read.value("value", nlohmann::json())) &&
-           read.value("slice", nlohmann::json()).value("_type", "") != "Slice";
-  if (kind != "Call")
+  return node.is_object() && node.value("_type", "") == "Name" &&
+         node.value("id", "") == name;
+}
+
+/// Whether `node` reads a value out of the dict `name`: `name[k]` or
+/// `name.pop(k)`.
+static bool reads_from_dict(const nlohmann::json &node, const std::string &name)
+{
+  if (!node.is_object())
     return false;
-  const nlohmann::json func = read.value("func", nlohmann::json());
-  return func.value("_type", "") == "Attribute" &&
-         func.value("attr", "") == "pop" &&
-         names_dict(func.value("value", nlohmann::json())) &&
-         read.value("args", nlohmann::json()).size() == 1 &&
-         read.value("keywords", nlohmann::json()).empty();
+  const std::string kind = node.value("_type", "");
+  if (kind == "Subscript")
+    return is_name(node["value"], name) &&
+           node["slice"].value("_type", "") != "Slice";
+  return kind == "Call" && node["func"].value("_type", "") == "Attribute" &&
+         node["func"].value("attr", "") == "pop" &&
+         is_name(node["func"]["value"], name) && node["args"].size() == 1 &&
+         node["keywords"].empty();
+}
+
+/// The Names `name` under `node`, and how many of them, outside a def, class
+/// or lambda, are the dict operand of a subscript or of a `pop` call. The
+/// scan of stores skips those scopes.
+static void count_dict_uses(
+  const nlohmann::json &node,
+  const std::string &name,
+  bool nested,
+  std::size_t &all,
+  std::size_t &indexed)
+{
+  if (!node.is_structured())
+    return;
+  const std::string kind =
+    node.is_object() ? node.value("_type", "") : std::string();
+  if (is_name(node, name))
+    ++all;
+  if (
+    !nested && (kind == "Subscript" ? is_name(node["value"], name)
+                                    : reads_from_dict(node, name)))
+    ++indexed;
+  nested = nested || kind == "FunctionDef" || kind == "AsyncFunctionDef" ||
+           kind == "ClassDef" || kind == "Lambda";
+  for (const auto &child : node)
+    count_dict_uses(child, name, nested, all, indexed);
 }
 
 /// Whether `value` names a variable bound only once, by a read out of the dict
-/// `name`, itself bound only once: storing it back into `name` adds no new
-/// kind of value.
+/// `name`, itself bound only once and otherwise only subscripted or popped:
+/// storing it back into `name` adds no new kind of value.
 static bool reads_back_from(
   const nlohmann::json &ast,
   const nlohmann::json &value,
@@ -163,7 +190,13 @@ static bool reads_back_from(
     return false;
   const nlohmann::json decl = json_utils::find_var_decl(var, "", ast);
   const nlohmann::json *read = json_utils::plain_assigned_value(decl, var);
-  return read && reads_from_dict(*read, name);
+  if (!read || !reads_from_dict(*read, name))
+    return false;
+  // Any other use, such as `name.update(...)` or an alias, can store a value
+  // of another kind, which `var` may then read back.
+  std::size_t all = 0, indexed = 0;
+  count_dict_uses(ast, name, false, all, indexed);
+  return all == indexed + 1;
 }
 
 /// The kind of the literal that the statement `stmt` stores into the dict
