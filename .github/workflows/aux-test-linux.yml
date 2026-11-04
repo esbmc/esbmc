@@ -1,9 +1,3 @@
-# Runs shards of the Linux PR regression from the bundle a pr-bundle build of
-# aux-build-unix.yml exported. Each executor restores the bundle into the same
-# workspace path, checks it against the producer's plan and runtime, runs its
-# CTest selection and publishes a report the summary judges.
-# See docs/ci/linux-regression.md.
-
 on:
   workflow_call:
     inputs:

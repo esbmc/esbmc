@@ -1,6 +1,3 @@
-# Runs scripts/check_python_tests.sh in its own job, for callers that do not
-# run it inside a build job (the parallel Linux PR path and the comparison).
-
 on:
   workflow_call:
 

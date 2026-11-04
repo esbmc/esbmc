@@ -1,8 +1,5 @@
 #!/usr/bin/env bash
-# What a Linux runner needs to run the regression from a bundle it did not
-# build: the tools the tests call and the Python packages the Python frontend
-# and its tests import. scripts/build.sh installs the Python part from here.
-#
+# Runtime of the Linux regression on a runner that did not build ESBMC.
 # Usage: linux-runtime.sh [all|packages|python]
 
 set -euo pipefail

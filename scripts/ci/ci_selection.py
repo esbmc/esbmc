@@ -43,9 +43,8 @@ def anchored(labels):
     return "^(" + "|".join(labels) + ")$"
 
 
-# (module, regex of its suite labels, shards), sized from the PR job's
-# timings (docs/ci/linux-regression.md). The last module has no regex: it
-# takes every other regression test, so a new suite is never left out.
+# (module, regex of its suite labels, shards). The last module takes every other
+# regression test, so a new suite is never left out.
 MODULES = (
     ("numpy", anchored(["numpy/"]), 2),
     ("python", anchored(["python/"]), 2),
