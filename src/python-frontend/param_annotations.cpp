@@ -99,8 +99,10 @@ bool is_none_constant(const nlohmann::json &node)
 }
 
 /// The type a tuple element names: a constant's type, or the `int`, `float`
-/// or `str` annotation of a parameter of @p scope (the innermost enclosing
-/// def, or null) that the def never rebinds. "" otherwise.
+/// or `str` annotation of a parameter or variable that @p scope (the innermost
+/// enclosing def or the module, or null) binds exactly once. "" otherwise.
+/// The variable's assignment must be a statement of the scope's own body: one
+/// under an `if` or `try` may not run, leaving the name unbound.
 std::string
 element_type_name(const nlohmann::json &elt, const nlohmann::json *scope)
 {
@@ -110,17 +112,17 @@ element_type_name(const nlohmann::json &elt, const nlohmann::json *scope)
   const std::string &id = elt["id"].get<std::string>();
   if (json_utils::count_name_bindings(*scope, id) != 1)
     return "";
-  for (const auto &arg : (*scope)["args"]["args"])
-  {
-    if (arg["arg"] != id)
-      continue;
-    const nlohmann::json &annotation =
-      arg.value("annotation", nlohmann::json());
-    const std::string type =
-      is_node(annotation, "Name") ? annotation["id"].get<std::string>() : "";
-    return type == "int" || type == "float" || type == "str" ? type : "";
-  }
-  return "";
+  const nlohmann::json decl = json_utils::find_var_in_function(id, *scope);
+  const nlohmann::json &body = (*scope)["body"];
+  if (
+    !decl.is_object() ||
+    (!decl.contains("arg") &&
+     std::find(body.begin(), body.end(), decl) == body.end()))
+    return "";
+  const nlohmann::json &annotation = decl.value("annotation", nlohmann::json());
+  const std::string type =
+    is_node(annotation, "Name") ? annotation["id"].get<std::string>() : "";
+  return type == "int" || type == "float" || type == "str" ? type : "";
 }
 
 /// A `tuple[T0, ...]` annotation for a tuple literal of constants or typed
@@ -447,8 +449,9 @@ private:
   stored_elem_annotation(const std::string &var, size_t module) const
   {
     std::vector<nlohmann::json> items;
+    const nlohmann::json &module_ast = *modules_[module].read;
     collect_stored_items(
-      modules_[module].read->at("body"), var, module, nullptr, items);
+      module_ast.at("body"), var, module, &module_ast, items);
 
     if (items.empty())
       return nlohmann::json();

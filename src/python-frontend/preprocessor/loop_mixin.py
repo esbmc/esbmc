@@ -758,10 +758,15 @@ class LoopMixin:
             ast.fix_missing_locations(stmt)
         return unrolled
 
-    def _with_manager_class(self, func_name):
-        """The class a `with func_name(...)` manager is annotated with: the
-        class a module function is annotated to return, else the callee."""
-        return getattr(self, "factory_classes", {}).get(func_name, func_name)
+    def _with_manager_class(self, ctx_expr):
+        """The class of this module that a `with NAME(...)` manager is: NAME
+        itself, or the class a module function NAME is annotated to return.
+        None otherwise, e.g. for a function imported from another module."""
+        if not (isinstance(ctx_expr, ast.Call) and isinstance(ctx_expr.func, ast.Name)):
+            return None
+        name = ctx_expr.func.id
+        name = getattr(self, "factory_classes", {}).get(name, name)
+        return name if name in getattr(self, "module_class_names", set()) else None
 
     @staticmethod
     def _scan_factory_classes(module, class_names):
@@ -801,8 +806,8 @@ class LoopMixin:
             self._with_counter += 1
             ctx_expr = item.context_expr
 
-            if isinstance(ctx_expr, ast.Call) and isinstance(ctx_expr.func, ast.Name):
-                class_name = self._with_manager_class(ctx_expr.func.id)
+            class_name = self._with_manager_class(ctx_expr)
+            if class_name is not None:
                 type_ann = ast.Name(id=class_name, ctx=ast.Load())
                 mgr_assign = ast.AnnAssign(
                     target=ast.Name(id=mgr_name, ctx=ast.Store()),
@@ -869,8 +874,7 @@ class LoopMixin:
         # falsy re-raises via bare `raise`.  Managers without a tracked class
         # (e.g. `open(...)`) fall back to today's unwrapped lowering.
         wrap = (hasattr(self, "_classes_with_exit") and len(node.items) > 0 and all(
-            isinstance(item.context_expr, ast.Call) and isinstance(item.context_expr.func, ast.Name)
-            and self._with_manager_class(item.context_expr.func.id) in self._classes_with_exit
+            self._with_manager_class(item.context_expr) in self._classes_with_exit
             for item in node.items))
 
         if wrap:
@@ -1848,7 +1852,8 @@ class LoopMixin:
     # the solver as a mismatched bitvector width, a tuple member emits a bare
     # inner `tuple` -- the very #5444 erosion this annotation avoids -- and a
     # bool member mismatches the tuple AST, so anything outside this set leaves
-    # the literal unannotated and the unpack refused.
+    # the literal unannotated. The converter then reads each element at the
+    # type it was pushed with, or refuses the unpack for a bool member.
     _SIZABLE_TUPLE_MEMBER_TYPES = frozenset({"int", "float"})
 
     def _literal_tuple_annotation_node(self, iterable_node):
@@ -2773,6 +2778,8 @@ class LoopMixin:
 
     def _infer_type_from_call(self, call_node):
         """Infer type from function call nodes"""
+        if self._copied_dict_name(call_node) is not None:
+            return "dict"
         if not isinstance(call_node.func, ast.Name):
             return "Any"
 
@@ -2907,9 +2914,38 @@ class LoopMixin:
             target_copy = copy.deepcopy(target_node)
             individual_assign = self._create_individual_assignment(target_copy, staged, source_node)
             self._update_variable_types_simple(target_copy, value_node)
+            if isinstance(target_copy, ast.Name):
+                self._update_name_target_assignment_metadata(target_copy.id, individual_assign)
             assignments.append(individual_assign)
 
         return assignments
+
+    def _scan_subscript_stored_values(self, module):
+        """Record the values each `name[key] = value` in `module` stores."""
+        self.subscript_stored_values = {}
+        for node in ast.walk(module):
+            if isinstance(node, ast.Assign):
+                for target in node.targets:
+                    if isinstance(target, ast.Subscript) and isinstance(target.value, ast.Name):
+                        self.subscript_stored_values.setdefault(target.value.id,
+                                                                []).append(node.value)
+
+    def _create_name_annotation(self, name, value):
+        """Annotation for `name` bound to `value`.
+
+        A dict literal's value type is dropped when the module stores a value
+        of another known type into `name`: the views of the dict would read
+        that value with the literal's type (#9753).
+        """
+        annotation = self._create_annotation_node_from_value(value)
+        if not (isinstance(value, ast.Dict) and isinstance(annotation, ast.Subscript)):
+            return annotation
+        value_type = ast.dump(annotation.slice.elts[1])
+        for stored in self.subscript_stored_values.get(name, []):
+            stored_type = self._infer_dict_value_annotation(stored)
+            if stored_type is not None and ast.dump(stored_type) != value_type:
+                return ast.Name(id="dict", ctx=ast.Load())
+        return annotation
 
     def _create_annotation_node_from_value(self, value):
         """Create an annotation AST node from a value node for storage"""
@@ -2920,8 +2956,29 @@ class LoopMixin:
         if isinstance(value, ast.Subscript):
             return self._create_subscript_annotation(value)
         if isinstance(value, ast.Call):
-            return self._create_annotation_from_call(value)
+            return self._create_annotation_from_call(value) or self._dict_copy_annotation(value)
         return None
+
+    def _copied_dict_name(self, call_node):
+        """The receiver of `d.copy()` when `d` is known to be a dict, else None.
+
+        A dict literal with heterogeneous keys or values is iterated per key,
+        which a copy does not inherit, so its copy is not treated as a dict.
+        """
+        func = call_node.func
+        if not (isinstance(func, ast.Attribute) and func.attr == "copy" and isinstance(
+                func.value, ast.Name) and not call_node.args and not call_node.keywords):
+            return None
+        name = func.value.id
+        if name in self.het_dict_literals or name in self.het_value_dict_literals:
+            return None
+        return name if self._is_known_dict_name(name) else None
+
+    def _dict_copy_annotation(self, call_node):
+        """The receiver's annotation for `d.copy()` on a dict `d`, else None."""
+        name = self._copied_dict_name(call_node)
+        ann = self.variable_annotations.get(name)
+        return copy.deepcopy(ann) if name is not None and ann is not None else None
 
     # Element/key/value types covered by the monomorphic builders in
     # models/nondet.py.  A type outside these is rejected rather than silently
@@ -3320,6 +3377,35 @@ class LoopMixin:
         typed_elts = [(self._infer_constant_type(v), v) for v in dict_node.values]
         return self._unroll_het_for(node, typed_elts)
 
+    def _fixed_literal_type(self, node):
+        """Type name of a number or str expression whose type cannot vary.
+
+        A literal, a name bound once in the module to a literal, or ``+``,
+        ``-``, ``*`` and unary ``-`` over such numbers; else None.
+        """
+        if isinstance(node, ast.Constant):
+            return type(node.value).__name__ if isinstance(node.value, (int, float, str)) else None
+        if isinstance(node, ast.UnaryOp) and isinstance(node.op, (ast.UAdd, ast.USub)):
+            operand = self._fixed_literal_type(node.operand)
+            return "int" if operand == "bool" else operand if operand in ("int", "float") else None
+        if isinstance(node, ast.Name) and node.id in self.once_bound_names:
+            return self._once_bound_literal_type(node.id)
+        if isinstance(node, ast.BinOp) and isinstance(node.op, (ast.Add, ast.Sub, ast.Mult)):
+            operands = {self._fixed_literal_type(node.left), self._fixed_literal_type(node.right)}
+            if operands <= {"int", "float"}:
+                return "float" if "float" in operands else "int"
+        return None
+
+    def _once_bound_literal_type(self, name):
+        """Type of the number or str that the module binds `name` to, else None."""
+        for stmt in self.module_statements.values():
+            target = (stmt.targets[0] if isinstance(stmt, ast.Assign) and len(stmt.targets) == 1
+                      else stmt.target if isinstance(stmt, ast.AnnAssign) else None)
+            if isinstance(target, ast.Name) and target.id == name and isinstance(
+                    stmt.value, ast.Constant):
+                return self._fixed_literal_type(stmt.value)
+        return None
+
     def _infer_dict_key_type(self, key_node):
         """Infer key type from dict literal's first key"""
         if isinstance(key_node, ast.Constant):
@@ -3327,6 +3413,8 @@ class LoopMixin:
                 return "str"
             if isinstance(key_node.value, int):
                 return "int"
+        if self._fixed_literal_type(key_node) in ("int", "str"):
+            return self._fixed_literal_type(key_node)
         if isinstance(key_node, ast.Tuple):
             return "tuple"
         return "Any"
@@ -3340,7 +3428,8 @@ class LoopMixin:
         if isinstance(value_node, ast.Constant):
             const_type = type(value_node.value).__name__
             return ast.Name(id=const_type, ctx=ast.Load())
-        return None
+        fixed = self._fixed_literal_type(value_node)
+        return ast.Name(id=fixed, ctx=ast.Load()) if fixed else None
 
     def _create_subscript_annotation(self, subscript_node):
         """Extract annotation from subscript operation (e.g., d["key"])"""

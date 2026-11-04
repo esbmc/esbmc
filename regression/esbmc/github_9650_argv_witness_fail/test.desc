@@ -1,0 +1,6 @@
+CORE
+main.c
+--witness-output-yaml -
+^VERIFICATION FAILED$
+type: "target"
+(?s)\A(?!.*\n *line: 0$)
