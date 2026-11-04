@@ -1839,6 +1839,8 @@ void goto_convertt::do_function_call_symbol(
 
     code_assignt assignment(lhs, rhs);
     assignment.location() = function.location();
+    // A YAML witness records what the call returned (#9881).
+    assignment.location().set("#nondet_call", true);
     copy(assignment, ASSIGN, dest);
   }
   else if (base_name == "exit")

@@ -947,10 +947,8 @@ void check_replace_invalid_assignment(std::string &assignment)
     assignment.clear();
 }
 
-std::string get_formated_assignment(
-  const namespacet &ns,
-  const goto_trace_stept &step,
-  bool yaml)
+std::string
+get_formated_assignment(const namespacet &ns, const goto_trace_stept &step)
 {
   std::string assignment = "";
   if (
@@ -961,8 +959,7 @@ std::string get_formated_assignment(
     assignment += from_expr(ns, "", step.lhs, presentationt::WITNESS);
     assignment += " == ";
     assignment += from_expr(ns, "", step.value, presentationt::WITNESS);
-    if (!yaml)
-      assignment += ";";
+    assignment += ";";
 
     std::replace(assignment.begin(), assignment.end(), '$', '_');
     check_replace_invalid_assignment(assignment);

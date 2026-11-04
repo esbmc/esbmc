@@ -219,10 +219,8 @@ bool is_valid_witness_step(const namespacet &ns, const goto_trace_stept &step);
  * will return the lhs and rhs formated in a way expected
  * by the assumption field.
  */
-std::string get_formated_assignment(
-  const namespacet &ns,
-  const goto_trace_stept &step,
-  bool yaml);
+std::string
+get_formated_assignment(const namespacet &ns, const goto_trace_stept &step);
 
 /**
  * Clear an assumption a witness validator would reject: one naming an

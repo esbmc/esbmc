@@ -57,6 +57,17 @@ public:
   {
     this->function(function);
   }
+
+  /// The closing ')' of the call this location starts, nil if it starts none.
+  const locationt &call_rparen() const
+  {
+    return static_cast<const locationt &>(find("#call_rparen"));
+  }
+
+  locationt &call_rparen()
+  {
+    return static_cast<locationt &>(add("#call_rparen"));
+  }
 };
 
 std::ostream &operator<<(std::ostream &out, const locationt &location);

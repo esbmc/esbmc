@@ -2763,6 +2763,10 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
       call.arguments().push_back(single_arg);
     }
 
+    // A YAML witness function_return waypoint names the call by its ')'
+    // (#9881), where a CallExpr ends.
+    get_final_location_from_stmt(function_call, location.call_rparen());
+
     new_expr = call;
     break;
   }

@@ -1,5 +1,6 @@
 #include <cassert>
 #include <goto-symex/trace/build_goto_trace.h>
+#include <goto-symex/equation/slice.h>
 #include <goto-symex/state/renaming.h>
 #include <goto-symex/witness/witnesses.h>
 #include <solvers/smt/smt_conv.h>
@@ -286,6 +287,28 @@ static void record_violated_reads(
   collect_nondet_reads(smt_conv, step.pc->guard, ssa_cond, step.nondet_reads);
 }
 
+/* Record what a __VERIFIER_nondet_*() call returned on this path: the nondet
+ * symbol its `lhs = NONDET` lowering assigns, not the whole lhs object. */
+static void record_nondet_return(
+  smt_convt &smt_conv,
+  const symex_target_equationt::SSA_stept &step,
+  std::list<std::pair<locationt, expr2tc>> &out)
+{
+  const locationt &loc = step.source.pc->location;
+  if (
+    !step.is_assignment() || step.ignore || !loc.get_bool("#nondet_call") ||
+    loc.call_rparen().is_nil() || !smt_conv.l_get(step.guard).is_true())
+    return;
+
+  const expr2tc nondet = symex_slicet::get_nondet_symbol(step.rhs);
+  if (!nondet || !is_symbol2t(nondet))
+    return;
+
+  expr2tc value = smt_conv.get(nondet);
+  if (is_constant_expr(value))
+    out.emplace_back(loc.call_rparen(), value);
+}
+
 /* Tracks which SSA symbols were computed from constants alone. A branch whose
  * condition reads only such symbols is fixed by the program text, so a witness
  * need not name its direction. */
@@ -333,6 +356,7 @@ void build_goto_trace(
 {
   unsigned step_nr = 0;
   input_trackert inputs;
+  std::list<std::pair<locationt, expr2tc>> nondet_returns;
 
   // l_get() memoises against the current model internally (the cache is
   // cleared on every solve / context change), so the thousands of repeated
@@ -341,6 +365,7 @@ void build_goto_trace(
   for (auto const &SSA_step : target.SSA_steps)
   {
     inputs.note_assignment(SSA_step);
+    record_nondet_return(smt_conv, SSA_step, nondet_returns);
 
     // Hidden steps are internal SSA bookkeeping (e.g. phi-merge nodes at
     // control-flow joins). They carry a synthesised value and a source
@@ -427,6 +452,7 @@ void build_goto_trace(
       goto_trace_step.guard = !smt_conv.l_get(SSA_step.cond).is_false();
 
     inputs.annotate_branch(SSA_step, goto_trace_step);
+    goto_trace_step.nondet_returns.swap(nondet_returns);
 
     goto_trace.steps.push_back(goto_trace_step);
   }
