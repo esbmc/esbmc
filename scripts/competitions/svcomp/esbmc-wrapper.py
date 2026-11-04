@@ -151,6 +151,26 @@ def violation_site(the_output):
   return os.path.basename(site.group(1)), site.group(2)
 
 
+ROW_FILE = re.compile(r"^(\S+), function ")
+ROW_LINE = re.compile(r"\[[^\]]*\]\s+line (\d+)\b")
+
+
+def failed_sites(the_output):
+  """{(file, line)} of every FAILED row of a --multi-property results table."""
+  sites = set()
+  current = None
+  for line in the_output.splitlines():
+    header = ROW_FILE.match(line)
+    if header:
+      current = os.path.basename(header.group(1))
+      continue
+    row = PROPERTY_ROW.match(line)
+    if current and row and row.group(1) == "FAILED":
+      at = ROW_LINE.search(line)
+      sites.add((current, at.group(1) if at else None))
+  return sites
+
+
 MEMORY_LEAK = "dereference failure: forgotten memory"
 UNREACHABILITY_INTRINSIC = "reachability: unreachable code reached"
 
@@ -528,6 +548,9 @@ MIN_RERUN_BUDGET = 30
 def confirmed_by_integer_encoding(esbmc_command_line, the_output, prop, elapsed):
   """Does a --ir re-run violate the same property at the same file and line?
 
+  The re-run checks every property, so it confirms the first run's site even
+  when it would have stopped at another violation first (#9803).
+
   A first run that leaves too little of the budget for the re-run is not
   confirmed.
   """
@@ -537,8 +560,10 @@ def confirmed_by_integer_encoding(esbmc_command_line, the_output, prop, elapsed)
   site = violation_site(the_output)
   if site is None:
     return False
-  rerun = run(esbmc_command_line + "--ir --z3 ", budget).decode()
-  return parse_result(rerun, prop) == Result.fail_python and violation_site(rerun) == site
+  rerun = run(esbmc_command_line + "--ir --z3 --multi-property ", budget).decode()
+  if parse_result(rerun, prop) != Result.fail_python:
+    return False
+  return violation_site(rerun) == site or site in failed_sites(rerun)
 
 
 def verify(strat, prop, arch, benchmark, concurrency, dargs, esbmc_ci, witness_path, validate_mode):
