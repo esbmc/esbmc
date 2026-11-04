@@ -2965,13 +2965,18 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     exprt if_expr("if", t);
     if_expr.copy_to_operands(cond, then, else_expr);
 
-    // Record the column of the ? token on the expression location so that
-    // goto_sideeffects can propagate it to the IF instruction when lowering
-    // this ternary for branching waypoints.
+    // A branching waypoint for a ternary points at its ?, so locate the
+    // expression there: goto_sideeffects copies this location to the IF
+    // instruction it lowers the ternary to. Violation witnesses use
+    // "#ternary" to emit no such waypoint (#9883).
     clang::PresumedLoc qLoc;
     get_presumed_location(ternary_if.getQuestionLoc(), qLoc);
     if (!qLoc.isInvalid())
+    {
+      location.set_line(qLoc.getLine());
       location.set_column(qLoc.getColumn());
+    }
+    location.set("#ternary", true);
 
     new_expr = if_expr;
     break;
@@ -4149,7 +4154,9 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
   }
   }
 
-  new_expr.location() = location;
+  // A pass-through arm such as ParenExpr keeps a ternary's ? location.
+  if (!new_expr.location().get_bool("#ternary"))
+    new_expr.location() = location;
   return false;
 }
 
