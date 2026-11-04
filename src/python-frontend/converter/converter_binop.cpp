@@ -423,13 +423,20 @@ nlohmann::json ast_node(const char *type, const nlohmann::json &loc)
   return node;
 }
 
-// The f-string part for one %s/%d/%i/%f conversion of `value`.
-std::optional<nlohmann::json>
-formatted_part(char conversion, nlohmann::json value, const typet &type)
+// The f-string part for one %s/%d/%i/%f conversion of `value`; `precision`
+// is that of a `%.<digits>f`, or -1 when the spec has none.
+std::optional<nlohmann::json> formatted_part(
+  char conversion,
+  nlohmann::json value,
+  const typet &type,
+  int precision)
 {
+  if (precision >= 0 && conversion != 'f')
+    return std::nullopt;
   if (conversion == 'f')
   {
-    if (!type.is_floatbv())
+    // The f-string lowering renders at most 15 fractional digits.
+    if (!type.is_floatbv() || precision > 15)
       return std::nullopt;
   }
   else if (conversion == 'd' || conversion == 'i')
@@ -452,7 +459,8 @@ formatted_part(char conversion, nlohmann::json value, const typet &type)
   if (conversion == 'f')
   {
     part["format_spec"] = ast_node("Constant", value);
-    part["format_spec"]["value"] = ".6f";
+    part["format_spec"]["value"] =
+      "." + std::to_string(precision >= 0 ? precision : 6) + "f";
   }
   return part;
 }
@@ -498,8 +506,22 @@ bool is_literal_percent_format(const nlohmann::json &element, const exprt &lhs)
          left["value"].is_string() && type_utils::is_string_type(lhs.type());
 }
 
+// The precision of a `.<digits>` that follows fmt[i], advancing `i` past it,
+// or -1 when there is none. `%.f` has precision 0.
+int percent_precision(const std::string &fmt, size_t &i)
+{
+  if (i + 1 >= fmt.size() || fmt[i + 1] != '.')
+    return -1;
+  ++i;
+  int precision = 0;
+  while (i + 1 < fmt.size() &&
+         std::isdigit(static_cast<unsigned char>(fmt[i + 1])))
+    precision = std::min(100, precision * 10 + (fmt[++i] - '0'));
+  return precision;
+}
+
 // `"id %d" % i` with a non-constant `i` as the f-string `f"id {int(i)}"`
-// (#8224). Only flag-free %s/%d/%i/%f/%% are rewritten.
+// (#8224). Only flag-free %s/%d/%i/%f/%.<digits>f/%% are rewritten.
 std::optional<nlohmann::json> percent_format_as_fstring(
   const nlohmann::json &left,
   const std::vector<nlohmann::json> &args,
@@ -528,8 +550,9 @@ std::optional<nlohmann::json> percent_format_as_fstring(
       literal.push_back(fmt[i]);
       continue;
     }
+    const int precision = percent_precision(fmt, i);
     const char c = i + 1 < fmt.size() ? fmt[++i] : '\0';
-    if (c == '%')
+    if (c == '%' && precision < 0)
     {
       literal.push_back('%');
       continue;
@@ -537,7 +560,7 @@ std::optional<nlohmann::json> percent_format_as_fstring(
     if (argi >= args.size())
       return std::nullopt;
     std::optional<nlohmann::json> part =
-      formatted_part(c, args[argi], arg_types[argi]);
+      formatted_part(c, args[argi], arg_types[argi], precision);
     if (!part)
       return std::nullopt;
     ++argi;
