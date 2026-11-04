@@ -65,19 +65,6 @@ bool contains_cpp_throw(const exprt &expr)
   return false;
 }
 
-// The raise a condition always ends in: a cpp-throw, possibly under `not` or a
-// bool cast. Null when evaluating @p cond does not always raise.
-const exprt *raised_condition(const exprt &cond)
-{
-  if (cond.statement() == "cpp-throw")
-    return &cond;
-  if (
-    (cond.id() == "not" || cond.id() == "typecast") &&
-    cond.operands().size() == 1)
-    return raised_condition(cond.op0());
-  return nullptr;
-}
-
 codet raise_statement(const exprt &raise, const locationt &location)
 {
   codet code("expression");
@@ -99,7 +86,7 @@ codet assign_or_raise(
   const exprt &value,
   const locationt &location)
 {
-  if (const exprt *raise = raised_condition(value))
+  if (const exprt *raise = python_frontend::raised_condition(value))
     return raise_statement(*raise, location);
   code_assignt assign(lhs, value);
   if (is_untyped_nondet(value))
@@ -9097,7 +9084,7 @@ codet build_conditional_code(
   const locationt &location)
 {
   // A test that raises leaves neither branch nor loop to run (#9092).
-  if (const exprt *raise = raised_condition(cond))
+  if (const exprt *raise = python_frontend::raised_condition(cond))
   {
     code_blockt raised = cond_prelude;
     raised.copy_to_operands(raise_statement(*raise, location));
@@ -9441,7 +9428,7 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
       // Start from the leftmost operand and carry the running result forward.
       // An operand that raises (#9838) is emitted as the raise statement.
       const exprt first = get_expr(operands[0]);
-      const exprt *first_raise = raised_condition(first);
+      const exprt *first_raise = python_frontend::raised_condition(first);
       cond = first_raise ? false_exprt() : to_bool_condition(first, operands[0]);
       current_lhs = saved_lhs;
 
@@ -9474,7 +9461,7 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
         current_lhs = nullptr;
         // Build the next operand only in the branch where it is still needed.
         const exprt next = get_expr(operands[i]);
-        const exprt *raise = raised_condition(next);
+        const exprt *raise = python_frontend::raised_condition(next);
         const exprt next_operand =
           raise ? exprt() : to_bool_condition(next, operands[i]);
         current_lhs = saved_lhs;

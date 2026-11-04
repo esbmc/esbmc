@@ -38,6 +38,14 @@ def tested_first(c) -> int:
     return 2
 
 
+def assigned_not(c) -> int:
+    try:
+        x = False or not c.limit
+    except AttributeError:
+        return 1
+    return 2
+
+
 c = C()
 assert assigned(c, False) == 1
 assert assigned(c, True) == 2
@@ -45,3 +53,4 @@ assert tested(c, True) == 1
 assert tested(c, False) == 2
 assert assigned_first(c) == 1
 assert tested_first(c) == 1
+assert assigned_not(c) == 1

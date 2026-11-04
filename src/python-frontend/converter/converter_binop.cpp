@@ -840,12 +840,11 @@ exprt python_converter::get_boolop_operand(
   exprt operand_expr = get_expr(operand);
   // A later operand that raises (#9838) is its raise statement, run only
   // where the operand is evaluated.
-  if (
-    operand_expr.statement() == "cpp-throw" && effects.size() > 1 &&
-    can_emit_operand_statement())
+  const exprt *raised = python_frontend::raised_condition(operand_expr);
+  if (raised && effects.size() > 1 && can_emit_operand_statement())
   {
     codet raise("expression");
-    raise.copy_to_operands(operand_expr);
+    raise.copy_to_operands(*raised);
     raise.location() = get_location_from_decl(operand);
     current_block->copy_to_operands(raise);
     operand_expr = nil_exprt();
@@ -888,6 +887,14 @@ exprt python_converter::lower_short_circuit_boolop(
   const auto planted = [](const code_blockt &b) {
     return !b.operands().empty();
   };
+  const auto plants_raise = [](const code_blockt &b) {
+    return std::any_of(
+      b.operands().begin(), b.operands().end(), [](const exprt &statement) {
+        return statement.statement() == "expression" &&
+               statement.operands().size() == 1 &&
+               statement.op0().statement() == "cpp-throw";
+      });
+  };
   if (std::none_of(effects.begin(), effects.end(), planted))
     return nil_exprt();
 
@@ -902,6 +909,10 @@ exprt python_converter::lower_short_circuit_boolop(
     asserted_and || !plain_cond || !can_emit_runtime_guard() ||
     !std::all_of(operands.begin(), operands.end(), same_type))
   {
+    // Unguarded, a planted raise would fire where Python short-circuits.
+    if (std::any_of(effects.begin(), effects.end(), plants_raise))
+      throw std::runtime_error(
+        "an and/or operand that raises is not supported in this context");
     for (const code_blockt &block : effects)
       for (const exprt &statement : block.operands())
         current_block->copy_to_operands(statement);
@@ -1050,11 +1061,12 @@ exprt python_converter::get_logical_operator_expr(const nlohmann::json &element)
   for (const auto &operand : element["values"])
   {
     exprt operand_expr = get_boolop_operand(operand, operand_effects);
-    if (operand_expr.statement() == "cpp-throw" && operand_effects.size() == 1)
+    const exprt *raised = python_frontend::raised_condition(operand_expr);
+    if (raised && operand_effects.size() == 1)
     {
       is_converting_rhs = old_is_converting_rhs;
       in_lazy_operand_ = old_in_lazy_operand;
-      return operand_expr;
+      return *raised;
     }
     // A planted raise: the operand's value is never read.
     if (operand_expr.is_nil())
