@@ -1,4 +1,4 @@
 CORE
 main.py
 
-^ERROR: type\(\) of a value whose class is not known statically
+^ERROR: function call: argument ".*@C@Schema@F@lam1@self\$param" type mismatch
