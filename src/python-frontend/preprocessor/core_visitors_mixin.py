@@ -1,6 +1,8 @@
 import ast
 import copy
 import keyword
+
+from preprocessor.bound_method_dispatch import _scope_nodes
 # pylint: disable=too-many-locals,too-many-branches,too-many-statements,too-many-return-statements
 # pylint: disable=too-many-nested-blocks,too-many-boolean-expressions,no-else-return,no-else-raise
 # pylint: disable=import-outside-toplevel
@@ -750,7 +752,12 @@ class CoreVisitorsMixin:
         `obj` gave at the binding (#8439). Returns the statements replacing
         the binding, or None if it stays."""
         captures = self._captures_receiver(target, value)
-        if not (resolvable and isinstance(target, ast.Name) and isinstance(value, ast.Attribute) and
+        # A method does not see the class body's names, so a binding there
+        # would reach calls that do not refer to it.
+        in_class_body = bool(self._bound_method_scopes) and isinstance(
+            self._bound_method_scopes[-1], ast.ClassDef)
+        if not (resolvable and isinstance(target, ast.Name) and isinstance(value, ast.Attribute)
+                and target.id not in self.unscoped_binding_names and not in_class_body and
                 (captures or isinstance(value.value, ast.Name))
                 and self._needs_no_method_value(target, value)):
             if isinstance(target, ast.Name):
@@ -2215,6 +2222,31 @@ class CoreVisitorsMixin:
         walk(node.body)
         return bound - declared
 
+    def _enter_bound_method_scope(self, node):
+        """Drop the bound method recorded for the name the def or class `node`
+        rebinds, and hide those recorded for the names it binds in its own
+        scope, less those it declares global or nonlocal: a call of a local
+        does not reach them. Returns the state `_exit_bound_method_scope`
+        restores."""
+        self.bound_method_vars.pop(node.name, None)
+        nodes = list(_scope_nodes(node))
+        declared = {
+            name
+            for n in nodes if isinstance(n, (ast.Global, ast.Nonlocal)) for name in n.names
+        }
+        local_names = {name for n in nodes for name in self._names_bound_by(n)} - declared
+        saved = {
+            name: self.bound_method_vars.pop(name)
+            for name in local_names if name in self.bound_method_vars
+        }
+        self._bound_method_scopes.append(node)
+        return local_names, saved
+
+    def _exit_bound_method_scope(self, state):
+        """Drop the bound methods recorded for locals of the scope being left."""
+        self._bound_method_scopes.pop()
+        self._restore_shadowed_literals(self.bound_method_vars, *state)
+
     @staticmethod
     def _restore_shadowed_literals(store, names, saved):
         """Undo inner-scope rebindings of `names`, keeping other changes."""
@@ -2255,6 +2287,7 @@ class CoreVisitorsMixin:
         self._assignment_call_origins.clear()
         saved_eq_only = set(self._eq_only_items_view_targets)
         self._eq_only_items_view_targets = self._scan_eq_only_items_view_targets(node.body)
+        bound_method_scope = self._enter_bound_method_scope(node)
         saved_vararg_defs = self._enter_vararg_scope(node)
         saved_builtin_shadows = self._enter_builtin_shadow_scope(node)
         try:
@@ -2300,4 +2333,5 @@ class CoreVisitorsMixin:
             self._assignment_call_origins = saved_call_origins
             self._eq_only_items_view_targets = saved_eq_only
             self._builtin_shadow_names = saved_builtin_shadows
+            self._exit_bound_method_scope(bound_method_scope)
             self._exit_vararg_scope(node, saved_vararg_defs)

@@ -2,6 +2,8 @@ import ast
 import builtins
 import copy
 from collections import Counter, defaultdict
+
+from preprocessor.bound_method_dispatch import _scope_nodes
 # pylint: disable=too-many-boolean-expressions
 
 
@@ -197,7 +199,9 @@ class ClassContextMixin:
         self._record_exit_suppresses_all(node)
         self._record_class_with_exit(node)
         self._class_stack.append(node)
+        bound_method_scope = self._enter_bound_method_scope(node)
         self.generic_visit(node)
+        self._exit_bound_method_scope(bound_method_scope)
         self._class_stack.pop()
 
         self.current_class_name = old_class_name
@@ -1082,6 +1086,35 @@ class ClassContextMixin:
                      for name in ClassContextMixin._names_bound_by(n)))
             for scope in (module, *(n for n in ast.walk(module) if isinstance(n, ast.FunctionDef)))
         }
+
+    @staticmethod
+    def _unscoped_binding_names(module):
+        """Names a call may not resolve to a bound method recorded elsewhere.
+
+        The visit scopes a def or class but not a lambda or comprehension, so
+        this holds the names one of those binds and calls. It also holds a
+        name a def declares global or nonlocal and that is bound more than
+        once, as the binding a call sees then depends on the order defs run.
+        """
+        inner = (ast.Lambda, ast.ListComp, ast.SetComp, ast.DictComp, ast.GeneratorExp)
+        names = set()
+        declared = set()
+        bindings = Counter()
+        for node in ast.walk(module):
+            if isinstance(node, inner):
+                called = {
+                    n.func.id
+                    for n in ast.walk(node)
+                    if isinstance(n, ast.Call) and isinstance(n.func, ast.Name)
+                }
+                names.update(
+                    called.intersection(name for n in _scope_nodes(node)
+                                        for name in ClassContextMixin._names_bound_by(n)))
+            elif isinstance(node, (ast.Global, ast.Nonlocal)):
+                declared.update(node.names)
+            else:
+                bindings.update(ClassContextMixin._names_bound_by(node))
+        return names | {name for name in declared if bindings[name] > 1}
 
     def _scan_fixed_receivers(self, module):
         """Map each `o` of a top-level `o = C(...)` to the methods `C` defines,
