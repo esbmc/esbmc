@@ -8,7 +8,10 @@
 #include <irep2/irep2_type.h>
 #include <util/lang/c_types.h>
 #include <util/irep/std_expr.h>
+#include <util/base/yaml_parser.h>
+#include <util/arith/mp_arith.h>
 
+#include <algorithm>
 #include <map>
 #include <memory>
 #include <unordered_map>
@@ -337,7 +340,8 @@ bool recognize_eca_main_loop(
   const loopst &loop,
   expr2tc &input_arg,
   std::vector<BigInt> &valid_inputs,
-  irep_idt &callee_name)
+  irep_idt &callee_name,
+  std::vector<expr2tc> &result_writes)
 {
   // Use the effective loop head — skips ASSUMEs etc. that
   // --interval-analysis inserts at the back-edge target. See
@@ -371,6 +375,16 @@ bool recognize_eca_main_loop(
         input_sym = a.target;
         continue;
       }
+      // A call result read through a temporary, as `int input = f();` and
+      // witness validation produce: `tmp = NONDET; input = tmp`.
+      if (
+        is_symbol2t(a.target) && is_symbol2t(a.source) &&
+        !is_nil_expr(input_sym) &&
+        to_symbol2t(a.source).thename == to_symbol2t(input_sym).thename)
+      {
+        input_sym = a.target;
+        continue;
+      }
       return false;
     }
     if (
@@ -391,6 +405,8 @@ bool recognize_eca_main_loop(
       if (next == back || !next->is_return())
         return false;
       auto tgt = it->targets.front();
+      while (tgt != back && tgt->type == DECL)
+        ++tgt;
       if (tgt == back || !tgt->is_function_call())
         return false;
       const code_function_call2t &call = to_code_function_call2t(tgt->code);
@@ -408,15 +424,22 @@ bool recognize_eca_main_loop(
         to_symbol2t(arg).thename != to_symbol2t(input_sym).thename)
         return false;
       callee = to_symbol2t(call.function).thename;
+      if (is_symbol2t(call.ret))
+        result_writes.push_back(call.ret);
       it = std::next(tgt);
-      // The remainder of the body must be DEAD/LOCATION/SKIP only.
-      while (it != back)
+      // The remainder of the body must be DEAD/LOCATION/SKIP only, plus
+      // the copy of a call result kept in a temporary (`output = tmp`).
+      for (; it != back; ++it)
       {
         if (
-          !it->is_skip() && it->type != LOCATION && it->type != DEAD &&
-          it->type != DECL)
+          it->is_skip() || it->type == LOCATION || it->type == DEAD ||
+          it->type == DECL)
+          continue;
+        if (
+          !it->is_assign() || !is_symbol2t(call.ret) ||
+          to_code_assign2t(it->code).source != call.ret)
           return false;
-        ++it;
+        result_writes.push_back(to_code_assign2t(it->code).target);
       }
       break;
     }
@@ -613,12 +636,28 @@ bool check_period_1_fixpoint(
   return is_sat(formula, options, ns);
 }
 
+/// The check never reads the witness, so a validator may trust it only for a
+/// witness that does nothing but name @p head as the cycle; any other witness
+/// is left to symex, which applies it.
+bool witness_is_bare_cycle_at(const optionst &options, const locationt &head)
+{
+  const auto &wps = yaml_parser::get_waypoints(options.get_option("witness"));
+  return !wps.empty() &&
+         std::all_of(wps.begin(), wps.end(), [&](const waypoint &wp) {
+           return wp.type == waypoint::assumption &&
+                  wp.action == waypoint::cycle &&
+                  (wp.value == "1" || wp.value == "true") &&
+                  integer2string(wp.line) == head.get_line().as_string();
+         });
+}
+
 } // namespace
 
 tvt try_prove_non_termination_by_recurrent_set(
   goto_functionst &goto_functions,
   optionst &options,
-  const namespacet &ns)
+  const namespacet &ns,
+  locationt &loop_location)
 {
   // MVP scope: only the eca-rers2012 finite-state-machine shape. Each
   // expected-false eca benchmark wraps an input-validation while(1)
@@ -642,7 +681,14 @@ tvt try_prove_non_termination_by_recurrent_set(
       expr2tc input_arg;
       std::vector<BigInt> valid_inputs;
       irep_idt callee_name;
-      if (!recognize_eca_main_loop(loop, input_arg, valid_inputs, callee_name))
+      std::vector<expr2tc> result_writes;
+      if (!recognize_eca_main_loop(
+            loop, input_arg, valid_inputs, callee_name, result_writes))
+        continue;
+      const locationt &head = loop.get_original_loop_head()->location;
+      if (
+        options.get_bool_option("validate-violation-witness") &&
+        !witness_is_bare_cycle_at(options, head))
         continue;
       auto callee_it = goto_functions.function_map.find(callee_name);
       if (callee_it == goto_functions.function_map.end())
@@ -661,6 +707,17 @@ tvt try_prove_non_termination_by_recurrent_set(
       std::vector<expr2tc> branch_conds;
       if (!collect_callee_branch_guards(callee_it->second, branch_conds))
         continue;
+      // A call result stored where the guards read it changes the state the
+      // fall-through left alone, so the next iteration differs.
+      std::unordered_map<irep_idt, expr2tc, irep_id_hash> guard_reads;
+      for (const expr2tc &c : branch_conds)
+        collect_free_symbols(c, guard_reads);
+      if (
+        std::any_of(
+          result_writes.begin(), result_writes.end(), [&](const expr2tc &w) {
+            return guard_reads.count(to_symbol2t(w).thename);
+          }))
+        continue;
       std::unordered_set<irep_idt, irep_id_hash> callee_writes;
       collect_writes(callee_it->second, callee_writes);
       if (
@@ -673,7 +730,10 @@ tvt try_prove_non_termination_by_recurrent_set(
           callee_writes,
           options,
           ns))
+      {
+        loop_location = head;
         return tvt(tvt::TV_FALSE);
+      }
     }
   }
   return tvt(tvt::TV_UNKNOWN);

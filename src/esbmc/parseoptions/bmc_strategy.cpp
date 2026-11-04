@@ -146,6 +146,36 @@ find_termination_marker(const goto_functionst &goto_functions)
   return marker;
 }
 
+// The head of the innermost loop that leaves through @p marker: one that jumps
+// to it, holds it (a return exit), or falls through to it (a do-while). A
+// cycle waypoint must be passed on every iteration, and the marker itself sits
+// on the loop's exit path, which runs at most once.
+static goto_programt::const_targett loop_head_of_marker(
+  const goto_functionst &goto_functions,
+  goto_programt::const_targett marker)
+{
+  const auto fn = goto_functions.function_map.find(marker->function);
+  if (fn == goto_functions.function_map.end())
+    return marker;
+  const goto_programt::instructionst &body = fn->second.body.instructions;
+  const unsigned m = marker->location_number;
+  goto_programt::const_targett best = marker;
+  for (auto b = body.begin(); b != body.end(); ++b)
+  {
+    if (!b->is_backwards_goto())
+      continue;
+    const auto h = b->targets.front();
+    const unsigned lo = h->location_number, hi = b->location_number;
+    bool exits = (m >= lo && m <= hi) || std::next(b) == marker;
+    for (auto p = h; !exits && p != std::next(b); ++p)
+      exits =
+        p->is_goto() && !p->targets.empty() && p->targets.front() == marker;
+    if (exits && (best == marker || lo > best->location_number))
+      best = h;
+  }
+  return best;
+}
+
 // Emit CWE-835 (non-termination / infinite loop) into the structured
 // outputs when --termination refutes the termination property.
 //
@@ -196,7 +226,23 @@ static void report_non_termination_cwe(
   if (want_graphml)
     violation_graphml_goto_trace(options, ns, trace);
   if (want_yaml)
-    non_termination_yaml_goto_trace(options, (*marker)->location);
+  {
+    // The recurrent-set check names its loop; the inductive step does not,
+    // so the marker's loop is a best-effort pick when there are several.
+    locationt loop = loop_head_of_marker(goto_functions, *marker)->location;
+    const std::string line =
+      options.get_option("termination-non-termination-loop-line");
+    if (!line.empty())
+    {
+      loop = locationt();
+      loop.set_line(line);
+      loop.set_column(
+        options.get_option("termination-non-termination-loop-column"));
+      loop.set_function(
+        options.get_option("termination-non-termination-loop-function"));
+    }
+    non_termination_yaml_goto_trace(options, loop);
+  }
   if (want_json)
     generate_json_report("1", ns, trace);
   if (want_sarif)
