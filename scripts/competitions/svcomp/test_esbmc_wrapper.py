@@ -554,5 +554,24 @@ VERIFICATION FAILED
         self.assertEqual(self.verdict(output, wrapper.Property.memory), "Unknown")
 
 
+class SolverChoice(unittest.TestCase):
+    def command(self, prop, concurrency):
+        with tempfile.NamedTemporaryFile("w", suffix=".c") as f:
+            f.write("pthread_create(0,0,0,0);" if concurrency else "int main(){}")
+            f.flush()
+            return wrapper.get_command_line(
+                "kinduction", prop, 32, f.name, concurrency, "", False)
+
+    def test_sequential_reach_uses_boolector(self):
+        cmd = self.command(wrapper.Property.reach, False)
+        self.assertIn("--boolector", cmd)
+        self.assertNotIn("--bitwuzla", cmd)
+
+    def test_concurrent_reach_keeps_bitwuzla(self):
+        cmd = self.command(wrapper.Property.reach, True)
+        self.assertIn("--bitwuzla", cmd)
+        self.assertNotIn("--boolector", cmd)
+
+
 if __name__ == "__main__":
     unittest.main()

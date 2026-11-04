@@ -454,6 +454,11 @@ def get_command_line(strat, prop, arch, benchmark, concurrency, dargs, esbmc_ci,
     # SUCCESSFUL, so this trades soundness of "true" verdicts for coverage.
     command_line += "--context-bound 3 "
     #command_line += "--no-slice " # TODO: Witness validation is only working without slicing
+  else:
+    # Bitwuzla, the default since #4131, takes 10x longer than Boolector on
+    # the combinations and hardness base cases and never reaches the
+    # inductive step (#9789).
+    command_line += "--boolector "
 
   # Add witness arg
   witness_name = os.path.basename(benchmark) if esbmc_ci else "witness"
