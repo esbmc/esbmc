@@ -1,0 +1,6 @@
+CORE
+main.c
+--witness-output-yaml -
+^VERIFICATION FAILED$
+^ +value: "5"$
+(?s)\A(?!.*value: "(true|false|default)")

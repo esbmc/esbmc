@@ -555,11 +555,22 @@ void violation_yaml_goto_trace(
           step.pc->location.get_line().empty() || !step.nondet_dependent)
           break;
 
+        /* A switch takes one waypoint naming the case it enters, or default
+           (Witness-Format.md, branching), not one per case test (#9882). */
+        const auto &case_ids = step.pc->switch_case_ids;
+        if (
+          !case_ids.empty() && !step.guard &&
+          !is_last_switch_case_test(step.pc))
+          break;
+
         ++branching_waypoints;
         waypoint wp =
           witness_waypoint(step.pc->location, yml.verified_file, options);
         wp.type = waypoint::branching;
-        wp.value = !step.guard ? "true" : "false";
+        if (case_ids.empty())
+          wp.value = !step.guard ? "true" : "false";
+        else
+          wp.value = step.guard ? case_ids.front() : "default";
         yml.segments.push_back(wp);
       }
       break;
