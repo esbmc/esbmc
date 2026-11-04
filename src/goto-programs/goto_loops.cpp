@@ -638,6 +638,40 @@ void goto_loopst::add_loop_var(
   // Without this distinction `*Var_Ptr = ...` adds `Var_Ptr` to the loop's
   // modified set, which then causes the inductive step to havoc the
   // pointer at loop entry — unsound if the loop never reassigns it.
+  if (is_modified && (is_member2t(expr) || is_index2t(expr)))
+  {
+    // Walk to the root symbol, keeping the member chain nearest to it: that
+    // is what a havoc must cover, whatever the indices further out select.
+    expr2tc root = expr;
+    expr2tc chain;
+    std::vector<expr2tc> indices;
+    while (!is_symbol2t(root))
+    {
+      if (is_member2t(root))
+      {
+        // Union members overlap, so havocing one leaves its aliases stale.
+        if (is_union_type(to_member2t(root).source_value->type))
+          break;
+        chain = root;
+        root = to_member2t(root).source_value;
+      }
+      else if (is_index2t(root))
+      {
+        indices.push_back(to_index2t(root).index);
+        chain = expr2tc();
+        root = to_index2t(root).source_value;
+      }
+      else
+        break;
+    }
+    if (is_symbol2t(root) && check_var_name(root) && !is_nil_expr(chain))
+    {
+      loop.add_modified_member_to_loop(root, chain);
+      for (const expr2tc &i : indices)
+        add_loop_var(loop, i, false);
+      return;
+    }
+  }
   if (is_modified && is_dereference2t(expr))
   {
     // The pointee has no named symbol, so record the pointer for the
