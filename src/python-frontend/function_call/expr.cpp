@@ -3584,11 +3584,14 @@ bool function_call_expr::receiver_is_binop_or_list_symbol() const
 const symbolt *
 function_call_expr::find_callee_symbol(const std::string &func_symbol_id)
 {
-  if (
-    function_type_ == FunctionType::InstanceMethod &&
-    function_id_.get_class().empty())
+  if (function_type_ != FunctionType::InstanceMethod)
+    return cached_find_symbol(func_symbol_id);
+  if (function_id_.get_class().empty())
     return nullptr;
-  return cached_find_symbol(func_symbol_id);
+  // find_symbol falls back to a module global of the method's name, which is
+  // not the method; an inherited one is then found in the bases (#9817).
+  const symbolt *symbol = cached_find_symbol(func_symbol_id);
+  return symbol && symbol->get_type().is_code() ? symbol : nullptr;
 }
 
 bool function_call_expr::receiver_class_defines_method(
