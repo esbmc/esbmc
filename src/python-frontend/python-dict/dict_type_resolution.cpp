@@ -139,7 +139,10 @@ stored_literal_kind(const nlohmann::json &stmt, const std::string &name)
     !target["value"].is_object() || target["value"].value("id", "") != name)
     return "";
   const auto &rhs = stmt["value"];
-  return rhs.value("_type", "") == "Constant" ? rhs["value"].type_name() : "?";
+  const std::string kind = rhs.value("_type", "");
+  if (kind == "List")
+    return "list";
+  return kind == "Constant" ? rhs["value"].type_name() : "?";
 }
 
 /// Whether every statement of `body` that stores into the dict `name` by
@@ -168,6 +171,27 @@ static bool stores_one_literal_kind(
         return false;
   }
   return true;
+}
+
+/// The value type that storing the literal `rhs` (`d[k] = 5`, `d[k] = "x"`,
+/// `d[k] = []`, ...) gives a dict, or nil for any other value.
+static typet
+stored_literal_type(const nlohmann::json &rhs, type_handler &handler)
+{
+  if (rhs.value("_type", std::string()) == "List")
+    return handler.get_list_type();
+  if (!rhs.contains("value"))
+    return typet();
+  const auto &lit = rhs["value"];
+  if (lit.is_boolean())
+    return bool_type();
+  if (lit.is_number_integer() || lit.is_number_unsigned())
+    return handler.get_typet("int", 0);
+  if (lit.is_number_float())
+    return handler.get_typet("float", 0);
+  if (lit.is_string())
+    return gen_pointer_type(char_type());
+  return typet();
 }
 
 typet python_dict_handler::resolve_expected_type_for_dict_subscript(
@@ -338,6 +362,12 @@ typet python_dict_handler::resolve_expected_type_for_dict_subscript(
         {
           typet candidate;
           bool have_candidate = false;
+          // A list store names the type only when every store is a list: the
+          // last store need not be the one a later read sees.
+          std::string body_kind;
+          const bool only_lists =
+            stores_one_literal_kind(func_node["body"], var_name, body_kind) &&
+            body_kind == "list";
           // Walk statements in document order, descending into For/While/If/
           // Try/With nested bodies — the d[k] = factory() assignments inserted
           // by the defaultdict preprocessor (see
@@ -422,31 +452,13 @@ typet python_dict_handler::resolve_expected_type_for_dict_subscript(
               return;
             const auto &rhs = stmt["value"];
 
-            // Literal RHS: pick the value type from the constant's kind.
-            // Covers `d[k] = 5`, `d[k] = 0.0`, `d[k] = True`, `d[k] = "x"`.
-            if (
-              rhs.value("_type", std::string()) == "Constant" &&
-              rhs.contains("value"))
+            const std::string rhs_kind = rhs.value("_type", std::string());
+            if (rhs_kind == "Constant" || (rhs_kind == "List" && only_lists))
             {
-              const auto &lit = rhs["value"];
-              if (lit.is_boolean())
+              const typet stored = stored_literal_type(rhs, type_handler_);
+              if (!stored.is_nil())
               {
-                candidate = bool_type();
-                have_candidate = true;
-              }
-              else if (lit.is_number_integer() || lit.is_number_unsigned())
-              {
-                candidate = type_handler_.get_typet("int", 0);
-                have_candidate = true;
-              }
-              else if (lit.is_number_float())
-              {
-                candidate = type_handler_.get_typet("float", 0);
-                have_candidate = true;
-              }
-              else if (lit.is_string())
-              {
-                candidate = gen_pointer_type(char_type());
+                candidate = stored;
                 have_candidate = true;
               }
               return;
