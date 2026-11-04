@@ -8,6 +8,7 @@
 
 import random
 import string
+import sys
 
 
 def nondet_bool():
@@ -25,14 +26,14 @@ def nondet_int() -> int:
 
 
 def nondet_list(nondet_elem):
-    l = []
+    values = []
     while nondet_bool():
-        l.append(nondet_elem())
-    return l
+        values.append(nondet_elem())
+    return values
 
 
 def nondet_dict(nondet_key, nondet_value):
-    d = dict()
+    d = {}
     while nondet_bool():
         d[nondet_key()] = nondet_value()
     return d
@@ -47,7 +48,6 @@ def nondet_str():
 
 
 def nondet_float():
-    import sys
     if nondet_bool():
         return random.choice([float('inf'), float('-inf'), float('nan'), float('-0.')])
     return random.uniform(-sys.float_info.max, sys.float_info.max)
