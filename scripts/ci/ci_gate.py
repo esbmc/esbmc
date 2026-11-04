@@ -10,7 +10,6 @@ import os
 import re
 
 _RESULT_DIR = re.compile(r"^linux-result-(?P<executor>.+)-(?P<attempt>\d+)$")
-# Jobs linux-test-summary requires on a PR.
 REQUIRED_JOBS = ("linux-build", "linux-regression", "cpython-check")
 
 

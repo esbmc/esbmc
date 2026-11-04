@@ -61,7 +61,6 @@ jobs:
   build:
     name: Build ESBMC (${{ inputs.operating-system }})
     runs-on: ${{ inputs.operating-system }}
-    # The legacy layout runs the whole suite here, under the runner's 6 h limit.
     timeout-minutes: ${{ inputs.linux-test-layout == 'pr-bundle' && 180 || 360 }}
     outputs:
       bundle-artifact: ${{ steps.bundle.outputs.bundle-artifact }}
@@ -87,7 +86,6 @@ jobs:
         case "$LAYOUT" in legacy|pr-bundle) ;; *)
           echo "::error::linux-test-layout must be legacy or pr-bundle, not '$LAYOUT'"; exit 1 ;;
         esac
-        # The shards (aux-test-linux.yml) run on ubuntu-24.04 x86.
         if [[ "$LAYOUT" == pr-bundle && ( "$OS" != ubuntu-24.04 || "$TESTING" != true ) ]]; then
           echo "::error::pr-bundle needs ubuntu-24.04, where the shards run, and testing: true"; exit 1
         fi
@@ -192,8 +190,6 @@ jobs:
           ctest -j2 --output-on-failure --progress .
         fi
 
-    # pr-bundle: run what the shards do not (tests without the regression label)
-    # under the PR's 120s budget, and export the regression to the shards.
     - name: Plan and run the producer's tests
       if: ${{ inputs.linux-test-layout == 'pr-bundle' }}
       run: |
