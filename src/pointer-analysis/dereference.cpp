@@ -1950,12 +1950,17 @@ void dereferencet::construct_from_const_struct_offset(
   value = expr2tc();
 }
 
-static bool is_struct_of_integers_and_pointers(const type2tc &type)
+/* The member-wise store costs one assignment per member, so only a wide struct
+ * is worth a byte_update, which hides the stored value from constant
+ * propagation and from counterexample traces. */
+static bool is_wide_struct_of_integers_and_pointers(const type2tc &type)
 {
+  constexpr size_t min_members = 8;
   const struct_type2t &st = to_struct_type(type);
-  return std::all_of(st.members.begin(), st.members.end(), [](const auto &m) {
-    return is_bv_type(m) || is_pointer_type(m);
-  });
+  return st.members.size() >= min_members &&
+         std::all_of(st.members.begin(), st.members.end(), [](const auto &m) {
+           return is_bv_type(m) || is_pointer_type(m);
+         });
 }
 
 void dereferencet::construct_from_dyn_struct_offset(
@@ -1991,7 +1996,7 @@ void dereferencet::construct_from_dyn_struct_offset(
   // lvalue to a single byte_update of the object (#9785).
   if (
     is_write(mode) && !int_encoding &&
-    is_struct_of_integers_and_pointers(value->type))
+    is_wide_struct_of_integers_and_pointers(value->type))
   {
     expr2tc offset_bytes = typecast2tc(
       size_type2(), div2tc(offset->type, offset, gen_long(offset->type, 8)));
