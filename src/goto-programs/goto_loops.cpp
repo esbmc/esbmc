@@ -622,6 +622,45 @@ void goto_loopst::get_modified_variables(
   }
 }
 
+static void record_pointer_array_write(loopst &loop, const expr2tc &ptr)
+{
+  if (is_nil_expr(ptr))
+    loop.set_pointer_array_write_unresolvable();
+  else
+    loop.add_pointer_array_write_ptr(ptr);
+}
+
+// Walk \p expr to its root symbol, keeping the member chain nearest to it:
+// that is what a havoc must cover, whatever the indices further out select.
+static bool split_member_write(
+  const expr2tc &expr,
+  expr2tc &root,
+  expr2tc &chain,
+  std::vector<expr2tc> &indices)
+{
+  root = expr;
+  while (!is_symbol2t(root))
+  {
+    if (is_member2t(root))
+    {
+      // Union members overlap, so havocing one leaves its aliases stale.
+      if (is_union_type(to_member2t(root).source_value->type))
+        return false;
+      chain = root;
+      root = to_member2t(root).source_value;
+    }
+    else if (is_index2t(root))
+    {
+      indices.push_back(to_index2t(root).index);
+      chain = expr2tc();
+      root = to_index2t(root).source_value;
+    }
+    else
+      return false;
+  }
+  return !is_nil_expr(chain);
+}
+
 void goto_loopst::add_loop_var(
   loopst &loop,
   const expr2tc &expr,
@@ -638,33 +677,11 @@ void goto_loopst::add_loop_var(
   // Without this distinction `*Var_Ptr = ...` adds `Var_Ptr` to the loop's
   // modified set, which then causes the inductive step to havoc the
   // pointer at loop entry — unsound if the loop never reassigns it.
-  if (is_modified && (is_member2t(expr) || is_index2t(expr)))
+  if (is_modified)
   {
-    // Walk to the root symbol, keeping the member chain nearest to it: that
-    // is what a havoc must cover, whatever the indices further out select.
-    expr2tc root = expr;
-    expr2tc chain;
+    expr2tc root, chain;
     std::vector<expr2tc> indices;
-    while (!is_symbol2t(root))
-    {
-      if (is_member2t(root))
-      {
-        // Union members overlap, so havocing one leaves its aliases stale.
-        if (is_union_type(to_member2t(root).source_value->type))
-          break;
-        chain = root;
-        root = to_member2t(root).source_value;
-      }
-      else if (is_index2t(root))
-      {
-        indices.push_back(to_index2t(root).index);
-        chain = expr2tc();
-        root = to_index2t(root).source_value;
-      }
-      else
-        break;
-    }
-    if (is_symbol2t(root) && check_var_name(root) && !is_nil_expr(chain))
+    if (split_member_write(expr, root, chain, indices) && check_var_name(root))
     {
       loop.add_modified_member_to_loop(root, chain);
       for (const expr2tc &i : indices)
@@ -677,11 +694,7 @@ void goto_loopst::add_loop_var(
     // The pointee has no named symbol, so record the pointer for the
     // loop-invariant schema to havoc through; an unextractable pointer leaves
     // the write uncoverable and the schema declines (#5230, #7478).
-    expr2tc ptr = extract_queried_pointer(expr);
-    if (is_nil_expr(ptr))
-      loop.set_pointer_array_write_unresolvable();
-    else
-      loop.add_pointer_array_write_ptr(ptr);
+    record_pointer_array_write(loop, extract_queried_pointer(expr));
     add_loop_var(loop, to_dereference2t(expr).value, false);
     return;
   }
@@ -692,13 +705,8 @@ void goto_loopst::add_loop_var(
     // `(*p)[i]`) has no named symbol to havoc (#5224); a stack array
     // (array-typed symbol source) is havoc'd as a whole symbol.
     if (indexes_through_pointer(idx.source_value))
-    {
-      expr2tc ptr = extract_queried_pointer(idx.source_value);
-      if (!is_nil_expr(ptr))
-        loop.add_pointer_array_write_ptr(ptr);
-      else
-        loop.set_pointer_array_write_unresolvable();
-    }
+      record_pointer_array_write(
+        loop, extract_queried_pointer(idx.source_value));
     add_loop_var(loop, idx.source_value, true);
     add_loop_var(loop, idx.index, false);
     return;
