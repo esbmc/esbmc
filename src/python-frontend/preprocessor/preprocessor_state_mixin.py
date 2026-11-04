@@ -113,6 +113,8 @@ class PreprocessorStateMixin:
         self.fixed_receivers = {}
         self.once_bound_names = set()
         self.module_statements = {}
+        # Name -> values stored by `name[key] = value` anywhere in the module.
+        self.subscript_stored_values = {}
         self.variable_names = set()
         self.scope_binding_counts = {}
         self.in_order_bindings = set()
