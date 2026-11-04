@@ -219,7 +219,7 @@ void create_waypoint(const waypoint &wp, YAML::Emitter &waypoint)
     waypoint << YAML::Key << "value" << YAML::Value << YAML::DoubleQuoted
              << wp.value;
     waypoint << YAML::Key << "format" << YAML::Value << YAML::DoubleQuoted
-             << "ext_c_expression";
+             << "c_expression";
     waypoint << YAML::EndMap;
   }
   else if (wp.type == waypoint::branching)
