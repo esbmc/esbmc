@@ -307,6 +307,24 @@ bool python_converter::is_identity_function(
   return false;
 }
 
+// A class of @p ast whose bases, transitively, are all classes of @p ast or
+// `object`: a builtin base such as list supplies a __len__ no user class has.
+static bool derives_only_from_user_classes(
+  const std::string &name,
+  const nlohmann::json &ast)
+{
+  const nlohmann::json cls = json_utils::find_class(ast["body"], name);
+  if (cls.empty())
+    return false;
+  return std::all_of(
+    cls["bases"].begin(), cls["bases"].end(), [&](const nlohmann::json &b) {
+      if (b.value("_type", "") != "Name")
+        return false;
+      const std::string base = b["id"].get<std::string>();
+      return base == "object" || derives_only_from_user_classes(base, ast);
+    });
+}
+
 exprt python_converter::get_len_on_class_instance(const nlohmann::json &element)
 {
   if (
@@ -318,7 +336,22 @@ exprt python_converter::get_len_on_class_instance(const nlohmann::json &element)
 
   const nlohmann::json &arg = element["args"][0];
   const locationt location = get_location_from_decl(element);
-  if (has_dunder_method(arg, "__len__"))
+  std::string cls = instance_class_name(arg);
+  // An unannotated `self` is named only by its bound type, which is not the
+  // receiver's class when a subclass, here or in a module that imports this
+  // one, may supply its own __len__ (#9835).
+  if (
+    cls.empty() && arg.value("id", "") == "self" &&
+    python_file() == main_python_filename())
+  {
+    const std::string bound = bound_class_name(arg);
+    if (
+      derives_only_from_user_classes(bound, *ast_json) &&
+      !json_utils::has_subclass(bound, *ast_json))
+      cls = bound;
+  }
+
+  if (!cls.empty() && find_dunder_method(cls, "__len__"))
     return checked_len_result(
       get_expr(
         build_dunder_call(arg, "__len__", nlohmann::json::array(), element)),
@@ -326,7 +359,6 @@ exprt python_converter::get_len_on_class_instance(const nlohmann::json &element)
 
   // Without a __len__ the builtin path measures the struct with strlen and
   // reports 0, silently emptying any `for x in obj` bounded by len() (#7085).
-  const std::string cls = instance_class_name(arg);
   if (!cls.empty() && is_class_instance(arg))
     return get_exception_handler().gen_exception_raise(
       "TypeError", "object of type '" + cls + "' has no len()");

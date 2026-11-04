@@ -3577,6 +3577,8 @@ private:
   /// True when @p value_node denotes a user-defined class instance, as opposed
   /// to a model container that merely resolves to a class name.
   bool is_class_instance(const nlohmann::json &value_node);
+  /// Class of the user-class instance a Name is bound to, or "".
+  std::string bound_class_name(const nlohmann::json &name_node);
   bool has_dunder_method(
     const nlohmann::json &value_node,
     const std::string &dunder_name);

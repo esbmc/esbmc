@@ -271,23 +271,29 @@ bool python_converter::is_class_instance(const nlohmann::json &value_node)
   if (node_type == "Call")
     return type_handler_.is_constructor_call(value_node);
 
-  if (node_type != "Name")
-    return false;
+  return !bound_class_name(value_node).empty();
+}
+
+std::string python_converter::bound_class_name(const nlohmann::json &name_node)
+{
+  if (name_node.value("_type", "") != "Name")
+    return {};
 
   // The bound type decides, not the annotation's name: `a: List[int]` resolves
   // to a class named List, but its struct is a model container that owns its
   // own operator and length paths (#7085).
   symbol_id sid(python_file(), current_classname(), current_function_name());
-  sid.set_object(value_node.value("id", ""));
+  sid.set_object(name_node.value("id", ""));
 
   symbolt *sym = find_symbol(sid.to_string());
   if (!sym)
     sym = find_symbol(sid.global_to_string());
   if (!sym)
-    return false;
+    return {};
 
   const typet &t = sym->get_type();
-  return is_user_class_pointer(t) || is_user_class_struct_type(t);
+  const typet &cls = t.is_pointer() ? t.subtype() : t;
+  return is_user_class_struct_type(cls) ? class_name_of(cls) : std::string();
 }
 
 // move_symbol_to_context() only overwrites an existing symbol's type when

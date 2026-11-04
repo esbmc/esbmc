@@ -1,0 +1,6 @@
+CORE
+main.py
+--unwind 5 --multi-property --no-pointer-check --no-align-check
+^VERIFICATION FAILED$
+^\*\* 1 of [0-9]+ properties failed
+FAILED.*line 6  uncaught exception: TypeError
