@@ -8,6 +8,7 @@
 #include <goto-symex/trace/goto_trace.h>
 #include <goto-symex/equation/symex_target_equation.h>
 #include <goto-symex/waypoint.h>
+#include <optional>
 #include <string>
 #include <regex>
 #include <vector>
@@ -231,6 +232,11 @@ void check_replace_invalid_assignment(std::string &assignment);
 bool is_valid_witness_expr(
   const namespacet &ns,
   const irep_container<expr2t> &exp);
+
+/// The ')' of the __VERIFIER_nondet_*() call starting at @p call, read from
+/// the source; nullopt when the text there is not such a call. A YAML
+/// function_return waypoint sits on it (#9881).
+std::optional<locationt> nondet_call_rparen(const locationt &call);
 
 BigInt get_line_number(
   const std::string &verified_file,

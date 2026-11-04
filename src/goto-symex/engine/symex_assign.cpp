@@ -3,6 +3,7 @@
 #include <goto-symex/engine/dynamic_allocation.h>
 #include <goto-symex/scheduler/execution_state.h>
 #include <goto-symex/engine/goto_symex.h>
+#include <goto-symex/witness/witnesses.h>
 #include <util/lang/c_types.h>
 #include <util/symtab/cprover_prefix.h>
 #include <util/expr/expr_util.h>
@@ -465,22 +466,20 @@ void goto_symext::symex_assign(
     const std::string nm = to_symbol2t(original_lhs).thename.as_string();
     if (nm.find("$tmp::return_value$_") != std::string::npos)
     {
-      // A function_return waypoint sits on the line of the call's ')'.
-      auto rparen_line = [](const locationt &call) {
-        const locationt &rparen = call.call_rparen();
-        return rparen.is_nil() ? call.get_line() : rparen.get_line();
-      };
+      irep_idt call_line;
       if (cur_state->source.pc->is_return())
       {
-        symex_witness_function_return(
-          original_lhs,
-          rparen_line(cur_state->top().calling_location.pc->location));
+        call_line = cur_state->top().calling_location.pc->location.get_line();
+        symex_witness_function_return(original_lhs, call_line);
       }
       else
       {
+        // A nondet call's function_return waypoint sits on its ')' (#9881).
         const locationt &call = cur_state->source.pc->location;
+        const auto rparen = nondet_call_rparen(call);
         symex_witness_function_enter(call.get_line());
-        symex_witness_function_return(original_lhs, rparen_line(call));
+        symex_witness_function_return(
+          original_lhs, rparen ? rparen->get_line() : call.get_line());
       }
     }
   }

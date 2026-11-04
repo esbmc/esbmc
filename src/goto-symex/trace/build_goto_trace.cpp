@@ -294,19 +294,22 @@ static void record_nondet_return(
   const symex_target_equationt::SSA_stept &step,
   std::list<std::pair<locationt, expr2tc>> &out)
 {
-  const locationt &loc = step.source.pc->location;
-  if (
-    !step.is_assignment() || step.ignore || !loc.get_bool("#nondet_call") ||
-    loc.call_rparen().is_nil() || !smt_conv.l_get(step.guard).is_true())
+  if (!step.is_assignment() || step.ignore)
     return;
 
   const expr2tc nondet = symex_slicet::get_nondet_symbol(step.rhs);
   if (!nondet || !is_symbol2t(nondet))
     return;
 
+  // Other nondet assignments (an uninitialised local, a contract's havoc of a
+  // call's result) are not at a nondet call in the source.
+  const auto rparen = nondet_call_rparen(step.source.pc->location);
+  if (!rparen || !smt_conv.l_get(step.guard).is_true())
+    return;
+
   expr2tc value = smt_conv.get(nondet);
   if (is_constant_expr(value))
-    out.emplace_back(loc.call_rparen(), value);
+    out.emplace_back(*rparen, value);
 }
 
 /* Tracks which SSA symbols were computed from constants alone. A branch whose
