@@ -838,6 +838,18 @@ exprt python_converter::get_boolop_operand(
     in_operand_effects_block_ = true;
   }
   exprt operand_expr = get_expr(operand);
+  // A later operand that raises (#9838) is its raise statement, run only
+  // where the operand is evaluated.
+  if (
+    operand_expr.statement() == "cpp-throw" && effects.size() > 1 &&
+    can_emit_operand_statement())
+  {
+    codet raise("expression");
+    raise.copy_to_operands(operand_expr);
+    raise.location() = get_location_from_decl(operand);
+    current_block->copy_to_operands(raise);
+    operand_expr = nil_exprt();
+  }
   current_block = saved_block;
   in_operand_effects_block_ = saved_own_block;
 
@@ -1038,6 +1050,15 @@ exprt python_converter::get_logical_operator_expr(const nlohmann::json &element)
   for (const auto &operand : element["values"])
   {
     exprt operand_expr = get_boolop_operand(operand, operand_effects);
+    if (operand_expr.statement() == "cpp-throw" && operand_effects.size() == 1)
+    {
+      is_converting_rhs = old_is_converting_rhs;
+      in_lazy_operand_ = old_in_lazy_operand;
+      return operand_expr;
+    }
+    // A planted raise: the operand's value is never read.
+    if (operand_expr.is_nil())
+      operand_expr = gen_zero(logical_expr.operands().front().type());
     refuse_tagged_boolop_operand(operand_expr);
     in_lazy_operand_ = true;
     logical_expr.copy_to_operands(operand_expr);

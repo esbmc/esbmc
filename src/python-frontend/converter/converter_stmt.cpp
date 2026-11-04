@@ -9439,7 +9439,10 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
       exprt *saved_lhs = current_lhs;
       current_lhs = nullptr;
       // Start from the leftmost operand and carry the running result forward.
-      cond = to_bool_condition(get_expr(operands[0]), operands[0]);
+      // An operand that raises (#9838) is emitted as the raise statement.
+      const exprt first = get_expr(operands[0]);
+      const exprt *first_raise = raised_condition(first);
+      cond = first_raise ? false_exprt() : to_bool_condition(first, operands[0]);
       current_lhs = saved_lhs;
 
       symbolt result_symbol = create_return_temp_variable(
@@ -9451,6 +9454,12 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
       result_decl.location() = get_location_from_decl(test_node);
       current_block->copy_to_operands(result_decl);
 
+      if (first_raise)
+      {
+        const locationt first_location = get_location_from_decl(operands[0]);
+        current_block->copy_to_operands(
+          raise_statement(*first_raise, first_location));
+      }
       code_assignt result_init(result_expr, cond);
       result_init.location() = get_location_from_decl(test_node);
       current_block->copy_to_operands(result_init);
@@ -9464,14 +9473,23 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
         saved_lhs = current_lhs;
         current_lhs = nullptr;
         // Build the next operand only in the branch where it is still needed.
-        exprt next_operand =
-          to_bool_condition(get_expr(operands[i]), operands[i]);
+        const exprt next = get_expr(operands[i]);
+        const exprt *raise = raised_condition(next);
+        const exprt next_operand =
+          raise ? exprt() : to_bool_condition(next, operands[i]);
         current_lhs = saved_lhs;
         current_block = saved_block;
 
-        code_assignt result_update(result_expr, next_operand);
-        result_update.location() = get_location_from_decl(operands[i]);
-        next_operand_block.copy_to_operands(result_update);
+        const locationt next_location = get_location_from_decl(operands[i]);
+        if (raise)
+          next_operand_block.copy_to_operands(
+            raise_statement(*raise, next_location));
+        else
+        {
+          code_assignt result_update(result_expr, next_operand);
+          result_update.location() = next_location;
+          next_operand_block.copy_to_operands(result_update);
+        }
 
         code_ifthenelset short_circuit_if;
         short_circuit_if.location() = get_location_from_decl(operands[i]);
