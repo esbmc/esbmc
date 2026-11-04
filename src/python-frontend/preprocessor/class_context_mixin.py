@@ -1,6 +1,7 @@
 import ast
 import builtins
 import copy
+import itertools
 from collections import Counter, defaultdict
 # pylint: disable=too-many-boolean-expressions
 
@@ -649,6 +650,8 @@ class ClassContextMixin:
         and nothing rebinds it; each distinct combination of such classes gets
         its own copy of the function, and the calls keep their arguments, so
         they are still evaluated."""
+        if self.is_entry_module:
+            self._rename_shadowing_parameters(module)
         while True:
             counts = Counter(name for n in ast.walk(module) for name in self._names_bound_by(n))
             if counts["*"]:
@@ -666,6 +669,45 @@ class ClassContextMixin:
             if not self._specialise_one_function(module, known, counts):
                 self._unroll_class_tuples(module, known, counts)
                 return
+
+    def _rename_shadowing_parameters(self, module):
+        """Rename a parameter of a top-level function that has the name of a
+        top-level class or function bound nowhere else, when every reference to
+        the function is a call passing a known class for it. The parameter
+        otherwise keeps the class from being known, and the function from
+        being specialised (#9806). Only the body is renamed: defaults and
+        annotations are evaluated in the module scope."""
+        counts = Counter(name for n in ast.walk(module) for name in self._names_bound_by(n))
+        loads = Counter(n.id for n in ast.walk(module) if isinstance(n, ast.Name))
+        taken = counts.keys() | loads.keys()
+        calls = defaultdict(list)
+        for n in ast.walk(module):
+            if isinstance(n, ast.Call) and isinstance(n.func, ast.Name):
+                calls[n.func.id].append(n)
+        for func in module.body:
+            if not (isinstance(func, ast.FunctionDef) and not func.decorator_list
+                    and counts[func.name] == 1 and calls[func.name]
+                    and loads[func.name] == len(calls[func.name])):
+                continue
+            for i, param in enumerate(func.args.posonlyargs + func.args.args):
+                name = param.arg
+                if counts[name] != 2 or self._binds_name(func, name, param):
+                    continue
+                known = self._known_classes(module, counts - Counter([name]))
+                if name not in known or not all(
+                        self._class_argument(c, func, i, known) for c in calls[func.name]):
+                    continue
+                fresh = next(f"{name}__esbmc_param{n}" for n in itertools.count()
+                             if f"{name}__esbmc_param{n}" not in taken)
+                taken.add(fresh)
+                for n in (n for s in func.body for n in ast.walk(s)):
+                    if isinstance(n, ast.Name) and n.id == name:
+                        n.id = fresh
+                for keyword in (k for c in calls[func.name] for k in c.keywords):
+                    if keyword.arg == name:
+                        keyword.arg = fresh
+                param.arg = fresh
+                counts[name] -= 1
 
     def _unroll_class_tuples(self, module, known, counts):
         """Unroll a `for` loop, and an `any`/`all` over a generator, that runs
