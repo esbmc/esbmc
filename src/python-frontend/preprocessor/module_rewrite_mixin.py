@@ -593,6 +593,7 @@ class ModuleRewriteMixin:
         self.referenced_names = _referenced_names(node)
         self.outer_stored_names = self._outer_stored_names(node)
         self._scan_fixed_receivers(node)
+        self._scan_subscript_stored_values(node)
         self.variable_names = self._variable_names(node)
         self.scope_binding_counts = self._scope_binding_counts(node)
 
@@ -607,7 +608,7 @@ class ModuleRewriteMixin:
             if isinstance(stmt, ast.Assign):
                 for target in stmt.targets:
                     if isinstance(target, ast.Name):
-                        annotation_node = self._create_annotation_node_from_value(stmt.value)
+                        annotation_node = self._create_name_annotation(target.id, stmt.value)
                         if annotation_node:
                             self.variable_annotations[target.id] = annotation_node
             elif isinstance(stmt, ast.AnnAssign) and isinstance(stmt.target, ast.Name):

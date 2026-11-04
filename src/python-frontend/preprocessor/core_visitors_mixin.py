@@ -610,7 +610,7 @@ class CoreVisitorsMixin:
             self._record_defaultdict_key_initialized(target.value.id, target.slice)
 
     def _update_name_target_assignment_metadata(self, target_id, node):
-        annotation_node = self._create_annotation_node_from_value(node.value)
+        annotation_node = self._create_name_annotation(target_id, node.value)
         if annotation_node:
             self.variable_annotations[target_id] = annotation_node
             if isinstance(node.value, ast.Subscript):
