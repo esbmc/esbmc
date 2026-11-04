@@ -5990,12 +5990,14 @@ void python_annotation<Json>::retype_methods_called_on_receivers()
   }
 }
 
-/// The type of call argument @p arg in method @p caller: that of a parameter
-/// the method never rebinds, else "".
+/// The type of call argument @p arg in method @p caller: that of a literal or
+/// of a parameter the method never rebinds, else "".
 template <class Json>
 std::string
 python_annotation<Json>::self_call_arg_type(const Json &arg, const Json &caller)
 {
+  if (arg.value("_type", "") == "Constant")
+    return get_type_from_constant(arg);
   if (arg.value("_type", "") != "Name")
     return "";
   const std::string name = arg["id"].template get<std::string>();
