@@ -33,7 +33,6 @@ exceptions in `regression/CMakeLists.txt` and the 30s CTest grace.
 | `python-benchmarks` | quixbugs, humaneval, mopsa, consensus, ai-generated-code, python-coverage, python-contracts |
 | `cpp` | `-L '^esbmc-cpp[0-9]*/.*$'`: every `esbmc-cpp*` suite |
 | `c-and-tools` | every other `regression` test, so a new suite is never left out |
-| `baseline` (comparison only) | `-L '^(regression)$' -LE '^(python-intensive/)$'` |
 
 Every module also excludes `python-intensive/`. The modules and their shard
 counts live in `MODULES` in `scripts/ci/ci_selection.py`; NumPy and Python
@@ -100,35 +99,17 @@ problem. Re-running a failed shard reuses the producer's bundle and publishes
 a new attempt; the latest attempt counts even when it fails. An expired
 bundle means a new run.
 
-## Manual comparison
-
-`.github/workflows/ci-linux-regression-compare.yml` (Actions >
-"Linux regression comparison" > Run workflow) takes a full `candidate-sha`
-and an optional `cold-build`. One build of the candidate feeds the
-monolithic `baseline` and the module jobs; `compare` fails on any test whose
-outcome differs, on a missing report and on reports of another plan or
-bundle, and publishes CTest seconds and memory per executor.
-
-`cold-build: true` builds from an empty ccache (no restore, no save) to
-measure the producer without cache. Each comparison has its own concurrency
-group, so comparisons queued for one SHA do not cancel each other, and none
-cancels a PR run. The CPython check of both workflows is
-`.github/workflows/aux-cpython-check.yml`.
-
-A `workflow_dispatch` workflow can only be run once it is on the default
-branch, so the comparison is available after the infrastructure merges.
-
 ## Required check and rollback
 
 Branch protection must require `linux-test-summary` instead of
 `static llvm-22 DebugOpt / Build ESBMC (ubuntu-24.04)`, which no longer runs.
 Rolling back means reverting the commits that replaced that job.
 
-## Measurements
+## Sizing
 
-`scripts/ci/shard_timings.py <ctest log>` reads per-test durations from a
-CTest log and simulates the modules as `-I i,,k` stripes them. On the PR job
-112391675659 (`Run tests` 4h46m45s, 23,067 tests) it simulates, at `-j2`:
+The modules were sized from the per-test durations of PR job 112391675659
+(`Run tests` 4h46m45s, 23,067 tests), striped as `-I i,,k` does and run on two
+slots:
 
 | Module job | Simulated minutes |
 |---|---|
@@ -146,5 +127,4 @@ contention of a module run alone are not in them.
 ```sh
 python3 -m unittest discover -s scripts/ci/tests -p 'test_*.py'
 python3 scripts/ci/linux_tests.py plan --build-dir build --out plan.json
-python3 scripts/ci/shard_timings.py job.log
 ```
