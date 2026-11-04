@@ -11,6 +11,13 @@ bool python_dict_handler::is_retypable_subscript(const nlohmann::json &node)
          !converter_.call_dict_value_type(node["value"]).has_value();
 }
 
+/// A dict read whose value type is still unknown. A str value is already read
+/// as its char pointer.
+static bool is_untyped_value_ptr(const typet &t)
+{
+  return t.is_pointer() && !type_utils::is_char_storage(t.subtype());
+}
+
 void python_dict_handler::resolve_dict_subscript_types(
   const nlohmann::json &left,
   const nlohmann::json &right,
@@ -60,7 +67,8 @@ void python_dict_handler::resolve_dict_subscript_types(
   // Case 3: Both sides are dict subscripts (returning pointers)
   // Default to long_int_type for dict-to-dict comparisons
   if (
-    lhs_is_dict_subscript && rhs_is_dict_subscript && lhs_is_ptr && rhs_is_ptr)
+    lhs_is_dict_subscript && rhs_is_dict_subscript &&
+    is_untyped_value_ptr(lhs.type()) && is_untyped_value_ptr(rhs.type()))
   {
     typet default_type = long_int_type();
 

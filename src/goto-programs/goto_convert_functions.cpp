@@ -2187,6 +2187,10 @@ void goto_convert_functionst::rename_types(
       alignment(static_cast<const typet &>(type), ns) > alignment(type2, ns))
       type2.set("alignment", decl_alignment);
 
+    // Likewise _Atomic, which qualifies the declaration, not the tag.
+    if (type.get_bool("#atomic"))
+      type2.set("#atomic", true);
+
     type = type2;
     return;
   }
