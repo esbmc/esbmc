@@ -842,7 +842,7 @@ void add_race_assertions(
       i_it = ++t;
 
       // now add assertion for what is read and written
-      forall_rw_set_entries(e_it, rw_set)
+      forall_rw_set_entries(e_it, rw_set) if (!e_it->second.atomic)
       {
         goto_programt::targett t = goto_program.insert(i_it);
 
