@@ -5,6 +5,7 @@
 #include <python-frontend/json_utils.h>
 #include <python-frontend/consteval/python_consteval.h>
 #include <python-frontend/python_converter.h>
+#include <python-frontend/numpy/numpy_random.h>
 #include <python-frontend/python_expr_builder.h>
 #include <python-frontend/python-dict/python_dict_handler.h>
 #include <python-frontend/python_annotation/python_annotation.h>
@@ -2035,6 +2036,62 @@ python_converter::resolve_name_symbol_id(const std::string &name) const
     return live_id(sid.to_string());
 
   return "";
+}
+
+bool python_converter::is_numpy_random_generator_call(
+  const nlohmann::json &call) const
+{
+  if (
+    !call.is_object() || call.value("_type", "") != "Call" ||
+    !call.contains("func") || !call["func"].is_object() ||
+    call["func"].value("_type", "") != "Attribute" ||
+    !call["func"].contains("value") || !call["func"]["value"].is_object() ||
+    call["func"]["value"].value("_type", "") != "Name" ||
+    !call["func"]["value"].contains("id") ||
+    !call["func"]["value"]["id"].is_string())
+    return false;
+  const std::string id =
+    resolve_name_symbol_id(call["func"]["value"]["id"].get<std::string>());
+  return numpy_random_generator_states_.count(id) != 0;
+}
+
+std::string
+python_converter::numpy_random_state_id(const nlohmann::json &call) const
+{
+  if (is_numpy_random_generator_call(call))
+  {
+    const std::string id =
+      resolve_name_symbol_id(call["func"]["value"]["id"].get<std::string>());
+    return numpy_random_generator_states_.at(id);
+  }
+  if (numpy_random::is_random_call(call, *ast_json))
+    return "$numpy_random_module_state$";
+  return {};
+}
+
+void python_converter::update_numpy_random_generator_binding(
+  const exprt &lhs,
+  const nlohmann::json &rhs_node)
+{
+  if (!lhs.is_symbol())
+    return;
+  const std::string lhs_id = lhs.identifier().as_string();
+  if (numpy_random::is_generator_constructor(rhs_node, *ast_json))
+  {
+    numpy_random_generator_states_[lhs_id] = "$numpy_generator_" + lhs_id;
+    return;
+  }
+  if (rhs_node.value("_type", "") == "Name")
+  {
+    const std::string rhs_id = resolve_name_symbol_id(rhs_node.value("id", ""));
+    auto it = numpy_random_generator_states_.find(rhs_id);
+    if (it != numpy_random_generator_states_.end())
+    {
+      numpy_random_generator_states_[lhs_id] = it->second;
+      return;
+    }
+  }
+  numpy_random_generator_states_.erase(lhs_id);
 }
 
 std::string
@@ -8347,7 +8404,10 @@ void python_converter::get_var_assign(
       if (
         effective_ast_node.contains("value") &&
         effective_ast_node["value"].is_object())
+      {
+        update_numpy_random_generator_binding(lhs, effective_ast_node["value"]);
         update_numpy_array_binding(lhs, effective_ast_node["value"]);
+      }
       else
         clear_numpy_view_copy(lhs);
       current_lhs = nullptr;
@@ -8479,7 +8539,10 @@ void python_converter::get_var_assign(
     if (
       effective_ast_node.contains("value") &&
       effective_ast_node["value"].is_object())
+    {
+      update_numpy_random_generator_binding(lhs, effective_ast_node["value"]);
       update_numpy_array_binding(lhs, effective_ast_node["value"]);
+    }
     else
       clear_numpy_view_copy(lhs);
     if (type_assertions_enabled() && can_emit_annotation_check)

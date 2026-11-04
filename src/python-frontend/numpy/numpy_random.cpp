@@ -12,8 +12,10 @@
 #include <algorithm>
 #include <cmath>
 #include <optional>
+#include <numeric>
 #include <set>
 #include <stdexcept>
+#include <string>
 #include <vector>
 
 namespace
@@ -37,6 +39,9 @@ const std::map<std::string, std::vector<std::string>> &signatures()
     {"weibull", {"a", "size"}},
     {"chisquare", {"df", "size"}},
     {"randint", {"low", "high", "size", "dtype"}},
+    {"integers", {"low", "high", "size", "dtype", "endpoint"}},
+    {"default_rng", {"seed"}},
+    {"seed", {"seed"}},
     {"choice", {"a", "size", "replace", "p"}}};
   return table;
 }
@@ -56,7 +61,9 @@ const std::map<std::string, std::map<std::string, double>> &defaults()
 bool is_integer_param(const std::string &name, const std::string &param)
 {
   return (name == "binomial" && param == "n") ||
-         (name == "randint" && (param == "low" || param == "high"));
+         ((name == "randint" || name == "integers") &&
+          (param == "low" || param == "high")) ||
+         ((name == "default_rng" || name == "seed") && param == "seed");
 }
 
 bool contains_call(const nlohmann::json &node)
@@ -79,7 +86,22 @@ bool is_bool_literal(const nlohmann::json &node)
 bool is_integral_result(const std::string &name)
 {
   return name == "poisson" || name == "binomial" || name == "geometric" ||
-         name == "randint";
+         name == "randint" || name == "integers";
+}
+
+bool has_optional_random_parameter(
+  const std::string &name,
+  const std::string &param)
+{
+  if (
+    param == "size" || param == "dtype" || param == "replace" || param == "p" ||
+    param == "endpoint")
+    return true;
+  if ((name == "randint" || name == "integers") && param == "high")
+    return true;
+  if ((name == "default_rng" || name == "seed") && param == "seed")
+    return true;
+  return defaults().count(name) != 0 && defaults().at(name).count(param) != 0;
 }
 
 /// The distribution an alias names: legacy spellings of the same sampler.
@@ -98,6 +120,75 @@ bool is_none(const nlohmann::json &node)
 {
   return node.value("_type", "") == "Constant" && node.contains("value") &&
          node["value"].is_null();
+}
+
+bool is_numpy_random_function(
+  const nlohmann::json &func,
+  const nlohmann::json &ast)
+{
+  if (
+    !func.is_object() || func.value("_type", "") != "Attribute" ||
+    !func.contains("value") || !func["value"].is_object())
+    return false;
+  const auto &random = func["value"];
+  if (
+    random.value("_type", "") != "Attribute" ||
+    random.value("attr", "") != "random" || !random.contains("value") ||
+    !random["value"].is_object())
+    return false;
+  const auto &module = random["value"];
+  return module.value("_type", "") == "Name" && module.contains("id") &&
+         module["id"].is_string() &&
+         is_imported_numpy_module_alias(ast, module["id"]);
+}
+
+std::optional<double> literal_probability(const nlohmann::json &node)
+{
+  if (
+    node.is_object() && node.value("_type", "") == "Constant" &&
+    node.contains("value") && node["value"].is_number())
+    return node["value"].get<double>();
+  if (
+    node.is_object() && node.value("_type", "") == "UnaryOp" &&
+    node.contains("op") && node["op"].is_object() && node.contains("operand"))
+  {
+    const auto operand = literal_probability(node["operand"]);
+    if (!operand)
+      return std::nullopt;
+    if (node["op"].value("_type", "") == "USub")
+      return -*operand;
+    if (node["op"].value("_type", "") == "UAdd")
+      return *operand;
+  }
+  return std::nullopt;
+}
+
+std::optional<nlohmann::json>
+generator_numpy_module(const nlohmann::json &call, const nlohmann::json &ast)
+{
+  if (!numpy_random::is_generator_call(call, ast))
+    return std::nullopt;
+  for (const auto &statement : ast.value("body", nlohmann::json::array()))
+  {
+    if (
+      !statement.is_object() || statement.value("_type", "") != "Import" ||
+      !statement.contains("names"))
+      continue;
+    for (const auto &alias : statement["names"])
+    {
+      if (
+        alias.is_object() && alias.value("name", "") == "numpy" &&
+        alias.contains("asname"))
+      {
+        const std::string name = alias["asname"].is_null()
+                                   ? "numpy"
+                                   : alias["asname"].get<std::string>();
+        return nlohmann::json{
+          {"_type", "Name"}, {"id", name}, {"ctx", {{"_type", "Load"}}}};
+      }
+    }
+  }
+  return std::nullopt;
 }
 
 /// An integer literal, negated or not; nullopt for anything else.
@@ -190,26 +281,123 @@ numpy_random::numpy_random(
     call_(call),
     function_(call["func"]["attr"].get<std::string>()),
     name_(canonical_name(function_)),
+    state_id_(converter.numpy_random_state_id(call)),
     location_(converter.get_location_from_decl(call))
 {
+}
+
+bool numpy_random::is_generator_constructor(
+  const nlohmann::json &call,
+  const nlohmann::json &ast)
+{
+  return is_random_call(call, ast) &&
+         call["func"].value("attr", "") == "default_rng";
+}
+
+namespace
+{
+void insert_generator_targets(
+  const nlohmann::json &node,
+  std::set<std::string> &names)
+{
+  if (!node.contains("targets") || !node["targets"].is_array())
+    return;
+  for (const auto &target : node["targets"])
+    if (
+      target.is_object() && target.value("_type", "") == "Name" &&
+      target.contains("id") && target["id"].is_string())
+      names.insert(target["id"]);
+}
+
+bool is_default_rng_assignment(
+  const nlohmann::json &value,
+  const nlohmann::json &ast)
+{
+  if (
+    !value.is_object() || value.value("_type", "") != "Call" ||
+    !value.contains("func") || !value["func"].is_object() ||
+    value["func"].value("_type", "") != "Attribute" ||
+    value["func"].value("attr", "") != "default_rng")
+    return false;
+  const auto &receiver = value["func"]["value"];
+  if (
+    !receiver.is_object() || receiver.value("_type", "") != "Attribute" ||
+    receiver.value("attr", "") != "random" || !receiver.contains("value") ||
+    !receiver["value"].is_object())
+    return false;
+  const auto &module = receiver["value"];
+  return module.value("_type", "") == "Name" && module.contains("id") &&
+         module["id"].is_string() &&
+         is_imported_numpy_module_alias(ast, module["id"]);
+}
+
+void collect_generator_assignment(
+  const nlohmann::json &node,
+  std::set<std::string> &names,
+  const nlohmann::json &ast)
+{
+  if (node.value("_type", "") != "Assign" || !node.contains("value"))
+    return;
+  const auto &value = node["value"];
+  if (is_default_rng_assignment(value, ast))
+  {
+    insert_generator_targets(node, names);
+    return;
+  }
+  if (
+    value.is_object() && value.value("_type", "") == "Name" &&
+    value.contains("id") && value["id"].is_string() &&
+    names.count(value["id"].get<std::string>()) != 0)
+    insert_generator_targets(node, names);
+}
+
+void collect_generator_names(
+  const nlohmann::json &node,
+  std::set<std::string> &names,
+  const nlohmann::json &ast)
+{
+  if (node.is_array())
+  {
+    for (const auto &child : node)
+      collect_generator_names(child, names, ast);
+    return;
+  }
+  if (!node.is_object())
+    return;
+  collect_generator_assignment(node, names, ast);
+
+  for (const auto &item : node.items())
+    collect_generator_names(item.value(), names, ast);
+}
+} // namespace
+
+bool numpy_random::is_generator_call(
+  const nlohmann::json &call,
+  const nlohmann::json &ast)
+{
+  if (
+    !call.is_object() || call.value("_type", "") != "Call" ||
+    !call.contains("func") || !call["func"].is_object() ||
+    call["func"].value("_type", "") != "Attribute" ||
+    !call["func"].contains("value") || !call["func"]["value"].is_object() ||
+    call["func"]["value"].value("_type", "") != "Name" ||
+    !call["func"]["value"].contains("id") ||
+    !call["func"]["value"]["id"].is_string())
+    return false;
+  std::set<std::string> names;
+  collect_generator_names(ast, names, ast);
+  return names.count(call["func"]["value"]["id"].get<std::string>()) != 0;
 }
 
 bool numpy_random::is_random_call(
   const nlohmann::json &call,
   const nlohmann::json &ast)
 {
-  const auto &func = call["func"];
   if (
-    func.value("_type", "") != "Attribute" ||
-    func["value"].value("_type", "") != "Attribute" ||
-    func["value"].value("attr", "") != "random")
+    !call.is_object() || call.value("_type", "") != "Call" ||
+    !call.contains("func") || !call["func"].is_object())
     return false;
-  const auto &module = func["value"]["value"];
-  if (
-    module.value("_type", "") != "Name" ||
-    !is_imported_numpy_module_alias(ast, module["id"]))
-    return false;
-  return true;
+  return is_numpy_random_function(call["func"], ast);
 }
 
 std::optional<std::vector<std::size_t>> numpy_random::output_shape(
@@ -218,7 +406,7 @@ std::optional<std::vector<std::size_t>> numpy_random::output_shape(
 {
   if (
     !call.is_object() || call.value("_type", "") != "Call" ||
-    !is_random_call(call, ast))
+    (!is_random_call(call, ast) && !is_generator_call(call, ast)))
     return std::nullopt;
   const std::string function = call["func"]["attr"].get<std::string>();
   auto signature = signatures().find(canonical_name(function));
@@ -263,6 +451,31 @@ exprt numpy_random::get()
     return finish(result);
   }
   bind_arguments();
+  if ((name_ == "default_rng" || name_ == "seed") && values_.count("seed") != 0)
+    raise_if(
+      rel(value("seed"), "<", gen_zero(long_long_int_type())),
+      "ValueError",
+      "seed must be non-negative");
+  if (name_ == "default_rng")
+  {
+    exprt result = fresh(long_long_int_type());
+    converter_.current_block = saved_block;
+    return finish(result);
+  }
+  if (
+    name_ == "integers" &&
+    (state_id_.empty() || state_id_ == "$numpy_random_module_state$"))
+  {
+    const exprt result = reject_unmodelled();
+    converter_.current_block = saved_block;
+    return finish(result);
+  }
+  if (name_ == "seed")
+  {
+    exprt result = gen_zero(long_long_int_type());
+    converter_.current_block = saved_block;
+    return finish(result);
+  }
   validate();
   check_shape();
   exprt result = sized_ ? sample_array() : sample();
@@ -317,10 +530,24 @@ void numpy_random::bind(const std::string &param, const nlohmann::json &arg)
     population_ = read_population(arg);
   else if (param == "replace")
     replace_ = read_replace(arg);
+  else if (param == "endpoint")
+  {
+    if (!is_bool_literal(arg))
+      throw std::runtime_error(
+        "TypeError: numpy.random.integers() endpoint must be a boolean");
+    endpoint_ = arg["value"].get<bool>();
+  }
   else if (param == "p" && name_ == "choice")
     has_probabilities_ = read_probabilities(arg);
   else if (param == "size")
     read_shape(arg);
+  else if (
+    param == "seed" && (name_ == "default_rng" || name_ == "seed") &&
+    is_none(arg))
+  {
+    bound_.insert(param);
+    return;
+  }
   else
     values_[param] = evaluate_once(arg, param);
   bound_.insert(param);
@@ -408,7 +635,8 @@ exprt numpy_random::read_population(const nlohmann::json &arg)
   if (kind == "Tuple")
     elements["_type"] = "List";
   nlohmann::json copy = call_;
-  copy["func"]["value"] = call_["func"]["value"]["value"];
+  const auto module = generator_numpy_module(call_, converter_.ast());
+  copy["func"]["value"] = module ? *module : call_["func"]["value"]["value"];
   copy["func"]["attr"] = "array";
   copy["args"] = nlohmann::json::array({elements});
   copy["keywords"] = nlohmann::json::array();
@@ -481,7 +709,31 @@ bool numpy_random::read_probabilities(const nlohmann::json &arg)
 {
   if (is_none(arg))
     return false;
-  evaluate_once(arg, "");
+  const std::string kind = arg.value("_type", "");
+  if ((kind != "List" && kind != "Tuple") || !arg.contains("elts"))
+  {
+    evaluate_once(arg, "");
+    throw std::runtime_error(
+      "TypeError: numpy.random.choice() probabilities must be a literal "
+      "sequence");
+  }
+  for (const auto &item : arg["elts"])
+  {
+    const auto probability = literal_probability(item);
+    if (!probability)
+    {
+      evaluate_once(item, "");
+      throw std::runtime_error(
+        "TypeError: numpy.random.choice() probabilities must be literal "
+        "numbers");
+    }
+    if (!std::isfinite(*probability) || *probability < 0.0)
+      throw std::runtime_error(
+        "ValueError: numpy.random.choice() probabilities must be finite "
+        "and non-negative");
+    probabilities_.push_back(*probability);
+  }
+  has_probabilities_ = true;
   return true;
 }
 
@@ -585,11 +837,7 @@ std::string numpy_random::missing_argument() const
 {
   for (const std::string &param : signatures().at(name_))
   {
-    const bool has_default =
-      param == "size" || param == "dtype" || param == "replace" ||
-      param == "p" || (name_ == "randint" && param == "high") ||
-      (defaults().count(name_) && defaults().at(name_).count(param));
-    if (!bound_.count(param) && !has_default)
+    if (!bound_.count(param) && !has_optional_random_parameter(name_, param))
       return function_ + "() missing required argument '" + param + "'";
   }
   return {};
@@ -655,7 +903,7 @@ exprt numpy_random::value(const std::string &param) const
 // still raises.
 void numpy_random::validate()
 {
-  if (name_ == "randint")
+  if (name_ == "randint" || name_ == "integers")
     return validate_randint();
   if (name_ == "choice")
     return validate_choice();
@@ -726,12 +974,35 @@ void numpy_random::validate()
 void numpy_random::validate_randint()
 {
   const exprt zero = gen_zero(long_long_int_type());
+  const bool integers = name_ == "integers";
+  const bool has_high = values_.count("high") != 0;
   if (!values_.count("high"))
-    raise_if(rel(value("low"), "<=", zero), "ValueError", "high <= 0");
-  else
     raise_if(
-      rel(value("low"), ">=", value("high")), "ValueError", "low >= high");
+      rel(value("low"), "<=", zero),
+      "ValueError",
+      integers ? "high <= 0" : "high <= 0");
+  else
+  {
+    const exprt upper =
+      endpoint_ && integers
+        ? plus_exprt(value("high"), gen_one(long_long_int_type()))
+        : value("high");
+    raise_if(rel(value("low"), ">=", upper), "ValueError", "low >= high");
+  }
 
+  const exprt low = has_high ? value("low") : zero;
+  const exprt high = has_high ? value("high") : value("low");
+  validate_integer_dtype(low, high, integers);
+}
+
+void numpy_random::validate_integer_dtype(
+  const exprt &low,
+  const exprt &high,
+  bool integers)
+{
+  const exprt dtype_high = endpoint_ && integers
+                             ? plus_exprt(high, gen_one(long_long_int_type()))
+                             : high;
   if (dtype_.empty() || dtype_ == "int64")
     return;
   if (dtype_.find("float") == 0 || dtype_.find("complex") == 0)
@@ -747,14 +1018,12 @@ void numpy_random::validate_randint()
   const bool is_unsigned = dtype_[0] == 'u';
   const long long min = is_unsigned ? 0 : -(1LL << (bits - 1));
   const long long max = is_unsigned ? (1LL << bits) : (1LL << (bits - 1));
-  const exprt low = values_.count("high") ? value("low") : zero;
-  const exprt high = values_.count("high") ? value("high") : value("low");
   raise_if(
     rel(low, "<", from_integer(min, long_long_int_type())),
     "ValueError",
     "low is out of bounds for " + dtype_);
   raise_if(
-    rel(high, ">", from_integer(max, long_long_int_type())),
+    rel(dtype_high, ">", from_integer(max, long_long_int_type())),
     "ValueError",
     "high is out of bounds for " + dtype_);
 }
@@ -786,10 +1055,20 @@ void numpy_random::validate_choice()
       "ValueError",
       "a cannot be empty unless no samples are taken");
   if (has_probabilities_)
-    return raise_if(
-      true_exprt(),
-      "TypeError",
-      "numpy.random.choice() probabilities are not supported");
+  {
+    if (probabilities_.size() != static_cast<std::size_t>(population_size()))
+      return raise_if(
+        true_exprt(),
+        "ValueError",
+        "numpy.random.choice() probabilities do not match population");
+    const double total =
+      std::accumulate(probabilities_.begin(), probabilities_.end(), 0.0);
+    if (std::fabs(total - 1.0) > 1e-8)
+      return raise_if(
+        true_exprt(),
+        "ValueError",
+        "numpy.random.choice() probabilities do not sum to 1");
+  }
   if (!replace_ && samples > population_size())
     raise_if(
       true_exprt(),
@@ -880,7 +1159,8 @@ exprt numpy_random::sample_real()
 typet numpy_random::integer_sample_type() const
 {
   const auto dtype = numpy_dtype_from_name(dtype_);
-  return name_ == "randint" && dtype && dtype->is_integer() && dtype->bits != 64
+  return (name_ == "randint" || name_ == "integers") && dtype &&
+             dtype->is_integer() && dtype->bits != 64
            ? dtype->element_type()
            : long_long_int_type();
 }
@@ -893,9 +1173,20 @@ exprt numpy_random::sample_integer()
   if (name_ == "randint")
   {
     const bool has_high = values_.count("high");
+    exprt high = has_high ? value("high") : value("low");
     assume(and_exprt(
-      rel(k, ">=", has_high ? value("low") : zero),
-      rel(k, "<", has_high ? value("high") : value("low"))));
+      rel(k, ">=", has_high ? value("low") : zero), rel(k, "<", high)));
+    const typet stored = integer_sample_type();
+    return stored == type ? k : exprt(typecast_exprt(k, stored));
+  }
+  if (name_ == "integers")
+  {
+    const bool has_high = values_.count("high");
+    exprt high = has_high ? value("high") : value("low");
+    if (endpoint_)
+      high = plus_exprt(high, gen_one(type));
+    assume(and_exprt(
+      rel(k, ">=", has_high ? value("low") : zero), rel(k, "<", high)));
     const typet stored = integer_sample_type();
     return stored == type ? k : exprt(typecast_exprt(k, stored));
   }

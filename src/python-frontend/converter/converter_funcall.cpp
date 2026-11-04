@@ -615,7 +615,9 @@ exprt python_converter::get_call_expr(const nlohmann::json &element)
       "function that returns a function");
   if (std::optional<exprt> raise = call_property_value(element))
     return *raise;
-  if (numpy_random::is_random_call(element, *ast_json))
+  if (
+    numpy_random::is_random_call(element, *ast_json) ||
+    is_numpy_random_generator_call(element))
     return numpy_random(*this, element).get();
   return get_function_call(element);
 }
