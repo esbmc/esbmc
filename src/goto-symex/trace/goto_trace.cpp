@@ -548,13 +548,11 @@ void violation_yaml_goto_trace(
            not given; dropping one only weakens guidance. witnesslint also
            rejects line 0, e.g. the argv setup in __ESBMC_main (#9650). A
            branch fixed by the program text needs no waypoint either: on deep
-           recursion they number in the hundreds of thousands (#9689).
-           CPAchecker and UAutomizer reject a ternary waypoint (#9883). */
+           recursion they number in the hundreds of thousands (#9689). */
         if (
           branching_waypoints >= max_branching_waypoints ||
           !input_file_check(step.pc->location) ||
-          step.pc->location.get_line().empty() || !step.nondet_dependent ||
-          step.pc->location.get_bool("#ternary"))
+          step.pc->location.get_line().empty() || !step.nondet_dependent)
           break;
 
         ++branching_waypoints;

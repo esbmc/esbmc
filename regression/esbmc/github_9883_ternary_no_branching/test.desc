@@ -1,6 +1,0 @@
-CORE
-main.c
---witness-output-yaml -
-^VERIFICATION FAILED$
-type: "target"
-(?s)\A(?!.*type: "branching")

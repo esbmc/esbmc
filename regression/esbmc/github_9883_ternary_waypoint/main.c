@@ -1,4 +1,4 @@
-// #9883: a ternary gets no branching waypoint; CPAchecker and UAutomizer reject one.
+// #9883: a ternary branching waypoint points at its ?, parenthesised or not.
 extern int __VERIFIER_nondet_int(void);
 int f(void) { return 2; }
 
