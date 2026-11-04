@@ -555,22 +555,17 @@ void violation_yaml_goto_trace(
           step.pc->location.get_line().empty() || !step.nondet_dependent)
           break;
 
-        /* A switch takes one waypoint naming the case it enters, or default
-           (Witness-Format.md, branching), not one per case test (#9882). */
-        const auto &case_ids = step.pc->switch_case_ids;
-        if (
-          !case_ids.empty() && !step.guard &&
-          !is_last_switch_case_test(step.pc))
+        /* A switch would take one waypoint naming the case it enters, but
+           CPAchecker cannot parse any switch waypoint and the format does not
+           require one, so emit none (#9882). */
+        if (!step.pc->switch_case_ids.empty())
           break;
 
         ++branching_waypoints;
         waypoint wp =
           witness_waypoint(step.pc->location, yml.verified_file, options);
         wp.type = waypoint::branching;
-        if (case_ids.empty())
-          wp.value = !step.guard ? "true" : "false";
-        else
-          wp.value = step.guard ? case_ids.front() : "default";
+        wp.value = !step.guard ? "true" : "false";
         yml.segments.push_back(wp);
       }
       break;

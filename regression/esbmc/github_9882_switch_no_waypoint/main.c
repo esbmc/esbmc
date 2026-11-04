@@ -1,4 +1,4 @@
-/* #9882: a switch gets one branching waypoint naming the case taken. */
+/* #9882: a switch gets no branching waypoint; validators cannot parse one. */
 int nondet_int(void);
 
 int main()

@@ -2,5 +2,5 @@ CORE
 main.c
 --witness-output-yaml -
 ^VERIFICATION FAILED$
-^ +value: "7"$
-(?s)\A(?!.*value: "(true|false)")
+^ +type: "target"$
+(?s)\A(?!.*type: "branching")
