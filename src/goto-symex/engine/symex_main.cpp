@@ -1517,7 +1517,8 @@ leak_root_pointers(const expr2tc &root, const std::string &suffix)
 {
   std::vector<expr2tc> sub_exprs = {root};
   std::string rest = suffix;
-  while (!rest.empty())
+  /* A zero-size array, such as a flexible array member, expands to none. */
+  while (!rest.empty() && !sub_exprs.empty())
   {
     /* The suffix consists of a sequence of components, which are either
      * "[]" or ".name" where name is the name of some member of a
