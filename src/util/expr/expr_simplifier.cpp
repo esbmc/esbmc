@@ -5,6 +5,7 @@
 #include <vector>
 
 #include <util/arith/arith_tools.h>
+#include <util/config/config.h>
 #include <util/expr/base_type.h>
 #include <util/lang/c_types.h>
 #include <util/expr/expr_reassociate.h>
@@ -4841,12 +4842,19 @@ struct Lessthantor
   }
 };
 
+/// Under --ir an integer is unbounded, so its type does not bound its value
+/// and folds that rely on the type's range are unsound (#9534).
+static bool type_bounds_value()
+{
+  return !config.options.get_bool_option("int-encoding");
+}
+
 /// Type-extreme detector. For an integer constant @p c against bv type @p t,
 /// reports whether the constant equals the type's representable max or min.
 /// Used to short-circuit ordered comparisons against the bounds of the type.
 static bool is_type_max(const BigInt &c, const type2tc &t)
 {
-  if (!is_bv_type(t))
+  if (!is_bv_type(t) || !type_bounds_value())
     return false;
   unsigned w = t->get_width();
   if (is_signedbv_type(t))
@@ -4856,7 +4864,7 @@ static bool is_type_max(const BigInt &c, const type2tc &t)
 
 static bool is_type_min(const BigInt &c, const type2tc &t)
 {
-  if (!is_bv_type(t))
+  if (!is_bv_type(t) || !type_bounds_value())
     return false;
   if (is_signedbv_type(t))
     return c == -BigInt::power2(t->get_width() - 1);
@@ -4868,6 +4876,8 @@ static bool is_type_min(const BigInt &c, const type2tc &t)
 // (the C promotion `(int)a_u16` shape — the sign bit is never set).
 static bool is_provably_nonneg(const expr2tc &e)
 {
+  if (!type_bounds_value())
+    return false;
   if (is_unsignedbv_type(e))
     return true;
   if (is_typecast2t(e))

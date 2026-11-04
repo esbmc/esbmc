@@ -35,6 +35,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <climits>
 #include <cmath>
 #include <cstdlib>
 #include <functional>
@@ -331,6 +332,73 @@ void function_call_expr::plant_unsupported(const std::string &message) const
   check.location().user_provided(true);
   check.location().comment(message);
   converter_.current_block->copy_to_operands(check);
+}
+
+static const char *const abs_overflow_message =
+  "Unsupported: abs() of the smallest int, whose result is too large to "
+  "represent";
+
+/// Asserts @p representable as the abs() refusal and assumes it, so a path
+/// that fails the refusal ends there instead of going on with a wrapped value.
+void function_call_expr::refuse_abs_unless(const exprt &representable) const
+{
+  if (!converter_.can_emit_runtime_guard())
+    throw std::runtime_error(abs_overflow_message);
+  code_assertt check(representable);
+  check.location() = converter_.get_location_from_decl(call_);
+  check.location().user_provided(true);
+  check.location().comment(abs_overflow_message);
+  converter_.add_instruction(check);
+  converter_.add_instruction(code_assumet(representable));
+}
+
+/// abs() of an int literal. abs(-9223372036854775808) arrives as the stripped
+/// literal 9223372036854775808, which no int of the encoding holds: that is
+/// refused, and the refusal ends the path, so the 0 returned is never read.
+nlohmann::json
+function_call_expr::abs_of_int_literal(const nlohmann::json &value) const
+{
+  if (
+    value.is_number_unsigned() && value.get<unsigned long long>() >
+                                    static_cast<unsigned long long>(LLONG_MAX))
+  {
+    // Not the constant false, which CFG cleanup reads as the end of the
+    // function and so drops the assume.
+    refuse_abs_unless(not_exprt(true_exprt()));
+    return 0;
+  }
+  return std::llabs(value.get<long long>());
+}
+
+/// Python's abs() of the smallest int of the fixed-width encoding is one more
+/// than its largest int, so the result cannot be represented. Refuse that
+/// value instead of letting abs() wrap it back to itself (#8892). Under
+/// --int-encoding ints are unbounded and abs() is exact, so nothing is
+/// refused. Returns the operand to take abs() of, read once.
+exprt function_call_expr::refuse_unrepresentable_abs(exprt operand) const
+{
+  if (
+    operand.type().id() != "signedbv" ||
+    config.options.get_bool_option("int-encoding"))
+    return operand;
+  const signedbv_typet type = to_signedbv_type(operand.type());
+  if (!converter_.can_emit_runtime_guard())
+    throw std::runtime_error(abs_overflow_message);
+  if (!operand.is_symbol())
+  {
+    const locationt location = converter_.get_location_from_decl(call_);
+    symbolt &tmp =
+      converter_.create_tmp_symbol(call_, "$abs$", operand.type(), exprt());
+    code_declt decl(build_symbol(tmp));
+    decl.location() = location;
+    converter_.add_instruction(decl);
+    code_assignt assign(build_symbol(tmp), operand);
+    assign.location() = location;
+    converter_.add_instruction(assign);
+    operand = build_symbol(tmp);
+  }
+  refuse_abs_unless(python_expr::build_notequal(operand, type.smallest_expr()));
+  return operand;
 }
 
 /// The value a name is bound to, or an empty object.
@@ -1918,7 +1986,7 @@ exprt function_call_expr::handle_abs(nlohmann::json &arg) const
     if (is_complex_type(operand.type()))
       return converter_.get_complex_handler().handle_abs(operand);
     exprt abs_expr("abs", operand.type());
-    abs_expr.copy_to_operands(operand);
+    abs_expr.copy_to_operands(refuse_unrepresentable_abs(operand));
     return abs_expr;
   };
 
@@ -1942,8 +2010,7 @@ exprt function_call_expr::handle_abs(nlohmann::json &arg) const
   {
     if (arg["value"].is_number_integer())
     {
-      const long long value = arg["value"].get<long long>();
-      arg["value"] = std::llabs(value); // Apply abs to integer constant
+      arg["value"] = abs_of_int_literal(arg["value"]);
       arg["type"] = "int";
     }
     else if (arg["value"].is_number_float())

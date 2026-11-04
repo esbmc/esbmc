@@ -2938,6 +2938,33 @@ class LoopMixin:
 
         return assignments
 
+    def _scan_subscript_stored_values(self, module):
+        """Record the values each `name[key] = value` in `module` stores."""
+        self.subscript_stored_values = {}
+        for node in ast.walk(module):
+            if isinstance(node, ast.Assign):
+                for target in node.targets:
+                    if isinstance(target, ast.Subscript) and isinstance(target.value, ast.Name):
+                        self.subscript_stored_values.setdefault(target.value.id,
+                                                                []).append(node.value)
+
+    def _create_name_annotation(self, name, value):
+        """Annotation for `name` bound to `value`.
+
+        A dict literal's value type is dropped when the module stores a value
+        of another known type into `name`: the views of the dict would read
+        that value with the literal's type (#9753).
+        """
+        annotation = self._create_annotation_node_from_value(value)
+        if not (isinstance(value, ast.Dict) and isinstance(annotation, ast.Subscript)):
+            return annotation
+        value_type = ast.dump(annotation.slice.elts[1])
+        for stored in self.subscript_stored_values.get(name, []):
+            stored_type = self._infer_dict_value_annotation(stored)
+            if stored_type is not None and ast.dump(stored_type) != value_type:
+                return ast.Name(id="dict", ctx=ast.Load())
+        return annotation
+
     def _create_annotation_node_from_value(self, value):
         """Create an annotation AST node from a value node for storage"""
         if isinstance(value, ast.List):
