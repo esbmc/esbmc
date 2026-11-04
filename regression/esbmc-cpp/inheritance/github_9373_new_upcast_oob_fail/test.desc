@@ -1,0 +1,5 @@
+CORE
+main.cpp
+--std c++17 --unwind 9
+array bounds violated: array `buf' upper bound
+^VERIFICATION FAILED$

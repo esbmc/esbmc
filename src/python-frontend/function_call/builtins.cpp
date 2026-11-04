@@ -603,15 +603,19 @@ exprt function_call_expr::bind_isinstance_call(exprt &obj_expr) const
 
 /// The list item a read `*(T *)item->value` of a scalar element comes from, or
 /// nil. The cast is the frontend's guess at the element's type; the item's
-/// type_id records the type it was stored with.
-static exprt list_item_of_scalar_read(const exprt &read, const typet &item_type)
+/// type_id records the type it was stored with. A dict value read types the
+/// item with the followed struct rather than its tag, hence the follow.
+static exprt list_item_of_scalar_read(
+  const exprt &read,
+  const typet &item_type,
+  const namespacet &ns)
 {
   if (read.id() != "dereference" || read.op0().id() != "typecast")
     return nil_exprt();
   const exprt &value = read.op0().op0();
   if (
     value.id() != "member" || value.get("component_name") != "value" ||
-    value.op0().type() != item_type)
+    ns.follow(value.op0().type()) != ns.follow(item_type))
     return nil_exprt();
   return value.op0();
 }
@@ -622,14 +626,15 @@ static exprt list_item_of_scalar_read(const exprt &read, const typet &item_type)
 static exprt tagged_isinstance_operand(
   const exprt &obj,
   const std::string &type_name,
-  const type_handler &types)
+  const type_handler &types,
+  const namespacet &ns)
 {
   if (types.is_tagged_scalar_type(obj.type()))
     return obj;
   static const std::set<std::string> scalars = {"bool", "int", "float", "str"};
   if (!scalars.count(type_name))
     return nil_exprt();
-  return list_item_of_scalar_read(obj, types.get_tagged_object_type());
+  return list_item_of_scalar_read(obj, types.get_tagged_object_type(), ns);
 }
 
 // The type name an isinstance() classinfo node names.
@@ -753,8 +758,8 @@ exprt function_call_expr::handle_isinstance() const
     // A tagged-scalar operand's real type lives in the runtime `.type_id`
     // field rather than in a single static C type, so it needs its own
     // check instead of the static-type comparisons below.
-    const exprt tagged =
-      tagged_isinstance_operand(obj_expr, type_name, type_handler_);
+    const exprt tagged = tagged_isinstance_operand(
+      obj_expr, type_name, type_handler_, converter_.ns);
     if (tagged.is_not_nil())
       return converter_.dynamic_type_handler_.build_isinstance_check(
         tagged, type_name, json_utils::is_class(type_name, converter_.ast()));
