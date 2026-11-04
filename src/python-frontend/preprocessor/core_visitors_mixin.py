@@ -794,10 +794,13 @@ class CoreVisitorsMixin:
 
     def _is_resolvable_unpacked_method(self, target, value, statement):
         """Whether unpacking `obj.m` into `target` may be resolved at each call
-        of `target`: the statement is top-level, `target` is bound nowhere
-        else, and `obj.m` is a method of a fixed instance (#8354)."""
-        return (id(statement) in self.module_statements and target.id in self.once_bound_names
-                and isinstance(value, ast.Attribute) and isinstance(value.value, ast.Name)
+        of `target`: `target` is bound nowhere else, by a top-level statement or
+        one whose every read raises NameError while it is unbound (#9813), and
+        `obj.m` is a method of a fixed instance (#8354)."""
+        return ((id(statement) in self.module_statements
+                 or target.id in self.unbound_checked_globals)
+                and target.id in self.once_bound_names and isinstance(value, ast.Attribute)
+                and isinstance(value.value, ast.Name)
                 and value.attr in self.fixed_receivers.get(value.value.id, ()))
 
     def _maybe_rewrite_bound_method_call(self, node):
