@@ -2065,8 +2065,14 @@ python_converter::numpy_random_state_id(const nlohmann::json &call) const
     return numpy_random_generator_states_.at(id);
   }
   if (numpy_random::is_random_call(call, *ast_json))
-    return "$numpy_random_module_state$";
+    return "$numpy_random_module_state$" +
+           std::to_string(numpy_random_module_state_version_);
   return {};
+}
+
+void python_converter::reset_numpy_random_module_state()
+{
+  ++numpy_random_module_state_version_;
 }
 
 void python_converter::update_numpy_random_generator_binding(

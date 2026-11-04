@@ -2258,6 +2258,7 @@ private:
   std::string resolve_name_symbol_id(const std::string &name) const;
   bool is_numpy_random_generator_call(const nlohmann::json &call) const;
   std::string numpy_random_state_id(const nlohmann::json &call) const;
+  void reset_numpy_random_module_state();
   void update_numpy_random_generator_binding(
     const exprt &lhs,
     const nlohmann::json &rhs_node);
@@ -3739,6 +3740,7 @@ private:
   bool has_cached_any_subscript_rhs_ = false;
   std::set<std::string> numpy_array_symbols_;
   std::unordered_map<std::string, std::string> numpy_random_generator_states_;
+  std::size_t numpy_random_module_state_version_ = 0;
   std::unordered_map<irep_idt, std::string, irep_id_hash> class_object_names_;
   /// Ids of the classes used as runtime class values.
   std::map<std::string, int> class_ids_;

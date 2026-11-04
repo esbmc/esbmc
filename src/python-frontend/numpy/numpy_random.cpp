@@ -464,7 +464,8 @@ exprt numpy_random::get()
   }
   if (
     name_ == "integers" &&
-    (state_id_.empty() || state_id_ == "$numpy_random_module_state$"))
+    (state_id_.empty() ||
+     state_id_.rfind("$numpy_random_module_state$", 0) == 0))
   {
     const exprt result = reject_unmodelled();
     converter_.current_block = saved_block;
@@ -472,6 +473,7 @@ exprt numpy_random::get()
   }
   if (name_ == "seed")
   {
+    converter_.reset_numpy_random_module_state();
     exprt result = gen_zero(long_long_int_type());
     converter_.current_block = saved_block;
     return finish(result);
