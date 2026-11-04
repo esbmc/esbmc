@@ -103,5 +103,9 @@ elseif(MIMALLOC_TARGET)
   # malloc/operator new override wins.
   target_link_libraries(esbmc PRIVATE ${MIMALLOC_TARGET})
 endif()
+# Finds a downloaded libz3.so, which src/solvers/z3 installs to lib/.
+if(UNIX AND NOT APPLE AND NOT BUILD_STATIC)
+  set_target_properties(esbmc PROPERTIES INSTALL_RPATH "$ORIGIN/../lib")
+endif()
 install(TARGETS esbmc DESTINATION bin)
 install(FILES ${CMAKE_SOURCE_DIR}/include/esbmc.h DESTINATION include)

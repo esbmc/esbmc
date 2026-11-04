@@ -33,6 +33,11 @@ on:
         required: false
         default: auto
         type: string
+      apt-llvm:
+        description: "LLVM major version to install from apt.llvm.org for a shared (-S OFF) Ubuntu build; empty adds no repository"
+        required: false
+        default: ''
+        type: string
 
 jobs:
   build:
@@ -56,6 +61,18 @@ jobs:
         path: .cache/ccache
         key: ${{ env.CCACHE_KEY }}-${{ github.sha }}
         restore-keys: ${{ env.CCACHE_KEY }}-
+
+    # build.sh -S OFF installs llvm-N-dev, libclang-N-dev, libclang-cppN-dev
+    # and clang-N with apt; Ubuntu's own archive stops at LLVM 20 on noble.
+    - name: Add the apt.llvm.org repository
+      if: ${{ inputs.apt-llvm != '' }}
+      run: |
+        codename=$(. /etc/os-release && echo "$VERSION_CODENAME")
+        sudo install -d -m 0755 /etc/apt/keyrings
+        wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key |
+          sudo tee /etc/apt/keyrings/apt.llvm.org.asc > /dev/null
+        echo "deb [signed-by=/etc/apt/keyrings/apt.llvm.org.asc] https://apt.llvm.org/$codename/ llvm-toolchain-$codename-${{ inputs.apt-llvm }} main" |
+          sudo tee /etc/apt/sources.list.d/apt.llvm.org.list
 
     - name: Build ESBMC
       run: ./scripts/build.sh ${{ inputs.build-flags }} ${{ inputs.linker != 'auto' && format('-l {0}', inputs.linker) || '' }}

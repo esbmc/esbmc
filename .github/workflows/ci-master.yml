@@ -29,7 +29,8 @@ jobs:
     uses: ./.github/workflows/aux-build-unix.yml
     with:
       operating-system: ubuntu-24.04
-      build-flags: '-b DebugOpt -e ON'
+      build-flags: '-b DebugOpt -S OFF -c 22 -e ON'
+      apt-llvm: '22'
       testing: false
       upload: false
       save-cache: true

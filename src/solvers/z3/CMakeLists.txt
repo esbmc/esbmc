@@ -51,6 +51,14 @@ if(ENABLE_Z3)
     # Add to solver link
     target_link_libraries(solvers INTERFACE solverz3)
 
+    # A downloaded Z3 lives in the build tree, which the installed esbmc
+    # cannot see.
+    string(FIND "${Z3_LIB}" "${CMAKE_BINARY_DIR}/" Z3_LIB_IN_BUILD_TREE)
+    if(UNIX AND NOT APPLE AND Z3_LIB_IN_BUILD_TREE EQUAL 0
+       AND Z3_LIB MATCHES "\\.so$")
+      install(FILES "${Z3_LIB}" DESTINATION lib)
+    endif()
+
     # Install dll for Windows
     if(WIN32)
       find_file(Z3_DLL libz3.dll HINTS ${Z3_DIR} $ENV{HOME}/z3 PATH_SUFFIXES lib bin)

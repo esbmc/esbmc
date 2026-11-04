@@ -178,8 +178,9 @@ prepare_platform_config() {
         BASE_ARGS+=(
           "-DClang_DIR=/usr/lib/cmake/clang-$CLANG_VERSION"
           "-DLLVM_DIR=/usr/lib/llvm-$CLANG_VERSION/lib/cmake/llvm"
-          "-DZ3_DIR=/usr"
         )
+        # Z3 comes from its release zip as libz3.so: noble's libz3-dev is
+        # 4.8.12, which dies with SIGFPE on --ir-ieee.
         log "Configuring shared Ubuntu build with Clang-$CLANG_VERSION frontend"
       else
         log "Configuring static Ubuntu build"
@@ -298,7 +299,6 @@ collect_ubuntu_packages() {
       "libclang-cpp${CLANG_VERSION}-dev"
       # Ships /usr/lib/cmake/clang-N (ClangConfig.cmake); no -dev package has it.
       "clang-$CLANG_VERSION"
-      libz3-dev
     )
   fi
 }

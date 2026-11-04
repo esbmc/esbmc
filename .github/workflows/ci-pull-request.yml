@@ -47,12 +47,17 @@ jobs:
     - name: Runs testing tool unit test
       run: cd regression && python3 testing_tool_test.py
 
+  # Shared against apt's LLVM: the static build's LLVM tarball and statically
+  # linked test binaries filled the runner's disk. The static release
+  # configuration is still built by ci-release.yml. The name stays "static":
+  # master's branch protection requires this check by name.
   build-ubuntu:
     uses: ./.github/workflows/aux-build-unix.yml
     name: static llvm-22 DebugOpt
     with:
       operating-system: ubuntu-24.04
-      build-flags: '-b DebugOpt -e ON'
+      build-flags: '-b DebugOpt -S OFF -c 22 -e ON'
+      apt-llvm: '22'
       testing: true
 
   # Check project with clang-format. This job no longer auto-commits fixes:
