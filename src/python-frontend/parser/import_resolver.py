@@ -107,6 +107,9 @@ def _mark_import_resolution(
     node.module_resolution_reason = reason
 
 
+_SV_VERIFIER = "_sv_verifier"
+
+
 def _has_model_file(module_name: str, output_dir: str) -> bool:
     """Whether a model stands in for this exact module.
 
@@ -268,6 +271,13 @@ def import_module_by_name(
                 return importlib.import_module(parent)
             except ImportError:
                 pass
+
+        if module_name == _SV_VERIFIER:
+            # BenchExec cloud workers receive only the task's own files, so the
+            # benchmark set's _sv_verifier.py may be absent (#9796).
+            stub = _normalize_existing_path(os.path.join(output_dir, "stubs", _SV_VERIFIER + ".py"))
+            if stub is not None:
+                return stub
 
         # Keep legacy error text: regression tests assert this exact line.
         _resolver_error(f"Module '{module_name}' not found.")
