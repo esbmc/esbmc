@@ -7,7 +7,9 @@
 #include <util/expr/expr_util.h>
 #include <util/lang/python_types.h>
 
+#include <algorithm>
 #include <map>
+#include <set>
 
 using namespace python_expr;
 
@@ -84,7 +86,106 @@ python_converter::instance_class_name(const nlohmann::json &value_node)
       class_name = func.value("id", "");
   }
 
+  if (class_name.empty() && value_node.value("_type", "") == "Attribute")
+    class_name = attribute_class_name(value_node);
+
   return class_name;
+}
+
+static bool contains_return(const nlohmann::json &node)
+{
+  if (node.is_object() && node.value("_type", "") == "Return")
+    return true;
+  return node.is_structured() &&
+         std::any_of(node.begin(), node.end(), contains_return);
+}
+
+// Counts the nodes of @p node that store to or delete an attribute @p attr,
+// or reach attributes by name (setattr, __dict__, ...).
+static size_t
+attribute_writes(const nlohmann::json &node, const std::string &attr)
+{
+  size_t n = 0;
+  if (node.is_object())
+  {
+    const std::string kind = node.value("_type", "");
+    if (
+      kind == "Attribute" && node.value("attr", "") == attr &&
+      node.value("ctx", nlohmann::json()).value("_type", "") != "Load")
+      ++n;
+    static const std::set<std::string> reflective = {
+      "setattr",
+      "delattr",
+      "__dict__",
+      "__setattr__",
+      "__delattr__",
+      "__class__",
+      "__new__",
+      "vars"};
+    if (
+      (kind == "Name" && reflective.count(node.value("id", ""))) ||
+      (kind == "Attribute" && reflective.count(node.value("attr", ""))))
+      ++n;
+  }
+  if (node.is_structured())
+    for (const auto &child : node)
+      n += attribute_writes(child, attr);
+  return n;
+}
+
+/// The class of the instance `obj.attr` holds, when that is fixed: the only
+/// store to `attr` in the module is an unconditional `self.attr = C(...)` in
+/// the `__init__` of obj's class, and neither class has a subclass. A
+/// component's type is that of the first value stored, so it names the
+/// runtime class only then: None, a subclass instance, or an attribute set
+/// on some paths would be dispatched as a C instance.
+std::string
+python_converter::attribute_class_name(const nlohmann::json &attribute)
+{
+  if (python_file() != main_python_filename())
+    return "";
+  const std::string owner = instance_class_name(attribute["value"]);
+  const std::string attr = attribute.value("attr", "");
+  const nlohmann::json &body = (*ast_json)["body"];
+  const nlohmann::json owner_def = json_utils::find_class(body, owner);
+  if (
+    owner_def.empty() || json_utils::has_subclass(owner, *ast_json) ||
+    attribute_writes(*ast_json, attr) != 1)
+    return "";
+
+  for (const auto &method : owner_def["body"])
+  {
+    if (
+      method.value("_type", "") != "FunctionDef" ||
+      method.value("name", "") != "__init__" || method["args"]["args"].empty())
+      continue;
+    const std::string self = method["args"]["args"][0].value("arg", "");
+    for (const auto &stmt : method["body"])
+    {
+      const std::string kind = stmt.value("_type", "");
+      const nlohmann::json &target =
+        kind == "Assign" && stmt["targets"].size() == 1 ? stmt["targets"][0]
+        : kind == "AnnAssign"                           ? stmt["target"]
+                                                        : nlohmann::json();
+      const nlohmann::json value = stmt.value("value", nlohmann::json());
+      if (
+        target.is_object() && target.value("_type", "") == "Attribute" &&
+        target.value("attr", "") == attr &&
+        target["value"].value("id", "") == self && value.is_object() &&
+        value.value("_type", "") == "Call" &&
+        value["func"].value("_type", "") == "Name")
+      {
+        const std::string cls = value["func"].value("id", "");
+        return json_utils::find_class(body, cls).empty() ||
+                   json_utils::has_subclass(cls, *ast_json)
+                 ? ""
+                 : cls;
+      }
+      if (contains_return(stmt))
+        return "";
+    }
+  }
+  return "";
 }
 
 bool python_converter::has_dunder_method(
