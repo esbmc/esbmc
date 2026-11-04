@@ -80,6 +80,15 @@ bool is_untyped_nondet(const exprt &e)
   return e.type().is_empty() && e.statement() == "nondet";
 }
 
+// @p value as a condition, or the raise evaluating it always ends in (#9838).
+exprt condition_or_raise(
+  const exprt &value,
+  const std::function<exprt(const exprt &)> &to_condition)
+{
+  const exprt *raise = python_frontend::raised_condition(value);
+  return raise ? *raise : to_condition(value);
+}
+
 // `lhs = value`, or the raise that evaluating @p value always ends in.
 codet assign_or_raise(
   const exprt &lhs,
@@ -9426,10 +9435,9 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
       exprt *saved_lhs = current_lhs;
       current_lhs = nullptr;
       // Start from the leftmost operand and carry the running result forward.
-      // An operand that raises (#9838) is emitted as the raise statement.
-      const exprt first = get_expr(operands[0]);
-      const exprt *first_raise = python_frontend::raised_condition(first);
-      cond = first_raise ? false_exprt() : to_bool_condition(first, operands[0]);
+      cond = condition_or_raise(get_expr(operands[0]), [&](const exprt &e) {
+        return to_bool_condition(e, operands[0]);
+      });
       current_lhs = saved_lhs;
 
       symbolt result_symbol = create_return_temp_variable(
@@ -9441,15 +9449,8 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
       result_decl.location() = get_location_from_decl(test_node);
       current_block->copy_to_operands(result_decl);
 
-      if (first_raise)
-      {
-        const locationt first_location = get_location_from_decl(operands[0]);
-        current_block->copy_to_operands(
-          raise_statement(*first_raise, first_location));
-      }
-      code_assignt result_init(result_expr, cond);
-      result_init.location() = get_location_from_decl(test_node);
-      current_block->copy_to_operands(result_init);
+      current_block->copy_to_operands(
+        assign_or_raise(result_expr, cond, get_location_from_decl(test_node)));
 
       const bool is_and = test_node["op"]["_type"] == "And";
       for (size_t i = 1; i < operands.size(); ++i)
@@ -9460,23 +9461,15 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
         saved_lhs = current_lhs;
         current_lhs = nullptr;
         // Build the next operand only in the branch where it is still needed.
-        const exprt next = get_expr(operands[i]);
-        const exprt *raise = python_frontend::raised_condition(next);
         const exprt next_operand =
-          raise ? exprt() : to_bool_condition(next, operands[i]);
+          condition_or_raise(get_expr(operands[i]), [&](const exprt &e) {
+            return to_bool_condition(e, operands[i]);
+          });
         current_lhs = saved_lhs;
         current_block = saved_block;
 
-        const locationt next_location = get_location_from_decl(operands[i]);
-        if (raise)
-          next_operand_block.copy_to_operands(
-            raise_statement(*raise, next_location));
-        else
-        {
-          code_assignt result_update(result_expr, next_operand);
-          result_update.location() = next_location;
-          next_operand_block.copy_to_operands(result_update);
-        }
+        next_operand_block.copy_to_operands(assign_or_raise(
+          result_expr, next_operand, get_location_from_decl(operands[i])));
 
         code_ifthenelset short_circuit_if;
         short_circuit_if.location() = get_location_from_decl(operands[i]);

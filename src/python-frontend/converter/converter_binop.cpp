@@ -1004,6 +1004,46 @@ void python_converter::reject_walrus_in_boolop(const nlohmann::json &element)
       "Walrus operator ':=' in a boolean (and/or) operand is not supported");
 }
 
+/// Converts the operands of the and/or \p element into \p logical_expr.
+/// Returns the raise when the first operand always raises, nil otherwise.
+exprt python_converter::convert_boolop_operands(
+  const nlohmann::json &element,
+  exprt &logical_expr,
+  std::vector<code_blockt> &effects,
+  bool &contains_non_boolean)
+{
+  // Mark that we're processing operands in an expression context
+  // This ensures boolean-returning function calls are converted to side-effect
+  // expressions
+  const bool old_is_converting_rhs = std::exchange(is_converting_rhs, true);
+  const bool old_in_lazy_operand = in_lazy_operand_;
+  exprt raised = nil_exprt();
+
+  // Iterate over operands of logical operations (and/or)
+  for (const auto &operand : element["values"])
+  {
+    exprt operand_expr = get_boolop_operand(operand, effects);
+    const exprt *raise = python_frontend::raised_condition(operand_expr);
+    if (raise && effects.size() == 1)
+    {
+      raised = *raise;
+      break;
+    }
+    // A planted raise: the operand's value is never read.
+    if (operand_expr.is_nil())
+      operand_expr = gen_zero(logical_expr.operands().front().type());
+    refuse_tagged_boolop_operand(operand_expr);
+    in_lazy_operand_ = true;
+    logical_expr.copy_to_operands(operand_expr);
+    contains_non_boolean |= !operand_expr.is_boolean();
+  }
+
+  // Restore the original flag state
+  is_converting_rhs = old_is_converting_rhs;
+  in_lazy_operand_ = old_in_lazy_operand;
+  return raised;
+}
+
 exprt python_converter::get_logical_operator_expr(const nlohmann::json &element)
 {
   // `and`/`or` short-circuit: a later operand may not execute. get_named_expr
@@ -1049,37 +1089,11 @@ exprt python_converter::get_logical_operator_expr(const nlohmann::json &element)
       value_expr, get_location_from_decl(element));
   };
 
-  // Mark that we're processing operands in an expression context
-  // This ensures boolean-returning function calls are converted to side-effect
-  // expressions
-  bool old_is_converting_rhs = is_converting_rhs;
-  is_converting_rhs = true;
-  const bool old_in_lazy_operand = in_lazy_operand_;
   std::vector<code_blockt> operand_effects;
-
-  // Iterate over operands of logical operations (and/or)
-  for (const auto &operand : element["values"])
-  {
-    exprt operand_expr = get_boolop_operand(operand, operand_effects);
-    const exprt *raised = python_frontend::raised_condition(operand_expr);
-    if (raised && operand_effects.size() == 1)
-    {
-      is_converting_rhs = old_is_converting_rhs;
-      in_lazy_operand_ = old_in_lazy_operand;
-      return *raised;
-    }
-    // A planted raise: the operand's value is never read.
-    if (operand_expr.is_nil())
-      operand_expr = gen_zero(logical_expr.operands().front().type());
-    refuse_tagged_boolop_operand(operand_expr);
-    in_lazy_operand_ = true;
-    logical_expr.copy_to_operands(operand_expr);
-    contains_non_boolean |= !operand_expr.is_boolean();
-  }
-
-  // Restore the original flag state
-  is_converting_rhs = old_is_converting_rhs;
-  in_lazy_operand_ = old_in_lazy_operand;
+  const exprt raised = convert_boolop_operands(
+    element, logical_expr, operand_effects, contains_non_boolean);
+  if (raised.is_not_nil())
+    return raised;
 
   // A BoolOp must have at least two values, but AST rewrites (e.g. lowering
   // `x == []` to `len(x) == 0`) can produce a degenerate one-value node. A

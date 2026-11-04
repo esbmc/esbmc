@@ -1119,6 +1119,12 @@ private:
 
   exprt get_logical_operator_expr(const nlohmann::json &element);
 
+  exprt convert_boolop_operands(
+    const nlohmann::json &element,
+    exprt &logical_expr,
+    std::vector<code_blockt> &effects,
+    bool &contains_non_boolean);
+
   exprt get_boolop_operand(
     const nlohmann::json &operand,
     std::vector<code_blockt> &effects);
