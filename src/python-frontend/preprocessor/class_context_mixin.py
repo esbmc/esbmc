@@ -685,13 +685,12 @@ class ClassContextMixin:
             if isinstance(n, ast.Call) and isinstance(n.func, ast.Name):
                 calls[n.func.id].append(n)
         for func in module.body:
-            if not (isinstance(func, ast.FunctionDef) and not func.decorator_list
-                    and counts[func.name] == 1 and calls[func.name]
+            if not (self._is_plain_function(func) and counts[func.name] == 1 and calls[func.name]
                     and loads[func.name] == len(calls[func.name])):
                 continue
             for i, param in enumerate(func.args.posonlyargs + func.args.args):
                 name = param.arg
-                if counts[name] != 2 or self._binds_name(func, name, param):
+                if counts[name] != 2:
                     continue
                 known = self._known_classes(module, counts - Counter([name]))
                 if name not in known or not all(
@@ -704,7 +703,7 @@ class ClassContextMixin:
                     if isinstance(n, ast.Name) and n.id == name:
                         n.id = fresh
                 for keyword in (k for c in calls[func.name] for k in c.keywords):
-                    if keyword.arg == name:
+                    if keyword.arg == name and i >= len(func.args.posonlyargs):
                         keyword.arg = fresh
                 param.arg = fresh
                 counts[name] -= 1
