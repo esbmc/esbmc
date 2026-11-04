@@ -245,7 +245,34 @@ exprt function_call_expr::build_nondet_call() const
 
   exprt rhs = exprt("sideeffect", type_handler_.get_typet(type));
   rhs.statement("nondet");
-  return rhs;
+  return exclude_smallest_int(type, rhs);
+}
+
+/// nondet_int() models Python's unbounded int as a 64-bit value, which already
+/// leaves out 2**63 and above. Leave out -2**63 as well, so the range is
+/// symmetric and abs() of a nondet int is representable (#8892). Under
+/// --int-encoding ints are unbounded and nothing is left out.
+exprt function_call_expr::exclude_smallest_int(
+  const std::string &type,
+  const exprt &nondet) const
+{
+  if (
+    type != "int" || config.options.get_bool_option("int-encoding") ||
+    !converter_.can_emit_runtime_guard())
+    return nondet;
+  const locationt location = converter_.get_location_from_decl(call_);
+  symbolt &tmp =
+    converter_.create_tmp_symbol(call_, "$nondet_int$", nondet.type(), exprt());
+  code_declt decl(build_symbol(tmp));
+  decl.location() = location;
+  converter_.add_instruction(decl);
+  code_assignt assign(build_symbol(tmp), nondet);
+  assign.location() = location;
+  converter_.add_instruction(assign);
+  converter_.add_instruction(code_assumet(
+    python_expr::build_notequal(
+      build_symbol(tmp), to_signedbv_type(nondet.type()).smallest_expr())));
+  return build_symbol(tmp);
 }
 
 // The types named by an isinstance/issubclass classinfo: a type, a (nested)
