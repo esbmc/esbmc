@@ -9,8 +9,10 @@
 import random
 import string
 
+
 def nondet_bool():
     return bool(random.randint(0, 1))
+
 
 def nondet_int() -> int:
     # unbounded int
@@ -21,11 +23,13 @@ def nondet_int() -> int:
         i = -i
     return i
 
+
 def nondet_list(nondet_elem):
     l = []
     while nondet_bool():
         l.append(nondet_elem())
     return l
+
 
 def nondet_dict(nondet_key, nondet_value):
     d = dict()
@@ -33,12 +37,14 @@ def nondet_dict(nondet_key, nondet_value):
         d[nondet_key()] = nondet_value()
     return d
 
+
 def nondet_str():
     # Source - https://stackoverflow.com/a/23728630
     # Posted by Randy Marsh, modified by community. See post 'Timeline' for change history
     # Retrieved 2026-06-01, License - CC BY-SA 4.0
     # Note that this is the concrete implementation, but it could be changed to include *any* kind of caracter
     return ''.join(random.choice(string.printable) for _ in range(abs(nondet_int())))
+
 
 def nondet_float():
     import sys

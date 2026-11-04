@@ -275,8 +275,7 @@ def import_module_by_name(
         if module_name == _SV_VERIFIER:
             # BenchExec cloud workers receive only the task's own files, so the
             # benchmark set's _sv_verifier.py may be absent (#9796).
-            stub = _normalize_existing_path(
-                os.path.join(output_dir, "stubs", _SV_VERIFIER + ".py"))
+            stub = _normalize_existing_path(os.path.join(output_dir, "stubs", _SV_VERIFIER + ".py"))
             if stub is not None:
                 return stub
 
