@@ -325,6 +325,21 @@ static bool derives_only_from_user_classes(
     });
 }
 
+// An unannotated `self` is named only by its bound type, which is not the
+// receiver's class when a subclass, here or in a module that imports this
+// one, may supply its own __len__ (#9835).
+std::string python_converter::exact_self_class(const nlohmann::json &arg)
+{
+  if (arg.value("id", "") != "self" || python_file() != main_python_filename())
+    return {};
+  const std::string bound = bound_class_name(arg);
+  if (
+    !derives_only_from_user_classes(bound, *ast_json) ||
+    json_utils::has_subclass(bound, *ast_json))
+    return {};
+  return bound;
+}
+
 exprt python_converter::get_len_on_class_instance(const nlohmann::json &element)
 {
   if (
@@ -337,19 +352,8 @@ exprt python_converter::get_len_on_class_instance(const nlohmann::json &element)
   const nlohmann::json &arg = element["args"][0];
   const locationt location = get_location_from_decl(element);
   std::string cls = instance_class_name(arg);
-  // An unannotated `self` is named only by its bound type, which is not the
-  // receiver's class when a subclass, here or in a module that imports this
-  // one, may supply its own __len__ (#9835).
-  if (
-    cls.empty() && arg.value("id", "") == "self" &&
-    python_file() == main_python_filename())
-  {
-    const std::string bound = bound_class_name(arg);
-    if (
-      derives_only_from_user_classes(bound, *ast_json) &&
-      !json_utils::has_subclass(bound, *ast_json))
-      cls = bound;
-  }
+  if (cls.empty())
+    cls = exact_self_class(arg);
 
   if (!cls.empty() && find_dunder_method(cls, "__len__"))
     return checked_len_result(

@@ -3579,6 +3579,8 @@ private:
   bool is_class_instance(const nlohmann::json &value_node);
   /// Class of the user-class instance a Name is bound to, or "".
   std::string bound_class_name(const nlohmann::json &name_node);
+  /// Class of @p arg when it is a `self` whose bound class is its runtime one.
+  std::string exact_self_class(const nlohmann::json &arg);
   bool has_dunder_method(
     const nlohmann::json &value_node,
     const std::string &dunder_name);
