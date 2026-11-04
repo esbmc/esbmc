@@ -680,33 +680,56 @@ class ClassContextMixin:
         counts = Counter(name for n in ast.walk(module) for name in self._names_bound_by(n))
         loads = Counter(n.id for n in ast.walk(module) if isinstance(n, ast.Name))
         taken = counts.keys() | loads.keys()
-        calls = defaultdict(list)
-        for n in ast.walk(module):
-            if isinstance(n, ast.Call) and isinstance(n.func, ast.Name):
-                calls[n.func.id].append(n)
+        calls = self._direct_calls(module)
         for func in module.body:
             if not (self._is_plain_function(func) and counts[func.name] == 1 and calls[func.name]
                     and loads[func.name] == len(calls[func.name])):
                 continue
             for i, param in enumerate(func.args.posonlyargs + func.args.args):
-                name = param.arg
-                if counts[name] != 2:
-                    continue
-                known = self._known_classes(module, counts - Counter([name]))
-                if name not in known or not all(
-                        self._class_argument(c, func, i, known) for c in calls[func.name]):
-                    continue
-                fresh = next(f"{name}__esbmc_param{n}" for n in itertools.count()
-                             if f"{name}__esbmc_param{n}" not in taken)
-                taken.add(fresh)
-                for n in (n for s in func.body for n in ast.walk(s)):
-                    if isinstance(n, ast.Name) and n.id == name:
-                        n.id = fresh
-                for keyword in (k for c in calls[func.name] for k in c.keywords):
-                    if keyword.arg == name and i >= len(func.args.posonlyargs):
-                        keyword.arg = fresh
-                param.arg = fresh
-                counts[name] -= 1
+                if self._shadows_class_argument(module, counts, func, i, calls[func.name]):
+                    counts[param.arg] -= 1
+                    self._rename_parameter(func, i, calls[func.name],
+                                           self._fresh_name(f"{param.arg}__esbmc_param", taken))
+
+    @staticmethod
+    def _direct_calls(module):
+        """Each name's calls in `module` that call it directly by name."""
+        calls = defaultdict(list)
+        for n in ast.walk(module):
+            if isinstance(n, ast.Call) and isinstance(n.func, ast.Name):
+                calls[n.func.id].append(n)
+        return calls
+
+    @staticmethod
+    def _fresh_name(prefix, taken):
+        """The first of `prefix0`, `prefix1`, ... not in `taken`, added to it."""
+        name = next(f"{prefix}{n}" for n in itertools.count() if f"{prefix}{n}" not in taken)
+        taken.add(name)
+        return name
+
+    def _shadows_class_argument(self, module, counts, func, index, calls):
+        """Whether `func`'s parameter `index` is the only binding of a known
+        class's name besides its definition, and every one of `calls` passes
+        a known class for it."""
+        name = (func.args.posonlyargs + func.args.args)[index].arg
+        if counts[name] != 2:
+            return False
+        known = self._known_classes(module, counts - Counter([name]))
+        return name in known and all(self._class_argument(c, func, index, known) for c in calls)
+
+    @staticmethod
+    def _rename_parameter(func, index, calls, fresh):
+        """Rename `func`'s parameter `index` to `fresh` in its body and in the
+        keywords of `calls`; a positional-only one is never a keyword."""
+        param = (func.args.posonlyargs + func.args.args)[index]
+        for n in (n for s in func.body for n in ast.walk(s)):
+            if isinstance(n, ast.Name) and n.id == param.arg:
+                n.id = fresh
+        if index >= len(func.args.posonlyargs):
+            for keyword in (k for c in calls for k in c.keywords):
+                if keyword.arg == param.arg:
+                    keyword.arg = fresh
+        param.arg = fresh
 
     def _unroll_class_tuples(self, module, known, counts):
         """Unroll a `for` loop, and an `any`/`all` over a generator, that runs
@@ -915,10 +938,7 @@ class ClassContextMixin:
         """Specialise the first top-level function that only ever is called
         directly by name; whether one was."""
         loads = Counter(n.id for n in ast.walk(module) if isinstance(n, ast.Name))
-        calls = defaultdict(list)
-        for n in ast.walk(module):
-            if isinstance(n, ast.Call) and isinstance(n.func, ast.Name):
-                calls[n.func.id].append(n)
+        calls = self._direct_calls(module)
         taken = counts.keys() | loads.keys()
         return any(
             self._specialise_type_parameters(module, f, known, calls[f.name], taken)
