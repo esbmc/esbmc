@@ -1,4 +1,0 @@
-CORE
-main.py
---unwind 6
-^ERROR: Cannot unpack empty - only tuples and arrays can be unpacked$
