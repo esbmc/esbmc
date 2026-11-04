@@ -215,11 +215,13 @@ void create_waypoint(const waypoint &wp, YAML::Emitter &waypoint)
   }
   else if (wp.type == waypoint::function_return)
   {
+    // Format 2.1 requires ext_c_expression (or acsl_expression) here, unlike
+    // the other waypoints; witnesslint rejects c_expression (#9687).
     waypoint << YAML::Key << "constraint" << YAML::Value << YAML::BeginMap;
     waypoint << YAML::Key << "value" << YAML::Value << YAML::DoubleQuoted
              << wp.value;
     waypoint << YAML::Key << "format" << YAML::Value << YAML::DoubleQuoted
-             << "c_expression";
+             << "ext_c_expression";
     waypoint << YAML::EndMap;
   }
   else if (wp.type == waypoint::branching)
