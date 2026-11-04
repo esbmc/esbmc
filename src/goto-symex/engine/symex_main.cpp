@@ -237,6 +237,31 @@ void goto_symext::propagate_assume_equality(const expr2tc &the_assumption)
   expr2tc lhs = strip_noop_casts(eq.side_1);
   expr2tc rhs = strip_noop_casts(eq.side_2);
 
+  // C promotes a narrow operand, so `flag == 1` arrives as `(int)flag == 1`.
+  // A value-preserving widening is lifted onto the narrow symbol when the
+  // constant fits it (#9852).
+  auto narrow_widened = [](expr2tc &sym_side, expr2tc &const_side) {
+    if (!is_typecast2t(sym_side) || !is_constant_int2t(const_side))
+      return;
+    const expr2tc &from = to_typecast2t(sym_side).from;
+    const type2tc &wide = sym_side->type;
+    if (!is_symbol2t(from) || !is_bv_type(from) || !is_bv_type(wide))
+      return;
+    const unsigned w = from->type->get_width();
+    if (w >= wide->get_width() || (is_signedbv_type(from) && is_unsignedbv_type(wide)))
+      return;
+    const BigInt &v = to_constant_int2t(const_side).value;
+    const bool fits = is_signedbv_type(from)
+                        ? v >= -BigInt::power2(w - 1) && v < BigInt::power2(w - 1)
+                        : v >= 0 && v < BigInt::power2(w);
+    if (!fits)
+      return;
+    const_side = constant_int2tc(from->type, v);
+    sym_side = from;
+  };
+  narrow_widened(lhs, rhs);
+  narrow_widened(rhs, lhs);
+
   // Only propagate when the other side is a constant: a symbol == symbol
   // assumption must NOT be turned into an assignment, as that perturbs the
   // symbolic state and aliasing (e.g. a[i]=7; assume(i==j); read a[j]).
