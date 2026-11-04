@@ -1,5 +1,6 @@
 # len(self) checks the result of __len__ (#9835).
 class C:
+
     def __init__(self, n: int) -> None:
         self.n = n
 

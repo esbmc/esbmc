@@ -1,4 +1,5 @@
 class C:
+
     def __len__(self) -> int:
         return 1
 

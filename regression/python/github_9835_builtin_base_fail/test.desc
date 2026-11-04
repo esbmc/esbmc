@@ -2,4 +2,4 @@ CORE
 main.py
 --unwind 5 --multi-property
 ^VERIFICATION FAILED$
-FAILED.*line +8  assertion 0$
+FAILED.*line +9  assertion 0$

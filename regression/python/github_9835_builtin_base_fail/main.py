@@ -1,5 +1,6 @@
 # len(self) on a list subclass does not raise TypeError (#9835).
 class C(list):
+
     def size(self) -> int:
         try:
             n = len(self)
@@ -7,5 +8,6 @@ class C(list):
             return 0
         assert False
         return n
+
 
 C().size()
