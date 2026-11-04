@@ -1,0 +1,5 @@
+CORE
+main.c
+--32 --no-pointer-check --no-bounds-check --validate-violation-witness --witness witness.yml
+
+^VERIFICATION SUCCESSFUL$
