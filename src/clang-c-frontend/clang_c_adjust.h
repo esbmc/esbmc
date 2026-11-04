@@ -95,6 +95,7 @@ protected:
   bool lower_complex_compound_assignment(exprt &expr);
   bool lower_complex_equality(exprt &expr);
   void adjust_expr_unary_complex(exprt &expr);
+  void bind_to_temporary(exprt &op, code_blockt &block, const char *suffix);
   void bind_sideeffect_operands(
     exprt &expr,
     code_blockt &block,
