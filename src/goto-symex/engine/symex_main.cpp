@@ -1563,6 +1563,12 @@ leak_root_pointers(const expr2tc &root, const std::string &suffix)
     {
       /* This could be huge. TODO: switch to the case below. */
       uint64_t n = to_constant_int2t(size).value.to_uint64();
+      /* A flexible array member (or GNU `T a[0]`) is typed with size zero.
+       * It has no elements in a declared object, and in a heap object as
+       * many as the allocation leaves room for, which the type cannot say;
+       * ignore it as above (#9892). */
+      if (n == 0)
+        return {};
       std::vector<expr2tc> new_sub_exprs;
       new_sub_exprs.reserve(n * sub_exprs.size());
       for (const expr2tc &p : sub_exprs)
