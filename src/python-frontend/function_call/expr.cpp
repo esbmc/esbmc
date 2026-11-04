@@ -2418,31 +2418,10 @@ function_call_expr::get_object_list_symbol(std::string &display_name) const
     // dispatch below, which can also resolve dict-subscript receivers.
     if (base_sym->get_type() == list_type)
     {
-      // Constant index: resolve directly from the registry.
-      if (
-        slice_node["_type"] == "Constant" &&
-        slice_node["value"].is_number_integer())
-      {
-        const size_t index = slice_node["value"].get<size_t>();
-
-        const std::string inner_id =
-          converter_.get_element_type_registry().element_id(base_id, index);
-        if (
-          converter_.get_element_type_registry().element_type(base_id, index) ==
-            list_type &&
-          !inner_id.empty())
-        {
-          display_name = base_name + "[" + std::to_string(index) + "]";
-          return bind_registered_inner_list(
-            converter_.find_symbol(inner_id), func_value);
-        }
-      }
-
-      // Non-constant index (e.g. nested[i].append(v)): delegate to the existing
-      // subscript handler.  For comprehension-generated nested lists the
-      // handler hits the registry early-return path and yields the template
-      // inner list symbol (the element produced inside the loop body) without
-      // emitting any runtime instructions.
+      // The inner list is read at runtime: the symbol the registry recorded
+      // for the element may since have been rebound, as the one created in a
+      // comprehension or loop body is on every iteration (#9766), or may be
+      // a user variable that must not be assigned the element.
       const exprt subscript_expr = converter_.get_expr(func_value);
       if (subscript_expr.is_symbol())
       {
@@ -2450,9 +2429,22 @@ function_call_expr::get_object_list_symbol(std::string &display_name) const
           converter_.find_symbol(subscript_expr.identifier().as_string());
         if (sym && sym->get_type() == list_type)
         {
-          const std::string idx_str = slice_node.contains("id")
-                                        ? slice_node["id"].get<std::string>()
-                                        : "(expr)";
+          std::string idx_str = "(expr)";
+          if (slice_node.contains("id"))
+            idx_str = slice_node["id"].get<std::string>();
+          else if (
+            slice_node["_type"] == "Constant" &&
+            slice_node["value"].is_number_integer())
+          {
+            const size_t index = slice_node["value"].get<size_t>();
+            idx_str = std::to_string(index);
+            // Element types the method records on sym stay visible to
+            // later reads of base[index].
+            element_type_registry &registry =
+              converter_.get_element_type_registry();
+            if (!registry.element_id(base_id, index).empty())
+              registry.replace(base_id, index, sym->id.as_string(), list_type);
+          }
           display_name = base_name + "[" + idx_str + "]";
           return sym;
         }
@@ -2540,25 +2532,6 @@ function_call_expr::get_object_list_symbol(std::string &display_name) const
   symbol_id list_symbol_id = converter_.create_symbol_id();
   list_symbol_id.set_object(display_name);
   return converter_.find_symbol(list_symbol_id.to_string());
-}
-
-// The registry names one symbol for the inner list at a constant index, but a
-// list built in a loop (`[[] for _ in range(n)]`) holds a different list at
-// each index while that symbol keeps only the last. Point it at the list the
-// subscript reads at run time, so the mutation reaches the right one (#9766).
-const symbolt *function_call_expr::bind_registered_inner_list(
-  const symbolt *inner,
-  const nlohmann::json &subscript) const
-{
-  if (!inner)
-    return inner;
-  const exprt runtime = converter_.get_expr(subscript);
-  if (
-    runtime.is_symbol() &&
-    runtime.type() == converter_.get_type_handler().get_list_type() &&
-    runtime.identifier() != inner->id)
-    converter_.add_instruction(code_assignt(build_symbol(*inner), runtime));
-  return inner;
 }
 
 // Emit the IR declaration for an instance-attribute list temp symbol.
@@ -3611,11 +3584,14 @@ bool function_call_expr::receiver_is_binop_or_list_symbol() const
 const symbolt *
 function_call_expr::find_callee_symbol(const std::string &func_symbol_id)
 {
-  if (
-    function_type_ == FunctionType::InstanceMethod &&
-    function_id_.get_class().empty())
+  if (function_type_ != FunctionType::InstanceMethod)
+    return cached_find_symbol(func_symbol_id);
+  if (function_id_.get_class().empty())
     return nullptr;
-  return cached_find_symbol(func_symbol_id);
+  // find_symbol falls back to a module global of the method's name, which is
+  // not the method; an inherited one is then found in the bases (#9817).
+  const symbolt *symbol = cached_find_symbol(func_symbol_id);
+  return symbol && symbol->get_type().is_code() ? symbol : nullptr;
 }
 
 bool function_call_expr::receiver_class_defines_method(

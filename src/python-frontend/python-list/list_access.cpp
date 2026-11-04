@@ -4788,6 +4788,27 @@ typet python_list::tagged_elem_type_or(
   return th.is_tagged_scalar_type(uniform) ? uniform : fallback;
 }
 
+/// A tuple type re-derived from the literal sizes a str member by its text,
+/// not as the push laid it out, so the read would copy a different struct.
+/// A bool member is left out: the solver cannot select it from such a read.
+typet python_list::recorded_tuple_type_or(
+  const exprt &array,
+  const typet &fallback) const
+{
+  if (!fallback.is_struct() || !array.is_symbol())
+    return fallback;
+  const typet recorded =
+    elem_types().uniform_element_type(array.identifier().as_string());
+  if (!recorded.is_struct())
+    return fallback;
+  const auto &members = to_struct_type(recorded).components();
+  const bool has_bool = std::any_of(
+    members.begin(), members.end(), [](const struct_typet::componentt &c) {
+      return c.type().is_bool();
+    });
+  return has_bool ? fallback : recorded;
+}
+
 bool python_list::is_numpy_param_negative_index_target(const exprt &array) const
 {
   return array.type().is_pointer() && array.is_symbol() &&
@@ -5223,7 +5244,8 @@ exprt python_list::handle_index_access(
             // Infer element type from the literal, accounting for the
             // int->float promotion applied to mixed numeric literals at
             // construction.
-            elem_type = infer_literal_element_type(list_node["value"]);
+            elem_type = recorded_tuple_type_or(
+              array, infer_literal_element_type(list_node["value"]));
           }
         }
       }
