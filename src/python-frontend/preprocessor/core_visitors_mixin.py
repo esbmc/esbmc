@@ -454,7 +454,8 @@ class CoreVisitorsMixin:
             return None
         if not comp.generators or any(gen.is_async for gen in comp.generators):
             return None
-        if not self._dictcomp_needs_loop(comp.generators[0]):
+        # The converter's dict-comprehension handler takes one generator only.
+        if len(comp.generators) == 1 and not self._dictcomp_needs_loop(comp.generators[0]):
             return None
 
         target_id = node.targets[0].id
