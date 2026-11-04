@@ -3,12 +3,6 @@
 
 on:
   workflow_call:
-    inputs:
-      checkout-ref:
-        description: "Commit to check; empty checks the triggering commit"
-        required: false
-        default: ''
-        type: string
 
 jobs:
   check:
@@ -17,8 +11,6 @@ jobs:
     timeout-minutes: 30
     steps:
     - uses: actions/checkout@v6
-      with:
-        ref: ${{ inputs.checkout-ref || github.sha }}
     - name: Install the Python runtime
       run: scripts/ci/linux-runtime.sh python
     - name: Check Python regression tests

@@ -93,8 +93,6 @@ def selection_args(executor):
         return ["-LE", anchored([INTENSIVE_LABEL])]
     if executor == "producer":
         return ["-LE", anchored([REGRESSION_LABEL])]
-    if executor == "baseline":
-        return ["-L", anchored([REGRESSION_LABEL]), "-LE", anchored([INTENSIVE_LABEL])]
     table = _shard_args()
     if executor not in table:
         raise SelectionError(f"unknown executor {executor!r}")
@@ -181,12 +179,9 @@ def make_plan(build_dir):
     executors = ["producer"] + shard_executors()
     parts = {e: _unique_names(show_only(build_dir, selection_args(e)), e) for e in executors}
     check_partition(baseline, executors, parts)
-    regression = _unique_names(show_only(build_dir, selection_args("baseline")), "baseline")
-    check_partition(regression, shard_executors(), {e: parts[e] for e in shard_executors()})
     plan = {
         "schema_version": 1,
         "executors": parts,
-        "baseline": regression,
         "tests": {
             name: records[name]
             for name in baseline
@@ -204,7 +199,7 @@ def plan_digest(plan):
 
 def check_restored(plan, build_dir, executor):
     """The restored build must select exactly what the producer planned."""
-    expected = plan["baseline"] if executor == "baseline" else plan["executors"][executor]
+    expected = plan["executors"][executor]
     tests = show_only(build_dir, selection_args(executor))
     names = _unique_names(tests, executor)
     if names != expected:

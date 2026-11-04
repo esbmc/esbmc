@@ -54,8 +54,6 @@ class PlanTest(unittest.TestCase):
                          ["regression/numpy/t", "regression/numpy/u"])
         self.assertEqual(len(executors["python-benchmarks"]),
                          len(ci_selection.PYTHON_BENCHMARK_LABELS))
-        self.assertEqual(sorted(plan["baseline"]),
-                         sorted(n for e in ci_selection.shard_executors() for n in executors[e]))
 
     def test_a_missing_shard_breaks_the_partition(self):
         plan = ci_selection.make_plan(self.build)

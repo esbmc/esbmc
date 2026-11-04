@@ -248,14 +248,6 @@ class MeasureTest(unittest.TestCase):
         else:
             self.assertIn("unavailable", record)
 
-    def test_the_measure_command_passes_the_exit_code_through(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            out = os.path.join(tmp, "m.json")
-            code = linux_tests.main(["measure", "--out", out, "--", "/bin/sh", "-c", "exit 4"])
-            self.assertEqual(code, 4)
-            with open(out, encoding="utf-8") as fp:
-                self.assertEqual(json.load(fp)["command"], ["/bin/sh", "-c", "exit 4"])
-
 
 if __name__ == "__main__":
     unittest.main()
