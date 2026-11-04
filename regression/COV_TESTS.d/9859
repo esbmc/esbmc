@@ -2,3 +2,5 @@ regression/k-induction/github_9854
 regression/k-induction/github_9854_member_unknown
 regression/k-induction/github_9854_deref_unknown
 regression/k-induction/github_9854_whole_unknown
+regression/k-induction/github_9854_union_root
+regression/loop-invariants/conditional_lvalue_pointer_write_fail
