@@ -331,16 +331,22 @@ static bool is_races_flag(const expr2tc &e)
   return is_symbol2t(e) && to_symbol2t(e).thename == "c:@F@__ESBMC_races_flag";
 }
 
-/* The slot index of the first __ESBMC_races_flag read in @p e, or nil. */
-static expr2tc races_flag_read_key(const expr2tc &e)
+/* The slot index of the first __ESBMC_races_flag read in @p e, or nil. @p seen
+ * memoises shared nodes: an SSA condition is a DAG, and walking it as a tree
+ * is exponential (regression/esbmc/nested_array_no_simplify_scale_fail). */
+static expr2tc
+races_flag_read_key(const expr2tc &e, std::unordered_set<const expr2t *> &seen)
 {
+  if (!seen.insert(e.get()).second)
+    return expr2tc();
+
   if (is_index2t(e) && is_races_flag(to_index2t(e).source_value))
     return to_index2t(e).index;
 
   expr2tc key;
-  e->foreach_operand([&key](const expr2tc &op) {
+  e->foreach_operand([&key, &seen](const expr2tc &op) {
     if (is_nil_expr(key) && !is_nil_expr(op))
-      key = races_flag_read_key(op);
+      key = races_flag_read_key(op, seen);
   });
   return key;
 }
@@ -394,7 +400,8 @@ struct race_flag_trackert
     if (trace_step.guard)
       return;
 
-    const expr2tc key = races_flag_read_key(step.cond);
+    std::unordered_set<const expr2t *> seen;
+    const expr2tc key = races_flag_read_key(step.cond, seen);
     if (is_nil_expr(key))
       return;
 
