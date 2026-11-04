@@ -673,7 +673,7 @@ void goto_loopst::add_loop_var(
   // modified; sub-expressions used to *locate* that storage are reads.
   //   `*p = ...`        — pointer `p` is read, the pointee is modified
   //   `arr[i] = ...`    — index `i` is read, `arr` element is modified
-  //   `s.f = ...`       — struct `s` storage is modified
+  //   `s.f = ...`       — member `s.f` is modified, not all of `s`
   // Without this distinction `*Var_Ptr = ...` adds `Var_Ptr` to the loop's
   // modified set, which then causes the inductive step to havoc the
   // pointer at loop entry — unsound if the loop never reassigns it.
