@@ -8247,6 +8247,15 @@ void python_converter::get_var_assign(
     reject_one_sided_tagged_store(lhs, rhs);
     adopt_tagged_element(lhs_symbol, lhs, rhs);
 
+    // A tuple literal's type differs from an annotated Optional[tuple]'s
+    // payload in tag spelling only; match it so the store is wrapped (#9843).
+    if (type_utils::is_optional_struct(lhs.type()))
+      rhs = tuple_handler_->coerce_to_tuple_type(
+        rhs,
+        to_struct_type(lhs.type()).get_component("value").type(),
+        get_location_from_decl(ast_node),
+        target_block);
+
     // Handle type adjustments
     handle_assignment_type_adjustments(
       lhs_symbol, lhs, rhs, lhs_type, ast_node, is_ctor_call);
