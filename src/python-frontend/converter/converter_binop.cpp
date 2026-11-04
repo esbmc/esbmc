@@ -423,9 +423,13 @@ nlohmann::json ast_node(const char *type, const nlohmann::json &loc)
   return node;
 }
 
-// The f-string part for one %s/%d/%i/%f conversion of `value`.
-std::optional<nlohmann::json>
-formatted_part(char conversion, nlohmann::json value, const typet &type)
+// The f-string part for one %s/%d/%i/%f conversion of `value`, with the
+// precision of a %.Nf (6 when none is given).
+std::optional<nlohmann::json> formatted_part(
+  char conversion,
+  int precision,
+  nlohmann::json value,
+  const typet &type)
 {
   if (conversion == 'f')
   {
@@ -452,7 +456,7 @@ formatted_part(char conversion, nlohmann::json value, const typet &type)
   if (conversion == 'f')
   {
     part["format_spec"] = ast_node("Constant", value);
-    part["format_spec"]["value"] = ".6f";
+    part["format_spec"]["value"] = "." + std::to_string(precision) + "f";
   }
   return part;
 }
@@ -499,7 +503,7 @@ bool is_literal_percent_format(const nlohmann::json &element, const exprt &lhs)
 }
 
 // `"id %d" % i` with a non-constant `i` as the f-string `f"id {int(i)}"`
-// (#8224). Only flag-free %s/%d/%i/%f/%% are rewritten.
+// (#8224). Only flag-free %s/%d/%i/%f/%% and %.Nf are rewritten.
 std::optional<nlohmann::json> percent_format_as_fstring(
   const nlohmann::json &left,
   const std::vector<nlohmann::json> &args,
@@ -528,6 +532,23 @@ std::optional<nlohmann::json> percent_format_as_fstring(
       literal.push_back(fmt[i]);
       continue;
     }
+    // An empty precision (%.f) is 0, as in CPython.
+    int precision = 6;
+    if (i + 1 < fmt.size() && fmt[i + 1] == '.')
+    {
+      ++i;
+      precision = 0;
+      for (int digits = 0; i + 1 < fmt.size() &&
+                           std::isdigit(static_cast<unsigned char>(fmt[i + 1]));
+           ++digits)
+      {
+        if (digits == 2)
+          return std::nullopt;
+        precision = precision * 10 + (fmt[++i] - '0');
+      }
+      if (i + 1 >= fmt.size() || fmt[i + 1] != 'f')
+        return std::nullopt;
+    }
     const char c = i + 1 < fmt.size() ? fmt[++i] : '\0';
     if (c == '%')
     {
@@ -537,7 +558,7 @@ std::optional<nlohmann::json> percent_format_as_fstring(
     if (argi >= args.size())
       return std::nullopt;
     std::optional<nlohmann::json> part =
-      formatted_part(c, args[argi], arg_types[argi]);
+      formatted_part(c, precision, args[argi], arg_types[argi]);
     if (!part)
       return std::nullopt;
     ++argi;

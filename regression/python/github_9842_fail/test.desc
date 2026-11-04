@@ -1,0 +1,5 @@
+CORE
+main.py
+--unwind 20 --multi-property --no-pointer-check --no-align-check
+^  file .*main.py line 7 column 0$
+^VERIFICATION FAILED$
