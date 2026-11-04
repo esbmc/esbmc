@@ -198,7 +198,8 @@ static void report_non_termination_cwe(
   optionst &options,
   const namespacet &ns,
   const goto_functionst &goto_functions,
-  const std::string &comment)
+  const std::string &comment,
+  const std::optional<locationt> &proved_loop)
 {
   // The YAML witness has no CWE field, so it carries only the cycle waypoint.
   const bool want_yaml = !options.get_option("witness-output-yaml").empty();
@@ -229,19 +230,10 @@ static void report_non_termination_cwe(
   {
     // The recurrent-set check names its loop; the inductive step does not,
     // so the marker's loop is a best-effort pick when there are several.
-    locationt loop = loop_head_of_marker(goto_functions, *marker)->location;
-    const std::string line =
-      options.get_option("termination-non-termination-loop-line");
-    if (!line.empty())
-    {
-      loop = locationt();
-      loop.set_line(line);
-      loop.set_column(
-        options.get_option("termination-non-termination-loop-column"));
-      loop.set_function(
-        options.get_option("termination-non-termination-loop-function"));
-    }
-    non_termination_yaml_goto_trace(options, loop);
+    non_termination_yaml_goto_trace(
+      options,
+      proved_loop ? *proved_loop
+                  : loop_head_of_marker(goto_functions, *marker)->location);
   }
   if (want_json)
     generate_json_report("1", ns, trace);
@@ -476,7 +468,8 @@ int esbmc_parseoptionst::do_bmc_strategy(
         const std::string comment =
           "Recurrent set shows a non-terminating execution";
         const namespacet ns(context);
-        report_non_termination_cwe(options, ns, goto_functions, comment);
+        report_non_termination_cwe(
+          options, ns, goto_functions, comment, non_termination_loop);
         const std::string cwes = format_cwe_list(cwe_for(comment));
         std::string msg = "\n" + comment + "\n";
         if (!cwes.empty())
@@ -522,7 +515,8 @@ int esbmc_parseoptionst::do_bmc_strategy(
             "Inductive step shows a non-terminating execution (k = {})",
             k_step);
           const namespacet ns(context);
-          report_non_termination_cwe(options, ns, goto_functions, comment);
+          report_non_termination_cwe(
+            options, ns, goto_functions, comment, non_termination_loop);
           const std::string cwes = format_cwe_list(cwe_for(comment));
           std::string msg = "\n" + comment;
           if (!cwes.empty())

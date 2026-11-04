@@ -552,14 +552,8 @@ bool esbmc_parseoptionst::process_goto_program(
                                .is_false();
       options.set_option("termination-non-termination-proved", non_term_proved);
       // The witness is written after the havoc transform rewrites the loop.
-      options.set_option(
-        "termination-non-termination-loop-line", loop.get_line().as_string());
-      options.set_option(
-        "termination-non-termination-loop-column",
-        loop.get_column().as_string());
-      options.set_option(
-        "termination-non-termination-loop-function",
-        loop.get_function().as_string());
+      if (non_term_proved)
+        non_termination_loop = loop;
 
       // Ranking-function termination check, on the CLEAN (un-havoced)
       // goto program. If it proves every loop terminates, record it so
