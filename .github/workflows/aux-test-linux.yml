@@ -8,7 +8,7 @@ on:
   workflow_call:
     inputs:
       executors:
-        description: "JSON list of executors to run (shards, or baseline)"
+        description: "JSON list of the shard executors to run"
         required: true
         type: string
       bundle-artifact:
@@ -23,30 +23,18 @@ on:
         description: "Digest of the producer's selection plan"
         required: true
         type: string
-      checkout-ref:
-        description: "Commit the producer built; empty for the triggering commit"
-        required: false
-        default: ''
-        type: string
-      timeout-minutes:
-        description: "Infrastructure limit of each executor; not a test budget"
-        required: false
-        default: 150
-        type: number
 
 jobs:
   run:
     name: ${{ matrix.executor }}
     runs-on: ubuntu-24.04
-    timeout-minutes: ${{ inputs.timeout-minutes }}
+    timeout-minutes: 150
     strategy:
       fail-fast: false
       matrix:
         executor: ${{ fromJSON(inputs.executors) }}
     steps:
     - uses: actions/checkout@v6
-      with:
-        ref: ${{ inputs.checkout-ref || github.sha }}
 
     - name: Install the regression runtime
       run: scripts/ci/linux-runtime.sh

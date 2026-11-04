@@ -59,18 +59,6 @@ def report_problems(reports, executors, plan_digest, bundle_sha256):
     return problems
 
 
-def compare_outcomes(baseline, shards):
-    """Tests whose outcome differs between the monolithic run and the shards."""
-    merged = {}
-    for report in shards:
-        merged.update(report["outcomes"])
-    names = sorted(set(baseline["outcomes"]) | set(merged))
-    return [
-        f"{n}: baseline {baseline['outcomes'].get(n, 'absent')}, shards {merged.get(n, 'absent')}"
-        for n in names if baseline["outcomes"].get(n) != merged.get(n)
-    ]
-
-
 def timing_table(reports):
     rows = [
         "| executor | tests | CTest seconds | max sampled memory (MiB) | oom kills |",

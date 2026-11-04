@@ -28,10 +28,6 @@ def _read_json(path):
         return json.load(fp)
 
 
-def _expected(plan, executor):
-    return plan["baseline"] if executor == "baseline" else plan["executors"][executor]
-
-
 def _identity(bundle_sha256):
     return {
         "run_id": os.environ.get("GITHUB_RUN_ID"),
@@ -56,8 +52,8 @@ def cmd_probe(args):
 
 def _report(args, plan, junit, exit_code):
     context = ci_results.RunContext(plan, _read_json(args.probes), ci_results.load_testing_tool())
-    report = ci_results.run_report(args.executor, _expected(plan, args.executor), junit, exit_code,
-                                   context)
+    report = ci_results.run_report(args.executor, plan["executors"][args.executor], junit,
+                                   exit_code, context)
     for problem in report["problems"]:
         print(f"::error::{args.executor}: {problem}")
     return report
@@ -96,16 +92,10 @@ def cmd_preflight(args):
             f"plan {plan['digest']} is not the producer's {args.plan_digest}")
     ci_selection.check_restored(plan, args.build_dir, args.executor)
     ci_results.check_runtime(plan, _read_json(args.probes), ci_results.load_testing_tool())
-    print(f"{args.executor}: {len(_expected(plan, args.executor))} tests match the producer; "
+    count = len(plan["executors"][args.executor])
+    print(f"{args.executor}: {count} tests match the producer; "
           f"{_tool_version('ctest')}")
     return 0
-
-
-def cmd_measure(args):
-    command = args.argv[1:] if args.argv[:1] == ["--"] else args.argv
-    exit_code, record = ci_metrics.measure(command)
-    _write_json(args.out, record)
-    return exit_code
 
 
 def _tool_version(tool):
@@ -164,16 +154,6 @@ def _publish(path, title, body, problems):
     return 1 if problems else 0
 
 
-def cmd_compare(args):
-    """The manual comparison: the monolithic baseline against the shards, same bundle."""
-    shards = ci_selection.shard_executors()
-    reports, problems = _run_problems(args, shards + ["baseline"])
-    if "baseline" in reports and all(e in reports for e in shards):
-        problems += ci_gate.compare_outcomes(reports["baseline"], [reports[e] for e in shards])
-    return _publish(args.summary, "Linux regression comparison", ci_gate.timing_table(reports),
-                    problems)
-
-
 def cmd_summary(args):
     """linux-test-summary: the required check of the Linux PR tests."""
     args.required = ",".join(ci_gate.REQUIRED_JOBS)
@@ -201,16 +181,11 @@ def parser():
                "probes", "executor", "out-dir")
     run.add_argument("--jobs", type=int, default=2)
     run.add_argument("--bundle-sha256")
-    measure = _add(commands, "measure", cmd_measure, "run a command, sampling memory", "out")
-    measure.add_argument("argv", nargs=argparse.REMAINDER)
     bundle = _add(commands, "bundle", cmd_bundle, "package the regression bundle", "workspace",
                   "build-dir", "plan", "out")
     bundle.add_argument("--github-output")
     _add(commands, "restore", cmd_restore, "check and extract the bundle", "tar", "sha256",
          "workspace")
-    compare = _add(commands, "compare", cmd_compare, "compare the baseline with the shards",
-                   "results-dir", "needs", "required", "plan-digest", "bundle-sha256")
-    compare.add_argument("--summary")
     summary = _add(commands, "summary", cmd_summary, "judge the Linux PR tests", "needs",
                    "results-dir")
     summary.add_argument("--plan-digest", default="")

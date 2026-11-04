@@ -43,21 +43,6 @@ on:
         required: false
         default: true
         type: boolean
-      collect-test-metrics:
-        description: "Record JUnit and memory metrics of the tests run here"
-        required: false
-        default: false
-        type: boolean
-      restore-build-cache:
-        description: "Restore the ccache; false builds from an empty ccache to measure a cold build"
-        required: false
-        default: true
-        type: boolean
-      checkout-ref:
-        description: "Commit to build; empty builds the triggering commit"
-        required: false
-        default: ''
-        type: string
     outputs:
       bundle-artifact:
         description: "Name of the Linux regression bundle artifact (pr-bundle)"
@@ -84,7 +69,7 @@ jobs:
       plan-digest: ${{ steps.bundle.outputs.plan-digest }}
       shard-executors: ${{ steps.bundle.outputs.shard-executors }}
     env:
-      CCACHE_DIR: ${{ github.workspace }}/.cache/${{ inputs.restore-build-cache && 'ccache' || 'ccache-cold' }}
+      CCACHE_DIR: ${{ github.workspace }}/.cache/ccache
       CCACHE_BASEDIR: ${{ github.workspace }}
       # Runner images are rebuilt weekly; mtime would invalidate every entry.
       CCACHE_COMPILERCHECK: content
@@ -98,8 +83,6 @@ jobs:
         LAYOUT: ${{ inputs.linux-test-layout }}
         OS: ${{ inputs.operating-system }}
         TESTING: ${{ inputs.testing }}
-        RESTORE: ${{ inputs.restore-build-cache }}
-        SAVE: ${{ inputs.save-cache }}
       run: |
         case "$LAYOUT" in legacy|pr-bundle) ;; *)
           echo "::error::linux-test-layout must be legacy or pr-bundle, not '$LAYOUT'"; exit 1 ;;
@@ -108,24 +91,10 @@ jobs:
         if [[ "$LAYOUT" == pr-bundle && ( "$OS" != ubuntu-24.04 || "$TESTING" != true ) ]]; then
           echo "::error::pr-bundle needs ubuntu-24.04, where the shards run, and testing: true"; exit 1
         fi
-        if [[ "$RESTORE" == false && ( "$LAYOUT" != pr-bundle || "$SAVE" == true ) ]]; then
-          echo "::error::restore-build-cache: false needs pr-bundle and save-cache: false"; exit 1
-        fi
 
     - uses: actions/checkout@v6
-      with:
-        ref: ${{ inputs.checkout-ref || github.sha }}
-
-    - name: Check that the cold ccache is empty
-      if: ${{ !inputs.restore-build-cache }}
-      run: |
-        if [ -e "$CCACHE_DIR" ] && [ -n "$(ls -A "$CCACHE_DIR")" ]; then
-          echo "::error::$CCACHE_DIR is not empty, so the build would not be cold"; exit 1
-        fi
-        echo "Cold build: $CCACHE_DIR is empty and no cache is restored or saved."
 
     - name: Restore ccache
-      if: ${{ inputs.restore-build-cache }}
       uses: actions/cache/restore@v6
       with:
         path: .cache/ccache
@@ -215,34 +184,13 @@ jobs:
         # "runner received a shutdown signal" (OOM). Run the Linux legs with -j2
         # to bound peak concurrent memory. The macOS leg runs the light python/
         # suite plus a handful of platform-sensitive tests, and keeps -j4.
-        #
-        # collect-test-metrics wraps ctest to record JUnit and the job's
-        # memory, without changing what runs.
-        metrics=()
-        junit=()
-        if [[ "${{ inputs.collect-test-metrics }}" == "true" ]]; then
-          mkdir -p ../ci-results/legacy
-          metrics=(python3 ../scripts/ci/linux_tests.py measure --out ../ci-results/legacy/metrics.json --)
-          junit=(--output-junit "$PWD/../ci-results/legacy/junit.xml")
-        fi
         if [[ "${{ inputs.operating-system }}" =~ ^macos ]]; then
-          "${metrics[@]}" ctest -j4 --output-on-failure --progress -L '^python/$|^platform-sensitive$' "${junit[@]}"
+          ctest -j4 --output-on-failure --progress -L '^python/$|^platform-sensitive$'
         elif [[ "${{ github.event_name }}" == "pull_request" ]]; then
-          "${metrics[@]}" ctest -j2 --output-on-failure --progress -LE python-intensive . "${junit[@]}"
+          ctest -j2 --output-on-failure --progress -LE python-intensive .
         else
-          "${metrics[@]}" ctest -j2 --output-on-failure --progress . "${junit[@]}"
+          ctest -j2 --output-on-failure --progress .
         fi
-
-    - name: Upload legacy test metrics
-      if: ${{ always() && inputs.testing == true && inputs.collect-test-metrics && inputs.linux-test-layout == 'legacy' }}
-      uses: actions/upload-artifact@v7
-      with:
-        name: linux-legacy-metrics-${{ github.run_attempt }}
-        path: |
-          ci-results/legacy
-          build/Testing/Temporary/LastTest.log
-        if-no-files-found: warn
-        retention-days: 7
 
     # pr-bundle: run what the shards do not (tests without the regression label)
     # under the PR's 120s budget, and export the regression to the shards.

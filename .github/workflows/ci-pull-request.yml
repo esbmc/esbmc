@@ -70,7 +70,6 @@ jobs:
       testing: true
       linux-test-layout: pr-bundle
       check-python-regressions: false
-      collect-test-metrics: true
 
   # The modules start only once the build and the CPython check both passed.
   linux-regression:
