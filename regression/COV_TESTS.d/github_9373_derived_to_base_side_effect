@@ -1,0 +1,5 @@
+regression/esbmc-cpp/inheritance/github_9373_new_upcast_oob_fail
+regression/esbmc-cpp/inheritance/github_9373_side_effect_upcast
+regression/esbmc-cpp/inheritance/github_9373_side_effect_upcast_fail
+regression/esbmc-cpp/inheritance/github_9373_temporary_upcast
+regression/esbmc-cpp/inheritance/github_9373_temporary_upcast_fail
