@@ -1761,7 +1761,7 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
       {
         for (const auto &arg_element : element["args"])
         {
-          exprt arg_expr = get_expr(arg_element);
+          exprt arg_expr = to_value_expr(get_expr(arg_element), ns);
           // The pointer target only carries a return type, no parameter
           // types, so refuse cleanly instead of passing a mistyped arg.
           if (type_handler_.is_tagged_scalar_type(arg_expr.type()))
