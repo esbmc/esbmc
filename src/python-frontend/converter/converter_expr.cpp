@@ -3492,7 +3492,8 @@ exprt python_converter::get_expr(const nlohmann::json &element)
           // __init__).  This happens when the object comes from a list element
           // or other expression that bypasses instance_has_attr registration.
           // Fall back to the struct member if the component exists.
-          if (class_type.has_component(attr_name))
+          if (instance_may_have_attr(
+                class_type, *symbol, var_name, obj_type_name, attr_name))
           {
             const typet &attr_type = class_type.get_component(attr_name).type();
             expr = build_member_expr_from_class(attr_type);
