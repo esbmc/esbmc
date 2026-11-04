@@ -780,6 +780,28 @@ python_converter::subclasses(const std::string &class_name) const
   return family;
 }
 
+std::optional<std::string> python_converter::family_method_owner(
+  const std::string &class_name,
+  const std::string &m) const
+{
+  std::optional<std::string> owner;
+  for (const std::string &cls : subclasses(class_name))
+  {
+    const auto mro = class_mro(cls);
+    if (!mro)
+      return std::nullopt;
+    const auto defining =
+      std::find_if(mro->begin(), mro->end(), [&](const std::string &c) {
+        return class_binds_name(c, m);
+      });
+    const std::string found = defining == mro->end() ? "" : *defining;
+    if (owner && *owner != found)
+      return std::nullopt;
+    owner = found;
+  }
+  return owner;
+}
+
 std::optional<std::string> python_converter::bound_method_id(
   const std::string &owner,
   const std::string &m) const
