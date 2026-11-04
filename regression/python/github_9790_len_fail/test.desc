@@ -1,0 +1,5 @@
+CORE
+main.py
+--no-bounds-check
+^VERIFICATION FAILED$
+FAILED\s+\[global\.assertion\.1\]\s+line\s+3\s+assertion

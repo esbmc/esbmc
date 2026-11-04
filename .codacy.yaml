@@ -79,6 +79,14 @@ engines:
       # removed in optimised bytecode") does not apply.
       - 'src/python-frontend/models/**'
 
+      # Fallback copy of sv-benchmarks' _sv_verifier.py (#9796). Its nondet_*
+      # functions describe an arbitrary value by drawing one from `random`;
+      # ESBMC replaces each call with a nondeterministic symbol and never runs
+      # the body for a value, so B311 ("pseudo-random generators are not
+      # suitable for cryptographic purposes") has no cryptographic use to
+      # protect.
+      - 'src/python-frontend/stubs/**'
+
       # Pytest property-based tests for the Python frontend. Pytest's
       # assertion-rewriting machinery requires plain `assert` (Bandit
       # B101 is incompatible with the pytest idiom), and these suites
