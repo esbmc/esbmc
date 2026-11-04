@@ -1,4 +1,5 @@
 #include "python_dict_internal.h"
+#include <python-frontend/converter/converter_internal.h>
 
 using namespace python_expr;
 
@@ -287,15 +288,27 @@ exprt python_dict_handler::get_dict_comprehension(const nlohmann::json &element)
   exprt key_expr = converter_.get_expr(element["key"]);
   exprt value_expr = converter_.get_expr(element["value"]);
 
-  // Reuse the normal dict assignment path for each generated pair
+  // Reuse the normal dict assignment path for each generated pair. A key or
+  // value that raises (#9838) stores nothing: the pair is the raise.
   code_blockt pair_block;
-  handle_dict_subscript_assign(
-    build_symbol(dict_sym),
-    key_expr,
-    value_expr,
-    location,
-    element,
-    pair_block);
+  const exprt *raised = python_frontend::raised_condition(key_expr);
+  if (!raised)
+    raised = python_frontend::raised_condition(value_expr);
+  if (raised)
+  {
+    codet raise("expression");
+    raise.copy_to_operands(*raised);
+    raise.location() = location;
+    pair_block.copy_to_operands(raise);
+  }
+  else
+    handle_dict_subscript_assign(
+      build_symbol(dict_sym),
+      key_expr,
+      value_expr,
+      location,
+      element,
+      pair_block);
   converter_.current_block = saved_block;
 
   if (generator.contains("ifs") && !generator["ifs"].empty())
