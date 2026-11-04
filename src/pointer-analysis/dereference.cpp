@@ -810,6 +810,53 @@ static bool is_struct_prefix(const struct_type2t &dt, const struct_type2t &ot)
   return true;
 }
 
+// Whether an object of type t holds a field of exactly type target at
+// offs_bits, through any nesting of structs, unions and arrays.
+static bool has_field_at(
+  const type2tc &t,
+  const BigInt &offs_bits,
+  const type2tc &target,
+  const namespacet &ns)
+{
+  if (offs_bits == 0 && base_type_eq(t, target, ns))
+    return true;
+
+  if (is_struct_type(t))
+  {
+    const struct_type2t &st = to_struct_type(t);
+    for (size_t i = 0; i < st.members.size(); i++)
+    {
+      const BigInt m_offs = member_offset_bits(t, st.member_names[i], &ns);
+      if (
+        offs_bits >= m_offs &&
+        offs_bits < m_offs + type_byte_size_bits(st.members[i], &ns) &&
+        has_field_at(st.members[i], offs_bits - m_offs, target, ns))
+        return true;
+    }
+    return false;
+  }
+
+  if (is_union_type(t))
+  {
+    for (const type2tc &m : to_union_type(t).members)
+      if (
+        offs_bits < type_byte_size_bits(m, &ns) &&
+        has_field_at(m, offs_bits, target, ns))
+        return true;
+    return false;
+  }
+
+  if (is_array_type(t) && !to_array_type(t).size_is_infinite)
+  {
+    const type2tc &sub = to_array_type(t).subtype;
+    const BigInt sub_size = type_byte_size_bits(sub, &ns);
+    return sub_size > 0 && offs_bits < type_byte_size_bits(t, &ns) &&
+           has_field_at(sub, offs_bits % sub_size, target, ns);
+  }
+
+  return false;
+}
+
 bool dereferencet::dereference_type_compare(
   expr2tc &object,
   const type2tc &dereference_type) const
@@ -1441,14 +1488,25 @@ void dereferencet::build_reference_rec(
 
     assert(uni_type.members.size() != 0);
     BigInt union_total_size = type_byte_size(value->type);
-    // Let's find a member with the biggest size
+    // Prefer a member with a field of exactly this type at a constant offset:
+    // reading it through another member reinterprets the bytes, and a pointer
+    // rebuilt from an integer loses the object it points to (#9907).
+    // Otherwise, take a member with the biggest size.
     size_t selected_member_index = SIZE_MAX;
-    for (size_t i = 0; i < uni_type.members.size(); i++)
+    if (is_constant_int2t(offset))
+      for (size_t i = 0; i < uni_type.members.size(); i++)
+        if (
+          has_field_at(
+            uni_type.members[i], to_constant_int2t(offset).value, type, ns))
+        {
+          selected_member_index = i;
+          break;
+        }
+    for (size_t i = 0;
+         selected_member_index == SIZE_MAX && i < uni_type.members.size();
+         i++)
       if (type_byte_size(uni_type.members[i]) == union_total_size)
-      {
         selected_member_index = i;
-        break;
-      }
     assert(selected_member_index < SIZE_MAX);
 
     value = member2tc(
