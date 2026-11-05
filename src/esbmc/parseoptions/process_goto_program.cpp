@@ -424,7 +424,7 @@ bool esbmc_parseoptionst::process_goto_program(
           adv.comment,
           format_cwe_list(cwe_for(adv.comment)));
 
-    lower_longjmp(goto_functions, context, options);
+    lower_longjmp(goto_functions, context);
 
     // Lower throw/catch to symbolic guarded control flow (#5075). Run before
     // inlining so per-call-site exception propagation is still explicit. This
