@@ -2046,9 +2046,16 @@ void goto_symext::add_memory_leak_checks()
         auto eit = out_edges.find(src);
         if (eit == out_edges.end())
           continue;
+        /* A pointer left in freed memory reaches nothing: reading it is
+         * itself invalid. */
+        const expr2tc live = has_prefix(src, "symex_dynamic::")
+                               ? not2tc(deallocated_obj2tc(node_adr.at(src)))
+                               : expr2tc();
         for (const auto &[dst, cond] : eit->second)
         {
           expr2tc g = g_src ? and2tc(g_src, cond) : cond;
+          if (live)
+            g = and2tc(live, g);
           auto [cit, ins] = contrib.emplace(dst, g);
           if (!ins)
             cit->second = or2tc(cit->second, g);
