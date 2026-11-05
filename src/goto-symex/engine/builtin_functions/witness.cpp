@@ -3,6 +3,7 @@
 #include <util/arith/arith_tools.h>
 #include <util/expr/expr_util.h>
 #include <util/message/message.h>
+#include <util/base/filesystem.h>
 #include <util/base/prefix.h>
 #include <irep2/irep2.h>
 
@@ -216,11 +217,19 @@ void goto_symext::symex_witness_assert(
         break;
       }
 
+  // A witness writer reports a claim in a bundled model, e.g. the leak check
+  // in exit(), at its innermost call site in the program.
+  const locationt *loc = &cur_state->source.pc->location;
+  for (auto it = cur_state->call_stack.rbegin();
+       it != cur_state->call_stack.rend() &&
+       file_operations::is_bundled_source(loc->get_file().as_string());
+       ++it)
+    if (it->calling_location.is_set)
+      loc = &it->calling_location.pc->location;
+
   // A final segment matches a violation on any visit to the target, not only
   // the first (sv-witnesses Witness-Format.md, "Matching a Final Segment").
-  if (
-    !target_wp ||
-    cur_state->source.pc->location.get_line() != target_wp->line_id)
+  if (!target_wp || loc->get_line() != target_wp->line_id)
     new_expr = gen_true_expr();
   else
     cur_state->witness_guard.guard_expr(new_expr);
