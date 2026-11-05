@@ -551,12 +551,15 @@ void value_sett::offset_pointer_arith_objects(
   }
 }
 
-/* What @p sym points at, looked up under the path the read spells and -- when
- * nothing is keyed there -- under the paths a union arm it crosses aliases.
- * Writing `u.s.p` and reading `u.q` keys the one and asks for the other, which
- * would otherwise leave the read unknown and its dereference unconstrained.
- * Looking the aliases up rather than recursing keeps the aliases of an alias
- * out of it, which would not terminate. Returns whether anything was found. */
+/* What @p sym points at, looked up under the path the read spells and under
+ * the paths a union arm it crosses aliases. Writing `u.s.p` and reading `u.q`
+ * keys the one and asks for the other, which would otherwise leave the read
+ * unknown and its dereference unconstrained. The aliases are needed even when
+ * the read's own path is keyed: that entry may predate the write through the
+ * other arm, e.g. the nondet initialisation of an enclosing struct keys every
+ * arm (#9907). Looking the aliases up rather than recursing keeps the aliases
+ * of an alias out of it, which would not terminate. Returns whether anything
+ * was found. */
 bool value_sett::get_symbol_value_set(
   const symbol2t &sym,
   const expr2tc &expr,
@@ -574,13 +577,10 @@ bool value_sett::get_symbol_value_set(
       : sym.get_symbol_name();
 
   const entryt *v = values.find(base_name + suffix);
-  if (v != nullptr)
-  {
+  bool found = v != nullptr;
+  if (found)
     make_union(dest, v->object_map);
-    return true;
-  }
 
-  bool aliased = false;
   for (const std::string &path :
        union_alias_paths(expr->type, suffix, original_type, ns))
   {
@@ -588,10 +588,10 @@ bool value_sett::get_symbol_value_set(
     if (a != nullptr)
     {
       make_union(dest, a->object_map);
-      aliased = true;
+      found = true;
     }
   }
-  return aliased;
+  return found;
 }
 
 void value_sett::get_value_set_rec_cached(

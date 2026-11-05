@@ -1,0 +1,5 @@
+CORE
+main.c
+--32 --memory-leak-check
+^VERIFICATION FAILED$
+^  dereference failure: Access to object out of bounds: heap object$
