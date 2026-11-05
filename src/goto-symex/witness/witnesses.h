@@ -241,6 +241,13 @@ BigInt get_line_number(
 
 int generate_sha256_hash_for_file(const char *path, std::string &output);
 
+/// A check raised in a controlling expression, a return expression or an
+/// initialiser carries the location of the enclosing statement or
+/// declaration. A target waypoint sits on the first character of the full
+/// expression instead (Witness-Format.md, "Target"), so read its start from
+/// the source; @p loc unchanged when it does not start such a construct.
+locationt full_expression_start(const locationt &loc);
+
 std::string
 get_invariant(std::string verified_file, BigInt line_number, optionst &options);
 

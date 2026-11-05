@@ -341,8 +341,10 @@ static waypoint witness_target_waypoint(
   optionst &options)
 {
   const locationt *loc = witness_input_location(step);
-  waypoint wp =
-    witness_waypoint(loc ? *loc : step.pc->location, verified_file, options);
+  waypoint wp = witness_waypoint(
+    loc ? full_expression_start(*loc) : step.pc->location,
+    verified_file,
+    options);
   wp.type = waypoint::target;
   if (loc == nullptr)
     wp.file = verified_file;
