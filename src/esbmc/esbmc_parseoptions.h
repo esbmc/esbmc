@@ -173,6 +173,10 @@ protected:
   // non-termination witness names it.
   std::optional<locationt> non_termination_loop;
 
+  // Heads of the loops the ranking check proved terminating; the
+  // non-termination witness does not name them.
+  std::vector<locationt> terminating_loops;
+
   // coverage mode
   bool is_coverage;
 
