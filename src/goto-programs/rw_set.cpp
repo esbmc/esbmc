@@ -23,67 +23,72 @@ static bool is_untracked_global(const irep_idt &name)
   return names.count(name.as_string()) != 0;
 }
 
-// Follow pointer arithmetic and typecasts down to the root pointer/array/object
-// symbol of an address expression (`A + i` -> A, `(T *)p` -> p), or return null
-// when the base is not a plain symbol.
-static const symbolt *root_object_symbol(const expr2tc &e, const namespacet &ns)
+// Follow pointer arithmetic and typecasts down to the pointer or array an
+// address expression is based on (`A + i` -> A, `(T *)p` -> p).
+static expr2tc pointer_base(expr2tc e)
 {
-  expr2tc cur = e;
-  while (!is_nil_expr(cur))
+  while (true)
   {
-    if (is_symbol2t(cur))
-      return ns.lookup(to_symbol2t(cur).thename);
-    if (is_typecast2t(cur))
-      cur = to_typecast2t(cur).from;
-    else if (is_add2t(cur))
+    if (is_typecast2t(e))
+      e = to_typecast2t(e).from;
+    else if (is_add2t(e))
       // pointer +/- integer offset: keep following the pointer-typed operand
-      cur = is_pointer_type(to_add2t(cur).side_1->type) ? to_add2t(cur).side_1
-                                                        : to_add2t(cur).side_2;
-    else if (is_sub2t(cur))
-      cur = to_sub2t(cur).side_1;
+      e = is_pointer_type(to_add2t(e).side_1->type) ? to_add2t(e).side_1
+                                                    : to_add2t(e).side_2;
+    else if (is_sub2t(e))
+      e = to_sub2t(e).side_1;
     else
-      break;
+      return e;
   }
-  return nullptr;
 }
 
 // C11 §5.1.2.4p4: concurrent accesses to _Atomic objects are not data races.
 // irep2 has no atomic-type node (see the FIXME in clang_c_convert's Atomic
-// case), so the `#atomic` flag survives only on the *legacy symbol type*. The
-// per-symbol check in read_write_rec therefore misses an access that reaches an
-// atomic element through a non-atomic pointer/array — e.g. `A[i]` with
-// `_Atomic int *A`, where neither the pointer A nor the index i is itself
-// atomic. Recover the flag from the base symbol's pointee/element type so such
-// accesses are correctly excluded from race checking (issue #4431).
+// case), so the `#atomic` flag survives only on legacy types. Rebuild the
+// legacy type of the lvalue `e` from the symbol table, setting `atomic` when it
+// or an object containing it is _Atomic. An _Atomic pointer does not make its
+// pointee atomic. Returns a nil type when the type cannot be recovered.
+static typet
+lvalue_legacy_type(const expr2tc &e, const namespacet &ns, bool &atomic)
+{
+  typet t;
+  if (is_symbol2t(e))
+  {
+    const symbolt *s = ns.lookup(to_symbol2t(e).thename);
+    if (s)
+      t = s->get_type();
+  }
+  else if (is_member2t(e))
+  {
+    const typet src =
+      ns.follow(lvalue_legacy_type(to_member2t(e).source_value, ns, atomic));
+    if (src.is_struct() || src.is_union())
+      t = to_struct_union_type(src).get_component(to_member2t(e).member).type();
+  }
+  else if (is_index2t(e))
+  {
+    const typet src =
+      ns.follow(lvalue_legacy_type(to_index2t(e).source_value, ns, atomic));
+    if (src.is_array())
+      t = src.subtype();
+  }
+  else if (is_dereference2t(e))
+  {
+    bool pointer_atomic = false;
+    const typet src = ns.follow(lvalue_legacy_type(
+      pointer_base(to_dereference2t(e).value), ns, pointer_atomic));
+    if (src.is_array() || src.is_pointer())
+      t = src.subtype();
+  }
+  atomic = atomic || t.get_bool("#atomic");
+  return t;
+}
+
 static bool accesses_atomic_object(const expr2tc &access, const namespacet &ns)
 {
-  if (is_nil_expr(access))
-    return false;
-
-  if (is_symbol2t(access))
-  {
-    const symbolt *s = ns.lookup(to_symbol2t(access).thename);
-    return s && s->get_type().get_bool("#atomic");
-  }
-
-  if (is_dereference2t(access) || is_index2t(access))
-  {
-    const expr2tc &base = is_dereference2t(access)
-                            ? to_dereference2t(access).value
-                            : to_index2t(access).source_value;
-    const symbolt *s = root_object_symbol(base, ns);
-    if (!s)
-      return false;
-    const typet &t = s->get_type();
-    if (t.is_pointer() || t.is_array())
-      return t.subtype().get_bool("#atomic");
-    return t.get_bool("#atomic");
-  }
-
-  if (is_member2t(access))
-    return accesses_atomic_object(to_member2t(access).source_value, ns);
-
-  return false;
+  bool atomic = false;
+  lvalue_legacy_type(access, ns, atomic);
+  return atomic;
 }
 
 void rw_sett::compute(const expr2tc &expr)
@@ -244,17 +249,14 @@ void rw_sett::read_write_rec(
       return; // ignore for now
     }
 
-    // C11 _Atomic variables are never involved in data races
-    // (§5.1.2.4p4: concurrent accesses to atomic objects are not races).
-    if (symbol->get_type().get_bool("#atomic"))
-      return;
-
-    // The check above only sees this symbol's own type. When the access
-    // reaches an atomic element through a non-atomic pointer/array (e.g.
-    // `A[i]` with `_Atomic int *A`), the atomic object is named by
-    // original_expr, not by this symbol; suppress those too (issue #4431).
-    if (
-      !is_nil_expr(original_expr) && accesses_atomic_object(original_expr, ns))
+    // The accessed object is original_expr when this symbol only names its
+    // base, e.g. `A[i]` with `_Atomic int *A` (#4431) or `s.f`. An _Atomic
+    // variable is never accessed non-atomically, so it needs no race flag. An
+    // atomic member or element shares bytes with plain accesses to its
+    // container, so it keeps its flag and only skips its own assertion.
+    const expr2tc &access = is_nil_expr(original_expr) ? expr : original_expr;
+    const bool atomic = accesses_atomic_object(access, ns);
+    if (atomic && is_nil_expr(original_expr))
       return;
 
     irep_idt object = id2string(symbol_expr.thename) + suffix;
@@ -264,8 +266,9 @@ void rw_sett::read_write_rec(
     entry.r = entry.r || r;
     entry.w = entry.w || w;
     entry.deref = dereferenced;
+    entry.atomic = atomic;
     entry.guard = guard;
-    entry.original_expr = is_nil_expr(original_expr) ? expr : original_expr;
+    entry.original_expr = access;
   }
   else if (is_member2t(expr))
   {
