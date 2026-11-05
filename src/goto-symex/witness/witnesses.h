@@ -192,6 +192,7 @@ void create_violation_yaml_emitter(
   YAML::Emitter &root);
 
 void create_waypoint(const waypoint &wp, YAML::Emitter &waypoint);
+void create_invariant(const invariant &inv, YAML::Emitter &out);
 
 /**
  * Create a edge node.
