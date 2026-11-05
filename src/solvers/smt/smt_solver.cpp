@@ -3448,20 +3448,12 @@ smt_solver_baset::get_index_value(const expr2tc &expr, expr2tc &res)
 
   // Convert the idx, it must be an integer
   expr2tc idx = get(newidx);
-  if (is_constant_int2t(idx) && !has_term(src_value))
-  {
-    expr2tc array = value_of(src_value);
-    if (!is_constant_array2t(array) && !is_constant_array_of2t(array))
-      return std::nullopt;
-    expr2tc elem = index2tc(to_array_type(array->type).subtype, array, idx);
-    simplify(elem);
-    return elem;
-  }
-
   if (is_constant_int2t(idx))
   {
-    // Convert the array so we can call the array api
-    smt_astt array = convert_ast(src_value);
+    smt_astt array = term_of(src_value);
+    // idx is flattened, so a nested array's value is indexed row by row.
+    if (!array)
+      return value_of(expr);
 
     // Retrieve the element
     if (is_tuple_array_ast_type(src_value->type))
@@ -3994,6 +3986,21 @@ bool smt_solver_baset::has_term(const expr2tc &expr)
   return smt_cache.find(expr) != smt_cache.end();
 }
 
+smt_astt smt_solver_baset::term_of(const expr2tc &expr)
+{
+  if (has_term(expr))
+    return convert_ast(expr);
+  if (!is_member2t(expr) || is_union_type(to_member2t(expr).source_value))
+    return nullptr;
+  const member2t &member = to_member2t(expr);
+  smt_astt source = term_of(member.source_value);
+  return source
+           ? source->project(
+               this,
+               get_member_name_field(member.source_value->type, member.member))
+           : nullptr;
+}
+
 /* Converting an expression the encoding never saw builds new formula, and some
  * conversions assert side constraints, which discards the model being read
  * (#8097). Its value is computed from its operands' values instead, following
@@ -4017,16 +4024,13 @@ expr2tc smt_solver_baset::value_of(const expr2tc &expr)
   {
     // Read as convert_member() encodes it: a field of the source's tuple, or
     // the member's bits of the union's.
-    const member2t &member = to_member2t(expr);
-    const expr2tc &source = member.source_value;
+    const expr2tc &source = to_member2t(expr).source_value;
     if (!is_union_type(source))
     {
-      if (!has_term(source))
+      smt_astt field = term_of(expr);
+      if (!field)
         break;
-      return get_by_ast(
-        expr->type,
-        convert_ast(source)->project(
-          this, get_member_name_field(source->type, member.member)));
+      return get_by_ast(expr->type, field);
     }
     const expr2tc bits = bitcast2tc(
       get_uint_type(type_byte_size_bits(source->type).to_uint64()), source);

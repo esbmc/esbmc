@@ -369,6 +369,9 @@ public:
   /** Whether the encoding gave @p expr a term a model can be read through. A
    *  symbol is a leaf: converting one only declares it. */
   bool has_term(const expr2tc &expr);
+  /** The term of @p expr, or of the encoded struct it is a field of projected
+   *  to that field; null where neither exists. Builds no constraint. */
+  smt_astt term_of(const expr2tc &expr);
   /** The model value of @p expr, computed from the values of its operands
    *  where it has no term, so that reading it builds no new formula. */
   expr2tc value_of(const expr2tc &expr);
