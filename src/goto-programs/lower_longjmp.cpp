@@ -67,16 +67,27 @@ public:
 
     auto end = std::prev(body.instructions.end());
     auto epilogue = insert(body, end, end);
-    epilogue->make_skip();
+    if (fn == "c:@F@main" || has_prefix(fn, "c:@F@main#"))
+      make_unmatched_check(*epilogue);
+    else
+      epilogue->make_skip();
 
     auto dispatch =
       sites.empty() ? epilogue : build_dispatch(fn, body, sites, epilogue);
 
+    // Checked at each call: the thread ends inside the trampoline before a
+    // jump to its epilogue would be merged there.
+    const bool thread_entry = fn == "c:@F@pthread_trampoline";
     for (auto call : others)
     {
       auto check = insert(body, std::next(call), call);
-      check->make_goto(dispatch, pending);
-      check->location.property("skipped");
+      if (thread_entry)
+        make_unmatched_check(*check);
+      else
+      {
+        check->make_goto(dispatch, pending);
+        check->location.property("skipped");
+      }
     }
   }
 
@@ -84,6 +95,15 @@ private:
   contextt &context;
   expr2tc pending, value, token, count;
   unsigned slots = 0;
+
+  /// A jump still pending when a thread's outermost function ends found no
+  /// active setjmp to resume at (C11 7.13.2.1p2).
+  void make_unmatched_check(goto_programt::instructiont &insn) const
+  {
+    insn.make_assertion(not2tc(pending));
+    insn.location.property("longjmp");
+    insn.location.comment("longjmp to a jmp_buf whose setjmp is not active");
+  }
 
   bool global(expr2tc &e, const char *id)
   {
@@ -148,7 +168,12 @@ private:
 
       auto match = insert(body, done, site);
       auto land = insert(body, epilogue, site);
-      match->make_goto(land, equality2tc(token, slot));
+      // A never-set static jmp_buf holds token 0, which must not match a slot
+      // this frame zeroed.
+      match->make_goto(
+        land,
+        and2tc(
+          notequal2tc(slot, gen_zero(slot->type)), equality2tc(token, slot)));
       const expr2tc &ret = to_code_function_call2t(site->code).ret;
       if (!is_nil_expr(ret))
       {
