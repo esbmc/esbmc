@@ -43,6 +43,22 @@ goto_programt::targett loopst::effective_loop_head() const
 void loopst::add_modified_var_to_loop(const expr2tc &expr)
 {
   modified_loop_vars.insert(expr);
+  whole_writes_.insert(expr);
+}
+
+void loopst::add_modified_member_to_loop(
+  const expr2tc &root,
+  const expr2tc &path)
+{
+  modified_loop_vars.insert(root);
+  member_writes_[root].insert(path);
+}
+
+const loopst::loop_varst *loopst::partial_writes(const expr2tc &root) const
+{
+  auto it = member_writes_.find(root);
+  return it == member_writes_.end() || whole_writes_.count(root) ? nullptr
+                                                                 : &it->second;
 }
 
 void loopst::add_unmodified_var_to_loop(const expr2tc &expr)
