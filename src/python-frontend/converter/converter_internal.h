@@ -15,6 +15,19 @@
 
 namespace python_frontend
 {
+// The raise a condition always ends in: a cpp-throw, possibly under `not` or a
+// bool cast. Null when evaluating @p cond does not always raise.
+inline const exprt *raised_condition(const exprt &cond)
+{
+  if (cond.statement() == "cpp-throw")
+    return &cond;
+  if (
+    (cond.id() == "not" || cond.id() == "typecast") &&
+    cond.operands().size() == 1)
+    return raised_condition(cond.op0());
+  return nullptr;
+}
+
 // Python AST statement-id (e.g. "If", "Return") -> internal StatementType.
 inline StatementType get_statement_type(const nlohmann::json &element)
 {

@@ -641,7 +641,8 @@ bool check_period_1_fixpoint(
 /// is left to symex, which applies it.
 bool witness_is_bare_cycle_at(const optionst &options, const locationt &head)
 {
-  const auto &wps = yaml_parser::get_waypoints(options.get_option("witness"));
+  const std::string witness = options.get_option("witness");
+  const auto &wps = yaml_parser::get_waypoints(witness);
   return !wps.empty() &&
          std::all_of(wps.begin(), wps.end(), [&](const waypoint &wp) {
            return wp.type == waypoint::assumption &&

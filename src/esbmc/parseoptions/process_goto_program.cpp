@@ -561,7 +561,11 @@ bool esbmc_parseoptionst::process_goto_program(
       // machinery. Never returns TV_FALSE, so it can only upgrade an
       // UNKNOWN to a proof, never produce a wrong verdict.
       bool ranking_proved = try_prove_termination_by_ranking(
-                              goto_functions, options, ns, terminating_loops)
+                              goto_functions,
+                              options,
+                              ns,
+                              terminating_loops,
+                              ranking_transition_invariants)
                               .is_true();
       options.set_option("termination-ranking-proved", ranking_proved);
 

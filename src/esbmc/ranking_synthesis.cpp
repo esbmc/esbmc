@@ -2909,6 +2909,7 @@ bool prove_loop_terminates(
   const goto_programt &body,
   optionst &options,
   const namespacet &ns,
+  std::vector<expr2tc> &measures,
   const loop_skipt *loop_skip = nullptr)
 {
   // Candidate measures. A simple relational guard yields one candidate; a
@@ -2979,6 +2980,7 @@ bool prove_loop_terminates(
       "ranking function proved loop terminates: measure={} invariant={}",
       from_expr(ns, "", m),
       from_expr(ns, "", inv));
+    measures = {m};
     return true;
   }
 
@@ -3057,6 +3059,7 @@ bool prove_loop_terminates(
           from_expr(ns, "", m1),
           from_expr(ns, "", m2),
           from_expr(ns, "", inv));
+        measures = {m1, m2};
         return true;
       }
     }
@@ -3145,6 +3148,7 @@ bool prove_loop_terminates(
             from_expr(ns, "", m2),
             from_expr(ns, "", m3),
             from_expr(ns, "", inv));
+          measures = {m1, m2, m3};
           return true;
         }
       }
@@ -3152,6 +3156,33 @@ bool prove_loop_terminates(
   }
 
   return false;
+}
+
+/// @p e with every variable read in the witness's earlier state.
+expr2tc at_any_prev(const namespacet &ns, const expr2tc &e)
+{
+  if (is_symbol2t(e))
+    return symbol2tc(
+      e->type,
+      "\\at(" + from_expr(ns, "", e, presentationt::WITNESS) + ", AnyPrev)");
+  expr2tc out = e;
+  out.get()->Foreach_operand([&](expr2tc &op) { op = at_any_prev(ns, op); });
+  return out;
+}
+
+/// `\at(m, AnyPrev) > m` for each measure, as a disjunction: each disjunct is
+/// well-founded, and a lexicographic decrease satisfies the disjunction against
+/// every earlier state because that order is transitive.
+std::string
+transition_invariant(const namespacet &ns, const std::vector<expr2tc> &measures)
+{
+  std::string out;
+  for (const expr2tc &m : measures)
+    out +=
+      (out.empty() ? "" : " || ") +
+      from_expr(
+        ns, "", greaterthan2tc(at_any_prev(ns, m), m), presentationt::WITNESS);
+  return out;
 }
 
 /// Classification of the program's recursion structure.
@@ -3397,7 +3428,8 @@ tvt try_prove_termination_by_ranking(
   goto_functionst &goto_functions,
   optionst &options,
   const namespacet &ns,
-  std::vector<locationt> &terminating_loops)
+  std::vector<locationt> &terminating_loops,
+  std::vector<std::pair<locationt, std::string>> &transition_invariants)
 {
   // Classify recursion. Mutual recursion / function pointers are out of
   // scope (UNKNOWN). Self-recursion is handled per-function by a ranking
@@ -3516,12 +3548,35 @@ tvt try_prove_termination_by_ranking(
           skip.by_head_locnum.insert(kv);
 
       ranking_loopt rl;
+      std::vector<expr2tc> measures;
       if (
-        recognize_loop(loop, f_it->second.body, rl, &goto_functions, &skip) &&
-        prove_loop_terminates(rl, f_it->second.body, options, ns, &skip))
-        terminating_loops.push_back(loop.get_original_loop_head()->location);
-      else
+        !recognize_loop(loop, f_it->second.body, rl, &goto_functions, &skip) ||
+        !prove_loop_terminates(
+          rl, f_it->second.body, options, ns, measures, &skip))
+      {
         all_proved = false;
+        continue;
+      }
+      terminating_loops.push_back(loop.get_original_loop_head()->location);
+
+      // A transition invariant compares against every earlier state at the
+      // loop head, so the measure alone holds only for a loop entered once.
+      // ponytail: top-level loops of main only; an inner loop or a loop in a
+      // callee would need the enclosing loops' measures in its invariant.
+      const auto head = loop.get_original_loop_head();
+      const auto back = loop.get_original_loop_exit();
+      const bool nested = std::any_of(
+        loops.get_loops().begin(),
+        loops.get_loops().end(),
+        [&](const loopst &outer) {
+          return outer.get_original_loop_head()->location_number <
+                   head->location_number &&
+                 outer.get_original_loop_exit()->location_number >
+                   back->location_number;
+        });
+      if (f_it->first == "c:@F@main" && !nested)
+        transition_invariants.emplace_back(
+          head->location, transition_invariant(ns, measures));
     }
   }
 
