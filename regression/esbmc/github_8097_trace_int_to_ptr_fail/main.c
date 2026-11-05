@@ -1,6 +1,6 @@
-/* #8097: reading u.s.a[0] back for the counterexample converted the pointer
- * held in u's bits, which asserted side constraints and discarded the model
- * being read. */
+/* #8097: printing u.s.c[1] = 4 read c back from u's bytes, which hold &x;
+ * decoding them as a pointer asserted side constraints and discarded the
+ * model being read. */
 int main()
 {
   union
