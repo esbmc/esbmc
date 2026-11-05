@@ -530,6 +530,14 @@ expr2tc execution_statet::get_guard_identifier()
 
 void execution_statet::switch_to_thread(unsigned int i)
 {
+  // A violation sequence orders waypoints along the interleaved execution,
+  // so the next thread resumes matching where this one stopped.
+  const goto_symex_statet &from = threads_state[active_thread];
+  goto_symex_statet &to = threads_state[i];
+  to.cur_seg = from.cur_seg;
+  to.witness_guard = from.witness_guard;
+  to.cycle_branch_map = from.cycle_branch_map;
+
   last_active_thread = active_thread;
   active_thread = i;
   cur_state = &threads_state[active_thread];
@@ -884,12 +892,7 @@ unsigned int execution_statet::add_thread(const goto_programt *prog)
   new_state.guard = cur_state->guard;
   new_state.global_guard.make_true();
   new_state.global_guard.add(get_guard_identifier());
-  // ponytail: each thread then tracks witness progress on its own; one
-  // sequence shared by all threads would follow the global interleaving.
   new_state.witness_segs = cur_state->witness_segs;
-  new_state.cur_seg = cur_state->cur_seg;
-  new_state.witness_guard = cur_state->witness_guard;
-  new_state.cycle_branch_map = cur_state->cycle_branch_map;
   threads_state.push_back(new_state);
   if (threads_state.size() > art1->reduction_stats.peak_threads)
     art1->reduction_stats.peak_threads = threads_state.size();
