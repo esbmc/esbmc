@@ -124,6 +124,9 @@ void yamlt::generate_yaml(
     }
   }
 
+  for (const invariant &inv : this->invariants)
+    create_invariant(inv, yaml_emitter);
+
   yaml_emitter << YAML::EndSeq;
 
   yaml_emitter << YAML::EndMap;
@@ -243,6 +246,33 @@ void create_waypoint(const waypoint &wp, YAML::Emitter &waypoint)
 
   waypoint << YAML::EndMap;
   waypoint << YAML::EndMap;
+}
+
+void create_invariant(const invariant &inv, YAML::Emitter &out)
+{
+  static const char *const type_names[] = {
+    "loop_invariant",
+    "loop_transition_invariant",
+    "location_invariant",
+    "location_transition_invariant"};
+  assert(inv.type != invariant::unknown);
+  out << YAML::BeginMap;
+  out << YAML::Key << "invariant" << YAML::Value << YAML::BeginMap;
+  out << YAML::Key << "type" << YAML::Value << YAML::DoubleQuoted
+      << type_names[inv.type];
+  out << YAML::Key << "location" << YAML::Value << YAML::BeginMap;
+  out << YAML::Key << "file_name" << YAML::Value << YAML::DoubleQuoted
+      << inv.file;
+  out << YAML::Key << "line" << YAML::Value << integer2string(inv.line);
+  out << YAML::Key << "column" << YAML::Value << integer2string(inv.column);
+  out << YAML::Key << "function" << YAML::Value << YAML::DoubleQuoted
+      << inv.function;
+  out << YAML::EndMap;
+  out << YAML::Key << "value" << YAML::Value << YAML::DoubleQuoted << inv.value;
+  out << YAML::Key << "format" << YAML::Value << YAML::DoubleQuoted
+      << inv.format;
+  out << YAML::EndMap;
+  out << YAML::EndMap;
 }
 
 void create_node_node(nodet &node, xmlnodet &nodenode)
