@@ -8,11 +8,12 @@ int main(void)
   state_t *p = &g_state;
   uint32_t n = __VERIFIER_nondet_uint();
   __ESBMC_assume(n <= 1000000u);
-  g_state.cfg = 1u;
+  g_state.cfg = 0u;
   for (uint32_t i = 0; i < n; i++)
   {
-    p->cfg = i;
-    assert(g_state.cfg == 1u);
+    g_state.shadow[i & 63u] = __VERIFIER_nondet_uint();
+    assert(g_state.cfg < 100u);
+    p->cfg++;
   }
   return 0;
 }
