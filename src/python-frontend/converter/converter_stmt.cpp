@@ -9874,7 +9874,19 @@ exprt python_converter::get_return_value(const nlohmann::json &value)
     return result;
   }
   if (value.value("_type", "") != "IfExp")
-    return get_expr(value);
+  {
+    exprt result = get_expr(value);
+    // A class with no __init__ converts to a sentinel that only an assignment
+    // lowers; a return needs the instance itself.
+    if (result == exprt("_init_undefined"))
+    {
+      const typet type =
+        type_handler_.get_typet(value["func"]["id"].get<std::string>());
+      result = gen_zero(ns.follow(type));
+      result.type() = type;
+    }
+    return result;
+  }
   ternary_return_target_ = current_func_return_type_;
   exprt result = get_expr(value);
   ternary_return_target_ = typet();
