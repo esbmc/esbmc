@@ -331,7 +331,37 @@ exprt python_converter::get_len_on_class_instance(const nlohmann::json &element)
     return get_exception_handler().gen_exception_raise(
       "TypeError", "object of type '" + cls + "' has no len()");
 
+  if (exprt bound = get_len_on_bound_instance(arg, element); bound.is_not_nil())
+    return bound;
+
   return get_len_on_list_element(arg, location);
+}
+
+// len(self): an unannotated name whose symbol is bound to a class instance.
+// The bound class is the static one, so the object may be an instance of any
+// subclass, and every one of them must resolve __len__ alike (#9835).
+exprt python_converter::get_len_on_bound_instance(
+  const nlohmann::json &arg,
+  const nlohmann::json &element)
+{
+  const std::string cls = bound_class_name(arg);
+  if (cls.empty())
+    return nil_exprt();
+
+  const std::optional<std::string> owner = family_method_owner(cls, "__len__");
+  if (!owner)
+    throw std::runtime_error(
+      "len() of an instance of class '" + cls +
+      "' is not supported when its subclasses or bases leave __len__ "
+      "unresolved");
+  if (owner->empty())
+    return get_exception_handler().gen_exception_raise(
+      "TypeError", "object of type '" + cls + "' has no len()");
+
+  return checked_len_result(
+    get_expr(
+      build_dunder_call(arg, "__len__", nlohmann::json::array(), element)),
+    get_location_from_decl(element));
 }
 
 // len(xs[i]): the AST names no class, but the element's converted type does
@@ -1346,6 +1376,7 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
   // every other expression context (assert, nested expressions, call
   // arguments, ...), which otherwise fall through to an unrelated builtin
   // or class-method lookup for the same method name.
+  reject_unmodelled_array_method(element);
   if (
     std::optional<nlohmann::json> rewritten =
       rewrite_numpy_method_call_node(element))
@@ -1458,7 +1489,7 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
     // is an int array (not char), so it correctly falls through to the error.
     const typet &arg_t = arg_expr.type();
     const bool is_string_operand = (arg_t.is_array() || arg_t.is_pointer()) &&
-                                   arg_t.subtype() == char_type();
+                                   type_utils::is_char_storage(arg_t.subtype());
     std::string str_val;
     if (
       is_string_operand &&
@@ -1473,11 +1504,12 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
     // mistypes it as a list pointer (out-of-bounds dereference / migrate
     // failure). This pins the str-only boundary of the fold above.
     if (
-      arg_t.is_array() && arg_t.subtype() != char_type() &&
+      arg_t.is_array() && !type_utils::is_char_storage(arg_t.subtype()) &&
       string_handler::extract_constant_string(list_arg, *this, str_val))
       throw std::runtime_error(
         "list() over a bytes object is not supported; bytes elements are "
         "integers, not characters");
+    refuse_list_of_instance(arg_t);
     // Fall through to the generic function-call builder below for non-list
     // iterables (e.g. list(42) or a non-constant string).
   }
@@ -1759,7 +1791,7 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
       {
         for (const auto &arg_element : element["args"])
         {
-          exprt arg_expr = get_expr(arg_element);
+          exprt arg_expr = to_value_expr(get_expr(arg_element), ns);
           // The pointer target only carries a return type, no parameter
           // types, so refuse cleanly instead of passing a mistyped arg.
           if (type_handler_.is_tagged_scalar_type(arg_expr.type()))

@@ -1,0 +1,5 @@
+CORE
+main.c
+--printf-check
+^  FAILED .* printf %s argument is not NUL-terminated within its object$
+^VERIFICATION FAILED$

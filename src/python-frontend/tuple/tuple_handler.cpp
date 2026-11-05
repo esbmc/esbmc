@@ -157,7 +157,7 @@ exprt tuple_handler::get_tuple_expr(const nlohmann::json &element)
     // pad_string_element). Symbolic char* strings are left as-is.
     if (
       (elem_expr.type().is_array() &&
-       elem_expr.type().subtype() == char_type()) ||
+       type_utils::is_char_storage(elem_expr.type().subtype())) ||
       type_utils::is_char_type(elem_expr.type()))
       elem_expr = pad_string_element(elem_expr);
 
@@ -276,7 +276,8 @@ static bool is_coercible_member(const typet &from, const typet &to)
   if (from == to)
     return true;
   if (from.is_pointer() && to.is_array())
-    return from.subtype() == char_type() && to.subtype() == char_type() &&
+    return type_utils::is_char_storage(from.subtype()) &&
+           type_utils::is_char_storage(to.subtype()) &&
            to_array_type(to).size().is_constant();
   auto is_int = [](const typet &t) {
     return t.id() == "signedbv" || t.id() == "unsignedbv";
@@ -922,7 +923,9 @@ typet tuple_handler::tuple_member_type_from_annotation(
     if (id == "bytes")
       throw std::runtime_error(
         "tuple[bytes, ...] annotations are not supported");
-    return type_handler_.get_typet(id);
+    // A tuple stores an instance by reference, as get_tuple_expr builds it.
+    const typet t = type_handler_.get_typet(id);
+    return converter_.is_heap_migrated_class_type(t) ? gen_pointer_type(t) : t;
   }
   // get_typet(json) unwraps list[int] to the bare name `list`, which it
   // then looks up as a variable and types void (#8511).

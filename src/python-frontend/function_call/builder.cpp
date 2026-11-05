@@ -831,6 +831,39 @@ static std::set<std::string> recorded_element_classes(
   return classes;
 }
 
+/// The module-level statements that can run before @p call. A call in a
+/// top-level statement runs once, so a later statement cannot change the list
+/// it reads; that statement is kept whole, since a loop in it may run again. A
+/// def may run at any time, so each is kept whole, and a call inside one keeps
+/// every statement.
+static nlohmann::json
+statements_before_call(const nlohmann::json &body, const nlohmann::json &call)
+{
+  const auto is_def = [](const nlohmann::json &stmt) {
+    const std::string kind = stmt.value("_type", "");
+    return kind == "FunctionDef" || kind == "AsyncFunctionDef" ||
+           kind == "ClassDef";
+  };
+  const auto number = [](const nlohmann::json &stmt, const char *key) {
+    return stmt.contains(key) && stmt[key].is_number() ? stmt[key].get<int>()
+                                                       : 0;
+  };
+  const int line = number(call, "lineno");
+  bool in_top_level_statement = false;
+  for (const auto &stmt : body)
+    if (
+      !is_def(stmt) && number(stmt, "lineno") <= line &&
+      line <= number(stmt, "end_lineno"))
+      in_top_level_statement = true;
+  if (!in_top_level_statement)
+    return body;
+  nlohmann::json before = nlohmann::json::array();
+  for (const auto &stmt : body)
+    if (is_def(stmt) || number(stmt, "lineno") <= line)
+      before.push_back(stmt);
+  return before;
+}
+
 std::string function_call_builder::subscript_receiver_class(
   const nlohmann::json &receiver) const
 {
@@ -870,7 +903,8 @@ std::string function_call_builder::subscript_receiver_class(
   // a parameter annotated with that class), no item stores and no aliases.
   const std::string &cls = *classes.begin();
   list_name_uses uses;
-  scan_list_uses(converter_.ast()["body"], name, uses);
+  scan_list_uses(
+    statements_before_call(converter_.ast()["body"], call_), name, uses);
   const bool tracked =
     !uses.escapes &&
     ((uses.bindings == 1 && uses.params.empty()) ||
@@ -887,12 +921,129 @@ std::string function_call_builder::subscript_receiver_class(
   return cls;
 }
 
+/// The Return statements of @p body, not those of a nested def, class or
+/// lambda.
+static void collect_returns(
+  const nlohmann::json &body,
+  std::vector<const nlohmann::json *> &returns)
+{
+  for (const auto &stmt : body)
+  {
+    const std::string kind = stmt.value("_type", "");
+    if (
+      kind == "FunctionDef" || kind == "AsyncFunctionDef" || kind == "ClassDef")
+      continue;
+    if (kind == "Return")
+      returns.push_back(&stmt);
+    for (const char *key : {"body", "orelse", "finalbody", "handlers", "cases"})
+      if (stmt.contains(key) && stmt[key].is_array())
+        collect_returns(stmt[key], returns);
+  }
+}
+
+/// Whether a def of @p method sits directly in the class statement @p cls.
+static const nlohmann::json *
+method_of(const nlohmann::json &cls, const std::string &method)
+{
+  for (const auto &member : cls["body"])
+    if (member.value("_type", "") == "FunctionDef" && member["name"] == method)
+      return &member;
+  return nullptr;
+}
+
+/// Whether a class other than @p definer, defined anywhere in the module, is
+/// @p current or derives from it and defines @p method.
+bool function_call_builder::overridden_below(
+  const std::string &current,
+  const std::string &definer,
+  const std::string &method) const
+{
+  for (const auto &stmt : converter_.ast()["body"])
+  {
+    if (stmt.value("_type", "") != "ClassDef" || stmt["name"] == definer)
+      continue;
+    const auto derived = converter_.class_mro(stmt["name"].get<std::string>());
+    const bool derives =
+      !derived ||
+      std::find(derived->begin(), derived->end(), current) != derived->end();
+    if (derives && method_of(stmt, method))
+      return true;
+  }
+  return false;
+}
+
+/// The module class built by the only return of @p def when that return is
+/// its last statement; empty otherwise.
+std::string
+function_call_builder::sole_constructed_class(const nlohmann::json &def) const
+{
+  std::vector<const nlohmann::json *> returns;
+  collect_returns(def["body"], returns);
+  const nlohmann::json &last = def["body"].back();
+  if (
+    returns.size() != 1 || returns[0] != &last || last["value"].is_null() ||
+    last["value"].value("_type", "") != "Call" ||
+    last["value"]["func"].value("_type", "") != "Name")
+    return "";
+  const std::string built = last["value"]["func"].value("id", "");
+  return json_utils::is_class(built, converter_.ast()) &&
+             converter_.class_mro(built)
+           ? built
+           : "";
+}
+
+/// The class of `self.m()` inside a method: the class `m` constructs when its
+/// only return is the last statement and builds a module class, provided no
+/// class derived from the caller's class, wherever it is defined, overrides
+/// `m` (self may be an instance of one). Empty otherwise.
+std::string function_call_builder::self_method_result_class(
+  const nlohmann::json &inner_call) const
+{
+  const nlohmann::json &func = inner_call["func"];
+  const std::string current = converter_.current_classname();
+  if (
+    current.empty() || func.value("_type", "") != "Attribute" ||
+    func["value"].value("_type", "") != "Name" ||
+    func["value"].value("id", "") != "self")
+    return "";
+  const std::string method = func.value("attr", "");
+  const nlohmann::json &ast = converter_.ast();
+  const auto mro = converter_.class_mro(current);
+  if (!mro)
+    return "";
+
+  const nlohmann::json *def = nullptr;
+  std::string definer;
+  for (const std::string &cls : *mro)
+  {
+    for (const auto &stmt : ast["body"])
+      if (stmt.value("_type", "") == "ClassDef" && stmt["name"] == cls)
+        def = method_of(stmt, method);
+    if (def)
+    {
+      definer = cls;
+      break;
+    }
+  }
+  if (!def || !(*def)["decorator_list"].empty())
+    return "";
+
+  if (overridden_below(current, definer, method))
+    return "";
+
+  const std::string built = sole_constructed_class(*def);
+  return built;
+}
+
 std::string function_call_builder::call_receiver_class(
   const nlohmann::json &inner_call) const
 {
   const auto inferred = [&]() {
     return converter_.get_type_handler().get_operand_type(inner_call);
   };
+  const std::string from_self = self_method_result_class(inner_call);
+  if (!from_self.empty())
+    return from_self;
   const nlohmann::json &func = inner_call["func"];
   if (
     func.value("_type", "") != "Attribute" || func.value("attr", "") != "pop" ||
@@ -1064,7 +1215,10 @@ symbol_id function_call_builder::build_function_id() const
           if (base_type.is_pointer())
             base_type = base_type.subtype();
           if (base_type.id() == "symbol")
+          {
+            converter_.build_forward_class(base_type);
             base_type = converter_.ns.follow(base_type);
+          }
 
           // Look up the member in the struct
           if (base_type.is_struct())
@@ -1091,6 +1245,8 @@ symbol_id function_call_builder::build_function_id() const
 
       if (!obj_type.id().empty())
       {
+        converter_.build_forward_class(obj_type);
+
         // If the resolved type is a list (e.g. class-level mutable_attr = []),
         // map directly to the "list" builtin name.
         if (is_pylist_object_type(obj_type, converter_.ns))

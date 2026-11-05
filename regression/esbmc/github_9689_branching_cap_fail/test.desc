@@ -1,0 +1,5 @@
+CORE
+main.c
+--witness-output-yaml - --unwind 1600 --no-unwinding-assertions
+^VERIFICATION FAILED$
+(?s)\A(?:(?!type: "branching").)*(?:type: "branching"(?:(?!type: "branching").)*){1,1000}\Z

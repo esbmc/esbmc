@@ -99,8 +99,10 @@ bool is_none_constant(const nlohmann::json &node)
 }
 
 /// The type a tuple element names: a constant's type, or the `int`, `float`
-/// or `str` annotation of a parameter of @p scope (the innermost enclosing
-/// def, or null) that the def never rebinds. "" otherwise.
+/// or `str` annotation of a parameter or variable that @p scope (the innermost
+/// enclosing def or the module, or null) binds exactly once. "" otherwise.
+/// The variable's assignment must be a statement of the scope's own body: one
+/// under an `if` or `try` may not run, leaving the name unbound.
 std::string
 element_type_name(const nlohmann::json &elt, const nlohmann::json *scope)
 {
@@ -110,17 +112,17 @@ element_type_name(const nlohmann::json &elt, const nlohmann::json *scope)
   const std::string &id = elt["id"].get<std::string>();
   if (json_utils::count_name_bindings(*scope, id) != 1)
     return "";
-  for (const auto &arg : (*scope)["args"]["args"])
-  {
-    if (arg["arg"] != id)
-      continue;
-    const nlohmann::json &annotation =
-      arg.value("annotation", nlohmann::json());
-    const std::string type =
-      is_node(annotation, "Name") ? annotation["id"].get<std::string>() : "";
-    return type == "int" || type == "float" || type == "str" ? type : "";
-  }
-  return "";
+  const nlohmann::json decl = json_utils::find_var_in_function(id, *scope);
+  const nlohmann::json &body = (*scope)["body"];
+  if (
+    !decl.is_object() ||
+    (!decl.contains("arg") &&
+     std::find(body.begin(), body.end(), decl) == body.end()))
+    return "";
+  const nlohmann::json &annotation = decl.value("annotation", nlohmann::json());
+  const std::string type =
+    is_node(annotation, "Name") ? annotation["id"].get<std::string>() : "";
+  return type == "int" || type == "float" || type == "str" ? type : "";
 }
 
 /// A `tuple[T0, ...]` annotation for a tuple literal of constants or typed
@@ -447,8 +449,9 @@ private:
   stored_elem_annotation(const std::string &var, size_t module) const
   {
     std::vector<nlohmann::json> items;
+    const nlohmann::json &module_ast = *modules_[module].read;
     collect_stored_items(
-      modules_[module].read->at("body"), var, module, nullptr, items);
+      module_ast.at("body"), var, module, &module_ast, items);
 
     if (items.empty())
       return nlohmann::json();
@@ -686,9 +689,28 @@ private:
   }
 };
 
+std::string literal_scalar_type(const nlohmann::json &node);
+
+/// int or float for +, -, *, /, // or % over int and float operands
+/// literal_scalar_type types, the way Python does, or "".
+std::string arithmetic_type(const nlohmann::json &node)
+{
+  static const std::set<std::string> arithmetic = {
+    "Add", "Sub", "Mult", "Div", "FloorDiv", "Mod"};
+  const std::string op = node["op"]["_type"];
+  const std::string lhs = literal_scalar_type(node["left"]);
+  const std::string rhs = literal_scalar_type(node["right"]);
+  const auto numeric = [](const std::string &t) {
+    return t == "int" || t == "float";
+  };
+  if (!arithmetic.count(op) || !numeric(lhs) || !numeric(rhs))
+    return "";
+  return op == "Div" || lhs == "float" || rhs == "float" ? "float" : "int";
+}
+
 /// Python type name of a scalar argument that this pass can type without a
-/// symbol table: a literal, a negated numeric literal, or a nondet_<T>() call,
-/// plain or module-qualified.
+/// symbol table: a literal, a nondet_<T>() call, plain or module-qualified, or
+/// arithmetic over operands it can type.
 std::string literal_scalar_type(const nlohmann::json &node)
 {
   if (is_node(node, "Constant") && node["value"].is_boolean())
@@ -698,9 +720,12 @@ std::string literal_scalar_type(const nlohmann::json &node)
     is_node(node, "UnaryOp") &&
     (is_node(node["op"], "USub") || is_node(node["op"], "UAdd")))
   {
-    const std::string type = constant_type_name(node["operand"]);
+    const std::string type = literal_scalar_type(node["operand"]);
     return type == "int" || type == "float" ? type : "";
   }
+
+  if (is_node(node, "BinOp"))
+    return arithmetic_type(node);
 
   if (is_node(node, "Call") && node["args"].empty() && node["keywords"].empty())
   {

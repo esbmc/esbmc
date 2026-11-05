@@ -256,14 +256,28 @@ bool python_converter::is_user_class_pointer(const typet &t)
   return t.is_pointer() && is_user_class_struct_type(t.subtype());
 }
 
+void python_converter::refuse_list_of_instance(const typet &t)
+{
+  const typet &cls = t.is_pointer() ? t.subtype() : t;
+  if (is_user_class_struct_type(cls))
+    throw std::runtime_error(
+      "list() of an instance of class '" + class_name_of(cls) +
+      "' is not supported here");
+}
+
 bool python_converter::is_class_instance(const nlohmann::json &value_node)
 {
   const std::string node_type = value_node.value("_type", "");
   if (node_type == "Call")
     return type_handler_.is_constructor_call(value_node);
 
-  if (node_type != "Name")
-    return false;
+  return !bound_class_name(value_node).empty();
+}
+
+std::string python_converter::bound_class_name(const nlohmann::json &value_node)
+{
+  if (value_node.value("_type", "") != "Name")
+    return {};
 
   // The bound type decides, not the annotation's name: `a: List[int]` resolves
   // to a class named List, but its struct is a model container that owns its
@@ -275,10 +289,11 @@ bool python_converter::is_class_instance(const nlohmann::json &value_node)
   if (!sym)
     sym = find_symbol(sid.global_to_string());
   if (!sym)
-    return false;
+    return {};
 
   const typet &t = sym->get_type();
-  return is_user_class_pointer(t) || is_user_class_struct_type(t);
+  const typet &cls = t.is_pointer() ? t.subtype() : t;
+  return is_user_class_struct_type(cls) ? class_name_of(cls) : std::string();
 }
 
 // move_symbol_to_context() only overwrites an existing symbol's type when
@@ -381,11 +396,37 @@ exprt python_converter::dispatch_dunder_operator(
   return nil_exprt();
 }
 
+static void
+reject_unmodelled_numpy_unary(const std::string &op, const typet &type)
+{
+  const bool strings = type_utils::is_numpy_string_array(type);
+  const bool complex_view =
+    type.is_pointer() &&
+    is_complex_type(type_utils::array_scalar_type(type.subtype()));
+  if (
+    strings || complex_view ||
+    (type_utils::is_numpy_complex_array(type) && op != "USub" && op != "UAdd"))
+    throw std::runtime_error(
+      "TypeError: numpy unary '" + op + "' over a " +
+      (strings ? "string" : "complex") + " array is not supported");
+  if (
+    op == "abs" && type.is_array() &&
+    type_utils::is_numpy_scalar_type(type_utils::array_scalar_type(type)))
+    throw std::runtime_error(
+      "TypeError: numpy.abs() over a dtype narrower than 64 bits is not "
+      "supported");
+}
+
 exprt python_converter::dispatch_unary_dunder_operator(
   const std::string &op,
   exprt &operand,
   const locationt &loc)
 {
+  reject_unmodelled_numpy_unary(op, operand.type());
+  const exprt narrow = numpy_narrow_unary(op, operand);
+  if (!narrow.is_nil())
+    return narrow;
+
   // Resolve the operand to its (pointee) struct. Under the object-model
   // migration (#3067/#4773) a class instance is a `Class*` pointer, so follow
   // it to the struct exactly as the binary dispatch does — otherwise str(obj),

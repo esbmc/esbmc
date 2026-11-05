@@ -893,7 +893,35 @@ std::string python_annotation<Json>::get_call_type(const Json &arg)
     }
   }
 
-  return "";
+  return module_call_type(arg);
+}
+
+/// The type a call of an imported module's function, such as
+/// random.randint(a, b), returns, or "" when unknown. Without it a parameter
+/// fed the call directly stays `void *` (#9816).
+template <class Json>
+std::string python_annotation<Json>::module_call_type(const Json &call)
+{
+  const Json &func = call["func"];
+  if (
+    func["_type"] != "Attribute" || func["value"].value("_type", "") != "Name")
+    return "";
+  // numpy calls build arrays, which the converter types on its own.
+  const std::string module = func["value"]["id"].template get<std::string>();
+  if (
+    !is_imported_name(module) ||
+    is_imported_numpy_module_alias(
+      static_cast<const nlohmann::json &>(ast_), module))
+    return "";
+  try
+  {
+    const std::string type = get_type_from_method(call);
+    return type == "Any" ? "" : type;
+  }
+  catch (std::runtime_error &)
+  {
+    return "";
+  }
 }
 
 /// The type a subscripted annotation spells. get_annotation_type_name flattens
@@ -1180,6 +1208,23 @@ std::string python_annotation<Json>::get_argument_type(const Json &arg)
   {
     if (arg.contains("values") && arg["values"].is_array())
     {
+      // and/or evaluates to one of its operands, so operands of one type
+      // give that type, and containers of one kind (list, list[int]) that
+      // kind.
+      std::set<std::string> operand_types, operand_bases;
+      for (const auto &val : arg["values"])
+      {
+        const std::string t = get_argument_type(val);
+        operand_types.insert(t);
+        operand_bases.insert(t.substr(0, t.find('[')));
+      }
+      if (operand_types.size() == 1 && !operand_types.begin()->empty())
+        return *operand_types.begin();
+      static const std::set<std::string> containers = {
+        "list", "dict", "set", "tuple"};
+      if (operand_bases.size() == 1 && containers.count(*operand_bases.begin()))
+        return *operand_bases.begin();
+
       for (const auto &val : arg["values"])
       {
         if (
@@ -1192,6 +1237,24 @@ std::string python_annotation<Json>::get_argument_type(const Json &arg)
             return it->second;
         }
       }
+      // `x and y` and `x or y` give one of their operands, so lists give a
+      // list, not a bool (#9742).
+      std::string list_type;
+      bool all_lists = true;
+      for (const auto &val : arg["values"])
+      {
+        const std::string type = get_argument_type(val);
+        if (type.empty())
+          continue;
+        if (
+          type.rfind("list", 0) != 0 ||
+          (!list_type.empty() && type != list_type))
+          all_lists = false;
+        else
+          list_type = type;
+      }
+      if (all_lists && !list_type.empty())
+        return list_type;
     }
     return "bool";
   }
@@ -3678,6 +3741,16 @@ InferResult python_annotation<Json>::infer_type_from_ifexp(
     if (body_type == orelse_type)
     {
       inferred_type = body_type;
+      // Two list literals of one element type give `list[T]`, as a single
+      // list literal does.
+      if (body_type == "list")
+      {
+        const std::string body_list = get_argument_type(ifexp_node["body"]);
+        if (
+          body_list.rfind("list[", 0) == 0 &&
+          body_list == get_argument_type(ifexp_node["orelse"]))
+          inferred_type = body_list;
+      }
       return InferResult::OK;
     }
 
@@ -4086,9 +4159,36 @@ InferResult python_annotation<Json>::infer_type(
     }
   }
   else
-    return InferResult::UNKNOWN;
+    return infer_self_attribute_copy(stmt, inferred_type);
 
   return InferResult::OK;
+}
+
+/// `self.x = self.y`, with `self.x` stored nowhere else, takes the declared
+/// type of `self.y`; otherwise `x` would be left as an untyped member (#9825).
+template <class Json>
+InferResult python_annotation<Json>::infer_self_attribute_copy(
+  const Json &stmt,
+  std::string &inferred_type)
+{
+  if (
+    stmt.value("_type", "") != "Assign" || !stmt.contains("targets") ||
+    stmt["targets"].size() != 1 ||
+    stmt["targets"][0].value("_type", "") != "Attribute" ||
+    stmt["targets"][0]["value"].value("id", "") != "self")
+    return InferResult::UNKNOWN;
+  size_t stores = 0;
+  size_t name_reads = 0;
+  count_attr_writers(
+    ast_["body"],
+    stmt["targets"][0]["attr"].template get<std::string>(),
+    "",
+    stores,
+    name_reads);
+  if (stores != 1)
+    return InferResult::UNKNOWN;
+  inferred_type = self_attribute_type(stmt["value"]);
+  return inferred_type.empty() ? InferResult::UNKNOWN : InferResult::OK;
 }
 
 // ---------- AST walkers and lookup ----------
@@ -5512,15 +5612,23 @@ void python_annotation<Json>::infer_parameter_types(Json &function_element)
 
         if (
           parent_func == nullptr && call_types.size() > 1 &&
-          specializable_at_call_sites(func_name, i, call_types, search_context))
+          specializable_at_call_sites(
+            func_name, i, call_types, search_context) &&
+          (!are_scalar_list_types(call_types) ||
+           function_values(ast_, extra_subscript_inference_asts_)
+             .only_called(function_element, ast_)))
         {
+          // A list specialization leaves the original typed from all its
+          // calls; see apply_pending_specializations.
+          const bool keep_original = are_scalar_list_types(call_types);
           if (!is_specialization_pending(func_name, i, call_types))
           {
             pending_specializations_.push_back(
               {func_name, i, std::move(call_types)});
           }
 
-          continue;
+          if (!keep_original)
+            continue;
         }
 
         std::string saved_ctx = current_func_name_context_;
@@ -5937,12 +6045,14 @@ void python_annotation<Json>::retype_methods_called_on_receivers()
   }
 }
 
-/// The type of call argument @p arg in method @p caller: that of a parameter
-/// the method never rebinds, else "".
+/// The type of call argument @p arg in method @p caller: that of a literal or
+/// of a parameter the method never rebinds, else "".
 template <class Json>
 std::string
 python_annotation<Json>::self_call_arg_type(const Json &arg, const Json &caller)
 {
+  if (arg.value("_type", "") == "Constant")
+    return get_type_from_constant(arg);
   if (arg.value("_type", "") != "Name")
     return "";
   const std::string name = arg["id"].template get<std::string>();
@@ -6297,6 +6407,11 @@ void python_annotation<Json>::add_type_annotation()
   // Second pass: add type annotations to global scope variables
   annotate_global_scope();
   current_line_ = 0;
+  // A global typed only now, such as `n = random.randint(0, 9)`, types the
+  // parameters it is passed to, and through them those of their callees,
+  // which are annotated first (#9826).
+  while (preprocess_function_calls(ast_))
+    ;
 
   // Add type annotation to all functions and class methods
   for (Json &element : ast_["body"])

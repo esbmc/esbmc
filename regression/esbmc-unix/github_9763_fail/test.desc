@@ -1,0 +1,6 @@
+CORE
+main.c
+--printf-check --32
+^  FAILED       \[main\.assertion\.[0-9]+\]  line 16  printf has more format specifiers than arguments$
+^\*\* 1 of [0-9]+ properties failed
+^VERIFICATION FAILED$
