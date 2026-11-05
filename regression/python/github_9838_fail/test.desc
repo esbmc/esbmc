@@ -1,0 +1,5 @@
+CORE
+main.py
+--unwind 5 --multi-property --no-pointer-check --no-align-check
+FAILED +\[global\.assertion\.[0-9]+\] +line 14 +uncaught exception: AttributeError
+^VERIFICATION FAILED$

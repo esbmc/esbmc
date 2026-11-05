@@ -25,7 +25,6 @@ class Result:
   err_timeout = 7
   err_memout = 8
   err_unwinding_assertion = 9
-  force_fp_mode = 10
   unknown = 11
   fail_memcleanup = 12
   fail_termination = 13
@@ -101,7 +100,7 @@ def do_exec(cmd_line, timeout=None):
   except subprocess.TimeoutExpired:
     p.kill()
     p.communicate()
-    return b"Timed out"
+    return b"ERROR: Timed out\n"
 
   return stdout + stderr
 
@@ -149,6 +148,26 @@ def violation_site(the_output):
   if site is None:
     return None
   return os.path.basename(site.group(1)), site.group(2)
+
+
+ROW_FILE = re.compile(r"^(\S+), function ")
+ROW_LINE = re.compile(r"\[[^\]]*\]\s+line (\d+)\b")
+
+
+def failed_sites(the_output):
+  """{(file, line)} of every FAILED row of a --multi-property results table."""
+  sites = set()
+  current = None
+  for line in the_output.splitlines():
+    header = ROW_FILE.match(line)
+    if header:
+      current = os.path.basename(header.group(1))
+      continue
+    row = PROPERTY_ROW.match(line)
+    if current and row and row.group(1) == "FAILED":
+      at = ROW_LINE.search(line)
+      sites.add((current, at.group(1) if at else None))
+  return sites
 
 
 MEMORY_LEAK = "dereference failure: forgotten memory"
@@ -291,6 +310,10 @@ def classify_violation(violated, prop):
   return None
 
 
+COUNTEREXAMPLE = re.compile(r"^\[Counterexample\]$.*?(?=^Violated property:$)",
+                            re.MULTILINE | re.DOTALL)
+
+
 def parse_result(the_output, prop):
   # ESBMC also prints a "  CWE: CWE-NNN" line after each violated-property
   # comment (see docs/cwe-mapping.md) and may emit a SARIF report under
@@ -298,15 +321,15 @@ def parse_result(the_output, prop):
   # still derived from the unchanged freeform comment strings below, matched
   # against the violated properties rather than the whole output.
 
-  # Parse output
-  if "Timed out" in the_output:
+  # A counterexample carries the program's own output, which may repeat any
+  # of ESBMC's messages (esbmc/esbmc#9890).
+  the_output = COUNTEREXAMPLE.sub("", the_output)
+
+  if re.search(r"^ERROR: Timed out$", the_output, re.MULTILINE):
     return Result.err_timeout
 
-  if "Out of memory" in the_output:
+  if re.search(r"^ERROR: Out of memory$", the_output, re.MULTILINE):
     return Result.err_memout
-
-  if "Chosen solver doesn\'t support floating-point numbers" in the_output:
-    return Result.force_fp_mode
 
   if "VERIFICATION FAILED" in the_output:
     decided = classify_violation(violated_property_text(the_output), prop)
@@ -528,19 +551,28 @@ MIN_RERUN_BUDGET = 30
 def confirmed_by_integer_encoding(esbmc_command_line, the_output, prop, elapsed):
   """Does a --ir re-run violate the same property at the same file and line?
 
-  A first run that leaves too little of the budget keeps its FALSE unchecked.
+  The re-run checks every property, so it confirms the first run's site even
+  when it would have stopped at another violation first (#9803).
+
+  A first run that leaves too little of the budget for the re-run is not
+  confirmed.
   """
   budget = min(IR_RERUN_TIMEOUT, TOTAL_BUDGET - elapsed)
   if budget < MIN_RERUN_BUDGET:
-    return True
+    return False
   site = violation_site(the_output)
   if site is None:
     return False
-  rerun = run(esbmc_command_line + "--ir --z3 ", budget).decode()
-  return parse_result(rerun, prop) == Result.fail_python and violation_site(rerun) == site
+  rerun = run(esbmc_command_line + "--ir --z3 --multi-property ", budget).decode()
+  if parse_result(rerun, prop) != Result.fail_python:
+    return False
+  return violation_site(rerun) == site or site in failed_sites(rerun)
 
 
 def verify(strat, prop, arch, benchmark, concurrency, dargs, esbmc_ci, witness_path, validate_mode):
+  if witness_path and validate_mode == "violation":
+    strat = "incr"
+
   esbmc_command_line = get_command_line(strat, prop, arch, benchmark, concurrency, dargs, esbmc_ci, validate=bool(witness_path))
 
   if witness_path:

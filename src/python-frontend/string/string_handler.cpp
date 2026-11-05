@@ -1558,10 +1558,15 @@ exprt string_handler::char_to_string(const exprt &expr)
   return str;
 }
 
-/// The str of a constant int, float or bool, or nil for any other constant.
+/// The str of a constant None, int, float or bool, or nil for any other
+/// constant.
 exprt string_handler::constant_to_string(const exprt &expr)
 {
   const typet &t = expr.type();
+  // str(None) is repr(None): NoneType inherits object.__str__.
+  if (t == none_type())
+    return converter_.get_string_builder().build_string_literal("None");
+
   if (type_utils::is_integer_type(t))
   {
     BigInt value = binary2integer(expr.value().as_string(), t.is_signedbv());
@@ -1628,6 +1633,19 @@ exprt string_handler::symbol_to_string(const exprt &expr)
   return nil_exprt();
 }
 
+/// A str held as a pointer, or any string for a pointer to a list or a class
+/// instance, whose bytes are not a str.
+exprt string_handler::pointer_to_string(const exprt &expr)
+{
+  if (expr.type().subtype().id() == typet::t_symbol)
+    return build_nondet_string_fallback(expr.location());
+
+  const typet char_ptr = gen_pointer_type(char_type());
+  if (expr.type() != char_ptr)
+    return build_typecast(expr, char_ptr);
+  return expr;
+}
+
 exprt string_handler::convert_to_string(const exprt &expr)
 {
   const typet &t = expr.type();
@@ -1659,12 +1677,7 @@ exprt string_handler::convert_to_string(const exprt &expr)
   // return type may be a zero-length array that migrates to empty_type2t,
   // causing a type mismatch when nested inside __python_str_concat.
   if (t.is_pointer() && !expr.is_code())
-  {
-    typet char_ptr = gen_pointer_type(char_type());
-    if (t != char_ptr)
-      return build_typecast(expr, char_ptr);
-    return expr;
-  }
+    return pointer_to_string(expr);
 
   // Non-constant scalars: dispatch to the matching __python_*_to_str
   // operational model in src/c2goto/library/python/string.c. The model
@@ -1735,14 +1748,9 @@ exprt string_handler::convert_to_string(const exprt &expr)
     return build_symbol(result_sym);
   }
 
-  // Anything else (struct, array of non-char, etc.) is currently unsupported.
-  std::string placeholder = "<expr>";
-  typet string_type =
-    type_handler_.build_array(char_type(), placeholder.size() + 1);
-  std::vector<unsigned char> chars(placeholder.begin(), placeholder.end());
-  chars.push_back('\0');
-
-  return make_char_array_expr(chars, string_type);
+  // The str of anything else (a list, tuple, dict, instance...) is not
+  // modelled, so it is any string.
+  return build_nondet_string_fallback(expr.location());
 }
 
 exprt string_handler::format_fstring_part(const nlohmann::json &value)
@@ -1907,7 +1915,7 @@ std::string string_handler::extract_string_from_array_operands(
         binary2integer(op.value().as_string(), op.type().is_signedbv());
       if (val == 0)
         break;
-      result += static_cast<char>(val.to_uint64());
+      result += static_cast<char>(val.to_int64());
     }
   }
   return result;
@@ -2669,7 +2677,7 @@ exprt string_handler::handle_int_conversion(
   // If argument is a float, truncate to integer
   if (arg.type().is_floatbv())
   {
-    return build_typecast(arg, int_type());
+    return build_typecast(arg, long_long_int_type());
   }
 
   // If argument is a boolean, convert to 0 or 1

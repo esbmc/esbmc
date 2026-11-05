@@ -1,7 +1,10 @@
 import ast
 import builtins
 import copy
+import itertools
 from collections import Counter, defaultdict
+
+from preprocessor.bound_method_dispatch import _scope_nodes
 # pylint: disable=too-many-boolean-expressions
 
 
@@ -197,7 +200,9 @@ class ClassContextMixin:
         self._record_exit_suppresses_all(node)
         self._record_class_with_exit(node)
         self._class_stack.append(node)
+        bound_method_scope = self._enter_bound_method_scope(node)
         self.generic_visit(node)
+        self._exit_bound_method_scope(bound_method_scope)
         self._class_stack.pop()
 
         self.current_class_name = old_class_name
@@ -649,6 +654,8 @@ class ClassContextMixin:
         and nothing rebinds it; each distinct combination of such classes gets
         its own copy of the function, and the calls keep their arguments, so
         they are still evaluated."""
+        if self.is_entry_module:
+            self._rename_shadowing_parameters(module)
         while True:
             counts = Counter(name for n in ast.walk(module) for name in self._names_bound_by(n))
             if counts["*"]:
@@ -666,6 +673,67 @@ class ClassContextMixin:
             if not self._specialise_one_function(module, known, counts):
                 self._unroll_class_tuples(module, known, counts)
                 return
+
+    def _rename_shadowing_parameters(self, module):
+        """Rename a parameter of a top-level function that has the name of a
+        top-level class or function bound nowhere else, when every reference to
+        the function is a call passing a known class for it. The parameter
+        otherwise keeps the class from being known, and the function from
+        being specialised (#9806). Only the body is renamed: defaults and
+        annotations are evaluated in the module scope."""
+        counts = Counter(name for n in ast.walk(module) for name in self._names_bound_by(n))
+        loads = Counter(n.id for n in ast.walk(module) if isinstance(n, ast.Name))
+        taken = counts.keys() | loads.keys()
+        calls = self._direct_calls(module)
+        for func in module.body:
+            if not (self._is_plain_function(func) and counts[func.name] == 1 and calls[func.name]
+                    and loads[func.name] == len(calls[func.name])):
+                continue
+            for i, param in enumerate(func.args.posonlyargs + func.args.args):
+                if self._shadows_class_argument(module, counts, func, i, calls[func.name]):
+                    counts[param.arg] -= 1
+                    self._rename_parameter(func, i, calls[func.name],
+                                           self._fresh_name(f"{param.arg}__esbmc_param", taken))
+
+    @staticmethod
+    def _direct_calls(module):
+        """Each name's calls in `module` that call it directly by name."""
+        calls = defaultdict(list)
+        for n in ast.walk(module):
+            if isinstance(n, ast.Call) and isinstance(n.func, ast.Name):
+                calls[n.func.id].append(n)
+        return calls
+
+    @staticmethod
+    def _fresh_name(prefix, taken):
+        """The first of `prefix0`, `prefix1`, ... not in `taken`, added to it."""
+        name = next(f"{prefix}{n}" for n in itertools.count() if f"{prefix}{n}" not in taken)
+        taken.add(name)
+        return name
+
+    def _shadows_class_argument(self, module, counts, func, index, calls):
+        """Whether `func`'s parameter `index` is the only binding of a known
+        class's name besides its definition, and every one of `calls` passes
+        a known class for it."""
+        name = (func.args.posonlyargs + func.args.args)[index].arg
+        if counts[name] != 2:
+            return False
+        known = self._known_classes(module, counts - Counter([name]))
+        return name in known and all(self._class_argument(c, func, index, known) for c in calls)
+
+    @staticmethod
+    def _rename_parameter(func, index, calls, fresh):
+        """Rename `func`'s parameter `index` to `fresh` in its body and in the
+        keywords of `calls`; a positional-only one is never a keyword."""
+        param = (func.args.posonlyargs + func.args.args)[index]
+        for n in (n for s in func.body for n in ast.walk(s)):
+            if isinstance(n, ast.Name) and n.id == param.arg:
+                n.id = fresh
+        if index >= len(func.args.posonlyargs):
+            for keyword in (k for c in calls for k in c.keywords):
+                if keyword.arg == param.arg:
+                    keyword.arg = fresh
+        param.arg = fresh
 
     def _unroll_class_tuples(self, module, known, counts):
         """Unroll a `for` loop, and an `any`/`all` over a generator, that runs
@@ -874,10 +942,7 @@ class ClassContextMixin:
         """Specialise the first top-level function that only ever is called
         directly by name; whether one was."""
         loads = Counter(n.id for n in ast.walk(module) if isinstance(n, ast.Name))
-        calls = defaultdict(list)
-        for n in ast.walk(module):
-            if isinstance(n, ast.Call) and isinstance(n.func, ast.Name):
-                calls[n.func.id].append(n)
+        calls = self._direct_calls(module)
         taken = counts.keys() | loads.keys()
         return any(
             self._specialise_type_parameters(module, f, known, calls[f.name], taken)
@@ -1082,6 +1147,35 @@ class ClassContextMixin:
                      for name in ClassContextMixin._names_bound_by(n)))
             for scope in (module, *(n for n in ast.walk(module) if isinstance(n, ast.FunctionDef)))
         }
+
+    @staticmethod
+    def _unscoped_binding_names(module):
+        """Names a call may not resolve to a bound method recorded elsewhere.
+
+        The visit scopes a def or class but not a lambda or comprehension, so
+        this holds the names one of those binds and calls. It also holds a
+        name a def declares global or nonlocal and that is bound more than
+        once, as the binding a call sees then depends on the order defs run.
+        """
+        inner = (ast.Lambda, ast.ListComp, ast.SetComp, ast.DictComp, ast.GeneratorExp)
+        names = set()
+        declared = set()
+        bindings = Counter()
+        for node in ast.walk(module):
+            if isinstance(node, inner):
+                called = {
+                    n.func.id
+                    for n in ast.walk(node)
+                    if isinstance(n, ast.Call) and isinstance(n.func, ast.Name)
+                }
+                names.update(
+                    called.intersection(name for n in _scope_nodes(node)
+                                        for name in ClassContextMixin._names_bound_by(n)))
+            elif isinstance(node, (ast.Global, ast.Nonlocal)):
+                declared.update(node.names)
+            else:
+                bindings.update(ClassContextMixin._names_bound_by(node))
+        return names | {name for name in declared if bindings[name] > 1}
 
     def _scan_fixed_receivers(self, module):
         """Map each `o` of a top-level `o = C(...)` to the methods `C` defines,

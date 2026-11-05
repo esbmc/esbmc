@@ -36,6 +36,19 @@ bool python_annotation<Json>::are_all_user_classes(
   return true;
 }
 
+// Lists whose element types differ between call sites, e.g. list[str] and
+// list[int]: no one annotation types the parameter (#9545).
+template <class Json>
+bool python_annotation<Json>::are_scalar_list_types(
+  const std::vector<std::string> &types)
+{
+  static const std::set<std::string> scalar_lists = {
+    "list[int]", "list[float]", "list[str]", "list[bool]"};
+  return std::all_of(types.begin(), types.end(), [](const std::string &t) {
+    return scalar_lists.count(t) != 0;
+  });
+}
+
 // Whether call sites passing `types` get a copy of the function per type.
 // Besides user classes, a parameter given an int at one call and a float at
 // another gets one: widening it to float gives the int call a float result,
@@ -44,7 +57,7 @@ template <class Json>
 bool python_annotation<Json>::are_specializable_types(
   const std::vector<std::string> &types) const
 {
-  if (are_all_user_classes(types))
+  if (are_all_user_classes(types) || are_scalar_list_types(types))
     return true;
   bool has_int = false, has_float = false, has_str = false;
   for (const auto &t : types)
@@ -83,7 +96,13 @@ std::string python_annotation<Json>::build_specialized_function_name(
   const std::string &base_name,
   const std::string &class_name) const
 {
-  return base_name + "__esbmc_poly_" + class_name;
+  std::string suffix = class_name;
+  std::replace_if(
+    suffix.begin(),
+    suffix.end(),
+    [](unsigned char c) { return !std::isalnum(c); },
+    '_');
+  return base_name + "__esbmc_poly_" + suffix;
 }
 
 template <class Json>
@@ -256,7 +275,10 @@ void python_annotation<Json>::apply_pending_specializations()
 
     const std::vector<Json> calls =
       find_function_calls(func_name, ast_["body"]);
-    if (!spec.class_types.empty())
+    // A call the rewrite below misses, e.g. through an alias of the function,
+    // must not reach a list parameter typed for another call's elements, so
+    // a list specialization leaves the original as its calls typed it.
+    if (!spec.class_types.empty() && !are_scalar_list_types(spec.class_types))
     {
       for (auto &node : ast_["body"])
       {
@@ -306,6 +328,23 @@ void python_annotation<Json>::apply_pending_specializations()
 
     rewrite_specialized_calls(
       func_name, param_index, specialized_names, ast_);
+
+    if (deferred_none_functions_.count(func_name) != 0)
+      for (Json &node : ast_["body"])
+      {
+        const std::string name = node.value("name", "");
+        const bool is_copy = std::any_of(
+          specialized_names.begin(),
+          specialized_names.end(),
+          [&](const auto &entry) { return entry.second == name; });
+        if (
+          node.value("_type", "") == "FunctionDef" &&
+          (name == func_name || is_copy))
+        {
+          node["returns"] = nullptr;
+          annotate_function(node);
+        }
+      }
   }
 
   pending_specializations_.clear();

@@ -446,6 +446,11 @@ void violation_graphml_goto_trace(
         (step.pc->is_other() && is_nil_expr(step.lhs)) ||
         step.pc->is_function_call())
       {
+        /* The argv setup in __ESBMC_main has no line; an edge for it would
+           carry startline 0 (#9677). */
+        if (step.pc->location.get_line().empty())
+          break;
+
         std::string assignment = get_formated_assignment(ns, step, false);
 
         graph.check_create_new_thread(step.thread_nr, prev_node);
@@ -503,6 +508,11 @@ static std::optional<waypoint> witness_nondet_waypoint(
   return wp;
 }
 
+/* Branches in a recursive trace number in the hundreds of thousands (#9689),
+   and a witness that size cannot be loaded by the validator. Dropping a
+   branching waypoint only weakens guidance. */
+static constexpr size_t max_branching_waypoints = 1000;
+
 void violation_yaml_goto_trace(
   optionst &options,
   const namespacet &ns,
@@ -513,6 +523,7 @@ void violation_yaml_goto_trace(
   yml.verified_file = options.get_option("input-file");
   log_progress("Generating Violation Yaml Witness for: {}", yml.verified_file);
 
+  size_t branching_waypoints = 0;
   for (const auto &step : goto_trace.steps)
   {
     switch (step.type)
@@ -534,10 +545,17 @@ void violation_yaml_goto_trace(
       if (step.pc->is_goto())
       {
         /* A validator cannot match a follow waypoint against a file it was
-           not given; dropping one only weakens guidance. */
-        if (!input_file_check(step.pc->location))
+           not given; dropping one only weakens guidance. witnesslint also
+           rejects line 0, e.g. the argv setup in __ESBMC_main (#9650). A
+           branch fixed by the program text needs no waypoint either: on deep
+           recursion they number in the hundreds of thousands (#9689). */
+        if (
+          branching_waypoints >= max_branching_waypoints ||
+          !input_file_check(step.pc->location) ||
+          step.pc->location.get_line().empty() || !step.nondet_dependent)
           break;
 
+        ++branching_waypoints;
         waypoint wp =
           witness_waypoint(step.pc->location, yml.verified_file, options);
         wp.type = waypoint::branching;
@@ -563,6 +581,21 @@ void violation_yaml_goto_trace(
       continue;
     }
   }
+}
+
+void non_termination_yaml_goto_trace(optionst &options, const locationt &loc)
+{
+  yamlt yml(yamlt::VIOLATION);
+  yml.verified_file = options.get_option("input-file");
+  log_progress(
+    "Generating Non-Termination Yaml Witness for: {}", yml.verified_file);
+
+  waypoint wp = witness_waypoint(loc, yml.verified_file, options);
+  wp.type = waypoint::assumption;
+  wp.action = waypoint::cycle;
+  wp.value = "1";
+  yml.segments.push_back(wp);
+  yml.generate_yaml(options);
 }
 
 void correctness_graphml_goto_trace(
@@ -616,14 +649,45 @@ void correctness_graphml_goto_trace(
 void correctness_yaml_goto_trace(
   optionst &options,
   const namespacet &ns [[maybe_unused]],
-  const goto_tracet &goto_trace [[maybe_unused]])
+  const goto_tracet &goto_trace [[maybe_unused]],
+  const std::vector<std::pair<locationt, std::string>> &transition_invariants)
 {
   yamlt yml(yamlt::CORRECTNESS);
   yml.verified_file = options.get_option("input-file");
   log_progress(
     "Generating Correctness Yaml Witness for: {}", yml.verified_file);
 
+  for (const auto &[loc, value] : transition_invariants)
+  {
+    const waypoint at = witness_waypoint(loc, yml.verified_file, options);
+    invariant inv;
+    inv.type = invariant::loop_transition_invariant;
+    inv.file = at.file;
+    inv.line = at.line;
+    inv.column = at.column;
+    inv.function = at.function;
+    inv.value = value;
+    inv.format = "ext_c_expression";
+    yml.invariants.push_back(inv);
+  }
+
   yml.generate_yaml(options);
+}
+
+void write_correctness_witnesses(
+  optionst &options,
+  const namespacet &ns,
+  const goto_tracet &goto_trace,
+  const std::vector<std::pair<locationt, std::string>> &transition_invariants)
+{
+  if (options.get_bool_option("result-only"))
+    return;
+
+  if (!options.get_option("witness-output-graphml").empty())
+    correctness_graphml_goto_trace(options, ns, goto_trace);
+
+  if (!options.get_option("witness-output-yaml").empty())
+    correctness_yaml_goto_trace(options, ns, goto_trace, transition_invariants);
 }
 
 void appendInfo(

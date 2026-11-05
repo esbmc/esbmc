@@ -1,0 +1,53 @@
+# This file is part of the SV-Benchmarks collection of verification tasks:
+# https://gitlab.com/sosy-lab/benchmarking/sv-benchmarks
+#
+# SPDX-FileCopyrightText: 2026 Raphaël Monat, Inria
+# SPDX-FileCopyrightText: 2026-... The SV-Benchmarks Community
+#
+# SPDX-License-Identifier: Apache-2.0
+
+import random
+import string
+import sys
+
+
+def nondet_bool():
+    return bool(random.randint(0, 1))
+
+
+def nondet_int() -> int:
+    # unbounded int
+    i = 0
+    while nondet_bool():
+        i += 1
+    if nondet_bool():
+        i = -i
+    return i
+
+
+def nondet_list(nondet_elem):
+    values = []
+    while nondet_bool():
+        values.append(nondet_elem())
+    return values
+
+
+def nondet_dict(nondet_key, nondet_value):
+    d = {}
+    while nondet_bool():
+        d[nondet_key()] = nondet_value()
+    return d
+
+
+def nondet_str():
+    # Source - https://stackoverflow.com/a/23728630
+    # Posted by Randy Marsh, modified by community. See post 'Timeline' for change history
+    # Retrieved 2026-06-01, License - CC BY-SA 4.0
+    # Note that this is the concrete implementation, but it could be changed to include *any* kind of caracter
+    return ''.join(random.choice(string.printable) for _ in range(abs(nondet_int())))
+
+
+def nondet_float():
+    if nondet_bool():
+        return random.choice([float('inf'), float('-inf'), float('nan'), float('-0.')])
+    return random.uniform(-sys.float_info.max, sys.float_info.max)
