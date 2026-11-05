@@ -29,6 +29,7 @@
 #include <goto-programs/goto_convert_functions.h>
 #include <goto-programs/goto_inline.h>
 #include <goto-programs/goto_k_induction.h>
+#include <goto-programs/goto_k_induction_legacy.h>
 #include <goto-programs/goto_termination.h>
 #include <esbmc/ranking_synthesis.h>
 #include <esbmc/non_termination.h>
@@ -562,6 +563,17 @@ bool esbmc_parseoptionst::process_goto_program(
       if (unsound)
         options.set_option("disable-inductive-step", true);
     };
+    // k-induction-legacy-havoc
+    auto k_induction = [&](contextt *flags_context) {
+      if (!options.get_bool_option("k-induction-legacy-havoc"))
+        return goto_k_induction(
+          goto_functions, flags_context, checks_past_violation);
+      log_warning(
+        "--k-induction-legacy-havoc: the inductive step does not havoc what "
+        "loops write through pointers and may prove a false property");
+      return goto_k_induction_legacy(
+        goto_functions, flags_context, checks_past_violation);
+    };
 
     if (cmdline.isset("loop-invariant"))
     {
@@ -569,8 +581,7 @@ bool esbmc_parseoptionst::process_goto_program(
       // ASSUME(INV) injected at end of loop body + k-induction (Branch 2).
       remove_no_op(goto_functions);
       goto_loop_invariant_combined(goto_functions);
-      disable_is_if_unsound(
-        goto_k_induction(goto_functions, &context, checks_past_violation));
+      disable_is_if_unsound(k_induction(&context));
     }
     else
     {
@@ -583,10 +594,8 @@ bool esbmc_parseoptionst::process_goto_program(
       {
         reachable_state_invariants =
           assume_reachable_loop_states(goto_functions, ns, 10000);
-        disable_is_if_unsound(goto_k_induction(
-          goto_functions,
-          loop_entry_flags(ts_strategy_requested(), context),
-          checks_past_violation));
+        disable_is_if_unsound(
+          k_induction(loop_entry_flags(ts_strategy_requested(), context)));
       }
 
       if (wants_loop_invariants())

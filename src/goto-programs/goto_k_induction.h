@@ -29,4 +29,12 @@ bool goto_k_induction(
   contextt *context,
   bool continue_past_failed_assertions);
 
+// k-induction-legacy-havoc
+class loopst;
+void k_induction_transform_loop(
+  contextt *context,
+  goto_functiont &goto_function,
+  loopst &loop,
+  bool continue_past_failed_assertions);
+
 #endif /* GOTO_PROGRAMS_GOTO_K_INDUCTION_H_ */
