@@ -139,8 +139,8 @@ static bool is_name(const nlohmann::json &node, const std::string &name)
          node.value("id", "") == name;
 }
 
-/// Whether `node` reads a value out of the dict `name`: `name[k]` or
-/// `name.pop(k)`.
+/// Whether `node` reads a value out of the dict `name`: `name[k]`,
+/// `name.pop(k)` or `name.get(k)`.
 static bool reads_from_dict(const nlohmann::json &node, const std::string &name)
 {
   if (!node.is_object())
@@ -149,10 +149,21 @@ static bool reads_from_dict(const nlohmann::json &node, const std::string &name)
   if (kind == "Subscript")
     return is_name(node["value"], name) &&
            node["slice"].value("_type", "") != "Slice";
-  return kind == "Call" && node["func"].value("_type", "") == "Attribute" &&
-         node["func"].value("attr", "") == "pop" &&
+  const std::string method =
+    kind == "Call" ? node["func"].value("attr", "") : std::string();
+  return (method == "pop" || method == "get") &&
+         node["func"].value("_type", "") == "Attribute" &&
          is_name(node["func"]["value"], name) && node["args"].size() == 1 &&
          node["keywords"].empty();
+}
+
+/// Whether `node` is `name.popitem()`, which removes an entry and stores none.
+static bool pops_item_from(const nlohmann::json &node, const std::string &name)
+{
+  return node.is_object() && node.value("_type", "") == "Call" &&
+         node["func"].value("_type", "") == "Attribute" &&
+         node["func"].value("attr", "") == "popitem" &&
+         is_name(node["func"]["value"], name) && node["args"].empty();
 }
 
 /// The Names `name` under `node`, and how many of them, outside a def, class
@@ -172,8 +183,9 @@ static void count_dict_uses(
   if (is_name(node, name))
     ++all;
   if (
-    !nested && (kind == "Subscript" ? is_name(node["value"], name)
-                                    : reads_from_dict(node, name)))
+    !nested && (kind == "Subscript"
+                  ? is_name(node["value"], name)
+                  : reads_from_dict(node, name) || pops_item_from(node, name)))
     ++indexed;
   nested = nested || kind == "FunctionDef" || kind == "AsyncFunctionDef" ||
            kind == "ClassDef" || kind == "Lambda";
@@ -207,12 +219,28 @@ static bool reads_back_from(
   return all == indexed + 1;
 }
 
+/// The kind of the stored expression `rhs`: that of a literal, "?" otherwise.
+/// A key distinguishes int from float.
+static std::string stored_expr_kind(const nlohmann::json &rhs, bool by_key)
+{
+  if (rhs.value("_type", "") != "Constant")
+    return "?";
+  const auto &literal = rhs["value"];
+  if (by_key && literal.is_number_float())
+    return "float";
+  if (by_key && literal.is_number_integer())
+    return "int";
+  return literal.type_name();
+}
+
 /// The kind of the literal that the statement `stmt` stores into the dict
 /// `name` by subscript, "?" for any other value, and "" if it stores nothing.
+/// With @p by_key it is the kind of the stored key instead.
 static std::string stored_literal_kind(
   const nlohmann::json &ast,
   const nlohmann::json &stmt,
-  const std::string &name)
+  const std::string &name,
+  bool by_key = false)
 {
   if (
     stmt.value("_type", "") != "Assign" || !stmt.contains("targets") ||
@@ -223,10 +251,10 @@ static std::string stored_literal_kind(
     !target.is_object() || target.value("_type", "") != "Subscript" ||
     !target["value"].is_object() || target["value"].value("id", "") != name)
     return "";
-  const auto &rhs = stmt["value"];
-  if (reads_back_from(ast, rhs, name))
+  const auto &rhs = by_key ? target["slice"] : stmt["value"];
+  if (!by_key && reads_back_from(ast, rhs, name))
     return "";
-  return rhs.value("_type", "") == "Constant" ? rhs["value"].type_name() : "?";
+  return stored_expr_kind(rhs, by_key);
 }
 
 /// Whether every statement of `body` that stores into the dict `name` by
@@ -235,7 +263,8 @@ static bool stores_one_literal_kind(
   const nlohmann::json &ast,
   const nlohmann::json &body,
   const std::string &name,
-  std::string &kind)
+  std::string &kind,
+  bool by_key = false)
 {
   if (!body.is_array())
     return true;
@@ -246,7 +275,7 @@ static bool stores_one_literal_kind(
     const std::string type = stmt.value("_type", "");
     if (type == "FunctionDef" || type == "ClassDef" || type == "Lambda")
       continue;
-    const std::string stored = stored_literal_kind(ast, stmt, name);
+    const std::string stored = stored_literal_kind(ast, stmt, name, by_key);
     if (stored == "?" || (!stored.empty() && !kind.empty() && stored != kind))
       return false;
     if (!stored.empty())
@@ -254,10 +283,48 @@ static bool stores_one_literal_kind(
     for (const char *key : {"body", "orelse", "finalbody"})
       if (
         stmt.contains(key) &&
-        !stores_one_literal_kind(ast, stmt[key], name, kind))
+        !stores_one_literal_kind(ast, stmt[key], name, kind, by_key))
         return false;
   }
   return true;
+}
+
+typet python_dict_handler::resolve_stored_key_type(const exprt &dict_expr)
+{
+  const symbolt *sym = dict_expr.is_symbol()
+                         ? symbol_table_.find_symbol(dict_expr.identifier())
+                         : nullptr;
+  if (!sym || !converter_.get_current_func_name().empty())
+    return empty_typet();
+  const std::string name = sym->name.as_string();
+  const nlohmann::json decl = json_utils::find_var_decl(
+    name, converter_.get_current_func_name(), converter_.get_ast_json());
+  const nlohmann::json &ast = converter_.get_ast_json();
+  std::string kind;
+  if (
+    decl.empty() || !decl.contains("value") ||
+    !is_empty_dict_init(decl["value"]) ||
+    !stores_one_literal_kind(ast, ast["body"], name, kind, true))
+    return empty_typet();
+  if (kind == "boolean")
+    return bool_type();
+  if (kind == "int")
+    return type_handler_.get_typet("int", 0);
+  if (kind == "float")
+    return type_handler_.get_typet("float", 0);
+  return empty_typet();
+}
+
+typet python_dict_handler::key_type_or_default(
+  const typet &key_type,
+  const exprt &dict_expr)
+{
+  typet key = key_type;
+  if (key.is_nil() || key.is_empty())
+    key = resolve_stored_key_type(dict_expr);
+  if (key.is_nil() || key.is_empty())
+    key = gen_pointer_type(char_type());
+  return key;
 }
 
 typet python_dict_handler::resolve_expected_type_for_dict_subscript(

@@ -1,0 +1,6 @@
+CORE
+main.c
+--overflow-check --no-assertions --witness-output-yaml -
+^VERIFICATION FAILED$
+type: "target"
+(?s)\A(?!.*type: "branching")

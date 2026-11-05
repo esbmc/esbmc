@@ -70,6 +70,54 @@ Violated property:
 VERIFICATION FAILED
 """
 
+DEREF_THEN_LEAK = """
+Violated property:
+  file main.c line 9 column 3 function main
+  dereference failure: invalidated dynamic object
+  CWE: CWE-416
+
+** Results:
+main.c, function main
+  FAILED       [main.invalidated-dynamic-object.1]  line  9  dereference failure: invalidated dynamic object
+  FAILED       [main.memory-leak.1]                 line 11  dereference failure: forgotten memory: dynamic_2_value
+
+** 2 of 2 properties failed
+
+VERIFICATION FAILED
+"""
+
+DEREF_THEN_BAD_FREE = """
+Violated property:
+  file main.c line 9 column 3 function detach
+  dereference failure: invalid pointer
+  CWE: CWE-416, CWE-822, CWE-824, CWE-908
+
+** Results:
+main.c, function detach
+  FAILED       [detach.invalid-pointer-dereference.1]  line  9  dereference failure: invalid pointer
+  FAILED       [detach.invalid-pointer-freed.1]        line 12  dereference failure: invalid pointer freed
+
+** 2 of 2 properties failed
+
+VERIFICATION FAILED
+"""
+
+FREE_THEN_DEREF = """
+Violated property:
+  file main.c line 11 column 3 function main
+  dereference failure: free() of non-dynamic memory
+  CWE: CWE-590, CWE-761
+
+** Results:
+main.c, function main
+  FAILED       [main.free-non-dynamic-memory.1]          line 11  dereference failure: free() of non-dynamic memory
+  FAILED       [main.expired-pointer-dereference.1]      line 11  dereference failure: accessed expired variable pointer `buf'
+
+** 2 of 2 properties failed
+
+VERIFICATION FAILED
+"""
+
 UNLISTED_DEREF_COMMENT = """
 Violated property:
   file main.c line 6368 column 5 function attach
@@ -243,6 +291,30 @@ class ParseResultTest(unittest.TestCase):
         self.assertEqual(
             self.verdict(UNLISTED_DEREF_COMMENT, wrapper.Property.memory),
             "FALSE_DEREF")
+
+    # The model goes on past its first violation and fails later claims too
+    # (#9895), shaped like the ldv-linux-3.4-simple and Juliet CWE590 logs.
+    def test_a_leak_after_the_violated_deref_does_not_decide(self):
+        self.assertEqual(
+            self.verdict(DEREF_THEN_LEAK, wrapper.Property.memory),
+            "FALSE_DEREF")
+
+    def test_a_leak_violated_first_still_decides(self):
+        output = DEREF_THEN_LEAK.replace(
+            "line 9 column 3 function main\n  dereference failure: invalidated dynamic object",
+            "line 11 column 1 function main\n  dereference failure: forgotten memory: dynamic_2_value")
+        self.assertEqual(
+            self.verdict(output, wrapper.Property.memory), "FALSE_MEMTRACK")
+
+    def test_a_bad_free_after_the_violated_deref_does_not_decide(self):
+        self.assertEqual(
+            self.verdict(DEREF_THEN_BAD_FREE, wrapper.Property.memory),
+            "FALSE_DEREF")
+
+    def test_a_deref_failing_with_the_violated_free_does_not_decide(self):
+        self.assertEqual(
+            self.verdict(FREE_THEN_DEREF, wrapper.Property.memory),
+            "FALSE_FREE")
 
     def test_program_output_in_the_counterexample_is_not_an_esbmc_error(self):
         # esbmc/esbmc#9890: sv-benchmarks memsafety-cve/cups.i prints this.

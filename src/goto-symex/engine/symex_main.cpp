@@ -400,6 +400,20 @@ void goto_symext::symex_step(reachability_treet &art)
     cur_state->num_instructions++;
   }
 
+  // A call on the target line runs deeper frames before the line's later
+  // claims, so only the arming frame (or its return) ends the target visit.
+  const size_t depth = cur_state->call_stack.size();
+  if (
+    !cur_state->witness_target_line.empty() &&
+    (depth < cur_state->witness_target_depth ||
+     (depth == cur_state->witness_target_depth &&
+      (instruction.location.get_line() != cur_state->witness_target_line ||
+       instruction.is_backwards_goto()))))
+  {
+    cur_state->advance_witness_position();
+    cur_state->witness_target_line = irep_idt();
+  }
+
   // Remember the first loop we're entering
   if (inductive_step && instruction.loop_number && !first_loop)
     first_loop = instruction.loop_number;
@@ -1550,7 +1564,8 @@ leak_root_pointers(const expr2tc &root, const std::string &suffix)
 {
   std::vector<expr2tc> sub_exprs = {root};
   std::string rest = suffix;
-  while (!rest.empty())
+  /* A zero-size array, such as a flexible array member, expands to none. */
+  while (!rest.empty() && !sub_exprs.empty())
   {
     /* The suffix consists of a sequence of components, which are either
      * "[]" or ".name" where name is the name of some member of a

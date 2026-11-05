@@ -176,7 +176,9 @@ void goto_symext::symex_witness_branching(
       else
       {
         force_goto(case_matches != instruction.flipped_guard);
-        if (case_matches)
+        if (
+          case_matches || (wp.value == "default" &&
+                           is_last_switch_case_test(cur_state->source.pc)))
           cur_state->advance_witness_position();
       }
       break;
@@ -216,12 +218,11 @@ void goto_symext::symex_witness_assert(
 
   if (
     !target_wp ||
-    cur_state->source.pc->location.get_line() != target_wp->line_id ||
-    cur_state->witness_target_reached)
+    cur_state->source.pc->location.get_line() != target_wp->line_id)
     new_expr = gen_true_expr();
-  else
+  else if (cur_state->witness_target_line.empty())
   {
-    cur_state->advance_witness_position();
-    cur_state->witness_target_reached = true;
+    cur_state->witness_target_line = target_wp->line_id;
+    cur_state->witness_target_depth = cur_state->call_stack.size();
   }
 }
