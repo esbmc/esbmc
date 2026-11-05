@@ -375,8 +375,9 @@ public:
   /** The model value of @p expr, computed from the values of its operands
    *  where it has no term, so that reading it builds no new formula. */
   expr2tc value_of(const expr2tc &expr);
-  /** The value of @p type whose object representation is @p bits. */
-  expr2tc value_from_bits(const type2tc &type, const BigInt &bits);
+  /** The value of @p type whose object representation is @p bits, a binary
+   *  string with the most significant bit first. */
+  expr2tc value_from_bits(const type2tc &type, const std::string &bits);
   /** The pointer of @p type whose address in the model is @p address. */
   expr2tc pointer_at_address(const type2tc &type, const BigInt &address);
 

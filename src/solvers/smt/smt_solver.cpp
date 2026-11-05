@@ -4053,7 +4053,11 @@ expr2tc smt_solver_baset::value_of(const expr2tc &expr)
         : value_of(from);
     if (!is_constant_int2t(bits))
       break;
-    expr2tc value = value_from_bits(expr->type, to_constant_int2t(bits).value);
+    expr2tc value = value_from_bits(
+      expr->type,
+      integer2binary(
+        to_constant_int2t(bits).value,
+        type_byte_size_bits(expr->type).to_uint64()));
     if (!is_nil_expr(value))
       return value;
     break;
@@ -4095,33 +4099,25 @@ expr2tc smt_solver_baset::value_of(const expr2tc &expr)
   return res;
 }
 
-/* Bits [lo, lo + width) of the @p total-bit value @p bits. */
-static BigInt
-bits_at(const BigInt &bits, unsigned total, unsigned lo, unsigned w)
-{
-  return binary2integer(
-    integer2binary(bits, total).substr(total - lo - w, w), false);
-}
-
 /* Inverts the layout convert_bitcast() reads a type out of a bit-vector with;
  * nil for a type it does not cover. */
 expr2tc
-smt_solver_baset::value_from_bits(const type2tc &type, const BigInt &bits)
+smt_solver_baset::value_from_bits(const type2tc &type, const std::string &bits)
 {
-  const unsigned total = type_byte_size_bits(type).to_uint64();
+  const unsigned total = bits.size();
   auto part = [&](const type2tc &t, unsigned offset) {
     const unsigned w = type_byte_size_bits(t).to_uint64();
     if (!w)
       return gen_zero(t);
     return value_from_bits(
-      t, bits_at(bits, total, flattened_position(offset, w, total), w));
+      t, bits.substr(total - flattened_position(offset, w, total) - w, w));
   };
 
   std::vector<expr2tc> parts;
   switch (type->type_id)
   {
   case type2t::pointer_id:
-    return pointer_at_address(type, bits);
+    return pointer_at_address(type, binary2integer(bits, false));
 
   case type2t::struct_id:
   {
@@ -4151,14 +4147,13 @@ smt_solver_baset::value_from_bits(const type2tc &type, const BigInt &bits)
   }
 
   case type2t::signedbv_id:
-    return constant_int2tc(
-      type, binary2integer(integer2binary(bits, total), true));
+    return constant_int2tc(type, binary2integer(bits, true));
 
   case type2t::bool_id:
   case type2t::unsignedbv_id:
   case type2t::fixedbv_id:
   case type2t::floatbv_id:
-    return get_by_value(type, bits);
+    return get_by_value(type, binary2integer(bits, false));
 
   default:
     return expr2tc();
