@@ -990,6 +990,20 @@ private:
     const std::string &attr_name,
     const std::string &obj_type_name);
 
+  bool attr_never_set_on(
+    const std::string &var_name,
+    const std::string &class_name,
+    const std::string &attr_name);
+
+  /// Whether `var_name.attr_name` may read a field of the instance. A store on
+  /// another instance also adds the field to the class type (#9836).
+  bool instance_may_have_attr(
+    const struct_typet &class_type,
+    const symbolt &symbol,
+    const std::string &var_name,
+    const std::string &obj_type_name,
+    const std::string &attr_name);
+
   bool is_instance_attribute(
     const std::string &symbol_id,
     const std::string &attr_name,
