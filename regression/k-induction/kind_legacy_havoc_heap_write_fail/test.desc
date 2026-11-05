@@ -1,0 +1,4 @@
+CORE
+main.c
+--k-induction --max-k-step 6 --k-induction-legacy-havoc
+^VERIFICATION FAILED$

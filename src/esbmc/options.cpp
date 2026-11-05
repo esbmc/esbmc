@@ -627,6 +627,12 @@ const struct group_opt_templ all_cmd_options[] = {
     {"max-inductive-step",
      boost::program_options::value<int>()->default_value(-1)->value_name("nr"),
      "Set max k value for the inductive step"},
+    // k-induction-legacy-havoc
+    {"k-induction-legacy-havoc",
+     NULL,
+     "Use the k-induction havoc from before the Andersen-based pointer-write "
+     "havoc: keeps the inductive step where that havoc would disable it, but "
+     "may prove false properties"},
     {"loop-invariant",
      NULL,
      "Verify using loop invariant + k-induction (combined mode). Still unwinds "

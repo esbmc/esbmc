@@ -1881,6 +1881,19 @@ bool calls_nondet_memory(const goto_functionst &goto_functions)
 }
 } // namespace
 
+// k-induction-legacy-havoc
+void k_induction_transform_loop(
+  goto_functiont &goto_function,
+  loopst &loop,
+  bool continue_past_failed_assertions)
+{
+  transform_loop(
+    goto_function,
+    loop,
+    {{}, ordered(loop.get_modified_loop_vars()), {}},
+    continue_past_failed_assertions);
+}
+
 /// Havocs what the loop of \p w writes and transforms it for the inductive
 /// step. Returns false when a write through a pointer stays uncovered.
 bool havoc_loop(
