@@ -718,10 +718,18 @@ bool run_once(
       if (i + 1 < insns.size())
         pending[i + 1].emplace_back(guard, s);
     };
-    if (
-      it->is_skip() || it->type == LOCATION || it->is_assume() ||
-      it->type == DEAD)
+    if (it->is_skip() || it->type == LOCATION || it->type == DEAD)
       fall();
+    else if (it->is_assume())
+    {
+      if (touches_memory_or_sideeffect(it->guard))
+        return false;
+      expr2tc c = read_in(it->guard, s);
+      if (is_nil_expr(c))
+        return false;
+      guard = and2tc(guard, c);
+      fall();
+    }
     else if (it->type == DECL)
     {
       s.erase(to_code_decl2t(it->code).value);
@@ -764,6 +772,8 @@ bool run_once(
       const expr2tc &op = to_code_return2t(it->code).operand;
       if (!is_nil_expr(op))
       {
+        if (touches_memory_or_sideeffect(op))
+          return false;
         expr2tc v = read_in(op, s);
         if (is_nil_expr(v))
           return false;
@@ -792,6 +802,8 @@ bool run_once(
       statet callee_entry = s;
       for (size_t k = 0; k < call.operands.size(); ++k)
       {
+        if (touches_memory_or_sideeffect(call.operands[k]))
+          return false;
         expr2tc v = read_in(call.operands[k], s);
         if (is_nil_expr(v))
           return false;
