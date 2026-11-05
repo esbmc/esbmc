@@ -1522,9 +1522,9 @@ protected:
    *  holds a NUL at or after its offset; nothing unless it resolves to one
    *  byte array at a constant offset. */
   void claim_nul_terminated(const expr2tc &ptr);
-  /** --printf-check claims for the original operand `arg` of a %s or %p
-   *  conversion; `reads_to_nul` is false when a precision or length modifier
-   *  changes what %s reads. */
+  /** Check the original operand `arg` of a %s or %p conversion: the read of
+   *  a %s string, plus the --printf-check claims; `reads_to_nul` is false
+   *  when a precision or length modifier changes what %s reads. */
   void check_printf_pointer_arg(
     printf_kindt kind,
     char spec,

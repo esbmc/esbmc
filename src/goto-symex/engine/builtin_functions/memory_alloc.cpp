@@ -971,9 +971,10 @@ void goto_symext::symex_free(const expr2tc &expr)
   internal_deref_items.clear();
   tmp = operand;
 
-  // Create temporary, dummy, dereference
+  // Create temporary, dummy, dereference. The FREE dereference above already
+  // made the validity claims; this one only collects the targets.
   tmp = dereference2tc(get_uint8_type(), tmp);
-  dereference(tmp, dereferencet::INTERNAL);
+  dereference(tmp, dereferencet::INTERNAL, true);
 
   // Only add assertions to check pointer offset if pointer check is enabled
   if (!options.get_bool_option("no-pointer-check"))
