@@ -336,9 +336,6 @@ def parse_result(the_output, prop):
   if re.search(r"^ERROR: Timed out$", the_output, re.MULTILINE):
     return Result.err_timeout
 
-  if re.search(r"^ERROR: Out of memory$", the_output, re.MULTILINE):
-    return Result.err_memout
-
   if "VERIFICATION FAILED" in the_output:
     # The model runs on past its first violation and fails later claims too,
     # such as a leak at exit after an invalid dereference. The program stopped
@@ -353,6 +350,11 @@ def parse_result(the_output, prop):
 
   if "VERIFICATION SUCCESSFUL" in the_output:
     return Result.success
+
+  # A k-induction step that runs out of memory is unknown and the next k is
+  # tried, so only a run that reached no verdict ran out of memory.
+  if re.search(r"^ERROR: Out of memory$", the_output, re.MULTILINE):
+    return Result.err_memout
 
   return Result.unknown
 
