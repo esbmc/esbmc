@@ -275,11 +275,24 @@ static inline expr2tc gen_value_by_byte(
      * until the end
      */
 
+    const type2tc &subtype = to_array_type(type).subtype;
+    uint64_t base_size = type_byte_size(subtype).to_uint64();
+
+    /* Filling the whole array makes every element the same value, which needs
+     * no per-element constant: memset of a 16 MB vmalloc buffer would otherwise
+     * build a 16-million-member array. A fully written scalar keeps none of
+     * its old bits, so the element is built from zero, not from src. */
+    if (
+      offset == 0 && is_scalar_type(subtype) &&
+      num_of_bytes >= type_byte_size(type).to_uint64())
+    {
+      expr2tc elem =
+        gen_value_by_byte(subtype, gen_zero(subtype), value, base_size, 0);
+      return elem ? constant_array_of2tc(type, elem) : expr2tc();
+    }
+
     expr2tc result = gen_zero(type);
     constant_array2t &data = to_constant_array2t(result);
-
-    uint64_t base_size =
-      type_byte_size(to_array_type(type).subtype).to_uint64();
     uint64_t bytes_left = num_of_bytes;
     uint64_t offset_left = offset;
 
