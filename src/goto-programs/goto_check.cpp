@@ -1479,6 +1479,12 @@ void goto_checkt::goto_check(goto_programt &goto_program)
     goto_programt::instructiont &i = *it;
     const locationt &loc = i.location;
 
+    // k-induction's havocs and entry-condition ASSUME restate expressions the
+    // program evaluates, and checks, elsewhere. A check placed here would run
+    // in the base case too, on the state before the loop.
+    if (i.inductive_step_instruction)
+      continue;
+
     new_code.clear();
     assertions.clear();
 
