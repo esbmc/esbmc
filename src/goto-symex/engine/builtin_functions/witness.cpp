@@ -3,6 +3,7 @@
 #include <util/arith/arith_tools.h>
 #include <util/expr/expr_util.h>
 #include <util/message/message.h>
+#include <util/base/filesystem.h>
 #include <util/base/prefix.h>
 #include <irep2/irep2.h>
 
@@ -107,7 +108,11 @@ void goto_symext::symex_witness_branching(
   bool &new_guard_false,
   const goto_programt::instructiont &instruction)
 {
-  if (!validate_witness || !forward || is_constant(old_guard))
+  // A goto skipped by an earlier taken jump runs with a false guard; matching
+  // a waypoint there would make witness_guard false and void the target.
+  if (
+    !validate_witness || !forward || is_constant(old_guard) ||
+    cur_state->guard.is_false())
     return;
 
   const auto &loc = cur_state->source.pc->location;
@@ -202,6 +207,8 @@ void goto_symext::symex_witness_assert(
 {
   if (
     !validate_witness || has_prefix(msg, "unwinding assertion loop") ||
+    msg == "recursion unwinding assertion" ||
+    has_prefix(msg, "uncontrolled recursion") ||
     has_prefix(msg, "termination per-loop marker") ||
     has_prefix(msg, "termination abort-call marker"))
     return;
@@ -216,13 +223,20 @@ void goto_symext::symex_witness_assert(
         break;
       }
 
-  if (
-    !target_wp ||
-    cur_state->source.pc->location.get_line() != target_wp->line_id)
+  // A witness writer reports a claim in a bundled model, e.g. the leak check
+  // in exit(), at its innermost call site in the program.
+  const locationt *loc = &cur_state->source.pc->location;
+  for (auto it = cur_state->call_stack.rbegin();
+       it != cur_state->call_stack.rend() &&
+       file_operations::is_bundled_source(loc->get_file().as_string());
+       ++it)
+    if (it->calling_location.is_set)
+      loc = &it->calling_location.pc->location;
+
+  // A final segment matches a violation on any visit to the target, not only
+  // the first (sv-witnesses Witness-Format.md, "Matching a Final Segment").
+  if (!target_wp || loc->get_line() != target_wp->line_id)
     new_expr = gen_true_expr();
-  else if (cur_state->witness_target_line.empty())
-  {
-    cur_state->witness_target_line = target_wp->line_id;
-    cur_state->witness_target_depth = cur_state->call_stack.size();
-  }
+  else
+    cur_state->witness_guard.guard_expr(new_expr);
 }

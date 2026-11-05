@@ -547,11 +547,14 @@ void violation_yaml_goto_trace(
            not given; dropping one only weakens guidance. witnesslint also
            rejects line 0, e.g. the argv setup in __ESBMC_main (#9650). A
            branch fixed by the program text needs no waypoint either: on deep
-           recursion they number in the hundreds of thousands (#9689). */
+           recursion they number in the hundreds of thousands (#9689). An
+           operand of && or || gets none: the waypoint's value is the whole
+           condition's, and a validator would apply it to another operand. */
         if (
           branching_waypoints >= max_branching_waypoints ||
           !input_file_check(step.pc->location) ||
-          step.pc->location.get_line().empty() || !step.nondet_dependent)
+          step.pc->location.get_line().empty() || !step.nondet_dependent ||
+          step.condition_operand)
           break;
 
         /* A switch would take one waypoint naming the case it enters, but
