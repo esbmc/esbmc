@@ -4135,10 +4135,7 @@ smt_solver_baset::value_from_bits(const type2tc &type, const BigInt &bits)
   case type2t::union_id:
     // As get_by_ast() reads a union: every member, from the same bits.
     for (const type2tc &member : to_union_type(type).members)
-      parts.push_back(part(
-        member,
-        lowest_address_high() ? total - type_byte_size_bits(member).to_uint64()
-                              : 0));
+      parts.push_back(part(member, 0));
     break;
 
   case type2t::array_id:
