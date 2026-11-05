@@ -448,7 +448,7 @@ def python_exception_flags(prop):
   return "--python-check-exceptions " + ",".join(PYTHON_EXCEPTION_FAMILIES[prop]) + " "
 
 
-def get_command_line(strat, prop, arch, benchmark, concurrency, dargs, esbmc_ci, validate=False):
+def get_command_line(strat, prop, arch, benchmark, concurrency, dargs, esbmc_ci, keep_loops=False):
   if prop in PYTHON_EXCEPTION_FAMILIES:
     # A Python task is a whole program whose only specification is that an
     # exception family does not escape, so none of the C defaults in dargs
@@ -530,7 +530,7 @@ def get_command_line(strat, prop, arch, benchmark, concurrency, dargs, esbmc_ci,
       command_line += "--no-pointer-check --no-bounds-check "
     else:
       command_line += "--no-pointer-check --interval-analysis --no-bounds-check --error-label ERROR "
-      if not validate:
+      if not keep_loops:
         command_line += "--goto-unwind --unlimited-goto-unwind "
   elif prop == Property.datarace:
     # TODO: can we do better in case 'concurrency == False'?
@@ -584,11 +584,24 @@ def confirmed_by_integer_encoding(esbmc_command_line, the_output, prop, elapsed)
   return violation_site(rerun) == site or site in failed_sites(rerun)
 
 
+def has_invariants(witness_path):
+  """Whether the YAML names an `invariant` in any style (block, flow, JSON).
+  A comment naming one also counts, which only keeps loops rolled."""
+  with open(witness_path) as f:
+    return re.search(r"\binvariant\b", f.read()) is not None
+
+
 def verify(strat, prop, arch, benchmark, concurrency, dargs, esbmc_ci, witness_path, validate_mode):
   if witness_path and validate_mode == "violation":
     strat = "incr"
 
-  esbmc_command_line = get_command_line(strat, prop, arch, benchmark, concurrency, dargs, esbmc_ci, validate=bool(witness_path))
+  # Unrolling a loop moves the waypoints placed on it, and an invariant on a
+  # loop --goto-unwind removes is never checked. Without it a bounded loop is
+  # proved one k-step at a time, so a correctness witness with no invariants,
+  # such as the ones ESBMC writes, is validated with it.
+  keep_loops = bool(witness_path) and (
+    validate_mode == "violation" or has_invariants(witness_path))
+  esbmc_command_line = get_command_line(strat, prop, arch, benchmark, concurrency, dargs, esbmc_ci, keep_loops)
 
   if witness_path:
     esbmc_command_line += "--validate-" + validate_mode + "-witness "
