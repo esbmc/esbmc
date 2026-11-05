@@ -990,6 +990,20 @@ private:
     const std::string &attr_name,
     const std::string &obj_type_name);
 
+  bool attr_never_set_on(
+    const std::string &var_name,
+    const std::string &class_name,
+    const std::string &attr_name);
+
+  /// Whether `var_name.attr_name` may read a field of the instance. A store on
+  /// another instance also adds the field to the class type (#9836).
+  bool instance_may_have_attr(
+    const struct_typet &class_type,
+    const symbolt &symbol,
+    const std::string &var_name,
+    const std::string &obj_type_name,
+    const std::string &attr_name);
+
   bool is_instance_attribute(
     const std::string &symbol_id,
     const std::string &attr_name,
@@ -1119,6 +1133,12 @@ private:
 
   exprt get_logical_operator_expr(const nlohmann::json &element);
 
+  exprt convert_boolop_operands(
+    const nlohmann::json &element,
+    exprt &logical_expr,
+    std::vector<code_blockt> &effects,
+    bool &contains_non_boolean);
+
   exprt get_boolop_operand(
     const nlohmann::json &operand,
     std::vector<code_blockt> &effects);
@@ -1194,6 +1214,9 @@ private:
   static bool is_pure_read(const nlohmann::json &node);
   exprt
   get_len_on_list_element(const nlohmann::json &arg, const locationt &location);
+  exprt get_len_on_bound_instance(
+    const nlohmann::json &arg,
+    const nlohmann::json &element);
   static exprt list_element_type_id(const exprt &value);
   std::size_t count_user_classes();
   exprt checked_len_result(const exprt &len_call, const locationt &location);
@@ -1856,6 +1879,11 @@ private:
     const std::pair<bool, std::string> &stored);
   /// @p class_name and every class in the file that derives from it.
   std::set<std::string> subclasses(const std::string &class_name) const;
+  /// The class that @p class_name and all its subclasses resolve @p m to: ""
+  /// when none resolves it, nullopt when they differ or an MRO is unknown.
+  std::optional<std::string> family_method_owner(
+    const std::string &class_name,
+    const std::string &m) const;
   std::optional<std::pair<bool, std::string>> stored_function(
     const nlohmann::json &target,
     const nlohmann::json &value,
@@ -3578,6 +3606,8 @@ private:
   /// True when @p value_node denotes a user-defined class instance, as opposed
   /// to a model container that merely resolves to a class name.
   bool is_class_instance(const nlohmann::json &value_node);
+  /// The user class a Name's symbol is bound to, or "" when it is none.
+  std::string bound_class_name(const nlohmann::json &value_node);
   bool has_dunder_method(
     const nlohmann::json &value_node,
     const std::string &dunder_name);

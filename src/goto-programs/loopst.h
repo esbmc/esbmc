@@ -2,6 +2,7 @@
 #define GOTO_PROGRAMS_LOOPST_H_
 
 #include <goto-programs/goto_functions.h>
+#include <unordered_map>
 #include <unordered_set>
 
 class loopst
@@ -43,6 +44,16 @@ public:
   goto_programt::targett effective_loop_head() const;
 
   void add_modified_var_to_loop(const expr2tc &expr);
+
+  /// Record a write that reaches only the member chain \p path of the symbol
+  /// \p root. \p root joins the modified set; a loop whose every write to it
+  /// is such a chain havocs just those members (#9854).
+  void add_modified_member_to_loop(const expr2tc &root, const expr2tc &path);
+
+  /// The member chains to havoc in place of \p root, or null when the loop
+  /// may write the whole symbol.
+  const loop_varst *partial_writes(const expr2tc &root) const;
+
   void add_unmodified_var_to_loop(const expr2tc &expr);
 
   /// Record a pointer the loop writes through, or a pointer argument of a
@@ -138,6 +149,8 @@ public:
 
 protected:
   loop_varst modified_loop_vars;
+  std::unordered_map<expr2tc, loop_varst, irep2_hash> member_writes_;
+  loop_varst whole_writes_;
   loop_varst unmodified_loop_vars;
 
   goto_programt::targett original_loop_head;

@@ -168,6 +168,10 @@ protected:
   // goto preprocessing; surfaced textually and (via bmct) in SARIF.
   std::vector<dead_store_advisoryt> dead_store_advisories;
 
+  // Witness transition invariants (loop head, C expression) from a
+  // ranking-function termination proof.
+  std::vector<std::pair<locationt, std::string>> ranking_transition_invariants;
+
   // coverage mode
   bool is_coverage;
 
