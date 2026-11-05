@@ -1586,6 +1586,8 @@ struct loop_writest
   bool drops_unresolved;
   const std::unordered_set<irep_idt, irep_id_hash> &address_taken;
   const iterationt &iteration;
+  /// Whether an uncovered write here disables the inductive step.
+  bool decides;
 };
 
 /// What the inductive step havocs to cover a loop's writes through pointers.
@@ -1626,12 +1628,13 @@ bool cover_write(const loop_writest &w, const expr2tc &ptr, covert &cover)
     if (messaget::state.target("k-induction", VerbosityLevel::Debug))
       log_debug(
         "k-induction",
-        "cannot name what {} may point to at {}: {}",
+        "cannot name what {} may point to at {}: {}{}",
         ptr->pretty(0),
         w.loop.get_original_loop_head()->location.as_string(),
         t.anything ? "anything"
         : t.heap   ? "heap"
-                   : "nothing");
+                   : "nothing",
+        w.decides ? "" : " (does not decide the step)");
     return false;
   }
 
@@ -2025,7 +2028,8 @@ bool goto_k_induction(
            derivations,
            drops_unresolved,
            address_taken,
-           *iteration++},
+           *iteration++,
+           decides},
           continue_past_failed_assertions) &&
         decides)
         uncovered_write = true;
