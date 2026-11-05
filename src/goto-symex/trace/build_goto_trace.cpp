@@ -307,8 +307,10 @@ static void record_nondet_return(
   if (!rparen || !smt_conv.l_get(step.guard).is_true())
     return;
 
+  // get() yields nil for a value it cannot convert, e.g. an --ir-ieee long
+  // double.
   expr2tc value = smt_conv.get(nondet);
-  if (is_constant_expr(value))
+  if (!is_nil_expr(value) && is_constant_expr(value))
     out.emplace_back(*rparen, value);
 }
 
