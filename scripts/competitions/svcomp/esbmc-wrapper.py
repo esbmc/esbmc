@@ -536,8 +536,22 @@ def confirmed_by_integer_encoding(esbmc_command_line, the_output, prop, elapsed)
   site = violation_site(the_output)
   if site is None:
     return False
-  rerun = run(esbmc_command_line + "--ir --z3 ", budget).decode()
-  return parse_result(rerun, prop) == Result.fail_python and violation_site(rerun) == site
+  rerun = run(esbmc_command_line + "--ir --z3 --multi-property ", budget).decode()
+  return parse_result(rerun, prop) == Result.fail_python and site_failed(rerun, site)
+
+
+def site_failed(the_output, site):
+  """Does the results table list the property at this (file, line) as FAILED?
+
+  A run stops at the first violation the solver finds, so a re-run can report a
+  different violable assertion than the first run did. --multi-property lists
+  them all. An exception without a line is compared as before.
+  """
+  _, line = site
+  if line is None:
+    return violation_site(the_output) == site
+  row = re.compile(r"FAILED(?:\033\[[0-9;]*m)?\s+\[[^\]]*\]\s+line\s+" + line + r"\b")
+  return row.search(the_output) is not None
 
 
 def verify(strat, prop, arch, benchmark, concurrency, dargs, esbmc_ci, witness_path, validate_mode):

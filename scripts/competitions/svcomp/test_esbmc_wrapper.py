@@ -330,7 +330,7 @@ class IntegerEncodingConfirmationTest(unittest.TestCase):
     def test_rerun_at_the_same_line_keeps_false(self):
         verdict, calls = self.verify(wrapper.Property.py_assertion, PY_ASSERTION, PY_ASSERTION)
         self.assertEqual(verdict, "FALSE")
-        self.assertTrue(calls[1][0].endswith("--ir --z3 "))
+        self.assertTrue(calls[1][0].endswith("--ir --z3 --multi-property "))
         self.assertEqual(calls[1][1], wrapper.IR_RERUN_TIMEOUT)
         self.assertIsNone(calls[0][1])
 
@@ -351,12 +351,20 @@ class IntegerEncodingConfirmationTest(unittest.TestCase):
         self.assertEqual(verdict, "Unknown")
         self.assertEqual(calls[1][1], wrapper.MIN_RERUN_BUDGET)
 
+    def test_rerun_listing_the_site_among_several_failures_keeps_false(self):
+        both = PY_ASSERTION.replace("line 5 column 4", "line 9 column 4").replace(
+            "  FAILED       [main.assertion.1]  line 5  assertion x != 3\n",
+            "  FAILED       [main.assertion.1]  line 5  assertion x != 3\n"
+            "  FAILED       [main.assertion.2]  line 9  assertion y != 3\n")
+        verdict, _ = self.verify(wrapper.Property.py_assertion, PY_ASSERTION, both)
+        self.assertEqual(verdict, "FALSE")
+
     def test_rerun_that_passes_is_unknown(self):
         verdict, _ = self.verify(wrapper.Property.py_assertion, PY_ASSERTION, self.PASSED)
         self.assertEqual(verdict, "Unknown")
 
     def test_rerun_failing_at_another_line_is_unknown(self):
-        other = PY_ASSERTION.replace("line 5 column 4", "line 9 column 4")
+        other = PY_ASSERTION.replace("line 5", "line 9")
         verdict, _ = self.verify(wrapper.Property.py_assertion, PY_ASSERTION, other)
         self.assertEqual(verdict, "Unknown")
 
