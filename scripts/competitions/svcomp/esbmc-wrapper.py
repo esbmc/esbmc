@@ -25,7 +25,6 @@ class Result:
   err_timeout = 7
   err_memout = 8
   err_unwinding_assertion = 9
-  force_fp_mode = 10
   unknown = 11
   fail_memcleanup = 12
   fail_termination = 13
@@ -101,7 +100,7 @@ def do_exec(cmd_line, timeout=None):
   except subprocess.TimeoutExpired:
     p.kill()
     p.communicate()
-    return b"Timed out"
+    return b"ERROR: Timed out\n"
 
   return stdout + stderr
 
@@ -311,6 +310,10 @@ def classify_violation(violated, prop):
   return None
 
 
+COUNTEREXAMPLE = re.compile(r"^\[Counterexample\]$.*?(?=^Violated property:$)",
+                            re.MULTILINE | re.DOTALL)
+
+
 def parse_result(the_output, prop):
   # ESBMC also prints a "  CWE: CWE-NNN" line after each violated-property
   # comment (see docs/cwe-mapping.md) and may emit a SARIF report under
@@ -318,15 +321,15 @@ def parse_result(the_output, prop):
   # still derived from the unchanged freeform comment strings below, matched
   # against the violated properties rather than the whole output.
 
-  # Parse output
-  if "Timed out" in the_output:
+  # A counterexample carries the program's own output, which may repeat any
+  # of ESBMC's messages (esbmc/esbmc#9890).
+  the_output = COUNTEREXAMPLE.sub("", the_output)
+
+  if re.search(r"^ERROR: Timed out$", the_output, re.MULTILINE):
     return Result.err_timeout
 
-  if "Out of memory" in the_output:
+  if re.search(r"^ERROR: Out of memory$", the_output, re.MULTILINE):
     return Result.err_memout
-
-  if "Chosen solver doesn\'t support floating-point numbers" in the_output:
-    return Result.force_fp_mode
 
   if "VERIFICATION FAILED" in the_output:
     decided = classify_violation(violated_property_text(the_output), prop)
