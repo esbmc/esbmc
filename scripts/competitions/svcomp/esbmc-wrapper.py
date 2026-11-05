@@ -556,8 +556,10 @@ def get_command_line(strat, prop, arch, benchmark, concurrency, dargs, esbmc_ci,
 # (esbmc/esbmc#8892), so a violation only the wrapped encoding reaches is false.
 # Bitwuzla does not support the integer encoding, hence --z3.
 IR_RERUN_TIMEOUT = 120
-# Wall-clock seconds for the k-induction round of a no-overflow task.
+# Wall-clock seconds and memory cap for the k-induction round of a no-overflow
+# task.
 KIND_OVERFLOW_TIMEOUT = 60
+KIND_OVERFLOW_MEMLIMIT = "2500m"
 # Keep both runs together under the competition's 900 s limit.
 TOTAL_BUDGET = 870
 MIN_RERUN_BUDGET = 30
@@ -598,10 +600,14 @@ def verify(strat, prop, arch, benchmark, concurrency, dargs, esbmc_ci, witness_p
   if prop == Property.overflow and "--k-induction " in esbmc_command_line:
     # The inductive step proves most no-overflow loops in seconds, but on
     # nonlinear arithmetic its solve can stall, and on goto-heavy code it can
-    # path-explode; those runs fall back to incremental BMC.
-    output = run(esbmc_command_line, KIND_OVERFLOW_TIMEOUT)
-    if parse_result(output.decode(), prop) in (Result.success, Result.fail_overflow):
-      return parse_result(output.decode(), prop)
+    # path-explode; those runs fall back to incremental BMC. The memory cap
+    # stops this run before it reaches the competition's limit, which would
+    # end the task instead.
+    memlimit = "--memlimit " + KIND_OVERFLOW_MEMLIMIT + " "
+    output = run(esbmc_command_line + memlimit, KIND_OVERFLOW_TIMEOUT)
+    res = parse_result(output.decode(), prop)
+    if res in (Result.success, Result.fail_overflow):
+      return res
     esbmc_command_line = esbmc_command_line.replace(strategy_flags(strat), "--incremental-bmc ")
   output = run(esbmc_command_line)
   elapsed = time.monotonic() - started
