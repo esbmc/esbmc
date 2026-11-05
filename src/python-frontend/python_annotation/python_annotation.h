@@ -200,12 +200,15 @@ private:
   std::string get_argument_type(const Json &arg);
   std::string get_dict_literal_type(const Json &dict_value);
   std::string get_call_type(const Json &arg);
+  std::string module_call_type(const Json &call);
   std::string get_attribute_type(const Json &arg);
   std::string class_attribute_type(
     const std::string &cls,
     const std::string &attr,
     bool constructed_only = false);
   std::string self_attribute_type(const Json &node);
+  InferResult
+  infer_self_attribute_copy(const Json &stmt, std::string &inferred_type);
   std::string get_operand_type(const Json &node);
   std::string get_builtin_call_type(const Json &call);
   // Type of a builtin call whose result depends on its argument (abs, hash),

@@ -736,6 +736,24 @@ struct str_value_scope_guard
   }
 };
 
+// A tuple literal's type differs from an annotated Optional[tuple]'s payload
+// in tag spelling only; match it so the store is wrapped (#9843).
+exprt coerce_to_optional_payload(
+  tuple_handler &tuples,
+  const exprt &value,
+  const typet &target,
+  const locationt &location,
+  codet &block)
+{
+  if (!type_utils::is_optional_struct(target))
+    return value;
+  return tuples.coerce_to_tuple_type(
+    value,
+    to_struct_type(target).get_component("value").type(),
+    location,
+    block);
+}
+
 } // namespace
 
 std::optional<std::vector<std::size_t>>
@@ -8242,6 +8260,13 @@ void python_converter::get_var_assign(
 
     reject_one_sided_tagged_store(lhs, rhs);
     adopt_tagged_element(lhs_symbol, lhs, rhs);
+
+    rhs = coerce_to_optional_payload(
+      *tuple_handler_,
+      rhs,
+      lhs.type(),
+      get_location_from_decl(ast_node),
+      target_block);
 
     // Handle type adjustments
     handle_assignment_type_adjustments(
