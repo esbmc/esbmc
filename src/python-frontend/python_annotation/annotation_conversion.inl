@@ -4131,9 +4131,36 @@ InferResult python_annotation<Json>::infer_type(
     }
   }
   else
-    return InferResult::UNKNOWN;
+    return infer_self_attribute_copy(stmt, inferred_type);
 
   return InferResult::OK;
+}
+
+/// `self.x = self.y`, with `self.x` stored nowhere else, takes the declared
+/// type of `self.y`; otherwise `x` would be left as an untyped member (#9825).
+template <class Json>
+InferResult python_annotation<Json>::infer_self_attribute_copy(
+  const Json &stmt,
+  std::string &inferred_type)
+{
+  if (
+    stmt.value("_type", "") != "Assign" || !stmt.contains("targets") ||
+    stmt["targets"].size() != 1 ||
+    stmt["targets"][0].value("_type", "") != "Attribute" ||
+    stmt["targets"][0]["value"].value("id", "") != "self")
+    return InferResult::UNKNOWN;
+  size_t stores = 0;
+  size_t name_reads = 0;
+  count_attr_writers(
+    ast_["body"],
+    stmt["targets"][0]["attr"].template get<std::string>(),
+    "",
+    stores,
+    name_reads);
+  if (stores != 1)
+    return InferResult::UNKNOWN;
+  inferred_type = self_attribute_type(stmt["value"]);
+  return inferred_type.empty() ? InferResult::UNKNOWN : InferResult::OK;
 }
 
 // ---------- AST walkers and lookup ----------
@@ -6352,6 +6379,11 @@ void python_annotation<Json>::add_type_annotation()
   // Second pass: add type annotations to global scope variables
   annotate_global_scope();
   current_line_ = 0;
+  // A global typed only now, such as `n = random.randint(0, 9)`, types the
+  // parameters it is passed to, and through them those of their callees,
+  // which are annotated first (#9826).
+  while (preprocess_function_calls(ast_))
+    ;
 
   // Add type annotation to all functions and class methods
   for (Json &element : ast_["body"])
