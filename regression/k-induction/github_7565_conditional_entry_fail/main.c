@@ -1,7 +1,7 @@
 /* The #7565 residual: the loop's only entry is a *conditional* jump landing
- * past the head, which collect_entry_jumps does not cover, so nothing havocs
- * the loop and the inductive step proves the program from its concrete entry
- * state at k = 2. --incremental-bmc finds the violation at k = 50. */
+ * past the head, which the step cannot havoc. Unhavoced, the step would prove
+ * the program from its concrete entry state at k = 2, so k-induction disables
+ * it and the base case finds the violation at k = 50. */
 
 #include <assert.h>
 
