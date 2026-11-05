@@ -807,20 +807,6 @@ void goto_symext::symex_function_call_deref(const expr2tc &expr)
   // address_of a symbol, or a set of if ireps. For symbols we'll invoke
   // symex_function_call_symbol, when dealing with if's we need to fork and
   // merge.
-  if (
-    (k_induction || inductive_step) &&
-    !options.get_bool_option("disable-inductive-step"))
-  {
-    log_warning(
-      "k-induction does not support function pointer calls yet. "
-      "Disabling inductive step");
-    options.set_option("disable-inductive-step", true);
-
-    // See the recursion site for the rationale.
-    if (inductive_step)
-      throw inductive_step_disabled_exceptiont("function pointer call");
-  }
-
   if (is_nil_expr(call.function))
   {
     log_error(
@@ -877,6 +863,22 @@ void goto_symext::symex_function_call_deref(const expr2tc &expr)
       assume(gen_false_expr());
     cur_state->source.pc++;
     return;
+  }
+
+  // A call with a target is not modelled by the inductive step; a call with
+  // none is skipped the same way in both steps and costs the proof nothing.
+  if (
+    (k_induction || inductive_step) &&
+    !options.get_bool_option("disable-inductive-step"))
+  {
+    log_warning(
+      "k-induction does not support function pointer calls yet. "
+      "Disabling inductive step");
+    options.set_option("disable-inductive-step", true);
+
+    // See the recursion site for the rationale.
+    if (inductive_step)
+      throw inductive_step_disabled_exceptiont("function pointer call");
   }
 
   std::list<std::pair<guard2tc, expr2tc>> l = get_function_list(func_ptr);

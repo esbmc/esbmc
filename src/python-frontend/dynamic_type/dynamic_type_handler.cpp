@@ -1486,9 +1486,13 @@ exprt dynamic_type_handler::build_isinstance_check(
     return build_equal(
       tagged_type_id, type_handler_.tagged_scalar_type_id(bool_type()));
 
+  // len() results are stored with size_t's type_id.
   if (type_name == "int")
-    return type_handler_.tagged_scalar_type_matches(
-      tagged_type_id, long_long_int_type());
+    return build_or(
+      type_handler_.tagged_scalar_type_matches(
+        tagged_type_id, long_long_int_type()),
+      build_equal(
+        tagged_type_id, type_handler_.tagged_scalar_type_id(size_type())));
 
   if (type_name == "float")
     return build_equal(

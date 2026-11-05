@@ -65,19 +65,6 @@ bool contains_cpp_throw(const exprt &expr)
   return false;
 }
 
-// The raise a condition always ends in: a cpp-throw, possibly under `not` or a
-// bool cast. Null when evaluating @p cond does not always raise.
-const exprt *raised_condition(const exprt &cond)
-{
-  if (cond.statement() == "cpp-throw")
-    return &cond;
-  if (
-    (cond.id() == "not" || cond.id() == "typecast") &&
-    cond.operands().size() == 1)
-    return raised_condition(cond.op0());
-  return nullptr;
-}
-
 codet raise_statement(const exprt &raise, const locationt &location)
 {
   codet code("expression");
@@ -93,13 +80,22 @@ bool is_untyped_nondet(const exprt &e)
   return e.type().is_empty() && e.statement() == "nondet";
 }
 
+// @p value as a condition, or the raise evaluating it always ends in (#9838).
+exprt condition_or_raise(
+  const exprt &value,
+  const std::function<exprt(const exprt &)> &to_condition)
+{
+  const exprt *raise = python_frontend::raised_condition(value);
+  return raise ? *raise : to_condition(value);
+}
+
 // `lhs = value`, or the raise that evaluating @p value always ends in.
 codet assign_or_raise(
   const exprt &lhs,
   const exprt &value,
   const locationt &location)
 {
-  if (const exprt *raise = raised_condition(value))
+  if (const exprt *raise = python_frontend::raised_condition(value))
     return raise_statement(*raise, location);
   code_assignt assign(lhs, value);
   if (is_untyped_nondet(value))
@@ -739,6 +735,24 @@ struct str_value_scope_guard
     ids.clear();
   }
 };
+
+// A tuple literal's type differs from an annotated Optional[tuple]'s payload
+// in tag spelling only; match it so the store is wrapped (#9843).
+exprt coerce_to_optional_payload(
+  tuple_handler &tuples,
+  const exprt &value,
+  const typet &target,
+  const locationt &location,
+  codet &block)
+{
+  if (!type_utils::is_optional_struct(target))
+    return value;
+  return tuples.coerce_to_tuple_type(
+    value,
+    to_struct_type(target).get_component("value").type(),
+    location,
+    block);
+}
 
 } // namespace
 
@@ -8247,8 +8261,13 @@ void python_converter::get_var_assign(
     reject_one_sided_tagged_store(lhs, rhs);
     adopt_tagged_element(lhs_symbol, lhs, rhs);
 
-    rhs = coerce_optional_tuple_payload(
-      rhs, lhs.type(), get_location_from_decl(ast_node), target_block);
+    rhs = coerce_to_optional_payload(
+      *tuple_handler_,
+      rhs,
+      lhs.type(),
+      get_location_from_decl(ast_node),
+      target_block);
+
     // Handle type adjustments
     handle_assignment_type_adjustments(
       lhs_symbol, lhs, rhs, lhs_type, ast_node, is_ctor_call);
@@ -9099,7 +9118,7 @@ codet build_conditional_code(
   const locationt &location)
 {
   // A test that raises leaves neither branch nor loop to run (#9092).
-  if (const exprt *raise = raised_condition(cond))
+  if (const exprt *raise = python_frontend::raised_condition(cond))
   {
     code_blockt raised = cond_prelude;
     raised.copy_to_operands(raise_statement(*raise, location));
@@ -9441,7 +9460,9 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
       exprt *saved_lhs = current_lhs;
       current_lhs = nullptr;
       // Start from the leftmost operand and carry the running result forward.
-      cond = to_bool_condition(get_expr(operands[0]), operands[0]);
+      cond = condition_or_raise(get_expr(operands[0]), [&](const exprt &e) {
+        return to_bool_condition(e, operands[0]);
+      });
       current_lhs = saved_lhs;
 
       symbolt result_symbol = create_return_temp_variable(
@@ -9453,9 +9474,8 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
       result_decl.location() = get_location_from_decl(test_node);
       current_block->copy_to_operands(result_decl);
 
-      code_assignt result_init(result_expr, cond);
-      result_init.location() = get_location_from_decl(test_node);
-      current_block->copy_to_operands(result_init);
+      current_block->copy_to_operands(
+        assign_or_raise(result_expr, cond, get_location_from_decl(test_node)));
 
       const bool is_and = test_node["op"]["_type"] == "And";
       for (size_t i = 1; i < operands.size(); ++i)
@@ -9466,14 +9486,15 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
         saved_lhs = current_lhs;
         current_lhs = nullptr;
         // Build the next operand only in the branch where it is still needed.
-        exprt next_operand =
-          to_bool_condition(get_expr(operands[i]), operands[i]);
+        const exprt next_operand =
+          condition_or_raise(get_expr(operands[i]), [&](const exprt &e) {
+            return to_bool_condition(e, operands[i]);
+          });
         current_lhs = saved_lhs;
         current_block = saved_block;
 
-        code_assignt result_update(result_expr, next_operand);
-        result_update.location() = get_location_from_decl(operands[i]);
-        next_operand_block.copy_to_operands(result_update);
+        next_operand_block.copy_to_operands(assign_or_raise(
+          result_expr, next_operand, get_location_from_decl(operands[i])));
 
         code_ifthenelset short_circuit_if;
         short_circuit_if.location() = get_location_from_decl(operands[i]);

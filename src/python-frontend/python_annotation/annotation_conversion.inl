@@ -893,7 +893,35 @@ std::string python_annotation<Json>::get_call_type(const Json &arg)
     }
   }
 
-  return "";
+  return module_call_type(arg);
+}
+
+/// The type a call of an imported module's function, such as
+/// random.randint(a, b), returns, or "" when unknown. Without it a parameter
+/// fed the call directly stays `void *` (#9816).
+template <class Json>
+std::string python_annotation<Json>::module_call_type(const Json &call)
+{
+  const Json &func = call["func"];
+  if (
+    func["_type"] != "Attribute" || func["value"].value("_type", "") != "Name")
+    return "";
+  // numpy calls build arrays, which the converter types on its own.
+  const std::string module = func["value"]["id"].template get<std::string>();
+  if (
+    !is_imported_name(module) ||
+    is_imported_numpy_module_alias(
+      static_cast<const nlohmann::json &>(ast_), module))
+    return "";
+  try
+  {
+    const std::string type = get_type_from_method(call);
+    return type == "Any" ? "" : type;
+  }
+  catch (std::runtime_error &)
+  {
+    return "";
+  }
 }
 
 /// The type a subscripted annotation spells. get_annotation_type_name flattens
@@ -4131,9 +4159,36 @@ InferResult python_annotation<Json>::infer_type(
     }
   }
   else
-    return InferResult::UNKNOWN;
+    return infer_self_attribute_copy(stmt, inferred_type);
 
   return InferResult::OK;
+}
+
+/// `self.x = self.y`, with `self.x` stored nowhere else, takes the declared
+/// type of `self.y`; otherwise `x` would be left as an untyped member (#9825).
+template <class Json>
+InferResult python_annotation<Json>::infer_self_attribute_copy(
+  const Json &stmt,
+  std::string &inferred_type)
+{
+  if (
+    stmt.value("_type", "") != "Assign" || !stmt.contains("targets") ||
+    stmt["targets"].size() != 1 ||
+    stmt["targets"][0].value("_type", "") != "Attribute" ||
+    stmt["targets"][0]["value"].value("id", "") != "self")
+    return InferResult::UNKNOWN;
+  size_t stores = 0;
+  size_t name_reads = 0;
+  count_attr_writers(
+    ast_["body"],
+    stmt["targets"][0]["attr"].template get<std::string>(),
+    "",
+    stores,
+    name_reads);
+  if (stores != 1)
+    return InferResult::UNKNOWN;
+  inferred_type = self_attribute_type(stmt["value"]);
+  return inferred_type.empty() ? InferResult::UNKNOWN : InferResult::OK;
 }
 
 // ---------- AST walkers and lookup ----------
@@ -5990,12 +6045,14 @@ void python_annotation<Json>::retype_methods_called_on_receivers()
   }
 }
 
-/// The type of call argument @p arg in method @p caller: that of a parameter
-/// the method never rebinds, else "".
+/// The type of call argument @p arg in method @p caller: that of a literal or
+/// of a parameter the method never rebinds, else "".
 template <class Json>
 std::string
 python_annotation<Json>::self_call_arg_type(const Json &arg, const Json &caller)
 {
+  if (arg.value("_type", "") == "Constant")
+    return get_type_from_constant(arg);
   if (arg.value("_type", "") != "Name")
     return "";
   const std::string name = arg["id"].template get<std::string>();
@@ -6350,6 +6407,11 @@ void python_annotation<Json>::add_type_annotation()
   // Second pass: add type annotations to global scope variables
   annotate_global_scope();
   current_line_ = 0;
+  // A global typed only now, such as `n = random.randint(0, 9)`, types the
+  // parameters it is passed to, and through them those of their callees,
+  // which are annotated first (#9826).
+  while (preprocess_function_calls(ast_))
+    ;
 
   // Add type annotation to all functions and class methods
   for (Json &element : ast_["body"])

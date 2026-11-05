@@ -1854,10 +1854,15 @@ void goto_symext::intrinsic_havoc_object(const code_function_call2t &call)
   expr2tc deref = dereference2tc(get_empty_type(), call.operands[0]);
   dereference(deref, dereferencet::INTERNAL);
   for (const auto &item : internal_deref_items)
+  {
     // Anything else is a constant, such as a string literal, or a function.
-    if (is_symbol2t(item.object) && !is_code_type(item.object->type))
-      symex_assign(
-        code_assign2tc(item.object, gen_nondet(item.object->type)),
-        false,
-        cur_state->guard);
+    if (!is_symbol2t(item.object) || is_code_type(item.object->type))
+      continue;
+    expr2tc target_guard = item.guard;
+    cur_state->rename(target_guard);
+    guard2tc guard = cur_state->guard;
+    guard.add(target_guard);
+    symex_assign(
+      code_assign2tc(item.object, gen_nondet(item.object->type)), false, guard);
+  }
 }
