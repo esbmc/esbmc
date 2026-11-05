@@ -75,6 +75,19 @@ get_fixed_2d_array_shape(const symbolt &source, const namespacet &ns)
     binary2integer(row_type.size().value().c_str(), false).to_int64());
 }
 
+bool is_inline_numpy_generator_call(
+  const nlohmann::json &element,
+  const nlohmann::json &ast)
+{
+  if (
+    !element.is_object() || element.value("_type", "") != "Call" ||
+    !element.contains("func") || !element["func"].is_object() ||
+    element["func"].value("_type", "") != "Attribute" ||
+    !element["func"].contains("value"))
+    return false;
+  return numpy_random::is_generator_constructor(element["func"]["value"], ast);
+}
+
 } // namespace
 
 // Resolve symbol values to constants
@@ -609,6 +622,10 @@ exprt python_converter::get_call_expr(const nlohmann::json &element)
     return get_expr(*folded);
   if (std::optional<exprt> call = call_returned_function(element))
     return *call;
+  if (is_inline_numpy_generator_call(element, *ast_json))
+    throw std::runtime_error(
+      "TypeError: numpy.random.default_rng() chained generator calls are "
+      "not supported");
   if (element["func"].value("_type", "") == "Call")
     throw std::runtime_error(
       "calling the result of a call is only supported through a module "

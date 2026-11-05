@@ -1183,7 +1183,7 @@ exprt numpy_random::sample_integer()
     const bool has_high = values_.count("high");
     exprt high = has_high ? value("high") : value("low");
     if (endpoint_)
-      high = plus_exprt(high, gen_one(type));
+      high = plus_exprt(high, gen_one(high.type()));
     assume(and_exprt(
       rel(k, ">=", has_high ? value("low") : zero), rel(k, "<", high)));
     const typet stored = integer_sample_type();
