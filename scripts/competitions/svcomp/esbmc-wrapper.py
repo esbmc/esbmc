@@ -547,8 +547,6 @@ def get_command_line(strat, prop, arch, benchmark, concurrency, dargs, esbmc_ci,
     # violation -- it never claims a proof, so --incremental-bmc still owns
     # every other verdict.
     command_line += "--falsify-context-bound 1 --incremental-bmc "
-  elif prop == Property.overflow: # Overflow only works with incremental
-    command_line += "--incremental-bmc "
   else:
     command_line += strategy_flags(strat)
 
