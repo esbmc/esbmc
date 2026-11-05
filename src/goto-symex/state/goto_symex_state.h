@@ -528,9 +528,11 @@ public:
   /// witness_segs[seg]: all actionable waypoints per segment
   std::vector<std::vector<waypoint>> witness_segs;
   size_t cur_seg;
-  /// The path conditions under which the segments before cur_seg were
-  /// passed. cur_seg survives a merge with a path that passed fewer, so a
-  /// target claim only holds under this guard.
+  /// The path condition under which the last segment before cur_seg was
+  /// passed. cur_seg survives a merge with a path that never passed it, so a
+  /// target claim only holds under this guard. Earlier segments are not
+  /// conjoined: symex may pass one on a path the counterexample does not take,
+  /// such as another target of a function pointer call.
   guard2tc witness_guard;
 
   /// Pre-built O(1) lookup for branching(cycle) waypoints.

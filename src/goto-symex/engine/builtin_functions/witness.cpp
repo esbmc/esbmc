@@ -109,7 +109,7 @@ void goto_symext::symex_witness_branching(
   const goto_programt::instructiont &instruction)
 {
   // A goto skipped by an earlier taken jump runs with a false guard; matching
-  // a waypoint there would add false to witness_guard and void the target.
+  // a waypoint there would make witness_guard false and void the target.
   if (
     !validate_witness || !forward || is_constant(old_guard) ||
     cur_state->guard.is_false())

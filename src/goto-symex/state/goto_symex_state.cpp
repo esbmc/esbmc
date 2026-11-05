@@ -1320,5 +1320,5 @@ void goto_symex_statet::advance_witness_position()
 {
   if (cur_seg < witness_segs.size())
     ++cur_seg;
-  witness_guard.add(guard.as_expr());
+  witness_guard = guard;
 }
