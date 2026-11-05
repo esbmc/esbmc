@@ -864,6 +864,11 @@ VERIFICATION FAILED
         self.assertEqual(verdict, "FALSE_OVERFLOW")
         self.assertEqual(len(calls), 1)
 
+    def test_a_timed_out_k_induction_falls_back_to_incremental_bmc(self):
+        verdict, calls = self.run_wrapper("ERROR: Timed out\n", self.SUCCESSFUL)
+        self.assertEqual(verdict, "TRUE")
+        self.assertEqual(len(calls), 2)
+
     def test_an_inconclusive_k_induction_falls_back_to_incremental_bmc(self):
         verdict, calls = self.run_wrapper(self.UNKNOWN, self.OVERFLOW)
         self.assertEqual(verdict, "FALSE_OVERFLOW")

@@ -556,13 +556,13 @@ def get_command_line(strat, prop, arch, benchmark, concurrency, dargs, esbmc_ci,
 # (esbmc/esbmc#8892), so a violation only the wrapped encoding reaches is false.
 # Bitwuzla does not support the integer encoding, hence --z3.
 IR_RERUN_TIMEOUT = 120
+# Keep both runs together under the competition's 900 s limit.
+TOTAL_BUDGET = 870
+MIN_RERUN_BUDGET = 30
 # Wall-clock seconds and memory cap for the k-induction round of a no-overflow
 # task.
 KIND_OVERFLOW_TIMEOUT = 60
 KIND_OVERFLOW_MEMLIMIT = "2500m"
-# Keep both runs together under the competition's 900 s limit.
-TOTAL_BUDGET = 870
-MIN_RERUN_BUDGET = 30
 
 
 def confirmed_by_integer_encoding(esbmc_command_line, the_output, prop, elapsed):
