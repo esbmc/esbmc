@@ -44,6 +44,7 @@ extern "C"
 #include <goto-programs/goto_convert_functions.h>
 #include <goto-programs/goto_inline.h>
 #include <goto-programs/goto_k_induction.h>
+#include <goto-programs/goto_divergence_markers.h>
 #include <goto-programs/goto_termination.h>
 #include <esbmc/ranking_synthesis.h>
 #include <esbmc/non_termination.h>
@@ -194,12 +195,12 @@ static goto_programt::const_targett loop_head_of_marker(
 // whole-program property, so with several loops present the chosen
 // marker is a best-effort representative location — only the CWE id
 // (835) is guaranteed, not that it is the specific non-terminating loop.
-static void report_non_termination_cwe(
+static void report_non_termination_at(
   optionst &options,
   const namespacet &ns,
-  const goto_functionst &goto_functions,
-  const std::string &comment,
-  const std::optional<locationt> &proved_loop)
+  goto_programt::const_targett anchor,
+  const locationt &cycle,
+  const std::string &comment)
 {
   // The YAML witness has no CWE field, so it carries only the cycle waypoint.
   const bool want_yaml = !options.get_option("witness-output-yaml").empty();
@@ -210,35 +211,114 @@ static void report_non_termination_cwe(
   if (!(want_sarif || want_graphml || want_json || want_yaml))
     return;
 
-  const auto marker = find_termination_marker(goto_functions);
-  if (!marker)
-    return;
-
   goto_tracet trace;
   goto_trace_stept step;
   step.step_nr = 1;
   step.thread_nr = 0;
   step.type = symex_targett::ASSERT;
   step.guard = false; // a violated assert
-  step.pc = *marker;
+  step.pc = anchor;
   step.comment = comment;
   trace.steps.push_back(step);
 
   if (want_graphml)
     violation_graphml_goto_trace(options, ns, trace);
   if (want_yaml)
-  {
-    // The recurrent-set check names its loop; the inductive step does not,
-    // so the marker's loop is a best-effort pick when there are several.
-    non_termination_yaml_goto_trace(
-      options,
-      proved_loop ? *proved_loop
-                  : loop_head_of_marker(goto_functions, *marker)->location);
-  }
+    non_termination_yaml_goto_trace(options, cycle);
   if (want_json)
     generate_json_report("1", ns, trace);
   if (want_sarif)
     sarif_goto_trace(options, ns, trace);
+}
+
+static void report_non_termination_cwe(
+  optionst &options,
+  const namespacet &ns,
+  const goto_functionst &goto_functions,
+  const std::string &comment,
+  const std::optional<locationt> &proved_loop)
+{
+  // The recurrent-set check names its loop; the inductive step does not,
+  // so the marker's loop is a best-effort pick when there are several.
+  if (const auto marker = find_termination_marker(goto_functions))
+    report_non_termination_at(
+      options,
+      ns,
+      *marker,
+      proved_loop ? *proved_loop
+                  : loop_head_of_marker(goto_functions, *marker)->location,
+      comment);
+}
+
+static void report_divergent_loop(
+  optionst &options,
+  const namespacet &ns,
+  goto_programt::const_targett marker,
+  uint64_t k_step)
+{
+  const std::string comment = fmt::format(
+    "Base case reaches a non-terminating execution (k = {})", k_step);
+  // The marker sits on the loop head, which every iteration passes.
+  report_non_termination_at(options, ns, marker, marker->location, comment);
+  std::string msg = "\n" + comment + "\n";
+  const std::string cwes = format_cwe_list(cwe_for(comment));
+  if (!cwes.empty())
+    msg += "CWE: " + cwes + "\n";
+  msg += "VERIFICATION FAILED";
+  log_fail("{}", msg);
+}
+
+/// Runs the base case on divergence_program and returns the divergence
+/// marker it reaches within @p k_step unwindings, if any.
+std::optional<goto_programt::const_targett>
+esbmc_parseoptionst::reach_divergent_loop(
+  const optionst &options,
+  uint64_t k_step)
+{
+  if (!divergence_program)
+    return std::nullopt;
+
+  optionst reach = options;
+  for (const char *check :
+       {"memory-leak-check", "deadlock-check", "data-races-check"})
+    reach.set_option(check, false);
+  // An invalid access is undefined behaviour the real program may crash on,
+  // so it ends the path instead of being checked or ignored.
+  reach.set_option("no-pointer-check", false);
+  reach.set_option("no-bounds-check", false);
+  reach.set_option("conv-assert-to-assume", true);
+  // The run itself reports nothing: a violation that is not a marker decides
+  // nothing, and the caller reports a marker.
+  reach.set_option("result-only", true);
+
+  log_status("Checking whether a divergent loop is reachable");
+  const auto table = goto_functionst::property_verdicts.checkpoint();
+  const VerbosityLevel verbosity = messaget::state.verbosity;
+  messaget::state.verbosity = std::min(verbosity, VerbosityLevel::Warning);
+  const bool violated =
+    is_base_case_violated(reach, *divergence_program, k_step).is_true();
+  messaget::state.verbosity = verbosity;
+  const auto results = goto_functionst::property_verdicts.snapshot();
+  goto_functionst::property_verdicts.restore(table);
+  if (!violated)
+    return std::nullopt;
+
+  for (const auto &[id, f] : divergence_program->function_map)
+    for (auto it = f.body.instructions.begin(); it != f.body.instructions.end();
+         ++it)
+    {
+      if (
+        !it->is_assert() ||
+        it->location.comment().as_string() != divergence_marker_comment)
+        continue;
+      const auto result =
+        results.find(property_key(*it, divergence_marker_comment));
+      if (
+        result != results.end() &&
+        result->second.verdict == property_verdictt::Failed)
+        return it;
+    }
+  return std::nullopt;
 }
 
 /// Give this run one property table for all its k steps, where it should have
@@ -479,6 +559,12 @@ int esbmc_parseoptionst::do_bmc_strategy(
           msg += "CWE: " + cwes + "\n";
         msg += "VERIFICATION FAILED";
         log_fail("{}", msg);
+        return 1;
+      }
+
+      if (const auto marker = reach_divergent_loop(options, k_step))
+      {
+        report_divergent_loop(options, namespacet(context), *marker, k_step);
         return 1;
       }
 

@@ -28,6 +28,7 @@
 #include <goto-programs/goto_convert_functions.h>
 #include <goto-programs/goto_inline.h>
 #include <goto-programs/goto_k_induction.h>
+#include <goto-programs/goto_divergence_markers.h>
 #include <goto-programs/goto_termination.h>
 #include <esbmc/ranking_synthesis.h>
 #include <esbmc/non_termination.h>
@@ -463,6 +464,11 @@ bool esbmc_parseoptionst::process_goto_program(
     // of interval-analysis pipeline gating.
     bool wants_kind_pipeline =
       is_k_induction || options.get_bool_option("termination");
+
+    // Before interval analysis and goto_termination add their ASSUMEs, which
+    // the divergence game would read as paths that can block.
+    if (options.get_bool_option("termination"))
+      divergence_program = make_divergence_program(goto_functions);
 
     if (cmdline.isset("interval-analysis") || cmdline.isset("goto-contractor"))
     {

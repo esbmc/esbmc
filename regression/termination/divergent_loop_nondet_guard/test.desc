@@ -1,0 +1,6 @@
+CORE
+main.c
+--termination --no-assertions --max-inductive-step 3
+^Base case reaches a non-terminating execution \(k = 1\)$
+^CWE: CWE-835$
+^VERIFICATION FAILED$

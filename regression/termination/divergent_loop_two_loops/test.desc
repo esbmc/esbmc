@@ -1,0 +1,7 @@
+CORE
+main.c
+--termination --no-assertions --max-inductive-step 3 --witness-output-yaml witness.yml
+^Generating Non-Termination Yaml Witness for: .*main.c$
+^Base case reaches a non-terminating execution \(k = 1\)$
+^CWE: CWE-835$
+^VERIFICATION FAILED$

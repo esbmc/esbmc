@@ -134,6 +134,21 @@ property_verdict_tablet::snapshot() const
   return results;
 }
 
+property_verdict_tablet::checkpointt property_verdict_tablet::checkpoint() const
+{
+  std::lock_guard lock(mutex);
+  return {results, recorded_this_round, violation, incomplete};
+}
+
+void property_verdict_tablet::restore(checkpointt saved)
+{
+  std::lock_guard lock(mutex);
+  results = std::move(saved.results);
+  recorded_this_round = std::move(saved.recorded_this_round);
+  violation = saved.violation;
+  incomplete = saved.incomplete;
+}
+
 void property_verdict_tablet::clear()
 {
   std::lock_guard lock(mutex);

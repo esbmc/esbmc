@@ -148,6 +148,19 @@ public:
   /// Discards all verdicts.
   void clear();
 
+  /// Everything recorded so far, for restore() to put back.
+  struct checkpointt
+  {
+    std::map<std::string, property_resultt> results;
+    std::set<std::string> recorded_this_round;
+    bool violation;
+    bool incomplete;
+  };
+  checkpointt checkpoint() const;
+
+  /// Discards what was recorded since @p saved was taken.
+  void restore(checkpointt saved);
+
 private:
   mutable std::mutex mutex;
   std::map<std::string, property_resultt> results;

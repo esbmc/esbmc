@@ -221,6 +221,14 @@ void goto_convertt::emit_assert_fail_noreturn(
   a->location.user_provided(true);
 }
 
+/// Under --termination a failed assertion still ends the program, which the
+/// divergence check (make_divergence_program) needs to see. Symex skips these
+/// user assertions under --no-assertions, so the verdict is unchanged.
+bool goto_convertt::keeps_skipped_assertions() const
+{
+  return options.get_bool_option("termination");
+}
+
 void goto_convertt::do_assert_fail(
   const exprt &function,
   const exprt::operandst &arguments,
@@ -242,7 +250,8 @@ void goto_convertt::do_assert_fail(
   if (options.get_bool_option("no-assertions"))
   {
     emit_assert_fail_noreturn(function.location(), dest);
-    return;
+    if (!keeps_skipped_assertions())
+      return;
   }
 
   goto_programt::targett t = dest.add_instruction(ASSERT);
@@ -1749,7 +1758,7 @@ void goto_convertt::do_function_call_symbol(
       abort();
     }
 
-    if (options.get_bool_option("no-assertions"))
+    if (options.get_bool_option("no-assertions") && !keeps_skipped_assertions())
       return;
 
     goto_programt::targett t = dest.add_instruction(ASSERT);
