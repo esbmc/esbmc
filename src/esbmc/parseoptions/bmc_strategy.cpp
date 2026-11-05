@@ -24,6 +24,7 @@ extern "C"
 #include <unordered_set>
 #include <goto-symex/trace/sarif.h>
 #include <util/base/cwe_mapping.h>
+#include <util/base/yaml_parser.h>
 #include <solvers/smt/smt_result.h>
 #include <solvers/smtlib/smtlib_conv.h>
 #include <solvers/solve.h>
@@ -243,6 +244,81 @@ static instruction_sett live_instructions(
   return live;
 }
 
+// The back edges of the loops that can run forever in the refuting inductive
+// step: a live path reaches the back edge from the entry point and leads from
+// the loop head to it, and the ranking check did not prove the loop
+// terminating.
+static instruction_sett loops_that_may_run_forever(
+  const goto_functionst &goto_functions,
+  const std::vector<locationt> &terminating_loops)
+{
+  const function_sett returns = returning_functions(goto_functions);
+  const instruction_sett live = live_instructions(goto_functions, returns);
+  instruction_sett forever;
+  for (const auto &[id, fn] : goto_functions.function_map)
+    for (auto b = fn.body.instructions.begin(); b != fn.body.instructions.end();
+         ++b)
+    {
+      if (!b->is_backwards_goto() || !live.count(&*b))
+        continue;
+      const auto head = b->targets.front();
+      const std::string at = head->location.as_string();
+      if (
+        live_path(
+          goto_functions,
+          returns,
+          fn.body,
+          head,
+          b,
+          head->location_number,
+          b->location_number) &&
+        std::none_of(
+          terminating_loops.begin(),
+          terminating_loops.end(),
+          [&at](const locationt &l) { return l.as_string() == at; }))
+        forever.insert(&*b);
+    }
+  return forever;
+}
+
+// Whether one user loop that can run forever holds, between its head and back
+// edge, the line of every cycle waypoint of the witness. Validation applies a
+// cycle waypoint once and the inductive step proves non-termination on its
+// own, so this is what keeps it from confirming a cycle that is not passed
+// infinitely often. A cycle in a function the loop calls is not accepted.
+static bool cycle_on_loop_that_may_run_forever(
+  const goto_functionst &goto_functions,
+  const std::vector<locationt> &terminating_loops,
+  const std::vector<waypoint> &waypoints)
+{
+  std::vector<irep_idt> lines;
+  for (const waypoint &wp : waypoints)
+    if (wp.action == waypoint::cycle)
+      lines.push_back(wp.line_id);
+
+  const instruction_sett forever =
+    loops_that_may_run_forever(goto_functions, terminating_loops);
+  for (const auto &[id, fn] : goto_functions.function_map)
+  {
+    if (fn.body.hide)
+      continue;
+    for (auto b = fn.body.instructions.begin(); b != fn.body.instructions.end();
+         ++b)
+      if (
+        forever.count(&*b) &&
+        std::all_of(lines.begin(), lines.end(), [&](const irep_idt &line) {
+          return std::any_of(
+            goto_programt::const_targett(b->targets.front()),
+            std::next(b),
+            [&line](const goto_programt::instructiont &i) {
+              return !line.empty() && i.location.get_line() == line;
+            });
+        }))
+        return true;
+  }
+  return false;
+}
+
 static std::optional<goto_programt::const_targett> find_termination_marker(
   const goto_functionst &goto_functions,
   const std::vector<locationt> &terminating_loops)
@@ -271,28 +347,12 @@ static std::optional<goto_programt::const_targett> find_termination_marker(
     NO_ANCHOR
   };
 
-  const function_sett returns = returning_functions(goto_functions);
-  const instruction_sett live = live_instructions(goto_functions, returns);
-  const auto may_run_forever =
-    [&](const goto_programt &body, goto_programt::const_targett marker) {
-      const auto back_edge = loop_of_marker(goto_functions, marker);
-      if (!back_edge || !live.count(&**back_edge))
-        return false;
-      const auto head = (*back_edge)->targets.front();
-      const std::string at = head->location.as_string();
-      return live_path(
-               goto_functions,
-               returns,
-               body,
-               head,
-               *back_edge,
-               head->location_number,
-               (*back_edge)->location_number) &&
-             std::none_of(
-               terminating_loops.begin(),
-               terminating_loops.end(),
-               [&at](const locationt &l) { return l.as_string() == at; });
-    };
+  const instruction_sett forever =
+    loops_that_may_run_forever(goto_functions, terminating_loops);
+  const auto may_run_forever = [&](goto_programt::const_targett marker) {
+    const auto back_edge = loop_of_marker(goto_functions, marker);
+    return back_edge && forever.count(&**back_edge);
+  };
 
   goto_programt::const_targett marker;
   anchor_rankt best = NO_ANCHOR;
@@ -315,7 +375,7 @@ static std::optional<goto_programt::const_targett> find_termination_marker(
         rank = is_lib ? LIB_ABORT : USER_ABORT;
       else
         continue;
-      if (rank < best && !may_run_forever(fn.second.body, it))
+      if (rank < best && !may_run_forever(it))
         rank = FINITE_LOOP;
       if (rank < best)
       {
@@ -667,6 +727,20 @@ int esbmc_parseoptionst::do_bmc_strategy(
       // gate is needed.
       if (k_step > 1)
       {
+        // The inductive step confirms a witness without reading where its
+        // cycle is. A cycle off every loop the step can show runs forever is
+        // UNKNOWN, not rejected: it may lie on a loop the step cannot decide.
+        if (
+          options.get_bool_option("validate-violation-witness") &&
+          !cycle_on_loop_that_may_run_forever(
+            goto_functions,
+            terminating_loops,
+            yaml_parser::get_waypoints(options.get_option("witness"))))
+        {
+          log_status("The witness cycle is not on a loop that can run forever");
+          log_fail("VERIFICATION UNKNOWN");
+          return 0;
+        }
         tvt is_res =
           is_inductive_step_violated(options, goto_functions, k_step);
         // Symex may have set disable-inductive-step mid-run (function
