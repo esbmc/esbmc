@@ -1034,7 +1034,7 @@ BigInt get_line_number(
 
 std::optional<locationt> nondet_call_rparen(const locationt &call)
 {
-  // ponytail: one cached copy per source file, never freed; witnesses read few.
+  // One cached copy per source file, never freed; witnesses read few files.
   static std::unordered_map<std::string, std::vector<std::string>> files;
   const std::string file = call.get_file().as_string();
   const size_t line = std::atoi(call.get_line().c_str());
