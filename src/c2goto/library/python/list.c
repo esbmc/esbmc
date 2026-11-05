@@ -694,7 +694,7 @@ bool __ESBMC_list_set_eq(const PyListObject *l1, const PyListObject *l2)
 
 PyObject *__ESBMC_list_at(PyListObject *l, size_t index)
 {
-  __ESBMC_assert(index < l->size, "out-of-bounds read in list");
+  __ESBMC_assert(index < l->size, "IndexError: out-of-bounds read in list");
   return &l->items[index];
 }
 
@@ -708,7 +708,8 @@ bool __ESBMC_list_set_at(
   int ptr_free)
 {
   __ESBMC_assert(l != NULL, "list_set_at: list is null");
-  __ESBMC_assert(index < l->size, "list_set_at: index out of bounds");
+  __ESBMC_assert(
+    index < l->size, "IndexError: list_set_at: index out of bounds");
 
   size_t float_idx = 0;
   void *copied_value = __ESBMC_copy_value(
@@ -1091,7 +1092,8 @@ size_t __ESBMC_list_try_find_index(
 bool __ESBMC_list_remove_at(PyListObject *l, size_t index)
 {
   __ESBMC_assert(l != NULL, "list_remove_at: list is null");
-  __ESBMC_assert(index < l->size, "list_remove_at: index out of bounds");
+  __ESBMC_assert(
+    index < l->size, "IndexError: list_remove_at: index out of bounds");
 
   // Shift elements to fill the gap
   size_t i = index;
