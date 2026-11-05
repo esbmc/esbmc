@@ -1,5 +1,6 @@
 CORE
 main.c
-
+--multi-property
 ^VERIFICATION FAILED$
 ^\s*FAILED\s+\[main\.assertion\.\d+\]\s+line 11\s+assertion r == 10$
+^\s*FAILED\s+\[main\.null-pointer-dereference\.\d+\]\s+line 10\s+dereference failure: NULL pointer$
