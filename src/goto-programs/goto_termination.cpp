@@ -733,7 +733,11 @@ void goto_termination(
   // function uniformly. __ESBMC_main is loop-free so this is a no-op
   // there; library helpers (body.hide) DO have loops but those are
   // explicitly skipped in the per-function pass below.
-  goto_k_induction(
+  // goto_k_induction returns true when its havoc misses what a loop
+  // writes (e.g. through a pointer it cannot name); the step then starts
+  // from a state the loop never left, and its UNSAT is no proof of
+  // non-termination.
+  bool any_unreliable_is_loop = goto_k_induction(
     goto_functions, ns, options.get_bool_option("multi-property"));
 
   // Per-function pass: inject no-op-cycle ASSUMEs, gate IS for loops
@@ -742,7 +746,6 @@ void goto_termination(
   // loop markers would be reachable from every program via
   // stdlib/pthread chains and defeat IS-UNSAT discrimination, and
   // their havoc'd loops shouldn't trigger the program-wide IS gate.
-  bool any_unreliable_is_loop = false;
   Forall_goto_functions (it, goto_functions)
   {
     if (!it->second.body_available)
