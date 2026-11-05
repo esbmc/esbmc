@@ -63,6 +63,12 @@ public:
   /** Mirrors reachability_treet::cs_bound_pruned; valid after start_bmc(). */
   bool cs_bound_pruned = false;
 
+  /// Emit the verdict for a satisfiable run: FAILED, or UNKNOWN when every
+  /// violated claim was abstraction-derived (issue #7480). Public so a driver
+  /// that suppressed the global verdict can emit it once its own guards have
+  /// run, without restating the rule or the diagnostic.
+  void report_violation();
+
   virtual smt_resultt start_bmc();
   virtual smt_resultt run(std::shared_ptr<symex_target_equationt> &eq);
   virtual ~bmct();
@@ -112,9 +118,6 @@ protected:
   virtual void show_program(const symex_target_equationt &eq);
   virtual void report_success();
   virtual void report_failure();
-  /// Emit the verdict for a satisfiable run: FAILED, or UNKNOWN when every
-  /// violated claim was abstraction-derived (issue #7480).
-  void report_violation();
 
   /// Set when the run printed UNKNOWN over a satisfiable result, so start_bmc
   /// can return the exit code the verdict earns without misreporting what the
