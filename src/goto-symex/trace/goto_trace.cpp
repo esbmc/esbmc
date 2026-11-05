@@ -511,6 +511,32 @@ static void push_nondet_return_waypoints(
    branching waypoint only weakens guidance. */
 static constexpr size_t max_branching_waypoints = 1000;
 
+/* A validator binds a branching waypoint to the next visit of its source
+   location, not of its instruction: --goto-unwind copies a loop body. */
+static std::string branch_location(const goto_trace_stept &step)
+{
+  const locationt &l = step.pc->location;
+  return id2string(l.get_file()) + ":" + id2string(l.get_line()) + ":" +
+         id2string(l.get_column());
+}
+
+/* The nondet-dependent visits of each branch location up to the violation. */
+static std::unordered_map<std::string, size_t>
+nondet_branch_visits(const goto_tracet &goto_trace)
+{
+  std::unordered_map<std::string, size_t> visits;
+  for (const auto &step : goto_trace.steps)
+  {
+    if (step.type == symex_targett::ASSERT && !step.guard)
+      break;
+    if (
+      step.type == symex_targett::BREANCHING && step.pc->is_goto() &&
+      step.nondet_dependent)
+      ++visits[branch_location(step)];
+  }
+  return visits;
+}
+
 void violation_yaml_goto_trace(
   optionst &options,
   const namespacet &ns,
@@ -521,25 +547,7 @@ void violation_yaml_goto_trace(
   yml.verified_file = options.get_option("input-file");
   log_progress("Generating Violation Yaml Witness for: {}", yml.verified_file);
 
-  /* A validator binds a branching waypoint to the next visit of its source
-     location, not of its instruction: --goto-unwind copies a loop body. Count
-     the nondet-dependent visits still ahead at each location. */
-  auto location_key = [](const goto_trace_stept &step) {
-    const locationt &l = step.pc->location;
-    return id2string(l.get_file()) + ":" + id2string(l.get_line()) + ":" +
-           id2string(l.get_column());
-  };
-  std::unordered_map<std::string, size_t> nondet_visits_ahead;
-  for (const auto &step : goto_trace.steps)
-  {
-    if (step.type == symex_targett::ASSERT && !step.guard)
-      break;
-    if (
-      step.type == symex_targett::BREANCHING && step.pc->is_goto() &&
-      step.nondet_dependent)
-      ++nondet_visits_ahead[location_key(step)];
-  }
-
+  auto nondet_visits_ahead = nondet_branch_visits(goto_trace);
   size_t branching_waypoints = 0;
   for (const auto &step : goto_trace.steps)
   {
@@ -563,7 +571,7 @@ void violation_yaml_goto_trace(
     case symex_targett::BREANCHING:
       if (step.pc->is_goto())
       {
-        size_t &ahead = nondet_visits_ahead[location_key(step)];
+        size_t &ahead = nondet_visits_ahead[branch_location(step)];
         if (step.nondet_dependent)
           --ahead;
 
