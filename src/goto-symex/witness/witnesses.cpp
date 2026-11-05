@@ -4,6 +4,9 @@
 #include <ac_config.h>
 #include <boost/property_tree/ptree.hpp>
 #include <fstream>
+#include <optional>
+#include <regex>
+#include <unordered_map>
 #include <langapi/languages.h>
 #include <irep2/irep2.h>
 #include <solvers/smt/smt_conv.h>
@@ -979,10 +982,8 @@ void check_replace_invalid_assignment(std::string &assignment)
     assignment.clear();
 }
 
-std::string get_formated_assignment(
-  const namespacet &ns,
-  const goto_trace_stept &step,
-  bool yaml)
+std::string
+get_formated_assignment(const namespacet &ns, const goto_trace_stept &step)
 {
   std::string assignment = "";
   if (
@@ -993,8 +994,7 @@ std::string get_formated_assignment(
     assignment += from_expr(ns, "", step.lhs, presentationt::WITNESS);
     assignment += " == ";
     assignment += from_expr(ns, "", step.value, presentationt::WITNESS);
-    if (!yaml)
-      assignment += ";";
+    assignment += ";";
 
     std::replace(assignment.begin(), assignment.end(), '$', '_');
     check_replace_invalid_assignment(assignment);
@@ -1062,6 +1062,49 @@ BigInt get_line_number(
     }
   }
   return line_count;
+}
+
+std::optional<locationt> nondet_call_rparen(const locationt &call)
+{
+  // One cached copy per source file, never freed; witnesses read few files.
+  static std::unordered_map<std::string, std::vector<std::string>> files;
+  const std::string file = call.get_file().as_string();
+  const size_t line = std::atoi(call.get_line().c_str());
+  const size_t column = std::atoi(call.get_column().c_str());
+  if (file.empty() || line == 0 || column == 0)
+    return std::nullopt;
+  auto [it, fresh] = files.try_emplace(file);
+  if (fresh)
+  {
+    std::ifstream in(file);
+    for (std::string text; std::getline(in, text);)
+      it->second.push_back(text);
+  }
+  const std::vector<std::string> &lines = it->second;
+  if (line > lines.size() || column > lines[line - 1].size())
+    return std::nullopt;
+
+  static const std::regex head(R"(^\w*nondet\w*\s*\()");
+  std::smatch m;
+  const std::string rest = lines[line - 1].substr(column - 1);
+  if (!std::regex_search(rest, m, head))
+    return std::nullopt;
+
+  // The calls take no arguments: the ')' is the next non-blank character.
+  size_t c = column - 1 + m.length(0);
+  for (size_t l = line - 1; l < lines.size(); ++l, c = 0)
+  {
+    const size_t p = lines[l].find_first_not_of(" \t", c);
+    if (p == std::string::npos)
+      continue;
+    if (lines[l][p] != ')')
+      return std::nullopt;
+    locationt rparen = call;
+    rparen.set_line(l + 1);
+    rparen.set_column(p + 1);
+    return rparen;
+  }
+  return std::nullopt;
 }
 
 std::string read_line(std::string file, BigInt line_number)
