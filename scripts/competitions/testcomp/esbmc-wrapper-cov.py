@@ -61,33 +61,37 @@ class Property:
     coverage = 1
     reach = 2
 
+
 dry_run = False
 
+
 def do_exec(cmd_line, cwd=None):
+    if dry_run:
+        exit(0)
 
-  if dry_run:
-    exit(0)
+    the_args = shlex.split(cmd_line)
 
-  the_args = shlex.split(cmd_line)
+    with subprocess.Popen(the_args, stdout=subprocess.PIPE,
+                          stderr=subprocess.PIPE, cwd=cwd) as p:
+        (stdout, stderr) = p.communicate()
 
-  p = subprocess.Popen(the_args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, cwd=cwd)
-  (stdout, stderr) = p.communicate()
+    return stdout + stderr
 
-  return stdout + stderr
 
 # Function to run esbmc
 def run(cmd_line):
-  print("Verifying with ESBMC")
-  print("Command: " + cmd_line)
-  out = do_exec(cmd_line, cwd=TEST_DIR)
-  # Test-Comp caps a tool's output at 2 MB; long counterexample traces exceed
-  # it, so echo only the tail (the result is parsed from the full output)
-  text = out.decode(errors="replace")
-  if len(text) > MAX_ECHO:
-    print("[... %d characters of ESBMC output omitted ...]" % (len(text) - MAX_ECHO))
-    text = text[-MAX_ECHO:]
-  print(text)
-  return out.decode(errors="replace")
+    print("Verifying with ESBMC")
+    print("Command: " + cmd_line)
+    out = do_exec(cmd_line, cwd=TEST_DIR).decode(errors="replace")
+    # Test-Comp caps a tool's output at 2 MB; long counterexample traces exceed
+    # it, so echo only the tail (the result is parsed from the full output)
+    if len(out) > MAX_ECHO:
+        print("[... %d characters of ESBMC output omitted ...]"
+              % (len(out) - MAX_ECHO))
+        print(out[-MAX_ECHO:])
+    else:
+        print(out)
+    return out
 
 
 
