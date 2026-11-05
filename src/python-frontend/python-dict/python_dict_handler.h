@@ -265,6 +265,14 @@ public:
     const nlohmann::json &node,
     codet &target_block);
 
+  void store_comprehension_pair(
+    const exprt &dict,
+    const exprt &key,
+    const exprt &value,
+    const locationt &location,
+    const nlohmann::json &element,
+    code_blockt &pair_block);
+
   /**
    * @brief Handles dictionary membership testing (`in` / `not in` operators).
    *
