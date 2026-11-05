@@ -110,6 +110,19 @@ protected:
   static c_typet rank_integer(unsigned width, bool is_signed);
   static c_typet rank_floating(unsigned width);
 
+  /// For an arithmetic operand pair with an integer of no standard width
+  /// (ranked OTHER), the operand whose type both convert to: 1 or 2, or 0
+  /// when the pair is not such a case or needs no conversion.
+  static int odd_width_target(
+    c_typet c1,
+    bool int1,
+    unsigned width1,
+    bool unsigned1,
+    c_typet c2,
+    bool int2,
+    unsigned width2,
+    bool unsigned2);
+
   void implicit_typecast_arithmetic(exprt &expr, c_typet c_type);
 
   void implicit_typecast_arithmetic(expr2tc &expr, c_typet c_type);

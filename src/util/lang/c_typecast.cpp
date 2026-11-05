@@ -324,6 +324,38 @@ c_typecastt::c_typet c_typecastt::rank_integer(unsigned width, bool is_signed)
   return OTHER;
 }
 
+// A bit-field or _BitInt wider than int but of no standard width ranks OTHER,
+// which outranks every kind, so the max-rank path converts neither operand and
+// `uint64_t f : 52` & `unsigned long` stays mixed-width. C23 6.3.1.1 ranks such
+// an integer by width, so the narrower operand converts to the wider; a
+// floating operand takes the integer (6.3.1.8); equal widths go unsigned.
+int c_typecastt::odd_width_target(
+  c_typet c1,
+  bool int1,
+  unsigned width1,
+  bool unsigned1,
+  c_typet c2,
+  bool int2,
+  unsigned width2,
+  bool unsigned2)
+{
+  const bool odd1 = c1 == OTHER && int1;
+  const bool odd2 = c2 == OTHER && int2;
+  if (!odd1 && !odd2)
+    return 0;
+  if ((!odd1 && c1 > LONGDOUBLE) || (!odd2 && c2 > LONGDOUBLE))
+    return 0;
+  if (c1 >= SINGLE && c1 <= LONGDOUBLE)
+    return 1;
+  if (c2 >= SINGLE && c2 <= LONGDOUBLE)
+    return 2;
+  if (width1 != width2)
+    return width1 > width2 ? 1 : 2;
+  if (unsigned1 != unsigned2)
+    return unsigned1 ? 1 : 2;
+  return 0;
+}
+
 c_typecastt::c_typet c_typecastt::rank_floating(unsigned width)
 {
   if (width <= config.ansi_c.single_width)
@@ -965,6 +997,27 @@ void c_typecastt::implicit_typecast_arithmetic(exprt &expr1, exprt &expr2)
 
   c_typet c_type1 = get_c_type(type1), c_type2 = get_c_type(type2);
 
+  auto is_int = [](const typet &t) {
+    return t.id() == "signedbv" || t.id() == "unsignedbv";
+  };
+  switch (odd_width_target(
+    c_type1,
+    is_int(type1),
+    atoi(type1.width().c_str()),
+    type1.id() == "unsignedbv",
+    c_type2,
+    is_int(type2),
+    atoi(type2.width().c_str()),
+    type2.id() == "unsignedbv"))
+  {
+  case 1:
+    do_typecast(expr2, type1);
+    return;
+  case 2:
+    do_typecast(expr1, type2);
+    return;
+  }
+
   c_typet max_type = std::max(c_type1, c_type2);
   max_type = std::max(max_type, INT); // minimum promotion
 
@@ -987,6 +1040,27 @@ void c_typecastt::implicit_typecast_arithmetic(expr2tc &expr1, expr2tc &expr2)
   const type2tc &type2 = ns.follow(expr2->type);
 
   c_typet c_type1 = get_c_type(type1), c_type2 = get_c_type(type2);
+
+  auto is_int = [](const type2tc &t) {
+    return is_signedbv_type(t) || is_unsignedbv_type(t);
+  };
+  switch (odd_width_target(
+    c_type1,
+    is_int(type1),
+    is_int(type1) ? type1->get_width() : 0,
+    is_unsignedbv_type(type1),
+    c_type2,
+    is_int(type2),
+    is_int(type2) ? type2->get_width() : 0,
+    is_unsignedbv_type(type2)))
+  {
+  case 1:
+    do_typecast(expr2, type1);
+    return;
+  case 2:
+    do_typecast(expr1, type2);
+    return;
+  }
 
   c_typet max_type = std::max(c_type1, c_type2);
   max_type = std::max(max_type, INT); // minimum promotion

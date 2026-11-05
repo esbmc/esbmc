@@ -743,6 +743,49 @@ TEST_CASE(
       symbol_exprt("b", signedbv_typet(40)),
       signedbv_typet(40));
   }
+  // C23 6.3.1.1p1 ranks a bit-precise type by width, so against a type of
+  // another width the narrower operand converts (6.3.1.8). A `unsigned long
+  // f : 52` bit-field migrates to the same unsignedbv(52).
+  SECTION("52-bit and unsigned long convert to unsigned long")
+  {
+    require_arith_result(
+      ns,
+      symbol_exprt("f", unsignedbv_typet(52)),
+      symbol_exprt("m", long_uint_type()),
+      long_uint_type());
+  }
+  SECTION("int and a 40-bit operand convert to the 40-bit type")
+  {
+    require_arith_result(
+      ns,
+      symbol_exprt("i", int_type()),
+      symbol_exprt("a", signedbv_typet(40)),
+      signedbv_typet(40));
+  }
+  SECTION("40-bit and 50-bit operands convert to the 50-bit type")
+  {
+    require_arith_result(
+      ns,
+      symbol_exprt("a", signedbv_typet(40)),
+      symbol_exprt("b", unsignedbv_typet(50)),
+      unsignedbv_typet(50));
+  }
+  SECTION("signed and unsigned 40-bit operands convert to unsigned")
+  {
+    require_arith_result(
+      ns,
+      symbol_exprt("a", signedbv_typet(40)),
+      symbol_exprt("b", unsignedbv_typet(40)),
+      unsignedbv_typet(40));
+  }
+  SECTION("a 52-bit operand and double convert to double")
+  {
+    require_arith_result(
+      ns,
+      symbol_exprt("f", unsignedbv_typet(52)),
+      symbol_exprt("d", double_type()),
+      double_type());
+  }
   SECTION("int and unsigned __int128 promote to unsigned __int128")
   {
     require_arith_result(
