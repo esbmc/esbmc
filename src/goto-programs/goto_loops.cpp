@@ -204,6 +204,7 @@ written_arguments(const irep_idt &function, const std::vector<expr2tc> &args)
     {"c:@F@__ESBMC_memmove", 0},
     {"c:@F@__ESBMC_memset", 0},
     {"c:@F@__ESBMC_init_object", 0},
+    {"c:@F@__ESBMC_nondet_memory", 0},
     {"c:@F@scanf", 1},
     {"c:@F@sscanf", 2},
     {"c:@F@fscanf", 2}};

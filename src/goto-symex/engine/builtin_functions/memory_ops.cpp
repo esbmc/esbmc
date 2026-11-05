@@ -1854,15 +1854,102 @@ void goto_symext::intrinsic_havoc_object(const code_function_call2t &call)
   expr2tc deref = dereference2tc(get_empty_type(), call.operands[0]);
   dereference(deref, dereferencet::INTERNAL);
   for (const auto &item : internal_deref_items)
-  {
     // Anything else is a constant, such as a string literal, or a function.
-    if (!is_symbol2t(item.object) || is_code_type(item.object->type))
-      continue;
-    expr2tc target_guard = item.guard;
-    cur_state->rename(target_guard);
-    guard2tc guard = cur_state->guard;
-    guard.add(target_guard);
-    symex_assign(
-      code_assign2tc(item.object, gen_nondet(item.object->type)), false, guard);
+    if (is_symbol2t(item.object) && !is_code_type(item.object->type))
+      havoc_target(item.object, item.guard);
+}
+
+void goto_symext::havoc_target(const expr2tc &object, expr2tc target_guard)
+{
+  cur_state->rename(target_guard);
+  guard2tc guard = cur_state->guard;
+  guard.add(target_guard);
+  symex_assign(code_assign2tc(object, gen_nondet(object->type)), false, guard);
+}
+
+/* Whether @p n bytes from the start of @p object provably cover all of it.
+ * A symbolic size rarely simplifies to the object's; those go to the C model,
+ * which leaves the comparison to the solver. */
+static bool covers_whole_object(const expr2tc &object, const expr2tc &n)
+{
+  expr2tc size;
+  try
+  {
+    size = type_byte_size_expr(object->type);
   }
+  catch (const array_type2t::inf_sized_array_excp &)
+  {
+    return false;
+  }
+  expr2tc same = equality2tc(n, typecast2tc(n->type, size));
+  simplify(same);
+  return is_true(same);
+}
+
+/* A string literal or a const object with static lifetime: writing it is
+ * undefined (C11 6.7.3p6), which only a WRITE dereference reports. */
+static bool is_read_only_target(const expr2tc &object, const namespacet &ns)
+{
+  if (is_constant_string2t(object))
+    return true;
+  if (!is_symbol2t(object))
+    return false;
+  const symbolt *sym = ns.lookup(to_symbol2t(object).thename);
+  return sym != nullptr && sym->static_lifetime &&
+         sym->get_type().cmt_constant();
+}
+
+void goto_symext::intrinsic_nondet_memory(const code_function_call2t &call)
+{
+  assert(call.operands.size() == 2);
+  if (cur_state->guard.is_false())
+    return;
+
+  const expr2tc &ptr = call.operands[0];
+  expr2tc n = call.operands[1];
+  cur_state->rename(n);
+  simplify(n);
+
+  internal_deref_items.clear();
+  expr2tc deref = dereference2tc(get_empty_type(), ptr);
+  dereference(deref, dereferencet::INTERNAL);
+  if (internal_deref_items.empty() || options.get_bool_option("no-simplify"))
+  {
+    bump_call(call, "c:@F@__nondet_memory_impl");
+    return;
+  }
+
+  // Each target must be covered whole, so that one assignment of a fresh
+  // value is exactly the byte loop's effect on it; otherwise run the C model.
+  for (const auto &item : internal_deref_items)
+  {
+    if (is_read_only_target(item.object, ns))
+    {
+      bump_call(call, "c:@F@__nondet_memory_bytes");
+      return;
+    }
+    expr2tc offset = item.offset;
+    cur_state->rename(offset);
+    simplify(offset);
+    if (
+      !is_symbol2t(item.object) || is_code_type(item.object->type) ||
+      !is_constant_int2t(offset) ||
+      !to_constant_int2t(offset).value.is_zero() ||
+      !covers_whole_object(item.object, n))
+    {
+      bump_call(call, "c:@F@__nondet_memory_impl");
+      return;
+    }
+  }
+
+  claim_valid_operand(ptr, n, "__VERIFIER_nondet_memory");
+  if (!options.get_bool_option("no-pointer-check"))
+  {
+    expr2tc not_null =
+      not2tc(same_object2tc(ptr, symbol2tc(ptr->type, "NULL")));
+    cur_state->guard.guard_expr(not_null);
+    claim(not_null, " dereference failure: NULL pointer");
+  }
+  for (const auto &item : internal_deref_items)
+    havoc_target(item.object, item.guard);
 }

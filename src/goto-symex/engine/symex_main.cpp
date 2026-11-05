@@ -1031,6 +1031,12 @@ void goto_symext::run_intrinsic(
     return;
   }
 
+  if (symname == "c:@F@__ESBMC_nondet_memory")
+  {
+    intrinsic_nondet_memory(func_call);
+    return;
+  }
+
   if (has_prefix(symname, "c:@F@__ESBMC_init_object"))
   {
     assert(

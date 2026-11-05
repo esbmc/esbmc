@@ -702,6 +702,12 @@ protected:
    *  point to, whole and of any size. k-induction emits it at a loop head for
    *  a pointer the loop writes through at offsets it cannot bound. */
   void intrinsic_havoc_object(const code_function_call2t &call);
+  /** Perform __VERIFIER_nondet_memory(ptr, n): havoc every object ptr may
+   *  point to in one step when the range covers it whole, else run the C
+   *  model __nondet_memory_impl. */
+  void intrinsic_nondet_memory(const code_function_call2t &call);
+  /** Assign a fresh value to @p object where @p target_guard holds. */
+  void havoc_target(const expr2tc &object, expr2tc target_guard);
   /** Perform init_thread_local; seeds each `__thread`-qualified global
    *  to its static initializer in the active thread's renaming scope. */
   void intrinsic_init_thread_local(reachability_treet &art);
