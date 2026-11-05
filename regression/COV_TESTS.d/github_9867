@@ -1,0 +1,5 @@
+regression/esbmc-unix/github_9867_atomic_member
+regression/esbmc-unix/github_9867_atomic_member_fail
+regression/esbmc-unix/github_9867_atomic_struct_whole
+regression/esbmc-unix/github_9867_atomic_ptr_pointee_fail
+regression/esbmc-unix/github_9867_atomic_union_mixed_fail

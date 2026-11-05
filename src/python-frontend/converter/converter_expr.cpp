@@ -708,22 +708,22 @@ constant_keeps_type(const nlohmann::json &value, const std::string &type)
          (type == "str" && constant.is_string());
 }
 
-/// Whether a name has a given annotated type where it is read.
-using name_type_test =
-  std::function<bool(const std::string &, const std::string &)>;
+/// Whether an operand, a name or a call, has a given annotated type.
+using operand_type_test =
+  std::function<bool(const nlohmann::json &, const std::string &)>;
 
 /// Whether \p aug adds to a global of annotated type \p type a constant, or
-/// a name \p has_type gives that type, that leaves it that type.
+/// a name or call \p has_type gives that type, that leaves it that type.
 static bool keeps_type(
   const nlohmann::json &aug,
   const std::string &type,
-  const name_type_test &has_type)
+  const operand_type_test &has_type)
 {
   const nlohmann::json &value = aug["value"];
   if (aug["op"].value("_type", "") == "Div")
     return false;
-  return value["_type"] == "Name"
-           ? has_type(value["id"].get<std::string>(), type)
+  return value["_type"] == "Name" || value["_type"] == "Call"
+           ? has_type(value, type)
            : constant_keeps_type(value, type);
 }
 
@@ -732,7 +732,7 @@ static std::size_t count_type_keeping_aug_assigns(
   const nlohmann::json &node,
   const std::string &name,
   const std::string &type,
-  const name_type_test &has_type)
+  const operand_type_test &has_type)
 {
   std::size_t n = node.is_object() && node.value("_type", "") == "AugAssign" &&
                   node["target"].value("id", "") == name &&
@@ -751,7 +751,7 @@ static std::size_t count_type_keeping_aug_assigns(
 static const nlohmann::json *sole_module_binding(
   const nlohmann::json &module,
   const std::string &name,
-  const name_type_test &has_type)
+  const operand_type_test &has_type)
 {
   const nlohmann::json *binding = find_module_binding(module["body"], name);
   if (!binding)
@@ -767,16 +767,25 @@ static const nlohmann::json *sole_module_binding(
   return binding;
 }
 
-/// Whether the module global \p name is already bound with annotated type
-/// \p type.
-bool python_converter::global_has_type(
-  const std::string &name,
+/// Whether \p operand is a module global already bound with annotated type
+/// \p type, or a call to a module function already defined to return it.
+bool python_converter::operand_has_type(
+  const nlohmann::json &operand,
   const std::string &type) const
 {
-  symbol_id sid(current_python_file, "", "");
-  sid.set_object(name);
+  const bool is_call = operand["_type"] == "Call";
+  const std::string id = (is_call ? operand["func"] : operand).value("id", "");
+  symbol_id sid(current_python_file, "", is_call ? id : "");
+  if (!is_call)
+    sid.set_object(id);
   const symbolt *symbol = symbol_table_.find_symbol(sid.to_string());
-  return symbol && symbol->get_type() == type_handler_.get_typet(type);
+  if (!symbol)
+    return false;
+  const typet &expected = type_handler_.get_typet(type);
+  if (!is_call)
+    return symbol->get_type() == expected;
+  return symbol->get_type().is_code() &&
+         to_code_type(symbol->get_type()).return_type() == expected;
 }
 
 /// The module global \p sid names for a read in an enclosing scope. Code
@@ -791,8 +800,8 @@ symbolt *python_converter::find_global_symbol(const symbol_id &sid)
   const nlohmann::json *binding = sole_module_binding(
     *ast_json,
     sid.get_object(),
-    [this](const std::string &name, const std::string &type) {
-      return global_has_type(name, type);
+    [this](const nlohmann::json &operand, const std::string &type) {
+      return operand_has_type(operand, type);
     });
   if (!binding || binding->value("_type", "") != "AnnAssign")
     return nullptr;
@@ -818,7 +827,7 @@ exprt python_converter::module_function_expr(
   if (symbol && symbol->get_type().is_code())
     return symbol_expr(*symbol);
   const nlohmann::json *binding = sole_module_binding(
-    *ast_json, name, [](const std::string &, const std::string &) {
+    *ast_json, name, [](const nlohmann::json &, const std::string &) {
       return false;
     });
   if (!binding || binding->value("_type", "") != "FunctionDef")
@@ -837,7 +846,7 @@ typet python_converter::forward_function_return_type(
 {
   const auto flag = unbound_global_flags_.find(fn.identifier().as_string());
   const nlohmann::json *def = sole_module_binding(
-    *ast_json, name, [](const std::string &, const std::string &) {
+    *ast_json, name, [](const nlohmann::json &, const std::string &) {
       return false;
     });
   if (flag == unbound_global_flags_.end() || !def)
@@ -3492,7 +3501,9 @@ exprt python_converter::get_expr(const nlohmann::json &element)
           // __init__).  This happens when the object comes from a list element
           // or other expression that bypasses instance_has_attr registration.
           // Fall back to the struct member if the component exists.
-          if (class_type.has_component(attr_name))
+          if (
+            instance_may_have_attr(
+              class_type, *symbol, var_name, obj_type_name, attr_name))
           {
             const typet &attr_type = class_type.get_component(attr_name).type();
             expr = build_member_expr_from_class(attr_type);

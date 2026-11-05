@@ -6,6 +6,7 @@
 #include <python-frontend/python-list/python_list.h>
 #include <python-frontend/python_converter.h>
 #include <python-frontend/python_expr_builder.h>
+#include <python-frontend/symbol_id.h>
 #include <python-frontend/type/element_type_registry.h>
 #include <python-frontend/type/type_handler.h>
 #include <python-frontend/json_utils.h>
@@ -1150,8 +1151,11 @@ exprt python_lambda::get_lambda_expr(
 
   lambda_type.return_type() = return_type;
 
-  // Parameters are created in param_scope (shared for nested lambdas)
-  std::string param_scope_id = "py:" + module_name + "@F@" + param_scope;
+  // Parameters are created in param_scope (shared for nested lambdas). Inside
+  // a method the body's names resolve under the class, so the scope keeps it.
+  const std::string param_scope_id =
+    symbol_id(module_name, converter_.current_classname(), param_scope)
+      .to_string();
 
   // Process lambda parameters: pass body for type inference
   if (element.contains("args"))
