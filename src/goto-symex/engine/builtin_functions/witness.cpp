@@ -181,7 +181,9 @@ void goto_symext::symex_witness_branching(
       else
       {
         force_goto(case_matches != instruction.flipped_guard);
-        if (case_matches)
+        if (
+          case_matches || (wp.value == "default" &&
+                           is_last_switch_case_test(cur_state->source.pc)))
           cur_state->advance_witness_position();
       }
       break;

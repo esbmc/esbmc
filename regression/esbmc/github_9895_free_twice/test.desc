@@ -1,0 +1,6 @@
+CORE
+main.c
+
+^VERIFICATION FAILED$
+dereference failure: invalidated dynamic object freed
+\A(?![\s\S]*invalidated dynamic object$)[\s\S]*\Z

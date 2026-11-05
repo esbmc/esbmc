@@ -424,7 +424,7 @@ bool esbmc_parseoptionst::process_goto_program(
           adv.comment,
           format_cwe_list(cwe_for(adv.comment)));
 
-    lower_longjmp(goto_functions, context, options);
+    lower_longjmp(goto_functions, context);
 
     // Lower throw/catch to symbolic guarded control flow (#5075). Run before
     // inlining so per-call-site exception propagation is still explicit. This
@@ -546,10 +546,14 @@ bool esbmc_parseoptionst::process_goto_program(
       // verdict loop can report FAILED without unwinding. Never
       // returns TV_TRUE; only TV_FALSE (proved non-terminating) or
       // TV_UNKNOWN.
-      bool non_term_proved =
-        try_prove_non_termination_by_recurrent_set(goto_functions, options, ns)
-          .is_false();
+      locationt loop;
+      bool non_term_proved = try_prove_non_termination_by_recurrent_set(
+                               goto_functions, options, ns, loop)
+                               .is_false();
       options.set_option("termination-non-termination-proved", non_term_proved);
+      // The witness is written after the havoc transform rewrites the loop.
+      if (non_term_proved)
+        non_termination_loop = loop;
 
       // Ranking-function termination check, on the CLEAN (un-havoced)
       // goto program. If it proves every loop terminates, record it so
@@ -557,7 +561,9 @@ bool esbmc_parseoptionst::process_goto_program(
       // machinery. Never returns TV_FALSE, so it can only upgrade an
       // UNKNOWN to a proof, never produce a wrong verdict.
       bool ranking_proved =
-        try_prove_termination_by_ranking(goto_functions, options, ns).is_true();
+        try_prove_termination_by_ranking(
+          goto_functions, options, ns, ranking_transition_invariants)
+          .is_true();
       options.set_option("termination-ranking-proved", ranking_proved);
 
       // Only run the marker/havoc transform when the ranking check did

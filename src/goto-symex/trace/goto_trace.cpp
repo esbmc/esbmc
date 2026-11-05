@@ -11,7 +11,6 @@
 #include <util/base/cwe_mapping.h>
 #include <util/irep/std_types.h>
 #include <util/symtab/namespace.h>
-#include <optional>
 #include <ostream>
 
 void goto_tracet::output(const class namespacet &ns, std::ostream &out) const
@@ -341,8 +340,10 @@ static waypoint witness_target_waypoint(
   optionst &options)
 {
   const locationt *loc = witness_input_location(step);
-  waypoint wp =
-    witness_waypoint(loc ? *loc : step.pc->location, verified_file, options);
+  waypoint wp = witness_waypoint(
+    loc ? full_expression_start(*loc) : step.pc->location,
+    verified_file,
+    options);
   wp.type = waypoint::target;
   if (loc == nullptr)
     wp.file = verified_file;
@@ -451,7 +452,7 @@ void violation_graphml_goto_trace(
         if (step.pc->location.get_line().empty())
           break;
 
-        std::string assignment = get_formated_assignment(ns, step, false);
+        std::string assignment = get_formated_assignment(ns, step);
 
         graph.check_create_new_thread(step.thread_nr, prev_node);
         prev_node = graph.edges.back().to_node;
@@ -478,34 +479,30 @@ void violation_graphml_goto_trace(
   }
 }
 
-/* The \result value of a nondet call, when this step carries one a validator
-   can act on. */
-static std::optional<waypoint> witness_nondet_waypoint(
+/* A function_return waypoint for each nondet call made up to @p step. It sits
+   at the call's ')' and names the value the call returned, not the value of
+   the expression the call is part of (#9881). */
+static void push_nondet_return_waypoints(
   const namespacet &ns,
   const goto_trace_stept &step,
-  const std::string &verified_file,
+  yamlt &yml,
   optionst &options)
 {
-  if (is_nil_expr(step.rhs) || !find_nondet_in_expr(step.rhs))
-    return {};
+  for (const auto &[rparen, value] : step.nondet_returns)
+  {
+    if (!input_file_check(rparen))
+      continue;
 
-  if (!input_file_check(step.pc->location))
-    return {};
+    std::string result = from_expr(ns, "", value, presentationt::WITNESS);
+    check_replace_invalid_assignment(result);
+    if (result.empty())
+      continue;
 
-  std::string assignment = get_formated_assignment(ns, step, true);
-  if (assignment.empty())
-    return {};
-
-  // Extract just the value part ("lhs == value" -> "value") for \result
-  std::string value_str;
-  auto eq_pos = assignment.find(" == ");
-  if (eq_pos != std::string::npos)
-    value_str = assignment.substr(eq_pos + 4);
-
-  waypoint wp = witness_waypoint(step.pc->location, verified_file, options);
-  wp.type = waypoint::function_return;
-  wp.value = "\\result == " + value_str;
-  return wp;
+    waypoint wp = witness_waypoint(rparen, yml.verified_file, options);
+    wp.type = waypoint::function_return;
+    wp.value = "\\result == " + result;
+    yml.segments.push_back(wp);
+  }
 }
 
 /* Branches in a recursive trace number in the hundreds of thousands (#9689),
@@ -526,6 +523,8 @@ void violation_yaml_goto_trace(
   size_t branching_waypoints = 0;
   for (const auto &step : goto_trace.steps)
   {
+    push_nondet_return_waypoints(ns, step, yml, options);
+
     switch (step.type)
     {
     case symex_targett::ASSERT:
@@ -558,25 +557,18 @@ void violation_yaml_goto_trace(
           step.condition_operand)
           break;
 
+        /* A switch would take one waypoint naming the case it enters, but
+           CPAchecker cannot parse any switch waypoint and the format does not
+           require one, so emit none (#9882). */
+        if (!step.pc->switch_case_ids.empty())
+          break;
+
         ++branching_waypoints;
         waypoint wp =
           witness_waypoint(step.pc->location, yml.verified_file, options);
         wp.type = waypoint::branching;
         wp.value = !step.guard ? "true" : "false";
         yml.segments.push_back(wp);
-      }
-      break;
-
-    case symex_targett::ASSIGNMENT:
-      if (
-        step.pc->is_assign() || step.pc->is_return() ||
-        (step.pc->is_other() && is_nil_expr(step.lhs)) ||
-        step.pc->is_function_call())
-      {
-        if (
-          auto wp =
-            witness_nondet_waypoint(ns, step, yml.verified_file, options))
-          yml.segments.push_back(*wp);
       }
       break;
 
@@ -652,12 +644,27 @@ void correctness_graphml_goto_trace(
 void correctness_yaml_goto_trace(
   optionst &options,
   const namespacet &ns [[maybe_unused]],
-  const goto_tracet &goto_trace [[maybe_unused]])
+  const goto_tracet &goto_trace [[maybe_unused]],
+  const std::vector<std::pair<locationt, std::string>> &transition_invariants)
 {
   yamlt yml(yamlt::CORRECTNESS);
   yml.verified_file = options.get_option("input-file");
   log_progress(
     "Generating Correctness Yaml Witness for: {}", yml.verified_file);
+
+  for (const auto &[loc, value] : transition_invariants)
+  {
+    const waypoint at = witness_waypoint(loc, yml.verified_file, options);
+    invariant inv;
+    inv.type = invariant::loop_transition_invariant;
+    inv.file = at.file;
+    inv.line = at.line;
+    inv.column = at.column;
+    inv.function = at.function;
+    inv.value = value;
+    inv.format = "ext_c_expression";
+    yml.invariants.push_back(inv);
+  }
 
   yml.generate_yaml(options);
 }
@@ -665,7 +672,8 @@ void correctness_yaml_goto_trace(
 void write_correctness_witnesses(
   optionst &options,
   const namespacet &ns,
-  const goto_tracet &goto_trace)
+  const goto_tracet &goto_trace,
+  const std::vector<std::pair<locationt, std::string>> &transition_invariants)
 {
   if (options.get_bool_option("result-only"))
     return;
@@ -674,7 +682,7 @@ void write_correctness_witnesses(
     correctness_graphml_goto_trace(options, ns, goto_trace);
 
   if (!options.get_option("witness-output-yaml").empty())
-    correctness_yaml_goto_trace(options, ns, goto_trace);
+    correctness_yaml_goto_trace(options, ns, goto_trace, transition_invariants);
 }
 
 void appendInfo(

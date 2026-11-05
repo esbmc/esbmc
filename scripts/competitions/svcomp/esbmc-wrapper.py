@@ -25,7 +25,6 @@ class Result:
   err_timeout = 7
   err_memout = 8
   err_unwinding_assertion = 9
-  force_fp_mode = 10
   unknown = 11
   fail_memcleanup = 12
   fail_termination = 13
@@ -101,7 +100,7 @@ def do_exec(cmd_line, timeout=None):
   except subprocess.TimeoutExpired:
     p.kill()
     p.communicate()
-    return b"Timed out"
+    return b"ERROR: Timed out\n"
 
   return stdout + stderr
 
@@ -138,6 +137,14 @@ def violated_property_text(the_output):
       if row and row.group(1) == "FAILED":
         violated.append(line)
   return "\n".join(violated)
+
+FIRST_VIOLATION = re.compile(r"^Violated property:\n((?:  .*\n?)+)", re.M)
+
+
+def first_violation_text(the_output):
+  """The property the counterexample violated first, or "" if none."""
+  first = FIRST_VIOLATION.search(the_output)
+  return first.group(1) if first else ""
 
 VIOLATION_SITE = re.compile(r"Violated property:\n\s+file (\S+)(?: line (\d+))?")
 
@@ -311,6 +318,10 @@ def classify_violation(violated, prop):
   return None
 
 
+COUNTEREXAMPLE = re.compile(r"^\[Counterexample\]$.*?(?=^Violated property:$)",
+                            re.MULTILINE | re.DOTALL)
+
+
 def parse_result(the_output, prop):
   # ESBMC also prints a "  CWE: CWE-NNN" line after each violated-property
   # comment (see docs/cwe-mapping.md) and may emit a SARIF report under
@@ -318,18 +329,25 @@ def parse_result(the_output, prop):
   # still derived from the unchanged freeform comment strings below, matched
   # against the violated properties rather than the whole output.
 
-  # Parse output
-  if "Timed out" in the_output:
+  # A counterexample carries the program's own output, which may repeat any
+  # of ESBMC's messages (esbmc/esbmc#9890).
+  the_output = COUNTEREXAMPLE.sub("", the_output)
+
+  if re.search(r"^ERROR: Timed out$", the_output, re.MULTILINE):
     return Result.err_timeout
 
-  if "Out of memory" in the_output:
+  if re.search(r"^ERROR: Out of memory$", the_output, re.MULTILINE):
     return Result.err_memout
 
-  if "Chosen solver doesn\'t support floating-point numbers" in the_output:
-    return Result.force_fp_mode
-
   if "VERIFICATION FAILED" in the_output:
-    decided = classify_violation(violated_property_text(the_output), prop)
+    # The model runs on past its first violation and fails later claims too,
+    # such as a leak at exit after an invalid dereference. The program stopped
+    # at the first one, so that one names the sub-property (#9895).
+    if prop == Property.memory:
+      violated = first_violation_text(the_output)
+    else:
+      violated = violated_property_text(the_output)
+    decided = classify_violation(violated, prop)
     if decided is not None:
       return decided
 

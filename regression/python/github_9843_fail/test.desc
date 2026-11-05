@@ -1,0 +1,5 @@
+CORE
+main.py
+--unwind 5 --multi-property --no-pointer-check --no-align-check
+FAILED +\[global\.assertion\.1\] +line 15 +assertion value\.value\.element_0 > 2\.0
+^VERIFICATION FAILED$
