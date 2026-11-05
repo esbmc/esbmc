@@ -27,7 +27,8 @@
 ///                  was UNSAT/UNKNOWN; caller falls back to the
 ///                  ranking-function pass / k-induction.
 ///
-/// Never returns TV_TRUE. This is a refutation-only checker.
+/// Never returns TV_TRUE. This is a refutation-only checker. On TV_FALSE,
+/// @p loop_location is the head of the non-terminating loop.
 ///
 /// The check is sound because the SMT obligation directly witnesses a
 /// non-terminating execution: the witness state and input cause the
@@ -40,6 +41,7 @@
 tvt try_prove_non_termination_by_recurrent_set(
   goto_functionst &goto_functions,
   optionst &options,
-  const namespacet &ns);
+  const namespacet &ns,
+  locationt &loop_location);
 
 #endif /* ESBMC_NON_TERMINATION_H */
