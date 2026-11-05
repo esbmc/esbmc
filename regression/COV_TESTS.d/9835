@@ -1,7 +1,9 @@
+regression/python/github_9835_attr_base_fail
 regression/python/github_9835_builtin_base_fail
 regression/python/github_9835_caught
 regression/python/github_9835_dunder_len
 regression/python/github_9835_dunder_len_fail
 regression/python/github_9835_fail
 regression/python/github_9835_imported_base
+regression/python/github_9835_imported_name_base_fail
 regression/python/github_9835_subclass_len
