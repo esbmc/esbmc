@@ -258,13 +258,35 @@ static typet function_element_type(
   return pointer_typet(func->get_type());
 }
 
+// The type of the variable a Name element reads, if one is in scope.
+static std::optional<typet>
+name_symbol_type(const python_converter &converter, const nlohmann::json &elem)
+{
+  if (elem.value("_type", "") != "Name")
+    return std::nullopt;
+  symbol_id sid(
+    converter.python_file(),
+    converter.current_classname(),
+    converter.current_function_name());
+  sid.set_object(elem["id"].get<std::string>());
+  const symbolt *symbol = converter.find_symbol(sid.to_string());
+  if (!symbol)
+    symbol = converter.find_symbol(sid.global_to_string());
+  if (!symbol || symbol->get_type().is_code())
+    return std::nullopt;
+  return symbol->get_type();
+}
+
 // The element type of one literal element. A call to a user function has no
 // name-derived type; it is left to the recorded element types and flagged.
+// A name whose binding cannot be typed from the AST (e.g. `s = 1 or None`)
+// takes the type its symbol was declared with.
 static typet literal_element_type(
-  const type_handler &th,
+  python_converter &converter,
   const nlohmann::json &elem,
   bool &unresolved_call)
 {
+  const type_handler &th = converter.get_type_handler();
   if (const std::optional<typet> element = th.scalar_array_element_type(elem))
     return *element;
   try
@@ -273,6 +295,8 @@ static typet literal_element_type(
   }
   catch (const std::runtime_error &)
   {
+    if (const std::optional<typet> declared = name_symbol_type(converter, elem))
+      return *declared;
     if (elem.value("_type", "") != "Call")
       throw;
     unresolved_call = true;
@@ -295,11 +319,10 @@ typet python_list::infer_literal_element_type(
   if (first_elem.is_null() || first_elem.empty())
     return typet();
 
-  const type_handler &th = converter_.get_type_handler();
   bool unresolved_call = false;
   // `a[i]` over a NumPy array or view has the array's element type.
   auto element_type = [&](const nlohmann::json &elem) {
-    return literal_element_type(th, elem, unresolved_call);
+    return literal_element_type(converter_, elem, unresolved_call);
   };
 
   // A heterogeneous int/float literal is promoted to a homogeneous double list
