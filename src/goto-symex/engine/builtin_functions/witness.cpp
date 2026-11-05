@@ -108,7 +108,11 @@ void goto_symext::symex_witness_branching(
   bool &new_guard_false,
   const goto_programt::instructiont &instruction)
 {
-  if (!validate_witness || !forward || is_constant(old_guard))
+  // A goto skipped by an earlier taken jump runs with a false guard; matching
+  // a waypoint there would add false to witness_guard and void the target.
+  if (
+    !validate_witness || !forward || is_constant(old_guard) ||
+    cur_state->guard.is_false())
     return;
 
   const auto &loc = cur_state->source.pc->location;
