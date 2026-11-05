@@ -21,6 +21,7 @@ extern "C"
 #include <goto-symex/engine/goto_symex.h>
 #include <goto-symex/trace/goto_trace.h>
 #include <optional>
+#include <unordered_set>
 #include <goto-symex/trace/sarif.h>
 #include <util/base/cwe_mapping.h>
 #include <solvers/smt/smt_result.h>
@@ -92,8 +93,159 @@ extern "C"
 #  include <goto-programs/goto_contractor.h>
 #endif
 
-static std::optional<goto_programt::const_targett>
-find_termination_marker(const goto_functionst &goto_functions)
+// The back edge of the innermost loop that leaves through @p marker: one that
+// jumps to it, holds it (a return exit), or falls through to it (a do-while).
+static std::optional<goto_programt::const_targett> loop_of_marker(
+  const goto_functionst &goto_functions,
+  goto_programt::const_targett marker)
+{
+  std::optional<goto_programt::const_targett> best;
+  const auto fn = goto_functions.function_map.find(marker->function);
+  if (fn == goto_functions.function_map.end())
+    return best;
+  const goto_programt::instructionst &body = fn->second.body.instructions;
+  const unsigned m = marker->location_number;
+  for (auto b = body.begin(); b != body.end(); ++b)
+  {
+    if (!b->is_backwards_goto())
+      continue;
+    const auto h = b->targets.front();
+    const unsigned lo = h->location_number, hi = b->location_number;
+    bool exits = (m >= lo && m <= hi) || std::next(b) == marker;
+    for (auto p = h; !exits && p != std::next(b); ++p)
+      exits =
+        p->is_goto() && !p->targets.empty() && p->targets.front() == marker;
+    if (exits && (!best || lo > (*best)->targets.front()->location_number))
+      best = b;
+  }
+  return best;
+}
+
+using function_sett = std::unordered_set<irep_idt, irep_id_hash>;
+using instruction_sett =
+  std::unordered_set<const goto_programt::instructiont *>;
+
+static const goto_functionst::function_mapt::value_type *callee_of(
+  const goto_functionst &goto_functions,
+  const goto_programt::instructiont &i)
+{
+  if (!i.is_function_call())
+    return nullptr;
+  const expr2tc &f = to_code_function_call2t(i.code).function;
+  if (!is_symbol2t(f))
+    return nullptr;
+  const auto it = goto_functions.function_map.find(to_symbol2t(f).thename);
+  if (
+    it == goto_functions.function_map.end() || !it->second.body_available ||
+    it->second.body.instructions.empty())
+    return nullptr;
+  return &*it;
+}
+
+// Successors of @p it on a path the inductive step keeps once it shows every
+// termination marker unreachable: a marker (a false ASSERT) ends the path, as
+// get_successors already has it, and a call falls through only to a callee in
+// @p returns.
+static goto_programt::const_targetst live_successors(
+  const goto_functionst &goto_functions,
+  const function_sett &returns,
+  const goto_programt &body,
+  goto_programt::const_targett it)
+{
+  goto_programt::const_targetst next;
+  const auto *callee = callee_of(goto_functions, *it);
+  if (!callee || returns.count(callee->first))
+    body.get_successors(it, next);
+  return next;
+}
+
+// Whether a live path from @p from reaches @p to through @p body's
+// instructions numbered [lo, hi].
+static bool live_path(
+  const goto_functionst &goto_functions,
+  const function_sett &returns,
+  const goto_programt &body,
+  goto_programt::const_targett from,
+  goto_programt::const_targett to,
+  unsigned lo,
+  unsigned hi)
+{
+  instruction_sett seen;
+  std::vector<goto_programt::const_targett> work{from};
+  while (!work.empty())
+  {
+    const auto it = work.back();
+    work.pop_back();
+    if (it == to)
+      return true;
+    if (
+      it == body.instructions.end() || it->location_number < lo ||
+      it->location_number > hi || !seen.insert(&*it).second)
+      continue;
+    for (const auto &n : live_successors(goto_functions, returns, body, it))
+      work.push_back(n);
+  }
+  return false;
+}
+
+// The functions with a live path from entry to END_FUNCTION.
+static function_sett returning_functions(const goto_functionst &goto_functions)
+{
+  function_sett returns;
+  for (bool changed = true; changed;)
+  {
+    changed = false;
+    for (const auto &[id, fn] : goto_functions.function_map)
+      if (
+        fn.body_available && !fn.body.instructions.empty() &&
+        !returns.count(id) &&
+        live_path(
+          goto_functions,
+          returns,
+          fn.body,
+          fn.body.instructions.begin(),
+          std::prev(fn.body.instructions.end()),
+          0,
+          std::numeric_limits<unsigned>::max()))
+      {
+        returns.insert(id);
+        changed = true;
+      }
+  }
+  return returns;
+}
+
+// The instructions a live path from the entry point reaches.
+static instruction_sett live_instructions(
+  const goto_functionst &goto_functions,
+  const function_sett &returns)
+{
+  instruction_sett live;
+  std::vector<std::pair<const goto_programt *, goto_programt::const_targett>>
+    work;
+  const auto enter = [&work](const goto_functiont &fn) {
+    work.emplace_back(&fn.body, fn.body.instructions.begin());
+  };
+  const auto main = goto_functions.function_map.find(goto_functions.main_id());
+  if (main != goto_functions.function_map.end())
+    enter(main->second);
+  while (!work.empty())
+  {
+    const auto [body, it] = work.back();
+    work.pop_back();
+    if (it == body->instructions.end() || !live.insert(&*it).second)
+      continue;
+    if (const auto *callee = callee_of(goto_functions, *it))
+      enter(callee->second);
+    for (const auto &n : live_successors(goto_functions, returns, *body, it))
+      work.emplace_back(body, n);
+  }
+  return live;
+}
+
+static std::optional<goto_programt::const_targett> find_termination_marker(
+  const goto_functionst &goto_functions,
+  const std::vector<locationt> &terminating_loops)
 {
   // Anchor candidates, best first. A user-source location always beats a
   // library helper: goto_termination inserts per-loop markers into helpers
@@ -102,14 +254,45 @@ find_termination_marker(const goto_functionst &goto_functions)
   // function_map is ordered by mangled id, `c:@F@__ESBMC_atexit_handler`
   // sorts before `c:@F@main`, so scanning without this rank anchors the
   // CWE to ESBMC's own stdlib.c instead of the user's loop.
+  //
+  // A loop that cannot run forever in the refuting inductive step ranks last:
+  // one only reached past a marker, which that step showed unreachable (in a
+  // function nothing calls, or past another loop's exit), one that leaves on
+  // every pass, or one the ranking check proved terminating. The YAML cycle
+  // waypoint names the marker's loop, and a validator rejects one that is not
+  // passed infinitely often.
   enum anchor_rankt
   {
     USER_LOOP = 0,
     USER_ABORT,
     LIB_LOOP,
     LIB_ABORT,
+    FINITE_LOOP,
     NO_ANCHOR
   };
+
+  const function_sett returns = returning_functions(goto_functions);
+  const instruction_sett live = live_instructions(goto_functions, returns);
+  const auto may_run_forever =
+    [&](const goto_programt &body, goto_programt::const_targett marker) {
+      const auto back_edge = loop_of_marker(goto_functions, marker);
+      if (!back_edge || !live.count(&**back_edge))
+        return false;
+      const auto head = (*back_edge)->targets.front();
+      const std::string at = head->location.as_string();
+      return live_path(
+               goto_functions,
+               returns,
+               body,
+               head,
+               *back_edge,
+               head->location_number,
+               (*back_edge)->location_number) &&
+             std::none_of(
+               terminating_loops.begin(),
+               terminating_loops.end(),
+               [&at](const locationt &l) { return l.as_string() == at; });
+    };
 
   goto_programt::const_targett marker;
   anchor_rankt best = NO_ANCHOR;
@@ -132,6 +315,8 @@ find_termination_marker(const goto_functionst &goto_functions)
         rank = is_lib ? LIB_ABORT : USER_ABORT;
       else
         continue;
+      if (rank < best && !may_run_forever(fn.second.body, it))
+        rank = FINITE_LOOP;
       if (rank < best)
       {
         marker = it;
@@ -144,36 +329,6 @@ find_termination_marker(const goto_functionst &goto_functions)
   if (best == NO_ANCHOR)
     return std::nullopt;
   return marker;
-}
-
-// The head of the innermost loop that leaves through @p marker: one that jumps
-// to it, holds it (a return exit), or falls through to it (a do-while). A
-// cycle waypoint must be passed on every iteration, and the marker itself sits
-// on the loop's exit path, which runs at most once.
-static goto_programt::const_targett loop_head_of_marker(
-  const goto_functionst &goto_functions,
-  goto_programt::const_targett marker)
-{
-  const auto fn = goto_functions.function_map.find(marker->function);
-  if (fn == goto_functions.function_map.end())
-    return marker;
-  const goto_programt::instructionst &body = fn->second.body.instructions;
-  const unsigned m = marker->location_number;
-  goto_programt::const_targett best = marker;
-  for (auto b = body.begin(); b != body.end(); ++b)
-  {
-    if (!b->is_backwards_goto())
-      continue;
-    const auto h = b->targets.front();
-    const unsigned lo = h->location_number, hi = b->location_number;
-    bool exits = (m >= lo && m <= hi) || std::next(b) == marker;
-    for (auto p = h; !exits && p != std::next(b); ++p)
-      exits =
-        p->is_goto() && !p->targets.empty() && p->targets.front() == marker;
-    if (exits && (best == marker || lo > best->location_number))
-      best = h;
-  }
-  return best;
 }
 
 // Emit CWE-835 (non-termination / infinite loop) into the structured
@@ -199,7 +354,8 @@ static void report_non_termination_cwe(
   const namespacet &ns,
   const goto_functionst &goto_functions,
   const std::string &comment,
-  const std::optional<locationt> &proved_loop)
+  const std::optional<locationt> &proved_loop,
+  const std::vector<locationt> &terminating_loops)
 {
   // The YAML witness has no CWE field, so it carries only the cycle waypoint.
   const bool want_yaml = !options.get_option("witness-output-yaml").empty();
@@ -210,7 +366,8 @@ static void report_non_termination_cwe(
   if (!(want_sarif || want_graphml || want_json || want_yaml))
     return;
 
-  const auto marker = find_termination_marker(goto_functions);
+  const auto marker =
+    find_termination_marker(goto_functions, terminating_loops);
   if (!marker)
     return;
 
@@ -229,11 +386,15 @@ static void report_non_termination_cwe(
   if (want_yaml)
   {
     // The recurrent-set check names its loop; the inductive step does not,
-    // so the marker's loop is a best-effort pick when there are several.
+    // so the marker's loop is a best-effort pick when there are several. A
+    // cycle waypoint must be passed on every iteration, and the marker itself
+    // sits on the loop's exit path, which runs at most once.
+    const auto back_edge = loop_of_marker(goto_functions, *marker);
     non_termination_yaml_goto_trace(
       options,
       proved_loop ? *proved_loop
-                  : loop_head_of_marker(goto_functions, *marker)->location);
+      : back_edge ? (*back_edge)->targets.front()->location
+                  : (*marker)->location);
   }
   if (want_json)
     generate_json_report("1", ns, trace);
@@ -472,7 +633,12 @@ int esbmc_parseoptionst::do_bmc_strategy(
           "Recurrent set shows a non-terminating execution";
         const namespacet ns(context);
         report_non_termination_cwe(
-          options, ns, goto_functions, comment, non_termination_loop);
+          options,
+          ns,
+          goto_functions,
+          comment,
+          non_termination_loop,
+          terminating_loops);
         const std::string cwes = format_cwe_list(cwe_for(comment));
         std::string msg = "\n" + comment + "\n";
         if (!cwes.empty())
@@ -519,7 +685,12 @@ int esbmc_parseoptionst::do_bmc_strategy(
             k_step);
           const namespacet ns(context);
           report_non_termination_cwe(
-            options, ns, goto_functions, comment, non_termination_loop);
+            options,
+            ns,
+            goto_functions,
+            comment,
+            non_termination_loop,
+            terminating_loops);
           const std::string cwes = format_cwe_list(cwe_for(comment));
           std::string msg = "\n" + comment;
           if (!cwes.empty())
