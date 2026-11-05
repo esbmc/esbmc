@@ -226,6 +226,9 @@ def _module_filename(module: ModuleType | str | None) -> str | None:
     return normalized
 
 
+SV_VERIFIER = "_sv_verifier"
+
+
 def import_module_by_name(
     module_name: str,
     output_dir: str,
@@ -268,6 +271,9 @@ def import_module_by_name(
                 return importlib.import_module(parent)
             except ImportError:
                 pass
+
+        if module_name == SV_VERIFIER:
+            return _normalize_existing_path(os.path.join(output_dir, "models", SV_VERIFIER + ".py"))
 
         # Keep legacy error text: regression tests assert this exact line.
         _resolver_error(f"Module '{module_name}' not found.")

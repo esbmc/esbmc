@@ -150,7 +150,7 @@ def _emit_model_jsons(
         filename = os.path.basename(python_file)
         module_name = filename[:-3]
 
-        if module_name == "threading_deadlock":
+        if module_name in ("threading_deadlock", import_resolver.SV_VERIFIER):
             continue
 
         if import_resolver.is_imported_model(module_name) and module_name != "typing":
