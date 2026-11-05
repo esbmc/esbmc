@@ -589,6 +589,10 @@ protected:
    */
   virtual void symex_function_call_code(const expr2tc &call);
 
+  /** Assign a fresh nondet value to @p ret, the result of a call that symex
+   *  skips; a nil @p ret is left alone. */
+  void assign_nondet_call_result(const expr2tc &ret);
+
   /**
    *  Model a call to a "__ESBMC_uninterpreted_*" or "__CPROVER_uninterpreted_*"
    *  function as a genuine uninterpreted function: assign the return an

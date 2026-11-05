@@ -1,0 +1,5 @@
+CORE
+main.c
+--overflow-check --unwind 4 --no-unwinding-assertions --witness-output-yaml -
+^VERIFICATION FAILED$
+type: "target"\n.*\n.*\n.*\n\s*line: 6\n\s*column: 16$

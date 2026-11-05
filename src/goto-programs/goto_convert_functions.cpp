@@ -1511,7 +1511,7 @@ bool goto_convert_functionst::convert_native_rec(
         for (const auto &op : it.second)
         {
           BigInt val;
-          if (!to_integer(op, val))
+          if (!to_integer(op.id() == "case_range" ? op.op0() : op, val))
             x->switch_case_ids.push_back(integer2string(val));
         }
     }
