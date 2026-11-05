@@ -834,8 +834,7 @@ bool __ESBMC_list_contains(
       // The type ids match, so item is a double when the element sits in the
       // double buffer. Comparing doubles folds for constants, where a bit-wise
       // read does not, and equates 0.0 with -0.0 as Python does (#9635).
-      if (
-        item_size == 8 && __ESBMC_same_object(elem->value, __ESBMC_float_buf))
+      if (item_size == 8 && __ESBMC_same_object(elem->value, __ESBMC_float_buf))
       {
         if (*(const double *)elem->value == *(const double *)item)
           return true;
