@@ -1,5 +1,7 @@
 #include <cassert>
 #include <climits>
+#include <functional>
+#include <unordered_map>
 #include <goto-symex/engine/dynamic_allocation.h>
 #include <goto-symex/scheduler/execution_state.h>
 #include <goto-symex/engine/goto_symex.h>
@@ -27,6 +29,89 @@ static bool is_lvalue(const expr2tc &e)
 static bool is_elementwise_literal(const expr2tc &e)
 {
   return is_constant_array2t(e) || is_constant_vector2t(e);
+}
+
+static void collect_if_arms(const expr2tc &lhs, std::vector<expr2tc> &arms)
+{
+  if (!is_if2t(lhs))
+  {
+    arms.push_back(lhs);
+    return;
+  }
+  collect_if_arms(to_if2t(lhs).true_value, arms);
+  collect_if_arms(to_if2t(lhs).false_value, arms);
+}
+
+/// The structs whose member \p arm writes, innermost first.
+static std::vector<expr2tc> written_struct_bases(expr2tc arm)
+{
+  std::vector<expr2tc> bases;
+  while (true)
+  {
+    if (is_member2t(arm))
+    {
+      arm = to_member2t(arm).source_value;
+      if (is_struct_type(arm))
+        bases.push_back(arm);
+    }
+    else if (is_index2t(arm))
+      arm = to_index2t(arm).source_value;
+    else if (is_typecast2t(arm))
+      arm = to_typecast2t(arm).from;
+    else if (is_bitcast2t(arm))
+      arm = to_bitcast2t(arm).from;
+    else if (is_byte_extract2t(arm))
+      arm = to_byte_extract2t(arm).source_value;
+    else if (is_extract2t(arm))
+      arm = to_extract2t(arm).from;
+    else if (is_concat2t(arm))
+      arm = to_concat2t(arm).side_1;
+    else
+      return bases;
+  }
+}
+
+/// The struct whose members most arms of \p lhs write, the innermost on a
+/// tie, if at least two arms do; nil otherwise.
+static expr2tc struct_written_by_arms(const expr2tc &lhs)
+{
+  std::vector<expr2tc> arms;
+  collect_if_arms(lhs, arms);
+  std::vector<std::vector<expr2tc>> bases;
+  for (const expr2tc &arm : arms)
+    bases.push_back(written_struct_bases(arm));
+
+  std::unordered_map<expr2tc, size_t, irep2_hash> counts;
+  for (const auto &arm_bases : bases)
+    for (const expr2tc &base : arm_bases)
+      ++counts[base];
+
+  expr2tc best;
+  size_t best_count = 1;
+  for (const auto &arm_bases : bases)
+    for (const expr2tc &base : arm_bases)
+      if (counts[base] > best_count)
+      {
+        best = base;
+        best_count = counts[base];
+      }
+  return best;
+}
+
+/// \p e with each subexpression equal to a key of \p values replaced, in one
+/// pass: a replacement is not searched again.
+static expr2tc replace_subexprs(
+  expr2tc e,
+  const std::vector<std::pair<expr2tc, expr2tc>> &values)
+{
+  for (const auto &[from, to] : values)
+    if (e == from)
+      return to;
+  e->Foreach_operand([&values](expr2tc &op) {
+    if (!is_nil_expr(op))
+      op = replace_subexprs(op, values);
+  });
+  return e;
 }
 
 goto_symext::goto_symext(
@@ -817,6 +902,32 @@ void goto_symext::symex_assign_array(
     index.source_value, full_lhs, new_rhs, full_rhs, guard, hidden);
 }
 
+void goto_symext::record_member_store(
+  const expr2tc &lhs,
+  const expr2tc &rhs,
+  const guard2tc &guard)
+{
+  // Earlier stores of this arm, which share its guard, have already happened
+  // when this one reads the members they wrote.
+  std::vector<member_store> &stores = member_stores->stores;
+  expr2tc store_guard = guard.as_expr();
+  std::vector<std::pair<expr2tc, expr2tc>> written;
+  auto same_member = stores.end();
+  for (auto it = stores.rbegin();
+       it != stores.rend() && it->guard == store_guard;
+       ++it)
+  {
+    written.emplace_back(it->member, it->value);
+    if (it->member == lhs)
+      same_member = std::next(it).base();
+  }
+  expr2tc value = replace_subexprs(rhs, written);
+  if (same_member != stores.end())
+    same_member->value = value;
+  else
+    stores.push_back({lhs, store_guard, value});
+}
+
 void goto_symext::symex_assign_member(
   const expr2tc &lhs,
   const expr2tc &full_lhs,
@@ -837,6 +948,13 @@ void goto_symext::symex_assign_member(
     is_complex_type(member.source_value));
 
   const irep_idt &component_name = member.member;
+
+  if (member_stores && member.source_value == member_stores->base)
+  {
+    record_member_store(lhs, rhs, guard);
+    return;
+  }
+
   expr2tc real_lhs = member.source_value;
 
   // typecasts involved? C++ does that for inheritance.
@@ -885,6 +1003,17 @@ void goto_symext::symex_assign_if(
 {
   // we have (c?a:b)=e;
 
+  if (!member_stores)
+  {
+    expr2tc base = struct_written_by_arms(lhs);
+    if (!is_nil_expr(base))
+    {
+      symex_assign_member_arms(
+        lhs, base, full_lhs, rhs, full_rhs, guard, hidden);
+      return;
+    }
+  }
+
   // need to copy rhs -- it gets destroyed
   expr2tc rhs_copy = rhs;
   const if2t &ifval = to_if2t(lhs);
@@ -902,6 +1031,61 @@ void goto_symext::symex_assign_if(
   symex_assign_rec(
     ifval.false_value, full_lhs, rhs_copy, full_rhs, guard, hidden);
   guard = old_guard;
+}
+
+void goto_symext::symex_assign_member_arms(
+  const expr2tc &lhs,
+  const expr2tc &base,
+  const expr2tc &full_lhs,
+  expr2tc &rhs,
+  expr2tc &full_rhs,
+  guard2tc &guard,
+  const bool hidden)
+{
+  // Arms that write other objects are assigned before the merged store, so
+  // every arm's condition must be read in the state before any of them.
+  std::function<void(expr2tc &)> rename_conditions = [&](expr2tc &e) {
+    if (!is_if2t(e))
+      return;
+    if2t &arm = to_if2t(e);
+    cur_state->rename(arm.cond);
+    rename_conditions(arm.true_value);
+    rename_conditions(arm.false_value);
+  };
+  expr2tc arms = lhs;
+  rename_conditions(arms);
+
+  member_store_collector collector{base, {}};
+  {
+    struct collecting
+    {
+      member_store_collector *&stores;
+      ~collecting()
+      {
+        stores = nullptr;
+      }
+    } scope{member_stores};
+    member_stores = &collector;
+    symex_assign_if(arms, full_lhs, rhs, full_rhs, guard, hidden);
+  }
+
+  // The arms of an if are exclusive, so each store reads the members as they
+  // were before the assignment, and at most one store's guard holds.
+  const struct_type2t &type = to_struct_type(base->type);
+  std::vector<expr2tc> members;
+  for (size_t i = 0; i < type.members.size(); i++)
+    members.push_back(member2tc(type.members[i], base, type.member_names[i]));
+  for (const member_store &store : collector.stores)
+  {
+    unsigned int i = *struct_union_get_component_number(
+      base->type, to_member2t(store.member).member);
+    members[i] = if2tc(type.members[i], store.guard, store.value, members[i]);
+  }
+
+  // Each member's store guard already includes the assignment's guard.
+  expr2tc new_rhs = constant_struct2tc(base->type, members);
+  guard2tc unguarded;
+  symex_assign_rec(base, full_lhs, new_rhs, full_rhs, unguarded, hidden);
 }
 
 void goto_symext::symex_assign_byte_extract(

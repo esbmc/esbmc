@@ -1366,6 +1366,46 @@ protected:
     const bool hidden);
 
   /**
+   *  Assign to an "if" whose arms write members of one struct \p base as a
+   *  single assignment to \p base, instead of one guarded whole-struct
+   *  assignment per arm (#9785). Arms that do not write a member of \p base
+   *  are assigned as usual.
+   */
+  void symex_assign_member_arms(
+    const expr2tc &lhs,
+    const expr2tc &base,
+    const expr2tc &full_lhs,
+    expr2tc &rhs,
+    expr2tc &full_rhs,
+    guard2tc &guard,
+    const bool hidden);
+
+  /** A store to a member of the struct symex_assign_member_arms is merging,
+   *  recorded by symex_assign_member instead of assigned. */
+  struct member_store
+  {
+    expr2tc member;
+    expr2tc guard;
+    expr2tc value;
+  };
+
+  struct member_store_collector
+  {
+    expr2tc base;
+    std::vector<member_store> stores;
+  };
+
+  /** Non-null while symex_assign_member_arms collects stores. */
+  member_store_collector *member_stores = nullptr;
+
+  /** Record the store of \p rhs to \p lhs, a member of the struct being
+   *  merged, under \p guard. */
+  void record_member_store(
+    const expr2tc &lhs,
+    const expr2tc &rhs,
+    const guard2tc &guard);
+
+  /**
    *  Perform assignment to a byte extract.
    *  Results in a byte update of the relevant part of the lhs with the
    *  right hand side at the appropriate position. Currently a problem , as
