@@ -217,6 +217,36 @@ bool goto_symext::is_assume_false(const expr2tc &assumption)
   return is_false(assumption);
 }
 
+static bool fits_in_bv(const BigInt &v, const type2tc &type)
+{
+  const unsigned w = type->get_width();
+  if (is_signedbv_type(type))
+    return v >= -BigInt::power2(w - 1) && v < BigInt::power2(w - 1);
+  return v >= 0 && v < BigInt::power2(w);
+}
+
+// C promotes a narrow operand, so `flag == 1` arrives as `(int)flag == 1`.
+// A value-preserving widening is lifted onto the narrow symbol when the
+// constant fits it (#9852).
+static void lift_narrow_widening(expr2tc &sym_side, expr2tc &const_side)
+{
+  if (!is_typecast2t(sym_side) || !is_constant_int2t(const_side))
+    return;
+  const expr2tc narrow = to_typecast2t(sym_side).from;
+  const type2tc &wide = sym_side->type;
+  if (!is_symbol2t(narrow) || !is_bv_type(narrow) || !is_bv_type(wide))
+    return;
+  if (
+    narrow->type->get_width() >= wide->get_width() ||
+    (is_signedbv_type(narrow) && is_unsignedbv_type(wide)))
+    return;
+  const BigInt v = to_constant_int2t(const_side).value;
+  if (!fits_in_bv(v, narrow->type))
+    return;
+  const_side = constant_int2tc(narrow->type, v);
+  sym_side = narrow;
+}
+
 void goto_symext::propagate_assume_equality(const expr2tc &the_assumption)
 {
   expr2tc c = the_assumption;
@@ -236,6 +266,9 @@ void goto_symext::propagate_assume_equality(const expr2tc &the_assumption)
   };
   expr2tc lhs = strip_noop_casts(eq.side_1);
   expr2tc rhs = strip_noop_casts(eq.side_2);
+
+  lift_narrow_widening(lhs, rhs);
+  lift_narrow_widening(rhs, lhs);
 
   // Only propagate when the other side is a constant: a symbol == symbol
   // assumption must NOT be turned into an assignment, as that perturbs the
@@ -365,6 +398,20 @@ void goto_symext::symex_step(reachability_treet &art)
     if (depth_limit != 0 && cur_state->num_instructions > depth_limit)
       cur_state->guard.add(gen_false_expr());
     cur_state->num_instructions++;
+  }
+
+  // A call on the target line runs deeper frames before the line's later
+  // claims, so only the arming frame (or its return) ends the target visit.
+  const size_t depth = cur_state->call_stack.size();
+  if (
+    !cur_state->witness_target_line.empty() &&
+    (depth < cur_state->witness_target_depth ||
+     (depth == cur_state->witness_target_depth &&
+      (instruction.location.get_line() != cur_state->witness_target_line ||
+       instruction.is_backwards_goto()))))
+  {
+    cur_state->advance_witness_position();
+    cur_state->witness_target_line = irep_idt();
   }
 
   // Remember the first loop we're entering
@@ -1517,7 +1564,8 @@ leak_root_pointers(const expr2tc &root, const std::string &suffix)
 {
   std::vector<expr2tc> sub_exprs = {root};
   std::string rest = suffix;
-  while (!rest.empty())
+  /* A zero-size array, such as a flexible array member, expands to none. */
+  while (!rest.empty() && !sub_exprs.empty())
   {
     /* The suffix consists of a sequence of components, which are either
      * "[]" or ".name" where name is the name of some member of a

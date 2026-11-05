@@ -528,10 +528,13 @@ public:
   /// witness_segs[seg]: all actionable waypoints per segment
   std::vector<std::vector<waypoint>> witness_segs;
   size_t cur_seg;
-  /// Set to true the first time the target assertion is allowed through.
-  /// Subsequent assertions at the target line (from continuation calls after
-  /// the witness call chain returns) are filtered to avoid false positives.
-  bool witness_target_reached;
+  /// The target line once a claim on it is kept, empty otherwise, and the
+  /// call depth of the frame that kept it. Every claim on that line stays live
+  /// until that frame leaves the line, takes a back edge or returns;
+  /// symex_step then moves past the target, so a later visit (loop iteration,
+  /// continuation call) does not re-arm it.
+  irep_idt witness_target_line;
+  size_t witness_target_depth = 0;
 
   /// Pre-built O(1) lookup for branching(cycle) waypoints.
   /// Maps line_id → direction_true (from wp.value == "true").

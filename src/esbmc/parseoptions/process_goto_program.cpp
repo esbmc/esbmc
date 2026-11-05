@@ -424,7 +424,7 @@ bool esbmc_parseoptionst::process_goto_program(
           adv.comment,
           format_cwe_list(cwe_for(adv.comment)));
 
-    lower_longjmp(goto_functions, context, options);
+    lower_longjmp(goto_functions, context);
 
     // Lower throw/catch to symbolic guarded control flow (#5075). Run before
     // inlining so per-call-site exception propagation is still explicit. This
@@ -561,7 +561,11 @@ bool esbmc_parseoptionst::process_goto_program(
       // machinery. Never returns TV_FALSE, so it can only upgrade an
       // UNKNOWN to a proof, never produce a wrong verdict.
       bool ranking_proved = try_prove_termination_by_ranking(
-                              goto_functions, options, ns, terminating_loops)
+                              goto_functions,
+                              options,
+                              ns,
+                              terminating_loops,
+                              ranking_transition_invariants)
                               .is_true();
       options.set_option("termination-ranking-proved", ranking_proved);
 
