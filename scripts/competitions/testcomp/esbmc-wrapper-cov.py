@@ -87,13 +87,17 @@ def run(cmd_line):
     print("[... %d characters of ESBMC output omitted ...]" % (len(text) - MAX_ECHO))
     text = text[-MAX_ECHO:]
   print(text)
-  return out
+  return out.decode(errors="replace")
 
+
+
+FAILED_ROW = re.compile(r"\s+(?:\033\[[0-9;]*m)?FAILED\b")
 
 
 def violated_property_text(the_output):
-    """The "Violated property:" blocks only: since esbmc/esbmc#7064 the
-    "** Results:" table also names properties that passed or were not checked."""
+    """The "Violated property:" blocks and FAILED rows only: since
+    esbmc/esbmc#7064 the "** Results:" table also names properties that passed
+    or were not checked."""
     violated = []
     lines = the_output.splitlines()
     for i, line in enumerate(lines):
@@ -102,6 +106,8 @@ def violated_property_text(the_output):
                 if not body.startswith("  "):
                     break
                 violated.append(body)
+        elif FAILED_ROW.match(line):
+            violated.append(line)
     return "\n".join(violated)
 
 
@@ -182,7 +188,7 @@ def get_command_line(strat, prop, arch, benchmark, concurrency, dargs, coverage)
   command_line = esbmc_path + dargs
 
   # Add benchmark
-  command_line += benchmark + " "
+  command_line += shlex.quote(benchmark) + " "
 
   # Disable clang check
   command_line += "-Wno-incompatible-pointer-types -Wno-int-conversion "
@@ -242,7 +248,7 @@ def get_command_line(strat, prop, arch, benchmark, concurrency, dargs, coverage)
 def verify(strat, prop, arch, benchmark, concurrency, dargs, coverage):
   esbmc_command_line = get_command_line(strat, prop, arch, benchmark, concurrency, dargs, coverage)
   output = run(esbmc_command_line)
-  return parse_result(output.decode(), prop)
+  return parse_result(output, prop)
 
 # Options
 if __name__ == "__main__":
@@ -312,7 +318,8 @@ if __name__ == "__main__":
       print ("Unsupported Property")
       exit(1)
 
-  createTestDir()
+  if not dry_run:
+    createTestDir()
   result = verify(strategy, category_property, arch, benchmark, concurrency, esbmc_dargs, coverage)
   print (get_result_string(result))
 

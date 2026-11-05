@@ -46,6 +46,16 @@ main.c, function main
 VERIFICATION FAILED
 """
 
+# --quiet, which coverage mode passes, drops the counterexample and with it the
+# "Violated property:" block, leaving only the table row.
+QUIET_VIOLATED_UNWINDING = """
+** Results:
+main.c, function main
+  FAILED       [main.assertion.1]  line 42  unwinding assertion loop 3
+
+VERIFICATION FAILED
+"""
+
 SUCCESSFUL = """
 ** Results:
 main.c, function main
@@ -66,6 +76,9 @@ class ParseResult(unittest.TestCase):
 
     def test_violated_unwinding_assertion_is_unknown(self):
         self.assertEqual(verdict(VIOLATED_UNWINDING), "Unknown")
+
+    def test_quiet_violated_unwinding_assertion_is_unknown(self):
+        self.assertEqual(verdict(QUIET_VIOLATED_UNWINDING), "Unknown")
 
     def test_successful_run_is_true(self):
         self.assertEqual(verdict(SUCCESSFUL), "TRUE")
