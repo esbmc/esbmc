@@ -552,6 +552,12 @@ void violation_yaml_goto_trace(
           step.pc->location.get_line().empty() || !step.nondet_dependent)
           break;
 
+        /* A switch would take one waypoint naming the case it enters, but
+           CPAchecker cannot parse any switch waypoint and the format does not
+           require one, so emit none (#9882). */
+        if (!step.pc->switch_case_ids.empty())
+          break;
+
         ++branching_waypoints;
         waypoint wp =
           witness_waypoint(step.pc->location, yml.verified_file, options);
