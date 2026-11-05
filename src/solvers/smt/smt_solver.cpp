@@ -1932,6 +1932,19 @@ void smt_solver_baset::assert_expr(const expr2tc &e)
   assert_ast(convert_ast(e));
 }
 
+void smt_solver_baset::assert_ast(smt_astt a)
+{
+  if (!is_nil_expr(reading_model))
+  {
+    log_error(
+      "Reading the model value of\n{}\nasserted a constraint, which discards "
+      "the model",
+      reading_model->pretty());
+    abort();
+  }
+  assert_ast_in_solver(a);
+}
+
 smt_sortt smt_solver_baset::convert_sort(const type2tc &type)
 {
   smt_sort_cachet::const_iterator it = sort_cache.find(type);
@@ -3435,6 +3448,16 @@ smt_solver_baset::get_index_value(const expr2tc &expr, expr2tc &res)
 
   // Convert the idx, it must be an integer
   expr2tc idx = get(newidx);
+  if (is_constant_int2t(idx) && !has_term(src_value))
+  {
+    expr2tc array = value_of(src_value);
+    if (!is_constant_array2t(array) && !is_constant_array_of2t(array))
+      return std::nullopt;
+    expr2tc elem = index2tc(to_array_type(array->type).subtype, array, idx);
+    simplify(elem);
+    return elem;
+  }
+
   if (is_constant_int2t(idx))
   {
     // Convert the array so we can call the array api
@@ -3460,27 +3483,30 @@ smt_solver_baset::get_index_value(const expr2tc &expr, expr2tc &res)
   return std::nullopt;
 }
 
-/* Sets smt_solver_baset::reading_model for one read; reads nest. */
+/* Marks @p expr as being read from the model; reads nest, and the outermost
+ * one is named. */
 class model_readt
 {
 public:
-  explicit model_readt(bool &flag) : flag(flag), was(flag)
+  model_readt(expr2tc &reading, const expr2tc &expr)
+    : reading(reading), was(reading)
   {
-    flag = true;
+    if (is_nil_expr(reading))
+      reading = expr;
   }
   ~model_readt()
   {
-    flag = was;
+    reading = was;
   }
 
 private:
-  bool &flag;
-  const bool was;
+  expr2tc &reading;
+  const expr2tc was;
 };
 
 expr2tc smt_solver_baset::get(const expr2tc &expr)
 {
-  model_readt reading(reading_model);
+  model_readt reading(reading_model, expr);
 
   if (is_constant_number(expr))
     return expr;
@@ -3960,9 +3986,223 @@ double smt_solver_baset::convert_rational_to_double(
   return result;
 }
 
+bool smt_solver_baset::has_term(const expr2tc &expr)
+{
+  if (is_symbol2t(expr))
+    return true;
+  std::lock_guard lock(smt_cache_mutex);
+  return smt_cache.find(expr) != smt_cache.end();
+}
+
+/* Converting an expression the encoding never saw builds new formula, and some
+ * conversions assert side constraints, which discards the model being read
+ * (#8097). Its value is computed from its operands' values instead, following
+ * what the conversion would have encoded. */
+expr2tc smt_solver_baset::value_of(const expr2tc &expr)
+{
+  if (is_nil_expr(expr) || is_constant_number(expr) || is_address_of2t(expr))
+    return expr;
+
+  if (has_term(expr))
+    return is_index2t(expr) ? get(expr) : get_by_type(expr);
+
+  switch (expr->expr_id)
+  {
+  case expr2t::index_id:
+    if (has_term(to_index2t(expr).source_value))
+      return get(expr);
+    break;
+
+  case expr2t::member_id:
+  {
+    // Read as convert_member() encodes it: a field of the source's tuple, or
+    // the member's bits of the union's.
+    const member2t &member = to_member2t(expr);
+    const expr2tc &source = member.source_value;
+    if (!is_union_type(source))
+    {
+      if (!has_term(source))
+        break;
+      return get_by_ast(
+        expr->type,
+        convert_ast(source)->project(
+          this, get_member_name_field(source->type, member.member)));
+    }
+    const expr2tc bits = bitcast2tc(
+      get_uint_type(type_byte_size_bits(source->type).to_uint64()), source);
+    return value_of(bitcast2tc(
+      expr->type,
+      union_member_bits(bits, type_byte_size_bits(expr->type).to_uint64())));
+  }
+
+  case expr2t::bitcast_id:
+  {
+    const expr2tc &from = to_bitcast2t(expr).from;
+    if (!is_bv_type(from) && !is_union_type(from))
+      break;
+    // A union's term is its bits.
+    const expr2tc bits =
+      is_union_type(from) && has_term(from)
+        ? get_by_ast(
+            get_uint_type(type_byte_size_bits(from->type).to_uint64()),
+            convert_ast(from))
+        : value_of(from);
+    if (!is_constant_int2t(bits))
+      break;
+    expr2tc value = value_from_bits(expr->type, to_constant_int2t(bits).value);
+    if (!is_nil_expr(value))
+      return value;
+    break;
+  }
+
+  case expr2t::typecast_id:
+  {
+    const expr2tc &from = to_typecast2t(expr).from;
+    if (!is_pointer_type(expr) || is_pointer_type(from))
+      break;
+    const expr2tc address = value_of(typecast2tc(ptraddr_type2(), from));
+    if (is_constant_int2t(address))
+      return pointer_at_address(expr->type, to_constant_int2t(address).value);
+    break;
+  }
+
+  case expr2t::if_id:
+  {
+    const if2t &i = to_if2t(expr);
+    const expr2tc cond = value_of(i.cond);
+    if (is_constant_bool2t(cond))
+      return value_of(
+        to_constant_bool2t(cond).value ? i.true_value : i.false_value);
+    break;
+  }
+
+  default:;
+  }
+
+  expr2tc res = expr;
+  res->Foreach_operand([this](expr2tc &e) {
+    if (is_nil_expr(e))
+      return;
+    expr2tc v = value_of(e);
+    if (!is_nil_expr(v))
+      e = v;
+  });
+  simplify(res);
+  return res;
+}
+
+/* Bits [lo, lo + width) of the @p total-bit value @p bits. */
+static BigInt
+bits_at(const BigInt &bits, unsigned total, unsigned lo, unsigned w)
+{
+  return binary2integer(
+    integer2binary(bits, total).substr(total - lo - w, w), false);
+}
+
+/* Inverts the layout convert_bitcast() reads a type out of a bit-vector with;
+ * nil for a type it does not cover. */
+expr2tc
+smt_solver_baset::value_from_bits(const type2tc &type, const BigInt &bits)
+{
+  const unsigned total = type_byte_size_bits(type).to_uint64();
+  auto part = [&](const type2tc &t, unsigned offset) {
+    const unsigned w = type_byte_size_bits(t).to_uint64();
+    if (!w)
+      return gen_zero(t);
+    return value_from_bits(
+      t, bits_at(bits, total, flattened_position(offset, w, total), w));
+  };
+
+  std::vector<expr2tc> parts;
+  switch (type->type_id)
+  {
+  case type2t::pointer_id:
+    return pointer_at_address(type, bits);
+
+  case type2t::struct_id:
+  {
+    const struct_type2t &s = to_struct_type(type);
+    for (size_t i = 0; i < s.members.size(); i++)
+      parts.push_back(part(
+        s.members[i], member_offset_bits(type, s.member_names[i]).to_uint64()));
+    break;
+  }
+
+  case type2t::union_id:
+    // As get_by_ast() reads a union: every member, from the same bits.
+    for (const type2tc &member : to_union_type(type).members)
+      parts.push_back(part(
+        member,
+        lowest_address_high() ? total - type_byte_size_bits(member).to_uint64()
+                              : 0));
+    break;
+
+  case type2t::array_id:
+  {
+    const array_type2t &a = to_array_type(type);
+    if (!is_constant_int2t(a.array_size))
+      return expr2tc();
+    const unsigned w = type_byte_size_bits(a.subtype).to_uint64();
+    for (uint64_t i = 0; i < to_constant_int2t(a.array_size).value.to_uint64();
+         i++)
+      parts.push_back(part(a.subtype, i * w));
+    break;
+  }
+
+  case type2t::signedbv_id:
+    return constant_int2tc(
+      type, binary2integer(integer2binary(bits, total), true));
+
+  case type2t::bool_id:
+  case type2t::unsignedbv_id:
+  case type2t::fixedbv_id:
+  case type2t::floatbv_id:
+    return get_by_value(type, bits);
+
+  default:
+    return expr2tc();
+  }
+
+  for (const expr2tc &p : parts)
+    if (is_nil_expr(p))
+      return expr2tc();
+  if (is_struct_type(type))
+    return constant_struct2tc(type, parts);
+  if (is_union_type(type))
+    return constant_union2tc(type, "", parts);
+  return constant_array2tc(type, parts);
+}
+
+/* What convert_typecast_to_ptr() makes of @p address, in the model: the
+ * registered object whose range holds it, INVALID where none does. */
+expr2tc
+smt_solver_baset::pointer_at_address(const type2tc &type, const BigInt &address)
+{
+  const type2tc int_type = ptraddr_type2();
+  auto bound = [&](const char *which, unsigned id) {
+    expr2tc v = get_by_type(
+      symbol2tc(int_type, fmt::format("__ESBMC_ptr_obj_{}_{}", which, id)));
+    return is_constant_int2t(v) ? to_constant_int2t(v).value : BigInt(-1);
+  };
+
+  const pointer_logict &logic = pointer_logic.back();
+  const unsigned invalid = logic.get_invalid_object();
+  for (const auto &[id, _] : addr_space_data.back())
+  {
+    const BigInt start = bound("start", id);
+    if (id != invalid && start <= address && address <= bound("end", id))
+      return logic.pointer_expr(
+        pointer_logict::pointert(id, address - start), type);
+  }
+  return logic.pointer_expr(
+    pointer_logict::pointert(invalid, address - bound("start", invalid)), type);
+}
+
 expr2tc smt_solver_baset::get_by_type(const expr2tc &expr)
 {
-  model_readt reading(reading_model);
+  model_readt reading(reading_model, expr);
+  if (!has_term(expr))
+    return value_of(expr);
 
   switch (expr->type->type_id)
   {
@@ -4430,8 +4670,14 @@ tvt smt_solver_baset::l_get(smt_astt a)
 tvt smt_solver_baset::l_get(const expr2tc &expr)
 {
   assert(is_bool_type(expr));
-  model_readt reading(reading_model);
-  return l_get(convert_ast(expr));
+  model_readt reading(reading_model, expr);
+  if (has_term(expr))
+    return l_get(convert_ast(expr));
+
+  expr2tc value = value_of(expr);
+  if (is_nil_expr(value) || !is_constant_bool2t(value))
+    return tvt(tvt::TV_UNKNOWN);
+  return tvt(to_constant_bool2t(value).value);
 }
 
 void smt_solver_baset::dump_expr(const expr2tc &expr)
@@ -4441,7 +4687,9 @@ void smt_solver_baset::dump_expr(const expr2tc &expr)
 
 expr2tc smt_solver_baset::get_by_ast(const expr2tc &expr)
 {
-  model_readt reading(reading_model);
+  model_readt reading(reading_model, expr);
+  if (!has_term(expr))
+    return value_of(expr);
   return get_by_ast(expr->type, convert_ast(expr));
 }
 

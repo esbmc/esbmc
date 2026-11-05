@@ -422,15 +422,6 @@ capability_from_components(const expr2tc &pesbt, const expr2tc &cursor)
     "cap");
 }
 
-/** The capability a pointer cast from the integer @p from carries. */
-static expr2tc provenance_of(const expr2tc &from)
-{
-  type2tc int_type = ptraddr_type2();
-  if (can_carry_provenance(from->type))
-    return member2tc(int_type, capability_struct_from_cap(from), "pesbt");
-  return gen_zero(int_type);
-}
-
 smt_astt smt_solver_baset::convert_typecast_to_ptr(const typecast2t &cast)
 {
   // First, sanity check -- typecast from one kind of pointer to another kind
@@ -447,9 +438,6 @@ smt_astt smt_solver_baset::convert_typecast_to_ptr(const typecast2t &cast)
   type2tc int_type = ptraddr_type2();
   smt_sortt int_sort = convert_sort(int_type);
   expr2tc cast_to_unsigned = typecast2tc(int_type, cast.from);
-  if (reading_model)
-    return name_object_by_range(cast, cast_to_unsigned);
-
   smt_astt target = convert_ast(cast_to_unsigned);
 
   // Construct array for all possible object outcomes
@@ -495,7 +483,13 @@ smt_astt smt_solver_baset::convert_typecast_to_ptr(const typecast2t &cast)
   if (config.ansi_c.cheri)
   {
     smt_astt output_cap = output->project(this, 2);
-    smt_astt other_cap_ast = convert_ast(provenance_of(cast.from));
+    expr2tc other_cap;
+    if (can_carry_provenance(cast.from->type))
+      other_cap =
+        member2tc(int_type, capability_struct_from_cap(cast.from), "pesbt");
+    else
+      other_cap = gen_zero(int_type);
+    smt_astt other_cap_ast = convert_ast(other_cap);
     assert_ast(other_cap_ast->eq(this, output_cap));
   }
 
@@ -556,43 +550,6 @@ smt_astt smt_solver_baset::convert_typecast_to_ptr(const typecast2t &cast)
     not_matched,
     mk_and(id->eq(this, output_obj), offs->eq(this, output_offs))));
   return output;
-}
-
-/* The pointer the integer @p target names, as an ite over the registered
- * objects' ranges, INVALID where none holds it: the choice the implications in
- * convert_typecast_to_ptr() force, without asserting anything. A model read
- * needs that, since an assertion discards the model it reads (#8097). The ite
- * is built on ASTs so that no expression nests once per object. */
-smt_astt smt_solver_baset::name_object_by_range(
-  const typecast2t &cast,
-  const expr2tc &target)
-{
-  const type2tc int_type = ptraddr_type2();
-  const struct_type2t &ptr_struct = to_struct_type(pointer_struct);
-  auto bound = [&int_type](const char *which, unsigned id) {
-    return symbol2tc(int_type, fmt::format("__ESBMC_ptr_obj_{}_{}", which, id));
-  };
-  auto pointer_into = [&](unsigned id) {
-    std::vector<expr2tc> members = {
-      constant_int2tc(ptr_struct.members[0], BigInt(id)),
-      sub2tc(int_type, target, bound("start", id))};
-    if (config.ansi_c.cheri)
-      members.push_back(provenance_of(cast.from));
-    return constant_struct2tc(pointer_struct, members);
-  };
-
-  const unsigned invalid = pointer_logic.back().get_invalid_object();
-  smt_astt pointer = convert_ast(pointer_into(invalid));
-  for (const auto &[id, _] : addr_space_data.back())
-  {
-    if (id == invalid)
-      continue;
-    smt_astt in_range = convert_ast(and2tc(
-      lessthanequal2tc(bound("start", id), target),
-      lessthanequal2tc(target, bound("end", id))));
-    pointer = convert_ast(pointer_into(id))->ite(this, in_range, pointer);
-  }
-  return pointer;
 }
 
 /* An integer names one pointer wherever it is converted: its object is a
