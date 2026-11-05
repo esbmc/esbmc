@@ -369,6 +369,19 @@ void collect_generator_names(
   for (const auto &item : node.items())
     collect_generator_names(item.value(), names, ast);
 }
+
+const std::set<std::string> &generator_names_for_ast(const nlohmann::json &ast)
+{
+  static thread_local const nlohmann::json *cached_ast = nullptr;
+  static thread_local std::set<std::string> cached_names;
+  if (cached_ast != &ast)
+  {
+    cached_names.clear();
+    collect_generator_names(ast, cached_names, ast);
+    cached_ast = &ast;
+  }
+  return cached_names;
+}
 } // namespace
 
 bool numpy_random::is_generator_call(
@@ -384,8 +397,7 @@ bool numpy_random::is_generator_call(
     !call["func"]["value"].contains("id") ||
     !call["func"]["value"]["id"].is_string())
     return false;
-  std::set<std::string> names;
-  collect_generator_names(ast, names, ast);
+  const auto &names = generator_names_for_ast(ast);
   return names.count(call["func"]["value"]["id"].get<std::string>()) != 0;
 }
 
