@@ -173,6 +173,10 @@ protected:
   // non-termination witness names it.
   std::optional<locationt> non_termination_loop;
 
+  // Heads of the loops the ranking check proved terminating; the
+  // non-termination witness does not name them.
+  std::vector<locationt> terminating_loops;
+
   // Witness transition invariants (loop head, C expression) from a
   // ranking-function termination proof.
   std::vector<std::pair<locationt, std::string>> ranking_transition_invariants;

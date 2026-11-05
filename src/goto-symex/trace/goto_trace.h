@@ -64,6 +64,10 @@ public:
    * symbol no earlier step computed from constants. */
   bool nondet_dependent = true;
 
+  /* For a branching step: whether it tests one operand of a && or ||
+   * condition, whose own direction is not the condition's. */
+  bool condition_operand = false;
+
   // for assert
   std::string comment;
 
