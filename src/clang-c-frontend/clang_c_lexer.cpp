@@ -24,6 +24,7 @@ CC_DIAGNOSTIC_POP()
 
 #include <clang-c-frontend/clang_c_lexer.h>
 #include <util/arith/arith_tools.h>
+#include <util/arith/ieee_float.h>
 #include <util/lang/c_types.h>
 #include <util/message/message.h>
 
@@ -97,16 +98,60 @@ struct ParseState
   }
 };
 
-expr2tc parse_integer(ParseState &ps)
+/// A decimal floating literal such as 2.5595000e+2f, rounded once to the type
+/// its suffix names, as the frontend does (convert_float_literal).
+expr2tc parse_floating(
+  llvm::StringRef spelling,
+  const clang::NumericLiteralParser &parser,
+  bool neg)
+{
+  if (parser.getRadix() != 10)
+    return expr2tc();
+
+  const type2tc type = parser.isFloat  ? float_type2()
+                       : parser.isLong ? long_double_type2()
+                                       : double_type2();
+  const std::string digits = spelling.lower();
+  auto [mantissa, exp_str] = llvm::StringRef(digits).rtrim("fl").split('e');
+  exp_str.consume_front("+");
+  const auto [whole, frac] = mantissa.split('.');
+
+  BigInt exponent = exp_str.empty() ? BigInt(0) : string2integer(exp_str.str());
+  exponent -= frac.size();
+  BigInt significand = string2integer(whole.str() + frac.str());
+  if (neg)
+    significand = -significand;
+
+  ieee_floatt value{ieee_float_spect(to_floatbv_type(type))};
+  value.from_base10(significand, exponent);
+  return constant_floatbv2tc(value);
+}
+
+/// The INFINITY macro: a float constant (C11 7.12p4).
+expr2tc parse_infinity(ParseState &ps, bool neg)
+{
+  if (
+    !ps.is(clang::tok::raw_identifier) ||
+    ps.cur.getRawIdentifier() != "INFINITY")
+    return expr2tc();
+  ps.advance();
+  ieee_floatt inf = ieee_floatt::plus_infinity(
+    ieee_float_spect(to_floatbv_type(float_type2())));
+  if (neg)
+    inf.negate();
+  return constant_floatbv2tc(inf);
+}
+
+expr2tc parse_number(ParseState &ps)
 {
   bool neg = false;
-  if (ps.is(clang::tok::minus))
+  if (ps.is(clang::tok::minus) || ps.is(clang::tok::plus))
   {
-    neg = true;
+    neg = ps.is(clang::tok::minus);
     ps.advance();
   }
   if (!ps.is(clang::tok::numeric_constant))
-    return expr2tc();
+    return parse_infinity(ps, neg);
 
   clang::Token t = ps.cur;
   ps.advance();
@@ -120,7 +165,11 @@ expr2tc parse_integer(ParseState &ps)
     *ps.ctx.target_info,
     ps.ctx.diags);
 
-  if (parser.hadError || !parser.isIntegerLiteral())
+  if (parser.hadError)
+    return expr2tc();
+  if (parser.isFloatingLiteral())
+    return parse_floating(spelling, parser, neg);
+  if (!parser.isIntegerLiteral())
     return expr2tc();
 
   llvm::APInt val(64, 0);
@@ -177,7 +226,7 @@ expr2tc do_parse_comparison(ParseState &ps)
   }
   ps.advance();
 
-  expr2tc rhs = parse_integer(ps);
+  expr2tc rhs = parse_number(ps);
   if (!rhs)
     return expr2tc();
 

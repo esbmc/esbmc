@@ -6,6 +6,25 @@
 #include <util/base/prefix.h>
 #include <irep2/irep2.h>
 
+/// A float literal compared with \result of another type: C converts both to
+/// the wider floating type, or an integer to the floating one (C11 6.3.1.8).
+static void to_common_float_type(expr2tc &rel)
+{
+  std::vector<expr2tc *> ops;
+  rel->Foreach_operand([&](expr2tc &op) { ops.push_back(&op); });
+  type2tc common;
+  for (const expr2tc *op : ops)
+    if (
+      is_floatbv_type(*op) &&
+      (!common || (*op)->type->get_width() > common->get_width()))
+      common = (*op)->type;
+  if (!common)
+    return;
+  for (expr2tc *op : ops)
+    if ((*op)->type != common)
+      *op = typecast2tc(common, *op);
+}
+
 static void substitute_result(expr2tc &e, const expr2tc &ret_val)
 {
   if (is_symbol2t(e) && to_symbol2t(e).thename == "\\result")
@@ -26,6 +45,8 @@ static void substitute_result(expr2tc &e, const expr2tc &ret_val)
     return;
   }
   e->Foreach_operand([&](expr2tc &op) { substitute_result(op, ret_val); });
+  if (is_comparison_expr(e))
+    to_common_float_type(e);
 }
 
 void goto_symext::symex_witness_function_return(
