@@ -225,12 +225,11 @@ void symex_slicet::run_on_assignment(
     // Should we add nondet to the dependency list (mostly for test cases)?
     if (!slice_nondet)
     {
-      auto expr = get_nondet_symbol(SSA_step.rhs);
-      if (expr && is_symbol2t(expr))
+      if (!get_nondet_symbols(SSA_step.rhs).empty())
       {
-        auto &sym = to_symbol2t(expr);
-        if (has_prefix(sym.thename.as_string(), "nondet$"))
-          return;
+        // The test generator reads the guard to tell whether the call ran.
+        collect_dependencies(SSA_step.guard);
+        return;
       }
     }
 
@@ -439,6 +438,37 @@ bool claim_slicer::run(symex_target_equationt::SSA_stepst &steps)
 
   return true;
 }
+
+std::vector<expr2tc> symex_slicet::get_nondet_symbols(const expr2tc &expr)
+{
+  switch (expr->expr_id)
+  {
+  case expr2t::constant_struct_id:
+  case expr2t::constant_union_id:
+  {
+    std::vector<expr2tc> symbols;
+    expr->foreach_operand([&symbols](const expr2tc &member) {
+      std::vector<expr2tc> nested = get_nondet_symbols(member);
+      symbols.insert(symbols.end(), nested.begin(), nested.end());
+    });
+    return symbols;
+  }
+
+  // e.g. an element of an array of structs: `arr WITH [1:={ .a=nondet0 }]`
+  case expr2t::with_id:
+    return get_nondet_symbols(to_with2t(expr).update_value);
+
+  default:
+  {
+    expr2tc symbol = get_nondet_symbol(expr);
+    if (
+      symbol && has_prefix(to_symbol2t(symbol).thename.as_string(), "nondet$"))
+      return {symbol};
+    return {};
+  }
+  }
+}
+
 // Recursively try to extract the nondet symbol of an expression
 expr2tc symex_slicet::get_nondet_symbol(const expr2tc &expr)
 {
