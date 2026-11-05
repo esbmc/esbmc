@@ -39,10 +39,40 @@ bool program_calls_longjmp(const goto_functionst &goto_functions)
   return false;
 }
 
+bool is_main(const irep_idt &id)
+{
+  return id == "c:@F@main" || has_prefix(id, "c:@F@main#");
+}
+
+bool mentions_main(const expr2tc &e)
+{
+  if (is_nil_expr(e))
+    return false;
+  if (is_symbol2t(e) && is_main(to_symbol2t(e).thename))
+    return true;
+  bool found = false;
+  e->foreach_operand(
+    [&](const expr2tc &op) { found = found || mentions_main(op); });
+  return found;
+}
+
+/// Whether anything but __ESBMC_main can call main (C allows it, C++ does
+/// not), so a frame of main may end while an outer one still has a setjmp.
+bool main_reentrant(const goto_functionst &goto_functions)
+{
+  for (const auto &[id, f] : goto_functions.function_map)
+    if (id != goto_functions.main_id())
+      for (const auto &insn : f.body.instructions)
+        if (mentions_main(insn.code) || mentions_main(insn.guard))
+          return true;
+  return false;
+}
+
 class longjmp_loweringt
 {
 public:
-  explicit longjmp_loweringt(contextt &context) : context(context)
+  longjmp_loweringt(contextt &context, bool check_main)
+    : context(context), check_main(check_main)
   {
   }
 
@@ -67,7 +97,7 @@ public:
 
     auto end = std::prev(body.instructions.end());
     auto epilogue = insert(body, end, end);
-    if (fn == "c:@F@main" || has_prefix(fn, "c:@F@main#"))
+    if (check_main && is_main(fn))
       make_unmatched_check(*epilogue);
     else
       epilogue->make_skip();
@@ -93,6 +123,7 @@ public:
 
 private:
   contextt &context;
+  const bool check_main;
   expr2tc pending, value, token, count;
   unsigned slots = 0;
 
@@ -199,7 +230,7 @@ void lower_longjmp(
     options.get_bool_option("enable-unreachability-intrinsic") ||
     !program_calls_longjmp(goto_functions))
     return;
-  longjmp_loweringt lowering(context);
+  longjmp_loweringt lowering(context, !main_reentrant(goto_functions));
   if (!lowering.find_globals())
     return;
   for (auto &[id, f] : goto_functions.function_map)
