@@ -1004,6 +1004,12 @@ public:
     codet &target_block);
 
 private:
+  /// The type of one literal element; a name whose binding has no static type
+  /// (such as `x or None`) is read at its symbol's type, as the list stored it.
+  typet literal_or_bound_element_type(
+    const nlohmann::json &elem,
+    bool &unresolved_call) const;
+
   /// Emits `size = len(list_expr)` and a ValueError unless it fits @p fixed
   /// targets (at least @p fixed when @p starred); returns the size.
   exprt check_unpack_length(
