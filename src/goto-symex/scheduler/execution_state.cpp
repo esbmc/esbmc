@@ -884,6 +884,12 @@ unsigned int execution_statet::add_thread(const goto_programt *prog)
   new_state.guard = cur_state->guard;
   new_state.global_guard.make_true();
   new_state.global_guard.add(get_guard_identifier());
+  // ponytail: each thread then tracks witness progress on its own; one
+  // sequence shared by all threads would follow the global interleaving.
+  new_state.witness_segs = cur_state->witness_segs;
+  new_state.cur_seg = cur_state->cur_seg;
+  new_state.witness_guard = cur_state->witness_guard;
+  new_state.cycle_branch_map = cur_state->cycle_branch_map;
   threads_state.push_back(new_state);
   if (threads_state.size() > art1->reduction_stats.peak_threads)
     art1->reduction_stats.peak_threads = threads_state.size();
