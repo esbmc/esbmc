@@ -200,6 +200,8 @@ void goto_symext::symex_witness_assert(
 {
   if (
     !validate_witness || has_prefix(msg, "unwinding assertion loop") ||
+    msg == "recursion unwinding assertion" ||
+    has_prefix(msg, "uncontrolled recursion") ||
     has_prefix(msg, "termination per-loop marker") ||
     has_prefix(msg, "termination abort-call marker"))
     return;
