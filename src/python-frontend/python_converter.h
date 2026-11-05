@@ -1194,6 +1194,9 @@ private:
   static bool is_pure_read(const nlohmann::json &node);
   exprt
   get_len_on_list_element(const nlohmann::json &arg, const locationt &location);
+  exprt get_len_on_bound_instance(
+    const nlohmann::json &arg,
+    const nlohmann::json &element);
   static exprt list_element_type_id(const exprt &value);
   std::size_t count_user_classes();
   exprt checked_len_result(const exprt &len_call, const locationt &location);
@@ -1856,6 +1859,11 @@ private:
     const std::pair<bool, std::string> &stored);
   /// @p class_name and every class in the file that derives from it.
   std::set<std::string> subclasses(const std::string &class_name) const;
+  /// The class that @p class_name and all its subclasses resolve @p m to: ""
+  /// when none resolves it, nullopt when they differ or an MRO is unknown.
+  std::optional<std::string> family_method_owner(
+    const std::string &class_name,
+    const std::string &m) const;
   std::optional<std::pair<bool, std::string>> stored_function(
     const nlohmann::json &target,
     const nlohmann::json &value,
@@ -3578,6 +3586,8 @@ private:
   /// True when @p value_node denotes a user-defined class instance, as opposed
   /// to a model container that merely resolves to a class name.
   bool is_class_instance(const nlohmann::json &value_node);
+  /// The user class a Name's symbol is bound to, or "" when it is none.
+  std::string bound_class_name(const nlohmann::json &value_node);
   bool has_dunder_method(
     const nlohmann::json &value_node,
     const std::string &dunder_name);
