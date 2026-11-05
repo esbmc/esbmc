@@ -1,0 +1,2 @@
+regression/esbmc/havoc_object_pointer_targets
+regression/esbmc/havoc_object_pointer_targets_fail

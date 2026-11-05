@@ -379,6 +379,32 @@ static void adopt_target_layout(const clang::TargetInfo &target)
     target.useZeroLengthBitfieldAlignment() || target.getTriple().isOSWindows();
 }
 
+static bool is_parsed_constraint(const waypoint &wp)
+{
+  return wp.type == waypoint::function_return ||
+         wp.format == "ext_c_expression" || wp.format == "acsl_expression";
+}
+
+static void parse_witness_constraints(std::vector<waypoint> &waypoints)
+{
+  clang_c_lexert lexer;
+  for (auto &wp : waypoints)
+  {
+    if (!is_parsed_constraint(wp))
+      continue;
+    expr2tc e = lexer.parse_expr(wp.value);
+    if (!e)
+    {
+      log_error(
+        "witness: could not parse constraint '{}'; witness is invalid",
+        wp.value);
+      abort();
+    }
+    wp.parsed_cond.expr = e;
+    wp.parsed_cond.valid = true;
+  }
+}
+
 bool clang_c_languaget::parse(const std::string &path)
 {
   // preprocessing
@@ -416,25 +442,7 @@ bool clang_c_languaget::parse(const std::string &path)
     const std::string witness_path = config.options.get_option("witness");
     auto &waypoints = yaml_parser::get_waypoints(witness_path);
     yaml_parser::fill_columns(actual_path, waypoints);
-    clang_c_lexert lexer;
-    for (auto &wp : waypoints)
-    {
-      if (wp.format != "ext_c_expression" && wp.format != "acsl_expression")
-        continue;
-      expr2tc e = lexer.parse_expr(wp.value);
-      if (e)
-      {
-        wp.parsed_cond.expr = e;
-        wp.parsed_cond.valid = true;
-      }
-      else
-      {
-        log_error(
-          "witness: could not parse constraint '{}'; witness is invalid",
-          wp.value);
-        abort();
-      }
-    }
+    parse_witness_constraints(waypoints);
     std::string content =
       yaml_parser::build_violation_witness_source(actual_path, path, waypoints);
     if (!content.empty())

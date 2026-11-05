@@ -596,6 +596,7 @@ class ModuleRewriteMixin:
         self._scan_subscript_stored_values(node)
         self.variable_names = self._variable_names(node)
         self.scope_binding_counts = self._scope_binding_counts(node)
+        self.unscoped_binding_names = self._unscoped_binding_names(node)
 
         self._scan_shadowed_nondet_collections(node)
         self._scan_imported_module_names(node)
