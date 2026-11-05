@@ -2064,8 +2064,12 @@ constant_subscript_element(const nlohmann::json &node)
   return i >= 0 && i < size ? &elts[i] : nullptr;
 }
 
-void python_converter::fold_class_subscript(nlohmann::json &operand)
+void python_converter::fold_class_subscript(
+  const std::string &cmp,
+  nlohmann::json &operand)
 {
+  if (cmp != "Is" && cmp != "IsNot")
+    return;
   const nlohmann::json *element = constant_subscript_element(operand);
   if (!element)
     return;
@@ -2103,11 +2107,8 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
   if (element.contains("ops") && element["ops"].size() == 1)
   {
     const std::string cmp = element["ops"][0]["_type"];
-    if (cmp == "Is" || cmp == "IsNot")
-    {
-      fold_class_subscript(left);
-      fold_class_subscript(right);
-    }
+    fold_class_subscript(cmp, left);
+    fold_class_subscript(cmp, right);
     if (cmp == "Is" || cmp == "IsNot" || cmp == "Eq" || cmp == "NotEq")
       type_compared_operands_ = {&left, &right};
   }
