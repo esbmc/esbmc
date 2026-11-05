@@ -3428,6 +3428,7 @@ tvt try_prove_termination_by_ranking(
   goto_functionst &goto_functions,
   optionst &options,
   const namespacet &ns,
+  std::vector<locationt> &terminating_loops,
   std::vector<std::pair<locationt, std::string>> &transition_invariants)
 {
   // Classify recursion. Mutual recursion / function pointers are out of
@@ -3476,6 +3477,7 @@ tvt try_prove_termination_by_ranking(
     }
   }
 
+  bool all_proved = true;
   Forall_goto_functions (f_it, goto_functions)
   {
     if (!f_it->second.body_available)
@@ -3546,12 +3548,16 @@ tvt try_prove_termination_by_ranking(
           skip.by_head_locnum.insert(kv);
 
       ranking_loopt rl;
-      if (!recognize_loop(loop, f_it->second.body, rl, &goto_functions, &skip))
-        return tvt(tvt::TV_UNKNOWN);
       std::vector<expr2tc> measures;
-      if (!prove_loop_terminates(
-            rl, f_it->second.body, options, ns, measures, &skip))
-        return tvt(tvt::TV_UNKNOWN);
+      if (
+        !recognize_loop(loop, f_it->second.body, rl, &goto_functions, &skip) ||
+        !prove_loop_terminates(
+          rl, f_it->second.body, options, ns, measures, &skip))
+      {
+        all_proved = false;
+        continue;
+      }
+      terminating_loops.push_back(loop.get_original_loop_head()->location);
 
       // A transition invariant compares against every earlier state at the
       // loop head, so the measure alone holds only for a loop entered once.
@@ -3577,5 +3583,5 @@ tvt try_prove_termination_by_ranking(
   // All loops proven terminating. With recursion ruled out above and
   // every natural loop ranked, no non-termination source remains
   // (vacuously true if there are no loops).
-  return tvt(tvt::TV_TRUE);
+  return all_proved ? tvt(tvt::TV_TRUE) : tvt(tvt::TV_UNKNOWN);
 }
