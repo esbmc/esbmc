@@ -224,10 +224,8 @@ bool is_valid_witness_step(const namespacet &ns, const goto_trace_stept &step);
  * will return the lhs and rhs formated in a way expected
  * by the assumption field.
  */
-std::string get_formated_assignment(
-  const namespacet &ns,
-  const goto_trace_stept &step,
-  bool yaml);
+std::string
+get_formated_assignment(const namespacet &ns, const goto_trace_stept &step);
 
 /**
  * Clear an assumption a witness validator would reject: one naming an
@@ -239,12 +237,24 @@ bool is_valid_witness_expr(
   const namespacet &ns,
   const irep_container<expr2t> &exp);
 
+/// The ')' of the __VERIFIER_nondet_*() call starting at @p call, read from
+/// the source; nullopt when the text there is not such a call. A YAML
+/// function_return waypoint sits on it (#9881).
+std::optional<locationt> nondet_call_rparen(const locationt &call);
+
 BigInt get_line_number(
   const std::string &verified_file,
   BigInt relative_line_number,
   optionst &options);
 
 int generate_sha256_hash_for_file(const char *path, std::string &output);
+
+/// A check raised in a controlling expression, a return expression or an
+/// initialiser carries the location of the enclosing statement or
+/// declaration. A target waypoint sits on the first character of the full
+/// expression instead (Witness-Format.md, "Target"), so read its start from
+/// the source; @p loc unchanged when it does not start such a construct.
+locationt full_expression_start(const locationt &loc);
 
 std::string
 get_invariant(std::string verified_file, BigInt line_number, optionst &options);

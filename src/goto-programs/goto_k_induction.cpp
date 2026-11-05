@@ -187,6 +187,25 @@ std::vector<expr2tc> ordered(const loopst::loop_varst &vars)
   return ordered;
 }
 
+/// What the inductive step havocs for the modified variables of \p loop: a
+/// symbol the loop writes only through member chains is replaced by them.
+std::vector<expr2tc> havoc_targets(const loopst &loop)
+{
+  std::vector<expr2tc> targets;
+  for (const expr2tc &var : ordered(loop.get_modified_loop_vars()))
+  {
+    const loopst::loop_varst *partial = loop.partial_writes(var);
+    if (!partial)
+    {
+      targets.push_back(var);
+      continue;
+    }
+    const std::vector<expr2tc> chains = ordered(*partial);
+    targets.insert(targets.end(), chains.begin(), chains.end());
+  }
+  return targets;
+}
+
 using pinst = std::vector<std::pair<expr2tc, expr2tc>>;
 
 /// What the inductive step havocs at a loop head and on each other edge into
@@ -1898,7 +1917,7 @@ bool havoc_loop(
   if (loop.get_modified_loop_vars().empty() && through.empty())
     return covered;
 
-  havocst havocs{ordered(through), ordered(loop.get_modified_loop_vars()), {}};
+  havocst havocs{ordered(through), havoc_targets(loop), {}};
   if (loop.writes_through_pointer() && !pin_havoced_pointers(w, havocs.pins))
     covered = false;
   // Symex answers the call by name, but goto_loopst, for the loops still to

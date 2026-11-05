@@ -3,7 +3,12 @@
 #include <util/base/filesystem.h>
 #include <ac_config.h>
 #include <boost/property_tree/ptree.hpp>
+#include <cctype>
+#include <cstring>
 #include <fstream>
+#include <optional>
+#include <regex>
+#include <unordered_map>
 #include <langapi/languages.h>
 #include <irep2/irep2.h>
 #include <solvers/smt/smt_conv.h>
@@ -220,11 +225,13 @@ void create_waypoint(const waypoint &wp, YAML::Emitter &waypoint)
   }
   else if (wp.type == waypoint::function_return)
   {
+    // Format 2.1 requires ext_c_expression (or acsl_expression) here, unlike
+    // the other waypoints; witnesslint rejects c_expression (#9687).
     waypoint << YAML::Key << "constraint" << YAML::Value << YAML::BeginMap;
     waypoint << YAML::Key << "value" << YAML::Value << YAML::DoubleQuoted
              << wp.value;
     waypoint << YAML::Key << "format" << YAML::Value << YAML::DoubleQuoted
-             << "c_expression";
+             << "ext_c_expression";
     waypoint << YAML::EndMap;
   }
   else if (wp.type == waypoint::branching)
@@ -979,10 +986,8 @@ void check_replace_invalid_assignment(std::string &assignment)
     assignment.clear();
 }
 
-std::string get_formated_assignment(
-  const namespacet &ns,
-  const goto_trace_stept &step,
-  bool yaml)
+std::string
+get_formated_assignment(const namespacet &ns, const goto_trace_stept &step)
 {
   std::string assignment = "";
   if (
@@ -993,8 +998,7 @@ std::string get_formated_assignment(
     assignment += from_expr(ns, "", step.lhs, presentationt::WITNESS);
     assignment += " == ";
     assignment += from_expr(ns, "", step.value, presentationt::WITNESS);
-    if (!yaml)
-      assignment += ";";
+    assignment += ";";
 
     std::replace(assignment.begin(), assignment.end(), '$', '_');
     check_replace_invalid_assignment(assignment);
@@ -1064,6 +1068,49 @@ BigInt get_line_number(
   return line_count;
 }
 
+std::optional<locationt> nondet_call_rparen(const locationt &call)
+{
+  // One cached copy per source file, never freed; witnesses read few files.
+  static std::unordered_map<std::string, std::vector<std::string>> files;
+  const std::string file = call.get_file().as_string();
+  const size_t line = std::atoi(call.get_line().c_str());
+  const size_t column = std::atoi(call.get_column().c_str());
+  if (file.empty() || line == 0 || column == 0)
+    return std::nullopt;
+  auto [it, fresh] = files.try_emplace(file);
+  if (fresh)
+  {
+    std::ifstream in(file);
+    for (std::string text; std::getline(in, text);)
+      it->second.push_back(text);
+  }
+  const std::vector<std::string> &lines = it->second;
+  if (line > lines.size() || column > lines[line - 1].size())
+    return std::nullopt;
+
+  static const std::regex head(R"(^\w*nondet\w*\s*\()");
+  std::smatch m;
+  const std::string rest = lines[line - 1].substr(column - 1);
+  if (!std::regex_search(rest, m, head))
+    return std::nullopt;
+
+  // The calls take no arguments: the ')' is the next non-blank character.
+  size_t c = column - 1 + m.length(0);
+  for (size_t l = line - 1; l < lines.size(); ++l, c = 0)
+  {
+    const size_t p = lines[l].find_first_not_of(" \t", c);
+    if (p == std::string::npos)
+      continue;
+    if (lines[l][p] != ')')
+      return std::nullopt;
+    locationt rparen = call;
+    rparen.set_line(l + 1);
+    rparen.set_column(p + 1);
+    return rparen;
+  }
+  return std::nullopt;
+}
+
 std::string read_line(std::string file, BigInt line_number)
 {
   std::string line;
@@ -1079,6 +1126,93 @@ std::string read_line(std::string file, BigInt line_number)
     }
   }
   return line_code;
+}
+
+locationt full_expression_start(const locationt &loc)
+{
+  const size_t line = std::atoi(loc.get_line().c_str());
+  const size_t column = std::atoi(loc.get_column().c_str());
+  if (line == 0 || column == 0)
+    return loc;
+
+  /* Only a start on the same line is taken: CPAchecker resolves a target
+     through a statement starting on its line and fails without one, so a
+     condition on a later line, e.g. a do-while's, keeps its statement. */
+  const std::string src = read_line(loc.get_file().as_string(), line);
+  const size_t i = column - 1;
+  if (i >= src.size())
+    return loc;
+
+  const auto skip_ws = [&](size_t p) {
+    return p >= src.size() ? std::string::npos
+                           : src.find_first_not_of(" \t\r", p);
+  };
+  const auto is_ident = [&](size_t p) {
+    return p < src.size() &&
+           (std::isalnum(static_cast<unsigned char>(src[p])) || src[p] == '_');
+  };
+  // The first of @p stops at bracket depth 0 from @p p on.
+  const auto find_top = [&](size_t p, const char *stops) {
+    for (int depth = 0; p < src.size(); ++p)
+    {
+      if (depth == 0 && std::strchr(stops, src[p]))
+        return p;
+      if (std::strchr("([{", src[p]))
+        ++depth;
+      else if (std::strchr(")]}", src[p]) && --depth < 0)
+        break;
+    }
+    return std::string::npos;
+  };
+  const auto after_lparen = [&](size_t p) {
+    p = skip_ws(p);
+    return p != std::string::npos && src[p] == '(' ? skip_ws(p + 1)
+                                                   : std::string::npos;
+  };
+
+  size_t end = i;
+  while (is_ident(end))
+    ++end;
+  const std::string word = src.substr(i, end - i);
+
+  size_t p = std::string::npos;
+  if (word == "if" || word == "while" || word == "switch")
+    p = after_lparen(end);
+  else if (word == "for")
+  {
+    // A check at `for` belongs to the condition: the clauses around it carry
+    // their own locations.
+    p = find_top(after_lparen(end), ";");
+    p = p == std::string::npos ? p : skip_ws(p + 1);
+  }
+  else if (word == "return")
+    p = skip_ws(end);
+  else if (!word.empty())
+  {
+    // Two adjacent identifiers start a declaration (`T x = e;`, `T *x = e;`);
+    // its full expression is the initialiser. With several declarators the
+    // check's own one is unknown, so those keep the declaration.
+    size_t q = src.find_first_not_of(" \t*", end);
+    if (
+      q != end && is_ident(q) &&
+      !std::isdigit(static_cast<unsigned char>(src[q])))
+    {
+      const size_t eq = find_top(q, "=,;");
+      const size_t semi = eq == std::string::npos ? eq : find_top(eq + 1, ",;");
+      // `x * y == z;` is an expression statement.
+      if (
+        semi != std::string::npos && src[eq] == '=' && src[semi] == ';' &&
+        src[eq + 1] != '=' && !std::strchr("!<>", src[eq - 1]))
+        p = skip_ws(eq + 1);
+    }
+  }
+
+  if (p == std::string::npos || std::strchr(";)", src[p]))
+    return loc;
+
+  locationt start = loc;
+  start.set_column(p + 1);
+  return start;
 }
 
 static const std::regex regex_invariants(

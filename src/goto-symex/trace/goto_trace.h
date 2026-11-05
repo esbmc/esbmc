@@ -91,6 +91,12 @@ public:
   };
   std::optional<accesst> racing_access;
 
+  /* The nondet calls made since the previous step, this one included: each
+   * call's ')' paired with the value it returned. A call nested in an
+   * expression returns into a hidden temporary with no step of its own, so a
+   * witness has nothing else to record it from (#9881). */
+  std::list<std::pair<locationt, expr2tc>> nondet_returns;
+
   // for OUTPUT
   std::string format_string;
   std::list<expr2tc> output_args;
