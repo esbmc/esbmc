@@ -20,6 +20,13 @@ static void to_common_float_type(expr2tc &rel)
       common = (*op)->type;
   if (!common)
     return;
+  // A pointer or aggregate result never equals a float.
+  for (const expr2tc *op : ops)
+    if (!is_number_type(*op))
+    {
+      rel = gen_false_expr();
+      return;
+    }
   for (expr2tc *op : ops)
     if ((*op)->type != common)
       *op = typecast2tc(common, *op);

@@ -98,22 +98,29 @@ struct ParseState
   }
 };
 
-/// A decimal floating literal such as 2.5595000e+2f, rounded once to the type
-/// its suffix names, as the frontend does (convert_float_literal).
+/// A decimal floating literal such as 2.5595000e+2f, rounded to the type its
+/// suffix names.
 expr2tc parse_floating(
   llvm::StringRef spelling,
   const clang::NumericLiteralParser &parser,
   bool neg)
 {
-  if (parser.getRadix() != 10)
-    return expr2tc();
-
   const type2tc type = parser.isFloat  ? float_type2()
                        : parser.isLong ? long_double_type2()
                                        : double_type2();
-  const std::string digits = spelling.lower();
-  auto [mantissa, exp_str] = llvm::StringRef(digits).rtrim("fl").split('e');
+  const std::string lower = spelling.lower();
+  const llvm::StringRef digits = llvm::StringRef(lower).rtrim("fl");
+  // Other suffixes (q, f16, i) and hex floats are not read.
+  if (
+    parser.getRadix() != 10 || !is_floatbv_type(type) ||
+    digits.find_first_not_of("0123456789.e+-") != llvm::StringRef::npos)
+    return expr2tc();
+
+  auto [mantissa, exp_str] = digits.split('e');
   exp_str.consume_front("+");
+  // Beyond any format's range; from_base10 would compute 5^exponent.
+  if (exp_str.ltrim('-').size() > 4)
+    return expr2tc();
   const auto [whole, frac] = mantissa.split('.');
 
   BigInt exponent = exp_str.empty() ? BigInt(0) : string2integer(exp_str.str());
@@ -132,7 +139,7 @@ expr2tc parse_infinity(ParseState &ps, bool neg)
 {
   if (
     !ps.is(clang::tok::raw_identifier) ||
-    ps.cur.getRawIdentifier() != "INFINITY")
+    ps.cur.getRawIdentifier() != "INFINITY" || !is_floatbv_type(float_type2()))
     return expr2tc();
   ps.advance();
   ieee_floatt inf = ieee_floatt::plus_infinity(
