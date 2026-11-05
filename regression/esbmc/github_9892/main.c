@@ -1,22 +1,16 @@
-/* #9892: the flexible array member gives `g` a value-set entry with suffix
- * ".fam[].p", and enumerating the pointers it names crashed. */
+/* #9892: a pointer stored into a flexible array member of a global. */
 #include <stdlib.h>
-
-struct slot
-{
-  void *p;
-};
-
-struct info
-{
-  void *keep;
-  struct slot fam[];
-};
-
-struct info g;
-
+int nondet_int(void);
+struct E { int *p; };
+struct S { int n; struct E arr[]; };
+struct S g;
+int *h;
 int main()
 {
-  g.keep = malloc(4);
+  int *q = malloc(sizeof(int));
+  h = q;
+  int x = nondet_int();
+  if (x > 0 && x < 0)
+    g.arr[0].p = q;
   return 0;
 }
