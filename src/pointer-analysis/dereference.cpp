@@ -846,7 +846,7 @@ static bool has_field_at(
     return false;
   }
 
-  if (is_array_type(t) && !to_array_type(t).size_is_infinite)
+  if (is_array_type(t) && is_constant_int2t(to_array_type(t).array_size))
   {
     const type2tc &sub = to_array_type(t).subtype;
     const BigInt sub_size = type_byte_size_bits(sub, &ns);
