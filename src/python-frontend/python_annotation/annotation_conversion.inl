@@ -893,7 +893,35 @@ std::string python_annotation<Json>::get_call_type(const Json &arg)
     }
   }
 
-  return "";
+  return module_call_type(arg);
+}
+
+/// The type a call of an imported module's function, such as
+/// random.randint(a, b), returns, or "" when unknown. Without it a parameter
+/// fed the call directly stays `void *` (#9816).
+template <class Json>
+std::string python_annotation<Json>::module_call_type(const Json &call)
+{
+  const Json &func = call["func"];
+  if (
+    func["_type"] != "Attribute" || func["value"].value("_type", "") != "Name")
+    return "";
+  // numpy calls build arrays, which the converter types on its own.
+  const std::string module = func["value"]["id"].template get<std::string>();
+  if (
+    !is_imported_name(module) ||
+    is_imported_numpy_module_alias(
+      static_cast<const nlohmann::json &>(ast_), module))
+    return "";
+  try
+  {
+    const std::string type = get_type_from_method(call);
+    return type == "Any" ? "" : type;
+  }
+  catch (std::runtime_error &)
+  {
+    return "";
+  }
 }
 
 /// The type a subscripted annotation spells. get_annotation_type_name flattens
