@@ -3460,8 +3460,28 @@ smt_solver_baset::get_index_value(const expr2tc &expr, expr2tc &res)
   return std::nullopt;
 }
 
+/* Sets smt_solver_baset::reading_model for one read; reads nest. */
+class model_readt
+{
+public:
+  explicit model_readt(bool &flag) : flag(flag), was(flag)
+  {
+    flag = true;
+  }
+  ~model_readt()
+  {
+    flag = was;
+  }
+
+private:
+  bool &flag;
+  const bool was;
+};
+
 expr2tc smt_solver_baset::get(const expr2tc &expr)
 {
+  model_readt reading(reading_model);
+
   if (is_constant_number(expr))
     return expr;
 
@@ -3942,6 +3962,8 @@ double smt_solver_baset::convert_rational_to_double(
 
 expr2tc smt_solver_baset::get_by_type(const expr2tc &expr)
 {
+  model_readt reading(reading_model);
+
   switch (expr->type->type_id)
   {
   case type2t::bool_id:
@@ -4408,6 +4430,7 @@ tvt smt_solver_baset::l_get(smt_astt a)
 tvt smt_solver_baset::l_get(const expr2tc &expr)
 {
   assert(is_bool_type(expr));
+  model_readt reading(reading_model);
   return l_get(convert_ast(expr));
 }
 
@@ -4418,6 +4441,7 @@ void smt_solver_baset::dump_expr(const expr2tc &expr)
 
 expr2tc smt_solver_baset::get_by_ast(const expr2tc &expr)
 {
+  model_readt reading(reading_model);
   return get_by_ast(expr->type, convert_ast(expr));
 }
 

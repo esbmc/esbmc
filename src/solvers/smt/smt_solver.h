@@ -976,6 +976,7 @@ public:
   smt_astt convert_typecast_to_ints_from_bool(const typecast2t &cast);
   /** Typecast something (i.e. an integer) to a pointer */
   smt_astt convert_typecast_to_ptr(const typecast2t &cast);
+  smt_astt name_object_by_range(const typecast2t &cast, const expr2tc &target);
   smt_astt name_object_by_value(
     const expr2tc &ptr,
     const expr2tc &target,
@@ -1137,6 +1138,9 @@ public:
    *  rather than keying it: the same bit-vector reads differently as signed
    *  or unsigned. */
   std::unordered_map<smt_astt, std::pair<type2tc, expr2tc>> get_ast_cache;
+  /** Set while get() and friends read the model. Conversion must then assert
+   *  nothing: an assertion discards the model being read. */
+  bool reading_model = false;
   /** Pointer_logict object, which contains some code for formatting how
    *  pointers are displayed in counter-examples. This is a list so that we
    *  can push and pop data when context push/pop operations occur. */
