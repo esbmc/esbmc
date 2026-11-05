@@ -32,6 +32,8 @@ CC_DIAGNOSTIC_POP()
 #include <clang-c-frontend/AST/build_ast.h>
 #include <clang-c-frontend/AST/vfs_adapter.h>
 #include <clang-c-frontend/AST/vfs_paths.h>
+#include <algorithm>
+#include <regex>
 
 /// Builds a clang driver initialized for running clang tools.
 static clang::driver::Driver *newDriver(
@@ -58,6 +60,34 @@ static clang::driver::Driver *newDriver(
   CompilerDriver->setTitle("clang_based_tool");
 #endif
   return CompilerDriver;
+}
+
+/* clang refuses to redeclare a builtin taking a va_list by reference
+ * (Builtin::Context::canBeRedeclared), a hard error no flag relaxes. CIL output
+ * still prototypes them on one line, which GCC accepts (#9894):
+ *   void __builtin_va_copy(__builtin_va_list, __builtin_va_list);
+ * The builtin is declared implicitly, so blank such lines out, keeping lines
+ * and columns. Returns whether \p src changed. */
+static bool blank_va_builtin_prototypes(std::string &src)
+{
+  static const std::regex prototype(
+    R"(\s*(extern\s+)?void\s+__builtin_va_(start|end|copy)\s*\([^;{}]*\)\s*;\s*)");
+  bool changed = false;
+  for (size_t at = src.find("__builtin_va_"); at != std::string::npos;
+       at = src.find("__builtin_va_", at))
+  {
+    const size_t bol = src.rfind('\n', at) + 1;
+    const size_t eol = std::min(src.find('\n', at), src.size());
+    at = eol;
+    // libstdc++'s regex recurses per character: keep long lines away from it.
+    if (
+      eol - bol > 256 ||
+      !std::regex_match(src.begin() + bol, src.begin() + eol, prototype))
+      continue;
+    std::fill(src.begin() + bol, src.begin() + eol, ' ');
+    changed = true;
+  }
+  return changed;
 }
 
 std::unique_ptr<clang::ASTUnit> buildASTs(
@@ -160,6 +190,19 @@ std::unique_ptr<clang::ASTUnit> buildASTs(
     llvm::MemoryBuffer::getMemBufferCopy(intrinsics, intrinsics_path)
       .release());
   PPOpts.Includes.insert(PPOpts.Includes.begin(), intrinsics_path);
+
+  for (const clang::FrontendInputFile &input :
+       Invocation->getFrontendOpts().Inputs)
+  {
+    auto buffer = Files->getBufferForFile(input.getFile());
+    if (!buffer)
+      continue;
+    std::string src = (*buffer)->getBuffer().str();
+    if (blank_va_builtin_prototypes(src))
+      PPOpts.addRemappedFile(
+        input.getFile(),
+        llvm::MemoryBuffer::getMemBufferCopy(src, input.getFile()).release());
+  }
 
   // Create ASTUnit
   std::unique_ptr<clang::ASTUnit> unit(
