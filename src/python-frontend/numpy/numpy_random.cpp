@@ -979,10 +979,7 @@ void numpy_random::validate_randint()
   const bool integers = name_ == "integers";
   const bool has_high = values_.count("high") != 0;
   if (!values_.count("high"))
-    raise_if(
-      rel(value("low"), "<=", zero),
-      "ValueError",
-      integers ? "high <= 0" : "high <= 0");
+    raise_if(rel(value("low"), "<=", zero), "ValueError", "high <= 0");
   else
   {
     const exprt upper =
