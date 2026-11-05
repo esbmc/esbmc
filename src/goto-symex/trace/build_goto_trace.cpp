@@ -48,17 +48,6 @@ expr2tc build_lhs(smt_convt &smt_conv, const expr2tc &lhs)
   return new_lhs;
 }
 
-expr2tc build_rhs(smt_convt &smt_conv, const expr2tc &rhs)
-{
-  if (is_nil_expr(rhs) || is_constant_expr(rhs))
-    return rhs;
-
-  auto new_rhs = smt_conv.get(rhs);
-  renaming::renaming_levelt::get_original_name(
-    new_rhs, symbol_renaming_level::level0);
-  return new_rhs;
-}
-
 /* Whether the model produced @p e rather than symex propagating it:
  * is_constant_expr is syntactic and admits aggregates with symbolic
  * elements. */
@@ -82,6 +71,17 @@ static bool is_model_value(const expr2tc &e)
       resolved = false;
   });
   return resolved;
+}
+
+expr2tc build_rhs(smt_convt &smt_conv, const expr2tc &rhs)
+{
+  if (is_nil_expr(rhs) || is_model_value(rhs))
+    return rhs;
+
+  auto new_rhs = smt_conv.get(rhs);
+  renaming::renaming_levelt::get_original_name(
+    new_rhs, symbol_renaming_level::level0);
+  return new_rhs;
 }
 
 /* Rebuild the source lvalue @p lvalue over @p ssa_lhs, the SSA symbol holding
