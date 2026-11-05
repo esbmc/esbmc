@@ -52,8 +52,7 @@ goto_symex_statet &goto_symex_statet::operator=(const goto_symex_statet &state)
   call_stack = state.call_stack;
   witness_segs = state.witness_segs;
   cur_seg = state.cur_seg;
-  witness_target_line = state.witness_target_line;
-  witness_target_depth = state.witness_target_depth;
+  witness_guard = state.witness_guard;
   cycle_branch_map = state.cycle_branch_map;
   return *this;
 }
@@ -1321,4 +1320,5 @@ void goto_symex_statet::advance_witness_position()
 {
   if (cur_seg < witness_segs.size())
     ++cur_seg;
+  witness_guard.add(guard.as_expr());
 }

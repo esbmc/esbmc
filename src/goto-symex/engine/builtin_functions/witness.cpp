@@ -214,13 +214,12 @@ void goto_symext::symex_witness_assert(
         break;
       }
 
+  // A final segment matches a violation on any visit to the target, not only
+  // the first (sv-witnesses Witness-Format.md, "Matching a Final Segment").
   if (
     !target_wp ||
     cur_state->source.pc->location.get_line() != target_wp->line_id)
     new_expr = gen_true_expr();
-  else if (cur_state->witness_target_line.empty())
-  {
-    cur_state->witness_target_line = target_wp->line_id;
-    cur_state->witness_target_depth = cur_state->call_stack.size();
-  }
+  else
+    cur_state->witness_guard.guard_expr(new_expr);
 }
