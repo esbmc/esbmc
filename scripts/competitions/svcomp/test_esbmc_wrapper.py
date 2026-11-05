@@ -227,6 +227,40 @@ list.c, function __ESBMC_list_size
 VERIFICATION FAILED
 """
 
+# The trace prints the program's own output unindented, between states.
+PROGRAM_PRINTS_BEFORE_LEAK = """
+[Counterexample]
+
+
+State 2 file main.c line 5 column 3 function main thread 0
+----------------------------------------------------
+  p = 0
+{}
+
+
+State 5 file main.c line 14 column 1 function main thread 0
+----------------------------------------------------
+Violated property:
+  file main.c line 14 column 1 function main
+  dereference failure: forgotten memory: dynamic_1_array
+  CWE: CWE-401
+
+
+** Results:
+main.c, function main
+  FAILED       [main.memory-leak.1]  line  14  dereference failure: forgotten memory: dynamic_1_array
+
+** 1 of 1 properties failed
+
+VERIFICATION FAILED
+"""
+
+ESBMC_OUT_OF_MEMORY = """
+Starting Bounded Model Checking
+ERROR: Out of memory
+
+"""
+
 
 class ParseResultTest(unittest.TestCase):
     def verdict(self, output, prop):
@@ -281,6 +315,36 @@ class ParseResultTest(unittest.TestCase):
         self.assertEqual(
             self.verdict(FREE_THEN_DEREF, wrapper.Property.memory),
             "FALSE_FREE")
+
+    def test_program_output_in_the_counterexample_is_not_an_esbmc_error(self):
+        # esbmc/esbmc#9890: sv-benchmarks memsafety-cve/cups.i prints this.
+        for printed in ("Out of memory", "ERROR: Out of memory", "ERROR: Timed out"):
+            with self.subTest(printed=printed):
+                self.assertEqual(
+                    self.verdict(PROGRAM_PRINTS_BEFORE_LEAK.format(printed),
+                                 wrapper.Property.memory),
+                    "FALSE_MEMTRACK")
+
+    def test_program_printing_successful_does_not_prove_the_task(self):
+        # A free violation decides nothing for memcleanup, so the only
+        # SUCCESSFUL left in the output is the program's.
+        output = "[Counterexample]\nVERIFICATION SUCCESSFUL\n" + FREE_WITH_UNCHECKED_LEAK
+        self.assertEqual(self.verdict(output, wrapper.Property.memcleanup), "Unknown")
+
+    def test_violated_comment_naming_an_esbmc_error_still_falsifies(self):
+        output = REACH_WITH_UNCHECKED_UNWINDING.replace(
+            "error label", 'assertion !"Out of memory" && !"Timed out"')
+        self.assertEqual(self.verdict(output, wrapper.Property.reach), "FALSE_REACH")
+
+    def test_esbmc_out_of_memory_is_unknown(self):
+        self.assertEqual(
+            self.verdict(ESBMC_OUT_OF_MEMORY, wrapper.Property.memory), "Unknown")
+
+    def test_esbmc_timeout_after_a_counterexample_is_a_timeout(self):
+        self.assertEqual(
+            self.verdict(PROGRAM_PRINTS_BEFORE_LEAK.format("") + "ERROR: Timed out\n",
+                         wrapper.Property.memory),
+            "Timed out")
 
     def test_successful_run_is_unaffected(self):
         self.assertEqual(
@@ -382,7 +446,7 @@ class IntegerEncodingConfirmationTest(unittest.TestCase):
     """A Python violation stays FALSE only if a --ir re-run repeats it in place."""
 
     PASSED = "** 0 of 1 properties failed, 1 passed\n\nVERIFICATION SUCCESSFUL\n"
-    TIMED_OUT = b"Timed out"
+    TIMED_OUT = b"ERROR: Timed out\n"
     NO_LINE = PY_ASSERTION.replace(" line 5 column 4", "")
 
     def verify(self, prop, first, rerun, benchmark="main.py", elapsed=0):
