@@ -630,6 +630,7 @@ protected:
     const irep_idt &base_name,
     std::size_t arity,
     std::size_t expr_arg);
+  bool keeps_skipped_assertions() const;
 
   // some built-in functions
   void do_abort(

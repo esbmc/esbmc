@@ -9,6 +9,7 @@
 #include <util/config/parseoptions.h>
 #include <goto-programs/goto_functions_algorithm.h>
 #include <util/base/threeval.h>
+#include <memory>
 #include <optional>
 #include <string_view>
 
@@ -24,6 +25,9 @@
 #endif
 
 extern const struct group_opt_templ all_cmd_options[];
+
+/// Turns off every check --no-standard-checks stands for.
+void disable_standard_checks(optionst &options);
 
 class esbmc_parseoptionst : public parseoptions_baset, public language_uit
 {
@@ -91,6 +95,9 @@ protected:
     bool has_replace_all);
 
   int do_bmc_strategy(optionst &options, goto_functionst &goto_functions);
+
+  std::optional<goto_programt::const_targett>
+  reach_divergent_loop(const optionst &options, uint64_t k_step);
 
   int do_ts_strategy(optionst &options, goto_functionst &goto_functions);
   bool ts_strategy_requested() const;
@@ -179,6 +186,10 @@ protected:
 
   // coverage mode
   bool is_coverage;
+
+  // --termination: the program with its divergent loop heads marked, or null
+  // when it has none (see make_divergence_program).
+  std::unique_ptr<goto_functionst> divergence_program;
 
 private:
   bool resolve_color_option() const;
