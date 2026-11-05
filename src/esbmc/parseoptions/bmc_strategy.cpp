@@ -279,7 +279,6 @@ esbmc_parseoptionst::reach_divergent_loop(
     return std::nullopt;
 
   optionst reach = options;
-  disable_standard_checks(reach);
   for (const char *check :
        {"memory-leak-check", "deadlock-check", "data-races-check"})
     reach.set_option(check, false);

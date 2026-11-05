@@ -26,9 +26,6 @@
 
 extern const struct group_opt_templ all_cmd_options[];
 
-/// Turns off every check --no-standard-checks stands for.
-void disable_standard_checks(optionst &options);
-
 class esbmc_parseoptionst : public parseoptions_baset, public language_uit
 {
 public:

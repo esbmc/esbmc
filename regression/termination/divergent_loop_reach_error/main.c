@@ -1,6 +1,5 @@
 /* The first iteration calls reach_error(), which aborts, so every execution
- * terminates. --no-assertions empties reach_error() in GOTO; the loop must
- * still not be taken for one that can run forever. */
+ * terminates, but termination is not proved. */
 extern int __VERIFIER_nondet_int(void);
 void reach_error(void)
 {

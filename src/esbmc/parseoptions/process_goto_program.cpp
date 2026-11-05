@@ -375,7 +375,15 @@ bool esbmc_parseoptionst::process_goto_program(
     if (
       cmdline.isset("no-standard-checks") ||
       options.get_bool_option("no-standard-checks"))
-      disable_standard_checks(options);
+    {
+      options.set_option("no-pointer-check", true);
+      options.set_option("no-div-by-zero-check", true);
+      options.set_option("no-pointer-relation-check", true);
+      options.set_option("no-unlimited-scanf-check", true);
+      options.set_option("no-vla-size-check", true);
+      options.set_option("no-align-check", true);
+      options.set_option("no-bounds-check", true);
+    }
 
     // Must precede inlining: goto_inlinet relabels a hidden function's
     // instructions with the call site, after which the models' assertions

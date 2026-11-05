@@ -762,13 +762,10 @@ static void
 expand_no_standard_checks(const cmdlinet &cmdline, optionst &options)
 {
   if (
-    cmdline.isset("no-standard-checks") ||
-    options.get_bool_option("no-standard-checks"))
-    disable_standard_checks(options);
-}
+    !cmdline.isset("no-standard-checks") &&
+    !options.get_bool_option("no-standard-checks"))
+    return;
 
-void disable_standard_checks(optionst &options)
-{
   options.set_option("no-pointer-check", true);
   options.set_option("no-div-by-zero-check", true);
   options.set_option("no-pointer-relation-check", true);

@@ -1,5 +1,5 @@
-/* getpid() has no body in ESBMC, but its result is not the program's to
- * choose: a process id is never 0, so the loop exits at once. */
+/* getpid() never returns 0, so the loop exits at once, but termination is
+ * not proved: ESBMC treats getpid() as returning any value. */
 #include <unistd.h>
 
 int main(void)

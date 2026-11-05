@@ -1,5 +1,6 @@
 /* The loop can run forever, but only after the assertion has failed, which
- * aborts: no execution reaches it. */
+ * aborts: no execution reaches it. --termination --no-assertions skips the
+ * assertion without ending the path, so termination is not proved. */
 #include <assert.h>
 extern int __VERIFIER_nondet_int(void);
 

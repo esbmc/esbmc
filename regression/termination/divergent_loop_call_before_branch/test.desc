@@ -1,4 +1,4 @@
-CORE
+KNOWNBUG
 main.c
 --termination --no-assertions --max-inductive-step 3
-^VERIFICATION UNKNOWN$
+^VERIFICATION FAILED$
