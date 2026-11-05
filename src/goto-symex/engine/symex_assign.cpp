@@ -476,10 +476,9 @@ void goto_symext::symex_assign(
       {
         // A nondet call's function_return waypoint sits on its ')' (#9881).
         const locationt &call = cur_state->source.pc->location;
-        const auto rparen = nondet_call_rparen(call);
         symex_witness_function_enter(call.get_line());
         symex_witness_function_return(
-          original_lhs, rparen ? rparen->get_line() : call.get_line());
+          original_lhs, nondet_call_rparen(call).value_or(call).get_line());
       }
     }
   }
