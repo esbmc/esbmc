@@ -611,6 +611,9 @@ public:
     const std::string &op,
     const exprt &lhs,
     const exprt &rhs);
+  /// `[A, B][i]` over classes only, as the runtime class value `i` selects;
+  /// nil for any other expression.
+  exprt listed_class_value(const nlohmann::json &node);
   /// Whether assigning `rhs` to the variable `ast_node` targets makes that
   /// variable a runtime class value: a class on one of several paths.
   bool binds_runtime_class(const nlohmann::json &ast_node, const exprt &rhs);
