@@ -727,10 +727,6 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
     cmdline.isset("forward-condition") || cmdline.isset("inductive-step"))
     options.set_option("no-interval-symex-guard", true);
 
-  if (
-    cmdline.isset("overflow-check") || cmdline.isset("unsigned-overflow-check"))
-    options.set_option("disable-inductive-step", true);
-
   if (cmdline.isset("ub-shift-check"))
     options.set_option("ub-shift-check", true);
 

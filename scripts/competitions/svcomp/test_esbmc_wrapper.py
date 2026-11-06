@@ -3,6 +3,8 @@
 
 import importlib.util
 import os
+import subprocess
+import sys
 import tempfile
 import unittest
 from unittest import mock
@@ -816,8 +818,6 @@ class TestCompParseResultTest(unittest.TestCase):
 
 def dry_run(prp_content, *options):
     # -n prints the ESBMC command and stops before running it
-    import subprocess
-    import sys
     with tempfile.TemporaryDirectory() as d:
         prp = os.path.join(d, "goal.prp")
         task = os.path.join(d, "task.c")
@@ -921,6 +921,65 @@ class PthreadDetectionTest(unittest.TestCase):
             "(pthread_t * __restrict __newthread ,\n"))
         self.assertFalse(self.detects(
             "extern int pthread_create (pthread_t *__restrict __newthread,\n"))
+
+
+class OverflowFallbackTest(unittest.TestCase):
+    """A no-overflow task runs k-induction first, then incremental BMC."""
+
+    OVERFLOW = """
+Violated property:
+  file task.c line 1 column 20 function main
+  arithmetic overflow on add
+
+VERIFICATION FAILED
+"""
+    SUCCESSFUL = "VERIFICATION SUCCESSFUL\n"
+    UNKNOWN = "VERIFICATION UNKNOWN\n"
+
+    def run_wrapper(self, kind_output, incr_output):
+        """Run the wrapper on a stand-in esbmc that answers by strategy."""
+        with tempfile.TemporaryDirectory() as d:
+            for name, text in (("kind.out", kind_output), ("incr.out", incr_output),
+                               ("no-overflow.prp", "CHECK( init(main()), LTL(G ! overflow) )\n"),
+                               ("task.c", "int main() { return 0; }\n")):
+                with open(os.path.join(d, name), "w", encoding="utf-8") as f:
+                    f.write(text)
+            esbmc = os.path.join(d, "esbmc")
+            with open(esbmc, "w", encoding="utf-8") as f:
+                f.write('#!/bin/sh\necho "$@" >> calls.log\n'
+                        'case "$*" in *--k-induction*) cat kind.out ;; *) cat incr.out ;; esac\n')
+            os.chmod(esbmc, 0o755)
+            script = os.path.join(os.path.dirname(os.path.abspath(__file__)), "esbmc-wrapper.py")
+            out = subprocess.run(
+                [sys.executable, script, "-p", "no-overflow.prp", "-s", "kinduction", "task.c"],
+                capture_output=True, text=True, check=True, cwd=d).stdout
+            with open(os.path.join(d, "calls.log"), encoding="utf-8") as f:
+                calls = f.read().splitlines()
+        return out.splitlines()[-1], calls
+
+    def test_a_proof_by_k_induction_is_kept(self):
+        verdict, calls = self.run_wrapper(self.SUCCESSFUL, self.UNKNOWN)
+        self.assertEqual(verdict, "TRUE")
+        self.assertEqual(len(calls), 1)
+        self.assertIn("--memlimit " + wrapper.KIND_OVERFLOW_MEMLIMIT, calls[0])
+
+    def test_an_overflow_found_by_k_induction_is_kept(self):
+        verdict, calls = self.run_wrapper(self.OVERFLOW, self.SUCCESSFUL)
+        self.assertEqual(verdict, "FALSE_OVERFLOW")
+        self.assertEqual(len(calls), 1)
+
+    def test_a_timed_out_k_induction_falls_back_to_incremental_bmc(self):
+        verdict, calls = self.run_wrapper("ERROR: Timed out\n", self.SUCCESSFUL)
+        self.assertEqual(verdict, "TRUE")
+        self.assertEqual(len(calls), 2)
+
+    def test_an_inconclusive_k_induction_falls_back_to_incremental_bmc(self):
+        verdict, calls = self.run_wrapper(self.UNKNOWN, self.OVERFLOW)
+        self.assertEqual(verdict, "FALSE_OVERFLOW")
+        self.assertEqual(len(calls), 2)
+        self.assertIn("--incremental-bmc", calls[1])
+        self.assertNotIn("--k-induction", calls[1])
+        self.assertNotIn("--memlimit", calls[1])
 
 
 if __name__ == "__main__":
