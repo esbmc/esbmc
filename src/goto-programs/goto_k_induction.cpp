@@ -1935,7 +1935,9 @@ bool havoc_loop(
 
 /// Whether a conditional jump enters a reachable, non-library loop past its
 /// head. The step cannot havoc that edge (see collect_entry_jumps), so it would
-/// run the loop from its concrete entry state (#7565).
+/// run the loop from its concrete entry state (#7565). A jump that falls
+/// through to the head is harmless: the havoc there starts from the same state
+/// and covers every iteration the jump leads to.
 bool enters_loop_conditionally(
   goto_functionst &goto_functions,
   const std::unordered_set<irep_idt, irep_id_hash> &reachable,
@@ -1951,7 +1953,9 @@ bool enters_loop_conditionally(
     for (const loopst &loop : loops.get_loops())
       for (const auto &jump : collect_entry_jumps(
              it->second.body, loop, continue_past_failed_assertions))
-        if (!is_true(jump->guard))
+        if (
+          !is_true(jump->guard) &&
+          std::next(jump) != loop.get_original_loop_head())
         {
           log_warning(
             "k-induction cannot havoc a loop a conditional jump enters past "
