@@ -64,6 +64,26 @@ exprt python_converter::unwrap_optional_if_needed(
     "value"));
 }
 
+exprt python_converter::optional_tuple_payload(
+  const exprt &value,
+  const nlohmann::json &element,
+  const std::string &message)
+{
+  if (!type_utils::is_optional_struct(value.type()))
+    return value;
+  const typet &payload =
+    to_struct_type(value.type()).get_component("value").type();
+  if (!tuple_handler_->is_tuple_type(ns.follow(payload)))
+    return value;
+  const exprt optional = materialize_optional(value, element);
+  emit_guarded_raise(
+    member_exprt(optional, "is_none", bool_type()),
+    "TypeError",
+    message,
+    get_location_from_decl(element));
+  return unwrap_optional_if_needed(optional, element);
+}
+
 exprt python_converter::wrap_in_optional(
   const exprt &value,
   const typet &optional_type)
