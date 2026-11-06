@@ -746,14 +746,15 @@ fetch_op_expr(const irep_idt &identifier, const exprt &old, const exprt &val)
     const bool is_float = entry.float_expr_id && type.is_floatbv();
     exprt result(is_float ? entry.float_expr_id : entry.expr_id, type);
     result.copy_to_operands(old, val);
-    // C11 7.17.7.5p3: atomic arithmetic on a signed type wraps silently, so
-    // compute it unsigned rather than raise a signed-overflow claim.
+    // C11 7.17.7.5p3: atomic arithmetic on a signed type wraps silently (GCC
+    // gives its builtins the same semantics). Compute one bit wider, where it
+    // cannot overflow, and truncate back.
     if (type.id() == "signedbv")
     {
-      const unsignedbv_typet utype(to_signedbv_type(type).get_width());
-      result.type() = utype;
+      const signedbv_typet wide(to_signedbv_type(type).get_width() + 1);
+      result.type() = wide;
       for (exprt &operand : result.operands())
-        operand = typecast_exprt(operand, utype);
+        operand = typecast_exprt(operand, wide);
       result = typecast_exprt(result, type);
     }
     if (op != "nand")
