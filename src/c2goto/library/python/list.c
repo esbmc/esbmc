@@ -842,6 +842,37 @@ bool __ESBMC_list_contains(
   return false;
 }
 
+// `item in l` for a list-valued item: an element matches when it is a list
+// equal to item, not when its stored pointer bytes match (#9960).
+bool __ESBMC_list_contains_list(
+  const PyListObject *l,
+  const PyListObject *item,
+  size_t list_type_id,
+  size_t max_depth,
+  size_t float_type_id)
+{
+  if (!l || !item)
+    return false;
+
+  size_t i = 0;
+  while (i < l->size)
+  {
+    const PyObject *elem = &l->items[i];
+    if (
+      elem->type_id == list_type_id && elem->size == sizeof(PyListObject *) &&
+      __ESBMC_list_eq(
+        *(const PyListObject **)elem->value,
+        item,
+        list_type_id,
+        max_depth,
+        float_type_id,
+        0))
+      return true;
+    ++i;
+  }
+  return false;
+}
+
 size_t __ESBMC_list_count(
   const PyListObject *l,
   const void *item,

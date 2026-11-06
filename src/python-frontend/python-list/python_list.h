@@ -562,6 +562,8 @@ public:
   exprt compare(const exprt &l1, const exprt &l2, const std::string &op);
 
   exprt contains(const exprt &item, const exprt &list);
+  bool holds_no_list_lookalike(const exprt &list) const;
+  exprt contains_list(const exprt &item, const exprt &list);
 
   exprt list_repetition(
     const nlohmann::json &left_node,

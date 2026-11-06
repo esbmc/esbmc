@@ -766,10 +766,73 @@ exprt python_list::compare(
     equality2tc(leqr2, op == "Eq" ? gen_true_expr() : gen_false_expr()));
 }
 
+// Lists, tuples, dicts and class instances share one element type id, so the
+// model can only tell a nested list from them by what the frontend recorded.
+bool python_list::holds_no_list_lookalike(const exprt &list) const
+{
+  if (!list.is_symbol())
+    return false;
+  const auto *recorded = elem_types().find(list.identifier().as_string());
+  if (!recorded)
+    return false;
+  const type_handler &th = converter_.get_type_handler();
+  const typet list_type = th.get_list_type();
+  // None is stored with size 0, which the model already skips.
+  const typet none_type = pointer_typet(bool_type());
+  return std::none_of(recorded->begin(), recorded->end(), [&](const auto &e) {
+    return e.second != list_type && e.second != none_type &&
+           th.type_to_string(e.second).empty();
+  });
+}
+
+exprt python_list::contains_list(const exprt &item, const exprt &list)
+{
+  const symbolt *func =
+    converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_contains_list");
+  assert(func);
+  symbolt &ret = converter_.create_tmp_symbol(
+    list_value_,
+    "contains_tmp",
+    bool_type(),
+    migrate_expr_back(gen_false_expr()));
+  converter_.add_instruction(code_declt(build_symbol(ret)));
+
+  const type_handler &th = converter_.get_type_handler();
+  auto hash_of = [&th](const typet &t) {
+    constant_exprt id(size_type());
+    id.set_value(integer2binary(
+      std::hash<std::string>{}(th.type_to_string(t)),
+      config.ansi_c.address_width));
+    return id;
+  };
+
+  // The inner lists' element types are not recorded, so keep list_eq's
+  // int/float path open: [1] in [[1.0]] holds in Python.
+  code_function_callt call;
+  call.function() = build_symbol(*func);
+  call.lhs() = build_symbol(ret);
+  call.arguments() = {
+    list,
+    item,
+    hash_of(list.type()),
+    from_integer(get_list_compare_depth(), size_type()),
+    hash_of(double_type())};
+  call.type() = bool_type();
+  call.location() = converter_.get_location_from_decl(list_value_);
+  converter_.add_instruction(call);
+  return build_symbol(ret);
+}
+
 exprt python_list::contains(const exprt &item, const exprt &list)
 {
   // Get type and size information for the item
   list_elem_info item_info = get_list_element_info(list_value_, item);
+
+  const type_handler &th = converter_.get_type_handler();
+  if (
+    item_info.elem_symbol->get_type() == th.get_list_type() &&
+    holds_no_list_lookalike(list))
+    return contains_list(build_symbol(*item_info.elem_symbol), list);
 
   // Find the list_contains function
   const symbolt *list_contains_func =
