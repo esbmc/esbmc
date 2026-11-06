@@ -850,18 +850,62 @@ bool loop_starts_at_initial_state(
   return true;
 }
 
+/// One iteration of the input loop @p loop from @p entry, which holds the
+/// input: its call to the updater, the assumes around the call, and the copies
+/// of the call's result after it. Adds the path after each return to @p out.
+void run_iteration(
+  const goto_functionst &goto_functions,
+  const loopst &loop,
+  const statet &entry,
+  pathst &out)
+{
+  expr2tc guard = gen_true_expr();
+  bool called = false;
+  for (auto it = loop.get_original_loop_head();
+       it != loop.get_original_loop_exit();
+       ++it)
+  {
+    if (it->is_function_call())
+    {
+      run_call(
+        goto_functions,
+        to_code_function_call2t(it->code),
+        guard,
+        entry,
+        0,
+        out);
+      called = true;
+    }
+    else if (it->is_assume() && !called)
+      guard = and2tc(guard, read_in(it->guard, entry));
+    else if (it->is_assume())
+      for (auto &[g, after] : out)
+        g = and2tc(g, read_in(it->guard, after));
+    else if (it->is_assign() && called)
+    {
+      const code_assign2t &copy = to_code_assign2t(it->code);
+      if (!is_symbol2t(copy.target))
+        throw unsupportedt();
+      for (auto &path : out)
+        path.second[to_symbol2t(copy.target).thename] =
+          read_in(copy.source, path.second);
+    }
+  }
+}
+
 /// Does a run of the input loop from @p s0 repeat a state within @p bound
 /// valid inputs, before exit or abort ends it?
 ///
 /// A repeated state proves non-termination: the loop starts in @p s0
 /// (loop_starts_at_initial_state), @p s0 is all the state it carries
 /// (has_cycle_from_init, and run_once gives up on any read of other state, of
-/// memory or of nondet), and run_once executes the updater @p fn exactly, so
-/// each iteration is a function of the state and the input. A state that
-/// recurs along returning paths closes a lasso the inputs can follow forever.
+/// memory or of nondet), and run_iteration executes the loop body exactly
+/// apart from the input, so each iteration is a function of the state and the
+/// input. A state that recurs along returning paths closes a lasso the inputs
+/// can follow forever.
 bool reaches_cycle_from_init(
   const goto_functionst &goto_functions,
-  const goto_functiont &fn,
+  const loopst &loop,
   const expr2tc &input_arg,
   const std::vector<BigInt> &valid_inputs,
   const statet &s0,
@@ -869,7 +913,6 @@ bool reaches_cycle_from_init(
   optionst &options,
   const namespacet &ns)
 {
-  const code_type2t &ct = to_code_type(fn.type);
   expr2tc formula = gen_true_expr();
   expr2tc alive = gen_true_expr();
   expr2tc repeats = gen_false_expr();
@@ -884,9 +927,9 @@ bool reaches_cycle_from_init(
     formula = and2tc(formula, valid);
 
     statet entry = states.back();
-    entry[ct.argument_names.at(0)] = typecast2tc(ct.arguments.at(0), in);
+    entry[to_symbol2t(input_arg).thename] = in;
     pathst paths;
-    run_once(goto_functions, fn, entry, 0, paths);
+    run_iteration(goto_functions, loop, entry, paths);
     expr2tc returned = gen_false_expr();
     for (const auto &path : paths)
       returned = or2tc(returned, path.first);
@@ -920,13 +963,12 @@ bool reaches_cycle_from_init(
 /// reaches_cycle_from_init for the loop @p loop of the entry function @p fname,
 /// with the globals that have a constant initialiser as its state. The loop
 /// itself writes only the input and the call's result (@p result_writes);
-/// were one of them such a global, the state would change outside @p fn.
+/// were one of them such a global, the state would change outside the updater.
 bool has_cycle_from_init(
   const goto_functionst &goto_functions,
   const irep_idt &fname,
   const goto_programt &body,
   const loopst &loop,
-  const goto_functiont &fn,
   const expr2tc &input_arg,
   const std::vector<BigInt> &valid_inputs,
   std::vector<expr2tc> result_writes,
@@ -953,7 +995,7 @@ bool has_cycle_from_init(
   try
   {
     return reaches_cycle_from_init(
-      goto_functions, fn, input_arg, valid_inputs, s0, 24, options, ns);
+      goto_functions, loop, input_arg, valid_inputs, s0, 24, options, ns);
   }
   catch (const unsupportedt &)
   {
@@ -1087,7 +1129,6 @@ tvt try_prove_non_termination_by_recurrent_set(
           f_it->first,
           f_it->second.body,
           loop,
-          callee_it->second,
           input_arg,
           valid_inputs,
           result_writes,
