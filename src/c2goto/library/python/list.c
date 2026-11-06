@@ -455,6 +455,12 @@ static inline size_t __ESBMC_list_eq_depth_limit(size_t max_depth)
                                               : depth_limit;
 }
 
+// Exact, as in CPython: widening n alone equates 2^53 + 1 with 2^53.
+static inline bool __ESBMC_int_float_eq(int64_t n, double d)
+{
+  return d >= -0x1p63 && d < 0x1p63 && (int64_t)d == n && d == (double)n;
+}
+
 bool __ESBMC_list_eq(
   const PyListObject *l1,
   const PyListObject *l2,
@@ -538,10 +544,9 @@ bool __ESBMC_list_eq(
         (a->type_id == float_type_id) != (b->type_id == float_type_id))
       {
         const bool a_float = a->type_id == float_type_id;
-        const double d = *(const double *)(a_float ? a->value : b->value);
-        const int64_t n = *(const int64_t *)(a_float ? b->value : a->value);
-        // Exact, as in CPython: widening n alone equates 2^53 + 1 with 2^53.
-        if (!(d >= -0x1p63 && d < 0x1p63 && (int64_t)d == n && d == (double)n))
+        if (!__ESBMC_int_float_eq(
+              *(const int64_t *)(a_float ? b->value : a->value),
+              *(const double *)(a_float ? a->value : b->value)))
           return false;
         continue;
       }

@@ -789,6 +789,20 @@ bool python_list::holds_list_lookalike(
   });
 }
 
+bool python_list::compares_as_lists(
+  const exprt &item,
+  const symbolt &item_copy,
+  const exprt &list) const
+{
+  const int depth = get_list_compare_depth();
+  return item_copy.get_type() ==
+           converter_.get_type_handler().get_list_type() &&
+         list.is_symbol() &&
+         !holds_list_lookalike(list.identifier().as_string(), true, depth) &&
+         !(item.is_symbol() &&
+           holds_list_lookalike(item.identifier().as_string(), false, depth));
+}
+
 exprt python_list::contains_list(const exprt &item, const exprt &list)
 {
   const symbolt *func =
@@ -832,15 +846,7 @@ exprt python_list::contains(const exprt &item, const exprt &list)
   // Get type and size information for the item
   list_elem_info item_info = get_list_element_info(list_value_, item);
 
-  const type_handler &th = converter_.get_type_handler();
-  if (
-    item_info.elem_symbol->get_type() == th.get_list_type() &&
-    list.is_symbol() &&
-    !holds_list_lookalike(
-      list.identifier().as_string(), true, get_list_compare_depth()) &&
-    !(item.is_symbol() &&
-      holds_list_lookalike(
-        item.identifier().as_string(), false, get_list_compare_depth())))
+  if (compares_as_lists(item, *item_info.elem_symbol, list))
     return contains_list(build_symbol(*item_info.elem_symbol), list);
 
   // Find the list_contains function

@@ -566,6 +566,10 @@ public:
     const std::string &list_id,
     bool if_unrecorded,
     int depth) const;
+  bool compares_as_lists(
+    const exprt &item,
+    const symbolt &item_copy,
+    const exprt &list) const;
   exprt contains_list(const exprt &item, const exprt &list);
 
   exprt list_repetition(
