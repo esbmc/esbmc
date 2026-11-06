@@ -36,7 +36,7 @@ and its stages, ADR-NP-004 the SMT-array scalability decision, and "principle
 | Statistics | `a.sum()`/`a.mean()`/`a.min()`/`a.max()`/`a.any()`/`a.all()`/`a.argmin()`/`a.argmax()` method forms and their `axis=0/1` variants are supported over concrete 1-D/2-D ndarrays (including function-returned arrays), sharing the same reducer/comparison policy as the functional forms. Still missing: axis/keepdims/out/overwrite/nan-policy style variants beyond concrete flattened/literal `median` and `percentile`, and reducer axes outside 2-D concrete `axis=0/1`. |
 | Linear algebra | Constant matrices: `det` up to 6x6, `inv` and `solve` up to 6x6, `eig` (eigenvalues and unit eigenvectors) of 2x2 matrices with distinct real eigenvalues and of diagonal ones, `eigvals` of 2x2, diagonal and triangular matrices up to 6x6, `svd` values of 2x2 matrices and its `U`, `S`, `Vh` factors of 2x2 and diagonal ones, and `norm` of vectors (orders 1, 2, inf, -inf) and matrices (fro, 1, -1, inf, -inf, and 2 for a 2x2 matrix) with `axis` and `keepdims`. Matrices with run-time entries: `det` up to 3x3 and the vector and Frobenius norms. Results are bounded around the exact value, eigenvectors and singular vectors with either sign and eigenvalues in either order; a result every IEEE implementation computes exactly keeps its value, and a bound that overflows leaves the result unconstrained. Keywords bind as in CPython, constructor arrays (`np.eye(3)`) and views are read, and a singular matrix raises a `LinAlgError` the program can catch. Missing: `eig`/`svd` of larger dense or non-square matrices, complex eigenvalues in `eig`, a repeated eigenvalue or singular value of a non-diagonal matrix, complex matrices, run-time entries for `inv`/`solve`/`eig`/`eigvals`/`svd` and for `det` past 3x3, `norm` orders `nuc`/-2/p, matrices past 6x6; a non-square or 0-d operand rejects during conversion instead of raising a catchable `LinAlgError`. |
 | Math functions | `exp`, `log`, `log2`, `log10`, `sqrt`, `sin`, `cos`, `tan`, `arcsin`/`asin`, `arccos`/`acos`, `arctan`/`atan`, `sinh`, `cosh` and `tanh` of run-time numbers, and of arrays and views of constant shape element by element, are bounded, and `math.*` shares the model with Python's `ValueError`/`OverflowError`. Missing: the other transcendental functions (`expm1`, `log1p`, `exp2`, `arcsinh`/`asinh`, `arccosh`, `arctanh`, `cbrt`, `hypot`, `arctan2`) reject in NumPy while their `math.*` forms still use the C library models (item 1); `np.isnan`/`np.isinf`/`np.isfinite` and the constants `np.inf`/`np.nan` are not recognised; complex arguments, string arrays and views of run-time shape reject; keywords other than `out=None` and `dtype=float` take the older paths. |
-| Random | Generator state and objects (`seed`, `get_state`, `set_state`, `default_rng`, `Generator`, `RandomState`) and every unmodelled `np.random` function (`shuffle`, `permutation`, `multivariate_normal`, `laplace`, `logistic`, ...) raise `TypeError`; `choice(p=...)` does too, since a probability vector has no encoding that keeps ADR-NP-002's over-approximation. Parameters must be scalars (no broadcasting of array parameters). `size` must be integer literals, at most 1024 samples (each sample is unrolled); a `size` read at run time rejects. `choice` takes a 1-D literal sequence, ndarray or view, not an integer `a`. `randint` rejects `dtype=bool` and `uint64`. |
+| Random | `np.random.default_rng()` and `default_rng(seed)` create a bounded logical generator descriptor; `None` and an omitted seed select the nondeterministic model, while a non-negative integer is validated. `np.random.seed(seed)` advances the module descriptor version, without claiming a concrete sequence. Generator aliases share their descriptor, module functions use a separate global descriptor, and `random`, `uniform`, `normal`, `standard_normal`, `exponential`, `poisson`, `binomial`, `geometric`, `lognormal`, `beta`, `gamma`, `weibull`, `chisquare` and `integers` accept the supported scalar or bounded `size` forms. `integers` validates `endpoint`, integer dtype and bounds. `choice(p=...)` accepts literal finite non-negative probabilities whose length matches the population and whose sum is within the supported tolerance; the selected index is constrained to the population, without claiming statistical weights. Parameters are evaluated once and invalid calls reject before sampling. `RandomState`, `BitGenerator`, `SeedSequence`, `get_state`, `set_state`, `shuffle`, `permutation`, unsupported keywords, symbolic parameters and unbounded shapes still raise explicit `TypeError`/`ValueError`. The model does not reproduce NumPy's concrete PRNG sequence or provide statistical guarantees. |
 | Structured arrays | Record dtypes. |
 | Views / strides | Views passed to lambdas used as callbacks, through `**kwargs` or to other modules' functions; views passed to multi-statement functions outside the subset whose layout is read from the call sites (see the shared-buffer view model row); views stored by mutation, in attributes or globals; `reshape`/`ravel` of N-D views with a run-time stride; arrays whose shape has no static upper bound (`np.zeros(n)` with `n` unconstrained). |
 | Iteration | `np.nditer` supports the flags `multi_index`, `c_index`, `f_index`, `external_loop`, `buffered`, `grow_inner`, `zerosize_ok` and `refs_ok`; several operands with broadcasting; per-operand `readonly`/`readwrite`/`writeonly`; `op_dtypes` with `casting`; `op_axes`; the orders C, F, A and K; the protocol (`next`, `iternext`, `iter(it)` in a loop, `value`, `finished`, `iterindex`, `index`, `multi_index`, `shape`, `ndim`, `itersize`, `nop`, `operands`, `reset`, `close` and `with`); and buffered write-back through a cast at exhaustion or close. Missing, each rejected: an iterator used as a value (passed to a function, `list(it)`, `iter(it) is it`); the flags `ranged`, `reduce_ok`, `common_dtype`, `copy_if_overlap` and `delay_bufalloc`; a buffered cast write over more than 64 elements or a layout known only at run time; `reset` with buffered writes pending; `shape`/`ndim` of an iterator tracking an index without a multi-index; rebinding an operand's source inside a branch or loop while the iterator is alive. |
@@ -88,7 +88,7 @@ and its stages, ADR-NP-004 the SMT-array scalability decision, and "principle
    its terms, and concrete norms are bounded unless exact in every IEEE
    implementation.
 8. **The suite's cost is in its slow tests, not its count.**
-   `regression/numpy` has 2398 tests; six linear algebra tests that repeated
+   `regression/numpy` has 2407 tests in the evaluated CTest configuration; six linear algebra tests that repeated
    another test's contract were removed, each listed with its replacement in
    the commit that removes them. Shortening the CI run needs per-test CI
    timings to merge the expensive programs.
@@ -168,12 +168,10 @@ reject, each pinned by a `CORE` test:
 
 ## Prioritised next steps
 
-1. **Random generator state** — `Generator`/`default_rng`, `seed` and
-   probability-vector `choice`; each needs its own ADR-NP-002 decision first.
-2. **Remaining math functions** — bound `expm1`, `log1p`, `exp2`, the
+1. **Remaining math functions** — bound `expm1`, `log1p`, `exp2`, the
    inverse hyperbolic functions, `cbrt`, `hypot` and `arctan2` (NumPy and
    `math.*`, item 1) and recognise `np.isnan`/`np.isinf`/`np.inf`/`np.nan`.
-3. **Linear algebra remainder** — `eig`/`svd` of larger dense matrices,
+2. **Linear algebra remainder** — `eig`/`svd` of larger dense matrices,
    run-time entries beyond `det` and `norm`, and the shape errors as
    catchable `LinAlgError`s.
 
@@ -185,13 +183,11 @@ view model; they stay rejected.
 
 ## Suggested next PRs
 
-The backlog closes in three PRs:
+The remaining NumPy backlog closes in two feature PRs:
 
-1. **Random generator state** — after the ADR decision on state and
-   probabilities.
-2. **Remaining math functions** — step 2, on the bounded model of
+1. **Remaining math functions** — step 1, on the bounded model of
    `util/arith/transcendental.h`; the smallest of the three.
-3. **Linear algebra remainder** — step 3, on the bounds and checks the
+2. **Linear algebra remainder** — step 2, on the bounds and checks the
    current `numpy.linalg` support shares.
 
 ---
