@@ -549,8 +549,6 @@ def get_command_line(strat, prop, arch, benchmark, concurrency, dargs, esbmc_ci,
     # violation -- it never claims a proof, so --incremental-bmc still owns
     # every other verdict.
     command_line += "--falsify-context-bound 1 --incremental-bmc "
-  elif prop == Property.overflow: # Overflow only works with incremental
-    command_line += "--incremental-bmc "
   else:
     command_line += strategy_flags(strat)
 
@@ -563,6 +561,10 @@ IR_RERUN_TIMEOUT = 120
 # Keep both runs together under the competition's 900 s limit.
 TOTAL_BUDGET = 870
 MIN_RERUN_BUDGET = 30
+# Wall-clock seconds and memory cap for the k-induction round of a no-overflow
+# task.
+KIND_OVERFLOW_TIMEOUT = 60
+KIND_OVERFLOW_MEMLIMIT = "2500m"
 
 
 def confirmed_by_integer_encoding(esbmc_command_line, the_output, prop, elapsed):
@@ -621,6 +623,18 @@ def verify(strat, prop, arch, benchmark, concurrency, dargs, esbmc_ci, witness_p
     esbmc_command_line += "--witness " + witness_path + " "
 
   started = time.monotonic()
+  if prop == Property.overflow and "--k-induction " in esbmc_command_line:
+    # The inductive step proves most no-overflow loops in seconds, but on
+    # nonlinear arithmetic its solve can stall, and on goto-heavy code it can
+    # path-explode; those runs fall back to incremental BMC. The memory cap
+    # stops this run before it reaches the competition's limit, which would
+    # end the task instead.
+    memlimit = "--memlimit " + KIND_OVERFLOW_MEMLIMIT + " "
+    output = run(esbmc_command_line + memlimit, KIND_OVERFLOW_TIMEOUT)
+    res = parse_result(output.decode(), prop)
+    if res in (Result.success, Result.fail_overflow):
+      return res
+    esbmc_command_line = esbmc_command_line.replace(strategy_flags(strat), "--incremental-bmc ")
   output = run(esbmc_command_line)
   elapsed = time.monotonic() - started
   res = parse_result(output.decode(), prop)
