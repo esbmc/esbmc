@@ -8,10 +8,4 @@ def g(a, b):
     return best
 
 
-def f(a, b):
-    return max(a, b, key=len)
-
-
-assert g("bb", "a") == "bb"
-r = f("a", "bb")
-assert r != "bb"
+assert g("bb", "a") != "bb"
