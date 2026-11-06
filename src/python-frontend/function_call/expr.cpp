@@ -9,6 +9,8 @@
 #include <python-frontend/math/python_int_overflow.h>
 #include <python-frontend/math/python_math.h>
 #include <python-frontend/numpy/numpy_reducer_shared.h>
+#include <python-frontend/numpy/numpy_call_expr.h>
+#include <python-frontend/numpy/numpy_dtype.h>
 #include <util/base/host_rounding_mode.h>
 #include <python-frontend/exception/python_exception_handler.h>
 #include <python-frontend/python-list/python_list.h>
@@ -1062,26 +1064,26 @@ static bool rebinds_repr_attribute(const nlohmann::json &node)
   return false;
 }
 
-/// Whether neither @p name, a class of @p ast, nor a base of it other than
-/// object defines __str__ or __repr__.
-static bool
-inherits_object_repr(const std::string &name, const nlohmann::json &ast)
+/// Whether @p name, a class of @p ast, or a base of it other than object may
+/// define @p dunder: a class not found in @p ast counts as defining it.
+static bool mro_defines(
+  const std::string &name,
+  const nlohmann::json &ast,
+  const std::string &dunder)
 {
   const nlohmann::json cls = find_class(ast["body"], name);
-  if (
-    cls.empty() || count_bindings(cls, "__str__") ||
-    count_bindings(cls, "__repr__"))
-    return false;
-  return std::all_of(
+  if (cls.empty() || count_bindings(cls, dunder))
+    return true;
+  return std::any_of(
     cls["bases"].begin(), cls["bases"].end(), [&](const nlohmann::json &b) {
       const std::string base = b.value("id", "");
-      return base == "object" || inherits_object_repr(base, ast);
+      return base != "object" && mro_defines(base, ast, dunder);
     });
 }
 
-/// The class whose default repr str() of @p value gives, or "" when that is
-/// not known: a plain class of the main module with no subclass, so the
-/// static type is the runtime class.
+/// The class whose __repr__ or default repr applies to @p value, or "" when
+/// that is not known: a plain class of the main module with no subclass, so
+/// the static type is the runtime class.
 static std::string
 default_repr_class(const exprt &value, const python_converter &converter)
 {
@@ -1098,7 +1100,7 @@ default_repr_class(const exprt &value, const python_converter &converter)
   if (
     converter.python_file() != converter.main_python_filename() ||
     !is_plain_class(name, ast) || json_utils::has_subclass(name, ast) ||
-    rebinds_repr_attribute(ast) || !inherits_object_repr(name, ast))
+    rebinds_repr_attribute(ast))
     return "";
   return name;
 }
@@ -1130,26 +1132,10 @@ exprt function_call_expr::str_of_object(exprt &value, const nlohmann::json &arg)
   {
     exprt dunder =
       converter_.dispatch_unary_dunder_operator("str", value, location);
-    const std::string cls = default_repr_class(value, converter_);
-    if (!dunder.is_nil() || cls.empty())
+    if (!dunder.is_nil())
       return dunder;
-    if (value.id() == "sideeffect")
-    {
-      code_expressiont call(value);
-      call.location() = location;
-      converter_.add_instruction(call);
-    }
-    const exprt repr =
-      converter_.get_string_handler().build_default_object_repr(
-        "<__main__." + cls + " object at 0x", location);
-    if (value.id() == "sideeffect" || !value.type().is_pointer())
-      return repr;
-    const exprt none =
-      converter_.get_string_builder().build_string_literal("None");
-    return if_exprt(
-      equality_exprt(value, gen_zero(value.type())),
-      build_address_of(build_index(none, from_integer(0, size_type()))),
-      repr);
+    // object.__str__ returns repr() of the instance.
+    return repr_of_object(value);
   }
   const std::string text =
     class_object_str(value.get_string("value"), arg, converter_);
@@ -1157,6 +1143,96 @@ exprt function_call_expr::str_of_object(exprt &value, const nlohmann::json &arg)
     return converter_.get_string_handler().build_nondet_string_fallback(
       location);
   return converter_.get_string_builder().build_string_literal(text);
+}
+
+exprt function_call_expr::none_or(const exprt &value, const exprt &other) const
+{
+  const locationt location = converter_.get_location_from_decl(call_);
+  const exprt none =
+    converter_.get_string_builder().build_string_literal("None");
+  // Symex bounds a string model's loops only over a named object (#7559).
+  symbolt &tmp =
+    converter_.create_tmp_symbol(call_, "$none_str$", none.type(), exprt());
+  code_declt decl(symbol_expr(tmp));
+  decl.location() = location;
+  converter_.add_instruction(decl);
+  code_assignt assign(symbol_expr(tmp), none);
+  assign.location() = location;
+  converter_.add_instruction(assign);
+  return if_exprt(
+    equality_exprt(value, gen_zero(value.type())),
+    build_address_of(
+      build_index(symbol_expr(tmp), from_integer(0, size_type()))),
+    other);
+}
+
+exprt function_call_expr::repr_of_object(exprt &value) const
+{
+  const locationt location = converter_.get_location_from_decl(call_);
+  // Only a null name is None: a None-typed slot holding 0 or False is null
+  // too. str(x, encoding) decodes, which raises TypeError for None.
+  const bool one_arg =
+    call_["args"].size() == 1 &&
+    (!call_.contains("keywords") || call_["keywords"].empty());
+  if (one_arg && value.is_symbol() && value.type() == none_type())
+    return none_or(
+      value,
+      converter_.get_string_handler().build_nondet_string_fallback(location));
+  const std::string cls = default_repr_class(value, converter_);
+  if (cls.empty())
+    return nil_exprt();
+  exprt dunder =
+    converter_.dispatch_unary_dunder_operator("repr", value, location);
+  if (!dunder.is_nil())
+    return dunder;
+  if (mro_defines(cls, converter_.get_ast_json(), "__repr__"))
+    return nil_exprt();
+  if (value.id() == "sideeffect")
+  {
+    code_expressiont call(value);
+    call.location() = location;
+    converter_.add_instruction(call);
+  }
+  const exprt repr = converter_.get_string_handler().build_default_object_repr(
+    "<__main__." + cls + " object at 0x", location);
+  if (value.id() == "sideeffect" || !value.type().is_pointer())
+    return repr;
+  return none_or(value, repr);
+}
+
+exprt function_call_expr::handle_repr_call()
+{
+  const auto &arg = call_["args"][0];
+  double real_val = 0.0, imag_val = 0.0;
+  if (
+    try_extract_complex_parts_from_json(
+      arg,
+      converter_.ast(),
+      converter_.current_function_name(),
+      real_val,
+      imag_val))
+  {
+    return converter_.get_string_builder().build_string_literal(
+      format_complex_string(real_val, imag_val));
+  }
+  exprt value_expr = converter_.get_expr(arg);
+  if (!value_expr.is_nil() && value_expr.statement() != "cpp-throw")
+  {
+    if (is_complex_type(value_expr.type()))
+      return handle_complex_to_str();
+    exprt object_value = value_expr;
+    converter_.convert_function_call_to_side_effect(object_value);
+    exprt object_repr = repr_of_object(object_value);
+    if (object_repr.is_not_nil())
+      return object_repr;
+    // Types without a repr model keep the general-call fallback: a clean
+    // error, never a wrong fold.
+    exprt repr = converter_.get_string_handler().build_repr(
+      value_expr, converter_.get_location_from_decl(call_));
+    if (repr.is_not_nil())
+      return repr;
+  }
+  return handle_general_function_call();
 }
 
 // float() ignores outer whitespace: str.isspace(), which also counts \x1c-\x1f.
@@ -1234,8 +1310,8 @@ exprt function_call_expr::build_constant_from_arg() const
     // (char-element) operand: a bytes literal serialises to an identical
     // Constant JSON, but tuple(b"ab") is (97, 98) in CPython — its operand type
     // is an int array (not char), so it correctly falls through to the error.
-    const bool is_string_operand =
-      (et.is_array() || et.is_pointer()) && et.subtype() == char_type();
+    const bool is_string_operand = (et.is_array() || et.is_pointer()) &&
+                                   type_utils::is_char_storage(et.subtype());
     std::string str_val;
     if (
       is_string_operand &&
@@ -2342,30 +2418,10 @@ function_call_expr::get_object_list_symbol(std::string &display_name) const
     // dispatch below, which can also resolve dict-subscript receivers.
     if (base_sym->get_type() == list_type)
     {
-      // Constant index: resolve directly from the registry.
-      if (
-        slice_node["_type"] == "Constant" &&
-        slice_node["value"].is_number_integer())
-      {
-        const size_t index = slice_node["value"].get<size_t>();
-
-        const std::string inner_id =
-          converter_.get_element_type_registry().element_id(base_id, index);
-        if (
-          converter_.get_element_type_registry().element_type(base_id, index) ==
-            list_type &&
-          !inner_id.empty())
-        {
-          display_name = base_name + "[" + std::to_string(index) + "]";
-          return converter_.find_symbol(inner_id);
-        }
-      }
-
-      // Non-constant index (e.g. nested[i].append(v)): delegate to the existing
-      // subscript handler.  For comprehension-generated nested lists the
-      // handler hits the registry early-return path and yields the template
-      // inner list symbol (the element produced inside the loop body) without
-      // emitting any runtime instructions.
+      // The inner list is read at runtime: the symbol the registry recorded
+      // for the element may since have been rebound, as the one created in a
+      // comprehension or loop body is on every iteration (#9766), or may be
+      // a user variable that must not be assigned the element.
       const exprt subscript_expr = converter_.get_expr(func_value);
       if (subscript_expr.is_symbol())
       {
@@ -2373,9 +2429,22 @@ function_call_expr::get_object_list_symbol(std::string &display_name) const
           converter_.find_symbol(subscript_expr.identifier().as_string());
         if (sym && sym->get_type() == list_type)
         {
-          const std::string idx_str = slice_node.contains("id")
-                                        ? slice_node["id"].get<std::string>()
-                                        : "(expr)";
+          std::string idx_str = "(expr)";
+          if (slice_node.contains("id"))
+            idx_str = slice_node["id"].get<std::string>();
+          else if (
+            slice_node["_type"] == "Constant" &&
+            slice_node["value"].is_number_integer())
+          {
+            const size_t index = slice_node["value"].get<size_t>();
+            idx_str = std::to_string(index);
+            // Element types the method records on sym stay visible to
+            // later reads of base[index].
+            element_type_registry &registry =
+              converter_.get_element_type_registry();
+            if (!registry.element_id(base_id, index).empty())
+              registry.replace(base_id, index, sym->id.as_string(), list_type);
+          }
           display_name = base_name + "[" + idx_str + "]";
           return sym;
         }
@@ -3512,6 +3581,19 @@ bool function_call_expr::receiver_is_binop_or_list_symbol() const
   return sym != nullptr && sym->get_type() == type_handler_.get_list_type();
 }
 
+const symbolt *
+function_call_expr::find_callee_symbol(const std::string &func_symbol_id)
+{
+  if (function_type_ != FunctionType::InstanceMethod)
+    return cached_find_symbol(func_symbol_id);
+  if (function_id_.get_class().empty())
+    return nullptr;
+  // find_symbol falls back to a module global of the method's name, which is
+  // not the method; an inherited one is then found in the bases (#9817).
+  const symbolt *symbol = cached_find_symbol(func_symbol_id);
+  return symbol && symbol->get_type().is_code() ? symbol : nullptr;
+}
+
 bool function_call_expr::receiver_class_defines_method(
   const std::string &method_name) const
 {
@@ -3529,13 +3611,7 @@ bool function_call_expr::receiver_class_defines_method(
          json_utils::class_defines_method((*module)["body"], cls, method_name);
 }
 
-/// Refuse a call whose receiver class is not known when some module of the
-/// program defines a class with a method named @p method_name. Such a method
-/// may write to its receiver, so the null fallback would drop those writes and
-/// prove what Python fails (#8915). A literal display is never such an
-/// instance.
-void function_call_expr::reject_unresolved_user_method(
-  const std::string &method_name) const
+bool function_call_expr::receiver_is_literal() const
 {
   static const std::unordered_set<std::string> literal_kinds = {
     "Constant",
@@ -3547,7 +3623,18 @@ void function_call_expr::reject_unresolved_user_method(
     "ListComp",
     "SetComp",
     "DictComp"};
-  if (literal_kinds.count(call_["func"]["value"].value("_type", "")))
+  return literal_kinds.count(call_["func"]["value"].value("_type", "")) != 0;
+}
+
+/// Refuse a call whose receiver class is not known when some module of the
+/// program defines a class with a method named @p method_name. Such a method
+/// may write to its receiver, so the null fallback would drop those writes and
+/// prove what Python fails (#8915). A literal display is never such an
+/// instance.
+void function_call_expr::reject_unresolved_user_method(
+  const std::string &method_name) const
+{
+  if (receiver_is_literal())
     return;
 
   const auto defines = [&](const nlohmann::json &module) {
@@ -3563,6 +3650,23 @@ void function_call_expr::reject_unresolved_user_method(
     throw std::runtime_error(
       "unsupported: calling method '" + method_name +
       "' on a value whose class is not known");
+}
+
+/// The null fallback for an unresolved method drops whatever the call would
+/// raise (#9530), so a reachable call is reported rather than proved.
+void function_call_expr::flag_unresolved_method_call(
+  const std::string &method_name,
+  const locationt &location) const
+{
+  if (receiver_is_literal())
+    return;
+  code_assertt check(migrate_expr_back(gen_false_expr()));
+  check.location() = location;
+  check.location().user_provided(true);
+  check.location().comment(
+    "Unsupported: calling method '" + method_name +
+    "' on a value whose class is not known");
+  converter_.current_block->copy_to_operands(check);
 }
 
 bool function_call_expr::is_list_method_call() const
@@ -3710,72 +3814,177 @@ bool function_call_expr::is_numpy_astype_call() const
   return function_id_.get_function() == "astype";
 }
 
-// Resolve the dtype argument to a target typet. Accepts np.float64-style
-// attribute access, bare type names (float/int/bool), and string literals
-// ("float64"); mirrors the dtype vocabulary already used for np.array(...,
-// dtype=...) and np.zeros(..., dtype=...) (see numpy_call_expr.cpp), but
-// kept local since astype's dtype is a positional arg, not a kwarg.
-static typet resolve_astype_target_type(const nlohmann::json &dtype_node)
+// The target element type, by the same normalization as a constructor's dtype=.
+static typet resolve_astype_target_type(
+  const nlohmann::json &dtype_node,
+  const nlohmann::json &ast)
 {
-  std::string name;
-  if (
-    dtype_node.value("_type", std::string()) == "Attribute" &&
-    dtype_node.contains("attr"))
-    name = dtype_node["attr"].get<std::string>();
-  else if (
-    dtype_node.value("_type", std::string()) == "Name" &&
-    dtype_node.contains("id"))
-    name = dtype_node["id"].get<std::string>();
-  else if (
-    dtype_node.value("_type", std::string()) == "Constant" &&
-    dtype_node.contains("value") && dtype_node["value"].is_string())
-    name = dtype_node["value"].get<std::string>();
-  else
+  const std::string kind = dtype_node.value("_type", std::string());
+  const bool spelled = kind == "Attribute" || kind == "Name" ||
+                       (kind == "Constant" && dtype_node.contains("value") &&
+                        dtype_node["value"].is_string());
+  if (!spelled)
     throw std::runtime_error(
       "TypeError: astype() requires a dtype argument (e.g. np.float64, "
       "float, int, bool)");
-
-  static const std::unordered_map<std::string, std::string> aliases = {
-    {"bool_", "bool"},
-    {"int_", "int64"},
-    {"int", "int64"},
-    {"uint_", "uint64"},
-    {"uint", "uint64"},
-    {"float_", "float64"},
-    {"float", "float64"}};
-  auto alias_it = aliases.find(name);
-  if (alias_it != aliases.end())
-    name = alias_it->second;
-
-  if (name == "bool")
-    return bool_type();
-  if (name == "int8")
-    return signedbv_typet(8);
-  if (name == "int16")
-    return signedbv_typet(16);
-  if (name == "int32")
-    return signedbv_typet(32);
-  if (name == "int64")
-    return signedbv_typet(64);
-  if (name == "uint8")
-    return unsignedbv_typet(8);
-  if (name == "uint16")
-    return unsignedbv_typet(16);
-  if (name == "uint32")
-    return unsignedbv_typet(32);
-  if (name == "uint64")
-    return unsignedbv_typet(64);
-  if (name == "float32")
-    return build_float_type(32);
-  if (name == "float64")
-    return build_float_type(64);
-
-  if (name == "complex64" || name == "complex128" || name == "complex")
+  std::string name = kind == "Name" ? dtype_node.value("id", "") : "";
+  try
+  {
+    name = extract_numpy_dtype_name(dtype_node, ast);
+  }
+  catch (const std::runtime_error &)
+  {
+    if (kind != "Name")
+      throw;
+  }
+  const auto dtype = numpy_dtype_from_name(name);
+  if (!dtype || dtype->kind == numpy_dtypet::kindt::string)
     throw std::runtime_error(
-      "TypeError: astype() to a complex dtype is not supported");
+      "TypeError: astype() target dtype '" + name + "' is not supported");
+  return dtype->element_type();
+}
 
+// The dtype a target spelled as a string dtype gives over elements of @p
+// source: a bare `str` holds what NumPy reserves for any value of the source's
+// dtype.
+static std::optional<std::size_t> astype_string_width(
+  const nlohmann::json &dtype_node,
+  const nlohmann::json &ast,
+  const typet &source)
+{
+  std::string name;
+  try
+  {
+    name = extract_numpy_dtype_name(dtype_node, ast);
+  }
+  catch (const std::runtime_error &)
+  {
+    name = dtype_node.value("id", "");
+  }
+  const auto dtype = numpy_dtype_from_name(name);
+  if (!dtype || dtype->kind != numpy_dtypet::kindt::string)
+    return std::nullopt;
+  if (dtype->bits)
+    return dtype->bits / 32;
+  if (source.is_bool())
+    return 5;
+  if (source.is_array())
+  {
+    BigInt capacity;
+    to_integer(to_array_type(source).size(), capacity);
+    return capacity.to_uint64() - 1;
+  }
+  if (source.is_signedbv() || source.is_unsignedbv())
+  {
+    static const std::map<std::size_t, std::size_t> digits = {
+      {8, 4}, {16, 6}, {32, 11}, {64, 21}};
+    return digits.at(bv_width(source)) - (source.is_unsignedbv() ? 1 : 0);
+  }
   throw std::runtime_error(
-    "TypeError: astype() target dtype '" + name + "' is not supported");
+    "TypeError: astype(str) of this numpy dtype is not supported");
+}
+
+// `a.astype(str)`: each cell holds the first characters of str(element), up to
+// the terminator str() wrote.
+exprt function_call_expr::numpy_astype_to_string(
+  const nlohmann::json &receiver,
+  const exprt &source,
+  std::size_t width) const
+{
+  const locationt location = converter_.get_location_from_decl(call_);
+  const auto &array = to_array_type(source.type());
+  BigInt length;
+  if (to_integer(array.size(), length))
+    throw std::runtime_error(
+      "TypeError: astype(str) of an array of run-time length is not supported");
+  const typet cell = type_handler_.build_array(char_type(), width + 1);
+  const typet result_type = type_handler_.build_array(cell, length.to_uint64());
+  symbolt &result = converter_.create_tmp_symbol(
+    call_, "$astype_str$", result_type, gen_zero(result_type));
+  code_declt decl(build_symbol(result));
+  decl.operands().push_back(gen_zero(result_type));
+  decl.location() = location;
+  converter_.add_instruction(decl);
+  const bool integer =
+    array.subtype().is_signedbv() || array.subtype().is_unsignedbv();
+  for (long long i = 0; i < length.to_int64(); ++i)
+  {
+    nlohmann::json read = {
+      {"_type", "Subscript"},
+      {"value", receiver},
+      {"slice", {{"_type", "Constant"}, {"value", i}}}};
+    converter_.copy_location_fields_from_decl(call_, read);
+    converter_.copy_location_fields_from_decl(call_, read["slice"]);
+    const auto builtin = [&](const char *name, const nlohmann::json &argument) {
+      nlohmann::json applied = {
+        {"_type", "Call"},
+        {"func",
+         {{"_type", "Name"}, {"id", name}, {"ctx", {{"_type", "Load"}}}}},
+        {"args", nlohmann::json::array({argument})},
+        {"keywords", nlohmann::json::array()}};
+      converter_.copy_location_fields_from_decl(call_, applied);
+      converter_.copy_location_fields_from_decl(call_, applied["func"]);
+      return applied;
+    };
+    const exprt text = converter_.get_expr(
+      array.subtype().is_array()
+        ? read
+        : builtin("str", integer ? builtin("int", read) : read));
+    const typet text_type =
+      text.type().is_array() ? pointer_typet(char_type()) : text.type();
+    symbolt &chars =
+      converter_.create_tmp_symbol(call_, "$astype_text$", text_type, exprt());
+    code_declt chars_decl(build_symbol(chars));
+    chars_decl.location() = location;
+    converter_.add_instruction(chars_decl);
+    if (text.id() == "code" && text.get("statement") == "function_call")
+    {
+      code_function_callt bound = to_code_function_call(to_code(text));
+      bound.lhs() = build_symbol(chars);
+      converter_.add_instruction(bound);
+    }
+    else
+    {
+      code_assignt bound(
+        build_symbol(chars),
+        text.type().is_array() ? address_of_exprt(index_exprt(
+                                   text, gen_zero(size_type()), char_type()))
+                               : text);
+      bound.location() = location;
+      converter_.add_instruction(bound);
+    }
+    symbolt &ended = converter_.create_tmp_symbol(
+      call_, "$astype_ended$", bool_type(), gen_boolean(false));
+    code_declt ended_decl(build_symbol(ended));
+    ended_decl.operands().push_back(gen_boolean(false));
+    ended_decl.location() = location;
+    converter_.add_instruction(ended_decl);
+    const exprt target_cell =
+      index_exprt(build_symbol(result), from_integer(i, size_type()), cell);
+    for (std::size_t j = 0; j < width; ++j)
+    {
+      const exprt character = dereference_exprt(
+        build_add(build_symbol(chars), from_integer(j, size_type()), text_type),
+        char_type());
+      code_blockt copy;
+      code_assignt stop(
+        build_symbol(ended), equality_exprt(character, gen_zero(char_type())));
+      stop.location() = location;
+      copy.copy_to_operands(stop);
+      code_assignt store(
+        index_exprt(target_cell, from_integer(j, size_type()), char_type()),
+        character);
+      store.location() = location;
+      copy.copy_to_operands(store);
+      code_ifthenelset unfinished;
+      unfinished.cond() = not_exprt(build_symbol(ended));
+      unfinished.then_case() = copy;
+      unfinished.location() = location;
+      converter_.add_instruction(unfinished);
+    }
+  }
+  converter_.numpy_result_is_fresh_copy_ = true;
+  return build_symbol(result);
 }
 
 exprt function_call_expr::handle_numpy_astype() const
@@ -3795,12 +4004,39 @@ exprt function_call_expr::handle_numpy_astype() const
       "TypeError: astype() is only supported on numpy arrays");
 
   const array_typet &src_array = static_cast<const array_typet &>(arr_type);
+  if (type_utils::is_numpy_string_array(arr_type))
+  {
+    const auto width = astype_string_width(
+      call_["args"][0], converter_.ast(), src_array.subtype());
+    if (
+      !width || src_array.subtype().subtype().is_array() ||
+      call_["func"]["value"].value("_type", "") != "Name")
+      throw std::runtime_error(
+        "TypeError: astype() of a numpy string array to this dtype is not "
+        "supported");
+    return numpy_astype_to_string(call_["func"]["value"], arr_expr, *width);
+  }
   if (ns.follow(src_array.subtype()).is_array())
     throw std::runtime_error(
       "TypeError: astype() on a multi-dimensional array is not supported "
       "yet; cast the innermost rows individually");
 
-  const typet target_type = resolve_astype_target_type(call_["args"][0]);
+  if (
+    const auto width = astype_string_width(
+      call_["args"][0], converter_.ast(), src_array.subtype()))
+  {
+    if (call_["func"]["value"].value("_type", "") != "Name")
+      throw std::runtime_error(
+        "TypeError: astype(str) of an unnamed array is not supported");
+    return numpy_astype_to_string(call_["func"]["value"], arr_expr, *width);
+  }
+
+  const typet target_type =
+    resolve_astype_target_type(call_["args"][0], converter_.ast());
+  if (is_complex_type(src_array.subtype()) && !is_complex_type(target_type))
+    throw std::runtime_error(
+      "TypeError: astype() from a complex dtype to a real one is not "
+      "supported");
   const locationt location = converter_.get_location_from_decl(call_);
 
   array_typet result_type(target_type, src_array.size());
@@ -3824,7 +4060,13 @@ exprt function_call_expr::handle_numpy_astype() const
 
   exprt src_elem =
     build_index(arr_expr, build_symbol(index_var), src_array.subtype());
-  exprt casted_elem = build_typecast(src_elem, target_type);
+  const exprt complex_elem = promote_to_complex(src_elem);
+  exprt casted_elem = is_complex_type(target_type)
+                        ? complex_as_element(
+                            complex_part(complex_elem, "real"),
+                            complex_part(complex_elem, "imag"),
+                            target_type)
+                        : build_typecast(src_elem, target_type);
   exprt dest_elem =
     build_index(build_symbol(result_sym), build_symbol(index_var), target_type);
 
@@ -3847,6 +4089,11 @@ exprt function_call_expr::handle_numpy_astype() const
   while_stmt.location() = location;
   converter_.add_instruction(while_stmt);
 
+  if (converter_.current_lhs)
+  {
+    converter_.current_lhs->type() = result_type;
+    converter_.update_symbol(*converter_.current_lhs);
+  }
   return build_symbol(result_sym);
 }
 
@@ -3940,7 +4187,7 @@ exprt function_call_expr::handle_list_append() const
   // generic array path; build_push_list_call then takes their address.
   if (
     !value_to_append.is_constant() && value_to_append.type().is_array() &&
-    value_to_append.type().subtype() == char_type())
+    type_utils::is_char_storage(value_to_append.type().subtype()))
   {
     const array_typet &array_type = to_array_type(value_to_append.type());
     if (array_type.size().is_constant())
@@ -4343,8 +4590,8 @@ exprt function_call_expr::handle_cmath_inverse_fast_path()
   model_call.location() = converter_.get_location_from_decl(call_);
 
   python_math &math = converter_.get_math_handler();
-  exprt zr = build_member(z, "real", double_type());
-  exprt zi = build_member(z, "imag", double_type());
+  exprt zr = complex_part(z, "real");
+  exprt zi = complex_part(z, "imag");
   exprt zero = from_double(0.0, double_type());
   // V.3: build the pure-imaginary guard (zr == 0) in IREP2.
   expr2tc zr2, zero2;
@@ -4490,6 +4737,32 @@ bool function_call_expr::is_math_function_dispatch_call() const
          bounded_math_import().has_value();
 }
 
+static bool is_math_number(const typet &t)
+{
+  return t.is_floatbv() || t.is_signedbv() || t.is_unsignedbv() || t.is_bool();
+}
+
+static bool overflows(const std::string &f)
+{
+  return f == "exp" || f == "exp2" || f == "expm1" || f == "sinh" ||
+         f == "cosh";
+}
+
+static bool is_finite_constant(const exprt &e)
+{
+  return e.is_constant() && e.type().is_floatbv() &&
+         ieee_floatt(to_constant_expr(e)).is_finite();
+}
+
+static bool is_numeric_literal(const nlohmann::json &node)
+{
+  if (node.value("_type", "") == "UnaryOp")
+    return is_numeric_literal(node["operand"]);
+  const nlohmann::json &value = node.value("value", nlohmann::json());
+  return node.value("_type", "") == "Constant" &&
+         (value.is_number() || value.is_boolean());
+}
+
 static bool is_number_literal(const nlohmann::json &node)
 {
   const std::string type = node.value("_type", "");
@@ -4524,8 +4797,7 @@ function_call_expr::try_bounded_math_call(const std::string &func_name)
   const exprt x = converter_.get_expr(arg);
   if (is_cpp_throw_expr(x))
     return x;
-  const typet &t = x.type();
-  if (!t.is_floatbv() && !t.is_signedbv() && !t.is_unsignedbv() && !t.is_bool())
+  if (!is_math_number(x.type()))
   {
     if (!json_utils::ast_contains_call(arg))
       return std::nullopt;
@@ -4549,7 +4821,45 @@ exprt function_call_expr::dispatch_math_call()
     std::optional<exprt> bounded =
       try_bounded_math_call(math_function_name(function_id_.get_function())))
     return *bounded;
-  return handle_math_function_dispatch();
+  const std::string func_name = math_function_name(function_id_.get_function());
+  if (calls_overflow_model(func_name))
+    return handle_general_function_call();
+  const exprt result = handle_math_function_dispatch();
+  return may_overflow(func_name, result) ? handle_general_function_call()
+                                         : result;
+}
+
+// These math.py models raise OverflowError themselves; as calls they also
+// keep short-circuit evaluation of the expression around them. A literal
+// argument is folded instead (may_overflow), and exp/sinh/cosh of a run-time
+// number take bounded_math, which raises too.
+bool function_call_expr::calls_overflow_model(const std::string &f) const
+{
+  const nlohmann::json &args = call_["args"];
+  const bool modelled =
+    f == "ldexp" || ((f == "expm1" || f == "exp2") && args.size() == 1 &&
+                     !is_number_literal(args[0]));
+  if (!modelled || converter_.is_model_file(call_))
+    return false;
+  if (
+    math_guard_utils::call_has_complex_in_args_or_keywords(
+      call_, converter_, type_handler_, converter_.current_function_name()))
+    return false;
+  // A call in an argument is converted once, by the model call; any other
+  // argument must be a number, as the models compare it with floats.
+  return std::all_of(args.begin(), args.end(), [&](const nlohmann::json &a) {
+    return json_utils::ast_contains_call(a) ||
+           is_math_number(converter_.get_expr(a).type());
+  });
+}
+
+// Only a finite folded result of a number literal is known not to overflow.
+bool function_call_expr::may_overflow(const std::string &f, const exprt &result)
+  const
+{
+  const nlohmann::json &args = call_["args"];
+  return overflows(f) && !converter_.is_model_file(call_) && args.size() == 1 &&
+         is_numeric_literal(args[0]) && !is_finite_constant(result);
 }
 
 exprt function_call_expr::handle_math_function_dispatch()
@@ -4569,6 +4879,7 @@ exprt function_call_expr::handle_math_function_dispatch()
     return math_guard_utils::call_has_complex_in_args_or_keywords(
       call_, converter_, type_handler_, converter_.current_function_name());
   };
+
   auto require_one_arg = [&]() -> exprt {
     if (args.size() != 1)
       throw std::runtime_error(func_name + "() expects exactly 1 argument");
@@ -5172,34 +5483,7 @@ function_call_expr::get_dispatch_table()
     {[this]() {
        return function_id_.get_function() == "repr" && !call_["args"].empty();
      },
-     [this]() {
-       const auto &arg = call_["args"][0];
-       double real_val = 0.0, imag_val = 0.0;
-       if (
-         try_extract_complex_parts_from_json(
-           arg,
-           converter_.ast(),
-           converter_.current_function_name(),
-           real_val,
-           imag_val))
-       {
-         return converter_.get_string_builder().build_string_literal(
-           format_complex_string(real_val, imag_val));
-       }
-       exprt value_expr = converter_.get_expr(arg);
-       if (!value_expr.is_nil() && value_expr.statement() != "cpp-throw")
-       {
-         if (is_complex_type(value_expr.type()))
-           return handle_complex_to_str();
-         // Types without a repr model keep the general-call fallback: a clean
-         // error, never a wrong fold.
-         exprt repr = converter_.get_string_handler().build_repr(
-           value_expr, converter_.get_location_from_decl(call_));
-         if (repr.is_not_nil())
-           return repr;
-       }
-       return handle_general_function_call();
-     },
+     [this]() { return handle_repr_call(); },
      "repr()"},
 
     // bytes.fromhex("..") classmethod — fold a constant hex string to bytes
@@ -5301,6 +5585,8 @@ exprt function_call_expr::get()
 {
   if (std::optional<exprt> raise = check_explicit_super())
     return *raise;
+  if (std::optional<exprt> number = try_int_of_numpy_scalar())
+    return *number;
 
   // Use dispatch table to handle special function types
   auto dispatch_table = get_dispatch_table();
@@ -5326,6 +5612,77 @@ function_call_expr::find_receiver_symbol(symbol_id &obj_symbol_id) const
   obj_symbol_id.set_object(caller);
   return converter_.follow_retype_alias(
     converter_.find_symbol(obj_symbol_id.to_string()));
+}
+
+// `sum(a)` over a narrow array: Python adds the elements to 0, a weak int, so
+// the running total stays at the element's width rather than the reducer's.
+std::optional<exprt> function_call_expr::try_builtin_sum_over_numpy_scalars()
+{
+  const auto &args = call_["args"];
+  if (
+    function_id_.get_function() != "sum" || args.size() != 1 ||
+    args[0].value("_type", "") != "Name" ||
+    !try_find_function(converter_.ast()["body"], "sum").empty())
+    return std::nullopt;
+  const std::string id =
+    converter_.resolve_name_symbol_id(args[0].value("id", ""));
+  const symbolt *symbol = converter_.symbol_table().find_symbol(id);
+  const typet type =
+    symbol ? converter_.ns.follow(symbol->get_type()) : typet();
+  if (
+    !type.is_array() ||
+    (!type_utils::is_numpy_scalar_type(type_utils::array_scalar_type(type)) &&
+     !type_utils::is_numpy_complex_array(type)))
+    return std::nullopt;
+  BigInt length;
+  if (to_integer(to_array_type(type).size(), length))
+    return std::nullopt;
+  nlohmann::json total = {{"_type", "Constant"}, {"value", 0}};
+  converter_.copy_location_fields_from_decl(call_, total);
+  for (long long i = 0; i < length.to_int64(); ++i)
+  {
+    nlohmann::json index = {{"_type", "Constant"}, {"value", i}};
+    nlohmann::json item = {
+      {"_type", "Subscript"}, {"value", args[0]}, {"slice", index}};
+    nlohmann::json sum = {
+      {"_type", "BinOp"},
+      {"left", total},
+      {"op", {{"_type", "Add"}}},
+      {"right", item}};
+    converter_.copy_location_fields_from_decl(call_, index);
+    converter_.copy_location_fields_from_decl(call_, item);
+    converter_.copy_location_fields_from_decl(call_, sum);
+    total = std::move(sum);
+  }
+  return converter_.get_expr(total);
+}
+
+// int(x) of a narrow scalar is a Python int, no longer wrapping at the width.
+std::optional<exprt> function_call_expr::try_int_of_numpy_scalar()
+{
+  const auto &args = call_["args"];
+  const std::string &function = function_id_.get_function();
+  const bool text = function == "str" || function == "repr";
+  if (
+    (function != "int" && function != "float" && !text) || args.size() != 1 ||
+    args[0].value("_type", "") != "Subscript" ||
+    json_utils::ast_contains_call(args[0]))
+    return std::nullopt;
+  const exprt value = converter_.get_expr(args[0]);
+  if (text)
+  {
+    converter_.reject_numpy_scalar_crossing(value.type(), function + "() of");
+    return std::nullopt;
+  }
+  if (is_complex_type(converter_.ns.follow(value.type())))
+    throw std::runtime_error(
+      "TypeError: " + function + "() of a complex number is not supported");
+  if (function != "int" || !type_utils::is_numpy_numeric_element(value.type()))
+    return std::nullopt;
+  if (value.type().is_unsignedbv() && bv_width(value.type()) == 64)
+    throw std::runtime_error(
+      "TypeError: int() of a numpy uint64 scalar is not supported");
+  return typecast_exprt(value, long_long_int_type());
 }
 
 exprt function_call_expr::handle_general_function_call()
@@ -5400,7 +5757,7 @@ exprt function_call_expr::handle_general_function_call()
   assert(!func_symbol_id.empty());
 
   // Find function symbol (O1: use per-call cache to avoid redundant lookups)
-  const symbolt *func_symbol = cached_find_symbol(func_symbol_id);
+  const symbolt *func_symbol = find_callee_symbol(func_symbol_id);
 
   if (func_symbol == nullptr)
   {
@@ -5849,6 +6206,8 @@ std::optional<exprt> function_call_expr::try_numpy_tolist_or_inplace_sort()
 {
   if (std::optional<exprt> materialized = try_materialize_numpy_tolist())
     return materialized;
+  if (std::optional<exprt> summed = try_builtin_sum_over_numpy_scalars())
+    return summed;
   return try_numpy_inplace_sort();
 }
 
@@ -6363,7 +6722,9 @@ std::optional<exprt> function_call_expr::try_fold_identity_array_return()
   typet innermost = converter_.ns.follow(element_candidate);
   while (innermost.is_array())
     innermost = converter_.ns.follow(to_array_type(innermost).subtype());
-  if (innermost == char_type())
+  if (
+    type_utils::is_char_storage(innermost) &&
+    !type_utils::is_numpy_string_array(element_candidate))
     return std::nullopt;
 
   return ret_expr;
@@ -6687,8 +7048,10 @@ std::optional<exprt> function_call_expr::apply_builtin_dispatch(
       if (elem_type.is_floatbv())
         actual_func_name += "_float";
       else if (
-        (elem_type.is_pointer() && elem_type.subtype() == char_type()) ||
-        (elem_type.is_array() && elem_type.subtype() == char_type()))
+        (elem_type.is_pointer() &&
+         type_utils::is_char_storage(elem_type.subtype())) ||
+        (elem_type.is_array() &&
+         type_utils::is_char_storage(elem_type.subtype())))
         actual_func_name += "_str";
       // Integer types use base name without suffix
     }
@@ -7056,7 +7419,7 @@ std::optional<exprt> function_call_expr::resolve_missing_function_symbol(
         // (x:MyClass) in python_converter::get_var_assign().
         return exprt("_init_undefined");
       }
-      converter_.base_ctor_called = true;
+      converter_.base_ctor_called.insert(function_id_.get_class());
     }
     else if (function_type_ == FunctionType::InstanceMethod)
     {
@@ -7174,6 +7537,7 @@ std::optional<exprt> function_call_expr::resolve_missing_function_symbol(
           {
             reject_unresolved_user_method(method_name);
             locationt location = converter_.get_location_from_decl(call_);
+            flag_unresolved_method_call(method_name, location);
             exprt zero_fallback =
               migrate_expr_back(gen_zero(migrate_type(any_type())));
             zero_fallback.set(PYTHON_UNRESOLVED_CALL_ATTR, true);
@@ -7802,20 +8166,6 @@ typet function_call_expr::dict_param_value_type(const symbolt *func, size_t idx)
     fn["args"]["args"][idx].value("annotation", nlohmann::json()));
 }
 
-// A numpy string or complex array is read only element by element; a callee
-// would read its storage as numbers.
-static void reject_unmodelled_numpy_array_argument(const typet &type)
-{
-  if (type_utils::is_numpy_string_array(type))
-    throw std::runtime_error(
-      "TypeError: passing a numpy string array to a function is not "
-      "supported");
-  if (type_utils::is_numpy_complex_array(type))
-    throw std::runtime_error(
-      "TypeError: passing a numpy complex array to a function is not "
-      "supported");
-}
-
 std::optional<exprt> function_call_expr::build_positional_arguments(
   code_function_callt &call,
   size_t param_offset,
@@ -7872,7 +8222,8 @@ std::optional<exprt> function_call_expr::build_positional_arguments(
 
       // Handle character-to-string-pointer conversion
       if (
-        param_type.is_pointer() && param_type.subtype() == char_type() &&
+        param_type.is_pointer() &&
+        type_utils::is_char_storage(param_type.subtype()) &&
         (arg.type().is_signedbv() || arg.type().is_unsignedbv()) &&
         arg.type() == char_type())
       {
@@ -7937,7 +8288,7 @@ std::optional<exprt> function_call_expr::build_positional_arguments(
       typet arg_followed_type = converter_.ns.follow(arg.type());
       if (
         param_type.is_pointer() && param_type.subtype().is_array() &&
-        param_type.subtype().subtype() == char_type() &&
+        type_utils::is_char_storage(param_type.subtype().subtype()) &&
         arg_followed_type.is_struct())
       {
         if (!arg.is_symbol())
@@ -8170,7 +8521,7 @@ std::optional<exprt> function_call_expr::build_positional_arguments(
     }
 
     reject_list_for_numpy_parameter(arg.type(), params, param_idx);
-    reject_unmodelled_numpy_array_argument(arg.type());
+    reject_scalar_crossing_into_parameter(arg.type(), params, param_idx);
 
     // All array function arguments (e.g. bytes type) are handled as pointers.
     if (arg.type().is_array())
@@ -8184,8 +8535,8 @@ std::optional<exprt> function_call_expr::build_positional_arguments(
       // bug (no regression relied on this, since it never worked). Reject it
       // explicitly rather than emit an unsound cast.
       if (
-        arg.type().subtype() != char_type() && param_idx < params.size() &&
-        params[param_idx].type().is_pointer())
+        !type_utils::is_char_storage(arg.type().subtype()) &&
+        param_idx < params.size() && params[param_idx].type().is_pointer())
       {
         const typet &target =
           converter_.ns.follow(params[param_idx].type().subtype());
@@ -8239,6 +8590,15 @@ std::optional<exprt> function_call_expr::build_positional_arguments(
 
 // A list where a numpy array parameter is expected would be read as the
 // array's elements.
+void function_call_expr::reject_scalar_crossing_into_parameter(
+  const typet &arg_type,
+  const code_typet::argumentst &params,
+  std::size_t param_idx) const
+{
+  if (param_idx >= params.size() || params[param_idx].type() != arg_type)
+    converter_.reject_numpy_scalar_crossing(arg_type, "passing");
+}
+
 void function_call_expr::reject_list_for_numpy_parameter(
   const typet &arg_type,
   const code_typet::argumentst &params,
@@ -8468,7 +8828,7 @@ exprt function_call_expr::finalize_call(
         // Check if default value is a string array type
         if (
           default_val.type().is_array() &&
-          default_val.type().subtype() == char_type())
+          type_utils::is_char_storage(default_val.type().subtype()))
         {
           // For constant string arrays, convert to string_constantt to ensure
           // proper initialization

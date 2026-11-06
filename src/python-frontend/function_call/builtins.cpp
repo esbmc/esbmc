@@ -31,9 +31,11 @@
 #include <util/expr/string_constant.h>
 #include <irep2/irep2_utils.h>
 #include <util/irep/migrate.h>
+#include <goto-programs/remove_exceptions.h>
 
 #include <algorithm>
 #include <cctype>
+#include <climits>
 #include <cmath>
 #include <cstdlib>
 #include <functional>
@@ -243,7 +245,34 @@ exprt function_call_expr::build_nondet_call() const
 
   exprt rhs = exprt("sideeffect", type_handler_.get_typet(type));
   rhs.statement("nondet");
-  return rhs;
+  return exclude_smallest_int(type, rhs);
+}
+
+/// nondet_int() models Python's unbounded int as a 64-bit value, which already
+/// leaves out 2**63 and above. Leave out -2**63 as well, so the range is
+/// symmetric and abs() of a nondet int is representable (#8892). Under
+/// --int-encoding ints are unbounded and nothing is left out.
+exprt function_call_expr::exclude_smallest_int(
+  const std::string &type,
+  const exprt &nondet) const
+{
+  if (
+    type != "int" || config.options.get_bool_option("int-encoding") ||
+    !converter_.can_emit_runtime_guard())
+    return nondet;
+  const locationt location = converter_.get_location_from_decl(call_);
+  symbolt &tmp =
+    converter_.create_tmp_symbol(call_, "$nondet_int$", nondet.type(), exprt());
+  code_declt decl(build_symbol(tmp));
+  decl.location() = location;
+  converter_.add_instruction(decl);
+  code_assignt assign(build_symbol(tmp), nondet);
+  assign.location() = location;
+  converter_.add_instruction(assign);
+  converter_.add_instruction(code_assumet(
+    python_expr::build_notequal(
+      build_symbol(tmp), to_signedbv_type(nondet.type()).smallest_expr())));
+  return build_symbol(tmp);
 }
 
 // The types named by an isinstance/issubclass classinfo: a type, a (nested)
@@ -332,6 +361,73 @@ void function_call_expr::plant_unsupported(const std::string &message) const
   converter_.current_block->copy_to_operands(check);
 }
 
+static const char *const abs_overflow_message =
+  "Unsupported: abs() of the smallest int, whose result is too large to "
+  "represent";
+
+/// Asserts @p representable as the abs() refusal and assumes it, so a path
+/// that fails the refusal ends there instead of going on with a wrapped value.
+void function_call_expr::refuse_abs_unless(const exprt &representable) const
+{
+  if (!converter_.can_emit_runtime_guard())
+    throw std::runtime_error(abs_overflow_message);
+  code_assertt check(representable);
+  check.location() = converter_.get_location_from_decl(call_);
+  check.location().user_provided(true);
+  check.location().comment(abs_overflow_message);
+  converter_.add_instruction(check);
+  converter_.add_instruction(code_assumet(representable));
+}
+
+/// abs() of an int literal. abs(-9223372036854775808) arrives as the stripped
+/// literal 9223372036854775808, which no int of the encoding holds: that is
+/// refused, and the refusal ends the path, so the 0 returned is never read.
+nlohmann::json
+function_call_expr::abs_of_int_literal(const nlohmann::json &value) const
+{
+  if (
+    value.is_number_unsigned() && value.get<unsigned long long>() >
+                                    static_cast<unsigned long long>(LLONG_MAX))
+  {
+    // Not the constant false, which CFG cleanup reads as the end of the
+    // function and so drops the assume.
+    refuse_abs_unless(not_exprt(true_exprt()));
+    return 0;
+  }
+  return std::llabs(value.get<long long>());
+}
+
+/// Python's abs() of the smallest int of the fixed-width encoding is one more
+/// than its largest int, so the result cannot be represented. Refuse that
+/// value instead of letting abs() wrap it back to itself (#8892). Under
+/// --int-encoding ints are unbounded and abs() is exact, so nothing is
+/// refused. Returns the operand to take abs() of, read once.
+exprt function_call_expr::refuse_unrepresentable_abs(exprt operand) const
+{
+  if (
+    operand.type().id() != "signedbv" ||
+    config.options.get_bool_option("int-encoding"))
+    return operand;
+  const signedbv_typet type = to_signedbv_type(operand.type());
+  if (!converter_.can_emit_runtime_guard())
+    throw std::runtime_error(abs_overflow_message);
+  if (!operand.is_symbol())
+  {
+    const locationt location = converter_.get_location_from_decl(call_);
+    symbolt &tmp =
+      converter_.create_tmp_symbol(call_, "$abs$", operand.type(), exprt());
+    code_declt decl(build_symbol(tmp));
+    decl.location() = location;
+    converter_.add_instruction(decl);
+    code_assignt assign(build_symbol(tmp), operand);
+    assign.location() = location;
+    converter_.add_instruction(assign);
+    operand = build_symbol(tmp);
+  }
+  refuse_abs_unless(python_expr::build_notequal(operand, type.smallest_expr()));
+  return operand;
+}
+
 /// The value a name is bound to, or an empty object.
 nlohmann::json function_call_expr::bound_value(const nlohmann::json &name) const
 {
@@ -399,6 +495,17 @@ void function_call_expr::refuse_isinstance_on_guessed_return(
       return id == "int" || id == "float" || id == "bool";
     });
   if (!asks_number || converter_.guessed_return_functions_.empty())
+    return;
+  // Only a run that reports TypeError can be misled by the guess.
+  const std::vector<irep_idt> checked =
+    python_checked_exceptions(config.options);
+  const auto covers_type_error = [](const irep_idt &name) {
+    return name == "TypeError" || name == "Exception" ||
+           name == "BaseException";
+  };
+  if (
+    !checked.empty() &&
+    std::none_of(checked.begin(), checked.end(), covers_type_error))
     return;
   const nlohmann::json call =
     obj_arg.value("_type", "") == "Name" ? bound_value(obj_arg) : obj_arg;
@@ -485,6 +592,13 @@ exprt function_call_expr::isinstance_without_type_name(
   if (std::any_of(types.begin(), types.end(), is_any))
     return converter_.get_exception_handler().gen_exception_raise(
       "TypeError", "typing.Any cannot be used with isinstance()");
+  // Every value is an instance of object.
+  const auto is_object = [&](const nlohmann::json &t) {
+    return t["_type"] == "Name" && t["id"] == "object" &&
+           !json_utils::is_class("object", converter_.ast());
+  };
+  if (std::any_of(types.begin(), types.end(), is_object))
+    return true_exprt();
   return nil_exprt();
 }
 
@@ -516,15 +630,19 @@ exprt function_call_expr::bind_isinstance_call(exprt &obj_expr) const
 
 /// The list item a read `*(T *)item->value` of a scalar element comes from, or
 /// nil. The cast is the frontend's guess at the element's type; the item's
-/// type_id records the type it was stored with.
-static exprt list_item_of_scalar_read(const exprt &read, const typet &item_type)
+/// type_id records the type it was stored with. A dict value read types the
+/// item with the followed struct rather than its tag, hence the follow.
+static exprt list_item_of_scalar_read(
+  const exprt &read,
+  const typet &item_type,
+  const namespacet &ns)
 {
   if (read.id() != "dereference" || read.op0().id() != "typecast")
     return nil_exprt();
   const exprt &value = read.op0().op0();
   if (
     value.id() != "member" || value.get("component_name") != "value" ||
-    value.op0().type() != item_type)
+    ns.follow(value.op0().type()) != ns.follow(item_type))
     return nil_exprt();
   return value.op0();
 }
@@ -535,14 +653,15 @@ static exprt list_item_of_scalar_read(const exprt &read, const typet &item_type)
 static exprt tagged_isinstance_operand(
   const exprt &obj,
   const std::string &type_name,
-  const type_handler &types)
+  const type_handler &types,
+  const namespacet &ns)
 {
   if (types.is_tagged_scalar_type(obj.type()))
     return obj;
   static const std::set<std::string> scalars = {"bool", "int", "float", "str"};
   if (!scalars.count(type_name))
     return nil_exprt();
-  return list_item_of_scalar_read(obj, types.get_tagged_object_type());
+  return list_item_of_scalar_read(obj, types.get_tagged_object_type(), ns);
 }
 
 // The type name an isinstance() classinfo node names.
@@ -666,8 +785,8 @@ exprt function_call_expr::handle_isinstance() const
     // A tagged-scalar operand's real type lives in the runtime `.type_id`
     // field rather than in a single static C type, so it needs its own
     // check instead of the static-type comparisons below.
-    const exprt tagged =
-      tagged_isinstance_operand(obj_expr, type_name, type_handler_);
+    const exprt tagged = tagged_isinstance_operand(
+      obj_expr, type_name, type_handler_, converter_.ns);
     if (tagged.is_not_nil())
       return converter_.dynamic_type_handler_.build_isinstance_check(
         tagged, type_name, json_utils::is_class(type_name, converter_.ast()));
@@ -709,12 +828,14 @@ exprt function_call_expr::handle_isinstance() const
     // char-pointer (a Python str), short-circuit to true here.
     if (
       expected_type.is_array() &&
-      to_array_type(expected_type).subtype() == char_type())
+      type_utils::is_char_storage(to_array_type(expected_type).subtype()))
     {
       const typet &obj_type = obj_expr.type();
       if (
-        (obj_type.is_array() && obj_type.subtype() == char_type()) ||
-        (obj_type.is_pointer() && obj_type.subtype() == char_type()))
+        (obj_type.is_array() &&
+         type_utils::is_char_storage(obj_type.subtype())) ||
+        (obj_type.is_pointer() &&
+         type_utils::is_char_storage(obj_type.subtype())))
         return type_name == "type" ? isinstance_str_as_type(obj_expr)
                                    : true_exprt();
     }
@@ -1901,7 +2022,7 @@ exprt function_call_expr::handle_abs(nlohmann::json &arg) const
     if (is_complex_type(operand.type()))
       return converter_.get_complex_handler().handle_abs(operand);
     exprt abs_expr("abs", operand.type());
-    abs_expr.copy_to_operands(operand);
+    abs_expr.copy_to_operands(refuse_unrepresentable_abs(operand));
     return abs_expr;
   };
 
@@ -1925,8 +2046,7 @@ exprt function_call_expr::handle_abs(nlohmann::json &arg) const
   {
     if (arg["value"].is_number_integer())
     {
-      const long long value = arg["value"].get<long long>();
-      arg["value"] = std::llabs(value); // Apply abs to integer constant
+      arg["value"] = abs_of_int_literal(arg["value"]);
       arg["type"] = "int";
     }
     else if (arg["value"].is_number_float())
@@ -2335,7 +2455,7 @@ exprt function_call_expr::handle_complex() const
         {
           const typet &elem_type = symbol_type.subtype();
           const bool is_textual_char_array =
-            elem_type == char_type() ||
+            type_utils::is_char_storage(elem_type) ||
             (elem_type.is_signedbv() &&
              to_signedbv_type(elem_type).get_width() == 8) ||
             (elem_type.is_unsignedbv() &&
@@ -2577,10 +2697,10 @@ exprt function_call_expr::handle_complex() const
   real_arg = promote_to_complex(real_arg);
   imag_arg = promote_to_complex(imag_arg);
 
-  exprt a = build_member(real_arg, "real", double_type());
-  exprt b = build_member(real_arg, "imag", double_type());
-  exprt c = build_member(imag_arg, "real", double_type());
-  exprt d = build_member(imag_arg, "imag", double_type());
+  exprt a = complex_part(real_arg, "real");
+  exprt b = complex_part(real_arg, "imag");
+  exprt c = complex_part(imag_arg, "real");
+  exprt d = complex_part(imag_arg, "imag");
 
   exprt real_part("ieee_sub", double_type());
   real_part.copy_to_operands(a, d);

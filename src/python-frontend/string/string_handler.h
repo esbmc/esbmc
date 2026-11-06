@@ -733,6 +733,12 @@ public:
     const exprt &string_obj,
     [[maybe_unused]] const locationt &location);
 
+  exprt
+  handle_string_isdecimal(const exprt &string_obj, const locationt &location);
+
+  exprt
+  handle_string_istitle(const exprt &string_obj, const locationt &location);
+
   /**
    * @brief Handle str.isidentifier() method
    */
@@ -938,6 +944,8 @@ private:
   exprt char_to_string(const exprt &expr);
 
   exprt constant_to_string(const exprt &expr);
+
+  exprt pointer_to_string(const exprt &expr);
 
   exprt build_string_index_result(
     const nlohmann::json &call,

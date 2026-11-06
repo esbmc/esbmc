@@ -694,7 +694,7 @@ bool __ESBMC_list_set_eq(const PyListObject *l1, const PyListObject *l2)
 
 PyObject *__ESBMC_list_at(PyListObject *l, size_t index)
 {
-  __ESBMC_assert(index < l->size, "out-of-bounds read in list");
+  __ESBMC_assert(index < l->size, "IndexError: out-of-bounds read in list");
   return &l->items[index];
 }
 
@@ -708,7 +708,8 @@ bool __ESBMC_list_set_at(
   int ptr_free)
 {
   __ESBMC_assert(l != NULL, "list_set_at: list is null");
-  __ESBMC_assert(index < l->size, "list_set_at: index out of bounds");
+  __ESBMC_assert(
+    index < l->size, "IndexError: list_set_at: index out of bounds");
 
   size_t float_idx = 0;
   void *copied_value = __ESBMC_copy_value(
@@ -831,6 +832,16 @@ bool __ESBMC_list_contains(
     // Check if types and sizes match
     if (elem->type_id == item_type_id && elem->size == item_size)
     {
+      // The type ids match, so item is a double when the element sits in the
+      // double buffer. Comparing doubles folds for constants, where a bit-wise
+      // read does not, and equates 0.0 with -0.0 as Python does (#9635).
+      if (item_size == 8 && __ESBMC_same_object(elem->value, __ESBMC_float_buf))
+      {
+        if (*(const double *)elem->value == *(const double *)item)
+          return true;
+        ++i;
+        continue;
+      }
       // Compare the actual data
       // TODO: Not sure if this works for recursive types
       if (__ESBMC_values_equal(elem->value, item, item_size))
@@ -1091,7 +1102,8 @@ size_t __ESBMC_list_try_find_index(
 bool __ESBMC_list_remove_at(PyListObject *l, size_t index)
 {
   __ESBMC_assert(l != NULL, "list_remove_at: list is null");
-  __ESBMC_assert(index < l->size, "list_remove_at: index out of bounds");
+  __ESBMC_assert(
+    index < l->size, "IndexError: list_remove_at: index out of bounds");
 
   // Shift elements to fill the gap
   size_t i = index;

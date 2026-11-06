@@ -92,6 +92,8 @@ public:
     const exprt *index_step = nullptr);
 
   exprt index(const exprt &array, const nlohmann::json &slice_node);
+  exprt
+  numpy_string_slice_copy(const exprt &array, const nlohmann::json &slice_node);
 
   /**
    * @brief Lower boolean-mask indexing `a[mask]` to a runtime loop that
@@ -945,6 +947,10 @@ public:
     bool constant_index,
     const nlohmann::json &list_node,
     const typet &fallback) const;
+
+  /// The type every element of @p array was pushed with when \p fallback is a
+  /// tuple struct, else \p fallback.
+  typet recorded_tuple_type_or(const exprt &array, const typet &fallback) const;
 
   struct shallow_push_call
   {

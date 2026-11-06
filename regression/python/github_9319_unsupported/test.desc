@@ -1,5 +1,0 @@
-CORE
-main.py
-
-^VERIFICATION FAILED$
-Unsupported: arithmetic on a value whose type was lost$

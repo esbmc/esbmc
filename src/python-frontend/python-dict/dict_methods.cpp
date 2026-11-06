@@ -921,8 +921,7 @@ typet python_dict_handler::get_popitem_tuple_type(const exprt &dict_expr)
       }
     }
   }
-  if (key_type.is_nil() || key_type.is_empty())
-    key_type = gen_pointer_type(char_type());
+  key_type = key_type_or_default(key_type, dict_expr);
   if (key_type.is_array() && key_type.subtype() == char_type())
     key_type = gen_pointer_type(char_type());
 

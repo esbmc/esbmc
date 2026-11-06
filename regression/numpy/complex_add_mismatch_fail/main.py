@@ -1,4 +1,6 @@
 import numpy as np
 
-z = np.conjugate(2 + 3j)
-assert z.imag == 3.0
+a = np.array([1 + 2j, 3j])
+b = np.array([1j, 2])
+c = a * b
+assert c[0] == 1 + 2j

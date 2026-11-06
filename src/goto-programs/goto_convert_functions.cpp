@@ -1511,7 +1511,7 @@ bool goto_convert_functionst::convert_native_rec(
         for (const auto &op : it.second)
         {
           BigInt val;
-          if (!to_integer(op, val))
+          if (!to_integer(op.id() == "case_range" ? op.op0() : op, val))
             x->switch_case_ids.push_back(integer2string(val));
         }
     }
@@ -2186,6 +2186,10 @@ void goto_convert_functionst::rename_types(
       decl_alignment.is_not_nil() &&
       alignment(static_cast<const typet &>(type), ns) > alignment(type2, ns))
       type2.set("alignment", decl_alignment);
+
+    // Likewise _Atomic, which qualifies the declaration, not the tag.
+    if (type.get_bool("#atomic"))
+      type2.set("#atomic", true);
 
     type = type2;
     return;
