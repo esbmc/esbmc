@@ -437,6 +437,18 @@ solidity_skips_overflow_check(const expr2tc &expr, const locationt &loc)
          (loc.get("#sol_unchecked") == "1" || is_shl2t(expr));
 }
 
+/* Atomic read-modify-write on a signed type wraps silently (C11 7.17.7.5p3;
+ * GCC gives its __sync/__atomic builtins the same semantics). Their names are
+ * reserved, so a body under one is the frontend's model of that builtin. */
+static bool wraps_signed(const expr2tc &expr, const locationt &loc)
+{
+  const std::string &function = loc.function().as_string();
+  return is_signedbv_type(expr->type) &&
+         (has_prefix(function, "__sync_") ||
+          has_prefix(function, "__atomic_") ||
+          has_prefix(function, "__c11_atomic_"));
+}
+
 static expr2tc overflow_expr(const expr2tc &expr)
 {
   if (is_neg2t(expr))
@@ -494,7 +506,7 @@ void goto_checkt::overflow_check(
   if (is_lshr2t(expr) || is_ashr2t(expr))
     return;
 
-  if (solidity_skips_overflow_check(expr, loc))
+  if (solidity_skips_overflow_check(expr, loc) || wraps_signed(expr, loc))
     return;
 
   // First, check type.
