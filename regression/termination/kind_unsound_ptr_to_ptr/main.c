@@ -1,6 +1,8 @@
 /* The loop counts through **q. k-induction cannot havoc that cell, so its
  * inductive step starts where the loop started and does not reach the exit
- * within k iterations; that is no proof of non-termination. */
+ * within k iterations; that is no proof of non-termination. The write to x
+ * keeps the loop's modified set non-empty, so only that havoc gate can
+ * disable the inductive step. */
 #include <stdlib.h>
 
 int main(void)
