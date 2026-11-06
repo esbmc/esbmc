@@ -1,4 +1,4 @@
-#include <esbmc.h>
+#include "../../../include/esbmc.h"
 
 int main() {
   int x;
