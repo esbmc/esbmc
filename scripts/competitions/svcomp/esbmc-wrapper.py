@@ -566,17 +566,28 @@ MIN_RERUN_BUDGET = 30
 def confirmed_by_integer_encoding(esbmc_command_line, the_output, prop, elapsed):
   """Does a --ir re-run violate the same property at the same file and line?
 
-  The re-run checks every property, so it confirms the first run's site even
-  when it would have stopped at another violation first (#9803).
+  A plain re-run confirms when it stops at the first run's site. Under
+  k-induction a --multi-property re-run goes on raising k for every other
+  claim after it has found that site, so it runs only when the plain re-run
+  stops elsewhere: it checks every property, so it confirms the first run's
+  site even when the plain re-run stopped at another violation first (#9803).
 
-  A first run that leaves too little of the budget for the re-run is not
-  confirmed.
+  Both re-runs share one budget, and one that would get too little of it is
+  not made, so the violation is not confirmed.
   """
   budget = min(IR_RERUN_TIMEOUT, TOTAL_BUDGET - elapsed)
   if budget < MIN_RERUN_BUDGET:
     return False
   site = violation_site(the_output)
   if site is None:
+    return False
+  started = time.monotonic()
+  plain = run(esbmc_command_line + "--ir --z3 ", budget).decode()
+  plain_result = parse_result(plain, prop)
+  if plain_result == Result.fail_python and violation_site(plain) == site:
+    return True
+  budget -= time.monotonic() - started
+  if plain_result == Result.success or budget < MIN_RERUN_BUDGET:
     return False
   rerun = run(esbmc_command_line + "--ir --z3 --multi-property ", budget).decode()
   if parse_result(rerun, prop) != Result.fail_python:
