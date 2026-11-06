@@ -4862,6 +4862,71 @@ bool function_call_expr::may_overflow(const std::string &f, const exprt &result)
          is_numeric_literal(args[0]) && !is_finite_constant(result);
 }
 
+// The logarithm of one operand of math.log, raising "math domain error" for
+// an operand <= 0 as the one-argument form does.
+exprt function_call_expr::math_log_of(const nlohmann::json &arg)
+{
+  const exprt arg_expr = converter_.get_expr(arg);
+  if (is_cpp_throw_expr(arg_expr))
+    return arg_expr;
+  if (is_complex_type(arg_expr.type()))
+    return complex_utils::raise_math_real_type_error_expr(converter_);
+  if (
+    !is_number_literal(arg) && is_math_number(arg_expr.type()) &&
+    !converter_.is_model_file(call_))
+    return bounded_math(converter_, call_)
+      .runtime("log", arg_expr, math_module::math);
+  expr2tc fp_operand;
+  migrate_expr(arg_expr, fp_operand);
+  if (!arg_expr.type().is_floatbv())
+    fp_operand = typecast2tc(
+      migrate_type(type_handler_.get_typet("float", 0)), fp_operand);
+  exprt raise_expr = converter_.get_exception_handler().gen_exception_raise(
+    "ValueError", "math domain error");
+  const locationt loc = converter_.get_location_from_decl(call_);
+  raise_expr.location() = loc;
+  raise_expr.location().user_provided(true);
+  code_expressiont raise_code(raise_expr);
+  raise_code.location() = loc;
+  code_ifthenelset guard;
+  guard.cond() =
+    migrate_expr_back(lessthanequal2tc(fp_operand, gen_zero(fp_operand->type)));
+  guard.then_case() = raise_code;
+  guard.location() = loc;
+  guard.location().property("skipped");
+  converter_.current_block->copy_to_operands(guard);
+  return converter_.get_math_handler().handle_log(arg_expr, call_);
+}
+
+// math.log(x, base) is log(x) / log(base), as in CPython, so a base of 1
+// raises ZeroDivisionError.
+exprt function_call_expr::handle_math_log()
+{
+  const nlohmann::json &args = call_["args"];
+  if (args.empty() || args.size() > 2)
+    throw std::runtime_error("log() expects 1 or 2 arguments");
+  const exprt ln_x = math_log_of(args[0]);
+  if (args.size() == 1 || is_cpp_throw_expr(ln_x))
+    return ln_x;
+  exprt ln_base = math_log_of(args[1]);
+  if (is_cpp_throw_expr(ln_base))
+    return ln_base;
+  ln_base = converter_.guard_operand(
+    ln_base,
+    call_,
+    "log_base",
+    [this](const expr2tc &value, const locationt &loc) {
+      converter_.emit_guarded_raise(
+        migrate_expr_back(equality2tc(value, gen_zero(value->type))),
+        "ZeroDivisionError",
+        "float division by zero",
+        loc);
+    });
+  exprt quotient("ieee_div", double_type());
+  quotient.copy_to_operands(ln_x, ln_base);
+  return quotient;
+}
+
 exprt function_call_expr::handle_math_function_dispatch()
 {
   const std::string func_name = math_function_name(function_id_.get_function());
@@ -5059,36 +5124,7 @@ exprt function_call_expr::handle_math_function_dispatch()
     return sqrt_result;
   }
   else if (func_name == "log")
-  {
-    exprt arg_expr = require_one_arg();
-    if (
-      std::optional<exprt> type_error = validate_real_arg(arg_expr);
-      type_error.has_value())
-
-      return *type_error;
-    // Domain check for log: operand must be > 0 (V.3: built in IREP2).
-    expr2tc fp_operand;
-    migrate_expr(arg_expr, fp_operand);
-    if (!arg_expr.type().is_floatbv())
-      fp_operand = typecast2tc(
-        migrate_type(type_handler_.get_typet("float", 0)), fp_operand);
-    exprt domain_check = migrate_expr_back(
-      lessthanequal2tc(fp_operand, gen_zero(fp_operand->type)));
-    exprt raise_expr = converter_.get_exception_handler().gen_exception_raise(
-      "ValueError", "math domain error");
-    locationt loc = converter_.get_location_from_decl(call_);
-    raise_expr.location() = loc;
-    raise_expr.location().user_provided(true);
-    code_expressiont raise_code(raise_expr);
-    raise_code.location() = loc;
-    code_ifthenelset guard;
-    guard.cond() = domain_check;
-    guard.then_case() = raise_code;
-    guard.location() = loc;
-    guard.location().property("skipped");
-    converter_.current_block->copy_to_operands(guard);
-    return converter_.get_math_handler().handle_log(arg_expr, call_);
-  }
+    return handle_math_log();
   else if (func_name == "acos")
   {
     exprt arg_expr = require_one_arg();
