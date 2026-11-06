@@ -82,6 +82,22 @@ static bool takes_address_of(const expr2tc &e, const expr2tc &symbol)
   return found;
 }
 
+/// True if an instruction in [first, last) assigns symbol or a call result to
+/// it.
+static bool assigns(
+  goto_programt::const_targett first,
+  goto_programt::const_targett last,
+  const expr2tc &symbol)
+{
+  for (; first != last; ++first)
+    if (
+      (first->is_assign() && to_code_assign2t(first->code).target == symbol) ||
+      (first->is_function_call() &&
+       to_code_function_call2t(first->code).ret == symbol))
+      return true;
+  return false;
+}
+
 /// True if symbol is declared in goto_program and no instruction there takes
 /// its address, so only a direct write in this function can change it.
 static bool
@@ -184,14 +200,7 @@ int bounded_loop_unroller::get_loop_bounds(
   // taken (#9975).
   t++;
   t++; // First instruction of the loop
-  for (; t != te; t++)
-  {
-    if (t->is_assign() && to_code_assign2t(t->code).target == symbol)
-      return -1;
-    if (t->is_function_call() && to_code_function_call2t(t->code).ret == symbol)
-      return -1;
-  }
-  if (!is_unaliased_local(symbol, goto_program))
+  if (assigns(t, te, symbol) || !is_unaliased_local(symbol, goto_program))
     return -1;
 
   int bound = k - k0;
