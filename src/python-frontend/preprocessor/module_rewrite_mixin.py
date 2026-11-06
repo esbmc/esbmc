@@ -630,7 +630,17 @@ class ModuleRewriteMixin:
         self._scan_module_vararg_defs(node)
         self._single_return_funcs = self._collect_single_return_funcs(node)
         self._param_subscripting_funcs = self._collect_param_subscripting_funcs(node)
+        self._plain_function_names = self._collect_plain_function_names(node)
         self.apply_range_rewrites(node, alias_seed=alias_seed, wrapper_seed=wrapper_seed)
+
+    @staticmethod
+    def _collect_plain_function_names(node):
+        """Names of the functions defined in the module that are not generators."""
+        return {
+            f.name
+            for f in ast.walk(node) if isinstance(f, ast.FunctionDef) and not any(
+                isinstance(n, (ast.Yield, ast.YieldFrom)) for n in ast.walk(f))
+        }
 
     def _scan_iterator_classes(self, node):
         """Classes whose instances a for loop iterates through `__iter__`, for visit_For.
