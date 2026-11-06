@@ -2085,6 +2085,48 @@ exprt python_converter::once_bound_exponent(
   return exponent->get_value();
 }
 
+// The element a literal `[A, B][k]` or `(A, B)[k]` reads at a constant k, or
+// nullptr.
+static const nlohmann::json *
+constant_subscript_element(const nlohmann::json &node)
+{
+  if (node.value("_type", "") != "Subscript")
+    return nullptr;
+  const nlohmann::json &seq = node["value"];
+  if (seq["_type"] != "List" && seq["_type"] != "Tuple")
+    return nullptr;
+  const nlohmann::json &elts = seq["elts"];
+  const nlohmann::json &slice = node["slice"];
+  const bool negated =
+    slice["_type"] == "UnaryOp" && slice["op"]["_type"] == "USub";
+  const nlohmann::json &index = negated ? slice["operand"] : slice;
+  if (index["_type"] != "Constant" || !index["value"].is_number_integer())
+    return nullptr;
+  long long i = index["value"].get<long long>();
+  if (negated)
+    i = -i;
+  const long long size = elts.size();
+  if (i < 0)
+    i += size;
+  return i >= 0 && i < size ? &elts[i] : nullptr;
+}
+
+void python_converter::fold_class_subscript(
+  const std::string &cmp,
+  nlohmann::json &operand)
+{
+  if (cmp != "Is" && cmp != "IsNot")
+    return;
+  const nlohmann::json *element = constant_subscript_element(operand);
+  if (!element)
+    return;
+  for (const auto &elt : operand["value"]["elts"])
+    if (elt["_type"] != "Name" || !class_identity_operand(elt, get_expr(elt)))
+      return;
+  const nlohmann::json chosen = *element;
+  operand = chosen;
+}
+
 exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
 {
   if (std::optional<exprt> bound = try_lowered_compare(element))
@@ -2112,6 +2154,8 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
   if (element.contains("ops") && element["ops"].size() == 1)
   {
     const std::string cmp = element["ops"][0]["_type"];
+    fold_class_subscript(cmp, left);
+    fold_class_subscript(cmp, right);
     if (cmp == "Is" || cmp == "IsNot" || cmp == "Eq" || cmp == "NotEq")
       type_compared_operands_ = {&left, &right};
   }

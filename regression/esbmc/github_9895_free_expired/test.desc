@@ -1,0 +1,6 @@
+CORE
+main.c
+
+^VERIFICATION FAILED$
+dereference failure: free\(\) of non-dynamic memory
+\A(?![\s\S]*accessed expired variable pointer)[\s\S]*\Z
