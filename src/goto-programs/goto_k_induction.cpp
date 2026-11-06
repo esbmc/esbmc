@@ -1933,6 +1933,35 @@ bool havoc_loop(
   return covered;
 }
 
+/// Whether a conditional jump enters a reachable, non-library loop past its
+/// head. The step cannot havoc that edge (see collect_entry_jumps), so it would
+/// run the loop from its concrete entry state (#7565).
+bool enters_loop_conditionally(
+  goto_functionst &goto_functions,
+  const std::unordered_set<irep_idt, irep_id_hash> &reachable,
+  bool continue_past_failed_assertions)
+{
+  Forall_goto_functions (it, goto_functions)
+  {
+    if (
+      !it->second.body_available || it->second.body.hide ||
+      !reachable.count(it->first))
+      continue;
+    goto_loopst loops(it->first, goto_functions, it->second);
+    for (const loopst &loop : loops.get_loops())
+      for (const auto &jump : collect_entry_jumps(
+             it->second.body, loop, continue_past_failed_assertions))
+        if (!is_true(jump->guard))
+        {
+          log_warning(
+            "k-induction cannot havoc a loop a conditional jump enters past "
+            "its head. Disabling inductive step");
+          return true;
+        }
+  }
+  return false;
+}
+
 /// The locals and parameters some loop of their function havocs in the
 /// inductive step and may read the havoc of.
 std::unordered_set<irep_idt, irep_id_hash>
@@ -2018,8 +2047,9 @@ bool goto_k_induction(
       "earlier iterations. Disabling inductive step");
     disable_inductive_step = true;
   }
+  disable_inductive_step |= enters_loop_conditionally(
+    goto_functions, reachable, continue_past_failed_assertions);
   bool uncovered_write = false;
-  bool conditional_entry = false;
   Forall_goto_functions (it, goto_functions)
   {
     if (!it->second.body_available)
@@ -2039,11 +2069,6 @@ bool goto_k_induction(
         drops_unresolved ? iteration_of(it->second, loop) : iterationt());
     auto iteration = iterations.cbegin();
     for (auto &loop : loops.get_loops())
-    {
-      if (decides)
-        for (const auto &jump : collect_entry_jumps(
-               it->second.body, loop, continue_past_failed_assertions))
-          conditional_entry |= !is_true(jump->guard);
       if (
         !havoc_loop(
           goto_functions,
@@ -2059,16 +2084,11 @@ bool goto_k_induction(
           continue_past_failed_assertions) &&
         decides)
         uncovered_write = true;
-    }
   }
   goto_functions.update();
   if (uncovered_write)
     log_warning(
       "k-induction cannot havoc what a loop writes through a pointer. "
       "Disabling inductive step");
-  if (conditional_entry)
-    log_warning(
-      "k-induction cannot havoc a loop a conditional jump enters past its "
-      "head. Disabling inductive step");
-  return disable_inductive_step || uncovered_write || conditional_entry;
+  return disable_inductive_step || uncovered_write;
 }
