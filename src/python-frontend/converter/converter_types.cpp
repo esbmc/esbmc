@@ -58,10 +58,11 @@ exprt python_converter::unwrap_optional_if_needed(
   // Extract the value field. V.3: IREP2 member access (round-trip).
   expr2tc b2;
   migrate_expr(materialize_optional(expr, element), b2);
-  return migrate_expr_back(member2tc(
+  // build_optional_type pads the payload; other tuples stay unpadded.
+  return tuple_handler_->strip_padding(migrate_expr_back(member2tc(
     migrate_type(to_struct_type(expr.type()).get_component("value").type()),
     b2,
-    "value"));
+    "value")));
 }
 
 exprt python_converter::wrap_in_optional(
