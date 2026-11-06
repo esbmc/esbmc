@@ -3550,6 +3550,12 @@ private:
   exprt unwrap_optional_if_needed(
     const exprt &expr,
     const nlohmann::json &element = nlohmann::json());
+  /// The tuple an Optional[tuple] \p value holds, raising TypeError with
+  /// \p message where it holds None; any other value is returned as is.
+  exprt optional_tuple_payload(
+    const exprt &value,
+    const nlohmann::json &element,
+    const std::string &message);
 
   // =========================================================================
   // Dunder method dispatch for user-defined struct types

@@ -1,0 +1,5 @@
+CORE
+main.c
+--overflow-check --k-induction --max-k-step 6
+^VERIFICATION SUCCESSFUL$
+^Solution found by the inductive step

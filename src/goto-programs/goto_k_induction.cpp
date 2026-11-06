@@ -457,23 +457,21 @@ bool reaches_back_edge(
   return false;
 }
 
-/// The unconditional jumps that enter the loop somewhere other than its head: a
-/// rotated (bottom-test) loop is entered at its test rather than at its head,
-/// and a switch dispatches through trampolines that jump past the head into the
+/// The jumps that enter the loop somewhere other than its head: a rotated
+/// (bottom-test) loop is entered at its test rather than at its head, and a
+/// switch dispatches through trampolines that jump past the head into the
 /// middle of the body. Without a havoc on those edges the inductive step
 /// symexes the concrete initial state and truncates at k instead of inducting
 /// (#7565). Jumps to the head are already covered: insert_swap pins those to
 /// the havoc block it writes there.
 ///
-/// Only unconditional jumps qualify. The havocs go in front of the jump
+/// Only unconditional jumps can be havoced. The havocs go in front of the jump
 /// itself, so every execution reaching them goes on to enter the loop; a
 /// conditional jump also falls through to a non-entry path, so splitting that
 /// edge would need a trampoline block, and the new edges would have to be
 /// revalidated against goto_loopst, adjust_loop_head_and_exit's
-/// location_number == 0 heuristic and remove_unreachable. A loop whose only
-/// entry is conditional therefore stays un-havoced and can still be falsely
-/// proved -- one #7565 residual, pinned by
-/// regression/k-induction/github_7565_conditional_entry_fail.
+/// location_number == 0 heuristic and remove_unreachable. A conditional entry
+/// disables the inductive step instead (see goto_k_induction).
 std::vector<goto_programt::targett> collect_entry_jumps(
   goto_programt &body,
   const loopst &loop,
@@ -493,7 +491,7 @@ std::vector<goto_programt::targett> collect_entry_jumps(
   std::vector<goto_programt::targett> jumps;
   for (auto it = body.instructions.begin(); it != body.instructions.end(); ++it)
   {
-    if (loop_range.count(&*it) || !it->is_goto() || !is_true(it->guard))
+    if (loop_range.count(&*it) || !it->is_goto())
       continue;
     for (const auto &target : it->targets)
       if (
@@ -547,8 +545,11 @@ void transform_loop(
   // Collected here, applied last: splicing a havoc block displaces the GOTO
   // onto a fresh instruction whose location_number is 0, which is what
   // adjust_loop_head_and_exit keys its loop-exit test on.
-  const std::vector<goto_programt::targett> entry_jumps = collect_entry_jumps(
+  std::vector<goto_programt::targett> entry_jumps = collect_entry_jumps(
     goto_function.body, loop, continue_past_failed_assertions);
+  std::erase_if(entry_jumps, [](const goto_programt::targett &jump) {
+    return !is_true(jump->guard);
+  });
 
   // Loop-scoped cache for get_entry_cond_rec. Nested loops in the same
   // function don't reuse entries because we construct a fresh cache per
@@ -1562,8 +1563,8 @@ iterationt iteration_of(const goto_functiont &function, const loopst &loop)
   iteration.back = loop.get_original_loop_exit()->location_number;
   const loop_bodyt body(loop);
 
-  // A jump into the body starts an iteration too, havoced only when it is
-  // unconditional (see collect_entry_jumps). Nothing a loop reads past its
+  // A jump into the body starts an iteration too; a conditional one disables
+  // the inductive step (see collect_entry_jumps). Nothing a loop reads past its
   // exit may be counted: the step can leave the loop right after the havoc.
   std::vector<size_t> entries{0};
   std::unordered_set<irep_idt, irep_id_hash> excluded;
@@ -1932,6 +1933,39 @@ bool havoc_loop(
   return covered;
 }
 
+/// Whether a conditional jump enters a reachable, non-library loop past its
+/// head. The step cannot havoc that edge (see collect_entry_jumps), so it would
+/// run the loop from its concrete entry state (#7565). A jump that falls
+/// through to the head is harmless: the havoc there starts from the same state
+/// and covers every iteration the jump leads to.
+bool enters_loop_conditionally(
+  goto_functionst &goto_functions,
+  const std::unordered_set<irep_idt, irep_id_hash> &reachable,
+  bool continue_past_failed_assertions)
+{
+  Forall_goto_functions (it, goto_functions)
+  {
+    if (
+      !it->second.body_available || it->second.body.hide ||
+      !reachable.count(it->first))
+      continue;
+    goto_loopst loops(it->first, goto_functions, it->second);
+    for (const loopst &loop : loops.get_loops())
+      for (const auto &jump : collect_entry_jumps(
+             it->second.body, loop, continue_past_failed_assertions))
+        if (
+          !is_true(jump->guard) &&
+          std::next(jump) != loop.get_original_loop_head())
+        {
+          log_warning(
+            "k-induction cannot havoc a loop a conditional jump enters past "
+            "its head. Disabling inductive step");
+          return true;
+        }
+  }
+  return false;
+}
+
 /// The locals and parameters some loop of their function havocs in the
 /// inductive step and may read the havoc of.
 std::unordered_set<irep_idt, irep_id_hash>
@@ -2017,6 +2051,8 @@ bool goto_k_induction(
       "earlier iterations. Disabling inductive step");
     disable_inductive_step = true;
   }
+  disable_inductive_step |= enters_loop_conditionally(
+    goto_functions, reachable, continue_past_failed_assertions);
   bool uncovered_write = false;
   Forall_goto_functions (it, goto_functions)
   {

@@ -427,7 +427,9 @@ bool recognize_eca_main_loop(
         to_symbol2t(arg).thename != to_symbol2t(input_sym).thename)
         return false;
       callee = to_symbol2t(call.function).thename;
-      if (is_symbol2t(call.ret))
+      // ret is nil when the call's result is discarded.
+      const bool keeps_result = !is_nil_expr(call.ret) && is_symbol2t(call.ret);
+      if (keeps_result)
         result_writes.push_back(call.ret);
       it = std::next(tgt);
       // The remainder of the body must be DEAD/LOCATION/SKIP only, plus
@@ -439,7 +441,7 @@ bool recognize_eca_main_loop(
           it->type == DECL)
           continue;
         if (
-          !it->is_assign() || !is_symbol2t(call.ret) ||
+          !it->is_assign() || !keeps_result ||
           to_code_assign2t(it->code).source != call.ret)
           return false;
         result_writes.push_back(to_code_assign2t(it->code).target);
