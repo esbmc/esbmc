@@ -170,24 +170,39 @@ void call_expr_delegate(T &, U &)
 }
 
 template <>
-void call_expr_delegate<const expr2tc, expr2t::const_op_delegate>(
+inline void call_expr_delegate<const expr2tc, expr2t::const_op_delegate>(
   const expr2tc &ref,
-  expr2t::const_op_delegate &f);
+  expr2t::const_op_delegate &f)
+{
+  f(ref);
+}
 
 template <>
-void call_expr_delegate<expr2tc, expr2t::op_delegate>(
+inline void call_expr_delegate<expr2tc, expr2t::op_delegate>(
   expr2tc &ref,
-  expr2t::op_delegate &f);
+  expr2t::op_delegate &f)
+{
+  f(ref);
+}
 
 template <>
-void call_expr_delegate<const std::vector<expr2tc>, expr2t::const_op_delegate>(
+inline void
+call_expr_delegate<const std::vector<expr2tc>, expr2t::const_op_delegate>(
   const std::vector<expr2tc> &ref,
-  expr2t::const_op_delegate &f);
+  expr2t::const_op_delegate &f)
+{
+  for (const expr2tc &r : ref)
+    f(r);
+}
 
 template <>
-void call_expr_delegate<std::vector<expr2tc>, expr2t::op_delegate>(
+inline void call_expr_delegate<std::vector<expr2tc>, expr2t::op_delegate>(
   std::vector<expr2tc> &ref,
-  expr2t::op_delegate &f);
+  expr2t::op_delegate &f)
+{
+  for (expr2tc &r : ref)
+    f(r);
+}
 
 // Same shape as call_expr_delegate, but for type2t::foreach_subtype.
 template <typename T, typename U>

@@ -329,40 +329,6 @@ std::string indent_str_irep2(unsigned int indent)
 }
 
 template <>
-void call_expr_delegate<const expr2tc, expr2t::const_op_delegate>(
-  const expr2tc &ref,
-  expr2t::const_op_delegate &f)
-{
-  f(ref);
-}
-
-template <>
-void call_expr_delegate<expr2tc, expr2t::op_delegate>(
-  expr2tc &ref,
-  expr2t::op_delegate &f)
-{
-  f(ref);
-}
-
-template <>
-void call_expr_delegate<const std::vector<expr2tc>, expr2t::const_op_delegate>(
-  const std::vector<expr2tc> &ref,
-  expr2t::const_op_delegate &f)
-{
-  for (const expr2tc &r : ref)
-    f(r);
-}
-
-template <>
-void call_expr_delegate<std::vector<expr2tc>, expr2t::op_delegate>(
-  std::vector<expr2tc> &ref,
-  expr2t::op_delegate &f)
-{
-  for (expr2tc &r : ref)
-    f(r);
-}
-
-template <>
 void call_type_delegate<const type2tc, type2t::const_subtype_delegate>(
   const type2tc &ref,
   type2t::const_subtype_delegate &f)
