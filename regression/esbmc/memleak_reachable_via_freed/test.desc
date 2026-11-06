@@ -1,0 +1,5 @@
+CORE
+main.c
+--memory-leak-check --no-reachable-memory-leak
+^VERIFICATION FAILED$
+forgotten memory: dynamic_2_array
