@@ -7,7 +7,9 @@
 #include <util/expr/expr_util.h>
 #include <util/lang/python_types.h>
 
+#include <algorithm>
 #include <map>
+#include <set>
 
 using namespace python_expr;
 
@@ -84,7 +86,146 @@ python_converter::instance_class_name(const nlohmann::json &value_node)
       class_name = func.value("id", "");
   }
 
+  if (class_name.empty() && value_node.value("_type", "") == "Attribute")
+    class_name = attribute_class_name(value_node);
+
   return class_name;
+}
+
+static bool contains_return(const nlohmann::json &node)
+{
+  if (node.is_object() && node.value("_type", "") == "Return")
+    return true;
+  return node.is_structured() &&
+         std::any_of(node.begin(), node.end(), contains_return);
+}
+
+// Counts the nodes of @p node that store to or delete an attribute @p attr,
+// or reach attributes by name (setattr, __dict__, ...).
+static size_t
+attribute_writes(const nlohmann::json &node, const std::string &attr)
+{
+  size_t n = 0;
+  if (node.is_object())
+  {
+    const std::string kind = node.value("_type", "");
+    if (
+      kind == "Attribute" && node.value("attr", "") == attr &&
+      node.value("ctx", nlohmann::json()).value("_type", "") != "Load")
+      ++n;
+    static const std::set<std::string> reflective = {
+      "setattr",
+      "delattr",
+      "__dict__",
+      "__setattr__",
+      "__delattr__",
+      "__class__",
+      "__new__",
+      "vars"};
+    if (
+      (kind == "Name" && reflective.count(node.value("id", ""))) ||
+      (kind == "Attribute" && reflective.count(node.value("attr", ""))))
+      ++n;
+  }
+  if (node.is_structured())
+    for (const auto &child : node)
+      n += attribute_writes(child, attr);
+  return n;
+}
+
+// The class C when @p stmt is `self.attr = C(...)` with @p self as `self`.
+static std::string constructed_class(
+  const nlohmann::json &stmt,
+  const std::string &self,
+  const std::string &attr)
+{
+  const std::string kind = stmt.value("_type", "");
+  const nlohmann::json &target = kind == "Assign" && stmt["targets"].size() == 1
+                                   ? stmt["targets"][0]
+                                 : kind == "AnnAssign" ? stmt["target"]
+                                                       : nlohmann::json();
+  const nlohmann::json value = stmt.value("value", nlohmann::json());
+  if (
+    !target.is_object() || target.value("_type", "") != "Attribute" ||
+    target.value("attr", "") != attr ||
+    target["value"].value("id", "") != self || !value.is_object() ||
+    value.value("_type", "") != "Call" ||
+    value["func"].value("_type", "") != "Name")
+    return "";
+  return value["func"].value("id", "");
+}
+
+// Whether @p node defines or stores to `__init__`.
+static bool binds_init(const nlohmann::json &node)
+{
+  if (node.is_object())
+  {
+    const std::string kind = node.value("_type", "");
+    if (
+      (kind == "FunctionDef" || kind == "AsyncFunctionDef") &&
+      node.value("name", "") == "__init__")
+      return true;
+    if (
+      kind == "Name" && node.value("id", "") == "__init__" &&
+      node.value("ctx", nlohmann::json()).value("_type", "") != "Load")
+      return true;
+    if (kind == "alias" && node.value("asname", "") == "__init__")
+      return true;
+  }
+  return node.is_structured() &&
+         std::any_of(node.begin(), node.end(), binds_init);
+}
+
+// The class C when the `__init__` @p class_def binds last stores a new C to
+// `self.attr` at its top level before any return, else "".
+static std::string
+init_constructed_class(const nlohmann::json &class_def, const std::string &attr)
+{
+  const nlohmann::json *init = nullptr;
+  for (const auto &stmt : class_def["body"])
+    if (binds_init(stmt))
+      init = &stmt;
+  if (
+    !init || init->value("_type", "") != "FunctionDef" ||
+    !(*init)["decorator_list"].empty() || (*init)["args"]["args"].empty())
+    return "";
+
+  const std::string self = (*init)["args"]["args"][0].value("arg", "");
+  for (const auto &stmt : (*init)["body"])
+  {
+    const std::string cls = constructed_class(stmt, self, attr);
+    if (!cls.empty() || contains_return(stmt))
+      return cls;
+  }
+  return "";
+}
+
+/// The class of the instance `obj.attr` holds, when that is fixed: the only
+/// store to `attr` in the module is an unconditional `self.attr = C(...)` in
+/// the `__init__` of obj's class, and neither class has a subclass. A
+/// component's type is that of the first value stored, so it names the
+/// runtime class only then: None, a subclass instance, or an attribute set
+/// on some paths would be dispatched as a C instance.
+std::string
+python_converter::attribute_class_name(const nlohmann::json &attribute)
+{
+  if (python_file() != main_python_filename())
+    return "";
+  const std::string owner = instance_class_name(attribute["value"]);
+  const std::string attr = attribute.value("attr", "");
+  const nlohmann::json &body = (*ast_json)["body"];
+  const nlohmann::json owner_def = json_utils::find_class(body, owner);
+  if (
+    owner_def.empty() || json_utils::has_subclass(owner, *ast_json) ||
+    attribute_writes(*ast_json, attr) != 1)
+    return "";
+
+  const std::string cls = init_constructed_class(owner_def, attr);
+  if (
+    cls.empty() || json_utils::find_class(body, cls).empty() ||
+    json_utils::has_subclass(cls, *ast_json))
+    return "";
+  return cls;
 }
 
 bool python_converter::has_dunder_method(
