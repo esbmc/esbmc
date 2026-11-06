@@ -2035,7 +2035,10 @@ exprt function_call_builder::build() const
   symbol_id function_id = build_function_id();
   if (is_len_call(function_id) && !call_["args"].empty())
   {
-    exprt arg_expr = converter_.get_expr(call_["args"][0]);
+    exprt arg_expr = converter_.optional_tuple_payload(
+      converter_.get_expr(call_["args"][0]),
+      call_["args"][0],
+      "object of type 'NoneType' has no len()");
 
     // If len() argument is a list-typed symbol, force list-size semantics.
     // This avoids misrouting to strlen() when variable annotations are absent
@@ -2082,7 +2085,8 @@ exprt function_call_builder::build() const
   if (function_id.get_function() == "__ESBMC_len_tuple")
   {
     const auto &arg = call_["args"][0];
-    exprt obj_expr = converter_.get_expr(arg);
+    exprt obj_expr = converter_.optional_tuple_payload(
+      converter_.get_expr(arg), arg, "object of type 'NoneType' has no len()");
 
     if (obj_expr.type().id() == "struct")
     {
