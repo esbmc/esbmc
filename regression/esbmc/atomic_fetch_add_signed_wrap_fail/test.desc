@@ -2,4 +2,5 @@ CORE
 main.c
 --overflow-check
 ^VERIFICATION FAILED$
+line 9 column [0-9]+ function main$
 arithmetic overflow on add
