@@ -1,4 +1,4 @@
 CORE
 main.py
 
-^ERROR: Unsupported: 'is' between a class and a value that may hold one$
+^VERIFICATION SUCCESSFUL$
