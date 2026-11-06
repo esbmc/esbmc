@@ -962,13 +962,10 @@ bool goto_symext::record_member_store(
   while (arm != stores.begin() && std::prev(arm)->guard == store_guard)
     --arm;
   const std::vector<member_store> earlier(arm, stores.end());
-  // An arm stores to disjoint parts of the object, so its stores never nest.
-  assert(
-    std::none_of(
-      earlier.begin(), earlier.end(), [&path](const member_store &store) {
-        return is_strict_prefix(store.path, *path) ||
-               is_strict_prefix(*path, store.path);
-      }));
+  // Under a member this arm already wrote: store to that member instead.
+  for (const member_store &store : earlier)
+    if (is_strict_prefix(store.path, *path))
+      return false;
 
   // Earlier stores of this arm have already happened when this one reads the
   // members they wrote, or a struct enclosing one.
@@ -981,8 +978,11 @@ bool goto_symext::record_member_store(
          e = to_member2t(e).source_value)
     {
       enclosing.pop_back();
-      written.emplace_back(
-        e, merge_member_stores(e, enclosing, earlier, false));
+      if (std::none_of(written.begin(), written.end(), [&e](const auto &w) {
+            return w.first == e;
+          }))
+        written.emplace_back(
+          e, merge_member_stores(e, enclosing, earlier, false));
     }
   }
   expr2tc value = replace_subexprs(rhs, written);
@@ -991,7 +991,9 @@ bool goto_symext::record_member_store(
     std::remove_if(
       arm,
       stores.end(),
-      [&path](const member_store &store) { return store.path == *path; }),
+      [&path](const member_store &store) {
+        return store.path == *path || is_strict_prefix(*path, store.path);
+      }),
     stores.end());
   stores.push_back({lhs, std::move(*path), store_guard, value});
   return true;
@@ -1035,14 +1037,21 @@ expr2tc goto_symext::merge_member_stores(
 
   // The solvers encode a union written through a with2t, but not as an arm of
   // an if: store to it through the enclosing struct instead. Arms are
-  // exclusive, so each union store applies to the members merged above.
-  expr2tc result = merged;
+  // exclusive, so each arm's union stores apply to the members merged above.
+  std::vector<std::pair<expr2tc, expr2tc>> arm_writes;
   for (const member_store *store : union_stores)
-    result = if2tc(
-      obj->type,
-      store->guard,
-      with_member(merged, store->path.back(), store->value),
-      result);
+  {
+    auto arm = std::find_if(
+      arm_writes.begin(), arm_writes.end(), [store](const auto &w) {
+        return w.first == store->guard;
+      });
+    if (arm == arm_writes.end())
+      arm = arm_writes.insert(arm_writes.end(), {store->guard, merged});
+    arm->second = with_member(arm->second, store->path.back(), store->value);
+  }
+  expr2tc result = merged;
+  for (const auto &[guard, value] : arm_writes)
+    result = if2tc(obj->type, guard, value, result);
   return result;
 }
 

@@ -1129,7 +1129,7 @@ void goto_symex_statet::rename(expr2tc &expr, renamed_exprst &renamed)
   }
   else
   {
-    // Operands first: a with2t's type must stay its source_value's type.
+    // Operands first, as in rename_type.
     expr->Foreach_operand([this, &renamed](expr2tc &e) { rename(e, renamed); });
     rename_own_type(expr);
   }
