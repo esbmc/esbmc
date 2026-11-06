@@ -1335,6 +1335,9 @@ bool find_nondet_in_expr(const expr2tc &expr)
 
 #include <util/base/prefix.h>
 #include <util/lang/c_types.h>
+#include <util/expr/type_byte_size.h>
+#include <algorithm>
+#include <optional>
 #include <boost/property_tree/detail/xml_parser_writer_settings.hpp>
 #include <cassert>
 #include <goto-symex/equation/slice.h>
@@ -1464,6 +1467,169 @@ static expr2tc zero_fill_aggregate(
   return value;
 }
 
+// Whether little_endian_bits lays out an object of `type` the way a C compiler
+// does: no complex or vector types, no long double (x87 extended, not the
+// IEEE format ESBMC models), and no nested arrays, whose model values
+// zero_fill_aggregate cannot complete.
+static bool has_known_byte_layout(const type2tc &type)
+{
+  auto all_known = [](const std::vector<type2tc> &members) {
+    return std::all_of(members.begin(), members.end(), has_known_byte_layout);
+  };
+
+  switch (type->type_id)
+  {
+  case type2t::bool_id:
+  case type2t::signedbv_id:
+  case type2t::unsignedbv_id:
+  case type2t::pointer_id:
+    return true;
+  case type2t::floatbv_id:
+  {
+    const unsigned width = type->get_width();
+    return width == 16 || width == 32 || width == 64;
+  }
+  case type2t::struct_id:
+    return all_known(to_struct_type(type).members);
+  case type2t::union_id:
+    return all_known(to_union_type(type).members);
+  case type2t::array_id:
+  {
+    const type2tc &element = to_array_type(type).subtype;
+    return !is_array_type(element) && has_known_byte_layout(element);
+  }
+  default:
+    return false;
+  }
+}
+
+// The bits of constant `value` in memory order on a little-endian target,
+// lowest address first; nullopt for a shape it cannot lay out. A pointer is
+// laid out as null: a test harness cannot reproduce an address.
+static std::optional<BigInt> little_endian_bits(const expr2tc &value)
+{
+  // The model may leave a member without a value, e.g. a pointer under
+  // Bitwuzla.
+  if (!value)
+    return std::nullopt;
+
+  if (is_pointer_type(value))
+    return BigInt(0);
+
+  if (is_constant_int2t(value))
+  {
+    BigInt bits = to_constant_int2t(value).value;
+    if (bits.is_negative())
+      bits += BigInt::power2(value->type->get_width());
+    return bits;
+  }
+
+  if (is_constant_bool2t(value))
+    return BigInt(to_constant_bool2t(value).value ? 1 : 0);
+
+  if (is_constant_floatbv2t(value))
+    return to_constant_floatbv2t(value).value.pack();
+
+  if (is_bitcast2t(value))
+    return little_endian_bits(to_bitcast2t(value).from);
+
+  if (is_constant_struct2t(value))
+  {
+    const struct_type2t &type = to_struct_type(value->type);
+    const auto &members = to_constant_struct2t(value).datatype_members;
+    BigInt bits = 0;
+    for (std::size_t i = 0; i < members.size(); ++i)
+    {
+      std::optional<BigInt> member = is_pointer_type(type.members[i])
+                                       ? BigInt(0)
+                                       : little_endian_bits(members[i]);
+      if (!member)
+        return std::nullopt;
+      bits +=
+        *member *
+        BigInt::power2(
+          member_offset_bits(value->type, type.member_names[i]).to_uint64());
+    }
+    return bits;
+  }
+
+  // The model gives every member, each a view of the same bits; the widest
+  // one covers them all.
+  if (is_constant_union2t(value))
+  {
+    const expr2tc *widest = nullptr;
+    for (const expr2tc &member : to_constant_union2t(value).datatype_members)
+      if (
+        member && (!widest || type_byte_size_bits(member->type) >
+                                type_byte_size_bits((*widest)->type)))
+        widest = &member;
+    return widest ? little_endian_bits(*widest) : std::nullopt;
+  }
+
+  if (is_constant_array2t(value))
+  {
+    const type2tc &element_type = to_array_type(value->type).subtype;
+    const auto &elements = to_constant_array2t(value).datatype_members;
+    const uint64_t width = type_byte_size_bits(element_type).to_uint64();
+    BigInt bits = 0;
+    for (std::size_t i = 0; i < elements.size(); ++i)
+    {
+      std::optional<BigInt> element = is_pointer_type(element_type)
+                                        ? BigInt(0)
+                                        : little_endian_bits(elements[i]);
+      if (!element)
+        return std::nullopt;
+      bits += *element * BigInt::power2(i * width);
+    }
+    return bits;
+  }
+
+  return std::nullopt;
+}
+
+// testcov's harness implements __VERIFIER_nondet_memory as one
+// __VERIFIER_nondet_uchar() per byte, while ESBMC's model may havoc the whole
+// object in one step, so the object's model value is fed to it bytewise.
+// Leaves `results` unchanged for an object it cannot lay out.
+static void collect_nondet_bytes(
+  const expr2tc &nondet,
+  smt_convt &smt_conv,
+  std::vector<collected_nondet_value> &results)
+{
+  if (
+    config.ansi_c.endianess != configt::ansi_ct::IS_LITTLE_ENDIAN ||
+    !has_known_byte_layout(nondet->type))
+    return;
+
+  BigInt size;
+  try
+  {
+    size = type_byte_size(nondet->type);
+  }
+  catch (const array_type2t::dyn_sized_array_excp &)
+  {
+    return;
+  }
+
+  std::optional<BigInt> bits = little_endian_bits(
+    zero_fill_aggregate(nondet->type, smt_conv.get(nondet), nondet, smt_conv));
+  if (!bits || !size.is_uint64())
+    return;
+
+  const std::string &name = to_symbol2t(nondet).thename.as_string();
+  for (uint64_t i = 0; i < size.to_uint64(); ++i)
+  {
+    collected_nondet_value val;
+    val.symbol_name = fmt::format("{}[{}]", name, i);
+    val.symbol_expr =
+      byte_extract2tc(get_uint8_type(), nondet, gen_ulong(i), false);
+    val.value_expr = constant_int2tc(get_uint8_type(), *bits % 256);
+    val.type = val.value_expr->type;
+    results.push_back(val);
+    *bits /= 256;
+  }
+}
+
 // Shared nondet collection logic (used by both TestComp and CTest)
 std::vector<collected_nondet_value> collect_nondet_values(
   const symex_target_equationt &target,
@@ -1487,8 +1653,24 @@ std::vector<collected_nondet_value> collect_nondet_values(
 
       const std::string file_path =
         SSA_step.source.pc->location.file().as_string();
+      const bool reached = smt_conv.l_get(SSA_step.guard).is_true();
+
+      if (
+        reached && harness_inputs_only &&
+        SSA_step.source.pc->location.function() == "__VERIFIER_nondet_memory" &&
+        file_operations::is_bundled_source(file_path))
+      {
+        for (const expr2tc &nondet_expr : nondets)
+        {
+          const std::string name = to_symbol2t(nondet_expr).thename.as_string();
+          if (seen_nondets.insert(name).second)
+            collect_nondet_bytes(nondet_expr, smt_conv, results);
+        }
+        continue;
+      }
+
       const bool is_input =
-        smt_conv.l_get(SSA_step.guard).is_true() &&
+        reached &&
         // Nondet initialisation of an uninitialised local (inserted by
         // mark_decl_as_non_det) is not a program input: the test harness
         // only feeds values to __VERIFIER_nondet_*() calls, so emitting it

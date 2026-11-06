@@ -336,9 +336,6 @@ def parse_result(the_output, prop):
   if re.search(r"^ERROR: Timed out$", the_output, re.MULTILINE):
     return Result.err_timeout
 
-  if re.search(r"^ERROR: Out of memory$", the_output, re.MULTILINE):
-    return Result.err_memout
-
   if "VERIFICATION FAILED" in the_output:
     # The model runs on past its first violation and fails later claims too,
     # such as a leak at exit after an invalid dereference. The program stopped
@@ -353,6 +350,11 @@ def parse_result(the_output, prop):
 
   if "VERIFICATION SUCCESSFUL" in the_output:
     return Result.success
+
+  # A k-induction step that runs out of memory is unknown and the next k is
+  # tried, so only a run that reached no verdict ran out of memory.
+  if re.search(r"^ERROR: Out of memory$", the_output, re.MULTILINE):
+    return Result.err_memout
 
   return Result.unknown
 
@@ -448,7 +450,7 @@ def python_exception_flags(prop):
   return "--python-check-exceptions " + ",".join(PYTHON_EXCEPTION_FAMILIES[prop]) + " "
 
 
-def get_command_line(strat, prop, arch, benchmark, concurrency, dargs, esbmc_ci, validate=False):
+def get_command_line(strat, prop, arch, benchmark, concurrency, dargs, esbmc_ci, keep_loops=False):
   if prop in PYTHON_EXCEPTION_FAMILIES:
     # A Python task is a whole program whose only specification is that an
     # exception family does not escape, so none of the C defaults in dargs
@@ -530,7 +532,7 @@ def get_command_line(strat, prop, arch, benchmark, concurrency, dargs, esbmc_ci,
       command_line += "--no-pointer-check --no-bounds-check "
     else:
       command_line += "--no-pointer-check --interval-analysis --no-bounds-check --error-label ERROR "
-      if not validate:
+      if not keep_loops:
         command_line += "--goto-unwind --unlimited-goto-unwind "
   elif prop == Property.datarace:
     # TODO: can we do better in case 'concurrency == False'?
@@ -566,11 +568,14 @@ MIN_RERUN_BUDGET = 30
 def confirmed_by_integer_encoding(esbmc_command_line, the_output, prop, elapsed):
   """Does a --ir re-run violate the same property at the same file and line?
 
-  The re-run checks every property, so it confirms the first run's site even
-  when it would have stopped at another violation first (#9803).
+  A plain re-run confirms when it stops at the first run's site. Under
+  k-induction a --multi-property re-run goes on raising k for every other
+  claim after it has found that site, so it runs only when the plain re-run
+  stops elsewhere: it checks every property, so it confirms the first run's
+  site even when the plain re-run stopped at another violation first (#9803).
 
-  A first run that leaves too little of the budget for the re-run is not
-  confirmed.
+  Both re-runs share one budget, and one that would get too little of it is
+  not made, so the violation is not confirmed.
   """
   budget = min(IR_RERUN_TIMEOUT, TOTAL_BUDGET - elapsed)
   if budget < MIN_RERUN_BUDGET:
@@ -578,17 +583,38 @@ def confirmed_by_integer_encoding(esbmc_command_line, the_output, prop, elapsed)
   site = violation_site(the_output)
   if site is None:
     return False
+  started = time.monotonic()
+  plain = run(esbmc_command_line + "--ir --z3 ", budget).decode()
+  plain_result = parse_result(plain, prop)
+  if plain_result == Result.fail_python and violation_site(plain) == site:
+    return True
+  budget -= time.monotonic() - started
+  if plain_result == Result.success or budget < MIN_RERUN_BUDGET:
+    return False
   rerun = run(esbmc_command_line + "--ir --z3 --multi-property ", budget).decode()
   if parse_result(rerun, prop) != Result.fail_python:
     return False
   return violation_site(rerun) == site or site in failed_sites(rerun)
 
 
+def has_invariants(witness_path):
+  """Whether the YAML names an `invariant` in any style (block, flow, JSON).
+  A comment naming one also counts, which only keeps loops rolled."""
+  with open(witness_path) as f:
+    return re.search(r"\binvariant\b", f.read()) is not None
+
+
 def verify(strat, prop, arch, benchmark, concurrency, dargs, esbmc_ci, witness_path, validate_mode):
   if witness_path and validate_mode == "violation":
     strat = "incr"
 
-  esbmc_command_line = get_command_line(strat, prop, arch, benchmark, concurrency, dargs, esbmc_ci, validate=bool(witness_path))
+  # Unrolling a loop moves the waypoints placed on it, and an invariant on a
+  # loop --goto-unwind removes is never checked. Without it a bounded loop is
+  # proved one k-step at a time, so a correctness witness with no invariants,
+  # such as the ones ESBMC writes, is validated with it.
+  keep_loops = bool(witness_path) and (
+    validate_mode == "violation" or has_invariants(witness_path))
+  esbmc_command_line = get_command_line(strat, prop, arch, benchmark, concurrency, dargs, esbmc_ci, keep_loops)
 
   if witness_path:
     esbmc_command_line += "--validate-" + validate_mode + "-witness "

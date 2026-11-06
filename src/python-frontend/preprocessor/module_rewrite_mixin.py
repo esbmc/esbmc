@@ -3,7 +3,7 @@ import copy
 from collections import Counter
 
 from preprocessor.binding_sites import binding_sites
-from preprocessor.bound_method_dispatch import dispatch_rebound_methods
+from preprocessor.bound_method_dispatch import _scope_nodes, dispatch_rebound_methods
 from preprocessor.bound_method_values import lower_method_values
 from preprocessor.check_type_lowering import lower_check_type
 from preprocessor.dotted_imports import alias_dotted_imports
@@ -580,7 +580,7 @@ class ModuleRewriteMixin:
         self.expand_unittest_main(node)
         self._rewrite_module_aliases(node)
         self._rewrite_map_values(node)
-        guard_unbound_locals(node)
+        self.unbound_checked_globals = guard_unbound_locals(node)
         self.in_order_bindings.update(
             dispatch_rebound_methods(node, self._names_bound_by, self._variable_names(node),
                                      self._next_unpack_tmp_id, self.module_name))
@@ -630,7 +630,17 @@ class ModuleRewriteMixin:
         self._scan_module_vararg_defs(node)
         self._single_return_funcs = self._collect_single_return_funcs(node)
         self._param_subscripting_funcs = self._collect_param_subscripting_funcs(node)
+        self._plain_function_names = self._collect_plain_function_names(node)
         self.apply_range_rewrites(node, alias_seed=alias_seed, wrapper_seed=wrapper_seed)
+
+    @staticmethod
+    def _collect_plain_function_names(node):
+        """Names of the functions defined in the module that are not generators."""
+        return {
+            f.name
+            for f in ast.walk(node) if isinstance(f, ast.FunctionDef) and not any(
+                isinstance(n, (ast.Yield, ast.YieldFrom)) for n in ast.walk(f))
+        }
 
     def _scan_iterator_classes(self, node):
         """Classes whose instances a for loop iterates through `__iter__`, for visit_For.
@@ -640,11 +650,8 @@ class ModuleRewriteMixin:
         and CPython's TypeError for it is already reported. The class name
         must be bound only by its class statement, so a call of it constructs
         the class."""
-        bind_counts = {}
-        for n in ast.walk(node):
-            for name in self._bound_names(n):
-                bind_counts[name] = bind_counts.get(name, 0) + 1
         classes = [n for n in ast.walk(node) if isinstance(n, ast.ClassDef)]
+        bind_counts = self._binding_counts_outside_class_bodies(node, classes)
         iterable = set()
         grew = True
         while grew:
@@ -654,6 +661,14 @@ class ModuleRewriteMixin:
                     iterable.add(c.name)
                     grew = True
         return {name for name in iterable if bind_counts.get(name) == 1}
+
+    def _binding_counts_outside_class_bodies(self, node, classes):
+        """How often each name is bound in `node`, leaving out the bindings of class
+        bodies: a method or class attribute binds in its class, so it never shadows a
+        class name that a call can reach (#9986)."""
+        in_class_body = {id(n) for c in classes for n in _scope_nodes(c)}
+        return Counter(name for n in ast.walk(node) if id(n) not in in_class_body
+                       for name in self._bound_names(n))
 
     def _scan_iterator_params(self, node):
         """`(id(def), param)` for each parameter of a module function that

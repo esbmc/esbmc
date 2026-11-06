@@ -790,6 +790,8 @@ private:
   bool is_math_function_dispatch_call() const;
   exprt dispatch_math_call();
   exprt handle_math_function_dispatch();
+  exprt math_log_of(const nlohmann::json &arg);
+  exprt handle_math_log();
   bool calls_overflow_model(const std::string &f) const;
   bool may_overflow(const std::string &f, const exprt &result) const;
   std::optional<std::string> bounded_math_import() const;

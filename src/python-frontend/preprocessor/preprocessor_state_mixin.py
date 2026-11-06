@@ -115,6 +115,7 @@ class PreprocessorStateMixin:
         self.fixed_receivers = {}
         self.once_bound_names = set()
         self.module_statements = {}
+        self.unbound_checked_globals = set()
         # Name -> values stored by `name[key] = value` anywhere in the module.
         self.subscript_stored_values = {}
         self.variable_names = set()
@@ -135,6 +136,7 @@ class PreprocessorStateMixin:
         # Module-level ``def f(p): return <expr>``: name -> (param, expr).
         self._single_return_funcs = {}
         self._param_subscripting_funcs = set()
+        self._plain_function_names = set()
         # Map var -> RHS Call node; used by _apply_assert_eq_rewrites to
         # substitute the Name back to its defining call.
         self._assignment_call_origins = {}
