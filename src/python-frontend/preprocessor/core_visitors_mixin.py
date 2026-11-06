@@ -1624,9 +1624,9 @@ class CoreVisitorsMixin:
         """
         Handle assignment nodes, including multiple assignments and tuple unpacking.
         """
-        split = self._split_linspace_retstep(node)
+        split = self._split_assign(node)
         if split is not None:
-            return [self.visit(statement) for statement in split]
+            return split
         self._invalidate_list_literals_for_assign_targets(node.targets)
         self._update_assignment_call_origins(node.targets, node.value)
         neutralized_target = self._neutralize_sorted_items_view(node)
@@ -1668,6 +1668,41 @@ class CoreVisitorsMixin:
             lowered = self._handle_single_target_assign(node)
             return self._lower_defaultdict_reads_in_target(node, lowered)
         return self._handle_multi_target_assign(node)
+
+    def _split_assign(self, node):
+        """The visited statements an assignment splits into, or None when it stays whole."""
+        split = self._split_linspace_retstep(node)
+        if split is not None:
+            return [self.visit(statement) for statement in split]
+        bound = self._bind_reordered_call_arg(node)
+        if bound is None:
+            return None
+        statements = []
+        for visited in (self.visit(bound), self.visit(node)):
+            statements += visited if isinstance(visited, list) else [visited]
+        return [statement for statement in statements if statement is not None]
+
+    def _bind_reordered_call_arg(self, node):
+        """Split `x = sorted(f())` into `t = f()` and `x = sorted(t)`, and the same for
+        reversed() and list(). Their result takes its element types from a named
+        argument, so with a call argument a comparison of two elements was a nondet
+        (#9956). f() is still evaluated once and first. Only a function defined in
+        the module qualifies: a class, a builtin and a generator keep their own
+        lowering."""
+        value = node.value
+        if not (isinstance(value, ast.Call) and isinstance(value.func, ast.Name)
+                and value.func.id in ("sorted", "reversed", "list") and value.args):
+            return None
+        arg = value.args[0]
+        if not (isinstance(arg, ast.Call) and isinstance(arg.func, ast.Name)
+                and arg.func.id in self._plain_function_names):
+            return None
+        name = f"ESBMC_reordered_arg_{self._next_unpack_tmp_id()}"
+        bind = ast.Assign(targets=[ast.Name(id=name, ctx=ast.Store())], value=arg)
+        ast.copy_location(bind, node)
+        value.args[0] = ast.copy_location(ast.Name(id=name, ctx=ast.Load()), arg)
+        ast.fix_missing_locations(bind)
+        return bind
 
     def _lower_defaultdict_reads_in_target(self, node, lowered):
         """Insert the missing-key checks for defaultdict reads in the
