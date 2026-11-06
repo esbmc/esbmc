@@ -3,6 +3,7 @@
 #include <goto-symex/engine/dynamic_allocation.h>
 #include <goto-symex/scheduler/execution_state.h>
 #include <goto-symex/engine/goto_symex.h>
+#include <goto-symex/witness/witnesses.h>
 #include <util/lang/c_types.h>
 #include <util/symtab/cprover_prefix.h>
 #include <util/expr/expr_util.h>
@@ -473,9 +474,11 @@ void goto_symext::symex_assign(
       }
       else
       {
-        call_line = cur_state->source.pc->location.get_line();
-        symex_witness_function_enter(call_line);
-        symex_witness_function_return(original_lhs, call_line);
+        // A nondet call's function_return waypoint sits on its ')' (#9881).
+        const locationt &call = cur_state->source.pc->location;
+        symex_witness_function_enter(call.get_line());
+        symex_witness_function_return(
+          original_lhs, nondet_call_rparen(call).value_or(call).get_line());
       }
     }
   }

@@ -1,0 +1,7 @@
+regression/python/github_9743_key_float
+regression/python/github_9743_key_float_fail
+regression/python/github_9743_key_int
+regression/python/github_9743_key_int_fail
+regression/python/github_9743_key_str
+regression/python/github_9743_readback
+regression/python/github_9743_readback_fail
