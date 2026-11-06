@@ -10,8 +10,10 @@
 #include <util/irep/std_code.h>
 #include <util/irep/std_expr.h>
 
+#include <algorithm>
 #include <cmath>
 #include <numbers>
+#include <optional>
 #include <set>
 
 namespace
@@ -145,7 +147,9 @@ double bounded_math::host_value(const std::string &function, double x)
 bool bounded_math::outside_domain(const std::string &function, double x)
 {
   const transcendental::domain domain = transcendental::domain_of(function);
-  return !(x >= domain.low && x <= domain.high);
+  return !(x >= domain.low && x <= domain.high) ||
+         std::find(domain.poles.begin(), domain.poles.end(), x) !=
+           domain.poles.end();
 }
 
 exprt bounded_math::literal(const std::string &function, double x)
@@ -322,6 +326,50 @@ exprt bounded_math::bounded_call(
   call.type() = double_type();
   call.location() = converter_.get_location_from_decl(call_);
   return fresh("$math$", call);
+}
+
+// The value of a number literal, int or float.
+static std::optional<double> constant_value(const exprt &x)
+{
+  if (!x.is_constant())
+    return std::nullopt;
+  if (x.type().is_floatbv())
+    return ieee_floatt(to_constant_expr(x)).to_double();
+  if (x.type().is_signedbv() || x.type().is_unsignedbv())
+  {
+    BigInt value;
+    if (!to_integer(x, value))
+      return value.to_int64();
+  }
+  return std::nullopt;
+}
+
+exprt bounded_math::hypot_of(const std::vector<exprt> &args)
+{
+  double value = 0.0;
+  bool constant = true;
+  for (const exprt &x : args)
+  {
+    const std::optional<double> literal = constant_value(x);
+    constant = constant && literal.has_value();
+    if (constant)
+      value = transcendental::host_value("hypot", value, *literal);
+  }
+  if (!constant)
+  {
+    std::vector<exprt> operands = args;
+    operands.resize(std::max<std::size_t>(operands.size(), 2), number(0.0));
+    exprt result = binary("hypot", operands[0], operands[1], math_module::math);
+    for (std::size_t i = 2; i < operands.size(); ++i)
+      result = binary("hypot", result, operands[i], math_module::math);
+    return result;
+  }
+  // CPython rounds a sum of more than two squares once, where each step here
+  // rounds again.
+  if (args.size() <= 2 || value == 0.0 || !std::isfinite(value))
+    return from_double(value, double_type());
+  const transcendental::interval bound = transcendental::within_ulps(value);
+  return within(bound.low, bound.high);
 }
 
 bool bounded_math::is_float_predicate(const std::string &function)

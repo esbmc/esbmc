@@ -3267,14 +3267,15 @@ numpy_call_expr::numpy_call_expr(
   const symbol_id &function_id,
   const nlohmann::json &call,
   python_converter &converter)
-  : function_call_expr(function_id, call, converter)
+  : function_call_expr(function_id, call, converter),
+    outer_build_static_lists_(converter.build_static_lists)
 {
   converter_.build_static_lists = true;
 }
 
 numpy_call_expr::~numpy_call_expr()
 {
-  converter_.build_static_lists = false;
+  converter_.build_static_lists = outer_build_static_lists_;
 }
 
 const nlohmann::json *
@@ -7077,6 +7078,17 @@ static bool only_noop_ufunc_keywords(const nlohmann::json &call)
   return !changing_ufunc_keyword(call);
 }
 
+// A tuple literal, read as the list NumPy makes of it.
+static nlohmann::json tuples_as_lists(nlohmann::json node)
+{
+  if (node.value("_type", "") == "Tuple")
+    node["_type"] = "List";
+  if (node.contains("elts"))
+    for (nlohmann::json &element : node["elts"])
+      element = tuples_as_lists(element);
+  return node;
+}
+
 // The ufuncs whose only route is the bounded model: anything outside it is
 // refused rather than handed to a path that does not know them.
 std::optional<exprt>
@@ -7105,35 +7117,83 @@ numpy_call_expr::try_bounded_ufunc(const std::string &function)
       " positional arguments, got " + std::to_string(call_["args"].size()));
   if (arity == 2)
     return bounded_binary_ufunc(function);
+  const nlohmann::json &arg = call_["args"][0];
   numeric_value constant;
-  if (try_extract_numeric_constant(call_["args"][0], constant))
+  if (try_extract_numeric_constant(arg, constant))
     return numpy_math_value(function, to_double(constant));
-  if (std::optional<exprt> result = try_runtime_math(function))
+  const std::string type = arg.value("_type", "");
+  const nlohmann::json list = tuples_as_lists(arg);
+  std::vector<std::vector<numeric_value>> rows;
+  std::vector<numeric_value> row;
+  if (
+    try_extract_numeric_1d_list(list, row) ||
+    try_extract_numeric_2d_list(list, rows))
+    return retype_lhs(numpy_math_list(function, list));
+  const bool sequence = type == "List" || type == "Tuple";
+  if (
+    std::optional<exprt> result =
+      sequence ? elementwise_math(function, arg) : try_runtime_math(function))
     return result;
   throw std::runtime_error(
     "TypeError: numpy." + function + " of this argument is not supported");
 }
 
-// hypot or arctan2 of two numbers.
+// hypot or arctan2 of numbers, arrays or views, broadcast as NumPy does.
 exprt numpy_call_expr::bounded_binary_ufunc(const std::string &function)
 {
-  // Converting an operand with current_lhs set would retype the target.
-  exprt *lhs = converter_.current_lhs;
-  converter_.current_lhs = nullptr;
-  const exprt a = converter_.get_expr(call_["args"][0]);
-  const exprt b = converter_.get_expr(call_["args"][1]);
-  converter_.current_lhs = lhs;
+  const exprt a = elementwise_operand(function, call_["args"][0]);
+  const exprt b = elementwise_operand(function, call_["args"][1]);
   for (const exprt &operand : {a, b})
-  {
-    reject_non_numeric_elements(function, operand.type());
-    if (!is_number_type(operand.type()))
+    if (!is_number_type(array_leaf_type(operand.type())))
       throw std::runtime_error(
-        "TypeError: numpy." + function +
-        " of an array or a non-number is "
-        "not supported");
-  }
-  return bounded_math(converter_, call_)
-    .binary(function, a, b, math_module::numpy);
+        "TypeError: numpy." + function + " of a non-number is not supported");
+  const std::vector<int> a_dims = type_handler_.get_array_type_shape(a.type());
+  const std::vector<int> b_dims = type_handler_.get_array_type_shape(b.type());
+  const std::vector<std::size_t> a_shape(a_dims.begin(), a_dims.end());
+  const std::vector<std::size_t> b_shape(b_dims.begin(), b_dims.end());
+  std::vector<std::size_t> shape;
+  if (!compute_broadcast_shape(a_shape, b_shape, shape))
+    throw std::runtime_error(
+      "ValueError: operands could not be broadcast together with shapes " +
+      format_shape(a_shape) + " " + format_shape(b_shape));
+  return retype_lhs(broadcast_pair(
+    bind_array_once(a),
+    bind_array_once(b),
+    shape,
+    0,
+    [&](const exprt &x, const exprt &y) {
+      return bounded_math(converter_, call_)
+        .binary(function, x, y, math_module::numpy);
+    }));
+}
+
+// f of the elements of a and b at each index of the broadcast shape, from
+// dimension depth on; a dimension of 1 or a missing leading one repeats.
+exprt numpy_call_expr::broadcast_pair(
+  const exprt &a,
+  const exprt &b,
+  const std::vector<std::size_t> &shape,
+  std::size_t depth,
+  const std::function<exprt(const exprt &, const exprt &)> &f)
+{
+  if (depth == shape.size())
+    return f(a, b);
+  const std::size_t rest = shape.size() - depth;
+  const auto element = [&](const exprt &v, std::size_t i) {
+    const std::vector<int> dims = type_handler_.get_array_type_shape(v.type());
+    if (dims.size() < rest)
+      return v;
+    const std::size_t index = dims.front() == 1 ? 0 : i;
+    return np_index(v, from_integer(index, size_type()), v.type().subtype());
+  };
+  typet type = double_type();
+  for (std::size_t d = shape.size(); d-- > depth;)
+    type = array_typet(type, from_integer(shape[d], size_type()));
+  exprt result("array", type);
+  for (std::size_t i = 0; i < shape[depth]; ++i)
+    result.copy_to_operands(
+      broadcast_pair(element(a, i), element(b, i), shape, depth + 1, f));
+  return result;
 }
 
 static typet shaped(const typet &t, const typet &leaf)
@@ -7158,18 +7218,29 @@ numpy_call_expr::try_runtime_math(const std::string &function)
     type == "List" || type == "Tuple" ||
     try_extract_numeric_constant(arg, constant))
     return std::nullopt;
-  const exprt x = elementwise_operand(function, arg);
-  if (is_number_type(array_leaf_type(x.type())))
-    return retype_lhs(map_elements(
-      bind_array_once(x), double_type(), [&](const exprt &element) {
-        return bounded_math(converter_, call_)
-          .runtime(function, element, math_module::numpy);
-      }));
+  if (std::optional<exprt> result = elementwise_math(function, arg))
+    return result;
   if (json_utils::ast_contains_call(arg))
     throw std::runtime_error(
       "TypeError: numpy." + function +
       " of a call that does not return a number is not supported");
   return std::nullopt;
+}
+
+// The function of a number, or of each element of an array or a view, known
+// only at run time; nullopt when the argument holds no numbers.
+std::optional<exprt> numpy_call_expr::elementwise_math(
+  const std::string &function,
+  const nlohmann::json &arg)
+{
+  const exprt x = elementwise_operand(function, arg);
+  if (!is_number_type(array_leaf_type(x.type())))
+    return std::nullopt;
+  return retype_lhs(
+    map_elements(bind_array_once(x), double_type(), [&](const exprt &element) {
+      return bounded_math(converter_, call_)
+        .runtime(function, element, math_module::numpy);
+    }));
 }
 
 static bool has_constant_shape(const typet &type)

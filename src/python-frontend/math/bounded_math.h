@@ -4,6 +4,7 @@
 #include <util/irep/expr.h>
 
 #include <string>
+#include <vector>
 
 class python_converter;
 
@@ -45,6 +46,9 @@ public:
     const exprt &a,
     const exprt &b,
     math_module module);
+  /// math.hypot of any number of arguments, each read once: hypot() is 0
+  /// and hypot(x) is |x|.
+  exprt hypot_of(const std::vector<exprt> &args);
   /// isnan, isinf or isfinite of a number, which is read once.
   static bool is_float_predicate(const std::string &function);
   exprt float_predicate(const std::string &function, const exprt &x);

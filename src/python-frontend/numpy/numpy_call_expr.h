@@ -58,6 +58,9 @@ public:
     python_converter &converter);
 
 private:
+  // A call nested in an argument restores, rather than clears, the flag.
+  const bool outer_build_static_lists_;
+
   exprt create_expr_from_call();
 
   // transpose()/flatten()/ravel() and every other descriptor-materialized
@@ -313,7 +316,15 @@ private:
   std::optional<exprt> try_numpy_math_constant();
   std::optional<exprt> try_bounded_ufunc(const std::string &function);
   exprt bounded_binary_ufunc(const std::string &function);
+  exprt broadcast_pair(
+    const exprt &a,
+    const exprt &b,
+    const std::vector<std::size_t> &shape,
+    std::size_t depth,
+    const std::function<exprt(const exprt &, const exprt &)> &f);
   std::optional<exprt> try_runtime_math(const std::string &function);
+  std::optional<exprt>
+  elementwise_math(const std::string &function, const nlohmann::json &arg);
   const std::string &canonical_function();
   exprt
   elementwise_operand(const std::string &function, const nlohmann::json &arg);

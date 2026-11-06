@@ -4805,7 +4805,9 @@ static std::optional<double> literal_value(const nlohmann::json &node)
 static bool
 keeps_library_value(const std::string &function, const nlohmann::json &args)
 {
-  if (!std::all_of(args.begin(), args.end(), is_number_literal))
+  if (
+    !std::all_of(args.begin(), args.end(), is_number_literal) ||
+    (function == "hypot" && args.size() != 2))
     return false;
   const std::optional<double> x =
     args.size() == 1 ? literal_value(args[0]) : std::nullopt;
@@ -4816,7 +4818,8 @@ bool function_call_expr::takes_bounded_math(const std::string &function) const
 {
   const nlohmann::json &args = call_["args"];
   const std::size_t arity = bounded_math::is_bounded_binary(function) ? 2 : 1;
-  return is_bounded_math(function) && args.size() == arity &&
+  return is_bounded_math(function) &&
+         (args.size() == arity || function == "hypot") &&
          call_.value("keywords", nlohmann::json::array()).empty() &&
          !keeps_library_value(function, args) &&
          !converter_.is_model_file(call_) &&
@@ -4830,21 +4833,15 @@ bool function_call_expr::takes_bounded_math(const std::string &function) const
 // math.exp(x) in the program, of a number known only at run time: the model
 // numpy.exp(x) uses, with math's ValueError and OverflowError. Calls inside
 // the models keep the C library models their own algorithms are tuned to.
-// math.atan2 takes exactly two arguments; math.hypot takes any number, of
-// which the model covers two.
+// math.atan2 takes exactly two arguments; math.hypot takes any number.
 void function_call_expr::reject_bounded_math_arity(
   const std::string &func_name) const
 {
   const std::size_t given = call_["args"].size();
-  if (converter_.is_model_file(call_) || given == 2)
+  if (converter_.is_model_file(call_) || given == 2 || func_name != "atan2")
     return;
-  if (func_name == "atan2")
-    throw std::runtime_error(
-      "TypeError: atan2 expected 2 arguments, got " + std::to_string(given));
-  if (func_name == "hypot")
-    throw std::runtime_error(
-      "TypeError: math.hypot() of " + std::to_string(given) +
-      " arguments is not supported");
+  throw std::runtime_error(
+    "TypeError: atan2 expected 2 arguments, got " + std::to_string(given));
 }
 
 std::optional<exprt>
@@ -4874,17 +4871,21 @@ function_call_expr::try_bounded_math_call(const std::string &func_name)
 std::optional<exprt>
 function_call_expr::bounded_binary_math_call(const std::string &function)
 {
-  const exprt a = converter_.get_expr(call_["args"][0]);
-  if (is_cpp_throw_expr(a))
-    return a;
-  const exprt b = converter_.get_expr(call_["args"][1]);
-  if (is_cpp_throw_expr(b))
-    return b;
-  // Both arguments are converted, so falling back would convert them again.
-  if (!is_math_number(a.type()) || !is_math_number(b.type()))
-    throw std::runtime_error("TypeError: must be real number");
-  return bounded_math(converter_, call_)
-    .binary(function, a, b, math_module::math);
+  std::vector<exprt> args;
+  for (const nlohmann::json &arg : call_["args"])
+  {
+    const exprt x = converter_.get_expr(arg);
+    if (is_cpp_throw_expr(x))
+      return x;
+    // The arguments are converted, so falling back would convert them again.
+    if (!is_math_number(x.type()))
+      throw std::runtime_error("TypeError: must be real number");
+    args.push_back(x);
+  }
+  bounded_math model(converter_, call_);
+  if (function == "hypot")
+    return model.hypot_of(args);
+  return model.binary(function, args[0], args[1], math_module::math);
 }
 
 static std::string math_function_name(const std::string &raw_func_name)
