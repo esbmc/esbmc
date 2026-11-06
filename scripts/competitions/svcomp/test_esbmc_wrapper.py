@@ -767,6 +767,21 @@ class TestCompParseResultTest(unittest.TestCase):
         self.assertEqual(self.verdict("ERROR: Timed out\n"), "Timed out")
 
 
+def dry_run(prp_content, *options):
+    # -n prints the ESBMC command and stops before running it
+    with tempfile.TemporaryDirectory() as d:
+        prp = os.path.join(d, "goal.prp")
+        task = os.path.join(d, "task.c")
+        with open(prp, "w") as f:
+            f.write(prp_content)
+        with open(task, "w") as f:
+            f.write("int main() { return 0; }\n")
+        return subprocess.run(
+            [sys.executable, os.path.join(os.path.dirname(os.path.abspath(__file__)), "esbmc-wrapper.py"),
+             "-n", "-p", prp, "-s", "kinduction", *options, task],
+            capture_output=True, text=True, check=True, cwd=d).stdout
+
+
 class TestCompRunTest(unittest.TestCase):
     """benchexec's tool-info runs esbmc-wrapper.py for SV-COMP and Test-Comp alike."""
 
@@ -786,37 +801,54 @@ class TestCompRunTest(unittest.TestCase):
             self.assertEqual(wrapper.test_goal(content), wrapper.TestGoal.error_call)
         self.assertIsNone(wrapper.test_goal("CHECK( init(main()), LTL(F end) )\n"))
 
-    def dry_run(self, prp_content, *options):
-        # -n prints the ESBMC command and stops before running it
-        with tempfile.TemporaryDirectory() as d:
-            prp = os.path.join(d, "goal.prp")
-            task = os.path.join(d, "task.c")
-            with open(prp, "w") as f:
-                f.write(prp_content)
-            with open(task, "w") as f:
-                f.write("int main() { return 0; }\n")
-            return subprocess.run(
-                [sys.executable, os.path.join(os.path.dirname(os.path.abspath(__file__)), "esbmc-wrapper.py"),
-                 "-n", "-p", prp, "-s", "kinduction", *options, task],
-                capture_output=True, text=True, check=True, cwd=d).stdout
-
     def test_branch_coverage_command(self):
-        out = self.dry_run(COVERAGE_BRANCHES, "-o", "branch-function")
+        out = dry_run(COVERAGE_BRANCHES, "-o", "branch-function")
         for flag in ("--force-malloc-success", "--floatbv", "--generate-testcase",
                      "--branch-function-coverage", "--max-inductive-step 8"):
             self.assertIn(flag, out)
         self.assertNotIn("--witness-output", out)
 
     def test_error_call_command(self):
-        out = self.dry_run(COVERAGE_ERROR_CALL, "-o", "branch-function")
+        out = dry_run(COVERAGE_ERROR_CALL, "-o", "branch-function")
         for flag in ("--generate-testcase", "--enable-unreachability-intrinsic", "--error-label ERROR"):
             self.assertIn(flag, out)
         self.assertNotIn("--branch-function-coverage", out)
 
     def test_svcomp_command_unchanged(self):
-        out = self.dry_run(UNREACH_CALL)
+        out = dry_run(UNREACH_CALL)
         self.assertNotIn("--generate-testcase", out)
         self.assertNotIn("--force-malloc-success", out)
+
+
+class ReachValidationUnwindTest(unittest.TestCase):
+    """Correctness validation unrolls loops only when the witness has no
+    invariants, such as ESBMC's own; violation validation never does."""
+
+    UNROLL = "--goto-unwind --unlimited-goto-unwind"
+    ESBMC = '- entry_type: "invariant_set"\n  content:\n    []\n'
+    BLOCK = ('- entry_type: "invariant_set"\n  content:\n'
+             '    - invariant:\n        type: "loop_invariant"\n        value: "i <= 5"\n')
+    FLOW = '[{entry_type: invariant_set, content: [{invariant: {type: loop_invariant, value: i <= 5}}]}]\n'
+    JSON = '[{"entry_type": "invariant_set", "content": [{"invariant": {"type": "loop_invariant"}}]}]\n'
+
+    def command(self, witness, mode):
+        with tempfile.NamedTemporaryFile("w", suffix=".yml") as w:
+            w.write(witness)
+            w.flush()
+            return dry_run(UNREACH_CALL, "--witness", w.name, "--validate-" + mode + "-witness")
+
+    def test_verification_unrolls(self):
+        self.assertIn(self.UNROLL, dry_run(UNREACH_CALL))
+
+    def test_invariant_free_correctness_witness_unrolls(self):
+        self.assertIn(self.UNROLL, self.command(self.ESBMC, "correctness"))
+
+    def test_invariants_keep_loops_in_every_yaml_style(self):
+        for witness in (self.BLOCK, self.FLOW, self.JSON):
+            self.assertNotIn("--goto-unwind", self.command(witness, "correctness"), witness)
+
+    def test_violation_validation_keeps_loops(self):
+        self.assertNotIn("--goto-unwind", self.command(self.ESBMC, "violation"))
 
 
 class OverflowFallbackTest(unittest.TestCase):
