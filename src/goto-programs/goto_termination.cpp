@@ -732,11 +732,8 @@ void goto_termination(
   // Apply k-induction's per-loop havoc + assume-entry-cond to every
   // function uniformly. __ESBMC_main is loop-free so this is a no-op
   // there; library helpers (body.hide) DO have loops but those are
-  // explicitly skipped in the per-function pass below.
-  // goto_k_induction returns true when its havoc misses what a loop
-  // writes (e.g. through a pointer it cannot name); the step then starts
-  // from a state the loop never left, and its UNSAT is no proof of
-  // non-termination.
+  // explicitly skipped in the per-function pass below. Its result gates
+  // the inductive step, as on the reachability path.
   bool any_unreliable_is_loop = goto_k_induction(
     goto_functions, ns, options.get_bool_option("multi-property"));
 
