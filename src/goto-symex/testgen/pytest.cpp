@@ -794,13 +794,14 @@ void pytest_generator::collect(
         if (!scope.dict_key_kind.empty())
           dict_key_kind = scope.dict_key_kind;
 
-        // Track the role of internal variables.  The builders hold the size
-        // in `size`/`bound` and produce each element from an anonymous
-        // `nondet_T()` call, so anything else nondet in scope is an element
+        // Track the role of internal variables. Any nondet in a size helper is
+        // the size, which may reach `size` through a temporary (#9923). The
+        // builders produce each element from an anonymous `nondet_T()` call, so
+        // anything else nondet in scope is an element
         // (a dict's keys are concrete constants, only its values are nondet).
         if (scope.any())
         {
-          if (var_name == "size")
+          if (scope.size)
           {
             is_list_size = true;
             is_dict_size = in_nondet_dict;
@@ -1305,13 +1306,14 @@ void pytest_generator::generate_single(
         if (!scope.dict_key_kind.empty())
           dict_key_kind = scope.dict_key_kind;
 
-        // Track the role of internal variables.  The builders hold the size
-        // in `size`/`bound` and produce each element from an anonymous
-        // `nondet_T()` call, so anything else nondet in scope is an element
+        // Track the role of internal variables. Any nondet in a size helper is
+        // the size, which may reach `size` through a temporary (#9923). The
+        // builders produce each element from an anonymous `nondet_T()` call, so
+        // anything else nondet in scope is an element
         // (a dict's keys are concrete constants, only its values are nondet).
         if (scope.any())
         {
-          if (var_name == "size")
+          if (scope.size)
           {
             is_list_size = true;
             is_dict_size = in_nondet_dict;
