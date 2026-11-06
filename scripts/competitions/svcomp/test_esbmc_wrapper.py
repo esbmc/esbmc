@@ -851,5 +851,18 @@ class ReachValidationUnwindTest(unittest.TestCase):
         self.assertNotIn("--goto-unwind", self.command(self.ESBMC, "violation"))
 
 
+class ConcurrencyContextBound(unittest.TestCase):
+
+    def test_falsify_rounds_reach_past_the_final_context_bound(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "main.c")
+            with open(path, "w") as f:
+                f.write("pthread_create(&t, 0, f, 0);\n")
+            cmd = wrapper.get_command_line("incr", wrapper.Property.datarace, 64, path, False, "",
+                                           False)
+        self.assertIn("--context-bound 3 ", cmd)
+        self.assertIn("--falsify-context-bound 4 ", cmd)
+
+
 if __name__ == "__main__":
     unittest.main()

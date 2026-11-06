@@ -545,8 +545,9 @@ def get_command_line(strat, prop, arch, benchmark, concurrency, dargs, esbmc_ci,
     # order, where the task times out with no answer at all (issue #6831, #6947).
     # One bounded round first costs a median 0.02s and can only report a
     # violation -- it never claims a proof, so --incremental-bmc still owns
-    # every other verdict.
-    command_line += "--falsify-context-bound 1 --incremental-bmc "
+    # every other verdict. The rounds reach one bound past --context-bound 3,
+    # whose SUCCESSFUL cannot see a violation needing four switches (#8220).
+    command_line += "--falsify-context-bound 4 --incremental-bmc "
   elif prop == Property.overflow: # Overflow only works with incremental
     command_line += "--incremental-bmc "
   else:

@@ -1,0 +1,5 @@
+CORE
+main.c
+--64 --context-bound 3 --falsify-context-bound 4 --data-races-check-only --no-pointer-check --no-bounds-check --no-assertions
+^Falsifying with context bound 4$
+^VERIFICATION FAILED$
