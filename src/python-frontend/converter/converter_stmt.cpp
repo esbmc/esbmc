@@ -5021,6 +5021,8 @@ bool python_converter::handle_unpacking_assignment(
 
   // Prepare RHS if it's a function call
   rhs = tuple_handler_->prepare_rhs_for_unpacking(ast_node, rhs, target_block);
+  rhs = optional_tuple_payload(
+    rhs, ast_node["value"], "cannot unpack non-iterable NoneType object");
 
   // Handle different unpacking types
   if (rhs.type().id() == "struct")
