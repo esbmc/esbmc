@@ -226,6 +226,21 @@ def _module_filename(module: ModuleType | str | None) -> str | None:
     return normalized
 
 
+def _import_bundled_fallback(module_name: str, output_dir: str) -> ModuleType | None:
+    """Import ESBMC's own copy of a module the task could not supply.
+
+    A cloud worker receives only the task file, not the sv-benchmarks
+    `_sv_verifier.py` it imports, which sv-benchmarks allows analysers to stub.
+    """
+    if module_name != "_sv_verifier":
+        return None
+    sys.path.append(os.path.join(output_dir, "fallback"))
+    try:
+        return importlib.import_module(module_name)
+    except ImportError:
+        return None
+
+
 def import_module_by_name(
     module_name: str,
     output_dir: str,
@@ -262,6 +277,9 @@ def import_module_by_name(
         module = importlib.import_module(module_name)
         return module
     except ImportError:
+        fallback = _import_bundled_fallback(module_name, output_dir)
+        if fallback is not None:
+            return fallback
         if "." in module_name:
             parent = ".".join(module_name.split(".")[:-1])
             try:
