@@ -25,6 +25,8 @@ public:
 
   /// Functions whose result of a run-time argument is bounded.
   static bool is_bounded(const std::string &function);
+  /// hypot and arctan2.
+  static bool is_bounded_binary(const std::string &function);
   /// is_bounded() or exact (sqrt).
   static bool has_runtime_model(const std::string &function);
   static double host_value(const std::string &function, double x);
@@ -34,6 +36,13 @@ public:
   /// The result for a number known only at run time, which is read once.
   exprt
   runtime(const std::string &function, const exprt &x, math_module module);
+  /// hypot(a, b) or arctan2(a, b), each argument read once. NumPy and
+  /// math.* agree on both: neither raises, and an overflow is an infinity.
+  exprt binary(
+    const std::string &function,
+    const exprt &a,
+    const exprt &b,
+    math_module module);
 
 private:
   python_converter &converter_;
@@ -47,6 +56,8 @@ private:
     const std::string &function,
     const exprt &x,
     const exprt &value);
+  exprt hypot(const exprt &x, const exprt &y);
+  exprt arctan2(const exprt &y, const exprt &x);
   exprt fresh(const std::string &name, const exprt &value);
   exprt read_once(const exprt &x);
   exprt within(double low, double high);

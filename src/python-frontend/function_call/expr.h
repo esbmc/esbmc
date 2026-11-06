@@ -797,6 +797,8 @@ private:
   std::optional<std::string> bounded_math_import() const;
   bool takes_bounded_math(const std::string &function) const;
   std::optional<exprt> try_bounded_math_call(const std::string &func_name);
+  void reject_bounded_math_arity(const std::string &func_name) const;
+  std::optional<exprt> bounded_binary_math_call(const std::string &function);
 
   // General function call handler
   exprt handle_general_function_call();

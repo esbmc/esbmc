@@ -4698,6 +4698,8 @@ numpy_call_expr::try_early_result(const std::string &function)
 
   static const std::set<std::string> model_only = {
     "remainder", "nextafter", "isclose"};
+  if (std::optional<exprt> bounded = try_bounded_ufunc(function))
+    return bounded;
   if (std::optional<exprt> math = try_runtime_math(function))
     return math;
   if (!model_only.count(function))
@@ -7047,8 +7049,10 @@ exprt numpy_call_expr::numpy_math_value(const std::string &function, double x)
   return bounded_math(converter_, call_).literal(function, x);
 }
 
-// `out=None` and `dtype=float` leave a scalar ufunc's result unchanged.
-static bool only_noop_ufunc_keywords(const nlohmann::json &call)
+// The first keyword other than `out=None` and `dtype=float`, which leave a
+// scalar ufunc's result unchanged.
+static std::optional<std::string>
+changing_ufunc_keyword(const nlohmann::json &call)
 {
   for (const auto &kw : call.value("keywords", nlohmann::json::array()))
   {
@@ -7059,9 +7063,73 @@ static bool only_noop_ufunc_keywords(const nlohmann::json &call)
     const bool float64 =
       value.value("id", "") == "float" || value.value("attr", "") == "float64";
     if (!(arg == "out" && none) && !(arg == "dtype" && float64))
-      return false;
+      return arg;
   }
-  return true;
+  return std::nullopt;
+}
+
+static bool only_noop_ufunc_keywords(const nlohmann::json &call)
+{
+  return !changing_ufunc_keyword(call);
+}
+
+// The ufuncs whose only route is the bounded model: anything outside it is
+// refused rather than handed to a path that does not know them.
+std::optional<exprt>
+numpy_call_expr::try_bounded_ufunc(const std::string &function)
+{
+  static const std::set<std::string> ufuncs = {
+    "expm1",
+    "log1p",
+    "exp2",
+    "arcsinh",
+    "arccosh",
+    "arctanh",
+    "cbrt",
+    "hypot",
+    "arctan2"};
+  if (!ufuncs.count(function))
+    return std::nullopt;
+  if (std::optional<std::string> keyword = changing_ufunc_keyword(call_))
+    throw std::runtime_error(
+      "TypeError: numpy." + function + "() keyword '" + *keyword +
+      "' is not supported");
+  const std::size_t arity = bounded_math::is_bounded_binary(function) ? 2 : 1;
+  if (call_["args"].size() != arity)
+    throw std::runtime_error(
+      "TypeError: numpy." + function + "() takes " + std::to_string(arity) +
+      " positional arguments, got " + std::to_string(call_["args"].size()));
+  if (arity == 2)
+    return bounded_binary_ufunc(function);
+  numeric_value constant;
+  if (try_extract_numeric_constant(call_["args"][0], constant))
+    return numpy_math_value(function, to_double(constant));
+  if (std::optional<exprt> result = try_runtime_math(function))
+    return result;
+  throw std::runtime_error(
+    "TypeError: numpy." + function + " of this argument is not supported");
+}
+
+// hypot or arctan2 of two numbers.
+exprt numpy_call_expr::bounded_binary_ufunc(const std::string &function)
+{
+  // Converting an operand with current_lhs set would retype the target.
+  exprt *lhs = converter_.current_lhs;
+  converter_.current_lhs = nullptr;
+  const exprt a = converter_.get_expr(call_["args"][0]);
+  const exprt b = converter_.get_expr(call_["args"][1]);
+  converter_.current_lhs = lhs;
+  for (const exprt &operand : {a, b})
+  {
+    reject_non_numeric_elements(function, operand.type());
+    if (!is_number_type(operand.type()))
+      throw std::runtime_error(
+        "TypeError: numpy." + function +
+        " of an array or a non-number is "
+        "not supported");
+  }
+  return bounded_math(converter_, call_)
+    .binary(function, a, b, math_module::numpy);
 }
 
 static typet double_shaped(const typet &t)
@@ -11639,7 +11707,13 @@ exprt numpy_call_expr::scalar_binary_call(
 const std::string &numpy_call_expr::canonical_function()
 {
   static const std::map<std::string, std::string> aliases = {
-    {"asin", "arcsin"}, {"acos", "arccos"}, {"atan", "arctan"}};
+    {"asin", "arcsin"},
+    {"acos", "arccos"},
+    {"atan", "arctan"},
+    {"asinh", "arcsinh"},
+    {"acosh", "arccosh"},
+    {"atanh", "arctanh"},
+    {"atan2", "arctan2"}};
   auto alias = aliases.find(function_id_.get_function());
   if (alias != aliases.end())
     function_id_.set_function(alias->second);

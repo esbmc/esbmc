@@ -311,6 +311,8 @@ private:
   exprt lapack_value(double exact, double radius);
   exprt numpy_math_value(const std::string &function, double x);
   std::optional<exprt> try_numpy_math_constant();
+  std::optional<exprt> try_bounded_ufunc(const std::string &function);
+  exprt bounded_binary_ufunc(const std::string &function);
   std::optional<exprt> try_runtime_math(const std::string &function);
   const std::string &canonical_function();
   std::optional<exprt>
