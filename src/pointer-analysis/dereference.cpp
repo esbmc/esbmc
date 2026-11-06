@@ -681,9 +681,6 @@ expr2tc dereferencet::dereference(
 
   // Where p can land: every target build_reference_to() produced a guard for.
   expr2tc resolved = gen_false_expr();
-  // The same, leaving out NULL, which the value set may hold at any offset.
-  expr2tc resolved_non_null = gen_false_expr();
-  bool null_target = false;
 
   for (const expr2tc &target : points_to_set)
   {
@@ -692,12 +689,6 @@ expr2tc dereferencet::dereference(
     new_value = build_reference_to(
       target, mode, src, type, guard, lexical_offset, pointer_guard);
     resolved = or2tc(resolved, pointer_guard);
-    if (
-      is_object_descriptor2t(target) &&
-      is_null_object2t(to_object_descriptor2t(target).get_root_object()))
-      null_target = true;
-    else
-      resolved_non_null = or2tc(resolved_non_null, pointer_guard);
 
     if (is_nil_expr(new_value))
       continue;
@@ -722,23 +713,7 @@ expr2tc dereferencet::dereference(
 
   if (!known_exhaustive && (is_write(mode) || is_free(mode)))
     deref_invalid_ptr(src, guard, mode, resolved);
-
-  if (null_target && !is_free(mode) && !is_internal(mode))
-  {
-    /* NULL plus an offset, rebuilt from an integer, is no longer in NULL's
-     * object: int_to_ptr puts (unsigned long)NULL + 432 in INVALID or in
-     * whatever object the solver places there. When the value set is
-     * exhaustive, missing every other target is what being NULL-derived
-     * means. */
-    expr2tc is_null =
-      known_exhaustive
-        ? not2tc(resolved_non_null)
-        : same_object2tc(
-            src, symbol2tc(pointer_type2tc(get_empty_type()), "NULL"));
-    guard2tc tmp_guard(guard);
-    tmp_guard.add(is_null);
-    dereference_failure("pointer dereference", "NULL pointer", tmp_guard);
-  }
+  null_offset_check(src, points_to_set, guard, mode);
 
   if (is_internal(mode))
   {
@@ -1083,7 +1058,11 @@ expr2tc dereferencet::build_reference_to(
 
     pointer_guard = same_object2tc(deref_expr, null_ptr);
 
-    // dereference() reports the failure, knowing every other target.
+    guard2tc tmp_guard(guard);
+    tmp_guard.add(pointer_guard);
+
+    dereference_failure("pointer dereference", "NULL pointer", tmp_guard);
+
     // Don't build a reference to this. You can't actually access NULL, and the
     // solver will only get confused.
     return value;
@@ -1200,6 +1179,45 @@ expr2tc dereferencet::build_reference_to(
   build_reference_rec(value, final_offset, type, tmp_guard, mode, alignment);
 
   return value;
+}
+
+/* A pointer rebuilt from (unsigned long)NULL + 432 is NULL+432 in the value
+ * set, but int_to_ptr places it in INVALID or in whatever object the solver
+ * puts there, so build_reference_to's same_object(p, NULL) misses it. When the
+ * value set is exhaustive, missing every other target is what being
+ * NULL-derived means. NULL at offset 0 is left to same_object, which does not
+ * trust a value set that can go stale (a pointer rewritten byte-wise keeps its
+ * old targets). */
+void dereferencet::null_offset_check(
+  const expr2tc &deref_expr,
+  const value_setst::valuest &points_to_set,
+  const guard2tc &guard,
+  modet mode)
+{
+  if (is_free(mode) || is_internal(mode))
+    return;
+  bool moved_null = false;
+  expr2tc elsewhere = gen_false_expr();
+  for (const expr2tc &target : points_to_set)
+  {
+    if (!is_object_descriptor2t(target))
+      return;
+    const object_descriptor2t &o = to_object_descriptor2t(target);
+    if (is_null_object2t(o.get_root_object()))
+      moved_null |= !is_constant_int2t(o.offset) ||
+                    !to_constant_int2t(o.offset).value.is_zero();
+    else
+      elsewhere = or2tc(
+        elsewhere,
+        same_object2tc(
+          deref_expr,
+          address_of2tc(pointer_type2tc(o.object->type), o.object)));
+  }
+  if (!moved_null)
+    return;
+  guard2tc tmp_guard(guard);
+  tmp_guard.add(not2tc(elsewhere));
+  dereference_failure("pointer dereference", "NULL pointer", tmp_guard);
 }
 
 void dereferencet::deref_invalid_ptr(

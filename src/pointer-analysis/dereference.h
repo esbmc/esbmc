@@ -459,6 +459,12 @@ private:
     modet mode,
     const expr2tc &resolved = expr2tc());
 
+  void null_offset_check(
+    const expr2tc &deref_expr,
+    const value_setst::valuest &points_to_set,
+    const guard2tc &guard,
+    modet mode);
+
   static const expr2tc &get_symbol(const expr2tc &object);
   void bounds_check(
     const expr2tc &expr,
