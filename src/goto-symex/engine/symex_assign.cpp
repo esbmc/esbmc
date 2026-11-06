@@ -1,6 +1,8 @@
+#include <algorithm>
 #include <cassert>
 #include <climits>
 #include <functional>
+#include <optional>
 #include <unordered_map>
 #include <goto-symex/engine/dynamic_allocation.h>
 #include <goto-symex/scheduler/execution_state.h>
@@ -97,6 +99,44 @@ static expr2tc struct_written_by_arms(const expr2tc &lhs)
         best_count = counts[base];
       }
   return best;
+}
+
+/// \p src with its member \p name replaced by \p value.
+static expr2tc
+with_member(const expr2tc &src, const irep_idt &name, const expr2tc &value)
+{
+  type2tc str_type = array_type2tc(
+    get_uint8_type(), gen_ulong(name.as_string().size() + 1), false);
+  return with2tc(
+    src->type,
+    src,
+    constant_string2tc(str_type, name, constant_string_kindt::DEFAULT),
+    value);
+}
+
+/// The members leading from \p base to \p e, if \p e is reached from \p base
+/// through struct members only.
+static std::optional<std::vector<irep_idt>>
+struct_member_path(expr2tc e, const expr2tc &base)
+{
+  std::vector<irep_idt> path;
+  while (is_member2t(e) && is_struct_type(to_member2t(e).source_value))
+  {
+    path.push_back(to_member2t(e).member);
+    e = to_member2t(e).source_value;
+    if (e == base)
+    {
+      std::reverse(path.begin(), path.end());
+      return path;
+    }
+  }
+  return std::nullopt;
+}
+
+static bool
+is_strict_prefix(const std::vector<irep_idt> &p, const std::vector<irep_idt> &q)
+{
+  return p.size() < q.size() && std::equal(p.begin(), p.end(), q.begin());
 }
 
 /// \p e with each subexpression equal to a key of \p values replaced, in one
@@ -905,30 +945,105 @@ void goto_symext::symex_assign_array(
     index.source_value, full_lhs, new_rhs, full_rhs, guard, hidden);
 }
 
-void goto_symext::record_member_store(
+bool goto_symext::record_member_store(
   const expr2tc &lhs,
   const expr2tc &rhs,
   const guard2tc &guard)
 {
-  // Earlier stores of this arm, which share its guard, have already happened
-  // when this one reads the members they wrote.
+  const expr2tc &base = member_stores->base;
+  std::optional<std::vector<irep_idt>> path = struct_member_path(lhs, base);
+  if (!path)
+    return false;
+
+  // The stores of this arm share its guard and sit at the end.
   std::vector<member_store> &stores = member_stores->stores;
   expr2tc store_guard = guard.as_expr();
+  auto arm = stores.end();
+  while (arm != stores.begin() && std::prev(arm)->guard == store_guard)
+    --arm;
+  const std::vector<member_store> earlier(arm, stores.end());
+  // An arm stores to disjoint parts of the object, so its stores never nest.
+  assert(
+    std::none_of(
+      earlier.begin(), earlier.end(), [&path](const member_store &store) {
+        return is_strict_prefix(store.path, *path) ||
+               is_strict_prefix(*path, store.path);
+      }));
+
+  // Earlier stores of this arm have already happened when this one reads the
+  // members they wrote, or a struct enclosing one.
   std::vector<std::pair<expr2tc, expr2tc>> written;
-  auto same_member = stores.end();
-  for (auto it = stores.rbegin();
-       it != stores.rend() && it->guard == store_guard;
-       ++it)
+  for (const member_store &store : earlier)
   {
-    written.emplace_back(it->member, it->value);
-    if (it->member == lhs)
-      same_member = std::next(it).base();
+    written.emplace_back(store.member, store.value);
+    std::vector<irep_idt> enclosing = store.path;
+    for (expr2tc e = to_member2t(store.member).source_value; e != base;
+         e = to_member2t(e).source_value)
+    {
+      enclosing.pop_back();
+      written.emplace_back(
+        e, merge_member_stores(e, enclosing, earlier, false));
+    }
   }
   expr2tc value = replace_subexprs(rhs, written);
-  if (same_member != stores.end())
-    same_member->value = value;
-  else
-    stores.push_back({lhs, store_guard, value});
+
+  stores.erase(
+    std::remove_if(
+      arm,
+      stores.end(),
+      [&path](const member_store &store) { return store.path == *path; }),
+    stores.end());
+  stores.push_back({lhs, std::move(*path), store_guard, value});
+  return true;
+}
+
+expr2tc goto_symext::merge_member_stores(
+  const expr2tc &obj,
+  const std::vector<irep_idt> &path,
+  const std::vector<member_store> &stores,
+  bool guarded) const
+{
+  const struct_type2t &type = to_struct_type(obj->type);
+  std::vector<irep_idt> member_path = path;
+  member_path.emplace_back();
+  std::vector<expr2tc> members;
+  std::vector<const member_store *> union_stores;
+  for (size_t i = 0; i < type.members.size(); i++)
+  {
+    member_path.back() = type.member_names[i];
+    expr2tc value = member2tc(type.members[i], obj, type.member_names[i]);
+    if (
+      std::any_of(
+        stores.begin(), stores.end(), [&member_path](const member_store &s) {
+          return is_strict_prefix(member_path, s.path);
+        }))
+      value = merge_member_stores(value, member_path, stores, guarded);
+    for (const member_store &store : stores)
+    {
+      if (store.path != member_path)
+        continue;
+      if (!guarded)
+        value = store.value;
+      else if (is_union_type(type.members[i]))
+        union_stores.push_back(&store);
+      else
+        value = if2tc(type.members[i], store.guard, store.value, value);
+    }
+    members.push_back(value);
+  }
+  const expr2tc merged = constant_struct2tc(obj->type, members);
+
+  // The solvers encode a union written through a with2t, but not as an arm of
+  // an if: store to it through the enclosing struct instead. Arms are
+  // exclusive, so each union store applies to the members merged above.
+  expr2tc result = merged;
+  for (const member_store *store : union_stores)
+    result = if2tc(
+      obj->type,
+      store->guard,
+      with_member(merged, store->path.back(), store->value),
+      result);
+  return result;
 }
 
 void goto_symext::symex_assign_member(
@@ -952,11 +1067,8 @@ void goto_symext::symex_assign_member(
 
   const irep_idt &component_name = member.member;
 
-  if (member_stores && member.source_value == member_stores->base)
-  {
-    record_member_store(lhs, rhs, guard);
+  if (member_stores && record_member_store(lhs, rhs, guard))
     return;
-  }
 
   expr2tc real_lhs = member.source_value;
 
@@ -983,14 +1095,7 @@ void goto_symext::symex_assign_member(
   // into
   //   a'==a WITH [c:=e]
 
-  type2tc str_type = array_type2tc(
-    get_uint8_type(), gen_ulong(component_name.as_string().size() + 1), false);
-  expr2tc new_rhs = with2tc(
-    real_lhs->type,
-    real_lhs,
-    constant_string2tc(
-      str_type, component_name, constant_string_kindt::DEFAULT),
-    rhs);
+  expr2tc new_rhs = with_member(real_lhs, component_name, rhs);
 
   symex_assign_rec(
     member.source_value, full_lhs, new_rhs, full_rhs, guard, hidden);
@@ -1073,20 +1178,9 @@ void goto_symext::symex_assign_member_arms(
   }
 
   // The arms of an if are exclusive, so each store reads the members as they
-  // were before the assignment, and at most one store's guard holds.
-  const struct_type2t &type = to_struct_type(base->type);
-  std::vector<expr2tc> members;
-  for (size_t i = 0; i < type.members.size(); i++)
-    members.push_back(member2tc(type.members[i], base, type.member_names[i]));
-  for (const member_store &store : collector.stores)
-  {
-    unsigned int i = *struct_union_get_component_number(
-      base->type, to_member2t(store.member).member);
-    members[i] = if2tc(type.members[i], store.guard, store.value, members[i]);
-  }
-
-  // Each member's store guard already includes the assignment's guard.
-  expr2tc new_rhs = constant_struct2tc(base->type, members);
+  // were before the assignment, and at most one store's guard holds. Each
+  // store's guard already includes the assignment's guard.
+  expr2tc new_rhs = merge_member_stores(base, {}, collector.stores, true);
   guard2tc unguarded;
   symex_assign_rec(base, full_lhs, new_rhs, full_rhs, unguarded, hidden);
 }

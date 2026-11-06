@@ -1,0 +1,6 @@
+regression/esbmc/intptr_struct_store_union_nested
+regression/esbmc/intptr_struct_store_union_nested_fail
+regression/esbmc/intptr_struct_store_nested_union
+regression/esbmc/intptr_struct_store_nested_union_fail
+regression/esbmc/intptr_struct_store_union_z3
+regression/esbmc/intptr_struct_store_union_z3_fail

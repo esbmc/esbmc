@@ -13,7 +13,9 @@
 #include <pointer-analysis/value_set.h>
 #include <set>
 #include <stack>
+#include <unordered_map>
 #include <string>
+#include <utility>
 #include <irep2/irep2_guard.h>
 #include <util/base/i2string.h>
 #include <irep2/irep2.h>
@@ -371,7 +373,14 @@ public:
    */
   void rename(expr2tc &expr);
 
+  /** Renamed shared subexpressions: original node -> (original, renamed). */
+  using renamed_exprst =
+    std::unordered_map<const expr2t *, std::pair<expr2tc, expr2tc>>;
+  void rename(expr2tc &expr, renamed_exprst &renamed);
+
   void rename_type(expr2tc &expr);
+  /** rename_type for \p expr itself, not its operands. */
+  void rename_own_type(expr2tc &expr);
   void rename_array_sizes(type2tc &type);
 
   /**
