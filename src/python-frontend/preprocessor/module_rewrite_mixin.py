@@ -3,7 +3,7 @@ import copy
 from collections import Counter
 
 from preprocessor.binding_sites import binding_sites
-from preprocessor.bound_method_dispatch import dispatch_rebound_methods
+from preprocessor.bound_method_dispatch import _scope_nodes, dispatch_rebound_methods
 from preprocessor.bound_method_values import lower_method_values
 from preprocessor.check_type_lowering import lower_check_type
 from preprocessor.dotted_imports import alias_dotted_imports
@@ -650,11 +650,8 @@ class ModuleRewriteMixin:
         and CPython's TypeError for it is already reported. The class name
         must be bound only by its class statement, so a call of it constructs
         the class."""
-        bind_counts = {}
-        for n in ast.walk(node):
-            for name in self._bound_names(n):
-                bind_counts[name] = bind_counts.get(name, 0) + 1
         classes = [n for n in ast.walk(node) if isinstance(n, ast.ClassDef)]
+        bind_counts = self._binding_counts_outside_class_bodies(node, classes)
         iterable = set()
         grew = True
         while grew:
@@ -664,6 +661,14 @@ class ModuleRewriteMixin:
                     iterable.add(c.name)
                     grew = True
         return {name for name in iterable if bind_counts.get(name) == 1}
+
+    def _binding_counts_outside_class_bodies(self, node, classes):
+        """How often each name is bound in `node`, leaving out the bindings of class
+        bodies: a method or class attribute binds in its class, so it never shadows a
+        class name that a call can reach (#9986)."""
+        in_class_body = {id(n) for c in classes for n in _scope_nodes(c)}
+        return Counter(name for n in ast.walk(node) if id(n) not in in_class_body
+                       for name in self._bound_names(n))
 
     def _scan_iterator_params(self, node):
         """`(id(def), param)` for each parameter of a module function that
