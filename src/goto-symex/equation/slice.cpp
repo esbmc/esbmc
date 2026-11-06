@@ -282,7 +282,7 @@ void symex_slicet::run_on_assignment(
   // an unread index is sound (a dead store) and keeps #depends monotone.
   if (!depends_on_tracked(SSA_step.lhs))
   {
-    // Should we add nondet to the dependency list (mostly for test cases)?
+    // Keep a nondet call's result for test cases and YAML witnesses.
     if (!slice_nondet)
     {
       auto expr = get_nondet_symbol(SSA_step.rhs);
@@ -290,7 +290,16 @@ void symex_slicet::run_on_assignment(
       {
         auto &sym = to_symbol2t(expr);
         if (has_prefix(sym.thename.as_string(), "nondet$"))
+        {
+          // Without its guard's definition the guard is free, and the trace
+          // could show a call on a path that never reaches it. The step is
+          // hidden: its index or target can be just as free, so the trace
+          // would show a store that never happened.
+          scan_array_uses(SSA_step.guard);
+          collect_dependencies(SSA_step.guard);
+          SSA_step.hidden = true;
           return;
+        }
       }
     }
 

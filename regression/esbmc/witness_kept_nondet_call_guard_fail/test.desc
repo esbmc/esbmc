@@ -1,0 +1,6 @@
+CORE
+main.c
+--witness-output-yaml -
+^VERIFICATION FAILED$
+value: "\\\\result == 5"\n\s+format: "ext_c_expression"\n\s+location:\n\s+file_name: "[^"]*main\.c"\n\s+line: 15$
+(?s)\A(?:(?!line: 14\n).)*\Z
