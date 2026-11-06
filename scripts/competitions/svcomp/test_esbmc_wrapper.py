@@ -722,5 +722,126 @@ VERIFICATION FAILED
         self.assertEqual(self.verdict(output, wrapper.Property.memory), "Unknown")
 
 
+# Test-Comp. Shaped like ESBMC 8.6 output on reducercommutativity/rangesum10.i
+# in Test-Comp 2027.
+TESTCOMP_REACH_WITH_UNCHECKED_UNWINDING = """
+Violated property:
+  file rangesum10.i line 61 column 6 function main
+  reach_error
+  0
+
+
+** Results:
+rangesum10.i, function main
+  NOT CHECKED  [main.assertion.1]  line 54  unwinding assertion loop 3
+  FAILED       [main.assertion.2]  line 61  reach_error
+
+** 1 of 2 properties failed, 1 not checked
+
+VERIFICATION FAILED
+
+Bug found (k = 11)
+"""
+
+# --quiet, which coverage mode passes, drops the counterexample and with it the
+# "Violated property:" block, leaving only the table row.
+TESTCOMP_QUIET_VIOLATED_UNWINDING = """
+** Results:
+main.c, function main
+  FAILED       [main.assertion.1]  line 42  unwinding assertion loop 3
+
+VERIFICATION FAILED
+"""
+
+TESTCOMP_SUCCESSFUL = """
+** Results:
+main.c, function main
+  PASSED       [main.assertion.1]  line 42  unwinding assertion loop 3
+
+VERIFICATION SUCCESSFUL
+"""
+
+COVERAGE_BRANCHES = "COVER( init(main()), FQL(COVER EDGES(@DECISIONEDGE)) )\n"
+COVERAGE_CONDITIONS = "COVER( init(main()), FQL(COVER EDGES(@CONDITIONEDGE)) )\n"
+COVERAGE_STATEMENTS = "COVER( init(main()), FQL(COVER EDGES(@BASICBLOCKENTRY)) )\n"
+COVERAGE_ERROR_CALL = "COVER( init(main()), FQL(COVER EDGES(@CALL(reach_error))) )\n"
+UNREACH_CALL = "CHECK( init(main()), LTL(G ! call(reach_error())) )\n"
+
+
+class TestCompParseResultTest(unittest.TestCase):
+
+    def verdict(self, output):
+        return wrapper.get_result_string(wrapper.testcomp_parse_result(output))
+
+    def test_unchecked_unwinding_row_does_not_mask_the_reach_violation(self):
+        self.assertEqual(self.verdict(TESTCOMP_REACH_WITH_UNCHECKED_UNWINDING), "FALSE_REACH")
+
+    def test_violated_unwinding_assertion_is_unknown(self):
+        self.assertEqual(self.verdict(VIOLATED_UNWINDING), "Unknown")
+
+    def test_quiet_violated_unwinding_assertion_is_unknown(self):
+        self.assertEqual(self.verdict(TESTCOMP_QUIET_VIOLATED_UNWINDING), "Unknown")
+
+    def test_successful_run_is_true(self):
+        self.assertEqual(self.verdict(TESTCOMP_SUCCESSFUL), "TRUE")
+
+    def test_timeout(self):
+        self.assertEqual(self.verdict("ERROR: Timed out\n"), "Timed out")
+
+
+class TestCompRunTest(unittest.TestCase):
+    """benchexec's tool-info runs esbmc-wrapper.py for SV-COMP and Test-Comp alike."""
+
+    def test_coverage_option_or_cover_property_is_testcomp(self):
+        self.assertTrue(wrapper.is_testcomp_run("branch-function", UNREACH_CALL))
+        for content in (COVERAGE_BRANCHES, COVERAGE_ERROR_CALL):
+            self.assertTrue(wrapper.is_testcomp_run(None, content))
+
+    def test_svcomp_properties_are_not_testcomp(self):
+        self.assertFalse(wrapper.is_testcomp_run(None, UNREACH_CALL))
+        self.assertFalse(wrapper.is_testcomp_run(None, "CHECK( init(main()), LTL(G valid-free) )\n"))
+
+    def test_goals(self):
+        for content in (COVERAGE_BRANCHES, COVERAGE_CONDITIONS, COVERAGE_STATEMENTS):
+            self.assertEqual(wrapper.test_goal(content), wrapper.TestGoal.coverage)
+        for content in (COVERAGE_ERROR_CALL, UNREACH_CALL):
+            self.assertEqual(wrapper.test_goal(content), wrapper.TestGoal.error_call)
+        self.assertIsNone(wrapper.test_goal("CHECK( init(main()), LTL(F end) )\n"))
+
+    def dry_run(self, prp_content, *options):
+        # -n prints the ESBMC command and stops before running it
+        import subprocess
+        import sys
+        with tempfile.TemporaryDirectory() as d:
+            prp = os.path.join(d, "goal.prp")
+            task = os.path.join(d, "task.c")
+            with open(prp, "w") as f:
+                f.write(prp_content)
+            with open(task, "w") as f:
+                f.write("int main() { return 0; }\n")
+            return subprocess.run(
+                [sys.executable, os.path.join(os.path.dirname(os.path.abspath(__file__)), "esbmc-wrapper.py"),
+                 "-n", "-p", prp, "-s", "kinduction", *options, task],
+                capture_output=True, text=True, check=True, cwd=d).stdout
+
+    def test_branch_coverage_command(self):
+        out = self.dry_run(COVERAGE_BRANCHES, "-o", "branch-function")
+        for flag in ("--force-malloc-success", "--floatbv", "--generate-testcase",
+                     "--branch-function-coverage", "--max-inductive-step 8"):
+            self.assertIn(flag, out)
+        self.assertNotIn("--witness-output", out)
+
+    def test_error_call_command(self):
+        out = self.dry_run(COVERAGE_ERROR_CALL, "-o", "branch-function")
+        for flag in ("--generate-testcase", "--enable-unreachability-intrinsic", "--error-label ERROR"):
+            self.assertIn(flag, out)
+        self.assertNotIn("--branch-function-coverage", out)
+
+    def test_svcomp_command_unchanged(self):
+        out = self.dry_run(UNREACH_CALL)
+        self.assertNotIn("--generate-testcase", out)
+        self.assertNotIn("--force-malloc-success", out)
+
+
 if __name__ == "__main__":
     unittest.main()
