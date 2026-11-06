@@ -70,6 +70,54 @@ Violated property:
 VERIFICATION FAILED
 """
 
+DEREF_THEN_LEAK = """
+Violated property:
+  file main.c line 9 column 3 function main
+  dereference failure: invalidated dynamic object
+  CWE: CWE-416
+
+** Results:
+main.c, function main
+  FAILED       [main.invalidated-dynamic-object.1]  line  9  dereference failure: invalidated dynamic object
+  FAILED       [main.memory-leak.1]                 line 11  dereference failure: forgotten memory: dynamic_2_value
+
+** 2 of 2 properties failed
+
+VERIFICATION FAILED
+"""
+
+DEREF_THEN_BAD_FREE = """
+Violated property:
+  file main.c line 9 column 3 function detach
+  dereference failure: invalid pointer
+  CWE: CWE-416, CWE-822, CWE-824, CWE-908
+
+** Results:
+main.c, function detach
+  FAILED       [detach.invalid-pointer-dereference.1]  line  9  dereference failure: invalid pointer
+  FAILED       [detach.invalid-pointer-freed.1]        line 12  dereference failure: invalid pointer freed
+
+** 2 of 2 properties failed
+
+VERIFICATION FAILED
+"""
+
+FREE_THEN_DEREF = """
+Violated property:
+  file main.c line 11 column 3 function main
+  dereference failure: free() of non-dynamic memory
+  CWE: CWE-590, CWE-761
+
+** Results:
+main.c, function main
+  FAILED       [main.free-non-dynamic-memory.1]          line 11  dereference failure: free() of non-dynamic memory
+  FAILED       [main.expired-pointer-dereference.1]      line 11  dereference failure: accessed expired variable pointer `buf'
+
+** 2 of 2 properties failed
+
+VERIFICATION FAILED
+"""
+
 UNLISTED_DEREF_COMMENT = """
 Violated property:
   file main.c line 6368 column 5 function attach
@@ -179,6 +227,40 @@ list.c, function __ESBMC_list_size
 VERIFICATION FAILED
 """
 
+# The trace prints the program's own output unindented, between states.
+PROGRAM_PRINTS_BEFORE_LEAK = """
+[Counterexample]
+
+
+State 2 file main.c line 5 column 3 function main thread 0
+----------------------------------------------------
+  p = 0
+{}
+
+
+State 5 file main.c line 14 column 1 function main thread 0
+----------------------------------------------------
+Violated property:
+  file main.c line 14 column 1 function main
+  dereference failure: forgotten memory: dynamic_1_array
+  CWE: CWE-401
+
+
+** Results:
+main.c, function main
+  FAILED       [main.memory-leak.1]  line  14  dereference failure: forgotten memory: dynamic_1_array
+
+** 1 of 1 properties failed
+
+VERIFICATION FAILED
+"""
+
+ESBMC_OUT_OF_MEMORY = """
+Starting Bounded Model Checking
+ERROR: Out of memory
+
+"""
+
 
 class ParseResultTest(unittest.TestCase):
     def verdict(self, output, prop):
@@ -209,6 +291,85 @@ class ParseResultTest(unittest.TestCase):
         self.assertEqual(
             self.verdict(UNLISTED_DEREF_COMMENT, wrapper.Property.memory),
             "FALSE_DEREF")
+
+    # The model goes on past its first violation and fails later claims too
+    # (#9895), shaped like the ldv-linux-3.4-simple and Juliet CWE590 logs.
+    def test_a_leak_after_the_violated_deref_does_not_decide(self):
+        self.assertEqual(
+            self.verdict(DEREF_THEN_LEAK, wrapper.Property.memory),
+            "FALSE_DEREF")
+
+    def test_a_leak_violated_first_still_decides(self):
+        output = DEREF_THEN_LEAK.replace(
+            "line 9 column 3 function main\n  dereference failure: invalidated dynamic object",
+            "line 11 column 1 function main\n  dereference failure: forgotten memory: dynamic_2_value")
+        self.assertEqual(
+            self.verdict(output, wrapper.Property.memory), "FALSE_MEMTRACK")
+
+    def test_a_bad_free_after_the_violated_deref_does_not_decide(self):
+        self.assertEqual(
+            self.verdict(DEREF_THEN_BAD_FREE, wrapper.Property.memory),
+            "FALSE_DEREF")
+
+    def test_a_deref_failing_with_the_violated_free_does_not_decide(self):
+        self.assertEqual(
+            self.verdict(FREE_THEN_DEREF, wrapper.Property.memory),
+            "FALSE_FREE")
+
+    def test_program_output_in_the_counterexample_is_not_an_esbmc_error(self):
+        # esbmc/esbmc#9890: sv-benchmarks memsafety-cve/cups.i prints this.
+        for printed in ("Out of memory", "ERROR: Out of memory", "ERROR: Timed out"):
+            with self.subTest(printed=printed):
+                self.assertEqual(
+                    self.verdict(PROGRAM_PRINTS_BEFORE_LEAK.format(printed),
+                                 wrapper.Property.memory),
+                    "FALSE_MEMTRACK")
+
+    def test_program_printing_successful_does_not_prove_the_task(self):
+        # A free violation decides nothing for memcleanup, so the only
+        # SUCCESSFUL left in the output is the program's.
+        output = "[Counterexample]\nVERIFICATION SUCCESSFUL\n" + FREE_WITH_UNCHECKED_LEAK
+        self.assertEqual(self.verdict(output, wrapper.Property.memcleanup), "Unknown")
+
+    def test_violated_comment_naming_an_esbmc_error_still_falsifies(self):
+        output = REACH_WITH_UNCHECKED_UNWINDING.replace(
+            "error label", 'assertion !"Out of memory" && !"Timed out"')
+        self.assertEqual(self.verdict(output, wrapper.Property.reach), "FALSE_REACH")
+
+    def test_esbmc_out_of_memory_is_unknown(self):
+        self.assertEqual(
+            self.verdict(ESBMC_OUT_OF_MEMORY, wrapper.Property.memory), "Unknown")
+
+    # Under k-induction a step that runs out of memory is unknown and the next
+    # k is tried, so a later step can still decide the task.
+    OOM_AT_EARLIER_K = ("Checking base case, k = 1\n" + ESBMC_OUT_OF_MEMORY +
+                        "Checking base case, k = 3\n")
+
+    def test_a_proof_after_an_earlier_out_of_memory_is_true(self):
+        self.assertEqual(
+            self.verdict(self.OOM_AT_EARLIER_K + "VERIFICATION SUCCESSFUL\n",
+                         wrapper.Property.py_assertion), "TRUE")
+
+    def test_a_violation_after_an_earlier_out_of_memory_is_false(self):
+        self.assertEqual(
+            self.verdict(self.OOM_AT_EARLIER_K + PY_ASSERTION, wrapper.Property.py_assertion),
+            "FALSE")
+
+    def test_a_run_out_of_memory_without_a_verdict_is_a_memory_out(self):
+        self.assertEqual(
+            wrapper.parse_result(self.OOM_AT_EARLIER_K, wrapper.Property.py_assertion),
+            wrapper.Result.err_memout)
+
+    def test_a_timeout_after_an_out_of_memory_is_a_timeout(self):
+        self.assertEqual(
+            self.verdict(self.OOM_AT_EARLIER_K + "ERROR: Timed out\n", wrapper.Property.py_assertion),
+            "Timed out")
+
+    def test_esbmc_timeout_after_a_counterexample_is_a_timeout(self):
+        self.assertEqual(
+            self.verdict(PROGRAM_PRINTS_BEFORE_LEAK.format("") + "ERROR: Timed out\n",
+                         wrapper.Property.memory),
+            "Timed out")
 
     def test_successful_run_is_unaffected(self):
         self.assertEqual(
@@ -310,11 +471,11 @@ class IntegerEncodingConfirmationTest(unittest.TestCase):
     """A Python violation stays FALSE only if a --ir re-run repeats it in place."""
 
     PASSED = "** 0 of 1 properties failed, 1 passed\n\nVERIFICATION SUCCESSFUL\n"
-    TIMED_OUT = b"Timed out"
+    TIMED_OUT = b"ERROR: Timed out\n"
     NO_LINE = PY_ASSERTION.replace(" line 5 column 4", "")
 
-    def verify(self, prop, first, rerun, benchmark="main.py", elapsed=0):
-        outputs = iter([first, rerun])
+    def verify(self, prop, first, *reruns, benchmark="main.py", elapsed=0, plain_seconds=0):
+        outputs = iter([first, *reruns])
         calls = []
 
         def fake_run(cmd_line, timeout=None):
@@ -323,16 +484,17 @@ class IntegerEncodingConfirmationTest(unittest.TestCase):
             return out if isinstance(out, bytes) else out.encode()
 
         with mock.patch.object(wrapper, "run", fake_run), \
-                mock.patch.object(wrapper.time, "monotonic", side_effect=[0, elapsed]):
+                mock.patch.object(wrapper.time, "monotonic", side_effect=[0, elapsed, 0, plain_seconds]):
             result = wrapper.verify("kinduction", prop, 64, benchmark, False, "", False, None, None)
         return wrapper.get_result_string(result), calls
 
     def test_rerun_at_the_same_line_keeps_false(self):
         verdict, calls = self.verify(wrapper.Property.py_assertion, PY_ASSERTION, PY_ASSERTION)
         self.assertEqual(verdict, "FALSE")
-        self.assertTrue(calls[1][0].endswith("--ir --z3 --multi-property "))
+        self.assertTrue(calls[1][0].endswith("--ir --z3 "))
         self.assertEqual(calls[1][1], wrapper.IR_RERUN_TIMEOUT)
         self.assertIsNone(calls[0][1])
+        self.assertEqual(len(calls), 2)
 
     def test_a_first_run_leaving_the_full_budget_is_rerun(self):
         verdict, calls = self.verify(wrapper.Property.py_assertion, PY_ASSERTION, self.PASSED, elapsed=700)
@@ -351,30 +513,53 @@ class IntegerEncodingConfirmationTest(unittest.TestCase):
         self.assertEqual(verdict, "Unknown")
         self.assertEqual(calls[1][1], wrapper.MIN_RERUN_BUDGET)
 
-    def test_rerun_that_passes_is_unknown(self):
-        verdict, _ = self.verify(wrapper.Property.py_assertion, PY_ASSERTION, self.PASSED)
+    def test_rerun_that_passes_is_unknown_without_a_fallback(self):
+        verdict, calls = self.verify(wrapper.Property.py_assertion, PY_ASSERTION, self.PASSED)
         self.assertEqual(verdict, "Unknown")
+        self.assertEqual(len(calls), 2)
+
+    OTHER_LINE = PY_ASSERTION.replace("line 5", "line 9")
+    BOTH_LINES = PY_ASSERTION.replace("line 5 column 4", "line 9 column 4").replace(
+        "  FAILED       [main.assertion.1]  line 5  assertion x != 3\n",
+        "  FAILED       [main.assertion.1]  line 5  assertion x != 3\n"
+        "  FAILED       [main.assertion.2]  line 9  assertion y != 4\n")
 
     def test_rerun_failing_at_another_line_is_unknown(self):
-        other = PY_ASSERTION.replace("line 5", "line 9")
-        verdict, _ = self.verify(wrapper.Property.py_assertion, PY_ASSERTION, other)
+        verdict, calls = self.verify(wrapper.Property.py_assertion, PY_ASSERTION, self.OTHER_LINE, self.OTHER_LINE)
         self.assertEqual(verdict, "Unknown")
+        self.assertTrue(calls[2][0].endswith("--ir --z3 --multi-property "))
 
-    def test_rerun_failing_both_lines_keeps_the_first_runs_site(self):
-        both = PY_ASSERTION.replace("line 5 column 4", "line 9 column 4").replace(
-            "  FAILED       [main.assertion.1]  line 5  assertion x != 3\n",
-            "  FAILED       [main.assertion.1]  line 5  assertion x != 3\n"
-            "  FAILED       [main.assertion.2]  line 9  assertion y != 4\n")
-        verdict, _ = self.verify(wrapper.Property.py_assertion, PY_ASSERTION, both)
+    def test_a_fallback_failing_both_lines_keeps_the_first_runs_site(self):
+        verdict, calls = self.verify(wrapper.Property.py_assertion, PY_ASSERTION, self.OTHER_LINE, self.BOTH_LINES,
+                                     plain_seconds=10)
         self.assertEqual(verdict, "FALSE")
+        self.assertTrue(calls[1][0].endswith("--ir --z3 "))
+        self.assertTrue(calls[2][0].endswith("--ir --z3 --multi-property "))
+        self.assertEqual(calls[2][1], wrapper.IR_RERUN_TIMEOUT - 10)
+
+    def test_no_budget_left_for_the_fallback_is_unknown(self):
+        plain_seconds = wrapper.IR_RERUN_TIMEOUT - wrapper.MIN_RERUN_BUDGET + 1
+        verdict, calls = self.verify(wrapper.Property.py_assertion, PY_ASSERTION, self.OTHER_LINE, self.BOTH_LINES,
+                                     plain_seconds=plain_seconds)
+        self.assertEqual(verdict, "Unknown")
+        self.assertEqual(len(calls), 2)
+
+    def test_a_fallback_at_the_threshold_is_still_made(self):
+        plain_seconds = wrapper.IR_RERUN_TIMEOUT - wrapper.MIN_RERUN_BUDGET
+        verdict, calls = self.verify(wrapper.Property.py_assertion, PY_ASSERTION, self.OTHER_LINE, self.BOTH_LINES,
+                                     plain_seconds=plain_seconds)
+        self.assertEqual(verdict, "FALSE")
+        self.assertEqual(calls[2][1], wrapper.MIN_RERUN_BUDGET)
 
     def test_rerun_timeout_is_unknown(self):
-        verdict, _ = self.verify(wrapper.Property.py_assertion, PY_ASSERTION, self.TIMED_OUT)
+        verdict, calls = self.verify(wrapper.Property.py_assertion, PY_ASSERTION, self.TIMED_OUT,
+                                     plain_seconds=wrapper.IR_RERUN_TIMEOUT)
         self.assertEqual(verdict, "Unknown")
+        self.assertEqual(len(calls), 2)
 
     def test_rerun_failing_another_property_is_unknown(self):
         same_site_valueerror = PY_VALUEERROR.replace("p_raise_value.py", "p_assert2.py").replace("line 6 column 8", "line 5 column 4")
-        verdict, _ = self.verify(wrapper.Property.py_assertion, PY_ASSERTION, same_site_valueerror)
+        verdict, _ = self.verify(wrapper.Property.py_assertion, PY_ASSERTION, same_site_valueerror, same_site_valueerror)
         self.assertEqual(verdict, "Unknown")
 
     def test_no_line_on_either_side_matches_on_the_file(self):
@@ -382,7 +567,7 @@ class IntegerEncodingConfirmationTest(unittest.TestCase):
         self.assertEqual(verdict, "FALSE")
 
     def test_a_line_on_one_side_only_is_unknown(self):
-        verdict, _ = self.verify(wrapper.Property.py_assertion, self.NO_LINE, PY_ASSERTION)
+        verdict, _ = self.verify(wrapper.Property.py_assertion, self.NO_LINE, PY_ASSERTION, PY_ASSERTION)
         self.assertEqual(verdict, "Unknown")
 
     def test_a_violation_without_a_site_is_unknown(self):
@@ -398,7 +583,7 @@ class IntegerEncodingConfirmationTest(unittest.TestCase):
 
     def test_a_c_violation_is_never_rerun(self):
         with tempfile.NamedTemporaryFile("w", suffix=".c") as c_file:
-            verdict, calls = self.verify(wrapper.Property.reach, REACH_WITH_UNCHECKED_UNWINDING, self.PASSED, c_file.name)
+            verdict, calls = self.verify(wrapper.Property.reach, REACH_WITH_UNCHECKED_UNWINDING, self.PASSED, benchmark=c_file.name)
         self.assertEqual(verdict, "FALSE_REACH")
         self.assertEqual(len(calls), 1)
 
@@ -560,6 +745,159 @@ main.c, function main
 VERIFICATION FAILED
 """
         self.assertEqual(self.verdict(output, wrapper.Property.memory), "Unknown")
+
+
+# Test-Comp. Shaped like ESBMC 8.6 output on reducercommutativity/rangesum10.i
+# in Test-Comp 2027.
+TESTCOMP_REACH_WITH_UNCHECKED_UNWINDING = """
+Violated property:
+  file rangesum10.i line 61 column 6 function main
+  reach_error
+  0
+
+
+** Results:
+rangesum10.i, function main
+  NOT CHECKED  [main.assertion.1]  line 54  unwinding assertion loop 3
+  FAILED       [main.assertion.2]  line 61  reach_error
+
+** 1 of 2 properties failed, 1 not checked
+
+VERIFICATION FAILED
+
+Bug found (k = 11)
+"""
+
+# --quiet, which coverage mode passes, drops the counterexample and with it the
+# "Violated property:" block, leaving only the table row.
+TESTCOMP_QUIET_VIOLATED_UNWINDING = """
+** Results:
+main.c, function main
+  FAILED       [main.assertion.1]  line 42  unwinding assertion loop 3
+
+VERIFICATION FAILED
+"""
+
+TESTCOMP_SUCCESSFUL = """
+** Results:
+main.c, function main
+  PASSED       [main.assertion.1]  line 42  unwinding assertion loop 3
+
+VERIFICATION SUCCESSFUL
+"""
+
+COVERAGE_BRANCHES = "COVER( init(main()), FQL(COVER EDGES(@DECISIONEDGE)) )\n"
+COVERAGE_CONDITIONS = "COVER( init(main()), FQL(COVER EDGES(@CONDITIONEDGE)) )\n"
+COVERAGE_STATEMENTS = "COVER( init(main()), FQL(COVER EDGES(@BASICBLOCKENTRY)) )\n"
+COVERAGE_ERROR_CALL = "COVER( init(main()), FQL(COVER EDGES(@CALL(reach_error))) )\n"
+UNREACH_CALL = "CHECK( init(main()), LTL(G ! call(reach_error())) )\n"
+
+
+class TestCompParseResultTest(unittest.TestCase):
+
+    def verdict(self, output):
+        return wrapper.get_result_string(wrapper.testcomp_parse_result(output))
+
+    def test_unchecked_unwinding_row_does_not_mask_the_reach_violation(self):
+        self.assertEqual(self.verdict(TESTCOMP_REACH_WITH_UNCHECKED_UNWINDING), "FALSE_REACH")
+
+    def test_violated_unwinding_assertion_is_unknown(self):
+        self.assertEqual(self.verdict(VIOLATED_UNWINDING), "Unknown")
+
+    def test_quiet_violated_unwinding_assertion_is_unknown(self):
+        self.assertEqual(self.verdict(TESTCOMP_QUIET_VIOLATED_UNWINDING), "Unknown")
+
+    def test_successful_run_is_true(self):
+        self.assertEqual(self.verdict(TESTCOMP_SUCCESSFUL), "TRUE")
+
+    def test_timeout(self):
+        self.assertEqual(self.verdict("ERROR: Timed out\n"), "Timed out")
+
+
+def dry_run(prp_content, *options):
+    # -n prints the ESBMC command and stops before running it
+    import subprocess
+    import sys
+    with tempfile.TemporaryDirectory() as d:
+        prp = os.path.join(d, "goal.prp")
+        task = os.path.join(d, "task.c")
+        with open(prp, "w") as f:
+            f.write(prp_content)
+        with open(task, "w") as f:
+            f.write("int main() { return 0; }\n")
+        return subprocess.run(
+            [sys.executable, os.path.join(os.path.dirname(os.path.abspath(__file__)), "esbmc-wrapper.py"),
+             "-n", "-p", prp, "-s", "kinduction", *options, task],
+            capture_output=True, text=True, check=True, cwd=d).stdout
+
+
+class TestCompRunTest(unittest.TestCase):
+    """benchexec's tool-info runs esbmc-wrapper.py for SV-COMP and Test-Comp alike."""
+
+    def test_coverage_option_or_cover_property_is_testcomp(self):
+        self.assertTrue(wrapper.is_testcomp_run("branch-function", UNREACH_CALL))
+        for content in (COVERAGE_BRANCHES, COVERAGE_ERROR_CALL):
+            self.assertTrue(wrapper.is_testcomp_run(None, content))
+
+    def test_svcomp_properties_are_not_testcomp(self):
+        self.assertFalse(wrapper.is_testcomp_run(None, UNREACH_CALL))
+        self.assertFalse(wrapper.is_testcomp_run(None, "CHECK( init(main()), LTL(G valid-free) )\n"))
+
+    def test_goals(self):
+        for content in (COVERAGE_BRANCHES, COVERAGE_CONDITIONS, COVERAGE_STATEMENTS):
+            self.assertEqual(wrapper.test_goal(content), wrapper.TestGoal.coverage)
+        for content in (COVERAGE_ERROR_CALL, UNREACH_CALL):
+            self.assertEqual(wrapper.test_goal(content), wrapper.TestGoal.error_call)
+        self.assertIsNone(wrapper.test_goal("CHECK( init(main()), LTL(F end) )\n"))
+
+    def test_branch_coverage_command(self):
+        out = dry_run(COVERAGE_BRANCHES, "-o", "branch-function")
+        for flag in ("--force-malloc-success", "--floatbv", "--generate-testcase",
+                     "--branch-function-coverage", "--max-inductive-step 8"):
+            self.assertIn(flag, out)
+        self.assertNotIn("--witness-output", out)
+
+    def test_error_call_command(self):
+        out = dry_run(COVERAGE_ERROR_CALL, "-o", "branch-function")
+        for flag in ("--generate-testcase", "--enable-unreachability-intrinsic", "--error-label ERROR"):
+            self.assertIn(flag, out)
+        self.assertNotIn("--branch-function-coverage", out)
+
+    def test_svcomp_command_unchanged(self):
+        out = dry_run(UNREACH_CALL)
+        self.assertNotIn("--generate-testcase", out)
+        self.assertNotIn("--force-malloc-success", out)
+
+
+class ReachValidationUnwindTest(unittest.TestCase):
+    """Correctness validation unrolls loops only when the witness has no
+    invariants, such as ESBMC's own; violation validation never does."""
+
+    UNROLL = "--goto-unwind --unlimited-goto-unwind"
+    ESBMC = '- entry_type: "invariant_set"\n  content:\n    []\n'
+    BLOCK = ('- entry_type: "invariant_set"\n  content:\n'
+             '    - invariant:\n        type: "loop_invariant"\n        value: "i <= 5"\n')
+    FLOW = '[{entry_type: invariant_set, content: [{invariant: {type: loop_invariant, value: i <= 5}}]}]\n'
+    JSON = '[{"entry_type": "invariant_set", "content": [{"invariant": {"type": "loop_invariant"}}]}]\n'
+
+    def command(self, witness, mode):
+        with tempfile.NamedTemporaryFile("w", suffix=".yml") as w:
+            w.write(witness)
+            w.flush()
+            return dry_run(UNREACH_CALL, "--witness", w.name, "--validate-" + mode + "-witness")
+
+    def test_verification_unrolls(self):
+        self.assertIn(self.UNROLL, dry_run(UNREACH_CALL))
+
+    def test_invariant_free_correctness_witness_unrolls(self):
+        self.assertIn(self.UNROLL, self.command(self.ESBMC, "correctness"))
+
+    def test_invariants_keep_loops_in_every_yaml_style(self):
+        for witness in (self.BLOCK, self.FLOW, self.JSON):
+            self.assertNotIn("--goto-unwind", self.command(witness, "correctness"), witness)
+
+    def test_violation_validation_keeps_loops(self):
+        self.assertNotIn("--goto-unwind", self.command(self.ESBMC, "violation"))
 
 
 if __name__ == "__main__":

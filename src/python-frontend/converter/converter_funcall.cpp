@@ -75,6 +75,19 @@ get_fixed_2d_array_shape(const symbolt &source, const namespacet &ns)
     binary2integer(row_type.size().value().c_str(), false).to_int64());
 }
 
+bool is_inline_numpy_generator_call(
+  const nlohmann::json &element,
+  const nlohmann::json &ast)
+{
+  if (
+    !element.is_object() || element.value("_type", "") != "Call" ||
+    !element.contains("func") || !element["func"].is_object() ||
+    element["func"].value("_type", "") != "Attribute" ||
+    !element["func"].contains("value"))
+    return false;
+  return numpy_random::is_generator_constructor(element["func"]["value"], ast);
+}
+
 } // namespace
 
 // Resolve symbol values to constants
@@ -331,7 +344,37 @@ exprt python_converter::get_len_on_class_instance(const nlohmann::json &element)
     return get_exception_handler().gen_exception_raise(
       "TypeError", "object of type '" + cls + "' has no len()");
 
+  if (exprt bound = get_len_on_bound_instance(arg, element); bound.is_not_nil())
+    return bound;
+
   return get_len_on_list_element(arg, location);
+}
+
+// len(self): an unannotated name whose symbol is bound to a class instance.
+// The bound class is the static one, so the object may be an instance of any
+// subclass, and every one of them must resolve __len__ alike (#9835).
+exprt python_converter::get_len_on_bound_instance(
+  const nlohmann::json &arg,
+  const nlohmann::json &element)
+{
+  const std::string cls = bound_class_name(arg);
+  if (cls.empty())
+    return nil_exprt();
+
+  const std::optional<std::string> owner = family_method_owner(cls, "__len__");
+  if (!owner)
+    throw std::runtime_error(
+      "len() of an instance of class '" + cls +
+      "' is not supported when its subclasses or bases leave __len__ "
+      "unresolved");
+  if (owner->empty())
+    return get_exception_handler().gen_exception_raise(
+      "TypeError", "object of type '" + cls + "' has no len()");
+
+  return checked_len_result(
+    get_expr(
+      build_dunder_call(arg, "__len__", nlohmann::json::array(), element)),
+    get_location_from_decl(element));
 }
 
 // len(xs[i]): the AST names no class, but the element's converted type does
@@ -579,13 +622,19 @@ exprt python_converter::get_call_expr(const nlohmann::json &element)
     return get_expr(*folded);
   if (std::optional<exprt> call = call_returned_function(element))
     return *call;
+  if (is_inline_numpy_generator_call(element, *ast_json))
+    throw std::runtime_error(
+      "TypeError: numpy.random.default_rng() chained generator calls are "
+      "not supported");
   if (element["func"].value("_type", "") == "Call")
     throw std::runtime_error(
       "calling the result of a call is only supported through a module "
       "function that returns a function");
   if (std::optional<exprt> raise = call_property_value(element))
     return *raise;
-  if (numpy_random::is_random_call(element, *ast_json))
+  if (
+    numpy_random::is_random_call(element, *ast_json) ||
+    is_numpy_random_generator_call(element))
     return numpy_random(*this, element).get();
   return get_function_call(element);
 }
@@ -1761,7 +1810,7 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
       {
         for (const auto &arg_element : element["args"])
         {
-          exprt arg_expr = get_expr(arg_element);
+          exprt arg_expr = to_value_expr(get_expr(arg_element), ns);
           // The pointer target only carries a return type, no parameter
           // types, so refuse cleanly instead of passing a mistyped arg.
           if (type_handler_.is_tagged_scalar_type(arg_expr.type()))

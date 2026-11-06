@@ -99,9 +99,12 @@ class symex_slicet : public slicer
 public:
   explicit symex_slicet(const optionst &options)
     : slice_assumes(options.get_bool_option("slice-assumes")),
+      // A YAML witness names every nondet call's result, and a validator
+      // binds each to the next call at its location.
       slice_nondet(
         !options.get_bool_option("generate-testcase") &&
-        !options.get_bool_option("generate-ctest-testcase"))
+        !options.get_bool_option("generate-ctest-testcase") &&
+        options.get_option("witness-output-yaml").empty())
   {
   }
 
@@ -125,6 +128,7 @@ public:
     index_reads.clear();
     array_disqualified.clear();
     scanned_cache.clear();
+    sliced_reads.clear();
 
     fine_timet algorithm_start = current_time();
     for (auto &step : boost::adaptors::reverse(eq))
@@ -133,6 +137,15 @@ public:
         continue;
       run_on_step(step);
     }
+    // A branching step only steers the witness, so its guard and cond are not
+    // dependencies. Where they read a value the slicer removed, the model's
+    // value for it is arbitrary and the waypoint may be infeasible (#9884):
+    // drop the step rather than keep that definition.
+    for (auto &step : eq)
+      if (
+        step.is_branching() && !step.ignore &&
+        (reads_sliced(step.guard) || reads_sliced(step.cond)))
+        step.ignore = true;
     fine_timet algorithm_stop = current_time();
     log_status(
       "Slicing time: {}s (removed {} assignments)",
@@ -171,6 +184,9 @@ public:
   /// index_reads/array_disqualified are insert-only, so re-skipping an
   /// already-scanned subtree adds nothing.
   std::unordered_set<const expr2t *> scanned_cache;
+
+  /// Memo for #reads_sliced: node -> whether its subtree reads a sliced value.
+  std::unordered_map<const expr2t *, bool> sliced_reads;
 
   static expr2tc get_nondet_symbol(const expr2tc &expr);
 
@@ -215,6 +231,17 @@ protected:
    * @return true if \expr touches the tracked dependency set
    */
   bool depends_on_tracked(const expr2tc &expr);
+
+  /**
+   * Does \expr read a value the slicer removed: a symbol outside the final
+   * #depends, or an array element whose store was dropped as dead? Only
+   * meaningful after the reverse pass. Memoised in #sliced_reads and walked
+   * with an explicit worklist, since it runs on the deep guard and-chains.
+   *
+   * @param expr expression to test
+   * @return true if \expr reads a sliced value
+   */
+  bool reads_sliced(const expr2tc &expr);
 
   /**
    * Asserts are never sliced: collect the step's guard/cond symbols into

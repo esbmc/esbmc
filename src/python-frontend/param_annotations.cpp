@@ -689,9 +689,28 @@ private:
   }
 };
 
+std::string literal_scalar_type(const nlohmann::json &node);
+
+/// int or float for +, -, *, /, // or % over int and float operands
+/// literal_scalar_type types, the way Python does, or "".
+std::string arithmetic_type(const nlohmann::json &node)
+{
+  static const std::set<std::string> arithmetic = {
+    "Add", "Sub", "Mult", "Div", "FloorDiv", "Mod"};
+  const std::string op = node["op"]["_type"];
+  const std::string lhs = literal_scalar_type(node["left"]);
+  const std::string rhs = literal_scalar_type(node["right"]);
+  const auto numeric = [](const std::string &t) {
+    return t == "int" || t == "float";
+  };
+  if (!arithmetic.count(op) || !numeric(lhs) || !numeric(rhs))
+    return "";
+  return op == "Div" || lhs == "float" || rhs == "float" ? "float" : "int";
+}
+
 /// Python type name of a scalar argument that this pass can type without a
-/// symbol table: a literal, a negated numeric literal, or a nondet_<T>() call,
-/// plain or module-qualified.
+/// symbol table: a literal, a nondet_<T>() call, plain or module-qualified, or
+/// arithmetic over operands it can type.
 std::string literal_scalar_type(const nlohmann::json &node)
 {
   if (is_node(node, "Constant") && node["value"].is_boolean())
@@ -701,9 +720,12 @@ std::string literal_scalar_type(const nlohmann::json &node)
     is_node(node, "UnaryOp") &&
     (is_node(node["op"], "USub") || is_node(node["op"], "UAdd")))
   {
-    const std::string type = constant_type_name(node["operand"]);
+    const std::string type = literal_scalar_type(node["operand"]);
     return type == "int" || type == "float" ? type : "";
   }
+
+  if (is_node(node, "BinOp"))
+    return arithmetic_type(node);
 
   if (is_node(node, "Call") && node["args"].empty() && node["keywords"].empty())
   {

@@ -1,0 +1,5 @@
+CORE
+main.c
+--termination --max-inductive-step 3 --k-step 2 --unlimited-k-steps --validate-violation-witness --witness witness.yml
+^VERIFICATION FAILED$
+Recurrent set shows a non-terminating execution

@@ -108,6 +108,8 @@ class PreprocessorStateMixin:
         # agrees (see _recover_param_dict_annotation).
         self._dict_param_call_shapes = {}
         self.bound_method_vars = {}
+        self.unscoped_binding_names = set()
+        self._bound_method_scopes = []
         # Filled by _scan_fixed_receivers; empty, an unpacked bound method
         # is never resolved at its calls.
         self.fixed_receivers = {}
@@ -133,6 +135,7 @@ class PreprocessorStateMixin:
         # Module-level ``def f(p): return <expr>``: name -> (param, expr).
         self._single_return_funcs = {}
         self._param_subscripting_funcs = set()
+        self._plain_function_names = set()
         # Map var -> RHS Call node; used by _apply_assert_eq_rewrites to
         # substitute the Name back to its defining call.
         self._assignment_call_origins = {}

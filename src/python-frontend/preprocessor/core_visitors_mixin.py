@@ -1,6 +1,8 @@
 import ast
 import copy
 import keyword
+
+from preprocessor.bound_method_dispatch import _scope_nodes
 # pylint: disable=too-many-locals,too-many-branches,too-many-statements,too-many-return-statements
 # pylint: disable=too-many-nested-blocks,too-many-boolean-expressions,no-else-return,no-else-raise
 # pylint: disable=import-outside-toplevel
@@ -751,7 +753,12 @@ class CoreVisitorsMixin:
         `obj` gave at the binding (#8439). Returns the statements replacing
         the binding, or None if it stays."""
         captures = self._captures_receiver(target, value)
-        if not (resolvable and isinstance(target, ast.Name) and isinstance(value, ast.Attribute) and
+        # A method does not see the class body's names, so a binding there
+        # would reach calls that do not refer to it.
+        in_class_body = bool(self._bound_method_scopes) and isinstance(
+            self._bound_method_scopes[-1], ast.ClassDef)
+        if not (resolvable and isinstance(target, ast.Name) and isinstance(value, ast.Attribute)
+                and target.id not in self.unscoped_binding_names and not in_class_body and
                 (captures or isinstance(value.value, ast.Name))
                 and self._needs_no_method_value(target, value)):
             if isinstance(target, ast.Name):
@@ -1617,9 +1624,9 @@ class CoreVisitorsMixin:
         """
         Handle assignment nodes, including multiple assignments and tuple unpacking.
         """
-        split = self._split_linspace_retstep(node)
+        split = self._split_assign(node)
         if split is not None:
-            return [self.visit(statement) for statement in split]
+            return split
         self._invalidate_list_literals_for_assign_targets(node.targets)
         self._update_assignment_call_origins(node.targets, node.value)
         neutralized_target = self._neutralize_sorted_items_view(node)
@@ -1661,6 +1668,41 @@ class CoreVisitorsMixin:
             lowered = self._handle_single_target_assign(node)
             return self._lower_defaultdict_reads_in_target(node, lowered)
         return self._handle_multi_target_assign(node)
+
+    def _split_assign(self, node):
+        """The visited statements an assignment splits into, or None when it stays whole."""
+        split = self._split_linspace_retstep(node)
+        if split is not None:
+            return [self.visit(statement) for statement in split]
+        bound = self._bind_reordered_call_arg(node)
+        if bound is None:
+            return None
+        statements = []
+        for visited in (self.visit(bound), self.visit(node)):
+            statements += visited if isinstance(visited, list) else [visited]
+        return [statement for statement in statements if statement is not None]
+
+    def _bind_reordered_call_arg(self, node):
+        """Split `x = sorted(f())` into `t = f()` and `x = sorted(t)`, and the same for
+        reversed() and list(). Their result takes its element types from a named
+        argument, so with a call argument a comparison of two elements was a nondet
+        (#9956). f() is still evaluated once and first. Only a function defined in
+        the module qualifies: a class, a builtin and a generator keep their own
+        lowering."""
+        value = node.value
+        if not (isinstance(value, ast.Call) and isinstance(value.func, ast.Name)
+                and value.func.id in ("sorted", "reversed", "list") and value.args):
+            return None
+        arg = value.args[0]
+        if not (isinstance(arg, ast.Call) and isinstance(arg.func, ast.Name)
+                and arg.func.id in self._plain_function_names):
+            return None
+        name = f"ESBMC_reordered_arg_{self._next_unpack_tmp_id()}"
+        bind = ast.Assign(targets=[ast.Name(id=name, ctx=ast.Store())], value=arg)
+        ast.copy_location(bind, node)
+        value.args[0] = ast.copy_location(ast.Name(id=name, ctx=ast.Load()), arg)
+        ast.fix_missing_locations(bind)
+        return bind
 
     def _lower_defaultdict_reads_in_target(self, node, lowered):
         """Insert the missing-key checks for defaultdict reads in the
@@ -2216,6 +2258,31 @@ class CoreVisitorsMixin:
         walk(node.body)
         return bound - declared
 
+    def _enter_bound_method_scope(self, node):
+        """Drop the bound method recorded for the name the def or class `node`
+        rebinds, and hide those recorded for the names it binds in its own
+        scope, less those it declares global or nonlocal: a call of a local
+        does not reach them. Returns the state `_exit_bound_method_scope`
+        restores."""
+        self.bound_method_vars.pop(node.name, None)
+        nodes = list(_scope_nodes(node))
+        declared = {
+            name
+            for n in nodes if isinstance(n, (ast.Global, ast.Nonlocal)) for name in n.names
+        }
+        local_names = {name for n in nodes for name in self._names_bound_by(n)} - declared
+        saved = {
+            name: self.bound_method_vars.pop(name)
+            for name in local_names if name in self.bound_method_vars
+        }
+        self._bound_method_scopes.append(node)
+        return local_names, saved
+
+    def _exit_bound_method_scope(self, state):
+        """Drop the bound methods recorded for locals of the scope being left."""
+        self._bound_method_scopes.pop()
+        self._restore_shadowed_literals(self.bound_method_vars, *state)
+
     @staticmethod
     def _restore_shadowed_literals(store, names, saved):
         """Undo inner-scope rebindings of `names`, keeping other changes."""
@@ -2256,6 +2323,7 @@ class CoreVisitorsMixin:
         self._assignment_call_origins.clear()
         saved_eq_only = set(self._eq_only_items_view_targets)
         self._eq_only_items_view_targets = self._scan_eq_only_items_view_targets(node.body)
+        bound_method_scope = self._enter_bound_method_scope(node)
         saved_vararg_defs = self._enter_vararg_scope(node)
         saved_builtin_shadows = self._enter_builtin_shadow_scope(node)
         try:
@@ -2301,4 +2369,5 @@ class CoreVisitorsMixin:
             self._assignment_call_origins = saved_call_origins
             self._eq_only_items_view_targets = saved_eq_only
             self._builtin_shadow_names = saved_builtin_shadows
+            self._exit_bound_method_scope(bound_method_scope)
             self._exit_vararg_scope(node, saved_vararg_defs)

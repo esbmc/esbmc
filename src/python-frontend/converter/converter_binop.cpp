@@ -861,6 +861,17 @@ exprt python_converter::get_boolop_operand(
     in_operand_effects_block_ = true;
   }
   exprt operand_expr = get_expr(operand);
+  // A later operand that raises (#9838) is its raise statement, run only
+  // where the operand is evaluated.
+  const exprt *raised = python_frontend::raised_condition(operand_expr);
+  if (raised && effects.size() > 1 && can_emit_operand_statement())
+  {
+    codet raise("expression");
+    raise.copy_to_operands(*raised);
+    raise.location() = get_location_from_decl(operand);
+    current_block->copy_to_operands(raise);
+    operand_expr = nil_exprt();
+  }
   current_block = saved_block;
   in_operand_effects_block_ = saved_own_block;
 
@@ -899,6 +910,14 @@ exprt python_converter::lower_short_circuit_boolop(
   const auto planted = [](const code_blockt &b) {
     return !b.operands().empty();
   };
+  const auto plants_raise = [](const code_blockt &b) {
+    return std::any_of(
+      b.operands().begin(), b.operands().end(), [](const exprt &statement) {
+        return statement.statement() == "expression" &&
+               statement.operands().size() == 1 &&
+               statement.op0().statement() == "cpp-throw";
+      });
+  };
   if (std::none_of(effects.begin(), effects.end(), planted))
     return nil_exprt();
 
@@ -913,6 +932,10 @@ exprt python_converter::lower_short_circuit_boolop(
     asserted_and || !plain_cond || !can_emit_runtime_guard() ||
     !std::all_of(operands.begin(), operands.end(), same_type))
   {
+    // Unguarded, a planted raise would fire where Python short-circuits.
+    if (std::any_of(effects.begin(), effects.end(), plants_raise))
+      throw std::runtime_error(
+        "an and/or operand that raises is not supported in this context");
     for (const code_blockt &block : effects)
       for (const exprt &statement : block.operands())
         current_block->copy_to_operands(statement);
@@ -1004,6 +1027,46 @@ void python_converter::reject_walrus_in_boolop(const nlohmann::json &element)
       "Walrus operator ':=' in a boolean (and/or) operand is not supported");
 }
 
+/// Converts the operands of the and/or \p element into \p logical_expr.
+/// Returns the raise when the first operand always raises, nil otherwise.
+exprt python_converter::convert_boolop_operands(
+  const nlohmann::json &element,
+  exprt &logical_expr,
+  std::vector<code_blockt> &effects,
+  bool &contains_non_boolean)
+{
+  // Mark that we're processing operands in an expression context
+  // This ensures boolean-returning function calls are converted to side-effect
+  // expressions
+  const bool old_is_converting_rhs = std::exchange(is_converting_rhs, true);
+  const bool old_in_lazy_operand = in_lazy_operand_;
+  exprt raised = nil_exprt();
+
+  // Iterate over operands of logical operations (and/or)
+  for (const auto &operand : element["values"])
+  {
+    exprt operand_expr = get_boolop_operand(operand, effects);
+    const exprt *raise = python_frontend::raised_condition(operand_expr);
+    if (raise && effects.size() == 1)
+    {
+      raised = *raise;
+      break;
+    }
+    // A planted raise: the operand's value is never read.
+    if (operand_expr.is_nil())
+      operand_expr = gen_zero(logical_expr.operands().front().type());
+    refuse_tagged_boolop_operand(operand_expr);
+    in_lazy_operand_ = true;
+    logical_expr.copy_to_operands(operand_expr);
+    contains_non_boolean |= !operand_expr.is_boolean();
+  }
+
+  // Restore the original flag state
+  is_converting_rhs = old_is_converting_rhs;
+  in_lazy_operand_ = old_in_lazy_operand;
+  return raised;
+}
+
 exprt python_converter::get_logical_operator_expr(const nlohmann::json &element)
 {
   // `and`/`or` short-circuit: a later operand may not execute. get_named_expr
@@ -1049,27 +1112,11 @@ exprt python_converter::get_logical_operator_expr(const nlohmann::json &element)
       value_expr, get_location_from_decl(element));
   };
 
-  // Mark that we're processing operands in an expression context
-  // This ensures boolean-returning function calls are converted to side-effect
-  // expressions
-  bool old_is_converting_rhs = is_converting_rhs;
-  is_converting_rhs = true;
-  const bool old_in_lazy_operand = in_lazy_operand_;
   std::vector<code_blockt> operand_effects;
-
-  // Iterate over operands of logical operations (and/or)
-  for (const auto &operand : element["values"])
-  {
-    exprt operand_expr = get_boolop_operand(operand, operand_effects);
-    refuse_tagged_boolop_operand(operand_expr);
-    in_lazy_operand_ = true;
-    logical_expr.copy_to_operands(operand_expr);
-    contains_non_boolean |= !operand_expr.is_boolean();
-  }
-
-  // Restore the original flag state
-  is_converting_rhs = old_is_converting_rhs;
-  in_lazy_operand_ = old_in_lazy_operand;
+  const exprt raised = convert_boolop_operands(
+    element, logical_expr, operand_effects, contains_non_boolean);
+  if (raised.is_not_nil())
+    return raised;
 
   // A BoolOp must have at least two values, but AST rewrites (e.g. lowering
   // `x == []` to `len(x) == 0`) can produce a degenerate one-value node. A
@@ -2038,6 +2085,48 @@ exprt python_converter::once_bound_exponent(
   return exponent->get_value();
 }
 
+// The element a literal `[A, B][k]` or `(A, B)[k]` reads at a constant k, or
+// nullptr.
+static const nlohmann::json *
+constant_subscript_element(const nlohmann::json &node)
+{
+  if (node.value("_type", "") != "Subscript")
+    return nullptr;
+  const nlohmann::json &seq = node["value"];
+  if (seq["_type"] != "List" && seq["_type"] != "Tuple")
+    return nullptr;
+  const nlohmann::json &elts = seq["elts"];
+  const nlohmann::json &slice = node["slice"];
+  const bool negated =
+    slice["_type"] == "UnaryOp" && slice["op"]["_type"] == "USub";
+  const nlohmann::json &index = negated ? slice["operand"] : slice;
+  if (index["_type"] != "Constant" || !index["value"].is_number_integer())
+    return nullptr;
+  long long i = index["value"].get<long long>();
+  if (negated)
+    i = -i;
+  const long long size = elts.size();
+  if (i < 0)
+    i += size;
+  return i >= 0 && i < size ? &elts[i] : nullptr;
+}
+
+void python_converter::fold_class_subscript(
+  const std::string &cmp,
+  nlohmann::json &operand)
+{
+  if (cmp != "Is" && cmp != "IsNot")
+    return;
+  const nlohmann::json *element = constant_subscript_element(operand);
+  if (!element)
+    return;
+  for (const auto &elt : operand["value"]["elts"])
+    if (elt["_type"] != "Name" || !class_identity_operand(elt, get_expr(elt)))
+      return;
+  const nlohmann::json chosen = *element;
+  operand = chosen;
+}
+
 exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
 {
   if (std::optional<exprt> bound = try_lowered_compare(element))
@@ -2065,6 +2154,8 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
   if (element.contains("ops") && element["ops"].size() == 1)
   {
     const std::string cmp = element["ops"][0]["_type"];
+    fold_class_subscript(cmp, left);
+    fold_class_subscript(cmp, right);
     if (cmp == "Is" || cmp == "IsNot" || cmp == "Eq" || cmp == "NotEq")
       type_compared_operands_ = {&left, &right};
   }
