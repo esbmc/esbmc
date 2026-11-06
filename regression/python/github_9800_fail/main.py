@@ -1,11 +1,11 @@
-try:
-    from esbmc import nondet_int
-except ImportError:
-
-    def nondet_int() -> int:
-        return 0
+class A:
+    pass
 
 
-i = nondet_int()
-if -3 <= i < 3:
-    assert type(2.5) is [int, float, str][i]
+class B:
+    pass
+
+
+b = B()
+assert type(2.5) is [int, float][1]
+assert type(b) is [A, B][0]

@@ -2,3 +2,4 @@ CORE
 main.py
 
 ^VERIFICATION FAILED$
+^  FAILED .*line 11  assertion

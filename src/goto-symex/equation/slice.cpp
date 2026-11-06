@@ -167,6 +167,66 @@ bool symex_slicet::depends_on_tracked(const expr2tc &expr)
          depends.find(s.get_symbol_name()) != depends.end();
 }
 
+bool symex_slicet::reads_sliced(const expr2tc &expr)
+{
+  // run_on_assignment keeps an array version in #depends but drops its stores
+  // to indices that no kept step reads, so a read of such an index, or of the
+  // whole array, is sliced too.
+  auto sliced_symbol = [this](const symbol2t &sym, const size_t *elem) {
+    const std::string name = sym.get_symbol_name();
+    if (!no_slice(sym) && !depends.count(name))
+      return true;
+    if (!is_array_type(sym.type) || array_disqualified.count(name))
+      return false;
+    auto reads = index_reads.find(name);
+    return !elem || reads == index_reads.end() || !reads->second.count(*elem);
+  };
+
+  // Post-order: a node is decided once its operands are.
+  std::vector<std::pair<const expr2tc *, bool>> worklist{{&expr, false}};
+  while (!worklist.empty())
+  {
+    auto [cur, children_done] = worklist.back();
+    worklist.pop_back();
+    const expr2t *node = cur->get();
+    if (sliced_reads.count(node))
+      continue;
+
+    // A constant-index element read, as #scan_array_uses records it.
+    if (is_index2t(*cur))
+    {
+      const index2t &index = to_index2t(*cur);
+      if (
+        is_symbol2t(index.source_value) && is_constant_int2t(index.index) &&
+        !to_constant_int2t(index.index).value.is_negative())
+      {
+        const size_t elem = to_constant_int2t(index.index).value.to_uint64();
+        sliced_reads[node] =
+          sliced_symbol(to_symbol2t(index.source_value), &elem);
+        continue;
+      }
+    }
+
+    if (!children_done)
+    {
+      worklist.emplace_back(cur, true);
+      (*cur)->foreach_operand([&worklist](const expr2tc &e) {
+        if (!is_nil_expr(e))
+          worklist.emplace_back(&e, false);
+      });
+      continue;
+    }
+
+    bool sliced =
+      is_symbol2t(*cur) && sliced_symbol(to_symbol2t(*cur), nullptr);
+    (*cur)->foreach_operand([this, &sliced](const expr2tc &e) {
+      sliced = sliced || (!is_nil_expr(e) && sliced_reads[e.get()]);
+    });
+    sliced_reads[node] = sliced;
+  }
+  return sliced_reads[expr.get()];
+}
+
 void symex_slicet::run_on_assert(symex_target_equationt::SSA_stept &SSA_step)
 {
   scan_array_uses(SSA_step.guard);
