@@ -1468,22 +1468,31 @@ static bool has_checked_operand(const expr2tc &code)
          is_code_cpp_delete2t(code) || is_code_cpp_del_array2t(code);
 }
 
+/// The first instruction from @p it that k-induction did not add. Its havocs
+/// and entry-condition ASSUME restate expressions the program evaluates, and
+/// checks, elsewhere; a check placed on them would run in the base case too,
+/// on the state before the loop.
+static goto_programt::instructionst::iterator skip_inductive_step(
+  goto_programt::instructionst::iterator it,
+  goto_programt::instructionst::iterator end)
+{
+  while (it != end && it->inductive_step_instruction)
+    ++it;
+  return it;
+}
+
 void goto_checkt::goto_check(goto_programt &goto_program)
 {
+  const goto_programt::instructionst::iterator end =
+    goto_program.instructions.end();
   // Not a ranged loop because we need it to be an iterator :/
   for (goto_programt::instructionst::iterator it =
-         goto_program.instructions.begin();
-       it != goto_program.instructions.end();
-       ++it)
+         skip_inductive_step(goto_program.instructions.begin(), end);
+       it != end;
+       it = skip_inductive_step(std::next(it), end))
   {
     goto_programt::instructiont &i = *it;
     const locationt &loc = i.location;
-
-    // k-induction's havocs and entry-condition ASSUME restate expressions the
-    // program evaluates, and checks, elsewhere. A check placed here would run
-    // in the base case too, on the state before the loop.
-    if (i.inductive_step_instruction)
-      continue;
 
     new_code.clear();
     assertions.clear();
