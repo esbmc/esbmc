@@ -24,6 +24,9 @@
 class bmct
 {
 public:
+  /// Loop invariants (loop head, C expression) for a correctness witness.
+  std::vector<std::pair<locationt, std::string>> loop_invariants;
+
   bmct(goto_functionst &funcs, optionst &opts, contextt &_context);
 
   optionst &options;

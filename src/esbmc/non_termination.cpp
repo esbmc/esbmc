@@ -6,9 +6,11 @@
 #include <solvers/smt/smt_conv.h>
 #include <irep2/irep2_expr.h>
 #include <irep2/irep2_type.h>
+#include <irep2/irep2_utils.h>
 #include <util/lang/c_types.h>
 #include <util/irep/std_expr.h>
 #include <util/base/yaml_parser.h>
+#include <langapi/language_util.h>
 #include <util/arith/mp_arith.h>
 #include <util/base/i2string.h>
 #include <util/config/config.h>
@@ -16,6 +18,7 @@
 #include <algorithm>
 #include <map>
 #include <memory>
+#include <set>
 #include <stdexcept>
 #include <unordered_map>
 #include <unordered_set>
@@ -351,14 +354,19 @@ bool recognize_eca_main_loop(
   // loopst::effective_loop_head documentation.
   goto_programt::const_targett head = loop.effective_loop_head();
   goto_programt::const_targett back = loop.get_original_loop_exit();
-  if (head == back || !head->is_goto() || !is_constant_false(head->guard))
+  if (head == back || !back->is_goto() || !back->is_backwards_goto())
     return false;
-  if (!back->is_goto() || !back->is_backwards_goto())
+  // while(1)'s exit test never jumps; remove_no_op, which k-induction runs
+  // first, drops it, leaving an unconditional back edge.
+  goto_programt::const_targett first = head;
+  if (head->is_goto() && is_constant_false(head->guard))
+    ++first;
+  else if (!is_true(back->guard))
     return false;
   expr2tc input_sym;
   irep_idt callee;
   std::vector<BigInt> values;
-  for (auto it = std::next(head); it != back; ++it)
+  for (auto it = first; it != back; ++it)
   {
     if (
       it->is_skip() || it->type == LOCATION || it->type == DECL ||
@@ -694,6 +702,19 @@ std::pair<expr2tc, statet> join(const pathst &in)
   return {guard, s};
 }
 
+/// @p e simplified, so a run on concrete states stays concrete.
+expr2tc folded(expr2tc e)
+{
+  simplify(e);
+  return e;
+}
+
+/// @p guard and @p c, leaving out a @p c that is true.
+expr2tc conjoin(const expr2tc &guard, const expr2tc &c)
+{
+  return is_true(c) ? guard : is_true(guard) ? c : and2tc(guard, c);
+}
+
 void run_once(
   const goto_functionst &goto_functions,
   const goto_functiont &fn,
@@ -777,24 +798,31 @@ void run_once(
     case DEAD:
       next.emplace_back(guard, s);
       break;
+    // A failed assertion ends the execution (C11 7.2.1.1: assert aborts).
+    case ASSERT:
     case ASSUME:
-      next.emplace_back(and2tc(guard, read_in(it->guard, s)), s);
+    {
+      const expr2tc c = folded(read_in(it->guard, s));
+      if (!is_false(c))
+        next.emplace_back(conjoin(guard, c), s);
       break;
+    }
     case ASSIGN:
       if (!is_symbol2t(to_code_assign2t(it->code).target))
         throw unsupportedt();
       s[to_symbol2t(to_code_assign2t(it->code).target).thename] =
-        read_in(to_code_assign2t(it->code).source, s);
-      next.emplace_back(guard, s);
+        folded(read_in(to_code_assign2t(it->code).source, s));
+      next.emplace_back(guard, std::move(s));
       break;
     case GOTO:
     {
       if (it->is_backwards_goto() || it->targets.size() != 1)
         throw unsupportedt();
-      const expr2tc c = read_in(it->guard, s);
-      pending[&*it->targets.front()].emplace_back(and2tc(guard, c), s);
+      const expr2tc c = folded(read_in(it->guard, s));
+      if (!is_false(c))
+        pending[&*it->targets.front()].emplace_back(conjoin(guard, c), s);
       if (!is_true(c))
-        next.emplace_back(and2tc(guard, not2tc(c)), s);
+        next.emplace_back(conjoin(guard, folded(not2tc(c))), s);
       break;
     }
     case RETURN:
@@ -1014,6 +1042,143 @@ bool has_cycle_from_init(
   }
 }
 
+/// The globals of @p s0 that the updater @p callee, or a function it calls,
+/// writes (@p written) or reads or writes (@p used). False when it reads or
+/// writes one that a function outside it,
+/// other than the entry function @p fname and __ESBMC_main's initialisation,
+/// also writes (e.g. a pthread hook run before main): then the head may not
+/// see the value __ESBMC_main gave it.
+bool updater_globals(
+  const goto_functionst &goto_functions,
+  const irep_idt &fname,
+  const irep_idt &callee,
+  const statet &s0,
+  std::unordered_set<irep_idt, irep_id_hash> &written,
+  std::unordered_set<irep_idt, irep_id_hash> &used)
+{
+  std::unordered_set<irep_idt, irep_id_hash> closure{callee};
+  std::vector<irep_idt> todo{callee};
+  std::unordered_map<irep_idt, expr2tc, irep_id_hash> touched;
+  while (!todo.empty())
+  {
+    auto f = goto_functions.function_map.find(todo.back());
+    todo.pop_back();
+    if (f == goto_functions.function_map.end())
+      continue;
+    collect_writes(f->second, written);
+    for (const auto &i : f->second.body.instructions)
+    {
+      collect_free_symbols(i.code, touched);
+      collect_free_symbols(i.guard, touched);
+      if (
+        i.is_function_call() &&
+        is_symbol2t(to_code_function_call2t(i.code).function))
+      {
+        const irep_idt &g =
+          to_symbol2t(to_code_function_call2t(i.code).function).thename;
+        if (closure.insert(g).second)
+          todo.push_back(g);
+      }
+    }
+  }
+  std::unordered_set<irep_idt, irep_id_hash> elsewhere;
+  for (const auto &[name, fn] : goto_functions.function_map)
+    if (!closure.count(name) && name != fname && name != "__ESBMC_main")
+      collect_writes(fn, elsewhere);
+  for (const auto &[name, e] : touched)
+  {
+    if (!s0.count(name))
+      continue;
+    if (elsewhere.count(name))
+      return false;
+    used.insert(name);
+  }
+  for (auto it = written.begin(); it != written.end();)
+    it = s0.count(*it) ? std::next(it) : written.erase(it);
+  return true;
+}
+
+/// Every state the input loop @p loop reaches at its head from @p s0, found
+/// by running each iteration on concrete states for every valid input. Empty
+/// when an iteration is not a function of the state and the input (a guard or
+/// a value does not simplify to a constant, or run_once gives up) or when
+/// more than @p cap states, or more than 256 values of one global, turn up:
+/// a global computed by arithmetic soon has more values than any table.
+std::vector<statet> reachable_states(
+  const goto_functionst &goto_functions,
+  const loopst &loop,
+  const expr2tc &input_arg,
+  const std::vector<BigInt> &valid_inputs,
+  const statet &s0,
+  size_t cap)
+{
+  std::vector<statet> states{s0};
+  std::set<std::vector<BigInt>> seen;
+  std::unordered_map<irep_idt, std::set<BigInt>, irep_id_hash> values;
+  auto key = [&](const statet &s) {
+    std::vector<BigInt> k;
+    for (const auto &[name, v0] : s0)
+      k.push_back(to_constant_int2t(s.at(name)).value);
+    return k;
+  };
+  seen.insert(key(s0));
+  try
+  {
+    for (size_t i = 0; i < states.size(); ++i)
+      for (const BigInt &v : valid_inputs)
+      {
+        pathst paths;
+        run_iteration(
+          goto_functions,
+          loop,
+          states[i],
+          input_arg,
+          constant_int2tc(input_arg->type, v),
+          paths);
+        for (auto &[g, after] : paths)
+        {
+          expr2tc guard = g;
+          simplify(guard);
+          if (is_false(guard))
+            continue;
+          if (!is_true(guard))
+            return {};
+          statet next;
+          for (const auto &[name, v0] : s0)
+          {
+            expr2tc value = after.at(name);
+            simplify(value);
+            if (!is_constant_int2t(value))
+              return {};
+            next[name] = value;
+          }
+          if (seen.insert(key(next)).second)
+          {
+            if (states.size() == cap)
+              return {};
+            for (const auto &[name, value] : next)
+            {
+              auto &vs = values[name];
+              vs.insert(to_constant_int2t(value).value);
+              if (vs.size() > 256)
+                return {};
+            }
+            states.push_back(std::move(next));
+          }
+        }
+      }
+  }
+  catch (const unsupportedt &)
+  {
+    return {};
+  }
+  catch (const std::out_of_range &)
+  {
+    return {};
+  }
+  return states;
+}
+
 /// The eca updater @p fn, called with the input once per iteration, never
 /// fires a branch for some reachable state and valid input, leaving the state
 /// as it was: the period-1 recurrent set.
@@ -1149,4 +1314,96 @@ tvt try_prove_non_termination_by_recurrent_set(
     }
   }
   return tvt(tvt::TV_UNKNOWN);
+}
+
+std::vector<std::pair<locationt, std::string>> assume_reachable_loop_states(
+  goto_functionst &goto_functions,
+  const namespacet &ns,
+  size_t max_states)
+{
+  std::vector<std::pair<locationt, std::string>> invariants;
+  const auto initial_state = harvest_initial_state(goto_functions);
+  auto f_it = goto_functions.function_map.find(
+    "c:@F@" + (config.main.empty() ? "main" : config.main));
+  if (f_it == goto_functions.function_map.end() || !f_it->second.body_available)
+    return invariants;
+  statet s0;
+  for (const auto &[name, value] : initial_state)
+  {
+    const symbolt *sym = ns.lookup(name);
+    if (sym && sym->static_lifetime && is_bv_type(sym->get_type2()))
+      s0[name] = constant_int2tc(sym->get_type2(), value);
+  }
+  goto_loopst loops(f_it->first, goto_functions, f_it->second);
+  for (const auto &loop : loops.get_loops())
+  {
+    expr2tc input_arg;
+    std::vector<BigInt> valid_inputs;
+    irep_idt callee_name;
+    std::vector<expr2tc> result_writes;
+    if (
+      !recognize_eca_main_loop(
+        loop, input_arg, valid_inputs, callee_name, result_writes) ||
+      !loop_starts_at_initial_state(
+        f_it->first, f_it->second.body, loop.get_original_loop_head(), ns))
+      continue;
+    // The loop must change the state only through the updater.
+    result_writes.push_back(input_arg);
+    if (
+      std::any_of(
+        result_writes.begin(), result_writes.end(), [&](const expr2tc &w) {
+          return s0.count(to_symbol2t(w).thename);
+        }))
+      continue;
+    std::unordered_set<irep_idt, irep_id_hash> written, used;
+    if (!updater_globals(
+          goto_functions, f_it->first, callee_name, s0, written, used))
+      continue;
+    // Only what the updater touches: run_once gives up on reading the rest.
+    statet state;
+    for (const irep_idt &name : used)
+      state[name] = s0.at(name);
+    // A witness may name only the program's own variables, not those of
+    // ESBMC's library models (e.g. exit's atexit_count).
+    const irep_idt &file = loop.get_original_loop_exit()->location.get_file();
+    for (auto it = written.begin(); it != written.end();)
+    {
+      const symbolt *sym = ns.lookup(*it);
+      it = sym && sym->location.get_file() == file ? std::next(it)
+                                                   : written.erase(it);
+    }
+    const std::vector<statet> states = reachable_states(
+      goto_functions, loop, input_arg, valid_inputs, state, max_states);
+    if (states.empty() || written.empty())
+      continue;
+
+    std::vector<expr2tc> disjuncts;
+    for (const statet &s : states)
+    {
+      std::vector<expr2tc> eqs;
+      for (const auto &[name, value] : s)
+        if (written.count(name))
+          eqs.push_back(equality2tc(symbol2tc(value->type, name), value));
+      disjuncts.push_back(conjunction(eqs));
+    }
+    // Only the inductive step needs it, after its havoc: every state the
+    // loop head sees on an execution that has not yet failed is in the set.
+    const expr2tc invariant = disjunction(disjuncts);
+    goto_programt::targett head = loop.get_original_loop_head();
+    goto_programt::targett assume =
+      f_it->second.body.instructions.insert(std::next(head), *head);
+    assume->make_assumption(invariant);
+    assume->targets.clear();
+    assume->labels.clear();
+    assume->inductive_step_instruction = true;
+    log_status(
+      "Loop at {}: assuming its {} reachable states in the inductive step",
+      head->location.as_string(),
+      states.size());
+    // The back edge carries the loop statement's own location.
+    invariants.emplace_back(
+      loop.get_original_loop_exit()->location,
+      from_expr(ns, "", invariant, presentationt::WITNESS));
+  }
+  return invariants;
 }
