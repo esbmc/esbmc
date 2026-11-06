@@ -1,0 +1,6 @@
+CORE
+main.c
+--witness-output-yaml -
+^VERIFICATION FAILED$
+^\s+line: 10$
+(?s)\A(?!.*type: "branching"(?:(?!type:).)*?^\s+line: 8$)

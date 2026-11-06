@@ -760,6 +760,20 @@ bool operator<(
   const goto_programt::const_targett i1,
   const goto_programt::const_targett i2);
 
+/// Whether \p it is the last case test of a switch, so failing it takes the
+/// default. convert_switch emits the tests back to back, separated only by
+/// checks on the switch value, and ends them with the default jump (or the
+/// SKIP that optimize_guarded_gotos leaves of it).
+inline bool is_last_switch_case_test(goto_programt::const_targett it)
+{
+  if (it->switch_case_ids.empty())
+    return false;
+  do
+    ++it;
+  while (it->is_assert() || it->is_assume());
+  return !it->is_goto() || it->switch_case_ids.empty();
+}
+
 struct const_target_hash
 {
   std::size_t operator()(const goto_programt::const_targett t) const

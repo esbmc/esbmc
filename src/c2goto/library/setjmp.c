@@ -13,7 +13,6 @@ _Thread_local long __ESBMC_setjmp_count;
 int setjmp(jmp_buf __env)
 {
 __ESBMC_HIDE:;
-  __ESBMC_unreachable();
   *(long *)__env = ++__ESBMC_setjmp_count;
   return 0;
 }
@@ -28,7 +27,6 @@ __ESBMC_HIDE:;
 _Noreturn void longjmp(jmp_buf env, int status)
 {
 __ESBMC_HIDE:;
-  __ESBMC_unreachable();
   __ESBMC_longjmp_token = *(long *)env;
   // C11 7.13.2.1p4: setjmp cannot return 0 through longjmp
   __ESBMC_longjmp_value = status ? status : 1;

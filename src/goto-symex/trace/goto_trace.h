@@ -63,6 +63,10 @@ public:
    * symbol no earlier step computed from constants. */
   bool nondet_dependent = true;
 
+  /* For a branching step: whether it tests one operand of a && or ||
+   * condition, whose own direction is not the condition's. */
+  bool condition_operand = false;
+
   // for assert
   std::string comment;
 
@@ -80,6 +84,12 @@ public:
    * each paired with its value in this counterexample. A witness has nothing
    * else to record them from (#7858). */
   std::list<std::pair<expr2tc, expr2tc>> nondet_reads;
+
+  /* The nondet calls made since the previous step, this one included: each
+   * call's ')' paired with the value it returned. A call nested in an
+   * expression returns into a hidden temporary with no step of its own, so a
+   * witness has nothing else to record it from (#9881). */
+  std::list<std::pair<locationt, expr2tc>> nondet_returns;
 
   // for OUTPUT
   std::string format_string;
