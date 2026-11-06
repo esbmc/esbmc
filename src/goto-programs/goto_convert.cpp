@@ -2245,8 +2245,9 @@ void goto_convertt::convert_switch(const codet &code, goto_programt &dest)
       options.get_option("witness-output-yaml") != "")
       for (const auto &op : case_ops)
       {
+        // A GNU case range is named by its low bound.
         BigInt val;
-        if (!to_integer(op, val))
+        if (!to_integer(op.id() == "case_range" ? op.op0() : op, val))
           x->switch_case_ids.push_back(integer2string(val));
       }
   }
