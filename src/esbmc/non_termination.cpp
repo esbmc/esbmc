@@ -18,6 +18,7 @@
 #include <algorithm>
 #include <map>
 #include <memory>
+#include <optional>
 #include <set>
 #include <stdexcept>
 #include <unordered_map>
@@ -1098,12 +1099,527 @@ bool updater_globals(
   return true;
 }
 
+/// Runs an input loop's iterations on concrete values. Each guard and
+/// assigned value is compiled once into flat nodes over numbered variables,
+/// since the updaters of the larger eca problems are chains of dozens of
+/// functions evaluated thousands of times per state. Integers wrap to their
+/// type's width as ESBMC's bit-vector encoding wraps them. Throws unsupportedt
+/// on anything else.
+class concrete_runnert
+{
+public:
+  concrete_runnert(const goto_functionst &goto_functions, const loopst &loop)
+    : goto_functions(goto_functions), loop(loop)
+  {
+  }
+
+  /// The slot of the variable @p name.
+  size_t slot(const irep_idt &name)
+  {
+    auto [it, fresh] = slots.emplace(name, values.size());
+    if (fresh)
+    {
+      values.push_back(0);
+      defined.push_back(false);
+    }
+    return it->second;
+  }
+
+  void set(size_t v, int64_t x)
+  {
+    values[v] = x;
+    defined[v] = true;
+  }
+
+  int64_t get(size_t v) const
+  {
+    if (!defined[v])
+      throw unsupportedt();
+    return values[v];
+  }
+
+  /// One iteration on the current values, reading @p in as the input @p
+  /// input_arg; walked as run_iteration walks it. False when it stops.
+  bool iterate(const expr2tc &input_arg, int64_t in)
+  {
+    steps = 0;
+    bool called = false;
+    for (auto it = loop.get_original_loop_head();
+         it != loop.get_original_loop_exit();
+         ++it)
+    {
+      if (
+        it->is_assign() && !called &&
+        to_code_assign2t(it->code).target == input_arg)
+        assign(input_arg, wrap_to(input_arg->type, in));
+      else if (it->is_function_call())
+      {
+        if (!call(it, 0))
+          return false;
+        called = true;
+      }
+      else if (it->is_assume() && !holds(it))
+        return false;
+      else if (it->is_assign() && called)
+        assign(it);
+    }
+    return true;
+  }
+
+private:
+  enum class opt : uint8_t
+  {
+    var,
+    constant,
+    cast,
+    lnot,
+    land,
+    lor,
+    ite,
+    eq,
+    ne,
+    lt,
+    le,
+    gt,
+    ge,
+    neg,
+    add,
+    sub,
+    mul,
+    div,
+    mod,
+    unsupported
+  };
+
+  struct nodet
+  {
+    opt op;
+    bool is_signed;
+    uint64_t mask; // the type's width; zero for Booleans
+    int64_t k;     // constant value, or variable slot
+    int32_t a, b, c;
+  };
+
+  const goto_functionst &goto_functions;
+  const loopst &loop;
+  std::unordered_map<irep_idt, size_t, irep_id_hash> slots;
+  std::vector<int64_t> values;
+  std::vector<bool> defined;
+  std::vector<nodet> nodes;
+  std::unordered_map<const expr2t *, int32_t> compiled;
+  size_t steps = 0;
+
+  /// A call resolved once: its callee, argument nodes, and where the
+  /// parameters and the result go.
+  struct call_sitet
+  {
+    bool stops = false; // exit or abort
+    const goto_functiont *fn = nullptr;
+    std::vector<int32_t> args;
+    std::vector<size_t> params;
+    std::vector<std::pair<uint64_t, bool>> param_widths;
+    bool has_ret = false;
+    size_t ret = 0;
+    std::pair<uint64_t, bool> ret_width{0, false};
+  };
+  std::vector<call_sitet> call_sites;
+  std::unordered_map<const goto_functiont *, bool> running;
+
+  /// Per instruction, by location_number: its compiled guard, value and call
+  /// site, -1 until first needed.
+  std::vector<int32_t> guard_at, value_at, call_at;
+
+  static int32_t &at(std::vector<int32_t> &v, unsigned n)
+  {
+    if (v.size() <= n)
+      v.resize(n + 1, -1);
+    return v[n];
+  }
+
+  int32_t guard_of(goto_programt::const_targett it)
+  {
+    int32_t &g = at(guard_at, it->location_number);
+    if (g < 0)
+      g = compile(it->guard);
+    return g;
+  }
+
+  int32_t value_of(goto_programt::const_targett it, const expr2tc &e)
+  {
+    int32_t &v = at(value_at, it->location_number);
+    if (v < 0)
+      v = compile(e);
+    return v;
+  }
+
+  /// The width mask and signedness of @p type; throws on non-integers.
+  static std::pair<uint64_t, bool> width_of(const type2tc &type)
+  {
+    if (is_bool_type(type))
+      return {0, false};
+    const bool is_signed = is_signedbv_type(type);
+    if (!is_signed && !is_unsignedbv_type(type))
+      throw unsupportedt();
+    const unsigned w = type->get_width();
+    if (w == 0 || w > 64 || (w == 64 && !is_signed))
+      throw unsupportedt();
+    return {w == 64 ? ~0ULL : (1ULL << w) - 1, is_signed};
+  }
+
+  static int64_t wrap(uint64_t v, uint64_t mask, bool is_signed)
+  {
+    if (mask == 0)
+      return v != 0;
+    v &= mask;
+    if (is_signed && (v & ~(mask >> 1) & mask))
+      v |= ~mask;
+    return static_cast<int64_t>(v);
+  }
+
+  static int64_t wrap_to(const type2tc &type, int64_t v)
+  {
+    auto [mask, is_signed] = width_of(type);
+    return wrap(static_cast<uint64_t>(v), mask, is_signed);
+  }
+
+  int32_t add_node(nodet n)
+  {
+    nodes.push_back(n);
+    return static_cast<int32_t>(nodes.size() - 1);
+  }
+
+  /// The node computing @p e; an opt::unsupported node when it cannot.
+  int32_t compile(const expr2tc &e)
+  {
+    if (auto it = compiled.find(e.get()); it != compiled.end())
+      return it->second;
+    int32_t idx;
+    try
+    {
+      idx = compile_node(e);
+    }
+    catch (const unsupportedt &)
+    {
+      idx = add_node({opt::unsupported, false, 0, 0, -1, -1, -1});
+    }
+    compiled.emplace(e.get(), idx);
+    return idx;
+  }
+
+  int32_t compile_node(const expr2tc &e)
+  {
+    auto sub = [&](unsigned i) {
+      const int32_t n = compile(*e->get_sub_expr(i));
+      if (nodes[n].op == opt::unsupported)
+        throw unsupportedt();
+      return n;
+    };
+    auto typed = [&](opt op, int32_t a, int32_t b = -1, int32_t c = -1) {
+      auto [mask, is_signed] = width_of(e->type);
+      return add_node({op, is_signed, mask, 0, a, b, c});
+    };
+    auto boolean = [&](opt op, int32_t a, int32_t b = -1, int32_t c = -1) {
+      return add_node({op, false, 0, 0, a, b, c});
+    };
+    switch (e->expr_id)
+    {
+    case expr2t::symbol_id:
+    {
+      const size_t v = slot(to_symbol2t(e).thename);
+      const int32_t n = boolean(opt::var, -1);
+      nodes[n].k = static_cast<int64_t>(v);
+      return n;
+    }
+    case expr2t::constant_int_id:
+    {
+      if (!to_constant_int2t(e).value.is_int64())
+        throw unsupportedt();
+      const int32_t n = typed(opt::constant, -1);
+      nodes[n].k = wrap_to(e->type, to_constant_int2t(e).value.to_int64());
+      return n;
+    }
+    case expr2t::constant_bool_id:
+    {
+      const int32_t n = boolean(opt::constant, -1);
+      nodes[n].k = to_constant_bool2t(e).value;
+      return n;
+    }
+    case expr2t::typecast_id:
+      return typed(opt::cast, sub(0));
+    case expr2t::not_id:
+      return boolean(opt::lnot, sub(0));
+    case expr2t::and_id:
+      return boolean(opt::land, sub(0), sub(1));
+    case expr2t::or_id:
+      return boolean(opt::lor, sub(0), sub(1));
+    case expr2t::if_id:
+      return typed(opt::ite, sub(0), sub(1), sub(2));
+    case expr2t::equality_id:
+      return boolean(opt::eq, sub(0), sub(1));
+    case expr2t::notequal_id:
+      return boolean(opt::ne, sub(0), sub(1));
+    case expr2t::lessthan_id:
+      return boolean(opt::lt, sub(0), sub(1));
+    case expr2t::lessthanequal_id:
+      return boolean(opt::le, sub(0), sub(1));
+    case expr2t::greaterthan_id:
+      return boolean(opt::gt, sub(0), sub(1));
+    case expr2t::greaterthanequal_id:
+      return boolean(opt::ge, sub(0), sub(1));
+    case expr2t::neg_id:
+      return typed(opt::neg, sub(0));
+    case expr2t::add_id:
+      return typed(opt::add, sub(0), sub(1));
+    case expr2t::sub_id:
+      return typed(opt::sub, sub(0), sub(1));
+    case expr2t::mul_id:
+      return typed(opt::mul, sub(0), sub(1));
+    case expr2t::div_id:
+      return typed(opt::div, sub(0), sub(1));
+    case expr2t::modulus_id:
+      return typed(opt::mod, sub(0), sub(1));
+    default:
+      throw unsupportedt();
+    }
+  }
+
+  int64_t eval(int32_t i)
+  {
+    const nodet &n = nodes[i];
+    auto u = [&](int32_t j) { return static_cast<uint64_t>(eval(j)); };
+    switch (n.op)
+    {
+    case opt::var:
+      return get(n.k);
+    case opt::constant:
+      return n.k;
+    case opt::cast:
+      return wrap(u(n.a), n.mask, n.is_signed);
+    case opt::lnot:
+      return !eval(n.a);
+    case opt::land:
+      return eval(n.a) && eval(n.b);
+    case opt::lor:
+      return eval(n.a) || eval(n.b);
+    case opt::ite:
+      return eval(n.a) ? eval(n.b) : eval(n.c);
+    case opt::eq:
+      return eval(n.a) == eval(n.b);
+    case opt::ne:
+      return eval(n.a) != eval(n.b);
+    case opt::lt:
+      return eval(n.a) < eval(n.b);
+    case opt::le:
+      return eval(n.a) <= eval(n.b);
+    case opt::gt:
+      return eval(n.a) > eval(n.b);
+    case opt::ge:
+      return eval(n.a) >= eval(n.b);
+    case opt::neg:
+      return wrap(0 - u(n.a), n.mask, n.is_signed);
+    case opt::add:
+      return wrap(u(n.a) + u(n.b), n.mask, n.is_signed);
+    case opt::sub:
+      return wrap(u(n.a) - u(n.b), n.mask, n.is_signed);
+    case opt::mul:
+      return wrap(u(n.a) * u(n.b), n.mask, n.is_signed);
+    case opt::div:
+    case opt::mod:
+    {
+      const int64_t a = eval(n.a), b = eval(n.b);
+      if (b == 0 || (a == INT64_MIN && b == -1))
+        throw unsupportedt();
+      // C11 6.5.5p6: the quotient truncates toward zero.
+      return wrap(
+        static_cast<uint64_t>(n.op == opt::div ? a / b : a % b),
+        n.mask,
+        n.is_signed);
+    }
+    case opt::unsupported:
+      break;
+    }
+    throw unsupportedt();
+  }
+
+  /// The assumption or assertion at @p it; one it cannot evaluate keeps the
+  /// execution, which only adds states.
+  bool holds(goto_programt::const_targett it)
+  {
+    const int32_t n = guard_of(it);
+    if (nodes[n].op == opt::unsupported)
+      return true;
+    try
+    {
+      return eval(n);
+    }
+    catch (const unsupportedt &)
+    {
+      return true;
+    }
+  }
+
+  void assign(const expr2tc &target, int64_t v)
+  {
+    if (!is_symbol2t(target))
+      throw unsupportedt();
+    set(slot(to_symbol2t(target).thename), wrap_to(target->type, v));
+  }
+
+  /// The assignment at @p it.
+  void assign(goto_programt::const_targett it)
+  {
+    const code_assign2t &a = to_code_assign2t(it->code);
+    assign(a.target, eval(value_of(it, a.source)));
+  }
+
+  const call_sitet &site_of(goto_programt::const_targett it)
+  {
+    int32_t &i = at(call_at, it->location_number);
+    if (i >= 0)
+      return call_sites[i];
+    const code_function_call2t &c = to_code_function_call2t(it->code);
+    call_sitet site;
+    if (!is_symbol2t(c.function))
+      throw unsupportedt();
+    const irep_idt &name = to_symbol2t(c.function).thename;
+    if (name == "c:@F@exit" || name == "c:@F@abort")
+      site.stops = true;
+    else
+    {
+      auto callee = goto_functions.function_map.find(name);
+      if (
+        callee == goto_functions.function_map.end() ||
+        !callee->second.body_available || !is_code_type(callee->second.type))
+        throw unsupportedt();
+      const code_type2t &type = to_code_type(callee->second.type);
+      if (type.argument_names.size() != c.operands.size())
+        throw unsupportedt();
+      site.fn = &callee->second;
+      for (size_t k = 0; k < c.operands.size(); ++k)
+      {
+        site.args.push_back(compile(c.operands[k]));
+        site.params.push_back(slot(type.argument_names[k]));
+        site.param_widths.push_back(width_of(type.arguments[k]));
+      }
+      if (!is_nil_expr(c.ret))
+      {
+        if (!is_symbol2t(c.ret))
+          throw unsupportedt();
+        site.has_ret = true;
+        site.ret = slot(to_symbol2t(c.ret).thename);
+        site.ret_width = width_of(c.ret->type);
+      }
+    }
+    call_sites.push_back(std::move(site));
+    i = static_cast<int32_t>(call_sites.size() - 1);
+    return call_sites[i];
+  }
+
+  /// Run the call at @p it. False when the execution stops in it: exit,
+  /// abort, or a failed assertion or assumption.
+  bool call(goto_programt::const_targett it, unsigned depth)
+  {
+    const call_sitet &site = site_of(it);
+    if (site.stops)
+      return false;
+    // A function's locals have one slot each, so it must not recurse.
+    bool &busy = running[site.fn];
+    if (busy || depth > 256)
+      throw unsupportedt();
+    int64_t args[16];
+    if (site.args.size() > 16)
+      throw unsupportedt();
+    for (size_t k = 0; k < site.args.size(); ++k)
+      args[k] = eval(site.args[k]);
+    for (size_t k = 0; k < site.args.size(); ++k)
+      set(
+        site.params[k],
+        wrap(
+          static_cast<uint64_t>(args[k]),
+          site.param_widths[k].first,
+          site.param_widths[k].second));
+    std::optional<int64_t> ret;
+    busy = true;
+    const bool returned = run(*site.fn, ret, depth);
+    busy = false;
+    if (!returned)
+      return false;
+    if (site.has_ret)
+    {
+      if (!ret)
+        throw unsupportedt();
+      set(
+        site.ret,
+        wrap(
+          static_cast<uint64_t>(*ret),
+          site.ret_width.first,
+          site.ret_width.second));
+    }
+    return true;
+  }
+
+  /// Run @p fn, following its one concrete path. False when the execution
+  /// stops in it; @p ret receives the returned value.
+  bool
+  run(const goto_functiont &fn, std::optional<int64_t> &ret, unsigned depth)
+  {
+    for (auto it = fn.body.instructions.begin();
+         it != fn.body.instructions.end();)
+    {
+      if (++steps > 10000000)
+        throw unsupportedt();
+      switch (it->type)
+      {
+      case DECL:
+        defined[slot(to_code_decl2t(it->code).value)] = false;
+        break;
+      case DEAD:
+      case SKIP:
+      case LOCATION:
+        break;
+      // C11 7.2.1.1: a failed assertion aborts.
+      case ASSERT:
+      case ASSUME:
+        if (!holds(it))
+          return false;
+        break;
+      case ASSIGN:
+        assign(it);
+        break;
+      case GOTO:
+        if (it->is_backwards_goto() || it->targets.size() != 1)
+          throw unsupportedt();
+        if (eval(guard_of(it)))
+        {
+          it = it->targets.front();
+          continue;
+        }
+        break;
+      case FUNCTION_CALL:
+        if (!call(it, depth + 1))
+          return false;
+        break;
+      case RETURN:
+        if (!is_nil_expr(to_code_return2t(it->code).operand))
+          ret = eval(value_of(it, to_code_return2t(it->code).operand));
+        return true;
+      case END_FUNCTION:
+        return true;
+      default:
+        throw unsupportedt();
+      }
+      ++it;
+    }
+    return true;
+  }
+};
+
 /// Every state the input loop @p loop reaches at its head from @p s0, found
-/// by running each iteration on concrete states for every valid input. Empty
-/// when an iteration is not a function of the state and the input (a guard or
-/// a value does not simplify to a constant, or run_once gives up) or when
-/// more than @p cap states, or more than 256 values of one global, turn up:
-/// a global computed by arithmetic soon has more values than any table.
+/// by running each iteration on concrete values for every valid input. Empty
+/// when an iteration is not a function of the state and the input (it reads
+/// something else, or does something concrete_runnert does not model) or
+/// when more than @p cap states, or more than 256 values of one global, turn
+/// up: a global computed by arithmetic soon has more values than any table.
 std::vector<statet> reachable_states(
   const goto_functionst &goto_functions,
   const loopst &loop,
@@ -1112,69 +1628,58 @@ std::vector<statet> reachable_states(
   const statet &s0,
   size_t cap)
 {
-  std::vector<statet> states{s0};
-  std::set<std::vector<BigInt>> seen;
-  std::unordered_map<irep_idt, std::set<BigInt>, irep_id_hash> values;
-  auto key = [&](const statet &s) {
-    std::vector<BigInt> k;
-    for (const auto &[name, v0] : s0)
-      k.push_back(to_constant_int2t(s.at(name)).value);
-    return k;
-  };
-  seen.insert(key(s0));
+  concrete_runnert runner(goto_functions, loop);
+  std::vector<std::pair<irep_idt, size_t>> globals;
+  std::vector<int64_t> init;
+  for (const auto &[name, value] : s0)
+  {
+    if (!to_constant_int2t(value).value.is_int64())
+      return {};
+    globals.emplace_back(name, runner.slot(name));
+    init.push_back(to_constant_int2t(value).value.to_int64());
+  }
+  std::vector<std::vector<int64_t>> todo{init};
+  std::set<std::vector<int64_t>> seen{init};
+  std::vector<std::set<int64_t>> values(globals.size());
   try
   {
-    for (size_t i = 0; i < states.size(); ++i)
+    for (size_t i = 0; i < todo.size(); ++i)
       for (const BigInt &v : valid_inputs)
       {
-        pathst paths;
-        run_iteration(
-          goto_functions,
-          loop,
-          states[i],
-          input_arg,
-          constant_int2tc(input_arg->type, v),
-          paths);
-        for (auto &[g, after] : paths)
+        if (!v.is_int64())
+          return {};
+        for (size_t g = 0; g < globals.size(); ++g)
+          runner.set(globals[g].second, todo[i][g]);
+        if (!runner.iterate(input_arg, v.to_int64()))
+          continue;
+        std::vector<int64_t> next;
+        for (const auto &[name, s] : globals)
+          next.push_back(runner.get(s));
+        if (!seen.insert(next).second)
+          continue;
+        if (todo.size() == cap)
+          return {};
+        for (size_t g = 0; g < globals.size(); ++g)
         {
-          expr2tc guard = g;
-          simplify(guard);
-          if (is_false(guard))
-            continue;
-          if (!is_true(guard))
+          values[g].insert(next[g]);
+          if (values[g].size() > 256)
             return {};
-          statet next;
-          for (const auto &[name, v0] : s0)
-          {
-            expr2tc value = after.at(name);
-            simplify(value);
-            if (!is_constant_int2t(value))
-              return {};
-            next[name] = value;
-          }
-          if (seen.insert(key(next)).second)
-          {
-            if (states.size() == cap)
-              return {};
-            for (const auto &[name, value] : next)
-            {
-              auto &vs = values[name];
-              vs.insert(to_constant_int2t(value).value);
-              if (vs.size() > 256)
-                return {};
-            }
-            states.push_back(std::move(next));
-          }
         }
+        todo.push_back(std::move(next));
       }
   }
   catch (const unsupportedt &)
   {
     return {};
   }
-  catch (const std::out_of_range &)
+  std::vector<statet> states;
+  for (const auto &t : todo)
   {
-    return {};
+    statet st;
+    for (size_t g = 0; g < globals.size(); ++g)
+      st[globals[g].first] =
+        constant_int2tc(s0.at(globals[g].first)->type, BigInt(t[g]));
+    states.push_back(std::move(st));
   }
   return states;
 }
@@ -1322,6 +1827,9 @@ std::vector<std::pair<locationt, std::string>> assume_reachable_loop_states(
   size_t max_states)
 {
   std::vector<std::pair<locationt, std::string>> invariants;
+  // concrete_runnert indexes its caches by location_number; earlier passes
+  // may have inserted instructions since the last numbering.
+  goto_functions.compute_location_numbers();
   const auto initial_state = harvest_initial_state(goto_functions);
   auto f_it = goto_functions.function_map.find(
     "c:@F@" + (config.main.empty() ? "main" : config.main));
