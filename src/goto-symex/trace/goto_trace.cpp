@@ -5,6 +5,7 @@
 #include <goto-symex/witness/witnesses.h>
 
 #include <regex>
+#include <unordered_map>
 #include <langapi/language_util.h>
 #include <langapi/languages.h>
 #include <util/arith/arith_tools.h>
@@ -528,6 +529,32 @@ static void push_violation_targets(
       options);
 }
 
+/* A validator binds a branching waypoint to the next visit of its source
+   location, not of its instruction: --goto-unwind copies a loop body. */
+static std::string branch_location(const goto_trace_stept &step)
+{
+  const locationt &l = step.pc->location;
+  return id2string(l.get_file()) + ":" + id2string(l.get_line()) + ":" +
+         id2string(l.get_column());
+}
+
+/* The nondet-dependent visits of each branch location up to the violation. */
+static std::unordered_map<std::string, size_t>
+nondet_branch_visits(const goto_tracet &goto_trace)
+{
+  std::unordered_map<std::string, size_t> visits;
+  for (const auto &step : goto_trace.steps)
+  {
+    if (step.type == symex_targett::ASSERT && !step.guard)
+      break;
+    if (
+      step.type == symex_targett::BREANCHING && step.pc->is_goto() &&
+      step.nondet_dependent)
+      ++visits[branch_location(step)];
+  }
+  return visits;
+}
+
 void violation_yaml_goto_trace(
   optionst &options,
   const namespacet &ns,
@@ -538,6 +565,7 @@ void violation_yaml_goto_trace(
   yml.verified_file = options.get_option("input-file");
   log_progress("Generating Violation Yaml Witness for: {}", yml.verified_file);
 
+  auto nondet_visits_ahead = nondet_branch_visits(goto_trace);
   size_t branching_waypoints = 0;
   for (const auto &step : goto_trace.steps)
   {
@@ -560,18 +588,25 @@ void violation_yaml_goto_trace(
     case symex_targett::BREANCHING:
       if (step.pc->is_goto())
       {
+        size_t &ahead = nondet_visits_ahead[branch_location(step)];
+        if (step.nondet_dependent)
+          --ahead;
+
         /* A validator cannot match a follow waypoint against a file it was
            not given; dropping one only weakens guidance. witnesslint also
            rejects line 0, e.g. the argv setup in __ESBMC_main (#9650). A
-           branch fixed by the program text needs no waypoint either: on deep
-           recursion they number in the hundreds of thousands (#9689). An
-           operand of && or || gets none: the waypoint's value is the whole
-           condition's, and a validator would apply it to another operand. */
+           branch fixed by the program text gets none, as on deep recursion
+           they number in the hundreds of thousands (#9689), unless a
+           nondet-dependent visit of its location follows: a validator would
+           bind that visit's waypoint to this one. The ones kept can fill the
+           cap before a later nondet waypoint. An operand of && or || gets none:
+           the waypoint's value is the whole condition's, and a validator would
+           apply it to another operand. */
         if (
           branching_waypoints >= max_branching_waypoints ||
           !input_file_check(step.pc->location) ||
-          step.pc->location.get_line().empty() || !step.nondet_dependent ||
-          step.condition_operand)
+          step.pc->location.get_line().empty() ||
+          (!step.nondet_dependent && ahead == 0) || step.condition_operand)
           break;
 
         /* A switch would take one waypoint naming the case it enters, but
