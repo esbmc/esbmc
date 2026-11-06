@@ -14,6 +14,7 @@
 #include <sstream>
 #include <map>
 #include <algorithm>
+#include <unordered_map>
 #include <unordered_set>
 
 // The entry Python file: the first positional file on the command line.
@@ -108,6 +109,67 @@ nondet_model_scopet classify_nondet_model(const std::string &function_name)
   }
   return scope;
 }
+
+/// nondet_int() holds its value in a `$nondet_int$` temporary, to assume it
+/// off -2**63 (#9923), and then copies the temporary into the variable or
+/// parameter the program reads. An input is named, scoped and sliced by that
+/// copy, so take the value there. A temporary that nothing copies (e.g. the
+/// one in `f(nondet_int() + 1)`) is still read from its own step.
+class nondet_bindingst
+{
+public:
+  explicit nondet_bindingst(const symex_target_equationt &target)
+  {
+    // Backwards, so that copying the result of a temporary-to-temporary move
+    // (a loop phi) marks the move's source as copied too.
+    for (auto it = target.SSA_steps.rbegin(); it != target.SSA_steps.rend();
+         ++it)
+    {
+      if (!it->is_assignment())
+        continue;
+      const expr2tc src = symex_slicet::get_nondet_symbol(it->rhs);
+      if (
+        is_temporary(src) &&
+        (!is_temporary(it->lhs) || copied.count(name(it->lhs))))
+        copied.insert(name(src));
+    }
+  }
+
+  /// The nondet symbol `step` binds, or nil when it binds none, only fills a
+  /// temporary that a later step copies, or moves one temporary to another.
+  expr2tc bound_nondet(const symex_target_equationt::SSA_stept &step)
+  {
+    expr2tc nondet = symex_slicet::get_nondet_symbol(step.rhs);
+    if (!nondet || !is_symbol2t(nondet))
+      return expr2tc();
+    const bool moved = is_temporary(nondet);
+    const auto it = temporaries.find(name(nondet));
+    if (it != temporaries.end())
+      nondet = it->second;
+    if (!has_prefix(to_symbol2t(nondet).thename.as_string(), "nondet$"))
+      return expr2tc();
+    if (!is_temporary(step.lhs))
+      return nondet;
+    temporaries.emplace(name(step.lhs), nondet);
+    return moved || copied.count(name(step.lhs)) ? expr2tc() : nondet;
+  }
+
+private:
+  static bool is_temporary(const expr2tc &e)
+  {
+    return e && is_symbol2t(e) &&
+           to_symbol2t(e).thename.as_string().find("$nondet_int$") !=
+             std::string::npos;
+  }
+
+  static std::string name(const expr2tc &e)
+  {
+    return to_symbol2t(e).get_symbol_name();
+  }
+
+  std::unordered_set<std::string> copied;
+  std::unordered_map<std::string, expr2tc> temporaries;
+};
 } // namespace
 
 // Refuse to clobber a file we did not generate ourselves (github #6220, same
@@ -161,8 +223,8 @@ std::string pytest_generator::clean_variable_name(const std::string &name) const
     if (exclaim_pos < var_name.size())
       var_name.resize(exclaim_pos);
 
-  // Remove everything after '?' (other suffix)
-  size_t question_pos = var_name.find('?');
+  // Remove everything after '?' or '&' (the SSA suffix of a local or global)
+  size_t question_pos = var_name.find_first_of("?&");
   if (question_pos != std::string::npos)
     if (question_pos < var_name.size())
       var_name.resize(question_pos);
@@ -756,6 +818,7 @@ void pytest_generator::collect(
   // Extract nondet values from counterexample
   int checked_assignments = 0;
   int found_nondets = 0;
+  nondet_bindingst bindings(target);
 
   for (auto const &SSA_step : target.SSA_steps)
   {
@@ -834,13 +897,11 @@ void pytest_generator::collect(
       }
 
       // Check if this is a nondet assignment
-      auto nondet_expr = symex_slicet::get_nondet_symbol(SSA_step.rhs);
-      if (!nondet_expr || !is_symbol2t(nondet_expr))
+      const expr2tc nondet_expr = bindings.bound_nondet(SSA_step);
+      if (!nondet_expr)
         continue;
 
       const symbol2t &sym = to_symbol2t(nondet_expr);
-      if (!has_prefix(sym.thename.as_string(), "nondet$"))
-        continue;
 
       // For dict/list components, allow duplicate nondet symbols
       // (key_type and value_type may share the same nondet symbol due to solver
@@ -1270,6 +1331,7 @@ void pytest_generator::generate_single(
     func_name = "test_function"; // Fallback
 
   // Traverse SSA steps to extract nondet variables
+  nondet_bindingst bindings(target);
   for (auto const &SSA_step : target.SSA_steps)
   {
     if (SSA_step.ignore || !smt_conv.l_get(SSA_step.guard).is_true())
@@ -1342,13 +1404,11 @@ void pytest_generator::generate_single(
       }
 
       // Check if this is a nondet assignment
-      auto nondet_expr = symex_slicet::get_nondet_symbol(SSA_step.rhs);
-      if (!nondet_expr || !is_symbol2t(nondet_expr))
+      const expr2tc nondet_expr = bindings.bound_nondet(SSA_step);
+      if (!nondet_expr)
         continue;
 
       const symbol2t &sym = to_symbol2t(nondet_expr);
-      if (!has_prefix(sym.thename.as_string(), "nondet$"))
-        continue;
 
       // For dict/list components, allow duplicate nondet symbols
       // (key_type and value_type may share the same nondet symbol due to solver
