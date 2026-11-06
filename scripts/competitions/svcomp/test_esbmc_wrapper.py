@@ -340,6 +340,31 @@ class ParseResultTest(unittest.TestCase):
         self.assertEqual(
             self.verdict(ESBMC_OUT_OF_MEMORY, wrapper.Property.memory), "Unknown")
 
+    # Under k-induction a step that runs out of memory is unknown and the next
+    # k is tried, so a later step can still decide the task.
+    OOM_AT_EARLIER_K = ("Checking base case, k = 1\n" + ESBMC_OUT_OF_MEMORY +
+                        "Checking base case, k = 3\n")
+
+    def test_a_proof_after_an_earlier_out_of_memory_is_true(self):
+        self.assertEqual(
+            self.verdict(self.OOM_AT_EARLIER_K + "VERIFICATION SUCCESSFUL\n",
+                         wrapper.Property.py_assertion), "TRUE")
+
+    def test_a_violation_after_an_earlier_out_of_memory_is_false(self):
+        self.assertEqual(
+            self.verdict(self.OOM_AT_EARLIER_K + PY_ASSERTION, wrapper.Property.py_assertion),
+            "FALSE")
+
+    def test_a_run_out_of_memory_without_a_verdict_is_a_memory_out(self):
+        self.assertEqual(
+            wrapper.parse_result(self.OOM_AT_EARLIER_K, wrapper.Property.py_assertion),
+            wrapper.Result.err_memout)
+
+    def test_a_timeout_after_an_out_of_memory_is_a_timeout(self):
+        self.assertEqual(
+            self.verdict(self.OOM_AT_EARLIER_K + "ERROR: Timed out\n", wrapper.Property.py_assertion),
+            "Timed out")
+
     def test_esbmc_timeout_after_a_counterexample_is_a_timeout(self):
         self.assertEqual(
             self.verdict(PROGRAM_PRINTS_BEFORE_LEAK.format("") + "ERROR: Timed out\n",
