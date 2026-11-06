@@ -1,7 +1,9 @@
-def check(xs: list[int]) -> int:
-    if len(xs) > 0:
-        return 1
-    return 2
+def first_positive(x: list[int]) -> bool:
+    if len(x) > 0:
+        if x[0] > 0:
+            return True
+    return False
 
 
-check(nondet_list(2))
+x = nondet_list(2)
+first_positive(x)

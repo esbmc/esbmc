@@ -836,6 +836,10 @@ private:
   static bool contains_nested_scope_named_expr(const nlohmann::json &node);
 
   exprt get_binary_operator_expr(const nlohmann::json &element);
+  /// Replaces @p operand, a literal sequence of classes subscripted by a
+  /// constant, `[A, B][1]`, with the class it reads when @p cmp is `Is` or
+  /// `IsNot` (#9800).
+  void fold_class_subscript(const std::string &cmp, nlohmann::json &operand);
   /// `a.m == b.m` for methods of instances, or nothing for any other shape.
   std::optional<exprt> try_bound_method_compare(const nlohmann::json &element);
   /// The receiver of `name.m` naming a method, and `C.m` for the class C
@@ -3602,6 +3606,7 @@ private:
   /// Class @p value_node is an instance of, or "" when it is not an instance.
   /// Resolves both a bound name and a constructor temporary.
   std::string instance_class_name(const nlohmann::json &value_node);
+  std::string attribute_class_name(const nlohmann::json &attribute);
 
   /// True when @p value_node denotes a user-defined class instance, as opposed
   /// to a model container that merely resolves to a class name.
