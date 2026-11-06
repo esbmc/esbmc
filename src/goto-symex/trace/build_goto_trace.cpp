@@ -4,6 +4,8 @@
 #include <goto-symex/state/renaming.h>
 #include <goto-symex/witness/witnesses.h>
 #include <solvers/smt/smt_conv.h>
+#include <map>
+#include <unordered_map>
 #include <unordered_set>
 
 static bool reads_through_dereference(const expr2tc &e);
@@ -364,6 +366,36 @@ struct input_trackert
   }
 };
 
+/* The conditional gotos that share their column with another in a run of
+ * instructions on one line: a && or || condition becomes one goto per operand,
+ * all at the statement's location. */
+static std::unordered_set<const goto_programt::instructiont *>
+condition_operand_gotos(const goto_programt &prog)
+{
+  std::unordered_set<const goto_programt::instructiont *> operands;
+  std::map<irep_idt, std::vector<const goto_programt::instructiont *>> run;
+  auto end_run = [&]() {
+    for (const auto &[column, gotos] : run)
+      if (gotos.size() > 1)
+        operands.insert(gotos.begin(), gotos.end());
+    run.clear();
+  };
+
+  irep_idt line;
+  for (const auto &instruction : prog.instructions)
+  {
+    if (instruction.location.get_line() != line)
+    {
+      end_run();
+      line = instruction.location.get_line();
+    }
+    if (instruction.is_goto() && !is_true(instruction.guard))
+      run[instruction.location.get_column()].push_back(&instruction);
+  }
+  end_run();
+  return operands;
+}
+
 void build_goto_trace(
   const symex_target_equationt &target,
   smt_convt &smt_conv,
@@ -371,6 +403,10 @@ void build_goto_trace(
 {
   unsigned step_nr = 0;
   input_trackert inputs;
+  std::unordered_map<
+    const goto_programt *,
+    std::unordered_set<const goto_programt::instructiont *>>
+    operand_gotos;
   std::list<std::pair<locationt, expr2tc>> nondet_returns;
   std::unordered_set<irep_idt> nondet_seen;
 
@@ -468,6 +504,14 @@ void build_goto_trace(
       goto_trace_step.guard = !smt_conv.l_get(SSA_step.cond).is_false();
 
     inputs.annotate_branch(SSA_step, goto_trace_step);
+    if (SSA_step.is_branching() && SSA_step.source.prog)
+    {
+      auto [it, fresh] = operand_gotos.try_emplace(SSA_step.source.prog);
+      if (fresh)
+        it->second = condition_operand_gotos(*SSA_step.source.prog);
+      goto_trace_step.condition_operand =
+        it->second.count(&*SSA_step.source.pc);
+    }
     goto_trace_step.nondet_returns.swap(nondet_returns);
 
     goto_trace.steps.push_back(goto_trace_step);
