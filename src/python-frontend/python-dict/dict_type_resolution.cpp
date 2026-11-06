@@ -283,7 +283,7 @@ static bool stores_one_literal_kind(
       return false;
     if (!stored.empty())
       kind = stored;
-    for (const char *key : {"body", "orelse", "finalbody"})
+    for (const char *key : {"body", "orelse", "finalbody", "handlers"})
       if (
         stmt.contains(key) &&
         !stores_one_literal_kind(ast, stmt[key], name, kind, by_key))
@@ -293,15 +293,13 @@ static bool stores_one_literal_kind(
 }
 
 /// The value type that storing the literal `rhs` (`d[k] = 5`, `d[k] = "x"`,
-/// `d[k] = []`, ...) gives a dict, or nil for any other value.
+/// `d[k] = []`, ...) gives a dict, or empty for any other value.
 static typet
 stored_literal_type(const nlohmann::json &rhs, type_handler &handler)
 {
   if (rhs.value("_type", std::string()) == "List")
     return handler.get_list_type();
-  if (!rhs.contains("value"))
-    return typet();
-  const auto &lit = rhs["value"];
+  const nlohmann::json lit = rhs.value("value", nlohmann::json());
   if (lit.is_boolean())
     return bool_type();
   if (lit.is_number_integer() || lit.is_number_unsigned())
@@ -310,7 +308,7 @@ stored_literal_type(const nlohmann::json &rhs, type_handler &handler)
     return handler.get_typet("float", 0);
   if (lit.is_string())
     return gen_pointer_type(char_type());
-  return typet();
+  return empty_typet();
 }
 
 typet python_dict_handler::resolve_stored_key_type(const exprt &dict_expr)
@@ -618,7 +616,7 @@ typet python_dict_handler::resolve_expected_type_for_dict_subscript(
             if (rhs_kind == "Constant" || (rhs_kind == "List" && only_lists))
             {
               const typet stored = stored_literal_type(rhs, type_handler_);
-              if (!stored.is_nil())
+              if (!stored.is_empty())
               {
                 candidate = stored;
                 have_candidate = true;
