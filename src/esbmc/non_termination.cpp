@@ -8,9 +8,15 @@
 #include <irep2/irep2_type.h>
 #include <util/lang/c_types.h>
 #include <util/irep/std_expr.h>
+#include <util/base/yaml_parser.h>
+#include <util/arith/mp_arith.h>
+#include <util/base/i2string.h>
+#include <util/config/config.h>
 
+#include <algorithm>
 #include <map>
 #include <memory>
+#include <stdexcept>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
@@ -337,7 +343,8 @@ bool recognize_eca_main_loop(
   const loopst &loop,
   expr2tc &input_arg,
   std::vector<BigInt> &valid_inputs,
-  irep_idt &callee_name)
+  irep_idt &callee_name,
+  std::vector<expr2tc> &result_writes)
 {
   // Use the effective loop head — skips ASSUMEs etc. that
   // --interval-analysis inserts at the back-edge target. See
@@ -371,6 +378,16 @@ bool recognize_eca_main_loop(
         input_sym = a.target;
         continue;
       }
+      // A call result read through a temporary, as `int input = f();` and
+      // witness validation produce: `tmp = NONDET; input = tmp`.
+      if (
+        is_symbol2t(a.target) && is_symbol2t(a.source) &&
+        !is_nil_expr(input_sym) &&
+        to_symbol2t(a.source).thename == to_symbol2t(input_sym).thename)
+      {
+        input_sym = a.target;
+        continue;
+      }
       return false;
     }
     if (
@@ -391,6 +408,8 @@ bool recognize_eca_main_loop(
       if (next == back || !next->is_return())
         return false;
       auto tgt = it->targets.front();
+      while (tgt != back && tgt->type == DECL)
+        ++tgt;
       if (tgt == back || !tgt->is_function_call())
         return false;
       const code_function_call2t &call = to_code_function_call2t(tgt->code);
@@ -408,15 +427,22 @@ bool recognize_eca_main_loop(
         to_symbol2t(arg).thename != to_symbol2t(input_sym).thename)
         return false;
       callee = to_symbol2t(call.function).thename;
+      if (is_symbol2t(call.ret))
+        result_writes.push_back(call.ret);
       it = std::next(tgt);
-      // The remainder of the body must be DEAD/LOCATION/SKIP only.
-      while (it != back)
+      // The remainder of the body must be DEAD/LOCATION/SKIP only, plus
+      // the copy of a call result kept in a temporary (`output = tmp`).
+      for (; it != back; ++it)
       {
         if (
-          !it->is_skip() && it->type != LOCATION && it->type != DEAD &&
-          it->type != DECL)
+          it->is_skip() || it->type == LOCATION || it->type == DEAD ||
+          it->type == DECL)
+          continue;
+        if (
+          !it->is_assign() || !is_symbol2t(call.ret) ||
+          to_code_assign2t(it->code).source != call.ret)
           return false;
-        ++it;
+        result_writes.push_back(to_code_assign2t(it->code).target);
       }
       break;
     }
@@ -613,12 +639,450 @@ bool check_period_1_fixpoint(
   return is_sat(formula, options, ns);
 }
 
+using statet = std::unordered_map<irep_idt, expr2tc, irep_id_hash>;
+/// The paths of a symbolic run: each one's guard and state.
+using pathst = std::vector<std::pair<expr2tc, statet>>;
+
+/// Thrown when the updater does something the run below does not model.
+struct unsupportedt
+{
+};
+
+/// @p e with every symbol read from @p s.
+expr2tc read_in(const expr2tc &e, const statet &s)
+{
+  if (is_symbol2t(e))
+  {
+    auto it = s.find(to_symbol2t(e).thename);
+    if (it == s.end())
+      throw unsupportedt();
+    return it->second;
+  }
+  if (is_address_of2t(e) || touches_memory_or_sideeffect(e))
+    throw unsupportedt();
+  expr2tc out = e;
+  out.get()->Foreach_operand([&](expr2tc &op) {
+    if (!is_nil_expr(op))
+      op = read_in(op, s);
+  });
+  return out;
+}
+
+/// Merge the paths reaching one instruction. Their guards are disjoint, so an
+/// ite per differing symbol merges them; a symbol one path lacks is dropped.
+std::pair<expr2tc, statet> join(const pathst &in)
+{
+  auto [guard, s] = in.front();
+  for (auto k = std::next(in.begin()); k != in.end(); ++k)
+  {
+    for (auto v = s.begin(); v != s.end();)
+    {
+      auto o = k->second.find(v->first);
+      if (o == k->second.end())
+      {
+        v = s.erase(v);
+        continue;
+      }
+      if (o->second != v->second)
+        v->second = if2tc(v->second->type, k->first, o->second, v->second);
+      ++v;
+    }
+    guard = or2tc(guard, k->first);
+  }
+  return {guard, s};
+}
+
+void run_once(
+  const goto_functionst &goto_functions,
+  const goto_functiont &fn,
+  const statet &entry,
+  unsigned depth,
+  pathst &returns);
+
+/// Run @p call in place, adding to @p out the state after each of the
+/// callee's returning paths. exit and abort end the path.
+void run_call(
+  const goto_functionst &goto_functions,
+  const code_function_call2t &call,
+  const expr2tc &guard,
+  const statet &s,
+  unsigned depth,
+  pathst &out)
+{
+  if (!is_symbol2t(call.function))
+    throw unsupportedt();
+  const irep_idt &name = to_symbol2t(call.function).thename;
+  if (name == "c:@F@exit" || name == "c:@F@abort")
+    return;
+  auto callee = goto_functions.function_map.find(name);
+  if (
+    callee == goto_functions.function_map.end() ||
+    !is_code_type(callee->second.type) ||
+    to_code_type(callee->second.type).argument_names.size() !=
+      call.operands.size())
+    throw unsupportedt();
+  statet entry = s;
+  for (size_t k = 0; k < call.operands.size(); ++k)
+    entry[to_code_type(callee->second.type).argument_names[k]] =
+      read_in(call.operands[k], s);
+  pathst inner;
+  run_once(goto_functions, callee->second, entry, depth + 1, inner);
+  for (auto &[g, after] : inner)
+  {
+    const expr2tc ret = after["#return"];
+    after.erase("#return");
+    if (!is_nil_expr(call.ret))
+    {
+      if (!is_symbol2t(call.ret) || is_nil_expr(ret))
+        throw unsupportedt();
+      after[to_symbol2t(call.ret).thename] = ret;
+    }
+    out.emplace_back(and2tc(guard, g), std::move(after));
+  }
+}
+
+/// Run @p fn once from @p entry, adding to @p returns the guard and final
+/// state of every path that returns; "#return" holds the returned value. An
+/// assume cuts a path. Throws unsupportedt when @p fn loops, touches memory or
+/// calls a function without a body.
+void run_once(
+  const goto_functionst &goto_functions,
+  const goto_functiont &fn,
+  const statet &entry,
+  unsigned depth,
+  pathst &returns)
+{
+  if (!fn.body_available || depth > 8)
+    throw unsupportedt();
+  std::unordered_map<const goto_programt::instructiont *, pathst> pending;
+  pending[&fn.body.instructions.front()].emplace_back(gen_true_expr(), entry);
+  for (auto it = fn.body.instructions.begin(); it != fn.body.instructions.end();
+       ++it)
+  {
+    auto p = pending.find(&*it);
+    if (p == pending.end() || p->second.empty())
+      continue;
+    auto [guard, s] = join(p->second);
+    pending.erase(p);
+    pathst &next = pending[&*std::next(it, !it->is_end_function())];
+    switch (it->type)
+    {
+    case DECL:
+      s.erase(to_code_decl2t(it->code).value);
+      [[fallthrough]];
+    case SKIP:
+    case LOCATION:
+    case DEAD:
+      next.emplace_back(guard, s);
+      break;
+    case ASSUME:
+      next.emplace_back(and2tc(guard, read_in(it->guard, s)), s);
+      break;
+    case ASSIGN:
+      if (!is_symbol2t(to_code_assign2t(it->code).target))
+        throw unsupportedt();
+      s[to_symbol2t(to_code_assign2t(it->code).target).thename] =
+        read_in(to_code_assign2t(it->code).source, s);
+      next.emplace_back(guard, s);
+      break;
+    case GOTO:
+    {
+      if (it->is_backwards_goto() || it->targets.size() != 1)
+        throw unsupportedt();
+      const expr2tc c = read_in(it->guard, s);
+      pending[&*it->targets.front()].emplace_back(and2tc(guard, c), s);
+      if (!is_true(c))
+        next.emplace_back(and2tc(guard, not2tc(c)), s);
+      break;
+    }
+    case RETURN:
+      if (!is_nil_expr(to_code_return2t(it->code).operand))
+        s["#return"] = read_in(to_code_return2t(it->code).operand, s);
+      [[fallthrough]];
+    case END_FUNCTION:
+      returns.emplace_back(guard, s);
+      break;
+    case FUNCTION_CALL:
+      run_call(
+        goto_functions,
+        to_code_function_call2t(it->code),
+        guard,
+        s,
+        depth,
+        next);
+      break;
+    default:
+      throw unsupportedt();
+    }
+  }
+}
+
+/// Control reaches @p head of the entry function @p fname straight from its
+/// start with the globals as __ESBMC_main initialised them: nothing before it
+/// branches, assumes, writes a global or calls anything but a witness assume.
+bool loop_starts_at_initial_state(
+  const irep_idt &fname,
+  const goto_programt &body,
+  goto_programt::const_targett head,
+  const namespacet &ns)
+{
+  if (fname != "c:@F@" + (config.main.empty() ? "main" : config.main))
+    return false;
+  for (auto it = body.instructions.begin(); it != head; ++it)
+  {
+    if (
+      it->is_skip() || it->type == LOCATION || it->type == DECL ||
+      it->type == DEAD)
+      continue;
+    if (
+      it->is_function_call() &&
+      is_symbol2t(to_code_function_call2t(it->code).function) &&
+      to_symbol2t(to_code_function_call2t(it->code).function).thename ==
+        "c:@F@__ESBMC_witness_assume")
+      continue;
+    if (!it->is_assign() || !is_symbol2t(to_code_assign2t(it->code).target))
+      return false;
+    const symbolt *sym =
+      ns.lookup(to_symbol2t(to_code_assign2t(it->code).target).thename);
+    if (!sym || sym->static_lifetime)
+      return false;
+  }
+  return true;
+}
+
+/// One iteration of the input loop @p loop from @p entry, reading @p in as
+/// the input once the body assigns it to @p input_arg: its call to the
+/// updater, the assumes around the call, and the copies of the call's result
+/// after it. Adds the path after each return to @p out.
+void run_iteration(
+  const goto_functionst &goto_functions,
+  const loopst &loop,
+  statet entry,
+  const expr2tc &input_arg,
+  const expr2tc &in,
+  pathst &out)
+{
+  expr2tc guard = gen_true_expr();
+  bool called = false;
+  for (auto it = loop.get_original_loop_head();
+       it != loop.get_original_loop_exit();
+       ++it)
+  {
+    if (
+      it->is_assign() && !called &&
+      to_code_assign2t(it->code).target == input_arg)
+      entry[to_symbol2t(input_arg).thename] = in;
+    else if (it->is_function_call())
+    {
+      run_call(
+        goto_functions,
+        to_code_function_call2t(it->code),
+        guard,
+        entry,
+        0,
+        out);
+      called = true;
+    }
+    else if (it->is_assume() && !called)
+      guard = and2tc(guard, read_in(it->guard, entry));
+    else if (it->is_assume())
+      for (auto &[g, after] : out)
+        g = and2tc(g, read_in(it->guard, after));
+    else if (it->is_assign() && called)
+    {
+      const code_assign2t &copy = to_code_assign2t(it->code);
+      if (!is_symbol2t(copy.target))
+        throw unsupportedt();
+      for (auto &path : out)
+        path.second[to_symbol2t(copy.target).thename] =
+          read_in(copy.source, path.second);
+    }
+  }
+}
+
+/// Does a run of the input loop from @p s0 repeat a state within @p bound
+/// valid inputs, before exit or abort ends it?
+///
+/// A repeated state proves non-termination: the loop starts in @p s0
+/// (loop_starts_at_initial_state), @p s0 is all the state it carries
+/// (has_cycle_from_init, and run_once gives up on any read of other state, of
+/// memory or of nondet), and run_iteration executes the loop body exactly
+/// apart from the input, so each iteration is a function of the state and the
+/// input. A state that recurs along returning paths closes a lasso the inputs
+/// can follow forever.
+bool reaches_cycle_from_init(
+  const goto_functionst &goto_functions,
+  const loopst &loop,
+  const expr2tc &input_arg,
+  const std::vector<BigInt> &valid_inputs,
+  const statet &s0,
+  unsigned bound,
+  optionst &options,
+  const namespacet &ns)
+{
+  expr2tc formula = gen_true_expr();
+  expr2tc alive = gen_true_expr();
+  expr2tc repeats = gen_false_expr();
+  std::vector<statet> states{s0};
+  for (unsigned t = 0; t < bound; ++t)
+  {
+    const expr2tc in =
+      symbol2tc(input_arg->type, "termination::lasso::input::" + i2string(t));
+    expr2tc valid = gen_false_expr();
+    for (const BigInt &v : valid_inputs)
+      valid = or2tc(valid, equality2tc(in, constant_int2tc(in->type, v)));
+    formula = and2tc(formula, valid);
+
+    pathst paths;
+    run_iteration(goto_functions, loop, states.back(), input_arg, in, paths);
+    expr2tc returned = gen_false_expr();
+    for (const auto &path : paths)
+      returned = or2tc(returned, path.first);
+    alive = and2tc(alive, returned);
+
+    // Name the next state, so that each step reads symbols rather than the
+    // whole history. A global is never declared, so every path still has it.
+    statet next;
+    for (const auto &[name, v0] : s0)
+    {
+      expr2tc value = states.back().at(name);
+      for (const auto &[g, after] : paths)
+        value = if2tc(v0->type, g, after.at(name), value);
+      next[name] = symbol2tc(
+        v0->type,
+        "termination::lasso::" + id2string(name) + "::" + i2string(t + 1));
+      formula = and2tc(formula, equality2tc(next[name], value));
+    }
+    for (const statet &earlier : states)
+    {
+      expr2tc same = alive;
+      for (const auto &[name, v] : next)
+        same = and2tc(same, equality2tc(earlier.at(name), v));
+      repeats = or2tc(repeats, same);
+    }
+    states.push_back(std::move(next));
+  }
+  return is_sat(and2tc(formula, repeats), options, ns);
+}
+
+/// reaches_cycle_from_init for the loop @p loop of the entry function @p fname,
+/// with the globals that have a constant initialiser as its state. The loop
+/// itself writes only the input and the call's result (@p result_writes);
+/// were one of them such a global, the state would change outside the updater.
+bool has_cycle_from_init(
+  const goto_functionst &goto_functions,
+  const irep_idt &fname,
+  const goto_programt &body,
+  const loopst &loop,
+  const expr2tc &input_arg,
+  const std::vector<BigInt> &valid_inputs,
+  std::vector<expr2tc> result_writes,
+  const std::unordered_map<irep_idt, BigInt, irep_id_hash> &initial_state,
+  optionst &options,
+  const namespacet &ns)
+{
+  statet s0;
+  for (const auto &[name, value] : initial_state)
+  {
+    const symbolt *sym = ns.lookup(name);
+    if (sym && sym->static_lifetime && is_bv_type(sym->get_type2()))
+      s0[name] = constant_int2tc(sym->get_type2(), value);
+  }
+  result_writes.push_back(input_arg);
+  if (
+    std::any_of(
+      result_writes.begin(),
+      result_writes.end(),
+      [&](const expr2tc &w) { return s0.count(to_symbol2t(w).thename); }) ||
+    !loop_starts_at_initial_state(
+      fname, body, loop.get_original_loop_head(), ns))
+    return false;
+  try
+  {
+    return reaches_cycle_from_init(
+      goto_functions, loop, input_arg, valid_inputs, s0, 24, options, ns);
+  }
+  catch (const unsupportedt &)
+  {
+    return false;
+  }
+  catch (const std::out_of_range &)
+  {
+    return false;
+  }
+}
+
+/// The eca updater @p fn, called with the input once per iteration, never
+/// fires a branch for some reachable state and valid input, leaving the state
+/// as it was: the period-1 recurrent set.
+bool has_period_1_fixpoint(
+  const goto_functiont &fn,
+  const expr2tc &input_arg,
+  const std::vector<BigInt> &valid_inputs,
+  const std::vector<expr2tc> &result_writes,
+  const std::unordered_map<irep_idt, BigInt, irep_id_hash> &initial_state,
+  optionst &options,
+  const namespacet &ns)
+{
+  // Identify the callee's single formal parameter so we can
+  // substitute its symbol with the caller's actual input.
+  irep_idt callee_formal_name;
+  if (is_code_type(fn.type))
+  {
+    const code_type2t &ct = to_code_type(fn.type);
+    if (ct.argument_names.size() == 1)
+      callee_formal_name = ct.argument_names[0];
+  }
+  std::vector<expr2tc> branch_conds;
+  if (!collect_callee_branch_guards(fn, branch_conds))
+    return false;
+  // A call result stored where the guards read it changes the state the
+  // fall-through left alone, so the next iteration differs.
+  std::unordered_map<irep_idt, expr2tc, irep_id_hash> guard_reads;
+  for (const expr2tc &c : branch_conds)
+    collect_free_symbols(c, guard_reads);
+  if (
+    std::any_of(
+      result_writes.begin(), result_writes.end(), [&](const expr2tc &w) {
+        return guard_reads.count(to_symbol2t(w).thename);
+      }))
+    return false;
+  std::unordered_set<irep_idt, irep_id_hash> callee_writes;
+  collect_writes(fn, callee_writes);
+  return check_period_1_fixpoint(
+    input_arg,
+    callee_formal_name,
+    valid_inputs,
+    branch_conds,
+    initial_state,
+    callee_writes,
+    options,
+    ns);
+}
+
+/// The check never reads the witness, so a validator may trust it only for a
+/// witness that does nothing but name @p head as the cycle; any other witness
+/// is left to symex, which applies it.
+bool witness_is_bare_cycle_at(const optionst &options, const locationt &head)
+{
+  const std::string witness = options.get_option("witness");
+  const auto &wps = yaml_parser::get_waypoints(witness);
+  return !wps.empty() &&
+         std::all_of(wps.begin(), wps.end(), [&](const waypoint &wp) {
+           return wp.type == waypoint::assumption &&
+                  wp.action == waypoint::cycle &&
+                  (wp.value == "1" || wp.value == "true") &&
+                  integer2string(wp.line) == head.get_line().as_string();
+         });
+}
+
 } // namespace
 
 tvt try_prove_non_termination_by_recurrent_set(
   goto_functionst &goto_functions,
   optionst &options,
-  const namespacet &ns)
+  const namespacet &ns,
+  locationt &loop_location)
 {
   // MVP scope: only the eca-rers2012 finite-state-machine shape. Each
   // expected-false eca benchmark wraps an input-validation while(1)
@@ -642,38 +1106,44 @@ tvt try_prove_non_termination_by_recurrent_set(
       expr2tc input_arg;
       std::vector<BigInt> valid_inputs;
       irep_idt callee_name;
-      if (!recognize_eca_main_loop(loop, input_arg, valid_inputs, callee_name))
+      std::vector<expr2tc> result_writes;
+      if (!recognize_eca_main_loop(
+            loop, input_arg, valid_inputs, callee_name, result_writes))
+        continue;
+      const locationt &head = loop.get_original_loop_head()->location;
+      if (
+        options.get_bool_option("validate-violation-witness") &&
+        !witness_is_bare_cycle_at(options, head))
         continue;
       auto callee_it = goto_functions.function_map.find(callee_name);
       if (callee_it == goto_functions.function_map.end())
         continue;
       if (!callee_it->second.body_available || callee_it->second.body.hide)
         continue;
-      // Identify the callee's single formal parameter so we can
-      // substitute its symbol with the caller's actual input.
-      irep_idt callee_formal_name;
-      if (is_code_type(callee_it->second.type))
-      {
-        const code_type2t &ct = to_code_type(callee_it->second.type);
-        if (ct.argument_names.size() == 1)
-          callee_formal_name = ct.argument_names[0];
-      }
-      std::vector<expr2tc> branch_conds;
-      if (!collect_callee_branch_guards(callee_it->second, branch_conds))
-        continue;
-      std::unordered_set<irep_idt, irep_id_hash> callee_writes;
-      collect_writes(callee_it->second, callee_writes);
       if (
-        check_period_1_fixpoint(
+        has_period_1_fixpoint(
+          callee_it->second,
           input_arg,
-          callee_formal_name,
           valid_inputs,
-          branch_conds,
+          result_writes,
           initial_state,
-          callee_writes,
+          options,
+          ns) ||
+        has_cycle_from_init(
+          goto_functions,
+          f_it->first,
+          f_it->second.body,
+          loop,
+          input_arg,
+          valid_inputs,
+          result_writes,
+          initial_state,
           options,
           ns))
+      {
+        loop_location = head;
         return tvt(tvt::TV_FALSE);
+      }
     }
   }
   return tvt(tvt::TV_UNKNOWN);

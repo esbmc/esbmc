@@ -1,0 +1,5 @@
+CORE
+main.c
+--k-induction --k-step 4 --max-k-step 9 --verbosity k-induction:8
+^VERIFICATION SUCCESSFUL$
+function unreachable_update: anything \(does not decide the step\)

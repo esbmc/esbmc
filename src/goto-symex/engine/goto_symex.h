@@ -589,6 +589,10 @@ protected:
    */
   virtual void symex_function_call_code(const expr2tc &call);
 
+  /** Assign a fresh nondet value to @p ret, the result of a call that symex
+   *  skips; a nil @p ret is left alone. */
+  void assign_nondet_call_result(const expr2tc &ret);
+
   /**
    *  Model a call to a "__ESBMC_uninterpreted_*" or "__CPROVER_uninterpreted_*"
    *  function as a genuine uninterpreted function: assign the return an
@@ -1489,17 +1493,47 @@ protected:
     const type2tc &char_type,
     std::vector<expr2tc> &chars);
   /** The length of an unrenamed printf-family call's output whose constant
-   *  format holds only text and %d, %i, %u or %s conversions without flags,
-   *  width or precision, with its largest value in `max_len`; nil for any
-   *  other format. */
+   *  format holds only text and %s or integer conversions with at most the
+   *  '-' and '0' flags and a width, with its largest value in `max_len`; nil
+   *  for any other format. With `chars`, also the output's characters of
+   *  `char_type`, one per position up to `max_len`, when each is known. */
   expr2tc printf_output_length(
     const code_printf2t &call,
     size_t fmt_idx,
-    size_t &max_len);
+    size_t &max_len,
+    const type2tc &char_type = type2tc(),
+    std::vector<expr2tc> *chars = nullptr);
+  /** The length of the conversion in format `f` whose specification starts at
+   *  `i`, of the unrenamed `args[arg]`, advancing both past it and adding its
+   *  largest value to `max_len`; `chars` receives its characters when known.
+   *  Nil when it cannot be measured. */
+  expr2tc printf_field_length(
+    const std::string &f,
+    size_t &i,
+    const std::vector<expr2tc> &args,
+    size_t &arg,
+    size_t &max_len,
+    std::function<expr2tc(const expr2tc &)> &chars);
   /** The characters a %s conversion prints for the unrenamed char pointer
    *  `ptr`, adding its largest value to `max_len`; nil unless `ptr` resolves
-   *  to one byte array at a constant offset. */
-  expr2tc string_length(const expr2tc &ptr, size_t &max_len);
+   *  to one byte array at a constant offset. `chars`, when given, receives
+   *  the character at a position when `ptr` surely points there. */
+  expr2tc string_length(
+    const expr2tc &ptr,
+    size_t &max_len,
+    std::function<expr2tc(const expr2tc &)> *chars = nullptr);
+  /** Claim that the byte array the unrenamed char pointer `ptr` resolves to
+   *  holds a NUL at or after its offset; nothing unless it resolves to one
+   *  byte array at a constant offset. */
+  void claim_nul_terminated(const expr2tc &ptr);
+  /** Check the original operand `arg` of a %s or %p conversion: the read of
+   *  a %s string, plus the --printf-check claims; `reads_to_nul` is false
+   *  when a precision or length modifier changes what %s reads. */
+  void check_printf_pointer_arg(
+    printf_kindt kind,
+    char spec,
+    bool reads_to_nul,
+    const expr2tc &arg);
   /** Store an unrenamed sprintf-family call's output and return the length
    *  that call returns: the stored length, or for printf, fprintf and dprintf
    *  with a used result, printf_output_length. Nil when unknown. */

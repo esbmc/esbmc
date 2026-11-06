@@ -5,6 +5,7 @@
 #include <python-frontend/json_utils.h>
 #include <python-frontend/consteval/python_consteval.h>
 #include <python-frontend/python_converter.h>
+#include <python-frontend/numpy/numpy_random.h>
 #include <python-frontend/python_expr_builder.h>
 #include <python-frontend/python-dict/python_dict_handler.h>
 #include <python-frontend/python_annotation/python_annotation.h>
@@ -65,19 +66,6 @@ bool contains_cpp_throw(const exprt &expr)
   return false;
 }
 
-// The raise a condition always ends in: a cpp-throw, possibly under `not` or a
-// bool cast. Null when evaluating @p cond does not always raise.
-const exprt *raised_condition(const exprt &cond)
-{
-  if (cond.statement() == "cpp-throw")
-    return &cond;
-  if (
-    (cond.id() == "not" || cond.id() == "typecast") &&
-    cond.operands().size() == 1)
-    return raised_condition(cond.op0());
-  return nullptr;
-}
-
 codet raise_statement(const exprt &raise, const locationt &location)
 {
   codet code("expression");
@@ -93,13 +81,22 @@ bool is_untyped_nondet(const exprt &e)
   return e.type().is_empty() && e.statement() == "nondet";
 }
 
+// @p value as a condition, or the raise evaluating it always ends in (#9838).
+exprt condition_or_raise(
+  const exprt &value,
+  const std::function<exprt(const exprt &)> &to_condition)
+{
+  const exprt *raise = python_frontend::raised_condition(value);
+  return raise ? *raise : to_condition(value);
+}
+
 // `lhs = value`, or the raise that evaluating @p value always ends in.
 codet assign_or_raise(
   const exprt &lhs,
   const exprt &value,
   const locationt &location)
 {
-  if (const exprt *raise = raised_condition(value))
+  if (const exprt *raise = python_frontend::raised_condition(value))
     return raise_statement(*raise, location);
   code_assignt assign(lhs, value);
   if (is_untyped_nondet(value))
@@ -740,6 +737,24 @@ struct str_value_scope_guard
   }
 };
 
+// A tuple literal's type differs from an annotated Optional[tuple]'s payload
+// in tag spelling only; match it so the store is wrapped (#9843).
+exprt coerce_to_optional_payload(
+  tuple_handler &tuples,
+  const exprt &value,
+  const typet &target,
+  const locationt &location,
+  codet &block)
+{
+  if (!type_utils::is_optional_struct(target))
+    return value;
+  return tuples.coerce_to_tuple_type(
+    value,
+    to_struct_type(target).get_component("value").type(),
+    location,
+    block);
+}
+
 } // namespace
 
 std::optional<std::vector<std::size_t>>
@@ -1268,7 +1283,7 @@ void python_converter::retype_resized_str(
   exprt &rhs)
 {
   auto is_char_array = [](const typet &t) {
-    return t.is_array() && t.subtype() == char_type();
+    return t.is_array() && type_utils::is_char_storage(t.subtype());
   };
   const bool may_join = block_nesting_ != function_body_depth_ + 1 ||
                         !symbol.get_value().is_constant();
@@ -1304,6 +1319,39 @@ bool python_converter::store_optional_str(
   return true;
 }
 
+// `x = x.method()` built its receiver as `&x` while `x` held the struct.
+void python_converter::pass_reference_receiver(
+  exprt &rhs,
+  const exprt &lhs,
+  const typet &old_lhs_type)
+{
+  if (
+    !is_user_class_struct_type(old_lhs_type) ||
+    !is_user_class_pointer(lhs.type()) || !rhs.is_code() ||
+    rhs.statement() != "function_call")
+    return;
+  for (exprt &arg : to_code_function_call(to_code(rhs)).arguments())
+    if (
+      arg.is_address_of() && arg.op0().is_symbol() &&
+      arg.op0().identifier() == lhs.identifier())
+      arg = lhs;
+}
+
+// Indexing a str yields a bare char; a variable holding its string as a char
+// array takes it as the one-character string (#9446).
+static exprt char_as_string(const exprt &rhs, const typet &target)
+{
+  if (
+    !target.is_array() || target.subtype() != char_type() ||
+    rhs.type() != char_type())
+    return rhs;
+  exprt str = gen_zero(target);
+  if (str.operands().size() < 2)
+    return rhs;
+  str.operands()[0] = rhs;
+  return str;
+}
+
 void python_converter::handle_assignment_type_adjustments(
   symbolt *lhs_symbol,
   exprt &lhs,
@@ -1321,6 +1369,8 @@ void python_converter::handle_assignment_type_adjustments(
     return;
 
   rhs = wrap_stored_if_optional(rhs, lhs.type());
+
+  rhs = char_as_string(rhs, lhs.type());
 
   // Assigning to a struct member (self.attr = value): an unannotated parameter
   // is typed as the any-type carrier (void*, i.e. a pointer whose subtype is
@@ -1553,8 +1603,10 @@ void python_converter::handle_assignment_type_adjustments(
       !(tuple_handler_->is_tuple_type(lhs_symbol->get_type()) &&
         !tuple_handler_->is_tuple_type(rhs.type())))
     {
+      const typet old_lhs_type = lhs.type();
       lhs_symbol->set_type(migrate_type(rhs.type()));
       lhs.type() = rhs.type();
+      pass_reference_receiver(rhs, lhs, old_lhs_type);
     }
 
     // Legacy: migrate_expr drops the `value` that marks a class object
@@ -1984,6 +2036,68 @@ python_converter::resolve_name_symbol_id(const std::string &name) const
     return live_id(sid.to_string());
 
   return "";
+}
+
+bool python_converter::is_numpy_random_generator_call(
+  const nlohmann::json &call) const
+{
+  if (
+    !call.is_object() || call.value("_type", "") != "Call" ||
+    !call.contains("func") || !call["func"].is_object() ||
+    call["func"].value("_type", "") != "Attribute" ||
+    !call["func"].contains("value") || !call["func"]["value"].is_object() ||
+    call["func"]["value"].value("_type", "") != "Name" ||
+    !call["func"]["value"].contains("id") ||
+    !call["func"]["value"]["id"].is_string())
+    return false;
+  const std::string id =
+    resolve_name_symbol_id(call["func"]["value"]["id"].get<std::string>());
+  return numpy_random_generator_states_.count(id) != 0;
+}
+
+std::string
+python_converter::numpy_random_state_id(const nlohmann::json &call) const
+{
+  if (is_numpy_random_generator_call(call))
+  {
+    const std::string id =
+      resolve_name_symbol_id(call["func"]["value"]["id"].get<std::string>());
+    return numpy_random_generator_states_.at(id);
+  }
+  if (numpy_random::is_random_call(call, *ast_json))
+    return "$numpy_random_module_state$" +
+           std::to_string(numpy_random_module_state_version_);
+  return {};
+}
+
+void python_converter::reset_numpy_random_module_state()
+{
+  ++numpy_random_module_state_version_;
+}
+
+void python_converter::update_numpy_random_generator_binding(
+  const exprt &lhs,
+  const nlohmann::json &rhs_node)
+{
+  if (!lhs.is_symbol())
+    return;
+  const std::string lhs_id = lhs.identifier().as_string();
+  if (numpy_random::is_generator_constructor(rhs_node, *ast_json))
+  {
+    numpy_random_generator_states_[lhs_id] = "$numpy_generator_" + lhs_id;
+    return;
+  }
+  if (rhs_node.value("_type", "") == "Name")
+  {
+    const std::string rhs_id = resolve_name_symbol_id(rhs_node.value("id", ""));
+    auto it = numpy_random_generator_states_.find(rhs_id);
+    if (it != numpy_random_generator_states_.end())
+    {
+      numpy_random_generator_states_[lhs_id] = it->second;
+      return;
+    }
+  }
+  numpy_random_generator_states_.erase(lhs_id);
 }
 
 std::string
@@ -2714,7 +2828,16 @@ std::optional<exprt> python_converter::build_numpy_descriptor_materialized_list(
     return std::nullopt;
 
   const std::vector<std::size_t> &shape = materialized->first;
-  const std::vector<exprt> &elems = materialized->second;
+  // tolist() gives Python numbers, whatever the array's dtype.
+  std::vector<exprt> elems = materialized->second;
+  for (exprt &element : elems)
+    if (is_complex64_type(element.type()))
+      element = make_complex(
+        complex_part(element, "real"), complex_part(element, "imag"));
+    else if (type_utils::is_numpy_scalar_type(element.type()))
+      element = typecast_exprt(
+        element,
+        element.type().is_floatbv() ? double_type() : long_long_int_type());
 
   nlohmann::json list_node{
     {"_type", "List"}, {"elts", nlohmann::json::array()}};
@@ -3483,9 +3606,16 @@ bool python_converter::return_call_only_references_params_or_modules(
 /// not intercepted here updates its char array with a whole string value, which
 /// trips with2t::assert_consistency and aborts instead of reporting anything.
 bool python_converter::reject_immutable_item_assignment(
-  const typet &container_type,
+  const exprt &container,
   codet &target_block)
 {
+  // A numpy string array parameter is a pointer to its fixed-width elements,
+  // which is mutable, unlike the pointer to chars of a str.
+  const typet &container_type = container.type();
+  if (
+    !container_type.is_array() &&
+    numpy_param_as_array(container).type().is_array())
+    return false;
   const char *kind = tuple_handler_->is_tuple_type(container_type) ? "tuple"
                      : type_utils::is_string_type(container_type)  ? "str"
                                                                    : nullptr;
@@ -4581,7 +4711,7 @@ std::string python_converter::infer_type_from_any_annotation(
     // annotated with a scalar type (e.g. y: int = f() where f() -> str),
     // use the actual return type so comparisons like y == "x" work correctly.
     bool ret_is_charptr =
-      ret_type.is_pointer() && ret_type.subtype() == char_type();
+      ret_type.is_pointer() && type_utils::is_char_storage(ret_type.subtype());
     bool lhs_is_scalar =
       !current_element_type.is_pointer() && !current_element_type.is_array() &&
       !current_element_type.is_struct() && !current_element_type.id().empty();
@@ -5647,13 +5777,8 @@ void python_converter::handle_function_call_rhs(
   // while `lhs` is the element/member expression, so retyping `lhs_symbol`
   // would corrupt the whole container — the sibling migrations guard on a Name
   // target for the same reason.
-  if (
-    !is_ctor_call && lhs_symbol && lhs.is_symbol() &&
-    is_user_class_pointer(rhs.type()) && is_user_class_struct_type(lhs.type()))
-  {
-    lhs.type() = rhs.type();
-    lhs_symbol->set_type(migrate_type(rhs.type()));
-  }
+  if (!is_ctor_call)
+    bind_class_reference(lhs_symbol, lhs, rhs);
 
   widen_int_target_for_float_call(lhs, rhs, is_ctor_call);
 
@@ -6343,6 +6468,20 @@ std::string python_converter::alias_rhs_class(const nlohmann::json &rhs)
            : "";
 }
 
+void python_converter::bind_class_reference(
+  symbolt *lhs_symbol,
+  exprt &lhs,
+  const exprt &rhs)
+{
+  if (
+    lhs_symbol && lhs.is_symbol() && is_user_class_pointer(rhs.type()) &&
+    is_user_class_struct_type(lhs.type()))
+  {
+    lhs.type() = rhs.type();
+    lhs_symbol->set_type(migrate_type(rhs.type()));
+  }
+}
+
 std::string python_converter::call_return_class(const nlohmann::json &rhs) const
 {
   if (
@@ -6811,18 +6950,17 @@ void python_converter::propagate_dict_member_list_type_info(
 
   element_type_registry_.assign_from(src, lhs_identifier);
 
-  // Tuple values are recorded under the $dict_value_types$ key, not the
+  // Value types are recorded under the $dict_value_types$ key, not the
   // values-list id (github_3719_4), so the copy above is a no-op for them.
-  // Propagate the stored tuple struct type so the generic list tuple-element
-  // read resolves it.
+  // Propagate the stored type so the generic list element read resolves it.
   if (component != "values")
     return;
 
-  typet tuple_t = dict_handler_->recorded_tuple_value_type(dict_sym);
+  const typet value_t = dict_handler_->recorded_value_type(dict_sym);
   if (
-    !tuple_t.is_nil() && !tuple_t.is_empty() &&
+    !value_t.is_nil() && !value_t.is_empty() &&
     element_type_registry_.size(lhs_identifier) == 0)
-    element_type_registry_.record(lhs_identifier, std::string(), tuple_t);
+    element_type_registry_.record(lhs_identifier, std::string(), value_t);
 }
 
 /// "s" or "n" when every recorded element of list @p id is a str or a
@@ -7133,9 +7271,30 @@ bool python_converter::try_dedicated_assign(
 static void fit_numpy_string_store(const exprt &lhs, exprt &rhs)
 {
   if (
-    lhs.id() != "index" || !lhs.type().is_array() || !rhs.type().is_array() ||
-    lhs.type().subtype() != char_type() ||
-    rhs.type().subtype() != char_type() || lhs.type() == rhs.type())
+    (lhs.id() != "index" && lhs.id() != "dereference") ||
+    !lhs.type().is_array() ||
+    !type_utils::is_char_storage(lhs.type().subtype()))
+    return;
+  if (rhs.type().is_pointer())
+    throw std::runtime_error(
+      "TypeError: storing a string of unknown width into a numpy string array "
+      "is not supported");
+  if (!rhs.type().is_array())
+    return;
+  // Storage holds one byte per character, so a non-ASCII or bytes value would
+  // read back with another length.
+  const bool storable =
+    type_utils::is_char_storage(rhs.type().subtype()) &&
+    std::none_of(
+      rhs.operands().begin(), rhs.operands().end(), [](const exprt &c) {
+        BigInt code;
+        return c.is_constant() && !to_integer(c, code) && code < 0;
+      });
+  if (!storable)
+    throw std::runtime_error(
+      "TypeError: storing a bytes or non-ASCII value into a numpy string "
+      "array is not supported");
+  if (lhs.type() == rhs.type())
     return;
   if (!rhs.is_constant())
     throw std::runtime_error(
@@ -7150,16 +7309,56 @@ static void fit_numpy_string_store(const exprt &lhs, exprt &rhs)
 
 // NumPy truncates a float stored into an integer array, raising for NaN and
 // infinity as int() does.
+static bool is_real_number_type(const typet &type)
+{
+  return type.is_signedbv() || type.is_unsignedbv() || type.is_floatbv();
+}
+
+static exprt fit_numpy_complex_store(const exprt &rhs, const typet &element)
+{
+  const exprt complex_rhs = promote_to_complex(rhs);
+  return complex_as_element(
+    complex_part(complex_rhs, "real"),
+    complex_part(complex_rhs, "imag"),
+    element);
+}
+
+// NEP 50: a Python integer out of the dtype's range raises at the store.
+exprt python_converter::raise_if_weak_store_outside(
+  const exprt &rhs,
+  const typet &element,
+  const nlohmann::json &value)
+{
+  if (
+    (!rhs.type().is_signedbv() && !rhs.type().is_unsignedbv()) ||
+    !is_weak_numpy_operand(value, rhs.type()))
+    return nil_exprt();
+  return raise_if_outside_numpy_integer(
+    rhs, element, element, get_location_from_decl(value));
+}
+
 exprt python_converter::fit_numpy_integer_store(
   const exprt &lhs,
   const exprt &rhs,
   const nlohmann::json &value)
 {
-  if (
-    lhs.id() != "index" || !lhs.op0().type().is_array() ||
-    lhs.type() != long_long_int_type() || !rhs.type().is_floatbv())
+  if (lhs.id() != "index" || !lhs.op0().type().is_array())
     return rhs;
-  return typecast_exprt(guard_nonfinite_float_to_int(rhs, value), lhs.type());
+  const typet &element = lhs.type();
+  if (is_complex_type(element))
+    return fit_numpy_complex_store(rhs, element);
+  const bool integer = element.is_signedbv() || element.is_unsignedbv();
+  if (integer && rhs.type().is_floatbv())
+    return typecast_exprt(guard_nonfinite_float_to_int(rhs, value), element);
+  const exprt raised = raise_if_weak_store_outside(rhs, element, value);
+  if (!raised.is_nil())
+    return raised;
+  // A wider result is cast once, at the store, to the array's own width.
+  if (
+    (integer || element.is_floatbv()) && is_real_number_type(rhs.type()) &&
+    rhs.type() != element)
+    return typecast_exprt(rhs, element);
+  return rhs;
 }
 
 // `it = np.nditer(...)`, and the names bound to what an iterator yields; a
@@ -7262,6 +7461,8 @@ void python_converter::get_var_assign(
   const nlohmann::json &ast_node,
   codet &target_block)
 {
+  reject_numpy_scalars_in_container(ast_node);
+
   if (try_dedicated_assign(ast_node, target_block))
     return;
 
@@ -7470,7 +7671,7 @@ void python_converter::get_var_assign(
     exprt container_expr = get_expr(target["value"]);
     typet container_type = container_expr.type();
 
-    if (reject_immutable_item_assignment(container_type, target_block))
+    if (reject_immutable_item_assignment(container_expr, target_block))
       return;
 
     // Handle object subscript assignment via __setitem__:
@@ -7630,7 +7831,7 @@ void python_converter::get_var_assign(
     // is_pointer() is false, so no extra nil guard is needed.
     if (
       current_element_type == any_type() && rhs.type().is_pointer() &&
-      rhs.type().subtype() == char_type())
+      type_utils::is_char_storage(rhs.type().subtype()))
     {
       current_element_type = rhs.type();
     }
@@ -7930,10 +8131,14 @@ void python_converter::get_var_assign(
 
     converted_value = true;
 
+    reject_unsafe_numpy_string_binding(effective_ast_node["value"], lhs);
+
     // Handle string literal conversion
     rhs = handle_string_literal_rhs(effective_ast_node, lhs_type, rhs);
     fit_numpy_string_store(lhs, rhs);
+    reject_numpy_scalar_in_attribute(lhs, rhs);
     rhs = fit_numpy_integer_store(lhs, rhs, effective_ast_node["value"]);
+    bind_numpy_scalar_name(target, lhs_symbol, lhs, rhs);
   }
 
   if (converted_value && rhs != exprt("_init_undefined"))
@@ -8119,6 +8324,13 @@ void python_converter::get_var_assign(
     reject_one_sided_tagged_store(lhs, rhs);
     adopt_tagged_element(lhs_symbol, lhs, rhs);
 
+    rhs = coerce_to_optional_payload(
+      *tuple_handler_,
+      rhs,
+      lhs.type(),
+      get_location_from_decl(ast_node),
+      target_block);
+
     // Handle type adjustments
     handle_assignment_type_adjustments(
       lhs_symbol, lhs, rhs, lhs_type, ast_node, is_ctor_call);
@@ -8198,7 +8410,10 @@ void python_converter::get_var_assign(
       if (
         effective_ast_node.contains("value") &&
         effective_ast_node["value"].is_object())
+      {
+        update_numpy_random_generator_binding(lhs, effective_ast_node["value"]);
         update_numpy_array_binding(lhs, effective_ast_node["value"]);
+      }
       else
         clear_numpy_view_copy(lhs);
       current_lhs = nullptr;
@@ -8238,6 +8453,8 @@ void python_converter::get_var_assign(
       return;
     }
 
+    // A tuple member read (`b = t[1]`) yields the stored `Cls*`.
+    bind_class_reference(lhs_symbol, lhs, rhs);
     adjust_statement_types(lhs, rhs);
 
     // Handle list type info propagation. A subscript store rebinds an element,
@@ -8328,7 +8545,10 @@ void python_converter::get_var_assign(
     if (
       effective_ast_node.contains("value") &&
       effective_ast_node["value"].is_object())
+    {
+      update_numpy_random_generator_binding(lhs, effective_ast_node["value"]);
       update_numpy_array_binding(lhs, effective_ast_node["value"]);
+    }
     else
       clear_numpy_view_copy(lhs);
     if (type_assertions_enabled() && can_emit_annotation_check)
@@ -8453,6 +8673,12 @@ python_converter::find_symbol_in_enclosing_scopes(const std::string &name)
   return nullptr;
 }
 
+static bool is_char_sequence(const typet &type)
+{
+  return (type.is_array() || type.is_pointer()) &&
+         type_utils::is_char_storage(type.subtype());
+}
+
 void python_converter::get_compound_assign(
   const nlohmann::json &ast_node,
   codet &target_block)
@@ -8545,19 +8771,8 @@ void python_converter::get_compound_assign(
   bool is_string_concat = false;
   if (op == "Add")
   {
-    // Standard array-based string concatenation
-    if (
-      (lhs.type().is_array() && lhs.type().subtype() == char_type()) ||
-      (current_element_type.is_array() &&
-       current_element_type.subtype() == char_type()))
-    {
-      is_string_concat = true;
-    }
-    // Pointer-based string
-    else if (
-      (lhs.type().is_pointer() && lhs.type().subtype() == char_type()) ||
-      (current_element_type.is_pointer() &&
-       current_element_type.subtype() == char_type()))
+    // Array- or pointer-based string concatenation
+    if (is_char_sequence(lhs.type()) || is_char_sequence(current_element_type))
     {
       is_string_concat = true;
     }
@@ -8589,9 +8804,10 @@ void python_converter::get_compound_assign(
     // Update the variable's type to match the concatenated result
     // Handle both array and pointer results
     if (
-      !var_name.empty() && (concatenated.type().is_array() ||
-                            (concatenated.type().is_pointer() &&
-                             concatenated.type().subtype() == char_type())))
+      !var_name.empty() &&
+      (concatenated.type().is_array() ||
+       (concatenated.type().is_pointer() &&
+        type_utils::is_char_storage(concatenated.type().subtype()))))
     {
       symbol_id sid = create_symbol_id();
       sid.set_object(var_name);
@@ -8625,6 +8841,9 @@ void python_converter::get_compound_assign(
 
   // Reset RHS flag
   is_converting_rhs = false;
+
+  if (store_through_numpy_view(ast_node["target"], lhs, rhs, loc, target_block))
+    return;
 
   // P27: Promote real RHS to complex when LHS is complex (AugAssign path).
   // adjust_statement_types() is NOT called on this path, so without this
@@ -8691,12 +8910,14 @@ typet resolve_ternary_type(
 
   // String handling: use pointer type for consistency
   // Handles: array+array, array+pointer, pointer+array
-  bool then_is_string =
-    (then_type.is_array() && then_type.subtype() == char_type()) ||
-    (then_type.is_pointer() && then_type.subtype() == char_type());
-  bool else_is_string =
-    (else_type.is_array() && else_type.subtype() == char_type()) ||
-    (else_type.is_pointer() && else_type.subtype() == char_type());
+  bool then_is_string = (then_type.is_array() &&
+                         type_utils::is_char_storage(then_type.subtype())) ||
+                        (then_type.is_pointer() &&
+                         type_utils::is_char_storage(then_type.subtype()));
+  bool else_is_string = (else_type.is_array() &&
+                         type_utils::is_char_storage(else_type.subtype())) ||
+                        (else_type.is_pointer() &&
+                         type_utils::is_char_storage(else_type.subtype()));
 
   if (then_is_string && else_is_string)
     return gen_pointer_type(char_type());
@@ -8966,7 +9187,7 @@ codet build_conditional_code(
   const locationt &location)
 {
   // A test that raises leaves neither branch nor loop to run (#9092).
-  if (const exprt *raise = raised_condition(cond))
+  if (const exprt *raise = python_frontend::raised_condition(cond))
   {
     code_blockt raised = cond_prelude;
     raised.copy_to_operands(raise_statement(*raise, location));
@@ -9308,7 +9529,9 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
       exprt *saved_lhs = current_lhs;
       current_lhs = nullptr;
       // Start from the leftmost operand and carry the running result forward.
-      cond = to_bool_condition(get_expr(operands[0]), operands[0]);
+      cond = condition_or_raise(get_expr(operands[0]), [&](const exprt &e) {
+        return to_bool_condition(e, operands[0]);
+      });
       current_lhs = saved_lhs;
 
       symbolt result_symbol = create_return_temp_variable(
@@ -9320,9 +9543,8 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
       result_decl.location() = get_location_from_decl(test_node);
       current_block->copy_to_operands(result_decl);
 
-      code_assignt result_init(result_expr, cond);
-      result_init.location() = get_location_from_decl(test_node);
-      current_block->copy_to_operands(result_init);
+      current_block->copy_to_operands(
+        assign_or_raise(result_expr, cond, get_location_from_decl(test_node)));
 
       const bool is_and = test_node["op"]["_type"] == "And";
       for (size_t i = 1; i < operands.size(); ++i)
@@ -9333,14 +9555,15 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
         saved_lhs = current_lhs;
         current_lhs = nullptr;
         // Build the next operand only in the branch where it is still needed.
-        exprt next_operand =
-          to_bool_condition(get_expr(operands[i]), operands[i]);
+        const exprt next_operand =
+          condition_or_raise(get_expr(operands[i]), [&](const exprt &e) {
+            return to_bool_condition(e, operands[i]);
+          });
         current_lhs = saved_lhs;
         current_block = saved_block;
 
-        code_assignt result_update(result_expr, next_operand);
-        result_update.location() = get_location_from_decl(operands[i]);
-        next_operand_block.copy_to_operands(result_update);
+        next_operand_block.copy_to_operands(assign_or_raise(
+          result_expr, next_operand, get_location_from_decl(operands[i])));
 
         code_ifthenelset short_circuit_if;
         short_circuit_if.location() = get_location_from_decl(operands[i]);
@@ -9720,7 +9943,19 @@ exprt python_converter::get_return_value(const nlohmann::json &value)
     return result;
   }
   if (value.value("_type", "") != "IfExp")
-    return get_expr(value);
+  {
+    exprt result = get_expr(value);
+    // A class with no __init__ converts to a sentinel that only an assignment
+    // lowers; a return needs the instance itself.
+    if (result == exprt("_init_undefined"))
+    {
+      const typet type =
+        type_handler_.get_typet(value["func"]["id"].get<std::string>());
+      result = gen_zero(ns.follow(type));
+      result.type() = type;
+    }
+    return result;
+  }
   ternary_return_target_ = current_func_return_type_;
   exprt result = get_expr(value);
   ternary_return_target_ = typet();
@@ -9870,6 +10105,7 @@ void python_converter::get_return_statements(
   const nlohmann::json &ast_node,
   codet &target_block)
 {
+  reject_numpy_scalar_return(ast_node["value"]);
   if (ast_node["value"].is_null())
   {
     // Handle bare return statement (return with no value)
@@ -10620,6 +10856,12 @@ static typet numpy_typed_shape(
 // NUL padding to the array's fixed width for a string.
 static exprt as_numpy_element(const exprt &value, const typet &element)
 {
+  if (is_complex_type(element) && !element.is_array())
+  {
+    const exprt promoted = promote_to_complex(value);
+    return complex_as_element(
+      complex_part(promoted, "real"), complex_part(promoted, "imag"), element);
+  }
   if (value.type() == element || !element.is_array())
     return value.type() == element ? value : typecast_exprt(value, element);
   exprt padded = gen_zero(element);
@@ -10631,7 +10873,8 @@ static exprt as_numpy_element(const exprt &value, const typet &element)
     padded.operands().at(0) = typecast_exprt(value, element.subtype());
     return padded;
   }
-  for (std::size_t i = 0; i < value.operands().size(); ++i)
+  const std::size_t width = padded.operands().size() - 1;
+  for (std::size_t i = 0; i < value.operands().size() && i < width; ++i)
     padded.operands().at(i) = value.operands()[i];
   return padded;
 }

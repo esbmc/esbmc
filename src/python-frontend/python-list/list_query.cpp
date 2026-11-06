@@ -68,8 +68,8 @@ std::optional<expr2tc> python_list::fast_elem_equality(
   const bool lhs_tuple = tuples.is_tuple_type(lhs_type);
   const bool rhs_tuple = tuples.is_tuple_type(rhs_type);
 
-  // Same-type numeric/bool compares directly; mixed numeric promotes both
-  // sides to double first. A tuple compares directly only against the
+  // Same-type numeric/bool compares directly; int against float by exact
+  // value, others as doubles. A tuple compares directly only against the
   // identical tuple type: two tuples whose string members were padded to
   // different widths are different struct sorts, which an equality would not
   // relate. Against a number or a bool a tuple is never equal; the runtime
@@ -80,6 +80,10 @@ std::optional<expr2tc> python_list::fast_elem_equality(
     (is_numeric(lhs_type) || lhs_type == bool_type() || lhs_tuple))
   {
   }
+  else if (
+    expr2tc exact =
+      python_converter::exact_int_float_relation("Eq", lhs_val, rhs_val, true))
+    return exact;
   else if (is_numeric(lhs_type) && is_numeric(rhs_type))
   {
     lhs_val = build_typecast(lhs_val, double_type());
@@ -852,7 +856,9 @@ exprt python_list::contains(const exprt &item, const exprt &list)
         const typet &stored_type = stored_entry.second;
 
         // Check if stored type is a char array (string)
-        if (stored_type.is_array() && stored_type.subtype() == char_type())
+        if (
+          stored_type.is_array() &&
+          type_utils::is_char_storage(stored_type.subtype()))
         {
           // Use the stored string array type instead of void pointer type
           const type_handler type_handler_ = converter_.get_type_handler();
@@ -1007,7 +1013,7 @@ exprt python_list::build_count_index_list_call(
   exprt element_arg;
   if (
     elem_info.elem_symbol->get_type().is_pointer() &&
-    elem_info.elem_symbol->get_type().subtype() == char_type())
+    type_utils::is_char_storage(elem_info.elem_symbol->get_type().subtype()))
     element_arg = build_symbol(*elem_info.elem_symbol);
   else
     element_arg = build_address_of(build_symbol(*elem_info.elem_symbol));
@@ -1054,7 +1060,7 @@ exprt python_list::build_index_list_call(
   exprt element_arg;
   if (
     elem_info.elem_symbol->get_type().is_pointer() &&
-    elem_info.elem_symbol->get_type().subtype() == char_type())
+    type_utils::is_char_storage(elem_info.elem_symbol->get_type().subtype()))
     element_arg = build_symbol(*elem_info.elem_symbol);
   else
     element_arg = build_address_of(build_symbol(*elem_info.elem_symbol));
@@ -1117,7 +1123,7 @@ exprt python_list::build_index_range_list_call(
   exprt element_arg;
   if (
     elem_info.elem_symbol->get_type().is_pointer() &&
-    elem_info.elem_symbol->get_type().subtype() == char_type())
+    type_utils::is_char_storage(elem_info.elem_symbol->get_type().subtype()))
     element_arg = build_symbol(*elem_info.elem_symbol);
   else
     element_arg = build_address_of(build_symbol(*elem_info.elem_symbol));
