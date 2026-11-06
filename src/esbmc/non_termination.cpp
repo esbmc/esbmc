@@ -850,13 +850,16 @@ bool loop_starts_at_initial_state(
   return true;
 }
 
-/// One iteration of the input loop @p loop from @p entry, which holds the
-/// input: its call to the updater, the assumes around the call, and the copies
-/// of the call's result after it. Adds the path after each return to @p out.
+/// One iteration of the input loop @p loop from @p entry, reading @p in as
+/// the input once the body assigns it to @p input_arg: its call to the
+/// updater, the assumes around the call, and the copies of the call's result
+/// after it. Adds the path after each return to @p out.
 void run_iteration(
   const goto_functionst &goto_functions,
   const loopst &loop,
-  const statet &entry,
+  statet entry,
+  const expr2tc &input_arg,
+  const expr2tc &in,
   pathst &out)
 {
   expr2tc guard = gen_true_expr();
@@ -865,7 +868,11 @@ void run_iteration(
        it != loop.get_original_loop_exit();
        ++it)
   {
-    if (it->is_function_call())
+    if (
+      it->is_assign() && !called &&
+      to_code_assign2t(it->code).target == input_arg)
+      entry[to_symbol2t(input_arg).thename] = in;
+    else if (it->is_function_call())
     {
       run_call(
         goto_functions,
@@ -926,10 +933,8 @@ bool reaches_cycle_from_init(
       valid = or2tc(valid, equality2tc(in, constant_int2tc(in->type, v)));
     formula = and2tc(formula, valid);
 
-    statet entry = states.back();
-    entry[to_symbol2t(input_arg).thename] = in;
     pathst paths;
-    run_iteration(goto_functions, loop, entry, paths);
+    run_iteration(goto_functions, loop, states.back(), input_arg, in, paths);
     expr2tc returned = gen_false_expr();
     for (const auto &path : paths)
       returned = or2tc(returned, path.first);
