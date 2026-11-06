@@ -1634,6 +1634,20 @@ leak_root_pointers(const expr2tc &root, const std::string &suffix)
   return sub_exprs;
 }
 
+/* `g`, further restricted for a heap object `src` to while it is allocated: a
+ * pointer left in freed memory reaches nothing, as reading it is itself
+ * invalid. */
+expr2tc while_allocated(
+  const std::string &src,
+  const std::map<std::string, expr2tc> &node_adr,
+  const expr2tc &g)
+{
+  if (!has_prefix(src, "symex_dynamic::"))
+    return g;
+  const expr2tc live = not2tc(deallocated_obj2tc(node_adr.at(src)));
+  return g ? and2tc(live, g) : live;
+}
+
 } // namespace
 
 void goto_symext::add_memory_leak_checks()
@@ -2021,9 +2035,10 @@ void goto_symext::add_memory_leak_checks()
 
     /* Phase 2: least fixpoint of the reachability conditions. Global symbols
      * are unconditionally reachable; every other symbol is reachable under the
-     * disjunction, over its incoming edges, of (source reachable) and (edge
-     * condition). Propagating only the disjuncts added by the previous round
-     * keeps each round's formula linear in the number of edges.
+     * disjunction, over its incoming edges, of (source reachable), (edge
+     * condition) and, for a heap source, (source allocated). Propagating only
+     * the disjuncts added by the previous round keeps each round's formula
+     * linear in the number of edges.
      *
      * A symbol reachable in some execution is reachable there along a simple
      * path, and a simple path leaves its root once and thereafter only visits
@@ -2041,21 +2056,15 @@ void goto_symext::add_memory_leak_checks()
     for (size_t round = 0; round < node_adr.size() && !delta.empty(); round++)
     {
       std::map<std::string, expr2tc> contrib;
-      for (const auto &[src, g_src] : delta)
+      for (const auto &[src, reach_src] : delta)
       {
         auto eit = out_edges.find(src);
         if (eit == out_edges.end())
           continue;
-        /* A pointer left in freed memory reaches nothing: reading it is
-         * itself invalid. */
-        const expr2tc live = has_prefix(src, "symex_dynamic::")
-                               ? not2tc(deallocated_obj2tc(node_adr.at(src)))
-                               : expr2tc();
+        const expr2tc g_src = while_allocated(src, node_adr, reach_src);
         for (const auto &[dst, cond] : eit->second)
         {
           expr2tc g = g_src ? and2tc(g_src, cond) : cond;
-          if (live)
-            g = and2tc(live, g);
           auto [cit, ins] = contrib.emplace(dst, g);
           if (!ins)
             cit->second = or2tc(cit->second, g);
