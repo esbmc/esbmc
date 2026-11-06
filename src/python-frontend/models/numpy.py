@@ -9,6 +9,8 @@ import math
 
 pi: float = math.pi
 e: float = math.e
+inf: float = math.inf
+nan: float = math.nan
 
 
 # Stubs for type inference.
@@ -183,6 +185,18 @@ def log10(x: float) -> float:
 
 def sinh(x: float) -> float:
     return math.sinh(x)
+
+
+def isnan(x: float) -> bool:
+    return math.isnan(x)
+
+
+def isinf(x: float) -> bool:
+    return math.isinf(x)
+
+
+def isfinite(x: float) -> bool:
+    return math.isfinite(x)
 
 
 def expm1(x: float) -> float:

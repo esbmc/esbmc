@@ -318,6 +318,21 @@ exprt bounded_math::bounded_call(
   return fresh("$math$", call);
 }
 
+bool bounded_math::is_float_predicate(const std::string &function)
+{
+  return function == "isnan" || function == "isinf" || function == "isfinite";
+}
+
+exprt bounded_math::float_predicate(const std::string &function, const exprt &x)
+{
+  const exprt value = read_once(x);
+  if (function == "isnan")
+    return is_nan(value);
+  if (function == "isinf")
+    return is_infinite(value);
+  return not_exprt(or_exprt(is_nan(value), is_infinite(value)));
+}
+
 // NaN propagates, an argument outside the domain gives NaN, and a signed
 // zero, a pole or an infinity has an exact result.
 exprt bounded_math::special_cases(

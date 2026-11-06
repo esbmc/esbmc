@@ -4698,6 +4698,8 @@ numpy_call_expr::try_early_result(const std::string &function)
 
   static const std::set<std::string> model_only = {
     "remainder", "nextafter", "isclose"};
+  if (std::optional<exprt> predicate = try_float_predicate(function))
+    return predicate;
   if (std::optional<exprt> bounded = try_bounded_ufunc(function))
     return bounded;
   if (std::optional<exprt> math = try_runtime_math(function))
@@ -7050,9 +7052,10 @@ exprt numpy_call_expr::numpy_math_value(const std::string &function, double x)
 }
 
 // The first keyword other than `out=None` and `dtype=float`, which leave a
-// scalar ufunc's result unchanged.
+// scalar ufunc's result unchanged; dtype=float raises for a ufunc without a
+// float loop, as isnan.
 static std::optional<std::string>
-changing_ufunc_keyword(const nlohmann::json &call)
+changing_ufunc_keyword(const nlohmann::json &call, bool has_float_loop = true)
 {
   for (const auto &kw : call.value("keywords", nlohmann::json::array()))
   {
@@ -7062,7 +7065,8 @@ changing_ufunc_keyword(const nlohmann::json &call)
                       value.contains("value") && value["value"].is_null();
     const bool float64 =
       value.value("id", "") == "float" || value.value("attr", "") == "float64";
-    if (!(arg == "out" && none) && !(arg == "dtype" && float64))
+    if (
+      !(arg == "out" && none) && !(arg == "dtype" && float64 && has_float_loop))
       return arg;
   }
   return std::nullopt;
@@ -7132,11 +7136,11 @@ exprt numpy_call_expr::bounded_binary_ufunc(const std::string &function)
     .binary(function, a, b, math_module::numpy);
 }
 
-static typet double_shaped(const typet &t)
+static typet shaped(const typet &t, const typet &leaf)
 {
   if (!t.is_array())
-    return double_type();
-  return array_typet(double_shaped(t.subtype()), to_array_type(t).size());
+    return leaf;
+  return array_typet(shaped(t.subtype(), leaf), to_array_type(t).size());
 }
 
 // `np.exp(x)` of a number or a numeric array known only at run time.
@@ -7154,6 +7158,25 @@ numpy_call_expr::try_runtime_math(const std::string &function)
     type == "List" || type == "Tuple" ||
     try_extract_numeric_constant(arg, constant))
     return std::nullopt;
+  const exprt x = elementwise_operand(function, arg);
+  if (is_number_type(array_leaf_type(x.type())))
+    return retype_lhs(map_elements(
+      bind_array_once(x), double_type(), [&](const exprt &element) {
+        return bounded_math(converter_, call_)
+          .runtime(function, element, math_module::numpy);
+      }));
+  if (json_utils::ast_contains_call(arg))
+    throw std::runtime_error(
+      "TypeError: numpy." + function +
+      " of a call that does not return a number is not supported");
+  return std::nullopt;
+}
+
+// The argument of an element-wise ufunc, a view copied out.
+exprt numpy_call_expr::elementwise_operand(
+  const std::string &function,
+  const nlohmann::json &arg)
+{
   // Converting a view operand with current_lhs set would retype the target.
   exprt *lhs = converter_.current_lhs;
   converter_.current_lhs = nullptr;
@@ -7161,21 +7184,7 @@ numpy_call_expr::try_runtime_math(const std::string &function)
   converter_.current_lhs = lhs;
   const exprt x = copy_of_view(function, operand).value_or(operand);
   reject_non_numeric_elements(function, x.type());
-  if (is_number_type(array_leaf_type(x.type())))
-  {
-    const exprt result = runtime_math_array(function, bind_array_once(x));
-    if (result.type().is_array() && converter_.current_lhs)
-    {
-      converter_.current_lhs->type() = result.type();
-      converter_.update_symbol(*converter_.current_lhs);
-    }
-    return result;
-  }
-  if (json_utils::ast_contains_call(arg))
-    throw std::runtime_error(
-      "TypeError: numpy." + function +
-      " of a call that does not return a number is not supported");
-  return std::nullopt;
+  return x;
 }
 
 // The elements of a view with constant axes, in row-major order.
@@ -7236,25 +7245,58 @@ exprt numpy_call_expr::bind_array_once(const exprt &array)
   return symbol;
 }
 
-// The function of each element of a number or of a numeric array of
-// concrete shape, read as a number known only at run time.
-exprt numpy_call_expr::runtime_math_array(
-  const std::string &function,
-  const exprt &value)
+// f of each element of a number or of a numeric array of concrete shape.
+exprt numpy_call_expr::map_elements(
+  const exprt &value,
+  const typet &leaf,
+  const std::function<exprt(const exprt &)> &f)
 {
   const typet &type = value.type();
   if (!type.is_array())
-    return bounded_math(converter_, call_)
-      .runtime(function, value, math_module::numpy);
+    return f(value);
   const int size = type_handler_.get_array_type_shape(type).front();
   exprt result(
     "array",
-    array_typet(
-      double_shaped(type.subtype()), from_integer(size, size_type())));
+    array_typet(shaped(type.subtype(), leaf), from_integer(size, size_type())));
   for (int i = 0; i < size; ++i)
-    result.copy_to_operands(runtime_math_array(
-      function, np_index(value, from_integer(i, size_type()), type.subtype())));
+    result.copy_to_operands(map_elements(
+      np_index(value, from_integer(i, size_type()), type.subtype()), leaf, f));
   return result;
+}
+
+exprt numpy_call_expr::retype_lhs(const exprt &result)
+{
+  if (result.type().is_array() && converter_.current_lhs)
+  {
+    converter_.current_lhs->type() = result.type();
+    converter_.update_symbol(*converter_.current_lhs);
+  }
+  return result;
+}
+
+// `np.isnan(x)`, `np.isinf(a)`, `np.isfinite(a[1:])`: a number, or each
+// element of a numeric array or view of concrete shape.
+std::optional<exprt>
+numpy_call_expr::try_float_predicate(const std::string &function)
+{
+  if (!bounded_math::is_float_predicate(function))
+    return std::nullopt;
+  if (std::optional<std::string> keyword = changing_ufunc_keyword(call_, false))
+    throw std::runtime_error(
+      "TypeError: numpy." + function + "() keyword '" + *keyword +
+      "' is not supported");
+  if (call_["args"].size() != 1)
+    throw std::runtime_error(
+      "TypeError: numpy." + function + "() takes 1 positional argument, got " +
+      std::to_string(call_["args"].size()));
+  const exprt x = elementwise_operand(function, call_["args"][0]);
+  if (!is_number_type(array_leaf_type(x.type())))
+    throw std::runtime_error(
+      "TypeError: numpy." + function + " of this argument is not supported");
+  return retype_lhs(
+    map_elements(bind_array_once(x), bool_type(), [&](const exprt &element) {
+      return bounded_math(converter_, call_).float_predicate(function, element);
+    }));
 }
 
 // `np.exp(0.3)`, `np.sin(-1.0)`: a numeric literal argument.

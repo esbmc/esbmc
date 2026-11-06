@@ -315,12 +315,19 @@ private:
   exprt bounded_binary_ufunc(const std::string &function);
   std::optional<exprt> try_runtime_math(const std::string &function);
   const std::string &canonical_function();
+  exprt
+  elementwise_operand(const std::string &function, const nlohmann::json &arg);
   std::optional<exprt>
   copy_of_view(const std::string &function, const exprt &operand);
   void
   reject_non_numeric_elements(const std::string &function, const typet &type);
   exprt bind_array_once(const exprt &array);
-  exprt runtime_math_array(const std::string &function, const exprt &value);
+  exprt map_elements(
+    const exprt &value,
+    const typet &leaf,
+    const std::function<exprt(const exprt &)> &f);
+  exprt retype_lhs(const exprt &result);
+  std::optional<exprt> try_float_predicate(const std::string &function);
   exprt numpy_math_list(const std::string &function, const nlohmann::json &arg);
   std::vector<std::vector<double>>
   linalg_matrix(const std::function<void(nlohmann::json &)> &unwrap);

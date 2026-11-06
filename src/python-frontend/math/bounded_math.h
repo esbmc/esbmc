@@ -43,6 +43,9 @@ public:
     const exprt &a,
     const exprt &b,
     math_module module);
+  /// isnan, isinf or isfinite of a number, which is read once.
+  static bool is_float_predicate(const std::string &function);
+  exprt float_predicate(const std::string &function, const exprt &x);
 
 private:
   python_converter &converter_;
