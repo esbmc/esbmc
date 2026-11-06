@@ -12,6 +12,7 @@
 #include <python-frontend/exception/python_exception_handler.h>
 #include <python-frontend/lambda/python_lambda.h>
 #include <python-frontend/python-list/python_list.h>
+#include <python-frontend/python-list/list_type_inference.h>
 #include <python-frontend/type/python_typechecking.h>
 #include <python-frontend/math/python_math.h>
 #include <python-frontend/string/string_builder.h>
@@ -5257,6 +5258,48 @@ exprt python_converter::hold_tuple_member_list(
   return symbol_expr(held);
 }
 
+// The element type the annotation of a tuple variable gives the list @p value
+// reads, a chain of `element_i` members of that variable: int for
+// `x.element_0` under `x: tuple[list[int], int]`. Nil when it does not say.
+typet python_converter::tuple_member_list_annotated_type(
+  const exprt &value) const
+{
+  std::vector<std::size_t> path;
+  const exprt *base = &value;
+  for (; base->id() == "member"; base = &base->op0())
+  {
+    const std::string component = base->get_string("component_name");
+    if (!boost::starts_with(component, "element_"))
+      return typet();
+    path.push_back(std::stoul(component.substr(8)));
+  }
+  const symbolt *tuple =
+    base->is_symbol() ? find_symbol(base->identifier().as_string()) : nullptr;
+  if (path.empty() || !tuple)
+    return typet();
+
+  const nlohmann::json decl = json_utils::find_var_decl(
+    tuple->name.as_string(), current_function_name(), ast());
+  if (!decl.contains("annotation"))
+    return typet();
+  nlohmann::json annotation = decl["annotation"];
+  for (auto i = path.rbegin(); i != path.rend(); ++i)
+  {
+    const nlohmann::json &tuple_ann =
+      python_list_detail::unwrap_optional_annotation(annotation);
+    const std::string kind =
+      tuple_ann.contains("value") ? tuple_ann["value"].value("id", "") : "";
+    if (
+      (kind != "tuple" && kind != "Tuple") ||
+      tuple_ann["slice"].value("_type", "") != "Tuple" ||
+      tuple_ann["slice"]["elts"].size() <= *i)
+      return typet();
+    annotation = tuple_ann["slice"]["elts"][*i];
+  }
+  return python_list_detail::get_elem_type_from_annotation(
+    {{"annotation", annotation}}, type_handler_);
+}
+
 void python_converter::unpack_nested_target(
   const nlohmann::json &ast_node,
   const nlohmann::json &target,
@@ -5295,6 +5338,22 @@ void python_converter::unpack_nested_target(
   {
     python_list(*this, ast_node["value"])
       .handle_list_var_unpacking(ast_node, target, list, target_block);
+    return;
+  }
+
+  const typet elem_type = tuple_member_list_annotated_type(value);
+  if (
+    elem_type != typet() && value.type() == get_type_handler().get_list_type())
+  {
+    symbolt &held =
+      create_tmp_symbol(ast_node, "$unpack_elem$", value.type(), exprt());
+    code_declt decl(symbol_expr(held));
+    decl.copy_to_operands(value);
+    target_block.copy_to_operands(decl);
+    element_type_registry_.assign(held.id.as_string(), elem_type);
+    python_list(*this, ast_node["value"])
+      .handle_list_var_unpacking(
+        ast_node, target, symbol_expr(held), target_block);
     return;
   }
 

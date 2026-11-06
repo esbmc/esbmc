@@ -2990,8 +2990,8 @@ private:
 
   /// Unpacks @p value, an element of an enclosing unpacking, into the nested
   /// Tuple or List @p target. A list must be a symbol, or a member of a tuple
-  /// variable, with element types recorded exactly; any other value or target
-  /// is refused.
+  /// variable, with element types recorded exactly or given by that variable's
+  /// annotation; any other value or target is refused.
   void unpack_nested_target(
     const nlohmann::json &ast_node,
     const nlohmann::json &target,
@@ -2999,6 +2999,8 @@ private:
     codet &target_block);
 
   exprt tuple_member_list_source(const exprt &value) const;
+
+  typet tuple_member_list_annotated_type(const exprt &value) const;
 
   void bind_tuple_member_list_types(
     const nlohmann::json &ast_node,
