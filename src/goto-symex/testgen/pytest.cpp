@@ -759,7 +759,10 @@ void pytest_generator::collect(
 
   for (auto const &SSA_step : target.SSA_steps)
   {
-    if (SSA_step.ignore || !smt_conv.l_get(SSA_step.guard).is_true())
+    // A #decl_nondet init (mark_decl_as_non_det) is not a program input.
+    if (
+      SSA_step.ignore || !smt_conv.l_get(SSA_step.guard).is_true() ||
+      SSA_step.source.pc->location.get_bool("#decl_nondet"))
       continue;
 
     if (SSA_step.is_assignment())
@@ -794,11 +797,11 @@ void pytest_generator::collect(
         if (!scope.dict_key_kind.empty())
           dict_key_kind = scope.dict_key_kind;
 
-        // Track the role of internal variables. Any nondet in a size helper is
-        // the size, which may reach `size` through a temporary (#9923). The
+        // Track the role of internal variables. A size helper's only input is
+        // the size, which reaches `size` through a temporary since #9923. The
         // builders produce each element from an anonymous `nondet_T()` call, so
-        // anything else nondet in scope is an element
-        // (a dict's keys are concrete constants, only its values are nondet).
+        // anything else nondet in scope is an element (a dict's keys are
+        // concrete constants, only its values are nondet).
         if (scope.any())
         {
           if (scope.size)
@@ -1273,7 +1276,10 @@ void pytest_generator::generate_single(
   // Traverse SSA steps to extract nondet variables
   for (auto const &SSA_step : target.SSA_steps)
   {
-    if (SSA_step.ignore || !smt_conv.l_get(SSA_step.guard).is_true())
+    // A #decl_nondet init (mark_decl_as_non_det) is not a program input.
+    if (
+      SSA_step.ignore || !smt_conv.l_get(SSA_step.guard).is_true() ||
+      SSA_step.source.pc->location.get_bool("#decl_nondet"))
       continue;
 
     if (SSA_step.is_assignment())
@@ -1306,11 +1312,11 @@ void pytest_generator::generate_single(
         if (!scope.dict_key_kind.empty())
           dict_key_kind = scope.dict_key_kind;
 
-        // Track the role of internal variables. Any nondet in a size helper is
-        // the size, which may reach `size` through a temporary (#9923). The
+        // Track the role of internal variables. A size helper's only input is
+        // the size, which reaches `size` through a temporary since #9923. The
         // builders produce each element from an anonymous `nondet_T()` call, so
-        // anything else nondet in scope is an element
-        // (a dict's keys are concrete constants, only its values are nondet).
+        // anything else nondet in scope is an element (a dict's keys are
+        // concrete constants, only its values are nondet).
         if (scope.any())
         {
           if (scope.size)

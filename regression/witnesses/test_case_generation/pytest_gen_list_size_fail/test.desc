@@ -1,6 +1,7 @@
 CORE
 main.py
---unwind 3 --generate-pytest-testcase
+--unwind 3 --no-slice --generate-pytest-testcase
 ^VERIFICATION FAILED$
 CHECK_FILE esbmc-pytest/test_main.py contains @pytest\.mark\.parametrize\("list0", \[
+CHECK_FILE esbmc-pytest/test_main.py contains ^    \[-?\d+, -?\d+\],$
 CHECK_FILE esbmc-pytest/test_main.py contains short\(list0\)$
