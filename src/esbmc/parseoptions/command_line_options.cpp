@@ -573,7 +573,7 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
     log_error(
       "Please specify --base-k-step >= 1: a base case of k = 0 sets "
       "--unwind 0, which ESBMC treats as unlimited unwinding.");
-    abort();
+    exit(1);
   }
 
   // check the user's parameters to run incremental verification
@@ -594,7 +594,7 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
         "--k-step ({}) must be smaller than --max-k-step ({}).",
         k_step_inc,
         max_k_step);
-      abort();
+      exit(1);
     }
 
     if (k_step_base >= max_k_step)
@@ -603,7 +603,7 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
         "--base-k-step ({}) must be smaller than --max-k-step ({}).",
         k_step_base,
         max_k_step);
-      abort();
+      exit(1);
     }
   }
 
