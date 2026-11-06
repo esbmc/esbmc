@@ -4,4 +4,4 @@ main.py
 ^Generated pytest test case with 1 test\(s\)\: test_main\.py
 ^COVERAGE ANALYSIS INCOMPLETE
 CHECK_FILE esbmc-pytest/test_main.py contains @pytest\.mark\.parametrize\("dict0"
-CHECK_FILE esbmc-pytest/test_main.py contains \{0: 
+CHECK_FILE esbmc-pytest/test_main.py contains ^    \{\},$
