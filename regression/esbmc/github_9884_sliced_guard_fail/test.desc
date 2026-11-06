@@ -1,0 +1,7 @@
+CORE
+main.c
+--overflow-check --no-assertions --witness-output-yaml -
+^VERIFICATION FAILED$
+value: "true"\n\s+location:\n\s+file_name: ".*main.c"\n\s+line: 12$
+type: "target"
+(?s)\A(?!.*line: 16$)

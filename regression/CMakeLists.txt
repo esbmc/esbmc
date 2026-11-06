@@ -480,6 +480,7 @@ else()
                     witnesses_validate/reachsafety-violationwitness
                     witnesses_validate/reachsafety-correctnesswitness
                     witnesses_validate/termination-violationwitness
+                    witnesses_validate/memsafety-violationwitness
        )
   else()
     set(REGRESSIONS $ENV{BENCHMARK_TO_RUN}) # run a single user-specified benchmark

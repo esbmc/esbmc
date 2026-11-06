@@ -528,10 +528,12 @@ public:
   /// witness_segs[seg]: all actionable waypoints per segment
   std::vector<std::vector<waypoint>> witness_segs;
   size_t cur_seg;
-  /// Set to true the first time the target assertion is allowed through.
-  /// Subsequent assertions at the target line (from continuation calls after
-  /// the witness call chain returns) are filtered to avoid false positives.
-  bool witness_target_reached;
+  /// The path condition under which the last segment before cur_seg was
+  /// passed. cur_seg survives a merge with a path that never passed it, so a
+  /// target claim only holds under this guard. Earlier segments are not
+  /// conjoined: symex may pass one on a path the counterexample does not take,
+  /// such as another target of a function pointer call.
+  guard2tc witness_guard;
 
   /// Pre-built O(1) lookup for branching(cycle) waypoints.
   /// Maps line_id → direction_true (from wp.value == "true").

@@ -1,0 +1,31 @@
+- entry_type: violation_sequence
+  metadata:
+    format_version: '2.0'
+  content:
+  - segment:
+    - waypoint:
+        type: branching
+        action: follow
+        constraint:
+          value: 'true'
+        location:
+          file_name: main.c
+          line: 7
+          column: 3
+  - segment:
+    - waypoint:
+        type: branching
+        action: follow
+        constraint:
+          value: 'false'
+        location:
+          file_name: main.c
+          line: 7
+          column: 3
+  - segment:
+    - waypoint:
+        type: target
+        action: follow
+        location:
+          file_name: main.c
+          line: 18
