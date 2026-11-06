@@ -3606,6 +3606,7 @@ private:
   /// Class @p value_node is an instance of, or "" when it is not an instance.
   /// Resolves both a bound name and a constructor temporary.
   std::string instance_class_name(const nlohmann::json &value_node);
+  std::string attribute_class_name(const nlohmann::json &attribute);
 
   /// True when @p value_node denotes a user-defined class instance, as opposed
   /// to a model container that merely resolves to a class name.
