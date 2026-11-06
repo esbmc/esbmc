@@ -2018,7 +2018,7 @@ void goto_convertt::convert_while(const codet &code, goto_programt &dest)
 
   goto_programt tmp_branch;
   const std::size_t stack_size = targets.destructor_stack.size();
-  generate_conditional_branch(gen_not(*cond), z, location, tmp_branch);
+  generate_conditional_branch(boolean_negate(*cond), z, location, tmp_branch);
 
   kill_condition_temporaries(stack_size, location, tmp_branch, tmp_z);
 
@@ -2617,7 +2617,7 @@ void goto_convertt::generate_ifthenelse(
   // v: if(!c) goto z/y;
   goto_programt tmp_v;
   generate_conditional_branch(
-    gen_not(guard), has_else ? y : z, location, tmp_v);
+    boolean_negate(guard), has_else ? y : z, location, tmp_v);
 
   // w: P;
   goto_programt tmp_w;
@@ -2764,13 +2764,6 @@ void goto_convertt::generate_conditional_branch(
   const locationt &location,
   goto_programt &dest)
 {
-  if (guard.id() == "not" && guard.op0().id() == "not")
-  {
-    generate_conditional_branch(
-      guard.op0().op0(), target_true, target_false, location, dest);
-    return;
-  }
-
   // Swap targets only for && or ||, which split below. Around any other
   // condition, optimize_guarded_gotos refolds the swap into a goto marked
   // flipped_guard, and witnesses then read its branch inverted (#9965).
@@ -2815,7 +2808,8 @@ void goto_convertt::generate_conditional_branch(
     const bool outer_short_circuit = in_short_circuit;
     in_short_circuit = true;
     forall_expr_list (it, op)
-      generate_conditional_branch(gen_not(*it), target_false, location, dest);
+      generate_conditional_branch(
+        boolean_negate(*it), target_false, location, dest);
     in_short_circuit = outer_short_circuit;
 
     goto_programt::targett t_true = dest.add_instruction();
