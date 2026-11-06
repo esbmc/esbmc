@@ -3,7 +3,6 @@
 #include <irep2/irep2_utils.h>
 #include <util/irep/migrate.h>
 #include <util/symtab/context.h>
-#include <util/config/options.h>
 
 namespace
 {
@@ -21,20 +20,31 @@ bool is_setjmp(const goto_programt::instructiont &insn)
          calls(insn, "c:@F@sigsetjmp") || calls(insn, "c:@F@__sigsetjmp");
 }
 
-bool is_longjmp(const goto_programt::instructiont &insn)
+bool mentions_longjmp(const expr2tc &e)
 {
-  return calls(insn, "c:@F@longjmp") || calls(insn, "c:@F@_longjmp") ||
-         calls(insn, "c:@F@siglongjmp");
+  if (is_nil_expr(e))
+    return false;
+  if (is_symbol2t(e))
+  {
+    const irep_idt &id = to_symbol2t(e).thename;
+    return id == "c:@F@longjmp" || id == "c:@F@_longjmp" ||
+           id == "c:@F@siglongjmp";
+  }
+  bool found = false;
+  e->foreach_operand(
+    [&found](const expr2tc &op) { found = found || mentions_longjmp(op); });
+  return found;
 }
 
-bool program_calls_longjmp(const goto_functionst &goto_functions)
+// A call through a pointer counts too, so any reference to longjmp does.
+bool program_uses_longjmp(const goto_functionst &goto_functions)
 {
   // The library's longjmp wrappers are linked whenever <setjmp.h> is
-  // included, so their calls do not count.
+  // included, so their references do not count.
   for (const auto &[id, f] : goto_functions.function_map)
     if (id != "c:@F@_longjmp" && id != "c:@F@siglongjmp")
       for (const auto &insn : f.body.instructions)
-        if (is_longjmp(insn))
+        if (mentions_longjmp(insn.code) || mentions_longjmp(insn.guard))
           return true;
   return false;
 }
@@ -221,14 +231,9 @@ private:
 };
 } // namespace
 
-void lower_longjmp(
-  goto_functionst &goto_functions,
-  contextt &context,
-  const optionst &options)
+void lower_longjmp(goto_functionst &goto_functions, contextt &context)
 {
-  if (
-    options.get_bool_option("enable-unreachability-intrinsic") ||
-    !program_calls_longjmp(goto_functions))
+  if (!program_uses_longjmp(goto_functions))
     return;
   longjmp_loweringt lowering(context, !main_reentrant(goto_functions));
   if (!lowering.find_globals())

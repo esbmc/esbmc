@@ -25,7 +25,6 @@ class Result:
   err_timeout = 7
   err_memout = 8
   err_unwinding_assertion = 9
-  force_fp_mode = 10
   unknown = 11
   fail_memcleanup = 12
   fail_termination = 13
@@ -88,20 +87,20 @@ PYTHON_EXCEPTION_FAMILIES = {
 # Parsed by the CLI entry point at the bottom; do_exec() is the only reader.
 args = None
 
-def do_exec(cmd_line, timeout=None):
+def do_exec(cmd_line, timeout=None, cwd=None):
 
   if args.dry_run:
     exit(0)
 
   the_args = shlex.split(cmd_line)
 
-  p = subprocess.Popen(the_args, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+  p = subprocess.Popen(the_args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, cwd=cwd)
   try:
     (stdout, stderr) = p.communicate(timeout=timeout)
   except subprocess.TimeoutExpired:
     p.kill()
     p.communicate()
-    return b"Timed out"
+    return b"ERROR: Timed out\n"
 
   return stdout + stderr
 
@@ -138,6 +137,14 @@ def violated_property_text(the_output):
       if row and row.group(1) == "FAILED":
         violated.append(line)
   return "\n".join(violated)
+
+FIRST_VIOLATION = re.compile(r"^Violated property:\n((?:  .*\n?)+)", re.M)
+
+
+def first_violation_text(the_output):
+  """The property the counterexample violated first, or "" if none."""
+  first = FIRST_VIOLATION.search(the_output)
+  return first.group(1) if first else ""
 
 VIOLATION_SITE = re.compile(r"Violated property:\n\s+file (\S+)(?: line (\d+))?")
 
@@ -311,6 +318,10 @@ def classify_violation(violated, prop):
   return None
 
 
+COUNTEREXAMPLE = re.compile(r"^\[Counterexample\]$.*?(?=^Violated property:$)",
+                            re.MULTILINE | re.DOTALL)
+
+
 def parse_result(the_output, prop):
   # ESBMC also prints a "  CWE: CWE-NNN" line after each violated-property
   # comment (see docs/cwe-mapping.md) and may emit a SARIF report under
@@ -318,18 +329,25 @@ def parse_result(the_output, prop):
   # still derived from the unchanged freeform comment strings below, matched
   # against the violated properties rather than the whole output.
 
-  # Parse output
-  if "Timed out" in the_output:
+  # A counterexample carries the program's own output, which may repeat any
+  # of ESBMC's messages (esbmc/esbmc#9890).
+  the_output = COUNTEREXAMPLE.sub("", the_output)
+
+  if re.search(r"^ERROR: Timed out$", the_output, re.MULTILINE):
     return Result.err_timeout
 
-  if "Out of memory" in the_output:
+  if re.search(r"^ERROR: Out of memory$", the_output, re.MULTILINE):
     return Result.err_memout
 
-  if "Chosen solver doesn\'t support floating-point numbers" in the_output:
-    return Result.force_fp_mode
-
   if "VERIFICATION FAILED" in the_output:
-    decided = classify_violation(violated_property_text(the_output), prop)
+    # The model runs on past its first violation and fails later claims too,
+    # such as a leak at exit after an invalid dereference. The program stopped
+    # at the first one, so that one names the sub-property (#9895).
+    if prop == Property.memory:
+      violated = first_violation_text(the_output)
+    else:
+      violated = violated_property_text(the_output)
+    decided = classify_violation(violated, prop)
     if decided is not None:
       return decided
 
@@ -430,7 +448,7 @@ def python_exception_flags(prop):
   return "--python-check-exceptions " + ",".join(PYTHON_EXCEPTION_FAMILIES[prop]) + " "
 
 
-def get_command_line(strat, prop, arch, benchmark, concurrency, dargs, esbmc_ci, validate=False):
+def get_command_line(strat, prop, arch, benchmark, concurrency, dargs, esbmc_ci, keep_loops=False):
   if prop in PYTHON_EXCEPTION_FAMILIES:
     # A Python task is a whole program whose only specification is that an
     # exception family does not escape, so none of the C defaults in dargs
@@ -512,7 +530,7 @@ def get_command_line(strat, prop, arch, benchmark, concurrency, dargs, esbmc_ci,
       command_line += "--no-pointer-check --no-bounds-check "
     else:
       command_line += "--no-pointer-check --interval-analysis --no-bounds-check --error-label ERROR "
-      if not validate:
+      if not keep_loops:
         command_line += "--goto-unwind --unlimited-goto-unwind "
   elif prop == Property.datarace:
     # TODO: can we do better in case 'concurrency == False'?
@@ -566,11 +584,24 @@ def confirmed_by_integer_encoding(esbmc_command_line, the_output, prop, elapsed)
   return violation_site(rerun) == site or site in failed_sites(rerun)
 
 
+def has_invariants(witness_path):
+  """Whether the YAML names an `invariant` in any style (block, flow, JSON).
+  A comment naming one also counts, which only keeps loops rolled."""
+  with open(witness_path) as f:
+    return re.search(r"\binvariant\b", f.read()) is not None
+
+
 def verify(strat, prop, arch, benchmark, concurrency, dargs, esbmc_ci, witness_path, validate_mode):
   if witness_path and validate_mode == "violation":
     strat = "incr"
 
-  esbmc_command_line = get_command_line(strat, prop, arch, benchmark, concurrency, dargs, esbmc_ci, validate=bool(witness_path))
+  # Unrolling a loop moves the waypoints placed on it, and an invariant on a
+  # loop --goto-unwind removes is never checked. Without it a bounded loop is
+  # proved one k-step at a time, so a correctness witness with no invariants,
+  # such as the ones ESBMC writes, is validated with it.
+  keep_loops = bool(witness_path) and (
+    validate_mode == "violation" or has_invariants(witness_path))
+  esbmc_command_line = get_command_line(strat, prop, arch, benchmark, concurrency, dargs, esbmc_ci, keep_loops)
 
   if witness_path:
     esbmc_command_line += "--validate-" + validate_mode + "-witness "
@@ -583,6 +614,136 @@ def verify(strat, prop, arch, benchmark, concurrency, dargs, esbmc_ci, witness_p
   if res == Result.fail_python and not confirmed_by_integer_encoding(esbmc_command_line, output.decode(), prop, elapsed):
     return Result.unknown
   return res
+
+
+# Test-Comp. benchexec's esbmc tool-info runs esbmc-wrapper.py in both
+# competitions, so this one wrapper serves both: a run with -o/--coverage (the
+# fm-tools testcomp options) or a COVER property writes a test suite instead of
+# a witness. Formerly scripts/competitions/testcomp/esbmc-wrapper-cov.py.
+
+class TestGoal:
+  coverage = 1    # coverage-branches, -conditions, -statements
+  error_call = 2  # coverage-error-call
+
+# ESBMC runs inside this directory and writes each test case there as soon as
+# it finds it, so a run killed at the time limit still leaves its test suite.
+TEST_DIR = "test-suite"
+
+# Most characters of ESBMC output echoed to stdout: Test-Comp caps a tool's
+# output at 2 MB and long counterexample traces exceed it.
+MAX_ECHO = 1000000
+
+# Unlike SV-COMP, Test-Comp runs assume allocation succeeds.
+testcomp_dargs = "--sv-comp --no-div-by-zero-check --force-malloc-success --state-hashing --add-symex-value-sets "
+testcomp_dargs += "--no-align-check --k-step 2 --floatbv --unlimited-k-steps --no-vla-size-check "
+
+
+def is_testcomp_run(coverage, property_file_content):
+  """SV-COMP properties are all CHECK( ... ); Test-Comp's are COVER( ... )."""
+  return bool(coverage) or "COVER(" in property_file_content
+
+
+def test_goal(property_file_content):
+  """Test-Comp only measures branch coverage, so the condition and statement
+  coverage properties are generated for as branch coverage."""
+  if any(edge in property_file_content for edge in
+         ("COVER EDGES(@DECISIONEDGE)", "COVER EDGES(@CONDITIONEDGE)", "COVER EDGES(@BASICBLOCKENTRY)")):
+    return TestGoal.coverage
+  if any(goal in property_file_content for goal in
+         ("COVER EDGES(@CALL(reach_error))", "COVER EDGES(@CALL(__VERIFIER_error))",
+          "LTL(G ! call(reach_error()))", "LTL(G ! call(__VERIFIER_error()))")):
+    return TestGoal.error_call
+  return None
+
+
+def create_test_dir():
+  """Create an empty TEST_DIR, clearing what an earlier run left there."""
+  if os.path.exists(TEST_DIR):
+    for file_name in os.listdir(TEST_DIR):
+      file_path = os.path.join(TEST_DIR, file_name)
+      if os.path.isfile(file_path):
+        os.remove(file_path)
+  else:
+    os.makedirs(TEST_DIR)
+
+
+def testcomp_command_line(strat, goal, arch, benchmark, coverage):
+  # ESBMC runs inside TEST_DIR, so the binary and the benchmark are absolute
+  esbmc = shlex.quote(os.path.join(os.path.dirname(os.path.realpath(__file__)), "esbmc"))
+  command_line = esbmc + " " + testcomp_dargs
+  command_line += shlex.quote(os.path.abspath(benchmark)) + " "
+  command_line += "-Wno-incompatible-pointer-types -Wno-int-conversion "
+  command_line += "--32 " if arch == 32 else "--64 "
+
+  concurrency = check_if_benchmark_contains_pthread(benchmark)
+  if concurrency:
+    command_line += " --no-por --context-bound 2 "
+
+  if goal == TestGoal.coverage:
+    command_line += "--base-k-step 2 --no-bounds-check --no-pointer-check --quiet --no-standard-checks "
+    command_line += "--generate-testcase "
+    if coverage == "branch":
+      command_line += "--branch-coverage "
+    elif coverage == "condition":
+      command_line += "--condition-coverage-rm --no-cov-asserts "
+    elif coverage == "branch-function":
+      command_line += "--branch-function-coverage "
+  else:
+    command_line += "--base-k-step 5 --enable-unreachability-intrinsic "
+    command_line += "--generate-testcase "
+    if concurrency:
+      command_line += "--no-pointer-check --no-bounds-check "
+    else:
+      command_line += "--no-pointer-check --interval-analysis --no-bounds-check --error-label ERROR --goto-unwind --unlimited-goto-unwind "
+
+  # Concurrency only works with incremental BMC. Test-Comp keeps
+  # --max-inductive-step 8; strategy_flags() uses SV-COMP's 3.
+  if concurrency or strat == "incr":
+    command_line += "--incremental-bmc "
+  elif strat in ("fixed", "kinduction"):
+    command_line += "--k-induction --max-inductive-step 8 "
+  elif strat == "falsi":
+    command_line += "--falsification "
+  return command_line
+
+
+def testcomp_run(cmd_line):
+  print("Verifying with ESBMC")
+  print("Command: " + cmd_line)
+  out = do_exec(cmd_line, cwd=TEST_DIR).decode(errors="replace")
+  # The result is parsed from the full output; only the tail is echoed
+  if len(out) > MAX_ECHO:
+    print(f"[... {len(out) - MAX_ECHO} characters of ESBMC output omitted ...]")
+    print(out[-MAX_ECHO:])
+  else:
+    print(out)
+  return out
+
+
+def testcomp_parse_result(the_output):
+  if "Timed out" in the_output:
+    return Result.err_timeout
+  if "Out of memory" in the_output:
+    return Result.err_memout
+  if "VERIFICATION FAILED" in the_output:
+    if "unwinding assertion loop" in violated_property_text(the_output):
+      return Result.err_unwinding_assertion
+    return Result.fail_reach
+  if "VERIFICATION SUCCESSFUL" in the_output:
+    return Result.success
+  return Result.unknown
+
+
+def testcomp(strat, property_file_content, arch, benchmark, coverage):
+  goal = test_goal(property_file_content)
+  if goal is None:
+    print("Unsupported Property")
+    exit(1)
+  command_line = testcomp_command_line(strat, goal, arch, benchmark, coverage)
+  if not args.dry_run:
+    create_test_dir()
+  return testcomp_parse_result(testcomp_run(command_line))
+
 
 if __name__ == "__main__":
   # Options
@@ -600,6 +761,8 @@ if __name__ == "__main__":
                       help="Validate a violation witness (use with --witness)")
   parser.add_argument("--validate-correctness-witness", dest="validate_correctness", action='store_true',
                       help="Validate a correctness witness (use with --witness)")
+  parser.add_argument("-o", "--coverage", help="Test-Comp: coverage criterion for the generated tests",
+                      choices=["branch", "branch-function", "condition"])
 
   args = parser.parse_args()
 
@@ -632,6 +795,10 @@ if __name__ == "__main__":
   # Parse property files
   f = open(property_file, 'r')
   property_file_content = f.read()
+
+  if is_testcomp_run(args.coverage, property_file_content):
+    print(get_result_string(testcomp(strategy, property_file_content, arch, benchmark, args.coverage)))
+    exit(0)
 
   category_property = 0
   if "CHECK( init(main()), LTL(G valid-free) )" in property_file_content:
