@@ -7172,6 +7172,12 @@ numpy_call_expr::try_runtime_math(const std::string &function)
   return std::nullopt;
 }
 
+static bool has_constant_shape(const typet &type)
+{
+  return !type.is_array() || (to_array_type(type).size().is_constant() &&
+                              has_constant_shape(type.subtype()));
+}
+
 // The argument of an element-wise ufunc, a view copied out.
 exprt numpy_call_expr::elementwise_operand(
   const std::string &function,
@@ -7184,6 +7190,10 @@ exprt numpy_call_expr::elementwise_operand(
   converter_.current_lhs = lhs;
   const exprt x = copy_of_view(function, operand).value_or(operand);
   reject_non_numeric_elements(function, x.type());
+  if (!has_constant_shape(x.type()))
+    throw std::runtime_error(
+      "TypeError: numpy." + function +
+      " of an array whose shape is known only at run time is not supported");
   return x;
 }
 

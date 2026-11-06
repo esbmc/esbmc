@@ -30,6 +30,8 @@ public:
   /// is_bounded() or exact (sqrt).
   static bool has_runtime_model(const std::string &function);
   static double host_value(const std::string &function, double x);
+  /// x lies outside the domain, poles included, where math.* raises.
+  static bool outside_domain(const std::string &function, double x);
 
   /// The numpy.* result for a literal argument.
   exprt literal(const std::string &function, double x);

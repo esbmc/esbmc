@@ -4783,15 +4783,42 @@ static bool is_number_literal(const nlohmann::json &node)
   return type == "Constant";
 }
 
+static std::optional<double> literal_value(const nlohmann::json &node)
+{
+  if (node.value("_type", "") == "UnaryOp")
+  {
+    const std::optional<double> operand = literal_value(node["operand"]);
+    const std::string op = node["op"].value("_type", "");
+    if (!operand || (op != "USub" && op != "UAdd"))
+      return std::nullopt;
+    return op == "USub" ? -*operand : *operand;
+  }
+  const nlohmann::json &value = node.value("value", nlohmann::json());
+  if (node.value("_type", "") != "Constant" || !value.is_number())
+    return std::nullopt;
+  return value.get<double>();
+}
+
 // A call whose arguments are all number literals keeps the C library's value
-// (handle_math_function_dispatch).
+// (handle_math_function_dispatch), unless it raises a domain error the C
+// library would turn into a NaN or an infinity.
+static bool
+keeps_library_value(const std::string &function, const nlohmann::json &args)
+{
+  if (!std::all_of(args.begin(), args.end(), is_number_literal))
+    return false;
+  const std::optional<double> x =
+    args.size() == 1 ? literal_value(args[0]) : std::nullopt;
+  return !x || !bounded_math::outside_domain(function, *x);
+}
+
 bool function_call_expr::takes_bounded_math(const std::string &function) const
 {
   const nlohmann::json &args = call_["args"];
   const std::size_t arity = bounded_math::is_bounded_binary(function) ? 2 : 1;
   return is_bounded_math(function) && args.size() == arity &&
          call_.value("keywords", nlohmann::json::array()).empty() &&
-         !std::all_of(args.begin(), args.end(), is_number_literal) &&
+         !keeps_library_value(function, args) &&
          !converter_.is_model_file(call_) &&
          !math_guard_utils::call_has_complex_in_args_or_keywords(
            call_,

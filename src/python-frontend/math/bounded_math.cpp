@@ -142,6 +142,12 @@ double bounded_math::host_value(const std::string &function, double x)
   return transcendental::host_value(function, x);
 }
 
+bool bounded_math::outside_domain(const std::string &function, double x)
+{
+  const transcendental::domain domain = transcendental::domain_of(function);
+  return !(x >= domain.low && x <= domain.high);
+}
+
 exprt bounded_math::literal(const std::string &function, double x)
 {
   const transcendental::interval result = transcendental::at(function, x);
