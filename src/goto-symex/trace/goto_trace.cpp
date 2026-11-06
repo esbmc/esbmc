@@ -5,13 +5,13 @@
 #include <goto-symex/witness/witnesses.h>
 
 #include <regex>
+#include <unordered_map>
 #include <langapi/language_util.h>
 #include <langapi/languages.h>
 #include <util/arith/arith_tools.h>
 #include <util/base/cwe_mapping.h>
 #include <util/irep/std_types.h>
 #include <util/symtab/namespace.h>
-#include <optional>
 #include <ostream>
 
 void goto_tracet::output(const class namespacet &ns, std::ostream &out) const
@@ -341,8 +341,10 @@ static waypoint witness_target_waypoint(
   optionst &options)
 {
   const locationt *loc = witness_input_location(step);
-  waypoint wp =
-    witness_waypoint(loc ? *loc : step.pc->location, verified_file, options);
+  waypoint wp = witness_waypoint(
+    loc ? full_expression_start(*loc) : step.pc->location,
+    verified_file,
+    options);
   wp.type = waypoint::target;
   if (loc == nullptr)
     wp.file = verified_file;
@@ -451,7 +453,7 @@ void violation_graphml_goto_trace(
         if (step.pc->location.get_line().empty())
           break;
 
-        std::string assignment = get_formated_assignment(ns, step, false);
+        std::string assignment = get_formated_assignment(ns, step);
 
         graph.check_create_new_thread(step.thread_nr, prev_node);
         prev_node = graph.edges.back().to_node;
@@ -478,40 +480,62 @@ void violation_graphml_goto_trace(
   }
 }
 
-/* The \result value of a nondet call, when this step carries one a validator
-   can act on. */
-static std::optional<waypoint> witness_nondet_waypoint(
+/* A function_return waypoint for each nondet call made up to @p step. It sits
+   at the call's ')' and names the value the call returned, not the value of
+   the expression the call is part of (#9881). */
+static void push_nondet_return_waypoints(
   const namespacet &ns,
   const goto_trace_stept &step,
-  const std::string &verified_file,
+  yamlt &yml,
   optionst &options)
 {
-  if (is_nil_expr(step.rhs) || !find_nondet_in_expr(step.rhs))
-    return {};
+  for (const auto &[rparen, value] : step.nondet_returns)
+  {
+    if (!input_file_check(rparen))
+      continue;
 
-  if (!input_file_check(step.pc->location))
-    return {};
+    std::string result = from_expr(ns, "", value, presentationt::WITNESS);
+    check_replace_invalid_assignment(result);
+    if (result.empty())
+      continue;
 
-  std::string assignment = get_formated_assignment(ns, step, true);
-  if (assignment.empty())
-    return {};
-
-  // Extract just the value part ("lhs == value" -> "value") for \result
-  std::string value_str;
-  auto eq_pos = assignment.find(" == ");
-  if (eq_pos != std::string::npos)
-    value_str = assignment.substr(eq_pos + 4);
-
-  waypoint wp = witness_waypoint(step.pc->location, verified_file, options);
-  wp.type = waypoint::function_return;
-  wp.value = "\\result == " + value_str;
-  return wp;
+    waypoint wp = witness_waypoint(rparen, yml.verified_file, options);
+    wp.type = waypoint::function_return;
+    wp.value = "\\result == " + result;
+    yml.segments.push_back(wp);
+  }
 }
 
 /* Branches in a recursive trace number in the hundreds of thousands (#9689),
    and a witness that size cannot be loaded by the validator. Dropping a
    branching waypoint only weakens guidance. */
 static constexpr size_t max_branching_waypoints = 1000;
+
+/* A validator binds a branching waypoint to the next visit of its source
+   location, not of its instruction: --goto-unwind copies a loop body. */
+static std::string branch_location(const goto_trace_stept &step)
+{
+  const locationt &l = step.pc->location;
+  return id2string(l.get_file()) + ":" + id2string(l.get_line()) + ":" +
+         id2string(l.get_column());
+}
+
+/* The nondet-dependent visits of each branch location up to the violation. */
+static std::unordered_map<std::string, size_t>
+nondet_branch_visits(const goto_tracet &goto_trace)
+{
+  std::unordered_map<std::string, size_t> visits;
+  for (const auto &step : goto_trace.steps)
+  {
+    if (step.type == symex_targett::ASSERT && !step.guard)
+      break;
+    if (
+      step.type == symex_targett::BREANCHING && step.pc->is_goto() &&
+      step.nondet_dependent)
+      ++visits[branch_location(step)];
+  }
+  return visits;
+}
 
 void violation_yaml_goto_trace(
   optionst &options,
@@ -523,9 +547,12 @@ void violation_yaml_goto_trace(
   yml.verified_file = options.get_option("input-file");
   log_progress("Generating Violation Yaml Witness for: {}", yml.verified_file);
 
+  auto nondet_visits_ahead = nondet_branch_visits(goto_trace);
   size_t branching_waypoints = 0;
   for (const auto &step : goto_trace.steps)
   {
+    push_nondet_return_waypoints(ns, step, yml, options);
+
     switch (step.type)
     {
     case symex_targett::ASSERT:
@@ -544,15 +571,31 @@ void violation_yaml_goto_trace(
     case symex_targett::BREANCHING:
       if (step.pc->is_goto())
       {
+        size_t &ahead = nondet_visits_ahead[branch_location(step)];
+        if (step.nondet_dependent)
+          --ahead;
+
         /* A validator cannot match a follow waypoint against a file it was
            not given; dropping one only weakens guidance. witnesslint also
            rejects line 0, e.g. the argv setup in __ESBMC_main (#9650). A
-           branch fixed by the program text needs no waypoint either: on deep
-           recursion they number in the hundreds of thousands (#9689). */
+           branch fixed by the program text gets none, as on deep recursion
+           they number in the hundreds of thousands (#9689), unless a
+           nondet-dependent visit of its location follows: a validator would
+           bind that visit's waypoint to this one. The ones kept can fill the
+           cap before a later nondet waypoint. An operand of && or || gets none:
+           the waypoint's value is the whole condition's, and a validator would
+           apply it to another operand. */
         if (
           branching_waypoints >= max_branching_waypoints ||
           !input_file_check(step.pc->location) ||
-          step.pc->location.get_line().empty() || !step.nondet_dependent)
+          step.pc->location.get_line().empty() ||
+          (!step.nondet_dependent && ahead == 0) || step.condition_operand)
+          break;
+
+        /* A switch would take one waypoint naming the case it enters, but
+           CPAchecker cannot parse any switch waypoint and the format does not
+           require one, so emit none (#9882). */
+        if (!step.pc->switch_case_ids.empty())
           break;
 
         ++branching_waypoints;
@@ -561,19 +604,6 @@ void violation_yaml_goto_trace(
         wp.type = waypoint::branching;
         wp.value = !step.guard ? "true" : "false";
         yml.segments.push_back(wp);
-      }
-      break;
-
-    case symex_targett::ASSIGNMENT:
-      if (
-        step.pc->is_assign() || step.pc->is_return() ||
-        (step.pc->is_other() && is_nil_expr(step.lhs)) ||
-        step.pc->is_function_call())
-      {
-        if (
-          auto wp =
-            witness_nondet_waypoint(ns, step, yml.verified_file, options))
-          yml.segments.push_back(*wp);
       }
       break;
 

@@ -836,6 +836,10 @@ private:
   static bool contains_nested_scope_named_expr(const nlohmann::json &node);
 
   exprt get_binary_operator_expr(const nlohmann::json &element);
+  /// Replaces @p operand, a literal sequence of classes subscripted by a
+  /// constant, `[A, B][1]`, with the class it reads when @p cmp is `Is` or
+  /// `IsNot` (#9800).
+  void fold_class_subscript(const std::string &cmp, nlohmann::json &operand);
   /// `a.m == b.m` for methods of instances, or nothing for any other shape.
   std::optional<exprt> try_bound_method_compare(const nlohmann::json &element);
   /// The receiver of `name.m` naming a method, and `C.m` for the class C
@@ -989,6 +993,20 @@ private:
     const std::string &var_name,
     const std::string &attr_name,
     const std::string &obj_type_name);
+
+  bool attr_never_set_on(
+    const std::string &var_name,
+    const std::string &class_name,
+    const std::string &attr_name);
+
+  /// Whether `var_name.attr_name` may read a field of the instance. A store on
+  /// another instance also adds the field to the class type (#9836).
+  bool instance_may_have_attr(
+    const struct_typet &class_type,
+    const symbolt &symbol,
+    const std::string &var_name,
+    const std::string &obj_type_name,
+    const std::string &attr_name);
 
   bool is_instance_attribute(
     const std::string &symbol_id,
@@ -2242,6 +2260,12 @@ private:
     const typet &current_type) const;
 
   std::string resolve_name_symbol_id(const std::string &name) const;
+  bool is_numpy_random_generator_call(const nlohmann::json &call) const;
+  std::string numpy_random_state_id(const nlohmann::json &call) const;
+  void reset_numpy_random_module_state();
+  void update_numpy_random_generator_binding(
+    const exprt &lhs,
+    const nlohmann::json &rhs_node);
   exprt
   once_bound_exponent(const nlohmann::json &right, const exprt &rhs) const;
   symbolt *find_enclosing_scope_symbol(symbol_id sid) const;
@@ -3588,6 +3612,7 @@ private:
   /// Class @p value_node is an instance of, or "" when it is not an instance.
   /// Resolves both a bound name and a constructor temporary.
   std::string instance_class_name(const nlohmann::json &value_node);
+  std::string attribute_class_name(const nlohmann::json &attribute);
 
   /// True when @p value_node denotes a user-defined class instance, as opposed
   /// to a model container that merely resolves to a class name.
@@ -3719,6 +3744,8 @@ private:
   exprt cached_any_subscript_rhs_;
   bool has_cached_any_subscript_rhs_ = false;
   std::set<std::string> numpy_array_symbols_;
+  std::unordered_map<std::string, std::string> numpy_random_generator_states_;
+  std::size_t numpy_random_module_state_version_ = 0;
   std::unordered_map<irep_idt, std::string, irep_id_hash> class_object_names_;
   /// Ids of the classes used as runtime class values.
   std::map<std::string, int> class_ids_;

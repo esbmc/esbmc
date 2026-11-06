@@ -382,6 +382,11 @@ public:
    */
   typet get_popitem_tuple_type(const exprt &dict_expr);
 
+  /// @p key_type if known, else the type shared by the literal keys stored
+  /// into the empty dict, else str.
+  typet key_type_or_default(const typet &key_type, const exprt &dict_expr);
+  typet resolve_stored_key_type(const exprt &dict_expr);
+
   /**
    * @brief Handles dict.popitem() method calls.
    * Implements Python's dict.popitem() semantics:

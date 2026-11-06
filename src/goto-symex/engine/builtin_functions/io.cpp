@@ -595,13 +595,28 @@ void goto_symext::check_printf_pointer_arg(
 {
   if (spec != 's' && spec != 'p')
     return;
+  const bool printf_check = options.get_bool_option("printf-check");
   if (!is_pointer_type(arg->type))
-    claim(
-      gen_false_expr(),
-      spec == 's' ? "printf format specifier %s requires pointer argument"
-                  : "printf format specifier %p requires pointer argument");
-  else if (spec == 's' && reads_to_nul && printf_args_are_direct(kind))
+  {
+    if (printf_check)
+      claim(
+        gen_false_expr(),
+        spec == 's' ? "printf format specifier %s requires pointer argument"
+                    : "printf format specifier %p requires pointer argument");
+    return;
+  }
+  if (spec != 's' || !reads_to_nul || !printf_args_are_direct(kind))
+    return;
+  if (printf_check)
     claim_nul_terminated(arg);
+  else
+  {
+    // %s reads the array its argument points to (C11 7.21.6.1p8), so check
+    // that read like any other. --printf-check dereferences every pointer
+    // argument further down instead.
+    expr2tc first_char = dereference2tc(get_uint8_type(), arg);
+    dereference(first_char, dereferencet::READ);
+  }
 }
 
 expr2tc goto_symext::printf_field_length(
@@ -1062,7 +1077,7 @@ void goto_symext::symex_printf(const expr2tc &lhs, expr2tc &rhs)
 
   // Check format specifiers against original operands before
   // renaming/conversion
-  if (printf_check)
+  if (!args_behind_va_list)
   {
     const code_printf2t &original_rhs = to_code_printf2t(rhs);
     std::string format_str = fmt.as_string();
@@ -1085,6 +1100,12 @@ void goto_symext::symex_printf(const expr2tc &lhs, expr2tc &rhs)
                 format_str[i] == ' ' || format_str[i] == '#' ||
                 format_str[i] == '0'))
           i++;
+        // A '*' width or precision takes an int argument of its own.
+        if (i < format_str.length() && format_str[i] == '*')
+        {
+          arg_idx++;
+          i++;
+        }
         while (i < format_str.length() && isdigit(format_str[i]))
           i++;
         // A precision bounds what %s reads, and a length modifier makes it
@@ -1094,6 +1115,11 @@ void goto_symext::symex_printf(const expr2tc &lhs, expr2tc &rhs)
         {
           reads_to_nul = false;
           i++;
+          if (i < format_str.length() && format_str[i] == '*')
+          {
+            arg_idx++;
+            i++;
+          }
           while (i < format_str.length() && isdigit(format_str[i]))
             i++;
         }
@@ -1108,31 +1134,27 @@ void goto_symext::symex_printf(const expr2tc &lhs, expr2tc &rhs)
           i++;
         }
 
+        // Past a conversion we do not know (e.g. %m, or a positional %1$s),
+        // the argument each later conversion takes is unknown.
+        if (
+          i == format_str.length() ||
+          std::string("diouxXfFeEgGaAcspn").find(format_str[i]) ==
+            std::string::npos)
+          break;
+
         // Check conversion specifier against original operands
-        if (i < format_str.length())
+        const char spec = format_str[i];
+        const size_t actual_arg_idx = idx + arg_idx;
+        if (actual_arg_idx >= original_rhs.operands.size())
         {
-          char spec = format_str[i];
-          size_t actual_arg_idx = idx + arg_idx;
-
-          // Check if we have enough arguments (skip %n and %*)
-          if (spec != 'n' && spec != '*')
-          {
-            if (actual_arg_idx >= original_rhs.operands.size())
-            {
-              claim(
-                gen_false_expr(),
-                "printf has more format specifiers than arguments");
-            }
-            else
-            {
-              const expr2tc &arg = original_rhs.operands[actual_arg_idx];
-
-              if (arg)
-                check_printf_pointer_arg(new_rhs.kind, spec, reads_to_nul, arg);
-            }
-            arg_idx++;
-          }
+          if (printf_check)
+            claim(
+              gen_false_expr(),
+              "printf has more format specifiers than arguments");
         }
+        else if (const expr2tc &arg = original_rhs.operands[actual_arg_idx])
+          check_printf_pointer_arg(new_rhs.kind, spec, reads_to_nul, arg);
+        arg_idx++;
       }
     }
   }

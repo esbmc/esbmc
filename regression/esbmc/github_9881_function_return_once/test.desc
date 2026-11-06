@@ -1,0 +1,6 @@
+CORE
+main.c
+--witness-output-yaml -
+^VERIFICATION FAILED$
+value: "\\\\result == 7"\n.*\n.*\n.*\n *line: 16$
+(?s)\A(?!.*result == 3")
