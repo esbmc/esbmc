@@ -1,0 +1,70 @@
+on:
+  workflow_call:
+    inputs:
+      executors:
+        description: "JSON list of the shard executors to run"
+        required: true
+        type: string
+      bundle-artifact:
+        description: "Name of the bundle artifact in this run"
+        required: true
+        type: string
+      bundle-sha256:
+        description: "SHA-256 the producer recorded for the bundle"
+        required: true
+        type: string
+      plan-digest:
+        description: "Digest of the producer's selection plan"
+        required: true
+        type: string
+
+jobs:
+  run:
+    name: ${{ matrix.executor }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 150
+    strategy:
+      fail-fast: false
+      matrix:
+        executor: ${{ fromJSON(inputs.executors) }}
+    steps:
+    - uses: actions/checkout@v6
+
+    - name: Install the regression runtime
+      run: scripts/ci/linux-runtime.sh
+
+    - name: Download the bundle
+      uses: actions/download-artifact@v8
+      with:
+        name: ${{ inputs.bundle-artifact }}
+        path: ${{ runner.temp }}/bundle
+
+    - name: Restore and check the bundle
+      env:
+        SHA256: ${{ inputs.bundle-sha256 }}
+        PLAN_DIGEST: ${{ inputs.plan-digest }}
+        EXECUTOR: ${{ matrix.executor }}
+      run: |
+        python3 scripts/ci/linux_tests.py restore --workspace "$GITHUB_WORKSPACE" \
+          --tar "$RUNNER_TEMP/bundle/linux-regression-bundle.tar.zst" --sha256 "$SHA256"
+        python3 scripts/ci/linux_tests.py preflight --build-dir build \
+          --plan ci-bundle/plan.json --plan-digest "$PLAN_DIGEST" \
+          --probes ci-bundle/probes.json --executor "$EXECUTOR"
+
+    - name: Run the selection
+      env:
+        SHA256: ${{ inputs.bundle-sha256 }}
+        EXECUTOR: ${{ matrix.executor }}
+      run: |
+        python3 scripts/ci/linux_tests.py run --build-dir build --plan ci-bundle/plan.json \
+          --probes ci-bundle/probes.json --executor "$EXECUTOR" --jobs 2 \
+          --out-dir "ci-results/$EXECUTOR" --bundle-sha256 "$SHA256"
+
+    - name: Upload the results
+      if: ${{ always() }}
+      uses: actions/upload-artifact@v7
+      with:
+        name: linux-result-${{ matrix.executor }}-${{ github.run_attempt }}
+        path: ci-results/${{ matrix.executor }}
+        if-no-files-found: warn
+        retention-days: 7
