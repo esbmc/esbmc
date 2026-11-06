@@ -530,21 +530,18 @@ bool __ESBMC_list_eq(
       // int-vs-float: Python compares numerically (1 == 1.0), but the two
       // store different bit patterns, so a byte compare would wrongly differ.
       // Triggered when exactly one side is a float (sizes already match here,
-      // and float/int elements are both 8 bytes). float_type_id is derived by
-      // the frontend from top-level element types only, so this numeric path
-      // does not reach nested mixed int/float lists; like list_lt, the int side
-      // is widened to double, so |int| > 2^53 loses precision vs CPython.
+      // and float/int elements are both 8 bytes). For ==, float_type_id is
+      // derived by the frontend from top-level element types only, so this
+      // numeric path does not reach nested mixed int/float lists.
       if (
         float_type_id != 0 && a->size == 8 &&
         (a->type_id == float_type_id) != (b->type_id == float_type_id))
       {
-        double av = (a->type_id == float_type_id)
-                      ? *(const double *)a->value
-                      : (double)*(const int64_t *)a->value;
-        double bv = (b->type_id == float_type_id)
-                      ? *(const double *)b->value
-                      : (double)*(const int64_t *)b->value;
-        if (av != bv)
+        const bool a_float = a->type_id == float_type_id;
+        const double d = *(const double *)(a_float ? a->value : b->value);
+        const int64_t n = *(const int64_t *)(a_float ? b->value : a->value);
+        // Exact, as in CPython: widening n alone equates 2^53 + 1 with 2^53.
+        if (!(d >= -0x1p63 && d < 0x1p63 && (int64_t)d == n && d == (double)n))
           return false;
         continue;
       }

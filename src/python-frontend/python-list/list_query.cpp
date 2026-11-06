@@ -768,20 +768,24 @@ exprt python_list::compare(
 
 // Lists, tuples, dicts and class instances share one element type id, so the
 // model can only tell a nested list from them by what the frontend recorded.
-bool python_list::holds_no_list_lookalike(const exprt &list) const
+bool python_list::holds_list_lookalike(
+  const std::string &list_id,
+  bool if_unrecorded,
+  int depth) const
 {
-  if (!list.is_symbol())
-    return false;
-  const auto *recorded = elem_types().find(list.identifier().as_string());
-  if (!recorded)
-    return false;
+  const auto *recorded = elem_types().find(list_id);
+  if (!recorded || depth <= 0)
+    return if_unrecorded;
   const type_handler &th = converter_.get_type_handler();
   const typet list_type = th.get_list_type();
   // None is stored with size 0, which the model already skips.
   const typet none_type = pointer_typet(bool_type());
-  return std::none_of(recorded->begin(), recorded->end(), [&](const auto &e) {
-    return e.second != list_type && e.second != none_type &&
-           th.type_to_string(e.second).empty();
+  return std::any_of(recorded->begin(), recorded->end(), [&](const auto &e) {
+    if (e.second == list_type)
+      return e.first.empty()
+               ? if_unrecorded
+               : holds_list_lookalike(e.first, if_unrecorded, depth - 1);
+    return e.second != none_type && th.type_to_string(e.second).empty();
   });
 }
 
@@ -831,7 +835,12 @@ exprt python_list::contains(const exprt &item, const exprt &list)
   const type_handler &th = converter_.get_type_handler();
   if (
     item_info.elem_symbol->get_type() == th.get_list_type() &&
-    holds_no_list_lookalike(list))
+    list.is_symbol() &&
+    !holds_list_lookalike(
+      list.identifier().as_string(), true, get_list_compare_depth()) &&
+    !(item.is_symbol() &&
+      holds_list_lookalike(
+        item.identifier().as_string(), false, get_list_compare_depth())))
     return contains_list(build_symbol(*item_info.elem_symbol), list);
 
   // Find the list_contains function

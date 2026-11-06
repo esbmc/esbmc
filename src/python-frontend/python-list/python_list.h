@@ -562,7 +562,10 @@ public:
   exprt compare(const exprt &l1, const exprt &l2, const std::string &op);
 
   exprt contains(const exprt &item, const exprt &list);
-  bool holds_no_list_lookalike(const exprt &list) const;
+  bool holds_list_lookalike(
+    const std::string &list_id,
+    bool if_unrecorded,
+    int depth) const;
   exprt contains_list(const exprt &item, const exprt &list);
 
   exprt list_repetition(
