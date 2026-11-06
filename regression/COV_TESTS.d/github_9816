@@ -1,0 +1,4 @@
+regression/python/github_9816_abs_float_module_call
+regression/python/github_9816_abs_math_module_call
+regression/python/github_9816_abs_module_call
+regression/python/github_9816_abs_module_call_fail

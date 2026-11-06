@@ -265,6 +265,14 @@ public:
     const nlohmann::json &node,
     codet &target_block);
 
+  void store_comprehension_pair(
+    const exprt &dict,
+    const exprt &key,
+    const exprt &value,
+    const locationt &location,
+    const nlohmann::json &element,
+    code_blockt &pair_block);
+
   /**
    * @brief Handles dictionary membership testing (`in` / `not in` operators).
    *
@@ -373,6 +381,11 @@ public:
    * @return struct_typet with element_0=key_type, element_1=value_type
    */
   typet get_popitem_tuple_type(const exprt &dict_expr);
+
+  /// @p key_type if known, else the type shared by the literal keys stored
+  /// into the empty dict, else str.
+  typet key_type_or_default(const typet &key_type, const exprt &dict_expr);
+  typet resolve_stored_key_type(const exprt &dict_expr);
 
   /**
    * @brief Handles dict.popitem() method calls.

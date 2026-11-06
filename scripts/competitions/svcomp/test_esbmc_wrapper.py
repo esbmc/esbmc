@@ -70,6 +70,54 @@ Violated property:
 VERIFICATION FAILED
 """
 
+DEREF_THEN_LEAK = """
+Violated property:
+  file main.c line 9 column 3 function main
+  dereference failure: invalidated dynamic object
+  CWE: CWE-416
+
+** Results:
+main.c, function main
+  FAILED       [main.invalidated-dynamic-object.1]  line  9  dereference failure: invalidated dynamic object
+  FAILED       [main.memory-leak.1]                 line 11  dereference failure: forgotten memory: dynamic_2_value
+
+** 2 of 2 properties failed
+
+VERIFICATION FAILED
+"""
+
+DEREF_THEN_BAD_FREE = """
+Violated property:
+  file main.c line 9 column 3 function detach
+  dereference failure: invalid pointer
+  CWE: CWE-416, CWE-822, CWE-824, CWE-908
+
+** Results:
+main.c, function detach
+  FAILED       [detach.invalid-pointer-dereference.1]  line  9  dereference failure: invalid pointer
+  FAILED       [detach.invalid-pointer-freed.1]        line 12  dereference failure: invalid pointer freed
+
+** 2 of 2 properties failed
+
+VERIFICATION FAILED
+"""
+
+FREE_THEN_DEREF = """
+Violated property:
+  file main.c line 11 column 3 function main
+  dereference failure: free() of non-dynamic memory
+  CWE: CWE-590, CWE-761
+
+** Results:
+main.c, function main
+  FAILED       [main.free-non-dynamic-memory.1]          line 11  dereference failure: free() of non-dynamic memory
+  FAILED       [main.expired-pointer-dereference.1]      line 11  dereference failure: accessed expired variable pointer `buf'
+
+** 2 of 2 properties failed
+
+VERIFICATION FAILED
+"""
+
 UNLISTED_DEREF_COMMENT = """
 Violated property:
   file main.c line 6368 column 5 function attach
@@ -179,6 +227,40 @@ list.c, function __ESBMC_list_size
 VERIFICATION FAILED
 """
 
+# The trace prints the program's own output unindented, between states.
+PROGRAM_PRINTS_BEFORE_LEAK = """
+[Counterexample]
+
+
+State 2 file main.c line 5 column 3 function main thread 0
+----------------------------------------------------
+  p = 0
+{}
+
+
+State 5 file main.c line 14 column 1 function main thread 0
+----------------------------------------------------
+Violated property:
+  file main.c line 14 column 1 function main
+  dereference failure: forgotten memory: dynamic_1_array
+  CWE: CWE-401
+
+
+** Results:
+main.c, function main
+  FAILED       [main.memory-leak.1]  line  14  dereference failure: forgotten memory: dynamic_1_array
+
+** 1 of 1 properties failed
+
+VERIFICATION FAILED
+"""
+
+ESBMC_OUT_OF_MEMORY = """
+Starting Bounded Model Checking
+ERROR: Out of memory
+
+"""
+
 
 class ParseResultTest(unittest.TestCase):
     def verdict(self, output, prop):
@@ -209,6 +291,60 @@ class ParseResultTest(unittest.TestCase):
         self.assertEqual(
             self.verdict(UNLISTED_DEREF_COMMENT, wrapper.Property.memory),
             "FALSE_DEREF")
+
+    # The model goes on past its first violation and fails later claims too
+    # (#9895), shaped like the ldv-linux-3.4-simple and Juliet CWE590 logs.
+    def test_a_leak_after_the_violated_deref_does_not_decide(self):
+        self.assertEqual(
+            self.verdict(DEREF_THEN_LEAK, wrapper.Property.memory),
+            "FALSE_DEREF")
+
+    def test_a_leak_violated_first_still_decides(self):
+        output = DEREF_THEN_LEAK.replace(
+            "line 9 column 3 function main\n  dereference failure: invalidated dynamic object",
+            "line 11 column 1 function main\n  dereference failure: forgotten memory: dynamic_2_value")
+        self.assertEqual(
+            self.verdict(output, wrapper.Property.memory), "FALSE_MEMTRACK")
+
+    def test_a_bad_free_after_the_violated_deref_does_not_decide(self):
+        self.assertEqual(
+            self.verdict(DEREF_THEN_BAD_FREE, wrapper.Property.memory),
+            "FALSE_DEREF")
+
+    def test_a_deref_failing_with_the_violated_free_does_not_decide(self):
+        self.assertEqual(
+            self.verdict(FREE_THEN_DEREF, wrapper.Property.memory),
+            "FALSE_FREE")
+
+    def test_program_output_in_the_counterexample_is_not_an_esbmc_error(self):
+        # esbmc/esbmc#9890: sv-benchmarks memsafety-cve/cups.i prints this.
+        for printed in ("Out of memory", "ERROR: Out of memory", "ERROR: Timed out"):
+            with self.subTest(printed=printed):
+                self.assertEqual(
+                    self.verdict(PROGRAM_PRINTS_BEFORE_LEAK.format(printed),
+                                 wrapper.Property.memory),
+                    "FALSE_MEMTRACK")
+
+    def test_program_printing_successful_does_not_prove_the_task(self):
+        # A free violation decides nothing for memcleanup, so the only
+        # SUCCESSFUL left in the output is the program's.
+        output = "[Counterexample]\nVERIFICATION SUCCESSFUL\n" + FREE_WITH_UNCHECKED_LEAK
+        self.assertEqual(self.verdict(output, wrapper.Property.memcleanup), "Unknown")
+
+    def test_violated_comment_naming_an_esbmc_error_still_falsifies(self):
+        output = REACH_WITH_UNCHECKED_UNWINDING.replace(
+            "error label", 'assertion !"Out of memory" && !"Timed out"')
+        self.assertEqual(self.verdict(output, wrapper.Property.reach), "FALSE_REACH")
+
+    def test_esbmc_out_of_memory_is_unknown(self):
+        self.assertEqual(
+            self.verdict(ESBMC_OUT_OF_MEMORY, wrapper.Property.memory), "Unknown")
+
+    def test_esbmc_timeout_after_a_counterexample_is_a_timeout(self):
+        self.assertEqual(
+            self.verdict(PROGRAM_PRINTS_BEFORE_LEAK.format("") + "ERROR: Timed out\n",
+                         wrapper.Property.memory),
+            "Timed out")
 
     def test_successful_run_is_unaffected(self):
         self.assertEqual(
@@ -310,7 +446,7 @@ class IntegerEncodingConfirmationTest(unittest.TestCase):
     """A Python violation stays FALSE only if a --ir re-run repeats it in place."""
 
     PASSED = "** 0 of 1 properties failed, 1 passed\n\nVERIFICATION SUCCESSFUL\n"
-    TIMED_OUT = b"Timed out"
+    TIMED_OUT = b"ERROR: Timed out\n"
     NO_LINE = PY_ASSERTION.replace(" line 5 column 4", "")
 
     def verify(self, prop, first, rerun, benchmark="main.py", elapsed=0):
@@ -560,6 +696,127 @@ main.c, function main
 VERIFICATION FAILED
 """
         self.assertEqual(self.verdict(output, wrapper.Property.memory), "Unknown")
+
+
+# Test-Comp. Shaped like ESBMC 8.6 output on reducercommutativity/rangesum10.i
+# in Test-Comp 2027.
+TESTCOMP_REACH_WITH_UNCHECKED_UNWINDING = """
+Violated property:
+  file rangesum10.i line 61 column 6 function main
+  reach_error
+  0
+
+
+** Results:
+rangesum10.i, function main
+  NOT CHECKED  [main.assertion.1]  line 54  unwinding assertion loop 3
+  FAILED       [main.assertion.2]  line 61  reach_error
+
+** 1 of 2 properties failed, 1 not checked
+
+VERIFICATION FAILED
+
+Bug found (k = 11)
+"""
+
+# --quiet, which coverage mode passes, drops the counterexample and with it the
+# "Violated property:" block, leaving only the table row.
+TESTCOMP_QUIET_VIOLATED_UNWINDING = """
+** Results:
+main.c, function main
+  FAILED       [main.assertion.1]  line 42  unwinding assertion loop 3
+
+VERIFICATION FAILED
+"""
+
+TESTCOMP_SUCCESSFUL = """
+** Results:
+main.c, function main
+  PASSED       [main.assertion.1]  line 42  unwinding assertion loop 3
+
+VERIFICATION SUCCESSFUL
+"""
+
+COVERAGE_BRANCHES = "COVER( init(main()), FQL(COVER EDGES(@DECISIONEDGE)) )\n"
+COVERAGE_CONDITIONS = "COVER( init(main()), FQL(COVER EDGES(@CONDITIONEDGE)) )\n"
+COVERAGE_STATEMENTS = "COVER( init(main()), FQL(COVER EDGES(@BASICBLOCKENTRY)) )\n"
+COVERAGE_ERROR_CALL = "COVER( init(main()), FQL(COVER EDGES(@CALL(reach_error))) )\n"
+UNREACH_CALL = "CHECK( init(main()), LTL(G ! call(reach_error())) )\n"
+
+
+class TestCompParseResultTest(unittest.TestCase):
+
+    def verdict(self, output):
+        return wrapper.get_result_string(wrapper.testcomp_parse_result(output))
+
+    def test_unchecked_unwinding_row_does_not_mask_the_reach_violation(self):
+        self.assertEqual(self.verdict(TESTCOMP_REACH_WITH_UNCHECKED_UNWINDING), "FALSE_REACH")
+
+    def test_violated_unwinding_assertion_is_unknown(self):
+        self.assertEqual(self.verdict(VIOLATED_UNWINDING), "Unknown")
+
+    def test_quiet_violated_unwinding_assertion_is_unknown(self):
+        self.assertEqual(self.verdict(TESTCOMP_QUIET_VIOLATED_UNWINDING), "Unknown")
+
+    def test_successful_run_is_true(self):
+        self.assertEqual(self.verdict(TESTCOMP_SUCCESSFUL), "TRUE")
+
+    def test_timeout(self):
+        self.assertEqual(self.verdict("ERROR: Timed out\n"), "Timed out")
+
+
+class TestCompRunTest(unittest.TestCase):
+    """benchexec's tool-info runs esbmc-wrapper.py for SV-COMP and Test-Comp alike."""
+
+    def test_coverage_option_or_cover_property_is_testcomp(self):
+        self.assertTrue(wrapper.is_testcomp_run("branch-function", UNREACH_CALL))
+        for content in (COVERAGE_BRANCHES, COVERAGE_ERROR_CALL):
+            self.assertTrue(wrapper.is_testcomp_run(None, content))
+
+    def test_svcomp_properties_are_not_testcomp(self):
+        self.assertFalse(wrapper.is_testcomp_run(None, UNREACH_CALL))
+        self.assertFalse(wrapper.is_testcomp_run(None, "CHECK( init(main()), LTL(G valid-free) )\n"))
+
+    def test_goals(self):
+        for content in (COVERAGE_BRANCHES, COVERAGE_CONDITIONS, COVERAGE_STATEMENTS):
+            self.assertEqual(wrapper.test_goal(content), wrapper.TestGoal.coverage)
+        for content in (COVERAGE_ERROR_CALL, UNREACH_CALL):
+            self.assertEqual(wrapper.test_goal(content), wrapper.TestGoal.error_call)
+        self.assertIsNone(wrapper.test_goal("CHECK( init(main()), LTL(F end) )\n"))
+
+    def dry_run(self, prp_content, *options):
+        # -n prints the ESBMC command and stops before running it
+        import subprocess
+        import sys
+        with tempfile.TemporaryDirectory() as d:
+            prp = os.path.join(d, "goal.prp")
+            task = os.path.join(d, "task.c")
+            with open(prp, "w") as f:
+                f.write(prp_content)
+            with open(task, "w") as f:
+                f.write("int main() { return 0; }\n")
+            return subprocess.run(
+                [sys.executable, os.path.join(os.path.dirname(os.path.abspath(__file__)), "esbmc-wrapper.py"),
+                 "-n", "-p", prp, "-s", "kinduction", *options, task],
+                capture_output=True, text=True, check=True, cwd=d).stdout
+
+    def test_branch_coverage_command(self):
+        out = self.dry_run(COVERAGE_BRANCHES, "-o", "branch-function")
+        for flag in ("--force-malloc-success", "--floatbv", "--generate-testcase",
+                     "--branch-function-coverage", "--max-inductive-step 8"):
+            self.assertIn(flag, out)
+        self.assertNotIn("--witness-output", out)
+
+    def test_error_call_command(self):
+        out = self.dry_run(COVERAGE_ERROR_CALL, "-o", "branch-function")
+        for flag in ("--generate-testcase", "--enable-unreachability-intrinsic", "--error-label ERROR"):
+            self.assertIn(flag, out)
+        self.assertNotIn("--branch-function-coverage", out)
+
+    def test_svcomp_command_unchanged(self):
+        out = self.dry_run(UNREACH_CALL)
+        self.assertNotIn("--generate-testcase", out)
+        self.assertNotIn("--force-malloc-success", out)
 
 
 if __name__ == "__main__":

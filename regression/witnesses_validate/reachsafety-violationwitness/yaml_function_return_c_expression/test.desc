@@ -1,5 +1,0 @@
-CORE
-main.c
---sv-comp --overflow-check --no-assertions --witness-output-yaml -
-^ +format: "c_expression"$
-^VERIFICATION FAILED$

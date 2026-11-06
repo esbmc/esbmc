@@ -780,6 +780,28 @@ python_converter::subclasses(const std::string &class_name) const
   return family;
 }
 
+std::optional<std::string> python_converter::family_method_owner(
+  const std::string &class_name,
+  const std::string &m) const
+{
+  std::optional<std::string> owner;
+  for (const std::string &cls : subclasses(class_name))
+  {
+    const auto mro = class_mro(cls);
+    if (!mro)
+      return std::nullopt;
+    const auto defining =
+      std::find_if(mro->begin(), mro->end(), [&](const std::string &c) {
+        return class_binds_name(c, m);
+      });
+    const std::string found = defining == mro->end() ? "" : *defining;
+    if (owner && *owner != found)
+      return std::nullopt;
+    owner = found;
+  }
+  return owner;
+}
+
 std::optional<std::string> python_converter::bound_method_id(
   const std::string &owner,
   const std::string &m) const
@@ -1204,8 +1226,17 @@ symbolt *python_converter::find_symbol_in_import(
     imported_module_name(obj, lookup_name);
   if (!name || import_hides_builtin(obj, symbol_id, lookup_name))
     return nullptr;
-  return find_symbol_in_module(
+  symbolt *found = find_symbol_in_module(
     symbol_id, obj["full_path"].get<std::string>(), lookup_name, *name);
+  // `import m` of a user module binds only `m`, so none of m's variables
+  // is a bare name here (#9725).
+  const bool plain_user_import =
+    obj["_type"] == "Import" &&
+    obj["full_path"].get<std::string>().find("/models/") == std::string::npos;
+  return found && plain_user_import && !found->get_type().is_code() &&
+             !found->is_type
+           ? nullptr
+           : found;
 }
 
 symbolt *
@@ -1274,6 +1305,34 @@ python_converter::find_nested_function_symbol(const std::string &name) const
   return nullptr;
 }
 
+/// Whether a statement of @p module's top level after a `from` import assigns
+/// the variable @p name.
+static bool
+module_level_binds(const nlohmann::json &module, const std::string &name)
+{
+  const auto is_name = [&](const nlohmann::json &target) {
+    return target.value("_type", "") == "Name" &&
+           target.value("id", "") == name;
+  };
+  bool imported = false;
+  for (const auto &stmt : module["body"])
+  {
+    const std::string kind = stmt.value("_type", "");
+    imported = imported || kind == "ImportFrom";
+    if (!imported)
+      continue;
+    if (kind == "Assign")
+    {
+      if (std::any_of(stmt["targets"].begin(), stmt["targets"].end(), is_name))
+        return true;
+    }
+    else if (
+      (kind == "AnnAssign" || kind == "AugAssign") && is_name(stmt["target"]))
+      return true;
+  }
+  return false;
+}
+
 symbolt *
 python_converter::find_symbol_through_module(const std::string &sym_id) const
 {
@@ -1287,11 +1346,20 @@ python_converter::find_symbol_through_module(const std::string &sym_id) const
     return find_symbol_in_module(sym_id, file, name, name);
   }
 
+  // Every module has its own __name__ and __file__, which no import rebinds.
+  if (sym_id.ends_with("@__name__") || sym_id.ends_with("@__file__"))
+    return nullptr;
+
   // User imports (e.g. "from other import sum") shadow builtin model
   // functions that are registered in the main file's namespace. Don't let
   // model-module stubs (e.g. esbmc.py's nondet_list stub) shadow operational
   // models (e.g. nondet.py's nondet_list).
   symbolt *imported = find_imported_symbol(sym_id);
+  // `from m import x` followed by `x = 2` rebinds x in this module (#9725).
+  if (
+    imported && !imported->get_type().is_code() && ast_json &&
+    module_level_binds(*ast_json, sym_id.substr(sym_id.rfind('@') + 1)))
+    return nullptr;
   if (
     imported &&
     imported->id.as_string().find("/models/") != std::string::npos &&
