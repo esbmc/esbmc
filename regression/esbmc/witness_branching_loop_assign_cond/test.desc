@@ -3,3 +3,4 @@ main.c
 --unwind 3 --no-unwinding-assertions --witness-output-yaml -
 ^VERIFICATION FAILED$
 (?s)value: "true".*value: "true".*type: "target"
+(?s)\A(?!.*value: "false")
