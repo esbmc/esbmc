@@ -2764,15 +2764,18 @@ void goto_convertt::generate_conditional_branch(
   const locationt &location,
   goto_programt &dest)
 {
-  // Swapping the targets of a not over a single condition would give
-  // "if(c) goto next; goto target_true; next:", which optimize_guarded_gotos
-  // folds back into "if(!c) goto target_true" marked flipped: the witness
-  // writer and validator then invert every branching waypoint of a loop whose
-  // condition has a side effect, e.g. while(__VERIFIER_nondet_int()).
+  if (guard.id() == "not" && guard.op0().id() == "not")
+  {
+    generate_conditional_branch(
+      guard.op0().op0(), target_true, target_false, location, dest);
+    return;
+  }
+
+  // Swap targets only for && or ||, which split below. Around any other
+  // condition, optimize_guarded_gotos refolds the swap into a goto marked
+  // flipped_guard, and witnesses then read its branch inverted (#9965).
   if (guard.id() == "not" && (guard.op0().is_and() || guard.op0().is_or()))
   {
-    assert(guard.operands().size() == 1);
-    // swap targets
     generate_conditional_branch(
       guard.op0(), target_false, target_true, location, dest);
     return;
