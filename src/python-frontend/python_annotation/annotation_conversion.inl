@@ -5757,7 +5757,10 @@ bool python_annotation<Json>::preprocess_constructor_calls(Json &node)
           // do not overwrite explicit annotations (e.g.,
           // Optional["List"]) with a less-specific type inferred from a
           // call site (e.g., NoneType).
-          if (param.contains("annotation") && !param["annotation"].is_null())
+          const bool typed_here = constructor_typed_params_.count(&param);
+          if (
+            param.contains("annotation") && !param["annotation"].is_null() &&
+            !typed_here)
             continue;
           const Json &arg = call_args[i - 1];
           const Json &scope =
@@ -5771,7 +5774,11 @@ bool python_annotation<Json>::preprocess_constructor_calls(Json &node)
             inherited_init_args_[&param].insert(arg_type);
           else if (!arg_type.empty())
           {
+            constructor_arg_types_[&param].insert(arg_type);
+            if (typed_here)
+              continue;
             add_parameter_annotation(param, arg_type);
+            constructor_typed_params_.insert(&param);
             annotated = true;
           }
         }
@@ -6373,6 +6380,25 @@ void python_annotation<Json>::collect_function_call_arg_types(
   }
 }
 
+/// A constructor parameter typed from its first call keeps that type for
+/// every call, so a str passed where a number was first, or the reverse, is
+/// converted wrongly. A copy of the class per type would be needed (#10024).
+template <class Json>
+void python_annotation<Json>::refuse_mixed_constructor_args() const
+{
+  for (const auto &[param, types] : constructor_arg_types_)
+  {
+    const bool has_str = types.count("str") != 0;
+    const bool has_number =
+      types.count("int") || types.count("float") || types.count("bool");
+    if (has_str && has_number)
+      throw std::runtime_error(
+        "unsupported: constructor parameter '" +
+        (*param)["arg"].template get<std::string>() +
+        "' is passed a str and a number");
+  }
+}
+
 template <class Json>
 void python_annotation<Json>::add_type_annotation()
 {
@@ -6380,6 +6406,7 @@ void python_annotation<Json>::add_type_annotation()
   // type that parameter gets from a later call (GitHub #8963).
   while (preprocess_constructor_calls(ast_))
     ;
+  refuse_mixed_constructor_args();
   for (const auto &[param, types] : inherited_init_args_)
     if (
       types.size() == 1 && !types.begin()->empty() &&
