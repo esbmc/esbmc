@@ -1,0 +1,5 @@
+CORE
+main.py
+--unwind 6 --no-unwinding-assertions --python-check-exceptions IndexError
+^VERIFICATION FAILED$
+out-of-bounds read in list

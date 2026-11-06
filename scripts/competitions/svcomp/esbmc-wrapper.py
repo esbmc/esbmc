@@ -336,9 +336,6 @@ def parse_result(the_output, prop):
   if re.search(r"^ERROR: Timed out$", the_output, re.MULTILINE):
     return Result.err_timeout
 
-  if re.search(r"^ERROR: Out of memory$", the_output, re.MULTILINE):
-    return Result.err_memout
-
   if "VERIFICATION FAILED" in the_output:
     # The model runs on past its first violation and fails later claims too,
     # such as a leak at exit after an invalid dereference. The program stopped
@@ -353,6 +350,11 @@ def parse_result(the_output, prop):
 
   if "VERIFICATION SUCCESSFUL" in the_output:
     return Result.success
+
+  # A k-induction step that runs out of memory is unknown and the next k is
+  # tried, so only a run that reached no verdict ran out of memory.
+  if re.search(r"^ERROR: Out of memory$", the_output, re.MULTILINE):
+    return Result.err_memout
 
   return Result.unknown
 
@@ -547,8 +549,6 @@ def get_command_line(strat, prop, arch, benchmark, concurrency, dargs, esbmc_ci,
     # violation -- it never claims a proof, so --incremental-bmc still owns
     # every other verdict.
     command_line += "--falsify-context-bound 1 --incremental-bmc "
-  elif prop == Property.overflow: # Overflow only works with incremental
-    command_line += "--incremental-bmc "
   else:
     command_line += strategy_flags(strat)
 
@@ -561,22 +561,37 @@ IR_RERUN_TIMEOUT = 120
 # Keep both runs together under the competition's 900 s limit.
 TOTAL_BUDGET = 870
 MIN_RERUN_BUDGET = 30
+# Wall-clock seconds and memory cap for the k-induction round of a no-overflow
+# task.
+KIND_OVERFLOW_TIMEOUT = 60
+KIND_OVERFLOW_MEMLIMIT = "2500m"
 
 
 def confirmed_by_integer_encoding(esbmc_command_line, the_output, prop, elapsed):
   """Does a --ir re-run violate the same property at the same file and line?
 
-  The re-run checks every property, so it confirms the first run's site even
-  when it would have stopped at another violation first (#9803).
+  A plain re-run confirms when it stops at the first run's site. Under
+  k-induction a --multi-property re-run goes on raising k for every other
+  claim after it has found that site, so it runs only when the plain re-run
+  stops elsewhere: it checks every property, so it confirms the first run's
+  site even when the plain re-run stopped at another violation first (#9803).
 
-  A first run that leaves too little of the budget for the re-run is not
-  confirmed.
+  Both re-runs share one budget, and one that would get too little of it is
+  not made, so the violation is not confirmed.
   """
   budget = min(IR_RERUN_TIMEOUT, TOTAL_BUDGET - elapsed)
   if budget < MIN_RERUN_BUDGET:
     return False
   site = violation_site(the_output)
   if site is None:
+    return False
+  started = time.monotonic()
+  plain = run(esbmc_command_line + "--ir --z3 ", budget).decode()
+  plain_result = parse_result(plain, prop)
+  if plain_result == Result.fail_python and violation_site(plain) == site:
+    return True
+  budget -= time.monotonic() - started
+  if plain_result == Result.success or budget < MIN_RERUN_BUDGET:
     return False
   rerun = run(esbmc_command_line + "--ir --z3 --multi-property ", budget).decode()
   if parse_result(rerun, prop) != Result.fail_python:
@@ -608,6 +623,18 @@ def verify(strat, prop, arch, benchmark, concurrency, dargs, esbmc_ci, witness_p
     esbmc_command_line += "--witness " + witness_path + " "
 
   started = time.monotonic()
+  if prop == Property.overflow and "--k-induction " in esbmc_command_line:
+    # The inductive step proves most no-overflow loops in seconds, but on
+    # nonlinear arithmetic its solve can stall, and on goto-heavy code it can
+    # path-explode; those runs fall back to incremental BMC. The memory cap
+    # stops this run before it reaches the competition's limit, which would
+    # end the task instead.
+    memlimit = "--memlimit " + KIND_OVERFLOW_MEMLIMIT + " "
+    output = run(esbmc_command_line + memlimit, KIND_OVERFLOW_TIMEOUT)
+    res = parse_result(output.decode(), prop)
+    if res in (Result.success, Result.fail_overflow):
+      return res
+    esbmc_command_line = esbmc_command_line.replace(strategy_flags(strat), "--incremental-bmc ")
   output = run(esbmc_command_line)
   elapsed = time.monotonic() - started
   res = parse_result(output.decode(), prop)

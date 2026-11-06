@@ -99,9 +99,12 @@ class symex_slicet : public slicer
 public:
   explicit symex_slicet(const optionst &options)
     : slice_assumes(options.get_bool_option("slice-assumes")),
+      // A YAML witness names every nondet call's result, and a validator
+      // binds each to the next call at its location.
       slice_nondet(
         !options.get_bool_option("generate-testcase") &&
-        !options.get_bool_option("generate-ctest-testcase"))
+        !options.get_bool_option("generate-ctest-testcase") &&
+        options.get_option("witness-output-yaml").empty())
   {
   }
 

@@ -96,9 +96,12 @@ build_nonnegative_slice_span(const exprt &lower, const exprt &upper)
 
 exprt python_list::build_list_at_call(
   const exprt &list,
-  const exprt &index,
+  const exprt &index_expr,
   const nlohmann::json &element)
 {
+  // A call such as len(s) in the index is still a statement. Nested as an
+  // argument it is never lowered and reaches the solver unconverted (#9932).
+  const exprt index = to_value_expr(index_expr, converter_.ns);
   pointer_typet obj_type(converter_.get_type_handler().get_list_element_type());
 
   const symbolt *list_at_func_sym =

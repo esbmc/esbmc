@@ -3,6 +3,8 @@
 
 import importlib.util
 import os
+import subprocess
+import sys
 import tempfile
 import unittest
 from unittest import mock
@@ -340,6 +342,31 @@ class ParseResultTest(unittest.TestCase):
         self.assertEqual(
             self.verdict(ESBMC_OUT_OF_MEMORY, wrapper.Property.memory), "Unknown")
 
+    # Under k-induction a step that runs out of memory is unknown and the next
+    # k is tried, so a later step can still decide the task.
+    OOM_AT_EARLIER_K = ("Checking base case, k = 1\n" + ESBMC_OUT_OF_MEMORY +
+                        "Checking base case, k = 3\n")
+
+    def test_a_proof_after_an_earlier_out_of_memory_is_true(self):
+        self.assertEqual(
+            self.verdict(self.OOM_AT_EARLIER_K + "VERIFICATION SUCCESSFUL\n",
+                         wrapper.Property.py_assertion), "TRUE")
+
+    def test_a_violation_after_an_earlier_out_of_memory_is_false(self):
+        self.assertEqual(
+            self.verdict(self.OOM_AT_EARLIER_K + PY_ASSERTION, wrapper.Property.py_assertion),
+            "FALSE")
+
+    def test_a_run_out_of_memory_without_a_verdict_is_a_memory_out(self):
+        self.assertEqual(
+            wrapper.parse_result(self.OOM_AT_EARLIER_K, wrapper.Property.py_assertion),
+            wrapper.Result.err_memout)
+
+    def test_a_timeout_after_an_out_of_memory_is_a_timeout(self):
+        self.assertEqual(
+            self.verdict(self.OOM_AT_EARLIER_K + "ERROR: Timed out\n", wrapper.Property.py_assertion),
+            "Timed out")
+
     def test_esbmc_timeout_after_a_counterexample_is_a_timeout(self):
         self.assertEqual(
             self.verdict(PROGRAM_PRINTS_BEFORE_LEAK.format("") + "ERROR: Timed out\n",
@@ -449,8 +476,8 @@ class IntegerEncodingConfirmationTest(unittest.TestCase):
     TIMED_OUT = b"ERROR: Timed out\n"
     NO_LINE = PY_ASSERTION.replace(" line 5 column 4", "")
 
-    def verify(self, prop, first, rerun, benchmark="main.py", elapsed=0):
-        outputs = iter([first, rerun])
+    def verify(self, prop, first, *reruns, benchmark="main.py", elapsed=0, plain_seconds=0):
+        outputs = iter([first, *reruns])
         calls = []
 
         def fake_run(cmd_line, timeout=None):
@@ -459,16 +486,17 @@ class IntegerEncodingConfirmationTest(unittest.TestCase):
             return out if isinstance(out, bytes) else out.encode()
 
         with mock.patch.object(wrapper, "run", fake_run), \
-                mock.patch.object(wrapper.time, "monotonic", side_effect=[0, elapsed]):
+                mock.patch.object(wrapper.time, "monotonic", side_effect=[0, elapsed, 0, plain_seconds]):
             result = wrapper.verify("kinduction", prop, 64, benchmark, False, "", False, None, None)
         return wrapper.get_result_string(result), calls
 
     def test_rerun_at_the_same_line_keeps_false(self):
         verdict, calls = self.verify(wrapper.Property.py_assertion, PY_ASSERTION, PY_ASSERTION)
         self.assertEqual(verdict, "FALSE")
-        self.assertTrue(calls[1][0].endswith("--ir --z3 --multi-property "))
+        self.assertTrue(calls[1][0].endswith("--ir --z3 "))
         self.assertEqual(calls[1][1], wrapper.IR_RERUN_TIMEOUT)
         self.assertIsNone(calls[0][1])
+        self.assertEqual(len(calls), 2)
 
     def test_a_first_run_leaving_the_full_budget_is_rerun(self):
         verdict, calls = self.verify(wrapper.Property.py_assertion, PY_ASSERTION, self.PASSED, elapsed=700)
@@ -487,30 +515,53 @@ class IntegerEncodingConfirmationTest(unittest.TestCase):
         self.assertEqual(verdict, "Unknown")
         self.assertEqual(calls[1][1], wrapper.MIN_RERUN_BUDGET)
 
-    def test_rerun_that_passes_is_unknown(self):
-        verdict, _ = self.verify(wrapper.Property.py_assertion, PY_ASSERTION, self.PASSED)
+    def test_rerun_that_passes_is_unknown_without_a_fallback(self):
+        verdict, calls = self.verify(wrapper.Property.py_assertion, PY_ASSERTION, self.PASSED)
         self.assertEqual(verdict, "Unknown")
+        self.assertEqual(len(calls), 2)
+
+    OTHER_LINE = PY_ASSERTION.replace("line 5", "line 9")
+    BOTH_LINES = PY_ASSERTION.replace("line 5 column 4", "line 9 column 4").replace(
+        "  FAILED       [main.assertion.1]  line 5  assertion x != 3\n",
+        "  FAILED       [main.assertion.1]  line 5  assertion x != 3\n"
+        "  FAILED       [main.assertion.2]  line 9  assertion y != 4\n")
 
     def test_rerun_failing_at_another_line_is_unknown(self):
-        other = PY_ASSERTION.replace("line 5", "line 9")
-        verdict, _ = self.verify(wrapper.Property.py_assertion, PY_ASSERTION, other)
+        verdict, calls = self.verify(wrapper.Property.py_assertion, PY_ASSERTION, self.OTHER_LINE, self.OTHER_LINE)
         self.assertEqual(verdict, "Unknown")
+        self.assertTrue(calls[2][0].endswith("--ir --z3 --multi-property "))
 
-    def test_rerun_failing_both_lines_keeps_the_first_runs_site(self):
-        both = PY_ASSERTION.replace("line 5 column 4", "line 9 column 4").replace(
-            "  FAILED       [main.assertion.1]  line 5  assertion x != 3\n",
-            "  FAILED       [main.assertion.1]  line 5  assertion x != 3\n"
-            "  FAILED       [main.assertion.2]  line 9  assertion y != 4\n")
-        verdict, _ = self.verify(wrapper.Property.py_assertion, PY_ASSERTION, both)
+    def test_a_fallback_failing_both_lines_keeps_the_first_runs_site(self):
+        verdict, calls = self.verify(wrapper.Property.py_assertion, PY_ASSERTION, self.OTHER_LINE, self.BOTH_LINES,
+                                     plain_seconds=10)
         self.assertEqual(verdict, "FALSE")
+        self.assertTrue(calls[1][0].endswith("--ir --z3 "))
+        self.assertTrue(calls[2][0].endswith("--ir --z3 --multi-property "))
+        self.assertEqual(calls[2][1], wrapper.IR_RERUN_TIMEOUT - 10)
+
+    def test_no_budget_left_for_the_fallback_is_unknown(self):
+        plain_seconds = wrapper.IR_RERUN_TIMEOUT - wrapper.MIN_RERUN_BUDGET + 1
+        verdict, calls = self.verify(wrapper.Property.py_assertion, PY_ASSERTION, self.OTHER_LINE, self.BOTH_LINES,
+                                     plain_seconds=plain_seconds)
+        self.assertEqual(verdict, "Unknown")
+        self.assertEqual(len(calls), 2)
+
+    def test_a_fallback_at_the_threshold_is_still_made(self):
+        plain_seconds = wrapper.IR_RERUN_TIMEOUT - wrapper.MIN_RERUN_BUDGET
+        verdict, calls = self.verify(wrapper.Property.py_assertion, PY_ASSERTION, self.OTHER_LINE, self.BOTH_LINES,
+                                     plain_seconds=plain_seconds)
+        self.assertEqual(verdict, "FALSE")
+        self.assertEqual(calls[2][1], wrapper.MIN_RERUN_BUDGET)
 
     def test_rerun_timeout_is_unknown(self):
-        verdict, _ = self.verify(wrapper.Property.py_assertion, PY_ASSERTION, self.TIMED_OUT)
+        verdict, calls = self.verify(wrapper.Property.py_assertion, PY_ASSERTION, self.TIMED_OUT,
+                                     plain_seconds=wrapper.IR_RERUN_TIMEOUT)
         self.assertEqual(verdict, "Unknown")
+        self.assertEqual(len(calls), 2)
 
     def test_rerun_failing_another_property_is_unknown(self):
         same_site_valueerror = PY_VALUEERROR.replace("p_raise_value.py", "p_assert2.py").replace("line 6 column 8", "line 5 column 4")
-        verdict, _ = self.verify(wrapper.Property.py_assertion, PY_ASSERTION, same_site_valueerror)
+        verdict, _ = self.verify(wrapper.Property.py_assertion, PY_ASSERTION, same_site_valueerror, same_site_valueerror)
         self.assertEqual(verdict, "Unknown")
 
     def test_no_line_on_either_side_matches_on_the_file(self):
@@ -518,7 +569,7 @@ class IntegerEncodingConfirmationTest(unittest.TestCase):
         self.assertEqual(verdict, "FALSE")
 
     def test_a_line_on_one_side_only_is_unknown(self):
-        verdict, _ = self.verify(wrapper.Property.py_assertion, self.NO_LINE, PY_ASSERTION)
+        verdict, _ = self.verify(wrapper.Property.py_assertion, self.NO_LINE, PY_ASSERTION, PY_ASSERTION)
         self.assertEqual(verdict, "Unknown")
 
     def test_a_violation_without_a_site_is_unknown(self):
@@ -534,7 +585,7 @@ class IntegerEncodingConfirmationTest(unittest.TestCase):
 
     def test_a_c_violation_is_never_rerun(self):
         with tempfile.NamedTemporaryFile("w", suffix=".c") as c_file:
-            verdict, calls = self.verify(wrapper.Property.reach, REACH_WITH_UNCHECKED_UNWINDING, self.PASSED, c_file.name)
+            verdict, calls = self.verify(wrapper.Property.reach, REACH_WITH_UNCHECKED_UNWINDING, self.PASSED, benchmark=c_file.name)
         self.assertEqual(verdict, "FALSE_REACH")
         self.assertEqual(len(calls), 1)
 
@@ -767,8 +818,6 @@ class TestCompParseResultTest(unittest.TestCase):
 
 def dry_run(prp_content, *options):
     # -n prints the ESBMC command and stops before running it
-    import subprocess
-    import sys
     with tempfile.TemporaryDirectory() as d:
         prp = os.path.join(d, "goal.prp")
         task = os.path.join(d, "task.c")
@@ -849,6 +898,65 @@ class ReachValidationUnwindTest(unittest.TestCase):
 
     def test_violation_validation_keeps_loops(self):
         self.assertNotIn("--goto-unwind", self.command(self.ESBMC, "violation"))
+
+
+class OverflowFallbackTest(unittest.TestCase):
+    """A no-overflow task runs k-induction first, then incremental BMC."""
+
+    OVERFLOW = """
+Violated property:
+  file task.c line 1 column 20 function main
+  arithmetic overflow on add
+
+VERIFICATION FAILED
+"""
+    SUCCESSFUL = "VERIFICATION SUCCESSFUL\n"
+    UNKNOWN = "VERIFICATION UNKNOWN\n"
+
+    def run_wrapper(self, kind_output, incr_output):
+        """Run the wrapper on a stand-in esbmc that answers by strategy."""
+        with tempfile.TemporaryDirectory() as d:
+            for name, text in (("kind.out", kind_output), ("incr.out", incr_output),
+                               ("no-overflow.prp", "CHECK( init(main()), LTL(G ! overflow) )\n"),
+                               ("task.c", "int main() { return 0; }\n")):
+                with open(os.path.join(d, name), "w", encoding="utf-8") as f:
+                    f.write(text)
+            esbmc = os.path.join(d, "esbmc")
+            with open(esbmc, "w", encoding="utf-8") as f:
+                f.write('#!/bin/sh\necho "$@" >> calls.log\n'
+                        'case "$*" in *--k-induction*) cat kind.out ;; *) cat incr.out ;; esac\n')
+            os.chmod(esbmc, 0o755)
+            script = os.path.join(os.path.dirname(os.path.abspath(__file__)), "esbmc-wrapper.py")
+            out = subprocess.run(
+                [sys.executable, script, "-p", "no-overflow.prp", "-s", "kinduction", "task.c"],
+                capture_output=True, text=True, check=True, cwd=d).stdout
+            with open(os.path.join(d, "calls.log"), encoding="utf-8") as f:
+                calls = f.read().splitlines()
+        return out.splitlines()[-1], calls
+
+    def test_a_proof_by_k_induction_is_kept(self):
+        verdict, calls = self.run_wrapper(self.SUCCESSFUL, self.UNKNOWN)
+        self.assertEqual(verdict, "TRUE")
+        self.assertEqual(len(calls), 1)
+        self.assertIn("--memlimit " + wrapper.KIND_OVERFLOW_MEMLIMIT, calls[0])
+
+    def test_an_overflow_found_by_k_induction_is_kept(self):
+        verdict, calls = self.run_wrapper(self.OVERFLOW, self.SUCCESSFUL)
+        self.assertEqual(verdict, "FALSE_OVERFLOW")
+        self.assertEqual(len(calls), 1)
+
+    def test_a_timed_out_k_induction_falls_back_to_incremental_bmc(self):
+        verdict, calls = self.run_wrapper("ERROR: Timed out\n", self.SUCCESSFUL)
+        self.assertEqual(verdict, "TRUE")
+        self.assertEqual(len(calls), 2)
+
+    def test_an_inconclusive_k_induction_falls_back_to_incremental_bmc(self):
+        verdict, calls = self.run_wrapper(self.UNKNOWN, self.OVERFLOW)
+        self.assertEqual(verdict, "FALSE_OVERFLOW")
+        self.assertEqual(len(calls), 2)
+        self.assertIn("--incremental-bmc", calls[1])
+        self.assertNotIn("--k-induction", calls[1])
+        self.assertNotIn("--memlimit", calls[1])
 
 
 if __name__ == "__main__":

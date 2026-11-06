@@ -2,3 +2,6 @@ regression/python/github_9800
 regression/python/github_9800_fail
 regression/python/github_9800_not_class
 regression/python/github_9800_symbolic_index
+regression/python/github_9800_listed
+regression/python/github_9800_symbolic_fail
+regression/python/github_9800_index_fail

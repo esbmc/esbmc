@@ -1187,9 +1187,10 @@ c_expr2stringt::convert_constant(const exprt &src, unsigned &precedence)
     ieee_floatt flt(to_constant_expr(src));
     if (flags & UNIQUE_FLOAT_REPR)
     {
-      /* XXX: Use some algorithm to compute the minimum precision, Grisu3 or
-       * similar. While that's not there, use the maximum defined by the type */
-      format.precision = ceil(flt.spec.f / 3.32); /* 3.32 < log_2(10) */
+      /* Digits after the point for max_digits10 significant digits, the
+       * fewest that read back every value of the type: 9 for float, 17 for
+       * double. Grisu-style shortest output would need fewer. */
+      format.precision = ceil((flt.spec.f + 1) * log10(2.0));
     }
     dest = flt.format(format);
 

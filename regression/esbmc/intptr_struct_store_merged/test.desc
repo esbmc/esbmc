@@ -1,0 +1,5 @@
+CORE
+main.c
+--no-pointer-check --no-bounds-check
+^Symex completed in: [0-9.]+s \(39 assignments\)$
+^VERIFICATION SUCCESSFUL$

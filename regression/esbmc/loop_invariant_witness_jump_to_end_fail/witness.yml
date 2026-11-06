@@ -1,0 +1,26 @@
+- entry_type: invariant_set
+  metadata:
+    format_version: "2.0"
+    uuid: 00000000-0000-0000-0000-000000000001
+    creation_time: 2026-11-05T00:00:00Z
+    producer:
+      name: hand-written
+      version: n/a
+    task:
+      input_files:
+      - main.c
+      input_file_hashes:
+        main.c: 0000000000000000000000000000000000000000000000000000000000000000
+      specification: G ! call(reach_error())
+      data_model: ILP32
+      language: C
+  content:
+  - invariant:
+      type: loop_invariant
+      location:
+        file_name: main.c
+        line: 10
+        column: 3
+        function: main
+      value: v == 0
+      format: c_expression
