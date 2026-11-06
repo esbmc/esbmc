@@ -499,6 +499,13 @@ static void push_nondet_return_waypoints(
     if (result.empty())
       continue;
 
+    // `\result == NAN` holds for no value, NaN included, so a NaN result
+    // gets no waypoint.
+    if (
+      is_constant_floatbv2t(value) &&
+      to_constant_floatbv2t(value).value.is_NaN())
+      continue;
+
     waypoint wp = witness_waypoint(rparen, yml.verified_file, options);
     wp.type = waypoint::function_return;
     wp.value = "\\result == " + result;
