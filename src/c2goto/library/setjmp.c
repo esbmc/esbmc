@@ -24,6 +24,9 @@ __ESBMC_HIDE:;
   return setjmp(__env);
 }
 
+// Returns on purpose: lower_longjmp tests the pending flag after the call.
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Winvalid-noreturn"
 _Noreturn void longjmp(jmp_buf env, int status)
 {
 __ESBMC_HIDE:;
@@ -32,6 +35,7 @@ __ESBMC_HIDE:;
   __ESBMC_longjmp_value = status ? status : 1;
   __ESBMC_longjmp_pending = 1;
 }
+#pragma clang diagnostic pop
 
 #undef sigsetjmp
 int sigsetjmp(sigjmp_buf env, int savemask)
