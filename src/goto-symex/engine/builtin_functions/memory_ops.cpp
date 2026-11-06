@@ -238,7 +238,69 @@ static bool lacks_byte_model(const type2tc &type)
   return is_floatbv_type(type) || is_fixedbv_type(type) || is_vector_type(type);
 }
 
-static inline expr2tc gen_value_by_byte(
+static expr2tc gen_value_by_byte(
+  const type2tc &type,
+  const expr2tc &src,
+  const expr2tc &value,
+  const size_t num_of_bytes,
+  const size_t offset);
+
+/* Arm of gen_value_by_byte for arrays: get the total number_of_bytes and keep
+ * subtracting until the end. */
+static expr2tc gen_array_by_byte(
+  const type2tc &type,
+  const expr2tc &src,
+  const expr2tc &value,
+  const size_t num_of_bytes,
+  const size_t offset)
+{
+  const type2tc &subtype = to_array_type(type).subtype;
+  uint64_t base_size = type_byte_size(subtype).to_uint64();
+
+  /* Filling the whole array gives every element the same value, so build it
+   * once rather than one constant per element. A fully written scalar keeps
+   * none of its old bits, so the element is built from zero, not from src. */
+  if (
+    offset == 0 && is_scalar_type(subtype) &&
+    num_of_bytes >= type_byte_size(type).to_uint64())
+  {
+    expr2tc elem =
+      gen_value_by_byte(subtype, gen_zero(subtype), value, base_size, 0);
+    return elem ? constant_array_of2tc(type, elem) : expr2tc();
+  }
+
+  expr2tc result = gen_zero(type);
+  constant_array2t &data = to_constant_array2t(result);
+  uint64_t bytes_left = num_of_bytes;
+  uint64_t offset_left = offset;
+
+  for (unsigned i = 0; i < data.datatype_members.size(); i++)
+  {
+    BigInt position(i);
+    expr2tc local_member =
+      index2tc(subtype, src, constant_int2tc(get_uint32_type(), position));
+    // Skip offsets
+    if (offset_left >= base_size)
+    {
+      data.datatype_members[i] = local_member;
+      offset_left -= base_size;
+    }
+    else
+    {
+      uint64_t bytes_to_write = std::min(bytes_left, base_size - offset_left);
+      data.datatype_members[i] = gen_value_by_byte(
+        subtype, local_member, value, bytes_to_write, offset_left);
+      if (!data.datatype_members[i])
+        return expr2tc();
+      bytes_left -= bytes_to_write;
+      offset_left = 0;
+    }
+  }
+
+  return result;
+}
+
+static expr2tc gen_value_by_byte(
   const type2tc &type,
   const expr2tc &src,
   const expr2tc &value,
@@ -269,64 +331,7 @@ static inline expr2tc gen_value_by_byte(
     return typecast2tc(type, value);
 
   if (is_array_type(type))
-  {
-    /*
-     * Very straighforward, get the total number_of_bytes and keep subtracting
-     * until the end
-     */
-
-    const type2tc &subtype = to_array_type(type).subtype;
-    uint64_t base_size = type_byte_size(subtype).to_uint64();
-
-    /* Filling the whole array makes every element the same value, which needs
-     * no per-element constant: memset of a 16 MB vmalloc buffer would otherwise
-     * build a 16-million-member array. A fully written scalar keeps none of
-     * its old bits, so the element is built from zero, not from src. */
-    if (
-      offset == 0 && is_scalar_type(subtype) &&
-      num_of_bytes >= type_byte_size(type).to_uint64())
-    {
-      expr2tc elem =
-        gen_value_by_byte(subtype, gen_zero(subtype), value, base_size, 0);
-      return elem ? constant_array_of2tc(type, elem) : expr2tc();
-    }
-
-    expr2tc result = gen_zero(type);
-    constant_array2t &data = to_constant_array2t(result);
-    uint64_t bytes_left = num_of_bytes;
-    uint64_t offset_left = offset;
-
-    for (unsigned i = 0; i < data.datatype_members.size(); i++)
-    {
-      BigInt position(i);
-      expr2tc local_member = index2tc(
-        to_array_type(type).subtype,
-        src,
-        constant_int2tc(get_uint32_type(), position));
-      // Skip offsets
-      if (offset_left >= base_size)
-      {
-        data.datatype_members[i] = local_member;
-        offset_left -= base_size;
-      }
-      else
-      {
-        uint64_t bytes_to_write = std::min(bytes_left, base_size - offset_left);
-        data.datatype_members[i] = gen_value_by_byte(
-          to_array_type(type).subtype,
-          local_member,
-          value,
-          bytes_to_write,
-          offset_left);
-        if (!data.datatype_members[i])
-          return expr2tc();
-        bytes_left -= bytes_to_write;
-        offset_left = 0;
-      }
-    }
-
-    return result;
-  }
+    return gen_array_by_byte(type, src, value, num_of_bytes, offset);
 
   if (is_struct_type(type))
   {

@@ -6,7 +6,7 @@
 
 int main()
 {
-  unsigned *p = malloc(SIZE);
+  unsigned *p = malloc(SIZE / sizeof(unsigned) * sizeof(unsigned));
   if (!p)
     return 0;
   memset(p, 1, SIZE);
