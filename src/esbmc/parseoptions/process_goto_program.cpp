@@ -518,8 +518,12 @@ bool esbmc_parseoptionst::process_goto_program(
         remove_no_op(goto_functions);
 
       if (is_k_induction)
+      {
+        reachable_state_invariants =
+          assume_reachable_loop_states(goto_functions, ns, 10000);
         disable_is_if_unsound(
           goto_k_induction(goto_functions, ns, checks_past_violation));
+      }
 
       if (wants_loop_invariants())
         apply_loop_invariants(goto_functions, context, options, is_k_induction);

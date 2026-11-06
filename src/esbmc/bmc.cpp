@@ -293,7 +293,7 @@ void bmct::successful_trace(const symex_target_equationt &eq [[maybe_unused]])
     return;
 
   goto_tracet goto_trace;
-  write_correctness_witnesses(options, ns, goto_trace);
+  write_correctness_witnesses(options, ns, goto_trace, {}, loop_invariants);
 
   // On a successful verification there is no error trace, but dead-store
   // advisories (CWE-563) are still valid and must reach SARIF. Emit an
