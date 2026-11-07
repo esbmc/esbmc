@@ -252,7 +252,7 @@ public:
   smt_astt mk_int2real(smt_astt a) override;
   smt_astt mk_isint(smt_astt a) override;
 
-  void assert_ast(smt_astt a) override;
+  void assert_ast_in_solver(smt_astt a) override;
 
   smt_sortt mk_bool_sort() override;
   smt_sortt mk_real_sort() override;
