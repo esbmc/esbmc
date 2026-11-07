@@ -1098,8 +1098,6 @@ expr2tc dereferencet::build_reference_to(
     return value;
   }
 
-  value = object;
-
   // Produce a guard that the dereferenced pointer points at this object.
   type2tc ptr_type = pointer_type2tc(object->type);
   expr2tc obj_ptr = address_of2tc(ptr_type, object);
