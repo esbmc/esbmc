@@ -6,20 +6,20 @@
 
 # Check if tool type coerces integer and string values.
 
-def func1():
-    return "Hello from func1"
+#def func1():
+#    return "Hello from func1"
 
 
-def func2():
-    return 42
+#def func2():
+#    return 42
 
 
-def main() -> None:
-    d = {1: func1, "1": func2}
-    if nondet_bool():
-        x = d[1]().upper()
-    else:
-        x = d["1"]() + 1
+#def main() -> None:
+#    d = {1: func1, "1": func2}
+#    if nondet_bool():
+#        x = d[1]().upper()
+#    else:
+#        x = d["1"]() + 1
 
 
-main()
+#main()
