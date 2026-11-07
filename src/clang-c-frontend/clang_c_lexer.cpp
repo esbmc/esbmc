@@ -27,6 +27,7 @@ CC_DIAGNOSTIC_POP()
 #include <util/arith/ieee_float.h>
 #include <util/lang/c_types.h>
 #include <util/message/message.h>
+#include <string_view>
 
 struct clang_c_lexert::LexerContext
 {
@@ -76,14 +77,24 @@ struct ParseState
   clang::Token cur;
 
   ParseState(clang_c_lexert::LexerContext &ctx_, const std::string &src)
+    : ParseState(ctx_, src, ctx_.lo)
+  {
+  }
+
+  ParseState(
+    clang_c_lexert::LexerContext &ctx_,
+    const std::string &src,
+    const clang::LangOptions &options,
+    bool retain_comments = false)
     : ctx(ctx_),
       lex(
         clang::SourceLocation(),
-        ctx_.lo,
+        options,
         src.data(),
         src.data(),
         src.data() + src.size())
   {
+    lex.SetCommentRetentionState(retain_comments);
     advance();
   }
 
@@ -304,4 +315,198 @@ expr2tc clang_c_lexert::parse_expr(const std::string &expr)
   if (!e || !ps.is(clang::tok::eof))
     return expr2tc();
   return e;
+}
+
+namespace
+{
+class control_body_scannert
+{
+  const std::string &source;
+  const std::set<size_t> &invariant_lines;
+  ParseState ps;
+  std::map<size_t, size_t> body_ends;
+  size_t offset = 0, line = 1;
+  size_t last_end = 0, depth = 0;
+  size_t line_start = 0, comment_end = 0;
+  bool at_line_start = false;
+  bool valid;
+
+  bool locate_token()
+  {
+    at_line_start = ps.cur.isAtStartOfLine();
+    while (ps.is(clang::tok::comment))
+    {
+      const size_t start = ps.cur.getLocation().getRawEncoding();
+      const std::string_view comment(source.data() + start, ps.cur.getLength());
+      if (comment.find('\n') != std::string_view::npos)
+        comment_end = start + comment.size();
+      ps.advance();
+      at_line_start |= ps.cur.isAtStartOfLine();
+    }
+    while (offset < ps.cur.getLocation().getRawEncoding())
+      if (source[offset++] == '\n')
+      {
+        ++line;
+        line_start = offset;
+      }
+    at_line_start &= line_start >= comment_end;
+    // Raw lexing cannot account for macros or conditional preprocessing.
+    return !ps.is(clang::tok::hash) && !ps.cur.needsCleaning();
+  }
+
+  bool advance()
+  {
+    last_end = ps.cur.getLocation().getRawEncoding() + ps.cur.getLength();
+    ps.advance();
+    return valid = locate_token();
+  }
+
+  bool consume(clang::tok::TokenKind kind)
+  {
+    return ps.is(kind) && advance();
+  }
+
+  bool word(const char *text) const
+  {
+    return source.compare(
+             ps.cur.getLocation().getRawEncoding(), ps.cur.getLength(), text) ==
+           0;
+  }
+
+  bool control() const
+  {
+    return word("if") || word("for") || word("while") || word("do");
+  }
+
+  bool item()
+  {
+    if (control())
+      return statement();
+    if (
+      ps.cur.isOneOf(
+        clang::tok::l_paren, clang::tok::l_square, clang::tok::l_brace))
+      return group();
+    if (
+      ps.cur.isOneOf(
+        clang::tok::eof,
+        clang::tok::r_paren,
+        clang::tok::r_square,
+        clang::tok::r_brace))
+      return false;
+    return advance();
+  }
+
+  bool sequence(clang::tok::TokenKind close)
+  {
+    while (valid && !ps.is(close))
+      if (!item())
+        return false;
+    return valid && (close == clang::tok::eof || advance());
+  }
+
+  bool group()
+  {
+    if (depth == 1024)
+      return false;
+    const auto close = ps.is(clang::tok::l_paren)    ? clang::tok::r_paren
+                       : ps.is(clang::tok::l_square) ? clang::tok::r_square
+                                                     : clang::tok::r_brace;
+    ++depth;
+    const bool result = advance() && sequence(close);
+    --depth;
+    return result;
+  }
+
+  bool body()
+  {
+    const size_t start_line = line;
+    const bool wrap =
+      !ps.is(clang::tok::l_brace) && invariant_lines.count(line);
+    if (wrap && !at_line_start)
+      return false;
+    if (!statement())
+      return false;
+    if (wrap)
+      body_ends[start_line] = last_end;
+    return true;
+  }
+
+  bool conditional()
+  {
+    const bool is_if = word("if");
+    if (!advance() || !ps.is(clang::tok::l_paren) || !group() || !body())
+      return false;
+    return !is_if || !word("else") || (advance() && body());
+  }
+
+  bool do_statement()
+  {
+    return advance() && body() && word("while") && advance() &&
+           ps.is(clang::tok::l_paren) && group() && consume(clang::tok::semi);
+  }
+
+  bool simple_statement()
+  {
+    if (word("case") || word("default"))
+      return false;
+    bool first = true;
+    while (valid && !ps.is(clang::tok::semi))
+    {
+      if (control() || word("switch") || !item())
+        return false;
+      if (first && ps.is(clang::tok::colon))
+        return false;
+      first = false;
+    }
+    return consume(clang::tok::semi);
+  }
+
+  bool statement()
+  {
+    if (!valid || depth == 1024)
+      return false;
+    ++depth;
+    bool result;
+    if (ps.is(clang::tok::l_brace))
+      result = group();
+    else if (word("do"))
+      result = do_statement();
+    else if (control())
+      result = conditional();
+    else
+      result = simple_statement();
+    --depth;
+    return result;
+  }
+
+public:
+  control_body_scannert(
+    clang_c_lexert::LexerContext &ctx,
+    const std::string &source,
+    const std::set<size_t> &invariant_lines,
+    const clang::LangOptions &options)
+    : source(source),
+      invariant_lines(invariant_lines),
+      ps(ctx, source, options, true),
+      valid(locate_token())
+  {
+  }
+
+  std::optional<std::map<size_t, size_t>> scan()
+  {
+    if (!sequence(clang::tok::eof))
+      return std::nullopt;
+    return body_ends;
+  }
+};
+} // namespace
+
+std::optional<std::map<size_t, size_t>> clang_c_lexert::find_control_body_ends(
+  const std::string &source,
+  const std::set<size_t> &invariant_lines)
+{
+  auto options = ctx->lo;
+  options.Digraphs = true;
+  options.Trigraphs = true;
+  return control_body_scannert(*ctx, source, invariant_lines, options).scan();
 }
