@@ -142,11 +142,6 @@ void value_sett::get_cast_value_set(
   // as a char pointer does, so it no longer stays in an array member.
   const expr2tc &from =
     is_typecast2t(expr) ? to_typecast2t(expr).from : to_bitcast2t(expr).from;
-  if (from->type == expr->type)
-  {
-    get_value_set_rec_cached(from, dest, suffix, original_type);
-    return;
-  }
   object_mapt cast_set;
   get_value_set_rec_cached(from, cast_set, suffix, original_type);
   for (const auto &[n, object] : cast_set)
