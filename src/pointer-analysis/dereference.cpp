@@ -1019,6 +1019,31 @@ expr2tc dereferencet::create_pointer_offset_bits(const expr2tc &deref_expr)
     gen_long(bitsize_type2(), 8));
 }
 
+expr2tc dereferencet::accessed_object(
+  const expr2tc &object,
+  const expr2tc &deref_expr,
+  modet mode,
+  expr2tc &start) const
+{
+  // An array member the pointer stays in is accessed, and bounds checked, as
+  // an object of its own (#9853); offsets are relative to it. Only a pointer
+  // to the element type stays in the member: one punned to another type, as
+  // a char * through a union, may walk the whole object.
+  if (
+    is_member2t(object) && !is_internal(mode) && is_pointer_type(deref_expr) &&
+    base_type_eq(
+      to_pointer_type(deref_expr->type).subtype,
+      to_array_type(object->type).subtype,
+      ns))
+  {
+    start = compute_pointer_offset(object, &ns);
+    return object;
+  }
+  start = gen_ulong(0);
+  // Value set tracking emits objects with some cruft built on top of them.
+  return get_base_object(object);
+}
+
 expr2tc dereferencet::build_reference_to(
   const expr2tc &what,
   modet mode,
@@ -1073,8 +1098,6 @@ expr2tc dereferencet::build_reference_to(
     return value;
   }
 
-  value = object;
-
   // Produce a guard that the dereferenced pointer points at this object.
   type2tc ptr_type = pointer_type2tc(object->type);
   expr2tc obj_ptr = address_of2tc(ptr_type, object);
@@ -1090,8 +1113,8 @@ expr2tc dereferencet::build_reference_to(
   if (is_free(mode))
     return expr2tc();
 
-  // Value set tracking emits objects with some cruft built on top of them.
-  value = get_base_object(value);
+  expr2tc member_start;
+  value = accessed_object(object, deref_expr, mode, member_start);
 
   // Final offset computations start here
   expr2tc final_offset = o.offset;
@@ -1116,6 +1139,10 @@ expr2tc dereferencet::build_reference_to(
 
     final_offset =
       pointer_offset2tc(get_int_type(config.ansi_c.address_width), deref_expr);
+    final_offset = sub2tc(
+      final_offset->type,
+      final_offset,
+      typecast2tc(final_offset->type, member_start));
     // simplify pointer offset expression
     simplify(final_offset);
   }
@@ -3112,7 +3139,7 @@ void dereferencet::bounds_check(
 
   expr2tc arrsize;
   if (
-    !is_constant_expr(expr) &&
+    is_symbol2t(expr) &&
     has_prefix(
       ns.lookup(to_symbol2t(expr).thename)->id.as_string(), "symex_dynamic::"))
   {

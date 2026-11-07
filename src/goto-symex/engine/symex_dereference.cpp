@@ -59,7 +59,7 @@ void symex_dereference_statet::get_value_set(
   value_setst::valuest &value_set)
 {
   // Here we obtain the set of objects via value set analysis.
-  state.value_set.get_value_set(expr, value_set);
+  state.value_set.get_value_set(expr, value_set, true);
 
   // add value set objects during the symbolic execution.
   if (
