@@ -49,10 +49,40 @@ bool program_uses_longjmp(const goto_functionst &goto_functions)
   return false;
 }
 
+bool is_main(const irep_idt &id)
+{
+  return id == "c:@F@main" || has_prefix(id, "c:@F@main#");
+}
+
+bool mentions_main(const expr2tc &e)
+{
+  if (is_nil_expr(e))
+    return false;
+  if (is_symbol2t(e) && is_main(to_symbol2t(e).thename))
+    return true;
+  bool found = false;
+  e->foreach_operand(
+    [&](const expr2tc &op) { found = found || mentions_main(op); });
+  return found;
+}
+
+/// Whether anything but __ESBMC_main can call main (C allows it, C++ does
+/// not), so a frame of main may end while an outer one still has a setjmp.
+bool main_reentrant(const goto_functionst &goto_functions)
+{
+  for (const auto &[id, f] : goto_functions.function_map)
+    if (id != goto_functions.main_id())
+      for (const auto &insn : f.body.instructions)
+        if (mentions_main(insn.code) || mentions_main(insn.guard))
+          return true;
+  return false;
+}
+
 class longjmp_loweringt
 {
 public:
-  explicit longjmp_loweringt(contextt &context) : context(context)
+  longjmp_loweringt(contextt &context, bool check_main)
+    : context(context), check_main(check_main)
   {
   }
 
@@ -77,23 +107,44 @@ public:
 
     auto end = std::prev(body.instructions.end());
     auto epilogue = insert(body, end, end);
-    epilogue->make_skip();
+    if (check_main && is_main(fn))
+      make_unmatched_check(*epilogue);
+    else
+      epilogue->make_skip();
 
     auto dispatch =
       sites.empty() ? epilogue : build_dispatch(fn, body, sites, epilogue);
 
+    // Checked at each call: the thread ends inside the trampoline before a
+    // jump to its epilogue would be merged there.
+    const bool thread_entry = fn == "c:@F@pthread_trampoline";
     for (auto call : others)
     {
       auto check = insert(body, std::next(call), call);
-      check->make_goto(dispatch, pending);
-      check->location.property("skipped");
+      if (thread_entry)
+        make_unmatched_check(*check);
+      else
+      {
+        check->make_goto(dispatch, pending);
+        check->location.property("skipped");
+      }
     }
   }
 
 private:
   contextt &context;
+  const bool check_main;
   expr2tc pending, value, token, count;
   unsigned slots = 0;
+
+  /// A jump still pending when a thread's outermost function ends found no
+  /// active setjmp to resume at (C11 7.13.2.1p2).
+  void make_unmatched_check(goto_programt::instructiont &insn) const
+  {
+    insn.make_assertion(not2tc(pending));
+    insn.location.property("longjmp");
+    insn.location.comment("longjmp to a jmp_buf whose setjmp is not active");
+  }
 
   bool global(expr2tc &e, const char *id)
   {
@@ -158,7 +209,12 @@ private:
 
       auto match = insert(body, done, site);
       auto land = insert(body, epilogue, site);
-      match->make_goto(land, equality2tc(token, slot));
+      // A never-set static jmp_buf holds token 0, which must not match a slot
+      // this frame zeroed.
+      match->make_goto(
+        land,
+        and2tc(
+          notequal2tc(slot, gen_zero(slot->type)), equality2tc(token, slot)));
       const expr2tc &ret = to_code_function_call2t(site->code).ret;
       if (!is_nil_expr(ret))
       {
@@ -179,7 +235,7 @@ void lower_longjmp(goto_functionst &goto_functions, contextt &context)
 {
   if (!program_uses_longjmp(goto_functions))
     return;
-  longjmp_loweringt lowering(context);
+  longjmp_loweringt lowering(context, !main_reentrant(goto_functions));
   if (!lowering.find_globals())
     return;
   for (auto &[id, f] : goto_functions.function_map)
