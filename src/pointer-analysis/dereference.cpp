@@ -1913,6 +1913,7 @@ void dereferencet::construct_from_const_offset(
     return;
   }
 
+  BigInt offset_val = theint.value;
   if (value->type->get_width() < type->get_width())
   {
     // Oversized read
@@ -1922,30 +1923,35 @@ void dereferencet::construct_from_const_offset(
       value = expr2tc();
       return;
     }
-    // We are accessing more than one member of a struct.
-    // So, get step down one level to the source_value and
-    // resort to extracting bytes from it.
-    else
+    // We are accessing more than one member of a struct. Step up through the
+    // enclosing members until the access fits, rebasing the offset onto each
+    // parent, and resort to extracting bytes from it.
+    const BigInt access_bits = type_byte_size_bits(type);
+    while (is_member2t(value) &&
+           type_byte_size_bits(value->type) < offset_val + access_bits)
     {
       const member2t &themember = to_member2t(value);
-      value = themember.source_value;
+      offset_val +=
+        member_offset_bits(themember.source_value->type, themember.member, &ns);
+      const expr2tc parent = themember.source_value;
+      value = parent;
     }
   }
+  const expr2tc offs = constant_int2tc(offset->type, offset_val);
 
   unsigned int num_bytes =
-    compute_num_bytes_to_extract(offset, type_byte_size_bits(type).to_uint64());
+    compute_num_bytes_to_extract(offs, type_byte_size_bits(type).to_uint64());
 
   // Converting offset to bytes before bytes extraction
   expr2tc offset_bytes = typecast2tc(
-    size_type2(), div2tc(offset->type, offset, gen_long(offset->type, 8)));
+    size_type2(), div2tc(offs->type, offs, gen_long(offs->type, 8)));
   simplify(offset_bytes);
 
   // Extracting and stitching bytes together
   value = stitch_together_from_byte_array(
     num_bytes, extract_bytes(value, num_bytes, offset_bytes));
 
-  expr2tc offset_bits =
-    modulus2tc(offset->type, offset, gen_long(offset->type, 8));
+  expr2tc offset_bits = modulus2tc(offs->type, offs, gen_long(offs->type, 8));
   simplify(offset_bits);
 
   value = extract_bits_from_byte_array(
