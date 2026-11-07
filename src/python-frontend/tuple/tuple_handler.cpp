@@ -269,6 +269,40 @@ exprt tuple_handler::copy_str_to_member(
   return dst;
 }
 
+static std::vector<size_t> non_padding_members(const typet &type)
+{
+  std::vector<size_t> idx;
+  const auto &components = to_struct_type(type).components();
+  for (size_t i = 0; i < components.size(); i++)
+    if (!components[i].get_is_padding())
+      idx.push_back(i);
+  return idx;
+}
+
+exprt tuple_handler::strip_padding(const exprt &value) const
+{
+  if (!is_tuple_type(value.type()))
+    return value;
+  const struct_typet &padded = to_struct_type(value.type());
+  const std::vector<size_t> idx = non_padding_members(padded);
+  if (idx.size() == padded.components().size())
+    return value;
+
+  std::vector<typet> element_types;
+  for (size_t i : idx)
+    element_types.push_back(padded.components()[i].type());
+  const struct_typet tuple_type = create_tuple_struct_type(element_types);
+  std::vector<expr2tc> members;
+  for (size_t i : idx)
+  {
+    expr2tc e2;
+    migrate_expr(get_tuple_element(value, padded, i), e2);
+    members.push_back(std::move(e2));
+  }
+  return migrate_expr_back(
+    constant_struct2tc(migrate_type(tuple_type), members));
+}
+
 /// Whether a tuple member of type @p from can be converted to @p to: a str
 /// pointer into a fixed-width str member, or one integer width to another.
 static bool is_coercible_member(const typet &from, const typet &to)
@@ -296,20 +330,27 @@ exprt tuple_handler::coerce_to_tuple_type(
     value.type() == target)
     return value;
 
+  // The target may already carry alignment padding (an Optional payload such
+  // as tuple[bool, float]) while the literal does not: match real members.
   const struct_typet &from = to_struct_type(value.type());
   const auto &to_members = to_struct_type(target).components();
-  if (from.components().size() != to_members.size())
+  const std::vector<size_t> from_idx = non_padding_members(from);
+  const std::vector<size_t> to_idx = non_padding_members(target);
+  if (from_idx.size() != to_idx.size())
     return value;
-  for (size_t i = 0; i < to_members.size(); i++)
-    if (!is_coercible_member(from.components()[i].type(), to_members[i].type()))
+  for (size_t k = 0; k < to_idx.size(); k++)
+    if (!is_coercible_member(
+          from.components()[from_idx[k]].type(), to_members[to_idx[k]].type()))
       return value;
 
   std::vector<expr2tc> members;
   members.reserve(to_members.size());
-  for (size_t i = 0; i < to_members.size(); i++)
+  for (size_t i = 0, k = 0; i < to_members.size(); i++)
   {
-    exprt elem = get_tuple_element(value, from, i);
     const typet &to_t = to_members[i].type();
+    exprt elem = to_members[i].get_is_padding()
+                   ? gen_zero(to_t)
+                   : get_tuple_element(value, from, from_idx[k++]);
     if (elem.type() != to_t && to_t.is_array())
       elem = copy_str_to_member(elem, to_array_type(to_t), loc, target_block);
     else if (elem.type() != to_t)

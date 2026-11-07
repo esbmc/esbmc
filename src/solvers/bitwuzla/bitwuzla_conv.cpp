@@ -121,7 +121,7 @@ const std::string bitwuzla_convt::solver_text()
   return ss;
 }
 
-void bitwuzla_convt::assert_ast(smt_astt a)
+void bitwuzla_convt::assert_ast_in_solver(smt_astt a)
 {
   bitw->assert_formula(to_solver_smt_ast<bitw_smt_ast>(a)->a);
 }

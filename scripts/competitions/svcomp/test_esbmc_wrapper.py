@@ -900,6 +900,29 @@ class ReachValidationUnwindTest(unittest.TestCase):
         self.assertNotIn("--goto-unwind", self.command(self.ESBMC, "violation"))
 
 
+class PthreadDetectionTest(unittest.TestCase):
+    """Only a call to pthread_create makes a task concurrent (#9971)."""
+
+    def detects(self, source):
+        with tempfile.NamedTemporaryFile("w", suffix=".i") as f:
+            f.write(source)
+            f.flush()
+            return wrapper.check_if_benchmark_contains_pthread(f.name)
+
+    def test_a_call_is_concurrent(self):
+        self.assertTrue(self.detects(
+            "extern int pthread_create (pthread_t *__restrict __newthread,\n"
+            "  status = pthread_create (&t, ((void *)0), f, ((void *)0));\n"))
+        self.assertTrue(self.detects("  pthread_create(&t1, 0, P0, 0);\n"))
+
+    def test_a_declaration_alone_is_not(self):
+        self.assertFalse(self.detects(
+            "extern int ( __attribute__((__nonnull__(1,3))) pthread_create)"
+            "(pthread_t * __restrict __newthread ,\n"))
+        self.assertFalse(self.detects(
+            "extern int pthread_create (pthread_t *__restrict __newthread,\n"))
+
+
 class OverflowFallbackTest(unittest.TestCase):
     """A no-overflow task runs k-induction first, then incremental BMC."""
 

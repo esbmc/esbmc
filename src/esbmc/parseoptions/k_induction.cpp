@@ -262,7 +262,7 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
       "--base-k-step ({}) must be smaller than --max-k-step ({}).",
       k_step_base,
       max_k_step);
-    abort();
+    return 1;
   }
 
   // All processes were created successfully

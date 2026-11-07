@@ -1,5 +1,6 @@
 #pragma once
 
+#include <functional>
 #include <nlohmann/json.hpp>
 #include <string>
 #include <unordered_map>
@@ -683,10 +684,16 @@ struct numeric_bindingt
   bool in_block;
 };
 
+// The kind of number a call returns: "int", "float" or "" when not known.
+using call_kindt = std::function<std::string(const nlohmann::json &)>;
+
 // The kind of number a binding of `name` stores: "int" (bool included),
-// "float", or "" for anything else or another name.
-inline std::string
-numeric_binding_kind(const nlohmann::json &stmt, const std::string &name)
+// "float", or "" for anything else or another name. An unannotated call
+// takes the kind `call_kind` gives it.
+inline std::string numeric_binding_kind(
+  const nlohmann::json &stmt,
+  const std::string &name,
+  const call_kindt &call_kind)
 {
   if (!assigns_name(stmt, name))
     return "";
@@ -695,7 +702,13 @@ numeric_binding_kind(const nlohmann::json &stmt, const std::string &name)
     annotation.is_object() ? annotation.value("id", "") : "";
   if (type == "int" || type == "bool")
     return "int";
-  return type == "float" ? "float" : "";
+  if (type == "float")
+    return "float";
+  const auto value = stmt.find("value");
+  return type.empty() && call_kind && value != stmt.end() &&
+             value->is_object() && value->value("_type", "") == "Call"
+           ? call_kind(*value)
+           : "";
 }
 
 // A line field of `node`, or -1 when the preprocessor left it unset.
@@ -730,12 +743,13 @@ inline void record_numeric_binding(
   const std::string &name,
   bool nested,
   int before,
-  std::vector<numeric_bindingt> &bindings)
+  std::vector<numeric_bindingt> &bindings,
+  const call_kindt &call_kind)
 {
   const int line = line_field(stmt, "lineno");
   if (!nested && line >= 0 && line < before && assigns_name(stmt, name))
     bindings.clear();
-  const std::string number = numeric_binding_kind(stmt, name);
+  const std::string number = numeric_binding_kind(stmt, name, call_kind);
   if (!number.empty() && stmt.contains("value") && !stmt["value"].is_null())
     bindings.push_back({number, stmt["value"], nested});
 }
@@ -749,7 +763,8 @@ inline void collect_numeric_bindings(
   bool nested,
   int before,
   bool include_later,
-  std::vector<numeric_bindingt> &bindings)
+  std::vector<numeric_bindingt> &bindings,
+  const call_kindt &call_kind)
 {
   for (const auto &stmt : body)
   {
@@ -758,12 +773,12 @@ inline void collect_numeric_bindings(
     const std::string kind = stmt.value("_type", "");
     if (kind == "FunctionDef" || kind == "ClassDef")
       continue;
-    record_numeric_binding(stmt, name, nested, before, bindings);
+    record_numeric_binding(stmt, name, nested, before, bindings, call_kind);
     const bool later = include_later || loop_spans(stmt, before);
     for (const char *key : {"body", "orelse", "finalbody", "handlers", "cases"})
       if (stmt.contains(key) && stmt[key].is_array())
         collect_numeric_bindings(
-          stmt[key], name, true, before, later, bindings);
+          stmt[key], name, true, before, later, bindings, call_kind);
   }
 }
 

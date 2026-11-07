@@ -1,0 +1,5 @@
+CORE
+main.c
+--no-align-check
+^VERIFICATION FAILED$
+FAILED.*assertion s\.pad == 5

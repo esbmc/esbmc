@@ -317,12 +317,14 @@ static waypoint witness_waypoint(
 /* README-YAML.md requires a waypoint's file_name to be one of the task's input
    files, so a step inside a header or an operational model is reported at its
    innermost call site that is one. Null when no frame qualifies. */
-static const locationt *witness_input_location(const goto_trace_stept &step)
+static const locationt *witness_input_location(
+  goto_programt::const_targett pc,
+  const std::vector<stack_framet> &stack_trace)
 {
-  if (input_file_check(step.pc->location))
-    return &step.pc->location;
+  if (input_file_check(pc->location))
+    return &pc->location;
 
-  for (const auto &frame : step.stack_trace)
+  for (const auto &frame : stack_trace)
     if (
       frame.src != nullptr && frame.src->is_set &&
       input_file_check(frame.src->pc->location))
@@ -336,15 +338,14 @@ static const locationt *witness_input_location(const goto_trace_stept &step)
    than dropped: a file_name the validator was never given makes the witness
    ill-formed, while a line it cannot match only costs confirmation. */
 static waypoint witness_target_waypoint(
-  const goto_trace_stept &step,
+  goto_programt::const_targett pc,
+  const std::vector<stack_framet> &stack_trace,
   const std::string &verified_file,
   optionst &options)
 {
-  const locationt *loc = witness_input_location(step);
+  const locationt *loc = witness_input_location(pc, stack_trace);
   waypoint wp = witness_waypoint(
-    loc ? full_expression_start(*loc) : step.pc->location,
-    verified_file,
-    options);
+    loc ? full_expression_start(*loc) : pc->location, verified_file, options);
   wp.type = waypoint::target;
   if (loc == nullptr)
     wp.file = verified_file;
@@ -518,6 +519,23 @@ static void push_nondet_return_waypoints(
    branching waypoint only weakens guidance. */
 static constexpr size_t max_branching_waypoints = 1000;
 
+/* The failed assertion's access, and for a data race the access it raced
+   with. */
+static void push_violation_targets(
+  yamlt &yml,
+  const goto_trace_stept &step,
+  optionst &options)
+{
+  yml.segments.push_back(witness_target_waypoint(
+    step.pc, step.stack_trace, yml.verified_file, options));
+  if (step.racing_access)
+    yml.racing_target = witness_target_waypoint(
+      step.racing_access->pc,
+      step.racing_access->stack_trace,
+      yml.verified_file,
+      options);
+}
+
 /* A validator binds a branching waypoint to the next visit of its source
    location, not of its instruction: --goto-unwind copies a loop body. */
 static std::string branch_location(const goto_trace_stept &step)
@@ -565,8 +583,7 @@ void violation_yaml_goto_trace(
     case symex_targett::ASSERT:
       if (!step.guard)
       {
-        yml.segments.push_back(
-          witness_target_waypoint(step, yml.verified_file, options));
+        push_violation_targets(yml, step, options);
 
         /* having printed a property violation, don't print more steps. */
 

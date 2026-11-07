@@ -134,6 +134,10 @@ public:
     const struct_typet &tuple_type,
     size_t idx) const;
 
+  /// @p value with any alignment padding members dropped, typed as the
+  /// unpadded tuple a literal of the same element types has.
+  exprt strip_padding(const exprt &value) const;
+
   /**
    * @brief Convert tuple @p value to the annotation-built tuple type @p target
    *

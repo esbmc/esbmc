@@ -115,18 +115,33 @@ bool do_get_sub_expr(const T &, size_t, size_t &, const expr2tc *&)
 }
 
 template <>
-bool do_get_sub_expr<expr2tc>(
+inline bool do_get_sub_expr<expr2tc>(
   const expr2tc &item,
   size_t idx,
   size_t &it,
-  const expr2tc *&ptr);
+  const expr2tc *&ptr)
+{
+  if (idx != it++)
+    return false;
+  ptr = &item;
+  return true;
+}
 
 template <>
-bool do_get_sub_expr<std::vector<expr2tc>>(
+inline bool do_get_sub_expr<std::vector<expr2tc>>(
   const std::vector<expr2tc> &item,
   size_t idx,
   size_t &it,
-  const expr2tc *&ptr);
+  const expr2tc *&ptr)
+{
+  if (idx < it + item.size())
+  {
+    ptr = &item[idx - it];
+    return true;
+  }
+  it += item.size();
+  return false;
+}
 
 template <class T>
 size_t do_count_sub_exprs(T &)
@@ -135,11 +150,17 @@ size_t do_count_sub_exprs(T &)
 }
 
 template <>
-size_t do_count_sub_exprs<const expr2tc>(const expr2tc &);
+inline size_t do_count_sub_exprs<const expr2tc>(const expr2tc &)
+{
+  return 1;
+}
 
 template <>
-size_t do_count_sub_exprs<const std::vector<expr2tc>>(
-  const std::vector<expr2tc> &item);
+inline size_t
+do_count_sub_exprs<const std::vector<expr2tc>>(const std::vector<expr2tc> &item)
+{
+  return item.size();
+}
 
 // Field-dispatch for expr2t::foreach_operand. Primary template is a no-op;
 // the specialisations below match expr2tc and std::vector<expr2tc> fields.
@@ -149,24 +170,39 @@ void call_expr_delegate(T &, U &)
 }
 
 template <>
-void call_expr_delegate<const expr2tc, expr2t::const_op_delegate>(
+inline void call_expr_delegate<const expr2tc, expr2t::const_op_delegate>(
   const expr2tc &ref,
-  expr2t::const_op_delegate &f);
+  expr2t::const_op_delegate &f)
+{
+  f(ref);
+}
 
 template <>
-void call_expr_delegate<expr2tc, expr2t::op_delegate>(
+inline void call_expr_delegate<expr2tc, expr2t::op_delegate>(
   expr2tc &ref,
-  expr2t::op_delegate &f);
+  expr2t::op_delegate &f)
+{
+  f(ref);
+}
 
 template <>
-void call_expr_delegate<const std::vector<expr2tc>, expr2t::const_op_delegate>(
+inline void
+call_expr_delegate<const std::vector<expr2tc>, expr2t::const_op_delegate>(
   const std::vector<expr2tc> &ref,
-  expr2t::const_op_delegate &f);
+  expr2t::const_op_delegate &f)
+{
+  for (const expr2tc &r : ref)
+    f(r);
+}
 
 template <>
-void call_expr_delegate<std::vector<expr2tc>, expr2t::op_delegate>(
+inline void call_expr_delegate<std::vector<expr2tc>, expr2t::op_delegate>(
   std::vector<expr2tc> &ref,
-  expr2t::op_delegate &f);
+  expr2t::op_delegate &f)
+{
+  for (expr2tc &r : ref)
+    f(r);
+}
 
 // Same shape as call_expr_delegate, but for type2t::foreach_subtype.
 template <typename T, typename U>
