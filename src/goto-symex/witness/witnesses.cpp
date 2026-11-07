@@ -1641,79 +1641,80 @@ std::vector<collected_nondet_value> collect_nondet_values(
 
   for (auto const &SSA_step : target.SSA_steps)
   {
-    if (SSA_step.ignore || !smt_conv.l_get(SSA_step.guard).is_true())
+    if (SSA_step.ignore)
       continue;
 
     if (SSA_step.is_assignment())
     {
-      auto nondet_expr = symex_slicet::get_nondet_symbol(SSA_step.rhs);
-      if (!nondet_expr || !is_symbol2t(nondet_expr))
+      std::vector<expr2tc> nondets =
+        symex_slicet::get_nondet_symbols(SSA_step.rhs);
+      if (nondets.empty())
         continue;
 
-      const symbol2t &sym = to_symbol2t(nondet_expr);
-      if (!has_prefix(sym.thename.as_string(), "nondet$"))
-        continue;
+      const std::string file_path =
+        SSA_step.source.pc->location.file().as_string();
+      const bool reached = smt_conv.l_get(SSA_step.guard).is_true();
 
       if (
-        harness_inputs_only &&
+        reached && harness_inputs_only &&
         SSA_step.source.pc->location.function() == "__VERIFIER_nondet_memory" &&
-        file_operations::is_bundled_source(
-          SSA_step.source.pc->location.file().as_string()))
+        file_operations::is_bundled_source(file_path))
       {
-        if (seen_nondets.insert(sym.thename.as_string()).second)
-          collect_nondet_bytes(nondet_expr, smt_conv, results);
+        for (const expr2tc &nondet_expr : nondets)
+        {
+          const std::string name = to_symbol2t(nondet_expr).thename.as_string();
+          if (seen_nondets.insert(name).second)
+            collect_nondet_bytes(nondet_expr, smt_conv, results);
+        }
         continue;
       }
 
-      // Nondet initialisation of an uninitialised local (inserted by
-      // mark_decl_as_non_det) is not a program input: the test harness only
-      // feeds values to __VERIFIER_nondet_*() calls, so emitting it would
-      // shift every following input.
-      if (
-        harness_inputs_only &&
-        SSA_step.source.pc->location.get_bool("#decl_nondet"))
-        continue;
+      const bool is_input =
+        reached &&
+        // Nondet initialisation of an uninitialised local (inserted by
+        // mark_decl_as_non_det) is not a program input: the test harness
+        // only feeds values to __VERIFIER_nondet_*() calls, so emitting it
+        // would shift every following input.
+        !(harness_inputs_only &&
+          SSA_step.source.pc->location.get_bool("#decl_nondet")) &&
+        // System library nondets (stdin, stdout, stderr, etc.)
+        !has_prefix(file_path, "/usr/include/") &&
+        !has_prefix(file_path, "/lib/") && !has_prefix(file_path, "/opt/") &&
+        // Likewise nondets from ESBMC's own library and operational models,
+        // e.g. the uninitialised `errno` global in libc/library/stdlib.c.
+        !file_operations::is_bundled_source(file_path);
 
-      // Skip system library nondets (stdin, stdout, stderr, etc.)
-      // These are from /usr/include/ or other system paths
-      std::string file_path = SSA_step.source.pc->location.file().as_string();
-      if (
-        has_prefix(file_path, "/usr/include/") ||
-        has_prefix(file_path, "/lib/") || has_prefix(file_path, "/opt/"))
+      // A skipped nondet stays seen: it can reappear in a later struct
+      // literal, e.g. a model-set member of a struct the program then writes.
+      if (!is_input)
       {
+        for (const expr2tc &nondet_expr : nondets)
+          seen_nondets.insert(to_symbol2t(nondet_expr).thename.as_string());
         continue;
       }
 
-      // Likewise for nondets from ESBMC's own library and operational
-      // models, e.g. the uninitialised `errno` global in libc/library/stdlib.c.
-      if (file_operations::is_bundled_source(file_path))
-        continue;
-
-      // Deduplicate by symbol name
-      if (seen_nondets.count(sym.thename.as_string()))
+      for (const expr2tc &nondet_expr : nondets)
       {
-        continue;
+        const std::string name = to_symbol2t(nondet_expr).thename.as_string();
+        if (!seen_nondets.insert(name).second)
+          continue;
+
+        // Get concrete value, model-completing unconstrained aggregate
+        // components to zero so witnesses render with all fields present
+        // and consistent across the witness set. `nondet_expr` is the live
+        // root for re-querying any nested aggregate the backend left
+        // unexpanded (e.g. Z3 returns `{ .c=N, .i=member(sym).i }` for a
+        // struct whose nested `.i` field is itself a struct).
+        auto concrete_value = zero_fill_aggregate(
+          nondet_expr->type, smt_conv.get(nondet_expr), nondet_expr, smt_conv);
+
+        collected_nondet_value val;
+        val.symbol_name = name;
+        val.symbol_expr = nondet_expr;
+        val.value_expr = concrete_value;
+        val.type = concrete_value->type;
+        results.push_back(val);
       }
-
-      seen_nondets.insert(sym.thename.as_string());
-
-      // Get concrete value, model-completing unconstrained aggregate
-      // components to zero so witnesses render with all fields present
-      // and consistent across the witness set. `nondet_expr` is the live
-      // root for re-querying any nested aggregate the backend left
-      // unexpanded (e.g. Z3 returns `{ .c=N, .i=member(sym).i }` for a
-      // struct whose nested `.i` field is itself a struct).
-      auto concrete_value = zero_fill_aggregate(
-        nondet_expr->type, smt_conv.get(nondet_expr), nondet_expr, smt_conv);
-
-      // Store the collected value
-      collected_nondet_value val;
-      val.symbol_name = sym.thename.as_string();
-      val.symbol_expr = nondet_expr;
-      val.value_expr = concrete_value;
-      val.type = concrete_value->type;
-
-      results.push_back(val);
     }
   }
   return results;
