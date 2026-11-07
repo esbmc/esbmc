@@ -14,6 +14,7 @@
 #include <util/arith/arith_tools.h>
 #include <util/irep/migrate.h>
 #include <util/symtab/namespace.h>
+#include <mutex>
 #include <set>
 #include <util/base/prefix.h>
 #include <util/irep/pad_names.h>

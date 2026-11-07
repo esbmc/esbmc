@@ -293,7 +293,7 @@ void bmct::successful_trace(const symex_target_equationt &eq [[maybe_unused]])
     return;
 
   goto_tracet goto_trace;
-  write_correctness_witnesses(options, ns, goto_trace);
+  write_correctness_witnesses(options, ns, goto_trace, {}, loop_invariants);
 
   // On a successful verification there is no error trace, but dead-store
   // advisories (CWE-563) are still valid and must reach SARIF. Emit an
@@ -452,7 +452,7 @@ void bmct::error_trace(smt_convt &smt_conv, const symex_target_equationt &eq)
     violation_graphml_goto_trace(options, ns, goto_trace);
 
   if (witness_yaml_output != "")
-    violation_yaml_goto_trace(options, ns, goto_trace);
+    violation_yaml_goto_trace(options, ns, goto_trace, program);
 
   if (!options.get_option("sarif-output").empty())
   {
@@ -3761,7 +3761,7 @@ smt_resultt bmct::multi_property_check(
             options, ns, w.trace, tag_artifact(graphml_path));
         if (want_yaml)
           violation_yaml_goto_trace(
-            options, ns, w.trace, tag_artifact(yaml_path));
+            options, ns, w.trace, program, tag_artifact(yaml_path));
         if (want_testcase)
           generate_testcase(
             "testcase-" + witness_id + ".xml", local_eq, *solver_ptr);

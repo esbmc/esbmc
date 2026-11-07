@@ -519,6 +519,15 @@ private:
    *  object, i.e. the assumption check_alignment() is entitled to make about
    *  everything below the offset it checks. */
   BigInt object_base_alignment(const expr2tc &object) const;
+
+  /** What a dereference of \p deref_expr resolving to the value-set \p object
+   *  accesses: an array member the value set named, or the base object. Sets
+   *  \p start to the byte offset of the accessed object within its base. */
+  expr2tc accessed_object(
+    const expr2tc &object,
+    const expr2tc &deref_expr,
+    modet mode,
+    expr2tc &start) const;
   unsigned int static compute_num_bytes_to_extract(
     const expr2tc &offset,
     unsigned long num_bits);
