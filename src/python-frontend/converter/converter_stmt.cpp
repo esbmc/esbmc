@@ -7459,6 +7459,15 @@ bool python_converter::try_numpy_nditer_assign(const nlohmann::json &ast_node)
   return false;
 }
 
+/// The symbol whose recorded string length @p rhs carries: a nondet_str()
+/// value is the address of its buffer's first byte.
+static const exprt &string_buffer_of(const exprt &rhs)
+{
+  if (rhs.id() == "address_of" && rhs.op0().id() == "index")
+    return rhs.op0().op0();
+  return rhs;
+}
+
 void python_converter::get_var_assign(
   const nlohmann::json &ast_node,
   codet &target_block)
@@ -8345,9 +8354,10 @@ void python_converter::get_var_assign(
     // Must run before type-branching which may take early returns.
     if (lhs.is_symbol())
     {
-      if (rhs.is_symbol())
+      const exprt &named = string_buffer_of(rhs);
+      if (named.is_symbol())
       {
-        const std::string rhs_id = rhs.identifier().as_string();
+        const std::string rhs_id = named.identifier().as_string();
         auto it = input_str_to_len_sym_.find(rhs_id);
         if (it != input_str_to_len_sym_.end())
           input_str_to_len_sym_[lhs.identifier().as_string()] = it->second;
