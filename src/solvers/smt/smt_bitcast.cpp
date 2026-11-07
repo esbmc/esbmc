@@ -212,8 +212,9 @@ bool smt_solver_baset::pointer_repr_applies(
   return ptr_type->get_width() == bv_type->get_width();
 }
 
-/** @p ptr with member, index and same-type typecast nodes over aggregates
- *  folded away, as it appears in the SSA step that holds it. */
+/** @p ptr with the member, index and typecast nodes the simplifier folds
+ *  removed, looking through same-type typecasts of their operand, as the
+ *  pointer appears in the SSA step that holds it. */
 static expr2tc folded_pointer(expr2tc ptr)
 {
   while (is_member2t(ptr) || is_index2t(ptr) || is_typecast2t(ptr))
@@ -246,8 +247,9 @@ smt_astt smt_solver_baset::encode_pointer_repr(
     bitcast2tc(to_type, ptr),
     ptr_flatten_entry{address, pointer, nullptr, ctx_level, 0});
   record_flattened_pointer(address, pointer);
-  flattened_values[folded_pointer(ptr)].emplace_back(
-    ctx_level, flatten_count - 1);
+  // A symbol reaches a later step through ptr_flow instead.
+  if (expr2tc value = folded_pointer(ptr); !is_symbol2t(value))
+    flattened_values[value].emplace_back(ctx_level, flatten_count - 1);
   return address;
 }
 
@@ -278,9 +280,11 @@ void smt_solver_baset::begin_step(const expr2tc &guard, const expr2tc &cond)
 
   /* A bitcast converted in an earlier step is a cache hit here, so
    * encode_pointer_repr() does not run; it is re-recorded under this step's
-   * guard below. The walk is memoised: SSA steps are DAGs (#7474). */
+   * guard below. A pointer flattened inside such an aggregate shows up only by
+   * its value, which makes its flattens sources here. The walk is memoised:
+   * SSA steps are DAGs (#7474). */
   std::vector<ptr_flatten_entry> reused;
-  if (!ptr_flow.empty() || !flattened.empty() || !flattened_values.empty())
+  if (!ptr_flow.empty() || !flattened.empty())
   {
     std::unordered_set<const expr2t *> seen;
     std::function<void(const expr2tc &)> walk = [&](const expr2tc &e) {
@@ -296,8 +300,8 @@ void smt_solver_baset::begin_step(const expr2tc &guard, const expr2tc &cond)
       else if (auto it = flattened.find(e); it != flattened.end())
         reused.push_back(it->second);
       else if (auto v = flattened_values.find(e); v != flattened_values.end())
-        for (const auto &[level, id] : v->second)
-          step_sources.insert(id);
+        for (const auto &flatten : v->second)
+          step_sources.insert(flatten.second);
       e->foreach_operand(walk);
     };
     walk(guard);
@@ -331,8 +335,9 @@ void smt_solver_baset::end_step()
 
 /** The pointer whose flattened representation is bits [lo, lo + width) of
  *  @p e whenever @p untouched holds (nil: always), looking through extracts,
- *  byte updates that leave those bits alone and the member layout of
- *  flatten_to_bitvector. The pointer is nil when that is not evident. */
+ *  truncations, byte updates that leave those bits alone, union withs and the
+ *  struct and array layout of flatten_to_bitvector. The pointer is nil when
+ * that is not evident. */
 struct flattened_pointert
 {
   expr2tc pointer;
@@ -408,8 +413,10 @@ flattened_in_union_with(const with2t &with, unsigned lo, unsigned width)
 {
   const unsigned bits = with.type->get_width();
   const type2tc &member_type =
-    to_union_type(with.type).members[*struct_union_get_component_number(
-      with.type, to_constant_string2t(with.update_field).value)];
+    to_union_type(with.type)
+      .members[struct_union_get_component_number(
+                 with.type, to_constant_string2t(with.update_field).value)
+                 .value()];
   const unsigned mem_bits = type_byte_size_bits(member_type).to_uint64();
   const unsigned member_lo =
     mem_bits < bits ? flattened_position(0, mem_bits, bits) : 0;
