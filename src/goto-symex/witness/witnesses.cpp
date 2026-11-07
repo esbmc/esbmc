@@ -1806,9 +1806,18 @@ void generate_testcase(
       test_case << fmt::format(
         "<input>{}</input>\n", to_constant_int2t(value_expr).value);
     else if (is_constant_floatbv2t(value_expr))
-      test_case << fmt::format(
-        "<input>{}</input>\n",
-        to_constant_floatbv2t(value_expr).value.to_ansi_c_string());
+    {
+      // fmt's default float format is the shortest string that reads back
+      // as the same value; to_ansi_c_string keeps only 6 digits.
+      const ieee_floatt &fv = to_constant_floatbv2t(value_expr).value;
+      const bool finite = !fv.is_NaN() && !fv.is_infinity();
+      std::string text = fv.to_ansi_c_string();
+      if (finite && fv.spec == ieee_float_spect::single_precision())
+        text = fmt::format("{}", fv.to_float());
+      else if (finite && fv.spec == ieee_float_spect::double_precision())
+        text = fmt::format("{}", fv.to_double());
+      test_case << fmt::format("<input>{}</input>\n", text);
+    }
     else if (is_constant_bool2t(value_expr))
       test_case << fmt::format(
         "<input>{}</input>\n",
