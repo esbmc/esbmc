@@ -123,6 +123,10 @@ expr2tc union_bits_with_member(
 /** A union member's bits @p member widened to the union's @p bits, as the
  *  bits at the union's lowest address; zero-extension is left to the caller. */
 expr2tc union_bits_of_member(const expr2tc &member, unsigned bits);
+
+/** The bits a union with2t writes through its member; nil for a zero-width
+ *  member, which writes none. */
+expr2tc union_with_member_bits(const with2t &with);
 class ra_apit;
 
 #include <solvers/smt/smt_array.h>
