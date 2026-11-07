@@ -78,9 +78,14 @@ class _Inliner(ast.NodeTransformer):
         self.scopes.pop()
         return node
 
-    visit_FunctionDef = visit_AsyncFunctionDef = visit_ClassDef = _visit_scope
-    visit_Lambda = visit_ListComp = visit_SetComp = _visit_scope
-    visit_DictComp = visit_GeneratorExp = _visit_scope
+    visit_FunctionDef = _visit_scope  # noqa: N815
+    visit_AsyncFunctionDef = _visit_scope  # noqa: N815
+    visit_ClassDef = _visit_scope  # noqa: N815
+    visit_Lambda = _visit_scope  # noqa: N815
+    visit_ListComp = _visit_scope  # noqa: N815
+    visit_SetComp = _visit_scope  # noqa: N815
+    visit_DictComp = _visit_scope  # noqa: N815
+    visit_GeneratorExp = _visit_scope  # noqa: N815
 
     def _eval_allowed(self, expr):
         enclosing = [s for s in self.scopes if not isinstance(s, ast.ClassDef)]
