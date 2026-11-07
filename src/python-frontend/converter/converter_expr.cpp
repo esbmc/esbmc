@@ -3780,8 +3780,9 @@ std::string python_converter::call_number_kind(const nlohmann::json &call) const
   const std::string key = current_python_file + ":" +
                           std::to_string(call.value("lineno", 0)) + ":" +
                           std::to_string(call.value("col_offset", 0));
-  if (const auto known = call_number_kinds_.find(key);
-      known != call_number_kinds_.end())
+  if (
+    const auto known = call_number_kinds_.find(key);
+    known != call_number_kinds_.end())
     return known->second;
 
   symbol_id callee;
@@ -3799,8 +3800,7 @@ std::string python_converter::call_number_kind(const nlohmann::json &call) const
     callee_symbol = find_imported_symbol(callee.to_string());
   if (!callee_symbol || !callee_symbol->get_type().is_code())
     return "";
-  const typet &returned =
-    to_code_type(callee_symbol->get_type()).return_type();
+  const typet &returned = to_code_type(callee_symbol->get_type()).return_type();
   std::string number;
   if (returned.is_floatbv())
     number = "float";
