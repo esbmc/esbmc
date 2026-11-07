@@ -123,6 +123,10 @@ expr2tc union_bits_with_member(
 /** A union member's bits @p member widened to the union's @p bits, as the
  *  bits at the union's lowest address; zero-extension is left to the caller. */
 expr2tc union_bits_of_member(const expr2tc &member, unsigned bits);
+
+/** The bits a union with2t writes through its member; nil for a zero-width
+ *  member, which writes none. */
+expr2tc union_with_member_bits(const with2t &with);
 class ra_apit;
 
 #include <solvers/smt/smt_array.h>
@@ -282,7 +286,9 @@ public:
    *  assignment it attempts to produce, the formula corresponding to the
    *  smt_ast argument must evaluate to true.
    *  @param a A handle to the formula that must be true. */
-  virtual void assert_ast(smt_astt a) = 0;
+  void assert_ast(smt_astt a);
+  /** The backend's half of assert_ast(). */
+  virtual void assert_ast_in_solver(smt_astt a) = 0;
 
   /** Solve the formula given to the solver. The solver will attempt to produce
    *  a satisfying assignment for all of the variables / symbols used in the
@@ -363,6 +369,21 @@ public:
   std::optional<expr2tc> get_index(const expr2tc &expr, expr2tc &res);
 
   virtual expr2tc get(const expr2tc &expr);
+
+  /** Whether the encoding gave @p expr a term a model can be read through. A
+   *  symbol is a leaf: converting one only declares it. */
+  bool has_term(const expr2tc &expr);
+  /** The term of @p expr, or of the encoded struct it is a field of projected
+   *  to that field; null where neither exists. Builds no constraint. */
+  smt_astt term_of(const expr2tc &expr);
+  /** The model value of @p expr, computed from the values of its operands
+   *  where it has no term, so that reading it builds no new formula. */
+  expr2tc value_of(const expr2tc &expr);
+  /** The value of @p type whose object representation is @p bits, a binary
+   *  string with the most significant bit first. */
+  expr2tc value_from_bits(const type2tc &type, const std::string &bits);
+  /** The pointer of @p type whose address in the model is @p address. */
+  expr2tc pointer_at_address(const type2tc &type, const BigInt &address);
 
   /** Solver name fetcher. Returns a string naming the solver being used, and
    *  potentially it's version, if available.
@@ -1137,6 +1158,9 @@ public:
    *  rather than keying it: the same bit-vector reads differently as signed
    *  or unsigned. */
   std::unordered_map<smt_astt, std::pair<type2tc, expr2tc>> get_ast_cache;
+  /** The expression get() and friends are reading from the model, nil
+   *  otherwise. An assertion meanwhile discards that model (#8097). */
+  expr2tc reading_model;
   /** Pointer_logict object, which contains some code for formatting how
    *  pointers are displayed in counter-examples. This is a list so that we
    *  can push and pop data when context push/pop operations occur. */

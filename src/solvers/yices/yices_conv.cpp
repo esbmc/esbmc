@@ -131,7 +131,7 @@ const std::string yices_convt::solver_text()
   return ss.str();
 }
 
-void yices_convt::assert_ast(smt_astt a)
+void yices_convt::assert_ast_in_solver(smt_astt a)
 {
   const yices_smt_ast *ast = to_solver_smt_ast<yices_smt_ast>(a);
   yices_assert_formula(yices_ctx, ast->a);

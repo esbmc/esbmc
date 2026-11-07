@@ -469,6 +469,92 @@ class PythonPropertyTest(unittest.TestCase):
                          wrapper.Property.py_arithmetic), "TRUE")
 
 
+# The --multi-property re-run of two SV-COMP 2027 Python tasks, trimmed. ESBMC
+# pads a row's line number to three columns, and lists a module-level
+# property under a bare path line rather than a ", function" header.
+MULTI_FUNCTION_ROWS = """
+Violated property:
+  file ../../sv-benchmarks/python/vllm/vllm_check_stop_buggy.py line 74 column 4 function main
+  assertion num_tokens < max_model_len
+  num_tokens < max_model_len
+
+Violated property:
+  file ../../sv-benchmarks/python/vllm/vllm_check_stop_buggy.py line 75 column 4 function main
+  assertion num_output_tokens < max_tokens
+  num_output_tokens < max_tokens
+
+** Results:
+../../sv-benchmarks/python/vllm/vllm_check_stop_buggy.py
+  PASSED       [global.assertion.1]                                line   0  uncaught exception
+../../sv-benchmarks/python/vllm/vllm_check_stop_buggy.py, function main
+  PASSED       [main.assertion.1]                                  line  58  assertion num_output_tokens >= 1
+  FAILED       [main.assertion.2]                                  line  74  assertion num_tokens < max_model_len
+  FAILED       [main.assertion.3]                                  line  75  assertion num_output_tokens < max_tokens
+/esbmc-vfs/libc/library/string.c, function memcpy
+  PASSED       [memcpy.null-pointer-dereference.1]                 line 343  dereference failure: NULL pointer on DST
+
+** 2 of 67 properties failed, 65 passed
+
+VERIFICATION FAILED
+"""
+
+MULTI_MODULE_ROWS = """
+Violated property:
+  file ../../sv-benchmarks/python/type-eval-py/returns_return_lambda_unsafe/main.py line 27 column 0
+  assertion a >= 0
+  a >= 0
+
+Violated property:
+  file ../../sv-benchmarks/python/type-eval-py/returns_return_lambda_unsafe/main.py line 28 column 0
+  assertion a == n * n
+  a == n * n
+
+** Results:
+../../sv-benchmarks/python/type-eval-py/returns_return_lambda_unsafe/main.py
+  PASSED       [global.assertion.1]                                line   0  uncaught exception
+  PASSED       [global.assertion.2]                                line  24  dereference failure: Program code accessed with non-zero offset
+  FAILED       [global.assertion.3]                                line  27  assertion a >= 0
+  FAILED       [global.assertion.4]                                line  28  assertion a == n * n
+  PASSED       [global.assertion.5]                                line  30  assertion b >= 0.25
+/esbmc-vfs/libc/library/string.c, function memcpy
+  PASSED       [memcpy.null-pointer-dereference.1]                 line 343  dereference failure: NULL pointer on DST
+
+** 2 of 68 properties failed, 66 passed
+
+VERIFICATION FAILED
+"""
+
+
+def single_run(path, line, comment, function=None):
+    """A run that stops at its first violation, shaped like ESBMC's output."""
+    where = " column 4 function " + function if function else " column 0"
+    header = path + (", function " + function if function else "")
+    claim = (function or "global") + ".assertion.1"
+    return ("\nViolated property:\n  file %s line %s%s\n  %s\n\n** Results:\n%s\n"
+            "  FAILED       [%s]  line %3s  %s\n\nVERIFICATION FAILED\n"
+            % (path, line, where, comment, header, claim, line, comment))
+
+
+class FailedSitesTest(unittest.TestCase):
+    """failed_sites reads every FAILED row of a --multi-property results table."""
+
+    def test_padded_rows_under_a_function_header(self):
+        self.assertEqual(wrapper.failed_sites(MULTI_FUNCTION_ROWS),
+                         {("vllm_check_stop_buggy.py", "74"), ("vllm_check_stop_buggy.py", "75")})
+
+    def test_padded_rows_under_a_module_header(self):
+        self.assertEqual(wrapper.failed_sites(MULTI_MODULE_ROWS), {("main.py", "27"), ("main.py", "28")})
+
+    def test_an_unpadded_three_digit_line(self):
+        failed = MULTI_FUNCTION_ROWS.replace("  PASSED       [memcpy.", "  FAILED       [memcpy.")
+        self.assertIn(("string.c", "343"), wrapper.failed_sites(failed))
+
+    def test_passed_rows_are_not_sites(self):
+        sites = wrapper.failed_sites(MULTI_FUNCTION_ROWS) | wrapper.failed_sites(MULTI_MODULE_ROWS)
+        for passed in ("0", "24", "30", "58", "343"):
+            self.assertNotIn(passed, {line for _, line in sites})
+
+
 class IntegerEncodingConfirmationTest(unittest.TestCase):
     """A Python violation stays FALSE only if a --ir re-run repeats it in place."""
 
@@ -538,6 +624,27 @@ class IntegerEncodingConfirmationTest(unittest.TestCase):
         self.assertTrue(calls[1][0].endswith("--ir --z3 "))
         self.assertTrue(calls[2][0].endswith("--ir --z3 --multi-property "))
         self.assertEqual(calls[2][1], wrapper.IR_RERUN_TIMEOUT - 10)
+
+    VLLM = "../../sv-benchmarks/python/vllm/vllm_check_stop_buggy.py"
+    LAMBDA = "../../sv-benchmarks/python/type-eval-py/returns_return_lambda_unsafe/main.py"
+
+    def test_a_fallback_confirms_a_padded_function_row(self):
+        first = single_run(self.VLLM, "75", "assertion num_output_tokens < max_tokens", "main")
+        plain = single_run(self.VLLM, "74", "assertion num_tokens < max_model_len", "main")
+        verdict, _ = self.verify(wrapper.Property.py_assertion, first, plain, MULTI_FUNCTION_ROWS)
+        self.assertEqual(verdict, "FALSE")
+
+    def test_a_fallback_confirms_a_padded_module_row(self):
+        first = single_run(self.LAMBDA, "28", "assertion a == n * n")
+        plain = single_run(self.LAMBDA, "27", "assertion a >= 0")
+        verdict, _ = self.verify(wrapper.Property.py_assertion, first, plain, MULTI_MODULE_ROWS)
+        self.assertEqual(verdict, "FALSE")
+
+    def test_a_fallback_without_the_first_runs_site_failed_is_unknown(self):
+        first = single_run(self.VLLM, "58", "assertion num_output_tokens >= 1", "main")
+        plain = single_run(self.VLLM, "74", "assertion num_tokens < max_model_len", "main")
+        verdict, _ = self.verify(wrapper.Property.py_assertion, first, plain, MULTI_FUNCTION_ROWS)
+        self.assertEqual(verdict, "Unknown")
 
     def test_no_budget_left_for_the_fallback_is_unknown(self):
         plain_seconds = wrapper.IR_RERUN_TIMEOUT - wrapper.MIN_RERUN_BUDGET + 1
@@ -898,6 +1005,29 @@ class ReachValidationUnwindTest(unittest.TestCase):
 
     def test_violation_validation_keeps_loops(self):
         self.assertNotIn("--goto-unwind", self.command(self.ESBMC, "violation"))
+
+
+class PthreadDetectionTest(unittest.TestCase):
+    """Only a call to pthread_create makes a task concurrent (#9971)."""
+
+    def detects(self, source):
+        with tempfile.NamedTemporaryFile("w", suffix=".i") as f:
+            f.write(source)
+            f.flush()
+            return wrapper.check_if_benchmark_contains_pthread(f.name)
+
+    def test_a_call_is_concurrent(self):
+        self.assertTrue(self.detects(
+            "extern int pthread_create (pthread_t *__restrict __newthread,\n"
+            "  status = pthread_create (&t, ((void *)0), f, ((void *)0));\n"))
+        self.assertTrue(self.detects("  pthread_create(&t1, 0, P0, 0);\n"))
+
+    def test_a_declaration_alone_is_not(self):
+        self.assertFalse(self.detects(
+            "extern int ( __attribute__((__nonnull__(1,3))) pthread_create)"
+            "(pthread_t * __restrict __newthread ,\n"))
+        self.assertFalse(self.detects(
+            "extern int pthread_create (pthread_t *__restrict __newthread,\n"))
 
 
 class OverflowFallbackTest(unittest.TestCase):

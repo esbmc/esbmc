@@ -1019,6 +1019,31 @@ expr2tc dereferencet::create_pointer_offset_bits(const expr2tc &deref_expr)
     gen_long(bitsize_type2(), 8));
 }
 
+expr2tc dereferencet::accessed_object(
+  const expr2tc &object,
+  const expr2tc &deref_expr,
+  modet mode,
+  expr2tc &start) const
+{
+  // An array member the pointer stays in is accessed, and bounds checked, as
+  // an object of its own (#9853); offsets are relative to it. Only a pointer
+  // to the element type stays in the member: one punned to another type, as
+  // a char * through a union, may walk the whole object.
+  if (
+    is_member2t(object) && !is_internal(mode) && is_pointer_type(deref_expr) &&
+    base_type_eq(
+      to_pointer_type(deref_expr->type).subtype,
+      to_array_type(object->type).subtype,
+      ns))
+  {
+    start = compute_pointer_offset(object, &ns);
+    return object;
+  }
+  start = gen_ulong(0);
+  // Value set tracking emits objects with some cruft built on top of them.
+  return get_base_object(object);
+}
+
 expr2tc dereferencet::build_reference_to(
   const expr2tc &what,
   modet mode,
@@ -1073,8 +1098,6 @@ expr2tc dereferencet::build_reference_to(
     return value;
   }
 
-  value = object;
-
   // Produce a guard that the dereferenced pointer points at this object.
   type2tc ptr_type = pointer_type2tc(object->type);
   expr2tc obj_ptr = address_of2tc(ptr_type, object);
@@ -1090,8 +1113,8 @@ expr2tc dereferencet::build_reference_to(
   if (is_free(mode))
     return expr2tc();
 
-  // Value set tracking emits objects with some cruft built on top of them.
-  value = get_base_object(value);
+  expr2tc member_start;
+  value = accessed_object(object, deref_expr, mode, member_start);
 
   // Final offset computations start here
   expr2tc final_offset = o.offset;
@@ -1116,6 +1139,10 @@ expr2tc dereferencet::build_reference_to(
 
     final_offset =
       pointer_offset2tc(get_int_type(config.ansi_c.address_width), deref_expr);
+    final_offset = sub2tc(
+      final_offset->type,
+      final_offset,
+      typecast2tc(final_offset->type, member_start));
     // simplify pointer offset expression
     simplify(final_offset);
   }
@@ -1913,31 +1940,35 @@ void dereferencet::construct_from_const_offset(
     return;
   }
 
-  if (value->type->get_width() < type->get_width())
+  // Oversized read of a non-member: give up, rely on dereference failure
+  if (value->type->get_width() < type->get_width() && !is_member2t(value))
   {
-    // Oversized read
-    if (!is_member2t(value))
-    {
-      // give up, rely on dereference failure
-      value = expr2tc();
-      return;
-    }
-    // We are accessing more than one member of a struct.
-    // So, get step down one level to the source_value and
-    // resort to extracting bytes from it.
-    else
-    {
-      const member2t &themember = to_member2t(value);
-      value = themember.source_value;
-    }
+    value = expr2tc();
+    return;
   }
 
+  // The access spans more than one member: step up through the enclosing
+  // objects until one holds it, rebasing the offset onto each (#10045, #10046).
+  const uint64_t access_bits = type_byte_size_bits(type).to_uint64();
+  BigInt offs = theint.value;
+  while (is_member2t(value) &&
+         type_byte_size_bits(value->type, &ns) < offs + access_bits)
+  {
+    const member2t &themember = to_member2t(value);
+    if (is_struct_type(themember.source_value))
+      offs +=
+        member_offset_bits(themember.source_value->type, themember.member, &ns);
+    value = themember.source_value;
+  }
+  const expr2tc offset_in_value = constant_int2tc(offset->type, offs);
+
   unsigned int num_bytes =
-    compute_num_bytes_to_extract(offset, type_byte_size_bits(type).to_uint64());
+    compute_num_bytes_to_extract(offset_in_value, access_bits);
 
   // Converting offset to bytes before bytes extraction
   expr2tc offset_bytes = typecast2tc(
-    size_type2(), div2tc(offset->type, offset, gen_long(offset->type, 8)));
+    size_type2(),
+    div2tc(offset->type, offset_in_value, gen_long(offset->type, 8)));
   simplify(offset_bytes);
 
   // Extracting and stitching bytes together
@@ -1945,11 +1976,10 @@ void dereferencet::construct_from_const_offset(
     num_bytes, extract_bytes(value, num_bytes, offset_bytes));
 
   expr2tc offset_bits =
-    modulus2tc(offset->type, offset, gen_long(offset->type, 8));
+    modulus2tc(offset->type, offset_in_value, gen_long(offset->type, 8));
   simplify(offset_bits);
 
-  value = extract_bits_from_byte_array(
-    value, offset_bits, type_byte_size_bits(type).to_uint64());
+  value = extract_bits_from_byte_array(value, offset_bits, access_bits);
 
   // Extracting bits from the produced bv
   value = bitcast2tc(type, value);
@@ -3112,7 +3142,7 @@ void dereferencet::bounds_check(
 
   expr2tc arrsize;
   if (
-    !is_constant_expr(expr) &&
+    is_symbol2t(expr) &&
     has_prefix(
       ns.lookup(to_symbol2t(expr).thename)->id.as_string(), "symex_dynamic::"))
   {
