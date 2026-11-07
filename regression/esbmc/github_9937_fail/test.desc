@@ -1,4 +1,6 @@
 CORE
 main.c
---64 --no-slice --result-only
+--no-slice
 ^VERIFICATION FAILED$
+\[main.assertion.1\]  line 17  reachable
+^  u\.s\.c != 4$

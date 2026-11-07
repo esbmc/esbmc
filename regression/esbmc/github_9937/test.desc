@@ -1,4 +1,6 @@
 CORE
 main.c
---64 --no-slice
+--no-slice
 ^VERIFICATION SUCCESSFUL$
+\[main.assertion.1\]  line 17  kept
+\[main.assertion.2\]  line 26  byte changed

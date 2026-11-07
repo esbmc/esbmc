@@ -1079,30 +1079,18 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
     }
     else if (is_union_type(expr))
     {
-      uint64_t bits = type_byte_size_bits(expr->type).to_uint64();
-      const union_type2t &tu = to_union_type(expr->type);
-      assert(is_constant_string2t(with.update_field));
-      unsigned c = struct_union_get_component_number(
-                     expr->type, to_constant_string2t(with.update_field).value)
-                     .value();
-      uint64_t mem_bits = type_byte_size_bits(tu.members[c]).to_uint64();
-      if (mem_bits == 0)
-      {
-        // A zero-sized union member (e.g. a Rust unit enum variant such as
-        // Result's Err carrying only ()) occupies no storage, so writing it
-        // leaves the union's bit representation unchanged. Encoding it via
-        // get_uint_type(0) would build a degenerate 0-width bitvector that the
-        // solver widens to 1 bit, producing a value one bit wider than the
-        // union sort.
-        a = convert_ast(with.source_value);
-      }
-      else
-      {
-        expr2tc upd = bitcast2tc(
-          get_uint_type(mem_bits),
-          typecast2tc(tu.members[c], with.update_value));
-        a = convert_ast(union_bits_with_member(with.source_value, upd, bits));
-      }
+      // A zero-sized union member (e.g. a Rust unit enum variant such as
+      // Result's Err carrying only ()) occupies no storage, so writing it
+      // leaves the union's bit representation unchanged. Encoding it via
+      // get_uint_type(0) would build a degenerate 0-width bitvector that the
+      // solver widens to 1 bit, producing a value one bit wider than the
+      // union sort.
+      const expr2tc upd = union_with_member_bits(with);
+      a = is_nil_expr(upd) ? convert_ast(with.source_value)
+                           : convert_ast(union_bits_with_member(
+                               with.source_value,
+                               upd,
+                               type_byte_size_bits(expr->type).to_uint64()));
     }
     else
     {

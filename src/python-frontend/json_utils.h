@@ -1138,6 +1138,18 @@ count_name_bindings(const nlohmann::json &node, const std::string &name)
   return n;
 }
 
+// Counts every Name node under `node` that is `name`, read or bound.
+inline std::size_t
+count_name_nodes(const nlohmann::json &node, const std::string &name)
+{
+  std::size_t n = node.is_object() && node.value("_type", "") == "Name" &&
+                  node.value("id", "") == name;
+  for (const auto &child : node)
+    if (child.is_structured())
+      n += count_name_nodes(child, name);
+  return n;
+}
+
 // The value `stmt` assigns when it is a plain `name = ...` or `name: T = ...`.
 inline const nlohmann::json *
 plain_assigned_value(const nlohmann::json &stmt, const std::string &name)

@@ -85,6 +85,19 @@ expr2tc union_bits_with_member(
     get_uint_type(bits), extract2tc(rest_type, rest, bits - 1, width), member);
 }
 
+expr2tc union_with_member_bits(const with2t &with)
+{
+  const type2tc &member =
+    to_union_type(with.type)
+      .members[struct_union_get_component_number(
+                 with.type, to_constant_string2t(with.update_field).value)
+                 .value()];
+  const unsigned w = type_byte_size_bits(member).to_uint64();
+  if (!w)
+    return expr2tc();
+  return bitcast2tc(get_uint_type(w), typecast2tc(member, with.update_value));
+}
+
 expr2tc union_bits_of_member(const expr2tc &member, unsigned bits)
 {
   if (!lowest_address_high())
@@ -299,6 +312,15 @@ void smt_solver_baset::begin_step(const expr2tc &guard, const expr2tc &cond)
       }
       else if (auto it = flattened.find(e); it != flattened.end())
         reused.push_back(it->second);
+      // The bitcast a union WITH flattens is made in conversion, not held.
+      else if (is_with2t(e) && is_union_type(e))
+      {
+        const expr2tc bits = union_with_member_bits(to_with2t(e));
+        if (
+          auto f = bits ? flattened.find(bits) : flattened.end();
+          f != flattened.end())
+          reused.push_back(f->second);
+      }
       else if (auto v = flattened_values.find(e); v != flattened_values.end())
         for (const auto &flatten : v->second)
           step_sources.insert(flatten.second);
@@ -337,7 +359,7 @@ void smt_solver_baset::end_step()
  *  @p e whenever @p untouched holds (nil: always), looking through extracts,
  *  truncations, byte updates that leave those bits alone, union withs and the
  *  struct and array layout of flatten_to_bitvector. The pointer is nil when
- * that is not evident. */
+ *  that is not evident. */
 struct flattened_pointert
 {
   expr2tc pointer;
@@ -407,28 +429,20 @@ flattened_in_struct(const expr2tc &from, unsigned lo, unsigned width)
   return member_offset == total ? found : flattened_pointert{};
 }
 
-/* The layout convert_ast() gives a union with2t: union_bits_with_member(). */
+/* The bits of a union just written through one member, laid out as
+ * union_bits_with_member() lays them out. */
 static flattened_pointert
 flattened_in_union_with(const with2t &with, unsigned lo, unsigned width)
 {
-  const unsigned bits = with.type->get_width();
-  const type2tc &member_type =
-    to_union_type(with.type)
-      .members[struct_union_get_component_number(
-                 with.type, to_constant_string2t(with.update_field).value)
-                 .value()];
-  const unsigned mem_bits = type_byte_size_bits(member_type).to_uint64();
+  const expr2tc bits = union_with_member_bits(with);
+  if (is_nil_expr(bits))
+    return {};
+  const unsigned w = bits->type->get_width();
   const unsigned member_lo =
-    mem_bits < bits ? flattened_position(0, mem_bits, bits) : 0;
-  if (member_lo <= lo && lo + width <= member_lo + mem_bits)
-    return pointer_flattened_at(
-      bitcast2tc(
-        get_uint_type(mem_bits), typecast2tc(member_type, with.update_value)),
-      lo - member_lo,
-      width);
-  if (lo + width <= member_lo || member_lo + mem_bits <= lo)
-    return flattened_in_value(with.source_value, lo, width);
-  return {};
+    flattened_position(0, w, type_byte_size_bits(with.type).to_uint64());
+  if (lo < member_lo || lo + width > member_lo + w)
+    return {};
+  return pointer_flattened_at(bits, lo - member_lo, width);
 }
 
 /* The layout flatten_to_bitvector() gives an array. */
@@ -482,15 +496,16 @@ pointer_flattened_at(const expr2tc &e, unsigned lo, unsigned width)
     return pointer_flattened_at(
       to_extract2t(e).from, lo + to_extract2t(e).lower, width);
 
-  // A truncation keeps the low bits: union_member_bits() on little endian.
+  if (is_byte_update2t(e))
+    return flattened_past_byte_update(to_byte_update2t(e), lo, width);
+
+  // A truncation, as union_member_bits() reads a member: the low bits stay.
   if (
     is_typecast2t(e) && is_unsignedbv_type(e) &&
     is_unsignedbv_type(to_typecast2t(e).from) &&
+    lo + width <= e->type->get_width() &&
     e->type->get_width() <= to_typecast2t(e).from->type->get_width())
     return pointer_flattened_at(to_typecast2t(e).from, lo, width);
-
-  if (is_byte_update2t(e))
-    return flattened_past_byte_update(to_byte_update2t(e), lo, width);
 
   if (!is_bitcast2t(e))
     return {};

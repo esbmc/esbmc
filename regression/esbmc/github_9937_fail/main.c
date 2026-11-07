@@ -1,10 +1,18 @@
-// #9937: a byte write into a union holding an out-of-bounds pointer made the
-// path vacuous.
+/* #9937: writing a member of a union whose other member holds an
+ * out-of-bounds pointer must not make the path vacuous. */
 int main()
 {
-  union { int *p; struct { int *a[1]; char c[2]; } s; } u;
+  union
+  {
+    int *p;
+    struct
+    {
+      int *a;
+      long c;
+    } s;
+  } u;
   int arr[2];
   u.p = arr + 100;
-  u.s.c[1] = 4;
-  __ESBMC_assert(0, "reachable");
+  u.s.c = 4;
+  __ESBMC_assert(u.s.c != 4, "reachable");
 }
