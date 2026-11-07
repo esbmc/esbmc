@@ -3764,6 +3764,18 @@ InferResult python_annotation<Json>::infer_type_from_ifexp(
       return InferResult::OK;
     }
 
+    // A list is held by pointer, so a None arm is the null list, as for an
+    // Optional[list[T]] annotation.
+    if (
+      (body_type == "NoneType" && orelse_type == "list") ||
+      (body_type == "list" && orelse_type == "NoneType"))
+    {
+      const std::string list_type = get_argument_type(
+        body_type == "list" ? ifexp_node["body"] : ifexp_node["orelse"]);
+      inferred_type = list_type.rfind("list[", 0) == 0 ? list_type : "list";
+      return InferResult::OK;
+    }
+
     // For different types, use a safe fallback
     log_warning(
       "Conditional expression has different types in branches: {} vs {}. "
