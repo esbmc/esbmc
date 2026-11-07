@@ -2129,7 +2129,7 @@ static bool union_has_none(const Json &slice)
 /// every return: an Any fallback says nothing, yet a caller returning this
 /// call would be annotated Any and converted with an int return (#8358); a
 /// None one misses a value a nested return yields (#9815).
-static std::string known_fallback_return_type(
+inline std::string known_fallback_return_type(
   const std::string &fallback_type,
   const nlohmann::json &body)
 {
