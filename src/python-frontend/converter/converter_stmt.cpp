@@ -9347,6 +9347,20 @@ static exprt coerce_ternary_branch(
   return typecast_exprt(branch, result_type);
 }
 
+/// A result temp for `None if c else xs` takes the element types of xs.
+static void copy_optional_list_arm_types(
+  element_type_registry &registry,
+  const exprt &then,
+  const exprt &else_expr,
+  bool then_is_none,
+  bool else_is_none,
+  const std::string &result_id)
+{
+  const exprt &value_arm = then_is_none ? else_expr : then;
+  if (then_is_none != else_is_none && value_arm.is_symbol())
+    registry.assign_from(value_arm.identifier().as_string(), result_id);
+}
+
 exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
 {
   // A walrus in a `while` test binds into the condition prelude, which runs
@@ -9891,10 +9905,13 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
         create_return_temp_variable(result_type, location, "ternary_result");
       symbol_table_.add(result_symbol);
       exprt result_expr = symbol_expr(result_symbol);
-      const exprt &value_arm = then_is_none ? else_expr : then;
-      if (then_is_none != else_is_none && value_arm.is_symbol())
-        element_type_registry_.assign_from(
-          value_arm.identifier().as_string(), result_symbol.id.as_string());
+      copy_optional_list_arm_types(
+        element_type_registry_,
+        then,
+        else_expr,
+        then_is_none,
+        else_is_none,
+        result_symbol.id.as_string());
 
       code_declt result_decl(result_expr);
       result_decl.location() = location;
