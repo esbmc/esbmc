@@ -1092,18 +1092,17 @@ expr2tc dereferencet::build_reference_to(
 
   // An array member the pointer stays in is accessed, and bounds checked, as
   // an object of its own (#9853); its offset is relative to that member.
-  BigInt member_start = 0;
+  // Only a pointer to the element type stays in the member: one punned to
+  // another type, as a char * through a union, may walk the whole object.
+  expr2tc member_start;
   if (
-    is_member2t(object) && is_array_type(object) &&
-    !is_constant_int2t(o.offset) && !is_internal(mode))
-  {
-    for (const expr2tc *e = &object; is_member2t(*e);
-         e = &to_member2t(*e).source_value)
-      member_start += member_offset(
-        to_member2t(*e).source_value->type, to_member2t(*e).member);
-  }
+    is_member2t(object) && !is_internal(mode) && is_pointer_type(deref_expr) &&
+    base_type_eq(
+      to_pointer_type(deref_expr->type).subtype,
+      to_array_type(object->type).subtype,
+      ns))
+    member_start = compute_pointer_offset(object, &ns);
   else
-    // Value set tracking emits objects with some cruft built on top of them.
     value = get_base_object(value);
 
   // Final offset computations start here
@@ -1129,11 +1128,11 @@ expr2tc dereferencet::build_reference_to(
 
     final_offset =
       pointer_offset2tc(get_int_type(config.ansi_c.address_width), deref_expr);
-    if (!member_start.is_zero())
+    if (!is_nil_expr(member_start))
       final_offset = sub2tc(
         final_offset->type,
         final_offset,
-        constant_int2tc(final_offset->type, member_start));
+        typecast2tc(final_offset->type, member_start));
     // simplify pointer offset expression
     simplify(final_offset);
   }

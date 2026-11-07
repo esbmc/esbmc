@@ -154,8 +154,8 @@ public:
      *  Units are bytes. Zero means N/A. */
     unsigned int offset_alignment;
     /** When the offset is not set, the bytes [member_begin, member_end) of the
-     *  object, an array member the pointer was formed into (#9853). Equal when
-     *  unknown. Accesses outside it are bounds violations of that member. */
+     *  object, an array member the pointer was formed into (#9853); begin ==
+     *  end means none. Accesses outside it are bounds violations of it. */
     uint64_t member_begin = 0, member_end = 0;
     bool has_member() const
     {
@@ -431,31 +431,28 @@ public:
     if (!old.offset_is_set)
     {
       unsigned int oldalign = old.offset_alignment;
+      // Only a member both records stay in survives the merge.
+      const bool member_lost =
+        old.has_member() &&
+        (object.offset_is_set || old.member_begin != object.member_begin ||
+         old.member_end != object.member_end);
+      if (member_lost)
+        old.member_begin = old.member_end = 0;
+
       if (!object.offset_is_set)
       {
         // Both object offsets not set; update alignment to minimum of the two
         old.offset_alignment =
           std::min(old.offset_alignment, object.offset_alignment);
-        bool member_changed = false;
-        if (
-          old.member_begin != object.member_begin ||
-          old.member_end != object.member_end)
-        {
-          member_changed = old.has_member();
-          old.member_begin = old.member_end = 0;
-        }
-        return member_changed || !(old.offset_alignment == oldalign);
+        return member_lost || !(old.offset_alignment == oldalign);
       }
-
-      const bool had_member = old.has_member();
-      old.member_begin = old.member_end = 0;
 
       // Old offset unset; new offset set. Compute the alignment of the
       // new object's offset, and take the minimum of that and the old
       // alignment.
       unsigned int new_alignment = offset2align(expr_obj, object.offset);
       old.offset_alignment = std::min(old.offset_alignment, new_alignment);
-      return had_member || !(old.offset_alignment == oldalign);
+      return member_lost || !(old.offset_alignment == oldalign);
     }
 
     // Old offset alignment is set; new isn't.

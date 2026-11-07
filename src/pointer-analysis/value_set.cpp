@@ -150,12 +150,17 @@ expr2tc value_sett::to_expr(
   // Name the array member the pointer stays in, so that a dereference
   // addresses it instead of splitting over every member of the object.
   expr2tc target = object;
-  if (name_array_member && it->second.has_member())
+  if (name_array_member)
   {
-    expr2tc member = array_member_at(
-      object, BigInt(it->second.member_begin), BigInt(it->second.member_end));
-    if (!is_nil_expr(member))
-      target = member;
+    // The dereference treats a member object as one named here, and no other.
+    target = get_base_object(object);
+    if (it->second.has_member())
+    {
+      expr2tc member =
+        array_member_at(target, it->second.member_begin, it->second.member_end);
+      if (!is_nil_expr(member))
+        target = member;
+    }
   }
 
   expr2tc obj = object_descriptor2tc(
@@ -1332,22 +1337,15 @@ void value_sett::get_reference_set_rec(const expr2tc &expr, object_mapt &dest)
 
           o.offset_alignment = std::min(index_align, old_align);
 
-          // A trailing [0] or [1] array may be indexed past its end on
-          // purpose, so only a longer array member bounds the pointer.
-          if (o.offset_is_set && is_struct_type(object))
+          // A [0] or [1] array may be indexed past its end on purpose, as a
+          // flexible array member, so only a longer array bounds the pointer.
+          BigInt size = type_byte_size_default(index.source_value->type, 0);
+          if (
+            o.offset_is_set && !o.offset.is_negative() &&
+            is_struct_type(object) && size > m)
           {
-            try
-            {
-              BigInt size = type_byte_size(index.source_value->type);
-              if (size > m)
-              {
-                o.member_begin = o.offset.to_uint64();
-                o.member_end = o.member_begin + size.to_uint64();
-              }
-            }
-            catch (const array_type2t::dyn_sized_array_excp &)
-            {
-            }
+            o.member_begin = o.offset.to_uint64();
+            o.member_end = o.member_begin + size.to_uint64();
           }
           o.offset_is_set = false;
         }
