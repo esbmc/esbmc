@@ -5084,6 +5084,8 @@ bool python_converter::handle_unpacking_assignment(
 
   // Prepare RHS if it's a function call
   rhs = tuple_handler_->prepare_rhs_for_unpacking(ast_node, rhs, target_block);
+  rhs = optional_tuple_payload(
+    rhs, ast_node["value"], "cannot unpack non-iterable NoneType object");
 
   // Handle different unpacking types
   if (rhs.type().id() == "struct")
@@ -5154,17 +5156,6 @@ void collect_read_names(
     if (child.is_structured() && !(key == "func" && node.is_object()))
       collect_read_names(child, names);
 }
-
-std::size_t
-count_name_nodes(const nlohmann::json &node, const std::string &name)
-{
-  std::size_t n = node.is_object() && node.value("_type", "") == "Name" &&
-                  node.value("id", "") == name;
-  for (const auto &child : node)
-    if (child.is_structured())
-      n += count_name_nodes(child, name);
-  return n;
-}
 } // namespace
 
 // The registry records types flow-insensitively, and a store through an alias
@@ -5182,8 +5173,8 @@ bool python_converter::unpack_record_is_trusted(
       json_utils::find_var_decl(name, current_function_name(), ast());
     if (
       json_utils::count_name_bindings(ast(), name) != 1 ||
-      count_name_nodes(ast(), name) != 2 || !decl.contains("value") ||
-      !is_plain_literal(decl["value"]))
+      json_utils::count_name_nodes(ast(), name) != 2 ||
+      !decl.contains("value") || !is_plain_literal(decl["value"]))
       return false;
   }
   return true;
@@ -5296,8 +5287,48 @@ void python_converter::unpack_nested_target(
     return;
   }
 
+  const exprt param_list =
+    hold_param_tuple_member_list(ast_node, value, target_block);
+  if (param_list.is_not_nil())
+  {
+    python_list(*this, ast_node["value"])
+      .handle_list_var_unpacking(ast_node, target, param_list, target_block);
+    return;
+  }
+
   throw std::runtime_error(
     "Cannot unpack non-tuple element into nested target");
+}
+
+// A list read from a tuple parameter, `x.element_i`, held in a temporary that
+// takes the element types of the displays the calls pass at that position.
+exprt python_converter::hold_param_tuple_member_list(
+  const nlohmann::json &ast_node,
+  const exprt &value,
+  codet &target_block)
+{
+  if (
+    value.id() != "member" || !value.op0().is_symbol() ||
+    value.type() != type_handler_.get_list_type())
+    return nil_exprt();
+  const symbolt *tuple = find_symbol(value.op0().identifier().as_string());
+  const typet tuple_type = ns.follow(value.op0().type());
+  if (!tuple || !tuple_handler_->is_tuple_type(tuple_type))
+    return nil_exprt();
+  const std::size_t i =
+    to_struct_type(tuple_type).component_number(value.get("component_name"));
+  std::vector<nlohmann::json> displays;
+  if (!param_tuple_member_displays(tuple->name.as_string(), i, displays))
+    return nil_exprt();
+
+  symbolt &held =
+    create_tmp_symbol(ast_node, "$unpack_elem$", value.type(), exprt());
+  if (!record_literal_elements(held.id.as_string(), displays, true))
+    return nil_exprt();
+  code_declt decl(symbol_expr(held));
+  decl.copy_to_operands(value);
+  target_block.copy_to_operands(decl);
+  return symbol_expr(held);
 }
 
 void python_converter::desugar_unpacking_with_lvalue_targets(
@@ -5529,6 +5560,24 @@ exprt python_converter::not_callable_function(
       "'" + type_handler_.type_to_string(value) + "' object is not callable")));
   symbol.set_value(body);
   return symbol_expr(*symbol_table_.move_symbol_to_context(symbol));
+}
+
+/// A function returning functions that returns \p value of a type that cannot
+/// be called returns a function raising the TypeError of calling it (#9824).
+void python_converter::coerce_not_callable_return(
+  exprt &value,
+  const locationt &location,
+  codet &target_block)
+{
+  const typet &returned = current_func_return_type_;
+  if (
+    !returned.is_pointer() || !returned.subtype().is_code() ||
+    may_be_callable(value.type()) || value.type() == none_type())
+    return;
+  if (value.id() == "sideeffect")
+    target_block.copy_to_operands(code_expressiont(value));
+  value = python_expr::decay_function_to_pointer(
+    not_callable_function(returned.subtype(), value.type(), location));
 }
 
 /// A choice between two functions of one type is a pointer to either. The
@@ -9120,8 +9169,12 @@ typet python_converter::optional_ternary_type(
 {
   const typet &value_type = then_is_none ? else_expr.type() : then.type();
   const bool reference_value = value_type.is_array() || value_type.is_pointer();
-  const typet &target =
-    current_lhs ? current_lhs->type() : ternary_return_target_;
+  typet target = current_lhs ? current_lhs->type() : ternary_return_target_;
+  // With no type to fit, a list is held as a nullable list pointer, as an
+  // unannotated function returning a list or None is.
+  const bool untyped_target = target.id().empty() || target.is_empty();
+  if (untyped_target && value_type == type_handler_.get_list_type())
+    target = value_type;
   if (!reference_value || !target.is_pointer())
   {
     typet result_type = type_handler_.build_optional_type(value_type);
@@ -10283,6 +10336,7 @@ void python_converter::get_return_statements(
         ret_expr = wrap_in_optional(ret_expr, current_func_return_type_);
     }
 
+    coerce_not_callable_return(ret_expr, location, target_block);
     coerce_to_tagged_return(ret_expr);
     ret_expr = check_float_fits_int_return(ast_node, ret_expr, target_block);
 
@@ -10341,6 +10395,7 @@ void python_converter::get_return_statements(
       is_user_class_struct_type(return_value.type()))
       return_value = box_value_on_heap(return_value, location, target_block);
 
+    coerce_not_callable_return(return_value, location, target_block);
     return_value = tuple_handler_->coerce_to_tuple_type(
       return_value, current_func_return_type_, location, target_block);
     return_value = coerce_optional_return(return_value, location, target_block);

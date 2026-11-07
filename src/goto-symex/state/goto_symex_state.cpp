@@ -644,11 +644,13 @@ static expr2tc pin_literal_elements(
                                    : pin_array_literal(state, rhs, l2_lhs);
 }
 
-/// The value @p arm holds for member @p name, or nil when the shape does not
-/// say. Deliberately not member2tc(..)->simplify(): expr2t::simplify walks the
-/// operands before applying the projection, so asking a large carried value for
-/// one member would cost the size of the whole value, once per member.
-static expr2tc project_member(const expr2tc &arm, const irep_idt &name)
+/// The value @p arm holds for member @p name, number @p i of @p arm's type, or
+/// nil when the shape does not say. Deliberately not member2tc(..)->simplify():
+/// expr2t::simplify walks the operands before applying the projection, so
+/// asking a large carried value for one member would cost the size of the whole
+/// value, once per member.
+static expr2tc
+project_member(const expr2tc &arm, size_t i, const irep_idt &name)
 {
   const expr2tc *cur = &arm;
   while (is_with2t(*cur) && is_struct_type((*cur)->type))
@@ -662,11 +664,8 @@ static expr2tc project_member(const expr2tc &arm, const irep_idt &name)
   }
   if (!is_constant_struct2t(*cur))
     return expr2tc();
-  const std::optional<unsigned> i =
-    struct_union_get_component_number((*cur)->type, name);
-  if (!i)
-    return expr2tc();
-  return to_constant_struct2t(*cur).datatype_members[*i];
+  // A with2t has its source's type, so the literal has @p arm's type.
+  return to_constant_struct2t(*cur).datatype_members[i];
 }
 
 /// The value @p arm holds at index @p i, or nil when the shape does not say --
@@ -763,7 +762,7 @@ static expr2tc pin_phi_members(
       phi,
       st.members.size(),
       [&](const expr2tc &arm, size_t i) {
-        return project_member(arm, st.member_names[i]);
+        return project_member(arm, i, st.member_names[i]);
       },
       [&](size_t i) {
         return member2tc(st.members[i], l2_lhs, st.member_names[i]);

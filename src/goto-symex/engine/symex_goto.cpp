@@ -810,8 +810,7 @@ void goto_symext::phi_function(const statet::merge_statet &merge_state)
       simplify(rhs);
     }
 
-    expr2tc lhs;
-    migrate_expr(symbol_expr(symbol), lhs);
+    expr2tc lhs = symbol2tc(type, symbol.id);
     expr2tc new_lhs = lhs;
 
     // Again, specify which l1 data object we're going to make the assignment

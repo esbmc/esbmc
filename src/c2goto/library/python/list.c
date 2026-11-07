@@ -455,6 +455,12 @@ static inline size_t __ESBMC_list_eq_depth_limit(size_t max_depth)
                                               : depth_limit;
 }
 
+// Exact, as in CPython: widening n alone equates 2^53 + 1 with 2^53.
+static inline bool __ESBMC_int_float_eq(int64_t n, double d)
+{
+  return d >= -0x1p63 && d < 0x1p63 && (int64_t)d == n && d == (double)n;
+}
+
 bool __ESBMC_list_eq(
   const PyListObject *l1,
   const PyListObject *l2,
@@ -530,21 +536,17 @@ bool __ESBMC_list_eq(
       // int-vs-float: Python compares numerically (1 == 1.0), but the two
       // store different bit patterns, so a byte compare would wrongly differ.
       // Triggered when exactly one side is a float (sizes already match here,
-      // and float/int elements are both 8 bytes). float_type_id is derived by
-      // the frontend from top-level element types only, so this numeric path
-      // does not reach nested mixed int/float lists; like list_lt, the int side
-      // is widened to double, so |int| > 2^53 loses precision vs CPython.
+      // and float/int elements are both 8 bytes). For ==, float_type_id is
+      // derived by the frontend from top-level element types only, so this
+      // numeric path does not reach nested mixed int/float lists.
       if (
         float_type_id != 0 && a->size == 8 &&
         (a->type_id == float_type_id) != (b->type_id == float_type_id))
       {
-        double av = (a->type_id == float_type_id)
-                      ? *(const double *)a->value
-                      : (double)*(const int64_t *)a->value;
-        double bv = (b->type_id == float_type_id)
-                      ? *(const double *)b->value
-                      : (double)*(const int64_t *)b->value;
-        if (av != bv)
+        const bool a_float = a->type_id == float_type_id;
+        if (!__ESBMC_int_float_eq(
+              *(const int64_t *)(a_float ? b->value : a->value),
+              *(const double *)(a_float ? a->value : b->value)))
           return false;
         continue;
       }
@@ -848,6 +850,37 @@ bool __ESBMC_list_contains(
         return true;
     }
 
+    ++i;
+  }
+  return false;
+}
+
+// `item in l` for a list-valued item: an element matches when it is a list
+// equal to item, not when its stored pointer bytes match (#9960).
+bool __ESBMC_list_contains_list(
+  const PyListObject *l,
+  const PyListObject *item,
+  size_t list_type_id,
+  size_t max_depth,
+  size_t float_type_id)
+{
+  if (!l || !item)
+    return false;
+
+  size_t i = 0;
+  while (i < l->size)
+  {
+    const PyObject *elem = &l->items[i];
+    if (
+      elem->type_id == list_type_id && elem->size == sizeof(PyListObject *) &&
+      __ESBMC_list_eq(
+        *(const PyListObject **)elem->value,
+        item,
+        list_type_id,
+        max_depth,
+        float_type_id,
+        0))
+      return true;
     ++i;
   }
   return false;

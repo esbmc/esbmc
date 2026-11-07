@@ -2107,6 +2107,72 @@ bool python_converter::call_site_list_literals(
   return complete;
 }
 
+static bool is_starred(const nlohmann::json &node)
+{
+  return node.value("_type", "") == "Starred";
+}
+
+/// The list display \p call passes as element \p member of a tuple display
+/// for its positional parameter \p index, or null.
+static const nlohmann::json *
+tuple_member_display(const nlohmann::json &call, size_t index, size_t member)
+{
+  const nlohmann::json &args = call["args"];
+  if (
+    !call["keywords"].empty() || args.size() <= index ||
+    std::any_of(args.begin(), args.end(), is_starred) ||
+    args[index].value("_type", "") != "Tuple")
+    return nullptr;
+  const nlohmann::json &elts = args[index]["elts"];
+  if (
+    elts.size() <= member ||
+    std::any_of(elts.begin(), elts.end(), is_starred) ||
+    elts[member].value("_type", "") != "List")
+    return nullptr;
+  return &elts[member];
+}
+
+/// Collects the list displays every call of the current module-level function
+/// passes as element \p member of a tuple display for its parameter
+/// \p param_name. Such a list is fresh, so when the body names the parameter
+/// only once nothing can change its elements before that read.
+bool python_converter::param_tuple_member_displays(
+  const std::string &param_name,
+  size_t member,
+  std::vector<nlohmann::json> &out) const
+{
+  const std::string &func_name = current_function_name();
+  const nlohmann::json *def = find_function_def((*ast_json)["body"], func_name);
+  if (
+    !current_class_name_.empty() || def == nullptr ||
+    !(*def)["decorator_list"].empty() ||
+    !only_called_directly(*ast_json, func_name) ||
+    json_utils::count_name_nodes((*def)["body"], param_name) != 1)
+    return false;
+  const nlohmann::json &params = (*def)["args"]["args"];
+  const auto param =
+    std::find_if(params.begin(), params.end(), [&](const nlohmann::json &p) {
+      return p.value("arg", "") == param_name;
+    });
+  if (param == params.end())
+    return false;
+  const size_t index = std::distance(params.begin(), param);
+
+  std::vector<numpy_param_call_site> call_sites;
+  collect_call_sites(*ast_json, "", call_sites);
+  for (const numpy_param_call_site &site : call_sites)
+  {
+    const nlohmann::json &call = *site.call;
+    if (call.value("func", nlohmann::json()).value("id", "") != func_name)
+      continue;
+    const nlohmann::json *display = tuple_member_display(call, index, member);
+    if (display == nullptr)
+      return false;
+    out.push_back(*display);
+  }
+  return !out.empty();
+}
+
 /// Types an unannotated parameter that every call fills with an element of a
 /// list parameter (param_elements) whose values are constants of one type,
 /// such as `k` in `f(*d)` over calls passing `[[3, 1], 2]` (#8472).
@@ -4413,10 +4479,24 @@ static bool binds_name(const nlohmann::json &node, const std::string &name)
   });
 }
 
+/// Whether \p value is a constant that is true, as a function is.
+static bool is_truthy_constant(const nlohmann::json &value)
+{
+  if (value.value("_type", "") != "Constant" || value.contains("_bigint"))
+    return false;
+  const nlohmann::json &v = value["value"];
+  return (v.is_boolean() && v.get<bool>()) ||
+         (v.is_number_integer() && v.get<long long>() != 0) ||
+         (v.is_number_float() && v.get<double>() != 0.0) ||
+         (v.is_string() && !v.get<std::string>().empty());
+}
+
 /// The functions a body returns by name, through conditional expressions.
-/// Empty when any return value is something else.
-static std::vector<std::string>
-returned_function_names(const nlohmann::json &function_node)
+/// Empty when any return value is something else, other than a true constant
+/// with \p skip_constants.
+static std::vector<std::string> returned_function_names(
+  const nlohmann::json &function_node,
+  bool skip_constants = false)
 {
   std::vector<nlohmann::json> values;
   collect_return_values(function_node["body"], values);
@@ -4440,7 +4520,7 @@ returned_function_names(const nlohmann::json &function_node)
       values.push_back(value["body"]);
       values.push_back(value["orelse"]);
     }
-    else
+    else if (!skip_constants || !is_truthy_constant(value))
       return {};
   }
   return names;
@@ -4458,24 +4538,137 @@ bool python_converter::same_signature(const code_typet &a, const code_typet &b)
   return true;
 }
 
-typet python_converter::returned_function_type(
-  const nlohmann::json &function_node)
+static bool is_call_of(const nlohmann::json &node, const std::string &name)
 {
-  const typet callable = type_handler_.get_typet(std::string("Callable"));
+  return node.is_object() && node.value("_type", "") == "Call" &&
+         node["func"].value("_type", "") == "Name" &&
+         node["func"].value("id", "") == name;
+}
+
+/// How many reads of `name` there are under `node`, and how many are calls.
+static std::pair<std::size_t, std::size_t>
+count_calls(const nlohmann::json &node, const std::string &name)
+{
+  std::pair<std::size_t, std::size_t> n{0, 0};
+  if (node.is_object())
+  {
+    n.first += node.value("_type", "") == "Name" &&
+               node.value("id", "") == name &&
+               node["ctx"].value("_type", "") == "Load";
+    n.second += is_call_of(node, name);
+  }
+  if (node.is_structured())
+    for (const auto &child : node)
+    {
+      const auto sub = count_calls(child, name);
+      n.first += sub.first;
+      n.second += sub.second;
+    }
+  return n;
+}
+
+static bool only_called(const nlohmann::json &module, const std::string &name)
+{
+  const auto n = count_calls(module, name);
+  return n.first == n.second;
+}
+
+/// How many results of calls of `name` under `node` are called at once or
+/// bound to a name only ever called.
+static std::size_t called_results(
+  const nlohmann::json &node,
+  const nlohmann::json &module,
+  const std::string &name)
+{
+  std::size_t n = 0;
+  if (node.is_object())
+  {
+    const std::string kind = node.value("_type", "");
+    const bool assign = kind == "Assign" && node["targets"].size() == 1;
+    const nlohmann::json &target =
+      assign ? node["targets"][0] : node.value("target", nlohmann::json());
+    n += kind == "Call" && is_call_of(node["func"], name);
+    n += (assign || kind == "AnnAssign") && is_call_of(node["value"], name) &&
+         target.value("_type", "") == "Name" &&
+         only_called(module, target["id"].get<std::string>());
+  }
+  if (node.is_structured())
+    for (const auto &child : node)
+      n += called_results(child, module, name);
+  return n;
+}
+
+/// Whether the module function `name` is only ever called, and so is every
+/// value it returns: a constant it returns is then never read as a value.
+static bool
+results_only_called(const nlohmann::json &module, const std::string &name)
+{
+  const auto n = count_calls(module, name);
+  return n.second > 0 && n.first == n.second &&
+         called_results(module, module, name) == n.second;
+}
+
+/// Whether a call of the module function `name` may fold to the constant it
+/// returns. Not when it returns functions and its results are only called: a
+/// constant it returns stands for a function raising TypeError.
+bool python_converter::is_foldable_function(const std::string &name)
+{
+  if (try_find_function((*ast_json)["body"], name).empty())
+    return false;
+  const symbolt *fn =
+    find_symbol(symbol_id(current_python_file, "", name).to_string());
+  if (!fn || !fn->get_type().is_code())
+    return true;
+  const typet &returned = to_code_type(fn->get_type()).return_type();
+  return !returned.is_pointer() || !returned.subtype().is_code() ||
+         !results_only_called(*ast_json, name);
+}
+
+/// The signature the module functions \p names share, if any.
+std::optional<code_typet>
+python_converter::shared_signature(const std::vector<std::string> &names)
+{
   std::optional<code_typet> signature;
-  for (const std::string &name : returned_function_names(function_node))
+  for (const std::string &name : names)
   {
     const symbolt *fn =
       find_symbol(symbol_id(current_python_file, "", name).to_string());
     if (!fn || !fn->get_type().is_code())
-      return callable;
+      return std::nullopt;
     const code_typet &fn_type = to_code_type(fn->get_type());
     if (!signature)
       signature = fn_type;
     else if (!same_signature(*signature, fn_type))
-      return callable;
+      return std::nullopt;
   }
-  return signature ? gen_pointer_type(*signature) : callable;
+  return signature;
+}
+
+typet python_converter::returned_function_type(
+  const nlohmann::json &function_node)
+{
+  const auto signature =
+    shared_signature(returned_function_names(function_node));
+  return signature ? gen_pointer_type(*signature)
+                   : type_handler_.get_typet(std::string("Callable"));
+}
+
+/// The return type of an unannotated function, inferred before its body is
+/// converted. A module function that returns functions on some paths and true
+/// constants on the others returns functions, when its results are only
+/// called: calling a constant raises TypeError (#9824).
+typet python_converter::unannotated_return_type(
+  const nlohmann::json &function_node)
+{
+  const std::string name = function_node["name"].get<std::string>();
+  if (
+    current_python_file != main_python_file || !current_class_name_.empty() ||
+    current_func_name_ != name || !results_only_called(*ast_json, name))
+    return infer_return_type_from_body(function_node["body"]);
+  const auto signature =
+    shared_signature(returned_function_names(function_node, true));
+  return signature ? gen_pointer_type(*signature)
+                   : infer_return_type_from_body(function_node["body"]);
 }
 
 typet python_converter::named_return_type(
@@ -6291,19 +6484,41 @@ bool python_converter::numpy_arithmetic_return(
   });
 }
 
+// Bignum literals (#4642) carry `_bigint` with a null value; they are ints.
+static bool is_none_return_value(const nlohmann::json &v)
+{
+  return v.is_null() || (v.value("_type", "") == "Constant" &&
+                         v["value"].is_null() && !v.contains("_bigint"));
+}
+
 /// Whether a return in \p body yields None: a bare `return`, `return None`, or
 /// a conditional expression with a None arm.
 static bool returns_none(const nlohmann::json &body)
 {
-  // Bignum literals (#4642) carry `_bigint` with a null value; they are ints.
-  auto is_none = [](const nlohmann::json &v) {
-    return v.is_null() || (v.value("_type", "") == "Constant" &&
-                           v["value"].is_null() && !v.contains("_bigint"));
-  };
   return any_return(body, [&](const nlohmann::json &v) {
-    return is_none(v) || (v.value("_type", "") == "IfExp" &&
-                          (is_none(v["body"]) || is_none(v["orelse"])));
+    return is_none_return_value(v) || (v.value("_type", "") == "IfExp" &&
+                                       (is_none_return_value(v["body"]) ||
+                                        is_none_return_value(v["orelse"])));
   });
+}
+
+/// The class every non-None return in \p body constructs (`return C()`), or
+/// empty when some return yields anything else.
+static std::string
+constructed_return_class(const nlohmann::json &body, const nlohmann::json &ast)
+{
+  std::string cls;
+  const bool other = any_return(body, [&](const nlohmann::json &v) {
+    if (is_none_return_value(v))
+      return false;
+    const std::string name =
+      v.value("_type", "") == "Call" ? v["func"].value("id", "") : "";
+    if (!json_utils::is_class(name, ast) || (!cls.empty() && cls != name))
+      return true;
+    cls = name;
+    return false;
+  });
+  return other ? std::string() : cls;
 }
 
 /// The Optional<T> type a function returns when it can return None but its
@@ -6329,6 +6544,11 @@ typet python_converter::optional_return_type(
     return type_handler_.build_optional_type(declared);
 
   // Unannotated: the value returns decide T.
+  // None or an instance: a C*, NULL for None, as Optional[C] declares it.
+  const std::string cls =
+    constructed_return_class(function_node["body"], *ast_json);
+  if (!cls.empty())
+    return gen_pointer_type(symbol_typet("tag-" + cls));
   const TypeFlags flags = infer_types_from_returns(function_node["body"]);
   if (!flags.has_int && !flags.has_float && !flags.has_bool)
     return typet();
@@ -6815,7 +7035,7 @@ void python_converter::get_function_definition(
   // conversion so return expressions are typed in the right context.
   if (type.return_type().is_empty())
   {
-    typet inferred_type = infer_return_type_from_body(function_node["body"]);
+    typet inferred_type = unannotated_return_type(function_node);
     // Stage 1 object-model migration (#3067): an unannotated function whose
     // body returns a user class instance (e.g. `return self` in __getitem__,
     // #4514) is inferred to the value struct here — apply the same Cls* ->

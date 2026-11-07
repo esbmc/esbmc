@@ -3164,10 +3164,14 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
         inits.operands().at(0) = init;
 
         // set which field is being initialized
-        auto init_union_field = init_stmt.getInitializedFieldInUnion();
-        if (init_union_field)
-          to_union_expr(inits).set_component_name(
-            init_union_field->getName().str());
+        if (auto *fd = init_stmt.getInitializedFieldInUnion())
+        {
+          // Name the field as its component is named: an anonymous member
+          // has no source name.
+          std::string name, id;
+          get_decl_name(*fd, name, id);
+          to_union_expr(inits).set_component_name(id);
+        }
       }
     }
     else if (t.id() == typet::t_complex && init_stmt.getNumInits() == 2)
@@ -3342,7 +3346,11 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
           return true;
         inits.operands().at(0) = init;
         if (auto *fd = init_stmt.getInitializedFieldInUnion())
-          to_union_expr(inits).set_component_name(fd->getName().str());
+        {
+          std::string name, id;
+          get_decl_name(*fd, name, id);
+          to_union_expr(inits).set_component_name(id);
+        }
       }
     }
     else if (args.empty())

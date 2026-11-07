@@ -366,6 +366,92 @@ struct input_trackert
   }
 };
 
+static bool is_races_flag(const expr2tc &e)
+{
+  return is_symbol2t(e) && to_symbol2t(e).thename == "c:@F@__ESBMC_races_flag";
+}
+
+/* The slot index of the first __ESBMC_races_flag read in @p e, or nil. @p seen
+ * memoises shared nodes: an SSA condition is a DAG, and walking it as a tree
+ * is exponential (regression/esbmc/nested_array_no_simplify_scale_fail). */
+static expr2tc
+races_flag_read_key(const expr2tc &e, std::unordered_set<const expr2t *> &seen)
+{
+  if (!seen.insert(e.get()).second)
+    return expr2tc();
+
+  if (is_index2t(e) && is_races_flag(to_index2t(e).source_value))
+    return to_index2t(e).index;
+
+  expr2tc key;
+  e->foreach_operand([&key, &seen](const expr2tc &op) {
+    if (is_nil_expr(key) && !is_nil_expr(op))
+      key = races_flag_read_key(op, seen);
+  });
+  return key;
+}
+
+/* Tracks the latest write to each __ESBMC_races_flag slot, keyed by the
+ * (object, offset) value the slot index takes in the model, so a violated race
+ * assert can name the access that set the slot it reads (#9688). The writes
+ * are hidden SSA steps, so they are tracked before hidden steps are dropped. */
+struct race_flag_trackert
+{
+  struct slot_writet
+  {
+    expr2tc key;
+    unsigned thread_nr;
+    bool set;
+    goto_trace_stept::accesst access;
+  };
+  std::vector<slot_writet> writes;
+
+  void note_assignment(
+    smt_convt &smt_conv,
+    const symex_target_equationt::SSA_stept &step)
+  {
+    if (
+      !step.is_assignment() || !is_races_flag(step.lhs) ||
+      !is_with2t(step.rhs) || step.ignore ||
+      !smt_conv.l_get(step.guard).is_true())
+      return;
+
+    const with2t &with = to_with2t(step.rhs);
+    slot_writet write{
+      smt_conv.get_by_ast(with.update_field),
+      step.source.thread_nr,
+      smt_conv.l_get(with.update_value).is_true(),
+      {step.source.pc, step.stack_trace()}};
+
+    for (slot_writet &w : writes)
+      if (w.key == write.key)
+      {
+        w = std::move(write);
+        return;
+      }
+    writes.push_back(std::move(write));
+  }
+
+  void annotate_violation(
+    smt_convt &smt_conv,
+    const symex_target_equationt::SSA_stept &step,
+    goto_trace_stept &trace_step) const
+  {
+    if (trace_step.guard)
+      return;
+
+    std::unordered_set<const expr2t *> seen;
+    const expr2tc key = races_flag_read_key(step.cond, seen);
+    if (is_nil_expr(key))
+      return;
+
+    const expr2tc value = smt_conv.get_by_ast(key);
+    for (const slot_writet &w : writes)
+      if (w.key == value && w.set && w.thread_nr != trace_step.thread_nr)
+        trace_step.racing_access = w.access;
+  }
+};
+
 /* The conditional gotos that share their column with another in a run of
  * instructions on one line: a && or || condition becomes one goto per operand,
  * all at the statement's location. */
@@ -403,6 +489,7 @@ void build_goto_trace(
 {
   unsigned step_nr = 0;
   input_trackert inputs;
+  race_flag_trackert race_flags;
   std::unordered_map<
     const goto_programt *,
     std::unordered_set<const goto_programt::instructiont *>>
@@ -417,6 +504,7 @@ void build_goto_trace(
   for (auto const &SSA_step : target.SSA_steps)
   {
     inputs.note_assignment(SSA_step);
+    race_flags.note_assignment(smt_conv, SSA_step);
     record_nondet_return(smt_conv, SSA_step, nondet_returns, nondet_seen);
 
     // Hidden steps are internal SSA bookkeeping (e.g. phi-merge nodes at
@@ -496,6 +584,7 @@ void build_goto_trace(
     {
       goto_trace_step.guard = smt_conv.l_get(SSA_step.cond_expr).is_true();
       record_violated_reads(smt_conv, SSA_step.cond, goto_trace_step);
+      race_flags.annotate_violation(smt_conv, SSA_step, goto_trace_step);
     }
     // Keeps the opposite idiom on purpose: here guard is a direction bit, not
     // a violation flag, so unknown has no fail-safe value and flipping would

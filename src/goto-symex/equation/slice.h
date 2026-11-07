@@ -189,6 +189,11 @@ public:
   std::unordered_map<const expr2t *, bool> sliced_reads;
 
   static expr2tc get_nondet_symbol(const expr2tc &expr);
+  /// The `nondet$` symbols of \p expr, in member order. Unlike
+  /// get_nondet_symbol it descends into struct and union literals: constant
+  /// propagation folds `s WITH [f := nondet]` on a known object into one,
+  /// holding one nondet symbol per written member.
+  static std::vector<expr2tc> get_nondet_symbols(const expr2tc &expr);
 
 protected:
   /// whether assumes should be sliced
