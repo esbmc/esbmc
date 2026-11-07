@@ -22,6 +22,7 @@ leaves the program unchanged.
 
 import ast
 import builtins
+import sys
 
 _HOOKS = {
     "setattr", "delattr", "vars", "dir", "globals", "locals", "eval", "exec", "__dict__",
@@ -209,13 +210,38 @@ def _mentioned(module):
     }
 
 
+def _imports_user_code(node):
+    """Whether an import may run code that reaches this module's names, or
+    binds a name this pass relies on."""
+    if isinstance(node, ast.ImportFrom):
+        names = [node.module or ""]
+        if node.level or any(a.name in ("*", "getattr", "hasattr") for a in node.names):
+            return True
+    else:
+        names = [a.name for a in node.names]
+    return any(
+        n.split(".")[0] not in sys.stdlib_module_names and n != "_sv_verifier" for n in names)
+
+
 def _reachable_otherwise(module, mentioned):
     """Whether something other than the nodes this pass rewrites may reach an
-    attribute: another module, a hook, a class pattern, or a rebound getattr
-    or hasattr."""
-    return (any(isinstance(n, (ast.Import, ast.ImportFrom, ast.Match)) for n in ast.walk(module))
+    attribute: a module other than the standard library's, a hook, a class
+    pattern, or a rebound getattr or hasattr."""
+    nodes = list(ast.walk(module))
+    imports = [n for n in nodes if isinstance(n, (ast.Import, ast.ImportFrom))]
+    return (any(isinstance(n, ast.Match) for n in nodes) or any(map(_imports_user_code, imports))
             or bool(mentioned & _HOOKS) or bool(_bindings(module, "getattr"))
             or bool(_bindings(module, "hasattr")))
+
+
+def _receiver_escapes(module, use, receiver):
+    """Whether `receiver` is read other than as the object of `use`, so an
+    imported function could be handed the instance and set the attribute."""
+    allowed = {id(n.value) for n in use.nodes if isinstance(n, ast.Attribute)}
+    allowed |= {id(c.args[0]) for c in use.calls}
+    return any(
+        isinstance(n, ast.Name) and isinstance(n.ctx, ast.Load) and n.id == receiver
+        and id(n) not in allowed for n in ast.walk(module))
 
 
 def _binding(module, use, scopes):
@@ -244,6 +270,7 @@ def lower_path_dependent_attributes(module):
     uses = _uses_by_attribute(module)
     if uses is None:
         return
+    has_imports = any(isinstance(n, (ast.Import, ast.ImportFrom)) for n in ast.walk(module))
     classes = {s.name: s for s in module.body if isinstance(s, ast.ClassDef)}
     scopes = _scopes(module)
     for attr, use in uses.items():
@@ -255,6 +282,7 @@ def lower_path_dependent_attributes(module):
         call = binding.value
         cls = call.func.id if isinstance(call, ast.Call) and isinstance(call.func, ast.Name) else ""
         if (len(_bindings(module, cls)) != 1 or not _class_lacks(classes, cls, attr)
-                or {has, value} & mentioned):
+                or {has, value} & mentioned
+                or has_imports and _receiver_escapes(module, use, receiver)):
             continue
         _lower(module, use, binding, has, value)

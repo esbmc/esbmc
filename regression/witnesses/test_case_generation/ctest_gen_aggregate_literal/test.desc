@@ -1,0 +1,6 @@
+CORE
+main.c
+--generate-ctest-testcase
+^Generated CTest test case\: test_case\.c$
+^VERIFICATION FAILED$
+CHECK_FILE esbmc-ctest/test_case.c contains static int const v\[\] = \{ -?[0-9]+, -?[0-9]+, -?[0-9]+, 2, 1 \};
