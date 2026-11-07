@@ -2,7 +2,10 @@
 #define CLANG_C_FRONTEND_CLANG_C_LEXER_H_
 
 #include <irep2/irep2.h>
+#include <map>
 #include <memory>
+#include <optional>
+#include <set>
 #include <string>
 
 class clang_c_lexert
@@ -26,6 +29,12 @@ public:
    * @return The parsed IRep2 expression, or a null expr2tc on parse error.
    */
   expr2tc parse_expr(const std::string &expr);
+
+  // Maps annotated unbraced body lines to exclusive end byte offsets.
+  // Returns nullopt when token boundaries cannot be determined safely.
+  std::optional<std::map<size_t, size_t>> find_control_body_ends(
+    const std::string &source,
+    const std::set<size_t> &invariant_lines);
 
   struct LexerContext;
 
