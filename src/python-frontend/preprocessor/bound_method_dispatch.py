@@ -237,20 +237,25 @@ class _Rebound:
                     continue
                 if self._module_function_value(name, nodes):
                     continue
-                assigns, calls = self.dispatched_statements(name, nodes, replacements)
-                dispatch = _Dispatch(scope, name, next_id)
-                for assign in assigns:
-                    replacements[id(assign)] = dispatch.bind(assign, variables)
-                replacements.update((id(call), dispatch.call(call)) for call in calls)
-                _refuse_when_run(
-                    self.module, self._other_reads(scope, name, calls), _bound_value(assigns[-1]),
-                    f"'{name}' is bound to methods at several sites and used other than as "
-                    "a whole call statement", replacements)
-                dispatches.append(dispatch)
+                dispatches.append(
+                    self._dispatch(scope, name, nodes, variables, next_id, replacements))
         _Replace(replacements).visit(self.module)
         for dispatch in dispatches:
             dispatch.start()
         return in_order
+
+    def _dispatch(self, scope, name, nodes, variables, next_id, replacements):
+        """Record in `replacements` the rewrite of the bindings and calls of
+        `name` in `scope`, and return its dispatch."""
+        assigns, calls = self.dispatched_statements(name, nodes, replacements)
+        dispatch = _Dispatch(scope, name, next_id)
+        replacements.update((id(assign), dispatch.bind(assign, variables)) for assign in assigns)
+        replacements.update((id(call), dispatch.call(call)) for call in calls)
+        _refuse_when_run(
+            self.module, self._other_reads(scope, name, calls), _bound_value(assigns[-1]),
+            f"'{name}' is bound to methods at several sites and used other than as "
+            "a whole call statement", replacements)
+        return dispatch
 
     def _module_function_value(self, name, nodes):
         """Whether `name` is bound to functions of the imported `modules` and
