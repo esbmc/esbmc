@@ -100,6 +100,20 @@ std::string classify_return_literal_kind(
     auto it = param_kinds.find(value.value("id", ""));
     return it == param_kinds.end() ? "" : it->second;
   }
+  // Arithmetic on a parameter, e.g. `return n + 1` (#9812).
+  if (value.value("_type", "") == "BinOp")
+  {
+    auto operand_kind = [&](const char *side) {
+      return classify_return_literal_kind(
+        {{"_type", "Return"}, {"value", value[side]}},
+        param_kinds,
+        module_body);
+    };
+    return dynamic_type_detail::binop_kind(
+      value["op"].value("_type", ""),
+      operand_kind("left"),
+      operand_kind("right"));
+  }
   if (value.value("_type", "") == "Call")
   {
     const std::string kind = nondet_call_kind(value);
