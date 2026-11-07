@@ -1,0 +1,5 @@
+CORE
+main.c
+
+^VERIFICATION FAILED$
+longjmp to a jmp_buf whose setjmp is not active

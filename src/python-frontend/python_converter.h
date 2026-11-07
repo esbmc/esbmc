@@ -157,11 +157,15 @@ public:
   /// A bare `Callable` return as the pointer type of the functions the body
   /// returns by name, when they agree on a signature (#7802).
   typet returned_function_type(const nlohmann::json &function_node);
+  std::optional<code_typet>
+  shared_signature(const std::vector<std::string> &names);
+  typet unannotated_return_type(const nlohmann::json &function_node);
   typet named_return_type(
     const std::string &name,
     const nlohmann::json &return_node,
     const nlohmann::json &function_node);
   typet named_callee_type(const std::string &name);
+  bool is_foldable_function(const std::string &name);
   std::optional<code_typet> returned_function(const nlohmann::json &callee);
   /// `get()()`: a call through the function pointer that `get()` returns.
   /// `(lambda x: ...)(a)`: a call of the lambda, typed by its arguments.
@@ -188,6 +192,10 @@ public:
     const typet &value,
     const locationt &location);
   void decay_function_choice(exprt &then, exprt &else_expr);
+  void coerce_not_callable_return(
+    exprt &value,
+    const locationt &location,
+    codet &target_block);
 
   typet get_type_from_annotation(
     const nlohmann::json &annotation_node,
@@ -2077,6 +2085,10 @@ private:
   bool mixes_str_and_number(
     const std::string &probe,
     const std::vector<typet> &kinds);
+  bool param_tuple_member_displays(
+    const std::string &param_name,
+    size_t member,
+    std::vector<nlohmann::json> &out) const;
 
   void handle_array_unpacking(
     const nlohmann::json &ast_node,
@@ -2990,8 +3002,8 @@ private:
 
   /// Unpacks @p value, an element of an enclosing unpacking, into the nested
   /// Tuple or List @p target. A list must be a symbol, or a member of a tuple
-  /// variable, with element types recorded exactly; any other value or target
-  /// is refused.
+  /// variable or parameter, with element types recorded exactly; any other
+  /// value or target is refused.
   void unpack_nested_target(
     const nlohmann::json &ast_node,
     const nlohmann::json &target,
@@ -3006,6 +3018,11 @@ private:
     const exprt &rhs);
 
   exprt hold_tuple_member_list(
+    const nlohmann::json &ast_node,
+    const exprt &value,
+    codet &target_block);
+
+  exprt hold_param_tuple_member_list(
     const nlohmann::json &ast_node,
     const exprt &value,
     codet &target_block);

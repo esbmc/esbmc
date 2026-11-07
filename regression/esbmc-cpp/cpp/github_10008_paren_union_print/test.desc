@@ -1,0 +1,4 @@
+CORE
+main.cpp
+--std c++20 --goto-functions-only
+^ +ASSIGN u=\{ \.a=17 \};$
