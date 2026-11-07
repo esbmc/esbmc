@@ -1049,6 +1049,8 @@ private:
     const std::string &name,
     int before,
     bool include_later) const;
+  std::string call_number_kind(const nlohmann::json &call) const;
+  mutable std::unordered_map<std::string, std::string> call_number_kinds_;
 
   void reject_inexact_number_join(
     const nlohmann::json &element,

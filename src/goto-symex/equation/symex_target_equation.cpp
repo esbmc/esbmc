@@ -649,6 +649,12 @@ void runtime_encoded_equationt::pop_ctx()
 
   SSA_steps.erase(it, SSA_steps.end());
 
+  // The steps kept here were encoded before any slicing, and the next
+  // interleaving shares them. A slicer run on the interleaving just finished
+  // may have marked some ignored, which would drop them from its trace (#9688).
+  for (SSA_stept &step : SSA_steps)
+    step.ignore = false;
+
   conv.pop_ctx();
   scoped_end_points.pop_back();
   solver_state->states.pop_back();

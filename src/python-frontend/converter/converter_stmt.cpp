@@ -9169,8 +9169,12 @@ typet python_converter::optional_ternary_type(
 {
   const typet &value_type = then_is_none ? else_expr.type() : then.type();
   const bool reference_value = value_type.is_array() || value_type.is_pointer();
-  const typet &target =
-    current_lhs ? current_lhs->type() : ternary_return_target_;
+  typet target = current_lhs ? current_lhs->type() : ternary_return_target_;
+  // With no type to fit, a list is held as a nullable list pointer, as an
+  // unannotated function returning a list or None is.
+  const bool untyped_target = target.id().empty() || target.is_empty();
+  if (untyped_target && value_type == type_handler_.get_list_type())
+    target = value_type;
   if (!reference_value || !target.is_pointer())
   {
     typet result_type = type_handler_.build_optional_type(value_type);

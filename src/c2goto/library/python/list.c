@@ -91,6 +91,9 @@ PyObject *__ESBMC_create_inf_obj()
   return NULL;
 };
 
+const bool __ESBMC_list_nest_no = false;
+const bool __ESBMC_list_nest_yes = true;
+
 PyListObject *__ESBMC_list_create()
 {
   PyListObject *l = __ESBMC_alloca(sizeof(PyListObject));
@@ -98,7 +101,37 @@ PyListObject *__ESBMC_list_create()
   l->items = __ESBMC_create_inf_obj();
   l->size = 0;
   l->is_tuple = false;
+  l->may_nest = &__ESBMC_list_nest_no;
   return l;
+}
+
+// A list's may_nest points at __ESBMC_list_nest_no until an element that may
+// be a nested list is stored. It is a pointer to a constant rather than a
+// bool field because symex does not track the fields of a list whose size is
+// symbolic, while it does track where a pointer points: while no store
+// redirects it, *may_nest folds to false and __ESBMC_list_eq drops its
+// nested-list branch, whose reads reinterpret every scalar cell as a list
+// pointer (#10023).
+static inline void __ESBMC_list_set_may_nest(PyListObject *l)
+{
+  l->may_nest = &__ESBMC_list_nest_yes;
+}
+
+static inline void
+__ESBMC_list_may_nest_from(PyListObject *l, const PyListObject *src)
+{
+  if (*src->may_nest)
+    __ESBMC_list_set_may_nest(l);
+}
+
+// Is o, an element of l, a nested list? Testing may_nest first lets symex
+// settle the question for a list that never held one.
+static inline bool __ESBMC_list_elem_is_nested(
+  const PyListObject *l,
+  const PyObject *o,
+  size_t list_type_id)
+{
+  return *l->may_nest && o->type_id == list_type_id;
 }
 
 size_t __ESBMC_list_size(const PyListObject *l)
@@ -239,6 +272,9 @@ bool __ESBMC_list_push(
   item->type_id = type_id;
   item->size = type_size;
   l->size++;
+  // ptr_free is 1 only for a payload with no pointer, which a list is not.
+  if (ptr_free != 1)
+    __ESBMC_list_set_may_nest(l);
 
   // TODO: Nondeterministic failure?
   return true;
@@ -362,12 +398,19 @@ static bool __ESBMC_list_push_shallow_sz(
   {
     l->items[l->size] = *o;
     l->size++;
+    __ESBMC_list_set_may_nest(l);
     return true;
   }
+  // With list_type_id known, the test above has ruled out a nested list, so
+  // the scalar copy below leaves may_nest as it was.
+  const bool *may_nest = l->may_nest;
   if (elem_size != 0)
-    return __ESBMC_list_push(
-      l, o->value, o->type_id, elem_size, float_type_id, 0);
-  return __ESBMC_list_push_object(l, o, float_type_id, 0);
+    __ESBMC_list_push(l, o->value, o->type_id, elem_size, float_type_id, 0);
+  else
+    __ESBMC_list_push_object(l, o, float_type_id, 0);
+  if (list_type_id != 0)
+    l->may_nest = may_nest;
+  return true;
 }
 
 // Shallow append for a list of tagged scalars. Their payload width is
@@ -386,6 +429,7 @@ bool __ESBMC_list_push_shallow_tagged(
   {
     l->items[l->size] = *o;
     l->size++;
+    __ESBMC_list_set_may_nest(l);
     return true;
   }
   return __ESBMC_list_push_tagged(
@@ -453,6 +497,12 @@ static inline size_t __ESBMC_list_eq_depth_limit(size_t max_depth)
   size_t depth_limit = max_depth > 0 ? max_depth : __ESBMC_LIST_DEFAULT_DEPTH;
   return depth_limit > __ESBMC_LIST_MAX_STACK ? __ESBMC_LIST_MAX_STACK
                                               : depth_limit;
+}
+
+// Exact, as in CPython: widening n alone equates 2^53 + 1 with 2^53.
+static inline bool __ESBMC_int_float_eq(int64_t n, double d)
+{
+  return d >= -0x1p63 && d < 0x1p63 && (int64_t)d == n && d == (double)n;
 }
 
 bool __ESBMC_list_eq(
@@ -530,21 +580,17 @@ bool __ESBMC_list_eq(
       // int-vs-float: Python compares numerically (1 == 1.0), but the two
       // store different bit patterns, so a byte compare would wrongly differ.
       // Triggered when exactly one side is a float (sizes already match here,
-      // and float/int elements are both 8 bytes). float_type_id is derived by
-      // the frontend from top-level element types only, so this numeric path
-      // does not reach nested mixed int/float lists; like list_lt, the int side
-      // is widened to double, so |int| > 2^53 loses precision vs CPython.
+      // and float/int elements are both 8 bytes). For ==, float_type_id is
+      // derived by the frontend from top-level element types only, so this
+      // numeric path does not reach nested mixed int/float lists.
       if (
         float_type_id != 0 && a->size == 8 &&
         (a->type_id == float_type_id) != (b->type_id == float_type_id))
       {
-        double av = (a->type_id == float_type_id)
-                      ? *(const double *)a->value
-                      : (double)*(const int64_t *)a->value;
-        double bv = (b->type_id == float_type_id)
-                      ? *(const double *)b->value
-                      : (double)*(const int64_t *)b->value;
-        if (av != bv)
+        const bool a_float = a->type_id == float_type_id;
+        if (!__ESBMC_int_float_eq(
+              *(const int64_t *)(a_float ? b->value : a->value),
+              *(const double *)(a_float ? a->value : b->value)))
           return false;
         continue;
       }
@@ -558,7 +604,7 @@ bool __ESBMC_list_eq(
     }
 
     // Check if elements are nested lists
-    if (a->type_id == list_type_id)
+    if (__ESBMC_list_elem_is_nested(cur_a, a, list_type_id))
     {
       const PyListObject *nested_a = *(const PyListObject **)a->value;
       const PyListObject *nested_b = *(const PyListObject **)b->value;
@@ -723,6 +769,8 @@ bool __ESBMC_list_set_at(
   l->items[index].float_idx = float_idx;
   l->items[index].type_id = type_id;
   l->items[index].size = type_size;
+  if (ptr_free != 1)
+    __ESBMC_list_set_may_nest(l);
 
   return true;
 }
@@ -772,6 +820,8 @@ bool __ESBMC_list_insert(
   l->items[index].type_id = type_id;
   l->items[index].size = type_size;
   l->size++;
+  if (ptr_free != 1)
+    __ESBMC_list_set_may_nest(l);
   return true;
 }
 
@@ -848,6 +898,37 @@ bool __ESBMC_list_contains(
         return true;
     }
 
+    ++i;
+  }
+  return false;
+}
+
+// `item in l` for a list-valued item: an element matches when it is a list
+// equal to item, not when its stored pointer bytes match (#9960).
+bool __ESBMC_list_contains_list(
+  const PyListObject *l,
+  const PyListObject *item,
+  size_t list_type_id,
+  size_t max_depth,
+  size_t float_type_id)
+{
+  if (!l || !item)
+    return false;
+
+  size_t i = 0;
+  while (i < l->size)
+  {
+    const PyObject *elem = &l->items[i];
+    if (
+      elem->type_id == list_type_id && elem->size == sizeof(PyListObject *) &&
+      __ESBMC_list_eq(
+        *(const PyListObject **)elem->value,
+        item,
+        list_type_id,
+        max_depth,
+        float_type_id,
+        0))
+      return true;
     ++i;
   }
   return false;
@@ -963,6 +1044,7 @@ void __ESBMC_list_extend(
 {
   if (!l || !other)
     return;
+  __ESBMC_list_may_nest_from(l, other);
 
   size_t i = 0;
   while (i < other->size)
@@ -1267,6 +1349,7 @@ PyListObject *__ESBMC_list_copy(const PyListObject *l)
 
   // Create new list
   PyListObject *copied = __ESBMC_list_create();
+  copied->may_nest = l->may_nest;
 
   // Copy all elements
   size_t i = 0;
@@ -1386,6 +1469,7 @@ bool __ESBMC_list_slice_assign(
   __ESBMC_assert(
     l != NULL && src != NULL, "list_slice_assign: list or source is null");
   __ESBMC_assert(step != 0, "ValueError: slice step cannot be zero");
+  __ESBMC_list_may_nest_from(l, src);
 
   int64_t size = (int64_t)l->size;
   int64_t lo_clamp = (step < 0) ? -1 : 0;
