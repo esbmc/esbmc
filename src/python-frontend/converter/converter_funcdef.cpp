@@ -4413,10 +4413,24 @@ static bool binds_name(const nlohmann::json &node, const std::string &name)
   });
 }
 
+/// Whether \p value is a constant that is true, as a function is.
+static bool is_truthy_constant(const nlohmann::json &value)
+{
+  if (value.value("_type", "") != "Constant" || value.contains("_bigint"))
+    return false;
+  const nlohmann::json &v = value["value"];
+  return (v.is_boolean() && v.get<bool>()) ||
+         (v.is_number_integer() && v.get<long long>() != 0) ||
+         (v.is_number_float() && v.get<double>() != 0.0) ||
+         (v.is_string() && !v.get<std::string>().empty());
+}
+
 /// The functions a body returns by name, through conditional expressions.
-/// Empty when any return value is something else.
-static std::vector<std::string>
-returned_function_names(const nlohmann::json &function_node)
+/// Empty when any return value is something else, other than a true constant
+/// with \p skip_constants.
+static std::vector<std::string> returned_function_names(
+  const nlohmann::json &function_node,
+  bool skip_constants = false)
 {
   std::vector<nlohmann::json> values;
   collect_return_values(function_node["body"], values);
@@ -4440,7 +4454,7 @@ returned_function_names(const nlohmann::json &function_node)
       values.push_back(value["body"]);
       values.push_back(value["orelse"]);
     }
-    else
+    else if (!skip_constants || !is_truthy_constant(value))
       return {};
   }
   return names;
@@ -4458,24 +4472,137 @@ bool python_converter::same_signature(const code_typet &a, const code_typet &b)
   return true;
 }
 
-typet python_converter::returned_function_type(
-  const nlohmann::json &function_node)
+static bool is_call_of(const nlohmann::json &node, const std::string &name)
 {
-  const typet callable = type_handler_.get_typet(std::string("Callable"));
+  return node.is_object() && node.value("_type", "") == "Call" &&
+         node["func"].value("_type", "") == "Name" &&
+         node["func"].value("id", "") == name;
+}
+
+/// How many reads of `name` there are under `node`, and how many are calls.
+static std::pair<std::size_t, std::size_t>
+count_calls(const nlohmann::json &node, const std::string &name)
+{
+  std::pair<std::size_t, std::size_t> n{0, 0};
+  if (node.is_object())
+  {
+    n.first += node.value("_type", "") == "Name" &&
+               node.value("id", "") == name &&
+               node["ctx"].value("_type", "") == "Load";
+    n.second += is_call_of(node, name);
+  }
+  if (node.is_structured())
+    for (const auto &child : node)
+    {
+      const auto sub = count_calls(child, name);
+      n.first += sub.first;
+      n.second += sub.second;
+    }
+  return n;
+}
+
+static bool only_called(const nlohmann::json &module, const std::string &name)
+{
+  const auto n = count_calls(module, name);
+  return n.first == n.second;
+}
+
+/// How many results of calls of `name` under `node` are called at once or
+/// bound to a name only ever called.
+static std::size_t called_results(
+  const nlohmann::json &node,
+  const nlohmann::json &module,
+  const std::string &name)
+{
+  std::size_t n = 0;
+  if (node.is_object())
+  {
+    const std::string kind = node.value("_type", "");
+    const bool assign = kind == "Assign" && node["targets"].size() == 1;
+    const nlohmann::json &target =
+      assign ? node["targets"][0] : node.value("target", nlohmann::json());
+    n += kind == "Call" && is_call_of(node["func"], name);
+    n += (assign || kind == "AnnAssign") && is_call_of(node["value"], name) &&
+         target.value("_type", "") == "Name" &&
+         only_called(module, target["id"].get<std::string>());
+  }
+  if (node.is_structured())
+    for (const auto &child : node)
+      n += called_results(child, module, name);
+  return n;
+}
+
+/// Whether the module function `name` is only ever called, and so is every
+/// value it returns: a constant it returns is then never read as a value.
+static bool
+results_only_called(const nlohmann::json &module, const std::string &name)
+{
+  const auto n = count_calls(module, name);
+  return n.second > 0 && n.first == n.second &&
+         called_results(module, module, name) == n.second;
+}
+
+/// Whether a call of the module function `name` may fold to the constant it
+/// returns. Not when it returns functions and its results are only called: a
+/// constant it returns stands for a function raising TypeError.
+bool python_converter::is_foldable_function(const std::string &name)
+{
+  if (try_find_function((*ast_json)["body"], name).empty())
+    return false;
+  const symbolt *fn =
+    find_symbol(symbol_id(current_python_file, "", name).to_string());
+  if (!fn || !fn->get_type().is_code())
+    return true;
+  const typet &returned = to_code_type(fn->get_type()).return_type();
+  return !returned.is_pointer() || !returned.subtype().is_code() ||
+         !results_only_called(*ast_json, name);
+}
+
+/// The signature the module functions \p names share, if any.
+std::optional<code_typet>
+python_converter::shared_signature(const std::vector<std::string> &names)
+{
   std::optional<code_typet> signature;
-  for (const std::string &name : returned_function_names(function_node))
+  for (const std::string &name : names)
   {
     const symbolt *fn =
       find_symbol(symbol_id(current_python_file, "", name).to_string());
     if (!fn || !fn->get_type().is_code())
-      return callable;
+      return std::nullopt;
     const code_typet &fn_type = to_code_type(fn->get_type());
     if (!signature)
       signature = fn_type;
     else if (!same_signature(*signature, fn_type))
-      return callable;
+      return std::nullopt;
   }
-  return signature ? gen_pointer_type(*signature) : callable;
+  return signature;
+}
+
+typet python_converter::returned_function_type(
+  const nlohmann::json &function_node)
+{
+  const auto signature =
+    shared_signature(returned_function_names(function_node));
+  return signature ? gen_pointer_type(*signature)
+                   : type_handler_.get_typet(std::string("Callable"));
+}
+
+/// The return type of an unannotated function, inferred before its body is
+/// converted. A module function that returns functions on some paths and true
+/// constants on the others returns functions, when its results are only
+/// called: calling a constant raises TypeError (#9824).
+typet python_converter::unannotated_return_type(
+  const nlohmann::json &function_node)
+{
+  const std::string name = function_node["name"].get<std::string>();
+  if (
+    current_python_file != main_python_file || !current_class_name_.empty() ||
+    current_func_name_ != name || !results_only_called(*ast_json, name))
+    return infer_return_type_from_body(function_node["body"]);
+  const auto signature =
+    shared_signature(returned_function_names(function_node, true));
+  return signature ? gen_pointer_type(*signature)
+                   : infer_return_type_from_body(function_node["body"]);
 }
 
 typet python_converter::named_return_type(
@@ -6815,7 +6942,7 @@ void python_converter::get_function_definition(
   // conversion so return expressions are typed in the right context.
   if (type.return_type().is_empty())
   {
-    typet inferred_type = infer_return_type_from_body(function_node["body"]);
+    typet inferred_type = unannotated_return_type(function_node);
     // Stage 1 object-model migration (#3067): an unannotated function whose
     // body returns a user class instance (e.g. `return self` in __getitem__,
     // #4514) is inferred to the value struct here — apply the same Cls* ->
