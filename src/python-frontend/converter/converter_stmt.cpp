@@ -5719,7 +5719,7 @@ void python_converter::widen_int_target_for_float_call(
 
 // A result stored to an Optional of its own type, or a None result, must be
 // wrapped, so the call writes a temporary first (#9055, #10075). Another type
-// would need a conversion that loses the result's type.
+// would need a conversion that loses the result's type, so it is refused.
 void python_converter::wrap_call_result_in_optional(
   const nlohmann::json &ast_node,
   const exprt &lhs,
@@ -5727,13 +5727,17 @@ void python_converter::wrap_call_result_in_optional(
   const locationt &location,
   codet &target_block)
 {
-  // A pointer result may encode None as NULL, so only None itself is wrapped.
-  if (
-    !type_utils::is_optional_struct(lhs.type()) ||
-    (rhs.type() != none_type() &&
-     (rhs.type().is_pointer() ||
-      to_struct_type(lhs.type()).get_component("value").type() != rhs.type())))
+  if (!type_utils::is_optional_struct(lhs.type()) || rhs.type() == lhs.type())
     return;
+  // A pointer result may encode None as NULL, so only None itself is wrapped.
+  if (rhs.type() != none_type() && rhs.type().is_pointer())
+    return;
+  if (
+    rhs.type() != none_type() &&
+    to_struct_type(lhs.type()).get_component("value").type() != rhs.type())
+    throw std::runtime_error(
+      "storing a call result into an Optional of another type is not yet "
+      "supported");
 
   symbolt &result =
     create_tmp_symbol(ast_node, "$call_result$", rhs.type(), exprt());
