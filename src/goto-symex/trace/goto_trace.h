@@ -179,14 +179,16 @@ void correctness_graphml_goto_trace(
   const namespacet &ns,
   const goto_tracet &goto_trace);
 
-/// @p transition_invariants are (loop head, C expression) pairs written as
-/// loop_transition_invariant entries.
+/// @p transition_invariants and @p loop_invariants are (loop head, C
+/// expression) pairs written as loop_transition_invariant and loop_invariant
+/// entries.
 void correctness_yaml_goto_trace(
   optionst &options,
   const namespacet &ns,
   const goto_tracet &goto_trace,
   const std::vector<std::pair<locationt, std::string>> &transition_invariants =
-    {});
+    {},
+  const std::vector<std::pair<locationt, std::string>> &loop_invariants = {});
 
 /// Write the correctness witnesses (GraphML and/or YAML) the options request.
 void write_correctness_witnesses(
@@ -194,7 +196,8 @@ void write_correctness_witnesses(
   const namespacet &ns,
   const goto_tracet &goto_trace,
   const std::vector<std::pair<locationt, std::string>> &transition_invariants =
-    {});
+    {},
+  const std::vector<std::pair<locationt, std::string>> &loop_invariants = {});
 
 void generate_goto_trace_in_correctness_graphml_format(
   std::string &witness_output,

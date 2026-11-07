@@ -843,26 +843,34 @@ void correctness_yaml_goto_trace(
   optionst &options,
   const namespacet &ns [[maybe_unused]],
   const goto_tracet &goto_trace [[maybe_unused]],
-  const std::vector<std::pair<locationt, std::string>> &transition_invariants)
+  const std::vector<std::pair<locationt, std::string>> &transition_invariants,
+  const std::vector<std::pair<locationt, std::string>> &loop_invariants)
 {
   yamlt yml(yamlt::CORRECTNESS);
   yml.verified_file = options.get_option("input-file");
   log_progress(
     "Generating Correctness Yaml Witness for: {}", yml.verified_file);
 
-  for (const auto &[loc, value] : transition_invariants)
-  {
-    const waypoint at = witness_waypoint(loc, yml.verified_file, options);
-    invariant inv;
-    inv.type = invariant::loop_transition_invariant;
-    inv.file = at.file;
-    inv.line = at.line;
-    inv.column = at.column;
-    inv.function = at.function;
-    inv.value = value;
-    inv.format = "ext_c_expression";
-    yml.invariants.push_back(inv);
-  }
+  // A transition invariant relates two states, so only ext_c_expression can
+  // write it; a loop invariant is plain C.
+  auto add = [&](const auto &invariants, invariant::Type type) {
+    for (const auto &[loc, value] : invariants)
+    {
+      const waypoint at = witness_waypoint(loc, yml.verified_file, options);
+      invariant inv;
+      inv.type = type;
+      inv.file = at.file;
+      inv.line = at.line;
+      inv.column = at.column;
+      inv.function = at.function;
+      inv.value = value;
+      inv.format =
+        type == invariant::loop_invariant ? "c_expression" : "ext_c_expression";
+      yml.invariants.push_back(inv);
+    }
+  };
+  add(transition_invariants, invariant::loop_transition_invariant);
+  add(loop_invariants, invariant::loop_invariant);
 
   yml.generate_yaml(options);
 }
@@ -871,7 +879,8 @@ void write_correctness_witnesses(
   optionst &options,
   const namespacet &ns,
   const goto_tracet &goto_trace,
-  const std::vector<std::pair<locationt, std::string>> &transition_invariants)
+  const std::vector<std::pair<locationt, std::string>> &transition_invariants,
+  const std::vector<std::pair<locationt, std::string>> &loop_invariants)
 {
   if (options.get_bool_option("result-only"))
     return;
@@ -880,7 +889,8 @@ void write_correctness_witnesses(
     correctness_graphml_goto_trace(options, ns, goto_trace);
 
   if (!options.get_option("witness-output-yaml").empty())
-    correctness_yaml_goto_trace(options, ns, goto_trace, transition_invariants);
+    correctness_yaml_goto_trace(
+      options, ns, goto_trace, transition_invariants, loop_invariants);
 }
 
 void appendInfo(
