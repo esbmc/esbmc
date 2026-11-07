@@ -2,7 +2,7 @@ import ast
 import copy
 import keyword
 
-from preprocessor.bound_method_dispatch import _scope_nodes
+from preprocessor.bound_method_dispatch import FUNCTION_VALUE, _scope_nodes
 # pylint: disable=too-many-locals,too-many-branches,too-many-statements,too-many-return-statements
 # pylint: disable=too-many-nested-blocks,too-many-boolean-expressions,no-else-return,no-else-raise
 # pylint: disable=import-outside-toplevel
@@ -759,8 +759,8 @@ class CoreVisitorsMixin:
             self._bound_method_scopes[-1], ast.ClassDef)
         if not (resolvable and isinstance(target, ast.Name) and isinstance(value, ast.Attribute)
                 and target.id not in self.unscoped_binding_names and not in_class_body and
-                (captures or isinstance(value.value, ast.Name))
-                and self._needs_no_method_value(target, value)):
+                (captures or isinstance(value.value, ast.Name)) and self._needs_no_method_value(
+                    target, value) and not getattr(value, FUNCTION_VALUE, False)):
             if isinstance(target, ast.Name):
                 self.bound_method_vars.pop(target.id, None)
             return None
