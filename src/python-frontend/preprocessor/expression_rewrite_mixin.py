@@ -151,6 +151,12 @@ class ExpressionRewriteMixin:
                     if not self._inline_single_use_map(stmts, i, name_counts):
                         i += 1
 
+    def _is_sorted_of_map(self, node):
+        """Whether `node` is sorted(map(f, xs), ...) with a pure `f`."""
+        return (isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+                and node.func.id == "sorted" and node.args and self._is_map_call(node.args[0])
+                and self._is_pure_operand(node.args[0].args[0]))
+
     def _rewrite_map_values(self, module):
         """Lower the map() uses whose result is consumed once, in full: as the
         value of an unpacking, as the argument of sorted(), as a for-loop
@@ -164,9 +170,7 @@ class ExpressionRewriteMixin:
             if (self._is_unpacking(n) and self._is_map_call(n.value)
                     and self._is_pure_operand(n.value.args[0])):
                 n.value = self._map_as_listcomp(n.value)
-            elif (not sorted_bound and isinstance(n, ast.Call) and isinstance(n.func, ast.Name)
-                  and n.func.id == "sorted" and n.args and self._is_map_call(n.args[0])
-                  and self._is_pure_operand(n.args[0].args[0])):
+            elif not sorted_bound and self._is_sorted_of_map(n):
                 n.args[0] = self._map_as_listcomp(n.args[0])
             elif (isinstance(n, ast.For) and self._is_map_call(n.iter)
                   and self._map_for_lowerable(n, n.iter)):
