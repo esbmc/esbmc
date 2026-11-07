@@ -568,6 +568,13 @@ private:
     unsigned long alignment,
     modet mode,
     const expr2tc *failed_symbol = nullptr);
+  /// The \p bits bits of struct \p value from bit \p start, each byte read
+  /// from the member holding it so that a store touches no other member; nil
+  /// if a byte is not inside one whole-byte member.
+  expr2tc stitch_across_members(
+    const expr2tc &value,
+    const BigInt &start,
+    unsigned int bits);
   void construct_from_multidir_array(
     expr2tc &value,
     const expr2tc &offset,
