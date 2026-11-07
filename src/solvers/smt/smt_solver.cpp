@@ -276,6 +276,11 @@ void smt_solver_baset::pop_ctx()
   });
   std::erase_if(
     flattened, [this](const auto &kv) { return kv.second.level >= ctx_level; });
+  for (auto &[value, flattens] : flattened_values)
+    std::erase_if(
+      flattens, [this](const auto &f) { return f.first >= ctx_level; });
+  std::erase_if(
+    flattened_values, [](const auto &kv) { return kv.second.empty(); });
   std::erase_if(
     ptr_flow, [this](const auto &kv) { return kv.second.first >= ctx_level; });
   if (base_addrspace_tied && *base_addrspace_tied >= ctx_level)
