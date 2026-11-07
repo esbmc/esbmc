@@ -4492,11 +4492,11 @@ static bool is_truthy_constant(const nlohmann::json &value)
 }
 
 /// The functions a body returns by name, through conditional expressions.
-/// Empty when any return value is something else, other than a true constant
-/// with \p skip_constants.
+/// Empty when any return value is something else, other than one \p skip
+/// accepts.
 static std::vector<std::string> returned_function_names(
   const nlohmann::json &function_node,
-  bool skip_constants = false)
+  bool (*skip)(const nlohmann::json &) = nullptr)
 {
   std::vector<nlohmann::json> values;
   collect_return_values(function_node["body"], values);
@@ -4520,7 +4520,7 @@ static std::vector<std::string> returned_function_names(
       values.push_back(value["body"]);
       values.push_back(value["orelse"]);
     }
-    else if (!skip_constants || !is_truthy_constant(value))
+    else if (!skip || !skip(value))
       return {};
   }
   return names;
@@ -4665,8 +4665,8 @@ typet python_converter::unannotated_return_type(
     current_python_file != main_python_file || !current_class_name_.empty() ||
     current_func_name_ != name || !results_only_called(*ast_json, name))
     return infer_return_type_from_body(function_node["body"]);
-  const auto signature =
-    shared_signature(returned_function_names(function_node, true));
+  const auto signature = shared_signature(
+    returned_function_names(function_node, is_truthy_constant));
   return signature ? gen_pointer_type(*signature)
                    : infer_return_type_from_body(function_node["body"]);
 }
@@ -6549,6 +6549,12 @@ typet python_converter::optional_return_type(
     constructed_return_class(function_node["body"], *ast_json);
   if (!cls.empty())
     return gen_pointer_type(symbol_typet("tag-" + cls));
+  // None or functions of one signature: a function pointer, NULL for None.
+  const std::vector<std::string> functions =
+    returned_function_names(function_node, is_none_return_value);
+  if (!functions.empty())
+    if (const auto signature = shared_signature(functions))
+      return gen_pointer_type(*signature);
   const TypeFlags flags = infer_types_from_returns(function_node["body"]);
   if (!flags.has_int && !flags.has_float && !flags.has_bool)
     return typet();
