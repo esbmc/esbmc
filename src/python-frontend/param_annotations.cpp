@@ -307,6 +307,21 @@ protected:
     return false;
   }
 
+  /// The module @p id names in @p caller: `lib` after `import lib as id`,
+  /// provided nothing else in the caller binds `id`.
+  std::string module_named_by(const std::string &id, size_t caller) const
+  {
+    const nlohmann::json &ast = *modules_[caller].read;
+    for (const auto &stmt : ast["body"])
+      if (is_node(stmt, "Import"))
+        for (const auto &alias : stmt["names"])
+          if (alias["asname"] == id)
+            return json_utils::count_name_bindings(ast, id) == 1
+                     ? alias["name"].get<std::string>()
+                     : "";
+    return id;
+  }
+
   /// The module defining @p func, or none when it is unknown or ambiguous.
   std::optional<size_t>
   resolve_callee(const nlohmann::json &func, size_t caller) const
@@ -320,10 +335,10 @@ protected:
     {
       if (!is_node(func["value"], "Name"))
         return std::nullopt;
+      const std::string module =
+        module_named_by(func["value"]["id"].get<std::string>(), caller);
       for (size_t i = 0; i < modules_.size(); ++i)
-        if (
-          modules_[i].name == func["value"]["id"].get<std::string>() &&
-          defines(i, name))
+        if (modules_[i].name == module && defines(i, name))
           return i;
       return std::nullopt;
     }
