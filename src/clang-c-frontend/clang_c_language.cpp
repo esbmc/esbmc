@@ -16,6 +16,9 @@ CC_DIAGNOSTIC_POP()
 #include <clang-c-frontend/clang_c_language.h>
 #include <clang-c-frontend/clang_c_main.h>
 #include <util/lang/c_expr2string.h>
+#include <fstream>
+#include <iterator>
+#include <set>
 #include <sstream>
 #include <util/lang/c_link.h>
 
@@ -243,7 +246,6 @@ void clang_c_languaget::build_compiler_args(
   for (auto const &inc : config.ansi_c.warnings)
     compiler_args.push_back("-W" + inc);
 
-
   // Lets a source tree tell an ESBMC run from an ordinary compile, and gates
   // include/esbmc.h so including it anywhere else is an error rather than a
   // pile of undefined intrinsics (#4610).
@@ -405,6 +407,23 @@ static void parse_witness_constraints(std::vector<waypoint> &waypoints)
   }
 }
 
+static std::optional<std::map<size_t, size_t>> witness_body_ends(
+  const std::string &path,
+  const std::vector<invariant> &invariants)
+{
+  if (!config.ansi_c.defines.empty() || !config.ansi_c.include_files.empty())
+    return std::nullopt;
+  std::ifstream in(path);
+  if (!in)
+    return std::nullopt;
+  const std::string source((std::istreambuf_iterator<char>(in)), {});
+  std::set<size_t> invariant_lines;
+  for (const auto &inv : invariants)
+    invariant_lines.insert(static_cast<size_t>(inv.line.to_int64()));
+  clang_c_lexert lexer;
+  return lexer.find_control_body_ends(source, invariant_lines);
+}
+
 bool clang_c_languaget::parse(const std::string &path)
 {
   // preprocessing
@@ -420,6 +439,10 @@ bool clang_c_languaget::parse(const std::string &path)
   const std::string &actual_path =
     nested_transformed ? nested_transformed->path() : path;
 
+  std::vector<std::string> new_compiler_args = compiler_args("clang-tool");
+  new_compiler_args.push_back(actual_path);
+  std::string intrinsics = internal_additions();
+
   // Inject witness intrinsic calls so that Clang parses them naturally.
   // #line directives after each injection preserve original line numbers.
   std::optional<file_operations::tmp_file> witness_injected;
@@ -429,8 +452,16 @@ bool clang_c_languaget::parse(const std::string &path)
     auto invariants = yaml_parser::read_invariants(witness_path);
     if (!invariants.empty())
     {
-      std::string content =
-        yaml_parser::build_injected_source(actual_path, path, invariants);
+      auto body_ends = witness_body_ends(actual_path, invariants);
+      if (!body_ends)
+      {
+        log_error(
+          "Cannot determine control-body boundaries for witness injection; "
+          "only direct C statements without preprocessing are supported");
+        return true;
+      }
+      std::string content = yaml_parser::build_injected_source(
+        actual_path, path, invariants, *body_ends);
       if (content.empty())
         log_warning("Failed to build injected source for '{}'", path);
       else
@@ -451,9 +482,7 @@ bool clang_c_languaget::parse(const std::string &path)
   const std::string &compile_path =
     witness_injected ? witness_injected->path() : actual_path;
 
-  // Get compiler arguments and add the file path
-  std::vector<std::string> new_compiler_args = compiler_args("clang-tool");
-  new_compiler_args.push_back(compile_path);
+  new_compiler_args.back() = compile_path;
 
   if (FILE *f = messaget::state.target("clang", VerbosityLevel::Debug))
   {
@@ -462,9 +491,6 @@ bool clang_c_languaget::parse(const std::string &path)
       fprintf(f, " '%s'", s.c_str());
     fprintf(f, "\n");
   }
-
-  // Get intrinsics
-  std::string intrinsics = internal_additions();
 
   // Generate ASTUnit and add to our vector
   auto newAST = buildASTs(intrinsics, new_compiler_args);
