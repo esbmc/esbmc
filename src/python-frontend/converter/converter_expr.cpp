@@ -768,7 +768,8 @@ static const nlohmann::json *sole_module_binding(
 }
 
 /// Whether \p operand is a module global already bound with annotated type
-/// \p type, or a call to a module function already defined to return it.
+/// \p type, or a call to a module function already defined to return it, or
+/// through a module global holding such functions.
 bool python_converter::operand_has_type(
   const nlohmann::json &operand,
   const std::string &type) const
@@ -776,16 +777,23 @@ bool python_converter::operand_has_type(
   const bool is_call = operand["_type"] == "Call";
   const std::string id = (is_call ? operand["func"] : operand).value("id", "");
   symbol_id sid(current_python_file, "", is_call ? id : "");
-  if (!is_call)
+  const symbolt *symbol =
+    is_call ? symbol_table_.find_symbol(sid.to_string()) : nullptr;
+  if (!symbol)
+  {
+    sid.set_function("");
     sid.set_object(id);
-  const symbolt *symbol = symbol_table_.find_symbol(sid.to_string());
+    symbol = symbol_table_.find_symbol(sid.to_string());
+  }
   if (!symbol)
     return false;
   const typet &expected = type_handler_.get_typet(type);
   if (!is_call)
     return symbol->get_type() == expected;
-  return symbol->get_type().is_code() &&
-         to_code_type(symbol->get_type()).return_type() == expected;
+  typet callee = symbol->get_type();
+  if (callee.is_pointer())
+    callee = callee.subtype();
+  return callee.is_code() && to_code_type(callee).return_type() == expected;
 }
 
 /// The module global \p sid names for a read in an enclosing scope. Code
