@@ -425,11 +425,12 @@ esbmc_dargs += "--no-vla-size-check "
 
 
 def check_if_benchmark_contains_pthread(benchmark):
+  # A call, not a declaration: goblint-coreutils declare pthread_create
+  # (`extern int (...) pthread_create)(...)`) and never start a thread.
+  call = re.compile(r"\bpthread_create\s*\(")
   with open(benchmark, "r") as f:
-    for line in f:
-      if re.search("pthread_create", line.strip()):
-        return True
-  return False
+    return any(call.search(line) and not line.lstrip().startswith("extern")
+               for line in f)
 
 def strategy_flags(strat):
   if strat in ("fixed", "kinduction"):
