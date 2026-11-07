@@ -2,4 +2,4 @@ CORE
 main.c
 --no-align-check
 ^VERIFICATION FAILED$
-assertion s.b == 0
+^  assertion s\.b == 0$

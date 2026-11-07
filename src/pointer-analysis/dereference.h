@@ -541,8 +541,15 @@ private:
     expr2tc &value,
     const expr2tc &offset,
     const type2tc &type);
-  /** \p value's bytes from bit \p offset, read as \p type. */
+  /** \p value's bytes from bit \p offset, read as \p type. The bytes may
+   *  run past \p value, as for an access spanning array elements. */
   void extract_from_const_offset(
+    expr2tc &value,
+    const expr2tc &offset,
+    const type2tc &type);
+  /** extract_from_const_offset on the struct \p value, for an access running
+   *  past the field it starts in; nil under --ir. */
+  void extract_across_fields(
     expr2tc &value,
     const expr2tc &offset,
     const type2tc &type);

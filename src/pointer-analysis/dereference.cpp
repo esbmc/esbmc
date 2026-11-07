@@ -1334,7 +1334,7 @@ enum target_flags
  *    *  |  V  |  *  | construct_vector_ref                           | rec
  *  -----+-----+-----+------------------------------------------------+---------
  *    s  |  s  |  c  | construct_from_const_offset                    | st
- *    S  |  s  |  c  | construct_from_const_struct_offset             | rec
+ *    S  |  s  |  c  | construct_from_const_struct_offset             | rec, st
  *    U  |  s  |  c  | <ad-hoc>                                       | rec
  *    A  |  s  |  c  | construct_from_array                           | rec, st
  *  -----+-----+-----+------------------------------------------------+---------
@@ -1922,9 +1922,8 @@ void dereferencet::construct_from_const_offset(
       value = expr2tc();
       return;
     }
-    // We are accessing more than one member of a struct.
-    // So, get step down one level to the source_value and
-    // resort to extracting bytes from it.
+    // An oversized access to a union member reads the union's bytes; one
+    // spanning struct fields is built on the struct before reaching here.
     else
     {
       const member2t &themember = to_member2t(value);
@@ -1961,6 +1960,18 @@ void dereferencet::extract_from_const_offset(
 
   // Extracting bits from the produced bv
   value = bitcast2tc(type, value);
+}
+
+void dereferencet::extract_across_fields(
+  expr2tc &value,
+  const expr2tc &offset,
+  const type2tc &type)
+{
+  // Under --ir a struct has no bit-vector representation to take bytes from.
+  if (options.get_bool_option("int-encoding"))
+    value = expr2tc();
+  else
+    extract_from_const_offset(value, offset, type);
 }
 
 void dereferencet::construct_from_const_struct_offset(
@@ -2026,21 +2037,18 @@ void dereferencet::construct_from_const_struct_offset(
 
     if (int_offset == m_offs)
     {
-      // Does this over-read?
-      if (
-        access_size > m_size && options.get_bool_option("struct-fields-check"))
-      {
-        dereference_failure(
-          "pointer dereference", "Over-sized read of struct field", guard);
-        value = expr2tc();
-        return;
-      }
-
       // An access running past this field takes the bytes of the fields
       // after it too, so it is built on this struct, not on the field.
       if (access_size > m_size)
       {
-        extract_from_const_offset(value, offset, type);
+        if (options.get_bool_option("struct-fields-check"))
+        {
+          dereference_failure(
+            "pointer dereference", "Over-sized read of struct field", guard);
+          value = expr2tc();
+          return;
+        }
+        extract_across_fields(value, offset, type);
         return;
       }
 
@@ -2068,10 +2076,9 @@ void dereferencet::construct_from_const_struct_offset(
     if (int_offset < (m_offs + m_size))
     {
       // This access starts in this field, but by process of elimination,
-      // doesn't end in it: an alignment error, which still accesses the
-      // bytes it covers.
+      // ends past it.
       alignment_failure("Misaligned access to struct field", guard);
-      extract_from_const_offset(value, offset, type);
+      extract_across_fields(value, offset, type);
       return;
     }
 
