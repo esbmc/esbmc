@@ -158,8 +158,10 @@ def violation_site(the_output):
   return os.path.basename(site.group(1)), site.group(2)
 
 
-ROW_FILE = re.compile(r"^(\S+), function ")
-ROW_LINE = re.compile(r"\[[^\]]*\]\s+line (\d+)\b")
+# A table header names a file, with ", function f" unless it heads the
+# module-level properties. A row pads its line number to three columns.
+ROW_FILE = re.compile(r"^(\S+)(?:, function .+)?$")
+ROW_LINE = re.compile(r"\[[^\]]*\]\s+line\s+(\d+)\b")
 
 
 def failed_sites(the_output):
