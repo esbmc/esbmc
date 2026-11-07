@@ -6815,7 +6815,7 @@ void python_converter::get_function_definition(
   // conversion so return expressions are typed in the right context.
   if (type.return_type().is_empty())
   {
-    typet inferred_type = infer_return_type_from_body(function_node["body"]);
+    typet inferred_type = infer_return_type_before_body(function_node);
     // Stage 1 object-model migration (#3067): an unannotated function whose
     // body returns a user class instance (e.g. `return self` in __getitem__,
     // #4514) is inferred to the value struct here — apply the same Cls* ->

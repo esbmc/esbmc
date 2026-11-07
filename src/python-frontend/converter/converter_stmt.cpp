@@ -5533,6 +5533,25 @@ exprt python_converter::not_callable_function(
   return symbol_expr(*symbol_table_.move_symbol_to_context(symbol));
 }
 
+/// A value that cannot be called, returned from a function that returns a
+/// function pointer, becomes a function that raises when it is called. The
+/// value is still evaluated for its side effects.
+void python_converter::raise_on_call_of_return(
+  exprt &value,
+  codet &target_block)
+{
+  const typet &type = current_func_return_type_;
+  if (
+    !type.is_pointer() || !type.subtype().is_code() ||
+    may_be_callable(value.type()))
+    return;
+  code_expressiont evaluate(value);
+  evaluate.location() = value.location();
+  target_block.copy_to_operands(evaluate);
+  value = python_expr::decay_function_to_pointer(
+    not_callable_function(type.subtype(), value.type(), value.location()));
+}
+
 /// A choice between two functions of one type is a pointer to either. The
 /// result of a choice between types would have no single type (#8404). An
 /// arm that cannot be called becomes a function that raises when it is.
@@ -10343,6 +10362,7 @@ void python_converter::get_return_statements(
       is_user_class_struct_type(return_value.type()))
       return_value = box_value_on_heap(return_value, location, target_block);
 
+    raise_on_call_of_return(return_value, target_block);
     return_value = tuple_handler_->coerce_to_tuple_type(
       return_value, current_func_return_type_, location, target_block);
     return_value = coerce_optional_return(return_value, location, target_block);

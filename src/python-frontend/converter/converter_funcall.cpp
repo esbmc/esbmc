@@ -1074,6 +1074,32 @@ static void collect_own_returns(
       collect_own_returns(child, out);
 }
 
+/// The return type of unannotated \p function_node, guessed before its body
+/// is converted. A `return` of a module function gives a pointer to it, even
+/// when another path returns a value that cannot be called (#9824).
+typet python_converter::infer_return_type_before_body(
+  const nlohmann::json &function_node)
+{
+  std::vector<nlohmann::json> returns;
+  collect_own_returns(function_node["body"], returns);
+  for (const auto &ret : returns)
+  {
+    const nlohmann::json &value = ret["value"];
+    if (!value.is_object() || value.value("_type", "") != "Name")
+      continue;
+    const std::string name = value["id"];
+    if (
+      count_bindings(function_node, name) != 0 ||
+      count_bindings(*ast_json, name) != 1)
+      continue;
+    const symbolt *fn = symbol_table_.find_symbol(
+      symbol_id(current_python_file, "", name).to_string());
+    if (fn && fn->get_type().is_code())
+      return gen_pointer_type(fn->get_type());
+  }
+  return infer_return_type_from_body(function_node["body"]);
+}
+
 // Whether `body` assigns a dict literal to the name `name`.
 static bool
 binds_dict_literal(const nlohmann::json &body, const nlohmann::json &name)

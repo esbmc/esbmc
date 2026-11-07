@@ -188,6 +188,8 @@ public:
     const typet &value,
     const locationt &location);
   void decay_function_choice(exprt &then, exprt &else_expr);
+  typet infer_return_type_before_body(const nlohmann::json &function_node);
+  void raise_on_call_of_return(exprt &value, codet &target_block);
 
   typet get_type_from_annotation(
     const nlohmann::json &annotation_node,
