@@ -519,15 +519,83 @@ static void push_nondet_return_waypoints(
    branching waypoint only weakens guidance. */
 static constexpr size_t max_branching_waypoints = 1000;
 
+/* A valid-memtrack violation at program exit is checked at the end of
+   __ESBMC_main, located at the entry function's `}`. Its target is the
+   `return` the path left the entry function through, or that `}` when it fell
+   off the end (#9939). The trace records the direction of every non-constant
+   forward branch, so the path is replayed from the entry function's last
+   step; on any branch it does not record, null is returned. */
+static const goto_programt::instructiont *memtrack_return(
+  const goto_tracet &goto_trace,
+  const goto_trace_stept &violation)
+{
+  const goto_programt::const_targett end = violation.pc;
+  if (
+    !end->is_end_function() || end->function != "__ESBMC_main" ||
+    !has_prefix(violation.comment, "dereference failure: forgotten memory"))
+    return nullptr;
+
+  const irep_idt &entry = end->location.get_function();
+  const goto_trace_stept *last = nullptr;
+  for (const auto &step : goto_trace.steps)
+  {
+    if (&step == &violation)
+      break;
+    if (
+      step.thread_nr == violation.thread_nr &&
+      step.pc->function != end->function &&
+      step.pc->location.get_function() == entry)
+      last = &step;
+  }
+  if (last == nullptr)
+    return nullptr;
+
+  goto_programt::const_targett pc = last->pc;
+  if (pc->is_goto())
+  {
+    if (last->type != symex_targett::BREANCHING)
+      return nullptr;
+    pc = last->guard != pc->flipped_guard ? pc->targets.front() : std::next(pc);
+  }
+  else if (!pc->is_return())
+    ++pc;
+
+  while (!pc->is_return())
+  {
+    if (pc->is_end_function() || pc->is_throw() || pc->is_catch())
+      return nullptr;
+    if (!pc->is_goto() || is_false(pc->guard))
+    {
+      ++pc;
+      continue;
+    }
+    if (
+      !is_true(pc->guard) ||
+      pc->targets.front()->location_number <= pc->location_number)
+      return nullptr;
+    pc = pc->targets.front();
+  }
+  return &*pc;
+}
+
 /* The failed assertion's access, and for a data race the access it raced
    with. */
 static void push_violation_targets(
   yamlt &yml,
+  const goto_tracet &goto_trace,
   const goto_trace_stept &step,
   optionst &options)
 {
-  yml.segments.push_back(witness_target_waypoint(
-    step.pc, step.stack_trace, yml.verified_file, options));
+  const goto_programt::instructiont *ret = memtrack_return(goto_trace, step);
+  if (ret != nullptr && input_file_check(ret->location))
+  {
+    waypoint wp = witness_waypoint(ret->location, yml.verified_file, options);
+    wp.type = waypoint::target;
+    yml.segments.push_back(wp);
+  }
+  else
+    yml.segments.push_back(witness_target_waypoint(
+      step.pc, step.stack_trace, yml.verified_file, options));
   if (step.racing_access)
     yml.racing_target = witness_target_waypoint(
       step.racing_access->pc,
@@ -583,7 +651,7 @@ void violation_yaml_goto_trace(
     case symex_targett::ASSERT:
       if (!step.guard)
       {
-        push_violation_targets(yml, step, options);
+        push_violation_targets(yml, goto_trace, step, options);
 
         /* having printed a property violation, don't print more steps. */
 
