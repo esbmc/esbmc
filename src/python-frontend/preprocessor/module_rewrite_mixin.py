@@ -581,11 +581,9 @@ class ModuleRewriteMixin:
         self._rewrite_module_aliases(node)
         self._rewrite_map_values(node)
         self.unbound_checked_globals = guard_unbound_locals(node)
-        self._scan_imported_module_names(node)
         self.in_order_bindings.update(
             dispatch_rebound_methods(node, self._names_bound_by, self._variable_names(node),
-                                     self.imported_module_names, self._next_unpack_tmp_id,
-                                     self.module_name))
+                                     self._next_unpack_tmp_id, self.module_name))
         self.hoist_nested_classes(node)
         self.copy_aliased_methods(node)
 
@@ -601,6 +599,7 @@ class ModuleRewriteMixin:
         self.unscoped_binding_names = self._unscoped_binding_names(node)
 
         self._scan_shadowed_nondet_collections(node)
+        self._scan_imported_module_names(node)
         self._scan_functools_reduce_names(node)
 
         self.iterator_classes = self._scan_iterator_classes(node)

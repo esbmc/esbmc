@@ -29,6 +29,9 @@ from collections import Counter
 from preprocessor.rejection import attach_location
 from preprocessor.unbound_locals import _NESTED_SCOPES, _global_error, _local_error, _located
 
+# Marks a `module.attr` bound as a function value, which no call rewrite replaces.
+FUNCTION_VALUE = "esbmc_function_value"
+
 
 def _scope_nodes(scope):
     """The nodes of `scope` outside its nested scopes, which are yielded but not entered."""
@@ -202,24 +205,25 @@ class _Replace(ast.NodeTransformer):
         return self.replacements.get(id(node), node)
 
 
-def dispatch_rebound_methods(module, names_bound_by, variables, modules, next_id, module_name):
+def dispatch_rebound_methods(module, names_bound_by, variables, next_id, module_name):
     """Give each name bound to methods at several sites of a scope, and called
     somewhere, a selector set by its bindings and read by its calls. Return the
     (scope, name) pairs left alone because their bindings run in source order,
     the scope None standing for the module."""
-    return _Rebound(module, names_bound_by, modules, module_name).rewrite(variables, next_id)
+    return _Rebound(module, names_bound_by, variables, next_id, module_name).rewrite()
 
 
 class _Rebound:
     """The names of `module` bound to methods at several sites of a scope."""
 
-    def __init__(self, module, names_bound_by, modules, module_name):
+    def __init__(self, module, names_bound_by, variables, next_id, module_name):
         self.module = module
         self.names_bound_by = names_bound_by
-        self.modules = modules
+        self.variables = variables
+        self.next_id = next_id
         self.module_name = module_name
 
-    def rewrite(self, variables, next_id):
+    def rewrite(self):
         """Rewrite the bindings and calls of each such name."""
         called = _called_names(self.module)
         in_order = set()
@@ -235,21 +239,21 @@ class _Rebound:
                 if self._in_order(scope, name, nodes):
                     in_order.add((None if scope is self.module else id(scope), name))
                     continue
-                if self._module_function_value(name, nodes):
+                if self._keep_function_value(name, nodes):
                     continue
-                dispatches.append(
-                    self._dispatch(scope, name, nodes, variables, next_id, replacements))
+                dispatches.append(self._dispatch(scope, name, nodes, replacements))
         _Replace(replacements).visit(self.module)
         for dispatch in dispatches:
             dispatch.start()
         return in_order
 
-    def _dispatch(self, scope, name, nodes, variables, next_id, replacements):
+    def _dispatch(self, scope, name, nodes, replacements):
         """Record in `replacements` the rewrite of the bindings and calls of
         `name` in `scope`, and return its dispatch."""
         assigns, calls = self.dispatched_statements(name, nodes, replacements)
-        dispatch = _Dispatch(scope, name, next_id)
-        replacements.update((id(assign), dispatch.bind(assign, variables)) for assign in assigns)
+        dispatch = _Dispatch(scope, name, self.next_id)
+        replacements.update(
+            (id(assign), dispatch.bind(assign, self.variables)) for assign in assigns)
         replacements.update((id(call), dispatch.call(call)) for call in calls)
         _refuse_when_run(
             self.module, self._other_reads(scope, name, calls), _bound_value(assigns[-1]),
@@ -257,15 +261,27 @@ class _Rebound:
             "a whole call statement", replacements)
         return dispatch
 
-    def _module_function_value(self, name, nodes):
-        """Whether `name` is bound to functions of the imported `modules` and
-        also another way: it then holds a function value, which the converter
-        calls (#9804)."""
+    def _modules(self):
+        """The names an `import` binds and nothing else assigns."""
+        return {
+            bound
+            for n in ast.walk(self.module) if isinstance(n, ast.Import) for a in n.names
+            for bound in self.names_bound_by(a)
+        } - self.variables
+
+    def _keep_function_value(self, name, nodes):
+        """Whether `name` is bound to functions of imported modules and also
+        another way: it then holds a function value, which the converter calls
+        (#9804). Its module bindings are then marked to be kept."""
+        modules = self._modules()
         methods = [n for n in nodes if _method_binding(n) and n.targets[0].id == name]
         targets = {id(n.targets[0]) for n in methods}
-        return any(name in self._binds(n) and id(n) not in targets for n in nodes) and all(
-            isinstance(n.value.value, ast.Name) and n.value.value.id in self.modules
-            for n in methods)
+        keep = any(name in self._binds(n) and id(n) not in targets for n in nodes) and all(
+            isinstance(n.value.value, ast.Name) and n.value.value.id in modules for n in methods)
+        if keep:
+            for n in methods:
+                setattr(n.value, FUNCTION_VALUE, True)
+        return keep
 
     def _in_order(self, scope, name, nodes):
         """Whether each binding of `name` is a simple statement of the body of
