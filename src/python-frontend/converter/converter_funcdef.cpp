@@ -6484,19 +6484,41 @@ bool python_converter::numpy_arithmetic_return(
   });
 }
 
+// Bignum literals (#4642) carry `_bigint` with a null value; they are ints.
+static bool is_none_return_value(const nlohmann::json &v)
+{
+  return v.is_null() || (v.value("_type", "") == "Constant" &&
+                         v["value"].is_null() && !v.contains("_bigint"));
+}
+
 /// Whether a return in \p body yields None: a bare `return`, `return None`, or
 /// a conditional expression with a None arm.
 static bool returns_none(const nlohmann::json &body)
 {
-  // Bignum literals (#4642) carry `_bigint` with a null value; they are ints.
-  auto is_none = [](const nlohmann::json &v) {
-    return v.is_null() || (v.value("_type", "") == "Constant" &&
-                           v["value"].is_null() && !v.contains("_bigint"));
-  };
   return any_return(body, [&](const nlohmann::json &v) {
-    return is_none(v) || (v.value("_type", "") == "IfExp" &&
-                          (is_none(v["body"]) || is_none(v["orelse"])));
+    return is_none_return_value(v) || (v.value("_type", "") == "IfExp" &&
+                                       (is_none_return_value(v["body"]) ||
+                                        is_none_return_value(v["orelse"])));
   });
+}
+
+/// The class every non-None return in \p body constructs (`return C()`), or
+/// empty when some return yields anything else.
+static std::string
+constructed_return_class(const nlohmann::json &body, const nlohmann::json &ast)
+{
+  std::string cls;
+  const bool other = any_return(body, [&](const nlohmann::json &v) {
+    if (is_none_return_value(v))
+      return false;
+    const std::string name =
+      v.value("_type", "") == "Call" ? v["func"].value("id", "") : "";
+    if (!json_utils::is_class(name, ast) || (!cls.empty() && cls != name))
+      return true;
+    cls = name;
+    return false;
+  });
+  return other ? std::string() : cls;
 }
 
 /// The Optional<T> type a function returns when it can return None but its
@@ -6522,6 +6544,11 @@ typet python_converter::optional_return_type(
     return type_handler_.build_optional_type(declared);
 
   // Unannotated: the value returns decide T.
+  // None or an instance: a C*, NULL for None, as Optional[C] declares it.
+  const std::string cls =
+    constructed_return_class(function_node["body"], *ast_json);
+  if (!cls.empty())
+    return gen_pointer_type(symbol_typet("tag-" + cls));
   const TypeFlags flags = infer_types_from_returns(function_node["body"]);
   if (!flags.has_int && !flags.has_float && !flags.has_bool)
     return typet();
