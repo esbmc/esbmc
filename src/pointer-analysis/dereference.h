@@ -541,18 +541,19 @@ private:
     expr2tc &value,
     const expr2tc &offset,
     const type2tc &type);
-  /** \p value's bytes from bit \p offset, read as \p type. The bytes may
-   *  run past \p value, as for an access spanning array elements. */
+  /** \p value's bytes from bit \p offset, read as \p type. */
   void extract_from_const_offset(
     expr2tc &value,
     const expr2tc &offset,
     const type2tc &type);
   /** extract_from_const_offset on the struct \p value, for an access running
-   *  past the field it starts in; nil under --ir. */
+   *  past the field it starts in. Under --ir, nil, and a store fails. */
   void extract_across_fields(
     expr2tc &value,
     const expr2tc &offset,
-    const type2tc &type);
+    const type2tc &type,
+    const guard2tc &guard,
+    modet mode);
   void construct_from_dyn_offset(
     expr2tc &value,
     const expr2tc &offset,

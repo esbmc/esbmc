@@ -1,0 +1,5 @@
+CORE
+main.c
+--ir --z3
+^VERIFICATION FAILED$
+Store spanning struct fields under integer encoding

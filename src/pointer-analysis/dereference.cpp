@@ -1965,13 +1965,24 @@ void dereferencet::extract_from_const_offset(
 void dereferencet::extract_across_fields(
   expr2tc &value,
   const expr2tc &offset,
-  const type2tc &type)
+  const type2tc &type,
+  const guard2tc &guard,
+  modet mode)
 {
-  // Under --ir a struct has no bit-vector representation to take bytes from.
-  if (options.get_bool_option("int-encoding"))
-    value = expr2tc();
-  else
+  if (!options.get_bool_option("int-encoding"))
+  {
     extract_from_const_offset(value, offset, type);
+    return;
+  }
+
+  // Under --ir a struct has no bit-vector representation to take bytes from.
+  // A read is left unconstrained; a store cannot be dropped silently.
+  if (is_write(mode))
+    dereference_failure(
+      "pointer dereference",
+      "Store spanning struct fields under integer encoding",
+      guard);
+  value = expr2tc();
 }
 
 void dereferencet::construct_from_const_struct_offset(
@@ -2048,7 +2059,7 @@ void dereferencet::construct_from_const_struct_offset(
           value = expr2tc();
           return;
         }
-        extract_across_fields(value, offset, type);
+        extract_across_fields(value, offset, type, guard, mode);
         return;
       }
 
@@ -2078,7 +2089,7 @@ void dereferencet::construct_from_const_struct_offset(
       // This access starts in this field, but by process of elimination,
       // ends past it.
       alignment_failure("Misaligned access to struct field", guard);
-      extract_across_fields(value, offset, type);
+      extract_across_fields(value, offset, type, guard, mode);
       return;
     }
 

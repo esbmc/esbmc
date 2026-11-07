@@ -1,0 +1,5 @@
+CORE
+main.c
+--ir --z3 --no-align-check
+^VERIFICATION FAILED$
+^  assertion \*\(unsigned short \*\)\(p \+ 1\) != 0x0302$

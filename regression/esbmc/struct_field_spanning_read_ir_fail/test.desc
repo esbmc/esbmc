@@ -1,0 +1,5 @@
+CORE
+main.c
+--ir --z3 --no-align-check
+^VERIFICATION FAILED$
+^  assertion \*\(unsigned long long \*\)\(q \+ 4\) != 0x0000000200000001ULL$
