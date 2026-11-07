@@ -1352,6 +1352,27 @@ static exprt char_as_string(const exprt &rhs, const typet &target)
   return str;
 }
 
+// None/Optional unification (#4796), step C: when the lvalue is already a
+// class reference (`Class*` — a migrated instance), keep that type and store a
+// typed NULL, so a later `x = Class(...)` construction allocates a
+// properly-sized object. Retyping it to none_type() (pointer-to-bool) would
+// shrink the pointee and corrupt the allocation. An Optional[dict] keeps its
+// dict pointer type the same way, and an Optional struct keeps its type for a
+// None call result, which the call store wraps (#10075).
+void python_converter::store_none_type(
+  symbolt &lhs_symbol,
+  exprt &lhs,
+  exprt &rhs)
+{
+  if (keeps_pointer_type_on_none(lhs.type()))
+    rhs = typecast_exprt(rhs, lhs.type());
+  else if (!type_utils::is_optional_struct(lhs.type()))
+  {
+    lhs_symbol.set_type(migrate_type(rhs.type()));
+    lhs.type() = rhs.type();
+  }
+}
+
 void python_converter::handle_assignment_type_adjustments(
   symbolt *lhs_symbol,
   exprt &lhs,
@@ -1567,22 +1588,7 @@ void python_converter::handle_assignment_type_adjustments(
       }
     }
     else if (rhs.type() == none_type())
-    {
-      // None/Optional unification (#4796), step C: when the lvalue is already a
-      // class reference (`Class*` — a migrated instance), keep that type and
-      // store a typed NULL, so a later `x = Class(...)` construction allocates
-      // a properly-sized object. Retyping it to none_type() (pointer-to-bool)
-      // would shrink the pointee and corrupt the allocation.
-      // An Optional[dict] keeps its dict pointer type the same way.
-      if (keeps_pointer_type_on_none(lhs.type()))
-        rhs = typecast_exprt(rhs, lhs.type());
-      else if (!type_utils::is_optional_struct(lhs.type()))
-      {
-        // Adjust pointer_type() to pointer_typet(empty_typet())
-        lhs_symbol->set_type(migrate_type(rhs.type()));
-        lhs.type() = rhs.type();
-      }
-    }
+      store_none_type(*lhs_symbol, lhs, rhs);
     // No annotation or an inferred Any: propagate rhs type to lhs. An "Any"
     // annotation counts as inferred when flagged by the annotation pass,
     // when the preprocessor marked it as synthesized (e.g. the items()-loop
