@@ -1932,6 +1932,14 @@ void dereferencet::construct_from_const_offset(
     }
   }
 
+  extract_from_const_offset(value, offset, type);
+}
+
+void dereferencet::extract_from_const_offset(
+  expr2tc &value,
+  const expr2tc &offset,
+  const type2tc &type)
+{
   unsigned int num_bytes =
     compute_num_bytes_to_extract(offset, type_byte_size_bits(type).to_uint64());
 
@@ -2028,6 +2036,14 @@ void dereferencet::construct_from_const_struct_offset(
         return;
       }
 
+      // An access running past this field takes the bytes of the fields
+      // after it too, so it is built on this struct, not on the field.
+      if (access_size > m_size)
+      {
+        extract_from_const_offset(value, offset, type);
+        return;
+      }
+
       // This is a valid access to this field. Extract it, recurse.
       value = member2tc(it, value, struct_type.member_names[i]);
       // The offset is 0 here. So does not matter bytes or bits
@@ -2052,10 +2068,10 @@ void dereferencet::construct_from_const_struct_offset(
     if (int_offset < (m_offs + m_size))
     {
       // This access starts in this field, but by process of elimination,
-      // doesn't end in it. Which means reading padding data (or an alignment
-      // error), which are both bad.
+      // doesn't end in it: an alignment error, which still accesses the
+      // bytes it covers.
       alignment_failure("Misaligned access to struct field", guard);
-      value = expr2tc();
+      extract_from_const_offset(value, offset, type);
       return;
     }
 

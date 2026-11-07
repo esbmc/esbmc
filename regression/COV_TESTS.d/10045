@@ -1,0 +1,6 @@
+regression/esbmc/github_10045
+regression/esbmc/github_10045_fail
+regression/esbmc/github_10046
+regression/esbmc/github_10046_fail
+regression/esbmc/struct_field_spanning_store_mid
+regression/esbmc/struct_field_spanning_read

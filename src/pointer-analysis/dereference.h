@@ -541,6 +541,11 @@ private:
     expr2tc &value,
     const expr2tc &offset,
     const type2tc &type);
+  /** \p value's bytes from bit \p offset, read as \p type. */
+  void extract_from_const_offset(
+    expr2tc &value,
+    const expr2tc &offset,
+    const type2tc &type);
   void construct_from_dyn_offset(
     expr2tc &value,
     const expr2tc &offset,
