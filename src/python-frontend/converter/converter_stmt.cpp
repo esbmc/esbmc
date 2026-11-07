@@ -5156,17 +5156,6 @@ void collect_read_names(
     if (child.is_structured() && !(key == "func" && node.is_object()))
       collect_read_names(child, names);
 }
-
-std::size_t
-count_name_nodes(const nlohmann::json &node, const std::string &name)
-{
-  std::size_t n = node.is_object() && node.value("_type", "") == "Name" &&
-                  node.value("id", "") == name;
-  for (const auto &child : node)
-    if (child.is_structured())
-      n += count_name_nodes(child, name);
-  return n;
-}
 } // namespace
 
 // The registry records types flow-insensitively, and a store through an alias
@@ -5184,8 +5173,8 @@ bool python_converter::unpack_record_is_trusted(
       json_utils::find_var_decl(name, current_function_name(), ast());
     if (
       json_utils::count_name_bindings(ast(), name) != 1 ||
-      count_name_nodes(ast(), name) != 2 || !decl.contains("value") ||
-      !is_plain_literal(decl["value"]))
+      json_utils::count_name_nodes(ast(), name) != 2 ||
+      !decl.contains("value") || !is_plain_literal(decl["value"]))
       return false;
   }
   return true;
@@ -5298,8 +5287,48 @@ void python_converter::unpack_nested_target(
     return;
   }
 
+  const exprt param_list =
+    hold_param_tuple_member_list(ast_node, value, target_block);
+  if (param_list.is_not_nil())
+  {
+    python_list(*this, ast_node["value"])
+      .handle_list_var_unpacking(ast_node, target, param_list, target_block);
+    return;
+  }
+
   throw std::runtime_error(
     "Cannot unpack non-tuple element into nested target");
+}
+
+// A list read from a tuple parameter, `x.element_i`, held in a temporary that
+// takes the element types of the displays the calls pass at that position.
+exprt python_converter::hold_param_tuple_member_list(
+  const nlohmann::json &ast_node,
+  const exprt &value,
+  codet &target_block)
+{
+  if (
+    value.id() != "member" || !value.op0().is_symbol() ||
+    value.type() != type_handler_.get_list_type())
+    return nil_exprt();
+  const symbolt *tuple = find_symbol(value.op0().identifier().as_string());
+  const typet tuple_type = ns.follow(value.op0().type());
+  if (!tuple || !tuple_handler_->is_tuple_type(tuple_type))
+    return nil_exprt();
+  const std::size_t i =
+    to_struct_type(tuple_type).component_number(value.get("component_name"));
+  std::vector<nlohmann::json> displays;
+  if (!param_tuple_member_displays(tuple->name.as_string(), i, displays))
+    return nil_exprt();
+
+  symbolt &held =
+    create_tmp_symbol(ast_node, "$unpack_elem$", value.type(), exprt());
+  if (!record_literal_elements(held.id.as_string(), displays, true))
+    return nil_exprt();
+  code_declt decl(symbol_expr(held));
+  decl.copy_to_operands(value);
+  target_block.copy_to_operands(decl);
+  return symbol_expr(held);
 }
 
 void python_converter::desugar_unpacking_with_lvalue_targets(
