@@ -1,0 +1,4 @@
+CORE
+main.c
+--inductive-step --k-step 2 --unwind 5
+^\*\* 0 of 5 properties failed

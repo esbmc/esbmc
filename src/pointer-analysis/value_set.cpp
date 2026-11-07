@@ -132,6 +132,59 @@ static expr2tc array_member_at(expr2tc obj, BigInt begin, BigInt end)
   return expr2tc();
 }
 
+/// The bytes [begin, end) of the array member of \p type, reached through
+/// struct members only, that holds byte \p offset and has \p element type
+/// elements.
+static std::optional<std::pair<BigInt, BigInt>>
+array_member_holding(type2tc type, const BigInt &offset, const type2tc &element)
+{
+  BigInt start = 0;
+  while (is_struct_type(type))
+  {
+    const struct_type2t &st = to_struct_type(type);
+    type2tc next;
+    for (size_t i = 0; i < st.members.size() && is_nil_type(next); i++)
+    {
+      BigInt member_start = start + member_offset(type, st.member_names[i]);
+      BigInt size = type_byte_size_default(st.members[i], 0);
+      if (member_start <= offset && offset < member_start + size)
+      {
+        next = st.members[i];
+        start = member_start;
+      }
+    }
+    if (is_nil_type(next))
+      return std::nullopt;
+    if (is_array_type(next) && to_array_type(next).subtype == element)
+      return std::make_pair(start, start + type_byte_size_default(next, 0));
+    type = next;
+  }
+  return std::nullopt;
+}
+
+void value_sett::bound_to_array_member(
+  objectt &o,
+  const expr2tc &object,
+  const expr2tc &ptr_op)
+{
+  if (
+    !o.offset_is_set || o.offset.is_negative() || !is_struct_type(object) ||
+    !is_pointer_type(ptr_op))
+    return;
+  // A pointer to an element of an array member stays in it under pointer
+  // arithmetic (C11 6.5.6p8), as `s.arr + k` and `&p->arr[k]` do.
+  const type2tc &element = to_pointer_type(ptr_op->type).subtype;
+  std::optional<std::pair<BigInt, BigInt>> member =
+    array_member_holding(object->type, o.offset, element);
+  if (
+    member &&
+    member->second - member->first > type_byte_size_default(element, 0))
+  {
+    o.member_begin = member->first.to_uint64();
+    o.member_end = member->second.to_uint64();
+  }
+}
+
 void value_sett::get_cast_value_set(
   const expr2tc &expr,
   object_mapt &dest,
@@ -192,7 +245,8 @@ expr2tc value_sett::to_expr(
   {
     // The dereference treats a member object as one named here, and no other.
     target = get_base_object(object);
-    if (it->second.has_member())
+    // NULL has no members to access, whatever type the value set gives it.
+    if (it->second.has_member() && !is_null_object2t(target))
     {
       expr2tc member =
         array_member_at(target, it->second.member_begin, it->second.member_end);
@@ -624,6 +678,7 @@ void value_sett::offset_pointer_arith_objects(
         offset_align = nat_align;
       }
 
+      bound_to_array_member(object, object_numbering[it.first], ptr_op);
       object.offset_is_set = false;
       object.offset_alignment = std::min(nat_align, offset_align);
     }
