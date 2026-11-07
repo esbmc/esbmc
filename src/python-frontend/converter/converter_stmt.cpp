@@ -1218,17 +1218,14 @@ std::string python_converter::user_class_of(const typet &type)
 
 /// An attribute is typed by the class of the instance it first holds, so
 /// storing an instance of an unrelated class would read one class's storage
-/// as the other's (#8461). A constructor stored into a list slot allocates its
-/// instance at the slot's class in the same way.
+/// as the other's (#8461).
 void python_converter::reject_attribute_class_change(
   const exprt &lhs,
   const exprt &rhs,
   const nlohmann::json &ast_node,
   bool is_ctor_call)
 {
-  const bool list_slot =
-    is_ctor_call && python_list::is_element_store_target(lhs);
-  if (!lhs.is_member() && !list_slot)
+  if (!lhs.is_member())
     return;
   const std::string held = user_class_of(lhs.type());
   const std::string assigned =
@@ -1239,16 +1236,35 @@ void python_converter::reject_attribute_class_change(
     held.empty() || !json_utils::is_class(assigned, *ast_json) ||
     type_handler_.class_derives_from(assigned, held))
     return;
-  if (list_slot)
-    throw std::runtime_error(
-      "unsupported: a list element holding a '" + held + "' is assigned a '" +
-      assigned +
-      "'; constructing an unrelated class into a list element is not "
-      "modelled");
   throw std::runtime_error(
     "unsupported: attribute '" + lhs.component_name().as_string() +
     "' holds a '" + held + "' and is assigned a '" + assigned +
     "'; an attribute holding instances of unrelated classes is not modelled");
+}
+
+/// A constructor stored into a list slot builds its instance at the class the
+/// slot already holds, and element reads keep that class, so a slot given an
+/// instance of another class, a subclass included, would be read as the old
+/// one.
+void python_converter::reject_list_slot_class_change(
+  const exprt &lhs,
+  const nlohmann::json &ast_node,
+  bool is_ctor_call)
+{
+  if (!is_ctor_call || !python_list::is_element_store_target(lhs))
+    return;
+  const std::string held = user_class_of(lhs.type());
+  const std::string assigned =
+    get_typechecker().get_constructor_name(ast_node["value"]["func"]);
+  if (
+    held.empty() || held == assigned ||
+    !json_utils::is_class(assigned, *ast_json))
+    return;
+  throw std::runtime_error(
+    "unsupported: a list element holding a '" + held + "' is assigned a new '" +
+    assigned +
+    "'; constructing another class into a list element is not "
+    "modelled");
 }
 
 /// An attribute keeps the scalar type it first holds, so storing a value its
@@ -1370,6 +1386,7 @@ void python_converter::handle_assignment_type_adjustments(
   bool is_ctor_call)
 {
   reject_attribute_class_change(lhs, rhs, ast_node, is_ctor_call);
+  reject_list_slot_class_change(lhs, ast_node, is_ctor_call);
   reject_attribute_scalar_change(lhs, rhs);
   const bool has_annotation =
     ast_node.contains("annotation") && !ast_node["annotation"].is_null();

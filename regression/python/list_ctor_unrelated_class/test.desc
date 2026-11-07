@@ -1,4 +1,4 @@
 CORE
 main.py
 --unwind 5
-^ERROR: unsupported: a list element holding a 'Square' is assigned a 'Other'
+^ERROR: unsupported: a list element holding a 'Square' is assigned a new 'Other'

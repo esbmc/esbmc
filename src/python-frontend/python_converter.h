@@ -3124,6 +3124,10 @@ private:
     const std::string &class_name,
     const std::string &attr) const;
   void reject_attribute_scalar_change(const exprt &lhs, const exprt &rhs);
+  void reject_list_slot_class_change(
+    const exprt &lhs,
+    const nlohmann::json &ast_node,
+    bool is_ctor_call);
   void reject_attribute_class_change(
     const exprt &lhs,
     const exprt &rhs,
