@@ -1,0 +1,68 @@
+- entry_type: invariant_set
+  metadata:
+    format_version: "2.0"
+  content:
+  - invariant:
+      type: location_invariant
+      location:
+        file_name: main.c
+        line: 6
+        function: main
+      value: "1"
+      format: c_expression
+  - invariant:
+      type: location_invariant
+      location:
+        file_name: main.c
+        line: 9
+        function: main
+      value: "1"
+      format: c_expression
+  - invariant:
+      type: location_invariant
+      location:
+        file_name: main.c
+        line: 11
+        function: main
+      value: "1"
+      format: c_expression
+  - invariant:
+      type: location_invariant
+      location:
+        file_name: main.c
+        line: 14
+        function: main
+      value: "1"
+      format: c_expression
+  - invariant:
+      type: location_invariant
+      location:
+        file_name: main.c
+        line: 16
+        function: main
+      value: "1"
+      format: c_expression
+  - invariant:
+      type: location_invariant
+      location:
+        file_name: main.c
+        line: 18
+        function: main
+      value: "0"
+      format: c_expression
+  - invariant:
+      type: location_invariant
+      location:
+        file_name: main.c
+        line: 20
+        function: main
+      value: "1"
+      format: c_expression
+  - invariant:
+      type: location_invariant
+      location:
+        file_name: main.c
+        line: 21
+        function: main
+      value: "1"
+      format: c_expression
