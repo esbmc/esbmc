@@ -519,61 +519,129 @@ static void push_nondet_return_waypoints(
    branching waypoint only weakens guidance. */
 static constexpr size_t max_branching_waypoints = 1000;
 
-/* A valid-memtrack violation at program exit is checked at the end of
-   __ESBMC_main, located at the entry function's `}`. Its target is the
-   `return` the path left the entry function through, or that `}` when it fell
-   off the end (#9939). The trace records the direction of every non-constant
-   forward branch, so the path is replayed from the entry function's last
-   step; on any branch it does not record, null is returned. */
-static const goto_programt::instructiont *memtrack_return(
-  const goto_tracet &goto_trace,
+/* Whether @p entry can call itself, directly or through other functions. */
+static bool
+recursive(const goto_functionst &goto_functions, const irep_idt &entry)
+{
+  std::unordered_set<irep_idt, irep_id_hash> seen;
+  std::vector<irep_idt> todo{entry};
+  while (!todo.empty())
+  {
+    const auto it = goto_functions.function_map.find(todo.back());
+    todo.pop_back();
+    if (it == goto_functions.function_map.end())
+      continue;
+    for (const auto &i : it->second.body.instructions)
+    {
+      if (!i.is_function_call())
+        continue;
+      const expr2tc &callee = to_code_function_call2t(i.code).function;
+      if (!is_symbol2t(callee) || to_symbol2t(callee).thename == entry)
+        return true;
+      if (seen.insert(to_symbol2t(callee).thename).second)
+        todo.push_back(to_symbol2t(callee).thename);
+    }
+  }
+  return false;
+}
+
+/* The entry function, whose `}` locates the end of __ESBMC_main. */
+static const goto_functionst::function_mapt::value_type *entry_function(
+  const goto_functionst &goto_functions,
   const goto_trace_stept &violation)
 {
-  const goto_programt::const_targett end = violation.pc;
-  if (
-    !end->is_end_function() || end->function != "__ESBMC_main" ||
-    !has_prefix(violation.comment, "dereference failure: forgotten memory"))
-    return nullptr;
+  for (const auto &f : goto_functions.function_map)
+    if (
+      f.first != violation.pc->function &&
+      !f.second.body.instructions.empty() &&
+      f.second.body.instructions.back().location == violation.pc->location)
+      return &f;
+  return nullptr;
+}
 
-  const irep_idt &entry = end->location.get_function();
+/* Where the path resumes in @p body after its last step there. */
+static goto_programt::const_targett resume_point(
+  const goto_tracet &goto_trace,
+  const goto_trace_stept &violation,
+  const irep_idt &function,
+  const goto_programt &body)
+{
   const goto_trace_stept *last = nullptr;
   for (const auto &step : goto_trace.steps)
   {
     if (&step == &violation)
       break;
-    if (
-      step.thread_nr == violation.thread_nr &&
-      step.pc->function != end->function &&
-      step.pc->location.get_function() == entry)
+    if (step.thread_nr == violation.thread_nr && step.pc->function == function)
       last = &step;
   }
   if (last == nullptr)
+    return body.instructions.begin();
+  const goto_programt::const_targett pc = last->pc;
+  if (last->type == symex_targett::BREANCHING && pc->is_goto())
+    return last->guard != pc->flipped_guard ? pc->targets.front()
+                                            : std::next(pc);
+  return pc->is_goto() || pc->is_return() || pc->is_end_function()
+           ? pc
+           : std::next(pc);
+}
+
+/* The `return` every path from @p pc leaves the function by, or null when
+   paths can leave by different ones or fall off the end. */
+static const goto_programt::instructiont *
+sole_return(goto_programt::const_targett pc)
+{
+  const goto_programt::instructiont *ret = nullptr;
+  for (; !pc->is_end_function(); ++pc)
+  {
+    if (pc->is_return())
+    {
+      if (ret != nullptr)
+        return nullptr;
+      ret = &*pc;
+    }
+    if (
+      pc->is_goto() && !is_false(pc->guard) &&
+      (pc->targets.front()->location_number <= pc->location_number ||
+       pc->targets.front()->is_end_function()))
+      return nullptr;
+  }
+  return ret != nullptr && std::prev(pc)->is_return() ? ret : nullptr;
+}
+
+/* A valid-memtrack violation at program exit is checked at the end of
+   __ESBMC_main, located at the entry function's `}`. The witness format makes
+   its target the `return` the path left the entry function by (#9939). The
+   path is replayed from the branch directions the trace records; from a branch
+   it does not record, the `return` must be the only one ahead. Branching steps
+   carry no stack trace, so a recursive entry function is not replayed. */
+static const goto_programt::instructiont *memtrack_return(
+  const goto_tracet &goto_trace,
+  const goto_functionst &goto_functions,
+  const goto_trace_stept &violation)
+{
+  if (
+    !violation.pc->is_end_function() ||
+    violation.pc->function != "__ESBMC_main" ||
+    !has_prefix(violation.comment, "dereference failure: forgotten memory"))
     return nullptr;
 
-  goto_programt::const_targett pc = last->pc;
-  if (pc->is_goto())
-  {
-    if (last->type != symex_targett::BREANCHING)
-      return nullptr;
-    pc = last->guard != pc->flipped_guard ? pc->targets.front() : std::next(pc);
-  }
-  else if (!pc->is_return())
-    ++pc;
+  const auto *entry = entry_function(goto_functions, violation);
+  if (entry == nullptr || recursive(goto_functions, entry->first))
+    return nullptr;
 
-  while (!pc->is_return())
+  auto pc =
+    resume_point(goto_trace, violation, entry->first, entry->second.body);
+  for (; !pc->is_return(); ++pc)
   {
-    if (pc->is_end_function() || pc->is_throw() || pc->is_catch())
+    if (pc->is_end_function())
       return nullptr;
     if (!pc->is_goto() || is_false(pc->guard))
-    {
-      ++pc;
       continue;
-    }
     if (
       !is_true(pc->guard) ||
       pc->targets.front()->location_number <= pc->location_number)
-      return nullptr;
-    pc = pc->targets.front();
+      return sole_return(pc);
+    pc = std::prev(pc->targets.front());
   }
   return &*pc;
 }
@@ -583,10 +651,12 @@ static const goto_programt::instructiont *memtrack_return(
 static void push_violation_targets(
   yamlt &yml,
   const goto_tracet &goto_trace,
+  const goto_functionst &goto_functions,
   const goto_trace_stept &step,
   optionst &options)
 {
-  const goto_programt::instructiont *ret = memtrack_return(goto_trace, step);
+  const goto_programt::instructiont *ret =
+    memtrack_return(goto_trace, goto_functions, step);
   if (ret != nullptr && input_file_check(ret->location))
   {
     waypoint wp = witness_waypoint(ret->location, yml.verified_file, options);
@@ -634,6 +704,7 @@ void violation_yaml_goto_trace(
   optionst &options,
   const namespacet &ns,
   const goto_tracet &goto_trace,
+  const goto_functionst &goto_functions,
   const std::string &output_path_override)
 {
   yamlt yml(yamlt::VIOLATION);
@@ -651,7 +722,7 @@ void violation_yaml_goto_trace(
     case symex_targett::ASSERT:
       if (!step.guard)
       {
-        push_violation_targets(yml, goto_trace, step, options);
+        push_violation_targets(yml, goto_trace, goto_functions, step, options);
 
         /* having printed a property violation, don't print more steps. */
 

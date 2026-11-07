@@ -2,7 +2,7 @@
 #define CPROVER_GOTO_SYMEX_GOTO_TRACE_H
 
 #include <fstream>
-#include <goto-programs/goto_program.h>
+#include <goto-programs/goto_functions.h>
 #include <goto-symex/equation/symex_target.h>
 
 #include <map>
@@ -167,6 +167,7 @@ void violation_yaml_goto_trace(
   optionst &options,
   const namespacet &ns,
   const goto_tracet &goto_trace,
+  const goto_functionst &goto_functions,
   const std::string &output_path_override = "");
 
 /// Write a YAML violation witness for a non-terminating execution: one cycle

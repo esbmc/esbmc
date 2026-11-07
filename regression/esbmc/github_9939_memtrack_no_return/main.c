@@ -4,5 +4,5 @@
 int main(void)
 {
   int *p = malloc(sizeof(int));
-  *p = 1;
+  p = 0;
 }
