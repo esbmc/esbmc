@@ -1,0 +1,5 @@
+CORE
+main.c
+--64 --no-slice
+^VERIFICATION FAILED$
+^  FAILED +\[main\.assertion\.1\] +line 10 +q kept$
