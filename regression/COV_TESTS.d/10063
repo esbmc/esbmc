@@ -1,0 +1,5 @@
+regression/esbmc/github_10063_decay
+regression/esbmc/github_10063_ptr
+regression/esbmc/array_member_decay_overflow_fail
+regression/esbmc/array_member_ptr_overflow_fail
+regression/esbmc/array_member_ptr_null

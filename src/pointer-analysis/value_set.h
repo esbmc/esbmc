@@ -755,6 +755,14 @@ private:
     const type2tc &array_type,
     const BigInt &element_size);
 
+  /** Record in \p o, at a known offset into the struct \p object, the array
+   *  member it points into, when \p ptr_op points to that member's elements:
+   *  pointer arithmetic on \p ptr_op keeps it there. */
+  static void bound_to_array_member(
+    objectt &o,
+    const expr2tc &object,
+    const expr2tc &ptr_op);
+
   /** What one get_value_set_rec_cached query contributed, keyed by its
    * arguments. Shared subexpressions make a value query a DAG walk, so without
    * this the walk costs paths exponential in the number of stores a propagated
