@@ -1576,7 +1576,10 @@ void python_converter::handle_assignment_type_adjustments(
       // An Optional[dict] keeps its dict pointer type the same way.
       if (keeps_pointer_type_on_none(lhs.type()))
         rhs = typecast_exprt(rhs, lhs.type());
-      else
+      // A call's None result is wrapped into the Optional once the call is
+      // built (wrap_call_result_in_optional).
+      else if (
+        !rhs.is_function_call() || !type_utils::is_optional_struct(lhs.type()))
       {
         // Adjust pointer_type() to pointer_typet(empty_typet())
         lhs_symbol->set_type(migrate_type(rhs.type()));
@@ -5717,9 +5720,9 @@ void python_converter::widen_int_target_for_float_call(
   update_symbol(lhs);
 }
 
-// A result stored to an Optional of its own type must be wrapped, so the call
-// writes a temporary first (#9055). Another type would need a conversion that
-// loses the result's type.
+// A result stored to an Optional of its own type, or a None result (#10075),
+// must be wrapped, so the call writes a temporary first (#9055). Another type
+// would need a conversion that loses the result's type.
 void python_converter::wrap_call_result_in_optional(
   const nlohmann::json &ast_node,
   const exprt &lhs,
@@ -5729,7 +5732,8 @@ void python_converter::wrap_call_result_in_optional(
 {
   if (
     !type_utils::is_optional_struct(lhs.type()) ||
-    to_struct_type(lhs.type()).get_component("value").type() != rhs.type())
+    (rhs.type() != none_type() &&
+     to_struct_type(lhs.type()).get_component("value").type() != rhs.type()))
     return;
 
   symbolt &result =
@@ -5835,6 +5839,8 @@ void python_converter::handle_function_call_rhs(
   if (rhs.type().is_pointer() && !is_ctor_call)
   {
     rhs.op0() = lhs;
+    if (rhs.type() == none_type())
+      wrap_call_result_in_optional(ast_node, lhs, rhs, location, target_block);
   }
   else if (!rhs.type().is_pointer() && !rhs.type().is_empty() && !is_ctor_call)
   {
