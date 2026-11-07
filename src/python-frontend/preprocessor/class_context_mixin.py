@@ -872,6 +872,27 @@ class ClassContextMixin:
         return {i for i, p in enumerate(func.args.posonlyargs + func.args.args) if p.arg in called}
 
     @staticmethod
+    def _calling_parameters(defs):
+        """For each def in `defs`, the indexes of its positional parameters
+        that it calls, or passes on as an argument another def calls."""
+        called = {name: ClassContextMixin._called_parameters(f) for name, f in defs.items()}
+        changed = True
+        while changed:
+            changed = False
+            for name, func in defs.items():
+                params = [p.arg for p in func.args.posonlyargs + func.args.args]
+                for call in ast.walk(func):
+                    if not (isinstance(call, ast.Call) and isinstance(call.func, ast.Name)):
+                        continue
+                    for j in list(called.get(call.func.id, ())):
+                        arg = call.args[j] if j < len(call.args) else None
+                        if isinstance(arg, ast.Name) and arg.id in params:
+                            index = params.index(arg.id)
+                            changed = changed or index not in called[name]
+                            called[name].add(index)
+        return called
+
+    @staticmethod
     def _module_level_calls(node):
         """The calls in `node` that run at module level, outside any def,
         lambda or comprehension whose names a lambda could capture."""
@@ -885,10 +906,12 @@ class ClassContextMixin:
 
     def _hoist_lambda_arguments(self, module, counts):
         """Turn a lambda passed at module level to a top-level function that
-        calls that parameter into a def named for it, so that the function is
-        specialised on it as on any def (#8979); whether any was. At module
+        calls that parameter, or passes it on to one that does (#9827), into a
+        def named for it, so that the function is specialised on it as on any
+        def (#8979); whether any was. At module
         level a lambda's free names are globals either way."""
         defs = {s.name: s for s in module.body if self._is_plain_function(s)}
+        called = self._calling_parameters(defs)
         hoisted = 0
         for i, stmt in reversed(list(enumerate(module.body))):
             new = []
@@ -896,7 +919,7 @@ class ClassContextMixin:
                 callee = defs.get(call.func.id) if isinstance(call.func, ast.Name) else None
                 if callee is None:
                     continue
-                for index in self._called_parameters(callee):
+                for index in called[callee.name]:
                     if index < len(call.args) and isinstance(call.args[index], ast.Lambda):
                         name = f"ESBMC_lambda_arg_{hoisted}"
                         while counts[name]:
