@@ -37,6 +37,7 @@ using python_annotation_utils::get_base_var_name;
 using python_annotation_utils::get_type_from_json;
 using python_annotation_utils::has_annotation;
 using python_annotation_utils::has_return_none;
+using python_annotation_utils::has_return_value;
 using python_annotation_utils::infer_type_from_default_arg_shape;
 using python_annotation_utils::InferResult;
 using python_annotation_utils::invert_substrings;

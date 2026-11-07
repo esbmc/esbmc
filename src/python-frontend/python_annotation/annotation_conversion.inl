@@ -2125,6 +2125,21 @@ static bool union_has_none(const Json &slice)
   return false;
 }
 
+/// The type the first top-level return of \p body gives, when it holds for
+/// every return: an Any fallback says nothing, yet a caller returning this
+/// call would be annotated Any and converted with an int return (#8358); a
+/// None one misses a value a nested return yields (#9815).
+static std::string known_fallback_return_type(
+  const std::string &fallback_type,
+  const nlohmann::json &body)
+{
+  if (
+    fallback_type == "Any" ||
+    (fallback_type == "NoneType" && has_return_value(body)))
+    return "";
+  return fallback_type;
+}
+
 template <class Json>
 std::string python_annotation<Json>::get_function_return_type(
   const std::string &func_name,
@@ -2365,9 +2380,7 @@ std::string python_annotation<Json>::get_function_return_type(
       }
       current_func_name_context_ = saved_fallback_ctx;
       functions_in_analysis_.erase(func_name);
-      // An Any fallback says nothing, yet a caller returning this call would
-      // be annotated Any and converted with an int return (#8358)
-      return fallback_type == "Any" ? "" : fallback_type;
+      return known_fallback_return_type(fallback_type, func_elem["body"]);
     }
 
     // If function has no explicit return statements, assume void/None
