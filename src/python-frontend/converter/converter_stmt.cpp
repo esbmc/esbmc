@@ -1576,7 +1576,7 @@ void python_converter::handle_assignment_type_adjustments(
       // An Optional[dict] keeps its dict pointer type the same way.
       if (keeps_pointer_type_on_none(lhs.type()))
         rhs = typecast_exprt(rhs, lhs.type());
-      else
+      else if (!type_utils::is_optional_struct(lhs.type()))
       {
         // Adjust pointer_type() to pointer_typet(empty_typet())
         lhs_symbol->set_type(migrate_type(rhs.type()));
@@ -5717,9 +5717,9 @@ void python_converter::widen_int_target_for_float_call(
   update_symbol(lhs);
 }
 
-// A result stored to an Optional of its own type must be wrapped, so the call
-// writes a temporary first (#9055). Another type would need a conversion that
-// loses the result's type.
+// A result stored to an Optional of its own type, or a None result, must be
+// wrapped, so the call writes a temporary first (#9055, #10075). Another type
+// would need a conversion that loses the result's type.
 void python_converter::wrap_call_result_in_optional(
   const nlohmann::json &ast_node,
   const exprt &lhs,
@@ -5727,9 +5727,12 @@ void python_converter::wrap_call_result_in_optional(
   const locationt &location,
   codet &target_block)
 {
+  // A pointer result may encode None as NULL, so only None itself is wrapped.
   if (
     !type_utils::is_optional_struct(lhs.type()) ||
-    to_struct_type(lhs.type()).get_component("value").type() != rhs.type())
+    (rhs.type() != none_type() &&
+     (rhs.type().is_pointer() ||
+      to_struct_type(lhs.type()).get_component("value").type() != rhs.type())))
     return;
 
   symbolt &result =
@@ -5832,11 +5835,7 @@ void python_converter::handle_function_call_rhs(
   widen_int_target_for_float_call(lhs, rhs, is_ctor_call);
 
   // Set return destination
-  if (rhs.type().is_pointer() && !is_ctor_call)
-  {
-    rhs.op0() = lhs;
-  }
-  else if (!rhs.type().is_pointer() && !rhs.type().is_empty() && !is_ctor_call)
+  if (!rhs.type().is_empty() && !is_ctor_call)
   {
     rhs.op0() = lhs;
     wrap_call_result_in_optional(ast_node, lhs, rhs, location, target_block);

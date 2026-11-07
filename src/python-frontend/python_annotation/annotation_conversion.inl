@@ -7172,8 +7172,8 @@ bool python_annotation<Json>::is_missing_method_call(const Json &value)
 }
 
 /// "Optional[T]" when every binding of `name` in `scope` is a plain
-/// `name = value` storing None or a value of one scalar type T, with at least
-/// one of each; "" otherwise.
+/// `name = value` storing None (a literal or a call returning it) or a value
+/// of one scalar type T, with at least one of each; "" otherwise.
 template <class Json>
 std::string python_annotation<Json>::optional_scalar_of(
   const std::string &name,
@@ -7183,10 +7183,14 @@ std::string python_annotation<Json>::optional_scalar_of(
     const Json &value = (*store)["value"];
     return value.value("_type", "") == "Constant" && value["value"].is_null();
   };
+  auto may_store_none = [&stores_none](const Json *store) {
+    return stores_none(store) ||
+           (*store)["value"].value("_type", "") == "Call";
+  };
   std::vector<const Json *> stores;
   collect_name_stores(name, scope["body"], stores);
   if (
-    std::none_of(stores.begin(), stores.end(), stores_none) ||
+    std::none_of(stores.begin(), stores.end(), may_store_none) ||
     json_utils::count_name_bindings(scope, name) != stores.size())
     return "";
 
