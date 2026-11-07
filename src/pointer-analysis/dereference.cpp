@@ -392,22 +392,8 @@ void dereferencet::dereference_addrof_expr(
     {
       //  We have a base. There may be additional dereferences in it.
       dereference_expr(base, guard, mode);
-
-      // A non-constant last index stays pointer arithmetic on the element
-      // type, so the value set keeps the array it points into (#10063).
-      expr2tc obj = addrof.ptr_obj;
-      expr2tc index;
-      if (is_index2t(obj) && !is_constant_int2t(to_index2t(obj).index))
-      {
-        index = to_index2t(obj).index;
-        obj = index2tc(
-          to_index2t(obj).type,
-          to_index2t(obj).source_value,
-          gen_zero(index->type));
-      }
-
       // Now compute the pointer offset involved.
-      expr2tc offs = compute_pointer_offset(obj);
+      expr2tc offs = compute_pointer_offset(addrof.ptr_obj);
       assert(
         !is_nil_expr(offs) &&
         "Pointer offset of index/member "
@@ -419,8 +405,6 @@ void dereferencet::dereference_addrof_expr(
       expr2tc output = typecast2tc(pointer_type2tc(get_uint8_type()), base);
       output = add2tc(output->type, output, offs);
       output = typecast2tc(expr->type, output);
-      if (!is_nil_expr(index))
-        output = add2tc(expr->type, output, index);
       expr = output;
     }
     else

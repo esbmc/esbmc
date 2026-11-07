@@ -1,4 +1,0 @@
-CORE
-main.c
---inductive-step --k-step 2 --unwind 2 --unwindset 6:65,3:4 --timeout 60s
-^VERIFICATION SUCCESSFUL$

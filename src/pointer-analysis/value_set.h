@@ -153,9 +153,10 @@ public:
      *  to the array element edges.
      *  Units are bytes. Zero means N/A. */
     unsigned int offset_alignment;
-    /** When the offset is not set, the bytes [member_begin, member_end) of the
-     *  object, an array member the pointer was formed into (#9853); begin ==
-     *  end means none. Accesses outside it are bounds violations of it. */
+    /** The bytes [member_begin, member_end) of the object, an array member
+     *  the pointer was formed into by indexing it (#9853); begin == end means
+     *  none. Once the offset is unknown, accesses outside it are bounds
+     *  violations of it. */
     uint64_t member_begin = 0, member_end = 0;
     bool has_member() const
     {
@@ -414,10 +415,17 @@ public:
     objectt &old = it2->second;
     const expr2tc &expr_obj = object_numbering[n];
 
+    // Only a member both records stay in survives the merge.
+    const bool member_lost =
+      old.has_member() && (old.member_begin != object.member_begin ||
+                           old.member_end != object.member_end);
+    if (member_lost)
+      old.member_begin = old.member_end = 0;
+
     if (old.offset_is_set && object.offset_is_set)
     {
       if (old.offset == object.offset)
-        return false;
+        return member_lost;
 
       // Merge the tracking for two offsets; take the minimum alignment
       // guaranteed by them.
@@ -431,14 +439,6 @@ public:
     if (!old.offset_is_set)
     {
       unsigned int oldalign = old.offset_alignment;
-      // Only a member both records stay in survives the merge.
-      const bool member_lost =
-        old.has_member() &&
-        (object.offset_is_set || old.member_begin != object.member_begin ||
-         old.member_end != object.member_end);
-      if (member_lost)
-        old.member_begin = old.member_end = 0;
-
       if (!object.offset_is_set)
       {
         // Both object offsets not set; update alignment to minimum of the two
@@ -754,14 +754,6 @@ private:
     const expr2tc &object,
     const type2tc &array_type,
     const BigInt &element_size);
-
-  /** Record in \p o, at a known offset into the struct \p object, the array
-   *  member it points into, when \p ptr_op points to that member's elements:
-   *  pointer arithmetic on \p ptr_op keeps it there. */
-  static void bound_to_array_member(
-    objectt &o,
-    const expr2tc &object,
-    const expr2tc &ptr_op);
 
   /** What one get_value_set_rec_cached query contributed, keyed by its
    * arguments. Shared subexpressions make a value query a DAG walk, so without

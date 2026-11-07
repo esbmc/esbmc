@@ -132,59 +132,6 @@ static expr2tc array_member_at(expr2tc obj, BigInt begin, BigInt end)
   return expr2tc();
 }
 
-/// The bytes [begin, end) of the array member of \p type, reached through
-/// struct members only, that holds byte \p offset and has \p element type
-/// elements.
-static std::optional<std::pair<BigInt, BigInt>>
-array_member_holding(type2tc type, const BigInt &offset, const type2tc &element)
-{
-  BigInt start = 0;
-  while (is_struct_type(type))
-  {
-    const struct_type2t &st = to_struct_type(type);
-    type2tc next;
-    for (size_t i = 0; i < st.members.size() && is_nil_type(next); i++)
-    {
-      BigInt member_start = start + member_offset(type, st.member_names[i]);
-      BigInt size = type_byte_size_default(st.members[i], 0);
-      if (member_start <= offset && offset < member_start + size)
-      {
-        next = st.members[i];
-        start = member_start;
-      }
-    }
-    if (is_nil_type(next))
-      return std::nullopt;
-    if (is_array_type(next) && to_array_type(next).subtype == element)
-      return std::make_pair(start, start + type_byte_size_default(next, 0));
-    type = next;
-  }
-  return std::nullopt;
-}
-
-void value_sett::bound_to_array_member(
-  objectt &o,
-  const expr2tc &object,
-  const expr2tc &ptr_op)
-{
-  if (
-    !o.offset_is_set || o.offset.is_negative() || !is_struct_type(object) ||
-    !is_pointer_type(ptr_op))
-    return;
-  // A pointer to an element of an array member stays in it under pointer
-  // arithmetic (C11 6.5.6p8), as `s.arr + k` and `&p->arr[k]` do.
-  const type2tc &element = to_pointer_type(ptr_op->type).subtype;
-  std::optional<std::pair<BigInt, BigInt>> member =
-    array_member_holding(object->type, o.offset, element);
-  if (
-    member &&
-    member->second - member->first > type_byte_size_default(element, 0))
-  {
-    o.member_begin = member->first.to_uint64();
-    o.member_end = member->second.to_uint64();
-  }
-}
-
 void value_sett::get_cast_value_set(
   const expr2tc &expr,
   object_mapt &dest,
@@ -211,12 +158,15 @@ void value_sett::record_array_member(
   const type2tc &array_type,
   const BigInt &element_size)
 {
+  if (
+    !o.offset_is_set || o.offset.is_negative() || !is_struct_type(object) ||
+    is_null_object2t(object) || !is_array_type(array_type) ||
+    to_array_type(array_type).size_is_infinite)
+    return;
   // A [0] or [1] array may be indexed past its end on purpose, as a flexible
   // array member, so only a longer array bounds the pointer.
   BigInt size = type_byte_size_default(array_type, 0);
-  if (
-    o.offset_is_set && !o.offset.is_negative() && is_struct_type(object) &&
-    size > element_size)
+  if (size > element_size)
   {
     o.member_begin = o.offset.to_uint64();
     o.member_end = o.member_begin + size.to_uint64();
@@ -245,8 +195,8 @@ expr2tc value_sett::to_expr(
   {
     // The dereference treats a member object as one named here, and no other.
     target = get_base_object(object);
-    // NULL has no members to access, whatever type the value set gives it.
-    if (it->second.has_member() && !is_null_object2t(target))
+    // A known offset is resolved against the whole object.
+    if (it->second.has_member() && !it->second.offset_is_set)
     {
       expr2tc member =
         array_member_at(target, it->second.member_begin, it->second.member_end);
@@ -678,7 +628,6 @@ void value_sett::offset_pointer_arith_objects(
         offset_align = nat_align;
       }
 
-      bound_to_array_member(object, object_numbering[it.first], ptr_op);
       object.offset_is_set = false;
       object.offset_alignment = std::min(nat_align, offset_align);
     }
@@ -1382,6 +1331,13 @@ void value_sett::get_reference_set_rec(const expr2tc &expr, object_mapt &dest)
         // Whatever the base object is, apply the offset represented by this
         // index expression.
         objectt o = a_it.second;
+        // The pointer stays in this array under pointer arithmetic (C11
+        // 6.5.6p8), whether the index is known yet or not (#10063).
+        record_array_member(
+          o,
+          object,
+          index.source_value->type,
+          type_byte_size_default(index.type, 1));
 
         if (has_const_index_offset && index_offset == 0)
         {
@@ -1413,8 +1369,6 @@ void value_sett::get_reference_set_rec(const expr2tc &expr, object_mapt &dest)
                                  : o.offset_alignment;
 
           o.offset_alignment = std::min(index_align, old_align);
-
-          record_array_member(o, object, index.source_value->type, m);
           o.offset_is_set = false;
         }
 
