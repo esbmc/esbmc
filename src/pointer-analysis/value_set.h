@@ -153,6 +153,14 @@ public:
      *  to the array element edges.
      *  Units are bytes. Zero means N/A. */
     unsigned int offset_alignment;
+    /** When the offset is not set, the bytes [member_begin, member_end) of the
+     *  object, an array member the pointer was formed into (#9853). Equal when
+     *  unknown. Accesses outside it are bounds violations of that member. */
+    uint64_t member_begin = 0, member_end = 0;
+    bool has_member() const
+    {
+      return member_begin != member_end;
+    }
     bool offset_is_zero() const
     {
       return offset_is_set && offset.is_zero();
@@ -161,7 +169,8 @@ public:
     {
       return offset_is_set == o.offset_is_set &&
              offset_alignment == o.offset_alignment &&
-             (!offset_is_set || offset == o.offset);
+             (!offset_is_set || offset == o.offset) &&
+             member_begin == o.member_begin && member_end == o.member_end;
     }
     bool operator!=(const objectt &o) const
     {
@@ -345,7 +354,8 @@ public:
 
   /** Convert an object map element to an expression. Formulates either an
    *  object_descriptor irep, or unknown / invalid expr's as appropriate. */
-  expr2tc to_expr(object_mapt::const_iterator it) const;
+  expr2tc
+  to_expr(object_mapt::const_iterator it, bool name_array_member = false) const;
 
   /** Insert an object record element into an object map.
    *  @param dest The map to insert this record into.
@@ -426,15 +436,26 @@ public:
         // Both object offsets not set; update alignment to minimum of the two
         old.offset_alignment =
           std::min(old.offset_alignment, object.offset_alignment);
-        return !(old.offset_alignment == oldalign);
+        bool member_changed = false;
+        if (
+          old.member_begin != object.member_begin ||
+          old.member_end != object.member_end)
+        {
+          member_changed = old.has_member();
+          old.member_begin = old.member_end = 0;
+        }
+        return member_changed || !(old.offset_alignment == oldalign);
       }
+
+      const bool had_member = old.has_member();
+      old.member_begin = old.member_end = 0;
 
       // Old offset unset; new offset set. Compute the alignment of the
       // new object's offset, and take the minimum of that and the old
       // alignment.
       unsigned int new_alignment = offset2align(expr_obj, object.offset);
       old.offset_alignment = std::min(old.offset_alignment, new_alignment);
-      return !(old.offset_alignment == oldalign);
+      return had_member || !(old.offset_alignment == oldalign);
     }
 
     // Old offset alignment is set; new isn't.
@@ -487,7 +508,10 @@ public:
    *         it points to.
    *  @param dest A list to store pointed-at object expressions into.
    *  */
-  void get_value_set(const expr2tc &expr, value_setst::valuest &dest) const;
+  void get_value_set(
+    const expr2tc &expr,
+    value_setst::valuest &dest,
+    bool name_array_member = false) const;
 
   /** Clear all value records from this value set. */
   void clear()

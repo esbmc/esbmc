@@ -1090,8 +1090,21 @@ expr2tc dereferencet::build_reference_to(
   if (is_free(mode))
     return expr2tc();
 
-  // Value set tracking emits objects with some cruft built on top of them.
-  value = get_base_object(value);
+  // An array member the pointer stays in is accessed, and bounds checked, as
+  // an object of its own (#9853); its offset is relative to that member.
+  BigInt member_start = 0;
+  if (
+    is_member2t(object) && is_array_type(object) &&
+    !is_constant_int2t(o.offset) && !is_internal(mode))
+  {
+    for (const expr2tc *e = &object; is_member2t(*e);
+         e = &to_member2t(*e).source_value)
+      member_start += member_offset(
+        to_member2t(*e).source_value->type, to_member2t(*e).member);
+  }
+  else
+    // Value set tracking emits objects with some cruft built on top of them.
+    value = get_base_object(value);
 
   // Final offset computations start here
   expr2tc final_offset = o.offset;
@@ -1116,6 +1129,11 @@ expr2tc dereferencet::build_reference_to(
 
     final_offset =
       pointer_offset2tc(get_int_type(config.ansi_c.address_width), deref_expr);
+    if (!member_start.is_zero())
+      final_offset = sub2tc(
+        final_offset->type,
+        final_offset,
+        constant_int2tc(final_offset->type, member_start));
     // simplify pointer offset expression
     simplify(final_offset);
   }
@@ -3112,7 +3130,7 @@ void dereferencet::bounds_check(
 
   expr2tc arrsize;
   if (
-    !is_constant_expr(expr) &&
+    is_symbol2t(expr) &&
     has_prefix(
       ns.lookup(to_symbol2t(expr).thename)->id.as_string(), "symex_dynamic::"))
   {
