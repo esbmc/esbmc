@@ -1228,15 +1228,16 @@ symbolt *python_converter::find_symbol_in_import(
     return nullptr;
   symbolt *found = find_symbol_in_module(
     symbol_id, obj["full_path"].get<std::string>(), lookup_name, *name);
-  // `import m` of a user module binds only `m`, so none of m's variables
-  // is a bare name here (#9725).
+  // `import m` of a user module binds only `m`, so none of m's variables or
+  // functions is a bare name here (#9725, #9804). Its classes and their
+  // methods are still found, as `m.C` is resolved through them.
   const bool plain_user_import =
     obj["_type"] == "Import" &&
     obj["full_path"].get<std::string>().find("/models/") == std::string::npos;
-  return found && plain_user_import && !found->get_type().is_code() &&
-             !found->is_type
-           ? nullptr
-           : found;
+  const bool module_member =
+    found && !found->is_type &&
+    ::symbol_id::from_string(found->id.as_string()).get_class().empty();
+  return plain_user_import && module_member ? nullptr : found;
 }
 
 symbolt *

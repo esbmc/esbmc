@@ -202,20 +202,21 @@ class _Replace(ast.NodeTransformer):
         return self.replacements.get(id(node), node)
 
 
-def dispatch_rebound_methods(module, names_bound_by, variables, next_id, module_name):
+def dispatch_rebound_methods(module, names_bound_by, variables, modules, next_id, module_name):
     """Give each name bound to methods at several sites of a scope, and called
     somewhere, a selector set by its bindings and read by its calls. Return the
     (scope, name) pairs left alone because their bindings run in source order,
     the scope None standing for the module."""
-    return _Rebound(module, names_bound_by, module_name).rewrite(variables, next_id)
+    return _Rebound(module, names_bound_by, modules, module_name).rewrite(variables, next_id)
 
 
 class _Rebound:
     """The names of `module` bound to methods at several sites of a scope."""
 
-    def __init__(self, module, names_bound_by, module_name):
+    def __init__(self, module, names_bound_by, modules, module_name):
         self.module = module
         self.names_bound_by = names_bound_by
+        self.modules = modules
         self.module_name = module_name
 
     def rewrite(self, variables, next_id):
@@ -234,6 +235,8 @@ class _Rebound:
                 if self._in_order(scope, name, nodes):
                     in_order.add((None if scope is self.module else id(scope), name))
                     continue
+                if self._module_function_value(name, nodes):
+                    continue
                 assigns, calls = self.dispatched_statements(name, nodes, replacements)
                 dispatch = _Dispatch(scope, name, next_id)
                 for assign in assigns:
@@ -248,6 +251,16 @@ class _Rebound:
         for dispatch in dispatches:
             dispatch.start()
         return in_order
+
+    def _module_function_value(self, name, nodes):
+        """Whether `name` is bound to functions of the imported `modules` and
+        also another way: it then holds a function value, which the converter
+        calls (#9804)."""
+        methods = [n for n in nodes if _method_binding(n) and n.targets[0].id == name]
+        targets = {id(n.targets[0]) for n in methods}
+        return any(name in self._binds(n) and id(n) not in targets for n in nodes) and all(
+            isinstance(n.value.value, ast.Name) and n.value.value.id in self.modules
+            for n in methods)
 
     def _in_order(self, scope, name, nodes):
         """Whether each binding of `name` is a simple statement of the body of

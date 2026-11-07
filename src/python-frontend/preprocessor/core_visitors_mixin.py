@@ -759,8 +759,8 @@ class CoreVisitorsMixin:
             self._bound_method_scopes[-1], ast.ClassDef)
         if not (resolvable and isinstance(target, ast.Name) and isinstance(value, ast.Attribute)
                 and target.id not in self.unscoped_binding_names and not in_class_body and
-                (captures or isinstance(value.value, ast.Name))
-                and self._needs_no_method_value(target, value)):
+                (captures or isinstance(value.value, ast.Name)) and self._needs_no_method_value(
+                    target, value) and not self._is_rebound_module_function(target, value)):
             if isinstance(target, ast.Name):
                 self.bound_method_vars.pop(target.id, None)
             return None
@@ -785,6 +785,21 @@ class CoreVisitorsMixin:
             target.id not in self.referenced_names and isinstance(value.value, ast.Name)
             and value.attr in self.fixed_receivers.get(value.value.id, ()))
 
+    def _bound_once_or_in_order(self, target):
+        """Whether `target` is bound once in the scope being visited, or its
+        bindings run in source order (#8467), so each call sees the last
+        binding above it."""
+        scope = id(self._vararg_scope_stack[-1]) if self._vararg_scope_stack else None
+        _, counts = self.scope_binding_counts.get(scope, (None, {}))
+        return counts.get(target.id) == 1 or (scope, target.id) in self.in_order_bindings
+
+    def _is_rebound_module_function(self, target, value):
+        """Whether `target = module.attr` binds a module's function to a name
+        bound elsewhere too, on a path the source order does not decide: the
+        binding is then a function value (#9804)."""
+        return (isinstance(value.value, ast.Name) and value.value.id in self.imported_module_names
+                and not self._bound_once_or_in_order(target))
+
     def _captures_receiver(self, target, value):
         """Whether `target = obj.attr` stores `obj` for the calls of `target`:
         nothing else binds `target` in the scope being visited, or its bindings
@@ -793,9 +808,7 @@ class CoreVisitorsMixin:
         a definition or a builtin."""
         if not (isinstance(target, ast.Name) and isinstance(value, ast.Attribute)):
             return False
-        scope = id(self._vararg_scope_stack[-1]) if self._vararg_scope_stack else None
-        _, counts = self.scope_binding_counts.get(scope, (None, {}))
-        return (counts.get(target.id) == 1 or (scope, target.id) in self.in_order_bindings) and (
+        return self._bound_once_or_in_order(target) and (
             isinstance(value.value, ast.Call) or
             (isinstance(value.value, ast.Name) and value.value.id in self.variable_names))
 
