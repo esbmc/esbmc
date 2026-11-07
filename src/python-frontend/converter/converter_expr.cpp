@@ -2,6 +2,7 @@
 #include <optional>
 #include <limits>
 #include <python-frontend/math/convert_float_literal.h>
+#include <python-frontend/function_call/builder.h>
 #include <python-frontend/function_call/expr.h>
 #include <python-frontend/json_utils.h>
 #include <python-frontend/python_annotation/python_annotation.h>
@@ -3751,8 +3752,64 @@ python_converter::scope_numeric_bindings(
                                  : (*ast_json)["body"];
   std::vector<dynamic_type_detail::numeric_bindingt> bindings;
   dynamic_type_detail::collect_numeric_bindings(
-    body, name, false, before, include_later, bindings);
+    body,
+    name,
+    false,
+    before,
+    include_later,
+    bindings,
+    [this](const nlohmann::json &call) { return call_number_kind(call); });
   return bindings;
+}
+
+/// "int" or "float" for a call of a function, by name or through a module,
+/// whose converted definition returns that kind of number; else "". The
+/// annotator leaves such a call untyped when the function is imported (#9936).
+std::string python_converter::call_number_kind(const nlohmann::json &call) const
+{
+  const nlohmann::json &func = call["func"];
+  const std::string kind = func.value("_type", "");
+  const bool module_function =
+    kind == "Attribute" && func["value"].value("_type", "") == "Name" &&
+    !get_imported_module_path(func["value"].value("id", "")).empty();
+  if (
+    !module_function &&
+    (kind != "Name" || is_class(func.value("id", ""), *ast_json)))
+    return "";
+
+  const std::string key = current_python_file + ":" +
+                          std::to_string(call.value("lineno", 0)) + ":" +
+                          std::to_string(call.value("col_offset", 0));
+  if (
+    const auto known = call_number_kinds_.find(key);
+    known != call_number_kinds_.end())
+    return known->second;
+
+  symbol_id callee;
+  try
+  {
+    callee = function_call_builder(const_cast<python_converter &>(*this), call)
+               .build_function_id();
+  }
+  catch (const std::exception &)
+  {
+    return "";
+  }
+  const symbolt *callee_symbol = find_symbol(callee.to_string());
+  if (!callee_symbol)
+    callee_symbol = find_imported_symbol(callee.to_string());
+  if (!callee_symbol || !callee_symbol->get_type().is_code())
+    return "";
+  const typet &returned = to_code_type(callee_symbol->get_type()).return_type();
+  std::string number;
+  if (returned.is_floatbv())
+    number = "float";
+  else if (type_utils::is_integer_type(returned) || returned.is_bool())
+    number = "int";
+  // A function converted later may not be known yet, so only answers stick.
+  if (!number.empty())
+    call_number_kinds_[key] = number;
+  return number;
 }
 
 /// Whether `value` survives the C type `type` unchanged: a float is exact

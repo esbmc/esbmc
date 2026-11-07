@@ -11,6 +11,10 @@
 #include <util/config/config.h>
 #include <util/message/message.h>
 
+#ifdef ESBMC_MIMALLOC
+#  include <mimalloc.h>
+#endif
+
 #if __has_include(<cxxabi.h>)
 #  include <cxxabi.h>
 #  define ESBMC_HAVE_CXXABI 1
@@ -130,6 +134,14 @@ int main(int argc, const char **argv)
 #ifdef __GLIBC__
   if (!wants_parallel_solving(argc, argv))
     mallopt(M_ARENA_MAX, 1);
+#endif
+
+#ifdef ESBMC_MIMALLOC
+  /* mimalloc reserves address space 1 GiB at a time, doubling every 8 arenas.
+   * Under an address-space cap (--memlimit, or ctest's 8 GB RLIMIT_AS) that
+   * ran out at 1.5 GB RSS on github_1352-fail-32bit, where glibc reaches 2 GB.
+   */
+  mi_option_set(mi_option_arena_reserve, 64 * 1024); // KiB
 #endif
 
   register_bundled_files();
