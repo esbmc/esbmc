@@ -6,22 +6,22 @@
 
 # Function contains usage of walrus operator
 
-def count_words(string):
-    words = string.split()
-    word_count = 0
-    while words and (word := words.pop()):
-        print(word)
-        word_count += 1
-    return word_count
+#def count_words(string):
+#    words = string.split()
+#    word_count = 0
+#    while words and (word := words.pop()):
+#        print(word)
+#        word_count += 1
+#    return word_count
 
 
-def main() -> None:
-    if nondet_bool():
-        s = "Hello Python"
-    else:
-        s = ""
-    a = count_words(s)
-    avg = len(s) / a
+#def main() -> None:
+#    if nondet_bool():
+#        s = "Hello Python"
+#    else:
+#        s = ""
+#    a = count_words(s)
+#    avg = len(s) / a
 
 
-main()
+#main()

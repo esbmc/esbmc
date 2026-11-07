@@ -6,23 +6,23 @@
 
 # Returning multiple types from a function using type hinting.
 
-def func(x):
-    if x > 0:
-        return x
-    else:
-        return "Invalid input"
+#def func(x):
+#    if x > 0:
+#        return x
+#    else:
+#        return "Invalid input"
 
 
-def main() -> None:
-    if nondet_bool():
-        x = 5
-    else:
-        x = -5
-    a = func(x)
-    if isinstance(a, int):
-        b = a + 1
-    else:
-        b = a.upper()
+#def main() -> None:
+#    if nondet_bool():
+#        x = 5
+#    else:
+#        x = -5
+#    a = func(x)
+#    if isinstance(a, int):
+#        b = a + 1
+#    else:
+#        b = a.upper()
 
 
-main()
+#main()
