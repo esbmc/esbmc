@@ -2107,6 +2107,72 @@ bool python_converter::call_site_list_literals(
   return complete;
 }
 
+static bool is_starred(const nlohmann::json &node)
+{
+  return node.value("_type", "") == "Starred";
+}
+
+/// The list display \p call passes as element \p member of a tuple display
+/// for its positional parameter \p index, or null.
+static const nlohmann::json *
+tuple_member_display(const nlohmann::json &call, size_t index, size_t member)
+{
+  const nlohmann::json &args = call["args"];
+  if (
+    !call["keywords"].empty() || args.size() <= index ||
+    std::any_of(args.begin(), args.end(), is_starred) ||
+    args[index].value("_type", "") != "Tuple")
+    return nullptr;
+  const nlohmann::json &elts = args[index]["elts"];
+  if (
+    elts.size() <= member ||
+    std::any_of(elts.begin(), elts.end(), is_starred) ||
+    elts[member].value("_type", "") != "List")
+    return nullptr;
+  return &elts[member];
+}
+
+/// Collects the list displays every call of the current module-level function
+/// passes as element \p member of a tuple display for its parameter
+/// \p param_name. Such a list is fresh, so when the body names the parameter
+/// only once nothing can change its elements before that read.
+bool python_converter::param_tuple_member_displays(
+  const std::string &param_name,
+  size_t member,
+  std::vector<nlohmann::json> &out) const
+{
+  const std::string &func_name = current_function_name();
+  const nlohmann::json *def = find_function_def((*ast_json)["body"], func_name);
+  if (
+    !current_class_name_.empty() || def == nullptr ||
+    !(*def)["decorator_list"].empty() ||
+    !only_called_directly(*ast_json, func_name) ||
+    json_utils::count_name_nodes((*def)["body"], param_name) != 1)
+    return false;
+  const nlohmann::json &params = (*def)["args"]["args"];
+  const auto param =
+    std::find_if(params.begin(), params.end(), [&](const nlohmann::json &p) {
+      return p.value("arg", "") == param_name;
+    });
+  if (param == params.end())
+    return false;
+  const size_t index = std::distance(params.begin(), param);
+
+  std::vector<numpy_param_call_site> call_sites;
+  collect_call_sites(*ast_json, "", call_sites);
+  for (const numpy_param_call_site &site : call_sites)
+  {
+    const nlohmann::json &call = *site.call;
+    if (call.value("func", nlohmann::json()).value("id", "") != func_name)
+      continue;
+    const nlohmann::json *display = tuple_member_display(call, index, member);
+    if (display == nullptr)
+      return false;
+    out.push_back(*display);
+  }
+  return !out.empty();
+}
+
 /// Types an unannotated parameter that every call fills with an element of a
 /// list parameter (param_elements) whose values are constants of one type,
 /// such as `k` in `f(*d)` over calls passing `[[3, 1], 2]` (#8472).
