@@ -307,18 +307,21 @@ protected:
     return false;
   }
 
-  /// The module @p id names in @p caller: `lib` after `import lib as id`,
-  /// provided nothing else in the caller binds `id`.
-  std::string module_named_by(const std::string &id, size_t caller) const
+  /// The module @p id names in @p caller: `lib` after `import lib as id`, or
+  /// none when the caller also binds `id` otherwise.
+  std::optional<std::string>
+  module_named_by(const std::string &id, size_t caller) const
   {
     const nlohmann::json &ast = *modules_[caller].read;
     for (const auto &stmt : ast["body"])
       if (is_node(stmt, "Import"))
         for (const auto &alias : stmt["names"])
           if (alias["asname"] == id)
-            return json_utils::count_name_bindings(ast, id) == 1
-                     ? alias["name"].get<std::string>()
-                     : "";
+          {
+            if (json_utils::count_name_bindings(ast, id) != 1)
+              return std::nullopt;
+            return alias["name"].get<std::string>();
+          }
     return id;
   }
 
@@ -335,10 +338,12 @@ protected:
     {
       if (!is_node(func["value"], "Name"))
         return std::nullopt;
-      const std::string module =
+      const std::optional<std::string> module =
         module_named_by(func["value"]["id"].get<std::string>(), caller);
+      if (!module)
+        return std::nullopt;
       for (size_t i = 0; i < modules_.size(); ++i)
-        if (modules_[i].name == module && defines(i, name))
+        if (modules_[i].name == *module && defines(i, name))
           return i;
       return std::nullopt;
     }
