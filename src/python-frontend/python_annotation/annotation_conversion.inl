@@ -4444,9 +4444,12 @@ void python_annotation<Json>::collect_return_types(
       // unknown here. The converter types the result from the class's member
       // types, whereas an "Any" return would make it a double (#8942).
       std::string inferred_type = get_argument_type(return_val);
-      if (inferred_type.empty() && return_val["_type"] == "Name")
-        types.insert(untyped_name_return);
+      // "Any" for a name only means its value's type is unknown here (#9929).
       if (
+        (inferred_type.empty() || inferred_type == "Any") &&
+        return_val["_type"] == "Name")
+        types.insert(untyped_name_return);
+      else if (
         !inferred_type.empty() &&
         (inferred_type != "Any" || !arithmetic_reads_attribute(return_val)))
         types.insert(inferred_type);
