@@ -1937,8 +1937,7 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
     // Skip builtins / models — only try user-defined functions
     if (
       !locally_shadowed && !type_utils::is_builtin_type(callee) &&
-      !type_utils::is_python_model_func(callee) &&
-      !try_find_function((*ast_json)["body"], callee).empty())
+      !type_utils::is_python_model_func(callee) && is_foldable_function(callee))
     {
       // Collect constant arguments
       bool all_const = true;

@@ -57,7 +57,12 @@ typedef struct __ESBMC_PyListObj
   PyObject *items; /**< Array of PyObject items (SMT infinite array concept) */
   size_t size;     /**< Number of elements currently in use */
   bool is_tuple;   /**< Built by tuple(x), which the model keeps as a list */
+  const bool *may_nest; /**< Whether an element may be a nested list */
 } PyListObject;
+
+/* The two targets of PyListObject::may_nest, defined in list.c. */
+extern const bool __ESBMC_list_nest_no;
+extern const bool __ESBMC_list_nest_yes;
 
 /**
  * @brief Minimal representation of a Python slice object.

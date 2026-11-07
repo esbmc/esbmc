@@ -157,11 +157,15 @@ public:
   /// A bare `Callable` return as the pointer type of the functions the body
   /// returns by name, when they agree on a signature (#7802).
   typet returned_function_type(const nlohmann::json &function_node);
+  std::optional<code_typet>
+  shared_signature(const std::vector<std::string> &names);
+  typet unannotated_return_type(const nlohmann::json &function_node);
   typet named_return_type(
     const std::string &name,
     const nlohmann::json &return_node,
     const nlohmann::json &function_node);
   typet named_callee_type(const std::string &name);
+  bool is_foldable_function(const std::string &name);
   std::optional<code_typet> returned_function(const nlohmann::json &callee);
   /// `get()()`: a call through the function pointer that `get()` returns.
   /// `(lambda x: ...)(a)`: a call of the lambda, typed by its arguments.
@@ -188,6 +192,10 @@ public:
     const typet &value,
     const locationt &location);
   void decay_function_choice(exprt &then, exprt &else_expr);
+  void coerce_not_callable_return(
+    exprt &value,
+    const locationt &location,
+    codet &target_block);
 
   typet get_type_from_annotation(
     const nlohmann::json &annotation_node,
@@ -1041,6 +1049,8 @@ private:
     const std::string &name,
     int before,
     bool include_later) const;
+  std::string call_number_kind(const nlohmann::json &call) const;
+  mutable std::unordered_map<std::string, std::string> call_number_kinds_;
 
   void reject_inexact_number_join(
     const nlohmann::json &element,

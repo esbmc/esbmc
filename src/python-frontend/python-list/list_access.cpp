@@ -4668,8 +4668,12 @@ std::optional<exprt> python_list::resolve_nested_list_element(
           // slot: binding it to the temporary below sends `xs[0] = xs[1]`
           // into a dead local and leaves xs untouched, so len(xs[0]) keeps
           // answering the overwritten element's length (#7360). Reads
-          // nested inside a target still take the temp path.
-          if (converter_.is_store_target(list_value_))
+          // nested inside a target still take the temp path. A type probe
+          // skips the IndexError guard, so a temp read there would run
+          // unguarded ahead of the real build (#9909).
+          if (
+            converter_.is_store_target(list_value_) ||
+            converter_.in_rhs_type_probe_)
             return inner_ptr;
 
           const locationt loc = converter_.get_location_from_decl(list_value_);

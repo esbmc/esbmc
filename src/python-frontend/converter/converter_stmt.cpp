@@ -5562,6 +5562,24 @@ exprt python_converter::not_callable_function(
   return symbol_expr(*symbol_table_.move_symbol_to_context(symbol));
 }
 
+/// A function returning functions that returns \p value of a type that cannot
+/// be called returns a function raising the TypeError of calling it (#9824).
+void python_converter::coerce_not_callable_return(
+  exprt &value,
+  const locationt &location,
+  codet &target_block)
+{
+  const typet &returned = current_func_return_type_;
+  if (
+    !returned.is_pointer() || !returned.subtype().is_code() ||
+    may_be_callable(value.type()) || value.type() == none_type())
+    return;
+  if (value.id() == "sideeffect")
+    target_block.copy_to_operands(code_expressiont(value));
+  value = python_expr::decay_function_to_pointer(
+    not_callable_function(returned.subtype(), value.type(), location));
+}
+
 /// A choice between two functions of one type is a pointer to either. The
 /// result of a choice between types would have no single type (#8404). An
 /// arm that cannot be called becomes a function that raises when it is.
@@ -9151,8 +9169,12 @@ typet python_converter::optional_ternary_type(
 {
   const typet &value_type = then_is_none ? else_expr.type() : then.type();
   const bool reference_value = value_type.is_array() || value_type.is_pointer();
-  const typet &target =
-    current_lhs ? current_lhs->type() : ternary_return_target_;
+  typet target = current_lhs ? current_lhs->type() : ternary_return_target_;
+  // With no type to fit, a list is held as a nullable list pointer, as an
+  // unannotated function returning a list or None is.
+  const bool untyped_target = target.id().empty() || target.is_empty();
+  if (untyped_target && value_type == type_handler_.get_list_type())
+    target = value_type;
   if (!reference_value || !target.is_pointer())
   {
     typet result_type = type_handler_.build_optional_type(value_type);
@@ -10314,6 +10336,7 @@ void python_converter::get_return_statements(
         ret_expr = wrap_in_optional(ret_expr, current_func_return_type_);
     }
 
+    coerce_not_callable_return(ret_expr, location, target_block);
     coerce_to_tagged_return(ret_expr);
     ret_expr = check_float_fits_int_return(ast_node, ret_expr, target_block);
 
@@ -10372,6 +10395,7 @@ void python_converter::get_return_statements(
       is_user_class_struct_type(return_value.type()))
       return_value = box_value_on_heap(return_value, location, target_block);
 
+    coerce_not_callable_return(return_value, location, target_block);
     return_value = tuple_handler_->coerce_to_tuple_type(
       return_value, current_func_return_type_, location, target_block);
     return_value = coerce_optional_return(return_value, location, target_block);
