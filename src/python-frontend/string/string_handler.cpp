@@ -837,6 +837,31 @@ exprt string_handler::build_nondet_string(const locationt &location)
   null_assign.location() = location;
   converter_.add_instruction(null_assign);
 
+  // A length symbol, as input() has, lets len() answer without scanning the
+  // buffer, so a guard such as len(s) <= 4 bounds every later scan.
+  symbolt &len_sym = converter_.create_tmp_symbol(
+    location, "$nondet_str_len$", size_type(), exprt());
+  code_declt len_decl(symbol_expr(len_sym));
+  len_decl.location() = location;
+  converter_.add_instruction(len_decl);
+  code_assignt len_assign(
+    symbol_expr(len_sym), side_effect_expr_nondett(size_type()));
+  len_assign.location() = location;
+  converter_.add_instruction(len_assign);
+  assume_length_in_buffer(symbol_expr(len_sym), max_str_length, location);
+  code_assignt term_assign(
+    build_index(symbol_expr(nondet_str_symbol), symbol_expr(len_sym)),
+    from_integer(0, char_type()));
+  term_assign.location() = location;
+  converter_.add_instruction(term_assign);
+  assume_no_nul_before(
+    symbol_expr(nondet_str_symbol),
+    symbol_expr(len_sym),
+    max_str_length,
+    location);
+  converter_.input_str_to_len_sym_[nondet_str_symbol.id.as_string()] =
+    len_sym.id.as_string();
+
   // Return address of first element: &arr[0] which is char*
   exprt first_elem =
     build_index(symbol_expr(nondet_str_symbol), from_integer(0, size_type()));
