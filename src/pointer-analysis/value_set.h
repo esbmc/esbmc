@@ -740,6 +740,21 @@ public:
     bool under_deref = true) const;
 
 private:
+  /** get_value_set_rec for a typecast or bitcast \p expr. */
+  void get_cast_value_set(
+    const expr2tc &expr,
+    object_mapt &dest,
+    const std::string &suffix,
+    const type2tc &original_type) const;
+
+  /** Record in \p o, whose offset into the struct \p object is known, the
+   *  bytes of the array member of type \p array_type it is indexed into. */
+  static void record_array_member(
+    objectt &o,
+    const expr2tc &object,
+    const type2tc &array_type,
+    const BigInt &element_size);
+
   /** What one get_value_set_rec_cached query contributed, keyed by its
    * arguments. Shared subexpressions make a value query a DAG walk, so without
    * this the walk costs paths exponential in the number of stores a propagated

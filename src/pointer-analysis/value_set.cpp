@@ -132,6 +132,49 @@ static expr2tc array_member_at(expr2tc obj, BigInt begin, BigInt end)
   return expr2tc();
 }
 
+void value_sett::get_cast_value_set(
+  const expr2tc &expr,
+  object_mapt &dest,
+  const std::string &suffix,
+  const type2tc &original_type) const
+{
+  // Push straight through casts. A cast pointer may walk the whole object,
+  // as a char pointer does, so it no longer stays in an array member.
+  const expr2tc &from =
+    is_typecast2t(expr) ? to_typecast2t(expr).from : to_bitcast2t(expr).from;
+  if (from->type == expr->type)
+  {
+    get_value_set_rec_cached(from, dest, suffix, original_type);
+    return;
+  }
+  object_mapt cast_set;
+  get_value_set_rec_cached(from, cast_set, suffix, original_type);
+  for (const auto &[n, object] : cast_set)
+  {
+    objectt o = object;
+    o.member_begin = o.member_end = 0;
+    insert(dest, n, o);
+  }
+}
+
+void value_sett::record_array_member(
+  objectt &o,
+  const expr2tc &object,
+  const type2tc &array_type,
+  const BigInt &element_size)
+{
+  // A [0] or [1] array may be indexed past its end on purpose, as a flexible
+  // array member, so only a longer array bounds the pointer.
+  BigInt size = type_byte_size_default(array_type, 0);
+  if (
+    o.offset_is_set && !o.offset.is_negative() && is_struct_type(object) &&
+    size > element_size)
+  {
+    o.member_begin = o.offset.to_uint64();
+    o.member_end = o.member_begin + size.to_uint64();
+  }
+}
+
 expr2tc value_sett::to_expr(
   object_mapt::const_iterator it,
   bool name_array_member) const
@@ -864,23 +907,7 @@ void value_sett::get_value_set_rec(
 
   if (is_typecast2t(expr) || is_bitcast2t(expr))
   {
-    // Push straight through casts. A cast pointer may walk the whole object,
-    // as a char pointer does, so it no longer stays in an array member.
-    const expr2tc &from =
-      is_typecast2t(expr) ? to_typecast2t(expr).from : to_bitcast2t(expr).from;
-    if (from->type == expr->type)
-    {
-      get_value_set_rec_cached(from, dest, suffix, original_type);
-      return;
-    }
-    object_mapt cast_set;
-    get_value_set_rec_cached(from, cast_set, suffix, original_type);
-    for (const auto &[n, object] : cast_set)
-    {
-      objectt o = object;
-      o.member_begin = o.member_end = 0;
-      insert(dest, n, o);
-    }
+    get_cast_value_set(expr, dest, suffix, original_type);
     return;
   }
 
@@ -1337,16 +1364,7 @@ void value_sett::get_reference_set_rec(const expr2tc &expr, object_mapt &dest)
 
           o.offset_alignment = std::min(index_align, old_align);
 
-          // A [0] or [1] array may be indexed past its end on purpose, as a
-          // flexible array member, so only a longer array bounds the pointer.
-          BigInt size = type_byte_size_default(index.source_value->type, 0);
-          if (
-            o.offset_is_set && !o.offset.is_negative() &&
-            is_struct_type(object) && size > m)
-          {
-            o.member_begin = o.offset.to_uint64();
-            o.member_end = o.member_begin + size.to_uint64();
-          }
+          record_array_member(o, object, index.source_value->type, m);
           o.offset_is_set = false;
         }
 
