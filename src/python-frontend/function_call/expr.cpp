@@ -4801,11 +4801,14 @@ static std::optional<double> literal_value(const nlohmann::json &node)
 
 // A call whose arguments are all number literals keeps the C library's value
 // (handle_math_function_dispatch), unless it raises a domain error the C
-// library would turn into a NaN or an infinity.
+// library would turn into a NaN or an infinity. cbrt, erf and erfc have no
+// C library model, only approximations in models/math.py, so they never do.
 static bool
 keeps_library_value(const std::string &function, const nlohmann::json &args)
 {
+  static const std::set<std::string> approximated = {"cbrt", "erf", "erfc"};
   if (
+    approximated.count(function) ||
     !std::all_of(args.begin(), args.end(), is_number_literal) ||
     (function == "hypot" && args.size() != 2))
     return false;

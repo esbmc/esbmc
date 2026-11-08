@@ -361,6 +361,7 @@ private:
   exprt retype_lhs(const exprt &result);
   std::optional<exprt> try_float_predicate(const std::string &function);
   exprt numpy_math_list(const std::string &function, const nlohmann::json &arg);
+  std::optional<exprt> literal_array_operand(const nlohmann::json &arg);
   std::vector<std::vector<double>>
   linalg_matrix(const std::function<void(nlohmann::json &)> &unwrap);
   exprt nondet_bool();

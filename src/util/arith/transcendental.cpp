@@ -87,7 +87,9 @@ const std::map<std::string, math_spec> &specs()
       -1.0,
       1.0,
       {-1.0, 1.0}}},
-    {"cbrt", {-inf, inf, -inf, inf, {}, false}}};
+    {"cbrt", {-inf, inf, -inf, inf, {}, false}},
+    {"erf", {-inf, inf, -1.0, 1.0, {}, false}},
+    {"erfc", {-inf, inf, 0.0, 2.0, {}, false}}};
   return table;
 }
 
@@ -105,7 +107,7 @@ const math_spec &spec_of(const std::string &function)
 bool exact_everywhere(const std::string &function, double x, double value)
 {
   static const std::set<std::string> one_at_zero = {
-    "exp", "exp2", "cos", "cosh"};
+    "exp", "exp2", "cos", "cosh", "erfc"};
   static const std::set<std::string> zero_at_one = {
     "log", "log2", "log10", "arccos", "arccosh"};
   int exponent = 0;
@@ -256,7 +258,8 @@ bool transcendental::is_odd(const std::string &function)
     "tanh",
     "arcsinh",
     "arctanh",
-    "cbrt"};
+    "cbrt",
+    "erf"};
   return odd.count(function) != 0;
 }
 
@@ -289,6 +292,8 @@ double transcendental::host_value(const std::string &function, double x)
     {"arccosh", [](double v) { return std::acosh(v); }},
     {"arctanh", [](double v) { return std::atanh(v); }},
     {"cbrt", [](double v) { return std::cbrt(v); }},
+    {"erf", [](double v) { return std::erf(v); }},
+    {"erfc", [](double v) { return std::erfc(v); }},
     {"rint", [](double v) { return std::rint(v); }}};
   auto it = functions.find(function);
   if (it == functions.end())

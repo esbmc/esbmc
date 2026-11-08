@@ -7274,9 +7274,14 @@ numpy_call_expr::try_bounded_ufunc(const std::string &function)
 // hypot or arctan2 of numbers, arrays or views, broadcast as NumPy does.
 exprt numpy_call_expr::bounded_binary_ufunc(const std::string &function)
 {
-  const exprt a = elementwise_operand(function, call_["args"][0]);
-  const exprt b = elementwise_operand(function, call_["args"][1]);
-  for (const exprt &operand : {a, b})
+  std::vector<exprt> operands;
+  for (const nlohmann::json &arg : {call_["args"][0], call_["args"][1]})
+  {
+    std::optional<exprt> literal = literal_array_operand(arg);
+    operands.push_back(literal ? *literal : elementwise_operand(function, arg));
+  }
+  const exprt &a = operands[0], &b = operands[1];
+  for (const exprt &operand : operands)
     if (!is_number_type(array_leaf_type(operand.type())))
       throw std::runtime_error(
         "TypeError: numpy." + function + " of a non-number is not supported");
@@ -7285,6 +7290,15 @@ exprt numpy_call_expr::bounded_binary_ufunc(const std::string &function)
       return bounded_math(converter_, call_)
         .binary(function, x[0], x[1], math_module::numpy);
     });
+}
+
+static bool is_constant_array(const exprt &e)
+{
+  return e.id() == "array" &&
+         std::all_of(
+           e.operands().begin(), e.operands().end(), [](const exprt &x) {
+             return x.is_constant() || is_constant_array(x);
+           });
 }
 
 // f of the operands' elements at each index of the broadcast shape, from
@@ -7311,10 +7325,13 @@ exprt numpy_call_expr::broadcast_elements(
       const std::vector<int> dims =
         type_handler_.get_array_type_shape(v.type());
       const std::size_t index = !dims.empty() && dims.front() == 1 ? 0 : i;
-      elements.push_back(
-        dims.size() < rest
-          ? v
-          : np_index(v, from_integer(index, size_type()), v.type().subtype()));
+      if (dims.size() < rest)
+        elements.push_back(v);
+      else if (is_constant_array(v))
+        elements.push_back(v.operands()[index]);
+      else
+        elements.push_back(
+          np_index(v, from_integer(index, size_type()), v.type().subtype()));
     }
     result.copy_to_operands(
       broadcast_elements(elements, shape, leaf, depth + 1, f));
@@ -7405,7 +7422,8 @@ exprt numpy_call_expr::apply_ufunc(
   const std::vector<std::size_t> shape =
     ufunc_shape(operands, out ? std::optional<std::size_t>(n) : std::nullopt);
   for (exprt &operand : operands)
-    operand = bind_array_once(operand);
+    if (!is_constant_array(operand))
+      operand = bind_array_once(operand);
   const typet result_leaf = out ? array_leaf_type(out->value.type()) : leaf;
   const exprt result = broadcast_elements(
     operands, shape, result_leaf, 0, [&](const std::vector<exprt> &e) {
@@ -7843,10 +7861,11 @@ std::optional<exprt> numpy_call_expr::try_numpy_math_constant()
   return numpy_math_value(function, to_double(value));
 }
 
-// The function applied to each element of a literal 1-D or 2-D list.
-exprt numpy_call_expr::numpy_math_list(
-  const std::string &function,
-  const nlohmann::json &arg)
+// A literal 1-D or 2-D list of numbers as an array of f of each element;
+// nullopt for anything else.
+static std::optional<exprt> numeric_list_array(
+  const nlohmann::json &arg,
+  const std::function<exprt(double)> &f)
 {
   std::vector<std::vector<numeric_value>> rows;
   std::vector<numeric_value> row;
@@ -7854,7 +7873,7 @@ exprt numpy_call_expr::numpy_math_list(
   if (flat)
     rows.push_back(row);
   else if (!try_extract_numeric_2d_list(arg, rows))
-    throw std::runtime_error("Unsupported Numpy call: " + function);
+    return std::nullopt;
   std::vector<exprt> results;
   for (const auto &values : rows)
   {
@@ -7862,7 +7881,7 @@ exprt numpy_call_expr::numpy_math_list(
       "array",
       array_typet(double_type(), from_integer(values.size(), size_type())));
     for (const numeric_value &value : values)
-      array.copy_to_operands(numpy_math_value(function, to_double(value)));
+      array.copy_to_operands(f(to_double(value)));
     results.push_back(array);
   }
   if (flat)
@@ -7874,6 +7893,40 @@ exprt numpy_call_expr::numpy_math_list(
   for (const exprt &result : results)
     matrix.copy_to_operands(result);
   return matrix;
+}
+
+// The function applied to each element of a literal 1-D or 2-D list.
+exprt numpy_call_expr::numpy_math_list(
+  const std::string &function,
+  const nlohmann::json &arg)
+{
+  if (std::optional<exprt> array = numeric_list_array(arg, [&](double x) {
+        return numpy_math_value(function, x);
+      }))
+    return *array;
+  throw std::runtime_error("Unsupported Numpy call: " + function);
+}
+
+// A literal list of numbers, or np.array of one, as a constant array, so
+// that its elements fold where the model only relates elements read at run
+// time.
+std::optional<exprt>
+numpy_call_expr::literal_array_operand(const nlohmann::json &arg)
+{
+  nlohmann::json node = tuples_as_lists(arg);
+  const nlohmann::json func = node.value("func", nlohmann::json::object());
+  const nlohmann::json module = func.value("value", nlohmann::json::object());
+  const std::string attr = func.value("attr", "");
+  if (
+    node.value("_type", "") == "Call" &&
+    (attr == "array" || attr == "asarray") &&
+    module.value("_type", "") == "Name" &&
+    is_imported_numpy_module_alias(converter_.ast(), module.value("id", "")) &&
+    node["args"].size() == 1 &&
+    node.value("keywords", nlohmann::json::array()).empty())
+    node = tuples_as_lists(node["args"][0]);
+  return numeric_list_array(
+    node, [](double x) { return from_double(x, double_type()); });
 }
 
 typet numpy_call_expr::get_typet_from_dtype() const
@@ -12288,7 +12341,12 @@ const std::string &numpy_call_expr::canonical_function()
     {"acosh", "arccosh"},
     {"atanh", "arctanh"},
     {"atan2", "arctan2"}};
-  auto alias = aliases.find(function_id_.get_function());
+  const std::string &name = function_id_.get_function();
+  // The bounded model has erf and erfc for math; NumPy has neither.
+  if (name == "erf" || name == "erfc")
+    throw std::runtime_error(
+      "AttributeError: module 'numpy' has no attribute '" + name + "'");
+  auto alias = aliases.find(name);
   if (alias != aliases.end())
     function_id_.set_function(alias->second);
   return function_id_.get_function();
