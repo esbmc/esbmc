@@ -16,6 +16,7 @@
 #include <util/config/config.h>
 
 #include <algorithm>
+#include <deque>
 #include <map>
 #include <memory>
 #include <optional>
@@ -954,7 +955,8 @@ private:
     size_t ret = 0;
     std::pair<uint64_t, bool> ret_width{0, false};
   };
-  std::vector<call_sitet> call_sites;
+  // A deque: call() holds a site while the callee resolves new ones.
+  std::deque<call_sitet> call_sites;
   std::unordered_map<const goto_functiont *, bool> running;
 
   /// Per instruction, by location_number: its compiled guard, value and call
