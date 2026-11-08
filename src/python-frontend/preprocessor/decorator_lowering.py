@@ -208,6 +208,83 @@ def _rebind(function, defined, original, module_name):
     return statements
 
 
+_SCOPED = (ast.Lambda, ast.NamedExpr, ast.GeneratorExp, ast.ListComp, ast.SetComp, ast.DictComp,
+           ast.Yield, ast.YieldFrom, ast.Await)
+
+
+def _stores_attribute_of(store, param):
+    """Whether `store` only assigns attributes of `param`, binding no name."""
+    if isinstance(store, ast.Assign):
+        targets = store.targets
+    elif isinstance(store, ast.AugAssign):
+        targets = [store.target]
+    else:
+        return False
+    return all(
+        isinstance(t, ast.Attribute) and isinstance(t.value, ast.Name) and t.value.id == param
+        for t in targets) and not any(isinstance(n, _SCOPED) for n in ast.walk(store))
+
+
+def _class_updates(decorator):
+    """The attribute stores of a decorator that only sets attributes of its
+    parameter and returns it, as `(param, stores)`, or None."""
+    params = decorator.args.args
+    if len(params) != 1 or decorator.args.defaults or not _has_plain_params(decorator):
+        return None
+    param = params[0].arg
+    body = decorator.body
+    if body and isinstance(body[0], ast.Expr) and isinstance(body[0].value, ast.Constant):
+        body = body[1:]
+    returns_param = body and isinstance(body[-1], ast.Return) and isinstance(
+        body[-1].value, ast.Name) and body[-1].value.id == param
+    if not returns_param or not all(_stores_attribute_of(s, param) for s in body[:-1]):
+        return None
+    return param, body[:-1]
+
+
+def _decorated_class(cls, defined):
+    """`@d class C` as the class, then the attribute stores of each `d`, applied
+    bottom-up as Python does, with `C` in place of its parameter; or None.
+    Each `d` returns its argument, so `C` stays bound to the class."""
+    statements = []
+    for decorator in reversed(cls.decorator_list):
+        definition = isinstance(decorator, ast.Name) and defined.get(decorator.id)
+        # A decorated decorator was renamed when its own decorators were lowered.
+        renamed = definition and definition.name != decorator.id
+        updates = definition and not renamed and _class_updates(definition)
+        if not updates:
+            return None
+        param, stores = updates
+        for store in copy.deepcopy(stores):
+            for n in ast.walk(store):
+                if isinstance(n, ast.Name) and n.id == param:
+                    n.id = cls.name
+            statements.append(ast.fix_missing_locations(ast.copy_location(store, cls)))
+    cls.decorator_list = []
+    _declare_new_attributes(cls, statements)
+    return statements
+
+
+def _declare_new_attributes(cls, stores):
+    """Bind at the top of the class body each attribute a store gives a
+    constant and the body never names, so the converter knows it as a class
+    attribute. The store runs right after the body, which cannot read the
+    binding first since it does not name it."""
+    named = {n.id for stmt in cls.body for n in ast.walk(stmt) if isinstance(n, ast.Name)}
+    named |= {b for stmt in cls.body for b in _bound_names(stmt)}
+    declarations = []
+    for store in stores:
+        if not isinstance(store, ast.Assign) or not isinstance(store.value, ast.Constant):
+            continue
+        for target in store.targets:
+            if target.attr not in named:
+                named.add(target.attr)
+                declaration = ast.Assign(targets=[ast.Name(id=target.attr, ctx=ast.Store())],
+                                         value=copy.deepcopy(store.value))
+                declarations.append(ast.fix_missing_locations(ast.copy_location(declaration, cls)))
+    cls.body[:0] = declarations
+
+
 def _refuse_later_decorators(function, user_functions, defined, module_name):
     """Refuse a decorator this program defines only further down."""
     for decorator in function.decorator_list:
@@ -261,6 +338,9 @@ def lower_user_decorators(module, module_name):
     body = []
     for stmt in module.body:
         body.append(stmt)
+        if isinstance(stmt, ast.ClassDef) and stmt.decorator_list and all(
+                _is_user_decorator(d, user_functions) for d in stmt.decorator_list):
+            body.extend(_decorated_class(stmt, defined) or [])
         if not isinstance(stmt, ast.FunctionDef):
             continue
         name = stmt.name
