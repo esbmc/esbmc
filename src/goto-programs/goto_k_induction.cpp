@@ -796,6 +796,9 @@ bool loop_shapest::in_loop(const irep_idt &function, unsigned location) const
 struct rootst
 {
   loopst::loop_varst pointers;
+  /// Those read before the loop: the head holds what they held then only
+  /// while nothing kills them on the way (see dead_at_head).
+  loopst::loop_varst read_before;
   loopst::loop_varst objects;
   /// Whether it is, in part, an object allocated in the iteration.
   bool allocated = false;
@@ -808,6 +811,7 @@ struct rootst
   void merge(const rootst &other)
   {
     pointers.insert(other.pointers.begin(), other.pointers.end());
+    read_before.insert(other.read_before.begin(), other.read_before.end());
     objects.insert(other.objects.begin(), other.objects.end());
     allocated |= other.allocated;
   }
@@ -839,8 +843,9 @@ struct iterationt
 /// keeps one value throughout the loop, so every object a write derived from
 /// it reaches is one it points to at the head. So is a pointer that every loop
 /// of its function only offsets: the step havocs it within the object it holds
-/// at the head (see keeps_object). A local the loop reassigns before every
-/// read is traced through its assignments in the body. An object allocated on
+/// at the head (see keeps_object). Either needs a value at the head symex
+/// resolves (see settled). A local the loop reassigns before every read is
+/// traced through its assignments in the body. An object allocated on
 /// the way was allocated in the same iteration, which the step executes, so it
 /// needs no havoc.
 class derivationst
@@ -875,6 +880,14 @@ public:
     const std::unordered_set<irep_idt, irep_id_hash> &address_taken,
     const addresslesst &addressless,
     const expr2tc &symbol) const;
+
+  /// Whether symex resolves the objects \p value, read at a loop head of
+  /// \p function, may point to.
+  bool settled(
+    const irep_idt &function,
+    const std::unordered_set<irep_idt, irep_id_hash> &address_taken,
+    const addresslesst &addressless,
+    const expr2tc &value) const;
 
   /// Whether some loop may assign \p symbol, and so some inductive step
   /// havoc it.
@@ -966,6 +979,18 @@ private:
   bool trace(queryt &q, const expr2tc &value) const;
   /// Whether \p value is \p name moved by offsets that hold no address.
   bool offsets(queryt &q, const expr2tc &value, const irep_idt &name) const;
+  /// Adds \p symbol to the roots if the head holds what the trace read.
+  bool root(queryt &q, const expr2tc &symbol) const;
+  /// Whether symex resolves the objects \p value may point to: no load from
+  /// memory feeds it, nor a variable a step havoc leaves unconstrained.
+  bool settled(
+    queryt &q,
+    const expr2tc &value,
+    std::unordered_set<irep_idt, irep_id_hash> &seen) const;
+  bool settled_def(
+    queryt &q,
+    const deft &def,
+    std::unordered_set<irep_idt, irep_id_hash> &seen) const;
   bool trace_address(queryt &q, expr2tc object) const;
   bool trace_symbol(queryt &q, const expr2tc &symbol) const;
   bool trace_def(queryt &q, const deft &def) const;
@@ -1011,15 +1036,22 @@ void derivationst::define(
     return;
   }
 
+  // p[i] writes through p, not to it.
+  bool through_pointer = false;
   expr2tc symbol = lhs;
   while (is_member2t(symbol) || is_index2t(symbol) || is_typecast2t(symbol))
+  {
+    through_pointer |=
+      is_index2t(symbol) && is_pointer_type(to_index2t(symbol).source_value);
     symbol = *symbol->get_sub_expr(0);
+  }
   if (!is_symbol2t(symbol))
     return;
   const irep_idt &name = to_symbol2t(symbol).thename;
-  deft &d =
-    defs[name].emplace_back(symbol == lhs ? def : deft{{}, {}, def.location});
-  d.in_own_loop = in_own_loop;
+  if (!through_pointer)
+    defs[name]
+      .emplace_back(symbol == lhs ? def : deft{{}, {}, def.location})
+      .in_own_loop = in_own_loop;
   if (in_loop)
     looped.insert(name);
   if (in_own_loop)
@@ -1204,6 +1236,121 @@ bool computes_from_operands(const expr2tc &e)
   }
 }
 
+/// A trace that left the iteration read the root before the loop, so it needs
+/// the root's only assignment: the head holds what that assigns.
+bool derivationst::root(queryt &q, const expr2tc &symbol) const
+{
+  const auto it = defs.find(to_symbol2t(symbol).thename);
+  if (q.outside && it != defs.end() && it->second.size() > 1)
+    return false;
+  std::unordered_set<irep_idt, irep_id_hash> seen;
+  if (!settled(q, symbol, seen))
+    return false;
+  q.out.pointers.insert(symbol);
+  if (q.outside)
+    q.out.read_before.insert(symbol);
+  return true;
+}
+
+bool derivationst::settled(
+  queryt &q,
+  const expr2tc &value,
+  std::unordered_set<irep_idt, irep_id_hash> &seen) const
+{
+  if (q.budget == 0)
+    return false;
+  --q.budget;
+  if (is_nil_expr(value) || is_constant_int2t(value))
+    return true;
+  if (is_bv_type(value->type) && q.addressless(value))
+    return true;
+  if (!carries_address(value->type))
+  {
+    std::unordered_set<irep_idt, irep_id_hash> visited;
+    return !may_hold_address(q, value, visited);
+  }
+  if (is_address_of2t(value))
+  {
+    expr2tc object = to_address_of2t(value).ptr_obj;
+    while (is_member2t(object) || is_index2t(object))
+      object = *object->get_sub_expr(0);
+    return !is_dereference2t(object) ||
+           settled(q, to_dereference2t(object).value, seen);
+  }
+  if (is_sideeffect2t(value))
+    return allocates(value) ||
+           to_sideeffect2t(value).kind == sideeffect2t::allockind::nondet;
+  if (is_symbol2t(value))
+  {
+    const irep_idt &name = to_symbol2t(value).thename;
+    if (name == "NULL")
+      return true;
+    if (q.address_taken.count(name))
+      return false;
+    if (!seen.insert(name).second)
+      return true;
+    // An assignment a loop makes leaves the variable unconstrained after the
+    // step's havoc, unless it only offsets a pointer the havoc keeps in its
+    // object.
+    const auto own = owner.find(name);
+    const bool moves =
+      (own == owner.end() ? looped : looped_here).count(name) != 0;
+    const bool kept =
+      moves && own != owner.end() &&
+      keeps_object(own->second, q.address_taken, q.addressless, value);
+    if (moves && !kept)
+      return false;
+    const auto it = defs.find(name);
+    return it == defs.end() ||
+           std::all_of(
+             it->second.begin(), it->second.end(), [&](const deft &d) {
+               return (kept && d.in_own_loop) || settled_def(q, d, seen);
+             });
+  }
+  if (is_typecast2t(value))
+    return settled(q, to_typecast2t(value).from, seen);
+  if (!computes_from_operands(value))
+    return false;
+  bool all = true;
+  value->foreach_operand(
+    [&](const expr2tc &op) { all = all && settled(q, op, seen); });
+  return all;
+}
+
+bool derivationst::settled(
+  const irep_idt &function,
+  const std::unordered_set<irep_idt, irep_id_hash> &address_taken,
+  const addresslesst &addressless,
+  const expr2tc &value) const
+{
+  rootst out;
+  std::unordered_set<irep_idt, irep_id_hash> seen;
+  return query(
+    function, address_taken, iterationt(), addressless, out, [&](queryt &q) {
+      return settled(q, value, seen);
+    });
+}
+
+bool derivationst::settled_def(
+  queryt &q,
+  const deft &def,
+  std::unordered_set<irep_idt, irep_id_hash> &seen) const
+{
+  if (!is_nil_expr(def.value))
+    return settled(q, def.value, seen);
+  if (def.callee.empty())
+    return false;
+  const auto it = returns.find(def.callee);
+  if (it == returns.end())
+    return !has_prefix(def.callee.as_string(), "c:@F@__ESBMC") &&
+           !has_prefix(def.callee.as_string(), "c:@F@__builtin");
+  return !seen.insert(def.callee).second ||
+         std::all_of(
+           it->second.begin(), it->second.end(), [&](const expr2tc &v) {
+             return settled(q, v, seen);
+           });
+}
+
 bool derivationst::trace(queryt &q, const expr2tc &value) const
 {
   if (q.budget == 0)
@@ -1298,26 +1445,17 @@ bool derivationst::trace_symbol(queryt &q, const expr2tc &symbol) const
   if (global || here)
   {
     // check_var_name also rejects goto_convert's temporaries, which are
-    // assigned like any other local.
-    if (
-      !check_var_name(symbol) &&
-      name.as_string().find("::$tmp::") == std::string::npos)
+    // assigned like any other local but are often dead at the loop head.
+    const bool named = check_var_name(symbol);
+    if (!named && name.as_string().find("::$tmp::") == std::string::npos)
       return false;
     // An integer is no address of its own: what it was computed from is.
     if (!moves && is_pointer_type(symbol))
-    {
-      q.out.pointers.insert(symbol);
-      return true;
-    }
+      return named && root(q, symbol);
     if (global || (moves && !q.iteration.reassigned.count(name)))
-    {
-      const bool root =
-        !global && !q.outside && check_var_name(symbol) &&
-        keeps_object(q.function, q.address_taken, q.addressless, symbol);
-      if (root)
-        q.out.pointers.insert(symbol);
-      return root;
-    }
+      return !global && !q.outside && named &&
+             keeps_object(q.function, q.address_taken, q.addressless, symbol) &&
+             root(q, symbol);
   }
   // The step havocs a callee's local at its loop's head, which the
   // assignments below do not show, unless nothing reads that havoc.
@@ -1701,6 +1839,7 @@ struct loop_writest
 {
   loopst &loop;
   const irep_idt &function;
+  const goto_programt &body;
   andersent &points_to;
   const derivationst &derivations;
   /// Whether symex drops a write through a pointer it cannot resolve, which
@@ -1710,7 +1849,57 @@ struct loop_writest
   const iterationt &iteration;
   /// Whether an uncovered write here disables the inductive step.
   bool decides;
+
+  derivationst::addresslesst addressless() const
+  {
+    return [this](const expr2tc &value) {
+      return holds_no_address(points_to, loop, value);
+    };
+  }
 };
+
+/// Whether \p name may be dead at the loop head: a DEAD of it reaches the head
+/// on a path that does not declare it again.
+bool dead_at_head(const loop_writest &w, const irep_idt &name)
+{
+  using targett = goto_programt::const_targett;
+  std::unordered_map<const instructiont *, std::vector<targett>> preds;
+  for (targett it = w.body.instructions.begin();
+       it != w.body.instructions.end();
+       ++it)
+  {
+    goto_programt::const_targetst successors;
+    w.body.get_successors(it, successors);
+    for (const targett &s : successors)
+      preds[&*s].push_back(it);
+  }
+  const targett head = w.loop.get_original_loop_head();
+  std::vector<targett> work{head};
+  std::unordered_set<const instructiont *> seen{&*head};
+  while (!work.empty())
+  {
+    const targett t = work.back();
+    work.pop_back();
+    for (const targett &p : preds[&*t])
+    {
+      if (!seen.insert(&*p).second)
+        continue;
+      if (p->type == DEAD && to_code_dead2t(p->code).value == name)
+        return true;
+      if (!p->is_decl() || to_code_decl2t(p->code).value != name)
+        work.push_back(p);
+    }
+  }
+  return false;
+}
+
+/// Whether symex resolves the objects \p ptr may point to at the loop head,
+/// without which it drops a write through it.
+bool settled_at_head(const loop_writest &w, const expr2tc &ptr)
+{
+  return w.derivations.settled(
+    w.function, w.address_taken, w.addressless(), ptr);
+}
 
 /// What the inductive step havocs to cover a loop's writes through pointers.
 struct covert
@@ -1731,16 +1920,16 @@ bool cover_write(const loop_writest &w, const expr2tc &ptr, covert &cover)
 {
   const targetst t = targets_of(w.points_to, w.loop, ptr);
   rootst roots;
-  const bool derived = w.drops_unresolved &&
-                       w.derivations.roots(
-                         w.function,
-                         w.address_taken,
-                         w.iteration,
-                         [&w](const expr2tc &value) {
-                           return holds_no_address(w.points_to, w.loop, value);
-                         },
-                         ptr,
-                         roots);
+  const bool derived =
+    w.drops_unresolved &&
+    w.derivations.roots(
+      w.function, w.address_taken, w.iteration, w.addressless(), ptr, roots) &&
+    std::none_of(
+      roots.read_before.begin(),
+      roots.read_before.end(),
+      [&w](const expr2tc &root) {
+        return dead_at_head(w, to_symbol2t(root).thename);
+      });
   // An unconstrained pointer writes no named object: symex sends such a write
   // to an invalid object. An empty set is different — no constraint reached
   // the pointer, so the analysis knows nothing about it.
@@ -1839,7 +2028,8 @@ bool havoc_written_objects(const loop_writest &w, loopst::loop_varst &through)
     return !check_var_name(ptr) || names(loop.get_modified_loop_vars(), name) ||
            w.derivations.assigned_in_loop(name) || names(cover.objects, name) ||
            names(clobbered, name) ||
-           (cover.anything && w.address_taken.count(name));
+           (cover.anything && w.address_taken.count(name)) ||
+           (w.drops_unresolved && !settled_at_head(w, ptr));
   };
   for (auto it = std::find_if(pointees.begin(), pointees.end(), moves);
        it != pointees.end();
@@ -2029,12 +2219,7 @@ bool havoc_loop(
   for (const expr2tc &var : havoc_targets(loop))
     if (
       w.derivations.keeps_object(
-        w.function,
-        w.address_taken,
-        [&w](const expr2tc &value) {
-          return holds_no_address(w.points_to, w.loop, value);
-        },
-        var))
+        w.function, w.address_taken, w.addressless(), var))
       havocs.pins.emplace_back(var, typecast2tc(var->type, at_any_offset(var)));
     else
       havocs.vars.push_back(var);
@@ -2198,6 +2383,7 @@ bool goto_k_induction(
           it->second,
           {loop,
            it->first,
+           it->second.body,
            points_to,
            derivations,
            drops_unresolved,
