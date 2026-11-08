@@ -550,6 +550,10 @@ private:
     expr2tc &value,
     const expr2tc &offset,
     const type2tc &type);
+  void construct_from_bytes(
+    expr2tc &value,
+    const expr2tc &offset,
+    const type2tc &type);
   void construct_from_dyn_offset(
     expr2tc &value,
     const expr2tc &offset,
