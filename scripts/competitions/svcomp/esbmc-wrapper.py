@@ -621,6 +621,16 @@ def deeper_context_bound_command(esbmc_command_line, the_output):
   return esbmc_command_line.replace(CONTEXT_BOUND_FLAG, DEEPER_CONTEXT_BOUND_FLAG)
 
 
+def retry_pruned_success(esbmc_command_line, the_output, prop, elapsed):
+  """SUCCESSFUL, or the violation a larger context bound finds in the time left."""
+  deeper = deeper_context_bound_command(esbmc_command_line, the_output)
+  budget = TOTAL_BUDGET - elapsed
+  if deeper is None or budget < MIN_RERUN_BUDGET:
+    return Result.success
+  deeper_res = parse_result(run(deeper, budget).decode(), prop)
+  return deeper_res if Result.is_fail(deeper_res) else Result.success
+
+
 def has_invariants(witness_path):
   """Whether the YAML names an `invariant` in any style (block, flow, JSON).
   A comment naming one also counts, which only keeps loops rolled."""
@@ -661,12 +671,7 @@ def verify(strat, prop, arch, benchmark, concurrency, dargs, esbmc_ci, witness_p
   elapsed = time.monotonic() - started
   res = parse_result(output.decode(), prop)
   if res == Result.success and concurrency and not witness_path:
-    deeper = deeper_context_bound_command(esbmc_command_line, output.decode())
-    budget = TOTAL_BUDGET - elapsed
-    if deeper is not None and budget >= MIN_RERUN_BUDGET:
-      deeper_res = parse_result(run(deeper, budget).decode(), prop)
-      if Result.is_fail(deeper_res):
-        return deeper_res
+    res = retry_pruned_success(esbmc_command_line, output.decode(), prop, elapsed)
   if res == Result.fail_python and not confirmed_by_integer_encoding(esbmc_command_line, output.decode(), prop, elapsed):
     return Result.unknown
   return res
