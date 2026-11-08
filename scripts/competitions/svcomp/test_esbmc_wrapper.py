@@ -976,35 +976,22 @@ class TestCompRunTest(unittest.TestCase):
         self.assertNotIn("--force-malloc-success", out)
 
 
-class ReachValidationUnwindTest(unittest.TestCase):
-    """Correctness validation unrolls loops only when the witness has no
-    invariants, such as ESBMC's own; violation validation never does."""
+class ReachNoUnwindTest(unittest.TestCase):
+    """SV-COMP reachability keeps every loop rolled, in verification and in
+    both kinds of witness validation."""
 
-    UNROLL = "--goto-unwind --unlimited-goto-unwind"
-    ESBMC = '- entry_type: "invariant_set"\n  content:\n    []\n'
-    BLOCK = ('- entry_type: "invariant_set"\n  content:\n'
-             '    - invariant:\n        type: "loop_invariant"\n        value: "i <= 5"\n')
-    FLOW = '[{entry_type: invariant_set, content: [{invariant: {type: loop_invariant, value: i <= 5}}]}]\n'
-    JSON = '[{"entry_type": "invariant_set", "content": [{"invariant": {"type": "loop_invariant"}}]}]\n'
-
-    def command(self, witness, mode):
+    def command(self, mode):
         with tempfile.NamedTemporaryFile("w", suffix=".yml") as w:
-            w.write(witness)
+            w.write('- entry_type: "invariant_set"\n  content:\n    []\n')
             w.flush()
             return dry_run(UNREACH_CALL, "--witness", w.name, "--validate-" + mode + "-witness")
 
-    def test_verification_unrolls(self):
-        self.assertIn(self.UNROLL, dry_run(UNREACH_CALL))
+    def test_verification_keeps_loops(self):
+        self.assertNotIn("--goto-unwind", dry_run(UNREACH_CALL))
 
-    def test_invariant_free_correctness_witness_unrolls(self):
-        self.assertIn(self.UNROLL, self.command(self.ESBMC, "correctness"))
-
-    def test_invariants_keep_loops_in_every_yaml_style(self):
-        for witness in (self.BLOCK, self.FLOW, self.JSON):
-            self.assertNotIn("--goto-unwind", self.command(witness, "correctness"), witness)
-
-    def test_violation_validation_keeps_loops(self):
-        self.assertNotIn("--goto-unwind", self.command(self.ESBMC, "violation"))
+    def test_validation_keeps_loops(self):
+        for mode in ("correctness", "violation"):
+            self.assertNotIn("--goto-unwind", self.command(mode), mode)
 
 
 class PthreadDetectionTest(unittest.TestCase):
