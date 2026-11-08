@@ -1,4 +1,4 @@
 import numpy as np
 
-x = nondet_float()
-y = np.expm1(x, where=True)
+y = np.expm1(1.0, casting="no")
+assert y < 1.0

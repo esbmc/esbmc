@@ -1,4 +1,4 @@
 CORE
 main.py
 --incremental-bmc
-^ERROR: TypeError: numpy.expm1\(\) keyword 'where' is not supported$
+^ERROR: TypeError: numpy.expm1\(\) keyword 'casting' is not supported$
