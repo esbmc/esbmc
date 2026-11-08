@@ -1,0 +1,5 @@
+CORE
+main.c
+--no-bounds-check --unwind 13
+^VERIFICATION FAILED$
+^  assertion s\.x == 5$

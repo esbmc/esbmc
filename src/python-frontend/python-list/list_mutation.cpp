@@ -404,6 +404,11 @@ size_t literal_subscript_index(const nlohmann::json &subscript)
 }
 } // namespace
 
+bool python_list::is_element_store_target(const exprt &lhs)
+{
+  return list_item_of_store_target(lhs) != nullptr;
+}
+
 void python_list::record_element_store(
   const nlohmann::json &subscript,
   const std::string &elem_id,
