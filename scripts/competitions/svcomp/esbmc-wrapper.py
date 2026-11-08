@@ -568,6 +568,12 @@ MIN_RERUN_BUDGET = 30
 # task.
 KIND_OVERFLOW_TIMEOUT = 60
 KIND_OVERFLOW_MEMLIMIT = "2500m"
+# Bounds for the inductive step's havoced loop variables. Assuming the overflow
+# checks keeps a counter's bound when widening sends the other one to infinity.
+KIND_OVERFLOW_INTERVALS = ("--interval-analysis --interval-analysis-arithmetic "
+                           "--interval-analysis-extrapolate "
+                           "--interval-analysis-extrapolate-under-approximate "
+                           "--interval-analysis-assume-asserts ")
 
 
 def confirmed_by_integer_encoding(esbmc_command_line, the_output, prop, elapsed):
@@ -633,7 +639,7 @@ def verify(strat, prop, arch, benchmark, concurrency, dargs, esbmc_ci, witness_p
     # stops this run before it reaches the competition's limit, which would
     # end the task instead.
     memlimit = "--memlimit " + KIND_OVERFLOW_MEMLIMIT + " "
-    output = run(esbmc_command_line + memlimit, KIND_OVERFLOW_TIMEOUT)
+    output = run(esbmc_command_line + memlimit + KIND_OVERFLOW_INTERVALS, KIND_OVERFLOW_TIMEOUT)
     res = parse_result(output.decode(), prop)
     if res in (Result.success, Result.fail_overflow):
       return res
