@@ -571,6 +571,21 @@ bool python_converter::function_has_missing_return_paths(
   return true; // No explicit return found
 }
 
+/// Constructors ("constructor" return type) and library/import models, whose
+/// void calls exist only for side effects, are left as-is; a module the program
+/// imports is promoted unless is_model_file() says it is a model (#10112).
+/// Generators (functions containing `yield`) also have an empty return type
+/// here but do NOT implicitly return None — calling one yields a generator
+/// object — so they must not be promoted.
+bool python_converter::returns_implicit_none(
+  const nlohmann::json &function_node,
+  const code_typet &type)
+{
+  return type.return_type().is_empty() && !is_loading_models &&
+         !(is_importing_module && is_model_file(function_node)) &&
+         !function_is_generator(function_node);
+}
+
 bool python_converter::function_is_generator(
   const nlohmann::json &function_node)
 {
@@ -7219,17 +7234,8 @@ void python_converter::get_function_definition(
   // returns None. Model such a function as returning none_type() and append an
   // explicit `return None`, so a caller that binds the result (`x = f()`) gets
   // a defined None value rather than a nondet slot — matching the already-
-  // correct `return None` path (issue #5914). Constructors ("constructor"
-  // return type) and library/import models, whose void calls exist only for
-  // side effects, are left as-is; a module the program imports is promoted
-  // unless is_model_file() says it is a model (#10112). Generators (functions
-  // containing `yield`) also have an empty return type here but do NOT
-  // implicitly return None — calling one yields a generator object — so they
-  // must not be promoted.
-  if (
-    type.return_type().is_empty() && !is_loading_models &&
-    !(is_importing_module && is_model_file(function_node)) &&
-    !function_is_generator(function_node))
+  // correct `return None` path (issue #5914).
+  if (returns_implicit_none(function_node, type))
   {
     type.return_type() = none_type();
     python_expr::set_function_type(*added_symbol, type);
