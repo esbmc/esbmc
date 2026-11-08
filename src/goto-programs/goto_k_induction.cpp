@@ -837,10 +837,12 @@ struct iterationt
 /// global that no loop assigns, or a local of the loop's function that none
 /// of its loops assigns, whose address nothing takes is never havoced and
 /// keeps one value throughout the loop, so every object a write derived from
-/// it reaches is one it points to at the head. A local the loop reassigns
-/// before every read is traced through its assignments in the body. An object
-/// allocated on the way was allocated in the same iteration, which the step
-/// executes, so it needs no havoc.
+/// it reaches is one it points to at the head. So is a pointer that every loop
+/// of its function only offsets: the step havocs it within the object it holds
+/// at the head (see keeps_object). A local the loop reassigns before every
+/// read is traced through its assignments in the body. An object allocated on
+/// the way was allocated in the same iteration, which the step executes, so it
+/// needs no havoc.
 class derivationst
 {
 public:
@@ -964,7 +966,6 @@ private:
   bool trace(queryt &q, const expr2tc &value) const;
   /// Whether \p value is \p name moved by offsets that hold no address.
   bool offsets(queryt &q, const expr2tc &value, const irep_idt &name) const;
-  bool moves_by_offsets(queryt &q, const irep_idt &name) const;
   bool trace_address(queryt &q, expr2tc object) const;
   bool trace_symbol(queryt &q, const expr2tc &symbol) const;
   bool trace_def(queryt &q, const deft &def) const;
@@ -1112,17 +1113,25 @@ bool derivationst::keeps_object(
   const addresslesst &addressless,
   const expr2tc &symbol) const
 {
-  if (!is_symbol2t(symbol) || !is_pointer_type(symbol))
+  if (
+    !is_symbol2t(symbol) || !is_pointer_type(symbol) ||
+    !carries_address(symbol->type))
     return false;
   const irep_idt &name = to_symbol2t(symbol).thename;
   const auto own = owner.find(name);
+  const auto it = defs.find(name);
   if (
-    own == owner.end() || own->second != function || address_taken.count(name))
+    own == owner.end() || own->second != function ||
+    address_taken.count(name) || it == defs.end())
     return false;
   rootst out;
   return query(
     function, address_taken, iterationt(), addressless, out, [&](queryt &q) {
-      return moves_by_offsets(q, name);
+      return std::all_of(
+        it->second.begin(), it->second.end(), [&](const deft &d) {
+          return !d.in_own_loop ||
+                 (!is_nil_expr(d.value) && offsets(q, d.value, name));
+        });
     });
 }
 
@@ -1157,7 +1166,7 @@ bool derivationst::offsets(
   const expr2tc &value,
   const irep_idt &name) const
 {
-  if (is_typecast2t(value))
+  if (is_typecast2t(value) && carries_address(value->type))
     return offsets(q, to_typecast2t(value).from, name);
   if (is_symbol2t(value))
     return to_symbol2t(value).thename == name;
@@ -1169,24 +1178,11 @@ bool derivationst::offsets(
   const expr2tc &a = *value->get_sub_expr(0);
   const expr2tc &b = *value->get_sub_expr(1);
   const auto addressless = [&](const expr2tc &offset) {
-    rootst roots;
-    queryt sub = q.sub(roots);
-    return trace(sub, offset) && roots.empty();
+    std::unordered_set<irep_idt, irep_id_hash> seen;
+    return !may_hold_address(q, offset, seen);
   };
   return (offsets(q, a, name) && addressless(b)) ||
          (is_add2t(value) && offsets(q, b, name) && addressless(a));
-}
-
-/// A loop that assigns only offsets of a pointer leaves it in the object it
-/// pointed to on entry, at an offset the havoc may leave free.
-bool derivationst::moves_by_offsets(queryt &q, const irep_idt &name) const
-{
-  const auto it = defs.find(name);
-  return it != defs.end() &&
-         std::all_of(it->second.begin(), it->second.end(), [&](const deft &d) {
-           return !d.in_own_loop ||
-                  (!is_nil_expr(d.value) && offsets(q, d.value, name));
-         });
 }
 
 /// Whether \p e holds no address but those its operands hold.
@@ -1315,10 +1311,9 @@ bool derivationst::trace_symbol(queryt &q, const expr2tc &symbol) const
     }
     if (global || (moves && !q.iteration.reassigned.count(name)))
     {
-      // The havoc moves it within the object it holds at the head, which
-      // is havoced whole (see keeps_object).
-      const bool root = !global && !q.outside && is_pointer_type(symbol) &&
-                        check_var_name(symbol) && moves_by_offsets(q, name);
+      const bool root =
+        !global && !q.outside && check_var_name(symbol) &&
+        keeps_object(q.function, q.address_taken, q.addressless, symbol);
       if (root)
         q.out.pointers.insert(symbol);
       return root;
@@ -1864,6 +1859,14 @@ bool havoc_written_objects(const loop_writest &w, loopst::loop_varst &through)
   return true;
 }
 
+/// \p ptr at any offset into the object it points to.
+expr2tc at_any_offset(const expr2tc &ptr)
+{
+  const type2tc bytes = pointer_type2tc(get_uint8_type());
+  return add2tc(
+    bytes, typecast2tc(bytes, ptr), gen_nondet(signed_size_type2()));
+}
+
 /// A value of \p type with the provenance \p t allows: an address into one of
 /// its named objects at any offset, NULL, or, when the pointer may be
 /// unconstrained, anything. The offset is unbounded, so an integer keeps its
@@ -1880,21 +1883,9 @@ expr2tc pinned_value(const type2tc &type, const targetst &t)
     value = if2tc(
       bytes,
       gen_nondet(get_bool_type()),
-      add2tc(
-        bytes,
-        typecast2tc(bytes, address_of2tc(obj->type, obj)),
-        gen_nondet(signed_size_type2())),
+      at_any_offset(address_of2tc(obj->type, obj)),
       value);
   return typecast2tc(type, value);
-}
-
-/// \p ptr at any offset into the object it points to.
-expr2tc offset_within_object(const expr2tc &ptr)
-{
-  const type2tc bytes = pointer_type2tc(get_uint8_type());
-  return typecast2tc(
-    ptr->type,
-    add2tc(bytes, typecast2tc(bytes, ptr), gen_nondet(signed_size_type2())));
 }
 
 /// Adds to \p pins an assignment of a \p t value to each address \p lvalue
@@ -2042,7 +2033,7 @@ bool havoc_loop(
           return holds_no_address(w.points_to, w.loop, value);
         },
         var))
-      havocs.pins.emplace_back(var, offset_within_object(var));
+      havocs.pins.emplace_back(var, typecast2tc(var->type, at_any_offset(var)));
     else
       havocs.vars.push_back(var);
   if (loop.writes_through_pointer() && !pin_havoced_pointers(w, havocs.pins))
