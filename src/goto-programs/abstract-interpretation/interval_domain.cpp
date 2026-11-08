@@ -975,7 +975,10 @@ void interval_domaint::transform(
     break;
 
   case ASSIGN:
-    assign(instruction.code);
+    if (is_dereference2t(to_code_assign2t(instruction.code).target))
+      havoc_through_pointer(&ai);
+    else
+      assign(instruction.code);
     break;
 
   case GOTO:
@@ -1027,7 +1030,7 @@ void interval_domaint::transform(
     break;
 
   case FUNCTION_CALL:
-    havoc_written_arguments(to_code_function_call2t(instruction.code));
+    havoc_written_arguments(to_code_function_call2t(instruction.code), &ai);
     break;
 
   case END_FUNCTION:
@@ -1395,7 +1398,22 @@ bool interval_domaint::havoc_pointee(const expr2tc &arg, bool any_type)
   return !is_pointer_type(arg) && !any_type;
 }
 
-void interval_domaint::havoc_written_arguments(const code_function_call2t &call)
+void interval_domaint::havoc_through_pointer(const ai_baset *ai)
+{
+  const auto *taken = ai ? ai->address_taken() : nullptr;
+  if (!taken)
+  {
+    clear_state();
+    return;
+  }
+  copy_if_needed();
+  for (auto it = intervals->begin(); it != intervals->end();)
+    it = taken->count(it->first) ? intervals->erase(it) : std::next(it);
+}
+
+void interval_domaint::havoc_written_arguments(
+  const code_function_call2t &call,
+  const ai_baset *ai)
 {
   if (!is_symbol2t(call.function))
     return;
@@ -1410,7 +1428,7 @@ void interval_domaint::havoc_written_arguments(const code_function_call2t &call)
       !is_nil_expr(call.operands[i]) &&
       !havoc_pointee(call.operands[i], any_type))
     {
-      clear_state();
+      havoc_through_pointer(ai);
       return;
     }
 }

@@ -232,7 +232,13 @@ public:
 
   /// Forget what a body-less call that symex models may write through its
   /// pointer arguments (#8083).
-  void havoc_written_arguments(const code_function_call2t &call);
+  void havoc_written_arguments(
+    const code_function_call2t &call,
+    const ai_baset *ai = nullptr);
+
+  /// Forgets what a write through an unknown pointer may change: what \p ai
+  /// found address-taken, or everything without it.
+  void havoc_through_pointer(const ai_baset *ai);
 
   /// Havoc the variable @p arg points into; false when that is unknown and
   /// @p arg, a pointer or @p any_type, may still have been written through.

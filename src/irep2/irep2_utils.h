@@ -475,6 +475,12 @@ void get_symbols(
   const expr2tc &expr,
   std::unordered_set<expr2tc, irep2_hash> &symbols);
 
+/// Add to @p out the symbol under every member, index and cast an address_of
+/// in @p expr takes the address of.
+void get_address_taken(
+  const expr2tc &expr,
+  std::unordered_set<irep_idt, irep_id_hash> &out);
+
 /** Insert a zero operand at each reserved padding-member position so a struct
  *  literal's operand list matches its type's component list, exactly as
  *  clang_c_adjust::adjust_struct's insertion loop does. IREP2 carries no
