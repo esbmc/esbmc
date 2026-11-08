@@ -601,6 +601,9 @@ public:
 
   bool has_shared_payload(const typet &type) const;
 
+  /// Whether @p lhs is a list subscript target `*(T *)item->value`.
+  static bool is_element_store_target(const exprt &lhs);
+
   /// Allocates the instance a constructor stores to @p lhs and returns the
   /// pointer to pass as `self`.
   exprt allocate_constructed_object(const exprt &lhs);
