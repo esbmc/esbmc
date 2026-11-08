@@ -1,0 +1,4 @@
+CORE
+main.c
+--64 --z3 --smt-symex-guard --cswitch-skip-readonly-globals --no-pointer-check --no-bounds-check --data-races-check-only --no-assertions --context-bound 4
+^VERIFICATION SUCCESSFUL$

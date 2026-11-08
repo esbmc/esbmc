@@ -570,6 +570,10 @@ KIND_OVERFLOW_TIMEOUT = 60
 KIND_OVERFLOW_MEMLIMIT = "2500m"
 
 
+CONTEXT_BOUND_FLAG = "--context-bound 3 "
+DEEPER_CONTEXT_BOUND_FLAG = "--context-bound 5 "
+
+
 def confirmed_by_integer_encoding(esbmc_command_line, the_output, prop, elapsed):
   """Does a --ir re-run violate the same property at the same file and line?
 
@@ -600,6 +604,21 @@ def confirmed_by_integer_encoding(esbmc_command_line, the_output, prop, elapsed)
   if parse_result(rerun, prop) != Result.fail_python:
     return False
   return violation_site(rerun) == site or site in failed_sites(rerun)
+
+
+def deeper_context_bound_command(esbmc_command_line, the_output):
+  """The command to retry a pruned SUCCESSFUL run with a larger context bound.
+
+  `--context-bound` drops every schedule beyond the bound yet still ends in
+  SUCCESSFUL, so a race that needs more context switches is reported true
+  (#8220). None when the run pruned nothing or already ran at the larger bound.
+  """
+  pruned = re.search(r"pruned_by_cs_bound (\d+)", the_output)
+  if pruned is None or int(pruned.group(1)) == 0:
+    return None
+  if CONTEXT_BOUND_FLAG not in esbmc_command_line:
+    return None
+  return esbmc_command_line.replace(CONTEXT_BOUND_FLAG, DEEPER_CONTEXT_BOUND_FLAG)
 
 
 def has_invariants(witness_path):
@@ -641,6 +660,13 @@ def verify(strat, prop, arch, benchmark, concurrency, dargs, esbmc_ci, witness_p
   output = run(esbmc_command_line)
   elapsed = time.monotonic() - started
   res = parse_result(output.decode(), prop)
+  if res == Result.success and concurrency and not witness_path:
+    deeper = deeper_context_bound_command(esbmc_command_line, output.decode())
+    budget = TOTAL_BUDGET - elapsed
+    if deeper is not None and budget >= MIN_RERUN_BUDGET:
+      deeper_res = parse_result(run(deeper, budget).decode(), prop)
+      if Result.is_fail(deeper_res):
+        return deeper_res
   if res == Result.fail_python and not confirmed_by_integer_encoding(esbmc_command_line, output.decode(), prop, elapsed):
     return Result.unknown
   return res

@@ -555,6 +555,38 @@ class FailedSitesTest(unittest.TestCase):
             self.assertNotIn(passed, {line for _, line in sites})
 
 
+class DeeperContextBoundTest(unittest.TestCase):
+    """A SUCCESSFUL run that pruned schedules is retried at a larger bound."""
+
+    CMD = "esbmc t.c --64 --context-bound 3 --falsify-context-bound 1 --incremental-bmc "
+
+    def test_a_pruned_run_is_retried_at_the_larger_bound(self):
+        out = "Schedule reduction: peak_threads 4, pruned_by_cs_bound 271298\nVERIFICATION SUCCESSFUL\n"
+        deeper = wrapper.deeper_context_bound_command(self.CMD, out)
+        self.assertEqual(deeper, self.CMD.replace("--context-bound 3 ", "--context-bound 5 "))
+
+    def test_a_run_that_pruned_nothing_is_final(self):
+        out = "Schedule reduction: peak_threads 2, pruned_by_cs_bound 0\nVERIFICATION SUCCESSFUL\n"
+        self.assertIsNone(wrapper.deeper_context_bound_command(self.CMD, out))
+
+    def test_a_run_without_the_bound_is_final(self):
+        out = "pruned_by_cs_bound 5\nVERIFICATION SUCCESSFUL\n"
+        self.assertIsNone(wrapper.deeper_context_bound_command("esbmc t.c --64 ", out))
+
+    def test_the_larger_bound_finds_the_reused_thread_id_race(self):
+        esbmc = os.environ.get("ESBMC")
+        if not esbmc:
+            self.skipTest("set ESBMC to the esbmc binary")
+        src = os.path.join(os.path.dirname(__file__), "..", "..", "..", "regression", "esbmc",
+                           "data_race_reused_thread_id_cb_fail", "main.c")
+        flags = ("--64 --z3 --smt-symex-guard --cswitch-skip-readonly-globals --no-pointer-check "
+                 "--no-bounds-check --data-races-check-only --no-assertions ")
+        for bound, verdict in (("3", "VERIFICATION SUCCESSFUL"), ("4", "VERIFICATION FAILED")):
+            res = subprocess.run(f"{esbmc} {src} {flags}--context-bound {bound}", shell=True,
+                                 capture_output=True, text=True, timeout=600)
+            self.assertIn(verdict, res.stdout + res.stderr)
+
+
 class IntegerEncodingConfirmationTest(unittest.TestCase):
     """A Python violation stays FALSE only if a --ir re-run repeats it in place."""
 
