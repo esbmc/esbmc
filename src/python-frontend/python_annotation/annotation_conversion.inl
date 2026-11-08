@@ -2734,24 +2734,49 @@ static bool binds_name_in(const Json *scope, const std::string &name)
 
 /// Whether `name` is a variable that may hold a function or a callable
 /// instance, whose calls the converter types instead.
-template <class Json>
-bool python_annotation<Json>::holds_callable_value(
-  const std::string &name) const
+/// Whether a statement in `stmts`, or in a module-level `if`, `try`, loop or
+/// `with` block under them, assigns `name` (g = f).
+static bool assigns_name_at_module_level(
+  const nlohmann::json &stmts,
+  const std::string &name)
 {
-  const nlohmann::json &body =
-    static_cast<const nlohmann::json &>(ast_["body"]);
-  for (const auto &stmt : body)
+  for (const auto &stmt : stmts)
   {
-    if (!stmt.contains("_type"))
-      continue;
-    const std::string &stype = stmt["_type"];
-    // Top-level assignment: g = f
+    const std::string stype = stmt.value("_type", "");
     if (stype == "Assign" && stmt.contains("targets"))
     {
       for (const auto &t : stmt["targets"])
         if (t.contains("id") && t["id"] == name)
           return true;
     }
+    if (stype == "FunctionDef" || stype == "ClassDef")
+      continue;
+    for (const char *field : {"body", "orelse", "finalbody"})
+      if (
+        stmt.contains(field) && stmt[field].is_array() &&
+        assigns_name_at_module_level(stmt[field], name))
+        return true;
+    if (stmt.contains("handlers"))
+      for (const auto &handler : stmt["handlers"])
+        if (assigns_name_at_module_level(handler["body"], name))
+          return true;
+  }
+  return false;
+}
+
+template <class Json>
+bool python_annotation<Json>::holds_callable_value(
+  const std::string &name) const
+{
+  const nlohmann::json &body =
+    static_cast<const nlohmann::json &>(ast_["body"]);
+  if (assigns_name_at_module_level(body, name))
+    return true;
+  for (const auto &stmt : body)
+  {
+    if (!stmt.contains("_type"))
+      continue;
+    const std::string &stype = stmt["_type"];
     // A callable instance: s = S() is already annotated as s: S
     if (
       stype == "AnnAssign" && stmt["target"].value("id", "") == name &&
