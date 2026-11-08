@@ -7,6 +7,7 @@ regression/esbmc/github_9937_byte_fail
 regression/esbmc/github_9937_byte_keep
 regression/esbmc/github_9937_byte_keep_fail
 regression/esbmc/github_9937_fail
+regression/esbmc/github_9937_int_array_fail
 regression/esbmc/github_9937_later_step_fail
 regression/esbmc/github_9937_nested
 regression/esbmc/github_9937_nested_fail
