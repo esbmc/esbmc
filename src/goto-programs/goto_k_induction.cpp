@@ -1588,7 +1588,7 @@ bool outside_the_loop(
 }
 
 /// Adds to \p excluded what a loop nested in the body assigns: it havocs that
-/// at its own head.
+/// at its own head, unless check_var_name keeps it out of every havoc.
 void exclude_nested_loops(
   const loop_bodyt &loop,
   const std::vector<irep_idt> &assigned,
@@ -1598,7 +1598,9 @@ void exclude_nested_loops(
     for (const auto &t : loop.body[i]->targets)
       if (const auto f = loop.inner(t); f && *f <= i)
         for (size_t j = *f; j <= i; ++j)
-          if (!assigned[j].empty())
+          if (
+            !assigned[j].empty() &&
+            check_var_name(symbol2tc(get_empty_type(), assigned[j])))
             excluded.insert(assigned[j]);
 }
 
