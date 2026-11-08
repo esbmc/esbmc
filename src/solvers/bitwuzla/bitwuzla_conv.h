@@ -175,6 +175,12 @@ public:
   bitwuzla::Options bitw_options;
   std::unique_ptr<bitwuzla::Bitwuzla> bitw;
 
+  /** Set when check_sat ran out of memory; the solver is then not destroyed. */
+  bool out_of_memory = false;
+
+  template <typename callt>
+  bitwuzla::Result check_sat_noting_oom(callt call);
+
   symtabt symtable;
 
   /** Uninterpreted-function declarations, keyed by name. Bitwuzla mints a fresh

@@ -66,7 +66,14 @@ bitwuzla_convt::bitwuzla_convt(const namespacet &ns, const optionst &options)
   bitw = std::make_unique<bitwuzla::Bitwuzla>(tm, bitw_options);
 }
 
-bitwuzla_convt::~bitwuzla_convt() = default;
+bitwuzla_convt::~bitwuzla_convt()
+{
+  /* Bitwuzla is left half-updated when an allocation fails inside it, and
+   * destroying it then crashes (#10054). The process is about to report the
+   * out-of-memory and stop, so leak the solver. */
+  if (out_of_memory)
+    (void)bitw.release();
+}
 
 void bitwuzla_convt::push_ctx()
 {
@@ -83,11 +90,26 @@ void bitwuzla_convt::pop_ctx()
   smt_solver_baset::pop_ctx();
 }
 
+template <typename callt>
+bitwuzla::Result bitwuzla_convt::check_sat_noting_oom(callt call)
+{
+  try
+  {
+    return call();
+  }
+  catch (const std::bad_alloc &)
+  {
+    out_of_memory = true;
+    throw;
+  }
+}
+
 smt_resultt bitwuzla_convt::dec_solve()
 {
   pre_solve();
 
-  bitwuzla::Result result = bitw->check_sat();
+  bitwuzla::Result result =
+    check_sat_noting_oom([&] { return bitw->check_sat(); });
 
   if (result == bitwuzla::Result::SAT)
     return P_SATISFIABLE;
@@ -106,7 +128,8 @@ smt_resultt bitwuzla_convt::dec_solve_assuming(const ast_vec &assumptions)
   for (smt_astt a : assumptions)
     terms.push_back(to_solver_smt_ast<bitw_smt_ast>(a)->a);
 
-  bitwuzla::Result result = bitw->check_sat(terms);
+  bitwuzla::Result result =
+    check_sat_noting_oom([&] { return bitw->check_sat(terms); });
   if (result == bitwuzla::Result::SAT)
     return P_SATISFIABLE;
   if (result == bitwuzla::Result::UNSAT)
