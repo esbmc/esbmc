@@ -123,7 +123,7 @@ smt_resultt z3_convt::dec_solve_assuming(const ast_vec &assumptions)
   return P_ERROR;
 }
 
-void z3_convt::assert_ast(smt_astt a)
+void z3_convt::assert_ast_in_solver(smt_astt a)
 {
   z3::expr theval = to_solver_smt_ast<z3_smt_ast>(a)->a;
   solver.add(theval);

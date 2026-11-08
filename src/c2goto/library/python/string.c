@@ -1128,6 +1128,7 @@ __ESBMC_HIDE:;
 
   list->type = NULL;
   list->is_tuple = false;
+  list->may_nest = &__ESBMC_list_nest_no;
   list->items = items;
   list->size = count;
   return list;

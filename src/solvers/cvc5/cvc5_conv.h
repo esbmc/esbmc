@@ -161,7 +161,7 @@ public:
   smt_astt
   convert_array_of(smt_astt init_val, unsigned long domain_width) override;
 
-  void assert_ast(smt_astt a) override;
+  void assert_ast_in_solver(smt_astt a) override;
 
   std::string dump_smt() override;
 

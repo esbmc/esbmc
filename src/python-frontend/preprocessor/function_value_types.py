@@ -19,6 +19,9 @@ import ast
 import os
 
 _NUMERIC = {"bool", "int", "float", "num"}
+# Builtins and attributes that reach module names other than by name.
+_REFLECTIVE = {"globals", "locals", "vars", "eval", "exec", "__import__"}
+_REFLECTIVE_ATTRS = {"modules", "__dict__", "__globals__"}
 _NONDET_PREFIX = "nondet_"
 _SHOWN = {"num": "int or float", "function": "a function"}
 # Operators no str, list or set supports, so their result is a number.
@@ -87,6 +90,26 @@ def _own_nodes(node):
         stack.extend(ast.iter_child_nodes(current))
 
 
+def _bound_names(nodes):
+    """Every name that `nodes` read or bind, in any scope."""
+    names = set()
+    for top in nodes:
+        for node in ast.walk(top):
+            if isinstance(node, ast.Name):
+                names.add(node.id)
+            elif isinstance(node, ast.arg):
+                names.add(node.arg)
+            elif isinstance(node, ast.alias):
+                names.add(node.asname or node.name.split(".")[0])
+            elif isinstance(node, (ast.Global, ast.Nonlocal)):
+                names.update(node.names)
+            elif isinstance(getattr(node, "name", None), str):
+                names.add(node.name)
+            elif isinstance(getattr(node, "rest", None), str):
+                names.add(node.rest)
+    return names
+
+
 class _Analysis:
     """The groups of values that function values flow through in one module."""
 
@@ -105,6 +128,7 @@ class _Analysis:
         self.kind_stack = set()
         self.seen_calls = set()
         self.from_imports = {}
+        self.star_names = {}
         self.loaded = {}
         self.module_paths = {}
         self.imported_calls = set()
@@ -158,8 +182,7 @@ class _Analysis:
                 continue
             elif isinstance(sub, ast.ImportFrom) and sub.level == 0 and self._local_module(
                     sub.module or ""):
-                self.from_imports.setdefault(path, {}).update(
-                    (alias.asname or alias.name, (sub.module, alias.name)) for alias in sub.names)
+                self.from_imports.setdefault(path, {}).update(self._from_import_bindings(sub))
             elif isinstance(sub, ast.Import):
                 imports = self.imports.setdefault(path, {})
                 for alias in sub.names:
@@ -178,6 +201,41 @@ class _Analysis:
                 self.methods.setdefault(member.name, []).append(member)
                 self._collect_scopes(member, scope, path)
 
+    def _from_import_bindings(self, node):
+        """The (module, name) pair each name a `from` import of a local module binds."""
+        for alias in node.names:
+            if alias.name != "*":
+                yield alias.asname or alias.name, (node.module, alias.name)
+                continue
+            for name in self.star_imported_names(node) or ():
+                yield name, (node.module, name)
+
+    def star_imported_names(self, node):
+        """A superset of the names `from m import *` binds, or None when they are not
+        known: m is a package or not next to the program, may narrow them with
+        `__all__`, binds names through a string, or star-imports another module."""
+        path = self._local_module(node.module or "") if node.level == 0 else None
+        if path is None or os.path.basename(path) == "__init__.py":
+            return None
+        if path not in self.star_names:
+            self.star_names[path] = self._public_names(path)
+        return self.star_names[path]
+
+    @staticmethod
+    def _public_names(path):
+        try:
+            with open(path, "rb") as src:
+                tree = ast.parse(src.read())
+        except (OSError, SyntaxError, UnicodeDecodeError, ValueError):
+            return None
+        nodes = list(ast.walk(tree))
+        names = _bound_names([tree])
+        if "*" in names or names & (_REFLECTIVE | {"__all__", "setattr"}) or any(
+                isinstance(n, ast.Attribute) and n.attr in _REFLECTIVE_ATTRS
+                or isinstance(n, ast.Constant) and n.value == "__all__" for n in nodes):
+            return None
+        return {name for name in names if not name.startswith("_")}
+
     def _local_module(self, dotted):
         """The source file of a module next to the program, or None."""
         base = os.path.join(self.dir, *dotted.split("."))
@@ -189,7 +247,7 @@ class _Analysis:
     def _load(self, path):
         """The parsed module at `path`, with the values in its functions recorded."""
         if path not in self.loaded:
-            with open(path, encoding="utf-8") as src:
+            with open(path, "rb") as src:
                 tree = ast.parse(src.read())
             self.loaded[path] = tree
             self.module_paths[id(tree)] = path

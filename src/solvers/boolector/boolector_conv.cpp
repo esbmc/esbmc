@@ -100,7 +100,7 @@ const std::string boolector_convt::solver_text()
   return ss;
 }
 
-void boolector_convt::assert_ast(smt_astt a)
+void boolector_convt::assert_ast_in_solver(smt_astt a)
 {
   boolector_assert(btor, to_solver_smt_ast<btor_smt_ast>(a)->a);
 }

@@ -110,7 +110,8 @@ later asks for a verdict.  The sequence of calls is:
     smt_convt::assert_expr(expr2tc)
         └─> convert_ast(expr2tc)              // defined in smt_conv.cpp
                 └─> mk_* family               // your overrides build native terms
-        └─> assert_ast(smt_astt)              // your override hands term to solver
+        └─> assert_ast(smt_astt)
+                └─> assert_ast_in_solver      // your override hands term to solver
 
     ... repeat for every SSA assertion ...
 
@@ -182,7 +183,7 @@ reference and the wiki as background.
    `abort()`.  Without them the class will not instantiate, or will die
    on the first call.
 
-   - Solver lifecycle: `assert_ast`, `dec_solve`, `push_ctx`, `pop_ctx`,
+   - Solver lifecycle: `assert_ast_in_solver`, `dec_solve`, `push_ctx`, `pop_ctx`,
      `solver_text`.
    - Sorts: `mk_bool_sort`, `mk_bv_sort`.
    - Literals and symbols: `mk_smt_bool`, `mk_smt_bv`, `mk_smt_symbol`.
