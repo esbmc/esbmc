@@ -1237,11 +1237,17 @@ bool computes_from_operands(const expr2tc &e)
 }
 
 /// A trace that left the iteration read the root before the loop, so it needs
-/// the root's only assignment: the head holds what that assigns.
+/// the root's only assignment, run once: the head holds what that assigns. A
+/// global's or a callee's assignment can run again between the read and the
+/// loop.
 bool derivationst::root(queryt &q, const expr2tc &symbol) const
 {
-  const auto it = defs.find(to_symbol2t(symbol).thename);
-  if (q.outside && it != defs.end() && it->second.size() > 1)
+  const irep_idt &name = to_symbol2t(symbol).thename;
+  const auto it = defs.find(name);
+  const auto own = owner.find(name);
+  if (
+    q.outside && ((it != defs.end() && it->second.size() > 1) ||
+                  own == owner.end() || own->second != q.function))
     return false;
   std::unordered_set<irep_idt, irep_id_hash> seen;
   if (!settled(q, symbol, seen))
