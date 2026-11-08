@@ -267,13 +267,12 @@ bmct::bmct(goto_functionst &funcs, optionst &opts, contextt &_context)
   if (options.get_bool_option("smt-during-symex"))
   {
     runtime_solver = std::unique_ptr<smt_convt>(create_solver("", ns, options));
+    auto equation =
+      std::make_shared<runtime_encoded_equationt>(ns, *runtime_solver);
+    equation->pre_register_addresses(funcs);
 
     symex = std::make_unique<reachability_treet>(
-      funcs,
-      ns,
-      options,
-      std::make_shared<runtime_encoded_equationt>(ns, *runtime_solver),
-      _context);
+      funcs, ns, options, equation, _context);
   }
   else
   {
