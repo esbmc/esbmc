@@ -926,7 +926,7 @@ const std::string smtlib_convt::solver_text()
   return "<smtlib:none>";
 }
 
-void smtlib_convt::assert_ast(smt_astt a)
+void smtlib_convt::assert_ast_in_solver(smt_astt a)
 {
   const smtlib_smt_ast *sa = static_cast<const smtlib_smt_ast *>(a);
 

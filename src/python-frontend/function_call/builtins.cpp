@@ -145,20 +145,21 @@ exprt function_call_expr::handle_input() const
   len_assign.location() = converter_.get_location_from_decl(call_);
   converter_.add_instruction(len_assign);
 
-  // len_sym and the literal are both size_type (synthetic), so build the
-  // length-bound comparison in IREP2 (V.3).
-  exprt len_bound = build_less_than(
-    build_symbol(len_sym), from_integer(max_str_length, size_type()));
-  codet assume_len("assume");
-  assume_len.copy_to_operands(len_bound);
-  assume_len.location() = converter_.get_location_from_decl(call_);
-  converter_.add_instruction(assume_len);
+  converter_.get_string_handler().assume_length_in_buffer(
+    build_symbol(len_sym),
+    max_str_length,
+    converter_.get_location_from_decl(call_));
 
   exprt term_pos =
     build_index(build_symbol(input_sym), build_symbol(len_sym), char_type());
   code_assignt term_assign(term_pos, from_integer(0, char_type()));
   term_assign.location() = converter_.get_location_from_decl(call_);
   converter_.add_instruction(term_assign);
+  converter_.get_string_handler().assume_no_nul_before(
+    build_symbol(input_sym),
+    build_symbol(len_sym),
+    max_str_length,
+    converter_.get_location_from_decl(call_));
 
   // Record the companion $input_len$ symbol so len() on this string (or any
   // variable aliasing it) can return the symbolic length directly instead of
@@ -1517,7 +1518,11 @@ bool function_call_expr::is_str_of_type_call() const
 
 exprt function_call_expr::handle_str_of_type_call() const
 {
+  const auto saved_compared = converter_.type_compared_operands_;
+  if (call_.value("esbmc_raise_message", false))
+    converter_.type_compared_operands_ = {&call_["args"][0], nullptr};
   exprt cls = converter_.get_expr(call_["args"][0]);
+  converter_.type_compared_operands_ = saved_compared;
   if (type_handler::is_class_value_type(cls.type()))
     throw std::runtime_error(
       "Unsupported: str() of a class that is only known at run time");

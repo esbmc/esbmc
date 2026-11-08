@@ -618,7 +618,7 @@ smt_astt cvc5_convt::mk_smt_fpbv_neg(smt_astt op)
     op->sort);
 }
 
-void cvc5_convt::assert_ast(smt_astt a)
+void cvc5_convt::assert_ast_in_solver(smt_astt a)
 {
   auto const *ca = to_solver_smt_ast<cvc5_smt_ast>(a);
   slv.assertFormula(ca->a);

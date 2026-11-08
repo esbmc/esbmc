@@ -10,6 +10,7 @@ from preprocessor.dotted_imports import alias_dotted_imports
 from preprocessor.decorator_lowering import lower_user_decorators
 from preprocessor.dict_splat import spell_out_dict_splats
 from preprocessor.itertools_lowering import lower_itertools
+from preprocessor.literal_eval_inlining import inline_literal_eval
 from preprocessor.coroutine_lowering import lower_coroutines
 from preprocessor.match_lowering import lower_match_statements
 from preprocessor.namedtuple_lowering import lower_namedtuples
@@ -554,6 +555,7 @@ class ModuleRewriteMixin:
 
         `entry` marks the program itself, whose module-level names no other
         module imports."""
+        inline_literal_eval(node)
         lower_coroutines(node, self.module_name)
         lower_check_type(node, self.module_name)
         lower_builtin_open(node, self.module_name)
