@@ -1,5 +1,6 @@
 #include "goto-programs/goto_binary_reader.h"
 #include <util/base/stack_budget.h>
+#include <util/base/threads.h>
 #include "irep2/irep2_expr.h"
 #include <util/lang/c_builtins.h>
 #include <util/lang/c_sizeof.h>
@@ -130,13 +131,14 @@ static code_typet::argumentst migrate_arguments_back(const code_type2t &ref2)
 }
 
 static std::map<irep_idt, BigInt> bin2int_map_signed, bin2int_map_unsigned;
-static std::mutex bin2int_map_signed_mutex, bin2int_map_unsigned_mutex;
+static threads_mutex<std::mutex> bin2int_map_signed_mutex,
+  bin2int_map_unsigned_mutex;
 
 const BigInt &binary2bigint(irep_idt binary, bool is_signed)
 {
   std::map<irep_idt, BigInt> &ref =
     (is_signed) ? bin2int_map_signed : bin2int_map_unsigned;
-  std::mutex &ref_mutex =
+  threads_mutex<std::mutex> &ref_mutex =
     (is_signed) ? bin2int_map_signed_mutex : bin2int_map_unsigned_mutex;
 
   std::lock_guard lock(ref_mutex);

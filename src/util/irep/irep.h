@@ -11,6 +11,7 @@
 #define SHARING
 
 #include <util/irep/irep_idt.h>
+#include <util/base/threads.h>
 
 typedef std::hash<irep_idt> irep_id_hash;
 
@@ -62,7 +63,7 @@ public:
   inline irept(const irept &irep) : data(irep.data)
   {
     if (data)
-      data->ref_count.fetch_add(1, std::memory_order_relaxed);
+      counter_add(data->ref_count, 1u, std::memory_order_relaxed);
   }
 
   inline irept &operator=(const irept &irep)
@@ -72,7 +73,7 @@ public:
 
     dt *new_data = irep.data;
     if (new_data)
-      new_data->ref_count.fetch_add(1, std::memory_order_relaxed);
+      counter_add(new_data->ref_count, 1u, std::memory_order_relaxed);
 
     dt *old_data = data;
     data = new_data;

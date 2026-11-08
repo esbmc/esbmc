@@ -7,7 +7,6 @@
 #include <boost/multi_index/ordered_index.hpp>
 #include <boost/multi_index_container.hpp>
 #include <memory>
-#include <mutex>
 #include <set>
 #include <utility>
 #include <unordered_map>
@@ -1140,8 +1139,6 @@ public:
 
   /** A cache mapping expressions to converted SMT ASTs. */
   smt_cachet smt_cache;
-  /** A mutex lock for writing to the cache. */
-  std::mutex smt_cache_mutex;
   /** A cache of converted type2tc's to smt sorts */
   smt_sort_cachet sort_cache;
 
