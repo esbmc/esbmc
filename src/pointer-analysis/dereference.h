@@ -550,6 +550,10 @@ private:
     expr2tc &value,
     const expr2tc &offset,
     const type2tc &type);
+  expr2tc stitch_from_const_offset(
+    const expr2tc &object,
+    const expr2tc &offset_in_value,
+    const type2tc &type);
   void construct_from_dyn_offset(
     expr2tc &value,
     const expr2tc &offset,
