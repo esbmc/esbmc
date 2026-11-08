@@ -5754,7 +5754,7 @@ void python_converter::widen_int_target_for_float_call(
 
 // A result stored to an Optional of its own type, or a None result (#10075),
 // must be wrapped, so the call writes a temporary first (#9055). Another type
-// would need a conversion that loses the result's type.
+// would need a conversion that loses the result's type, so it is refused.
 void python_converter::wrap_call_result_in_optional(
   const nlohmann::json &ast_node,
   const exprt &lhs,
@@ -5762,14 +5762,20 @@ void python_converter::wrap_call_result_in_optional(
   const locationt &location,
   codet &target_block)
 {
-  if (!type_utils::is_optional_struct(lhs.type()))
+  if (!type_utils::is_optional_struct(lhs.type()) || rhs.type() == lhs.type())
     return;
   const typet &value_type =
     to_struct_type(lhs.type()).get_component("value").type();
-  if (
-    rhs.type() != none_type() &&
-    (rhs.type().is_pointer() || value_type != rhs.type()))
-    return;
+  if (rhs.type() != none_type())
+  {
+    // A pointer result may encode None as NULL, so it is stored unwrapped.
+    if (rhs.type().is_pointer())
+      return;
+    if (value_type != rhs.type())
+      throw std::runtime_error(
+        "storing a call result into an Optional of another type is not yet "
+        "supported");
+  }
 
   symbolt &result =
     create_tmp_symbol(ast_node, "$call_result$", rhs.type(), exprt());
@@ -7561,6 +7567,15 @@ bool python_converter::try_numpy_nditer_assign(const nlohmann::json &ast_node)
   return false;
 }
 
+/// The symbol whose recorded string length @p rhs carries: a nondet_str()
+/// value is the address of its buffer's first byte.
+static const exprt &string_buffer_of(const exprt &rhs)
+{
+  if (rhs.id() == "address_of" && rhs.op0().id() == "index")
+    return rhs.op0().op0();
+  return rhs;
+}
+
 void python_converter::get_var_assign(
   const nlohmann::json &ast_node,
   codet &target_block)
@@ -8447,9 +8462,10 @@ void python_converter::get_var_assign(
     // Must run before type-branching which may take early returns.
     if (lhs.is_symbol())
     {
-      if (rhs.is_symbol())
+      const exprt &named = string_buffer_of(rhs);
+      if (named.is_symbol())
       {
-        const std::string rhs_id = rhs.identifier().as_string();
+        const std::string rhs_id = named.identifier().as_string();
         auto it = input_str_to_len_sym_.find(rhs_id);
         if (it != input_str_to_len_sym_.end())
           input_str_to_len_sym_[lhs.identifier().as_string()] = it->second;
@@ -9710,12 +9726,7 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
       cond = result_expr;
     }
   }
-  // An operand converted here is not guarded by the while test's prelude, so
-  // a walrus in a `while` test takes the general path, whose and/or lowering
-  // refuses it.
-  else if (
-    test_type == "BoolOp" && !model_mode &&
-    !(type == "While" && contains_named_expr(ast_node["test"])))
+  else if (test_type == "BoolOp" && !model_mode)
     cond = get_flat_boolop_test(ast_node["test"], to_bool_condition);
   else if (has_nested_call)
   {

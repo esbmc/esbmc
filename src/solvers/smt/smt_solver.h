@@ -7,7 +7,6 @@
 #include <boost/multi_index/ordered_index.hpp>
 #include <boost/multi_index_container.hpp>
 #include <memory>
-#include <mutex>
 #include <set>
 #include <utility>
 #include <unordered_map>
@@ -1143,8 +1142,6 @@ public:
 
   /** A cache mapping expressions to converted SMT ASTs. */
   smt_cachet smt_cache;
-  /** A mutex lock for writing to the cache. */
-  std::mutex smt_cache_mutex;
   /** A cache of converted type2tc's to smt sorts */
   smt_sort_cachet sort_cache;
 
@@ -1236,6 +1233,14 @@ public:
   /** Each flattening bitcast converted so far, for steps that hit it in the
    *  conversion cache. */
   std::unordered_map<expr2tc, ptr_flatten_entry, irep2_hash> flattened;
+  /** The context level and id of each flatten of a pointer, by its value: a
+   *  flatten inside an aggregate converted in an earlier step is a cache hit
+   *  too, and the step names only the pointer (#9937). */
+  std::unordered_map<
+    expr2tc,
+    std::vector<std::pair<unsigned int, size_t>>,
+    irep2_hash>
+    flattened_values;
   void record_flattened_pointer(smt_astt address, smt_astt pointer);
 
   /** The SSA step being converted: its guard, the flattens its operands may

@@ -1,0 +1,4 @@
+CORE
+main.py
+--ir --unwind 20
+^VERIFICATION SUCCESSFUL$

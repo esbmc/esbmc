@@ -1,0 +1,5 @@
+CORE
+main.c
+--generate-testcase --no-pointer-check --64 --i386-linux
+^VERIFICATION FAILED$
+CHECK_FILE testcase.xml contains <testcase coversError="true">\n<input>1\.00000000000000000001355252715606893e-1</input>\n</testcase>
