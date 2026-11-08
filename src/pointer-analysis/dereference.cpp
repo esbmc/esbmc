@@ -1,4 +1,5 @@
 #include <cassert>
+#include <numeric>
 #include <langapi/language_util.h>
 #include <pointer-analysis/dereference.h>
 #include <pointer-analysis/value_set.h>
@@ -1648,18 +1649,8 @@ void dereferencet::construct_from_array(
   // accesses the indexed structure and resolves nested fields.
   if (is_structure_type(arr_subtype))
   {
-    /* Neither bounds_check() nor the member walk claims alignment, and
-     * check_pointer_alignment() assumed an aligned base, which an array of
-     * packed structs does not have (#7707). */
-    if (!mode.unaligned && is_scalar_type(type))
-    {
-      const BigInt access_bits = type_byte_size_bits(type);
-      if (object_base_alignment(value) * 8 < access_bits)
-        check_alignment(access_bits, offset, guard, value);
-    }
-
-    value = index2tc(arr_subtype, value, div);
-    build_reference_rec(value, mod, type, guard, mode, alignment);
+    construct_from_struct_array(
+      value, offset, div, mod, type, guard, mode, alignment);
     return;
   }
   // prevent unexpected behaviors when handling non-structure
@@ -1765,6 +1756,42 @@ void dereferencet::construct_from_array(
       extract_bits_from_byte_array(
         value, offset_bits, type_byte_size_bits(type).to_uint64()));
   }
+}
+
+void dereferencet::construct_from_struct_array(
+  expr2tc &value,
+  const expr2tc &offset,
+  const expr2tc &index,
+  const expr2tc &elem_offset,
+  const type2tc &type,
+  const guard2tc &guard,
+  modet mode,
+  unsigned long alignment)
+{
+  /* Neither bounds_check() nor the member walk claims alignment, and
+   * check_pointer_alignment() assumed an aligned base, which an array of
+   * packed structs does not have (#7707). */
+  if (!mode.unaligned && is_scalar_type(type))
+  {
+    const BigInt access_bits = type_byte_size_bits(type);
+    if (object_base_alignment(value) * 8 < access_bits)
+      check_alignment(access_bits, offset, guard, value);
+  }
+
+  // An access can start in one element and end in the next (#10088).
+  const expr2tc array = value;
+  if (is_constant_int2t(elem_offset))
+  {
+    value = stitch_across_elements(
+      array, index, to_constant_int2t(elem_offset).value, type);
+    if (!is_nil_expr(value))
+      return;
+  }
+  value = index2tc(array_or_vector_subtype(array->type), array, index);
+  build_reference_rec(value, elem_offset, type, guard, mode, alignment);
+  if (!is_constant_int2t(elem_offset))
+    add_element_spanning_arms(
+      value, array, index, elem_offset, type, alignment, mode);
 }
 
 /* Vectors (#7907) and arrays are built as values. An array destination is a
@@ -2213,7 +2240,7 @@ void dereferencet::construct_from_dyn_struct_offset(
     // Emplaced after the field's own arm, so they take precedence (#10045).
     if (!int_encoding)
       add_spanning_arms(
-        value, offset, type, alignment, offs, field_size, extract_list);
+        value, offset, type, alignment, mode, offs, field_size, extract_list);
 
     i++;
   }
@@ -2227,25 +2254,40 @@ void dereferencet::construct_from_dyn_struct_offset(
   value = new_value;
 }
 
+/* The offsets into \p container at which a \p type access can start are
+ * multiples of this: of the known \p alignment and, unless misalignment is
+ * allowed, of the access type's, taken modulo the container's size, since the
+ * container may be an array element (#10088). */
+BigInt dereferencet::spanning_step(
+  const type2tc &type,
+  const type2tc &container,
+  unsigned long alignment,
+  modet mode)
+{
+  uint64_t step = std::max<uint64_t>(alignment, config.ansi_c.char_width);
+  if (!mode.unaligned && !options.get_bool_option("no-align-check"))
+  {
+    const BigInt type_align = std::min(
+      ::alignment(migrate_type_back(type), ns),
+      ::alignment(migrate_type_back(container), ns));
+    step = std::max<uint64_t>(step, type_align.to_uint64() * 8);
+  }
+  return std::gcd(step, type_byte_size_bits(container, &ns).to_uint64());
+}
+
 void dereferencet::add_spanning_arms(
   const expr2tc &value,
   const expr2tc &offset,
   const type2tc &type,
   unsigned long alignment,
+  modet mode,
   const BigInt &field_offset,
   const BigInt &field_size,
   std::list<std::pair<expr2tc, expr2tc>> &extract_list)
 {
   const unsigned int access_sz = type_byte_size_bits(type).to_uint64();
   const BigInt struct_bits = type_byte_size_bits(value->type, &ns);
-  // Alignment is relative to the struct, which may be less aligned than the
-  // access type.
-  const BigInt step = std::max(
-    BigInt(alignment),
-    std::min(
-      ::alignment(migrate_type_back(type), ns),
-      ::alignment(migrate_type_back(value->type), ns)) *
-      8);
+  const BigInt step = spanning_step(type, value->type, alignment, mode);
   const BigInt field_end = field_offset + field_size;
   BigInt p =
     std::max(field_offset, field_end - access_sz + config.ansi_c.char_width);
@@ -2272,31 +2314,95 @@ expr2tc dereferencet::stitch_across_members(
   std::vector<expr2tc> bytes;
   for (BigInt pos = start; pos < start + bits; pos += width)
   {
-    expr2tc byte;
-    for (unsigned int i = 0; i < struct_type.members.size(); i++)
-    {
-      const irep_idt &name = struct_type.member_names[i];
-      const type2tc member_type = ns.follow(struct_type.members[i]);
-      const BigInt m_offs = member_offset_bits(value->type, name, &ns);
-      const BigInt m_size = type_byte_size_bits(member_type, &ns);
-      if (
-        m_offs % width == 0 && m_size % width == 0 && m_offs <= pos &&
-        pos < m_offs + m_size)
-      {
-        byte = extract_bytes(
-          member2tc(member_type, value, name),
-          1,
-          gen_ulong((pos - m_offs) / width))[0];
-        break;
-      }
-    }
-    // Reading a bitfield byte from the whole struct would make a store
-    // rewrite every member, pointers included.
+    expr2tc byte = byte_of_struct(value, pos);
     if (is_nil_expr(byte))
       return expr2tc();
     bytes.push_back(byte);
   }
   return stitch_together_from_byte_array(bytes.size(), bytes);
+}
+
+expr2tc dereferencet::byte_of_struct(const expr2tc &value, const BigInt &pos)
+{
+  const struct_type2t &struct_type = to_struct_type(value->type);
+  const unsigned int width = config.ansi_c.char_width;
+  for (unsigned int i = 0; i < struct_type.members.size(); i++)
+  {
+    const irep_idt &name = struct_type.member_names[i];
+    const type2tc member_type = ns.follow(struct_type.members[i]);
+    const BigInt m_offs = member_offset_bits(value->type, name, &ns);
+    const BigInt m_size = type_byte_size_bits(member_type, &ns);
+    if (
+      m_offs % width == 0 && m_size % width == 0 && m_offs <= pos &&
+      pos < m_offs + m_size)
+      return extract_bytes(
+        member2tc(member_type, value, name),
+        1,
+        gen_ulong((pos - m_offs) / width))[0];
+  }
+  // Reading a bitfield byte from the whole struct would make a store rewrite
+  // every member, pointers included.
+  return expr2tc();
+}
+
+expr2tc dereferencet::stitch_across_elements(
+  const expr2tc &array,
+  const expr2tc &index,
+  const BigInt &start,
+  const type2tc &type)
+{
+  const type2tc &elem_type = array_or_vector_subtype(array->type);
+  const BigInt elem_bits = type_byte_size_bits(elem_type, &ns);
+  const BigInt access_bits = type_byte_size_bits(type, &ns);
+  if (
+    !is_struct_type(elem_type) || !is_scalar_type(type) ||
+    start + access_bits <= elem_bits || options.get_bool_option("int-encoding"))
+    return expr2tc();
+
+  const unsigned int width = config.ansi_c.char_width;
+  std::vector<expr2tc> bytes;
+  for (BigInt pos = start; pos < start + access_bits; pos += width)
+  {
+    expr2tc elem_index = add2tc(
+      index->type,
+      index,
+      constant_int2tc(index->type, (pos / elem_bits).to_uint64()));
+    simplify(elem_index);
+    expr2tc byte =
+      byte_of_struct(index2tc(elem_type, array, elem_index), pos % elem_bits);
+    if (is_nil_expr(byte))
+      return expr2tc();
+    bytes.push_back(byte);
+  }
+  return bitcast2tc(type, stitch_together_from_byte_array(bytes.size(), bytes));
+}
+
+void dereferencet::add_element_spanning_arms(
+  expr2tc &value,
+  const expr2tc &array,
+  const expr2tc &index,
+  const expr2tc &offset,
+  const type2tc &type,
+  unsigned long alignment,
+  modet mode)
+{
+  const type2tc &elem_type = array_or_vector_subtype(array->type);
+  const BigInt elem_bits = type_byte_size_bits(elem_type, &ns);
+  const BigInt step = spanning_step(type, elem_type, alignment, mode);
+  BigInt p = std::max(
+    BigInt(0),
+    elem_bits - type_byte_size_bits(type, &ns) + config.ansi_c.char_width);
+  for (p = (p + step - 1) / step * step; p < elem_bits; p += step)
+  {
+    expr2tc spanning = stitch_across_elements(array, index, p, type);
+    if (is_nil_expr(spanning))
+      continue;
+    value = if2tc(
+      type,
+      equality2tc(offset, constant_int2tc(offset->type, p)),
+      spanning,
+      value);
+  }
 }
 
 void dereferencet::construct_from_dyn_offset(
