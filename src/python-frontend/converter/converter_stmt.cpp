@@ -9641,12 +9641,7 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
       cond = result_expr;
     }
   }
-  // An operand converted here is not guarded by the while test's prelude, so
-  // a walrus in a `while` test takes the general path, whose and/or lowering
-  // refuses it.
-  else if (
-    test_type == "BoolOp" && !model_mode &&
-    !(type == "While" && contains_named_expr(ast_node["test"])))
+  else if (test_type == "BoolOp" && !model_mode)
     cond = get_flat_boolop_test(ast_node["test"], to_bool_condition);
   else if (has_nested_call)
   {
