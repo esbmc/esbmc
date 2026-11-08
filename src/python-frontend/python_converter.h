@@ -1973,6 +1973,7 @@ private:
 
   typet nullable_dict_pointee(const typet &t) const;
   bool keeps_pointer_type_on_none(const typet &t);
+  void adopt_none_rhs(symbolt &lhs_symbol, exprt &lhs, exprt &rhs);
   void guard_none_container(
     exprt &rhs,
     typet &rhs_type,
@@ -2149,7 +2150,7 @@ private:
   /// members to the dict's internal list symbol.
   void propagate_list_type_info(
     const exprt &lhs,
-    const exprt &rhs,
+    const exprt &assigned,
     symbolt *lhs_symbol);
 
   /// Propagates the element-type map of the list backing a dict's `.keys` /
@@ -3124,6 +3125,10 @@ private:
     const std::string &class_name,
     const std::string &attr) const;
   void reject_attribute_scalar_change(const exprt &lhs, const exprt &rhs);
+  void reject_list_slot_class_change(
+    const exprt &lhs,
+    const nlohmann::json &ast_node,
+    bool is_ctor_call);
   void reject_attribute_class_change(
     const exprt &lhs,
     const exprt &rhs,

@@ -115,6 +115,15 @@ public:
 
   /// The nondet str buffer size: --nondet-str-length plus the NUL.
   static int nondet_str_buffer_size();
+  void assume_length_in_buffer(
+    const exprt &length,
+    int buffer_size,
+    const locationt &location);
+  void assume_no_nul_before(
+    const exprt &array,
+    const exprt &length,
+    int buffer_size,
+    const locationt &location);
 
   /**
    * @brief Extract string content from array operands
@@ -739,6 +748,14 @@ public:
   exprt
   handle_string_istitle(const exprt &string_obj, const locationt &location);
 
+  exprt
+  handle_string_isprintable(const exprt &string_obj, const locationt &location);
+
+  exprt call_str_predicate_model(
+    const std::string &name,
+    const exprt &string_obj,
+    const locationt &location);
+
   /**
    * @brief Handle str.isidentifier() method
    */
@@ -974,6 +991,8 @@ private:
     const nlohmann::json &arg_json,
     const exprt &arg_expr);
   exprt try_len_fast_path_from_name_arg(const nlohmann::json &arg_json);
+  bool is_single_binding(const std::string &var_name);
+  exprt recorded_length(const nlohmann::json &arg_json, const exprt &arg_expr);
 
   /**
    * @brief Convert float bits to string representation

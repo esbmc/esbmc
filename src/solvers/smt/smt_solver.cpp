@@ -3983,6 +3983,8 @@ smt_astt smt_solver_baset::term_of(const expr2tc &expr)
 {
   if (has_term(expr))
     return convert_ast(expr);
+  if (is_index2t(expr))
+    return infinite_array_row_term(to_index2t(expr));
   if (!is_member2t(expr) || is_union_type(to_member2t(expr).source_value))
     return nullptr;
   const member2t &member = to_member2t(expr);
@@ -3992,6 +3994,23 @@ smt_astt smt_solver_baset::term_of(const expr2tc &expr)
                this,
                get_member_name_field(member.source_value->type, member.member))
            : nullptr;
+}
+
+/* An infinite array of arrays (a nested Solidity mapping) is not flattened, so
+ * a row of it has an array sort of its own: select it at the index's model
+ * value. */
+smt_astt smt_solver_baset::infinite_array_row_term(const index2t &index)
+{
+  const type2tc &src_type = index.source_value->type;
+  if (
+    !is_array_type(index.type) || !is_array_type(src_type) ||
+    !to_array_type(src_type).size_is_infinite)
+    return nullptr;
+  smt_astt source = term_of(index.source_value);
+  const expr2tc idx = get(index.index);
+  if (!source || !is_constant_int2t(idx))
+    return nullptr;
+  return source->select(this, fix_array_idx(idx, src_type));
 }
 
 /* Converting an expression the encoding never saw builds new formula, and some

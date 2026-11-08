@@ -120,6 +120,10 @@ ignored_dirs=(
   "input5"
   "input6"
   "github_7377_input_len"
+  # input() reads stdin, which this check does not provide: EOFError.
+  "github_9955_input_len_bytes"
+  "github_9955_input_len_bytes_fail"
+  "github_9955_input_len_ir"
   "harness_os_listdir"
   "github_3712"
   "github_3713"
