@@ -865,6 +865,15 @@ public:
     const expr2tc &value,
     rootst &out) const;
 
+  /// Whether \p symbol, a pointer local to \p function whose address nothing
+  /// takes, keeps its object in every loop of the function: each assigns it
+  /// only offsets of itself.
+  bool keeps_object(
+    const irep_idt &function,
+    const std::unordered_set<irep_idt, irep_id_hash> &address_taken,
+    const addresslesst &addressless,
+    const expr2tc &symbol) const;
+
   /// Whether some loop may assign \p symbol, and so some inductive step
   /// havoc it.
   bool assigned_in_loop(const irep_idt &symbol) const
@@ -889,6 +898,7 @@ private:
     expr2tc value;
     irep_idt callee;
     unsigned location;
+    bool in_own_loop = false;
   };
 
   struct tracedt
@@ -944,7 +954,17 @@ private:
     bool in_loop,
     bool in_own_loop);
 
+  bool query(
+    const irep_idt &function,
+    const std::unordered_set<irep_idt, irep_id_hash> &address_taken,
+    const iterationt &iteration,
+    const addresslesst &addressless,
+    rootst &out,
+    const std::function<bool(queryt &)> &f) const;
   bool trace(queryt &q, const expr2tc &value) const;
+  /// Whether \p value is \p name moved by offsets that hold no address.
+  bool offsets(queryt &q, const expr2tc &value, const irep_idt &name) const;
+  bool moves_by_offsets(queryt &q, const irep_idt &name) const;
   bool trace_address(queryt &q, expr2tc object) const;
   bool trace_symbol(queryt &q, const expr2tc &symbol) const;
   bool trace_def(queryt &q, const deft &def) const;
@@ -996,7 +1016,9 @@ void derivationst::define(
   if (!is_symbol2t(symbol))
     return;
   const irep_idt &name = to_symbol2t(symbol).thename;
-  defs[name].push_back(symbol == lhs ? def : deft{{}, {}, def.location});
+  deft &d =
+    defs[name].emplace_back(symbol == lhs ? def : deft{{}, {}, def.location});
+  d.in_own_loop = in_own_loop;
   if (in_loop)
     looped.insert(name);
   if (in_own_loop)
@@ -1078,6 +1100,40 @@ bool derivationst::roots(
   const expr2tc &value,
   rootst &out) const
 {
+  return query(
+    function, address_taken, iteration, addressless, out, [&](queryt &q) {
+      return trace(q, value);
+    });
+}
+
+bool derivationst::keeps_object(
+  const irep_idt &function,
+  const std::unordered_set<irep_idt, irep_id_hash> &address_taken,
+  const addresslesst &addressless,
+  const expr2tc &symbol) const
+{
+  if (!is_symbol2t(symbol) || !is_pointer_type(symbol))
+    return false;
+  const irep_idt &name = to_symbol2t(symbol).thename;
+  const auto own = owner.find(name);
+  if (
+    own == owner.end() || own->second != function || address_taken.count(name))
+    return false;
+  rootst out;
+  return query(
+    function, address_taken, iterationt(), addressless, out, [&](queryt &q) {
+      return moves_by_offsets(q, name);
+    });
+}
+
+bool derivationst::query(
+  const irep_idt &function,
+  const std::unordered_set<irep_idt, irep_id_hash> &address_taken,
+  const iterationt &iteration,
+  const addresslesst &addressless,
+  rootst &out,
+  const std::function<bool(queryt &)> &f) const
+{
   std::array<std::unordered_set<irep_idt, irep_id_hash>, 2> visiting;
   std::array<memot, 2> memo;
   unsigned cycles = 0;
@@ -1093,7 +1149,44 @@ bool derivationst::roots(
     cycles,
     budget,
     false};
-  return trace(q, value);
+  return f(q);
+}
+
+bool derivationst::offsets(
+  queryt &q,
+  const expr2tc &value,
+  const irep_idt &name) const
+{
+  if (is_typecast2t(value))
+    return offsets(q, to_typecast2t(value).from, name);
+  if (is_symbol2t(value))
+    return to_symbol2t(value).thename == name;
+  if (is_if2t(value))
+    return offsets(q, to_if2t(value).true_value, name) &&
+           offsets(q, to_if2t(value).false_value, name);
+  if (!is_add2t(value) && !is_sub2t(value))
+    return false;
+  const expr2tc &a = *value->get_sub_expr(0);
+  const expr2tc &b = *value->get_sub_expr(1);
+  const auto addressless = [&](const expr2tc &offset) {
+    rootst roots;
+    queryt sub = q.sub(roots);
+    return trace(sub, offset) && roots.empty();
+  };
+  return (offsets(q, a, name) && addressless(b)) ||
+         (is_add2t(value) && offsets(q, b, name) && addressless(a));
+}
+
+/// A loop that assigns only offsets of a pointer leaves it in the object it
+/// pointed to on entry, at an offset the havoc may leave free.
+bool derivationst::moves_by_offsets(queryt &q, const irep_idt &name) const
+{
+  const auto it = defs.find(name);
+  return it != defs.end() &&
+         std::all_of(it->second.begin(), it->second.end(), [&](const deft &d) {
+           return !d.in_own_loop ||
+                  (!is_nil_expr(d.value) && offsets(q, d.value, name));
+         });
 }
 
 /// Whether \p e holds no address but those its operands hold.
@@ -1221,7 +1314,15 @@ bool derivationst::trace_symbol(queryt &q, const expr2tc &symbol) const
       return true;
     }
     if (global || (moves && !q.iteration.reassigned.count(name)))
-      return false;
+    {
+      // The havoc moves it within the object it holds at the head, which
+      // is havoced whole (see keeps_object).
+      const bool root = !global && !q.outside && is_pointer_type(symbol) &&
+                        check_var_name(symbol) && moves_by_offsets(q, name);
+      if (root)
+        q.out.pointers.insert(symbol);
+      return root;
+    }
   }
   // The step havocs a callee's local at its loop's head, which the
   // assignments below do not show, unless nothing reads that havoc.
@@ -1787,6 +1888,15 @@ expr2tc pinned_value(const type2tc &type, const targetst &t)
   return typecast2tc(type, value);
 }
 
+/// \p ptr at any offset into the object it points to.
+expr2tc offset_within_object(const expr2tc &ptr)
+{
+  const type2tc bytes = pointer_type2tc(get_uint8_type());
+  return typecast2tc(
+    ptr->type,
+    add2tc(bytes, typecast2tc(bytes, ptr), gen_nondet(signed_size_type2())));
+}
+
 /// Adds to \p pins an assignment of a \p t value to each address \p lvalue
 /// stores. Returns false when one sits in an array element or a union member,
 /// which no single assignment reaches.
@@ -1922,7 +2032,19 @@ bool havoc_loop(
   if (loop.get_modified_loop_vars().empty() && through.empty())
     return covered;
 
-  havocst havocs{ordered(through), havoc_targets(loop), {}};
+  havocst havocs{ordered(through), {}, {}};
+  for (const expr2tc &var : havoc_targets(loop))
+    if (
+      w.derivations.keeps_object(
+        w.function,
+        w.address_taken,
+        [&w](const expr2tc &value) {
+          return holds_no_address(w.points_to, w.loop, value);
+        },
+        var))
+      havocs.pins.emplace_back(var, offset_within_object(var));
+    else
+      havocs.vars.push_back(var);
   if (loop.writes_through_pointer() && !pin_havoced_pointers(w, havocs.pins))
     covered = false;
   // Symex answers the call by name, but goto_loopst, for the loops still to
