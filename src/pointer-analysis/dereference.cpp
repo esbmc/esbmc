@@ -1960,15 +1960,20 @@ void dereferencet::construct_from_const_offset(
         member_offset_bits(themember.source_value->type, themember.member, &ns);
     value = themember.source_value;
   }
-  const expr2tc offset_in_value = constant_int2tc(offset->type, offs);
+  construct_from_bytes(value, constant_int2tc(offset->type, offs), type);
+}
 
-  unsigned int num_bytes =
-    compute_num_bytes_to_extract(offset_in_value, access_bits);
+void dereferencet::construct_from_bytes(
+  expr2tc &value,
+  const expr2tc &offset,
+  const type2tc &type)
+{
+  const uint64_t access_bits = type_byte_size_bits(type).to_uint64();
+  unsigned int num_bytes = compute_num_bytes_to_extract(offset, access_bits);
 
   // Converting offset to bytes before bytes extraction
   expr2tc offset_bytes = typecast2tc(
-    size_type2(),
-    div2tc(offset->type, offset_in_value, gen_long(offset->type, 8)));
+    size_type2(), div2tc(offset->type, offset, gen_long(offset->type, 8)));
   simplify(offset_bytes);
 
   // Extracting and stitching bytes together
@@ -1976,7 +1981,7 @@ void dereferencet::construct_from_const_offset(
     num_bytes, extract_bytes(value, num_bytes, offset_bytes));
 
   expr2tc offset_bits =
-    modulus2tc(offset->type, offset_in_value, gen_long(offset->type, 8));
+    modulus2tc(offset->type, offset, gen_long(offset->type, 8));
   simplify(offset_bits);
 
   value = extract_bits_from_byte_array(value, offset_bits, access_bits);
@@ -2081,9 +2086,14 @@ void dereferencet::construct_from_const_struct_offset(
 
     if (int_offset < (m_offs + m_size))
     {
-      // This access starts in this field, but by process of elimination,
-      // doesn't end in it. Which means reading padding data (or an alignment
-      // error), which are both bad.
+      // An aligned access can start inside an array, struct or union member
+      // and end in the next member; check_pointer_alignment() claims the
+      // address (#10090). A scalar member it cannot leave unless misaligned.
+      if (!is_scalar_type(it) && !options.get_bool_option("int-encoding"))
+      {
+        construct_from_bytes(value, offset, type);
+        return;
+      }
       alignment_failure("Misaligned access to struct field", guard);
       value = expr2tc();
       return;

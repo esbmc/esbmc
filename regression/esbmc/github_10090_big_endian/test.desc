@@ -1,0 +1,5 @@
+CORE
+main.c
+--big-endian
+^VERIFICATION FAILED$
+FAILED.*assertion s\[1\]\.h == 0x0403
