@@ -1,5 +1,5 @@
 CORE
 main.py
 
-\[global\.assertion\.1\]\s+line 4\s+assertion
+\[global\.assertion\.1\]\s+line\s+4\s+assertion
 ^VERIFICATION FAILED$

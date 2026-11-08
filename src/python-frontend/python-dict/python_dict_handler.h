@@ -435,7 +435,8 @@ public:
   bool reads_value_as_tagged(
     const exprt &dict_expr,
     const nlohmann::json &slice_node,
-    const element_type_registry::entries &entries);
+    const element_type_registry::entries &entries,
+    const typet &read_type);
 
   char annotated_value_kind(const exprt &dict_expr);
 
