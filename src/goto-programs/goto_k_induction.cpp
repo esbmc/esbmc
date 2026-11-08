@@ -1208,7 +1208,11 @@ bool derivationst::trace_symbol(queryt &q, const expr2tc &symbol) const
   const bool moves = (global ? looped : looped_here).count(name) != 0;
   if (global || here)
   {
-    if (!check_var_name(symbol))
+    // check_var_name also rejects goto_convert's temporaries, which are
+    // assigned like any other local.
+    if (
+      !check_var_name(symbol) &&
+      name.as_string().find("::$tmp::") == std::string::npos)
       return false;
     // An integer is no address of its own: what it was computed from is.
     if (!moves && is_pointer_type(symbol))
