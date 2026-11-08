@@ -855,10 +855,12 @@ exprt python_converter::get_boolop_operand(
   effects.emplace_back();
   code_blockt *saved_block = current_block;
   const bool saved_own_block = in_operand_effects_block_;
+  const bool saved_while_test = in_while_test_;
   if (current_block && effects.size() > 1)
   {
     current_block = &effects.back();
     in_operand_effects_block_ = true;
+    in_while_test_ = false;
   }
   exprt operand_expr = get_expr(operand);
   // A later operand that raises (#9838) is its raise statement, run only
@@ -874,6 +876,7 @@ exprt python_converter::get_boolop_operand(
   }
   current_block = saved_block;
   in_operand_effects_block_ = saved_own_block;
+  in_while_test_ = saved_while_test;
 
   if (!operand_expr.is_code() || operand_expr.statement() != "function_call")
     return operand_expr;
@@ -895,9 +898,9 @@ exprt python_converter::get_boolop_operand(
 /// a result temporary updated by one guarded block per operand, so each
 /// operand's statements run only when Python evaluates it (#8275). Returns nil
 /// when nothing was planted, or, after emitting the planted statements
-/// unconditionally as before, when the operation is itself evaluated lazily
-/// (a while test), is an `and` asserted directly, or the operands do not share
-/// a type whose truthiness is a plain condition. An asserted `and` fails anyway
+/// unconditionally as before, when no block runs where the operation is
+/// evaluated, it is an `and` asserted directly, or the operands do not share a
+/// type whose truthiness is a plain condition. An asserted `and` fails anyway
 /// when a later operand is skipped, so its early guard matters only when the
 /// exception is caught; guarding it made dict_update_kwargs' k-induction
 /// forward condition go from 28s to over 20 minutes.
@@ -929,7 +932,7 @@ exprt python_converter::lower_short_circuit_boolop(
                           type_utils::is_integer_type(cond_type);
   const bool asserted_and = logical_expr.is_and() && &element == asserted_test_;
   if (
-    asserted_and || !plain_cond || !can_emit_runtime_guard() ||
+    asserted_and || !plain_cond || !can_emit_operand_statement() ||
     !std::all_of(operands.begin(), operands.end(), same_type))
   {
     // Unguarded, a planted raise would fire where Python short-circuits.
@@ -2258,7 +2261,8 @@ bool python_converter::may_rebind_left(
 {
   const typet &type = lhs.type();
   if (!type.is_pointer() && !type_utils::is_string_type(type))
-    return contains_call(right);
+    return contains_call(right) ||
+           (in_while_test_ && contains_named_expr(right));
   return left.value("_type", "") == "Name" && calls_user_code(right);
 }
 
@@ -2343,6 +2347,70 @@ python_converter::chained_compare_as_pairs(const nlohmann::json &element)
   return all;
 }
 
+static bool program_binds_name(const nlohmann::json &node, const char *name)
+{
+  if (
+    node.is_object() &&
+    (node.value("name", "") == name || node.value("arg", "") == name ||
+     (node.value("id", "") == name &&
+      node["ctx"].value("_type", "") == "Store")))
+    return true;
+  if (!node.is_object() && !node.is_array())
+    return false;
+  for (const auto &child : node)
+    if (program_binds_name(child, name))
+      return true;
+  return false;
+}
+
+// `len` of a list or str name, and only where nothing can replace `len` or
+// make it run user code.
+bool python_converter::is_pure_len_call(const nlohmann::json &call)
+{
+  const nlohmann::json &func = call["func"];
+  const nlohmann::json &args = call["args"];
+  if (
+    func.value("id", "") != "len" || args.size() != 1 ||
+    args[0].value("_type", "") != "Name" ||
+    program_binds_name(*ast_json, "len") ||
+    program_binds_name(*ast_json, "__len__"))
+    return false;
+  const typet type = get_expr(args[0]).type();
+  return type_utils::is_string_type(type) ||
+         type == type_handler_.get_list_type() ||
+         (type.is_pointer() && type.subtype() == type_handler_.get_list_type());
+}
+
+// Evaluating this cannot rebind anything: names, constants, arithmetic over
+// plain numbers and `len`. Anything else counts as having effects.
+bool python_converter::is_effect_free_right(const nlohmann::json &node)
+{
+  const std::string kind = node.value("_type", "");
+  if (kind == "Constant")
+    return true;
+  if (kind == "Name")
+  {
+    const typet type = get_expr(node).type();
+    return type.is_bool() || type.is_floatbv() ||
+           type_utils::is_integer_type(type);
+  }
+  if (kind == "BinOp")
+    return is_effect_free_right(node["left"]) &&
+           is_effect_free_right(node["right"]);
+  if (kind == "UnaryOp")
+    return is_effect_free_right(node["operand"]);
+  return kind == "Call" && is_pure_len_call(node);
+}
+
+// A while test's prelude runs again on every iteration, so a read is copied
+// there unless the right operand provably cannot rebind what it reads.
+bool python_converter::can_snapshot_left(const nlohmann::json &right)
+{
+  return can_emit_runtime_guard() ||
+         (can_emit_operand_statement() &&
+          (!in_while_test_ || !is_effect_free_right(right)));
+}
+
 // Python reads the left operand before it runs a call in the right one,
 // which may rebind what the left operand reads (`g + bump()`).
 exprt python_converter::snapshot_left_operand(
@@ -2356,8 +2424,8 @@ exprt python_converter::snapshot_left_operand(
   const bool safe = lhs.is_symbol() || is_in_bounds_constant_index(lhs) ||
                     conditional_expr_depth_ == 0;
   if (
-    !can_emit_operand_statement() || !is_read_ahead_type(type) || !safe ||
-    lhs.is_constant() || !may_rebind_left(left, lhs, right))
+    !is_read_ahead_type(type) || !safe || lhs.is_constant() ||
+    !may_rebind_left(left, lhs, right) || !can_snapshot_left(right))
     return lhs;
   exprt value = lhs;
   if (value.is_function_call())

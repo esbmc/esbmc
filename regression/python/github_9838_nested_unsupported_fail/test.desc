@@ -1,4 +1,5 @@
 CORE
 main.py
 --unwind 5 --multi-property --no-pointer-check --no-align-check
-^ERROR: an and/or operand that raises is not supported in this context$
+^  FAILED .* line +10  assertion
+^VERIFICATION FAILED$

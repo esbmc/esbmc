@@ -9661,7 +9661,12 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
   };
 
   const bool old_in_lazy_operand = in_lazy_operand_;
+  const bool old_own_block = in_operand_effects_block_;
   in_lazy_operand_ |= type == "While";
+  // A while test's prelude runs at every evaluation of the test.
+  in_operand_effects_block_ |= type == "While";
+  const bool old_in_while_test = in_while_test_;
+  in_while_test_ = type == "While";
   const bool short_circuit_boolop = test_type == "BoolOp" && current_block &&
                                     !coverage_mode && !pytest_generation_mode &&
                                     !model_mode;
@@ -9791,6 +9796,8 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
     cond = get_expr(ast_node["test"]);
   }
   in_lazy_operand_ = old_in_lazy_operand;
+  in_operand_effects_block_ = old_own_block;
+  in_while_test_ = old_in_while_test;
 
   if (!short_circuit_boolop)
   {

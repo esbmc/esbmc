@@ -1,5 +1,5 @@
-# Issue #9838: a raising operand of an and/or nested in another operand cannot
-# be guarded, so it is refused rather than raised where Python skips it.
+# Issue #9838: a raising operand of an and/or nested in another operand is
+# guarded, so it raises only where Python evaluates it.
 class C:
     pass
 

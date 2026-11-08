@@ -1431,6 +1431,10 @@ private:
     const exprt &rhs,
     const locationt &location,
     codet &target_block);
+  bool is_pure_len_call(const nlohmann::json &call);
+  bool is_effect_free_right(const nlohmann::json &node);
+  bool can_snapshot_left(const nlohmann::json &right);
+
   exprt snapshot_left_operand(
     const nlohmann::json &left,
     const exprt &lhs,
@@ -4068,6 +4072,8 @@ private:
   unsigned conditional_expr_depth_ = 0;
   // Converting an and/or operand into the block of effects it owns.
   bool in_operand_effects_block_ = false;
+  // Converting the test of a while, which its prelude evaluates.
+  bool in_while_test_ = false;
   /// Detach for a constant-shape view: copies what it sees into a dense
   /// snapshot and repoints it there. Returns the snapshot's id.
   std::vector<exprt> read_strided_view_elements(

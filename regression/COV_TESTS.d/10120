@@ -1,0 +1,8 @@
+regression/python/github_10120
+regression/python/github_10120_assign
+regression/python/github_10120_assign_fail
+regression/python/github_10120_fail
+regression/python/github_10120_reeval_fail
+regression/python/github_10120_call_once
+regression/python/github_10120_left_first
+regression/python/github_10120_left_first_fail

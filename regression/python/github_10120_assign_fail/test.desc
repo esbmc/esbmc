@@ -1,0 +1,5 @@
+CORE
+main.py
+--unwind 5
+^  FAILED .* line +3  uncaught exception: IndexError
+^VERIFICATION FAILED$
