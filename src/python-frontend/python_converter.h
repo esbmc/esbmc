@@ -956,6 +956,10 @@ private:
 
   bool function_is_generator(const nlohmann::json &function_node);
 
+  bool returns_implicit_none(
+    const nlohmann::json &function_node,
+    const code_typet &type);
+
   exprt materialize_list_function_call(
     const exprt &expr,
     const nlohmann::json &element,
