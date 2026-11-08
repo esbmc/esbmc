@@ -60,6 +60,24 @@ bool has_return_none(const nlohmann::json &body)
   return false;
 }
 
+bool has_return_value(const nlohmann::json &body)
+{
+  for (const nlohmann::json &stmt : body)
+  {
+    if (
+      stmt["_type"] == "Return" && !stmt["value"].is_null() &&
+      !(stmt["value"]["_type"] == "Constant" &&
+        stmt["value"]["value"].is_null()))
+      return true;
+    for (const char *key : {"body", "orelse"})
+      if (
+        stmt.contains(key) && stmt[key].is_array() &&
+        has_return_value(stmt[key]))
+        return true;
+  }
+  return false;
+}
+
 std::string get_base_var_name(const nlohmann::json &node)
 {
   if (node["_type"] == "Name")

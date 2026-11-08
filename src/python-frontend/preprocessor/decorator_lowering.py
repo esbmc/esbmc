@@ -33,18 +33,27 @@ def _returns_lambda(function):
         isinstance(n, ast.Return) and isinstance(n.value, ast.Lambda) for n in ast.walk(function))
 
 
+def _is_factory_call(decorator):
+    """`@factory(args)` whose arguments call nothing: they are evaluated after
+    the def here, while CPython evaluates them before its defaults."""
+    return isinstance(decorator, ast.Call) and isinstance(decorator.func, ast.Name) and not any(
+        isinstance(n, ast.Call) for arg in decorator.args + decorator.keywords
+        for n in ast.walk(arg))
+
+
 def _check_decorators(function, defined, original, module_name):
     for decorator in function.decorator_list:
-        if not isinstance(decorator, ast.Name):
-            _refuse(decorator, f"the decorator @{ast.unparse(decorator)}", module_name)
+        spelled = ast.unparse(decorator)
+        if not (isinstance(decorator, ast.Name) or _is_factory_call(decorator)):
+            _refuse(decorator, f"the decorator @{spelled}", module_name)
         if not _is_user_decorator(decorator, defined):
-            _refuse(decorator, f"the decorator @{decorator.id} beside one this program defines",
+            _refuse(decorator, f"the decorator @{spelled} beside one this program defines",
                     module_name)
-        if any(_is_user_decorator(d, defined) for d in original[id(defined[decorator.id])]):
-            _refuse(decorator, f"the decorator @{decorator.id}, itself decorated,", module_name)
-        if _returns_lambda(defined[decorator.id]):
-            _refuse(decorator, f"the decorator @{decorator.id}, which returns a lambda,",
-                    module_name)
+        root = _decorator_root(decorator).id
+        if any(_is_user_decorator(d, defined) for d in original[id(defined[root])]):
+            _refuse(decorator, f"the decorator @{spelled}, itself decorated,", module_name)
+        if _returns_lambda(defined[root]):
+            _refuse(decorator, f"the decorator @{spelled}, which returns a lambda,", module_name)
 
 
 def _returned_wrapper(decorator):
@@ -73,33 +82,104 @@ def _liftable(wrapper, param):
     return not {param, wrapper.name} & bound
 
 
-def _lifted_wrapper(decorator, inner, name):
+def _has_plain_params(function):
+    args = function.args
+    return not (args.posonlyargs or args.vararg or args.kwonlyargs or args.kwarg)
+
+
+def _lifted_wrapper(decorator, inner, name, captured=None):
     """The wrapper `decorator` returns, as a top-level def `name` that calls
-    `inner` in place of the decorator's parameter, or None.
+    `inner` in place of the decorator's parameter, or None. `captured` renames
+    the names of an enclosing factory the wrapper reads.
 
     Applying such a decorator has no other effect, so a call to the decorated
     function becomes a direct call, whose arguments type the wrapper's
     parameters (#9319).
     """
-    args = decorator.args
-    if len(args.args) != 1 or args.posonlyargs or args.vararg or args.kwonlyargs or args.kwarg:
+    captured = captured or {}
+    if len(decorator.args.args) != 1 or not _has_plain_params(decorator):
         return None
     wrapper = _returned_wrapper(decorator)
     if wrapper is None:
         return None
-    param = args.args[0].arg
-    if not _liftable(wrapper, param):
+    renames = {**captured, decorator.args.args[0].arg: inner}
+    if len(renames) != len(captured) + 1 or not all(_liftable(wrapper, p) for p in renames):
+        return None
+    if any(isinstance(n, ast.Name) and n.id == decorator.name for n in ast.walk(wrapper)):
         return None
     lifted = copy.deepcopy(wrapper)
     lifted.name = name
     for n in ast.walk(lifted):
-        if isinstance(n, ast.Name) and n.id == param:
-            n.id = inner
+        if isinstance(n, ast.Name) and n.id in renames:
+            n.id = renames[n.id]
     return lifted
 
 
+def _factory_arguments(factory, call):
+    """Each parameter of `factory` with the expression `call` binds it to, or
+    None when the binding is not a plain one."""
+    params = [a.arg for a in factory.args.args]
+    if not _has_plain_params(factory) or len(call.args) > len(params):
+        return None
+    if any(isinstance(a, ast.Starred) for a in call.args):
+        return None
+    bound = dict(zip(params, call.args))
+    for keyword in call.keywords:
+        if keyword.arg not in params or keyword.arg in bound:
+            return None
+        bound[keyword.arg] = keyword.value
+    defaults = factory.args.defaults
+    for param, default in zip(params[len(params) - len(defaults):], defaults):
+        # A default is evaluated once, when the factory is defined.
+        if param not in bound and isinstance(default, ast.Constant):
+            bound[param] = default
+    return bound if len(bound) == len(params) else None
+
+
+def _lifted_factory(factory, call, inner, name, prefix):
+    """`@factory(args)` as an assignment of each argument to a top-level name,
+    then the wrapper lifted as `_lifted_wrapper` does, reading those names in
+    place of the factory's parameters; or None."""
+    bound = _factory_arguments(factory, call)
+    decorator = _returned_wrapper(factory)
+    if bound is None or decorator is None or not _has_plain_params(decorator):
+        return None
+    captured = {param: f"{prefix}_{param}" for param in bound}
+    lifted = _lifted_wrapper(decorator, inner, name, captured)
+    if lifted is None:
+        return None
+    assignments = [
+        ast.Assign(targets=[ast.Name(id=captured[p], ctx=ast.Store())], value=copy.deepcopy(value))
+        for p, value in bound.items()
+    ]
+    return assignments + [lifted]
+
+
+def _lifted(decorator, definition, value, name, clone_name):
+    """The statements lifting `decorator` applied to `value`, or None."""
+    if not isinstance(value, ast.Name):
+        return None
+    if isinstance(decorator, ast.Name):
+        lifted = _lifted_wrapper(definition, value.id, name)
+        return lifted and [lifted]
+    return _lifted_factory(definition, decorator, value.id, name, clone_name)
+
+
+def _applied_clone(decorator, definition, value, clone_name):
+    """A copy of the decorator `definition`, and the call applying it to `value`."""
+    clone = copy.deepcopy(definition)
+    clone.name = clone_name
+    applied = ast.Name(id=clone.name, ctx=ast.Load())
+    if isinstance(decorator, ast.Call):
+        applied = ast.Call(func=applied,
+                           args=copy.deepcopy(decorator.args),
+                           keywords=copy.deepcopy(decorator.keywords))
+    return clone, ast.Call(func=applied, args=[value], keywords=[])
+
+
 def _rebind(function, defined, original, module_name):
-    """`def f` renamed, then `f = d1(d2(renamed))`, as Python applies them.
+    """`def f` renamed, then `f = d1(d2(renamed))`, as Python applies them;
+    a factory `@d(a)` applies `d(a)`.
 
     Each application calls its own copy of the decorator. A nested function
     is one static function here, so the function a wrapper captures would
@@ -110,17 +190,15 @@ def _rebind(function, defined, original, module_name):
     statements = []
     value = ast.Name(id=UNDECORATED_PREFIX + name, ctx=ast.Load())
     for position, decorator in reversed(list(enumerate(function.decorator_list))):
-        clone_name = f"ESBMC_{decorator.id}_{position}_for_{name}"
-        lifted = isinstance(value, ast.Name) and _lifted_wrapper(defined[decorator.id], value.id,
-                                                                 clone_name if position else name)
+        definition = defined[_decorator_root(decorator).id]
+        clone_name = f"ESBMC_{definition.name}_{position}_for_{name}"
+        lifted = _lifted(decorator, definition, value, clone_name if position else name, clone_name)
         if lifted:
-            statements.append(lifted)
-            value = ast.Name(id=lifted.name, ctx=ast.Load())
+            statements.extend(lifted)
+            value = ast.Name(id=lifted[-1].name, ctx=ast.Load())
             continue
-        clone = copy.deepcopy(defined[decorator.id])
-        clone.name = clone_name
+        clone, value = _applied_clone(decorator, definition, value, clone_name)
         statements.append(clone)
-        value = ast.Call(func=ast.Name(id=clone.name, ctx=ast.Load()), args=[value], keywords=[])
     function.name = UNDECORATED_PREFIX + name
     function.decorator_list = []
     if not (isinstance(value, ast.Name) and value.id == name):

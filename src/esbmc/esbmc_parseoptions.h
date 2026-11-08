@@ -180,6 +180,8 @@ protected:
   // Witness transition invariants (loop head, C expression) from a
   // ranking-function termination proof.
   std::vector<std::pair<locationt, std::string>> ranking_transition_invariants;
+  /// The reachable-state invariants assume_reachable_loop_states inserted.
+  std::vector<std::pair<locationt, std::string>> reachable_state_invariants;
 
   // coverage mode
   bool is_coverage;

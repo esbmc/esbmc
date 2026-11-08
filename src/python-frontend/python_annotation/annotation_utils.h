@@ -35,6 +35,10 @@ bool has_annotation(const nlohmann::json &node);
 // either at the top level or inside nested `body`/`orelse` blocks.
 bool has_return_none(const nlohmann::json &body);
 
+// True when `body` contains a `return` of a value other than None, at the
+// top level or inside nested `body`/`orelse` blocks.
+bool has_return_value(const nlohmann::json &body);
+
 // Recursively reconstructs a dotted base name for an attribute /
 // subscript chain rooted at a Name node (e.g. `obj.attr[0]`).
 // Returns the empty string on unrecognised shapes.

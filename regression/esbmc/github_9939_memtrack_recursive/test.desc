@@ -1,0 +1,6 @@
+CORE
+main.c
+--memory-leak-check --no-reachable-memory-leak --witness-output-yaml -
+^VERIFICATION FAILED$
+forgotten memory
+type: "target"\n.*\n.*\n.*\n\s*line: 16\n\s*column: 1$
