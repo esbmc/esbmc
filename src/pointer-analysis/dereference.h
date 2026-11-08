@@ -572,6 +572,24 @@ private:
     unsigned long alignment,
     modet mode,
     const expr2tc *failed_symbol = nullptr);
+  /// Adds to \p extract_list an arm for each aligned \p offset at which a
+  /// \p type access starts in the given field of struct \p value and ends
+  /// past it.
+  void add_spanning_arms(
+    const expr2tc &value,
+    const expr2tc &offset,
+    const type2tc &type,
+    unsigned long alignment,
+    const BigInt &field_offset,
+    const BigInt &field_size,
+    std::list<std::pair<expr2tc, expr2tc>> &extract_list);
+  /// The \p bits bits of struct \p value from bit \p start, each byte read
+  /// from the member holding it so that a store touches no other member; nil
+  /// if a byte is not inside one whole-byte member.
+  expr2tc stitch_across_members(
+    const expr2tc &value,
+    const BigInt &start,
+    unsigned int bits);
   void construct_from_multidir_array(
     expr2tc &value,
     const expr2tc &offset,

@@ -2210,6 +2210,11 @@ void dereferencet::construct_from_dyn_struct_offset(
       extract_list.emplace_back(field_guard, field);
     }
 
+    // Emplaced after the field's own arm, so they take precedence (#10045).
+    if (!int_encoding)
+      add_spanning_arms(
+        value, offset, type, alignment, offs, field_size, extract_list);
+
     i++;
   }
 
@@ -2220,6 +2225,78 @@ void dereferencet::construct_from_dyn_struct_offset(
     new_value = if2tc(type, it.first, it.second, new_value);
 
   value = new_value;
+}
+
+void dereferencet::add_spanning_arms(
+  const expr2tc &value,
+  const expr2tc &offset,
+  const type2tc &type,
+  unsigned long alignment,
+  const BigInt &field_offset,
+  const BigInt &field_size,
+  std::list<std::pair<expr2tc, expr2tc>> &extract_list)
+{
+  const unsigned int access_sz = type_byte_size_bits(type).to_uint64();
+  const BigInt struct_bits = type_byte_size_bits(value->type, &ns);
+  // Alignment is relative to the struct, which may be less aligned than the
+  // access type.
+  const BigInt step = std::max(
+    BigInt(alignment),
+    std::min(
+      ::alignment(migrate_type_back(type), ns),
+      ::alignment(migrate_type_back(value->type), ns)) *
+      8);
+  const BigInt field_end = field_offset + field_size;
+  BigInt p =
+    std::max(field_offset, field_end - access_sz + config.ansi_c.char_width);
+  for (p = (p + step - 1) / step * step;
+       p < field_end && p + access_sz <= struct_bits;
+       p += step)
+  {
+    expr2tc spanning = stitch_across_members(value, p, access_sz);
+    if (is_nil_expr(spanning))
+      continue;
+    extract_list.emplace_back(
+      equality2tc(offset, constant_int2tc(offset->type, p)),
+      bitcast2tc(type, spanning));
+  }
+}
+
+expr2tc dereferencet::stitch_across_members(
+  const expr2tc &value,
+  const BigInt &start,
+  unsigned int bits)
+{
+  const struct_type2t &struct_type = to_struct_type(value->type);
+  const unsigned int width = config.ansi_c.char_width;
+  std::vector<expr2tc> bytes;
+  for (BigInt pos = start; pos < start + bits; pos += width)
+  {
+    expr2tc byte;
+    for (unsigned int i = 0; i < struct_type.members.size(); i++)
+    {
+      const irep_idt &name = struct_type.member_names[i];
+      const type2tc member_type = ns.follow(struct_type.members[i]);
+      const BigInt m_offs = member_offset_bits(value->type, name, &ns);
+      const BigInt m_size = type_byte_size_bits(member_type, &ns);
+      if (
+        m_offs % width == 0 && m_size % width == 0 && m_offs <= pos &&
+        pos < m_offs + m_size)
+      {
+        byte = extract_bytes(
+          member2tc(member_type, value, name),
+          1,
+          gen_ulong((pos - m_offs) / width))[0];
+        break;
+      }
+    }
+    // Reading a bitfield byte from the whole struct would make a store
+    // rewrite every member, pointers included.
+    if (is_nil_expr(byte))
+      return expr2tc();
+    bytes.push_back(byte);
+  }
+  return stitch_together_from_byte_array(bytes.size(), bytes);
 }
 
 void dereferencet::construct_from_dyn_offset(
