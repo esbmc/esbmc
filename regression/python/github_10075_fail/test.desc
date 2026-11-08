@@ -1,5 +1,5 @@
 CORE
 main.py
 
+^  FAILED\s+\[run\.assertion\.\d+\]\s+line\s+16\s+assertion
 ^VERIFICATION FAILED$
-^  file .*main\.py line 17 column 8 function run$

@@ -1,3 +1,4 @@
+# #10075: the int path of an int-or-None call result must reach the assert.
 def f():
     return 42
 
@@ -12,10 +13,7 @@ def run(flag):
     else:
         r = g()
     if flag:
-        assert r == 42
-    else:
-        assert r is not None
+        assert r != 42
 
 
 run(True)
-run(False)

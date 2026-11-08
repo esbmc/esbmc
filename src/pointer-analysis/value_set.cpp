@@ -158,12 +158,15 @@ void value_sett::record_array_member(
   const type2tc &array_type,
   const BigInt &element_size)
 {
+  if (
+    !o.offset_is_set || o.offset.is_negative() || !is_struct_type(object) ||
+    is_null_object2t(object) || !is_array_type(array_type) ||
+    to_array_type(array_type).size_is_infinite)
+    return;
   // A [0] or [1] array may be indexed past its end on purpose, as a flexible
   // array member, so only a longer array bounds the pointer.
   BigInt size = type_byte_size_default(array_type, 0);
-  if (
-    o.offset_is_set && !o.offset.is_negative() && is_struct_type(object) &&
-    size > element_size)
+  if (size > element_size)
   {
     o.member_begin = o.offset.to_uint64();
     o.member_end = o.member_begin + size.to_uint64();
@@ -192,7 +195,8 @@ expr2tc value_sett::to_expr(
   {
     // The dereference treats a member object as one named here, and no other.
     target = get_base_object(object);
-    if (it->second.has_member())
+    // A known offset is resolved against the whole object.
+    if (it->second.has_member() && !it->second.offset_is_set)
     {
       expr2tc member =
         array_member_at(target, it->second.member_begin, it->second.member_end);
@@ -1327,6 +1331,13 @@ void value_sett::get_reference_set_rec(const expr2tc &expr, object_mapt &dest)
         // Whatever the base object is, apply the offset represented by this
         // index expression.
         objectt o = a_it.second;
+        // The pointer stays in this array under pointer arithmetic (C11
+        // 6.5.6p8), whether the index is known yet or not (#10063).
+        record_array_member(
+          o,
+          object,
+          index.source_value->type,
+          type_byte_size_default(index.type, 1));
 
         if (has_const_index_offset && index_offset == 0)
         {
@@ -1358,8 +1369,6 @@ void value_sett::get_reference_set_rec(const expr2tc &expr, object_mapt &dest)
                                  : o.offset_alignment;
 
           o.offset_alignment = std::min(index_align, old_align);
-
-          record_array_member(o, object, index.source_value->type, m);
           o.offset_is_set = false;
         }
 

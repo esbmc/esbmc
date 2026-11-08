@@ -2745,6 +2745,40 @@ static bool binds_name_in(const Json *scope, const std::string &name)
   return scope != nullptr && json_utils::count_name_bindings(*scope, name) > 0;
 }
 
+/// Whether a statement in `stmts`, or in a module-level `if`, `try`, loop or
+/// `with` block under them, assigns `name` (g = f).
+static bool assigns_name_at_module_level(
+  const nlohmann::json &stmts,
+  const std::string &name)
+{
+  for (const auto &stmt : stmts)
+  {
+    const std::string stype = stmt.value("_type", "");
+    if (stype == "Assign" && stmt.contains("targets"))
+    {
+      for (const auto &t : stmt["targets"])
+        if (t.contains("id") && t["id"] == name)
+          return true;
+    }
+    if (
+      stype == "FunctionDef" || stype == "AsyncFunctionDef" ||
+      stype == "ClassDef")
+      continue;
+    for (const char *field : {"body", "orelse", "finalbody"})
+      if (
+        stmt.contains(field) && stmt[field].is_array() &&
+        assigns_name_at_module_level(stmt[field], name))
+        return true;
+    if (stmt.contains("handlers"))
+      for (const auto &handler : stmt["handlers"])
+        if (
+          handler.contains("body") &&
+          assigns_name_at_module_level(handler["body"], name))
+          return true;
+  }
+  return false;
+}
+
 /// Whether `name` is a variable that may hold a function or a callable
 /// instance, whose calls the converter types instead.
 template <class Json>
@@ -2753,18 +2787,13 @@ bool python_annotation<Json>::holds_callable_value(
 {
   const nlohmann::json &body =
     static_cast<const nlohmann::json &>(ast_["body"]);
+  if (assigns_name_at_module_level(body, name))
+    return true;
   for (const auto &stmt : body)
   {
     if (!stmt.contains("_type"))
       continue;
     const std::string &stype = stmt["_type"];
-    // Top-level assignment: g = f
-    if (stype == "Assign" && stmt.contains("targets"))
-    {
-      for (const auto &t : stmt["targets"])
-        if (t.contains("id") && t["id"] == name)
-          return true;
-    }
     // A callable instance: s = S() is already annotated as s: S
     if (
       stype == "AnnAssign" && stmt["target"].value("id", "") == name &&
@@ -7185,8 +7214,8 @@ bool python_annotation<Json>::is_missing_method_call(const Json &value)
 }
 
 /// "Optional[T]" when every binding of `name` in `scope` is a plain
-/// `name = value` storing None (a literal or a call returning it) or a value
-/// of one scalar type T, with at least one of each; "" otherwise.
+/// `name = value` storing None or a value of one scalar type T, with at least
+/// one of each; "" otherwise.
 template <class Json>
 std::string python_annotation<Json>::optional_scalar_of(
   const std::string &name,
@@ -7196,9 +7225,9 @@ std::string python_annotation<Json>::optional_scalar_of(
     const Json &value = (*store)["value"];
     return value.value("_type", "") == "Constant" && value["value"].is_null();
   };
-  auto may_store_none = [&stores_none](const Json *store) {
-    return stores_none(store) ||
-           (*store)["value"].value("_type", "") == "Call";
+  // A call can return None too (#10075); its type is inferred below.
+  auto may_store_none = [&](const Json *store) {
+    return stores_none(store) || (*store)["value"].value("_type", "") == "Call";
   };
   std::vector<const Json *> stores;
   collect_name_stores(name, scope["body"], stores);

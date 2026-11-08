@@ -1,3 +1,5 @@
+# #10075: r holds an int from one call and None from another, so it is an
+# Optional[int] and `r == 42` must not fold to False on the int path.
 def f():
     return 42
 

@@ -748,6 +748,14 @@ public:
   exprt
   handle_string_istitle(const exprt &string_obj, const locationt &location);
 
+  exprt
+  handle_string_isprintable(const exprt &string_obj, const locationt &location);
+
+  exprt call_str_predicate_model(
+    const std::string &name,
+    const exprt &string_obj,
+    const locationt &location);
+
   /**
    * @brief Handle str.isidentifier() method
    */
