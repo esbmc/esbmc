@@ -381,11 +381,7 @@ void smt_solver_baset::define(const expr2tc &expr)
   const equality2t &eq = to_equality2t(expr);
   const type2tc &t = eq.side_1->type;
   const bool scalar = is_bool_type(t) || is_bv_type(t) || is_floatbv_type(t);
-  bool converted;
-  {
-    std::lock_guard lock(smt_cache_mutex);
-    converted = smt_cache.find(eq.side_1) != smt_cache.end();
-  }
+  const bool converted = smt_cache.find(eq.side_1) != smt_cache.end();
   // Aggregates need the flatteners' assign; a symbol already in use would
   // otherwise stay free.
   if (!scalar || converted)
@@ -394,7 +390,6 @@ void smt_solver_baset::define(const expr2tc &expr)
     return;
   }
   smt_astt value = convert_ast(eq.side_2);
-  std::lock_guard lock(smt_cache_mutex);
   smt_cache.insert({eq.side_1, value, ctx_level});
 }
 
@@ -418,12 +413,7 @@ smt_astt smt_solver_baset::convert_assign(const expr2tc &expr)
   // flatteners work, in that one can choose to create a set of expressions and
   // their ASTs, then store them in the cache, rather than have a more
   // sophisticated conversion.
-  {
-    const smt_cache_entryt e = {eq.side_1, side2, ctx_level};
-    // Lock automatically released when it goes out of scope
-    std::lock_guard lock(smt_cache_mutex);
-    smt_cache.insert(e);
-  }
+  smt_cache.insert({eq.side_1, side2, ctx_level});
 
   // Propagate ir-ieee interval metadata from RHS to LHS SSA variable so
   // that get_interval() lookups on the LHS variable find the stored interval
@@ -492,12 +482,8 @@ smt_astt smt_solver_baset::convert_ast(const expr2tc &expr)
   // the warmed post-order path those re-entrant calls are guaranteed hits;
   // checking the cache up front keeps them O(1) instead of paying a worklist
   // allocation per call.
-  {
-    std::lock_guard lock(smt_cache_mutex);
-    smt_cachet::const_iterator hit = smt_cache.find(expr);
-    if (hit != smt_cache.end())
-      return hit->ast;
-  }
+  if (auto hit = smt_cache.find(expr); hit != smt_cache.end())
+    return hit->ast;
 
   // Warm the cache bottom-up with an explicit-stack post-order walk so that
   // the per-node body (convert_ast_node) never has to recurse through a long
@@ -517,13 +503,10 @@ smt_astt smt_solver_baset::convert_ast(const expr2tc &expr)
     const expr2tc node = stack.back().first;
     const bool expanded = stack.back().second;
 
+    if (smt_cache.find(node) != smt_cache.end())
     {
-      std::lock_guard lock(smt_cache_mutex);
-      if (smt_cache.find(node) != smt_cache.end())
-      {
-        stack.pop_back();
-        continue;
-      }
+      stack.pop_back();
+      continue;
     }
 
     if (!expanded && walks_operands(node))
@@ -553,15 +536,11 @@ smt_astt smt_solver_baset::convert_ast(const expr2tc &expr)
     // must record the result here — later iterations and the final lookup rely
     // on every converted node being present in the cache.
     smt_astt a = convert_ast_node(node);
-    {
-      std::lock_guard lock(smt_cache_mutex);
-      if (smt_cache.find(node) == smt_cache.end())
-        smt_cache.insert(smt_cache_entryt{node, a, ctx_level});
-    }
+    if (smt_cache.find(node) == smt_cache.end())
+      smt_cache.insert(smt_cache_entryt{node, a, ctx_level});
     stack.pop_back();
   }
 
-  std::lock_guard lock(smt_cache_mutex);
   return smt_cache.find(expr)->ast;
 }
 
@@ -614,12 +593,8 @@ smt_astt smt_solver_baset::convert_ieee_arith_2op(const expr2tc &expr)
 
 smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
 {
-  {
-    std::lock_guard lock(smt_cache_mutex);
-    smt_cachet::const_iterator cache_result = smt_cache.find(expr);
-    if (cache_result != smt_cache.end())
-      return (cache_result->ast);
-  }
+  if (auto hit = smt_cache.find(expr); hit != smt_cache.end())
+    return hit->ast;
 
   // A sizeof(T) node lowers to its eagerly-computed byte-size value.
   // do_simplify normally folds it away, but under --no-simplify it survives to
@@ -1841,11 +1816,7 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
     abort();
   }
 
-  {
-    struct smt_cache_entryt entry = {expr, a, ctx_level};
-    std::lock_guard lock(smt_cache_mutex);
-    smt_cache.insert(entry);
-  }
+  smt_cache.insert({expr, a, ctx_level});
   return a;
 }
 
@@ -3975,7 +3946,6 @@ bool smt_solver_baset::has_term(const expr2tc &expr)
 {
   if (is_symbol2t(expr))
     return true;
-  std::lock_guard lock(smt_cache_mutex);
   return smt_cache.find(expr) != smt_cache.end();
 }
 

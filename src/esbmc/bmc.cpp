@@ -48,6 +48,7 @@
 #include <util/irep/migrate.h>
 #include <util/base/cwe_mapping.h>
 #include <util/symtab/show_symbol_table.h>
+#include <util/base/threads.h>
 #include <util/base/time_stopping.h>
 #include <util/ssa/cache.h>
 #include <util/ssa/fingerprint.h>
@@ -3925,6 +3926,7 @@ smt_resultt bmct::multi_property_check(
 
         // TODO: Running everything in parallel might be a bad idea.
         //       Should we also add a thread pool?
+        threads_scope scope;
         std::vector<std::thread> parallel_jobs;
         for (const auto &i : jobs)
           parallel_jobs.push_back(
