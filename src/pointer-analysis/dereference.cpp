@@ -2309,7 +2309,6 @@ expr2tc dereferencet::stitch_across_members(
   const BigInt &start,
   unsigned int bits)
 {
-  const struct_type2t &struct_type = to_struct_type(value->type);
   const unsigned int width = config.ansi_c.char_width;
   std::vector<expr2tc> bytes;
   for (BigInt pos = start; pos < start + bits; pos += width)
