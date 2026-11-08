@@ -316,12 +316,37 @@ private:
   std::optional<exprt> try_numpy_math_constant();
   std::optional<exprt> try_bounded_ufunc(const std::string &function);
   exprt bounded_binary_ufunc(const std::string &function);
-  exprt broadcast_pair(
-    const exprt &a,
-    const exprt &b,
+  exprt broadcast_elements(
+    const std::vector<exprt> &operands,
     const std::vector<std::size_t> &shape,
+    const typet &leaf,
     std::size_t depth,
-    const std::function<exprt(const exprt &, const exprt &)> &f);
+    const std::function<exprt(const std::vector<exprt> &)> &f);
+  std::vector<std::size_t> ufunc_shape(
+    const std::vector<exprt> &operands,
+    std::optional<std::size_t> out_index);
+  exprt apply_ufunc(
+    const std::string &function,
+    const std::vector<exprt> &inputs,
+    const typet &leaf,
+    const std::function<exprt(const std::vector<exprt> &)> &f);
+  std::optional<exprt> ufunc_mask(const std::string &function);
+  exprt mask_operand(const std::string &function, const nlohmann::json &node);
+  exprt boolean_mask(const std::string &function, const nlohmann::json &node);
+  exprt elementwise_relation(const irep_idt &id, std::vector<exprt> operands);
+  static exprt truth_of(const exprt &element);
+  /// The array out= writes (a view's pointer, or the array) and its elements
+  /// as read before the call.
+  struct ufunc_output
+  {
+    exprt target;
+    exprt value;
+  };
+  std::optional<ufunc_output>
+  ufunc_out(const std::string &function, std::size_t arity, const typet &leaf);
+  exprt out_operand(const std::string &function, const nlohmann::json &node);
+  void reject_unwritable_out(const exprt &target);
+  exprt write_out(const exprt &target, const exprt &result);
   std::optional<exprt> try_runtime_math(const std::string &function);
   std::optional<exprt>
   elementwise_math(const std::string &function, const nlohmann::json &arg);
@@ -333,16 +358,13 @@ private:
   void
   reject_non_numeric_elements(const std::string &function, const typet &type);
   exprt bind_array_once(const exprt &array);
-  exprt map_elements(
-    const exprt &value,
-    const typet &leaf,
-    const std::function<exprt(const exprt &)> &f);
   exprt retype_lhs(const exprt &result);
   std::optional<exprt> try_float_predicate(const std::string &function);
   exprt numpy_math_list(const std::string &function, const nlohmann::json &arg);
   std::vector<std::vector<double>>
   linalg_matrix(const std::function<void(nlohmann::json &)> &unwrap);
   exprt nondet_bool();
+  exprt nondet_value(const typet &type, const std::string &name);
   exprt eigenvalues(const std::vector<std::vector<double>> &m);
   exprt eigen_decomposition(const std::vector<std::vector<double>> &m);
   std::vector<exprt> in_any_order(const std::vector<exprt> &values);
