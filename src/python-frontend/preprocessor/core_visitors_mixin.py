@@ -2,7 +2,7 @@ import ast
 import copy
 import keyword
 
-from preprocessor.bound_method_dispatch import _scope_nodes
+from preprocessor.bound_method_dispatch import FUNCTION_VALUE, _scope_nodes
 # pylint: disable=too-many-locals,too-many-branches,too-many-statements,too-many-return-statements
 # pylint: disable=too-many-nested-blocks,too-many-boolean-expressions,no-else-return,no-else-raise
 # pylint: disable=import-outside-toplevel
@@ -759,8 +759,8 @@ class CoreVisitorsMixin:
             self._bound_method_scopes[-1], ast.ClassDef)
         if not (resolvable and isinstance(target, ast.Name) and isinstance(value, ast.Attribute)
                 and target.id not in self.unscoped_binding_names and not in_class_body and
-                (captures or isinstance(value.value, ast.Name))
-                and self._needs_no_method_value(target, value)):
+                (captures or isinstance(value.value, ast.Name)) and self._needs_no_method_value(
+                    target, value) and not getattr(value, FUNCTION_VALUE, False)):
             if isinstance(target, ast.Name):
                 self.bound_method_vars.pop(target.id, None)
             return None
@@ -1876,7 +1876,18 @@ class CoreVisitorsMixin:
             idx = self._index_name_for(call)
             return self._index_comprehension(idx, [self._subscript(s.id, idx) for s in call.args],
                                              self._shortest_len([s.id for s in call.args]))
-        return None
+        return self._comprehension_over(call, len(call.args))
+
+    def _comprehension_over(self, call, width):
+        """[(v0, ..., vn) for v0, ..., vn in call], so the for-loop lowering of
+        zip/enumerate binds each operand to a temporary once (#9985)."""
+        if any(isinstance(a, ast.Starred) for a in call.args):
+            return None
+        names = [f"{self._index_name_for(call)}_{i}" for i in range(width)]
+        target = ast.Tuple(elts=[self._load_name(n, ast.Store()) for n in names], ctx=ast.Store())
+        return ast.ListComp(
+            elt=ast.Tuple(elts=[self._load_name(n) for n in names], ctx=ast.Load()),
+            generators=[ast.comprehension(target=target, iter=call, ifs=[], is_async=0)])
 
     def _enumerate_to_list(self, call):
         if not 1 <= len(call.args) <= 2:
@@ -1902,6 +1913,8 @@ class CoreVisitorsMixin:
                 left=self._load_name(idx), op=ast.Add(), right=copy.deepcopy(start))
             return self._index_comprehension(idx, [position, self._subscript(seq.id, idx)],
                                              self._builtin_call("len", [self._load_name(seq.id)]))
+        if constant_start:
+            return self._comprehension_over(call, 2)
         return None
 
     def _maybe_rewrite_list_over_iterator(self, node):

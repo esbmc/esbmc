@@ -1148,7 +1148,7 @@ bool goto_convert_functionst::convert_native_rec(
         stamp_value_locations(cond_legacy, stamp);
       const std::size_t stack_size = targets.destructor_stack.size();
       generate_conditional_branch(
-        gen_not(cond_legacy), z, location, tmp_branch);
+        boolean_negate(cond_legacy), z, location, tmp_branch);
       kill_condition_temporaries(stack_size, location, tmp_branch, tmp_z);
     }
     else

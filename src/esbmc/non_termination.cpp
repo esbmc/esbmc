@@ -6,16 +6,21 @@
 #include <solvers/smt/smt_conv.h>
 #include <irep2/irep2_expr.h>
 #include <irep2/irep2_type.h>
+#include <irep2/irep2_utils.h>
 #include <util/lang/c_types.h>
 #include <util/irep/std_expr.h>
 #include <util/base/yaml_parser.h>
+#include <langapi/language_util.h>
 #include <util/arith/mp_arith.h>
 #include <util/base/i2string.h>
 #include <util/config/config.h>
 
 #include <algorithm>
+#include <deque>
 #include <map>
 #include <memory>
+#include <optional>
+#include <set>
 #include <stdexcept>
 #include <unordered_map>
 #include <unordered_set>
@@ -168,165 +173,6 @@ bool extract_value_set_membership(
   return true;
 }
 
-/// Collect IF guards from a callee body that we treat as "branch
-/// guards": top-level forward IFs whose THEN-branch ends in a transfer
-/// out (RETURN or a FUNCTION_CALL to a noreturn function like exit /
-/// abort), so that NOT taking any of these IFs means falling through
-/// the entire body. On success, @p out is populated with one entry per
-/// IF — the entry stores the IF's *negated* guard (which is the C
-/// source's positive `if (cond)` condition: the IF jumps when cond is
-/// false, so the THEN-arm runs when cond is true).
-///
-/// Returns false if the callee shape isn't recognisable — any non-IF
-/// instruction between the IFs that isn't a SKIP/LOCATION/DECL/DEAD/
-/// ASSIGN/FUNCTION_CALL-to-noreturn/RETURN/GOTO; any guard touching
-/// memory or sideeffects; or a fall-through tail with global writes.
-///
-/// The eca-rers2012 calculate_output shape is:
-///   IF !cond_1 GOTO L1
-///   ASSIGN <state writes>
-///   RETURN <val>
-///   L1: IF !cond_2 GOTO L2
-///   ASSIGN <state writes>
-///   RETURN <val>
-///   ...
-///   IF !err_cond_1 GOTO E1
-///   FUNCTION_CALL: exit(0)
-///   E1: IF !err_cond_2 GOTO E2
-///   FUNCTION_CALL: exit(0)
-///   ...
-///   RETURN -2     <-- the fall-through tail (no state writes)
-///
-/// Every IF here is "if the condition fires, we transfer out of the
-/// body" (either via RETURN or exit). So if NONE of the IFs fire, we
-/// reach the trailing RETURN -2 without modifying any state. The query
-/// then is: is the conjunction `¬cond_1 ∧ ¬cond_2 ∧ ... ∧ ¬err_cond_1
-/// ∧ ...` satisfiable under the input-validation constraint? If yes,
-/// the demon has a choice of inputs that keeps state unchanged →
-/// non-terminating.
-bool collect_callee_branch_guards(
-  const goto_functiont &callee,
-  std::vector<expr2tc> &out)
-{
-  out.clear();
-  auto end = callee.body.instructions.end();
-  for (auto it = callee.body.instructions.begin(); it != end; ++it)
-  {
-    if (
-      it->is_skip() || it->type == LOCATION || it->type == DECL ||
-      it->type == DEAD)
-      continue;
-    // Tolerate ASSUMEs from --interval-analysis. They constrain
-    // modified-set values but don't affect the branch structure.
-    if (it->is_assume())
-      continue;
-    if (it->is_return())
-    {
-      // The trailing fall-through RETURN. Must be the last meaningful
-      // instruction — anything else after it would have to be skipped,
-      // and there must be no assigns or function calls AFTER an IF
-      // chain has fully fallen through. Walk forward to confirm.
-      auto j = std::next(it);
-      while (j != end)
-      {
-        if (
-          j->is_skip() || j->type == LOCATION || j->type == DECL ||
-          j->type == DEAD || j->type == END_FUNCTION || j->is_assume())
-        {
-          ++j;
-          continue;
-        }
-        return false; // unexpected instruction after fall-through return
-      }
-      return !out.empty();
-    }
-    if (it->is_goto())
-    {
-      // Must be a forward IF with a non-trivial guard that touches only
-      // scalars.
-      if (it->is_backwards_goto() || it->targets.size() != 1)
-        return false;
-      if (is_true(it->guard) || is_nil_expr(it->guard))
-        return false;
-      if (touches_memory_or_sideeffect(it->guard))
-        return false;
-      auto tgt = it->targets.front();
-      if (tgt == end)
-        return false; // pathological: jump target is past end-of-function
-      if (tgt->location_number <= it->location_number)
-        return false;
-      // The IF guard is `!cond` (THEN-arm runs when cond is true). We
-      // store cond (peel the outer not) as the positive branch
-      // condition.
-      expr2tc neg_guard = it->guard;
-      expr2tc pos_cond =
-        is_not2t(neg_guard) ? to_not2t(neg_guard).value : not2tc(neg_guard);
-      // Walk the THEN-arm (instructions strictly between `it` and
-      // `tgt`). Every assign must hit a scalar global / local; the arm
-      // must end in either a RETURN or a call to a noreturn function
-      // (exit / abort / __VERIFIER_error). We don't constrain the
-      // assigns further since they only matter when the branch fires,
-      // and we're conjoining ¬cond so it won't.
-      bool arm_ok = false;
-      for (auto k = std::next(it); k != tgt; ++k)
-      {
-        if (
-          k->is_skip() || k->type == LOCATION || k->type == DECL ||
-          k->type == DEAD)
-          continue;
-        if (k->is_assume())
-          continue; // ASSUME from --interval-analysis; doesn't fire the branch
-        if (k->is_assign())
-        {
-          if (touches_memory_or_sideeffect(to_code_assign2t(k->code).source))
-            return false;
-          continue;
-        }
-        if (k->is_return())
-        {
-          arm_ok = true;
-          break;
-        }
-        if (k->is_function_call())
-        {
-          const code_function_call2t &c = to_code_function_call2t(k->code);
-          if (!is_symbol2t(c.function))
-            return false;
-          irep_idt fname = to_symbol2t(c.function).thename;
-          static const char *noreturns[] = {
-            "c:@F@exit",
-            "c:@F@abort",
-            "c:@F@__VERIFIER_error",
-            "c:@F@reach_error"};
-          bool is_noreturn = false;
-          for (const char *nm : noreturns)
-            if (fname == nm)
-            {
-              is_noreturn = true;
-              break;
-            }
-          if (!is_noreturn)
-            return false;
-          arm_ok = true;
-          break;
-        }
-        if (k->is_goto())
-          return false; // inner goto / jump out of arm
-        return false;   // unknown instruction in arm
-      }
-      if (!arm_ok)
-        return false;
-      out.push_back(pos_cond);
-      // The arm has been walked. Advance the outer iterator to the IF
-      // target so the next iteration picks up the next top-level IF.
-      it = std::prev(tgt);
-      continue;
-    }
-    return false; // unexpected top-level instruction
-  }
-  return false; // walked off end without seeing the trailing return
-}
-
 /// Recognise an eca-rers2012 main loop: a `while(1)` whose body is
 ///
 ///   DECL input
@@ -351,14 +197,19 @@ bool recognize_eca_main_loop(
   // loopst::effective_loop_head documentation.
   goto_programt::const_targett head = loop.effective_loop_head();
   goto_programt::const_targett back = loop.get_original_loop_exit();
-  if (head == back || !head->is_goto() || !is_constant_false(head->guard))
+  if (head == back || !back->is_goto() || !back->is_backwards_goto())
     return false;
-  if (!back->is_goto() || !back->is_backwards_goto())
+  // while(1)'s exit test never jumps; remove_no_op, which k-induction runs
+  // first, drops it, leaving an unconditional back edge.
+  goto_programt::const_targett first = head;
+  if (head->is_goto() && is_constant_false(head->guard))
+    ++first;
+  else if (!is_true(back->guard))
     return false;
   expr2tc input_sym;
   irep_idt callee;
   std::vector<BigInt> values;
-  for (auto it = std::next(head); it != back; ++it)
+  for (auto it = first; it != back; ++it)
   {
     if (
       it->is_skip() || it->type == LOCATION || it->type == DECL ||
@@ -458,74 +309,6 @@ bool recognize_eca_main_loop(
   return true;
 }
 
-/// Collect the thename of every scalar storage symbol written by any
-/// ASSIGN in @p fn into @p out. Used by the soundness pass to identify
-/// which globals the callee can mutate across iterations — those are
-/// left existentially free in the SMT formula (their reachable set
-/// over-approximates), while globals NEVER written are pinned to
-/// their initial values (sound: their reachable set IS the singleton
-/// initial value).
-void collect_writes(
-  const goto_functiont &fn,
-  std::unordered_set<irep_idt, irep_id_hash> &out)
-{
-  for (const auto &instr : fn.body.instructions)
-  {
-    if (!instr.is_assign())
-      continue;
-    const code_assign2t &a = to_code_assign2t(instr.code);
-    if (is_symbol2t(a.target))
-      out.insert(to_symbol2t(a.target).thename);
-  }
-}
-
-/// Replace every leaf `symbol2t` named @p from_name in @p e by a copy
-/// of @p to. Used to substitute a callee's formal parameter symbol
-/// with the caller's actual-argument symbol so the SMT formula treats
-/// them as the same SMT variable.
-expr2tc substitute_symbol(
-  const expr2tc &e,
-  const irep_idt &from_name,
-  const expr2tc &to)
-{
-  if (is_nil_expr(e))
-    return e;
-  if (is_symbol2t(e) && to_symbol2t(e).thename == from_name)
-    return to;
-  expr2tc out = e;
-  bool changed = false;
-  std::vector<expr2tc> new_ops;
-  e->foreach_operand([&](const expr2tc &op) {
-    expr2tc no = substitute_symbol(op, from_name, to);
-    if (no.get() != op.get())
-      changed = true;
-    new_ops.push_back(no);
-  });
-  if (!changed)
-    return e;
-  size_t i = 0;
-  out.get()->Foreach_operand([&](expr2tc &op) { op = new_ops[i++]; });
-  return out;
-}
-
-/// Walk @p e collecting the thename of every `symbol2t` leaf into
-/// @p out (deduplicated by name). Used to gather the free state
-/// symbols the SMT formula will mention, so we can constrain those
-/// that have known initialisers to their initial values.
-void collect_free_symbols(
-  const expr2tc &e,
-  std::unordered_map<irep_idt, expr2tc, irep_id_hash> &out)
-{
-  if (is_nil_expr(e))
-    return;
-  if (is_symbol2t(e))
-  {
-    out.emplace(to_symbol2t(e).thename, e);
-    return;
-  }
-  e->foreach_operand([&](const expr2tc &op) { collect_free_symbols(op, out); });
-}
-
 /// Harvest constant initial values for globals from `__ESBMC_main`,
 /// the synthetic entry point ESBMC inserts before calling C's `main`.
 /// `__ESBMC_main` is loop-free and consists of a flat sequence of
@@ -558,87 +341,6 @@ harvest_initial_state(const goto_functionst &goto_functions)
     out[to_symbol2t(a.target).thename] = to_constant_int2t(a.source).value;
   }
   return out;
-}
-
-/// Build the SMT formula and ask whether a period-1 fixpoint exists.
-///
-/// Concretely:
-///   input == v1 ∨ ... ∨ input == vn         (caller's input constraint)
-///   ∧  state_i == init_i for every state symbol with a known initialiser
-///                       AND not modified by any branch of the callee
-///   ∧  ¬cond_1 ∧ ... ∧ ¬cond_N               (no branch fires)
-///
-/// Each `cond_i` has its callee formal parameter substituted by the
-/// caller's actual `input_arg` symbol, so all references to "the
-/// input" denote the same SMT variable.
-///
-/// Globals the callee MIGHT modify are left existentially free in the
-/// SMT formula — sound because the reachable set of values is at
-/// least as wide as their initial value (the demon may have stepped
-/// the loop through writing branches in earlier iterations), so any
-/// satisfying assignment over reachable states is still a valid
-/// non-termination witness from the LASSO closure of that reachable
-/// set. Globals NEVER written by the callee, on the other hand, are
-/// pinned to their initial value (the reachable set IS the singleton
-/// initial value), preventing the wrong-false where the SMT would
-/// otherwise pick an unreachable value to falsify a state-dependent
-/// guard (e.g. the Codex `a == 1` exploit).
-///
-/// SAT means there's a state + input combination, consistent with the
-/// reachable-state over-approximation, under which the updater falls
-/// through to its trailing `return -2` without firing any branch — a
-/// real non-terminating execution of the main loop.
-bool check_period_1_fixpoint(
-  const expr2tc &input_arg,
-  const irep_idt &callee_formal_name,
-  const std::vector<BigInt> &valid_inputs,
-  const std::vector<expr2tc> &branch_conds,
-  const std::unordered_map<irep_idt, BigInt, irep_id_hash> &initial_state,
-  const std::unordered_set<irep_idt, irep_id_hash> &callee_writes,
-  optionst &options,
-  const namespacet &ns)
-{
-  expr2tc input_constraint;
-  for (const BigInt &v : valid_inputs)
-  {
-    expr2tc atom = equality2tc(input_arg, constant_int2tc(input_arg->type, v));
-    input_constraint =
-      is_nil_expr(input_constraint) ? atom : or2tc(input_constraint, atom);
-  }
-  // Substitute the callee's formal parameter with the caller's actual
-  // input symbol in every branch guard so the SMT formula treats them
-  // as the same variable rather than two unrelated free variables.
-  std::vector<expr2tc> rewritten;
-  rewritten.reserve(branch_conds.size());
-  for (const expr2tc &c : branch_conds)
-    rewritten.push_back(
-      callee_formal_name.empty()
-        ? c
-        : substitute_symbol(c, callee_formal_name, input_arg));
-  // Collect all free symbols appearing in the (rewritten) branch
-  // conditions and conjoin known initialisers ONLY for symbols the
-  // callee never writes. The caller's input symbol is *deliberately*
-  // excluded — its values are constrained by `input_constraint`.
-  std::unordered_map<irep_idt, expr2tc, irep_id_hash> free_syms;
-  for (const expr2tc &c : rewritten)
-    collect_free_symbols(c, free_syms);
-  expr2tc formula = input_constraint;
-  for (const auto &kv : free_syms)
-  {
-    if (is_symbol2t(input_arg) && kv.first == to_symbol2t(input_arg).thename)
-      continue;
-    if (callee_writes.count(kv.first))
-      continue; // mutable across iterations — leave free
-    auto init = initial_state.find(kv.first);
-    if (init == initial_state.end())
-      continue;
-    expr2tc eq =
-      equality2tc(kv.second, constant_int2tc(kv.second->type, init->second));
-    formula = and2tc(formula, eq);
-  }
-  for (const expr2tc &c : rewritten)
-    formula = and2tc(formula, not2tc(c));
-  return is_sat(formula, options, ns);
 }
 
 using statet = std::unordered_map<irep_idt, expr2tc, irep_id_hash>;
@@ -692,6 +394,19 @@ std::pair<expr2tc, statet> join(const pathst &in)
     guard = or2tc(guard, k->first);
   }
   return {guard, s};
+}
+
+/// @p e simplified, so a run on concrete states stays concrete.
+expr2tc folded(expr2tc e)
+{
+  simplify(e);
+  return e;
+}
+
+/// @p guard and @p c, leaving out a @p c that is true.
+expr2tc conjoin(const expr2tc &guard, const expr2tc &c)
+{
+  return is_true(c) ? guard : is_true(guard) ? c : and2tc(guard, c);
 }
 
 void run_once(
@@ -777,24 +492,31 @@ void run_once(
     case DEAD:
       next.emplace_back(guard, s);
       break;
+    // A failed assertion ends the execution (C11 7.2.1.1: assert aborts).
+    case ASSERT:
     case ASSUME:
-      next.emplace_back(and2tc(guard, read_in(it->guard, s)), s);
+    {
+      const expr2tc c = folded(read_in(it->guard, s));
+      if (!is_false(c))
+        next.emplace_back(conjoin(guard, c), s);
       break;
+    }
     case ASSIGN:
       if (!is_symbol2t(to_code_assign2t(it->code).target))
         throw unsupportedt();
       s[to_symbol2t(to_code_assign2t(it->code).target).thename] =
-        read_in(to_code_assign2t(it->code).source, s);
-      next.emplace_back(guard, s);
+        folded(read_in(to_code_assign2t(it->code).source, s));
+      next.emplace_back(guard, std::move(s));
       break;
     case GOTO:
     {
       if (it->is_backwards_goto() || it->targets.size() != 1)
         throw unsupportedt();
-      const expr2tc c = read_in(it->guard, s);
-      pending[&*it->targets.front()].emplace_back(and2tc(guard, c), s);
+      const expr2tc c = folded(read_in(it->guard, s));
+      if (!is_false(c))
+        pending[&*it->targets.front()].emplace_back(conjoin(guard, c), s);
       if (!is_true(c))
-        next.emplace_back(and2tc(guard, not2tc(c)), s);
+        next.emplace_back(conjoin(guard, folded(not2tc(c))), s);
       break;
     }
     case RETURN:
@@ -819,9 +541,11 @@ void run_once(
   }
 }
 
-/// Control reaches @p head of the entry function @p fname straight from its
-/// start with the globals as __ESBMC_main initialised them: nothing before it
-/// branches, assumes, writes a global or calls anything but a witness assume.
+/// Control reaches @p head of the entry function @p fname from its start with
+/// the globals as __ESBMC_main initialised them: the code before it writes
+/// only locals, jumps nowhere past @p head, and neither returns, exits,
+/// assumes nor calls anything but a witness assume. Its loops may run
+/// forever, but then so does the program.
 bool loop_starts_at_initial_state(
   const irep_idt &fname,
   const goto_programt &body,
@@ -836,6 +560,14 @@ bool loop_starts_at_initial_state(
       it->is_skip() || it->type == LOCATION || it->type == DECL ||
       it->type == DEAD)
       continue;
+    // A jump past the head could skip the loop.
+    if (it->is_goto())
+    {
+      for (const auto &t : it->targets)
+        if (t->location_number > head->location_number)
+          return false;
+      continue;
+    }
     if (
       it->is_function_call() &&
       is_symbol2t(to_code_function_call2t(it->code).function) &&
@@ -1014,54 +746,677 @@ bool has_cycle_from_init(
   }
 }
 
-/// The eca updater @p fn, called with the input once per iteration, never
-/// fires a branch for some reachable state and valid input, leaving the state
-/// as it was: the period-1 recurrent set.
-bool has_period_1_fixpoint(
+/// Add to @p out every symbol an ASSIGN in @p fn writes directly.
+void collect_writes(
   const goto_functiont &fn,
-  const expr2tc &input_arg,
-  const std::vector<BigInt> &valid_inputs,
-  const std::vector<expr2tc> &result_writes,
-  const std::unordered_map<irep_idt, BigInt, irep_id_hash> &initial_state,
-  optionst &options,
-  const namespacet &ns)
+  std::unordered_set<irep_idt, irep_id_hash> &out)
 {
-  // Identify the callee's single formal parameter so we can
-  // substitute its symbol with the caller's actual input.
-  irep_idt callee_formal_name;
-  if (is_code_type(fn.type))
+  for (const auto &instr : fn.body.instructions)
   {
-    const code_type2t &ct = to_code_type(fn.type);
-    if (ct.argument_names.size() == 1)
-      callee_formal_name = ct.argument_names[0];
+    if (!instr.is_assign())
+      continue;
+    const code_assign2t &a = to_code_assign2t(instr.code);
+    if (is_symbol2t(a.target))
+      out.insert(to_symbol2t(a.target).thename);
   }
-  std::vector<expr2tc> branch_conds;
-  if (!collect_callee_branch_guards(fn, branch_conds))
-    return false;
-  // A call result stored where the guards read it changes the state the
-  // fall-through left alone, so the next iteration differs.
-  std::unordered_map<irep_idt, expr2tc, irep_id_hash> guard_reads;
-  for (const expr2tc &c : branch_conds)
-    collect_free_symbols(c, guard_reads);
-  if (
-    std::any_of(
-      result_writes.begin(), result_writes.end(), [&](const expr2tc &w) {
-        return guard_reads.count(to_symbol2t(w).thename);
-      }))
-    return false;
-  std::unordered_set<irep_idt, irep_id_hash> callee_writes;
-  collect_writes(fn, callee_writes);
-  return check_period_1_fixpoint(
-    input_arg,
-    callee_formal_name,
-    valid_inputs,
-    branch_conds,
-    initial_state,
-    callee_writes,
-    options,
-    ns);
 }
 
+/// Add to @p out every symbol @p e reads, keyed by name.
+void collect_free_symbols(
+  const expr2tc &e,
+  std::unordered_map<irep_idt, expr2tc, irep_id_hash> &out)
+{
+  if (is_nil_expr(e))
+    return;
+  if (is_symbol2t(e))
+  {
+    out.emplace(to_symbol2t(e).thename, e);
+    return;
+  }
+  e->foreach_operand([&](const expr2tc &op) { collect_free_symbols(op, out); });
+}
+
+/// The globals of @p s0 that the updater @p callee, or a function it calls,
+/// writes (@p written) or reads or writes (@p used). False when it reads or
+/// writes one that a function outside it,
+/// other than the entry function @p fname and __ESBMC_main's initialisation,
+/// also writes (e.g. a pthread hook run before main): then the head may not
+/// see the value __ESBMC_main gave it.
+bool updater_globals(
+  const goto_functionst &goto_functions,
+  const irep_idt &fname,
+  const irep_idt &callee,
+  const statet &s0,
+  std::unordered_set<irep_idt, irep_id_hash> &written,
+  std::unordered_set<irep_idt, irep_id_hash> &used)
+{
+  std::unordered_set<irep_idt, irep_id_hash> closure{callee};
+  std::vector<irep_idt> todo{callee};
+  std::unordered_map<irep_idt, expr2tc, irep_id_hash> touched;
+  while (!todo.empty())
+  {
+    auto f = goto_functions.function_map.find(todo.back());
+    todo.pop_back();
+    if (f == goto_functions.function_map.end())
+      continue;
+    collect_writes(f->second, written);
+    for (const auto &i : f->second.body.instructions)
+    {
+      collect_free_symbols(i.code, touched);
+      collect_free_symbols(i.guard, touched);
+      if (
+        i.is_function_call() &&
+        is_symbol2t(to_code_function_call2t(i.code).function))
+      {
+        const irep_idt &g =
+          to_symbol2t(to_code_function_call2t(i.code).function).thename;
+        if (closure.insert(g).second)
+          todo.push_back(g);
+      }
+    }
+  }
+  std::unordered_set<irep_idt, irep_id_hash> elsewhere;
+  for (const auto &[name, fn] : goto_functions.function_map)
+    if (!closure.count(name) && name != fname && name != "__ESBMC_main")
+      collect_writes(fn, elsewhere);
+  for (const auto &[name, e] : touched)
+  {
+    if (!s0.count(name))
+      continue;
+    if (elsewhere.count(name))
+      return false;
+    used.insert(name);
+  }
+  for (auto it = written.begin(); it != written.end();)
+    it = s0.count(*it) ? std::next(it) : written.erase(it);
+  return true;
+}
+
+/// Runs an input loop's iterations on concrete values. Each guard and
+/// assigned value is compiled once into flat nodes over numbered variables,
+/// since the updaters of the larger eca problems are chains of dozens of
+/// functions evaluated thousands of times per state. Integers wrap to their
+/// type's width as ESBMC's bit-vector encoding wraps them. Throws unsupportedt
+/// on anything else.
+class concrete_runnert
+{
+public:
+  concrete_runnert(const goto_functionst &goto_functions, const loopst &loop)
+    : goto_functions(goto_functions), loop(loop)
+  {
+  }
+
+  /// The slot of the variable @p name.
+  size_t slot(const irep_idt &name)
+  {
+    auto [it, fresh] = slots.emplace(name, values.size());
+    if (fresh)
+    {
+      values.push_back(0);
+      defined.push_back(false);
+    }
+    return it->second;
+  }
+
+  void set(size_t v, int64_t x)
+  {
+    values[v] = x;
+    defined[v] = true;
+  }
+
+  int64_t get(size_t v) const
+  {
+    if (!defined[v])
+      throw unsupportedt();
+    return values[v];
+  }
+
+  /// One iteration on the current values, reading @p in as the input @p
+  /// input_arg; walked as run_iteration walks it. False when it stops.
+  bool iterate(const expr2tc &input_arg, int64_t in)
+  {
+    steps = 0;
+    bool called = false;
+    for (auto it = loop.get_original_loop_head();
+         it != loop.get_original_loop_exit();
+         ++it)
+    {
+      if (
+        it->is_assign() && !called &&
+        to_code_assign2t(it->code).target == input_arg)
+        assign(input_arg, wrap_to(input_arg->type, in));
+      else if (it->is_function_call())
+      {
+        if (!call(it, 0))
+          return false;
+        called = true;
+      }
+      else if (it->is_assume() && !holds(it))
+        return false;
+      else if (it->is_assign() && called)
+        assign(it);
+    }
+    return true;
+  }
+
+private:
+  enum class opt : uint8_t
+  {
+    var,
+    constant,
+    cast,
+    lnot,
+    land,
+    lor,
+    ite,
+    eq,
+    ne,
+    lt,
+    le,
+    gt,
+    ge,
+    neg,
+    add,
+    sub,
+    mul,
+    div,
+    mod,
+    unsupported
+  };
+
+  struct nodet
+  {
+    opt op;
+    bool is_signed;
+    uint64_t mask; // the type's width; zero for Booleans
+    int64_t k;     // constant value, or variable slot
+    int32_t a, b, c;
+  };
+
+  const goto_functionst &goto_functions;
+  const loopst &loop;
+  std::unordered_map<irep_idt, size_t, irep_id_hash> slots;
+  std::vector<int64_t> values;
+  std::vector<bool> defined;
+  std::vector<nodet> nodes;
+  std::unordered_map<const expr2t *, int32_t> compiled;
+  size_t steps = 0;
+
+  /// A call resolved once: its callee, argument nodes, and where the
+  /// parameters and the result go.
+  struct call_sitet
+  {
+    bool stops = false; // exit or abort
+    const goto_functiont *fn = nullptr;
+    std::vector<int32_t> args;
+    std::vector<size_t> params;
+    std::vector<std::pair<uint64_t, bool>> param_widths;
+    bool has_ret = false;
+    size_t ret = 0;
+    std::pair<uint64_t, bool> ret_width{0, false};
+  };
+  // A deque: call() holds a site while the callee resolves new ones.
+  std::deque<call_sitet> call_sites;
+  std::unordered_map<const goto_functiont *, bool> running;
+
+  /// Per instruction, by location_number: its compiled guard, value and call
+  /// site, -1 until first needed.
+  std::vector<int32_t> guard_at, value_at, call_at;
+
+  static int32_t &at(std::vector<int32_t> &v, unsigned n)
+  {
+    if (v.size() <= n)
+      v.resize(n + 1, -1);
+    return v[n];
+  }
+
+  int32_t guard_of(goto_programt::const_targett it)
+  {
+    int32_t &g = at(guard_at, it->location_number);
+    if (g < 0)
+      g = compile(it->guard);
+    return g;
+  }
+
+  int32_t value_of(goto_programt::const_targett it, const expr2tc &e)
+  {
+    int32_t &v = at(value_at, it->location_number);
+    if (v < 0)
+      v = compile(e);
+    return v;
+  }
+
+  /// The width mask and signedness of @p type; throws on non-integers.
+  static std::pair<uint64_t, bool> width_of(const type2tc &type)
+  {
+    if (is_bool_type(type))
+      return {0, false};
+    const bool is_signed = is_signedbv_type(type);
+    if (!is_signed && !is_unsignedbv_type(type))
+      throw unsupportedt();
+    const unsigned w = type->get_width();
+    if (w == 0 || w > 64 || (w == 64 && !is_signed))
+      throw unsupportedt();
+    return {w == 64 ? ~0ULL : (1ULL << w) - 1, is_signed};
+  }
+
+  static int64_t wrap(uint64_t v, uint64_t mask, bool is_signed)
+  {
+    if (mask == 0)
+      return v != 0;
+    v &= mask;
+    if (is_signed && (v & ~(mask >> 1) & mask))
+      v |= ~mask;
+    return static_cast<int64_t>(v);
+  }
+
+  static int64_t wrap_to(const type2tc &type, int64_t v)
+  {
+    auto [mask, is_signed] = width_of(type);
+    return wrap(static_cast<uint64_t>(v), mask, is_signed);
+  }
+
+  int32_t add_node(nodet n)
+  {
+    nodes.push_back(n);
+    return static_cast<int32_t>(nodes.size() - 1);
+  }
+
+  /// The node computing @p e; an opt::unsupported node when it cannot.
+  int32_t compile(const expr2tc &e)
+  {
+    if (auto it = compiled.find(e.get()); it != compiled.end())
+      return it->second;
+    int32_t idx;
+    try
+    {
+      idx = compile_node(e);
+    }
+    catch (const unsupportedt &)
+    {
+      idx = add_node({opt::unsupported, false, 0, 0, -1, -1, -1});
+    }
+    compiled.emplace(e.get(), idx);
+    return idx;
+  }
+
+  int32_t compile_node(const expr2tc &e)
+  {
+    auto sub = [&](unsigned i) {
+      const int32_t n = compile(*e->get_sub_expr(i));
+      if (nodes[n].op == opt::unsupported)
+        throw unsupportedt();
+      return n;
+    };
+    auto typed = [&](opt op, int32_t a, int32_t b = -1, int32_t c = -1) {
+      auto [mask, is_signed] = width_of(e->type);
+      return add_node({op, is_signed, mask, 0, a, b, c});
+    };
+    auto boolean = [&](opt op, int32_t a, int32_t b = -1, int32_t c = -1) {
+      return add_node({op, false, 0, 0, a, b, c});
+    };
+    switch (e->expr_id)
+    {
+    case expr2t::symbol_id:
+    {
+      const size_t v = slot(to_symbol2t(e).thename);
+      const int32_t n = boolean(opt::var, -1);
+      nodes[n].k = static_cast<int64_t>(v);
+      return n;
+    }
+    case expr2t::constant_int_id:
+    {
+      if (!to_constant_int2t(e).value.is_int64())
+        throw unsupportedt();
+      const int32_t n = typed(opt::constant, -1);
+      nodes[n].k = wrap_to(e->type, to_constant_int2t(e).value.to_int64());
+      return n;
+    }
+    case expr2t::constant_bool_id:
+    {
+      const int32_t n = boolean(opt::constant, -1);
+      nodes[n].k = to_constant_bool2t(e).value;
+      return n;
+    }
+    case expr2t::typecast_id:
+      return typed(opt::cast, sub(0));
+    case expr2t::not_id:
+      return boolean(opt::lnot, sub(0));
+    case expr2t::and_id:
+      return boolean(opt::land, sub(0), sub(1));
+    case expr2t::or_id:
+      return boolean(opt::lor, sub(0), sub(1));
+    case expr2t::if_id:
+      return typed(opt::ite, sub(0), sub(1), sub(2));
+    case expr2t::equality_id:
+      return boolean(opt::eq, sub(0), sub(1));
+    case expr2t::notequal_id:
+      return boolean(opt::ne, sub(0), sub(1));
+    case expr2t::lessthan_id:
+      return boolean(opt::lt, sub(0), sub(1));
+    case expr2t::lessthanequal_id:
+      return boolean(opt::le, sub(0), sub(1));
+    case expr2t::greaterthan_id:
+      return boolean(opt::gt, sub(0), sub(1));
+    case expr2t::greaterthanequal_id:
+      return boolean(opt::ge, sub(0), sub(1));
+    case expr2t::neg_id:
+      return typed(opt::neg, sub(0));
+    case expr2t::add_id:
+      return typed(opt::add, sub(0), sub(1));
+    case expr2t::sub_id:
+      return typed(opt::sub, sub(0), sub(1));
+    case expr2t::mul_id:
+      return typed(opt::mul, sub(0), sub(1));
+    case expr2t::div_id:
+      return typed(opt::div, sub(0), sub(1));
+    case expr2t::modulus_id:
+      return typed(opt::mod, sub(0), sub(1));
+    default:
+      throw unsupportedt();
+    }
+  }
+
+  int64_t eval(int32_t i)
+  {
+    const nodet &n = nodes[i];
+    auto u = [&](int32_t j) { return static_cast<uint64_t>(eval(j)); };
+    switch (n.op)
+    {
+    case opt::var:
+      return get(n.k);
+    case opt::constant:
+      return n.k;
+    case opt::cast:
+      return wrap(u(n.a), n.mask, n.is_signed);
+    case opt::lnot:
+      return !eval(n.a);
+    case opt::land:
+      return eval(n.a) && eval(n.b);
+    case opt::lor:
+      return eval(n.a) || eval(n.b);
+    case opt::ite:
+      return eval(n.a) ? eval(n.b) : eval(n.c);
+    case opt::eq:
+      return eval(n.a) == eval(n.b);
+    case opt::ne:
+      return eval(n.a) != eval(n.b);
+    case opt::lt:
+      return eval(n.a) < eval(n.b);
+    case opt::le:
+      return eval(n.a) <= eval(n.b);
+    case opt::gt:
+      return eval(n.a) > eval(n.b);
+    case opt::ge:
+      return eval(n.a) >= eval(n.b);
+    case opt::neg:
+      return wrap(0 - u(n.a), n.mask, n.is_signed);
+    case opt::add:
+      return wrap(u(n.a) + u(n.b), n.mask, n.is_signed);
+    case opt::sub:
+      return wrap(u(n.a) - u(n.b), n.mask, n.is_signed);
+    case opt::mul:
+      return wrap(u(n.a) * u(n.b), n.mask, n.is_signed);
+    case opt::div:
+    case opt::mod:
+    {
+      const int64_t a = eval(n.a), b = eval(n.b);
+      if (b == 0 || (a == INT64_MIN && b == -1))
+        throw unsupportedt();
+      // C11 6.5.5p6: the quotient truncates toward zero.
+      return wrap(
+        static_cast<uint64_t>(n.op == opt::div ? a / b : a % b),
+        n.mask,
+        n.is_signed);
+    }
+    case opt::unsupported:
+      break;
+    }
+    throw unsupportedt();
+  }
+
+  /// The assumption or assertion at @p it; one it cannot evaluate keeps the
+  /// execution, which only adds states.
+  bool holds(goto_programt::const_targett it)
+  {
+    const int32_t n = guard_of(it);
+    if (nodes[n].op == opt::unsupported)
+      return true;
+    try
+    {
+      return eval(n);
+    }
+    catch (const unsupportedt &)
+    {
+      return true;
+    }
+  }
+
+  void assign(const expr2tc &target, int64_t v)
+  {
+    if (!is_symbol2t(target))
+      throw unsupportedt();
+    set(slot(to_symbol2t(target).thename), wrap_to(target->type, v));
+  }
+
+  /// The assignment at @p it.
+  void assign(goto_programt::const_targett it)
+  {
+    const code_assign2t &a = to_code_assign2t(it->code);
+    assign(a.target, eval(value_of(it, a.source)));
+  }
+
+  const call_sitet &site_of(goto_programt::const_targett it)
+  {
+    int32_t &i = at(call_at, it->location_number);
+    if (i >= 0)
+      return call_sites[i];
+    const code_function_call2t &c = to_code_function_call2t(it->code);
+    call_sitet site;
+    if (!is_symbol2t(c.function))
+      throw unsupportedt();
+    const irep_idt &name = to_symbol2t(c.function).thename;
+    if (name == "c:@F@exit" || name == "c:@F@abort")
+      site.stops = true;
+    else
+    {
+      auto callee = goto_functions.function_map.find(name);
+      if (
+        callee == goto_functions.function_map.end() ||
+        !callee->second.body_available || !is_code_type(callee->second.type))
+        throw unsupportedt();
+      const code_type2t &type = to_code_type(callee->second.type);
+      if (type.argument_names.size() != c.operands.size())
+        throw unsupportedt();
+      site.fn = &callee->second;
+      for (size_t k = 0; k < c.operands.size(); ++k)
+      {
+        site.args.push_back(compile(c.operands[k]));
+        site.params.push_back(slot(type.argument_names[k]));
+        site.param_widths.push_back(width_of(type.arguments[k]));
+      }
+      if (!is_nil_expr(c.ret))
+      {
+        if (!is_symbol2t(c.ret))
+          throw unsupportedt();
+        site.has_ret = true;
+        site.ret = slot(to_symbol2t(c.ret).thename);
+        site.ret_width = width_of(c.ret->type);
+      }
+    }
+    call_sites.push_back(std::move(site));
+    i = static_cast<int32_t>(call_sites.size() - 1);
+    return call_sites[i];
+  }
+
+  /// Run the call at @p it. False when the execution stops in it: exit,
+  /// abort, or a failed assertion or assumption.
+  bool call(goto_programt::const_targett it, unsigned depth)
+  {
+    const call_sitet &site = site_of(it);
+    if (site.stops)
+      return false;
+    // A function's locals have one slot each, so it must not recurse.
+    bool &busy = running[site.fn];
+    if (busy || depth > 256)
+      throw unsupportedt();
+    int64_t args[16];
+    if (site.args.size() > 16)
+      throw unsupportedt();
+    for (size_t k = 0; k < site.args.size(); ++k)
+      args[k] = eval(site.args[k]);
+    for (size_t k = 0; k < site.args.size(); ++k)
+      set(
+        site.params[k],
+        wrap(
+          static_cast<uint64_t>(args[k]),
+          site.param_widths[k].first,
+          site.param_widths[k].second));
+    std::optional<int64_t> ret;
+    busy = true;
+    const bool returned = run(*site.fn, ret, depth);
+    busy = false;
+    if (!returned)
+      return false;
+    if (site.has_ret)
+    {
+      if (!ret)
+        throw unsupportedt();
+      set(
+        site.ret,
+        wrap(
+          static_cast<uint64_t>(*ret),
+          site.ret_width.first,
+          site.ret_width.second));
+    }
+    return true;
+  }
+
+  /// Run @p fn, following its one concrete path. False when the execution
+  /// stops in it; @p ret receives the returned value.
+  bool
+  run(const goto_functiont &fn, std::optional<int64_t> &ret, unsigned depth)
+  {
+    for (auto it = fn.body.instructions.begin();
+         it != fn.body.instructions.end();)
+    {
+      if (++steps > 10000000)
+        throw unsupportedt();
+      switch (it->type)
+      {
+      case DECL:
+        defined[slot(to_code_decl2t(it->code).value)] = false;
+        break;
+      case DEAD:
+      case SKIP:
+      case LOCATION:
+        break;
+      // C11 7.2.1.1: a failed assertion aborts.
+      case ASSERT:
+      case ASSUME:
+        if (!holds(it))
+          return false;
+        break;
+      case ASSIGN:
+        assign(it);
+        break;
+      case GOTO:
+        if (it->is_backwards_goto() || it->targets.size() != 1)
+          throw unsupportedt();
+        if (eval(guard_of(it)))
+        {
+          it = it->targets.front();
+          continue;
+        }
+        break;
+      case FUNCTION_CALL:
+        if (!call(it, depth + 1))
+          return false;
+        break;
+      case RETURN:
+        if (!is_nil_expr(to_code_return2t(it->code).operand))
+          ret = eval(value_of(it, to_code_return2t(it->code).operand));
+        return true;
+      case END_FUNCTION:
+        return true;
+      default:
+        throw unsupportedt();
+      }
+      ++it;
+    }
+    return true;
+  }
+};
+
+/// Every state the input loop @p loop reaches at its head from @p s0, found
+/// by running each iteration on concrete values for every valid input. Empty
+/// when an iteration is not a function of the state and the input (it reads
+/// something else, or does something concrete_runnert does not model) or
+/// when more than @p cap states, or more than 256 values of one global, turn
+/// up: a global computed by arithmetic soon has more values than any table.
+std::vector<statet> reachable_states(
+  const goto_functionst &goto_functions,
+  const loopst &loop,
+  const expr2tc &input_arg,
+  const std::vector<BigInt> &valid_inputs,
+  const statet &s0,
+  size_t cap)
+{
+  concrete_runnert runner(goto_functions, loop);
+  std::vector<std::pair<irep_idt, size_t>> globals;
+  std::vector<int64_t> init;
+  for (const auto &[name, value] : s0)
+  {
+    if (!to_constant_int2t(value).value.is_int64())
+      return {};
+    globals.emplace_back(name, runner.slot(name));
+    init.push_back(to_constant_int2t(value).value.to_int64());
+  }
+  std::vector<std::vector<int64_t>> todo{init};
+  std::set<std::vector<int64_t>> seen{init};
+  std::vector<std::set<int64_t>> values(globals.size());
+  try
+  {
+    for (size_t i = 0; i < todo.size(); ++i)
+      for (const BigInt &v : valid_inputs)
+      {
+        if (!v.is_int64())
+          return {};
+        for (size_t g = 0; g < globals.size(); ++g)
+          runner.set(globals[g].second, todo[i][g]);
+        if (!runner.iterate(input_arg, v.to_int64()))
+          continue;
+        std::vector<int64_t> next;
+        for (const auto &[name, s] : globals)
+          next.push_back(runner.get(s));
+        if (!seen.insert(next).second)
+          continue;
+        if (todo.size() == cap)
+          return {};
+        for (size_t g = 0; g < globals.size(); ++g)
+        {
+          values[g].insert(next[g]);
+          if (values[g].size() > 256)
+            return {};
+        }
+        todo.push_back(std::move(next));
+      }
+  }
+  catch (const unsupportedt &)
+  {
+    return {};
+  }
+  std::vector<statet> states;
+  for (const auto &t : todo)
+  {
+    statet st;
+    for (size_t g = 0; g < globals.size(); ++g)
+      st[globals[g].first] =
+        constant_int2tc(s0.at(globals[g].first)->type, BigInt(t[g]));
+    states.push_back(std::move(st));
+  }
+  return states;
+}
 /// The check never reads the witness, so a validator may trust it only for a
 /// witness that does nothing but name @p head as the cycle; any other witness
 /// is left to symex, which applies it.
@@ -1086,17 +1441,11 @@ tvt try_prove_non_termination_by_recurrent_set(
   const namespacet &ns,
   locationt &loop_location)
 {
-  // MVP scope: only the eca-rers2012 finite-state-machine shape. Each
-  // expected-false eca benchmark wraps an input-validation while(1)
-  // around a single call to `calculate_output(input)`; if there's a
-  // state s and an input i ∈ valid_inputs such that none of the
-  // branches in calculate_output fire, then the body falls through to
-  // its trailing `return -2` with state unchanged, and the demon can
-  // pick that (s, i) forever. We discharge the existence question via
-  // a single SMT SAT query — no symex required, just the IF guards
-  // harvested from the goto program, with the callee's formal input
-  // substituted by the caller's actual input and globals constrained
-  // to their initialisers harvested from `__ESBMC_main`.
+  // Only the eca-rers2012 shape: an input-validation while(1) around one
+  // call to an updater. Run the loop from the initial state and look for a
+  // state that recurs (has_cycle_from_init); a fixpoint found over all
+  // values of the globals could pick a state the program never reaches
+  // (#10005).
   const auto initial_state = harvest_initial_state(goto_functions);
   Forall_goto_functions (f_it, goto_functions)
   {
@@ -1123,14 +1472,6 @@ tvt try_prove_non_termination_by_recurrent_set(
       if (!callee_it->second.body_available || callee_it->second.body.hide)
         continue;
       if (
-        has_period_1_fixpoint(
-          callee_it->second,
-          input_arg,
-          valid_inputs,
-          result_writes,
-          initial_state,
-          options,
-          ns) ||
         has_cycle_from_init(
           goto_functions,
           f_it->first,
@@ -1149,4 +1490,99 @@ tvt try_prove_non_termination_by_recurrent_set(
     }
   }
   return tvt(tvt::TV_UNKNOWN);
+}
+
+std::vector<std::pair<locationt, std::string>> assume_reachable_loop_states(
+  goto_functionst &goto_functions,
+  const namespacet &ns,
+  size_t max_states)
+{
+  std::vector<std::pair<locationt, std::string>> invariants;
+  // concrete_runnert indexes its caches by location_number; earlier passes
+  // may have inserted instructions since the last numbering.
+  goto_functions.compute_location_numbers();
+  const auto initial_state = harvest_initial_state(goto_functions);
+  auto f_it = goto_functions.function_map.find(
+    "c:@F@" + (config.main.empty() ? "main" : config.main));
+  if (f_it == goto_functions.function_map.end() || !f_it->second.body_available)
+    return invariants;
+  statet s0;
+  for (const auto &[name, value] : initial_state)
+  {
+    const symbolt *sym = ns.lookup(name);
+    if (sym && sym->static_lifetime && is_bv_type(sym->get_type2()))
+      s0[name] = constant_int2tc(sym->get_type2(), value);
+  }
+  goto_loopst loops(f_it->first, goto_functions, f_it->second);
+  for (const auto &loop : loops.get_loops())
+  {
+    expr2tc input_arg;
+    std::vector<BigInt> valid_inputs;
+    irep_idt callee_name;
+    std::vector<expr2tc> result_writes;
+    if (
+      !recognize_eca_main_loop(
+        loop, input_arg, valid_inputs, callee_name, result_writes) ||
+      !loop_starts_at_initial_state(
+        f_it->first, f_it->second.body, loop.get_original_loop_head(), ns))
+      continue;
+    // The loop must change the state only through the updater.
+    result_writes.push_back(input_arg);
+    if (
+      std::any_of(
+        result_writes.begin(), result_writes.end(), [&](const expr2tc &w) {
+          return s0.count(to_symbol2t(w).thename);
+        }))
+      continue;
+    std::unordered_set<irep_idt, irep_id_hash> written, used;
+    if (!updater_globals(
+          goto_functions, f_it->first, callee_name, s0, written, used))
+      continue;
+    // Only what the updater touches: run_once gives up on reading the rest.
+    statet state;
+    for (const irep_idt &name : used)
+      state[name] = s0.at(name);
+    // A witness may name only the program's own variables, not those of
+    // ESBMC's library models (e.g. exit's atexit_count).
+    const irep_idt &file = loop.get_original_loop_exit()->location.get_file();
+    for (auto it = written.begin(); it != written.end();)
+    {
+      const symbolt *sym = ns.lookup(*it);
+      it = sym && sym->location.get_file() == file ? std::next(it)
+                                                   : written.erase(it);
+    }
+    const std::vector<statet> states = reachable_states(
+      goto_functions, loop, input_arg, valid_inputs, state, max_states);
+    if (states.empty() || written.empty())
+      continue;
+
+    std::vector<expr2tc> disjuncts;
+    for (const statet &s : states)
+    {
+      std::vector<expr2tc> eqs;
+      for (const auto &[name, value] : s)
+        if (written.count(name))
+          eqs.push_back(equality2tc(symbol2tc(value->type, name), value));
+      disjuncts.push_back(conjunction(eqs));
+    }
+    // Only the inductive step needs it, after its havoc: every state the
+    // loop head sees on an execution that has not yet failed is in the set.
+    const expr2tc invariant = disjunction(disjuncts);
+    goto_programt::targett head = loop.get_original_loop_head();
+    goto_programt::targett assume =
+      f_it->second.body.instructions.insert(std::next(head), *head);
+    assume->make_assumption(invariant);
+    assume->targets.clear();
+    assume->labels.clear();
+    assume->inductive_step_instruction = true;
+    log_status(
+      "Loop at {}: assuming its {} reachable states in the inductive step",
+      head->location.as_string(),
+      states.size());
+    // The back edge carries the loop statement's own location.
+    invariants.emplace_back(
+      loop.get_original_loop_exit()->location,
+      from_expr(ns, "", invariant, presentationt::WITNESS));
+  }
+  return invariants;
 }

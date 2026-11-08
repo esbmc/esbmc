@@ -1,0 +1,5 @@
+CORE
+main.c
+--generate-ctest-testcase
+^WARNING: No nondet variables found\. No CTest test case generated\.$
+^VERIFICATION FAILED$

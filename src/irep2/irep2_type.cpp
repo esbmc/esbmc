@@ -428,9 +428,9 @@ std::vector<type2tc> &struct_union_members(type2tc &t)
   }
 }
 
-std::vector<irep_idt> struct_union_member_names(const type2tc &t)
+static const std::vector<irep_idt> &member_names_of(const type2tc &t)
 {
-  static const irep_idt real_id("real"), imag_id("imag");
+  static const std::vector<irep_idt> complex_names{"real", "imag"};
   switch (t->type_id)
   {
   case type2t::struct_id:
@@ -438,10 +438,15 @@ std::vector<irep_idt> struct_union_member_names(const type2tc &t)
   case type2t::union_id:
     return to_union_type(t).member_names;
   case type2t::complex_id:
-    return {real_id, imag_id};
+    return complex_names;
   default:
     irep2_bad_family_cast(t->type_id, "struct_union_member_names");
   }
+}
+
+std::vector<irep_idt> struct_union_member_names(const type2tc &t)
+{
+  return member_names_of(t);
 }
 
 irep_idt struct_union_name(const type2tc &t)
@@ -478,7 +483,7 @@ bool struct_union_packed(const type2tc &t)
 std::optional<unsigned int>
 struct_union_get_component_number(const type2tc &t, const irep_idt &comp)
 {
-  const std::vector<irep_idt> names = struct_union_member_names(t);
+  const std::vector<irep_idt> &names = member_names_of(t);
   unsigned int i = 0, count = 0, pos = 0;
   for (const irep_idt &it : names)
   {

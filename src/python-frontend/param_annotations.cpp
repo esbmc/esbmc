@@ -307,6 +307,24 @@ protected:
     return false;
   }
 
+  /// The module @p id names in @p caller: `lib` after `import lib as id`, or
+  /// none when the caller also binds `id` otherwise.
+  std::optional<std::string>
+  module_named_by(const std::string &id, size_t caller) const
+  {
+    const nlohmann::json &ast = *modules_[caller].read;
+    for (const auto &stmt : ast["body"])
+      if (is_node(stmt, "Import"))
+        for (const auto &alias : stmt["names"])
+          if (alias["asname"] == id)
+          {
+            if (json_utils::count_name_bindings(ast, id) != 1)
+              return std::nullopt;
+            return alias["name"].get<std::string>();
+          }
+    return id;
+  }
+
   /// The module defining @p func, or none when it is unknown or ambiguous.
   std::optional<size_t>
   resolve_callee(const nlohmann::json &func, size_t caller) const
@@ -320,10 +338,12 @@ protected:
     {
       if (!is_node(func["value"], "Name"))
         return std::nullopt;
+      const std::optional<std::string> module =
+        module_named_by(func["value"]["id"].get<std::string>(), caller);
+      if (!module)
+        return std::nullopt;
       for (size_t i = 0; i < modules_.size(); ++i)
-        if (
-          modules_[i].name == func["value"]["id"].get<std::string>() &&
-          defines(i, name))
+        if (modules_[i].name == *module && defines(i, name))
           return i;
       return std::nullopt;
     }
@@ -1188,7 +1208,7 @@ private:
       // A function its module binds again (a second def in an `if`) is not
       // the one find_function returns.
       if (
-        !entry.from_other_module || poisoned_.count(key_member(key_name)) ||
+        !entry.from_other_module ||
         json_utils::count_name_bindings(
           *modules_[module].read, key_owner(key_name)) != 1)
         continue;
@@ -1196,11 +1216,15 @@ private:
       nlohmann::json &def =
         *key_def(modules_[module].write->at("body"), key_name);
       nlohmann::json &arg = def["args"]["args"][param];
+      // A use of the name outside a call only adds call sites, so the kinds
+      // already seen still disagree (#9828).
       if (!entry.type)
       {
         refuse_mixed_kinds(key_name, def, arg["arg"], entry.kinds);
         continue;
       }
+      if (poisoned_.count(key_member(key_name)))
+        continue;
       nlohmann::json annotation{{"_type", "Name"}, {"id", *entry.type}};
       for (const char *field :
            {"lineno", "col_offset", "end_lineno", "end_col_offset"})

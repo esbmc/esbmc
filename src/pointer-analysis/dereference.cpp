@@ -1940,31 +1940,35 @@ void dereferencet::construct_from_const_offset(
     return;
   }
 
-  if (value->type->get_width() < type->get_width())
+  // Oversized read of a non-member: give up, rely on dereference failure
+  if (value->type->get_width() < type->get_width() && !is_member2t(value))
   {
-    // Oversized read
-    if (!is_member2t(value))
-    {
-      // give up, rely on dereference failure
-      value = expr2tc();
-      return;
-    }
-    // We are accessing more than one member of a struct.
-    // So, get step down one level to the source_value and
-    // resort to extracting bytes from it.
-    else
-    {
-      const member2t &themember = to_member2t(value);
-      value = themember.source_value;
-    }
+    value = expr2tc();
+    return;
   }
 
+  // The access spans more than one member: step up through the enclosing
+  // objects until one holds it, rebasing the offset onto each (#10045, #10046).
+  const uint64_t access_bits = type_byte_size_bits(type).to_uint64();
+  BigInt offs = theint.value;
+  while (is_member2t(value) &&
+         type_byte_size_bits(value->type, &ns) < offs + access_bits)
+  {
+    const member2t &themember = to_member2t(value);
+    if (is_struct_type(themember.source_value))
+      offs +=
+        member_offset_bits(themember.source_value->type, themember.member, &ns);
+    value = themember.source_value;
+  }
+  const expr2tc offset_in_value = constant_int2tc(offset->type, offs);
+
   unsigned int num_bytes =
-    compute_num_bytes_to_extract(offset, type_byte_size_bits(type).to_uint64());
+    compute_num_bytes_to_extract(offset_in_value, access_bits);
 
   // Converting offset to bytes before bytes extraction
   expr2tc offset_bytes = typecast2tc(
-    size_type2(), div2tc(offset->type, offset, gen_long(offset->type, 8)));
+    size_type2(),
+    div2tc(offset->type, offset_in_value, gen_long(offset->type, 8)));
   simplify(offset_bytes);
 
   // Extracting and stitching bytes together
@@ -1972,11 +1976,10 @@ void dereferencet::construct_from_const_offset(
     num_bytes, extract_bytes(value, num_bytes, offset_bytes));
 
   expr2tc offset_bits =
-    modulus2tc(offset->type, offset, gen_long(offset->type, 8));
+    modulus2tc(offset->type, offset_in_value, gen_long(offset->type, 8));
   simplify(offset_bits);
 
-  value = extract_bits_from_byte_array(
-    value, offset_bits, type_byte_size_bits(type).to_uint64());
+  value = extract_bits_from_byte_array(value, offset_bits, access_bits);
 
   // Extracting bits from the produced bv
   value = bitcast2tc(type, value);

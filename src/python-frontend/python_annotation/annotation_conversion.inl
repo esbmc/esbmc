@@ -2125,6 +2125,21 @@ static bool union_has_none(const Json &slice)
   return false;
 }
 
+/// The type the first top-level return of \p body gives, when it holds for
+/// every return: an Any fallback says nothing, yet a caller returning this
+/// call would be annotated Any and converted with an int return (#8358); a
+/// None one misses a value a nested return yields (#9815).
+inline std::string known_fallback_return_type(
+  const std::string &fallback_type,
+  const nlohmann::json &body)
+{
+  if (
+    fallback_type == "Any" ||
+    (fallback_type == "NoneType" && has_return_value(body)))
+    return "";
+  return fallback_type;
+}
+
 template <class Json>
 std::string python_annotation<Json>::get_function_return_type(
   const std::string &func_name,
@@ -2365,9 +2380,7 @@ std::string python_annotation<Json>::get_function_return_type(
       }
       current_func_name_context_ = saved_fallback_ctx;
       functions_in_analysis_.erase(func_name);
-      // An Any fallback says nothing, yet a caller returning this call would
-      // be annotated Any and converted with an int return (#8358)
-      return fallback_type == "Any" ? "" : fallback_type;
+      return known_fallback_return_type(fallback_type, func_elem["body"]);
     }
 
     // If function has no explicit return statements, assume void/None
@@ -3764,6 +3777,18 @@ InferResult python_annotation<Json>::infer_type_from_ifexp(
       return InferResult::OK;
     }
 
+    // A list is held by pointer, so a None arm is the null list, as for an
+    // Optional[list[T]] annotation.
+    if (
+      (body_type == "NoneType" && orelse_type == "list") ||
+      (body_type == "list" && orelse_type == "NoneType"))
+    {
+      const std::string list_type = get_argument_type(
+        body_type == "list" ? ifexp_node["body"] : ifexp_node["orelse"]);
+      inferred_type = list_type.rfind("list[", 0) == 0 ? list_type : "list";
+      return InferResult::OK;
+    }
+
     // For different types, use a safe fallback
     log_warning(
       "Conditional expression has different types in branches: {} vs {}. "
@@ -4444,9 +4469,12 @@ void python_annotation<Json>::collect_return_types(
       // unknown here. The converter types the result from the class's member
       // types, whereas an "Any" return would make it a double (#8942).
       std::string inferred_type = get_argument_type(return_val);
-      if (inferred_type.empty() && return_val["_type"] == "Name")
-        types.insert(untyped_name_return);
+      // "Any" for a name only means its value's type is unknown here (#9929).
       if (
+        (inferred_type.empty() || inferred_type == "Any") &&
+        return_val["_type"] == "Name")
+        types.insert(untyped_name_return);
+      else if (
         !inferred_type.empty() &&
         (inferred_type != "Any" || !arithmetic_reads_attribute(return_val)))
         types.insert(inferred_type);
@@ -5757,7 +5785,10 @@ bool python_annotation<Json>::preprocess_constructor_calls(Json &node)
           // do not overwrite explicit annotations (e.g.,
           // Optional["List"]) with a less-specific type inferred from a
           // call site (e.g., NoneType).
-          if (param.contains("annotation") && !param["annotation"].is_null())
+          const bool typed_here = constructor_typed_params_.count(&param);
+          if (
+            param.contains("annotation") && !param["annotation"].is_null() &&
+            !typed_here)
             continue;
           const Json &arg = call_args[i - 1];
           const Json &scope =
@@ -5771,7 +5802,11 @@ bool python_annotation<Json>::preprocess_constructor_calls(Json &node)
             inherited_init_args_[&param].insert(arg_type);
           else if (!arg_type.empty())
           {
+            constructor_arg_types_[&param].insert(arg_type);
+            if (typed_here)
+              continue;
             add_parameter_annotation(param, arg_type);
+            constructor_typed_params_.insert(&param);
             annotated = true;
           }
         }
@@ -6373,6 +6408,25 @@ void python_annotation<Json>::collect_function_call_arg_types(
   }
 }
 
+/// A constructor parameter typed from its first call keeps that type for
+/// every call, so a str passed where a number was first, or the reverse, is
+/// converted wrongly. A copy of the class per type would be needed (#10024).
+template <class Json>
+void python_annotation<Json>::refuse_mixed_constructor_args() const
+{
+  for (const auto &[param, types] : constructor_arg_types_)
+  {
+    const bool has_str = types.count("str") != 0;
+    const bool has_number =
+      types.count("int") || types.count("float") || types.count("bool");
+    if (has_str && has_number)
+      throw std::runtime_error(
+        "unsupported: constructor parameter '" +
+        (*param)["arg"].template get<std::string>() +
+        "' is passed a str and a number");
+  }
+}
+
 template <class Json>
 void python_annotation<Json>::add_type_annotation()
 {
@@ -6380,6 +6434,7 @@ void python_annotation<Json>::add_type_annotation()
   // type that parameter gets from a later call (GitHub #8963).
   while (preprocess_constructor_calls(ast_))
     ;
+  refuse_mixed_constructor_args();
   for (const auto &[param, types] : inherited_init_args_)
     if (
       types.size() == 1 && !types.begin()->empty() &&

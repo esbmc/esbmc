@@ -1573,14 +1573,16 @@ static const char *float_lowering_id(
 
   // C17 7.12.10.2: remainder() is IEEE 754 remainder, exactly SMT-LIB's
   // fp.rem. The fmod/remquo models are built on top of it (libm/fmod.c).
+  // The nodes are fixed-arity; a declaration with another arity stays a call.
+  const std::size_t arity = expr.arguments().size();
   switch (ieee_float_builtin_of(identifier))
   {
   case ieee_float_builtin::nearbyint:
-    return "nearbyint";
+    return arity == 1 ? "nearbyint" : nullptr;
   case ieee_float_builtin::remainder:
-    return "ieee_rem";
+    return arity == 2 ? "ieee_rem" : nullptr;
   case ieee_float_builtin::fma:
-    return "ieee_fma";
+    return arity == 3 ? "ieee_fma" : nullptr;
   case ieee_float_builtin::none:
     return nullptr;
   }

@@ -550,7 +550,7 @@ int esbmc_parseoptionst::do_bmc_strategy(
       "--base-k-step ({}) must be smaller than --max-k-step ({}).",
       k_step_base,
       max_k_step);
-    abort();
+    return 1;
   }
 
   // Track whether any violation was found across all k steps.

@@ -37,6 +37,7 @@ using python_annotation_utils::get_base_var_name;
 using python_annotation_utils::get_type_from_json;
 using python_annotation_utils::has_annotation;
 using python_annotation_utils::has_return_none;
+using python_annotation_utils::has_return_value;
 using python_annotation_utils::infer_type_from_default_arg_shape;
 using python_annotation_utils::InferResult;
 using python_annotation_utils::invert_substrings;
@@ -114,6 +115,11 @@ private:
   class_init(const std::string &class_name, unsigned depth, bool &inherited);
   /// Argument types each inherited __init__ parameter receives, by parameter.
   std::map<Json *, std::set<std::string>> inherited_init_args_;
+  /// Argument types each constructor parameter receives, and the
+  /// parameters this pass typed from a call.
+  std::map<Json *, std::set<std::string>> constructor_arg_types_;
+  std::set<Json *> constructor_typed_params_;
+  void refuse_mixed_constructor_args() const;
   // Implementations live in annotation_conversion.inl unless noted.
 
   // ----- AST lookup and walk helpers -----
