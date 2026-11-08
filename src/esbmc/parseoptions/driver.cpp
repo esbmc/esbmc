@@ -233,6 +233,23 @@ static bool incompatible_flags(const cmdlinet &cmdline)
   if (k_induction_parallel_conflicts(cmdline))
     return true;
 
+  // --smt-during-symex builds one solver during symex, and the equation it
+  // leaves refers to that solver's terms, so the --parallel-solving jobs would
+  // all share it unsynchronised (issue #10103). The other flags imply it.
+  if (cmdline.isset("parallel-solving"))
+    for (const char *incompatible :
+         {"smt-during-symex",
+          "smt-thread-guard",
+          "smt-symex-guard",
+          "smt-symex-assert",
+          "smt-symex-assume"})
+      if (cmdline.isset(incompatible))
+      {
+        log_error(
+          "--parallel-solving cannot be combined with --{}", incompatible);
+        return true;
+      }
+
   // --incremental-context-bound owns the outer verification loop, re-running
   // do_bmc per context bound; the unwinding strategies each drive an outer
   // loop of their own, so only one driver can own the run (issue #6480).
