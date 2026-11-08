@@ -503,6 +503,64 @@ static bool may_follow_base_case(const optionst &options, const tvt &base_case)
   return base_case.is_false() || options.get_bool_option("smt-formula-only");
 }
 
+static void max_int_constant(const expr2tc &expr, uint64_t &best)
+{
+  if (is_nil_expr(expr))
+    return;
+  if (is_constant_int2t(expr))
+  {
+    // Larger constants are type limits and masks, not loop bounds.
+    const BigInt &v = to_constant_int2t(expr).value;
+    if (!v.is_negative() && v.is_uint64() && v.to_uint64() <= (1ULL << 20))
+      best = std::max(best, v.to_uint64());
+    return;
+  }
+  expr->foreach_operand(
+    [&best](const expr2tc &e) { max_int_constant(e, best); });
+}
+
+// The largest constant in a loop's exit test, or in an assume over a variable
+// such a test reads: a guess at the deepest loop bound, not a per-loop one.
+static uint64_t largest_loop_bound(const goto_functionst &goto_functions)
+{
+  uint64_t best = 0;
+  for (const auto &fn : goto_functions.function_map)
+  {
+    if (!fn.second.body_available || fn.second.body.hide)
+      continue;
+    const goto_programt::instructionst &body = fn.second.body.instructions;
+    std::unordered_set<expr2tc, irep2_hash> exit_vars;
+    for (auto back = body.begin(); back != body.end(); ++back)
+    {
+      if (!back->is_backwards_goto())
+        continue;
+      std::unordered_set<const goto_programt::instructiont *> loop;
+      for (auto i = back->get_target(); i != std::next(back); ++i)
+        loop.insert(&*i);
+      for (const goto_programt::instructiont *i : loop)
+        if (i->is_goto() && (i == &*back || !loop.count(&*i->get_target())))
+        {
+          max_int_constant(i->guard, best);
+          get_symbols(i->guard, exit_vars);
+        }
+    }
+    for (const auto &ins : body)
+    {
+      if (!ins.is_assume())
+        continue;
+      std::unordered_set<expr2tc, irep2_hash> vars;
+      get_symbols(ins.guard, vars);
+      for (const expr2tc &v : vars)
+        if (exit_vars.count(v))
+        {
+          max_int_constant(ins.guard, best);
+          break;
+        }
+    }
+  }
+  return best;
+}
+
 // This method iteratively applies one of the verification strategies
 // for different unwinding bounds up to the specified maximum depth.
 //
@@ -587,8 +645,13 @@ int esbmc_parseoptionst::do_bmc_strategy(
 
   // Trying all bounds from 1 to "max_k_step" in "k_step_inc"
   uint64_t last_k_step = k_step_base;
-  for (uint64_t k_step = k_step_base; k_step <= max_k_step;
-       k_step += k_step_inc)
+  // Past --max-inductive-step only the base case and the forward condition
+  // run, and both cover every depth up to k, so k can jump to a loop bound.
+  const long max_is = strtol(cmdline.getval("max-inductive-step"), nullptr, 10);
+  uint64_t bound_hint = options.get_bool_option("k-induction") && max_is >= 0
+                          ? largest_loop_bound(goto_functions)
+                          : 0;
+  for (uint64_t k_step = k_step_base; k_step <= max_k_step;)
   {
     last_k_step = k_step;
     // k-induction
@@ -816,6 +879,16 @@ int esbmc_parseoptionst::do_bmc_strategy(
       // max-k-step exit, whose reason would not apply.
       if (is_coverage)
         return 0;
+    }
+
+    k_step += k_step_inc;
+    if (
+      k_step > (uint64_t)max_is && bound_hint > k_step &&
+      bound_hint <= max_k_step)
+    {
+      log_status("Jumping k from {:d} to loop bound {:d}", k_step, bound_hint);
+      k_step = bound_hint;
+      bound_hint = 0;
     }
   }
 
