@@ -1257,7 +1257,7 @@ void goto_symext::symex_assign_concat(
 
   // A byte assembled from bit-field slices (dereferencet::bit_field_byte):
   // split the value by bits, the low ones going to side_2.
-  if (cat.type->get_width() <= 8)
+  if (cat.type->get_width() <= config.ansi_c.char_width)
   {
     cur_state->rename(rhs);
     const unsigned int low = cat.side_2->type->get_width();
@@ -1273,7 +1273,8 @@ void goto_symext::symex_assign_concat(
   // occur in one large grouping. Produce a list of them.
   std::list<expr2tc> operand_list;
   expr2tc cur_concat = lhs;
-  while (is_concat2t(cur_concat) && cur_concat->type->get_width() > 8)
+  while (is_concat2t(cur_concat) &&
+         cur_concat->type->get_width() > config.ansi_c.char_width)
   {
     const concat2t &cat2 = to_concat2t(cur_concat);
     operand_list.push_back(cat2.side_2);

@@ -2108,6 +2108,12 @@ void dereferencet::construct_from_const_struct_offset(
   value = expr2tc();
 }
 
+static bool occupies_whole_bytes(const BigInt &offset, const BigInt &size)
+{
+  const unsigned int width = config.ansi_c.char_width;
+  return offset % width == 0 && size % width == 0;
+}
+
 void dereferencet::construct_from_dyn_struct_offset(
   expr2tc &value,
   const expr2tc &offset,
@@ -2164,13 +2170,17 @@ void dereferencet::construct_from_dyn_struct_offset(
 
     // A bit-field, or the padding bits after one, does not occupy whole
     // bytes, so an access starting in it is assembled from bits (#10087).
-    if (
-      offs % config.ansi_c.char_width != 0 ||
-      field_size % config.ansi_c.char_width != 0)
+    if (field_size == 0 || !occupies_whole_bytes(offs, field_size))
     {
       if (!int_encoding)
-        add_bit_field_arms(
-          value, offset, type, alignment, offs, field_size, extract_list);
+        add_arms_from(
+          value,
+          offset,
+          type,
+          alignment,
+          offs,
+          offs + field_size,
+          extract_list);
       i++;
       continue;
     }
@@ -2217,8 +2227,15 @@ void dereferencet::construct_from_dyn_struct_offset(
 
     // Emplaced after the field's own arm, so they take precedence (#10045).
     if (!int_encoding)
-      add_spanning_arms(
-        value, offset, type, alignment, offs, field_size, extract_list);
+      add_arms_from(
+        value,
+        offset,
+        type,
+        alignment,
+        std::max(
+          offs, offs + field_size - access_sz + config.ansi_c.char_width),
+        offs + field_size,
+        extract_list);
 
     i++;
   }
@@ -2232,74 +2249,33 @@ void dereferencet::construct_from_dyn_struct_offset(
   value = new_value;
 }
 
-void dereferencet::add_spanning_arms(
+void dereferencet::add_arms_from(
   const expr2tc &value,
   const expr2tc &offset,
   const type2tc &type,
   unsigned long alignment,
-  const BigInt &field_offset,
-  const BigInt &field_size,
+  const BigInt &first,
+  const BigInt &field_end,
   std::list<std::pair<expr2tc, expr2tc>> &extract_list)
 {
   const unsigned int access_sz = type_byte_size_bits(type).to_uint64();
   const BigInt struct_bits = type_byte_size_bits(value->type, &ns);
-  const BigInt step = access_step(value->type, type, alignment);
-  const BigInt field_end = field_offset + field_size;
-  BigInt p =
-    std::max(field_offset, field_end - access_sz + config.ansi_c.char_width);
-  for (p = (p + step - 1) / step * step;
-       p < field_end && p + access_sz <= struct_bits;
-       p += step)
-    add_arm_at(value, offset, type, p, extract_list);
-}
-
-void dereferencet::add_bit_field_arms(
-  const expr2tc &value,
-  const expr2tc &offset,
-  const type2tc &type,
-  unsigned long alignment,
-  const BigInt &field_offset,
-  const BigInt &field_size,
-  std::list<std::pair<expr2tc, expr2tc>> &extract_list)
-{
-  const unsigned int access_sz = type_byte_size_bits(type).to_uint64();
-  const BigInt struct_bits = type_byte_size_bits(value->type, &ns);
-  const BigInt step = access_step(value->type, type, alignment);
-  for (BigInt p = (field_offset + step - 1) / step * step;
-       p < field_offset + field_size && p + access_sz <= struct_bits;
-       p += step)
-    add_arm_at(value, offset, type, p, extract_list);
-}
-
-void dereferencet::add_arm_at(
-  const expr2tc &value,
-  const expr2tc &offset,
-  const type2tc &type,
-  const BigInt &p,
-  std::list<std::pair<expr2tc, expr2tc>> &extract_list)
-{
-  const unsigned int access_sz = type_byte_size_bits(type).to_uint64();
-  const expr2tc field = stitch_across_members(value, p, access_sz);
-  if (is_nil_expr(field))
-    return;
-  extract_list.emplace_back(
-    equality2tc(offset, constant_int2tc(offset->type, p)),
-    bitcast2tc(type, field));
-}
-
-BigInt dereferencet::access_step(
-  const type2tc &struct_type,
-  const type2tc &type,
-  unsigned long alignment) const
-{
   // Alignment is relative to the struct, which may be less aligned than the
   // access type.
-  return std::max(
+  const BigInt step = std::max(
     BigInt(alignment),
     std::min(
       ::alignment(migrate_type_back(type), ns),
-      ::alignment(migrate_type_back(struct_type), ns)) *
+      ::alignment(migrate_type_back(value->type), ns)) *
       8);
+  for (BigInt p = (first + step - 1) / step * step;
+       p < field_end && p + access_sz <= struct_bits;
+       p += step)
+  {
+    extract_list.emplace_back(
+      equality2tc(offset, constant_int2tc(offset->type, p)),
+      bitcast2tc(type, stitch_across_members(value, p, access_sz)));
+  }
 }
 
 expr2tc dereferencet::stitch_across_members(
@@ -2334,8 +2310,6 @@ expr2tc dereferencet::stitch_across_members(
     // rewrite every member, pointers included.
     if (is_nil_expr(byte))
       byte = bit_field_byte(value, pos);
-    if (is_nil_expr(byte))
-      return expr2tc();
     bytes.push_back(byte);
   }
   return stitch_together_from_byte_array(bytes.size(), bytes);
@@ -2361,8 +2335,7 @@ expr2tc dereferencet::bit_field_byte(const expr2tc &value, const BigInt &pos)
     const BigInt hi = std::min(pos + width, m_offs + m_size);
     if (lo >= hi)
       continue;
-    if (!is_bv_type(member_type))
-      return expr2tc();
+    assert(is_bv_type(member_type));
     const unsigned int w = m_size.to_uint64();
     const unsigned int first = (lo - m_offs).to_uint64();
     const unsigned int last = (hi - m_offs).to_uint64() - 1;
@@ -2381,8 +2354,7 @@ expr2tc dereferencet::bit_field_byte(const expr2tc &value, const BigInt &pos)
       byte = big_endian ? concat2tc(t, byte, slice) : concat2tc(t, slice, byte);
     }
   }
-  if (covered != width)
-    return expr2tc();
+  assert(covered == width);
   return byte;
 }
 

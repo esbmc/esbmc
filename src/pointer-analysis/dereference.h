@@ -572,48 +572,22 @@ private:
     unsigned long alignment,
     modet mode,
     const expr2tc *failed_symbol = nullptr);
-  /// Adds to \p extract_list an arm for each aligned \p offset at which a
-  /// \p type access starts in the given field of struct \p value and ends
-  /// past it.
-  void add_spanning_arms(
+  /// Adds to \p extract_list an arm for each aligned \p offset in
+  /// [\p first, \p field_end) at which a \p type access starts in struct
+  /// \p value, read across the members it covers.
+  void add_arms_from(
     const expr2tc &value,
     const expr2tc &offset,
     const type2tc &type,
     unsigned long alignment,
-    const BigInt &field_offset,
-    const BigInt &field_size,
-    std::list<std::pair<expr2tc, expr2tc>> &extract_list);
-  /// Adds to \p extract_list an arm for each aligned \p offset in the given
-  /// field of struct \p value, a field not made of whole bytes.
-  void add_bit_field_arms(
-    const expr2tc &value,
-    const expr2tc &offset,
-    const type2tc &type,
-    unsigned long alignment,
-    const BigInt &field_offset,
-    const BigInt &field_size,
-    std::list<std::pair<expr2tc, expr2tc>> &extract_list);
-  /// The distance in bits between the offsets in \p struct_type at which a
-  /// \p type access can start.
-  BigInt access_step(
-    const type2tc &struct_type,
-    const type2tc &type,
-    unsigned long alignment) const;
-  /// Adds to \p extract_list the arm reading a \p type access at bit \p p
-  /// of struct \p value.
-  void add_arm_at(
-    const expr2tc &value,
-    const expr2tc &offset,
-    const type2tc &type,
-    const BigInt &p,
+    const BigInt &first,
+    const BigInt &field_end,
     std::list<std::pair<expr2tc, expr2tc>> &extract_list);
   /// The byte at bit \p pos of struct \p value, assembled from the bit-field
-  /// and padding members covering it; nil if a member covering it is not a
-  /// bit-vector.
+  /// and padding members covering it.
   expr2tc bit_field_byte(const expr2tc &value, const BigInt &pos);
   /// The \p bits bits of struct \p value from bit \p start, each byte read
-  /// from the members holding it so that a store touches no other member; nil
-  /// if a byte cannot be read that way.
+  /// from the members holding it so that a store touches no other member.
   expr2tc stitch_across_members(
     const expr2tc &value,
     const BigInt &start,
