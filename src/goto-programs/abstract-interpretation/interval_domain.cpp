@@ -1056,9 +1056,7 @@ void interval_domaint::transform(
 
     // We don't know anything about the return value
     if (!is_nil_expr(code_function_call.ret))
-    {
-      havoc_rec(code_function_call.ret);
-    }
+      havoc_target(code_function_call.ret);
 
     assert(is_code_type(code_function_call.function->type));
     const code_type2t &function =
@@ -1322,8 +1320,7 @@ void interval_domaint::assign(const expr2tc &expr, const bool recursive)
 
   if (!is_symbol2t(c.target))
   {
-    if (is_dereference2t(c.target))
-      clear_state();
+    havoc_target(c.target);
     return;
   }
 
@@ -1423,6 +1420,26 @@ void interval_domaint::havoc_arguments(
   const code_type2t &function = to_code_type(t);
   for (size_t i = 0; i < function.arguments.size(); i++)
     havoc_rec(symbol2tc(function.arguments[i], function.argument_names[i]));
+}
+
+void interval_domaint::havoc_target(const expr2tc &target)
+{
+  if (is_symbol2t(target))
+    havoc_rec(target);
+  else if (is_if2t(target))
+  {
+    havoc_target(to_if2t(target).true_value);
+    havoc_target(to_if2t(target).false_value);
+  }
+  else if (is_typecast2t(target))
+    havoc_target(to_typecast2t(target).from);
+  else if (is_member2t(target))
+    havoc_target(to_member2t(target).source_value);
+  else if (is_index2t(target))
+    havoc_target(to_index2t(target).source_value);
+  else
+    // A write through a pointer, or to an lvalue not modelled here.
+    clear_state();
 }
 
 void interval_domaint::havoc_rec(const expr2tc &expr)
