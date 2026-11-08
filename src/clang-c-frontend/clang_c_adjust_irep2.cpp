@@ -1019,12 +1019,13 @@ static bool is_shift_assignment(const irep_idt &op)
 /// An E1 wider than int with no rank (rank_integer) misses the usual
 /// conversions; the C converter already cast E2 to the computation type
 /// (#10135).
-static bool outside_computation_type(const expr2tc &lhs, const expr2tc &rhs)
+static void promote_to_computation_type(expr2tc &lhs, const expr2tc &rhs)
 {
-  return is_bv_type(lhs) && lhs->type != rhs->type &&
-         (is_fractional_type(rhs->type) ||
-          (is_bv_type(rhs) &&
-           rhs->type->get_width() >= lhs->type->get_width()));
+  if (
+    is_bv_type(lhs) && lhs->type != rhs->type &&
+    (is_fractional_type(rhs->type) ||
+     (is_bv_type(rhs) && rhs->type->get_width() >= lhs->type->get_width())))
+    lhs = typecast2tc(rhs->type, lhs);
 }
 
 void clang_c_adjust_irep2::adjust_compound_assignment(expr2tc &expr)
@@ -1071,8 +1072,7 @@ void clang_c_adjust_irep2::adjust_compound_assignment(expr2tc &expr)
   expr2tc lhs = a.lhs, rhs = a.rhs;
   c_implicit_typecast_arithmetic(lhs, rhs, ns);
 
-  if (outside_computation_type(lhs, rhs))
-    lhs = typecast2tc(rhs->type, lhs);
+  promote_to_computation_type(lhs, rhs);
 
   if (lhs != a.lhs || rhs != a.rhs || expr->type != target)
     expr =
