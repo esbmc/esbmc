@@ -550,12 +550,15 @@ class ModuleRewriteMixin:
             imp = ast.Import(names=[ast.alias(name=modules[name], asname=alias)])
             module_node.body[i] = ast.fix_missing_locations(ast.copy_location(imp, stmt))
 
-    def _lower_decorators(self, node):
-        """Lower decorators, and refuse a call through mixed functions that a factory leaves."""
+    def _lower_decorators(self, node, entry):
+        """Lower decorators, dispatch over the defs they leave, and refuse a mixed call left."""
         decorated = any(getattr(n, "decorator_list", None) for n in ast.walk(node))
         lower_user_decorators(node, self.module_name)
-        if decorated:
-            reject_mixed_function_values(node, self.module_name)
+        if not decorated:
+            return
+        if entry:
+            dispatch_mixed_function_values(node, self.module_name)
+        reject_mixed_function_values(node, self.module_name)
 
     def prepare_module(self, node, alias_seed=frozenset(), wrapper_seed=None, entry=False):
         """Run pre-visit analyses and range-alias/wrapper canonicalization.
@@ -580,7 +583,7 @@ class ModuleRewriteMixin:
         lower_match_statements(node)
         lower_itertools(node)
         lower_namedtuples(node, self.module_name)
-        self._lower_decorators(node)
+        self._lower_decorators(node, entry)
         define_read_siblings_first(node)
         if entry:
             dispatch_class_value_calls(node)
