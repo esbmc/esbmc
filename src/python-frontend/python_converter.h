@@ -2150,7 +2150,7 @@ private:
   /// members to the dict's internal list symbol.
   void propagate_list_type_info(
     const exprt &lhs,
-    const exprt &rhs,
+    const exprt &assigned,
     symbolt *lhs_symbol);
 
   /// Propagates the element-type map of the list backing a dict's `.keys` /

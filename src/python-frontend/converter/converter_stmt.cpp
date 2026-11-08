@@ -7063,11 +7063,26 @@ bool python_converter::element_kinds_differ(
   return !ka.empty() && !kb.empty() && ka != kb;
 }
 
+/// The list arm of `None if c else xs` (or `xs if c else None`): the None arm
+/// holds no elements, so the binding's element types are the list arm's.
+static const exprt &list_arm_of_optional(const exprt &rhs)
+{
+  if (rhs.id() != "if")
+    return rhs;
+  const if_exprt &ite = to_if_expr(rhs);
+  if (ite.true_case().is_zero())
+    return ite.false_case();
+  if (ite.false_case().is_zero())
+    return ite.true_case();
+  return rhs;
+}
+
 void python_converter::propagate_list_type_info(
   const exprt &lhs,
-  const exprt &rhs,
+  const exprt &assigned,
   symbolt *lhs_symbol)
 {
+  const exprt &rhs = list_arm_of_optional(assigned);
   const std::string &lhs_identifier = lhs.identifier().as_string();
   const std::string &rhs_identifier = rhs.identifier().as_string();
   // The registry keeps one record per name, so a rebinding under a branch or
@@ -9346,6 +9361,20 @@ static exprt coerce_ternary_branch(
   return typecast_exprt(branch, result_type);
 }
 
+/// A result temp for `None if c else xs` takes the element types of xs.
+static void copy_optional_list_arm_types(
+  element_type_registry &registry,
+  const exprt &then,
+  const exprt &else_expr,
+  bool then_is_none,
+  bool else_is_none,
+  const std::string &result_id)
+{
+  const exprt &value_arm = then_is_none ? else_expr : then;
+  if (then_is_none != else_is_none && value_arm.is_symbol())
+    registry.assign_from(value_arm.identifier().as_string(), result_id);
+}
+
 exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
 {
   // A walrus in a `while` test binds into the condition prelude, which runs
@@ -9890,6 +9919,13 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
         create_return_temp_variable(result_type, location, "ternary_result");
       symbol_table_.add(result_symbol);
       exprt result_expr = symbol_expr(result_symbol);
+      copy_optional_list_arm_types(
+        element_type_registry_,
+        then,
+        else_expr,
+        then_is_none,
+        else_is_none,
+        result_symbol.id.as_string());
 
       code_declt result_decl(result_expr);
       result_decl.location() = location;
