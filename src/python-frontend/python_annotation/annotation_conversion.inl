@@ -7251,7 +7251,8 @@ std::string python_annotation<Json>::optional_scalar_of(
   if (types.erase("NoneType") == 0 || types.size() != 1)
     return "";
   const std::string &scalar = *types.begin();
-  return scalar == "int" || scalar == "float" || scalar == "bool"
+  return scalar == "int" || scalar == "float" || scalar == "bool" ||
+             scalar == "str"
            ? "Optional[" + scalar + "]"
            : "";
 }

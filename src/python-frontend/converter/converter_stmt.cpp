@@ -1337,6 +1337,9 @@ bool python_converter::store_optional_str(
     !type_utils::is_optional_str_pointer(lhs.type()) ||
     !type_utils::is_string_type(rhs.type()) || rhs.type() == lhs.type())
     return false;
+  // A call writes its result through its return destination.
+  if (rhs.is_function_call())
+    return true;
   if (rhs.type().is_array())
     rhs = string_handler_.get_array_base_address(rhs);
   rhs = typecast_exprt(rhs, lhs.type());
@@ -1389,7 +1392,11 @@ void python_converter::adopt_none_rhs(
   // would shrink the pointee and corrupt the allocation.
   // An Optional[dict] keeps its dict pointer type the same way.
   if (keeps_pointer_type_on_none(lhs.type()))
-    rhs = typecast_exprt(rhs, lhs.type());
+  {
+    // A call stores its NULL result through its return destination.
+    if (!rhs.is_function_call())
+      rhs = typecast_exprt(rhs, lhs.type());
+  }
   // A call's None result is wrapped into the Optional once the call is
   // built (wrap_call_result_in_optional).
   else if (
