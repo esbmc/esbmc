@@ -23,4 +23,4 @@ class Board:
 b = Board()
 b.squares[0] = Other()
 s = b.squares[0]
-assert s.move() == 1
+assert s.move() == 7

@@ -17,4 +17,4 @@ class Other:
 
 sq = [Square(1)]
 sq[0] = Other()
-assert isinstance(sq[0], Square)
+assert isinstance(sq[0], Other)

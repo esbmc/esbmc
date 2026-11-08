@@ -17,4 +17,4 @@ class Sub(Square):
 sq = [Square(1)]
 sq[0] = Sub()
 s = sq[0]
-assert s.move() == 2
+assert s.move() == 9
