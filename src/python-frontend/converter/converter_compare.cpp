@@ -331,7 +331,8 @@ static bool is_constant_char_array(const exprt &expr)
 static exprt char_pointer_of(const exprt &expr)
 {
   exprt ptr = expr.type().is_pointer() ? expr : address_of_exprt(expr);
-  if (ptr.type().subtype().is_empty())
+  // An Optional[str] points to a char array; index its chars, not arrays.
+  if (ptr.type().subtype().is_empty() || ptr.type().subtype().is_array())
     ptr = typecast_exprt(ptr, gen_pointer_type(char_type()));
   return ptr;
 }
