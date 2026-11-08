@@ -1973,6 +1973,7 @@ private:
 
   typet nullable_dict_pointee(const typet &t) const;
   bool keeps_pointer_type_on_none(const typet &t);
+  void adopt_none_rhs(symbolt &lhs_symbol, exprt &lhs, exprt &rhs);
   void guard_none_container(
     exprt &rhs,
     typet &rhs_type,

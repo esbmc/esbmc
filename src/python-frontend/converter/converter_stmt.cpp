@@ -1352,6 +1352,30 @@ static exprt char_as_string(const exprt &rhs, const typet &target)
   return str;
 }
 
+void python_converter::adopt_none_rhs(
+  symbolt &lhs_symbol,
+  exprt &lhs,
+  exprt &rhs)
+{
+  // None/Optional unification (#4796), step C: when the lvalue is already a
+  // class reference (`Class*` — a migrated instance), keep that type and
+  // store a typed NULL, so a later `x = Class(...)` construction allocates
+  // a properly-sized object. Retyping it to none_type() (pointer-to-bool)
+  // would shrink the pointee and corrupt the allocation.
+  // An Optional[dict] keeps its dict pointer type the same way.
+  if (keeps_pointer_type_on_none(lhs.type()))
+    rhs = typecast_exprt(rhs, lhs.type());
+  // A call's None result is wrapped into the Optional once the call is
+  // built (wrap_call_result_in_optional).
+  else if (
+    !rhs.is_function_call() || !type_utils::is_optional_struct(lhs.type()))
+  {
+    // Adjust pointer_type() to pointer_typet(empty_typet())
+    lhs_symbol.set_type(migrate_type(rhs.type()));
+    lhs.type() = rhs.type();
+  }
+}
+
 void python_converter::handle_assignment_type_adjustments(
   symbolt *lhs_symbol,
   exprt &lhs,
@@ -1567,25 +1591,7 @@ void python_converter::handle_assignment_type_adjustments(
       }
     }
     else if (rhs.type() == none_type())
-    {
-      // None/Optional unification (#4796), step C: when the lvalue is already a
-      // class reference (`Class*` — a migrated instance), keep that type and
-      // store a typed NULL, so a later `x = Class(...)` construction allocates
-      // a properly-sized object. Retyping it to none_type() (pointer-to-bool)
-      // would shrink the pointee and corrupt the allocation.
-      // An Optional[dict] keeps its dict pointer type the same way.
-      if (keeps_pointer_type_on_none(lhs.type()))
-        rhs = typecast_exprt(rhs, lhs.type());
-      // A call's None result is wrapped into the Optional once the call is
-      // built (wrap_call_result_in_optional).
-      else if (
-        !rhs.is_function_call() || !type_utils::is_optional_struct(lhs.type()))
-      {
-        // Adjust pointer_type() to pointer_typet(empty_typet())
-        lhs_symbol->set_type(migrate_type(rhs.type()));
-        lhs.type() = rhs.type();
-      }
-    }
+      adopt_none_rhs(*lhs_symbol, lhs, rhs);
     // No annotation or an inferred Any: propagate rhs type to lhs. An "Any"
     // annotation counts as inferred when flagged by the annotation pass,
     // when the preprocessor marked it as synthesized (e.g. the items()-loop
@@ -5730,10 +5736,13 @@ void python_converter::wrap_call_result_in_optional(
   const locationt &location,
   codet &target_block)
 {
+  if (!type_utils::is_optional_struct(lhs.type()))
+    return;
+  const typet &value_type =
+    to_struct_type(lhs.type()).get_component("value").type();
   if (
-    !type_utils::is_optional_struct(lhs.type()) ||
-    (rhs.type() != none_type() &&
-     to_struct_type(lhs.type()).get_component("value").type() != rhs.type()))
+    rhs.type() != none_type() &&
+    (rhs.type().is_pointer() || value_type != rhs.type()))
     return;
 
   symbolt &result =
@@ -5839,8 +5848,7 @@ void python_converter::handle_function_call_rhs(
   if (rhs.type().is_pointer() && !is_ctor_call)
   {
     rhs.op0() = lhs;
-    if (rhs.type() == none_type())
-      wrap_call_result_in_optional(ast_node, lhs, rhs, location, target_block);
+    wrap_call_result_in_optional(ast_node, lhs, rhs, location, target_block);
   }
   else if (!rhs.type().is_pointer() && !rhs.type().is_empty() && !is_ctor_call)
   {
