@@ -1242,6 +1242,31 @@ void python_converter::reject_attribute_class_change(
     "'; an attribute holding instances of unrelated classes is not modelled");
 }
 
+/// A constructor stored into a list slot builds its instance at the class the
+/// slot already holds, and element reads keep that class, so a slot given an
+/// instance of another class, a subclass included, would be read as the old
+/// one.
+void python_converter::reject_list_slot_class_change(
+  const exprt &lhs,
+  const nlohmann::json &ast_node,
+  bool is_ctor_call)
+{
+  if (!is_ctor_call || !python_list::is_element_store_target(lhs))
+    return;
+  const std::string held = user_class_of(lhs.type());
+  const std::string assigned =
+    get_typechecker().get_constructor_name(ast_node["value"]["func"]);
+  if (
+    held.empty() || held == assigned ||
+    !json_utils::is_class(assigned, *ast_json))
+    return;
+  throw std::runtime_error(
+    "unsupported: a list element holding a '" + held + "' is assigned a new '" +
+    assigned +
+    "'; constructing another class into a list element is not "
+    "modelled");
+}
+
 /// An attribute keeps the scalar type it first holds, so storing a value its
 /// type cannot hold (an int attribute given a float or a str) would convert
 /// it rather than rebind it (#8381). An int into a float attribute is exact.
@@ -1385,6 +1410,7 @@ void python_converter::handle_assignment_type_adjustments(
   bool is_ctor_call)
 {
   reject_attribute_class_change(lhs, rhs, ast_node, is_ctor_call);
+  reject_list_slot_class_change(lhs, ast_node, is_ctor_call);
   reject_attribute_scalar_change(lhs, rhs);
   const bool has_annotation =
     ast_node.contains("annotation") && !ast_node["annotation"].is_null();
