@@ -224,6 +224,9 @@ public:
    * @param expr
    */
   void havoc_rec(const expr2tc &expr);
+  /// Forgets what a write to the lvalue \p target may change: everything when
+  /// it writes through a pointer.
+  void havoc_target(const expr2tc &target);
   void havoc_arguments(const irep_idt &function_id, const namespacet &ns);
   void apply_return(
     goto_programt::const_targett call,
