@@ -2,4 +2,4 @@ CORE
 main.c
 
 ^VERIFICATION FAILED$
-assertion s\[1\]\.d == 0$
+^\s*FAILED\s+\[main\.assertion\.\d+\].*assertion s\[1\]\.d == 0$

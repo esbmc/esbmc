@@ -2090,11 +2090,13 @@ void dereferencet::construct_from_const_struct_offset(
 
     if (int_offset < (m_offs + m_size))
     {
-      // This access starts in this field but ends in a later one. Alignment
-      // is checked on the pointer itself, so take the bytes from the struct
-      // (#10090). Integer encoding has no bytes of a struct to take.
+      // This access starts in this field but ends in a later one. When the
+      // object's base is aligned for it, the check on the pointer's offset
+      // decides alignment, so take the bytes from the struct (#10090).
+      // Integer encoding has no bytes of a struct to take.
       if (
-        !options.get_bool_option("int-encoding") &&
+        !options.get_bool_option("int-encoding") && !mode.unaligned &&
+        object_base_alignment(value) * 8 >= access_size &&
         int_offset + access_size <= type_byte_size_bits(value->type, &ns))
       {
         value = stitch_from_const_offset(value, offset, type);

@@ -2,4 +2,4 @@ CORE
 main.c
 
 ^VERIFICATION FAILED$
-dereference failure: Incorrect alignment when accessing data object$
+^\s*FAILED\s+\[main\.assertion\.\d+\].*Incorrect alignment when accessing data object$
