@@ -1252,18 +1252,28 @@ void goto_symext::symex_assign_concat(
   guard2tc &guard,
   const bool hidden)
 {
-// Right: generate a series of symex assigns.
-#ifndef NDEBUG
-  const concat2t &cat = to_concat2t(lhs);
-  assert(cat.type->get_width() > 8);
-#endif
   assert(is_scalar_type(rhs));
+  const concat2t &cat = to_concat2t(lhs);
+
+  // A byte assembled from bit-field slices (dereferencet::bit_field_byte):
+  // split the value by bits, the low ones going to side_2.
+  if (cat.type->get_width() <= 8)
+  {
+    cur_state->rename(rhs);
+    const unsigned int low = cat.side_2->type->get_width();
+    const unsigned int width = cat.type->get_width();
+    expr2tc high_part = extract2tc(cat.side_1->type, rhs, width - 1, low);
+    expr2tc low_part = extract2tc(cat.side_2->type, rhs, low - 1, 0);
+    symex_assign_rec(cat.side_2, full_lhs, low_part, rhs, guard, hidden);
+    symex_assign_rec(cat.side_1, full_lhs, high_part, rhs, guard, hidden);
+    return;
+  }
 
   // Second attempt at this code: byte stitching guarantees that all the concats
   // occur in one large grouping. Produce a list of them.
   std::list<expr2tc> operand_list;
   expr2tc cur_concat = lhs;
-  while (is_concat2t(cur_concat))
+  while (is_concat2t(cur_concat) && cur_concat->type->get_width() > 8)
   {
     const concat2t &cat2 = to_concat2t(cur_concat);
     operand_list.push_back(cat2.side_2);
