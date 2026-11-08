@@ -1023,7 +1023,7 @@ void interval_domaint::transform(
   }
 
   case ASSERT:
-    assume_assertion(instruction.guard, ai);
+    assume_assertion(instruction, ai);
     break;
 
   case FUNCTION_CALL:
@@ -1513,15 +1513,16 @@ void interval_domaint::assume_rec(
 }
 
 void interval_domaint::assume_assertion(
-  const expr2tc &guard,
+  const goto_programt::instructiont &assertion,
   const ai_baset &ai)
 {
   // There is a bug in Floats that need to be investigated!
   // regression-float/nextafter
   if (
     enable_assume_asserts && !ai.continue_past_failed_assertions &&
-    !contains_float(guard))
-    assume(guard);
+    !(skip_user_assertions && assertion.location.user_provided()) &&
+    !contains_float(assertion.guard))
+    assume(assertion.guard);
 }
 
 void interval_domaint::assume(const expr2tc &cond)
@@ -1619,6 +1620,49 @@ tvt interval_domaint::eval_boolean_expression(
   return tvt(tvt::TV_UNKNOWN);
 }
 
+void interval_domaint::assume_no_overflow(const expr2tc &op)
+{
+  if (
+    enable_wrapped_intervals || !is_bv_type(op) ||
+    !(is_add2t(op) || is_sub2t(op) || is_mul2t(op)))
+    return;
+  const expr2tc &a = *op->get_sub_expr(0);
+  const expr2tc &b = *op->get_sub_expr(1);
+  if (a->type != op->type || b->type != op->type)
+    return;
+
+  const integer_intervalt range =
+    generate_modular_interval<integer_intervalt>(op->type);
+  const integer_intervalt ia = get_interval<integer_intervalt>(a);
+  const integer_intervalt ib = get_interval<integer_intervalt>(b);
+  auto narrow = [this](const expr2tc &e, const integer_intervalt &bound) {
+    if (!is_symbol2t(e))
+      return;
+    integer_intervalt i = get_interval<integer_intervalt>(e);
+    i.intersect_with(bound);
+    update_symbol_interval(to_symbol2t(e), i);
+    if (i.is_bottom())
+      make_bottom();
+  };
+  // a op b lies in range, so each operand lies in range op^-1 the other.
+  // Integer division truncates, which rounds range / b inward.
+  if (is_add2t(op))
+  {
+    narrow(a, range - ib);
+    narrow(b, range - ia);
+  }
+  else if (is_sub2t(op))
+  {
+    narrow(a, range + ib);
+    narrow(b, ia - range);
+  }
+  else
+  {
+    narrow(a, range / ib);
+    narrow(b, range / ia);
+  }
+}
+
 void interval_domaint::assume_rec(const expr2tc &cond, bool negation)
 {
   if (is_comp_expr(cond))
@@ -1689,6 +1733,8 @@ void interval_domaint::assume_rec(const expr2tc &cond, bool negation)
   {
     assume_rec(to_typecast2t(cond).from, negation);
   }
+  else if (is_overflow2t(cond) && negation)
+    assume_no_overflow(to_overflow2t(cond).operand);
   // added in case "cond = false" which happens when the ibex contractor results
   // in empty set.
   else if (is_constant_bool2t(cond))
@@ -1767,6 +1813,7 @@ void interval_domaint::set_options(const optionst &options)
     options.get_bool_option("interval-analysis-wrapped");
   enable_assume_asserts =
     options.get_bool_option("interval-analysis-assume-asserts");
+  skip_user_assertions = options.get_bool_option("no-assertions");
   enable_eval_assumptions =
     options.get_bool_option("interval-analysis-eval-assumptions");
   enable_ibex_contractor =
@@ -1827,6 +1874,7 @@ bool interval_domaint::enable_contraction_for_abstract_states = true;
 bool interval_domaint::enable_wrapped_intervals = false;
 bool interval_domaint::enable_real_intervals = true;
 bool interval_domaint::enable_assume_asserts = true;
+bool interval_domaint::skip_user_assertions = false;
 bool interval_domaint::enable_eval_assumptions = true;
 bool interval_domaint::enable_ibex_contractor = false;
 thread_local bool interval_domaint::skip_inductive_step_instructions = false;
