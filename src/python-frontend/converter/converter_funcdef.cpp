@@ -7221,12 +7221,15 @@ void python_converter::get_function_definition(
   // a defined None value rather than a nondet slot — matching the already-
   // correct `return None` path (issue #5914). Constructors ("constructor"
   // return type) and library/import models, whose void calls exist only for
-  // side effects, are left as-is. Generators (functions containing `yield`)
-  // also have an empty return type here but do NOT implicitly return None —
-  // calling one yields a generator object — so they must not be promoted.
+  // side effects, are left as-is; a module the program imports is promoted
+  // unless is_model_file() says it is a model (#10112). Generators (functions
+  // containing `yield`) also have an empty return type here but do NOT
+  // implicitly return None — calling one yields a generator object — so they
+  // must not be promoted.
   if (
     type.return_type().is_empty() && !is_loading_models &&
-    !is_importing_module && !function_is_generator(function_node))
+    !(is_importing_module && is_model_file(function_node)) &&
+    !function_is_generator(function_node))
   {
     type.return_type() = none_type();
     python_expr::set_function_type(*added_symbol, type);
