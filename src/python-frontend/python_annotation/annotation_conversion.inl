@@ -2732,8 +2732,6 @@ static bool binds_name_in(const Json *scope, const std::string &name)
   return scope != nullptr && json_utils::count_name_bindings(*scope, name) > 0;
 }
 
-/// Whether `name` is a variable that may hold a function or a callable
-/// instance, whose calls the converter types instead.
 /// Whether a statement in `stmts`, or in a module-level `if`, `try`, loop or
 /// `with` block under them, assigns `name` (g = f).
 static bool assigns_name_at_module_level(
@@ -2749,7 +2747,9 @@ static bool assigns_name_at_module_level(
         if (t.contains("id") && t["id"] == name)
           return true;
     }
-    if (stype == "FunctionDef" || stype == "ClassDef")
+    if (
+      stype == "FunctionDef" || stype == "AsyncFunctionDef" ||
+      stype == "ClassDef")
       continue;
     for (const char *field : {"body", "orelse", "finalbody"})
       if (
@@ -2758,12 +2758,16 @@ static bool assigns_name_at_module_level(
         return true;
     if (stmt.contains("handlers"))
       for (const auto &handler : stmt["handlers"])
-        if (assigns_name_at_module_level(handler["body"], name))
+        if (
+          handler.contains("body") &&
+          assigns_name_at_module_level(handler["body"], name))
           return true;
   }
   return false;
 }
 
+/// Whether `name` is a variable that may hold a function or a callable
+/// instance, whose calls the converter types instead.
 template <class Json>
 bool python_annotation<Json>::holds_callable_value(
   const std::string &name) const
