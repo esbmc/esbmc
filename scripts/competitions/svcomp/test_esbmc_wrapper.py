@@ -579,11 +579,18 @@ class DeeperContextBoundTest(unittest.TestCase):
             self.skipTest("set ESBMC to the esbmc binary")
         src = os.path.join(os.path.dirname(__file__), "..", "..", "..", "regression", "esbmc",
                            "data_race_reused_thread_id_cb_fail", "main.c")
-        flags = ("--64 --z3 --smt-symex-guard --cswitch-skip-readonly-globals --no-pointer-check "
-                 "--no-bounds-check --data-races-check-only --no-assertions ")
+        flags = [
+            "--64", "--z3", "--smt-symex-guard", "--cswitch-skip-readonly-globals",
+            "--no-pointer-check", "--no-bounds-check", "--data-races-check-only",
+            "--no-assertions"
+        ]
         for bound, verdict in (("3", "VERIFICATION SUCCESSFUL"), ("4", "VERIFICATION FAILED")):
-            res = subprocess.run(f"{esbmc} {src} {flags}--context-bound {bound}", shell=True,
-                                 capture_output=True, text=True, timeout=600)
+            # A violation exits non-zero, so the exit code is not checked.
+            res = subprocess.run([esbmc, src, *flags, "--context-bound", bound],
+                                 capture_output=True,
+                                 text=True,
+                                 timeout=600,
+                                 check=False)
             self.assertIn(verdict, res.stdout + res.stderr)
 
 
