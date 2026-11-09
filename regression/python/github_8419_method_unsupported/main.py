@@ -1,16 +1,18 @@
-def double(f):
+replace = True
 
-    def wrapper(self, x: int) -> int:
-        return 2 * f(self, x)
 
-    return wrapper
+def other(self):
+    return 7
+
+
+def dec(f):
+    return other if replace else f
 
 
 class C:
+    @dec
+    def g(self):
+        return 1
 
-    @double
-    def g(self, x: int) -> int:
-        return x
 
-
-assert C().g(3) == 6
+assert C().g() == 7

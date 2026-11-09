@@ -1,9 +1,10 @@
 #include <goto-programs/loop_unroll.h>
 #include <util/base/prefix.h>
+#include <util/expr/type_byte_size.h>
 
 bool unsound_loop_unroller::runOnLoop(loopst &loop, goto_programt &goto_program)
 {
-  int bound = get_loop_bounds(loop);
+  int bound = get_loop_bounds(loop, goto_program);
   if (bound <= 0)
     return false; // Can't unroll this
 
@@ -69,7 +70,53 @@ bool unsound_loop_unroller::runOnLoop(loopst &loop, goto_programt &goto_program)
   return true;
 }
 
-int bounded_loop_unroller::get_loop_bounds(loopst &loop)
+static bool takes_address_of(const expr2tc &e, const expr2tc &symbol)
+{
+  if (is_nil_expr(e))
+    return false;
+  if (is_address_of2t(e) && get_base_object(e) == symbol)
+    return true;
+  bool found = false;
+  e->foreach_operand(
+    [&](const expr2tc &op) { found = found || takes_address_of(op, symbol); });
+  return found;
+}
+
+/// True if an instruction in [first, last) assigns symbol or a call result to
+/// it.
+static bool assigns(
+  goto_programt::const_targett first,
+  goto_programt::const_targett last,
+  const expr2tc &symbol)
+{
+  for (; first != last; ++first)
+    if (
+      (first->is_assign() && to_code_assign2t(first->code).target == symbol) ||
+      (first->is_function_call() &&
+       to_code_function_call2t(first->code).ret == symbol))
+      return true;
+  return false;
+}
+
+/// True if symbol is declared in goto_program and no instruction there takes
+/// its address, so only a direct write in this function can change it.
+static bool
+is_unaliased_local(const expr2tc &symbol, const goto_programt &goto_program)
+{
+  bool declared = false;
+  for (const auto &i : goto_program.instructions)
+  {
+    if (takes_address_of(i.code, symbol) || takes_address_of(i.guard, symbol))
+      return false;
+    declared |= i.is_decl() &&
+                to_code_decl2t(i.code).value == to_symbol2t(symbol).thename;
+  }
+  return declared;
+}
+
+int bounded_loop_unroller::get_loop_bounds(
+  loopst &loop,
+  const goto_programt &goto_program)
 {
   /**
    * This looks for the following template
@@ -147,17 +194,14 @@ int bounded_loop_unroller::get_loop_bounds(loopst &loop)
       return -1;
   }
 
-  // 3. It mustn't exist an assignment over symbol inside the loop
+  // 4. Nothing in the loop but the increment may write symbol. Direct
+  // assignments and call results show up here; writes through a pointer or
+  // by a callee do not, so symbol must also be a local whose address is never
+  // taken (#9975).
   t++;
   t++; // First instruction of the loop
-  // Check if forall assignments exists one that targets symbol
-  for (; t != te; t++)
-    if (t->is_assign())
-    {
-      auto &x = to_code_assign2t(t->code);
-      if (x.target == symbol)
-        return -1;
-    }
+  if (assigns(t, te, symbol) || !is_unaliased_local(symbol, goto_program))
+    return -1;
 
   int bound = k - k0;
   assert(bound > 0);

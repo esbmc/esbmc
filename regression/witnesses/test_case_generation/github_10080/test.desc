@@ -1,0 +1,5 @@
+CORE
+main.c
+--generate-testcase --no-pointer-check
+^VERIFICATION FAILED$
+CHECK_FILE testcase.xml contains <testcase coversError="true">\n<input>0\.10000001</input>\n</testcase>

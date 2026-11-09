@@ -96,9 +96,12 @@ build_nonnegative_slice_span(const exprt &lower, const exprt &upper)
 
 exprt python_list::build_list_at_call(
   const exprt &list,
-  const exprt &index,
+  const exprt &index_expr,
   const nlohmann::json &element)
 {
+  // A call such as len(s) in the index is still a statement. Nested as an
+  // argument it is never lowered and reaches the solver unconverted (#9932).
+  const exprt index = to_value_expr(index_expr, converter_.ns);
   pointer_typet obj_type(converter_.get_type_handler().get_list_element_type());
 
   const symbolt *list_at_func_sym =
@@ -4665,8 +4668,12 @@ std::optional<exprt> python_list::resolve_nested_list_element(
           // slot: binding it to the temporary below sends `xs[0] = xs[1]`
           // into a dead local and leaves xs untouched, so len(xs[0]) keeps
           // answering the overwritten element's length (#7360). Reads
-          // nested inside a target still take the temp path.
-          if (converter_.is_store_target(list_value_))
+          // nested inside a target still take the temp path. A type probe
+          // skips the IndexError guard, so a temp read there would run
+          // unguarded ahead of the real build (#9909).
+          if (
+            converter_.is_store_target(list_value_) ||
+            converter_.in_rhs_type_probe_)
             return inner_ptr;
 
           const locationt loc = converter_.get_location_from_decl(list_value_);
@@ -4786,6 +4793,27 @@ typet python_list::tagged_elem_type_or(
     return th.get_tagged_object_type();
   const typet uniform = elem_types().uniform_element_type(id);
   return th.is_tagged_scalar_type(uniform) ? uniform : fallback;
+}
+
+/// A tuple type re-derived from the literal sizes a str member by its text,
+/// not as the push laid it out, so the read would copy a different struct.
+/// A bool member is left out: the solver cannot select it from such a read.
+typet python_list::recorded_tuple_type_or(
+  const exprt &array,
+  const typet &fallback) const
+{
+  if (!fallback.is_struct() || !array.is_symbol())
+    return fallback;
+  const typet recorded =
+    elem_types().uniform_element_type(array.identifier().as_string());
+  if (!recorded.is_struct())
+    return fallback;
+  const auto &members = to_struct_type(recorded).components();
+  const bool has_bool = std::any_of(
+    members.begin(), members.end(), [](const struct_typet::componentt &c) {
+      return c.type().is_bool();
+    });
+  return has_bool ? fallback : recorded;
 }
 
 bool python_list::is_numpy_param_negative_index_target(const exprt &array) const
@@ -5223,7 +5251,8 @@ exprt python_list::handle_index_access(
             // Infer element type from the literal, accounting for the
             // int->float promotion applied to mixed numeric literals at
             // construction.
-            elem_type = infer_literal_element_type(list_node["value"]);
+            elem_type = recorded_tuple_type_or(
+              array, infer_literal_element_type(list_node["value"]));
           }
         }
       }

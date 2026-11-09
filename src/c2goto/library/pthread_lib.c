@@ -159,17 +159,23 @@ __ESBMC_HIDE:;
   __ESBMC_num_threads_running--;
 }
 
+/* Called inside the thread-exit atomic section, which is released only
+ * around a destructor call: destructors are application code, so other
+ * threads interleave with them (#9434). */
 static _Bool tsd_destructor_pass(void)
 {
 __ESBMC_HIDE:;
   _Bool called = 0;
   for (unsigned long i = 0; i < __ESBMC_next_thread_key; ++i)
   {
+    void (*destructor)(void *) = __ESBMC_thread_key_destructors[i];
     void *value = __ESBMC_pthread_tsd[tsd_index(i)];
-    if (__ESBMC_thread_key_destructors[i] && value)
+    if (destructor && value)
     {
       __ESBMC_pthread_tsd[tsd_index(i)] = NULL;
-      __ESBMC_thread_key_destructors[i](value);
+      __ESBMC_atomic_end();
+      destructor(value);
+      __ESBMC_atomic_begin();
       called = 1;
     }
   }
@@ -179,14 +185,12 @@ __ESBMC_HIDE:;
 void pthread_exec_key_destructors(void)
 {
 __ESBMC_HIDE:;
-  __ESBMC_atomic_begin();
   // POSIX.1-2017 pthread_key_create: clear each non-NULL value, then call its
   // destructor; repeat while destructors ran, for at most
   // PTHREAD_DESTRUCTOR_ITERATIONS (4) passes. Unrolled rather than looped so
   // that an unwind bound never truncates thread exit.
   if (tsd_destructor_pass() && tsd_destructor_pass() && tsd_destructor_pass())
     tsd_destructor_pass();
-  __ESBMC_atomic_end();
 }
 
 void pthread_trampoline(void)
@@ -205,6 +209,7 @@ __ESBMC_HIDE:;
   void *exit_val = startdata.func(startdata.start_arg);
 
   __ESBMC_atomic_begin();
+  pthread_exec_key_destructors();
   threadid = __ESBMC_get_thread_id();
   __ESBMC_pthread_end_values[threadid] = exit_val;
   __ESBMC_pthread_thread_ended[threadid] = 1;
@@ -215,7 +220,6 @@ __ESBMC_HIDE:;
   // deadlock or it can be found down a different path. Proof left as exercise
   // to the reader.
   __ESBMC_assume(__ESBMC_blocked_threads_count == 0);
-  pthread_exec_key_destructors();
   __ESBMC_terminate_thread();
   __ESBMC_atomic_end(); // Never reached; doesn't matter.
 

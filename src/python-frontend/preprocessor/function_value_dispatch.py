@@ -30,8 +30,10 @@ import re
 
 from preprocessor.function_value_lift import lift_nested_defs
 from preprocessor.function_value_methods import lift_bound_methods
-from preprocessor.function_value_params import specialise_function_parameters
-from preprocessor.function_value_types import _Analysis, _differ, _own_nodes
+from preprocessor.function_value_params import (specialise_function_parameters,
+                                                specialise_function_parameters_in_order)
+from preprocessor.function_value_types import (_REFLECTIVE, _REFLECTIVE_ATTRS, _Analysis,
+                                               _bound_names, _differ, _own_nodes)
 
 # The most copies of the rest of the module that one module may need.
 _CAP = 32
@@ -45,9 +47,6 @@ _IDENTITY = "esbmc_fv_identity"
 _CALLABLE = "esbmc_fv_callable"
 _CHOSEN = "esbmc_fv_chosen"
 _RETURN = "esbmc_fv_return"
-# Builtins and attributes that reach module names other than by name.
-_REFLECTIVE = {"globals", "locals", "vars", "eval", "exec", "__import__"}
-_REFLECTIVE_ATTRS = {"modules", "__dict__", "__globals__"}
 _NESTED = (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda, ast.ClassDef, ast.ListComp,
            ast.SetComp, ast.DictComp, ast.GeneratorExp)
 # Statements that cannot be copied into an arm: their bindings are not plain names.
@@ -346,24 +345,6 @@ def _binds_by_string(node, names):
     return isinstance(bound, str) and bound in names
 
 
-def _bound_names(nodes):
-    """Every name that `nodes` read or bind, in any scope."""
-    names = set()
-    for top in nodes:
-        for node in ast.walk(top):
-            if isinstance(node, ast.Name):
-                names.add(node.id)
-            elif isinstance(node, ast.arg):
-                names.add(node.arg)
-            elif isinstance(node, ast.alias):
-                names.add(node.asname or node.name.split(".")[0])
-            elif isinstance(node, (ast.Global, ast.Nonlocal)):
-                names.update(node.names)
-            elif isinstance(getattr(node, "name", None), str):
-                names.add(node.name)
-    return names
-
-
 def _scope_locals(scope):
     """The names a def, lambda or class binds for itself: parameters and its own bindings."""
     args = getattr(scope, "args", None)
@@ -445,13 +426,26 @@ def _sole_def(fn, defs, module, analysis):
             for n in _own_nodes(module)):
         return False
     if defs.get(name) is fn:
-        return len(analysis.defs.get((id(module), name), [])) == 1
+        return len(analysis.defs.get(
+            (id(module), name), [])) == 1 and not _star_imports(name, module, analysis, fn.lineno)
     return _sole_import(fn, module, analysis)
+
+
+def _star_imports(name, module, analysis, after=0):
+    """The number of `from m import *` in `module` past line `after` that may bind `name`."""
+    count = 0
+    for node in ast.walk(module):
+        if isinstance(node, ast.ImportFrom) and node.lineno > after and any(a.name == "*"
+                                                                            for a in node.names):
+            names = analysis.star_imported_names(node)
+            count += names is None or name in names
+    return count
 
 
 def _sole_import(fn, module, analysis):
     """Whether `fn` is what the only binding of its name in `module` imports."""
-    if not (len(_from_import_aliases(ast.walk(module), fn.name)) == 1
+    if not (len(_from_import_aliases(ast.walk(module), fn.name)) +
+            _star_imports(fn.name, module, analysis) == 1
             and analysis.from_imported_def(fn.name, analysis.scopes[id(module)]) is fn):
         return False
     source = next(tree for tree in analysis.loaded.values() if fn in tree.body)
@@ -569,6 +563,7 @@ class _Plan:
         self.returned_names = set()
         self.local_fns = set()
         self.imported = set()
+        self.has_imported = False
         defs = {stmt.name: stmt for stmt in module.body if isinstance(stmt, ast.FunctionDef)}
         self.defs = defs
         for root in roots:
@@ -577,6 +572,7 @@ class _Plan:
             if not all(_sole_def(fn, defs, module, analysis) for fn in fns):
                 raise _Refused
             self.groups.append(fns)
+            self.has_imported |= any(defs.get(fn.name) is not fn for fn in fns)
             self.imported.update(
                 id(alias) for fn in fns if defs.get(fn.name) is not fn
                 for alias in _from_import_aliases(module.body, fn.name))
@@ -874,8 +870,8 @@ class _Plan:
 
     def check_imported(self):
         """An imported function is dispatched at module level only, where its result keeps its type."""
-        if self.imported and (self.param_holders
-                              or any(hasattr(n, _RETURN) for n in ast.walk(self.module))):
+        if self.has_imported and (self.param_holders
+                                  or any(hasattr(n, _RETURN) for n in ast.walk(self.module))):
             raise _Refused
 
     def check_param_holders(self):
@@ -1342,6 +1338,7 @@ def dispatch_mixed_function_values(module, path):
     base = candidate if lifted_methods else module
     original = _propagated(base, path)
     if not _mixed_groups(original):
+        specialise_function_parameters_in_order(module)
         return
     try:
         _inline_once_defs(candidate)

@@ -5,6 +5,7 @@
 #include <python-frontend/json_utils.h>
 #include <python-frontend/consteval/python_consteval.h>
 #include <python-frontend/python_converter.h>
+#include <python-frontend/numpy/numpy_random.h>
 #include <python-frontend/python_expr_builder.h>
 #include <python-frontend/python-dict/python_dict_handler.h>
 #include <python-frontend/python_annotation/python_annotation.h>
@@ -65,19 +66,6 @@ bool contains_cpp_throw(const exprt &expr)
   return false;
 }
 
-// The raise a condition always ends in: a cpp-throw, possibly under `not` or a
-// bool cast. Null when evaluating @p cond does not always raise.
-const exprt *raised_condition(const exprt &cond)
-{
-  if (cond.statement() == "cpp-throw")
-    return &cond;
-  if (
-    (cond.id() == "not" || cond.id() == "typecast") &&
-    cond.operands().size() == 1)
-    return raised_condition(cond.op0());
-  return nullptr;
-}
-
 codet raise_statement(const exprt &raise, const locationt &location)
 {
   codet code("expression");
@@ -93,13 +81,22 @@ bool is_untyped_nondet(const exprt &e)
   return e.type().is_empty() && e.statement() == "nondet";
 }
 
+// @p value as a condition, or the raise evaluating it always ends in (#9838).
+exprt condition_or_raise(
+  const exprt &value,
+  const std::function<exprt(const exprt &)> &to_condition)
+{
+  const exprt *raise = python_frontend::raised_condition(value);
+  return raise ? *raise : to_condition(value);
+}
+
 // `lhs = value`, or the raise that evaluating @p value always ends in.
 codet assign_or_raise(
   const exprt &lhs,
   const exprt &value,
   const locationt &location)
 {
-  if (const exprt *raise = raised_condition(value))
+  if (const exprt *raise = python_frontend::raised_condition(value))
     return raise_statement(*raise, location);
   code_assignt assign(lhs, value);
   if (is_untyped_nondet(value))
@@ -740,6 +737,24 @@ struct str_value_scope_guard
   }
 };
 
+// A tuple literal's type differs from an annotated Optional[tuple]'s payload
+// in tag spelling only; match it so the store is wrapped (#9843).
+exprt coerce_to_optional_payload(
+  tuple_handler &tuples,
+  const exprt &value,
+  const typet &target,
+  const locationt &location,
+  codet &block)
+{
+  if (!type_utils::is_optional_struct(target))
+    return value;
+  return tuples.coerce_to_tuple_type(
+    value,
+    to_struct_type(target).get_component("value").type(),
+    location,
+    block);
+}
+
 } // namespace
 
 std::optional<std::vector<std::size_t>>
@@ -1227,6 +1242,31 @@ void python_converter::reject_attribute_class_change(
     "'; an attribute holding instances of unrelated classes is not modelled");
 }
 
+/// A constructor stored into a list slot builds its instance at the class the
+/// slot already holds, and element reads keep that class, so a slot given an
+/// instance of another class, a subclass included, would be read as the old
+/// one.
+void python_converter::reject_list_slot_class_change(
+  const exprt &lhs,
+  const nlohmann::json &ast_node,
+  bool is_ctor_call)
+{
+  if (!is_ctor_call || !python_list::is_element_store_target(lhs))
+    return;
+  const std::string held = user_class_of(lhs.type());
+  const std::string assigned =
+    get_typechecker().get_constructor_name(ast_node["value"]["func"]);
+  if (
+    held.empty() || held == assigned ||
+    !json_utils::is_class(assigned, *ast_json))
+    return;
+  throw std::runtime_error(
+    "unsupported: a list element holding a '" + held + "' is assigned a new '" +
+    assigned +
+    "'; constructing another class into a list element is not "
+    "modelled");
+}
+
 /// An attribute keeps the scalar type it first holds, so storing a value its
 /// type cannot hold (an int attribute given a float or a str) would convert
 /// it rather than rebind it (#8381). An int into a float attribute is exact.
@@ -1297,6 +1337,9 @@ bool python_converter::store_optional_str(
     !type_utils::is_optional_str_pointer(lhs.type()) ||
     !type_utils::is_string_type(rhs.type()) || rhs.type() == lhs.type())
     return false;
+  // A call writes its result through its return destination.
+  if (rhs.is_function_call())
+    return true;
   if (rhs.type().is_array())
     rhs = string_handler_.get_array_base_address(rhs);
   rhs = typecast_exprt(rhs, lhs.type());
@@ -1337,6 +1380,34 @@ static exprt char_as_string(const exprt &rhs, const typet &target)
   return str;
 }
 
+void python_converter::adopt_none_rhs(
+  symbolt &lhs_symbol,
+  exprt &lhs,
+  exprt &rhs)
+{
+  // None/Optional unification (#4796), step C: when the lvalue is already a
+  // class reference (`Class*` — a migrated instance), keep that type and
+  // store a typed NULL, so a later `x = Class(...)` construction allocates
+  // a properly-sized object. Retyping it to none_type() (pointer-to-bool)
+  // would shrink the pointee and corrupt the allocation.
+  // An Optional[dict] keeps its dict pointer type the same way.
+  if (keeps_pointer_type_on_none(lhs.type()))
+  {
+    // A call stores its NULL result through its return destination.
+    if (!rhs.is_function_call())
+      rhs = typecast_exprt(rhs, lhs.type());
+  }
+  // A call's None result is wrapped into the Optional once the call is
+  // built (wrap_call_result_in_optional).
+  else if (
+    !rhs.is_function_call() || !type_utils::is_optional_struct(lhs.type()))
+  {
+    // Adjust pointer_type() to pointer_typet(empty_typet())
+    lhs_symbol.set_type(migrate_type(rhs.type()));
+    lhs.type() = rhs.type();
+  }
+}
+
 void python_converter::handle_assignment_type_adjustments(
   symbolt *lhs_symbol,
   exprt &lhs,
@@ -1346,6 +1417,7 @@ void python_converter::handle_assignment_type_adjustments(
   bool is_ctor_call)
 {
   reject_attribute_class_change(lhs, rhs, ast_node, is_ctor_call);
+  reject_list_slot_class_change(lhs, ast_node, is_ctor_call);
   reject_attribute_scalar_change(lhs, rhs);
   const bool has_annotation =
     ast_node.contains("annotation") && !ast_node["annotation"].is_null();
@@ -1552,22 +1624,7 @@ void python_converter::handle_assignment_type_adjustments(
       }
     }
     else if (rhs.type() == none_type())
-    {
-      // None/Optional unification (#4796), step C: when the lvalue is already a
-      // class reference (`Class*` — a migrated instance), keep that type and
-      // store a typed NULL, so a later `x = Class(...)` construction allocates
-      // a properly-sized object. Retyping it to none_type() (pointer-to-bool)
-      // would shrink the pointee and corrupt the allocation.
-      // An Optional[dict] keeps its dict pointer type the same way.
-      if (keeps_pointer_type_on_none(lhs.type()))
-        rhs = typecast_exprt(rhs, lhs.type());
-      else
-      {
-        // Adjust pointer_type() to pointer_typet(empty_typet())
-        lhs_symbol->set_type(migrate_type(rhs.type()));
-        lhs.type() = rhs.type();
-      }
-    }
+      adopt_none_rhs(*lhs_symbol, lhs, rhs);
     // No annotation or an inferred Any: propagate rhs type to lhs. An "Any"
     // annotation counts as inferred when flagged by the annotation pass,
     // when the preprocessor marked it as synthesized (e.g. the items()-loop
@@ -2021,6 +2078,68 @@ python_converter::resolve_name_symbol_id(const std::string &name) const
     return live_id(sid.to_string());
 
   return "";
+}
+
+bool python_converter::is_numpy_random_generator_call(
+  const nlohmann::json &call) const
+{
+  if (
+    !call.is_object() || call.value("_type", "") != "Call" ||
+    !call.contains("func") || !call["func"].is_object() ||
+    call["func"].value("_type", "") != "Attribute" ||
+    !call["func"].contains("value") || !call["func"]["value"].is_object() ||
+    call["func"]["value"].value("_type", "") != "Name" ||
+    !call["func"]["value"].contains("id") ||
+    !call["func"]["value"]["id"].is_string())
+    return false;
+  const std::string id =
+    resolve_name_symbol_id(call["func"]["value"]["id"].get<std::string>());
+  return numpy_random_generator_states_.count(id) != 0;
+}
+
+std::string
+python_converter::numpy_random_state_id(const nlohmann::json &call) const
+{
+  if (is_numpy_random_generator_call(call))
+  {
+    const std::string id =
+      resolve_name_symbol_id(call["func"]["value"]["id"].get<std::string>());
+    return numpy_random_generator_states_.at(id);
+  }
+  if (numpy_random::is_random_call(call, *ast_json))
+    return "$numpy_random_module_state$" +
+           std::to_string(numpy_random_module_state_version_);
+  return {};
+}
+
+void python_converter::reset_numpy_random_module_state()
+{
+  ++numpy_random_module_state_version_;
+}
+
+void python_converter::update_numpy_random_generator_binding(
+  const exprt &lhs,
+  const nlohmann::json &rhs_node)
+{
+  if (!lhs.is_symbol())
+    return;
+  const std::string lhs_id = lhs.identifier().as_string();
+  if (numpy_random::is_generator_constructor(rhs_node, *ast_json))
+  {
+    numpy_random_generator_states_[lhs_id] = "$numpy_generator_" + lhs_id;
+    return;
+  }
+  if (rhs_node.value("_type", "") == "Name")
+  {
+    const std::string rhs_id = resolve_name_symbol_id(rhs_node.value("id", ""));
+    auto it = numpy_random_generator_states_.find(rhs_id);
+    if (it != numpy_random_generator_states_.end())
+    {
+      numpy_random_generator_states_[lhs_id] = it->second;
+      return;
+    }
+  }
+  numpy_random_generator_states_.erase(lhs_id);
 }
 
 std::string
@@ -5007,6 +5126,8 @@ bool python_converter::handle_unpacking_assignment(
 
   // Prepare RHS if it's a function call
   rhs = tuple_handler_->prepare_rhs_for_unpacking(ast_node, rhs, target_block);
+  rhs = optional_tuple_payload(
+    rhs, ast_node["value"], "cannot unpack non-iterable NoneType object");
 
   // Handle different unpacking types
   if (rhs.type().id() == "struct")
@@ -5077,17 +5198,6 @@ void collect_read_names(
     if (child.is_structured() && !(key == "func" && node.is_object()))
       collect_read_names(child, names);
 }
-
-std::size_t
-count_name_nodes(const nlohmann::json &node, const std::string &name)
-{
-  std::size_t n = node.is_object() && node.value("_type", "") == "Name" &&
-                  node.value("id", "") == name;
-  for (const auto &child : node)
-    if (child.is_structured())
-      n += count_name_nodes(child, name);
-  return n;
-}
 } // namespace
 
 // The registry records types flow-insensitively, and a store through an alias
@@ -5105,8 +5215,8 @@ bool python_converter::unpack_record_is_trusted(
       json_utils::find_var_decl(name, current_function_name(), ast());
     if (
       json_utils::count_name_bindings(ast(), name) != 1 ||
-      count_name_nodes(ast(), name) != 2 || !decl.contains("value") ||
-      !is_plain_literal(decl["value"]))
+      json_utils::count_name_nodes(ast(), name) != 2 ||
+      !decl.contains("value") || !is_plain_literal(decl["value"]))
       return false;
   }
   return true;
@@ -5219,8 +5329,48 @@ void python_converter::unpack_nested_target(
     return;
   }
 
+  const exprt param_list =
+    hold_param_tuple_member_list(ast_node, value, target_block);
+  if (param_list.is_not_nil())
+  {
+    python_list(*this, ast_node["value"])
+      .handle_list_var_unpacking(ast_node, target, param_list, target_block);
+    return;
+  }
+
   throw std::runtime_error(
     "Cannot unpack non-tuple element into nested target");
+}
+
+// A list read from a tuple parameter, `x.element_i`, held in a temporary that
+// takes the element types of the displays the calls pass at that position.
+exprt python_converter::hold_param_tuple_member_list(
+  const nlohmann::json &ast_node,
+  const exprt &value,
+  codet &target_block)
+{
+  if (
+    value.id() != "member" || !value.op0().is_symbol() ||
+    value.type() != type_handler_.get_list_type())
+    return nil_exprt();
+  const symbolt *tuple = find_symbol(value.op0().identifier().as_string());
+  const typet tuple_type = ns.follow(value.op0().type());
+  if (!tuple || !tuple_handler_->is_tuple_type(tuple_type))
+    return nil_exprt();
+  const std::size_t i =
+    to_struct_type(tuple_type).component_number(value.get("component_name"));
+  std::vector<nlohmann::json> displays;
+  if (!param_tuple_member_displays(tuple->name.as_string(), i, displays))
+    return nil_exprt();
+
+  symbolt &held =
+    create_tmp_symbol(ast_node, "$unpack_elem$", value.type(), exprt());
+  if (!record_literal_elements(held.id.as_string(), displays, true))
+    return nil_exprt();
+  code_declt decl(symbol_expr(held));
+  decl.copy_to_operands(value);
+  target_block.copy_to_operands(decl);
+  return symbol_expr(held);
 }
 
 void python_converter::desugar_unpacking_with_lvalue_targets(
@@ -5454,6 +5604,24 @@ exprt python_converter::not_callable_function(
   return symbol_expr(*symbol_table_.move_symbol_to_context(symbol));
 }
 
+/// A function returning functions that returns \p value of a type that cannot
+/// be called returns a function raising the TypeError of calling it (#9824).
+void python_converter::coerce_not_callable_return(
+  exprt &value,
+  const locationt &location,
+  codet &target_block)
+{
+  const typet &returned = current_func_return_type_;
+  if (
+    !returned.is_pointer() || !returned.subtype().is_code() ||
+    may_be_callable(value.type()) || value.type() == none_type())
+    return;
+  if (value.id() == "sideeffect")
+    target_block.copy_to_operands(code_expressiont(value));
+  value = python_expr::decay_function_to_pointer(
+    not_callable_function(returned.subtype(), value.type(), location));
+}
+
 /// A choice between two functions of one type is a pointer to either. The
 /// result of a choice between types would have no single type (#8404). An
 /// arm that cannot be called becomes a function that raises when it is.
@@ -5591,9 +5759,9 @@ void python_converter::widen_int_target_for_float_call(
   update_symbol(lhs);
 }
 
-// A result stored to an Optional of its own type must be wrapped, so the call
-// writes a temporary first (#9055). Another type would need a conversion that
-// loses the result's type.
+// A result stored to an Optional of its own type, or a None result (#10075),
+// must be wrapped, so the call writes a temporary first (#9055). Another type
+// would need a conversion that loses the result's type, so it is refused.
 void python_converter::wrap_call_result_in_optional(
   const nlohmann::json &ast_node,
   const exprt &lhs,
@@ -5601,10 +5769,20 @@ void python_converter::wrap_call_result_in_optional(
   const locationt &location,
   codet &target_block)
 {
-  if (
-    !type_utils::is_optional_struct(lhs.type()) ||
-    to_struct_type(lhs.type()).get_component("value").type() != rhs.type())
+  if (!type_utils::is_optional_struct(lhs.type()) || rhs.type() == lhs.type())
     return;
+  const typet &value_type =
+    to_struct_type(lhs.type()).get_component("value").type();
+  if (rhs.type() != none_type())
+  {
+    // A pointer result may encode None as NULL, so it is stored unwrapped.
+    if (rhs.type().is_pointer())
+      return;
+    if (value_type != rhs.type())
+      throw std::runtime_error(
+        "storing a call result into an Optional of another type is not yet "
+        "supported");
+  }
 
   symbolt &result =
     create_tmp_symbol(ast_node, "$call_result$", rhs.type(), exprt());
@@ -5709,6 +5887,7 @@ void python_converter::handle_function_call_rhs(
   if (rhs.type().is_pointer() && !is_ctor_call)
   {
     rhs.op0() = lhs;
+    wrap_call_result_in_optional(ast_node, lhs, rhs, location, target_block);
   }
   else if (!rhs.type().is_pointer() && !rhs.type().is_empty() && !is_ctor_call)
   {
@@ -6722,6 +6901,27 @@ may_tag_binop(const nlohmann::json &value, const dynamic_type_handler &handler)
          is_tagged_name(value["left"]) && is_tagged_name(value["right"]);
 }
 
+// On the spine the whole slot is assigned next, so the value `name` held
+// before is not copied in. Off it, a path that skips this assignment reads that
+// copy, which a tag cannot hold unless it is a scalar or a str (not None).
+void python_converter::declare_tag_for_binop_result(
+  const std::string &name,
+  bool on_spine,
+  const nlohmann::json &ast_node)
+{
+  const symbolt *existing = symbol_table_.find_symbol(
+    dynamic_type_handler_.bound_symbol_id(name).to_string());
+  if (
+    !on_spine && existing && existing->get_type() != any_type() &&
+    !type_handler_.is_numeric_scalar_type(existing->get_type()) &&
+    !type_handler_.is_string_type(existing->get_type()))
+    throw std::runtime_error(
+      "rebinding '" + name +
+      "' from a value of another type to a dynamically typed value under a "
+      "branch or loop is not yet supported");
+  dynamic_type_handler_.declare_dynamic_type_names({name}, ast_node, !on_spine);
+}
+
 bool python_converter::try_tagged_var_assign(
   const nlohmann::json &ast_node,
   codet &target_block)
@@ -6751,19 +6951,19 @@ bool python_converter::try_tagged_var_assign(
     // A call runs first, so the tag holds its result rather than the call.
     const exprt rhs = store_call_result(
       get_expr(ast_node["value"]), location, "$tag_call$", &target_block);
+    const bool on_spine = !is_attribute && current_class_name_.empty() &&
+                          loop_body_depth_ == 0 &&
+                          block_nesting_ == function_body_depth_ + 1;
     if (type_handler_.is_tagged_scalar_type(rhs.type()))
     {
       if (value_may_tag)
-        dynamic_type_handler_.declare_dynamic_type_names({name}, ast_node);
+        declare_tag_for_binop_result(name, on_spine, ast_node);
       dynamic_type_handler_.assign_tagged_object(
         rhs, location, name, target_block);
       return true;
     }
     assert(
       !value_may_tag && "tagged 'x + y' always converts to a tagged result");
-    const bool on_spine = !is_attribute && current_class_name_.empty() &&
-                          loop_body_depth_ == 0 &&
-                          block_nesting_ == function_body_depth_ + 1;
     // A tagged slot compares only against an int, bool or str, so a float
     // rebound on the spine takes its own slot below.
     if (
@@ -6923,11 +7123,26 @@ bool python_converter::element_kinds_differ(
   return !ka.empty() && !kb.empty() && ka != kb;
 }
 
+/// The list arm of `None if c else xs` (or `xs if c else None`): the None arm
+/// holds no elements, so the binding's element types are the list arm's.
+static const exprt &list_arm_of_optional(const exprt &rhs)
+{
+  if (rhs.id() != "if")
+    return rhs;
+  const if_exprt &ite = to_if_expr(rhs);
+  if (ite.true_case().is_zero())
+    return ite.false_case();
+  if (ite.false_case().is_zero())
+    return ite.true_case();
+  return rhs;
+}
+
 void python_converter::propagate_list_type_info(
   const exprt &lhs,
-  const exprt &rhs,
+  const exprt &assigned,
   symbolt *lhs_symbol)
 {
+  const exprt &rhs = list_arm_of_optional(assigned);
   const std::string &lhs_identifier = lhs.identifier().as_string();
   const std::string &rhs_identifier = rhs.identifier().as_string();
   // The registry keeps one record per name, so a rebinding under a branch or
@@ -7378,6 +7593,15 @@ bool python_converter::try_numpy_nditer_assign(const nlohmann::json &ast_node)
     numpy_nditer_items_.erase(
       numpy_nditer::key(current_func_name_, target["id"].get<std::string>()));
   return false;
+}
+
+/// The symbol whose recorded string length @p rhs carries: a nondet_str()
+/// value is the address of its buffer's first byte.
+static const exprt &string_buffer_of(const exprt &rhs)
+{
+  if (rhs.id() == "address_of" && rhs.op0().id() == "index")
+    return rhs.op0().op0();
+  return rhs;
 }
 
 void python_converter::get_var_assign(
@@ -8247,6 +8471,13 @@ void python_converter::get_var_assign(
     reject_one_sided_tagged_store(lhs, rhs);
     adopt_tagged_element(lhs_symbol, lhs, rhs);
 
+    rhs = coerce_to_optional_payload(
+      *tuple_handler_,
+      rhs,
+      lhs.type(),
+      get_location_from_decl(ast_node),
+      target_block);
+
     // Handle type adjustments
     handle_assignment_type_adjustments(
       lhs_symbol, lhs, rhs, lhs_type, ast_node, is_ctor_call);
@@ -8259,9 +8490,10 @@ void python_converter::get_var_assign(
     // Must run before type-branching which may take early returns.
     if (lhs.is_symbol())
     {
-      if (rhs.is_symbol())
+      const exprt &named = string_buffer_of(rhs);
+      if (named.is_symbol())
       {
-        const std::string rhs_id = rhs.identifier().as_string();
+        const std::string rhs_id = named.identifier().as_string();
         auto it = input_str_to_len_sym_.find(rhs_id);
         if (it != input_str_to_len_sym_.end())
           input_str_to_len_sym_[lhs.identifier().as_string()] = it->second;
@@ -8326,7 +8558,10 @@ void python_converter::get_var_assign(
       if (
         effective_ast_node.contains("value") &&
         effective_ast_node["value"].is_object())
+      {
+        update_numpy_random_generator_binding(lhs, effective_ast_node["value"]);
         update_numpy_array_binding(lhs, effective_ast_node["value"]);
+      }
       else
         clear_numpy_view_copy(lhs);
       current_lhs = nullptr;
@@ -8458,7 +8693,10 @@ void python_converter::get_var_assign(
     if (
       effective_ast_node.contains("value") &&
       effective_ast_node["value"].is_object())
+    {
+      update_numpy_random_generator_binding(lhs, effective_ast_node["value"]);
       update_numpy_array_binding(lhs, effective_ast_node["value"]);
+    }
     else
       clear_numpy_view_copy(lhs);
     if (type_assertions_enabled() && can_emit_annotation_check)
@@ -9030,8 +9268,12 @@ typet python_converter::optional_ternary_type(
 {
   const typet &value_type = then_is_none ? else_expr.type() : then.type();
   const bool reference_value = value_type.is_array() || value_type.is_pointer();
-  const typet &target =
-    current_lhs ? current_lhs->type() : ternary_return_target_;
+  typet target = current_lhs ? current_lhs->type() : ternary_return_target_;
+  // With no type to fit, a list is held as a nullable list pointer, as an
+  // unannotated function returning a list or None is.
+  const bool untyped_target = target.id().empty() || target.is_empty();
+  if (untyped_target && value_type == type_handler_.get_list_type())
+    target = value_type;
   if (!reference_value || !target.is_pointer())
   {
     typet result_type = type_handler_.build_optional_type(value_type);
@@ -9097,7 +9339,7 @@ codet build_conditional_code(
   const locationt &location)
 {
   // A test that raises leaves neither branch nor loop to run (#9092).
-  if (const exprt *raise = raised_condition(cond))
+  if (const exprt *raise = python_frontend::raised_condition(cond))
   {
     code_blockt raised = cond_prelude;
     raised.copy_to_operands(raise_statement(*raise, location));
@@ -9187,6 +9429,20 @@ static exprt coerce_ternary_branch(
     result_type.subtype() == branch.type().subtype())
     return strings.get_array_base_address(branch);
   return typecast_exprt(branch, result_type);
+}
+
+/// A result temp for `None if c else xs` takes the element types of xs.
+static void copy_optional_list_arm_types(
+  element_type_registry &registry,
+  const exprt &then,
+  const exprt &else_expr,
+  bool then_is_none,
+  bool else_is_none,
+  const std::string &result_id)
+{
+  const exprt &value_arm = then_is_none ? else_expr : then;
+  if (then_is_none != else_is_none && value_arm.is_symbol())
+    registry.assign_from(value_arm.identifier().as_string(), result_id);
 }
 
 exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
@@ -9439,7 +9695,9 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
       exprt *saved_lhs = current_lhs;
       current_lhs = nullptr;
       // Start from the leftmost operand and carry the running result forward.
-      cond = to_bool_condition(get_expr(operands[0]), operands[0]);
+      cond = condition_or_raise(get_expr(operands[0]), [&](const exprt &e) {
+        return to_bool_condition(e, operands[0]);
+      });
       current_lhs = saved_lhs;
 
       symbolt result_symbol = create_return_temp_variable(
@@ -9451,9 +9709,8 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
       result_decl.location() = get_location_from_decl(test_node);
       current_block->copy_to_operands(result_decl);
 
-      code_assignt result_init(result_expr, cond);
-      result_init.location() = get_location_from_decl(test_node);
-      current_block->copy_to_operands(result_init);
+      current_block->copy_to_operands(
+        assign_or_raise(result_expr, cond, get_location_from_decl(test_node)));
 
       const bool is_and = test_node["op"]["_type"] == "And";
       for (size_t i = 1; i < operands.size(); ++i)
@@ -9464,14 +9721,15 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
         saved_lhs = current_lhs;
         current_lhs = nullptr;
         // Build the next operand only in the branch where it is still needed.
-        exprt next_operand =
-          to_bool_condition(get_expr(operands[i]), operands[i]);
+        const exprt next_operand =
+          condition_or_raise(get_expr(operands[i]), [&](const exprt &e) {
+            return to_bool_condition(e, operands[i]);
+          });
         current_lhs = saved_lhs;
         current_block = saved_block;
 
-        code_assignt result_update(result_expr, next_operand);
-        result_update.location() = get_location_from_decl(operands[i]);
-        next_operand_block.copy_to_operands(result_update);
+        next_operand_block.copy_to_operands(assign_or_raise(
+          result_expr, next_operand, get_location_from_decl(operands[i])));
 
         code_ifthenelset short_circuit_if;
         short_circuit_if.location() = get_location_from_decl(operands[i]);
@@ -9496,12 +9754,7 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
       cond = result_expr;
     }
   }
-  // An operand converted here is not guarded by the while test's prelude, so
-  // a walrus in a `while` test takes the general path, whose and/or lowering
-  // refuses it.
-  else if (
-    test_type == "BoolOp" && !model_mode &&
-    !(type == "While" && contains_named_expr(ast_node["test"])))
+  else if (test_type == "BoolOp" && !model_mode)
     cond = get_flat_boolop_test(ast_node["test"], to_bool_condition);
   else if (has_nested_call)
   {
@@ -9731,6 +9984,13 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
         create_return_temp_variable(result_type, location, "ternary_result");
       symbol_table_.add(result_symbol);
       exprt result_expr = symbol_expr(result_symbol);
+      copy_optional_list_arm_types(
+        element_type_registry_,
+        then,
+        else_expr,
+        then_is_none,
+        else_is_none,
+        result_symbol.id.as_string());
 
       code_declt result_decl(result_expr);
       result_decl.location() = location;
@@ -9851,7 +10111,19 @@ exprt python_converter::get_return_value(const nlohmann::json &value)
     return result;
   }
   if (value.value("_type", "") != "IfExp")
-    return get_expr(value);
+  {
+    exprt result = get_expr(value);
+    // A class with no __init__ converts to a sentinel that only an assignment
+    // lowers; a return needs the instance itself.
+    if (result == exprt("_init_undefined"))
+    {
+      const typet type =
+        type_handler_.get_typet(value["func"]["id"].get<std::string>());
+      result = gen_zero(ns.follow(type));
+      result.type() = type;
+    }
+    return result;
+  }
   ternary_return_target_ = current_func_return_type_;
   exprt result = get_expr(value);
   ternary_return_target_ = typet();
@@ -10179,6 +10451,7 @@ void python_converter::get_return_statements(
         ret_expr = wrap_in_optional(ret_expr, current_func_return_type_);
     }
 
+    coerce_not_callable_return(ret_expr, location, target_block);
     coerce_to_tagged_return(ret_expr);
     ret_expr = check_float_fits_int_return(ast_node, ret_expr, target_block);
 
@@ -10237,6 +10510,7 @@ void python_converter::get_return_statements(
       is_user_class_struct_type(return_value.type()))
       return_value = box_value_on_heap(return_value, location, target_block);
 
+    coerce_not_callable_return(return_value, location, target_block);
     return_value = tuple_handler_->coerce_to_tuple_type(
       return_value, current_func_return_type_, location, target_block);
     return_value = coerce_optional_return(return_value, location, target_block);

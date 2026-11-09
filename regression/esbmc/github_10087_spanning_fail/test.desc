@@ -1,0 +1,5 @@
+CORE
+main.c
+--little-endian
+^VERIFICATION FAILED$
+FAILED.*assertion s\[i\]\.b == 0$

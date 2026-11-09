@@ -1552,12 +1552,11 @@ irept build_builtin_rhs(
   //
   // setjmp: neither tool models the longjmp control transfer, so the direct
   // return is the only one the explored control flow can take and 0 is exact
-  // -- the value CBMC itself assigns. ESBMC's own setjmp OM instead puts the
-  // construct out of scope (__ESBMC_unreachable), leaving a bodyless external
-  // here whose nondet return admits values the modelled program cannot
-  // produce: a false FAILED on any setjmp-using binary. A longjmp still fails
-  // to transfer control, exactly as under CBMC -- cbmc_setjmp_longjmp pins
-  // that this rewrite does not claim otherwise.
+  // -- the value CBMC itself assigns. Without this rule setjmp is a bodyless
+  // external here, whose nondet return admits values the modelled program
+  // cannot produce: a false FAILED on any setjmp-using binary. A longjmp still
+  // fails to transfer control, exactly as under CBMC -- cbmc_setjmp_longjmp
+  // pins that this rewrite does not claim otherwise.
   static const std::unordered_map<std::string, builtin_rhs_rule> rules = {
     {"malloc", {builtin_rhs_kind::mem, "malloc"}},
     {"alloca", {builtin_rhs_kind::mem, "alloca"}},

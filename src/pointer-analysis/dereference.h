@@ -459,6 +459,12 @@ private:
     modet mode,
     const expr2tc &resolved = expr2tc());
 
+  void null_offset_check(
+    const expr2tc &deref_expr,
+    const value_setst::valuest &points_to_set,
+    const guard2tc &guard,
+    modet mode);
+
   static const expr2tc &get_symbol(const expr2tc &object);
   void bounds_check(
     const expr2tc &expr,
@@ -513,6 +519,15 @@ private:
    *  object, i.e. the assumption check_alignment() is entitled to make about
    *  everything below the offset it checks. */
   BigInt object_base_alignment(const expr2tc &object) const;
+
+  /** What a dereference of \p deref_expr resolving to the value-set \p object
+   *  accesses: an array member the value set named, or the base object. Sets
+   *  \p start to the byte offset of the accessed object within its base. */
+  expr2tc accessed_object(
+    const expr2tc &object,
+    const expr2tc &deref_expr,
+    modet mode,
+    expr2tc &start) const;
   unsigned int static compute_num_bytes_to_extract(
     const expr2tc &offset,
     unsigned long num_bits);
@@ -535,6 +550,10 @@ private:
     expr2tc &value,
     const expr2tc &offset,
     const type2tc &type);
+  void construct_from_bytes(
+    expr2tc &value,
+    const expr2tc &offset,
+    const type2tc &type);
   void construct_from_dyn_offset(
     expr2tc &value,
     const expr2tc &offset,
@@ -553,6 +572,37 @@ private:
     unsigned long alignment,
     modet mode,
     const expr2tc *failed_symbol = nullptr);
+  /// Whether the member of struct \p value at \p field_offset gets no arm of
+  /// its own; for a bit-field, adds to \p extract_list the arms of the
+  /// accesses that start in it.
+  bool skips_member(
+    const expr2tc &value,
+    const expr2tc &offset,
+    const type2tc &type,
+    unsigned long alignment,
+    const BigInt &field_offset,
+    const BigInt &field_size,
+    std::list<std::pair<expr2tc, expr2tc>> &extract_list);
+  /// Adds to \p extract_list an arm for each aligned \p offset in
+  /// [\p first, \p field_end) at which a \p type access starts in struct
+  /// \p value, read across the members it covers.
+  void add_arms_from(
+    const expr2tc &value,
+    const expr2tc &offset,
+    const type2tc &type,
+    unsigned long alignment,
+    const BigInt &first,
+    const BigInt &field_end,
+    std::list<std::pair<expr2tc, expr2tc>> &extract_list);
+  /// The byte at bit \p pos of struct \p value, assembled from the bit-field
+  /// and padding members covering it.
+  expr2tc bit_field_byte(const expr2tc &value, const BigInt &pos);
+  /// The \p bits bits of struct \p value from bit \p start, each byte read
+  /// from the members holding it so that a store touches no other member.
+  expr2tc stitch_across_members(
+    const expr2tc &value,
+    const BigInt &start,
+    unsigned int bits);
   void construct_from_multidir_array(
     expr2tc &value,
     const expr2tc &offset,

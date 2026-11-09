@@ -44,19 +44,11 @@ void irept::detatch()
     return;
   }
 
-  dt *const old_data = data;
-  old_data->dt_mutex.lock();
-  if (old_data->ref_count == 1)
-  {
-    old_data->dt_mutex.unlock();
+  if (data->ref_count.load(std::memory_order_acquire) == 1)
     return;
-  }
-  dt *new_data = new dt(*old_data);
-  this->data = new_data;
 
-  data->ref_count = 1;
-
-  old_data->dt_mutex.unlock();
+  dt *const old_data = data;
+  data = new dt(*old_data);
   remove_ref(old_data);
 }
 #endif
@@ -74,25 +66,16 @@ const irept::dt &irept::read() const
 #ifdef SHARING
 void irept::remove_ref(dt *old_data)
 {
-  bool should_delete = false;
-
   if (old_data == nullptr)
     return;
 
-  {
-    // Lock the data block we are about to modify.
-    std::lock_guard<std::mutex> lock(old_data->dt_mutex);
-    assert(old_data->ref_count > 0);
-    old_data->ref_count--;
-    if (old_data->ref_count == 0)
-      should_delete = true;
-  }
-
-  // Delete the data after releasing the lock.
-  if (should_delete)
-  {
+  // acq_rel, as in std::shared_ptr: whoever drops the last reference must see
+  // every other owner's accesses before deleting.
+  const unsigned prev =
+    counter_sub(old_data->ref_count, 1u, std::memory_order_acq_rel);
+  assert(prev > 0);
+  if (prev == 1)
     delete old_data;
-  }
 }
 #endif
 

@@ -67,6 +67,24 @@ def _body_keeps(fn, param):
         (n.id == fn.name or (n.id == param and not isinstance(n.ctx, ast.Load))) for n in nodes)
 
 
+def _has_call(nodes):
+    return any(isinstance(n, ast.Call) for node in nodes if node for n in ast.walk(node))
+
+
+def _runs_code(stmt):
+    """Whether running `stmt`, at module or class level, can call a function of the module."""
+    if isinstance(stmt, (ast.Import, ast.ImportFrom, ast.Pass)):
+        return False
+    if isinstance(stmt, (ast.Expr, ast.Assign, ast.AnnAssign)):
+        return not isinstance(stmt.value, ast.Constant)
+    if isinstance(stmt, (ast.FunctionDef, ast.AsyncFunctionDef)):
+        return _has_call(stmt.decorator_list + [stmt.args, stmt.returns])
+    if isinstance(stmt, ast.ClassDef):
+        return (_has_call(stmt.decorator_list + stmt.bases + stmt.keywords)
+                or any(_runs_code(s) for s in stmt.body))
+    return True
+
+
 def _passed_function(module, fn, index):
     """The one module-level def named at `index` by every call of `fn`, with those calls."""
     sites = _call_sites(module, fn.name)
@@ -108,3 +126,16 @@ def specialise_function_parameters(module):
         for index in reversed(range(len(fn.args.args))):
             changed = _specialise(module, fn, index) or changed
     return changed
+
+
+def specialise_function_parameters_in_order(module):
+    """specialise_function_parameters, when every def precedes the module code that can call it.
+
+    A call made before a def raises NameError in CPython, but would read the function once the
+    parameter is dropped (#8369)."""
+    ran = False
+    for stmt in module.body:
+        if ran and isinstance(stmt, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            return False
+        ran = ran or _runs_code(stmt)
+    return specialise_function_parameters(module)

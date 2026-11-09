@@ -288,6 +288,28 @@ reject_mixed_unresolved_call(bool unresolved_call, const typet &first)
     throw std::runtime_error("Invalid type");
 }
 
+typet python_list::literal_or_bound_element_type(
+  const nlohmann::json &elem,
+  bool &unresolved_call) const
+{
+  try
+  {
+    return literal_element_type(
+      converter_.get_type_handler(), elem, unresolved_call);
+  }
+  catch (const std::runtime_error &)
+  {
+    const symbolt *bound =
+      elem.value("_type", "") == "Name"
+        ? converter_.find_symbol(
+            converter_.resolve_name_symbol_id(elem.value("id", "")))
+        : nullptr;
+    if (!bound || bound->get_type().is_code())
+      throw;
+    return bound->get_type();
+  }
+}
+
 typet python_list::infer_literal_element_type(
   const nlohmann::json &list_literal)
 {
@@ -295,11 +317,10 @@ typet python_list::infer_literal_element_type(
   if (first_elem.is_null() || first_elem.empty())
     return typet();
 
-  const type_handler &th = converter_.get_type_handler();
   bool unresolved_call = false;
   // `a[i]` over a NumPy array or view has the array's element type.
   auto element_type = [&](const nlohmann::json &elem) {
-    return literal_element_type(th, elem, unresolved_call);
+    return literal_or_bound_element_type(elem, unresolved_call);
   };
 
   // A heterogeneous int/float literal is promoted to a homogeneous double list

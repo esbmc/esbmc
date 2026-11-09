@@ -765,6 +765,49 @@ int string_handler::nondet_str_buffer_size()
   return length < std::numeric_limits<int>::max() ? length + 1 : length;
 }
 
+/// Assume 0 <= @p length < @p buffer_size. The lower bound is not implied
+/// under --ir, where an unsigned value is an unbounded integer.
+void string_handler::assume_length_in_buffer(
+  const exprt &length,
+  int buffer_size,
+  const locationt &location)
+{
+  exprt below("<", bool_type());
+  below.copy_to_operands(length, from_integer(buffer_size, size_type()));
+  exprt not_negative(">=", bool_type());
+  not_negative.copy_to_operands(length, from_integer(0, size_type()));
+  for (const exprt &bound : {below, not_negative})
+  {
+    code_assumet assume(bound);
+    assume.location() = location;
+    converter_.add_instruction(assume);
+  }
+}
+
+/// Assume the bytes of @p array before @p length are not NUL, so strlen of
+/// the string agrees with @p length (#9955).
+void string_handler::assume_no_nul_before(
+  const exprt &array,
+  const exprt &length,
+  int buffer_size,
+  const locationt &location)
+{
+  for (int i = 0; i + 1 < buffer_size; ++i)
+  {
+    const exprt index = from_integer(i, size_type());
+    exprt past_end("<=", bool_type());
+    past_end.copy_to_operands(length, index);
+    exprt not_nul("notequal", bool_type());
+    not_nul.copy_to_operands(
+      build_index(array, index), from_integer(0, char_type()));
+    exprt holds("or", bool_type());
+    holds.copy_to_operands(past_end, not_nul);
+    code_assumet assume(holds);
+    assume.location() = location;
+    converter_.add_instruction(assume);
+  }
+}
+
 exprt string_handler::build_nondet_string(const locationt &location)
 {
   const int max_str_length = nondet_str_buffer_size();
@@ -793,6 +836,45 @@ exprt string_handler::build_nondet_string(const locationt &location)
   code_assignt null_assign(last_elem, from_integer(0, char_type()));
   null_assign.location() = location;
   converter_.add_instruction(null_assign);
+
+  // A length symbol, as input() has, lets len() answer without scanning the
+  // buffer, so a guard such as len(s) <= 4 bounds every later scan.
+  symbolt &len_sym = converter_.create_tmp_symbol(
+    location, "$nondet_str_len$", size_type(), exprt());
+  code_declt len_decl(symbol_expr(len_sym));
+  len_decl.location() = location;
+  converter_.add_instruction(len_decl);
+  code_assignt len_assign(
+    symbol_expr(len_sym), side_effect_expr_nondett(size_type()));
+  len_assign.location() = location;
+  // The buffer already holds the input, so a generated test must not take
+  // the length as an argument of its own.
+  len_assign.location().set("#decl_nondet", true);
+  converter_.add_instruction(len_assign);
+  assume_length_in_buffer(symbol_expr(len_sym), max_str_length, location);
+  // Assumed at each constant index rather than stored at the symbolic one:
+  // such a store leaves no constant terminator, so a scan without --unwind
+  // never stops, and its bounds checks become unreachable coverage goals.
+  for (int i = 0; i + 1 < max_str_length; ++i)
+  {
+    const exprt index = from_integer(i, size_type());
+    exprt elsewhere("notequal", bool_type());
+    elsewhere.copy_to_operands(symbol_expr(len_sym), index);
+    code_assumet term_assume(or_exprt(
+      elsewhere,
+      equality_exprt(
+        build_index(symbol_expr(nondet_str_symbol), index),
+        from_integer(0, char_type()))));
+    term_assume.location() = location;
+    converter_.add_instruction(term_assume);
+  }
+  assume_no_nul_before(
+    symbol_expr(nondet_str_symbol),
+    symbol_expr(len_sym),
+    max_str_length,
+    location);
+  converter_.input_str_to_len_sym_[nondet_str_symbol.id.as_string()] =
+    len_sym.id.as_string();
 
   // Return address of first element: &arr[0] which is char*
   exprt first_elem =
@@ -1915,7 +1997,7 @@ std::string string_handler::extract_string_from_array_operands(
         binary2integer(op.value().as_string(), op.type().is_signedbv());
       if (val == 0)
         break;
-      result += static_cast<char>(val.to_uint64());
+      result += static_cast<char>(val.to_int64());
     }
   }
   return result;
@@ -2886,21 +2968,30 @@ exprt string_handler::try_handle_len_string_fast_path(
     }
   }
 
-  if (arg_expr.is_symbol())
-  {
-    const std::string sym_id =
-      to_symbol_expr(arg_expr).get_identifier().as_string();
-    const auto &len_map = converter_.input_str_to_len_sym_;
-    auto it = len_map.find(sym_id);
-    if (it != len_map.end())
-    {
-      const symbolt *len_sym = converter_.find_symbol(it->second);
-      if (len_sym)
-        return build_typecast(build_symbol(*len_sym), size_type());
-    }
-  }
+  if (exprt length = recorded_length(arg_json, arg_expr); !length.is_nil())
+    return length;
 
   return char_array_type_length(arg_expr);
+}
+
+/// The length symbol recorded for the string @p arg_expr names, or nil. The
+/// name-to-length map is filled in conversion order, not along paths, so it
+/// only holds for a name bound once (#9955).
+exprt string_handler::recorded_length(
+  const nlohmann::json &arg_json,
+  const exprt &arg_expr)
+{
+  if (
+    !arg_expr.is_symbol() || arg_json.value("_type", "") != "Name" ||
+    !is_single_binding(arg_json["id"].get<std::string>()))
+    return nil_exprt();
+  const auto &len_map = converter_.input_str_to_len_sym_;
+  auto it = len_map.find(to_symbol_expr(arg_expr).get_identifier().as_string());
+  if (it == len_map.end())
+    return nil_exprt();
+  const symbolt *len_sym = converter_.find_symbol(it->second);
+  return len_sym ? build_typecast(build_symbol(*len_sym), size_type())
+                 : nil_exprt();
 }
 
 // The length a char array's type gives @p arg_expr, or nil. An element of a
@@ -2951,17 +3042,10 @@ exprt string_handler::try_len_fast_path_from_constant_arg(
   return nil_exprt();
 }
 
-exprt string_handler::try_len_fast_path_from_name_arg(
-  const nlohmann::json &arg_json)
+/// Whether @p var_name is bound exactly once in the current scope, by a plain
+/// assignment, so a value recorded at that binding holds on every path.
+bool string_handler::is_single_binding(const std::string &var_name)
 {
-  const std::string arg_type =
-    (arg_json.contains("_type") && arg_json["_type"].is_string())
-      ? arg_json["_type"].get<std::string>()
-      : "";
-  if (!(arg_type == "Name" && arg_json.contains("id")))
-    return nil_exprt();
-
-  const std::string var_name = arg_json["id"].get<std::string>();
   const std::string current_scope_id = converter_.get_current_func_name();
   const std::string cache_key = current_scope_id + "::" + var_name;
   int assign_count = 0;
@@ -3001,7 +3085,23 @@ exprt string_handler::try_len_fast_path_from_name_arg(
     assignment_has_augassign_cache_[cache_key] = has_augassign;
   }
 
-  if (!(assign_count == 1 && !has_augassign))
+  return assign_count == 1 && !has_augassign;
+}
+
+exprt string_handler::try_len_fast_path_from_name_arg(
+  const nlohmann::json &arg_json)
+{
+  const std::string arg_type =
+    (arg_json.contains("_type") && arg_json["_type"].is_string())
+      ? arg_json["_type"].get<std::string>()
+      : "";
+  if (!(arg_type == "Name" && arg_json.contains("id")))
+    return nil_exprt();
+
+  const std::string var_name = arg_json["id"].get<std::string>();
+  const std::string cache_key =
+    converter_.get_current_func_name() + "::" + var_name;
+  if (!is_single_binding(var_name))
   {
     var_value_cache_.erase(cache_key);
     return nil_exprt();
@@ -3089,7 +3189,7 @@ exprt string_handler::try_len_fast_path_from_name_arg(
   else
   {
     var_value = json_utils::get_var_value(
-      var_name, current_scope_id, converter_.get_ast_json());
+      var_name, converter_.get_current_func_name(), converter_.get_ast_json());
     var_value_cache_[cache_key] = var_value;
   }
 

@@ -29,6 +29,7 @@
  */
 
 #include <big-int/bigint.hh>
+#include <util/base/threads.h>
 #include <atomic>
 #include <cstddef>
 #include <cstdint>
@@ -158,7 +159,7 @@ private:
   irep_container(T *raw, make_tag) noexcept : ptr_(raw)
   {
     if (ptr_)
-      ptr_->refcount.fetch_add(1, std::memory_order_relaxed);
+      counter_add(ptr_->refcount, 1u, std::memory_order_relaxed);
   }
 
   template <class U, class... Args>
@@ -174,7 +175,7 @@ public:
   irep_container(const irep_container &ref) noexcept : ptr_(ref.ptr_)
   {
     if (ptr_)
-      ptr_->refcount.fetch_add(1, std::memory_order_relaxed);
+      counter_add(ptr_->refcount, 1u, std::memory_order_relaxed);
   }
 
   irep_container(irep_container &&ref) noexcept : ptr_(ref.ptr_)
@@ -202,7 +203,7 @@ public:
       // reloads and crashes).
       T *new_ptr = ref.ptr_;
       if (new_ptr)
-        new_ptr->refcount.fetch_add(1, std::memory_order_relaxed);
+        counter_add(new_ptr->refcount, 1u, std::memory_order_relaxed);
       release();
       ptr_ = new_ptr;
     }
@@ -403,7 +404,8 @@ private:
   {
     if (!ptr_)
       return;
-    unsigned int prev = ptr_->refcount.fetch_sub(1, std::memory_order_release);
+    unsigned int prev =
+      counter_sub(ptr_->refcount, 1u, std::memory_order_release);
     if (prev == 1)
     {
       // Acquire fence prevents the delete (and any side-effects of

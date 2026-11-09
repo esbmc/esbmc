@@ -122,6 +122,29 @@ static bool k_induction_parallel_conflicts(const cmdlinet &cmdline)
   return false;
 }
 
+/// --smt-during-symex builds one solver during symex, and the equation it
+/// leaves refers to that solver's terms, so the --parallel-solving jobs would
+/// all share it unsynchronised (issue #10103). The other flags imply it.
+static bool parallel_solving_conflicts(const cmdlinet &cmdline)
+{
+  if (!cmdline.isset("parallel-solving"))
+    return false;
+
+  for (const char *incompatible :
+       {"smt-during-symex",
+        "smt-thread-guard",
+        "smt-symex-guard",
+        "smt-symex-assert",
+        "smt-symex-assume"})
+    if (cmdline.isset(incompatible))
+    {
+      log_error(
+        "--parallel-solving cannot be combined with --{}", incompatible);
+      return true;
+    }
+  return false;
+}
+
 /// --houdini-loop-invariants owns the outer loop too: it re-derives the
 /// program once per filtering round from a pristine copy and applies the
 /// loop-invariant schema itself. Combining it with another driver is not
@@ -267,6 +290,9 @@ static bool incompatible_flags(const cmdlinet &cmdline)
     }
 
   if (k_induction_parallel_conflicts(cmdline))
+    return true;
+
+  if (parallel_solving_conflicts(cmdline))
     return true;
 
   if (houdini_conflicts(cmdline))

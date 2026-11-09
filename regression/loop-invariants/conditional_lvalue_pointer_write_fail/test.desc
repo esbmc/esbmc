@@ -1,0 +1,6 @@
+CORE
+main.cpp
+--loop-invariant-check --multi-property
+^WARNING: loop invariant at .* not checked beyond its base case: the loop writes through a pointer the havoc cannot cover$
+^\s+FAILED\s+\[main\.assertion\.3\]\s+line\s+22\s+assertion a\.e\[1\] == 0$
+^VERIFICATION FAILED$

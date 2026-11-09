@@ -100,6 +100,20 @@ std::string classify_return_literal_kind(
     auto it = param_kinds.find(value.value("id", ""));
     return it == param_kinds.end() ? "" : it->second;
   }
+  // Arithmetic on a parameter, e.g. `return n + 1` (#9812).
+  if (value.value("_type", "") == "BinOp")
+  {
+    auto operand_kind = [&](const char *side) {
+      return classify_return_literal_kind(
+        {{"_type", "Return"}, {"value", value[side]}},
+        param_kinds,
+        module_body);
+    };
+    return dynamic_type_detail::binop_kind(
+      value["op"].value("_type", ""),
+      operand_kind("left"),
+      operand_kind("right"));
+  }
   if (value.value("_type", "") == "Call")
   {
     const std::string kind = nondet_call_kind(value);
@@ -652,7 +666,8 @@ bool dynamic_type_handler::joins_divergent_kinds(
 
 void dynamic_type_handler::declare_dynamic_type_names(
   const std::unordered_set<std::string> &dynamic_type_names,
-  const nlohmann::json &ast_node)
+  const nlohmann::json &ast_node,
+  bool copy_existing)
 {
   for (const auto &name : dynamic_type_names)
   {
@@ -704,7 +719,7 @@ void dynamic_type_handler::declare_dynamic_type_names(
       // Initialize from the pre-existing value, in case something reads the
       // alias before a branch's assign() runs.
       // A name declared Any holds no scalar to copy, and both arms assign it.
-      if (existing_symbol->get_type() == any_type())
+      if (!copy_existing || existing_symbol->get_type() == any_type())
         continue;
       exprt existing_value = build_symbol(*existing_symbol);
       for (const codet &instr : build_tag_field_assigns(
@@ -1486,9 +1501,13 @@ exprt dynamic_type_handler::build_isinstance_check(
     return build_equal(
       tagged_type_id, type_handler_.tagged_scalar_type_id(bool_type()));
 
+  // len() results are stored with size_t's type_id.
   if (type_name == "int")
-    return type_handler_.tagged_scalar_type_matches(
-      tagged_type_id, long_long_int_type());
+    return build_or(
+      type_handler_.tagged_scalar_type_matches(
+        tagged_type_id, long_long_int_type()),
+      build_equal(
+        tagged_type_id, type_handler_.tagged_scalar_type_id(size_type())));
 
   if (type_name == "float")
     return build_equal(

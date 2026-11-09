@@ -424,7 +424,7 @@ bool esbmc_parseoptionst::process_goto_program(
           adv.comment,
           format_cwe_list(cwe_for(adv.comment)));
 
-    lower_longjmp(goto_functions, context, options);
+    lower_longjmp(goto_functions, context);
 
     // Lower throw/catch to symbolic guarded control flow (#5075). Run before
     // inlining so per-call-site exception propagation is still explicit. This
@@ -518,8 +518,12 @@ bool esbmc_parseoptionst::process_goto_program(
         remove_no_op(goto_functions);
 
       if (is_k_induction)
+      {
+        reachable_state_invariants =
+          assume_reachable_loop_states(goto_functions, ns, 10000);
         disable_is_if_unsound(
           goto_k_induction(goto_functions, ns, checks_past_violation));
+      }
 
       if (wants_loop_invariants())
         apply_loop_invariants(goto_functions, context, options, is_k_induction);
@@ -546,18 +550,27 @@ bool esbmc_parseoptionst::process_goto_program(
       // verdict loop can report FAILED without unwinding. Never
       // returns TV_TRUE; only TV_FALSE (proved non-terminating) or
       // TV_UNKNOWN.
-      bool non_term_proved =
-        try_prove_non_termination_by_recurrent_set(goto_functions, options, ns)
-          .is_false();
+      locationt loop;
+      bool non_term_proved = try_prove_non_termination_by_recurrent_set(
+                               goto_functions, options, ns, loop)
+                               .is_false();
       options.set_option("termination-non-termination-proved", non_term_proved);
+      // The witness is written after the havoc transform rewrites the loop.
+      if (non_term_proved)
+        non_termination_loop = loop;
 
       // Ranking-function termination check, on the CLEAN (un-havoced)
       // goto program. If it proves every loop terminates, record it so
       // the verdict loop can report SUCCESSFUL without the marker/FC/IS
       // machinery. Never returns TV_FALSE, so it can only upgrade an
       // UNKNOWN to a proof, never produce a wrong verdict.
-      bool ranking_proved =
-        try_prove_termination_by_ranking(goto_functions, options, ns).is_true();
+      bool ranking_proved = try_prove_termination_by_ranking(
+                              goto_functions,
+                              options,
+                              ns,
+                              terminating_loops,
+                              ranking_transition_invariants)
+                              .is_true();
       options.set_option("termination-ranking-proved", ranking_proved);
 
       // Only run the marker/havoc transform when the ranking check did
@@ -565,24 +578,6 @@ bool esbmc_parseoptionst::process_goto_program(
       // ranking flag and the havoc'd markers would just be dead work.
       if (!ranking_proved)
         goto_termination(goto_functions, options, ns);
-    }
-
-    // Pass B (post-k-induction loop bounds): when interval analysis ran
-    // earlier and k-induction (or --termination's equivalent havoc) has
-    // now finished inserting its nondet havoc before each loop head,
-    // recompute bounds with k-induction's preamble instructions treated
-    // as transparent, then insert an ASSUME(bounds) right before each
-    // loop's exit-test. The ASSUME is marked inductive_step_instruction
-    // = true so only the inductive step sees it; base case and forward
-    // condition skip it. This is the place where interval analysis
-    // actually strengthens the inductive hypothesis.
-    if (
-      (cmdline.isset("interval-analysis") ||
-       cmdline.isset("goto-contractor")) &&
-      wants_kind_pipeline)
-    {
-      instrument_loop_bounds_after_kind(
-        goto_functions, ns, options, checks_past_violation);
     }
 
     if (
@@ -601,6 +596,25 @@ bool esbmc_parseoptionst::process_goto_program(
     }
 
     goto_check(ns, options, goto_functions);
+
+    // Pass B (post-k-induction loop bounds): when interval analysis ran
+    // earlier and k-induction (or --termination's equivalent havoc) has
+    // now finished inserting its nondet havoc before each loop head,
+    // recompute bounds with k-induction's preamble instructions treated
+    // as transparent, then insert an ASSUME(bounds) right before each
+    // loop's exit-test. The ASSUME is marked inductive_step_instruction
+    // = true so only the inductive step sees it; base case and forward
+    // condition skip it. This is the place where interval analysis
+    // actually strengthens the inductive hypothesis. It follows goto_check
+    // so that --interval-analysis-assume-asserts sees the overflow claims.
+    if (
+      (cmdline.isset("interval-analysis") ||
+       cmdline.isset("goto-contractor")) &&
+      wants_kind_pipeline)
+    {
+      instrument_loop_bounds_after_kind(
+        goto_functions, ns, options, checks_past_violation);
+    }
 
     // Eliminate goto-level no-op loops (empty body, dead modified vars).
     // Runs AFTER goto_check so that any check assertions inserted into a

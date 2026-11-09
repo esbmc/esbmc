@@ -1,4 +1,0 @@
-CORE
-main.py
---branch-coverage
-^ERROR: Walrus operator ':=' in a boolean \(and/or\) operand is not supported$
