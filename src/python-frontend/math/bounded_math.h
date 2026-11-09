@@ -4,6 +4,7 @@
 #include <util/irep/expr.h>
 
 #include <string>
+#include <vector>
 
 class python_converter;
 
@@ -25,15 +26,35 @@ public:
 
   /// Functions whose result of a run-time argument is bounded.
   static bool is_bounded(const std::string &function);
+  /// hypot and arctan2.
+  static bool is_bounded_binary(const std::string &function);
   /// is_bounded() or exact (sqrt).
   static bool has_runtime_model(const std::string &function);
   static double host_value(const std::string &function, double x);
+  /// x lies outside the domain, poles included, where math.* raises.
+  static bool outside_domain(const std::string &function, double x);
 
   /// The numpy.* result for a literal argument.
   exprt literal(const std::string &function, double x);
   /// The result for a number known only at run time, which is read once.
   exprt
   runtime(const std::string &function, const exprt &x, math_module module);
+  /// hypot(a, b) or arctan2(a, b), each argument read once. NumPy and
+  /// math.* agree on both: neither raises, and an overflow is an infinity.
+  exprt binary(
+    const std::string &function,
+    const exprt &a,
+    const exprt &b,
+    math_module module);
+  /// math.hypot of any number of arguments, each read once: hypot() is 0
+  /// and hypot(x) is |x|.
+  exprt hypot_of(const std::vector<exprt> &args);
+  /// The value of an argument at this point, before a later argument's
+  /// call can change what it reads.
+  exprt capture(const exprt &x);
+  /// isnan, isinf or isfinite of a number, which is read once.
+  static bool is_float_predicate(const std::string &function);
+  exprt float_predicate(const std::string &function, const exprt &x);
 
 private:
   python_converter &converter_;
@@ -47,6 +68,9 @@ private:
     const std::string &function,
     const exprt &x,
     const exprt &value);
+  exprt hypot(const exprt &x, const exprt &y);
+  exprt hypot_of_runtime(const std::vector<exprt> &args);
+  exprt arctan2(const exprt &y, const exprt &x);
   exprt fresh(const std::string &name, const exprt &value);
   exprt read_once(const exprt &x);
   exprt within(double low, double high);

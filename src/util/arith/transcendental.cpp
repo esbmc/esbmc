@@ -27,16 +27,38 @@ struct math_spec
   bool periodic;
   std::vector<double> poles = {};
   double domain_low = -inf, domain_high = inf;
+  // Where the function is an infinity inside its domain.
+  std::vector<double> domain_poles = {};
+  // Breakpoints a function needs beyond the shared grid, such as where it
+  // overflows.
+  std::vector<double> extra_points = {};
 };
 
 const std::map<std::string, math_spec> &specs()
 {
   static const double pi = std::numbers::pi, half_pi = pi / 2;
+  static const double above_minus_one = std::nextafter(-1.0, 0.0);
+  static const double below_one = std::nextafter(1.0, 0.0);
   static const std::map<std::string, math_spec> table = {
     {"exp", {-inf, inf, 0.0, inf, {}, false}},
-    {"log", {DBL_TRUE_MIN, inf, -inf, inf, {}, false, {}, 0.0}},
-    {"log2", {DBL_TRUE_MIN, inf, -inf, inf, {}, false, {}, 0.0}},
-    {"log10", {DBL_TRUE_MIN, inf, -inf, inf, {}, false, {}, 0.0}},
+    {"expm1", {-inf, inf, -1.0, inf, {}, false}},
+    {"exp2",
+     {-inf,
+      inf,
+      0.0,
+      inf,
+      {},
+      false,
+      {},
+      -inf,
+      inf,
+      {},
+      {std::nextafter(1024.0, 0.0), 1024.0}}},
+    {"log", {DBL_TRUE_MIN, inf, -inf, inf, {}, false, {}, 0.0, inf, {0.0}}},
+    {"log2", {DBL_TRUE_MIN, inf, -inf, inf, {}, false, {}, 0.0, inf, {0.0}}},
+    {"log10", {DBL_TRUE_MIN, inf, -inf, inf, {}, false, {}, 0.0, inf, {0.0}}},
+    {"log1p",
+     {above_minus_one, inf, -inf, inf, {}, false, {}, -1.0, inf, {-1.0}}},
     {"sin",
      {-8.0,
       8.0,
@@ -51,7 +73,23 @@ const std::map<std::string, math_spec> &specs()
     {"arctan", {-inf, inf, -half_pi, half_pi, {}, false}},
     {"sinh", {-inf, inf, -inf, inf, {}, false}},
     {"cosh", {-inf, inf, 1.0, inf, {0.0}, false}},
-    {"tanh", {-inf, inf, -1.0, 1.0, {}, false}}};
+    {"tanh", {-inf, inf, -1.0, 1.0, {}, false}},
+    {"arcsinh", {-inf, inf, -inf, inf, {}, false}},
+    {"arccosh", {1.0, inf, 0.0, inf, {}, false, {}, 1.0}},
+    {"arctanh",
+     {above_minus_one,
+      below_one,
+      -inf,
+      inf,
+      {},
+      false,
+      {},
+      -1.0,
+      1.0,
+      {-1.0, 1.0}}},
+    {"cbrt", {-inf, inf, -inf, inf, {}, false}},
+    {"erf", {-inf, inf, -1.0, 1.0, {}, false}},
+    {"erfc", {-inf, inf, 0.0, 2.0, {}, false}}};
   return table;
 }
 
@@ -68,14 +106,16 @@ const math_spec &spec_of(const std::string &function)
 // at infinity, and any result that is not finite.
 bool exact_everywhere(const std::string &function, double x, double value)
 {
-  static const std::set<std::string> one_at_zero = {"exp", "cos", "cosh"};
+  static const std::set<std::string> one_at_zero = {
+    "exp", "exp2", "cos", "cosh", "erfc"};
   static const std::set<std::string> zero_at_one = {
-    "log", "log2", "log10", "arccos"};
+    "log", "log2", "log10", "arccos", "arccosh"};
   int exponent = 0;
   const bool power_of_two = x > 0 && std::frexp(x, &exponent) == 0.5;
   return function == "sqrt" || function == "rint" || !std::isfinite(value) ||
          !std::isfinite(x) ||
-         (x == 0.0 && (is_odd(function) || one_at_zero.count(function) != 0)) ||
+         (x == 0.0 &&
+          (keeps_signed_zero(function) || one_at_zero.count(function) != 0)) ||
          (x == 1.0 && zero_at_one.count(function) != 0) ||
          (function == "log2" && power_of_two);
 }
@@ -95,10 +135,14 @@ double max_ulps()
   return ulps;
 }
 
+// Past the largest double the spacing below it continues, not infinity.
 double ulps(double value)
 {
-  return max_ulps() *
-         (std::nextafter(std::fabs(value), inf) - std::fabs(value));
+  const double magnitude = std::fabs(value);
+  const double spacing = magnitude == DBL_MAX
+                           ? magnitude - std::nextafter(magnitude, 0.0)
+                           : std::nextafter(magnitude, inf) - magnitude;
+  return max_ulps() * spacing;
 }
 
 // The results around x: at x itself, or near it, where only a zero keeps
@@ -163,6 +207,7 @@ std::vector<double> breakpoints(const math_spec &spec)
       if (point > spec.from && point < spec.to)
         points.insert(point);
   points.insert(spec.turning.begin(), spec.turning.end());
+  points.insert(spec.extra_points.begin(), spec.extra_points.end());
   for (double pole : spec.poles)
     points.insert({pole, pole_partner(pole)});
   return {points.begin(), points.end()};
@@ -209,8 +254,22 @@ bool transcendental::is_bounded(const std::string &function)
 bool transcendental::is_odd(const std::string &function)
 {
   static const std::set<std::string> odd = {
-    "sin", "tan", "arctan", "arcsin", "sinh", "tanh"};
+    "sin",
+    "tan",
+    "arctan",
+    "arcsin",
+    "sinh",
+    "tanh",
+    "arcsinh",
+    "arctanh",
+    "cbrt",
+    "erf"};
   return odd.count(function) != 0;
+}
+
+bool transcendental::keeps_signed_zero(const std::string &function)
+{
+  return is_odd(function) || function == "expm1" || function == "log1p";
 }
 
 double transcendental::host_value(const std::string &function, double x)
@@ -230,6 +289,15 @@ double transcendental::host_value(const std::string &function, double x)
     {"sinh", [](double v) { return std::sinh(v); }},
     {"cosh", [](double v) { return std::cosh(v); }},
     {"tanh", [](double v) { return std::tanh(v); }},
+    {"expm1", [](double v) { return std::expm1(v); }},
+    {"exp2", [](double v) { return std::exp2(v); }},
+    {"log1p", [](double v) { return std::log1p(v); }},
+    {"arcsinh", [](double v) { return std::asinh(v); }},
+    {"arccosh", [](double v) { return std::acosh(v); }},
+    {"arctanh", [](double v) { return std::atanh(v); }},
+    {"cbrt", [](double v) { return std::cbrt(v); }},
+    {"erf", [](double v) { return std::erf(v); }},
+    {"erfc", [](double v) { return std::erfc(v); }},
     {"rint", [](double v) { return std::rint(v); }}};
   auto it = functions.find(function);
   if (it == functions.end())
@@ -254,8 +322,33 @@ const std::vector<piece> &transcendental::pieces(const std::string &function)
   return it->second;
 }
 
+bool transcendental::is_bounded_binary(const std::string &function)
+{
+  return function == "hypot" || function == "arctan2";
+}
+
+double
+transcendental::host_value(const std::string &function, double a, double b)
+{
+  if (function == "hypot")
+    return std::hypot(a, b);
+  if (function == "arctan2")
+    return std::atan2(a, b);
+  throw std::runtime_error("Unsupported Numpy binary function: " + function);
+}
+
+interval transcendental::within_ulps(double value)
+{
+  if (!std::isfinite(value) || value == 0.0)
+    return {value, value};
+  const double low = value > 0 ? 0.0 : -inf;
+  const double high = value < 0 ? 0.0 : inf;
+  return {
+    std::max(value - ulps(value), low), std::min(value + ulps(value), high)};
+}
+
 domain transcendental::domain_of(const std::string &function)
 {
   const math_spec &spec = spec_of(function);
-  return {spec.domain_low, spec.domain_high, spec.periodic};
+  return {spec.domain_low, spec.domain_high, spec.periodic, spec.domain_poles};
 }

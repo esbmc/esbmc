@@ -999,6 +999,25 @@ void python_converter::refuse_tagged_boolop_operand(const exprt &operand) const
       "used is not yet supported");
 }
 
+// The result has one C type, and a bool cast to a list pointer is not a list
+// (#10143).
+void python_converter::refuse_bool_with_list_operand(
+  const exprt &logical_expr) const
+{
+  const exprt::operandst &operands = logical_expr.operands();
+  const typet list_type = type_handler_.get_list_type();
+  const auto is_bool = [](const exprt &e) { return e.type().is_bool(); };
+  const auto is_list = [&](const exprt &e) {
+    return e.type() == list_type ||
+           (e.type().is_pointer() && e.type().subtype() == list_type);
+  };
+  if (
+    std::any_of(operands.begin(), operands.end(), is_bool) &&
+    std::any_of(operands.begin(), operands.end(), is_list))
+    throw std::runtime_error(
+      "an and/or whose value is a list or a bool is not supported");
+}
+
 exprt python_converter::boolop_string_truthiness(
   const exprt &value,
   const locationt &location)
@@ -1159,6 +1178,7 @@ exprt python_converter::get_logical_operator_expr(const nlohmann::json &element)
     // Are we dealing with an actual bool expression?
     if (t.is_bool())
       return build_boolean_chain(logical_expr);
+    refuse_bool_with_list_operand(logical_expr);
     // Result expression starts from last operand as default else branch.
     const type2tc t2 = migrate_type(t);
     exprt result_expr = logical_expr.operands().back();

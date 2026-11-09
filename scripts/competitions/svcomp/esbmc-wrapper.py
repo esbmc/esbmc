@@ -2,9 +2,13 @@
 
 import os
 import argparse
+import glob
+import json
 import shlex
 import re
+import shutil
 import subprocess
+import tempfile
 import time
 import sys
 import resource
@@ -608,6 +612,460 @@ def confirmed_by_integer_encoding(esbmc_command_line, the_output, prop, elapsed)
   return violation_site(rerun) == site or site in failed_sites(rerun)
 
 
+# CPython replay of ESBMC's counterexample. The wrapper asks ESBMC for the
+# values of the nondet_* calls on the failing path, replays them in CPython
+# through a stand-in _sv_verifier module and confirms the violation when the
+# program ends with an exception of the property's family. One real execution
+# whose every nondet call returns a value in its domain is a proof, whatever the
+# counterexample looked like, so a replay can add a confirmation but never a
+# verdict. Anything else leaves the verdict to the --ir re-run. The stand-in and
+# its launcher are embedded at the end of this section, so the wrapper stays one
+# file; they are written to a temporary directory for each replay.
+REPLAY_BUDGET = 20
+VALUES_RUN_TIMEOUT = 60
+MIN_REPLAY_BUDGET = 2
+REPLAY_MEMORY = 2 * 1024 ** 3
+REPLAY_FILE_SIZE = 200 * 1024 ** 2
+REPLAY_MAX_RUNS = 32
+REPLAY_MAX_BITS = 4
+REPLAY_MAX_COPY = 50 * 1024 ** 2
+VALUES_FLAGS = "--generate-pytest-testcase --pytest-values-only --pytest-output-dir "
+NO_VALUES = "witness = [\n    {},\n]\n"
+
+
+def values_flags(values_dir):
+  return VALUES_FLAGS + shlex.quote(values_dir) + " "
+
+
+def task_provides_verifier(benchmark):
+  """Does the task, or a directory above it, hold its own _sv_verifier.py?
+  Its nondet_* calls then cannot be fed the counterexample's values."""
+  directory = os.path.dirname(os.path.abspath(benchmark))
+  while True:
+    if os.path.isfile(os.path.join(directory, "_sv_verifier.py")):
+      return True
+    parent = os.path.dirname(directory)
+    if parent == directory:
+      return False
+    directory = parent
+
+
+def copy_task(benchmark, destination):
+  """A copy of the task's directory, so the replay writes nowhere else."""
+  source = os.path.dirname(os.path.abspath(benchmark))
+  size = 0
+  for root, _, files in os.walk(source):
+    size += sum(os.path.getsize(os.path.join(root, f)) for f in files if os.path.isfile(os.path.join(root, f)))
+    if size > REPLAY_MAX_COPY:
+      return None
+  copy = os.path.join(destination, "task")
+  shutil.copytree(source, copy, ignore=shutil.ignore_patterns("__pycache__"))
+  return os.path.join(copy, os.path.basename(benchmark))
+
+
+def replay_limits():
+  """Cap the replay's memory and file size; a limit the system refuses (macOS
+  has no address-space limit) leaves that cap off, the timeout still applies."""
+  for kind, size in ((resource.RLIMIT_AS, REPLAY_MEMORY), (resource.RLIMIT_FSIZE, REPLAY_FILE_SIZE)):
+    try:
+      resource.setrlimit(kind, (size, size))
+    except (ValueError, OSError):
+      pass
+  os.nice(10)
+
+
+def replay_once(work, replay_dir, program, witness, bits, fill, timeout):
+  """One CPython run of the program; the launcher's account of its ending, or
+  None when the run did not end by itself or left no account."""
+  result = os.path.join(work, "result.json")
+  if os.path.exists(result):
+    os.remove(result)
+  python = [sys.executable, "-s"] + (["-P"] if sys.version_info >= (3, 11) else [])
+  env = {"PATH": "/usr/bin:/bin", "HOME": work, "LANG": "C.UTF-8", "PYTHONHASHSEED": "0",
+         "ESBMC_REPLAY_WITNESS": witness, "ESBMC_REPLAY_BOOLS": bits, "ESBMC_REPLAY_BOOLS_FILL": fill}
+  try:
+    subprocess.run(python + [os.path.join(replay_dir, "launch.py"), result, replay_dir, program],
+                   env=env, cwd=os.path.dirname(program), stdin=subprocess.DEVNULL,
+                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, preexec_fn=replay_limits,
+                   timeout=timeout)
+    with open(result, encoding="utf-8") as f:
+      return json.load(f)
+  except (subprocess.SubprocessError, OSError, ValueError):
+    return None
+
+
+def replay_confirms_family(ending, prop):
+  """Did the run end with an exception of the property's family? An exception
+  group, a failure inside the stand-in and a run that took a value outside the
+  call's domain or ran out of recorded values do not count."""
+  if not ending or ending.get("status") != "exception" or ending.get("group"):
+    return False
+  if ending.get("inconclusive") or ending.get("raised_in_verifier"):
+    return False
+  return any(name in PYTHON_EXCEPTION_FAMILIES[prop] for name in ending.get("builtin_mro", ()))
+
+
+def recorded_values(values_dir):
+  """The witness file ESBMC wrote, or an empty witness when it wrote none, as
+  when the program makes no nondet call."""
+  try:
+    with open(sorted(glob.glob(os.path.join(values_dir, "test_*.py")))[0], encoding="utf-8") as f:
+      return f.read()
+  except (IndexError, OSError, UnicodeDecodeError):
+    return NO_VALUES
+
+
+def write_replay_files(directory):
+  """Write the embedded stand-in and launcher into `directory`."""
+  os.makedirs(directory)
+  for name, text in (("_sv_verifier.py", REPLAY_VERIFIER), ("launch.py", REPLAY_LAUNCHER)):
+    with open(os.path.join(directory, name), "w", encoding="utf-8") as f:
+      f.write(text)
+  return directory
+
+
+def confirmed_by_replay(benchmark, prop, values_dir, elapsed):
+  """Does replaying the counterexample's values in CPython end with the
+  property's exception? ESBMC's witness leaves out its nondet_bool values, so
+  a bool call with no recorded bool takes the next bit of a bit string, tried
+  breadth first, with a constant tail for loops that ask for a bool each pass."""
+  budget = min(REPLAY_BUDGET, TOTAL_BUDGET - elapsed)
+  if budget < MIN_REPLAY_BUDGET or not replay_possible(benchmark):
+    return False
+  with tempfile.TemporaryDirectory(prefix="esbmc-replay-") as work:
+    program = copy_task(benchmark, work)
+    if program is None:
+      return False
+    replay_dir = write_replay_files(os.path.join(work, "replay"))
+    witness = os.path.join(work, "witness.py")
+    with open(witness, "w", encoding="utf-8") as f:
+      f.write(recorded_values(values_dir))
+    started = time.monotonic()
+    queue, runs = [("", "")], 0
+    while queue and runs < REPLAY_MAX_RUNS:
+      left = budget - (time.monotonic() - started)
+      if left < MIN_REPLAY_BUDGET:
+        return False
+      bits, fill = queue.pop(0)
+      ending = replay_once(work, replay_dir, program, witness, bits, fill, left)
+      runs += 1
+      if replay_confirms_family(ending, prop):
+        return True
+      if ending and not fill and ending.get("inconclusive") == "bool bits exhausted":
+        queue += [(bits, "0"), (bits, "1")]
+        if len(bits) < REPLAY_MAX_BITS:
+          queue += [(bits + "0", ""), (bits + "1", "")]
+  return False
+
+
+# Embedded replay sources, kept verbatim and apart from the code above. They run
+# only in the replay's own Python process, never in the wrapper's.
+REPLAY_VERIFIER = r'''# Replay stand-in for sv-benchmarks' python/_sv_verifier.py, used only by the
+# wrapper's CPython replay of an ESBMC counterexample (see esbmc-wrapper.py).
+# nondet_* return the values of the counterexample, read from the
+# `witness = [...]` file that --generate-pytest-testcase --pytest-values-only
+# writes (path in ESBMC_REPLAY_WITNESS). Scalars are taken in the order ESBMC
+# recorded them, lists from list0, list1, ... and dicts from dict0, ...
+# A value outside the call's domain, or a call with nothing left to return,
+# makes the replay inconclusive: _replay_inconclusive is set and a
+# BaseException outside every property family ends the run, so a replay can
+# only confirm. check_type and _matches_type are the reference code verbatim.
+import ast
+import os
+import re
+import string
+import collections.abc
+import types
+from typing import Any, Callable, Literal, Union, get_args, get_origin
+
+_replay_inconclusive = None
+
+
+class _ReplayExhausted(BaseException):
+    pass
+
+
+def _literal(node):
+    """Evaluate the literal subset ESBMC writes, plus float('nan'/'inf'/'-inf')."""
+    if isinstance(node, ast.Constant):
+        return node.value
+    if isinstance(node, ast.UnaryOp) and isinstance(node.op, (ast.USub, ast.UAdd)):
+        v = _literal(node.operand)
+        if type(v) not in (int, float):
+            raise ValueError("unary on non-number")
+        return -v if isinstance(node.op, ast.USub) else v
+    if isinstance(node, ast.List):
+        return [_literal(e) for e in node.elts]
+    if isinstance(node, ast.Tuple):
+        return tuple(_literal(e) for e in node.elts)
+    if isinstance(node, ast.Dict):
+        return {_literal(k): _literal(v) for k, v in zip(node.keys, node.values)}
+    if (isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == "float"
+            and len(node.args) == 1 and not node.keywords and isinstance(node.args[0], ast.Constant)
+            and node.args[0].value in ("nan", "inf", "-inf")):
+        return float(node.args[0].value)
+    raise ValueError("unsupported witness node " + type(node).__name__)
+
+
+def _load():
+    path = os.environ.get("ESBMC_REPLAY_WITNESS")
+    if not path:
+        return None
+    tree = ast.parse(open(path).read())
+    for stmt in tree.body:
+        if isinstance(stmt, ast.Assign) and [t.id for t in stmt.targets if isinstance(t, ast.Name)] == ["witness"]:
+            cases = _literal(stmt.value)
+            return cases[0] if cases else {}
+    return None
+
+
+_scalars, _lists, _dicts = [], [], []
+try:
+    _w = _load()
+    if _w is None:
+        _replay_inconclusive = "no witness"
+    else:
+        for k, v in _w.items():
+            if re.fullmatch(r"list\d+", k):
+                _lists.append((int(k[4:]), v))
+            elif re.fullmatch(r"dict\d+", k):
+                _dicts.append((int(k[4:]), v))
+            else:
+                _scalars.append(v)
+        _lists = [v for _, v in sorted(_lists)]
+        _dicts = [v for _, v in sorted(_dicts)]
+except Exception as e:
+    _replay_inconclusive = "witness unreadable: " + repr(e)[:200]
+
+
+def _replay_unused():
+    return {"scalars": len(_scalars), "lists": len(_lists), "dicts": len(_dicts)}
+
+
+def _give_up(reason):
+    global _replay_inconclusive
+    if _replay_inconclusive is None:
+        _replay_inconclusive = reason
+    raise _ReplayExhausted(reason)
+
+
+def _as_int(v):
+    if type(v) is int:
+        return v
+    if type(v) is bool:
+        return int(v)
+    _give_up(f"int expected, got {v!r}")
+
+
+def _as_bool(v):
+    if type(v) is bool:
+        return v
+    if type(v) is int and v in (0, 1):
+        return bool(v)
+    _give_up(f"bool expected, got {v!r}")
+
+
+def _as_str(v):
+    if type(v) is str and all(c in string.printable for c in v):
+        return v
+    _give_up(f"printable str expected, got {v!r}")
+
+
+def _as_float(v):
+    if type(v) in (float, int):
+        return float(v)
+    _give_up(f"float expected, got {v!r}")
+
+
+def _pop_scalar():
+    if _replay_inconclusive is not None:
+        _give_up(_replay_inconclusive)
+    if not _scalars:
+        _give_up("witness exhausted (scalar)")
+    return _scalars.pop(0)
+
+
+# ESBMC's witness leaves out nondet_bool values, so a bool call whose next
+# recorded value is not a bool takes the next bit of ESBMC_REPLAY_BOOLS instead. The
+# driver tries bit strings in turn; every choice is in nondet_bool's domain.
+_bits = list(os.environ.get("ESBMC_REPLAY_BOOLS", ""))
+_fill = os.environ.get("ESBMC_REPLAY_BOOLS_FILL", "")  # "0"/"1": every later bool
+_replay_bits_used = 0
+
+
+def nondet_bool():
+    global _replay_bits_used
+    if _replay_inconclusive is not None:
+        _give_up(_replay_inconclusive)
+    if _scalars and type(_scalars[0]) is bool:
+        return _scalars.pop(0)
+    if not _bits:
+        if _fill:
+            _replay_bits_used += 1
+            return _fill == "1"
+        _give_up("bool bits exhausted")
+    _replay_bits_used += 1
+    return _bits.pop(0) == "1"
+
+
+def _pop_typed(ok):
+    """The next recorded scalar if it fits the call, else the first later one
+    that does. ESBMC does not always record scalars in call order; any value
+    that fits is in the call's domain, so the choice only affects coverage."""
+    if _replay_inconclusive is not None:
+        _give_up(_replay_inconclusive)
+    for i, v in enumerate(_scalars):
+        if ok(v):
+            return _scalars.pop(i)
+    _give_up("witness exhausted (no fitting scalar)")
+
+
+def nondet_int() -> int:
+    return _pop_typed(lambda v: type(v) is int)
+
+
+def nondet_str():
+    return _pop_typed(lambda v: type(v) is str and all(c in string.printable for c in v))
+
+
+def nondet_float():
+    return float(_pop_typed(lambda v: type(v) is float))
+
+
+def nondet_float_range(a, b):
+    v = float(_pop_typed(lambda v: type(v) in (float, int) and a <= v <= b))
+    if not (a <= v <= b):
+        _give_up(f"{v!r} outside [{a!r}, {b!r}]")
+    return v
+
+
+_ELEM = {}
+
+
+def _convert_elem(f, v):
+    conv = _ELEM.get(f)
+    if conv is None:
+        _give_up("element maker is not a nondet_* function")
+    return conv(v)
+
+
+def nondet_list(nondet_elem):
+    if _replay_inconclusive is not None:
+        _give_up(_replay_inconclusive)
+    if not _lists:
+        _give_up("witness exhausted (list)")
+    v = _lists.pop(0)
+    if type(v) is not list:
+        _give_up(f"list expected, got {v!r}")
+    return [_convert_elem(nondet_elem, e) for e in v]
+
+
+def nondet_dict(nondet_key, nondet_value):
+    if _replay_inconclusive is not None:
+        _give_up(_replay_inconclusive)
+    if not _dicts:
+        _give_up("witness exhausted (dict)")
+    v = _dicts.pop(0)
+    if type(v) is not dict:
+        _give_up(f"dict expected, got {v!r}")
+    return {_convert_elem(nondet_key, k): _convert_elem(nondet_value, x) for k, x in v.items()}
+
+
+_ELEM.update({nondet_int: _as_int, nondet_bool: _as_bool, nondet_str: _as_str, nondet_float: _as_float})
+
+def _matches_type(value, hint) -> bool:
+    if hint is Any:
+        return True
+    if hint is None or hint is type(None):
+        return value is None
+    origin = get_origin(hint)
+    if origin is None:
+        # Plain class, e.g. int or list
+        return isinstance(value, hint)
+    args = get_args(hint)
+    if origin is Union or origin is types.UnionType:
+        return any(_matches_type(value, a) for a in args)
+    if origin is Literal:
+        return any(value == a and type(value) is type(a) for a in args)
+    if not isinstance(value, origin):
+        return False
+    if not args:
+        return True
+    if origin is tuple:
+        if len(args) == 2 and args[1] is Ellipsis:
+            return all(_matches_type(v, args[0]) for v in value)
+        if args == ((),):
+            return len(value) == 0
+        return len(value) == len(args) and all(_matches_type(v, a) for v, a in zip(value, args))
+    if origin is collections.abc.Callable:
+        # Signatures are not checked, only callability
+        return True
+    if issubclass(origin, collections.abc.Mapping):
+        key_hint, value_hint = args
+        return all(_matches_type(k, key_hint) and _matches_type(v, value_hint) for k, v in value.items())
+    if issubclass(origin, collections.abc.Iterable):
+        (elem_hint,) = args
+        return all(_matches_type(v, elem_hint) for v in value)
+    raise NotImplementedError(f"check_type: unsupported type hint {hint!r}")
+
+def check_type(value, hint):
+    """Raise a TypeError if value is not of the type described by hint (e.g. list[list[int]])."""
+    if not _matches_type(value, hint):
+        raise TypeError(f"expected value of type {hint!r}, got {value!r}")
+'''
+
+REPLAY_LAUNCHER = r'''# Runs one benchmark program as __main__ under the replay _sv_verifier and
+# records how it ended in a JSON file.
+# Usage: python3 launch.py RESULT_JSON VERIFIER_DIR PROGRAM
+import builtins
+import json
+import os
+import runpy
+import sys
+import traceback
+
+res_path, verifier_dir, prog = sys.argv[1], sys.argv[2], os.path.abspath(sys.argv[3])
+out = {"status": "no-result"}
+
+# The task's own directory comes first, so a task-local _sv_verifier.py is
+# never shadowed by the replay one.
+sys.path[0:1] = [os.path.dirname(prog), verifier_dir]
+sys.argv = [prog]
+try:
+    runpy.run_path(prog, run_name="__main__")
+    out = {"status": "normal"}
+    sys.stdout.flush()
+except SystemExit as e:
+    out = {"status": "exit", "code": repr(e.code)}
+except BaseException as e:
+    tb = e.__traceback__.tb_next  # drop this launcher's frame
+    frames = traceback.extract_tb(tb)
+    inner = frames[-1] if frames else None
+    verifier_file = os.path.join(verifier_dir, "_sv_verifier.py")
+    out = {
+        "status": "exception",
+        "cls": type(e).__name__,
+        "builtin_mro": [c.__name__ for c in type(e).__mro__ if c.__module__ == "builtins"],
+        "group": isinstance(e, getattr(builtins, "BaseExceptionGroup", ())),
+        # A failure inside the stand-in's own nondet_* code says nothing about
+        # the program. check_type is part of the specification.
+        "raised_in_verifier": bool(inner and os.path.abspath(inner.filename) == os.path.abspath(verifier_file)
+                                   and inner.name not in ("check_type", "_matches_type")),
+    }
+module = sys.modules.get("_sv_verifier")
+if module is None:
+    out["inconclusive"] = None  # no nondet call was possible
+elif getattr(module, "__file__", None) == os.path.join(verifier_dir, "_sv_verifier.py"):
+    out["inconclusive"] = getattr(module, "_replay_inconclusive", None)
+else:
+    out["inconclusive"] = "the replay _sv_verifier was not the module imported"
+fd = os.open(res_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+os.write(fd, json.dumps(out).encode())
+os.close(fd)
+os._exit(0)
+'''
+
+
 def has_invariants(witness_path):
   """Whether the YAML names an `invariant` in any style (block, flow, JSON).
   A comment naming one also counts, which only keeps loops rolled."""
@@ -644,12 +1102,60 @@ def verify(strat, prop, arch, benchmark, concurrency, dargs, esbmc_ci, witness_p
     if res in (Result.success, Result.fail_overflow):
       return res
     esbmc_command_line = esbmc_command_line.replace(strategy_flags(strat), "--incremental-bmc ")
+  if prop in PYTHON_EXCEPTION_FAMILIES and not witness_path:
+    return verify_python(esbmc_command_line, prop, benchmark, started)
   output = run(esbmc_command_line)
   elapsed = time.monotonic() - started
   res = parse_result(output.decode(), prop)
   if res == Result.fail_python and not confirmed_by_integer_encoding(esbmc_command_line, output.decode(), prop, elapsed):
     return Result.unknown
   return res
+
+
+def counterexample_values(esbmc_command_line, prop, values_dir, elapsed):
+  """Run ESBMC again on a violation it found, asking for the values of the
+  nondet calls on the failing path. The flags change the front end (a walrus in
+  a boolean operand is refused under them), so the first run never carries
+  them. Returns whether the second run found the violation too."""
+  budget = min(VALUES_RUN_TIMEOUT, 1.5 * elapsed + 10, TOTAL_BUDGET - elapsed - IR_RERUN_TIMEOUT)
+  if budget < MIN_REPLAY_BUDGET:
+    return False
+  output = run(esbmc_command_line + values_flags(values_dir), budget)
+  return parse_result(output.decode(), prop) == Result.fail_python
+
+
+def replay_possible(benchmark):
+  """Whether a CPython replay of this task could be tried at all."""
+  return os.path.isfile(benchmark) and not task_provides_verifier(benchmark)
+
+
+def confirmed_by_cpython(esbmc_command_line, prop, benchmark, elapsed, started):
+  """Run ESBMC again for the counterexample's values and replay them."""
+  values_dir = tempfile.mkdtemp(prefix="esbmc-values-")
+  try:
+    return counterexample_values(esbmc_command_line, prop, values_dir, elapsed) and \
+        confirmed_by_replay(benchmark, prop, values_dir, time.monotonic() - started)
+  finally:
+    shutil.rmtree(values_dir, ignore_errors=True)
+
+
+def verify_python(esbmc_command_line, prop, benchmark, started):
+  """One run of a Python task. A FALSE stays FALSE when replaying ESBMC's
+  counterexample in CPython ends with the property's exception, or else when a
+  --ir re-run repeats it."""
+  output = run(esbmc_command_line)
+  elapsed = time.monotonic() - started
+  res = parse_result(output.decode(), prop)
+  if res != Result.fail_python:
+    return res
+  if replay_possible(benchmark) and confirmed_by_cpython(esbmc_command_line, prop, benchmark, elapsed, started):
+    print("CPython replay of the counterexample confirms the violation")
+    return res
+  if replay_possible(benchmark):
+    elapsed = time.monotonic() - started
+  if confirmed_by_integer_encoding(esbmc_command_line, output.decode(), prop, elapsed):
+    return res
+  return Result.unknown
 
 
 # Test-Comp. benchexec's esbmc tool-info runs esbmc-wrapper.py in both

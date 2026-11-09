@@ -572,10 +572,10 @@ private:
     unsigned long alignment,
     modet mode,
     const expr2tc *failed_symbol = nullptr);
-  /// Adds to \p extract_list an arm for each aligned \p offset at which a
-  /// \p type access starts in the given field of struct \p value and ends
-  /// past it. Under integer encoding a store there fails instead.
-  void add_spanning_arms(
+  /// Whether the member of struct \p value at \p field_offset gets no arm of
+  /// its own; for a bit-field, adds to \p extract_list the arms of the
+  /// accesses that start in it.
+  bool skips_member(
     const expr2tc &value,
     const expr2tc &offset,
     const type2tc &type,
@@ -585,9 +585,25 @@ private:
     const BigInt &field_offset,
     const BigInt &field_size,
     std::list<std::pair<expr2tc, expr2tc>> &extract_list);
+  /// Adds to \p extract_list an arm for each aligned \p offset in
+  /// [\p first, \p field_end) at which a \p type access starts in struct
+  /// \p value, read across the members it covers. Under integer encoding a
+  /// store there fails instead.
+  void add_arms_from(
+    const expr2tc &value,
+    const expr2tc &offset,
+    const type2tc &type,
+    const guard2tc &guard,
+    unsigned long alignment,
+    modet mode,
+    const BigInt &first,
+    const BigInt &field_end,
+    std::list<std::pair<expr2tc, expr2tc>> &extract_list);
+  /// The byte at bit \p pos of struct \p value, assembled from the bit-field
+  /// and padding members covering it.
+  expr2tc bit_field_byte(const expr2tc &value, const BigInt &pos);
   /// The \p bits bits of struct \p value from bit \p start, each byte read
-  /// from the member holding it so that a store touches no other member; nil
-  /// if a byte is not inside one whole-byte member.
+  /// from the members holding it so that a store touches no other member.
   expr2tc stitch_across_members(
     const expr2tc &value,
     const BigInt &start,

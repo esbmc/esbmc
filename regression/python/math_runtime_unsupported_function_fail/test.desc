@@ -1,4 +1,4 @@
 CORE
 main.py
 --incremental-bmc
-^ERROR: Unsupported NumPy function call: arctanh$
+^ERROR: Unsupported NumPy function call: sinc$
