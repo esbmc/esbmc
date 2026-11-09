@@ -956,6 +956,10 @@ private:
 
   bool function_is_generator(const nlohmann::json &function_node);
 
+  bool returns_implicit_none(
+    const nlohmann::json &function_node,
+    const code_typet &type);
+
   exprt materialize_list_function_call(
     const exprt &expr,
     const nlohmann::json &element,
@@ -3623,6 +3627,7 @@ private:
 
   /// Throws on a tagged operand of an `and`/`or` whose value is used.
   void refuse_tagged_boolop_operand(const exprt &operand) const;
+  void refuse_bool_with_list_operand(const exprt &logical_expr) const;
 
   /// The truthiness of a str and/or operand: false for None or "", else true.
   /// Any other value comes back unchanged.

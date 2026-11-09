@@ -6,6 +6,7 @@ so the undecorated function ran instead of what the decorator returns.
 
 import ast
 import copy
+from collections import Counter
 
 from preprocessor.check_type_lowering import _bound_names
 from preprocessor.rejection import attach_location
@@ -177,9 +178,10 @@ def _applied_clone(decorator, definition, value, clone_name):
     return clone, ast.Call(func=applied, args=[value], keywords=[])
 
 
-def _rebind(function, defined, original, module_name):
+def _rebind(function, defined, original, module_name, lift_only=False):
     """`def f` renamed, then `f = d1(d2(renamed))`, as Python applies them;
-    a factory `@d(a)` applies `d(a)`.
+    a factory `@d(a)` applies `d(a)`. With `lift_only`, None unless every
+    wrapper lifts, leaving `function` as it was.
 
     Each application calls its own copy of the decorator. A nested function
     is one static function here, so the function a wrapper captures would
@@ -197,6 +199,8 @@ def _rebind(function, defined, original, module_name):
             statements.extend(lifted)
             value = ast.Name(id=lifted[-1].name, ctx=ast.Load())
             continue
+        if lift_only:
+            return None
         clone, value = _applied_clone(decorator, definition, value, clone_name)
         statements.append(clone)
     function.name = UNDECORATED_PREFIX + name
@@ -206,6 +210,178 @@ def _rebind(function, defined, original, module_name):
     for statement in statements:
         ast.fix_missing_locations(ast.copy_location(statement, function))
     return statements
+
+
+class _CallThroughClass(ast.NodeTransformer):
+    """Read `inner` as the attribute of class `cls_name`."""
+
+    def __init__(self, inner, cls_name):
+        self.inner = inner
+        self.cls_name = cls_name
+
+    def visit_Name(self, node):
+        if node.id != self.inner:
+            return node
+        owner = ast.Name(id=self.cls_name, ctx=ast.Load())
+        return ast.copy_location(ast.Attribute(value=owner, attr=self.inner, ctx=ast.Load()), node)
+
+
+def _is_method_wrapper(lifted):
+    """Whether `lifted` takes the instance and has the same meaning in a class
+    body, which evaluates its defaults in the class scope."""
+    return lifted is not None and lifted.args.args and _has_plain_params(lifted) and all(
+        isinstance(d, ast.Constant) for d in lifted.args.defaults)
+
+
+def _lowered_method(method, cls_name, defined, original, module_name):
+    """`@d def m` in class `cls_name` as `def ESBMC_undecorated_m`, then the
+    wrapper each `d` returns lifted as a method that calls the method below it
+    through the class; or None.
+
+    A function stored in a class is a method, so the lifted wrapper is bound
+    to the instance as the one `d` returns would be (#9798).
+    """
+    decorators = method.decorator_list
+    if method.name.startswith("__") or not all(
+            isinstance(d, ast.Name) and d.id in defined for d in decorators):
+        return None
+    _check_decorators(method, defined, original, module_name)
+    inner = UNDECORATED_PREFIX + method.name
+    lifted_methods = []
+    for position, decorator in reversed(list(enumerate(decorators))):
+        clone_name = f"ESBMC_{decorator.id}_{position}_for_{method.name}"
+        lifted = _lifted_wrapper(defined[decorator.id], inner,
+                                 clone_name if position else method.name)
+        if not _is_method_wrapper(lifted):
+            return None
+        _CallThroughClass(inner, cls_name).visit(lifted)
+        lifted_methods.append(lifted)
+        inner = lifted.name
+    method.name = UNDECORATED_PREFIX + method.name
+    method.decorator_list = []
+    for lifted in lifted_methods:
+        ast.fix_missing_locations(ast.copy_location(lifted, method))
+    return [method] + lifted_methods
+
+
+def _lower_method_decorators(cls, defined, original, module_name, bind_counts):
+    """Lower each method of `cls` that `_lowered_method` can, while `cls` is
+    bound once so the lifted calls through it reach this class."""
+    if bind_counts[cls.name] != 1:
+        return
+    body = []
+    for stmt in cls.body:
+        lowered = isinstance(stmt, ast.FunctionDef) and stmt.decorator_list and _lowered_method(
+            stmt, cls.name, defined, original, module_name)
+        body.extend(lowered or [stmt])
+    cls.body = body
+
+
+_SCOPED = (ast.Lambda, ast.NamedExpr, ast.GeneratorExp, ast.ListComp, ast.SetComp, ast.DictComp,
+           ast.Yield, ast.YieldFrom, ast.Await)
+
+
+def _stores_attribute_of(store, param):
+    """Whether `store` only assigns attributes of `param`, binding no name."""
+    if isinstance(store, ast.Assign):
+        targets = store.targets
+    elif isinstance(store, ast.AugAssign):
+        targets = [store.target]
+    else:
+        return False
+    return all(
+        isinstance(t, ast.Attribute) and isinstance(t.value, ast.Name) and t.value.id == param
+        for t in targets) and not any(isinstance(n, _SCOPED) for n in ast.walk(store))
+
+
+def _class_updates(decorator):
+    """The attribute stores of a decorator that only sets attributes of its
+    parameter and returns it, as `(param, stores)`, or None."""
+    params = decorator.args.args
+    if len(params) != 1 or decorator.args.defaults or not _has_plain_params(decorator):
+        return None
+    param = params[0].arg
+    body = decorator.body
+    if body and isinstance(body[0], ast.Expr) and isinstance(body[0].value, ast.Constant):
+        body = body[1:]
+    returns_param = body and isinstance(body[-1], ast.Return) and isinstance(
+        body[-1].value, ast.Name) and body[-1].value.id == param
+    if not returns_param or not all(_stores_attribute_of(s, param) for s in body[:-1]):
+        return None
+    return param, body[:-1]
+
+
+def _decorated_class(cls, defined):
+    """`@d class C` as the class, then the attribute stores of each `d`, applied
+    bottom-up as Python does, with `C` in place of its parameter; or None.
+    Each `d` returns its argument, so `C` stays bound to the class."""
+    statements = []
+    for decorator in reversed(cls.decorator_list):
+        definition = isinstance(decorator, ast.Name) and defined.get(decorator.id)
+        # A decorated decorator was renamed when its own decorators were lowered.
+        renamed = definition and definition.name != decorator.id
+        updates = definition and not renamed and _class_updates(definition)
+        if not updates:
+            return None
+        param, stores = updates
+        for store in copy.deepcopy(stores):
+            for n in ast.walk(store):
+                if isinstance(n, ast.Name) and n.id == param:
+                    n.id = cls.name
+            statements.append(ast.fix_missing_locations(ast.copy_location(store, cls)))
+    cls.decorator_list = []
+    _declare_new_attributes(cls, statements)
+    return statements
+
+
+def _lowered_class_decorators(cls, user_functions, defined):
+    """The statements `_decorated_class` adds after `cls`, when every decorator
+    of `cls` is one this program defines."""
+    if cls.decorator_list and all(
+            _is_user_decorator(d, user_functions) for d in cls.decorator_list):
+        return _decorated_class(cls, defined) or []
+    return []
+
+
+def _declare_new_attributes(cls, stores):
+    """Bind at the top of the class body each attribute a store gives a
+    constant and the body never names, so the converter knows it as a class
+    attribute. The store runs right after the body, which cannot read the
+    binding first since it does not name it."""
+    named = {n.id for stmt in cls.body for n in ast.walk(stmt) if isinstance(n, ast.Name)}
+    named |= {b for stmt in cls.body for b in _bound_names(stmt)}
+    declarations = []
+    for store in stores:
+        if not isinstance(store, ast.Assign) or not isinstance(store.value, ast.Constant):
+            continue
+        for target in store.targets:
+            if target.attr not in named:
+                named.add(target.attr)
+                declaration = ast.Assign(targets=[ast.Name(id=target.attr, ctx=ast.Store())],
+                                         value=copy.deepcopy(store.value))
+                declarations.append(ast.fix_missing_locations(ast.copy_location(declaration, cls)))
+    cls.body[:0] = declarations
+
+
+def _lower_body_decorators(function, module_name):
+    """Lower each def of the body of `function` decorated only by defs that
+    body binds once before it, when every wrapper lifts. The lifted def reads
+    a free name where the wrapper would: the decorator binds only its
+    parameter and the wrapper."""
+    if any(isinstance(n, (ast.Global, ast.Nonlocal)) for n in ast.walk(function)):
+        return
+    bind_counts = Counter(name for node in ast.walk(function) for name in _bound_names(node))
+    defined, original, body = {}, {}, []
+    for stmt in function.body:
+        body.append(stmt)
+        if not isinstance(stmt, ast.FunctionDef):
+            continue
+        original[id(stmt)] = list(stmt.decorator_list)
+        if stmt.decorator_list and all(_is_user_decorator(d, defined) for d in stmt.decorator_list):
+            body.extend(_rebind(stmt, defined, original, module_name, lift_only=True) or [])
+        if bind_counts[stmt.name] == 1:
+            defined[stmt.name] = stmt
+    function.body = body
 
 
 def _refuse_later_decorators(function, user_functions, defined, module_name):
@@ -257,10 +433,14 @@ def lower_user_decorators(module, module_name):
         id(s): list(s.decorator_list)
         for s in module.body if isinstance(s, ast.FunctionDef)
     }
+    bind_counts = Counter(name for node in ast.walk(module) for name in _bound_names(node))
     defined = {}
     body = []
     for stmt in module.body:
         body.append(stmt)
+        if isinstance(stmt, ast.ClassDef):
+            _lower_method_decorators(stmt, defined, original, module_name, bind_counts)
+            body.extend(_lowered_class_decorators(stmt, user_functions, defined))
         if not isinstance(stmt, ast.FunctionDef):
             continue
         name = stmt.name
@@ -269,5 +449,8 @@ def lower_user_decorators(module, module_name):
             body.extend(_rebind(stmt, defined, original, module_name))
         defined[name] = stmt
     module.body = body
+    for node in list(ast.walk(module)):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            _lower_body_decorators(node, module_name)
     _refuse_nested_decorators(module, user_functions, module_name)
     _refuse_local_decorators(module, module_name)

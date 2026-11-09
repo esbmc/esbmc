@@ -2776,7 +2776,7 @@ regression/python/github_8361_short_circuit
 regression/python/github_8361_short_circuit_fail
 regression/python/github_8361_str_operand
 regression/python/github_8361_str_operand_fail
-regression/python/walrus_while_boolop_coverage_unsupported
+regression/python/walrus_while_boolop_coverage
 regression/python/walrus_while_comprehension_unsupported
 regression/python/if_walrus_boolop_coverage
 regression/python/github_8363

@@ -230,28 +230,6 @@ written_arguments(const irep_idt &function, const std::vector<expr2tc> &args)
   return written;
 }
 
-/// A variable whose address the callee takes can be reassigned through that
-/// address, which collect_lhs_symbols does not see.
-void goto_loopst::collect_address_taken(
-  const expr2tc &e,
-  function_summaryt &out) const
-{
-  if (is_nil_expr(e))
-    return;
-  if (is_address_of2t(e))
-  {
-    expr2tc obj = to_address_of2t(e).ptr_obj;
-    while (is_member2t(obj) || is_index2t(obj) || is_typecast2t(obj))
-      obj = is_member2t(obj)  ? to_member2t(obj).source_value
-            : is_index2t(obj) ? to_index2t(obj).source_value
-                              : to_typecast2t(obj).from;
-    if (is_symbol2t(obj))
-      out.address_taken.insert(to_symbol2t(obj).thename);
-  }
-  e->foreach_operand(
-    [this, &out](const expr2tc &op) { collect_address_taken(op, out); });
-}
-
 void goto_loopst::function_summaryt::record_write(const expr2tc &lhs)
 {
   const expr2tc ptr = extract_queried_pointer(lhs);
@@ -490,8 +468,10 @@ bool goto_loopst::compute_function_summary(
 
   for (const auto &instr : it->second.body.instructions)
   {
-    collect_address_taken(instr.code, local);
-    collect_address_taken(instr.guard, local);
+    // A variable whose address the callee takes can be reassigned through
+    // that address, which collect_lhs_symbols does not see.
+    get_address_taken(instr.code, local.address_taken);
+    get_address_taken(instr.guard, local.address_taken);
     if (instr.is_assign())
     {
       const expr2tc &target = to_code_assign2t(instr.code).target;

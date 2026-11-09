@@ -2961,11 +2961,9 @@ class LoopMixin:
         annotation = self._create_annotation_node_from_value(value)
         if not (isinstance(value, ast.Dict) and isinstance(annotation, ast.Subscript)):
             return annotation
-        value_type = ast.dump(annotation.slice.elts[1])
-        for stored in self.subscript_stored_values.get(name, []):
-            stored_type = self._infer_dict_value_annotation(stored)
-            if stored_type is not None and ast.dump(stored_type) != value_type:
-                return ast.Name(id="dict", ctx=ast.Load())
+        if self._has_other_value_type(self.subscript_stored_values.get(name, []),
+                                      annotation.slice.elts[1]):
+            return ast.Name(id="dict", ctx=ast.Load())
         return annotation
 
     def _create_annotation_node_from_value(self, value):
@@ -3252,7 +3250,8 @@ class LoopMixin:
         key_type = self._infer_dict_key_type(dict_node.keys[0])
         value_annotation = self._infer_dict_value_annotation(dict_node.values[0])
 
-        if key_type != "Any" and value_annotation:
+        if key_type != "Any" and value_annotation and not self._has_other_value_type(
+                dict_node.values, value_annotation):
             return ast.Subscript(
                 value=ast.Name(id="dict", ctx=ast.Load()),
                 slice=ast.Tuple(
@@ -3263,6 +3262,14 @@ class LoopMixin:
             )
 
         return ast.Name(id="dict", ctx=ast.Load())
+
+    def _has_other_value_type(self, values, annotation):
+        """True if one of `values` has a known type other than `annotation`."""
+        for value in values:
+            value_type = self._infer_dict_value_annotation(value)
+            if value_type is not None and ast.dump(value_type) != ast.dump(annotation):
+                return True
+        return False
 
     def _has_heterogeneous_keys(self, dict_node):
         """Return True if a dict literal needs per-key loop unrolling at iteration.
