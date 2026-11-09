@@ -347,7 +347,9 @@ int esbmc_parseoptionst::run_chosen_strategy(
   if (
     cmdline.isset("termination") || cmdline.isset("incremental-bmc") ||
     cmdline.isset("falsification") || cmdline.isset("k-induction") ||
-    cmdline.isset("loop-invariant"))
+    cmdline.isset("loop-invariant") ||
+    // --sv-comp switches a program that starts a thread to incremental BMC.
+    options.get_bool_option("incremental-bmc"))
     return do_bmc_strategy(options, goto_functions);
 
   // No strategy chosen: rely on the simplifier and the flags set through CMD.
@@ -523,13 +525,11 @@ int esbmc_parseoptionst::doit()
         cmdline.isset("neurosym") || cmdline.isset("default-solver");
       if (!user_picked_solver && !incremental_mode)
       {
-        const std::string padded =
-          std::string(" ") + ESBMC_AVAILABLE_SOLVERS + " ";
         const char *preferred[] = {"bitwuzla", "cvc5", "boolector", "z3"};
         const char *chosen = nullptr;
         for (const char *name : preferred)
         {
-          if (padded.find(std::string(" ") + name + " ") != std::string::npos)
+          if (solver_built_in(name))
           {
             chosen = name;
             break;
