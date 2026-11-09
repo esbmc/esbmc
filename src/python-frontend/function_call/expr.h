@@ -632,6 +632,7 @@ private:
     const locationt &location) const;
   bool is_list_method_call() const;
   exprt handle_list_method() const;
+  exprt none_if_assigned(exprt call) const;
   exprt handle_list_append() const;
   exprt handle_list_insert() const;
   exprt handle_list_extend() const;

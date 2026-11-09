@@ -579,6 +579,7 @@ private:
     const expr2tc &value,
     const expr2tc &offset,
     const type2tc &type,
+    const guard2tc &guard,
     unsigned long alignment,
     modet mode,
     const BigInt &field_offset,
@@ -586,11 +587,13 @@ private:
     std::list<std::pair<expr2tc, expr2tc>> &extract_list);
   /// Adds to \p extract_list an arm for each aligned \p offset in
   /// [\p first, \p field_end) at which a \p type access starts in struct
-  /// \p value, read across the members it covers.
+  /// \p value, read across the members it covers. Under integer encoding a
+  /// store there fails instead.
   void add_arms_from(
     const expr2tc &value,
     const expr2tc &offset,
     const type2tc &type,
+    const guard2tc &guard,
     unsigned long alignment,
     modet mode,
     const BigInt &first,

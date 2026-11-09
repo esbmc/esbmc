@@ -1,0 +1,2 @@
+def pick(n):
+    pass
