@@ -2659,6 +2659,8 @@ private:
     codet &target_block);
   /// The call whose result is not used as a value.
   const nlohmann::json *numpy_discarded_call_ = nullptr;
+  /// The call that is the whole value of the assignment being converted.
+  const nlohmann::json *assigned_call_ = nullptr;
   void reject_numpy_view_argument_use(const nlohmann::json &call);
   void reject_numpy_view_method_call(const nlohmann::json &func) const;
   void reject_numpy_view_callee(const nlohmann::json &call);

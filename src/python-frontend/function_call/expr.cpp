@@ -3807,9 +3807,12 @@ exprt function_call_expr::handle_list_method() const
   throw std::runtime_error("Unsupported list method: " + method_name);
 }
 
-/// An in-place list method returns None, so read as a value the call runs and
-/// then yields None rather than the model function's own result (#10160).
-exprt function_call_expr::none_unless_discarded(exprt call) const
+/// An in-place list method returns None, so assigned to a name the call runs
+/// and the name holds None rather than the model function's own result
+/// (#10160). Other value positions are left alone: the and/or, conditional and
+/// str() lowerings copy or fold a None-typed operand and would drop or repeat
+/// the call.
+exprt function_call_expr::none_if_assigned(exprt call) const
 {
   static const std::set<std::string> in_place = {
     "append",
@@ -3821,7 +3824,7 @@ exprt function_call_expr::none_unless_discarded(exprt call) const
     "reverse",
     "sort"};
   if (
-    &call_ == converter_.numpy_discarded_call_ ||
+    !converter_.assigned_call_ || call_ != *converter_.assigned_call_ ||
     !in_place.count(function_id_.get_function()))
     return call;
   code_blockt block;
@@ -5417,7 +5420,7 @@ function_call_expr::get_dispatch_table()
 
     // List methods
     {[this]() { return is_list_method_call(); },
-     [this]() { return none_unless_discarded(handle_list_method()); },
+     [this]() { return none_if_assigned(handle_list_method()); },
      "list methods"},
 
     // numpy ndarray.astype(dtype)

@@ -1,5 +1,5 @@
 CORE
 main.py
 
-^\s*assertion v == .*1$
+^\s*assertion !\(ISNONE\(r, 0\)\)$
 ^VERIFICATION FAILED$
