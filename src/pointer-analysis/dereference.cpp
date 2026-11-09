@@ -2118,7 +2118,9 @@ bool dereferencet::skips_member(
   const expr2tc &value,
   const expr2tc &offset,
   const type2tc &type,
+  const guard2tc &guard,
   unsigned long alignment,
+  modet mode,
   const BigInt &field_offset,
   const BigInt &field_size,
   std::list<std::pair<expr2tc, expr2tc>> &extract_list)
@@ -2136,7 +2138,9 @@ bool dereferencet::skips_member(
     value,
     offset,
     type,
+    guard,
     alignment,
+    mode,
     field_offset,
     field_offset + field_size,
     extract_list);
@@ -2199,7 +2203,15 @@ void dereferencet::construct_from_dyn_struct_offset(
 
     if (
       skips_member(
-        value, offset, type, alignment, offs, field_size, extract_list))
+        value,
+        offset,
+        type,
+        guard,
+        alignment,
+        mode,
+        offs,
+        field_size,
+        extract_list))
     {
       i++;
       continue;
@@ -2246,16 +2258,16 @@ void dereferencet::construct_from_dyn_struct_offset(
     }
 
     // Emplaced after the field's own arm, so they take precedence (#10045).
-    if (!int_encoding)
-      add_arms_from(
-        value,
-        offset,
-        type,
-        alignment,
-        std::max(
-          offs, offs + field_size - access_sz + config.ansi_c.char_width),
-        offs + field_size,
-        extract_list);
+    add_arms_from(
+      value,
+      offset,
+      type,
+      guard,
+      alignment,
+      mode,
+      std::max(offs, offs + field_size - access_sz + config.ansi_c.char_width),
+      offs + field_size,
+      extract_list);
 
     i++;
   }
@@ -2273,7 +2285,9 @@ void dereferencet::add_arms_from(
   const expr2tc &value,
   const expr2tc &offset,
   const type2tc &type,
+  const guard2tc &guard,
   unsigned long alignment,
+  modet mode,
   const BigInt &first,
   const BigInt &field_end,
   std::list<std::pair<expr2tc, expr2tc>> &extract_list)
@@ -2295,9 +2309,24 @@ void dereferencet::add_arms_from(
        p < field_end && p + access_sz <= struct_bits;
        p += step)
   {
+    const expr2tc at_p = equality2tc(offset, constant_int2tc(offset->type, p));
+    // Integer encoding has no bytes of a struct to stitch, so such a store
+    // would be dropped; a read is left a free value (#10089).
+    if (options.get_bool_option("int-encoding"))
+    {
+      if (is_write(mode))
+      {
+        guard2tc spanning_guard(guard);
+        spanning_guard.add(at_p);
+        dereference_failure(
+          "pointer dereference",
+          "Store spanning struct members under integer encoding",
+          spanning_guard);
+      }
+      continue;
+    }
     extract_list.emplace_back(
-      equality2tc(offset, constant_int2tc(offset->type, p)),
-      bitcast2tc(type, stitch_across_members(value, p, access_sz)));
+      at_p, bitcast2tc(type, stitch_across_members(value, p, access_sz)));
   }
 }
 
