@@ -9389,6 +9389,13 @@ codet build_conditional_code(
     code.copy_to_operands(else_expr);
   return code;
 }
+
+// A while test with a prelude re-runs that prelude on every iteration, so only
+// one without a prelude is evaluated lazily.
+bool is_lazy_while_test(const std::string &kind, bool has_prelude)
+{
+  return kind == "While" && !has_prelude;
+}
 } // namespace
 
 // The block that receives the statements a loop condition emits: a `while`
@@ -9710,8 +9717,7 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
   };
 
   const bool old_in_lazy_operand = in_lazy_operand_;
-  // A while test with a prelude re-runs that prelude on every iteration.
-  in_lazy_operand_ |= type == "While" && current_block != &cond_prelude;
+  in_lazy_operand_ |= is_lazy_while_test(type, current_block == &cond_prelude);
   const bool short_circuit_boolop = test_type == "BoolOp" && current_block &&
                                     !coverage_mode && !pytest_generation_mode &&
                                     !model_mode;
