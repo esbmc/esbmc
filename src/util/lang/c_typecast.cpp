@@ -757,6 +757,16 @@ void c_typecastt::implicit_typecast_followed(
 
       return;
     }
+
+    // An aligned array initialised from its unaligned initializer: alignment
+    // does not change the value, so retype rather than decay it to a pointer.
+    typet unaligned_dest = dest_type;
+    unaligned_dest.remove("alignment");
+    if (src_type == unaligned_dest)
+    {
+      expr.type() = dest_type;
+      return;
+    }
   }
 
   if (check_c_implicit_typecast(src_type, dest_type))
