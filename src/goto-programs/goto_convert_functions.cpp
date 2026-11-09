@@ -1516,6 +1516,14 @@ bool goto_convert_functionst::convert_native_rec(
         }
     }
 
+    // As in convert_switch: evaluate a value no case guard reads.
+    if (targets.cases.empty())
+    {
+      code_expressiont eval(argument);
+      eval.location() = sw.location;
+      copy(eval, OTHER, tmp_cases);
+    }
+
     goto_programt::targett d_jump = tmp_cases.add_instruction();
     d_jump->make_goto(case_entry(
       targets.default_target, stack_before.size(), sw.location, stubs));

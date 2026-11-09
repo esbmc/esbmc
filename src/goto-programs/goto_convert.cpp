@@ -2252,6 +2252,15 @@ void goto_convertt::convert_switch(const codet &code, goto_programt &dest)
       }
   }
 
+  // C11 6.8.4.2: the controlling expression is evaluated even when no case
+  // guard reads it, so its checks (e.g. a NULL dereference) must still fire.
+  if (targets.cases.empty())
+  {
+    code_expressiont eval(argument);
+    eval.location() = code.location();
+    copy(eval, OTHER, tmp_cases);
+  }
+
   {
     goto_programt::targett d_jump = tmp_cases.add_instruction();
     d_jump->make_goto(
