@@ -572,6 +572,17 @@ private:
     unsigned long alignment,
     modet mode,
     const expr2tc *failed_symbol = nullptr);
+  /// Whether the member of struct \p value at \p field_offset gets no arm of
+  /// its own; for a bit-field, adds to \p extract_list the arms of the
+  /// accesses that start in it.
+  bool skips_member(
+    const expr2tc &value,
+    const expr2tc &offset,
+    const type2tc &type,
+    unsigned long alignment,
+    const BigInt &field_offset,
+    const BigInt &field_size,
+    std::list<std::pair<expr2tc, expr2tc>> &extract_list);
   /// Adds to \p extract_list an arm for each aligned \p offset in
   /// [\p first, \p field_end) at which a \p type access starts in struct
   /// \p value, read across the members it covers.

@@ -2114,6 +2114,35 @@ static bool occupies_whole_bytes(const BigInt &offset, const BigInt &size)
   return offset % width == 0 && size % width == 0;
 }
 
+bool dereferencet::skips_member(
+  const expr2tc &value,
+  const expr2tc &offset,
+  const type2tc &type,
+  unsigned long alignment,
+  const BigInt &field_offset,
+  const BigInt &field_size,
+  std::list<std::pair<expr2tc, expr2tc>> &extract_list)
+{
+  const unsigned int width = config.ansi_c.char_width;
+  if (
+    options.get_bool_option("int-encoding") ||
+    type_byte_size_bits(type) % width != 0 ||
+    occupies_whole_bytes(field_offset, field_size))
+    return field_size < width;
+
+  // A bit-field, or the padding bits after one, does not occupy whole bytes,
+  // so a whole-byte access starting in it is assembled from bits (#10087).
+  add_arms_from(
+    value,
+    offset,
+    type,
+    alignment,
+    field_offset,
+    field_offset + field_size,
+    extract_list);
+  return true;
+}
+
 void dereferencet::construct_from_dyn_struct_offset(
   expr2tc &value,
   const expr2tc &offset,
@@ -2168,19 +2197,10 @@ void dereferencet::construct_from_dyn_struct_offset(
     it = ns.follow(it);
     BigInt field_size = type_byte_size_bits(it, &ns);
 
-    // A bit-field, or the padding bits after one, does not occupy whole
-    // bytes, so an access starting in it is assembled from bits (#10087).
-    if (field_size == 0 || !occupies_whole_bytes(offs, field_size))
+    if (
+      skips_member(
+        value, offset, type, alignment, offs, field_size, extract_list))
     {
-      if (!int_encoding)
-        add_arms_from(
-          value,
-          offset,
-          type,
-          alignment,
-          offs,
-          offs + field_size,
-          extract_list);
       i++;
       continue;
     }
@@ -2259,6 +2279,9 @@ void dereferencet::add_arms_from(
   std::list<std::pair<expr2tc, expr2tc>> &extract_list)
 {
   const unsigned int access_sz = type_byte_size_bits(type).to_uint64();
+  // The arms are stitched from whole bytes.
+  if (access_sz % config.ansi_c.char_width != 0)
+    return;
   const BigInt struct_bits = type_byte_size_bits(value->type, &ns);
   // Alignment is relative to the struct, which may be less aligned than the
   // access type.
