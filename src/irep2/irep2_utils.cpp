@@ -298,6 +298,26 @@ expr2tc make_cmp_value(const type2tc &t, int v)
   return constant_struct2tc(t, std::move(ops));
 }
 
+void get_address_taken(
+  const expr2tc &expr,
+  std::unordered_set<irep_idt, irep_id_hash> &out)
+{
+  if (is_nil_expr(expr))
+    return;
+  if (is_address_of2t(expr))
+  {
+    expr2tc obj = to_address_of2t(expr).ptr_obj;
+    while (is_member2t(obj) || is_index2t(obj) || is_typecast2t(obj))
+      obj = is_member2t(obj)  ? to_member2t(obj).source_value
+            : is_index2t(obj) ? to_index2t(obj).source_value
+                              : to_typecast2t(obj).from;
+    if (is_symbol2t(obj))
+      out.insert(to_symbol2t(obj).thename);
+  }
+  expr->foreach_operand(
+    [&out](const expr2tc &op) { get_address_taken(op, out); });
+}
+
 void get_symbols(
   const expr2tc &expr,
   std::unordered_set<expr2tc, irep2_hash> &symbols)
@@ -326,91 +346,6 @@ void get_symbols(
 std::string indent_str_irep2(unsigned int indent)
 {
   return std::string(indent, ' ');
-}
-
-template <>
-bool do_get_sub_expr<expr2tc>(
-  const expr2tc &item,
-  size_t idx,
-  size_t &it,
-  const expr2tc *&ptr)
-{
-  if (idx == it)
-  {
-    ptr = &item;
-    return true;
-  }
-  else
-  {
-    it++;
-    return false;
-  }
-}
-
-template <>
-bool do_get_sub_expr<std::vector<expr2tc>>(
-  const std::vector<expr2tc> &item,
-  size_t idx,
-  size_t &it,
-  const expr2tc *&ptr)
-{
-  if (idx < it + item.size())
-  {
-    ptr = &item[idx - it];
-    return true;
-  }
-  else
-  {
-    it += item.size();
-    return false;
-  }
-}
-
-template <>
-size_t do_count_sub_exprs<const expr2tc>(const expr2tc &)
-{
-  return 1;
-}
-
-template <>
-size_t
-do_count_sub_exprs<const std::vector<expr2tc>>(const std::vector<expr2tc> &item)
-{
-  return item.size();
-}
-
-template <>
-void call_expr_delegate<const expr2tc, expr2t::const_op_delegate>(
-  const expr2tc &ref,
-  expr2t::const_op_delegate &f)
-{
-  f(ref);
-}
-
-template <>
-void call_expr_delegate<expr2tc, expr2t::op_delegate>(
-  expr2tc &ref,
-  expr2t::op_delegate &f)
-{
-  f(ref);
-}
-
-template <>
-void call_expr_delegate<const std::vector<expr2tc>, expr2t::const_op_delegate>(
-  const std::vector<expr2tc> &ref,
-  expr2t::const_op_delegate &f)
-{
-  for (const expr2tc &r : ref)
-    f(r);
-}
-
-template <>
-void call_expr_delegate<std::vector<expr2tc>, expr2t::op_delegate>(
-  std::vector<expr2tc> &ref,
-  expr2t::op_delegate &f)
-{
-  for (expr2tc &r : ref)
-    f(r);
 }
 
 template <>

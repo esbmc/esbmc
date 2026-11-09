@@ -1,0 +1,5 @@
+CORE
+main.c
+--generate-testcase --unwind 7 --no-unwinding-assertions
+^VERIFICATION FAILED$
+CHECK_FILE testcase.xml contains <testcase coversError="true">\n<input>3</input>\n</testcase>

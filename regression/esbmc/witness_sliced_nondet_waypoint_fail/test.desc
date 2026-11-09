@@ -1,0 +1,6 @@
+CORE
+main.c
+--unwind 4 --witness-output-yaml -
+^VERIFICATION FAILED$
+(?s)\A(?:(?!function_return).)*(?:type: "function_return"(?:(?!function_return).)*){3}\Z
+value: "\\\\result == 7"

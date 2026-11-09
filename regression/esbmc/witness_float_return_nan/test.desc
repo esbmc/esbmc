@@ -1,0 +1,6 @@
+CORE
+main.c
+--64 --witness-output-yaml w.yml
+^VERIFICATION FAILED$
+CHECK_FILE w.yml contains type: "target"
+CHECK_FILE w.yml absent function_return

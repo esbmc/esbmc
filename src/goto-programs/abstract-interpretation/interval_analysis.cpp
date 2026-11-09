@@ -248,10 +248,11 @@ struct scoped_skip_inductive
 } // namespace
 
 /// The interval state at loop head \p head, or null when it is missing or
-/// proves that the loop body is never entered: \p head is a forward
-/// conditional jump out of the loop (past \p back_edge) whose negated guard is
-/// infeasible. Bounding the variables there would contradict k-induction's
-/// entry-condition assume and make the inductive step vacuously true.
+/// proves that the loop body is never entered: the exit test, the first
+/// instruction from \p head past goto_check's claims, is a forward conditional
+/// jump out of the loop (past \p back_edge) whose negated guard is infeasible.
+/// Bounding the variables there would contradict k-induction's entry-condition
+/// assume and make the inductive step vacuously true.
 static const interval_domaint *loop_head_state(
   const ait<interval_domaint> &interval_analysis,
   const goto_programt::targett &head,
@@ -260,15 +261,20 @@ static const interval_domaint *loop_head_state(
   auto state_iterator = interval_analysis.state_map.find(head);
   if (state_iterator == interval_analysis.state_map.end())
     return nullptr;
-  const interval_domaint &d = state_iterator->second;
+  goto_programt::targett test = head;
+  while (test != back_edge && test->is_assert())
+    ++test;
   const bool exits_loop =
-    head->is_goto() && head->targets.size() == 1 &&
-    head->targets.front()->location_number > back_edge->location_number;
+    test->is_goto() && test->targets.size() == 1 &&
+    test->targets.front()->location_number > back_edge->location_number;
   if (!exits_loop)
-    return &d;
-  interval_domaint entered = d;
-  entered.assume(not2tc(head->guard));
-  return entered.is_bottom() ? nullptr : &d;
+    return &state_iterator->second;
+  auto test_state = interval_analysis.state_map.find(test);
+  if (test_state == interval_analysis.state_map.end())
+    return nullptr;
+  interval_domaint entered = test_state->second;
+  entered.assume(not2tc(test->guard));
+  return entered.is_bottom() ? nullptr : &state_iterator->second;
 }
 
 void instrument_loop_bounds_after_kind(
@@ -281,6 +287,9 @@ void instrument_loop_bounds_after_kind(
   // The transparency flag makes the havoc'd assignments and entry-condition
   // assumes no-ops in the transformer, so the state at each loop head
   // matches what it was in the *original* program (before k-induction).
+  // goto_check inserts its claims without renumbering, and finding the
+  // back-edges below compares location numbers.
+  goto_functions.update();
   interval_domaint::set_options(options);
   scoped_skip_inductive _skip_guard;
 
@@ -393,6 +402,9 @@ void instrument_loop_bounds_after_kind(
       instruction.make_assumption(conjunction(symbol_constraints));
       instruction.inductive_step_instruction = true;
       instruction.location = insert_pos->location;
+      // insert_pos may be a goto_check claim, whose description is not ours.
+      instruction.location.remove("comment");
+      instruction.location.remove("property");
       instruction.function = insert_pos->function;
       f_it->second.body.insert_swap(insert_pos, instruction);
     }

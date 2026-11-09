@@ -1,5 +1,7 @@
 #include "python_list_internal.h"
 
+#include <python-frontend/set/python_set.h>
+
 using namespace python_expr;
 using namespace python_list_detail;
 
@@ -156,6 +158,29 @@ size_t python_list::eq_float_type_id(
            : 0;
 }
 
+/// `a < b`, `a <= b`, `a > b` and `a >= b` on sets: a subset test, and for the
+/// strict forms also that the converse does not hold.
+static exprt set_ordering(
+  python_converter &converter,
+  const nlohmann::json &element,
+  const symbolt &lhs,
+  const symbolt &rhs,
+  const std::string &op)
+{
+  python_set sets(converter, element);
+  const auto subset = [&](const symbolt &small, const symbolt &large) {
+    return sets.build_set_relation_call(
+      build_symbol(small), build_symbol(large), element, "issubset");
+  };
+  const bool left_in_right = op == "Lt" || op == "LtE";
+  const symbolt &small = left_in_right ? lhs : rhs;
+  const symbolt &large = left_in_right ? rhs : lhs;
+  const exprt contained = subset(small, large);
+  if (op == "LtE" || op == "GtE")
+    return contained;
+  return and_exprt(contained, not_exprt(subset(large, small)));
+}
+
 exprt python_list::compare(
   const exprt &l1,
   const exprt &l2,
@@ -209,13 +234,9 @@ exprt python_list::compare(
     if (!(lhs_is_set && rhs_is_set))
       return gen_boolean(op == "NotEq");
 
-    // Python set ordering (< strict subset, <= subset-or-equal, and the > / >=
-    // supersets) requires proper subset checking, which is not yet modelled.
-    // Reject it explicitly rather than silently returning the Eq/NotEq result,
-    // which would be wrong for these operators.
     if (op == "Lt" || op == "LtE" || op == "Gt" || op == "GtE")
-      throw std::runtime_error(
-        "set ordering (<, <=, >, >=) is not yet supported");
+      return set_ordering(
+        converter_, list_value_, *lhs_symbol, *rhs_symbol, op);
 
     symbolt *set_eq_func =
       converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_set_eq");
@@ -770,10 +791,88 @@ exprt python_list::compare(
     equality2tc(leqr2, op == "Eq" ? gen_true_expr() : gen_false_expr()));
 }
 
+// Lists, tuples, dicts and class instances share one element type id, so the
+// model can only tell a nested list from them by what the frontend recorded.
+bool python_list::holds_list_lookalike(
+  const std::string &list_id,
+  bool if_unrecorded,
+  int depth) const
+{
+  const auto *recorded = elem_types().find(list_id);
+  if (!recorded || depth <= 0)
+    return if_unrecorded;
+  const type_handler &th = converter_.get_type_handler();
+  const typet list_type = th.get_list_type();
+  // None is stored with size 0, which the model already skips.
+  const typet none_type = pointer_typet(bool_type());
+  return std::any_of(recorded->begin(), recorded->end(), [&](const auto &e) {
+    if (e.second == list_type)
+      return e.first.empty()
+               ? if_unrecorded
+               : holds_list_lookalike(e.first, if_unrecorded, depth - 1);
+    return e.second != none_type && th.type_to_string(e.second).empty();
+  });
+}
+
+bool python_list::compares_as_lists(
+  const exprt &item,
+  const symbolt &item_copy,
+  const exprt &list) const
+{
+  const int depth = get_list_compare_depth();
+  return item_copy.get_type() ==
+           converter_.get_type_handler().get_list_type() &&
+         list.is_symbol() &&
+         !holds_list_lookalike(list.identifier().as_string(), true, depth) &&
+         !(item.is_symbol() &&
+           holds_list_lookalike(item.identifier().as_string(), false, depth));
+}
+
+exprt python_list::contains_list(const exprt &item, const exprt &list)
+{
+  const symbolt *func =
+    converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_contains_list");
+  assert(func);
+  symbolt &ret = converter_.create_tmp_symbol(
+    list_value_,
+    "contains_tmp",
+    bool_type(),
+    migrate_expr_back(gen_false_expr()));
+  converter_.add_instruction(code_declt(build_symbol(ret)));
+
+  const type_handler &th = converter_.get_type_handler();
+  auto hash_of = [&th](const typet &t) {
+    constant_exprt id(size_type());
+    id.set_value(integer2binary(
+      std::hash<std::string>{}(th.type_to_string(t)),
+      config.ansi_c.address_width));
+    return id;
+  };
+
+  // The inner lists' element types are not recorded, so keep list_eq's
+  // int/float path open: [1] in [[1.0]] holds in Python.
+  code_function_callt call;
+  call.function() = build_symbol(*func);
+  call.lhs() = build_symbol(ret);
+  call.arguments() = {
+    list,
+    item,
+    hash_of(list.type()),
+    from_integer(get_list_compare_depth(), size_type()),
+    hash_of(double_type())};
+  call.type() = bool_type();
+  call.location() = converter_.get_location_from_decl(list_value_);
+  converter_.add_instruction(call);
+  return build_symbol(ret);
+}
+
 exprt python_list::contains(const exprt &item, const exprt &list)
 {
   // Get type and size information for the item
   list_elem_info item_info = get_list_element_info(list_value_, item);
+
+  if (compares_as_lists(item, *item_info.elem_symbol, list))
+    return contains_list(build_symbol(*item_info.elem_symbol), list);
 
   // Find the list_contains function
   const symbolt *list_contains_func =

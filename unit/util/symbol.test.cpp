@@ -15,6 +15,7 @@ Module: Unit tests for symbolt -- specifically the legacy / IREP2
 #include <irep2/irep2_type.h>
 #include <irep2/irep2_utils.h>
 #include <util/arith/arith_tools.h>
+#include <util/base/threads.h>
 #include <util/irep/migrate.h>
 #include <util/irep/std_code.h>
 #include <util/symtab/symbol.h>
@@ -427,6 +428,7 @@ void read_concurrently(Setup setup, Getter getter)
 
     std::vector<std::decay_t<decltype(expected)>> seen(threads);
     std::barrier start(threads);
+    threads_scope scope;
     std::vector<std::thread> pool;
     for (int t = 0; t < threads; ++t)
       pool.emplace_back([&, t] {

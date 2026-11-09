@@ -1,0 +1,4 @@
+regression/esbmc/github_10063_decay
+regression/esbmc/array_member_decay_overflow_fail
+regression/esbmc/array_member_one_past_fail
+regression/esbmc/array_member_memset_walk_fail

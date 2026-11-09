@@ -1,0 +1,6 @@
+CORE
+main.c
+--no-slice
+^VERIFICATION FAILED$
+\[main.assertion.1\]  line 17  reachable
+^  u\.s\.c != 4$

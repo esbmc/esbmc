@@ -354,6 +354,215 @@ void python_converter::reject_maybe_unset_instance_attr(
     attr_name + "'");
 }
 
+static bool is_name(const nlohmann::json &node, const std::string &name)
+{
+  return node.is_object() && node.value("_type", "") == "Name" &&
+         node.value("id", "") == name;
+}
+
+static bool is_load(const nlohmann::json &node)
+{
+  return node.contains("ctx") && node["ctx"].value("_type", "") == "Load";
+}
+
+// Whether `name` is read under @p node other than as the object of `name.x`.
+static bool
+escapes_as_object(const nlohmann::json &node, const std::string &name)
+{
+  if (node.is_object())
+  {
+    if (node.value("_type", "") == "Attribute" && is_name(node["value"], name))
+      return false;
+    if (is_name(node, name) && is_load(node))
+      return true;
+  }
+  for (const auto &child : node)
+    if (child.is_structured() && escapes_as_object(child, name))
+      return true;
+  return false;
+}
+
+// Whether class `name` is read under @p node other than as a constructor
+// callee, a base in a class definition or an annotation.
+static bool
+escapes_as_class(const nlohmann::json &node, const std::string &name)
+{
+  if (is_name(node, name) && is_load(node))
+    return true;
+  const std::string kind = node.is_object() ? node.value("_type", "") : "";
+  for (const auto &[key, child] : node.items())
+  {
+    const bool skipped =
+      (kind == "Call" && key == "func" && is_name(child, name)) ||
+      (kind == "ClassDef" && key == "bases") || key == "annotation" ||
+      key == "returns";
+    if (!skipped && child.is_structured() && escapes_as_class(child, name))
+      return true;
+  }
+  return false;
+}
+
+// Whether objects of @p class_node get attributes only from plain stores: no
+// decorator, metaclass, attribute hook or custom __new__, and no method lets
+// its first parameter escape.
+static bool has_plain_attributes(const nlohmann::json &class_node)
+{
+  static const std::set<std::string> hooks = {
+    "__getattr__", "__getattribute__", "__setattr__", "__new__"};
+  if (!class_node["decorator_list"].empty() || !class_node["keywords"].empty())
+    return false;
+  for (const auto &stmt : class_node["body"])
+  {
+    if (stmt.value("_type", "") != "FunctionDef")
+      continue;
+    if (hooks.count(stmt["name"].get<std::string>()))
+      return false;
+    const auto &params = stmt["args"]["args"];
+    if (
+      !params.empty() &&
+      escapes_as_object(stmt["body"], params[0]["arg"].get<std::string>()))
+      return false;
+  }
+  return true;
+}
+
+// Appends @p class_name and its bases, all user classes of plain attributes;
+// false when one is not.
+static bool collect_plain_hierarchy(
+  const nlohmann::json &module,
+  const std::string &class_name,
+  std::vector<nlohmann::json> &classes)
+{
+  if (class_name == "object")
+    return true;
+  const nlohmann::json class_node =
+    json_utils::find_class(module["body"], class_name);
+  if (
+    class_node.empty() || classes.size() > 16 ||
+    !has_plain_attributes(class_node))
+    return false;
+  classes.push_back(class_node);
+  for (const auto &base : class_node["bases"])
+    if (
+      base.value("_type", "") != "Name" ||
+      !collect_plain_hierarchy(module, base["id"], classes))
+      return false;
+  return true;
+}
+
+static std::size_t count_constructions(
+  const nlohmann::json &node,
+  const std::string &var,
+  const std::string &class_name)
+{
+  std::size_t n = 0;
+  const nlohmann::json *value = json_utils::plain_assigned_value(node, var);
+  if (
+    value && value->value("_type", "") == "Call" &&
+    is_name((*value)["func"], class_name))
+    ++n;
+  for (const auto &child : node)
+    if (child.is_structured())
+      n += count_constructions(child, var, class_name);
+  return n;
+}
+
+static void
+collect_parameter_names(const nlohmann::json &node, std::set<std::string> &out)
+{
+  if (node.is_object() && node.value("_type", "") == "arg")
+    out.insert(node["arg"].get<std::string>());
+  for (const auto &child : node)
+    if (child.is_structured())
+      collect_parameter_names(child, out);
+}
+
+// Whether @p node stores, deletes or reflects on `attr` through anything but
+// a name outside @p risky, or uses a builtin that can set attributes.
+static bool may_set_attr(
+  const nlohmann::json &node,
+  const std::string &attr,
+  const std::set<std::string> &risky)
+{
+  static const std::set<std::string> reflective_names = {
+    "setattr",
+    "delattr",
+    "globals",
+    "locals",
+    "vars",
+    "exec",
+    "eval",
+    "__import__"};
+  static const std::set<std::string> reflective_attrs = {
+    "__dict__", "__class__", "__setattr__"};
+  if (node.is_object() && node.value("_type", "") == "Name")
+    return reflective_names.count(node.value("id", "")) > 0;
+  if (node.is_object() && node.value("_type", "") == "Attribute")
+  {
+    const std::string name = node.value("attr", "");
+    if (reflective_attrs.count(name))
+      return true;
+    const nlohmann::json &object = node["value"];
+    if (
+      name == attr && !is_load(node) &&
+      (object.value("_type", "") != "Name" ||
+       risky.count(object["id"].get<std::string>())))
+      return true;
+  }
+  for (const auto &child : node)
+    if (child.is_structured() && may_set_attr(child, attr, risky))
+      return true;
+  return false;
+}
+
+// Whether no store can have given `attr_name` to the object that `var_name`,
+// bound only to `class_name(...)` calls, names.
+bool python_converter::attr_never_set_on(
+  const std::string &var_name,
+  const std::string &class_name,
+  const std::string &attr_name)
+{
+  const nlohmann::json &module = *ast_json;
+  std::vector<nlohmann::json> classes;
+  if (!collect_plain_hierarchy(module, class_name, classes))
+    return false;
+
+  const std::size_t bindings =
+    json_utils::count_name_bindings(module, var_name);
+  if (
+    bindings == 0 ||
+    bindings != count_constructions(module, var_name, class_name) ||
+    escapes_as_object(module, var_name))
+    return false;
+
+  std::set<std::string> risky = {var_name};
+  collect_parameter_names(module, risky);
+  for (const auto &class_node : classes)
+  {
+    const std::string name = class_node["name"].get<std::string>();
+    if (
+      json_utils::count_name_bindings(class_node["body"], attr_name) ||
+      escapes_as_class(module, name))
+      return false;
+    risky.insert(name);
+  }
+  return !may_set_attr(module, attr_name, risky);
+}
+
+bool python_converter::instance_may_have_attr(
+  const struct_typet &class_type,
+  const symbolt &symbol,
+  const std::string &var_name,
+  const std::string &obj_type_name,
+  const std::string &attr_name)
+{
+  if (!class_type.has_component(attr_name))
+    return false;
+  return var_name == "self" || symbol.is_parameter ||
+         !attr_never_set_on(
+           var_name, extract_class_name_from_tag(obj_type_name), attr_name);
+}
+
 void python_converter::copy_instance_attributes(
   const std::string &src_obj_id,
   const std::string &target_obj_id)

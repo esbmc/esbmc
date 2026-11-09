@@ -272,6 +272,7 @@ if(ENABLE_PYTHON_FRONTEND)
     set(REGRESSIONS_NUMPY numpy)
     set(REGRESSIONS_HUMANEVAL humaneval)
     set(REGRESSIONS_QUIXBUGS quixbugs)
+    set(REGRESSIONS_TYPEEVALPY typeevalpy)
     set(REGRESSIONS_PYTHON_COVERAGE python-coverage)
     set(REGRESSIONS_PYTHON_CONTRACTS python-contracts)
     set(REGRESSIONS_AI_GENERATED_CODE ai-generated-code)
@@ -388,6 +389,7 @@ if(APPLE)
                     ${REGRESSIONS_NUMPY}
                     ${REGRESSIONS_HUMANEVAL}
                     ${REGRESSIONS_QUIXBUGS}
+                    ${REGRESSIONS_TYPEEVALPY}
                     ${REGRESSIONS_PYTHON_COVERAGE}
                     ${REGRESSIONS_PYTHON_CONTRACTS}
                     ${REGRESSIONS_AI_GENERATED_CODE}
@@ -466,6 +468,7 @@ else()
                     ${REGRESSIONS_NUMPY}
                     ${REGRESSIONS_HUMANEVAL}
                     ${REGRESSIONS_QUIXBUGS}
+                    ${REGRESSIONS_TYPEEVALPY}
                     ${REGRESSIONS_PYTHON_COVERAGE}
                     ${REGRESSIONS_PYTHON_CONTRACTS}
                     ${REGRESSIONS_AI_GENERATED_CODE}
@@ -480,6 +483,7 @@ else()
                     witnesses_validate/reachsafety-violationwitness
                     witnesses_validate/reachsafety-correctnesswitness
                     witnesses_validate/termination-violationwitness
+                    witnesses_validate/memsafety-violationwitness
        )
   else()
     set(REGRESSIONS $ENV{BENCHMARK_TO_RUN}) # run a single user-specified benchmark

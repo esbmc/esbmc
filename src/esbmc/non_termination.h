@@ -27,7 +27,8 @@
 ///                  was UNSAT/UNKNOWN; caller falls back to the
 ///                  ranking-function pass / k-induction.
 ///
-/// Never returns TV_TRUE. This is a refutation-only checker.
+/// Never returns TV_TRUE. This is a refutation-only checker. On TV_FALSE,
+/// @p loop_location is the head of the non-terminating loop.
 ///
 /// The check is sound because the SMT obligation directly witnesses a
 /// non-terminating execution: the witness state and input cause the
@@ -40,6 +41,17 @@
 tvt try_prove_non_termination_by_recurrent_set(
   goto_functionst &goto_functions,
   optionst &options,
-  const namespacet &ns);
+  const namespacet &ns,
+  locationt &loop_location);
+
+/// Before k-induction transforms the program: for each input loop of the
+/// entry function whose iterations are a function of its globals and a finite
+/// input, enumerate the global states it reaches at its head from the initial
+/// state (at most @p max_states) and assume them there in the inductive step.
+/// Returns each such loop's invariant, as a C expression, at its loop head.
+std::vector<std::pair<locationt, std::string>> assume_reachable_loop_states(
+  goto_functionst &goto_functions,
+  const namespacet &ns,
+  size_t max_states);
 
 #endif /* ESBMC_NON_TERMINATION_H */

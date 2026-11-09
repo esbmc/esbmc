@@ -346,7 +346,17 @@ void python_class_builder::gen_ctor(bool has_ud_base, struct_typet &st)
     exprt deref = build_dereference(symbol_expr(self_sym), st);
     exprt member = build_member(deref, attr, comp_type);
 
-    exprt value = conv_.get_expr(n["value"]);
+    // Seed from the class attribute, not the class body's value: a store such
+    // as `C.attr = v`, e.g. from a class decorator, may have rebound it.
+    symbol_id attr_sid;
+    attr_sid.set_filename(mod);
+    attr_sid.set_class(conv_.current_class_name_);
+    attr_sid.set_object(attr);
+    const symbolt *class_attr =
+      conv_.symbol_table_.find_symbol(attr_sid.to_string());
+    exprt value = class_attr && class_attr->get_type() == comp_type
+                    ? symbol_expr(*class_attr)
+                    : conv_.get_expr(n["value"]);
     if (value.type() != comp_type)
       value.make_typecast(comp_type);
 

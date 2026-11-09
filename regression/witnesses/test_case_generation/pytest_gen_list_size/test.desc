@@ -1,0 +1,6 @@
+CORE
+main.py
+--unwind 3 --no-slice --branch-coverage --generate-pytest-testcase
+^Generated pytest test case with \d+ test\(s\)\: test_main\.py
+CHECK_FILE esbmc-pytest/test_main.py contains @pytest\.mark\.parametrize\("list0", \[
+CHECK_FILE esbmc-pytest/test_main.py contains first_positive\(list0\)$

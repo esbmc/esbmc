@@ -2,6 +2,7 @@
 #include <optional>
 #include <limits>
 #include <python-frontend/math/convert_float_literal.h>
+#include <python-frontend/function_call/builder.h>
 #include <python-frontend/function_call/expr.h>
 #include <python-frontend/json_utils.h>
 #include <python-frontend/python_annotation/python_annotation.h>
@@ -708,22 +709,22 @@ constant_keeps_type(const nlohmann::json &value, const std::string &type)
          (type == "str" && constant.is_string());
 }
 
-/// Whether a name has a given annotated type where it is read.
-using name_type_test =
-  std::function<bool(const std::string &, const std::string &)>;
+/// Whether an operand, a name or a call, has a given annotated type.
+using operand_type_test =
+  std::function<bool(const nlohmann::json &, const std::string &)>;
 
 /// Whether \p aug adds to a global of annotated type \p type a constant, or
-/// a name \p has_type gives that type, that leaves it that type.
+/// a name or call \p has_type gives that type, that leaves it that type.
 static bool keeps_type(
   const nlohmann::json &aug,
   const std::string &type,
-  const name_type_test &has_type)
+  const operand_type_test &has_type)
 {
   const nlohmann::json &value = aug["value"];
   if (aug["op"].value("_type", "") == "Div")
     return false;
-  return value["_type"] == "Name"
-           ? has_type(value["id"].get<std::string>(), type)
+  return value["_type"] == "Name" || value["_type"] == "Call"
+           ? has_type(value, type)
            : constant_keeps_type(value, type);
 }
 
@@ -732,7 +733,7 @@ static std::size_t count_type_keeping_aug_assigns(
   const nlohmann::json &node,
   const std::string &name,
   const std::string &type,
-  const name_type_test &has_type)
+  const operand_type_test &has_type)
 {
   std::size_t n = node.is_object() && node.value("_type", "") == "AugAssign" &&
                   node["target"].value("id", "") == name &&
@@ -751,7 +752,7 @@ static std::size_t count_type_keeping_aug_assigns(
 static const nlohmann::json *sole_module_binding(
   const nlohmann::json &module,
   const std::string &name,
-  const name_type_test &has_type)
+  const operand_type_test &has_type)
 {
   const nlohmann::json *binding = find_module_binding(module["body"], name);
   if (!binding)
@@ -767,16 +768,33 @@ static const nlohmann::json *sole_module_binding(
   return binding;
 }
 
-/// Whether the module global \p name is already bound with annotated type
-/// \p type.
-bool python_converter::global_has_type(
-  const std::string &name,
+/// Whether \p operand is a module global already bound with annotated type
+/// \p type, or a call to a module function already defined to return it, or
+/// through a module global holding such functions.
+bool python_converter::operand_has_type(
+  const nlohmann::json &operand,
   const std::string &type) const
 {
-  symbol_id sid(current_python_file, "", "");
-  sid.set_object(name);
-  const symbolt *symbol = symbol_table_.find_symbol(sid.to_string());
-  return symbol && symbol->get_type() == type_handler_.get_typet(type);
+  const bool is_call = operand["_type"] == "Call";
+  const std::string id = (is_call ? operand["func"] : operand).value("id", "");
+  symbol_id sid(current_python_file, "", is_call ? id : "");
+  const symbolt *symbol =
+    is_call ? symbol_table_.find_symbol(sid.to_string()) : nullptr;
+  if (!symbol)
+  {
+    sid.set_function("");
+    sid.set_object(id);
+    symbol = symbol_table_.find_symbol(sid.to_string());
+  }
+  if (!symbol)
+    return false;
+  const typet &expected = type_handler_.get_typet(type);
+  if (!is_call)
+    return symbol->get_type() == expected;
+  typet callee = symbol->get_type();
+  if (callee.is_pointer())
+    callee = callee.subtype();
+  return callee.is_code() && to_code_type(callee).return_type() == expected;
 }
 
 /// The module global \p sid names for a read in an enclosing scope. Code
@@ -791,8 +809,8 @@ symbolt *python_converter::find_global_symbol(const symbol_id &sid)
   const nlohmann::json *binding = sole_module_binding(
     *ast_json,
     sid.get_object(),
-    [this](const std::string &name, const std::string &type) {
-      return global_has_type(name, type);
+    [this](const nlohmann::json &operand, const std::string &type) {
+      return operand_has_type(operand, type);
     });
   if (!binding || binding->value("_type", "") != "AnnAssign")
     return nullptr;
@@ -818,7 +836,7 @@ exprt python_converter::module_function_expr(
   if (symbol && symbol->get_type().is_code())
     return symbol_expr(*symbol);
   const nlohmann::json *binding = sole_module_binding(
-    *ast_json, name, [](const std::string &, const std::string &) {
+    *ast_json, name, [](const nlohmann::json &, const std::string &) {
       return false;
     });
   if (!binding || binding->value("_type", "") != "FunctionDef")
@@ -837,7 +855,7 @@ typet python_converter::forward_function_return_type(
 {
   const auto flag = unbound_global_flags_.find(fn.identifier().as_string());
   const nlohmann::json *def = sole_module_binding(
-    *ast_json, name, [](const std::string &, const std::string &) {
+    *ast_json, name, [](const nlohmann::json &, const std::string &) {
       return false;
     });
   if (flag == unbound_global_flags_.end() || !def)
@@ -3492,7 +3510,9 @@ exprt python_converter::get_expr(const nlohmann::json &element)
           // __init__).  This happens when the object comes from a list element
           // or other expression that bypasses instance_has_attr registration.
           // Fall back to the struct member if the component exists.
-          if (class_type.has_component(attr_name))
+          if (
+            instance_may_have_attr(
+              class_type, *symbol, var_name, obj_type_name, attr_name))
           {
             const typet &attr_type = class_type.get_component(attr_name).type();
             expr = build_member_expr_from_class(attr_type);
@@ -3740,8 +3760,64 @@ python_converter::scope_numeric_bindings(
                                  : (*ast_json)["body"];
   std::vector<dynamic_type_detail::numeric_bindingt> bindings;
   dynamic_type_detail::collect_numeric_bindings(
-    body, name, false, before, include_later, bindings);
+    body,
+    name,
+    false,
+    before,
+    include_later,
+    bindings,
+    [this](const nlohmann::json &call) { return call_number_kind(call); });
   return bindings;
+}
+
+/// "int" or "float" for a call of a function, by name or through a module,
+/// whose converted definition returns that kind of number; else "". The
+/// annotator leaves such a call untyped when the function is imported (#9936).
+std::string python_converter::call_number_kind(const nlohmann::json &call) const
+{
+  const nlohmann::json &func = call["func"];
+  const std::string kind = func.value("_type", "");
+  const bool module_function =
+    kind == "Attribute" && func["value"].value("_type", "") == "Name" &&
+    !get_imported_module_path(func["value"].value("id", "")).empty();
+  if (
+    !module_function &&
+    (kind != "Name" || is_class(func.value("id", ""), *ast_json)))
+    return "";
+
+  const std::string key = current_python_file + ":" +
+                          std::to_string(call.value("lineno", 0)) + ":" +
+                          std::to_string(call.value("col_offset", 0));
+  if (
+    const auto known = call_number_kinds_.find(key);
+    known != call_number_kinds_.end())
+    return known->second;
+
+  symbol_id callee;
+  try
+  {
+    callee = function_call_builder(const_cast<python_converter &>(*this), call)
+               .build_function_id();
+  }
+  catch (const std::exception &)
+  {
+    return "";
+  }
+  const symbolt *callee_symbol = find_symbol(callee.to_string());
+  if (!callee_symbol)
+    callee_symbol = find_imported_symbol(callee.to_string());
+  if (!callee_symbol || !callee_symbol->get_type().is_code())
+    return "";
+  const typet &returned = to_code_type(callee_symbol->get_type()).return_type();
+  std::string number;
+  if (returned.is_floatbv())
+    number = "float";
+  else if (type_utils::is_integer_type(returned) || returned.is_bool())
+    number = "int";
+  // A function converted later may not be known yet, so only answers stick.
+  if (!number.empty())
+    call_number_kinds_[key] = number;
+  return number;
 }
 
 /// Whether `value` survives the C type `type` unchanged: a float is exact

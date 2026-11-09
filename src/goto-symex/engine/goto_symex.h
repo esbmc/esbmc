@@ -589,6 +589,10 @@ protected:
    */
   virtual void symex_function_call_code(const expr2tc &call);
 
+  /** Assign a fresh nondet value to @p ret, the result of a call that symex
+   *  skips; a nil @p ret is left alone. */
+  void assign_nondet_call_result(const expr2tc &ret);
+
   /**
    *  Model a call to a "__ESBMC_uninterpreted_*" or "__CPROVER_uninterpreted_*"
    *  function as a genuine uninterpreted function: assign the return an
@@ -1366,6 +1370,58 @@ protected:
     const bool hidden);
 
   /**
+   *  Assign to an "if" whose arms write members of one struct \p base as a
+   *  single assignment to \p base, instead of one guarded whole-struct
+   *  assignment per arm (#9785). Arms that do not write a member of \p base
+   *  are assigned as usual.
+   */
+  void symex_assign_member_arms(
+    const expr2tc &lhs,
+    const expr2tc &base,
+    const expr2tc &full_lhs,
+    expr2tc &rhs,
+    expr2tc &full_rhs,
+    guard2tc &guard,
+    const bool hidden);
+
+  /** A store to a member of the struct symex_assign_member_arms is merging,
+   *  recorded by symex_assign_member instead of assigned. \p path names the
+   *  struct members leading from that struct to \p member. */
+  struct member_store
+  {
+    expr2tc member;
+    std::vector<irep_idt> path;
+    expr2tc guard;
+    expr2tc value;
+  };
+
+  struct member_store_collector
+  {
+    expr2tc base;
+    std::vector<member_store> stores;
+  };
+
+  /** Non-null while symex_assign_member_arms collects stores. */
+  member_store_collector *member_stores = nullptr;
+
+  /** Record the store of \p rhs to \p lhs under \p guard if \p lhs is reached
+   *  from the struct being merged through struct members only; otherwise
+   *  return false and record nothing. */
+  bool record_member_store(
+    const expr2tc &lhs,
+    const expr2tc &rhs,
+    const guard2tc &guard);
+
+  /** \p obj, a struct at \p path below the merged struct, rebuilt member by
+   *  member from \p stores. With \p guarded, each store applies under its
+   *  guard; otherwise \p stores belong to one arm and do not overlap. */
+  expr2tc merge_member_stores(
+    const expr2tc &obj,
+    const std::vector<irep_idt> &path,
+    const std::vector<member_store> &stores,
+    bool guarded) const;
+
+  /**
    *  Perform assignment to a byte extract.
    *  Results in a byte update of the relevant part of the lhs with the
    *  right hand side at the appropriate position. Currently a problem , as
@@ -1522,9 +1578,9 @@ protected:
    *  holds a NUL at or after its offset; nothing unless it resolves to one
    *  byte array at a constant offset. */
   void claim_nul_terminated(const expr2tc &ptr);
-  /** --printf-check claims for the original operand `arg` of a %s or %p
-   *  conversion; `reads_to_nul` is false when a precision or length modifier
-   *  changes what %s reads. */
+  /** Check the original operand `arg` of a %s or %p conversion: the read of
+   *  a %s string, plus the --printf-check claims; `reads_to_nul` is false
+   *  when a precision or length modifier changes what %s reads. */
   void check_printf_pointer_arg(
     printf_kindt kind,
     char spec,
