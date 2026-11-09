@@ -1,0 +1,5 @@
+CORE
+main.py
+--unwind 6
+^  FAILED\s+\[global\.assertion\.\d+\]\s+line\s+6\s+assertion k == 1$
+^VERIFICATION FAILED$
