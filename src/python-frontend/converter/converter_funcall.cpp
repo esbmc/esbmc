@@ -2,6 +2,7 @@
 #include <python-frontend/function_call/expr.h>
 #include <python-frontend/exception/python_exception_handler.h>
 #include <python-frontend/json_utils.h>
+#include <python-frontend/python_annotation/annotation_intrinsics.h>
 #include <python-frontend/python_annotation/function_values.h>
 #include <python-frontend/consteval/python_consteval.h>
 #include <python-frontend/python_converter.h>
@@ -26,6 +27,7 @@
 #include <util/expr/string_constant.h>
 
 #include <algorithm>
+#include <climits>
 #include <optional>
 #include <sstream>
 
@@ -632,6 +634,8 @@ exprt python_converter::get_call_expr(const nlohmann::json &element)
       "function that returns a function");
   if (std::optional<exprt> raise = call_property_value(element))
     return *raise;
+  if (std::optional<exprt> raise = call_rebound_builtin(element))
+    return *raise;
   if (
     numpy_random::is_random_call(element, *ast_json) ||
     is_numpy_random_generator_call(element))
@@ -694,6 +698,121 @@ python_converter::call_property_value(const nlohmann::json &element)
   return get_exception_handler().gen_exception_raise(
     "TypeError",
     "'" + type_handler_.type_to_string(type) + "' object is not callable");
+}
+
+/// Whether the call on \p line follows the one statement of \p scope's own
+/// body that binds \p name, which is also its only binding anywhere under
+/// \p scope. Null when the binding is not of that shape.
+static std::optional<bool>
+binding_precedes(const nlohmann::json &scope, const std::string &name, int line)
+{
+  if (json_utils::count_name_bindings(scope, name) != 1)
+    return std::nullopt;
+  const nlohmann::json param = json_utils::find_var_in_function(name, scope);
+  if (param.is_object() && param.value("_type", "") == "arg")
+    return true;
+  const auto is_name = [&](const nlohmann::json &target) {
+    return target.value("_type", "") == "Name" &&
+           target.value("id", "") == name;
+  };
+  for (const auto &stmt : scope["body"])
+  {
+    const std::string kind = stmt.value("_type", "");
+    const bool binds =
+      kind == "Assign"
+        ? std::any_of(stmt["targets"].begin(), stmt["targets"].end(), is_name)
+        : kind == "AnnAssign" && !stmt["value"].is_null() &&
+            is_name(stmt["target"]);
+    if (binds)
+      return line > stmt["end_lineno"].get<int>();
+  }
+  return std::nullopt;
+}
+
+/// Whether the call on \p line follows the one top-level `from m import` that
+/// binds \p name to the variable \p file defines as its only binding.
+std::optional<bool> python_converter::import_binds_before(
+  const std::string &name,
+  const std::string &file,
+  int line) const
+{
+  const nlohmann::json *import = nullptr;
+  bool listed = false;
+  for (const auto &stmt : (*ast_json)["body"])
+  {
+    if (stmt.value("_type", "") != "ImportFrom" || stmt["module"].is_null())
+      continue;
+    for (const auto &alias : stmt["names"])
+    {
+      const bool named = alias["name"] == name && alias["asname"].is_null();
+      if (!named && alias["name"] != "*")
+        continue;
+      if (import != nullptr)
+        return std::nullopt;
+      import = &stmt;
+      listed = named;
+    }
+  }
+  if (
+    import == nullptr ||
+    json_utils::count_name_bindings(*ast_json, name) != listed)
+    return std::nullopt;
+  const auto module = module_ast_pool_.find((*import)["module"]);
+  if (
+    module == module_ast_pool_.end() ||
+    module->second.value("filename", "") != file ||
+    !binding_precedes(module->second, name, INT_MAX))
+    return std::nullopt;
+  return line > (*import)["end_lineno"].get<int>();
+}
+
+/// A builtin called after the program rebound its name to a value that cannot
+/// be called raises the TypeError of calling that value (#10162). The name
+/// is looked up in the scope first, so the builtin runs only while it is
+/// unbound; a binding whose position against the call is not known is
+/// refused rather than guessed.
+std::optional<exprt>
+python_converter::call_rebound_builtin(const nlohmann::json &element)
+{
+  const nlohmann::json &func = element["func"];
+  if (
+    func.value("_type", "") != "Name" ||
+    !is_program_file(current_python_file) ||
+    !python_annotation_intrinsics::builtin_functions().count(
+      func["id"].get<std::string>()))
+    return std::nullopt;
+
+  const std::string name = func["id"];
+  symbol_id sid = create_symbol_id();
+  sid.set_object(name);
+  const symbolt *var = find_symbol(sid.to_string());
+  if (!var || var->is_type || may_be_callable(var->get_type()))
+    return std::nullopt;
+
+  const int line = element["lineno"].get<int>();
+  std::optional<bool> bound;
+  if (var->id == sid.to_string() && current_func_name_.empty())
+    bound = binding_precedes(*ast_json, name, line);
+  else if (var->id == sid.to_string())
+  {
+    const nlohmann::json function = current_user_function_node();
+    if (!function.empty())
+      bound = binding_precedes(function, name, line);
+  }
+  else if (current_func_name_.empty() && current_class_name_.empty())
+    bound = import_binds_before(
+      name, symbol_id::from_string(var->id.as_string()).get_filename(), line);
+
+  if (!bound)
+    throw std::runtime_error(
+      "unsupported: call of builtin '" + name +
+      "', which the program rebinds to a value that is not callable");
+  if (!*bound)
+    return std::nullopt;
+  return get_exception_handler().gen_exception_raise(
+    "TypeError",
+    "'" + type_handler_.type_to_string(var->get_type()) +
+      "' object is not callable");
 }
 
 bool python_converter::may_be_callable(const typet &type)
