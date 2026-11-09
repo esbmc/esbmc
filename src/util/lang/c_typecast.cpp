@@ -761,6 +761,14 @@ void c_typecastt::implicit_typecast_followed(
 
   if (check_c_implicit_typecast(src_type, dest_type))
     errors.emplace_back("implicit conversion not permitted");
+  else if (
+    src_type.is_array() && dest_type.is_array() &&
+    src_type.subtype() == dest_type.subtype() &&
+    to_array_type(src_type).size() == to_array_type(dest_type).size())
+  {
+    // Same array shape; only attributes such as alignment differ (#10171).
+    expr.type() = dest_type;
+  }
   else if (src_type != dest_type)
     do_typecast(expr, dest_type);
 }
