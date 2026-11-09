@@ -363,8 +363,27 @@ private:
   std::optional<exprt> try_float_predicate(const std::string &function);
   exprt numpy_math_list(const std::string &function, const nlohmann::json &arg);
   std::optional<exprt> literal_array_operand(const nlohmann::json &arg);
-  std::vector<std::vector<double>>
-  linalg_matrix(const std::function<void(nlohmann::json &)> &unwrap);
+  exprt linalg_unary(
+    const std::string &function,
+    const std::function<void(nlohmann::json &)> &resolve);
+  exprt constant_linalg(
+    const std::string &function,
+    const std::vector<std::vector<double>> &m);
+  exprt runtime_linalg(
+    const std::string &function,
+    const std::vector<std::vector<exprt>> &m,
+    const std::vector<exprt> &b = {});
+  exprt runtime_solve(
+    const nlohmann::json &original_a,
+    const nlohmann::json &original_b);
+  exprt runtime_inverse(
+    const std::vector<std::vector<exprt>> &m,
+    const std::vector<exprt> &b);
+  exprt linalg_solve_call(
+    const nlohmann::json &original_a,
+    const nlohmann::json &original_b,
+    nlohmann::json a,
+    nlohmann::json b);
   exprt nondet_bool();
   exprt nondet_value(const typet &type, const std::string &name);
   exprt eigenvalues(const std::vector<std::vector<double>> &m);
@@ -387,15 +406,23 @@ private:
   exprt linalg_inverse(const std::vector<std::vector<double>> &m);
   exprt bounded_inverse(const std::vector<std::vector<double>> &m);
   void raise_singular_matrix();
+  void raise_linalg(
+    const std::string &type,
+    const std::string &message,
+    const exprt &when);
+  exprt raise_linalg_fault(const std::string &type, const std::string &message);
   exprt bounded_solve(
     const std::string &function,
     const std::vector<std::vector<double>> &m,
     const std::vector<double> &b);
   void unwrap_linalg_operand(nlohmann::json &arg) const;
-  std::vector<std::vector<exprt>>
-  runtime_entries(const nlohmann::json &arg, std::size_t &rank);
+  std::vector<std::vector<exprt>> runtime_entries(
+    const nlohmann::json &arg,
+    std::optional<std::vector<int>> &shape);
   exprt within_radius(const exprt &value, const exprt &radius);
-  exprt symbolic_det(const nlohmann::json &arg, bool strings);
+  void
+  assume_near(const exprt &residual, const exprt &bound, const exprt &excused);
+  exprt symbolic_det(const std::vector<std::vector<exprt>> &m);
   exprt symbolic_norm(const nlohmann::json &arg, norm_order order);
   exprt linalg_norm(const std::function<void(nlohmann::json &)> &unwrap);
   exprt norm_array(const std::vector<std::vector<exprt>> &rows, bool as_matrix);

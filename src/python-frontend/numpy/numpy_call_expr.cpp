@@ -6052,17 +6052,79 @@ exprt numpy_call_expr::lapack_matrix(
   return array;
 }
 
-// The literal a numpy.linalg operand stands for: the list of np.array(list)
-// or of a constructor such as np.eye(3). A scalar has no matrix dimensions.
-void numpy_call_expr::unwrap_linalg_operand(nlohmann::json &arg) const
+namespace
+{
+// The exception NumPy raises for an operand's shape before LAPACK runs.
+struct linalg_fault
+{
+  std::string type, message;
+};
+} // namespace
+
+static linalg_fault rank_fault(std::size_t rank)
+{
+  return {
+    "LinAlgError",
+    std::to_string(rank) +
+      "-dimensional array given. Array must be at least two-dimensional"};
+}
+
+static std::optional<linalg_fault>
+shape_fault(const std::vector<int> &shape, bool square)
+{
+  if (shape.size() < 2)
+    return rank_fault(shape.size());
+  if (square && shape[0] != shape[1])
+    return linalg_fault{
+      "LinAlgError", "Last 2 dimensions of the array must be square"};
+  return std::nullopt;
+}
+
+static bool is_list_literal(const nlohmann::json &node)
+{
+  const std::string kind = node.value("_type", "");
+  return (kind == "List" || kind == "Tuple") && node.contains("elts");
+}
+
+// The shape fault of a literal operand: a scalar, a flat list, rows of
+// different lengths (np.array's ValueError), or rows that are not square.
+// Elements that are neither literals nor constants leave it to the run-time
+// route.
+static std::optional<linalg_fault>
+literal_fault(const nlohmann::json &arg, bool square)
 {
   scalar_value scalar;
-  if (
-    function_id_.get_function() != "norm" &&
-    try_extract_scalar_constant(arg, scalar))
-    throw std::runtime_error(
-      "numpy.linalg.LinAlgError: 0-dimensional array given. Array must be at "
-      "least two-dimensional");
+  if (try_extract_scalar_constant(arg, scalar))
+    return rank_fault(0);
+  if (!is_list_literal(arg))
+    return std::nullopt;
+  const nlohmann::json &rows = arg["elts"];
+  std::size_t lists = 0, scalars = 0;
+  for (const auto &row : rows)
+  {
+    lists += is_list_literal(row);
+    scalars += try_extract_scalar_constant(row, scalar);
+  }
+  if (lists + scalars != rows.size())
+    return std::nullopt;
+  if (lists == 0)
+    return rank_fault(1);
+  for (const auto &row : rows)
+    if (!is_list_literal(row) || row["elts"].size() != rows[0]["elts"].size())
+      return linalg_fault{
+        "ValueError",
+        "setting an array element with a sequence. The requested array has "
+        "an inhomogeneous shape after 1 dimensions. The detected shape was (" +
+          std::to_string(rows.size()) + ",) + inhomogeneous part."};
+  return shape_fault(
+    {static_cast<int>(rows.size()), static_cast<int>(rows[0]["elts"].size())},
+    square);
+}
+
+// The literal a numpy.linalg operand stands for: the list of np.array(list)
+// or of a constructor such as np.eye(3).
+void numpy_call_expr::unwrap_linalg_operand(nlohmann::json &arg) const
+{
   if (arg.value("_type", "") != "Call")
     return;
   const nlohmann::json &func = arg["func"];
@@ -6077,27 +6139,6 @@ void numpy_call_expr::unwrap_linalg_operand(nlohmann::json &arg) const
     std::optional<nlohmann::json> literal =
       materialize_numpy_constructor_array(arg, converter_.ast()))
     arg = *literal;
-}
-
-// The constant real square matrix an eigvals or svd call reads.
-std::vector<std::vector<double>> numpy_call_expr::linalg_matrix(
-  const std::function<void(nlohmann::json &)> &unwrap)
-{
-  const std::string &function = function_id_.get_function();
-  nlohmann::json arg = call_["args"][0];
-  unwrap(arg);
-  std::vector<std::vector<scalar_value>> matrix;
-  if (!try_extract_scalar_2d_list(arg, matrix))
-    throw std::runtime_error(
-      "TypeError: numpy.linalg." + function +
-      " currently supports only constant 2D real numeric matrices");
-  for (const auto &row : matrix)
-    for (const auto &value : row)
-      if (value.is_complex)
-        throw std::runtime_error(
-          "TypeError: numpy.linalg." + function +
-          " does not support complex-valued matrices");
-  return real_matrix(matrix);
 }
 
 static bool is_diagonal(const std::vector<std::vector<double>> &m)
@@ -6538,31 +6579,18 @@ cofactor_terms(const std::vector<std::vector<exprt>> &m)
   return {value, magnitude};
 }
 
-// The entries of a numeric array of rank 1 or 2 known only at run time, as
-// doubles read from it once, rows of one row for rank 1; empty otherwise.
-std::vector<std::vector<exprt>>
-numpy_call_expr::runtime_entries(const nlohmann::json &arg, std::size_t &rank)
+// The entries of a rank 1 or 2 `array` as doubles: the rows of a matrix, or
+// one row for a vector.
+static std::vector<std::vector<exprt>>
+array_entries(const exprt &array, const std::vector<int> &shape)
 {
-  exprt *lhs = converter_.current_lhs;
-  converter_.current_lhs = nullptr;
-  const exprt value = converter_.get_expr(arg);
-  converter_.current_lhs = lhs;
-  const std::vector<int> shape =
-    type_handler_.get_array_type_shape(value.type());
-  const typet &leaf = array_leaf_type(value.type());
-  if (
-    shape.empty() || shape.size() > 2 || !is_number_type(leaf) ||
-    leaf == char_type())
-    return {};
-  rank = shape.size();
-  const exprt array = bind_array_once(value);
   std::vector<exprt> rows = {array};
   if (shape.size() == 2)
   {
     rows.clear();
     for (int i = 0; i < shape[0]; ++i)
       rows.push_back(
-        np_index(array, from_integer(i, size_type()), value.type().subtype()));
+        np_index(array, from_integer(i, size_type()), array.type().subtype()));
   }
   std::vector<std::vector<exprt>> entries;
   for (const exprt &row : rows)
@@ -6580,13 +6608,35 @@ numpy_call_expr::runtime_entries(const nlohmann::json &arg, std::size_t &rank)
   return entries;
 }
 
+// The entries of a numeric operand known only at run time, read from it
+// once. `shape` is set for any numeric operand, empty for a scalar; there
+// are no entries beyond rank 2.
+std::vector<std::vector<exprt>> numpy_call_expr::runtime_entries(
+  const nlohmann::json &arg,
+  std::optional<std::vector<int>> &shape)
+{
+  exprt *lhs = converter_.current_lhs;
+  converter_.current_lhs = nullptr;
+  const exprt value = converter_.get_expr(arg);
+  converter_.current_lhs = lhs;
+  const typet &leaf = array_leaf_type(value.type());
+  if (!is_number_type(leaf) || leaf == char_type())
+    return {};
+  shape = type_handler_.get_array_type_shape(value.type());
+  if (shape->empty())
+    bind_once(value);
+  if (shape->empty() || shape->size() > 2)
+    return {};
+  return array_entries(bind_array_once(value), *shape);
+}
+
 // Any double within `radius` of `value`, or any double at all when the
-// radius is not finite.
+// radius or the value is not finite.
 exprt numpy_call_expr::within_radius(const exprt &value, const exprt &radius)
 {
   const exprt result = lapack_value(0.0, INFINITY);
   code_assumet within{or_exprt(
-    not_exprt(is_finite_double(radius)),
+    not_exprt(and_exprt(is_finite_double(radius), is_finite_double(value))),
     and_exprt(
       binary_relation_exprt(result, ">=", ieee_op("ieee_sub", value, radius)),
       binary_relation_exprt(
@@ -6636,20 +6686,377 @@ sum_of_magnitudes(const std::vector<exprt> &magnitudes, bool squares)
 // det of a matrix of order at most 3 with entries known only at run time:
 // the cofactor expansion, within lapack_tolerance of the sum of its terms'
 // magnitudes, which covers LU's rounding and NumPy's sum of logarithms.
-exprt numpy_call_expr::symbolic_det(const nlohmann::json &arg, bool strings)
+exprt numpy_call_expr::symbolic_det(const std::vector<std::vector<exprt>> &m)
 {
-  std::size_t rank = 0;
-  const std::vector<std::vector<exprt>> m =
-    strings ? std::vector<std::vector<exprt>>() : runtime_entries(arg, rank);
-  if (rank != 2 || m.size() < 2 || m.size() > 3 || m.size() != m.front().size())
-    throw std::runtime_error(
-      "TypeError: numpy.linalg.det currently supports only constant 2D "
-      "numeric arrays");
   const auto [value, magnitude] = cofactor_terms(m);
   return within_radius(
     value,
     ieee_op(
       "ieee_mul", from_double(lapack_tolerance, double_type()), magnitude));
+}
+
+// The largest magnitude among `values`, NaN when one is NaN.
+static exprt largest_magnitude(const std::vector<exprt> &values)
+{
+  std::vector<exprt> magnitudes;
+  for (const exprt &value : values)
+    magnitudes.push_back(abs_double(value));
+  return extreme_magnitude(magnitudes, ">");
+}
+
+// The largest row sum of magnitudes, NaN when one is NaN.
+static exprt infinity_norm(const std::vector<std::vector<exprt>> &m)
+{
+  std::vector<exprt> sums;
+  for (const auto &row : m)
+  {
+    std::vector<exprt> magnitudes;
+    for (const exprt &entry : row)
+      magnitudes.push_back(abs_double(entry));
+    sums.push_back(sum_of_magnitudes(magnitudes, false));
+  }
+  return extreme_magnitude(sums, ">");
+}
+
+static exprt
+dot_double(const std::vector<exprt> &a, const std::vector<exprt> &b)
+{
+  std::vector<exprt> terms;
+  for (std::size_t k = 0; k < a.size(); ++k)
+    terms.push_back(ieee_op("ieee_mul", a[k], b[k]));
+  return sum_of_magnitudes(terms, false);
+}
+
+// Assumes |residual| <= bound, a relation LAPACK's result satisfies, unless
+// `excused`; a bound that is not finite does not satisfy it.
+void numpy_call_expr::assume_near(
+  const exprt &residual,
+  const exprt &bound,
+  const exprt &excused)
+{
+  code_assumet near{or_exprt(
+    excused,
+    and_exprt(
+      is_finite_double(bound),
+      binary_relation_exprt(abs_double(residual), "<=", bound)))};
+  near.location() = converter_.get_location_from_decl(call_);
+  converter_.add_instruction(near);
+}
+
+// The cofactor (-1)^(i+j) det(m without row i and column j).
+static exprt
+cofactor(const std::vector<std::vector<exprt>> &m, std::size_t i, std::size_t j)
+{
+  if (m.size() == 1)
+    return from_double(1.0, double_type());
+  std::vector<std::vector<exprt>> minor;
+  for (std::size_t r = 0; r < m.size(); ++r)
+  {
+    if (r == i)
+      continue;
+    minor.push_back(m[r]);
+    minor.back().erase(minor.back().begin() + j);
+  }
+  const exprt value = cofactor_terms(minor).first;
+  return (i + j) % 2 ? negate_double(value) : value;
+}
+
+static exprt product(const std::vector<exprt> &factors)
+{
+  exprt result = factors.front();
+  for (std::size_t k = 1; k < factors.size(); ++k)
+    result = ieee_op("ieee_mul", result, factors[k]);
+  return result;
+}
+
+static std::vector<exprt>
+adjugate_entries(const std::vector<std::vector<exprt>> &m)
+{
+  std::vector<exprt> entries;
+  for (std::size_t i = 0; i < m.size(); ++i)
+    for (std::size_t j = 0; j < m.size(); ++j)
+      entries.push_back(cofactor(m, j, i));
+  return entries;
+}
+
+// Whether neither X nor its residual can overflow: |X| <= (n-1)!
+// max(||m||, 1)^(n-1) |B| / |det|, and |m||X| one factor more.
+static exprt representable_solution(
+  const exprt &det,
+  const exprt &norm,
+  const exprt &rhs_norm,
+  std::size_t n)
+{
+  const exprt one = from_double(1.0, double_type());
+  exprt power = ieee_op("ieee_add", one, rhs_norm);
+  for (std::size_t k = 0; k < n; ++k)
+    power = ieee_op(
+      "ieee_mul",
+      power,
+      if_exprt(binary_relation_exprt(norm, ">", one), norm, one));
+  return binary_relation_exprt(
+    ieee_op("ieee_mul", abs_double(det), from_double(1e300, double_type())),
+    ">",
+    power);
+}
+
+static std::vector<std::vector<exprt>> identity_columns(std::size_t n)
+{
+  std::vector<std::vector<exprt>> columns;
+  for (std::size_t j = 0; j < n; ++j)
+  {
+    columns.emplace_back();
+    for (std::size_t i = 0; i < n; ++i)
+      columns.back().push_back(from_double(i == j ? 1.0 : 0.0, double_type()));
+  }
+  return columns;
+}
+
+static exprt columns_as_matrix(const std::vector<std::vector<exprt>> &columns)
+{
+  std::vector<exprt> rows;
+  for (std::size_t i = 0; i < columns.size(); ++i)
+  {
+    std::vector<exprt> row;
+    for (const auto &column : columns)
+      row.push_back(column[i]);
+    rows.push_back(double_array(row));
+  }
+  return double_array(rows);
+}
+
+// inv(m), or solve(m, b) when `b` has entries, for a matrix of order at most
+// 3 known only at run time. LU with partial pivoting is backward stable:
+// LAPACK's X satisfies |m X - B| <= c u |L||U||X|. While
+// |det| > lapack_tolerance n ||m|| max|adj m|, m is far enough from singular
+// that |X| <= 2n max|adj m| |B| / |det|, so |m X - B| |det| is within
+// lapack_tolerance (2n ||m|| max|adj m| + |det|) |B|, a relation linear in X
+// that also covers evaluating the residual in doubles. Below that LAPACK may
+// meet a zero pivot: the call may raise LinAlgError, and otherwise its result
+// is unconstrained, as it is where X or its residual may overflow.
+exprt numpy_call_expr::runtime_inverse(
+  const std::vector<std::vector<exprt>> &m,
+  const std::vector<exprt> &b)
+{
+  const std::size_t n = m.size();
+  const exprt det = cofactor_terms(m).first;
+  const exprt tolerance = from_double(lapack_tolerance, double_type());
+  const exprt order = from_double(static_cast<double>(n), double_type());
+  const exprt norm = infinity_norm(m);
+  const exprt largest_cofactor = largest_magnitude(adjugate_entries(m));
+  const exprt rhs_norm =
+    b.empty() ? from_double(1.0, double_type()) : largest_magnitude(b);
+  const exprt ill_conditioned = not_exprt(binary_relation_exprt(
+    abs_double(det), ">", product({tolerance, order, norm, largest_cofactor})));
+  raise_linalg(
+    "LinAlgError",
+    "Singular matrix",
+    and_exprt(ill_conditioned, nondet_bool()));
+  const exprt excused = or_exprt(
+    ill_conditioned, not_exprt(representable_solution(det, norm, rhs_norm, n)));
+  const exprt bound = ieee_op(
+    "ieee_add",
+    product(
+      {tolerance,
+       rhs_norm,
+       ieee_op(
+         "ieee_add",
+         product({ieee_op("ieee_add", order, order), norm, largest_cofactor}),
+         abs_double(det))}),
+    from_double(1e-300, double_type()));
+  std::vector<std::vector<exprt>> columns;
+  for (const std::vector<exprt> &target :
+       b.empty() ? identity_columns(n) : std::vector<std::vector<exprt>>{b})
+  {
+    std::vector<exprt> column;
+    for (std::size_t i = 0; i < n; ++i)
+      column.push_back(lapack_value(0.0, INFINITY));
+    for (std::size_t i = 0; i < n; ++i)
+      assume_near(
+        ieee_op(
+          "ieee_mul",
+          ieee_op("ieee_sub", dot_double(m[i], column), target[i]),
+          det),
+        bound,
+        excused);
+    columns.push_back(column);
+  }
+  return b.empty() ? columns_as_matrix(columns) : double_array(columns.front());
+}
+
+// The real matrix of a constant operand: det and inv check its order too.
+static std::vector<std::vector<double>> constant_matrix(
+  const std::string &function,
+  const std::vector<std::vector<scalar_value>> &matrix)
+{
+  if (function == "det" || function == "inv")
+    return checked_square_matrix(function, matrix);
+  for (const auto &row : matrix)
+    for (const auto &value : row)
+      if (value.is_complex)
+        throw std::runtime_error(
+          "TypeError: numpy.linalg." + function +
+          " does not support complex-valued matrices");
+  return real_matrix(matrix);
+}
+
+// The diagnostic for an operand no numpy.linalg route can read.
+[[noreturn]] static void reject_linalg_operand(const std::string &function)
+{
+  throw std::runtime_error(
+    "TypeError: numpy.linalg." + function + " requires a real numeric matrix");
+}
+
+// det, inv, eig, eigvals or svd of one operand: a shape NumPy refuses raises
+// its exception, a constant matrix takes the exact or bounded route, and one
+// known only at run time the run-time route.
+exprt numpy_call_expr::linalg_unary(
+  const std::string &function,
+  const std::function<void(nlohmann::json &)> &resolve)
+{
+  nlohmann::json arg = call_["args"][0];
+  resolve(arg);
+  unwrap_linalg_operand(arg);
+  const bool square = function != "svd";
+  if (const std::optional<linalg_fault> fault = literal_fault(arg, square))
+    return raise_linalg_fault(fault->type, fault->message);
+  std::vector<std::vector<scalar_value>> matrix;
+  if (try_extract_scalar_2d_list(arg, matrix))
+    return constant_linalg(function, constant_matrix(function, matrix));
+  if (contains_string_constant(arg))
+    reject_linalg_operand(function);
+  std::optional<std::vector<int>> shape;
+  const std::vector<std::vector<exprt>> m =
+    runtime_entries(call_["args"][0], shape);
+  if (!shape)
+    reject_linalg_operand(function);
+  if (const std::optional<linalg_fault> fault = shape_fault(*shape, square))
+    return raise_linalg_fault(fault->type, fault->message);
+  return runtime_linalg(function, m);
+}
+
+// The run-time routes, each over matrices of a bounded order.
+exprt numpy_call_expr::runtime_linalg(
+  const std::string &function,
+  const std::vector<std::vector<exprt>> &m,
+  const std::vector<exprt> &b)
+{
+  if (m.empty())
+    reject_linalg_operand(function);
+  if (m.size() > 3)
+    throw std::runtime_error(
+      "TypeError: numpy.linalg." + function +
+      " supports only run-time matrices up to 3x3");
+  if (function == "det")
+    return symbolic_det(m);
+  if (function == "inv" || function == "solve")
+    return runtime_inverse(m, b);
+  throw std::runtime_error(
+    "TypeError: numpy.linalg." + function +
+    " currently supports only constant 2D real numeric matrices");
+}
+
+exprt numpy_call_expr::constant_linalg(
+  const std::string &function,
+  const std::vector<std::vector<double>> &m)
+{
+  if (function == "inv")
+    return linalg_inverse(m);
+  if (function != "det")
+    return linalg_decomposition(function, m);
+  if (const std::optional<double> computed = exact_det(m))
+    return lapack_value(*computed, 0.0);
+  if (structurally_singular(m))
+    return lapack_value(0.0, 0.0);
+  const double exact = cofactor_det(m);
+  return lapack_value(exact, det_radius(m, exact));
+}
+
+namespace
+{
+// The fault NumPy's solve raises for its right-hand side.
+std::optional<linalg_fault>
+solve_rhs_fault(const std::vector<int> &shape, std::size_t n)
+{
+  if (shape.empty())
+    return linalg_fault{
+      "ValueError",
+      "solve: Input operand 1 does not have enough dimensions (has 0, gufunc "
+      "core with signature (m,m),(m,n)->(m,n) requires 2)"};
+  if (shape.size() > 1)
+    throw std::runtime_error(
+      "TypeError: numpy.linalg.solve supports only a 1D right-hand side");
+  if (static_cast<std::size_t>(shape[0]) == n)
+    return std::nullopt;
+  return linalg_fault{
+    "ValueError",
+    "solve1: Input operand 1 has a mismatch in its core dimension 0, with "
+    "gufunc signature (m,m),(m)->(m) (size " +
+      std::to_string(shape[0]) + " is different from " + std::to_string(n) +
+      ")"};
+}
+} // namespace
+
+static std::vector<double> real_parts(const std::vector<scalar_value> &values)
+{
+  std::vector<double> parts;
+  for (const scalar_value &value : values)
+    parts.push_back(value.value.real());
+  return parts;
+}
+
+// solve(a, b), with a 1D b: both operands are evaluated before a shape
+// NumPy refuses raises, the matrix's faults first.
+exprt numpy_call_expr::linalg_solve_call(
+  const nlohmann::json &original_a,
+  const nlohmann::json &original_b,
+  nlohmann::json a,
+  nlohmann::json b)
+{
+  unwrap_linalg_operand(a);
+  unwrap_linalg_operand(b);
+  const std::optional<linalg_fault> literal = literal_fault(a, true);
+  std::vector<std::vector<scalar_value>> matrix;
+  std::vector<scalar_value> rhs;
+  if (literal)
+  {
+    std::optional<std::vector<int>> b_shape;
+    runtime_entries(original_b, b_shape);
+    return raise_linalg_fault(literal->type, literal->message);
+  }
+  if (
+    !try_extract_scalar_2d_list(a, matrix) ||
+    !try_extract_scalar_1d_list(b, rhs))
+    return runtime_solve(original_a, original_b);
+  const std::vector<std::vector<double>> real =
+    checked_square_matrix("solve", matrix);
+  if (
+    const std::optional<linalg_fault> fault =
+      solve_rhs_fault({static_cast<int>(rhs.size())}, real.size()))
+    return raise_linalg_fault(fault->type, fault->message);
+  return linalg_solve("solve", real, real_parts(rhs));
+}
+
+// solve over operands known only at run time.
+exprt numpy_call_expr::runtime_solve(
+  const nlohmann::json &original_a,
+  const nlohmann::json &original_b)
+{
+  std::optional<std::vector<int>> a_shape, b_shape;
+  const std::vector<std::vector<exprt>> m =
+    runtime_entries(original_a, a_shape);
+  const std::vector<std::vector<exprt>> v =
+    runtime_entries(original_b, b_shape);
+  if (!a_shape)
+    reject_linalg_operand("solve");
+  std::optional<linalg_fault> fault = shape_fault(*a_shape, true);
+  if (!fault && b_shape)
+    fault = solve_rhs_fault(*b_shape, m.size());
+  if (fault)
+    return raise_linalg_fault(fault->type, fault->message);
+  if (!b_shape)
+    reject_linalg_operand("solve");
+  return runtime_linalg("solve", m, v.front());
 }
 
 // norm of a vector, or the Frobenius norm of a matrix, with entries known
@@ -6659,8 +7066,9 @@ exprt numpy_call_expr::symbolic_norm(
   const nlohmann::json &arg,
   norm_order order)
 {
-  std::size_t rank = 0;
-  const std::vector<std::vector<exprt>> m = runtime_entries(arg, rank);
+  std::optional<std::vector<int>> shape;
+  const std::vector<std::vector<exprt>> m = runtime_entries(arg, shape);
+  const std::size_t rank = shape.value_or(std::vector<int>()).size();
   const bool sum_of_squares =
     order == norm_order::none ||
     order == (rank == 1 ? norm_order::l2 : norm_order::frobenius);
@@ -6980,12 +7388,52 @@ exprt numpy_call_expr::linalg_inverse(const std::vector<std::vector<double>> &m)
 // NumPy's LinAlgError for a singular matrix, raised where the call runs.
 void numpy_call_expr::raise_singular_matrix()
 {
-  exprt raise = converter_.get_exception_handler().gen_exception_raise(
-    "LinAlgError", "Singular matrix");
+  raise_linalg("LinAlgError", "Singular matrix", true_exprt());
+}
+
+// The exception `type` raised where the call runs, when `when` holds.
+void numpy_call_expr::raise_linalg(
+  const std::string &type,
+  const std::string &message,
+  const exprt &when)
+{
+  exprt raise =
+    converter_.get_exception_handler().gen_exception_raise(type, message);
   raise.location() = converter_.get_location_from_decl(call_);
   code_expressiont raise_code(raise);
   raise_code.location() = raise.location();
-  converter_.add_instruction(raise_code);
+  if (when.is_true())
+  {
+    converter_.add_instruction(raise_code);
+    return;
+  }
+  code_ifthenelset guard;
+  guard.cond() = when;
+  guard.then_case() = raise_code;
+  guard.location() = raise.location();
+  converter_.add_instruction(guard);
+}
+
+// A shape fault raises before the function computes anything; the value
+// returned only gives the unreachable assignment a type of the right form.
+exprt numpy_call_expr::raise_linalg_fault(
+  const std::string &type,
+  const std::string &message)
+{
+  raise_linalg(type, message, true_exprt());
+  const std::string &function = function_id_.get_function();
+  const exprt zero = lapack_vector({0.0}, 0.0);
+  const exprt square = lapack_matrix({{0.0}}, 0.0);
+  if (function == "det")
+    return from_double(0.0, double_type());
+  if (function == "eigvals")
+    return double_array(
+      {make_complex(gen_zero(double_type()), gen_zero(double_type()))});
+  if (function == "eig")
+    return linalg_tuple({zero, square});
+  if (function == "svd")
+    return svd_values_only() ? zero : linalg_tuple({square, zero, square});
+  return function == "inv" ? square : zero;
 }
 
 exprt numpy_call_expr::bounded_inverse(
@@ -9053,52 +9501,16 @@ exprt numpy_call_expr::create_expr_from_call()
   if (call_["args"].size() == 1 || function_id_.get_function() == "norm")
   {
     const std::string &function = function_id_.get_function();
-    if (function == "det")
-    {
-      nlohmann::json arg = call_["args"][0];
-      resolve_var(arg);
-      unwrap_linalg_operand(arg);
-
-      std::vector<std::vector<scalar_value>> matrix;
-      if (!try_extract_scalar_2d_list(arg, matrix))
-        return symbolic_det(call_["args"][0], contains_string_constant(arg));
-
-      const std::vector<std::vector<double>> real =
-        checked_square_matrix(function, matrix);
-      if (const std::optional<double> computed = exact_det(real))
-        return lapack_value(*computed, 0.0);
-      if (structurally_singular(real))
-        return lapack_value(0.0, 0.0);
-      const double exact = cofactor_det(real);
-      return lapack_value(exact, det_radius(real, exact));
-    }
-
-    auto unwrap_np_array_arg = [&resolve_var, this](nlohmann::json &arg) {
-      resolve_var(arg);
-      unwrap_linalg_operand(arg);
-    };
-
-    if (function == "inv")
-    {
-      nlohmann::json arg = call_["args"][0];
-      unwrap_np_array_arg(arg);
-
-      std::vector<std::vector<scalar_value>> matrix;
-      if (!try_extract_scalar_2d_list(arg, matrix))
-        throw std::runtime_error(
-          "TypeError: numpy.linalg.inv currently supports only constant 2D "
-          "numeric arrays");
-
-      return linalg_inverse(checked_square_matrix(function, matrix));
-    }
+    static const std::set<std::string> matrix_functions = {
+      "det", "inv", "eig", "eigvals", "svd"};
+    if (matrix_functions.count(function) != 0)
+      return linalg_unary(function, resolve_var);
 
     if (function == "norm")
-      return linalg_norm(unwrap_np_array_arg);
-
-    static const std::set<std::string> decompositions = {
-      "eig", "eigvals", "svd"};
-    if (decompositions.count(function) != 0)
-      return linalg_decomposition(function, linalg_matrix(unwrap_np_array_arg));
+      return linalg_norm([&resolve_var, this](nlohmann::json &arg) {
+        resolve_var(arg);
+        unwrap_linalg_operand(arg);
+      });
 
     if (is_complex_function(function))
     {
@@ -9654,36 +10066,7 @@ exprt numpy_call_expr::create_expr_from_call()
     resolve_var(rhs);
 
     if (function == "solve")
-    {
-      unwrap_linalg_operand(lhs);
-      unwrap_linalg_operand(rhs);
-
-      std::vector<std::vector<scalar_value>> A;
-      if (!try_extract_scalar_2d_list(lhs, A))
-        throw std::runtime_error(
-          "TypeError: numpy.linalg.solve requires a constant 2D numeric "
-          "matrix as first argument");
-
-      const std::vector<std::vector<double>> real =
-        checked_square_matrix(function, A);
-      const std::size_t n = real.size();
-
-      std::vector<scalar_value> b;
-      if (!try_extract_scalar_1d_list(rhs, b))
-        throw std::runtime_error(
-          "TypeError: numpy.linalg.solve requires a constant 1D numeric "
-          "array as second argument");
-
-      if (b.size() != n)
-        throw std::runtime_error(
-          "ValueError: numpy.linalg.solve: matrix and vector sizes are "
-          "incompatible");
-
-      std::vector<double> rhs_values;
-      for (const scalar_value &value : b)
-        rhs_values.push_back(value.value.real());
-      return linalg_solve(function, real, rhs_values);
-    }
+      return linalg_solve_call(original_lhs, original_rhs, lhs, rhs);
 
     if (should_fallback_to_numpy_model(function))
       return function_call_expr::get();
