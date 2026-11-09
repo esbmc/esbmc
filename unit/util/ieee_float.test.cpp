@@ -1,6 +1,10 @@
 #define CATCH_CONFIG_MAIN
 #include <catch2/catch.hpp>
+#include <cfenv>
 #include <cmath>
+#include <cstdint>
+#include <cstring>
+#include <random>
 #include <util/arith/ieee_float.h>
 
 TEST_CASE("ieee float can handle 1", "[core][util][ieee_floatt]")
@@ -113,5 +117,58 @@ TEST_CASE("ieee float classifies infinities", "[core][util][ieee_floatt]")
 
     REQUIRE(subnormal.is_finite());
     REQUIRE_FALSE(subnormal.is_normal());
+  }
+}
+
+TEST_CASE(
+  "ieee float division is correctly rounded",
+  "[core][util][ieee_floatt]")
+{
+  // #10172: a quotient just above a halfway point must not round as a tie.
+  const std::pair<int, ieee_floatt::rounding_modet> modes[] = {
+    {FE_TONEAREST, ieee_floatt::ROUND_TO_EVEN},
+    {FE_TOWARDZERO, ieee_floatt::ROUND_TO_ZERO},
+    {FE_UPWARD, ieee_floatt::ROUND_TO_PLUS_INF},
+    {FE_DOWNWARD, ieee_floatt::ROUND_TO_MINUS_INF}};
+
+  std::mt19937_64 rng(10172);
+  for (unsigned i = 0; i < 20000; ++i)
+  {
+    // Every fourth operand is subnormal.
+    uint64_t bits[2];
+    for (uint64_t &b : bits)
+    {
+      b = rng();
+      if (rng() % 4 == 0)
+        b &= 0x800fffffffffffffULL;
+    }
+    double a, b;
+    std::memcpy(&a, &bits[0], sizeof a);
+    std::memcpy(&b, &bits[1], sizeof b);
+    if (std::isnan(a) || std::isnan(b))
+      continue;
+
+    for (const auto &[host_mode, mode] : modes)
+    {
+      std::fesetround(host_mode);
+      volatile double va = a, vb = b;
+      const double expected = va / vb;
+      std::fesetround(FE_TONEAREST);
+
+      ieee_floatt x, y;
+      x.from_double(a);
+      y.from_double(b);
+      x.rounding_mode = mode;
+      x /= y;
+
+      CAPTURE(a, b, host_mode, expected, x.to_double());
+      if (std::isnan(expected))
+        REQUIRE(std::isnan(x.to_double()));
+      else
+      {
+        REQUIRE(x.to_double() == expected);
+        REQUIRE(std::signbit(x.to_double()) == std::signbit(expected));
+      }
+    }
   }
 }
