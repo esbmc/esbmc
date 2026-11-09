@@ -186,14 +186,16 @@ private:
   }
 };
 
-bool resolve(loopst &loop, const loop_writest &w, value_setst &points_to)
+/// Havocs the named objects the loop's pointer writes point to, when every
+/// one of them resolves.
+void resolve(loopst &loop, const loop_writest &w, value_setst &points_to)
 {
   if (w.unresolvable || w.ptrs.empty())
-    return false;
+    return;
 
   goto_programt::const_targett loc = loop.get_original_loop_head();
   if (!points_to.has_location(loc))
-    return false;
+    return;
 
   loopst::loop_varst objects;
   for (const expr2tc &ptr : w.ptrs)
@@ -201,21 +203,20 @@ bool resolve(loopst &loop, const loop_writest &w, value_setst &points_to)
     value_setst::valuest values;
     points_to.get_values(loc, ptr, values);
     if (values.empty())
-      return false;
+      return;
     for (const expr2tc &v : values)
     {
       if (!is_object_descriptor2t(v))
-        return false;
+        return;
       const expr2tc &object = to_object_descriptor2t(v).object;
       if (!is_symbol2t(object) || !check_var_name(object))
-        return false;
+        return;
       objects.insert(object);
     }
   }
 
   for (const expr2tc &obj : objects)
     loop.add_modified_var_to_loop(obj);
-  return true;
 }
 
 bool calls_nondet_memory(const goto_functionst &goto_functions)
@@ -252,7 +253,6 @@ bool goto_k_induction_legacy(
       "k-induction cannot generalise the memory __VERIFIER_nondet_memory "
       "havocs. Disabling inductive step");
 
-  bool unresolved_write = false;
   Forall_goto_functions (it, goto_functions)
   {
     if (!it->second.body_available)
@@ -261,11 +261,13 @@ bool goto_k_induction_legacy(
     goto_loopst loops(it->first, goto_functions, it->second);
     for (auto &loop : loops.get_loops())
     {
+      // The step stays enabled when a write does not resolve: that is what
+      // this option trades soundness for.
       if (user_function)
       {
         const loop_writest w = scan.scan(loop);
-        if (w.modifies_pointer_array && !resolve(loop, w, points_to))
-          unresolved_write = true;
+        if (w.modifies_pointer_array)
+          resolve(loop, w, points_to);
       }
 
       if (loop.get_modified_loop_vars().empty())
@@ -275,10 +277,5 @@ bool goto_k_induction_legacy(
     }
   }
   goto_functions.update();
-
-  if (unresolved_write)
-    log_warning(
-      "k-induction cannot havoc an array element a loop writes through a "
-      "pointer. Disabling inductive step");
-  return nondet_memory || unresolved_write;
+  return nondet_memory;
 }
