@@ -1004,6 +1004,13 @@ void c_typecastt::implicit_typecast_arithmetic(expr2tc &expr1, expr2tc &expr2)
   }
 }
 
+/// Array types that differ only in attributes such as alignment (#10171).
+static bool same_array_shape(const typet &a, const typet &b)
+{
+  return a.is_array() && b.is_array() && a.subtype() == b.subtype() &&
+         to_array_type(a).size() == to_array_type(b).size();
+}
+
 void c_typecastt::do_typecast(exprt &dest, const typet &type)
 {
   // special case: array -> pointer is actually
@@ -1013,6 +1020,12 @@ void c_typecastt::do_typecast(exprt &dest, const typet &type)
 
   if (dest_type.is_array() || dest_type.is_incomplete_array())
   {
+    if (same_array_shape(dest_type, ns.follow(type)))
+    {
+      dest.type() = type;
+      return;
+    }
+
     if (dest.id() == "if")
     {
       // Special case: if expression
