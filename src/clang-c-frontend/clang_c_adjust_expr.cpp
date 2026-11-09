@@ -1331,6 +1331,21 @@ bool clang_c_adjust::lower_complex_compound_assignment(exprt &expr)
   return true;
 }
 
+/// An E1 wider than int with no rank (rank_integer) misses the usual
+/// conversions, and the IREP2 round trip drops computation_type before
+/// remove_assignment.
+static void promote_to_computation_type(exprt &expr, const namespacet &ns)
+{
+  const typet &computation_type =
+    static_cast<const typet &>(expr.find("computation_type"));
+  exprt &op0 = expr.op0();
+  if (
+    computation_type.is_not_nil() &&
+    (op0.type().is_unsignedbv() || op0.type().is_signedbv()) &&
+    op0.type() != computation_type)
+    gen_typecast(ns, op0, computation_type);
+}
+
 void clang_c_adjust::adjust_side_effect_assignment(exprt &expr)
 {
   const irep_idt &statement = expr.statement();
@@ -1382,6 +1397,7 @@ void clang_c_adjust::adjust_side_effect_assignment(exprt &expr)
   }
 
   gen_typecast_arithmetic(ns, op0, op1);
+  promote_to_computation_type(expr, ns);
 }
 
 void clang_c_adjust::adjust_side_effect_function_call(

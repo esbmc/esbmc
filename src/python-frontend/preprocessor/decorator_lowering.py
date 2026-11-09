@@ -178,9 +178,10 @@ def _applied_clone(decorator, definition, value, clone_name):
     return clone, ast.Call(func=applied, args=[value], keywords=[])
 
 
-def _rebind(function, defined, original, module_name):
+def _rebind(function, defined, original, module_name, lift_only=False):
     """`def f` renamed, then `f = d1(d2(renamed))`, as Python applies them;
-    a factory `@d(a)` applies `d(a)`.
+    a factory `@d(a)` applies `d(a)`. With `lift_only`, None unless every
+    wrapper lifts, leaving `function` as it was.
 
     Each application calls its own copy of the decorator. A nested function
     is one static function here, so the function a wrapper captures would
@@ -198,6 +199,8 @@ def _rebind(function, defined, original, module_name):
             statements.extend(lifted)
             value = ast.Name(id=lifted[-1].name, ctx=ast.Load())
             continue
+        if lift_only:
+            return None
         clone, value = _applied_clone(decorator, definition, value, clone_name)
         statements.append(clone)
     function.name = UNDECORATED_PREFIX + name
@@ -360,6 +363,27 @@ def _declare_new_attributes(cls, stores):
     cls.body[:0] = declarations
 
 
+def _lower_body_decorators(function, module_name):
+    """Lower each def of the body of `function` decorated only by defs that
+    body binds once before it, when every wrapper lifts. The lifted def reads
+    a free name where the wrapper would: the decorator binds only its
+    parameter and the wrapper."""
+    if any(isinstance(n, (ast.Global, ast.Nonlocal)) for n in ast.walk(function)):
+        return
+    bind_counts = Counter(name for node in ast.walk(function) for name in _bound_names(node))
+    defined, original, body = {}, {}, []
+    for stmt in function.body:
+        body.append(stmt)
+        if not isinstance(stmt, ast.FunctionDef):
+            continue
+        original[id(stmt)] = list(stmt.decorator_list)
+        if stmt.decorator_list and all(_is_user_decorator(d, defined) for d in stmt.decorator_list):
+            body.extend(_rebind(stmt, defined, original, module_name, lift_only=True) or [])
+        if bind_counts[stmt.name] == 1:
+            defined[stmt.name] = stmt
+    function.body = body
+
+
 def _refuse_later_decorators(function, user_functions, defined, module_name):
     """Refuse a decorator this program defines only further down."""
     for decorator in function.decorator_list:
@@ -425,5 +449,8 @@ def lower_user_decorators(module, module_name):
             body.extend(_rebind(stmt, defined, original, module_name))
         defined[name] = stmt
     module.body = body
+    for node in list(ast.walk(module)):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            _lower_body_decorators(node, module_name)
     _refuse_nested_decorators(module, user_functions, module_name)
     _refuse_local_decorators(module, module_name)
