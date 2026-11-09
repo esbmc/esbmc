@@ -1071,6 +1071,11 @@ void interval_domaint::transform(
     // Let's do an assignment for all parameters!
     for (size_t i = 0; i < function.arguments.size(); i++)
     {
+      // Unnamed parameters of a prototype share the empty name, so their
+      // intervals would collide in the map.
+      if (function.argument_names[i].empty())
+        continue;
+
       const type2tc &arg_type = function.arguments[i];
       const expr2tc arg_symbol =
         symbol2tc(arg_type, function.argument_names[i]);
