@@ -9,6 +9,8 @@ import math
 
 pi: float = math.pi
 e: float = math.e
+inf: float = math.inf
+nan: float = math.nan
 
 
 # Stubs for type inference.
@@ -183,6 +185,70 @@ def log10(x: float) -> float:
 
 def sinh(x: float) -> float:
     return math.sinh(x)
+
+
+def isnan(x: float) -> bool:
+    return math.isnan(x)
+
+
+def isinf(x: float) -> bool:
+    return math.isinf(x)
+
+
+def isfinite(x: float) -> bool:
+    return math.isfinite(x)
+
+
+def expm1(x: float) -> float:
+    return math.expm1(x)
+
+
+def log1p(x: float) -> float:
+    return math.log1p(x)
+
+
+def exp2(x: float) -> float:
+    return math.exp2(x)
+
+
+def arcsinh(x: float) -> float:
+    return math.asinh(x)
+
+
+def arccosh(x: float) -> float:
+    return math.acosh(x)
+
+
+def arctanh(x: float) -> float:
+    return math.atanh(x)
+
+
+def asinh(x: float) -> float:
+    return math.asinh(x)
+
+
+def acosh(x: float) -> float:
+    return math.acosh(x)
+
+
+def atanh(x: float) -> float:
+    return math.atanh(x)
+
+
+def cbrt(x: float) -> float:
+    return math.cbrt(x)
+
+
+def hypot(x: float, y: float) -> float:
+    return math.hypot(x, y)
+
+
+def arctan2(y: float, x: float) -> float:
+    return math.atan2(y, x)
+
+
+def atan2(y: float, x: float) -> float:
+    return math.atan2(y, x)
 
 
 def cosh(x: float) -> float:

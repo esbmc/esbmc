@@ -666,7 +666,8 @@ bool dynamic_type_handler::joins_divergent_kinds(
 
 void dynamic_type_handler::declare_dynamic_type_names(
   const std::unordered_set<std::string> &dynamic_type_names,
-  const nlohmann::json &ast_node)
+  const nlohmann::json &ast_node,
+  bool copy_existing)
 {
   for (const auto &name : dynamic_type_names)
   {
@@ -718,7 +719,7 @@ void dynamic_type_handler::declare_dynamic_type_names(
       // Initialize from the pre-existing value, in case something reads the
       // alias before a branch's assign() runs.
       // A name declared Any holds no scalar to copy, and both arms assign it.
-      if (existing_symbol->get_type() == any_type())
+      if (!copy_existing || existing_symbol->get_type() == any_type())
         continue;
       exprt existing_value = build_symbol(*existing_symbol);
       for (const codet &instr : build_tag_field_assigns(

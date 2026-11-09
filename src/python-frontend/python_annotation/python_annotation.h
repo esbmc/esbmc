@@ -245,6 +245,8 @@ private:
   function_signature(const function_values::candidate &function);
   std::string
   function_value_return_type(const Json &value, const Json *call = nullptr);
+  std::optional<std::string>
+  named_call_type(const Json &call, const Json &body);
   InferResult
   infer_type(const Json &stmt, const Json &body, std::string &inferred_type);
   // True for a `np.<ctor>(...)` call node (module or aliased), where <ctor>
