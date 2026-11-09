@@ -1,0 +1,5 @@
+CORE
+main.py
+
+^\s*assertion v == .*1$
+^VERIFICATION FAILED$
