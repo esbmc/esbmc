@@ -2125,6 +2125,21 @@ static bool union_has_none(const Json &slice)
   return false;
 }
 
+/// The type the first top-level return of \p body gives, when it holds for
+/// every return: an Any fallback says nothing, yet a caller returning this
+/// call would be annotated Any and converted with an int return (#8358); a
+/// None one misses a value a nested return yields (#9815).
+inline std::string known_fallback_return_type(
+  const std::string &fallback_type,
+  const nlohmann::json &body)
+{
+  if (
+    fallback_type == "Any" ||
+    (fallback_type == "NoneType" && has_return_value(body)))
+    return "";
+  return fallback_type;
+}
+
 template <class Json>
 std::string python_annotation<Json>::get_function_return_type(
   const std::string &func_name,
@@ -2365,9 +2380,7 @@ std::string python_annotation<Json>::get_function_return_type(
       }
       current_func_name_context_ = saved_fallback_ctx;
       functions_in_analysis_.erase(func_name);
-      // An Any fallback says nothing, yet a caller returning this call would
-      // be annotated Any and converted with an int return (#8358)
-      return fallback_type == "Any" ? "" : fallback_type;
+      return known_fallback_return_type(fallback_type, func_elem["body"]);
     }
 
     // If function has no explicit return statements, assume void/None
@@ -2732,6 +2745,40 @@ static bool binds_name_in(const Json *scope, const std::string &name)
   return scope != nullptr && json_utils::count_name_bindings(*scope, name) > 0;
 }
 
+/// Whether a statement in `stmts`, or in a module-level `if`, `try`, loop or
+/// `with` block under them, assigns `name` (g = f).
+static bool assigns_name_at_module_level(
+  const nlohmann::json &stmts,
+  const std::string &name)
+{
+  for (const auto &stmt : stmts)
+  {
+    const std::string stype = stmt.value("_type", "");
+    if (stype == "Assign" && stmt.contains("targets"))
+    {
+      for (const auto &t : stmt["targets"])
+        if (t.contains("id") && t["id"] == name)
+          return true;
+    }
+    if (
+      stype == "FunctionDef" || stype == "AsyncFunctionDef" ||
+      stype == "ClassDef")
+      continue;
+    for (const char *field : {"body", "orelse", "finalbody"})
+      if (
+        stmt.contains(field) && stmt[field].is_array() &&
+        assigns_name_at_module_level(stmt[field], name))
+        return true;
+    if (stmt.contains("handlers"))
+      for (const auto &handler : stmt["handlers"])
+        if (
+          handler.contains("body") &&
+          assigns_name_at_module_level(handler["body"], name))
+          return true;
+  }
+  return false;
+}
+
 /// Whether `name` is a variable that may hold a function or a callable
 /// instance, whose calls the converter types instead.
 template <class Json>
@@ -2740,18 +2787,13 @@ bool python_annotation<Json>::holds_callable_value(
 {
   const nlohmann::json &body =
     static_cast<const nlohmann::json &>(ast_["body"]);
+  if (assigns_name_at_module_level(body, name))
+    return true;
   for (const auto &stmt : body)
   {
     if (!stmt.contains("_type"))
       continue;
     const std::string &stype = stmt["_type"];
-    // Top-level assignment: g = f
-    if (stype == "Assign" && stmt.contains("targets"))
-    {
-      for (const auto &t : stmt["targets"])
-        if (t.contains("id") && t["id"] == name)
-          return true;
-    }
     // A callable instance: s = S() is already annotated as s: S
     if (
       stype == "AnnAssign" && stmt["target"].value("id", "") == name &&
@@ -7183,10 +7225,14 @@ std::string python_annotation<Json>::optional_scalar_of(
     const Json &value = (*store)["value"];
     return value.value("_type", "") == "Constant" && value["value"].is_null();
   };
+  // A call can return None too (#10075); its type is inferred below.
+  auto may_store_none = [&](const Json *store) {
+    return stores_none(store) || (*store)["value"].value("_type", "") == "Call";
+  };
   std::vector<const Json *> stores;
   collect_name_stores(name, scope["body"], stores);
   if (
-    std::none_of(stores.begin(), stores.end(), stores_none) ||
+    std::none_of(stores.begin(), stores.end(), may_store_none) ||
     json_utils::count_name_bindings(scope, name) != stores.size())
     return "";
 
@@ -7205,7 +7251,8 @@ std::string python_annotation<Json>::optional_scalar_of(
   if (types.erase("NoneType") == 0 || types.size() != 1)
     return "";
   const std::string &scalar = *types.begin();
-  return scalar == "int" || scalar == "float" || scalar == "bool"
+  return scalar == "int" || scalar == "float" || scalar == "bool" ||
+             scalar == "str"
            ? "Optional[" + scalar + "]"
            : "";
 }

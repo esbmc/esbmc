@@ -1242,6 +1242,31 @@ void python_converter::reject_attribute_class_change(
     "'; an attribute holding instances of unrelated classes is not modelled");
 }
 
+/// A constructor stored into a list slot builds its instance at the class the
+/// slot already holds, and element reads keep that class, so a slot given an
+/// instance of another class, a subclass included, would be read as the old
+/// one.
+void python_converter::reject_list_slot_class_change(
+  const exprt &lhs,
+  const nlohmann::json &ast_node,
+  bool is_ctor_call)
+{
+  if (!is_ctor_call || !python_list::is_element_store_target(lhs))
+    return;
+  const std::string held = user_class_of(lhs.type());
+  const std::string assigned =
+    get_typechecker().get_constructor_name(ast_node["value"]["func"]);
+  if (
+    held.empty() || held == assigned ||
+    !json_utils::is_class(assigned, *ast_json))
+    return;
+  throw std::runtime_error(
+    "unsupported: a list element holding a '" + held + "' is assigned a new '" +
+    assigned +
+    "'; constructing another class into a list element is not "
+    "modelled");
+}
+
 /// An attribute keeps the scalar type it first holds, so storing a value its
 /// type cannot hold (an int attribute given a float or a str) would convert
 /// it rather than rebind it (#8381). An int into a float attribute is exact.
@@ -1312,6 +1337,9 @@ bool python_converter::store_optional_str(
     !type_utils::is_optional_str_pointer(lhs.type()) ||
     !type_utils::is_string_type(rhs.type()) || rhs.type() == lhs.type())
     return false;
+  // A call writes its result through its return destination.
+  if (rhs.is_function_call())
+    return true;
   if (rhs.type().is_array())
     rhs = string_handler_.get_array_base_address(rhs);
   rhs = typecast_exprt(rhs, lhs.type());
@@ -1352,6 +1380,34 @@ static exprt char_as_string(const exprt &rhs, const typet &target)
   return str;
 }
 
+void python_converter::adopt_none_rhs(
+  symbolt &lhs_symbol,
+  exprt &lhs,
+  exprt &rhs)
+{
+  // None/Optional unification (#4796), step C: when the lvalue is already a
+  // class reference (`Class*` — a migrated instance), keep that type and
+  // store a typed NULL, so a later `x = Class(...)` construction allocates
+  // a properly-sized object. Retyping it to none_type() (pointer-to-bool)
+  // would shrink the pointee and corrupt the allocation.
+  // An Optional[dict] keeps its dict pointer type the same way.
+  if (keeps_pointer_type_on_none(lhs.type()))
+  {
+    // A call stores its NULL result through its return destination.
+    if (!rhs.is_function_call())
+      rhs = typecast_exprt(rhs, lhs.type());
+  }
+  // A call's None result is wrapped into the Optional once the call is
+  // built (wrap_call_result_in_optional).
+  else if (
+    !rhs.is_function_call() || !type_utils::is_optional_struct(lhs.type()))
+  {
+    // Adjust pointer_type() to pointer_typet(empty_typet())
+    lhs_symbol.set_type(migrate_type(rhs.type()));
+    lhs.type() = rhs.type();
+  }
+}
+
 void python_converter::handle_assignment_type_adjustments(
   symbolt *lhs_symbol,
   exprt &lhs,
@@ -1361,6 +1417,7 @@ void python_converter::handle_assignment_type_adjustments(
   bool is_ctor_call)
 {
   reject_attribute_class_change(lhs, rhs, ast_node, is_ctor_call);
+  reject_list_slot_class_change(lhs, ast_node, is_ctor_call);
   reject_attribute_scalar_change(lhs, rhs);
   const bool has_annotation =
     ast_node.contains("annotation") && !ast_node["annotation"].is_null();
@@ -1567,22 +1624,7 @@ void python_converter::handle_assignment_type_adjustments(
       }
     }
     else if (rhs.type() == none_type())
-    {
-      // None/Optional unification (#4796), step C: when the lvalue is already a
-      // class reference (`Class*` — a migrated instance), keep that type and
-      // store a typed NULL, so a later `x = Class(...)` construction allocates
-      // a properly-sized object. Retyping it to none_type() (pointer-to-bool)
-      // would shrink the pointee and corrupt the allocation.
-      // An Optional[dict] keeps its dict pointer type the same way.
-      if (keeps_pointer_type_on_none(lhs.type()))
-        rhs = typecast_exprt(rhs, lhs.type());
-      else
-      {
-        // Adjust pointer_type() to pointer_typet(empty_typet())
-        lhs_symbol->set_type(migrate_type(rhs.type()));
-        lhs.type() = rhs.type();
-      }
-    }
+      adopt_none_rhs(*lhs_symbol, lhs, rhs);
     // No annotation or an inferred Any: propagate rhs type to lhs. An "Any"
     // annotation counts as inferred when flagged by the annotation pass,
     // when the preprocessor marked it as synthesized (e.g. the items()-loop
@@ -5717,9 +5759,9 @@ void python_converter::widen_int_target_for_float_call(
   update_symbol(lhs);
 }
 
-// A result stored to an Optional of its own type must be wrapped, so the call
-// writes a temporary first (#9055). Another type would need a conversion that
-// loses the result's type.
+// A result stored to an Optional of its own type, or a None result (#10075),
+// must be wrapped, so the call writes a temporary first (#9055). Another type
+// would need a conversion that loses the result's type, so it is refused.
 void python_converter::wrap_call_result_in_optional(
   const nlohmann::json &ast_node,
   const exprt &lhs,
@@ -5727,10 +5769,20 @@ void python_converter::wrap_call_result_in_optional(
   const locationt &location,
   codet &target_block)
 {
-  if (
-    !type_utils::is_optional_struct(lhs.type()) ||
-    to_struct_type(lhs.type()).get_component("value").type() != rhs.type())
+  if (!type_utils::is_optional_struct(lhs.type()) || rhs.type() == lhs.type())
     return;
+  const typet &value_type =
+    to_struct_type(lhs.type()).get_component("value").type();
+  if (rhs.type() != none_type())
+  {
+    // A pointer result may encode None as NULL, so it is stored unwrapped.
+    if (rhs.type().is_pointer())
+      return;
+    if (value_type != rhs.type())
+      throw std::runtime_error(
+        "storing a call result into an Optional of another type is not yet "
+        "supported");
+  }
 
   symbolt &result =
     create_tmp_symbol(ast_node, "$call_result$", rhs.type(), exprt());
@@ -5835,6 +5887,7 @@ void python_converter::handle_function_call_rhs(
   if (rhs.type().is_pointer() && !is_ctor_call)
   {
     rhs.op0() = lhs;
+    wrap_call_result_in_optional(ast_node, lhs, rhs, location, target_block);
   }
   else if (!rhs.type().is_pointer() && !rhs.type().is_empty() && !is_ctor_call)
   {
@@ -7049,11 +7102,26 @@ bool python_converter::element_kinds_differ(
   return !ka.empty() && !kb.empty() && ka != kb;
 }
 
+/// The list arm of `None if c else xs` (or `xs if c else None`): the None arm
+/// holds no elements, so the binding's element types are the list arm's.
+static const exprt &list_arm_of_optional(const exprt &rhs)
+{
+  if (rhs.id() != "if")
+    return rhs;
+  const if_exprt &ite = to_if_expr(rhs);
+  if (ite.true_case().is_zero())
+    return ite.false_case();
+  if (ite.false_case().is_zero())
+    return ite.true_case();
+  return rhs;
+}
+
 void python_converter::propagate_list_type_info(
   const exprt &lhs,
-  const exprt &rhs,
+  const exprt &assigned,
   symbolt *lhs_symbol)
 {
+  const exprt &rhs = list_arm_of_optional(assigned);
   const std::string &lhs_identifier = lhs.identifier().as_string();
   const std::string &rhs_identifier = rhs.identifier().as_string();
   // The registry keeps one record per name, so a rebinding under a branch or
@@ -7504,6 +7572,15 @@ bool python_converter::try_numpy_nditer_assign(const nlohmann::json &ast_node)
     numpy_nditer_items_.erase(
       numpy_nditer::key(current_func_name_, target["id"].get<std::string>()));
   return false;
+}
+
+/// The symbol whose recorded string length @p rhs carries: a nondet_str()
+/// value is the address of its buffer's first byte.
+static const exprt &string_buffer_of(const exprt &rhs)
+{
+  if (rhs.id() == "address_of" && rhs.op0().id() == "index")
+    return rhs.op0().op0();
+  return rhs;
 }
 
 void python_converter::get_var_assign(
@@ -8392,9 +8469,10 @@ void python_converter::get_var_assign(
     // Must run before type-branching which may take early returns.
     if (lhs.is_symbol())
     {
-      if (rhs.is_symbol())
+      const exprt &named = string_buffer_of(rhs);
+      if (named.is_symbol())
       {
-        const std::string rhs_id = rhs.identifier().as_string();
+        const std::string rhs_id = named.identifier().as_string();
         auto it = input_str_to_len_sym_.find(rhs_id);
         if (it != input_str_to_len_sym_.end())
           input_str_to_len_sym_[lhs.identifier().as_string()] = it->second;
@@ -9332,6 +9410,20 @@ static exprt coerce_ternary_branch(
   return typecast_exprt(branch, result_type);
 }
 
+/// A result temp for `None if c else xs` takes the element types of xs.
+static void copy_optional_list_arm_types(
+  element_type_registry &registry,
+  const exprt &then,
+  const exprt &else_expr,
+  bool then_is_none,
+  bool else_is_none,
+  const std::string &result_id)
+{
+  const exprt &value_arm = then_is_none ? else_expr : then;
+  if (then_is_none != else_is_none && value_arm.is_symbol())
+    registry.assign_from(value_arm.identifier().as_string(), result_id);
+}
+
 exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
 {
   // A walrus in a `while` test binds into the condition prelude, which runs
@@ -9641,12 +9733,7 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
       cond = result_expr;
     }
   }
-  // An operand converted here is not guarded by the while test's prelude, so
-  // a walrus in a `while` test takes the general path, whose and/or lowering
-  // refuses it.
-  else if (
-    test_type == "BoolOp" && !model_mode &&
-    !(type == "While" && contains_named_expr(ast_node["test"])))
+  else if (test_type == "BoolOp" && !model_mode)
     cond = get_flat_boolop_test(ast_node["test"], to_bool_condition);
   else if (has_nested_call)
   {
@@ -9876,6 +9963,13 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
         create_return_temp_variable(result_type, location, "ternary_result");
       symbol_table_.add(result_symbol);
       exprt result_expr = symbol_expr(result_symbol);
+      copy_optional_list_arm_types(
+        element_type_registry_,
+        then,
+        else_expr,
+        then_is_none,
+        else_is_none,
+        result_symbol.id.as_string());
 
       code_declt result_decl(result_expr);
       result_decl.location() = location;

@@ -1208,7 +1208,7 @@ private:
       // A function its module binds again (a second def in an `if`) is not
       // the one find_function returns.
       if (
-        !entry.from_other_module || poisoned_.count(key_member(key_name)) ||
+        !entry.from_other_module ||
         json_utils::count_name_bindings(
           *modules_[module].read, key_owner(key_name)) != 1)
         continue;
@@ -1216,11 +1216,15 @@ private:
       nlohmann::json &def =
         *key_def(modules_[module].write->at("body"), key_name);
       nlohmann::json &arg = def["args"]["args"][param];
+      // A use of the name outside a call only adds call sites, so the kinds
+      // already seen still disagree (#9828).
       if (!entry.type)
       {
         refuse_mixed_kinds(key_name, def, arg["arg"], entry.kinds);
         continue;
       }
+      if (poisoned_.count(key_member(key_name)))
+        continue;
       nlohmann::json annotation{{"_type", "Name"}, {"id", *entry.type}};
       for (const char *field :
            {"lineno", "col_offset", "end_lineno", "end_col_offset"})

@@ -8,6 +8,7 @@
 #include <functional>
 #include <memory>
 #include <sstream>
+#include <irep2/irep2_utils.h>
 #include <unordered_set>
 
 #include <util/irep/std_code.h>
@@ -73,6 +74,13 @@ void ai_baset::initialize(const goto_functionst &goto_functions)
   forall_goto_functions (it, goto_functions)
     initialize(it->second);
   find_call_cycles(goto_functions);
+  taken.emplace();
+  forall_goto_functions (f_it, goto_functions)
+    forall_goto_program_instructions (i_it, f_it->second.body)
+    {
+      get_address_taken(i_it->code, *taken);
+      get_address_taken(i_it->guard, *taken);
+    }
 }
 
 /// Tarjan's strongly connected components over the direct calls; a call

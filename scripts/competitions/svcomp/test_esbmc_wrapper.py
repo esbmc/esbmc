@@ -1101,6 +1101,7 @@ VERIFICATION FAILED
         self.assertEqual(verdict, "TRUE")
         self.assertEqual(len(calls), 1)
         self.assertIn("--memlimit " + wrapper.KIND_OVERFLOW_MEMLIMIT, calls[0])
+        self.assertIn(wrapper.KIND_OVERFLOW_INTERVALS, calls[0] + " ")
 
     def test_an_overflow_found_by_k_induction_is_kept(self):
         verdict, calls = self.run_wrapper(self.OVERFLOW, self.SUCCESSFUL)
@@ -1119,6 +1120,7 @@ VERIFICATION FAILED
         self.assertIn("--incremental-bmc", calls[1])
         self.assertNotIn("--k-induction", calls[1])
         self.assertNotIn("--memlimit", calls[1])
+        self.assertNotIn("--interval-analysis", calls[1])
 
 
 if __name__ == "__main__":
