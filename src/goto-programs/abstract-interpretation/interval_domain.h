@@ -224,9 +224,9 @@ public:
    * @param expr
    */
   void havoc_rec(const expr2tc &expr);
-  /// Forgets what a write to the lvalue \p target may change: everything when
-  /// it writes through a pointer.
-  void havoc_target(const expr2tc &target);
+  /// Forgets what a write to the lvalue \p target may change, through a
+  /// pointer as havoc_through_pointer does.
+  void havoc_target(const expr2tc &target, const ai_baset *ai = nullptr);
   void havoc_arguments(const irep_idt &function_id, const namespacet &ns);
   void apply_return(
     goto_programt::const_targett call,
@@ -235,7 +235,13 @@ public:
 
   /// Forget what a body-less call that symex models may write through its
   /// pointer arguments (#8083).
-  void havoc_written_arguments(const code_function_call2t &call);
+  void havoc_written_arguments(
+    const code_function_call2t &call,
+    const ai_baset *ai = nullptr);
+
+  /// Forgets what a write through an unknown pointer may change: what \p ai
+  /// found address-taken, or everything without it.
+  void havoc_through_pointer(const ai_baset *ai);
 
   /// Havoc the variable @p arg points into; false when that is unknown and
   /// @p arg, a pointer or @p any_type, may still have been written through.
