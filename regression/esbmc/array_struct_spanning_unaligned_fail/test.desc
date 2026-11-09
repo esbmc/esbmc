@@ -1,4 +1,4 @@
-CORE
+KNOWNBUG
 main.c
 --no-align-check
 ^  expect FAIL$

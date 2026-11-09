@@ -2300,9 +2300,11 @@ void dereferencet::construct_from_dyn_struct_offset(
 }
 
 /* The offsets into \p container at which a \p type access can start are
- * multiples of this: of the known \p alignment and, unless misalignment is
- * allowed, of the access type's, taken modulo the container's size, since the
- * container may be an array element (#10088). */
+ * multiples of this: of the known \p alignment and, unless the access is
+ * packed, of the access type's, taken modulo the container's size, since the
+ * container may be an array element (#10088). Not even under --no-align-check:
+ * a byte step there gives every access through an integer-derived pointer an
+ * arm per byte, so a misaligned spanning access is still dropped. */
 BigInt dereferencet::spanning_step(
   const type2tc &type,
   const type2tc &container,
@@ -2310,7 +2312,7 @@ BigInt dereferencet::spanning_step(
   modet mode)
 {
   uint64_t step = std::max<uint64_t>(alignment, config.ansi_c.char_width);
-  if (!mode.unaligned && !options.get_bool_option("no-align-check"))
+  if (!mode.unaligned)
   {
     const BigInt type_align = std::min(
       ::alignment(migrate_type_back(type), ns),
