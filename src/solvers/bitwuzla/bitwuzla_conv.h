@@ -174,6 +174,10 @@ public:
   bitwuzla::TermManager tm;
   bitwuzla::Options bitw_options;
   std::unique_ptr<bitwuzla::Bitwuzla> bitw;
+  bool out_of_memory = false;
+
+  template <typename callt>
+  bitwuzla::Result check_sat_or_poison(callt call);
 
   symtabt symtable;
 
