@@ -387,4 +387,50 @@ void ai_baset::sequential_fixedpoint(
 
   if (f_it != goto_functions.function_map.end())
     fixedpoint(f_it->second.body, goto_functions, ns);
+
+  if (!taken)
+    return;
+
+  // A call through a function pointer enters no body (do_function_call_rec),
+  // so a function whose address is taken, or one such a function calls
+  // directly, may start from any state. A body not reached here keeps no
+  // constraints and stays unanalysed, which keeps thread bodies, whose
+  // globals other threads write, out of this sequential analysis.
+  std::unordered_set<irep_idt, irep_id_hash> any_entry;
+  std::vector<irep_idt> work(taken->begin(), taken->end());
+  while (!work.empty())
+  {
+    const irep_idt f = work.back();
+    work.pop_back();
+    const auto it = goto_functions.function_map.find(f);
+    if (
+      it == goto_functions.function_map.end() || !it->second.body_available ||
+      !any_entry.insert(f).second)
+      continue;
+    forall_goto_program_instructions (i_it, it->second.body)
+      if (i_it->is_function_call())
+      {
+        const expr2tc &callee = to_code_function_call2t(i_it->code).function;
+        if (is_symbol2t(callee))
+          work.push_back(to_symbol2t(callee).thename);
+      }
+  }
+
+  for (bool changed = true; changed;)
+  {
+    changed = false;
+    forall_goto_functions (it, goto_functions)
+    {
+      const goto_programt::const_targett l_begin =
+        it->second.body.instructions.begin();
+      if (!any_entry.count(it->first) || get_state(l_begin).is_bottom())
+        continue;
+      any_entry.erase(it->first);
+      changed = true;
+      std::unique_ptr<statet> entry(make_temporary_state(get_state(l_begin)));
+      entry->make_entry();
+      if (merge(*entry, l_begin, l_begin))
+        fixedpoint(it->second.body, goto_functions, ns);
+    }
+  }
 }

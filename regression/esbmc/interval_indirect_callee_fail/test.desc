@@ -1,0 +1,5 @@
+CORE
+main.c
+--interval-analysis
+^\s+FAILED\s+\[g\.assertion\.1\]\s+line\s+3\s+a may be 5$
+^VERIFICATION FAILED$

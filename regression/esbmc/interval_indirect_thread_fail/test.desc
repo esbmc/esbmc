@@ -1,0 +1,5 @@
+CORE
+main.c
+--interval-analysis
+^\s+FAILED\s+\[w\.assertion\.1\]\s+line\s+6\s+main may write g$
+^VERIFICATION FAILED$
