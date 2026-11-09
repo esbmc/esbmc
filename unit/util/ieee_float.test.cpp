@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <cstring>
 #include <random>
+#include <vector>
 #include <util/arith/ieee_float.h>
 
 TEST_CASE("ieee float can handle 1", "[core][util][ieee_floatt]")
@@ -131,6 +132,18 @@ TEST_CASE(
     {FE_UPWARD, ieee_floatt::ROUND_TO_PLUS_INF},
     {FE_DOWNWARD, ieee_floatt::ROUND_TO_MINUS_INF}};
 
+  std::vector<std::pair<double, double>> operands;
+
+  // k / (2^53 - c) has a long run of zeros after its 54th bit, so a quotient
+  // truncated there lands on a halfway point; also with subnormal dividends.
+  for (int k = 1; k <= 64; ++k)
+    for (int c = 1; c <= 64; ++c)
+    {
+      const double b = 9007199254740992.0 - c;
+      operands.emplace_back(k, b);
+      operands.emplace_back(std::ldexp(k, -1074), std::ldexp(b, -100));
+    }
+
   std::mt19937_64 rng(10172);
   for (unsigned i = 0; i < 20000; ++i)
   {
@@ -145,9 +158,12 @@ TEST_CASE(
     double a, b;
     std::memcpy(&a, &bits[0], sizeof a);
     std::memcpy(&b, &bits[1], sizeof b);
-    if (std::isnan(a) || std::isnan(b))
-      continue;
+    if (!std::isnan(a) && !std::isnan(b))
+      operands.emplace_back(a, b);
+  }
 
+  for (const auto &[a, b] : operands)
+  {
     for (const auto &[host_mode, mode] : modes)
     {
       std::fesetround(host_mode);

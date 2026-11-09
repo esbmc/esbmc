@@ -2,3 +2,4 @@ CORE
 main.c
 --64
 ^VERIFICATION FAILED$
+assertion c == 0x1p-53
