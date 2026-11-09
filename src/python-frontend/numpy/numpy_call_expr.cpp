@@ -6320,14 +6320,27 @@ unit_eigenvector_2x2(const std::vector<std::vector<double>> &m, double lambda)
   return {u[0] / length, u[1] / length};
 }
 
-// `v` or -v, as LAPACK's eigenvectors have an arbitrary sign.
-std::vector<exprt> numpy_call_expr::with_any_sign(const std::vector<exprt> &v)
+static std::vector<exprt>
+signed_by(const exprt &flip, const std::vector<exprt> &v)
 {
-  const exprt flip = nondet_bool();
   std::vector<exprt> column;
   for (const exprt &value : v)
     column.push_back(if_exprt(flip, negate_double(value), value));
   return column;
+}
+
+static std::vector<exprt> constant_row(const std::vector<double> &row)
+{
+  std::vector<exprt> values;
+  for (double value : row)
+    values.push_back(from_double(value, double_type()));
+  return values;
+}
+
+// `v` or -v, as LAPACK's eigenvectors have an arbitrary sign.
+std::vector<exprt> numpy_call_expr::with_any_sign(const std::vector<exprt> &v)
+{
+  return signed_by(nondet_bool(), v);
 }
 
 // A column of `lapack_value`s around `exact`, with an arbitrary sign as
@@ -6428,51 +6441,6 @@ numpy_call_expr::dense_eigenvalues(const std::vector<std::vector<double>> &m)
   return in_any_order(values);
 }
 
-// eig of a dense matrix larger than 2x2 whose eigenvalues are real and
-// distinct: the eigenvalues in any order, each within its own radius, and
-// the unit eigenvector LAPACK pairs with each, bound by its residual.
-void numpy_call_expr::dense_eigen_pairs(
-  const std::vector<std::vector<double>> &m,
-  std::vector<exprt> &values,
-  std::vector<std::vector<exprt>> &columns)
-{
-  if (m.size() > max_linalg_order)
-    throw std::runtime_error(
-      "TypeError: numpy.linalg.eig supports only matrices up to " +
-      std::to_string(max_linalg_order) + "x" +
-      std::to_string(max_linalg_order));
-  const dense_spectrum::eigen_system system =
-    dense_spectrum::real_eigen_system("eig", m);
-  std::vector<std::vector<exprt>> entries;
-  for (const auto &row : m)
-  {
-    entries.emplace_back();
-    for (double value : row)
-      entries.back().push_back(from_double(value, double_type()));
-  }
-  // Each output picks an eigenpair by a distinct slot: a constant chosen by
-  // the slot plus an offset, so that only the outputs carry the relation.
-  const std::vector<exprt> slots = permutation_slots(system.values.size());
-  double value_radius = 0.0;
-  for (double radius : system.value_radius)
-    value_radius = std::max(value_radius, radius);
-  for (const exprt &slot : slots)
-  {
-    values.push_back(selected_offset(slot, system.values, value_radius));
-    std::vector<exprt> v;
-    for (std::size_t i = 0; i < m.size(); ++i)
-    {
-      std::vector<double> components;
-      for (const auto &vector : system.vectors)
-        components.push_back(vector[i]);
-      v.push_back(selected_offset(slot, components, system.vector_radius));
-    }
-    bind_eigenvector(entries, values.back(), v);
-    columns.push_back(with_any_sign(v));
-    bind_eigenvector(entries, values.back(), columns.back());
-  }
-}
-
 // `(values, vectors)` as a Python tuple of two arrays.
 exprt numpy_call_expr::linalg_tuple(const std::vector<exprt> &parts)
 {
@@ -6542,26 +6510,87 @@ exprt numpy_call_expr::eigen_decomposition(
   return linalg_tuple({double_array(values), double_array(rows)});
 }
 
-// svd(compute_uv=False) of a 2x2 matrix: the singular values in descending
-// order, from a formula that keeps the smaller one accurate.
+namespace
+{
+// One singular value with its left and right singular vectors.
+struct singular_triple
+{
+  double sigma;
+  std::vector<double> u, v;
+};
+} // namespace
+
+// A diagonal matrix's singular values are its entries' magnitudes in
+// descending order, with unit vectors and the entry's sign kept in v.
+static std::vector<singular_triple>
+diagonal_singular_triples(const std::vector<std::vector<double>> &m)
+{
+  const std::size_t n = m.size();
+  std::vector<std::size_t> order(n);
+  std::iota(order.begin(), order.end(), 0);
+  std::stable_sort(
+    order.begin(), order.end(), [&](std::size_t i, std::size_t j) {
+      return std::fabs(m[i][i]) > std::fabs(m[j][j]);
+    });
+  std::vector<singular_triple> triples;
+  for (std::size_t k : order)
+  {
+    std::vector<double> u(n, 0.0), v(n, 0.0);
+    u[k] = 1.0;
+    v[k] = m[k][k] < 0 ? -1.0 : 1.0;
+    triples.push_back({std::fabs(m[k][k]), u, v});
+  }
+  return triples;
+}
+
+// The order of the square matrix svd decomposes.
+static std::size_t svd_order(const std::vector<std::vector<double>> &m)
+{
+  const std::size_t n = m.size();
+  if (!std::all_of(
+        m.begin(), m.end(), [n](const auto &row) { return row.size() == n; }))
+    throw std::runtime_error(
+      "TypeError: numpy.linalg.svd supports only square matrices currently");
+  if (n > max_linalg_order)
+    throw std::runtime_error(
+      "TypeError: numpy.linalg.svd supports only matrices up to " +
+      std::to_string(max_linalg_order) + "x" +
+      std::to_string(max_linalg_order));
+  return n;
+}
+
+// svd(compute_uv=False): the singular values in descending order. A 2x2
+// matrix's come from a formula that keeps the smaller one accurate, a
+// diagonal matrix's are its entries' magnitudes, and a larger matrix's are
+// within LAPACK's backward error of the extended-precision ones.
 exprt numpy_call_expr::singular_values(
   const std::vector<std::vector<double>> &m)
 {
-  if (m.size() != 2 || m[0].size() != 2 || m[1].size() != 2)
-    throw std::runtime_error(
-      "TypeError: numpy.linalg.svd currently supports only 2x2 matrices");
-  const double a = m[0][0], b = m[0][1], c = m[1][0], d = m[1][1];
-  const double largest =
-    (std::hypot(a + d, c - b) + std::hypot(a - d, b + c)) / 2;
-  const double smallest =
-    largest == 0.0 ? 0.0 : std::fabs(a * d - b * c) / largest;
-  const double radius = 1e-12 * frobenius_norm(m);
-  const exprt first = lapack_value(largest, radius);
-  const exprt second = lapack_value(smallest, radius);
-  assume_singular_order({first, second});
-  exprt array("array", array_typet(first.type(), from_integer(2, size_type())));
-  array.copy_to_operands(first, second);
-  return array;
+  const std::size_t n = svd_order(m);
+  std::vector<double> sigma;
+  double radius = 1e-12 * frobenius_norm(m);
+  if (n == 2)
+  {
+    const double a = m[0][0], b = m[0][1], c = m[1][0], d = m[1][1];
+    const double largest =
+      (std::hypot(a + d, c - b) + std::hypot(a - d, b + c)) / 2;
+    sigma = {
+      largest, largest == 0.0 ? 0.0 : std::fabs(a * d - b * c) / largest};
+  }
+  else if (is_diagonal(m))
+  {
+    for (const singular_triple &t : diagonal_singular_triples(m))
+      sigma.push_back(t.sigma);
+    radius = 0.0;
+  }
+  else
+    sigma = dense_spectrum::singular_values_of(m);
+  std::vector<exprt> values;
+  for (double value : sigma)
+    values.push_back(
+      n == 2 ? lapack_value(value, radius) : lapack_value(value, radius));
+  assume_singular_order(values);
+  return double_array(values);
 }
 
 static bool is_number_type(const typet &t)
@@ -6611,20 +6640,12 @@ select_constant(const exprt &slot, const std::vector<double> &values)
   return chosen;
 }
 
-// Any double within `radius` of the value `slot` selects, as the selected
-// value plus an offset where every such double is reachable that way.
-exprt numpy_call_expr::selected_offset(
+// Any double within `radius` of the value `slot` selects.
+exprt numpy_call_expr::selected_box(
   const exprt &slot,
   const std::vector<double> &exacts,
   double radius)
 {
-  const bool reachable =
-    std::all_of(exacts.begin(), exacts.end(), [&](double x) {
-      return radius <= std::fabs(x) / 4 || x == 0.0;
-    });
-  if (reachable)
-    return ieee_op(
-      "ieee_add", select_constant(slot, exacts), lapack_value(0.0, radius));
   std::vector<double> lows, highs;
   for (double x : exacts)
   {
@@ -6638,6 +6659,101 @@ exprt numpy_call_expr::selected_offset(
   within.location() = converter_.get_location_from_decl(call_);
   converter_.add_instruction(within);
   return result;
+}
+
+namespace
+{
+// A factor of a product: any value within `radius` of `center`.
+struct box_factor
+{
+  double center, radius;
+};
+} // namespace
+
+// An upper bound on |sum of the products - target| for every choice of the
+// factors in their boxes, evaluated in doubles: the products' spread from
+// their centres, plus the rounding of each product and sum.
+static double
+implied_bound(const std::vector<std::vector<box_factor>> &terms, double target)
+{
+  long double residual = -static_cast<long double>(target), spread = 0,
+              magnitude = std::fabs(static_cast<long double>(target));
+  for (const auto &term : terms)
+  {
+    long double centre = 1, high = 1;
+    for (const box_factor &f : term)
+    {
+      centre *= f.center;
+      high *= std::fabs(static_cast<long double>(f.center)) + f.radius;
+    }
+    residual += centre;
+    spread += high - std::fabs(centre);
+    magnitude += high;
+  }
+  return static_cast<double>(
+    2 * (std::fabs(residual) + spread + 8 * DBL_EPSILON * magnitude) + 1e-300L);
+}
+
+// eig of a dense matrix larger than 2x2 whose eigenvalues are real and
+// distinct: each eigenvalue within its radius with its unit eigenvector of
+// arbitrary sign, the pairs in any order. The residual and norm relations
+// hold at every point of those boxes, so they restrict nothing; they let a
+// solver relate the results to the matrix without exploring the boxes.
+void numpy_call_expr::dense_eigen_pairs(
+  const std::vector<std::vector<double>> &m,
+  std::vector<exprt> &values,
+  std::vector<std::vector<exprt>> &columns)
+{
+  if (m.size() > max_linalg_order)
+    throw std::runtime_error(
+      "TypeError: numpy.linalg.eig supports only matrices up to " +
+      std::to_string(max_linalg_order) + "x" +
+      std::to_string(max_linalg_order));
+  const dense_spectrum::eigen_system system =
+    dense_spectrum::real_eigen_system("eig", m);
+  const double value_radius =
+    *std::max_element(system.value_radius.begin(), system.value_radius.end());
+  const double vector_radius = system.vector_radius;
+  double residual = 0.0, norm = 0.0;
+  for (std::size_t k = 0; k < system.values.size(); ++k)
+  {
+    const std::vector<double> &v = system.vectors[k];
+    std::vector<std::vector<box_factor>> squares;
+    for (std::size_t i = 0; i < m.size(); ++i)
+    {
+      std::vector<std::vector<box_factor>> terms;
+      for (std::size_t j = 0; j < m.size(); ++j)
+        terms.push_back({{m[i][j], 0.0}, {v[j], vector_radius}});
+      terms.push_back(
+        {{-system.values[k], value_radius}, {v[i], vector_radius}});
+      residual = std::max(residual, implied_bound(terms, 0.0));
+      squares.push_back({{v[i], vector_radius}, {v[i], vector_radius}});
+    }
+    norm = std::max(norm, implied_bound(squares, 1.0));
+  }
+  std::vector<std::vector<exprt>> entries;
+  for (const auto &row : m)
+    entries.push_back(constant_row(row));
+  for (const exprt &slot : permutation_slots(system.values.size()))
+  {
+    values.push_back(selected_box(slot, system.values, value_radius));
+    std::vector<exprt> v;
+    for (std::size_t i = 0; i < m.size(); ++i)
+    {
+      std::vector<double> components;
+      for (const auto &vector : system.vectors)
+        components.push_back(vector[i]);
+      v.push_back(selected_box(slot, components, vector_radius));
+    }
+    columns.push_back(with_any_sign(v));
+    bind_eigenvector(
+      entries,
+      values.back(),
+      columns.back(),
+      from_double(residual, double_type()),
+      from_double(norm, double_type()),
+      false_exprt());
+  }
 }
 
 static exprt abs_double(const exprt &value)
@@ -7081,28 +7197,25 @@ numpy_call_expr::runtime_eigenvalues(const std::vector<std::vector<exprt>> &m)
   return {{re1, im1}, {re2, im2}};
 }
 
-// Binds v as LAPACK's unit eigenvector of m for `lambda`: an exact
-// eigenvector of a matrix within rounding of m, so its residual
-// |m v - lambda v| stays within lapack_tolerance S, S the sum of m's
-// entries' magnitudes.
+// Binds v as a unit eigenvector of m for `lambda`: |m v - lambda v| within
+// `residual` and |v.v - 1| within `norm`, unless `excused`.
 void numpy_call_expr::bind_eigenvector(
   const std::vector<std::vector<exprt>> &m,
   const exprt &lambda,
-  const std::vector<exprt> &v)
+  const std::vector<exprt> &v,
+  const exprt &residual,
+  const exprt &norm,
+  const exprt &excused)
 {
-  const exprt tolerance = from_double(lapack_tolerance, double_type());
-  const exprt bound =
-    within_floor(ieee_op("ieee_mul", tolerance, entry_scale(m)));
-  const exprt excused = not_exprt(is_finite_double(bound));
   for (std::size_t i = 0; i < m.size(); ++i)
     assume_near(
       ieee_op(
         "ieee_sub", dot_double(m[i], v), ieee_op("ieee_mul", lambda, v[i])),
-      bound,
+      residual,
       excused);
   assume_near(
     ieee_op("ieee_sub", dot_double(v, v), from_double(1.0, double_type())),
-    within_floor(tolerance),
+    norm,
     false_exprt());
 }
 
@@ -7116,16 +7229,64 @@ exprt numpy_call_expr::runtime_eigen_pairs(
     equality_exprt(values[0].second, from_double(0.0, double_type()))};
   real.location() = converter_.get_location_from_decl(call_);
   converter_.add_instruction(real);
+  // LAPACK's pair is exact for a matrix within rounding of m, so its
+  // residual stays within lapack_tolerance S, S the sum of m's entries'
+  // magnitudes.
+  const exprt tolerance = from_double(lapack_tolerance, double_type());
+  const exprt bound =
+    within_floor(ieee_op("ieee_mul", tolerance, entry_scale(m)));
   std::vector<std::vector<exprt>> columns;
   for (const auto &value : values)
   {
     columns.push_back(
       {lapack_value(0.0, INFINITY), lapack_value(0.0, INFINITY)});
-    bind_eigenvector(m, value.first, columns.back());
+    bind_eigenvector(
+      m,
+      value.first,
+      columns.back(),
+      bound,
+      within_floor(tolerance),
+      not_exprt(is_finite_double(bound)));
   }
   return linalg_tuple(
     {double_array({values[0].first, values[1].first}),
      columns_as_matrix(columns)});
+}
+
+// svd(compute_uv=False) of a 2x2 matrix known only at run time: LAPACK's
+// singular values are those of a matrix within rounding of m, so the sum of
+// their squares and their product are within lapack_tolerance S^2 of the
+// squared Frobenius norm and |det m|, S the sum of the entries' magnitudes.
+exprt numpy_call_expr::runtime_singular_values(
+  const std::vector<std::vector<exprt>> &m)
+{
+  raise_linalg(
+    "LinAlgError", "SVD did not converge", not_exprt(entries_finite(m)));
+  const exprt &a = m[0][0], &b = m[0][1], &c = m[1][0], &d = m[1][1];
+  const exprt scale = entry_scale(m);
+  const exprt bound = within_floor(product(
+    {from_double(4.0 * lapack_tolerance, double_type()), scale, scale}));
+  const exprt excused = not_exprt(is_finite_double(bound));
+  const std::vector<exprt> sigmas = {
+    lapack_value(0.0, INFINITY), lapack_value(0.0, INFINITY)};
+  assume_singular_order(sigmas);
+  std::vector<exprt> entries;
+  for (const auto &row : m)
+    entries.insert(entries.end(), row.begin(), row.end());
+  assume_near(
+    ieee_op(
+      "ieee_sub", dot_double(sigmas, sigmas), dot_double(entries, entries)),
+    bound,
+    excused);
+  assume_near(
+    ieee_op(
+      "ieee_sub",
+      ieee_op("ieee_mul", sigmas[0], sigmas[1]),
+      abs_double(ieee_op(
+        "ieee_sub", ieee_op("ieee_mul", a, d), ieee_op("ieee_mul", b, c)))),
+    bound,
+    excused);
+  return double_array(sigmas);
 }
 
 // The real matrix of a constant operand: det and inv check its order too.
@@ -7219,18 +7380,31 @@ exprt numpy_call_expr::runtime_linalg(
     return symbolic_det(m);
   if (function == "inv" || function == "solve")
     return runtime_inverse(m, b);
-  if (function == "eig" && m.size() == 2)
+  return runtime_decomposition(function, m);
+}
+
+// eig, eigvals and svd(compute_uv=False) of a 2x2 matrix known only at run
+// time; eig's matrix is symmetric (linalg_unary checks it).
+exprt numpy_call_expr::runtime_decomposition(
+  const std::string &function,
+  const std::vector<std::vector<exprt>> &m)
+{
+  if (function == "svd" && (!svd_values_only() || m.size() != 2))
+    throw std::runtime_error(
+      "TypeError: numpy.linalg.svd of a run-time matrix supports only "
+      "compute_uv=False on 2x2 matrices");
+  if (m.size() != 2)
+    throw std::runtime_error(
+      "TypeError: numpy.linalg." + function +
+      " of a run-time matrix supports only 2x2 matrices");
+  if (function == "eig")
     return runtime_eigen_pairs(m);
-  if (function == "eigvals" && m.size() == 2)
-  {
-    std::vector<exprt> values;
-    for (const auto &[re, im] : runtime_eigenvalues(m))
-      values.push_back(make_complex(re, im));
-    return double_array(values);
-  }
-  throw std::runtime_error(
-    "TypeError: numpy.linalg." + function +
-    " currently supports only constant 2D real numeric matrices");
+  if (function == "svd")
+    return runtime_singular_values(m);
+  std::vector<exprt> values;
+  for (const auto &[re, im] : runtime_eigenvalues(m))
+    values.push_back(make_complex(re, im));
+  return double_array(values);
 }
 
 exprt numpy_call_expr::constant_linalg(
@@ -7809,39 +7983,6 @@ bool numpy_call_expr::svd_values_only() const
   return values_only;
 }
 
-namespace
-{
-// One singular value with its left and right singular vectors.
-struct singular_triple
-{
-  double sigma;
-  std::vector<double> u, v;
-};
-} // namespace
-
-// A diagonal matrix's singular values are its entries' magnitudes in
-// descending order, with unit vectors and the entry's sign kept in v.
-static std::vector<singular_triple>
-diagonal_singular_triples(const std::vector<std::vector<double>> &m)
-{
-  const std::size_t n = m.size();
-  std::vector<std::size_t> order(n);
-  std::iota(order.begin(), order.end(), 0);
-  std::stable_sort(
-    order.begin(), order.end(), [&](std::size_t i, std::size_t j) {
-      return std::fabs(m[i][i]) > std::fabs(m[j][j]);
-    });
-  std::vector<singular_triple> triples;
-  for (std::size_t k : order)
-  {
-    std::vector<double> u(n, 0.0), v(n, 0.0);
-    u[k] = 1.0;
-    v[k] = m[k][k] < 0 ? -1.0 : 1.0;
-    triples.push_back({std::fabs(m[k][k]), u, v});
-  }
-  return triples;
-}
-
 // A 2x2 matrix: v are the eigenvectors of A^T A, u1 = A v1 / sigma1 and u2
 // the unit vector orthogonal to u1.
 static std::vector<singular_triple>
@@ -7898,14 +8039,10 @@ singular_gap(const std::vector<singular_triple> &triples, double rounding)
 // the gap between the singular values allows.
 exprt numpy_call_expr::svd_factors(const std::vector<std::vector<double>> &m)
 {
-  const std::size_t n = m.size();
-  const bool square = std::all_of(
-    m.begin(), m.end(), [n](const auto &row) { return row.size() == n; });
-  const bool diagonal = square && is_diagonal(m);
-  if (!square || (!diagonal && n != 2))
-    throw std::runtime_error(
-      "TypeError: numpy.linalg.svd supports only 2x2 and diagonal matrices "
-      "currently");
+  const std::size_t n = svd_order(m);
+  const bool diagonal = is_diagonal(m);
+  if (!diagonal && n > 2)
+    return dense_svd_factors(m);
   const std::vector<singular_triple> triples =
     diagonal ? diagonal_singular_triples(m) : singular_triples_2x2(m);
   const double norm = frobenius_norm(m);
@@ -7939,6 +8076,58 @@ exprt numpy_call_expr::svd_factors(const std::vector<std::vector<double>> &m)
     std::vector<exprt> row;
     for (std::size_t k = 0; k < n; ++k)
       row.push_back(us[k][i]);
+    u_rows.push_back(double_array(row));
+    vh_rows.push_back(double_array(vs[i]));
+  }
+  return linalg_tuple(
+    {double_array(u_rows), double_array(sigmas), double_array(vh_rows)});
+}
+
+// svd's (U, S, Vh) of a dense square matrix larger than 2x2 whose singular
+// values are distinct: each factor within the radius the gap between them
+// allows of the extended-precision one, which singular_system_of checked
+// against the reconstruction and orthogonality relations. LAPACK picks the
+// sign per singular triple (independently for a singular value within
+// rounding of zero).
+exprt numpy_call_expr::dense_svd_factors(
+  const std::vector<std::vector<double>> &m)
+{
+  const dense_spectrum::singular_system system =
+    dense_spectrum::singular_system_of(m);
+  const double norm = frobenius_norm(m);
+  const double value_radius = 1e-12 * norm;
+  std::vector<singular_triple> triples;
+  for (std::size_t k = 0; k < system.sigma.size(); ++k)
+    triples.push_back({system.sigma[k], system.u[k], system.v[k]});
+  const double vector_radius =
+    1e-12 * (1 + norm / singular_gap(triples, 2 * value_radius));
+  if (vector_radius > 1e-6)
+    throw std::runtime_error(
+      "TypeError: numpy.linalg.svd of a matrix larger than 2x2 with close "
+      "singular values is not supported");
+  const auto box = [&](const std::vector<double> &vector) {
+    std::vector<exprt> components;
+    for (double component : vector)
+      components.push_back(lapack_value(component, vector_radius));
+    return components;
+  };
+  std::vector<std::vector<exprt>> us, vs;
+  std::vector<exprt> sigmas;
+  for (const singular_triple &t : triples)
+  {
+    sigmas.push_back(lapack_value(t.sigma, value_radius));
+    const exprt flip = nondet_bool();
+    const exprt flip_v = t.sigma <= value_radius ? nondet_bool() : flip;
+    us.push_back(signed_by(flip, box(t.u)));
+    vs.push_back(signed_by(flip_v, box(t.v)));
+  }
+  assume_singular_order(sigmas);
+  std::vector<exprt> u_rows, vh_rows;
+  for (std::size_t i = 0; i < m.size(); ++i)
+  {
+    std::vector<exprt> row;
+    for (const auto &u : us)
+      row.push_back(u[i]);
     u_rows.push_back(double_array(row));
     vh_rows.push_back(double_array(vs[i]));
   }

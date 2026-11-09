@@ -373,6 +373,9 @@ private:
     const std::string &function,
     const std::vector<std::vector<exprt>> &m,
     const std::vector<exprt> &b = {});
+  exprt runtime_decomposition(
+    const std::string &function,
+    const std::vector<std::vector<exprt>> &m);
   exprt runtime_solve(
     const nlohmann::json &original_a,
     const nlohmann::json &original_b);
@@ -391,7 +394,7 @@ private:
   std::vector<exprt> in_any_order(const std::vector<exprt> &values);
   std::vector<exprt> permutation_slots(std::size_t n);
   std::vector<exprt> with_any_sign(const std::vector<exprt> &v);
-  exprt selected_offset(
+  exprt selected_box(
     const exprt &slot,
     const std::vector<double> &exacts,
     double radius);
@@ -437,10 +440,15 @@ private:
   std::vector<std::pair<exprt, exprt>>
   runtime_eigenvalues(const std::vector<std::vector<exprt>> &m);
   exprt runtime_eigen_pairs(const std::vector<std::vector<exprt>> &m);
+  exprt runtime_singular_values(const std::vector<std::vector<exprt>> &m);
+  exprt dense_svd_factors(const std::vector<std::vector<double>> &m);
   void bind_eigenvector(
     const std::vector<std::vector<exprt>> &m,
     const exprt &lambda,
-    const std::vector<exprt> &v);
+    const std::vector<exprt> &v,
+    const exprt &residual,
+    const exprt &norm,
+    const exprt &excused);
   exprt symbolic_det(const std::vector<std::vector<exprt>> &m);
   exprt symbolic_norm(const nlohmann::json &arg, norm_order order);
   exprt linalg_norm(const std::function<void(nlohmann::json &)> &unwrap);
