@@ -904,10 +904,17 @@ for {i} in range(0, len({seq})):
     def visit_BoolOp(self, node):
         """Fold the operands decided by a list literal on the left: `[1] and x` is `x`,
         `[] and x` is `[]`, `[1] or x` is `[1]` and `[] or x` is `x`, so the result has the
-        type of the operand that is kept."""
+        type of the operand that is kept. `(a and b) and c` has the value of `a and b and c`,
+        so a nested operand with the same operator is spliced in."""
         node = self.generic_visit(node)
         is_and = isinstance(node.op, ast.And)
-        values = list(node.values)
+        values = []
+        for value in node.values:
+            if isinstance(value, ast.BoolOp) and type(value.op) is type(node.op):
+                values.extend(value.values)
+            else:
+                values.append(value)
+        node.values = list(values)
         while len(values) > 1:
             truth = self._literal_list_truth(values[0])
             if truth is None:

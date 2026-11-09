@@ -6901,6 +6901,27 @@ may_tag_binop(const nlohmann::json &value, const dynamic_type_handler &handler)
          is_tagged_name(value["left"]) && is_tagged_name(value["right"]);
 }
 
+// On the spine the whole slot is assigned next, so the value `name` held
+// before is not copied in. Off it, a path that skips this assignment reads that
+// copy, which a tag cannot hold unless it is a scalar or a str (not None).
+void python_converter::declare_tag_for_binop_result(
+  const std::string &name,
+  bool on_spine,
+  const nlohmann::json &ast_node)
+{
+  const symbolt *existing = symbol_table_.find_symbol(
+    dynamic_type_handler_.bound_symbol_id(name).to_string());
+  if (
+    !on_spine && existing && existing->get_type() != any_type() &&
+    !type_handler_.is_numeric_scalar_type(existing->get_type()) &&
+    !type_handler_.is_string_type(existing->get_type()))
+    throw std::runtime_error(
+      "rebinding '" + name +
+      "' from a value of another type to a dynamically typed value under a "
+      "branch or loop is not yet supported");
+  dynamic_type_handler_.declare_dynamic_type_names({name}, ast_node, !on_spine);
+}
+
 bool python_converter::try_tagged_var_assign(
   const nlohmann::json &ast_node,
   codet &target_block)
@@ -6930,19 +6951,19 @@ bool python_converter::try_tagged_var_assign(
     // A call runs first, so the tag holds its result rather than the call.
     const exprt rhs = store_call_result(
       get_expr(ast_node["value"]), location, "$tag_call$", &target_block);
+    const bool on_spine = !is_attribute && current_class_name_.empty() &&
+                          loop_body_depth_ == 0 &&
+                          block_nesting_ == function_body_depth_ + 1;
     if (type_handler_.is_tagged_scalar_type(rhs.type()))
     {
       if (value_may_tag)
-        dynamic_type_handler_.declare_dynamic_type_names({name}, ast_node);
+        declare_tag_for_binop_result(name, on_spine, ast_node);
       dynamic_type_handler_.assign_tagged_object(
         rhs, location, name, target_block);
       return true;
     }
     assert(
       !value_may_tag && "tagged 'x + y' always converts to a tagged result");
-    const bool on_spine = !is_attribute && current_class_name_.empty() &&
-                          loop_body_depth_ == 0 &&
-                          block_nesting_ == function_body_depth_ + 1;
     // A tagged slot compares only against an int, bool or str, so a float
     // rebound on the spine takes its own slot below.
     if (
