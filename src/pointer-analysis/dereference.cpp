@@ -1262,6 +1262,16 @@ void dereferencet::deref_invalid_ptr(
   if (is_nil_expr(resolved) && (is_write(mode) || is_free(mode)))
     return;
 
+  /* NULL is object 0, which invalid_pointer treats as valid: an unknown
+   * pointer needs its own NULL claim. */
+  if (!is_free(mode))
+  {
+    guard2tc null_guard(guard);
+    null_guard.add(same_object2tc(
+      deref_expr, symbol2tc(pointer_type2tc(get_empty_type()), "NULL")));
+    dereference_failure("pointer dereference", "NULL pointer", null_guard);
+  }
+
   // constraint that it actually is an invalid pointer
   expr2tc invalid_pointer_expr = invalid_pointer2tc(deref_expr);
 
