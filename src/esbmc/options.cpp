@@ -247,6 +247,14 @@ const struct group_opt_templ all_cmd_options[] = {
       "comma-separated types or a subclass of one. Any other uncaught "
       "exception ends its path unreported, and the program's assert "
       "statements become assumptions unless AssertionError is covered"},
+     {"python-exception-census",
+      NULL,
+      "With --python-check-exceptions, first walk the program's source and "
+      "the modules it imports: if no construct in them can raise a listed "
+      "type, report success without converting the program. Static, and "
+      "sound only for the families ZeroDivisionError/FloatingPointError and "
+      "KeyError/IndexError, and only when the frontend runs on Python 3.14; "
+      "otherwise conversion proceeds as without it"},
      {"python-no-fold",
       NULL,
       "Disable NumPy constant folding in the Python frontend"},

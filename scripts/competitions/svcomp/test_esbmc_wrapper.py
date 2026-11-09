@@ -1001,6 +1001,12 @@ class PythonCommandLineTest(unittest.TestCase):
         for prop, family in cases:
             self.assertIn("--python-check-exceptions " + family + " ", self.command(prop))
 
+    def test_census_is_asked_for_only_the_families_it_is_sound_for(self):
+        for prop in (wrapper.Property.py_arithmetic, wrapper.Property.py_datalookup):
+            self.assertIn("--python-exception-census ", self.command(prop))
+        for prop in (wrapper.Property.py_assertion, wrapper.Property.py_dyntyping):
+            self.assertNotIn("--python-exception-census", self.command(prop))
+
 
 class PythonPropertyFileTest(unittest.TestCase):
     """python/properties/*.prp in sv-benchmarks, verbatim."""

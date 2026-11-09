@@ -88,6 +88,11 @@ PYTHON_EXCEPTION_FAMILIES = {
   Property.py_dyntyping: ("TypeError", "AttributeError"),
 }
 
+# The families the exception census (--python-exception-census) is sound for:
+# a program with no construct that can raise one of them cannot violate the
+# property, so ESBMC reports success without converting it.
+CENSUS_PROPERTIES = (Property.py_arithmetic, Property.py_datalookup)
+
 # Parsed by the CLI entry point at the bottom; do_exec() is the only reader.
 args = None
 
@@ -454,7 +459,10 @@ def python_exception_flags(prop):
   exception ends its path unreported, as CPython stops there, and the
   program's asserts become assumptions unless AssertionError is the family,
   so a failure outside the family no longer hides the one asked about."""
-  return "--python-check-exceptions " + ",".join(PYTHON_EXCEPTION_FAMILIES[prop]) + " "
+  flags = "--python-check-exceptions " + ",".join(PYTHON_EXCEPTION_FAMILIES[prop]) + " "
+  if prop in CENSUS_PROPERTIES:
+    flags += "--python-exception-census "
+  return flags
 
 
 def get_command_line(strat, prop, arch, benchmark, dargs, esbmc_ci, keep_loops=False):

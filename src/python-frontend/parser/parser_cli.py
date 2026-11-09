@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import ast
 import glob
+import importlib
 import os
 import shutil
 import sys
@@ -106,6 +107,8 @@ def _read_ast_from_file(filename: str) -> ast.Module:
 
 
 _FLAGS = ("--deadlock-check", "--typecheck")
+_CENSUS_FLAG = "--exception-census="
+CENSUS_MARKER = "exception-census-pass"
 
 
 def check_usage() -> None:
@@ -115,9 +118,31 @@ def check_usage() -> None:
               f"[{'] ['.join(_FLAGS)}]")
         sys.exit(2)
     for flag in sys.argv[3:]:
-        if flag not in _FLAGS:
+        if flag not in _FLAGS and not flag.startswith(_CENSUS_FLAG):
             print(f"Unknown flag: {flag}")
             sys.exit(2)
+
+
+def census_summary(filename: str, flags: list[str]) -> str | None:
+    """The census's line when it proves the requested exception types cannot
+    escape the program, else None.  Any failure of the census is None."""
+    types = [
+        t for flag in flags if flag.startswith(_CENSUS_FLAG)
+        for t in flag[len(_CENSUS_FLAG):].split(",") if t
+    ]
+    if not types:
+        return None
+    imported = set(sys.modules)
+    try:
+        name = f"{__package__}.exception_census" if __package__ else "exception_census"
+        return importlib.import_module(name).census_summary(filename, types)
+    except Exception:  # pylint: disable=broad-except
+        return None
+    finally:
+        # A module the census imported must not stand in for a local file of
+        # the same name when the program is converted after all.
+        for loaded in set(sys.modules) - imported:
+            del sys.modules[loaded]
 
 
 def check_dependencies() -> None:
@@ -172,12 +197,25 @@ def main(*, deps: CliDeps) -> int | None:
     """Run parser CLI orchestration with explicit dependency injection."""
     check_usage()
 
+    # Importing the program's modules to resolve them must not leave bytecode next to
+    # them: the census declines on compiled files in the program's directories.
+    sys.dont_write_bytecode = True
+
     import_resolver = deps.import_resolver
     import_resolver.reset_state()
 
     filename = sys.argv[1]
     output_dir = sys.argv[2]
     deadlock_check = "--deadlock-check" in sys.argv[3:]
+
+    # Before the program's directory joins sys.path: the census imports the
+    # standard library, which a file of that name next to the program would shadow.
+    summary = census_summary(filename, sys.argv[3:])
+    if summary:
+        os.makedirs(output_dir, exist_ok=True)
+        with open(os.path.join(output_dir, CENSUS_MARKER), "w", encoding="utf-8") as marker:
+            marker.write(summary + "\n")
+        return 0
 
     # Opt-in: the report is advisory -- it never reaches the AST or the
     # verdict -- and a cold mypy cache costs about half the run.
