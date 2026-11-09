@@ -514,8 +514,8 @@ exprt python_converter::dispatch_dunder_operator(
     }
   }
 
-  // fallback: try rhs.__radd__(lhs). Python calls a comparison method the
-  // left operand defines whatever its annotation says.
+  // fallback: try rhs.__radd__(lhs). An annotation mismatch does not stop
+  // Python calling a comparison method the left operand defines.
   if (
     rhs_type.is_struct() &&
     !(lhs_defines_dunder && type_utils::is_relational_op(op)))

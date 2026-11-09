@@ -1,5 +1,5 @@
-# A defines __lt__, so Python calls it whatever its annotation says, and
-# never B.__gt__ (#10156).
+# A defines __lt__, so B.__gt__ must not decide a < b despite the
+# annotation mismatch (#10156).
 class C:
     pass
 
