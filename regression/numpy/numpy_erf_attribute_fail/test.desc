@@ -1,0 +1,4 @@
+CORE
+main.py
+--incremental-bmc
+^ERROR: AttributeError: module 'numpy' has no attribute 'erf'$
