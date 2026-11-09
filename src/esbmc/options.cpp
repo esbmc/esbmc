@@ -837,6 +837,10 @@ const struct group_opt_templ all_cmd_options[] = {
      NULL,
      "Do not check that a floating-point to integer conversion is in range "
      "(C11 6.3.1.4p1); the rest of --overflow-check is unaffected"},
+    {"no-fp-overflow-check",
+     NULL,
+     "Do not check floating-point arithmetic for overflow; integer overflow "
+     "checks under --overflow-check are unaffected"},
     {"no-unlimited-scanf-check",
      NULL,
      "Do not do overflow check for scanf/fscanf with unlimited character "
