@@ -1,5 +1,5 @@
 CORE
 main.c
-
-^  dereference failure: NULL pointer$
+--multi-property
+^  FAILED .*null-pointer-dereference.1\].*NULL pointer$
 ^VERIFICATION FAILED$

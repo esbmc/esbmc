@@ -1212,7 +1212,8 @@ expr2tc dereferencet::build_reference_to(
 
 /* A read through an unknown or invalid target is only checked by
  * invalid_pointer, which is false on NULL. Unless a NULL target already put
- * same_object(p, NULL) under a claim, add it here (#10188). */
+ * same_object(p, NULL) under a claim, claim p != NULL here (#10188). NULL at
+ * a non-zero offset is left alone, as for any other unresolved pointer. */
 void dereferencet::unresolved_null_check(
   const expr2tc &deref_expr,
   const value_setst::valuest &points_to_set,
@@ -1224,8 +1225,11 @@ void dereferencet::unresolved_null_check(
       is_null_object2t(to_object_descriptor2t(target).get_root_object()))
       return;
   expr2tc null_ptr = symbol2tc(pointer_type2tc(get_empty_type()), "NULL");
+  type2tc offs_type = get_int_type(config.ansi_c.address_width);
   guard2tc tmp_guard(guard);
   tmp_guard.add(same_object2tc(deref_expr, null_ptr));
+  tmp_guard.add(
+    equality2tc(pointer_offset2tc(offs_type, deref_expr), gen_zero(offs_type)));
   dereference_failure("pointer dereference", "NULL pointer", tmp_guard);
 }
 
