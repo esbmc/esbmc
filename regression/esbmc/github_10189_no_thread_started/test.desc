@@ -1,0 +1,5 @@
+CORE
+main.c
+--sv-comp --k-induction --interval-analysis --goto-unwind --unlimited-goto-unwind
+\A(?![\s\S]*can start a thread)
+^VERIFICATION SUCCESSFUL$
