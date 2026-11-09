@@ -2189,10 +2189,13 @@ void dereferencet::construct_from_dyn_struct_offset(
     it = ns.follow(it);
     BigInt field_size = type_byte_size_bits(it, &ns);
 
-    // Skip sub-byte members (unnamed bitfields, padding bits): they are
-    // narrower than one byte and cannot hold a byte-aligned access.
+    // A sub-byte member (bitfield, padding bits) cannot hold a byte-aligned
+    // access, but one can start in it and span the members after it (#10087).
     if (field_size < config.ansi_c.char_width)
     {
+      if (!int_encoding)
+        add_spanning_arms(
+          value, offset, type, alignment, mode, offs, field_size, extract_list);
       i++;
       continue;
     }
@@ -2289,8 +2292,7 @@ void dereferencet::add_spanning_arms(
   const BigInt struct_bits = type_byte_size_bits(value->type, &ns);
   const BigInt step = spanning_step(type, value->type, alignment, mode);
   const BigInt field_end = field_offset + field_size;
-  BigInt p =
-    std::max(field_offset, field_end - access_sz + config.ansi_c.char_width);
+  BigInt p = std::max(field_offset, field_end - access_sz + 1);
   for (p = (p + step - 1) / step * step;
        p < field_end && p + access_sz <= struct_bits;
        p += step)
@@ -2325,23 +2327,44 @@ expr2tc dereferencet::byte_of_struct(const expr2tc &value, const BigInt &pos)
 {
   const struct_type2t &struct_type = to_struct_type(value->type);
   const unsigned int width = config.ansi_c.char_width;
-  for (unsigned int i = 0; i < struct_type.members.size(); i++)
+  const BigInt end = pos + width;
+  // A byte shared by bitfields is the bits each one has in it, lowest first
+  // (#10087). Reading it from the whole struct instead would make a store
+  // rewrite every member, pointers included.
+  std::vector<expr2tc> pieces;
+  BigInt covered = pos;
+  for (unsigned int i = 0; i < struct_type.members.size() && covered < end; i++)
   {
     const irep_idt &name = struct_type.member_names[i];
     const type2tc member_type = ns.follow(struct_type.members[i]);
     const BigInt m_offs = member_offset_bits(value->type, name, &ns);
     const BigInt m_size = type_byte_size_bits(member_type, &ns);
+    if (m_offs + m_size <= pos || m_size == 0)
+      continue;
+    const expr2tc member = member2tc(member_type, value, name);
+    if (m_offs % width == 0 && m_size % width == 0 && m_offs <= pos)
+      return extract_bytes(member, 1, gen_ulong((pos - m_offs) / width))[0];
     if (
-      m_offs % width == 0 && m_size % width == 0 && m_offs <= pos &&
-      pos < m_offs + m_size)
-      return extract_bytes(
-        member2tc(member_type, value, name),
-        1,
-        gen_ulong((pos - m_offs) / width))[0];
+      m_offs > covered || !is_bv_type(member_type) ||
+      config.ansi_c.endianess != configt::ansi_ct::IS_LITTLE_ENDIAN)
+      return expr2tc();
+    const BigInt top = std::min(end, m_offs + m_size);
+    pieces.push_back(extract2tc(
+      get_uint_type((top - covered).to_uint64()),
+      member,
+      (top - m_offs - 1).to_uint64(),
+      (covered - m_offs).to_uint64()));
+    covered = top;
   }
-  // Reading a bitfield byte from the whole struct would make a store rewrite
-  // every member, pointers included.
-  return expr2tc();
+  // The frontend pads every bitfield run to a byte boundary.
+  assert(covered == end);
+  expr2tc byte = pieces.front();
+  for (size_t k = 1; k < pieces.size(); k++)
+    byte = concat2tc(
+      get_uint_type(byte->type->get_width() + pieces[k]->type->get_width()),
+      pieces[k],
+      byte);
+  return byte;
 }
 
 expr2tc dereferencet::stitch_across_elements(
