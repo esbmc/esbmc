@@ -7292,6 +7292,189 @@ exprt numpy_call_expr::bounded_binary_ufunc(const std::string &function)
     });
 }
 
+static std::optional<nlohmann::json>
+out_node(const nlohmann::json &call, std::size_t arity);
+
+// The array a ufunc call whose where=/out= are lowered writes, when it is a
+// name or a subscript without calls, which read the same storage again.
+static std::optional<nlohmann::json>
+named_ufunc_output(const nlohmann::json &ast, const nlohmann::json &call)
+{
+  static const std::set<std::string> binary = {"hypot", "arctan2", "atan2"};
+  static const std::set<std::string> aliases = {
+    "asin", "acos", "atan", "asinh", "acosh", "atanh", "atan2"};
+  const nlohmann::json &func = call.value("func", nlohmann::json::object());
+  const nlohmann::json &module = func.value("value", nlohmann::json::object());
+  const std::string name = func.value("attr", "");
+  if (
+    call.value("_type", "") != "Call" || module.value("_type", "") != "Name" ||
+    !is_imported_numpy_module_alias(ast, module.value("id", "")) ||
+    !(bounded_math::has_runtime_model(name) ||
+      bounded_math::is_float_predicate(name) || aliases.count(name)))
+    return std::nullopt;
+  const std::size_t arity = binary.count(name) ? 2 : 1;
+  std::optional<nlohmann::json> out;
+  try
+  {
+    out = out_node(call, arity);
+  }
+  catch (const std::runtime_error &)
+  {
+    return std::nullopt;
+  }
+  const std::string type = out ? out->value("_type", "") : "";
+  if (
+    (type != "Name" && type != "Subscript") ||
+    json_utils::ast_contains_call(*out))
+    return std::nullopt;
+  return out;
+}
+
+// The value an assignment stores in something other than a name.
+static void stored_value(
+  const nlohmann::json &node,
+  std::vector<const nlohmann::json *> &values)
+{
+  const bool annotated = node.value("_type", "") == "AnnAssign";
+  const nlohmann::json &target =
+    annotated ? node["target"] : node["targets"][0];
+  if (target.value("_type", "") != "Name")
+    values.push_back(&node["value"]);
+}
+
+// The arguments of a call to a function that is not a numpy one.
+static void passed_values(
+  const nlohmann::json &ast,
+  const nlohmann::json &call,
+  std::vector<const nlohmann::json *> &values)
+{
+  const nlohmann::json &module =
+    call["func"].value("value", nlohmann::json::object());
+  if (
+    module.value("_type", "") == "Name" &&
+    is_imported_numpy_module_alias(ast, module.value("id", "")))
+    return;
+  for (const nlohmann::json &arg : call["args"])
+    values.push_back(&arg);
+  for (const nlohmann::json &keyword : call["keywords"])
+    values.push_back(&keyword["value"]);
+}
+
+// The values a node lets escape: returned, stored or passed to a function
+// that is not a numpy one.
+static std::vector<const nlohmann::json *>
+escaping_values(const nlohmann::json &ast, const nlohmann::json &node)
+{
+  static const std::map<std::string, std::string> fields = {
+    {"Return", "value"},
+    {"Yield", "value"},
+    {"NamedExpr", "value"},
+    {"Lambda", "body"},
+    {"List", "elts"},
+    {"Tuple", "elts"},
+    {"Set", "elts"},
+    {"Dict", "values"}};
+  std::vector<const nlohmann::json *> values;
+  const std::string type = node.value("_type", "");
+  const auto field = fields.find(type);
+  if (field != fields.end())
+  {
+    const nlohmann::json &value = node[field->second];
+    if (value.is_array())
+      for (const nlohmann::json &item : value)
+        values.push_back(&item);
+    else
+      values.push_back(&value);
+  }
+  else if (type == "Assign" || type == "AnnAssign")
+    stored_value(node, values);
+  else if (type == "Call")
+    passed_values(ast, node, values);
+  return values;
+}
+
+// Such a value would be a copy where NumPy returns the out= array itself.
+static void reject_escaping_ufunc_output(
+  const nlohmann::json &ast,
+  const nlohmann::json &node)
+{
+  for (const nlohmann::json *value : escaping_values(ast, node))
+    if (value->is_object() && named_ufunc_output(ast, *value))
+      throw std::runtime_error(
+        "TypeError: numpy." + (*value)["func"].value("attr", "") +
+        "() with out= is only supported as a statement or assigned to a "
+        "name");
+}
+
+static void
+alias_ufunc_outputs_in(const nlohmann::json &ast, nlohmann::json &node)
+{
+  if (node.is_object())
+  {
+    reject_escaping_ufunc_output(ast, node);
+    for (auto &child : node.items())
+      alias_ufunc_outputs_in(ast, child.value());
+    return;
+  }
+  if (!node.is_array())
+    return;
+  nlohmann::json body = nlohmann::json::array();
+  for (nlohmann::json &statement : node)
+  {
+    alias_ufunc_outputs_in(ast, statement);
+    const std::string type =
+      statement.is_object() ? statement.value("_type", "") : "";
+    const bool named =
+      type == "AnnAssign" ? statement["target"].value("_type", "") == "Name"
+      : type == "Assign"  ? std::all_of(
+                              statement["targets"].begin(),
+                              statement["targets"].end(),
+                              [](const nlohmann::json &t) {
+                               return t.value("_type", "") == "Name";
+                              })
+                          : false;
+    const std::optional<nlohmann::json> out =
+      named && statement["value"].is_object()
+        ? named_ufunc_output(ast, statement["value"])
+        : std::nullopt;
+    if (!out)
+    {
+      body.push_back(statement);
+      continue;
+    }
+    nlohmann::json call = statement;
+    call["_type"] = "Expr";
+    call.erase("targets");
+    call.erase("target");
+    call.erase("annotation");
+    call.erase("simple");
+    body.push_back(call);
+    statement["value"] = *out;
+    body.push_back(statement);
+  }
+  node = body;
+}
+
+void alias_numpy_ufunc_outputs(nlohmann::json &ast)
+{
+  alias_ufunc_outputs_in(ast, ast["body"]);
+}
+
+// Python evaluates keywords in the order written, after the positionals.
+static bool where_before_out(const nlohmann::json &call, std::size_t arity)
+{
+  if (call["args"].size() > arity)
+    return false;
+  for (const nlohmann::json &keyword :
+       call.value("keywords", nlohmann::json::array()))
+  {
+    const nlohmann::json &arg = keyword["arg"];
+    if (arg == "where" || arg == "out")
+      return arg == "where";
+  }
+  return false;
+}
+
 static bool is_constant_array(const exprt &e)
 {
   return e.id() == "array" &&
@@ -7412,8 +7595,13 @@ exprt numpy_call_expr::apply_ufunc(
   const std::function<exprt(const std::vector<exprt> &)> &f)
 {
   const std::size_t n = inputs.size();
-  const std::optional<ufunc_output> out = ufunc_out(function, n, leaf);
-  const std::optional<exprt> mask = ufunc_mask(function);
+  std::optional<ufunc_output> out;
+  std::optional<exprt> mask;
+  if (where_before_out(call_, n))
+    mask = ufunc_mask(function);
+  out = ufunc_out(function, n, leaf);
+  if (!where_before_out(call_, n))
+    mask = ufunc_mask(function);
   std::vector<exprt> operands = inputs;
   if (out)
     operands.push_back(out->value);
@@ -7447,6 +7635,16 @@ std::optional<exprt> numpy_call_expr::ufunc_mask(const std::string &function)
   if (is_none(*where))
     return false_exprt();
   return mask_operand(function, tuples_as_lists(*where));
+}
+
+static std::string dtype_name(const typet &type)
+{
+  if (type.is_bool())
+    return "bool";
+  if (type.is_floatbv())
+    return "float" + type.width().as_string();
+  const std::string width = type.width().as_string();
+  return (type.is_unsignedbv() ? "uint" : "int") + width;
 }
 
 // A comparison, ~, &, | or ^ in a mask is taken element-wise, as NumPy
@@ -7483,10 +7681,19 @@ exprt numpy_call_expr::mask_operand(
     return elementwise_relation(
       "not", {boolean_mask(function, node["operand"])});
   const exprt mask = elementwise_operand(function, node);
-  if (!is_number_type(array_leaf_type(mask.type())))
+  const typet &leaf = array_leaf_type(mask.type());
+  if (!is_number_type(leaf))
     throw std::runtime_error(
       "TypeError: numpy." + function +
       "() where= of this argument is not supported");
+  // NumPy converts a literal sequence to bool, but casts an array under the
+  // safe rule, which only a bool array passes.
+  if (
+    mask.type().is_array() && !leaf.is_bool() && type != "List" &&
+    type != "Tuple")
+    throw std::runtime_error(
+      "TypeError: Cannot cast array data from dtype('" + dtype_name(leaf) +
+      "') to dtype('bool') according to the rule 'safe'");
   return mask;
 }
 
@@ -7530,14 +7737,6 @@ exprt numpy_call_expr::truth_of(const exprt &element)
   exprt nonzero("notequal", bool_type());
   nonzero.copy_to_operands(element, gen_zero(element.type()));
   return nonzero;
-}
-
-static std::string dtype_name(const typet &type)
-{
-  if (type.is_bool())
-    return "bool";
-  const std::string width = type.width().as_string();
-  return (type.is_unsignedbv() ? "uint" : "int") + width;
 }
 
 // The node out= names, or the argument after the inputs, unwrapped from a
@@ -7631,7 +7830,7 @@ exprt numpy_call_expr::out_operand(
   const exprt target = converter_.get_expr(node);
   converter_.current_lhs = lhs;
   if (view.is_nil())
-    return target;
+    return node.value("_type", "") == "Call" ? bind_array_once(target) : target;
   if (!target.type().is_pointer())
     throw std::runtime_error(
       "TypeError: numpy." + function +
@@ -7758,6 +7957,10 @@ exprt numpy_call_expr::elementwise_operand(
     throw std::runtime_error(
       "TypeError: numpy." + function +
       " of an array whose shape is known only at run time is not supported");
+  // A number or a call is evaluated here, in argument order; an array is
+  // read when the ufunc runs, after every argument, as NumPy reads it.
+  if (x.id() == "code" || (!x.type().is_array() && !x.is_constant()))
+    return bind_once(x);
   return x;
 }
 
@@ -7798,21 +8001,26 @@ exprt numpy_call_expr::bind_array_once(const exprt &array)
 {
   if (!array.type().is_array() || array.is_symbol())
     return array;
+  return bind_once(array);
+}
+
+exprt numpy_call_expr::bind_once(const exprt &value)
+{
   symbolt &tmp =
-    converter_.create_tmp_symbol(call_, "$math_array$", array.type(), exprt());
+    converter_.create_tmp_symbol(call_, "$math_array$", value.type(), exprt());
   const exprt symbol = symbol_expr(tmp);
   code_declt decl(symbol);
   decl.location() = converter_.get_location_from_decl(call_);
   converter_.add_instruction(decl);
-  if (array.id() == "code" && array.get("statement") == "function_call")
+  if (value.id() == "code" && value.get("statement") == "function_call")
   {
-    code_function_callt call = to_code_function_call(to_code(array));
+    code_function_callt call = to_code_function_call(to_code(value));
     call.lhs() = symbol;
     converter_.add_instruction(call);
   }
   else
   {
-    code_assignt assign(symbol, array);
+    code_assignt assign(symbol, value);
     assign.location() = decl.location();
     converter_.add_instruction(assign);
   }

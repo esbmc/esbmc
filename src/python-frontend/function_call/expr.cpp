@@ -4874,6 +4874,7 @@ function_call_expr::try_bounded_math_call(const std::string &func_name)
 std::optional<exprt>
 function_call_expr::bounded_binary_math_call(const std::string &function)
 {
+  bounded_math model(converter_, call_);
   std::vector<exprt> args;
   for (const nlohmann::json &arg : call_["args"])
   {
@@ -4883,9 +4884,8 @@ function_call_expr::bounded_binary_math_call(const std::string &function)
     // The arguments are converted, so falling back would convert them again.
     if (!is_math_number(x.type()))
       throw std::runtime_error("TypeError: must be real number");
-    args.push_back(x);
+    args.push_back(model.capture(x));
   }
-  bounded_math model(converter_, call_);
   if (function == "hypot")
     return model.hypot_of(args);
   return model.binary(function, args[0], args[1], math_module::math);

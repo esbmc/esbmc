@@ -30,7 +30,8 @@ exprt between(const exprt &value, double low, double high)
 // An exact value at a signed zero, where the bounds cannot keep the sign.
 exprt at_zero(const std::string &function, const exprt &x)
 {
-  static const std::set<std::string> one = {"exp", "exp2", "cos", "cosh"};
+  static const std::set<std::string> one = {
+    "exp", "exp2", "cos", "cosh", "erfc"};
   if (one.count(function) != 0)
     return from_double(1.0, double_type());
   if (transcendental::keeps_signed_zero(function))
@@ -344,32 +345,54 @@ static std::optional<double> constant_value(const exprt &x)
   return std::nullopt;
 }
 
+// An infinite argument wins over NaN, and NaN over a sum that overflows, as
+// CPython checks the arguments before it sums their squares.
 exprt bounded_math::hypot_of(const std::vector<exprt> &args)
 {
+  bool constant = true, infinite = false, nan = false;
   double value = 0.0;
-  bool constant = true;
   for (const exprt &x : args)
   {
     const std::optional<double> literal = constant_value(x);
     constant = constant && literal.has_value();
-    if (constant)
-      value = transcendental::host_value("hypot", value, *literal);
+    if (!constant)
+      break;
+    infinite = infinite || std::isinf(*literal);
+    nan = nan || std::isnan(*literal);
+    value = transcendental::host_value("hypot", value, *literal);
   }
   if (!constant)
-  {
-    std::vector<exprt> operands = args;
-    operands.resize(std::max<std::size_t>(operands.size(), 2), number(0.0));
-    exprt result = binary("hypot", operands[0], operands[1], math_module::math);
-    for (std::size_t i = 2; i < operands.size(); ++i)
-      result = binary("hypot", result, operands[i], math_module::math);
-    return result;
-  }
+    return hypot_of_runtime(args);
+  if (infinite || nan)
+    return number(infinite ? inf : NAN);
   // CPython rounds a sum of more than two squares once, where each step here
   // rounds again.
   if (args.size() <= 2 || value == 0.0 || !std::isfinite(value))
     return from_double(value, double_type());
   const transcendental::interval bound = transcendental::within_ulps(value);
   return within(bound.low, bound.high);
+}
+
+exprt bounded_math::hypot_of_runtime(const std::vector<exprt> &args)
+{
+  std::vector<exprt> operands;
+  exprt::operandst infinite, nan;
+  for (const exprt &x : args)
+  {
+    operands.push_back(read_once(x));
+    infinite.push_back(is_infinite(operands.back()));
+    nan.push_back(is_nan(operands.back()));
+  }
+  operands.resize(std::max<std::size_t>(operands.size(), 2), number(0.0));
+  exprt result = binary("hypot", operands[0], operands[1], math_module::math);
+  for (std::size_t i = 2; i < operands.size(); ++i)
+    result = binary("hypot", result, operands[i], math_module::math);
+  if (args.size() <= 2)
+    return result;
+  return if_exprt(
+    or_exprt(infinite),
+    number(inf),
+    if_exprt(or_exprt(nan), number(NAN), result));
 }
 
 bool bounded_math::is_float_predicate(const std::string &function)
@@ -438,6 +461,11 @@ exprt bounded_math::fresh(const std::string &name, const exprt &value)
   assign.location() = location;
   converter_.add_instruction(assign);
   return symbol;
+}
+
+exprt bounded_math::capture(const exprt &x)
+{
+  return x.is_constant() ? x : fresh("$math_arg$", x);
 }
 
 exprt bounded_math::read_once(const exprt &x)

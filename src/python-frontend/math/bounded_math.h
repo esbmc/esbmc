@@ -49,6 +49,9 @@ public:
   /// math.hypot of any number of arguments, each read once: hypot() is 0
   /// and hypot(x) is |x|.
   exprt hypot_of(const std::vector<exprt> &args);
+  /// The value of an argument at this point, before a later argument's
+  /// call can change what it reads.
+  exprt capture(const exprt &x);
   /// isnan, isinf or isfinite of a number, which is read once.
   static bool is_float_predicate(const std::string &function);
   exprt float_predicate(const std::string &function, const exprt &x);
@@ -66,6 +69,7 @@ private:
     const exprt &x,
     const exprt &value);
   exprt hypot(const exprt &x, const exprt &y);
+  exprt hypot_of_runtime(const std::vector<exprt> &args);
   exprt arctan2(const exprt &y, const exprt &x);
   exprt fresh(const std::string &name, const exprt &value);
   exprt read_once(const exprt &x);

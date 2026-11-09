@@ -135,10 +135,14 @@ double max_ulps()
   return ulps;
 }
 
+// Past the largest double the spacing below it continues, not infinity.
 double ulps(double value)
 {
-  return max_ulps() *
-         (std::nextafter(std::fabs(value), inf) - std::fabs(value));
+  const double magnitude = std::fabs(value);
+  const double spacing = magnitude == DBL_MAX
+                           ? magnitude - std::nextafter(magnitude, 0.0)
+                           : std::nextafter(magnitude, inf) - magnitude;
+  return max_ulps() * spacing;
 }
 
 // The results around x: at x itself, or near it, where only a zero keeps

@@ -358,6 +358,7 @@ private:
   void
   reject_non_numeric_elements(const std::string &function, const typet &type);
   exprt bind_array_once(const exprt &array);
+  exprt bind_once(const exprt &value);
   exprt retype_lhs(const exprt &result);
   std::optional<exprt> try_float_predicate(const std::string &function);
   exprt numpy_math_list(const std::string &function, const nlohmann::json &arg);

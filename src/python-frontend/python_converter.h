@@ -54,6 +54,10 @@ class get_expr_depth_guard;
 /// their source, whose storage they share.
 void alias_numpy_string_views(nlohmann::json &ast);
 
+/// Splits `r = np.f(x, out=o)` into the call and `r = o`, as the ufunc
+/// returns its out= array, which r then aliases.
+void alias_numpy_ufunc_outputs(nlohmann::json &ast);
+
 bool is_imported_numpy_module_alias(
   const nlohmann::json &ast,
   const std::string &name);
