@@ -164,6 +164,9 @@ bool esbmc_parseoptionst::get_goto_program(
     malloc_trim(0);
 #endif
 
+    if (options.get_bool_option("sv-comp"))
+      configure_sv_comp_threads(options, goto_functions);
+
     fine_timet process_start = current_time();
     if (process_goto_program(options, goto_functions))
       return true;
@@ -194,6 +197,64 @@ bool esbmc_parseoptionst::get_goto_program(
   }
 
   return false;
+}
+
+/// SV-COMP runs every task with the same command line, so the configuration
+/// for concurrent programs is chosen here, from the program: only one that can
+/// start a thread from main gets it. The wrapper used to match pthread_create
+/// in the source, which also caught programs that never call it (#10189).
+void esbmc_parseoptionst::configure_sv_comp_threads(
+  optionst &options,
+  const goto_functionst &goto_functions)
+{
+  // Termination has its own strategy and no schedule bound.
+  if (options.get_bool_option("termination") || !spawns_threads(goto_functions))
+    return;
+
+  log_status("The program can start a thread: verifying its schedules");
+
+  // Interval analysis and loop unrolling assume one thread.
+  for (const char *flag : {"interval-analysis", "goto-unwind"})
+    cmdline.vm.erase(flag);
+  std::erase_if(goto_preprocess_algorithms, [](const auto &algorithm) {
+    return dynamic_cast<const bounded_loop_unroller *>(algorithm.get());
+  });
+
+  // The inductive step stops at the first thread, so search for violations
+  // with incremental BMC instead. Correctness-witness validation needs
+  // k-induction to check the invariants.
+  if (!cmdline.isset("validate-correctness-witness"))
+  {
+    cmdline.vm.erase("k-induction");
+    options.set_option("k-induction", false);
+    options.set_option("incremental-bmc", true);
+  }
+
+  // A truncated schedule space still reports SUCCESSFUL, so this trades the
+  // soundness of "true" verdicts for coverage.
+  if (!cmdline.isset("context-bound"))
+    options.set_option("context-bound", "3");
+  options.set_option("cswitch-skip-readonly-globals", true);
+  // One bounded round first can only report a violation (#6831, #6947); it
+  // cannot run with --multi-property.
+  if (
+    !cmdline.isset("falsify-context-bound") &&
+    !options.get_bool_option("multi-property"))
+    options.set_option("falsify-context-bound", "1");
+
+  // --smt-symex-guard makes sibling schedules share a solver context (#6831,
+  // #7043). A data-race run keeps a race claim open on every schedule and
+  // runs out of memory with it (#9692).
+  if (!cmdline.isset("data-races-check-only"))
+  {
+    options.set_option("smt-symex-guard", true);
+    options.set_option("smt-during-symex", true);
+  }
+  // A solver flag still takes precedence over the default.
+  if (!cmdline.isset("default-solver") && solver_built_in("bitwuzla"))
+    options.set_option("default-solver", "bitwuzla");
+
+  config.options = options;
 }
 
 // Retarget the synthesised __ESBMC_main wrapper so its boilerplate call to
