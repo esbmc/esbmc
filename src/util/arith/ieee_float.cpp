@@ -764,14 +764,20 @@ ieee_floatt &ieee_floatt::operator/=(const ieee_floatt &other)
     return *this;
   }
 
+  // Quotient >= 2^(f+2) plus a sticky bit, so align() rounds the exact
+  // value even for subnormal operands (#10172).
+  const unsigned shift = other.fraction.floorPow2() + spec.f + 3;
   exponent -= other.exponent;
-  fraction *= power(2, spec.f);
+  exponent -= shift - spec.f;
+  fraction *= power(2, shift);
 
-  // to account for error
-  fraction *= power(2, spec.f);
-  exponent -= spec.f;
-
+  const BigInt remainder = fraction % other.fraction;
   fraction /= other.fraction;
+  if (remainder != 0)
+  {
+    fraction = fraction * 2 + 1;
+    --exponent;
+  }
 
   if (other.sign_flag)
     negate();

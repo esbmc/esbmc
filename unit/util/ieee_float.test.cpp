@@ -1,6 +1,7 @@
 #define CATCH_CONFIG_MAIN
 #include <catch2/catch.hpp>
 #include <cmath>
+#include <limits>
 #include <util/arith/ieee_float.h>
 
 TEST_CASE("ieee float can handle 1", "[core][util][ieee_floatt]")
@@ -113,5 +114,89 @@ TEST_CASE("ieee float classifies infinities", "[core][util][ieee_floatt]")
 
     REQUIRE(subnormal.is_finite());
     REQUIRE_FALSE(subnormal.is_normal());
+  }
+}
+
+TEST_CASE("ieee float division rounds correctly", "[core][util][ieee_floatt]")
+{
+  // #10172: quotients just above a halfway point, and subnormal dividends.
+  constexpr double inf = std::numeric_limits<double>::infinity();
+  constexpr double max = std::numeric_limits<double>::max();
+  struct row
+  {
+    double a, b, even, away, plus_inf, minus_inf, zero;
+  };
+  const row rows[] = {
+    {0x1p+0,
+     0x1.fffffffffffffp+52,
+     0x1.0000000000001p-53,
+     0x1.0000000000001p-53,
+     0x1.0000000000001p-53,
+     0x1p-53,
+     0x1p-53},
+    {-0x1p+0,
+     0x1.fffffffffffffp+52,
+     -0x1.0000000000001p-53,
+     -0x1.0000000000001p-53,
+     -0x1p-53,
+     -0x1.0000000000001p-53,
+     -0x1p-53},
+    {0x0.0000000000001p-1022,
+     0x1.fffffffffffffp+0,
+     0x0.0000000000001p-1022,
+     0x0.0000000000001p-1022,
+     0x0.0000000000001p-1022,
+     0x0p+0,
+     0x0p+0},
+    {0x0.0000000000003p-1022,
+     0x1.56e1fc2f8f359p-997,
+     0x1.1eb2d66005835p-76,
+     0x1.1eb2d66005835p-76,
+     0x1.1eb2d66005835p-76,
+     0x1.1eb2d66005834p-76,
+     0x1.1eb2d66005834p-76},
+    {0x1p+0,
+     0x1.8p+1,
+     0x1.5555555555555p-2,
+     0x1.5555555555555p-2,
+     0x1.5555555555556p-2,
+     0x1.5555555555555p-2,
+     0x1.5555555555555p-2},
+    {0x1.8p+1, 0x1.8p+0, 0x1p+1, 0x1p+1, 0x1p+1, 0x1p+1, 0x1p+1},
+    {0x0.0000000000003p-1022,
+     0x1p+1,
+     0x0.0000000000002p-1022,
+     0x0.0000000000002p-1022,
+     0x0.0000000000002p-1022,
+     0x0.0000000000001p-1022,
+     0x0.0000000000001p-1022},
+    {0x1p-1000,
+     0x0.0000000000003p-1022,
+     0x1.5555555555555p+72,
+     0x1.5555555555555p+72,
+     0x1.5555555555556p+72,
+     0x1.5555555555555p+72,
+     0x1.5555555555555p+72},
+    {max, 0x1p-1, inf, inf, inf, max, max},
+    {-max, 0x1p-1, -inf, -inf, -max, -inf, -max},
+  };
+
+  const auto divide = [](double a, double b, ieee_floatt::rounding_modet mode) {
+    ieee_floatt x(ieee_float_spect(52, 11)), y(ieee_float_spect(52, 11));
+    x.from_double(a);
+    y.from_double(b);
+    x.rounding_mode = mode;
+    x /= y;
+    return x.to_double();
+  };
+
+  for (const row &r : rows)
+  {
+    CAPTURE(r.a, r.b);
+    CHECK(divide(r.a, r.b, ieee_floatt::ROUND_TO_EVEN) == r.even);
+    CHECK(divide(r.a, r.b, ieee_floatt::ROUND_TO_AWAY) == r.away);
+    CHECK(divide(r.a, r.b, ieee_floatt::ROUND_TO_PLUS_INF) == r.plus_inf);
+    CHECK(divide(r.a, r.b, ieee_floatt::ROUND_TO_MINUS_INF) == r.minus_inf);
+    CHECK(divide(r.a, r.b, ieee_floatt::ROUND_TO_ZERO) == r.zero);
   }
 }
