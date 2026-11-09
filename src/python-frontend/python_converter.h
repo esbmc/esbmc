@@ -1656,6 +1656,15 @@ private:
 
   typet
   any_attribute_type(const nlohmann::json &stmt, const std::string &attr_name);
+  bool is_tagged_value_expr(
+    const nlohmann::json &value,
+    const nlohmann::json &func_node,
+    const struct_typet &clazz) const;
+  typet unannotated_attribute_type(
+    const nlohmann::json &value,
+    const nlohmann::json &func_node,
+    const struct_typet &clazz,
+    const typet &fallback) const;
   void get_attributes_from_self(
     const nlohmann::json &func_node,
     struct_typet &clazz);
