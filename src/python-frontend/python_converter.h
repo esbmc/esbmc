@@ -188,6 +188,11 @@ public:
     side_effect_expr_function_callt &call,
     const code_typet *&callee_type);
   std::optional<exprt> call_property_value(const nlohmann::json &element);
+  std::optional<exprt> call_rebound_builtin(const nlohmann::json &element);
+  std::optional<bool> import_binds_before(
+    const std::string &name,
+    const std::string &file,
+    int line) const;
   /// Unknown, function or class-instance types: a call on such a value may
   /// succeed.
   bool may_be_callable(const typet &type);
