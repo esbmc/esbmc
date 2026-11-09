@@ -7,7 +7,9 @@
 #include <iosfwd>
 #include <map>
 #include <memory>
+#include <optional>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 #include <goto-programs/abstract-interpretation/ai_domain.h>
 #include <goto-programs/goto_functions.h>
@@ -96,6 +98,14 @@ public:
   const std::vector<expr2tc> *
   reentered_locals(const irep_idt &caller, const irep_idt &callee) const;
 
+  /// The symbols whose address the analysed functions take, the only ones a
+  /// write through a pointer can change; nullptr when one program was analysed
+  /// on its own.
+  const std::unordered_set<irep_idt, irep_id_hash> *address_taken() const
+  {
+    return taken ? &*taken : nullptr;
+  }
+
   /// The function whose body holds the FUNCTION_CALL @p call.
   const irep_idt &function_of(goto_programt::const_targett call) const
   {
@@ -109,6 +119,7 @@ protected:
     call_site_function;
   std::unordered_map<irep_idt, unsigned, irep_id_hash> call_cycle;
   std::unordered_map<irep_idt, std::vector<expr2tc>, irep_id_hash> cycle_locals;
+  std::optional<std::unordered_set<irep_idt, irep_id_hash>> taken;
 
   // overload to add a factory
   virtual void initialize(const goto_programt &);

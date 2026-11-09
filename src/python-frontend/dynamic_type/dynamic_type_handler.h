@@ -38,7 +38,8 @@ public:
    */
   void declare_dynamic_type_names(
     const std::unordered_set<std::string> &dynamic_type_names,
-    const nlohmann::json &ast_node);
+    const nlohmann::json &ast_node,
+    bool copy_existing = true);
 
   /**
    * @brief True if `name` currently resolves to a tagged-object symbol,

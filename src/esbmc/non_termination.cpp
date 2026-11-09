@@ -634,6 +634,15 @@ void run_iteration(
   }
 }
 
+std::optional<bool> concrete_cycle_from_init(
+  const goto_functionst &goto_functions,
+  const loopst &loop,
+  const expr2tc &input_arg,
+  const std::vector<BigInt> &valid_inputs,
+  const statet &s0,
+  unsigned bound,
+  size_t cap);
+
 /// Does a run of the input loop from @p s0 repeat a state within @p bound
 /// valid inputs, before exit or abort ends it?
 ///
@@ -654,6 +663,11 @@ bool reaches_cycle_from_init(
   optionst &options,
   const namespacet &ns)
 {
+  if (
+    const std::optional<bool> concrete = concrete_cycle_from_init(
+      goto_functions, loop, input_arg, valid_inputs, s0, bound, 20000))
+    return *concrete;
+
   expr2tc formula = gen_true_expr();
   expr2tc alive = gen_true_expr();
   expr2tc repeats = gen_false_expr();
@@ -1348,6 +1362,108 @@ private:
   }
 };
 
+/// reaches_cycle_from_init on concrete values: every state the loop reaches
+/// from @p s0 within @p bound iterations, by running each one for every valid
+/// input, then a search of those edges for a cycle. A cycle is a lasso by the
+/// argument at reaches_cycle_from_init. False when every reachable state was
+/// explored without one; nullopt, leaving the solver to decide, when the bound
+/// or @p cap states cut the search, or an iteration is not concrete.
+std::optional<bool> concrete_cycle_from_init(
+  const goto_functionst &goto_functions,
+  const loopst &loop,
+  const expr2tc &input_arg,
+  const std::vector<BigInt> &valid_inputs,
+  const statet &s0,
+  unsigned bound,
+  size_t cap)
+{
+  concrete_runnert runner(goto_functions, loop);
+  std::vector<size_t> slots;
+  std::vector<int64_t> init;
+  for (const auto &[name, value] : s0)
+  {
+    if (!to_constant_int2t(value).value.is_int64())
+      return std::nullopt;
+    slots.push_back(runner.slot(name));
+    init.push_back(to_constant_int2t(value).value.to_int64());
+  }
+  for (const BigInt &v : valid_inputs)
+    if (!v.is_int64())
+      return std::nullopt;
+
+  std::map<std::vector<int64_t>, size_t> index{{init, 0}};
+  std::vector<std::vector<int64_t>> states{init};
+  std::vector<unsigned> depth{0};
+  std::vector<std::vector<size_t>> next;
+  bool cut = false;
+  try
+  {
+    for (size_t i = 0; i < states.size(); ++i)
+    {
+      next.emplace_back();
+      if (depth[i] == bound)
+      {
+        cut = true;
+        continue;
+      }
+      for (const BigInt &v : valid_inputs)
+      {
+        for (size_t g = 0; g < slots.size(); ++g)
+          runner.set(slots[g], states[i][g]);
+        if (!runner.iterate(input_arg, v.to_int64()))
+          continue;
+        std::vector<int64_t> after;
+        for (size_t slot : slots)
+          after.push_back(runner.get(slot));
+        auto [it, fresh] = index.emplace(std::move(after), states.size());
+        if (fresh)
+        {
+          if (states.size() == cap)
+            return std::nullopt;
+          states.push_back(it->first);
+          depth.push_back(depth[i] + 1);
+        }
+        next[i].push_back(it->second);
+      }
+    }
+  }
+  catch (const unsupportedt &)
+  {
+    return std::nullopt;
+  }
+
+  enum colourt : uint8_t
+  {
+    unseen,
+    on_path,
+    done
+  };
+  std::vector<colourt> colour(states.size(), unseen);
+  std::vector<std::pair<size_t, size_t>> path{{0, 0}};
+  colour[0] = on_path;
+  while (!path.empty())
+  {
+    auto &[n, k] = path.back();
+    if (k == next[n].size())
+    {
+      colour[n] = done;
+      path.pop_back();
+      continue;
+    }
+    const size_t m = next[n][k++];
+    if (colour[m] == on_path)
+      return true;
+    if (colour[m] == unseen)
+    {
+      colour[m] = on_path;
+      path.emplace_back(m, 0);
+    }
+  }
+  if (cut)
+    return std::nullopt;
+  return false;
+}
+
 /// Every state the input loop @p loop reaches at its head from @p s0, found
 /// by running each iteration on concrete values for every valid input. Empty
 /// when an iteration is not a function of the state and the input (it reads
@@ -1441,6 +1557,10 @@ tvt try_prove_non_termination_by_recurrent_set(
   const namespacet &ns,
   locationt &loop_location)
 {
+  // has_cycle_from_init runs concrete_runnert, which indexes its caches by
+  // location_number; earlier passes may have inserted instructions since the
+  // last numbering.
+  goto_functions.compute_location_numbers();
   // Only the eca-rers2012 shape: an input-validation while(1) around one
   // call to an updater. Run the loop from the initial state and look for a
   // state that recurs (has_cycle_from_init); a fixpoint found over all
