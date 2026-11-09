@@ -389,6 +389,18 @@ private:
   exprt eigenvalues(const std::vector<std::vector<double>> &m);
   exprt eigen_decomposition(const std::vector<std::vector<double>> &m);
   std::vector<exprt> in_any_order(const std::vector<exprt> &values);
+  std::vector<exprt> permutation_slots(std::size_t n);
+  std::vector<exprt> with_any_sign(const std::vector<exprt> &v);
+  exprt selected_offset(
+    const exprt &slot,
+    const std::vector<double> &exacts,
+    double radius);
+  std::vector<exprt>
+  dense_eigenvalues(const std::vector<std::vector<double>> &m);
+  void dense_eigen_pairs(
+    const std::vector<std::vector<double>> &m,
+    std::vector<exprt> &values,
+    std::vector<std::vector<exprt>> &columns);
   void eigen_pair_2x2(
     const std::vector<std::vector<double>> &m,
     std::vector<exprt> &values,
@@ -422,6 +434,13 @@ private:
   exprt within_radius(const exprt &value, const exprt &radius);
   void
   assume_near(const exprt &residual, const exprt &bound, const exprt &excused);
+  std::vector<std::pair<exprt, exprt>>
+  runtime_eigenvalues(const std::vector<std::vector<exprt>> &m);
+  exprt runtime_eigen_pairs(const std::vector<std::vector<exprt>> &m);
+  void bind_eigenvector(
+    const std::vector<std::vector<exprt>> &m,
+    const exprt &lambda,
+    const std::vector<exprt> &v);
   exprt symbolic_det(const std::vector<std::vector<exprt>> &m);
   exprt symbolic_norm(const nlohmann::json &arg, norm_order order);
   exprt linalg_norm(const std::function<void(nlohmann::json &)> &unwrap);
