@@ -1944,13 +1944,10 @@ std::string python_annotation<Json>::get_type_from_binary_expr(
     {
       // Handle function calls in binary expressions like float("1.1") +
       // float("2.2")
-      const std::string &func_name = lhs["func"]["id"];
-
-      if (type_utils::is_builtin_type(func_name))
-        type = get_builtin_call_type(lhs);
-      else
-        type = get_function_return_type(
-          func_name, body); // For user-defined functions
+      const std::optional<std::string> call_type = named_call_type(lhs, body);
+      if (!call_type)
+        return "";
+      type = *call_type;
     }
     else if (lhs["_type"] == "Constant")
       type = get_type_from_constant(lhs);
@@ -2011,6 +2008,30 @@ std::string python_annotation<Json>::get_type_from_binary_expr(
   }
 
   return promote_to_float_operand(stmt, type);
+}
+
+/// The type a call of a name returns, or nullopt when the name holds a
+/// function whose return type is unknown, such as a decorator's parameter.
+template <class Json>
+std::optional<std::string>
+python_annotation<Json>::named_call_type(const Json &call, const Json &body)
+{
+  const std::string &func_name = call["func"]["id"];
+  if (type_utils::is_builtin_type(func_name))
+    return get_builtin_call_type(call);
+  try
+  {
+    return get_function_return_type(func_name, body);
+  }
+  catch (std::runtime_error &)
+  {
+    const std::string type = function_value_return_type(call["func"], &call);
+    if (!type.empty())
+      return type;
+    if (holds_callable_value(func_name))
+      return std::nullopt;
+    throw;
+  }
 }
 
 /// The type a declaration's annotation names, or empty. A `list[T]` or
