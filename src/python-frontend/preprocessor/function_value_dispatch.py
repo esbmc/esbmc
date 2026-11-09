@@ -30,6 +30,7 @@ import re
 
 from preprocessor.function_value_lift import lift_nested_defs
 from preprocessor.function_value_methods import lift_bound_methods
+from preprocessor.function_value_modules import lift_module_functions
 from preprocessor.function_value_params import (specialise_function_parameters,
                                                 specialise_function_parameters_in_order)
 from preprocessor.function_value_types import (_REFLECTIVE, _REFLECTIVE_ATTRS, _Analysis,
@@ -1335,6 +1336,7 @@ def dispatch_mixed_function_values(module, path):
     candidate = copy.deepcopy(module)
     lifted_methods = _may_lift_methods(module) and lift_bound_methods(candidate)
     lifted_methods = specialise_function_parameters(candidate) or lifted_methods
+    lifted_methods = lift_module_functions(candidate, path) or lifted_methods
     base = candidate if lifted_methods else module
     original = _propagated(base, path)
     if not _mixed_groups(original):
