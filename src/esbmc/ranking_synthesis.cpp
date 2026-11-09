@@ -3170,6 +3170,28 @@ expr2tc at_any_prev(const namespacet &ns, const expr2tc &e)
   return out;
 }
 
+/// Whether @p e reads only program variables and integer constants, the only
+/// leaves at_any_prev moves to the earlier state. A dereference becomes a
+/// synthetic symbol (`$rank_deref$...`) that prints as its pointer, so
+/// `\at(p, AnyPrev)` would name the old pointer, not the value it pointed to.
+bool plain_measure(const namespacet &ns, const expr2tc &e)
+{
+  if (is_symbol2t(e))
+    return ns.lookup(to_symbol2t(e).thename) != nullptr;
+  if (is_constant_int2t(e))
+    return true;
+  if (
+    is_dereference2t(e) || is_index2t(e) || is_member2t(e) ||
+    is_address_of2t(e) || is_sideeffect2t(e))
+    return false;
+  bool plain = true, leaf = true;
+  e->foreach_operand([&](const expr2tc &op) {
+    leaf = false;
+    plain = plain && plain_measure(ns, op);
+  });
+  return plain && !leaf;
+}
+
 /// `\at(m, AnyPrev) > m` for each measure, as a disjunction: each disjunct is
 /// well-founded, and a lexicographic decrease satisfies the disjunction against
 /// every earlier state because that order is transitive.
@@ -3574,7 +3596,14 @@ tvt try_prove_termination_by_ranking(
                  outer.get_original_loop_exit()->location_number >
                    back->location_number;
         });
-      if (f_it->first == "c:@F@main" && !nested)
+      // A do-while loop has no instruction at its `do`, and the witness must
+      // name the loop statement, not the first statement of its body.
+      const bool bottom_tested = !is_true(back->guard);
+      if (
+        f_it->first == "c:@F@main" && !nested && !bottom_tested &&
+        std::all_of(measures.begin(), measures.end(), [&](const expr2tc &m) {
+          return plain_measure(ns, m);
+        }))
         transition_invariants.emplace_back(
           head->location, transition_invariant(ns, measures));
     }
