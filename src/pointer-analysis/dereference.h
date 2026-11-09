@@ -459,6 +459,11 @@ private:
     modet mode,
     const expr2tc &resolved = expr2tc());
 
+  void unresolved_null_check(
+    const expr2tc &deref_expr,
+    const value_setst::valuest &points_to_set,
+    const guard2tc &guard);
+
   void null_offset_check(
     const expr2tc &deref_expr,
     const value_setst::valuest &points_to_set,

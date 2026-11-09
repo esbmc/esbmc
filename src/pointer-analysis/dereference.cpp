@@ -713,6 +713,8 @@ expr2tc dereferencet::dereference(
 
   if (!known_exhaustive && (is_write(mode) || is_free(mode)))
     deref_invalid_ptr(src, guard, mode, resolved);
+  if (!known_exhaustive && is_read(mode))
+    unresolved_null_check(src, points_to_set, guard);
   null_offset_check(src, points_to_set, guard, mode);
 
   if (is_internal(mode))
@@ -1206,6 +1208,25 @@ expr2tc dereferencet::build_reference_to(
   build_reference_rec(value, final_offset, type, tmp_guard, mode, alignment);
 
   return value;
+}
+
+/* A read through an unknown or invalid target is only checked by
+ * invalid_pointer, which is false on NULL. Unless a NULL target already put
+ * same_object(p, NULL) under a claim, add it here (#10188). */
+void dereferencet::unresolved_null_check(
+  const expr2tc &deref_expr,
+  const value_setst::valuest &points_to_set,
+  const guard2tc &guard)
+{
+  for (const expr2tc &target : points_to_set)
+    if (
+      is_object_descriptor2t(target) &&
+      is_null_object2t(to_object_descriptor2t(target).get_root_object()))
+      return;
+  expr2tc null_ptr = symbol2tc(pointer_type2tc(get_empty_type()), "NULL");
+  guard2tc tmp_guard(guard);
+  tmp_guard.add(same_object2tc(deref_expr, null_ptr));
+  dereference_failure("pointer dereference", "NULL pointer", tmp_guard);
 }
 
 /* A pointer rebuilt from (unsigned long)NULL + 432 is NULL+432 in the value
