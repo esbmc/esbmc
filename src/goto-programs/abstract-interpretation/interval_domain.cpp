@@ -975,8 +975,14 @@ void interval_domaint::transform(
     break;
 
   case ASSIGN:
-    assign(instruction.code);
+  {
+    const expr2tc &target = to_code_assign2t(instruction.code).target;
+    if (is_symbol2t(target) || is_typecast2t(target))
+      assign(instruction.code);
+    else
+      havoc_target(target, &ai);
     break;
+  }
 
   case GOTO:
   {
@@ -1027,7 +1033,7 @@ void interval_domaint::transform(
     break;
 
   case FUNCTION_CALL:
-    havoc_written_arguments(to_code_function_call2t(instruction.code));
+    havoc_written_arguments(to_code_function_call2t(instruction.code), &ai);
     break;
 
   case END_FUNCTION:
@@ -1056,7 +1062,7 @@ void interval_domaint::transform(
 
     // We don't know anything about the return value
     if (!is_nil_expr(code_function_call.ret))
-      havoc_target(code_function_call.ret);
+      havoc_target(code_function_call.ret, &ai);
 
     assert(is_code_type(code_function_call.function->type));
     const code_type2t &function =
@@ -1392,7 +1398,22 @@ bool interval_domaint::havoc_pointee(const expr2tc &arg, bool any_type)
   return !is_pointer_type(arg) && !any_type;
 }
 
-void interval_domaint::havoc_written_arguments(const code_function_call2t &call)
+void interval_domaint::havoc_through_pointer(const ai_baset *ai)
+{
+  const auto *taken = ai ? ai->address_taken() : nullptr;
+  if (!taken)
+  {
+    clear_state();
+    return;
+  }
+  copy_if_needed();
+  for (auto it = intervals->begin(); it != intervals->end();)
+    it = taken->count(it->first) ? intervals->erase(it) : std::next(it);
+}
+
+void interval_domaint::havoc_written_arguments(
+  const code_function_call2t &call,
+  const ai_baset *ai)
 {
   if (!is_symbol2t(call.function))
     return;
@@ -1407,7 +1428,7 @@ void interval_domaint::havoc_written_arguments(const code_function_call2t &call)
       !is_nil_expr(call.operands[i]) &&
       !havoc_pointee(call.operands[i], any_type))
     {
-      clear_state();
+      havoc_through_pointer(ai);
       return;
     }
 }
@@ -1422,24 +1443,24 @@ void interval_domaint::havoc_arguments(
     havoc_rec(symbol2tc(function.arguments[i], function.argument_names[i]));
 }
 
-void interval_domaint::havoc_target(const expr2tc &target)
+void interval_domaint::havoc_target(const expr2tc &target, const ai_baset *ai)
 {
   if (is_symbol2t(target))
     havoc_rec(target);
   else if (is_if2t(target))
   {
-    havoc_target(to_if2t(target).true_value);
-    havoc_target(to_if2t(target).false_value);
+    havoc_target(to_if2t(target).true_value, ai);
+    havoc_target(to_if2t(target).false_value, ai);
   }
   else if (is_typecast2t(target))
-    havoc_target(to_typecast2t(target).from);
+    havoc_target(to_typecast2t(target).from, ai);
   else if (is_member2t(target))
-    havoc_target(to_member2t(target).source_value);
+    havoc_target(to_member2t(target).source_value, ai);
   else if (is_index2t(target))
-    havoc_target(to_index2t(target).source_value);
+    havoc_target(to_index2t(target).source_value, ai);
   else
     // A write through a pointer, or to an lvalue not modelled here.
-    clear_state();
+    havoc_through_pointer(ai);
 }
 
 void interval_domaint::havoc_rec(const expr2tc &expr)
