@@ -3807,6 +3807,35 @@ exprt function_call_expr::handle_list_method() const
   throw std::runtime_error("Unsupported list method: " + method_name);
 }
 
+/// An in-place list method returns None, so assigned to a name the call runs
+/// and the name holds None rather than the model function's own result
+/// (#10160). Other value positions are left alone: the and/or, conditional and
+/// str() lowerings copy or fold a None-typed operand and would drop or repeat
+/// the call.
+exprt function_call_expr::none_if_assigned(exprt call) const
+{
+  static const std::set<std::string> in_place = {
+    "append",
+    "appendleft",
+    "clear",
+    "extend",
+    "insert",
+    "remove",
+    "reverse",
+    "sort"};
+  if (
+    !converter_.assigned_call_ || call_ != *converter_.assigned_call_ ||
+    !in_place.count(function_id_.get_function()))
+    return call;
+  code_blockt block;
+  block.copy_to_operands(converter_.convert_expression_to_code(call));
+  block.copy_to_operands(code_expressiont(gen_zero(none_type())));
+  side_effect_exprt value("statement_expression", none_type());
+  value.copy_to_operands(block);
+  value.location() = converter_.get_location_from_decl(call_);
+  return value;
+}
+
 bool function_call_expr::is_numpy_astype_call() const
 {
   if (call_["func"]["_type"] != "Attribute")
@@ -5475,7 +5504,7 @@ function_call_expr::get_dispatch_table()
 
     // List methods
     {[this]() { return is_list_method_call(); },
-     [this]() { return handle_list_method(); },
+     [this]() { return none_if_assigned(handle_list_method()); },
      "list methods"},
 
     // numpy ndarray.astype(dtype)
