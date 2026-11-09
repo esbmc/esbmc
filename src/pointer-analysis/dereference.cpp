@@ -2211,9 +2211,16 @@ void dereferencet::construct_from_dyn_struct_offset(
     }
 
     // Emplaced after the field's own arm, so they take precedence (#10045).
-    if (!int_encoding)
-      add_spanning_arms(
-        value, offset, type, alignment, offs, field_size, extract_list);
+    add_spanning_arms(
+      value,
+      offset,
+      type,
+      guard,
+      alignment,
+      mode,
+      offs,
+      field_size,
+      extract_list);
 
     i++;
   }
@@ -2231,7 +2238,9 @@ void dereferencet::add_spanning_arms(
   const expr2tc &value,
   const expr2tc &offset,
   const type2tc &type,
+  const guard2tc &guard,
   unsigned long alignment,
+  modet mode,
   const BigInt &field_offset,
   const BigInt &field_size,
   std::list<std::pair<expr2tc, expr2tc>> &extract_list)
@@ -2253,12 +2262,26 @@ void dereferencet::add_spanning_arms(
        p < field_end && p + access_sz <= struct_bits;
        p += step)
   {
+    const expr2tc at_p = equality2tc(offset, constant_int2tc(offset->type, p));
+    // Integer encoding has no bytes of a struct to stitch, so such a store
+    // would be dropped; a read is left a free value (#10089).
+    if (options.get_bool_option("int-encoding"))
+    {
+      if (is_write(mode))
+      {
+        guard2tc spanning_guard(guard);
+        spanning_guard.add(at_p);
+        dereference_failure(
+          "pointer dereference",
+          "Store spanning struct members under integer encoding",
+          spanning_guard);
+      }
+      continue;
+    }
     expr2tc spanning = stitch_across_members(value, p, access_sz);
     if (is_nil_expr(spanning))
       continue;
-    extract_list.emplace_back(
-      equality2tc(offset, constant_int2tc(offset->type, p)),
-      bitcast2tc(type, spanning));
+    extract_list.emplace_back(at_p, bitcast2tc(type, spanning));
   }
 }
 

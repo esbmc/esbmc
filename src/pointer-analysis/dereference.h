@@ -574,12 +574,14 @@ private:
     const expr2tc *failed_symbol = nullptr);
   /// Adds to \p extract_list an arm for each aligned \p offset at which a
   /// \p type access starts in the given field of struct \p value and ends
-  /// past it.
+  /// past it. Under integer encoding a store there fails instead.
   void add_spanning_arms(
     const expr2tc &value,
     const expr2tc &offset,
     const type2tc &type,
+    const guard2tc &guard,
     unsigned long alignment,
+    modet mode,
     const BigInt &field_offset,
     const BigInt &field_size,
     std::list<std::pair<expr2tc, expr2tc>> &extract_list);
