@@ -462,7 +462,8 @@ private:
   void unresolved_null_check(
     const expr2tc &deref_expr,
     const value_setst::valuest &points_to_set,
-    const guard2tc &guard);
+    const guard2tc &guard,
+    modet mode);
 
   void null_offset_check(
     const expr2tc &deref_expr,
