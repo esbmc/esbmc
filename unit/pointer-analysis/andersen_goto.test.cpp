@@ -351,6 +351,42 @@ TEST_CASE("andersen frontend widens an intrinsic to TOP", "[andersen][goto]")
 }
 
 TEST_CASE(
+  "andersen frontend models the intrinsics it knows as symex runs them",
+  "[andersen][goto]")
+{
+  // __ESBMC_memset stores its fill byte and returns its destination;
+  // __ESBMC_havoc_object stores nondet; __ESBMC_builtin_object_size writes
+  // nothing. A pointer made of nondet or fill bytes reaches no named object.
+  std::string src = R"(
+    void __ESBMC_havoc_object(void *);
+    __SIZE_TYPE__ __ESBMC_builtin_object_size(const void *, int);
+    int a;
+    int main(void)
+    {
+      int *m = &a;
+      void *r = __ESBMC_memset(&m, 0, sizeof(m));
+      int *h = &a;
+      __ESBMC_havoc_object(&h);
+      int *s = &a;
+      __SIZE_TYPE__ z = __ESBMC_builtin_object_size(&s, 0);
+      return 0;
+    }
+  )";
+
+  goto_functionst functions = compile(src);
+  andersent andersen;
+  andersen(functions);
+
+  const std::set<std::string> a_or_nondet{"a", andersent::nondet_object_name};
+  REQUIRE(targets_of(andersen, functions, "main", "m") == a_or_nondet);
+  REQUIRE(
+    targets_of(andersen, functions, "main", "r") == std::set<std::string>{"m"});
+  REQUIRE(targets_of(andersen, functions, "main", "h") == a_or_nondet);
+  REQUIRE(
+    targets_of(andersen, functions, "main", "s") == std::set<std::string>{"a"});
+}
+
+TEST_CASE(
   "andersen frontend widens variadic arguments only for va_arg",
   "[andersen][goto]")
 {

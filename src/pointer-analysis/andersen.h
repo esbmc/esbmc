@@ -362,6 +362,13 @@ protected:
     const std::vector<expr2tc> &arguments,
     unsigned location_number);
 
+  /// Models a symex intrinsic whose effect on pointers is known exactly.
+  /// False when \p callee is not one of them.
+  bool model_intrinsic(
+    const irep_idt &callee,
+    const code_function_call2t &call,
+    unsigned location_number);
+
   /// The conservative treatment of a callee this analysis cannot name: it may
   /// return anything and write anything through the pointers it is handed.
   void widen_call(

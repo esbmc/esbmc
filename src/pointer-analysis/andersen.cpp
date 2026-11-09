@@ -869,6 +869,46 @@ void andersent::handle_assign(
   assign_node(lhs, eval_rhs(rhs, loc), loc);
 }
 
+bool andersent::model_intrinsic(
+  const irep_idt &callee,
+  const code_function_call2t &call,
+  unsigned loc)
+{
+  const std::string &name = callee.as_string();
+  const std::vector<expr2tc> &args = call.operands;
+
+  // Computes a size from the object its argument reaches and writes nothing
+  // (goto_symext::intrinsic_builtin_object_size).
+  if (name == "c:@F@__ESBMC_builtin_object_size")
+    return true;
+
+  // Assigns nondet to every object its argument may reach
+  // (goto_symext::intrinsic_havoc_object). A pointer it leaves there is
+  // unconstrained, as a nondet side effect's is.
+  if (name == "c:@F@__ESBMC_havoc_object" && args.size() == 1)
+  {
+    add_constraint(
+      constraint_kindt::STORE, eval_rhs(args[0], loc), unconstrained());
+    return true;
+  }
+
+  // Fills the bytes of *s with c (goto_symext::intrinsic_memset). A pointer
+  // made of those bytes holds what c does, or, built from an integer, is one
+  // symex resolves to an invalid object.
+  if (name == "c:@F@__ESBMC_memset" && args.size() == 3)
+  {
+    const node_id dest = eval_rhs(args[0], loc);
+    add_constraint(constraint_kindt::STORE, dest, unconstrained());
+    if (!is_nil_expr(args[1]))
+      add_constraint(constraint_kindt::STORE, dest, eval_rhs(args[1], loc));
+    if (!is_nil_expr(call.ret) && may_hold_address(call.ret->type))
+      assign_node(call.ret, dest, loc);
+    return true;
+  }
+
+  return false;
+}
+
 void andersent::widen_call(
   const expr2tc &ret,
   const std::vector<expr2tc> &arguments,
@@ -955,6 +995,8 @@ void andersent::handle_function_call(
     auto it = goto_functions.function_map.find(callee_name);
     if (it != goto_functions.function_map.end() && it->second.body_available)
       bind_call(callee_name, it->second, call.ret, call.operands, loc);
+    else if (model_intrinsic(callee_name, call, loc))
+      return;
     else if (symex_runs(callee_name))
       widen_call(call.ret, call.operands, loc);
     // Symex gives a call to any other function without a body a fresh
