@@ -1062,6 +1062,15 @@ expr2tc dereferencet::build_reference_to(
   if (is_unknown2t(what) || is_invalid2t(what))
   {
     deref_invalid_ptr(deref_expr, guard, mode);
+    // invalid_pointer does not hold for NULL, and an unknown or invalid
+    // target does not name the NULL object (#10188).
+    if (!is_free(mode) && !is_internal(mode))
+    {
+      guard2tc tmp_guard(guard);
+      tmp_guard.add(
+        same_object2tc(deref_expr, symbol2tc(pointer_type2tc(type), "NULL")));
+      dereference_failure("pointer dereference", "NULL pointer", tmp_guard);
+    }
     return value;
   }
 
