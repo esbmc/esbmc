@@ -734,8 +734,10 @@ void goto_termination(
   // there; library helpers (body.hide) DO have loops but those are
   // explicitly skipped in the per-function pass below. Its result gates
   // the inductive step, as on the reachability path.
+  // No entry flags: non-termination is a claim about the states that enter
+  // the loop.
   bool any_unreliable_is_loop = goto_k_induction(
-    goto_functions, ns, options.get_bool_option("multi-property"));
+    goto_functions, nullptr, options.get_bool_option("multi-property"));
 
   // Per-function pass: inject no-op-cycle ASSUMEs, gate IS for loops
   // that would make IS UNSAT unsound, and insert termination

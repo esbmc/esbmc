@@ -508,7 +508,7 @@ bool esbmc_parseoptionst::process_goto_program(
       remove_no_op(goto_functions);
       goto_loop_invariant_combined(goto_functions);
       disable_is_if_unsound(
-        goto_k_induction(goto_functions, ns, checks_past_violation));
+        goto_k_induction(goto_functions, &context, checks_past_violation));
     }
     else
     {
@@ -522,7 +522,7 @@ bool esbmc_parseoptionst::process_goto_program(
         reachable_state_invariants =
           assume_reachable_loop_states(goto_functions, ns, 10000);
         disable_is_if_unsound(
-          goto_k_induction(goto_functions, ns, checks_past_violation));
+          goto_k_induction(goto_functions, &context, checks_past_violation));
       }
 
       if (wants_loop_invariants())

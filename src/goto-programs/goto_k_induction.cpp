@@ -14,6 +14,8 @@
 #include <util/base/i2string.h>
 #include <util/base/prefix.h>
 #include <util/irep/std_expr.h>
+#include <util/irep/migrate.h>
+#include <util/symtab/symbol_generator.h>
 #include <util/message/message.h>
 #include <iterator>
 #include <memory>
@@ -232,10 +234,12 @@ expr2tc havoc_object_function()
     "c:@F@__ESBMC_havoc_object");
 }
 
+/// With \p flag, each havoc takes effect only where \p flag holds.
 void add_havoc_assigns(
   goto_programt &dest,
   const havocst &havocs,
-  const locationt &location)
+  const locationt &location,
+  const expr2tc &flag = expr2tc())
 {
   const type2tc void_ptr = pointer_type2tc(get_empty_type());
   const expr2tc havoc_object = havoc_object_function();
@@ -255,7 +259,8 @@ void add_havoc_assigns(
   const auto add = [&](const expr2tc &lhs, const expr2tc &rhs) {
     goto_programt::targett t = dest.add_instruction(ASSIGN);
     t->inductive_step_instruction = true;
-    t->code = code_assign2tc(lhs, rhs);
+    t->code = code_assign2tc(
+      lhs, is_nil_expr(flag) ? rhs : if2tc(lhs->type, flag, rhs, lhs));
     t->location = location;
   };
   for (auto const &lhs : havocs.vars)
@@ -267,10 +272,19 @@ void add_havoc_assigns(
 void make_nondet_assign(
   goto_functiont &goto_function,
   goto_programt::targett &loop_head,
-  const havocst &havocs)
+  const havocst &havocs,
+  const expr2tc &flag,
+  const expr2tc &entry)
 {
   goto_programt dest;
-  add_havoc_assigns(dest, havocs, loop_head->location);
+  if (!is_nil_expr(flag))
+  {
+    goto_programt::targett t = dest.add_instruction(ASSIGN);
+    t->inductive_step_instruction = true;
+    t->code = code_assign2tc(flag, entry);
+    t->location = loop_head->location;
+  }
+  add_havoc_assigns(dest, havocs, loop_head->location, flag);
   const size_t inserted = dest.instructions.size();
   goto_function.body.insert_swap(loop_head, dest);
 
@@ -319,18 +333,65 @@ void remove_unrelated_loop_cond(guardst &guards, const loopst &loop)
   }
 }
 
+/// The conjunction of the loop-entry guards, or nil when there is none to
+/// assume.
+expr2tc entry_condition(const guardst &guards)
+{
+  guard2tc combined;
+  for (auto const &kv : guards)
+  {
+    expr2tc loop_cond = kv.second.as_expr();
+
+    if (is_nil_expr(loop_cond) || is_true(loop_cond))
+      continue;
+
+    // A guard that simplifies to false would make the assume kill the
+    // path even before the loop. Preserve the legacy "bail out" choice:
+    // any unresolved false among the branch guards skips the whole
+    // entry-cond instrumentation.
+    if (is_false(loop_cond))
+      return expr2tc();
+
+    combined.add(loop_cond);
+  }
+
+  expr2tc combined_expr = combined.as_expr();
+  if (
+    is_nil_expr(combined_expr) || is_true(combined_expr) ||
+    is_false(combined_expr))
+    return expr2tc();
+  return combined_expr;
+}
+
+/// Fresh Booleans recording whether the state before a loop enters it.
+struct entry_flagst
+{
+  /// Where the flags go; null when every loop is assumed to be entered.
+  contextt *context;
+  symbol_generator names{"c:@__ESBMC_kind_entry$"};
+
+  expr2tc fresh()
+  {
+    symbolt &symbol = names.new_symbol(*context, get_bool_type());
+    symbol.static_lifetime = true;
+    return symbol2tc(get_bool_type(), symbol.id);
+  }
+};
+
 void assume_loop_entry_cond_before_loop(
   goto_functiont &goto_function,
   goto_programt::targett &loop_head,
-  const guardst &guards)
+  const expr2tc &combined_expr,
+  const expr2tc &flag)
 {
   // Combine all per-branch loop-entry guards into one ASSUME and
   // insert it via raw `insert(loop_head, ...)` immediately before the
   // loop_head IF. This runs *after* make_nondet_assign in
   // transform_loop, so the layout becomes
   //
-  //   NONDET havocs               [inductive_step]   <- make_nondet_assign
-  //   ASSUME(entry_cond)          [inductive_step]   <- this insert
+  //   flag = head test            [inductive_step]   <- make_nondet_assign
+  //   x = flag ? NONDET : x       [inductive_step]   <- make_nondet_assign
+  //   ASSUME(!flag || entry_cond) [inductive_step]   <- this insert
   //   loop_head: IF !cond GOTO exit                  <- original IF
   //   body
   //   GOTO loop_head  -> back-edge targets the IF
@@ -339,7 +400,9 @@ void assume_loop_entry_cond_before_loop(
   // Two properties matter for soundness/precision:
   //   1. The ASSUME comes *after* the NONDET havocs, so it constrains
   //      the just-havoced state (the actual inductive-hypothesis pin),
-  //      not the pre-loop concrete values.
+  //      not the pre-loop concrete values. Without a flag (no head test,
+  //      or a loop that writes through a pointer) the havocs and the
+  //      ASSUME are unconditional.
   //   2. The ASSUME sits *before* loop_head and is reached only via
   //      fall-through from the havocs. The back-edge
   //      (adjust_loop_head_and_exit retargets it at loop_head, the
@@ -368,33 +431,13 @@ void assume_loop_entry_cond_before_loop(
   // and no ASSUME was inserted, regressing post-loop assertions in
   // loop-invariants, incremental-smt, witnesses_validate and
   // esbmc-solidity (issue #4846).
-  guard2tc combined;
-  for (auto const &kv : guards)
-  {
-    expr2tc loop_cond = kv.second.as_expr();
-
-    if (is_nil_expr(loop_cond) || is_true(loop_cond))
-      continue;
-
-    // A guard that simplifies to false would make the assume kill the
-    // path even before the loop. Preserve the legacy "bail out" choice:
-    // any unresolved false among the branch guards skips the whole
-    // entry-cond instrumentation.
-    if (is_false(loop_cond))
-      return;
-
-    combined.add(loop_cond);
-  }
-
-  expr2tc combined_expr = combined.as_expr();
-  if (
-    is_nil_expr(combined_expr) || is_true(combined_expr) ||
-    is_false(combined_expr))
+  if (is_nil_expr(combined_expr))
     return;
 
   goto_programt::instructiont instruction;
   instruction.type = ASSUME;
-  instruction.guard = combined_expr;
+  instruction.guard =
+    is_nil_expr(flag) ? combined_expr : or2tc(not2tc(flag), combined_expr);
   instruction.inductive_step_instruction = true;
   instruction.location = loop_head->location;
   goto_function.body.instructions.insert(loop_head, instruction);
@@ -534,6 +577,7 @@ void havoc_entry_jumps(
 /// variables and inject an ASSUME of the loop entry condition right
 /// before the loop head.
 void transform_loop(
+  entry_flagst &entry_flags,
   goto_functiont &goto_function,
   loopst &loop,
   const havocst &havocs,
@@ -561,19 +605,36 @@ void transform_loop(
   // Remove loop conditions not related to the written variables
   remove_unrelated_loop_cond(guards, loop);
 
-  // Order matters: the entry-cond ASSUME must constrain the state
-  // *after* the loop vars have been havoced, so we emit the NONDET
-  // havocs first and then place the ASSUME just before loop_head.
+  // Order matters: the flag reads the state before the havocs, and the
+  // entry-cond ASSUME constrains the state *after* them, so we emit the
+  // flag and the havocs first and then place the ASSUME just before
+  // loop_head.
   // make_nondet_assign also rewinds loop_head back onto the original
   // loop head (post its advance-by-`inserted` step), so by the time
   // assume_loop_entry_cond_before_loop runs the iterator is correct
   // and the ASSUME ends up between the havocs and the IF.
 
+  // A state before the loop that fails the head test skips the loop, so it
+  // keeps its values and the entry assumption does not apply to it: assuming
+  // it there would drop every path that skips the loop (#10154). Only the head
+  // test can tell: a test later in the body may read what the body wrote
+  // before it. havoc_object cannot be made conditional, so a loop that writes
+  // through a pointer keeps the plain assumption.
+  const expr2tc entry = entry_condition(guards);
+  const auto head_guard = guards.find(&*loop_head);
+  const expr2tc head_test =
+    head_guard == guards.end() ? expr2tc() : head_guard->second.as_expr();
+  const expr2tc flag = !entry_flags.context || is_nil_expr(entry) ||
+                           is_nil_expr(head_test) || is_true(head_test) ||
+                           !havocs.through.empty()
+                         ? expr2tc()
+                         : entry_flags.fresh();
+
   // Create the nondet assignments on the beginning of the loop
-  make_nondet_assign(goto_function, loop_head, havocs);
+  make_nondet_assign(goto_function, loop_head, havocs, flag, head_test);
 
   // Assume the loop entry condition before going into the loop
-  assume_loop_entry_cond_before_loop(goto_function, loop_head, guards);
+  assume_loop_entry_cond_before_loop(goto_function, loop_head, entry, flag);
 
   // Check if the loop exit needs to be updated. We must point to the
   // assume that was inserted in the previous transformation
@@ -2207,6 +2268,7 @@ bool calls_nondet_memory(const goto_functionst &goto_functions)
 /// Havocs what the loop of \p w writes and transforms it for the inductive
 /// step. Returns false when a write through a pointer stays uncovered.
 bool havoc_loop(
+  entry_flagst &entry_flags,
   goto_functionst &goto_functions,
   goto_functiont &goto_function,
   const loop_writest &w,
@@ -2239,7 +2301,8 @@ bool havoc_loop(
     goto_functions.function_map[to_symbol2t(havoc_object).thename].type =
       havoc_object->type;
   }
-  transform_loop(goto_function, loop, havocs, continue_past_failed_assertions);
+  transform_loop(
+    entry_flags, goto_function, loop, havocs, continue_past_failed_assertions);
   return covered;
 }
 
@@ -2311,9 +2374,10 @@ unsettled_by_loops(goto_functionst &goto_functions)
 
 bool goto_k_induction(
   goto_functionst &goto_functions,
-  const namespacet &,
+  contextt *context,
   bool continue_past_failed_assertions)
 {
+  entry_flagst entry_flags{context};
   // Andersen and loop_shapest key on location numbers, which inlining
   // restarts in every function.
   goto_functions.update();
@@ -2385,6 +2449,7 @@ bool goto_k_induction(
     for (auto &loop : loops.get_loops())
       if (
         !havoc_loop(
+          entry_flags,
           goto_functions,
           it->second,
           {loop,
