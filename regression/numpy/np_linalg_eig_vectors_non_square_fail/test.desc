@@ -1,4 +1,5 @@
 CORE
 main.py
 --incremental-bmc
-^ERROR: numpy.linalg.LinAlgError: Last 2 dimensions of the array must be square$
+^VERIFICATION FAILED$
+^  uncaught exception: LinAlgError$
