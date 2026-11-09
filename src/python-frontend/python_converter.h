@@ -2108,6 +2108,10 @@ private:
   /// should fall through to the ordinary assignment path.
   bool
   try_tagged_var_assign(const nlohmann::json &ast_node, codet &target_block);
+  void declare_tag_for_binop_result(
+    const std::string &name,
+    bool on_spine,
+    const nlohmann::json &ast_node);
 
   /// Whether a module-scope assignment must probe its RHS type before fixing
   /// the target's type.
