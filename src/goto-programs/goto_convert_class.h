@@ -292,6 +292,10 @@ protected:
     const locationt &location,
     goto_programt &dest);
   void convert_switch(const codet &code, goto_programt &dest);
+  void evaluate_unguarded_switch_value(
+    const exprt &value,
+    const locationt &location,
+    goto_programt &dest);
   void convert_break(const code_breakt &code, goto_programt &dest);
   void convert_return(const code_returnt &code, goto_programt &dest);
   void remove_return_value_sideeffects(exprt &value, goto_programt &dest);
