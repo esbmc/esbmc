@@ -1,0 +1,4 @@
+CORE
+main.py
+--incremental-bmc
+^ERROR: TypeError: Cannot cast ufunc 'expm1' output from dtype\('float64'\) to dtype\('int64'\) with casting rule 'same_kind'$
