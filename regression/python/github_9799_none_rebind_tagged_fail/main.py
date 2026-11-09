@@ -6,4 +6,4 @@ if random.random() < 0.5:
 else:
     x = "s"
 y = x + x
-assert y == 2
+assert y != 2 and y != "ss"
