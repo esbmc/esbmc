@@ -575,7 +575,7 @@ class IntegerEncodingConfirmationTest(unittest.TestCase):
 
         with mock.patch.object(wrapper, "run", fake_run), \
                 mock.patch.object(wrapper.time, "monotonic", side_effect=[0, elapsed, 0, plain_seconds]):
-            result = wrapper.verify("kinduction", prop, 64, benchmark, False, "", False, None, None)
+            result = wrapper.verify("kinduction", prop, 64, benchmark, "", False, None, None)
         return wrapper.get_result_string(result), calls
 
     def test_rerun_at_the_same_line_keeps_false(self):
@@ -746,7 +746,7 @@ class CPythonReplayTest(unittest.TestCase):
             with mock.patch.object(wrapper, "run", esbmc), \
                     mock.patch.object(wrapper, "REPLAY_VERIFIER", options.get("verifier") or wrapper.REPLAY_VERIFIER):
                 result = wrapper.verify("kinduction", prop, 64, os.path.join(task, "main.py"),
-                                        False, "", False, None, None)
+                                        "", False, None, None)
         return wrapper.get_result_string(result), esbmc.calls
 
     def ir_calls(self, calls):
@@ -946,7 +946,7 @@ class CPythonReplayTest(unittest.TestCase):
             esbmc = FakeEsbmc(REACH_WITH_UNCHECKED_UNWINDING, self.PASSED, None, None)
             with mock.patch.object(wrapper, "run", esbmc):
                 result = wrapper.verify("kinduction", wrapper.Property.reach, 64, c_file.name,
-                                        False, "", False, None, None)
+                                        "", False, None, None)
         self.assertEqual(wrapper.get_result_string(result), "FALSE_REACH")
         self.assertNotIn("--pytest", esbmc.calls[0])
 
@@ -955,7 +955,7 @@ class CPythonReplayTest(unittest.TestCase):
                 mock.patch.object(wrapper, "confirmed_by_replay", side_effect=AssertionError("replayed")):
             esbmc = FakeEsbmc(PY_INDEXERROR, self.PASSED, None, None)
             with mock.patch.object(wrapper, "run", esbmc):
-                wrapper.verify("incr", wrapper.Property.py_datalookup, 64, py_file.name, False, "",
+                wrapper.verify("incr", wrapper.Property.py_datalookup, 64, py_file.name, "",
                                False, "w.yml", "violation")
         self.assertNotIn("--pytest", esbmc.calls[0])
 
@@ -989,7 +989,7 @@ class PythonCommandLineTest(unittest.TestCase):
     """Each run reports only its property's exception family."""
 
     def command(self, prop):
-        return wrapper.get_command_line("kinduction", prop, None, "main.py", False, "", False)
+        return wrapper.get_command_line("kinduction", prop, None, "main.py", "", False)
 
     def test_each_property_checks_its_own_family(self):
         cases = (
@@ -1316,6 +1316,21 @@ class PthreadDetectionTest(unittest.TestCase):
             "(pthread_t * __restrict __newthread ,\n"))
         self.assertFalse(self.detects(
             "extern int pthread_create (pthread_t *__restrict __newthread,\n"))
+
+
+class ThreadedTaskCommandLineTest(unittest.TestCase):
+    """ESBMC, not the wrapper, configures a program that starts a thread
+    (#10189)."""
+
+    def test_a_pthread_create_call_keeps_the_common_command_line(self):
+        with tempfile.NamedTemporaryFile("w", suffix=".i") as f:
+            f.write("int main() { pthread_create(&t, 0, f, 0); }\n")
+            f.flush()
+            cmd = wrapper.get_command_line(
+                "kinduction", wrapper.Property.reach, 64, f.name, "", False)
+        self.assertIn("--k-induction", cmd)
+        self.assertIn("--interval-analysis", cmd)
+        self.assertNotIn("--context-bound", cmd)
 
 
 class OverflowFallbackTest(unittest.TestCase):

@@ -1,0 +1,5 @@
+CORE
+main.c
+--k-induction
+^Bug found \(k = 3\)$
+^VERIFICATION FAILED$

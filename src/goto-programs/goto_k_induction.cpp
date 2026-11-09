@@ -2117,13 +2117,23 @@ bool pin(const expr2tc &lvalue, const targetst &t, pinst &pins)
 /// refused that pointer. A local of a function the loop calls needs none
 /// either: every call declares it afresh, so the step never reads its havoced
 /// value. Returns false when a value cannot be pinned.
-bool pin_havoced_pointers(const loop_writest &w, pinst &pins)
+bool pin_havoced_pointers(
+  const loop_writest &w,
+  pinst &pins,
+  bool keep_pinned = false)
 {
+  const pinst earlier = pins;
   for (const expr2tc &var : ordered(w.loop.get_modified_loop_vars()))
   {
     if (
       is_symbol2t(var) &&
       w.derivations.local_elsewhere(to_symbol2t(var).thename, w.function))
+      continue;
+    if (
+      keep_pinned &&
+      std::any_of(earlier.begin(), earlier.end(), [&](const auto &p) {
+        return p.first == var;
+      }))
       continue;
     const targetst t = held_by(w.points_to, w.loop, var);
     if (t.named.empty() || t.heap || t.anything)
@@ -2229,8 +2239,16 @@ bool havoc_loop(
       havocs.pins.emplace_back(var, typecast2tc(var->type, at_any_offset(var)));
     else
       havocs.vars.push_back(var);
-  if (loop.writes_through_pointer() && !pin_havoced_pointers(w, havocs.pins))
-    covered = false;
+  if (loop.writes_through_pointer())
+  {
+    if (!pin_havoced_pointers(w, havocs.pins))
+      covered = false;
+  }
+  else
+    // A dereference of an unpinned pointer resolves to an invalid object, so
+    // the step checks no bounds there; the base case does. A pointer that
+    // cannot be pinned stays as it was.
+    pin_havoced_pointers(w, havocs.pins, true);
   // Symex answers the call by name, but goto_loopst, for the loops still to
   // come, and later passes resolve every call through function_map.
   if (!havocs.through.empty())

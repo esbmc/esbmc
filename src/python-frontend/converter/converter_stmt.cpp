@@ -7604,10 +7604,38 @@ static const exprt &string_buffer_of(const exprt &rhs)
   return rhs;
 }
 
+/// The Call that is the whole value of an assignment to a name, or null.
+static const nlohmann::json *assigned_call(const nlohmann::json &ast_node)
+{
+  const nlohmann::json &target =
+    ast_node.contains("targets") ? ast_node["targets"][0] : ast_node["target"];
+  if (
+    target.value("_type", "") != "Name" || !ast_node.contains("value") ||
+    !ast_node["value"].is_object() ||
+    ast_node["value"].value("_type", "") != "Call")
+    return nullptr;
+  return &ast_node["value"];
+}
+
+namespace
+{
+struct restore_pointer
+{
+  const nlohmann::json *&slot;
+  const nlohmann::json *saved;
+  ~restore_pointer()
+  {
+    slot = saved;
+  }
+};
+} // namespace
+
 void python_converter::get_var_assign(
   const nlohmann::json &ast_node,
   codet &target_block)
 {
+  const restore_pointer restore_assigned_call{
+    assigned_call_, std::exchange(assigned_call_, assigned_call(ast_node))};
   reject_numpy_scalars_in_container(ast_node);
 
   if (try_dedicated_assign(ast_node, target_block))
