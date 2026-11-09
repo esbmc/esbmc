@@ -54,6 +54,10 @@ class get_expr_depth_guard;
 /// their source, whose storage they share.
 void alias_numpy_string_views(nlohmann::json &ast);
 
+/// Splits `r = np.f(x, out=o)` into the call and `r = o`, as the ufunc
+/// returns its out= array, which r then aliases.
+void alias_numpy_ufunc_outputs(nlohmann::json &ast);
+
 bool is_imported_numpy_module_alias(
   const nlohmann::json &ast,
   const std::string &name);
@@ -955,6 +959,10 @@ private:
   bool function_has_missing_return_paths(const nlohmann::json &function_node);
 
   bool function_is_generator(const nlohmann::json &function_node);
+
+  bool returns_implicit_none(
+    const nlohmann::json &function_node,
+    const code_typet &type);
 
   exprt materialize_list_function_call(
     const exprt &expr,
@@ -2104,6 +2112,10 @@ private:
   /// should fall through to the ordinary assignment path.
   bool
   try_tagged_var_assign(const nlohmann::json &ast_node, codet &target_block);
+  void declare_tag_for_binop_result(
+    const std::string &name,
+    bool on_spine,
+    const nlohmann::json &ast_node);
 
   /// Whether a module-scope assignment must probe its RHS type before fixing
   /// the target's type.
@@ -3623,6 +3635,7 @@ private:
 
   /// Throws on a tagged operand of an `and`/`or` whose value is used.
   void refuse_tagged_boolop_operand(const exprt &operand) const;
+  void refuse_bool_with_list_operand(const exprt &logical_expr) const;
 
   /// The truthiness of a str and/or operand: false for None or "", else true.
   /// Any other value comes back unchanged.

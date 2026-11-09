@@ -1,3 +1,4 @@
+/* #10087: a store at a dynamic offset that starts in a sub-byte bit-field. */
 #include <assert.h>
 struct S
 {

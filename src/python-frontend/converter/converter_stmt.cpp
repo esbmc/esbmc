@@ -1337,6 +1337,9 @@ bool python_converter::store_optional_str(
     !type_utils::is_optional_str_pointer(lhs.type()) ||
     !type_utils::is_string_type(rhs.type()) || rhs.type() == lhs.type())
     return false;
+  // A call writes its result through its return destination.
+  if (rhs.is_function_call())
+    return true;
   if (rhs.type().is_array())
     rhs = string_handler_.get_array_base_address(rhs);
   rhs = typecast_exprt(rhs, lhs.type());
@@ -1389,7 +1392,11 @@ void python_converter::adopt_none_rhs(
   // would shrink the pointee and corrupt the allocation.
   // An Optional[dict] keeps its dict pointer type the same way.
   if (keeps_pointer_type_on_none(lhs.type()))
-    rhs = typecast_exprt(rhs, lhs.type());
+  {
+    // A call stores its NULL result through its return destination.
+    if (!rhs.is_function_call())
+      rhs = typecast_exprt(rhs, lhs.type());
+  }
   // A call's None result is wrapped into the Optional once the call is
   // built (wrap_call_result_in_optional).
   else if (
@@ -5754,7 +5761,7 @@ void python_converter::widen_int_target_for_float_call(
 
 // A result stored to an Optional of its own type, or a None result (#10075),
 // must be wrapped, so the call writes a temporary first (#9055). Another type
-// would need a conversion that loses the result's type.
+// would need a conversion that loses the result's type, so it is refused.
 void python_converter::wrap_call_result_in_optional(
   const nlohmann::json &ast_node,
   const exprt &lhs,
@@ -5762,14 +5769,20 @@ void python_converter::wrap_call_result_in_optional(
   const locationt &location,
   codet &target_block)
 {
-  if (!type_utils::is_optional_struct(lhs.type()))
+  if (!type_utils::is_optional_struct(lhs.type()) || rhs.type() == lhs.type())
     return;
   const typet &value_type =
     to_struct_type(lhs.type()).get_component("value").type();
-  if (
-    rhs.type() != none_type() &&
-    (rhs.type().is_pointer() || value_type != rhs.type()))
-    return;
+  if (rhs.type() != none_type())
+  {
+    // A pointer result may encode None as NULL, so it is stored unwrapped.
+    if (rhs.type().is_pointer())
+      return;
+    if (value_type != rhs.type())
+      throw std::runtime_error(
+        "storing a call result into an Optional of another type is not yet "
+        "supported");
+  }
 
   symbolt &result =
     create_tmp_symbol(ast_node, "$call_result$", rhs.type(), exprt());
@@ -6888,6 +6901,27 @@ may_tag_binop(const nlohmann::json &value, const dynamic_type_handler &handler)
          is_tagged_name(value["left"]) && is_tagged_name(value["right"]);
 }
 
+// On the spine the whole slot is assigned next, so the value `name` held
+// before is not copied in. Off it, a path that skips this assignment reads that
+// copy, which a tag cannot hold unless it is a scalar or a str (not None).
+void python_converter::declare_tag_for_binop_result(
+  const std::string &name,
+  bool on_spine,
+  const nlohmann::json &ast_node)
+{
+  const symbolt *existing = symbol_table_.find_symbol(
+    dynamic_type_handler_.bound_symbol_id(name).to_string());
+  if (
+    !on_spine && existing && existing->get_type() != any_type() &&
+    !type_handler_.is_numeric_scalar_type(existing->get_type()) &&
+    !type_handler_.is_string_type(existing->get_type()))
+    throw std::runtime_error(
+      "rebinding '" + name +
+      "' from a value of another type to a dynamically typed value under a "
+      "branch or loop is not yet supported");
+  dynamic_type_handler_.declare_dynamic_type_names({name}, ast_node, !on_spine);
+}
+
 bool python_converter::try_tagged_var_assign(
   const nlohmann::json &ast_node,
   codet &target_block)
@@ -6917,19 +6951,19 @@ bool python_converter::try_tagged_var_assign(
     // A call runs first, so the tag holds its result rather than the call.
     const exprt rhs = store_call_result(
       get_expr(ast_node["value"]), location, "$tag_call$", &target_block);
+    const bool on_spine = !is_attribute && current_class_name_.empty() &&
+                          loop_body_depth_ == 0 &&
+                          block_nesting_ == function_body_depth_ + 1;
     if (type_handler_.is_tagged_scalar_type(rhs.type()))
     {
       if (value_may_tag)
-        dynamic_type_handler_.declare_dynamic_type_names({name}, ast_node);
+        declare_tag_for_binop_result(name, on_spine, ast_node);
       dynamic_type_handler_.assign_tagged_object(
         rhs, location, name, target_block);
       return true;
     }
     assert(
       !value_may_tag && "tagged 'x + y' always converts to a tagged result");
-    const bool on_spine = !is_attribute && current_class_name_.empty() &&
-                          loop_body_depth_ == 0 &&
-                          block_nesting_ == function_body_depth_ + 1;
     // A tagged slot compares only against an int, bool or str, so a float
     // rebound on the spine takes its own slot below.
     if (

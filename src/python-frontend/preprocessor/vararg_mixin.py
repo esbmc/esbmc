@@ -655,9 +655,11 @@ class VarargMixin:
                 self._record_fixed_length_starred(stmt, scope.body[index + 1:], bind_counts, unsafe,
                                                   fixed)
         for scope in defs:
+            calls = calls_to.get(scope.name, [])
             fixed.update(
-                self._fixed_length_starred_params(scope, calls_to.get(scope.name, []), parents,
-                                                  bind_counts, unsafe))
+                self._fixed_length_starred_params(scope, calls, parents, bind_counts, unsafe))
+            self._split_by_starred_length(module, scope, calls, (parents, bind_counts, unsafe),
+                                          fixed)
         return fixed
 
     def _fixed_length_starred_params(self, scope, calls, parents, bind_counts, unsafe):
@@ -682,6 +684,56 @@ class VarargMixin:
             fixed.update(
                 dict.fromkeys(self._starred_reads(scope, param.arg, parents, bind_counts), length))
         return fixed
+
+    def _split_by_starred_length(self, module, scope, calls, index_info, fixed):
+        """Replace a module-level `scope` by one copy per length of the
+        displays its `calls` pass for a parameter it unpacks into a call, when
+        those lengths differ (#9797). Each call goes to the copy for its
+        length, where the unpacking has that fixed length."""
+        parents, bind_counts, _ = index_info
+        inner = {id(node) for node in ast.walk(scope)}
+        if (scope not in module.body or scope.args.vararg or scope.args.kwarg
+                or any(id(call) in inner for call in calls)
+                or not self._called_only_by(scope, calls, parents, bind_counts)):
+            return
+        for index in range(len(scope.args.posonlyargs + scope.args.args)):
+            reads = self._length_split_reads(scope, index, calls, index_info)
+            if reads:
+                position = module.body.index(scope)
+                module.body[position:position + 1] = self._copy_per_length(
+                    scope, index, calls, reads, fixed)
+                return
+
+    def _length_split_reads(self, scope, index, calls, index_info):
+        """The `*p` reads in `scope` of its parameter p at `index` when `calls`
+        pass non-empty displays of one kind and more than one length there,
+        else None."""
+        parents, bind_counts, unsafe = index_info
+        name = (scope.args.posonlyargs + scope.args.args)[index].arg
+        displays = [self._passed_display(call, index) for call in calls]
+        if None in displays or len({kind for kind, _ in displays}) != 1:
+            return None
+        lengths = {length for _, length in displays}
+        if len(lengths) < 2 or not all(lengths) or name in unsafe or bind_counts.get(name) != 1:
+            return None
+        return self._starred_reads(scope, name, parents, bind_counts)
+
+    @staticmethod
+    def _copy_per_length(scope, index, calls, reads, fixed):
+        copies = {}
+        for call in calls:
+            length = len(call.args[index].elts)
+            if length not in copies:
+                memo = {}
+                copies[length] = copy.deepcopy(scope, memo)
+                copies[length].name = f"{scope.name}__esbmc_len{length}"
+                for node, known in list(fixed.items()):
+                    if id(node) in memo:
+                        fixed[memo[id(node)]] = known
+                for read in reads:
+                    fixed[memo[id(read)]] = length
+            call.func.id = copies[length].name
+        return list(copies.values())
 
     @staticmethod
     def _called_only_by(scope, calls, parents, bind_counts):

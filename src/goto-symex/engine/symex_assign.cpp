@@ -1252,15 +1252,29 @@ void goto_symext::symex_assign_concat(
   guard2tc &guard,
   const bool hidden)
 {
-  // Right: generate a series of symex assigns.
-  const concat2t &cat = to_concat2t(lhs);
   assert(is_scalar_type(rhs));
+  const concat2t &cat = to_concat2t(lhs);
+
+  // A byte assembled from bit-field slices (dereferencet::bit_field_byte):
+  // split the value by bits, the low ones going to side_2.
+  if (cat.type->get_width() <= config.ansi_c.char_width)
+  {
+    cur_state->rename(rhs);
+    const unsigned int low = cat.side_2->type->get_width();
+    const unsigned int width = cat.type->get_width();
+    expr2tc high_part = extract2tc(cat.side_1->type, rhs, width - 1, low);
+    expr2tc low_part = extract2tc(cat.side_2->type, rhs, low - 1, 0);
+    symex_assign_rec(cat.side_2, full_lhs, low_part, rhs, guard, hidden);
+    symex_assign_rec(cat.side_1, full_lhs, high_part, rhs, guard, hidden);
+    return;
+  }
 
   // Second attempt at this code: byte stitching guarantees that all the concats
   // occur in one large grouping. Produce a list of them.
   std::list<expr2tc> operand_list;
   expr2tc cur_concat = lhs;
-  while (is_concat2t(cur_concat))
+  while (is_concat2t(cur_concat) &&
+         cur_concat->type->get_width() > config.ansi_c.char_width)
   {
     const concat2t &cat2 = to_concat2t(cur_concat);
     operand_list.push_back(cat2.side_2);
@@ -1270,12 +1284,10 @@ void goto_symext::symex_assign_concat(
   // Add final operand to list
   operand_list.push_back(cur_concat);
 
-  // A byte stitched from bitfield pieces (#10087) is not a list of bytes:
-  // give each side its own bits of the value.
-  for (auto const &operand : operand_list)
-    if (operand->type->get_width() != 8)
-      return symex_assign_concat_sides(cat, full_lhs, rhs, guard, hidden);
-
+#ifndef NDEBUG
+  for (auto const &foo : operand_list)
+    assert(foo->type->get_width() == 8);
+#endif
   assert((operand_list.size() * 8) == cat.type->get_width());
 
   bool is_big_endian =
@@ -1316,26 +1328,6 @@ void goto_symext::symex_assign_concat(
     lhs_it++;
     rhs_it++;
   }
-}
-
-void goto_symext::symex_assign_concat_sides(
-  const concat2t &cat,
-  const expr2tc &full_lhs,
-  expr2tc &rhs,
-  guard2tc &guard,
-  const bool hidden)
-{
-  const unsigned int width = cat.type->get_width();
-  const unsigned int low_width = cat.side_2->type->get_width();
-  cur_state->rename(rhs);
-  // symex_assign_typecast and this recursion both hand over the concat's own
-  // unsigned type.
-  assert(is_unsignedbv_type(rhs) && rhs->type->get_width() == width);
-
-  expr2tc low = extract2tc(cat.side_2->type, rhs, low_width - 1, 0);
-  symex_assign_rec(cat.side_2, full_lhs, low, rhs, guard, hidden);
-  expr2tc high = extract2tc(cat.side_1->type, rhs, width - 1, low_width);
-  symex_assign_rec(cat.side_1, full_lhs, high, rhs, guard, hidden);
 }
 
 void goto_symext::symex_assign_extract(
@@ -1395,9 +1387,7 @@ void goto_symext::symex_assign_extract(
   }
 
   // OK: accuml now has a bitblob sized expression that can be assigned into
-  // the relevant field, which may be signed.
-  if (accuml->type != ex.from->type)
-    accuml = bitcast2tc(ex.from->type, accuml);
+  // the relevant field.
   symex_assign_rec(ex.from, full_lhs, accuml, full_rhs, guard, hidden);
 }
 

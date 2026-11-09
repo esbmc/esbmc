@@ -2135,6 +2135,43 @@ void dereferencet::construct_from_const_struct_offset(
   value = expr2tc();
 }
 
+static bool occupies_whole_bytes(const BigInt &offset, const BigInt &size)
+{
+  const unsigned int width = config.ansi_c.char_width;
+  return offset % width == 0 && size % width == 0;
+}
+
+bool dereferencet::skips_member(
+  const expr2tc &value,
+  const expr2tc &offset,
+  const type2tc &type,
+  unsigned long alignment,
+  modet mode,
+  const BigInt &field_offset,
+  const BigInt &field_size,
+  std::list<std::pair<expr2tc, expr2tc>> &extract_list)
+{
+  const unsigned int width = config.ansi_c.char_width;
+  if (
+    options.get_bool_option("int-encoding") ||
+    type_byte_size_bits(type) % width != 0 ||
+    occupies_whole_bytes(field_offset, field_size))
+    return field_size < width;
+
+  // A bit-field, or the padding bits after one, does not occupy whole bytes,
+  // so a whole-byte access starting in it is assembled from bits (#10087).
+  add_arms_from(
+    value,
+    offset,
+    type,
+    alignment,
+    mode,
+    field_offset,
+    field_offset + field_size,
+    extract_list);
+  return true;
+}
+
 void dereferencet::construct_from_dyn_struct_offset(
   expr2tc &value,
   const expr2tc &offset,
@@ -2189,13 +2226,10 @@ void dereferencet::construct_from_dyn_struct_offset(
     it = ns.follow(it);
     BigInt field_size = type_byte_size_bits(it, &ns);
 
-    // A sub-byte member (bitfield, padding bits) cannot hold a byte-aligned
-    // access, but one can start in it and span the members after it (#10087).
-    if (field_size < config.ansi_c.char_width)
+    if (
+      skips_member(
+        value, offset, type, alignment, mode, offs, field_size, extract_list))
     {
-      if (!int_encoding)
-        add_spanning_arms(
-          value, offset, type, alignment, mode, offs, field_size, extract_list);
       i++;
       continue;
     }
@@ -2242,8 +2276,16 @@ void dereferencet::construct_from_dyn_struct_offset(
 
     // Emplaced after the field's own arm, so they take precedence (#10045).
     if (!int_encoding)
-      add_spanning_arms(
-        value, offset, type, alignment, mode, offs, field_size, extract_list);
+      add_arms_from(
+        value,
+        offset,
+        type,
+        alignment,
+        mode,
+        std::max(
+          offs, offs + field_size - access_sz + config.ansi_c.char_width),
+        offs + field_size,
+        extract_list);
 
     i++;
   }
@@ -2278,31 +2320,29 @@ BigInt dereferencet::spanning_step(
   return std::gcd(step, type_byte_size_bits(container, &ns).to_uint64());
 }
 
-void dereferencet::add_spanning_arms(
+void dereferencet::add_arms_from(
   const expr2tc &value,
   const expr2tc &offset,
   const type2tc &type,
   unsigned long alignment,
   modet mode,
-  const BigInt &field_offset,
-  const BigInt &field_size,
+  const BigInt &first,
+  const BigInt &field_end,
   std::list<std::pair<expr2tc, expr2tc>> &extract_list)
 {
   const unsigned int access_sz = type_byte_size_bits(type).to_uint64();
+  // The arms are stitched from whole bytes.
+  if (access_sz % config.ansi_c.char_width != 0)
+    return;
   const BigInt struct_bits = type_byte_size_bits(value->type, &ns);
   const BigInt step = spanning_step(type, value->type, alignment, mode);
-  const BigInt field_end = field_offset + field_size;
-  BigInt p = std::max(field_offset, field_end - access_sz + 1);
-  for (p = (p + step - 1) / step * step;
+  for (BigInt p = (first + step - 1) / step * step;
        p < field_end && p + access_sz <= struct_bits;
        p += step)
   {
-    expr2tc spanning = stitch_across_members(value, p, access_sz);
-    if (is_nil_expr(spanning))
-      continue;
     extract_list.emplace_back(
       equality2tc(offset, constant_int2tc(offset->type, p)),
-      bitcast2tc(type, spanning));
+      bitcast2tc(type, stitch_across_members(value, p, access_sz)));
   }
 }
 
@@ -2317,7 +2357,7 @@ expr2tc dereferencet::stitch_across_members(
   {
     expr2tc byte = byte_of_struct(value, pos);
     if (is_nil_expr(byte))
-      return expr2tc();
+      byte = bit_field_byte(value, pos);
     bytes.push_back(byte);
   }
   return stitch_together_from_byte_array(bytes.size(), bytes);
@@ -2327,43 +2367,65 @@ expr2tc dereferencet::byte_of_struct(const expr2tc &value, const BigInt &pos)
 {
   const struct_type2t &struct_type = to_struct_type(value->type);
   const unsigned int width = config.ansi_c.char_width;
-  const BigInt end = pos + width;
-  // A byte shared by bitfields is the bits each one has in it, lowest first
-  // (#10087). Reading it from the whole struct instead would make a store
-  // rewrite every member, pointers included.
-  std::vector<expr2tc> pieces;
-  BigInt covered = pos;
-  for (unsigned int i = 0; i < struct_type.members.size() && covered < end; i++)
+  for (unsigned int i = 0; i < struct_type.members.size(); i++)
   {
     const irep_idt &name = struct_type.member_names[i];
     const type2tc member_type = ns.follow(struct_type.members[i]);
     const BigInt m_offs = member_offset_bits(value->type, name, &ns);
     const BigInt m_size = type_byte_size_bits(member_type, &ns);
-    if (m_offs + m_size <= pos || m_size == 0)
-      continue;
-    const expr2tc member = member2tc(member_type, value, name);
-    if (m_offs % width == 0 && m_size % width == 0 && m_offs <= pos)
-      return extract_bytes(member, 1, gen_ulong((pos - m_offs) / width))[0];
     if (
-      m_offs > covered || !is_bv_type(member_type) ||
-      config.ansi_c.endianess != configt::ansi_ct::IS_LITTLE_ENDIAN)
-      return expr2tc();
-    const BigInt top = std::min(end, m_offs + m_size);
-    pieces.push_back(extract2tc(
-      get_uint_type((top - covered).to_uint64()),
-      member,
-      (top - m_offs - 1).to_uint64(),
-      (covered - m_offs).to_uint64()));
-    covered = top;
+      m_offs % width == 0 && m_size % width == 0 && m_offs <= pos &&
+      pos < m_offs + m_size)
+      return extract_bytes(
+        member2tc(member_type, value, name),
+        1,
+        gen_ulong((pos - m_offs) / width))[0];
   }
-  // The frontend pads every bitfield run to a byte boundary.
-  assert(covered == end);
-  expr2tc byte = pieces.front();
-  for (size_t k = 1; k < pieces.size(); k++)
-    byte = concat2tc(
-      get_uint_type(byte->type->get_width() + pieces[k]->type->get_width()),
-      pieces[k],
-      byte);
+  // Reading a bitfield byte from the whole struct would make a store rewrite
+  // every member, pointers included.
+  return expr2tc();
+}
+
+expr2tc dereferencet::bit_field_byte(const expr2tc &value, const BigInt &pos)
+{
+  const struct_type2t &struct_type = to_struct_type(value->type);
+  const unsigned int width = config.ansi_c.char_width;
+  const bool big_endian =
+    config.ansi_c.endianess == configt::ansi_ct::IS_BIG_ENDIAN;
+  // Struct bit k of a member at offset o is its bit k - o counted from the
+  // least significant end on little-endian targets, the most on big-endian.
+  expr2tc byte;
+  BigInt covered = 0;
+  for (unsigned int i = 0; i < struct_type.members.size(); i++)
+  {
+    const irep_idt &name = struct_type.member_names[i];
+    const type2tc member_type = ns.follow(struct_type.members[i]);
+    const BigInt m_offs = member_offset_bits(value->type, name, &ns);
+    const BigInt m_size = type_byte_size_bits(member_type, &ns);
+    const BigInt lo = std::max(pos, m_offs);
+    const BigInt hi = std::min(pos + width, m_offs + m_size);
+    if (lo >= hi)
+      continue;
+    assert(is_bv_type(member_type));
+    const unsigned int w = m_size.to_uint64();
+    const unsigned int first = (lo - m_offs).to_uint64();
+    const unsigned int last = (hi - m_offs).to_uint64() - 1;
+    const unsigned int slice_width = last - first + 1;
+    expr2tc slice = extract2tc(
+      get_uint_type(slice_width),
+      member2tc(member_type, value, name),
+      big_endian ? w - 1 - first : last,
+      big_endian ? w - 1 - last : first);
+    covered += slice_width;
+    if (is_nil_expr(byte))
+      byte = slice;
+    else
+    {
+      const type2tc t = get_uint_type(covered.to_uint64());
+      byte = big_endian ? concat2tc(t, byte, slice) : concat2tc(t, slice, byte);
+    }
+  }
+  assert(covered == width);
   return byte;
 }
 
@@ -2390,10 +2452,10 @@ expr2tc dereferencet::stitch_across_elements(
       index,
       constant_int2tc(index->type, (pos / elem_bits).to_uint64()));
     simplify(elem_index);
-    expr2tc byte =
-      byte_of_struct(index2tc(elem_type, array, elem_index), pos % elem_bits);
+    const expr2tc elem = index2tc(elem_type, array, elem_index);
+    expr2tc byte = byte_of_struct(elem, pos % elem_bits);
     if (is_nil_expr(byte))
-      return expr2tc();
+      byte = bit_field_byte(elem, pos % elem_bits);
     bytes.push_back(byte);
   }
   return bitcast2tc(type, stitch_together_from_byte_array(bytes.size(), bytes));

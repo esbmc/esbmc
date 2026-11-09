@@ -1,3 +1,4 @@
+/* #10087: a store at a dynamic offset that starts in a sub-byte bit-field. */
 #include <assert.h>
 struct S
 {
@@ -11,6 +12,10 @@ int main(void)
   int i = nondet_int();
   __ESBMC_assume(i >= 0 && i < 2);
   *(unsigned int *)&s[i] = 0x31u;
-  assert(s[i].a == 1 && s[i].b == 3 && s[i].c == 0);
+  *((unsigned int *)&s[i] + 1) = 7u;
+  assert(s[i].a == 1);
+  assert(s[i].b == 3);
+  assert(s[i].c == 7);
+  assert(*(unsigned int *)&s[i] == 0x31u);
   return 0;
 }

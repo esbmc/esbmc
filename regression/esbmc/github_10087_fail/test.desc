@@ -1,5 +1,5 @@
 CORE
 main.c
-
-^  assertion s\[i\]\.a == 0$
+--little-endian
 ^VERIFICATION FAILED$
+FAILED.*assertion s\[i\]\.a == 0

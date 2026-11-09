@@ -298,6 +298,26 @@ expr2tc make_cmp_value(const type2tc &t, int v)
   return constant_struct2tc(t, std::move(ops));
 }
 
+void get_address_taken(
+  const expr2tc &expr,
+  std::unordered_set<irep_idt, irep_id_hash> &out)
+{
+  if (is_nil_expr(expr))
+    return;
+  if (is_address_of2t(expr))
+  {
+    expr2tc obj = to_address_of2t(expr).ptr_obj;
+    while (is_member2t(obj) || is_index2t(obj) || is_typecast2t(obj))
+      obj = is_member2t(obj)  ? to_member2t(obj).source_value
+            : is_index2t(obj) ? to_index2t(obj).source_value
+                              : to_typecast2t(obj).from;
+    if (is_symbol2t(obj))
+      out.insert(to_symbol2t(obj).thename);
+  }
+  expr->foreach_operand(
+    [&out](const expr2tc &op) { get_address_taken(op, out); });
+}
+
 void get_symbols(
   const expr2tc &expr,
   std::unordered_set<expr2tc, irep2_hash> &symbols)

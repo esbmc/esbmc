@@ -936,6 +936,8 @@ void add_cprover_library(contextt &context, const languaget *language)
         "sideeffect", get_complete_type(s.get_type(), namespacet{context}));
       value.statement("nondet");
       s.set_value(value);
+      // No harness feeds this value, so it is not a test input (#10132).
+      s.location.set("#decl_nondet", true);
     }
   });
 }

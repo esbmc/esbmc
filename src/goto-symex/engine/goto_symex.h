@@ -1457,13 +1457,6 @@ protected:
     expr2tc &full_rhs,
     guard2tc &guard,
     const bool hidden);
-  /// Assigns each side of \p cat its own bits of \p rhs, low bits to side_2.
-  void symex_assign_concat_sides(
-    const concat2t &cat,
-    const expr2tc &full_lhs,
-    expr2tc &rhs,
-    guard2tc &guard,
-    const bool hidden);
 
   /**
    *  This method is used when we need to assign a value
