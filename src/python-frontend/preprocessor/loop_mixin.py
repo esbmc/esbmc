@@ -226,11 +226,32 @@ class LoopMixin:
         if self._nditer_source(node.iter) is not None:
             for_else_pre, for_else_post = self._lower_for_else(node)
             return for_else_pre + self._lower_nditer_for(node) + for_else_post
+        node.iter = self._inline_stored_range(node.iter)
         for_else_pre, for_else_post = self._lower_for_else(node)
         result = self._visit_for_inner(node)
         if not isinstance(result, list):
             result = [result]
         return for_else_pre + result + for_else_post
+
+    def _inline_stored_range(self, iterable):
+        """The `range(...)` call that `iterable` names when it is a name bound
+        once to one, whose arguments are literals or names bound once, so the
+        loop iterates the range directly (#9772).
+
+        A range kept in a variable is otherwise a list that has a size but no
+        items when a bound is not a constant.
+        """
+        origin = self._assignment_call_origins.get(iterable.id) if isinstance(iterable,
+                                                                              ast.Name) else None
+        if not (isinstance(origin, ast.Call) and isinstance(origin.func, ast.Name)
+                and origin.func.id == "range" and not origin.keywords):
+            return iterable
+        scope = id(self._vararg_scope_stack[-1]) if self._vararg_scope_stack else None
+        _, counts = self.scope_binding_counts.get(scope, (None, {}))
+        fixed = all(
+            isinstance(arg, ast.Constant) or (isinstance(arg, ast.Name) and counts.get(arg.id) == 1)
+            for arg in origin.args)
+        return copy.deepcopy(origin) if counts.get(iterable.id) == 1 and fixed else iterable
 
     def _forget_literals_changed_in_loop(self, loop):
         """Drop the tracked literals that @p loop rebinds or mutates anywhere.
@@ -1852,7 +1873,8 @@ class LoopMixin:
     # the solver as a mismatched bitvector width, a tuple member emits a bare
     # inner `tuple` -- the very #5444 erosion this annotation avoids -- and a
     # bool member mismatches the tuple AST, so anything outside this set leaves
-    # the literal unannotated and the unpack refused.
+    # the literal unannotated. The converter then reads each element at the
+    # type it was pushed with, or refuses the unpack for a bool member.
     _SIZABLE_TUPLE_MEMBER_TYPES = frozenset({"int", "float"})
 
     def _literal_tuple_annotation_node(self, iterable_node):
@@ -2777,6 +2799,8 @@ class LoopMixin:
 
     def _infer_type_from_call(self, call_node):
         """Infer type from function call nodes"""
+        if self._copied_dict_name(call_node) is not None:
+            return "dict"
         if not isinstance(call_node.func, ast.Name):
             return "Any"
 
@@ -2917,6 +2941,31 @@ class LoopMixin:
 
         return assignments
 
+    def _scan_subscript_stored_values(self, module):
+        """Record the values each `name[key] = value` in `module` stores."""
+        self.subscript_stored_values = {}
+        for node in ast.walk(module):
+            if isinstance(node, ast.Assign):
+                for target in node.targets:
+                    if isinstance(target, ast.Subscript) and isinstance(target.value, ast.Name):
+                        self.subscript_stored_values.setdefault(target.value.id,
+                                                                []).append(node.value)
+
+    def _create_name_annotation(self, name, value):
+        """Annotation for `name` bound to `value`.
+
+        A dict literal's value type is dropped when the module stores a value
+        of another known type into `name`: the views of the dict would read
+        that value with the literal's type (#9753).
+        """
+        annotation = self._create_annotation_node_from_value(value)
+        if not (isinstance(value, ast.Dict) and isinstance(annotation, ast.Subscript)):
+            return annotation
+        if self._has_other_value_type(self.subscript_stored_values.get(name, []),
+                                      annotation.slice.elts[1]):
+            return ast.Name(id="dict", ctx=ast.Load())
+        return annotation
+
     def _create_annotation_node_from_value(self, value):
         """Create an annotation AST node from a value node for storage"""
         if isinstance(value, ast.List):
@@ -2926,8 +2975,29 @@ class LoopMixin:
         if isinstance(value, ast.Subscript):
             return self._create_subscript_annotation(value)
         if isinstance(value, ast.Call):
-            return self._create_annotation_from_call(value)
+            return self._create_annotation_from_call(value) or self._dict_copy_annotation(value)
         return None
+
+    def _copied_dict_name(self, call_node):
+        """The receiver of `d.copy()` when `d` is known to be a dict, else None.
+
+        A dict literal with heterogeneous keys or values is iterated per key,
+        which a copy does not inherit, so its copy is not treated as a dict.
+        """
+        func = call_node.func
+        if not (isinstance(func, ast.Attribute) and func.attr == "copy" and isinstance(
+                func.value, ast.Name) and not call_node.args and not call_node.keywords):
+            return None
+        name = func.value.id
+        if name in self.het_dict_literals or name in self.het_value_dict_literals:
+            return None
+        return name if self._is_known_dict_name(name) else None
+
+    def _dict_copy_annotation(self, call_node):
+        """The receiver's annotation for `d.copy()` on a dict `d`, else None."""
+        name = self._copied_dict_name(call_node)
+        ann = self.variable_annotations.get(name)
+        return copy.deepcopy(ann) if name is not None and ann is not None else None
 
     # Element/key/value types covered by the monomorphic builders in
     # models/nondet.py.  A type outside these is rejected rather than silently
@@ -3180,7 +3250,8 @@ class LoopMixin:
         key_type = self._infer_dict_key_type(dict_node.keys[0])
         value_annotation = self._infer_dict_value_annotation(dict_node.values[0])
 
-        if key_type != "Any" and value_annotation:
+        if key_type != "Any" and value_annotation and not self._has_other_value_type(
+                dict_node.values, value_annotation):
             return ast.Subscript(
                 value=ast.Name(id="dict", ctx=ast.Load()),
                 slice=ast.Tuple(
@@ -3191,6 +3262,14 @@ class LoopMixin:
             )
 
         return ast.Name(id="dict", ctx=ast.Load())
+
+    def _has_other_value_type(self, values, annotation):
+        """True if one of `values` has a known type other than `annotation`."""
+        for value in values:
+            value_type = self._infer_dict_value_annotation(value)
+            if value_type is not None and ast.dump(value_type) != ast.dump(annotation):
+                return True
+        return False
 
     def _has_heterogeneous_keys(self, dict_node):
         """Return True if a dict literal needs per-key loop unrolling at iteration.

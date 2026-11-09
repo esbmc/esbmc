@@ -346,6 +346,11 @@ private:
     const nlohmann::json &obj_arg,
     const std::vector<nlohmann::json> &types) const;
   void plant_unsupported(const std::string &message) const;
+  void refuse_abs_unless(const exprt &representable) const;
+  exprt refuse_unrepresentable_abs(exprt operand) const;
+  exprt
+  exclude_smallest_int(const std::string &type, const exprt &nondet) const;
+  nlohmann::json abs_of_int_literal(const nlohmann::json &value) const;
   nlohmann::json bound_value(const nlohmann::json &name) const;
   bool is_symbolic_int_power(const nlohmann::json &node) const;
   void refuse_type_of_symbolic_int_power(
@@ -785,11 +790,15 @@ private:
   bool is_math_function_dispatch_call() const;
   exprt dispatch_math_call();
   exprt handle_math_function_dispatch();
+  exprt math_log_of(const nlohmann::json &arg);
+  exprt handle_math_log();
   bool calls_overflow_model(const std::string &f) const;
   bool may_overflow(const std::string &f, const exprt &result) const;
   std::optional<std::string> bounded_math_import() const;
   bool takes_bounded_math(const std::string &function) const;
   std::optional<exprt> try_bounded_math_call(const std::string &func_name);
+  void reject_bounded_math_arity(const std::string &func_name) const;
+  std::optional<exprt> bounded_binary_math_call(const std::string &function);
 
   // General function call handler
   exprt handle_general_function_call();

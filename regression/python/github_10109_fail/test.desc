@@ -1,0 +1,5 @@
+CORE
+main.py
+
+^  FAILED\s+\[run\.assertion\.\d+\]\s+line\s+19\s+assertion
+^VERIFICATION FAILED$

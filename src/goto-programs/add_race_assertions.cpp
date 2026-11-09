@@ -662,6 +662,15 @@ static void store_call_result_via_local(
   t->location = original.location;
 }
 
+// The pthread operational models take their locks inside atomic regions;
+// flagging those writes would make every lock operation an interleaving point.
+static bool is_sync_primitive(const irep_idt &function)
+{
+  const std::string name = id2string(function);
+  return name.find("@F@pthread_") != std::string::npos ||
+         name.find("@F@__ESBMC_") != std::string::npos;
+}
+
 static goto_programt::instructiont
 yield_instruction(contextt &context, const locationt &location)
 {
@@ -679,6 +688,7 @@ void add_race_assertions(
   w_guardst &w_guards,
   const rw_sett::shared_localst &shared_locals,
   bool body_is_atomic,
+  bool track_atomic_writes,
   symbol_generator &tmp_sym)
 {
   namespacet ns(context);
@@ -727,7 +737,7 @@ void add_race_assertions(
     // we still need to know whether the region touched shared state so a
     // context-switch point can be created at its boundary (see note above).
     if (
-      races_only && is_atomic && !atomic_region_touched_shared &&
+      track_atomic_writes && is_atomic && !atomic_region_touched_shared &&
       (instruction.is_assign() || instruction.is_other() ||
        instruction.is_return() || instruction.is_goto() ||
        instruction.is_assert() || instruction.is_function_call() ||
@@ -758,7 +768,7 @@ void add_race_assertions(
     // assertion is added inside the atomic region on purpose: two
     // mutually-exclusive atomic writers must never race with each other, and a
     // check here would turn that race-free pattern into a spurious violation.
-    if (races_only && is_atomic && instruction.is_assign())
+    if (track_atomic_writes && is_atomic && instruction.is_assign())
     {
       rw_sett rw_set(ns, i_it, instruction.code, &shared_locals);
 
@@ -842,7 +852,7 @@ void add_race_assertions(
       i_it = ++t;
 
       // now add assertion for what is read and written
-      forall_rw_set_entries(e_it, rw_set)
+      forall_rw_set_entries(e_it, rw_set) if (!e_it->second.atomic)
       {
         goto_programt::targett t = goto_program.insert(i_it);
 
@@ -929,7 +939,7 @@ void add_race_assertions(
       // atomic regions. Restricted to regions that touched shared state to
       // avoid growing the interleaving space for purely thread-local atomics.
       // See https://github.com/esbmc/esbmc/issues/4423
-      if (races_only && atomic_region_touched_shared)
+      if (track_atomic_writes && atomic_region_touched_shared)
       {
         atomic_region_touched_shared = false;
 
@@ -978,6 +988,7 @@ void add_race_assertions(contextt &context, goto_programt &goto_program)
     w_guards,
     shared_locals,
     /*body_is_atomic=*/false,
+    config.options.get_bool_option("data-races-check-only"),
     tmp_sym);
 
   w_guards.add_initialization(goto_program);
@@ -986,6 +997,8 @@ void add_race_assertions(contextt &context, goto_programt &goto_program)
 
 void add_race_assertions(contextt &context, goto_functionst &goto_functions)
 {
+  const bool races_only =
+    config.options.get_bool_option("data-races-check-only");
   w_guardst w_guards(context);
   namespacet ns(context);
   symbol_generator tmp_sym("race_check::");
@@ -1017,6 +1030,7 @@ void add_race_assertions(contextt &context, goto_functionst &goto_functions)
         w_guards,
         shared_locals,
         always_atomic.count(f_it->first) > 0,
+        races_only || !is_sync_primitive(f_it->first),
         tmp_sym);
 
   // get "main"

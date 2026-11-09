@@ -37,6 +37,7 @@ using python_annotation_utils::get_base_var_name;
 using python_annotation_utils::get_type_from_json;
 using python_annotation_utils::has_annotation;
 using python_annotation_utils::has_return_none;
+using python_annotation_utils::has_return_value;
 using python_annotation_utils::infer_type_from_default_arg_shape;
 using python_annotation_utils::InferResult;
 using python_annotation_utils::invert_substrings;
@@ -114,6 +115,11 @@ private:
   class_init(const std::string &class_name, unsigned depth, bool &inherited);
   /// Argument types each inherited __init__ parameter receives, by parameter.
   std::map<Json *, std::set<std::string>> inherited_init_args_;
+  /// Argument types each constructor parameter receives, and the
+  /// parameters this pass typed from a call.
+  std::map<Json *, std::set<std::string>> constructor_arg_types_;
+  std::set<Json *> constructor_typed_params_;
+  void refuse_mixed_constructor_args() const;
   // Implementations live in annotation_conversion.inl unless noted.
 
   // ----- AST lookup and walk helpers -----
@@ -200,12 +206,15 @@ private:
   std::string get_argument_type(const Json &arg);
   std::string get_dict_literal_type(const Json &dict_value);
   std::string get_call_type(const Json &arg);
+  std::string module_call_type(const Json &call);
   std::string get_attribute_type(const Json &arg);
   std::string class_attribute_type(
     const std::string &cls,
     const std::string &attr,
     bool constructed_only = false);
   std::string self_attribute_type(const Json &node);
+  InferResult
+  infer_self_attribute_copy(const Json &stmt, std::string &inferred_type);
   std::string get_operand_type(const Json &node);
   std::string get_builtin_call_type(const Json &call);
   // Type of a builtin call whose result depends on its argument (abs, hash),
@@ -236,6 +245,8 @@ private:
   function_signature(const function_values::candidate &function);
   std::string
   function_value_return_type(const Json &value, const Json *call = nullptr);
+  std::optional<std::string>
+  named_call_type(const Json &call, const Json &body);
   InferResult
   infer_type(const Json &stmt, const Json &body, std::string &inferred_type);
   // True for a `np.<ctor>(...)` call node (module or aliased), where <ctor>

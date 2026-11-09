@@ -1,0 +1,4 @@
+CORE
+main.py
+
+^ERROR: an and/or whose value is a list or a bool is not supported$

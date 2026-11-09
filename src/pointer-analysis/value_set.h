@@ -153,6 +153,15 @@ public:
      *  to the array element edges.
      *  Units are bytes. Zero means N/A. */
     unsigned int offset_alignment;
+    /** The bytes [member_begin, member_end) of the object, an array member
+     *  the pointer was formed into by indexing it (#9853); begin == end means
+     *  none. Once the offset is unknown, accesses outside it are bounds
+     *  violations of it. */
+    uint64_t member_begin = 0, member_end = 0;
+    bool has_member() const
+    {
+      return member_begin != member_end;
+    }
     bool offset_is_zero() const
     {
       return offset_is_set && offset.is_zero();
@@ -161,7 +170,8 @@ public:
     {
       return offset_is_set == o.offset_is_set &&
              offset_alignment == o.offset_alignment &&
-             (!offset_is_set || offset == o.offset);
+             (!offset_is_set || offset == o.offset) &&
+             member_begin == o.member_begin && member_end == o.member_end;
     }
     bool operator!=(const objectt &o) const
     {
@@ -345,7 +355,8 @@ public:
 
   /** Convert an object map element to an expression. Formulates either an
    *  object_descriptor irep, or unknown / invalid expr's as appropriate. */
-  expr2tc to_expr(object_mapt::const_iterator it) const;
+  expr2tc
+  to_expr(object_mapt::const_iterator it, bool name_array_member = false) const;
 
   /** Insert an object record element into an object map.
    *  @param dest The map to insert this record into.
@@ -404,10 +415,17 @@ public:
     objectt &old = it2->second;
     const expr2tc &expr_obj = object_numbering[n];
 
+    // Only a member both records stay in survives the merge.
+    const bool member_lost =
+      old.has_member() && (old.member_begin != object.member_begin ||
+                           old.member_end != object.member_end);
+    if (member_lost)
+      old.member_begin = old.member_end = 0;
+
     if (old.offset_is_set && object.offset_is_set)
     {
       if (old.offset == object.offset)
-        return false;
+        return member_lost;
 
       // Merge the tracking for two offsets; take the minimum alignment
       // guaranteed by them.
@@ -426,7 +444,7 @@ public:
         // Both object offsets not set; update alignment to minimum of the two
         old.offset_alignment =
           std::min(old.offset_alignment, object.offset_alignment);
-        return !(old.offset_alignment == oldalign);
+        return member_lost || !(old.offset_alignment == oldalign);
       }
 
       // Old offset unset; new offset set. Compute the alignment of the
@@ -434,7 +452,7 @@ public:
       // alignment.
       unsigned int new_alignment = offset2align(expr_obj, object.offset);
       old.offset_alignment = std::min(old.offset_alignment, new_alignment);
-      return !(old.offset_alignment == oldalign);
+      return member_lost || !(old.offset_alignment == oldalign);
     }
 
     // Old offset alignment is set; new isn't.
@@ -487,7 +505,10 @@ public:
    *         it points to.
    *  @param dest A list to store pointed-at object expressions into.
    *  */
-  void get_value_set(const expr2tc &expr, value_setst::valuest &dest) const;
+  void get_value_set(
+    const expr2tc &expr,
+    value_setst::valuest &dest,
+    bool name_array_member = false) const;
 
   /** Clear all value records from this value set. */
   void clear()
@@ -719,6 +740,21 @@ public:
     bool under_deref = true) const;
 
 private:
+  /** get_value_set_rec for a typecast or bitcast \p expr. */
+  void get_cast_value_set(
+    const expr2tc &expr,
+    object_mapt &dest,
+    const std::string &suffix,
+    const type2tc &original_type) const;
+
+  /** Record in \p o, whose offset into the struct \p object is known, the
+   *  bytes of the array member of type \p array_type it is indexed into. */
+  static void record_array_member(
+    objectt &o,
+    const expr2tc &object,
+    const type2tc &array_type,
+    const BigInt &element_size);
+
   /** What one get_value_set_rec_cached query contributed, keyed by its
    * arguments. Shared subexpressions make a value query a DAG walk, so without
    * this the walk costs paths exponential in the number of stores a propagated

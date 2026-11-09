@@ -1,0 +1,5 @@
+CORE
+main.c
+--sv-comp --no-pointer-check
+^VERIFICATION FAILED$
+^\s+FAILED\s+\[main\.assertion\.1\]\s+line\s+8\s+reach_error$

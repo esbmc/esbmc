@@ -1,0 +1,5 @@
+regression/python/github_10024_function_str_int
+regression/python/github_10024_function_str_int_fail
+regression/python/github_10024_method_str
+regression/python/github_10024_method_str_fail
+regression/python/github_10024_method_str_int_unsupported

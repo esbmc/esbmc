@@ -1,0 +1,5 @@
+CORE
+main.py
+
+^VERIFICATION FAILED$
+^  FAILED .*line 15  assertion d == \(void \*\)6$

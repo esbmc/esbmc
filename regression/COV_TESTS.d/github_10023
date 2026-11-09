@@ -1,0 +1,10 @@
+regression/python/github_10023
+regression/python/github_10023_append
+regression/python/github_10023_concat
+regression/python/github_10023_copy
+regression/python/github_10023_fail
+regression/python/github_10023_insert
+regression/python/github_10023_int_float
+regression/python/github_10023_setitem
+regression/python/github_10023_slice
+regression/python/github_10023_slice_assign

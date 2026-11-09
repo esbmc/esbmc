@@ -1,0 +1,6 @@
+CORE
+main.c
+--no-slice
+^  u\.m\[0\]\[2\] = 3 
+^  u\.m\[1\]\[2\] = 5 
+^VERIFICATION FAILED$
