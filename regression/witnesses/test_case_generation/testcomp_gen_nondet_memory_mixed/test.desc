@@ -1,0 +1,5 @@
+CORE
+main.c
+--generate-testcase --64
+^VERIFICATION FAILED$
+CHECK_FILE testcase.xml contains <testcase coversError="true">\n<input>0</input>\n<input>0</input>\n<input>192</input>\n<input>63</input>\n<input>[0-9]+</input>\n<input>[0-9]+</input>\n<input>[0-9]+</input>\n<input>[0-9]+</input>\n<input>0</input>\n<input>0</input>\n<input>0</input>\n<input>0</input>\n<input>0</input>\n<input>0</input>\n<input>0</input>\n<input>0</input>\n<input>0</input>\n<input>0</input>\n<input>0</input>\n<input>0</input>\n<input>0</input>\n<input>0</input>\n<input>0</input>\n<input>0</input>\n<input>5</input>\n<input>0</input>\n<input>0</input>\n<input>0</input>\n<input>[0-9]+</input>\n<input>[0-9]+</input>\n<input>[0-9]+</input>\n<input>[0-9]+</input>\n</testcase>

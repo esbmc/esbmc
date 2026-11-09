@@ -302,10 +302,17 @@ void clang_c_adjust::adjust_derived_to_base(
   if (!base_displacement(ns, derived, base_id, offset) || offset == 0)
     return;
 
-  // The null guard below names the operand twice, and side effects are not
-  // lifted out until remove_sideeffects; displacing `f()` would call f twice.
-  // Decline rather than duplicate.
-  if (has_side_effect(expr))
+  // [conv.ptr]/3: a null pointer operand converts to a null pointer, so the
+  // displacement must not be applied to it. An address (of a materialized
+  // temporary, say) and a value-form operand, an lvalue, are never null.
+  const bool guard = ptr_mode && !expr.is_address_of();
+
+  // The guard names the operand twice, and side effects are not lifted out
+  // until remove_sideeffects, so a side-effecting operand (`f()`, `new C`,
+  // `p++`) is evaluated once into a temporary (#9373). A value-form operand
+  // is named once, but binding it would copy the object; decline.
+  const bool side_effect = has_side_effect(expr);
+  if (side_effect && !ptr_mode)
   {
     log_debug(
       "c++",
@@ -315,8 +322,17 @@ void clang_c_adjust::adjust_derived_to_base(
   }
 
   const typet base_ptr = pointer_typet(symbol_typet(base_id));
+  code_blockt block;
   exprt src = expr;
-  if (!ptr_mode)
+  if (side_effect && guard)
+  {
+    // A reference-typed temporary would be read as its referent, not as the
+    // address it holds.
+    if (is_lvalue_or_rvalue_reference(src.type()))
+      src = typecast_exprt(src, pointer_typet(src.type().subtype()));
+    bind_to_temporary(src, block, "$derived_to_base$");
+  }
+  else if (!ptr_mode)
     src = address_of_exprt(expr);
 
   typet char_ptr = pointer_typet(char_type());
@@ -327,15 +343,19 @@ void clang_c_adjust::adjust_derived_to_base(
   adjusted.type() = char_ptr;
   gen_typecast(ns, adjusted, base_ptr);
 
-  // [conv.ptr]/3: a null pointer operand converts to a null pointer, so the
-  // displacement must not be applied to it. A value-form operand is an lvalue
-  // and can never be null, so only the pointer form needs the guard.
-  if (ptr_mode)
+  if (guard)
   {
     exprt guarded = if_exprt(
       equality_exprt(src, gen_zero(src.type())), gen_zero(base_ptr), adjusted);
     guarded.location() = expr.location();
-    expr = guarded;
+    finish_complex_lowering(expr, guarded, block);
+    return;
+  }
+
+  if (ptr_mode)
+  {
+    adjusted.location() = expr.location();
+    expr = adjusted;
     return;
   }
 
@@ -577,28 +597,35 @@ void clang_c_adjust::bind_sideeffect_operands(
   {
     exprt &op = *it;
     const bool compound = bind_compound && !op.is_symbol() && !op.is_constant();
-    if (!compound && !contains_sideeffect(op))
-      continue;
-    // Embed file:line in the name and mark the symbol file_local with a
-    // module, like the compound-literal symbols (clang_c_convert.cpp): each
-    // TU is adjusted in an isolated context and merged by c_link, which only
-    // renames clashing symbols that are file_local with a module -- a bare
-    // "complex$1" would collide across TUs.
-    const std::string path = op.location().file().as_string();
-    const std::string file = path.substr(path.find_last_of("/\\") + 1);
-    symbolt &tmp = tmp_symbol.new_symbol(
-      context,
-      op.type(),
-      path + ":" + op.location().get_line().as_string() + "$complex$");
-    tmp.mode = "C";
-    tmp.module = file.substr(0, file.find_last_of('.'));
-    tmp.file_local = true;
-    tmp.location = op.location();
-    code_declt decl(symbol_expr(tmp), op);
-    decl.location() = op.location();
-    block.operands().push_back(decl);
-    op = symbol_expr(tmp);
+    if (compound || contains_sideeffect(op))
+      bind_to_temporary(op, block, "$complex$");
   }
+}
+
+void clang_c_adjust::bind_to_temporary(
+  exprt &op,
+  code_blockt &block,
+  const char *suffix)
+{
+  // Embed file:line in the name and mark the symbol file_local with a
+  // module, like the compound-literal symbols (clang_c_convert.cpp): each
+  // TU is adjusted in an isolated context and merged by c_link, which only
+  // renames clashing symbols that are file_local with a module -- a bare
+  // "complex$1" would collide across TUs.
+  const std::string path = op.location().file().as_string();
+  const std::string file = path.substr(path.find_last_of("/\\") + 1);
+  symbolt &tmp = tmp_symbol.new_symbol(
+    context,
+    op.type(),
+    path + ":" + op.location().get_line().as_string() + suffix);
+  tmp.mode = "C";
+  tmp.module = file.substr(0, file.find_last_of('.'));
+  tmp.file_local = true;
+  tmp.location = op.location();
+  code_declt decl(symbol_expr(tmp), op);
+  decl.location() = op.location();
+  block.operands().push_back(decl);
+  op = symbol_expr(tmp);
 }
 
 void clang_c_adjust::finish_complex_lowering(
@@ -1304,6 +1331,21 @@ bool clang_c_adjust::lower_complex_compound_assignment(exprt &expr)
   return true;
 }
 
+/// An E1 wider than int with no rank (rank_integer) misses the usual
+/// conversions, and the IREP2 round trip drops computation_type before
+/// remove_assignment.
+static void promote_to_computation_type(exprt &expr, const namespacet &ns)
+{
+  const typet &computation_type =
+    static_cast<const typet &>(expr.find("computation_type"));
+  exprt &op0 = expr.op0();
+  if (
+    computation_type.is_not_nil() &&
+    (op0.type().is_unsignedbv() || op0.type().is_signedbv()) &&
+    op0.type() != computation_type)
+    gen_typecast(ns, op0, computation_type);
+}
+
 void clang_c_adjust::adjust_side_effect_assignment(exprt &expr)
 {
   const irep_idt &statement = expr.statement();
@@ -1355,6 +1397,7 @@ void clang_c_adjust::adjust_side_effect_assignment(exprt &expr)
   }
 
   gen_typecast_arithmetic(ns, op0, op1);
+  promote_to_computation_type(expr, ns);
 }
 
 void clang_c_adjust::adjust_side_effect_function_call(
@@ -1546,14 +1589,16 @@ static const char *float_lowering_id(
 
   // C17 7.12.10.2: remainder() is IEEE 754 remainder, exactly SMT-LIB's
   // fp.rem. The fmod/remquo models are built on top of it (libm/fmod.c).
+  // The nodes are fixed-arity; a declaration with another arity stays a call.
+  const std::size_t arity = expr.arguments().size();
   switch (ieee_float_builtin_of(identifier))
   {
   case ieee_float_builtin::nearbyint:
-    return "nearbyint";
+    return arity == 1 ? "nearbyint" : nullptr;
   case ieee_float_builtin::remainder:
-    return "ieee_rem";
+    return arity == 2 ? "ieee_rem" : nullptr;
   case ieee_float_builtin::fma:
-    return "ieee_fma";
+    return arity == 3 ? "ieee_fma" : nullptr;
   case ieee_float_builtin::none:
     return nullptr;
   }

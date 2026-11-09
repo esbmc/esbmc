@@ -8,7 +8,7 @@ def g():
 
 
 fs = [f, g]
-i = nondet_int()
+i = nondet_int() % 1000 - 500
 r = fs[abs(i) % 2]()
 last = fs[-1]()
 assert last == "a"

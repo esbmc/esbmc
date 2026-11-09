@@ -77,7 +77,7 @@ void mathsat_convt::pop_ctx()
   smt_solver_baset::pop_ctx();
 }
 
-void mathsat_convt::assert_ast(smt_astt a)
+void mathsat_convt::assert_ast_in_solver(smt_astt a)
 {
   const mathsat_smt_ast *mast = to_solver_smt_ast<mathsat_smt_ast>(a);
   msat_assert_formula(env, mast->a);

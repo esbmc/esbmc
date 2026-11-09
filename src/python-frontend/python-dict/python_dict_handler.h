@@ -265,6 +265,14 @@ public:
     const nlohmann::json &node,
     codet &target_block);
 
+  void store_comprehension_pair(
+    const exprt &dict,
+    const exprt &key,
+    const exprt &value,
+    const locationt &location,
+    const nlohmann::json &element,
+    code_blockt &pair_block);
+
   /**
    * @brief Handles dictionary membership testing (`in` / `not in` operators).
    *
@@ -374,6 +382,11 @@ public:
    */
   typet get_popitem_tuple_type(const exprt &dict_expr);
 
+  /// @p key_type if known, else the type shared by the literal keys stored
+  /// into the empty dict, else str.
+  typet key_type_or_default(const typet &key_type, const exprt &dict_expr);
+  typet resolve_stored_key_type(const exprt &dict_expr);
+
   /**
    * @brief Handles dict.popitem() method calls.
    * Implements Python's dict.popitem() semantics:
@@ -422,7 +435,8 @@ public:
   bool reads_value_as_tagged(
     const exprt &dict_expr,
     const nlohmann::json &slice_node,
-    const element_type_registry::entries &entries);
+    const element_type_registry::entries &entries,
+    const typet &read_type);
 
   char annotated_value_kind(const exprt &dict_expr);
 

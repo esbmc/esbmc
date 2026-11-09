@@ -1,0 +1,4 @@
+CORE
+main.c
+--64 --clang-c-irep2-adjust-only
+^VERIFICATION SUCCESSFUL$

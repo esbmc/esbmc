@@ -3584,11 +3584,14 @@ bool function_call_expr::receiver_is_binop_or_list_symbol() const
 const symbolt *
 function_call_expr::find_callee_symbol(const std::string &func_symbol_id)
 {
-  if (
-    function_type_ == FunctionType::InstanceMethod &&
-    function_id_.get_class().empty())
+  if (function_type_ != FunctionType::InstanceMethod)
+    return cached_find_symbol(func_symbol_id);
+  if (function_id_.get_class().empty())
     return nullptr;
-  return cached_find_symbol(func_symbol_id);
+  // find_symbol falls back to a module global of the method's name, which is
+  // not the method; an inherited one is then found in the bases (#9817).
+  const symbolt *symbol = cached_find_symbol(func_symbol_id);
+  return symbol && symbol->get_type().is_code() ? symbol : nullptr;
 }
 
 bool function_call_expr::receiver_class_defines_method(
@@ -4671,10 +4674,22 @@ exprt function_call_expr::handle_cmath_inverse_fast_path()
   return build_if(migrate_expr_back(fast_guard), fast_path, model_call);
 }
 
+static bool is_bounded_math(const std::string &function)
+{
+  return bounded_math::is_bounded(function) ||
+         bounded_math::is_bounded_binary(function);
+}
+
 static std::string numpy_spelling(const std::string &math_name)
 {
   static const std::map<std::string, std::string> numpy_names = {
-    {"asin", "arcsin"}, {"acos", "arccos"}, {"atan", "arctan"}};
+    {"asin", "arcsin"},
+    {"acos", "arccos"},
+    {"atan", "arctan"},
+    {"asinh", "arcsinh"},
+    {"acosh", "arccosh"},
+    {"atanh", "arctanh"},
+    {"atan2", "arctan2"}};
   auto renamed = numpy_names.find(math_name);
   return renamed == numpy_names.end() ? math_name : renamed->second;
 }
@@ -4714,7 +4729,7 @@ std::optional<std::string> function_call_expr::bounded_math_import() const
     return std::nullopt;
   std::optional<std::string> imported =
     math_import_of(converter_.ast(), function_id_.get_function());
-  if (!imported || !bounded_math::is_bounded(numpy_spelling(*imported)))
+  if (!imported || !is_bounded_math(numpy_spelling(*imported)))
     return std::nullopt;
   return imported;
 }
@@ -4768,12 +4783,49 @@ static bool is_number_literal(const nlohmann::json &node)
   return type == "Constant";
 }
 
+static std::optional<double> literal_value(const nlohmann::json &node)
+{
+  if (node.value("_type", "") == "UnaryOp")
+  {
+    const std::optional<double> operand = literal_value(node["operand"]);
+    const std::string op = node["op"].value("_type", "");
+    if (!operand || (op != "USub" && op != "UAdd"))
+      return std::nullopt;
+    return op == "USub" ? -*operand : *operand;
+  }
+  const nlohmann::json &value = node.value("value", nlohmann::json());
+  if (node.value("_type", "") != "Constant" || !value.is_number())
+    return std::nullopt;
+  return value.get<double>();
+}
+
+// A call whose arguments are all number literals keeps the C library's value
+// (handle_math_function_dispatch), unless it raises a domain error the C
+// library would turn into a NaN or an infinity. cbrt, erf and erfc have no
+// C library model, only approximations in models/math.py, so they never do.
+static bool
+keeps_library_value(const std::string &function, const nlohmann::json &args)
+{
+  static const std::set<std::string> approximated = {"cbrt", "erf", "erfc"};
+  if (
+    approximated.count(function) ||
+    !std::all_of(args.begin(), args.end(), is_number_literal) ||
+    (function == "hypot" && args.size() != 2))
+    return false;
+  const std::optional<double> x =
+    args.size() == 1 ? literal_value(args[0]) : std::nullopt;
+  return !x || !bounded_math::outside_domain(function, *x);
+}
+
 bool function_call_expr::takes_bounded_math(const std::string &function) const
 {
   const nlohmann::json &args = call_["args"];
-  return bounded_math::is_bounded(function) && args.size() == 1 &&
+  const std::size_t arity = bounded_math::is_bounded_binary(function) ? 2 : 1;
+  return is_bounded_math(function) &&
+         (args.size() == arity || function == "hypot") &&
          call_.value("keywords", nlohmann::json::array()).empty() &&
-         !is_number_literal(args[0]) && !converter_.is_model_file(call_) &&
+         !keeps_library_value(function, args) &&
+         !converter_.is_model_file(call_) &&
          !math_guard_utils::call_has_complex_in_args_or_keywords(
            call_,
            converter_,
@@ -4784,12 +4836,27 @@ bool function_call_expr::takes_bounded_math(const std::string &function) const
 // math.exp(x) in the program, of a number known only at run time: the model
 // numpy.exp(x) uses, with math's ValueError and OverflowError. Calls inside
 // the models keep the C library models their own algorithms are tuned to.
+// math.atan2 takes exactly two arguments; math.hypot takes any number.
+void function_call_expr::reject_bounded_math_arity(
+  const std::string &func_name) const
+{
+  const std::size_t given = call_["args"].size();
+  if (converter_.is_model_file(call_) || given == 2 || func_name != "atan2")
+    return;
+  throw std::runtime_error(
+    "TypeError: atan2 expected 2 arguments, got " + std::to_string(given));
+}
+
 std::optional<exprt>
 function_call_expr::try_bounded_math_call(const std::string &func_name)
 {
   const std::string function = numpy_spelling(func_name);
+  if (bounded_math::is_bounded_binary(function))
+    reject_bounded_math_arity(func_name);
   if (!takes_bounded_math(function))
     return std::nullopt;
+  if (bounded_math::is_bounded_binary(function))
+    return bounded_binary_math_call(function);
   const nlohmann::json &arg = call_["args"][0];
   const exprt x = converter_.get_expr(arg);
   if (is_cpp_throw_expr(x))
@@ -4802,6 +4869,26 @@ function_call_expr::try_bounded_math_call(const std::string &func_name)
   }
   return bounded_math(converter_, call_)
     .runtime(function, x, math_module::math);
+}
+
+std::optional<exprt>
+function_call_expr::bounded_binary_math_call(const std::string &function)
+{
+  bounded_math model(converter_, call_);
+  std::vector<exprt> args;
+  for (const nlohmann::json &arg : call_["args"])
+  {
+    const exprt x = converter_.get_expr(arg);
+    if (is_cpp_throw_expr(x))
+      return x;
+    // The arguments are converted, so falling back would convert them again.
+    if (!is_math_number(x.type()))
+      throw std::runtime_error("TypeError: must be real number");
+    args.push_back(model.capture(x));
+  }
+  if (function == "hypot")
+    return model.hypot_of(args);
+  return model.binary(function, args[0], args[1], math_module::math);
 }
 
 static std::string math_function_name(const std::string &raw_func_name)
@@ -4857,6 +4944,71 @@ bool function_call_expr::may_overflow(const std::string &f, const exprt &result)
   const nlohmann::json &args = call_["args"];
   return overflows(f) && !converter_.is_model_file(call_) && args.size() == 1 &&
          is_numeric_literal(args[0]) && !is_finite_constant(result);
+}
+
+// The logarithm of one operand of math.log, raising "math domain error" for
+// an operand <= 0 as the one-argument form does.
+exprt function_call_expr::math_log_of(const nlohmann::json &arg)
+{
+  const exprt arg_expr = converter_.get_expr(arg);
+  if (is_cpp_throw_expr(arg_expr))
+    return arg_expr;
+  if (is_complex_type(arg_expr.type()))
+    return complex_utils::raise_math_real_type_error_expr(converter_);
+  if (
+    !is_number_literal(arg) && is_math_number(arg_expr.type()) &&
+    !converter_.is_model_file(call_))
+    return bounded_math(converter_, call_)
+      .runtime("log", arg_expr, math_module::math);
+  expr2tc fp_operand;
+  migrate_expr(arg_expr, fp_operand);
+  if (!arg_expr.type().is_floatbv())
+    fp_operand = typecast2tc(
+      migrate_type(type_handler_.get_typet("float", 0)), fp_operand);
+  exprt raise_expr = converter_.get_exception_handler().gen_exception_raise(
+    "ValueError", "math domain error");
+  const locationt loc = converter_.get_location_from_decl(call_);
+  raise_expr.location() = loc;
+  raise_expr.location().user_provided(true);
+  code_expressiont raise_code(raise_expr);
+  raise_code.location() = loc;
+  code_ifthenelset guard;
+  guard.cond() =
+    migrate_expr_back(lessthanequal2tc(fp_operand, gen_zero(fp_operand->type)));
+  guard.then_case() = raise_code;
+  guard.location() = loc;
+  guard.location().property("skipped");
+  converter_.current_block->copy_to_operands(guard);
+  return converter_.get_math_handler().handle_log(arg_expr, call_);
+}
+
+// math.log(x, base) is log(x) / log(base), as in CPython, so a base of 1
+// raises ZeroDivisionError.
+exprt function_call_expr::handle_math_log()
+{
+  const nlohmann::json &args = call_["args"];
+  if (args.empty() || args.size() > 2)
+    throw std::runtime_error("log() expects 1 or 2 arguments");
+  const exprt ln_x = math_log_of(args[0]);
+  if (args.size() == 1 || is_cpp_throw_expr(ln_x))
+    return ln_x;
+  exprt ln_base = math_log_of(args[1]);
+  if (is_cpp_throw_expr(ln_base))
+    return ln_base;
+  ln_base = converter_.guard_operand(
+    ln_base,
+    call_,
+    "log_base",
+    [this](const expr2tc &value, const locationt &loc) {
+      converter_.emit_guarded_raise(
+        migrate_expr_back(equality2tc(value, gen_zero(value->type))),
+        "ZeroDivisionError",
+        "float division by zero",
+        loc);
+    });
+  exprt quotient("ieee_div", double_type());
+  quotient.copy_to_operands(ln_x, ln_base);
+  return quotient;
 }
 
 exprt function_call_expr::handle_math_function_dispatch()
@@ -5056,36 +5208,7 @@ exprt function_call_expr::handle_math_function_dispatch()
     return sqrt_result;
   }
   else if (func_name == "log")
-  {
-    exprt arg_expr = require_one_arg();
-    if (
-      std::optional<exprt> type_error = validate_real_arg(arg_expr);
-      type_error.has_value())
-
-      return *type_error;
-    // Domain check for log: operand must be > 0 (V.3: built in IREP2).
-    expr2tc fp_operand;
-    migrate_expr(arg_expr, fp_operand);
-    if (!arg_expr.type().is_floatbv())
-      fp_operand = typecast2tc(
-        migrate_type(type_handler_.get_typet("float", 0)), fp_operand);
-    exprt domain_check = migrate_expr_back(
-      lessthanequal2tc(fp_operand, gen_zero(fp_operand->type)));
-    exprt raise_expr = converter_.get_exception_handler().gen_exception_raise(
-      "ValueError", "math domain error");
-    locationt loc = converter_.get_location_from_decl(call_);
-    raise_expr.location() = loc;
-    raise_expr.location().user_provided(true);
-    code_expressiont raise_code(raise_expr);
-    raise_code.location() = loc;
-    code_ifthenelset guard;
-    guard.cond() = domain_check;
-    guard.then_case() = raise_code;
-    guard.location() = loc;
-    guard.location().property("skipped");
-    converter_.current_block->copy_to_operands(guard);
-    return converter_.get_math_handler().handle_log(arg_expr, call_);
-  }
+    return handle_math_log();
   else if (func_name == "acos")
   {
     exprt arg_expr = require_one_arg();

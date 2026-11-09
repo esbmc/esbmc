@@ -219,28 +219,6 @@ written_arguments(const irep_idt &function, const std::vector<expr2tc> &args)
   return written;
 }
 
-/// A variable whose address the callee takes can be reassigned through that
-/// address, which collect_lhs_symbols does not see.
-void goto_loopst::collect_address_taken(
-  const expr2tc &e,
-  function_summaryt &out) const
-{
-  if (is_nil_expr(e))
-    return;
-  if (is_address_of2t(e))
-  {
-    expr2tc obj = to_address_of2t(e).ptr_obj;
-    while (is_member2t(obj) || is_index2t(obj) || is_typecast2t(obj))
-      obj = is_member2t(obj)  ? to_member2t(obj).source_value
-            : is_index2t(obj) ? to_index2t(obj).source_value
-                              : to_typecast2t(obj).from;
-    if (is_symbol2t(obj))
-      out.address_taken.insert(to_symbol2t(obj).thename);
-  }
-  e->foreach_operand(
-    [this, &out](const expr2tc &op) { collect_address_taken(op, out); });
-}
-
 void goto_loopst::function_summaryt::record_write(const expr2tc &lhs)
 {
   const expr2tc ptr = extract_queried_pointer(lhs);
@@ -479,8 +457,10 @@ bool goto_loopst::compute_function_summary(
 
   for (const auto &instr : it->second.body.instructions)
   {
-    collect_address_taken(instr.code, local);
-    collect_address_taken(instr.guard, local);
+    // A variable whose address the callee takes can be reassigned through
+    // that address, which collect_lhs_symbols does not see.
+    get_address_taken(instr.code, local.address_taken);
+    get_address_taken(instr.guard, local.address_taken);
     if (instr.is_assign())
     {
       const expr2tc &target = to_code_assign2t(instr.code).target;
@@ -622,6 +602,45 @@ void goto_loopst::get_modified_variables(
   }
 }
 
+static void record_pointer_array_write(loopst &loop, const expr2tc &ptr)
+{
+  if (is_nil_expr(ptr))
+    loop.set_pointer_array_write_unresolvable();
+  else
+    loop.add_pointer_array_write_ptr(ptr);
+}
+
+// Walk \p expr to its root symbol, keeping the member chain nearest to it:
+// that is what a havoc must cover, whatever the indices further out select.
+static bool split_member_write(
+  const expr2tc &expr,
+  expr2tc &root,
+  expr2tc &chain,
+  std::vector<expr2tc> &indices)
+{
+  root = expr;
+  while (!is_symbol2t(root))
+  {
+    if (is_member2t(root))
+    {
+      // Union members overlap, so havocing one leaves its aliases stale.
+      if (is_union_type(to_member2t(root).source_value->type))
+        return false;
+      chain = root;
+      root = to_member2t(root).source_value;
+    }
+    else if (is_index2t(root))
+    {
+      indices.push_back(to_index2t(root).index);
+      chain = expr2tc();
+      root = to_index2t(root).source_value;
+    }
+    else
+      return false;
+  }
+  return !is_nil_expr(chain);
+}
+
 void goto_loopst::add_loop_var(
   loopst &loop,
   const expr2tc &expr,
@@ -634,20 +653,28 @@ void goto_loopst::add_loop_var(
   // modified; sub-expressions used to *locate* that storage are reads.
   //   `*p = ...`        — pointer `p` is read, the pointee is modified
   //   `arr[i] = ...`    — index `i` is read, `arr` element is modified
-  //   `s.f = ...`       — struct `s` storage is modified
+  //   `s.f = ...`       — member `s.f` is modified, not all of `s`
   // Without this distinction `*Var_Ptr = ...` adds `Var_Ptr` to the loop's
   // modified set, which then causes the inductive step to havoc the
   // pointer at loop entry — unsound if the loop never reassigns it.
+  if (is_modified)
+  {
+    expr2tc root, chain;
+    std::vector<expr2tc> indices;
+    if (split_member_write(expr, root, chain, indices) && check_var_name(root))
+    {
+      loop.add_modified_member_to_loop(root, chain);
+      for (const expr2tc &i : indices)
+        add_loop_var(loop, i, false);
+      return;
+    }
+  }
   if (is_modified && is_dereference2t(expr))
   {
     // The pointee has no named symbol, so record the pointer for the
     // loop-invariant schema to havoc through; an unextractable pointer leaves
     // the write uncoverable and the schema declines (#5230, #7478).
-    expr2tc ptr = extract_queried_pointer(expr);
-    if (is_nil_expr(ptr))
-      loop.set_pointer_array_write_unresolvable();
-    else
-      loop.add_pointer_array_write_ptr(ptr);
+    record_pointer_array_write(loop, extract_queried_pointer(expr));
     add_loop_var(loop, to_dereference2t(expr).value, false);
     return;
   }
@@ -658,13 +685,8 @@ void goto_loopst::add_loop_var(
     // `(*p)[i]`) has no named symbol to havoc (#5224); a stack array
     // (array-typed symbol source) is havoc'd as a whole symbol.
     if (indexes_through_pointer(idx.source_value))
-    {
-      expr2tc ptr = extract_queried_pointer(idx.source_value);
-      if (!is_nil_expr(ptr))
-        loop.add_pointer_array_write_ptr(ptr);
-      else
-        loop.set_pointer_array_write_unresolvable();
-    }
+      record_pointer_array_write(
+        loop, extract_queried_pointer(idx.source_value));
     add_loop_var(loop, idx.source_value, true);
     add_loop_var(loop, idx.index, false);
     return;

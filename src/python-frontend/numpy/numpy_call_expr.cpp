@@ -3267,14 +3267,15 @@ numpy_call_expr::numpy_call_expr(
   const symbol_id &function_id,
   const nlohmann::json &call,
   python_converter &converter)
-  : function_call_expr(function_id, call, converter)
+  : function_call_expr(function_id, call, converter),
+    outer_build_static_lists_(converter.build_static_lists)
 {
   converter_.build_static_lists = true;
 }
 
 numpy_call_expr::~numpy_call_expr()
 {
-  converter_.build_static_lists = false;
+  converter_.build_static_lists = outer_build_static_lists_;
 }
 
 const nlohmann::json *
@@ -4687,6 +4688,171 @@ std::optional<exprt> numpy_call_expr::try_argmin_argmax_axis_result(
   return try_argmin_argmax_along_axis(function, arg);
 }
 
+static bool has_constant_shape(const typet &type)
+{
+  return !type.is_array() || (to_array_type(type).size().is_constant() &&
+                              has_constant_shape(type.subtype()));
+}
+
+static bool is_none(const nlohmann::json &node)
+{
+  return node.value("_type", "") == "Constant" && node.contains("value") &&
+         node["value"].is_null();
+}
+
+static const nlohmann::json *
+keyword_value(const nlohmann::json &call, const std::string &name)
+{
+  if (!call.contains("keywords"))
+    return nullptr;
+  for (const auto &kw : call["keywords"])
+    if (kw.value("arg", "") == name)
+      return &kw["value"];
+  return nullptr;
+}
+
+// The first keyword the ufunc lowering does not handle: where= and out= are
+// lowered, and dtype=float leaves the result unchanged; dtype=float raises
+// for a ufunc without a float loop, as isnan.
+static std::optional<std::string>
+unhandled_ufunc_keyword(const nlohmann::json &call, bool has_float_loop = true)
+{
+  for (const auto &kw : call.value("keywords", nlohmann::json::array()))
+  {
+    const std::string arg = kw.value("arg", "");
+    const nlohmann::json &value = kw["value"];
+    const bool float64 =
+      value.value("id", "") == "float" || value.value("attr", "") == "float64";
+    if (
+      arg != "out" && arg != "where" &&
+      !(arg == "dtype" && float64 && has_float_loop))
+      return arg;
+  }
+  return std::nullopt;
+}
+
+// Whether the call masks its result with where= or writes it to an out=
+// array, given as a keyword or as the argument after the inputs.
+static bool masks_or_writes(const nlohmann::json &call, std::size_t arity)
+{
+  const nlohmann::json *out = keyword_value(call, "out");
+  return call["args"].size() > arity || keyword_value(call, "where") ||
+         (out && !is_none(*out));
+}
+
+static void reject_ufunc_keywords_and_arity(
+  const nlohmann::json &call,
+  const std::string &function,
+  std::size_t arity,
+  bool has_float_loop = true)
+{
+  if (
+    std::optional<std::string> keyword =
+      unhandled_ufunc_keyword(call, has_float_loop))
+    throw std::runtime_error(
+      "TypeError: numpy." + function + "() keyword '" + *keyword +
+      "' is not supported");
+  const std::size_t given = call["args"].size();
+  if (given < arity)
+    throw std::runtime_error(
+      "TypeError: numpy." + function + "() takes " + std::to_string(arity) +
+      " positional arguments, got " + std::to_string(given));
+  if (given > arity + 1)
+    throw std::runtime_error(
+      "TypeError: " + function + "() takes from " + std::to_string(arity) +
+      " to " + std::to_string(arity + 1) + " positional arguments but " +
+      std::to_string(given) + " were given");
+}
+
+// A ufunc whose where= or out= is not lowered is refused rather than
+// computed as if the keyword were absent.
+static void reject_unlowered_ufunc_keywords(
+  const nlohmann::json &call,
+  const std::string &function)
+{
+  static const std::set<std::string> ufuncs = {
+    "abs",
+    "absolute",
+    "add",
+    "bitwise_and",
+    "bitwise_count",
+    "bitwise_invert",
+    "bitwise_left_shift",
+    "bitwise_not",
+    "bitwise_or",
+    "bitwise_right_shift",
+    "bitwise_xor",
+    "ceil",
+    "conj",
+    "conjugate",
+    "copysign",
+    "deg2rad",
+    "degrees",
+    "divide",
+    "divmod",
+    "equal",
+    "fabs",
+    "float_power",
+    "floor",
+    "floor_divide",
+    "fmax",
+    "fmin",
+    "fmod",
+    "frexp",
+    "gcd",
+    "greater",
+    "greater_equal",
+    "heaviside",
+    "invert",
+    "isnat",
+    "lcm",
+    "ldexp",
+    "left_shift",
+    "less",
+    "less_equal",
+    "logaddexp",
+    "logaddexp2",
+    "logical_and",
+    "logical_not",
+    "logical_or",
+    "logical_xor",
+    "matmul",
+    "matvec",
+    "maximum",
+    "minimum",
+    "mod",
+    "modf",
+    "multiply",
+    "negative",
+    "nextafter",
+    "not_equal",
+    "positive",
+    "pow",
+    "power",
+    "rad2deg",
+    "radians",
+    "reciprocal",
+    "remainder",
+    "right_shift",
+    "sign",
+    "signbit",
+    "spacing",
+    "square",
+    "subtract",
+    "true_divide",
+    "trunc",
+    "vecdot",
+    "vecmat"};
+  if (!ufuncs.count(function))
+    return;
+  for (const char *name : {"where", "out"})
+    if (const nlohmann::json *value = keyword_value(call, name))
+      if (!is_none(*value) || std::string(name) == "where")
+        throw std::runtime_error(
+          "TypeError: numpy." + function + "() keyword '" + name +
+          "' is not supported");
+}
+
 // Calls answered before the general paths: the scalar functions whose
 // operational model is their whole definition (building them as a binary
 // operation has no operator to use), and any()/all().
@@ -4698,8 +4864,13 @@ numpy_call_expr::try_early_result(const std::string &function)
 
   static const std::set<std::string> model_only = {
     "remainder", "nextafter", "isclose"};
+  if (std::optional<exprt> predicate = try_float_predicate(function))
+    return predicate;
+  if (std::optional<exprt> bounded = try_bounded_ufunc(function))
+    return bounded;
   if (std::optional<exprt> math = try_runtime_math(function))
     return math;
+  reject_unlowered_ufunc_keywords(call_, function);
   if (!model_only.count(function))
     return try_any_all_result(function);
   for (const nlohmann::json &arg : call_["args"])
@@ -5961,16 +6132,20 @@ static double frobenius_norm(const std::vector<std::vector<double>> &m)
 
 exprt numpy_call_expr::nondet_bool()
 {
-  symbolt &tmp =
-    converter_.create_tmp_symbol(call_, "$order$", bool_type(), exprt());
-  const exprt flag = symbol_expr(tmp);
-  code_declt decl(flag);
+  return nondet_value(bool_type(), "$order$");
+}
+
+exprt numpy_call_expr::nondet_value(const typet &type, const std::string &name)
+{
+  symbolt &tmp = converter_.create_tmp_symbol(call_, name, type, exprt());
+  const exprt value = symbol_expr(tmp);
+  code_declt decl(value);
   decl.location() = converter_.get_location_from_decl(call_);
   converter_.add_instruction(decl);
-  code_assignt assign(flag, side_effect_expr_nondett(bool_type()));
+  code_assignt assign(value, side_effect_expr_nondett(type));
   assign.location() = decl.location();
   converter_.add_instruction(assign);
-  return flag;
+  return value;
 }
 
 // How far LAPACK may round the eigenvalues of a 2x2 matrix that is not
@@ -7047,37 +7222,692 @@ exprt numpy_call_expr::numpy_math_value(const std::string &function, double x)
   return bounded_math(converter_, call_).literal(function, x);
 }
 
-// `out=None` and `dtype=float` leave a scalar ufunc's result unchanged.
-static bool only_noop_ufunc_keywords(const nlohmann::json &call)
+// A tuple literal, read as the list NumPy makes of it.
+static nlohmann::json tuples_as_lists(nlohmann::json node)
 {
-  for (const auto &kw : call.value("keywords", nlohmann::json::array()))
+  if (node.value("_type", "") == "Tuple")
+    node["_type"] = "List";
+  if (node.contains("elts"))
+    for (nlohmann::json &element : node["elts"])
+      element = tuples_as_lists(element);
+  return node;
+}
+
+// The ufuncs whose only route is the bounded model: anything outside it is
+// refused rather than handed to a path that does not know them.
+std::optional<exprt>
+numpy_call_expr::try_bounded_ufunc(const std::string &function)
+{
+  static const std::set<std::string> ufuncs = {
+    "expm1",
+    "log1p",
+    "exp2",
+    "arcsinh",
+    "arccosh",
+    "arctanh",
+    "cbrt",
+    "hypot",
+    "arctan2"};
+  if (!ufuncs.count(function))
+    return std::nullopt;
+  const std::size_t arity = bounded_math::is_bounded_binary(function) ? 2 : 1;
+  reject_ufunc_keywords_and_arity(call_, function, arity);
+  if (arity == 2)
+    return bounded_binary_ufunc(function);
+  const nlohmann::json arg = tuples_as_lists(call_["args"][0]);
+  numeric_value constant;
+  std::vector<std::vector<numeric_value>> rows;
+  std::vector<numeric_value> row;
+  const bool plain = !masks_or_writes(call_, arity);
+  if (plain && try_extract_numeric_constant(arg, constant))
+    return numpy_math_value(function, to_double(constant));
+  if (
+    plain && (try_extract_numeric_1d_list(arg, row) ||
+              try_extract_numeric_2d_list(arg, rows)))
+    return retype_lhs(numpy_math_list(function, arg));
+  if (std::optional<exprt> result = elementwise_math(function, arg))
+    return result;
+  throw std::runtime_error(
+    "TypeError: numpy." + function + " of this argument is not supported");
+}
+
+// hypot or arctan2 of numbers, arrays or views, broadcast as NumPy does.
+exprt numpy_call_expr::bounded_binary_ufunc(const std::string &function)
+{
+  std::vector<exprt> operands;
+  for (const nlohmann::json &arg : {call_["args"][0], call_["args"][1]})
   {
-    const std::string arg = kw.value("arg", "");
-    const nlohmann::json &value = kw["value"];
-    const bool none = value.value("_type", "") == "Constant" &&
-                      value.contains("value") && value["value"].is_null();
-    const bool float64 =
-      value.value("id", "") == "float" || value.value("attr", "") == "float64";
-    if (!(arg == "out" && none) && !(arg == "dtype" && float64))
+    std::optional<exprt> literal = literal_array_operand(arg);
+    operands.push_back(literal ? *literal : elementwise_operand(function, arg));
+  }
+  const exprt &a = operands[0], &b = operands[1];
+  for (const exprt &operand : operands)
+    if (!is_number_type(array_leaf_type(operand.type())))
+      throw std::runtime_error(
+        "TypeError: numpy." + function + " of a non-number is not supported");
+  return apply_ufunc(
+    function, {a, b}, double_type(), [&](const std::vector<exprt> &x) {
+      return bounded_math(converter_, call_)
+        .binary(function, x[0], x[1], math_module::numpy);
+    });
+}
+
+static std::optional<nlohmann::json>
+out_node(const nlohmann::json &call, std::size_t arity);
+
+// The array a ufunc call whose where=/out= are lowered writes, when it is a
+// name or a subscript without calls, which read the same storage again.
+static std::optional<nlohmann::json>
+named_ufunc_output(const nlohmann::json &ast, const nlohmann::json &call)
+{
+  static const std::set<std::string> binary = {"hypot", "arctan2", "atan2"};
+  static const std::set<std::string> aliases = {
+    "asin", "acos", "atan", "asinh", "acosh", "atanh", "atan2"};
+  const nlohmann::json &func = call.value("func", nlohmann::json::object());
+  const nlohmann::json &module = func.value("value", nlohmann::json::object());
+  const std::string name = func.value("attr", "");
+  if (
+    call.value("_type", "") != "Call" || module.value("_type", "") != "Name" ||
+    !is_imported_numpy_module_alias(ast, module.value("id", "")) ||
+    !(bounded_math::has_runtime_model(name) ||
+      bounded_math::is_float_predicate(name) || aliases.count(name)))
+    return std::nullopt;
+  const std::size_t arity = binary.count(name) ? 2 : 1;
+  std::optional<nlohmann::json> out;
+  try
+  {
+    out = out_node(call, arity);
+  }
+  catch (const std::runtime_error &)
+  {
+    return std::nullopt;
+  }
+  const std::string type = out ? out->value("_type", "") : "";
+  if (
+    (type != "Name" && type != "Subscript") ||
+    json_utils::ast_contains_call(*out))
+    return std::nullopt;
+  return out;
+}
+
+// The value an assignment stores in something other than a name.
+static void stored_value(
+  const nlohmann::json &node,
+  std::vector<const nlohmann::json *> &values)
+{
+  const bool annotated = node.value("_type", "") == "AnnAssign";
+  const nlohmann::json &target =
+    annotated ? node["target"] : node["targets"][0];
+  if (target.value("_type", "") != "Name")
+    values.push_back(&node["value"]);
+}
+
+// The arguments of a call to a function that is not a numpy one.
+static void passed_values(
+  const nlohmann::json &ast,
+  const nlohmann::json &call,
+  std::vector<const nlohmann::json *> &values)
+{
+  const nlohmann::json &module =
+    call["func"].value("value", nlohmann::json::object());
+  if (
+    module.value("_type", "") == "Name" &&
+    is_imported_numpy_module_alias(ast, module.value("id", "")))
+    return;
+  for (const nlohmann::json &arg : call["args"])
+    values.push_back(&arg);
+  for (const nlohmann::json &keyword : call["keywords"])
+    values.push_back(&keyword["value"]);
+}
+
+// The values a node lets escape: returned, stored or passed to a function
+// that is not a numpy one.
+static std::vector<const nlohmann::json *>
+escaping_values(const nlohmann::json &ast, const nlohmann::json &node)
+{
+  static const std::map<std::string, std::string> fields = {
+    {"Return", "value"},
+    {"Yield", "value"},
+    {"NamedExpr", "value"},
+    {"Lambda", "body"},
+    {"List", "elts"},
+    {"Tuple", "elts"},
+    {"Set", "elts"},
+    {"Dict", "values"}};
+  std::vector<const nlohmann::json *> values;
+  const std::string type = node.value("_type", "");
+  const auto field = fields.find(type);
+  if (field != fields.end())
+  {
+    const nlohmann::json &value = node[field->second];
+    if (value.is_array())
+      for (const nlohmann::json &item : value)
+        values.push_back(&item);
+    else
+      values.push_back(&value);
+  }
+  else if (type == "Assign" || type == "AnnAssign")
+    stored_value(node, values);
+  else if (type == "Call")
+    passed_values(ast, node, values);
+  return values;
+}
+
+// Such a value would be a copy where NumPy returns the out= array itself.
+static void reject_escaping_ufunc_output(
+  const nlohmann::json &ast,
+  const nlohmann::json &node)
+{
+  for (const nlohmann::json *value : escaping_values(ast, node))
+    if (value->is_object() && named_ufunc_output(ast, *value))
+      throw std::runtime_error(
+        "TypeError: numpy." + (*value)["func"].value("attr", "") +
+        "() with out= is only supported as a statement or assigned to a "
+        "name");
+}
+
+static void
+alias_ufunc_outputs_in(const nlohmann::json &ast, nlohmann::json &node)
+{
+  if (node.is_object())
+  {
+    reject_escaping_ufunc_output(ast, node);
+    for (auto &child : node.items())
+      alias_ufunc_outputs_in(ast, child.value());
+    return;
+  }
+  if (!node.is_array())
+    return;
+  nlohmann::json body = nlohmann::json::array();
+  for (nlohmann::json &statement : node)
+  {
+    alias_ufunc_outputs_in(ast, statement);
+    const std::string type =
+      statement.is_object() ? statement.value("_type", "") : "";
+    const bool named =
+      type == "AnnAssign" ? statement["target"].value("_type", "") == "Name"
+      : type == "Assign"  ? std::all_of(
+                              statement["targets"].begin(),
+                              statement["targets"].end(),
+                              [](const nlohmann::json &t) {
+                               return t.value("_type", "") == "Name";
+                              })
+                          : false;
+    const std::optional<nlohmann::json> out =
+      named && statement["value"].is_object()
+        ? named_ufunc_output(ast, statement["value"])
+        : std::nullopt;
+    if (!out)
+    {
+      body.push_back(statement);
+      continue;
+    }
+    nlohmann::json call = statement;
+    call["_type"] = "Expr";
+    call.erase("targets");
+    call.erase("target");
+    call.erase("annotation");
+    call.erase("simple");
+    body.push_back(call);
+    statement["value"] = *out;
+    body.push_back(statement);
+  }
+  node = body;
+}
+
+void alias_numpy_ufunc_outputs(nlohmann::json &ast)
+{
+  alias_ufunc_outputs_in(ast, ast["body"]);
+}
+
+// Python evaluates keywords in the order written, after the positionals.
+static bool where_before_out(const nlohmann::json &call, std::size_t arity)
+{
+  if (call["args"].size() > arity)
+    return false;
+  for (const nlohmann::json &keyword :
+       call.value("keywords", nlohmann::json::array()))
+  {
+    const nlohmann::json &arg = keyword["arg"];
+    if (arg == "where" || arg == "out")
+      return arg == "where";
+  }
+  return false;
+}
+
+static bool is_constant_array(const exprt &e)
+{
+  return e.id() == "array" &&
+         std::all_of(
+           e.operands().begin(), e.operands().end(), [](const exprt &x) {
+             return x.is_constant() || is_constant_array(x);
+           });
+}
+
+// f of the operands' elements at each index of the broadcast shape, from
+// dimension depth on; a dimension of 1 or a missing leading one repeats.
+exprt numpy_call_expr::broadcast_elements(
+  const std::vector<exprt> &operands,
+  const std::vector<std::size_t> &shape,
+  const typet &leaf,
+  std::size_t depth,
+  const std::function<exprt(const std::vector<exprt> &)> &f)
+{
+  if (depth == shape.size())
+    return f(operands);
+  const std::size_t rest = shape.size() - depth;
+  typet type = leaf;
+  for (std::size_t d = shape.size(); d-- > depth;)
+    type = array_typet(type, from_integer(shape[d], size_type()));
+  exprt result("array", type);
+  for (std::size_t i = 0; i < shape[depth]; ++i)
+  {
+    std::vector<exprt> elements;
+    for (const exprt &v : operands)
+    {
+      const std::vector<int> dims =
+        type_handler_.get_array_type_shape(v.type());
+      const std::size_t index = !dims.empty() && dims.front() == 1 ? 0 : i;
+      if (dims.size() < rest)
+        elements.push_back(v);
+      else if (is_constant_array(v))
+        elements.push_back(v.operands()[index]);
+      else
+        elements.push_back(
+          np_index(v, from_integer(index, size_type()), v.type().subtype()));
+    }
+    result.copy_to_operands(
+      broadcast_elements(elements, shape, leaf, depth + 1, f));
+  }
+  return result;
+}
+
+static std::string numpy_shape(const std::vector<std::size_t> &shape)
+{
+  std::string text = "(";
+  for (std::size_t i = 0; i < shape.size(); ++i)
+    text += (i ? "," : "") + std::to_string(shape[i]);
+  return text + (shape.size() == 1 ? ",)" : ")");
+}
+
+// Broadcasts shape with next in place; a dimension of 1 takes the other's,
+// 0 included, as NumPy pairs (1,) with (0,).
+static bool broadcast_into(
+  std::vector<std::size_t> &shape,
+  const std::vector<std::size_t> &next)
+{
+  if (next.size() > shape.size())
+    shape.insert(shape.begin(), next.size() - shape.size(), 1);
+  const std::size_t skip = shape.size() - next.size();
+  for (std::size_t i = 0; i < next.size(); ++i)
+  {
+    std::size_t &dim = shape[skip + i];
+    if (dim != next[i] && next[i] != 1 && dim != 1)
       return false;
+    if (dim == 1)
+      dim = next[i];
   }
   return true;
 }
 
-static typet double_shaped(const typet &t)
+// The shape the operands broadcast to, which out=, the operand at
+// out_index, must already have.
+std::vector<std::size_t> numpy_call_expr::ufunc_shape(
+  const std::vector<exprt> &operands,
+  std::optional<std::size_t> out_index)
 {
-  if (!t.is_array())
-    return double_type();
-  return array_typet(double_shaped(t.subtype()), to_array_type(t).size());
+  std::vector<std::vector<std::size_t>> shapes;
+  for (const exprt &operand : operands)
+  {
+    const std::vector<int> dims =
+      type_handler_.get_array_type_shape(operand.type());
+    shapes.emplace_back(dims.begin(), dims.end());
+  }
+  std::vector<std::size_t> shape;
+  for (const std::vector<std::size_t> &next : shapes)
+  {
+    if (!broadcast_into(shape, next))
+    {
+      std::string listed;
+      for (const std::vector<std::size_t> &s : shapes)
+        listed += (listed.empty() ? "" : " ") + numpy_shape(s);
+      throw std::runtime_error(
+        "ValueError: operands could not be broadcast together with shapes " +
+        listed);
+    }
+  }
+  if (out_index && shapes[*out_index] != shape)
+    throw std::runtime_error(
+      "ValueError: non-broadcastable output operand with shape " +
+      numpy_shape(shapes[*out_index]) + " doesn't match the broadcast shape " +
+      numpy_shape(shape));
+  return shape;
 }
 
-// `np.exp(x)` of a number or a numeric array known only at run time.
+// f of the inputs at each index of their broadcast shape, as the ufunc
+// computes it under where= and out=: an element the mask leaves out keeps
+// what out= holds, or is any value without out=, as NumPy leaves it
+// uninitialised.
+exprt numpy_call_expr::apply_ufunc(
+  const std::string &function,
+  const std::vector<exprt> &inputs,
+  const typet &leaf,
+  const std::function<exprt(const std::vector<exprt> &)> &f)
+{
+  const std::size_t n = inputs.size();
+  std::optional<ufunc_output> out;
+  std::optional<exprt> mask;
+  if (where_before_out(call_, n))
+    mask = ufunc_mask(function);
+  out = ufunc_out(function, n, leaf);
+  if (!where_before_out(call_, n))
+    mask = ufunc_mask(function);
+  std::vector<exprt> operands = inputs;
+  if (out)
+    operands.push_back(out->value);
+  if (mask)
+    operands.push_back(*mask);
+  const std::vector<std::size_t> shape =
+    ufunc_shape(operands, out ? std::optional<std::size_t>(n) : std::nullopt);
+  for (exprt &operand : operands)
+    if (!is_constant_array(operand))
+      operand = bind_array_once(operand);
+  const typet result_leaf = out ? array_leaf_type(out->value.type()) : leaf;
+  const exprt result = broadcast_elements(
+    operands, shape, result_leaf, 0, [&](const std::vector<exprt> &e) {
+      exprt value = f({e.begin(), e.begin() + n});
+      if (value.type() != result_leaf)
+        value = typecast_exprt(value, result_leaf);
+      if (!mask)
+        return value;
+      const exprt kept = out ? e[n] : nondet_value(result_leaf, "$uninit$");
+      return exprt(if_exprt(truth_of(e.back()), value, kept));
+    });
+  return retype_lhs(out ? write_out(out->target, result) : result);
+}
+
+// The mask where= gives; None masks every element out.
+std::optional<exprt> numpy_call_expr::ufunc_mask(const std::string &function)
+{
+  const nlohmann::json *where = keyword_value(call_, "where");
+  if (!where)
+    return std::nullopt;
+  if (is_none(*where))
+    return false_exprt();
+  return mask_operand(function, tuples_as_lists(*where));
+}
+
+static std::string dtype_name(const typet &type)
+{
+  if (type.is_bool())
+    return "bool";
+  if (type.is_floatbv())
+    return "float" + type.width().as_string();
+  const std::string width = type.width().as_string();
+  return (type.is_unsignedbv() ? "uint" : "int") + width;
+}
+
+// A comparison, ~, &, | or ^ in a mask is taken element-wise, as NumPy
+// computes it over arrays; anything else is converted as an operand.
+exprt numpy_call_expr::mask_operand(
+  const std::string &function,
+  const nlohmann::json &node)
+{
+  static const std::map<std::string, irep_idt> relations = {
+    {"Lt", "<"},
+    {"LtE", "<="},
+    {"Gt", ">"},
+    {"GtE", ">="},
+    {"Eq", "="},
+    {"NotEq", "notequal"}};
+  static const std::map<std::string, irep_idt> connectives = {
+    {"BitAnd", "and"}, {"BitOr", "or"}, {"BitXor", "xor"}};
+  const std::string type = node.value("_type", "");
+  const std::string op =
+    type == "Compare" && node["ops"].size() == 1
+      ? node["ops"][0].value("_type", "")
+      : node.value("op", nlohmann::json::object()).value("_type", "");
+  if (type == "Compare" && relations.count(op))
+    return elementwise_relation(
+      relations.at(op),
+      {elementwise_operand(function, node["left"]),
+       elementwise_operand(function, node["comparators"][0])});
+  if (type == "BinOp" && connectives.count(op))
+    return elementwise_relation(
+      connectives.at(op),
+      {boolean_mask(function, node["left"]),
+       boolean_mask(function, node["right"])});
+  if (type == "UnaryOp" && op == "Invert")
+    return elementwise_relation(
+      "not", {boolean_mask(function, node["operand"])});
+  const exprt mask = elementwise_operand(function, node);
+  const typet &leaf = array_leaf_type(mask.type());
+  if (!is_number_type(leaf))
+    throw std::runtime_error(
+      "TypeError: numpy." + function +
+      "() where= of this argument is not supported");
+  // NumPy converts a literal sequence to bool, but casts an array under the
+  // safe rule, which only a bool array passes.
+  if (
+    mask.type().is_array() && !leaf.is_bool() && type != "List" &&
+    type != "Tuple")
+    throw std::runtime_error(
+      "TypeError: Cannot cast array data from dtype('" + dtype_name(leaf) +
+      "') to dtype('bool') according to the rule 'safe'");
+  return mask;
+}
+
+exprt numpy_call_expr::boolean_mask(
+  const std::string &function,
+  const nlohmann::json &node)
+{
+  const exprt mask = mask_operand(function, node);
+  if (!array_leaf_type(mask.type()).is_bool())
+    throw std::runtime_error(
+      "TypeError: numpy." + function +
+      "() where= with a bitwise operator on non-booleans is not supported");
+  return mask;
+}
+
+// The operator id applied to the operands' elements at each index of their
+// broadcast shape; numbers of different types are compared as doubles.
+exprt numpy_call_expr::elementwise_relation(
+  const irep_idt &id,
+  std::vector<exprt> operands)
+{
+  const std::vector<std::size_t> shape = ufunc_shape(operands, std::nullopt);
+  for (exprt &operand : operands)
+    operand = bind_array_once(operand);
+  return broadcast_elements(
+    operands, shape, bool_type(), 0, [&](std::vector<exprt> e) {
+      if (e.size() == 2 && e[0].type() != e[1].type())
+        for (exprt &side : e)
+          side = typecast_exprt(side, double_type());
+      exprt result(id, bool_type());
+      for (const exprt &side : e)
+        result.copy_to_operands(side);
+      return result;
+    });
+}
+
+exprt numpy_call_expr::truth_of(const exprt &element)
+{
+  if (element.type().is_bool())
+    return element;
+  exprt nonzero("notequal", bool_type());
+  nonzero.copy_to_operands(element, gen_zero(element.type()));
+  return nonzero;
+}
+
+// The node out= names, or the argument after the inputs, unwrapped from a
+// one-element tuple; nullopt for out=None.
+static std::optional<nlohmann::json>
+out_node(const nlohmann::json &call, std::size_t arity)
+{
+  const nlohmann::json *keyword = keyword_value(call, "out");
+  const nlohmann::json &args = call["args"];
+  if (keyword && args.size() > arity)
+    throw std::runtime_error(
+      "TypeError: cannot specify 'out' as both a positional and keyword "
+      "argument");
+  if (!keyword && args.size() <= arity)
+    return std::nullopt;
+  nlohmann::json node = args.size() > arity ? args[arity] : *keyword;
+  if (node.value("_type", "") == "Tuple")
+  {
+    if (node["elts"].size() != 1)
+      throw std::runtime_error(
+        "ValueError: The 'out' tuple must have exactly one entry per ufunc "
+        "output");
+    node = node["elts"][0];
+  }
+  if (is_none(node))
+    return std::nullopt;
+  const std::string type = node.value("_type", "");
+  if (type == "List" || type == "Tuple" || type == "Constant")
+    throw std::runtime_error("TypeError: return arrays must be of ArrayType");
+  return node;
+}
+
+// out= must be an ndarray, or a writable view of one.
+void numpy_call_expr::reject_unwritable_out(const exprt &target)
+{
+  const std::string not_array = "TypeError: return arrays must be of ArrayType";
+  if (target.type().is_array())
+    return;
+  if (!target.type().is_pointer())
+    throw std::runtime_error(not_array);
+  std::optional<python_list::strided_view_desc> view =
+    python_list(converter_, call_).describe_strided_view(target);
+  if (!view)
+    throw std::runtime_error(not_array);
+  if (view->readonly)
+    throw std::runtime_error("ValueError: output array is read-only");
+}
+
+// The array out= names with its elements as the ufunc reads them; nullopt
+// for out=None.
+std::optional<numpy_call_expr::ufunc_output> numpy_call_expr::ufunc_out(
+  const std::string &function,
+  std::size_t arity,
+  const typet &leaf)
+{
+  const std::optional<nlohmann::json> node = out_node(call_, arity);
+  if (!node)
+    return std::nullopt;
+  const exprt target = out_operand(function, *node);
+  reject_unwritable_out(target);
+  const exprt value = copy_of_view(function, target).value_or(target);
+  reject_non_numeric_elements(function, value.type());
+  if (!has_constant_shape(value.type()))
+    throw std::runtime_error(
+      "TypeError: numpy." + function +
+      " of an array whose shape is known only at run time is not supported");
+  const typet &out_leaf = array_leaf_type(value.type());
+  if (leaf.is_floatbv() && !out_leaf.is_floatbv())
+    throw std::runtime_error(
+      "TypeError: Cannot cast ufunc '" + function +
+      "' output from dtype('float64') to dtype('" + dtype_name(out_leaf) +
+      "') with casting rule 'same_kind'");
+  return ufunc_output{target, value};
+}
+
+// The out= operand as converted; a slice is bound to a temporary, as
+// `v = a[1:]` binds it, so that it names the elements of `a` it covers.
+exprt numpy_call_expr::out_operand(
+  const std::string &function,
+  const nlohmann::json &node)
+{
+  exprt *lhs = converter_.current_lhs;
+  exprt view = nil_exprt();
+  if (node.value("_type", "") == "Subscript")
+  {
+    symbolt &tmp = converter_.create_tmp_symbol(
+      call_, "$out_view$", pointer_typet(double_type()), exprt());
+    view = symbol_expr(tmp);
+  }
+  converter_.current_lhs = view.is_nil() ? nullptr : &view;
+  const exprt target = converter_.get_expr(node);
+  converter_.current_lhs = lhs;
+  if (view.is_nil())
+    return node.value("_type", "") == "Call" ? bind_array_once(target) : target;
+  if (!target.type().is_pointer())
+    throw std::runtime_error(
+      "TypeError: numpy." + function +
+      "() out= of this subscript is not supported");
+  view.type() = target.type();
+  code_declt decl(view);
+  decl.location() = converter_.get_location_from_decl(call_);
+  converter_.add_instruction(decl);
+  code_assignt assign(view, target);
+  assign.location() = decl.location();
+  converter_.add_instruction(assign);
+  return view;
+}
+
+// Stores the result in the out= array, whole or through its view, and gives
+// what the call returns.
+exprt numpy_call_expr::write_out(const exprt &target, const exprt &result)
+{
+  const locationt location = converter_.get_location_from_decl(call_);
+  if (!target.type().is_pointer())
+  {
+    code_assignt assign(target, result);
+    assign.location() = location;
+    converter_.add_instruction(assign);
+    return target;
+  }
+  // Bound first, so an out= view overlapping an input reads it unchanged.
+  const exprt value = bind_array_once(result);
+  python_list list(converter_, call_);
+  const python_list::strided_view_desc view =
+    *list.describe_strided_view(target);
+  const std::vector<int> shape =
+    type_handler_.get_array_type_shape(value.type());
+  std::size_t count = 1;
+  for (int extent : shape)
+    count *= extent;
+  for (std::size_t flat = 0; flat < count; ++flat)
+  {
+    std::vector<std::size_t> digits(shape.size());
+    for (std::size_t axis = shape.size(), rest = flat; axis-- > 0;)
+    {
+      digits[axis] = rest % shape[axis];
+      rest /= shape[axis];
+    }
+    std::vector<exprt> index;
+    exprt element = value;
+    for (std::size_t digit : digits)
+    {
+      index.push_back(from_integer(digit, signedbv_typet(64)));
+      element = np_index(
+        element, from_integer(digit, size_type()), element.type().subtype());
+    }
+    code_assignt assign(list.view_element(view, index), element);
+    assign.location() = location;
+    converter_.add_instruction(assign);
+  }
+  return value;
+}
+
+// `np.exp(x)` of a number or a numeric array known only at run time, and of
+// any operand under where= or out=.
 std::optional<exprt>
 numpy_call_expr::try_runtime_math(const std::string &function)
 {
-  if (
-    !bounded_math::has_runtime_model(function) || call_["args"].size() != 1 ||
-    !only_noop_ufunc_keywords(call_))
+  if (!bounded_math::has_runtime_model(function))
+    return std::nullopt;
+  if (masks_or_writes(call_, 1))
+  {
+    reject_ufunc_keywords_and_arity(call_, function, 1);
+    if (
+      std::optional<exprt> result =
+        elementwise_math(function, tuples_as_lists(call_["args"][0])))
+      return result;
+    throw std::runtime_error(
+      "TypeError: numpy." + function + " of this argument is not supported");
+  }
+  if (call_["args"].size() != 1 || unhandled_ufunc_keyword(call_))
     return std::nullopt;
   const nlohmann::json &arg = call_["args"][0];
   const std::string type = arg.value("_type", "");
@@ -7086,6 +7916,36 @@ numpy_call_expr::try_runtime_math(const std::string &function)
     type == "List" || type == "Tuple" ||
     try_extract_numeric_constant(arg, constant))
     return std::nullopt;
+  if (std::optional<exprt> result = elementwise_math(function, arg))
+    return result;
+  if (json_utils::ast_contains_call(arg))
+    throw std::runtime_error(
+      "TypeError: numpy." + function +
+      " of a call that does not return a number is not supported");
+  return std::nullopt;
+}
+
+// The function of a number, or of each element of an array or a view, known
+// only at run time; nullopt when the argument holds no numbers.
+std::optional<exprt> numpy_call_expr::elementwise_math(
+  const std::string &function,
+  const nlohmann::json &arg)
+{
+  const exprt x = elementwise_operand(function, arg);
+  if (!is_number_type(array_leaf_type(x.type())))
+    return std::nullopt;
+  return apply_ufunc(
+    function, {x}, double_type(), [&](const std::vector<exprt> &element) {
+      return bounded_math(converter_, call_)
+        .runtime(function, element[0], math_module::numpy);
+    });
+}
+
+// The argument of an element-wise ufunc, a view copied out.
+exprt numpy_call_expr::elementwise_operand(
+  const std::string &function,
+  const nlohmann::json &arg)
+{
   // Converting a view operand with current_lhs set would retype the target.
   exprt *lhs = converter_.current_lhs;
   converter_.current_lhs = nullptr;
@@ -7093,21 +7953,15 @@ numpy_call_expr::try_runtime_math(const std::string &function)
   converter_.current_lhs = lhs;
   const exprt x = copy_of_view(function, operand).value_or(operand);
   reject_non_numeric_elements(function, x.type());
-  if (is_number_type(array_leaf_type(x.type())))
-  {
-    const exprt result = runtime_math_array(function, bind_array_once(x));
-    if (result.type().is_array() && converter_.current_lhs)
-    {
-      converter_.current_lhs->type() = result.type();
-      converter_.update_symbol(*converter_.current_lhs);
-    }
-    return result;
-  }
-  if (json_utils::ast_contains_call(arg))
+  if (!has_constant_shape(x.type()))
     throw std::runtime_error(
       "TypeError: numpy." + function +
-      " of a call that does not return a number is not supported");
-  return std::nullopt;
+      " of an array whose shape is known only at run time is not supported");
+  // A number or a call is evaluated here, in argument order; an array is
+  // read when the ufunc runs, after every argument, as NumPy reads it.
+  if (x.id() == "code" || (!x.type().is_array() && !x.is_constant()))
+    return bind_once(x);
+  return x;
 }
 
 // The elements of a view with constant axes, in row-major order.
@@ -7147,46 +8001,60 @@ exprt numpy_call_expr::bind_array_once(const exprt &array)
 {
   if (!array.type().is_array() || array.is_symbol())
     return array;
+  return bind_once(array);
+}
+
+exprt numpy_call_expr::bind_once(const exprt &value)
+{
   symbolt &tmp =
-    converter_.create_tmp_symbol(call_, "$math_array$", array.type(), exprt());
+    converter_.create_tmp_symbol(call_, "$math_array$", value.type(), exprt());
   const exprt symbol = symbol_expr(tmp);
   code_declt decl(symbol);
   decl.location() = converter_.get_location_from_decl(call_);
   converter_.add_instruction(decl);
-  if (array.id() == "code" && array.get("statement") == "function_call")
+  if (value.id() == "code" && value.get("statement") == "function_call")
   {
-    code_function_callt call = to_code_function_call(to_code(array));
+    code_function_callt call = to_code_function_call(to_code(value));
     call.lhs() = symbol;
     converter_.add_instruction(call);
   }
   else
   {
-    code_assignt assign(symbol, array);
+    code_assignt assign(symbol, value);
     assign.location() = decl.location();
     converter_.add_instruction(assign);
   }
   return symbol;
 }
 
-// The function of each element of a number or of a numeric array of
-// concrete shape, read as a number known only at run time.
-exprt numpy_call_expr::runtime_math_array(
-  const std::string &function,
-  const exprt &value)
+exprt numpy_call_expr::retype_lhs(const exprt &result)
 {
-  const typet &type = value.type();
-  if (!type.is_array())
-    return bounded_math(converter_, call_)
-      .runtime(function, value, math_module::numpy);
-  const int size = type_handler_.get_array_type_shape(type).front();
-  exprt result(
-    "array",
-    array_typet(
-      double_shaped(type.subtype()), from_integer(size, size_type())));
-  for (int i = 0; i < size; ++i)
-    result.copy_to_operands(runtime_math_array(
-      function, np_index(value, from_integer(i, size_type()), type.subtype())));
+  if (result.type().is_array() && converter_.current_lhs)
+  {
+    converter_.current_lhs->type() = result.type();
+    converter_.update_symbol(*converter_.current_lhs);
+  }
   return result;
+}
+
+// `np.isnan(x)`, `np.isinf(a)`, `np.isfinite(a[1:])`: a number, or each
+// element of a numeric array or view of concrete shape.
+std::optional<exprt>
+numpy_call_expr::try_float_predicate(const std::string &function)
+{
+  if (!bounded_math::is_float_predicate(function))
+    return std::nullopt;
+  reject_ufunc_keywords_and_arity(call_, function, 1, false);
+  const exprt x =
+    elementwise_operand(function, tuples_as_lists(call_["args"][0]));
+  if (!is_number_type(array_leaf_type(x.type())))
+    throw std::runtime_error(
+      "TypeError: numpy." + function + " of this argument is not supported");
+  return apply_ufunc(
+    function, {x}, bool_type(), [&](const std::vector<exprt> &element) {
+      return bounded_math(converter_, call_)
+        .float_predicate(function, element[0]);
+    });
 }
 
 // `np.exp(0.3)`, `np.sin(-1.0)`: a numeric literal argument.
@@ -7201,10 +8069,11 @@ std::optional<exprt> numpy_call_expr::try_numpy_math_constant()
   return numpy_math_value(function, to_double(value));
 }
 
-// The function applied to each element of a literal 1-D or 2-D list.
-exprt numpy_call_expr::numpy_math_list(
-  const std::string &function,
-  const nlohmann::json &arg)
+// A literal 1-D or 2-D list of numbers as an array of f of each element;
+// nullopt for anything else.
+static std::optional<exprt> numeric_list_array(
+  const nlohmann::json &arg,
+  const std::function<exprt(double)> &f)
 {
   std::vector<std::vector<numeric_value>> rows;
   std::vector<numeric_value> row;
@@ -7212,7 +8081,7 @@ exprt numpy_call_expr::numpy_math_list(
   if (flat)
     rows.push_back(row);
   else if (!try_extract_numeric_2d_list(arg, rows))
-    throw std::runtime_error("Unsupported Numpy call: " + function);
+    return std::nullopt;
   std::vector<exprt> results;
   for (const auto &values : rows)
   {
@@ -7220,7 +8089,7 @@ exprt numpy_call_expr::numpy_math_list(
       "array",
       array_typet(double_type(), from_integer(values.size(), size_type())));
     for (const numeric_value &value : values)
-      array.copy_to_operands(numpy_math_value(function, to_double(value)));
+      array.copy_to_operands(f(to_double(value)));
     results.push_back(array);
   }
   if (flat)
@@ -7232,6 +8101,40 @@ exprt numpy_call_expr::numpy_math_list(
   for (const exprt &result : results)
     matrix.copy_to_operands(result);
   return matrix;
+}
+
+// The function applied to each element of a literal 1-D or 2-D list.
+exprt numpy_call_expr::numpy_math_list(
+  const std::string &function,
+  const nlohmann::json &arg)
+{
+  if (std::optional<exprt> array = numeric_list_array(arg, [&](double x) {
+        return numpy_math_value(function, x);
+      }))
+    return *array;
+  throw std::runtime_error("Unsupported Numpy call: " + function);
+}
+
+// A literal list of numbers, or np.array of one, as a constant array, so
+// that its elements fold where the model only relates elements read at run
+// time.
+std::optional<exprt>
+numpy_call_expr::literal_array_operand(const nlohmann::json &arg)
+{
+  nlohmann::json node = tuples_as_lists(arg);
+  const nlohmann::json func = node.value("func", nlohmann::json::object());
+  const nlohmann::json module = func.value("value", nlohmann::json::object());
+  const std::string attr = func.value("attr", "");
+  if (
+    node.value("_type", "") == "Call" &&
+    (attr == "array" || attr == "asarray") &&
+    module.value("_type", "") == "Name" &&
+    is_imported_numpy_module_alias(converter_.ast(), module.value("id", "")) &&
+    node["args"].size() == 1 &&
+    node.value("keywords", nlohmann::json::array()).empty())
+    node = tuples_as_lists(node["args"][0]);
+  return numeric_list_array(
+    node, [](double x) { return from_double(x, double_type()); });
 }
 
 typet numpy_call_expr::get_typet_from_dtype() const
@@ -11639,8 +12542,19 @@ exprt numpy_call_expr::scalar_binary_call(
 const std::string &numpy_call_expr::canonical_function()
 {
   static const std::map<std::string, std::string> aliases = {
-    {"asin", "arcsin"}, {"acos", "arccos"}, {"atan", "arctan"}};
-  auto alias = aliases.find(function_id_.get_function());
+    {"asin", "arcsin"},
+    {"acos", "arccos"},
+    {"atan", "arctan"},
+    {"asinh", "arcsinh"},
+    {"acosh", "arccosh"},
+    {"atanh", "arctanh"},
+    {"atan2", "arctan2"}};
+  const std::string &name = function_id_.get_function();
+  // The bounded model has erf and erfc for math; NumPy has neither.
+  if (name == "erf" || name == "erfc")
+    throw std::runtime_error(
+      "AttributeError: module 'numpy' has no attribute '" + name + "'");
+  auto alias = aliases.find(name);
   if (alias != aliases.end())
     function_id_.set_function(alias->second);
   return function_id_.get_function();

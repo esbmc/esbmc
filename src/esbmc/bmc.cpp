@@ -48,6 +48,7 @@
 #include <util/irep/migrate.h>
 #include <util/base/cwe_mapping.h>
 #include <util/symtab/show_symbol_table.h>
+#include <util/base/threads.h>
 #include <util/base/time_stopping.h>
 #include <util/ssa/cache.h>
 #include <util/ssa/fingerprint.h>
@@ -266,13 +267,12 @@ bmct::bmct(goto_functionst &funcs, optionst &opts, contextt &_context)
   if (options.get_bool_option("smt-during-symex"))
   {
     runtime_solver = std::unique_ptr<smt_convt>(create_solver("", ns, options));
+    auto equation =
+      std::make_shared<runtime_encoded_equationt>(ns, *runtime_solver);
+    equation->pre_register_addresses(funcs);
 
     symex = std::make_unique<reachability_treet>(
-      funcs,
-      ns,
-      options,
-      std::make_shared<runtime_encoded_equationt>(ns, *runtime_solver),
-      _context);
+      funcs, ns, options, equation, _context);
   }
   else
   {
@@ -293,7 +293,7 @@ void bmct::successful_trace(const symex_target_equationt &eq [[maybe_unused]])
     return;
 
   goto_tracet goto_trace;
-  write_correctness_witnesses(options, ns, goto_trace);
+  write_correctness_witnesses(options, ns, goto_trace, {}, loop_invariants);
 
   // On a successful verification there is no error trace, but dead-store
   // advisories (CWE-563) are still valid and must reach SARIF. Emit an
@@ -452,7 +452,7 @@ void bmct::error_trace(smt_convt &smt_conv, const symex_target_equationt &eq)
     violation_graphml_goto_trace(options, ns, goto_trace);
 
   if (witness_yaml_output != "")
-    violation_yaml_goto_trace(options, ns, goto_trace);
+    violation_yaml_goto_trace(options, ns, goto_trace, program);
 
   if (!options.get_option("sarif-output").empty())
   {
@@ -3777,7 +3777,7 @@ smt_resultt bmct::multi_property_check(
             options, ns, w.trace, tag_artifact(graphml_path));
         if (want_yaml)
           violation_yaml_goto_trace(
-            options, ns, w.trace, tag_artifact(yaml_path));
+            options, ns, w.trace, program, tag_artifact(yaml_path));
         if (want_testcase)
           generate_testcase(
             "testcase-" + witness_id + ".xml", local_eq, *solver_ptr);
@@ -3941,6 +3941,7 @@ smt_resultt bmct::multi_property_check(
 
         // TODO: Running everything in parallel might be a bad idea.
         //       Should we also add a thread pool?
+        threads_scope scope;
         std::vector<std::thread> parallel_jobs;
         for (const auto &i : jobs)
           parallel_jobs.push_back(

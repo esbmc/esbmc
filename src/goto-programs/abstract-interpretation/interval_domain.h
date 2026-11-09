@@ -69,6 +69,7 @@ public:
     enable_wrapped_intervals; /// Enabled wrapped intervals (disables Integers)
   static bool enable_real_intervals; /// Enable real (floating-point) intervals
   static bool enable_assume_asserts; /// Asserts are propagates as assumptions
+  static bool skip_user_assertions;  /// --no-assertions
   static bool enable_eval_assumptions; /// Try to evaluate in a guard in a TVT
                                        /// to accelerate bottoms
   static bool enable_ibex_contractor;  /// Use ibex contractor
@@ -189,8 +190,11 @@ public:
    */
   void assume(const expr2tc &);
 
-  /// Under --interval-analysis-assume-asserts, narrows the state to \p guard.
-  void assume_assertion(const expr2tc &guard, const ai_baset &ai);
+  /// Under --interval-analysis-assume-asserts, narrows the state to the guard
+  /// of \p assertion, unless symex will not check it.
+  void assume_assertion(
+    const goto_programt::instructiont &assertion,
+    const ai_baset &ai);
 
   /**
    * @brief Updates the interval state based on a single goto-program
@@ -220,6 +224,9 @@ public:
    * @param expr
    */
   void havoc_rec(const expr2tc &expr);
+  /// Forgets what a write to the lvalue \p target may change, through a
+  /// pointer as havoc_through_pointer does.
+  void havoc_target(const expr2tc &target, const ai_baset *ai = nullptr);
   void havoc_arguments(const irep_idt &function_id, const namespacet &ns);
   void apply_return(
     goto_programt::const_targett call,
@@ -228,7 +235,13 @@ public:
 
   /// Forget what a body-less call that symex models may write through its
   /// pointer arguments (#8083).
-  void havoc_written_arguments(const code_function_call2t &call);
+  void havoc_written_arguments(
+    const code_function_call2t &call,
+    const ai_baset *ai = nullptr);
+
+  /// Forgets what a write through an unknown pointer may change: what \p ai
+  /// found address-taken, or everything without it.
+  void havoc_through_pointer(const ai_baset *ai);
 
   /// Havoc the variable @p arg points into; false when that is unknown and
   /// @p arg, a pointer or @p any_type, may still have been written through.
@@ -303,6 +316,9 @@ protected:
    * @param rhs
    */
   void assume_rec(const expr2tc &lhs, expr2t::expr_ids id, const expr2tc &rhs);
+
+  /// Narrows the operands of \p op to where op does not overflow its type.
+  void assume_no_overflow(const expr2tc &op);
 
   /**
    * @brief Computes an assignment expression.

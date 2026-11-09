@@ -564,6 +564,15 @@ public:
   exprt compare(const exprt &l1, const exprt &l2, const std::string &op);
 
   exprt contains(const exprt &item, const exprt &list);
+  bool holds_list_lookalike(
+    const std::string &list_id,
+    bool if_unrecorded,
+    int depth) const;
+  bool compares_as_lists(
+    const exprt &item,
+    const symbolt &item_copy,
+    const exprt &list) const;
+  exprt contains_list(const exprt &item, const exprt &list);
 
   std::optional<exprt> repeat_variable_list(
     const nlohmann::json &left_node,
@@ -591,6 +600,9 @@ public:
   void retype_element_store(exprt &lhs, exprt &rhs);
 
   bool has_shared_payload(const typet &type) const;
+
+  /// Whether @p lhs is a list subscript target `*(T *)item->value`.
+  static bool is_element_store_target(const exprt &lhs);
 
   /// Allocates the instance a constructor stores to @p lhs and returns the
   /// pointer to pass as `self`.
@@ -948,6 +960,10 @@ public:
     const nlohmann::json &list_node,
     const typet &fallback) const;
 
+  /// The type every element of @p array was pushed with when \p fallback is a
+  /// tuple struct, else \p fallback.
+  typet recorded_tuple_type_or(const exprt &array, const typet &fallback) const;
+
   struct shallow_push_call
   {
     const symbolt *func;
@@ -1000,6 +1016,12 @@ public:
     codet &target_block);
 
 private:
+  /// The type of one literal element; a name whose binding has no static type
+  /// (such as `x or None`) is read at its symbol's type, as the list stored it.
+  typet literal_or_bound_element_type(
+    const nlohmann::json &elem,
+    bool &unresolved_call) const;
+
   /// Emits `size = len(list_expr)` and a ValueError unless it fits @p fixed
   /// targets (at least @p fixed when @p starred); returns the size.
   exprt check_unpack_length(

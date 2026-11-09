@@ -1,0 +1,5 @@
+regression/python/github_9960
+regression/python/github_9960_fail
+regression/python/github_9960_int_float_fail
+regression/python/github_9960_fallback
+regression/python/github_9960_fallback_fail

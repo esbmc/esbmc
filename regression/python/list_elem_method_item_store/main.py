@@ -9,5 +9,6 @@ class Q:
 
 
 ps = [P()]
-ps[0] = Q()
+q = Q()
+ps[0] = q
 assert ps[0].size(2) == 3
