@@ -2505,21 +2505,10 @@ class LoopMixin:
 
         index_assign = self._create_index_assignment(node, index_var)
         setup_statements.append(index_assign)
-        # CPython's list iterator re-reads the length of the list object on every
-        # step, so it sees the body resize the list but not rebind the name.
-        if (isinstance(node.iter, ast.Name)
-                and self.known_variable_types.get(iter_var_name) in ("list", "List")):
-            list_ref = f"{iter_var_base}_{loop_id}"
-            setup_statements.append(
-                self._create_iter_assignment(node, "list", list_ref, element_type,
-                                             full_element_ann))
-            while_cond = ast.Compare(left=self.create_name_node(index_var, ast.Load(), node),
-                                     ops=[ast.Lt()],
-                                     comparators=[self._create_len_call(node, list_ref)])
-            self.ensure_all_locations(while_cond, node)
-        else:
-            setup_statements.append(self._create_length_assignment(node, iter_var_name, length_var))
-            while_cond = self._create_while_condition(node, index_var, length_var)
+        bound_setup, while_cond = self._create_iteration_bound(node, loop_id, iter_var_name,
+                                                               index_var, length_var, element_type,
+                                                               full_element_ann)
+        setup_statements.extend(bound_setup)
 
         # Create loop body with unique variable names
         transformed_body = self._create_loop_body(node, target_var_name, iter_var_name, index_var,
@@ -2537,6 +2526,25 @@ class LoopMixin:
             ast.fix_missing_locations(stmt)
 
         return result
+
+    def _create_iteration_bound(  # pylint: disable=too-many-arguments,too-many-positional-arguments
+            self, node, loop_id, iter_var_name, index_var, length_var, element_type,
+            full_element_ann):
+        """Return the setup statements and while condition bounding the index."""
+        # CPython's list iterator re-reads the length of the list object on every
+        # step, so it sees the body resize the list but not rebind the name.
+        if (isinstance(node.iter, ast.Name)
+                and self.known_variable_types.get(iter_var_name) in ("list", "List")):
+            list_ref = f"ESBMC_iter_{loop_id}"
+            list_assign = self._create_iter_assignment(node, "list", list_ref, element_type,
+                                                       full_element_ann)
+            while_cond = ast.Compare(left=self.create_name_node(index_var, ast.Load(), node),
+                                     ops=[ast.Lt()],
+                                     comparators=[self._create_len_call(node, list_ref)])
+            self.ensure_all_locations(while_cond, node)
+            return [list_assign], while_cond
+        return ([self._create_length_assignment(node, iter_var_name, length_var)],
+                self._create_while_condition(node, index_var, length_var))
 
     def _create_iter_assignment(  # pylint: disable=too-many-arguments,too-many-positional-arguments
             self,
