@@ -3198,7 +3198,8 @@ exprt python_converter::build_power(
 {
   const typet &type = base.type();
   if (
-    (!type.is_signedbv() && !type.is_unsignedbv() && !type.is_floatbv()) ||
+    (!type.is_signedbv() && !type.is_unsignedbv() && !type.is_floatbv() &&
+     !type.is_bool()) ||
     !needs_operand_guard("Pow", exponent))
     return math_handler_.handle_power(base, exponent);
   return build_guarded_binop("Pow", base, exponent, element);

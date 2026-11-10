@@ -17,5 +17,8 @@ b: float = nondet_float()
 __ESBMC_assume(b != 0.0 or n >= 0)
 __ESBMC_assume(n > -3 and n < 3)
 y = b ** n
+ok = n != 0 and n ** -1 != 0.0
+t: bool = True
+assert t ** -1 == 1.0
 z = pow(2, -1)
 assert z == 0.5
