@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Self-test. Run: python3 scripts/competitions/svcomp/test_esbmc_wrapper.py"""
 
+import argparse
 import shlex
 import importlib.util
 import os
@@ -1001,6 +1002,11 @@ class PythonCommandLineTest(unittest.TestCase):
         for prop, family in cases:
             self.assertIn("--python-check-exceptions " + family + " ", self.command(prop))
 
+    def test_the_multi_property_rerun_gets_sequential_k_induction(self):
+        cmd = self.command(wrapper.Property.py_assertion)
+        self.assertIn("--k-induction ", cmd)
+        self.assertNotIn("--k-induction-parallel", cmd)
+
 
 class PythonPropertyFileTest(unittest.TestCase):
     """python/properties/*.prp in sv-benchmarks, verbatim."""
@@ -1328,9 +1334,21 @@ class ThreadedTaskCommandLineTest(unittest.TestCase):
             f.flush()
             cmd = wrapper.get_command_line(
                 "kinduction", wrapper.Property.reach, 64, f.name, "", False)
-        self.assertIn("--k-induction", cmd)
+        self.assertIn("--k-induction-parallel ", cmd)
         self.assertIn("--interval-analysis", cmd)
         self.assertNotIn("--context-bound", cmd)
+
+
+class TimeoutTest(unittest.TestCase):
+    """A timeout kills the processes --k-induction-parallel forks, which
+    otherwise hold the output pipes open until they finish."""
+
+    def test_a_timeout_kills_the_forked_children(self):
+        started = time.monotonic()
+        with mock.patch.object(wrapper, "args", argparse.Namespace(dry_run=False)):
+            out = wrapper.do_exec("sh -c 'sleep 60 & sleep 60'", timeout=1)
+        self.assertEqual(out, b"ERROR: Timed out\n")
+        self.assertLess(time.monotonic() - started, 30)
 
 
 class OverflowFallbackTest(unittest.TestCase):
