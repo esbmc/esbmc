@@ -99,7 +99,7 @@ def _rename_builtin_defs(module):
             for n in ast.walk(module)):
         return  # a star import binds names that binding_sites cannot see
     sites = binding_sites(module)
-    taken = {n.id for n in ast.walk(module) if isinstance(n, ast.Name)}
+    taken = set(sites) | {n.id for n in ast.walk(module) if isinstance(n, ast.Name)}
     for i, stmt in enumerate(module.body):
         if (not isinstance(stmt, ast.FunctionDef) or stmt.name not in _BUILTIN_FUNCTIONS
                 or sites[stmt.name] != 1):
