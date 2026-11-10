@@ -7,9 +7,13 @@ suites, and the heaviest modules are striped into shards with `ctest -I i,,k`.
 
 import hashlib
 import json
+import os
 import re
 import subprocess
 
+# The PR budget of a regression test; regression/CMakeLists.txt defaults to 1200
+# and derives the 2x and 3x exceptions and the CTest TIMEOUT from it.
+REGRESS_TIMEOUT = "120"
 INTENSIVE_LABEL = "python-intensive/"
 REGRESSION_LABEL = "regression"
 PYTHON_BENCHMARK_LABELS = ("quixbugs/", "humaneval/", "mopsa/", "consensus/", "ai-generated-code/",
@@ -169,8 +173,22 @@ def check_partition(baseline, executors, parts):
                              f"{', '.join(executors)}")
 
 
+def cached_regress_timeout(build_dir):
+    """ESBMC_REGRESS_TIMEOUT in the build tree's CMake cache, or None."""
+    with open(os.path.join(build_dir, "CMakeCache.txt"), encoding="utf-8") as fp:
+        for line in fp:
+            key, _, value = line.rstrip("\n").partition("=")
+            if key.partition(":")[0] == "ESBMC_REGRESS_TIMEOUT":
+                return value
+    return None
+
+
 def make_plan(build_dir):
     """The expected tests of every executor, proven to partition the PR baseline."""
+    budget = cached_regress_timeout(build_dir)
+    if budget != REGRESS_TIMEOUT:
+        raise SelectionError(f"the build has ESBMC_REGRESS_TIMEOUT={budget}, "
+                             f"not the PR's {REGRESS_TIMEOUT}")
     inventory = show_only(build_dir, [])
     check_inventory(inventory)
     records = {t["name"]: test_record(t) for t in inventory}

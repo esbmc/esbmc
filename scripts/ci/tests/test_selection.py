@@ -1,5 +1,6 @@
 # ci_fixture puts scripts/ci on sys.path, so it comes first.
 import ci_fixture  # pylint: disable=wrong-import-order
+import subprocess
 import unittest
 
 import ci_selection
@@ -76,6 +77,13 @@ class PlanTest(unittest.TestCase):
         union = ci_selection.show_only(self.build, ["-LE", "^(numpy/|python/)$"])
         self.assertEqual(len(anded), len(pr_suite()))
         self.assertEqual(len(union), len(pr_suite()) - 4)
+
+    def test_a_build_without_the_pr_budget_is_refused(self):
+        subprocess.run(["cmake", "-DESBMC_REGRESS_TIMEOUT=1200", self.build],
+                       check=True,
+                       capture_output=True)
+        with self.assertRaisesRegex(SelectionError, "ESBMC_REGRESS_TIMEOUT=1200"):
+            ci_selection.make_plan(self.build)
 
     def test_restored_build_must_match_the_plan(self):
         plan = ci_selection.make_plan(self.build)

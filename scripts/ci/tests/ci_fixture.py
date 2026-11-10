@@ -16,7 +16,7 @@ def write_project(root, tests, extra=()):
     """A CMake project registering `tests`: dicts of name, command, labels, props."""
     lines = [
         "cmake_minimum_required(VERSION 3.19)", "project(ci_fixture NONE)", "enable_testing()",
-        *extra
+        'set(ESBMC_REGRESS_TIMEOUT 120 CACHE STRING "")', *extra
     ]
     for test in tests:
         command = " ".join(f'"{part}"' for part in test["command"])
