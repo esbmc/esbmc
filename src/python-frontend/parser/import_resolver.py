@@ -360,8 +360,9 @@ def process_imports(node: ast.Import | ast.ImportFrom,
 
         module = import_module_by_name(module_name, output_dir)
         # The converter runs a module's body in place of a module-level import
-        # only; anywhere else its exception would be lost.
-        if module_name in _raising_modules and not module_level:
+        # only, and a `from` import of named elements emits only those, so
+        # anywhere else its exception would be lost.
+        if module_name in _raising_modules and not (module_level and imported_elements is None):
             module = None
         if module is None:
             _warn_resolution_failure(module_name, node, "module-not-found")
