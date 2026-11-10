@@ -24,6 +24,10 @@ which built and ran the whole suite in one job.
 The PR baseline is `ctest -LE python-intensive` after `cmake
 -DESBMC_REGRESS_TIMEOUT=120 build`, which keeps the 120s budget, the 2x/3x
 exceptions in `regression/CMakeLists.txt` and the 30s CTest grace.
+`linux_tests.py plan` refuses a build tree whose CMake cache holds another
+`ESBMC_REGRESS_TIMEOUT` (`REGRESS_TIMEOUT` in `scripts/ci/ci_selection.py`),
+so the budget cannot be lost by dropping the reconfigure. Tests without the
+`regression` label keep their own CTest timeout, as in the job this replaces.
 
 | Executor | CTest selection |
 |---|---|
