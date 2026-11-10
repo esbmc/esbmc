@@ -171,6 +171,11 @@ private:
    */
   exprt pad_string_element(const exprt &elem) const;
 
+  /// Raise IndexError at @p element when @p out_of_range holds.
+  void add_index_error_guard(
+    const exprt &out_of_range,
+    const nlohmann::json &element);
+
   /// Index of the Starred node in @p targets, or targets.size() if none.
   exprt unpacked_list_source(const exprt &rhs, size_t i) const;
 

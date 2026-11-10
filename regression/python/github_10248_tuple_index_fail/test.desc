@@ -1,0 +1,5 @@
+CORE
+main.py
+--python-check-exceptions KeyError,IndexError
+^\s*uncaught exception: IndexError$
+^VERIFICATION FAILED$

@@ -497,13 +497,9 @@ exprt tuple_handler::handle_tuple_subscript(
     if (components.empty())
     {
       // Every index is out of range, so the selected value is dead and only
-      // the assertion carries meaning. Iterating an empty tuple lowers to a
+      // the raise carries meaning. Iterating an empty tuple lowers to a
       // subscript under a `0 < 0` guard, which leaves it unreachable.
-      code_assertt bounds_assert{false_exprt()};
-      if (element.contains("lineno"))
-        bounds_assert.location() = converter_.get_location_from_decl(element);
-      bounds_assert.location().comment("Tuple index out of range");
-      converter_.add_instruction(bounds_assert);
+      add_index_error_guard(true_exprt(), element);
       return gen_zero(int_type());
     }
 
@@ -531,14 +527,10 @@ exprt tuple_handler::handle_tuple_subscript(
     const expr2tc idxnorm2 = if2tc(
       idx2t, lessthan2tc(index2, zero2), add2tc(idx2t, index2, n2), index2);
 
-    // Bounds: 0 <= idx_norm < n
-    exprt in_bounds = migrate_expr_back(
-      and2tc(greaterthanequal2tc(idxnorm2, zero2), lessthan2tc(idxnorm2, n2)));
-    code_assertt bounds_assert(in_bounds);
-    if (element.contains("lineno"))
-      bounds_assert.location() = converter_.get_location_from_decl(element);
-    bounds_assert.location().comment("Tuple index out of range");
-    converter_.add_instruction(bounds_assert);
+    add_index_error_guard(
+      migrate_expr_back(
+        or2tc(lessthan2tc(idxnorm2, zero2), greaterthanequal2tc(idxnorm2, n2))),
+      element);
 
     // Build chain: i==n-1 ? element_(n-1) : (... ? ... : element_0)
     // V.3: build the index select chain in IREP2. This path is gated to
@@ -601,6 +593,28 @@ exprt tuple_handler::handle_tuple_subscript(
   }
 
   return result;
+}
+
+void tuple_handler::add_index_error_guard(
+  const exprt &out_of_range,
+  const nlohmann::json &element)
+{
+  // The discarded RHS type probe would emit the guard a second time.
+  if (converter_.in_rhs_type_probe_)
+    return;
+
+  codet throw_code("expression");
+  throw_code.operands().push_back(
+    converter_.get_exception_handler().gen_exception_raise(
+      "IndexError", "tuple index out of range"));
+
+  code_ifthenelset guard;
+  guard.cond() = out_of_range;
+  guard.then_case() = throw_code;
+  if (element.contains("lineno"))
+    guard.location() = converter_.get_location_from_decl(element);
+  guard.location().property("skipped");
+  converter_.add_instruction(guard);
 }
 
 static bool has_side_effect(const exprt &expr)

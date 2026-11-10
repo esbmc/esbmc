@@ -1,0 +1,5 @@
+CORE
+main.py
+--python-check-exceptions IndexError,AssertionError
+^\s*FAILED .* line 7\s
+^VERIFICATION FAILED$
