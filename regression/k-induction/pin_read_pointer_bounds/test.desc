@@ -1,0 +1,5 @@
+CORE
+main.c
+--inductive-step --unwind 2 --partial-loops --no-unwinding-assertions --show-vcc
+^dereference failure: array bounds violated$
+\A(?![\s\S]*dereference failure: invalid pointer)[\s\S]*\Z

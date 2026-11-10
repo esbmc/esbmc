@@ -1,0 +1,4 @@
+CORE
+main.py
+
+^ERROR: .*unsupported: array\.array is modelled only for an integer typecode$

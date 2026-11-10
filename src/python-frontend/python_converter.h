@@ -54,6 +54,10 @@ class get_expr_depth_guard;
 /// their source, whose storage they share.
 void alias_numpy_string_views(nlohmann::json &ast);
 
+/// Splits `r = np.f(x, out=o)` into the call and `r = o`, as the ufunc
+/// returns its out= array, which r then aliases.
+void alias_numpy_ufunc_outputs(nlohmann::json &ast);
+
 bool is_imported_numpy_module_alias(
   const nlohmann::json &ast,
   const std::string &name);
@@ -184,6 +188,11 @@ public:
     side_effect_expr_function_callt &call,
     const code_typet *&callee_type);
   std::optional<exprt> call_property_value(const nlohmann::json &element);
+  std::optional<exprt> call_rebound_builtin(const nlohmann::json &element);
+  std::optional<bool> import_binds_before(
+    const std::string &name,
+    const std::string &file,
+    int line) const;
   /// Unknown, function or class-instance types: a call on such a value may
   /// succeed.
   bool may_be_callable(const typet &type);
@@ -955,6 +964,10 @@ private:
   bool function_has_missing_return_paths(const nlohmann::json &function_node);
 
   bool function_is_generator(const nlohmann::json &function_node);
+
+  bool returns_implicit_none(
+    const nlohmann::json &function_node,
+    const code_typet &type);
 
   exprt materialize_list_function_call(
     const exprt &expr,
@@ -1973,6 +1986,7 @@ private:
 
   typet nullable_dict_pointee(const typet &t) const;
   bool keeps_pointer_type_on_none(const typet &t);
+  void adopt_none_rhs(symbolt &lhs_symbol, exprt &lhs, exprt &rhs);
   void guard_none_container(
     exprt &rhs,
     typet &rhs_type,
@@ -2103,6 +2117,10 @@ private:
   /// should fall through to the ordinary assignment path.
   bool
   try_tagged_var_assign(const nlohmann::json &ast_node, codet &target_block);
+  void declare_tag_for_binop_result(
+    const std::string &name,
+    bool on_spine,
+    const nlohmann::json &ast_node);
 
   /// Whether a module-scope assignment must probe its RHS type before fixing
   /// the target's type.
@@ -2149,7 +2167,7 @@ private:
   /// members to the dict's internal list symbol.
   void propagate_list_type_info(
     const exprt &lhs,
-    const exprt &rhs,
+    const exprt &assigned,
     symbolt *lhs_symbol);
 
   /// Propagates the element-type map of the list backing a dict's `.keys` /
@@ -2654,6 +2672,8 @@ private:
     codet &target_block);
   /// The call whose result is not used as a value.
   const nlohmann::json *numpy_discarded_call_ = nullptr;
+  /// The call that is the whole value of the assignment being converted.
+  const nlohmann::json *assigned_call_ = nullptr;
   void reject_numpy_view_argument_use(const nlohmann::json &call);
   void reject_numpy_view_method_call(const nlohmann::json &func) const;
   void reject_numpy_view_callee(const nlohmann::json &call);
@@ -3124,6 +3144,10 @@ private:
     const std::string &class_name,
     const std::string &attr) const;
   void reject_attribute_scalar_change(const exprt &lhs, const exprt &rhs);
+  void reject_list_slot_class_change(
+    const exprt &lhs,
+    const nlohmann::json &ast_node,
+    bool is_ctor_call);
   void reject_attribute_class_change(
     const exprt &lhs,
     const exprt &rhs,
@@ -3618,6 +3642,7 @@ private:
 
   /// Throws on a tagged operand of an `and`/`or` whose value is used.
   void refuse_tagged_boolop_operand(const exprt &operand) const;
+  void refuse_bool_with_list_operand(const exprt &logical_expr) const;
 
   /// The truthiness of a str and/or operand: false for None or "", else true.
   /// Any other value comes back unchanged.

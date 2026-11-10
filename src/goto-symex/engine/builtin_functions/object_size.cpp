@@ -105,22 +105,51 @@ void goto_symext::intrinsic_builtin_object_size(
   expr2tc ptr = func_call.operands[0];
   expr2tc type_param = func_call.operands[1];
 
-  // Extract type parameter
-  size_t type_value = 0;
   cur_state->rename(type_param);
-  if (is_constant_int2t(type_param))
-  {
-    int64_t param_val = to_constant_int2t(type_param).value.to_int64();
-    // Outside 0..3 (and ESBMC's internal whole-object mode): 0, as GCC does.
-    if (param_val >= 0 && param_val <= esbmc_object_size_whole)
-      type_value = static_cast<size_t>(param_val);
-  }
 
   // Work out what the ptr points at.
   internal_deref_items.clear();
   expr2tc deref = dereference2tc(get_empty_type(), ptr);
   dereference(deref, dereferencet::INTERNAL);
 
+  expr2tc obj_size;
+  if (is_constant_int2t(type_param))
+  {
+    int64_t param_val = to_constant_int2t(type_param).value.to_int64();
+    // Outside 0..3 (and ESBMC's internal whole-object mode): 0, as GCC does.
+    bool in_range = param_val >= 0 && param_val <= esbmc_object_size_whole;
+    obj_size = object_size_of_type(ptr, deref, in_range ? param_val : 0);
+  }
+  else
+  {
+    // GCC and clang reject a non-constant type, but the macro this call comes
+    // from bypasses clang's check, so a nondet type selects among GCC's modes.
+    obj_size = object_size_of_type(ptr, deref, 0);
+    for (int t = 1; t <= 3; t++)
+      obj_size = if2tc(
+        size_type2(),
+        equality2tc(type_param, constant_int2tc(type_param->type, BigInt(t))),
+        object_size_of_type(ptr, deref, t),
+        obj_size);
+  }
+  do_simplify(obj_size);
+
+  expr2tc ret_ref = func_call.ret;
+  if (!is_nil_expr(ret_ref))
+  {
+    dereference(ret_ref, dereferencet::READ);
+    symex_assign(
+      code_assign2tc(ret_ref, typecast2tc(ret_ref->type, obj_size)),
+      false,
+      cur_state->guard);
+  }
+}
+
+expr2tc goto_symext::object_size_of_type(
+  const expr2tc &ptr,
+  const expr2tc &deref,
+  int type_value)
+{
   bool use_zero_for_unknown = (type_value == 2 || type_value == 3);
   bool consider_offset = (type_value == 1 || type_value == 3);
 
@@ -188,17 +217,7 @@ void goto_symext::intrinsic_builtin_object_size(
       typecast2tc(size_type2(), sub2tc(get_int64_type(), total, offset)),
       gen_zero(size_type2()));
   }
-  do_simplify(obj_size);
-
-  expr2tc ret_ref = func_call.ret;
-  if (!is_nil_expr(ret_ref))
-  {
-    dereference(ret_ref, dereferencet::READ);
-    symex_assign(
-      code_assign2tc(ret_ref, typecast2tc(ret_ref->type, obj_size)),
-      false,
-      cur_state->guard);
-  }
+  return obj_size;
 }
 
 void goto_symext::intrinsic_get_object_size(

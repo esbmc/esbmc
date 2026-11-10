@@ -1,0 +1,4 @@
+CORE
+main.c
+--unwind 2 --unwindset 6:65,3:4 --no-unwinding-assertions --timeout 60s
+^VERIFICATION SUCCESSFUL$

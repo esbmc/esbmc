@@ -1817,6 +1817,10 @@ python_consteval::eval_expr(const nlohmann::json &node, const Env &env)
 
     const std::string &func_name = node["func"]["id"].get<std::string>();
 
+    // A name bound to a value is not the builtin or the function of that name.
+    if (env.count(func_name))
+      return std::nullopt;
+
     // Built-in: len()
     if (func_name == "len")
     {

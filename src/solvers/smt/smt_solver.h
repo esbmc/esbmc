@@ -7,7 +7,6 @@
 #include <boost/multi_index/ordered_index.hpp>
 #include <boost/multi_index_container.hpp>
 #include <memory>
-#include <mutex>
 #include <set>
 #include <utility>
 #include <unordered_map>
@@ -373,9 +372,12 @@ public:
   /** Whether the encoding gave @p expr a term a model can be read through. A
    *  symbol is a leaf: converting one only declares it. */
   bool has_term(const expr2tc &expr);
-  /** The term of @p expr, or of the encoded struct it is a field of projected
-   *  to that field; null where neither exists. Builds no constraint. */
+  /** The term of @p expr, of the encoded struct it is a field of projected
+   *  to that field, or of the infinite array it is a row of selected at that
+   *  row; null where none exists. Builds no constraint. */
   smt_astt term_of(const expr2tc &expr);
+  /** term_of() for a row of an infinite array of arrays; null otherwise. */
+  smt_astt infinite_array_row_term(const index2t &index);
   /** The model value of @p expr, computed from the values of its operands
    *  where it has no term, so that reading it builds no new formula. */
   expr2tc value_of(const expr2tc &expr);
@@ -1140,8 +1142,6 @@ public:
 
   /** A cache mapping expressions to converted SMT ASTs. */
   smt_cachet smt_cache;
-  /** A mutex lock for writing to the cache. */
-  std::mutex smt_cache_mutex;
   /** A cache of converted type2tc's to smt sorts */
   smt_sort_cachet sort_cache;
 
@@ -1233,6 +1233,14 @@ public:
   /** Each flattening bitcast converted so far, for steps that hit it in the
    *  conversion cache. */
   std::unordered_map<expr2tc, ptr_flatten_entry, irep2_hash> flattened;
+  /** The context level and id of each flatten of a pointer, by its value: a
+   *  flatten inside an aggregate converted in an earlier step is a cache hit
+   *  too, and the step names only the pointer (#9937). */
+  std::unordered_map<
+    expr2tc,
+    std::vector<std::pair<unsigned int, size_t>>,
+    irep2_hash>
+    flattened_values;
   void record_flattened_pointer(smt_astt address, smt_astt pointer);
 
   /** The SSA step being converted: its guard, the flattens its operands may

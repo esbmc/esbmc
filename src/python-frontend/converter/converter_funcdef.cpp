@@ -571,6 +571,21 @@ bool python_converter::function_has_missing_return_paths(
   return true; // No explicit return found
 }
 
+/// Constructors ("constructor" return type) and library/import models, whose
+/// void calls exist only for side effects, are left as-is; a module the program
+/// imports is promoted unless is_model_file() says it is a model (#10112).
+/// Generators (functions containing `yield`) also have an empty return type
+/// here but do NOT implicitly return None — calling one yields a generator
+/// object — so they must not be promoted.
+bool python_converter::returns_implicit_none(
+  const nlohmann::json &function_node,
+  const code_typet &type)
+{
+  return type.return_type().is_empty() && !is_loading_models &&
+         !(is_importing_module && is_model_file(function_node)) &&
+         !function_is_generator(function_node);
+}
+
 bool python_converter::function_is_generator(
   const nlohmann::json &function_node)
 {
@@ -4492,11 +4507,11 @@ static bool is_truthy_constant(const nlohmann::json &value)
 }
 
 /// The functions a body returns by name, through conditional expressions.
-/// Empty when any return value is something else, other than a true constant
-/// with \p skip_constants.
+/// Empty when any return value is something else, other than one \p skip
+/// accepts.
 static std::vector<std::string> returned_function_names(
   const nlohmann::json &function_node,
-  bool skip_constants = false)
+  bool (*skip)(const nlohmann::json &) = nullptr)
 {
   std::vector<nlohmann::json> values;
   collect_return_values(function_node["body"], values);
@@ -4520,7 +4535,7 @@ static std::vector<std::string> returned_function_names(
       values.push_back(value["body"]);
       values.push_back(value["orelse"]);
     }
-    else if (!skip_constants || !is_truthy_constant(value))
+    else if (!skip || !skip(value))
       return {};
   }
   return names;
@@ -4665,8 +4680,8 @@ typet python_converter::unannotated_return_type(
     current_python_file != main_python_file || !current_class_name_.empty() ||
     current_func_name_ != name || !results_only_called(*ast_json, name))
     return infer_return_type_from_body(function_node["body"]);
-  const auto signature =
-    shared_signature(returned_function_names(function_node, true));
+  const auto signature = shared_signature(
+    returned_function_names(function_node, is_truthy_constant));
   return signature ? gen_pointer_type(*signature)
                    : infer_return_type_from_body(function_node["body"]);
 }
@@ -6549,6 +6564,12 @@ typet python_converter::optional_return_type(
     constructed_return_class(function_node["body"], *ast_json);
   if (!cls.empty())
     return gen_pointer_type(symbol_typet("tag-" + cls));
+  // None or functions of one signature: a function pointer, NULL for None.
+  const std::vector<std::string> functions =
+    returned_function_names(function_node, is_none_return_value);
+  if (!functions.empty())
+    if (const auto signature = shared_signature(functions))
+      return gen_pointer_type(*signature);
   const TypeFlags flags = infer_types_from_returns(function_node["body"]);
   if (!flags.has_int && !flags.has_float && !flags.has_bool)
     return typet();
@@ -7213,14 +7234,8 @@ void python_converter::get_function_definition(
   // returns None. Model such a function as returning none_type() and append an
   // explicit `return None`, so a caller that binds the result (`x = f()`) gets
   // a defined None value rather than a nondet slot — matching the already-
-  // correct `return None` path (issue #5914). Constructors ("constructor"
-  // return type) and library/import models, whose void calls exist only for
-  // side effects, are left as-is. Generators (functions containing `yield`)
-  // also have an empty return type here but do NOT implicitly return None —
-  // calling one yields a generator object — so they must not be promoted.
-  if (
-    type.return_type().is_empty() && !is_loading_models &&
-    !is_importing_module && !function_is_generator(function_node))
+  // correct `return None` path (issue #5914).
+  if (returns_implicit_none(function_node, type))
   {
     type.return_type() = none_type();
     python_expr::set_function_type(*added_symbol, type);

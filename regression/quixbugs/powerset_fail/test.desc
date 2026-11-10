@@ -1,4 +1,4 @@
-THOROUGH
+CORE
 main.py
---incremental-bmc
+--unwind 65
 ^VERIFICATION FAILED$

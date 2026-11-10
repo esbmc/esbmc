@@ -72,7 +72,7 @@ void irept::remove_ref(dt *old_data)
   // acq_rel, as in std::shared_ptr: whoever drops the last reference must see
   // every other owner's accesses before deleting.
   const unsigned prev =
-    old_data->ref_count.fetch_sub(1, std::memory_order_acq_rel);
+    counter_sub(old_data->ref_count, 1u, std::memory_order_acq_rel);
   assert(prev > 0);
   if (prev == 1)
     delete old_data;

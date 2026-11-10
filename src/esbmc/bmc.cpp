@@ -48,6 +48,7 @@
 #include <util/irep/migrate.h>
 #include <util/base/cwe_mapping.h>
 #include <util/symtab/show_symbol_table.h>
+#include <util/base/threads.h>
 #include <util/base/time_stopping.h>
 #include <util/ssa/cache.h>
 #include <util/ssa/fingerprint.h>
@@ -266,13 +267,12 @@ bmct::bmct(goto_functionst &funcs, optionst &opts, contextt &_context)
   if (options.get_bool_option("smt-during-symex"))
   {
     runtime_solver = std::unique_ptr<smt_convt>(create_solver("", ns, options));
+    auto equation =
+      std::make_shared<runtime_encoded_equationt>(ns, *runtime_solver);
+    equation->pre_register_addresses(funcs);
 
     symex = std::make_unique<reachability_treet>(
-      funcs,
-      ns,
-      options,
-      std::make_shared<runtime_encoded_equationt>(ns, *runtime_solver),
-      _context);
+      funcs, ns, options, equation, _context);
   }
   else
   {
@@ -3925,6 +3925,7 @@ smt_resultt bmct::multi_property_check(
 
         // TODO: Running everything in parallel might be a bad idea.
         //       Should we also add a thread pool?
+        threads_scope scope;
         std::vector<std::thread> parallel_jobs;
         for (const auto &i : jobs)
           parallel_jobs.push_back(

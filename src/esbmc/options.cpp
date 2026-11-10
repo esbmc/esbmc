@@ -193,7 +193,10 @@ const struct group_opt_templ all_cmd_options[] = {
      "Enable SV-COMP mode: suppress GCC-acceptable frontend diagnostics "
      "(int/pointer conversions), treat __builtin_unreachable as a no-op, emit "
      "physical line numbers for witnesses, and avoid malloc/free in the "
-     "fopen/fclose models. Set automatically by the SV-COMP wrapper."},
+     "fopen/fclose models. A program that can start a thread is verified with "
+     "incremental BMC over schedules of at most three context switches, "
+     "without interval analysis or --goto-unwind. Set automatically by the "
+     "SV-COMP wrapper."},
     /* Read by clang_c_language.cpp, which is built unconditionally, so these
      * must not sit in a frontend-gated group (#7345). */
     {"clang-c-irep2-adjust",

@@ -1,0 +1,5 @@
+CORE
+main.c
+
+^  j=1 writes s\[2\]\.a=3: expect FAIL$
+^VERIFICATION FAILED$

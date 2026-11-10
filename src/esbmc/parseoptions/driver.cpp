@@ -121,6 +121,29 @@ static bool k_induction_parallel_conflicts(const cmdlinet &cmdline)
   return false;
 }
 
+/// --smt-during-symex builds one solver during symex, and the equation it
+/// leaves refers to that solver's terms, so the --parallel-solving jobs would
+/// all share it unsynchronised (issue #10103). The other flags imply it.
+static bool parallel_solving_conflicts(const cmdlinet &cmdline)
+{
+  if (!cmdline.isset("parallel-solving"))
+    return false;
+
+  for (const char *incompatible :
+       {"smt-during-symex",
+        "smt-thread-guard",
+        "smt-symex-guard",
+        "smt-symex-assert",
+        "smt-symex-assume"})
+    if (cmdline.isset(incompatible))
+    {
+      log_error(
+        "--parallel-solving cannot be combined with --{}", incompatible);
+      return true;
+    }
+  return false;
+}
+
 /// The flag combinations that cannot produce a sound report, rejected
 /// before any work is done. Kept out of doit() so every combination check
 /// reads in one place.
@@ -233,6 +256,9 @@ static bool incompatible_flags(const cmdlinet &cmdline)
   if (k_induction_parallel_conflicts(cmdline))
     return true;
 
+  if (parallel_solving_conflicts(cmdline))
+    return true;
+
   // --incremental-context-bound owns the outer verification loop, re-running
   // do_bmc per context bound; the unwinding strategies each drive an outer
   // loop of their own, so only one driver can own the run (issue #6480).
@@ -321,7 +347,9 @@ int esbmc_parseoptionst::run_chosen_strategy(
   if (
     cmdline.isset("termination") || cmdline.isset("incremental-bmc") ||
     cmdline.isset("falsification") || cmdline.isset("k-induction") ||
-    cmdline.isset("loop-invariant"))
+    cmdline.isset("loop-invariant") ||
+    // --sv-comp switches a program that starts a thread to incremental BMC.
+    options.get_bool_option("incremental-bmc"))
     return do_bmc_strategy(options, goto_functions);
 
   // No strategy chosen: rely on the simplifier and the flags set through CMD.
@@ -497,13 +525,11 @@ int esbmc_parseoptionst::doit()
         cmdline.isset("neurosym") || cmdline.isset("default-solver");
       if (!user_picked_solver && !incremental_mode)
       {
-        const std::string padded =
-          std::string(" ") + ESBMC_AVAILABLE_SOLVERS + " ";
         const char *preferred[] = {"bitwuzla", "cvc5", "boolector", "z3"};
         const char *chosen = nullptr;
         for (const char *name : preferred)
         {
-          if (padded.find(std::string(" ") + name + " ") != std::string::npos)
+          if (solver_built_in(name))
           {
             chosen = name;
             break;

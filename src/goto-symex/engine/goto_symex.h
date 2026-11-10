@@ -873,6 +873,12 @@ protected:
     const code_function_call2t &func_call,
     reachability_treet &art);
 
+  /** The __builtin_object_size of `ptr` for one constant `type_value`, given
+   * `deref`, the INTERNAL dereference of `ptr` that filled
+   * internal_deref_items. */
+  expr2tc
+  object_size_of_type(const expr2tc &ptr, const expr2tc &deref, int type_value);
+
   /* Handles dereferencing between threads and is used only in data race checks.
    * **/
   void replace_races_check(expr2tc &expr);
@@ -1385,10 +1391,12 @@ protected:
     const bool hidden);
 
   /** A store to a member of the struct symex_assign_member_arms is merging,
-   *  recorded by symex_assign_member instead of assigned. */
+   *  recorded by symex_assign_member instead of assigned. \p path names the
+   *  struct members leading from that struct to \p member. */
   struct member_store
   {
     expr2tc member;
+    std::vector<irep_idt> path;
     expr2tc guard;
     expr2tc value;
   };
@@ -1402,12 +1410,22 @@ protected:
   /** Non-null while symex_assign_member_arms collects stores. */
   member_store_collector *member_stores = nullptr;
 
-  /** Record the store of \p rhs to \p lhs, a member of the struct being
-   *  merged, under \p guard. */
-  void record_member_store(
+  /** Record the store of \p rhs to \p lhs under \p guard if \p lhs is reached
+   *  from the struct being merged through struct members only; otherwise
+   *  return false and record nothing. */
+  bool record_member_store(
     const expr2tc &lhs,
     const expr2tc &rhs,
     const guard2tc &guard);
+
+  /** \p obj, a struct at \p path below the merged struct, rebuilt member by
+   *  member from \p stores. With \p guarded, each store applies under its
+   *  guard; otherwise \p stores belong to one arm and do not overlap. */
+  expr2tc merge_member_stores(
+    const expr2tc &obj,
+    const std::vector<irep_idt> &path,
+    const std::vector<member_store> &stores,
+    bool guarded) const;
 
   /**
    *  Perform assignment to a byte extract.
@@ -1951,6 +1969,8 @@ protected:
 
   void
   get_value_set(const expr2tc &expr, value_setst::valuest &value_set) override;
+
+  void points_to(const expr2tc &expr, value_setst::valuest &value_set) override;
 
   bool has_failed_symbol(const expr2tc &expr, const symbolt *&symbol) override;
 

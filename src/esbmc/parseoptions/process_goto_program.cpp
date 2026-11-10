@@ -580,24 +580,6 @@ bool esbmc_parseoptionst::process_goto_program(
         goto_termination(goto_functions, options, ns);
     }
 
-    // Pass B (post-k-induction loop bounds): when interval analysis ran
-    // earlier and k-induction (or --termination's equivalent havoc) has
-    // now finished inserting its nondet havoc before each loop head,
-    // recompute bounds with k-induction's preamble instructions treated
-    // as transparent, then insert an ASSUME(bounds) right before each
-    // loop's exit-test. The ASSUME is marked inductive_step_instruction
-    // = true so only the inductive step sees it; base case and forward
-    // condition skip it. This is the place where interval analysis
-    // actually strengthens the inductive hypothesis.
-    if (
-      (cmdline.isset("interval-analysis") ||
-       cmdline.isset("goto-contractor")) &&
-      wants_kind_pipeline)
-    {
-      instrument_loop_bounds_after_kind(
-        goto_functions, ns, options, checks_past_violation);
-    }
-
     if (
       cmdline.isset("goto-contractor") ||
       cmdline.isset("goto-contractor-condition"))
@@ -614,6 +596,25 @@ bool esbmc_parseoptionst::process_goto_program(
     }
 
     goto_check(ns, options, goto_functions);
+
+    // Pass B (post-k-induction loop bounds): when interval analysis ran
+    // earlier and k-induction (or --termination's equivalent havoc) has
+    // now finished inserting its nondet havoc before each loop head,
+    // recompute bounds with k-induction's preamble instructions treated
+    // as transparent, then insert an ASSUME(bounds) right before each
+    // loop's exit-test. The ASSUME is marked inductive_step_instruction
+    // = true so only the inductive step sees it; base case and forward
+    // condition skip it. This is the place where interval analysis
+    // actually strengthens the inductive hypothesis. It follows goto_check
+    // so that --interval-analysis-assume-asserts sees the overflow claims.
+    if (
+      (cmdline.isset("interval-analysis") ||
+       cmdline.isset("goto-contractor")) &&
+      wants_kind_pipeline)
+    {
+      instrument_loop_bounds_after_kind(
+        goto_functions, ns, options, checks_past_violation);
+    }
 
     // Eliminate goto-level no-op loops (empty body, dead modified vars).
     // Runs AFTER goto_check so that any check assertions inserted into a

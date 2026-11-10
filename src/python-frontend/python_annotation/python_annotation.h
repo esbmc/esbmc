@@ -37,6 +37,7 @@ using python_annotation_utils::get_base_var_name;
 using python_annotation_utils::get_type_from_json;
 using python_annotation_utils::has_annotation;
 using python_annotation_utils::has_return_none;
+using python_annotation_utils::has_return_value;
 using python_annotation_utils::infer_type_from_default_arg_shape;
 using python_annotation_utils::InferResult;
 using python_annotation_utils::invert_substrings;
@@ -244,6 +245,8 @@ private:
   function_signature(const function_values::candidate &function);
   std::string
   function_value_return_type(const Json &value, const Json *call = nullptr);
+  std::optional<std::string>
+  named_call_type(const Json &call, const Json &body);
   InferResult
   infer_type(const Json &stmt, const Json &body, std::string &inferred_type);
   // True for a `np.<ctor>(...)` call node (module or aliased), where <ctor>
