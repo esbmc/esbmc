@@ -1879,6 +1879,17 @@ bool python_converter::needs_operand_guard(
     if (!rhs.type().is_signedbv())
       return false;
   }
+  else if (op == "Pow")
+  {
+    if (!rhs.type().is_signedbv() && !rhs.type().is_floatbv())
+      return false;
+    expr2tc exponent;
+    migrate_expr(rhs, exponent);
+    expr2tc negative = lessthan2tc(exponent, gen_zero(exponent->type));
+    simplify(negative);
+    if (is_false(negative))
+      return false;
+  }
   else if (op != "Div" && op != "FloorDiv" && op != "Mod")
     return false;
   else if (
@@ -3151,8 +3162,11 @@ exprt python_converter::get_binary_operator_expr(
   }
 
   // Handle special mathematical operations
-  if (op == "Pow" || op == "power")
+  // NumPy's power gives inf for zero to a negative power instead of raising.
+  if (op == "power")
     return math_handler_.handle_power(lhs, once_bound_exponent(right, rhs));
+  if (op == "Pow")
+    return build_power(lhs, once_bound_exponent(right, rhs), element);
 
   if (type_utils::is_relational_op(op))
   {
@@ -3173,6 +3187,21 @@ exprt python_converter::get_binary_operator_expr(
   }
 
   return build_guarded_binop(op, lhs, rhs, element);
+}
+
+// Python raises ZeroDivisionError for zero to a negative power, for int and
+// float operands alike.
+exprt python_converter::build_power(
+  const exprt &base,
+  const exprt &exponent,
+  const nlohmann::json &element)
+{
+  const typet &type = base.type();
+  if (
+    (!type.is_signedbv() && !type.is_unsignedbv() && !type.is_floatbv()) ||
+    !needs_operand_guard("Pow", exponent))
+    return math_handler_.handle_power(base, exponent);
+  return build_guarded_binop("Pow", base, exponent, element);
 }
 
 exprt python_converter::build_guarded_binop(
@@ -3214,6 +3243,23 @@ exprt python_converter::build_guarded_binop(
       "negative shift count",
       get_location_from_decl(element));
   }
+  else if (op == "Pow")
+  {
+    expr2tc base, exponent;
+    migrate_expr(lhs, base);
+    migrate_expr(rhs, exponent);
+    // 0.0 ** -inf is inf, not an error.
+    expr2tc raises = and2tc(
+      equality2tc(base, gen_zero(base->type)),
+      lessthan2tc(exponent, gen_zero(exponent->type)));
+    if (is_floatbv_type(exponent))
+      raises = and2tc(raises, not2tc(isinf2tc(exponent)));
+    emit_guarded_raise(
+      migrate_expr_back(raises),
+      "ZeroDivisionError",
+      "zero to a negative power",
+      get_location_from_decl(element));
+  }
   else
   {
     exprt is_zero("=", bool_type());
@@ -3226,7 +3272,8 @@ exprt python_converter::build_guarded_binop(
   }
   current_block = saved_block;
 
-  exprt result = build_arithmetic_binop(op, lhs, rhs, element);
+  exprt result = op == "Pow" ? math_handler_.handle_power(lhs, rhs)
+                             : build_arithmetic_binop(op, lhs, rhs, element);
   if (!lazy)
     return result;
 
