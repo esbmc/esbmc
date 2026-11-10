@@ -2503,13 +2503,23 @@ class LoopMixin:
                                                        element_type, full_element_ann)
             setup_statements = scan_setup + [iter_assign]
 
-        # Create common setup statements (index and length) with unique names
         index_assign = self._create_index_assignment(node, index_var)
-        length_assign = self._create_length_assignment(node, iter_var_name, length_var)
-        setup_statements.extend([index_assign, length_assign])
-
-        # Create while loop condition with unique variable names
-        while_cond = self._create_while_condition(node, index_var, length_var)
+        setup_statements.append(index_assign)
+        # CPython's list iterator re-reads the length of the list object on every
+        # step, so it sees the body resize the list but not rebind the name.
+        if (isinstance(node.iter, ast.Name)
+                and self.known_variable_types.get(iter_var_name) in ("list", "List")):
+            list_ref = f"{iter_var_base}_{loop_id}"
+            setup_statements.append(
+                self._create_iter_assignment(node, "list", list_ref, element_type,
+                                             full_element_ann))
+            while_cond = ast.Compare(left=self.create_name_node(index_var, ast.Load(), node),
+                                     ops=[ast.Lt()],
+                                     comparators=[self._create_len_call(node, list_ref)])
+            self.ensure_all_locations(while_cond, node)
+        else:
+            setup_statements.append(self._create_length_assignment(node, iter_var_name, length_var))
+            while_cond = self._create_while_condition(node, index_var, length_var)
 
         # Create loop body with unique variable names
         transformed_body = self._create_loop_body(node, target_var_name, iter_var_name, index_var,
@@ -2610,22 +2620,23 @@ class LoopMixin:
         """Create ESBMC_length assignment with custom name."""
         length_target = self.create_name_node(length_var, ast.Store(), node)
         int_annotation = self.create_name_node("int", ast.Load(), node)
+        length_assign = ast.AnnAssign(target=length_target,
+                                      annotation=int_annotation,
+                                      value=self._create_len_call(node, iter_var_name),
+                                      simple=1)
+        self.ensure_all_locations(length_assign, node)
+        return length_assign
 
+    def _create_len_call(self, node, iter_var_name):
+        """Create len(<iter_var_name>)."""
         # The function_call_builder will map len() to either:
         # - strlen(): string types
         # - __ESBMC_get_object_size(): list/dict/set/sequence types
         len_func = self.create_name_node("len", ast.Load(), node)
-
         iter_arg = self.create_name_node(iter_var_name, ast.Load(), node)
         len_call = ast.Call(func=len_func, args=[iter_arg], keywords=[])
         self.ensure_all_locations(len_call, node)
-
-        length_assign = ast.AnnAssign(target=length_target,
-                                      annotation=int_annotation,
-                                      value=len_call,
-                                      simple=1)
-        self.ensure_all_locations(length_assign, node)
-        return length_assign
+        return len_call
 
     def _create_while_condition(self, node, index_var="ESBMC_index", length_var="ESBMC_length"):
         """Create while loop condition with custom variable names."""
