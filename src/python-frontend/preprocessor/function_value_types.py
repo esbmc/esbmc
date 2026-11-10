@@ -180,8 +180,8 @@ class _Analysis:
                 self._collect_nested(sub, scope, path)
             elif path is None:
                 continue
-            elif isinstance(sub, ast.ImportFrom) and sub.level == 0 and self._local_module(
-                    sub.module or ""):
+            elif isinstance(sub, ast.ImportFrom) and sub.level == 0 and self.local_module(sub.module
+                                                                                          or ""):
                 self.from_imports.setdefault(path, {}).update(self._from_import_bindings(sub))
             elif isinstance(sub, ast.Import):
                 imports = self.imports.setdefault(path, {})
@@ -214,7 +214,7 @@ class _Analysis:
         """A superset of the names `from m import *` binds, or None when they are not
         known: m is a package or not next to the program, may narrow them with
         `__all__`, binds names through a string, or star-imports another module."""
-        path = self._local_module(node.module or "") if node.level == 0 else None
+        path = self.local_module(node.module or "") if node.level == 0 else None
         if path is None or os.path.basename(path) == "__init__.py":
             return None
         if path not in self.star_names:
@@ -236,7 +236,7 @@ class _Analysis:
             return None
         return {name for name in names if not name.startswith("_")}
 
-    def _local_module(self, dotted):
+    def local_module(self, dotted):
         """The source file of a module next to the program, or None."""
         base = os.path.join(self.dir, *dotted.split("."))
         for path in (base + ".py", os.path.join(base, "__init__.py")):
@@ -256,7 +256,7 @@ class _Analysis:
             self._walk_scopes(known)
         return self.loaded[path]
 
-    def _module_def(self, path, name):
+    def module_def(self, path, name):
         """The function `name` defined at the top of the module at `path`, or None."""
         for stmt in self._load(path).body:
             if isinstance(stmt, ast.FunctionDef) and stmt.name == name:
@@ -269,7 +269,7 @@ class _Analysis:
         if name not in from_imports:
             return None
         module, original = from_imports[name]
-        return self._module_def(self._local_module(module), original)
+        return self.module_def(self.local_module(module), original)
 
     def _path_of(self, scope):
         while scope.parent is not None:
@@ -352,11 +352,10 @@ class _Analysis:
         imports = self.imports.get(self._path_of(scope), {})
         if not isinstance(node, ast.Name) or node.id not in imports or not self.dir:
             return None
-        path = self._local_module(".".join(imports[node.id].split(".") +
-                                           list(reversed(dotted[1:]))))
+        path = self.local_module(".".join(imports[node.id].split(".") + list(reversed(dotted[1:]))))
         if path is None:
             return None
-        stmt = self._module_def(path, expr.attr)
+        stmt = self.module_def(path, expr.attr)
         if stmt is None:
             return None
         key = ("imported", path, stmt.name)

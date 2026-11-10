@@ -35,7 +35,15 @@ std::string python_converter::op_to_dunder(const std::string &op)
 
 std::string python_converter::op_to_rdunder(const std::string &op)
 {
+  // A comparison's reflection is its mirrored comparison (Python data model,
+  // "Rich comparison methods").
   static const std::map<std::string, std::string> rdunder_map = {
+    {"Eq", "__eq__"},
+    {"NotEq", "__ne__"},
+    {"Lt", "__gt__"},
+    {"LtE", "__ge__"},
+    {"Gt", "__lt__"},
+    {"GtE", "__le__"},
     {"Add", "__radd__"},
     {"Sub", "__rsub__"},
     {"Mult", "__rmul__"},
@@ -473,6 +481,7 @@ exprt python_converter::dispatch_dunder_operator(
 {
   typet lhs_type = resolve_operand_type(lhs, symbol_table_, ns);
   typet rhs_type = resolve_operand_type(rhs, symbol_table_, ns);
+  bool lhs_defines_dunder = false;
 
   // Try lhs.__add__(rhs)
   if (lhs_type.is_struct())
@@ -489,6 +498,7 @@ exprt python_converter::dispatch_dunder_operator(
         symbolt *method = find_dunder_method(class_name, dunder);
         if (method)
         {
+          lhs_defines_dunder = true;
           const code_typet &method_type = to_code_type(method->get_type());
           if (is_other_param_compatible(method_type, rhs_type, ns))
           {
@@ -504,8 +514,11 @@ exprt python_converter::dispatch_dunder_operator(
     }
   }
 
-  // fallback: try rhs.__radd__(lhs)
-  if (rhs_type.is_struct())
+  // fallback: try rhs.__radd__(lhs). An annotation mismatch does not stop
+  // Python calling a comparison method the left operand defines.
+  if (
+    rhs_type.is_struct() &&
+    !(lhs_defines_dunder && type_utils::is_relational_op(op)))
   {
     const struct_typet &rhs_struct = to_struct_type(rhs_type);
     std::string rhs_tag = rhs_struct.tag().as_string();

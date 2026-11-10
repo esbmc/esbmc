@@ -1,0 +1,5 @@
+CORE
+main.c
+--ir
+^VERIFICATION FAILED$
+^  dereference failure: Store spanning struct members under integer encoding$

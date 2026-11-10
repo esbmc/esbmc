@@ -7604,10 +7604,38 @@ static const exprt &string_buffer_of(const exprt &rhs)
   return rhs;
 }
 
+/// The Call that is the whole value of an assignment to a name, or null.
+static const nlohmann::json *assigned_call(const nlohmann::json &ast_node)
+{
+  const nlohmann::json &target =
+    ast_node.contains("targets") ? ast_node["targets"][0] : ast_node["target"];
+  if (
+    target.value("_type", "") != "Name" || !ast_node.contains("value") ||
+    !ast_node["value"].is_object() ||
+    ast_node["value"].value("_type", "") != "Call")
+    return nullptr;
+  return &ast_node["value"];
+}
+
+namespace
+{
+struct restore_pointer
+{
+  const nlohmann::json *&slot;
+  const nlohmann::json *saved;
+  ~restore_pointer()
+  {
+    slot = saved;
+  }
+};
+} // namespace
+
 void python_converter::get_var_assign(
   const nlohmann::json &ast_node,
   codet &target_block)
 {
+  const restore_pointer restore_assigned_call{
+    assigned_call_, std::exchange(assigned_call_, assigned_call(ast_node))};
   reject_numpy_scalars_in_container(ast_node);
 
   if (try_dedicated_assign(ast_node, target_block))
@@ -9361,6 +9389,13 @@ codet build_conditional_code(
     code.copy_to_operands(else_expr);
   return code;
 }
+
+// A while test with a prelude re-runs that prelude on every iteration, so only
+// one without a prelude is evaluated lazily.
+bool is_lazy_while_test(const std::string &kind, bool has_prelude)
+{
+  return kind == "While" && !has_prelude;
+}
 } // namespace
 
 // The block that receives the statements a loop condition emits: a `while`
@@ -9682,7 +9717,7 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
   };
 
   const bool old_in_lazy_operand = in_lazy_operand_;
-  in_lazy_operand_ |= type == "While";
+  in_lazy_operand_ |= is_lazy_while_test(type, current_block == &cond_prelude);
   const bool short_circuit_boolop = test_type == "BoolOp" && current_block &&
                                     !coverage_mode && !pytest_generation_mode &&
                                     !model_mode;

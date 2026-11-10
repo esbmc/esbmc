@@ -12,6 +12,7 @@ from preprocessor.dict_splat import spell_out_dict_splats
 from preprocessor.itertools_lowering import lower_itertools
 from preprocessor.literal_eval_inlining import inline_literal_eval
 from preprocessor.coroutine_lowering import lower_coroutines
+from preprocessor.array_typecodes import reject_unmodelled_array_typecodes
 from preprocessor.match_lowering import lower_match_statements
 from preprocessor.namedtuple_lowering import lower_namedtuples
 from preprocessor.open_lowering import lower_builtin_open
@@ -550,12 +551,15 @@ class ModuleRewriteMixin:
             imp = ast.Import(names=[ast.alias(name=modules[name], asname=alias)])
             module_node.body[i] = ast.fix_missing_locations(ast.copy_location(imp, stmt))
 
-    def _lower_decorators(self, node):
-        """Lower decorators, and refuse a call through mixed functions that a factory leaves."""
+    def _lower_decorators(self, node, entry):
+        """Lower decorators, dispatch over the defs they leave, and refuse a mixed call left."""
         decorated = any(getattr(n, "decorator_list", None) for n in ast.walk(node))
         lower_user_decorators(node, self.module_name)
-        if decorated:
-            reject_mixed_function_values(node, self.module_name)
+        if not decorated:
+            return
+        if entry:
+            dispatch_mixed_function_values(node, self.module_name)
+        reject_mixed_function_values(node, self.module_name)
 
     def prepare_module(self, node, alias_seed=frozenset(), wrapper_seed=None, entry=False):
         """Run pre-visit analyses and range-alias/wrapper canonicalization.
@@ -564,6 +568,7 @@ class ModuleRewriteMixin:
         module imports."""
         inline_literal_eval(node)
         lower_coroutines(node, self.module_name)
+        reject_unmodelled_array_typecodes(node, self.module_name)
         lower_check_type(node, self.module_name)
         lower_builtin_open(node, self.module_name)
         _rename_shadowed_classes(node)
@@ -580,7 +585,7 @@ class ModuleRewriteMixin:
         lower_match_statements(node)
         lower_itertools(node)
         lower_namedtuples(node, self.module_name)
-        self._lower_decorators(node)
+        self._lower_decorators(node, entry)
         define_read_siblings_first(node)
         if entry:
             dispatch_class_value_calls(node)

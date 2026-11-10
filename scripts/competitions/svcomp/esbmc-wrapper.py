@@ -457,7 +457,7 @@ def python_exception_flags(prop):
   return "--python-check-exceptions " + ",".join(PYTHON_EXCEPTION_FAMILIES[prop]) + " "
 
 
-def get_command_line(strat, prop, arch, benchmark, concurrency, dargs, esbmc_ci, keep_loops=False):
+def get_command_line(strat, prop, arch, benchmark, dargs, esbmc_ci, keep_loops=False):
   if prop in PYTHON_EXCEPTION_FAMILIES:
     # A Python task is a whole program whose only specification is that an
     # exception family does not escape, so none of the C defaults in dargs
@@ -488,19 +488,6 @@ def get_command_line(strat, prop, arch, benchmark, concurrency, dargs, esbmc_ci,
     command_line += "--32 "
   else:
     command_line += "--64 "
-
-  concurrency = ((prop in (Property.reach, Property.datarace, Property.overflow, Property.memory)) and
-                 check_if_benchmark_contains_pthread(benchmark))
-
-  if concurrency:
-    # --smt-symex-guard also turns on --smt-during-symex, which is what makes
-    # sibling schedules share a solver context (issue #6831, #7043); do not add
-    # it separately, and do not drop the guard without re-measuring.
-    command_line += " --smt-symex-guard --bitwuzla --cswitch-skip-readonly-globals "
-    # Unlike --max-context-bound, a truncated schedule space still reports
-    # SUCCESSFUL, so this trades soundness of "true" verdicts for coverage.
-    command_line += "--context-bound 3 "
-    #command_line += "--no-slice " # TODO: Witness validation is only working without slicing
 
   # Add witness arg
   witness_name = os.path.basename(benchmark) if esbmc_ci else "witness"
@@ -535,29 +522,17 @@ def get_command_line(strat, prop, arch, benchmark, concurrency, dargs, esbmc_ci,
     command_line += "--no-pointer-check --no-bounds-check --memory-leak-check --no-assertions "
   elif prop == Property.reach:
     command_line += "--enable-unreachability-intrinsic "
-    if concurrency:
-      command_line += "--no-pointer-check --no-bounds-check "
-    else:
-      command_line += "--no-pointer-check --interval-analysis --no-bounds-check --error-label ERROR "
-      if not keep_loops:
-        command_line += "--goto-unwind --unlimited-goto-unwind "
+    command_line += "--no-pointer-check --interval-analysis --no-bounds-check --error-label ERROR "
+    if not keep_loops:
+      command_line += "--goto-unwind --unlimited-goto-unwind "
   elif prop == Property.datarace:
-    # TODO: can we do better in case 'concurrency == False'?
     command_line += "--no-pointer-check --no-bounds-check --data-races-check-only --no-assertions "
   else:
     print("Unknown property")
     exit(1)
 
   # Add strategy
-  if concurrency: # Concurrency only works with incremental
-    # A violation needing few context switches can sit deep in unbounded DFS
-    # order, where the task times out with no answer at all (issue #6831, #6947).
-    # One bounded round first costs a median 0.02s and can only report a
-    # violation -- it never claims a proof, so --incremental-bmc still owns
-    # every other verdict.
-    command_line += "--falsify-context-bound 1 --incremental-bmc "
-  else:
-    command_line += strategy_flags(strat)
+  command_line += strategy_flags(strat)
 
   return command_line
 
@@ -1073,7 +1048,7 @@ def has_invariants(witness_path):
     return re.search(r"\binvariant\b", f.read()) is not None
 
 
-def verify(strat, prop, arch, benchmark, concurrency, dargs, esbmc_ci, witness_path, validate_mode):
+def verify(strat, prop, arch, benchmark, dargs, esbmc_ci, witness_path, validate_mode):
   if witness_path and validate_mode == "violation":
     strat = "incr"
 
@@ -1083,7 +1058,7 @@ def verify(strat, prop, arch, benchmark, concurrency, dargs, esbmc_ci, witness_p
   # such as the ones ESBMC writes, is validated with it.
   keep_loops = bool(witness_path) and (
     validate_mode == "violation" or has_invariants(witness_path))
-  esbmc_command_line = get_command_line(strat, prop, arch, benchmark, concurrency, dargs, esbmc_ci, keep_loops)
+  esbmc_command_line = get_command_line(strat, prop, arch, benchmark, dargs, esbmc_ci, keep_loops)
 
   if witness_path:
     esbmc_command_line += "--validate-" + validate_mode + "-witness "
@@ -1295,7 +1270,6 @@ if __name__ == "__main__":
   parser.add_argument("-p", "--propertyfile", help="Path to the property file")
   parser.add_argument("benchmark", nargs='?', help="Path to the benchmark")
   parser.add_argument("-s", "--strategy", help="ESBMC's strategy", choices=["kinduction", "falsi", "incr", "fixed"], default="fixed")
-  parser.add_argument("-c", "--concurrency", help="Set concurrency flags", action='store_true')
   parser.add_argument("-n", "--dry-run", help="do not actually run ESBMC, just print the command", action='store_true')
   parser.add_argument("--ci", help="run this wrapper with special options for the CI (internal use)", action='store_true')
   parser.add_argument("--witness", help="Path to witness file; enables witness validation mode")
@@ -1313,7 +1287,6 @@ if __name__ == "__main__":
   property_file = args.propertyfile
   benchmark = args.benchmark
   strategy = args.strategy
-  concurrency = args.concurrency
   esbmc_ci = args.ci
   witness_path = args.witness
 
@@ -1365,6 +1338,6 @@ if __name__ == "__main__":
   if category_property in PYTHON_EXCEPTION_FAMILIES:
     add_python_module_path(benchmark)
 
-  result = verify(strategy, category_property, arch, benchmark, concurrency, esbmc_dargs, esbmc_ci, witness_path, validate_mode)
+  result = verify(strategy, category_property, arch, benchmark, esbmc_dargs, esbmc_ci, witness_path, validate_mode)
 
   print(get_result_string(result))

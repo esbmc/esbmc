@@ -895,9 +895,9 @@ exprt python_converter::get_boolop_operand(
 /// a result temporary updated by one guarded block per operand, so each
 /// operand's statements run only when Python evaluates it (#8275). Returns nil
 /// when nothing was planted, or, after emitting the planted statements
-/// unconditionally as before, when the operation is itself evaluated lazily
-/// (a while test), is an `and` asserted directly, or the operands do not share
-/// a type whose truthiness is a plain condition. An asserted `and` fails anyway
+/// unconditionally as before, when the operation is itself evaluated lazily (an
+/// and/or tail), is an `and` asserted directly, or the operands do not share a
+/// type whose truthiness is a plain condition. An asserted `and` fails anyway
 /// when a later operand is skipped, so its early guard matters only when the
 /// exception is caught; guarding it made dict_update_kwargs' k-induction
 /// forward condition go from 28s to over 20 minutes.

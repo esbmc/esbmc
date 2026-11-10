@@ -1071,6 +1071,11 @@ void interval_domaint::transform(
     // Let's do an assignment for all parameters!
     for (size_t i = 0; i < function.arguments.size(); i++)
     {
+      // Only a prototype with no definition leaves a parameter unnamed, and
+      // every unnamed parameter would share one entry (#10187).
+      if (function.argument_names[i].empty())
+        continue;
+
       const type2tc &arg_type = function.arguments[i];
       const expr2tc arg_symbol =
         symbol2tc(arg_type, function.argument_names[i]);

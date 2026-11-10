@@ -188,6 +188,11 @@ public:
     side_effect_expr_function_callt &call,
     const code_typet *&callee_type);
   std::optional<exprt> call_property_value(const nlohmann::json &element);
+  std::optional<exprt> call_rebound_builtin(const nlohmann::json &element);
+  std::optional<bool> import_binds_before(
+    const std::string &name,
+    const std::string &file,
+    int line) const;
   /// Unknown, function or class-instance types: a call on such a value may
   /// succeed.
   bool may_be_callable(const typet &type);
@@ -2667,6 +2672,8 @@ private:
     codet &target_block);
   /// The call whose result is not used as a value.
   const nlohmann::json *numpy_discarded_call_ = nullptr;
+  /// The call that is the whole value of the assignment being converted.
+  const nlohmann::json *assigned_call_ = nullptr;
   void reject_numpy_view_argument_use(const nlohmann::json &call);
   void reject_numpy_view_method_call(const nlohmann::json &func) const;
   void reject_numpy_view_callee(const nlohmann::json &call);
