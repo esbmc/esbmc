@@ -895,6 +895,10 @@ private:
     const exprt &left_value,
     const nlohmann::json &right,
     exprt &lhs);
+  exprt build_power(
+    const exprt &base,
+    const exprt &exponent,
+    const nlohmann::json &element);
   exprt build_guarded_binop(
     const std::string &op,
     exprt lhs,
