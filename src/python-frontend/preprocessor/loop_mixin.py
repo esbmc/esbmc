@@ -1579,6 +1579,50 @@ class LoopMixin:
         # Return the transformed statements
         return [step_validation, start_assign, has_next_assign, while_stmt]
 
+    _LIST_RESIZE_METHODS = frozenset({"append", "extend", "insert", "pop", "remove", "clear"})
+
+    @classmethod
+    def _node_may_resize_name(cls, n, name):
+        """True if AST node `n` may change the length of the list bound to `name`."""
+        if isinstance(n, ast.Call):
+            func = n.func
+            if (isinstance(func, ast.Attribute) and isinstance(func.value, ast.Name)
+                    and func.value.id == name):
+                return func.attr in cls._LIST_RESIZE_METHODS
+            passed = any(isinstance(a, ast.Name) and a.id == name for a in n.args)
+            return passed and not (isinstance(func, ast.Name) and func.id == "len")
+        if isinstance(n, ast.AugAssign):
+            return isinstance(n.target, ast.Name) and n.target.id == name
+        if isinstance(n, ast.Delete):
+            return any(
+                isinstance(t, ast.Subscript) and isinstance(t.value, ast.Name)
+                and t.value.id == name for t in n.targets)
+        return False
+
+    @classmethod
+    def _body_resizes_name(cls, body, name):
+        """True if `body` may resize the list `name` in place without rebinding it.
+
+        A rebound name keeps the cached length: CPython goes on iterating the
+        original object, which the per-index element read cannot reach.
+        """
+        nodes = [n for stmt in body for n in ast.walk(stmt)]
+        aug_targets = {id(n.target) for n in nodes if isinstance(n, ast.AugAssign)}
+        if any(
+                isinstance(n, ast.Name) and n.id == name and isinstance(n.ctx, ast.Store)
+                and id(n) not in aug_targets for n in nodes):
+            return False
+        return any(cls._node_may_resize_name(n, name) for n in nodes)
+
+    def _remeasure_resized_list(self, node, annotation_id, while_cond, length_assign):
+        """Compare the index with `len(xs)` when the body resizes the list `xs`.
+
+        CPython's list iterator reads the current length on every step (#10260).
+        """
+        if (isinstance(node.iter, ast.Name) and annotation_id in ("list", "List")
+                and self._body_resizes_name(node.body, node.iter.id)):
+            while_cond.comparators = [copy.deepcopy(length_assign.value)]
+
     @staticmethod
     def _body_destructures_name(body, name):
         """True if `body` assigns `name` to a tuple/list target (`u, v = name`).
@@ -2510,6 +2554,7 @@ class LoopMixin:
 
         # Create while loop condition with unique variable names
         while_cond = self._create_while_condition(node, index_var, length_var)
+        self._remeasure_resized_list(node, annotation_id, while_cond, length_assign)
 
         # Create loop body with unique variable names
         transformed_body = self._create_loop_body(node, target_var_name, iter_var_name, index_var,
