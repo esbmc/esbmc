@@ -1168,6 +1168,11 @@ private:
     const exprt &symbol_value);
 
   exprt get_logical_operator_expr(const nlohmann::json &element);
+  exprt bind_boolop_operand(
+    const exprt &operand,
+    const nlohmann::json &element,
+    code_blockt &binding);
+  static exprt with_binding(code_blockt binding, const exprt &value);
 
   exprt convert_boolop_operands(
     const nlohmann::json &element,

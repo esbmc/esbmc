@@ -1,0 +1,5 @@
+CORE
+main.py
+--unwind 4
+^  FAILED +\[global\.assertion\.2\]  line 12  assertion n == 2$
+^VERIFICATION FAILED$
