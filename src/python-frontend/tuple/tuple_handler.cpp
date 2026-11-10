@@ -366,6 +366,11 @@ void tuple_handler::raise_index_error(
   const nlohmann::json &element,
   const exprt &cond)
 {
+  // A discarded type probe is followed by the real conversion, which emits
+  // the guard in its evaluation context; a hoisted raise there could be caught.
+  if (converter_.in_type_probe())
+    return;
+
   codet raise("expression");
   raise.copy_to_operands(converter_.get_exception_handler().gen_exception_raise(
     "IndexError", "tuple index out of range"));
