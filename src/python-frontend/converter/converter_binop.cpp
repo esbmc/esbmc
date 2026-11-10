@@ -2076,6 +2076,24 @@ std::vector<typet> python_converter::percent_arg_types(
   return types;
 }
 
+// A call to a function the program defines, such as an operator method.
+static bool calls_python_function(const exprt &expr)
+{
+  const exprt *function = nullptr;
+  if (expr.is_function_call())
+    function = &to_code_function_call(to_code(expr)).function();
+  else if (expr.id() == "sideeffect" && expr.statement() == "function_call")
+    function = &expr.op0();
+  if (
+    function && function->is_symbol() &&
+    has_prefix(function->identifier().as_string(), "py:"))
+    return true;
+  for (const exprt &operand : expr.operands())
+    if (calls_python_function(operand))
+      return true;
+  return false;
+}
+
 exprt python_converter::get_right_operand_expr(
   const nlohmann::json &element,
   const nlohmann::json &right,
@@ -2083,6 +2101,31 @@ exprt python_converter::get_right_operand_expr(
 {
   return is_literal_percent_format(element, lhs) ? probe_expr(right)
                                                  : get_expr(right);
+}
+
+/// Converts \p right. An operator method of it is user code with no Call in
+/// the AST (`i < a + 0`), so it shows only once the operand is converted; the
+/// left operand \p lhs, not yet copied from \p left_value, is then copied ahead
+/// of what that conversion planted.
+exprt python_converter::get_right_operand_after_left(
+  const nlohmann::json &element,
+  const nlohmann::json &left,
+  const exprt &left_value,
+  const nlohmann::json &right,
+  exprt &lhs)
+{
+  const std::size_t right_start =
+    current_block ? current_block->operands().size() : 0;
+  exprt rhs = get_right_operand_expr(element, right, lhs);
+  if (!(lhs == left_value) || !calls_python_function(rhs))
+    return rhs;
+  lhs = snapshot_left_operand(left, lhs, right, true);
+  if (!(lhs == left_value))
+  {
+    exprt::operandst &stmts = current_block->operands();
+    std::rotate(stmts.begin() + right_start, stmts.end() - 2, stmts.end());
+  }
+  return rhs;
 }
 
 // An exponent named by a variable bound once to a small int constant is that
@@ -2147,24 +2190,6 @@ void python_converter::fold_class_subscript(
   operand = chosen;
 }
 
-// A call to a function the program defines, such as an operator method.
-static bool calls_python_function(const exprt &expr)
-{
-  const exprt *function = nullptr;
-  if (expr.is_function_call())
-    function = &to_code_function_call(to_code(expr)).function();
-  else if (expr.id() == "sideeffect" && expr.statement() == "function_call")
-    function = &expr.op0();
-  if (
-    function && function->is_symbol() &&
-    has_prefix(function->identifier().as_string(), "py:"))
-    return true;
-  for (const exprt &operand : expr.operands())
-    if (calls_python_function(operand))
-      return true;
-  return false;
-}
-
 exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
 {
   if (std::optional<exprt> bound = try_lowered_compare(element))
@@ -2199,21 +2224,8 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
   }
   const exprt left_value = get_expr(left);
   exprt lhs = snapshot_left_operand(left, left_value, right);
-  const std::size_t right_start =
-    current_block ? current_block->operands().size() : 0;
-  exprt rhs = get_right_operand_expr(element, right, lhs);
-  // An operator method of the right operand is user code with no Call in the
-  // AST (`i < a + 0`), so it shows only once the operand is converted. The
-  // read goes ahead of what converting the operand planted.
-  if (lhs == left_value && calls_python_function(rhs))
-  {
-    lhs = snapshot_left_operand(left, lhs, right, true);
-    if (!(lhs == left_value))
-    {
-      exprt::operandst &stmts = current_block->operands();
-      std::rotate(stmts.begin() + right_start, stmts.end() - 2, stmts.end());
-    }
-  }
+  exprt rhs =
+    get_right_operand_after_left(element, left, left_value, right, lhs);
   type_compared_operands_ = saved_compared;
   current_lhs = saved_lhs;
   if (element.value("_type", "") == "BinOp")

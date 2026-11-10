@@ -889,6 +889,12 @@ private:
     const nlohmann::json &element,
     const nlohmann::json &right,
     const exprt &lhs);
+  exprt get_right_operand_after_left(
+    const nlohmann::json &element,
+    const nlohmann::json &left,
+    const exprt &left_value,
+    const nlohmann::json &right,
+    exprt &lhs);
   exprt build_guarded_binop(
     const std::string &op,
     exprt lhs,
