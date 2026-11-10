@@ -1,0 +1,5 @@
+CORE
+main.c
+
+^  FAILED       \[main.assertion.1\]  line 11  assertion __builtin_object_size\(&s.a, nondet_int\(\)\) == 8$
+^VERIFICATION FAILED$

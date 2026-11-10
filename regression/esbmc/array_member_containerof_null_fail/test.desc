@@ -1,0 +1,5 @@
+CORE
+main.c
+
+^  assertion l != 0$
+^VERIFICATION FAILED$

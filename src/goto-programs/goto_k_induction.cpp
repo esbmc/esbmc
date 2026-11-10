@@ -342,7 +342,7 @@ void assume_loop_entry_cond_before_loop(
   //      not the pre-loop concrete values.
   //   2. The ASSUME sits *before* loop_head and is reached only via
   //      fall-through from the havocs. The back-edge
-  //      (adjust_loop_head_and_exit retargets it at loop_head, the
+  //      (retarget_back_edge retargets it at loop_head, the
   //      IF) skips both the havocs and the ASSUME on every iteration
   //      after the first, so the natural exit on `cond` is never
   //      blocked by a re-firing entry-cond assume.
@@ -400,26 +400,12 @@ void assume_loop_entry_cond_before_loop(
   goto_function.body.instructions.insert(loop_head, instruction);
 }
 
-void adjust_loop_head_and_exit(
+void retarget_back_edge(
   goto_programt::targett &loop_head,
   goto_programt::targett &loop_exit)
 {
   loop_exit->targets.clear();
   loop_exit->targets.push_front(loop_head);
-
-  goto_programt::targett _loop_exit = loop_exit;
-  ++_loop_exit;
-
-  // Zero means that the instruction was added during
-  // the k-induction transformation
-  if (_loop_exit->location_number == 0)
-  {
-    // Clear the target
-    loop_head->targets.clear();
-
-    // And set the target to be the newly inserted assume(cond)
-    loop_head->targets.push_front(_loop_exit);
-  }
 }
 
 /// Whether control reaches the loop's back edge from @p from without leaving
@@ -469,8 +455,7 @@ bool reaches_back_edge(
 /// itself, so every execution reaching them goes on to enter the loop; a
 /// conditional jump also falls through to a non-entry path, so splitting that
 /// edge would need a trampoline block, and the new edges would have to be
-/// revalidated against goto_loopst, adjust_loop_head_and_exit's
-/// location_number == 0 heuristic and remove_unreachable. A conditional entry
+/// revalidated against goto_loopst and remove_unreachable. A conditional entry
 /// disables the inductive step instead (see goto_k_induction).
 std::vector<goto_programt::targett> collect_entry_jumps(
   goto_programt &body,
@@ -542,9 +527,6 @@ void transform_loop(
   goto_programt::targett loop_head = loop.get_original_loop_head();
   goto_programt::targett loop_exit = loop.get_original_loop_exit();
 
-  // Collected here, applied last: splicing a havoc block displaces the GOTO
-  // onto a fresh instruction whose location_number is 0, which is what
-  // adjust_loop_head_and_exit keys its loop-exit test on.
   std::vector<goto_programt::targett> entry_jumps = collect_entry_jumps(
     goto_function.body, loop, continue_past_failed_assertions);
   std::erase_if(entry_jumps, [](const goto_programt::targett &jump) {
@@ -575,9 +557,7 @@ void transform_loop(
   // Assume the loop entry condition before going into the loop
   assume_loop_entry_cond_before_loop(goto_function, loop_head, guards);
 
-  // Check if the loop exit needs to be updated. We must point to the
-  // assume that was inserted in the previous transformation
-  adjust_loop_head_and_exit(loop_head, loop_exit);
+  retarget_back_edge(loop_head, loop_exit);
 
   havoc_entry_jumps(goto_function.body, havocs, entry_jumps);
 }
@@ -2117,13 +2097,23 @@ bool pin(const expr2tc &lvalue, const targetst &t, pinst &pins)
 /// refused that pointer. A local of a function the loop calls needs none
 /// either: every call declares it afresh, so the step never reads its havoced
 /// value. Returns false when a value cannot be pinned.
-bool pin_havoced_pointers(const loop_writest &w, pinst &pins)
+bool pin_havoced_pointers(
+  const loop_writest &w,
+  pinst &pins,
+  bool keep_pinned = false)
 {
+  const pinst earlier = pins;
   for (const expr2tc &var : ordered(w.loop.get_modified_loop_vars()))
   {
     if (
       is_symbol2t(var) &&
       w.derivations.local_elsewhere(to_symbol2t(var).thename, w.function))
+      continue;
+    if (
+      keep_pinned &&
+      std::any_of(earlier.begin(), earlier.end(), [&](const auto &p) {
+        return p.first == var;
+      }))
       continue;
     const targetst t = held_by(w.points_to, w.loop, var);
     if (t.named.empty() || t.heap || t.anything)
@@ -2229,8 +2219,16 @@ bool havoc_loop(
       havocs.pins.emplace_back(var, typecast2tc(var->type, at_any_offset(var)));
     else
       havocs.vars.push_back(var);
-  if (loop.writes_through_pointer() && !pin_havoced_pointers(w, havocs.pins))
-    covered = false;
+  if (loop.writes_through_pointer())
+  {
+    if (!pin_havoced_pointers(w, havocs.pins))
+      covered = false;
+  }
+  else
+    // A dereference of an unpinned pointer resolves to an invalid object, so
+    // the step checks no bounds there; the base case does. A pointer that
+    // cannot be pinned stays as it was.
+    pin_havoced_pointers(w, havocs.pins, true);
   // Symex answers the call by name, but goto_loopst, for the loops still to
   // come, and later passes resolve every call through function_map.
   if (!havocs.through.empty())

@@ -1387,7 +1387,9 @@ void goto_symext::symex_assign_extract(
   }
 
   // OK: accuml now has a bitblob sized expression that can be assigned into
-  // the relevant field.
+  // the relevant field, which may be signed.
+  if (accuml->type != ex.from->type)
+    accuml = bitcast2tc(ex.from->type, accuml);
   symex_assign_rec(ex.from, full_lhs, accuml, full_rhs, guard, hidden);
 }
 

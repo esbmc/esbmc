@@ -1,0 +1,5 @@
+CORE
+main.c
+--sv-comp --k-induction --interval-analysis --goto-unwind --unlimited-goto-unwind
+^The program can start a thread: verifying its schedules$
+^VERIFICATION FAILED$
