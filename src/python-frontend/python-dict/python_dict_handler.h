@@ -241,6 +241,9 @@ public:
     const typet &type,
     const locationt &location);
 
+  /// Stop a lookup with a key of unknown type, which would never match.
+  void refuse_untyped_key(const exprt &key, const locationt &location);
+
   /**
    * @brief Handles dictionary subscript assignment (e.g., `dict['key'] =
    * value`).
