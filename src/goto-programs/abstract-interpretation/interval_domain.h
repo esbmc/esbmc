@@ -73,6 +73,7 @@ public:
   static bool enable_eval_assumptions; /// Try to evaluate in a guard in a TVT
                                        /// to accelerate bottoms
   static bool enable_ibex_contractor;  /// Use ibex contractor
+  static bool keep_checked_arithmetic; /// Overflow or shift checks are on
 
   /// When set, the transformer skips any instruction whose
   /// `inductive_step_instruction` flag is true. Used by the post-k-induction

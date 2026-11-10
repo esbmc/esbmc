@@ -1861,6 +1861,10 @@ void interval_domaint::set_options(const optionst &options)
     options.get_bool_option("interval-analysis-eval-assumptions");
   enable_ibex_contractor =
     options.get_bool_option("interval-analysis-ibex-contractor");
+  keep_checked_arithmetic =
+    options.get_bool_option("overflow-check") ||
+    options.get_bool_option("unsigned-overflow-check") ||
+    options.get_bool_option("ub-shift-check");
 
   auto fixpoint_str = options.get_option("interval-analysis-extrapolate-limit");
   fixpoint_limit = fixpoint_str.empty() ? 5 : atoi(fixpoint_str.c_str());
@@ -1920,6 +1924,7 @@ bool interval_domaint::enable_assume_asserts = true;
 bool interval_domaint::skip_user_assertions = false;
 bool interval_domaint::enable_eval_assumptions = true;
 bool interval_domaint::enable_ibex_contractor = false;
+bool interval_domaint::keep_checked_arithmetic = false;
 thread_local bool interval_domaint::skip_inductive_step_instructions = false;
 
 // Widening options

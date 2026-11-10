@@ -895,9 +895,9 @@ exprt python_converter::get_boolop_operand(
 /// a result temporary updated by one guarded block per operand, so each
 /// operand's statements run only when Python evaluates it (#8275). Returns nil
 /// when nothing was planted, or, after emitting the planted statements
-/// unconditionally as before, when the operation is itself evaluated lazily
-/// (a while test), is an `and` asserted directly, or the operands do not share
-/// a type whose truthiness is a plain condition. An asserted `and` fails anyway
+/// unconditionally as before, when the operation is itself evaluated lazily (an
+/// and/or tail), is an `and` asserted directly, or the operands do not share a
+/// type whose truthiness is a plain condition. An asserted `and` fails anyway
 /// when a later operand is skipped, so its early guard matters only when the
 /// exception is caught; guarding it made dict_update_kwargs' k-induction
 /// forward condition go from 28s to over 20 minutes.
@@ -1086,6 +1086,40 @@ exprt python_converter::convert_boolop_operands(
   return raised;
 }
 
+/// A value-producing and/or operand is both tested and selected, so one with
+/// a side effect (a call) is bound to a temporary in \p binding to run once.
+exprt python_converter::bind_boolop_operand(
+  const exprt &operand,
+  const nlohmann::json &element,
+  code_blockt &binding)
+{
+  if (
+    !has_side_effect(operand) || operand.type().is_nil() ||
+    operand.type().is_empty())
+    return operand;
+  const locationt loc = get_location_from_decl(element);
+  symbolt &tmp =
+    create_tmp_symbol(element, "$boolop_operand$", operand.type(), exprt());
+  code_declt decl(symbol_expr(tmp));
+  decl.location() = loc;
+  binding.copy_to_operands(decl);
+  code_assignt assign(symbol_expr(tmp), operand);
+  assign.location() = loc;
+  binding.copy_to_operands(assign);
+  return symbol_expr(tmp);
+}
+
+/// \p value evaluated after \p binding, where it stands.
+exprt python_converter::with_binding(code_blockt binding, const exprt &value)
+{
+  if (binding.operands().empty())
+    return value;
+  binding.copy_to_operands(code_expressiont(value));
+  side_effect_exprt bound("statement_expression", value.type());
+  bound.copy_to_operands(binding);
+  return bound;
+}
+
 exprt python_converter::get_logical_operator_expr(const nlohmann::json &element)
 {
   // `and`/`or` short-circuit: a later operand may not execute. get_named_expr
@@ -1184,7 +1218,9 @@ exprt python_converter::get_logical_operator_expr(const nlohmann::json &element)
     exprt result_expr = logical_expr.operands().back();
     for (int i = logical_expr.operands().size() - 2; i >= 0; i--)
     {
-      const exprt &current = logical_expr.operands()[i];
+      code_blockt binding;
+      const exprt current =
+        bind_boolop_operand(logical_expr.operands()[i], element, binding);
       exprt current_cond = get_truthy_condition(current);
       // V.3: build the short-circuit select in IREP2 when both branches
       // share the result type-id. A mixed-type BoolOp keeps the result type
@@ -1213,6 +1249,7 @@ exprt python_converter::get_logical_operator_expr(const nlohmann::json &element)
           if_expr.copy_to_operands(current_cond, current, result_expr);
         result_expr = if_expr;
       }
+      result_expr = with_binding(binding, result_expr);
     }
     return result_expr;
   }
@@ -2076,6 +2113,24 @@ std::vector<typet> python_converter::percent_arg_types(
   return types;
 }
 
+// A call to a function the program defines, such as an operator method.
+static bool calls_python_function(const exprt &expr)
+{
+  const exprt *function = nullptr;
+  if (expr.is_function_call())
+    function = &to_code_function_call(to_code(expr)).function();
+  else if (expr.id() == "sideeffect" && expr.statement() == "function_call")
+    function = &expr.op0();
+  if (
+    function && function->is_symbol() &&
+    has_prefix(function->identifier().as_string(), "py:"))
+    return true;
+  for (const exprt &operand : expr.operands())
+    if (calls_python_function(operand))
+      return true;
+  return false;
+}
+
 exprt python_converter::get_right_operand_expr(
   const nlohmann::json &element,
   const nlohmann::json &right,
@@ -2083,6 +2138,31 @@ exprt python_converter::get_right_operand_expr(
 {
   return is_literal_percent_format(element, lhs) ? probe_expr(right)
                                                  : get_expr(right);
+}
+
+/// Converts \p right. An operator method of it is user code with no Call in
+/// the AST (`i < a + 0`), so it shows only once the operand is converted; the
+/// left operand \p lhs, not yet copied from \p left_value, is then copied ahead
+/// of what that conversion planted.
+exprt python_converter::get_right_operand_after_left(
+  const nlohmann::json &element,
+  const nlohmann::json &left,
+  const exprt &left_value,
+  const nlohmann::json &right,
+  exprt &lhs)
+{
+  const std::size_t right_start =
+    current_block ? current_block->operands().size() : 0;
+  exprt rhs = get_right_operand_expr(element, right, lhs);
+  if (!(lhs == left_value) || !calls_python_function(rhs))
+    return rhs;
+  lhs = snapshot_left_operand(left, lhs, right, true);
+  if (!(lhs == left_value))
+  {
+    exprt::operandst &stmts = current_block->operands();
+    std::rotate(stmts.begin() + right_start, stmts.end() - 2, stmts.end());
+  }
+  return rhs;
 }
 
 // An exponent named by a variable bound once to a small int constant is that
@@ -2179,8 +2259,10 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
     if (cmp == "Is" || cmp == "IsNot" || cmp == "Eq" || cmp == "NotEq")
       type_compared_operands_ = {&left, &right};
   }
-  exprt lhs = snapshot_left_operand(left, get_expr(left), right);
-  exprt rhs = get_right_operand_expr(element, right, lhs);
+  const exprt left_value = get_expr(left);
+  exprt lhs = snapshot_left_operand(left, left_value, right);
+  exprt rhs =
+    get_right_operand_after_left(element, left, left_value, right, lhs);
   type_compared_operands_ = saved_compared;
   current_lhs = saved_lhs;
   if (element.value("_type", "") == "BinOp")
@@ -2274,12 +2356,14 @@ bool python_converter::calls_user_code(const nlohmann::json &node) const
 bool python_converter::may_rebind_left(
   const nlohmann::json &left,
   const exprt &lhs,
-  const nlohmann::json &right) const
+  const nlohmann::json &right,
+  bool right_runs_user_code) const
 {
   const typet &type = lhs.type();
   if (!type.is_pointer() && !type_utils::is_string_type(type))
-    return contains_call(right);
-  return left.value("_type", "") == "Name" && calls_user_code(right);
+    return right_runs_user_code || contains_call(right);
+  return left.value("_type", "") == "Name" &&
+         (right_runs_user_code || calls_user_code(right));
 }
 
 std::optional<exprt>
@@ -2368,7 +2452,8 @@ python_converter::chained_compare_as_pairs(const nlohmann::json &element)
 exprt python_converter::snapshot_left_operand(
   const nlohmann::json &left,
   const exprt &lhs,
-  const nlohmann::json &right)
+  const nlohmann::json &right,
+  bool right_runs_user_code)
 {
   const typet &type = lhs.type();
   // An arm of a conditional expression runs on one path only, so only a read
@@ -2377,7 +2462,8 @@ exprt python_converter::snapshot_left_operand(
                     conditional_expr_depth_ == 0;
   if (
     !can_emit_operand_statement() || !is_read_ahead_type(type) || !safe ||
-    lhs.is_constant() || !may_rebind_left(left, lhs, right))
+    lhs.is_constant() ||
+    !may_rebind_left(left, lhs, right, right_runs_user_code))
     return lhs;
   exprt value = lhs;
   if (value.is_function_call())

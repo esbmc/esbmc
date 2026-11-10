@@ -3,13 +3,25 @@
 if(DOWNLOAD_DEPENDENCIES AND ("${LLVM_DIR}" STREQUAL ""))
   if(ESBMC_CHERI)
     download_zip_and_extract(LLVM ${ESBMC_CHERI_LLVM_URL})
-    set(LLVM_DIR ${CMAKE_BINARY_DIR}/LLVM/${ESBMC_CHERI_LLVM_NAME})
-    set(Clang_DIR ${CMAKE_BINARY_DIR}/LLVM/${ESBMC_CHERI_LLVM_NAME})
+    set(_llvm_root ${CMAKE_BINARY_DIR}/LLVM/${ESBMC_CHERI_LLVM_NAME})
+  elseif(APPLE AND "${ESBMC_LLVM_URL}" STREQUAL "")
+    find_program(BREW_EXECUTABLE brew HINTS /opt/homebrew/bin /usr/local/bin)
+    if(BREW_EXECUTABLE)
+      execute_process(
+        COMMAND ${BREW_EXECUTABLE} --prefix ${ESBMC_HOMEBREW_LLVM}
+        OUTPUT_VARIABLE _llvm_root
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+        ERROR_QUIET)
+    endif()
+    if(NOT IS_DIRECTORY "${_llvm_root}/lib/cmake/llvm")
+      message(FATAL_ERROR "No LLVM download for macOS. Run 'brew install ${ESBMC_HOMEBREW_LLVM}', or pass -DLLVM_DIR and -DClang_DIR.")
+    endif()
   else()
     download_zip_and_extract(LLVM ${ESBMC_LLVM_URL})
-    set(LLVM_DIR ${CMAKE_BINARY_DIR}/LLVM/${ESBMC_LLVM_NAME})
-    set(Clang_DIR ${CMAKE_BINARY_DIR}/LLVM/${ESBMC_LLVM_NAME})
+    set(_llvm_root ${CMAKE_BINARY_DIR}/LLVM/${ESBMC_LLVM_NAME})
   endif()
+  set(LLVM_DIR ${_llvm_root})
+  set(Clang_DIR ${_llvm_root})
 endif()
 
 if(NOT (("${LLVM_DIR}" STREQUAL "LLVM_DIR-NOTFOUND") OR ("${LLVM_DIR}" STREQUAL "")))

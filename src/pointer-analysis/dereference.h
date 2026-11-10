@@ -119,6 +119,11 @@ public:
   virtual void
   get_value_set(const expr2tc &expr, value_setst::valuest &value_set) = 0;
 
+  /** The objects \p expr can point at, with no side effect on the program
+   *  (get_value_set may assume them during an inductive step). */
+  virtual void
+  points_to(const expr2tc &expr, value_setst::valuest &value_set) = 0;
+
   /** Check whether a failed symbol already exists for the given symbol.
    *  This is legacy, and will be removed at some point soon. */
   virtual bool
@@ -322,6 +327,7 @@ private:
    */
   virtual void
   dereference_addrof_expr(expr2tc &expr, guard2tc &guard, modet mode);
+  bool address_in_one_object(expr2tc &expr, const expr2tc &base);
 
   /** Interpret an expression that accesses a nonscalar type. This means that
    *  it's an index or member (or some other glue expr) on top of a dereference
@@ -608,6 +614,32 @@ private:
     const expr2tc &value,
     const BigInt &start,
     unsigned int bits);
+  /// The byte at bit \p pos of struct \p value, read from the whole-byte
+  /// member holding it; nil if there is none.
+  expr2tc byte_of_struct(const expr2tc &value, const BigInt &pos);
+  /// A \p type access at bit \p start of struct element \p index of \p array
+  /// that ends in the next element, stitched from bytes of both; nil if it
+  /// fits in one element.
+  expr2tc stitch_across_elements(
+    const expr2tc &array,
+    const expr2tc &index,
+    const BigInt &start,
+    const type2tc &type);
+  /// Wraps \p value in an arm for each aligned dynamic \p offset into element
+  /// \p index of \p array at which a \p type access ends in the next element.
+  void add_element_spanning_arms(
+    expr2tc &value,
+    const expr2tc &array,
+    const expr2tc &index,
+    const expr2tc &offset,
+    const type2tc &type,
+    unsigned long alignment,
+    modet mode);
+  BigInt spanning_step(
+    const type2tc &type,
+    const type2tc &container,
+    unsigned long alignment,
+    modet mode);
   void construct_from_multidir_array(
     expr2tc &value,
     const expr2tc &offset,
@@ -663,6 +695,17 @@ private:
     const guard2tc &guard,
     modet mode,
     unsigned long alignment = 0);
+  /// Builds a \p type access at \p elem_offset into element \p index of
+  /// \p value, an array of structs or unions.
+  void construct_from_struct_array(
+    expr2tc &value,
+    const expr2tc &offset,
+    const expr2tc &index,
+    const expr2tc &elem_offset,
+    const type2tc &type,
+    const guard2tc &guard,
+    modet mode,
+    unsigned long alignment);
   /// Builds a vector or array destination; false for any other type.
   bool construct_value_ref(
     expr2tc &value,
