@@ -990,7 +990,7 @@ def infer_subscript_container(key_type, value_type):
     return Unknown()
 
 
-def transfer_annassign(stmt, env, context):
+def transfer_annassign(stmt, env, context,):
     if not isinstance(stmt.target, ast.Name):
         return env
 
@@ -1039,6 +1039,9 @@ def transfer_annassign(stmt, env, context):
 
 
 def collect_function_argument_types(tree, context):
+
+    collected = {}
+    
     for node in ast.walk(tree):
         if not isinstance(node, ast.Call):
             continue
@@ -1057,18 +1060,16 @@ def collect_function_argument_types(tree, context):
             typ = infer_type_from_expr(arg, {}, context)
             arg_types.append(typ)
 
-        if name not in context.function_params:
-            context.function_params[name] = arg_types
+        if name not in collected:
+            collected[name] = arg_types
             continue
 
-        previous = context.function_params[name]
+        previous = collected[name]
 
         for i in range(min(len(previous), len(arg_types))):
             current = arg_types[i]
 
             if isinstance(previous[i], Unknown):
-                if not isinstance(current, Unknown):
-                    previous[i] = current
                 continue
 
             if isinstance(current, Unknown):
@@ -1077,6 +1078,7 @@ def collect_function_argument_types(tree, context):
 
             previous[i] = previous[i].join(current)
 
+    context.function_name = collected
 
 def transfer_expr(
     stmt: ast.Expr,

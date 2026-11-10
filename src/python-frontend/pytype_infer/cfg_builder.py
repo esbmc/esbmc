@@ -127,13 +127,22 @@ def build_while(cfg: CFG,
     return exit_idx
 
 
-def build_for(cfg: CFG, stmt: ast.For, current_idx: int, outer_loop: LoopContext | None, function_exit_idx: int | None = None, finally_ctx=None,) -> int:
+def build_for(
+    cfg: CFG,
+    stmt: ast.For,
+    current_idx: int,
+    outer_loop: LoopContext | None,
+    function_exit_idx: int | None = None,
+    finally_ctx=None,
+) -> int | None:
 
     header_idx = len(cfg.blocks)
     cfg.blocks.append(Block())
     add_edge(cfg, current_idx, header_idx)
 
-    cfg.blocks[header_idx].stmts.append(('for', stmt.target, stmt.iter))
+    cfg.blocks[header_idx].stmts.append(
+        ("for", stmt.target, stmt.iter)
+    )
 
     body_idx = len(cfg.blocks)
     cfg.blocks.append(Block())
@@ -150,21 +159,44 @@ def build_for(cfg: CFG, stmt: ast.For, current_idx: int, outer_loop: LoopContext
         else_idx = None
         add_edge(cfg, header_idx, exit_idx)
 
-    loop_ctx = LoopContext(header=header_idx, break_target=exit_idx, continue_target=header_idx)
+    loop_ctx = LoopContext(
+        header=header_idx,
+        break_target=exit_idx,
+        continue_target=header_idx,
+    )
 
     body_tail = build_statements(
         stmt.body,
         cfg,
         body_idx,
         loop_ctx,
+        function_exit_idx,
+        finally_ctx,
     )
 
     if body_tail is not None:
-        add_edge(cfg, body_tail, header_idx)
+        add_edge(
+            cfg,
+            body_tail,
+            header_idx,
+        )
 
     if else_idx is not None:
-        else_tail = build_statements(stmt.orelse, cfg, else_idx, outer_loop)
-        add_edge(cfg, else_tail, exit_idx)
+        else_tail = build_statements(
+            stmt.orelse,
+            cfg,
+            else_idx,
+            outer_loop,
+            function_exit_idx,
+            finally_ctx,
+        )
+
+        if else_tail is not None:
+            add_edge(
+                cfg,
+                else_tail,
+                exit_idx,
+            )
 
     return exit_idx
 
