@@ -9177,6 +9177,20 @@ static std::optional<bool> constant_string_is_empty(const exprt &str)
   return first.is_zero();
 }
 
+// A bool-typed conditional expression takes a str branch's truth; cast to
+// bool, its address would make "" true.
+void python_converter::take_str_branch_truth(
+  const typet &result_type,
+  exprt &then,
+  exprt &else_expr,
+  const locationt &location)
+{
+  if (!result_type.is_bool())
+    return;
+  then = apply_string_truthiness(then, location);
+  else_expr = apply_string_truthiness(else_expr, location);
+}
+
 exprt python_converter::tagged_truthiness(
   exprt value,
   const nlohmann::json &node)
@@ -10011,13 +10025,7 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
       }
     }
 
-    // A bool-typed conditional expression takes a str branch's truth; cast to
-    // bool, its address would make "" true.
-    if (result_type.is_bool())
-    {
-      then = apply_string_truthiness(then, location);
-      else_expr = apply_string_truthiness(else_expr, location);
-    }
+    take_str_branch_truth(result_type, then, else_expr, location);
 
     // When a branch emits side-effecting instructions (notably a subscript's
     // IndexError raise, or a materialised nested access whose value expression
