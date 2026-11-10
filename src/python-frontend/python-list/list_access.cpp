@@ -5727,7 +5727,84 @@ exprt python_list::handle_index_access(
     return slice_call;
   }
 
+  if (is_bytes_param_pointer(array, resolved_array_type))
+    pos_expr = guard_bytes_param_index(array, pos_expr);
+
   return build_numpy_array_index_access(array, pos_expr, slice_node);
+}
+
+// A bytes parameter decays to a pointer to its elements, so its length is the
+// element count of the object it addresses, as len() reads it.
+bool python_list::is_bytes_param_pointer(
+  const exprt &array,
+  const typet &resolved_array_type) const
+{
+  return array.is_symbol() && resolved_array_type.is_pointer() &&
+         type_utils::is_integer_type(resolved_array_type.subtype()) &&
+         list_value_.contains("value") &&
+         list_value_["value"].value("_type", "") == "Name" &&
+         converter_.get_type_handler().get_var_type(
+           list_value_["value"]["id"].get<std::string>()) == "bytes" &&
+         converter_.can_emit_runtime_guard() &&
+         converter_.symbol_table().find_symbol(
+           "c:@F@__ESBMC_get_object_size") != nullptr;
+}
+
+/// `d[i]` on a bytes parameter: CPython's negative index and IndexError,
+/// which the pointer read alone does not raise.
+exprt python_list::guard_bytes_param_index(
+  const exprt &array,
+  const exprt &pos_expr)
+{
+  const typet ll_type = signedbv_typet(64);
+  const locationt loc = converter_.get_location_from_decl(list_value_);
+  const symbolt &size_fn =
+    *converter_.symbol_table().find_symbol("c:@F@__ESBMC_get_object_size");
+
+  symbolt &len_sym = converter_.create_tmp_symbol(
+    list_value_, "$bytes_len$", ll_type, gen_zero(ll_type));
+  const exprt len = build_symbol(len_sym);
+  code_declt len_decl(len);
+  len_decl.location() = loc;
+  converter_.add_instruction(len_decl);
+  code_function_callt size_call;
+  size_call.function() = build_symbol(size_fn);
+  size_call.lhs() = len;
+  size_call.arguments().push_back(array);
+  size_call.location() = loc;
+  converter_.add_instruction(size_call);
+
+  symbolt &idx_sym = converter_.create_tmp_symbol(
+    list_value_, "$bytes_idx$", ll_type, gen_zero(ll_type));
+  const exprt idx = build_symbol(idx_sym);
+  code_declt idx_decl(idx);
+  idx_decl.location() = loc;
+  converter_.add_instruction(idx_decl);
+  code_assignt idx_init(idx, build_typecast(pos_expr, ll_type));
+  idx_init.location() = loc;
+  converter_.add_instruction(idx_init);
+
+  code_ifthenelset norm_guard;
+  norm_guard.cond() = build_less_than(idx, from_integer(0, ll_type));
+  norm_guard.then_case() = code_assignt(idx, build_add(idx, len, ll_type));
+  norm_guard.location() = loc;
+  norm_guard.location().property("skipped");
+  converter_.add_instruction(norm_guard);
+
+  exprt raise = converter_.get_exception_handler().gen_exception_raise(
+    "IndexError", "index out of range");
+  codet throw_code("expression");
+  throw_code.operands().push_back(raise);
+  code_ifthenelset oob_guard;
+  oob_guard.cond() = build_or(
+    build_less_than(idx, from_integer(0, ll_type)),
+    build_greater_equal(idx, len));
+  oob_guard.then_case() = throw_code;
+  oob_guard.location() = loc;
+  oob_guard.location().property("skipped");
+  converter_.add_instruction(oob_guard);
+
+  return idx;
 }
 
 exprt python_list::extract_pyobject_value(

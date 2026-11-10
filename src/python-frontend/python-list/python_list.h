@@ -1171,6 +1171,12 @@ private:
     const exprt &pos_expr,
     const nlohmann::json &slice_node);
 
+  bool is_bytes_param_pointer(
+    const exprt &array,
+    const typet &resolved_array_type) const;
+
+  exprt guard_bytes_param_index(const exprt &array, const exprt &pos_expr);
+
   std::optional<exprt> try_build_column_pointer_view(
     const exprt &array,
     const nlohmann::json &col_index_node);
