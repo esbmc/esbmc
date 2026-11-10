@@ -1184,7 +1184,25 @@ exprt python_converter::get_logical_operator_expr(const nlohmann::json &element)
     exprt result_expr = logical_expr.operands().back();
     for (int i = logical_expr.operands().size() - 2; i >= 0; i--)
     {
-      const exprt &current = logical_expr.operands()[i];
+      // The operand is both tested and selected, so one with a side effect
+      // (a call) is bound to a temporary to run once, where it stands.
+      code_blockt binding;
+      exprt current = logical_expr.operands()[i];
+      if (
+        has_side_effect(current) && !current.type().is_nil() &&
+        !current.type().is_empty())
+      {
+        const locationt loc = get_location_from_decl(element);
+        symbolt &tmp = create_tmp_symbol(
+          element, "$boolop_operand$", current.type(), exprt());
+        code_declt decl(symbol_expr(tmp));
+        decl.location() = loc;
+        binding.copy_to_operands(decl);
+        code_assignt assign(symbol_expr(tmp), current);
+        assign.location() = loc;
+        binding.copy_to_operands(assign);
+        current = symbol_expr(tmp);
+      }
       exprt current_cond = get_truthy_condition(current);
       // V.3: build the short-circuit select in IREP2 when both branches
       // share the result type-id. A mixed-type BoolOp keeps the result type
@@ -1212,6 +1230,14 @@ exprt python_converter::get_logical_operator_expr(const nlohmann::json &element)
         else
           if_expr.copy_to_operands(current_cond, current, result_expr);
         result_expr = if_expr;
+      }
+      if (!binding.operands().empty())
+      {
+        const typet result_type = result_expr.type();
+        binding.copy_to_operands(code_expressiont(result_expr));
+        side_effect_exprt bound("statement_expression", result_type);
+        bound.copy_to_operands(binding);
+        result_expr = bound;
       }
     }
     return result_expr;
