@@ -89,27 +89,36 @@ _BUILTIN_FUNCTIONS = {
 }
 
 
+def _has_star_import(module):
+    return any(
+        isinstance(n, ast.ImportFrom) and any(a.name == "*" for a in n.names)
+        for n in ast.walk(module))
+
+
+def _read_before_def(module, i):
+    """Whether `module.body[i]`'s name occurs in an earlier top-level
+    statement or in the def's own header, which runs before it binds."""
+    stmt = module.body[i]
+    header = [stmt.args, *stmt.decorator_list] + ([stmt.returns] if stmt.returns else [])
+    return any(
+        isinstance(n, ast.Name) and n.id == stmt.name for part in module.body[:i] + header
+        for n in ast.walk(part))
+
+
 def _rename_builtin_defs(module):
     """Rename a module-level `def len(...)` and every read of `len`, so that
     the converter calls it instead of the builtin (#10159). Only when the def
     binds the name nowhere else and nothing reads the name before the def
     runs: every read then means the def."""
-    if any(
-            isinstance(n, ast.ImportFrom) and any(a.name == "*" for a in n.names)
-            for n in ast.walk(module)):
+    if _has_star_import(module):
         return  # a star import binds names that binding_sites cannot see
     sites = binding_sites(module)
     taken = set(sites) | {n.id for n in ast.walk(module) if isinstance(n, ast.Name)}
     for i, stmt in enumerate(module.body):
         if (not isinstance(stmt, ast.FunctionDef) or stmt.name not in _BUILTIN_FUNCTIONS
-                or sites[stmt.name] != 1):
+                or sites[stmt.name] != 1 or _read_before_def(module, i)):
             continue
         name = stmt.name
-        header = [stmt.args, *stmt.decorator_list] + ([stmt.returns] if stmt.returns else [])
-        if any(
-                isinstance(n, ast.Name) and n.id == name for part in module.body[:i] + header
-                for n in ast.walk(part)):
-            continue
         renamed = f"{name}__esbmc_user"
         while renamed in taken:
             renamed += "_"
