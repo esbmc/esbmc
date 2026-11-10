@@ -9152,6 +9152,18 @@ bool python_converter::contains_nested_scope_named_expr(
   return false;
 }
 
+// A variable, or an attribute read through variables, which can be read twice.
+static bool is_plain_read(const expr2tc &e)
+{
+  if (is_member2t(e))
+    return is_plain_read(to_member2t(e).source_value);
+  if (is_dereference2t(e))
+    return is_plain_read(to_dereference2t(e).value);
+  if (is_typecast2t(e))
+    return is_plain_read(to_typecast2t(e).from);
+  return is_symbol2t(e);
+}
+
 // Whether a str array constant is empty, reading it as strlen does; nullopt for
 // any other value. Symex never ends strlen's loop over the address of an array
 // constant (#8713), so a literal's truth value is folded instead.
@@ -9163,18 +9175,6 @@ static std::optional<bool> constant_string_is_empty(const exprt &str)
   if (!first.is_constant())
     return std::nullopt;
   return first.is_zero();
-}
-
-// A variable, or an attribute read through variables, which can be read twice.
-static bool is_plain_read(const expr2tc &e)
-{
-  if (is_member2t(e))
-    return is_plain_read(to_member2t(e).source_value);
-  if (is_dereference2t(e))
-    return is_plain_read(to_dereference2t(e).value);
-  if (is_typecast2t(e))
-    return is_plain_read(to_typecast2t(e).from);
-  return is_symbol2t(e);
 }
 
 /// The value of an and/or over a str and a bool is an `if` whose branches keep
@@ -9194,6 +9194,20 @@ exprt python_converter::chosen_branch_truthiness(
   exprt cond = if_exprt(value.op0(), then_cond, else_cond);
   cond.location() = location;
   return cond;
+}
+
+// A bool-typed conditional expression takes a str branch's truth; cast to
+// bool, its address would make "" true.
+void python_converter::take_str_branch_truth(
+  const typet &result_type,
+  exprt &then,
+  exprt &else_expr,
+  const locationt &location)
+{
+  if (!result_type.is_bool())
+    return;
+  then = apply_string_truthiness(then, location);
+  else_expr = apply_string_truthiness(else_expr, location);
 }
 
 exprt python_converter::tagged_truthiness(
@@ -10036,6 +10050,8 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
         result_type = then.type(); // Use pointer type as result
       }
     }
+
+    take_str_branch_truth(result_type, then, else_expr, location);
 
     // When a branch emits side-effecting instructions (notably a subscript's
     // IndexError raise, or a materialised nested access whose value expression
