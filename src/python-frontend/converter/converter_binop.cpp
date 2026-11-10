@@ -1883,7 +1883,7 @@ bool python_converter::needs_operand_guard(
     return false;
   else if (
     !rhs.type().is_signedbv() && !rhs.type().is_unsignedbv() &&
-    !rhs.type().is_floatbv())
+    !rhs.type().is_floatbv() && !rhs.type().is_bool())
     return false;
 
   return !in_rhs_type_probe_ && !in_contract_clause_;

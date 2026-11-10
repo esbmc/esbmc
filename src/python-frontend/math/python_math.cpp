@@ -1063,7 +1063,7 @@ exprt python_math::handle_divmod(
   if (
     converter.can_emit_runtime_guard() &&
     (divisor.type().is_signedbv() || divisor.type().is_unsignedbv() ||
-     divisor.type().is_floatbv()))
+     divisor.type().is_floatbv() || divisor.type().is_bool()))
   {
     dividend =
       converter.hoist_side_effecting_operand(dividend, element, "$divmod_lhs$");
