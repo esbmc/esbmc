@@ -1393,6 +1393,55 @@ typet python_converter::any_attribute_type(
            : from_usage;
 }
 
+/// Whether @p value, stored by method @p func_node, is built only from
+/// dynamically-typed operands: tagged attributes of @p clazz and unannotated
+/// parameters that call sites tag.
+bool python_converter::is_tagged_value_expr(
+  const nlohmann::json &value,
+  const nlohmann::json &func_node,
+  const struct_typet &clazz) const
+{
+  if (!value.is_object())
+    return false;
+  const std::string kind = value.value("_type", "");
+  if (kind == "BinOp")
+    return is_tagged_value_expr(value["left"], func_node, clazz) &&
+           is_tagged_value_expr(value["right"], func_node, clazz);
+  if (
+    kind == "Attribute" && value["value"].value("_type", "") == "Name" &&
+    value["value"].value("id", "") == "self")
+  {
+    const irep_idt attr = value.value("attr", "");
+    return clazz.has_component(attr) && type_handler_.is_tagged_scalar_type(
+                                          clazz.get_component(attr).type());
+  }
+  if (kind != "Name" || !func_node.contains("args"))
+    return false;
+  const std::string name = value.value("id", "");
+  const nlohmann::json &params = func_node["args"]["args"];
+  for (size_t i = 0; i < params.size(); ++i)
+    if (params[i].value("arg", "") == name && name != "self")
+      return params[i].value("annotation", nlohmann::json()).is_null() &&
+             try_infer_dynamic_param_type(
+               current_class_name_ + "." + func_node.value("name", ""),
+               name,
+               i);
+  return false;
+}
+
+/// The type of an attribute that @p fallback gives Any: tagged when the stored
+/// @p value is built only from tagged operands, as its result is (#9799).
+typet python_converter::unannotated_attribute_type(
+  const nlohmann::json &value,
+  const nlohmann::json &func_node,
+  const struct_typet &clazz,
+  const typet &fallback) const
+{
+  return fallback == any_type() && is_tagged_value_expr(value, func_node, clazz)
+           ? type_handler_.get_tagged_object_type()
+           : fallback;
+}
+
 void python_converter::get_attributes_from_self(
   const nlohmann::json &func_node,
   struct_typet &clazz)
@@ -1593,7 +1642,11 @@ void python_converter::get_attributes_from_self(
         // the same way: if every construction/assignment of this attribute
         // across all reachable modules agrees on one class, adopt it; on any
         // conflict infer_attr_type_from_usage returns unset and we keep Any.
-        type = any_attribute_type(stmt, attr_name);
+        type = unannotated_attribute_type(
+          stmt.value("value", nlohmann::json()),
+          func_node,
+          clazz,
+          any_attribute_type(stmt, attr_name));
       }
       else
       {
@@ -1651,7 +1704,8 @@ void python_converter::get_attributes_from_self(
       stmt["targets"][0]["value"]["id"] == "self")
     {
       // A member is initialized with something that might be not annotated
-      typet type = any_type();
+      typet type =
+        unannotated_attribute_type(stmt["value"], func_node, clazz, any_type());
       const std::string &attr_name = stmt["targets"][0]["attr"];
 
       if (!clazz.has_component(attr_name))

@@ -1953,11 +1953,26 @@ class LoopMixin:
 
     def _get_kv_types_from_call(self, call_node):
         """Return (key_ann, val_ann) annotation nodes from a function call's return annotation."""
+        func_name = None
         if isinstance(call_node, ast.Call) and isinstance(call_node.func, ast.Name):
             func_name = call_node.func.id
-            if func_name in self.function_return_annotations:
-                return self._kv_types_from_annotation(self.function_return_annotations[func_name])
+        elif isinstance(call_node, ast.Call) and isinstance(call_node.func, ast.Attribute):
+            owner = self._attribute_owner_class(call_node.func)
+            if owner is not None:
+                func_name = f"{owner}.{call_node.func.attr}"
+        if func_name in self.function_return_annotations:
+            return self._kv_types_from_annotation(self.function_return_annotations[func_name])
         return self._any_ann(), self._any_ann()
+
+    def _attribute_owner_class(self, attr_node):
+        """The class named by the receiver of C.m or c.m, where c = C(), else None."""
+        if not isinstance(attr_node.value, ast.Name):
+            return None
+        name = attr_node.value.id
+        ann = self.variable_annotations.get(name)
+        if isinstance(ann, ast.Name):
+            return ann.id
+        return self.instance_class_map.get(name, name)
 
     def _get_kv_types_from_attribute(self, attr_node):
         """Return (key_ann, val_ann) annotation nodes from c.d via class attribute lookup."""
