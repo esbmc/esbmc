@@ -1,10 +1,12 @@
 import random
+from typing import Any
 
 
 class C:
     def __init__(self, a):
         self.a = a
         self.twice = a + a
+        self.unset: Any
 
     def compute(self):
         self.r = self.a + self.a
