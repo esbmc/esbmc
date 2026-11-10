@@ -34,3 +34,6 @@ if (a.s and a.s == "x") or m == 1:
     m = 5
 assert m == 0
 assert not (a.s and a.s == "x")
+
+b = True
+assert not bool((t and b) or m == 1)

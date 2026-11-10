@@ -9179,7 +9179,7 @@ static std::optional<bool> constant_string_is_empty(const exprt &str)
 
 /// The value of an and/or over a str and a bool is an `if` whose branches keep
 /// their own types (#10130); its truth is the chosen branch's. Nil when no
-/// branch is a str or a branch's truth is not a condition.
+/// branch's truth is a str's or a branch's truth is not a condition.
 exprt python_converter::chosen_branch_truthiness(
   const exprt &value,
   const locationt &location)
@@ -9188,12 +9188,30 @@ exprt python_converter::chosen_branch_truthiness(
   const exprt else_cond = apply_string_truthiness(value.op2(), location);
   if (
     !then_cond.type().is_bool() || !else_cond.type().is_bool() ||
-    (!type_utils::is_string_type(value.op1().type()) &&
-     !type_utils::is_string_type(value.op2().type())))
+    (then_cond == value.op1() && else_cond == value.op2()))
     return nil_exprt();
   exprt cond = if_exprt(value.op0(), then_cond, else_cond);
   cond.location() = location;
   return cond;
+}
+
+/// A statement expression is as true as its value, read after its statements
+/// run once. Unchanged when its value's truth is not a str's.
+exprt python_converter::bound_value_truthiness(
+  const exprt &bound,
+  const locationt &location)
+{
+  const exprt::operandst &statements = bound.op0().operands();
+  if (statements.empty() || statements.back().statement() != "expression")
+    return bound;
+  const exprt &value = statements.back().op0();
+  const exprt cond = apply_string_truthiness(value, location);
+  if (value.type().is_bool() || !cond.type().is_bool())
+    return bound;
+  exprt truth = bound;
+  truth.type() = bool_type();
+  truth.op0().operands().back().op0() = cond;
+  return truth;
 }
 
 // A bool-typed conditional expression takes a str branch's truth; cast to
@@ -9228,6 +9246,9 @@ exprt python_converter::apply_string_truthiness(
   const exprt &str,
   const locationt &location)
 {
+  if (str.id() == "sideeffect" && str.statement() == "statement_expression")
+    return bound_value_truthiness(str, location);
+
   if (str.id() == "if" && !str.type().is_bool())
   {
     exprt cond = chosen_branch_truthiness(str, location);
