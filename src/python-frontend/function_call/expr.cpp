@@ -1329,10 +1329,10 @@ exprt function_call_expr::build_constant_from_arg() const
   // a real byte array here instead, matching the bytes-literal representation.
   if (func_name == "bytes")
   {
-    // bytes([i0, i1, ...]) — a list of constant ints in range(0, 256).
-    if (
-      arg.is_object() && arg.value("_type", "") == "List" &&
-      arg.contains("elts"))
+    // bytes([i0, i1, ...]) or bytes((i0, ...)) — constant ints in
+    // range(0, 256).
+    const std::string arg_kind = arg.is_object() ? arg.value("_type", "") : "";
+    if ((arg_kind == "List" || arg_kind == "Tuple") && arg.contains("elts"))
     {
       std::vector<uint8_t> bytes;
       for (const auto &e : arg["elts"])
@@ -1369,6 +1369,22 @@ exprt function_call_expr::build_constant_from_arg() const
       return converter_.get_string_builder().build_raw_byte_array(
         std::vector<uint8_t>(static_cast<size_t>(n), 0));
     }
+
+    // bytes(b) of a bytes value is b itself (bytes are immutable).
+    exprt value = converter_.get_expr(arg);
+    const bool no_keywords =
+      !call_.contains("keywords") || call_["keywords"].empty();
+    if (
+      call_["args"].size() == 1 && no_keywords &&
+      type_utils::is_bytes_array(value.type()))
+      return value;
+
+    // The generic constructor tail would relabel any other argument (a list
+    // variable, a str, a non-constant count, ...) as a byte array without
+    // converting it, giving a wrong length and contents (#10208).
+    throw std::runtime_error(
+      "bytes(): only a bytes value, a constant count, or a list or tuple of "
+      "constant integers is supported");
   }
 
   // Handle str(z) / repr(z) where z is a complex expression.
