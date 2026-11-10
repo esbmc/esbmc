@@ -5727,8 +5727,7 @@ exprt python_list::handle_index_access(
     return slice_call;
   }
 
-  if (is_bytes_param_pointer(array, resolved_array_type))
-    pos_expr = guard_bytes_param_index(array, pos_expr);
+  pos_expr = guard_bytes_param_index(array, resolved_array_type, pos_expr);
 
   return build_numpy_array_index_access(array, pos_expr, slice_node);
 }
@@ -5751,11 +5750,16 @@ bool python_list::is_bytes_param_pointer(
 }
 
 /// `d[i]` on a bytes parameter: CPython's negative index and IndexError,
-/// which the pointer read alone does not raise.
+/// which the pointer read alone does not raise. Any other access returns
+/// `pos_expr` unchanged.
 exprt python_list::guard_bytes_param_index(
   const exprt &array,
+  const typet &resolved_array_type,
   const exprt &pos_expr)
 {
+  if (!is_bytes_param_pointer(array, resolved_array_type))
+    return pos_expr;
+
   const typet ll_type = signedbv_typet(64);
   const locationt loc = converter_.get_location_from_decl(list_value_);
   const symbolt &size_fn =

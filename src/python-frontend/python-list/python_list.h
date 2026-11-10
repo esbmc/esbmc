@@ -1175,7 +1175,10 @@ private:
     const exprt &array,
     const typet &resolved_array_type) const;
 
-  exprt guard_bytes_param_index(const exprt &array, const exprt &pos_expr);
+  exprt guard_bytes_param_index(
+    const exprt &array,
+    const typet &resolved_array_type,
+    const exprt &pos_expr);
 
   std::optional<exprt> try_build_column_pointer_view(
     const exprt &array,
