@@ -1086,6 +1086,40 @@ exprt python_converter::convert_boolop_operands(
   return raised;
 }
 
+/// A value-producing and/or operand is both tested and selected, so one with
+/// a side effect (a call) is bound to a temporary in \p binding to run once.
+exprt python_converter::bind_boolop_operand(
+  const exprt &operand,
+  const nlohmann::json &element,
+  code_blockt &binding)
+{
+  if (
+    !has_side_effect(operand) || operand.type().is_nil() ||
+    operand.type().is_empty())
+    return operand;
+  const locationt loc = get_location_from_decl(element);
+  symbolt &tmp =
+    create_tmp_symbol(element, "$boolop_operand$", operand.type(), exprt());
+  code_declt decl(symbol_expr(tmp));
+  decl.location() = loc;
+  binding.copy_to_operands(decl);
+  code_assignt assign(symbol_expr(tmp), operand);
+  assign.location() = loc;
+  binding.copy_to_operands(assign);
+  return symbol_expr(tmp);
+}
+
+/// \p value evaluated after \p binding, where it stands.
+exprt python_converter::with_binding(code_blockt binding, const exprt &value)
+{
+  if (binding.operands().empty())
+    return value;
+  binding.copy_to_operands(code_expressiont(value));
+  side_effect_exprt bound("statement_expression", value.type());
+  bound.copy_to_operands(binding);
+  return bound;
+}
+
 exprt python_converter::get_logical_operator_expr(const nlohmann::json &element)
 {
   // `and`/`or` short-circuit: a later operand may not execute. get_named_expr
@@ -1184,7 +1218,9 @@ exprt python_converter::get_logical_operator_expr(const nlohmann::json &element)
     exprt result_expr = logical_expr.operands().back();
     for (int i = logical_expr.operands().size() - 2; i >= 0; i--)
     {
-      const exprt &current = logical_expr.operands()[i];
+      code_blockt binding;
+      const exprt current =
+        bind_boolop_operand(logical_expr.operands()[i], element, binding);
       exprt current_cond = get_truthy_condition(current);
       // V.3: build the short-circuit select in IREP2 when both branches
       // share the result type-id. A mixed-type BoolOp keeps the result type
@@ -1213,6 +1249,7 @@ exprt python_converter::get_logical_operator_expr(const nlohmann::json &element)
           if_expr.copy_to_operands(current_cond, current, result_expr);
         result_expr = if_expr;
       }
+      result_expr = with_binding(binding, result_expr);
     }
     return result_expr;
   }
@@ -1877,6 +1914,17 @@ bool python_converter::needs_operand_guard(
   if (is_shift_op(op))
   {
     if (!rhs.type().is_signedbv())
+      return false;
+  }
+  else if (op == "Pow")
+  {
+    if (!rhs.type().is_signedbv() && !rhs.type().is_floatbv())
+      return false;
+    expr2tc exponent;
+    migrate_expr(rhs, exponent);
+    expr2tc negative = lessthan2tc(exponent, gen_zero(exponent->type));
+    simplify(negative);
+    if (is_false(negative))
       return false;
   }
   else if (op != "Div" && op != "FloorDiv" && op != "Mod")
@@ -3151,8 +3199,11 @@ exprt python_converter::get_binary_operator_expr(
   }
 
   // Handle special mathematical operations
-  if (op == "Pow" || op == "power")
+  // NumPy's power gives inf for zero to a negative power instead of raising.
+  if (op == "power")
     return math_handler_.handle_power(lhs, once_bound_exponent(right, rhs));
+  if (op == "Pow")
+    return build_power(lhs, once_bound_exponent(right, rhs), element);
 
   if (type_utils::is_relational_op(op))
   {
@@ -3173,6 +3224,22 @@ exprt python_converter::get_binary_operator_expr(
   }
 
   return build_guarded_binop(op, lhs, rhs, element);
+}
+
+// Python raises ZeroDivisionError for zero to a negative power, for int and
+// float operands alike.
+exprt python_converter::build_power(
+  const exprt &base,
+  const exprt &exponent,
+  const nlohmann::json &element)
+{
+  const typet &type = base.type();
+  if (
+    (!type.is_signedbv() && !type.is_unsignedbv() && !type.is_floatbv() &&
+     !type.is_bool()) ||
+    !needs_operand_guard("Pow", exponent))
+    return math_handler_.handle_power(base, exponent);
+  return build_guarded_binop("Pow", base, exponent, element);
 }
 
 exprt python_converter::build_guarded_binop(
@@ -3214,6 +3281,23 @@ exprt python_converter::build_guarded_binop(
       "negative shift count",
       get_location_from_decl(element));
   }
+  else if (op == "Pow")
+  {
+    expr2tc base, exponent;
+    migrate_expr(lhs, base);
+    migrate_expr(rhs, exponent);
+    // 0.0 ** -inf is inf, not an error.
+    expr2tc raises = and2tc(
+      equality2tc(base, gen_zero(base->type)),
+      lessthan2tc(exponent, gen_zero(exponent->type)));
+    if (is_floatbv_type(exponent))
+      raises = and2tc(raises, not2tc(isinf2tc(exponent)));
+    emit_guarded_raise(
+      migrate_expr_back(raises),
+      "ZeroDivisionError",
+      "zero to a negative power",
+      get_location_from_decl(element));
+  }
   else
   {
     exprt is_zero("=", bool_type());
@@ -3226,7 +3310,8 @@ exprt python_converter::build_guarded_binop(
   }
   current_block = saved_block;
 
-  exprt result = build_arithmetic_binop(op, lhs, rhs, element);
+  exprt result = op == "Pow" ? math_handler_.handle_power(lhs, rhs)
+                             : build_arithmetic_binop(op, lhs, rhs, element);
   if (!lazy)
     return result;
 

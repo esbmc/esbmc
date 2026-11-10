@@ -1698,6 +1698,12 @@ bool clang_c_convertert::get_builtin_type(
   const clang::BuiltinType &bt,
   typet &new_type)
 {
+  if (auto it = builtin_types.find(bt.getKind()); it != builtin_types.end())
+  {
+    new_type = it->second;
+    return false;
+  }
+
   std::string c_type;
 
   switch (bt.getKind())
@@ -2126,6 +2132,7 @@ bool clang_c_convertert::get_builtin_type(
   }
 
   new_type.cpp_type(c_type);
+  builtin_types.emplace(bt.getKind(), new_type);
   return false;
 }
 
@@ -5924,10 +5931,21 @@ void clang_c_convertert::set_location(
     return;
   }
 
-  location.set_line(line);
-  location.set_file(filename);
+  // Share each field equal to the previous location's rather than build a
+  // fresh node per AST node (#10190).
+  auto reuse = [&](const char *field, bool same) {
+    if (same)
+      location.set(field, last_loc.find(field));
+    return same;
+  };
+  if (!reuse("line", last_loc_valid && line == last_loc_line))
+    location.set_line(line);
+  if (!reuse("file", last_loc_valid && last_loc_filename == filename))
+    location.set_file(filename);
   location.set_column(column);
-  if (!function_name.empty())
+  if (
+    !function_name.empty() &&
+    !reuse("function", last_loc_valid && last_loc_function == function_name))
     location.set_function(function_name);
 
   last_loc = location;

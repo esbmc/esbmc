@@ -80,6 +80,7 @@ add_library(pythonfrontend STATIC
             numpy/numpy_dtype.cpp
             numpy/numpy_random.cpp
             numpy/numpy_nditer.cpp
+            numpy/dense_spectrum.cpp
             numpy/ndarray_shape.cpp
             function_call/builder.cpp
             string/string_builder.cpp

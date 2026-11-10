@@ -26,6 +26,30 @@ void python_dict_handler::check_value_type(
   converter_.add_instruction(check);
 }
 
+/// A key whose type was lost (`void *`) hashes like no stored key, so its
+/// lookup would raise KeyError on every path (#10241). Where the lookup runs,
+/// report it as unsupported and end the path instead.
+void python_dict_handler::refuse_untyped_key(
+  const exprt &key,
+  const locationt &location)
+{
+  if (!key.type().is_pointer() || !key.type().subtype().is_empty())
+    return;
+  const std::string message =
+    "Unsupported: a dict lookup with a key whose type is not known";
+  if (!converter_.can_emit_runtime_guard())
+    throw std::runtime_error(message);
+  // Not the constant false, which CFG cleanup reads as the end of the
+  // function and so drops the assume.
+  const exprt never = not_exprt(true_exprt());
+  code_assertt check(never);
+  check.location() = location;
+  check.location().user_provided(true);
+  check.location().comment(message);
+  converter_.add_instruction(check);
+  converter_.add_instruction(code_assumet(never));
+}
+
 /// The float_type_id argument of a push or set: an element's own type id
 /// routes a float into the real-sorted __ESBMC_float_buf (and records its
 /// float_idx) so a typed read finds it there (#5501); 0 copies the bytes.
@@ -134,6 +158,7 @@ exprt python_dict_handler::handle_dict_subscript(
     resolved_type = resolve_expected_type_for_dict_subscript(dict_expr);
 
   exprt key_expr = get_key_expr(slice_node);
+  refuse_untyped_key(key_expr, location);
 
   // Get dict.keys and dict.values
   exprt keys_member = build_member(dict_expr, "keys", list_type);
