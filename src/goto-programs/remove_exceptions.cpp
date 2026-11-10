@@ -207,6 +207,8 @@ public:
                 thrown_dynamic_types_.end(),
                 dyn) == thrown_dynamic_types_.end())
               thrown_dynamic_types_.push_back(dyn);
+            if (entry_reachable_.count(fn.first))
+              reachable_thrown_types_.insert(dyn);
             const locationt loc = raise_location(body, it);
             raise_location_[&*it] = loc;
             raise_site_id_[&*it] = record_throw_site(
@@ -478,6 +480,8 @@ private:
   // name_to_id, which the exception_typeidt constructor seeds from *every* type
   // symbol, not just exception types.
   std::vector<irep_idt> thrown_dynamic_types_;
+  // The subset raised in at least one function of entry_reachable_.
+  std::set<irep_idt> reachable_thrown_types_;
   /// One statement a type is raised from, and the id the lowering stamps on the
   /// exception state there.
   struct throw_sitet
@@ -1732,6 +1736,9 @@ private:
 
     for (const irep_idt &name : thrown_dynamic_types_)
     {
+      // #10257: left out of known_disj too, so a missed caller fails the residual.
+      if (reports_escape(name) && !reachable_thrown_types_.count(name))
+        continue;
       expr2tc eq = typeid_eq(name);
       known_disj = is_nil_expr(known_disj) ? eq : or2tc(known_disj, eq);
       if (!reports_escape(name))

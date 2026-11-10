@@ -1,0 +1,5 @@
+CORE
+main.cpp
+
+uncaught exception: struct U$
+^VERIFICATION FAILED$
