@@ -400,6 +400,58 @@ scalar.c, function __python_scalar_add_num
 VERIFICATION FAILED
 """
 
+# sv-benchmarks' quixbugs/pascal_1 under ESBMC 9f5278bb04, trimmed: the
+# violated property is the list model's own assertion, and the program's
+# uncaught IndexError fails alongside it.
+PY_MODEL_INDEXERROR = """
+Violated property:
+  file /src/c2goto/library/python/list.c line 697 column 3 function __ESBMC_list_at
+  IndexError: out-of-bounds read in list
+  index < l->size
+
+
+** Results:
+pascal_1.py
+  NOT CHECKED  [global.assertion.2]                                line   0  uncaught exception: IndexError
+pascal_1.py, function pascal
+  FAILED       [pascal.assertion.6]                                line  23  uncaught exception: IndexError
+/src/c2goto/library/python/list.c, function __ESBMC_list_at
+  FAILED       [__ESBMC_list_at.assertion.1]                       line 697  IndexError: out-of-bounds read in list
+
+** 2 of 124 properties failed, 60 passed, 62 not checked
+
+VERIFICATION FAILED
+"""
+
+PY_MODEL_INDEXERROR_AND_KEYERROR = PY_MODEL_INDEXERROR.replace(
+    "uncaught exception: IndexError", "uncaught exception: KeyError")
+
+# One run falsifying both members of the data-lookup family names neither.
+PY_INDEX_AND_KEYERROR = """
+Violated property:
+  file p_lookup.py line 6 column 12 function main
+  uncaught exception: IndexError
+
+Violated property:
+  file p_lookup.py line 8 column 4 function main
+  uncaught exception: KeyError
+
+** Results:
+p_lookup.py, function main
+  FAILED       [main.assertion.1]  line 6  uncaught exception: IndexError
+  FAILED       [main.assertion.2]  line 8  uncaught exception: KeyError
+
+** 2 of 4 properties failed, 2 not checked
+
+VERIFICATION FAILED
+"""
+
+PY_INDEXERROR_AND_MODEL_TYPEERROR = PY_INDEXERROR.replace(
+    "\n** 1 of 4 properties failed, 3 not checked",
+    "  FAILED       [main.assertion.2]  line 7  TypeError: unsupported operand type(s) for +"
+    "\n\n** 2 of 4 properties failed, 2 not checked")
+
+
 class PythonPropertyTest(unittest.TestCase):
     """The Python track scores one exception family per property file.
 
@@ -413,7 +465,8 @@ class PythonPropertyTest(unittest.TestCase):
 
     def test_zerodivision_falsifies_arithmetic(self):
         self.assertEqual(
-            self.verdict(PY_ZERODIVISION, wrapper.Property.py_arithmetic), "FALSE")
+            self.verdict(PY_ZERODIVISION, wrapper.Property.py_arithmetic),
+            "FALSE(ZeroDivisionError)")
 
     def test_zerodivision_says_nothing_about_data_lookup(self):
         self.assertEqual(
@@ -425,11 +478,28 @@ class PythonPropertyTest(unittest.TestCase):
 
     def test_indexerror_falsifies_data_lookup(self):
         self.assertEqual(
-            self.verdict(PY_INDEXERROR, wrapper.Property.py_datalookup), "FALSE")
+            self.verdict(PY_INDEXERROR, wrapper.Property.py_datalookup), "FALSE(IndexError)")
+
+    def test_a_model_indexerror_is_named(self):
+        self.assertEqual(
+            self.verdict(PY_MODEL_INDEXERROR, wrapper.Property.py_datalookup), "FALSE(IndexError)")
+
+    def test_a_model_indexerror_beside_a_keyerror_leaves_false_unnamed(self):
+        self.assertEqual(
+            self.verdict(PY_MODEL_INDEXERROR_AND_KEYERROR, wrapper.Property.py_datalookup), "FALSE")
+
+    def test_two_exceptions_of_the_family_leave_false_unnamed(self):
+        self.assertEqual(
+            self.verdict(PY_INDEX_AND_KEYERROR, wrapper.Property.py_datalookup), "FALSE")
+
+    def test_an_exception_outside_the_family_does_not_hide_the_name(self):
+        self.assertEqual(
+            self.verdict(PY_INDEXERROR_AND_MODEL_TYPEERROR, wrapper.Property.py_datalookup),
+            "FALSE(IndexError)")
 
     def test_typeerror_falsifies_dynamic_typing(self):
         self.assertEqual(
-            self.verdict(PY_TYPEERROR, wrapper.Property.py_dyntyping), "FALSE")
+            self.verdict(PY_TYPEERROR, wrapper.Property.py_dyntyping), "FALSE(TypeError)")
 
     def test_typeerror_says_nothing_about_arithmetic(self):
         self.assertEqual(
@@ -437,7 +507,7 @@ class PythonPropertyTest(unittest.TestCase):
 
     def test_model_typeerror_falsifies_dynamic_typing(self):
         self.assertEqual(
-            self.verdict(PY_MODEL_TYPEERROR, wrapper.Property.py_dyntyping), "FALSE")
+            self.verdict(PY_MODEL_TYPEERROR, wrapper.Property.py_dyntyping), "FALSE(TypeError)")
 
     def test_model_typeerror_says_nothing_about_arithmetic(self):
         self.assertEqual(
@@ -757,7 +827,7 @@ class CPythonReplayTest(unittest.TestCase):
             wrapper.Property.py_datalookup, PY_INDEXERROR,
             self.HEADER + "xs = _sv_verifier.nondet_list(_sv_verifier.nondet_int)\nxs[3]\n",
             "witness = [\n    {'list0': [1]},\n]\n")
-        self.assertEqual(verdict, "FALSE")
+        self.assertEqual(verdict, "FALSE(IndexError)")
         self.assertEqual(len(calls), 2)
         self.assertEqual(len(self.ir_calls(calls)), 0)
 
@@ -774,7 +844,7 @@ class CPythonReplayTest(unittest.TestCase):
             wrapper.Property.py_datalookup, PY_INDEXERROR,
             self.HEADER + "xs = _sv_verifier.nondet_list(_sv_verifier.nondet_int)\nxs[0]\n",
             "witness = [\n    {'list0': [1]},\n]\n", ir=PY_INDEXERROR)
-        self.assertEqual(verdict, "FALSE")
+        self.assertEqual(verdict, "FALSE(IndexError)")
         self.assertEqual(len(self.ir_calls(calls)), 1)
 
     def test_an_exception_of_another_family_does_not_confirm(self):
@@ -814,7 +884,7 @@ class CPythonReplayTest(unittest.TestCase):
             "s = _sv_verifier.nondet_str()\nif _sv_verifier.nondet_bool():\n    d = {}\n    d[s]\n")
         verdict, calls = self.verify(
             wrapper.Property.py_datalookup, PY_INDEXERROR, source, "witness = [\n    {'arg0': 'k'},\n]\n")
-        self.assertEqual(verdict, "FALSE")
+        self.assertEqual(verdict, "FALSE(IndexError)")
         self.assertEqual(len(calls), 2)
         self.assertEqual(len(self.ir_calls(calls)), 0)
 
@@ -823,7 +893,7 @@ class CPythonReplayTest(unittest.TestCase):
             "n = 0\nwhile _sv_verifier.nondet_bool():\n    n += 1\n    if n > 5:\n        [][0]\n")
         verdict, calls = self.verify(
             wrapper.Property.py_datalookup, PY_INDEXERROR, source, "witness = [\n    {},\n]\n")
-        self.assertEqual(verdict, "FALSE")
+        self.assertEqual(verdict, "FALSE(IndexError)")
         self.assertEqual(len(calls), 2)
         self.assertEqual(len(self.ir_calls(calls)), 0)
 
@@ -833,14 +903,14 @@ class CPythonReplayTest(unittest.TestCase):
         verdict, calls = self.verify(
             wrapper.Property.py_arithmetic, PY_ZERODIVISION, source,
             "witness = [\n    {'arg0': 1.5, 'arg1': 7},\n]\n")
-        self.assertEqual(verdict, "FALSE")
+        self.assertEqual(verdict, "FALSE(ZeroDivisionError)")
         self.assertEqual(len(calls), 2)
         self.assertEqual(len(self.ir_calls(calls)), 0)
 
     def test_a_missing_witness_is_an_empty_one(self):
         verdict, calls = self.verify(
             wrapper.Property.py_datalookup, PY_INDEXERROR, "[][0]\n", None)
-        self.assertEqual(verdict, "FALSE")
+        self.assertEqual(verdict, "FALSE(IndexError)")
         self.assertEqual(len(calls), 2)
         self.assertEqual(len(self.ir_calls(calls)), 0)
 
