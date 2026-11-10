@@ -233,48 +233,70 @@ def _is_method_wrapper(lifted):
         isinstance(d, ast.Constant) for d in lifted.args.defaults)
 
 
+def _is_method_decorator(decorator, defined):
+    """`@d` or `@factory(constants)` naming a def this program defines. The
+    arguments of a factory are bound at module level ahead of the class, which
+    a constant reads the same as the class body would."""
+    if isinstance(decorator, ast.Call):
+        arguments = decorator.args + [k.value for k in decorator.keywords]
+        return _is_factory_call(decorator) and decorator.func.id in defined and all(
+            isinstance(a, ast.Constant) for a in arguments)
+    return isinstance(decorator, ast.Name) and decorator.id in defined
+
+
 def _lowered_method(method, cls_name, defined, original, module_name):
     """`@d def m` in class `cls_name` as `def ESBMC_undecorated_m`, then the
     wrapper each `d` returns lifted as a method that calls the method below it
-    through the class; or None.
+    through the class, as `(statements before the class, class statements)`;
+    or None.
 
     A function stored in a class is a method, so the lifted wrapper is bound
     to the instance as the one `d` returns would be (#9798).
     """
     decorators = method.decorator_list
     if method.name.startswith("__") or not all(
-            isinstance(d, ast.Name) and d.id in defined for d in decorators):
+            _is_method_decorator(d, defined) for d in decorators):
         return None
     _check_decorators(method, defined, original, module_name)
     inner = UNDECORATED_PREFIX + method.name
-    lifted_methods = []
+    hoisted, lifted_methods = [], []
     for position, decorator in reversed(list(enumerate(decorators))):
-        clone_name = f"ESBMC_{decorator.id}_{position}_for_{method.name}"
-        lifted = _lifted_wrapper(defined[decorator.id], inner,
-                                 clone_name if position else method.name)
+        definition = defined[_decorator_root(decorator).id]
+        clone_name = f"ESBMC_{definition.name}_{position}_for_{cls_name}_{method.name}"
+        name = clone_name if position else method.name
+        if isinstance(decorator, ast.Name):
+            statements = [_lifted_wrapper(definition, inner, name)]
+        else:
+            statements = _lifted_factory(definition, decorator, inner, name, clone_name) or [None]
+        lifted = statements[-1]
         if not _is_method_wrapper(lifted):
             return None
         _CallThroughClass(inner, cls_name).visit(lifted)
+        hoisted.extend(statements[:-1])
         lifted_methods.append(lifted)
         inner = lifted.name
     method.name = UNDECORATED_PREFIX + method.name
     method.decorator_list = []
-    for lifted in lifted_methods:
-        ast.fix_missing_locations(ast.copy_location(lifted, method))
-    return [method] + lifted_methods
+    for statement in hoisted + lifted_methods:
+        ast.fix_missing_locations(ast.copy_location(statement, method))
+    return hoisted, [method] + lifted_methods
 
 
 def _lower_method_decorators(cls, defined, original, module_name, bind_counts):
     """Lower each method of `cls` that `_lowered_method` can, while `cls` is
-    bound once so the lifted calls through it reach this class."""
+    bound once so the lifted calls through it reach this class. Returns the
+    statements to run before `cls`."""
     if bind_counts[cls.name] != 1:
-        return
-    body = []
+        return []
+    hoisted, body = [], []
     for stmt in cls.body:
         lowered = isinstance(stmt, ast.FunctionDef) and stmt.decorator_list and _lowered_method(
             stmt, cls.name, defined, original, module_name)
-        body.extend(lowered or [stmt])
+        if lowered:
+            hoisted.extend(lowered[0])
+        body.extend(lowered[1] if lowered else [stmt])
     cls.body = body
+    return hoisted
 
 
 _SCOPED = (ast.Lambda, ast.NamedExpr, ast.GeneratorExp, ast.ListComp, ast.SetComp, ast.DictComp,
@@ -439,7 +461,8 @@ def lower_user_decorators(module, module_name):
     for stmt in module.body:
         body.append(stmt)
         if isinstance(stmt, ast.ClassDef):
-            _lower_method_decorators(stmt, defined, original, module_name, bind_counts)
+            body[-1:-1] = _lower_method_decorators(stmt, defined, original, module_name,
+                                                   bind_counts)
             body.extend(_lowered_class_decorators(stmt, user_functions, defined))
         if not isinstance(stmt, ast.FunctionDef):
             continue
