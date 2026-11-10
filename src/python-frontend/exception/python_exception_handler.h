@@ -210,9 +210,13 @@ private:
   };
   std::vector<handled_exceptiont> handled_;
 
+  // Pushes onto @p handled_stack the state that a handler re-raising with a
+  // bare `raise` saves on entry, and returns the statements saving it.
   code_blockt save_handled_exception(
     const nlohmann::json &element,
-    handled_exceptiont &handled);
+    std::vector<handled_exceptiont> &handled_stack);
+
+  void restore_handled_exception(const locationt &location, codet &block) const;
 
   exprt make_finally_rethrow_handler(const nlohmann::json &element);
 

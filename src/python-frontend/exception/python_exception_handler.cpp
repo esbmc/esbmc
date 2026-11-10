@@ -654,8 +654,12 @@ static bool reraises(const nlohmann::json &node)
 
 code_blockt python_exception_handler::save_handled_exception(
   const nlohmann::json &element,
-  handled_exceptiont &handled)
+  std::vector<handled_exceptiont> &handled_stack)
 {
+  if (!reraises(element["body"]))
+    return code_blockt();
+  handled_exceptiont handled;
+  handled.function = converter_.current_function_name();
   contextt &context = converter_.symbol_table();
   create_exception_state_symbols(context);
   const locationt location = converter_.get_location_from_decl(element);
@@ -678,7 +682,30 @@ code_blockt python_exception_handler::save_handled_exception(
     saves.copy_to_operands(assign);
     handled.saved.push_back(copy);
   }
+  handled_stack.push_back(std::move(handled));
   return saves;
+}
+
+void python_exception_handler::restore_handled_exception(
+  const locationt &location,
+  codet &block) const
+{
+  if (
+    handled_.empty() ||
+    handled_.back().function != converter_.current_function_name())
+    return;
+  const char *globals[] = {
+    exception_globals::typeid_id,
+    exception_globals::value_id,
+    exception_globals::site_id};
+  for (std::size_t i = 0; i < handled_.back().saved.size(); ++i)
+  {
+    code_assignt restore(
+      build_symbol(*converter_.symbol_table().find_symbol(globals[i])),
+      handled_.back().saved[i]);
+    restore.location() = location;
+    block.copy_to_operands(restore);
+  }
 }
 
 void python_exception_handler::get_raise_statement(
@@ -693,23 +720,7 @@ void python_exception_handler::get_raise_statement(
   // which is first restored to what the enclosing handler is handling.
   if (element["exc"].is_null())
   {
-    if (
-      !handled_.empty() &&
-      handled_.back().function == converter_.current_function_name())
-    {
-      const char *globals[] = {
-        exception_globals::typeid_id,
-        exception_globals::value_id,
-        exception_globals::site_id};
-      for (std::size_t i = 0; i < handled_.back().saved.size(); ++i)
-      {
-        code_assignt restore(
-          build_symbol(*converter_.symbol_table().find_symbol(globals[i])),
-          handled_.back().saved[i]);
-        restore.location() = location;
-        block.copy_to_operands(restore);
-      }
-    }
+    restore_handled_exception(location, block);
 
     side_effect_exprt side("cpp-throw", empty_typet());
     side.location() = location;
@@ -897,15 +908,8 @@ void python_exception_handler::emit_catch_block(
     exception_symbol = converter_.symbol_table().move_symbol_to_context(symbol);
   }
 
-  code_blockt saves;
   decltype(handled_) inner = handled_;
-  if (reraises(element["body"]))
-  {
-    handled_exceptiont handled;
-    handled.function = converter_.current_function_name();
-    saves = save_handled_exception(element, handled);
-    inner.push_back(std::move(handled));
-  }
+  const code_blockt saves = save_handled_exception(element, inner);
 
   // Process exception handler body (symbol now exists)
   exprt catch_block;
