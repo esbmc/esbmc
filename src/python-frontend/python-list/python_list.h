@@ -1200,7 +1200,8 @@ private:
     const exprt &index,
     const exprt &length,
     const exprt &stride,
-    const nlohmann::json &slice_node);
+    const nlohmann::json &slice_node,
+    const std::string &error_msg = "index is out of bounds for numpy view");
 
   struct symbolic_slice_params
   {
@@ -1232,6 +1233,11 @@ private:
     const nlohmann::json &slice_node);
 
   exprt guard_numpy_static_array_index(
+    const exprt &array,
+    const exprt &index,
+    const nlohmann::json &slice_node);
+
+  exprt guard_bytes_param_index(
     const exprt &array,
     const exprt &index,
     const nlohmann::json &slice_node);

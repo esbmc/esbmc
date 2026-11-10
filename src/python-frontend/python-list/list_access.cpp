@@ -3284,7 +3284,8 @@ exprt python_list::normalize_and_scale_index(
   const exprt &index,
   const exprt &length,
   const exprt &stride,
-  const nlohmann::json &slice_node)
+  const nlohmann::json &slice_node,
+  const std::string &error_msg)
 {
   const typet ll_type = signedbv_typet(64);
   const locationt loc = converter_.get_location_from_decl(slice_node);
@@ -3320,7 +3321,7 @@ exprt python_list::normalize_and_scale_index(
   expr2tc past_end = greaterthanequal2tc(idx2, len2);
 
   exprt raise = converter_.get_exception_handler().gen_exception_raise(
-    "IndexError", "index is out of bounds for numpy view");
+    "IndexError", error_msg);
   codet throw_code("expression");
   throw_code.operands().push_back(raise);
   throw_code.location() = loc;
@@ -3388,6 +3389,49 @@ exprt python_list::guard_numpy_static_array_index(
   const long long length =
     binary2integer(array_type.size().value().c_str(), false).to_int64();
   return normalize_and_scale_index(index, length, /*stride=*/1, slice_node);
+}
+
+// A bytes parameter decays to a pointer with no static bound, so take its
+// length from the object it addresses, as len() does (#10206).
+exprt python_list::guard_bytes_param_index(
+  const exprt &array,
+  const exprt &index,
+  const nlohmann::json &slice_node)
+{
+  const nlohmann::json &base = list_value_["value"];
+  if (
+    !array.is_symbol() || !array.type().is_pointer() ||
+    base.value("_type", "") != "Name" ||
+    !converter_.safe_to_emit_side_effecting_statement() ||
+    converter_.get_type_handler().get_var_type(base["id"]) != "bytes")
+    return index;
+
+  const symbolt *size_fn =
+    converter_.symbol_table().find_symbol("c:@F@__ESBMC_get_object_size");
+  if (!size_fn)
+    return index;
+
+  const typet ll_type = signedbv_typet(64);
+  const locationt loc = converter_.get_location_from_decl(slice_node);
+  symbolt &len_sym = converter_.create_tmp_symbol(
+    slice_node, "$bytes_len$", size_type(), gen_zero(size_type()));
+  code_declt len_decl(build_symbol(len_sym));
+  len_decl.location() = loc;
+  converter_.add_instruction(len_decl);
+
+  code_function_callt size_call;
+  size_call.function() = build_symbol(*size_fn);
+  size_call.lhs() = build_symbol(len_sym);
+  size_call.arguments().push_back(array);
+  size_call.location() = loc;
+  converter_.add_instruction(size_call);
+
+  return normalize_and_scale_index(
+    index,
+    build_typecast(build_symbol(len_sym), ll_type),
+    from_integer(1, ll_type),
+    slice_node,
+    "index out of range");
 }
 
 std::optional<exprt> python_list::try_build_flat_index_assignment_target(
@@ -5727,6 +5771,7 @@ exprt python_list::handle_index_access(
     return slice_call;
   }
 
+  pos_expr = guard_bytes_param_index(array, pos_expr, slice_node);
   return build_numpy_array_index_access(array, pos_expr, slice_node);
 }
 
