@@ -6087,13 +6087,25 @@ static bool is_list_literal(const nlohmann::json &node)
   return (kind == "List" || kind == "Tuple") && node.contains("elts");
 }
 
+static bool contains_call(const nlohmann::json &node)
+{
+  if (node.is_object() && node.value("_type", "") == "Call")
+    return true;
+  return (node.is_object() || node.is_array()) &&
+         std::any_of(node.begin(), node.end(), [](const nlohmann::json &child) {
+           return contains_call(child);
+         });
+}
+
 // The shape fault of a literal operand: a scalar, a flat list, rows of
 // different lengths (np.array's ValueError), or rows that are not square.
-// Elements that are neither literals nor constants leave it to the run-time
-// route.
+// Elements that are neither literals nor constants, and calls whose effects
+// must happen before the fault, leave it to the run-time route.
 static std::optional<linalg_fault>
 literal_fault(const nlohmann::json &arg, bool square)
 {
+  if (contains_call(arg))
+    return std::nullopt;
   scalar_value scalar;
   if (try_extract_scalar_constant(arg, scalar))
     return rank_fault(0);
@@ -6968,6 +6980,16 @@ void numpy_call_expr::assume_near(
   converter_.add_instruction(near);
 }
 
+// Whether any of `values` overflows: a relation over it would hold for no
+// result, so it must constrain nothing.
+static exprt any_not_finite(const std::vector<exprt> &values)
+{
+  exprt::operandst finite;
+  for (const exprt &value : values)
+    finite.push_back(is_finite_double(value));
+  return not_exprt(and_exprt(finite));
+}
+
 // The cofactor (-1)^(i+j) det(m without row i and column j).
 static exprt
 cofactor(const std::vector<std::vector<exprt>> &m, std::size_t i, std::size_t j)
@@ -7089,6 +7111,7 @@ exprt numpy_call_expr::runtime_inverse(
          product({ieee_op("ieee_add", order, order), norm, largest_cofactor}),
          abs_double(det))}),
     from_double(1e-300, double_type()));
+  const exprt unbounded = or_exprt(excused, any_not_finite({bound}));
   std::vector<std::vector<exprt>> columns;
   for (const std::vector<exprt> &target :
        b.empty() ? identity_columns(n) : std::vector<std::vector<exprt>>{b})
@@ -7103,7 +7126,7 @@ exprt numpy_call_expr::runtime_inverse(
           ieee_op("ieee_sub", dot_double(m[i], column), target[i]),
           det),
         bound,
-        excused);
+        unbounded);
     columns.push_back(column);
   }
   return b.empty() ? columns_as_matrix(columns) : double_array(columns.front());
@@ -7152,12 +7175,16 @@ numpy_call_expr::runtime_eigenvalues(const std::vector<std::vector<exprt>> &m)
   const exprt scale = entry_scale(m);
   const exprt sum_bound = within_floor(ieee_op("ieee_mul", tolerance, scale));
   const exprt product_bound = within_floor(product({tolerance, scale, scale}));
-  const exprt excused = not_exprt(is_finite_double(product_bound));
   const exprt difference = ieee_op("ieee_sub", a, d);
   const exprt discriminant = ieee_op(
     "ieee_add",
     ieee_op("ieee_mul", difference, difference),
     product({from_double(4.0, double_type()), b, c}));
+  const exprt trace = ieee_op("ieee_add", a, d);
+  const exprt det =
+    ieee_op("ieee_sub", ieee_op("ieee_mul", a, d), ieee_op("ieee_mul", b, c));
+  const exprt excused =
+    any_not_finite({product_bound, discriminant, trace, det});
   const exprt slack =
     ieee_op("ieee_mul", from_double(16.0, double_type()), product_bound);
   const exprt real = nondet_bool();
@@ -7182,8 +7209,7 @@ numpy_call_expr::runtime_eigenvalues(const std::vector<std::vector<exprt>> &m)
   shape.location() = converter_.get_location_from_decl(call_);
   converter_.add_instruction(shape);
   assume_near(
-    ieee_op(
-      "ieee_sub", ieee_op("ieee_add", re1, re2), ieee_op("ieee_add", a, d)),
+    ieee_op("ieee_sub", ieee_op("ieee_add", re1, re2), trace),
     sum_bound,
     excused);
   assume_near(
@@ -7193,8 +7219,7 @@ numpy_call_expr::runtime_eigenvalues(const std::vector<std::vector<exprt>> &m)
         "ieee_sub",
         ieee_op("ieee_mul", re1, re2),
         ieee_op("ieee_mul", im1, im2)),
-      ieee_op(
-        "ieee_sub", ieee_op("ieee_mul", a, d), ieee_op("ieee_mul", b, c))),
+      det),
     product_bound,
     excused);
   return {{re1, im1}, {re2, im2}};
@@ -7236,8 +7261,8 @@ exprt numpy_call_expr::runtime_eigen_pairs(
   // residual stays within lapack_tolerance S, S the sum of m's entries'
   // magnitudes.
   const exprt tolerance = from_double(lapack_tolerance, double_type());
-  const exprt bound =
-    within_floor(ieee_op("ieee_mul", tolerance, entry_scale(m)));
+  const exprt scale = entry_scale(m);
+  const exprt bound = within_floor(ieee_op("ieee_mul", tolerance, scale));
   std::vector<std::vector<exprt>> columns;
   for (const auto &value : values)
   {
@@ -7249,7 +7274,8 @@ exprt numpy_call_expr::runtime_eigen_pairs(
       columns.back(),
       bound,
       within_floor(tolerance),
-      not_exprt(is_finite_double(bound)));
+      any_not_finite(
+        {bound, ieee_op("ieee_mul", from_double(2.0, double_type()), scale)}));
   }
   return linalg_tuple(
     {double_array({values[0].first, values[1].first}),
@@ -7269,24 +7295,20 @@ exprt numpy_call_expr::runtime_singular_values(
   const exprt scale = entry_scale(m);
   const exprt bound = within_floor(product(
     {from_double(4.0 * lapack_tolerance, double_type()), scale, scale}));
-  const exprt excused = not_exprt(is_finite_double(bound));
-  const std::vector<exprt> sigmas = {
-    lapack_value(0.0, INFINITY), lapack_value(0.0, INFINITY)};
-  assume_singular_order(sigmas);
   std::vector<exprt> entries;
   for (const auto &row : m)
     entries.insert(entries.end(), row.begin(), row.end());
+  const exprt squares = dot_double(entries, entries);
+  const exprt det = abs_double(
+    ieee_op("ieee_sub", ieee_op("ieee_mul", a, d), ieee_op("ieee_mul", b, c)));
+  const exprt excused = any_not_finite({bound, squares, det});
+  const std::vector<exprt> sigmas = {
+    lapack_value(0.0, INFINITY), lapack_value(0.0, INFINITY)};
+  assume_singular_order(sigmas);
   assume_near(
-    ieee_op(
-      "ieee_sub", dot_double(sigmas, sigmas), dot_double(entries, entries)),
-    bound,
-    excused);
+    ieee_op("ieee_sub", dot_double(sigmas, sigmas), squares), bound, excused);
   assume_near(
-    ieee_op(
-      "ieee_sub",
-      ieee_op("ieee_mul", sigmas[0], sigmas[1]),
-      abs_double(ieee_op(
-        "ieee_sub", ieee_op("ieee_mul", a, d), ieee_op("ieee_mul", b, c)))),
+    ieee_op("ieee_sub", ieee_op("ieee_mul", sigmas[0], sigmas[1]), det),
     bound,
     excused);
   return double_array(sigmas);
@@ -7353,10 +7375,6 @@ exprt numpy_call_expr::linalg_unary(
     return constant_linalg(function, constant_matrix(function, matrix));
   if (contains_string_constant(arg))
     reject_linalg_operand(function);
-  if (function == "eig" && !is_symmetric_2x2_literal(arg))
-    throw std::runtime_error(
-      "TypeError: numpy.linalg.eig of a run-time matrix supports only "
-      "symmetric 2x2 matrices");
   std::optional<std::vector<int>> shape;
   const std::vector<std::vector<exprt>> m =
     runtime_entries(call_["args"][0], shape);
@@ -7364,6 +7382,10 @@ exprt numpy_call_expr::linalg_unary(
     reject_linalg_operand(function);
   if (const std::optional<linalg_fault> fault = shape_fault(*shape, square))
     return raise_linalg_fault(fault->type, fault->message);
+  if (function == "eig" && !is_symmetric_2x2_literal(arg))
+    throw std::runtime_error(
+      "TypeError: numpy.linalg.eig of a run-time matrix supports only "
+      "symmetric 2x2 matrices");
   return runtime_linalg(function, m);
 }
 
@@ -7392,11 +7414,12 @@ exprt numpy_call_expr::runtime_decomposition(
   const std::string &function,
   const std::vector<std::vector<exprt>> &m)
 {
-  if (function == "svd" && (!svd_values_only() || m.size() != 2))
+  const bool two_by_two = m.size() == 2 && m[0].size() == 2;
+  if (function == "svd" && (!svd_values_only() || !two_by_two))
     throw std::runtime_error(
       "TypeError: numpy.linalg.svd of a run-time matrix supports only "
       "compute_uv=False on 2x2 matrices");
-  if (m.size() != 2)
+  if (!two_by_two)
     throw std::runtime_error(
       "TypeError: numpy.linalg." + function +
       " of a run-time matrix supports only 2x2 matrices");
@@ -7875,6 +7898,9 @@ exprt numpy_call_expr::raise_linalg_fault(
   const std::string &message)
 {
   raise_linalg(type, message, true_exprt());
+  // An array target keeps its type: the assignment is never reached.
+  if (converter_.current_lhs && converter_.current_lhs->type().is_array())
+    return nondet_value(converter_.current_lhs->type(), "$linalg$");
   const std::string &function = function_id_.get_function();
   const exprt zero = lapack_vector({0.0}, 0.0);
   const exprt square = lapack_matrix({{0.0}}, 0.0);
@@ -9279,6 +9305,9 @@ bool is_broadcastable(
 
 void numpy_call_expr::broadcast_check(const nlohmann::json &operands) const
 {
+  // solve checks its operands' shapes itself and raises NumPy's errors.
+  if (function_id_.get_function() == "solve")
+    return;
   std::vector<std::size_t> previous_shape;
   bool is_first_operand = true;
 
