@@ -39,7 +39,8 @@ public:
       enable_is_instance_check(options.get_bool_option("is-instance-check")),
       enable_clz_zero_check(options.get_bool_option("clz-zero-check")),
       disable_fp_conversion_check(
-        options.get_bool_option("no-fp-conversion-check"))
+        options.get_bool_option("no-fp-conversion-check")),
+      disable_fp_overflow_check(options.get_bool_option("no-fp-overflow-check"))
   {
   }
 
@@ -159,6 +160,7 @@ protected:
   bool enable_is_instance_check;
   bool enable_clz_zero_check;
   bool disable_fp_conversion_check;
+  bool disable_fp_overflow_check;
 };
 
 void goto_checkt::div_by_zero_check(
@@ -194,7 +196,7 @@ void goto_checkt::float_overflow_check(
   const guard2tc &guard,
   const locationt &loc)
 {
-  if (!enable_overflow_check)
+  if (!enable_overflow_check || disable_fp_overflow_check)
     return;
 
   // First, check type.
