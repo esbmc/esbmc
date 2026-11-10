@@ -1,6 +1,6 @@
 # ESBMC NumPy — Remaining Work
 
-**Updated:** 2026-11-08.
+**Updated:** 2026-11-09.
 
 This file tracks only what is **not yet implemented, broken, risky, or queued
 as backlog** in the NumPy module. If an item is not listed here as a gap, TODO,
@@ -34,7 +34,7 @@ and its stages, ADR-NP-004 the SMT-array scalability decision, and "principle
 | Sorting / searching | Symbolic array shapes and symbolic `sorter=` operands for `searchsorted` reject explicitly. Genuine 2-D array input is also rejected, matching NumPy's `ValueError: object too deep for desired array`; 1-D row/column views remain supported. |
 | Direct constructor chaining | Supported for the current concrete constructor subset and direct literal `np.array(...)` receivers across the pinned reducers/views (`sum`, `mean`, `min`, `max`, `argsort`, `searchsorted`, `flatten`, `ravel`, `transpose`, `.T`, `reshape`, `argmin`, `argmax`, `diagonal`, `prod`, `std`, and `var`). Remaining gaps are method forms tied to unsupported constructors, symbolic constructor payloads, or broader unsupported APIs. |
 | Statistics | `a.sum()`/`a.mean()`/`a.min()`/`a.max()`/`a.any()`/`a.all()`/`a.argmin()`/`a.argmax()` method forms and their `axis=0/1` variants are supported over concrete 1-D/2-D ndarrays (including function-returned arrays), sharing the same reducer/comparison policy as the functional forms. Still missing: axis/keepdims/out/overwrite/nan-policy style variants beyond concrete flattened/literal `median` and `percentile`, and reducer axes outside 2-D concrete `axis=0/1`. |
-| Linear algebra | Constant matrices: `det` up to 6x6, `inv` and `solve` up to 6x6, `eig` (eigenvalues and unit eigenvectors) of 2x2 matrices with distinct real eigenvalues and of diagonal ones, `eigvals` of 2x2, diagonal and triangular matrices up to 6x6, `svd` values of 2x2 matrices and its `U`, `S`, `Vh` factors of 2x2 and diagonal ones, and `norm` of vectors (orders 1, 2, inf, -inf) and matrices (fro, 1, -1, inf, -inf, and 2 for a 2x2 matrix) with `axis` and `keepdims`. Matrices with run-time entries: `det` up to 3x3 and the vector and Frobenius norms. Results are bounded around the exact value, eigenvectors and singular vectors with either sign and eigenvalues in either order; a result every IEEE implementation computes exactly keeps its value, and a bound that overflows leaves the result unconstrained. Keywords bind as in CPython, constructor arrays (`np.eye(3)`) and views are read, and a singular matrix raises a `LinAlgError` the program can catch. Missing: `eig`/`svd` of larger dense or non-square matrices, complex eigenvalues in `eig`, a repeated eigenvalue or singular value of a non-diagonal matrix, complex matrices, run-time entries for `inv`/`solve`/`eig`/`eigvals`/`svd` and for `det` past 3x3, `norm` orders `nuc`/-2/p, matrices past 6x6; a non-square or 0-d operand rejects during conversion instead of raising a catchable `LinAlgError`. |
+| Linear algebra | Constant matrices up to 6x6: `det`, `inv` and `solve`; `eigvals` and `eig` of matrices with distinct real eigenvalues (2x2 also with a complex pair for `eigvals`, diagonal and triangular ones exactly); `svd` values and `U`, `S`, `Vh` factors of square matrices with distinct singular values (diagonal ones exactly, a single zero singular value with independent signs); `norm` of vectors (orders 1, 2, inf, -inf) and matrices (fro, 1, -1, inf, -inf, and 2 for a 2x2 matrix) with `axis` and `keepdims`. Matrices with run-time entries: `det`, `inv` and `solve` up to 3x3, `eigvals` and `svd(compute_uv=False)` of 2x2 matrices, `eig` of a 2x2 literal whose off-diagonal entries are the same name or constant, and the vector and Frobenius norms. Results are bounded around the extended-precision value or bound by the relations LAPACK's backward stability guarantees (residual, trace and determinant, reconstruction), eigenvectors and singular vectors with either sign and eigenvalues in any order. Shape errors raise what NumPy raises and the program can catch: `LinAlgError` for a 0-d, 1-d or non-square operand, `ValueError` for ragged rows and for a `solve` right-hand side of the wrong size; `eig`/`eigvals` of a non-finite matrix raise `LinAlgError`, and `svd` raises `SVD did not converge`. Missing: complex matrices, complex eigenvalues in `eig` and in `eigvals` past 2x2, a repeated or ill-conditioned eigenvalue or singular value of a non-diagonal matrix, `svd` of non-square matrices, run-time `eig`/`eigvals`/`svd` past 2x2 (and non-symmetric run-time `eig`, run-time `svd` factors), run-time `inv`/`solve`/`det` past 3x3, a matrix literal whose entries call functions (rejected during conversion, as `np.array` of such a literal is), a 2-D right-hand side in `solve`, `norm` orders `nuc`/-2/p, matrices past 6x6 and the 0x0 matrix. NumPy 2.x returns `eig`'s results as complex128; the model returns float64 for real spectra. |
 | Math functions | `exp`, `expm1`, `exp2`, `log`, `log1p`, `log2`, `log10`, `sqrt`, `cbrt`, the trigonometric and hyperbolic functions and their inverses (with the `asin`/`asinh`-style aliases) of run-time numbers, and of literal lists, arrays and views of constant shape element by element, are bounded; `hypot` and `arctan2`/`atan2` of numbers, arrays and views broadcast as NumPy does and are bounded by relations between the arguments, and computed within the ulps bound for the elements of literal lists and `np.array` literals; `math.hypot` takes any number of arguments; `np.isnan`/`np.isinf`/`np.isfinite` and `np.inf`/`np.nan` work on numbers, arrays and views; `math.*` shares the model with Python's `ValueError`/`OverflowError`, literal arguments included; `np.ndarray` annotations say no more than no annotation. `where=` (a constant, a literal, an array, a view, or `<`/`<=`/`>`/`>=`/`==`/`!=`, `~`, `&`, `|`, `^` of these, evaluated element-wise) and `out=` (an array or a view, by keyword, as a one-element tuple or as the positional argument after the inputs) work for all of these ufuncs and broadcast with the inputs; an element the mask leaves out keeps the value of `out=`, or is any value without it, as NumPy leaves it uninitialised; `out=` is written whole or through its view, overlapping an input included, and NumPy's shape, `same_kind` cast and `ArrayType` errors are raised; `r = np.f(x, out=o)` binds `r` to `o` (a name, or a subscript without calls), and `out=` may be a call such as `np.empty(2)`; an array mask that is not boolean raises NumPy's safe-cast `TypeError`, while a literal sequence of numbers is converted to bool. Numbers and calls among the arguments and the mask are evaluated once, in Python's order; `math.hypot` gives an infinite argument precedence over NaN, and NaN over an overflowing sum. Missing: complex arguments, string arrays and arrays or views of run-time shape reject; so do any other keyword (`dtype=float` aside), `out=` of a fancy-indexed subscript, and `where=`/`out=` on the other ufuncs (`add`, `floor`, ...); a call with `out=` naming an array whose result is returned, stored, or passed to a function that is not NumPy's raises `TypeError`, as it would be a copy where NumPy returns `out=` itself. `math.erf`/`math.erfc` are bounded like the other functions (they replaced an approximation with an error near 1.5e-7), and a number literal passed to `math.cbrt`/`math.erf`/`math.erfc` is bounded rather than computed by the approximate Python models; `np.erf`/`np.erfc` raise NumPy's `AttributeError`. |
 | Random | `np.random.default_rng()` and `default_rng(seed)` create a bounded logical generator descriptor; `None` and an omitted seed select the nondeterministic model, while a non-negative integer is validated. `np.random.seed(seed)` advances the module descriptor version, without claiming a concrete sequence. Generator aliases share their descriptor, module functions use a separate global descriptor, and `random`, `uniform`, `normal`, `standard_normal`, `exponential`, `poisson`, `binomial`, `geometric`, `lognormal`, `beta`, `gamma`, `weibull`, `chisquare` and `integers` accept the supported scalar or bounded `size` forms. `integers` validates `endpoint`, integer dtype and bounds. `choice(p=...)` accepts literal finite non-negative probabilities whose length matches the population and whose sum is within the supported tolerance; the selected index is constrained to the population, without claiming statistical weights. Parameters are evaluated once and invalid calls reject before sampling. `RandomState`, `BitGenerator`, `SeedSequence`, `get_state`, `set_state`, `shuffle`, `permutation`, unsupported keywords, symbolic parameters and unbounded shapes still raise explicit `TypeError`/`ValueError`. The model does not reproduce NumPy's concrete PRNG sequence or provide statistical guarantees. |
 | Structured arrays | Record dtypes. |
@@ -91,11 +91,21 @@ and its stages, ADR-NP-004 the SMT-array scalability decision, and "principle
    rounding on each entry and rejects a pivot within it, as LAPACK's order of
    operations may make that pivot zero; `det`'s bound uses the magnitudes of
    its terms, and concrete norms are bounded unless exact in every IEEE
-   implementation.
+   implementation. With run-time entries, `inv`/`solve` raise `LinAlgError`
+   or return an unconstrained result whenever `|det|` is within
+   `1e-12 n ||A|| max|adj A|` of zero, so an exactly singular run-time
+   matrix may also report the unconstrained path. A run-time relation
+   whose bound or target (trace, determinant, squared norm) overflows
+   constrains nothing. Dense eigenvectors carry
+   residual relations that hold at every point of their bounds, which keeps
+   both proofs and counterexamples fast; dense `svd` factors carry only the
+   bounds, so a property over all nine reconstructed entries of a 3x3
+   matrix takes minutes (four entries take about a minute).
 8. **The suite's cost is in its slow tests, not its count.**
-   `regression/numpy` has 2407 tests in the evaluated CTest configuration; six linear algebra tests that repeated
-   another test's contract were removed, each listed with its replacement in
-   the commit that removes them. Shortening the CI run needs per-test CI
+   `regression/numpy` has 2519 tests in the evaluated CTest configuration;
+   eight linear algebra tests that repeated another test's contract were
+   removed, each listed with its replacement in the commit that removes
+   them. A run-time 3x3 `solve` with two unknown entries takes minutes. Shortening the CI run needs per-test CI
    timings to merge the expensive programs.
 
 9. **A scalar read from an array divides like a Python number.** `a[0] / 0`
@@ -173,13 +183,14 @@ reject, each pinned by a `CORE` test:
 
 ## Prioritised next steps
 
-1. **Linear algebra remainder** — `eig`/`svd` of larger dense matrices,
-   run-time entries beyond `det` and `norm`, and the shape errors as
-   catchable `LinAlgError`s.
-2. **Math remainder** — bounded `pow`, `gamma` and `lgamma`, tighter
+1. **Math remainder** — bounded `pow`, `gamma` and `lgamma`, tighter
    `hypot`/`arctan2` bounds for the elements of named arrays, and
    `where=`/`out=` on the arithmetic ufuncs through the element-wise
    lowering the math ufuncs use.
+2. **Linear algebra follow-up** — complex128 `eig` results as NumPy 2.x
+   returns them, complex spectra past 2x2, `svd` of non-square matrices,
+   run-time decompositions past 2x2, and relations for dense `svd`
+   factors that keep counterexamples fast.
 
 The residual view forms in the table above (lambdas passed on, `**kwargs`, a
 per-type copy of a callee) are narrow and each needs something outside the
@@ -191,11 +202,11 @@ view model; they stay rejected.
 
 The remaining NumPy backlog closes in two feature PRs:
 
-1. **Linear algebra remainder** — step 1, on the bounds and checks the
-   current `numpy.linalg` support shares.
-2. **Math remainder** — step 2, on the bounded model of
+1. **Math remainder** — on the bounded model of
    `util/arith/transcendental.h` and the element-wise lowering, with
    `where=`/`out=`, the math ufuncs share.
+2. **Linear algebra follow-up** — on `dense_spectrum` and the relations the
+   run-time routes bind.
 
 ---
 

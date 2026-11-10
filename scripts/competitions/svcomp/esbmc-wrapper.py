@@ -241,14 +241,36 @@ MODEL_TYPEERROR = re.compile(
   r"|can only concatenate str)")
 
 
+# An operational model raises an exception as an assertion whose comment
+# starts with the exception's name, as list.c's "IndexError: out-of-bounds read
+# in list" does.
+MODEL_EXCEPTION = re.compile(r"\b(\w+Error): ")
+
+
+class PythonFailure(int):
+  """Result.fail_python that names the one exception of the property's family
+  the violation reports, for an expected verdict such as false(IndexError)."""
+
+  def __new__(cls, exception):
+    failure = super().__new__(cls, Result.fail_python)
+    failure.exception = exception
+    return failure
+
+
+def python_failure(violated, family):
+  names = set(UNCAUGHT_EXCEPTION.findall(violated) + MODEL_EXCEPTION.findall(violated))
+  names &= set(family)
+  return PythonFailure(names.pop()) if len(names) == 1 else Result.fail_python
+
+
 def classify_python_violation(violated, prop):
   """Does this violation belong to the exception family the property asks about?"""
   family = PYTHON_EXCEPTION_FAMILIES[prop]
   if any(name in family for name in UNCAUGHT_EXCEPTION.findall(violated)):
-    return Result.fail_python
+    return python_failure(violated, family)
 
   if "TypeError" in family and MODEL_TYPEERROR.search(violated):
-    return Result.fail_python
+    return python_failure(violated, family)
 
   if prop == Property.py_assertion and ASSERTION_ROW.search(violated):
     return Result.fail_python
@@ -364,6 +386,11 @@ def parse_result(the_output, prop):
 
   return Result.unknown
 
+def python_false_string(the_result):
+  exception = getattr(the_result, "exception", None)
+  return "FALSE(%s)" % exception if exception else "FALSE"
+
+
 def get_result_string(the_result):
   if the_result == Result.fail_memcleanup:
     return "FALSE_MEMCLEANUP"
@@ -390,11 +417,11 @@ def get_result_string(the_result):
     return "FALSE_DATARACE"
 
   if the_result == Result.fail_python:
-    # BenchExec maps a bare FALSE to false(unreach-call), and a task
-    # definition whose expected verdict carries no subproperty accepts any
-    # result starting with "false" (benchexec result.get_result_category), so
-    # the Python properties need no new result string.
-    return "FALSE"
+    # A task definition whose expected verdict carries no subproperty accepts
+    # any result starting with "false" (benchexec result.get_result_category).
+    # One with a subproperty accepts only false(<subproperty>), so a FALSE
+    # names its exception when the violation reports exactly one.
+    return python_false_string(the_result)
 
   if the_result == Result.success:
     return "TRUE"
@@ -509,8 +536,9 @@ def get_command_line(strat, prop, arch, benchmark, dargs, esbmc_ci, keep_loops=F
     # conversions to signed-integer types do not violate this property." A
     # float-to-int conversion out of range is real UB but a different property,
     # and parse_result() below reports any violation in this run as
-    # FALSE_OVERFLOW, so the check has to be off here (esbmc #7572).
-    command_line += "--no-pointer-check --no-bounds-check --overflow-check --no-assertions --no-fp-conversion-check "
+    # FALSE_OVERFLOW, so the check has to be off here (esbmc #7572). The same
+    # holds for floating-point arithmetic overflow (esbmc #10173).
+    command_line += "--no-pointer-check --no-bounds-check --overflow-check --no-assertions --no-fp-conversion-check --no-fp-overflow-check "
   elif prop == Property.memory:
     command_line += "--memory-leak-check --no-reachable-memory-leak --no-assertions "
     # It seems SV-COMP doesn't want to check for memleaks on abort()

@@ -102,6 +102,10 @@ protected:
   std::string last_loc_function;
   bool last_loc_valid = false;
 
+  // One shared irep per builtin kind; building a fresh type for every
+  // builtin-typed AST node dominated conversion memory (#10190).
+  std::unordered_map<unsigned, typet> builtin_types;
+
   // class symbol id prefix `tag-`
   std::string tag_prefix = "tag-";
 

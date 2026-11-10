@@ -510,6 +510,7 @@ std::vector<expr2tc> symex_slicet::get_nondet_symbols(const expr2tc &expr)
   {
   case expr2t::constant_struct_id:
   case expr2t::constant_union_id:
+  case expr2t::constant_array_id:
   {
     std::vector<expr2tc> symbols;
     expr->foreach_operand([&symbols](const expr2tc &member) {

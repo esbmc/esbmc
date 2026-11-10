@@ -6200,8 +6200,9 @@ void python_annotation<Json>::retype_methods_called_on_receivers()
   }
 }
 
-/// The type of call argument @p arg in method @p caller: that of a literal or
-/// of a parameter the method never rebinds, else "".
+/// The type of call argument @p arg in method @p caller: that of a literal, of
+/// a parameter the method never rebinds, or of a local whose one store is an
+/// annotated assignment, else "".
 template <class Json>
 std::string
 python_annotation<Json>::self_call_arg_type(const Json &arg, const Json &caller)
@@ -6211,19 +6212,15 @@ python_annotation<Json>::self_call_arg_type(const Json &arg, const Json &caller)
   if (arg.value("_type", "") != "Name")
     return "";
   const std::string name = arg["id"].template get<std::string>();
-  std::function<bool(const Json &)> stores = [&](const Json &node) {
-    if (
-      node.is_object() && node.value("_type", "") == "Name" &&
-      node.value("id", "") == name &&
-      node.value("ctx", Json()).value("_type", "") == "Store")
-      return true;
-    if (node.is_structured())
-      for (const auto &child : node)
-        if (stores(child))
-          return true;
-    return false;
-  };
-  if (stores(caller["body"]))
+  const std::size_t stores = name_store_count(caller["body"], name);
+  if (stores == 1)
+  {
+    const Json decl = find_annotated_assign(name, caller["body"]);
+    return decl.value("_type", "") == "AnnAssign"
+             ? operand_annotation_type(decl)
+             : "";
+  }
+  if (stores != 0)
     return "";
   for (const Json &param : caller["args"]["args"])
     if (param.value("arg", "") == name)
