@@ -2147,6 +2147,24 @@ void python_converter::fold_class_subscript(
   operand = chosen;
 }
 
+// A call to a function the program defines, such as an operator method.
+static bool calls_python_function(const exprt &expr)
+{
+  const exprt *function = nullptr;
+  if (expr.is_function_call())
+    function = &to_code_function_call(to_code(expr)).function();
+  else if (expr.id() == "sideeffect" && expr.statement() == "function_call")
+    function = &expr.op0();
+  if (
+    function && function->is_symbol() &&
+    has_prefix(function->identifier().as_string(), "py:"))
+    return true;
+  for (const exprt &operand : expr.operands())
+    if (calls_python_function(operand))
+      return true;
+  return false;
+}
+
 exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
 {
   if (std::optional<exprt> bound = try_lowered_compare(element))
@@ -2179,8 +2197,23 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
     if (cmp == "Is" || cmp == "IsNot" || cmp == "Eq" || cmp == "NotEq")
       type_compared_operands_ = {&left, &right};
   }
-  exprt lhs = snapshot_left_operand(left, get_expr(left), right);
+  const exprt left_value = get_expr(left);
+  exprt lhs = snapshot_left_operand(left, left_value, right);
+  const std::size_t right_start =
+    current_block ? current_block->operands().size() : 0;
   exprt rhs = get_right_operand_expr(element, right, lhs);
+  // An operator method of the right operand is user code with no Call in the
+  // AST (`i < a + 0`), so it shows only once the operand is converted. The
+  // read goes ahead of what converting the operand planted.
+  if (lhs == left_value && calls_python_function(rhs))
+  {
+    lhs = snapshot_left_operand(left, lhs, right, true);
+    if (!(lhs == left_value))
+    {
+      exprt::operandst &stmts = current_block->operands();
+      std::rotate(stmts.begin() + right_start, stmts.end() - 2, stmts.end());
+    }
+  }
   type_compared_operands_ = saved_compared;
   current_lhs = saved_lhs;
   if (element.value("_type", "") == "BinOp")
@@ -2274,12 +2307,14 @@ bool python_converter::calls_user_code(const nlohmann::json &node) const
 bool python_converter::may_rebind_left(
   const nlohmann::json &left,
   const exprt &lhs,
-  const nlohmann::json &right) const
+  const nlohmann::json &right,
+  bool right_runs_user_code) const
 {
   const typet &type = lhs.type();
   if (!type.is_pointer() && !type_utils::is_string_type(type))
-    return contains_call(right);
-  return left.value("_type", "") == "Name" && calls_user_code(right);
+    return right_runs_user_code || contains_call(right);
+  return left.value("_type", "") == "Name" &&
+         (right_runs_user_code || calls_user_code(right));
 }
 
 std::optional<exprt>
@@ -2368,7 +2403,8 @@ python_converter::chained_compare_as_pairs(const nlohmann::json &element)
 exprt python_converter::snapshot_left_operand(
   const nlohmann::json &left,
   const exprt &lhs,
-  const nlohmann::json &right)
+  const nlohmann::json &right,
+  bool right_runs_user_code)
 {
   const typet &type = lhs.type();
   // An arm of a conditional expression runs on one path only, so only a read
@@ -2377,7 +2413,8 @@ exprt python_converter::snapshot_left_operand(
                     conditional_expr_depth_ == 0;
   if (
     !can_emit_operand_statement() || !is_read_ahead_type(type) || !safe ||
-    lhs.is_constant() || !may_rebind_left(left, lhs, right))
+    lhs.is_constant() ||
+    !may_rebind_left(left, lhs, right, right_runs_user_code))
     return lhs;
   exprt value = lhs;
   if (value.is_function_call())

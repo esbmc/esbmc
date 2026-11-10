@@ -1443,11 +1443,13 @@ private:
   exprt snapshot_left_operand(
     const nlohmann::json &left,
     const exprt &lhs,
-    const nlohmann::json &right);
+    const nlohmann::json &right,
+    bool right_runs_user_code = false);
   bool may_rebind_left(
     const nlohmann::json &left,
     const exprt &lhs,
-    const nlohmann::json &right) const;
+    const nlohmann::json &right,
+    bool right_runs_user_code) const;
   bool calls_user_code(const nlohmann::json &node) const;
   exprt
   materialize_numpy_arithmetic(const nlohmann::json &node, const exprt &value);
