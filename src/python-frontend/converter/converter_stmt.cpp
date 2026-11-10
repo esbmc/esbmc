@@ -9183,6 +9183,23 @@ exprt python_converter::apply_string_truthiness(
   const exprt &str,
   const locationt &location)
 {
+  // The value of an and/or over a str and a bool is an `if` whose branches
+  // keep their own types (#10130); its truth is the chosen branch's.
+  if (str.id() == "if" && !str.type().is_bool() && str.operands().size() == 3)
+  {
+    const exprt then_cond = apply_string_truthiness(str.op1(), location);
+    const exprt else_cond = apply_string_truthiness(str.op2(), location);
+    if (
+      then_cond.type().is_bool() && else_cond.type().is_bool() &&
+      (type_utils::is_string_type(str.op1().type()) ||
+       type_utils::is_string_type(str.op2().type())))
+    {
+      exprt cond = if_exprt(str.op0(), then_cond, else_cond);
+      cond.location() = location;
+      return cond;
+    }
+  }
+
   if (!type_utils::is_string_type(str.type()))
     return str;
 
