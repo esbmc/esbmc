@@ -1086,6 +1086,40 @@ exprt python_converter::convert_boolop_operands(
   return raised;
 }
 
+/// A value-producing and/or operand is both tested and selected, so one with
+/// a side effect (a call) is bound to a temporary in \p binding to run once.
+exprt python_converter::bind_boolop_operand(
+  const exprt &operand,
+  const nlohmann::json &element,
+  code_blockt &binding)
+{
+  if (
+    !has_side_effect(operand) || operand.type().is_nil() ||
+    operand.type().is_empty())
+    return operand;
+  const locationt loc = get_location_from_decl(element);
+  symbolt &tmp =
+    create_tmp_symbol(element, "$boolop_operand$", operand.type(), exprt());
+  code_declt decl(symbol_expr(tmp));
+  decl.location() = loc;
+  binding.copy_to_operands(decl);
+  code_assignt assign(symbol_expr(tmp), operand);
+  assign.location() = loc;
+  binding.copy_to_operands(assign);
+  return symbol_expr(tmp);
+}
+
+/// \p value evaluated after \p binding, where it stands.
+exprt python_converter::with_binding(code_blockt binding, const exprt &value)
+{
+  if (binding.operands().empty())
+    return value;
+  binding.copy_to_operands(code_expressiont(value));
+  side_effect_exprt bound("statement_expression", value.type());
+  bound.copy_to_operands(binding);
+  return bound;
+}
+
 exprt python_converter::get_logical_operator_expr(const nlohmann::json &element)
 {
   // `and`/`or` short-circuit: a later operand may not execute. get_named_expr
@@ -1184,25 +1218,9 @@ exprt python_converter::get_logical_operator_expr(const nlohmann::json &element)
     exprt result_expr = logical_expr.operands().back();
     for (int i = logical_expr.operands().size() - 2; i >= 0; i--)
     {
-      // The operand is both tested and selected, so one with a side effect
-      // (a call) is bound to a temporary to run once, where it stands.
       code_blockt binding;
-      exprt current = logical_expr.operands()[i];
-      if (
-        has_side_effect(current) && !current.type().is_nil() &&
-        !current.type().is_empty())
-      {
-        const locationt loc = get_location_from_decl(element);
-        symbolt &tmp = create_tmp_symbol(
-          element, "$boolop_operand$", current.type(), exprt());
-        code_declt decl(symbol_expr(tmp));
-        decl.location() = loc;
-        binding.copy_to_operands(decl);
-        code_assignt assign(symbol_expr(tmp), current);
-        assign.location() = loc;
-        binding.copy_to_operands(assign);
-        current = symbol_expr(tmp);
-      }
+      const exprt current =
+        bind_boolop_operand(logical_expr.operands()[i], element, binding);
       exprt current_cond = get_truthy_condition(current);
       // V.3: build the short-circuit select in IREP2 when both branches
       // share the result type-id. A mixed-type BoolOp keeps the result type
@@ -1231,14 +1249,7 @@ exprt python_converter::get_logical_operator_expr(const nlohmann::json &element)
           if_expr.copy_to_operands(current_cond, current, result_expr);
         result_expr = if_expr;
       }
-      if (!binding.operands().empty())
-      {
-        const typet result_type = result_expr.type();
-        binding.copy_to_operands(code_expressiont(result_expr));
-        side_effect_exprt bound("statement_expression", result_type);
-        bound.copy_to_operands(binding);
-        result_expr = bound;
-      }
+      result_expr = with_binding(binding, result_expr);
     }
     return result_expr;
   }
