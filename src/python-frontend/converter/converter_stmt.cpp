@@ -9165,6 +9165,37 @@ static std::optional<bool> constant_string_is_empty(const exprt &str)
   return first.is_zero();
 }
 
+// A variable, or an attribute read through variables, which can be read twice.
+static bool is_plain_read(const expr2tc &e)
+{
+  if (is_member2t(e))
+    return is_plain_read(to_member2t(e).source_value);
+  if (is_dereference2t(e))
+    return is_plain_read(to_dereference2t(e).value);
+  if (is_typecast2t(e))
+    return is_plain_read(to_typecast2t(e).from);
+  return is_symbol2t(e);
+}
+
+/// The value of an and/or over a str and a bool is an `if` whose branches keep
+/// their own types (#10130); its truth is the chosen branch's. Nil when no
+/// branch is a str or a branch's truth is not a condition.
+exprt python_converter::chosen_branch_truthiness(
+  const exprt &value,
+  const locationt &location)
+{
+  const exprt then_cond = apply_string_truthiness(value.op1(), location);
+  const exprt else_cond = apply_string_truthiness(value.op2(), location);
+  if (
+    !then_cond.type().is_bool() || !else_cond.type().is_bool() ||
+    (!type_utils::is_string_type(value.op1().type()) &&
+     !type_utils::is_string_type(value.op2().type())))
+    return nil_exprt();
+  exprt cond = if_exprt(value.op0(), then_cond, else_cond);
+  cond.location() = location;
+  return cond;
+}
+
 exprt python_converter::tagged_truthiness(
   exprt value,
   const nlohmann::json &node)
@@ -9183,41 +9214,11 @@ exprt python_converter::apply_string_truthiness(
   const exprt &str,
   const locationt &location)
 {
-  // The value of an and/or over a str and a bool is an `if` whose branches
-  // keep their own types (#10130); its truth is the chosen branch's.
-  if (str.id() == "if" && !str.type().is_bool() && str.operands().size() == 3)
+  if (str.id() == "if" && !str.type().is_bool())
   {
-    // An Optional[str] attribute holding None is false; strlen must not read
-    // it. A call is not repeated, so only a plain read is guarded.
-    const auto branch_truth = [&](const exprt &branch) {
-      exprt cond = apply_string_truthiness(branch, location);
-      const exprt *read = &branch;
-      while (read->id() == "member" || read->id() == "dereference" ||
-             read->id() == "typecast")
-        read = &read->op0();
-      if (
-        branch.type().is_pointer() && read->is_symbol() &&
-        !cond.is_constant() && cond.type().is_bool())
-      {
-        expr2tc branch2;
-        migrate_expr(branch, branch2);
-        cond = and_exprt(
-          migrate_expr_back(notequal2tc(branch2, gen_zero(branch2->type))),
-          cond);
-      }
+    exprt cond = chosen_branch_truthiness(str, location);
+    if (cond.is_not_nil())
       return cond;
-    };
-    const exprt then_cond = branch_truth(str.op1());
-    const exprt else_cond = branch_truth(str.op2());
-    if (
-      then_cond.type().is_bool() && else_cond.type().is_bool() &&
-      (type_utils::is_string_type(str.op1().type()) ||
-       type_utils::is_string_type(str.op2().type())))
-    {
-      exprt cond = if_exprt(str.op0(), then_cond, else_cond);
-      cond.location() = location;
-      return cond;
-    }
   }
 
   if (!type_utils::is_string_type(str.type()))
@@ -9246,8 +9247,8 @@ exprt python_converter::apply_string_truthiness(
   cond.location() = location;
   cond.op0().location() = location;
   // An Optional[str] holding None is a null pointer, which strlen must not
-  // read. Only a symbol is guarded: copying a call would evaluate it twice.
-  if (is_pointer_type(strlen_arg2) && is_symbol2t(strlen_arg2))
+  // read. Only a plain read is guarded: copying a call would evaluate it twice.
+  if (is_pointer_type(strlen_arg2) && is_plain_read(strlen_arg2))
   {
     cond = if_exprt(
       migrate_expr_back(notequal2tc(strlen_arg2, gen_zero(strlen_arg2->type))),

@@ -3651,6 +3651,7 @@ private:
   /// Rewrite a string @p str into `strlen(str) != 0`, its truthiness; any
   /// other value comes back unchanged.
   exprt apply_string_truthiness(const exprt &str, const locationt &location);
+  exprt chosen_branch_truthiness(const exprt &value, const locationt &location);
 
   /// apply_bool_dunder for the `not` operator; a no-op for any other @p op.
   exprt apply_bool_dunder_for_not(
