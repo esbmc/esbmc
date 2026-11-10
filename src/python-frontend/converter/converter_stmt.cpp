@@ -9187,8 +9187,28 @@ exprt python_converter::apply_string_truthiness(
   // keep their own types (#10130); its truth is the chosen branch's.
   if (str.id() == "if" && !str.type().is_bool() && str.operands().size() == 3)
   {
-    const exprt then_cond = apply_string_truthiness(str.op1(), location);
-    const exprt else_cond = apply_string_truthiness(str.op2(), location);
+    // An Optional[str] attribute holding None is false; strlen must not read
+    // it. A call is not repeated, so only a plain read is guarded.
+    const auto branch_truth = [&](const exprt &branch) {
+      exprt cond = apply_string_truthiness(branch, location);
+      const exprt *read = &branch;
+      while (read->id() == "member" || read->id() == "dereference" ||
+             read->id() == "typecast")
+        read = &read->op0();
+      if (
+        branch.type().is_pointer() && read->is_symbol() &&
+        !cond.is_constant() && cond.type().is_bool())
+      {
+        expr2tc branch2;
+        migrate_expr(branch, branch2);
+        cond = and_exprt(
+          migrate_expr_back(notequal2tc(branch2, gen_zero(branch2->type))),
+          cond);
+      }
+      return cond;
+    };
+    const exprt then_cond = branch_truth(str.op1());
+    const exprt else_cond = branch_truth(str.op2());
     if (
       then_cond.type().is_bool() && else_cond.type().is_bool() &&
       (type_utils::is_string_type(str.op1().type()) ||
