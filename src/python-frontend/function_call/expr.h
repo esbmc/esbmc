@@ -297,6 +297,8 @@ private:
 
   exprt handle_int_to_bytes() const;
 
+  exprt handle_bytes_constructor(const nlohmann::json &arg) const;
+
   /*
    * Folds a zero-argument int method on a constant literal receiver
    * (e.g. (255).bit_length(), (7).bit_count(), (5).conjugate()). A Name or
