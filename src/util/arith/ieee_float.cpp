@@ -764,14 +764,22 @@ ieee_floatt &ieee_floatt::operator/=(const ieee_floatt &other)
     return *this;
   }
 
+  // Scale so the quotient keeps at least two bits below the f+1 that align()
+  // keeps, even for a subnormal dividend, then fold any remainder into a
+  // sticky bit: a truncated quotient on a halfway point would round as a tie.
+  const unsigned shift = 2 * spec.f + 3;
   exponent -= other.exponent;
-  fraction *= power(2, spec.f);
+  exponent += spec.f;
+  exponent -= shift;
+  fraction *= power(2, shift);
 
-  // to account for error
-  fraction *= power(2, spec.f);
-  exponent -= spec.f;
-
+  const bool inexact = fraction % other.fraction != 0;
   fraction /= other.fraction;
+  if (inexact)
+  {
+    fraction = fraction * 2 + 1;
+    --exponent;
+  }
 
   if (other.sign_flag)
     negate();

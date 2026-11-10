@@ -1,4 +1,5 @@
 CORE
 main.py
 --unwind 4
-^ERROR: TypeError: a call inside a term of a chained comparison where nothing can be bound first, such as a loop condition, is not supported$
+^  assertion i == 0$
+^VERIFICATION FAILED$
