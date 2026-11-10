@@ -299,16 +299,23 @@ def import_module_by_name(
         # the same way. The module parsed; it failed executing, so the reason
         # must not claim otherwise.
         _resolver_warning(f"{module_name} module-import-failed: {exc}")
-        # What the body raises is the program's behaviour, so the body must
-        # still be converted (#10223); find_spec locates it without running it.
-        try:
-            spec = importlib.util.find_spec(module_name)
-        except Exception:  # pylint: disable=broad-except
-            return None
-        if spec is None:
-            return None
-        _raising_modules.add(module_name)
-        return spec.origin
+        return _raising_module_file(module_name)
+
+
+def _raising_module_file(module_name: str) -> str | None:
+    """The source of a module whose body raised on import, located without running it.
+
+    What the body raises is the program's behaviour, so the body must still
+    be converted (#10223).
+    """
+    try:
+        spec = importlib.util.find_spec(module_name)
+    except Exception:  # pylint: disable=broad-except
+        return None
+    if spec is None:
+        return None
+    _raising_modules.add(module_name)
+    return spec.origin
 
 
 def _collect_import_targets(
