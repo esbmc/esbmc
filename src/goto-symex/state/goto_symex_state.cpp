@@ -375,7 +375,7 @@ static bool incremental_strategy_active()
 {
   return config.language.lid != language_idt::PYTHON &&
          (config.options.get_bool_option("incremental-bmc") ||
-          config.options.get_bool_option("k-induction"));
+          config.options.is_kind());
 }
 
 bool goto_symex_statet::constant_propagation(const expr2tc &expr) const
