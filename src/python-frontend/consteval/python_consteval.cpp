@@ -1,4 +1,5 @@
 #include <python-frontend/consteval/python_consteval.h>
+#include <big-int/bigint.hh>
 #include <algorithm>
 #include <cctype>
 #include <cmath>
@@ -75,6 +76,49 @@ bool PyConstValue::is_truthy() const
     return !tuple_val.empty();
   }
   return false;
+}
+
+// A Python int does not wrap: give up on a result outside long long range
+// rather than fold a wrapped value (#10254).
+static std::optional<PyConstValue> make_checked_int(const BigInt &v)
+{
+  if (!v.is_int64())
+    return std::nullopt;
+  return PyConstValue::make_int(v.to_int64());
+}
+
+static std::optional<PyConstValue>
+eval_int_binop(const std::string &op, long long lhs, long long rhs)
+{
+  const BigInt l(lhs), r(rhs);
+  if (op == "Add")
+    return make_checked_int(l + r);
+  if (op == "Sub")
+    return make_checked_int(l - r);
+  if (op == "Mult")
+    return make_checked_int(l * r);
+  if (op == "FloorDiv" || op == "Mod")
+  {
+    if (r.is_zero())
+      return std::nullopt;
+    // BigInt division truncates; Python floors, and % takes the divisor's sign.
+    BigInt q = l / r;
+    if (q * r != l && l.is_negative() != r.is_negative())
+      q -= 1;
+    return make_checked_int(op == "FloorDiv" ? q : l - q * r);
+  }
+  if (op == "Pow")
+  {
+    if (rhs < 0)
+      return std::nullopt; // Would produce float
+    if (rhs > 64)
+      return std::nullopt; // Exponent too large for safe const-eval
+    BigInt result = 1;
+    for (long long i = 0; i < rhs; ++i)
+      result *= l;
+    return make_checked_int(result);
+  }
+  return std::nullopt;
 }
 
 // CPython int/float equality is exact. A double equals a long long only when
@@ -839,30 +883,17 @@ python_consteval::exec_stmt(const nlohmann::json &stmt, Env &env)
     const std::string &op = stmt["op"]["_type"];
     PyConstValue &lhs = it->second;
 
-    if (op == "Add")
+    if (lhs.kind == PyConstValue::INT && rhs->kind == PyConstValue::INT)
     {
-      if (lhs.kind == PyConstValue::INT && rhs->kind == PyConstValue::INT)
-        lhs.int_val += rhs->int_val;
-      else if (
-        lhs.kind == PyConstValue::STRING && rhs->kind == PyConstValue::STRING)
-        lhs.string_val += rhs->string_val;
-      else
+      auto result = eval_int_binop(op, lhs.int_val, rhs->int_val);
+      if (!result)
         return std::nullopt;
+      lhs = *result;
     }
-    else if (op == "Sub")
-    {
-      if (lhs.kind == PyConstValue::INT && rhs->kind == PyConstValue::INT)
-        lhs.int_val -= rhs->int_val;
-      else
-        return std::nullopt;
-    }
-    else if (op == "Mult")
-    {
-      if (lhs.kind == PyConstValue::INT && rhs->kind == PyConstValue::INT)
-        lhs.int_val *= rhs->int_val;
-      else
-        return std::nullopt;
-    }
+    else if (
+      op == "Add" && lhs.kind == PyConstValue::STRING &&
+      rhs->kind == PyConstValue::STRING)
+      lhs.string_val += rhs->string_val;
     else
       return std::nullopt;
 
@@ -1110,7 +1141,7 @@ python_consteval::eval_expr(const nlohmann::json &node, const Env &env)
     if (op == "USub")
     {
       if (operand->kind == PyConstValue::INT)
-        return PyConstValue::make_int(-operand->int_val);
+        return make_checked_int(-BigInt(operand->int_val));
       if (operand->kind == PyConstValue::FLOAT)
         return PyConstValue{
           PyConstValue::FLOAT, false, 0, -operand->float_val, "", {}};
@@ -1168,40 +1199,7 @@ python_consteval::eval_expr(const nlohmann::json &node, const Env &env)
     // Integer arithmetic
     if (left->kind == PyConstValue::INT && right->kind == PyConstValue::INT)
     {
-      long long l = left->int_val, r = right->int_val;
-      if (op == "Add")
-        return PyConstValue::make_int(l + r);
-      if (op == "Sub")
-        return PyConstValue::make_int(l - r);
-      if (op == "Mult")
-        return PyConstValue::make_int(l * r);
-      if (op == "FloorDiv")
-      {
-        if (r == 0)
-          return std::nullopt;
-        return PyConstValue::make_int(l / r);
-      }
-      if (op == "Mod")
-      {
-        if (r == 0)
-          return std::nullopt;
-        long long result = l % r;
-        // Python mod always returns non-negative for positive divisor
-        if (result != 0 && ((result < 0) != (r < 0)))
-          result += r;
-        return PyConstValue::make_int(result);
-      }
-      if (op == "Pow")
-      {
-        if (r < 0)
-          return std::nullopt; // Would produce float
-        if (r > 64)
-          return std::nullopt; // Exponent too large for safe const-eval
-        long long result = 1;
-        for (long long i = 0; i < r; ++i)
-          result *= l;
-        return PyConstValue::make_int(result);
-      }
+      return eval_int_binop(op, left->int_val, right->int_val);
     }
 
     return std::nullopt;
@@ -1885,8 +1883,10 @@ python_consteval::eval_expr(const nlohmann::json &node, const Env &env)
       if (!arg)
         return std::nullopt;
       if (arg->kind == PyConstValue::INT)
-        return PyConstValue::make_int(
-          arg->int_val < 0 ? -arg->int_val : arg->int_val);
+      {
+        const BigInt v(arg->int_val);
+        return make_checked_int(v.is_negative() ? -v : v);
+      }
       return std::nullopt;
     }
 
