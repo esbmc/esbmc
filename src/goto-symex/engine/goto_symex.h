@@ -873,6 +873,12 @@ protected:
     const code_function_call2t &func_call,
     reachability_treet &art);
 
+  /** The __builtin_object_size of `ptr` for one constant `type_value`, given
+   * `deref`, the INTERNAL dereference of `ptr` that filled
+   * internal_deref_items. */
+  expr2tc
+  object_size_of_type(const expr2tc &ptr, const expr2tc &deref, int type_value);
+
   /* Handles dereferencing between threads and is used only in data race checks.
    * **/
   void replace_races_check(expr2tc &expr);
