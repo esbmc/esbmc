@@ -103,9 +103,13 @@ eval_int_binop(const std::string &op, long long lhs, long long rhs)
       return std::nullopt;
     // BigInt division truncates; Python floors, and % takes the divisor's sign.
     BigInt q = l / r;
-    if (q * r != l && l.is_negative() != r.is_negative())
+    BigInt rem = l - q * r;
+    if (!rem.is_zero() && l.is_negative() != r.is_negative())
+    {
       q -= 1;
-    return make_checked_int(op == "FloorDiv" ? q : l - q * r);
+      rem += r;
+    }
+    return make_checked_int(op == "FloorDiv" ? q : rem);
   }
   if (op == "Pow")
   {

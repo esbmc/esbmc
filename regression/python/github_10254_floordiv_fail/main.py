@@ -3,4 +3,5 @@ def q(a: int, b: int) -> int:
     return a // b
 
 
+assert q(0, -3) == 0
 assert q(-7, 2) == -3
