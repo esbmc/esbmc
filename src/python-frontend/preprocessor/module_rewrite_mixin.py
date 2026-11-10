@@ -1,5 +1,7 @@
 import ast
+import builtins
 import copy
+import types
 from collections import Counter
 
 from preprocessor.binding_sites import binding_sites
@@ -79,6 +81,52 @@ def _rename_shadowed_classes(module):
                 taken.add(renamed)
                 stmt.name = renamed
                 break
+
+
+_BUILTIN_FUNCTIONS = {
+    name
+    for name, value in vars(builtins).items() if isinstance(value, types.BuiltinFunctionType)
+}
+
+
+def _has_star_import(module):
+    return any(
+        isinstance(n, ast.ImportFrom) and any(a.name == "*" for a in n.names)
+        for n in ast.walk(module))
+
+
+def _read_before_def(module, i):
+    """Whether `module.body[i]`'s name occurs in an earlier top-level
+    statement or in the def's own header, which runs before it binds."""
+    stmt = module.body[i]
+    header = [stmt.args, *stmt.decorator_list] + ([stmt.returns] if stmt.returns else [])
+    return any(
+        isinstance(n, ast.Name) and n.id == stmt.name for part in module.body[:i] + header
+        for n in ast.walk(part))
+
+
+def _rename_builtin_defs(module):
+    """Rename a module-level `def len(...)` and every read of `len`, so that
+    the converter calls it instead of the builtin (#10159). Only when the def
+    binds the name nowhere else and nothing reads the name before the def
+    runs: every read then means the def."""
+    if _has_star_import(module):
+        return  # a star import binds names that binding_sites cannot see
+    sites = binding_sites(module)
+    taken = set(sites) | {n.id for n in ast.walk(module) if isinstance(n, ast.Name)}
+    for i, stmt in enumerate(module.body):
+        if (not isinstance(stmt, ast.FunctionDef) or stmt.name not in _BUILTIN_FUNCTIONS
+                or sites[stmt.name] != 1 or _read_before_def(module, i)):
+            continue
+        name = stmt.name
+        renamed = f"{name}__esbmc_user"
+        while renamed in taken:
+            renamed += "_"
+        taken.add(renamed)
+        stmt.name = renamed
+        for n in ast.walk(module):
+            if isinstance(n, ast.Name) and n.id == name:
+                n.id = renamed
 
 
 def _referenced_names(module):
@@ -566,6 +614,8 @@ class ModuleRewriteMixin:
 
         `entry` marks the program itself, whose module-level names no other
         module imports."""
+        if entry:
+            _rename_builtin_defs(node)
         inline_literal_eval(node)
         lower_coroutines(node, self.module_name)
         reject_unmodelled_array_typecodes(node, self.module_name)

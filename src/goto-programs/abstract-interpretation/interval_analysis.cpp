@@ -47,6 +47,33 @@ inline void optimize_expr_interval(expr2tc &expr, const interval_domaint &state)
   }
 }
 
+/// Whether goto_check would check arithmetic in \p expr for overflow.
+static bool has_checked_arithmetic(const expr2tc &expr)
+{
+  if (is_nil_expr(expr))
+    return false;
+  switch (expr->expr_id)
+  {
+  case expr2t::add_id:
+  case expr2t::sub_id:
+  case expr2t::mul_id:
+  case expr2t::div_id:
+  case expr2t::modulus_id:
+  case expr2t::neg_id:
+  case expr2t::abs_id:
+  case expr2t::shl_id:
+  case expr2t::ashr_id:
+  case expr2t::lshr_id:
+    return true;
+  default:
+    break;
+  }
+  bool found = false;
+  expr->foreach_operand(
+    [&found](const expr2tc &e) { found = found || has_checked_arithmetic(e); });
+  return found;
+}
+
 static void optimize_expression(expr2tc &expr, const interval_domaint &state)
 {
   // Preconditions
@@ -83,6 +110,15 @@ static void optimize_expression(expr2tc &expr, const interval_domaint &state)
   if (is_overflow2t(expr))
   {
     to_overflow2t(expr).operand->Foreach_operand(
+      [&state](expr2tc &e) { optimize_expression(e, state); });
+    return;
+  }
+
+  // goto_check adds its overflow claims after this pass, on the arithmetic
+  // itself: folding an expression that contains it would drop the claim.
+  if (interval_domaint::keep_checked_arithmetic && has_checked_arithmetic(expr))
+  {
+    expr->Foreach_operand(
       [&state](expr2tc &e) { optimize_expression(e, state); });
     return;
   }

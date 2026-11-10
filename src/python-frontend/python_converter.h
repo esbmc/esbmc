@@ -889,6 +889,12 @@ private:
     const nlohmann::json &element,
     const nlohmann::json &right,
     const exprt &lhs);
+  exprt get_right_operand_after_left(
+    const nlohmann::json &element,
+    const nlohmann::json &left,
+    const exprt &left_value,
+    const nlohmann::json &right,
+    exprt &lhs);
   exprt build_guarded_binop(
     const std::string &op,
     exprt lhs,
@@ -1162,6 +1168,11 @@ private:
     const exprt &symbol_value);
 
   exprt get_logical_operator_expr(const nlohmann::json &element);
+  exprt bind_boolop_operand(
+    const exprt &operand,
+    const nlohmann::json &element,
+    code_blockt &binding);
+  static exprt with_binding(code_blockt binding, const exprt &value);
 
   exprt convert_boolop_operands(
     const nlohmann::json &element,
@@ -1443,11 +1454,13 @@ private:
   exprt snapshot_left_operand(
     const nlohmann::json &left,
     const exprt &lhs,
-    const nlohmann::json &right);
+    const nlohmann::json &right,
+    bool right_runs_user_code = false);
   bool may_rebind_left(
     const nlohmann::json &left,
     const exprt &lhs,
-    const nlohmann::json &right) const;
+    const nlohmann::json &right,
+    bool right_runs_user_code) const;
   bool calls_user_code(const nlohmann::json &node) const;
   exprt
   materialize_numpy_arithmetic(const nlohmann::json &node, const exprt &value);
@@ -1656,6 +1669,15 @@ private:
 
   typet
   any_attribute_type(const nlohmann::json &stmt, const std::string &attr_name);
+  bool is_tagged_value_expr(
+    const nlohmann::json &value,
+    const nlohmann::json &func_node,
+    const struct_typet &clazz) const;
+  typet unannotated_attribute_type(
+    const nlohmann::json &value,
+    const nlohmann::json &func_node,
+    const struct_typet &clazz,
+    const typet &fallback) const;
   void get_attributes_from_self(
     const nlohmann::json &func_node,
     struct_typet &clazz);
@@ -3651,6 +3673,11 @@ private:
   /// Rewrite a string @p str into `strlen(str) != 0`, its truthiness; any
   /// other value comes back unchanged.
   exprt apply_string_truthiness(const exprt &str, const locationt &location);
+  void take_str_branch_truth(
+    const typet &result_type,
+    exprt &then,
+    exprt &else_expr,
+    const locationt &location);
 
   /// apply_bool_dunder for the `not` operator; a no-op for any other @p op.
   exprt apply_bool_dunder_for_not(

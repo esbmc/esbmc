@@ -1283,6 +1283,8 @@ class CoreVisitorsMixin:
     def _record_function_param_types(self, node):
         if node.returns is not None:
             self.function_return_annotations[node.name] = node.returns
+            self.function_return_annotations[self._build_qualified_function_name(
+                node)] = node.returns
         for arg in node.args.args:
             if arg.annotation is not None:
                 param_type = self._extract_type_from_annotation(arg.annotation)
