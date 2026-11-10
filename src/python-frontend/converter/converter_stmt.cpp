@@ -9155,6 +9155,18 @@ bool python_converter::contains_nested_scope_named_expr(
 // Whether a str array constant is empty, reading it as strlen does; nullopt for
 // any other value. Symex never ends strlen's loop over the address of an array
 // constant (#8713), so a literal's truth value is folded instead.
+// A variable, or an attribute read through variables, which can be read twice.
+static bool is_plain_read(const expr2tc &e)
+{
+  if (is_member2t(e))
+    return is_plain_read(to_member2t(e).source_value);
+  if (is_dereference2t(e))
+    return is_plain_read(to_dereference2t(e).value);
+  if (is_typecast2t(e))
+    return is_plain_read(to_typecast2t(e).from);
+  return is_symbol2t(e);
+}
+
 static std::optional<bool> constant_string_is_empty(const exprt &str)
 {
   if (!str.is_constant() || !str.type().is_array() || str.operands().empty())
@@ -9209,8 +9221,8 @@ exprt python_converter::apply_string_truthiness(
   cond.location() = location;
   cond.op0().location() = location;
   // An Optional[str] holding None is a null pointer, which strlen must not
-  // read. Only a symbol is guarded: copying a call would evaluate it twice.
-  if (is_pointer_type(strlen_arg2) && is_symbol2t(strlen_arg2))
+  // read. Only a plain read is guarded: copying a call would evaluate it twice.
+  if (is_pointer_type(strlen_arg2) && is_plain_read(strlen_arg2))
   {
     cond = if_exprt(
       migrate_expr_back(notequal2tc(strlen_arg2, gen_zero(strlen_arg2->type))),
@@ -9997,6 +10009,14 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
         else_expr = string_handler_.get_array_base_address(else_expr);
         result_type = then.type(); // Use pointer type as result
       }
+    }
+
+    // A bool-typed conditional expression takes a str branch's truth; cast to
+    // bool, its address would make "" true.
+    if (result_type.is_bool())
+    {
+      then = apply_string_truthiness(then, location);
+      else_expr = apply_string_truthiness(else_expr, location);
     }
 
     // When a branch emits side-effecting instructions (notably a subscript's
