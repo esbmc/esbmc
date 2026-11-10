@@ -12,6 +12,7 @@
 #include <csignal>
 #include <cstdio>
 #include <cstdlib>
+#include <fcntl.h>
 #include <memory>
 #include <new>
 #include <sys/wait.h>
@@ -42,12 +43,14 @@ void *operator new(std::size_t n)
   throw std::bad_alloc();
 }
 
-void operator delete(void *p) noexcept
+// noinline: GCC otherwise inlines these into library code and takes the
+// free() of memory from the replaced operator new for a mismatch.
+[[gnu::noinline]] void operator delete(void *p) noexcept
 {
   std::free(p);
 }
 
-void operator delete(void *p, std::size_t) noexcept
+[[gnu::noinline]] void operator delete(void *p, std::size_t) noexcept
 {
   std::free(p);
 }
@@ -110,7 +113,7 @@ SCENARIO(
       stack_t off = {};
       off.ss_flags = SS_DISABLE;
       sigaltstack(&off, nullptr);
-      std::freopen("/dev/null", "w", stderr);
+      dup2(open("/dev/null", O_WRONLY), STDERR_FILENO);
       _exit(solve_failing_at(k) ? 0 : 1);
     }
 
