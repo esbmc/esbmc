@@ -1,4 +1,5 @@
 #include <boost/algorithm/string/predicate.hpp>
+#include <python-frontend/model_path.h>
 #include <python-frontend/converter/converter_internal.h>
 #include <python-frontend/math/convert_float_literal.h>
 #include <python-frontend/function_call/expr.h>
@@ -5037,7 +5038,7 @@ typet python_converter::resolve_numpy_reducer_call_array_type(
   auto module_it = imported_modules.find(module_alias);
   if (
     module_it == imported_modules.end() ||
-    !boost::algorithm::ends_with(module_it->second, "/models/numpy.py"))
+    !model_path::is_model(module_it->second, "numpy.py"))
     return current_type;
 
   is_converting_rhs = true;

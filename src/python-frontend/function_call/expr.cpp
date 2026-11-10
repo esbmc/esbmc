@@ -1,3 +1,4 @@
+#include <python-frontend/model_path.h>
 #include <python-frontend/function_call/expr.h>
 #include <python-frontend/math/bounded_math.h>
 #include <python-frontend/math/cmath_lowering_policy.h>
@@ -5888,12 +5889,8 @@ exprt function_call_expr::handle_general_function_call()
   // e.g. "from other import sum" defines a user sum that shadows the builtin
   bool is_user_imported =
     converter_.find_imported_symbol(function_id_.to_string()) != nullptr;
-  const bool is_numpy_model_call = [](const std::string &filename) {
-    std::string normalized = filename;
-    std::replace(normalized.begin(), normalized.end(), '\\', '/');
-    return boost::algorithm::ends_with(
-      normalized, std::string{"/models/numpy.py"});
-  }(function_id_.get_filename());
+  const bool is_numpy_model_call =
+    model_path::is_model(function_id_.get_filename(), "numpy.py");
 
   if (std::optional<exprt> rounded = try_handle_round(is_user_imported))
     return *rounded;
