@@ -361,6 +361,22 @@ void dereferencet::dereference_guard_expr(
   return;
 }
 
+/* \p ptr_obj's address as \p base plus its byte offset: essentially pointer
+ * arithmetic. */
+static expr2tc
+byte_address(const expr2tc &ptr_obj, const expr2tc &base, const type2tc &type)
+{
+  expr2tc offs = compute_pointer_offset(ptr_obj);
+  assert(
+    !is_nil_expr(offs) &&
+    "Pointer offset of index/member combination should be valid int");
+  offs = typecast2tc(pointer_type2(), offs);
+
+  expr2tc output = typecast2tc(pointer_type2tc(get_uint8_type()), base);
+  output = add2tc(output->type, output, offs);
+  return typecast2tc(type, output);
+}
+
 void dereferencet::dereference_addrof_expr(
   expr2tc &expr,
   guard2tc &guard,
@@ -392,20 +408,8 @@ void dereferencet::dereference_addrof_expr(
     {
       //  We have a base. There may be additional dereferences in it.
       dereference_expr(base, guard, mode);
-      // Now compute the pointer offset involved.
-      expr2tc offs = compute_pointer_offset(addrof.ptr_obj);
-      assert(
-        !is_nil_expr(offs) &&
-        "Pointer offset of index/member "
-        "combination should be valid int");
-
-      offs = typecast2tc(pointer_type2(), offs);
-
-      // Cast to a byte pointer; add; cast back. Is essentially pointer arith.
-      expr2tc output = typecast2tc(pointer_type2tc(get_uint8_type()), base);
-      output = add2tc(output->type, output, offs);
-      output = typecast2tc(expr->type, output);
-      expr = output;
+      if (!address_in_one_object(expr, base))
+        expr = byte_address(addrof.ptr_obj, base, expr->type);
     }
     else
     {
@@ -419,6 +423,86 @@ void dereferencet::dereference_addrof_expr(
   // arithmetic that contains another dereference. So we need to re-deref this
   // new expression.
   dereference_expr(expr, guard, mode);
+}
+
+/* The member/index chain \p e with its innermost dereference replaced by
+ * \p object; nil if \p e indexes a pointer. */
+static expr2tc rebase_on_object(const expr2tc &e, const expr2tc &object)
+{
+  if (is_dereference2t(e))
+    return object;
+  if (is_member2t(e))
+  {
+    const member2t &m = to_member2t(e);
+    expr2tc source = rebase_on_object(m.source_value, object);
+    return is_nil_expr(source) ? source : member2tc(e->type, source, m.member);
+  }
+  if (is_index2t(e) && !is_pointer_type(to_index2t(e).source_value))
+  {
+    const index2t &i = to_index2t(e);
+    expr2tc source = rebase_on_object(i.source_value, object);
+    return is_nil_expr(source) ? source : index2tc(e->type, source, i.index);
+  }
+  return expr2tc();
+}
+
+/* When \p base can only point at the start of one object of its pointee type,
+ * or be null, &base->arr[k] is &object.arr[k]. Keeping that form, not byte
+ * arithmetic, keeps the member in the value set (#10063). Taking an address
+ * dereferences nothing, so no claim is made. */
+bool dereferencet::address_in_one_object(expr2tc &expr, const expr2tc &base)
+{
+  if (!is_pointer_type(base))
+    return false;
+  value_setst::valuest targets;
+  dereference_callback.points_to(base, targets);
+  expr2tc object;
+  bool may_be_null = false;
+  for (const expr2tc &target : targets)
+  {
+    if (!is_object_descriptor2t(target))
+      return false;
+    const object_descriptor2t &o = to_object_descriptor2t(target);
+    // Only NULL itself: NULL plus an offset (container_of on a null list
+    // node) is not == NULL and would take the object's arm.
+    if (
+      !is_constant_int2t(o.offset) ||
+      !to_constant_int2t(o.offset).value.is_zero())
+      return false;
+    if (is_null_object2t(o.object))
+    {
+      may_be_null = true;
+      continue;
+    }
+    if (
+      !is_nil_expr(object) ||
+      !base_type_eq(o.object->type, to_pointer_type(base->type).subtype, ns))
+      return false;
+    object = o.object;
+  }
+  if (is_nil_expr(object))
+    return false;
+
+  const expr2tc orig_ptr_obj = to_address_of2t(expr).ptr_obj;
+  expr2tc ptr_obj = rebase_on_object(orig_ptr_obj, object);
+  if (is_nil_expr(ptr_obj))
+    return false;
+  expr2tc address = address_of2tc(ptr_obj->type, ptr_obj);
+  if (address->type != expr->type)
+    address = typecast2tc(expr->type, address);
+  // A null base (e.g. a failed malloc) keeps its arithmetic, on NULL itself,
+  // so its value-set entry stays apart from the object's.
+  if (may_be_null)
+  {
+    const expr2tc null_ptr = symbol2tc(base->type, "NULL");
+    address = if2tc(
+      expr->type,
+      equality2tc(base, null_ptr),
+      byte_address(orig_ptr_obj, null_ptr, expr->type),
+      address);
+  }
+  expr = address;
+  return true;
 }
 
 /* Once per type: this fires on every access, so a program that reads a packed

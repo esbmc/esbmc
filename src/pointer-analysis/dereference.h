@@ -119,6 +119,11 @@ public:
   virtual void
   get_value_set(const expr2tc &expr, value_setst::valuest &value_set) = 0;
 
+  /** The objects \p expr can point at, with no side effect on the program
+   *  (get_value_set may assume them during an inductive step). */
+  virtual void
+  points_to(const expr2tc &expr, value_setst::valuest &value_set) = 0;
+
   /** Check whether a failed symbol already exists for the given symbol.
    *  This is legacy, and will be removed at some point soon. */
   virtual bool
@@ -322,6 +327,7 @@ private:
    */
   virtual void
   dereference_addrof_expr(expr2tc &expr, guard2tc &guard, modet mode);
+  bool address_in_one_object(expr2tc &expr, const expr2tc &base);
 
   /** Interpret an expression that accesses a nonscalar type. This means that
    *  it's an index or member (or some other glue expr) on top of a dereference

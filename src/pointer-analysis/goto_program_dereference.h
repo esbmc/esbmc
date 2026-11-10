@@ -58,6 +58,7 @@ protected:
   }
 
   void get_value_set(const expr2tc &expr, value_setst::valuest &dest) override;
+  void points_to(const expr2tc &expr, value_setst::valuest &dest) override;
 
   void dereference_instruction(
     goto_programt::targett target,

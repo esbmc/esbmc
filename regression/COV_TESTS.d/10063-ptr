@@ -1,0 +1,10 @@
+regression/esbmc/github_10063_ptr
+regression/esbmc/github_10063_heap
+regression/esbmc/array_member_ptr_overflow_fail
+regression/esbmc/array_member_heap_overflow_fail
+regression/esbmc/array_member_ptr_null_fail
+regression/esbmc/array_member_ptr_value
+regression/esbmc/array_member_heap_value
+regression/esbmc/array_member_containerof_null_fail
+regression/esbmc/array_member_ptr_null_offset_read_fail
+regression/esbmc/array_member_ptr_invalid_or_object_fail

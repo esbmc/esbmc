@@ -1970,6 +1970,8 @@ protected:
   void
   get_value_set(const expr2tc &expr, value_setst::valuest &value_set) override;
 
+  void points_to(const expr2tc &expr, value_setst::valuest &value_set) override;
+
   bool has_failed_symbol(const expr2tc &expr, const symbolt *&symbol) override;
 
   void rename(expr2tc &expr) override;

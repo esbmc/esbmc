@@ -99,6 +99,13 @@ void goto_program_dereferencet::get_value_set(
   value_sets.get_values(current_target, expr, dest);
 }
 
+void goto_program_dereferencet::points_to(
+  const expr2tc &expr,
+  value_setst::valuest &dest)
+{
+  get_value_set(expr, dest);
+}
+
 void goto_program_dereferencet::dereference_expr(
   expr2tc &expr,
   const bool checks_only,
