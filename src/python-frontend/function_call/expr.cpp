@@ -1257,6 +1257,81 @@ static bool parse_py_float(const std::string &s, double &out)
   return end == digits.c_str() + digits.size();
 }
 
+// bytes([i0, i1, ...]) or bytes((i0, ...)): constant ints in range(0, 256).
+static std::optional<std::vector<uint8_t>>
+constant_byte_elements(const nlohmann::json &arg)
+{
+  const std::string kind = arg.is_object() ? arg.value("_type", "") : "";
+  if ((kind != "List" && kind != "Tuple") || !arg.contains("elts"))
+    return std::nullopt;
+  std::vector<uint8_t> bytes;
+  for (const auto &e : arg["elts"])
+  {
+    if (
+      !e.is_object() || e.value("_type", "") != "Constant" ||
+      !e.contains("value") || !e["value"].is_number_integer())
+      throw std::runtime_error(
+        "bytes(): only a list of constant integers is supported");
+    const long long v = e["value"].get<long long>();
+    if (v < 0 || v > 255)
+      throw std::runtime_error("ValueError: bytes must be in range(0, 256)");
+    bytes.push_back(static_cast<uint8_t>(v));
+  }
+  return bytes;
+}
+
+// bytes(n): a constant non-negative count of zero bytes.
+static std::optional<std::vector<uint8_t>>
+constant_zero_bytes(const nlohmann::json &arg)
+{
+  if (
+    !arg.is_object() || arg.value("_type", "") != "Constant" ||
+    !arg.contains("value") || !arg["value"].is_number_integer())
+    return std::nullopt;
+  const long long n = arg["value"].get<long long>();
+  if (n < 0)
+    throw std::runtime_error("ValueError: negative count");
+  return std::vector<uint8_t>(static_cast<size_t>(n), 0);
+}
+
+// bytes(...) constructor. The generic constructor path relabels the
+// argument expression's type as the bytes array type without converting the
+// value; for a list/int argument that yields a list-pointer (or scalar) value
+// tagged as an array, which trips base_type_eq in value_set (a crash). Build
+// a real byte array here instead, matching the bytes-literal representation.
+exprt function_call_expr::handle_bytes_constructor(
+  const nlohmann::json &arg) const
+{
+  std::optional<std::vector<uint8_t>> bytes = constant_byte_elements(arg);
+  if (!bytes)
+    bytes = constant_zero_bytes(arg);
+  if (bytes)
+  {
+    // An empty byte array is modelled as a size-0 (variable-length) array,
+    // which len()/iteration then route through strlen; reuse the no-argument
+    // bytes() representation, which the size-0 path handles correctly.
+    if (bytes->empty())
+      return exprt("constant", type_handler_.get_typet("bytes", 0));
+    return converter_.get_string_builder().build_raw_byte_array(*bytes);
+  }
+
+  // bytes(b) of a bytes value is b itself (bytes are immutable).
+  exprt value = converter_.get_expr(arg);
+  const bool no_keywords =
+    !call_.contains("keywords") || call_["keywords"].empty();
+  if (
+    call_["args"].size() == 1 && no_keywords &&
+    type_utils::is_bytes_array(value.type()))
+    return value;
+
+  // The generic constructor tail would relabel any other argument (a list
+  // variable, a str, a non-constant count, ...) as a byte array without
+  // converting it, giving a wrong length and contents (#10208).
+  throw std::runtime_error(
+    "bytes(): only a bytes value, a constant count, or a list or tuple of "
+    "constant integers is supported");
+}
+
 exprt function_call_expr::build_constant_from_arg() const
 {
   const std::string &func_name = function_id_.get_function();
@@ -1322,54 +1397,8 @@ exprt function_call_expr::build_constant_from_arg() const
       "tuple() is only supported over list and tuple arguments");
   }
 
-  // bytes(...) constructor. The generic constructor path below relabels the
-  // argument expression's type as the bytes array type without converting the
-  // value; for a list/int argument that yields a list-pointer (or scalar) value
-  // tagged as an array, which trips base_type_eq in value_set (a crash). Build
-  // a real byte array here instead, matching the bytes-literal representation.
   if (func_name == "bytes")
-  {
-    // bytes([i0, i1, ...]) — a list of constant ints in range(0, 256).
-    if (
-      arg.is_object() && arg.value("_type", "") == "List" &&
-      arg.contains("elts"))
-    {
-      std::vector<uint8_t> bytes;
-      for (const auto &e : arg["elts"])
-      {
-        if (
-          !e.is_object() || e.value("_type", "") != "Constant" ||
-          !e.contains("value") || !e["value"].is_number_integer())
-          throw std::runtime_error(
-            "bytes(): only a list of constant integers is supported");
-        const long long v = e["value"].get<long long>();
-        if (v < 0 || v > 255)
-          throw std::runtime_error(
-            "ValueError: bytes must be in range(0, 256)");
-        bytes.push_back(static_cast<uint8_t>(v));
-      }
-      // An empty byte array is modelled as a size-0 (variable-length) array,
-      // which len()/iteration then route through strlen; reuse the no-argument
-      // bytes() representation, which the size-0 path handles correctly.
-      if (bytes.empty())
-        return exprt("constant", type_handler_.get_typet("bytes", 0));
-      return converter_.get_string_builder().build_raw_byte_array(bytes);
-    }
-
-    // bytes(n) — a constant non-negative count of zero bytes.
-    if (
-      arg.is_object() && arg.value("_type", "") == "Constant" &&
-      arg.contains("value") && arg["value"].is_number_integer())
-    {
-      const long long n = arg["value"].get<long long>();
-      if (n < 0)
-        throw std::runtime_error("ValueError: negative count");
-      if (n == 0)
-        return exprt("constant", type_handler_.get_typet("bytes", 0));
-      return converter_.get_string_builder().build_raw_byte_array(
-        std::vector<uint8_t>(static_cast<size_t>(n), 0));
-    }
-  }
+    return handle_bytes_constructor(arg);
 
   // Handle str(z) / repr(z) where z is a complex expression.
   // Must check before the arg["value"]-based dispatch below, since

@@ -1171,6 +1171,15 @@ private:
     const exprt &pos_expr,
     const nlohmann::json &slice_node);
 
+  bool is_bytes_param_pointer(
+    const exprt &array,
+    const typet &resolved_array_type) const;
+
+  exprt guard_bytes_param_index(
+    const exprt &array,
+    const typet &resolved_array_type,
+    const exprt &pos_expr);
+
   std::optional<exprt> try_build_column_pointer_view(
     const exprt &array,
     const nlohmann::json &col_index_node);
@@ -1200,8 +1209,7 @@ private:
     const exprt &index,
     const exprt &length,
     const exprt &stride,
-    const nlohmann::json &slice_node,
-    const std::string &error_msg = "index is out of bounds for numpy view");
+    const nlohmann::json &slice_node);
 
   struct symbolic_slice_params
   {
@@ -1233,11 +1241,6 @@ private:
     const nlohmann::json &slice_node);
 
   exprt guard_numpy_static_array_index(
-    const exprt &array,
-    const exprt &index,
-    const nlohmann::json &slice_node);
-
-  exprt guard_bytes_param_index(
     const exprt &array,
     const exprt &index,
     const nlohmann::json &slice_node);

@@ -1,0 +1,5 @@
+CORE
+main.py
+--unwind 3
+^  FAILED +\[global\.assertion\.2\] +line  8  assertion return_value\$_f\$1 == 1$
+^VERIFICATION FAILED$
