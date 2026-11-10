@@ -1,5 +1,6 @@
 #include <bitwuzla_conv.h>
 #include <cstdio>
+#include <new>
 #include <sstream>
 
 #define new_ast new_solver_ast<bitw_smt_ast>
@@ -66,7 +67,11 @@ bitwuzla_convt::bitwuzla_convt(const namespacet &ns, const optionst &options)
   bitw = std::make_unique<bitwuzla::Bitwuzla>(tm, bitw_options);
 }
 
-bitwuzla_convt::~bitwuzla_convt() = default;
+bitwuzla_convt::~bitwuzla_convt()
+{
+  if (out_of_memory)
+    (void)bitw.release();
+}
 
 void bitwuzla_convt::push_ctx()
 {
@@ -83,11 +88,25 @@ void bitwuzla_convt::pop_ctx()
   smt_solver_baset::pop_ctx();
 }
 
+bitwuzla::Result
+bitwuzla_convt::check_sat(const std::vector<bitwuzla::Term> &assumptions)
+{
+  try
+  {
+    return bitw->check_sat(assumptions);
+  }
+  catch (const std::bad_alloc &)
+  {
+    out_of_memory = true;
+    throw;
+  }
+}
+
 smt_resultt bitwuzla_convt::dec_solve()
 {
   pre_solve();
 
-  bitwuzla::Result result = bitw->check_sat();
+  bitwuzla::Result result = check_sat({});
 
   if (result == bitwuzla::Result::SAT)
     return P_SATISFIABLE;
@@ -106,7 +125,7 @@ smt_resultt bitwuzla_convt::dec_solve_assuming(const ast_vec &assumptions)
   for (smt_astt a : assumptions)
     terms.push_back(to_solver_smt_ast<bitw_smt_ast>(a)->a);
 
-  bitwuzla::Result result = bitw->check_sat(terms);
+  bitwuzla::Result result = check_sat(terms);
   if (result == bitwuzla::Result::SAT)
     return P_SATISFIABLE;
   if (result == bitwuzla::Result::UNSAT)

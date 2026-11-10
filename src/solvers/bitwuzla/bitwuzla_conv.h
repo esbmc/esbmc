@@ -183,6 +183,13 @@ public:
   std::unordered_map<std::string, bitwuzla::Term> uf_decls;
 
 private:
+  bitwuzla::Result check_sat(const std::vector<bitwuzla::Term> &assumptions);
+
+  /** Bitwuzla is not exception-safe: a bad_alloc out of check_sat can leave
+   *  its bit-blaster in a state its destructor crashes on (#10054). Set when
+   *  that happened, so the destructor leaks the instance instead. */
+  bool out_of_memory = false;
+
   /** Identifies a sort by kind plus the two values that parameterise it: the
    *  bit-width for bit-vectors, (exponent, significand) for floating-point, and
    *  the domain and range sorts' addresses for arrays -- identity rather than
