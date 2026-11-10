@@ -172,6 +172,20 @@ nlohmann::json tuple_annotation_of_list(const nlohmann::json &list_literal)
   return annotation;
 }
 
+/// @p annotation without source locations, so that call sites annotated on
+/// different lines compare equal.
+nlohmann::json without_locations(nlohmann::json annotation)
+{
+  if (annotation.is_object())
+    for (const char *field :
+         {"lineno", "col_offset", "end_lineno", "end_col_offset"})
+      annotation.erase(field);
+  if (annotation.is_structured())
+    for (auto &child : annotation)
+      child = without_locations(std::move(child));
+  return annotation;
+}
+
 /// `list[<elem>]`, keeping the location fields the annotator reads off @p
 /// origin.
 nlohmann::json
@@ -448,7 +462,7 @@ private:
     {
       const nlohmann::json &elem = list_elem_annotation(decl["annotation"]);
       if (is_tuple_annotation(elem))
-        return elem;
+        return without_locations(elem);
     }
 
     if (decl.contains("value") && is_node(decl["value"], "List"))

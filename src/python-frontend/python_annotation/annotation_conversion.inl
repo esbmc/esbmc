@@ -932,7 +932,8 @@ std::string
 python_annotation<Json>::subscript_annotation_type(const Json &annotation)
 {
   const std::string full = json_utils::render_annotation_type(annotation);
-  if (annotation["value"]["id"] == "dict" && !full.empty())
+  const auto &container = annotation["value"]["id"];
+  if ((container == "dict" || container == "list") && !full.empty())
     return full;
   return json_utils::get_annotation_type_name(annotation);
 }
@@ -1452,6 +1453,34 @@ std::string python_annotation<Json>::get_operand_type(const Json &node)
   return type.empty() ? self_attribute_type(node) : type;
 }
 
+/// The argument @p item_arg picks from the first call under @p node for which
+/// it picks one; empty when there is none.
+template <class Json, class ItemArg>
+static Json find_first_item_arg(const Json &node, const ItemArg &item_arg)
+{
+  if (node.is_object() && node.value("_type", std::string()) == "Call")
+  {
+    Json found = item_arg(node);
+    if (!found.empty())
+      return found;
+  }
+  if (node.is_object() || node.is_array())
+    for (const auto &child : node)
+    {
+      Json found = find_first_item_arg(child, item_arg);
+      if (!found.empty())
+        return found;
+    }
+  return Json();
+}
+
+template <class Json>
+static bool names(const Json &node, const std::string &name)
+{
+  return node.is_object() && node.value("_type", std::string()) == "Name" &&
+         node.value("id", std::string()) == name;
+}
+
 // Recursively search a statement subtree for the first
 // ``<name>.append(arg)`` call and return its argument node. Returns an
 // empty Json when no such append exists. Used to recover the element
@@ -1459,38 +1488,29 @@ std::string python_annotation<Json>::get_operand_type(const Json &node)
 template <class Json>
 static Json find_first_append_arg(const Json &node, const std::string &name)
 {
-  if (node.is_object())
-  {
+  return find_first_item_arg(node, [&name](const Json &call) {
+    const Json &func = call["func"];
     if (
-      node.value("_type", std::string()) == "Call" && node.contains("func") &&
-      node["func"].is_object() &&
-      node["func"].value("_type", std::string()) == "Attribute" &&
-      node["func"].value("attr", std::string()) == "append" &&
-      node["func"].contains("value") && node["func"]["value"].is_object() &&
-      node["func"]["value"].value("_type", std::string()) == "Name" &&
-      node["func"]["value"].value("id", std::string()) == name &&
-      node.contains("args") && node["args"].is_array() &&
-      node["args"].size() == 1)
-    {
-      return node["args"][0];
-    }
-    for (auto it = node.begin(); it != node.end(); ++it)
-    {
-      Json found = find_first_append_arg(*it, name);
-      if (!found.empty())
-        return found;
-    }
-  }
-  else if (node.is_array())
-  {
-    for (const auto &child : node)
-    {
-      Json found = find_first_append_arg(child, name);
-      if (!found.empty())
-        return found;
-    }
-  }
-  return Json();
+      func.value("_type", std::string()) == "Attribute" &&
+      func.value("attr", std::string()) == "append" &&
+      names(func["value"], name) && call["args"].size() == 1)
+      return call["args"][0];
+    return Json();
+  });
+}
+
+/// The item of the first `heappush(<name>, x)` under @p node, or empty.
+template <class Json>
+static Json find_first_heappush_arg(const Json &node, const std::string &name)
+{
+  return find_first_item_arg(node, [&name](const Json &call) {
+    const Json &args = call["args"];
+    if (
+      names(call["func"], "heappush") && args.size() == 2 &&
+      names(args[0], name))
+      return args[1];
+    return Json();
+  });
 }
 
 // Method to get the full type of a list literal
@@ -1673,6 +1693,50 @@ std::string python_annotation<Json>::refine_any_from_value(
   return value_type.empty() ? annotated : value_type;
 }
 
+/// Whether @p type is spelled from int, float, str, bool and tuple alone.
+static bool is_builtin_scalar_or_tuple(const std::string &type)
+{
+  static const std::set<std::string> builtins = {
+    "int", "float", "str", "bool", "tuple"};
+  std::string word;
+  for (const char c : type + ",")
+  {
+    if (c != '[' && c != ']' && c != ',' && c != ' ')
+    {
+      word += c;
+      continue;
+    }
+    if (!word.empty() && !builtins.count(word))
+      return false;
+    word.clear();
+  }
+  return !type.empty();
+}
+
+/// `list[T]` for an empty list @p var_name whose first item stored under
+/// @p body is a `heappush` of a T, heapq's imported by name. The heapq model
+/// appends in its own module, where the converter cannot record the caller's
+/// element type, so the annotation is the only place it can come from. A T
+/// naming a class is left out: the annotation would name it before its
+/// definition. `heapq.heappush` is left out too: a heap of tuples it fills
+/// can read back wrong elements even when annotated by hand. "" otherwise.
+template <class Json>
+std::string python_annotation<Json>::heap_list_type(
+  const Json &body,
+  const std::string &var_name)
+{
+  if (
+    !json_utils::is_imported_from(ast_, "heapq", "heappush") ||
+    !json_utils::try_find_function(ast_["body"], "heappush").empty() ||
+    !find_first_append_arg(body, var_name).empty())
+    return "";
+  const Json item = find_first_heappush_arg(body, var_name);
+  if (item.empty())
+    return "";
+  const std::string elem_type = get_argument_type(item);
+  return is_builtin_scalar_or_tuple(elem_type) ? "list[" + elem_type + "]" : "";
+}
+
 template <class Json>
 std::string python_annotation<Json>::recover_list_type_from_appends(
   const std::string &var_name)
@@ -1690,7 +1754,7 @@ std::string python_annotation<Json>::recover_list_type_from_appends(
 
   Json append_arg = find_first_append_arg(body, var_name);
   if (append_arg.empty())
-    return "";
+    return heap_list_type(body, var_name);
 
   // Only commit to a parameterised list when the element type resolves to a
   // concrete type. An unresolved ("") or dynamic ("Any") element keeps the
@@ -4083,6 +4147,12 @@ InferResult python_annotation<Json>::infer_type(
         Json append_arg = find_first_append_arg(body, target_name);
         if (!append_arg.empty() && append_arg_is_plain_int(append_arg))
           inferred_type = "list[int]";
+        else if (append_arg.empty())
+        {
+          const std::string heap_type = heap_list_type(body, target_name);
+          if (!heap_type.empty())
+            inferred_type = heap_type;
+        }
       }
     }
   }
