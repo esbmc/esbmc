@@ -6605,10 +6605,13 @@ static const typet &array_leaf_type(const typet &t)
 
 // The shape of @p t with double elements.
 // A string literal anywhere in a list literal makes NumPy build a string
-// array, which no numpy.linalg function takes.
+// array, which no numpy.linalg function takes; one passed to a call, as in
+// float("nan"), is not an element.
 static bool contains_string_constant(const nlohmann::json &node)
 {
   if (!node.is_object() && !node.is_array())
+    return false;
+  if (node.is_object() && node.value("_type", "") == "Call")
     return false;
   if (
     node.is_object() && node.value("_type", "") == "Constant" &&
