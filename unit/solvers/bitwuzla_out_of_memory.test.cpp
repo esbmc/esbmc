@@ -52,7 +52,6 @@ void operator delete(void *p, std::size_t) noexcept
   std::free(p);
 }
 
-// Returns whether the solve threw std::bad_alloc.
 static bool solve_failing_at(long k)
 {
   contextt ctx;
@@ -95,23 +94,33 @@ SCENARIO(
   const long points = large_allocs;
   REQUIRE(points > 0);
 
-  long caught = 0, crashed = 0;
+  long caught = 0, crashed = 0, first_caught = -1;
   for (long k = 0; k < points; ++k)
   {
+    // An aborting child would flush the output this process buffered.
+    std::fflush(nullptr);
     const pid_t pid = fork();
     REQUIRE(pid >= 0);
     if (pid == 0)
     {
-      // Each child that terminates would print libc++abi's message.
+      // Report a child's crash to the parent as its signal, not through the
+      // fatal-condition handler and alternate stack Catch2 installed.
+      for (int sig : {SIGABRT, SIGSEGV, SIGBUS})
+        signal(sig, SIG_DFL);
+      stack_t off = {};
+      off.ss_flags = SS_DISABLE;
+      sigaltstack(&off, nullptr);
       std::freopen("/dev/null", "w", stderr);
-      // exit, not _exit, so a coverage build writes the child's profile.
-      std::exit(solve_failing_at(k) ? 0 : 1);
+      _exit(solve_failing_at(k) ? 0 : 1);
     }
 
     int status;
     REQUIRE(waitpid(pid, &status, 0) == pid);
     if (WIFEXITED(status) && WEXITSTATUS(status) == 0)
-      ++caught;
+    {
+      if (caught++ == 0)
+        first_caught = k;
+    }
     else if (
       WIFSIGNALED(status) &&
       (WTERMSIG(status) == SIGSEGV || WTERMSIG(status) == SIGBUS))
@@ -121,4 +130,7 @@ SCENARIO(
   INFO(caught << " of " << points << " failure points caught");
   REQUIRE(caught > 0);
   REQUIRE(crashed == 0);
+
+  // A child writes no coverage profile, so repeat a point it survived here.
+  REQUIRE(solve_failing_at(first_caught));
 }

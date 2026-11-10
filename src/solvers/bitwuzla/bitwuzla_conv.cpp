@@ -1,6 +1,5 @@
 #include <bitwuzla_conv.h>
 #include <cstdio>
-#include <new>
 #include <sstream>
 
 #define new_ast new_solver_ast<bitw_smt_ast>
@@ -69,7 +68,7 @@ bitwuzla_convt::bitwuzla_convt(const namespacet &ns, const optionst &options)
 
 bitwuzla_convt::~bitwuzla_convt()
 {
-  if (out_of_memory)
+  if (check_sat_threw)
     (void)bitw.release();
 }
 
@@ -95,9 +94,9 @@ bitwuzla_convt::check_sat(const std::vector<bitwuzla::Term> &assumptions)
   {
     return bitw->check_sat(assumptions);
   }
-  catch (const std::bad_alloc &)
+  catch (...)
   {
-    out_of_memory = true;
+    check_sat_threw = true;
     throw;
   }
 }
