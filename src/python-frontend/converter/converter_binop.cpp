@@ -1907,6 +1907,19 @@ static bool is_shift_op(const std::string &op)
   return op == "LShift" || op == "RShift";
 }
 
+// A NaN divisor is not zero either: CPython returns nan rather than raising.
+static bool is_nonzero_constant(const exprt &e)
+{
+  expr2tc value;
+  migrate_expr(e, value);
+  simplify(value);
+  if (is_constant_int2t(value))
+    return !to_constant_int2t(value).value.is_zero();
+  if (is_constant_floatbv2t(value))
+    return !to_constant_floatbv2t(value).value.is_zero();
+  return false;
+}
+
 bool python_converter::needs_operand_guard(
   const std::string &op,
   const exprt &rhs) const
@@ -3298,7 +3311,7 @@ exprt python_converter::build_guarded_binop(
       "zero to a negative power",
       get_location_from_decl(element));
   }
-  else
+  else if (!is_nonzero_constant(rhs))
   {
     exprt is_zero("=", bool_type());
     is_zero.copy_to_operands(rhs, gen_zero(rhs.type()));
