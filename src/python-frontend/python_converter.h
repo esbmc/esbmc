@@ -3966,6 +3966,12 @@ private:
   bool dict_values(
     const nlohmann::json &container,
     std::vector<nlohmann::json> &out);
+  typet stored_function_code_type(const nlohmann::json &value);
+  /// The type of a value read `d[k]` of a dict that holds functions: a
+  /// pointer to their one signature. A read has one static type, so a dict
+  /// that also holds other values, or functions whose signatures differ or
+  /// are not known, is refused (#10341). Nothing when it holds no function.
+  std::optional<typet> dict_read_function_type(const nlohmann::json &element);
   typet subscript_call_return_type(
     const exprt &func_ptr,
     const nlohmann::json &func_node);
