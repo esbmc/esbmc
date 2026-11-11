@@ -66,9 +66,7 @@ public:
   /** Like mk_tuple_symbol, but for arrays */
   virtual smt_astt mk_tuple_array_symbol(const expr2tc &expr) = 0;
 
-  /** Extract the assignment to a tuple-typed symbol from the SMT solvers
-   *  model */
-  virtual expr2tc tuple_get(const expr2tc &expr) = 0;
+  /** Extract a tuple-typed AST value from the SMT solver model */
   virtual expr2tc tuple_get(const type2tc &type, smt_astt a) = 0;
 
   virtual expr2tc tuple_get_array_elem(

@@ -1,0 +1,4 @@
+CORE
+../counterexample_init_struct_array_pass_node/main.c
+--tuple-sym-flattener
+^VERIFICATION SUCCESSFUL$
