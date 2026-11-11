@@ -3415,6 +3415,10 @@ private:
     const std::string &exception,
     const std::string &message,
     const typet &type);
+  exprt str_arithmetic_type_error(
+    const std::string &op,
+    const exprt &lhs,
+    const exprt &rhs);
   void reject_unmodelled_array_arithmetic(
     const std::string &op,
     const exprt &lhs,
