@@ -9018,7 +9018,24 @@ void python_converter::get_compound_assign(
   // Reset RHS flag
   is_converting_rhs = false;
 
-  if (store_through_numpy_view(ast_node["target"], lhs, rhs, loc, target_block))
+  store_compound_result(ast_node["target"], lhs, rhs, loc, target_block);
+}
+
+void python_converter::store_compound_result(
+  const nlohmann::json &target,
+  const exprt &lhs,
+  exprt rhs,
+  const locationt &loc,
+  codet &target_block)
+{
+  // An operator CPython rejects lowers to a raise; the target keeps its value.
+  if (rhs.statement() == "cpp-throw")
+  {
+    target_block.copy_to_operands(raise_statement(rhs, loc));
+    return;
+  }
+
+  if (store_through_numpy_view(target, lhs, rhs, loc, target_block))
     return;
 
   // P27: Promote real RHS to complex when LHS is complex (AugAssign path).
