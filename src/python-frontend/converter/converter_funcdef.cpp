@@ -634,11 +634,24 @@ static bool is_bitwise_binop(const nlohmann::json &value)
          bitwise.count(value["op"].value("_type", "")) != 0;
 }
 
-/// An arithmetic return is taken for a double, a bit operation for an int.
+/// Whether @p value is `-`, `+` or `~` applied to an int literal, such as -1.
+static bool is_signed_int_literal(const nlohmann::json &value)
+{
+  if (value["_type"] != "UnaryOp" || value["op"].value("_type", "") == "Not")
+    return false;
+  const nlohmann::json &operand = value["operand"];
+  return operand["_type"] == "Constant" && !operand.contains("_bigint") &&
+         operand["value"].is_number_integer();
+}
+
+/// An arithmetic return is taken for a double, a bit operation or a signed int
+/// literal for an int.
 static void
 note_expression_return(TypeFlags &flags, const nlohmann::json &value)
 {
-  (is_bitwise_binop(value) ? flags.has_int : flags.has_float) = true;
+  (is_bitwise_binop(value) || is_signed_int_literal(value) ? flags.has_int
+                                                           : flags.has_float) =
+    true;
 }
 
 TypeFlags
@@ -6796,11 +6809,12 @@ void python_converter::note_guessed_return(const nlohmann::json &function_node)
     [&](const nlohmann::json &body) {
       return std::any_of(body.begin(), body.end(), [&](const auto &stmt) {
         const std::string kind = stmt["_type"];
-        const bool returns_expression = kind == "Return" &&
-                                        !stmt["value"].is_null() &&
-                                        ((stmt["value"]["_type"] == "BinOp" &&
-                                          !is_bitwise_binop(stmt["value"])) ||
-                                         stmt["value"]["_type"] == "UnaryOp");
+        const bool returns_expression =
+          kind == "Return" && !stmt["value"].is_null() &&
+          ((stmt["value"]["_type"] == "BinOp" &&
+            !is_bitwise_binop(stmt["value"])) ||
+           (stmt["value"]["_type"] == "UnaryOp" &&
+            !is_signed_int_literal(stmt["value"])));
         return returns_expression ||
                (stmt.contains("body") && stmt["body"].is_array() &&
                 arithmetic(stmt["body"])) ||

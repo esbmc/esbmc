@@ -1,0 +1,5 @@
+CORE
+main.py
+
+^\s+assertion .*w\.value == .*-9007199254740992\)?$
+^VERIFICATION FAILED$
