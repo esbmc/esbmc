@@ -362,6 +362,26 @@ exprt tuple_handler::coerce_to_tuple_type(
   return migrate_expr_back(constant_struct2tc(migrate_type(target), members));
 }
 
+void tuple_handler::raise_index_error(
+  const nlohmann::json &element,
+  const exprt &cond)
+{
+  // A discarded type probe is followed by the real conversion, which emits
+  // the guard in its evaluation context; a hoisted raise there could be caught.
+  if (converter_.in_type_probe())
+    return;
+
+  codet raise("expression");
+  raise.copy_to_operands(converter_.get_exception_handler().gen_exception_raise(
+    "IndexError", "tuple index out of range"));
+  code_ifthenelset guard;
+  guard.cond() = cond;
+  guard.then_case() = raise;
+  if (element.contains("lineno"))
+    guard.location() = converter_.get_location_from_decl(element);
+  converter_.add_instruction(guard);
+}
+
 exprt tuple_handler::handle_tuple_subscript(
   const exprt &array,
   const nlohmann::json &slice,
@@ -491,19 +511,15 @@ exprt tuple_handler::handle_tuple_subscript(
   {
     // Non-constant index: build an if-expression chain selecting the matching
     // element. Only supported when every tuple component has the same type,
-    // since the result must have a single type. Issues a runtime
-    // out-of-range assertion for indices outside [-N, N).
+    // since the result must have a single type. An index outside
+    // [-N, N) raises IndexError.
     const auto &components = tuple_type.components();
     if (components.empty())
     {
       // Every index is out of range, so the selected value is dead and only
-      // the assertion carries meaning. Iterating an empty tuple lowers to a
+      // the raise carries meaning. Iterating an empty tuple lowers to a
       // subscript under a `0 < 0` guard, which leaves it unreachable.
-      code_assertt bounds_assert{false_exprt()};
-      if (element.contains("lineno"))
-        bounds_assert.location() = converter_.get_location_from_decl(element);
-      bounds_assert.location().comment("Tuple index out of range");
-      converter_.add_instruction(bounds_assert);
+      raise_index_error(element, true_exprt());
       return gen_zero(int_type());
     }
 
@@ -531,14 +547,10 @@ exprt tuple_handler::handle_tuple_subscript(
     const expr2tc idxnorm2 = if2tc(
       idx2t, lessthan2tc(index2, zero2), add2tc(idx2t, index2, n2), index2);
 
-    // Bounds: 0 <= idx_norm < n
-    exprt in_bounds = migrate_expr_back(
-      and2tc(greaterthanequal2tc(idxnorm2, zero2), lessthan2tc(idxnorm2, n2)));
-    code_assertt bounds_assert(in_bounds);
-    if (element.contains("lineno"))
-      bounds_assert.location() = converter_.get_location_from_decl(element);
-    bounds_assert.location().comment("Tuple index out of range");
-    converter_.add_instruction(bounds_assert);
+    raise_index_error(
+      element,
+      migrate_expr_back(or2tc(
+        lessthan2tc(idxnorm2, zero2), greaterthanequal2tc(idxnorm2, n2))));
 
     // Build chain: i==n-1 ? element_(n-1) : (... ? ... : element_0)
     // V.3: build the index select chain in IREP2. This path is gated to

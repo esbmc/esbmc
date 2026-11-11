@@ -1,0 +1,5 @@
+CORE
+main.py
+
+^\s*FAILED\s+\[f\.assertion\.1\]\s+line 9\s+assertion b$
+^VERIFICATION FAILED$
