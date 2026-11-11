@@ -10,6 +10,7 @@
 #include <langapi/language_util.h>
 #include <solvers/smt/smt_conv.h>
 #include <util/expr/expr_util.h>
+#include <util/expr/type_byte_size.h>
 #include <util/base/i2string.h>
 #include <irep2/irep2.h>
 #include <irep2/irep2_utils.h>
@@ -50,6 +51,23 @@ expr2tc static_address_base(const namespacet &ns, const expr2tc &e)
   return expr2tc();
 }
 
+/// Whether the size of @p type depends on a variable, as argv's argc + 1 does.
+/// Symex renames that variable, so the object it registers has another type
+/// than the one in the GOTO program.
+bool has_variable_size(const namespacet &ns, const type2tc &type)
+{
+  try
+  {
+    expr2tc size = type_byte_size_expr(type, &ns);
+    simplify(size);
+    return !is_constant_int2t(size);
+  }
+  catch (const array_type2t::inf_sized_array_excp &)
+  {
+    return false;
+  }
+}
+
 /// Registers the objects with static storage duration whose address @p root
 /// takes. They exist throughout the program, so any int-to-ptr cast could
 /// legitimately reach them regardless of where their address first appears
@@ -75,7 +93,9 @@ void register_static_addresses(
     // ahead of its assignment, which leaves a flattened tuple free (#10293).
     if (obj && !from_goto)
       smt_conv.convert_ast(address_of2tc(e->type, obj));
-    else if (obj)
+    // An object registered under two types gets two object numbers but one
+    // pointer symbol, which makes the formula unsatisfiable.
+    else if (obj && !has_variable_size(ns, obj->type))
     {
       if (is_symbol2t(obj))
         to_symbol2t(obj).rlevel = symbol_renaming_level::level1_global;
