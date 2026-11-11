@@ -3717,6 +3717,11 @@ private:
     const std::string &op,
     exprt &operand,
     const locationt &loc);
+  bool is_plain_user_class(const std::string &class_name);
+  bool lacks_binary_dunder(
+    const std::string &op,
+    const exprt &lhs,
+    const exprt &rhs);
 
   // =========================================================================
   // Member variables
