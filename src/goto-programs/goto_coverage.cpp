@@ -589,6 +589,10 @@ void goto_coveraget::branch_coverage()
           // this stands for the auxiliary condition/branch we added.
           continue;
 
+        // The inductive step's havoc block is not program logic.
+        if (it->inductive_step_instruction)
+          continue;
+
         instrument_branch_instruction(goto_program, it);
       }
     }
@@ -1307,6 +1311,10 @@ void goto_coveraget::condition_coverage()
         // express path constraints, not program logic, so their guards
         // must not contribute to condition-coverage claims (issue #4291).
         if (it->is_assume())
+          continue;
+
+        // The inductive step's havoc block is not program logic.
+        if (it->inductive_step_instruction)
           continue;
 
         // Skip the uncaught-exception and exception-specification checks that

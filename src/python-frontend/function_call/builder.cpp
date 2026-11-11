@@ -1,3 +1,4 @@
+#include <python-frontend/model_path.h>
 #include <python-frontend/function_call/builder.h>
 #include <python-frontend/exception/python_exception_handler.h>
 #include <python-frontend/function_call/expr.h>
@@ -648,8 +649,7 @@ bool function_call_builder::is_numpy_call(const symbol_id &function_id) const
 
   const std::string &filename = function_id.get_filename();
 
-  return boost::algorithm::ends_with(filename, "/models/numpy.py") ||
-         filename.find("/numpy/linalg") != std::string::npos;
+  return model_path::is_numpy_model(filename);
 }
 
 bool function_call_builder::is_assume_call(const symbol_id &function_id) const

@@ -860,7 +860,7 @@ exprt python_converter::get_boolop_operand(
     current_block = &effects.back();
     in_operand_effects_block_ = true;
   }
-  exprt operand_expr = get_expr(operand);
+  exprt operand_expr = get_value_expr(operand);
   // A later operand that raises (#9838) is its raise statement, run only
   // where the operand is evaluated.
   const exprt *raised = python_frontend::raised_condition(operand_expr);
@@ -1919,6 +1919,19 @@ static bool is_shift_op(const std::string &op)
   return op == "LShift" || op == "RShift";
 }
 
+// A NaN divisor is not zero either: CPython returns nan rather than raising.
+static bool is_nonzero_constant(const exprt &e)
+{
+  expr2tc value;
+  migrate_expr(e, value);
+  simplify(value);
+  if (is_constant_int2t(value))
+    return !to_constant_int2t(value).value.is_zero();
+  if (is_constant_floatbv2t(value))
+    return !to_constant_floatbv2t(value).value.is_zero();
+  return false;
+}
+
 bool python_converter::needs_operand_guard(
   const std::string &op,
   const exprt &rhs) const
@@ -1943,7 +1956,7 @@ bool python_converter::needs_operand_guard(
     return false;
   else if (
     !rhs.type().is_signedbv() && !rhs.type().is_unsignedbv() &&
-    !rhs.type().is_floatbv())
+    !rhs.type().is_floatbv() && !rhs.type().is_bool())
     return false;
 
   return !in_rhs_type_probe_ && !in_contract_clause_;
@@ -2600,6 +2613,25 @@ exprt python_converter::checked_erased_int(
   return operand;
 }
 
+exprt python_converter::refused_erased_float(
+  const exprt &operand,
+  const typet &float_type,
+  const nlohmann::json &element)
+{
+  if (!current_block)
+    throw std::runtime_error(
+      "arithmetic between a float and a value whose type was lost is not "
+      "supported");
+  code_assertt check{false_exprt()};
+  check.location() = get_location_from_decl(element);
+  check.location().user_provided(true);
+  check.location().comment(
+    "Unsupported: arithmetic on a value whose type was lost");
+  current_block->copy_to_operands(check);
+  return typecast_exprt(
+    typecast_exprt(operand, type_handler_.get_typet("int", 0)), float_type);
+}
+
 // A None operand outside `str % None`, which is formatting, not arithmetic.
 static bool
 is_none_arithmetic(const std::string &op, const exprt &lhs, const exprt &rhs)
@@ -2612,6 +2644,45 @@ static void reject_opaque_array_operator(
   const std::string &op,
   const typet &lhs,
   const typet &rhs);
+
+static bool is_erased_operand(const exprt &e, const typet &list_type)
+{
+  return e.type().is_pointer() &&
+         (e.type().subtype().id() == "empty" || e.type() == list_type);
+}
+
+static bool is_integer_operand(const exprt &e)
+{
+  return e.type().is_signedbv() || e.type().is_unsignedbv();
+}
+
+// Arithmetic (Sub, Add, Mult, ...) on an any_type (void*) operand: cast it to
+// the integer operand's type, or refuse it next to a float.
+void python_converter::coerce_erased_arith_operands(
+  const nlohmann::json &element,
+  const nlohmann::json &left,
+  const nlohmann::json &right,
+  exprt &lhs,
+  exprt &rhs)
+{
+  const typet list_type = type_handler_.get_list_type();
+  const bool lhs_any = is_erased_operand(lhs, list_type);
+  const bool rhs_any = is_erased_operand(rhs, list_type);
+  if (lhs_any && rhs_any)
+  {
+    const typet int_type = type_handler_.get_typet("int", 0);
+    lhs = typecast_exprt(checked_erased_int(lhs, left, element), int_type);
+    rhs = typecast_exprt(checked_erased_int(rhs, right, element), int_type);
+  }
+  else if (lhs_any && is_integer_operand(rhs))
+    lhs = typecast_exprt(checked_erased_int(lhs, left, element), rhs.type());
+  else if (rhs_any && is_integer_operand(lhs))
+    rhs = typecast_exprt(checked_erased_int(rhs, right, element), lhs.type());
+  else if (lhs_any && lhs.type() != list_type && rhs.type().is_floatbv())
+    lhs = refused_erased_float(lhs, rhs.type(), element);
+  else if (rhs_any && rhs.type() != list_type && lhs.type().is_floatbv())
+    rhs = refused_erased_float(rhs, lhs.type(), element);
+}
 
 exprt python_converter::get_binary_operator_expr(
   const nlohmann::json &element,
@@ -3113,31 +3184,14 @@ exprt python_converter::get_binary_operator_expr(
   // above. Treating it like a void* (cast to the integer operand's type) keeps
   // GOTO generation from building invalid pointer arithmetic on dead code.
   auto is_any_ptr = [&](const exprt &e) {
-    return e.type().is_pointer() &&
-           (e.type().subtype().id() == "empty" || e.type() == list_type);
+    return is_erased_operand(e, list_type);
   };
-  auto is_integer = [](const exprt &e) {
-    return e.type().is_signedbv() || e.type().is_unsignedbv();
-  };
+  auto is_integer = [](const exprt &e) { return is_integer_operand(e); };
 
-  // For arithmetic operations (Sub, Add, Mult, etc.) on an any_type (void*)
-  // operand combined with an integer operand, cast the void* to the integer
-  // type.
   if (
     !type_utils::is_relational_op(op) && op != "Is" && op != "IsNot" &&
     op != "In" && op != "NotIn")
-  {
-    if (is_any_ptr(lhs) && is_any_ptr(rhs))
-    {
-      const typet int_type = type_handler_.get_typet("int", 0);
-      lhs = typecast_exprt(checked_erased_int(lhs, left, element), int_type);
-      rhs = typecast_exprt(checked_erased_int(rhs, right, element), int_type);
-    }
-    else if (is_any_ptr(lhs) && is_integer(rhs))
-      lhs = typecast_exprt(checked_erased_int(lhs, left, element), rhs.type());
-    else if (is_any_ptr(rhs) && is_integer(lhs))
-      rhs = typecast_exprt(checked_erased_int(rhs, right, element), lhs.type());
-  }
+    coerce_erased_arith_operands(element, left, right, lhs, rhs);
 
   // Handle Any-typed (void*) operands in comparisons.
   if (
@@ -3310,7 +3364,7 @@ exprt python_converter::build_guarded_binop(
       "zero to a negative power",
       get_location_from_decl(element));
   }
-  else
+  else if (!is_nonzero_constant(rhs))
   {
     exprt is_zero("=", bool_type());
     is_zero.copy_to_operands(rhs, gen_zero(rhs.type()));
@@ -4244,6 +4298,66 @@ exprt python_converter::numpy_or_array_operation(
   return nil_exprt();
 }
 
+static bool is_char_array_type(const typet &t)
+{
+  return t.is_array() && is_char_element(t.subtype());
+}
+
+// `str` has no arithmetic beyond `+` (below) or ordering against anything
+// but `str`; `*` is string repetition and is handled elsewhere. Reaching
+// generic arithmetic with a char-array operand otherwise asserts
+// internally or silently verifies a program CPython rejects.
+exprt python_converter::str_arithmetic_type_error(
+  const std::string &op,
+  const exprt &lhs,
+  const exprt &rhs)
+{
+  static const std::map<std::string, std::string> arith_symbols = {
+    {"Sub", "-"}, {"Div", "/"}, {"FloorDiv", "//"}, {"Pow", "**"}};
+  const auto arith_it = arith_symbols.find(op);
+  static const std::set<std::string> ordering_ops = {"Lt", "LtE", "Gt", "GtE"};
+  const bool is_ordering = ordering_ops.count(op) != 0;
+  if (arith_it == arith_symbols.end() && !is_ordering)
+    return nil_exprt();
+
+  const bool lhs_char = is_char_array_type(lhs.type());
+  const bool rhs_char = is_char_array_type(rhs.type());
+  if (lhs_char && rhs_char && !is_ordering)
+    return get_exception_handler().gen_exception_raise(
+      "TypeError",
+      "unsupported operand type(s) for " + arith_it->second +
+        ": 'str' and 'str'");
+  if (lhs_char == rhs_char)
+    return nil_exprt();
+
+  const exprt &other = lhs_char ? rhs : lhs;
+  // Float ordering is already handled by handle_float_vs_string.
+  const std::string cat = get_python_type_category(other.type());
+  if (
+    cat == "string" || cat.empty() ||
+    (is_ordering && other.type().is_floatbv()))
+    return nil_exprt();
+
+  const std::string lhs_name = type_handler_.get_python_type_name(lhs.type());
+  const std::string rhs_name = type_handler_.get_python_type_name(rhs.type());
+  if (!is_ordering)
+    return get_exception_handler().gen_exception_raise(
+      "TypeError",
+      "unsupported operand type(s) for " + arith_it->second + ": '" + lhs_name +
+        "' and '" + rhs_name + "'");
+
+  std::string lower_op = op;
+  std::transform(
+    lower_op.begin(), lower_op.end(), lower_op.begin(), [](unsigned char c) {
+      return std::tolower(c);
+    });
+  const auto &sym = python_frontend::operator_map().at(lower_op);
+  return get_exception_handler().gen_exception_raise(
+    "TypeError",
+    "'" + sym + "' not supported between instances of '" + lhs_name +
+      "' and '" + rhs_name + "'");
+}
+
 // An element-wise operator between a numeric array and an operand
 // numpy_array_arithmetic does not model is rejected rather than lowered as
 // scalar arithmetic.
@@ -4420,53 +4534,9 @@ exprt python_converter::handle_array_operations(
   }
   reject_unmodelled_array_arithmetic(op, lhs, rhs, element);
 
-  // `str` has no arithmetic beyond `+` (below) or ordering against anything
-  // but `str`; `*` is string repetition and is handled elsewhere. Reaching
-  // generic arithmetic with a char-array operand otherwise asserts
-  // internally or silently verifies a program CPython rejects.
-  {
-    static const std::map<std::string, std::string> arith_symbols = {
-      {"Sub", "-"}, {"Div", "/"}, {"FloorDiv", "//"}, {"Pow", "**"}};
-    auto arith_it = arith_symbols.find(op);
-    bool is_ordering = op == "Lt" || op == "LtE" || op == "Gt" || op == "GtE";
-    if (arith_it != arith_symbols.end() || is_ordering)
-    {
-      const bool lhs_char = is_char_array(lhs.type());
-      const bool rhs_char = is_char_array(rhs.type());
-      if (lhs_char != rhs_char)
-      {
-        const exprt &other = lhs_char ? rhs : lhs;
-        // Float ordering is already handled by handle_float_vs_string.
-        const bool other_is_float = other.type().is_floatbv();
-        const std::string cat = get_python_type_category(other.type());
-        if (cat != "string" && !cat.empty() && !(is_ordering && other_is_float))
-        {
-          const std::string lhs_name =
-            type_handler_.get_python_type_name(lhs.type());
-          const std::string rhs_name =
-            type_handler_.get_python_type_name(rhs.type());
-          if (is_ordering)
-          {
-            std::string lower_op = op;
-            std::transform(
-              lower_op.begin(),
-              lower_op.end(),
-              lower_op.begin(),
-              [](unsigned char c) { return std::tolower(c); });
-            const auto &sym = python_frontend::operator_map().at(lower_op);
-            return get_exception_handler().gen_exception_raise(
-              "TypeError",
-              "'" + sym + "' not supported between instances of '" + lhs_name +
-                "' and '" + rhs_name + "'");
-          }
-          return get_exception_handler().gen_exception_raise(
-            "TypeError",
-            "unsupported operand type(s) for " + arith_it->second + ": '" +
-              lhs_name + "' and '" + rhs_name + "'");
-        }
-      }
-    }
-  }
+  const exprt str_error = str_arithmetic_type_error(op, lhs, rhs);
+  if (!str_error.is_nil())
+    return str_error;
 
   // Handle string concatenation -- only valid for char-arrays. Numeric
   // arrays (e.g. ``np.array([1, 2, 3])``, modelled as ``long int [N]``)

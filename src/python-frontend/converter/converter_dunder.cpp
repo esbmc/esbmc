@@ -1,4 +1,5 @@
 #include <python-frontend/python_converter.h>
+#include <python-frontend/exception/python_exception_handler.h>
 #include <python-frontend/python_expr_builder.h>
 #include <python-frontend/symbol_id.h>
 #include <python-frontend/type/type_handler.h>
@@ -547,7 +548,103 @@ exprt python_converter::dispatch_dunder_operator(
     }
   }
 
-  return nil_exprt();
+  if (!lacks_binary_dunder(op, lhs, rhs))
+    return nil_exprt();
+  static const std::map<std::string, std::string> symbols = {
+    {"Add", "+"},
+    {"Sub", "-"},
+    {"Mult", "*"},
+    {"Div", "/"},
+    {"FloorDiv", "//"},
+    {"Mod", "%"}};
+  return get_exception_handler().gen_exception_raise(
+    "TypeError",
+    "unsupported operand type(s) for " + symbols.at(op) + ": '" +
+      type_handler_.get_python_type_name(lhs.type()) + "' and '" +
+      type_handler_.get_python_type_name(rhs.type()) + "'");
+}
+
+static bool mentions_string(const nlohmann::json &node, const std::string &s)
+{
+  if (node.is_string())
+    return node.get<std::string>() == s;
+  return node.is_structured() &&
+         std::any_of(node.begin(), node.end(), [&](const nlohmann::json &c) {
+           return mentions_string(c, s);
+         });
+}
+
+// A top-level class of the main module, defined once, with no decorator or
+// metaclass, whose bases are all such classes: nothing but its own body can
+// give it an operator method.
+bool python_converter::is_plain_user_class(const std::string &class_name)
+{
+  const nlohmann::json &body = (*ast_json)["body"];
+  const auto defs =
+    std::count_if(body.begin(), body.end(), [&](const nlohmann::json &stmt) {
+      return stmt.value("_type", "") == "ClassDef" &&
+             stmt.value("name", "") == class_name;
+    });
+  if (defs != 1)
+    return false;
+  const nlohmann::json cls = json_utils::find_class(body, class_name);
+  if (
+    !cls.value("decorator_list", nlohmann::json::array()).empty() ||
+    !cls.value("keywords", nlohmann::json::array()).empty())
+    return false;
+  for (const auto &base : cls.value("bases", nlohmann::json::array()))
+  {
+    const std::string id = base.value("id", "");
+    if (
+      base.value("_type", "") != "Name" || id == class_name ||
+      !is_plain_user_class(id))
+      return false;
+  }
+  return true;
+}
+
+// CPython raises TypeError for `x op y` when neither x.__op__ nor y.__rop__
+// exists. Only decided for a plain user class against another one or a number:
+// a sequence operand can multiply by an instance's __index__, a NumPy array
+// broadcasts over it, and a builtin base brings its own operators.
+bool python_converter::lacks_binary_dunder(
+  const std::string &op,
+  const exprt &lhs,
+  const exprt &rhs)
+{
+  const std::string dunder = op_to_dunder(op);
+  if (dunder.empty() || type_utils::is_relational_op(op))
+    return false;
+
+  bool has_class = false;
+  for (const exprt *operand : {&lhs, &rhs})
+  {
+    const typet t = resolve_operand_type(*operand, symbol_table_, ns);
+    if (t.is_signedbv() || t.is_unsignedbv() || t.is_floatbv() || t.is_bool())
+      continue;
+    if (
+      !t.is_struct() || is_excluded_struct_tag(to_struct_type(t)) ||
+      !is_user_class_struct_type(t) || !is_plain_user_class(class_name_of(t)))
+      return false;
+    has_class = true;
+  }
+  if (!has_class)
+    return false;
+
+  // The method may be bound by a def, an assignment in a class body, a store
+  // to the class attribute, setattr, type() or exec; any mention bails out.
+  for (const std::string &name :
+       {dunder,
+        op_to_rdunder(op),
+        std::string("setattr"),
+        std::string("type"),
+        std::string("exec"),
+        std::string("eval"),
+        std::string("__dict__"),
+        std::string("__class__")})
+    if (mentions_string(*ast_json, name))
+      return false;
+  return true;
 }
 
 static void

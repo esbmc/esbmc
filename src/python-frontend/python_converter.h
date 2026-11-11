@@ -471,12 +471,6 @@ public:
     const nlohmann::json &element,
     bool is_self = false);
 
-  void store_compound_result(
-    const nlohmann::json &target,
-    const exprt &lhs,
-    exprt rhs,
-    const locationt &loc,
-    codet &target_block);
   codet get_compound_store(
     const exprt &lhs,
     const exprt &rhs,
@@ -802,6 +796,12 @@ private:
   resolve_variable_type(const std::string &var_name, const locationt &loc);
 
   void get_compound_assign(const nlohmann::json &ast_node, codet &target_block);
+  void store_compound_result(
+    const nlohmann::json &target,
+    const exprt &lhs,
+    exprt rhs,
+    const locationt &loc,
+    codet &target_block);
 
   /// The symbol for @p name in an enclosing function's scope, or null. Python
   /// resolves a name a nested function only reads or mutates against the
@@ -889,6 +889,19 @@ private:
   exprt checked_erased_int(
     exprt operand,
     const nlohmann::json &node,
+    const nlohmann::json &element);
+  /// An operand whose type was erased to `void *`, about to meet a float in
+  /// arithmetic. Its bits cannot be read back as a float, so a check that
+  /// fails as unsupported guards it. Returns it converted to @p float_type.
+  void coerce_erased_arith_operands(
+    const nlohmann::json &element,
+    const nlohmann::json &left,
+    const nlohmann::json &right,
+    exprt &lhs,
+    exprt &rhs);
+  exprt refused_erased_float(
+    const exprt &operand,
+    const typet &float_type,
     const nlohmann::json &element);
   /// The right operand of @p element; a `str %` operand is only probed.
   exprt get_right_operand_expr(
@@ -1190,6 +1203,7 @@ private:
     std::vector<code_blockt> &effects,
     bool &contains_non_boolean);
 
+  exprt get_value_expr(const nlohmann::json &node);
   exprt get_boolop_operand(
     const nlohmann::json &operand,
     std::vector<code_blockt> &effects);
@@ -3421,6 +3435,10 @@ private:
     const std::string &exception,
     const std::string &message,
     const typet &type);
+  exprt str_arithmetic_type_error(
+    const std::string &op,
+    const exprt &lhs,
+    const exprt &rhs);
   void reject_unmodelled_array_arithmetic(
     const std::string &op,
     const exprt &lhs,
@@ -3723,6 +3741,11 @@ private:
     const std::string &op,
     exprt &operand,
     const locationt &loc);
+  bool is_plain_user_class(const std::string &class_name);
+  bool lacks_binary_dunder(
+    const std::string &op,
+    const exprt &lhs,
+    const exprt &rhs);
 
   // =========================================================================
   // Member variables

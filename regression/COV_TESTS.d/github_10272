@@ -1,0 +1,8 @@
+regression/numpy/windows_model_path_column_view
+regression/numpy/windows_model_path_column_view_fail
+regression/numpy/windows_model_path_reversed_view_write
+regression/numpy/windows_model_path_reversed_view_write_fail
+regression/numpy/windows_model_path_sum
+regression/numpy/windows_model_path_sum_fail
+regression/numpy/windows_model_path_zeros_index
+regression/numpy/windows_model_path_zeros_index_fail

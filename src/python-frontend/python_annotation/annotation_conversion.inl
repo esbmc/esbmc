@@ -2225,6 +2225,14 @@ inline std::string known_fallback_return_type(
   return fallback_type;
 }
 
+/// The type of a function with no top-level return: None, unless a nested
+/// return yields a value whose type was not inferred (e.g. a function), which
+/// None would mistype (#10231).
+inline std::string no_top_level_return_type(const nlohmann::json &body)
+{
+  return has_return_value(body) ? "" : "NoneType";
+}
+
 template <class Json>
 std::string python_annotation<Json>::get_function_return_type(
   const std::string &func_name,
@@ -2468,9 +2476,8 @@ std::string python_annotation<Json>::get_function_return_type(
       return known_fallback_return_type(fallback_type, func_elem["body"]);
     }
 
-    // If function has no explicit return statements, assume void/None
     functions_in_analysis_.erase(func_name);
-    return "NoneType";
+    return no_top_level_return_type(func_elem["body"]);
   }
 
   // Check for lambda assignments when regular function not found
@@ -2831,7 +2838,8 @@ static bool binds_name_in(const Json *scope, const std::string &name)
 }
 
 /// Whether a statement in `stmts`, or in a module-level `if`, `try`, loop or
-/// `with` block under them, assigns `name` (g = f).
+/// `with` block under them, assigns `name` (g = f). An assignment this pass
+/// has already annotated as Any (g: Any = f) still counts.
 static bool assigns_name_at_module_level(
   const nlohmann::json &stmts,
   const std::string &name)
@@ -2845,6 +2853,11 @@ static bool assigns_name_at_module_level(
         if (t.contains("id") && t["id"] == name)
           return true;
     }
+    if (
+      stype == "AnnAssign" && stmt.value("_inferred_annotation", false) &&
+      stmt["annotation"].value("id", "") == "Any" &&
+      stmt["target"].value("id", "") == name)
+      return true;
     if (
       stype == "FunctionDef" || stype == "AsyncFunctionDef" ||
       stype == "ClassDef")
