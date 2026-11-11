@@ -26,14 +26,15 @@ void python_dict_handler::check_value_type(
   converter_.add_instruction(check);
 }
 
-/// A key whose type was lost (`void *`) hashes like no stored key, so its
-/// lookup would raise KeyError on every path (#10241). Where the lookup runs,
+/// A key stored at its lost type (`void *`) hashes like no stored key, so its
+/// lookup would raise KeyError on every path (#10241). A list element read at
+/// that type carries its own type and is not one. Where the lookup runs,
 /// report it as unsupported and end the path instead.
 void python_dict_handler::refuse_untyped_key(
-  const exprt &key,
+  const typet &key_type,
   const locationt &location)
 {
-  if (!key.type().is_pointer() || !key.type().subtype().is_empty())
+  if (!key_type.is_pointer() || !key_type.subtype().is_empty())
     return;
   const std::string message =
     "Unsupported: a dict lookup with a key whose type is not known";
@@ -158,7 +159,6 @@ exprt python_dict_handler::handle_dict_subscript(
     resolved_type = resolve_expected_type_for_dict_subscript(dict_expr);
 
   exprt key_expr = get_key_expr(slice_node);
-  refuse_untyped_key(key_expr, location);
 
   // Get dict.keys and dict.values
   exprt keys_member = build_member(dict_expr, "keys", list_type);
@@ -185,6 +185,7 @@ exprt python_dict_handler::handle_dict_subscript(
   python_list list_handler(converter_, slice_node);
   list_elem_info key_info =
     list_handler.get_lookup_key_info(slice_node, key_expr);
+  refuse_untyped_key(key_info.elem_symbol->get_type(), location);
 
   // Call try_find_index(keys, key, type_hash, size) — returns SIZE_MAX if
   // absent
