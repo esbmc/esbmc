@@ -124,6 +124,7 @@ ignored_dirs=(
   "github_9955_input_len_bytes"
   "github_9955_input_len_bytes_fail"
   "github_9955_input_len_ir"
+  "str_str_arith_typeerror_fail"
   "harness_os_listdir"
   "github_3712"
   "github_3713"

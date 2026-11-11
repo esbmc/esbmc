@@ -4298,6 +4298,66 @@ exprt python_converter::numpy_or_array_operation(
   return nil_exprt();
 }
 
+static bool is_char_array_type(const typet &t)
+{
+  return t.is_array() && is_char_element(t.subtype());
+}
+
+// `str` has no arithmetic beyond `+` (below) or ordering against anything
+// but `str`; `*` is string repetition and is handled elsewhere. Reaching
+// generic arithmetic with a char-array operand otherwise asserts
+// internally or silently verifies a program CPython rejects.
+exprt python_converter::str_arithmetic_type_error(
+  const std::string &op,
+  const exprt &lhs,
+  const exprt &rhs)
+{
+  static const std::map<std::string, std::string> arith_symbols = {
+    {"Sub", "-"}, {"Div", "/"}, {"FloorDiv", "//"}, {"Pow", "**"}};
+  const auto arith_it = arith_symbols.find(op);
+  static const std::set<std::string> ordering_ops = {"Lt", "LtE", "Gt", "GtE"};
+  const bool is_ordering = ordering_ops.count(op) != 0;
+  if (arith_it == arith_symbols.end() && !is_ordering)
+    return nil_exprt();
+
+  const bool lhs_char = is_char_array_type(lhs.type());
+  const bool rhs_char = is_char_array_type(rhs.type());
+  if (lhs_char && rhs_char && !is_ordering)
+    return get_exception_handler().gen_exception_raise(
+      "TypeError",
+      "unsupported operand type(s) for " + arith_it->second +
+        ": 'str' and 'str'");
+  if (lhs_char == rhs_char)
+    return nil_exprt();
+
+  const exprt &other = lhs_char ? rhs : lhs;
+  // Float ordering is already handled by handle_float_vs_string.
+  const std::string cat = get_python_type_category(other.type());
+  if (
+    cat == "string" || cat.empty() ||
+    (is_ordering && other.type().is_floatbv()))
+    return nil_exprt();
+
+  const std::string lhs_name = type_handler_.get_python_type_name(lhs.type());
+  const std::string rhs_name = type_handler_.get_python_type_name(rhs.type());
+  if (!is_ordering)
+    return get_exception_handler().gen_exception_raise(
+      "TypeError",
+      "unsupported operand type(s) for " + arith_it->second + ": '" + lhs_name +
+        "' and '" + rhs_name + "'");
+
+  std::string lower_op = op;
+  std::transform(
+    lower_op.begin(), lower_op.end(), lower_op.begin(), [](unsigned char c) {
+      return std::tolower(c);
+    });
+  const auto &sym = python_frontend::operator_map().at(lower_op);
+  return get_exception_handler().gen_exception_raise(
+    "TypeError",
+    "'" + sym + "' not supported between instances of '" + lhs_name +
+      "' and '" + rhs_name + "'");
+}
+
 // An element-wise operator between a numeric array and an operand
 // numpy_array_arithmetic does not model is rejected rather than lowered as
 // scalar arithmetic.
@@ -4474,53 +4534,9 @@ exprt python_converter::handle_array_operations(
   }
   reject_unmodelled_array_arithmetic(op, lhs, rhs, element);
 
-  // `str` has no arithmetic beyond `+` (below) or ordering against anything
-  // but `str`; `*` is string repetition and is handled elsewhere. Reaching
-  // generic arithmetic with a char-array operand otherwise asserts
-  // internally or silently verifies a program CPython rejects.
-  {
-    static const std::map<std::string, std::string> arith_symbols = {
-      {"Sub", "-"}, {"Div", "/"}, {"FloorDiv", "//"}, {"Pow", "**"}};
-    auto arith_it = arith_symbols.find(op);
-    bool is_ordering = op == "Lt" || op == "LtE" || op == "Gt" || op == "GtE";
-    if (arith_it != arith_symbols.end() || is_ordering)
-    {
-      const bool lhs_char = is_char_array(lhs.type());
-      const bool rhs_char = is_char_array(rhs.type());
-      if (lhs_char != rhs_char)
-      {
-        const exprt &other = lhs_char ? rhs : lhs;
-        // Float ordering is already handled by handle_float_vs_string.
-        const bool other_is_float = other.type().is_floatbv();
-        const std::string cat = get_python_type_category(other.type());
-        if (cat != "string" && !cat.empty() && !(is_ordering && other_is_float))
-        {
-          const std::string lhs_name =
-            type_handler_.get_python_type_name(lhs.type());
-          const std::string rhs_name =
-            type_handler_.get_python_type_name(rhs.type());
-          if (is_ordering)
-          {
-            std::string lower_op = op;
-            std::transform(
-              lower_op.begin(),
-              lower_op.end(),
-              lower_op.begin(),
-              [](unsigned char c) { return std::tolower(c); });
-            const auto &sym = python_frontend::operator_map().at(lower_op);
-            return get_exception_handler().gen_exception_raise(
-              "TypeError",
-              "'" + sym + "' not supported between instances of '" + lhs_name +
-                "' and '" + rhs_name + "'");
-          }
-          return get_exception_handler().gen_exception_raise(
-            "TypeError",
-            "unsupported operand type(s) for " + arith_it->second + ": '" +
-              lhs_name + "' and '" + rhs_name + "'");
-        }
-      }
-    }
-  }
+  const exprt str_error = str_arithmetic_type_error(op, lhs, rhs);
+  if (!str_error.is_nil())
+    return str_error;
 
   // Handle string concatenation -- only valid for char-arrays. Numeric
   // arrays (e.g. ``np.array([1, 2, 3])``, modelled as ``long int [N]``)
