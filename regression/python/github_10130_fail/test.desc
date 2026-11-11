@@ -1,0 +1,6 @@
+CORE
+main.py
+--unwind 3
+^  PASSED +\[global\.assertion\.1\] +line  6  assertion n == 0$
+^  FAILED +\[global\.assertion\.2\] +line 11  assertion n == 0$
+^VERIFICATION FAILED$

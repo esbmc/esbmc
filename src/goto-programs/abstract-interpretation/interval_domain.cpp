@@ -863,7 +863,9 @@ expr2tc interval_domaint::make_expression_helper(const expr2tc &symbol) const
     c_implicit_typecast(v, symbol->type, *migrate_namespace_lookup);
     return v;
   };
-  if (interval.singleton())
+  // A float bound is moved out by one ulp, so a float singleton becomes a
+  // range: an equality would name the next float up (#10240).
+  if (interval.singleton() && !std::is_same_v<T, real_intervalt>)
   {
     expr2tc value = make_expression_value(interval, src.type, true);
     conjuncts.push_back(equality2tc(typecast(value), symbol));

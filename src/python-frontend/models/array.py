@@ -62,5 +62,48 @@ class array:
         self._check(v)
         self.items[i] = v
 
+    def __mul__(self, n: int) -> "array":
+        result: array = array(self.typecode)
+        for _ in range(n):
+            for v in self.items:
+                result.items.append(v)
+        return result
+
     def tolist(self) -> list[int]:
+        return self.items.copy()
+
+
+class _double_array:
+    """array.array("d", ...); the preprocessor routes such calls here."""
+
+    def __init__(self, typecode: str, initializer: list[float] = None) -> None:
+        self.typecode: str = typecode
+        self.items: list[float] = []
+        if initializer is not None:
+            for v in initializer:
+                self.append(v)
+
+    def append(self, v: float) -> None:
+        self.items.append(float(v))
+
+    def __getitem__(self, i: int) -> float:
+        return self.items[i]
+
+    def __len__(self) -> int:
+        return len(self.items)
+
+    def __bool__(self) -> bool:
+        return len(self.items) != 0
+
+    def __setitem__(self, i: int, v: float) -> None:
+        self.items[i] = float(v)
+
+    def __mul__(self, n: int) -> "_double_array":
+        result: _double_array = _double_array(self.typecode)
+        for _ in range(n):
+            for v in self.items:
+                result.items.append(v)
+        return result
+
+    def tolist(self) -> list[float]:
         return self.items.copy()

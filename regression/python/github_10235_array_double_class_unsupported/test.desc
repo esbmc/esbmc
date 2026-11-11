@@ -1,0 +1,4 @@
+CORE
+main.py
+
+^ERROR: .*unsupported: using array\.array as a value alongside a 'd' array$

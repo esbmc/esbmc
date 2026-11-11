@@ -895,6 +895,10 @@ private:
     const exprt &left_value,
     const nlohmann::json &right,
     exprt &lhs);
+  exprt build_power(
+    const exprt &base,
+    const exprt &exponent,
+    const nlohmann::json &element);
   exprt build_guarded_binop(
     const std::string &op,
     exprt lhs,
@@ -3673,6 +3677,8 @@ private:
   /// Rewrite a string @p str into `strlen(str) != 0`, its truthiness; any
   /// other value comes back unchanged.
   exprt apply_string_truthiness(const exprt &str, const locationt &location);
+  exprt chosen_branch_truthiness(const exprt &value, const locationt &location);
+  exprt bound_value_truthiness(const exprt &bound, const locationt &location);
   void take_str_branch_truth(
     const typet &result_type,
     exprt &then,
@@ -3711,6 +3717,11 @@ private:
     const std::string &op,
     exprt &operand,
     const locationt &loc);
+  bool is_plain_user_class(const std::string &class_name);
+  bool lacks_binary_dunder(
+    const std::string &op,
+    const exprt &lhs,
+    const exprt &rhs);
 
   // =========================================================================
   // Member variables

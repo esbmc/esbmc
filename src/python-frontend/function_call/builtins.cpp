@@ -1934,7 +1934,7 @@ exprt function_call_expr::handle_pow() const
   if (args.size() == 2)
     // pow(base, exp) shares the exact lowering of the ** operator, so integer,
     // float, and negative-exponent cases behave identically to base ** exp.
-    return converter_.get_math_handler().handle_power(base, exp);
+    return converter_.build_power(base, exp, call_);
 
   // 3-argument form: pow(base, exp, mod) == (base ** exp) % mod. CPython
   // requires all three operands to be integers.

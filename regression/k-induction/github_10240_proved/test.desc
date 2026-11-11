@@ -1,0 +1,5 @@
+CORE
+main.c
+--interval-analysis --k-induction --max-k-step 3
+^Solution found by the inductive step
+^VERIFICATION SUCCESSFUL$

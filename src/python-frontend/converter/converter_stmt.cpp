@@ -9152,9 +9152,6 @@ bool python_converter::contains_nested_scope_named_expr(
   return false;
 }
 
-// Whether a str array constant is empty, reading it as strlen does; nullopt for
-// any other value. Symex never ends strlen's loop over the address of an array
-// constant (#8713), so a literal's truth value is folded instead.
 // A variable, or an attribute read through variables, which can be read twice.
 static bool is_plain_read(const expr2tc &e)
 {
@@ -9167,6 +9164,9 @@ static bool is_plain_read(const expr2tc &e)
   return is_symbol2t(e);
 }
 
+// Whether a str array constant is empty, reading it as strlen does; nullopt for
+// any other value. Symex never ends strlen's loop over the address of an array
+// constant (#8713), so a literal's truth value is folded instead.
 static std::optional<bool> constant_string_is_empty(const exprt &str)
 {
   if (!str.is_constant() || !str.type().is_array() || str.operands().empty())
@@ -9175,6 +9175,43 @@ static std::optional<bool> constant_string_is_empty(const exprt &str)
   if (!first.is_constant())
     return std::nullopt;
   return first.is_zero();
+}
+
+/// The value of an and/or over a str and a bool is an `if` whose branches keep
+/// their own types (#10130); its truth is the chosen branch's. Nil when no
+/// branch's truth is a str's or a branch's truth is not a condition.
+exprt python_converter::chosen_branch_truthiness(
+  const exprt &value,
+  const locationt &location)
+{
+  const exprt then_cond = apply_string_truthiness(value.op1(), location);
+  const exprt else_cond = apply_string_truthiness(value.op2(), location);
+  if (
+    !then_cond.type().is_bool() || !else_cond.type().is_bool() ||
+    (then_cond == value.op1() && else_cond == value.op2()))
+    return nil_exprt();
+  exprt cond = if_exprt(value.op0(), then_cond, else_cond);
+  cond.location() = location;
+  return cond;
+}
+
+/// A statement expression is as true as its value, read after its statements
+/// run once. Unchanged when its value's truth is not a str's.
+exprt python_converter::bound_value_truthiness(
+  const exprt &bound,
+  const locationt &location)
+{
+  const exprt::operandst &statements = bound.op0().operands();
+  if (statements.empty() || statements.back().statement() != "expression")
+    return bound;
+  const exprt &value = statements.back().op0();
+  const exprt cond = apply_string_truthiness(value, location);
+  if (value.type().is_bool() || !cond.type().is_bool())
+    return bound;
+  exprt truth = bound;
+  truth.type() = bool_type();
+  truth.op0().operands().back().op0() = cond;
+  return truth;
 }
 
 // A bool-typed conditional expression takes a str branch's truth; cast to
@@ -9209,6 +9246,16 @@ exprt python_converter::apply_string_truthiness(
   const exprt &str,
   const locationt &location)
 {
+  if (str.id() == "sideeffect" && str.statement() == "statement_expression")
+    return bound_value_truthiness(str, location);
+
+  if (str.id() == "if" && !str.type().is_bool())
+  {
+    exprt cond = chosen_branch_truthiness(str, location);
+    if (cond.is_not_nil())
+      return cond;
+  }
+
   if (!type_utils::is_string_type(str.type()))
     return str;
 
