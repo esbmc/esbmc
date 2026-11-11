@@ -1,4 +1,3 @@
-#include <boost/algorithm/string/predicate.hpp>
 #include <python-frontend/model_path.h>
 #include <python-frontend/converter/converter_internal.h>
 #include <python-frontend/math/convert_float_literal.h>
