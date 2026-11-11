@@ -152,6 +152,76 @@ static void adopt_symbol_components(const symbolt &sym, struct_typet &st)
       st.components().push_back(c);
 }
 
+/// get_members converts only method definitions and annotated assignments; any
+/// other class-body statement is dropped (a nested class is converted on its
+/// own). Dropping is sound only for one that cannot raise or have a side effect
+/// (#10222).
+/// An unconverted `async def` evaluates its decorators, defaults and
+/// annotations where it stands, so only one where those cannot raise is inert.
+static bool is_inert_async_def(const nlohmann::json &def)
+{
+  const auto is_plain = [](const nlohmann::json &node, const char *key) {
+    if (!node.contains(key) || node[key].is_null())
+      return true;
+    const std::string kind = node[key].value("_type", "");
+    return kind == "Name" || kind == "Constant";
+  };
+  for (const auto &decorator : def["decorator_list"])
+  {
+    const std::string name = decorator.value("id", "");
+    if (name != "staticmethod" && name != "classmethod")
+      return false;
+  }
+  const nlohmann::json &args = def["args"];
+  if (!args["defaults"].empty() || !is_plain(def, "returns"))
+    return false;
+  for (const auto &d : args["kw_defaults"])
+    if (!d.is_null())
+      return false;
+  for (const char *group : {"posonlyargs", "args", "kwonlyargs"})
+    for (const auto &arg : args.value(group, nlohmann::json::array()))
+      if (!is_plain(arg, "annotation"))
+        return false;
+  return true;
+}
+
+static bool is_droppable_class_statement(const nlohmann::json &stmt)
+{
+  const auto is_constant = [](const nlohmann::json &e) {
+    return e.is_object() && e.value("_type", "") == "Constant";
+  };
+  const std::string kind = stmt.value("_type", "");
+  if (kind == "Pass" || kind == "ClassDef")
+    return true;
+  if (kind == "AsyncFunctionDef")
+    return is_inert_async_def(stmt);
+  if (kind == "Expr")
+    return is_constant(stmt["value"]);
+  if (kind != "Assign" || !is_constant(stmt["value"]))
+    return false;
+  for (const auto &target : stmt["targets"])
+    if (target.value("_type", "") != "Name")
+      return false;
+  return true;
+}
+
+static void refuse_dropped_statements(
+  const python_converter &conv,
+  const nlohmann::json &class_node)
+{
+  for (const auto &n : class_node.at("body"))
+  {
+    const std::string kind = n.value("_type", "");
+    if (
+      kind != "FunctionDef" && kind != "AnnAssign" &&
+      !is_droppable_class_statement(n))
+      throw std::runtime_error(
+        conv.get_location_from_decl(n).as_string() + ": the body of class '" +
+        class_node.value("name", "") + "' has a statement of kind " + kind +
+        ", which is not supported");
+  }
+}
+
 void python_class_builder::get_members(
   struct_typet &st,
   codet &out,
@@ -168,6 +238,7 @@ void python_class_builder::get_members(
     conv_.current_class_name_ = class_name;
   }
 
+  refuse_dropped_statements(conv_, cls_);
   for (const auto &n : cls_.at("body"))
   {
     const std::string kind = n.value("_type", "");
