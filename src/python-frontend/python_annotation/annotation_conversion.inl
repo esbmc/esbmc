@@ -6563,6 +6563,22 @@ void python_annotation<Json>::refuse_mixed_constructor_args() const
   }
 }
 
+/// A constructor parameter typed from its first call keeps that type for the
+/// other calls' arguments, so a value typed as a class passed there may hold
+/// another type (#10326). None is modelled alongside the class. Marks those
+/// classes for the converter.
+template <class Json>
+void python_annotation<Json>::mark_mixed_constructor_classes()
+{
+  for (const auto &[param, types] : constructor_arg_types_)
+    for (Json &element : ast_["body"])
+      if (
+        types.size() - types.count("NoneType") > 1 &&
+        element["_type"] == "ClassDef" &&
+        types.count(element["name"].template get<std::string>()))
+        element["_mixed_constructor_arg"] = true;
+}
+
 template <class Json>
 void python_annotation<Json>::add_type_annotation()
 {
@@ -6617,6 +6633,7 @@ void python_annotation<Json>::add_type_annotation()
 
   apply_pending_specializations();
   retype_methods_called_on_receivers();
+  mark_mixed_constructor_classes();
 }
 
 template <class Json>

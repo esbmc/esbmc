@@ -1,0 +1,4 @@
+KNOWNBUG
+main.py
+--python-check-exceptions TypeError,AttributeError
+^VERIFICATION SUCCESSFUL$

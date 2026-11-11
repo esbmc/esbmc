@@ -474,6 +474,59 @@ void python_converter::retype_placeholder_to_class(
     sym.set_type(migrate_type(new_type));
 }
 
+// A value typed as a class that a constructor parameter also takes another
+// type for may hold that other type (#10326).
+bool python_converter::holds_mixed_constructor_arg(const exprt &operand)
+{
+  const typet t = resolve_operand_type(operand, symbol_table_, ns);
+  if (
+    !t.is_struct() || is_excluded_struct_tag(to_struct_type(t)) ||
+    !is_user_class_struct_type(t))
+    return false;
+  // A class of another module has no definition in this one.
+  const nlohmann::json cls =
+    json_utils::find_class((*ast_json)["body"], class_name_of(t));
+  return cls.is_object() && cls.value("_mixed_constructor_arg", false);
+}
+
+// Arithmetic on such a value: neither the class's operator methods nor the
+// other type's apply to every instance, and the value is stored at the class
+// type. Report it as unsupported and end the path. Nil when it is not one.
+// `str % value` formats rather than computes, so it is not refused.
+exprt python_converter::refuse_mixed_constructor_arg(
+  const std::string &op,
+  const exprt &lhs,
+  const exprt &rhs,
+  const locationt &loc)
+{
+  static const std::set<std::string> unary = {"USub", "UAdd", "Invert"};
+  if (
+    (rhs.is_nil() ? !unary.count(op) : type_utils::is_relational_op(op)) ||
+    (op == "Mod" && type_utils::is_string_type(lhs.type())) ||
+    !(holds_mixed_constructor_arg(lhs) || holds_mixed_constructor_arg(rhs)))
+    return nil_exprt();
+  const std::string message =
+    "Unsupported: arithmetic on a value whose class differs between "
+    "instances";
+  if (!can_emit_runtime_guard())
+    throw std::runtime_error(message);
+  // Not the constant false, which CFG cleanup reads as the end of the
+  // function and so drops the assume.
+  const exprt never = not_exprt(true_exprt());
+  code_assertt check(never);
+  check.location() = loc;
+  check.location().user_provided(true);
+  check.location().comment(message);
+  add_instruction(check);
+  add_instruction(code_assumet(never));
+  const typet &number =
+    holds_mixed_constructor_arg(lhs) ? rhs.type() : lhs.type();
+  return side_effect_expr_nondett(
+    number.is_signedbv() || number.is_floatbv()
+      ? number
+      : type_handler::python_int_typet());
+}
+
 exprt python_converter::dispatch_dunder_operator(
   const std::string &op,
   exprt &lhs,
@@ -482,6 +535,10 @@ exprt python_converter::dispatch_dunder_operator(
 {
   typet lhs_type = resolve_operand_type(lhs, symbol_table_, ns);
   typet rhs_type = resolve_operand_type(rhs, symbol_table_, ns);
+  if (
+    exprt refused = refuse_mixed_constructor_arg(op, lhs, rhs, loc);
+    refused.is_not_nil())
+    return refused;
   bool lhs_defines_dunder = false;
 
   // Try lhs.__add__(rhs)
@@ -692,6 +749,10 @@ exprt python_converter::dispatch_unary_dunder_operator(
 
   if (is_excluded_struct_tag(struct_type))
     return nil_exprt();
+  if (
+    exprt refused = refuse_mixed_constructor_arg(op, operand, nil_exprt(), loc);
+    refused.is_not_nil())
+    return refused;
 
   static const std::map<std::string, std::string> unary_dunder_map = {
     {"USub", "__neg__"},

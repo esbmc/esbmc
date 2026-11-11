@@ -3750,6 +3750,12 @@ private:
     const std::string &op,
     const exprt &lhs,
     const exprt &rhs);
+  bool holds_mixed_constructor_arg(const exprt &operand);
+  exprt refuse_mixed_constructor_arg(
+    const std::string &op,
+    const exprt &lhs,
+    const exprt &rhs,
+    const locationt &loc);
 
   // =========================================================================
   // Member variables
