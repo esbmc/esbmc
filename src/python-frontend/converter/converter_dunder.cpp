@@ -1,4 +1,5 @@
 #include <python-frontend/python_converter.h>
+#include <python-frontend/exception/python_exception_handler.h>
 #include <python-frontend/python_expr_builder.h>
 #include <python-frontend/symbol_id.h>
 #include <python-frontend/type/type_handler.h>
@@ -547,7 +548,20 @@ exprt python_converter::dispatch_dunder_operator(
     }
   }
 
-  return nil_exprt();
+  if (!lacks_binary_dunder(op, lhs, rhs))
+    return nil_exprt();
+  static const std::map<std::string, std::string> symbols = {
+    {"Add", "+"},
+    {"Sub", "-"},
+    {"Mult", "*"},
+    {"Div", "/"},
+    {"FloorDiv", "//"},
+    {"Mod", "%"}};
+  return get_exception_handler().gen_exception_raise(
+    "TypeError",
+    "unsupported operand type(s) for " + symbols.at(op) + ": '" +
+      type_handler_.get_python_type_name(lhs.type()) + "' and '" +
+      type_handler_.get_python_type_name(rhs.type()) + "'");
 }
 
 static bool mentions_string(const nlohmann::json &node, const std::string &s)

@@ -2795,21 +2795,6 @@ exprt python_converter::get_binary_operator_expr(
     if (!dunder_result.is_nil())
       return dunder_result;
   }
-  if (lacks_binary_dunder(op, lhs, rhs))
-  {
-    static const std::map<std::string, std::string> symbols = {
-      {"Add", "+"},
-      {"Sub", "-"},
-      {"Mult", "*"},
-      {"Div", "/"},
-      {"FloorDiv", "//"},
-      {"Mod", "%"}};
-    return get_exception_handler().gen_exception_raise(
-      "TypeError",
-      "unsupported operand type(s) for " + symbols.at(op) + ": '" +
-        type_handler_.get_python_type_name(lhs.type()) + "' and '" +
-        type_handler_.get_python_type_name(rhs.type()) + "'");
-  }
 
   // Intercept complex arithmetic/comparison before generic binary expression
   // building, which cannot operate directly on struct operands.
