@@ -1,0 +1,6 @@
+CORE
+main.c
+--houdini-loop-invariants
+^Houdini: \d+ candidate\(s\) inductive after \d+ round\(s\)$
+^\s+PASSED\s+\[main\.assertion\.\d+\]\s+line 16\s+assertion x > 0$
+^VERIFICATION SUCCESSFUL$

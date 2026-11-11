@@ -1,0 +1,5 @@
+CORE
+main.c
+--houdini-loop-invariants
+^\s+FAILED\s+\[main\.assertion\.1\].*assertion 0$
+^VERIFICATION FAILED$
