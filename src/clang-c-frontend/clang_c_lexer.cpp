@@ -180,14 +180,48 @@ expr2tc parse_number(ParseState &ps)
     return expr2tc();
 
   llvm::APInt val(64, 0);
-  parser.GetIntegerValue(val);
+  if (parser.GetIntegerValue(val))
+    return expr2tc();
 
-  BigInt n =
-    parser.isUnsigned ? BigInt(val.getZExtValue()) : BigInt(val.getSExtValue());
-  if (neg)
-    n = -n;
+  const BigInt n(val.getZExtValue());
+  const std::pair<type2tc, type2tc> candidates[] = {
+    {int_type2(), uint_type2()},
+    {long_int_type2(), long_uint_type2()},
+    {long_long_int_type2(), long_long_uint_type2()}};
+  const size_t first = parser.isLongLong ? 2 : parser.isLong ? 1 : 0;
+  // C11 6.4.4.1: decimal literals without U only try signed types.
+  for (size_t i = first; i < 3; ++i)
+  {
+    const auto &[signed_type, unsigned_type] = candidates[i];
+    if (!parser.isUnsigned && n < BigInt::power2(signed_type->get_width() - 1))
+      return from_integer(neg ? -n : n, signed_type);
+    if (
+      (parser.isUnsigned || parser.getRadix() != 10) &&
+      n < BigInt::power2(unsigned_type->get_width()))
+      return from_integer(neg ? -n : n, unsigned_type);
+  }
+  return expr2tc();
+}
 
-  return constant_int2tc(get_int64_type(), n);
+expr2tc parse_constraint_value(ParseState &ps)
+{
+  expr2tc value = parse_number(ps);
+  if (!value || !ps.is(clang::tok::minus))
+    return value;
+
+  // The witness writer spells signed minima as -MAX - 1 (C11 6.4.4.1).
+  if (
+    !is_constant_int2t(value) || !is_signedbv_type(value->type) ||
+    to_constant_int2t(value).value !=
+      1 - BigInt::power2(value->type->get_width() - 1))
+    return expr2tc();
+  ps.advance();
+  const expr2tc one = parse_number(ps);
+  if (
+    !one || !is_constant_int2t(one) || one->type != int_type2() ||
+    to_constant_int2t(one).value != 1)
+    return expr2tc();
+  return from_integer(to_constant_int2t(value).value - 1, value->type);
 }
 
 expr2tc do_parse_expr(ParseState &ps);
@@ -233,7 +267,7 @@ expr2tc do_parse_comparison(ParseState &ps)
   }
   ps.advance();
 
-  expr2tc rhs = parse_number(ps);
+  expr2tc rhs = parse_constraint_value(ps);
   if (!rhs)
     return expr2tc();
 

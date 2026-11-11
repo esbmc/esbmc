@@ -34,7 +34,25 @@ static void to_common_float_type(expr2tc &rel)
       *op = typecast2tc(common, *op);
 }
 
-static void substitute_result(expr2tc &e, const expr2tc &ret_val)
+static void to_common_integer_type(expr2tc &rel)
+{
+  std::vector<expr2tc *> ops;
+  rel->Foreach_operand([&](expr2tc &op) { ops.push_back(&op); });
+  if (ops.size() != 2 || !is_bv_type(*ops[0]) || !is_bv_type(*ops[1]))
+    return;
+  type2tc common = (*ops[0])->type;
+  const type2tc other = (*ops[1])->type;
+  if (
+    other->get_width() > common->get_width() ||
+    (other->get_width() == common->get_width() && is_unsignedbv_type(other)))
+    common = other;
+  for (expr2tc *op : ops)
+    if ((*op)->type != common)
+      *op = typecast2tc(common, *op);
+}
+
+static void
+substitute_result(expr2tc &e, const expr2tc &ret_val, bool integer_result)
 {
   if (is_symbol2t(e) && to_symbol2t(e).thename == "\\result")
   {
@@ -43,19 +61,19 @@ static void substitute_result(expr2tc &e, const expr2tc &ret_val)
   }
   if (is_constant_int2t(e))
   {
-    if (
-      is_unsignedbv_type(ret_val->type) &&
-      to_constant_int2t(e).value.is_negative())
-      log_warning(
-        "witness: function_return constraint compares signed constant {} "
-        "against unsigned return type; constraint may be trivially false",
-        integer2string(to_constant_int2t(e).value));
+    if (integer_result)
+      return;
     e = from_integer(to_constant_int2t(e).value, ret_val->type);
     return;
   }
-  e->Foreach_operand([&](expr2tc &op) { substitute_result(op, ret_val); });
+  e->Foreach_operand(
+    [&](expr2tc &op) { substitute_result(op, ret_val, integer_result); });
   if (is_comparison_expr(e))
+  {
     to_common_float_type(e);
+    if (integer_result)
+      to_common_integer_type(e);
+  }
 }
 
 const std::vector<size_t> &goto_symext::witness_segments_at(
@@ -112,6 +130,12 @@ void goto_symext::symex_witness_function_return(
   expr2tc ret_val,
   const irep_idt &call_line)
 {
+  // Promote narrow results before comparing them (C11 6.3.1.1, 6.3.1.8).
+  const bool promoted = is_bool_type(ret_val->type) ||
+                        (is_bv_type(ret_val->type) &&
+                         ret_val->type->get_width() < config.ansi_c.int_width);
+  if (promoted)
+    ret_val = typecast2tc(int_type2(), ret_val);
   const expr2tc position = witness_position();
   for (size_t seg : witness_segments_at(waypoint::function_return, call_line))
   {
@@ -127,7 +151,7 @@ void goto_symext::symex_witness_function_return(
 
       cur_state->rename(ret_val);
       expr2tc constraint = wp.parsed_cond.expr;
-      substitute_result(constraint, ret_val);
+      substitute_result(constraint, ret_val, is_bv_type(ret_val->type));
       if (wp.action == waypoint::avoid)
         constraint = not2tc(constraint);
       assume(implies2tc(active, constraint));
