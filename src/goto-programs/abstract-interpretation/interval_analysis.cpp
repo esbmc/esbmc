@@ -404,9 +404,13 @@ void instrument_loop_bounds_after_kind(
           if (!pre_it->inductive_step_instruction || !pre_it->is_assign())
             break;
           const code_assign2t &a = to_code_assign2t(pre_it->code);
+          // A havoc that applies only when the loop is entered is
+          // `x = flag ? NONDET : x` (#10154).
+          const expr2tc &source =
+            is_if2t(a.source) ? to_if2t(a.source).true_value : a.source;
           if (
-            is_symbol2t(a.target) && is_sideeffect2t(a.source) &&
-            to_sideeffect2t(a.source).kind == sideeffect2t::allockind::nondet)
+            is_symbol2t(a.target) && is_sideeffect2t(source) &&
+            to_sideeffect2t(source).kind == sideeffect2t::allockind::nondet)
             symbols.insert(a.target);
         } while (pre_it != f_it->second.body.instructions.begin());
       }
