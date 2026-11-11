@@ -650,7 +650,9 @@ exprt bounded_math::hypot(const exprt &x, const exprt &y)
   // Constrained only for regular arguments, so the paths of NaN and infinite
   // arguments survive the assumption.
   const exprt result = fresh("$math$", nil_exprt());
-  assume(or_exprt(not_exprt(regular), between(result, larger, upper)));
+  assume(or_exprt(
+    not_exprt(regular),
+    and_exprt(between(result, larger, upper), squares_relation(x, y, result))));
   return if_exprt(
     or_exprt(is_infinite(x), is_infinite(y)),
     number(inf),
@@ -663,8 +665,63 @@ exprt bounded_math::hypot(const exprt &x, const exprt &y)
         if_exprt(equality_exprt(y, zero), ax, result))));
 }
 
+// r^2 within the ulps of x^2 + y^2, while that sum stays normal: r is within
+// max_ulps of the exact hypot, and each square and the sum round once more.
+exprt bounded_math::squares_relation(
+  const exprt &x,
+  const exprt &y,
+  const exprt &r)
+{
+  const exprt sum =
+    ieee("ieee_add", ieee("ieee_mul", x, x), ieee("ieee_mul", y, y));
+  const exprt normal = and_exprt(greater(sum, 0x1p-1000), less(sum, 0x1p1000));
+  const exprt radius = ieee(
+    "ieee_mul",
+    sum,
+    number((2 * transcendental::max_ulps() + 16) * DBL_EPSILON));
+  const exprt square = ieee("ieee_mul", r, r);
+  return or_exprt(
+    not_exprt(normal),
+    between(
+      square, ieee("ieee_sub", sum, radius), ieee("ieee_add", sum, radius)));
+}
+
+// arctan2(|y|, x) of a regular (x, y), from the Taylor series of arctan on
+// t = min/max, taken to (t - 1)/(t + 1) past tan(pi/8) so that the series
+// of 19 terms is within 3e-17, then moved to the octant of (x, y).
+exprt bounded_math::arctan2_estimate(const exprt &y, const exprt &x)
+{
+  static const double pi = std::numbers::pi;
+  const exprt ax = abs_value(x), ay = abs_value(y);
+  const exprt steep = binary_relation_exprt(ay, ">", ax);
+  const exprt t =
+    ieee("ieee_div", if_exprt(steep, ax, ay), if_exprt(steep, ay, ax));
+  const exprt far = greater(t, 0.41421356237309503);
+  const exprt one = number(1.0);
+  const exprt u = if_exprt(
+    far,
+    ieee("ieee_div", ieee("ieee_sub", t, one), ieee("ieee_add", t, one)),
+    t);
+  const exprt w = ieee("ieee_mul", u, u);
+  exprt series = number(1.0 / 37);
+  for (int k = 17; k >= 0; --k)
+    series = ieee(
+      "ieee_add",
+      number((k % 2 ? -1.0 : 1.0) / (2 * k + 1)),
+      ieee("ieee_mul", w, series));
+  const exprt angle = ieee(
+    "ieee_add",
+    if_exprt(far, number(pi / 4), number(0.0)),
+    ieee("ieee_mul", u, series));
+  const exprt octant =
+    if_exprt(steep, ieee("ieee_sub", number(pi / 2), angle), angle);
+  return if_exprt(less(x, 0.0), ieee("ieee_sub", number(pi), octant), octant);
+}
+
 // The special values of C99 F.9.1.4 are exact; otherwise the result lies in
-// the quadrant of (x, y), on the side of pi/4 or 3*pi/4 that |y| >= |x| picks.
+// the quadrant of (x, y), on the side of pi/4 or 3*pi/4 that |y| >= |x| picks,
+// and within 1e-13 of arctan2_estimate, which covers its rounding and
+// NumPy's ulps.
 exprt bounded_math::arctan2(const exprt &y, const exprt &x)
 {
   static const double pi = std::numbers::pi, half_pi = pi / 2,
@@ -690,7 +747,16 @@ exprt bounded_math::arctan2(const exprt &y, const exprt &x)
       between(
         magnitude, number(below(half_pi)), number(above(three_quarter_pi))),
       between(magnitude, number(below(three_quarter_pi)), number(above(pi)))));
-  assume(or_exprt(not_exprt(regular), in_quadrant));
+  const exprt estimate = arctan2_estimate(y, x);
+  const exprt tolerance = number(1e-13);
+  assume(or_exprt(
+    not_exprt(regular),
+    and_exprt(
+      in_quadrant,
+      between(
+        magnitude,
+        ieee("ieee_sub", estimate, tolerance),
+        ieee("ieee_add", estimate, tolerance)))));
   exprt negated("unary-", double_type());
   negated.copy_to_operands(magnitude);
   const exprt general = if_exprt(sign_bit(y), negated, magnitude);

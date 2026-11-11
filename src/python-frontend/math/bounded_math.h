@@ -83,6 +83,8 @@ private:
   exprt hypot(const exprt &x, const exprt &y);
   exprt hypot_of_runtime(const std::vector<exprt> &args);
   exprt arctan2(const exprt &y, const exprt &x);
+  exprt squares_relation(const exprt &x, const exprt &y, const exprt &r);
+  exprt arctan2_estimate(const exprt &y, const exprt &x);
   exprt fresh(const std::string &name, const exprt &value);
   exprt read_once(const exprt &x);
   exprt within(double low, double high);
