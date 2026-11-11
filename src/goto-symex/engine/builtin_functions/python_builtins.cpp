@@ -112,11 +112,22 @@ static expr2tc isinstance_subject(expr2tc value, const expr2tc &operand)
 // value set traced back to its object carries no Python type, so no answer is
 // sound: comparing `void *` itself would say "no" to every type. Fail only if
 // this path is reachable, and end it so no check after it relies on the guess.
+// The marker the frontend plants (#10251): a null `void *` for the type.
+static bool asks_whether_traced(const expr2tc &expect_type)
+{
+  return !is_nil_expr(expect_type) && is_pointer_type(expect_type->type) &&
+         is_empty_type(to_pointer_type(expect_type->type).subtype);
+}
+
+static bool is_untyped_pointer(const expr2tc &value)
+{
+  return is_symbol2t(value) && is_pointer_type(value->type) &&
+         is_empty_type(to_pointer_type(value->type).subtype);
+}
+
 void goto_symext::reject_untyped_isinstance(const expr2tc &value)
 {
-  if (
-    !is_symbol2t(value) || !is_pointer_type(value->type) ||
-    !is_empty_type(to_pointer_type(value->type).subtype))
+  if (!is_untyped_pointer(value))
     return;
   claim(gen_false_expr(), "isinstance() on a value whose type was lost");
   assume(gen_false_expr());
@@ -145,6 +156,44 @@ static expr2tc points_to_object(
     is_python_number_type(value->type) ||
     (is_tuple_element(value) && is_null_object2t(object));
   return says_nothing ? current : object;
+}
+
+// The value isinstance inspects once the value set has been consulted: the
+// object the operand points to, or the operand itself when nothing is known.
+expr2tc goto_symext::isinstance_subject_of(const isinstance2t &obj)
+{
+  expr2tc value = obj.side_1;
+  value_setst::valuest value_set;
+  // The value-set map is keyed by the L1 symbol name (e.g. "...@x?1!0"); the
+  // isinstance operand arrives as an L0 symbol, so an unrenamed lookup misses
+  // and the points-to set comes back empty/unknown. Rename to L1 first. This
+  // matters for the object-model migration (#3067): a class instance is a
+  // `Class*` allocated by `new_object`; when that allocation is guarded
+  // (e.g. inside `if c:`), constant propagation cannot recover the concrete
+  // object from the renamed pointer, so the value-set is the only way to find
+  // the pointed-to struct and resolve the type. The L1 rename keeps the
+  // symbol shape (cur_state->rename may wrap it in a typecast), so we can
+  // index the map directly.
+  expr2tc l1_value = value;
+  cur_state->top().level1.rename(l1_value);
+  cur_state->value_set.get_value_set(l1_value, value_set);
+
+  // Find the last value from the value set
+  for (const auto &entry : value_set)
+  {
+    if (is_object_descriptor2t(entry))
+    {
+      const object_descriptor2t &o = to_object_descriptor2t(entry);
+      value = points_to_object(l1_value, o.object, value);
+    }
+  }
+
+  cur_state->rename(value);
+  value = isinstance_subject(value, obj.side_1);
+
+  if (is_address_of2t(value))
+    value = to_address_of2t(value).ptr_obj;
+  return value;
 }
 
 void goto_symext::simplify_python_builtins(expr2tc &expr)
@@ -176,36 +225,15 @@ void goto_symext::simplify_python_builtins(expr2tc &expr)
       }
     }
 
-    value_setst::valuest value_set;
-    // The value-set map is keyed by the L1 symbol name (e.g. "...@x?1!0"); the
-    // isinstance operand arrives as an L0 symbol, so an unrenamed lookup misses
-    // and the points-to set comes back empty/unknown. Rename to L1 first. This
-    // matters for the object-model migration (#3067): a class instance is a
-    // `Class*` allocated by `new_object`; when that allocation is guarded
-    // (e.g. inside `if c:`), constant propagation cannot recover the concrete
-    // object from the renamed pointer, so the value-set is the only way to find
-    // the pointed-to struct and resolve the type. The L1 rename keeps the
-    // symbol shape (cur_state->rename may wrap it in a typecast), so we can
-    // index the map directly.
-    expr2tc l1_value = value;
-    cur_state->top().level1.rename(l1_value);
-    cur_state->value_set.get_value_set(l1_value, value_set);
+    value = isinstance_subject_of(obj);
 
-    // Find the last value from the value set
-    for (const auto &obj : value_set)
+    // The frontend's visible refusal (#10251) asks only whether the type was
+    // traced: a `void *` second operand stands for no type at all.
+    if (asks_whether_traced(expect_type))
     {
-      if (is_object_descriptor2t(obj))
-      {
-        const object_descriptor2t &o = to_object_descriptor2t(obj);
-        value = points_to_object(l1_value, o.object, value);
-      }
+      expr = is_untyped_pointer(value) ? gen_false_expr() : gen_true_expr();
+      return;
     }
-
-    cur_state->rename(value);
-    value = isinstance_subject(value, obj.side_1);
-
-    if (is_address_of2t(value))
-      value = to_address_of2t(value).ptr_obj;
 
     reject_untyped_isinstance(value);
 

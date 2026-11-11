@@ -885,6 +885,7 @@ protected:
 
   void simplify_python_builtins(expr2tc &expr);
   void reject_untyped_isinstance(const expr2tc &value);
+  expr2tc isinstance_subject_of(const isinstance2t &obj);
 
   void volatile_check(expr2tc &expr);
 
