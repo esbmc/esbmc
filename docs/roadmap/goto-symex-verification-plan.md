@@ -919,6 +919,7 @@ this document** — each is a prioritised target for the cited harness.
 | **R138** | **High (false SUCCESSFUL and false FAILED, default configuration)** — R129's open note, §15 M9 (R138); **FIXED** for a bounded output, same entry | **`sprintf` and `snprintf` of a nondet value through anything but `%d`, `%i` or `%u` left the destination unchanged.** R129 stores text and those three conversions only, so `char b[4]; sprintf(b, "%x", x);` with a nondet `x` raised no bounds violation, and after `char b[12] = "abcdefghijk"; int r = sprintf(b, "%x", x);` `b[r]` still read the old text, so `assert(b[r] == '\0')` was FAILED. | `sprintf_output` and `format_printf_output`, `src/goto-symex/engine/builtin_functions/io.cpp`; `regression/esbmc/sprintf_symbolic_output{,_fail}` | — | **Fixed** when the formatter bounds the output at 1024 characters or fewer: the call writes nondet characters up to a length within those bounds and a NUL after them, each write bounds-checked. |
 | **R141** | **High (false SUCCESSFUL and false FAILED, default configuration)** — found reading `nextafter.c` while checking the open notes of PR #8296, §15 M9 (R141); **FIXED**, same entry | **`nextafter` from an infinity returned the infinity.** The model's `FP_INFINITE` case left the value unchanged, so `nextafter(INFINITY, 0.0)` was `INFINITY` rather than `DBL_MAX`, and `nextafterf` was the same: `assert(isinf(nextafter(INFINITY, 0.0)))` was SUCCESSFUL. The `nextafter-spec` and `nextafterf-spec` tests asserted the wrong result. | `src/c2goto/library/libm/nextafter.c`; `regression/esbmc/nextafter_from_infinity{,_fail}`; `regression/floats-regression/nextafter{,f}-spec` | — | **Fixed** by stepping an infinity's bits like a finite value's. `nextafterl` and `nexttoward` still have no model. |
 | **R137** | **High (false SUCCESSFUL and false FAILED, default configuration)** — R121's open note on `vsprintf` and `vsnprintf`, §15 M9 (R137); **FIXED** for a format that takes no argument, same entry | **`vsprintf` and `vsnprintf` never wrote their destination.** `symex_sprintf_store` stored only `sprintf` and `snprintf` output, so after `vsprintf(b, "xy", ap)` the buffer kept its old text and `char b[4]; vsprintf(b, "hello", ap);` raised no bounds violation. | `symex_sprintf_store` and `format_printf_output`, `src/goto-symex/engine/builtin_functions/io.cpp`; `regression/esbmc/vsprintf_stores_output{,_fail}` | — | **Fixed** when the format is constant and needs no argument: the output is stored as for `sprintf`. A conversion that reads the `va_list` still leaves the destination unchanged. |
+| **R152** | **High (false SUCCESSFUL and false FAILED, default configuration)** — R133's open note, §15 M9 (R152); **FIXED**, same entry | **`log`, `log2` and `log1p` were truncated series.** `log` returned `log2(x) * M_LN2`, and `log2` took two square roots and an 8-term series, so exact cases came out a few ulps off: `assert(log(M_E) == 1.0);` was FAILED and `assert(log(M_E) != 1.0);` was SUCCESSFUL. `pow`, `acosh`, `asinh` and `atanh` call them. | `src/c2goto/library/libm/musl/log.c`, `log2.c`, `log1p.c`; `regression/esbmc/log_model{,_fail}` | — | **Fixed** with musl's fdlibm-derived `log`, `log2` and `log1p`. `--fp-taylor-terms` now tunes only `exp`, `expm1` and `pow`'s `exp`. |
 
 ---
 
@@ -12657,6 +12658,37 @@ Monday failures, whose jobs also failed on 10-05: `Simplifier equivalence` (`git
 `overflow_16_fir_new`), Windows DebugOpt (`k-induction_cpp_stack_empty_bug`
 and three `goto-transcoder` tests), and the macOS build's
 `github_9081_optional_dict_value_fail`.
+
+### M9 (R152) — 2026-11-11, the logarithms R133 left as series
+
+R133's entry left `log`, `log2` and `log1p` on the truncated Taylor series in
+`src/c2goto/library/libm/exp.c`. `log` returned `log2(x) * M_LN2`, and `log2`
+reduced `x` with `frexp` and two square roots and then summed eight terms of
+the `log1p` series, so the result was a few ulps off even where glibc is
+exact: `assert(log(M_E) == 1.0);` was FAILED and `assert(log(M_E) != 1.0);`
+was SUCCESSFUL, and so were `log2(10.0)` and `log1p(M_E - 1.0)`. `pow` takes
+`log(fabs(x))` and `acosh`, `asinh` and `atanh` call `log` or `log1p`, so
+their results carried the same error.
+
+**Fixed** by replacing the three models with musl's `log.c`, `log2.c` and
+`log1p.c` (the fdlibm versions, the same reduction and polynomial as R133's
+`log10.c`) under `src/c2goto/library/libm/musl`. Compiled natively, each was
+within 1 ulp of glibc on 3,000,000 random inputs, and exactly glibc's on the
+test inputs. `--fp-taylor-terms` now tunes only `exp`, `expm1` and the `exp`
+inside `pow`; the four `floats/github_2865_*` tests that set it move from
+`log1p(0.125)` to `expm1(0.24)`, whose error is 3e-14 at the default 8 terms,
+2e-10 at 6 and 6e-17 at 12, so each keeps its verdict.
+
+`log_model` checks `log(M_E)`, `log(2.0) == M_LN2`, a subnormal, both zeros,
+a negative argument, an infinity, `log2` at powers of two and at `10.0`,
+`log1p` at `M_E - 1` and `0.125`, `log1p(-1.0)`, `log1p(-2.0)` and the
+`__builtin_` forms; it is FAILED on master and passes natively.
+`log_model_fail` runs under `--multi-property` and pins that `log(2.0)` lies
+in `(0.69314, 0.69315)` and that `log(M_E) != 1.0` fails; master passes both.
+RESULTS_PLACEHOLDER
+
+Not fixed: the `float` and `long double` forms other than musl's `logf` and
+`log1pf` (`log2f`, `logl`, `log2l`, `log1pl`) are unchanged by this entry.
 
 ---
 

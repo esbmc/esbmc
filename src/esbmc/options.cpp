@@ -384,7 +384,7 @@ const struct group_opt_templ all_cmd_options[] = {
      {"round-to-zero", NULL, "Round floating-point results towards zero"},
      {"fp-taylor-terms",
       boost::program_options::value<int>()->value_name("n"),
-      "Terms the exp/log/pow operational models expand their Taylor series to, "
+      "Terms the exp and pow operational models expand their Taylor series to, "
       "between 2 and 12 (default 8). More terms are more accurate and more "
       "expensive to solve"},
    }},

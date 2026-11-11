@@ -177,7 +177,6 @@ const static std::vector<std::string> python_c_extern_deps = {
   "log2",
   "log1p",
   "ldexp",
-  "log1p_taylor",
   "asinh",
   "acosh",
   "atanh",

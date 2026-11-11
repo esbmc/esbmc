@@ -109,7 +109,7 @@ static bool set_model_global(
   return false;
 }
 
-/* --fp-taylor-terms tunes how far the exp/log/pow models expand their Taylor
+/* --fp-taylor-terms tunes how far the exp and pow models expand their Taylor
  * series (esbmc/esbmc#2865); see src/c2goto/library/libm/exp.c. */
 static bool
 apply_taylor_terms(goto_functionst &goto_functions, const cmdlinet &cmdline)
