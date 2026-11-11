@@ -327,6 +327,22 @@ static bool early_answer_allowed(
          });
 }
 
+static void record_early_answer(
+  optionst &options,
+  const cmdlinet &cmdline,
+  const goto_functionst &goto_functions,
+  const contextt &context,
+  bool checks_past_violation)
+{
+  if (early_answer_allowed(options, cmdline, checks_past_violation))
+    options.set_option(
+      "python-no-checked-exception",
+      no_reachable_property(
+        goto_functions,
+        context,
+        options.get_bool_option("no-unwinding-assertions")));
+}
+
 bool esbmc_parseoptionst::process_goto_program(
   optionst &options,
   goto_functionst &goto_functions)
@@ -969,13 +985,8 @@ bool esbmc_parseoptionst::process_goto_program(
       tmp.negating_asserts(tgt_fname);
     }
 
-    if (early_answer_allowed(options, cmdline, checks_past_violation))
-      options.set_option(
-        "python-no-checked-exception",
-        no_reachable_property(
-          goto_functions,
-          context,
-          options.get_bool_option("no-unwinding-assertions")));
+    record_early_answer(
+      options, cmdline, goto_functions, context, checks_past_violation);
   }
 
   catch (const char *e)

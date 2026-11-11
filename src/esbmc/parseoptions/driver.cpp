@@ -357,6 +357,17 @@ int esbmc_parseoptionst::run_chosen_strategy(
   return do_bmc(bmc);
 }
 
+// --skip-bmc leaves silently; an early answer (#10252) prints its verdict.
+static bool answered_without_bmc(const optionst &options)
+{
+  if (options.get_bool_option("skip-bmc"))
+    return true;
+  const bool early = options.get_bool_option("python-no-checked-exception");
+  if (early)
+    log_success("\nVERIFICATION SUCCESSFUL");
+  return early;
+}
+
 int esbmc_parseoptionst::doit()
 {
   // Configure msg output
@@ -580,14 +591,8 @@ int esbmc_parseoptionst::doit()
     return 1;
 
   // Leave without doing any Bounded Model Checking
-  if (options.get_bool_option("skip-bmc"))
+  if (answered_without_bmc(options))
     return 0;
-
-  if (options.get_bool_option("python-no-checked-exception"))
-  {
-    log_success("\nVERIFICATION SUCCESSFUL");
-    return 0;
-  }
 
   // A violation found under a bounded schedule space is genuine whichever
   // strategy owns the run, so this precedes the dispatch rather than joins it.
