@@ -2832,7 +2832,8 @@ private:
     const nlohmann::json &element);
   std::optional<exprt> try_dispatch_dunder_getitem(
     const nlohmann::json &element,
-    const nlohmann::json &slice);
+    const nlohmann::json &slice,
+    const exprt &receiver);
   void reject_scalar_subscript(
     const typet &array_type,
     const nlohmann::json &element) const;
@@ -3726,6 +3727,7 @@ private:
   /// Class @p value_node is an instance of, or "" when it is not an instance.
   /// Resolves both a bound name and a constructor temporary.
   std::string instance_class_name(const nlohmann::json &value_node);
+  nlohmann::json fixed_attribute_value(const nlohmann::json &attribute);
   std::string attribute_class_name(const nlohmann::json &attribute);
 
   /// True when @p value_node denotes a user-defined class instance, as opposed
@@ -3745,6 +3747,16 @@ private:
     const std::string &op,
     exprt &operand,
     const locationt &loc);
+  bool try_dispatch_dunder_setitem(
+    const nlohmann::json &target,
+    const nlohmann::json &ast_node,
+    const exprt &container,
+    codet &target_block);
+  std::optional<exprt> dispatch_item_dunder_by_type(
+    const exprt &receiver,
+    const nlohmann::json &receiver_node,
+    const std::string &dunder,
+    const nlohmann::json &args);
   bool is_plain_user_class(const std::string &class_name);
   bool lacks_binary_dunder(
     const std::string &op,

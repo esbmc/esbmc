@@ -7642,6 +7642,35 @@ exprt python_converter::get_value_expr(const nlohmann::json &node)
   return get_expr(node);
 }
 
+// Object subscript assignment via __setitem__:
+//   obj[key] = value  ->  obj.__setitem__(key, value)
+bool python_converter::try_dispatch_dunder_setitem(
+  const nlohmann::json &target,
+  const nlohmann::json &ast_node,
+  const exprt &container,
+  codet &target_block)
+{
+  if (
+    !target.contains("value") || !target.contains("slice") ||
+    !ast_node.contains("value") || ast_node["value"].is_null())
+    return false;
+
+  nlohmann::json args = nlohmann::json::array();
+  args.push_back(target["slice"]);
+  args.push_back(ast_node["value"]);
+  std::optional<exprt> setitem_call;
+  if (has_dunder_method(target["value"], "__setitem__"))
+    setitem_call = get_function_call(
+      build_dunder_call(target["value"], "__setitem__", args, ast_node));
+  else
+    setitem_call = dispatch_item_dunder_by_type(
+      container, target["value"], "__setitem__", args);
+  if (!setitem_call)
+    return false;
+  target_block.copy_to_operands(convert_expression_to_code(*setitem_call));
+  return true;
+}
+
 void python_converter::get_var_assign(
   const nlohmann::json &ast_node,
   codet &target_block)
@@ -7861,22 +7890,10 @@ void python_converter::get_var_assign(
     if (reject_immutable_item_assignment(container_expr, target_block))
       return;
 
-    // Handle object subscript assignment via __setitem__:
-    //   obj[key] = value  ->  obj.__setitem__(key, value)
     if (
-      target.contains("value") && target.contains("slice") &&
-      ast_node.contains("value") && !ast_node["value"].is_null() &&
-      has_dunder_method(target["value"], "__setitem__"))
-    {
-      nlohmann::json args = nlohmann::json::array();
-      args.push_back(target["slice"]);
-      args.push_back(ast_node["value"]);
-      nlohmann::json call_node =
-        build_dunder_call(target["value"], "__setitem__", args, ast_node);
-      exprt setitem_call = get_function_call(call_node);
-      target_block.copy_to_operands(convert_expression_to_code(setitem_call));
+      try_dispatch_dunder_setitem(
+        target, ast_node, container_expr, target_block))
       return;
-    }
 
     const namespacet ns(symbol_table_);
     const typet resolved_container = ns.follow(container_type);

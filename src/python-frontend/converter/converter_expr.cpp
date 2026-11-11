@@ -2084,12 +2084,17 @@ std::optional<exprt> python_converter::try_dispatch_bool_mask_variable_index(
 
 std::optional<exprt> python_converter::try_dispatch_dunder_getitem(
   const nlohmann::json &element,
-  const nlohmann::json &slice)
+  const nlohmann::json &slice,
+  const exprt &receiver)
 {
   // Handle object subscripting through __getitem__:
   //   obj[key] -> obj.__getitem__(key)
   if (!has_dunder_method(element["value"], "__getitem__"))
-    return std::nullopt;
+    return dispatch_item_dunder_by_type(
+      receiver,
+      element["value"],
+      "__getitem__",
+      nlohmann::json::array({slice}));
 
   nlohmann::json args = nlohmann::json::array();
   args.push_back(slice);
@@ -2326,7 +2331,7 @@ exprt python_converter::handle_subscript_expr(const nlohmann::json &element)
 
   if (
     std::optional<exprt> dunder_result =
-      try_dispatch_dunder_getitem(element, slice))
+      try_dispatch_dunder_getitem(element, slice, array))
     return *dunder_result;
 
   reject_scalar_subscript(array_type, element);

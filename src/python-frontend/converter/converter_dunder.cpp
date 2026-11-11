@@ -142,8 +142,9 @@ attribute_writes(const nlohmann::json &node, const std::string &attr)
   return n;
 }
 
-// The class C when @p stmt is `self.attr = C(...)` with @p self as `self`.
-static std::string constructed_class(
+// The value @p stmt stores when it is `self.attr = value` with @p self as
+// `self`, else null.
+static nlohmann::json stored_value(
   const nlohmann::json &stmt,
   const std::string &self,
   const std::string &attr)
@@ -153,15 +154,11 @@ static std::string constructed_class(
                                    ? stmt["targets"][0]
                                  : kind == "AnnAssign" ? stmt["target"]
                                                        : nlohmann::json();
-  const nlohmann::json value = stmt.value("value", nlohmann::json());
   if (
     !target.is_object() || target.value("_type", "") != "Attribute" ||
-    target.value("attr", "") != attr ||
-    target["value"].value("id", "") != self || !value.is_object() ||
-    value.value("_type", "") != "Call" ||
-    value["func"].value("_type", "") != "Name")
-    return "";
-  return value["func"].value("id", "");
+    target.value("attr", "") != attr || target["value"].value("id", "") != self)
+    return nullptr;
+  return stmt.value("value", nlohmann::json());
 }
 
 // Whether @p node defines or stores to `__init__`.
@@ -185,10 +182,10 @@ static bool binds_init(const nlohmann::json &node)
          std::any_of(node.begin(), node.end(), binds_init);
 }
 
-// The class C when the `__init__` @p class_def binds last stores a new C to
-// `self.attr` at its top level before any return, else "".
-static std::string
-init_constructed_class(const nlohmann::json &class_def, const std::string &attr)
+// The value the `__init__` @p class_def binds last stores to `self.attr` at
+// its top level before any return, else null.
+static nlohmann::json
+init_stored_value(const nlohmann::json &class_def, const std::string &attr)
 {
   const nlohmann::json *init = nullptr;
   for (const auto &stmt : class_def["body"])
@@ -197,41 +194,53 @@ init_constructed_class(const nlohmann::json &class_def, const std::string &attr)
   if (
     !init || init->value("_type", "") != "FunctionDef" ||
     !(*init)["decorator_list"].empty() || (*init)["args"]["args"].empty())
-    return "";
+    return nullptr;
 
   const std::string self = (*init)["args"]["args"][0].value("arg", "");
   for (const auto &stmt : (*init)["body"])
   {
-    const std::string cls = constructed_class(stmt, self, attr);
-    if (!cls.empty() || contains_return(stmt))
-      return cls;
+    const nlohmann::json value = stored_value(stmt, self, attr);
+    if (!value.is_null() || contains_return(stmt))
+      return value;
   }
-  return "";
+  return nullptr;
 }
 
-/// The class of the instance `obj.attr` holds, when that is fixed: the only
-/// store to `attr` in the module is an unconditional `self.attr = C(...)` in
-/// the `__init__` of obj's class, and neither class has a subclass. A
-/// component's type is that of the first value stored, so it names the
-/// runtime class only then: None, a subclass instance, or an attribute set
-/// on some paths would be dispatched as a C instance.
-std::string
-python_converter::attribute_class_name(const nlohmann::json &attribute)
+/// The value `obj.attr` holds, when that is fixed: the only store to `attr`
+/// in the module is an unconditional `self.attr = value` in the `__init__` of
+/// obj's class, which has no subclass. Else null.
+nlohmann::json
+python_converter::fixed_attribute_value(const nlohmann::json &attribute)
 {
   if (python_file() != main_python_filename())
-    return "";
+    return nullptr;
   const std::string owner = instance_class_name(attribute["value"]);
   const std::string attr = attribute.value("attr", "");
-  const nlohmann::json &body = (*ast_json)["body"];
-  const nlohmann::json owner_def = json_utils::find_class(body, owner);
+  const nlohmann::json owner_def =
+    json_utils::find_class((*ast_json)["body"], owner);
   if (
     owner_def.empty() || json_utils::has_subclass(owner, *ast_json) ||
     attribute_writes(*ast_json, attr) != 1)
-    return "";
+    return nullptr;
+  return init_stored_value(owner_def, attr);
+}
 
-  const std::string cls = init_constructed_class(owner_def, attr);
+/// The class C of the instance `obj.attr` holds, when its fixed value is a
+/// new C and C has no subclass. A component's type is that of the first value
+/// stored, so it names the runtime class only then: None, a subclass
+/// instance, or an attribute set on some paths would be dispatched as a C
+/// instance.
+std::string
+python_converter::attribute_class_name(const nlohmann::json &attribute)
+{
+  const nlohmann::json value = fixed_attribute_value(attribute);
   if (
-    cls.empty() || json_utils::find_class(body, cls).empty() ||
+    !value.is_object() || value.value("_type", "") != "Call" ||
+    value["func"].value("_type", "") != "Name")
+    return "";
+  const std::string cls = value["func"].value("id", "");
+  if (
+    json_utils::find_class((*ast_json)["body"], cls).empty() ||
     json_utils::has_subclass(cls, *ast_json))
     return "";
   return cls;
@@ -562,6 +571,70 @@ exprt python_converter::dispatch_dunder_operator(
     "unsupported operand type(s) for " + symbols.at(op) + ": '" +
       type_handler_.get_python_type_name(lhs.type()) + "' and '" +
       type_handler_.get_python_type_name(rhs.type()) + "'");
+}
+
+// A number goes by value to a number parameter, an int to an `Any` one.
+static exprt item_dunder_arg(const exprt &arg, const typet &param_type)
+{
+  const bool to_number =
+    is_number(param_type) ||
+    (param_type == any_type() &&
+     (arg.type().is_signedbv() || arg.type().is_unsignedbv()));
+  return is_number(arg.type()) && to_number ? typecast_exprt(arg, param_type)
+                                            : arg;
+}
+
+// `boxes[1][i]` or `self.data[i] = v`: the AST names no class for the
+// receiver, but its type does. A class instance must not be indexed as a list.
+std::optional<exprt> python_converter::dispatch_item_dunder_by_type(
+  const exprt &receiver,
+  const nlohmann::json &receiver_node,
+  const std::string &dunder,
+  const nlohmann::json &args)
+{
+  const typet t = resolve_operand_type(receiver, symbol_table_, ns);
+  if (
+    !t.is_struct() || is_excluded_struct_tag(to_struct_type(t)) ||
+    !is_user_class_struct_type(t))
+    return std::nullopt;
+  const std::string cls = class_name_of(t);
+  // The static type names the runtime class only when no subclass exists
+  // and an attribute holds a value on every path.
+  if (
+    json_utils::has_subclass(cls, *ast_json) ||
+    (receiver_node.value("_type", "") == "Attribute" &&
+     fixed_attribute_value(receiver_node).is_null()))
+    return std::nullopt;
+
+  const std::runtime_error unsupported(
+    "subscripting an instance of class '" + cls + "' is not supported here");
+  const symbolt *method = find_dunder_method(cls, dunder);
+  // Only the class body can give a plain class the method.
+  if (!method && is_plain_user_class(cls))
+    return get_exception_handler().gen_exception_raise(
+      "TypeError",
+      "'" + cls + "' object " +
+        (dunder == "__getitem__" ? "is not subscriptable"
+                                 : "does not support item assignment"));
+  if (!method || args[0].value("_type", "") == "Slice")
+    throw unsupported;
+  const code_typet &method_type = to_code_type(method->get_type());
+  const auto &params = method_type.arguments();
+  if (params.size() != args.size() + 1)
+    throw unsupported;
+
+  std::vector<exprt> call_args = {dunder_ref_arg(receiver)};
+  for (size_t k = 0; k < args.size(); ++k)
+  {
+    const typet &param_type = params[k + 1].type();
+    const exprt arg = item_dunder_arg(get_expr(args[k]), param_type);
+    if (ns.follow(arg.type()) != ns.follow(param_type))
+      throw unsupported;
+    call_args.push_back(arg);
+  }
+  exprt call = build_call_expr(*method, method_type.return_type(), call_args);
+  call.location() = get_location_from_decl(receiver_node);
+  return call;
 }
 
 static bool mentions_string(const nlohmann::json &node, const std::string &s)
