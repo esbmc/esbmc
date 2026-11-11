@@ -389,6 +389,54 @@ const nlohmann::json *python_converter::sole_binding(
   return found;
 }
 
+/// Whether @p node stores into or deletes an attribute named @p name, as
+/// `m.name = f` does when it rebinds a global of module `m`.
+static bool
+writes_attribute(const nlohmann::json &node, const std::string &name)
+{
+  if (
+    node.is_object() && node.value("_type", "") == "Attribute" &&
+    node.value("attr", "") == name &&
+    node.value("ctx", nlohmann::json::object()).value("_type", "") != "Load")
+    return true;
+  return node.is_structured() &&
+         std::any_of(node.begin(), node.end(), [&](const nlohmann::json &c) {
+           return writes_attribute(c, name);
+         });
+}
+
+const symbolt *python_converter::module_alias_target(const symbolt &alias) const
+{
+  const exprt &value = alias.get_value();
+  if (!value.is_address_of() || !value.op0().is_symbol())
+    return nullptr;
+  const std::string file =
+    ::symbol_id::from_string(alias.id.as_string()).get_filename();
+  const auto module = std::find_if(
+    module_ast_pool_.begin(), module_ast_pool_.end(), [&](const auto &m) {
+      return m.second.value("filename", "") == file;
+    });
+  if (module == module_ast_pool_.end())
+    return nullptr;
+
+  const std::string name = alias.name.as_string();
+  const nlohmann::json &body = module->second["body"];
+  const auto binds = [&](const nlohmann::json &stmt) {
+    return may_bind_name(stmt, name, true);
+  };
+  const auto binding = std::find_if(body.begin(), body.end(), binds);
+  if (
+    binding == body.end() || binding->value("_type", "") != "Assign" ||
+    std::any_of(std::next(binding), body.end(), binds))
+    return nullptr;
+  for (const nlohmann::json *module_body : reachable_module_bodies())
+    if (writes_attribute(*module_body, name))
+      return nullptr;
+
+  const symbolt *target = symbol_table_.find_symbol(value.op0().identifier());
+  return target && target->get_type().is_code() ? target : nullptr;
+}
+
 using scope_bindings = python_converter::scope_bindings;
 
 static bool names_contain(const nlohmann::json &names, const std::string &name)

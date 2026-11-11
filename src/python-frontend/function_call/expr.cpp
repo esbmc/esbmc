@@ -3615,7 +3615,13 @@ const symbolt *
 function_call_expr::find_callee_symbol(const std::string &func_symbol_id)
 {
   if (function_type_ != FunctionType::InstanceMethod)
-    return cached_find_symbol(func_symbol_id);
+  {
+    const symbolt *symbol = cached_find_symbol(func_symbol_id);
+    const bool module_global = symbol && !symbol->is_type &&
+                               !symbol->get_type().is_code() &&
+                               call_["func"]["_type"] == "Attribute";
+    return module_global ? converter_.module_alias_target(*symbol) : symbol;
+  }
   if (function_id_.get_class().empty())
     return nullptr;
   // find_symbol falls back to a module global of the method's name, which is
@@ -7792,7 +7798,7 @@ std::optional<exprt> function_call_expr::resolve_missing_function_symbol(
   {
     // Find in global scope
     function_id_.set_class("");
-    func_symbol = converter_.find_symbol(function_id_.to_string());
+    func_symbol = find_callee_symbol(function_id_.to_string());
 
     if (!func_symbol)
     {

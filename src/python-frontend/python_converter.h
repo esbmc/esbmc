@@ -572,6 +572,11 @@ public:
     const nlohmann::json &use) const;
   std::string current_module_name() const;
 
+  /// The function that @p alias, a global of an imported module, is bound to
+  /// when its module binds it once, by an assignment, and no attribute of
+  /// that name is written anywhere; null otherwise.
+  const symbolt *module_alias_target(const symbolt &alias) const;
+
   /// The file of the module named @p module_name, looked up by its own name:
   /// unlike get_imported_module_path, an alias bound in another module cannot
   /// stand in for it. Empty when the module was not collected.
