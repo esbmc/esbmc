@@ -2,6 +2,11 @@
 
 void fix_symbolt::fix_symbol(symbolt &symbol)
 {
+  // replace() walks through mutable accessors, which copies every node the
+  // value shares with the symbol and every shared type it passes (#10190).
+  if (expr_map.empty() && type_map.empty())
+    return;
+
   type_mapt::const_iterator it = type_map.find(symbol.id);
   if (it != type_map.end())
     symbol.id = it->second.id();
