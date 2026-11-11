@@ -128,6 +128,13 @@ public:
   {
   }
 
+  static std::set<irep_idt>
+  reachable_functions(const goto_functionst &gf, const contextt &context)
+  {
+    return compute_entry_reachable(
+      build_call_graph(gf), collect_address_taken(gf, context));
+  }
+
   void run(goto_functionst &goto_functions)
   {
     // Turn dynamic_cast<T&> bad_cast intrinsics into ordinary THROWs first, so
@@ -2182,4 +2189,10 @@ std::vector<irep_idt> python_checked_exceptions(const optionst &options)
   for (std::string name; std::getline(listed, name, ',');)
     checked.emplace_back(name);
   return checked;
+}
+
+std::set<irep_idt>
+entry_reachable_functions(const goto_functionst &gf, const contextt &context)
+{
+  return exception_loweringt::reachable_functions(gf, context);
 }

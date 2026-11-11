@@ -583,6 +583,12 @@ int esbmc_parseoptionst::doit()
   if (options.get_bool_option("skip-bmc"))
     return 0;
 
+  if (options.get_bool_option("python-no-checked-exception"))
+  {
+    log_success("\nVERIFICATION SUCCESSFUL");
+    return 0;
+  }
+
   // A violation found under a bounded schedule space is genuine whichever
   // strategy owns the run, so this precedes the dispatch rather than joins it.
   const int prepass = falsify_with_bounded_schedules(options, goto_functions);
