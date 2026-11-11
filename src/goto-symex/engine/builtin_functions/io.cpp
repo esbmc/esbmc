@@ -619,6 +619,14 @@ void goto_symext::check_printf_pointer_arg(
   }
 }
 
+void goto_symext::check_printf_format(const expr2tc &fmt)
+{
+  if (!is_pointer_type(fmt->type))
+    return;
+  expr2tc first_char = dereference2tc(get_uint8_type(), fmt);
+  dereference(first_char, dereferencet::READ);
+}
+
 expr2tc goto_symext::printf_field_length(
   const std::string &f,
   size_t &i,
@@ -1067,14 +1075,7 @@ void goto_symext::symex_printf(const expr2tc &lhs, expr2tc &rhs)
     // cannot be bounded; the return value is handled as unbounded below.
     fmt = "";
     idx = fmt_idx;
-
-    // The format is a string printf reads (C11 7.21.6.1p2).
-    const expr2tc &fmt_arg = to_code_printf2t(rhs).operands[fmt_idx];
-    if (is_pointer_type(fmt_arg->type))
-    {
-      expr2tc first_char = dereference2tc(get_uint8_type(), fmt_arg);
-      dereference(first_char, dereferencet::READ);
-    }
+    check_printf_format(to_code_printf2t(rhs).operands[fmt_idx]);
   }
 
   // A v* call's only operand after the format is its va_list, which is
