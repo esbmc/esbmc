@@ -4874,6 +4874,8 @@ numpy_call_expr::try_early_result(const std::string &function)
     return math;
   if (std::optional<exprt> power = try_runtime_power(function))
     return power;
+  if (std::optional<exprt> arithmetic = try_arithmetic_ufunc(function))
+    return arithmetic;
   reject_unlowered_ufunc_keywords(call_, function);
   if (!model_only.count(function))
     return try_any_all_result(function);
@@ -8246,6 +8248,100 @@ exprt numpy_call_expr::bounded_binary_ufunc(const std::string &function)
     });
 }
 
+// The arithmetic ufuncs and aliases the element-wise lowering computes: under
+// where=/out= for all of them, and always for the aliases that have no other
+// route (true_divide is divide, square is multiply(x, x)).
+static std::optional<std::size_t> arithmetic_arity(const std::string &name)
+{
+  static const std::map<std::string, std::size_t> arity = {
+    {"add", 2},
+    {"subtract", 2},
+    {"multiply", 2},
+    {"divide", 2},
+    {"true_divide", 2},
+    {"power", 2},
+    {"pow", 2},
+    {"square", 1}};
+  auto it = arity.find(name);
+  if (it == arity.end())
+    return std::nullopt;
+  return it->second;
+}
+
+// The dtype NumPy computes an arithmetic ufunc in: float64 for division or
+// any float operand, int64 for integers. Booleans and other types reject.
+static typet
+arithmetic_leaf(const std::string &function, const std::vector<exprt> &operands)
+{
+  bool floating = function == "divide" || function == "true_divide";
+  for (const exprt &operand : operands)
+  {
+    const typet &leaf = array_leaf_type(operand.type());
+    if (leaf.is_bool() || !is_number_type(leaf))
+      throw std::runtime_error(
+        "TypeError: numpy." + function +
+        "() where=/out= of this operand is not supported");
+    floating = floating || leaf.is_floatbv();
+  }
+  return floating ? double_type() : signedbv_typet(64);
+}
+
+// One element of an arithmetic ufunc, its operands already of `leaf`.
+exprt numpy_call_expr::arithmetic_element(
+  const std::string &function,
+  const typet &leaf,
+  const std::vector<exprt> &x)
+{
+  static const std::map<std::string, std::pair<irep_idt, irep_idt>> ops = {
+    {"add", {"ieee_add", "+"}},
+    {"subtract", {"ieee_sub", "-"}},
+    {"multiply", {"ieee_mul", "*"}},
+    {"square", {"ieee_mul", "*"}},
+    {"divide", {"ieee_div", "/"}},
+    {"true_divide", {"ieee_div", "/"}}};
+  const exprt &a = x.front(), &b = x.back();
+  if (function == "power" || function == "pow")
+    return bounded_math(converter_, call_)
+      .binary("pow", a, b, math_module::numpy);
+  const auto &[ieee_op_id, integer_op] = ops.at(function);
+  exprt result(leaf.is_floatbv() ? ieee_op_id : integer_op, leaf);
+  result.copy_to_operands(a, b);
+  if (leaf.is_floatbv())
+    result.add("rounding_mode") =
+      symbol_exprt("c:@__ESBMC_rounding_mode", int_type());
+  return result;
+}
+
+// add, subtract, multiply, divide and power under where=/out=, and the
+// true_divide and square aliases, through the element-wise lowering of the
+// math ufuncs: inputs, mask and out= evaluated once, masked elements left
+// to out=, and NumPy's checks raised before anything is written.
+std::optional<exprt>
+numpy_call_expr::try_arithmetic_ufunc(const std::string &function)
+{
+  const std::optional<std::size_t> arity = arithmetic_arity(function);
+  const bool alias = function == "true_divide" || function == "square";
+  if (!arity || (!alias && !masks_or_writes(call_, *arity)))
+    return std::nullopt;
+  reject_ufunc_keywords_and_arity(call_, function, *arity);
+  std::vector<exprt> inputs;
+  // Converted as the program wrote them: an integer literal keeps its dtype.
+  for (std::size_t i = 0; i < *arity; ++i)
+    inputs.push_back(elementwise_operand(function, call_["args"][i]));
+  const typet leaf = arithmetic_leaf(function, inputs);
+  if (!leaf.is_floatbv() && (function == "power" || function == "pow"))
+    throw std::runtime_error(
+      "TypeError: numpy.power() of integers under where=/out= is not "
+      "supported");
+  return apply_ufunc(function, inputs, leaf, [&](const std::vector<exprt> &e) {
+    std::vector<exprt> x;
+    for (const exprt &element : e)
+      x.push_back(
+        element.type() == leaf ? element : typecast_exprt(element, leaf));
+    return arithmetic_element(function, leaf, x);
+  });
+}
+
 static bool is_numeric_literal_operand(const nlohmann::json &arg)
 {
   numeric_value constant;
@@ -8287,6 +8383,21 @@ bool numpy_call_expr::may_hold_float(const nlohmann::json &arg)
   return array_leaf_type(converter_.get_expr(arg).type()).is_floatbv();
 }
 
+namespace
+{
+// An error NumPy raises when it checks a ufunc's operands, before it
+// computes or writes anything: raised where the call runs, unlike a
+// diagnostic for a form the model does not support.
+struct numpy_ufunc_error : std::runtime_error
+{
+  numpy_ufunc_error(const std::string &type, const std::string &message)
+    : std::runtime_error(type + ": " + message), type(type), message(message)
+  {
+  }
+  std::string type, message;
+};
+} // namespace
+
 static std::optional<nlohmann::json>
 out_node(const nlohmann::json &call, std::size_t arity);
 
@@ -8305,9 +8416,11 @@ named_ufunc_output(const nlohmann::json &ast, const nlohmann::json &call)
     call.value("_type", "") != "Call" || module.value("_type", "") != "Name" ||
     !is_imported_numpy_module_alias(ast, module.value("id", "")) ||
     !(bounded_math::has_runtime_model(name) ||
-      bounded_math::is_float_predicate(name) || aliases.count(name)))
+      bounded_math::is_float_predicate(name) || aliases.count(name) ||
+      arithmetic_arity(name)))
     return std::nullopt;
-  const std::size_t arity = binary.count(name) ? 2 : 1;
+  const std::size_t arity =
+    arithmetic_arity(name).value_or(binary.count(name) ? 2 : 1);
   std::optional<nlohmann::json> out;
   try
   {
@@ -8566,17 +8679,42 @@ std::vector<std::size_t> numpy_call_expr::ufunc_shape(
       std::string listed;
       for (const std::vector<std::size_t> &s : shapes)
         listed += (listed.empty() ? "" : " ") + numpy_shape(s);
-      throw std::runtime_error(
-        "ValueError: operands could not be broadcast together with shapes " +
-        listed);
+      throw numpy_ufunc_error(
+        "ValueError",
+        "operands could not be broadcast together with shapes " + listed);
     }
   }
   if (out_index && shapes[*out_index] != shape)
-    throw std::runtime_error(
-      "ValueError: non-broadcastable output operand with shape " +
-      numpy_shape(shapes[*out_index]) + " doesn't match the broadcast shape " +
-      numpy_shape(shape));
+    throw numpy_ufunc_error(
+      "ValueError",
+      "non-broadcastable output operand with shape " +
+        numpy_shape(shapes[*out_index]) +
+        " doesn't match the broadcast shape " + numpy_shape(shape));
   return shape;
+}
+
+// The mask and out= of a ufunc call, each evaluated once in Python's order,
+// and the shape the operands broadcast to.
+numpy_call_expr::ufunc_plan numpy_call_expr::plan_ufunc(
+  const std::string &function,
+  const std::vector<exprt> &inputs,
+  const typet &leaf)
+{
+  const std::size_t n = inputs.size();
+  ufunc_plan plan;
+  if (where_before_out(call_, n))
+    plan.mask = ufunc_mask(function);
+  plan.out = ufunc_out(function, n, leaf);
+  if (!where_before_out(call_, n))
+    plan.mask = ufunc_mask(function);
+  plan.operands = inputs;
+  if (plan.out)
+    plan.operands.push_back(plan.out->value);
+  if (plan.mask)
+    plan.operands.push_back(*plan.mask);
+  plan.shape = ufunc_shape(
+    plan.operands, plan.out ? std::optional<std::size_t>(n) : std::nullopt);
+  return plan;
 }
 
 // f of the inputs at each index of their broadcast shape, as the ufunc
@@ -8590,20 +8728,26 @@ exprt numpy_call_expr::apply_ufunc(
   const std::function<exprt(const std::vector<exprt> &)> &f)
 {
   const std::size_t n = inputs.size();
-  std::optional<ufunc_output> out;
-  std::optional<exprt> mask;
-  if (where_before_out(call_, n))
-    mask = ufunc_mask(function);
-  out = ufunc_out(function, n, leaf);
-  if (!where_before_out(call_, n))
-    mask = ufunc_mask(function);
-  std::vector<exprt> operands = inputs;
-  if (out)
-    operands.push_back(out->value);
-  if (mask)
-    operands.push_back(*mask);
-  const std::vector<std::size_t> shape =
-    ufunc_shape(operands, out ? std::optional<std::size_t>(n) : std::nullopt);
+  ufunc_plan plan;
+  try
+  {
+    plan = plan_ufunc(function, inputs, leaf);
+  }
+  catch (const numpy_ufunc_error &error)
+  {
+    // Checked before anything is written, as NumPy checks it.
+    raise_linalg(error.type, error.message, true_exprt());
+    const exprt *lhs = converter_.current_lhs;
+    const typet type = lhs && lhs->type().is_array() ? lhs->type()
+                       : inputs.front().type().is_array()
+                         ? inputs.front().type()
+                         : leaf;
+    return nondet_value(type, "$ufunc$");
+  }
+  const std::optional<ufunc_output> &out = plan.out;
+  const std::optional<exprt> &mask = plan.mask;
+  std::vector<exprt> &operands = plan.operands;
+  const std::vector<std::size_t> &shape = plan.shape;
   for (exprt &operand : operands)
     if (!is_constant_array(operand))
       operand = bind_array_once(operand);
@@ -8686,9 +8830,10 @@ exprt numpy_call_expr::mask_operand(
   if (
     mask.type().is_array() && !leaf.is_bool() && type != "List" &&
     type != "Tuple")
-    throw std::runtime_error(
-      "TypeError: Cannot cast array data from dtype('" + dtype_name(leaf) +
-      "') to dtype('bool') according to the rule 'safe'");
+    throw numpy_ufunc_error(
+      "TypeError",
+      "Cannot cast array data from dtype('" + dtype_name(leaf) +
+        "') to dtype('bool') according to the rule 'safe'");
   return mask;
 }
 
@@ -8751,33 +8896,34 @@ out_node(const nlohmann::json &call, std::size_t arity)
   if (node.value("_type", "") == "Tuple")
   {
     if (node["elts"].size() != 1)
-      throw std::runtime_error(
-        "ValueError: The 'out' tuple must have exactly one entry per ufunc "
-        "output");
+      throw numpy_ufunc_error(
+        "ValueError",
+        "The 'out' tuple must have exactly one entry per ufunc output");
     node = node["elts"][0];
   }
   if (is_none(node))
     return std::nullopt;
   const std::string type = node.value("_type", "");
   if (type == "List" || type == "Tuple" || type == "Constant")
-    throw std::runtime_error("TypeError: return arrays must be of ArrayType");
+    throw numpy_ufunc_error("TypeError", "return arrays must be of ArrayType");
   return node;
 }
 
 // out= must be an ndarray, or a writable view of one.
 void numpy_call_expr::reject_unwritable_out(const exprt &target)
 {
-  const std::string not_array = "TypeError: return arrays must be of ArrayType";
+  const numpy_ufunc_error not_array(
+    "TypeError", "return arrays must be of ArrayType");
   if (target.type().is_array())
     return;
   if (!target.type().is_pointer())
-    throw std::runtime_error(not_array);
+    throw not_array;
   std::optional<python_list::strided_view_desc> view =
     python_list(converter_, call_).describe_strided_view(target);
   if (!view)
-    throw std::runtime_error(not_array);
+    throw not_array;
   if (view->readonly)
-    throw std::runtime_error("ValueError: output array is read-only");
+    throw numpy_ufunc_error("ValueError", "output array is read-only");
 }
 
 // The array out= names with its elements as the ufunc reads them; nullopt
@@ -8799,11 +8945,14 @@ std::optional<numpy_call_expr::ufunc_output> numpy_call_expr::ufunc_out(
       "TypeError: numpy." + function +
       " of an array whose shape is known only at run time is not supported");
   const typet &out_leaf = array_leaf_type(value.type());
-  if (leaf.is_floatbv() && !out_leaf.is_floatbv())
-    throw std::runtime_error(
-      "TypeError: Cannot cast ufunc '" + function +
-      "' output from dtype('float64') to dtype('" + dtype_name(out_leaf) +
-      "') with casting rule 'same_kind'");
+  const bool narrows = (leaf.is_floatbv() && !out_leaf.is_floatbv()) ||
+                       (!leaf.is_bool() && out_leaf.is_bool());
+  if (narrows)
+    throw numpy_ufunc_error(
+      "TypeError",
+      "Cannot cast ufunc '" + function + "' output from dtype('" +
+        dtype_name(leaf) + "') to dtype('" + dtype_name(out_leaf) +
+        "') with casting rule 'same_kind'");
   return ufunc_output{target, value};
 }
 
