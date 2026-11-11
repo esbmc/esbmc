@@ -319,7 +319,7 @@ bool clang_c_maint::clang_main()
           }
         return x < min ? min : x;
       };
-      const int max_args = get_int_opt("argv-max-args", 2, 0);
+      const int max_args = get_int_opt("argv-max-args", 5, 0);
       // Soft cap: max_strlen feeds a single SMT range so it scales for free,
       // but max_args drives a build-time loop that materialises 2 symbols
       // and ~5 init statements per iteration — a typo here causes OOM
