@@ -4433,6 +4433,11 @@ exprt python_converter::handle_array_operations(
     {
       const bool lhs_char = is_char_array(lhs.type());
       const bool rhs_char = is_char_array(rhs.type());
+      if (lhs_char && rhs_char && !is_ordering)
+        return get_exception_handler().gen_exception_raise(
+          "TypeError",
+          "unsupported operand type(s) for " + arith_it->second +
+            ": 'str' and 'str'");
       if (lhs_char != rhs_char)
       {
         const exprt &other = lhs_char ? rhs : lhs;
