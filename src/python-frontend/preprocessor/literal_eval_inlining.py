@@ -21,7 +21,7 @@ Code that does not compile is left alone: CPython raises SyntaxError for it.
 """
 
 import ast
-from collections import defaultdict
+from collections import Counter, defaultdict
 
 from preprocessor.binding_sites import binding_sites
 
@@ -69,51 +69,66 @@ def _module_statements(body):
             yield from _module_statements(getattr(stmt, field, []))
 
 
-def _exec_binds(source, name):
-    """Whether the code `source` spells may bind `name` when exec runs it."""
-    try:
-        return binding_sites(ast.parse(source))[name] > 0
-    except (SyntaxError, ValueError):
-        return False
+def _reads(node):
+    """How many times `node` reads each name."""
+    return Counter(n.id for n in ast.walk(node)
+                   if isinstance(n, ast.Name) and isinstance(n.ctx, ast.Load))
+
+
+def _executed_names(module, sites):
+    """How many statements `exec(name)` `module` holds for each name."""
+    return Counter(n.value.args[0].id for n in ast.walk(module)
+                   if isinstance(n, ast.Expr) and _builtin_call(n.value, "exec", 1, sites)
+                   and isinstance(n.value.args[0], ast.Name))
+
+
+def _code_names(sources):
+    """The names the code of `sources`, (source, mode) pairs, binds, and
+    those it reads or binds."""
+    binds, seen = Counter(), Counter()
+    for source, mode in sources:
+        try:
+            tree = ast.parse(source, mode=mode)
+        except (SyntaxError, ValueError):
+            continue
+        binds.update(binding_sites(tree))
+        seen.update(_reads(tree))
+    seen.update(binds)
+    return binds, seen
 
 
 def _held_strings(module, sites):
-    """For each name bound only by module-level assignments of code that
-    `exec` takes, that code and the assignments, in order."""
+    """For each name `exec(name)` runs, the module-level assignments of code
+    `exec` takes to it, with that code, in order."""
+    executed = _executed_names(module, sites)
     held = defaultdict(list)
-    if any(sites[hook] or _names(module, hook) for hook in ("globals", "vars", "locals")):
-        return held
-    for stmt in _module_statements(module.body):
+    for stmt in _module_statements(module.body) if executed else ():
         if (isinstance(stmt, ast.Assign) and len(stmt.targets) == 1
-                and isinstance(stmt.targets[0], ast.Name)):
+                and isinstance(stmt.targets[0], ast.Name) and stmt.targets[0].id in executed):
             source = _code_source(stmt.value, "exec", sites)
             if source is not None:
                 held[stmt.targets[0].id].append((source, stmt))
-    executed = [s for assigns in held.values() for s, _ in assigns]
-    executed += [
-        s for s in (_literal_source(n, "exec", sites) for n in ast.walk(module)) if s is not None
-    ]
-    return {
-        name: assigns
-        for name, assigns in held.items()
-        if len(assigns) == sites[name] and not any(_exec_binds(s, name) for s in executed)
-    }
+    return dict(held)
 
 
-def _names(module, name):
-    """How many times `module` reads `name`."""
-    return sum(
-        isinstance(n, ast.Name) and n.id == name and isinstance(n.ctx, ast.Load)
-        for n in ast.walk(module))
+def _inlined_sources(module, sites, held):
+    """The code, as (source, mode) pairs, that inlining may place in `module`."""
+    sources = [(s, "exec") for assigns in held.values() for s, _ in assigns]
+    for func in ("exec", "eval"):
+        sources += [(s, func) for s in (_literal_source(n, func, sites) for n in ast.walk(module))
+                    if s is not None]
+    return sources
 
 
-def _only_executed(module, name, sites):
-    """Whether every read of `name` in `module` is a statement `exec(name)`."""
-    calls = sum(
-        isinstance(n, ast.Expr) and _builtin_call(n.value, "exec", 1, sites)
-        and isinstance(n.value.args[0], ast.Name) and n.value.args[0].id == name
-        for n in ast.walk(module))
-    return calls == _names(module, name)
+def _compiles_as_string(module, name, assigns, sites, seen):
+    """Whether the code objects `assigns` bind to `name` behave as the strings
+    they compile: they compile, `name` is bound nowhere else, and only
+    statements `exec(name)` read it."""
+    reads = _reads(module)
+    return (len(assigns) == sites[name] and not seen[name]
+            and not any(reads[h] or sites[h] for h in ("globals", "vars", "locals"))
+            and reads[name] == _executed_names(module, sites)[name]
+            and all(_parse(s, "exec", stmt) is not None for s, stmt in assigns))
 
 
 def _parse(source, mode, location):
@@ -210,13 +225,16 @@ def inline_literal_eval(module):
     """Replace each eval/exec of a string literal in `module` by its code."""
     sites = binding_sites(module)
     held = _held_strings(module, sites)
+    binds, seen = _code_names(_inlined_sources(module, sites, held))
+    # Inlined code that rebinds a builtin would change what a later call runs.
+    if any(binds[f] for f in ("exec", "eval", "compile")):
+        return
     for name, assigns in list(held.items()):
         if all(_str_constant(stmt.value) for _, stmt in assigns):
             continue
-        if not _only_executed(module, name, sites):
+        if not _compiles_as_string(module, name, assigns, sites, seen):
             del held[name]
             continue
-        # A code object only `exec` reads behaves as the string it compiles.
         for source, stmt in assigns:
             stmt.value = ast.copy_location(ast.Constant(value=source), stmt.value)
     _Inliner(sites, held).visit(module)
