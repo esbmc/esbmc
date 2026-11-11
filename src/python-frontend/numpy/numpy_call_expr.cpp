@@ -8249,8 +8249,9 @@ exprt numpy_call_expr::bounded_binary_ufunc(const std::string &function)
 }
 
 // The arithmetic ufuncs and aliases the element-wise lowering computes: under
-// where=/out= for all of them, and always for the aliases that have no other
-// route (true_divide is divide, square is multiply(x, x)).
+// where=/out= for all of them, and always for those that have no other route
+// (true_divide is divide, square is multiply(x, x), and the unary negative,
+// positive and absolute keep their operand's dtype).
 static std::optional<std::size_t> arithmetic_arity(const std::string &name)
 {
   static const std::map<std::string, std::size_t> arity = {
@@ -8261,7 +8262,10 @@ static std::optional<std::size_t> arithmetic_arity(const std::string &name)
     {"true_divide", 2},
     {"power", 2},
     {"pow", 2},
-    {"square", 1}};
+    {"square", 1},
+    {"negative", 1},
+    {"positive", 1},
+    {"absolute", 1}};
   auto it = arity.find(name);
   if (it == arity.end())
     return std::nullopt;
@@ -8286,6 +8290,75 @@ arithmetic_leaf(const std::string &function, const std::vector<exprt> &operands)
   return floating ? double_type() : signedbv_typet(64);
 }
 
+// The constant element an index of a literal array reads.
+static exprt constant_element(const exprt &element)
+{
+  if (element.id() == "typecast")
+    return constant_element(element.op0());
+  if (
+    element.id() != "index" || !element.op1().is_constant() ||
+    element.op0().id() != "array")
+    return element;
+  BigInt position;
+  if (to_integer(element.op1(), position))
+    return element;
+  const exprt::operandst &items = element.op0().operands();
+  const std::size_t i = position.to_uint64();
+  return i < items.size() ? constant_element(items[i]) : element;
+}
+
+// base ** exponent in int64 as NumPy computes it, by squaring, wrapping on
+// overflow; a constant exponent takes only the bits it has. A negative
+// exponent is NumPy's ValueError, which the caller raises. Each step is bound
+// to a temporary, as nesting the squares would double the formula each time.
+exprt numpy_call_expr::integer_power(const exprt &base, const exprt &exponent)
+{
+  const typet &type = base.type();
+  std::size_t bits = 64;
+  BigInt known;
+  const exprt literal = constant_element(exponent);
+  if (literal.is_constant() && !to_integer(literal, known))
+  {
+    if (known < 0)
+      return from_integer(0, type);
+    bits = 0;
+    for (BigInt rest = known; rest > 0; rest /= 2)
+      ++bits;
+  }
+  exprt result = from_integer(1, type), square = base;
+  for (std::size_t k = 0; k < bits; ++k)
+  {
+    exprt shifted("lshr", type);
+    shifted.copy_to_operands(exponent, from_integer(k, type));
+    exprt bit("bitand", type);
+    bit.copy_to_operands(shifted, from_integer(1, type));
+    exprt product("*", type);
+    product.copy_to_operands(result, square);
+    result = bind_once(if_exprt(
+      not_exprt(equality_exprt(bit, from_integer(0, type))), product, result));
+    exprt next("*", type);
+    next.copy_to_operands(square, square);
+    square = bind_once(next);
+  }
+  return result;
+}
+
+// negative, positive or absolute of one element of `leaf`; absolute of the
+// smallest integer wraps to itself, as NumPy's does.
+static exprt unary_element(const std::string &function, const exprt &x)
+{
+  if (function == "positive")
+    return x;
+  exprt negated("unary-", x.type());
+  negated.copy_to_operands(x);
+  if (function == "negative")
+    return negated;
+  if (x.type().is_floatbv())
+    return abs_double(x);
+  return if_exprt(
+    binary_relation_exprt(x, "<", from_integer(0, x.type())), negated, x);
+}
+
 // One element of an arithmetic ufunc, its operands already of `leaf`.
 exprt numpy_call_expr::arithmetic_element(
   const std::string &function,
@@ -8300,6 +8373,11 @@ exprt numpy_call_expr::arithmetic_element(
     {"divide", {"ieee_div", "/"}},
     {"true_divide", {"ieee_div", "/"}}};
   const exprt &a = x.front(), &b = x.back();
+  if (
+    function == "negative" || function == "positive" || function == "absolute")
+    return unary_element(function, a);
+  if ((function == "power" || function == "pow") && !leaf.is_floatbv())
+    return integer_power(a, b);
   if (function == "power" || function == "pow")
     return bounded_math(converter_, call_)
       .binary("pow", a, b, math_module::numpy);
@@ -8319,9 +8397,10 @@ exprt numpy_call_expr::arithmetic_element(
 std::optional<exprt>
 numpy_call_expr::try_arithmetic_ufunc(const std::string &function)
 {
+  static const std::set<std::string> own_route = {
+    "true_divide", "square", "negative", "positive", "absolute"};
   const std::optional<std::size_t> arity = arithmetic_arity(function);
-  const bool alias = function == "true_divide" || function == "square";
-  if (!arity || (!alias && !masks_or_writes(call_, *arity)))
+  if (!arity || (!own_route.count(function) && !masks_or_writes(call_, *arity)))
     return std::nullopt;
   reject_ufunc_keywords_and_arity(call_, function, *arity);
   std::vector<exprt> inputs;
@@ -8329,17 +8408,30 @@ numpy_call_expr::try_arithmetic_ufunc(const std::string &function)
   for (std::size_t i = 0; i < *arity; ++i)
     inputs.push_back(elementwise_operand(function, call_["args"][i]));
   const typet leaf = arithmetic_leaf(function, inputs);
-  if (!leaf.is_floatbv() && (function == "power" || function == "pow"))
-    throw std::runtime_error(
-      "TypeError: numpy.power() of integers under where=/out= is not "
-      "supported");
-  return apply_ufunc(function, inputs, leaf, [&](const std::vector<exprt> &e) {
+  const auto as_leaf = [&](const std::vector<exprt> &e) {
     std::vector<exprt> x;
     for (const exprt &element : e)
       x.push_back(
         element.type() == leaf ? element : typecast_exprt(element, leaf));
-    return arithmetic_element(function, leaf, x);
-  });
+    return x;
+  };
+  const bool integer_power =
+    !leaf.is_floatbv() && (function == "power" || function == "pow");
+  const ufunc_check negative_exponent{
+    "ValueError",
+    "Integers to negative integer powers are not allowed.",
+    [&](const std::vector<exprt> &e) {
+      return binary_relation_exprt(
+        as_leaf(e).back(), "<", from_integer(0, leaf));
+    }};
+  return apply_ufunc(
+    function,
+    inputs,
+    leaf,
+    [&](const std::vector<exprt> &e) {
+      return arithmetic_element(function, leaf, as_leaf(e));
+    },
+    integer_power ? &negative_exponent : nullptr);
 }
 
 static bool is_numeric_literal_operand(const nlohmann::json &arg)
@@ -8693,6 +8785,30 @@ std::vector<std::size_t> numpy_call_expr::ufunc_shape(
   return shape;
 }
 
+// What a call whose checks raised gives the unreachable assignment: a value
+// of the target's array type, or of the first input's.
+exprt numpy_call_expr::ufunc_error_value(
+  const std::vector<exprt> &inputs,
+  const typet &leaf)
+{
+  const exprt *lhs = converter_.current_lhs;
+  if (lhs && lhs->type().is_array())
+    return nondet_value(lhs->type(), "$ufunc$");
+  const typet &input = inputs.front().type();
+  return nondet_value(input.is_array() ? input : leaf, "$ufunc$");
+}
+
+// The check's condition on an element, for an element the mask selects.
+exprt numpy_call_expr::selected_fault(
+  const ufunc_check &check,
+  const std::optional<exprt> &mask,
+  const std::vector<exprt> &e,
+  const std::vector<exprt> &elements)
+{
+  const exprt when = check.when(elements);
+  return mask ? exprt(and_exprt(truth_of(e.back()), when)) : when;
+}
+
 // The mask and out= of a ufunc call, each evaluated once in Python's order,
 // and the shape the operands broadcast to.
 numpy_call_expr::ufunc_plan numpy_call_expr::plan_ufunc(
@@ -8725,7 +8841,8 @@ exprt numpy_call_expr::apply_ufunc(
   const std::string &function,
   const std::vector<exprt> &inputs,
   const typet &leaf,
-  const std::function<exprt(const std::vector<exprt> &)> &f)
+  const std::function<exprt(const std::vector<exprt> &)> &f,
+  const ufunc_check *check)
 {
   const std::size_t n = inputs.size();
   ufunc_plan plan;
@@ -8737,12 +8854,7 @@ exprt numpy_call_expr::apply_ufunc(
   {
     // Checked before anything is written, as NumPy checks it.
     raise_linalg(error.type, error.message, true_exprt());
-    const exprt *lhs = converter_.current_lhs;
-    const typet type = lhs && lhs->type().is_array() ? lhs->type()
-                       : inputs.front().type().is_array()
-                         ? inputs.front().type()
-                         : leaf;
-    return nondet_value(type, "$ufunc$");
+    return ufunc_error_value(inputs, leaf);
   }
   const std::optional<ufunc_output> &out = plan.out;
   const std::optional<exprt> &mask = plan.mask;
@@ -8752,9 +8864,13 @@ exprt numpy_call_expr::apply_ufunc(
     if (!is_constant_array(operand))
       operand = bind_array_once(operand);
   const typet result_leaf = out ? array_leaf_type(out->value.type()) : leaf;
+  exprt::operandst faults;
   const exprt result = broadcast_elements(
     operands, shape, result_leaf, 0, [&](const std::vector<exprt> &e) {
-      exprt value = f({e.begin(), e.begin() + n});
+      const std::vector<exprt> elements(e.begin(), e.begin() + n);
+      if (check)
+        faults.push_back(selected_fault(*check, mask, e, elements));
+      exprt value = f(elements);
       if (value.type() != result_leaf)
         value = typecast_exprt(value, result_leaf);
       if (!mask)
@@ -8762,6 +8878,9 @@ exprt numpy_call_expr::apply_ufunc(
       const exprt kept = out ? e[n] : nondet_value(result_leaf, "$uninit$");
       return exprt(if_exprt(truth_of(e.back()), value, kept));
     });
+  // A selected element NumPy refuses raises before anything is written.
+  if (check && !faults.empty())
+    raise_linalg(check->type, check->message, or_exprt(faults));
   return retype_lhs(out ? write_out(out->target, result) : result);
 }
 
