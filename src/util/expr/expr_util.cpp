@@ -10,6 +10,22 @@ exprt gen_zero(const typet &type)
   return gen_zero(type, false);
 }
 
+static exprt gen_zero_array(const typet &type, bool array_as_array_of)
+{
+  // A VLA (C23 `int a[n] = {}`) has no constant size to enumerate.
+  const exprt &size = to_array_type(type).size();
+  if (
+    array_as_array_of || size.id() == "infinity" ||
+    (size.is_not_nil() && !size.is_constant()))
+    return array_of_exprt(gen_zero(type.subtype(), true), type);
+
+  exprt result("constant", type);
+  const BigInt n = string2integer(size.value().as_string(), 2);
+  for (uint64_t i = 0; i < n.to_uint64(); i++)
+    result.copy_to_operands(gen_zero(type.subtype(), array_as_array_of));
+  return result;
+}
+
 exprt gen_zero(const typet &type, bool array_as_array_of)
 {
   exprt result;
@@ -52,24 +68,7 @@ exprt gen_zero(const typet &type, bool array_as_array_of)
       result.copy_to_operands(gen_zero(comp.type(), array_as_array_of));
   }
   else if (type_id == "array")
-  {
-    // A VLA (C23 `int a[n] = {}`) has no constant size to enumerate.
-    const exprt &size = to_array_type(type).size();
-    if (
-      array_as_array_of || size.id() == "infinity" ||
-      (size.is_not_nil() && !size.is_constant()))
-    {
-      result = array_of_exprt(gen_zero(type.subtype(), true), type);
-    }
-    else
-    {
-      array_typet arr_type = to_array_type(type);
-
-      BigInt size = string2integer(arr_type.size().value().as_string(), 2);
-      for (uint64_t i = 0; i < size.to_uint64(); i++)
-        result.copy_to_operands(gen_zero(type.subtype(), array_as_array_of));
-    }
-  }
+    result = gen_zero_array(type, array_as_array_of);
   else if (type_id == "vector")
   {
     vector_typet vec = to_vector_type(type);
