@@ -298,6 +298,7 @@ private:
   exprt handle_int_to_bytes() const;
 
   exprt handle_bytes_constructor(const nlohmann::json &arg) const;
+  nlohmann::json once_bound_literal(const nlohmann::json &arg) const;
 
   /*
    * Folds a zero-argument int method on a constant literal receiver

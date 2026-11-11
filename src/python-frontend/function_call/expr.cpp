@@ -1295,6 +1295,24 @@ constant_zero_bytes(const nlohmann::json &arg)
   return std::vector<uint8_t>(static_cast<size_t>(n), 0);
 }
 
+// The literal a name is bound to, when the program binds it once and reads it
+// only at @p arg, so no store, call or alias can have changed it; else @p arg.
+nlohmann::json
+function_call_expr::once_bound_literal(const nlohmann::json &arg) const
+{
+  if (!arg.is_object() || arg.value("_type", "") != "Name")
+    return arg;
+  const std::string name = arg.value("id", "");
+  const nlohmann::json &ast = converter_.ast();
+  if (
+    json_utils::count_name_bindings(ast, name) != 1 ||
+    json_utils::count_name_nodes(ast, name) != 2)
+    return arg;
+  const nlohmann::json decl =
+    json_utils::find_var_decl(name, converter_.current_function_name(), ast);
+  return decl.contains("value") ? decl["value"] : arg;
+}
+
 // bytes(...) constructor. The generic constructor path relabels the
 // argument expression's type as the bytes array type without converting the
 // value; for a list/int argument that yields a list-pointer (or scalar) value
@@ -1303,7 +1321,11 @@ constant_zero_bytes(const nlohmann::json &arg)
 exprt function_call_expr::handle_bytes_constructor(
   const nlohmann::json &arg) const
 {
-  std::optional<std::vector<uint8_t>> bytes = constant_byte_elements(arg);
+  const nlohmann::json source = once_bound_literal(arg);
+  std::optional<std::vector<uint8_t>> bytes = constant_byte_elements(source);
+  // The name is still read, for the NameError of a global not yet bound.
+  if (bytes && source != arg)
+    converter_.get_expr(arg);
   if (!bytes)
     bytes = constant_zero_bytes(arg);
   if (bytes)
