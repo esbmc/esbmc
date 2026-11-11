@@ -10,15 +10,15 @@ them too. For verification in CI rather than at the keyboard, see
 [GitHub Action](/docs/github-action).
 
 {{< cards >}}
-{{< card link="https://github.com/esbmc/vscode-esbmc" title="VS Code Extension" icon="external-link" >}}
+{{< card link="https://open-vsx.org/extension/esbmc/vscode-esbmc" title="VS Code Extension" icon="external-link" >}}
 {{< card link="https://github.com/esbmc/esbmc-web" title="Web Interface" icon="external-link" >}}
 {{< card link="https://github.com/esbmc/agent-marketplace" title="Claude Code Plugin" icon="external-link" >}}
 {{< /cards >}}
 
 ## Visual Studio Code
 
-[vscode-esbmc](https://github.com/esbmc/vscode-esbmc) verifies the file you are
-editing without leaving the editor. It contributes four command-palette entries:
+[vscode-esbmc](https://open-vsx.org/extension/esbmc/vscode-esbmc) verifies the
+file you are editing without leaving the editor. It contributes four command-palette entries:
 
 - `ESBMC: Verify file` — run ESBMC on the active C, C++, Python, Solidity or
   Jimple file and stream the output to the integrated terminal;
@@ -33,12 +33,12 @@ editing without leaving the editor. It contributes four command-palette entries:
 Note that it requires VS Code 1.68 or later. The install and update commands are Linux
 only; elsewhere, install ESBMC first via [Setup](/docs/setup).
 
-The extension is not on the VS Code Marketplace yet, so build the `.vsix` from
-source and install it from the Extensions view; the repository README has the
-walkthrough. Sideloading this way does not pull in the extension's dependency
-on `mindaro-dev.file-downloader`, which the install and update commands need.
-Publishing to the Marketplace and Open VSX is tracked in
-[vscode-esbmc#15](https://github.com/esbmc/vscode-esbmc/issues/15).
+Install it from [Open VSX](https://open-vsx.org/extension/esbmc/vscode-esbmc),
+which VS Codium and other VS Code derivatives use. It is not on the VS Code
+Marketplace yet; on VS Code itself, build the `.vsix` from source and install it
+from the Extensions view — the repository README has the walkthrough. Sideloading
+that way does not pull in the extension's dependency on
+`mindaro-dev.file-downloader`, which the install and update commands need.
 
 ## Web interface
 
