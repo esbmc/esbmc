@@ -151,13 +151,23 @@ message(STATUS "Regression capabilities: ${ESBMC_TEST_CAPABILITIES_ARG}")
 # "<folder>/<test>". The macOS CI leg runs only the python/ suite, so without
 # this a change of that kind passes on Linux and fails on macOS with no signal
 # from CI; #6617 was fixed twice for exactly that reason. These carry the
-# platform-sensitive label, which the macOS leg also selects (#6619).
+# platform-sensitive label, which the macOS and Windows legs also select (#6619).
 set(ESBMC_PLATFORM_SENSITIVE_TESTS
     # Deep expression nesting: needs the large-stack thread main.cpp spawns,
     # since raising RLIMIT_STACK does not grow the main thread's stack on
     # macOS even though setrlimit reports success (#6618).
     esbmc/deep_binary_chain_pass
-    esbmc/deep_binary_chain_fail)
+    esbmc/deep_binary_chain_fail
+    # The NumPy model is found by its path, which is '\'-separated on
+    # Windows (#10272).
+    numpy/windows_model_path_column_view
+    numpy/windows_model_path_column_view_fail
+    numpy/windows_model_path_reversed_view_write
+    numpy/windows_model_path_reversed_view_write_fail
+    numpy/windows_model_path_sum
+    numpy/windows_model_path_sum_fail
+    numpy/windows_model_path_zeros_index
+    numpy/windows_model_path_zeros_index_fail)
 
 # An optional 5th argument names a backend to run the suite under. The tool
 # string is shlex-split by testing_tool.py, so the extra option rides along with
