@@ -243,8 +243,7 @@ bmct::bmct(goto_functionst &funcs, optionst &opts, contextt &_context)
     // Run cache if user has specified the option
     if (
       !options.get_bool_option("no-cache-asserts") &&
-      !options.get_bool_option("forward-condition") &&
-      !options.get_bool_option("k-induction") &&
+      !options.get_bool_option("forward-condition") && !options.is_kind() &&
       !options.get_bool_option("ltl"))
       // Store the set between runs
       algorithms.emplace_back(
@@ -2437,8 +2436,7 @@ void bmct::bidirectional_search(
 {
   // We should only analyze the inductive step's cex and we're running
   // in k-induction mode
-  if (!(options.get_bool_option("inductive-step") &&
-        options.get_bool_option("k-induction")))
+  if (!(options.get_bool_option("inductive-step") && options.is_kind()))
     return;
 
   // We'll walk list of SSA steps and look for inductive assignments
