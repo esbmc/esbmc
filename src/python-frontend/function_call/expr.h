@@ -623,6 +623,7 @@ private:
   bool receiver_is_tracked_numpy_view(const std::string &recv_type) const;
   bool receiver_is_binop_or_list_symbol() const;
   bool receiver_class_defines_method(const std::string &method_name) const;
+  bool is_user_method_named_like_builtin() const;
 
   /// The callee's symbol. An instance method of no known class has none: it
   /// must not bind to a module function of the same name (#9658).

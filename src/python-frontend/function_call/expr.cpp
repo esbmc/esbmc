@@ -3640,6 +3640,17 @@ bool function_call_expr::receiver_class_defines_method(
          json_utils::class_defines_method((*module)["body"], cls, method_name);
 }
 
+/// `b.set()` or `b.type()` where b's class defines the method: the builtin
+/// of that name must not claim the call.
+bool function_call_expr::is_user_method_named_like_builtin() const
+{
+  const std::string &name = function_id_.get_function();
+  return call_["func"]["_type"] == "Attribute" &&
+         (type_utils::is_builtin_type(name) ||
+          type_utils::is_consensus_type(name)) &&
+         receiver_class_defines_method(name);
+}
+
 bool function_call_expr::receiver_is_literal() const
 {
   static const std::unordered_set<std::string> literal_kinds = {
@@ -5765,6 +5776,8 @@ exprt function_call_expr::get()
     return *raise;
   if (std::optional<exprt> number = try_int_of_numpy_scalar())
     return *number;
+  if (is_user_method_named_like_builtin())
+    return handle_general_function_call();
 
   // Use dispatch table to handle special function types
   auto dispatch_table = get_dispatch_table();
