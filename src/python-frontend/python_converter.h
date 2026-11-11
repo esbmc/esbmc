@@ -471,6 +471,12 @@ public:
     const nlohmann::json &element,
     bool is_self = false);
 
+  void store_compound_result(
+    const nlohmann::json &target,
+    const exprt &lhs,
+    exprt rhs,
+    const locationt &loc,
+    codet &target_block);
   codet get_compound_store(
     const exprt &lhs,
     const exprt &rhs,

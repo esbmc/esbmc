@@ -9018,13 +9018,24 @@ void python_converter::get_compound_assign(
   // Reset RHS flag
   is_converting_rhs = false;
 
+  store_compound_result(ast_node["target"], lhs, rhs, loc, target_block);
+}
+
+// The operator's raise stands in for the store: Python raises before it.
+void python_converter::store_compound_result(
+  const nlohmann::json &target,
+  const exprt &lhs,
+  exprt rhs,
+  const locationt &loc,
+  codet &target_block)
+{
   if (const exprt *raise = python_frontend::raised_condition(rhs))
   {
     target_block.copy_to_operands(raise_statement(*raise, loc));
     return;
   }
 
-  if (store_through_numpy_view(ast_node["target"], lhs, rhs, loc, target_block))
+  if (store_through_numpy_view(target, lhs, rhs, loc, target_block))
     return;
 
   // P27: Promote real RHS to complex when LHS is complex (AugAssign path).
