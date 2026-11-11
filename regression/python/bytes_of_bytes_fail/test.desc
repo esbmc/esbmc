@@ -1,0 +1,5 @@
+CORE
+main.py
+--unwind 5
+^  FAILED +\[global\.assertion\.2\]  line 4  assertion b\[1\] == 97$
+^VERIFICATION FAILED$

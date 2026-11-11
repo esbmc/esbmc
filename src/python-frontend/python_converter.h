@@ -895,6 +895,10 @@ private:
     const exprt &left_value,
     const nlohmann::json &right,
     exprt &lhs);
+  exprt build_power(
+    const exprt &base,
+    const exprt &exponent,
+    const nlohmann::json &element);
   exprt build_guarded_binop(
     const std::string &op,
     exprt lhs,
@@ -1168,6 +1172,11 @@ private:
     const exprt &symbol_value);
 
   exprt get_logical_operator_expr(const nlohmann::json &element);
+  exprt bind_boolop_operand(
+    const exprt &operand,
+    const nlohmann::json &element,
+    code_blockt &binding);
+  static exprt with_binding(code_blockt binding, const exprt &value);
 
   exprt convert_boolop_operands(
     const nlohmann::json &element,
@@ -3668,6 +3677,11 @@ private:
   /// Rewrite a string @p str into `strlen(str) != 0`, its truthiness; any
   /// other value comes back unchanged.
   exprt apply_string_truthiness(const exprt &str, const locationt &location);
+  void take_str_branch_truth(
+    const typet &result_type,
+    exprt &then,
+    exprt &else_expr,
+    const locationt &location);
 
   /// apply_bool_dunder for the `not` operator; a no-op for any other @p op.
   exprt apply_bool_dunder_for_not(
