@@ -370,6 +370,8 @@ static const char *const abs_overflow_message =
 /// that fails the refusal ends there instead of going on with a wrapped value.
 void function_call_expr::refuse_abs_unless(const exprt &representable) const
 {
+  if (converter_.in_type_probe())
+    return;
   if (!converter_.can_emit_runtime_guard())
     throw std::runtime_error(abs_overflow_message);
   code_assertt check(representable);
