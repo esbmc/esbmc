@@ -1,4 +1,4 @@
 import array
 
-a = array.array("d", [1.5])
+a = array.array("f", [1.5])
 assert a[0] == 1.5

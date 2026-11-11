@@ -204,7 +204,7 @@ def main(*, deps: CliDeps) -> int | None:
 
     for node in ast.walk(tree):
         if isinstance(node, (ast.Import, ast.ImportFrom)):
-            import_resolver.process_imports(node, output_dir)
+            import_resolver.process_imports(node, output_dir, node in tree.body)
 
     callbacks_deps = _ResolverCallbacksDeps(
         parse_file_canonicalised=deps.parse_file_canonicalised,
