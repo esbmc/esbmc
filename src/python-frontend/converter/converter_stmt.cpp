@@ -12,6 +12,7 @@
 #include <python-frontend/exception/python_exception_handler.h>
 #include <python-frontend/lambda/python_lambda.h>
 #include <python-frontend/python-list/python_list.h>
+#include <python-frontend/python-list/list_type_inference.h>
 #include <python-frontend/type/python_typechecking.h>
 #include <python-frontend/math/python_math.h>
 #include <python-frontend/string/string_builder.h>
@@ -5675,6 +5676,33 @@ static void copy_homogeneous_elem_types(
   registry.assign_from(src, dest);
 }
 
+/// Copy the element types of the list named \p name, whose registry id is
+/// \p src, to \p dest. A list with nothing recorded, such as one a
+/// nondet_list builder returns, still declares its element type in its
+/// annotation, which reads of the list itself use. Record that type for
+/// \p dest so reads of the result are typed the same way (#10323).
+static void copy_named_list_elem_types(
+  python_converter &converter,
+  element_type_registry &registry,
+  const nlohmann::json &name,
+  const std::string &src,
+  const std::string &dest)
+{
+  if (registry.size(src) != 0)
+  {
+    copy_homogeneous_elem_types(registry, src, dest);
+    return;
+  }
+  const typet elem_type = python_list_detail::get_elem_type_from_annotation(
+    json_utils::get_var_value(
+      name["id"].get<std::string>(),
+      converter.current_function_name(),
+      converter.ast()),
+    converter.get_type_handler());
+  if (elem_type != typet())
+    registry.record(dest, std::string(), elem_type);
+}
+
 /// sorted()/reversed()/list() reorder or copy their argument, they do not
 /// retype it, so the result's elements are the argument's. Without this the
 /// runtime path leaves the result untyped and a tuple element reads back as an
@@ -5715,8 +5743,8 @@ void python_converter::copy_elem_types_from_reordering_builtin(
   {
     symbol_id arg_sid = create_symbol_id();
     arg_sid.set_object(arg["id"].get<std::string>());
-    copy_homogeneous_elem_types(
-      element_type_registry_, arg_sid.to_string(), lhs_id);
+    copy_named_list_elem_types(
+      *this, element_type_registry_, arg, arg_sid.to_string(), lhs_id);
     return;
   }
 
