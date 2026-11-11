@@ -296,6 +296,7 @@ protected:
   void
   symex_witness_function_return(expr2tc ret_val, const irep_idt &call_line);
   bool symex_witness_function_enter(const irep_idt &call_line);
+  void symex_witness_main_return();
   void symex_witness_branching(
     const expr2tc &old_guard,
     const expr2tc &new_guard,
@@ -303,7 +304,19 @@ protected:
     bool &new_guard_true,
     bool &new_guard_false,
     const goto_programt::instructiont &instruction);
-  void symex_witness_assert(expr2tc &new_expr, const std::string &msg);
+  void symex_witness_assert(
+    expr2tc &new_expr,
+    const std::string &msg,
+    bool user_assertion);
+  const std::vector<size_t> &
+  witness_segments_at(waypoint::Type type, const irep_idt &line) const;
+  expr2tc witness_segment_guard(size_t segment, const expr2tc &position);
+  expr2tc witness_position() const;
+  expr2tc witness_target_guard(
+    const locationt &loc,
+    const expr2tc &position,
+    bool return_statement = false);
+  void advance_witness_position(size_t segment, const expr2tc &position);
 
   /**
    *  Interpret an OTHER instruction.
@@ -387,7 +400,10 @@ protected:
    *  @param expr Expression that must always be true.
    *  @param msg Textual message explaining assertion.
    */
-  virtual void claim(const expr2tc &expr, const std::string &msg);
+  virtual void claim(
+    const expr2tc &expr,
+    const std::string &msg,
+    bool user_assertion = false);
 
   /**
    *  Record a verdict for the claim being symbolically executed.
@@ -1935,6 +1951,7 @@ protected:
   /** Cached from --validate-violation-witness; checked on every
    * branch/intrinsic. */
   bool validate_witness;
+  expr2tc witness_cursor;
 
   /** Set of dereference state records; this field is used as a mailbox between
    *  the dereference code and the caller, who will inspect the contents after

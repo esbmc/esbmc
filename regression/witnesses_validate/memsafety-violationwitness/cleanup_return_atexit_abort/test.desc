@@ -1,0 +1,4 @@
+CORE
+main.c
+--memory-leak-check --validate-violation-witness --witness witness.yml --incremental-bmc
+^VERIFICATION SUCCESSFUL$
