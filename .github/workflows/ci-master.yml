@@ -19,7 +19,7 @@ jobs:
 
   # Saves the ccache that the PR build restores: master's is the only cache
   # scope every PR can read, and PR-scoped entries would evict it from the
-  # 10 GB budget. Operating system and flags must match build-ubuntu in
+  # 10 GB budget. Operating system and flags must match linux-build in
   # ci-pull-request.yml, or the cache keys will not line up.
   seed-ccache:
     name: Seed ccache for PR builds
