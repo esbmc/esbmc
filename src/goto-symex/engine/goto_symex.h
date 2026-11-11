@@ -880,8 +880,10 @@ protected:
   object_size_of_type(const expr2tc &ptr, const expr2tc &deref, int type_value);
 
   /* Handles dereferencing between threads and is used only in data race checks.
+   * In a claim, a flag only counts when the access hits a value-set target.
    * **/
-  void replace_races_check(expr2tc &expr);
+  void replace_races_check(expr2tc &expr, bool in_claim = false);
+  expr2tc race_access_modelled(const expr2tc &ptr);
 
   void simplify_python_builtins(expr2tc &expr);
   void reject_untyped_isinstance(const expr2tc &value);

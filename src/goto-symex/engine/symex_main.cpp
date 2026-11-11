@@ -658,7 +658,7 @@ void goto_symext::symex_assert()
   dereference(tmp, dereferencet::READ);
   replace_dynamic_allocation(tmp);
 
-  replace_races_check(tmp);
+  replace_races_check(tmp, true);
   simplify_python_builtins(tmp);
 
   claim_skips_deferred = instruction.location.get_bool("ends_path");

@@ -547,7 +547,15 @@ void goto_symext::symex_assign(
   replace_dynamic_allocation(lhs);
   replace_dynamic_allocation(rhs);
 
-  replace_races_check(lhs);
+  if (is_races_check2t(lhs))
+  {
+    // Leave the flag alone where the access is not modelled.
+    expr2tc hits = race_access_modelled(to_races_check2t(lhs).value);
+    replace_races_check(lhs);
+    rhs = if2tc(lhs->type, hits, rhs, lhs);
+  }
+  else
+    replace_races_check(lhs);
   simplify_python_builtins(rhs);
 
   // If rhs is a printf expression, handle it specially

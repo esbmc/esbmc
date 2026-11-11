@@ -9,7 +9,7 @@
 #include <util/irep/migrate.h>
 #include <util/irep/std_types.h>
 
-void goto_symext::replace_races_check(expr2tc &expr)
+void goto_symext::replace_races_check(expr2tc &expr, bool in_claim)
 {
   if (!options.get_bool_option("data-races-check"))
     return;
@@ -17,9 +17,9 @@ void goto_symext::replace_races_check(expr2tc &expr)
   // replace RACE_CHECK(&x) with __ESBMC_races_flag[key(&x)] (key packing
   // is described below)
   // recursion is needed for this case: !RACE_CHECK(&x)
-  expr->Foreach_operand([this](expr2tc &e) {
+  expr->Foreach_operand([this, in_claim](expr2tc &e) {
     if (!is_nil_expr(e))
-      replace_races_check(e);
+      replace_races_check(e, in_claim);
   });
 
   if (is_races_check2t(expr))
@@ -66,8 +66,26 @@ void goto_symext::replace_races_check(expr2tc &expr)
       bitand2tc(
         key_type, offset, constant_int2tc(key_type, BigInt::power2m1(half))));
 
+    const expr2tc ptr = obj.value;
     expr = index2tc(get_bool_type(), flag, index);
+    if (in_claim)
+      expr = and2tc(expr, race_access_modelled(ptr));
   }
+}
+
+/* A pointer outside its value set (e.g. loaded from uninitialised memory) has
+ * an unconstrained object number, so its race key can match any flag. Symex
+ * models no access there, so the race check must not either (#10293). */
+expr2tc goto_symext::race_access_modelled(const expr2tc &ptr)
+{
+  internal_deref_items.clear();
+  expr2tc deref = dereference2tc(get_uint8_type(), ptr);
+  dereference(deref, dereferencet::INTERNAL);
+  expr2tc hits = gen_false_expr();
+  for (const auto &item : internal_deref_items)
+    hits = or2tc(hits, item.guard);
+  do_simplify(hits);
+  return hits;
 }
 
 void goto_symext::volatile_check(expr2tc &expr)
