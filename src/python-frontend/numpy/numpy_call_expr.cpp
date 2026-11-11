@@ -28,6 +28,7 @@
 
 #include <algorithm>
 #include <array>
+#include <bit>
 #include <cfloat>
 #include <climits>
 #include <cmath>
@@ -7622,7 +7623,7 @@ static bool exact_nonnegative_sum(const std::vector<double> &terms)
     int exponent = 0;
     const auto mantissa = static_cast<unsigned long long>(
       std::ldexp(std::frexp(term, &exponent), 53));
-    lowest = std::min(lowest, exponent - 53 + __builtin_ctzll(mantissa));
+    lowest = std::min(lowest, exponent - 53 + std::countr_zero(mantissa));
   }
   return std::isfinite(sum) &&
          (lowest == INT_MAX || sum < std::ldexp(1.0, lowest + 53));
