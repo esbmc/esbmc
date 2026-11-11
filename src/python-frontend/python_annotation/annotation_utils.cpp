@@ -1,6 +1,7 @@
 #include <python-frontend/python_annotation/annotation_utils.h>
 
 #include <algorithm>
+#include <functional>
 #include <sstream>
 #include <vector>
 
@@ -76,6 +77,110 @@ bool has_return_value(const nlohmann::json &body)
         return true;
   }
   return false;
+}
+
+// Whether `node`, outside nested loops and scopes, has a `break`.
+static bool breaks(const nlohmann::json &node)
+{
+  if (node.is_object())
+  {
+    const std::string kind = node.value("_type", "");
+    if (kind == "Break")
+      return true;
+    if (
+      kind == "For" || kind == "AsyncFor" || kind == "While" ||
+      kind == "FunctionDef" || kind == "AsyncFunctionDef" ||
+      kind == "ClassDef" || kind == "Lambda")
+      return false;
+  }
+  if (node.is_structured())
+    for (const nlohmann::json &child : node)
+      if (breaks(child))
+        return true;
+  return false;
+}
+
+// Whether no path through `block` reaches its end.
+static bool never_falls_off(const nlohmann::json &block)
+{
+  if (!block.is_array() || block.empty())
+    return false;
+  const nlohmann::json &last = block.back();
+  const std::string kind = last.value("_type", "");
+  if (kind == "Return" || kind == "Raise")
+    return true;
+  if (kind == "If")
+    return never_falls_off(last["body"]) && never_falls_off(last["orelse"]);
+  if (kind == "While")
+    return last["test"].value("_type", "") == "Constant" &&
+           last["test"].value("value", nlohmann::json()) == true &&
+           !breaks(last["body"]);
+  if (kind != "Try")
+    return false;
+  const nlohmann::json &handlers = last["handlers"];
+  return never_falls_off(last["finalbody"]) ||
+         ((never_falls_off(last["body"]) || never_falls_off(last["orelse"])) &&
+          std::all_of(
+            handlers.begin(), handlers.end(), [](const nlohmann::json &h) {
+              return never_falls_off(h["body"]);
+            }));
+}
+
+// Whether `node`, outside nested scopes, returns a value other than None and
+// does not yield.
+static bool returns_value_without_yield(const nlohmann::json &node)
+{
+  bool value_return = false;
+  bool yields = false;
+  std::function<void(const nlohmann::json &)> scan =
+    [&](const nlohmann::json &n) {
+      if (n.is_object())
+      {
+        const std::string kind = n.value("_type", "");
+        if (
+          kind == "FunctionDef" || kind == "AsyncFunctionDef" ||
+          kind == "ClassDef" || kind == "Lambda")
+          return;
+        yields |= kind == "Yield" || kind == "YieldFrom";
+        value_return |=
+          kind == "Return" && n["value"].is_object() &&
+          !(n["value"].value("_type", "") == "Constant" &&
+            n["value"]["value"].is_null() && !n["value"].contains("_bigint"));
+      }
+      if (n.is_structured())
+        for (const nlohmann::json &child : n)
+          scan(child);
+    };
+  scan(node);
+  return value_return && !yields;
+}
+
+void return_none_on_fall_off(nlohmann::json &node)
+{
+  if (!node.is_structured())
+    return;
+  for (nlohmann::json &child : node)
+    return_none_on_fall_off(child);
+  if (
+    !node.is_object() || node.value("_type", "") != "FunctionDef" ||
+    !node.value("returns", nlohmann::json()).is_null() ||
+    never_falls_off(node["body"]) || !returns_value_without_yield(node["body"]))
+    return;
+  nlohmann::json &body = node["body"];
+  const int line = body.back().value("end_lineno", node.value("lineno", 0));
+  const int col = body.back().value("col_offset", 0);
+  const nlohmann::json at = {
+    {"lineno", line},
+    {"col_offset", col},
+    {"end_lineno", line},
+    {"end_col_offset", col}};
+  nlohmann::json none = at;
+  none["_type"] = "Constant";
+  none["value"] = nullptr;
+  nlohmann::json ret = at;
+  ret["_type"] = "Return";
+  ret["value"] = none;
+  body.push_back(ret);
 }
 
 std::string get_base_var_name(const nlohmann::json &node)
