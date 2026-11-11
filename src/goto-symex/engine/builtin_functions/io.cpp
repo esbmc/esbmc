@@ -1075,6 +1075,17 @@ void goto_symext::symex_printf(const expr2tc &lhs, expr2tc &rhs)
   const bool printf_check =
     options.get_bool_option("printf-check") && !args_behind_va_list;
 
+  // The call reads its format string (C11 7.21.6.1p2), so check that read
+  // like any other. --printf-check dereferences it further down instead.
+  const expr2tc &fmt_arg = to_code_printf2t(rhs).operands[fmt_idx];
+  if (
+    !format_is_constant && !printf_check && fmt_arg &&
+    is_pointer_type(fmt_arg->type))
+  {
+    expr2tc first_char = dereference2tc(get_uint8_type(), fmt_arg);
+    dereference(first_char, dereferencet::READ);
+  }
+
   // Check format specifiers against original operands before
   // renaming/conversion
   if (!args_behind_va_list)

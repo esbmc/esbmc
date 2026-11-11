@@ -1,0 +1,5 @@
+CORE
+main.c
+
+^VERIFICATION FAILED$
+\[main\.invalidated-dynamic-object\.5\] +line 15 +dereference failure: invalidated dynamic object$

@@ -1,0 +1,5 @@
+CORE
+main.c
+--force-malloc-success
+^VERIFICATION FAILED$
+\[main\.invalidated-dynamic-object\.1\] +line 9 +dereference failure: invalidated dynamic object$
