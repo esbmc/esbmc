@@ -5942,7 +5942,10 @@ void clang_c_convertert::set_location(
     location.set_line(line);
   if (!reuse("file", last_loc_valid && last_loc_filename == filename))
     location.set_file(filename);
-  location.set_column(column);
+  auto [col, inserted] = column_nodes.try_emplace(column);
+  if (inserted)
+    col->second.id(std::to_string(column));
+  location.set("column", col->second);
   if (
     !function_name.empty() &&
     !reuse("function", last_loc_valid && last_loc_function == function_name))
