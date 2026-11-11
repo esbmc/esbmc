@@ -7,7 +7,6 @@ import json
 import shlex
 import re
 import shutil
-import signal
 import subprocess
 import tempfile
 import time
@@ -99,14 +98,11 @@ def do_exec(cmd_line, timeout=None, cwd=None):
 
   the_args = shlex.split(cmd_line)
 
-  # A session of its own, so a timeout also kills the processes that
-  # --k-induction-parallel forks; they hold the pipes open otherwise.
-  p = subprocess.Popen(the_args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, cwd=cwd,
-                       start_new_session=True)
+  p = subprocess.Popen(the_args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, cwd=cwd)
   try:
     (stdout, stderr) = p.communicate(timeout=timeout)
   except subprocess.TimeoutExpired:
-    os.killpg(p.pid, signal.SIGKILL)
+    p.kill()
     p.communicate()
     return b"ERROR: Timed out\n"
 
@@ -442,10 +438,9 @@ def check_if_benchmark_contains_pthread(benchmark):
     return any(call.search(line) and not line.lstrip().startswith("extern")
                for line in f)
 
-def strategy_flags(strat, parallel=True):
+def strategy_flags(strat):
   if strat in ("fixed", "kinduction"):
-    kind = "--k-induction-parallel " if parallel else "--k-induction "
-    return kind + "--max-inductive-step 3 "
+    return "--k-induction --max-inductive-step 3 "
   if strat == "falsi":
     return "--falsification "
   if strat == "incr":
@@ -477,11 +472,10 @@ def get_command_line(strat, prop, arch, benchmark, dargs, esbmc_ci, keep_loops=F
     # round, which halves the shallow solver rounds before a deep bound is
     # reached and is a measurable speedup on these tasks with no verdict
     # change. They go here, not in strategy_flags, because the C path
-    # already carries --unlimited-k-steps in dargs. The --multi-property
-    # re-run in confirmed_by_integer_encoding rejects --k-induction-parallel.
+    # already carries --unlimited-k-steps in dargs.
     return (
       esbmc_path + "--sv-comp " + benchmark + " "
-      + strategy_flags(strat, parallel=False) + "--k-step 2 --unlimited-k-steps "
+      + strategy_flags(strat) + "--k-step 2 --unlimited-k-steps "
       + python_exception_flags(prop))
 
   command_line = esbmc_path + dargs
@@ -1072,7 +1066,7 @@ def verify(strat, prop, arch, benchmark, dargs, esbmc_ci, witness_path, validate
     esbmc_command_line += "--witness " + witness_path + " "
 
   started = time.monotonic()
-  if prop == Property.overflow and "--k-induction-parallel " in esbmc_command_line:
+  if prop == Property.overflow and "--k-induction " in esbmc_command_line:
     # The inductive step proves most no-overflow loops in seconds, but on
     # nonlinear arithmetic its solve can stall, and on goto-heavy code it can
     # path-explode; those runs fall back to incremental BMC. The memory cap
