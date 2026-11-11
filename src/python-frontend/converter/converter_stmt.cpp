@@ -9018,6 +9018,12 @@ void python_converter::get_compound_assign(
   // Reset RHS flag
   is_converting_rhs = false;
 
+  if (const exprt *raise = python_frontend::raised_condition(rhs))
+  {
+    target_block.copy_to_operands(raise_statement(*raise, loc));
+    return;
+  }
+
   if (store_through_numpy_view(ast_node["target"], lhs, rhs, loc, target_block))
     return;
 
