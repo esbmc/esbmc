@@ -1024,7 +1024,9 @@ exprt python_converter::boolop_string_truthiness(
 {
   exprt cond = apply_string_truthiness(value, location);
   // A str parameter may hold None, which is false; strlen must not read it.
-  if (!cond.is_boolean() || !value.type().is_pointer())
+  // A value with side effects is not read again.
+  if (
+    !cond.is_boolean() || !value.type().is_pointer() || has_side_effect(value))
     return cond;
   expr2tc value2, cond2;
   migrate_expr(value, value2);
@@ -1097,6 +1099,16 @@ exprt python_converter::bind_boolop_operand(
     !has_side_effect(operand) || operand.type().is_nil() ||
     operand.type().is_empty())
     return operand;
+  // An `if` keeps its shape so its truth is read from the chosen branch
+  // (#10130); only its condition is bound.
+  if (
+    operand.id() == "if" && !has_side_effect(operand.op1()) &&
+    !has_side_effect(operand.op2()))
+  {
+    exprt bound = operand;
+    bound.op0() = bind_boolop_operand(operand.op0(), element, binding);
+    return bound;
+  }
   const locationt loc = get_location_from_decl(element);
   symbolt &tmp =
     create_tmp_symbol(element, "$boolop_operand$", operand.type(), exprt());
