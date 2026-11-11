@@ -410,31 +410,25 @@ def python_false_string(the_result):
   return "FALSE(%s)" % exception if exception else "FALSE"
 
 
+RESULT_STRINGS = {
+  Result.fail_memcleanup: "FALSE_MEMCLEANUP",
+  Result.fail_memtrack: "FALSE_MEMTRACK",
+  Result.fail_free: "FALSE_FREE",
+  Result.fail_deref: "FALSE_DEREF",
+  Result.fail_overflow: "FALSE_OVERFLOW",
+  Result.fail_reach: "FALSE_REACH",
+  Result.fail_termination: "FALSE_TERMINATION",
+  Result.fail_race: "FALSE_DATARACE",
+  Result.success: "TRUE",
+  Result.err_timeout: "Timed out",
+  Result.err_unwinding_assertion: "Unknown",
+  Result.err_memout: "Unknown",
+  Result.err_crash: "ERROR",
+  Result.unknown: "Unknown",
+}
+
+
 def get_result_string(the_result):
-  if the_result == Result.fail_memcleanup:
-    return "FALSE_MEMCLEANUP"
-
-  if the_result == Result.fail_memtrack:
-    return "FALSE_MEMTRACK"
-
-  if the_result == Result.fail_free:
-    return "FALSE_FREE"
-
-  if the_result == Result.fail_deref:
-    return "FALSE_DEREF"
-
-  if the_result == Result.fail_overflow:
-    return "FALSE_OVERFLOW"
-
-  if the_result == Result.fail_reach:
-    return "FALSE_REACH"
-
-  if the_result == Result.fail_termination:
-    return "FALSE_TERMINATION"
-
-  if the_result == Result.fail_race:
-    return "FALSE_DATARACE"
-
   if the_result == Result.fail_python:
     # A task definition whose expected verdict carries no subproperty accepts
     # any result starting with "false" (benchexec result.get_result_category).
@@ -442,23 +436,8 @@ def get_result_string(the_result):
     # names its exception when the violation reports exactly one.
     return python_false_string(the_result)
 
-  if the_result == Result.success:
-    return "TRUE"
-
-  if the_result == Result.err_timeout:
-    return "Timed out"
-
-  if the_result == Result.err_unwinding_assertion:
-    return "Unknown"
-
-  if the_result == Result.err_memout:
-    return "Unknown"
-
-  if the_result == Result.err_crash:
-    return "ERROR"
-
-  if the_result == Result.unknown:
-    return "Unknown"
+  if the_result in RESULT_STRINGS:
+    return RESULT_STRINGS[the_result]
 
   exit(0)
 
