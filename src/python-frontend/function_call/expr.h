@@ -1104,6 +1104,11 @@ private:
     const typet &param_type,
     const symbolt &callee) const;
 
+  exprt int_power_of_two_argument(
+    const nlohmann::json &node,
+    const exprt &arg,
+    const typet &param_type) const;
+
   typet dict_param_value_type(const symbolt *func, size_t idx) const;
   bool is_size_builtin() const;
   bool is_list_typed(const typet &type) const;
