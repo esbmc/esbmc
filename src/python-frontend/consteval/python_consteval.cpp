@@ -6,21 +6,16 @@
 #include <functional>
 #include <unordered_set>
 
+// value - floor(value) is exact for a double, so a tie is exactly 0.5.
 static double round_ties_to_even_consteval(const double value)
 {
   const double lower = std::floor(value);
   const double diff = value - lower;
-  constexpr double tie_eps = 1e-12;
-
-  if (diff < 0.5 - tie_eps)
+  if (diff < 0.5)
     return lower;
-  if (diff > 0.5 + tie_eps)
+  if (diff > 0.5)
     return lower + 1.0;
-
-  const double parity = std::fmod(std::fabs(lower), 2.0);
-  const bool lower_is_even =
-    parity < tie_eps || std::fabs(parity - 2.0) < tie_eps;
-  return lower_is_even ? lower : lower + 1.0;
+  return std::fmod(lower, 2.0) == 0.0 ? lower : lower + 1.0;
 }
 
 static double
@@ -1908,10 +1903,14 @@ python_consteval::eval_expr(const nlohmann::json &node, const Env &env)
         // round(x) -> int
         if (arg->kind == PyConstValue::INT)
           return PyConstValue::make_int(arg->int_val);
-        if (arg->kind == PyConstValue::FLOAT)
-          return PyConstValue::make_int(
-            static_cast<long long>(
-              round_ties_to_even_consteval(arg->float_val)));
+        if (arg->kind == PyConstValue::FLOAT && std::isfinite(arg->float_val))
+        {
+          const double rounded = round_ties_to_even_consteval(arg->float_val);
+          if (
+            rounded >= -9223372036854775808.0 &&
+            rounded < 9223372036854775808.0)
+            return PyConstValue::make_int(static_cast<long long>(rounded));
+        }
         return std::nullopt;
       }
 
