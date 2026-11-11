@@ -71,8 +71,10 @@ void register_static_addresses(
     if (!e || !seen.insert(e.get()).second)
       return;
     expr2tc obj = static_address_base(ns, e);
+    // Only the base: converting an index of e would encode an SSA symbol
+    // ahead of its assignment, which leaves a flattened tuple free (#10293).
     if (obj && !from_goto)
-      smt_conv.convert_ast(e);
+      smt_conv.convert_ast(address_of2tc(e->type, obj));
     else if (obj)
     {
       if (is_symbol2t(obj))
