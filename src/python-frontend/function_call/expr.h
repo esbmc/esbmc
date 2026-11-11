@@ -361,7 +361,8 @@ private:
   exprt handle_isinstance() const;
   void plant_untyped_isinstance_refusal(
     const exprt &operand,
-    const exprt &answer) const;
+    const exprt &answer,
+    const exprt &binding) const;
 
   /// Binds a call operand of isinstance to a temporary, so it runs exactly
   /// once even when the check reads it per type or folds without reading it.

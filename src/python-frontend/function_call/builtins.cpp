@@ -739,14 +739,16 @@ static bool tests_type_of(const exprt &e, const exprt &operand)
 // Symex refuses an isinstance() whose `void *` operand it cannot trace to an
 // object (#8315). Planting that refusal here makes it visible in the GOTO
 // program; the assume ends the path as symex does (#10251). Only an answer
-// that reads the operand's type needs it.
+// that reads the operand's type needs it. A bound call result is not assigned
+// yet where the statement is planted, so symex keeps the refusal there.
 void function_call_expr::plant_untyped_isinstance_refusal(
   const exprt &operand,
-  const exprt &answer) const
+  const exprt &answer,
+  const exprt &binding) const
 {
   if (
-    !operand.is_symbol() || !operand.type().is_pointer() ||
-    operand.type().subtype().id() != "empty" ||
+    binding.is_not_nil() || !operand.is_symbol() ||
+    !operand.type().is_pointer() || operand.type().subtype().id() != "empty" ||
     !tests_type_of(answer, operand) || !converter_.can_emit_runtime_guard())
     return;
   expr2tc value, untyped;
@@ -925,7 +927,7 @@ exprt function_call_expr::handle_isinstance() const
       isinstance_operand(types[i], build_isinstance, isinstance_type_name));
     result = or_expr;
   }
-  plant_untyped_isinstance_refusal(obj_expr, result);
+  plant_untyped_isinstance_refusal(obj_expr, result, binding);
   return evaluate_after(binding, evaluate_after(optional_binding, result));
 }
 

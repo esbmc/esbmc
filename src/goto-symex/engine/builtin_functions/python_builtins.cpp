@@ -108,10 +108,6 @@ static expr2tc isinstance_subject(expr2tc value, const expr2tc &operand)
            : value;
 }
 
-// An untyped (`void *`) operand that neither constant propagation nor the
-// value set traced back to its object carries no Python type, so no answer is
-// sound: comparing `void *` itself would say "no" to every type. Fail only if
-// this path is reachable, and end it so no check after it relies on the guess.
 // The marker the frontend plants (#10251): a null `void *` for the type.
 static bool asks_whether_traced(const expr2tc &expect_type)
 {
@@ -125,6 +121,10 @@ static bool is_untyped_pointer(const expr2tc &value)
          is_empty_type(to_pointer_type(value->type).subtype);
 }
 
+// An untyped (`void *`) operand that neither constant propagation nor the
+// value set traced back to its object carries no Python type, so no answer is
+// sound: comparing `void *` itself would say "no" to every type. Fail only if
+// this path is reachable, and end it so no check after it relies on the guess.
 void goto_symext::reject_untyped_isinstance(const expr2tc &value)
 {
   if (!is_untyped_pointer(value))
