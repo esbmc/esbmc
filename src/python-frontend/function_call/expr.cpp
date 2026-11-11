@@ -1817,8 +1817,13 @@ exprt function_call_expr::build_constant_from_arg() const
   // Simply changing expr.type() on an integer expression creates IR where
   // the type tag says float but the operation is bitvector arithmetic,
   // causing sort mismatches in the SMT encoder.
+  // A call statement nested in that cast is never hoisted, and reaches the
+  // solver as is (#10359).
   if (func_name == "float" && !expr.type().is_floatbv())
+  {
+    converter_.convert_function_call_to_side_effect(expr);
     return build_float_conversion(guard_none_to_float(expr), t);
+  }
 
   if (func_name != "str")
     expr = retype_or_typecast(expr, t);

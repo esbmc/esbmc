@@ -208,6 +208,8 @@ private:
   std::string get_dict_literal_type(const Json &dict_value);
   std::string get_call_type(const Json &arg);
   std::string module_call_type(const Json &call);
+  std::string
+  specialised_call_type(const std::string &func_name, const Json &call);
   std::string get_attribute_type(const Json &arg);
   std::string class_attribute_type(
     const std::string &cls,
@@ -469,6 +471,8 @@ private:
   // re-entry means the self-reference is indirect (the returned name's binding
   // calls the function), which the return-expression scan cannot see.
   std::set<std::string> functions_reentered_;
+  // Functions whose per-call return type specialised_call_type is computing.
+  std::set<std::string> specialising_calls_;
   std::set<std::string> resolving_rhs_vars_;
   // Per (scope, name): the Optional[T] annotation of a name stored None and
   // one scalar type T, decided before any of its stores is annotated.

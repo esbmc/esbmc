@@ -881,6 +881,10 @@ std::string python_annotation<Json>::get_call_type(const Json &arg)
     if (builtin_functions().count(func_name))
       return get_builtin_call_type(arg);
 
+    const std::string per_call = specialised_call_type(func_name, arg);
+    if (!per_call.empty())
+      return per_call;
+
     // For user-defined functions, try to get return type
     try
     {
@@ -894,6 +898,70 @@ std::string python_annotation<Json>::get_call_type(const Json &arg)
   }
 
   return module_call_type(arg);
+}
+
+/// The type @p call returns when @p func_name is copied per call type
+/// because its calls pass an int to a parameter at one site and a float at
+/// another: the return type with this call's argument types, or "".
+/// Typing every call by one shared return type gave `f(g(1))` and
+/// `f(g(0.5))` one argument type, so `f` kept a single int signature
+/// (#10359).
+template <class Json>
+std::string python_annotation<Json>::specialised_call_type(
+  const std::string &func_name,
+  const Json &call)
+{
+  Json *func = nullptr;
+  for (Json &node : ast_["body"])
+    if (node.value("_type", "") == "FunctionDef" && node["name"] == func_name)
+      func = &node;
+  if (
+    func == nullptr || !call.contains("args") ||
+    !specialising_calls_.insert(func_name).second)
+    return "";
+  struct scopet
+  {
+    std::set<std::string> &set;
+    const std::string &name;
+    ~scopet()
+    {
+      set.erase(name);
+    }
+  } scope{specialising_calls_, func_name};
+
+  Json &params = (*func)["args"]["args"];
+  const std::vector<Json> calls = find_function_calls(func_name, ast_["body"]);
+  bool specialised = false;
+  for (size_t i = 0; i < params.size() && !specialised; ++i)
+    specialised =
+      params[i].value("annotation", Json()).is_null() &&
+      are_specializable_types(collect_parameter_types_from_calls(i, calls));
+  if (!specialised)
+    return "";
+
+  const Json saved_params = params;
+  const Json saved_returns = (*func)["returns"];
+  for (size_t i = 0; i < params.size() && i < call["args"].size(); ++i)
+  {
+    const std::string type = get_argument_type(call["args"][i]);
+    if (params[i].value("annotation", Json()).is_null() && !type.empty())
+      add_parameter_annotation(params[i], type);
+  }
+  if (
+    saved_returns.is_object() &&
+    saved_returns.value("_inferred_annotation", false))
+    (*func)["returns"] = nullptr;
+  std::string type;
+  try
+  {
+    type = get_function_return_type(func_name, ast_);
+  }
+  catch (std::runtime_error &)
+  {
+  }
+  params = saved_params;
+  (*func)["returns"] = saved_returns;
+  return type;
 }
 
 /// The type a call of an imported module's function, such as
