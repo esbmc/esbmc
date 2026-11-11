@@ -2468,9 +2468,10 @@ std::string python_annotation<Json>::get_function_return_type(
       return known_fallback_return_type(fallback_type, func_elem["body"]);
     }
 
-    // If function has no explicit return statements, assume void/None
+    // No top-level return. A nested `return v` whose type was not inferred
+    // (e.g. a function value) still returns a value on that path.
     functions_in_analysis_.erase(func_name);
-    return "NoneType";
+    return has_return_value(func_elem["body"]) ? "" : "NoneType";
   }
 
   // Check for lambda assignments when regular function not found
