@@ -232,15 +232,16 @@ void esbmc_parseoptionst::configure_sv_comp_threads(
 
   // A truncated schedule space still reports SUCCESSFUL, so this trades the
   // soundness of "true" verdicts for coverage.
-  if (!cmdline.isset("context-bound"))
+  if (options.get_option("context-bound").empty())
     options.set_option("context-bound", "3");
   options.set_option("cswitch-skip-readonly-globals", true);
-  // One bounded round first can only report a violation (#6831, #6947); it
-  // cannot run with --multi-property.
+  // Bounded rounds first can only report a violation (#6831, #6947); they
+  // cannot run with --multi-property. A boost default makes cmdline.isset
+  // true, so test the option itself (#8220).
   if (
-    !cmdline.isset("falsify-context-bound") &&
+    options.get_option("falsify-context-bound").empty() &&
     !options.get_bool_option("multi-property"))
-    options.set_option("falsify-context-bound", "1");
+    options.set_option("falsify-context-bound", "3");
 
   // --smt-symex-guard makes sibling schedules share a solver context (#6831,
   // #7043). A data-race run keeps a race claim open on every schedule and
