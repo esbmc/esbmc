@@ -902,5 +902,5 @@ so that a name encountered in a counterexample or a GOTO dump can be identified.
 | `__ESBMC_atexit_handler` | Runs functions registered with `atexit` |
 | `__ESBMC_memory_leak_checks` | Emits the memory-leak claims at program exit |
 | `__ESBMC_witness_assume` | Injected by the witness validator to replay an assumption waypoint |
-| `__ESBMC_assigns_impl`, `__ESBMC_loop_assigns_impl` | Variadic backends behind the `__ESBMC_assigns` / `__ESBMC_loop_assigns` macros, which dispatch on argument count and accept **at most five** targets |
+| `__ESBMC_assigns_impl`, `__ESBMC_loop_assigns_impl` | Variadic backends behind the `__ESBMC_assigns` / `__ESBMC_loop_assigns` macros, which dispatch on argument count and accept **at most six** (`__ESBMC_assigns`) and **five** (`__ESBMC_loop_assigns`) targets |
 | `__ESBMC_old_raw` | Backend behind the `__ESBMC_old` macro |

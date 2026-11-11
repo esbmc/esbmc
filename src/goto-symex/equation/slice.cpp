@@ -167,6 +167,66 @@ bool symex_slicet::depends_on_tracked(const expr2tc &expr)
          depends.find(s.get_symbol_name()) != depends.end();
 }
 
+bool symex_slicet::reads_sliced(const expr2tc &expr)
+{
+  // run_on_assignment keeps an array version in #depends but drops its stores
+  // to indices that no kept step reads, so a read of such an index, or of the
+  // whole array, is sliced too.
+  auto sliced_symbol = [this](const symbol2t &sym, const size_t *elem) {
+    const std::string name = sym.get_symbol_name();
+    if (!no_slice(sym) && !depends.count(name))
+      return true;
+    if (!is_array_type(sym.type) || array_disqualified.count(name))
+      return false;
+    auto reads = index_reads.find(name);
+    return !elem || reads == index_reads.end() || !reads->second.count(*elem);
+  };
+
+  // Post-order: a node is decided once its operands are.
+  std::vector<std::pair<const expr2tc *, bool>> worklist{{&expr, false}};
+  while (!worklist.empty())
+  {
+    auto [cur, children_done] = worklist.back();
+    worklist.pop_back();
+    const expr2t *node = cur->get();
+    if (sliced_reads.count(node))
+      continue;
+
+    // A constant-index element read, as #scan_array_uses records it.
+    if (is_index2t(*cur))
+    {
+      const index2t &index = to_index2t(*cur);
+      if (
+        is_symbol2t(index.source_value) && is_constant_int2t(index.index) &&
+        !to_constant_int2t(index.index).value.is_negative())
+      {
+        const size_t elem = to_constant_int2t(index.index).value.to_uint64();
+        sliced_reads[node] =
+          sliced_symbol(to_symbol2t(index.source_value), &elem);
+        continue;
+      }
+    }
+
+    if (!children_done)
+    {
+      worklist.emplace_back(cur, true);
+      (*cur)->foreach_operand([&worklist](const expr2tc &e) {
+        if (!is_nil_expr(e))
+          worklist.emplace_back(&e, false);
+      });
+      continue;
+    }
+
+    bool sliced =
+      is_symbol2t(*cur) && sliced_symbol(to_symbol2t(*cur), nullptr);
+    (*cur)->foreach_operand([this, &sliced](const expr2tc &e) {
+      sliced = sliced || (!is_nil_expr(e) && sliced_reads[e.get()]);
+    });
+    sliced_reads[node] = sliced;
+  }
+  return sliced_reads[expr.get()];
+}
+
 void symex_slicet::run_on_assert(symex_target_equationt::SSA_stept &SSA_step)
 {
   scan_array_uses(SSA_step.guard);
@@ -222,15 +282,19 @@ void symex_slicet::run_on_assignment(
   // an unread index is sound (a dead store) and keeps #depends monotone.
   if (!depends_on_tracked(SSA_step.lhs))
   {
-    // Should we add nondet to the dependency list (mostly for test cases)?
+    // Keep a nondet call's result for test cases and YAML witnesses.
     if (!slice_nondet)
     {
-      auto expr = get_nondet_symbol(SSA_step.rhs);
-      if (expr && is_symbol2t(expr))
+      if (!get_nondet_symbols(SSA_step.rhs).empty())
       {
-        auto &sym = to_symbol2t(expr);
-        if (has_prefix(sym.thename.as_string(), "nondet$"))
-          return;
+        // Without its guard's definition the guard is free, and the trace
+        // could show a call on a path that never reaches it. The step is
+        // hidden: its index or target can be just as free, so the trace
+        // would show a store that never happened.
+        scan_array_uses(SSA_step.guard);
+        collect_dependencies(SSA_step.guard);
+        SSA_step.hidden = true;
+        return;
       }
     }
 
@@ -439,6 +503,38 @@ bool claim_slicer::run(symex_target_equationt::SSA_stepst &steps)
 
   return true;
 }
+
+std::vector<expr2tc> symex_slicet::get_nondet_symbols(const expr2tc &expr)
+{
+  switch (expr->expr_id)
+  {
+  case expr2t::constant_struct_id:
+  case expr2t::constant_union_id:
+  case expr2t::constant_array_id:
+  {
+    std::vector<expr2tc> symbols;
+    expr->foreach_operand([&symbols](const expr2tc &member) {
+      std::vector<expr2tc> nested = get_nondet_symbols(member);
+      symbols.insert(symbols.end(), nested.begin(), nested.end());
+    });
+    return symbols;
+  }
+
+  // e.g. an element of an array of structs: `arr WITH [1:={ .a=nondet0 }]`
+  case expr2t::with_id:
+    return get_nondet_symbols(to_with2t(expr).update_value);
+
+  default:
+  {
+    expr2tc symbol = get_nondet_symbol(expr);
+    if (
+      symbol && has_prefix(to_symbol2t(symbol).thename.as_string(), "nondet$"))
+      return {symbol};
+    return {};
+  }
+  }
+}
+
 // Recursively try to extract the nondet symbol of an expression
 expr2tc symex_slicet::get_nondet_symbol(const expr2tc &expr)
 {
@@ -452,6 +548,10 @@ expr2tc symex_slicet::get_nondet_symbol(const expr2tc &expr)
 
   case expr2t::byte_extract_id:
     return get_nondet_symbol(to_byte_extract2t(expr).source_value);
+
+  // e.g. `x[i] = __VERIFIER_nondet_int()` on a VLA is encoded byte-wise
+  case expr2t::byte_update_id:
+    return get_nondet_symbol(to_byte_update2t(expr).update_value);
 
   case expr2t::typecast_id:
     return get_nondet_symbol(to_typecast2t(expr).from);

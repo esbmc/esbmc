@@ -182,7 +182,7 @@ public:
       "RuntimeError",      "StopIteration",
       "EOFError",          "UnboundLocalError",
       "ArithmeticError",   "FloatingPointError",
-      "LookupError"};
+      "LookupError",       "LinAlgError"};
     return exceptions.count(name) != 0;
   }
 
@@ -264,7 +264,7 @@ public:
   static bool is_optional_str_pointer(const typet &t)
   {
     return t.is_pointer() && t.subtype().is_array() &&
-           t.subtype().subtype() == char_type() &&
+           is_char_storage(t.subtype().subtype()) &&
            to_array_type(t.subtype()).size().is_zero();
   }
 
@@ -393,6 +393,32 @@ public:
     return false;
   }
 
+  /// The name `T` of an annotation `Optional[T]`, `T | None` or `None | T`;
+  /// "" otherwise.
+  static std::string optional_inner_name(const nlohmann::json &ann)
+  {
+    if (!ann.is_object())
+      return "";
+    if (
+      ann.value("_type", "") == "Subscript" && ann.contains("value") &&
+      ann["value"].value("id", "") == "Optional" && ann.contains("slice"))
+      return ann["slice"].value("id", "");
+    if (
+      ann.value("_type", "") != "BinOp" || !ann.contains("op") ||
+      ann["op"].value("_type", "") != "BitOr" || !ann.contains("left") ||
+      !ann.contains("right"))
+      return "";
+    auto is_none = [](const nlohmann::json &n) {
+      return n.value("_type", "") == "Constant" && n.contains("value") &&
+             n["value"].is_null();
+    };
+    if (is_none(ann["right"]))
+      return ann["left"].value("id", "");
+    if (is_none(ann["left"]))
+      return ann["right"].value("id", "");
+    return "";
+  }
+
   static bool is_integer_type(const typet &type)
   {
     return type.is_signedbv() || type.is_unsignedbv();
@@ -403,8 +429,37 @@ public:
   {
     if (!type.is_array() || !type.subtype().is_array())
       return false;
-    return type.subtype().subtype() == char_type() ||
+    return is_char_storage(type.subtype().subtype()) ||
            is_numpy_string_array(type.subtype());
+  }
+
+  /// @p integer as a numeric NumPy element. An 8-bit one would otherwise equal
+  /// char_type(), and the array would read as a string.
+  static typet numpy_integer_type(typet integer)
+  {
+    integer.cpp_type("numpy_numeric");
+    return integer;
+  }
+
+  /// An element tagged by numpy_integer_type.
+  static bool is_numpy_numeric_element(const typet &type)
+  {
+    return type.cpp_type() == "numpy_numeric";
+  }
+
+  /// A scalar a NumPy operation reads at its dtype: a tagged integer, or a
+  /// float narrower than a Python float.
+  static bool is_numpy_scalar_type(const typet &type)
+  {
+    if (type.is_floatbv())
+      return to_floatbv_type(type).get_width() < 64;
+    return is_numpy_numeric_element(type) || is_complex64_type(type);
+  }
+
+  /// A character of a string's storage, which a numeric 8-bit element is not.
+  static bool is_char_storage(const typet &type)
+  {
+    return type == char_type() && !is_numpy_numeric_element(type);
   }
 
   /// The scalar type at the leaves of the (possibly nested) array @p type.
@@ -425,17 +480,17 @@ public:
   static bool is_string_type(const typet &type)
   {
     // String types are represented as arrays or pointers to char
-    if (type.is_array() && type.subtype() == char_type())
+    if (type.is_array() && is_char_storage(type.subtype()))
       return true;
 
     if (type.is_pointer())
     {
       const typet &subtype = type.subtype();
       // Direct pointer to char: char*
-      if (subtype == char_type())
+      if (is_char_storage(subtype))
         return true;
       // Pointer to char array: char(*)[N] (string literals)
-      if (subtype.is_array() && subtype.subtype() == char_type())
+      if (subtype.is_array() && is_char_storage(subtype.subtype()))
         return true;
     }
 

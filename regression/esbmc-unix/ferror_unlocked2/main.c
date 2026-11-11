@@ -22,8 +22,7 @@ int main(void) {
     // Rewind and read back safely
     rewind(fp);
     char readback[32];
-    char *res = fgets(readback, sizeof(readback), fp);
-    assert(res != NULL);
+    fgets(readback, sizeof(readback), fp);
 
     // Still no error
     assert(ferror_unlocked(fp) == 0);

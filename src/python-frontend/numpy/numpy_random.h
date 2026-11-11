@@ -15,11 +15,11 @@
 
 class python_converter;
 
-/// `np.random.<name>(...)` as a nondeterministic over-approximation
-/// (ADR-NP-002): each sample is a fresh symbol constrained to the support of
-/// its distribution. Probabilities, uniformity and generator state are not
-/// modelled. Arguments are evaluated once, in source order, and validated
-/// before any sample is drawn.
+/// NumPy random calls as a nondeterministic over-approximation (ADR-NP-002).
+/// Each sample is a fresh symbol constrained to the operation's support.
+/// Probabilities and the concrete PRNG sequence are not modelled. Generator
+/// identity is tracked by the converter so aliases do not silently become
+/// unsupported calls.
 class numpy_random
 {
 public:
@@ -27,6 +27,13 @@ public:
 
   static bool
   is_random_call(const nlohmann::json &call, const nlohmann::json &ast);
+
+  static bool is_generator_constructor(
+    const nlohmann::json &call,
+    const nlohmann::json &ast);
+
+  static bool
+  is_generator_call(const nlohmann::json &call, const nlohmann::json &ast);
 
   exprt get();
 
@@ -47,6 +54,7 @@ private:
   /// The function as spelled, and the distribution it samples.
   std::string function_;
   std::string name_;
+  std::string state_id_;
   locationt location_;
   code_blockt block_;
   /// Bound parameter values, each read once into a temporary.
@@ -65,6 +73,8 @@ private:
   exprt population_;
   bool replace_ = true;
   bool has_probabilities_ = false;
+  bool endpoint_ = false;
+  std::vector<double> probabilities_;
   std::vector<exprt> drawn_indices_;
 
   exprt reject_unmodelled();
@@ -96,7 +106,10 @@ private:
 
   void validate();
   void validate_randint();
+  void
+  validate_integer_dtype(const exprt &low, const exprt &high, bool integers);
   exprt sample();
+  typet integer_sample_type() const;
   exprt sample_integer();
   exprt sample_real();
   exprt nan_from_parameters(const exprt &sample);

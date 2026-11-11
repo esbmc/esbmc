@@ -16,6 +16,7 @@ add_library(symex
   engine/builtin_functions/memory_ops.cpp
   engine/builtin_functions/object_size.cpp
   engine/builtin_functions/run_builtin.cpp
+  engine/builtin_functions/bounded_math.cpp
   engine/builtin_functions/python_builtins.cpp
   engine/builtin_functions/misc.cpp
   engine/builtin_functions/witness.cpp

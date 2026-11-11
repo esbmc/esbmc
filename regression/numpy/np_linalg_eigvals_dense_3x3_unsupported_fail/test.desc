@@ -1,4 +1,4 @@
 CORE
 main.py
 --incremental-bmc
-^ERROR: TypeError: numpy.linalg.eigvals supports only 2x2 and diagonal matrices currently$
+^ERROR: TypeError: numpy.linalg.eigvals of a matrix larger than 2x2 with complex eigenvalues is not supported$

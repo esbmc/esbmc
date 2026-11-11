@@ -1,0 +1,5 @@
+CORE
+main.c
+--no-pointer-check --closed-world-fnptr
+^No target candidate for function call \*ext_cb; assuming unreachable \(--closed-world-fnptr\)$
+^VERIFICATION SUCCESSFUL$

@@ -1,8 +1,12 @@
 #include <cassert>
 #include <goto-symex/trace/build_goto_trace.h>
+#include <goto-symex/equation/slice.h>
 #include <goto-symex/state/renaming.h>
 #include <goto-symex/witness/witnesses.h>
 #include <solvers/smt/smt_conv.h>
+#include <map>
+#include <unordered_map>
+#include <unordered_set>
 
 static bool reads_through_dereference(const expr2tc &e);
 
@@ -47,17 +51,6 @@ expr2tc build_lhs(smt_convt &smt_conv, const expr2tc &lhs)
   return new_lhs;
 }
 
-expr2tc build_rhs(smt_convt &smt_conv, const expr2tc &rhs)
-{
-  if (is_nil_expr(rhs) || is_constant_expr(rhs))
-    return rhs;
-
-  auto new_rhs = smt_conv.get(rhs);
-  renaming::renaming_levelt::get_original_name(
-    new_rhs, symbol_renaming_level::level0);
-  return new_rhs;
-}
-
 /* Whether the model produced @p e rather than symex propagating it:
  * is_constant_expr is syntactic and admits aggregates with symbolic
  * elements. */
@@ -81,6 +74,17 @@ static bool is_model_value(const expr2tc &e)
       resolved = false;
   });
   return resolved;
+}
+
+expr2tc build_rhs(smt_convt &smt_conv, const expr2tc &rhs)
+{
+  if (is_nil_expr(rhs) || is_model_value(rhs))
+    return rhs;
+
+  auto new_rhs = smt_conv.get(rhs);
+  renaming::renaming_levelt::get_original_name(
+    new_rhs, symbol_renaming_level::level0);
+  return new_rhs;
 }
 
 /* Rebuild the source lvalue @p lvalue over @p ssa_lhs, the SSA symbol holding
@@ -285,12 +289,213 @@ static void record_violated_reads(
   collect_nondet_reads(smt_conv, step.pc->guard, ssa_cond, step.nondet_reads);
 }
 
+/* Record what a __VERIFIER_nondet_*() call returned on this path: the nondet
+ * symbol its `lhs = NONDET` lowering assigns, not the whole lhs object. */
+static void record_nondet_return(
+  smt_convt &smt_conv,
+  const symex_target_equationt::SSA_stept &step,
+  std::list<std::pair<locationt, expr2tc>> &out,
+  std::unordered_set<irep_idt> &seen)
+{
+  if (!step.is_assignment() || step.ignore)
+    return;
+
+  // get_nondet_symbol also returns a plain symbol: a phi merge placed at the
+  // call would name another variable's value. A store through a pointer with
+  // several targets writes one call's nondet symbol into each of them.
+  const expr2tc nondet = symex_slicet::get_nondet_symbol(step.rhs);
+  if (
+    !nondet || !is_symbol2t(nondet) ||
+    !has_prefix(to_symbol2t(nondet).thename, "nondet$") ||
+    seen.count(to_symbol2t(nondet).thename))
+    return;
+
+  // Other nondet assignments (an uninitialised local, a contract's havoc of a
+  // call's result) are not at a nondet call in the source.
+  const auto rparen = nondet_call_rparen(step.source.pc->location);
+  if (!rparen || !smt_conv.l_get(step.guard).is_true())
+    return;
+
+  // get() yields nil for a value it cannot convert, e.g. an --ir-ieee long
+  // double.
+  expr2tc value = smt_conv.get(nondet);
+  if (!is_nil_expr(value) && is_constant_expr(value))
+  {
+    out.emplace_back(*rparen, value);
+    seen.insert(to_symbol2t(nondet).thename);
+  }
+}
+
+/* Tracks which SSA symbols were computed from constants alone. A branch whose
+ * condition reads only such symbols is fixed by the program text, so a witness
+ * need not name its direction. */
+struct input_trackert
+{
+  std::unordered_set<std::string> computed;
+
+  /* Whether @p e reads a nondet value or a symbol no earlier assignment
+   * computed from constants. */
+  bool reads_input(const expr2tc &e) const
+  {
+    if (is_nil_expr(e))
+      return false;
+    if (is_sideeffect2t(e))
+      return true;
+    if (is_symbol2t(e))
+      return find_nondet_in_expr(e) ||
+             !computed.count(to_symbol2t(e).get_symbol_name());
+
+    bool found = false;
+    e->foreach_operand(
+      [&](const expr2tc &op) { found = found || reads_input(op); });
+    return found;
+  }
+
+  void note_assignment(const symex_target_equationt::SSA_stept &step)
+  {
+    if (step.is_assignment() && is_symbol2t(step.lhs) && !reads_input(step.rhs))
+      computed.insert(to_symbol2t(step.lhs).get_symbol_name());
+  }
+
+  void annotate_branch(
+    const symex_target_equationt::SSA_stept &step,
+    goto_trace_stept &trace_step) const
+  {
+    if (step.is_branching())
+      trace_step.nondet_dependent = reads_input(step.cond);
+  }
+};
+
+static bool is_races_flag(const expr2tc &e)
+{
+  return is_symbol2t(e) && to_symbol2t(e).thename == "c:@F@__ESBMC_races_flag";
+}
+
+/* The slot index of the first __ESBMC_races_flag read in @p e, or nil. @p seen
+ * memoises shared nodes: an SSA condition is a DAG, and walking it as a tree
+ * is exponential (regression/esbmc/nested_array_no_simplify_scale_fail). */
+static expr2tc
+races_flag_read_key(const expr2tc &e, std::unordered_set<const expr2t *> &seen)
+{
+  if (!seen.insert(e.get()).second)
+    return expr2tc();
+
+  if (is_index2t(e) && is_races_flag(to_index2t(e).source_value))
+    return to_index2t(e).index;
+
+  expr2tc key;
+  e->foreach_operand([&key, &seen](const expr2tc &op) {
+    if (is_nil_expr(key) && !is_nil_expr(op))
+      key = races_flag_read_key(op, seen);
+  });
+  return key;
+}
+
+/* Tracks the latest write to each __ESBMC_races_flag slot, keyed by the
+ * (object, offset) value the slot index takes in the model, so a violated race
+ * assert can name the access that set the slot it reads (#9688). The writes
+ * are hidden SSA steps, so they are tracked before hidden steps are dropped. */
+struct race_flag_trackert
+{
+  struct slot_writet
+  {
+    expr2tc key;
+    unsigned thread_nr;
+    bool set;
+    goto_trace_stept::accesst access;
+  };
+  std::vector<slot_writet> writes;
+
+  void note_assignment(
+    smt_convt &smt_conv,
+    const symex_target_equationt::SSA_stept &step)
+  {
+    if (
+      !step.is_assignment() || !is_races_flag(step.lhs) ||
+      !is_with2t(step.rhs) || step.ignore ||
+      !smt_conv.l_get(step.guard).is_true())
+      return;
+
+    const with2t &with = to_with2t(step.rhs);
+    slot_writet write{
+      smt_conv.get_by_ast(with.update_field),
+      step.source.thread_nr,
+      smt_conv.l_get(with.update_value).is_true(),
+      {step.source.pc, step.stack_trace()}};
+
+    for (slot_writet &w : writes)
+      if (w.key == write.key)
+      {
+        w = std::move(write);
+        return;
+      }
+    writes.push_back(std::move(write));
+  }
+
+  void annotate_violation(
+    smt_convt &smt_conv,
+    const symex_target_equationt::SSA_stept &step,
+    goto_trace_stept &trace_step) const
+  {
+    if (trace_step.guard)
+      return;
+
+    std::unordered_set<const expr2t *> seen;
+    const expr2tc key = races_flag_read_key(step.cond, seen);
+    if (is_nil_expr(key))
+      return;
+
+    const expr2tc value = smt_conv.get_by_ast(key);
+    for (const slot_writet &w : writes)
+      if (w.key == value && w.set && w.thread_nr != trace_step.thread_nr)
+        trace_step.racing_access = w.access;
+  }
+};
+
+/* The conditional gotos that share their column with another in a run of
+ * instructions on one line: a && or || condition becomes one goto per operand,
+ * all at the statement's location. */
+static std::unordered_set<const goto_programt::instructiont *>
+condition_operand_gotos(const goto_programt &prog)
+{
+  std::unordered_set<const goto_programt::instructiont *> operands;
+  std::map<irep_idt, std::vector<const goto_programt::instructiont *>> run;
+  auto end_run = [&]() {
+    for (const auto &[column, gotos] : run)
+      if (gotos.size() > 1)
+        operands.insert(gotos.begin(), gotos.end());
+    run.clear();
+  };
+
+  irep_idt line;
+  for (const auto &instruction : prog.instructions)
+  {
+    if (instruction.location.get_line() != line)
+    {
+      end_run();
+      line = instruction.location.get_line();
+    }
+    if (instruction.is_goto() && !is_true(instruction.guard))
+      run[instruction.location.get_column()].push_back(&instruction);
+  }
+  end_run();
+  return operands;
+}
+
 void build_goto_trace(
   const symex_target_equationt &target,
   smt_convt &smt_conv,
   goto_tracet &goto_trace)
 {
   unsigned step_nr = 0;
+  input_trackert inputs;
+  race_flag_trackert race_flags;
+  std::unordered_map<
+    const goto_programt *,
+    std::unordered_set<const goto_programt::instructiont *>>
+    operand_gotos;
+  std::list<std::pair<locationt, expr2tc>> nondet_returns;
+  std::unordered_set<irep_idt> nondet_seen;
 
   // l_get() memoises against the current model internally (the cache is
   // cleared on every solve / context change), so the thousands of repeated
@@ -298,6 +503,10 @@ void build_goto_trace(
   // without any explicit scope management here.
   for (auto const &SSA_step : target.SSA_steps)
   {
+    inputs.note_assignment(SSA_step);
+    race_flags.note_assignment(smt_conv, SSA_step);
+    record_nondet_return(smt_conv, SSA_step, nondet_returns, nondet_seen);
+
     // Hidden steps are internal SSA bookkeeping (e.g. phi-merge nodes at
     // control-flow joins). They carry a synthesised value and a source
     // location borrowed from a branch, so surfacing them in the trace yields
@@ -375,12 +584,24 @@ void build_goto_trace(
     {
       goto_trace_step.guard = smt_conv.l_get(SSA_step.cond_expr).is_true();
       record_violated_reads(smt_conv, SSA_step.cond, goto_trace_step);
+      race_flags.annotate_violation(smt_conv, SSA_step, goto_trace_step);
     }
     // Keeps the opposite idiom on purpose: here guard is a direction bit, not
     // a violation flag, so unknown has no fail-safe value and flipping would
     // swap one invented branch direction for another.
     else if (SSA_step.is_assume() || SSA_step.is_branching())
       goto_trace_step.guard = !smt_conv.l_get(SSA_step.cond).is_false();
+
+    inputs.annotate_branch(SSA_step, goto_trace_step);
+    if (SSA_step.is_branching() && SSA_step.source.prog)
+    {
+      auto [it, fresh] = operand_gotos.try_emplace(SSA_step.source.prog);
+      if (fresh)
+        it->second = condition_operand_gotos(*SSA_step.source.prog);
+      goto_trace_step.condition_operand =
+        it->second.count(&*SSA_step.source.pc);
+    }
+    goto_trace_step.nondet_returns.swap(nondet_returns);
 
     goto_trace.steps.push_back(goto_trace_step);
   }

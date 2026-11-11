@@ -1,0 +1,16 @@
+regression/python/github_9073
+regression/python/github_9073_augassign
+regression/python/github_9073_bare_annotation
+regression/python/github_9073_bare_annotation_fail
+regression/python/github_9073_class_attr_fail
+regression/python/github_9073_fail
+regression/python/github_9073_mixed_shapes
+regression/python/github_9073_nested_def
+regression/python/github_9073_nested_def_fail
+regression/python/github_9073_rebound
+regression/python/github_9073_rebound_fail
+regression/python/github_9073_reinit_fail
+regression/python/github_9073_tuple_local
+regression/python/github_9073_tuple_local_fail
+regression/python/github_9073_two_arities_fail
+regression/python/github_9073_type_call_fail

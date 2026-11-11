@@ -25,7 +25,8 @@
 /// marker / forward-condition / inductive-step machinery. The check
 /// never returns TV_FALSE — it can prove termination but never refute
 /// it, so it can only ever turn an UNKNOWN into a SUCCESSFUL, never
-/// produce a wrong verdict.
+/// produce a wrong verdict. Whatever it returns, the per-loop pass adds the
+/// head of each loop it proves terminating to @p terminating_loops.
 ///
 /// Must be called BEFORE goto_termination()'s havoc transform, on the
 /// original (un-havoced) goto program — the obligations are built from
@@ -35,9 +36,14 @@
 /// difference / decrement cannot overflow (signed overflow would be
 /// UB and unsound); the lower bound L is derived from the guard, never
 /// hardcoded.
+///
+/// On TV_TRUE, @p transition_invariants receives a witness transition
+/// invariant (loop head, C expression) for each top-level loop of main.
 tvt try_prove_termination_by_ranking(
   goto_functionst &goto_functions,
   optionst &options,
-  const namespacet &ns);
+  const namespacet &ns,
+  std::vector<locationt> &terminating_loops,
+  std::vector<std::pair<locationt, std::string>> &transition_invariants);
 
 #endif /* ESBMC_RANKING_SYNTHESIS_H */

@@ -241,6 +241,9 @@ public:
     const typet &type,
     const locationt &location);
 
+  /// Stop a lookup with a key of unknown type, which would never match.
+  void refuse_untyped_key(const typet &key_type, const locationt &location);
+
   /**
    * @brief Handles dictionary subscript assignment (e.g., `dict['key'] =
    * value`).
@@ -264,6 +267,14 @@ public:
     const locationt &location,
     const nlohmann::json &node,
     codet &target_block);
+
+  void store_comprehension_pair(
+    const exprt &dict,
+    const exprt &key,
+    const exprt &value,
+    const locationt &location,
+    const nlohmann::json &element,
+    code_blockt &pair_block);
 
   /**
    * @brief Handles dictionary membership testing (`in` / `not in` operators).
@@ -354,6 +365,8 @@ public:
     exprt &lhs,
     exprt &rhs);
 
+  bool is_retypable_subscript(const nlohmann::json &node);
+
   /**
    * @brief Extract value type from dict type annotation
    *
@@ -371,6 +384,11 @@ public:
    * @return struct_typet with element_0=key_type, element_1=value_type
    */
   typet get_popitem_tuple_type(const exprt &dict_expr);
+
+  /// @p key_type if known, else the type shared by the literal keys stored
+  /// into the empty dict, else str.
+  typet key_type_or_default(const typet &key_type, const exprt &dict_expr);
+  typet resolve_stored_key_type(const exprt &dict_expr);
 
   /**
    * @brief Handles dict.popitem() method calls.
@@ -414,12 +432,14 @@ public:
    * @param dict_expr The dictionary expression (must be a symbol)
    */
   typet recorded_tuple_value_type(const exprt &dict_expr) const;
+  typet recorded_value_type(const exprt &dict_expr) const;
 
   /// Whether a read of @p dict_expr yields the stored item as a tagged scalar.
   bool reads_value_as_tagged(
     const exprt &dict_expr,
     const nlohmann::json &slice_node,
-    const element_type_registry::entries &entries);
+    const element_type_registry::entries &entries,
+    const typet &read_type);
 
   char annotated_value_kind(const exprt &dict_expr);
 
@@ -752,6 +772,16 @@ private:
     const symbolt &values_list,
     const exprt &value_expr,
     const locationt &location);
+
+  /// Append to \p target_block a heap copy of the dict \p value; returns the
+  /// pointer to it.
+  const symbolt &heap_copy_dict(
+    const nlohmann::json &node,
+    const exprt &value,
+    const locationt &location,
+    codet &target_block);
+
+  constant_exprt nested_dict_type_hash(const typet &dict_type);
 
   /**
    * @brief Store the dict v of `d[k] = v` by pointer to a heap copy, as

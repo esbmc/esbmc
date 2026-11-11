@@ -262,7 +262,7 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
       "--base-k-step ({}) must be smaller than --max-k-step ({}).",
       k_step_base,
       max_k_step);
-    abort();
+    return 1;
   }
 
   // All processes were created successfully
@@ -888,6 +888,7 @@ tvt esbmc_parseoptionst::is_inductive_step_violated(
   options.set_option("unwind", integer2string(k_step));
 
   bmct bmc(goto_functions, options, context);
+  bmc.loop_invariants = reachable_state_invariants;
 
   log_progress("Checking inductive step, k = {:d}", k_step);
   smt_resultt res = static_cast<smt_resultt>(do_bmc(bmc));

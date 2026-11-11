@@ -1,5 +1,6 @@
 #include <python-frontend/exception/python_exception_handler.h>
 #include <python-frontend/exception/exception_utils.h>
+#include <goto-programs/exception_globals.h>
 #include <python-frontend/json_utils.h>
 #include <python-frontend/python_converter.h>
 #include <python-frontend/python-list/python_list.h>
@@ -7,6 +8,9 @@
 #include <python-frontend/symbol_id.h>
 #include <python-frontend/type/type_handler.h>
 #include <python-frontend/type/type_utils.h>
+#include <algorithm>
+#include <set>
+#include <utility>
 #include <util/arith/arith_tools.h>
 #include <util/lang/c_types.h>
 #include <util/expr/expr_util.h>
@@ -17,6 +21,25 @@
 #include <python-frontend/python_expr_builder.h>
 
 using namespace python_expr;
+
+// Sets @p var to @p value for the lifetime of this object.
+template <typename T>
+class restore_on_exit
+{
+public:
+  restore_on_exit(T &var, T value)
+    : var_(var), saved_(std::exchange(var, std::move(value)))
+  {
+  }
+  ~restore_on_exit()
+  {
+    var_ = std::move(saved_);
+  }
+
+private:
+  T &var_;
+  T saved_;
+};
 
 // ---------------------------------------------------------------------------
 // Constructor
@@ -179,6 +202,9 @@ void python_exception_handler::get_try_statement(
 exprt python_exception_handler::make_finally_rethrow_handler(
   const nlohmann::json &element)
 {
+  // A `raise` in this copy re-raises the exception propagating through the
+  // finally, not one an enclosing handler saved.
+  const restore_on_exit<decltype(handled_)> scope(handled_, {});
   exprt finally_handler = converter_.get_block(element["finalbody"]);
   finally_handler.type().set("ellipsis", true); // catch-all
   // Same flip-blocker-2 pre-set as emit_catch_block: this handler is built
@@ -428,6 +454,118 @@ bool python_exception_handler::body_has_escaping_control_flow(
   return false;
 }
 
+namespace
+{
+// Records the module that import statement \p node of type \p type binds to
+// \p name in \p modules, or sets \p other when it binds it another way
+// (`from m import name`, or an import that did not resolve).
+void record_import_binding(
+  const nlohmann::json &node,
+  const std::string &type,
+  const std::string &name,
+  std::set<std::string> &modules,
+  bool &other)
+{
+  const bool resolved = type == "Import" &&
+                        !node.value("module_not_found", false) &&
+                        !node.value("module_unmodelled", false);
+  for (const auto &alias : node["names"])
+  {
+    const std::string full = alias.value("name", "");
+    const bool has_as = alias.contains("asname") && alias["asname"].is_string();
+    const std::string bound = has_as ? alias["asname"].get<std::string>()
+                                     : full.substr(0, full.find('.'));
+    if (bound != name)
+      continue;
+    if (resolved)
+      modules.insert(has_as ? full : bound);
+    else
+      other = true;
+  }
+}
+
+// Collects into \p modules the module each `import` anywhere under \p node
+// binds to \p name, and sets \p other when anything else binds it by import.
+void collect_import_bindings(
+  const nlohmann::json &node,
+  const std::string &name,
+  std::set<std::string> &modules,
+  bool &other)
+{
+  if (node.is_array())
+  {
+    for (const auto &child : node)
+      collect_import_bindings(child, name, modules, other);
+    return;
+  }
+  if (!node.is_object())
+    return;
+  const std::string type = node.value("_type", "");
+  if ((type == "Import" || type == "ImportFrom") && node.contains("names"))
+    record_import_binding(node, type, name, modules, other);
+  else
+    for (const auto &item : node.items())
+      collect_import_bindings(item.value(), name, modules, other);
+}
+
+// The module that \p name names at \p use: every binding of it is a plain
+// `import` of that one module, and one of them is at the top of \p ast before
+// \p use. Empty otherwise.
+std::string imported_module_of(
+  const nlohmann::json &ast,
+  const std::string &name,
+  const nlohmann::json &use)
+{
+  std::set<std::string> modules;
+  bool other = false;
+  collect_import_bindings(ast["body"], name, modules, other);
+  if (other || modules.size() != 1)
+    return "";
+
+  const int use_line = use.value("lineno", 0);
+  for (const auto &stmt : ast["body"])
+  {
+    if (
+      stmt.value("_type", "") == "Import" &&
+      stmt.value("lineno", use_line) < use_line)
+    {
+      std::set<std::string> here;
+      collect_import_bindings(stmt, name, here, other);
+      if (!here.empty())
+        return *modules.begin();
+    }
+  }
+  return "";
+}
+} // namespace
+
+std::string python_exception_handler::module_class_name(
+  const nlohmann::json &node,
+  const nlohmann::json &use) const
+{
+  if (
+    node.value("_type", "") != "Attribute" ||
+    node["value"].value("_type", "") != "Name")
+    return "";
+  const std::string receiver = node["value"]["id"].get<std::string>();
+  if (!converter_.is_module_receiver(receiver, node["value"], use))
+    return "";
+  const std::string module =
+    imported_module_of(converter_.ast(), receiver, use);
+  const std::string name = node["attr"].get<std::string>();
+  if (module.empty() || type_utils::is_python_exceptions(name))
+    return "";
+
+  // Class symbols are keyed by name alone, so any other binding of this name
+  // in the program could make `module.name` another class at run time.
+  const symbolt *cls = converter_.find_symbol("tag-" + name);
+  if (
+    !cls || cls->module != converter_.module_file(module) ||
+    !converter_.is_sole_class_binding(name))
+    return "";
+  return name;
+}
+
 bool python_exception_handler::raises_instance_variable(
   const nlohmann::json &exc,
   const std::string &exc_name) const
@@ -474,6 +612,102 @@ exprt python_exception_handler::build_builtin_exception(
   return raise;
 }
 
+/// Whether `node` is the call `name(...)`.
+static bool calls_name(const nlohmann::json &node, const char *name)
+{
+  return node.is_object() && node.value("_type", "") == "Call" &&
+         node.contains("func") && node["func"].is_object() &&
+         node["func"].value("id", "") == name;
+}
+
+/// Marks each str(type(x)) in a raised expression: its text is only a message.
+static void mark_type_messages(nlohmann::json &node)
+{
+  if (!node.is_structured())
+    return;
+  if (
+    calls_name(node, "str") && node.contains("args") &&
+    node["args"].size() == 1 && calls_name(node["args"][0], "type"))
+    node["esbmc_raise_message"] = true;
+  for (auto &child : node)
+    mark_type_messages(child);
+}
+
+// A bare `raise` in @p node run by the same frame (a nested function is not
+// searched).
+static bool reraises(const nlohmann::json &node)
+{
+  if (node.is_array())
+    return std::any_of(node.begin(), node.end(), reraises);
+  if (!node.is_object())
+    return false;
+  const std::string type = node.value("_type", "");
+  if (type == "FunctionDef" || type == "AsyncFunctionDef" || type == "Lambda")
+    return false;
+  if (type == "Raise" && node.contains("exc") && node["exc"].is_null())
+    return true;
+  for (const auto &item : node.items())
+    if (reraises(item.value()))
+      return true;
+  return false;
+}
+
+code_blockt python_exception_handler::save_handled_exception(
+  const nlohmann::json &element,
+  std::vector<handled_exceptiont> &handled_stack)
+{
+  if (!reraises(element["body"]))
+    return code_blockt();
+  handled_exceptiont handled;
+  handled.function = converter_.current_function_name();
+  contextt &context = converter_.symbol_table();
+  create_exception_state_symbols(context);
+  const locationt location = converter_.get_location_from_decl(element);
+  code_blockt saves;
+  for (const char *id :
+       {exception_globals::typeid_id,
+        exception_globals::value_id,
+        exception_globals::site_id})
+  {
+    const symbolt &global = *context.find_symbol(id);
+    symbolt saved = converter_.create_return_temp_variable(
+      global.get_type(), location, "handled_exception");
+    const symbolt *added = context.move_symbol_to_context(saved);
+    exprt copy = build_symbol(*added);
+    code_declt decl(copy);
+    decl.location() = location;
+    saves.copy_to_operands(converter_.convert_expression_to_code(decl));
+    code_assignt assign(copy, build_symbol(global));
+    assign.location() = location;
+    saves.copy_to_operands(assign);
+    handled.saved.push_back(copy);
+  }
+  handled_stack.push_back(std::move(handled));
+  return saves;
+}
+
+void python_exception_handler::restore_handled_exception(
+  const locationt &location,
+  codet &block) const
+{
+  if (
+    handled_.empty() ||
+    handled_.back().function != converter_.current_function_name())
+    return;
+  const char *globals[] = {
+    exception_globals::typeid_id,
+    exception_globals::value_id,
+    exception_globals::site_id};
+  for (std::size_t i = 0; i < handled_.back().saved.size(); ++i)
+  {
+    code_assignt restore(
+      build_symbol(*converter_.symbol_table().find_symbol(globals[i])),
+      handled_.back().saved[i]);
+    restore.location() = location;
+    block.copy_to_operands(restore);
+  }
+}
+
 void python_exception_handler::get_raise_statement(
   const nlohmann::json &element,
   codet &block)
@@ -482,9 +716,12 @@ void python_exception_handler::get_raise_statement(
 
   // Bare 'raise' (Raise.exc is null) re-raises the active exception.
   // Lower it to a cpp-throw with no operand and an empty exception_list;
-  // remove_exceptions re-raises from the global exception state (#5075).
+  // remove_exceptions re-raises from the global exception state (#5075),
+  // which is first restored to what the enclosing handler is handling.
   if (element["exc"].is_null())
   {
+    restore_handled_exception(location, block);
+
     side_effect_exprt side("cpp-throw", empty_typet());
     side.location() = location;
 
@@ -494,23 +731,15 @@ void python_exception_handler::get_raise_statement(
     return;
   }
 
-  std::string exc_name;
-
-  // Try to extract the exception name from different AST shapes
-  if (element["exc"].contains("func") && element["exc"]["func"].contains("id"))
-    exc_name = element["exc"]["func"]["id"].get<std::string>();
-  else if (element["exc"].contains("id"))
-    exc_name = element["exc"]["id"].get<std::string>();
-  else if (element["exc"].is_string())
-    exc_name = element["exc"].get<std::string>();
-  else
-    exc_name = ""; // fallback
+  const std::string exc_name = raised_class_name(element["exc"], element);
+  nlohmann::json exc = element["exc"];
+  mark_type_messages(exc);
 
   typet type;
   exprt raise;
   if (raises_instance_variable(element["exc"], exc_name))
   {
-    raise = converter_.get_expr(element["exc"]);
+    raise = converter_.get_expr(exc);
     // A class instance is held by pointer; except clauses match the class.
     if (raise.type().is_pointer())
       raise = build_dereference(raise, raise.type().subtype());
@@ -519,7 +748,7 @@ void python_exception_handler::get_raise_statement(
   else if (type_utils::is_python_exceptions(exc_name))
   {
     type = type_handler_.get_typet(exc_name);
-    raise = build_builtin_exception(element["exc"], type);
+    raise = build_builtin_exception(exc, type);
   }
   else
   {
@@ -528,7 +757,7 @@ void python_exception_handler::get_raise_statement(
     // DECL MyException return_value;
     // FUNCTION_CALL:  MyException(&return_value, &"message");
     // Throw MyException return_value;
-    raise = converter_.get_expr(element["exc"]);
+    raise = converter_.get_expr(exc);
 
     // get_function_call() returns the `_init_undefined` sentinel when the
     // raised class (and its bases) define no __init__. Constructors emit
@@ -610,6 +839,18 @@ void python_exception_handler::get_raise_statement(
   block.move_to_operands(code_expr);
 }
 
+std::string python_exception_handler::raised_class_name(
+  const nlohmann::json &exc,
+  const nlohmann::json &use) const
+{
+  const nlohmann::json &target = exc.contains("func") ? exc["func"] : exc;
+  if (target.contains("id"))
+    return target["id"].get<std::string>();
+  if (target.is_string())
+    return target.get<std::string>();
+  return module_class_name(target, use);
+}
+
 // Emit a single catch block for `type_node` (an exception-type Name node, or
 // null for a bare `except:`), running the handler body. Appends it to `block`.
 void python_exception_handler::emit_catch_block(
@@ -623,15 +864,19 @@ void python_exception_handler::emit_catch_block(
   // Create exception variable symbol before processing body
   if (!type_node.is_null())
   {
-    // Only a bare name (`except ValueError:`) is modelled. A dotted type such
-    // as `except socket.error:` is an Attribute node with no "id"; reject it
-    // with a clean diagnostic rather than crashing on the missing json key.
-    if (!type_node.contains("id"))
+    // numpy.linalg.LinAlgError is two attributes deep, past what
+    // module_class_name reads.
+    const bool linalg_error = type_node.value("attr", "") == "LinAlgError" &&
+                              type_node["value"].value("attr", "") == "linalg";
+    const std::string class_name =
+      type_node.contains("id") ? type_node["id"].get<std::string>()
+      : linalg_error           ? "LinAlgError"
+                               : module_class_name(type_node, element);
+    if (class_name.empty())
       throw std::runtime_error(
         "except with a dotted/attribute exception type is not supported");
 
-    exception_type =
-      type_handler_.get_typet(type_node["id"].get<std::string>());
+    exception_type = type_handler_.get_typet(class_name);
 
     std::string name;
     symbol_id sid = converter_.create_symbol_id();
@@ -663,8 +908,17 @@ void python_exception_handler::emit_catch_block(
     exception_symbol = converter_.symbol_table().move_symbol_to_context(symbol);
   }
 
+  decltype(handled_) inner = handled_;
+  const code_blockt saves = save_handled_exception(element, inner);
+
   // Process exception handler body (symbol now exists)
-  exprt catch_block = converter_.get_block(element["body"]);
+  exprt catch_block;
+  {
+    const restore_on_exit<decltype(handled_)> scope(handled_, std::move(inner));
+    catch_block = converter_.get_block(element["body"]);
+  }
+  codet::operandst &ops = catch_block.operands();
+  ops.insert(ops.begin(), saves.operands().begin(), saves.operands().end());
 
   // Add type and declaration if exception variable was created
   if (exception_symbol != nullptr)

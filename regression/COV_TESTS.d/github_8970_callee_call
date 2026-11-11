@@ -1,0 +1,8 @@
+regression/python/github_8970_callee_call
+regression/python/github_8970_callee_call_fail
+regression/python/github_8970_callee_call_order
+regression/python/github_8970_callee_call_order_fail
+regression/python/github_8970_callee_call_other_fail
+regression/python/github_8970_callee_conditional
+regression/python/github_8970_callee_constant
+regression/python/github_8970_callee_embedded_refused

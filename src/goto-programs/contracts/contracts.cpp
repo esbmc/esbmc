@@ -5662,8 +5662,9 @@ expr2tc code_contractst::declare_call_result(
   // Unlike the three havoc sites, this one does not skip a pointer under
   // --add-symex-value-sets. They leave existing state alone; this one is the
   // result's only definition, and omitting it puts the ensures back over the
-  // caller's stale value. A pointer result therefore carries no value set, so
-  // a write through it is lost (github_7009_pointer_result_knownbug).
+  // caller's stale value. A pointer result therefore carries no value set; a
+  // write through it reaches an object only when an ensures pins the result to
+  // it (github_7009_pointer_result).
   static size_t counter = 0;
   expr2tc result = declare_local_symbol(
     "__ESBMC_return_value$" + std::to_string(counter++), result_type);
@@ -5697,6 +5698,32 @@ static void write_back_call_result(
   t->code = code_assign2tc(ret_val, call_result);
   t->location = call_location;
   t->location.comment("contract call result written back");
+}
+
+static bool contains_symbol(const expr2tc &e, const irep_idt &name)
+{
+  if (is_nil_expr(e))
+    return false;
+  if (is_symbol2t(e) && to_symbol2t(e).thename == name)
+    return true;
+
+  bool found = false;
+  e->foreach_operand([&found, &name](const expr2tc &op) {
+    if (!found)
+      found = contains_symbol(op, name);
+  });
+  return found;
+}
+
+void code_contractst::drop_unread_region_snapshots(
+  std::vector<old_snapshot_t> &snapshots,
+  const expr2tc &ensures_clause)
+{
+  std::erase_if(snapshots, [&ensures_clause](const old_snapshot_t &s) {
+    return s.is_ptr_region &&
+           !contains_symbol(
+             ensures_clause, to_symbol2t(s.snapshot_var).thename);
+  });
 }
 
 void code_contractst::generate_replacement_at_call(
@@ -5786,6 +5813,7 @@ void code_contractst::generate_replacement_at_call(
   // moves the snapshots to the call site instead of a wrapper function.
   std::vector<old_snapshot_t> body_snapshots =
     collect_old_snapshots_from_body(function_body);
+  drop_unread_region_snapshots(body_snapshots, ensures_clause);
   std::vector<old_snapshot_t> callsite_snapshots =
     materialize_old_snapshots_at_callsite(
       body_snapshots,
@@ -6081,21 +6109,6 @@ void code_contractst::generate_replacement_at_call(
 }
 
 // ========== Pointer validity assumptions support ==========
-
-static bool contains_symbol(const expr2tc &e, const irep_idt &name)
-{
-  if (is_nil_expr(e))
-    return false;
-  if (is_symbol2t(e) && to_symbol2t(e).thename == name)
-    return true;
-
-  bool found = false;
-  e->foreach_operand([&found, &name](const expr2tc &op) {
-    if (!found)
-      found = contains_symbol(op, name);
-  });
-  return found;
-}
 
 /// Whether \p e reads or writes through \p name rather than merely naming it.
 static bool dereferences_symbol(const expr2tc &e, const irep_idt &name)

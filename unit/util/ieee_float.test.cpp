@@ -1,6 +1,11 @@
 #define CATCH_CONFIG_MAIN
 #include <catch2/catch.hpp>
+#include <cfenv>
 #include <cmath>
+#include <cstdint>
+#include <cstring>
+#include <random>
+#include <vector>
 #include <util/arith/ieee_float.h>
 
 TEST_CASE("ieee float can handle 1", "[core][util][ieee_floatt]")
@@ -114,4 +119,92 @@ TEST_CASE("ieee float classifies infinities", "[core][util][ieee_floatt]")
     REQUIRE(subnormal.is_finite());
     REQUIRE_FALSE(subnormal.is_normal());
   }
+}
+
+TEST_CASE(
+  "ieee float division is correctly rounded",
+  "[core][util][ieee_floatt]")
+{
+  // #10172: a quotient just above a halfway point must not round as a tie.
+  const std::pair<int, ieee_floatt::rounding_modet> modes[] = {
+    {FE_TONEAREST, ieee_floatt::ROUND_TO_EVEN},
+    {FE_TOWARDZERO, ieee_floatt::ROUND_TO_ZERO},
+    {FE_UPWARD, ieee_floatt::ROUND_TO_PLUS_INF},
+    {FE_DOWNWARD, ieee_floatt::ROUND_TO_MINUS_INF}};
+
+  std::vector<std::pair<double, double>> operands;
+
+  // k / (2^53 - c) has a long run of zeros after its 54th bit, so a quotient
+  // truncated there lands on a halfway point; also with subnormal dividends.
+  for (int k = 1; k <= 64; ++k)
+    for (int c = 1; c <= 64; ++c)
+    {
+      const double b = 9007199254740992.0 - c;
+      operands.emplace_back(k, b);
+      operands.emplace_back(std::ldexp(k, -1074), std::ldexp(b, -100));
+    }
+
+  std::mt19937_64 rng(10172);
+  for (unsigned i = 0; i < 20000; ++i)
+  {
+    // Every fourth operand is subnormal.
+    uint64_t bits[2];
+    for (uint64_t &b : bits)
+    {
+      b = rng();
+      if (rng() % 4 == 0)
+        b &= 0x800fffffffffffffULL;
+    }
+    double a, b;
+    std::memcpy(&a, &bits[0], sizeof a);
+    std::memcpy(&b, &bits[1], sizeof b);
+    if (!std::isnan(a) && !std::isnan(b))
+      operands.emplace_back(a, b);
+  }
+
+  for (const auto &[a, b] : operands)
+  {
+    for (const auto &[host_mode, mode] : modes)
+    {
+      std::fesetround(host_mode);
+      volatile double va = a, vb = b;
+      const double expected = va / vb;
+      std::fesetround(FE_TONEAREST);
+
+      ieee_floatt x, y;
+      x.from_double(a);
+      y.from_double(b);
+      x.rounding_mode = mode;
+      x /= y;
+
+      CAPTURE(a, b, host_mode, expected, x.to_double());
+      if (std::isnan(expected))
+        REQUIRE(std::isnan(x.to_double()));
+      else
+      {
+        REQUIRE(x.to_double() == expected);
+        REQUIRE(std::signbit(x.to_double()) == std::signbit(expected));
+      }
+    }
+  }
+}
+
+TEST_CASE("ieee float packs NaN as a quiet NaN", "[core][util][ieee_floatt]")
+{
+  const ieee_float_spect single = ieee_float_spect::single_precision();
+  const ieee_float_spect dbl = ieee_float_spect::double_precision();
+
+  REQUIRE(ieee_floatt::NaN(single).pack() == BigInt(0x7fc00000));
+  REQUIRE(ieee_floatt::NaN(dbl).pack() == BigInt(0x7ff8000000000000ULL));
+
+  REQUIRE(ieee_floatt::NaN(ieee_float_spect(10, 5)).pack() == BigInt(0x7e00));
+  REQUIRE(ieee_floatt::NaN(ieee_float_spect(7, 8)).pack() == BigInt(0x7fc0));
+
+  ieee_floatt negative = ieee_floatt::NaN(single);
+  negative.set_sign(true);
+  REQUIRE(negative.pack() == BigInt(0xffc00000ULL));
+
+  ieee_floatt round_trip(single);
+  round_trip.unpack(BigInt(0x7fc00000));
+  REQUIRE(round_trip.is_NaN());
 }

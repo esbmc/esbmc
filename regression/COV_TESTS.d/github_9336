@@ -1,0 +1,6 @@
+regression/python/github_9336_imported_len_fail
+regression/python/github_9336_imported_len_str
+regression/python/github_9336_local_len_fail
+regression/python/github_9336_package_len_fail
+regression/python/github_9336_imported_len_char
+regression/python/github_9336_imported_len_index

@@ -1,0 +1,5 @@
+CORE
+main.py
+--incremental-bmc
+^VERIFICATION FAILED$
+^\s*FAILED\s+\[test_order\.assertion\.1\]\s+line\s+14

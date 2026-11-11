@@ -5,6 +5,7 @@
 #include <vector>
 #include <set>
 #include <util/base/string_pool.h>
+#include <util/base/threads.h>
 #include <mutex>
 
 class StringContainerTest
@@ -287,6 +288,7 @@ TEST_CASE(
   "global container: thread safety initialization",
   "[global][static][thread]")
 {
+  threads_scope scope;
   std::vector<std::thread> threads;
   std::set<string_pool *> instances;
   std::mutex mutex;
@@ -398,6 +400,23 @@ TEST_CASE("stress: many unique strings", "[stress]")
   }
 }
 
+TEST_CASE("stress: more strings than 2048 chunks hold", "[stress]")
+{
+  // The cap was 2048 chunks of 4096 strings; one past it wrote out of bounds
+  // (#9666).
+  string_pool container;
+  const unsigned old_cap = 2048 * 4096;
+
+  unsigned misnumbered = 0;
+  for (unsigned i = 1; i <= old_cap; ++i)
+    misnumbered += container["s" + std::to_string(i)] != i;
+
+  REQUIRE(misnumbered == 0);
+  REQUIRE(container.c_str(1) == std::string("s1"));
+  REQUIRE(container.c_str(old_cap) == "s" + std::to_string(old_cap));
+  REQUIRE(container["s1"] == 1);
+}
+
 TEST_CASE("stress: repeated lookups", "[stress]")
 {
   string_pool container;
@@ -421,6 +440,7 @@ TEST_CASE(
   "[concurrency][thread]")
 {
   string_pool container;
+  threads_scope scope;
   std::vector<std::thread> threads;
   std::vector<unsigned> ids(10);
   std::mutex mutex;
@@ -455,6 +475,7 @@ TEST_CASE(
   unsigned master_id = container["shared"];
 
   std::vector<unsigned> retrieved_ids(100);
+  threads_scope scope;
   std::vector<std::thread> threads;
   std::mutex mutex;
 
@@ -489,6 +510,7 @@ TEST_CASE(
   const int NUM_THREADS = 10;
   const int STRINGS_PER_THREAD = 1000;
 
+  threads_scope scope;
   std::vector<std::thread> threads;
   std::set<unsigned> all_ids;
   std::mutex mutex;

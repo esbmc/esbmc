@@ -30,6 +30,7 @@ class PreprocessorStateMixin:
         self._vararg_alias_stmts = []
         self._redefined_names = set()
         self.functionVarargs = set()
+        self.functionAnyKeywords = set()
         self._vararg_func_defs = {}
         self._vararg_module_defs = set()
         self._vararg_callee_defs = {}
@@ -53,6 +54,7 @@ class PreprocessorStateMixin:
         self.exported_type_specs = {}
         self.listcomp_counter = 0
         self.comprehension_targets = set()
+        self.outer_stored_names = set()
         self.functools_reduce_names = set()
         self.functools_module_names = set()
         self.minmax_key_counter = 0
@@ -106,11 +108,16 @@ class PreprocessorStateMixin:
         # agrees (see _recover_param_dict_annotation).
         self._dict_param_call_shapes = {}
         self.bound_method_vars = {}
+        self.unscoped_binding_names = set()
+        self._bound_method_scopes = []
         # Filled by _scan_fixed_receivers; empty, an unpacked bound method
         # is never resolved at its calls.
         self.fixed_receivers = {}
         self.once_bound_names = set()
         self.module_statements = {}
+        self.unbound_checked_globals = set()
+        # Name -> values stored by `name[key] = value` anywhere in the module.
+        self.subscript_stored_values = {}
         self.variable_names = set()
         self.scope_binding_counts = {}
         self.in_order_bindings = set()
@@ -129,6 +136,7 @@ class PreprocessorStateMixin:
         # Module-level ``def f(p): return <expr>``: name -> (param, expr).
         self._single_return_funcs = {}
         self._param_subscripting_funcs = set()
+        self._plain_function_names = set()
         # Map var -> RHS Call node; used by _apply_assert_eq_rewrites to
         # substitute the Name back to its defining call.
         self._assignment_call_origins = {}

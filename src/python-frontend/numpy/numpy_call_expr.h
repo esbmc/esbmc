@@ -1,5 +1,6 @@
 #pragma once
 
+#include <python-frontend/numpy/numpy_dtype.h>
 #include <python-frontend/numpy/numpy_reducer_shared.h>
 
 #include <python-frontend/function_call/expr.h>
@@ -21,9 +22,17 @@ std::string extract_numpy_dtype_name(
   const nlohmann::json &dtype_node,
   const nlohmann::json &ast);
 
+/// Whether the literal of `np.array(literal)` holds a complex number.
+bool numpy_literal_call_is_complex(const nlohmann::json &call);
+std::optional<std::size_t>
+numpy_literal_string_width(const nlohmann::json &call);
+
 /// The literal `np.array(literal, dtype=...)` stores, cast to its dtype.
 nlohmann::json
 numpy_literal_with_dtype(const nlohmann::json &call, const nlohmann::json &ast);
+
+enum class norm_order;
+struct norm_value;
 
 class numpy_call_expr : public function_call_expr
 {
@@ -49,6 +58,9 @@ public:
     python_converter &converter);
 
 private:
+  // A call nested in an argument restores, rather than clears, the flag.
+  const bool outer_build_static_lists_;
+
   exprt create_expr_from_call();
 
   // transpose()/flatten()/ravel() and every other descriptor-materialized
@@ -114,7 +126,12 @@ private:
   // The element type of the array built from the literal @p list: a fixed-width
   // string, or empty for the literal's own.
   typet constructor_element_type(const nlohmann::json &list) const;
-  void reject_complex_array_operands(const std::string &function) const;
+  void reject_unmodelled_operands(const std::string &function) const;
+  void reject_array_copy_with_dtype(const std::string &function) const;
+  void reject_narrow_float_mean(
+    const std::string &function,
+    const nlohmann::json &arg) const;
+  bool is_string_operand(const nlohmann::json &arg) const;
   bool is_complex_operand(const nlohmann::json &arg) const;
   // @p build run with constructor_element_type(@p list) at the leaves of
   // the static arrays it builds.
@@ -135,6 +152,34 @@ private:
 
   std::string get_dtype() const;
   typet get_typet_from_dtype() const;
+  std::optional<numpy_dtypet> runtime_fill_dtype() const;
+  typet string_element_type(std::size_t literal_width) const;
+  std::optional<exprt> full_of_array_fill(
+    const std::vector<std::size_t> &dims,
+    const nlohmann::json &fill_node);
+  std::optional<std::vector<nlohmann::json>>
+  narrow_float_mean_nodes(const nlohmann::json &operand) const;
+  std::optional<exprt> try_narrow_float_reduce(const std::string &function);
+  exprt full_of_literal_array(
+    const std::vector<std::size_t> &dims,
+    const nlohmann::json &fill);
+  std::optional<exprt> try_narrow_operand_call(const std::string &function);
+  std::optional<std::vector<nlohmann::json>>
+  complex_element_nodes(const nlohmann::json &operand) const;
+  std::optional<nlohmann::json>
+  complex_reducer_operand(const std::string &function) const;
+  std::optional<exprt> try_complex_reducer(const std::string &function);
+  exprt complex_truth_reduce(
+    const std::string &function,
+    const std::vector<nlohmann::json> &nodes);
+  exprt complex_value_reduce(
+    const std::string &function,
+    const std::vector<nlohmann::json> &nodes);
+  bool is_narrow_operand(const nlohmann::json &arg) const;
+  bool has_narrow_operand() const;
+  std::optional<exprt> narrow_ufunc_as_operator(const std::string &function);
+  std::optional<exprt>
+  call_with_narrow_constructors_bound(const std::string &function);
   size_t get_dtype_size() const;
 
   // `*_like`'s element type from dtype= (an override) or the base array's
@@ -269,13 +314,151 @@ private:
   exprt lapack_value(double exact, double radius);
   exprt numpy_math_value(const std::string &function, double x);
   std::optional<exprt> try_numpy_math_constant();
+  std::optional<exprt> try_bounded_ufunc(const std::string &function);
+  exprt bounded_binary_ufunc(const std::string &function);
+  exprt broadcast_elements(
+    const std::vector<exprt> &operands,
+    const std::vector<std::size_t> &shape,
+    const typet &leaf,
+    std::size_t depth,
+    const std::function<exprt(const std::vector<exprt> &)> &f);
+  std::vector<std::size_t> ufunc_shape(
+    const std::vector<exprt> &operands,
+    std::optional<std::size_t> out_index);
+  exprt apply_ufunc(
+    const std::string &function,
+    const std::vector<exprt> &inputs,
+    const typet &leaf,
+    const std::function<exprt(const std::vector<exprt> &)> &f);
+  std::optional<exprt> ufunc_mask(const std::string &function);
+  exprt mask_operand(const std::string &function, const nlohmann::json &node);
+  exprt boolean_mask(const std::string &function, const nlohmann::json &node);
+  exprt elementwise_relation(const irep_idt &id, std::vector<exprt> operands);
+  static exprt truth_of(const exprt &element);
+  /// The array out= writes (a view's pointer, or the array) and its elements
+  /// as read before the call.
+  struct ufunc_output
+  {
+    exprt target;
+    exprt value;
+  };
+  std::optional<ufunc_output>
+  ufunc_out(const std::string &function, std::size_t arity, const typet &leaf);
+  exprt out_operand(const std::string &function, const nlohmann::json &node);
+  void reject_unwritable_out(const exprt &target);
+  exprt write_out(const exprt &target, const exprt &result);
+  std::optional<exprt> try_runtime_math(const std::string &function);
+  std::optional<exprt>
+  elementwise_math(const std::string &function, const nlohmann::json &arg);
+  const std::string &canonical_function();
+  exprt
+  elementwise_operand(const std::string &function, const nlohmann::json &arg);
+  std::optional<exprt>
+  copy_of_view(const std::string &function, const exprt &operand);
+  void
+  reject_non_numeric_elements(const std::string &function, const typet &type);
+  exprt bind_array_once(const exprt &array);
+  exprt bind_once(const exprt &value);
+  exprt retype_lhs(const exprt &result);
+  std::optional<exprt> try_float_predicate(const std::string &function);
   exprt numpy_math_list(const std::string &function, const nlohmann::json &arg);
-  std::vector<std::vector<double>>
-  linalg_matrix(const std::function<void(nlohmann::json &)> &unwrap);
+  std::optional<exprt> literal_array_operand(const nlohmann::json &arg);
+  exprt linalg_unary(
+    const std::string &function,
+    const std::function<void(nlohmann::json &)> &resolve);
+  exprt constant_linalg(
+    const std::string &function,
+    const std::vector<std::vector<double>> &m);
+  exprt runtime_linalg(
+    const std::string &function,
+    const std::vector<std::vector<exprt>> &m,
+    const std::vector<exprt> &b = {});
+  exprt runtime_decomposition(
+    const std::string &function,
+    const std::vector<std::vector<exprt>> &m);
+  exprt runtime_solve(
+    const nlohmann::json &original_a,
+    const nlohmann::json &original_b);
+  exprt runtime_inverse(
+    const std::vector<std::vector<exprt>> &m,
+    const std::vector<exprt> &b);
+  exprt linalg_solve_call(
+    const nlohmann::json &original_a,
+    const nlohmann::json &original_b,
+    nlohmann::json a,
+    nlohmann::json b);
   exprt nondet_bool();
+  exprt nondet_value(const typet &type, const std::string &name);
   exprt eigenvalues(const std::vector<std::vector<double>> &m);
+  exprt eigen_decomposition(const std::vector<std::vector<double>> &m);
+  std::vector<exprt> in_any_order(const std::vector<exprt> &values);
+  std::vector<exprt> permutation_slots(std::size_t n);
+  std::vector<exprt> with_any_sign(const std::vector<exprt> &v);
+  exprt selected_box(
+    const exprt &slot,
+    const std::vector<double> &exacts,
+    double radius);
+  std::vector<exprt>
+  dense_eigenvalues(const std::vector<std::vector<double>> &m);
+  void dense_eigen_pairs(
+    const std::vector<std::vector<double>> &m,
+    std::vector<exprt> &values,
+    std::vector<std::vector<exprt>> &columns);
+  void eigen_pair_2x2(
+    const std::vector<std::vector<double>> &m,
+    std::vector<exprt> &values,
+    std::vector<std::vector<exprt>> &columns);
+  std::vector<exprt>
+  signed_column(const std::vector<double> &exact, double radius);
+  exprt linalg_tuple(const std::vector<exprt> &parts);
   std::vector<exprt> eigenvalue_pair(const std::vector<std::vector<double>> &m);
   exprt singular_values(const std::vector<std::vector<double>> &m);
+  bool svd_values_only() const;
+  exprt linalg_decomposition(
+    const std::string &function,
+    const std::vector<std::vector<double>> &m);
+  void assume_singular_order(const std::vector<exprt> &sigmas);
+  exprt linalg_inverse(const std::vector<std::vector<double>> &m);
+  exprt bounded_inverse(const std::vector<std::vector<double>> &m);
+  void raise_singular_matrix();
+  void raise_linalg(
+    const std::string &type,
+    const std::string &message,
+    const exprt &when);
+  exprt raise_linalg_fault(const std::string &type, const std::string &message);
+  exprt bounded_solve(
+    const std::string &function,
+    const std::vector<std::vector<double>> &m,
+    const std::vector<double> &b);
+  void unwrap_linalg_operand(nlohmann::json &arg) const;
+  std::vector<std::vector<exprt>> runtime_entries(
+    const nlohmann::json &arg,
+    std::optional<std::vector<int>> &shape);
+  exprt within_radius(const exprt &value, const exprt &radius);
+  void
+  assume_near(const exprt &residual, const exprt &bound, const exprt &excused);
+  std::vector<std::pair<exprt, exprt>>
+  runtime_eigenvalues(const std::vector<std::vector<exprt>> &m);
+  exprt runtime_eigen_pairs(const std::vector<std::vector<exprt>> &m);
+  exprt runtime_singular_values(const std::vector<std::vector<exprt>> &m);
+  exprt dense_svd_factors(const std::vector<std::vector<double>> &m);
+  void bind_eigenvector(
+    const std::vector<std::vector<exprt>> &m,
+    const exprt &lambda,
+    const std::vector<exprt> &v,
+    const exprt &residual,
+    const exprt &norm,
+    const exprt &excused);
+  exprt symbolic_det(const std::vector<std::vector<exprt>> &m);
+  exprt symbolic_norm(const nlohmann::json &arg, norm_order order);
+  exprt linalg_norm(const std::function<void(nlohmann::json &)> &unwrap);
+  exprt norm_array(const std::vector<std::vector<exprt>> &rows, bool as_matrix);
+  exprt bounded_norm(const norm_value &norm);
+  exprt linalg_solve(
+    const std::string &function,
+    const std::vector<std::vector<double>> &m,
+    const std::vector<double> &b);
+  exprt svd_factors(const std::vector<std::vector<double>> &m);
   exprt lapack_vector(const std::vector<double> &exact, double radius);
   exprt
   lapack_matrix(const std::vector<std::vector<double>> &exact, double radius);

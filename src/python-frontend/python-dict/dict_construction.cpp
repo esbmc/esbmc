@@ -1,4 +1,5 @@
 #include "python_dict_internal.h"
+#include <python-frontend/converter/converter_internal.h>
 
 using namespace python_expr;
 
@@ -42,6 +43,31 @@ exprt python_dict_handler::get_dict_literal(const nlohmann::json &element)
 
   // Return the symbol expression pointing to the initialized dictionary
   return build_symbol(dict_sym);
+}
+
+/// Stores the pair \p key: \p value of a comprehension into \p dict. A key
+/// or value that raises (#9838) stores nothing: the pair is the raise.
+void python_dict_handler::store_comprehension_pair(
+  const exprt &dict,
+  const exprt &key,
+  const exprt &value,
+  const locationt &location,
+  const nlohmann::json &element,
+  code_blockt &pair_block)
+{
+  const exprt *raised = python_frontend::raised_condition(key);
+  if (!raised)
+    raised = python_frontend::raised_condition(value);
+  if (!raised)
+  {
+    handle_dict_subscript_assign(
+      dict, key, value, location, element, pair_block);
+    return;
+  }
+  codet raise("expression");
+  raise.copy_to_operands(*raised);
+  raise.location() = location;
+  pair_block.copy_to_operands(raise);
 }
 
 exprt python_dict_handler::get_dict_comprehension(const nlohmann::json &element)
@@ -289,7 +315,7 @@ exprt python_dict_handler::get_dict_comprehension(const nlohmann::json &element)
 
   // Reuse the normal dict assignment path for each generated pair
   code_blockt pair_block;
-  handle_dict_subscript_assign(
+  store_comprehension_pair(
     build_symbol(dict_sym),
     key_expr,
     value_expr,
@@ -417,7 +443,7 @@ exprt python_dict_handler::build_range_dict_comprehension(
   exprt value_expr = converter_.get_expr(element["value"]);
 
   code_blockt pair_block;
-  handle_dict_subscript_assign(
+  store_comprehension_pair(
     build_symbol(dict_sym),
     key_expr,
     value_expr,
@@ -611,6 +637,8 @@ exprt python_dict_handler::create_dict_from_literal(
 
   // An Optional[T] value type stores each value wrapped, as a read expects.
   const typet expected_value = literal_value_type(target_symbol);
+  // The hint is for this literal only, not for a dict literal among its values.
+  literal_value_type_hint = typet();
 
   for (size_t i = 0; i < keys.size(); ++i)
   {
@@ -635,9 +663,10 @@ exprt python_dict_handler::create_dict_from_literal(
       value_expr = build_address_of(value_expr);
 
     // Check if this is a nested dict that needs special pointer storage
-    if (value_expr.type().is_struct() && is_dict_type(value_expr.type()))
+    if (value_expr.type().is_struct() && holds_dict_lists(value_expr.type()))
     {
-      // Nested dict: store pointer to dict (reference semantics)
+      // Nested dict, bare or Optional-wrapped: store pointer to it
+      // (reference semantics)
       store_nested_dict_value(element, values_list, value_expr, location);
     }
     else

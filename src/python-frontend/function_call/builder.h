@@ -51,7 +51,9 @@ public:
    * len() of an operand that lowered to a bitvector: length 1 for a single
    * character, TypeError for a number, which defines no __len__ (#6261).
    */
-  exprt len_of_bitvector_operand(const nlohmann::json &arg) const;
+  exprt len_of_bitvector_operand(
+    const nlohmann::json &arg,
+    const typet &lowered_type) const;
 
   /*
    * Checks if a NumPy function is being invoked.
@@ -167,6 +169,12 @@ private:
    * the type get_operand_type infers.
    */
   std::string call_receiver_class(const nlohmann::json &inner_call) const;
+  std::string self_method_result_class(const nlohmann::json &inner_call) const;
+  bool overridden_below(
+    const std::string &current,
+    const std::string &definer,
+    const std::string &method) const;
+  std::string sole_constructed_class(const nlohmann::json &def) const;
 
   python_converter &converter_;
   const nlohmann::json &call_;

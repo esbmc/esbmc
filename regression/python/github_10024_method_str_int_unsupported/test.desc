@@ -1,0 +1,4 @@
+CORE
+main.py
+
+^ERROR: unsupported: constructor parameter 'a' is passed a str and a number

@@ -134,6 +134,10 @@ public:
     const struct_typet &tuple_type,
     size_t idx) const;
 
+  /// @p value with any alignment padding members dropped, typed as the
+  /// unpadded tuple a literal of the same element types has.
+  exprt strip_padding(const exprt &value) const;
+
   /**
    * @brief Convert tuple @p value to the annotation-built tuple type @p target
    *
@@ -168,11 +172,18 @@ private:
   exprt pad_string_element(const exprt &elem) const;
 
   /// Index of the Starred node in @p targets, or targets.size() if none.
+  exprt unpacked_list_source(const exprt &rhs, size_t i) const;
+
+  void raise_index_error(const nlohmann::json &element, const exprt &cond);
+
   size_t starred_target_index(const nlohmann::json &targets) const;
 
-  /// The symbol a Name unpacking target denotes, created with @p type if new.
-  symbolt &
-  unpack_target_symbol(const nlohmann::json &name_node, const typet &type);
+  /// The symbol a Name unpacking target denotes, created with @p type if new
+  /// and then declared in @p target_block when it is a function local.
+  symbolt &unpack_target_symbol(
+    const nlohmann::json &name_node,
+    const typet &type,
+    codet &target_block);
 
   typet unpack_target_type(const exprt &rhs, const typet &member_type) const;
 

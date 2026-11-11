@@ -1,0 +1,4 @@
+CORE
+main.py
+
+^ERROR: arithmetic or comparison on a dynamically-typed variable that may hold a float is not yet supported$

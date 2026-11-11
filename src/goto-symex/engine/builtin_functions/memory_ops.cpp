@@ -238,7 +238,69 @@ static bool lacks_byte_model(const type2tc &type)
   return is_floatbv_type(type) || is_fixedbv_type(type) || is_vector_type(type);
 }
 
-static inline expr2tc gen_value_by_byte(
+static expr2tc gen_value_by_byte(
+  const type2tc &type,
+  const expr2tc &src,
+  const expr2tc &value,
+  const size_t num_of_bytes,
+  const size_t offset);
+
+/* Arm of gen_value_by_byte for arrays: get the total number_of_bytes and keep
+ * subtracting until the end. */
+static expr2tc gen_array_by_byte(
+  const type2tc &type,
+  const expr2tc &src,
+  const expr2tc &value,
+  const size_t num_of_bytes,
+  const size_t offset)
+{
+  const type2tc &subtype = to_array_type(type).subtype;
+  uint64_t base_size = type_byte_size(subtype).to_uint64();
+
+  /* Filling the whole array gives every element the same value, so build it
+   * once rather than one constant per element. A fully written scalar keeps
+   * none of its old bits, so the element is built from zero, not from src. */
+  if (
+    offset == 0 && is_scalar_type(subtype) &&
+    num_of_bytes >= type_byte_size(type).to_uint64())
+  {
+    expr2tc elem =
+      gen_value_by_byte(subtype, gen_zero(subtype), value, base_size, 0);
+    return elem ? constant_array_of2tc(type, elem) : expr2tc();
+  }
+
+  expr2tc result = gen_zero(type);
+  constant_array2t &data = to_constant_array2t(result);
+  uint64_t bytes_left = num_of_bytes;
+  uint64_t offset_left = offset;
+
+  for (unsigned i = 0; i < data.datatype_members.size(); i++)
+  {
+    BigInt position(i);
+    expr2tc local_member =
+      index2tc(subtype, src, constant_int2tc(get_uint32_type(), position));
+    // Skip offsets
+    if (offset_left >= base_size)
+    {
+      data.datatype_members[i] = local_member;
+      offset_left -= base_size;
+    }
+    else
+    {
+      uint64_t bytes_to_write = std::min(bytes_left, base_size - offset_left);
+      data.datatype_members[i] = gen_value_by_byte(
+        subtype, local_member, value, bytes_to_write, offset_left);
+      if (!data.datatype_members[i])
+        return expr2tc();
+      bytes_left -= bytes_to_write;
+      offset_left = 0;
+    }
+  }
+
+  return result;
+}
+
+static expr2tc gen_value_by_byte(
   const type2tc &type,
   const expr2tc &src,
   const expr2tc &value,
@@ -269,51 +331,7 @@ static inline expr2tc gen_value_by_byte(
     return typecast2tc(type, value);
 
   if (is_array_type(type))
-  {
-    /*
-     * Very straighforward, get the total number_of_bytes and keep subtracting
-     * until the end
-     */
-
-    expr2tc result = gen_zero(type);
-    constant_array2t &data = to_constant_array2t(result);
-
-    uint64_t base_size =
-      type_byte_size(to_array_type(type).subtype).to_uint64();
-    uint64_t bytes_left = num_of_bytes;
-    uint64_t offset_left = offset;
-
-    for (unsigned i = 0; i < data.datatype_members.size(); i++)
-    {
-      BigInt position(i);
-      expr2tc local_member = index2tc(
-        to_array_type(type).subtype,
-        src,
-        constant_int2tc(get_uint32_type(), position));
-      // Skip offsets
-      if (offset_left >= base_size)
-      {
-        data.datatype_members[i] = local_member;
-        offset_left -= base_size;
-      }
-      else
-      {
-        uint64_t bytes_to_write = std::min(bytes_left, base_size - offset_left);
-        data.datatype_members[i] = gen_value_by_byte(
-          to_array_type(type).subtype,
-          local_member,
-          value,
-          bytes_to_write,
-          offset_left);
-        if (!data.datatype_members[i])
-          return expr2tc();
-        bytes_left -= bytes_to_write;
-        offset_left = 0;
-      }
-    }
-
-    return result;
-  }
+    return gen_array_by_byte(type, src, value, num_of_bytes, offset);
 
   if (is_struct_type(type))
   {
@@ -1567,34 +1585,36 @@ void goto_symext::intrinsic_memchr(
       return;
     }
 
-    // Reading the first n bytes must stay within the object.
-    const bool is_out_bounds =
-      (number_of_offset > type_size) ||
-      ((type_size - number_of_offset) < number_of_bytes);
-    if (
-      is_out_bounds && !options.get_bool_option("no-pointer-check") &&
-      !options.get_bool_option("no-bounds-check"))
-    {
-      std::string error_msg = fmt::format(
-        "dereference failure on memchr: reading memory segment of size {} with "
-        "{} bytes",
-        type_size - number_of_offset,
-        number_of_bytes);
-      expr2tc check = implies2tc(item.guard, gen_false_expr());
-      claim(check, error_msg);
-      continue;
-    }
-
-    // Fold the n candidate bytes into a nested-ite pointer, from the last
-    // position outward so the first match wins.
+    // Fold the candidate bytes inside the object into a nested-ite pointer,
+    // from the last position outward so the first match wins.
+    const uint64_t available =
+      number_of_offset > type_size ? 0 : type_size - number_of_offset;
+    const uint64_t in_bounds = std::min<uint64_t>(number_of_bytes, available);
     expr2tc result = null_result;
-    for (unsigned long k = number_of_bytes; k-- > 0;)
+    expr2tc any_match = gen_false_expr();
+    for (uint64_t k = in_bounds; k-- > 0;)
     {
       expr2tc byte =
         object_byte(item_object, number_of_offset + k, is_big_endian);
       expr2tc match = equality2tc(byte, ch_byte);
       expr2tc hit = add2tc(ret_type, buf_arg, gen_ulong(k));
       result = if2tc(ret_type, match, hit, result);
+      any_match = or2tc(match, any_match);
+    }
+
+    // memchr stops at the first match (C17 7.24.5.1p2), so it reads past the
+    // object only when none of the bytes inside it matches (#9439).
+    if (
+      in_bounds < number_of_bytes &&
+      !options.get_bool_option("no-pointer-check") &&
+      !options.get_bool_option("no-bounds-check"))
+    {
+      std::string error_msg = fmt::format(
+        "dereference failure on memchr: reading memory segment of size {} with "
+        "{} bytes",
+        available,
+        number_of_bytes);
+      claim(implies2tc(item.guard, any_match), error_msg);
     }
 
     symex_assign(code_assign2tc(ret_ref, result), false, guard);
@@ -1852,10 +1872,15 @@ void goto_symext::intrinsic_havoc_object(const code_function_call2t &call)
   expr2tc deref = dereference2tc(get_empty_type(), call.operands[0]);
   dereference(deref, dereferencet::INTERNAL);
   for (const auto &item : internal_deref_items)
+  {
     // Anything else is a constant, such as a string literal, or a function.
-    if (is_symbol2t(item.object) && !is_code_type(item.object->type))
-      symex_assign(
-        code_assign2tc(item.object, gen_nondet(item.object->type)),
-        false,
-        cur_state->guard);
+    if (!is_symbol2t(item.object) || is_code_type(item.object->type))
+      continue;
+    expr2tc target_guard = item.guard;
+    cur_state->rename(target_guard);
+    guard2tc guard = cur_state->guard;
+    guard.add(target_guard);
+    symex_assign(
+      code_assign2tc(item.object, gen_nondet(item.object->type)), false, guard);
+  }
 }

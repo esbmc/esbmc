@@ -10,6 +10,8 @@ import copy
 # pylint: disable=too-many-locals,too-many-branches,too-many-statements
 import sys
 
+from preprocessor.rejection import attach_location
+
 CONTRACT_CLAUSES = ("__ESBMC_requires", "__ESBMC_ensures")
 
 
@@ -216,9 +218,23 @@ class GeneratorMixin:
                 best_idx = i
         return best_idx
 
+    @staticmethod
+    def _outer_stored_names(module):
+        """The names that @p module stores other than as a comprehension target."""
+        in_comprehension = {}
+        stored = {}
+        for node in ast.walk(module):
+            if isinstance(node, ast.comprehension):
+                for name in ast.walk(node.target):
+                    if isinstance(name, ast.Name):
+                        in_comprehension[name.id] = in_comprehension.get(name.id, 0) + 1
+            if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Store):
+                stored[node.id] = stored.get(node.id, 0) + 1
+        return {name for name, count in stored.items() if count > in_comprehension.get(name, 0)}
+
     def _rename_shadowing_targets(self, node):
-        """Rename a comprehension target that shadows a known outer variable
-        or the target of an earlier comprehension.
+        """Rename a comprehension target that shadows an outer variable, bound
+        before or after it, or the target of an earlier comprehension.
 
         Python 3 scopes a comprehension's target to the comprehension, so the
         rename is semantically free. Without it the outer and inner bindings
@@ -230,7 +246,8 @@ class GeneratorMixin:
             if not isinstance(generator.target, ast.Name):
                 continue
             old = generator.target.id
-            if old not in self.known_variable_types and old not in self.comprehension_targets:
+            if (old not in self.known_variable_types and old not in self.comprehension_targets
+                    and old not in self.outer_stored_names):
                 self.comprehension_targets.add(old)
                 continue
 
@@ -753,18 +770,22 @@ class GeneratorMixin:
         (otherwise an unrelated nested helper that happens to reference the
         outer name triggers a false-positive recursive-generator transform).
         """
+        return any(True for _ in GeneratorMixin._recursive_calls(func_name, body))
+
+    @staticmethod
+    def _recursive_calls(func_name, body):
+        """Yield (call, parent) for each direct call to func_name in *body*."""
 
         def walk(node):
             if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)):
                 return
-            if (isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
-                    and node.func.id == func_name):
-                yield node
             for child in ast.iter_child_nodes(node):
+                if (isinstance(child, ast.Call) and isinstance(child.func, ast.Name)
+                        and child.func.id == func_name):
+                    yield child, node
                 yield from walk(child)
 
-        module = ast.Module(body=body, type_ignores=[])
-        return any(True for _ in walk(module))
+        yield from walk(ast.Module(body=body, type_ignores=[]))
 
     def _transform_recursive_generator(self, node):
         """Transform a recursive generator function to accumulate-and-return.
@@ -785,6 +806,17 @@ class GeneratorMixin:
         """
         result_var = "ESBMC_gen_result"
         template = node.body[0] if node.body else node
+
+        # The transform runs every recursive call eagerly, which matches
+        # CPython only when the call's generator is iterated in place.
+        # Elsewhere CPython keeps an unstarted generator object (#4786).
+        for call, parent in self._recursive_calls(node.name, node.body):
+            if not (isinstance(parent, (ast.For, ast.comprehension)) and parent.iter is call):
+                err = NotImplementedError(
+                    f"using the generator returned by recursive generator '{node.name}' "
+                    "other than as a for-loop iterable is not supported")
+                attach_location(err, call, self.module_name)
+                raise err
 
         # Annotate unannotated parameters as list[Any].  Without this the C++
         # annotator infers Any from the recursive call site (flatten(x) where

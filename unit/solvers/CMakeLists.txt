@@ -48,6 +48,16 @@ if(ENABLE_BITWUZLA)
 
   new_unit_test(solver_assumptions_test "solver_assumptions.test.cpp"
                 "solvers;util_esbmc;filesystem;bigint")
+
+  new_unit_test(int_to_ptr_push_pop_test "int_to_ptr_push_pop.test.cpp"
+                "solvers;util_esbmc;filesystem;bigint")
+
+  # Forks a child per allocation failure point.
+  if(NOT WIN32)
+    new_unit_test(bitwuzla_out_of_memory_test
+                  "bitwuzla_out_of_memory.test.cpp"
+                  "solvers;util_esbmc;filesystem;bigint")
+  endif()
 endif()
 
 if(ENABLE_SMTLIB)

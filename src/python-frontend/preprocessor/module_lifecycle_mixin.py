@@ -1,6 +1,9 @@
 import ast
 import pytype_infer
 
+from preprocessor.numpy_annotations import drop_ndarray_annotations
+from preprocessor.numpy_path_bindings import lower_numpy_path_bindings
+from preprocessor.numpy_returned_views import lower_numpy_returned_views
 from preprocessor.path_dependent_attributes import lower_path_dependent_attributes
 
 
@@ -60,10 +63,14 @@ class ModuleLifecycleMixin:
         self._bind_nested_classes_via_self(node)
         if self.is_entry_module:
             lower_path_dependent_attributes(node)
+            lower_numpy_returned_views(node)
+            lower_numpy_path_bindings(node)
+            drop_ndarray_annotations(node)
         self._copy_methods_into_heirs(node)
         self._builtin_shadow_names = self._scan_builtin_shadow_names(node)
         self._unobservable_builtin_keys = self._scan_unobservable_builtin_keys(node)
         self._closed_lambda_bindings = self._scan_closed_lambda_bindings(node)
+        self._fix_constructor_varargs(node)
         self._fixed_length_starred = self._scan_fixed_length_starred(node)
         self._vararg_alias_calls = self._scan_vararg_alias_calls(node)
         # Per-module scope for the eq-only set and call-origin map.

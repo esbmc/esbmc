@@ -24,6 +24,9 @@
 class bmct
 {
 public:
+  /// Loop invariants (loop head, C expression) for a correctness witness.
+  std::vector<std::pair<locationt, std::string>> loop_invariants;
+
   bmct(goto_functionst &funcs, optionst &opts, contextt &_context);
 
   optionst &options;
@@ -322,7 +325,8 @@ void report_coverage(
   std::unordered_set<std::string> &reached_claims,
   const std::unordered_multiset<std::string> &reached_mul_claims,
   pytest_generator &pytest_gen,
-  ctest_generator &ctest_gen);
+  ctest_generator &ctest_gen,
+  const std::string &partial_reason = "");
 
 /// Record why a coverage measurement is not exhaustive; the reason is listed
 /// under the closing COVERAGE ANALYSIS INCOMPLETE line.

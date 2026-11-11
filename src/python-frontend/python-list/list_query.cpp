@@ -1,5 +1,7 @@
 #include "python_list_internal.h"
 
+#include <python-frontend/set/python_set.h>
+
 using namespace python_expr;
 using namespace python_list_detail;
 
@@ -66,8 +68,8 @@ std::optional<expr2tc> python_list::fast_elem_equality(
   const bool lhs_tuple = tuples.is_tuple_type(lhs_type);
   const bool rhs_tuple = tuples.is_tuple_type(rhs_type);
 
-  // Same-type numeric/bool compares directly; mixed numeric promotes both
-  // sides to double first. A tuple compares directly only against the
+  // Same-type numeric/bool compares directly; int against float by exact
+  // value, others as doubles. A tuple compares directly only against the
   // identical tuple type: two tuples whose string members were padded to
   // different widths are different struct sorts, which an equality would not
   // relate. Against a number or a bool a tuple is never equal; the runtime
@@ -78,6 +80,10 @@ std::optional<expr2tc> python_list::fast_elem_equality(
     (is_numeric(lhs_type) || lhs_type == bool_type() || lhs_tuple))
   {
   }
+  else if (
+    expr2tc exact =
+      python_converter::exact_int_float_relation("Eq", lhs_val, rhs_val, true))
+    return exact;
   else if (is_numeric(lhs_type) && is_numeric(rhs_type))
   {
     lhs_val = build_typecast(lhs_val, double_type());
@@ -94,27 +100,31 @@ std::optional<expr2tc> python_list::fast_elem_equality(
   return equality2tc(lhs_val2, rhs_val2);
 }
 
-expr2tc python_list::stored_element_is(
-  const symbolt &list,
-  std::size_t i,
-  const symbolt &elem)
+void python_list::require_stored_types(
+  expr2tc &sizes_ok,
+  std::size_t depth,
+  const exprt &lhs_at,
+  const typet &lhs_type,
+  const exprt &rhs_at,
+  const typet &rhs_type) const
 {
-  const exprt at = build_list_at_call(
-    build_symbol(list), from_integer(BigInt(i), size_type()), list_value_);
-  expr2tc stored, current;
-  migrate_expr(extract_pyobject_value(at, elem.get_type()), stored);
-  migrate_expr(build_symbol(elem), current);
-  // By object and offset: these fold through the casts the stored copy is read
-  // back with, where a pointer == stays symbolic and keeps the unbounded
-  // __ESBMC_list_eq fallback live.
-  const type2tc offset_type = get_int_type(config.ansi_c.address_width);
-  return and2tc(
-    equality2tc(
-      pointer_object2tc(pointer_type2(), stored),
-      pointer_object2tc(pointer_type2(), current)),
-    equality2tc(
-      pointer_offset2tc(offset_type, stored),
-      pointer_offset2tc(offset_type, current)));
+  const type_handler &th = converter_.get_type_handler();
+  const typet list_type = th.get_list_type();
+  if (depth == 0 && lhs_type != list_type && rhs_type != list_type)
+    return;
+
+  auto stored_type_is = [&](const exprt &at, const typet &type) {
+    expr2tc stored, expected;
+    migrate_expr(build_deref_member(at, "type_id", size_type()), stored);
+    migrate_expr(
+      from_integer(
+        std::hash<std::string>{}(th.type_to_string(type)), size_type()),
+      expected);
+    return equality2tc(stored, expected);
+  };
+  sizes_ok = and2tc(
+    sizes_ok,
+    and2tc(stored_type_is(lhs_at, lhs_type), stored_type_is(rhs_at, rhs_type)));
 }
 
 /// The float element type_id that lets list_eq compare mixed int and float
@@ -146,6 +156,29 @@ size_t python_list::eq_float_type_id(
   return may_hold_int
            ? std::hash<std::string>{}(th.type_to_string(double_type()))
            : 0;
+}
+
+/// `a < b`, `a <= b`, `a > b` and `a >= b` on sets: a subset test, and for the
+/// strict forms also that the converse does not hold.
+static exprt set_ordering(
+  python_converter &converter,
+  const nlohmann::json &element,
+  const symbolt &lhs,
+  const symbolt &rhs,
+  const std::string &op)
+{
+  python_set sets(converter, element);
+  const auto subset = [&](const symbolt &small, const symbolt &large) {
+    return sets.build_set_relation_call(
+      build_symbol(small), build_symbol(large), element, "issubset");
+  };
+  const bool left_in_right = op == "Lt" || op == "LtE";
+  const symbolt &small = left_in_right ? lhs : rhs;
+  const symbolt &large = left_in_right ? rhs : lhs;
+  const exprt contained = subset(small, large);
+  if (op == "LtE" || op == "GtE")
+    return contained;
+  return and_exprt(contained, not_exprt(subset(large, small)));
 }
 
 exprt python_list::compare(
@@ -201,13 +234,9 @@ exprt python_list::compare(
     if (!(lhs_is_set && rhs_is_set))
       return gen_boolean(op == "NotEq");
 
-    // Python set ordering (< strict subset, <= subset-or-equal, and the > / >=
-    // supersets) requires proper subset checking, which is not yet modelled.
-    // Reject it explicitly rather than silently returning the Eq/NotEq result,
-    // which would be wrong for these operators.
     if (op == "Lt" || op == "LtE" || op == "Gt" || op == "GtE")
-      throw std::runtime_error(
-        "set ordering (<, <=, >, >=) is not yet supported");
+      return set_ordering(
+        converter_, list_value_, *lhs_symbol, *rhs_symbol, op);
 
     symbolt *set_eq_func =
       converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_set_eq");
@@ -312,15 +341,13 @@ exprt python_list::compare(
     const symbolt *list_size_sym =
       converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_size");
     assert(list_size_sym);
-    auto size_is = [&](const symbolt &list, std::size_t n) {
+    auto size_is = [&](const exprt &list, std::size_t n) {
       expr2tc size;
       migrate_expr(
         build_call_expr(
           *list_size_sym,
           size_type(),
-          {list.get_type().is_pointer()
-             ? build_symbol(list)
-             : build_address_of(build_symbol(list))}),
+          {list.type().is_pointer() ? list : build_address_of(list)}),
         size);
       return equality2tc(size, constant_int2tc(size->type, BigInt(n)));
     };
@@ -424,13 +451,24 @@ exprt python_list::compare(
     // Concrete nested lists can be compared directly without forcing the
     // recursive list operational model. This keeps matrix-style comparisons
     // from blowing up into large __ESBMC_list_eq trees.
+    // The type map names a nested list by the symbol it was appended from,
+    // which can be dead or rebound by now (#8130), so its elements are read
+    // through the outer list and their types checked at run time.
     const typet list_model_type = converter_.get_type_handler().get_list_type();
     std::function<bool(
-      const symbolt *, const symbolt *, std::size_t, expr2tc &, expr2tc &)>
+      const symbolt *,
+      const symbolt *,
+      const exprt &,
+      const exprt &,
+      std::size_t,
+      expr2tc &,
+      expr2tc &)>
       build_nested_equality;
     build_nested_equality = [&](
                               const symbolt *lhs_list,
                               const symbolt *rhs_list,
+                              const exprt &lhs_expr,
+                              const exprt &rhs_expr,
                               std::size_t depth,
                               expr2tc &result,
                               expr2tc &sizes_ok) -> bool {
@@ -448,7 +486,7 @@ exprt python_list::compare(
       const std::size_t rhs_size = elem_types().size(rhs_list_id);
       sizes_ok = and2tc(
         sizes_ok,
-        and2tc(size_is(*lhs_list, lhs_size), size_is(*rhs_list, rhs_size)));
+        and2tc(size_is(lhs_expr, lhs_size), size_is(rhs_expr, rhs_size)));
       if (lhs_size != rhs_size)
       {
         result = gen_false_expr();
@@ -471,6 +509,11 @@ exprt python_list::compare(
         const typet &rhs_elem_type = rhs_elem_sym->get_type();
         const bool lhs_is_list = lhs_elem_type == list_model_type;
         const bool rhs_is_list = rhs_elem_type == list_model_type;
+        const exprt index = from_integer(BigInt(i), size_type());
+        const exprt lhs_at = build_list_at_call(lhs_expr, index, list_value_);
+        const exprt rhs_at = build_list_at_call(rhs_expr, index, list_value_);
+        require_stored_types(
+          sizes_ok, depth, lhs_at, lhs_elem_type, rhs_at, rhs_elem_type);
         expr2tc elem_equal;
 
         if (lhs_is_list || rhs_is_list)
@@ -488,13 +531,14 @@ exprt python_list::compare(
             converter_.outlive_scope(lhs_nested_id);
             converter_.outlive_scope(rhs_nested_id);
             if (!build_nested_equality(
-                  lhs_nested, rhs_nested, depth + 1, elem_equal, sizes_ok))
+                  lhs_nested,
+                  rhs_nested,
+                  extract_pyobject_value(lhs_at, list_model_type),
+                  extract_pyobject_value(rhs_at, list_model_type),
+                  depth + 1,
+                  elem_equal,
+                  sizes_ok))
               return false;
-            sizes_ok = and2tc(
-              sizes_ok,
-              and2tc(
-                stored_element_is(*lhs_list, i, *lhs_nested),
-                stored_element_is(*rhs_list, i, *rhs_nested)));
           }
         }
         else
@@ -506,11 +550,6 @@ exprt python_list::compare(
               is_tuple(rhs_elem_type)))
             return false;
 
-          const exprt index = from_integer(BigInt(i), size_type());
-          exprt lhs_at =
-            build_list_at_call(build_symbol(*lhs_list), index, list_value_);
-          exprt rhs_at =
-            build_list_at_call(build_symbol(*rhs_list), index, list_value_);
           exprt lhs_value = extract_pyobject_value(lhs_at, lhs_elem_type);
           exprt rhs_value = extract_pyobject_value(rhs_at, rhs_elem_type);
           if (lhs_elem_type != rhs_elem_type)
@@ -540,7 +579,13 @@ exprt python_list::compare(
       expr2tc sizes_ok = gen_true_expr();
       if (
         build_nested_equality(
-          lhs_symbol, rhs_symbol, 0, nested_equal, sizes_ok))
+          lhs_symbol,
+          rhs_symbol,
+          build_symbol(*lhs_symbol),
+          build_symbol(*rhs_symbol),
+          0,
+          nested_equal,
+          sizes_ok))
         return unless_resized(nested_equal, sizes_ok);
     }
 
@@ -601,7 +646,9 @@ exprt python_list::compare(
           if (comparable)
             return unless_resized(
               all_equal,
-              and2tc(size_is(*lhs_symbol, lhs_n), size_is(*rhs_symbol, rhs_n)));
+              and2tc(
+                size_is(build_symbol(*lhs_symbol), lhs_n),
+                size_is(build_symbol(*rhs_symbol), rhs_n)));
         }
       }
     }
@@ -744,10 +791,88 @@ exprt python_list::compare(
     equality2tc(leqr2, op == "Eq" ? gen_true_expr() : gen_false_expr()));
 }
 
+// Lists, tuples, dicts and class instances share one element type id, so the
+// model can only tell a nested list from them by what the frontend recorded.
+bool python_list::holds_list_lookalike(
+  const std::string &list_id,
+  bool if_unrecorded,
+  int depth) const
+{
+  const auto *recorded = elem_types().find(list_id);
+  if (!recorded || depth <= 0)
+    return if_unrecorded;
+  const type_handler &th = converter_.get_type_handler();
+  const typet list_type = th.get_list_type();
+  // None is stored with size 0, which the model already skips.
+  const typet none_type = pointer_typet(bool_type());
+  return std::any_of(recorded->begin(), recorded->end(), [&](const auto &e) {
+    if (e.second == list_type)
+      return e.first.empty()
+               ? if_unrecorded
+               : holds_list_lookalike(e.first, if_unrecorded, depth - 1);
+    return e.second != none_type && th.type_to_string(e.second).empty();
+  });
+}
+
+bool python_list::compares_as_lists(
+  const exprt &item,
+  const symbolt &item_copy,
+  const exprt &list) const
+{
+  const int depth = get_list_compare_depth();
+  return item_copy.get_type() ==
+           converter_.get_type_handler().get_list_type() &&
+         list.is_symbol() &&
+         !holds_list_lookalike(list.identifier().as_string(), true, depth) &&
+         !(item.is_symbol() &&
+           holds_list_lookalike(item.identifier().as_string(), false, depth));
+}
+
+exprt python_list::contains_list(const exprt &item, const exprt &list)
+{
+  const symbolt *func =
+    converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_contains_list");
+  assert(func);
+  symbolt &ret = converter_.create_tmp_symbol(
+    list_value_,
+    "contains_tmp",
+    bool_type(),
+    migrate_expr_back(gen_false_expr()));
+  converter_.add_instruction(code_declt(build_symbol(ret)));
+
+  const type_handler &th = converter_.get_type_handler();
+  auto hash_of = [&th](const typet &t) {
+    constant_exprt id(size_type());
+    id.set_value(integer2binary(
+      std::hash<std::string>{}(th.type_to_string(t)),
+      config.ansi_c.address_width));
+    return id;
+  };
+
+  // The inner lists' element types are not recorded, so keep list_eq's
+  // int/float path open: [1] in [[1.0]] holds in Python.
+  code_function_callt call;
+  call.function() = build_symbol(*func);
+  call.lhs() = build_symbol(ret);
+  call.arguments() = {
+    list,
+    item,
+    hash_of(list.type()),
+    from_integer(get_list_compare_depth(), size_type()),
+    hash_of(double_type())};
+  call.type() = bool_type();
+  call.location() = converter_.get_location_from_decl(list_value_);
+  converter_.add_instruction(call);
+  return build_symbol(ret);
+}
+
 exprt python_list::contains(const exprt &item, const exprt &list)
 {
   // Get type and size information for the item
   list_elem_info item_info = get_list_element_info(list_value_, item);
+
+  if (compares_as_lists(item, *item_info.elem_symbol, list))
+    return contains_list(build_symbol(*item_info.elem_symbol), list);
 
   // Find the list_contains function
   const symbolt *list_contains_func =
@@ -809,7 +934,9 @@ exprt python_list::contains(const exprt &item, const exprt &list)
         const typet &stored_type = stored_entry.second;
 
         // Check if stored type is a char array (string)
-        if (stored_type.is_array() && stored_type.subtype() == char_type())
+        if (
+          stored_type.is_array() &&
+          type_utils::is_char_storage(stored_type.subtype()))
         {
           // Use the stored string array type instead of void pointer type
           const type_handler type_handler_ = converter_.get_type_handler();
@@ -964,7 +1091,7 @@ exprt python_list::build_count_index_list_call(
   exprt element_arg;
   if (
     elem_info.elem_symbol->get_type().is_pointer() &&
-    elem_info.elem_symbol->get_type().subtype() == char_type())
+    type_utils::is_char_storage(elem_info.elem_symbol->get_type().subtype()))
     element_arg = build_symbol(*elem_info.elem_symbol);
   else
     element_arg = build_address_of(build_symbol(*elem_info.elem_symbol));
@@ -1011,7 +1138,7 @@ exprt python_list::build_index_list_call(
   exprt element_arg;
   if (
     elem_info.elem_symbol->get_type().is_pointer() &&
-    elem_info.elem_symbol->get_type().subtype() == char_type())
+    type_utils::is_char_storage(elem_info.elem_symbol->get_type().subtype()))
     element_arg = build_symbol(*elem_info.elem_symbol);
   else
     element_arg = build_address_of(build_symbol(*elem_info.elem_symbol));
@@ -1074,7 +1201,7 @@ exprt python_list::build_index_range_list_call(
   exprt element_arg;
   if (
     elem_info.elem_symbol->get_type().is_pointer() &&
-    elem_info.elem_symbol->get_type().subtype() == char_type())
+    type_utils::is_char_storage(elem_info.elem_symbol->get_type().subtype()))
     element_arg = build_symbol(*elem_info.elem_symbol);
   else
     element_arg = build_address_of(build_symbol(*elem_info.elem_symbol));

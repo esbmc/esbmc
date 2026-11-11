@@ -1,0 +1,5 @@
+properties:
+  - id: P1
+    kind: invariant
+    expression: "Motor_A == Motor_B"
+    justification: "Expressions containing whitespace and unsupported syntax must not be diagnosed as IEC operators."

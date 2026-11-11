@@ -54,12 +54,19 @@ bool symex_dereference_statet::has_failed_symbol(
   return false;
 }
 
+void symex_dereference_statet::points_to(
+  const expr2tc &expr,
+  value_setst::valuest &value_set)
+{
+  state.value_set.get_value_set(expr, value_set, true);
+}
+
 void symex_dereference_statet::get_value_set(
   const expr2tc &expr,
   value_setst::valuest &value_set)
 {
   // Here we obtain the set of objects via value set analysis.
-  state.value_set.get_value_set(expr, value_set);
+  points_to(expr, value_set);
 
   // add value set objects during the symbolic execution.
   if (

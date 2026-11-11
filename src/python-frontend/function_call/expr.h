@@ -204,6 +204,17 @@ private:
   /// has a __str__; nil otherwise.
   exprt str_of_object(exprt &value, const nlohmann::json &arg) const;
 
+  /// repr() of the instance @p value through __repr__ or object's default,
+  /// when its runtime class is its static class; nil otherwise.
+  exprt repr_of_object(exprt &value) const;
+
+  /// "None" where the object pointer @p value is null, @p other elsewhere.
+  exprt none_or(const exprt &value, const exprt &other) const;
+
+  /// repr(x): complex, instance, or modelled str/number repr; otherwise the
+  /// general call.
+  exprt handle_repr_call();
+
   /*
    * object(): a pointer to a fresh heap object, so each call has its own
    * identity and is never None.
@@ -286,6 +297,8 @@ private:
 
   exprt handle_int_to_bytes() const;
 
+  exprt handle_bytes_constructor(const nlohmann::json &arg) const;
+
   /*
    * Folds a zero-argument int method on a constant literal receiver
    * (e.g. (255).bit_length(), (7).bit_count(), (5).conjugate()). A Name or
@@ -328,9 +341,23 @@ private:
    */
   const symbolt *lookup_python_symbol(const std::string &var_name) const;
 
+  void refuse_isinstance_on_guessed_return(
+    const nlohmann::json &obj_arg,
+    const std::vector<nlohmann::json> &types) const;
   void refuse_isinstance_on_path_dependent_number(
     const nlohmann::json &obj_arg,
     const std::vector<nlohmann::json> &types) const;
+  void plant_unsupported(const std::string &message) const;
+  void refuse_abs_unless(const exprt &representable) const;
+  exprt refuse_unrepresentable_abs(exprt operand) const;
+  exprt
+  exclude_smallest_int(const std::string &type, const exprt &nondet) const;
+  nlohmann::json abs_of_int_literal(const nlohmann::json &value) const;
+  nlohmann::json bound_value(const nlohmann::json &name) const;
+  bool is_symbolic_int_power(const nlohmann::json &node) const;
+  void refuse_type_of_symbolic_int_power(
+    const nlohmann::json &arg,
+    const exprt &value) const;
   exprt handle_isinstance() const;
 
   /// Binds a call operand of isinstance to a temporary, so it runs exactly
@@ -588,15 +615,27 @@ private:
 
   // Set method detection and handling
   bool is_set_method_call() const;
+  bool is_unknown_method_on_list_attribute() const;
+  exprt raise_list_has_no_method() const;
   exprt handle_set_method() const;
 
   // List method detection and handling
   bool receiver_is_tracked_numpy_view(const std::string &recv_type) const;
   bool receiver_is_binop_or_list_symbol() const;
   bool receiver_class_defines_method(const std::string &method_name) const;
+  bool is_user_method_named_like_builtin() const;
+
+  /// The callee's symbol. An instance method of no known class has none: it
+  /// must not bind to a module function of the same name (#9658).
+  const symbolt *find_callee_symbol(const std::string &func_symbol_id);
+  bool receiver_is_literal() const;
   void reject_unresolved_user_method(const std::string &method_name) const;
+  void flag_unresolved_method_call(
+    const std::string &method_name,
+    const locationt &location) const;
   bool is_list_method_call() const;
   exprt handle_list_method() const;
+  exprt none_if_assigned(exprt call) const;
   exprt handle_list_append() const;
   exprt handle_list_insert() const;
   exprt handle_list_extend() const;
@@ -613,6 +652,9 @@ private:
   exprt handle_list_reverse() const;
   exprt handle_list_count() const;
   exprt handle_list_index() const;
+
+  std::optional<exprt> try_builtin_sum_over_numpy_scalars();
+  std::optional<exprt> try_int_of_numpy_scalar();
 
   // numpy ndarray.astype(dtype): runtime element-wise dtype cast.
   bool is_numpy_astype_call() const;
@@ -750,7 +792,17 @@ private:
   exprt handle_cmath_inverse_fast_path();
   // Real-valued math module functions (sin/cos/sqrt/exp/log/etc.).
   bool is_math_function_dispatch_call() const;
+  exprt dispatch_math_call();
   exprt handle_math_function_dispatch();
+  exprt math_log_of(const nlohmann::json &arg);
+  exprt handle_math_log();
+  bool calls_overflow_model(const std::string &f) const;
+  bool may_overflow(const std::string &f, const exprt &result) const;
+  std::optional<std::string> bounded_math_import() const;
+  bool takes_bounded_math(const std::string &function) const;
+  std::optional<exprt> try_bounded_math_call(const std::string &func_name);
+  void reject_bounded_math_arity(const std::string &func_name) const;
+  std::optional<exprt> bounded_binary_math_call(const std::string &function);
 
   // General function call handler
   exprt handle_general_function_call();
@@ -896,6 +948,11 @@ private:
    */
   std::optional<exprt> try_fold_identity_array_return();
 
+  exprt numpy_astype_to_string(
+    const nlohmann::json &receiver,
+    const exprt &source,
+    std::size_t width) const;
+
   /**
    * Suffix selecting the models/random.py variant that matches a sequence
    * argument's type: "_float" or "_str" for a list of those, "_chars" for a
@@ -971,6 +1028,17 @@ private:
   void refuse_unheld_attribute(
     const std::string &class_name,
     const std::string &attr) const;
+  /// Refuse `x.attr(...)` when @p attr is an untyped field no class in the MRO
+  /// of @p class_name binds: it is set on the instance, so the method lookup
+  /// a call falls back to would raise a false AttributeError (#9255).
+  void refuse_untyped_attribute(
+    const std::string &class_name,
+    const std::string &attr,
+    const typet &field_type) const;
+  /// Whether a class in the MRO of @p class_name may bind @p attr, or the MRO
+  /// is not known.
+  bool
+  mro_may_bind(const std::string &class_name, const std::string &attr) const;
   /// The functions field @p attr of @p class_name holds, when it is untyped
   /// and no class in its MRO binds @p attr too.
   const python_converter::attribute_functions *held_functions(
@@ -1036,7 +1104,15 @@ private:
     const typet &param_type,
     const symbolt &callee) const;
 
+  exprt int_power_of_two_argument(
+    const nlohmann::json &node,
+    const exprt &arg,
+    const typet &param_type) const;
+
   typet dict_param_value_type(const symbolt *func, size_t idx) const;
+  bool is_size_builtin() const;
+  bool is_list_typed(const typet &type) const;
+  exprt build_dict_size_call(const exprt &dict);
   std::optional<exprt> build_positional_arguments(
     code_function_callt &call,
     size_t param_offset,
@@ -1049,10 +1125,20 @@ private:
     const symbolt &callee,
     size_t param_idx,
     bool is_bytes_literal) const;
+  void reject_scalar_crossing_into_parameter(
+    const typet &arg_type,
+    const code_typet::argumentst &params,
+    std::size_t param_idx) const;
   void reject_list_for_numpy_parameter(
     const typet &arg_type,
     const code_typet::argumentst &params,
     size_t param_idx) const;
+  void forward_keyword_arguments(
+    code_function_callt &call,
+    const code_typet::argumentst &params,
+    const locationt &location,
+    const symbolt &func_symbol);
+
   exprt finalize_call(
     code_function_callt &call,
     size_t param_offset,

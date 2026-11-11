@@ -1,26 +1,22 @@
-class M:
-    def s(self):
-        return "s"
+# pick returns a bound method of a, and the result is called.
+class K:
+    def f(self):
+        return "a"
 
-    def t(self):
-        return 3
+    def g(self):
+        return 1
 
-
-a = M()
-
-
-class C:
-    def pick(self, flag):
-        if flag:
-            return a.s
-        return a.t
+    def pick(self, c):
+        if c:
+            return self.f
+        return self.g
 
 
-c = C()
-flag = nondet_bool()
-h = c.pick(flag)
+a = K()
+c = nondet_bool()
+h = a.pick(c)
 r = h()
-if flag:
-    assert r == "s"
+if c:
+    assert r == "a"
 else:
-    assert r == 3
+    assert r == 1

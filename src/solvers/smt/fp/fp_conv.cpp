@@ -45,13 +45,13 @@ smt_sortt fp_convt::mk_fpbv_rm_sort()
 
 smt_astt fp_convt::mk_smt_fpbv_nan(bool sgn, unsigned ew, unsigned sw)
 {
-  // TODO: we always create the same positive NaN:
-  // 01111111100000000000000000000001
+  // Quiet NaN with empty payload (IEEE 754-2019 6.2.1), e.g. 0x7fc00000 for
+  // binary32; matches ieee_floatt::pack().
   smt_astt top_exp = mk_top_exp(ew);
   return mk_from_bv_to_fp(
     ctx->mk_concat(
       ctx->mk_smt_bv(BigInt(sgn), 1),
-      ctx->mk_concat(top_exp, ctx->mk_smt_bv(BigInt(1), sw - 1))),
+      ctx->mk_concat(top_exp, ctx->mk_smt_bv(BigInt::power2(sw - 2), sw - 1))),
     mk_fpbv_sort(ew, sw - 1));
 }
 
@@ -650,10 +650,11 @@ smt_astt fp_convt::mk_to_bv(smt_astt x, bool is_signed, std::size_t width)
   smt_astt x_is_zero = mk_smt_fpbv_is_zero(x);
   smt_astt x_is_neg = mk_is_neg(x);
 
-  // NaN, Inf, or negative (except -0) -> unspecified
+  // NaN, Inf, or negative (except -0) -> unspecified. Each conversion gets its
+  // own value: C leaves out-of-range conversions undefined (C11 6.3.1.4p1),
+  // so two of them need not agree (#9448).
   smt_astt c1 = ctx->mk_or(x_is_nan, x_is_inf);
-  smt_astt unspec_v = ctx->mk_smt_symbol(
-    "UNSPEC_FP" + std::to_string(width), ctx->mk_bv_sort(width));
+  smt_astt unspec_v = ctx->mk_fresh(ctx->mk_bv_sort(width), "UNSPEC_FP::");
   assert(unspec_v->sort->get_data_width() == width);
   smt_astt v1 = unspec_v;
 

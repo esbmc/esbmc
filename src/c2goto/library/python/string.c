@@ -129,6 +129,21 @@ __ESBMC_HIDE:;
   return 1;
 }
 
+// Python string isascii - true iff every byte is below 0x80. A UTF-8 byte at
+// or above 0x80 belongs to a non-ASCII code point, so this matches CPython's
+// per-code-point check. True on the empty string.
+_Bool __python_str_isascii(const char *s)
+{
+__ESBMC_HIDE:;
+  while (*s)
+  {
+    if ((unsigned char)*s >= 0x80)
+      return 0;
+    s++;
+  }
+  return 1;
+}
+
 // Python string isalnum - true iff the string is non-empty and every
 // character is a letter (ASCII A-Z / a-z) or a digit (0-9). Matches
 // Python's CPython behaviour on the ASCII subset; broader Unicode
@@ -492,6 +507,57 @@ __ESBMC_HIDE:;
   }
 
   return has_cased;
+}
+
+// isdecimal, istitle and isprintable on ASCII text. CPython classifies code
+// points, so a UTF-8 byte (>= 0x80) makes the answer nondeterministic.
+_Bool __python_str_isdecimal(const char *s)
+{
+__ESBMC_HIDE:;
+  if (!*s)
+    return 0;
+  while (*s)
+  {
+    unsigned char c = (unsigned char)*s++;
+    if (c >= 0x80)
+      return nondet_bool();
+    if (c < '0' || c > '9')
+      return 0;
+  }
+  return 1;
+}
+
+_Bool __python_str_istitle(const char *s)
+{
+__ESBMC_HIDE:;
+  _Bool cased = 0, prev_cased = 0;
+  while (*s)
+  {
+    unsigned char c = (unsigned char)*s++;
+    if (c >= 0x80)
+      return nondet_bool();
+    _Bool upper = c >= 'A' && c <= 'Z';
+    _Bool lower = c >= 'a' && c <= 'z';
+    if ((upper && prev_cased) || (lower && !prev_cased))
+      return 0;
+    prev_cased = upper || lower;
+    cased = cased || prev_cased;
+  }
+  return cased;
+}
+
+_Bool __python_str_isprintable(const char *s)
+{
+__ESBMC_HIDE:;
+  while (*s)
+  {
+    unsigned char c = (unsigned char)*s++;
+    if (c >= 0x80)
+      return nondet_bool();
+    if (c < 0x20 || c == 0x7f)
+      return 0;
+  }
+  return 1;
 }
 
 // Python character lower - converts a single character to lowercase
@@ -1113,6 +1179,7 @@ __ESBMC_HIDE:;
 
   list->type = NULL;
   list->is_tuple = false;
+  list->may_nest = &__ESBMC_list_nest_no;
   list->items = items;
   list->size = count;
   return list;

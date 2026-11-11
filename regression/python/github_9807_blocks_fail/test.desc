@@ -1,0 +1,5 @@
+CORE
+main.py
+
+^VERIFICATION FAILED$
+FAILED.*line 15 +assertion r == 1 && s == 2

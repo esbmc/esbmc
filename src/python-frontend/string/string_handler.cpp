@@ -765,6 +765,49 @@ int string_handler::nondet_str_buffer_size()
   return length < std::numeric_limits<int>::max() ? length + 1 : length;
 }
 
+/// Assume 0 <= @p length < @p buffer_size. The lower bound is not implied
+/// under --ir, where an unsigned value is an unbounded integer.
+void string_handler::assume_length_in_buffer(
+  const exprt &length,
+  int buffer_size,
+  const locationt &location)
+{
+  exprt below("<", bool_type());
+  below.copy_to_operands(length, from_integer(buffer_size, size_type()));
+  exprt not_negative(">=", bool_type());
+  not_negative.copy_to_operands(length, from_integer(0, size_type()));
+  for (const exprt &bound : {below, not_negative})
+  {
+    code_assumet assume(bound);
+    assume.location() = location;
+    converter_.add_instruction(assume);
+  }
+}
+
+/// Assume the bytes of @p array before @p length are not NUL, so strlen of
+/// the string agrees with @p length (#9955).
+void string_handler::assume_no_nul_before(
+  const exprt &array,
+  const exprt &length,
+  int buffer_size,
+  const locationt &location)
+{
+  for (int i = 0; i + 1 < buffer_size; ++i)
+  {
+    const exprt index = from_integer(i, size_type());
+    exprt past_end("<=", bool_type());
+    past_end.copy_to_operands(length, index);
+    exprt not_nul("notequal", bool_type());
+    not_nul.copy_to_operands(
+      build_index(array, index), from_integer(0, char_type()));
+    exprt holds("or", bool_type());
+    holds.copy_to_operands(past_end, not_nul);
+    code_assumet assume(holds);
+    assume.location() = location;
+    converter_.add_instruction(assume);
+  }
+}
+
 exprt string_handler::build_nondet_string(const locationt &location)
 {
   const int max_str_length = nondet_str_buffer_size();
@@ -793,6 +836,45 @@ exprt string_handler::build_nondet_string(const locationt &location)
   code_assignt null_assign(last_elem, from_integer(0, char_type()));
   null_assign.location() = location;
   converter_.add_instruction(null_assign);
+
+  // A length symbol, as input() has, lets len() answer without scanning the
+  // buffer, so a guard such as len(s) <= 4 bounds every later scan.
+  symbolt &len_sym = converter_.create_tmp_symbol(
+    location, "$nondet_str_len$", size_type(), exprt());
+  code_declt len_decl(symbol_expr(len_sym));
+  len_decl.location() = location;
+  converter_.add_instruction(len_decl);
+  code_assignt len_assign(
+    symbol_expr(len_sym), side_effect_expr_nondett(size_type()));
+  len_assign.location() = location;
+  // The buffer already holds the input, so a generated test must not take
+  // the length as an argument of its own.
+  len_assign.location().set("#decl_nondet", true);
+  converter_.add_instruction(len_assign);
+  assume_length_in_buffer(symbol_expr(len_sym), max_str_length, location);
+  // Assumed at each constant index rather than stored at the symbolic one:
+  // such a store leaves no constant terminator, so a scan without --unwind
+  // never stops, and its bounds checks become unreachable coverage goals.
+  for (int i = 0; i + 1 < max_str_length; ++i)
+  {
+    const exprt index = from_integer(i, size_type());
+    exprt elsewhere("notequal", bool_type());
+    elsewhere.copy_to_operands(symbol_expr(len_sym), index);
+    code_assumet term_assume(or_exprt(
+      elsewhere,
+      equality_exprt(
+        build_index(symbol_expr(nondet_str_symbol), index),
+        from_integer(0, char_type()))));
+    term_assume.location() = location;
+    converter_.add_instruction(term_assume);
+  }
+  assume_no_nul_before(
+    symbol_expr(nondet_str_symbol),
+    symbol_expr(len_sym),
+    max_str_length,
+    location);
+  converter_.input_str_to_len_sym_[nondet_str_symbol.id.as_string()] =
+    len_sym.id.as_string();
 
   // Return address of first element: &arr[0] which is char*
   exprt first_elem =
@@ -842,6 +924,67 @@ exprt string_handler::build_nondet_string_fallback(const locationt &location)
   }
 
   return build_nondet_string(location);
+}
+
+exprt string_handler::build_default_object_repr(
+  const std::string &prefix,
+  const locationt &location)
+{
+  constexpr int max_digits = 16;
+  const int start = prefix.size();
+  const typet array_type =
+    array_typet(char_type(), from_integer(start + max_digits + 2, size_type()));
+  symbolt &repr = converter_.create_tmp_symbol(
+    location, "$object_repr$", array_type, exprt());
+  const exprt text = symbol_expr(repr);
+
+  auto add = [&](codet code) {
+    code.location() = location;
+    converter_.add_instruction(code);
+  };
+  auto at = [&](const exprt &index) { return build_index(text, index); };
+  auto chr = [](char c) { return from_integer(c, char_type()); };
+
+  add(code_declt(text));
+  add(code_assignt(text, side_effect_expr_nondett(array_type)));
+  for (int i = 0; i < start; ++i)
+    add(code_assignt(at(from_integer(i, size_type())), chr(prefix[i])));
+
+  symbolt &count = converter_.create_tmp_symbol(
+    location, "$repr_digits$", size_type(), exprt());
+  const exprt digits = symbol_expr(count);
+  add(code_declt(digits));
+  add(code_assignt(digits, side_effect_expr_nondett(size_type())));
+  add(code_assumet(and_exprt(
+    binary_relation_exprt(digits, ">=", from_integer(1, size_type())),
+    binary_relation_exprt(
+      digits, "<=", from_integer(max_digits, size_type())))));
+
+  // Concrete indices only, so a terminator stays at a known position and a
+  // later strlen() stops unwinding.
+  for (int i = 0; i <= max_digits; ++i)
+  {
+    const exprt pos = from_integer(i, size_type());
+    const exprt c = at(from_integer(start + i, size_type()));
+    auto in = [&](char lo, char hi) {
+      return and_exprt(
+        binary_relation_exprt(c, ">=", chr(lo)),
+        binary_relation_exprt(c, "<=", chr(hi)));
+    };
+    const exprt is_digit = binary_relation_exprt(pos, "<", digits);
+    if (i < max_digits)
+      add(code_assumet(
+        or_exprt(not_exprt(is_digit), or_exprt(in('0', '9'), in('a', 'f')))));
+    add(code_assignt(
+      c,
+      if_exprt(
+        is_digit,
+        c,
+        if_exprt(equality_exprt(pos, digits), chr('>'), chr('\0')))));
+  }
+  add(code_assignt(
+    at(from_integer(start + max_digits + 1, size_type())), chr('\0')));
+  return build_address_of(at(from_integer(0, size_type())));
 }
 
 BigInt string_handler::get_string_size(const exprt &expr)
@@ -1497,10 +1640,15 @@ exprt string_handler::char_to_string(const exprt &expr)
   return str;
 }
 
-/// The str of a constant int, float or bool, or nil for any other constant.
+/// The str of a constant None, int, float or bool, or nil for any other
+/// constant.
 exprt string_handler::constant_to_string(const exprt &expr)
 {
   const typet &t = expr.type();
+  // str(None) is repr(None): NoneType inherits object.__str__.
+  if (t == none_type())
+    return converter_.get_string_builder().build_string_literal("None");
+
   if (type_utils::is_integer_type(t))
   {
     BigInt value = binary2integer(expr.value().as_string(), t.is_signedbv());
@@ -1567,6 +1715,19 @@ exprt string_handler::symbol_to_string(const exprt &expr)
   return nil_exprt();
 }
 
+/// A str held as a pointer, or any string for a pointer to a list or a class
+/// instance, whose bytes are not a str.
+exprt string_handler::pointer_to_string(const exprt &expr)
+{
+  if (expr.type().subtype().id() == typet::t_symbol)
+    return build_nondet_string_fallback(expr.location());
+
+  const typet char_ptr = gen_pointer_type(char_type());
+  if (expr.type() != char_ptr)
+    return build_typecast(expr, char_ptr);
+  return expr;
+}
+
 exprt string_handler::convert_to_string(const exprt &expr)
 {
   const typet &t = expr.type();
@@ -1598,12 +1759,7 @@ exprt string_handler::convert_to_string(const exprt &expr)
   // return type may be a zero-length array that migrates to empty_type2t,
   // causing a type mismatch when nested inside __python_str_concat.
   if (t.is_pointer() && !expr.is_code())
-  {
-    typet char_ptr = gen_pointer_type(char_type());
-    if (t != char_ptr)
-      return build_typecast(expr, char_ptr);
-    return expr;
-  }
+    return pointer_to_string(expr);
 
   // Non-constant scalars: dispatch to the matching __python_*_to_str
   // operational model in src/c2goto/library/python/string.c. The model
@@ -1674,14 +1830,9 @@ exprt string_handler::convert_to_string(const exprt &expr)
     return build_symbol(result_sym);
   }
 
-  // Anything else (struct, array of non-char, etc.) is currently unsupported.
-  std::string placeholder = "<expr>";
-  typet string_type =
-    type_handler_.build_array(char_type(), placeholder.size() + 1);
-  std::vector<unsigned char> chars(placeholder.begin(), placeholder.end());
-  chars.push_back('\0');
-
-  return make_char_array_expr(chars, string_type);
+  // The str of anything else (a list, tuple, dict, instance...) is not
+  // modelled, so it is any string.
+  return build_nondet_string_fallback(expr.location());
 }
 
 exprt string_handler::format_fstring_part(const nlohmann::json &value)
@@ -1846,7 +1997,7 @@ std::string string_handler::extract_string_from_array_operands(
         binary2integer(op.value().as_string(), op.type().is_signedbv());
       if (val == 0)
         break;
-      result += static_cast<char>(val.to_uint64());
+      result += static_cast<char>(val.to_int64());
     }
   }
   return result;
@@ -2608,7 +2759,7 @@ exprt string_handler::handle_int_conversion(
   // If argument is a float, truncate to integer
   if (arg.type().is_floatbv())
   {
-    return build_typecast(arg, int_type());
+    return build_typecast(arg, long_long_int_type());
   }
 
   // If argument is a boolean, convert to 0 or 1
@@ -2817,21 +2968,30 @@ exprt string_handler::try_handle_len_string_fast_path(
     }
   }
 
-  if (arg_expr.is_symbol())
-  {
-    const std::string sym_id =
-      to_symbol_expr(arg_expr).get_identifier().as_string();
-    const auto &len_map = converter_.input_str_to_len_sym_;
-    auto it = len_map.find(sym_id);
-    if (it != len_map.end())
-    {
-      const symbolt *len_sym = converter_.find_symbol(it->second);
-      if (len_sym)
-        return build_typecast(build_symbol(*len_sym), size_type());
-    }
-  }
+  if (exprt length = recorded_length(arg_json, arg_expr); !length.is_nil())
+    return length;
 
   return char_array_type_length(arg_expr);
+}
+
+/// The length symbol recorded for the string @p arg_expr names, or nil. The
+/// name-to-length map is filled in conversion order, not along paths, so it
+/// only holds for a name bound once (#9955).
+exprt string_handler::recorded_length(
+  const nlohmann::json &arg_json,
+  const exprt &arg_expr)
+{
+  if (
+    !arg_expr.is_symbol() || arg_json.value("_type", "") != "Name" ||
+    !is_single_binding(arg_json["id"].get<std::string>()))
+    return nil_exprt();
+  const auto &len_map = converter_.input_str_to_len_sym_;
+  auto it = len_map.find(to_symbol_expr(arg_expr).get_identifier().as_string());
+  if (it == len_map.end())
+    return nil_exprt();
+  const symbolt *len_sym = converter_.find_symbol(it->second);
+  return len_sym ? build_typecast(build_symbol(*len_sym), size_type())
+                 : nil_exprt();
 }
 
 // The length a char array's type gives @p arg_expr, or nil. An element of a
@@ -2882,17 +3042,10 @@ exprt string_handler::try_len_fast_path_from_constant_arg(
   return nil_exprt();
 }
 
-exprt string_handler::try_len_fast_path_from_name_arg(
-  const nlohmann::json &arg_json)
+/// Whether @p var_name is bound exactly once in the current scope, by a plain
+/// assignment, so a value recorded at that binding holds on every path.
+bool string_handler::is_single_binding(const std::string &var_name)
 {
-  const std::string arg_type =
-    (arg_json.contains("_type") && arg_json["_type"].is_string())
-      ? arg_json["_type"].get<std::string>()
-      : "";
-  if (!(arg_type == "Name" && arg_json.contains("id")))
-    return nil_exprt();
-
-  const std::string var_name = arg_json["id"].get<std::string>();
   const std::string current_scope_id = converter_.get_current_func_name();
   const std::string cache_key = current_scope_id + "::" + var_name;
   int assign_count = 0;
@@ -2932,7 +3085,23 @@ exprt string_handler::try_len_fast_path_from_name_arg(
     assignment_has_augassign_cache_[cache_key] = has_augassign;
   }
 
-  if (!(assign_count == 1 && !has_augassign))
+  return assign_count == 1 && !has_augassign;
+}
+
+exprt string_handler::try_len_fast_path_from_name_arg(
+  const nlohmann::json &arg_json)
+{
+  const std::string arg_type =
+    (arg_json.contains("_type") && arg_json["_type"].is_string())
+      ? arg_json["_type"].get<std::string>()
+      : "";
+  if (!(arg_type == "Name" && arg_json.contains("id")))
+    return nil_exprt();
+
+  const std::string var_name = arg_json["id"].get<std::string>();
+  const std::string cache_key =
+    converter_.get_current_func_name() + "::" + var_name;
+  if (!is_single_binding(var_name))
   {
     var_value_cache_.erase(cache_key);
     return nil_exprt();
@@ -3020,7 +3189,7 @@ exprt string_handler::try_len_fast_path_from_name_arg(
   else
   {
     var_value = json_utils::get_var_value(
-      var_name, current_scope_id, converter_.get_ast_json());
+      var_name, converter_.get_current_func_name(), converter_.get_ast_json());
     var_value_cache_[cache_key] = var_value;
   }
 
@@ -3067,10 +3236,17 @@ exprt string_handler::read_tagged_str_receiver(
     return receiver;
 
   // The receiver is read twice, so only a symbol qualifies, and the guard
-  // must run exactly where the call is evaluated.
-  if (
-    !receiver.is_symbol() || !type_utils::is_str_only_method(method) ||
-    !converter_.can_emit_runtime_guard())
+  // must run exactly where the call is evaluated. A type probe is discarded,
+  // so it only needs the type of the str the real conversion reads.
+  if (!receiver.is_symbol() || !type_utils::is_str_only_method(method))
+    throw std::runtime_error(
+      "calling '" + method +
+      "' on a dynamically-typed variable is not yet supported");
+  if (converter_.in_type_probe())
+    return build_typecast(
+      build_member(receiver, "value", pointer_typet(empty_typet())),
+      pointer_typet(char_type()));
+  if (!converter_.can_emit_runtime_guard())
     throw std::runtime_error(
       "calling '" + method +
       "' on a dynamically-typed variable is not yet supported");

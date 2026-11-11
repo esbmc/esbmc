@@ -3,8 +3,35 @@
 #include <util/arith/arith_tools.h>
 #include <util/expr/expr_util.h>
 #include <util/message/message.h>
+#include <util/base/filesystem.h>
 #include <util/base/prefix.h>
 #include <irep2/irep2.h>
+
+/// A float literal compared with \result of another type: C converts both to
+/// the wider floating type, or an integer to the floating one (C11 6.3.1.8).
+static void to_common_float_type(expr2tc &rel)
+{
+  std::vector<expr2tc *> ops;
+  rel->Foreach_operand([&](expr2tc &op) { ops.push_back(&op); });
+  type2tc common;
+  for (const expr2tc *op : ops)
+    if (
+      is_floatbv_type(*op) &&
+      (!common || (*op)->type->get_width() > common->get_width()))
+      common = (*op)->type;
+  if (!common)
+    return;
+  // A pointer or aggregate result never equals a float.
+  for (const expr2tc *op : ops)
+    if (!is_number_type(*op))
+    {
+      rel = gen_false_expr();
+      return;
+    }
+  for (expr2tc *op : ops)
+    if ((*op)->type != common)
+      *op = typecast2tc(common, *op);
+}
 
 static void substitute_result(expr2tc &e, const expr2tc &ret_val)
 {
@@ -26,6 +53,8 @@ static void substitute_result(expr2tc &e, const expr2tc &ret_val)
     return;
   }
   e->Foreach_operand([&](expr2tc &op) { substitute_result(op, ret_val); });
+  if (is_comparison_expr(e))
+    to_common_float_type(e);
 }
 
 void goto_symext::symex_witness_function_return(
@@ -107,7 +136,11 @@ void goto_symext::symex_witness_branching(
   bool &new_guard_false,
   const goto_programt::instructiont &instruction)
 {
-  if (!validate_witness || !forward || is_constant(old_guard))
+  // A goto skipped by an earlier taken jump runs with a false guard; matching
+  // a waypoint there would make witness_guard false and void the target.
+  if (
+    !validate_witness || !forward || is_constant(old_guard) ||
+    cur_state->guard.is_false())
     return;
 
   const auto &loc = cur_state->source.pc->location;
@@ -166,16 +199,19 @@ void goto_symext::symex_witness_branching(
           break;
         }
 
+      // A flipped dispatch goto is taken when its case does not match
       if (is_avoid)
       {
         if (!case_matches)
           continue;
-        force_goto(false);
+        force_goto(instruction.flipped_guard);
       }
       else
       {
-        force_goto(case_matches);
-        if (case_matches)
+        force_goto(case_matches != instruction.flipped_guard);
+        if (
+          case_matches || (wp.value == "default" &&
+                           is_last_switch_case_test(cur_state->source.pc)))
           cur_state->advance_witness_position();
       }
       break;
@@ -199,6 +235,8 @@ void goto_symext::symex_witness_assert(
 {
   if (
     !validate_witness || has_prefix(msg, "unwinding assertion loop") ||
+    msg == "recursion unwinding assertion" ||
+    has_prefix(msg, "uncontrolled recursion") ||
     has_prefix(msg, "termination per-loop marker") ||
     has_prefix(msg, "termination abort-call marker"))
     return;
@@ -213,14 +251,20 @@ void goto_symext::symex_witness_assert(
         break;
       }
 
-  if (
-    !target_wp ||
-    cur_state->source.pc->location.get_line() != target_wp->line_id ||
-    cur_state->witness_target_reached)
+  // A witness writer reports a claim in a bundled model, e.g. the leak check
+  // in exit(), at its innermost call site in the program.
+  const locationt *loc = &cur_state->source.pc->location;
+  for (auto it = cur_state->call_stack.rbegin();
+       it != cur_state->call_stack.rend() &&
+       file_operations::is_bundled_source(loc->get_file().as_string());
+       ++it)
+    if (it->calling_location.is_set)
+      loc = &it->calling_location.pc->location;
+
+  // A final segment matches a violation on any visit to the target, not only
+  // the first (sv-witnesses Witness-Format.md, "Matching a Final Segment").
+  if (!target_wp || loc->get_line() != target_wp->line_id)
     new_expr = gen_true_expr();
   else
-  {
-    cur_state->advance_witness_position();
-    cur_state->witness_target_reached = true;
-  }
+    cur_state->witness_guard.guard_expr(new_expr);
 }

@@ -35,7 +35,7 @@ namespace
 /// loop_head IF has moved (insert_swap shuffles instruction content
 /// between slots without exchanging location_number). The actual IF
 /// iterator is found via the back-edge's target — kinduction's
-/// adjust_loop_head_and_exit retargets the back-edge at the post-
+/// retarget_back_edge points the back-edge at the post-
 /// havoc loop_head.
 void inject_noop_cycle_assumes(
   goto_functiont &goto_function,
@@ -732,9 +732,12 @@ void goto_termination(
   // Apply k-induction's per-loop havoc + assume-entry-cond to every
   // function uniformly. __ESBMC_main is loop-free so this is a no-op
   // there; library helpers (body.hide) DO have loops but those are
-  // explicitly skipped in the per-function pass below.
-  goto_k_induction(
-    goto_functions, ns, options.get_bool_option("multi-property"));
+  // explicitly skipped in the per-function pass below. Its result gates
+  // the inductive step, as on the reachability path.
+  // No entry flags: non-termination is a claim about the states that enter
+  // the loop.
+  bool any_unreliable_is_loop = goto_k_induction(
+    goto_functions, nullptr, options.get_bool_option("multi-property"));
 
   // Per-function pass: inject no-op-cycle ASSUMEs, gate IS for loops
   // that would make IS UNSAT unsound, and insert termination
@@ -742,7 +745,6 @@ void goto_termination(
   // loop markers would be reachable from every program via
   // stdlib/pthread chains and defeat IS-UNSAT discrimination, and
   // their havoc'd loops shouldn't trigger the program-wide IS gate.
-  bool any_unreliable_is_loop = false;
   Forall_goto_functions (it, goto_functions)
   {
     if (!it->second.body_available)

@@ -29,6 +29,10 @@ def remove(path: str) -> None:
         raise FileNotFoundError("No such file or directory")
 
 
+def unlink(path: str) -> None:
+    remove(path)
+
+
 def mkdir(path: str) -> None:
     dir_not_exists: bool = nondet_bool()
     if not dir_not_exists:

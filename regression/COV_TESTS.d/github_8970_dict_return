@@ -1,0 +1,6 @@
+regression/python/github_8970_dict_return
+regression/python/github_8970_dict_return_branch_refused
+regression/python/github_8970_dict_return_fail
+regression/python/github_8970_dict_return_key_fail
+regression/python/github_8970_dict_return_twice_refused
+regression/python/github_8970_dict_return_unbound_refused

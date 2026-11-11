@@ -151,17 +151,27 @@ class ExpressionRewriteMixin:
                     if not self._inline_single_use_map(stmts, i, name_counts):
                         i += 1
 
+    def _is_sorted_of_map(self, node):
+        """Whether `node` is sorted(map(f, xs), ...) with a pure `f`."""
+        return (isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+                and node.func.id == "sorted" and node.args and self._is_map_call(node.args[0])
+                and self._is_pure_operand(node.args[0].args[0]))
+
     def _rewrite_map_values(self, module):
         """Lower the map() uses whose result is consumed once, in full: as the
-        value of an unpacking, as a for-loop iterable, and through a name used
-        only by the next statement. list(map(...)) is lowered in visit_Call."""
+        value of an unpacking, as the argument of sorted(), as a for-loop
+        iterable, and through a name used only by the next statement.
+        list(map(...)) is lowered in visit_Call."""
         if self._binds_name(module, "map"):
             return
         self._inline_single_use_maps(module)
+        sorted_bound = self._binds_name(module, "sorted")
         for n in ast.walk(module):
             if (self._is_unpacking(n) and self._is_map_call(n.value)
                     and self._is_pure_operand(n.value.args[0])):
                 n.value = self._map_as_listcomp(n.value)
+            elif not sorted_bound and self._is_sorted_of_map(n):
+                n.args[0] = self._map_as_listcomp(n.args[0])
             elif (isinstance(n, ast.For) and self._is_map_call(n.iter)
                   and self._map_for_lowerable(n, n.iter)):
                 self._map_for_as_plain_for(n)
@@ -569,9 +579,26 @@ for {i} in range(0, len({seq})):
         if node.value is not None:
             dd_inits, node.value = self._lower_defaultdict_reads_in_expr(node.value, node)
             prefix = dd_inits + prefix
+        prefix = prefix + self._name_returned_sorted(node)
         if prefix:
             return prefix + [node]
         return node
+
+    def _name_returned_sorted(self, node):
+        """Bind `return sorted(x)` to a name first: the elements of a returned name's
+        value keep their types where those of a returned call do not (#9736)."""
+        value = node.value
+        if not (isinstance(value, ast.Call) and isinstance(value.func, ast.Name)
+                and value.func.id == "sorted"):
+            return []
+        name = f"ESBMC_sorted_ret_{self._next_unpack_tmp_id()}"
+        assign = ast.Assign(targets=[ast.Name(id=name, ctx=ast.Store())], value=value)
+        ast.copy_location(assign, node)
+        ast.copy_location(assign.targets[0], node)
+        node.value = ast.Name(id=name, ctx=ast.Load())
+        ast.copy_location(node.value, node)
+        ast.fix_missing_locations(assign)
+        return [assign]
 
     def visit_Attribute(self, node):
         node = self.generic_visit(node)
@@ -865,4 +892,40 @@ for {i} in range(0, len({seq})):
 
     def visit_Compare(self, node):
         node = self.generic_visit(node)
+        return node
+
+    @staticmethod
+    def _literal_list_truth(node):
+        """Whether a list literal of constants is truthy, or None for any other operand."""
+        if isinstance(node, ast.List) and all(isinstance(e, ast.Constant) for e in node.elts):
+            return bool(node.elts)
+        return None
+
+    def visit_BoolOp(self, node):
+        """Fold the operands decided by a list literal on the left: `[1] and x` is `x`,
+        `[] and x` is `[]`, `[1] or x` is `[1]` and `[] or x` is `x`, so the result has the
+        type of the operand that is kept. `(a and b) and c` has the value of `a and b and c`,
+        so a nested operand with the same operator is spliced in."""
+        node = self.generic_visit(node)
+        is_and = isinstance(node.op, ast.And)
+        values = []
+        for value in node.values:
+            if isinstance(value, ast.BoolOp) and type(value.op) is type(node.op):
+                values.extend(value.values)
+            else:
+                values.append(value)
+        node.values = list(values)
+        while len(values) > 1:
+            truth = self._literal_list_truth(values[0])
+            if truth is None:
+                break
+            if truth == is_and:
+                values = values[1:]
+            else:
+                values = values[:1]
+        if len(values) == len(node.values):
+            return node
+        if len(values) == 1:
+            return values[0]
+        node.values = values
         return node

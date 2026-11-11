@@ -1,0 +1,4 @@
+CORE
+main.py
+
+^ERROR: a dynamically-typed variable as an and/or operand whose value is used is not yet supported$

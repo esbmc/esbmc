@@ -1,6 +1,8 @@
+#include <algorithm>
 #include <unordered_set>
 #include <cassert>
 #include <functional>
+#include <goto-programs/goto_functions.h>
 #include <goto-symex/engine/goto_symex.h>
 #include <goto-symex/state/goto_symex_state.h>
 #include <goto-symex/symex_invariant.h>
@@ -27,53 +29,80 @@ struct equation_conversion_statet
   std::vector<expr2tc> assertions;
 };
 
+/// The object @p e takes the address of, when that object has static storage
+/// duration (a literal, a static variable or a function); otherwise nil.
+expr2tc static_address_base(const namespacet &ns, const expr2tc &e)
+{
+  if (!is_address_of2t(e))
+    return expr2tc();
+  // Unwrap index/member chains (e.g. &""[0]) to reach the literal base.
+  expr2tc obj = to_address_of2t(e).ptr_obj;
+  while (is_index2t(obj) || is_member2t(obj))
+    obj = is_index2t(obj) ? to_index2t(obj).source_value
+                          : to_member2t(obj).source_value;
+  const symbolt *sym =
+    is_symbol2t(obj) ? ns.lookup(to_symbol2t(obj).thename) : nullptr;
+  if (
+    is_constant_string2t(obj) || is_constant_array2t(obj) ||
+    (sym && (sym->static_lifetime || is_code_type(obj)) &&
+     !sym->is_thread_local))
+    return obj;
+  return expr2tc();
+}
+
+/// Registers the objects with static storage duration whose address @p root
+/// takes. They exist throughout the program, so any int-to-ptr cast could
+/// legitimately reach them regardless of where their address first appears
+/// (#1539). Dynamic/automatic objects keep their original lazy registration to
+/// avoid exposing later-allocated memory to earlier casts.
+/// Shared subexpressions make an SSA step a DAG, not a tree -- a propagated
+/// `with` chain over a nested array references itself once per store -- so an
+/// unmemoised walk costs a number of paths exponential in the store count.
+/// With @p from_goto, @p root is unrenamed, so the object is registered under
+/// the level1_global name symex gives it.
+void register_static_addresses(
+  const namespacet &ns,
+  smt_convt &smt_conv,
+  const expr2tc &root,
+  std::unordered_set<const expr2t *> &seen,
+  bool from_goto = false)
+{
+  std::function<void(const expr2tc &)> walk = [&](const expr2tc &e) {
+    if (!e || !seen.insert(e.get()).second)
+      return;
+    expr2tc obj = static_address_base(ns, e);
+    // Only the base: converting an index of e would encode an SSA symbol
+    // ahead of its assignment, which leaves a flattened tuple free (#10293).
+    if (obj && !from_goto)
+      smt_conv.convert_ast(address_of2tc(e->type, obj));
+    else if (obj)
+    {
+      if (is_symbol2t(obj))
+        to_symbol2t(obj).rlevel = symbol_renaming_level::level1_global;
+      smt_conv.convert_ast(address_of2tc(pointer_type2tc(obj->type), obj));
+    }
+    e->foreach_operand([&](const expr2tc &op) { walk(op); });
+  };
+  walk(root);
+}
+
 void pre_register_addresses(
+  const namespacet &ns,
   smt_convt &smt_conv,
   symex_target_equationt::SSA_stepst::iterator begin,
   symex_target_equationt::SSA_stepst::iterator end)
 {
-  // Only pre-register address_of of compile-time constants (string and
-  // array literals).  These have static lifetime and exist throughout the
-  // program, so including them early in the address space cannot produce
-  // spurious candidate matches for int-to-ptr casts -- any int-to-ptr
-  // cast could legitimately reach them regardless of where the literal's
-  // use happens to appear in the source.  Dynamic/automatic objects keep
-  // their original lazy registration to avoid exposing later-allocated
-  // memory to earlier casts.
-  // Shared subexpressions make an SSA step a DAG, not a tree -- a propagated
-  // `with` chain over a nested array references itself once per store -- so an
-  // unmemoised walk costs a number of paths exponential in the store count.
   std::unordered_set<const expr2t *> seen;
-  std::function<void(const expr2tc &)> walk = [&](const expr2tc &e) {
-    if (!e)
-      return;
-    if (!seen.insert(e.get()).second)
-      return;
-    if (is_address_of2t(e))
-    {
-      // Unwrap index/member chains (e.g. &""[0]) to reach the literal base.
-      expr2tc obj = to_address_of2t(e).ptr_obj;
-      while (is_index2t(obj) || is_member2t(obj))
-        obj = is_index2t(obj) ? to_index2t(obj).source_value
-                              : to_member2t(obj).source_value;
-      if (is_constant_string2t(obj) || is_constant_array2t(obj))
-        smt_conv.convert_ast(e);
-    }
-    e->foreach_operand([&](const expr2tc &op) { walk(op); });
-  };
-
   for (auto it = begin; it != end; ++it)
   {
     const symex_target_equationt::SSA_stept &step = *it;
     if (step.ignore)
       continue;
-    walk(step.guard);
-    walk(step.cond);
-    walk(step.lhs);
-    walk(step.rhs);
+    for (const expr2tc *e : {&step.guard, &step.cond, &step.lhs, &step.rhs})
+      register_static_addresses(ns, smt_conv, *e, seen);
     if (step.output_data)
       for (const expr2tc &arg : step.output_data->output_args)
-        walk(arg);
+        register_static_addresses(ns, smt_conv, arg, seen);
   }
 }
 
@@ -334,10 +363,10 @@ void symex_target_equationt::renumber(
 
 void symex_target_equationt::convert(smt_convt &smt_conv, assertion_modet mode)
 {
-  // Pre-register address-of'd string/array literals so int-to-ptr casts see
-  // them regardless of source-level declaration order (see
+  // Pre-register address-of'd static objects so int-to-ptr casts see them
+  // regardless of source-level declaration order (see
   // pre_register_addresses for scope).
-  pre_register_addresses(smt_conv, SSA_steps.begin(), SSA_steps.end());
+  pre_register_addresses(ns, smt_conv, SSA_steps.begin(), SSA_steps.end());
 
   // Show the solver every division's operand pair up front: the
   // modulus conversion lowers a remainder compositionally only when
@@ -580,6 +609,55 @@ runtime_encoded_equationt::runtime_encoded_equationt(
 
 runtime_encoded_equationt::~runtime_encoded_equationt() = default;
 
+/// Whether @p root casts an integer other than a null pointer constant to a
+/// pointer.
+static bool casts_int_to_pointer(const expr2tc &root)
+{
+  bool found = false;
+  std::unordered_set<const expr2t *> seen;
+  std::function<void(const expr2tc &)> walk = [&](const expr2tc &e) {
+    if (!e || found || !seen.insert(e.get()).second)
+      return;
+    if (is_typecast2t(e) && is_pointer_type(e->type))
+    {
+      const expr2tc &from = to_typecast2t(e).from;
+      found = !is_pointer_type(from->type) &&
+              !(is_constant_int2t(from) && to_constant_int2t(from).value == 0);
+    }
+    e->foreach_operand([&](const expr2tc &op) { walk(op); });
+  };
+  walk(root);
+  return found;
+}
+
+/// Steps are converted as symex makes them, so a cast converted before a
+/// static object's address first appears would miss that object (#9273):
+/// when a reachable body has such a cast, register every such object the
+/// reachable bodies take the address of up front.
+void runtime_encoded_equationt::pre_register_addresses(
+  const goto_functionst &goto_functions)
+{
+  std::vector<const goto_programt::instructiont *> reachable;
+  for (const irep_idt &id : reachable_functions(goto_functions))
+  {
+    const auto it = goto_functions.function_map.find(id);
+    if (it != goto_functions.function_map.end())
+      for (const goto_programt::instructiont &i : it->second.body.instructions)
+        reachable.push_back(&i);
+  }
+  if (std::none_of(reachable.begin(), reachable.end(), [](const auto *i) {
+        return casts_int_to_pointer(i->code) || casts_int_to_pointer(i->guard);
+      }))
+    return;
+
+  std::unordered_set<const expr2t *> seen;
+  for (const goto_programt::instructiont *i : reachable)
+  {
+    register_static_addresses(ns, conv, i->code, seen, true);
+    register_static_addresses(ns, conv, i->guard, seen, true);
+  }
+}
+
 void runtime_encoded_equationt::flush_latest_instructions()
 {
   if (SSA_steps.size() == 0)
@@ -604,10 +682,10 @@ void runtime_encoded_equationt::flush_latest_instructions()
     }
   }
 
-  // Pre-register address-of'd string/array literals so int-to-ptr casts see
-  // them regardless of source-level declaration order (see
+  // Pre-register address-of'd static objects so int-to-ptr casts see them
+  // regardless of source-level declaration order (see
   // pre_register_addresses for scope).
-  pre_register_addresses(conv, run_it, SSA_steps.end());
+  ::pre_register_addresses(ns, conv, run_it, SSA_steps.end());
 
   // Now iterate from the start insn to convert, to the end of the list.
   for (; run_it != SSA_steps.end(); ++run_it)
@@ -644,6 +722,12 @@ void runtime_encoded_equationt::pop_ctx()
     ++it;
 
   SSA_steps.erase(it, SSA_steps.end());
+
+  // The steps kept here were encoded before any slicing, and the next
+  // interleaving shares them. A slicer run on the interleaving just finished
+  // may have marked some ignored, which would drop them from its trace (#9688).
+  for (SSA_stept &step : SSA_steps)
+    step.ignore = false;
 
   conv.pop_ctx();
   scoped_end_points.pop_back();

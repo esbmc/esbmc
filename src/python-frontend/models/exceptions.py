@@ -42,6 +42,17 @@ class ValueError(Exception):
         return self.message
 
 
+# numpy.linalg.LinAlgError, which NumPy derives from ValueError.
+class LinAlgError(ValueError):
+    message: str = ""
+
+    def __init__(self, message: str = ""):
+        self.message: str = message
+
+    def __str__(self) -> str:
+        return self.message
+
+
 class TypeError(Exception):
     message: str = ""
 

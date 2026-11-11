@@ -82,14 +82,18 @@ public:
    * @param elem_type  IRep2 type of @p fill_value, recorded in the registry.
    * @param index_base When non-null, each element is @p index_base plus the
    *        loop index rather than @p fill_value, which is what a range needs.
+   * @param index_step When non-null, the loop index is scaled by it first.
    */
   exprt build_symbolic_fill_list(
     const exprt &size,
     const exprt &fill_value,
     const typet &elem_type,
-    const exprt *index_base = nullptr);
+    const exprt *index_base = nullptr,
+    const exprt *index_step = nullptr);
 
   exprt index(const exprt &array, const nlohmann::json &slice_node);
+  exprt
+  numpy_string_slice_copy(const exprt &array, const nlohmann::json &slice_node);
 
   /**
    * @brief Lower boolean-mask indexing `a[mask]` to a runtime loop that
@@ -560,7 +564,22 @@ public:
   exprt compare(const exprt &l1, const exprt &l2, const std::string &op);
 
   exprt contains(const exprt &item, const exprt &list);
+  bool holds_list_lookalike(
+    const std::string &list_id,
+    bool if_unrecorded,
+    int depth) const;
+  bool compares_as_lists(
+    const exprt &item,
+    const symbolt &item_copy,
+    const exprt &list) const;
+  exprt contains_list(const exprt &item, const exprt &list);
 
+  std::optional<exprt> repeat_variable_list(
+    const nlohmann::json &left_node,
+    const nlohmann::json &right_node,
+    const exprt &lhs,
+    const exprt &rhs);
+  exprt repeat_at_runtime(const exprt &source, const exprt &count);
   exprt list_repetition(
     const nlohmann::json &left_node,
     const nlohmann::json &right_node,
@@ -582,6 +601,9 @@ public:
 
   bool has_shared_payload(const typet &type) const;
 
+  /// Whether @p lhs is a list subscript target `*(T *)item->value`.
+  static bool is_element_store_target(const exprt &lhs);
+
   /// Allocates the instance a constructor stores to @p lhs and returns the
   /// pointer to pass as `self`.
   exprt allocate_constructed_object(const exprt &lhs);
@@ -599,6 +621,18 @@ public:
     exprt lhs_val,
     exprt rhs_val,
     const typet &lhs_type,
+    const typet &rhs_type) const;
+
+  /// Conjoins to @p sizes_ok that the slots @p lhs_at and @p rhs_at hold
+  /// @p lhs_type and @p rhs_type, for compare()'s nested fast path. Only a
+  /// top-level scalar slot is exempt: any other slot was typed through a
+  /// nested list the type map may name by a dead or rebound symbol (#8130).
+  void require_stored_types(
+    expr2tc &sizes_ok,
+    std::size_t depth,
+    const exprt &lhs_at,
+    const typet &lhs_type,
+    const exprt &rhs_at,
     const typet &rhs_type) const;
 
   exprt build_push_list_call(
@@ -897,13 +931,6 @@ public:
    */
   BigInt uniform_elem_size(const exprt &list) const;
 
-  /// Whether the list stored at index @p i of @p list is the one @p elem holds
-  /// now. The type map names a nested element by the symbol it was appended
-  /// from, and a later assignment can rebind that symbol, or a store through
-  /// the outer list or an alias of it can replace the slot (#8130).
-  expr2tc
-  stored_element_is(const symbolt &list, std::size_t i, const symbolt &elem);
-
   /// The element type a subscript's base declares when the type map has no
   /// record of the list: a name's annotation, or a called function's return
   /// annotation. Empty when neither gives one.
@@ -932,6 +959,10 @@ public:
     bool constant_index,
     const nlohmann::json &list_node,
     const typet &fallback) const;
+
+  /// The type every element of @p array was pushed with when \p fallback is a
+  /// tuple struct, else \p fallback.
+  typet recorded_tuple_type_or(const exprt &array, const typet &fallback) const;
 
   struct shallow_push_call
   {
@@ -985,6 +1016,12 @@ public:
     codet &target_block);
 
 private:
+  /// The type of one literal element; a name whose binding has no static type
+  /// (such as `x or None`) is read at its symbol's type, as the list stored it.
+  typet literal_or_bound_element_type(
+    const nlohmann::json &elem,
+    bool &unresolved_call) const;
+
   /// Emits `size = len(list_expr)` and a ValueError unless it fits @p fixed
   /// targets (at least @p fixed when @p starred); returns the size.
   exprt check_unpack_length(
@@ -1133,6 +1170,15 @@ private:
     const exprt &array,
     const exprt &pos_expr,
     const nlohmann::json &slice_node);
+
+  bool is_bytes_param_pointer(
+    const exprt &array,
+    const typet &resolved_array_type) const;
+
+  exprt guard_bytes_param_index(
+    const exprt &array,
+    const typet &resolved_array_type,
+    const exprt &pos_expr);
 
   std::optional<exprt> try_build_column_pointer_view(
     const exprt &array,

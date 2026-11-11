@@ -58,7 +58,13 @@ class int:
     # exit at n == 0 well before that — incremental BMC terminates at the
     # first k that proves the property.
     def bit_length(cls, n: IntWide) -> int:
+        # A negative n counts the bits of -n - 1, which cannot overflow, plus
+        # one when -n is a power of two, i.e. when -n - 1 is all ones.
+        negative: bool = n < 0
+        if negative:
+            n: IntWide = -(n + 1)
         length: int = 0
+        ones: int = 0
         # Soundness: the literal 512 must be >= kPythonBitLengthCap in
         # src/python-frontend/type/type_handler.cpp, which a static_assert ties
         # to kPythonBignumWidth. The OM is FLAIL-mangled before the C++
@@ -66,7 +72,10 @@ class int:
         # both together when widening Python int (#4642). The static_assert
         # turns a silently-wrong bit_length into a build break.
         while length < 512 and n > 0:
+            ones = ones + (n & 1)
             n: IntWide = n >> 1
+            length = length + 1
+        if negative and ones == length:
             length = length + 1
         return length
 

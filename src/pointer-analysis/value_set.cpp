@@ -1,3 +1,4 @@
+#include <numeric>
 #include <cassert>
 #include <unordered_set>
 #include <langapi/language_util.h>
@@ -102,7 +103,80 @@ void value_sett::output(std::ostream &out) const
   }
 }
 
-expr2tc value_sett::to_expr(object_mapt::const_iterator it) const
+/// The array member of struct \p obj occupying exactly bytes [begin, end) of
+/// it, reached through struct members only; nil if there is none.
+static expr2tc array_member_at(expr2tc obj, BigInt begin, BigInt end)
+{
+  while (is_struct_type(obj))
+  {
+    const struct_type2t &type = to_struct_type(obj->type);
+    expr2tc next;
+    for (size_t i = 0; i < type.members.size() && is_nil_expr(next); i++)
+    {
+      BigInt offset = member_offset(obj->type, type.member_names[i]);
+      BigInt size = type_byte_size_default(type.members[i], 0);
+      if (offset <= begin && end <= offset + size)
+      {
+        next = member2tc(type.members[i], obj, type.member_names[i]);
+        begin -= offset;
+        end -= offset;
+      }
+    }
+    if (is_nil_expr(next))
+      return expr2tc();
+    if (
+      is_array_type(next) && begin.is_zero() &&
+      end == type_byte_size(next->type))
+      return next;
+    obj = next;
+  }
+  return expr2tc();
+}
+
+void value_sett::get_cast_value_set(
+  const expr2tc &expr,
+  object_mapt &dest,
+  const std::string &suffix,
+  const type2tc &original_type) const
+{
+  // Push straight through casts. A cast pointer may walk the whole object,
+  // as a char pointer does, so it no longer stays in an array member.
+  const expr2tc &from =
+    is_typecast2t(expr) ? to_typecast2t(expr).from : to_bitcast2t(expr).from;
+  object_mapt cast_set;
+  get_value_set_rec_cached(from, cast_set, suffix, original_type);
+  for (const auto &[n, object] : cast_set)
+  {
+    objectt o = object;
+    o.member_begin = o.member_end = 0;
+    insert(dest, n, o);
+  }
+}
+
+void value_sett::record_array_member(
+  objectt &o,
+  const expr2tc &object,
+  const type2tc &array_type,
+  const BigInt &element_size)
+{
+  if (
+    !o.offset_is_set || o.offset.is_negative() || !is_struct_type(object) ||
+    is_null_object2t(object) || !is_array_type(array_type) ||
+    to_array_type(array_type).size_is_infinite)
+    return;
+  // A [0] or [1] array may be indexed past its end on purpose, as a flexible
+  // array member, so only a longer array bounds the pointer.
+  BigInt size = type_byte_size_default(array_type, 0);
+  if (size > element_size)
+  {
+    o.member_begin = o.offset.to_uint64();
+    o.member_end = o.member_begin + size.to_uint64();
+  }
+}
+
+expr2tc value_sett::to_expr(
+  object_mapt::const_iterator it,
+  bool name_array_member) const
 {
   const expr2tc &object = object_numbering[it->first];
 
@@ -115,8 +189,25 @@ expr2tc value_sett::to_expr(object_mapt::const_iterator it) const
   else
     offs = unknown2tc(index_type2());
 
+  // Name the array member the pointer stays in, so that a dereference
+  // addresses it instead of splitting over every member of the object.
+  expr2tc target = object;
+  if (name_array_member)
+  {
+    // The dereference treats a member object as one named here, and no other.
+    target = get_base_object(object);
+    // A known offset is resolved against the whole object.
+    if (it->second.has_member() && !it->second.offset_is_set)
+    {
+      expr2tc member =
+        array_member_at(target, it->second.member_begin, it->second.member_end);
+      if (!is_nil_expr(member))
+        target = member;
+    }
+  }
+
   expr2tc obj = object_descriptor2tc(
-    object->type, object, offs, it->second.offset_alignment);
+    object->type, target, offs, it->second.offset_alignment);
   return obj;
 }
 
@@ -171,8 +262,10 @@ bool value_sett::make_union(object_mapt &dest, const object_mapt &src) const
   return result;
 }
 
-void value_sett::get_value_set(const expr2tc &expr, value_setst::valuest &dest)
-  const
+void value_sett::get_value_set(
+  const expr2tc &expr,
+  value_setst::valuest &dest,
+  bool name_array_member) const
 {
   object_mapt object_map;
   // Fetch all values into object_map,
@@ -182,7 +275,7 @@ void value_sett::get_value_set(const expr2tc &expr, value_setst::valuest &dest)
   for (object_mapt::const_iterator it = object_map.begin();
        it != object_map.end();
        ++it)
-    dest.push_back(to_expr(it));
+    dest.push_back(to_expr(it, name_array_member));
 }
 
 void value_sett::get_value_set(const expr2tc &expr, object_mapt &dest) const
@@ -495,55 +588,48 @@ void value_sett::offset_pointer_arith_objects(
   object_mapt &dest) const
 {
   const bool is_const = total_offs.has_value();
-  unsigned int ptr_align = get_natural_alignment(ptr_op);
+  /* A nondet offset moves the pointer by a multiple of its pointee's size,
+   * which need not be the object's element size: (uint64_t *)s + j into an
+   * array of 6-byte structs is 2-byte aligned, not 6 (#10088). */
+  uint64_t step = 1;
+  if (is_const)
+    step = total_offs->is_negative() ? (-*total_offs).to_uint64()
+                                     : total_offs->to_uint64();
+  else if (is_pointer_type(ptr_op))
+  {
+    try
+    {
+      step =
+        type_byte_size(to_pointer_type(ptr_op->type).subtype, &ns).to_uint64();
+    }
+    catch (const array_type2t::array_size_excp &)
+    {
+      // A VLA pointee: keep the byte step.
+    }
+  }
 
   for (const auto &it : pointer_expr_set)
   {
     objectt object = it.second;
-
-    unsigned int nat_align = get_natural_alignment(object_numbering[it.first]);
 
     if (is_const && object.offset_is_set)
     {
       // Both are const; we can accumulate offsets;
       object.offset += *total_offs;
     }
-    else if (is_const && !object.offset_is_set)
-    {
-      // Offset is const, but existing pointer isn't. The alignment is now
-      // at least as small as the operand alignment.
-      object.offset_alignment = std::min(nat_align, object.offset_alignment);
-    }
-    else if (!is_const && object.offset_is_set)
-    {
-      // Nondet but aligned offset from arithmetic; but offset set in
-      // current object. Take the minimum alignment again.
-      unsigned int offset_align = 0;
-      if ((object.offset % nat_align) != 0)
-      {
-        // We have some kind of offset into this data object, but it's less
-        // than the data objects natural alignment. So, the maximum
-        // alignment we can have is that of the pointer type being added
-        // or subtracted. The minimum, depends on the offset into the
-        // data object we're pointing at.
-        offset_align = ptr_align;
-        if (object.offset % ptr_align != 0)
-          // Too complex to calculate; clamp to bytes.
-          offset_align = 1;
-      }
-      else
-      {
-        offset_align = nat_align;
-      }
-
-      object.offset_is_set = false;
-      object.offset_alignment = std::min(nat_align, offset_align);
-    }
     else
     {
-      // Final case: nondet offset from operation, and nondet offset in
-      // the current object. So, just take the minimum available.
-      object.offset_alignment = std::min(nat_align, object.offset_alignment);
+      // The offset is now a multiple of whatever divides both the old offset
+      // (or its alignment) and the step, capped by the object's natural
+      // alignment.
+      uint64_t old_align = object.offset_alignment;
+      if (object.offset_is_set)
+        old_align = object.offset.is_negative() ? (-object.offset).to_uint64()
+                                                : object.offset.to_uint64();
+      object.offset_is_set = false;
+      object.offset_alignment = std::gcd(
+        std::gcd(old_align, step),
+        uint64_t(get_natural_alignment(object_numbering[it.first])));
     }
 
     // Once updated, store object reference into destination map.
@@ -812,19 +898,9 @@ void value_sett::get_value_set_rec(
     return;
   }
 
-  if (is_typecast2t(expr))
+  if (is_typecast2t(expr) || is_bitcast2t(expr))
   {
-    // Push straight through typecasts.
-    const typecast2t &cast = to_typecast2t(expr);
-    get_value_set_rec_cached(cast.from, dest, suffix, original_type);
-    return;
-  }
-
-  if (is_bitcast2t(expr))
-  {
-    // Bitcasts are just typecasts with additional semantics
-    const bitcast2t &cast = to_bitcast2t(expr);
-    get_value_set_rec_cached(cast.from, dest, suffix, original_type);
+    get_cast_value_set(expr, dest, suffix, original_type);
     return;
   }
 
@@ -1249,6 +1325,13 @@ void value_sett::get_reference_set_rec(const expr2tc &expr, object_mapt &dest)
         // Whatever the base object is, apply the offset represented by this
         // index expression.
         objectt o = a_it.second;
+        // The pointer stays in this array under pointer arithmetic (C11
+        // 6.5.6p8), whether the index is known yet or not (#10063).
+        record_array_member(
+          o,
+          object,
+          index.source_value->type,
+          type_byte_size_default(index.type, 1));
 
         if (has_const_index_offset && index_offset == 0)
         {

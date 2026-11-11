@@ -7,6 +7,7 @@
 #include <nlohmann/json.hpp>
 #include <functional>
 #include <string>
+#include <vector>
 
 class python_converter;
 class type_handler;
@@ -91,6 +92,11 @@ public:
     const nlohmann::json &type_node,
     codet &block);
 
+  // Class named by a raise's exception expression read at @p use, or "" when
+  // unknown.
+  std::string
+  raised_class_name(const nlohmann::json &exc, const nlohmann::json &use) const;
+
   // -----------------------------------------------------------------------
   // Assertion helpers (previously python_converter private methods)
   // -----------------------------------------------------------------------
@@ -161,6 +167,14 @@ private:
   exprt
   build_builtin_exception(const nlohmann::json &exc, const typet &type) const;
 
+  /// The class name in `module.Class` read at @p use, or empty unless the
+  /// receiver is bound only by `import` of one module, imported at the top of
+  /// the file before @p use, and that module's class is the program's only
+  /// binding of the name.
+  std::string module_class_name(
+    const nlohmann::json &node,
+    const nlohmann::json &use) const;
+
   /// True when `raise <exc>` names a variable holding an exception instance
   /// rather than an exception class.
   bool raises_instance_variable(
@@ -185,6 +199,24 @@ private:
 
   /// Names the spill temporaries inject_finally_before_escapes introduces.
   unsigned finally_spill_count_ = 0;
+
+  // The exception an enclosing handler is handling, saved on entry to it. A
+  // bare `raise` restores it: by then a nested handler may have overwritten
+  // the in-flight state.
+  struct handled_exceptiont
+  {
+    std::string function;
+    std::vector<exprt> saved; // copies of the exception-state globals
+  };
+  std::vector<handled_exceptiont> handled_;
+
+  // Pushes onto @p handled_stack the state that a handler re-raising with a
+  // bare `raise` saves on entry, and returns the statements saving it.
+  code_blockt save_handled_exception(
+    const nlohmann::json &element,
+    std::vector<handled_exceptiont> &handled_stack);
+
+  void restore_handled_exception(const locationt &location, codet &block) const;
 
   exprt make_finally_rethrow_handler(const nlohmann::json &element);
 

@@ -276,8 +276,21 @@ void smt_solver_baset::pop_ctx()
   });
   std::erase_if(
     flattened, [this](const auto &kv) { return kv.second.level >= ctx_level; });
+  for (auto &[value, flattens] : flattened_values)
+    std::erase_if(
+      flattens, [this](const auto &f) { return f.first >= ctx_level; });
+  std::erase_if(
+    flattened_values, [](const auto &kv) { return kv.second.empty(); });
   std::erase_if(
     ptr_flow, [this](const auto &kv) { return kv.second.first >= ctx_level; });
+  if (base_addrspace_tied && *base_addrspace_tied >= ctx_level)
+    base_addrspace_tied.reset();
+  std::erase_if(int_to_ptr_objects, [this](const int_to_ptr_objectt &c) {
+    return c.level >= ctx_level;
+  });
+  for (int_to_ptr_objectt &c : int_to_ptr_objects)
+    if (c.closed_at && *c.closed_at >= ctx_level)
+      c.closed_at.reset();
 
   pointer_logic.pop_back();
   addr_space_sym_num.pop_back();
@@ -368,11 +381,7 @@ void smt_solver_baset::define(const expr2tc &expr)
   const equality2t &eq = to_equality2t(expr);
   const type2tc &t = eq.side_1->type;
   const bool scalar = is_bool_type(t) || is_bv_type(t) || is_floatbv_type(t);
-  bool converted;
-  {
-    std::lock_guard lock(smt_cache_mutex);
-    converted = smt_cache.find(eq.side_1) != smt_cache.end();
-  }
+  const bool converted = smt_cache.find(eq.side_1) != smt_cache.end();
   // Aggregates need the flatteners' assign; a symbol already in use would
   // otherwise stay free.
   if (!scalar || converted)
@@ -381,7 +390,6 @@ void smt_solver_baset::define(const expr2tc &expr)
     return;
   }
   smt_astt value = convert_ast(eq.side_2);
-  std::lock_guard lock(smt_cache_mutex);
   smt_cache.insert({eq.side_1, value, ctx_level});
 }
 
@@ -405,12 +413,7 @@ smt_astt smt_solver_baset::convert_assign(const expr2tc &expr)
   // flatteners work, in that one can choose to create a set of expressions and
   // their ASTs, then store them in the cache, rather than have a more
   // sophisticated conversion.
-  {
-    const smt_cache_entryt e = {eq.side_1, side2, ctx_level};
-    // Lock automatically released when it goes out of scope
-    std::lock_guard lock(smt_cache_mutex);
-    smt_cache.insert(e);
-  }
+  smt_cache.insert({eq.side_1, side2, ctx_level});
 
   // Propagate ir-ieee interval metadata from RHS to LHS SSA variable so
   // that get_interval() lookups on the LHS variable find the stored interval
@@ -479,12 +482,8 @@ smt_astt smt_solver_baset::convert_ast(const expr2tc &expr)
   // the warmed post-order path those re-entrant calls are guaranteed hits;
   // checking the cache up front keeps them O(1) instead of paying a worklist
   // allocation per call.
-  {
-    std::lock_guard lock(smt_cache_mutex);
-    smt_cachet::const_iterator hit = smt_cache.find(expr);
-    if (hit != smt_cache.end())
-      return hit->ast;
-  }
+  if (auto hit = smt_cache.find(expr); hit != smt_cache.end())
+    return hit->ast;
 
   // Warm the cache bottom-up with an explicit-stack post-order walk so that
   // the per-node body (convert_ast_node) never has to recurse through a long
@@ -504,13 +503,10 @@ smt_astt smt_solver_baset::convert_ast(const expr2tc &expr)
     const expr2tc node = stack.back().first;
     const bool expanded = stack.back().second;
 
+    if (smt_cache.find(node) != smt_cache.end())
     {
-      std::lock_guard lock(smt_cache_mutex);
-      if (smt_cache.find(node) != smt_cache.end())
-      {
-        stack.pop_back();
-        continue;
-      }
+      stack.pop_back();
+      continue;
     }
 
     if (!expanded && walks_operands(node))
@@ -540,15 +536,11 @@ smt_astt smt_solver_baset::convert_ast(const expr2tc &expr)
     // must record the result here — later iterations and the final lookup rely
     // on every converted node being present in the cache.
     smt_astt a = convert_ast_node(node);
-    {
-      std::lock_guard lock(smt_cache_mutex);
-      if (smt_cache.find(node) == smt_cache.end())
-        smt_cache.insert(smt_cache_entryt{node, a, ctx_level});
-    }
+    if (smt_cache.find(node) == smt_cache.end())
+      smt_cache.insert(smt_cache_entryt{node, a, ctx_level});
     stack.pop_back();
   }
 
-  std::lock_guard lock(smt_cache_mutex);
   return smt_cache.find(expr)->ast;
 }
 
@@ -601,12 +593,8 @@ smt_astt smt_solver_baset::convert_ieee_arith_2op(const expr2tc &expr)
 
 smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
 {
-  {
-    std::lock_guard lock(smt_cache_mutex);
-    smt_cachet::const_iterator cache_result = smt_cache.find(expr);
-    if (cache_result != smt_cache.end())
-      return (cache_result->ast);
-  }
+  if (auto hit = smt_cache.find(expr); hit != smt_cache.end())
+    return hit->ast;
 
   // A sizeof(T) node lowers to its eagerly-computed byte-size value.
   // do_simplify normally folds it away, but under --no-simplify it survives to
@@ -1066,30 +1054,18 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
     }
     else if (is_union_type(expr))
     {
-      uint64_t bits = type_byte_size_bits(expr->type).to_uint64();
-      const union_type2t &tu = to_union_type(expr->type);
-      assert(is_constant_string2t(with.update_field));
-      unsigned c = struct_union_get_component_number(
-                     expr->type, to_constant_string2t(with.update_field).value)
-                     .value();
-      uint64_t mem_bits = type_byte_size_bits(tu.members[c]).to_uint64();
-      if (mem_bits == 0)
-      {
-        // A zero-sized union member (e.g. a Rust unit enum variant such as
-        // Result's Err carrying only ()) occupies no storage, so writing it
-        // leaves the union's bit representation unchanged. Encoding it via
-        // get_uint_type(0) would build a degenerate 0-width bitvector that the
-        // solver widens to 1 bit, producing a value one bit wider than the
-        // union sort.
-        a = convert_ast(with.source_value);
-      }
-      else
-      {
-        expr2tc upd = bitcast2tc(
-          get_uint_type(mem_bits),
-          typecast2tc(tu.members[c], with.update_value));
-        a = convert_ast(union_bits_with_member(with.source_value, upd, bits));
-      }
+      // A zero-sized union member (e.g. a Rust unit enum variant such as
+      // Result's Err carrying only ()) occupies no storage, so writing it
+      // leaves the union's bit representation unchanged. Encoding it via
+      // get_uint_type(0) would build a degenerate 0-width bitvector that the
+      // solver widens to 1 bit, producing a value one bit wider than the
+      // union sort.
+      const expr2tc upd = union_with_member_bits(with);
+      a = is_nil_expr(upd) ? convert_ast(with.source_value)
+                           : convert_ast(union_bits_with_member(
+                               with.source_value,
+                               upd,
+                               type_byte_size_bits(expr->type).to_uint64()));
     }
     else
     {
@@ -1840,11 +1816,7 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
     abort();
   }
 
-  {
-    struct smt_cache_entryt entry = {expr, a, ctx_level};
-    std::lock_guard lock(smt_cache_mutex);
-    smt_cache.insert(entry);
-  }
+  smt_cache.insert({expr, a, ctx_level});
   return a;
 }
 
@@ -1922,6 +1894,19 @@ void smt_solver_baset::note_division_operands(
 void smt_solver_baset::assert_expr(const expr2tc &e)
 {
   assert_ast(convert_ast(e));
+}
+
+void smt_solver_baset::assert_ast(smt_astt a)
+{
+  if (!is_nil_expr(reading_model))
+  {
+    log_error(
+      "Reading the model value of\n{}\nasserted a constraint, which discards "
+      "the model",
+      reading_model->pretty());
+    abort();
+  }
+  assert_ast_in_solver(a);
 }
 
 smt_sortt smt_solver_baset::convert_sort(const type2tc &type)
@@ -3369,6 +3354,8 @@ void smt_solver_baset::pre_solve()
   l_get_cache.clear();
   get_ast_cache.clear();
 
+  close_int_to_ptr_objects();
+
   // NB: always perform tuple constraint adding first, as it covers tuple
   // arrays too, and might end up generating more ASTs to be encoded in
   // the array api class.
@@ -3427,8 +3414,10 @@ smt_solver_baset::get_index_value(const expr2tc &expr, expr2tc &res)
   expr2tc idx = get(newidx);
   if (is_constant_int2t(idx))
   {
-    // Convert the array so we can call the array api
-    smt_astt array = convert_ast(src_value);
+    smt_astt array = term_of(src_value);
+    // idx is flattened, so a nested array's value is indexed row by row.
+    if (!array)
+      return value_of(expr);
 
     // Retrieve the element
     if (is_tuple_array_ast_type(src_value->type))
@@ -3450,8 +3439,31 @@ smt_solver_baset::get_index_value(const expr2tc &expr, expr2tc &res)
   return std::nullopt;
 }
 
+/* Marks @p expr as being read from the model; reads nest, and the outermost
+ * one is named. */
+class model_readt
+{
+public:
+  model_readt(expr2tc &reading, const expr2tc &expr)
+    : reading(reading), was(reading)
+  {
+    if (is_nil_expr(reading))
+      reading = expr;
+  }
+  ~model_readt()
+  {
+    reading = was;
+  }
+
+private:
+  expr2tc &reading;
+  const expr2tc was;
+};
+
 expr2tc smt_solver_baset::get(const expr2tc &expr)
 {
+  model_readt reading(reading_model, expr);
+
   if (is_constant_number(expr))
     return expr;
 
@@ -3930,8 +3942,246 @@ double smt_solver_baset::convert_rational_to_double(
   return result;
 }
 
+bool smt_solver_baset::has_term(const expr2tc &expr)
+{
+  if (is_symbol2t(expr))
+    return true;
+  return smt_cache.find(expr) != smt_cache.end();
+}
+
+smt_astt smt_solver_baset::term_of(const expr2tc &expr)
+{
+  if (has_term(expr))
+    return convert_ast(expr);
+  if (is_index2t(expr))
+    return infinite_array_row_term(to_index2t(expr));
+  if (!is_member2t(expr) || is_union_type(to_member2t(expr).source_value))
+    return nullptr;
+  const member2t &member = to_member2t(expr);
+  smt_astt source = term_of(member.source_value);
+  return source
+           ? source->project(
+               this,
+               get_member_name_field(member.source_value->type, member.member))
+           : nullptr;
+}
+
+/* An infinite array of arrays (a nested Solidity mapping) is not flattened, so
+ * a row of it has an array sort of its own: select it at the index's model
+ * value. */
+smt_astt smt_solver_baset::infinite_array_row_term(const index2t &index)
+{
+  const type2tc &src_type = index.source_value->type;
+  if (
+    !is_array_type(index.type) || !is_array_type(src_type) ||
+    !to_array_type(src_type).size_is_infinite)
+    return nullptr;
+  smt_astt source = term_of(index.source_value);
+  const expr2tc idx = get(index.index);
+  if (!source || !is_constant_int2t(idx))
+    return nullptr;
+  return source->select(this, fix_array_idx(idx, src_type));
+}
+
+/* Converting an expression the encoding never saw builds new formula, and some
+ * conversions assert side constraints, which discards the model being read
+ * (#8097). Its value is computed from its operands' values instead, following
+ * what the conversion would have encoded. */
+expr2tc smt_solver_baset::value_of(const expr2tc &expr)
+{
+  if (is_nil_expr(expr) || is_constant_number(expr) || is_address_of2t(expr))
+    return expr;
+
+  if (has_term(expr))
+    return is_index2t(expr) ? get(expr) : get_by_type(expr);
+
+  switch (expr->expr_id)
+  {
+  case expr2t::index_id:
+    if (has_term(to_index2t(expr).source_value))
+      return get(expr);
+    break;
+
+  case expr2t::member_id:
+  {
+    // Read as convert_member() encodes it: a field of the source's tuple, or
+    // the member's bits of the union's.
+    const expr2tc &source = to_member2t(expr).source_value;
+    if (!is_union_type(source))
+    {
+      smt_astt field = term_of(expr);
+      if (!field)
+        break;
+      return get_by_ast(expr->type, field);
+    }
+    const expr2tc bits = bitcast2tc(
+      get_uint_type(type_byte_size_bits(source->type).to_uint64()), source);
+    return value_of(bitcast2tc(
+      expr->type,
+      union_member_bits(bits, type_byte_size_bits(expr->type).to_uint64())));
+  }
+
+  case expr2t::bitcast_id:
+  {
+    const expr2tc &from = to_bitcast2t(expr).from;
+    if (!is_bv_type(from) && !is_union_type(from))
+      break;
+    // A union's term is its bits.
+    const expr2tc bits =
+      is_union_type(from) && has_term(from)
+        ? get_by_ast(
+            get_uint_type(type_byte_size_bits(from->type).to_uint64()),
+            convert_ast(from))
+        : value_of(from);
+    if (!is_constant_int2t(bits))
+      break;
+    expr2tc value = value_from_bits(
+      expr->type,
+      integer2binary(
+        to_constant_int2t(bits).value,
+        type_byte_size_bits(expr->type).to_uint64()));
+    if (!is_nil_expr(value))
+      return value;
+    break;
+  }
+
+  case expr2t::typecast_id:
+  {
+    const expr2tc &from = to_typecast2t(expr).from;
+    if (!is_pointer_type(expr) || is_pointer_type(from))
+      break;
+    const expr2tc address = value_of(typecast2tc(ptraddr_type2(), from));
+    if (is_constant_int2t(address))
+      return pointer_at_address(expr->type, to_constant_int2t(address).value);
+    break;
+  }
+
+  case expr2t::if_id:
+  {
+    const if2t &i = to_if2t(expr);
+    const expr2tc cond = value_of(i.cond);
+    if (is_constant_bool2t(cond))
+      return value_of(
+        to_constant_bool2t(cond).value ? i.true_value : i.false_value);
+    break;
+  }
+
+  default:;
+  }
+
+  expr2tc res = expr;
+  res->Foreach_operand([this](expr2tc &e) {
+    if (is_nil_expr(e))
+      return;
+    expr2tc v = value_of(e);
+    if (!is_nil_expr(v))
+      e = v;
+  });
+  simplify(res);
+  return res;
+}
+
+/* Inverts the layout convert_bitcast() reads a type out of a bit-vector with;
+ * nil for a type it does not cover. */
+expr2tc
+smt_solver_baset::value_from_bits(const type2tc &type, const std::string &bits)
+{
+  const unsigned total = bits.size();
+  auto part = [&](const type2tc &t, unsigned offset) {
+    const unsigned w = type_byte_size_bits(t).to_uint64();
+    if (!w)
+      return gen_zero(t);
+    return value_from_bits(
+      t, bits.substr(total - flattened_position(offset, w, total) - w, w));
+  };
+
+  std::vector<expr2tc> parts;
+  switch (type->type_id)
+  {
+  case type2t::pointer_id:
+    return pointer_at_address(type, binary2integer(bits, false));
+
+  case type2t::struct_id:
+  {
+    const struct_type2t &s = to_struct_type(type);
+    for (size_t i = 0; i < s.members.size(); i++)
+      parts.push_back(part(
+        s.members[i], member_offset_bits(type, s.member_names[i]).to_uint64()));
+    break;
+  }
+
+  case type2t::union_id:
+    // As get_by_ast() reads a union: every member, from the same bits.
+    for (const type2tc &member : to_union_type(type).members)
+      parts.push_back(part(member, 0));
+    break;
+
+  case type2t::array_id:
+  {
+    const array_type2t &a = to_array_type(type);
+    if (!is_constant_int2t(a.array_size))
+      return expr2tc();
+    const unsigned w = type_byte_size_bits(a.subtype).to_uint64();
+    for (uint64_t i = 0; i < to_constant_int2t(a.array_size).value.to_uint64();
+         i++)
+      parts.push_back(part(a.subtype, i * w));
+    break;
+  }
+
+  case type2t::signedbv_id:
+    return constant_int2tc(type, binary2integer(bits, true));
+
+  case type2t::bool_id:
+  case type2t::unsignedbv_id:
+  case type2t::fixedbv_id:
+  case type2t::floatbv_id:
+    return get_by_value(type, binary2integer(bits, false));
+
+  default:
+    return expr2tc();
+  }
+
+  for (const expr2tc &p : parts)
+    if (is_nil_expr(p))
+      return expr2tc();
+  if (is_struct_type(type))
+    return constant_struct2tc(type, parts);
+  if (is_union_type(type))
+    return constant_union2tc(type, "", parts);
+  return constant_array2tc(type, parts);
+}
+
+/* What convert_typecast_to_ptr() makes of @p address, in the model: the
+ * registered object whose range holds it, INVALID where none does. */
+expr2tc
+smt_solver_baset::pointer_at_address(const type2tc &type, const BigInt &address)
+{
+  const type2tc int_type = ptraddr_type2();
+  auto bound = [&](const char *which, unsigned id) {
+    expr2tc v = get_by_type(
+      symbol2tc(int_type, fmt::format("__ESBMC_ptr_obj_{}_{}", which, id)));
+    return is_constant_int2t(v) ? to_constant_int2t(v).value : BigInt(-1);
+  };
+
+  const pointer_logict &logic = pointer_logic.back();
+  const unsigned invalid = logic.get_invalid_object();
+  for (const auto &[id, _] : addr_space_data.back())
+  {
+    const BigInt start = bound("start", id);
+    if (id != invalid && start <= address && address <= bound("end", id))
+      return logic.pointer_expr(
+        pointer_logict::pointert(id, address - start), type);
+  }
+  return logic.pointer_expr(
+    pointer_logict::pointert(invalid, address - bound("start", invalid)), type);
+}
+
 expr2tc smt_solver_baset::get_by_type(const expr2tc &expr)
 {
+  model_readt reading(reading_model, expr);
+  if (!has_term(expr))
+    return value_of(expr);
+
   switch (expr->type->type_id)
   {
   case type2t::bool_id:
@@ -4398,7 +4648,14 @@ tvt smt_solver_baset::l_get(smt_astt a)
 tvt smt_solver_baset::l_get(const expr2tc &expr)
 {
   assert(is_bool_type(expr));
-  return l_get(convert_ast(expr));
+  model_readt reading(reading_model, expr);
+  if (has_term(expr))
+    return l_get(convert_ast(expr));
+
+  expr2tc value = value_of(expr);
+  if (is_nil_expr(value) || !is_constant_bool2t(value))
+    return tvt(tvt::TV_UNKNOWN);
+  return tvt(to_constant_bool2t(value).value);
 }
 
 void smt_solver_baset::dump_expr(const expr2tc &expr)
@@ -4408,6 +4665,9 @@ void smt_solver_baset::dump_expr(const expr2tc &expr)
 
 expr2tc smt_solver_baset::get_by_ast(const expr2tc &expr)
 {
+  model_readt reading(reading_model, expr);
+  if (!has_term(expr))
+    return value_of(expr);
   return get_by_ast(expr->type, convert_ast(expr));
 }
 

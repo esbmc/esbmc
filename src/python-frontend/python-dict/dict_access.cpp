@@ -1,4 +1,5 @@
 #include "python_dict_internal.h"
+#include <set>
 
 using namespace python_expr;
 
@@ -23,6 +24,31 @@ void python_dict_handler::check_value_type(
   check.location().comment(
     "Unsupported: a dict value whose type differs from the one inferred");
   converter_.add_instruction(check);
+}
+
+/// A key stored at its lost type (`void *`) hashes like no stored key, so its
+/// lookup would raise KeyError on every path (#10241). A list element read at
+/// that type carries its own type and is not one. Where the lookup runs,
+/// report it as unsupported and end the path instead.
+void python_dict_handler::refuse_untyped_key(
+  const typet &key_type,
+  const locationt &location)
+{
+  if (!key_type.is_pointer() || !key_type.subtype().is_empty())
+    return;
+  const std::string message =
+    "Unsupported: a dict lookup with a key whose type is not known";
+  if (!converter_.can_emit_runtime_guard())
+    throw std::runtime_error(message);
+  // Not the constant false, which CFG cleanup reads as the end of the
+  // function and so drops the assume.
+  const exprt never = not_exprt(true_exprt());
+  code_assertt check(never);
+  check.location() = location;
+  check.location().user_provided(true);
+  check.location().comment(message);
+  converter_.add_instruction(check);
+  converter_.add_instruction(code_assumet(never));
 }
 
 /// The float_type_id argument of a push or set: an element's own type id
@@ -64,17 +90,36 @@ char python_dict_handler::annotated_value_kind(const exprt &dict_expr)
     get_dict_value_type_from_annotation(var_decl["annotation"]));
 }
 
+/// Whether the values a read at @p key can see, those recorded at that key or
+/// at a key not known statically (every value when @p key is not known), are
+/// of more than one kind, or of one kind other than @p type's (#9790).
+static bool reads_other_kind(
+  const element_type_registry::entries &entries,
+  const std::string &key,
+  const typet &type)
+{
+  std::set<char> kinds;
+  for (const element_type_registry::entry &e : entries)
+    if (key.empty() || e.first.empty() || e.first == key)
+      if (const char kind = scalar_kind(e.second))
+        kinds.insert(kind);
+  const char expected = scalar_kind(type);
+  return kinds.size() > 1 ||
+         (expected && kinds.size() == 1 && *kinds.begin() != expected);
+}
+
 /// Whether a read of @p dict_expr at @p slice_node, whose recorded values are
 /// @p entries, yields the stored item as a tagged scalar: every value is
-/// tagged, or the read's constant key was written a string where the written
-/// `dict[K, V]` annotation has a number V, or the reverse. The latter is read
-/// like an element of a list mixing strings and numbers (#4797): its type_id,
-/// not V, then answers isinstance. A key not known statically, at the read or
-/// the write, leaves the read typed V.
+/// tagged, the values it can see are not all of @p read_type's kind, or the
+/// read's constant key was written a string where the written `dict[K, V]`
+/// annotation has a number V, or the reverse. Such a value is read like an
+/// element of a list mixing strings and numbers (#4797): its type_id, not V,
+/// then answers isinstance.
 bool python_dict_handler::reads_value_as_tagged(
   const exprt &dict_expr,
   const nlohmann::json &slice_node,
-  const element_type_registry::entries &entries)
+  const element_type_registry::entries &entries,
+  const typet &read_type)
 {
   if (
     std::all_of(
@@ -84,8 +129,10 @@ bool python_dict_handler::reads_value_as_tagged(
         return type_handler_.is_tagged_scalar_type(e.second);
       }))
     return true;
-  const char annotated = annotated_value_kind(dict_expr);
   const std::string key = dict_key_id(slice_node, converter_.get_ast_json());
+  if (reads_other_kind(entries, key, read_type))
+    return true;
+  const char annotated = annotated_value_kind(dict_expr);
   return annotated && std::any_of(
                         entries.begin(),
                         entries.end(),
@@ -138,6 +185,7 @@ exprt python_dict_handler::handle_dict_subscript(
   python_list list_handler(converter_, slice_node);
   list_elem_info key_info =
     list_handler.get_lookup_key_info(slice_node, key_expr);
+  refuse_untyped_key(key_info.elem_symbol->get_type(), location);
 
   // Call try_find_index(keys, key, type_hash, size) — returns SIZE_MAX if
   // absent
@@ -275,7 +323,7 @@ exprt python_dict_handler::handle_dict_subscript(
           vals_id, type_slot::dict_value_types);
       if (
         entries && !entries->empty() &&
-        reads_value_as_tagged(dict_expr, slice_node, *entries))
+        reads_value_as_tagged(dict_expr, slice_node, *entries, resolved_type))
         // element_type was resolved to the struct above; is_tagged_scalar_type
         // matches on the symbol_typet identity instead.
         return build_dereference(

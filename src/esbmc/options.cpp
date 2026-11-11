@@ -97,6 +97,10 @@ const struct group_opt_templ all_cmd_options[] = {
     {"show-stacktrace",
      NULL,
      "Show the stack trace of function call in the counterexample"},
+    {"show-funccall-trace",
+     NULL,
+     "Show the chronological sequence of function calls leading to the "
+     "counterexample (reentrancy-aware)"},
     {"simplify-trace",
      NULL,
      "Simplify the trace and exclude the assignments whose variables are not "
@@ -189,7 +193,10 @@ const struct group_opt_templ all_cmd_options[] = {
      "Enable SV-COMP mode: suppress GCC-acceptable frontend diagnostics "
      "(int/pointer conversions), treat __builtin_unreachable as a no-op, emit "
      "physical line numbers for witnesses, and avoid malloc/free in the "
-     "fopen/fclose models. Set automatically by the SV-COMP wrapper."},
+     "fopen/fclose models. A program that can start a thread is verified with "
+     "incremental BMC over schedules of at most three context switches, "
+     "without interval analysis or --goto-unwind. Set automatically by the "
+     "SV-COMP wrapper."},
     /* Read by clang_c_language.cpp, which is built unconditionally, so these
      * must not sit in a frontend-gated group (#7345). */
     {"clang-c-irep2-adjust",
@@ -243,6 +250,11 @@ const struct group_opt_templ all_cmd_options[] = {
      {"python-no-fold",
       NULL,
       "Disable NumPy constant folding in the Python frontend"},
+     {"python-math-ulps",
+      boost::program_options::value<int>()->value_name("n"),
+      "How many ulps a math or NumPy transcendental function's result may "
+      "lie from the C library's value (default 8); 0 assumes a correctly "
+      "rounded library"},
      {"python-typecheck",
       NULL,
       "Type-check the input with mypy --strict and print the report."},
@@ -828,6 +840,10 @@ const struct group_opt_templ all_cmd_options[] = {
      NULL,
      "Do not check that a floating-point to integer conversion is in range "
      "(C11 6.3.1.4p1); the rest of --overflow-check is unaffected"},
+    {"no-fp-overflow-check",
+     NULL,
+     "Do not check floating-point arithmetic for overflow; integer overflow "
+     "checks under --overflow-check are unaffected"},
     {"no-unlimited-scanf-check",
      NULL,
      "Do not do overflow check for scanf/fscanf with unlimited character "
@@ -1048,6 +1064,12 @@ const struct group_opt_templ all_cmd_options[] = {
      {"branch-coverage-claims",
       NULL,
       "Enable branch-coverage and shows all reached claims"},
+     {"coverage-covered-set",
+      boost::program_options::value<std::string>()->value_name("path"),
+      "Cross-run persisted covered-set for --branch-coverage. Read at "
+      "start (edges already witnessed are not re-instrumented, cutting "
+      "SMT cost) and merge-written at end. The denominator stays the "
+      "full static universe, so skipping never inflates coverage"},
      {"branch-function-coverage",
       NULL,
       "Show the coverage of branches and function entry"},

@@ -7,6 +7,7 @@
 #include <util/symtab/symbol.h>
 #include <python-frontend/symbol_id.h>
 #include <nlohmann/json.hpp>
+#include <optional>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
@@ -37,7 +38,8 @@ public:
    */
   void declare_dynamic_type_names(
     const std::unordered_set<std::string> &dynamic_type_names,
-    const nlohmann::json &ast_node);
+    const nlohmann::json &ast_node,
+    bool copy_existing = true);
 
   /**
    * @brief True if `name` currently resolves to a tagged-object symbol,
@@ -67,13 +69,14 @@ public:
 
   /**
    * @brief Fills in the tagged-object fields for `name` from an
-   * already-converted value
+   * already-converted value; `value_node` is the source `rhs` came from
    */
   void assign(
     const exprt &rhs,
     const locationt &location,
     const std::string &name,
-    codet &target_block);
+    codet &target_block,
+    const nlohmann::json &value_node);
 
   /**
    * @brief Redirects `symbol` to its tagged-object alias, if a pre-existing
@@ -124,6 +127,9 @@ public:
     const exprt &tagged,
     const std::string &type_name,
     bool type_is_user_class) const;
+
+  /// Python truthiness of a tagged value, decided by its runtime type.
+  exprt build_truthiness(const exprt &tagged);
 
   /**
    * @brief True if a function's top-level if/elif/else chain -- including
@@ -207,12 +213,36 @@ private:
    * fields (value/type_id/size/float_idx) from an already-converted value.
    * Shared by assign() (literal or non-literal reassignment) and
    * declare_dynamic_type_names() (initializing a pre-existing alias from
-   * its prior value)
+   * its prior value). `interned_text` is set when `rhs` is an interned str
+   * literal, whose tags then share one payload
    */
   std::vector<codet> build_tag_field_assigns(
     symbolt &tag_symbol,
     const exprt &rhs,
-    const locationt &location);
+    const locationt &location,
+    const std::optional<std::string> &interned_text = std::nullopt);
+
+  /// The static object of a module name @p rhs bound once, nil for any other
+  /// value; sets @p elem_size.
+  exprt module_name_payload(
+    const exprt &rhs,
+    const locationt &location,
+    std::vector<codet> &instructions,
+    exprt &elem_size);
+
+  /// A fresh copy of @p rhs as a tag's `.value`; sets @p elem_size.
+  exprt build_scalar_payload(
+    const exprt &rhs,
+    const locationt &location,
+    std::vector<codet> &instructions,
+    exprt &elem_size);
+
+  /// The one static object holding the interned str @p text; sets
+  /// @p elem_size.
+  exprt interned_str_payload(
+    const std::string &text,
+    const exprt &rhs,
+    exprt &elem_size);
 
   /**
    * @brief Resolves `name` to its tagged-object symbol, following `aliases_`

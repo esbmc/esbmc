@@ -1,8 +1,14 @@
 #include "irep2/irep2_expr.h"
 #include <goto-symex/witness/witnesses.h>
+#include <util/base/filesystem.h>
 #include <ac_config.h>
 #include <boost/property_tree/ptree.hpp>
+#include <cctype>
+#include <cstring>
 #include <fstream>
+#include <optional>
+#include <regex>
+#include <unordered_map>
 #include <langapi/languages.h>
 #include <irep2/irep2.h>
 #include <solvers/smt/smt_conv.h>
@@ -117,11 +123,16 @@ void yamlt::generate_yaml(
       yaml_emitter << YAML::Key << "segment" << YAML::Value << YAML::BeginSeq;
 
       create_waypoint(waypoint, yaml_emitter);
+      if (racing_target && &waypoint == &this->segments.back())
+        create_waypoint(*racing_target, yaml_emitter);
 
       yaml_emitter << YAML::EndSeq;
       yaml_emitter << YAML::EndMap;
     }
   }
+
+  for (const invariant &inv : this->invariants)
+    create_invariant(inv, yaml_emitter);
 
   yaml_emitter << YAML::EndSeq;
 
@@ -201,7 +212,7 @@ void create_waypoint(const waypoint &wp, YAML::Emitter &waypoint)
              << "branching";
 
   waypoint << YAML::Key << "action" << YAML::Value << YAML::DoubleQuoted
-           << "follow";
+           << (wp.action == waypoint::cycle ? "cycle" : "follow");
 
   if (wp.type == waypoint::assumption)
   {
@@ -214,6 +225,8 @@ void create_waypoint(const waypoint &wp, YAML::Emitter &waypoint)
   }
   else if (wp.type == waypoint::function_return)
   {
+    // Format 2.1 requires ext_c_expression (or acsl_expression) here, unlike
+    // the other waypoints; witnesslint rejects c_expression (#9687).
     waypoint << YAML::Key << "constraint" << YAML::Value << YAML::BeginMap;
     waypoint << YAML::Key << "value" << YAML::Value << YAML::DoubleQuoted
              << wp.value;
@@ -242,6 +255,33 @@ void create_waypoint(const waypoint &wp, YAML::Emitter &waypoint)
 
   waypoint << YAML::EndMap;
   waypoint << YAML::EndMap;
+}
+
+void create_invariant(const invariant &inv, YAML::Emitter &out)
+{
+  static const char *const type_names[] = {
+    "loop_invariant",
+    "loop_transition_invariant",
+    "location_invariant",
+    "location_transition_invariant"};
+  assert(inv.type != invariant::unknown);
+  out << YAML::BeginMap;
+  out << YAML::Key << "invariant" << YAML::Value << YAML::BeginMap;
+  out << YAML::Key << "type" << YAML::Value << YAML::DoubleQuoted
+      << type_names[inv.type];
+  out << YAML::Key << "location" << YAML::Value << YAML::BeginMap;
+  out << YAML::Key << "file_name" << YAML::Value << YAML::DoubleQuoted
+      << inv.file;
+  out << YAML::Key << "line" << YAML::Value << integer2string(inv.line);
+  out << YAML::Key << "column" << YAML::Value << integer2string(inv.column);
+  out << YAML::Key << "function" << YAML::Value << YAML::DoubleQuoted
+      << inv.function;
+  out << YAML::EndMap;
+  out << YAML::Key << "value" << YAML::Value << YAML::DoubleQuoted << inv.value;
+  out << YAML::Key << "format" << YAML::Value << YAML::DoubleQuoted
+      << inv.format;
+  out << YAML::EndMap;
+  out << YAML::EndMap;
 }
 
 void create_node_node(nodet &node, xmlnodet &nodenode)
@@ -738,6 +778,8 @@ void _create_graph_node(
   }
   else if (options.get_bool_option("data-races-check"))
     pDataSpecification.put_value("CHECK( init(main()), LTL(G ! data-race) )");
+  else if (options.get_bool_option("termination"))
+    pDataSpecification.put_value("CHECK( init(main()), LTL(F end) )");
   else
     pDataSpecification.put_value(
       "CHECK( init(main()), LTL(G ! call(__VERIFIER_error())) )");
@@ -760,6 +802,28 @@ void _create_graph_node(
   graphnode.add_child("data", p_creationTime);
 }
 
+static std::string yaml_specification(const optionst &options)
+{
+  std::string spec;
+  if (options.get_bool_option("overflow-check"))
+    spec = "G ! overflow";
+  else if (options.get_bool_option("memory-leak-check"))
+  {
+    if (options.get_bool_option("no-reachable-memory-leak"))
+      spec = "G valid-free|valid-deref|valid-memtrack";
+    else
+      spec = "G valid-memcleanup";
+  }
+  else if (options.get_bool_option("data-races-check"))
+    spec = "G ! data-race";
+  else if (options.get_bool_option("termination"))
+    spec = "F end";
+  else
+    spec = "G ! call(reach_error())";
+
+  return spec;
+}
+
 void _create_yaml_metadata_emitter(
   const std::string &verifiedfile,
   const optionst &options,
@@ -767,7 +831,7 @@ void _create_yaml_metadata_emitter(
 {
   metadata << YAML::BeginMap;
   metadata << YAML::Key << "format_version" << YAML::Value << YAML::DoubleQuoted
-           << "2.0";
+           << "2.1";
 
   std::string uuid =
     boost::uuids::to_string(boost::uuids::random_generator()());
@@ -830,20 +894,7 @@ void _create_yaml_metadata_emitter(
   }
   metadata << YAML::EndMap;
 
-  std::string spec;
-  if (options.get_bool_option("overflow-check"))
-    spec = "G ! overflow";
-  else if (options.get_bool_option("memory-leak-check"))
-  {
-    if (options.get_bool_option("no-reachable-memory-leak"))
-      spec = "G valid-free|valid-deref|valid-memtrack";
-    else
-      spec = "G valid-memcleanup";
-  }
-  else if (options.get_bool_option("data-races-check"))
-    spec = "G ! data-race";
-  else
-    spec = "G ! call(reach_error())";
+  const std::string spec = yaml_specification(options);
 
   metadata << YAML::Key << "specification" << YAML::Value << YAML::DoubleQuoted
            << spec;
@@ -935,10 +986,8 @@ void check_replace_invalid_assignment(std::string &assignment)
     assignment.clear();
 }
 
-std::string get_formated_assignment(
-  const namespacet &ns,
-  const goto_trace_stept &step,
-  bool yaml)
+std::string
+get_formated_assignment(const namespacet &ns, const goto_trace_stept &step)
 {
   std::string assignment = "";
   if (
@@ -949,8 +998,7 @@ std::string get_formated_assignment(
     assignment += from_expr(ns, "", step.lhs, presentationt::WITNESS);
     assignment += " == ";
     assignment += from_expr(ns, "", step.value, presentationt::WITNESS);
-    if (!yaml)
-      assignment += ";";
+    assignment += ";";
 
     std::replace(assignment.begin(), assignment.end(), '$', '_');
     check_replace_invalid_assignment(assignment);
@@ -1020,6 +1068,49 @@ BigInt get_line_number(
   return line_count;
 }
 
+std::optional<locationt> nondet_call_rparen(const locationt &call)
+{
+  // One cached copy per source file, never freed; witnesses read few files.
+  static std::unordered_map<std::string, std::vector<std::string>> files;
+  const std::string file = call.get_file().as_string();
+  const size_t line = std::atoi(call.get_line().c_str());
+  const size_t column = std::atoi(call.get_column().c_str());
+  if (file.empty() || line == 0 || column == 0)
+    return std::nullopt;
+  auto [it, fresh] = files.try_emplace(file);
+  if (fresh)
+  {
+    std::ifstream in(file);
+    for (std::string text; std::getline(in, text);)
+      it->second.push_back(text);
+  }
+  const std::vector<std::string> &lines = it->second;
+  if (line > lines.size() || column > lines[line - 1].size())
+    return std::nullopt;
+
+  static const std::regex head(R"(^\w*nondet\w*\s*\()");
+  std::smatch m;
+  const std::string rest = lines[line - 1].substr(column - 1);
+  if (!std::regex_search(rest, m, head))
+    return std::nullopt;
+
+  // The calls take no arguments: the ')' is the next non-blank character.
+  size_t c = column - 1 + m.length(0);
+  for (size_t l = line - 1; l < lines.size(); ++l, c = 0)
+  {
+    const size_t p = lines[l].find_first_not_of(" \t", c);
+    if (p == std::string::npos)
+      continue;
+    if (lines[l][p] != ')')
+      return std::nullopt;
+    locationt rparen = call;
+    rparen.set_line(l + 1);
+    rparen.set_column(p + 1);
+    return rparen;
+  }
+  return std::nullopt;
+}
+
 std::string read_line(std::string file, BigInt line_number)
 {
   std::string line;
@@ -1035,6 +1126,93 @@ std::string read_line(std::string file, BigInt line_number)
     }
   }
   return line_code;
+}
+
+locationt full_expression_start(const locationt &loc)
+{
+  const size_t line = std::atoi(loc.get_line().c_str());
+  const size_t column = std::atoi(loc.get_column().c_str());
+  if (line == 0 || column == 0)
+    return loc;
+
+  /* Only a start on the same line is taken: CPAchecker resolves a target
+     through a statement starting on its line and fails without one, so a
+     condition on a later line, e.g. a do-while's, keeps its statement. */
+  const std::string src = read_line(loc.get_file().as_string(), line);
+  const size_t i = column - 1;
+  if (i >= src.size())
+    return loc;
+
+  const auto skip_ws = [&](size_t p) {
+    return p >= src.size() ? std::string::npos
+                           : src.find_first_not_of(" \t\r", p);
+  };
+  const auto is_ident = [&](size_t p) {
+    return p < src.size() &&
+           (std::isalnum(static_cast<unsigned char>(src[p])) || src[p] == '_');
+  };
+  // The first of @p stops at bracket depth 0 from @p p on.
+  const auto find_top = [&](size_t p, const char *stops) {
+    for (int depth = 0; p < src.size(); ++p)
+    {
+      if (depth == 0 && std::strchr(stops, src[p]))
+        return p;
+      if (std::strchr("([{", src[p]))
+        ++depth;
+      else if (std::strchr(")]}", src[p]) && --depth < 0)
+        break;
+    }
+    return std::string::npos;
+  };
+  const auto after_lparen = [&](size_t p) {
+    p = skip_ws(p);
+    return p != std::string::npos && src[p] == '(' ? skip_ws(p + 1)
+                                                   : std::string::npos;
+  };
+
+  size_t end = i;
+  while (is_ident(end))
+    ++end;
+  const std::string word = src.substr(i, end - i);
+
+  size_t p = std::string::npos;
+  if (word == "if" || word == "while" || word == "switch")
+    p = after_lparen(end);
+  else if (word == "for")
+  {
+    // A check at `for` belongs to the condition: the clauses around it carry
+    // their own locations.
+    p = find_top(after_lparen(end), ";");
+    p = p == std::string::npos ? p : skip_ws(p + 1);
+  }
+  else if (word == "return")
+    p = skip_ws(end);
+  else if (!word.empty())
+  {
+    // Two adjacent identifiers start a declaration (`T x = e;`, `T *x = e;`);
+    // its full expression is the initialiser. With several declarators the
+    // check's own one is unknown, so those keep the declaration.
+    size_t q = src.find_first_not_of(" \t*", end);
+    if (
+      q != end && is_ident(q) &&
+      !std::isdigit(static_cast<unsigned char>(src[q])))
+    {
+      const size_t eq = find_top(q, "=,;");
+      const size_t semi = eq == std::string::npos ? eq : find_top(eq + 1, ",;");
+      // `x * y == z;` is an expression statement.
+      if (
+        semi != std::string::npos && src[eq] == '=' && src[semi] == ';' &&
+        src[eq + 1] != '=' && !std::strchr("!<>", src[eq - 1]))
+        p = skip_ws(eq + 1);
+    }
+  }
+
+  if (p == std::string::npos || std::strchr(";)", src[p]))
+    return loc;
+
+  locationt start = loc;
+  start.set_column(p + 1);
+  return start;
 }
 
 static const std::regex regex_invariants(
@@ -1159,6 +1337,9 @@ bool find_nondet_in_expr(const expr2tc &expr)
 
 #include <util/base/prefix.h>
 #include <util/lang/c_types.h>
+#include <util/expr/type_byte_size.h>
+#include <algorithm>
+#include <optional>
 #include <boost/property_tree/detail/xml_parser_writer_settings.hpp>
 #include <cassert>
 #include <goto-symex/equation/slice.h>
@@ -1288,63 +1469,254 @@ static expr2tc zero_fill_aggregate(
   return value;
 }
 
+// Whether little_endian_bits lays out an object of `type` the way a C compiler
+// does: no complex or vector types, no long double (x87 extended, not the
+// IEEE format ESBMC models), and no nested arrays, whose model values
+// zero_fill_aggregate cannot complete.
+static bool has_known_byte_layout(const type2tc &type)
+{
+  auto all_known = [](const std::vector<type2tc> &members) {
+    return std::all_of(members.begin(), members.end(), has_known_byte_layout);
+  };
+
+  switch (type->type_id)
+  {
+  case type2t::bool_id:
+  case type2t::signedbv_id:
+  case type2t::unsignedbv_id:
+  case type2t::pointer_id:
+    return true;
+  case type2t::floatbv_id:
+  {
+    const unsigned width = type->get_width();
+    return width == 16 || width == 32 || width == 64;
+  }
+  case type2t::struct_id:
+    return all_known(to_struct_type(type).members);
+  case type2t::union_id:
+    return all_known(to_union_type(type).members);
+  case type2t::array_id:
+  {
+    const type2tc &element = to_array_type(type).subtype;
+    return !is_array_type(element) && has_known_byte_layout(element);
+  }
+  default:
+    return false;
+  }
+}
+
+// The bits of constant `value` in memory order on a little-endian target,
+// lowest address first; nullopt for a shape it cannot lay out. A pointer is
+// laid out as null: a test harness cannot reproduce an address.
+static std::optional<BigInt> little_endian_bits(const expr2tc &value)
+{
+  // The model may leave a member without a value, e.g. a pointer under
+  // Bitwuzla.
+  if (!value)
+    return std::nullopt;
+
+  if (is_pointer_type(value))
+    return BigInt(0);
+
+  if (is_constant_int2t(value))
+  {
+    BigInt bits = to_constant_int2t(value).value;
+    if (bits.is_negative())
+      bits += BigInt::power2(value->type->get_width());
+    return bits;
+  }
+
+  if (is_constant_bool2t(value))
+    return BigInt(to_constant_bool2t(value).value ? 1 : 0);
+
+  if (is_constant_floatbv2t(value))
+    return to_constant_floatbv2t(value).value.pack();
+
+  if (is_bitcast2t(value))
+    return little_endian_bits(to_bitcast2t(value).from);
+
+  if (is_constant_struct2t(value))
+  {
+    const struct_type2t &type = to_struct_type(value->type);
+    const auto &members = to_constant_struct2t(value).datatype_members;
+    BigInt bits = 0;
+    for (std::size_t i = 0; i < members.size(); ++i)
+    {
+      std::optional<BigInt> member = is_pointer_type(type.members[i])
+                                       ? BigInt(0)
+                                       : little_endian_bits(members[i]);
+      if (!member)
+        return std::nullopt;
+      bits +=
+        *member *
+        BigInt::power2(
+          member_offset_bits(value->type, type.member_names[i]).to_uint64());
+    }
+    return bits;
+  }
+
+  // The model gives every member, each a view of the same bits; the widest
+  // one covers them all.
+  if (is_constant_union2t(value))
+  {
+    const expr2tc *widest = nullptr;
+    for (const expr2tc &member : to_constant_union2t(value).datatype_members)
+      if (
+        member && (!widest || type_byte_size_bits(member->type) >
+                                type_byte_size_bits((*widest)->type)))
+        widest = &member;
+    return widest ? little_endian_bits(*widest) : std::nullopt;
+  }
+
+  if (is_constant_array2t(value))
+  {
+    const type2tc &element_type = to_array_type(value->type).subtype;
+    const auto &elements = to_constant_array2t(value).datatype_members;
+    const uint64_t width = type_byte_size_bits(element_type).to_uint64();
+    BigInt bits = 0;
+    for (std::size_t i = 0; i < elements.size(); ++i)
+    {
+      std::optional<BigInt> element = is_pointer_type(element_type)
+                                        ? BigInt(0)
+                                        : little_endian_bits(elements[i]);
+      if (!element)
+        return std::nullopt;
+      bits += *element * BigInt::power2(i * width);
+    }
+    return bits;
+  }
+
+  return std::nullopt;
+}
+
+// testcov's harness implements __VERIFIER_nondet_memory as one
+// __VERIFIER_nondet_uchar() per byte, while ESBMC's model may havoc the whole
+// object in one step, so the object's model value is fed to it bytewise.
+// Leaves `results` unchanged for an object it cannot lay out.
+static void collect_nondet_bytes(
+  const expr2tc &nondet,
+  smt_convt &smt_conv,
+  std::vector<collected_nondet_value> &results)
+{
+  if (
+    config.ansi_c.endianess != configt::ansi_ct::IS_LITTLE_ENDIAN ||
+    !has_known_byte_layout(nondet->type))
+    return;
+
+  BigInt size;
+  try
+  {
+    size = type_byte_size(nondet->type);
+  }
+  catch (const array_type2t::dyn_sized_array_excp &)
+  {
+    return;
+  }
+
+  std::optional<BigInt> bits = little_endian_bits(
+    zero_fill_aggregate(nondet->type, smt_conv.get(nondet), nondet, smt_conv));
+  if (!bits || !size.is_uint64())
+    return;
+
+  const std::string &name = to_symbol2t(nondet).thename.as_string();
+  for (uint64_t i = 0; i < size.to_uint64(); ++i)
+  {
+    collected_nondet_value val;
+    val.symbol_name = fmt::format("{}[{}]", name, i);
+    val.symbol_expr =
+      byte_extract2tc(get_uint8_type(), nondet, gen_ulong(i), false);
+    val.value_expr = constant_int2tc(get_uint8_type(), *bits % 256);
+    val.type = val.value_expr->type;
+    results.push_back(val);
+    *bits /= 256;
+  }
+}
+
 // Shared nondet collection logic (used by both TestComp and CTest)
-std::vector<collected_nondet_value>
-collect_nondet_values(const symex_target_equationt &target, smt_convt &smt_conv)
+std::vector<collected_nondet_value> collect_nondet_values(
+  const symex_target_equationt &target,
+  smt_convt &smt_conv,
+  bool harness_inputs_only)
 {
   std::vector<collected_nondet_value> results;
   std::unordered_set<std::string> seen_nondets;
 
   for (auto const &SSA_step : target.SSA_steps)
   {
-    if (SSA_step.ignore || !smt_conv.l_get(SSA_step.guard).is_true())
+    if (SSA_step.ignore)
       continue;
 
     if (SSA_step.is_assignment())
     {
-      auto nondet_expr = symex_slicet::get_nondet_symbol(SSA_step.rhs);
-      if (!nondet_expr || !is_symbol2t(nondet_expr))
+      std::vector<expr2tc> nondets =
+        symex_slicet::get_nondet_symbols(SSA_step.rhs);
+      if (nondets.empty())
         continue;
 
-      const symbol2t &sym = to_symbol2t(nondet_expr);
-      if (!has_prefix(sym.thename.as_string(), "nondet$"))
-        continue;
+      const std::string file_path =
+        SSA_step.source.pc->location.file().as_string();
+      const bool reached = smt_conv.l_get(SSA_step.guard).is_true();
 
-      // Skip system library nondets (stdin, stdout, stderr, etc.)
-      // These are from /usr/include/ or other system paths
-      std::string file_path = SSA_step.source.pc->location.file().as_string();
       if (
-        has_prefix(file_path, "/usr/include/") ||
-        has_prefix(file_path, "/lib/") || has_prefix(file_path, "/opt/"))
+        reached && harness_inputs_only &&
+        SSA_step.source.pc->location.function() == "__VERIFIER_nondet_memory" &&
+        file_operations::is_bundled_source(file_path))
       {
+        for (const expr2tc &nondet_expr : nondets)
+        {
+          const std::string name = to_symbol2t(nondet_expr).thename.as_string();
+          if (seen_nondets.insert(name).second)
+            collect_nondet_bytes(nondet_expr, smt_conv, results);
+        }
         continue;
       }
 
-      // Deduplicate by symbol name
-      if (seen_nondets.count(sym.thename.as_string()))
+      const bool is_input =
+        reached &&
+        // Nondet initialisation of an uninitialised local (inserted by
+        // mark_decl_as_non_det) is not a program input: the test harness
+        // only feeds values to __VERIFIER_nondet_*() calls, so emitting it
+        // would shift every following input.
+        !(harness_inputs_only &&
+          SSA_step.source.pc->location.get_bool("#decl_nondet")) &&
+        // System library nondets (stdin, stdout, stderr, etc.)
+        !has_prefix(file_path, "/usr/include/") &&
+        !has_prefix(file_path, "/lib/") && !has_prefix(file_path, "/opt/") &&
+        // Likewise nondets from ESBMC's own library and operational models,
+        // e.g. the uninitialised `errno` global in libc/library/stdlib.c.
+        !file_operations::is_bundled_source(file_path);
+
+      // A skipped nondet stays seen: it can reappear in a later struct
+      // literal, e.g. a model-set member of a struct the program then writes.
+      if (!is_input)
       {
+        for (const expr2tc &nondet_expr : nondets)
+          seen_nondets.insert(to_symbol2t(nondet_expr).thename.as_string());
         continue;
       }
 
-      seen_nondets.insert(sym.thename.as_string());
+      for (const expr2tc &nondet_expr : nondets)
+      {
+        const std::string name = to_symbol2t(nondet_expr).thename.as_string();
+        if (!seen_nondets.insert(name).second)
+          continue;
 
-      // Get concrete value, model-completing unconstrained aggregate
-      // components to zero so witnesses render with all fields present
-      // and consistent across the witness set. `nondet_expr` is the live
-      // root for re-querying any nested aggregate the backend left
-      // unexpanded (e.g. Z3 returns `{ .c=N, .i=member(sym).i }` for a
-      // struct whose nested `.i` field is itself a struct).
-      auto concrete_value = zero_fill_aggregate(
-        nondet_expr->type, smt_conv.get(nondet_expr), nondet_expr, smt_conv);
+        // Get concrete value, model-completing unconstrained aggregate
+        // components to zero so witnesses render with all fields present
+        // and consistent across the witness set. `nondet_expr` is the live
+        // root for re-querying any nested aggregate the backend left
+        // unexpanded (e.g. Z3 returns `{ .c=N, .i=member(sym).i }` for a
+        // struct whose nested `.i` field is itself a struct).
+        auto concrete_value = zero_fill_aggregate(
+          nondet_expr->type, smt_conv.get(nondet_expr), nondet_expr, smt_conv);
 
-      // Store the collected value
-      collected_nondet_value val;
-      val.symbol_name = sym.thename.as_string();
-      val.symbol_expr = nondet_expr;
-      val.value_expr = concrete_value;
-      val.type = concrete_value->type;
-
-      results.push_back(val);
+        collected_nondet_value val;
+        val.symbol_name = name;
+        val.symbol_expr = nondet_expr;
+        val.value_expr = concrete_value;
+        val.type = concrete_value->type;
+        results.push_back(val);
+      }
     }
   }
   return results;
@@ -1423,7 +1795,7 @@ void generate_testcase(
             << "\n";
 
   // Use the SHARED collection logic
-  auto collected_values = collect_nondet_values(target, smt_conv);
+  auto collected_values = collect_nondet_values(target, smt_conv, true);
 
   // Output collected values to XML
   for (const auto &val : collected_values)
@@ -1434,9 +1806,24 @@ void generate_testcase(
       test_case << fmt::format(
         "<input>{}</input>\n", to_constant_int2t(value_expr).value);
     else if (is_constant_floatbv2t(value_expr))
-      test_case << fmt::format(
-        "<input>{}</input>\n",
-        to_constant_floatbv2t(value_expr).value.to_ansi_c_string());
+    {
+      // Print enough digits to read back as the same value: fmt's shortest
+      // form for float and double, max_digits10 for other widths.
+      const ieee_floatt &fv = to_constant_floatbv2t(value_expr).value;
+      const bool finite = !fv.is_NaN() && !fv.is_infinity();
+      std::string text;
+      if (finite && fv.spec == ieee_float_spect::single_precision())
+        text = fmt::format("{}", fv.to_float());
+      else if (finite && fv.spec == ieee_float_spect::double_precision())
+        text = fmt::format("{}", fv.to_double());
+      else
+      {
+        format_spect spec;
+        spec.precision = ceil((fv.spec.f + 1) * log10(2.0));
+        text = fv.format(spec);
+      }
+      test_case << fmt::format("<input>{}</input>\n", text);
+    }
     else if (is_constant_bool2t(value_expr))
       test_case << fmt::format(
         "<input>{}</input>\n",

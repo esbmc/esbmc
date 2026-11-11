@@ -8,6 +8,7 @@
 #include <goto-symex/trace/goto_trace.h>
 #include <goto-symex/equation/symex_target_equation.h>
 #include <goto-symex/waypoint.h>
+#include <optional>
 #include <string>
 #include <regex>
 #include <vector>
@@ -140,6 +141,9 @@ public:
   typet witness_type;
   std::string verified_file;
   std::vector<waypoint> segments;
+  /// The earlier of two racing accesses; written beside the last waypoint
+  /// in a final segment of two targets, as a no-data-race witness requires.
+  std::optional<waypoint> racing_target;
   std::vector<invariant> invariants;
 
   yamlt(typet t)
@@ -192,6 +196,7 @@ void create_violation_yaml_emitter(
   YAML::Emitter &root);
 
 void create_waypoint(const waypoint &wp, YAML::Emitter &waypoint);
+void create_invariant(const invariant &inv, YAML::Emitter &out);
 
 /**
  * Create a edge node.
@@ -219,10 +224,8 @@ bool is_valid_witness_step(const namespacet &ns, const goto_trace_stept &step);
  * will return the lhs and rhs formated in a way expected
  * by the assumption field.
  */
-std::string get_formated_assignment(
-  const namespacet &ns,
-  const goto_trace_stept &step,
-  bool yaml);
+std::string
+get_formated_assignment(const namespacet &ns, const goto_trace_stept &step);
 
 /**
  * Clear an assumption a witness validator would reject: one naming an
@@ -234,12 +237,24 @@ bool is_valid_witness_expr(
   const namespacet &ns,
   const irep_container<expr2t> &exp);
 
+/// The ')' of the __VERIFIER_nondet_*() call starting at @p call, read from
+/// the source; nullopt when the text there is not such a call. A YAML
+/// function_return waypoint sits on it (#9881).
+std::optional<locationt> nondet_call_rparen(const locationt &call);
+
 BigInt get_line_number(
   const std::string &verified_file,
   BigInt relative_line_number,
   optionst &options);
 
 int generate_sha256_hash_for_file(const char *path, std::string &output);
+
+/// A check raised in a controlling expression, a return expression or an
+/// initialiser carries the location of the enclosing statement or
+/// declaration. A target waypoint sits on the first character of the full
+/// expression instead (Witness-Format.md, "Target"), so read its start from
+/// the source; @p loc unchanged when it does not start such a construct.
+locationt full_expression_start(const locationt &loc);
 
 std::string
 get_invariant(std::string verified_file, BigInt line_number, optionst &options);
@@ -266,10 +281,12 @@ struct collected_nondet_value
   type2tc type;            // The type
 };
 
-/// Collect all nondet values from SSA
+/// Collect all nondet values from SSA. `harness_inputs_only` drops the
+/// nondet values of uninitialised locals, which a test harness cannot feed.
 std::vector<collected_nondet_value> collect_nondet_values(
   const symex_target_equationt &target,
-  smt_convt &smt_conv);
+  smt_convt &smt_conv,
+  bool harness_inputs_only = false);
 
 /// Build a blocking clause that excludes the given input tuple from future
 /// solver queries: NOT (sym_1 == val_1 AND sym_2 == val_2 AND ...).

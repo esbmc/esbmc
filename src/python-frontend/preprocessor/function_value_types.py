@@ -19,6 +19,9 @@ import ast
 import os
 
 _NUMERIC = {"bool", "int", "float", "num"}
+# Builtins and attributes that reach module names other than by name.
+_REFLECTIVE = {"globals", "locals", "vars", "eval", "exec", "__import__"}
+_REFLECTIVE_ATTRS = {"modules", "__dict__", "__globals__"}
 _NONDET_PREFIX = "nondet_"
 _SHOWN = {"num": "int or float", "function": "a function"}
 # Operators no str, list or set supports, so their result is a number.
@@ -87,10 +90,31 @@ def _own_nodes(node):
         stack.extend(ast.iter_child_nodes(current))
 
 
+def _bound_names(nodes):
+    """Every name that `nodes` read or bind, in any scope."""
+    names = set()
+    for top in nodes:
+        for node in ast.walk(top):
+            if isinstance(node, ast.Name):
+                names.add(node.id)
+            elif isinstance(node, ast.arg):
+                names.add(node.arg)
+            elif isinstance(node, ast.alias):
+                names.add(node.asname or node.name.split(".")[0])
+            elif isinstance(node, (ast.Global, ast.Nonlocal)):
+                names.update(node.names)
+            elif isinstance(getattr(node, "name", None), str):
+                names.add(node.name)
+            elif isinstance(getattr(node, "rest", None), str):
+                names.add(node.rest)
+    return names
+
+
 class _Analysis:
     """The groups of values that function values flow through in one module."""
 
-    def __init__(self, module, path):
+    def __init__(self, module, path, dicts=False):
+        self.dicts = dicts
         self.dir = os.path.dirname(os.path.abspath(path)) if path else ""
         self.path = path
         self.parent = {}
@@ -104,6 +128,7 @@ class _Analysis:
         self.kind_stack = set()
         self.seen_calls = set()
         self.from_imports = {}
+        self.star_names = {}
         self.loaded = {}
         self.module_paths = {}
         self.imported_calls = set()
@@ -155,10 +180,9 @@ class _Analysis:
                 self._collect_nested(sub, scope, path)
             elif path is None:
                 continue
-            elif isinstance(sub, ast.ImportFrom) and sub.level == 0 and self._local_module(
-                    sub.module or ""):
-                self.from_imports.setdefault(path, {}).update(
-                    (alias.asname or alias.name, (sub.module, alias.name)) for alias in sub.names)
+            elif isinstance(sub, ast.ImportFrom) and sub.level == 0 and self.local_module(sub.module
+                                                                                          or ""):
+                self.from_imports.setdefault(path, {}).update(self._from_import_bindings(sub))
             elif isinstance(sub, ast.Import):
                 imports = self.imports.setdefault(path, {})
                 for alias in sub.names:
@@ -177,7 +201,42 @@ class _Analysis:
                 self.methods.setdefault(member.name, []).append(member)
                 self._collect_scopes(member, scope, path)
 
-    def _local_module(self, dotted):
+    def _from_import_bindings(self, node):
+        """The (module, name) pair each name a `from` import of a local module binds."""
+        for alias in node.names:
+            if alias.name != "*":
+                yield alias.asname or alias.name, (node.module, alias.name)
+                continue
+            for name in self.star_imported_names(node) or ():
+                yield name, (node.module, name)
+
+    def star_imported_names(self, node):
+        """A superset of the names `from m import *` binds, or None when they are not
+        known: m is a package or not next to the program, may narrow them with
+        `__all__`, binds names through a string, or star-imports another module."""
+        path = self.local_module(node.module or "") if node.level == 0 else None
+        if path is None or os.path.basename(path) == "__init__.py":
+            return None
+        if path not in self.star_names:
+            self.star_names[path] = self._public_names(path)
+        return self.star_names[path]
+
+    @staticmethod
+    def _public_names(path):
+        try:
+            with open(path, "rb") as src:
+                tree = ast.parse(src.read())
+        except (OSError, SyntaxError, UnicodeDecodeError, ValueError):
+            return None
+        nodes = list(ast.walk(tree))
+        names = _bound_names([tree])
+        if "*" in names or names & (_REFLECTIVE | {"__all__", "setattr"}) or any(
+                isinstance(n, ast.Attribute) and n.attr in _REFLECTIVE_ATTRS
+                or isinstance(n, ast.Constant) and n.value == "__all__" for n in nodes):
+            return None
+        return {name for name in names if not name.startswith("_")}
+
+    def local_module(self, dotted):
         """The source file of a module next to the program, or None."""
         base = os.path.join(self.dir, *dotted.split("."))
         for path in (base + ".py", os.path.join(base, "__init__.py")):
@@ -188,7 +247,7 @@ class _Analysis:
     def _load(self, path):
         """The parsed module at `path`, with the values in its functions recorded."""
         if path not in self.loaded:
-            with open(path, encoding="utf-8") as src:
+            with open(path, "rb") as src:
                 tree = ast.parse(src.read())
             self.loaded[path] = tree
             self.module_paths[id(tree)] = path
@@ -197,7 +256,7 @@ class _Analysis:
             self._walk_scopes(known)
         return self.loaded[path]
 
-    def _module_def(self, path, name):
+    def module_def(self, path, name):
         """The function `name` defined at the top of the module at `path`, or None."""
         for stmt in self._load(path).body:
             if isinstance(stmt, ast.FunctionDef) and stmt.name == name:
@@ -210,7 +269,7 @@ class _Analysis:
         if name not in from_imports:
             return None
         module, original = from_imports[name]
-        return self._module_def(self._local_module(module), original)
+        return self.module_def(self.local_module(module), original)
 
     def _path_of(self, scope):
         while scope.parent is not None:
@@ -264,11 +323,8 @@ class _Analysis:
             orelse = self.value(expr.orelse, scope)
             self.union(body, orelse)
             return body or orelse
-        if isinstance(expr, (ast.List, ast.Tuple, ast.Set)):
-            key = ("elements", id(expr))
-            for elt in expr.elts:
-                self.union(key, self.value(elt, scope))
-            return key
+        if isinstance(expr, (ast.List, ast.Tuple, ast.Set, ast.Dict)):
+            return self.elements(expr, scope)
         if isinstance(expr, ast.Subscript):
             return self.value(expr.value, scope)
         if isinstance(expr, ast.Attribute):
@@ -276,6 +332,15 @@ class _Analysis:
         if isinstance(expr, ast.Call):
             return self.call(expr, scope)
         return None
+
+    def elements(self, expr, scope):
+        """The key of the values a list, tuple, set or (when asked for) dict literal holds."""
+        if isinstance(expr, ast.Dict) and not self.dicts:
+            return None
+        key = ("elements", id(expr))
+        for item in expr.values if isinstance(expr, ast.Dict) else expr.elts:
+            self.union(key, self.value(item, scope))
+        return key
 
     def imported_value(self, expr, scope):
         """The key of `module.function`, for a module imported by its path."""
@@ -287,11 +352,10 @@ class _Analysis:
         imports = self.imports.get(self._path_of(scope), {})
         if not isinstance(node, ast.Name) or node.id not in imports or not self.dir:
             return None
-        path = self._local_module(".".join(imports[node.id].split(".") +
-                                           list(reversed(dotted[1:]))))
+        path = self.local_module(".".join(imports[node.id].split(".") + list(reversed(dotted[1:]))))
         if path is None:
             return None
-        stmt = self._module_def(path, expr.attr)
+        stmt = self.module_def(path, expr.attr)
         if stmt is None:
             return None
         key = ("imported", path, stmt.name)
@@ -316,6 +380,7 @@ class _Analysis:
                     self.link_call(fn, expr, scope)
                     self.union(self.result_key(callees[0]), self.result_key(fn))
                 return self.result_key(callees[0])
+        self.link_stored(expr, scope)
         callee = self.value(expr.func, scope)
         args = [self.value(arg, scope) for arg in expr.args]
         keywords = {kw.arg: self.value(kw.value, scope) for kw in expr.keywords if kw.arg}
@@ -355,6 +420,13 @@ class _Analysis:
                 isinstance(node, ast.Name) and node.id == name and isinstance(node.ctx, ast.Store)
                 for node in _own_nodes(self.scopes[key[0]].node))
         return self.rebound[key]
+
+    def link_stored(self, call, scope):
+        """Merge what `d.update(x)` or `d.setdefault(k, x)` stores into the group of `d`."""
+        if self.dicts and isinstance(call.func,
+                                     ast.Attribute) and call.func.attr in ("update", "setdefault"):
+            for arg in call.args[-1:]:
+                self.union(self.value(call.func.value, scope), self.value(arg, scope))
 
     def link_call(self, fn, call, scope):
         args = [self.value(arg, scope) for arg in call.args]
@@ -398,6 +470,8 @@ class _Analysis:
     def _bind(self, target, value, value_node, scope):
         if isinstance(target, ast.Name):
             self.union(self.name_key(target.id, scope), value)
+        elif self.dicts and isinstance(target, ast.Subscript):
+            self.union(self.value(target.value, scope), value)
         elif isinstance(target, (ast.Tuple, ast.List)):
             if isinstance(value_node,
                           (ast.Tuple, ast.List)) and len(value_node.elts) == len(target.elts):
@@ -412,6 +486,8 @@ class _Analysis:
         """The type `fn` returns, or None when the source does not tell."""
         if id(fn) in self.kinds:
             return self.kinds[id(fn)]
+        if getattr(fn, "esbmc_kind", None) is not None:
+            return fn.esbmc_kind
         if fn.returns is not None:
             kind = ast.unparse(fn.returns)
         elif id(fn) in self.kind_stack:

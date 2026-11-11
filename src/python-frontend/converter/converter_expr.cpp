@@ -2,6 +2,7 @@
 #include <optional>
 #include <limits>
 #include <python-frontend/math/convert_float_literal.h>
+#include <python-frontend/function_call/builder.h>
 #include <python-frontend/function_call/expr.h>
 #include <python-frontend/json_utils.h>
 #include <python-frontend/python_annotation/python_annotation.h>
@@ -528,6 +529,42 @@ exprt python_converter::get_lambda_expr(
   return result;
 }
 
+exprt python_converter::get_lambda_body_expr(
+  const nlohmann::json &body,
+  code_blockt &block)
+{
+  code_blockt *saved_block = current_block;
+  const bool saved_lambda = converting_lambda_body_;
+  const bool saved_lazy = in_lazy_operand_;
+  const bool saved_own_block = in_operand_effects_block_;
+  const unsigned saved_conditional = conditional_expr_depth_;
+  current_block = &block;
+  converting_lambda_body_ = false;
+  in_lazy_operand_ = false;
+  in_operand_effects_block_ = false;
+  conditional_expr_depth_ = 0;
+  exprt result = get_expr(body);
+  // goto_convert does not lower a call that is a return's operand.
+  if (result.is_function_call() && !result.type().is_empty())
+  {
+    code_function_callt call = to_code_function_call(to_code(result));
+    symbolt &tmp =
+      create_tmp_symbol(body, "$lambda_call$", call.type(), exprt());
+    code_declt decl(symbol_expr(tmp));
+    decl.location() = get_location_from_decl(body);
+    block.copy_to_operands(decl);
+    call.lhs() = symbol_expr(tmp);
+    block.copy_to_operands(call);
+    result = symbol_expr(tmp);
+  }
+  current_block = saved_block;
+  converting_lambda_body_ = saved_lambda;
+  in_lazy_operand_ = saved_lazy;
+  in_operand_effects_block_ = saved_own_block;
+  conditional_expr_depth_ = saved_conditional;
+  return result;
+}
+
 exprt python_converter::get_named_expr(const nlohmann::json &element)
 {
   // PEP 572 walrus `(target := value)`: assign value to target, then evaluate
@@ -672,22 +709,22 @@ constant_keeps_type(const nlohmann::json &value, const std::string &type)
          (type == "str" && constant.is_string());
 }
 
-/// Whether a name has a given annotated type where it is read.
-using name_type_test =
-  std::function<bool(const std::string &, const std::string &)>;
+/// Whether an operand, a name or a call, has a given annotated type.
+using operand_type_test =
+  std::function<bool(const nlohmann::json &, const std::string &)>;
 
 /// Whether \p aug adds to a global of annotated type \p type a constant, or
-/// a name \p has_type gives that type, that leaves it that type.
+/// a name or call \p has_type gives that type, that leaves it that type.
 static bool keeps_type(
   const nlohmann::json &aug,
   const std::string &type,
-  const name_type_test &has_type)
+  const operand_type_test &has_type)
 {
   const nlohmann::json &value = aug["value"];
   if (aug["op"].value("_type", "") == "Div")
     return false;
-  return value["_type"] == "Name"
-           ? has_type(value["id"].get<std::string>(), type)
+  return value["_type"] == "Name" || value["_type"] == "Call"
+           ? has_type(value, type)
            : constant_keeps_type(value, type);
 }
 
@@ -696,7 +733,7 @@ static std::size_t count_type_keeping_aug_assigns(
   const nlohmann::json &node,
   const std::string &name,
   const std::string &type,
-  const name_type_test &has_type)
+  const operand_type_test &has_type)
 {
   std::size_t n = node.is_object() && node.value("_type", "") == "AugAssign" &&
                   node["target"].value("id", "") == name &&
@@ -715,7 +752,7 @@ static std::size_t count_type_keeping_aug_assigns(
 static const nlohmann::json *sole_module_binding(
   const nlohmann::json &module,
   const std::string &name,
-  const name_type_test &has_type)
+  const operand_type_test &has_type)
 {
   const nlohmann::json *binding = find_module_binding(module["body"], name);
   if (!binding)
@@ -731,16 +768,33 @@ static const nlohmann::json *sole_module_binding(
   return binding;
 }
 
-/// Whether the module global \p name is already bound with annotated type
-/// \p type.
-bool python_converter::global_has_type(
-  const std::string &name,
+/// Whether \p operand is a module global already bound with annotated type
+/// \p type, or a call to a module function already defined to return it, or
+/// through a module global holding such functions.
+bool python_converter::operand_has_type(
+  const nlohmann::json &operand,
   const std::string &type) const
 {
-  symbol_id sid(current_python_file, "", "");
-  sid.set_object(name);
-  const symbolt *symbol = symbol_table_.find_symbol(sid.to_string());
-  return symbol && symbol->get_type() == type_handler_.get_typet(type);
+  const bool is_call = operand["_type"] == "Call";
+  const std::string id = (is_call ? operand["func"] : operand).value("id", "");
+  symbol_id sid(current_python_file, "", is_call ? id : "");
+  const symbolt *symbol =
+    is_call ? symbol_table_.find_symbol(sid.to_string()) : nullptr;
+  if (!symbol)
+  {
+    sid.set_function("");
+    sid.set_object(id);
+    symbol = symbol_table_.find_symbol(sid.to_string());
+  }
+  if (!symbol)
+    return false;
+  const typet &expected = type_handler_.get_typet(type);
+  if (!is_call)
+    return symbol->get_type() == expected;
+  typet callee = symbol->get_type();
+  if (callee.is_pointer())
+    callee = callee.subtype();
+  return callee.is_code() && to_code_type(callee).return_type() == expected;
 }
 
 /// The module global \p sid names for a read in an enclosing scope. Code
@@ -755,8 +809,8 @@ symbolt *python_converter::find_global_symbol(const symbol_id &sid)
   const nlohmann::json *binding = sole_module_binding(
     *ast_json,
     sid.get_object(),
-    [this](const std::string &name, const std::string &type) {
-      return global_has_type(name, type);
+    [this](const nlohmann::json &operand, const std::string &type) {
+      return operand_has_type(operand, type);
     });
   if (!binding || binding->value("_type", "") != "AnnAssign")
     return nullptr;
@@ -782,7 +836,7 @@ exprt python_converter::module_function_expr(
   if (symbol && symbol->get_type().is_code())
     return symbol_expr(*symbol);
   const nlohmann::json *binding = sole_module_binding(
-    *ast_json, name, [](const std::string &, const std::string &) {
+    *ast_json, name, [](const nlohmann::json &, const std::string &) {
       return false;
     });
   if (!binding || binding->value("_type", "") != "FunctionDef")
@@ -801,7 +855,7 @@ typet python_converter::forward_function_return_type(
 {
   const auto flag = unbound_global_flags_.find(fn.identifier().as_string());
   const nlohmann::json *def = sole_module_binding(
-    *ast_json, name, [](const std::string &, const std::string &) {
+    *ast_json, name, [](const nlohmann::json &, const std::string &) {
       return false;
     });
   if (flag == unbound_global_flags_.end() || !def)
@@ -977,6 +1031,12 @@ std::optional<exprt> python_converter::try_get_numpy_pointer_view_shape_attr(
   const symbolt &symbol,
   const std::string &attr_name)
 {
+  const nlohmann::json name = {
+    {"_type", "Name"}, {"id", symbol.name.as_string()}};
+  if (
+    std::optional<exprt> storage = try_get_numpy_storage_attr(name, attr_name))
+    return storage;
+
   auto it = numpy_pointer_view_info_.find(symbol.id.as_string());
   if (it == numpy_pointer_view_info_.end() && !symbol.name.empty())
     it = numpy_pointer_view_info_.find(symbol.name.as_string());
@@ -1167,6 +1227,45 @@ exprt python_converter::numpy_param_as_array(const exprt &operand) const
   return dereference_exprt(typecast_exprt(operand, pointer), pointer);
 }
 
+// An arithmetic operand naming a view reads its elements: the view's pointer
+// would otherwise add as an address.
+void python_converter::numpy_view_operands_as_arrays(
+  const nlohmann::json &element,
+  const nlohmann::json &left,
+  const nlohmann::json &right,
+  exprt &lhs,
+  exprt &rhs)
+{
+  const std::string kind = element.value("_type", "");
+  if (kind != "BinOp" && kind != "AugAssign")
+    return;
+  lhs = numpy_view_operand_as_array(left, lhs);
+  rhs = numpy_view_operand_as_array(right, rhs);
+}
+
+exprt python_converter::numpy_view_operand_as_array(
+  const nlohmann::json &node,
+  const exprt &operand)
+{
+  if (
+    node.value("_type", "") != "Name" || !operand.is_symbol() ||
+    !operand.type().is_pointer() ||
+    numpy_pointer_view_info_.count(operand.identifier().as_string()) == 0)
+    return operand;
+  const auto materialized = build_numpy_descriptor_materialized_elements(
+    node, "TypeError: arithmetic over this numpy view is not supported");
+  if (!materialized || materialized->second.empty())
+    return operand;
+  const bool was_fresh_copy = numpy_result_is_fresh_copy_;
+  const exprt array = materialize_numpy_elements(
+    node,
+    materialized->first,
+    materialized->second,
+    materialized->second.front().type());
+  numpy_result_is_fresh_copy_ = was_fresh_copy;
+  return array;
+}
+
 std::optional<std::vector<std::size_t>>
 python_converter::numpy_shape_from_indexed_decl(const std::string &name) const
 {
@@ -1305,7 +1404,7 @@ std::optional<exprt> python_converter::try_get_numpy_value_shape_attr(
   const std::string &attr_name)
 {
   if (attr_name != "shape" && attr_name != "ndim" && attr_name != "size")
-    return std::nullopt;
+    return try_get_numpy_storage_attr(base_node, attr_name);
 
   if (
     std::optional<exprt> tracked_attr =
@@ -1614,10 +1713,82 @@ std::optional<exprt> python_converter::try_dispatch_dict_subscript(
     check_type = !expected_type.is_empty();
   }
 
+  // A dict returned by a user function's call, as in f()[k], has no name to
+  // type its value by either; the handler's str default would misread any
+  // other value.
+  if (std::optional<typet> returned = call_dict_value_type(base))
+  {
+    if (returned->is_empty())
+      throw std::runtime_error(
+        "subscripting a dict returned by a call is not supported unless its "
+        "value type is known; bind the result to a name first");
+    expected_type = *returned;
+    check_type = !type_handler_.type_to_string(expected_type).empty();
+  }
+  else if (is_call_bound_dict(base))
+    check_type = !type_handler_.type_to_string(expected_type).empty();
+
   // Pass the expected type to the dict handler
   // If empty, the handler will use its default heuristics
   return dict_handler_->handle_dict_subscript(
     array, element["slice"], expected_type, check_type);
+}
+
+/// Whether @p name is bound to the dict a user function's call returns, as in
+/// `r = f()`. A read of `r[k]` is typed by the callee's dict, whose value a
+/// later store, in the callee or here, may have given another type.
+bool python_converter::is_call_bound_dict(const nlohmann::json &name)
+{
+  if (name.value("_type", "") != "Name")
+    return false;
+  const nlohmann::json decl = json_utils::find_var_decl(
+    name["id"].get<std::string>(), current_func_name_, *ast_json);
+  return decl.contains("value") && decl["value"].is_object() &&
+         call_dict_value_type(decl["value"]);
+}
+
+/// The value type of the dict that @p call returns: the callee's `dict[K, V]`
+/// annotation, else the one scalar or str value type recorded for the dict
+/// its return statement names. Empty when neither is known, and nullopt when
+/// @p call does not call a module-level function.
+std::optional<typet>
+python_converter::call_dict_value_type(const nlohmann::json &call)
+{
+  if (call.value("_type", "") != "Call")
+    return std::nullopt;
+  const nlohmann::json &func = call["func"];
+  if (func.value("_type", "") != "Name")
+    return std::nullopt;
+  const std::string name = func["id"].get<std::string>();
+
+  const nlohmann::json func_def =
+    json_utils::try_find_function((*ast_json)["body"], name);
+  if (func_def.empty())
+    return std::nullopt;
+  if (func_def.contains("returns") && !func_def["returns"].is_null())
+  {
+    const typet annotated =
+      dict_handler_->get_dict_value_type_from_annotation(func_def["returns"]);
+    if (!annotated.is_nil() && !annotated.is_empty())
+      return annotated;
+  }
+
+  // A callee defined after this call has not been converted yet.
+  const std::string func_id = symbol_id(python_file(), "", name).to_string();
+  if (!symbol_table_.find_symbol(func_id))
+    return empty_typet();
+  const exprt ret = get_return_from_func(func_id.c_str());
+  if (ret.is_nil() || ret.operands().empty() || !ret.op0().is_symbol())
+    return empty_typet();
+  const std::string &vals_id = python_dict_handler::get_internal_list_id(
+    ret.op0().identifier().as_string(), false);
+  if (vals_id.empty())
+    return empty_typet();
+  const typet uniform = element_type_registry_.uniform_element_type(
+    vals_id, type_slot::dict_value_types);
+  if (uniform == typet() || type_handler_.type_to_string(uniform).empty())
+    return empty_typet();
+  return uniform;
 }
 
 std::optional<exprt> python_converter::try_dispatch_multidim_tuple_axes(
@@ -2006,6 +2177,68 @@ exprt python_converter::materialize_numpy_arithmetic(
   return symbol_expr(tmp);
 }
 
+/// `tagged[i]`: the character of the str the tag holds, with CPython's
+/// negative index and IndexError. Where the tag holds anything else CPython
+/// raises TypeError, reported as an unsupported property, which the SV-COMP
+/// wrapper reads as unknown. A slice, or a place where no guard can run
+/// ahead of the statement, stays refused.
+std::optional<exprt> python_converter::try_index_tagged_str(
+  exprt array,
+  const nlohmann::json &element)
+{
+  if (!type_handler_.is_tagged_scalar_type(array.type()))
+    return std::nullopt;
+  if (
+    !can_emit_runtime_guard() || element["slice"].value("_type", "") == "Slice")
+    throw std::runtime_error(
+      "slicing a dynamically-typed variable, or indexing it where it may not "
+      "run, is not yet supported");
+
+  const locationt location = get_location_from_decl(element);
+  array =
+    tuple_handler_->prepare_rhs_for_unpacking(element, array, *current_block);
+  code_assertt check(
+    dynamic_type_handler_.build_isinstance_check(array, "str", false));
+  check.location() = location;
+  check.location().user_provided(true);
+  check.location().comment(
+    "Unsupported: indexing a dynamically-typed value that is not a str");
+  current_block->copy_to_operands(check);
+
+  const typet int_type = type_handler::python_int_typet();
+  const exprt zero = from_integer(0, int_type);
+  const exprt index =
+    python_expr::build_typecast(get_expr(element["slice"]), int_type);
+  const exprt length = python_expr::build_sub(
+    python_expr::build_typecast(
+      python_expr::build_member(array, "size", size_type()), int_type),
+    from_integer(1, int_type),
+    int_type);
+  const exprt position = python_expr::build_if(
+    python_expr::build_less_than(index, zero),
+    python_expr::build_add(index, length, int_type),
+    index);
+  emit_guarded_raise(
+    python_expr::build_or(
+      python_expr::build_less_than(position, zero),
+      python_expr::build_greater_equal(position, length)),
+    "IndexError",
+    "string index out of range",
+    location);
+
+  const typet chars = pointer_typet(char_type());
+  typet element_type = char_type();
+  type_utils::set_cpp_type(element_type, "char");
+  return python_expr::build_dereference(
+    python_expr::build_add(
+      python_expr::build_typecast(
+        python_expr::build_member(array, "value", pointer_typet(empty_typet())),
+        chars),
+      position,
+      chars),
+    element_type);
+}
+
 exprt python_converter::handle_subscript_expr(const nlohmann::json &element)
 {
   // a.flat[i] (read): see try_build_flat_index_read's own comment for why
@@ -2029,6 +2262,8 @@ exprt python_converter::handle_subscript_expr(const nlohmann::json &element)
   if (std::optional<exprt> early = resolve_subscript_base(element, array))
     return *early;
   array = materialize_numpy_arithmetic(element["value"], array);
+  if (std::optional<exprt> tagged = try_index_tagged_str(array, element))
+    return *tagged;
 
   // Indexing char(*)[0] would select a whole array per step.
   if (type_utils::is_optional_str_pointer(array.type()))
@@ -2215,6 +2450,22 @@ void python_converter::reject_attribute_added_on_some_paths(
 // referenced from synthesized source; and reads through an np.nditer (an
 // attribute or operand of the iterator, a name bound to what it yields).
 std::optional<exprt>
+python_converter::try_numpy_attribute_expr(const nlohmann::json &element)
+{
+  const nlohmann::json &value = element["value"];
+  const std::string kind = value.value("_type", "");
+  if (kind == "Attribute")
+    return try_get_numpy_storage_attr(
+      value, element["attr"].get<std::string>());
+  if (kind != "BinOp" || !is_numpy_valued_node(value))
+    return std::nullopt;
+  // The operation runs once, and its array answers like any other.
+  nlohmann::json attribute = element;
+  attribute["value"] = bind_to_fresh_name(value, "ESBMC_numpy_operand_");
+  return get_expr(attribute);
+}
+
+std::optional<exprt>
 python_converter::get_intercepted_expr(const nlohmann::json &element)
 {
   if (!element.is_object())
@@ -2224,6 +2475,9 @@ python_converter::get_intercepted_expr(const nlohmann::json &element)
     return get_named_expr(element);
   if (type == "EsbmcExpr")
     return prebuilt_exprs_.at(element["slot"].get<std::size_t>());
+  if (type == "Attribute")
+    if (auto attribute = try_numpy_attribute_expr(element))
+      return attribute;
   if (numpy_nditers_.empty())
     return std::nullopt;
   numpy_nditer nditer(*this);
@@ -2335,6 +2589,15 @@ exprt python_converter::get_module_member(
   symbolt *symbol = find_symbol(module_sid.to_string());
   if (!symbol)
   {
+    // `dt = np.int8` binds a dtype; only its spelling is ever read, by
+    // extract_numpy_dtype_name through the binding.
+    if (
+      is_imported_numpy_module_alias(*ast_json, var_name) &&
+      numpy_dtype_from_name(attr_name))
+    {
+      nlohmann::json spelling = {{"_type", "Constant"}, {"value", attr_name}};
+      return get_expr(spelling);
+    }
     throw std::runtime_error(
       fmt::format(
         "Module member '{}' not found in module '{}'", attr_name, var_name));
@@ -2345,6 +2608,8 @@ exprt python_converter::get_module_member(
 exprt python_converter::get_expr(const nlohmann::json &element)
 {
   get_expr_depth_guard depth_guard(*this);
+
+  reject_subscript_of_unmodelled_method(element);
 
   // Walrus operator `(target := value)` — assign as a side effect, evaluate to
   // the bound value. Handled before the type switch since NamedExpr is not in
@@ -3017,7 +3282,9 @@ exprt python_converter::get_expr(const nlohmann::json &element)
                                    : symbol->get_type();
 
       // Handle union types
-      if (symbol_type.is_array() && symbol_type.subtype() == char_type())
+      if (
+        symbol_type.is_array() &&
+        type_utils::is_char_storage(symbol_type.subtype()))
       {
         // For union types, we need to infer which concrete type to use.
         // Strategy: Look for isinstance checks in the current scope to
@@ -3243,7 +3510,9 @@ exprt python_converter::get_expr(const nlohmann::json &element)
           // __init__).  This happens when the object comes from a list element
           // or other expression that bypasses instance_has_attr registration.
           // Fall back to the struct member if the component exists.
-          if (class_type.has_component(attr_name))
+          if (
+            instance_may_have_attr(
+              class_type, *symbol, var_name, obj_type_name, attr_name))
           {
             const typet &attr_type = class_type.get_component(attr_name).type();
             expr = build_member_expr_from_class(attr_type);
@@ -3491,8 +3760,64 @@ python_converter::scope_numeric_bindings(
                                  : (*ast_json)["body"];
   std::vector<dynamic_type_detail::numeric_bindingt> bindings;
   dynamic_type_detail::collect_numeric_bindings(
-    body, name, false, before, include_later, bindings);
+    body,
+    name,
+    false,
+    before,
+    include_later,
+    bindings,
+    [this](const nlohmann::json &call) { return call_number_kind(call); });
   return bindings;
+}
+
+/// "int" or "float" for a call of a function, by name or through a module,
+/// whose converted definition returns that kind of number; else "". The
+/// annotator leaves such a call untyped when the function is imported (#9936).
+std::string python_converter::call_number_kind(const nlohmann::json &call) const
+{
+  const nlohmann::json &func = call["func"];
+  const std::string kind = func.value("_type", "");
+  const bool module_function =
+    kind == "Attribute" && func["value"].value("_type", "") == "Name" &&
+    !get_imported_module_path(func["value"].value("id", "")).empty();
+  if (
+    !module_function &&
+    (kind != "Name" || is_class(func.value("id", ""), *ast_json)))
+    return "";
+
+  const std::string key = current_python_file + ":" +
+                          std::to_string(call.value("lineno", 0)) + ":" +
+                          std::to_string(call.value("col_offset", 0));
+  if (
+    const auto known = call_number_kinds_.find(key);
+    known != call_number_kinds_.end())
+    return known->second;
+
+  symbol_id callee;
+  try
+  {
+    callee = function_call_builder(const_cast<python_converter &>(*this), call)
+               .build_function_id();
+  }
+  catch (const std::exception &)
+  {
+    return "";
+  }
+  const symbolt *callee_symbol = find_symbol(callee.to_string());
+  if (!callee_symbol)
+    callee_symbol = find_imported_symbol(callee.to_string());
+  if (!callee_symbol || !callee_symbol->get_type().is_code())
+    return "";
+  const typet &returned = to_code_type(callee_symbol->get_type()).return_type();
+  std::string number;
+  if (returned.is_floatbv())
+    number = "float";
+  else if (type_utils::is_integer_type(returned) || returned.is_bool())
+    number = "int";
+  // A function converted later may not be known yet, so only answers stick.
+  if (!number.empty())
+    call_number_kinds_[key] = number;
+  return number;
 }
 
 /// Whether `value` survives the C type `type` unchanged: a float is exact

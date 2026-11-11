@@ -1,0 +1,4 @@
+CORE
+main.py
+
+^ERROR: unsupported: a \*\* argument whose keys are not known statically$

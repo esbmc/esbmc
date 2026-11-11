@@ -1,4 +1,5 @@
 CORE
 main.py
 --incremental-bmc
-^ERROR: TypeError: numpy.linalg.eigvals requires a square 2D matrix
+^VERIFICATION FAILED$
+^  uncaught exception: LinAlgError$

@@ -4,18 +4,18 @@ import os
 
 
 def f(p: str) -> bool:
-    return not os.path.islink(p)
+    return not os.path.ismount(p)
 
 
 def g(p: str) -> int:
-    if os.path.islink(p):
+    if os.path.ismount(p):
         return 1
     return 0
 
 
 def h(p: str) -> int:
     n = 0
-    while os.path.islink(p):
+    while os.path.ismount(p):
         n += 1
         if n > 1:
             break

@@ -688,6 +688,12 @@ private:
     goto_programt &replacement,
     const locationt &call_location) const;
 
+  /// Only ensures reads a call-site snapshot; one a loop_invariant alone uses
+  /// is never read, so its extent is not resolved and cannot abort (#7627).
+  static void drop_unread_region_snapshots(
+    std::vector<old_snapshot_t> &snapshots,
+    const expr2tc &ensures_clause);
+
   /// \brief Find the __ESBMC_is_fresh(ptr, size) call in \p function_body
   ///        whose ptr operand names \p target_param and which \p
   ///        requires_clause asserts unconditionally, and return its size

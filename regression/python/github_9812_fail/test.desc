@@ -1,0 +1,6 @@
+CORE
+main.py
+--unwind 8 --no-unwinding-assertions --multi-property
+^VERIFICATION FAILED$
+FAILED.*line +14 +assertion
+FAILED.*line +16 +assertion

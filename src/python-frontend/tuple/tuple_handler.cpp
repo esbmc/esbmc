@@ -128,6 +128,10 @@ exprt tuple_handler::get_tuple_expr(const nlohmann::json &element)
       return elem;
 
     const exprt value_elem = to_value_expr(elem, converter_.name_space());
+    // A discarded type probe must not leave the element evaluated ahead of
+    // the guards the real conversion emits.
+    if (converter_.in_type_probe())
+      return value_elem;
 
     symbolt &tmp = converter_.create_tmp_symbol(
       element, "$tuple_elem$", value_elem.type(), value_elem);
@@ -157,7 +161,7 @@ exprt tuple_handler::get_tuple_expr(const nlohmann::json &element)
     // pad_string_element). Symbolic char* strings are left as-is.
     if (
       (elem_expr.type().is_array() &&
-       elem_expr.type().subtype() == char_type()) ||
+       type_utils::is_char_storage(elem_expr.type().subtype())) ||
       type_utils::is_char_type(elem_expr.type()))
       elem_expr = pad_string_element(elem_expr);
 
@@ -269,6 +273,40 @@ exprt tuple_handler::copy_str_to_member(
   return dst;
 }
 
+static std::vector<size_t> non_padding_members(const typet &type)
+{
+  std::vector<size_t> idx;
+  const auto &components = to_struct_type(type).components();
+  for (size_t i = 0; i < components.size(); i++)
+    if (!components[i].get_is_padding())
+      idx.push_back(i);
+  return idx;
+}
+
+exprt tuple_handler::strip_padding(const exprt &value) const
+{
+  if (!is_tuple_type(value.type()))
+    return value;
+  const struct_typet &padded = to_struct_type(value.type());
+  const std::vector<size_t> idx = non_padding_members(padded);
+  if (idx.size() == padded.components().size())
+    return value;
+
+  std::vector<typet> element_types;
+  for (size_t i : idx)
+    element_types.push_back(padded.components()[i].type());
+  const struct_typet tuple_type = create_tuple_struct_type(element_types);
+  std::vector<expr2tc> members;
+  for (size_t i : idx)
+  {
+    expr2tc e2;
+    migrate_expr(get_tuple_element(value, padded, i), e2);
+    members.push_back(std::move(e2));
+  }
+  return migrate_expr_back(
+    constant_struct2tc(migrate_type(tuple_type), members));
+}
+
 /// Whether a tuple member of type @p from can be converted to @p to: a str
 /// pointer into a fixed-width str member, or one integer width to another.
 static bool is_coercible_member(const typet &from, const typet &to)
@@ -276,7 +314,8 @@ static bool is_coercible_member(const typet &from, const typet &to)
   if (from == to)
     return true;
   if (from.is_pointer() && to.is_array())
-    return from.subtype() == char_type() && to.subtype() == char_type() &&
+    return type_utils::is_char_storage(from.subtype()) &&
+           type_utils::is_char_storage(to.subtype()) &&
            to_array_type(to).size().is_constant();
   auto is_int = [](const typet &t) {
     return t.id() == "signedbv" || t.id() == "unsignedbv";
@@ -295,20 +334,27 @@ exprt tuple_handler::coerce_to_tuple_type(
     value.type() == target)
     return value;
 
+  // The target may already carry alignment padding (an Optional payload such
+  // as tuple[bool, float]) while the literal does not: match real members.
   const struct_typet &from = to_struct_type(value.type());
   const auto &to_members = to_struct_type(target).components();
-  if (from.components().size() != to_members.size())
+  const std::vector<size_t> from_idx = non_padding_members(from);
+  const std::vector<size_t> to_idx = non_padding_members(target);
+  if (from_idx.size() != to_idx.size())
     return value;
-  for (size_t i = 0; i < to_members.size(); i++)
-    if (!is_coercible_member(from.components()[i].type(), to_members[i].type()))
+  for (size_t k = 0; k < to_idx.size(); k++)
+    if (!is_coercible_member(
+          from.components()[from_idx[k]].type(), to_members[to_idx[k]].type()))
       return value;
 
   std::vector<expr2tc> members;
   members.reserve(to_members.size());
-  for (size_t i = 0; i < to_members.size(); i++)
+  for (size_t i = 0, k = 0; i < to_members.size(); i++)
   {
-    exprt elem = get_tuple_element(value, from, i);
     const typet &to_t = to_members[i].type();
+    exprt elem = to_members[i].get_is_padding()
+                   ? gen_zero(to_t)
+                   : get_tuple_element(value, from, from_idx[k++]);
     if (elem.type() != to_t && to_t.is_array())
       elem = copy_str_to_member(elem, to_array_type(to_t), loc, target_block);
     else if (elem.type() != to_t)
@@ -318,6 +364,26 @@ exprt tuple_handler::coerce_to_tuple_type(
     members.push_back(std::move(e2));
   }
   return migrate_expr_back(constant_struct2tc(migrate_type(target), members));
+}
+
+void tuple_handler::raise_index_error(
+  const nlohmann::json &element,
+  const exprt &cond)
+{
+  // A discarded type probe is followed by the real conversion, which emits
+  // the guard in its evaluation context; a hoisted raise there could be caught.
+  if (converter_.in_type_probe())
+    return;
+
+  codet raise("expression");
+  raise.copy_to_operands(converter_.get_exception_handler().gen_exception_raise(
+    "IndexError", "tuple index out of range"));
+  code_ifthenelset guard;
+  guard.cond() = cond;
+  guard.then_case() = raise;
+  if (element.contains("lineno"))
+    guard.location() = converter_.get_location_from_decl(element);
+  converter_.add_instruction(guard);
 }
 
 exprt tuple_handler::handle_tuple_subscript(
@@ -449,19 +515,15 @@ exprt tuple_handler::handle_tuple_subscript(
   {
     // Non-constant index: build an if-expression chain selecting the matching
     // element. Only supported when every tuple component has the same type,
-    // since the result must have a single type. Issues a runtime
-    // out-of-range assertion for indices outside [-N, N).
+    // since the result must have a single type. An index outside
+    // [-N, N) raises IndexError.
     const auto &components = tuple_type.components();
     if (components.empty())
     {
       // Every index is out of range, so the selected value is dead and only
-      // the assertion carries meaning. Iterating an empty tuple lowers to a
+      // the raise carries meaning. Iterating an empty tuple lowers to a
       // subscript under a `0 < 0` guard, which leaves it unreachable.
-      code_assertt bounds_assert{false_exprt()};
-      if (element.contains("lineno"))
-        bounds_assert.location() = converter_.get_location_from_decl(element);
-      bounds_assert.location().comment("Tuple index out of range");
-      converter_.add_instruction(bounds_assert);
+      raise_index_error(element, true_exprt());
       return gen_zero(int_type());
     }
 
@@ -489,14 +551,10 @@ exprt tuple_handler::handle_tuple_subscript(
     const expr2tc idxnorm2 = if2tc(
       idx2t, lessthan2tc(index2, zero2), add2tc(idx2t, index2, n2), index2);
 
-    // Bounds: 0 <= idx_norm < n
-    exprt in_bounds = migrate_expr_back(
-      and2tc(greaterthanequal2tc(idxnorm2, zero2), lessthan2tc(idxnorm2, n2)));
-    code_assertt bounds_assert(in_bounds);
-    if (element.contains("lineno"))
-      bounds_assert.location() = converter_.get_location_from_decl(element);
-    bounds_assert.location().comment("Tuple index out of range");
-    converter_.add_instruction(bounds_assert);
+    raise_index_error(
+      element,
+      migrate_expr_back(or2tc(
+        lessthan2tc(idxnorm2, zero2), greaterthanequal2tc(idxnorm2, n2))));
 
     // Build chain: i==n-1 ? element_(n-1) : (... ? ... : element_0)
     // V.3: build the index select chain in IREP2. This path is gated to
@@ -712,19 +770,36 @@ void tuple_handler::handle_tuple_unpacking(
     std::string member_name = "element_" + std::to_string(i);
     const typet &member_type = tuple_type.components()[i].type();
     exprt member_access = build_member(rhs, member_name, member_type);
-    const exprt target = build_symbol(
-      unpack_target_symbol(targets[t], unpack_target_type(rhs, member_type)));
+    const exprt target = build_symbol(unpack_target_symbol(
+      targets[t], unpack_target_type(rhs, member_type), target_block));
     assign_unpacked_element(
       target,
       member_access,
       converter_.get_location_from_decl(ast_node),
       target_block);
     // A list taken out of a tuple literal keeps its element types (#8928).
-    if (rhs.id() == "struct" && rhs.operands()[i].is_symbol())
+    const exprt source = unpacked_list_source(rhs, i);
+    if (source.is_symbol())
       converter_.get_element_type_registry().assign_from(
-        rhs.operands()[i].identifier().as_string(),
-        target.identifier().as_string());
+        source.identifier().as_string(), target.identifier().as_string());
   }
+}
+
+// The list a tuple's element @p i was built from: the literal's own operand,
+// or for a tuple variable bound once to a literal and read once, the operand of
+// that literal.
+exprt tuple_handler::unpacked_list_source(const exprt &rhs, size_t i) const
+{
+  if (rhs.id() == "struct")
+    return rhs.operands()[i];
+  if (!rhs.is_symbol() || !converter_.unpack_record_in_force())
+    return nil_exprt();
+  const symbolt *tuple = converter_.find_symbol(rhs.identifier().as_string());
+  if (
+    !tuple || tuple->get_value().id() != "struct" ||
+    tuple->get_value().operands().size() <= i)
+    return nil_exprt();
+  return tuple->get_value().operands()[i];
 }
 
 // A str element of a tuple held in a list or dict (reached through a
@@ -799,7 +874,8 @@ size_t tuple_handler::starred_target_index(const nlohmann::json &targets) const
 
 symbolt &tuple_handler::unpack_target_symbol(
   const nlohmann::json &name_node,
-  const typet &type)
+  const typet &type,
+  codet &target_block)
 {
   symbol_id var_sid = converter_.create_symbol_id();
   var_sid.set_object(name_node["id"].get<std::string>());
@@ -817,7 +893,16 @@ symbolt &tuple_handler::unpack_target_symbol(
   new_symbol.lvalue = true;
   new_symbol.file_local = true;
   new_symbol.is_extern = false;
-  return *converter_.symbol_table().move_symbol_to_context(new_symbol);
+  symbolt &added =
+    *converter_.symbol_table().move_symbol_to_context(new_symbol);
+  // Without a declaration a local is shared by every frame of a recursive call
+  if (!converter_.get_current_func_name().empty())
+  {
+    code_declt decl(build_symbol(added));
+    decl.location() = loc;
+    target_block.copy_to_operands(decl);
+  }
+  return added;
 }
 
 void tuple_handler::assign_starred_elements(
@@ -851,8 +936,8 @@ void tuple_handler::assign_starred_elements(
   for (const exprt &op : list_block.operands())
     target_block.copy_to_operands(op);
 
-  const exprt star =
-    build_symbol(unpack_target_symbol(star_value, list_expr.type()));
+  const exprt star = build_symbol(
+    unpack_target_symbol(star_value, list_expr.type(), target_block));
   // Retyping a symbol in place would corrupt its earlier uses
   if (star.type() != list_expr.type())
     throw std::runtime_error(
@@ -895,7 +980,9 @@ typet tuple_handler::tuple_member_type_from_annotation(
     if (id == "bytes")
       throw std::runtime_error(
         "tuple[bytes, ...] annotations are not supported");
-    return type_handler_.get_typet(id);
+    // A tuple stores an instance by reference, as get_tuple_expr builds it.
+    const typet t = type_handler_.get_typet(id);
+    return converter_.is_heap_migrated_class_type(t) ? gen_pointer_type(t) : t;
   }
   // get_typet(json) unwraps list[int] to the bare name `list`, which it
   // then looks up as a variable and types void (#8511).

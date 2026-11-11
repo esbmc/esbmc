@@ -15,6 +15,7 @@
 #include <util/base/threeval.h>
 #include <vector>
 
+class goto_functionst;
 class smt_convt;
 
 class symex_target_equationt : public symex_targett
@@ -342,6 +343,7 @@ public:
     smt_convt &smt_conv,
     assertion_modet mode = assertion_modet::Violated) override;
   void flush_latest_instructions();
+  void pre_register_addresses(const goto_functionst &goto_functions);
 
   tvt ask_solver_question(const expr2tc &question);
 

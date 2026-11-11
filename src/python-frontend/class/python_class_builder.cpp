@@ -87,7 +87,7 @@ bool python_class_builder::is_unmodelled_base(const std::string &base) const
   return false;
 }
 
-bool python_class_builder::get_bases(struct_typet &st)
+bool python_class_builder::get_bases(struct_typet &st, codet &out)
 {
   bool has_ud = false;
   auto &ids = st.add("bases").get_sub();
@@ -105,6 +105,13 @@ bool python_class_builder::get_bases(struct_typet &st)
 
     has_ud = true;
     auto *bsym = conv_.symbol_table_.find_symbol("tag-" + base);
+    if (!bsym && !is_unmodelled_base(bfull))
+    {
+      // This class was reached before its base was built, through a type that
+      // refers to it (#9634).
+      conv_.process_forward_reference({{"_type", "Name"}, {"id", base}}, out);
+      bsym = conv_.symbol_table_.find_symbol("tag-" + base);
+    }
     if (!bsym && is_unmodelled_base(bfull))
     {
       conv_.unmodelled_base_classes_.emplace(pc_.name(), bfull);
@@ -145,6 +152,76 @@ static void adopt_symbol_components(const symbolt &sym, struct_typet &st)
       st.components().push_back(c);
 }
 
+/// get_members converts only method definitions and annotated assignments; any
+/// other class-body statement is dropped (a nested class is converted on its
+/// own). Dropping is sound only for one that cannot raise or have a side effect
+/// (#10222).
+/// An unconverted `async def` evaluates its decorators, defaults and
+/// annotations where it stands, so only one where those cannot raise is inert.
+static bool is_inert_async_def(const nlohmann::json &def)
+{
+  const auto is_plain = [](const nlohmann::json &node, const char *key) {
+    if (!node.contains(key) || node[key].is_null())
+      return true;
+    const std::string kind = node[key].value("_type", "");
+    return kind == "Name" || kind == "Constant";
+  };
+  for (const auto &decorator : def["decorator_list"])
+  {
+    const std::string name = decorator.value("id", "");
+    if (name != "staticmethod" && name != "classmethod")
+      return false;
+  }
+  const nlohmann::json &args = def["args"];
+  if (!args["defaults"].empty() || !is_plain(def, "returns"))
+    return false;
+  for (const auto &d : args["kw_defaults"])
+    if (!d.is_null())
+      return false;
+  for (const char *group : {"posonlyargs", "args", "kwonlyargs"})
+    for (const auto &arg : args.value(group, nlohmann::json::array()))
+      if (!is_plain(arg, "annotation"))
+        return false;
+  return true;
+}
+
+static bool is_droppable_class_statement(const nlohmann::json &stmt)
+{
+  const auto is_constant = [](const nlohmann::json &e) {
+    return e.is_object() && e.value("_type", "") == "Constant";
+  };
+  const std::string kind = stmt.value("_type", "");
+  if (kind == "Pass" || kind == "ClassDef")
+    return true;
+  if (kind == "AsyncFunctionDef")
+    return is_inert_async_def(stmt);
+  if (kind == "Expr")
+    return is_constant(stmt["value"]);
+  if (kind != "Assign" || !is_constant(stmt["value"]))
+    return false;
+  for (const auto &target : stmt["targets"])
+    if (target.value("_type", "") != "Name")
+      return false;
+  return true;
+}
+
+static void refuse_dropped_statements(
+  const python_converter &conv,
+  const nlohmann::json &class_node)
+{
+  for (const auto &n : class_node.at("body"))
+  {
+    const std::string kind = n.value("_type", "");
+    if (
+      kind != "FunctionDef" && kind != "AnnAssign" &&
+      !is_droppable_class_statement(n))
+      throw std::runtime_error(
+        conv.get_location_from_decl(n).as_string() + ": the body of class '" +
+        class_node.value("name", "") + "' has a statement of kind " + kind +
+        ", which is not supported");
+  }
+}
+
 void python_class_builder::get_members(
   struct_typet &st,
   codet &out,
@@ -161,6 +238,7 @@ void python_class_builder::get_members(
     conv_.current_class_name_ = class_name;
   }
 
+  refuse_dropped_statements(conv_, cls_);
   for (const auto &n : cls_.at("body"))
   {
     const std::string kind = n.value("_type", "");
@@ -339,7 +417,17 @@ void python_class_builder::gen_ctor(bool has_ud_base, struct_typet &st)
     exprt deref = build_dereference(symbol_expr(self_sym), st);
     exprt member = build_member(deref, attr, comp_type);
 
-    exprt value = conv_.get_expr(n["value"]);
+    // Seed from the class attribute, not the class body's value: a store such
+    // as `C.attr = v`, e.g. from a class decorator, may have rebound it.
+    symbol_id attr_sid;
+    attr_sid.set_filename(mod);
+    attr_sid.set_class(conv_.current_class_name_);
+    attr_sid.set_object(attr);
+    const symbolt *class_attr =
+      conv_.symbol_table_.find_symbol(attr_sid.to_string());
+    exprt value = class_attr && class_attr->get_type() == comp_type
+                    ? symbol_expr(*class_attr)
+                    : conv_.get_expr(n["value"]);
     if (value.type() != comp_type)
       value.make_typecast(comp_type);
 
@@ -444,7 +532,7 @@ void python_class_builder::build(codet &out)
   st.tag(conv_.current_class_name_);
 
   // Collect inheritance and instance attributes
-  const bool has_ud_base = get_bases(st);
+  const bool has_ud_base = get_bases(st, out);
   add_self_attrs(st);
 
   // Partial commit allows nested lookups while building members
