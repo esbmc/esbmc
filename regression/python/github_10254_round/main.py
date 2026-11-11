@@ -3,6 +3,10 @@ def r(x: float) -> int:
     return round(x)
 
 
+def ri(x: int) -> int:
+    return round(x)
+
+
 r(1e300)
 overflowed = False
 try:
@@ -15,3 +19,4 @@ assert r(3.5) == 4
 assert r(2.5) == 2
 assert r(-3.5) == -4
 assert r(2.5000000000001) == 3
+assert ri(7) == 7
