@@ -18,7 +18,13 @@ Module: Unit tests for node sharing in clang_c_convertert
 
 static const char source[] =
   "int a, b;\n"
-  "int f(void) { return (a == 1) && (b == 2); }\n";
+  "int f(void) { return (a == 1) && (b == 2); }\n"
+  "int g(void)\n"
+  "{\n"
+  "  a = 3;\n"
+  "  b = 4;\n"
+  "  return a;\n"
+  "}\n";
 
 static void collect_constants(const irept &e, std::vector<const exprt *> &out)
 {
@@ -53,16 +59,24 @@ TEST_CASE("the C converter shares equal types and locations", "[core]")
   const symbolt *f = l.context.find_symbol("c:@F@f");
   REQUIRE(f != nullptr);
 
+  const symbolt *g = l.context.find_symbol("c:@F@g");
+  REQUIRE(g != nullptr);
+
   std::vector<const exprt *> constants;
   collect_constants(f->get_value(), constants);
-  const exprt *one = nullptr, *two = nullptr;
-  for (const exprt *c : constants)
-    if (c->get("#cformat") == "1")
-      one = c;
-    else if (c->get("#cformat") == "2")
-      two = c;
+  collect_constants(g->get_value(), constants);
+  auto literal = [&constants](const char *text) {
+    for (const exprt *c : constants)
+      if (c->get("#cformat") == text)
+        return c;
+    return static_cast<const exprt *>(nullptr);
+  };
+  const exprt *one = literal("1"), *two = literal("2");
+  const exprt *three = literal("3"), *four = literal("4");
   REQUIRE(one != nullptr);
   REQUIRE(two != nullptr);
+  REQUIRE(three != nullptr);
+  REQUIRE(four != nullptr);
 
   // Two int literals share one type node.
   REQUIRE(one->type() == two->type());
@@ -78,4 +92,11 @@ TEST_CASE("the C converter shares equal types and locations", "[core]")
     REQUIRE(x.find(field) == y.find(field));
     REQUIRE(same_node(x.find(field), y.find(field)));
   }
+
+  // The same column on two lines, with other locations between, is one node.
+  const locationt &p = three->location();
+  const locationt &q = four->location();
+  REQUIRE(p.get_line() != q.get_line());
+  REQUIRE(p.get_column() == q.get_column());
+  REQUIRE(same_node(p.find("column"), q.find("column")));
 }
