@@ -1,6 +1,7 @@
-"""Refuse an array.array the array model does not handle.
+"""Route array.array calls to the model class for their typecode.
 
-The model stores ints only, so a float or unicode array, or one whose
+The model has an int class and a double class, so a "d" array is routed to
+the double class, and a single-precision float or unicode array, or one whose
 typecode is not a literal, is refused here rather than reaching the model.
 """
 
@@ -38,15 +39,52 @@ def _is_array_call(call, modules, imported):
             and isinstance(func.value, ast.Name) and func.value.id in modules)
 
 
-def reject_unmodelled_array_typecodes(module, module_name):
-    """Raise for the first array.array call the model cannot represent."""
+_DOUBLE_ARRAY = "_double_array"
+
+
+def _import_double_array(module):
+    """Bind the double class wherever array.array is imported by name."""
+    for node in ast.walk(module):
+        if (isinstance(node, ast.ImportFrom) and node.module == "array"
+                and all(a.name != _DOUBLE_ARRAY for a in node.names)):
+            node.names.append(ast.alias(name=_DOUBLE_ARRAY))
+
+
+def _refuse_class_values(module, module_name, modules, imported):
+    """A "d" array is not an instance of the int class, so any use of
+    array.array other than a call (isinstance, type(x) is, a base class)
+    could answer differently from CPython."""
+    called = {id(n.func) for n in ast.walk(module) if isinstance(n, ast.Call)}
+    for node in ast.walk(module):
+        if (isinstance(node, (ast.Name, ast.Attribute)) and id(node) not in called
+                and isinstance(node.ctx, ast.Load)
+                and _is_array_call(ast.Call(func=node), modules, imported)):
+            _refuse(node, module_name, "using array.array as a value alongside a 'd' array")
+
+
+def route_array_typecodes(module, module_name):
+    """Send each "d" array.array call to the double class; raise for the
+    first call the model cannot represent."""
     modules, imported = _array_bindings(module, module_name)
     if not modules and not imported:
         return
+    routed = False
     for node in ast.walk(module):
         if not isinstance(node, ast.Call) or not _is_array_call(node, modules, imported):
             continue
         typecode = node.args[0] if node.args else None
         if (not isinstance(typecode, ast.Constant) or not isinstance(typecode.value, str)
-                or typecode.value in ("f", "d", "u", "w")):
-            _refuse(node, module_name, "array.array is modelled only for an integer typecode")
+                or typecode.value in ("f", "u", "w")):
+            _refuse(node, module_name,
+                    "array.array is modelled only for an integer or 'd' typecode")
+        if typecode.value == "d":
+            if isinstance(node.func, ast.Name):
+                node.func.id = _DOUBLE_ARRAY
+            else:
+                node.func.attr = _DOUBLE_ARRAY
+            routed = True
+    if not routed:
+        return
+    _refuse_class_values(module, module_name, modules, imported)
+    if imported:
+        _import_double_array(module)
