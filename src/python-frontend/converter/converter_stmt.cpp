@@ -7631,6 +7631,17 @@ struct restore_pointer
 };
 } // namespace
 
+/// Converts \p node, whose value is read, so that a call to an in-place list
+/// method there is None (#10160).
+exprt python_converter::get_value_expr(const nlohmann::json &node)
+{
+  const restore_pointer restore_assigned_call{
+    assigned_call_,
+    std::exchange(
+      assigned_call_, node.value("_type", "") == "Call" ? &node : nullptr)};
+  return get_expr(node);
+}
+
 void python_converter::get_var_assign(
   const nlohmann::json &ast_node,
   codet &target_block)
@@ -9833,9 +9844,10 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
       exprt *saved_lhs = current_lhs;
       current_lhs = nullptr;
       // Start from the leftmost operand and carry the running result forward.
-      cond = condition_or_raise(get_expr(operands[0]), [&](const exprt &e) {
-        return to_bool_condition(e, operands[0]);
-      });
+      cond =
+        condition_or_raise(get_value_expr(operands[0]), [&](const exprt &e) {
+          return to_bool_condition(e, operands[0]);
+        });
       current_lhs = saved_lhs;
 
       symbolt result_symbol = create_return_temp_variable(
@@ -9860,7 +9872,7 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
         current_lhs = nullptr;
         // Build the next operand only in the branch where it is still needed.
         const exprt next_operand =
-          condition_or_raise(get_expr(operands[i]), [&](const exprt &e) {
+          condition_or_raise(get_value_expr(operands[i]), [&](const exprt &e) {
             return to_bool_condition(e, operands[i]);
           });
         current_lhs = saved_lhs;

@@ -3848,11 +3848,11 @@ exprt function_call_expr::handle_list_method() const
   throw std::runtime_error("Unsupported list method: " + method_name);
 }
 
-/// An in-place list method returns None, so assigned to a name the call runs
-/// and the name holds None rather than the model function's own result
-/// (#10160). Other value positions are left alone: the and/or, conditional and
-/// str() lowerings copy or fold a None-typed operand and would drop or repeat
-/// the call.
+/// An in-place list method returns None, so assigned to a name or read as an
+/// and/or operand the call runs and its value is None rather than the model
+/// function's own result (#10160). Other value positions are left alone: the
+/// conditional and str() lowerings copy or fold a None-typed operand and would
+/// drop or repeat the call.
 exprt function_call_expr::none_if_assigned(exprt call) const
 {
   static const std::set<std::string> in_place = {

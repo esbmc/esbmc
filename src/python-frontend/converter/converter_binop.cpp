@@ -860,7 +860,7 @@ exprt python_converter::get_boolop_operand(
     current_block = &effects.back();
     in_operand_effects_block_ = true;
   }
-  exprt operand_expr = get_expr(operand);
+  exprt operand_expr = get_value_expr(operand);
   // A later operand that raises (#9838) is its raise statement, run only
   // where the operand is evaluated.
   const exprt *raised = python_frontend::raised_condition(operand_expr);

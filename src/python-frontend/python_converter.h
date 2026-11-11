@@ -1203,6 +1203,7 @@ private:
     std::vector<code_blockt> &effects,
     bool &contains_non_boolean);
 
+  exprt get_value_expr(const nlohmann::json &node);
   exprt get_boolop_operand(
     const nlohmann::json &operand,
     std::vector<code_blockt> &effects);
