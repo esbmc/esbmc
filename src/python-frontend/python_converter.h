@@ -796,6 +796,12 @@ private:
   resolve_variable_type(const std::string &var_name, const locationt &loc);
 
   void get_compound_assign(const nlohmann::json &ast_node, codet &target_block);
+  void store_compound_result(
+    const nlohmann::json &target,
+    const exprt &lhs,
+    exprt rhs,
+    const locationt &loc,
+    codet &target_block);
 
   /// The symbol for @p name in an enclosing function's scope, or null. Python
   /// resolves a name a nested function only reads or mutates against the
