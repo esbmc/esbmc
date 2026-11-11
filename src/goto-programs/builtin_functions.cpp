@@ -1241,6 +1241,38 @@ static exprt assigns_marker_operand(const exprt &target)
   return address_of_exprt(target);
 }
 
+void goto_convertt::do_esbmc_cover(
+  const exprt &lhs,
+  const exprt &function,
+  const exprt::operandst &arguments,
+  goto_programt &dest)
+{
+  if (arguments.size() != 1)
+  {
+    log_error(
+      "`{}' expected to have one argument", id2string(function.identifier()));
+    abort();
+  }
+
+  if (lhs.is_not_nil())
+  {
+    log_error("{} expected not to have LHS", id2string(function.identifier()));
+    abort();
+  }
+
+  if (options.get_bool_option("no-assertions"))
+    return;
+
+  goto_programt::targett t = dest.add_instruction(ASSERT);
+  // cover(cond) behaves as assert(!cond)
+  migrate_expr(gen_not(arguments[0]), t->guard);
+
+  t->location = function.location();
+  t->location.user_provided(true);
+  t->location.property("cover");
+  t->location.comment("ESBMC cover");
+}
+
 /// Lower a call to ::operator new(n) into a cpp_new side effect. Kept out of
 /// do_function_call_symbol, which is already over the complexity gate.
 void goto_convertt::do_operator_new(

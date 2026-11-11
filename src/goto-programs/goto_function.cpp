@@ -63,6 +63,12 @@ void goto_convertt::do_function_call(
   {
     do_function_call_if(new_lhs, new_function, new_arguments, dest);
   }
+  else if (
+    new_function.id() == "symbol" &&
+    new_function.identifier() == "__ESBMC_cover")
+  {
+    do_esbmc_cover(new_lhs, new_function, new_arguments, dest);
+  }
   else if (new_function.id() == "symbol")
   {
     do_function_call_symbol(new_lhs, new_function, new_arguments, dest);
