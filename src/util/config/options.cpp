@@ -80,8 +80,13 @@ bool optionst::is_kind() const
 
 bool optionst::contracts_enabled() const
 {
+  // The bundled C library keeps its models' clauses; they stay inert unless
+  // --contract-operational-models replaces calls with them.
   return !get_option("enforce-contract").empty() ||
          !get_option("replace-call-with-contract").empty() ||
          get_bool_option("enforce-all-contracts") ||
-         get_bool_option("replace-all-contracts");
+         get_bool_option("replace-all-contracts") ||
+         get_bool_option("contract-operational-models") ||
+         get_bool_option("enforce-operational-model-contracts") ||
+         get_bool_option("building-c-library");
 }

@@ -1,0 +1,6 @@
+CORE
+main.c
+--replace-call-with-contract g --force-malloc-success
+main.c line 17 column 3 function main$
+^  dereference failure: invalidated dynamic object$
+^VERIFICATION FAILED$

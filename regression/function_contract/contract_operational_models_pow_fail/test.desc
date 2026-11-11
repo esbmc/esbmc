@@ -1,0 +1,5 @@
+CORE
+main.c
+--contract-operational-models
+false: replaced pow is unknown
+^VERIFICATION FAILED$

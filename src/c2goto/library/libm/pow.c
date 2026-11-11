@@ -49,9 +49,18 @@ static double pow_by_squaring(double x, uint32_t n)
   return result;
 }
 
+double __ESBMC_uninterpreted_pow(double, double);
+
 double pow(double x, double y)
 {
 __ESBMC_HIDE:;
+  // Deterministic but otherwise unknown: enough to compare two programs
+  // that call pow on the same arguments. NaN results compare by NaN-ness.
+  __ESBMC_assigns();
+  __ESBMC_ensures(
+    (__ESBMC_return_value == __ESBMC_uninterpreted_pow(x, y)) |
+    ((__ESBMC_return_value != __ESBMC_return_value) &
+     (__ESBMC_uninterpreted_pow(x, y) != __ESBMC_uninterpreted_pow(x, y))));
   if (x == 1.0 || y == 0.0)
     return 1.0;
 

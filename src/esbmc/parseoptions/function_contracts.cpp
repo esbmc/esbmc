@@ -1,6 +1,7 @@
 #include <ac_config.h>
 
 #include <esbmc/esbmc_parseoptions.h>
+#include <clang-c-frontend/AST/vfs_paths.h>
 #include <goto-programs/contracts/contracts.h>
 #include <util/irep/irep.h>
 #include <util/symtab/symbol.h>
@@ -8,14 +9,114 @@
 #include <set>
 #include <string>
 
+// Operational models are the functions whose body ESBMC serves from its VFS.
+// The symbol keeps the location of whichever header declared it first, which
+// for <math.h> is the host's.
+static bool
+is_operational_model(const goto_functionst &goto_functions, const irep_idt &id)
+{
+  const auto it = goto_functions.function_map.find(id);
+  return it != goto_functions.function_map.end() &&
+         !it->second.body.instructions.empty() &&
+         id2string(it->second.body.instructions.front().location.get_file())
+             .rfind(clang_vfs_root(), 0) == 0;
+}
+
+// Model contracts are acted on only by the operational-model flags.
+static bool user_pass_skips(
+  const code_contractst &contracts,
+  const goto_functionst &goto_functions,
+  const irep_idt &id)
+{
+  return contracts.is_compiler_generated(id2string(id)) ||
+         is_operational_model(goto_functions, id);
+}
+
+static std::set<std::string> contracted_models(
+  const goto_functionst &goto_functions,
+  const code_contractst &contracts)
+{
+  std::set<std::string> models;
+  forall_goto_functions (it, goto_functions)
+    if (
+      it->second.body_available &&
+      is_operational_model(goto_functions, it->first) &&
+      contracts.has_contracts(it->second.body))
+      models.insert(id2string(it->first));
+  return models;
+}
+
+// Model contracts are checked once, by --enforce-operational-model-contracts,
+// not by every user enforce run.
+static void drop_models(
+  std::set<std::string> &to_enforce,
+  code_contractst &contracts,
+  const goto_functionst &goto_functions)
+{
+  for (auto it = to_enforce.begin(); it != to_enforce.end();)
+  {
+    const symbolt *sym = contracts.find_function_symbol(*it);
+    if (sym && is_operational_model(goto_functions, sym->id))
+    {
+      log_warning(
+        "--enforce-contract: skipping operational model '{}'; use "
+        "--enforce-operational-model-contracts",
+        *it);
+      it = to_enforce.erase(it);
+    }
+    else
+      ++it;
+  }
+}
+
+static void act_on_models(
+  const goto_functionst &goto_functions,
+  code_contractst &contracts,
+  const std::string &entry_function,
+  bool enforce,
+  bool replace)
+{
+  if (enforce)
+    log_status(
+      "Enforcing {} operational-model contract(s)",
+      contracts
+        .enforce_contracts(
+          contracted_models(goto_functions, contracts),
+          entry_function,
+          true)
+        .size());
+  if (replace)
+  {
+    const std::set<std::string> models =
+      contracted_models(goto_functions, contracts);
+    log_status(
+      "Replacing {} operational model(s) with contracts", models.size());
+    contracts.replace_calls(models);
+  }
+}
+
+bool esbmc_parseoptionst::contract_pass_requested() const
+{
+  for (const char *flag :
+       {"enforce-contract",
+        "replace-call-with-contract",
+        "enforce-all-contracts",
+        "replace-all-contracts",
+        "contract-operational-models",
+        "enforce-operational-model-contracts"})
+    if (cmdline.isset(flag))
+      return true;
+  return false;
+}
+
 // Process function contracts if enabled
 bool esbmc_parseoptionst::process_function_contracts(
-  goto_functionst &goto_functions,
-  bool has_replace,
-  bool has_enforce,
-  bool has_enforce_all,
-  bool has_replace_all)
+  goto_functionst &goto_functions)
 {
+  const bool has_enforce = cmdline.isset("enforce-contract");
+  const bool has_replace = cmdline.isset("replace-call-with-contract");
+  const bool has_enforce_all = cmdline.isset("enforce-all-contracts");
+  const bool has_replace_all = cmdline.isset("replace-all-contracts");
   namespacet ns(context);
   code_contractst contracts(goto_functions, context, ns);
 
@@ -40,7 +141,7 @@ bool esbmc_parseoptionst::process_function_contracts(
         // Use is_compiler_generated (which correctly handles C++ USR IDs like
         // "c:@F@fst#*1I#") instead of a raw '#' string filter, which would
         // incorrectly skip all C++ functions with parameters.
-        if (contracts.is_compiler_generated(func_name))
+        if (user_pass_skips(contracts, goto_functions, it->first))
           continue;
 
         // Check for explicit contract clauses in function body
@@ -147,6 +248,7 @@ bool esbmc_parseoptionst::process_function_contracts(
 
   if (has_enforce)
     to_enforce = process_function_list(cmdline.get_values("enforce-contract"));
+  drop_models(to_enforce, contracts, goto_functions);
   if (has_replace)
     to_replace =
       process_function_list(cmdline.get_values("replace-call-with-contract"));
@@ -194,6 +296,13 @@ bool esbmc_parseoptionst::process_function_contracts(
 
   if (has_replace_all)
     contracts.replace_calls(annotated);
+
+  act_on_models(
+    goto_functions,
+    contracts,
+    entry_function,
+    cmdline.isset("enforce-operational-model-contracts"),
+    cmdline.isset("contract-operational-models"));
 
   contracts.remove_inactive_clauses();
   return false;

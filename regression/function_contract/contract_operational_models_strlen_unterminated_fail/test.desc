@@ -1,0 +1,6 @@
+CORE
+main.c
+--contract-operational-models --force-malloc-success
+^Violated property:$
+^  contract requires$
+^VERIFICATION FAILED$

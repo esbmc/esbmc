@@ -1,0 +1,5 @@
+CORE
+main.c
+--enforce-contract *
+^Enforcing contracts for 1 function\(s\)$
+^VERIFICATION SUCCESSFUL$
