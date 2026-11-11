@@ -1,0 +1,8 @@
+regression/python/github_10254_floordiv
+regression/python/github_10254_floordiv_fail
+regression/python/github_10254_overflow
+regression/python/github_10254_overflow_fail
+regression/python/github_10254_round
+regression/python/github_10254_round_fail
+regression/python/github_10254_unfolded
+regression/python/github_10254_unfolded_fail
