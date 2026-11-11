@@ -4,8 +4,9 @@ Rules for adding and running tests under `regression/`. The quickstart ctest
 commands and the 10-minute suite cap live in AGENTS.md (Testing).
 
 Regression test format (`test.desc`): line 1 is
-`CORE`/`KNOWNBUG`/`FUTURE`/`THOROUGH` (THOROUGH is Linux-only), line 2 is the
-source file, line 3 is ESBMC flags, line 4+ are expected output regexes. Every
+`CORE`/`KNOWNBUG`/`FUTURE`/`THOROUGH` (THOROUGH is Linux-only; PR CI runs
+CORE only), line 2 is the source file, line 3 is ESBMC flags, line 4+ are
+expected output regexes. Every
 PR adds a _pair_ of regression tests — see "Regression tests come in pairs"
 below.
 
