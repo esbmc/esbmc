@@ -164,7 +164,7 @@ static void report_base_case_end(
 // This is the parallel version of k-induction algorithm.
 // This is an old implementation and should be revisited sometime in the
 // future.
-int esbmc_parseoptionst::doit_k_induction_parallel()
+int esbmc_parseoptionst::doit_k_induction_parallel(optionst &options)
 {
 #ifdef _WIN32
   log_error("Windows does not support parallel kind");
@@ -222,28 +222,6 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
   {
     log_error("Child processes were not created successfully.");
     abort();
-  }
-
-  optionst options;
-
-  if (process_type != PARENT)
-  {
-    // Get full set of options
-    get_command_line_options(options);
-
-    // Generate goto functions and set claims
-    if (get_goto_program(options, goto_functions))
-      return 6;
-
-    if (cmdline.isset("show-claims"))
-    {
-      const namespacet ns(context);
-      show_claims(ns, goto_functions);
-      return 0;
-    }
-
-    if (set_claims(goto_functions))
-      return 7;
   }
 
   // Get max number of iterations

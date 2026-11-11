@@ -1,0 +1,5 @@
+CORE
+main.c
+--sv-comp --k-induction-parallel --max-k-step 5
+^Bug found \(k = 1\)$
+^VERIFICATION FAILED$
