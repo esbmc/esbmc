@@ -2838,7 +2838,8 @@ static bool binds_name_in(const Json *scope, const std::string &name)
 }
 
 /// Whether a statement in `stmts`, or in a module-level `if`, `try`, loop or
-/// `with` block under them, assigns `name` (g = f).
+/// `with` block under them, assigns `name` (g = f). An assignment this pass
+/// has already annotated as Any (g: Any = f) still counts.
 static bool assigns_name_at_module_level(
   const nlohmann::json &stmts,
   const std::string &name)
@@ -2852,6 +2853,11 @@ static bool assigns_name_at_module_level(
         if (t.contains("id") && t["id"] == name)
           return true;
     }
+    if (
+      stype == "AnnAssign" && stmt.value("_inferred_annotation", false) &&
+      stmt["annotation"].value("id", "") == "Any" &&
+      stmt["target"].value("id", "") == name)
+      return true;
     if (
       stype == "FunctionDef" || stype == "AsyncFunctionDef" ||
       stype == "ClassDef")
