@@ -375,7 +375,7 @@ BigInt ieee_floatt::pack() const
   if (NaN_flag)
   {
     result += power(2, spec.f) * spec.max_exponent();
-    result += 1;
+    result += power(2, spec.f - 1); // quiet bit, IEEE 754-2019 6.2.1
   }
   else if (infinity_flag)
   {

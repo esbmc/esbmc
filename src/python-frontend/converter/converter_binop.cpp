@@ -1956,7 +1956,7 @@ bool python_converter::needs_operand_guard(
     return false;
   else if (
     !rhs.type().is_signedbv() && !rhs.type().is_unsignedbv() &&
-    !rhs.type().is_floatbv())
+    !rhs.type().is_floatbv() && !rhs.type().is_bool())
     return false;
 
   return !in_rhs_type_probe_ && !in_contract_clause_;
@@ -2613,6 +2613,25 @@ exprt python_converter::checked_erased_int(
   return operand;
 }
 
+exprt python_converter::refused_erased_float(
+  const exprt &operand,
+  const typet &float_type,
+  const nlohmann::json &element)
+{
+  if (!current_block)
+    throw std::runtime_error(
+      "arithmetic between a float and a value whose type was lost is not "
+      "supported");
+  code_assertt check{false_exprt()};
+  check.location() = get_location_from_decl(element);
+  check.location().user_provided(true);
+  check.location().comment(
+    "Unsupported: arithmetic on a value whose type was lost");
+  current_block->copy_to_operands(check);
+  return typecast_exprt(
+    typecast_exprt(operand, type_handler_.get_typet("int", 0)), float_type);
+}
+
 // A None operand outside `str % None`, which is formatting, not arithmetic.
 static bool
 is_none_arithmetic(const std::string &op, const exprt &lhs, const exprt &rhs)
@@ -2625,6 +2644,45 @@ static void reject_opaque_array_operator(
   const std::string &op,
   const typet &lhs,
   const typet &rhs);
+
+static bool is_erased_operand(const exprt &e, const typet &list_type)
+{
+  return e.type().is_pointer() &&
+         (e.type().subtype().id() == "empty" || e.type() == list_type);
+}
+
+static bool is_integer_operand(const exprt &e)
+{
+  return e.type().is_signedbv() || e.type().is_unsignedbv();
+}
+
+// Arithmetic (Sub, Add, Mult, ...) on an any_type (void*) operand: cast it to
+// the integer operand's type, or refuse it next to a float.
+void python_converter::coerce_erased_arith_operands(
+  const nlohmann::json &element,
+  const nlohmann::json &left,
+  const nlohmann::json &right,
+  exprt &lhs,
+  exprt &rhs)
+{
+  const typet list_type = type_handler_.get_list_type();
+  const bool lhs_any = is_erased_operand(lhs, list_type);
+  const bool rhs_any = is_erased_operand(rhs, list_type);
+  if (lhs_any && rhs_any)
+  {
+    const typet int_type = type_handler_.get_typet("int", 0);
+    lhs = typecast_exprt(checked_erased_int(lhs, left, element), int_type);
+    rhs = typecast_exprt(checked_erased_int(rhs, right, element), int_type);
+  }
+  else if (lhs_any && is_integer_operand(rhs))
+    lhs = typecast_exprt(checked_erased_int(lhs, left, element), rhs.type());
+  else if (rhs_any && is_integer_operand(lhs))
+    rhs = typecast_exprt(checked_erased_int(rhs, right, element), lhs.type());
+  else if (lhs_any && lhs.type() != list_type && rhs.type().is_floatbv())
+    lhs = refused_erased_float(lhs, rhs.type(), element);
+  else if (rhs_any && rhs.type() != list_type && lhs.type().is_floatbv())
+    rhs = refused_erased_float(rhs, lhs.type(), element);
+}
 
 exprt python_converter::get_binary_operator_expr(
   const nlohmann::json &element,
@@ -3126,31 +3184,14 @@ exprt python_converter::get_binary_operator_expr(
   // above. Treating it like a void* (cast to the integer operand's type) keeps
   // GOTO generation from building invalid pointer arithmetic on dead code.
   auto is_any_ptr = [&](const exprt &e) {
-    return e.type().is_pointer() &&
-           (e.type().subtype().id() == "empty" || e.type() == list_type);
+    return is_erased_operand(e, list_type);
   };
-  auto is_integer = [](const exprt &e) {
-    return e.type().is_signedbv() || e.type().is_unsignedbv();
-  };
+  auto is_integer = [](const exprt &e) { return is_integer_operand(e); };
 
-  // For arithmetic operations (Sub, Add, Mult, etc.) on an any_type (void*)
-  // operand combined with an integer operand, cast the void* to the integer
-  // type.
   if (
     !type_utils::is_relational_op(op) && op != "Is" && op != "IsNot" &&
     op != "In" && op != "NotIn")
-  {
-    if (is_any_ptr(lhs) && is_any_ptr(rhs))
-    {
-      const typet int_type = type_handler_.get_typet("int", 0);
-      lhs = typecast_exprt(checked_erased_int(lhs, left, element), int_type);
-      rhs = typecast_exprt(checked_erased_int(rhs, right, element), int_type);
-    }
-    else if (is_any_ptr(lhs) && is_integer(rhs))
-      lhs = typecast_exprt(checked_erased_int(lhs, left, element), rhs.type());
-    else if (is_any_ptr(rhs) && is_integer(lhs))
-      rhs = typecast_exprt(checked_erased_int(rhs, right, element), lhs.type());
-  }
+    coerce_erased_arith_operands(element, left, right, lhs, rhs);
 
   // Handle Any-typed (void*) operands in comparisons.
   if (

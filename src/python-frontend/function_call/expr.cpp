@@ -1,3 +1,4 @@
+#include <python-frontend/model_path.h>
 #include <python-frontend/function_call/expr.h>
 #include <python-frontend/math/bounded_math.h>
 #include <python-frontend/math/cmath_lowering_policy.h>
@@ -5901,12 +5902,8 @@ exprt function_call_expr::handle_general_function_call()
   // e.g. "from other import sum" defines a user sum that shadows the builtin
   bool is_user_imported =
     converter_.find_imported_symbol(function_id_.to_string()) != nullptr;
-  const bool is_numpy_model_call = [](const std::string &filename) {
-    std::string normalized = filename;
-    std::replace(normalized.begin(), normalized.end(), '\\', '/');
-    return boost::algorithm::ends_with(
-      normalized, std::string{"/models/numpy.py"});
-  }(function_id_.get_filename());
+  const bool is_numpy_model_call =
+    model_path::is_model(function_id_.get_filename(), "numpy.py");
 
   if (std::optional<exprt> rounded = try_handle_round(is_user_imported))
     return *rounded;
@@ -8270,6 +8267,64 @@ void function_call_expr::refuse_float_to_int_argument(
       "passing a float to an int parameter is not supported");
 }
 
+// `2 ** e` with a non-constant int `e` is lowered to an exact double by
+// power_of_two, so it can be passed to an int parameter where it is an int in
+// CPython. A negative `e` gives a float and a large one does not fit the
+// parameter; both are refused at run time (#10228).
+exprt function_call_expr::int_power_of_two_argument(
+  const nlohmann::json &node,
+  const exprt &arg,
+  const typet &param_type) const
+{
+  if (
+    !arg.type().is_floatbv() || !param_type.is_signedbv() ||
+    node.value("_type", "") != "BinOp" ||
+    node["op"].value("_type", "") != "Pow" ||
+    node["left"].value("_type", "") != "Constant" ||
+    !node["left"]["value"].is_number_integer() ||
+    node["left"]["value"].get<long long>() != 2 ||
+    node["right"].value("_type", "") != "Name" ||
+    config.ansi_c.double_width != 64 ||
+    config.options.get_bool_option("int-encoding") ||
+    !converter_.can_emit_runtime_guard())
+    return arg;
+
+  const typet exponent_type = converter_.get_expr(node["right"]).type();
+  if (!exponent_type.is_signedbv() && !exponent_type.is_unsignedbv())
+    return arg;
+
+  // Read the power once, here, so the guard and the argument see one value
+  // even if a later argument rebinds the exponent.
+  const locationt location = converter_.get_location_from_decl(call_);
+  symbolt &tmp =
+    converter_.create_tmp_symbol(call_, "$pow_arg$", arg.type(), exprt());
+  code_declt decl(build_symbol(tmp));
+  decl.location() = location;
+  converter_.add_instruction(decl);
+  code_assignt assign(build_symbol(tmp), arg);
+  assign.location() = location;
+  converter_.add_instruction(assign);
+  const exprt power = build_symbol(tmp);
+
+  // power_of_two is exact, so 1 <= 2 ** e <= 2 ** (width - 2) holds exactly
+  // when 0 <= e <= width - 2.
+  const exprt in_range = and_exprt(
+    binary_relation_exprt(power, ">=", from_double(1.0, arg.type())),
+    binary_relation_exprt(
+      power,
+      "<=",
+      from_double(std::ldexp(1.0, bv_width(param_type) - 2), arg.type())));
+  code_assertt check(in_range);
+  check.location() = location;
+  check.location().user_provided(true);
+  check.location().comment(
+    "Unsupported: an int raised to a power that is negative or too large, "
+    "passed to an int parameter");
+  converter_.add_instruction(check);
+  converter_.add_instruction(code_assumet(in_range));
+  return typecast_exprt(power, param_type);
+}
+
 static std::optional<std::string> string_literal(const nlohmann::json &node)
 {
   if (node.value("_type", "") == "Constant" && node["value"].is_string())
@@ -8387,6 +8442,7 @@ std::optional<exprt> function_call_expr::build_positional_arguments(
 
     if (param_idx < params.size())
     {
+      arg = int_power_of_two_argument(arg_node, arg, params[param_idx].type());
       refuse_float_to_int_argument(arg, params[param_idx].type(), *func_symbol);
       arg = coerce_tagged_argument(arg, params[param_idx].type(), location);
     }
@@ -8884,6 +8940,8 @@ void function_call_expr::forward_keyword_arguments(
         if (params[i].get_base_name().as_string() == kw_name)
         {
           exprt kw_val = converter_.get_expr(kw["value"]);
+          kw_val =
+            int_power_of_two_argument(kw["value"], kw_val, params[i].type());
           refuse_float_to_int_argument(kw_val, params[i].type(), func_symbol);
           kw_val = coerce_tagged_argument(kw_val, params[i].type(), location);
           if (call.arguments().size() <= i)

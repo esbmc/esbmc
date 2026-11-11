@@ -188,3 +188,23 @@ TEST_CASE(
     }
   }
 }
+
+TEST_CASE("ieee float packs NaN as a quiet NaN", "[core][util][ieee_floatt]")
+{
+  const ieee_float_spect single = ieee_float_spect::single_precision();
+  const ieee_float_spect dbl = ieee_float_spect::double_precision();
+
+  REQUIRE(ieee_floatt::NaN(single).pack() == BigInt(0x7fc00000));
+  REQUIRE(ieee_floatt::NaN(dbl).pack() == BigInt(0x7ff8000000000000ULL));
+
+  REQUIRE(ieee_floatt::NaN(ieee_float_spect(10, 5)).pack() == BigInt(0x7e00));
+  REQUIRE(ieee_floatt::NaN(ieee_float_spect(7, 8)).pack() == BigInt(0x7fc0));
+
+  ieee_floatt negative = ieee_floatt::NaN(single);
+  negative.set_sign(true);
+  REQUIRE(negative.pack() == BigInt(0xffc00000ULL));
+
+  ieee_floatt round_trip(single);
+  round_trip.unpack(BigInt(0x7fc00000));
+  REQUIRE(round_trip.is_NaN());
+}
