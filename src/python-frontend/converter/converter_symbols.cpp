@@ -1,3 +1,4 @@
+#include <python-frontend/model_path.h>
 #include <python-frontend/json_utils.h>
 #include <python-frontend/python_converter.h>
 #include <filesystem>
@@ -1122,16 +1123,10 @@ bool python_converter::import_hides_builtin(
   const std::string &name) const
 {
   const std::string module_file = import["full_path"].get<std::string>();
-  const std::string numpy_model = "/models/numpy.py";
-  return import["_type"] == "Import" &&
-         symbol_id.find("/models/") == std::string::npos &&
+  return import["_type"] == "Import" && !model_path::in_models(symbol_id) &&
          symbol_table_.find_symbol(
            "py:/esbmc-vfs/python/models/builtins.py@F@" + name) &&
-         module_file.size() >= numpy_model.size() &&
-         module_file.compare(
-           module_file.size() - numpy_model.size(),
-           numpy_model.size(),
-           numpy_model) == 0 &&
+         model_path::is_model(module_file, "numpy.py") &&
          symbol_id.rfind("py:" + module_file + "@", 0) != 0;
 }
 
@@ -1233,7 +1228,7 @@ symbolt *python_converter::find_symbol_in_import(
   // methods are still found, as `m.C` is resolved through them.
   const bool plain_user_import =
     obj["_type"] == "Import" &&
-    obj["full_path"].get<std::string>().find("/models/") == std::string::npos;
+    !model_path::in_models(obj["full_path"].get<std::string>());
   const bool module_member =
     found && !found->is_type &&
     ::symbol_id::from_string(found->id.as_string()).get_class().empty();
@@ -1362,8 +1357,7 @@ python_converter::find_symbol_through_module(const std::string &sym_id) const
     module_level_binds(*ast_json, sym_id.substr(sym_id.rfind('@') + 1)))
     return nullptr;
   if (
-    imported &&
-    imported->id.as_string().find("/models/") != std::string::npos &&
+    imported && model_path::in_models(imported->id.as_string()) &&
     symbol_table_.find_symbol(sym_id))
     return nullptr;
   return imported;
