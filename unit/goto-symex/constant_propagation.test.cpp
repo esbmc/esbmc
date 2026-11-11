@@ -735,6 +735,30 @@ TEST_CASE(
 }
 
 TEST_CASE(
+  "a with chain is not carried under any incremental strategy",
+  "[symex][constant-propagation]")
+{
+  // --k-induction-parallel must encode the same formula as --k-induction.
+  engine e;
+  const expr2tc update = with_field(
+    symbol_at(
+      pair_struct(), "c:test.c@F@main@VAR", symbol_renaming_level::level2),
+    "r",
+    member_of(
+      symbol_at(
+        pair_struct(), "c:test.c@F@main@IO", symbol_renaming_level::level2),
+      "i"));
+
+  REQUIRE(e.state().constant_propagation(update));
+  for (const char *strategy :
+       {"incremental-bmc", "k-induction", "k-induction-parallel"})
+  {
+    const scoped_option s(strategy, true);
+    REQUIRE_FALSE(e.state().constant_propagation(update));
+  }
+}
+
+TEST_CASE(
   "a pinned read constant_propagation still refuses ends the chain",
   "[symex][constant-propagation]")
 {

@@ -225,8 +225,11 @@ void esbmc_parseoptionst::configure_sv_comp_threads(
   // k-induction to check the invariants.
   if (!cmdline.isset("validate-correctness-witness"))
   {
-    cmdline.vm.erase("k-induction");
-    options.set_option("k-induction", false);
+    for (const char *kind : {"k-induction", "k-induction-parallel"})
+    {
+      cmdline.vm.erase(kind);
+      options.set_option(kind, false);
+    }
     options.set_option("incremental-bmc", true);
   }
 

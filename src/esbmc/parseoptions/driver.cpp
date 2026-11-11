@@ -468,18 +468,6 @@ int esbmc_parseoptionst::doit()
     }
   }
 
-  // Run this before the main flow. This method performs its own
-  // parsing and preprocessing.
-  // This is an old implementation of parallel k-induction algorithm.
-  // Eventually we will modify it and implement parallel version for all
-  // available strategies. Just run it first before everything else
-  // for now.
-  //
-  // The parallel driver has no termination interpretation, so --termination
-  // takes priority: fall through to the sequential strategy instead (#6031).
-  if (cmdline.isset("k-induction-parallel") && !cmdline.isset("termination"))
-    return doit_k_induction_parallel();
-
   // Parse ESBMC options (CMD + set internal options)
   optionst options;
   get_command_line_options(options);
@@ -588,6 +576,12 @@ int esbmc_parseoptionst::doit()
   const int prepass = falsify_with_bounded_schedules(options, goto_functions);
   if (prepass >= 0)
     return prepass;
+
+  // Fork only now, so the steps share one GOTO program and the SV-COMP thread
+  // setup can turn the parallel driver off. --termination clears this option
+  // and runs the sequential strategy instead (#6031).
+  if (options.get_bool_option("k-induction-parallel"))
+    return doit_k_induction_parallel(options);
 
   const int res = run_chosen_strategy(options, goto_functions);
 

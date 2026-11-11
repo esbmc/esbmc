@@ -109,7 +109,7 @@ protected:
 
   int run_chosen_strategy(optionst &options, goto_functionst &goto_functions);
 
-  int doit_k_induction_parallel();
+  int doit_k_induction_parallel(optionst &options);
 
   tvt is_base_case_violated(
     optionst &options,
