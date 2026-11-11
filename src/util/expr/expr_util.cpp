@@ -53,7 +53,11 @@ exprt gen_zero(const typet &type, bool array_as_array_of)
   }
   else if (type_id == "array")
   {
-    if (array_as_array_of || to_array_type(type).size().id() == "infinity")
+    // A VLA (C23 `int a[n] = {}`) has no constant size to enumerate.
+    const exprt &size = to_array_type(type).size();
+    if (
+      array_as_array_of || size.id() == "infinity" ||
+      (size.is_not_nil() && !size.is_constant()))
     {
       result = array_of_exprt(gen_zero(type.subtype(), true), type);
     }
