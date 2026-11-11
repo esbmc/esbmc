@@ -884,6 +884,19 @@ private:
     exprt operand,
     const nlohmann::json &node,
     const nlohmann::json &element);
+  /// An operand whose type was erased to `void *`, about to meet a float in
+  /// arithmetic. Its bits cannot be read back as a float, so a check that
+  /// fails as unsupported guards it. Returns it converted to @p float_type.
+  void coerce_erased_arith_operands(
+    const nlohmann::json &element,
+    const nlohmann::json &left,
+    const nlohmann::json &right,
+    exprt &lhs,
+    exprt &rhs);
+  exprt refused_erased_float(
+    const exprt &operand,
+    const typet &float_type,
+    const nlohmann::json &element);
   /// The right operand of @p element; a `str %` operand is only probed.
   exprt get_right_operand_expr(
     const nlohmann::json &element,
