@@ -55,6 +55,7 @@ _reported_cycles: set[tuple[str, ...]] = set()
 _reported_resolution_failures: set[tuple[str, str, str]] = set()
 _reported_unmodelled: set[str] = set()
 _unmodelled_modules: dict[str, ModuleType] = {}
+_raising_modules: set[str] = set()
 
 
 @dataclass(frozen=True)
@@ -76,6 +77,7 @@ def reset_state() -> None:
     _reported_resolution_failures.clear()
     _reported_unmodelled.clear()
     _unmodelled_modules.clear()
+    _raising_modules.clear()
     imported_signature_sources.clear()
     default_helper_exports.clear()
 
@@ -297,7 +299,23 @@ def import_module_by_name(
         # the same way. The module parsed; it failed executing, so the reason
         # must not claim otherwise.
         _resolver_warning(f"{module_name} module-import-failed: {exc}")
+        return _raising_module_file(module_name)
+
+
+def _raising_module_file(module_name: str) -> str | None:
+    """The source of a module whose body raised on import, located without running it.
+
+    What the body raises is the program's behaviour, so the body must still
+    be converted (#10223).
+    """
+    try:
+        spec = importlib.util.find_spec(module_name)
+    except Exception:  # pylint: disable=broad-except
         return None
+    if spec is None:
+        return None
+    _raising_modules.add(module_name)
+    return spec.origin
 
 
 def _collect_import_targets(
@@ -321,8 +339,13 @@ def _collect_import_targets(
     return module_names, imported_elements
 
 
-def process_imports(node: ast.Import | ast.ImportFrom, output_dir: str) -> None:
-    """Collect import targets and attach best-effort resolution metadata."""
+def process_imports(node: ast.Import | ast.ImportFrom,
+                    output_dir: str,
+                    module_level: bool = False) -> None:
+    """Collect import targets and attach best-effort resolution metadata.
+
+    `module_level` says `node` is a statement of its module's body.
+    """
     module_names, imported_elements = _collect_import_targets(node)
     if not module_names:
         return
@@ -343,6 +366,11 @@ def process_imports(node: ast.Import | ast.ImportFrom, output_dir: str) -> None:
                 module_imports[module_name]['specific_names'].add(elem.name)
 
         module = import_module_by_name(module_name, output_dir)
+        # The converter runs a module's body in place of a module-level import
+        # only, and a `from` import of named elements emits only those, so
+        # anywhere else its exception would be lost.
+        if module_name in _raising_modules and not (module_level and imported_elements is None):
+            module = None
         if module is None:
             _warn_resolution_failure(module_name, node, "module-not-found")
             _mark_import_resolution(node, ok=False, reason="module-not-found")
@@ -762,7 +790,7 @@ def process_collected_imports(output_dir: str,
                     callbacks.rewrite_relative_import(subnode, module_name)
                     for imported_name in _extract_module_names(subnode):
                         import_graph[module_name].add(imported_name)
-                    process_imports(subnode, output_dir)
+                    process_imports(subnode, output_dir, subnode in tree.body)
             _warn_if_cycle(import_graph, module_name)
 
     callbacks.propagate_range_aliases(parsed_trees)
