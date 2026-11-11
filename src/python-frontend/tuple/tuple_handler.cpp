@@ -128,6 +128,10 @@ exprt tuple_handler::get_tuple_expr(const nlohmann::json &element)
       return elem;
 
     const exprt value_elem = to_value_expr(elem, converter_.name_space());
+    // A discarded type probe must not leave the element evaluated ahead of
+    // the guards the real conversion emits.
+    if (converter_.in_type_probe())
+      return value_elem;
 
     symbolt &tmp = converter_.create_tmp_symbol(
       element, "$tuple_elem$", value_elem.type(), value_elem);
