@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Self-test. Run: python3 scripts/competitions/svcomp/test_esbmc_wrapper.py"""
 
+import argparse
 import shlex
 import importlib.util
 import os
@@ -381,6 +382,38 @@ class ParseResultTest(unittest.TestCase):
                          "VERIFICATION SUCCESSFUL\n", wrapper.Property.reach),
             "TRUE")
 
+
+
+class AbnormalExitTest(unittest.TestCase):
+    """benchexec counts a run that prints "Unknown" as unknown, so a crash
+    must print something else to be seen as an error (#8097)."""
+
+    def setUp(self):
+        self.saved_args = wrapper.args
+        wrapper.args = argparse.Namespace(dry_run=False)
+
+    def tearDown(self):
+        wrapper.args = self.saved_args
+
+    def verdict(self, script):
+        output = wrapper.do_exec("sh -c " + shlex.quote(script)).decode()
+        return wrapper.get_result_string(wrapper.parse_result(output, wrapper.Property.reach))
+
+    def test_a_run_killed_by_a_signal_is_an_error(self):
+        self.assertEqual(self.verdict("echo Starting; kill -ABRT $$"), "ERROR")
+
+    def test_an_uncaught_exception_is_an_error(self):
+        self.assertEqual(
+            self.verdict("echo 'ERROR: uncaught exception [x]: y'; exit 70"), "ERROR")
+
+    def test_a_crash_after_a_verdict_keeps_the_verdict(self):
+        self.assertEqual(self.verdict("echo 'VERIFICATION SUCCESSFUL'; kill -SEGV $$"), "TRUE")
+
+    def test_a_crash_after_an_out_of_memory_is_a_memory_out(self):
+        self.assertEqual(self.verdict("echo 'ERROR: Out of memory'; kill -ABRT $$"), "Unknown")
+
+    def test_a_normal_exit_without_a_verdict_is_unknown(self):
+        self.assertEqual(self.verdict("echo 'VERIFICATION UNKNOWN'; exit 6"), "Unknown")
 
 # The scalar model's own TypeError on `r + 1`, where `r` is an int on one path
 # and a str on the other.

@@ -29,6 +29,7 @@ class Result:
   err_timeout = 7
   err_memout = 8
   err_unwinding_assertion = 9
+  err_crash = 10
   unknown = 11
   fail_memcleanup = 12
   fail_termination = 13
@@ -61,6 +62,8 @@ class Result:
       return True
     if res == Result.err_timeout:
       return True
+    if res == Result.err_crash:
+      return True
     if res == Result.unknown:
       return True
     return False
@@ -91,6 +94,17 @@ PYTHON_EXCEPTION_FAMILIES = {
 # Parsed by the CLI entry point at the bottom; do_exec() is the only reader.
 args = None
 
+# ESBMC's exit status for an uncaught exception (sysexits.h EX_SOFTWARE).
+ESBMC_INTERNAL_ERROR = 70
+
+
+def abnormal_exit_line(returncode):
+  if returncode < 0:
+    return "ERROR: ESBMC exited abnormally (signal %d)\n" % -returncode
+  if returncode == ESBMC_INTERNAL_ERROR:
+    return "ERROR: ESBMC exited abnormally (exit code %d)\n" % returncode
+  return ""
+
 def do_exec(cmd_line, timeout=None, cwd=None):
 
   if args.dry_run:
@@ -106,7 +120,7 @@ def do_exec(cmd_line, timeout=None, cwd=None):
     p.communicate()
     return b"ERROR: Timed out\n"
 
-  return stdout + stderr
+  return stdout + stderr + abnormal_exit_line(p.returncode).encode()
 
 # Function to run esbmc
 def run(cmd_line, timeout=None):
@@ -384,6 +398,11 @@ def parse_result(the_output, prop):
   if re.search(r"^ERROR: Out of memory$", the_output, re.MULTILINE):
     return Result.err_memout
 
+  # benchexec reports a run whose output has no verdict and no "Unknown" line
+  # as ERROR, so a crash is not counted as unknown (#8097).
+  if re.search(r"^ERROR: ESBMC exited abnormally", the_output, re.MULTILINE):
+    return Result.err_crash
+
   return Result.unknown
 
 def python_false_string(the_result):
@@ -434,6 +453,9 @@ def get_result_string(the_result):
 
   if the_result == Result.err_memout:
     return "Unknown"
+
+  if the_result == Result.err_crash:
+    return "ERROR"
 
   if the_result == Result.unknown:
     return "Unknown"
