@@ -1067,6 +1067,14 @@ void goto_symext::symex_printf(const expr2tc &lhs, expr2tc &rhs)
     // cannot be bounded; the return value is handled as unbounded below.
     fmt = "";
     idx = fmt_idx;
+
+    // The format is a string printf reads (C11 7.21.6.1p2).
+    const expr2tc &fmt_arg = to_code_printf2t(rhs).operands[fmt_idx];
+    if (is_pointer_type(fmt_arg->type))
+    {
+      expr2tc first_char = dereference2tc(get_uint8_type(), fmt_arg);
+      dereference(first_char, dereferencet::READ);
+    }
   }
 
   // A v* call's only operand after the format is its va_list, which is
