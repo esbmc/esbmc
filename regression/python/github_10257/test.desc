@@ -1,0 +1,5 @@
+CORE
+main.py
+--python-check-exceptions ZeroDivisionError
+^\*\* 0 of 1 properties failed, 1 passed$
+^VERIFICATION SUCCESSFUL$
