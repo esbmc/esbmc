@@ -76,8 +76,7 @@ static void record_covered_branch(
 
 static bool strategy_reports_coverage(const optionst &options)
 {
-  return options.get_bool_option("k-induction") ||
-         options.get_bool_option("incremental-bmc");
+  return options.is_kind() || options.get_bool_option("incremental-bmc");
 }
 
 static bool reports_bounded_coverage(const optionst &options)
@@ -654,8 +653,7 @@ void bmct::report_violation()
   verdict_is_unknown = true;
   // The strategy goes on to the next k and prints the run's verdict.
   if (
-    (options.get_bool_option("k-induction") ||
-     options.get_bool_option("incremental-bmc")) &&
+    (options.is_kind() || options.get_bool_option("incremental-bmc")) &&
     !options.get_bool_option("multi-property"))
     log_status("The base case is unknown");
   else
