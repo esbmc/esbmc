@@ -4912,7 +4912,8 @@ static std::optional<double> literal_value(const nlohmann::json &node)
 static bool
 keeps_library_value(const std::string &function, const nlohmann::json &args)
 {
-  static const std::set<std::string> approximated = {"cbrt", "erf", "erfc"};
+  static const std::set<std::string> approximated = {
+    "cbrt", "erf", "erfc", "gamma", "lgamma", "pow"};
   if (
     approximated.count(function) ||
     !std::all_of(args.begin(), args.end(), is_number_literal) ||

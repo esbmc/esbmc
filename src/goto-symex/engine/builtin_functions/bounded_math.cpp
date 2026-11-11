@@ -37,9 +37,13 @@ void goto_symext::symex_bounded_math(
   {
     const double value = to_constant_floatbv2t(x).value.to_double();
     const double host = transcendental::host_value(function, value);
+    // math.* gives the C library's value, except for the functions CPython
+    // computes itself.
+    const bool library = is_true(call.operands[1]) &&
+                         !transcendental::cpython_implements(function);
     const transcendental::interval result =
-      is_true(call.operands[1]) ? transcendental::interval{host, host}
-                                : transcendental::at(function, value);
+      library ? transcendental::interval{host, host}
+              : transcendental::at(function, value);
     if (result.low == result.high || std::isnan(result.low))
     {
       symex_assign(code_assign2tc(ret, double_constant(ret->type, result.low)));

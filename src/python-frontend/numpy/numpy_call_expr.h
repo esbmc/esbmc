@@ -316,6 +316,8 @@ private:
   std::optional<exprt> try_numpy_math_constant();
   std::optional<exprt> try_bounded_ufunc(const std::string &function);
   exprt bounded_binary_ufunc(const std::string &function);
+  std::optional<exprt> try_runtime_power(const std::string &function);
+  bool may_hold_float(const nlohmann::json &arg);
   exprt broadcast_elements(
     const std::vector<exprt> &operands,
     const std::vector<std::size_t> &shape,

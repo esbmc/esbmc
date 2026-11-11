@@ -4872,6 +4872,8 @@ numpy_call_expr::try_early_result(const std::string &function)
     return bounded;
   if (std::optional<exprt> math = try_runtime_math(function))
     return math;
+  if (std::optional<exprt> power = try_runtime_power(function))
+    return power;
   reject_unlowered_ufunc_keywords(call_, function);
   if (!model_only.count(function))
     return try_any_all_result(function);
@@ -8236,11 +8238,53 @@ exprt numpy_call_expr::bounded_binary_ufunc(const std::string &function)
     if (!is_number_type(array_leaf_type(operand.type())))
       throw std::runtime_error(
         "TypeError: numpy." + function + " of a non-number is not supported");
+  const std::string model = function == "power" ? "pow" : function;
   return apply_ufunc(
     function, {a, b}, double_type(), [&](const std::vector<exprt> &x) {
       return bounded_math(converter_, call_)
-        .binary(function, x[0], x[1], math_module::numpy);
+        .binary(model, x[0], x[1], math_module::numpy);
     });
+}
+
+static bool is_numeric_literal_operand(const nlohmann::json &arg)
+{
+  numeric_value constant;
+  std::vector<numeric_value> row;
+  std::vector<std::vector<numeric_value>> rows;
+  const nlohmann::json node = tuples_as_lists(arg);
+  return try_extract_numeric_constant(node, constant) ||
+         try_extract_numeric_1d_list(node, row) ||
+         try_extract_numeric_2d_list(node, rows);
+}
+
+// numpy.power with an operand known only at run time and a float element:
+// the bounded pow of each pair of elements. Literal and integer operands
+// keep their exact routes.
+std::optional<exprt>
+numpy_call_expr::try_runtime_power(const std::string &function)
+{
+  if (
+    (function != "power" && function != "pow") || call_["args"].size() != 2 ||
+    masks_or_writes(call_, 2))
+    return std::nullopt;
+  const nlohmann::json &args = call_["args"];
+  if (
+    is_numeric_literal_operand(args[0]) && is_numeric_literal_operand(args[1]))
+    return std::nullopt;
+  if (!may_hold_float(args[0]) && !may_hold_float(args[1]))
+    return std::nullopt;
+  return bounded_binary_ufunc("power");
+}
+
+// Whether an operand's elements may be floats, read without converting an
+// operand whose conversion has effects (a call, or any other expression).
+bool numpy_call_expr::may_hold_float(const nlohmann::json &arg)
+{
+  if (std::optional<exprt> literal = literal_array_operand(arg))
+    return array_leaf_type(literal->type()).is_floatbv();
+  if (arg.value("_type", "") != "Name")
+    return true;
+  return array_leaf_type(converter_.get_expr(arg).type()).is_floatbv();
 }
 
 static std::optional<nlohmann::json>
@@ -13259,7 +13303,6 @@ fold_double(const std::string &function, double left, double right)
     {"add", [](double a, double b) { return a + b; }},
     {"subtract", [](double a, double b) { return a - b; }},
     {"multiply", [](double a, double b) { return a * b; }},
-    {"power", [](double a, double b) { return std::pow(a, b); }},
     {"copysign", [](double a, double b) { return std::copysign(a, b); }},
     {"fmax", [](double a, double b) { return std::fmax(a, b); }},
     {"fmin", [](double a, double b) { return std::fmin(a, b); }},
@@ -13351,6 +13394,13 @@ std::optional<exprt> numpy_call_expr::fold_scalar_binary(
     folded.cformat(integer2string(wrapped));
     return folded;
   }
+  if (function == "power")
+    return bounded_math(converter_, call_)
+      .binary(
+        "pow",
+        from_double(to_double(lhs), double_type()),
+        from_double(to_double(rhs), double_type()),
+        math_module::numpy);
   const std::optional<double> value =
     fold_double(function, to_double(lhs), to_double(rhs));
   if (!value)

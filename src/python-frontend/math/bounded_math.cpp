@@ -11,6 +11,7 @@
 #include <util/irep/std_expr.h>
 
 #include <algorithm>
+#include <cfloat>
 #include <cmath>
 #include <numbers>
 #include <optional>
@@ -72,6 +73,33 @@ exprt number(double value)
   return from_double(value, double_type());
 }
 
+// x rounded to an integral value in the IEEE rounding mode `mode`.
+exprt rounded(const exprt &x, ieee_floatt::rounding_modet mode)
+{
+  expr2tc x2;
+  migrate_expr(x, x2);
+  return migrate_expr_back(nearbyint2tc(
+    x2->type, x2, constant_int2tc(get_int32_type(), BigInt(mode))));
+}
+
+exprt is_integral(const exprt &x)
+{
+  return and_exprt(
+    not_exprt(or_exprt(is_nan(x), is_infinite(x))),
+    equality_exprt(rounded(x, ieee_floatt::ROUND_TO_ZERO), x));
+}
+
+// floor(x) is even; x finite, below 2^53 in magnitude.
+exprt even_floor(const exprt &x)
+{
+  const exprt floor = rounded(x, ieee_floatt::ROUND_TO_MINUS_INF);
+  exprt half("ieee_div", double_type());
+  half.copy_to_operands(floor, number(2.0));
+  half.add("rounding_mode") =
+    symbol_exprt("c:@__ESBMC_rounding_mode", int_type());
+  return is_integral(half);
+}
+
 // c with the sign of y, as C's copysign; y may be a signed zero.
 exprt with_sign_of(double c, const exprt &y)
 {
@@ -116,6 +144,122 @@ exprt domain_error(const std::string &function, const exprt &x)
     outside.push_back(is_infinite(x));
   return and_exprt(not_exprt(is_nan(x)), or_exprt(outside));
 }
+
+// The powers every implementation computes exactly: an integral result of
+// an integral base below 2^53, a power of two that stays normal, and the
+// special values C99 F.9.4.4 fixes.
+bool exact_power(double x, double y, double value)
+{
+  if (!std::isfinite(value) || value == 0.0 || y == 0.0 || x == 1.0 || y == 1.0)
+    return true;
+  if (!std::isfinite(x) || !std::isfinite(y) || y != std::floor(y))
+    return false;
+  int exponent = 0;
+  const bool power_of_two = std::frexp(std::fabs(x), &exponent) == 0.5;
+  if (power_of_two)
+    return std::fabs(value) >= DBL_MIN;
+  return x == std::floor(x) && y > 0 && std::fabs(value) <= 0x1p53;
+}
+
+// The value of a number literal, int or float, possibly cast to double.
+std::optional<double> literal_double(const exprt &e)
+{
+  if (e.id() == "typecast")
+    return literal_double(e.op0());
+  if (e.id() == "unary-")
+  {
+    const std::optional<double> operand = literal_double(e.op0());
+    return operand ? std::optional<double>(-*operand) : std::nullopt;
+  }
+  const exprt &x = e;
+  if (!x.is_constant())
+    return std::nullopt;
+  if (x.type().is_floatbv())
+    return ieee_floatt(to_constant_expr(x)).to_double();
+  BigInt value;
+  if (
+    (x.type().is_signedbv() || x.type().is_unsignedbv()) &&
+    !to_integer(x, value))
+    return value.to_int64();
+  return std::nullopt;
+}
+
+exprt odd_integer(const exprt &y)
+{
+  exprt half("ieee_div", double_type());
+  half.copy_to_operands(y, number(2.0));
+  half.add("rounding_mode") =
+    symbol_exprt("c:@__ESBMC_rounding_mode", int_type());
+  return and_exprt(is_integral(y), not_exprt(is_integral(half)));
+}
+
+exprt ieee(const irep_idt &op, const exprt &a, const exprt &b)
+{
+  exprt result(op, double_type());
+  result.copy_to_operands(a, b);
+  result.add("rounding_mode") =
+    symbol_exprt("c:@__ESBMC_rounding_mode", int_type());
+  return result;
+}
+
+// Whether a * b rounds to `product` exactly, by fma(a, b, -product) == 0.
+exprt exact_product(const exprt &a, const exprt &b, const exprt &product)
+{
+  expr2tc a2, b2, p2;
+  migrate_expr(a, a2);
+  migrate_expr(b, b2);
+  migrate_expr(product, p2);
+  const expr2tc rm = symbol2tc(get_int32_type(), "c:@__ESBMC_rounding_mode");
+  const expr2tc residual =
+    ieee_fma2tc(a2->type, a2, b2, neg2tc(p2->type, p2), rm);
+  return migrate_expr_back(equality2tc(residual, gen_zero(residual->type)));
+}
+
+exprt negated(const exprt &x)
+{
+  exprt result("unary-", double_type());
+  result.copy_to_operands(x);
+  return result;
+}
+
+exprt less(const exprt &a, double b)
+{
+  return binary_relation_exprt(a, "<", number(b));
+}
+
+exprt greater(const exprt &a, double b)
+{
+  return binary_relation_exprt(a, ">", number(b));
+}
+
+exprt finite(const exprt &x)
+{
+  return not_exprt(or_exprt(is_nan(x), is_infinite(x)));
+}
+
+// The exponent e of a >= 0 written m * 2^e with m in [0.5, 1), from its bits;
+// `low` asks for the bound below a subnormal's, `high` for the one above.
+exprt binary_exponent(const exprt &a, bool high)
+{
+  expr2tc a2;
+  migrate_expr(a, a2);
+  const expr2tc bits = bitcast2tc(get_uint64_type(), a2);
+  const expr2tc biased = typecast2tc(
+    get_int64_type(),
+    lshr2tc(get_uint64_type(), bits, constant_int2tc(get_uint64_type(), 52)));
+  const expr2tc normal = sub2tc(
+    get_int64_type(),
+    biased,
+    constant_int2tc(get_int64_type(), high ? 1022 : 1023));
+  const expr2tc subnormal =
+    constant_int2tc(get_int64_type(), high ? BigInt(-1021) : BigInt(-1075));
+  const expr2tc exponent = if2tc(
+    get_int64_type(),
+    equality2tc(biased, constant_int2tc(get_int64_type(), 0)),
+    subnormal,
+    normal);
+  return migrate_expr_back(typecast2tc(migrate_type(double_type()), exponent));
+}
 } // namespace
 
 bounded_math::bounded_math(
@@ -137,7 +281,9 @@ bool bounded_math::is_bounded_binary(const std::string &function)
 
 bool bounded_math::has_runtime_model(const std::string &function)
 {
-  return is_bounded(function) || function == "sqrt";
+  return (is_bounded(function) &&
+          !transcendental::cpython_implements(function)) ||
+         function == "sqrt";
 }
 
 double bounded_math::host_value(const std::string &function, double x)
@@ -169,6 +315,8 @@ exprt bounded_math::runtime(
   const exprt argument = read_once(x);
   if (function == "sqrt")
     return converter_.get_math_handler().handle_sqrt(argument, call_);
+  if (transcendental::cpython_implements(function))
+    return gamma_family(function, argument);
   const exprt value =
     special_cases(function, argument, bounded_call(function, argument, module));
   if (module == math_module::math)
@@ -182,6 +330,8 @@ exprt bounded_math::binary(
   const exprt &b,
   math_module module)
 {
+  if (function == "pow")
+    return power(a, b, module);
   const exprt x = read_once(a), y = read_once(b);
   if (x.is_constant() && y.is_constant())
   {
@@ -200,6 +350,280 @@ exprt bounded_math::binary(
              : within(result.low, result.high);
   }
   return function == "hypot" ? hypot(x, y) : arctan2(x, y);
+}
+
+// pow(x, y) of math.pow (raising Python's errors) or numpy.power: the
+// special values of C99 F.9.4.4 are exact, and otherwise the result has the
+// sign an odd integral exponent gives a negative base, and the magnitude
+// power_magnitude bounds.
+exprt bounded_math::power(const exprt &a, const exprt &b, math_module module)
+{
+  const exprt x = read_once(a), y = read_once(b);
+  const std::optional<double> base = literal_double(x),
+                              exponent = literal_double(y);
+  if (base && exponent)
+    return constant_power(*base, *exponent, module);
+  const exprt zero = number(0.0);
+  const exprt odd = odd_integer(y);
+  const exprt domain = and_exprt(
+    and_exprt(less(x, 0.0), finite(x)),
+    and_exprt(finite(y), not_exprt(is_integral(y))));
+  const exprt regular = and_exprt(
+    and_exprt(finite(x), finite(y)),
+    and_exprt(
+      and_exprt(
+        not_exprt(equality_exprt(x, zero)), not_exprt(equality_exprt(y, zero))),
+      and_exprt(not_exprt(equality_exprt(x, number(1.0))), not_exprt(domain))));
+  const exprt magnitude = power_magnitude(abs_value(x), y, regular);
+  const exprt general =
+    if_exprt(and_exprt(less(x, 0.0), odd), negated(magnitude), magnitude);
+  const exprt result = if_exprt(
+    or_exprt(equality_exprt(y, zero), equality_exprt(x, number(1.0))),
+    number(1.0),
+    if_exprt(
+      or_exprt(is_nan(x), is_nan(y)),
+      number(NAN),
+      if_exprt(
+        is_infinite(y),
+        power_infinite_exponent(x, y),
+        if_exprt(
+          is_infinite(x),
+          power_infinite_base(x, y, odd),
+          if_exprt(
+            equality_exprt(x, zero),
+            power_zero_base(x, y, odd),
+            if_exprt(domain, number(NAN), general))))));
+  if (module == math_module::math)
+  {
+    raise_if(
+      or_exprt(
+        domain,
+        and_exprt(equality_exprt(x, zero), and_exprt(less(y, 0.0), finite(y)))),
+      "ValueError",
+      "math domain error");
+    raise_if(
+      and_exprt(and_exprt(finite(x), finite(y)), is_infinite(result)),
+      "OverflowError",
+      "math range error");
+  }
+  return result;
+}
+
+exprt bounded_math::power_infinite_exponent(const exprt &x, const exprt &y)
+{
+  const exprt ax = abs_value(x);
+  return if_exprt(
+    equality_exprt(ax, number(1.0)),
+    number(1.0),
+    if_exprt(
+      equality_exprt(less(ax, 1.0), greater(y, 0.0)),
+      number(0.0),
+      number(inf)));
+}
+
+exprt bounded_math::power_infinite_base(
+  const exprt &x,
+  const exprt &y,
+  const exprt &odd)
+{
+  const exprt positive_y = greater(y, 0.0);
+  return if_exprt(
+    greater(x, 0.0),
+    if_exprt(positive_y, number(inf), number(0.0)),
+    if_exprt(
+      positive_y,
+      if_exprt(odd, number(-inf), number(inf)),
+      if_exprt(odd, number(-0.0), number(0.0))));
+}
+
+exprt bounded_math::power_zero_base(
+  const exprt &x,
+  const exprt &y,
+  const exprt &odd)
+{
+  return if_exprt(
+    greater(y, 0.0),
+    if_exprt(odd, x, number(0.0)),
+    if_exprt(odd, with_sign_of(inf, x), number(inf)));
+}
+
+// |x|^y for x and y finite and away from the special values: within the
+// ulps of the product for a literal integral exponent up to 8 in magnitude
+// (sqrt for 0.5), on the side of 1 and of |x| monotonicity gives, and
+// infinite exactly where the binary exponents of |x| and y say it overflows.
+// A factor of 2^-48 covers every implementation's rounding.
+exprt bounded_math::power_magnitude(
+  const exprt &a,
+  const exprt &y,
+  const exprt &regular)
+{
+  const exprt m = fresh("$math$", nil_exprt());
+  const exprt one = number(1.0);
+  const exprt down = number(1 - 0x1p-48), up = number(1 + 0x1p-48);
+  const exprt above_one = or_exprt(
+    and_exprt(greater(a, 1.0), greater(y, 0.0)),
+    and_exprt(less(a, 1.0), less(y, 0.0)));
+  const exprt below_one = or_exprt(
+    and_exprt(greater(a, 1.0), less(y, 0.0)),
+    and_exprt(less(a, 1.0), greater(y, 0.0)));
+  const exprt a_down = ieee("ieee_mul", a, down),
+              a_up = ieee("ieee_mul", a, up);
+  const exprt beyond_a = if_exprt(
+    binary_relation_exprt(a, ">=", one),
+    binary_relation_exprt(m, ">=", a_down),
+    binary_relation_exprt(m, "<=", a_up));
+  const exprt within_a = if_exprt(
+    binary_relation_exprt(a, ">=", one),
+    binary_relation_exprt(m, "<=", a_up),
+    binary_relation_exprt(m, ">=", a_down));
+  const exprt shape = and_exprt(
+    and_exprt(
+      binary_relation_exprt(m, ">=", number(0.0)),
+      and_exprt(
+        or_exprt(not_exprt(above_one), binary_relation_exprt(m, ">=", down)),
+        or_exprt(not_exprt(below_one), binary_relation_exprt(m, "<=", up)))),
+    and_exprt(
+      or_exprt(binary_relation_exprt(y, "<", one), beyond_a),
+      or_exprt(or_exprt(less(y, 0.0), greater(y, 1.0)), within_a)));
+  assume(or_exprt(
+    not_exprt(regular),
+    and_exprt(
+      shape,
+      and_exprt(power_overflow(a, y, m), power_literal_exponent(a, y, m)))));
+  return m;
+}
+
+// a^y overflows for a >= 1 < y once y * e_low >= 1025, and cannot while
+// y * e_high <= 1022, where 2^(e_low - 1) <= a < 2^e_high; likewise for
+// a < 1 and y < 0 with (1 / a)^-y.
+exprt bounded_math::power_overflow(
+  const exprt &a,
+  const exprt &y,
+  const exprt &m)
+{
+  const exprt high = binary_exponent(a, true), low = binary_exponent(a, false);
+  const exprt neg_y = negated(y);
+  const exprt grows =
+    and_exprt(binary_relation_exprt(a, ">=", number(1.0)), greater(y, 0.0));
+  const exprt shrinks = and_exprt(less(a, 1.0), less(y, 0.0));
+  const exprt safe = or_exprt(
+    and_exprt(
+      grows,
+      binary_relation_exprt(ieee("ieee_mul", y, high), "<=", number(1022.0))),
+    and_exprt(
+      shrinks,
+      binary_relation_exprt(
+        ieee("ieee_mul", neg_y, negated(low)), "<=", number(1022.0))));
+  const exprt sure = or_exprt(
+    and_exprt(
+      grows,
+      binary_relation_exprt(
+        ieee("ieee_mul", y, ieee("ieee_sub", low, number(1.0))),
+        ">=",
+        number(1025.0))),
+    and_exprt(
+      shrinks,
+      binary_relation_exprt(
+        ieee("ieee_mul", neg_y, negated(high)), ">=", number(1025.0))));
+  return and_exprt(
+    or_exprt(not_exprt(safe), finite(m)),
+    or_exprt(not_exprt(sure), is_infinite(m)));
+}
+
+// A literal exponent of 1 keeps |x|; 0.5 is sqrt and 2..8 in magnitude the
+// product (its reciprocal for a negative one), within the ulps of the
+// library plus the product's own rounding while the product stays normal.
+exprt bounded_math::power_literal_exponent(
+  const exprt &a,
+  const exprt &y,
+  const exprt &m)
+{
+  const std::optional<double> literal = literal_double(y);
+  if (!literal)
+    return true_exprt();
+  const double exponent = *literal;
+  if (exponent == 1.0)
+    return equality_exprt(m, a);
+  exprt product;
+  std::size_t steps = 0;
+  if (exponent == 0.5)
+  {
+    exprt root("ieee_sqrt", double_type());
+    root.copy_to_operands(a);
+    root.add("rounding_mode") =
+      symbol_exprt("c:@__ESBMC_rounding_mode", int_type());
+    product = root;
+    steps = 1;
+  }
+  else if (
+    exponent == std::floor(exponent) && std::fabs(exponent) >= 2 &&
+    std::fabs(exponent) <= 8)
+  {
+    steps = static_cast<std::size_t>(std::fabs(exponent));
+    product = a;
+    exprt::operandst exact;
+    for (std::size_t k = 1; k < steps; ++k)
+    {
+      const exprt next = ieee("ieee_mul", product, a);
+      exact.push_back(exact_product(product, a, next));
+      product = next;
+    }
+    // Every implementation returns a product it can represent exactly.
+    if (exponent > 0)
+      return or_exprt(
+        and_exprt(and_exprt(exact), equality_exprt(m, product)),
+        and_exprt(not_exprt(and_exprt(exact)), relative_to(product, m, steps)));
+    product = ieee("ieee_div", number(1.0), product);
+  }
+  else
+    return true_exprt();
+  return relative_to(product, m, steps);
+}
+
+// m within the library's ulps of `product`, which rounded `steps` times,
+// while the product stays normal.
+exprt bounded_math::relative_to(
+  const exprt &product,
+  const exprt &m,
+  std::size_t steps)
+{
+  const double tolerance =
+    (2.0 * steps + 2.0 * transcendental::max_ulps() + 4.0) * 0x1p-53;
+  const exprt normal = and_exprt(
+    binary_relation_exprt(product, ">=", number(0x1p-1000)),
+    binary_relation_exprt(product, "<=", number(0x1p1000)));
+  const exprt radius = ieee("ieee_mul", product, number(tolerance));
+  return or_exprt(
+    not_exprt(normal),
+    between(
+      m, ieee("ieee_sub", product, radius), ieee("ieee_add", product, radius)));
+}
+
+// pow of two literals: math.* the C library's value and its errors, raised
+// where the call runs; numpy.* within the ulps unless every implementation
+// is exact.
+exprt bounded_math::constant_power(
+  double base,
+  double exponent,
+  math_module module)
+{
+  const double value = std::pow(base, exponent);
+  const bool finite_args = std::isfinite(base) && std::isfinite(exponent);
+  if (module == math_module::math)
+  {
+    const bool domain =
+      finite_args && ((base < 0 && exponent != std::floor(exponent)) ||
+                      (base == 0 && exponent < 0));
+    if (domain)
+      raise_if(true_exprt(), "ValueError", "math domain error");
+    else if (finite_args && std::isinf(value))
+      raise_if(true_exprt(), "OverflowError", "math range error");
+    return number(domain ? NAN : value);
+  }
+  if (exact_power(base, exponent, value))
+    return number(value);
+  const transcendental::interval bound = transcendental::within_ulps(value);
+  return within(bound.low, bound.high);
 }
 
 // An infinity wins over NaN, a zero argument leaves the other's magnitude,
@@ -440,6 +864,53 @@ exprt bounded_math::special_cases(
   return if_exprt(is_nan(x), x, result);
 }
 
+// math.gamma or math.lgamma: the pieces bound a positive argument; a zero, a
+// negative integer and gamma's -inf are poles ("math domain error"), lgamma's
+// -inf is +inf, and between the negative poles gamma has the sign of
+// (-1)^ceil(-x) and lgamma is finite. Only math.* has them; NumPy does not.
+exprt bounded_math::gamma_family(const std::string &function, const exprt &x)
+{
+  const bool gamma = function == "gamma";
+  const exprt positive_part = bounded_call(function, x, math_module::math);
+  const exprt zero = number(0.0);
+  const exprt pole =
+    and_exprt(binary_relation_exprt(x, "<=", zero), is_integral(x));
+  const exprt negative_infinity =
+    and_exprt(is_infinite(x), binary_relation_exprt(x, "<", zero));
+  const exprt between_poles = fresh("$math$", nil_exprt());
+  const exprt finite =
+    not_exprt(or_exprt(is_nan(between_poles), is_infinite(between_poles)));
+  assume(
+    gamma ? and_exprt(
+              finite,
+              if_exprt(
+                even_floor(x),
+                binary_relation_exprt(between_poles, ">=", zero),
+                binary_relation_exprt(between_poles, "<=", zero)))
+          : finite);
+  const exprt result = if_exprt(
+    is_nan(x),
+    x,
+    if_exprt(
+      negative_infinity,
+      number(gamma ? NAN : inf),
+      if_exprt(
+        pole,
+        number(gamma ? NAN : inf),
+        if_exprt(
+          binary_relation_exprt(x, "<", zero), between_poles, positive_part))));
+  raise_if(
+    or_exprt(pole, gamma ? negative_infinity : false_exprt()),
+    "ValueError",
+    "math domain error");
+  raise_if(
+    and_exprt(
+      not_exprt(or_exprt(is_nan(x), is_infinite(x))), is_infinite(result)),
+    "OverflowError",
+    "math range error");
+  return result;
+}
+
 exprt bounded_math::fresh(const std::string &name, const exprt &value)
 {
   const typet type = value.is_nil() ? double_type() : value.type();
@@ -463,13 +934,16 @@ exprt bounded_math::fresh(const std::string &name, const exprt &value)
   return symbol;
 }
 
+// A number literal, such as -52.0, reads nothing, so it stays a literal.
 exprt bounded_math::capture(const exprt &x)
 {
-  return x.is_constant() ? x : fresh("$math_arg$", x);
+  return x.is_constant() || literal_double(x) ? x : fresh("$math_arg$", x);
 }
 
 exprt bounded_math::read_once(const exprt &x)
 {
+  if (const std::optional<double> literal = literal_double(x))
+    return number(*literal);
   const exprt value =
     x.is_symbol() || x.is_constant() ? x : fresh("$math_arg$", x);
   if (value.type() == double_type())
