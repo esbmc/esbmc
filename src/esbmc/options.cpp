@@ -178,8 +178,8 @@ const struct group_opt_templ all_cmd_options[] = {
     {"funsigned-char", NULL, "Make \"char\" unsigned by default"},
     {"fms-extensions", NULL, "Enable microsoft C extensions"},
     {"argv-max-args",
-     boost::program_options::value<int>()->default_value(2)->value_name("nr"),
-     "Maximum number of argv entries backed with nondet strings (default 2). "
+     boost::program_options::value<int>()->default_value(5)->value_name("nr"),
+     "Maximum number of argv entries backed with nondet strings (default 5). "
      "Higher values widen coverage at the cost of a larger SMT formula."},
     {"argv-max-strlen",
      boost::program_options::value<int>()->default_value(256)->value_name("nr"),
