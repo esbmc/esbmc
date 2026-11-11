@@ -934,6 +934,10 @@ private:
   /// still be dispatched). The caller MUST fall through to the existing
   /// handling on the empty result.
   std::string get_python_type_category(const typet &t) const;
+  exprt char_operand_type_error(
+    const std::string &op,
+    const exprt &lhs,
+    const exprt &rhs);
 
   bool is_bytes_literal(const nlohmann::json &element);
 

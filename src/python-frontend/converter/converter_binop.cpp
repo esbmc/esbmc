@@ -2626,6 +2626,53 @@ static void reject_opaque_array_operator(
   const typet &lhs,
   const typet &rhs);
 
+// A 1-char str from indexing or chr() is modelled as an 8-bit int, so an
+// operator CPython rejects on a str would otherwise run as int arithmetic.
+exprt python_converter::char_operand_type_error(
+  const std::string &op,
+  const exprt &lhs,
+  const exprt &rhs)
+{
+  static const std::map<std::string, std::string> symbols = {
+    {"Add", "+"},
+    {"Mult", "*"},
+    {"Sub", "-"},
+    {"Div", "/"},
+    {"FloorDiv", "//"},
+    {"Pow", "**"},
+    {"MatMult", "@"},
+    {"BitAnd", "&"},
+    {"BitOr", "|"},
+    {"BitXor", "^"},
+    {"LShift", "<<"},
+    {"RShift", ">>"}};
+  const auto symbol = symbols.find(op);
+  if (
+    symbol == symbols.end() || (!type_utils::is_char_type(lhs.type()) &&
+                                !type_utils::is_char_type(rhs.type())))
+    return nil_exprt();
+
+  const std::string lc = get_python_type_category(lhs.type());
+  const std::string rc = get_python_type_category(rhs.type());
+  const auto known = [](const std::string &c) {
+    return c == "string" || c == "numeric";
+  };
+  // str + str is concatenation and str * int repetition.
+  if (
+    !known(lc) || !known(rc) || (op == "Add" && lc == rc) ||
+    (op == "Mult" && lc != rc))
+    return nil_exprt();
+
+  const auto name = [this](const typet &t) {
+    return type_utils::is_char_type(t) ? std::string("str")
+                                       : type_handler_.get_python_type_name(t);
+  };
+  return get_exception_handler().gen_exception_raise(
+    "TypeError",
+    "unsupported operand type(s) for " + symbol->second + ": '" +
+      name(lhs.type()) + "' and '" + name(rhs.type()) + "'");
+}
+
 exprt python_converter::get_binary_operator_expr(
   const nlohmann::json &element,
   const nlohmann::json &left,
@@ -4238,6 +4285,8 @@ exprt python_converter::numpy_or_array_operation(
   const nlohmann::json &right,
   const nlohmann::json &element)
 {
+  if (exprt raised = char_operand_type_error(op, lhs, rhs); raised.is_not_nil())
+    return raised;
   cast_weak_float_compare(op, lhs, rhs, left, right);
   reject_opaque_array_operator(op, lhs.type(), rhs.type());
   reject_narrow_method_result_operands(op, lhs, rhs, left, right);
