@@ -1,0 +1,6 @@
+regression/python/github_10331
+regression/python/github_10331_abs_min_literal_unsupported
+regression/python/github_10331_abs_min_unsupported
+regression/python/github_10331_fail
+regression/python/github_10331_top_level_return
+regression/python/github_10331_top_level_return_fail

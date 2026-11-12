@@ -1929,6 +1929,8 @@ static bool is_nonzero_constant(const exprt &e)
     return !to_constant_int2t(value).value.is_zero();
   if (is_constant_floatbv2t(value))
     return !to_constant_floatbv2t(value).value.is_zero();
+  if (is_constant_bool2t(value))
+    return to_constant_bool2t(value).value;
   return false;
 }
 
@@ -4344,12 +4346,14 @@ exprt python_converter::numpy_or_array_operation(
   }
   if (lhs.type().is_array() || rhs.type().is_array())
     return handle_array_operations(op, lhs, rhs, left, right, element);
-  return nil_exprt();
+  // A `str` parameter is a char pointer, which the array gate above misses.
+  return str_arithmetic_type_error(op, lhs, rhs);
 }
 
-static bool is_char_array_type(const typet &t)
+static bool is_str_operand_type(const typet &t)
 {
-  return t.is_array() && is_char_element(t.subtype());
+  return (t.is_array() && is_char_element(t.subtype())) ||
+         type_utils::is_string_type(t);
 }
 
 // `str` has no arithmetic beyond `+` (below) or ordering against anything
@@ -4369,8 +4373,8 @@ exprt python_converter::str_arithmetic_type_error(
   if (arith_it == arith_symbols.end() && !is_ordering)
     return nil_exprt();
 
-  const bool lhs_char = is_char_array_type(lhs.type());
-  const bool rhs_char = is_char_array_type(rhs.type());
+  const bool lhs_char = is_str_operand_type(lhs.type());
+  const bool rhs_char = is_str_operand_type(rhs.type());
   if (lhs_char && rhs_char && !is_ordering)
     return get_exception_handler().gen_exception_raise(
       "TypeError",
