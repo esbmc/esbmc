@@ -1,4 +1,4 @@
 CORE
 main.py
 --unwind 5 --multi-property
-^ERROR: unsupported: constructor parameter 'a' is passed a str and a number$
+^ERROR: storing into an attribute that is dynamically typed only on one side is not yet supported$

@@ -124,7 +124,9 @@ private:
   /// parameters this pass typed from a call.
   std::map<Json *, std::set<std::string>> constructor_arg_types_;
   std::set<Json *> constructor_typed_params_;
-  void refuse_mixed_constructor_args() const;
+  /// Constructor parameters left unannotated on purpose; never re-annotate.
+  std::set<Json *> dynamic_constructor_params_;
+  void settle_mixed_constructor_args();
   void mark_mixed_constructor_classes();
   // Implementations live in annotation_conversion.inl unless noted.
 
