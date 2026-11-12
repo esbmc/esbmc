@@ -953,10 +953,29 @@ public:
   void set_ra_conv(ra_apit *iface);
 
   void bump_addrspace_array(unsigned int idx, const expr2tc &val);
-  /** Get the symbol name for the current address-allocation record array. */
-  std::string get_cur_addrspace_ident();
-  /** The address-space version every other one is stored over. */
-  expr2tc base_addrspace_array() const;
+  /** The current version of the address-allocation record arrays. */
+  unsigned int cur_addrspace() const;
+  /** The start (@p member 0) or end (1) address of object @p obj in
+   *  address-space version @p version. */
+  expr2tc addrspace_read(
+    unsigned int version,
+    unsigned int member,
+    const expr2tc &obj);
+  /** A store bump_addrspace_array() made: the version it defines, the slot,
+   *  its range, the context level it was made at, and the one its equations
+   *  were asserted at, if they have been. */
+  struct addrspace_storet
+  {
+    unsigned int version;
+    unsigned int idx;
+    expr2tc range;
+    unsigned int level;
+    std::optional<unsigned int> asserted_at;
+  };
+  /** The stores, asserted only once a version they define is read, so a
+   *  formula that never reads an address keeps no arrays (#9785). */
+  std::vector<addrspace_storet> addrspace_stores;
+  void assert_addrspace_stores(unsigned int version);
   void tie_base_addrspace(unsigned int idx, const expr2tc &val);
   /** Gives the base version every object's range, now and on registration,
    *  for convert_typecast_to_ptr(), the only reader of a slot before it is
@@ -1006,7 +1025,7 @@ public:
     bool from_byte_update);
   smt_astt address_holds(
     const expr2tc &ptr,
-    const expr2tc &addrspace,
+    unsigned int addrspace,
     const expr2tc &target,
     bool in_range);
   /** Typecast a pointer to an integer */
@@ -1281,7 +1300,8 @@ public:
   /** Type of the address space allocation records. Currently a start address
    *  integer and an end address integer. */
   type2tc addr_space_type;
-  /** Type of the array of address space allocation records. */
+  /** Type of the arrays of start and of end addresses, kept apart so that a
+   *  solver with native arrays reads them without tuple flattening (#9785). */
   type2tc addr_space_arr_type;
   /** The objects given an address so far, each mapped to whether it is a heap
    *  object that may be freed. In a list to support pushing and popping. */

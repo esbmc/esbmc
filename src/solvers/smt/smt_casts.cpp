@@ -535,11 +535,9 @@ smt_astt smt_solver_baset::convert_typecast_to_ptr(const typecast2t &cast)
 
   if (from_byte_update)
   {
-    expr2tc addrspace =
-      symbol2tc(addr_space_arr_type, get_cur_addrspace_ident());
     assert_ast(mk_implies(
       not_matched,
-      address_holds(output_sym, addrspace, cast_to_unsigned, false)));
+      address_holds(output_sym, cur_addrspace(), cast_to_unsigned, false)));
     return output;
   }
 
@@ -575,9 +573,8 @@ smt_astt smt_solver_baset::name_object_by_value(
       "__ESBMC_int_to_ptr_object", {convert_ast(target)}, obj->sort)));
   int_to_ptr_objects.push_back({obj, ctx_level, {}});
 
-  expr2tc addrspace =
-    from_byte_update ? symbol2tc(addr_space_arr_type, get_cur_addrspace_ident())
-                     : base_addrspace_array();
+  // init_addr_space_array() starts the version count at 1.
+  unsigned int addrspace = from_byte_update ? cur_addrspace() : 1;
   assert_ast(mk_implies(
     not_matched, address_holds(ptr, addrspace, target, !from_byte_update)));
   return pointer;
@@ -609,21 +606,19 @@ void smt_solver_baset::close_int_to_ptr_objects()
  *  @p target; with @p in_range, that object's range also holds @p target. */
 smt_astt smt_solver_baset::address_holds(
   const expr2tc &ptr,
-  const expr2tc &addrspace,
+  unsigned int addrspace,
   const expr2tc &target,
   bool in_range)
 {
-  const struct_type2t &as = to_struct_type(addr_space_type);
-  expr2tc range = index2tc(
-    addr_space_type, addrspace, pointer_object2tc(ptraddr_type2(), ptr));
-  expr2tc start = member2tc(as.members[0], range, as.member_names[0]);
+  expr2tc obj = pointer_object2tc(ptraddr_type2(), ptr);
+  expr2tc start = addrspace_read(addrspace, 0, obj);
   expr2tc offs =
     pointer_offset2tc(get_int_type(config.ansi_c.address_width), ptr);
   expr2tc holds = equality2tc(
     add2tc(ptraddr_type2(), start, typecast2tc(ptraddr_type2(), offs)), target);
   if (in_range)
   {
-    expr2tc end = member2tc(as.members[1], range, as.member_names[1]);
+    expr2tc end = addrspace_read(addrspace, 1, obj);
     holds = and2tc(
       holds,
       and2tc(lessthanequal2tc(start, target), lessthanequal2tc(target, end)));
@@ -676,16 +671,7 @@ smt_astt smt_solver_baset::convert_typecast_from_ptr(const typecast2t &cast)
   expr2tc address = static_address_of(cast.from);
   if (is_nil_expr(address))
   {
-    expr2tc from_addr_space = index2tc(
-      addr_space_type,
-      symbol2tc(addr_space_arr_type, get_cur_addrspace_ident()),
-      obj_num);
-
-    // We've now grabbed the pointer struct, now get the first element.
-    // Represent as fetching the first element of the struct representation.
-    const struct_type2t &addr_space_ty = to_struct_type(addr_space_type);
-    expr2tc from_start = member2tc(
-      addr_space_ty.members[0], from_addr_space, addr_space_ty.member_names[0]);
+    expr2tc from_start = addrspace_read(cur_addrspace(), 0, obj_num);
 
     expr2tc ptr_offs = pointer_offset2tc(diff_type, cast.from);
     address = add2tc(addr_type, from_start, ptr_offs);

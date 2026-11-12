@@ -739,40 +739,68 @@ void smt_solver_baset::init_addr_space_array()
   addr_space_data.back()[1] = false;
 }
 
+static expr2tc addrspace_array(unsigned int version, unsigned int member)
+{
+  return symbol2tc(
+    array_type2tc(ptraddr_type2(), expr2tc(), true),
+    std::string(member ? "__ESBMC_addrspace_end_" : "__ESBMC_addrspace_start_") +
+      std::to_string(version));
+}
+
+static expr2tc range_member(const expr2tc &range, unsigned int member)
+{
+  if (is_constant_struct2t(range))
+    return to_constant_struct2t(range).datatype_members[member];
+  const struct_type2t &t = to_struct_type(range->type);
+  return member2tc(t.members[member], range, t.member_names[member]);
+}
+
 void smt_solver_baset::bump_addrspace_array(
   unsigned int idx,
   const expr2tc &val)
 {
-  expr2tc oldname = symbol2tc(
-    addr_space_arr_type,
-    "__ESBMC_addrspace_arr_" + std::to_string(addr_space_sym_num.back()++));
-  expr2tc store = with2tc(
-    addr_space_arr_type,
-    oldname,
-    constant_int2tc(machine_ptr, BigInt(idx)),
-    val);
-  expr2tc newname = symbol2tc(
-    addr_space_arr_type,
-    "__ESBMC_addrspace_arr_" + std::to_string(addr_space_sym_num.back()));
-  convert_assign(equality2tc(newname, store));
+  addrspace_stores.push_back(
+    {++addr_space_sym_num.back(), idx, val, ctx_level, std::nullopt});
   if (base_addrspace_tied)
     tie_base_addrspace(idx, val);
 }
 
-expr2tc smt_solver_baset::base_addrspace_array() const
+void smt_solver_baset::assert_addrspace_stores(unsigned int version)
 {
-  // init_addr_space_array() starts the version count at 1.
-  return symbol2tc(addr_space_arr_type, "__ESBMC_addrspace_arr_1");
+  for (addrspace_storet &s : addrspace_stores)
+  {
+    if (s.version > version || s.asserted_at)
+      continue;
+    expr2tc obj = constant_int2tc(machine_ptr, BigInt(s.idx));
+    for (unsigned int m = 0; m < 2; m++)
+    {
+      expr2tc old_arr = addrspace_array(s.version - 1, m);
+      expr2tc store =
+        with2tc(old_arr->type, old_arr, obj, range_member(s.range, m));
+      convert_assign(equality2tc(addrspace_array(s.version, m), store));
+    }
+    s.asserted_at = ctx_level;
+  }
 }
+
+expr2tc smt_solver_baset::addrspace_read(
+  unsigned int version,
+  unsigned int member,
+  const expr2tc &obj)
+{
+  assert_addrspace_stores(version);
+  return index2tc(ptraddr_type2(), addrspace_array(version, member), obj);
+}
+
+// init_addr_space_array() starts the version count at 1.
+static const unsigned int base_addrspace = 1;
 
 void smt_solver_baset::tie_base_addrspace(unsigned int idx, const expr2tc &val)
 {
-  assert_expr(equality2tc(
-    index2tc(
-      addr_space_type,
-      base_addrspace_array(),
-      constant_int2tc(machine_ptr, BigInt(idx))),
-    val));
+  expr2tc obj = constant_int2tc(machine_ptr, BigInt(idx));
+  for (unsigned int m = 0; m < 2; m++)
+    assert_expr(equality2tc(
+      addrspace_read(base_addrspace, m, obj), range_member(val, m)));
 }
 
 void smt_solver_baset::tie_base_addrspace_to_objects()
@@ -787,9 +815,7 @@ void smt_solver_baset::tie_base_addrspace_to_objects()
   base_addrspace_tied = ctx_level;
 }
 
-std::string smt_solver_baset::get_cur_addrspace_ident()
+unsigned int smt_solver_baset::cur_addrspace() const
 {
-  std::stringstream ss;
-  ss << "__ESBMC_addrspace_arr_" << addr_space_sym_num.back();
-  return ss.str();
+  return addr_space_sym_num.back();
 }
