@@ -13,21 +13,31 @@ Module: Unit tests for node sharing in clang_c_convertert
 #include <clang-c-frontend/AST/vfs_paths.h>
 #include <langapi/language_ui.h>
 #include <util/base/filesystem.h>
+#include <util/expr/expr_util.h>
+#include <util/lang/c_types.h>
+#include <util/symtab/fix_symbol.h>
 
 #include <vector>
 
 static const char source[] =
   "int a, b;\n"
-  "int f(void) { return (a == 1) && (b == 2); }\n";
+  "int f(void) { return (a == 1) && (b == 2); }\n"
+  "int g(void)\n"
+  "{\n"
+  "  a = 3;\n"
+  "  b = 4;\n"
+  "  return a;\n"
+  "}\n";
 
-static void collect_constants(const irept &e, std::vector<const exprt *> &out)
+static void
+collect(const irept &e, const irep_idt &id, std::vector<const exprt *> &out)
 {
-  if (e.id() == "constant")
+  if (e.id() == id)
     out.push_back(static_cast<const exprt *>(&e));
   for (const irept &op : e.get_sub())
-    collect_constants(op, out);
+    collect(op, id, out);
   for (const auto &[name, sub] : e.get_named_sub())
-    collect_constants(sub, out);
+    collect(sub, id, out);
 }
 
 // Two ireps share storage exactly when they read the same node.
@@ -53,20 +63,42 @@ TEST_CASE("the C converter shares equal types and locations", "[core]")
   const symbolt *f = l.context.find_symbol("c:@F@f");
   REQUIRE(f != nullptr);
 
+  const symbolt *g = l.context.find_symbol("c:@F@g");
+  REQUIRE(g != nullptr);
+
+  // Variable references carry no location of their own.
+  std::vector<const exprt *> symbols;
+  collect(f->get_value(), "symbol", symbols);
+  REQUIRE(symbols.size() == 2);
+  for (const exprt *s : symbols)
+    REQUIRE(s->location().get_line().empty());
+
   std::vector<const exprt *> constants;
-  collect_constants(f->get_value(), constants);
-  const exprt *one = nullptr, *two = nullptr;
-  for (const exprt *c : constants)
-    if (c->get("#cformat") == "1")
-      one = c;
-    else if (c->get("#cformat") == "2")
-      two = c;
+  collect(f->get_value(), "constant", constants);
+  collect(g->get_value(), "constant", constants);
+  auto literal = [&constants](const char *text) {
+    for (const exprt *c : constants)
+      if (c->get("#cformat") == text)
+        return c;
+    return static_cast<const exprt *>(nullptr);
+  };
+  const exprt *one = literal("1"), *two = literal("2");
+  const exprt *three = literal("3"), *four = literal("4");
   REQUIRE(one != nullptr);
   REQUIRE(two != nullptr);
+  REQUIRE(three != nullptr);
+  REQUIRE(four != nullptr);
 
   // Two int literals share one type node.
   REQUIRE(one->type() == two->type());
   REQUIRE(same_node(one->type(), two->type()));
+
+  // Two comparisons share one bool type node, still after linking.
+  std::vector<const exprt *> equalities;
+  collect(f->get_value(), "=", equalities);
+  REQUIRE(equalities.size() == 2);
+  REQUIRE(equalities[0]->type().id() == "bool");
+  REQUIRE(same_node(equalities[0]->type(), equalities[1]->type()));
 
   // Two locations on one line share every field but the column.
   const locationt &x = one->location();
@@ -78,4 +110,25 @@ TEST_CASE("the C converter shares equal types and locations", "[core]")
     REQUIRE(x.find(field) == y.find(field));
     REQUIRE(same_node(x.find(field), y.find(field)));
   }
+
+  // The same column on two lines, with other locations between, is one node.
+  const locationt &p = three->location();
+  const locationt &q = four->location();
+  REQUIRE(p.get_line() != q.get_line());
+  REQUIRE(p.get_column() == q.get_column());
+  REQUIRE(same_node(p.find("column"), q.find("column")));
+}
+
+TEST_CASE("linking leaves a value alone when nothing is renamed", "[core]")
+{
+  symbolt symbol;
+  symbol.id = "c:@x";
+  symbol.set_value(gen_zero(int_type()));
+  const exprt before = symbol.get_value();
+
+  fix_symbolt fixer;
+  fixer.fix_symbol(symbol);
+
+  REQUIRE(symbol.get_value() == before);
+  REQUIRE(same_node(symbol.get_value(), before));
 }

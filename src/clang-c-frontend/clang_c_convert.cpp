@@ -4171,7 +4171,11 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
   }
   }
 
-  new_expr.location() = location;
+  // Nothing needs the location of these, and keeping one per node cost over
+  // 200 MB on a large program (#10190).
+  if (!llvm::isa<clang::ImplicitCastExpr, clang::DeclRefExpr, clang::ParenExpr>(
+        stmt))
+    new_expr.location() = location;
   return false;
 }
 
@@ -5938,11 +5942,18 @@ void clang_c_convertert::set_location(
       location.set(field, last_loc.find(field));
     return same;
   };
-  if (!reuse("line", last_loc_valid && line == last_loc_line))
-    location.set_line(line);
+  // A line or column number is the same node wherever it occurs.
+  auto number = [](std::vector<irept> &nodes, unsigned n) -> const irept & {
+    if (n >= nodes.size())
+      nodes.resize(n + 1);
+    if (nodes[n].id().empty())
+      nodes[n].id(std::to_string(n));
+    return nodes[n];
+  };
+  location.set("line", number(line_nodes, line));
   if (!reuse("file", last_loc_valid && last_loc_filename == filename))
     location.set_file(filename);
-  location.set_column(column);
+  location.set("column", number(column_nodes, column));
   if (
     !function_name.empty() &&
     !reuse("function", last_loc_valid && last_loc_function == function_name))

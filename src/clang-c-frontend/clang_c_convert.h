@@ -101,6 +101,7 @@ protected:
   std::string last_loc_filename;
   std::string last_loc_function;
   bool last_loc_valid = false;
+  std::vector<irept> line_nodes, column_nodes;
 
   // One shared irep per builtin kind; building a fresh type for every
   // builtin-typed AST node dominated conversion memory (#10190).
