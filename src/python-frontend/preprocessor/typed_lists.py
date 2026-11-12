@@ -115,6 +115,13 @@ def _names_in(node):
     return {n.id for n in ast.walk(node) if isinstance(n, ast.Name)}
 
 
+def _stored_names(node):
+    return {
+        n.id
+        for n in ast.walk(node) if isinstance(n, ast.Name) and not isinstance(n.ctx, ast.Load)
+    }
+
+
 def _walk_scope(stmts):
     """Every node of a scope's statements, not descending into a nested scope;
     the nested scope's own node is yielded."""
@@ -322,8 +329,6 @@ class TypedListGate:
             return False
         if call.func.id == "len":
             return len(call.args) == 1 and not isinstance(call.args[0], ast.Starred)
-        if call.func.id in self.functions:
-            return self.int_vars.get((call.func.id, RETURN), False)
         return call.func.id == "nondet_int" and not call.args
 
     def _verifier_modules(self):
@@ -365,6 +370,13 @@ class TypedListGate:
                 self._bind_location((node.func.id, param.arg), arg, scope)
 
     def _collect_name_bindings(self, node, scope):
+        if isinstance(node, _NESTED_SCOPES) and node not in self.top_defs.values():
+            # A walrus in a comprehension, or a nonlocal or global store in a
+            # nested function, rebinds a variable of this scope or the module.
+            for name in _stored_names(node):
+                self._bind(scope, name, None)
+                self._bind_location((MODULE, name), None, scope)
+            return
         target = _single_name_target(node)
         if target is not None:
             self._bind(scope, target.id, node.value)
