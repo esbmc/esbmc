@@ -115,7 +115,7 @@ bool no_reachable_property(
   }
   if (claims.empty())
     return true;
-  const python_claim_dischargert discharge(goto_functions, reachable);
+  const python_claim_dischargert discharge(goto_functions, context, reachable);
   return std::all_of(
     claims.begin(), claims.end(), [&](auto i) { return discharge.proves(i); });
 }
