@@ -400,6 +400,15 @@ class TypedListGate:
     def _bind_location(self, loc, value, scope):
         self.bindings.setdefault(loc, []).append((value, scope))
 
+    def _poison_unfollowed_bindings(self):
+        """A location bound by an import, a handler or any other binding this
+        pass does not follow, or never bound in this module, may hold
+        anything."""
+        for loc in list(self.classes.parent):
+            values = self.bindings.get(loc)
+            if not values or any(value is None for value, _ in values):
+                self.classes.poison_loc(loc, "bound by a binding not followed")
+
     def _bind(self, scope, name, value):
         self._bind_location(scope.loc(name), value, scope)
 
@@ -666,6 +675,7 @@ class TypedListGate:
         for scope in self.scopes:
             self._record_scope(scope)
         self._collect_bindings()
+        self._poison_unfollowed_bindings()
         while True:
             self._compute_int_vars()
             if not self._check_values():
