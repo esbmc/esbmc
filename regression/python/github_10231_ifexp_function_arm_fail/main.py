@@ -5,6 +5,6 @@ def g():
     return "a"
 
 
-f = g if random.random() < 0.5 else g()
+f = g if random.random() < 0.0 else g()
 r = f()
 assert r == "a"
