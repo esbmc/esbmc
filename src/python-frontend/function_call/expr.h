@@ -1011,6 +1011,31 @@ private:
   std::optional<exprt>
   fold_sum_over_tuple(bool is_user_imported, bool is_numpy_model_call);
 
+  /**
+   * min()/max()/sorted() over a list mixing int and float, which the
+   * list[float] models would read as all-float.
+   *
+   * @return the inline result, or nullopt when the list is not mixed or the
+   *         call has a typed model that handles it.
+   */
+  std::optional<exprt> build_mixed_numeric_call(
+    const exprt &list_arg,
+    const std::string &list_id,
+    bool has_default_kwarg);
+
+  /// Whether the sorted() argument registered as @p list_id mixes int and
+  /// float elements.
+  bool sorts_mixed_numeric(const std::string &list_id) const;
+
+  /**
+   * sorted() over a list literal of int and float constants, reordered at
+   * conversion time so that each element keeps its own type.
+   *
+   * @throws std::runtime_error for any other mixed int/float argument, whose
+   *         element types per position are not known statically.
+   */
+  exprt sort_mixed_numeric_literal();
+
   /*
    * Typed-builtin dispatch for min/max/sum/sorted/reversed: appends the
    * _float/_str/_default suffix to actual_func_name based on element type, and
