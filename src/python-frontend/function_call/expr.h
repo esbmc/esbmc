@@ -372,6 +372,10 @@ private:
   exprt bind_isinstance_call(exprt &obj_expr) const;
   std::optional<exprt>
   list_isinstance(const exprt &obj, const std::string &type_name) const;
+  std::optional<exprt> str_isinstance(
+    const exprt &obj,
+    const typet &expected_type,
+    const std::string &type_name) const;
 
   /// isinstance's test against the classinfo @p node: @p build of its
   /// @p type_name, or, for a variable holding a runtime class value (#8390),

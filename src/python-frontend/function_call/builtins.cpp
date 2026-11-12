@@ -551,6 +551,35 @@ std::optional<exprt> function_call_expr::list_isinstance(
     and2tc(notequal2tc(obj2, gen_zero(obj2->type)), not2tc(tuple2)));
 }
 
+/// isinstance(obj, str) answered from obj's static type. get_typet("str")
+/// returns char[0], which the generic encoding lowers to an empty array
+/// constant, and simplify_python_builtins would then have to recover the
+/// answer from value-set state. A char array is always a str. A char pointer
+/// is one unless it is NULL, which is how None reaches a `str` parameter
+/// (#10442). Empty unless both obj and @p expected_type are str-typed.
+std::optional<exprt> function_call_expr::str_isinstance(
+  const exprt &obj,
+  const typet &expected_type,
+  const std::string &type_name) const
+{
+  if (
+    !expected_type.is_array() ||
+    !type_utils::is_char_storage(to_array_type(expected_type).subtype()))
+    return std::nullopt;
+  const typet &obj_type = obj.type();
+  if (
+    !(obj_type.is_array() || obj_type.is_pointer()) ||
+    !type_utils::is_char_storage(obj_type.subtype()))
+    return std::nullopt;
+  if (type_name == "type")
+    return isinstance_str_as_type(obj);
+  if (obj_type.is_array())
+    return true_exprt();
+  expr2tc obj2;
+  migrate_expr(obj, obj2);
+  return migrate_expr_back(notequal2tc(obj2, gen_zero(obj2->type)));
+}
+
 exprt function_call_expr::isinstance_operand(
   const nlohmann::json &node,
   const std::function<exprt(const std::string &)> &build,
@@ -862,25 +891,10 @@ exprt function_call_expr::handle_isinstance() const
     if (std::optional<exprt> listed = list_isinstance(obj_expr, type_name))
       return *listed;
 
-    // String special case: get_typet("str") returns char[0], which the
-    // generic encoding lowers to gen_zero(char[0]) — an empty array
-    // constant. simplify_python_builtins then has to recover the answer
-    // from value-set state, which is fragile (e.g. depends on operational
-    // model layout). When obj's static type is already a char-array or
-    // char-pointer (a Python str), short-circuit to true here.
     if (
-      expected_type.is_array() &&
-      type_utils::is_char_storage(to_array_type(expected_type).subtype()))
-    {
-      const typet &obj_type = obj_expr.type();
-      if (
-        (obj_type.is_array() &&
-         type_utils::is_char_storage(obj_type.subtype())) ||
-        (obj_type.is_pointer() &&
-         type_utils::is_char_storage(obj_type.subtype())))
-        return type_name == "type" ? isinstance_str_as_type(obj_expr)
-                                   : true_exprt();
-    }
+      std::optional<exprt> str =
+        str_isinstance(obj_expr, expected_type, type_name))
+      return *str;
 
     exprt t;
 
