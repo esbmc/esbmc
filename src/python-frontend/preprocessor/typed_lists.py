@@ -228,6 +228,7 @@ class TypedListGate:
         self.allocations = []  # (scope, value node, location)
         self.accesses = []  # (scope, Subscript, stored value or None)
         self.appends = []  # (scope, Call)
+        self.calls = []  # calls of followed functions
 
     # --- scopes and the functions whose calls carry lists -------------------
 
@@ -520,6 +521,7 @@ class TypedListGate:
 
     def _record_call(self, node, scope):
         if self._analysed_call(node):
+            self.calls.append(node)
             params = self.functions[node.func.id].args.args
             for arg, param in zip(node.args, params):
                 self._flow_into((node.func.id, param.arg), arg, scope)
@@ -695,6 +697,12 @@ class TypedListGate:
                 setattr(subscript, TYPED_FLAG, True)
         for scope, call in self.appends:
             if self.classes.typed(scope.loc(call.func.value.id)):
+                setattr(call, TYPED_FLAG, True)
+        # A call whose result is a typed list: a converter path that builds
+        # the result itself instead of calling the function must build it
+        # typed.
+        for call in self.calls:
+            if self.classes.typed((call.func.id, RETURN)):
                 setattr(call, TYPED_FLAG, True)
 
     def builder_sites(self):

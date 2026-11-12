@@ -1895,6 +1895,8 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
         list_node["elts"].push_back(elt);
       }
       copy_location_fields_from_decl(element, list_node);
+      // A result the typed-list gate typed is built typed (#10451).
+      list_node["esbmc_typed_list"] = python_list::is_typed(element);
       python_list list(*this, list_node);
       return list.get();
     }
