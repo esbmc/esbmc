@@ -250,6 +250,8 @@ class TypedListGate:
         self.calls = []  # calls of followed functions
         self.sorts = []  # (scope, Call)
         self.copies = []  # (scope, slice/list()/copy() node, source Name)
+        self.compares = []  # (scope, Compare)
+        self.extends = []  # (scope, Call)
 
     # --- scopes and the functions whose calls carry lists -------------------
 
@@ -578,6 +580,8 @@ class TypedListGate:
                 self._record_return(node, scope)
             elif isinstance(node, ast.Call):
                 self._record_call(node, scope)
+            elif self._list_compare(node):
+                self.compares.append((scope, node))
             elif isinstance(node, ast.Name):
                 self._record_name(node, scope)
         for name in scope.declared:
@@ -656,7 +660,32 @@ class TypedListGate:
             return True
         if isinstance(parent, ast.Return):
             return scope.name != MODULE
+        if self._list_compare(parent):
+            return True
         return isinstance(parent, ast.Call) and call in parent.args and self._analysed_call(parent)
+
+    def _list_compare(self, node):
+        """`a == b` or `a != b` whose operands are each a name, a followed
+        call or `sorted(x)`: compared element-wise when both are typed."""
+        return (isinstance(node, ast.Compare) and len(node.ops) == 1
+                and isinstance(node.ops[0], (ast.Eq, ast.NotEq)) and all(
+                    isinstance(o, ast.Name) or self._analysed_call(o) or self._sorted_call(o)
+                    for o in (node.left, node.comparators[0])))
+
+    def _compared_loc(self, operand, scope):
+        """The location whose typing decides operand @p operand of a list
+        comparison."""
+        if isinstance(operand, ast.Name):
+            return scope.loc(operand.id)
+        if self._analysed_call(operand):
+            return (operand.func.id, RETURN)
+        return scope.loc(operand.args[0].id)
+
+    def _typed_compare(self, compare, scope):
+        """Whether both operands of list comparison @p compare are typed."""
+        return all(
+            self.classes.typed(self._compared_loc(o, scope))
+            for o in (compare.left, compare.comparators[0]))
 
     def _record_name(self, node, scope):
         loc = scope.loc(node.id)
@@ -688,6 +717,10 @@ class TypedListGate:
         """An operand of `x + y` built into a list: it was joined to the
         result when recorded."""
         return None if getattr(node, "_typed_operand", False) else NOT_MINE
+
+    def _rule_compared(self, node, _scope):
+        """An operand of a list comparison, checked in `_check_compares`."""
+        return None if self._list_compare(_parent(node)) else NOT_MINE
 
     def _rule_len(self, node, _scope):
         parent = _parent(node)
@@ -792,6 +825,20 @@ class TypedListGate:
         self.appends.append((scope, call))
         return None
 
+    def _method_extend(self, call, scope):
+        """`x.extend(y)` of a list name or a fresh list y, which then holds
+        elements of x's class."""
+        if not (len(call.args) == 1 and not call.keywords and isinstance(_parent(call), ast.Expr)):
+            return "method .extend used as a value"
+        source = call.args[0]
+        if isinstance(source, ast.Name):
+            setattr(source, "_typed_operand", True)
+        elif not self._allocation_shape(source):
+            return f"extended by {_describe(source)}"
+        self._flow_into(scope.loc(call.func.value.id), source, scope)
+        self.extends.append((scope, call))
+        return None
+
     def _method_copy(self, call, scope):
         if self._copy_source(call) is None:
             return "method .copy with arguments"
@@ -800,10 +847,10 @@ class TypedListGate:
 
     # The uses of a list name the typed model implements, tried in order.
     USE_RULES = (_rule_concatenated, _rule_len, _rule_analysed_call, _rule_alias, _rule_list_call,
-                 _rule_subscript, _rule_truth, _rule_sorted, _rule_method)
+                 _rule_subscript, _rule_truth, _rule_sorted, _rule_method, _rule_compared)
 
     # The list methods it implements.
-    METHOD_RULES = {"append": _method_append, "copy": _method_copy}
+    METHOD_RULES = {"append": _method_append, "copy": _method_copy, "extend": _method_extend}
 
     # --- the decision -------------------------------------------------------
 
@@ -832,7 +879,23 @@ class TypedListGate:
             if not self.is_int(call.args[0], scope):
                 poison(scope.loc(call.func.value.id), "appends a non-int")
         changed = self._check_copies() or changed
+        changed = self._check_compares() or changed
         return self._check_sorts() or changed
+
+    def _check_compares(self):
+        """Poison the typed names and call results of a list comparison
+        whose other operand is not typed. A `sorted(x)` operand then becomes
+        an untyped list instead. True when anything changed."""
+        changed = False
+        for scope, compare in self.compares:
+            if self._typed_compare(compare, scope):
+                continue
+            for operand in (compare.left, compare.comparators[0]):
+                loc = self._compared_loc(operand, scope)
+                if not self._sorted_call(operand) and self.classes.typed(loc):
+                    self.classes.poison_loc(loc, "compared with a list not typed")
+                    changed = True
+        return changed
 
     def _check_copies(self):
         """Poison the source of a slice whose bounds may not be ints. True
@@ -910,6 +973,7 @@ class TypedListGate:
         return self
 
     def _flag(self):
+        self._flag_compares()
         for _, value, loc in self.allocations:
             if self.classes.typed(loc):
                 for node in _shape_nodes(value):
@@ -926,7 +990,7 @@ class TypedListGate:
         for scope, subscript, _ in self.accesses:
             if self.classes.typed(scope.loc(subscript.value.id)):
                 setattr(subscript, TYPED_FLAG, True)
-        for scope, call in self.appends:
+        for scope, call in self.appends + self.extends:
             if self.classes.typed(scope.loc(call.func.value.id)):
                 setattr(call, TYPED_FLAG, True)
         # A call whose result is a typed list: a converter path that builds
@@ -936,6 +1000,16 @@ class TypedListGate:
             if self.classes.typed((call.func.id, RETURN)):
                 setattr(call, TYPED_FLAG, True)
         self._flag_copies()
+
+    def _flag_compares(self):
+        """Flag a comparison of two typed lists and a `sorted(x)` operand of
+        one, which then builds a typed result."""
+        for scope, compare in self.compares:
+            if self._typed_compare(compare, scope):
+                for node in (compare.left, compare.comparators[0]):
+                    if self._sorted_call(node):
+                        setattr(node, TYPED_FLAG, True)
+                setattr(compare, TYPED_FLAG, True)
 
     def _flag_copies(self):
         for scope, node, source in self.copies:

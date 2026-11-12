@@ -1065,6 +1065,50 @@ PyListObject *__ESBMC_tlist_slice_untyped(
   return r;
 }
 
+/* l.extend(m): m's elements appended to l. m may be l itself, so its size
+ * is read first. As in __ESBMC_tlist_repeat, the first 8 elements come from
+ * a loop unwound in full. */
+void __ESBMC_tlist_extend(PyListObject *l, const PyListObject *m)
+{
+  size_t n = m->size;
+  size_t base = l->size;
+  size_t i = 0;
+  __ESBMC_unroll(8);
+  while (i < 8 && i < n)
+  {
+    l->slot[base + i].v = m->slot[i].v;
+    i++;
+  }
+  while (i < n)
+  {
+    l->slot[base + i].v = m->slot[i].v;
+    i++;
+  }
+  l->size = base + n;
+}
+
+/* a == b, element by element over a's size. The first 8 elements are one
+ * formula with no path per element: an element at or past the size does not
+ * take part. Longer lists compare the rest in a loop. */
+bool __ESBMC_tlist_eq(const PyListObject *a, const PyListObject *b)
+{
+  size_t n = a->size;
+  bool eq = n == b->size;
+  size_t i = 0;
+  __ESBMC_unroll(8);
+  while (i < 8)
+  {
+    eq = eq && (i >= n || a->slot[i].v == b->slot[i].v);
+    i++;
+  }
+  while (i < n)
+  {
+    eq = eq && a->slot[i].v == b->slot[i].v;
+    i++;
+  }
+  return eq;
+}
+
 bool __ESBMC_list_set_at(
   PyListObject *l,
   size_t index,

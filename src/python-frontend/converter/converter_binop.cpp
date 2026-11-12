@@ -2408,7 +2408,7 @@ bool python_converter::may_rebind_left(
 std::optional<exprt>
 python_converter::try_lowered_compare(const nlohmann::json &element)
 {
-  if (python_list::is_typed(element))
+  if (python_list::is_typed(element) && element["_type"] == "BinOp")
     return python_list(*this, element).typed_binop();
   std::optional<exprt> bound = try_numpy_dtype_compare(element);
   if (!bound)
@@ -5204,7 +5204,7 @@ exprt python_converter::handle_list_operations(
      op == "GtE"))
   {
     python_list list(*this, element);
-    return list.compare(lhs, rhs, op);
+    return list.typed_or_untyped_compare(lhs, rhs, op);
   }
 
   // List concatenation: also handle Any-typed (void*) right operand, which
