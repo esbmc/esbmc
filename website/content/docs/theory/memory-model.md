@@ -56,7 +56,8 @@ would sort below the base. A constant request past the cap is *reported*; a
 symbolic one is bounded by assumption where the path has no failure outcome to
 report, and `realloc` joins the cap to its failure condition so C17 7.22.3.5
 still holds. Two flags opt out: `--force-realloc-success` skips the `realloc`
-cap and `--no-vla-size-check` the VLA bound.
+cap and `--no-vla-size-check` the VLA bound. `calloc` returns `NULL` when
+`nmemb * size` wraps `size_t`.
 
 ## Properties checked
 

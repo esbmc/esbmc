@@ -1,5 +1,5 @@
 CORE
 main.py
 --unwind 1
+^  uncaught exception: ValueError$
 ^VERIFICATION FAILED$
-uncaught exception: ValueError

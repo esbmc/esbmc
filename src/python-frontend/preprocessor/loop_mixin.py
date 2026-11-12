@@ -1445,6 +1445,30 @@ class LoopMixin:
                 transformed_body.append(transformed_statement)
         return transformed_body
 
+    def _range_zero_step_check(self, step, node):
+        """`if step == 0: raise ValueError(...)`, or nothing for a literal step.
+
+        A literal zero step is rejected before this is reached.
+        """
+        if isinstance(step, ast.Constant):
+            return []
+        check = ast.If(
+            test=ast.Compare(left=step, ops=[ast.Eq()], comparators=[ast.Constant(value=0)]),
+            body=[
+                ast.Raise(
+                    exc=ast.Call(
+                        func=ast.Name(id="ValueError", ctx=ast.Load()),
+                        args=[ast.Constant(value="range() arg 3 must not be zero")],
+                        keywords=[],
+                    ),
+                    cause=None,
+                )
+            ],
+            orelse=[],
+        )
+        self.ensure_all_locations(check, node)
+        return [check]
+
     def _transform_range_for(self, node):  # pylint: disable=too-many-locals
         """Transform range-based for loops to while loops"""
         # Add validation for range arguments
@@ -1480,7 +1504,7 @@ class LoopMixin:
         else:
             step = ast.Constant(value=1)
 
-        step_validation = self._range_zero_step_check(step)
+        step_validation = self._range_zero_step_check(step, node)
 
         # Create assignment for the start variable
         start_assign = ast.AnnAssign(
@@ -1572,32 +1596,8 @@ class LoopMixin:
         # Create the while statement
         while_stmt = ast.While(test=while_cond, body=while_body, orelse=[])
 
+        # Return the transformed statements
         return step_validation + [start_assign, has_next_assign, while_stmt]
-
-    @staticmethod
-    def _range_zero_step_check(step):
-        """`if step == 0: raise ValueError(...)`, omitted for a non-zero literal."""
-        try:
-            literal = ast.literal_eval(step)
-        except ValueError:
-            literal = None
-        if isinstance(literal, int) and literal != 0:
-            return []
-        raise_value_error = ast.Raise(
-            exc=ast.Call(
-                func=ast.Name(id="ValueError", ctx=ast.Load()),
-                args=[ast.Constant(value="range() arg 3 must not be zero")],
-                keywords=[],
-            ),
-            cause=None,
-        )
-        return [
-            ast.If(
-                test=ast.Compare(left=step, ops=[ast.Eq()], comparators=[ast.Constant(value=0)]),
-                body=[raise_value_error],
-                orelse=[],
-            )
-        ]
 
     @staticmethod
     def _body_destructures_name(body, name):

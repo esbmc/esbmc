@@ -1640,6 +1640,8 @@ std::vector<collected_nondet_value> collect_nondet_values(
 {
   std::vector<collected_nondet_value> results;
   std::unordered_set<std::string> seen_nondets;
+  std::unordered_map<std::string, const goto_programt::instructiont *>
+    off_trace;
 
   for (auto const &SSA_step : target.SSA_steps)
   {
@@ -1655,10 +1657,27 @@ std::vector<collected_nondet_value> collect_nondet_values(
 
       const std::string file_path =
         SSA_step.source.pc->location.file().as_string();
-      const bool reached = smt_conv.l_get(SSA_step.guard).is_true();
+      // A store through a pointer with several targets makes one step per
+      // target; the one the trace takes is the input (#10315). A step at
+      // another instruction that reads an off-trace nondet, e.g. the phi after
+      // an untaken branch, does not emit it.
+      const goto_programt::instructiont *const pc = &*SSA_step.source.pc;
+      if (!smt_conv.l_get(SSA_step.guard).is_true())
+      {
+        for (const expr2tc &nondet_expr : nondets)
+          off_trace.emplace(to_symbol2t(nondet_expr).thename.as_string(), pc);
+        continue;
+      }
+      for (const expr2tc &nondet_expr : nondets)
+      {
+        const std::string &name = to_symbol2t(nondet_expr).thename.as_string();
+        const auto it = off_trace.find(name);
+        if (it != off_trace.end() && it->second != pc)
+          seen_nondets.insert(name);
+      }
 
       if (
-        reached && harness_inputs_only &&
+        harness_inputs_only &&
         SSA_step.source.pc->location.function() == "__VERIFIER_nondet_memory" &&
         file_operations::is_bundled_source(file_path))
       {
@@ -1672,7 +1691,6 @@ std::vector<collected_nondet_value> collect_nondet_values(
       }
 
       const bool is_input =
-        reached &&
         // Nondet initialisation of an uninitialised local (inserted by
         // mark_decl_as_non_det) is not a program input: the test harness
         // only feeds values to __VERIFIER_nondet_*() calls, so emitting it
