@@ -550,6 +550,10 @@ void python_converter::convert_module_imports(code_blockt &all_imports_block)
   for (auto &entry : module_ast_pool_)
     modules.push_back({&entry.second, &entry.second, entry.first});
   python_param_annotations::propagate_tuple_list_params(modules);
+  // The scalar pass may point the entry module's calls at the copies it makes
+  // of an imported function (#10431). The entry AST is the front end's own,
+  // not yet converted.
+  modules.front().write = const_cast<nlohmann::json *>(ast_json);
   python_param_annotations::propagate_scalar_params(modules);
 
   auto convert_import = [&](const nlohmann::json &node) {

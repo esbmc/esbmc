@@ -98,6 +98,14 @@ bool is_none_constant(const nlohmann::json &node)
          node["value"].is_null();
 }
 
+/// `int`, `float` or `str` for an annotation naming one of them, else "".
+std::string annotated_type_name(const nlohmann::json &annotation)
+{
+  const std::string type =
+    is_node(annotation, "Name") ? annotation["id"].get<std::string>() : "";
+  return type == "int" || type == "float" || type == "str" ? type : "";
+}
+
 /// The type a tuple element names: a constant's type, or the `int`, `float`
 /// or `str` annotation of a parameter or variable that @p scope (the innermost
 /// enclosing def or the module, or null) binds exactly once. "" otherwise.
@@ -119,10 +127,7 @@ element_type_name(const nlohmann::json &elt, const nlohmann::json *scope)
     (!decl.contains("arg") &&
      std::find(body.begin(), body.end(), decl) == body.end()))
     return "";
-  const nlohmann::json &annotation = decl.value("annotation", nlohmann::json());
-  const std::string type =
-    is_node(annotation, "Name") ? annotation["id"].get<std::string>() : "";
-  return type == "int" || type == "float" || type == "str" ? type : "";
+  return annotated_type_name(decl.value("annotation", nlohmann::json()));
 }
 
 /// A `tuple[T0, ...]` annotation for a tuple literal of constants or typed
@@ -775,18 +780,17 @@ std::string literal_scalar_type(const nlohmann::json &node)
   return constant_type_name(node);
 }
 
-/// The value of the `name = ...` or `name: T = ...` statement under @p node,
-/// in whatever block it sits.
+/// The `name = ...` or `name: T = ...` statement under @p node, in whatever
+/// block it sits.
 const nlohmann::json *
-plain_assignment_value(const nlohmann::json &node, const std::string &name)
+plain_assignment(const nlohmann::json &node, const std::string &name)
 {
-  if (
-    const nlohmann::json *value = json_utils::plain_assigned_value(node, name))
-    return value;
+  if (json_utils::plain_assigned_value(node, name))
+    return &node;
   if (node.is_structured())
     for (const auto &child : node)
-      if (const nlohmann::json *value = plain_assignment_value(child, name))
-        return value;
+      if (const nlohmann::json *stmt = plain_assignment(child, name))
+        return stmt;
   return nullptr;
 }
 
@@ -804,8 +808,9 @@ bool has_star_import(const nlohmann::json &body)
 /// their call sites. Each module is annotated on its own and sees only its own
 /// calls, so `lib.f(2.5)` left `f`'s parameter as Any and the value was
 /// reinterpreted as a pointer (GitHub #8501). A parameter is annotated only
-/// when every call site passes the same type; any site this pass cannot type,
-/// or any use of the function's name other than as a callee, leaves it alone.
+/// when every call site passes the same type, and specialised when the sites
+/// pass two; any site this pass cannot type, or any use of the function's name
+/// other than as a callee, leaves it alone.
 class scalar_propagator : call_resolver
 {
 public:
@@ -818,11 +823,20 @@ public:
       collect_base_names(module.read->at("body"));
   }
 
+  /// A parameter annotated in one round types the calls its function passes
+  /// it to in the next (#10431). Each round annotates a parameter or points
+  /// the calls of one at copies that annotate it, so fewer calls pass an
+  /// unannotated parameter and the rounds end.
   void run()
   {
-    for (size_t module = 0; module < modules_.size(); ++module)
-      visit(modules_[module].read->at("body"), module, false);
-    apply();
+    do
+    {
+      bound_.clear();
+      poisoned_.clear();
+      calls_.clear();
+      for (size_t module = 0; module < modules_.size(); ++module)
+        visit(modules_[module].read->at("body"), module, nullptr, false);
+    } while (apply());
   }
 
 private:
@@ -994,43 +1008,71 @@ private:
     return nullptr;
   }
 
+  struct site
+  {
+    const nlohmann::json *call;
+    size_t caller;
+    std::string type;
+  };
   struct binding
   {
     std::optional<std::string> type;
     bool from_other_module;
     std::set<std::string> kinds;
+    std::vector<site> sites;
   };
   std::map<param_key, binding> bound_;
   std::set<std::string> poisoned_;
+  /// The calls of each function (module, name) that bind by position.
+  std::map<std::pair<size_t, std::string>, size_t> calls_;
 
-  /// A Name argument is typed only when its module binds it exactly once, by a
-  /// plain assignment, to a value literal_scalar_type can type.
-  std::string name_type(const std::string &id, size_t module) const
+  /// A Name argument is typed only when it is a parameter of @p scope, by the
+  /// annotation element_type_name reads (#10431), or when its module binds it
+  /// exactly once, by a plain assignment, to a value literal_scalar_type can
+  /// type or with an annotation naming its type.
+  std::string name_type(
+    const nlohmann::json &name,
+    size_t module,
+    const nlohmann::json *scope) const
   {
+    const std::string id = name["id"];
+    if (scope && json_utils::count_name_bindings((*scope)["args"], id))
+      return element_type_name(name, scope);
     const nlohmann::json &ast = *modules_[module].read;
     if (
       has_star_import(ast["body"]) ||
       json_utils::count_name_bindings(ast, id) != 1)
       return "";
-    const nlohmann::json *value = plain_assignment_value(ast, id);
-    return value ? literal_scalar_type(*value) : "";
+    const nlohmann::json *stmt = plain_assignment(ast, id);
+    if (!stmt)
+      return "";
+    const std::string annotated =
+      annotated_type_name(stmt->value("annotation", nlohmann::json()));
+    return annotated.empty()
+             ? literal_scalar_type(*json_utils::plain_assigned_value(*stmt, id))
+             : annotated;
   }
 
-  std::string arg_type(const nlohmann::json &arg, size_t module) const
+  std::string arg_type(
+    const nlohmann::json &arg,
+    size_t module,
+    const nlohmann::json *scope) const
   {
-    return is_node(arg, "Name") ? name_type(arg["id"], module)
+    return is_node(arg, "Name") ? name_type(arg, module, scope)
                                 : literal_scalar_type(arg);
   }
 
-  void bind(const param_key &key, const std::string &type, bool other_module)
+  void bind(const param_key &key, const site &at, bool other_module)
   {
+    const std::string &type = at.type;
     std::optional<std::string> inferred;
     if (!type.empty())
       inferred = type;
     auto [entry, inserted] =
-      bound_.emplace(key, binding{inferred, other_module, {}});
+      bound_.emplace(key, binding{inferred, other_module, {}, {}});
     if (!type.empty())
       entry->second.kinds.insert(type);
+    entry->second.sites.push_back(at);
     if (inserted)
       return;
     if (entry->second.type != inferred)
@@ -1064,7 +1106,11 @@ private:
            is_none_constant(defaults[i - required]);
   }
 
-  void visit_call(const nlohmann::json &call, size_t caller)
+  /// @p scope is the function or lambda the call is made in, or null.
+  void visit_call(
+    const nlohmann::json &call,
+    size_t caller,
+    const nlohmann::json *scope)
   {
     const std::string name = callee_name(call["func"]);
     const std::optional<call_target> target =
@@ -1074,7 +1120,7 @@ private:
       poisoned_.insert(name);
       return;
     }
-    if (modules_[target->module].write == nullptr || !target->def)
+    if (modules_[target->module].name.empty() || !target->def)
       return;
 
     const nlohmann::json *def = target->def;
@@ -1094,6 +1140,7 @@ private:
       poisoned_.insert(name);
       return;
     }
+    ++calls_[{target->module, target->key}];
     // A parameter the call leaves out takes its default, typed in the
     // callee's module (#8968).
     const nlohmann::json &defaults = (*def)["args"]["defaults"];
@@ -1109,7 +1156,10 @@ private:
         continue;
       bind(
         param_key{target->module, target->key, i},
-        arg_type(arg, passed ? caller : target->module),
+        {&call,
+         caller,
+         passed ? arg_type(arg, caller, scope)
+                : arg_type(arg, target->module, nullptr)},
         target->module != caller);
     }
   }
@@ -1127,19 +1177,26 @@ private:
     return "";
   }
 
+  static bool opens_scope(const nlohmann::json &node)
+  {
+    return is_node(node, "FunctionDef") || is_node(node, "AsyncFunctionDef") ||
+           is_node(node, "Lambda");
+  }
+
   /// Walk every node, class and function bodies included. A Name or Attribute
   /// outside callee position may carry the function anywhere, so its name is
   /// poisoned, unless it only names a type in an annotation.
   void visit(
     const nlohmann::json &node,
     size_t module,
+    const nlohmann::json *scope,
     bool is_callee,
     bool in_annotation = false)
   {
     if (node.is_array())
     {
       for (const auto &elem : node)
-        visit(elem, module, false, in_annotation);
+        visit(elem, module, scope, false, in_annotation);
       return;
     }
     if (!node.is_object())
@@ -1150,12 +1207,14 @@ private:
 
     const bool is_call = is_node(node, "Call");
     if (is_call)
-      visit_call(node, module);
+      visit_call(node, module, scope);
 
+    const nlohmann::json *inner = opens_scope(node) ? &node : scope;
     for (auto it = node.begin(); it != node.end(); ++it)
       visit(
         it.value(),
         module,
+        inner,
         is_call && it.key() == "func",
         in_annotation || it.key() == "annotation" || it.key() == "returns");
   }
@@ -1214,8 +1273,138 @@ private:
       "' is passed values of different types (" + spelled + ")");
   }
 
-  void apply() const
+  static void annotate(nlohmann::json &arg, const std::string &type)
   {
+    nlohmann::json annotation{{"_type", "Name"}, {"id", type}};
+    for (const char *field :
+         {"lineno", "col_offset", "end_lineno", "end_col_offset"})
+      if (arg.contains(field))
+        annotation[field] = arg[field];
+    arg["annotation"] = annotation;
+  }
+
+  static bool reads_name(const nlohmann::json &node, const std::string &name)
+  {
+    if (is_node(node, "Name") && node["id"] == name)
+      return true;
+    return node.is_structured() &&
+           std::any_of(node.begin(), node.end(), [&](const auto &child) {
+             return reads_name(child, name);
+           });
+  }
+
+  /// Import @p copies beside the `from ... import name` of @p module.
+  void import_copies(
+    size_t module,
+    const std::string &name,
+    const std::map<std::string, std::string> &copies) const
+  {
+    for (auto &stmt : modules_[module].write->at("body"))
+    {
+      if (!is_node(stmt, "ImportFrom"))
+        continue;
+      nlohmann::json &aliases = stmt["names"];
+      const auto it =
+        std::find_if(aliases.begin(), aliases.end(), [&](const auto &alias) {
+          return alias["name"] == name && alias["asname"].is_null();
+        });
+      if (it == aliases.end())
+        continue;
+      const nlohmann::json original = *it;
+      for (const auto &[kind, copy] : copies)
+      {
+        nlohmann::json alias = original;
+        alias["name"] = copy;
+        aliases.push_back(std::move(alias));
+      }
+      return;
+    }
+  }
+
+  /// Point each call in @p node that @p copies maps at its copy.
+  static void redirect(
+    nlohmann::json &node,
+    const std::map<const nlohmann::json *, std::string> &copies)
+  {
+    if (!node.is_structured())
+      return;
+    if (const auto it = copies.find(&node); it != copies.end())
+      node["func"]["id"] = it->second;
+    for (auto &child : node)
+      redirect(child, copies);
+  }
+
+  /// Whether each call of @p entry can be pointed at its type's copy in
+  /// @p names: a bare-name call this pass typed, made in @p module or in one
+  /// that imports @p name by name, to a copy @p module does not define yet.
+  bool redirectable(
+    const binding &entry,
+    size_t module,
+    const std::string &name,
+    const std::map<std::string, std::string> &names) const
+  {
+    const nlohmann::json &body = modules_[module].read->at("body");
+    return std::all_of(
+      entry.sites.begin(), entry.sites.end(), [&](const site &at) {
+        return !at.type.empty() && is_node((*at.call)["func"], "Name") &&
+               modules_[at.caller].write &&
+               !json_utils::count_name_bindings(body, names.at(at.type)) &&
+               (at.caller == module ||
+                imports_name(*modules_[at.caller].read, name));
+      });
+  }
+
+  /// Copy the function @p key names once per type its parameter is passed,
+  /// and point each call at the copy for its argument's type, as the
+  /// annotator does for the calls a module makes to its own functions
+  /// (#10431). Nothing changes unless every call is redirectable, the
+  /// function does not name itself, and @p entry is its only parameter whose
+  /// calls disagree.
+  bool specialise(const param_key &key, const binding &entry) const
+  {
+    const auto &[module, name, param] = key;
+    nlohmann::json &body = modules_[module].write->at("body");
+    const nlohmann::json *def = find_function(body, name);
+    const auto disagrees = [&](const auto &other) {
+      return std::get<0>(other.first) == module &&
+             std::get<1>(other.first) == name && !other.second.type;
+    };
+    std::map<std::string, std::string> names;
+    for (const std::string &kind : entry.kinds)
+      names[kind] = name + "__esbmc_poly_" + kind;
+    if (
+      !def || names.size() < 2 || poisoned_.count(name) ||
+      entry.sites.size() != calls_.at({module, name}) ||
+      reads_name((*def)["body"], name) ||
+      std::count_if(bound_.begin(), bound_.end(), disagrees) != 1 ||
+      !redirectable(entry, module, name, names))
+      return false;
+
+    std::map<size_t, std::map<const nlohmann::json *, std::string>> copies;
+    for (const site &at : entry.sites)
+      copies[at.caller][at.call] = names[at.type];
+    for (const auto &[caller, calls] : copies)
+    {
+      redirect(*modules_[caller].write, calls);
+      if (caller != module)
+        import_copies(caller, name, names);
+    }
+    const ptrdiff_t at = def - &body[0];
+    for (auto it = names.rbegin(); it != names.rend(); ++it)
+    {
+      nlohmann::json copy = body[at];
+      copy["name"] = it->second;
+      annotate(copy["args"]["args"][param], it->first);
+      body.insert(body.begin() + at + 1, std::move(copy));
+    }
+    return true;
+  }
+
+  /// Whether the ASTs changed: a parameter was annotated or a function
+  /// specialised.
+  bool apply() const
+  {
+    bool annotated = false;
     for (const auto &[key, entry] : bound_)
     {
       const auto &[module, key_name, param] = key;
@@ -1234,18 +1423,18 @@ private:
       // already seen still disagree (#9828).
       if (!entry.type)
       {
+        // One copy per round: the next round sees the calls it redirected.
+        if (specialise(key, entry))
+          return true;
         refuse_mixed_kinds(key_name, def, arg["arg"], entry.kinds);
         continue;
       }
       if (poisoned_.count(key_member(key_name)))
         continue;
-      nlohmann::json annotation{{"_type", "Name"}, {"id", *entry.type}};
-      for (const char *field :
-           {"lineno", "col_offset", "end_lineno", "end_col_offset"})
-        if (arg.contains(field))
-          annotation[field] = arg[field];
-      arg["annotation"] = annotation;
+      annotate(arg, *entry.type);
+      annotated = true;
     }
+    return annotated;
   }
 };
 } // namespace

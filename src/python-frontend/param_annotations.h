@@ -41,8 +41,11 @@ void propagate_tuple_list_params(const std::vector<module_ast> &modules);
  * @brief Annotate the unannotated parameters of imported modules' top-level
  * functions with the scalar type every call site passes (GitHub #8501).
  *
- * Only modules with a non-null @c write are rewritten, and only parameters
- * reached by at least one call from another module.
+ * Only the parameters of imported modules (a non-empty @c name) are retyped,
+ * and only those reached by at least one call from another module. A
+ * parameter passed two scalar types is instead specialised: its function is
+ * copied once per type, and each call, in any module with a non-null
+ * @c write, is pointed at its copy.
  */
 void propagate_scalar_params(const std::vector<module_ast> &modules);
 } // namespace python_param_annotations
