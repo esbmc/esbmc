@@ -22,11 +22,11 @@ public:
   dynamic_type_handler(python_converter &converter, type_handler &type_handler);
 
   /**
-   * @brief Names assigned genuinely incompatible literal types across
-   * every branch of `if_node`, following nested if/else (including elif)
-   * on either side; a name must be assigned in every branch to qualify. The
-   * value a name holds before the `if` counts as one more branch, and a
-   * name `C.v` stands for class C's own attribute v
+   * @brief Names assigned genuinely incompatible literal types across the
+   * branches of `if_node`, following nested if/else (including elif)
+   * on either side. A branch that does not assign a name, such as the
+   * missing else of an elif chain, keeps the value the name holds before the
+   * `if`, and a name `C.v` stands for class C's own attribute v
    */
   std::unordered_set<std::string>
   detect_dynamic_type_names(const nlohmann::json &if_node) const;
@@ -268,12 +268,13 @@ private:
   symbolt *find_tag_symbol(const std::string &name) const;
 
   /**
-   * @brief Whether `name`, assigned `kinds` on every branch of an `if`,
-   * holds a num on one path and a str on another after it; `keeps_value`
-   * says the `if` has no else
+   * @brief Whether `name`, bound to `existing` before an `if` and assigned
+   * `kinds` on its branches, holds a num on one path and a str on another
+   * after it; `keeps_value` says some branch keeps `existing`
    */
   bool joins_divergent_kinds(
     const std::string &name,
+    const symbolt *existing,
     std::unordered_set<std::string> &kinds,
     bool keeps_value) const;
 
