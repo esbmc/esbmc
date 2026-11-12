@@ -5826,6 +5826,52 @@ void python_converter::wrap_call_result_in_optional(
   rhs = store;
 }
 
+/// T of a `list[T]` or `List[T]` annotation whose T is a plain name, else nil.
+static typet
+list_annotation_elem_type(const nlohmann::json &ann, const type_handler &th)
+{
+  if (
+    !ann.is_object() || ann.value("_type", "") != "Subscript" ||
+    !ann["value"].is_object() || !ann["slice"].is_object())
+    return typet();
+  const std::string container = ann["value"].value("id", "");
+  const std::string elem = ann["slice"].value("id", "");
+  if ((container != "list" && container != "List") || elem.empty())
+    return typet();
+  return th.get_typet(elem);
+}
+
+/// Records the element type of a list-returning call's target from the
+/// callee's `-> list[T]` annotation or, failing that, from the target's own
+/// `x: list[T]` annotation. The second covers a callee whose body is not
+/// converted yet, such as the nondet list builders, whose results the
+/// preprocessor annotates.
+void python_converter::record_annotated_list_elem_type(
+  const nlohmann::json &ast_node,
+  const std::string &lhs_id)
+{
+  typet elem_type;
+  if (
+    ast_node.contains("value") && ast_node["value"].contains("func") &&
+    ast_node["value"]["func"].is_object())
+  {
+    const auto &func_ref = ast_node["value"]["func"];
+    const std::string func_name =
+      func_ref.value("id", func_ref.value("attr", ""));
+    const auto &func_def =
+      func_name.empty()
+        ? nlohmann::json()
+        : json_utils::try_find_function((*ast_json)["body"], func_name);
+    if (!func_def.empty() && func_def.contains("returns"))
+      elem_type = list_annotation_elem_type(func_def["returns"], type_handler_);
+  }
+  if (elem_type == typet() && ast_node.contains("annotation"))
+    elem_type =
+      list_annotation_elem_type(ast_node["annotation"], type_handler_);
+  if (elem_type != typet())
+    element_type_registry_.record(lhs_id, std::string(), elem_type);
+}
+
 void python_converter::handle_function_call_rhs(
   const nlohmann::json &ast_node,
   symbolt *lhs_symbol,
@@ -5942,59 +5988,7 @@ void python_converter::handle_function_call_rhs(
     const std::string &lhs_id = lhs.identifier().as_string();
     copy_elem_types_from_reordering_builtin(ast_node, lhs_id);
     if (element_type_registry_.size(lhs_id) == 0)
-    {
-      std::string func_name;
-      if (
-        ast_node.contains("value") && ast_node["value"].contains("func") &&
-        ast_node["value"]["func"].is_object())
-      {
-        const auto &func_ref = ast_node["value"]["func"];
-        if (func_ref.contains("id") && func_ref["id"].is_string())
-          func_name = func_ref["id"].get<std::string>();
-        else if (func_ref.contains("attr") && func_ref["attr"].is_string())
-          func_name = func_ref["attr"].get<std::string>();
-      }
-
-      if (!func_name.empty())
-      {
-        const auto &func_def =
-          json_utils::try_find_function((*ast_json)["body"], func_name);
-        if (
-          !func_def.empty() && func_def.contains("returns") &&
-          !func_def["returns"].is_null())
-        {
-          const auto &returns = func_def["returns"];
-          // Handle list[T] annotation
-          // Subscript node with value.id == "list"
-          if (
-            returns.is_object() && returns.contains("_type") &&
-            returns["_type"] == "Subscript" && returns.contains("value") &&
-            returns["value"].is_object() && returns["value"].contains("id") &&
-            returns["value"]["id"].is_string())
-          {
-            const std::string val_id =
-              returns["value"]["id"].get<std::string>();
-            if (val_id == "list" || val_id == "List")
-            {
-              // Extract element type from the slice, e.g. int in list[int]
-              if (
-                returns.contains("slice") && returns["slice"].is_object() &&
-                returns["slice"].contains("id") &&
-                returns["slice"]["id"].is_string())
-              {
-                typet elem_type = type_handler_.get_typet(
-                  returns["slice"]["id"].get<std::string>());
-                if (elem_type != typet())
-                {
-                  element_type_registry_.record(
-                    lhs_id, std::string(), elem_type);
-                }
-              }
-            }
-          }
-        }
-      }
-    }
+      record_annotated_list_elem_type(ast_node, lhs_id);
 
     typet l_type = type_handler_.get_list_type();
     symbolt &tmp_var_symbol =

@@ -6566,6 +6566,7 @@ void python_annotation<Json>::refuse_mixed_constructor_args() const
 template <class Json>
 void python_annotation<Json>::add_type_annotation()
 {
+  python_annotation_utils::return_none_on_fall_off(ast_);
   // Iterated so a constructor called with its caller's parameter sees the
   // type that parameter gets from a later call (GitHub #8963).
   while (preprocess_constructor_calls(ast_))
@@ -6629,6 +6630,7 @@ void python_annotation<Json>::add_extra_subscript_inference_source(
 template <class Json>
 void python_annotation<Json>::add_type_annotation(const std::string &func_name)
 {
+  python_annotation_utils::return_none_on_fall_off(ast_);
   current_line_ = 0;
   annotating_function_entry_point_ = true;
 

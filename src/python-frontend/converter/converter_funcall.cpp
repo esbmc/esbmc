@@ -1334,6 +1334,88 @@ bool python_converter::dict_values(
   return true;
 }
 
+// Kinds of expression that never evaluate to a function.
+static bool is_data_syntax(const nlohmann::json &value)
+{
+  static const std::set<std::string> kinds = {
+    "Constant",
+    "JoinedStr",
+    "List",
+    "Tuple",
+    "Set",
+    "Dict",
+    "ListComp",
+    "SetComp",
+    "DictComp",
+    "BinOp",
+    "UnaryOp",
+    "Compare"};
+  return kinds.count(value.value("_type", "")) > 0;
+}
+
+// The code type of the function a stored value names, or nil.
+typet python_converter::stored_function_code_type(const nlohmann::json &value)
+{
+  if (value.value("_type", "") != "Name")
+    return typet();
+  const std::string name = value["id"].get<std::string>();
+  symbol_id id = create_symbol_id();
+  id.set_object(name);
+  const symbolt *named = find_symbol(id.to_string());
+  if (!named)
+    named = find_nested_function_symbol(name);
+  if (!named)
+    named =
+      symbol_table_.find_symbol(symbol_id(python_file(), "", name).to_string());
+  if (!named)
+    return typet();
+  const typet &t = named->get_type();
+  return t.is_pointer() ? t.subtype() : t;
+}
+
+// Whether `t` is a function type whose return type is known.
+static bool is_typed_function(const typet &t)
+{
+  if (!t.is_code())
+    return false;
+  const typet &ret = to_code_type(t).return_type();
+  return !ret.is_nil() && !ret.is_empty();
+}
+
+std::optional<typet>
+python_converter::dict_read_function_type(const nlohmann::json &element)
+{
+  std::vector<nlohmann::json> values;
+  if (is_converting_lhs || !dict_values(element["value"], values))
+    return std::nullopt;
+  function_values functions(*ast_json, {});
+  std::optional<typet> shared;
+  bool function = false;
+  bool precise = true;
+  for (const auto &v : values)
+  {
+    const typet t = stored_function_code_type(v);
+    if (is_typed_function(t))
+    {
+      function = true;
+      precise &=
+        !shared || same_signature(to_code_type(*shared), to_code_type(t));
+      shared = t;
+      continue;
+    }
+    precise = false;
+    function = function || t.is_code() || v.value("_type", "") == "Lambda" ||
+               (!is_data_syntax(v) && functions.of(v));
+  }
+  if (!function)
+    return std::nullopt;
+  if (!precise)
+    throw std::runtime_error(
+      "unsupported: reading a value from a dict whose values are not all "
+      "functions of one known signature");
+  return pointer_typet(*shared);
+}
+
 [[noreturn]] static void refuse_mixed_return_types()
 {
   throw std::runtime_error(
