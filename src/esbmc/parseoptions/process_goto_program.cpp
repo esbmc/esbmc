@@ -340,6 +340,17 @@ static bool early_answer_allowed(
          });
 }
 
+// A failed unwinding assertion is a verdict only in a run with a bound that
+// keeps unwinding assertions. k-induction and the incremental strategies assume
+// them in the base case, and an unbounded run never reaches one.
+static bool
+reports_unwinding_failure(const optionst &options, const cmdlinet &cmdline)
+{
+  return !options.get_bool_option("no-unwinding-assertions") &&
+         (cmdline.isset("unwind") || cmdline.isset("unwindset") ||
+          cmdline.isset("unwindsetname"));
+}
+
 static void record_early_answer(
   optionst &options,
   const cmdlinet &cmdline,
@@ -351,9 +362,7 @@ static void record_early_answer(
     options.set_option(
       "python-no-checked-exception",
       no_reachable_property(
-        goto_functions,
-        context,
-        options.get_bool_option("no-unwinding-assertions")));
+        goto_functions, context, !reports_unwinding_failure(options, cmdline)));
 }
 
 bool esbmc_parseoptionst::process_goto_program(

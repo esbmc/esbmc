@@ -1,7 +1,10 @@
 regression/python/github_10252
 regression/python/github_10252_bool_divisor_fail
 regression/python/github_10252_esbmc_assert_fail
+regression/python/github_10252_escape
+regression/python/github_10252_escape_fail
 regression/python/github_10252_funcptr_fail
+regression/python/github_10252_loop_k_induction
 regression/python/github_10252_missing_return
 regression/python/github_10252_model_assert_fail
 regression/python/github_10252_no_option
