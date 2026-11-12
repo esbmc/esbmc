@@ -37,6 +37,7 @@
 #include <cctype>
 #include <climits>
 #include <cmath>
+#include <cstdio>
 #include <cstdlib>
 #include <functional>
 #include <optional>
@@ -48,44 +49,71 @@ using namespace python_expr;
 
 namespace
 {
-// Banker's rounding (IEEE 754 round-half-to-even): rounds to the nearest
-// integer, breaking ties toward the even neighbor. The tie_eps tolerates
-// small floating-point error around the .5 boundary so that values
-// representable as exact halves are detected reliably.
-template <typename F>
-F round_ties_to_even(const F value, const F tie_eps)
+// value - floor(value) is exact for a double, so a tie is exactly 0.5.
+double round_ties_to_even(const double value)
 {
-  const F lower = std::floor(value);
-  const F diff = value - lower;
-
-  if (diff < F(0.5) - tie_eps)
+  const double lower = std::floor(value);
+  const double diff = value - lower;
+  if (diff < 0.5)
     return lower;
-  if (diff > F(0.5) + tie_eps)
-    return lower + F(1);
-
-  const F parity = std::fmod(std::fabs(lower), F(2));
-  const bool lower_is_even =
-    parity < tie_eps || std::fabs(parity - F(2)) < tie_eps;
-  return lower_is_even ? lower : lower + F(1);
+  if (diff > 0.5)
+    return lower + 1.0;
+  return std::fmod(lower, 2.0) == 0.0 ? lower : lower + 1.0;
 }
 
-constexpr double ROUND_TIE_EPS_DOUBLE = 1e-12;
-constexpr long double ROUND_TIE_EPS_LONG_DOUBLE = 1e-15L;
-
-double round_to_ndigits_ties_even(const double value, const int ndigits)
+// CPython rounds the exact binary value half to even at the ndigits-th decimal
+// digit and reads the decimal result back (float_round_impl in
+// Objects/floatobject.c). printf's %f conversion of a double is exact.
+// Answers nullopt where CPython raises OverflowError.
+std::optional<double>
+round_to_ndigits_ties_even(const double value, const int ndigits)
 {
-  // Keep scaling deterministic across libm implementations.
-  long double scale = 1.0L;
-  const int n = ndigits >= 0 ? ndigits : -ndigits;
-  for (int i = 0; i < n; ++i)
-    scale *= 10.0L;
+  if (!std::isfinite(value) || ndigits > 323)
+    return value;
+  if (ndigits < -308)
+    return 0.0 * value;
 
-  const long double scaled = ndigits >= 0
-                               ? static_cast<long double>(value) * scale
-                               : static_cast<long double>(value) / scale;
-  const long double rounded =
-    round_ties_to_even<long double>(scaled, ROUND_TIE_EPS_LONG_DOUBLE);
-  return static_cast<double>(ndigits >= 0 ? rounded / scale : rounded * scale);
+  if (ndigits >= 0)
+  {
+    std::vector<char> buf(
+      std::snprintf(nullptr, 0, "%.*f", ndigits, value) + 1);
+    std::snprintf(buf.data(), buf.size(), "%.*f", ndigits, value);
+    return std::strtod(buf.data(), nullptr);
+  }
+
+  // Round the integer digits at 10**-ndigits; a nonzero fraction breaks a tie
+  // away from zero.
+  const double magnitude = std::fabs(value);
+  const double whole = std::trunc(magnitude);
+  std::vector<char> buf(std::snprintf(nullptr, 0, "%.0f", whole) + 1);
+  std::snprintf(buf.data(), buf.size(), "%.0f", whole);
+  const std::size_t k = -static_cast<long>(ndigits);
+  std::string digits(buf.data());
+  if (digits.size() <= k)
+    digits.insert(0, k + 1 - digits.size(), '0');
+
+  const std::size_t keep = digits.size() - k;
+  const std::string half = "5" + std::string(k - 1, '0');
+  const int cmp = digits.compare(keep, k, half);
+  const bool round_up =
+    cmp > 0 ||
+    (cmp == 0 && (magnitude != whole || (digits[keep - 1] - '0') % 2 != 0));
+
+  digits.replace(keep, k, k, '0');
+  if (round_up)
+  {
+    std::size_t i = keep;
+    while (i > 0 && digits[i - 1] == '9')
+      digits[--i] = '0';
+    if (i == 0)
+      digits.insert(0, 1, '1');
+    else
+      ++digits[i - 1];
+  }
+  const double rounded = std::strtod(digits.c_str(), nullptr);
+  if (std::isinf(rounded))
+    return std::nullopt;
+  return std::signbit(value) ? -rounded : rounded;
 }
 
 // Check if an AST node is a known-empty literal (falsy in Python).
@@ -2116,8 +2144,9 @@ static std::optional<int> literal_ndigits(const nlohmann::json &ndigits_arg)
     negated ? ndigits_arg["operand"] : ndigits_arg;
   if (!literal.contains("value") || !literal["value"].is_number_integer())
     return std::nullopt;
-  const int n = literal["value"].get<int>();
-  return negated ? -n : n;
+  // Any ndigits past the 323/-308 bounds rounds alike; clamp before narrowing.
+  const double n = std::clamp(literal["value"].get<double>(), -1000.0, 1000.0);
+  return static_cast<int>(negated ? -n : n);
 }
 
 exprt function_call_expr::handle_round(nlohmann::json &arg) const
@@ -2153,34 +2182,48 @@ exprt function_call_expr::handle_round(nlohmann::json &arg) const
     if (!has_ndigits)
     {
       // round(x) -> nearest integer (returns int)
+      bool folded = true;
       if (arg["value"].is_number_integer())
       {
         long long val = arg["value"].get<long long>();
         if (is_negated)
           val = -val;
         arg["value"] = val;
-        arg["type"] = "int";
       }
       else
       {
         double val = arg["value"].get<double>();
         if (is_negated)
           val = -val;
-        arg["value"] = static_cast<int>(
-          round_ties_to_even<double>(val, ROUND_TIE_EPS_DOUBLE));
-        arg["type"] = "int";
+        const double rounded = round_ties_to_even(val);
+        // A Python int does not wrap: a result outside long long (or a NaN)
+        // is left to the symbolic path rather than folded to a wrapped value.
+        folded =
+          rounded >= -9223372036854775808.0 && rounded < 9223372036854775808.0;
+        if (folded)
+          arg["value"] = static_cast<long long>(rounded);
+        else
+          arg["value"] = val;
       }
-      typet t = type_handler_.get_typet("int", 0);
-      exprt expr = converter_.get_expr(arg);
-      expr.type() = t;
-      return expr;
+      if (folded)
+      {
+        arg["type"] = "int";
+        exprt expr = converter_.get_expr(arg);
+        expr.type() = type_handler_.get_typet("int", 0);
+        return expr;
+      }
     }
     else if (ndigits)
     {
       double val = arg["value"].get<double>();
       if (is_negated)
         val = -val;
-      arg["value"] = round_to_ndigits_ties_even(val, *ndigits);
+      const std::optional<double> rounded =
+        round_to_ndigits_ties_even(val, *ndigits);
+      if (!rounded)
+        return converter_.get_exception_handler().gen_exception_raise(
+          "OverflowError", "rounded value too large to represent");
+      arg["value"] = *rounded;
       arg["type"] = "float";
       typet t = type_handler_.get_typet("float", 0);
       exprt expr = converter_.get_expr(arg);
