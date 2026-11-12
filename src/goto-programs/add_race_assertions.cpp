@@ -120,6 +120,20 @@ static expr2tc lvalue_root(const expr2tc &e)
   return is_symbol2t(obj) ? obj : expr2tc();
 }
 
+// The operational models' own bookkeeping (thread counters, join waiters, end
+// values). The program cannot name these objects, so a flag set on one is only
+// observed through a pointer the solver aims at it. pthread_trampoline writes
+// them in an atomic region that ends the thread, so the deferred reset never
+// runs and the flag would stay set for the rest of the run.
+static bool is_model_internal(const expr2tc &access, const namespacet &ns)
+{
+  const expr2tc root = lvalue_root(access);
+  if (is_nil_expr(root))
+    return false;
+  const symbolt *s = ns.lookup(to_symbol2t(root).thename);
+  return s && has_prefix(id2string(s->name), "__ESBMC_");
+}
+
 // A stack local becomes shared between threads when its address reaches a newly
 // spawned thread. Passing it straight to pthread_create is only the direct
 // case: the address also reaches the thread when it is parked somewhere the
@@ -783,7 +797,8 @@ void add_race_assertions(
         i_it++;
 
         // set the write flag(s) immediately before the original write -- set
-        forall_rw_set_entries(e_it, rw_set) if (e_it->second.w)
+        forall_rw_set_entries(e_it, rw_set) if (
+          e_it->second.w && !is_model_internal(e_it->second.original_expr, ns))
         {
           const expr2tc guard_expr = w_guards.get_w_guard_expr(e_it->second);
 
