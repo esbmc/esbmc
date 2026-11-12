@@ -7,6 +7,7 @@
 #include <util/message/message.h>
 
 #include <algorithm>
+#include <climits>
 #include <functional>
 #include <optional>
 #include <regex>
@@ -1457,6 +1458,44 @@ bool python_converter::is_imported_module(const std::string &module_name) const
     return false;
 
   return json_utils::is_module(module_name, *ast_json);
+}
+
+// `from pkg import sub` binds a module only when `pkg` does not bind `sub`
+// itself and `pkg.sub` was collected from its own file, as submodule_imports
+// decides; otherwise it binds a member such as `from random import random`.
+bool python_converter::names_module_object(const std::string &name, int line)
+  const
+{
+  if (json_utils::count_name_bindings(*ast_json, name) != 1)
+    return false;
+  for (const auto &stmt : (*ast_json)["body"])
+  {
+    const std::string kind = stmt.value("_type", "");
+    if (
+      (kind != "Import" && kind != "ImportFrom") ||
+      stmt.value("end_lineno", INT_MAX) >= line)
+      continue;
+    for (const auto &alias : stmt["names"])
+    {
+      const std::string member = alias["name"];
+      const auto &asname = alias["asname"];
+      if ((asname.is_string() ? asname.get<std::string>() : member) != name)
+        continue;
+      if (kind == "Import")
+        return true;
+      if (!stmt["module"].is_string())
+        return false;
+      const auto package = module_ast_pool_.find(stmt["module"]);
+      if (
+        package == module_ast_pool_.end() ||
+        json_utils::count_name_bindings(package->second, member))
+        return false;
+      const std::string file = module_file(package->first + "." + member);
+      return !file.empty() &&
+             file != package->second.value("filename", std::string());
+    }
+  }
+  return false;
 }
 
 /// Stem of the file being converted, i.e. the module name it would be imported

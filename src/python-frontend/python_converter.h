@@ -201,6 +201,11 @@ public:
     const typet &value,
     const locationt &location);
   void decay_function_choice(exprt &then, exprt &else_expr);
+  void hoist_raising_arm(
+    exprt &then,
+    code_blockt &then_side_effects,
+    exprt &else_expr,
+    code_blockt &else_side_effects);
   void coerce_not_callable_return(
     exprt &value,
     const locationt &location,
@@ -519,6 +524,9 @@ public:
   symbolt *find_symbol(const std::string &symbol_id) const;
 
   bool is_imported_module(const std::string &module_name) const;
+  /// Whether @p name is bound, once in the whole program, by a top-level
+  /// import of a module object that ends before @p line.
+  bool names_module_object(const std::string &name, int line) const;
   /// FunctionDef stubs, each only a `name` and its `returns`, for the
   /// functions a call in the current module can name: its own and those an
   /// import binds, as `mk` after `from helper import mk` and `helper.mk`
