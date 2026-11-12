@@ -1480,11 +1480,7 @@ class LoopMixin:
         else:
             step = ast.Constant(value=1)
 
-        # Step validation - Python raises ValueError if step == 0
-        step_validation = ast.Assert(
-            test=ast.Compare(left=step, ops=[ast.NotEq()], comparators=[ast.Constant(value=0)]),
-            msg=ast.Constant(value="range() arg 3 must not be zero"),
-        )
+        step_validation = self._range_zero_step_check(step)
 
         # Create assignment for the start variable
         start_assign = ast.AnnAssign(
@@ -1576,8 +1572,32 @@ class LoopMixin:
         # Create the while statement
         while_stmt = ast.While(test=while_cond, body=while_body, orelse=[])
 
-        # Return the transformed statements
-        return [step_validation, start_assign, has_next_assign, while_stmt]
+        return step_validation + [start_assign, has_next_assign, while_stmt]
+
+    @staticmethod
+    def _range_zero_step_check(step):
+        """`if step == 0: raise ValueError(...)`, omitted for a non-zero literal."""
+        try:
+            literal = ast.literal_eval(step)
+        except ValueError:
+            literal = None
+        if isinstance(literal, int) and literal != 0:
+            return []
+        raise_value_error = ast.Raise(
+            exc=ast.Call(
+                func=ast.Name(id="ValueError", ctx=ast.Load()),
+                args=[ast.Constant(value="range() arg 3 must not be zero")],
+                keywords=[],
+            ),
+            cause=None,
+        )
+        return [
+            ast.If(
+                test=ast.Compare(left=step, ops=[ast.Eq()], comparators=[ast.Constant(value=0)]),
+                body=[raise_value_error],
+                orelse=[],
+            )
+        ]
 
     @staticmethod
     def _body_destructures_name(body, name):

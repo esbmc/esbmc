@@ -1,0 +1,4 @@
+CORE
+main.py
+--python-check-exceptions AssertionError --show-claims
+\A(?![\s\S]*range\(\) arg 3)[\s\S]*\Z
