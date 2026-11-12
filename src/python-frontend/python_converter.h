@@ -1299,6 +1299,9 @@ private:
   exprt get_len_on_bound_instance(
     const nlohmann::json &arg,
     const nlohmann::json &element);
+  exprt get_len_on_computed_instance(
+    const nlohmann::json &arg,
+    const locationt &location);
   static exprt list_element_type_id(const exprt &value);
   std::size_t count_user_classes();
   exprt checked_len_result(const exprt &len_call, const locationt &location);
