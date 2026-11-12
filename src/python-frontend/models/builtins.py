@@ -293,29 +293,14 @@ def sorted(iterable: list[int], reverse: bool = False) -> list[int]:
         result.append(iterable[i])
         i = i + 1
 
-    # Bubble sort ascending (simple and verifier-friendly)
-    n: int = len(result)
-    i = 0
-    while i < n:
-        j: int = 0
-        while j < n - 1 - i:
-            if result[j] > result[j + 1]:
-                # Swap
-                temp: int = result[j]
-                result[j] = result[j + 1]
-                result[j + 1] = temp
-            j = j + 1
-        i = i + 1
-
-    # Reverse in place for descending order.
+    # Python's sort is stable for reverse=True as well: reverse, sort
+    # ascending, reverse back, as CPython does, so equal elements keep their
+    # order. list.sort() lowers to the insertion sort of the C list model.
     if reverse:
-        i = 0
-        half: int = n // 2
-        while i < half:
-            t: int = result[i]
-            result[i] = result[n - 1 - i]
-            result[n - 1 - i] = t
-            i = i + 1
+        result.reverse()
+    result.sort()
+    if reverse:
+        result.reverse()
 
     return result
 
@@ -330,26 +315,11 @@ def sorted_float(iterable: list[float], reverse: bool = False) -> list[float]:
         result.append(iterable[i])
         i = i + 1
 
-    n: int = len(result)
-    i = 0
-    while i < n:
-        j: int = 0
-        while j < n - 1 - i:
-            if result[j] > result[j + 1]:
-                temp: float = result[j]
-                result[j] = result[j + 1]
-                result[j + 1] = temp
-            j = j + 1
-        i = i + 1
-
     if reverse:
-        i = 0
-        half: int = n // 2
-        while i < half:
-            t: float = result[i]
-            result[i] = result[n - 1 - i]
-            result[n - 1 - i] = t
-            i = i + 1
+        result.reverse()
+    result.sort()
+    if reverse:
+        result.reverse()
 
     return result
 
@@ -364,26 +334,11 @@ def sorted_str(iterable: list[str], reverse: bool = False) -> list[str]:
         result.append(iterable[i])
         i = i + 1
 
-    n: int = len(result)
-    i = 0
-    while i < n:
-        j: int = 0
-        while j < n - 1 - i:
-            if result[j] > result[j + 1]:
-                temp: str = result[j]
-                result[j] = result[j + 1]
-                result[j + 1] = temp
-            j = j + 1
-        i = i + 1
-
     if reverse:
-        i = 0
-        half: int = n // 2
-        while i < half:
-            t: str = result[i]
-            result[i] = result[n - 1 - i]
-            result[n - 1 - i] = t
-            i = i + 1
+        result.reverse()
+    result.sort()
+    if reverse:
+        result.reverse()
 
     return result
 
