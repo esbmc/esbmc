@@ -802,11 +802,12 @@ esbmc file.c --show-funccall-trace
 ```
 Violated property:
   file file.c line 5 column 20 function check
-Function call trace:
-  c:@F@main at file file.c line 6 column 1
-  c:@F@setup at file file.c line 8 column 3 function main
-  c:@F@check at file file.c line 9 column 3 function main
   assertion g != 3
+  g != 3
+Function call trace:
+  main at file file.c line 6 column 1
+  setup at file file.c line 8 column 3 function main
+  check at file file.c line 9 column 3 function main
 ```
 
 ## Bounding the stack
