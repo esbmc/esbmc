@@ -1,0 +1,4 @@
+CORE
+main.py
+--unwind 8
+^ERROR: Slice with a non-constant step is not supported$
