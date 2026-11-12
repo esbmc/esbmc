@@ -10524,7 +10524,8 @@ void python_converter::get_return_statements(
   locationt location = get_location_from_decl(ast_node);
 
   // Coerces `val` to a tagged-object value when the function's return type
-  // is tagged. No-op when `val` is already tagged.
+  // is tagged. No-op when `val` is already tagged; refuses a tagged `val`
+  // returned through a str or number slot.
   auto coerce_to_tagged_return = [&](exprt &val) {
     reject_tagged_scalar_return(
       type_handler_, val.type(), current_func_return_type_);
