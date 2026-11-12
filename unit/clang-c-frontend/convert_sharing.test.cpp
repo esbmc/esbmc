@@ -14,6 +14,7 @@ Module: Unit tests for node sharing in clang_c_convertert
 #include <langapi/language_ui.h>
 #include <util/base/filesystem.h>
 
+#include <functional>
 #include <vector>
 
 static const char source[] =
@@ -52,6 +53,21 @@ TEST_CASE("the C converter shares equal types and locations", "[core]")
   REQUIRE(!l.typecheck());
   const symbolt *f = l.context.find_symbol("c:@F@f");
   REQUIRE(f != nullptr);
+
+  // Variable references carry no location of their own.
+  std::vector<const irept *> symbols;
+  std::function<void(const irept &)> walk = [&](const irept &e) {
+    if (e.id() == "symbol")
+      symbols.push_back(&e);
+    for (const irept &op : e.get_sub())
+      walk(op);
+    for (const auto &[name, sub] : e.get_named_sub())
+      walk(sub);
+  };
+  walk(f->get_value());
+  REQUIRE(symbols.size() == 2);
+  for (const irept *s : symbols)
+    REQUIRE(static_cast<const exprt *>(s)->location().get_line().empty());
 
   std::vector<const exprt *> constants;
   collect_constants(f->get_value(), constants);
