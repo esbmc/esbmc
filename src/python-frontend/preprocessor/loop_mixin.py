@@ -1445,6 +1445,30 @@ class LoopMixin:
                 transformed_body.append(transformed_statement)
         return transformed_body
 
+    def _range_zero_step_check(self, step, node):
+        """`if step == 0: raise ValueError(...)`, or nothing for a literal step.
+
+        A literal zero step is rejected before this is reached.
+        """
+        if isinstance(step, ast.Constant):
+            return []
+        check = ast.If(
+            test=ast.Compare(left=step, ops=[ast.Eq()], comparators=[ast.Constant(value=0)]),
+            body=[
+                ast.Raise(
+                    exc=ast.Call(
+                        func=ast.Name(id="ValueError", ctx=ast.Load()),
+                        args=[ast.Constant(value="range() arg 3 must not be zero")],
+                        keywords=[],
+                    ),
+                    cause=None,
+                )
+            ],
+            orelse=[],
+        )
+        self.ensure_all_locations(check, node)
+        return [check]
+
     def _transform_range_for(self, node):  # pylint: disable=too-many-locals
         """Transform range-based for loops to while loops"""
         # Add validation for range arguments
@@ -1480,11 +1504,7 @@ class LoopMixin:
         else:
             step = ast.Constant(value=1)
 
-        # Step validation - Python raises ValueError if step == 0
-        step_validation = ast.Assert(
-            test=ast.Compare(left=step, ops=[ast.NotEq()], comparators=[ast.Constant(value=0)]),
-            msg=ast.Constant(value="range() arg 3 must not be zero"),
-        )
+        step_validation = self._range_zero_step_check(step, node)
 
         # Create assignment for the start variable
         start_assign = ast.AnnAssign(
@@ -1577,7 +1597,7 @@ class LoopMixin:
         while_stmt = ast.While(test=while_cond, body=while_body, orelse=[])
 
         # Return the transformed statements
-        return [step_validation, start_assign, has_next_assign, while_stmt]
+        return step_validation + [start_assign, has_next_assign, while_stmt]
 
     @staticmethod
     def _body_destructures_name(body, name):

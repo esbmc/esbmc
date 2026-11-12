@@ -163,6 +163,8 @@ private:
 
   bool is_unmodelled_base_instantiation() const;
 
+  bool is_module_object_call() const;
+
   /// Refuse creating \p class_name, which derives from a class that has no
   /// model: its instances lack whatever that base provides.
   [[noreturn]] void
@@ -631,7 +633,9 @@ private:
   bool is_user_method_named_like_builtin() const;
 
   /// The callee's symbol. An instance method of no known class has none: it
-  /// must not bind to a module function of the same name (#9658).
+  /// must not bind to a module function of the same name (#9658). A global
+  /// of a module called as `m.name()` stands for the function it is bound to,
+  /// and for none when that binding is not known.
   const symbolt *find_callee_symbol(const std::string &func_symbol_id);
   bool receiver_is_literal() const;
   void reject_unresolved_user_method(const std::string &method_name) const;

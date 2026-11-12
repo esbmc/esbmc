@@ -596,6 +596,14 @@ bool function_call_expr::is_unmodelled_base_instantiation() const
          converter_.unmodelled_base_classes_.count(function_id_.get_class());
 }
 
+bool function_call_expr::is_module_object_call() const
+{
+  const auto &func = call_["func"];
+  return func.value("_type", "") == "Name" &&
+         converter_.names_module_object(
+           func["id"].get<std::string>(), call_.value("lineno", 0));
+}
+
 void function_call_expr::refuse_unmodelled_base_instance(
   const std::string &class_name) const
 {
@@ -3637,7 +3645,13 @@ const symbolt *
 function_call_expr::find_callee_symbol(const std::string &func_symbol_id)
 {
   if (function_type_ != FunctionType::InstanceMethod)
-    return cached_find_symbol(func_symbol_id);
+  {
+    const symbolt *symbol = cached_find_symbol(func_symbol_id);
+    const bool module_global = symbol && !symbol->is_type &&
+                               !symbol->get_type().is_code() &&
+                               call_["func"]["_type"] == "Attribute";
+    return module_global ? converter_.module_alias_target(*symbol) : symbol;
+  }
   if (function_id_.get_class().empty())
     return nullptr;
   // find_symbol falls back to a module global of the method's name, which is
@@ -5447,6 +5461,15 @@ function_call_expr::get_dispatch_table()
        refuse_unmodelled_base_instance(function_id_.get_class());
      },
      "instantiating a class derived from an unmodelled one"},
+
+    {[this]() { return is_module_object_call(); },
+     [this]() {
+       exprt raise = converter_.get_exception_handler().gen_exception_raise(
+         "TypeError", "'module' object is not callable");
+       raise.location() = converter_.get_location_from_decl(call_);
+       return raise;
+     },
+     "calling a module"},
 
     {[this]() { return is_abstract_instantiation(); },
      [this]() { return abstract_instantiation_error(call_); },
@@ -7814,7 +7837,7 @@ std::optional<exprt> function_call_expr::resolve_missing_function_symbol(
   {
     // Find in global scope
     function_id_.set_class("");
-    func_symbol = converter_.find_symbol(function_id_.to_string());
+    func_symbol = find_callee_symbol(function_id_.to_string());
 
     if (!func_symbol)
     {
