@@ -1,0 +1,5 @@
+CORE
+main.py
+--python-check-exceptions ValueError --unwind 5
+^  uncaught exception: ValueError$
+^VERIFICATION FAILED$
