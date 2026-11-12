@@ -10,6 +10,8 @@
 #undef strnlen
 #undef strcmp
 #undef strncmp
+#undef strcoll
+#undef strxfrm
 #undef strchr
 #undef strrchr
 #undef strspn
@@ -150,6 +152,46 @@ __ESBMC_HIDE:;
   } while (ch1 != 0 && ch2 != 0 && i < n);
   return 0;
 }
+
+/* Only the C locale is modelled, whose collation is strcmp's
+ * (C11 7.24.4.3, 7.24.4.5). */
+int strcoll(const char *s1, const char *s2)
+{
+__ESBMC_HIDE:;
+  return strcmp(s1, s2);
+}
+
+size_t strxfrm(char *dst, const char *src, size_t n)
+{
+__ESBMC_HIDE:;
+  size_t len = strlen(src);
+  if (len < n)
+    memcpy(dst, src, len + 1);
+  else
+    /* C11 7.24.4.5p3: the contents of the array are indeterminate. */
+    for (size_t i = 0; i < n; i++)
+      dst[i] = nondet_char();
+  return len;
+}
+
+#if defined(__unix__) || defined(__APPLE__) || defined(__MACH__)
+#  include <locale.h>
+#  if defined(__APPLE__)
+#    include <xlocale.h>
+#  endif
+
+int strcoll_l(const char *s1, const char *s2, locale_t loc)
+{
+__ESBMC_HIDE:;
+  return strcmp(s1, s2);
+}
+
+size_t strxfrm_l(char *dst, const char *src, size_t n, locale_t loc)
+{
+__ESBMC_HIDE:;
+  return strxfrm(dst, src, n);
+}
+#endif
 
 char *strchr(const char *s, int ch)
 {
