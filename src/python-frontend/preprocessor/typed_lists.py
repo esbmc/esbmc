@@ -163,7 +163,7 @@ def _allowed_list_annotation(annotation):
         return annotation.id in _LIST_ANNOTATIONS
     return (isinstance(annotation, ast.Subscript) and isinstance(annotation.value, ast.Name)
             and annotation.value.id in _LIST_ANNOTATIONS and isinstance(annotation.slice, ast.Name)
-            and annotation.slice.id == "int")
+            and annotation.slice.id in ("int", "Any"))
 
 
 def _declaration(node):
@@ -250,6 +250,7 @@ class TypedListGate:
         self.calls = []  # calls of followed functions
         self.sorts = []  # (scope, Call)
         self.copies = []  # (scope, slice/list()/copy() node, source Name)
+        self.compares = []  # (scope, `x == y` or `x != y`)
 
     # --- scopes and the functions whose calls carry lists -------------------
 
@@ -578,6 +579,8 @@ class TypedListGate:
                 self._record_return(node, scope)
             elif isinstance(node, ast.Call):
                 self._record_call(node, scope)
+            elif _list_compare(node):
+                self.compares.append((scope, node))
             elif isinstance(node, ast.Name):
                 self._record_name(node, scope)
         for name in scope.declared:
@@ -656,6 +659,8 @@ class TypedListGate:
             return True
         if isinstance(parent, ast.Return):
             return scope.name != MODULE
+        if _list_compare(parent):
+            return True
         return isinstance(parent, ast.Call) and call in parent.args and self._analysed_call(parent)
 
     def _record_name(self, node, scope):
@@ -688,6 +693,11 @@ class TypedListGate:
         """An operand of `x + y` built into a list: it was joined to the
         result when recorded."""
         return None if getattr(node, "_typed_operand", False) else NOT_MINE
+
+    def _rule_compared(self, node, _scope):
+        """`x == y` or `x != y`: checked with the other operand in
+        `_check_compares`."""
+        return None if _list_compare(_parent(node)) else NOT_MINE
 
     def _rule_len(self, node, _scope):
         parent = _parent(node)
@@ -799,8 +809,8 @@ class TypedListGate:
         return None
 
     # The uses of a list name the typed model implements, tried in order.
-    USE_RULES = (_rule_concatenated, _rule_len, _rule_analysed_call, _rule_alias, _rule_list_call,
-                 _rule_subscript, _rule_truth, _rule_sorted, _rule_method)
+    USE_RULES = (_rule_concatenated, _rule_compared, _rule_len, _rule_analysed_call, _rule_alias,
+                 _rule_list_call, _rule_subscript, _rule_truth, _rule_sorted, _rule_method)
 
     # The list methods it implements.
     METHOD_RULES = {"append": _method_append, "copy": _method_copy}
@@ -832,6 +842,7 @@ class TypedListGate:
             if not self.is_int(call.args[0], scope):
                 poison(scope.loc(call.func.value.id), "appends a non-int")
         changed = self._check_copies() or changed
+        changed = self._check_compares() or changed
         return self._check_sorts() or changed
 
     def _check_copies(self):
@@ -845,6 +856,37 @@ class TypedListGate:
                                                    for b in bounds):
                 self.classes.poison_loc(loc, "sliced by a non-int")
                 changed = True
+        return changed
+
+    def _compared_location(self, operand, scope):
+        """The location deciding whether @p operand of a comparison is a typed
+        list: a list name, a followed call or `sorted(x)`, else None."""
+        if isinstance(operand, ast.Name):
+            return scope.loc(operand.id)
+        if self._analysed_call(operand):
+            return (operand.func.id, RETURN)
+        if self._sorted_call(operand):
+            return scope.loc(operand.args[0].id)
+        return None
+
+    def _typed_compare(self, compare, scope):
+        return all(loc is not None and self.classes.typed(loc)
+                   for loc in (self._compared_location(o, scope)
+                               for o in _compare_operands(compare)))
+
+    def _check_compares(self):
+        """Poison a typed list compared with anything but a typed list. A
+        `sorted(x)` operand needs nothing poisoned: it is then sorted into an
+        untyped list. True when anything changed."""
+        changed = False
+        for scope, compare in self.compares:
+            if self._typed_compare(compare, scope):
+                continue
+            for operand in _compare_operands(compare):
+                loc = self._compared_location(operand, scope)
+                if loc is not None and not self._sorted_call(operand) and self.classes.typed(loc):
+                    self.classes.poison_loc(loc, "compared with a list not typed")
+                    changed = True
         return changed
 
     def _check_sorts(self):
@@ -903,6 +945,7 @@ class TypedListGate:
             if not self._check_values():
                 break
         self._flag()
+        self._retype_int_reads()
         for node in ast.walk(self.module):
             node.__dict__.pop("_typed_parent", None)
             node.__dict__.pop("_typed_access", None)
@@ -910,6 +953,8 @@ class TypedListGate:
         return self
 
     def _flag(self):
+        # First, so a sorted() compared with a typed list is sorted typed.
+        self._flag_compares()
         for _, value, loc in self.allocations:
             if self.classes.typed(loc):
                 for node in _shape_nodes(value):
@@ -936,6 +981,35 @@ class TypedListGate:
             if self.classes.typed((call.func.id, RETURN)):
                 setattr(call, TYPED_FLAG, True)
         self._flag_copies()
+
+    def _flag_compares(self):
+        for scope, compare in self.compares:
+            if self._typed_compare(compare, scope):
+                setattr(compare, TYPED_FLAG, True)
+                for operand in _compare_operands(compare):
+                    if self._sorted_call(operand):
+                        setattr(operand, TYPED_FLAG, True)
+
+    def _retype_int_reads(self):
+        """Annotate `x: Any = l[i]` of a typed l as `x: int` when every value
+        x is bound to is an int, so x holds the element as an int rather than
+        an untyped pointer. A loop over a list the preprocessor cannot type
+        binds its target this way."""
+        annotations = {}
+        for scope in self.scopes:
+            for node in _walk_scope(scope.body):
+                target = _single_name_target(node)
+                if isinstance(node, ast.AnnAssign) and target is not None:
+                    annotations.setdefault(scope.loc(target.id), []).append(node)
+        for loc, nodes in annotations.items():
+            if not self.int_vars.get(loc, False) or not all(
+                    isinstance(n.annotation, ast.Name) and n.annotation.id in ("Any", "int")
+                    for n in nodes):
+                continue
+            for node in nodes:
+                if node.annotation.id == "Any" and getattr(node.value, TYPED_FLAG, False):
+                    node.annotation = ast.copy_location(ast.Name(id="int", ctx=ast.Load()),
+                                                        node.annotation)
 
     def _flag_copies(self):
         for scope, node, source in self.copies:
@@ -1015,6 +1089,17 @@ def _compared(node):
     parent = _parent(node)
     return isinstance(parent, ast.Compare) and all(
         isinstance(op, (ast.Eq, ast.NotEq)) for op in parent.ops)
+
+
+def _list_compare(node):
+    """Whether @p node is `x == y` or `x != y`, which compares two typed lists
+    element-wise when both operands are typed."""
+    return isinstance(node, ast.Compare) and len(node.ops) == 1 and isinstance(
+        node.ops[0], (ast.Eq, ast.NotEq))
+
+
+def _compare_operands(compare):
+    return [compare.left] + compare.comparators
 
 
 def _list_name(node):

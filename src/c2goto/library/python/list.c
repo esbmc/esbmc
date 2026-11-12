@@ -985,6 +985,27 @@ PyListObject *__ESBMC_tlist_to_list(const PyListObject *t, size_t int_type_id)
   return l;
 }
 
+/* a == b of two typed lists. The first 8 elements are compared without a
+ * loop or a path, as in __ESBMC_tlist_sorted, so a short list does not depend
+ * on the unwinding bound. Longer lists compare the rest in a loop. */
+bool __ESBMC_tlist_eq(const PyListObject *a, const PyListObject *b)
+{
+  size_t n = a->size;
+  const PySlot *x = a->slot, *y = b->slot;
+  bool eq = n == b->size && (n <= 0 || x[0].v == y[0].v) &&
+            (n <= 1 || x[1].v == y[1].v) && (n <= 2 || x[2].v == y[2].v) &&
+            (n <= 3 || x[3].v == y[3].v) && (n <= 4 || x[4].v == y[4].v) &&
+            (n <= 5 || x[5].v == y[5].v) && (n <= 6 || x[6].v == y[6].v) &&
+            (n <= 7 || x[7].v == y[7].v);
+  size_t i = 8;
+  while (eq && i < n)
+  {
+    eq = x[i].v == y[i].v;
+    i++;
+  }
+  return eq;
+}
+
 /* One bound of a slice with a nonzero step, clamped as
  * PySlice_AdjustIndices does to a list of `size` elements. */
 static long long

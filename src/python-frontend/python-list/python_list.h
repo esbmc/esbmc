@@ -68,6 +68,7 @@ public:
   exprt typed_nondet(const exprt &max_size);
   exprt typed_element(const exprt &list, const exprt &index);
   exprt typed_append(const exprt &list, const exprt &value);
+  /// `a + b`, `[x] * n`, `n * [x]`, or `a == b` and `a != b`.
   exprt typed_binop();
   /// A call the gate flagged: a typed nondet_list builder, or sorted(x) of
   /// a typed x, whose result is typed when the gate typed the call and is
@@ -1045,6 +1046,11 @@ private:
   exprt typed_int_type_id() const;
   exprt typed_int_temp(const nlohmann::json &node, const exprt &value);
   exprt typed_new_list(const char *create, const std::vector<exprt> &args);
+  exprt typed_model_call(
+    const char *name,
+    const std::vector<exprt> &args,
+    const typet &type);
+  exprt typed_compare();
   exprt typed_sorted();
   code_function_callt
   typed_push(const nlohmann::json &node, const exprt &list, const exprt &value);

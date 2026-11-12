@@ -62,22 +62,31 @@ exprt python_list::typed_new_list(
   const char *create,
   const std::vector<exprt> &args)
 {
+  return typed_model_call(
+    create, args, converter_.get_type_handler().get_list_type());
+}
+
+// A temporary holding what model function @p name returns for @p args.
+exprt python_list::typed_model_call(
+  const char *name,
+  const std::vector<exprt> &args,
+  const typet &type)
+{
   const locationt location = converter_.get_location_from_decl(list_value_);
-  const typet list_type = converter_.get_type_handler().get_list_type();
-  symbolt &list =
-    converter_.create_tmp_symbol(list_value_, "$py_list$", list_type, exprt());
-  code_declt decl(build_symbol(list));
+  symbolt &result =
+    converter_.create_tmp_symbol(list_value_, "$py_list$", type, exprt());
+  code_declt decl(build_symbol(result));
   decl.location() = location;
   converter_.add_instruction(decl);
 
   code_function_callt call;
-  call.function() = build_symbol(model_function(converter_, create));
+  call.function() = build_symbol(model_function(converter_, name));
   call.arguments() = args;
-  call.lhs() = build_symbol(list);
-  call.type() = list_type;
+  call.lhs() = build_symbol(result);
+  call.type() = type;
   call.location() = location;
   converter_.add_instruction(call);
-  return build_symbol(list);
+  return build_symbol(result);
 }
 
 code_function_callt python_list::typed_push(
@@ -142,6 +151,9 @@ exprt python_list::typed_append(const exprt &list, const exprt &value)
 
 exprt python_list::typed_binop()
 {
+  if (list_value_["_type"] == "Compare")
+    return typed_compare();
+
   // `a + b`, `[x] * n` or `n * [x]`, operands evaluated left to right. A
   // constructor call in an operand must not take the outer target as its self.
   const bool concat = list_value_["op"]["_type"] == "Add";
@@ -166,6 +178,38 @@ exprt python_list::typed_binop()
   args[1] =
     build_typecast(to_value_expr(args[1], converter_.ns), typed_int_type());
   return typed_new_list("c:@F@__ESBMC_tlist_repeat", args);
+}
+
+exprt python_list::typed_compare()
+{
+  // `a == b` or `a != b` of two typed lists. Each operand is held in a
+  // temporary as soon as it is evaluated, so a call in the left one runs
+  // before the right one is evaluated.
+  exprt *saved_lhs = converter_.current_lhs;
+  converter_.current_lhs = nullptr;
+  const typet list_type = converter_.get_type_handler().get_list_type();
+  std::vector<exprt> args;
+  for (const nlohmann::json &operand :
+       {list_value_["left"], list_value_["comparators"][0]})
+  {
+    symbolt &tmp =
+      converter_.create_tmp_symbol(operand, "$py_list$", list_type, exprt());
+    code_declt decl(build_symbol(tmp));
+    decl.location() = converter_.get_location_from_decl(operand);
+    converter_.add_instruction(decl);
+    code_assignt assign(
+      build_symbol(tmp),
+      to_value_expr(converter_.get_expr(operand), converter_.ns));
+    assign.location() = decl.location();
+    converter_.add_instruction(assign);
+    args.push_back(build_symbol(tmp));
+  }
+  converter_.current_lhs = saved_lhs;
+
+  const exprt eq = typed_model_call("c:@F@__ESBMC_tlist_eq", args, bool_type());
+  if (list_value_["ops"][0]["_type"] == "Eq")
+    return eq;
+  return not_exprt(eq);
 }
 
 bool python_list::is_typed_call(const nlohmann::json &call)
