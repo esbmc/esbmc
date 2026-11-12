@@ -695,15 +695,17 @@ exprt function_call_expr::bind_isinstance_call(exprt &obj_expr) const
 /// The list item a read `*(T *)item->value` of a scalar element comes from, or
 /// nil. The cast is the frontend's guess at the element's type; the item's
 /// type_id records the type it was stored with. A dict value read types the
-/// item with the followed struct rather than its tag, hence the follow.
+/// item with the followed struct rather than its tag, hence the follow. A dict
+/// value of no known type is read as `(char *)item->value` (#10432).
 static exprt list_item_of_scalar_read(
   const exprt &read,
   const typet &item_type,
   const namespacet &ns)
 {
-  if (read.id() != "dereference" || read.op0().id() != "typecast")
+  const exprt &cast = read.id() == "dereference" ? read.op0() : read;
+  if (cast.id() != "typecast")
     return nil_exprt();
-  const exprt &value = read.op0().op0();
+  const exprt &value = cast.op0();
   if (
     value.id() != "member" || value.get("component_name") != "value" ||
     ns.follow(value.op0().type()) != ns.follow(item_type))
