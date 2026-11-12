@@ -134,6 +134,12 @@ static bool is_model_internal(const expr2tc &access, const namespacet &ns)
   return s && has_prefix(id2string(s->name), "__ESBMC_");
 }
 
+static bool
+flags_atomic_write(const rw_sett::entryt &entry, const namespacet &ns)
+{
+  return entry.w && !is_model_internal(entry.original_expr, ns);
+}
+
 // A stack local becomes shared between threads when its address reaches a newly
 // spawned thread. Passing it straight to pthread_create is only the direct
 // case: the address also reaches the thread when it is parked somewhere the
@@ -797,8 +803,8 @@ void add_race_assertions(
         i_it++;
 
         // set the write flag(s) immediately before the original write -- set
-        forall_rw_set_entries(e_it, rw_set) if (
-          e_it->second.w && !is_model_internal(e_it->second.original_expr, ns))
+        forall_rw_set_entries(
+          e_it, rw_set) if (flags_atomic_write(e_it->second, ns))
         {
           const expr2tc guard_expr = w_guards.get_w_guard_expr(e_it->second);
 
