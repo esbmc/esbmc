@@ -1,5 +1,5 @@
 CORE
 main.py
---python-check-exceptions ZeroDivisionError
+--python-check-exceptions ZeroDivisionError --multi-property
 ^\*\* 0 of 1 properties failed, 1 passed$
 ^VERIFICATION SUCCESSFUL$
