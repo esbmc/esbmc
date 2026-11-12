@@ -251,20 +251,24 @@ class TypedListGate:
         }
         walked = self._walked_calls()
         for node in ast.walk(self.module):
-            if isinstance(node, ast.Name) and node.id in candidates:
-                call = _parent(node)
-                if not (isinstance(node.ctx, ast.Load) and isinstance(call, ast.Call)
-                        and call.func is node and id(call) in walked
-                        and self._plain_call(call, candidates[node.id])):
-                    candidates.pop(node.id)
-            elif isinstance(node, (ast.Global, ast.Nonlocal)):
-                for name in node.names:
-                    candidates.pop(name, None)
-            else:
-                for name in _bound_without_name_node(node):
-                    if name in candidates and node is not candidates[name]:
-                        candidates.pop(name)
+            for name in self._disqualified(node, candidates, walked):
+                candidates.pop(name, None)
         return candidates
+
+    def _disqualified(self, node, candidates, walked):
+        """The candidate functions @p node uses in a way not followed."""
+        if isinstance(node, ast.Name) and node.id in candidates:
+            call = _parent(node)
+            followed = (isinstance(node.ctx, ast.Load) and isinstance(call, ast.Call)
+                        and call.func is node and id(call) in walked
+                        and self._plain_call(call, candidates[node.id]))
+            return [] if followed else [node.id]
+        if isinstance(node, (ast.Global, ast.Nonlocal)):
+            return node.names
+        return [
+            name for name in _bound_without_name_node(node)
+            if name in candidates and node is not candidates[name]
+        ]
 
     @staticmethod
     def _plain_signature(func):
@@ -347,30 +351,39 @@ class TypedListGate:
                 for param in scope.params:
                     self._bind(scope, param, None)
             elif not _ends_in_exit(scope.body):
-                self.bindings.setdefault((scope.name, RETURN), []).append((None, scope))
+                self._bind_location((scope.name, RETURN), None, scope)
             for node in _walk_scope(scope.body):
-                if isinstance(node, ast.Return) and scope.name in self.functions:
-                    self.bindings.setdefault((scope.name, RETURN), []).append((node.value, scope))
-                if self._analysed_call(node):
-                    for arg, param in zip(node.args, self.functions[node.func.id].args.args):
-                        self.bindings.setdefault((node.func.id, param.arg), []).append((arg, scope))
-                target = _single_name_target(node)
-                if target is not None:
-                    self._bind(scope, target.id, node.value)
-                elif isinstance(node, ast.AugAssign) and isinstance(node.target, ast.Name):
-                    load = ast.Name(id=node.target.id, ctx=ast.Load())
-                    self._bind(scope, node.target.id,
-                               ast.BinOp(left=load, op=node.op, right=node.value))
-                elif isinstance(node, ast.Name) and not isinstance(node.ctx, ast.Load):
-                    if _single_name_target(_parent(node)) is not node and not isinstance(
-                            _parent(node), ast.AugAssign):
-                        self._bind(scope, node.id, None)
-                else:
-                    for name in _bound_without_name_node(node):
-                        self._bind(scope, name, None)
+                self._collect_flow_bindings(node, scope)
+                self._collect_name_bindings(node, scope)
+
+    def _collect_flow_bindings(self, node, scope):
+        """A followed function's return values and its arguments at a call."""
+        if isinstance(node, ast.Return) and scope.name in self.functions:
+            self._bind_location((scope.name, RETURN), node.value, scope)
+        if self._analysed_call(node):
+            for arg, param in zip(node.args, self.functions[node.func.id].args.args):
+                self._bind_location((node.func.id, param.arg), arg, scope)
+
+    def _collect_name_bindings(self, node, scope):
+        target = _single_name_target(node)
+        if target is not None:
+            self._bind(scope, target.id, node.value)
+        elif isinstance(node, ast.AugAssign) and isinstance(node.target, ast.Name):
+            load = ast.Name(id=node.target.id, ctx=ast.Load())
+            self._bind(scope, node.target.id, ast.BinOp(left=load, op=node.op, right=node.value))
+        elif isinstance(node, ast.Name) and not isinstance(node.ctx, ast.Load):
+            parent = _parent(node)
+            if _single_name_target(parent) is not node and not isinstance(parent, ast.AugAssign):
+                self._bind(scope, node.id, None)
+        else:
+            for name in _bound_without_name_node(node):
+                self._bind(scope, name, None)
+
+    def _bind_location(self, loc, value, scope):
+        self.bindings.setdefault(loc, []).append((value, scope))
 
     def _bind(self, scope, name, value):
-        self.bindings.setdefault(scope.loc(name), []).append((value, scope))
+        self._bind_location(scope.loc(name), value, scope)
 
     def _compute_int_vars(self):
         """Greatest fixpoint: a variable is int when every binding of it stores
