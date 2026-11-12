@@ -12659,6 +12659,32 @@ Monday failures, whose jobs also failed on 10-05: `Simplifier equivalence` (`git
 and three `goto-transcoder` tests), and the macOS build's
 `github_9081_optional_dict_value_fail`.
 
+### M9 (R152) — 2026-11-12, the collation functions
+
+R144's and R151's entries left `strcoll`, `strxfrm`, `strcoll_l` and
+`strxfrm_l` without a model, so each call returned a nondet value and read
+and wrote nothing: `assert(strcoll("abc", "abd") < 0)` was FAILED, `strxfrm`
+left its destination unchanged, and `strxfrm(out, "hello", 6)` with
+`char out[4]` was SUCCESSFUL although it writes past `out`.
+
+**Fixed** by modelling the C locale, as R150 and R151 do: `strcoll` is
+`strcmp` (C11 7.24.4.3), and `strxfrm` returns the length of the string and
+copies it, NUL included, when that fits in `n` bytes. When it does not, the
+first `n` bytes get nondet values, since C11 7.24.4.5p3 leaves the array's
+contents indeterminate. The `_l` forms ignore the locale.
+
+`strcoll_strxfrm_model` checks the sign of `strcoll` for equal, smaller,
+larger and prefix strings, the length `strxfrm` returns with a null
+destination, a copy that fits, a truncated call, and both `_l` forms; master
+fails it, and it passes natively. `strcoll_strxfrm_model_fail` runs under
+`--multi-property` and pins a read past an unterminated array in `strcoll`
+and the six-byte write into `char out[4]`; it is SUCCESSFUL on master. Under
+Z3, the only solver in this run's build.
+
+Not fixed: a locale other than C is not modelled, so `cstd/strcoll` and
+`cstd/strxfrm`, which collate in a Czech locale, stay KNOWNBUG; and
+`log(M_E) == 1.0` is still FAILED (R133).
+
 ---
 
 ## Appendix A — Methodological basis

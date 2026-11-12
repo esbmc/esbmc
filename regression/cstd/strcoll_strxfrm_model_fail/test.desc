@@ -2,3 +2,5 @@ CORE
 main.c
 --unwind 10 --no-unwinding-assertions --multi-property
 ^VERIFICATION FAILED$
+function strcmp$
+^  dereference failure on memcpy: writing memory segment of size 4 with 6 bytes$

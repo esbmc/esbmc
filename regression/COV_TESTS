@@ -3276,3 +3276,5 @@ regression/python/closure_called_in_frame
 regression/python/closure_called_in_frame_fail
 regression/python/github_8968_imported_default_param
 regression/python/github_8968_imported_default_param_fail
+regression/cstd/strcoll_strxfrm_model
+regression/cstd/strcoll_strxfrm_model_fail
