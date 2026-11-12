@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# pylint: disable=bad-indentation  # the file is indented with 2 spaces throughout
 
 import os
 import argparse
