@@ -232,13 +232,7 @@ bool holds_for_every_exception_state(
 // ---------------------------------------------------------------------------
 
 /// The signs an integer local may have, as a mask of these.
-enum : unsigned
-{
-  negative = 1,
-  zero = 2,
-  positive = 4,
-  any_sign = 7
-};
+constexpr unsigned negative = 1, zero = 2, positive = 4, any_sign = 7;
 
 /// What is known about one integer or pointer local. A local with no entry
 /// may have any value.
