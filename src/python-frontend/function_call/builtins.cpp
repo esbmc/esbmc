@@ -1944,8 +1944,8 @@ exprt function_call_expr::handle_issubclass() const
   return false_exprt();
 }
 
-/// Whether `node` may shadow the builtin `name` anywhere: an assignment,
-/// walrus, loop or with target, parameter, def, import alias, or a star import.
+/// Whether `node` may bind `name` anywhere: a store, parameter, keyword, def,
+/// import alias, pattern capture, or a star import.
 static bool
 may_shadow_builtin(const nlohmann::json &node, const std::string &name)
 {
@@ -1957,7 +1957,7 @@ may_shadow_builtin(const nlohmann::json &node, const std::string &name)
       node.value("_type", "") == "Name" && node.value("id", "") == name &&
       node.contains("ctx") && node["ctx"].value("_type", "") != "Load")
       return true;
-    for (const char *key : {"arg", "name", "asname"})
+    for (const char *key : {"arg", "name", "asname", "rest"})
       if (node.contains(key) && node[key].is_string() && node[key] == name)
         return true;
     if (node.value("_type", "") == "alias" && node.value("name", "") == "*")
@@ -1994,26 +1994,33 @@ exprt function_call_expr::handle_callable() const
     const std::string name = arg["id"].get<std::string>();
     const auto &ast = converter_.ast();
 
-    // CPython's builtin_function_or_method names.
-    static const std::set<std::string> builtin_functions = {
-      "abs",        "aiter",      "all",      "anext",   "any",     "ascii",
-      "bin",        "breakpoint", "callable", "chr",     "compile", "delattr",
-      "dir",        "divmod",     "eval",     "exec",    "format",  "getattr",
-      "globals",    "hasattr",    "hash",     "hex",     "id",      "input",
-      "isinstance", "issubclass", "iter",     "len",     "locals",  "max",
-      "min",        "next",       "oct",      "open",    "ord",     "pow",
-      "print",      "repr",       "round",    "setattr", "sorted",  "sum",
-      "vars"};
-
-    // Builtin type constructors and builtin functions, unless the program
-    // rebinds the name, user classes, and user functions are all callable.
-    const bool builtin =
-      type_utils::is_builtin_type(name) || builtin_functions.count(name);
     if (
-      (builtin && !may_shadow_builtin(ast, name)) ||
       json_utils::is_class(name, ast) ||
       json_utils::search_function_in_ast(ast, name))
       return true_exprt();
+
+    // CPython's builtin functions and the builtin classes the frontend does
+    // not list as types.
+    static const std::set<std::string> builtin_callables = {
+      "abs",         "aiter",   "all",        "anext",        "any",
+      "ascii",       "bin",     "breakpoint", "callable",     "chr",
+      "classmethod", "compile", "delattr",    "dir",          "divmod",
+      "enumerate",   "eval",    "exec",       "filter",       "format",
+      "getattr",     "globals", "hasattr",    "hash",         "hex",
+      "id",          "input",   "isinstance", "issubclass",   "iter",
+      "len",         "locals",  "map",        "max",          "memoryview",
+      "min",         "next",    "oct",        "open",         "ord",
+      "pow",         "print",   "property",   "repr",         "reversed",
+      "round",       "setattr", "sorted",     "staticmethod", "sum",
+      "super",       "vars",    "zip"};
+    if (type_utils::is_builtin_type(name) || builtin_callables.count(name))
+    {
+      // The binding check is flow- and scope-insensitive, so a name it finds
+      // may still be the builtin at this call.
+      if (may_shadow_builtin(ast, name))
+        return side_effect_expr_nondett(bool_type());
+      return true_exprt();
+    }
 
     // Otherwise it is an ordinary variable: callable iff its class defines
     // __call__.
