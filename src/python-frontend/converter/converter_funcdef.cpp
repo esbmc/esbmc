@@ -6536,6 +6536,24 @@ constructed_return_class(const nlohmann::json &body, const nlohmann::json &ast)
   return other ? std::string() : cls;
 }
 
+/// Whether \p body returns a str literal and, besides `return None`, nothing
+/// else. A bare `return` builds no value of a str return type.
+static bool returns_str_literal_or_none(const nlohmann::json &body)
+{
+  bool has_str = false;
+  const bool other = any_return(body, [&](const nlohmann::json &v) {
+    if (v.is_null())
+      return true;
+    if (is_none_return_value(v))
+      return false;
+    if (v.value("_type", "") != "Constant" || !v["value"].is_string())
+      return true;
+    has_str = true;
+    return false;
+  });
+  return has_str && !other;
+}
+
 /// The Optional<T> type a function returns when it can return None but its
 /// declared return type cannot hold it, or an empty type (#8016). Python does
 /// not enforce annotations, so `-> int` with a `return None` path is Optional
@@ -6564,6 +6582,9 @@ typet python_converter::optional_return_type(
     constructed_return_class(function_node["body"], *ast_json);
   if (!cls.empty())
     return gen_pointer_type(symbol_typet("tag-" + cls));
+  // None or str literals: NULL for None, as Optional[str] declares it.
+  if (returns_str_literal_or_none(function_node["body"]))
+    return gen_pointer_type(type_handler_.get_typet(std::string("str")));
   // None or functions of one signature: a function pointer, NULL for None.
   const std::vector<std::string> functions =
     returned_function_names(function_node, is_none_return_value);
