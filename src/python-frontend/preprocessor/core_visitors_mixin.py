@@ -1573,6 +1573,12 @@ class CoreVisitorsMixin:
     def _store_function_defaults(self, node, qualified_name):
         return_nodes = []
         is_method = "." in qualified_name
+        # A call in a function's default runs once, when the def runs (#10309).
+        # A method's default is hoisted past its class, where a call may not
+        # resolve, so it stays at the call site.
+        hoisted = (ast.Name, ast.List, ast.Dict, ast.Set)
+        if not is_method:
+            hoisted += (ast.Call, )
         for i in range(1, len(node.args.defaults) + 1):
             arg_index = len(node.args.args) - i
             if arg_index < 0:
@@ -1581,7 +1587,7 @@ class CoreVisitorsMixin:
             arg_name = node.args.args[-i].arg
             if isinstance(default_node, ast.Constant):
                 self.functionDefaults[(qualified_name, arg_name)] = default_node.value
-            elif isinstance(default_node, (ast.Name, ast.List, ast.Dict, ast.Set)):
+            elif isinstance(default_node, hoisted):
                 assignment_node, target_var = self.generate_variable_copy(
                     qualified_name, node.args.args[-i],
                     self.class_scope_default(default_node, node) if is_method else default_node)
@@ -1599,7 +1605,7 @@ class CoreVisitorsMixin:
             kwarg_name = node.args.kwonlyargs[i].arg
             if isinstance(default, ast.Constant):
                 self.functionDefaults[(qualified_name, kwarg_name)] = default.value
-            elif isinstance(default, (ast.Name, ast.List, ast.Dict, ast.Set)):
+            elif isinstance(default, hoisted):
                 assignment_node, target_var = self.generate_variable_copy(
                     qualified_name, node.args.kwonlyargs[i],
                     self.class_scope_default(default, node) if is_method else default)
