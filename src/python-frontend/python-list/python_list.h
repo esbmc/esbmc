@@ -550,6 +550,7 @@ public:
    * @param slice_node The Slice AST node holding lower/upper/step
    * @param value_node The AST node of the assigned (right-hand side) value
    */
+  void forget_static_length(const exprt &list);
   void handle_slice_assignment(
     const exprt &list_expr,
     const nlohmann::json &slice_node,
@@ -967,13 +968,12 @@ public:
   struct shallow_push_call
   {
     const symbolt *func;
-    std::vector<exprt> trailing_args;
+    exprt last_arg;
   };
 
   /** Shallow-push entry point for a copy of `src`. A list of tagged scalars
-   *  needs the bounded-copy variant, which takes only a float_type_id after
-   *  the list type id; the untagged one takes an element width, then the
-   *  float_type_id (#7716).
+   *  needs the bounded-copy variant, which reads its trailing argument as a
+   *  float_type_id rather than as an element width (#7716).
    */
   shallow_push_call
   select_shallow_push(const exprt &src, const exprt &untagged_last_arg) const;

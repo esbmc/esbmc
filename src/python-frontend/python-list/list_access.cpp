@@ -4022,13 +4022,13 @@ exprt python_list::handle_range_slice(
     std::hash<std::string>{}(converter_.get_type_handler().type_to_string(
       converter_.get_type_handler().get_list_type())),
     config.ansi_c.address_width));
-  std::vector<exprt> push_args{
-    build_symbol(sliced_list), build_symbol(at_result), slice_list_type_id};
-  push_args.insert(
-    push_args.end(),
-    shallow_push.trailing_args.begin(),
-    shallow_push.trailing_args.end());
-  exprt push_call = build_call_expr(*push_func, bool_type(), push_args);
+  exprt push_call = build_call_expr(
+    *push_func,
+    bool_type(),
+    {build_symbol(sliced_list),
+     build_symbol(at_result),
+     slice_list_type_id,
+     shallow_push.last_arg});
   push_call.location() = location;
   loop_body.copy_to_operands(converter_.convert_expression_to_code(push_call));
 
@@ -4424,6 +4424,15 @@ void python_list::handle_slice_assignment(
      elem_size});
   call.location() = location;
   converter_.add_instruction(converter_.convert_expression_to_code(call));
+  forget_static_length(list_expr);
+}
+
+// A slice assignment may change the list's length, which the recorded entries
+// behind the constant-index bounds check do not follow (#10447).
+void python_list::forget_static_length(const exprt &list)
+{
+  if (list.is_symbol())
+    converter_.mark_list_call_escaped(list.identifier().as_string());
 }
 
 void python_list::handle_subscript_assign_none(

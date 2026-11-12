@@ -408,6 +408,11 @@ static bool __ESBMC_list_push_shallow_sz(
     __ESBMC_list_push(l, o->value, o->type_id, elem_size, float_type_id, 0);
   else
     __ESBMC_list_push_object(l, o, float_type_id, 0);
+  // A float is read back from __ESBMC_float_buf at float_idx, whose entries
+  // are written once, so the copy shares the source's entry, as
+  // __ESBMC_list_store_elem and __ESBMC_list_extend do. A push with no
+  // float_type_id leaves it 0, which reads some other float (#10428).
+  l->items[l->size - 1].float_idx = o->float_idx;
   if (list_type_id != 0)
     l->may_nest = may_nest;
   return true;
@@ -439,17 +444,13 @@ bool __ESBMC_list_push_shallow_tagged(
 // elem_size is threaded straight to the size-aware core above: the slice
 // lowering knows the source list's element width, and passing it keeps the
 // per-element copy off memcpy's byte loop. 0 keeps the previous behaviour.
-// float_type_id gives a float copy its own __ESBMC_float_buf slot; with 0 the
-// copy's float_idx is 0 and it reads back as __ESBMC_float_buf[0] (#10428).
 bool __ESBMC_list_push_shallow(
   PyListObject *l,
   PyObject *o,
   size_t list_type_id,
-  size_t elem_size,
-  size_t float_type_id)
+  size_t elem_size)
 {
-  return __ESBMC_list_push_shallow_sz(
-    l, o, list_type_id, elem_size, float_type_id);
+  return __ESBMC_list_push_shallow_sz(l, o, list_type_id, elem_size, 0);
 }
 
 // Store a dict pointer directly in the list without byte-copying.

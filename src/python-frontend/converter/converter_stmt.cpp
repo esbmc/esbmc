@@ -968,8 +968,10 @@ void python_converter::adjust_statement_types(exprt &lhs, exprt &rhs) const
   // Case 6: Align bit-widths between LHS and RHS if they differ. Never
   // "align" a tuple struct against a non-tuple: demoting the LHS symbol to
   // the scalar's type corrupts already-emitted tuple member reads (see the
-  // fresh-alias gate in get_var_assign).
+  // fresh-alias gate in get_var_assign). Nor a tagged slot: get_var_assign
+  // boxes the value into its fields (#8974).
   else if (
+    !type_handler_.is_tagged_scalar_type(lhs_type) &&
     lhs_type.width() != rhs_type.width() &&
     tuple_handler_->is_tuple_type(lhs_type) ==
       tuple_handler_->is_tuple_type(rhs_type))
@@ -5624,6 +5626,34 @@ void python_converter::coerce_not_callable_return(
     not_callable_function(returned.subtype(), value.type(), location));
 }
 
+/// An arm of `a if c else b` that raises becomes a raise in that arm's side
+/// effects, guarded by the condition, with a nondet of the other arm's type
+/// for its value.
+void python_converter::hoist_raising_arm(
+  exprt &then,
+  code_blockt &then_side_effects,
+  exprt &else_expr,
+  code_blockt &else_side_effects)
+{
+  const bool then_raises = then.statement() == "cpp-throw";
+  const bool else_raises = else_expr.statement() == "cpp-throw";
+  const typet type = !then_raises   ? then.type()
+                     : !else_raises ? else_expr.type()
+                                    : long_int_type();
+  auto hoist = [&type](exprt &arm, code_blockt &side_effects) {
+    code_expressiont raise(arm);
+    raise.location() = arm.location();
+    side_effects.copy_to_operands(raise);
+    const locationt location = arm.location();
+    arm = side_effect_expr_nondett(type);
+    arm.location() = location;
+  };
+  if (then_raises)
+    hoist(then, then_side_effects);
+  if (else_raises)
+    hoist(else_expr, else_side_effects);
+}
+
 /// A choice between two functions of one type is a pointer to either. The
 /// result of a choice between types would have no single type (#8404). An
 /// arm that cannot be called becomes a function that raises when it is.
@@ -5826,6 +5856,52 @@ void python_converter::wrap_call_result_in_optional(
   rhs = store;
 }
 
+/// T of a `list[T]` or `List[T]` annotation whose T is a plain name, else nil.
+static typet
+list_annotation_elem_type(const nlohmann::json &ann, const type_handler &th)
+{
+  if (
+    !ann.is_object() || ann.value("_type", "") != "Subscript" ||
+    !ann["value"].is_object() || !ann["slice"].is_object())
+    return typet();
+  const std::string container = ann["value"].value("id", "");
+  const std::string elem = ann["slice"].value("id", "");
+  if ((container != "list" && container != "List") || elem.empty())
+    return typet();
+  return th.get_typet(elem);
+}
+
+/// Records the element type of a list-returning call's target from the
+/// callee's `-> list[T]` annotation or, failing that, from the target's own
+/// `x: list[T]` annotation. The second covers a callee whose body is not
+/// converted yet, such as the nondet list builders, whose results the
+/// preprocessor annotates.
+void python_converter::record_annotated_list_elem_type(
+  const nlohmann::json &ast_node,
+  const std::string &lhs_id)
+{
+  typet elem_type;
+  if (
+    ast_node.contains("value") && ast_node["value"].contains("func") &&
+    ast_node["value"]["func"].is_object())
+  {
+    const auto &func_ref = ast_node["value"]["func"];
+    const std::string func_name =
+      func_ref.value("id", func_ref.value("attr", ""));
+    const auto &func_def =
+      func_name.empty()
+        ? nlohmann::json()
+        : json_utils::try_find_function((*ast_json)["body"], func_name);
+    if (!func_def.empty() && func_def.contains("returns"))
+      elem_type = list_annotation_elem_type(func_def["returns"], type_handler_);
+  }
+  if (elem_type == typet() && ast_node.contains("annotation"))
+    elem_type =
+      list_annotation_elem_type(ast_node["annotation"], type_handler_);
+  if (elem_type != typet())
+    element_type_registry_.record(lhs_id, std::string(), elem_type);
+}
+
 void python_converter::handle_function_call_rhs(
   const nlohmann::json &ast_node,
   symbolt *lhs_symbol,
@@ -5942,59 +6018,7 @@ void python_converter::handle_function_call_rhs(
     const std::string &lhs_id = lhs.identifier().as_string();
     copy_elem_types_from_reordering_builtin(ast_node, lhs_id);
     if (element_type_registry_.size(lhs_id) == 0)
-    {
-      std::string func_name;
-      if (
-        ast_node.contains("value") && ast_node["value"].contains("func") &&
-        ast_node["value"]["func"].is_object())
-      {
-        const auto &func_ref = ast_node["value"]["func"];
-        if (func_ref.contains("id") && func_ref["id"].is_string())
-          func_name = func_ref["id"].get<std::string>();
-        else if (func_ref.contains("attr") && func_ref["attr"].is_string())
-          func_name = func_ref["attr"].get<std::string>();
-      }
-
-      if (!func_name.empty())
-      {
-        const auto &func_def =
-          json_utils::try_find_function((*ast_json)["body"], func_name);
-        if (
-          !func_def.empty() && func_def.contains("returns") &&
-          !func_def["returns"].is_null())
-        {
-          const auto &returns = func_def["returns"];
-          // Handle list[T] annotation
-          // Subscript node with value.id == "list"
-          if (
-            returns.is_object() && returns.contains("_type") &&
-            returns["_type"] == "Subscript" && returns.contains("value") &&
-            returns["value"].is_object() && returns["value"].contains("id") &&
-            returns["value"]["id"].is_string())
-          {
-            const std::string val_id =
-              returns["value"]["id"].get<std::string>();
-            if (val_id == "list" || val_id == "List")
-            {
-              // Extract element type from the slice, e.g. int in list[int]
-              if (
-                returns.contains("slice") && returns["slice"].is_object() &&
-                returns["slice"].contains("id") &&
-                returns["slice"]["id"].is_string())
-              {
-                typet elem_type = type_handler_.get_typet(
-                  returns["slice"]["id"].get<std::string>());
-                if (elem_type != typet())
-                {
-                  element_type_registry_.record(
-                    lhs_id, std::string(), elem_type);
-                }
-              }
-            }
-          }
-        }
-      }
-    }
+      record_annotated_list_elem_type(ast_node, lhs_id);
 
     typet l_type = type_handler_.get_list_type();
     symbolt &tmp_var_symbol =
@@ -7670,6 +7694,35 @@ exprt python_converter::get_value_expr(const nlohmann::json &node)
   return get_expr(node);
 }
 
+// Object subscript assignment via __setitem__:
+//   obj[key] = value  ->  obj.__setitem__(key, value)
+bool python_converter::try_dispatch_dunder_setitem(
+  const nlohmann::json &target,
+  const nlohmann::json &ast_node,
+  const exprt &container,
+  codet &target_block)
+{
+  if (
+    !target.contains("value") || !target.contains("slice") ||
+    !ast_node.contains("value") || ast_node["value"].is_null())
+    return false;
+
+  nlohmann::json args = nlohmann::json::array();
+  args.push_back(target["slice"]);
+  args.push_back(ast_node["value"]);
+  std::optional<exprt> setitem_call;
+  if (has_dunder_method(target["value"], "__setitem__"))
+    setitem_call = get_function_call(
+      build_dunder_call(target["value"], "__setitem__", args, ast_node));
+  else
+    setitem_call = dispatch_item_dunder_by_type(
+      container, target["value"], "__setitem__", args);
+  if (!setitem_call)
+    return false;
+  target_block.copy_to_operands(convert_expression_to_code(*setitem_call));
+  return true;
+}
+
 void python_converter::get_var_assign(
   const nlohmann::json &ast_node,
   codet &target_block)
@@ -7889,22 +7942,10 @@ void python_converter::get_var_assign(
     if (reject_immutable_item_assignment(container_expr, target_block))
       return;
 
-    // Handle object subscript assignment via __setitem__:
-    //   obj[key] = value  ->  obj.__setitem__(key, value)
     if (
-      target.contains("value") && target.contains("slice") &&
-      ast_node.contains("value") && !ast_node["value"].is_null() &&
-      has_dunder_method(target["value"], "__setitem__"))
-    {
-      nlohmann::json args = nlohmann::json::array();
-      args.push_back(target["slice"]);
-      args.push_back(ast_node["value"]);
-      nlohmann::json call_node =
-        build_dunder_call(target["value"], "__setitem__", args, ast_node);
-      exprt setitem_call = get_function_call(call_node);
-      target_block.copy_to_operands(convert_expression_to_code(setitem_call));
+      try_dispatch_dunder_setitem(
+        target, ast_node, container_expr, target_block))
       return;
-    }
 
     const namespacet ns(symbol_table_);
     const typet resolved_container = ns.follow(container_type);
@@ -10115,6 +10156,7 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
     // that migration to irep2 preserves the correct return type in if2t.
     then = to_value_expr(then, ns);
     else_expr = to_value_expr(else_expr, ns);
+    hoist_raising_arm(then, then_side_effects, else_expr, else_side_effects);
     decay_function_choice(then, else_expr);
 
     bool then_is_none = (then.type() == none_type());
@@ -10449,6 +10491,22 @@ void python_converter::get_return_with_conditional_spelling(
   get_return_statements(ast_node, target_block);
 }
 
+// A tagged value's fields cannot be returned through a plain scalar slot
+// (#8974).
+static void reject_tagged_scalar_return(
+  const type_handler &types,
+  const typet &value_type,
+  const typet &return_type)
+{
+  if (
+    types.is_tagged_scalar_type(value_type) &&
+    (types.is_numeric_scalar_type(return_type) ||
+     types.is_string_type(return_type)))
+    throw std::runtime_error(
+      "returning a dynamically-typed value from a function whose return type "
+      "is not dynamic is not yet supported");
+}
+
 void python_converter::get_return_statements(
   const nlohmann::json &ast_node,
   codet &target_block)
@@ -10506,8 +10564,11 @@ void python_converter::get_return_statements(
   locationt location = get_location_from_decl(ast_node);
 
   // Coerces `val` to a tagged-object value when the function's return type
-  // is tagged. No-op when `val` is already tagged.
+  // is tagged. No-op when `val` is already tagged; refuses a tagged `val`
+  // returned through a str or number slot.
   auto coerce_to_tagged_return = [&](exprt &val) {
+    reject_tagged_scalar_return(
+      type_handler_, val.type(), current_func_return_type_);
     if (
       !type_handler_.is_tagged_scalar_type(current_func_return_type_) ||
       type_handler_.is_tagged_scalar_type(val.type()))

@@ -477,13 +477,13 @@ void python_list::handle_list_var_unpacking(
       std::hash<std::string>{}(converter_.get_type_handler().type_to_string(
         converter_.get_type_handler().get_list_type())),
       config.ansi_c.address_width));
-    std::vector<exprt> push_args{
-      build_symbol(star_list), build_symbol(tmp_at), star_list_type_id};
-    push_args.insert(
-      push_args.end(),
-      shallow_push.trailing_args.begin(),
-      shallow_push.trailing_args.end());
-    exprt push_call = build_call_expr(*push_obj_func, bool_type(), push_args);
+    exprt push_call = build_call_expr(
+      *push_obj_func,
+      bool_type(),
+      {build_symbol(star_list),
+       build_symbol(tmp_at),
+       star_list_type_id,
+       shallow_push.last_arg});
     push_call.location() = loc;
     loop_body.copy_to_operands(
       converter_.convert_expression_to_code(push_call));
