@@ -14,7 +14,6 @@ Module: Unit tests for node sharing in clang_c_convertert
 #include <langapi/language_ui.h>
 #include <util/base/filesystem.h>
 
-#include <cstring>
 #include <vector>
 
 static const char source[] =
@@ -44,7 +43,9 @@ static bool same_node(const irept &x, const irept &y)
 }
 
 // Parse and typecheck `src` and return the body of its function f.
-static exprt typecheck_f(language_uit &l, const char *name, const char *src)
+template <size_t N>
+static exprt
+typecheck_f(language_uit &l, const char *name, const char (&src)[N])
 {
   cmdlinet cmd = goto_factory::get_default_cmdline("");
   optionst opts = goto_factory::get_default_options(cmd);
@@ -52,7 +53,7 @@ static exprt typecheck_f(language_uit &l, const char *name, const char *src)
     goto_factory::Architecture::BIT_64, cmd, opts);
 
   std::string path = clang_vfs_root() + "/unit/clang-c-frontend/" + name;
-  file_operations::filesystemt::get().add_bundled(path, src, strlen(src));
+  file_operations::filesystemt::get().add_bundled(path, src, N - 1);
 
   REQUIRE(!l.parse(path));
   REQUIRE(!l.typecheck());
