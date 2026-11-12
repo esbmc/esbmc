@@ -408,6 +408,11 @@ static bool __ESBMC_list_push_shallow_sz(
     __ESBMC_list_push(l, o->value, o->type_id, elem_size, float_type_id, 0);
   else
     __ESBMC_list_push_object(l, o, float_type_id, 0);
+  // A float is read back from __ESBMC_float_buf at float_idx, whose entries
+  // are written once, so the copy shares the source's entry, as
+  // __ESBMC_list_store_elem and __ESBMC_list_extend do. A push with no
+  // float_type_id leaves it 0, which reads some other float (#10428).
+  l->items[l->size - 1].float_idx = o->float_idx;
   if (list_type_id != 0)
     l->may_nest = may_nest;
   return true;
