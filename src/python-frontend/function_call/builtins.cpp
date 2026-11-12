@@ -1944,29 +1944,60 @@ exprt function_call_expr::handle_issubclass() const
   return false_exprt();
 }
 
-/// Whether `node` may bind `name` anywhere: a store, parameter, keyword, def,
-/// import alias, pattern capture, or a star import.
+/// Whether the AST object `node` itself binds `name`: a store, parameter,
+/// keyword, def, import alias, pattern capture, or a star import.
+static bool node_binds(const nlohmann::json &node, const std::string &name)
+{
+  const std::string type = node.value("_type", "");
+  if (
+    type == "Name" && node.value("id", "") == name && node.contains("ctx") &&
+    node["ctx"].value("_type", "") != "Load")
+    return true;
+  if (type == "alias" && node.value("name", "") == "*")
+    return true;
+  static const char *const keys[] = {"arg", "name", "asname", "rest"};
+  return std::any_of(std::begin(keys), std::end(keys), [&](const char *key) {
+    return node.contains(key) && node[key].is_string() && node[key] == name;
+  });
+}
+
 static bool
 may_shadow_builtin(const nlohmann::json &node, const std::string &name)
 {
-  if (!node.is_object() && !node.is_array())
-    return false;
-  if (node.is_object())
-  {
-    if (
-      node.value("_type", "") == "Name" && node.value("id", "") == name &&
-      node.contains("ctx") && node["ctx"].value("_type", "") != "Load")
-      return true;
-    for (const char *key : {"arg", "name", "asname", "rest"})
-      if (node.contains(key) && node[key].is_string() && node[key] == name)
-        return true;
-    if (node.value("_type", "") == "alias" && node.value("name", "") == "*")
-      return true;
-  }
-  for (const auto &child : node)
-    if (may_shadow_builtin(child, name))
-      return true;
-  return false;
+  if (node.is_object() && node_binds(node, name))
+    return true;
+  return node.is_structured() &&
+         std::any_of(node.begin(), node.end(), [&](const auto &child) {
+           return may_shadow_builtin(child, name);
+         });
+}
+
+/// callable() of a builtin function or class named `name`, or nil when `name`
+/// names neither.
+static exprt
+callable_builtin(const std::string &name, const nlohmann::json &ast)
+{
+  // CPython's builtin functions and the builtin classes the frontend does not
+  // list as types.
+  static const std::set<std::string> builtin_callables = {
+    "abs",         "aiter",   "all",        "anext",        "any",
+    "ascii",       "bin",     "breakpoint", "callable",     "chr",
+    "classmethod", "compile", "delattr",    "dir",          "divmod",
+    "enumerate",   "eval",    "exec",       "filter",       "format",
+    "getattr",     "globals", "hasattr",    "hash",         "hex",
+    "id",          "input",   "isinstance", "issubclass",   "iter",
+    "len",         "locals",  "map",        "max",          "memoryview",
+    "min",         "next",    "oct",        "open",         "ord",
+    "pow",         "print",   "property",   "repr",         "reversed",
+    "round",       "setattr", "sorted",     "staticmethod", "sum",
+    "super",       "vars",    "zip"};
+  if (!type_utils::is_builtin_type(name) && !builtin_callables.count(name))
+    return nil_exprt();
+  // The binding check is flow- and scope-insensitive, so a name it finds may
+  // still be the builtin at this call.
+  if (may_shadow_builtin(ast, name))
+    return side_effect_expr_nondett(bool_type());
+  return true_exprt();
 }
 
 exprt function_call_expr::handle_callable() const
@@ -1999,28 +2030,8 @@ exprt function_call_expr::handle_callable() const
       json_utils::search_function_in_ast(ast, name))
       return true_exprt();
 
-    // CPython's builtin functions and the builtin classes the frontend does
-    // not list as types.
-    static const std::set<std::string> builtin_callables = {
-      "abs",         "aiter",   "all",        "anext",        "any",
-      "ascii",       "bin",     "breakpoint", "callable",     "chr",
-      "classmethod", "compile", "delattr",    "dir",          "divmod",
-      "enumerate",   "eval",    "exec",       "filter",       "format",
-      "getattr",     "globals", "hasattr",    "hash",         "hex",
-      "id",          "input",   "isinstance", "issubclass",   "iter",
-      "len",         "locals",  "map",        "max",          "memoryview",
-      "min",         "next",    "oct",        "open",         "ord",
-      "pow",         "print",   "property",   "repr",         "reversed",
-      "round",       "setattr", "sorted",     "staticmethod", "sum",
-      "super",       "vars",    "zip"};
-    if (type_utils::is_builtin_type(name) || builtin_callables.count(name))
-    {
-      // The binding check is flow- and scope-insensitive, so a name it finds
-      // may still be the builtin at this call.
-      if (may_shadow_builtin(ast, name))
-        return side_effect_expr_nondett(bool_type());
-      return true_exprt();
-    }
+    if (const exprt builtin = callable_builtin(name, ast); builtin.is_not_nil())
+      return builtin;
 
     // Otherwise it is an ordinary variable: callable iff its class defines
     // __call__.
