@@ -47,6 +47,17 @@ __ESBMC_HIDE:;
   return copied;
 }
 
+// Copies an int into storage of its own type, so the store and every read
+// of `.value` stay whole-word rather than byte-level (which wraps at 64 bits
+// under --ir).
+void *__python_scalar_int_copy(long long value)
+{
+__ESBMC_HIDE:;
+  long long *copied = __ESBMC_alloca(sizeof(long long));
+  *copied = value;
+  return copied;
+}
+
 int __python_scalar_eq_num(
   const PyObject *tagged,
   int type_matches,

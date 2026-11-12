@@ -922,6 +922,14 @@ exprt dynamic_type_handler::module_name_payload(
     build_address_of(build_symbol(*object)), pointer_typet(empty_typet()));
 }
 
+exprt dynamic_type_handler::int_payload(const exprt &value) const
+{
+  const symbolt *copy_func =
+    converter_.symbol_table().find_symbol("c:@F@__python_scalar_int_copy");
+  assert(copy_func && "__python_scalar_int_copy not found in symbol table");
+  return build_call_expr(*copy_func, pointer_typet(empty_typet()), {value});
+}
+
 exprt dynamic_type_handler::build_scalar_payload(
   const exprt &rhs,
   const locationt &location,
@@ -964,6 +972,9 @@ exprt dynamic_type_handler::build_scalar_payload(
   // storage, which goes DEAD at branch exit, so it needs an explicit copy.
   if (value_to_store.type().is_pointer())
     return build_typecast(build_symbol(backing), pointer_typet(empty_typet()));
+
+  if (value_to_store.type() == long_long_int_type())
+    return int_payload(build_symbol(backing));
 
   const symbolt *copy_func =
     converter_.symbol_table().find_symbol("c:@F@__python_scalar_tag_copy");
