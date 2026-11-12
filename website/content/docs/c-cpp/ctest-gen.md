@@ -320,6 +320,8 @@ TOTAL                                          6       6   100%
 
 The CTest generator can format all types supported by ESBMC's symbolic execution engine. These types are collected using the same logic as `--generate-testcase` (TestComp XML format) and then formatted as C or C++ code.
 
+`--generate-testcase` writes the inputs of a counterexample to `testcase.xml`, one `<input>` per value a `__VERIFIER_nondet_*()` call returns, in call order. Values ESBMC assigns by itself are not inputs and are left out: uninitialised locals, `extern` variables that no file defines, and globals of ESBMC's own library models such as `errno`. `__VERIFIER_nondet_memory(p, n)` contributes one input per byte of the object; an object whose byte layout the generator does not know, such as a two-dimensional array, contributes none. Float and double inputs are printed with enough digits to read back as the same value, e.g. `<input>0.10000001</input>`.
+
 
 ### Integer Types (Signed)
 | Function | C Type | Example Values |

@@ -5624,6 +5624,34 @@ void python_converter::coerce_not_callable_return(
     not_callable_function(returned.subtype(), value.type(), location));
 }
 
+/// An arm of `a if c else b` that raises becomes a raise in that arm's side
+/// effects, guarded by the condition, with a nondet of the other arm's type
+/// for its value.
+void python_converter::hoist_raising_arm(
+  exprt &then,
+  code_blockt &then_side_effects,
+  exprt &else_expr,
+  code_blockt &else_side_effects)
+{
+  const bool then_raises = then.statement() == "cpp-throw";
+  const bool else_raises = else_expr.statement() == "cpp-throw";
+  const typet type = !then_raises   ? then.type()
+                     : !else_raises ? else_expr.type()
+                                    : long_int_type();
+  auto hoist = [&type](exprt &arm, code_blockt &side_effects) {
+    code_expressiont raise(arm);
+    raise.location() = arm.location();
+    side_effects.copy_to_operands(raise);
+    const locationt location = arm.location();
+    arm = side_effect_expr_nondett(type);
+    arm.location() = location;
+  };
+  if (then_raises)
+    hoist(then, then_side_effects);
+  if (else_raises)
+    hoist(else_expr, else_side_effects);
+}
+
 /// A choice between two functions of one type is a pointer to either. The
 /// result of a choice between types would have no single type (#8404). An
 /// arm that cannot be called becomes a function that raises when it is.
@@ -7664,6 +7692,35 @@ exprt python_converter::get_value_expr(const nlohmann::json &node)
   return get_expr(node);
 }
 
+// Object subscript assignment via __setitem__:
+//   obj[key] = value  ->  obj.__setitem__(key, value)
+bool python_converter::try_dispatch_dunder_setitem(
+  const nlohmann::json &target,
+  const nlohmann::json &ast_node,
+  const exprt &container,
+  codet &target_block)
+{
+  if (
+    !target.contains("value") || !target.contains("slice") ||
+    !ast_node.contains("value") || ast_node["value"].is_null())
+    return false;
+
+  nlohmann::json args = nlohmann::json::array();
+  args.push_back(target["slice"]);
+  args.push_back(ast_node["value"]);
+  std::optional<exprt> setitem_call;
+  if (has_dunder_method(target["value"], "__setitem__"))
+    setitem_call = get_function_call(
+      build_dunder_call(target["value"], "__setitem__", args, ast_node));
+  else
+    setitem_call = dispatch_item_dunder_by_type(
+      container, target["value"], "__setitem__", args);
+  if (!setitem_call)
+    return false;
+  target_block.copy_to_operands(convert_expression_to_code(*setitem_call));
+  return true;
+}
+
 void python_converter::get_var_assign(
   const nlohmann::json &ast_node,
   codet &target_block)
@@ -7883,22 +7940,10 @@ void python_converter::get_var_assign(
     if (reject_immutable_item_assignment(container_expr, target_block))
       return;
 
-    // Handle object subscript assignment via __setitem__:
-    //   obj[key] = value  ->  obj.__setitem__(key, value)
     if (
-      target.contains("value") && target.contains("slice") &&
-      ast_node.contains("value") && !ast_node["value"].is_null() &&
-      has_dunder_method(target["value"], "__setitem__"))
-    {
-      nlohmann::json args = nlohmann::json::array();
-      args.push_back(target["slice"]);
-      args.push_back(ast_node["value"]);
-      nlohmann::json call_node =
-        build_dunder_call(target["value"], "__setitem__", args, ast_node);
-      exprt setitem_call = get_function_call(call_node);
-      target_block.copy_to_operands(convert_expression_to_code(setitem_call));
+      try_dispatch_dunder_setitem(
+        target, ast_node, container_expr, target_block))
       return;
-    }
 
     const namespacet ns(symbol_table_);
     const typet resolved_container = ns.follow(container_type);
@@ -10109,6 +10154,7 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
     // that migration to irep2 preserves the correct return type in if2t.
     then = to_value_expr(then, ns);
     else_expr = to_value_expr(else_expr, ns);
+    hoist_raising_arm(then, then_side_effects, else_expr, else_side_effects);
     decay_function_choice(then, else_expr);
 
     bool then_is_none = (then.type() == none_type());
