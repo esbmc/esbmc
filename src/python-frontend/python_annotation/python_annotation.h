@@ -197,6 +197,13 @@ private:
 
   // The type every element of the literal in `[a, b, ...][i]` shares, or "Any".
   std::string subscript_type_from_list_literal(const Json &subscript_node);
+
+  // Whether @p body appends to the list @p name an item whose type is known
+  // and differs from @p element_type.
+  bool list_gains_other_type(
+    const std::string &name,
+    const std::string &element_type,
+    const Json &body);
   bool
   is_imported_name_in_body(const std::string &name, const Json &stmts) const;
   bool is_imported_name(const std::string &name) const;
