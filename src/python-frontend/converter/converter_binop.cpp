@@ -1929,6 +1929,8 @@ static bool is_nonzero_constant(const exprt &e)
     return !to_constant_int2t(value).value.is_zero();
   if (is_constant_floatbv2t(value))
     return !to_constant_floatbv2t(value).value.is_zero();
+  if (is_constant_bool2t(value))
+    return to_constant_bool2t(value).value;
   return false;
 }
 
