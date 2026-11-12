@@ -8,7 +8,8 @@ int __python_scalar_eq_obj(
   const PyObject *a,
   const PyObject *b,
   size_t num_type_id,
-  size_t bool_type_id);
+  size_t bool_type_id,
+  size_t float_type_id);
 
 // Allocate a Python object instance. The frontend emits a call to this for
 // `ClassName(...)` so class instances get CPython reference semantics (a
@@ -667,7 +668,8 @@ bool __ESBMC_list_eq_tagged(
   const PyListObject *l1,
   const PyListObject *l2,
   size_t num_type_id,
-  size_t bool_type_id)
+  size_t bool_type_id,
+  size_t float_type_id)
 {
   if (!l1 || !l2)
     return false;
@@ -678,7 +680,11 @@ bool __ESBMC_list_eq_tagged(
 
   for (size_t i = 0; i < l1->size; ++i)
     if (!__python_scalar_eq_obj(
-          &l1->items[i], &l2->items[i], num_type_id, bool_type_id))
+          &l1->items[i],
+          &l2->items[i],
+          num_type_id,
+          bool_type_id,
+          float_type_id))
       return false;
   return true;
 }

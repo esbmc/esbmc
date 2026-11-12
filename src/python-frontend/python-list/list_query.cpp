@@ -52,7 +52,8 @@ python_list::list_eq_target python_list::select_list_eq(
   return {
     eq_tagged_sym,
     {th.tagged_scalar_type_id(long_long_int_type()),
-     th.tagged_scalar_type_id(bool_type())}};
+     th.tagged_scalar_type_id(bool_type()),
+     th.tagged_scalar_type_id(double_type())}};
 }
 
 std::optional<expr2tc> python_list::fast_elem_equality(

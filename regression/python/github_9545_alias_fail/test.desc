@@ -1,4 +1,5 @@
 CORE
 main.py
 
-^ERROR: comparing a dynamically-typed variable against this literal type is not yet supported$
+^VERIFICATION FAILED$
+file .*main\.py line 10 column

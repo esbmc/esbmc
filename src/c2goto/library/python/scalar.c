@@ -58,15 +58,114 @@ __ESBMC_HIDE:;
   return copied;
 }
 
-int __python_scalar_eq_num(
+// Three-way compares (-1/0/1) of numbers, giving 2 when a NaN leaves them
+// unordered. An int, a bool and a float all compare by value, as in CPython.
+static inline int __python_scalar_cmp_float_float(double a, double b)
+{
+__ESBMC_HIDE:;
+  if (a < b)
+    return -1;
+  if (a > b)
+    return 1;
+  return a == b ? 0 : 2;
+}
+
+// Exact, as in CPython: widening n alone ties 2^53 + 1 with 2^53. A strict
+// order between f and (double)n carries over to n, since rounding is
+// monotonic. A tie makes f integral, so it converts back exactly unless n
+// rounded up to 2^63.
+static inline int __python_scalar_cmp_float_int(double f, long long n)
+{
+__ESBMC_HIDE:;
+  double widened = (double)n;
+  if (f != widened)
+    return __python_scalar_cmp_float_float(f, widened);
+  if (f >= 0x1p63)
+    return 1;
+  long long whole = (long long)f;
+  return (whole > n) - (whole < n);
+}
+
+static inline int __python_scalar_cmp_flip(int cmp)
+{
+__ESBMC_HIDE:;
+  return cmp == 2 ? 2 : -cmp;
+}
+
+// `tagged` holds an int, a bool (widened to long long) or a float.
+static inline int __python_scalar_cmp_tagged_int(
   const PyObject *tagged,
-  int type_matches,
+  size_t float_type_id,
   long long value)
 {
 __ESBMC_HIDE:;
-  if (!tagged || !type_matches)
+  if (tagged->type_id == float_type_id)
+    return __python_scalar_cmp_float_int(*(const double *)tagged->value, value);
+  long long tagged_val = *(const long long *)tagged->value;
+  return (tagged_val > value) - (tagged_val < value);
+}
+
+static inline int __python_scalar_cmp_tagged_float(
+  const PyObject *tagged,
+  size_t float_type_id,
+  double value)
+{
+__ESBMC_HIDE:;
+  if (tagged->type_id == float_type_id)
+    return __python_scalar_cmp_float_float(
+      *(const double *)tagged->value, value);
+  return __python_scalar_cmp_flip(
+    __python_scalar_cmp_float_int(value, *(const long long *)tagged->value));
+}
+
+static inline int __python_scalar_cmp_tagged_num(
+  const PyObject *a,
+  const PyObject *b,
+  size_t float_type_id)
+{
+__ESBMC_HIDE:;
+  return __python_scalar_cmp_flip(
+    a->type_id == float_type_id
+      ? __python_scalar_cmp_tagged_float(
+          b, float_type_id, *(const double *)a->value)
+      : __python_scalar_cmp_tagged_int(
+          b, float_type_id, *(const long long *)a->value));
+}
+
+// The arithmetic helpers return a long long, but a float operand makes the
+// result a float.
+static inline void __python_scalar_refuse_float(int is_float)
+{
+__ESBMC_HIDE:;
+  __ESBMC_assert(
+    !is_float,
+    "Unsupported: arithmetic on a dynamically-typed value holding a float");
+  __ESBMC_assume(!is_float);
+}
+
+// `is_number` says `tagged` holds an int, a bool or a float.
+int __python_scalar_eq_num(
+  const PyObject *tagged,
+  int is_number,
+  long long value,
+  size_t float_type_id)
+{
+__ESBMC_HIDE:;
+  if (!tagged || !is_number)
     return 0;
-  return *(const long long *)tagged->value == value;
+  return __python_scalar_cmp_tagged_int(tagged, float_type_id, value) == 0;
+}
+
+int __python_scalar_eq_float(
+  const PyObject *tagged,
+  int is_number,
+  double value,
+  size_t float_type_id)
+{
+__ESBMC_HIDE:;
+  if (!tagged || !is_number)
+    return 0;
+  return __python_scalar_cmp_tagged_float(tagged, float_type_id, value) == 0;
 }
 
 int __python_scalar_eq_str(
@@ -82,25 +181,36 @@ __ESBMC_HIDE:;
   return __python_scalar_bytes_equal(tagged->value, value, size);
 }
 
-// Three-way compare against a numeric literal (-1/0/1). Shared by
-// Lt/LtE/Gt/GtE -- the frontend composes the boolean from this against 0.
+// Three-way compare against a numeric literal (-1/0/1, or 2 if unordered).
+// Shared by Lt/LtE/Gt/GtE -- the frontend composes the boolean from this.
 int __python_scalar_cmp_num(
   const PyObject *tagged,
-  int type_matches,
-  long long value)
+  int is_number,
+  long long value,
+  size_t float_type_id)
 {
 __ESBMC_HIDE:;
   __ESBMC_assert(
-    tagged && type_matches,
+    tagged && is_number,
     "TypeError: comparison not supported between these types");
-  if (!tagged || !type_matches)
+  if (!tagged || !is_number)
     return 0;
-  long long tagged_val = *(const long long *)tagged->value;
-  if (tagged_val < value)
-    return -1;
-  if (tagged_val > value)
-    return 1;
-  return 0;
+  return __python_scalar_cmp_tagged_int(tagged, float_type_id, value);
+}
+
+int __python_scalar_cmp_float(
+  const PyObject *tagged,
+  int is_number,
+  double value,
+  size_t float_type_id)
+{
+__ESBMC_HIDE:;
+  __ESBMC_assert(
+    tagged && is_number,
+    "TypeError: comparison not supported between these types");
+  if (!tagged || !is_number)
+    return 0;
+  return __python_scalar_cmp_tagged_float(tagged, float_type_id, value);
 }
 
 // Lexicographic three-way compare against a literal str (-1/0/1). The loop
@@ -139,14 +249,17 @@ int __python_scalar_eq_obj(
   const PyObject *a,
   const PyObject *b,
   size_t num_type_id,
-  size_t bool_type_id)
+  size_t bool_type_id,
+  size_t float_type_id)
 {
 __ESBMC_HIDE:;
-  int a_num = a->type_id == num_type_id || a->type_id == bool_type_id;
-  int b_num = b->type_id == num_type_id || b->type_id == bool_type_id;
+  int a_num = a->type_id == num_type_id || a->type_id == bool_type_id ||
+              a->type_id == float_type_id;
+  int b_num = b->type_id == num_type_id || b->type_id == bool_type_id ||
+              b->type_id == float_type_id;
   if (a_num || b_num)
     return a_num && b_num &&
-           *(const long long *)a->value == *(const long long *)b->value;
+           __python_scalar_cmp_tagged_num(a, b, float_type_id) == 0;
   // Python compares across types as unequal rather than coercing.
   if (a->type_id != b->type_id || a->size != b->size)
     return 0;
@@ -162,32 +275,27 @@ __ESBMC_HIDE:;
   return 1;
 }
 
-// Three-way compare (-1/0/1) between two tagged scalars, for Lt/LtE/Gt/GtE.
-// A type mismatch here is a genuine TypeError, unlike equality.
+// Three-way compare (-1/0/1, or 2 if unordered) between two tagged scalars, for
+// Lt/LtE/Gt/GtE. A type mismatch here is a genuine TypeError, unlike equality.
 int __python_scalar_cmp_obj(
   const PyObject *a,
   const PyObject *b,
   size_t num_type_id,
-  size_t bool_type_id)
+  size_t bool_type_id,
+  size_t float_type_id)
 {
 __ESBMC_HIDE:;
-  int a_num = a->type_id == num_type_id || a->type_id == bool_type_id;
-  int b_num = b->type_id == num_type_id || b->type_id == bool_type_id;
+  int a_num = a->type_id == num_type_id || a->type_id == bool_type_id ||
+              a->type_id == float_type_id;
+  int b_num = b->type_id == num_type_id || b->type_id == bool_type_id ||
+              b->type_id == float_type_id;
   __ESBMC_assert(
     a_num == b_num && (a_num || a->type_id == b->type_id),
     "TypeError: comparison not supported between these types");
   if (!(a_num == b_num && (a_num || a->type_id == b->type_id)))
     return 0;
   if (a_num)
-  {
-    long long av = *(const long long *)a->value;
-    long long bv = *(const long long *)b->value;
-    if (av < bv)
-      return -1;
-    if (av > bv)
-      return 1;
-    return 0;
-  }
+    return __python_scalar_cmp_tagged_num(a, b, float_type_id);
   __ESBMC_assert(
     a->size <= ESBMC_PY_STRNLEN_BOUND && b->size <= ESBMC_PY_STRNLEN_BOUND,
     "tagged str exceeds the modelled bound");
@@ -237,14 +345,16 @@ __ESBMC_HIDE:;
 // in this library: an assert on the path that would have raised.
 long long __python_scalar_add_num(
   const PyObject *tagged,
-  int type_matches,
-  long long value)
+  int is_number,
+  long long value,
+  size_t float_type_id)
 {
 __ESBMC_HIDE:;
   __ESBMC_assert(
-    tagged && type_matches, "TypeError: unsupported operand type(s) for +");
-  if (!tagged || !type_matches)
+    tagged && is_number, "TypeError: unsupported operand type(s) for +");
+  if (!tagged || !is_number)
     return 0;
+  __python_scalar_refuse_float(tagged->type_id == float_type_id);
   return *(const long long *)tagged->value + value;
 }
 
@@ -292,15 +402,17 @@ __ESBMC_HIDE:;
 // subtraction order matters.
 long long __python_scalar_sub_num(
   const PyObject *tagged,
-  int type_matches,
+  int is_number,
   long long value,
-  int tagged_is_left)
+  int tagged_is_left,
+  size_t float_type_id)
 {
 __ESBMC_HIDE:;
   __ESBMC_assert(
-    tagged && type_matches, "TypeError: unsupported operand type(s) for -");
-  if (!tagged || !type_matches)
+    tagged && is_number, "TypeError: unsupported operand type(s) for -");
+  if (!tagged || !is_number)
     return 0;
+  __python_scalar_refuse_float(tagged->type_id == float_type_id);
   long long tagged_val = *(const long long *)tagged->value;
   return tagged_is_left ? tagged_val - value : value - tagged_val;
 }
@@ -308,15 +420,17 @@ __ESBMC_HIDE:;
 // Python's / is always true division, even for two ints.
 double __python_scalar_div_num(
   const PyObject *tagged,
-  int type_matches,
+  int is_number,
   long long value,
-  int tagged_is_left)
+  int tagged_is_left,
+  size_t float_type_id)
 {
 __ESBMC_HIDE:;
   __ESBMC_assert(
-    tagged && type_matches, "TypeError: unsupported operand type(s) for /");
-  if (!tagged || !type_matches)
+    tagged && is_number, "TypeError: unsupported operand type(s) for /");
+  if (!tagged || !is_number)
     return 0.0;
+  __python_scalar_refuse_float(tagged->type_id == float_type_id);
   long long tagged_val = *(const long long *)tagged->value;
   return tagged_is_left ? (double)tagged_val / (double)value
                         : (double)value / (double)tagged_val;
@@ -327,7 +441,8 @@ long long __python_scalar_sub_num_dyn(
   const PyObject *lhs,
   int lhs_is_num,
   const PyObject *rhs,
-  int rhs_is_num)
+  int rhs_is_num,
+  size_t float_type_id)
 {
 __ESBMC_HIDE:;
   __ESBMC_assert(
@@ -335,6 +450,8 @@ __ESBMC_HIDE:;
     "TypeError: unsupported operand type(s) for -");
   if (!lhs || !rhs || !lhs_is_num || !rhs_is_num)
     return 0;
+  __python_scalar_refuse_float(
+    lhs->type_id == float_type_id || rhs->type_id == float_type_id);
   return *(const long long *)lhs->value - *(const long long *)rhs->value;
 }
 
@@ -342,7 +459,8 @@ double __python_scalar_div_num_dyn(
   const PyObject *lhs,
   int lhs_is_num,
   const PyObject *rhs,
-  int rhs_is_num)
+  int rhs_is_num,
+  size_t float_type_id)
 {
 __ESBMC_HIDE:;
   __ESBMC_assert(
@@ -350,6 +468,8 @@ __ESBMC_HIDE:;
     "TypeError: unsupported operand type(s) for /");
   if (!lhs || !rhs || !lhs_is_num || !rhs_is_num)
     return 0.0;
+  __python_scalar_refuse_float(
+    lhs->type_id == float_type_id || rhs->type_id == float_type_id);
   return (double)(*(const long long *)lhs->value) /
          (double)(*(const long long *)rhs->value);
 }
@@ -366,13 +486,17 @@ PyObject __python_scalar_add_obj_dyn(
   int rhs_is_num,
   int rhs_is_str,
   size_t num_type_id,
-  size_t str_type_id)
+  size_t str_type_id,
+  size_t float_type_id)
 {
 __ESBMC_HIDE:;
   int both_num = lhs && rhs && lhs_is_num && rhs_is_num;
   int both_str = lhs && rhs && lhs_is_str && rhs_is_str;
   __ESBMC_assert(
     both_num || both_str, "TypeError: unsupported operand type(s) for +");
+  __python_scalar_refuse_float(
+    both_num &&
+    (lhs->type_id == float_type_id || rhs->type_id == float_type_id));
 
   PyObject result;
   result.float_idx = 0;
