@@ -3837,6 +3837,8 @@ exprt function_call_expr::handle_list_method() const
 {
   const std::string &method_name = function_id_.get_function();
 
+  if (python_list::is_typed(call_))
+    return handle_typed_list_method();
   if (method_name == "append")
     return handle_list_append();
   if (method_name == "insert")
@@ -4189,18 +4191,24 @@ exprt function_call_expr::handle_numpy_astype() const
   return build_symbol(result_sym);
 }
 
+/// A method call on a typed list (#10451), one the gate's _METHOD_RULES
+/// accepted.
+exprt function_call_expr::handle_typed_list_method() const
+{
+  const std::string &method_name = function_id_.get_function();
+  python_list list(converter_, call_);
+  const exprt receiver = converter_.get_expr(call_["func"]["value"]);
+  if (method_name == "append")
+    return list.typed_append(receiver, converter_.get_expr(call_["args"][0]));
+  throw std::runtime_error("Unsupported typed list method: " + method_name);
+}
+
 exprt function_call_expr::handle_list_append() const
 {
   const auto &args = call_["args"];
 
   if (args.size() != 1)
     throw std::runtime_error("append() takes exactly one argument");
-
-  if (python_list::is_typed(call_))
-    return python_list(converter_, call_)
-      .typed_append(
-        converter_.get_expr(call_["func"]["value"]),
-        converter_.get_expr(args[0]));
 
   std::string list_display_name;
   const symbolt *list_symbol = get_object_list_symbol(list_display_name);

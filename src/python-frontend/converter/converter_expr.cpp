@@ -1579,6 +1579,11 @@ std::optional<exprt> python_converter::resolve_subscript_base(
     array =
       materialize_list_function_call(array, element["value"], *current_block);
 
+  // A typed list (#10451) is read and written through its own storage.
+  if (python_list::is_typed(element))
+    return python_list(*this, element)
+      .typed_element(array, get_expr(element["slice"]));
+
   return std::nullopt;
 }
 
@@ -2243,10 +2248,6 @@ std::optional<exprt> python_converter::try_index_tagged_str(
 
 exprt python_converter::handle_subscript_expr(const nlohmann::json &element)
 {
-  if (python_list::is_typed(element))
-    return python_list(*this, element)
-      .typed_element(get_expr(element["value"]), get_expr(element["slice"]));
-
   // a.flat[i] (read): see try_build_flat_index_read's own comment for why
   // this needs to be special-cased ahead of the generic Subscript path.
   if (std::optional<exprt> flat_value = try_build_flat_index_read(element))

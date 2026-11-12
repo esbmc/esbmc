@@ -687,6 +687,12 @@ require_new_object_pointer_lvalue(const code_function_call2t &func_call)
   abort();
 }
 
+/// The type @p ptr points to; nil when @p ptr is nil.
+static type2tc pointee_type_or_nil(const expr2tc &ptr)
+{
+  return is_nil_expr(ptr) ? type2tc() : to_pointer_type(ptr->type).subtype;
+}
+
 void goto_symext::run_intrinsic(
   const code_function_call2t &func_call,
   reachability_treet &art,
@@ -1297,31 +1303,13 @@ void goto_symext::run_intrinsic(
     return;
   }
 
-  if (has_prefix(symname, "c:@F@__ESBMC_create_inf_obj"))
+  // __ESBMC_create_inf_obj and __ESBMC_create_inf_slots (python/list.c): a
+  // fresh infinite array of what the result points to.
+  if (has_prefix(symname, "c:@F@__ESBMC_create_inf_"))
   {
     assert(func_call.operands.size() == 0 && "Wrong signature");
-
-    const symbolt *list_object_symbol =
-      new_context.find_symbol("tag-struct __ESBMC_PyObj");
-    assert(list_object_symbol);
-
     symex_mem_inf(
-      func_call.ret,
-      migrate_symbol_type(*list_object_symbol),
-      cur_state->guard);
-
-    return;
-  }
-
-  // The element storage of a typed Python list (python/list.c).
-  if (symname == "c:@F@__ESBMC_create_inf_slots")
-  {
-    assert(func_call.operands.size() == 0 && "Wrong signature");
-    const symbolt *slot_symbol =
-      new_context.find_symbol("tag-struct __ESBMC_PySlot");
-    assert(slot_symbol);
-    symex_mem_inf(
-      func_call.ret, migrate_symbol_type(*slot_symbol), cur_state->guard);
+      func_call.ret, pointee_type_or_nil(func_call.ret), cur_state->guard);
     return;
   }
 
