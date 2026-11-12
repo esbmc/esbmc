@@ -50,11 +50,12 @@ private:
 
   void exclude_all(const expr2tc &e)
   {
-    if (is_nil_expr(e))
-      return;
     if (is_symbol2t(e))
       excluded.insert(to_symbol2t(e).thename);
-    e->foreach_operand([this](const expr2tc &op) { exclude_all(op); });
+    e->foreach_operand([this](const expr2tc &op) {
+      if (!is_nil_expr(op))
+        exclude_all(op);
+    });
   }
 
   /* Excludes each symbol under @p e that is not the source of a member, where
@@ -83,11 +84,8 @@ private:
     else if (is_symbol2t(e))
     {
       const irep_idt &name = to_symbol2t(e).thename;
-      if (!is_struct_type(e->type))
-        excluded.insert(name);
-      else if (
-        const auto [it, fresh] = seen.emplace(name, e->type);
-        !fresh && it->second != e->type)
+      const auto [it, fresh] = seen.emplace(name, e->type);
+      if (!is_struct_type(e->type) || it->second != e->type)
         excluded.insert(name);
     }
     e->foreach_operand([this](const expr2tc &op) { note(op); });
@@ -129,12 +127,6 @@ private:
         a.source->type != a.target->type ||
         mentions(a.source, to_symbol2t(a.target).thename))
         excluded.insert(to_symbol2t(a.target).thename);
-    }
-    else if (is_code_decl2t(i.code))
-    {
-      const code_decl2t &d = to_code_decl2t(i.code);
-      if (!is_nil_expr(d.init) && d.init->type != d.type)
-        excluded.insert(d.value);
     }
   }
 
@@ -271,11 +263,15 @@ private:
   {
     const expr2tc &var = fields.at(split_target(code)).vars[k];
     if (is_code_decl2t(code))
+    {
+      // goto_convert moves a declaration's initializer into an assignment.
+      assert(is_nil_expr(to_code_decl2t(code).init));
       return code_decl2tc(
         var->type,
         to_symbol2t(var).thename,
-        is_nil_expr(value) ? expr2tc() : member_value(value, k),
+        expr2tc(),
         to_code_decl2t(code).location);
+    }
     if (is_code_dead2t(code))
       return code_dead2tc(
         var->type, to_symbol2t(var).thename, to_code_dead2t(code).location);
@@ -304,10 +300,9 @@ private:
         continue;
       }
 
-      const expr2tc value = replace(
-        is_code_decl2t(it->code)     ? to_code_decl2t(it->code).init
-        : is_code_assign2t(it->code) ? to_code_assign2t(it->code).source
-                                     : expr2tc());
+      const expr2tc value = is_code_assign2t(it->code)
+                              ? replace(to_code_assign2t(it->code).source)
+                              : expr2tc();
       std::vector<expr2tc> codes;
       const std::vector<expr2tc> &vars = fields.at(name).vars;
       for (size_t k = 0; k < vars.size(); k++)

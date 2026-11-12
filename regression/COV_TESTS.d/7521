@@ -5,3 +5,5 @@ regression/esbmc/scalarize_structs_threads
 regression/esbmc/scalarize_structs_kinduction_fail
 regression/esbmc/scalarize_structs_loop_invariant
 regression/python/scalarize_structs_rebound
+regression/esbmc/scalarize_structs_loop_assigns
+regression/esbmc/scalarize_structs_empty
