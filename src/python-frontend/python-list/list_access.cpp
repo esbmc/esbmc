@@ -3564,6 +3564,14 @@ exprt python_list::handle_range_slice(
       step_info.literal))
     return *slice_copy;
 
+  // Only a non-char array has a run-time step lowering
+  // (build_symbolic_step_slice); everywhere else step_val would silently be 1.
+  const bool has_runtime_step_lowering =
+    resolved_array_type.is_array() &&
+    !type_utils::is_char_storage(resolved_array_type.subtype());
+  if (!step_info.literal && !has_runtime_step_lowering)
+    throw std::runtime_error("Slice with a non-constant step is not supported");
+
   if (is_string_slice)
   {
     locationt location = converter_.get_location_from_decl(slice_node);
