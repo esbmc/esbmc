@@ -439,6 +439,18 @@ void goto_convertt::do_realloc(
 {
   assert(arguments.size() == 2 && "realloc requires two arguments");
 
+  // `realloc(p, n);` with the result discarded still frees p on success.
+  if (lhs.is_nil())
+  {
+    const typet ptr_type = pointer_typet(empty_typet());
+    do_realloc(
+      symbol_exprt(new_tmp_symbol(ptr_type).id, ptr_type),
+      function,
+      arguments,
+      dest);
+    return;
+  }
+
   // Create a null pointer expression (workaround for missing
   // null_pointer_exprt)
   exprt null_ptr = gen_zero(arguments[0].type());
