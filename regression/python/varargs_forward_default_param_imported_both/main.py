@@ -1,11 +1,6 @@
 import random
 
-from .relative_rel import func2
-
-
-def func1(*args):
-    return func2(*args)
-
+from pkg.fwd import func1
 
 if random.random() < 0.5:
     a = func1()
