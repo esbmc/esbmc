@@ -215,6 +215,13 @@ static void apply_gcse(
 //
 // \param options - various options used by the processing methods,
 // \param goto_functions - reference to the GOTO program to be processed.
+// TS extraction reads the havoc as the loop-head state, so it needs every loop
+// entered; its fallback runs no inductive step (#10201).
+static contextt *loop_entry_flags(bool ts_strategy, contextt &context)
+{
+  return ts_strategy ? nullptr : &context;
+}
+
 // Exceptions whose escape is not reported as a failed property.
 static std::set<irep_idt> unreported_exceptions(const optionst &options)
 {
@@ -576,8 +583,10 @@ bool esbmc_parseoptionst::process_goto_program(
       {
         reachable_state_invariants =
           assume_reachable_loop_states(goto_functions, ns, 10000);
-        disable_is_if_unsound(
-          goto_k_induction(goto_functions, &context, checks_past_violation));
+        disable_is_if_unsound(goto_k_induction(
+          goto_functions,
+          loop_entry_flags(ts_strategy_requested(), context),
+          checks_past_violation));
       }
 
       if (wants_loop_invariants())
