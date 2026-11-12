@@ -232,7 +232,8 @@ std::string goto2leant::var_name(const irep_idt &id)
   if (s && s->static_lifetime)
     unsupported("global variable " + id.as_string(), s->location);
   std::string base = s ? s->name.as_string() : shorthand(id.as_string());
-  base = base.substr(0, base.find("::")); // C++ parameters: `lo::0`
+  if (auto cut = base.find("::"); cut != std::string::npos)
+    base.resize(cut); // C++ parameters: `lo::0`
   return cur->names[id.as_string()] = fresh(base);
 }
 
