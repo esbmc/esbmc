@@ -76,6 +76,11 @@ public:
   bool preprocess_self_method_calls();
   std::string self_call_arg_type(const Json &arg, const Json &caller);
   bool is_instance_call(const Json &func) const;
+  bool receiver_method_call(
+    const Json &node,
+    Json &receiver,
+    std::string &method,
+    Json &args) const;
   Json *class_method(const std::string &cls, const Json &method);
   /// Sentinel recorded for a call-site argument this pass cannot type; never
   /// a valid Python type name, so it can only block, never be annotated.
