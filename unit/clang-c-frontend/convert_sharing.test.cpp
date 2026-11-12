@@ -66,6 +66,13 @@ TEST_CASE("the C converter shares equal types and locations", "[core]")
   const symbolt *g = l.context.find_symbol("c:@F@g");
   REQUIRE(g != nullptr);
 
+  // Variable references carry no location of their own.
+  std::vector<const exprt *> symbols;
+  collect(f->get_value(), "symbol", symbols);
+  REQUIRE(symbols.size() == 2);
+  for (const exprt *s : symbols)
+    REQUIRE(s->location().get_line().empty());
+
   std::vector<const exprt *> constants;
   collect(f->get_value(), "constant", constants);
   collect(g->get_value(), "constant", constants);

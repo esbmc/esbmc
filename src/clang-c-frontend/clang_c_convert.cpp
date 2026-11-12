@@ -4171,7 +4171,11 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
   }
   }
 
-  new_expr.location() = location;
+  // Nothing needs the location of these, and keeping one per node cost over
+  // 200 MB on a large program (#10190).
+  if (!llvm::isa<clang::ImplicitCastExpr, clang::DeclRefExpr, clang::ParenExpr>(
+        stmt))
+    new_expr.location() = location;
   return false;
 }
 
