@@ -596,6 +596,14 @@ bool function_call_expr::is_unmodelled_base_instantiation() const
          converter_.unmodelled_base_classes_.count(function_id_.get_class());
 }
 
+bool function_call_expr::is_module_object_call() const
+{
+  const auto &func = call_["func"];
+  return func.value("_type", "") == "Name" &&
+         converter_.names_module_object(
+           func["id"].get<std::string>(), call_.value("lineno", 0));
+}
+
 void function_call_expr::refuse_unmodelled_base_instance(
   const std::string &class_name) const
 {
@@ -5425,6 +5433,15 @@ function_call_expr::get_dispatch_table()
        refuse_unmodelled_base_instance(function_id_.get_class());
      },
      "instantiating a class derived from an unmodelled one"},
+
+    {[this]() { return is_module_object_call(); },
+     [this]() {
+       exprt raise = converter_.get_exception_handler().gen_exception_raise(
+         "TypeError", "'module' object is not callable");
+       raise.location() = converter_.get_location_from_decl(call_);
+       return raise;
+     },
+     "calling a module"},
 
     {[this]() { return is_abstract_instantiation(); },
      [this]() { return abstract_instantiation_error(call_); },

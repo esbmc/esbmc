@@ -163,6 +163,8 @@ private:
 
   bool is_unmodelled_base_instantiation() const;
 
+  bool is_module_object_call() const;
+
   /// Refuse creating \p class_name, which derives from a class that has no
   /// model: its instances lack whatever that base provides.
   [[noreturn]] void
