@@ -1,0 +1,4 @@
+regression/esbmc/scalarize_structs
+regression/esbmc/scalarize_structs_fail
+regression/esbmc/scalarize_structs_alias_fail
+regression/esbmc/scalarize_structs_threads

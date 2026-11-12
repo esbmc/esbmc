@@ -1123,6 +1123,10 @@ const struct group_opt_templ all_cmd_options[] = {
      NULL,
      "Disable constant propagation (unsupported with concurrency: the pthread "
      "model requires constant thread ids)"},
+    {"scalarize-structs",
+     NULL,
+     "Give each field of a struct variable whose address is never taken a "
+     "variable of its own, so that writing a field does not copy the struct"},
     {"gcse",
      NULL,
      "Adds intermediate variables to precompute common sub-expressions between "
