@@ -1,0 +1,5 @@
+CORE
+main.py
+--python-check-exceptions ZeroDivisionError,FloatingPointError
+isinstance\(\) on a value whose type was lost
+^VERIFICATION FAILED$
