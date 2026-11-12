@@ -974,6 +974,10 @@ public:
    *  formula that never reads an address keeps no arrays (#9785). */
   std::vector<addrspace_storet> addrspace_stores;
   void assert_addrspace_stores(unsigned int version);
+  bool native_addrspace() const;
+  /** init_addr_space_array() starts the version count here; every other
+   *  version is stored over it. */
+  static constexpr unsigned int base_addrspace = 1;
   void tie_base_addrspace(unsigned int idx, const expr2tc &val);
   /** Gives the base version every object's range, now and on registration,
    *  for convert_typecast_to_ptr(), the only reader of a slot before it is
@@ -1298,8 +1302,8 @@ public:
   /** Type of the address space allocation records. Currently a start address
    *  integer and an end address integer. */
   type2tc addr_space_type;
-  /** Type of the arrays of start and of end addresses, kept apart so that a
-   *  solver with native arrays reads them without tuple flattening (#9785). */
+  /** Type of the array of address space allocation records, used where the
+   *  solver has no native arrays; see native_addrspace(). */
   type2tc addr_space_arr_type;
   /** The objects given an address so far, each mapped to whether it is a heap
    *  object that may be freed. In a list to support pushing and popping. */

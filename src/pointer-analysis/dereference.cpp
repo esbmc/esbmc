@@ -1131,7 +1131,9 @@ expr2tc dereferencet::accessed_object(
 
 /* The offset of @p ptr in @p root, where same_object(ptr, &root) holds. For a
  * pointer made from an integer that is the integer minus root's address, which
- * spares the solver the int-to-pointer object search (#9785). */
+ * spares the solver the int-to-pointer object search (#9785). Relies on
+ * smt_solver_baset::convert_typecast_to_ptr giving such a pointer the offset
+ * integer - start. */
 static expr2tc offset_within(const expr2tc &ptr, const expr2tc &root)
 {
   const type2tc offset_type = get_int_type(config.ansi_c.address_width);

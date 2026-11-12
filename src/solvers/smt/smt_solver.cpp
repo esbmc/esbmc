@@ -119,7 +119,7 @@ smt_solver_baset::smt_solver_baset(
   addr_space_type = struct_type2tc(members, names, names, "addr_space_type");
 
   /* indexed by pointer_object2t expressions */
-  addr_space_arr_type = array_type2tc(ptraddr_type2(), expr2tc(), true);
+  addr_space_arr_type = array_type2tc(addr_space_type, expr2tc(), true);
 
   addr_space_data.emplace_back();
 

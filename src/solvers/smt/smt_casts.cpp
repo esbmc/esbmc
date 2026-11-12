@@ -501,7 +501,8 @@ smt_astt smt_solver_baset::convert_typecast_to_ptr(const typecast2t &cast)
     if (i == 1)
       continue; // Skip invalid, it contains everything.
 
-    // Calculate ptr offset were it this
+    // Calculate ptr offset were it this; dereferencet's offset_within()
+    // relies on it being target - start.
     smt_astt offs = int_encoding ? mk_sub(target, obj_starts[i])
                                  : mk_bvsub(target, obj_starts[i]);
 
@@ -573,8 +574,7 @@ smt_astt smt_solver_baset::name_object_by_value(
       "__ESBMC_int_to_ptr_object", {convert_ast(target)}, obj->sort)));
   int_to_ptr_objects.push_back({obj, ctx_level, {}});
 
-  // init_addr_space_array() starts the version count at 1.
-  unsigned int addrspace = from_byte_update ? cur_addrspace() : 1;
+  unsigned int addrspace = from_byte_update ? cur_addrspace() : base_addrspace;
   assert_ast(mk_implies(
     not_matched, address_holds(ptr, addrspace, target, !from_byte_update)));
   return pointer;
