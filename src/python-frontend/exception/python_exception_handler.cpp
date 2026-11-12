@@ -1,5 +1,6 @@
 #include <python-frontend/exception/python_exception_handler.h>
 #include <python-frontend/exception/exception_utils.h>
+#include <goto-programs/exception_globals.h>
 #include <python-frontend/json_utils.h>
 #include <python-frontend/python_converter.h>
 #include <python-frontend/python-list/python_list.h>
@@ -7,7 +8,9 @@
 #include <python-frontend/symbol_id.h>
 #include <python-frontend/type/type_handler.h>
 #include <python-frontend/type/type_utils.h>
+#include <algorithm>
 #include <set>
+#include <utility>
 #include <util/arith/arith_tools.h>
 #include <util/lang/c_types.h>
 #include <util/expr/expr_util.h>
@@ -18,6 +21,25 @@
 #include <python-frontend/python_expr_builder.h>
 
 using namespace python_expr;
+
+// Sets @p var to @p value for the lifetime of this object.
+template <typename T>
+class restore_on_exit
+{
+public:
+  restore_on_exit(T &var, T value)
+    : var_(var), saved_(std::exchange(var, std::move(value)))
+  {
+  }
+  ~restore_on_exit()
+  {
+    var_ = std::move(saved_);
+  }
+
+private:
+  T &var_;
+  T saved_;
+};
 
 // ---------------------------------------------------------------------------
 // Constructor
@@ -180,6 +202,9 @@ void python_exception_handler::get_try_statement(
 exprt python_exception_handler::make_finally_rethrow_handler(
   const nlohmann::json &element)
 {
+  // A `raise` in this copy re-raises the exception propagating through the
+  // finally, not one an enclosing handler saved.
+  const restore_on_exit<decltype(handled_)> scope(handled_, {});
   exprt finally_handler = converter_.get_block(element["finalbody"]);
   finally_handler.type().set("ellipsis", true); // catch-all
   // Same flip-blocker-2 pre-set as emit_catch_block: this handler is built
@@ -608,6 +633,81 @@ static void mark_type_messages(nlohmann::json &node)
     mark_type_messages(child);
 }
 
+// A bare `raise` in @p node run by the same frame (a nested function is not
+// searched).
+static bool reraises(const nlohmann::json &node)
+{
+  if (node.is_array())
+    return std::any_of(node.begin(), node.end(), reraises);
+  if (!node.is_object())
+    return false;
+  const std::string type = node.value("_type", "");
+  if (type == "FunctionDef" || type == "AsyncFunctionDef" || type == "Lambda")
+    return false;
+  if (type == "Raise" && node.contains("exc") && node["exc"].is_null())
+    return true;
+  for (const auto &item : node.items())
+    if (reraises(item.value()))
+      return true;
+  return false;
+}
+
+code_blockt python_exception_handler::save_handled_exception(
+  const nlohmann::json &element,
+  std::vector<handled_exceptiont> &handled_stack)
+{
+  if (!reraises(element["body"]))
+    return code_blockt();
+  handled_exceptiont handled;
+  handled.function = converter_.current_function_name();
+  contextt &context = converter_.symbol_table();
+  create_exception_state_symbols(context);
+  const locationt location = converter_.get_location_from_decl(element);
+  code_blockt saves;
+  for (const char *id :
+       {exception_globals::typeid_id,
+        exception_globals::value_id,
+        exception_globals::site_id})
+  {
+    const symbolt &global = *context.find_symbol(id);
+    symbolt saved = converter_.create_return_temp_variable(
+      global.get_type(), location, "handled_exception");
+    const symbolt *added = context.move_symbol_to_context(saved);
+    exprt copy = build_symbol(*added);
+    code_declt decl(copy);
+    decl.location() = location;
+    saves.copy_to_operands(converter_.convert_expression_to_code(decl));
+    code_assignt assign(copy, build_symbol(global));
+    assign.location() = location;
+    saves.copy_to_operands(assign);
+    handled.saved.push_back(copy);
+  }
+  handled_stack.push_back(std::move(handled));
+  return saves;
+}
+
+void python_exception_handler::restore_handled_exception(
+  const locationt &location,
+  codet &block) const
+{
+  if (
+    handled_.empty() ||
+    handled_.back().function != converter_.current_function_name())
+    return;
+  const char *globals[] = {
+    exception_globals::typeid_id,
+    exception_globals::value_id,
+    exception_globals::site_id};
+  for (std::size_t i = 0; i < handled_.back().saved.size(); ++i)
+  {
+    code_assignt restore(
+      build_symbol(*converter_.symbol_table().find_symbol(globals[i])),
+      handled_.back().saved[i]);
+    restore.location() = location;
+    block.copy_to_operands(restore);
+  }
+}
+
 void python_exception_handler::get_raise_statement(
   const nlohmann::json &element,
   codet &block)
@@ -616,9 +716,12 @@ void python_exception_handler::get_raise_statement(
 
   // Bare 'raise' (Raise.exc is null) re-raises the active exception.
   // Lower it to a cpp-throw with no operand and an empty exception_list;
-  // remove_exceptions re-raises from the global exception state (#5075).
+  // remove_exceptions re-raises from the global exception state (#5075),
+  // which is first restored to what the enclosing handler is handling.
   if (element["exc"].is_null())
   {
+    restore_handled_exception(location, block);
+
     side_effect_exprt side("cpp-throw", empty_typet());
     side.location() = location;
 
@@ -805,8 +908,17 @@ void python_exception_handler::emit_catch_block(
     exception_symbol = converter_.symbol_table().move_symbol_to_context(symbol);
   }
 
+  decltype(handled_) inner = handled_;
+  const code_blockt saves = save_handled_exception(element, inner);
+
   // Process exception handler body (symbol now exists)
-  exprt catch_block = converter_.get_block(element["body"]);
+  exprt catch_block;
+  {
+    const restore_on_exit<decltype(handled_)> scope(handled_, std::move(inner));
+    catch_block = converter_.get_block(element["body"]);
+  }
+  codet::operandst &ops = catch_block.operands();
+  ops.insert(ops.begin(), saves.operands().begin(), saves.operands().end());
 
   // Add type and declaration if exception variable was created
   if (exception_symbol != nullptr)

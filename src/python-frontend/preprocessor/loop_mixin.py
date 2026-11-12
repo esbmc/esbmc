@@ -1579,50 +1579,6 @@ class LoopMixin:
         # Return the transformed statements
         return [step_validation, start_assign, has_next_assign, while_stmt]
 
-    _LIST_RESIZE_METHODS = frozenset({"append", "extend", "insert", "pop", "remove", "clear"})
-
-    @classmethod
-    def _node_may_resize_name(cls, n, name):
-        """True if AST node `n` may change the length of the list bound to `name`."""
-        if isinstance(n, ast.Call):
-            func = n.func
-            if (isinstance(func, ast.Attribute) and isinstance(func.value, ast.Name)
-                    and func.value.id == name):
-                return func.attr in cls._LIST_RESIZE_METHODS
-            passed = any(isinstance(a, ast.Name) and a.id == name for a in n.args)
-            return passed and not (isinstance(func, ast.Name) and func.id == "len")
-        if isinstance(n, ast.AugAssign):
-            return isinstance(n.target, ast.Name) and n.target.id == name
-        if isinstance(n, ast.Delete):
-            return any(
-                isinstance(t, ast.Subscript) and isinstance(t.value, ast.Name)
-                and t.value.id == name for t in n.targets)
-        return False
-
-    @classmethod
-    def _body_resizes_name(cls, body, name):
-        """True if `body` may resize the list `name` in place without rebinding it.
-
-        A rebound name keeps the cached length: CPython goes on iterating the
-        original object, which the per-index element read cannot reach.
-        """
-        nodes = [n for stmt in body for n in ast.walk(stmt)]
-        aug_targets = {id(n.target) for n in nodes if isinstance(n, ast.AugAssign)}
-        if any(
-                isinstance(n, ast.Name) and n.id == name and isinstance(n.ctx, ast.Store)
-                and id(n) not in aug_targets for n in nodes):
-            return False
-        return any(cls._node_may_resize_name(n, name) for n in nodes)
-
-    def _remeasure_resized_list(self, node, annotation_id, while_cond, length_assign):
-        """Compare the index with `len(xs)` when the body resizes the list `xs`.
-
-        CPython's list iterator reads the current length on every step (#10260).
-        """
-        if (isinstance(node.iter, ast.Name) and annotation_id in ("list", "List")
-                and self._body_resizes_name(node.body, node.iter.id)):
-            while_cond.comparators = [copy.deepcopy(length_assign.value)]
-
     @staticmethod
     def _body_destructures_name(body, name):
         """True if `body` assigns `name` to a tuple/list target (`u, v = name`).
@@ -2547,18 +2503,17 @@ class LoopMixin:
                                                        element_type, full_element_ann)
             setup_statements = scan_setup + [iter_assign]
 
-        # Create common setup statements (index and length) with unique names
         index_assign = self._create_index_assignment(node, index_var)
-        length_assign = self._create_length_assignment(node, iter_var_name, length_var)
-        setup_statements.extend([index_assign, length_assign])
-
-        # Create while loop condition with unique variable names
-        while_cond = self._create_while_condition(node, index_var, length_var)
-        self._remeasure_resized_list(node, annotation_id, while_cond, length_assign)
+        setup_statements.append(index_assign)
+        bound_setup, while_cond = self._create_iteration_bound(node, loop_id, iter_var_name,
+                                                               index_var, length_var, element_type,
+                                                               full_element_ann)
+        setup_statements.extend(bound_setup)
 
         # Create loop body with unique variable names
         transformed_body = self._create_loop_body(node, target_var_name, iter_var_name, index_var,
                                                   element_type, full_element_ann)
+        self._mark_element_read_in_bounds(node, iter_var_name, transformed_body[0].value)
 
         # Create the while statement
         while_stmt = ast.While(test=while_cond, body=transformed_body, orelse=[])
@@ -2572,6 +2527,58 @@ class LoopMixin:
             ast.fix_missing_locations(stmt)
 
         return result
+
+    def _holds_iterated_list(self, node, iter_var_name):
+        """Whether the loop over @p node holds the list it iterates and re-reads
+        its length on every step."""
+        return (isinstance(node.iter, ast.Name)
+                and self.known_variable_types.get(iter_var_name) in ("list", "List"))
+
+    def _mark_element_read_in_bounds(self, node, iter_var_name, read):
+        """Mark @p read as needing no bounds check when the loop condition has
+        just re-read the length of the list the name still holds (#10259)."""
+        if self._holds_iterated_list(node, iter_var_name) and self._loop_keeps_name(
+                node, iter_var_name):
+            read.esbmc_in_bounds = True
+
+    def _loop_keeps_name(self, node, name):
+        """Whether the loop @p node cannot rebind @p name: its target and body
+        never mention it, and no scope declares it global or nonlocal."""
+        if self.rebindable_names is None or name in self.rebindable_names:
+            return False
+        parts = [node.target] + node.body
+        return not any(
+            isinstance(n, ast.Name) and n.id == name for part in parts for n in ast.walk(part))
+
+    @staticmethod
+    def _rebindable_names(module):
+        """Names a global or nonlocal declaration lets another scope rebind; None
+        when the module can rebind names dynamically."""
+        names = set()
+        for n in ast.walk(module):
+            if isinstance(n, (ast.Global, ast.Nonlocal)):
+                names.update(n.names)
+            elif isinstance(n, ast.Name) and n.id in ("exec", "eval", "globals", "locals", "vars"):
+                return None
+        return names
+
+    def _create_iteration_bound(  # pylint: disable=too-many-arguments,too-many-positional-arguments
+            self, node, loop_id, iter_var_name, index_var, length_var, element_type,
+            full_element_ann):
+        """Return the setup statements and while condition bounding the index."""
+        # CPython's list iterator re-reads the length of the list object on every
+        # step, so it sees the body resize the list but not rebind the name.
+        if self._holds_iterated_list(node, iter_var_name):
+            list_ref = f"ESBMC_iter_{loop_id}"
+            list_assign = self._create_iter_assignment(node, "list", list_ref, element_type,
+                                                       full_element_ann)
+            while_cond = ast.Compare(left=self.create_name_node(index_var, ast.Load(), node),
+                                     ops=[ast.Lt()],
+                                     comparators=[self._create_len_call(node, list_ref)])
+            self.ensure_all_locations(while_cond, node)
+            return [list_assign], while_cond
+        return ([self._create_length_assignment(node, iter_var_name, length_var)],
+                self._create_while_condition(node, index_var, length_var))
 
     def _create_iter_assignment(  # pylint: disable=too-many-arguments,too-many-positional-arguments
             self,
@@ -2655,22 +2662,23 @@ class LoopMixin:
         """Create ESBMC_length assignment with custom name."""
         length_target = self.create_name_node(length_var, ast.Store(), node)
         int_annotation = self.create_name_node("int", ast.Load(), node)
+        length_assign = ast.AnnAssign(target=length_target,
+                                      annotation=int_annotation,
+                                      value=self._create_len_call(node, iter_var_name),
+                                      simple=1)
+        self.ensure_all_locations(length_assign, node)
+        return length_assign
 
+    def _create_len_call(self, node, iter_var_name):
+        """Create len(<iter_var_name>)."""
         # The function_call_builder will map len() to either:
         # - strlen(): string types
         # - __ESBMC_get_object_size(): list/dict/set/sequence types
         len_func = self.create_name_node("len", ast.Load(), node)
-
         iter_arg = self.create_name_node(iter_var_name, ast.Load(), node)
         len_call = ast.Call(func=len_func, args=[iter_arg], keywords=[])
         self.ensure_all_locations(len_call, node)
-
-        length_assign = ast.AnnAssign(target=length_target,
-                                      annotation=int_annotation,
-                                      value=len_call,
-                                      simple=1)
-        self.ensure_all_locations(length_assign, node)
-        return length_assign
+        return len_call
 
     def _create_while_condition(self, node, index_var="ESBMC_index", length_var="ESBMC_length"):
         """Create while loop condition with custom variable names."""

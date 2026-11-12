@@ -1295,6 +1295,24 @@ constant_zero_bytes(const nlohmann::json &arg)
   return std::vector<uint8_t>(static_cast<size_t>(n), 0);
 }
 
+// The literal a name is bound to, when the program binds it once and reads it
+// only at @p arg, so no store, call or alias can have changed it; else @p arg.
+nlohmann::json
+function_call_expr::once_bound_literal(const nlohmann::json &arg) const
+{
+  if (!arg.is_object() || arg.value("_type", "") != "Name")
+    return arg;
+  const std::string name = arg.value("id", "");
+  const nlohmann::json &ast = converter_.ast();
+  if (
+    json_utils::count_name_bindings(ast, name) != 1 ||
+    json_utils::count_name_nodes(ast, name) != 2)
+    return arg;
+  const nlohmann::json decl =
+    json_utils::find_var_decl(name, converter_.current_function_name(), ast);
+  return decl.contains("value") ? decl["value"] : arg;
+}
+
 // bytes(...) constructor. The generic constructor path relabels the
 // argument expression's type as the bytes array type without converting the
 // value; for a list/int argument that yields a list-pointer (or scalar) value
@@ -1303,7 +1321,11 @@ constant_zero_bytes(const nlohmann::json &arg)
 exprt function_call_expr::handle_bytes_constructor(
   const nlohmann::json &arg) const
 {
-  std::optional<std::vector<uint8_t>> bytes = constant_byte_elements(arg);
+  const nlohmann::json source = once_bound_literal(arg);
+  std::optional<std::vector<uint8_t>> bytes = constant_byte_elements(source);
+  // The name is still read, for the NameError of a global not yet bound.
+  if (bytes && source != arg)
+    converter_.get_expr(arg);
   if (!bytes)
     bytes = constant_zero_bytes(arg);
   if (bytes)
@@ -3848,11 +3870,11 @@ exprt function_call_expr::handle_list_method() const
   throw std::runtime_error("Unsupported list method: " + method_name);
 }
 
-/// An in-place list method returns None, so assigned to a name the call runs
-/// and the name holds None rather than the model function's own result
-/// (#10160). Other value positions are left alone: the and/or, conditional and
-/// str() lowerings copy or fold a None-typed operand and would drop or repeat
-/// the call.
+/// An in-place list method returns None, so assigned to a name or read as an
+/// and/or operand the call runs and its value is None rather than the model
+/// function's own result (#10160). Other value positions are left alone: the
+/// conditional and str() lowerings copy or fold a None-typed operand and would
+/// drop or repeat the call.
 exprt function_call_expr::none_if_assigned(exprt call) const
 {
   static const std::set<std::string> in_place = {
@@ -8267,6 +8289,64 @@ void function_call_expr::refuse_float_to_int_argument(
       "passing a float to an int parameter is not supported");
 }
 
+// `2 ** e` with a non-constant int `e` is lowered to an exact double by
+// power_of_two, so it can be passed to an int parameter where it is an int in
+// CPython. A negative `e` gives a float and a large one does not fit the
+// parameter; both are refused at run time (#10228).
+exprt function_call_expr::int_power_of_two_argument(
+  const nlohmann::json &node,
+  const exprt &arg,
+  const typet &param_type) const
+{
+  if (
+    !arg.type().is_floatbv() || !param_type.is_signedbv() ||
+    node.value("_type", "") != "BinOp" ||
+    node["op"].value("_type", "") != "Pow" ||
+    node["left"].value("_type", "") != "Constant" ||
+    !node["left"]["value"].is_number_integer() ||
+    node["left"]["value"].get<long long>() != 2 ||
+    node["right"].value("_type", "") != "Name" ||
+    config.ansi_c.double_width != 64 ||
+    config.options.get_bool_option("int-encoding") ||
+    !converter_.can_emit_runtime_guard())
+    return arg;
+
+  const typet exponent_type = converter_.get_expr(node["right"]).type();
+  if (!exponent_type.is_signedbv() && !exponent_type.is_unsignedbv())
+    return arg;
+
+  // Read the power once, here, so the guard and the argument see one value
+  // even if a later argument rebinds the exponent.
+  const locationt location = converter_.get_location_from_decl(call_);
+  symbolt &tmp =
+    converter_.create_tmp_symbol(call_, "$pow_arg$", arg.type(), exprt());
+  code_declt decl(build_symbol(tmp));
+  decl.location() = location;
+  converter_.add_instruction(decl);
+  code_assignt assign(build_symbol(tmp), arg);
+  assign.location() = location;
+  converter_.add_instruction(assign);
+  const exprt power = build_symbol(tmp);
+
+  // power_of_two is exact, so 1 <= 2 ** e <= 2 ** (width - 2) holds exactly
+  // when 0 <= e <= width - 2.
+  const exprt in_range = and_exprt(
+    binary_relation_exprt(power, ">=", from_double(1.0, arg.type())),
+    binary_relation_exprt(
+      power,
+      "<=",
+      from_double(std::ldexp(1.0, bv_width(param_type) - 2), arg.type())));
+  code_assertt check(in_range);
+  check.location() = location;
+  check.location().user_provided(true);
+  check.location().comment(
+    "Unsupported: an int raised to a power that is negative or too large, "
+    "passed to an int parameter");
+  converter_.add_instruction(check);
+  converter_.add_instruction(code_assumet(in_range));
+  return typecast_exprt(power, param_type);
+}
+
 static std::optional<std::string> string_literal(const nlohmann::json &node)
 {
   if (node.value("_type", "") == "Constant" && node["value"].is_string())
@@ -8384,6 +8464,7 @@ std::optional<exprt> function_call_expr::build_positional_arguments(
 
     if (param_idx < params.size())
     {
+      arg = int_power_of_two_argument(arg_node, arg, params[param_idx].type());
       refuse_float_to_int_argument(arg, params[param_idx].type(), *func_symbol);
       arg = coerce_tagged_argument(arg, params[param_idx].type(), location);
     }
@@ -8881,6 +8962,8 @@ void function_call_expr::forward_keyword_arguments(
         if (params[i].get_base_name().as_string() == kw_name)
         {
           exprt kw_val = converter_.get_expr(kw["value"]);
+          kw_val =
+            int_power_of_two_argument(kw["value"], kw_val, params[i].type());
           refuse_float_to_int_argument(kw_val, params[i].type(), func_symbol);
           kw_val = coerce_tagged_argument(kw_val, params[i].type(), location);
           if (call.arguments().size() <= i)

@@ -1058,6 +1058,11 @@ exprt python_math::handle_divmod(
     dividend = typecast_exprt(dividend, int_like(divisor));
   if (is_any_ptr(divisor))
     divisor = typecast_exprt(divisor, int_like(dividend));
+  // A bool operand is an int in arithmetic: divmod(7, True) == (7, 0).
+  if (dividend.type().is_bool())
+    dividend = typecast_exprt(dividend, int_like(divisor));
+  if (divisor.type().is_bool())
+    divisor = typecast_exprt(divisor, int_like(dividend));
 
   // A zero divisor raises a catchable ZeroDivisionError, as `//` and `%` do.
   if (

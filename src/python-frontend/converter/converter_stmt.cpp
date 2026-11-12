@@ -12,6 +12,7 @@
 #include <python-frontend/exception/python_exception_handler.h>
 #include <python-frontend/lambda/python_lambda.h>
 #include <python-frontend/python-list/python_list.h>
+#include <python-frontend/python-list/list_type_inference.h>
 #include <python-frontend/type/python_typechecking.h>
 #include <python-frontend/math/python_math.h>
 #include <python-frontend/string/string_builder.h>
@@ -1134,15 +1135,16 @@ exprt python_converter::create_lhs_expression(
   return lhs;
 }
 
-/// A tagged value and an untagged attribute slot differ in size, so storing
-/// one into the other would overrun or misread the object.
+/// A tagged value stored into an untagged attribute slot would overrun or
+/// misread the object. The other direction (an untagged value into a
+/// tagged slot) is a plain box, handled later in get_var_assign.
 void python_converter::reject_one_sided_tagged_store(
   const exprt &lhs,
   const exprt &rhs) const
 {
   if (
-    lhs.is_member() && type_handler_.is_tagged_scalar_type(lhs.type()) !=
-                         type_handler_.is_tagged_scalar_type(rhs.type()))
+    lhs.is_member() && !type_handler_.is_tagged_scalar_type(lhs.type()) &&
+    type_handler_.is_tagged_scalar_type(rhs.type()))
     throw std::runtime_error(
       "storing into an attribute that is dynamically typed only on one side "
       "is not yet supported");
@@ -5675,6 +5677,33 @@ static void copy_homogeneous_elem_types(
   registry.assign_from(src, dest);
 }
 
+/// Copy the element types of the list named \p name, whose registry id is
+/// \p src, to \p dest. A list with nothing recorded, such as one a
+/// nondet_list builder returns, still declares its element type in its
+/// annotation, which reads of the list itself use. Record that type for
+/// \p dest so reads of the result are typed the same way (#10323).
+static void copy_named_list_elem_types(
+  python_converter &converter,
+  element_type_registry &registry,
+  const nlohmann::json &name,
+  const std::string &src,
+  const std::string &dest)
+{
+  if (registry.size(src) != 0)
+  {
+    copy_homogeneous_elem_types(registry, src, dest);
+    return;
+  }
+  const typet elem_type = python_list_detail::get_elem_type_from_annotation(
+    json_utils::get_var_value(
+      name["id"].get<std::string>(),
+      converter.current_function_name(),
+      converter.ast()),
+    converter.get_type_handler());
+  if (elem_type != typet())
+    registry.record(dest, std::string(), elem_type);
+}
+
 /// sorted()/reversed()/list() reorder or copy their argument, they do not
 /// retype it, so the result's elements are the argument's. Without this the
 /// runtime path leaves the result untyped and a tuple element reads back as an
@@ -5715,8 +5744,8 @@ void python_converter::copy_elem_types_from_reordering_builtin(
   {
     symbol_id arg_sid = create_symbol_id();
     arg_sid.set_object(arg["id"].get<std::string>());
-    copy_homogeneous_elem_types(
-      element_type_registry_, arg_sid.to_string(), lhs_id);
+    copy_named_list_elem_types(
+      *this, element_type_registry_, arg, arg_sid.to_string(), lhs_id);
     return;
   }
 
@@ -7630,6 +7659,17 @@ struct restore_pointer
 };
 } // namespace
 
+/// Converts \p node, whose value is read, so that a call to an in-place list
+/// method there is None (#10160).
+exprt python_converter::get_value_expr(const nlohmann::json &node)
+{
+  const restore_pointer restore_assigned_call{
+    assigned_call_,
+    std::exchange(
+      assigned_call_, node.value("_type", "") == "Call" ? &node : nullptr)};
+  return get_expr(node);
+}
+
 void python_converter::get_var_assign(
   const nlohmann::json &ast_node,
   codet &target_block)
@@ -8714,6 +8754,18 @@ void python_converter::get_var_assign(
     }
 
     python_list(*this, target).retype_element_store(lhs, rhs);
+
+    // Box a plain value into a dynamically-typed attribute's fields.
+    if (
+      type_handler_.is_tagged_scalar_type(lhs.type()) &&
+      !type_handler_.is_tagged_scalar_type(rhs.type()))
+    {
+      dynamic_type_handler_.assign_to_lvalue(
+        rhs, location_begin, lhs, target_block);
+      current_lhs = nullptr;
+      return;
+    }
+
     code_assignt code_assign(lhs, rhs);
     code_assign.location() = location_begin;
     target_block.copy_to_operands(code_assign);
@@ -9018,7 +9070,24 @@ void python_converter::get_compound_assign(
   // Reset RHS flag
   is_converting_rhs = false;
 
-  if (store_through_numpy_view(ast_node["target"], lhs, rhs, loc, target_block))
+  store_compound_result(ast_node["target"], lhs, rhs, loc, target_block);
+}
+
+void python_converter::store_compound_result(
+  const nlohmann::json &target,
+  const exprt &lhs,
+  exprt rhs,
+  const locationt &loc,
+  codet &target_block)
+{
+  // An operator CPython rejects lowers to a raise; the target keeps its value.
+  if (const exprt *raise = python_frontend::raised_condition(rhs))
+  {
+    target_block.copy_to_operands(raise_statement(*raise, loc));
+    return;
+  }
+
+  if (store_through_numpy_view(target, lhs, rhs, loc, target_block))
     return;
 
   // P27: Promote real RHS to complex when LHS is complex (AugAssign path).
@@ -9803,9 +9872,10 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
       exprt *saved_lhs = current_lhs;
       current_lhs = nullptr;
       // Start from the leftmost operand and carry the running result forward.
-      cond = condition_or_raise(get_expr(operands[0]), [&](const exprt &e) {
-        return to_bool_condition(e, operands[0]);
-      });
+      cond =
+        condition_or_raise(get_value_expr(operands[0]), [&](const exprt &e) {
+          return to_bool_condition(e, operands[0]);
+        });
       current_lhs = saved_lhs;
 
       symbolt result_symbol = create_return_temp_variable(
@@ -9830,7 +9900,7 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
         current_lhs = nullptr;
         // Build the next operand only in the branch where it is still needed.
         const exprt next_operand =
-          condition_or_raise(get_expr(operands[i]), [&](const exprt &e) {
+          condition_or_raise(get_value_expr(operands[i]), [&](const exprt &e) {
             return to_bool_condition(e, operands[i]);
           });
         current_lhs = saved_lhs;

@@ -298,6 +298,7 @@ private:
   exprt handle_int_to_bytes() const;
 
   exprt handle_bytes_constructor(const nlohmann::json &arg) const;
+  nlohmann::json once_bound_literal(const nlohmann::json &arg) const;
 
   /*
    * Folds a zero-argument int method on a constant literal receiver
@@ -359,6 +360,10 @@ private:
     const nlohmann::json &arg,
     const exprt &value) const;
   exprt handle_isinstance() const;
+  void plant_untyped_isinstance_refusal(
+    const exprt &operand,
+    const exprt &answer,
+    const exprt &binding) const;
 
   /// Binds a call operand of isinstance to a temporary, so it runs exactly
   /// once even when the check reads it per type or folds without reading it.
@@ -1103,6 +1108,11 @@ private:
     const exprt &arg,
     const typet &param_type,
     const symbolt &callee) const;
+
+  exprt int_power_of_two_argument(
+    const nlohmann::json &node,
+    const exprt &arg,
+    const typet &param_type) const;
 
   typet dict_param_value_type(const symbolt *func, size_t idx) const;
   bool is_size_builtin() const;

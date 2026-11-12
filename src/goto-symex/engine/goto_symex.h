@@ -885,6 +885,7 @@ protected:
 
   void simplify_python_builtins(expr2tc &expr);
   void reject_untyped_isinstance(const expr2tc &value);
+  expr2tc isinstance_subject_of(const isinstance2t &obj);
 
   void volatile_check(expr2tc &expr);
 
@@ -1592,6 +1593,9 @@ protected:
     char spec,
     bool reads_to_nul,
     const expr2tc &arg);
+  /** Check the read of a non-constant format string, the unrenamed operand
+   *  `fmt` (C11 7.21.6.1p2). */
+  void check_printf_format(const expr2tc &fmt);
   /** Store an unrenamed sprintf-family call's output and return the length
    *  that call returns: the stored length, or for printf, fprintf and dprintf
    *  with a used result, printf_output_length. Nil when unknown. */

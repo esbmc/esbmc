@@ -370,6 +370,8 @@ static const char *const abs_overflow_message =
 /// that fails the refusal ends there instead of going on with a wrapped value.
 void function_call_expr::refuse_abs_unless(const exprt &representable) const
 {
+  if (converter_.in_type_probe())
+    return;
   if (!converter_.can_emit_runtime_guard())
     throw std::runtime_error(abs_overflow_message);
   code_assertt check(representable);
@@ -408,6 +410,9 @@ exprt function_call_expr::refuse_unrepresentable_abs(exprt operand) const
   if (
     operand.type().id() != "signedbv" ||
     config.options.get_bool_option("int-encoding"))
+    return operand;
+  // A type probe is discarded; the real conversion plants or refuses.
+  if (converter_.in_type_probe())
     return operand;
   const signedbv_typet type = to_signedbv_type(operand.type());
   if (!converter_.can_emit_runtime_guard())
@@ -726,6 +731,42 @@ static std::string isinstance_type_name(const nlohmann::json &node)
     throw std::runtime_error("Unsupported type format in isinstance()");
 }
 
+static bool tests_type_of(const exprt &e, const exprt &operand)
+{
+  return (e.id() == "isinstance" && e.op0().is_symbol() &&
+          e.op0().identifier() == operand.identifier()) ||
+         std::any_of(
+           e.operands().begin(), e.operands().end(), [&](const exprt &o) {
+             return tests_type_of(o, operand);
+           });
+}
+
+// Symex refuses an isinstance() whose `void *` operand it cannot trace to an
+// object (#8315). Planting that refusal here makes it visible in the GOTO
+// program; the assume ends the path as symex does (#10251). Only an answer
+// that reads the operand's type needs it. A bound call result is not assigned
+// yet where the statement is planted, so symex keeps the refusal there.
+void function_call_expr::plant_untyped_isinstance_refusal(
+  const exprt &operand,
+  const exprt &answer,
+  const exprt &binding) const
+{
+  if (
+    binding.is_not_nil() || !operand.is_symbol() ||
+    !operand.type().is_pointer() || operand.type().subtype().id() != "empty" ||
+    !tests_type_of(answer, operand) || !converter_.can_emit_runtime_guard())
+    return;
+  expr2tc value, untyped;
+  migrate_expr(operand, value);
+  untyped = gen_zero(pointer_type2tc(get_empty_type()));
+  const exprt traced = migrate_expr_back(isinstance2tc(value, untyped));
+  code_assertt refusal(traced);
+  refusal.location() = converter_.get_location_from_decl(call_);
+  refusal.location().user_provided(true);
+  refusal.location().comment("isinstance() on a value whose type was lost");
+  converter_.current_block->copy_to_operands(refusal, code_assumet(traced));
+}
+
 exprt function_call_expr::handle_isinstance() const
 {
   const auto &args = call_["args"];
@@ -891,6 +932,7 @@ exprt function_call_expr::handle_isinstance() const
       isinstance_operand(types[i], build_isinstance, isinstance_type_name));
     result = or_expr;
   }
+  plant_untyped_isinstance_refusal(obj_expr, result, binding);
   return evaluate_after(binding, evaluate_after(optional_binding, result));
 }
 
