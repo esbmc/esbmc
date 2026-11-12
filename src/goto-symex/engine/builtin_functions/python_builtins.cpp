@@ -12,7 +12,9 @@
 /// Whether a NULL pointer to @p subt is how the frontend spells Python None.
 static bool null_is_none(const type2tc &subt, const namespacet &ns)
 {
-  if (is_empty_type(subt) || is_struct_type(subt) || is_array_type(subt))
+  if (
+    is_empty_type(subt) || is_struct_type(subt) || is_array_type(subt) ||
+    is_code_type(subt))
     return true;
   return is_symbol_type(subt) &&
          ns.follow(migrate_type_back(subt)).id() == "struct";
