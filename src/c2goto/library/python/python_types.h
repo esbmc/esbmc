@@ -58,6 +58,9 @@ typedef struct __ESBMC_PyListObj
   size_t size;     /**< Number of elements currently in use */
   bool is_tuple;   /**< Built by tuple(x), which the model keeps as a list */
   const bool *may_nest; /**< Whether an element may be a nested list */
+  /** Element storage of a typed list, whose every element is an int, else
+   *  unused. A typed list leaves items NULL. */
+  long long *slot;
 } PyListObject;
 
 /* The two targets of PyListObject::may_nest, defined in list.c. */
