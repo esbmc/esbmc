@@ -83,6 +83,17 @@ def _rename_shadowed_classes(module):
                 break
 
 
+def _drop_none_slice_bounds(module):
+    """`x[a:None:None]` is `x[a::]`: drop a literal `None` slice bound so
+    every slice handler takes its omitted-bound default (#10468)."""
+    for n in ast.walk(module):
+        if isinstance(n, ast.Slice):
+            for key in ("lower", "upper", "step"):
+                bound = getattr(n, key)
+                if isinstance(bound, ast.Constant) and bound.value is None:
+                    setattr(n, key, None)
+
+
 _BUILTIN_FUNCTIONS = {
     name
     for name, value in vars(builtins).items() if isinstance(value, types.BuiltinFunctionType)
@@ -617,6 +628,7 @@ class ModuleRewriteMixin:
         if entry:
             _rename_builtin_defs(node)
         inline_literal_eval(node)
+        _drop_none_slice_bounds(node)
         lower_coroutines(node, self.module_name)
         route_array_typecodes(node, self.module_name)
         lower_check_type(node, self.module_name)
