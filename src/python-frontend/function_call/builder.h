@@ -92,6 +92,10 @@ private:
   /// str-method lowering, or nil when neither applies.
   exprt build_method_call_on_receiver() const;
 
+  /// The call to the C intrinsic for __ESBMC_unreachable() or
+  /// __ESBMC_unroll(n), or nil for any other callee.
+  exprt build_c_intrinsic_call(const symbol_id &function_id) const;
+
   /// AttributeError for a str-only method called on an int, float or bool,
   /// which would otherwise lower as a 1-char str (#8379); nil otherwise.
   exprt str_method_on_number_error() const;
