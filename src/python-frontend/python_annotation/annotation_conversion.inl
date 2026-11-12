@@ -6090,6 +6090,59 @@ bool python_annotation<Json>::is_instance_call(const Json &func) const
          json_utils::try_find_function(ast_["body"], name).is_null();
 }
 
+/// Whether @p node calls a method of an instance, setting its @p receiver,
+/// @p method and @p args: `obj.m(args)`, `obj(args)` calling
+/// `obj.__call__(args)` (#9070), a read `obj[key]` calling
+/// `obj.__getitem__(key)` or `obj[key] = value` calling
+/// `obj.__setitem__(key, value)` (#10334).
+template <class Json>
+bool python_annotation<Json>::receiver_method_call(
+  const Json &node,
+  Json &receiver,
+  std::string &method,
+  Json &args) const
+{
+  const std::string kind = node.value("_type", "");
+  if (kind == "Subscript")
+  {
+    if (!node.contains("ctx") || node["ctx"].value("_type", "") != "Load")
+      return false;
+    receiver = node["value"];
+    method = "__getitem__";
+    args = Json::array();
+    args.push_back(node["slice"]);
+    return true;
+  }
+  if (
+    kind == "Assign" && node["targets"].size() == 1 &&
+    node["targets"][0].value("_type", "") == "Subscript")
+  {
+    receiver = node["targets"][0]["value"];
+    method = "__setitem__";
+    args = Json::array();
+    args.push_back(node["targets"][0]["slice"]);
+    args.push_back(node["value"]);
+    return true;
+  }
+  if (kind != "Call")
+    return false;
+  const Json &func = node["func"];
+  if (is_instance_call(func))
+  {
+    receiver = func;
+    method = "__call__";
+  }
+  else if (func.value("_type", "") == "Attribute")
+  {
+    receiver = func["value"];
+    method = func["attr"].template get<std::string>();
+  }
+  else
+    return false;
+  args = node["args"];
+  return true;
+}
+
 /// Types the unannotated parameters of a method from its `obj.m(args)` calls
 /// at module level, where `obj` is a name bound once to an instance of a
 /// module class, when every such call passes one type (#8923). With
@@ -6132,20 +6185,13 @@ python_annotation<Json>::preprocess_receiver_method_calls(bool inside_functions)
       parent_func = saved_parent;
       return;
     }
-    const Json &func = node.value("func", Json());
-    // `obj(args)` on a callable instance calls `obj.__call__(args)` (#9070).
-    const bool instance_call = kind == "Call" && is_instance_call(func);
-    const bool method_call =
-      kind == "Call" && func.value("_type", "") == "Attribute";
-    const Json receiver =
-      instance_call ? func : method_call ? func["value"] : Json();
+    Json receiver, args;
+    std::string attr;
     if (
-      (instance_call || method_call) &&
+      receiver_method_call(node, receiver, attr, args) &&
       receiver.value("_type", "") == "Name" &&
       !is_rebound_in_scope(receiver["id"].template get<std::string>()))
     {
-      const std::string attr =
-        instance_call ? "__call__" : func["attr"].template get<std::string>();
       for (const std::string &cls :
            get_class_ancestors(get_argument_type(receiver)))
         if (Json *method = class_method(cls, attr))
@@ -6156,11 +6202,14 @@ python_annotation<Json>::preprocess_receiver_method_calls(bool inside_functions)
           const Json &params = (*method)["args"]["args"];
           owner[method] = {cls, attr};
           for (size_t i = 1; i < params.size(); ++i)
-            seen[{method, i}].insert(
-              i - 1 < node["args"].size() &&
-                  !is_dynamically_typed_name(node["args"][i - 1], ast_["body"])
-                ? get_argument_type(node["args"][i - 1])
-                : std::string());
+          {
+            const std::string type =
+              i - 1 < args.size() &&
+                  !is_dynamically_typed_name(args[i - 1], ast_["body"])
+                ? get_argument_type(args[i - 1])
+                : std::string();
+            seen[{method, i}].insert(is_unresolved_arg_type(type) ? "" : type);
+          }
           break;
         }
     }
