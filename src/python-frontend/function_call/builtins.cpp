@@ -370,6 +370,8 @@ static const char *const abs_overflow_message =
 /// that fails the refusal ends there instead of going on with a wrapped value.
 void function_call_expr::refuse_abs_unless(const exprt &representable) const
 {
+  if (converter_.in_type_probe())
+    return;
   if (!converter_.can_emit_runtime_guard())
     throw std::runtime_error(abs_overflow_message);
   code_assertt check(representable);
@@ -408,6 +410,9 @@ exprt function_call_expr::refuse_unrepresentable_abs(exprt operand) const
   if (
     operand.type().id() != "signedbv" ||
     config.options.get_bool_option("int-encoding"))
+    return operand;
+  // A type probe is discarded; the real conversion plants or refuses.
+  if (converter_.in_type_probe())
     return operand;
   const signedbv_typet type = to_signedbv_type(operand.type());
   if (!converter_.can_emit_runtime_guard())
