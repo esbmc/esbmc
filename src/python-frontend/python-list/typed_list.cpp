@@ -128,3 +128,31 @@ exprt python_list::typed_append(const exprt &list, const exprt &value)
 {
   return typed_push(list_value_, list, value);
 }
+
+exprt python_list::typed_binop()
+{
+  // `a + b`, `[x] * n` or `n * [x]`, operands evaluated left to right. A
+  // constructor call in an operand must not take the outer target as its self.
+  const bool concat = list_value_["op"]["_type"] == "Add";
+  exprt *saved_lhs = converter_.current_lhs;
+  converter_.current_lhs = nullptr;
+  std::vector<exprt> args;
+  for (const char *side : {"left", "right"})
+  {
+    const nlohmann::json &operand = list_value_[side];
+    const bool repeated = !concat && operand["_type"] == "List";
+    args.push_back(
+      repeated
+        ? typed_int_temp(operand, converter_.get_expr(operand["elts"][0]))
+        : converter_.get_expr(operand));
+  }
+  converter_.current_lhs = saved_lhs;
+
+  if (concat)
+    return typed_new_list("c:@F@__ESBMC_tlist_concat", args);
+  if (list_value_["right"]["_type"] == "List")
+    std::swap(args[0], args[1]);
+  args[1] =
+    build_typecast(to_value_expr(args[1], converter_.ns), typed_int_type());
+  return typed_new_list("c:@F@__ESBMC_tlist_repeat", args);
+}
