@@ -326,9 +326,15 @@ static bool early_answer_allowed(
     "memstats",
     "cov-report-json",
     "schedule",
-    "ts-bmc"};
+    "ts-bmc",
+    "abort-on-recursion",
+    "check-guard-subsumption",
+    "deadlock-check",
+    "printf-check"};
   return !python_checked_exceptions(options).empty() &&
          !checks_past_violation && !options.get_bool_option("termination") &&
+         atol(options.get_option("stack-limit").c_str()) <= 0 &&
+         atol(options.get_option("total-stack-limit").c_str()) <= 0 &&
          std::none_of(std::begin(bypassed), std::end(bypassed), [&](auto name) {
            return cmdline.isset(name);
          });

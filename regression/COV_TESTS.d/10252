@@ -9,6 +9,7 @@ regression/python/github_10252_overflow_check
 regression/python/github_10252_param_zero_fail
 regression/python/github_10252_recursion_fail
 regression/python/github_10252_show_vcc
+regression/python/github_10252_stack_limit
 regression/python/github_10252_unreachable_intrinsic_fail
 regression/python/github_10252_unsupported_fail
 regression/python/github_10252_unwind_bound
