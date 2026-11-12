@@ -2149,6 +2149,33 @@ static std::optional<int> literal_ndigits(const nlohmann::json &ndigits_arg)
   return static_cast<int>(negated ? -n : n);
 }
 
+// Rewrites the numeric literal arg as the int literal round(arg). Answers
+// false, leaving the signed value in arg, when the result is outside long long
+// (or a NaN): a Python int does not wrap, so the symbolic path takes it.
+static bool fold_round_to_int(nlohmann::json &arg, const bool is_negated)
+{
+  if (arg["value"].is_number_integer())
+  {
+    const long long val = arg["value"].get<long long>();
+    arg["value"] = is_negated ? -val : val;
+  }
+  else
+  {
+    double val = arg["value"].get<double>();
+    if (is_negated)
+      val = -val;
+    const double rounded = round_ties_to_even(val);
+    if (!(rounded >= -9223372036854775808.0 && rounded < 9223372036854775808.0))
+    {
+      arg["value"] = val;
+      return false;
+    }
+    arg["value"] = static_cast<long long>(rounded);
+  }
+  arg["type"] = "int";
+  return true;
+}
+
 exprt function_call_expr::handle_round(nlohmann::json &arg) const
 {
   const auto &args = call_["args"];
@@ -2182,32 +2209,8 @@ exprt function_call_expr::handle_round(nlohmann::json &arg) const
     if (!has_ndigits)
     {
       // round(x) -> nearest integer (returns int)
-      bool folded = true;
-      if (arg["value"].is_number_integer())
+      if (fold_round_to_int(arg, is_negated))
       {
-        long long val = arg["value"].get<long long>();
-        if (is_negated)
-          val = -val;
-        arg["value"] = val;
-      }
-      else
-      {
-        double val = arg["value"].get<double>();
-        if (is_negated)
-          val = -val;
-        const double rounded = round_ties_to_even(val);
-        // A Python int does not wrap: a result outside long long (or a NaN)
-        // is left to the symbolic path rather than folded to a wrapped value.
-        folded =
-          rounded >= -9223372036854775808.0 && rounded < 9223372036854775808.0;
-        if (folded)
-          arg["value"] = static_cast<long long>(rounded);
-        else
-          arg["value"] = val;
-      }
-      if (folded)
-      {
-        arg["type"] = "int";
         exprt expr = converter_.get_expr(arg);
         expr.type() = type_handler_.get_typet("int", 0);
         return expr;
