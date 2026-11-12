@@ -805,6 +805,22 @@ const side_effect_expr_function_callt *find_list_at_call(const exprt &expr)
       return call;
   return nullptr;
 }
+
+/// Whether a value of @p new_kind may be written through a slot holding
+/// @p old_kind.
+bool kinds_share_slot(store_kind old_kind, store_kind new_kind)
+{
+  // retype_element_store() replaces a tuple over an int or another tuple, and
+  // an int over a tuple (#8133).
+  const auto int_or_tuple = [](store_kind kind) {
+    return kind == store_kind::integer || kind == store_kind::tuple;
+  };
+  // An int stored into a float slot keeps its value as a float.
+  return old_kind == store_kind::other || new_kind == store_kind::other ||
+         old_kind == new_kind ||
+         (int_or_tuple(old_kind) && int_or_tuple(new_kind)) ||
+         (old_kind == store_kind::floating && new_kind == store_kind::integer);
+}
 } // namespace
 
 // Writing through the slot reinterprets `rhs` as the old element's type, so a
@@ -826,23 +842,16 @@ bool python_list::store_replaces_element(
 
   const store_kind old_kind = kind_of(old_type, converter_);
   const store_kind new_kind = kind_of(new_type, converter_);
+  // Written through a bool slot, an int would be truncated to a bool.
+  if (old_type.is_bool() && new_kind == store_kind::integer)
+    return !new_type.is_bool();
   // A scalar written through a reference slot, or a reference through a
   // scalar slot, would be reinterpreted as the other type (#9214).
   if (
     (old_is_reference && new_kind != store_kind::other) ||
     (new_is_reference && old_kind != store_kind::other))
     return true;
-  // retype_element_store() replaces a tuple over an int or another tuple, and
-  // an int over a tuple (#8133).
-  const auto int_or_tuple = [](store_kind kind) {
-    return kind == store_kind::integer || kind == store_kind::tuple;
-  };
-  // An int stored into a float slot keeps its value as a float.
-  return !(
-    old_kind == store_kind::other || new_kind == store_kind::other ||
-    old_kind == new_kind ||
-    (int_or_tuple(old_kind) && int_or_tuple(new_kind)) ||
-    (old_kind == store_kind::floating && new_kind == store_kind::integer));
+  return !kinds_share_slot(old_kind, new_kind);
 }
 
 std::optional<exprt> python_list::build_element_replacement(
