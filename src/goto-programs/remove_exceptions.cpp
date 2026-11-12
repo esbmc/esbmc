@@ -129,6 +129,12 @@ public:
   }
 
   static std::set<irep_idt>
+  address_taken(const goto_functionst &gf, const contextt &context)
+  {
+    return collect_address_taken(gf, context);
+  }
+
+  static std::set<irep_idt>
   reachable_functions(const goto_functionst &gf, const contextt &context)
   {
     return compute_entry_reachable(
@@ -2195,4 +2201,10 @@ std::set<irep_idt>
 entry_reachable_functions(const goto_functionst &gf, const contextt &context)
 {
   return exception_loweringt::reachable_functions(gf, context);
+}
+
+std::set<irep_idt>
+address_taken_functions(const goto_functionst &gf, const contextt &context)
+{
+  return exception_loweringt::address_taken(gf, context);
 }

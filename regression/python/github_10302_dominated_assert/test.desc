@@ -1,0 +1,4 @@
+CORE
+main.py
+--python-check-exceptions AssertionError --k-induction
+processing time: [0-9.]+s\n\nVERIFICATION SUCCESSFUL
