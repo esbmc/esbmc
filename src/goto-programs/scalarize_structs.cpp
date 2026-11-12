@@ -5,6 +5,14 @@
 
 namespace
 {
+/* The variables a scalarized struct is split into: one per member, nil for
+ * padding, which nothing can read without the struct's address. */
+struct fieldst
+{
+  std::vector<expr2tc> vars;
+  std::unordered_map<irep_idt, size_t, irep_id_hash> index;
+};
+
 class scalarizert
 {
 public:
@@ -38,7 +46,7 @@ private:
   contextt &context;
   std::map<irep_idt, type2tc> seen;
   std::set<irep_idt> excluded;
-  std::map<irep_idt, std::vector<expr2tc>> fields;
+  std::map<irep_idt, fieldst> fields;
 
   void exclude_all(const expr2tc &e)
   {
@@ -50,7 +58,7 @@ private:
   }
 
   /* Excludes each symbol under @p e that is not the source of a member, where
-   * @p e is written: a field symbol can take a field write, but nothing can
+   * @p e is written: a field variable can take a field write, but nothing can
    * stand for the whole struct there. */
   void exclude_whole(const expr2tc &e)
   {
@@ -72,11 +80,15 @@ private:
       return;
     if (is_address_of2t(e))
       exclude_all(e);
-    else if (is_symbol2t(e) && is_struct_type(e->type))
+    else if (is_symbol2t(e))
     {
-      const auto [it, fresh] = seen.emplace(to_symbol2t(e).thename, e->type);
-      if (!fresh && it->second != e->type)
-        excluded.insert(it->first);
+      const irep_idt &name = to_symbol2t(e).thename;
+      if (!is_struct_type(e->type))
+        excluded.insert(name);
+      else if (
+        const auto [it, fresh] = seen.emplace(name, e->type);
+        !fresh && it->second != e->type)
+        excluded.insert(name);
     }
     e->foreach_operand([this](const expr2tc &op) { note(op); });
   }
@@ -97,6 +109,13 @@ private:
   {
     note(i.code);
     note(i.guard);
+    for (const expr2tc &inv : i.get_loop_invariants())
+      note(inv);
+    for (const expr2tc &target : i.get_loop_assigns_targets())
+    {
+      note(target);
+      exclude_whole(target);
+    }
     if (is_nil_expr(i.code))
       return;
     if (is_code_function_call2t(i.code))
@@ -106,8 +125,16 @@ private:
       const code_assign2t &a = to_code_assign2t(i.code);
       if (!is_symbol2t(a.target))
         exclude_whole(a.target);
-      else if (mentions(a.source, to_symbol2t(a.target).thename))
+      else if (
+        a.source->type != a.target->type ||
+        mentions(a.source, to_symbol2t(a.target).thename))
         excluded.insert(to_symbol2t(a.target).thename);
+    }
+    else if (is_code_decl2t(i.code))
+    {
+      const code_decl2t &d = to_code_decl2t(i.code);
+      if (!is_nil_expr(d.init) && d.init->type != d.type)
+        excluded.insert(d.value);
     }
   }
 
@@ -127,51 +154,40 @@ private:
     if (!s || s->is_parameter || s->is_extern || !s->lvalue)
       return;
     const struct_type2t &st = to_struct_type(type);
-    if (st.members.empty())
-      return;
     for (const type2tc &m : st.members)
       if (!layable(m))
         return;
+    if (
+      std::all_of(
+        st.member_names.begin(), st.member_names.end(), [](irep_idt m) {
+          return is_padding_name(id2string(m));
+        }))
+      return;
 
-    std::vector<symbolt> news;
+    fieldst &f = fields[name];
+    const expr2tc &value = s->get_value2();
     for (size_t k = 0; k < st.members.size(); k++)
     {
-      symbolt f = *s;
-      /* Symex leaves a symbol named with '$' out of traces, and padding has
-       * no value to show. Not '.': a value-set entry is its symbol's name
-       * followed by a suffix that starts with '.' or '[', so "s.f" + ".g"
-       * would read as "s" + ".f.g". */
-      const std::string &m = id2string(st.member_names[k]);
-      f.id = id2string(name) + (is_padding_name(m) ? "$" : "::") + m;
-      f.name = id2string(s->name) + "." + id2string(st.member_pretty_names[k]);
-      if (context.find_symbol(f.id))
-        return;
-      f.set_type(st.members[k]);
-      const expr2tc &v = s->get_value2();
-      f.set_value(
-        !is_nil_expr(v) && is_constant_struct2t(v)
-          ? to_constant_struct2t(v).datatype_members[k]
+      f.index.emplace(st.member_names[k], k);
+      if (is_padding_name(id2string(st.member_names[k])))
+      {
+        f.vars.emplace_back();
+        continue;
+      }
+      /* Named by index: passes such as k-induction's havoc classify a symbol
+       * by substrings of its id, which a member name could add. */
+      symbolt var = *s;
+      var.id = id2string(name) + "::" + std::to_string(k);
+      var.name =
+        id2string(s->name) + "." + id2string(st.member_pretty_names[k]);
+      var.set_type(st.members[k]);
+      var.set_value(
+        !is_nil_expr(value) && is_constant_struct2t(value)
+          ? to_constant_struct2t(value).datatype_members[k]
           : expr2tc());
-      news.push_back(f);
+      f.vars.push_back(symbol2tc(st.members[k], var.id));
+      context.add(var);
     }
-
-    std::vector<expr2tc> &syms = fields[name];
-    for (symbolt &f : news)
-    {
-      syms.push_back(symbol2tc(f.get_type2(), f.id));
-      context.add(f);
-    }
-  }
-
-  expr2tc field(const expr2tc &whole, const irep_idt &member) const
-  {
-    const struct_type2t &st = to_struct_type(whole->type);
-    const std::vector<expr2tc> &syms = fields.at(to_symbol2t(whole).thename);
-    for (size_t k = 0; k < st.member_names.size(); k++)
-      if (st.member_names[k] == member)
-        return syms[k];
-    log_error("scalarize_structs: no member {}", member);
-    abort();
   }
 
   bool scalarized(const expr2tc &e) const
@@ -179,29 +195,45 @@ private:
     return is_symbol2t(e) && fields.count(to_symbol2t(e).thename);
   }
 
+  expr2tc whole(const expr2tc &sym) const
+  {
+    const fieldst &f = fields.at(to_symbol2t(sym).thename);
+    const struct_type2t &st = to_struct_type(sym->type);
+    std::vector<expr2tc> members;
+    for (size_t k = 0; k < f.vars.size(); k++)
+      members.push_back(
+        is_nil_expr(f.vars[k]) ? gen_zero(st.members[k]) : f.vars[k]);
+    return constant_struct2tc(sym->type, members);
+  }
+
   expr2tc replace(const expr2tc &e) const
   {
     if (is_nil_expr(e))
       return e;
     if (is_member2t(e) && scalarized(to_member2t(e).source_value))
-      return field(to_member2t(e).source_value, to_member2t(e).member);
+    {
+      const member2t &m = to_member2t(e);
+      const fieldst &f = fields.at(to_symbol2t(m.source_value).thename);
+      return f.vars[f.index.at(m.member)];
+    }
     if (scalarized(e))
-      return constant_struct2tc(e->type, fields.at(to_symbol2t(e).thename));
+      return whole(e);
 
-    expr2tc r = e->clone();
+    std::vector<expr2tc> ops;
     bool changed = false;
-    r->Foreach_operand([&](expr2tc &op) {
-      expr2tc n = replace(op);
-      if (n != op)
-      {
-        op = n;
-        changed = true;
-      }
+    e->foreach_operand([&](const expr2tc &op) {
+      ops.push_back(replace(op));
+      changed = changed || ops.back() != op;
     });
-    return changed ? r : e;
+    if (!changed)
+      return e;
+    expr2tc r = e->clone();
+    auto next = ops.begin();
+    r->Foreach_operand([&](expr2tc &op) { op = *next++; });
+    return r;
   }
 
-  /* Member @p k of the struct value @p v, written into a field symbol. */
+  /* Member @p k of the struct value @p v, written into a field variable. */
   static expr2tc member_value(const expr2tc &v, size_t k)
   {
     if (is_constant_struct2t(v))
@@ -220,23 +252,34 @@ private:
     return member2tc(st.members[k], v, st.member_names[k]);
   }
 
-  /* One instruction per field in place of @p it, which keeps its position so
-   * jumps to it still land on the first. */
-  static void expand(
-    goto_programt &body,
-    goto_programt::targett it,
-    const std::vector<expr2tc> &codes)
+  /* The scalarized struct a DECL, DEAD or whole assignment @p code names. */
+  irep_idt split_target(const expr2tc &code) const
   {
-    it->code = codes[0];
-    auto pos = std::next(it);
-    for (size_t k = 1; k < codes.size(); k++)
-    {
-      auto t = body.instructions.insert(pos, *it);
-      t->code = codes[k];
-      t->targets.clear();
-      t->target_number = unsigned(-1);
-      t->labels.clear();
-    }
+    irep_idt name;
+    if (is_code_decl2t(code))
+      name = to_code_decl2t(code).value;
+    else if (is_code_dead2t(code))
+      name = to_code_dead2t(code).value;
+    else if (
+      is_code_assign2t(code) && is_symbol2t(to_code_assign2t(code).target))
+      name = to_symbol2t(to_code_assign2t(code).target).thename;
+    return fields.count(name) ? name : irep_idt();
+  }
+
+  /* @p code, which names a scalarized struct, for member @p k's variable. */
+  expr2tc for_field(const expr2tc &code, const expr2tc &value, size_t k) const
+  {
+    const expr2tc &var = fields.at(split_target(code)).vars[k];
+    if (is_code_decl2t(code))
+      return code_decl2tc(
+        var->type,
+        to_symbol2t(var).thename,
+        is_nil_expr(value) ? expr2tc() : member_value(value, k),
+        to_code_decl2t(code).location);
+    if (is_code_dead2t(code))
+      return code_dead2tc(
+        var->type, to_symbol2t(var).thename, to_code_dead2t(code).location);
+    return code_assign2tc(var, member_value(value, k));
   }
 
   void rewrite(goto_programt &body)
@@ -245,49 +288,43 @@ private:
          ++it)
     {
       it->guard = replace(it->guard);
+      if (it->loop_contract_data)
+      {
+        for (expr2tc &inv : it->loop_contract_data->invariants)
+          inv = replace(inv);
+        for (expr2tc &target : it->loop_contract_data->assigns_targets)
+          target = replace(target);
+      }
       if (is_nil_expr(it->code))
         continue;
-      std::vector<expr2tc> codes;
-      if (
-        is_code_decl2t(it->code) &&
-        fields.count(to_code_decl2t(it->code).value))
-      {
-        const code_decl2t &d = to_code_decl2t(it->code);
-        const expr2tc init = replace(d.init);
-        const auto &syms = fields.at(d.value);
-        for (size_t k = 0; k < syms.size(); k++)
-          codes.push_back(code_decl2tc(
-            syms[k]->type,
-            to_symbol2t(syms[k]).thename,
-            is_nil_expr(init) ? expr2tc() : member_value(init, k),
-            d.location));
-      }
-      else if (
-        is_code_dead2t(it->code) &&
-        fields.count(to_code_dead2t(it->code).value))
-      {
-        const code_dead2t &d = to_code_dead2t(it->code);
-        for (const expr2tc &f : fields.at(d.value))
-          codes.push_back(
-            code_dead2tc(f->type, to_symbol2t(f).thename, d.location));
-      }
-      else if (
-        is_code_assign2t(it->code) &&
-        scalarized(to_code_assign2t(it->code).target))
-      {
-        const code_assign2t &a = to_code_assign2t(it->code);
-        const expr2tc source = replace(a.source);
-        const auto &syms = fields.at(to_symbol2t(a.target).thename);
-        for (size_t k = 0; k < syms.size(); k++)
-          codes.push_back(code_assign2tc(syms[k], member_value(source, k)));
-      }
-      else
+      const irep_idt name = split_target(it->code);
+      if (name.empty())
       {
         it->code = replace(it->code);
         continue;
       }
-      expand(body, it, codes);
-      std::advance(it, codes.size() - 1);
+
+      const expr2tc value = replace(
+        is_code_decl2t(it->code)     ? to_code_decl2t(it->code).init
+        : is_code_assign2t(it->code) ? to_code_assign2t(it->code).source
+                                     : expr2tc());
+      std::vector<expr2tc> codes;
+      const std::vector<expr2tc> &vars = fields.at(name).vars;
+      for (size_t k = 0; k < vars.size(); k++)
+        if (!is_nil_expr(vars[k]))
+          codes.push_back(for_field(it->code, value, k));
+
+      /* The first takes this instruction's place, so jumps to it still land
+       * on the split. */
+      it->code = codes[0];
+      for (size_t k = 1; k < codes.size(); k++)
+      {
+        it = body.instructions.insert(std::next(it), *it);
+        it->code = codes[k];
+        it->targets.clear();
+        it->target_number = unsigned(-1);
+        it->labels.clear();
+      }
     }
   }
 };
