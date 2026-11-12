@@ -8283,8 +8283,9 @@ arithmetic_leaf(const std::string &function, const std::vector<exprt> &operands)
     const typet &leaf = array_leaf_type(operand.type());
     if (leaf.is_bool() || !is_number_type(leaf))
       throw std::runtime_error(
-        "TypeError: numpy." + function +
-        "() where=/out= of this operand is not supported");
+        "TypeError: numpy." + function + "() of a " +
+        (leaf.is_bool() ? "bool" : "non-numeric") +
+        " operand is not supported");
     floating = floating || leaf.is_floatbv();
   }
   return floating ? double_type() : signedbv_typet(64);
