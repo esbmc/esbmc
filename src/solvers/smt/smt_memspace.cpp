@@ -743,7 +743,8 @@ static expr2tc addrspace_array(unsigned int version, unsigned int member)
 {
   return symbol2tc(
     array_type2tc(ptraddr_type2(), expr2tc(), true),
-    std::string(member ? "__ESBMC_addrspace_end_" : "__ESBMC_addrspace_start_") +
+    std::string(
+      member ? "__ESBMC_addrspace_end_" : "__ESBMC_addrspace_start_") +
       std::to_string(version));
 }
 

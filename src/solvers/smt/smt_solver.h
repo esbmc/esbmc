@@ -957,10 +957,8 @@ public:
   unsigned int cur_addrspace() const;
   /** The start (@p member 0) or end (1) address of object @p obj in
    *  address-space version @p version. */
-  expr2tc addrspace_read(
-    unsigned int version,
-    unsigned int member,
-    const expr2tc &obj);
+  expr2tc
+  addrspace_read(unsigned int version, unsigned int member, const expr2tc &obj);
   /** A store bump_addrspace_array() made: the version it defines, the slot,
    *  its range, the context level it was made at, and the one its equations
    *  were asserted at, if they have been. */

@@ -1141,8 +1141,7 @@ static expr2tc offset_within(const expr2tc &ptr, const expr2tc &root)
   if (!is_typecast2t(*e) || !is_bv_type(to_typecast2t(*e).from))
     return pointer_offset2tc(offset_type, ptr);
 
-  const expr2tc address =
-    typecast2tc(ptraddr_type2(), to_typecast2t(*e).from);
+  const expr2tc address = typecast2tc(ptraddr_type2(), to_typecast2t(*e).from);
   const expr2tc root_address = typecast2tc(
     ptraddr_type2(), address_of2tc(pointer_type2tc(root->type), root));
   return typecast2tc(
