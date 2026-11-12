@@ -2,6 +2,7 @@
 
 #include <functional>
 #include <nlohmann/json.hpp>
+#include <functional>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
@@ -529,8 +530,8 @@ classify_branch_literal_assigns(
 }
 
 // Collects, per name, the literal kinds assigned to it across every leaf
-// reachable from `block`, following elif/nested if-else chains. Returns
-// false if any such chain is dangling (no final else).
+// reachable from `block`, following elif/nested if-else chains. A chain with
+// no final else ends in an empty leaf, which assigns nothing.
 inline bool collect_branch_literal_kinds(
   const nlohmann::json &block,
   std::unordered_map<std::string, std::unordered_set<std::string>> &kinds,
@@ -544,9 +545,7 @@ inline bool collect_branch_literal_kinds(
     block[0].value("_type", "") == "If")
   {
     const auto &nested = block[0];
-    if (
-      !nested.contains("body") || !nested.contains("orelse") ||
-      nested["orelse"].empty())
+    if (!nested.contains("body") || !nested.contains("orelse"))
       return false;
 
     return collect_branch_literal_kinds(
@@ -584,9 +583,7 @@ inline bool collect_if_node_literal_kinds(
   const nlohmann::json &scope_body,
   const nlohmann::json &module_body = nlohmann::json())
 {
-  if (!if_node.contains("body"))
-    return false;
-  if (!if_node.contains("orelse") || if_node["orelse"].empty())
+  if (!if_node.contains("body") || !if_node.contains("orelse"))
     return false;
 
   return collect_branch_literal_kinds(
@@ -796,5 +793,114 @@ is_path_dependent_number(const std::vector<numeric_bindingt> &bindings)
     in_block |= binding.in_block;
   }
   return has_int && has_float && in_block;
+}
+
+// Target/value pair of an Assign or AnnAssign, or nulls otherwise.
+inline std::pair<const nlohmann::json *, const nlohmann::json *>
+assign_target_value(const nlohmann::json &stmt)
+{
+  if (!stmt.is_object() || !stmt.contains("value"))
+    return {nullptr, nullptr};
+  const std::string &kind = stmt.value("_type", "");
+  if (
+    kind == "Assign" && stmt.contains("targets") &&
+    stmt["targets"].is_array() && !stmt["targets"].empty())
+    return {&stmt["targets"][0], &stmt["value"]};
+  if (kind == "AnnAssign" && stmt.contains("target"))
+    return {&stmt["target"], &stmt["value"]};
+  return {nullptr, nullptr};
+}
+
+// Literal kinds assigned anywhere in the module to `.<attr_name>`.
+inline std::unordered_set<std::string> collect_attribute_literal_kinds(
+  const nlohmann::json &module_body,
+  const std::string &attr_name)
+{
+  std::unordered_set<std::string> kinds;
+
+  std::function<void(const nlohmann::json &)> scan =
+    [&](const nlohmann::json &body) {
+      if (!body.is_array())
+        return;
+      for (const auto &stmt : body)
+      {
+        if (!stmt.is_object())
+          continue;
+
+        auto [target, value] = assign_target_value(stmt);
+        if (
+          target && value && !value->is_null() &&
+          target->value("_type", "") == "Attribute" &&
+          target->value("attr", "") == attr_name)
+        {
+          std::string kind = classify_literal_value_kind(*value, module_body);
+          if (!kind.empty())
+            kinds.insert(kind);
+        }
+
+        if (stmt.contains("body"))
+          scan(stmt["body"]);
+        if (stmt.contains("orelse"))
+          scan(stmt["orelse"]);
+      }
+    };
+
+  scan(module_body);
+  return kinds;
+}
+
+// Classes (by name) whose own methods assign `self.<attr_name>` somewhere.
+inline std::unordered_set<std::string> classes_declaring_attribute(
+  const nlohmann::json &module_body,
+  const std::string &attr_name)
+{
+  std::unordered_set<std::string> owners;
+  if (!module_body.is_array())
+    return owners;
+
+  for (const auto &stmt : module_body)
+  {
+    if (!stmt.is_object() || stmt.value("_type", "") != "ClassDef")
+      continue;
+    const std::string &class_name = stmt.value("name", "");
+    if (!stmt.contains("body"))
+      continue;
+
+    for (const auto &member : stmt["body"])
+    {
+      if (!member.is_object() || member.value("_type", "") != "FunctionDef")
+        continue;
+      if (!member.contains("body"))
+        continue;
+
+      std::function<bool(const nlohmann::json &)> assigns_self_attr =
+        [&](const nlohmann::json &body) -> bool {
+        if (!body.is_array())
+          return false;
+        for (const auto &inner : body)
+        {
+          if (!inner.is_object())
+            continue;
+          auto [target, value] = assign_target_value(inner);
+          if (
+            target && value && target->value("_type", "") == "Attribute" &&
+            target->value("attr", "") == attr_name &&
+            target->contains("value") && (*target)["value"].is_object() &&
+            (*target)["value"].value("_type", "") == "Name" &&
+            (*target)["value"].value("id", "") == "self")
+            return true;
+          if (inner.contains("body") && assigns_self_attr(inner["body"]))
+            return true;
+          if (inner.contains("orelse") && assigns_self_attr(inner["orelse"]))
+            return true;
+        }
+        return false;
+      };
+
+      if (assigns_self_attr(member["body"]))
+        owners.insert(class_name);
+    }
+  }
+  return owners;
 }
 } // namespace dynamic_type_detail
