@@ -4,6 +4,7 @@
 #include <cassert>
 #include <list>
 #include <map>
+#include <boost/container/flat_map.hpp>
 #include <string>
 #include <vector>
 #include <atomic>
@@ -39,7 +40,10 @@ public:
   typedef std::vector<irept> subt;
   // typedef std::list<irept> subt;
 
-  typedef std::map<irep_idt, irept> named_subt;
+  // A sorted vector, which costs far less per field than std::map (#10190).
+  // Adding or removing a field moves the others, so never hold a reference to
+  // one field across add() or remove() on the same irep.
+  typedef boost::container::flat_map<irep_idt, irept> named_subt;
 
   // Dump contents of irep to stdout. Debugging only.
   void dump() const;
