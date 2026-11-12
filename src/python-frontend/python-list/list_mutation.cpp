@@ -1521,7 +1521,16 @@ python_list::shallow_push_call python_list::select_shallow_push(
            : "c:@F@__ESBMC_list_push_shallow");
   if (tagged)
     return {func, {tagged_float_type_id(true)}};
-  return {func, {untagged_last_arg, tagged_float_type_id(true)}};
+  // The float id costs a type-id branch per copied element, so it is left out
+  // when every recorded element of `src` is known not to be a float.
+  const element_type_registry::entries *recorded =
+    src.is_symbol() ? elem_types().find(src.identifier().as_string()) : nullptr;
+  const bool may_hold_float =
+    !recorded ||
+    std::any_of(recorded->begin(), recorded->end(), [](const auto &entry) {
+      return entry.second.is_floatbv();
+    });
+  return {func, {untagged_last_arg, tagged_float_type_id(may_hold_float)}};
 }
 
 BigInt python_list::uniform_elem_size(const exprt &list) const
