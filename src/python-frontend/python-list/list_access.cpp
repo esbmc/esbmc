@@ -4887,6 +4887,15 @@ static typet declared_elem_type_or(
 // literal List AST node, giving a compile-time element count to normalize a
 // negative index against. Split out of normalize_index_access_position to
 // keep that function's own decision count down.
+// The length a negative constant index counts back from. The recorded element
+// types follow appends and pops, the literal does not.
+static size_t known_length(
+  const element_type_registry::entries *recorded,
+  const nlohmann::json &list_node)
+{
+  return recorded ? recorded->size() : list_node["value"]["elts"].size();
+}
+
 static bool is_literal_list_backed(const nlohmann::json &list_node)
 {
   return list_node.contains("value") &&
@@ -4961,7 +4970,7 @@ void python_list::normalize_index_access_position(
       // (append/insert/extend), so we must resolve the negative index
       // at runtime via build_list_at_call using __ESBMC_list_size.
       index = slice_node["operand"]["value"].get<size_t>();
-      index = list_node["value"]["elts"].size() - index;
+      index = known_length(recorded_elem_types(array), list_node) - index;
     }
     // A pointer-typed array without a literal list backing it (e.g. a numpy
     // row/column view, which has no AST list assignment to read a
