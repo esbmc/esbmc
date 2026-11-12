@@ -1799,6 +1799,22 @@ exprt function_call_builder::len_of_bitvector_operand(
   return from_integer(1, long_long_int_type());
 }
 
+bool function_call_builder::is_scalar_len_operand(const typet &type) const
+{
+  return type.is_signedbv() || type.is_unsignedbv() ||
+         converter_.get_type_handler().is_tagged_scalar_type(type);
+}
+
+exprt function_call_builder::len_of_scalar_operand(
+  const nlohmann::json &arg,
+  const exprt &operand) const
+{
+  if (converter_.get_type_handler().is_tagged_scalar_type(operand.type()))
+    return converter_.dynamic_type_handler_.build_len(
+      operand, converter_.get_location_from_decl(call_));
+  return len_of_bitvector_operand(arg, operand.type());
+}
+
 static std::string none_has_no_attribute(const nlohmann::json &call)
 {
   return "'NoneType' object has no attribute '" +
@@ -2057,8 +2073,8 @@ exprt function_call_builder::build() const
       }
     }
 
-    if (arg_expr.type().is_signedbv() || arg_expr.type().is_unsignedbv())
-      return len_of_bitvector_operand(call_["args"][0], arg_expr.type());
+    if (is_scalar_len_operand(arg_expr.type()))
+      return len_of_scalar_operand(call_["args"][0], arg_expr);
 
     typet len_arg_type = converter_.ns.follow(arg_expr.type());
     if (len_arg_type.is_array() && len_arg_type.subtype() != char_type())

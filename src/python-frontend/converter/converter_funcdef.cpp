@@ -4755,23 +4755,53 @@ references_name(const nlohmann::json &node, const std::string &param_name)
   return false;
 }
 
-// Safe as a `Compare` (always bool) or as the parameter itself, which the
-// function then returns tagged. Anything else, e.g. `v + v`, may itself
-// evaluate to a tagged value the fixed return type can't hold.
+// `value` is the parameter itself, or `+` between it and another parameter of
+// `func_def`, which the function then returns as the tagged operation gives
+// (#10343).
+static bool returns_param_value(
+  const nlohmann::json &value,
+  const std::string &param_name,
+  const nlohmann::json &func_def)
+{
+  auto is_param = [&](const nlohmann::json &node) {
+    return node.value("_type", std::string()) == "Name" &&
+           node.value("id", std::string()) == param_name;
+  };
+  if (is_param(value))
+    return true;
+  auto is_any_param = [&](const nlohmann::json &node) {
+    if (node.value("_type", std::string()) != "Name")
+      return false;
+    for (const auto &arg : func_def["args"]["args"])
+      if (arg.value("arg", std::string()) == node.value("id", std::string()))
+        return true;
+    return false;
+  };
+  return value.value("_type", std::string()) == "BinOp" &&
+         value["op"].value("_type", std::string()) == "Add" &&
+         is_any_param(value["left"]) && is_any_param(value["right"]) &&
+         (is_param(value["left"]) || is_param(value["right"]));
+}
+
+// Safe as a `Compare` (always bool) or as the parameter's own value. Anything
+// else, e.g. `v * 2`, may itself evaluate to a tagged value the fixed return
+// type can't hold.
 static bool return_value_safe_for_tagged_param(
   const nlohmann::json &value,
-  const std::string &param_name)
+  const std::string &param_name,
+  const nlohmann::json &func_def)
 {
-  const std::string kind = value.value("_type", std::string());
-  return !references_name(value, param_name) || kind == "Compare" ||
-         (kind == "Name" && value.value("id", std::string()) == param_name);
+  return !references_name(value, param_name) ||
+         value.value("_type", std::string()) == "Compare" ||
+         returns_param_value(value, param_name, func_def);
 }
 
 // True if some `return` statement anywhere in 'body' would be unsafe once
 // 'param_name' becomes a tagged parameter.
 static bool any_return_unsafe_for_tagged_param(
   const nlohmann::json &body,
-  const std::string &param_name)
+  const std::string &param_name,
+  const nlohmann::json &func_def)
 {
   if (!body.is_array())
     return false;
@@ -4782,22 +4812,23 @@ static bool any_return_unsafe_for_tagged_param(
     if (
       stmt.value("_type", std::string()) == "Return" &&
       stmt.contains("value") && !stmt["value"].is_null() &&
-      !return_value_safe_for_tagged_param(stmt["value"], param_name))
+      !return_value_safe_for_tagged_param(stmt["value"], param_name, func_def))
       return true;
     for (const char *key : {"body", "orelse"})
       if (
         stmt.contains(key) &&
-        any_return_unsafe_for_tagged_param(stmt[key], param_name))
+        any_return_unsafe_for_tagged_param(stmt[key], param_name, func_def))
         return true;
   }
   return false;
 }
 
-// Counts the value-carrying returns in `body` that are the bare parameter and
-// those that are anything else.
+// Counts the value-carrying returns in `body` that are the parameter's own
+// value and those that are anything else.
 static void count_param_returns(
   const nlohmann::json &body,
   const std::string &param_name,
+  const nlohmann::json &func_def,
   size_t &bare,
   size_t &other)
 {
@@ -4811,31 +4842,31 @@ static void count_param_returns(
       stmt.value("_type", std::string()) == "Return" &&
       stmt.contains("value") && !stmt["value"].is_null())
     {
-      const nlohmann::json &value = stmt["value"];
-      const bool is_param = value.value("_type", std::string()) == "Name" &&
-                            value.value("id", std::string()) == param_name;
-      (is_param ? bare : other)++;
+      (returns_param_value(stmt["value"], param_name, func_def) ? bare
+                                                                : other)++;
     }
     for (const char *key : {"body", "orelse"})
       if (stmt.contains(key))
-        count_param_returns(stmt[key], param_name, bare, other);
+        count_param_returns(stmt[key], param_name, func_def, bare, other);
   }
 }
 
 // Tagging `param_name` would leak into the fixed return type of `func_def`.
-// Returning the parameter itself is safe only when nothing else is returned
-// and the parameter is never rebound, so the return type is simply the tag.
+// Returning the parameter's own value is safe only when nothing else is
+// returned and the parameter is never rebound, so the return type is simply
+// what the tagged value or operation gives.
 static bool tagged_param_return_unsafe(
   const nlohmann::json &func_def,
   const std::string &param_name)
 {
   if (!func_def.contains("body"))
     return false;
-  if (any_return_unsafe_for_tagged_param(func_def["body"], param_name))
+  if (
+    any_return_unsafe_for_tagged_param(func_def["body"], param_name, func_def))
     return true;
   size_t bare = 0;
   size_t other = 0;
-  count_param_returns(func_def["body"], param_name, bare, other);
+  count_param_returns(func_def["body"], param_name, func_def, bare, other);
   return bare > 0 && (other > 0 || count_bindings(func_def, param_name) > 1);
 }
 
@@ -6812,6 +6843,48 @@ void python_converter::note_guessed_return(const nlohmann::json &function_node)
     guessed_return_functions_.insert(function_node["name"].get<std::string>());
 }
 
+// Some `return` in `body` adds two parameters that are both tagged, which
+// gives a tagged value whatever the return annotation was inferred as (#10343).
+static bool returns_sum_of_tagged_params(
+  const nlohmann::json &body,
+  const code_typet &type,
+  const type_handler &types)
+{
+  auto tagged_param = [&](const nlohmann::json &node) {
+    for (const auto &arg : type.arguments())
+      if (
+        node.value("_type", std::string()) == "Name" &&
+        node.value("id", std::string()) == arg.get_base_name().as_string())
+        return types.is_tagged_scalar_type(arg.type());
+    return false;
+  };
+  for (const auto &stmt : body)
+  {
+    const nlohmann::json &value = stmt.value("value", nlohmann::json());
+    if (
+      stmt.value("_type", std::string()) == "Return" && value.is_object() &&
+      value.value("_type", std::string()) == "BinOp" &&
+      value["op"].value("_type", std::string()) == "Add" &&
+      tagged_param(value["left"]) && tagged_param(value["right"]))
+      return true;
+    for (const char *key : {"body", "orelse"})
+      if (
+        stmt.contains(key) && stmt[key].is_array() &&
+        returns_sum_of_tagged_params(stmt[key], type, types))
+        return true;
+  }
+  return false;
+}
+
+static void tag_sum_of_tagged_params_return(
+  const nlohmann::json &body,
+  code_typet &type,
+  const type_handler &types)
+{
+  if (returns_sum_of_tagged_params(body, type, types))
+    type.return_type() = types.get_tagged_object_type();
+}
+
 void python_converter::get_function_definition(
   const nlohmann::json &function_node)
 {
@@ -6987,6 +7060,7 @@ void python_converter::get_function_definition(
 
   // Process function arguments
   process_function_arguments(function_node, type, id, location);
+  tag_sum_of_tagged_params_return(function_node["body"], type, type_handler_);
 
   // Closure capture (#6256): the cells must exist before the body is
   // converted, so a free variable resolves to the cell rather than walking out

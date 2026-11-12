@@ -1610,6 +1610,33 @@ exprt dynamic_type_handler::build_isinstance_check(
     "dynamically-typed variable");
 }
 
+exprt dynamic_type_handler::build_len(
+  const exprt &tagged,
+  const locationt &location)
+{
+  if (!converter_.in_type_probe())
+  {
+    if (!converter_.can_emit_operand_statement())
+      throw std::runtime_error(
+        "len() of a dynamically-typed variable here is not yet supported");
+    exprt is_str = build_equal(
+      build_member(tagged, "type_id", size_type()),
+      type_handler_.tagged_scalar_type_id(pointer_typet(char_type())));
+    converter_.emit_guarded_raise(
+      build_not(is_str), "TypeError", "object has no len()", location);
+  }
+
+  const symbolt *strlen_func = converter_.symbol_table().find_symbol(
+    "c:@F@__python_scalar_strlen_bounded");
+  assert(
+    strlen_func && "__python_scalar_strlen_bounded not found in symbol table");
+  exprt chars = build_typecast(
+    build_member(tagged, "value", pointer_typet(empty_typet())),
+    pointer_typet(char_type()));
+  return build_typecast(
+    build_call_expr(*strlen_func, size_type(), {chars}), long_long_int_type());
+}
+
 exprt dynamic_type_handler::build_truthiness(const exprt &tagged)
 {
   const symbolt *func =

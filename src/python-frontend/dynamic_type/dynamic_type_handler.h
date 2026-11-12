@@ -144,6 +144,9 @@ public:
     const std::string &type_name,
     bool type_is_user_class) const;
 
+  /// len(@p tagged): the length of the str it holds, else a TypeError.
+  exprt build_len(const exprt &tagged, const locationt &location);
+
   /// Python truthiness of a tagged value, decided by its runtime type.
   exprt build_truthiness(const exprt &tagged);
 
