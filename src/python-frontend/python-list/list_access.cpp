@@ -4424,6 +4424,15 @@ void python_list::handle_slice_assignment(
      elem_size});
   call.location() = location;
   converter_.add_instruction(converter_.convert_expression_to_code(call));
+  forget_static_length(list_expr);
+}
+
+// A slice assignment may change the list's length, which the recorded entries
+// behind the constant-index bounds check do not follow (#10447).
+void python_list::forget_static_length(const exprt &list)
+{
+  if (list.is_symbol())
+    converter_.mark_list_call_escaped(list.identifier().as_string());
 }
 
 void python_list::handle_subscript_assign_none(
