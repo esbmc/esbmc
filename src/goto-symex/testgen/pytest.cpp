@@ -94,9 +94,11 @@ nondet_model_scopet classify_nondet_model(const std::string &function_name)
     scope.size = true;
     scope.dict = true;
   }
-  else if (base == "_nondet_size")
+  else if (base == "_nondet_size" || base == "__ESBMC_tlist_nondet_size")
     scope.size = true;
-  else if (base.rfind("_nondet_list_", 0) == 0 || base == "nondet_list")
+  else if (
+    base.rfind("_nondet_list_", 0) == 0 || base == "nondet_list" ||
+    base == "__ESBMC_tlist_nondet_push")
     scope.list = true;
   else if (base.rfind("_nondet_dict_", 0) == 0 || base == "nondet_dict")
   {

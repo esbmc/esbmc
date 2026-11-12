@@ -1313,6 +1313,14 @@ void goto_symext::run_intrinsic(
     return;
   }
 
+  // The element storage of a typed Python list (python/list.c).
+  if (symname == "c:@F@__ESBMC_create_inf_i64")
+  {
+    assert(func_call.operands.size() == 0 && "Wrong signature");
+    symex_mem_inf(func_call.ret, get_int64_type(), cur_state->guard);
+    return;
+  }
+
   if (has_prefix(symname, "c:@F@__ESBMC_unroll"))
     return;
 

@@ -105,7 +105,7 @@ def _read_ast_from_file(filename: str) -> ast.Module:
         return ast.parse(source.read())
 
 
-_FLAGS = ("--deadlock-check", "--typecheck")
+_FLAGS = ("--deadlock-check", "--typecheck", "--typed-lists")
 
 
 def check_usage() -> None:
@@ -256,6 +256,11 @@ def main(*, deps: CliDeps) -> int | None:
     deps.threading_lowering.lower_threading_thread_usage(tree, filename)
 
     deps.rewrite_re_match_attribute_calls(tree)
+
+    if "--typed-lists" in sys.argv[3:]:
+        # pylint: disable-next=import-outside-toplevel
+        from preprocessor.typed_lists import mark_typed_lists
+        mark_typed_lists(tree)
 
     deps.generate_ast_json_fn(tree, filename, None, output_dir)
     _emit_model_jsons(output_dir,

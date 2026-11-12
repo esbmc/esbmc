@@ -5,6 +5,7 @@
 #include <python-frontend/type/element_type_registry.h>
 #include <util/irep/type.h>
 #include <util/irep/expr.h>
+#include <util/irep/std_code.h>
 #include <util/irep/std_expr.h>
 #include <util/symtab/symbol.h>
 #include <functional>
@@ -59,6 +60,14 @@ public:
     bool from_right = false);
 
   exprt get();
+
+  /// Typed lists (#10451): the lowering of the nodes the frontend's gate
+  /// (preprocessor/typed_lists.py) flags. Defined in typed_list.cpp.
+  static bool is_typed(const nlohmann::json &node);
+  exprt typed_literal();
+  exprt typed_nondet(const exprt &max_size);
+  exprt typed_element(const exprt &list, const exprt &index);
+  exprt typed_append(const exprt &list, const exprt &value);
 
   /**
    * @brief Materialize a fresh list from already-evaluated element values.
@@ -1016,6 +1025,13 @@ public:
     codet &target_block);
 
 private:
+  // Helpers of the typed-list lowerings in typed_list.cpp.
+  typet typed_int_type() const;
+  exprt typed_int_temp(const nlohmann::json &node, const exprt &value);
+  exprt typed_new_list(const char *create, const std::vector<exprt> &args);
+  code_function_callt
+  typed_push(const nlohmann::json &node, const exprt &list, const exprt &value);
+
   /// The type of one literal element; a name whose binding has no static type
   /// (such as `x or None`) is read at its symbol's type, as the list stored it.
   typet literal_or_bound_element_type(
@@ -1073,10 +1089,26 @@ private:
     const exprt &count,
     const std::vector<exprt> &list_elems);
 
+  /// Where a list keeps its elements: the model function that returns a
+  /// pointer to one after asserting the index is in range, the member that
+  /// points at the first, and the type of a pointer to one.
+  struct element_storage
+  {
+    const char *at_function;
+    const char *member;
+    typet pointer_type;
+  };
+  element_storage untyped_storage() const;
+
   exprt build_list_at_call(
     const exprt &list,
     const exprt &index,
     const nlohmann::json &element);
+  exprt build_list_at_call(
+    const exprt &list,
+    const exprt &index,
+    const nlohmann::json &element,
+    const element_storage &storage);
 
   exprt bind_list_element(const exprt &list_at_call);
 

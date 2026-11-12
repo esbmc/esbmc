@@ -4196,6 +4196,12 @@ exprt function_call_expr::handle_list_append() const
   if (args.size() != 1)
     throw std::runtime_error("append() takes exactly one argument");
 
+  if (python_list::is_typed(call_))
+    return python_list(converter_, call_)
+      .typed_append(
+        converter_.get_expr(call_["func"]["value"]),
+        converter_.get_expr(args[0]));
+
   std::string list_display_name;
   const symbolt *list_symbol = get_object_list_symbol(list_display_name);
   materialize_list_symbol(list_symbol);

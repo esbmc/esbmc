@@ -1,4 +1,5 @@
 #include <stdbool.h>
+#include <limits.h>
 #include <stdlib.h>
 #include <stdint.h> // SIZE_MAX
 #include <string.h>
@@ -742,6 +743,90 @@ PyObject *__ESBMC_list_at(PyListObject *l, size_t index)
 {
   __ESBMC_assert(index < l->size, "IndexError: out-of-bounds read in list");
   return &l->items[index];
+}
+
+/* Typed lists (#10451). A list the frontend proves holds only ints keeps
+ * them in `slot`, an infinite array of int64, instead of one untyped cell per
+ * element. Reads and writes then select one array element, with no pointer
+ * per element and no byte offsets. The frontend's gate decides which lists
+ * qualify. Every operation on such a list is one of the __ESBMC_tlist_*
+ * functions below or a direct `slot[i]` access the converter emits. */
+
+/* Symex binds the result to a fresh infinite array of int64. */
+long long *__ESBMC_create_inf_i64()
+{
+  return NULL;
+}
+
+PyListObject *__ESBMC_tlist_create()
+{
+  PyListObject *l = __ESBMC_alloca(sizeof(PyListObject));
+  l->type = &__ESBMC_list_type;
+  l->items = NULL;
+  l->size = 0;
+  l->is_tuple = false;
+  l->may_nest = &__ESBMC_list_nest_no;
+  l->slot = __ESBMC_create_inf_i64();
+  return l;
+}
+
+void __ESBMC_tlist_push(PyListObject *l, long long value);
+
+/* _nondet_size(max_size): a size in [0, max_size]. Test-case generation
+ * reads the list's length from this function's nondet. */
+long long __ESBMC_tlist_nondet_size(long long max_size)
+{
+  long long size = nondet_long();
+  __ESBMC_assume(size >= 0);
+  __ESBMC_assume(size <= max_size);
+  return size;
+}
+
+/* One element of _nondet_list_int: nondet_int(), which never returns the
+ * smallest int unless ints are unbounded (#9923). Test-case generation reads
+ * the element from this function's nondet. */
+static void __ESBMC_tlist_nondet_push(PyListObject *l, bool exclude_min)
+{
+  long long value = nondet_long();
+  if (exclude_min)
+    __ESBMC_assume(value != LLONG_MIN);
+  __ESBMC_tlist_push(l, value);
+}
+
+/* The list _nondet_list_int(max_size) builds, with the same loops: the first
+ * is unwound in full for up to 8 elements, so the builder does not decide how
+ * deep the program is explored, and the rest come from an ordinary loop. */
+PyListObject *__ESBMC_tlist_nondet(long long max_size, bool exclude_min)
+{
+  PyListObject *l = __ESBMC_tlist_create();
+  long long size = __ESBMC_tlist_nondet_size(max_size);
+  long long i = 0;
+  __ESBMC_unroll(8);
+  while (i < 8 && i < size)
+  {
+    __ESBMC_tlist_nondet_push(l, exclude_min);
+    i++;
+  }
+  if (max_size > 8)
+    while (i < size)
+    {
+      __ESBMC_tlist_nondet_push(l, exclude_min);
+      i++;
+    }
+  return l;
+}
+
+void __ESBMC_tlist_push(PyListObject *l, long long value)
+{
+  l->slot[l->size] = value;
+  l->size++;
+}
+
+/* The element __ESBMC_list_at would return, with the same claim. */
+long long *__ESBMC_tlist_at(PyListObject *l, size_t index)
+{
+  __ESBMC_assert(index < l->size, "IndexError: out-of-bounds read in list");
+  return &l->slot[index];
 }
 
 bool __ESBMC_list_set_at(

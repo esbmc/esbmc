@@ -2066,6 +2066,13 @@ exprt function_call_builder::build_c_intrinsic_call(
 
 exprt function_call_builder::build() const
 {
+  // A nondet_list(nondet_int) builder whose list the gate typed (#10451).
+  if (
+    python_list::is_typed(call_) &&
+    call_["func"].value("id", "") == "_nondet_list_int")
+    return python_list(converter_, call_)
+      .typed_nondet(converter_.get_expr(call_["args"][0]));
+
   if (call_["func"]["_type"] == "Attribute")
   {
     exprt handled_method = build_method_call_on_receiver();

@@ -94,18 +94,35 @@ build_nonnegative_slice_span(const exprt &lower, const exprt &upper)
   return build_typecast(migrate_expr_back(span), size_type());
 }
 
+python_list::element_storage python_list::untyped_storage() const
+{
+  return {
+    "c:@F@__ESBMC_list_at",
+    "items",
+    pointer_typet(converter_.get_type_handler().get_list_element_type())};
+}
+
 exprt python_list::build_list_at_call(
   const exprt &list,
   const exprt &index_expr,
   const nlohmann::json &element)
 {
+  return build_list_at_call(list, index_expr, element, untyped_storage());
+}
+
+exprt python_list::build_list_at_call(
+  const exprt &list,
+  const exprt &index_expr,
+  const nlohmann::json &element,
+  const element_storage &storage)
+{
   // A call such as len(s) in the index is still a statement. Nested as an
   // argument it is never lowered and reaches the solver unconverted (#9932).
   const exprt index = to_value_expr(index_expr, converter_.ns);
-  pointer_typet obj_type(converter_.get_type_handler().get_list_element_type());
+  const typet &obj_type = storage.pointer_type;
 
   const symbolt *list_at_func_sym =
-    converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_at");
+    converter_.symbol_table().find_symbol(storage.at_function);
   assert(list_at_func_sym);
 
   locationt location = converter_.get_location_from_decl(element);
@@ -131,7 +148,7 @@ exprt python_list::build_list_at_call(
         build_less_than(index, gen_zero(index.type())),
         build_add(size, position, size_type()),
         position);
-    const exprt items = build_deref_member(list, "items", obj_type);
+    const exprt items = build_deref_member(list, storage.member, obj_type);
     return build_if(
       build_less_than(position, size),
       build_add(items, position, obj_type),
@@ -145,7 +162,7 @@ exprt python_list::build_list_at_call(
     const exprt list_ptr =
       list.type().is_pointer() ? list : build_address_of(list);
     return build_add(
-      build_deref_member(list_ptr, "items", obj_type),
+      build_deref_member(list_ptr, storage.member, obj_type),
       build_typecast(index, size_type()),
       obj_type);
   }
