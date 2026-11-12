@@ -317,11 +317,155 @@ bool is_equality_test(unsigned signs)
   return signs == zero || signs == (negative | positive);
 }
 
+/// The globals a forward pass may track, and the ones each function may
+/// write, directly or through its calls. A global counts only when its
+/// address is never taken, so only a direct write or a call can change it,
+/// and only when no thread is spawned, so nothing changes it between two
+/// instructions of one function.
+struct globalst
+{
+  std::set<irep_idt> trackable;
+  std::map<irep_idt, std::set<irep_idt>> writes;
+  std::set<irep_idt> indirect_writes;
+
+  globalst(
+    const goto_functionst &gf,
+    const contextt &context,
+    const std::set<irep_idt> &reachable,
+    const std::set<irep_idt> &address_taken_fns)
+  {
+    std::set<irep_idt> taken, seen;
+    auto scan = [&](const expr2tc &e) {
+      mentions(e, [&](const expr2tc &x) {
+        if (is_address_of2t(x))
+          collect_symbols(to_address_of2t(x).ptr_obj, taken);
+        if (is_symbol2t(x))
+          seen.insert(to_symbol2t(x).thename);
+        return false;
+      });
+    };
+    std::map<irep_idt, std::set<irep_idt>> callees;
+    std::set<irep_idt> indirect_callers;
+    for (const irep_idt &id : reachable)
+    {
+      auto fn = gf.function_map.find(id);
+      if (fn == gf.function_map.end() || !fn->second.body_available)
+        continue;
+      for (const auto &i : fn->second.body.instructions)
+      {
+        if (spawns_thread(i))
+          return;
+        scan(i.code);
+        scan(i.guard);
+        record_write(context, id, i, callees, indirect_callers);
+      }
+    }
+    context.foreach_operand([&](const symbolt &sym) {
+      if (sym.static_lifetime)
+        collect_address_of(sym.get_value2(), taken);
+    });
+    for (const irep_idt &name : seen)
+    {
+      const symbolt *sym = context.find_symbol(name);
+      if (sym && sym->static_lifetime && !taken.count(name))
+        trackable.insert(name);
+    }
+    close_over_calls(callees, indirect_callers, address_taken_fns);
+  }
+
+  /// The globals a call may write.
+  const std::set<irep_idt> &written_by(const code_function_call2t &c) const
+  {
+    static const std::set<irep_idt> none;
+    if (!is_symbol2t(c.function))
+      return indirect_writes;
+    auto it = writes.find(to_symbol2t(c.function).thename);
+    return it == writes.end() ? none : it->second;
+  }
+
+private:
+  static void collect_symbols(const expr2tc &e, std::set<irep_idt> &out)
+  {
+    mentions(e, [&](const expr2tc &x) {
+      if (is_symbol2t(x))
+        out.insert(to_symbol2t(x).thename);
+      return false;
+    });
+  }
+
+  static void collect_address_of(const expr2tc &e, std::set<irep_idt> &out)
+  {
+    mentions(e, [&](const expr2tc &x) {
+      if (is_address_of2t(x))
+        collect_symbols(to_address_of2t(x).ptr_obj, out);
+      return false;
+    });
+  }
+
+  void record_write(
+    const contextt &context,
+    const irep_idt &id,
+    const goto_programt::instructiont &i,
+    std::map<irep_idt, std::set<irep_idt>> &callees,
+    std::set<irep_idt> &indirect_callers)
+  {
+    std::set<irep_idt> targets;
+    if (i.is_assign())
+      collect_symbols(to_code_assign2t(i.code).target, targets);
+    else if (i.is_function_call())
+    {
+      const code_function_call2t &c = to_code_function_call2t(i.code);
+      collect_symbols(c.ret, targets);
+      if (is_symbol2t(c.function))
+        callees[id].insert(to_symbol2t(c.function).thename);
+      else
+        indirect_callers.insert(id);
+    }
+    for (const irep_idt &t : targets)
+    {
+      const symbolt *sym = context.find_symbol(t);
+      if (sym && sym->static_lifetime)
+        writes[id].insert(t);
+    }
+  }
+
+  // A call writes what its callee writes. A call through a pointer can only
+  // reach an address-taken function.
+  void close_over_calls(
+    const std::map<irep_idt, std::set<irep_idt>> &callees,
+    const std::set<irep_idt> &indirect_callers,
+    const std::set<irep_idt> &address_taken_fns)
+  {
+    for (bool changed = true; changed;)
+    {
+      changed = false;
+      std::set<irep_idt> indirect;
+      for (const irep_idt &fn : address_taken_fns)
+        indirect.insert(writes[fn].begin(), writes[fn].end());
+      changed = indirect != indirect_writes;
+      indirect_writes = indirect;
+      for (const auto &[caller, cs] : callees)
+      {
+        std::set<irep_idt> &w = writes[caller];
+        const std::size_t before = w.size();
+        for (const irep_idt &callee : cs)
+          w.insert(writes[callee].begin(), writes[callee].end());
+        if (indirect_callers.count(caller))
+          w.insert(indirect_writes.begin(), indirect_writes.end());
+        changed = changed || w.size() != before;
+      }
+    }
+  }
+};
+
 class functiont
 {
 public:
-  functiont(const goto_functiont &fn, const contextt &context)
-    : fn(fn), context(context)
+  functiont(
+    const goto_functiont &fn,
+    const contextt &context,
+    const globalst &globals)
+    : fn(fn), context(context), globals(globals)
   {
     for (const auto &i : fn.body.instructions)
     {
@@ -340,6 +484,8 @@ public:
     if (!is_bv_type(e->type) && !is_pointer_type(e->type))
       return false;
     const irep_idt &name = to_symbol2t(e).thename;
+    if (globals.trackable.count(name))
+      return true;
     const symbolt *s = context.find_symbol(name);
     return !taken.count(name) && s && !s->static_lifetime;
   }
@@ -368,6 +514,8 @@ public:
       return std::nullopt;
     return atomt{to_symbol2t(x).thename, signs, pointer};
   }
+
+  const globalst &globals;
 
 private:
   const contextt &context;
@@ -493,6 +641,7 @@ struct python_claim_dischargert::implt
 {
   std::set<irep_idt> address_taken;
   std::optional<std::set<BigInt>> type_ids;
+  globalst globals;
   std::map<irep_idt, std::unique_ptr<functiont>> functions;
   std::map<irep_idt, std::set<unsigned>> non_null_params;
   std::set<irep_idt> non_null_returns;
@@ -505,11 +654,12 @@ struct python_claim_dischargert::implt
     const contextt &context,
     const std::set<irep_idt> &reachable)
     : address_taken(address_taken_functions(gf, context)),
-      type_ids(exception_type_ids(gf, reachable))
+      type_ids(exception_type_ids(gf, reachable)),
+      globals(gf, context, reachable, address_taken)
   {
     for (const auto &[id, fn] : gf.function_map)
       if (fn.body_available && reachable.count(id))
-        functions[id] = std::make_unique<functiont>(fn, context);
+        functions[id] = std::make_unique<functiont>(fn, context, globals);
     // Parameter and return facts only grow, so this reaches a fixpoint. The
     // bound guards against a slow one, after which nothing is proved.
     for (unsigned round = 0; round < 50 && !converged; ++round)
@@ -584,6 +734,8 @@ struct python_claim_dischargert::implt
         is_fixed_size_alloca(c) ||
         (is_symbol2t(c.function) &&
          non_null_returns.count(to_symbol2t(c.function).thename));
+      for (const irep_idt &g : globals.written_by(c))
+        facts.erase(g);
       assign(f, facts, c.ret, non_null, expr2tc());
       return true;
     }
