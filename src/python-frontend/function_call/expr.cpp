@@ -4214,6 +4214,8 @@ exprt function_call_expr::handle_typed_list_method() const
   const exprt receiver = converter_.get_expr(call_["func"]["value"]);
   if (method_name == "append")
     return list.typed_append(receiver, converter_.get_expr(call_["args"][0]));
+  if (method_name == "copy")
+    return list.typed_copy(receiver);
   throw std::runtime_error("Unsupported typed list method: " + method_name);
 }
 

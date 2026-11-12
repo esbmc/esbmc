@@ -28,6 +28,17 @@ typet python_list::typed_int_type() const
   return converter_.get_type_handler().get_typet("int", 0);
 }
 
+// The type hash an untyped push of an int records.
+exprt python_list::typed_int_type_id() const
+{
+  constant_exprt id(size_type());
+  id.set_value(integer2binary(
+    std::hash<std::string>{}(
+      converter_.get_type_handler().type_to_string(typed_int_type())),
+    config.ansi_c.address_width));
+  return id;
+}
+
 exprt python_list::typed_int_temp(
   const nlohmann::json &node,
   const exprt &value)
@@ -186,10 +197,83 @@ exprt python_list::typed_sorted()
 
   // The gate found a use of the result the typed model does not implement:
   // hand it an untyped list holding the same ints.
-  const std::string int_name =
-    converter_.get_type_handler().type_to_string(typed_int_type());
-  constant_exprt int_type_id(size_type());
-  int_type_id.set_value(integer2binary(
-    std::hash<std::string>{}(int_name), config.ansi_c.address_width));
-  return typed_new_list("c:@F@__ESBMC_tlist_to_list", {sorted, int_type_id});
+  return typed_new_list(
+    "c:@F@__ESBMC_tlist_to_list", {sorted, typed_int_type_id()});
+}
+
+bool python_list::reads_typed(const nlohmann::json &node)
+{
+  return node.is_object() && node.value("esbmc_typed_source", false);
+}
+
+bool python_list::is_typed_subscript(const nlohmann::json &node)
+{
+  return is_typed(node) || reads_typed(node);
+}
+
+exprt python_list::typed_subscript(
+  const exprt &list,
+  const nlohmann::json &slice)
+{
+  if (reads_typed(list_value_))
+    return typed_slice(list, slice);
+  return typed_element(list, converter_.get_expr(slice));
+}
+
+exprt python_list::typed_copy_call(
+  const exprt &list,
+  const std::vector<exprt> &bounds,
+  long long step)
+{
+  std::vector<exprt> args{list};
+  args.insert(args.end(), bounds.begin(), bounds.end());
+  args.push_back(from_integer(step, typed_int_type()));
+  if (is_typed(list_value_))
+    return typed_new_list("c:@F@__ESBMC_tlist_slice", args);
+
+  // The gate left the result untyped: an untyped list whose every element
+  // is an int, which its readers must know.
+  args.push_back(typed_int_type_id());
+  const exprt result = typed_new_list("c:@F@__ESBMC_tlist_slice_untyped", args);
+  elem_types().assign(result.identifier().as_string(), typed_int_type());
+  return result;
+}
+
+exprt python_list::typed_slice(const exprt &list, const nlohmann::json &slice)
+{
+  // The gate admits only a missing step or an int literal, maybe negated.
+  long long step = 1;
+  if (slice.contains("step") && !slice["step"].is_null())
+  {
+    const nlohmann::json &literal = slice["step"]["_type"] == "UnaryOp"
+                                      ? slice["step"]["operand"]
+                                      : slice["step"];
+    step = literal["value"].get<long long>();
+    if (slice["step"]["_type"] == "UnaryOp")
+      step = -step;
+  }
+  // The raise diverts control, so the slice built after it is dead.
+  emit_slice_zero_step_raise(slice, step == 0);
+  if (step == 0)
+    step = 1;
+
+  // Each bound is passed as (given, value). The model computes a missing
+  // bound's default itself.
+  std::vector<exprt> bounds;
+  for (const char *name : {"lower", "upper"})
+  {
+    const bool given = slice.contains(name) && !slice[name].is_null();
+    bounds.push_back(given ? exprt(true_exprt()) : exprt(false_exprt()));
+    bounds.push_back(
+      given ? typed_int_temp(slice[name], converter_.get_expr(slice[name]))
+            : from_integer(0, typed_int_type()));
+  }
+  return typed_copy_call(list, bounds, step);
+}
+
+exprt python_list::typed_copy(const exprt &list)
+{
+  const exprt missing = from_integer(0, typed_int_type());
+  return typed_copy_call(
+    list, {false_exprt(), missing, false_exprt(), missing}, 1);
 }

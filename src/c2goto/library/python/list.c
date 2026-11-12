@@ -985,6 +985,86 @@ PyListObject *__ESBMC_tlist_to_list(const PyListObject *t, size_t int_type_id)
   return l;
 }
 
+/* One bound of a slice with a nonzero step, clamped as
+ * PySlice_AdjustIndices does to a list of `size` elements. */
+static long long
+__ESBMC_tlist_clamp(long long size, long long bound, long long step)
+{
+  if (bound < 0)
+  {
+    bound += size;
+    if (bound < 0)
+      bound = step < 0 ? -1 : 0;
+  }
+  else if (bound >= size)
+    bound = step < 0 ? size - 1 : size;
+  return bound;
+}
+
+/* The clamped *start and *stop of a slice with a nonzero step, and its
+ * length. A bound the program leaves out (has_* false) takes the value
+ * PySlice_Unpack's default clamps to, without passing that default's extreme
+ * value through any arithmetic. */
+static long long __ESBMC_tlist_slice_length(
+  long long size,
+  bool has_start,
+  long long *start,
+  bool has_stop,
+  long long *stop,
+  long long step)
+{
+  *start = has_start  ? __ESBMC_tlist_clamp(size, *start, step)
+           : step < 0 ? size - 1
+                      : 0;
+  *stop = has_stop   ? __ESBMC_tlist_clamp(size, *stop, step)
+          : step < 0 ? -1
+                     : size;
+  if (step < 0)
+    return *stop < *start ? (*start - *stop - 1) / -step + 1 : 0;
+  return *start < *stop ? (*stop - *start - 1) / step + 1 : 0;
+}
+
+/* l[start:stop:step], step != 0, as a fresh typed list: an element-wise copy
+ * from l's slots, with no cell per element. list(l) and l.copy() are
+ * l[::1]. */
+PyListObject *__ESBMC_tlist_slice(
+  const PyListObject *l,
+  bool has_start,
+  long long start,
+  bool has_stop,
+  long long stop,
+  long long step)
+{
+  long long n = __ESBMC_tlist_slice_length(
+    l->size, has_start, &start, has_stop, &stop, step);
+  PyListObject *r = __ESBMC_tlist_create();
+  for (long long j = 0; j < n; j++)
+    r->slot[j].v = l->slot[start + j * step].v;
+  r->size = n;
+  return r;
+}
+
+/* The same slice as an untyped list, for a result the frontend's gate leaves
+ * untyped: each element is pushed as an int whose type hash is
+ * int_type_id. */
+PyListObject *__ESBMC_tlist_slice_untyped(
+  const PyListObject *l,
+  bool has_start,
+  long long start,
+  bool has_stop,
+  long long stop,
+  long long step,
+  size_t int_type_id)
+{
+  long long n = __ESBMC_tlist_slice_length(
+    l->size, has_start, &start, has_stop, &stop, step);
+  PyListObject *r = __ESBMC_list_create();
+  for (long long j = 0; j < n; j++)
+    __ESBMC_list_push(
+      r, &l->slot[start + j * step].v, int_type_id, sizeof(long long), 0, 1);
+  return r;
+}
+
 bool __ESBMC_list_set_at(
   PyListObject *l,
   size_t index,

@@ -29,6 +29,8 @@ TYPED_FLAG = "esbmc_typed_list"
 # On a `sorted(x)` call of a typed x whose result is only compared by `==` or
 # `!=` with a list: the converter sorts x and copies it into an untyped list.
 UNTYPED_RESULT_FLAG = "esbmc_typed_list_source"
+# On a slice, list() or copy() of a typed list, whose result may be untyped.
+SOURCE_FLAG = "esbmc_typed_source"
 
 MODULE = "<module>"
 RETURN = "<return>"
@@ -182,6 +184,17 @@ def _single_name_target(node):
     return target if isinstance(target, ast.Name) else None
 
 
+def _literal_step(step):
+    """Whether a slice's step is absent or an int literal, maybe negated, that
+    fits an int64 with its negation."""
+    if isinstance(step, ast.UnaryOp) and isinstance(step.op, ast.USub):
+        step = step.operand
+    if step is None:
+        return True
+    value = getattr(step, "value", None) if isinstance(step, ast.Constant) else None
+    return isinstance(value, int) and not isinstance(value, bool) and value <= _INT64_MAX
+
+
 def _ends_in_exit(body):
     return bool(body) and isinstance(body[-1], (ast.Return, ast.Raise))
 
@@ -236,6 +249,7 @@ class TypedListGate:
         self.appends = []  # (scope, Call)
         self.calls = []  # calls of followed functions
         self.sorts = []  # (scope, Call)
+        self.copies = []  # (scope, slice/list()/copy() node, source Name)
 
     # --- scopes and the functions whose calls carry lists -------------------
 
@@ -477,6 +491,35 @@ class TypedListGate:
 
     # --- recording sites ---------------------------------------------------
 
+    def _copy_source(self, value):
+        """The list name @p value slices or copies with list() or copy(),
+        else None."""
+        if isinstance(value, ast.Subscript) and isinstance(value.slice, ast.Slice):
+            source = value.value if self._plain_slice(value) else None
+        elif isinstance(value, ast.Call) and not value.keywords:
+            source = self._copied_by_call(value)
+        else:
+            return None
+        return source if isinstance(source, ast.Name) else None
+
+    @staticmethod
+    def _plain_slice(subscript):
+        return isinstance(subscript.ctx, ast.Load) and _literal_step(subscript.slice.step)
+
+    def _copied_by_call(self, call):
+        """The argument of `list(x)` or the receiver of `x.copy()`."""
+        if isinstance(call.func, ast.Attribute) and call.func.attr == "copy":
+            return call.func.value if not call.args else None
+        if (isinstance(call.func, ast.Name) and call.func.id == "list"
+                and "list" not in self.shadowed and len(call.args) == 1):
+            return call.args[0]
+        return None
+
+    def _derived_list(self, value):
+        """Whether @p value is `sorted(x)`, a slice of x, `list(x)` or
+        `x.copy()`."""
+        return bool(self._sorted_call(value)) or self._copy_source(value) is not None
+
     def _allocation_shape(self, value):
         """Whether @p value builds a fresh list the typed model could hold;
         its elements are checked later."""
@@ -486,7 +529,7 @@ class TypedListGate:
             return _repetition(value) is not None or (isinstance(value.op, ast.Add) and all(
                 isinstance(o, ast.Name) or self._allocation_shape(o)
                 for o in (value.left, value.right)))
-        if self._sorted_call(value):
+        if self._derived_list(value):
             return True
         return (isinstance(value, ast.Call) and isinstance(value.func, ast.Name)
                 and value.func.id == _INT_BUILDER and _INT_BUILDER not in self.shadowed
@@ -675,7 +718,10 @@ class TypedListGate:
         if not (isinstance(subscript, ast.Subscript) and subscript.value is node):
             return NOT_MINE
         if isinstance(subscript.slice, ast.Slice):
-            return "sliced"
+            if self._copy_source(subscript) is None:
+                return "sliced"
+            self.copies.append((scope, subscript, node))
+            return None
         holder = _parent(subscript)
         if isinstance(subscript.ctx, ast.Store):
             if not (isinstance(holder, ast.Assign) and holder.targets == [subscript]):
@@ -718,6 +764,15 @@ class TypedListGate:
         self.sorts.append((scope, call))
         return None
 
+    def _rule_list_call(self, node, scope):
+        """`list(x)`, a copy."""
+        call = _parent(node)
+        if not (isinstance(call, ast.Call) and node in call.args
+                and self._copy_source(call) is node):
+            return NOT_MINE
+        self.copies.append((scope, call, node))
+        return None
+
     def _rule_method(self, node, scope):
         attribute = _parent(node)
         if not (isinstance(attribute, ast.Attribute) and attribute.value is node):
@@ -737,12 +792,18 @@ class TypedListGate:
         self.appends.append((scope, call))
         return None
 
+    def _method_copy(self, call, scope):
+        if self._copy_source(call) is None:
+            return "method .copy with arguments"
+        self.copies.append((scope, call, call.func.value))
+        return None
+
     # The uses of a list name the typed model implements, tried in order.
-    USE_RULES = (_rule_concatenated, _rule_len, _rule_analysed_call, _rule_alias, _rule_subscript,
-                 _rule_truth, _rule_sorted, _rule_method)
+    USE_RULES = (_rule_concatenated, _rule_len, _rule_analysed_call, _rule_alias, _rule_list_call,
+                 _rule_subscript, _rule_truth, _rule_sorted, _rule_method)
 
     # The list methods it implements.
-    METHOD_RULES = {"append": _method_append}
+    METHOD_RULES = {"append": _method_append, "copy": _method_copy}
 
     # --- the decision -------------------------------------------------------
 
@@ -770,7 +831,21 @@ class TypedListGate:
         for scope, call in self.appends:
             if not self.is_int(call.args[0], scope):
                 poison(scope.loc(call.func.value.id), "appends a non-int")
+        changed = self._check_copies() or changed
         return self._check_sorts() or changed
+
+    def _check_copies(self):
+        """Poison the source of a slice whose bounds may not be ints. True
+        when anything changed."""
+        changed = False
+        for scope, node, source in self.copies:
+            bounds = (node.slice.lower, node.slice.upper) if isinstance(node, ast.Subscript) else ()
+            loc = scope.loc(source.id)
+            if self.classes.typed(loc) and not all(b is None or self.is_int(b, scope)
+                                                   for b in bounds):
+                self.classes.poison_loc(loc, "sliced by a non-int")
+                changed = True
+        return changed
 
     def _check_sorts(self):
         """Poison x of a `sorted(x)` whose result the typed model cannot
@@ -794,6 +869,11 @@ class TypedListGate:
     def _allocation_poison(self, value, scope):
         """Why allocation @p value may hold a non-int, else None."""
         for node in _shape_nodes(value):
+            source = self._copy_source(node)
+            if source is not None:
+                if not self.classes.typed(scope.loc(source.id)):
+                    return "copied from a list not typed"
+                continue
             repetition = _repetition(node)
             if isinstance(node, ast.List) and not all(self.is_int(e, scope) for e in node.elts):
                 return "built from a non-int"
@@ -855,6 +935,12 @@ class TypedListGate:
         for call in self.calls:
             if self.classes.typed((call.func.id, RETURN)):
                 setattr(call, TYPED_FLAG, True)
+        self._flag_copies()
+
+    def _flag_copies(self):
+        for scope, node, source in self.copies:
+            if self.classes.typed(scope.loc(source.id)):
+                setattr(node, SOURCE_FLAG, True)
 
     def builder_sites(self):
         """(typed, poison reason) for each nondet_list builder site."""

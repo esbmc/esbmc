@@ -74,6 +74,14 @@ public:
   /// otherwise the sorted ints in an untyped list.
   static bool is_typed_call(const nlohmann::json &call);
   exprt typed_call(const std::string &func_name);
+  /// A slice, list() or copy() of a typed list. The result is typed when the
+  /// gate flagged the node, else an untyped list of the same ints.
+  static bool reads_typed(const nlohmann::json &node);
+  /// An element access or a slice of a typed list.
+  static bool is_typed_subscript(const nlohmann::json &node);
+  exprt typed_subscript(const exprt &list, const nlohmann::json &slice);
+  exprt typed_slice(const exprt &list, const nlohmann::json &slice);
+  exprt typed_copy(const exprt &list);
 
   /**
    * @brief Materialize a fresh list from already-evaluated element values.
@@ -1034,11 +1042,16 @@ public:
 private:
   // Helpers of the typed-list lowerings in typed_list.cpp.
   typet typed_int_type() const;
+  exprt typed_int_type_id() const;
   exprt typed_int_temp(const nlohmann::json &node, const exprt &value);
   exprt typed_new_list(const char *create, const std::vector<exprt> &args);
   exprt typed_sorted();
   code_function_callt
   typed_push(const nlohmann::json &node, const exprt &list, const exprt &value);
+  exprt typed_copy_call(
+    const exprt &list,
+    const std::vector<exprt> &bounds,
+    long long step);
 
   /// The type of one literal element; a name whose binding has no static type
   /// (such as `x or None`) is read at its symbol's type, as the list stored it.
