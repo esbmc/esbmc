@@ -1592,6 +1592,9 @@ protected:
     char spec,
     bool reads_to_nul,
     const expr2tc &arg);
+  /** Check the read of a non-constant format string, the unrenamed operand
+   *  `fmt` (C11 7.21.6.1p2). */
+  void check_printf_format(const expr2tc &fmt);
   /** Store an unrenamed sprintf-family call's output and return the length
    *  that call returns: the stored length, or for printf, fprintf and dprintf
    *  with a used result, printf_output_length. Nil when unknown. */
