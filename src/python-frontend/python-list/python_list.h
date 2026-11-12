@@ -772,28 +772,6 @@ public:
    */
   typet infer_literal_element_type(const nlohmann::json &list_literal);
 
-  /**
-   * @brief Build an inline min/max computation for a mixed int/float list.
-   * Accesses each element with its original type, promotes int elements to
-   * double for comparison, and returns the winning value as double.
-   *
-   * Note: Python's min/max returns the winning element in its *original* type
-   * (e.g., max([1, 2.5, 3]) returns int 3, not float 3.0). This implementation
-   * always returns double, which is correct for float comparisons and equality
-   * checks (via float promotion in handle_relational_type_mismatches), but will
-   * not work if the result is used as an array index or integer operand.
-   *
-   * @param list_arg  Expression for the list symbol
-   * @param list_id   Symbol identifier of the list
-   * @param func_name "min" or "max" (used in error messages)
-   * @param comparison_op  exprt::i_gt for max, exprt::i_lt for min
-   * @return Expression of type double_type() holding the min/max value
-   */
-  exprt build_min_max_for_mixed_numeric(
-    const exprt &list_arg,
-    const std::string &list_id,
-    const std::string &func_name,
-    irep_idt comparison_op);
 
   /**
    * @brief Create a list from a range() call

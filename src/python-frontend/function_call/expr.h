@@ -1021,12 +1021,9 @@ private:
    * list[float] models would read as all-float.
    *
    * @return the inline result, or nullopt when the list is not mixed or the
-   *         call has a typed model that handles it.
+   *         call is not one of these.
    */
-  std::optional<exprt> build_mixed_numeric_call(
-    const exprt &list_arg,
-    const std::string &list_id,
-    bool has_default_kwarg);
+  std::optional<exprt> build_mixed_numeric_call(const std::string &list_id);
 
   /// Whether the sorted() argument registered as @p list_id mixes int and
   /// float elements.
@@ -1040,6 +1037,16 @@ private:
    *         element types per position are not known statically.
    */
   exprt sort_mixed_numeric_literal();
+
+  /**
+   * min() (@p is_max false) or max() over a list literal of int and float
+   * constants, selected at conversion time so that the result keeps the
+   * selected element's own type.
+   *
+   * @throws std::runtime_error for any other mixed int/float argument, whose
+   *         result type depends on the element values.
+   */
+  exprt select_mixed_numeric_literal(bool is_max);
 
   /*
    * Typed-builtin dispatch for min/max/sum/sorted/reversed: appends the
