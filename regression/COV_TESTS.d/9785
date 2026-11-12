@@ -20,3 +20,5 @@ regression/esbmc/github_9785_two_targets
 regression/esbmc/github_9785_two_targets_fail
 regression/esbmc/github_9785_push_pop
 regression/esbmc/github_9785_push_pop_fail
+regression/esbmc/github_9785_string_address
+regression/esbmc/github_9785_string_address_fail
