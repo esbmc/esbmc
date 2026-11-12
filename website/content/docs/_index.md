@@ -18,10 +18,11 @@ By default, ESBMC checks for:
 - User-specified assertion failures
 - Out-of-bounds array access
 - Illegal pointer dereferences (null, out-of-bounds, double-free, misalignment)
-- Integer overflow
-- Floating-point NaN
 - Division by zero
-- Memory leaks
+
+Other checks are enabled by options, among them arithmetic overflow
+(`--overflow-check`), floating-point NaN (`--nan-check`) and memory leaks
+(`--memory-leak-check`).
 
 For concurrent (pthread) programs it can additionally check for deadlock, data
 races, atomicity violations and lock-ordering issues by explicitly exploring

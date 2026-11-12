@@ -55,6 +55,14 @@ public:
     const nlohmann::json &arg,
     const typet &lowered_type) const;
 
+  /// A bitvector or a tagged value, whose len() has no container to measure.
+  bool is_scalar_len_operand(const typet &type) const;
+
+  /// len() of an is_scalar_len_operand: a tagged value's str length or
+  /// TypeError, else as len_of_bitvector_operand.
+  exprt
+  len_of_scalar_operand(const nlohmann::json &arg, const exprt &operand) const;
+
   /*
    * Checks if a NumPy function is being invoked.
    */

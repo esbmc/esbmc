@@ -1,0 +1,5 @@
+KNOWNBUG
+main.py
+--python-check-exceptions TypeError,AttributeError
+^\s*FAILED\s+\[global\.assertion\.\d+\]\s+line 12\s+uncaught exception: TypeError$
+^VERIFICATION FAILED$
