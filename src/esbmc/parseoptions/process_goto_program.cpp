@@ -576,8 +576,12 @@ bool esbmc_parseoptionst::process_goto_program(
       {
         reachable_state_invariants =
           assume_reachable_loop_states(goto_functions, ns, 10000);
-        disable_is_if_unsound(
-          goto_k_induction(goto_functions, &context, checks_past_violation));
+        // TS extraction needs plain havocs: a loop-entry flag would be a
+        // constant state variable, and it already rejects post-loop asserts.
+        disable_is_if_unsound(goto_k_induction(
+          goto_functions,
+          ts_strategy_requested() ? nullptr : &context,
+          checks_past_violation));
       }
 
       if (wants_loop_invariants())

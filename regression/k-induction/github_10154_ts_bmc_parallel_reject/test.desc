@@ -1,0 +1,5 @@
+CORE
+main.c
+--ts-bmc --k-induction-parallel --max-k-step 10
+^ERROR: --k-induction-parallel cannot be combined with --ts-bmc$
+\A(?![\s\S]*VERIFICATION)[\s\S]*\Z
