@@ -429,6 +429,7 @@ private:
    * a class defining __call__).
    */
   exprt handle_callable() const;
+  bool is_callable_name(const std::string &name) const;
 
   exprt handle_type_call() const;
   exprt tagged_scalar_class(const exprt &tagged) const;
