@@ -1,0 +1,4 @@
+CORE
+main.py
+
+^ERROR: returning a dynamically-typed value from a function whose return type is not dynamic is not yet supported$

@@ -968,8 +968,10 @@ void python_converter::adjust_statement_types(exprt &lhs, exprt &rhs) const
   // Case 6: Align bit-widths between LHS and RHS if they differ. Never
   // "align" a tuple struct against a non-tuple: demoting the LHS symbol to
   // the scalar's type corrupts already-emitted tuple member reads (see the
-  // fresh-alias gate in get_var_assign).
+  // fresh-alias gate in get_var_assign). Nor a tagged slot: get_var_assign
+  // boxes the value into its fields (#8974).
   else if (
+    !type_handler_.is_tagged_scalar_type(lhs_type) &&
     lhs_type.width() != rhs_type.width() &&
     tuple_handler_->is_tuple_type(lhs_type) ==
       tuple_handler_->is_tuple_type(rhs_type))
@@ -10449,6 +10451,22 @@ void python_converter::get_return_with_conditional_spelling(
   get_return_statements(ast_node, target_block);
 }
 
+// A tagged value's fields cannot be returned through a plain scalar slot
+// (#8974).
+static void reject_tagged_scalar_return(
+  const type_handler &types,
+  const typet &value_type,
+  const typet &return_type)
+{
+  if (
+    types.is_tagged_scalar_type(value_type) &&
+    (types.is_numeric_scalar_type(return_type) ||
+     types.is_string_type(return_type)))
+    throw std::runtime_error(
+      "returning a dynamically-typed value from a function whose return type "
+      "is not dynamic is not yet supported");
+}
+
 void python_converter::get_return_statements(
   const nlohmann::json &ast_node,
   codet &target_block)
@@ -10508,6 +10526,8 @@ void python_converter::get_return_statements(
   // Coerces `val` to a tagged-object value when the function's return type
   // is tagged. No-op when `val` is already tagged.
   auto coerce_to_tagged_return = [&](exprt &val) {
+    reject_tagged_scalar_return(
+      type_handler_, val.type(), current_func_return_type_);
     if (
       !type_handler_.is_tagged_scalar_type(current_func_return_type_) ||
       type_handler_.is_tagged_scalar_type(val.type()))
