@@ -22,7 +22,7 @@ using namespace python_expr;
 namespace
 {
 using dynamic_type_detail::assigned_value_at;
-using dynamic_type_detail::collect_branch_literal_kinds;
+using dynamic_type_detail::collect_if_node_literal_kinds;
 using dynamic_type_detail::count_bindings;
 using dynamic_type_detail::single_assigned_value;
 
@@ -611,34 +611,36 @@ std::unordered_set<std::string> dynamic_type_handler::detect_dynamic_type_names(
     }
   }
 
-  const nlohmann::json callables = converter_.kind_module_body();
-  auto collect = [&](const nlohmann::json &block) {
-    return collect_branch_literal_kinds(
-      block, kinds, leaf_count, leaf_total, *scope_body, callables);
-  };
-  const bool keeps_value =
-    !if_node.contains("orelse") || if_node["orelse"].empty();
-  if (
-    !if_node.contains("body") || !collect(if_node["body"]) ||
-    (!keeps_value && !collect(if_node["orelse"])))
+  if (!collect_if_node_literal_kinds(
+        if_node,
+        kinds,
+        leaf_count,
+        leaf_total,
+        *scope_body,
+        converter_.kind_module_body()))
     return dynamic_type_names;
 
+  // A path through a leaf that assigns nothing keeps the name's value, or
+  // leaves it unbound, so that a read there raises.
   for (auto &[name, kind_set] : kinds)
+  {
+    const symbolt *existing =
+      converter_.symbol_table().find_symbol(bound_symbol_id(name).to_string());
     if (
-      leaf_count[name] == leaf_total &&
-      joins_divergent_kinds(name, kind_set, keeps_value))
+      joins_divergent_kinds(
+        name, existing, kind_set, existing && leaf_count[name] < leaf_total))
       dynamic_type_names.insert(name);
+  }
 
   return dynamic_type_names;
 }
 
 bool dynamic_type_handler::joins_divergent_kinds(
   const std::string &name,
+  const symbolt *existing,
   std::unordered_set<std::string> &kinds,
   bool keeps_value) const
 {
-  const symbolt *existing =
-    converter_.symbol_table().find_symbol(bound_symbol_id(name).to_string());
   const bool declared_any = existing && existing->get_type() == any_type();
   if (
     existing && !declared_any &&
