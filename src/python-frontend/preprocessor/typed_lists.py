@@ -16,8 +16,8 @@ recognise poisons the location involved, so any doubt keeps the current
 model.
 
 The converter lowers a node differently only when it carries
-``esbmc_typed_list``. A new operation is added by a rule in ``_USE_RULES``
-or ``_METHOD_RULES`` (and, for a new kind of allocation, a shape in
+``esbmc_typed_list``. A new operation is added by a rule in ``USE_RULES``
+or ``METHOD_RULES`` (and, for a new kind of allocation, a shape in
 ``_allocation_shape``), then a lowering of the flagged node in the converter
 (python-list/typed_list.cpp).
 """
@@ -208,6 +208,10 @@ class _Scope:
         return (MODULE, name)
 
 
+# A use rule's answer for a use that is not its shape.
+NOT_MINE = object()
+
+
 class TypedListGate:
     """Decide the typed lists of one module and flag their nodes."""
 
@@ -297,7 +301,9 @@ class TypedListGate:
     def is_int(self, expr, scope):
         """Whether @p expr always evaluates to an int (never a bool)."""
         if isinstance(expr, ast.Constant):
-            return type(expr.value) is int and _INT64_MIN <= expr.value <= _INT64_MAX
+            return isinstance(
+                expr.value,
+                int) and not isinstance(expr.value, bool) and _INT64_MIN <= expr.value <= _INT64_MAX
         if isinstance(expr, ast.Name):
             return self.int_vars.get(scope.loc(expr.id), False)
         if isinstance(expr, ast.BinOp):
@@ -308,13 +314,13 @@ class TypedListGate:
         if isinstance(expr, ast.IfExp):
             return self.is_int(expr.body, scope) and self.is_int(expr.orelse, scope)
         if isinstance(expr, ast.Call):
-            return self._is_int_call(expr, scope)
+            return self._is_int_call(expr)
         if isinstance(expr, ast.Subscript):
             return (getattr(expr, "_typed_access", False)
                     and self.classes.typed(scope.loc(expr.value.id)))
         return False
 
-    def _is_int_call(self, call, scope):
+    def _is_int_call(self, call):
         if call.keywords:
             return False
         if isinstance(call.func, ast.Attribute):
@@ -541,7 +547,7 @@ class TypedListGate:
     def _classify_use(self, node, scope):
         """Record the use of name @p node; the poison reason when the use is
         not one the typed model implements, else None."""
-        for rule in _USE_RULES:
+        for rule in self.USE_RULES:
             verdict = rule(self, node, scope)
             if verdict is not NOT_MINE:
                 return verdict
@@ -592,7 +598,7 @@ class TypedListGate:
             value = None
         else:
             return "element deleted"
-        subscript._typed_access = True
+        setattr(subscript, "_typed_access", True)
         self.accesses.append((scope, subscript, value))
         return None
 
@@ -601,7 +607,7 @@ class TypedListGate:
         if not (isinstance(attribute, ast.Attribute) and attribute.value is node):
             return NOT_MINE
         call = _parent(attribute)
-        method = _METHOD_RULES.get(attribute.attr)
+        method = self.METHOD_RULES.get(attribute.attr)
         if method is None or not (isinstance(call, ast.Call) and call.func is attribute):
             return f"method .{attribute.attr}"
         return method(self, call, scope)
@@ -614,6 +620,12 @@ class TypedListGate:
             return "method .append used as a value"
         self.appends.append((scope, call))
         return None
+
+    # The uses of a list name the typed model implements, tried in order.
+    USE_RULES = (_rule_len, _rule_analysed_call, _rule_alias, _rule_subscript, _rule_method)
+
+    # The list methods it implements.
+    METHOD_RULES = {"append": _method_append}
 
     # --- the decision -------------------------------------------------------
 
@@ -648,7 +660,7 @@ class TypedListGate:
         _unshare(self.module)
         for node in ast.walk(self.module):
             for child in ast.iter_child_nodes(node):
-                child._typed_parent = node
+                setattr(child, "_typed_parent", node)
         self.verifier_modules = self._verifier_modules()
         self._build_scopes()
         for scope in self.scopes:
@@ -691,23 +703,6 @@ def _describe(node):
     if isinstance(node, ast.Compare):
         return "a comparison " + "/".join(type(op).__name__ for op in node.ops)
     return type(node).__name__ if node is not None else "nothing"
-
-
-NOT_MINE = object()
-
-# The uses of a list name the typed model implements, tried in order.
-_USE_RULES = (
-    TypedListGate._rule_len,
-    TypedListGate._rule_analysed_call,
-    TypedListGate._rule_alias,
-    TypedListGate._rule_subscript,
-    TypedListGate._rule_method,
-)
-
-# The list methods it implements.
-_METHOD_RULES = {
-    "append": TypedListGate._method_append,
-}
 
 
 def mark_typed_lists(module):
