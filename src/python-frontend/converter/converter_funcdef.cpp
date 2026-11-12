@@ -6598,6 +6598,26 @@ static bool returns_str_literal_or_none(const nlohmann::json &body)
   return has_str && !other;
 }
 
+/// The return type a PEP 604 union annotation declares. `T | None` is typed
+/// as a parameter's annotation is, so it agrees with `Optional[T]`: a list
+/// is a pointer, NULL for None, and a scalar gets the Optional<T> struct. A
+/// union without None is its widest scalar.
+typet python_converter::union_return_type(
+  const nlohmann::json &return_node,
+  const nlohmann::json &function_node,
+  bool &is_optional)
+{
+  if (type_utils::annotation_admits_none(return_node))
+  {
+    is_optional = true;
+    return get_type_from_annotation(return_node, function_node);
+  }
+  TypeFlags flags = type_utils::extract_binop_union_types(return_node);
+  if (!flags.has_float && !flags.has_int && !flags.has_bool)
+    log_warning("Union with no recognized types, defaulting to pointer");
+  return type_utils::select_widest_type(flags, any_type());
+}
+
 /// The Optional<T> type a function returns when it can return None but its
 /// declared return type cannot hold it, or an empty type (#8016). Python does
 /// not enforce annotations, so `-> int` with a `return None` path is Optional
@@ -7035,12 +7055,8 @@ void python_converter::get_function_definition(
   }
   else if (return_node["_type"] == "BinOp")
   {
-    // Handle PEP 604 union syntax: int | bool
-    TypeFlags flags = type_utils::extract_binop_union_types(return_node);
-    type.return_type() = type_utils::select_widest_type(flags, any_type());
-
-    if (!flags.has_float && !flags.has_int && !flags.has_bool)
-      log_warning("Union with no recognized types, defaulting to pointer");
+    type.return_type() =
+      union_return_type(return_node, function_node, annotation_is_optional);
   }
   else if (return_node["_type"] == "Tuple")
   {

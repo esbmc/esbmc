@@ -3606,6 +3606,10 @@ private:
   typet optional_return_type(
     const nlohmann::json &function_node,
     const typet &declared);
+  typet union_return_type(
+    const nlohmann::json &return_node,
+    const nlohmann::json &function_node,
+    bool &is_optional);
   exprt wrap_in_optional(const exprt &value, const typet &optional_type);
   /// \p value wrapped when \p type is an Optional<T> struct, else unchanged.
   exprt wrap_if_optional(const exprt &value, const typet &type)
