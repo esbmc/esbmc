@@ -15,7 +15,9 @@ does:
 `exec(name)` is inlined the same way when the module binds `name` only by
 module-level assignments of such strings (#10230). Each string's code runs
 under a test that `name` holds it, so the read of `name` stays in place, and
-the call itself is kept for any other value.
+the call itself is kept for any other value. `compile(name, file, "exec")`
+of such a `name`, run by `exec` at once or through a name only `exec` reads,
+is taken as `name` itself (#10329).
 
 Code that does not compile is left alone: CPython raises SyntaxError for it.
 """
@@ -56,6 +58,14 @@ def _code_source(arg, func, sites):
     return None
 
 
+def _compiled_name(node, sites):
+    """The name `node`, a call `compile(name, <str>, "exec")`, compiles, else None."""
+    if (_builtin_call(node, "compile", 3, sites) and isinstance(node.args[0], ast.Name)
+            and all(map(_str_constant, node.args[1:])) and node.args[2].value == "exec"):
+        return node.args[0].id
+    return None
+
+
 def _module_statements(body):
     """The statements of a module `body`, at any depth outside a def or class."""
     for stmt in body:
@@ -75,11 +85,25 @@ def _reads(node):
                    if isinstance(n, ast.Name) and isinstance(n.ctx, ast.Load))
 
 
+def _exec_args(module, sites):
+    """The argument of each statement `exec(arg)` in `module`."""
+    return [
+        n.value.args[0] for n in ast.walk(module)
+        if isinstance(n, ast.Expr) and _builtin_call(n.value, "exec", 1, sites)
+    ]
+
+
 def _executed_names(module, sites):
     """How many statements `exec(name)` `module` holds for each name."""
-    return Counter(n.value.args[0].id for n in ast.walk(module)
-                   if isinstance(n, ast.Expr) and _builtin_call(n.value, "exec", 1, sites)
-                   and isinstance(n.value.args[0], ast.Name))
+    return Counter(a.id for a in _exec_args(module, sites) if isinstance(a, ast.Name))
+
+
+def _assigned_name(stmt):
+    """The one name `stmt` assigns, else None."""
+    if isinstance(stmt, ast.Assign) and len(stmt.targets) == 1 and isinstance(
+            stmt.targets[0], ast.Name):
+        return stmt.targets[0].id
+    return None
 
 
 def _code_names(sources):
@@ -98,17 +122,36 @@ def _code_names(sources):
 
 
 def _held_strings(module, sites):
-    """For each name `exec(name)` runs, the module-level assignments of code
-    `exec` takes to it, with that code, in order."""
+    """For each name `exec(name)` runs, or `compile` compiles for `exec`, the
+    module-level assignments of code `exec` takes to it, with that code, in
+    order. `name = compile(code, ...)` gives `name` each string `code` holds."""
     executed = _executed_names(module, sites)
+    assigns = [(_assigned_name(s), s) for s in _module_statements(module.body)]
+    runs = set(executed) | _compiled_names(module, sites, assigns, executed)
     held = defaultdict(list)
-    for stmt in _module_statements(module.body) if executed else ():
-        if (isinstance(stmt, ast.Assign) and len(stmt.targets) == 1
-                and isinstance(stmt.targets[0], ast.Name) and stmt.targets[0].id in executed):
-            source = _code_source(stmt.value, "exec", sites)
-            if source is not None:
-                held[stmt.targets[0].id].append((source, stmt))
+    for name, stmt in assigns:
+        source = _code_source(stmt.value, "exec", sites) if name in runs else None
+        if source is not None:
+            held[name].append((source, stmt))
+    _add_compiled_strings(held, assigns, executed, sites)
     return dict(held)
+
+
+def _compiled_names(module, sites, assigns, executed):
+    """The names `compile` compiles for `exec`, run at once or through a name
+    in `executed`."""
+    compiled = {_compiled_name(a, sites) for a in _exec_args(module, sites)}
+    compiled |= {_compiled_name(s.value, sites) for name, s in assigns if name in executed}
+    return compiled - {None}
+
+
+def _add_compiled_strings(held, assigns, executed, sites):
+    """Give each name in `executed` that `name = compile(code, ...)` binds the
+    strings `held` has for `code`."""
+    for name, stmt in assigns:
+        code = _compiled_name(stmt.value, sites) if name in executed else None
+        if code in held:
+            held[name] += [(s, stmt) for s, _ in held[code]]
 
 
 def _inlined_sources(module, sites, held):
@@ -120,15 +163,36 @@ def _inlined_sources(module, sites, held):
     return sources
 
 
-def _compiles_as_string(module, name, assigns, sites, seen):
-    """Whether the code objects `assigns` bind to `name` behave as the strings
-    they compile: they compile, `name` is bound nowhere else, and only
+def _holds_only_strings(name, held, sites, seen):
+    """Whether `name` is bound only by assignments of the strings `held` has."""
+    assigns = held.get(name, [])
+    return (len(assigns) == sites[name] and not seen[name] and not sites["*"]
+            and all(_str_constant(stmt.value) for _, stmt in assigns))
+
+
+def _statements(assigns):
+    """The distinct statements of `assigns`, (source, statement) pairs."""
+    return list(dict.fromkeys(stmt for _, stmt in assigns))
+
+
+def _compiles_in_place(source, stmt, held, sites, seen):
+    """Whether `source`, which `stmt` binds, compiles, and a name `stmt`
+    compiles holds only strings, so `compile` cannot raise there."""
+    code = _compiled_name(stmt.value, sites)
+    return (_parse(source, "exec", stmt) is not None
+            and (code is None or _holds_only_strings(code, held, sites, seen)))
+
+
+def _compiles_as_string(module, name, held, sites, seen):
+    """Whether the code objects `held` has `name` bound to behave as the
+    strings they compile: they compile, `name` is bound nowhere else, and only
     statements `exec(name)` read it."""
+    assigns = held[name]
     reads = _reads(module)
-    return (len(assigns) == sites[name] and not seen[name]
+    return (len(_statements(assigns)) == sites[name] and not seen[name]
             and not any(reads[h] or sites[h] for h in ("globals", "vars", "locals"))
             and reads[name] == _executed_names(module, sites)[name]
-            and all(_parse(s, "exec", stmt) is not None for s, stmt in assigns))
+            and all(_compiles_in_place(s, stmt, held, sites, seen) for s, stmt in assigns))
 
 
 def _parse(source, mode, location):
@@ -193,7 +257,8 @@ class _Inliner(ast.NodeTransformer):
         if self.scopes or not _builtin_call(node.value, "exec", 1, self.sites):
             return None
         arg = node.value.args[0]
-        assigns = self.held.get(arg.id) if isinstance(arg, ast.Name) else None
+        name = arg.id if isinstance(arg, ast.Name) else _compiled_name(arg, self.sites)
+        assigns = self.held.get(name)
         if not assigns:
             return None
         sources = list(dict.fromkeys(s for s, _ in assigns))
@@ -204,7 +269,7 @@ class _Inliner(ast.NodeTransformer):
         # reaches the call itself.
         chain = [node]
         for source, body in reversed(list(zip(sources, bodies))):
-            test = ast.Compare(left=ast.Name(id=arg.id, ctx=ast.Load()),
+            test = ast.Compare(left=ast.Name(id=name, ctx=ast.Load()),
                                ops=[ast.Eq()],
                                comparators=[ast.Constant(value=source)])
             chain = [ast.If(test=test, body=body or [ast.Pass()], orelse=chain)]
@@ -232,9 +297,10 @@ def inline_literal_eval(module):
     for name, assigns in list(held.items()):
         if all(_str_constant(stmt.value) for _, stmt in assigns):
             continue
-        if not _compiles_as_string(module, name, assigns, sites, seen):
+        if not _compiles_as_string(module, name, held, sites, seen):
             del held[name]
             continue
-        for source, stmt in assigns:
-            stmt.value = ast.copy_location(ast.Constant(value=source), stmt.value)
+        # `compile(code, file, "exec")` becomes `code`, a literal or a name.
+        for stmt in _statements(assigns):
+            stmt.value = ast.copy_location(stmt.value.args[0], stmt.value)
     _Inliner(sites, held).visit(module)
