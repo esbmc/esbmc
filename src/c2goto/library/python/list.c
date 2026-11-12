@@ -1109,6 +1109,46 @@ bool __ESBMC_tlist_eq(const PyListObject *a, const PyListObject *b)
   return eq;
 }
 
+/* l[start:stop:step] = src for typed lists, as __ESBMC_list_slice_assign
+ * does it over the slots: a step of 1 replaces the slice with all of src,
+ * shifting the tail, and any other step needs src as long as the slice. The
+ * frontend lowers a literal zero step to its ValueError before the call.
+ * Bounds are passed as for __ESBMC_tlist_slice. */
+void __ESBMC_tlist_slice_assign(
+  PyListObject *l,
+  bool has_start,
+  long long start,
+  bool has_stop,
+  long long stop,
+  long long step,
+  const PyListObject *src)
+{
+  long long size = l->size;
+  long long n =
+    __ESBMC_tlist_slice_length(size, has_start, &start, has_stop, &stop, step);
+  if (src == l)
+    src = __ESBMC_tlist_slice(l, false, 0, false, 0, 1);
+  long long m = src->size;
+  if (step == 1)
+  {
+    if (m < n)
+      for (long long k = start + n; k < size; k++)
+        l->slot[k - n + m].v = l->slot[k].v;
+    else if (m > n)
+      for (long long k = size - 1; k >= start + n; k--)
+        l->slot[k - n + m].v = l->slot[k].v;
+    l->size = size - n + m;
+  }
+  else
+    __ESBMC_assert(
+      m == n,
+      "ValueError: attempt to assign sequence of different size to extended "
+      "slice");
+  long long writes = step != 1 && n < m ? n : m;
+  for (long long j = 0; j < writes; j++)
+    l->slot[start + j * step].v = src->slot[j].v;
+}
+
 bool __ESBMC_list_set_at(
   PyListObject *l,
   size_t index,
