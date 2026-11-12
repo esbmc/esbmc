@@ -201,6 +201,11 @@ public:
     const typet &value,
     const locationt &location);
   void decay_function_choice(exprt &then, exprt &else_expr);
+  void hoist_raising_arm(
+    exprt &then,
+    code_blockt &then_side_effects,
+    exprt &else_expr,
+    code_blockt &else_side_effects);
   void coerce_not_callable_return(
     exprt &value,
     const locationt &location,
@@ -519,6 +524,9 @@ public:
   symbolt *find_symbol(const std::string &symbol_id) const;
 
   bool is_imported_module(const std::string &module_name) const;
+  /// Whether @p name is bound, once in the whole program, by a top-level
+  /// import of a module object that ends before @p line.
+  bool names_module_object(const std::string &name, int line) const;
   /// FunctionDef stubs, each only a `name` and its `returns`, for the
   /// functions a call in the current module can name: its own and those an
   /// import binds, as `mk` after `from helper import mk` and `helper.mk`
@@ -571,6 +579,11 @@ public:
     const nlohmann::json &receiver,
     const nlohmann::json &use) const;
   std::string current_module_name() const;
+
+  /// The function that @p alias, a global of an imported module, is bound to
+  /// when its module binds it once, by an assignment, and no attribute of
+  /// that name is written anywhere; null otherwise.
+  const symbolt *module_alias_target(const symbolt &alias) const;
 
   /// The file of the module named @p module_name, looked up by its own name:
   /// unlike get_imported_module_path, an alias bound in another module cannot
@@ -2832,7 +2845,8 @@ private:
     const nlohmann::json &element);
   std::optional<exprt> try_dispatch_dunder_getitem(
     const nlohmann::json &element,
-    const nlohmann::json &slice);
+    const nlohmann::json &slice,
+    const exprt &receiver);
   void reject_scalar_subscript(
     const typet &array_type,
     const nlohmann::json &element) const;
@@ -3729,6 +3743,7 @@ private:
   /// Class @p value_node is an instance of, or "" when it is not an instance.
   /// Resolves both a bound name and a constructor temporary.
   std::string instance_class_name(const nlohmann::json &value_node);
+  nlohmann::json fixed_attribute_value(const nlohmann::json &attribute);
   std::string attribute_class_name(const nlohmann::json &attribute);
 
   /// True when @p value_node denotes a user-defined class instance, as opposed
@@ -3748,11 +3763,27 @@ private:
     const std::string &op,
     exprt &operand,
     const locationt &loc);
+  bool try_dispatch_dunder_setitem(
+    const nlohmann::json &target,
+    const nlohmann::json &ast_node,
+    const exprt &container,
+    codet &target_block);
+  std::optional<exprt> dispatch_item_dunder_by_type(
+    const exprt &receiver,
+    const nlohmann::json &receiver_node,
+    const std::string &dunder,
+    const nlohmann::json &args);
   bool is_plain_user_class(const std::string &class_name);
   bool lacks_binary_dunder(
     const std::string &op,
     const exprt &lhs,
     const exprt &rhs);
+  bool holds_mixed_constructor_arg(const exprt &operand);
+  exprt refuse_mixed_constructor_arg(
+    const std::string &op,
+    const exprt &lhs,
+    const exprt &rhs,
+    const locationt &loc);
 
   // =========================================================================
   // Member variables

@@ -58,6 +58,8 @@ __ESBMC_assume(b != 0)
 assert divide(10, b) >= 0
 ```
 
+`nondet_int()` and `__VERIFIER_nondet_int()` model Python's unbounded `int` as a 64-bit value and leave out `-2**63`, so they return a value in `[-(2**63 - 1), 2**63 - 1]` and `abs()` of one is always representable. A property that fails only outside that range is reported `VERIFICATION SUCCESSFUL`. Under `--ir`, `-2**63` is not left out ([#9923](https://github.com/esbmc/esbmc/pull/9923)).
+
 Use `__ESBMC_cover()` with `--multi-property` to check reachability of specific program points:
 
 ```python
@@ -72,7 +74,7 @@ if x > 0:
 
 ### Example 1: Division by Zero
 
-The following Python program runs without error in a standard interpreter, but ESBMC reveals a hidden division-by-zero bug.
+The following Python program fails for one of the 20 input combinations that `random.randint` can return, so a test run seldom reaches it. ESBMC explores every combination and reveals the division by zero.
 
 ```python
 import random as rand
@@ -83,8 +85,8 @@ def div1(cond: int, x: int) -> int:
     else:
        return x // 10
 
-cond: int = rand.random()
-x: int = rand.random()
+cond: int = rand.randint(0, 1)
+x: int = rand.randint(0, 9)
 
 assert div1(cond, x) != 1
 ```
@@ -96,25 +98,18 @@ esbmc main.py
 ```
 [Counterexample]
 
-State 1 file main.py line 12 column 8 function random thread 0
-----------------------------------------------------
-  value = 2.619487e-10
 
-State 3 file main.py line 12 column 8 function random thread 0
-----------------------------------------------------
-  value = 3.454678e-77
-
-State 5 file main.py line 5 column 8 function div1 thread 0
+State 5 file main.py line 5 column 15 function div1 thread 0
 ----------------------------------------------------
 Violated property:
-  file main.py line 5 column 8 function div1
-  division by zero
-  x != 0
+  file main.py line 5 column 15 function div1
+  uncaught exception: ZeroDivisionError
+  !(c:@__ESBMC_exc_thrown && c:@__ESBMC_exc_typeid == 27)
 
 VERIFICATION FAILED
 ```
 
-ESBMC finds a path where the randomly generated `x` is cast to integer zero, causing division by zero. The counterexample values can be used to construct a concrete failing test:
+The only failing path takes `cond == 0` and `x == 0`. Those values give a concrete failing test:
 
 ```python
 def div1(cond: int, x: int) -> int:
@@ -123,9 +118,7 @@ def div1(cond: int, x: int) -> int:
     else:
         return x // 10
 
-cond = int(2.619487e-10)  # → 0
-x = int(3.454678e-77)     # → 0
-print(div1(cond, x))      # ZeroDivisionError
+print(div1(0, 0))      # ZeroDivisionError
 ```
 
 ---
@@ -191,8 +184,8 @@ esbmc main.py --multi-property
 
 ```
 Violated property:
-  file main.py line 16 column 4 function test_exception_handling
-  assertion
+  file main.py line 11 column 4 function test_exception_handling
+  assertion return_value$_safe_divide$3 == 0
   return_value$_safe_divide$3 == 0
 
 VERIFICATION FAILED
@@ -256,9 +249,9 @@ esbmc main.py --multi-property
 
 ```
 Violated property:
-  file main.py line 3 column 4 function access_list_element
-  array bounds violated: array `my_list' upper bound
-  index < 5
+  file main.py line 3 column 11 function access_list_element
+  uncaught exception: IndexError
+  !(c:@__ESBMC_exc_thrown && c:@__ESBMC_exc_typeid == 25)
 
 VERIFICATION FAILED
 ```
@@ -299,7 +292,7 @@ assert evens == [2, 4]
 class Animal: pass
 class Dog(Animal): pass
 assert issubclass(Dog, Animal)
-assert callable(len)
+assert callable(is_even)
 ```
 
 ```bash
@@ -341,9 +334,6 @@ esbmc main.py --multi-property
 ```
 
 ```
-Type checking warning:
-main.py:1: error: Missing return statement
-
 Violated property:
   Missing return statement detected in function 'calculate_grade'
 

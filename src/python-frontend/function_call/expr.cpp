@@ -596,6 +596,14 @@ bool function_call_expr::is_unmodelled_base_instantiation() const
          converter_.unmodelled_base_classes_.count(function_id_.get_class());
 }
 
+bool function_call_expr::is_module_object_call() const
+{
+  const auto &func = call_["func"];
+  return func.value("_type", "") == "Name" &&
+         converter_.names_module_object(
+           func["id"].get<std::string>(), call_.value("lineno", 0));
+}
+
 void function_call_expr::refuse_unmodelled_base_instance(
   const std::string &class_name) const
 {
@@ -3635,7 +3643,13 @@ const symbolt *
 function_call_expr::find_callee_symbol(const std::string &func_symbol_id)
 {
   if (function_type_ != FunctionType::InstanceMethod)
-    return cached_find_symbol(func_symbol_id);
+  {
+    const symbolt *symbol = cached_find_symbol(func_symbol_id);
+    const bool module_global = symbol && !symbol->is_type &&
+                               !symbol->get_type().is_code() &&
+                               call_["func"]["_type"] == "Attribute";
+    return module_global ? converter_.module_alias_target(*symbol) : symbol;
+  }
   if (function_id_.get_class().empty())
     return nullptr;
   // find_symbol falls back to a module global of the method's name, which is
@@ -5445,6 +5459,15 @@ function_call_expr::get_dispatch_table()
        refuse_unmodelled_base_instance(function_id_.get_class());
      },
      "instantiating a class derived from an unmodelled one"},
+
+    {[this]() { return is_module_object_call(); },
+     [this]() {
+       exprt raise = converter_.get_exception_handler().gen_exception_raise(
+         "TypeError", "'module' object is not callable");
+       raise.location() = converter_.get_location_from_decl(call_);
+       return raise;
+     },
+     "calling a module"},
 
     {[this]() { return is_abstract_instantiation(); },
      [this]() { return abstract_instantiation_error(call_); },
@@ -7566,6 +7589,32 @@ forward_function_node(const nlohmann::json &ast, const std::string &name)
     ast, json_utils::split_function_path(name));
 }
 
+/// The type a forward-referenced function annotated `-> ret_cls` returns,
+/// mirroring the type its `def` is converted to. A str is a char pointer, not
+/// the char array get_typet names: typing the call as an array while the callee
+/// returns a pointer leaves the caller's result a different type (#10442).
+/// Stage 1 object-model migration (#3067): a user-defined class is a Cls*
+/// reference, not the value struct. Resolving it by value leaves the call typed
+/// as a struct while the callee actually returns a pointer, which crashes on
+/// `return f(...)` with a struct-vs-pointer irep2_cast_error. @overload stubs
+/// resolve per call site, so they stay by value (consistent with
+/// call_return_class).
+static typet forward_return_type(
+  const std::string &ret_cls,
+  const nlohmann::json &func_node,
+  const nlohmann::json &ast,
+  const type_handler &types)
+{
+  if (ret_cls == "str")
+    return gen_pointer_type(char_type());
+  const typet type = types.get_typet(ret_cls);
+  if (
+    json_utils::is_class(ret_cls, ast) &&
+    !json_utils::has_overload_decorator(func_node))
+    return gen_pointer_type(type);
+  return type;
+}
+
 /// The constant a forward-referenced function always returns, or nil. Only a
 /// body that is a lone `return <constant>` is converted: the callee's
 /// statements would otherwise be converted in the caller's scope.
@@ -7812,7 +7861,7 @@ std::optional<exprt> function_call_expr::resolve_missing_function_symbol(
   {
     // Find in global scope
     function_id_.set_class("");
-    func_symbol = converter_.find_symbol(function_id_.to_string());
+    func_symbol = find_callee_symbol(function_id_.to_string());
 
     if (!func_symbol)
     {
@@ -7847,22 +7896,11 @@ std::optional<exprt> function_call_expr::resolve_missing_function_symbol(
           {
             const auto &returns = func_node["returns"];
             if (returns.contains("id"))
-            {
-              const std::string ret_cls = returns["id"].get<std::string>();
-              return_type = type_handler_.get_typet(ret_cls);
-              // Stage 1 object-model migration (#3067): mirror the funcdef
-              // migration — a forward-referenced function returning a
-              // user-defined class returns a Cls* reference, not the value
-              // struct. Resolving it by value here leaves the call typed as a
-              // struct while the callee actually returns a pointer, which
-              // crashes on `return f(...)` with a struct-vs-pointer
-              // irep2_cast_error. @overload stubs resolve per call site, so
-              // leave them by value (consistent with call_return_class).
-              if (
-                json_utils::is_class(ret_cls, converter_.ast()) &&
-                !json_utils::has_overload_decorator(func_node))
-                return_type = gen_pointer_type(return_type);
-            }
+              return_type = forward_return_type(
+                returns["id"].get<std::string>(),
+                func_node,
+                converter_.ast(),
+                type_handler_);
           }
           exprt const_return = forward_constant_return(func_node);
           if (!const_return.is_nil())
