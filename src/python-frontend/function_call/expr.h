@@ -1122,6 +1122,7 @@ private:
   bool is_size_builtin() const;
   bool is_list_typed(const typet &type) const;
   exprt build_dict_size_call(const exprt &dict);
+  exprt len_of_instance(exprt object, const locationt &location);
   std::optional<exprt> build_positional_arguments(
     code_function_callt &call,
     size_t param_offset,

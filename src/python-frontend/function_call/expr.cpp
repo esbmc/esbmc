@@ -8422,6 +8422,22 @@ exprt function_call_expr::build_dict_size_call(const exprt &dict)
   return list_size_func_call;
 }
 
+exprt function_call_expr::len_of_instance(
+  exprt object,
+  const locationt &location)
+{
+  if (object.is_function_call())
+    object = converter_.store_call_result(object, location, "len");
+  const exprt dunder =
+    converter_.dispatch_unary_dunder_operator("len", object, location);
+  if (dunder.is_nil())
+    return converter_.get_exception_handler().gen_exception_raise(
+      "TypeError",
+      "object of type '" + converter_.class_name_of(object.type()) +
+        "' has no len()");
+  return converter_.checked_len_result(dunder, location);
+}
+
 exprt function_call_expr::fold_from_bytes_byteorder(
   exprt arg,
   const nlohmann::json &node,
@@ -8725,6 +8741,13 @@ std::optional<exprt> function_call_expr::build_positional_arguments(
       is_size_builtin() && converter_.get_dict_handler()->is_dict_type(
                              converter_.ns.follow(arg.type())))
       return build_dict_size_call(arg);
+
+    // len(a * 2) or len(f()): the AST names no class, so the instance reaches
+    // here and strlen would read the struct bytes (#10505).
+    if (
+      function_id_.get_function() == "strlen" &&
+      converter_.is_user_class_pointer(arg.type()))
+      return len_of_instance(arg, location);
 
     // Handle function calls used as arguments
     if (arg.is_code() && arg.is_function_call())
