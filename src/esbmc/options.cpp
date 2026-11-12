@@ -265,7 +265,7 @@ const struct group_opt_templ all_cmd_options[] = {
      {"python-typed-lists",
       NULL,
       "Keep a list whose every element is an int in an int64 array instead of "
-      "one untyped cell per element (default off)"},
+      "one untyped cell per element (default on)"},
      {"no-python-typed-lists",
       NULL,
       "Keep every list in one untyped cell per element"},

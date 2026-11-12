@@ -99,7 +99,6 @@ static void append_parser_flags(std::vector<std::string> &args)
   // The annotation checks of --is-instance-check read list items as tagged
   // cells, which a typed list does not have.
   if (
-    config.options.get_bool_option("python-typed-lists") &&
     !config.options.get_bool_option("no-python-typed-lists") &&
     !config.options.get_bool_option("is-instance-check"))
     args.push_back("--typed-lists");
