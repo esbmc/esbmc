@@ -995,16 +995,51 @@ class CPythonReplayTest(unittest.TestCase):
         self.assertEqual(verdict, "Unknown")
         self.assertEqual(len(self.ir_calls(calls)), 1)
 
-    def test_a_values_run_is_skipped_when_it_would_leave_no_budget_for_the_ir_rerun(self):
-        esbmc = FakeEsbmc(PY_INDEXERROR, self.PASSED, None, None)
+    def verify_after(self, first, elapsed, source="[][0]\n"):
+        """verify_python() on a first run that ended `elapsed` seconds in."""
+        esbmc = FakeEsbmc(first, self.PASSED, None, None)
         with tempfile.TemporaryDirectory() as task, mock.patch.object(wrapper, "run", esbmc):
-            write_task(task, "[][0]\n")
-            wrapper.verify_python("esbmc ", wrapper.Property.py_datalookup, os.path.join(task, "main.py"),
-                                  time.monotonic() - (wrapper.TOTAL_BUDGET - wrapper.IR_RERUN_TIMEOUT - 1))
-        self.assertEqual(len(esbmc.calls), 2)
-        self.assertNotIn("--pytest", "".join(esbmc.calls))
-        self.assertTrue(esbmc.calls[1].endswith("--ir --z3 "))
-        self.assertEqual(esbmc.timeouts[1], wrapper.IR_RERUN_TIMEOUT)
+            write_task(task, source)
+            wrapper.verify_python(wrapper.esbmc_path + wrapper.python_search_flags("kinduction"),
+                                  wrapper.Property.py_datalookup, os.path.join(task, "main.py"),
+                                  time.monotonic() - elapsed, wrapper.python_search_flags("kinduction"))
+        return esbmc
+
+    def test_a_values_run_is_skipped_when_it_would_leave_no_budget_for_the_replay(self):
+        esbmc = self.verify_after(PY_INDEXERROR, wrapper.TOTAL_BUDGET - wrapper.REPLAY_BUDGET - 1)
+        self.assertEqual(len(esbmc.calls), 1)
+
+    def test_a_late_violation_gives_the_values_run_what_the_replay_leaves(self):
+        esbmc = self.verify_after(PY_INDEXERROR, 400)
+        self.assertIn("--pytest", esbmc.calls[1])
+        self.assertAlmostEqual(esbmc.timeouts[1], wrapper.TOTAL_BUDGET - 400 - wrapper.REPLAY_BUDGET, delta=1)
+
+    def test_an_early_violation_caps_the_values_run_near_the_first_runs_time(self):
+        esbmc = self.verify_after(PY_INDEXERROR, 100)
+        self.assertAlmostEqual(esbmc.timeouts[1], 1.5 * 100 + 10, delta=1)
+
+    def test_a_confirmation_checks_only_the_violations_bound(self):
+        esbmc = self.verify_after(PY_INDEXERROR + "\nBug found (k = 53)\n", 10, "pass\n")
+        self.assertIn("--k-induction", esbmc.calls[0])
+        for confirmation in esbmc.calls[1:]:
+            self.assertIn("--unwind 53 --no-unwinding-assertions ", confirmation)
+            self.assertNotIn("--k-induction", confirmation)
+            self.assertNotIn("--unlimited-k-steps", confirmation)
+        self.assertTrue(any("--pytest" in c for c in esbmc.calls[1:]))
+        self.assertTrue(any("--ir" in c for c in esbmc.calls[1:]))
+
+    def test_a_bound_printed_by_the_program_is_not_read(self):
+        printed = "[Counterexample]\nBug found (k = 9)\n" + PY_INDEXERROR
+        esbmc = self.verify_after(printed, 10)
+        self.assertIn("--k-induction", esbmc.calls[1])
+        self.assertNotIn("--unwind", esbmc.calls[1])
+
+    def test_control_without_a_bound_the_confirmation_searches_again(self):
+        esbmc = self.verify_after(PY_INDEXERROR, 10, "pass\n")
+        self.assertEqual(len(esbmc.calls), 3)
+        for confirmation in esbmc.calls[1:]:
+            self.assertIn("--k-induction", confirmation)
+            self.assertNotIn("--unwind", confirmation)
 
     def test_only_python_runs_ask_for_the_values(self):
         _, calls = self.verify(wrapper.Property.py_datalookup, PY_INDEXERROR, "[][0]\n", None)
