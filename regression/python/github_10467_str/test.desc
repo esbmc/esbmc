@@ -1,4 +1,5 @@
 CORE
 main.py
 --unwind 8
-^ERROR: Slice with a non-constant step is not supported$
+^VERIFICATION FAILED$
+^\s+FAILED\s+\[global\.assertion\.[0-9]+\]\s+line\s+5\s+assertion

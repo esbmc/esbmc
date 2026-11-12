@@ -748,6 +748,8 @@ public:
     return it == class_object_names_.end() ? nullptr : &it->second;
   }
 
+  exprt once_bound_int(const nlohmann::json &node, const exprt &value) const;
+
 private:
   // Hoists @p operand once and plants @p emit_guards over its value where the
   // operand is evaluated, also inside an and/or tail or a while test.

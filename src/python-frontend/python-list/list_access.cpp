@@ -924,6 +924,17 @@ struct slice_step_info
   bool literal;
 };
 
+slice_step_info constant_slice_step(const BigInt &step)
+{
+  slice_step_info info{step.to_int64(), false, true};
+  if (info.value == 0)
+  {
+    info.literal_zero = true;
+    info.value = 1;
+  }
+  return info;
+}
+
 slice_step_info get_slice_step_info(const nlohmann::json &slice_node)
 {
   slice_step_info info{1, false, true};
@@ -937,14 +948,42 @@ slice_step_info get_slice_step_info(const nlohmann::json &slice_node)
     info.literal = false;
     return info;
   }
+  return constant_slice_step(literal_value);
+}
 
-  info.value = literal_value.to_int64();
-  if (info.value == 0)
-  {
-    info.literal_zero = true;
-    info.value = 1;
-  }
-  return info;
+// A step named by a variable bound once to an int constant is that constant,
+// so `s = 2; l[::s]` slices as `l[::2]` does.
+slice_step_info once_bound_slice_step(
+  python_converter &converter,
+  const nlohmann::json &slice_node,
+  const slice_step_info &info)
+{
+  if (info.literal || slice_node["step"].value("_type", "") != "Name")
+    return info;
+  const nlohmann::json &step_node = slice_node["step"];
+  const exprt value =
+    converter.once_bound_int(step_node, converter.get_expr(step_node));
+  BigInt step;
+  if (!value.is_constant() || to_integer(value, step))
+    return info;
+  return constant_slice_step(step);
+}
+
+// The char pointer __python_str_slice reads: a str pointer, or a str held in
+// an array whose step is only known at run time. nullopt otherwise.
+std::optional<exprt> str_slice_model_operand(
+  const exprt &array,
+  const typet &type,
+  bool constant_step)
+{
+  if (!type_utils::is_char_storage(type.subtype()))
+    return std::nullopt;
+  if (type.is_pointer())
+    return array;
+  if (constant_step || !type.is_array())
+    return std::nullopt;
+  return build_address_of(
+    build_index(array, gen_zero(size_type()), type.subtype()));
 }
 
 bool can_build_scalar_pointer_view(
@@ -3255,6 +3294,52 @@ std::optional<exprt> python_list::try_copy_numpy_pointer_view_slice(
   return build_symbol(result);
 }
 
+// The step of a str slice as a run-time value. A step that is not a constant
+// is held in a temporary and raises ValueError when it is zero.
+exprt python_list::str_slice_step(
+  const nlohmann::json &slice_node,
+  long long step_val,
+  bool literal_step)
+{
+  const signedbv_typet ll_type(64);
+  if (literal_step)
+    return from_integer(step_val, ll_type);
+  exprt step = converter_.get_expr(slice_node["step"]);
+  if (!step.type().is_signedbv())
+  {
+    refuse_nonconstant_step(slice_node, false);
+    return from_integer(step_val, ll_type);
+  }
+  const exprt held = emit_ll_temp(
+    slice_node,
+    "$slice_step$",
+    remove_function_calls_recursive(step, slice_node));
+  code_ifthenelset guard;
+  guard.cond() = build_equal(held, gen_zero(ll_type));
+  guard.then_case() =
+    code_expressiont(converter_.get_exception_handler().gen_exception_raise(
+      "ValueError", "slice step cannot be zero"));
+  guard.location() = converter_.get_location_from_decl(slice_node);
+  converter_.add_instruction(guard);
+  return held;
+}
+
+// A slice whose step is neither a literal nor a once-bound constant is refused
+// where only a constant step is modelled, instead of slicing with step 1.
+void python_list::refuse_nonconstant_step(
+  const nlohmann::json &slice_node,
+  bool constant_step)
+{
+  if (constant_step)
+    return;
+  code_assertt check{false_exprt()};
+  check.location() = converter_.get_location_from_decl(slice_node);
+  check.location().user_provided(true);
+  check.location().comment(
+    "Unsupported: slicing with a step that is not a constant");
+  converter_.add_instruction(check);
+}
+
 void python_list::emit_slice_zero_step_raise(
   const nlohmann::json &slice_node,
   bool literal_zero_step)
@@ -3541,14 +3626,12 @@ exprt python_list::handle_range_slice(
      type_utils::is_char_storage(resolved_array_type.subtype()));
 
   // Determine step value (default 1).
-  const slice_step_info step_info = get_slice_step_info(slice_node);
-  const long long step_val = step_info.value;
+  const slice_step_info literal_step = get_slice_step_info(slice_node);
   // Python raises ValueError on step==0. Raise it from the frontend (a
   // cpp-throw) so try/except ValueError can catch it — a code_assert would be
   // an uncatchable property violation. The raise diverts control, so the rest
   // of the slice IR (kept consistent with step_val==1) is a dead path.
-  emit_slice_zero_step_raise(slice_node, step_info.literal_zero);
-  bool negative_step = (step_val < 0);
+  emit_slice_zero_step_raise(slice_node, literal_step.literal_zero);
 
   if (
     std::optional<exprt> param_view =
@@ -3560,35 +3643,35 @@ exprt python_list::handle_range_slice(
       array,
       resolved_array_type.subtype(),
       slice_node,
-      step_val,
-      step_info.literal))
+      literal_step.value,
+      literal_step.literal))
     return *slice_copy;
 
-  // Only a non-char array has a run-time step lowering
-  // (build_symbolic_step_slice); everywhere else step_val would silently be 1.
-  const bool has_runtime_step_lowering =
-    resolved_array_type.is_array() &&
-    !type_utils::is_char_storage(resolved_array_type.subtype());
-  if (!step_info.literal && !has_runtime_step_lowering)
-    throw std::runtime_error("Slice with a non-constant step is not supported");
+  const slice_step_info step_info =
+    once_bound_slice_step(converter_, slice_node, literal_step);
+  emit_slice_zero_step_raise(
+    slice_node, step_info.literal_zero != literal_step.literal_zero);
+  const long long step_val = step_info.value;
+  bool negative_step = (step_val < 0);
 
   if (is_string_slice)
   {
     locationt location = converter_.get_location_from_decl(slice_node);
 
     // For pointer types (function parameters), delegate to __python_str_slice
-    // which uses __ESBMC_alloca and survives function returns.
+    // which uses __ESBMC_alloca and survives function returns. It also takes a
+    // step only known at run time.
     if (
-      resolved_array_type.is_pointer() &&
-      type_utils::is_char_storage(resolved_array_type.subtype()))
+      std::optional<exprt> str =
+        str_slice_model_operand(array, resolved_array_type, step_info.literal))
     {
       const symbolt &slice_func_ref = get_str_slice_sym();
 
       // Extract start/end bounds from slice node
       auto get_bound_expr =
-        [&](const std::string &name, long long default_val) -> exprt {
+        [&](const std::string &name, const exprt &default_val) -> exprt {
         if (!slice_node.contains(name) || slice_node[name].is_null())
-          return from_integer(default_val, signedbv_typet(64));
+          return default_val;
 
         const auto &bound = slice_node[name];
         if (bound["_type"] == "UnaryOp" && bound["op"]["_type"] == "USub")
@@ -3606,21 +3689,27 @@ exprt python_list::handle_range_slice(
         return build_typecast(e, signedbv_typet(64));
       };
 
+      exprt step_expr = str_slice_step(slice_node, step_val, step_info.literal);
       // Defaults: for positive step start=0,end=MAX; for negative step
       // start=MAX,end=MIN We use large sentinel values; __python_str_slice
       // clamps them
-      long long start_default = negative_step ? 999999 : 0;
-      long long end_default = negative_step ? -999999 : 999999;
-
-      exprt start_expr = get_bound_expr("lower", start_default);
-      exprt end_expr = get_bound_expr("upper", end_default);
-      exprt step_expr = from_integer(step_val, signedbv_typet(64));
+      const signedbv_typet ll_type(64);
+      const exprt negative = build_less_than(step_expr, gen_zero(ll_type));
+      exprt start_expr = get_bound_expr(
+        "lower",
+        build_if(negative, from_integer(999999, ll_type), gen_zero(ll_type)));
+      exprt end_expr = get_bound_expr(
+        "upper",
+        build_if(
+          negative,
+          from_integer(-999999, ll_type),
+          from_integer(999999, ll_type)));
 
       // Call __python_str_slice(s, start, end, step) as side-effect expression
       exprt slice_call = build_call_expr(
         slice_func_ref,
         pointer_typet(char_type()),
-        {array, start_expr, end_expr, step_expr});
+        {*str, start_expr, end_expr, step_expr});
       slice_call.location() = location;
 
       return slice_call;
@@ -3873,6 +3962,7 @@ exprt python_list::handle_range_slice(
   }
 
   // Handle list slicing
+  refuse_nonconstant_step(slice_node, step_info.literal);
   symbolt &sliced_list = create_list();
   const locationt location = converter_.get_location_from_decl(list_value_);
 
