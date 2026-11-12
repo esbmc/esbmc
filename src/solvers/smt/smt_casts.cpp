@@ -643,14 +643,11 @@ expr2tc smt_solver_baset::static_address_of(const expr2tc &ptr)
     renumber_map.back().count(to_symbol2t(base).get_symbol_name()))
     return expr2tc();
 
+  // Converting the address registers the object; add_object() then names it.
   convert_ast(*p);
-  const auto it = pointer_logic.back().objects.find(base);
-  if (
-    it == pointer_logic.back().objects.end() ||
-    !addr_space_data.back().count(it->second))
-    return expr2tc();
-  const expr2tc start = symbol2tc(
-    ptraddr_type2(), "__ESBMC_ptr_obj_start_" + std::to_string(it->second));
+  const unsigned int id = pointer_logic.back().add_object(base);
+  const expr2tc start =
+    symbol2tc(ptraddr_type2(), "__ESBMC_ptr_obj_start_" + std::to_string(id));
   return add2tc(
     ptraddr_type2(),
     start,
