@@ -2513,6 +2513,7 @@ class LoopMixin:
         # Create loop body with unique variable names
         transformed_body = self._create_loop_body(node, target_var_name, iter_var_name, index_var,
                                                   element_type, full_element_ann)
+        self._mark_element_read_in_bounds(node, iter_var_name, transformed_body[0].value)
 
         # Create the while statement
         while_stmt = ast.While(test=while_cond, body=transformed_body, orelse=[])
@@ -2527,14 +2528,47 @@ class LoopMixin:
 
         return result
 
+    def _holds_iterated_list(self, node, iter_var_name):
+        """Whether the loop over @p node holds the list it iterates and re-reads
+        its length on every step."""
+        return (isinstance(node.iter, ast.Name)
+                and self.known_variable_types.get(iter_var_name) in ("list", "List"))
+
+    def _mark_element_read_in_bounds(self, node, iter_var_name, read):
+        """Mark @p read as needing no bounds check when the loop condition has
+        just re-read the length of the list the name still holds (#10259)."""
+        if self._holds_iterated_list(node, iter_var_name) and self._loop_keeps_name(
+                node, iter_var_name):
+            read.esbmc_in_bounds = True
+
+    def _loop_keeps_name(self, node, name):
+        """Whether the loop @p node cannot rebind @p name: its target and body
+        never mention it, and no scope declares it global or nonlocal."""
+        if self.rebindable_names is None or name in self.rebindable_names:
+            return False
+        parts = [node.target] + node.body
+        return not any(
+            isinstance(n, ast.Name) and n.id == name for part in parts for n in ast.walk(part))
+
+    @staticmethod
+    def _rebindable_names(module):
+        """Names a global or nonlocal declaration lets another scope rebind; None
+        when the module can rebind names dynamically."""
+        names = set()
+        for n in ast.walk(module):
+            if isinstance(n, (ast.Global, ast.Nonlocal)):
+                names.update(n.names)
+            elif isinstance(n, ast.Name) and n.id in ("exec", "eval", "globals", "locals", "vars"):
+                return None
+        return names
+
     def _create_iteration_bound(  # pylint: disable=too-many-arguments,too-many-positional-arguments
             self, node, loop_id, iter_var_name, index_var, length_var, element_type,
             full_element_ann):
         """Return the setup statements and while condition bounding the index."""
         # CPython's list iterator re-reads the length of the list object on every
         # step, so it sees the body resize the list but not rebind the name.
-        if (isinstance(node.iter, ast.Name)
-                and self.known_variable_types.get(iter_var_name) in ("list", "List")):
+        if self._holds_iterated_list(node, iter_var_name):
             list_ref = f"ESBMC_iter_{loop_id}"
             list_assign = self._create_iter_assignment(node, "list", list_ref, element_type,
                                                        full_element_ann)

@@ -994,6 +994,9 @@ smt_astt z3_convt::mk_smt_fpbv_rm(ieee_floatt::rounding_modet rm)
   case ieee_floatt::ROUND_TO_EVEN:
     return new_ast(z3::to_expr(z3_ctx, Z3_mk_fpa_rne(z3_ctx)), s);
 
+  case ieee_floatt::ROUND_TO_AWAY:
+    return new_ast(z3::to_expr(z3_ctx, Z3_mk_fpa_rna(z3_ctx)), s);
+
   case ieee_floatt::ROUND_TO_MINUS_INF:
     return new_ast(z3::to_expr(z3_ctx, Z3_mk_fpa_rtn(z3_ctx)), s);
 
