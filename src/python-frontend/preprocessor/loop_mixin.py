@@ -982,7 +982,9 @@ class LoopMixin:
                                                                    loop_id)
 
         # Step 5: Create the while loop
-        while_stmt = self._create_enumerate_while_loop(node, target_info, loop_id)
+        holds_list = (isinstance(iterable, ast.Name)
+                      and self.known_variable_types.get(iterable.id) in ("list", "List"))
+        while_stmt = self._create_enumerate_while_loop(node, target_info, loop_id, holds_list)
 
         # Step 6: Combine everything and ensure proper AST locations
         result = setup_statements + [while_stmt]
@@ -1289,16 +1291,23 @@ class LoopMixin:
 
         return [iter_assign, index_assign, array_index_assign, length_assign]
 
-    def _create_enumerate_while_loop(self, node, target_info, loop_id):
-        """Create the while loop for enumerate transformation."""
-        array_index_var = f"ESBMC_array_index_{loop_id}"
-        length_var = f"ESBMC_length_{loop_id}"
+    def _create_enumerate_while_loop(self, node, target_info, loop_id, holds_list):
+        """Create the while loop for enumerate transformation.
 
-        # Create while condition: ESBMC_array_index < ESBMC_length
+        Over a list, CPython's iterator re-reads the length on every step, so it
+        sees the body resize the list; the element read that follows the
+        comparison then needs no bounds check (#10259).
+        """
+        array_index_var = f"ESBMC_array_index_{loop_id}"
+        if holds_list:
+            bound = self._create_len_call(node, f"ESBMC_iter_{loop_id}")
+        else:
+            bound = self.create_name_node(f"ESBMC_length_{loop_id}", ast.Load(), node)
+
         while_cond = ast.Compare(
             left=self.create_name_node(array_index_var, ast.Load(), node),
             ops=[ast.Lt()],
-            comparators=[self.create_name_node(length_var, ast.Load(), node)],
+            comparators=[bound],
         )
         self.ensure_all_locations(while_cond, node)
 
@@ -1307,6 +1316,10 @@ class LoopMixin:
             loop_body = self._create_unpacking_loop_body(node, target_info, loop_id)
         else:  # single variable
             loop_body = self._create_single_var_loop_body(node, target_info, loop_id)
+        if holds_list:
+            for read in (n for stmt in loop_body for n in ast.walk(stmt)):
+                if isinstance(read, ast.Subscript):
+                    read.esbmc_in_bounds = True
 
         # Add increment statements
         loop_body.extend(self._create_increment_statements(node, loop_id))
