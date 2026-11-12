@@ -901,7 +901,7 @@ void python_list::emit_list_copy(
   // lists are shared (Python shallow-copy semantics) rather than corrupted by
   // a pointee byte-copy (esbmc/esbmc#5102).
   const shallow_push_call shallow_push =
-    select_shallow_push(src, from_integer(BigInt(0), size_type()));
+    select_shallow_push(src, from_integer(uniform_elem_size(src), size_type()));
   const symbolt *push_obj_sym = shallow_push.func;
   assert(size_sym && at_sym && push_obj_sym);
 
