@@ -5902,6 +5902,27 @@ void python_converter::record_annotated_list_elem_type(
     element_type_registry_.record(lhs_id, std::string(), elem_type);
 }
 
+/// The symbol the textually last `return` of \p code that returns one hands
+/// back, at any depth, else nil. A function that returns a list from inside a
+/// loop and None after it ends in `return None`.
+static exprt last_returned_symbol(const exprt &code)
+{
+  if (
+    code.id() == "code" && to_code(code).get_statement() == "return" &&
+    code.operands().size() == 1 && code.op0().is_symbol())
+    return code.op0();
+  exprt found = nil_exprt();
+  for (const exprt &op : code.operands())
+    if (exprt ret = last_returned_symbol(op); !ret.is_nil())
+      found = ret;
+  return found;
+}
+
+static exprt last_returned_symbol(const symbolt *function)
+{
+  return function ? last_returned_symbol(function->get_value()) : nil_exprt();
+}
+
 void python_converter::handle_function_call_rhs(
   const nlohmann::json &ast_node,
   symbolt *lhs_symbol,
@@ -6004,11 +6025,12 @@ void python_converter::handle_function_call_rhs(
   if (rhs.type() == type_handler_.get_list_type())
   {
     if (
-      auto ret = get_return_from_func(rhs.op1().identifier().c_str());
+      const exprt ret =
+        last_returned_symbol(symbol_table_.find_symbol(rhs.op1().identifier()));
       !ret.is_nil())
     {
       element_type_registry_.assign_from(
-        ret.op0().identifier().as_string(), lhs.identifier().as_string());
+        ret.identifier().as_string(), lhs.identifier().as_string());
     }
 
     // If nothing is recorded for the LHS yet
