@@ -9053,9 +9053,9 @@ void python_converter::store_compound_result(
   codet &target_block)
 {
   // An operator CPython rejects lowers to a raise; the target keeps its value.
-  if (rhs.statement() == "cpp-throw")
+  if (const exprt *raise = python_frontend::raised_condition(rhs))
   {
-    target_block.copy_to_operands(raise_statement(rhs, loc));
+    target_block.copy_to_operands(raise_statement(*raise, loc));
     return;
   }
 
