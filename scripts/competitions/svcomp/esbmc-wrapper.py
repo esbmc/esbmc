@@ -101,9 +101,9 @@ ESBMC_INTERNAL_ERROR = 70
 
 def abnormal_exit_line(returncode):
   if returncode < 0:
-    return "ERROR: ESBMC exited abnormally (signal %d)\n" % -returncode
+    return f"ERROR: ESBMC exited abnormally (signal {-returncode})\n"
   if returncode == ESBMC_INTERNAL_ERROR:
-    return "ERROR: ESBMC exited abnormally (exit code %d)\n" % returncode
+    return f"ERROR: ESBMC exited abnormally (exit code {returncode})\n"
   return ""
 
 def do_exec(cmd_line, timeout=None, cwd=None):
@@ -399,10 +399,8 @@ def parse_result(the_output, prop):
   if re.search(r"^ERROR: Out of memory$", the_output, re.MULTILINE):
     return Result.err_memout
 
-  # benchexec reports a run whose output has no verdict and no "Unknown" line
-  # as ERROR, so a crash is not counted as unknown (#8097).
   if re.search(r"^ERROR: ESBMC exited abnormally", the_output, re.MULTILINE):
-    return Result.err_crash
+    return Result.err_crash  # benchexec scores it ERROR, not unknown (#8097)
 
   return Result.unknown
 
