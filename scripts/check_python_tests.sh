@@ -193,6 +193,7 @@ ignored_dirs=(
   "github_6281"
   "github_6281_used"
   "github_6281_fail"
+  "varargs_forward_default_param_relative"
 )
 
 # Prefixes for ESBMC-specific regression directories that are not suitable for

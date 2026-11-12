@@ -5323,7 +5323,11 @@ static bool rebound_in_function(
     if (decl.empty())
       continue;
     if (decl.value("_type", "") == "arg")
-      return !json_utils::get_var_node(name, func).empty();
+    {
+      // get_var_node falls back to the parameter when nothing assigns it.
+      const Json bound = json_utils::get_var_node(name, func);
+      return bound.is_object() && bound.value("_type", "") != "arg";
+    }
     return json_utils::has_multiple_assignments_in_block(name, func);
   }
   return false;
@@ -5349,6 +5353,29 @@ std::string python_annotation<Json>::caller_arg_type(
   return type;
 }
 
+/// The scope of the nodes nested in @p node, which lies in @p scope.
+template <class Json>
+typename python_annotation<Json>::caller_scopet
+python_annotation<Json>::inner_scope(
+  const Json &node,
+  const caller_scopet &scope)
+{
+  caller_scopet inner = scope;
+  const std::string kind = node.value("_type", "");
+  if (kind == "ClassDef" && scope.ctx.empty())
+    inner.class_prefix = node.value("name", "") + "@C@";
+  else if (kind == "FunctionDef" || kind == "AsyncFunctionDef")
+  {
+    const std::string name = node.value("name", "");
+    inner.ctx =
+      scope.ctx.empty() ? scope.class_prefix + name : scope.ctx + "@F@" + name;
+    inner.class_prefix.clear();
+  }
+  else if (kind == "Lambda")
+    inner.in_lambda = true;
+  return inner;
+}
+
 /// Append to @p types the type of argument @p index at each call to
 /// @p callee made in a function nested in @p node, resolved in that caller's
 /// scope, or "" where it is unknown. The call-site inference resolves names
@@ -5372,21 +5399,10 @@ void python_annotation<Json>::collect_caller_arg_types(
   if (!node.is_object())
     return;
 
-  caller_scopet inner = scope;
-  const std::string kind = node.value("_type", "");
-  if (kind == "ClassDef" && scope.ctx.empty())
-    inner.class_prefix = node.value("name", "") + "@C@";
-  else if (kind == "FunctionDef" || kind == "AsyncFunctionDef")
-  {
-    const std::string name = node.value("name", "");
-    inner.ctx =
-      scope.ctx.empty() ? scope.class_prefix + name : scope.ctx + "@F@" + name;
-    inner.class_prefix.clear();
-  }
-  else if (kind == "Lambda")
-    inner.in_lambda = true;
-  else if (
-    kind == "Call" && scope.ctx != scope.root && node.contains("args") &&
+  const caller_scopet inner = inner_scope(node, scope);
+  if (
+    node.value("_type", "") == "Call" && scope.ctx != scope.root &&
+    node.contains("args") &&
     index < node["args"].size() && node["func"].value("_type", "") == "Name" &&
     node["func"].value("id", "") == callee)
   {
@@ -5407,10 +5423,11 @@ template <class Json>
 std::vector<std::string> python_annotation<Json>::caller_arg_types(
   const std::string &func_name,
   size_t index,
-  const Json &search_context)
+  const Json &search_context,
+  const std::string &root)
 {
   caller_scopet scope;
-  scope.root = current_func_name_context_;
+  scope.root = root;
   scope.ctx = scope.root;
   std::vector<std::string> types;
   collect_caller_arg_types(func_name, index, search_context, scope, types);
@@ -5443,7 +5460,8 @@ std::string python_annotation<Json>::infer_parameter_type_at_call_sites(
   std::string inferred =
     infer_parameter_type_from_calls(param_index, function_calls);
   const std::vector<std::string> callers =
-    caller_arg_types(func_name, param_index, search_context);
+    caller_arg_types(
+      func_name, param_index, search_context, current_func_name_context_);
   // Every call is made in another function, whose scope alone can type its
   // argument (`find(pkt.ident)` with `pkt` a caller's local, #8672).
   if (
@@ -5464,10 +5482,11 @@ bool python_annotation<Json>::specializable_at_call_sites(
   const std::string &func_name,
   size_t param_index,
   std::vector<std::string> &call_types,
-  const Json &search_context)
+  const Json &search_context,
+  const std::string &call_site_context)
 {
-  for (const std::string &type :
-       caller_arg_types(func_name, param_index, search_context))
+  for (const std::string &type : caller_arg_types(
+         func_name, param_index, search_context, call_site_context))
   {
     if (type.empty())
       return false;
@@ -5771,10 +5790,13 @@ void python_annotation<Json>::infer_parameter_types(Json &function_element)
         std::vector<std::string> call_types =
           collect_parameter_types_from_calls(i, calls);
 
+        // Merged with the types the calls made in other functions pass
+        // first, which the callee's scope cannot see (#10372).
         if (
-          parent_func == nullptr && call_types.size() > 1 &&
+          parent_func == nullptr &&
           specializable_at_call_sites(
-            func_name, i, call_types, search_context) &&
+            func_name, i, call_types, search_context, call_site_context) &&
+          call_types.size() > 1 &&
           (!are_scalar_list_types(call_types) ||
            function_values(ast_, extra_subscript_inference_asts_)
              .only_called(function_element, ast_)))
