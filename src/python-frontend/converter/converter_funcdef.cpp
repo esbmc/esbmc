@@ -5109,14 +5109,24 @@ bool python_converter::infer_dynamic_param_forwarded(
     };
 
   bool tagged = false;
+  // Literal kinds the call sites pass directly, e.g. f(1) beside f("x").
+  std::unordered_set<std::string> literal_kinds;
   for (const std::string &name : constructor_callees(module_body, callee))
     for (const call_context &site : call_sites)
     {
       const nlohmann::json *arg =
         site_argument(site, module_body, name, param_index);
-      tagged = tagged || (arg != nullptr && diverges_at_site(*arg, site));
+      if (arg == nullptr)
+        continue;
+      if (diverges_at_site(*arg, site))
+        tagged = true;
+      const std::string kind =
+        dynamic_type_handler_.classify_literal_kind(*arg);
+      if (!kind.empty())
+        literal_kinds.insert(kind);
     }
   visiting.erase(key);
+  tagged = tagged || literal_kinds.size() >= 2;
   return tagged;
 }
 
