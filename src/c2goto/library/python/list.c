@@ -103,6 +103,8 @@ PyListObject *__ESBMC_list_create()
   l->size = 0;
   l->is_tuple = false;
   l->may_nest = &__ESBMC_list_nest_no;
+  // Unused by an untyped list, but left unset it is one free pointer per list.
+  l->slot = NULL;
   return l;
 }
 
