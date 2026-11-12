@@ -104,14 +104,20 @@ extern "C"
 /// The forked k-induction processes each keep their own property table, and
 /// the one that concludes the run reports its base-case bound as PASSED (D4 of
 /// docs/roadmap/multi-property-strategy-plan.md). The other flags listed turn
-/// --multi-property on. --termination runs the sequential driver instead.
+/// --multi-property on. The TS strategies never run under this driver, yet
+/// they drop the loop-entry flags its inductive step needs (#10154).
+/// --termination runs the sequential driver instead.
 static bool k_induction_parallel_conflicts(const cmdlinet &cmdline)
 {
   if (!cmdline.isset("k-induction-parallel") || cmdline.isset("termination"))
     return false;
 
   for (const char *incompatible :
-       {"multi-property", "all-witnesses", "parallel-solving"})
+       {"multi-property",
+        "all-witnesses",
+        "parallel-solving",
+        "ts-bmc",
+        "ts-check"})
     if (cmdline.isset(incompatible))
     {
       log_error(
@@ -269,7 +275,9 @@ static bool incompatible_flags(const cmdlinet &cmdline)
           "falsification",
           "k-induction",
           "k-induction-parallel",
-          "loop-invariant"})
+          "loop-invariant",
+          "ts-bmc",
+          "ts-check"})
       if (cmdline.isset(incompatible))
       {
         log_error(
