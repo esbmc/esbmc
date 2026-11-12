@@ -9,6 +9,7 @@
 #include <solvers/smt/smt_result.h>
 #include <solvers/smtlib/smtlib_conv.h>
 #include <solvers/solve.h>
+#include <algorithm>
 #include <cctype>
 #include <charconv>
 #include <clang-c-frontend/clang_c_language.h>
@@ -44,6 +45,7 @@
 #include <goto-programs/remove_unreachable.h>
 #include <goto-programs/remove_library_assertions.h>
 #include <goto-programs/remove_exceptions.h>
+#include <goto-programs/python_exception_reachability.h>
 #include <goto-programs/lower_longjmp.h>
 #include <goto-programs/set_claims.h>
 #include <goto-programs/show_claims.h>
@@ -286,6 +288,59 @@ static void use_fp2bv_for_unsupported_formats(
     "natively; encoding floating-point as bit-vectors",
     solver);
   options.set_option("fp2bv", true);
+}
+
+// The early answer skips symex and the verdict path, so it must not run when an
+// option adds claims in symex or asks for output from them (#10252).
+static bool early_answer_allowed(
+  const optionst &options,
+  const cmdlinet &cmdline,
+  bool checks_past_violation)
+{
+  static const char *const bypassed[] = {
+    "termination",
+    "enable-unreachability-intrinsic",
+    "memory-leak-check",
+    "ltl",
+    "witness-output",
+    "witness-output-graphml",
+    "witness-output-yaml",
+    "proof-cache",
+    "smt-formula-only",
+    "smt-formula-too",
+    "smt-model",
+    "show-vcc",
+    "symex-ssa-trace",
+    "ssa-trace",
+    "ssa-symbol-table",
+    "show-symex-value-sets",
+    "program-too",
+    "check-vacuity",
+    "memstats",
+    "cov-report-json",
+    "schedule",
+    "ts-bmc"};
+  return !python_checked_exceptions(options).empty() &&
+         !checks_past_violation && !options.get_bool_option("termination") &&
+         std::none_of(std::begin(bypassed), std::end(bypassed), [&](auto name) {
+           return cmdline.isset(name);
+         });
+}
+
+static void record_early_answer(
+  optionst &options,
+  const cmdlinet &cmdline,
+  const goto_functionst &goto_functions,
+  const contextt &context,
+  bool checks_past_violation)
+{
+  if (early_answer_allowed(options, cmdline, checks_past_violation))
+    options.set_option(
+      "python-no-checked-exception",
+      no_reachable_property(
+        goto_functions,
+        context,
+        options.get_bool_option("no-unwinding-assertions")));
 }
 
 bool esbmc_parseoptionst::process_goto_program(
@@ -929,6 +984,9 @@ bool esbmc_parseoptionst::process_goto_program(
       goto_coveraget tmp(ns, goto_functions, filename);
       tmp.negating_asserts(tgt_fname);
     }
+
+    record_early_answer(
+      options, cmdline, goto_functions, context, checks_past_violation);
   }
 
   catch (const char *e)

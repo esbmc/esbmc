@@ -3928,6 +3928,12 @@ InferResult python_annotation<Json>::infer_type_from_ifexp(
     return InferResult::OK;
   }
 
+  // A function arm makes the value a function on one path, which no other
+  // arm's type describes; leave the name to the converter (#10231).
+  function_values values(ast_, extra_subscript_inference_asts_);
+  if (values.of(ifexp_node["body"]) || values.of(ifexp_node["orelse"]))
+    return InferResult::UNKNOWN;
+
   // If only one branch succeeded, use that type
   if (body_result == InferResult::OK)
   {
