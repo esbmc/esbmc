@@ -73,6 +73,15 @@ _MAX_NONDET_STR_KEYS: int = 8
 # bool admits exactly two keys, however large the requested bound.
 _MAX_NONDET_BOOL_KEYS: int = 2
 
+# The first loop of every list builder is marked `__ESBMC_unroll(8)` and adds
+# at most this many elements, so symex unwinds it in full whatever k or
+# `--unwind` is: the input builder does not decide how deep the program under
+# test is explored. `__ESBMC_unroll` takes a literal only, so each 8 must match
+# this value. A list asked for more elements adds the rest in an ordinary loop.
+# The dict builders are left unmarked: inserting a key scans the dict, and that
+# loop in the C model would still set k.
+_UNROLLED_ELEMENTS: int = 8
+
 
 def _nondet_size(max_size: int) -> int:
     """
@@ -126,6 +135,14 @@ def _nondet_str_key_bound(max_size: int) -> int:
     return bound
 
 
+def _nondet_unrolled_bound(max_size: int) -> int:
+    """Clamp a requested size to the elements the unrolled loop builds."""
+    bound: int = max_size
+    if bound > _UNROLLED_ELEMENTS:  # pylint: disable=consider-using-min-builtin
+        bound = _UNROLLED_ELEMENTS
+    return bound
+
+
 def _nondet_bool_key_bound(max_size: int) -> int:
     """Clamp a requested size to the two keys a bool admits."""
     bound: int = max_size
@@ -138,11 +155,17 @@ def _nondet_list_int(max_size: int) -> list:
     """Return a list of size [0, max_size] whose elements are independent ints."""
     result: list[int] = []
     size: int = _nondet_size(max_size)
+    bound: int = _nondet_unrolled_bound(max_size)
 
     i: int = 0
-    while i < size:
+    __ESBMC_unroll(8)
+    while i < bound and i < size:
         result.append(nondet_int())
         i = i + 1
+    if bound < max_size:
+        while i < size:
+            result.append(nondet_int())
+            i = i + 1
 
     return result
 
@@ -151,11 +174,17 @@ def _nondet_list_float(max_size: int) -> list:
     """Return a list of size [0, max_size] whose elements are independent floats."""
     result: list[float] = []
     size: int = _nondet_size(max_size)
+    bound: int = _nondet_unrolled_bound(max_size)
 
     i: int = 0
-    while i < size:
+    __ESBMC_unroll(8)
+    while i < bound and i < size:
         result.append(nondet_float())
         i = i + 1
+    if bound < max_size:
+        while i < size:
+            result.append(nondet_float())
+            i = i + 1
 
     return result
 
@@ -164,11 +193,17 @@ def _nondet_list_bool(max_size: int) -> list:
     """Return a list of size [0, max_size] whose elements are independent bools."""
     result: list[bool] = []
     size: int = _nondet_size(max_size)
+    bound: int = _nondet_unrolled_bound(max_size)
 
     i: int = 0
-    while i < size:
+    __ESBMC_unroll(8)
+    while i < bound and i < size:
         result.append(nondet_bool())
         i = i + 1
+    if bound < max_size:
+        while i < size:
+            result.append(nondet_bool())
+            i = i + 1
 
     return result
 
@@ -177,11 +212,17 @@ def _nondet_list_str(max_size: int) -> list:
     """Return a list of size [0, max_size] whose elements are independent strs."""
     result: list[str] = []
     size: int = _nondet_size(max_size)
+    bound: int = _nondet_unrolled_bound(max_size)
 
     i: int = 0
-    while i < size:
+    __ESBMC_unroll(8)
+    while i < bound and i < size:
         result.append(nondet_str())
         i = i + 1
+    if bound < max_size:
+        while i < size:
+            result.append(nondet_str())
+            i = i + 1
 
     return result
 
