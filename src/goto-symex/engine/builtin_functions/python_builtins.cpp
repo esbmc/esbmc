@@ -160,7 +160,10 @@ static expr2tc points_to_object(
 
 // The value isinstance inspects once the value set has been consulted: the
 // object the operand points to, or the operand itself when nothing is known.
-expr2tc goto_symext::isinstance_subject_of(const isinstance2t &obj)
+// NULL beside another object is None on some paths only: it is skipped and
+// @p beside_null set, so the caller tests NULL itself (#10434).
+expr2tc
+goto_symext::isinstance_subject_of(const isinstance2t &obj, bool *beside_null)
 {
   expr2tc value = obj.side_1;
   value_setst::valuest value_set;
@@ -178,12 +181,25 @@ expr2tc goto_symext::isinstance_subject_of(const isinstance2t &obj)
   cur_state->top().level1.rename(l1_value);
   cur_state->value_set.get_value_set(l1_value, value_set);
 
+  const auto is_object = [](const expr2tc &entry) {
+    return is_object_descriptor2t(entry) &&
+           !is_null_object2t(to_object_descriptor2t(entry).object);
+  };
+  const bool has_object =
+    std::any_of(value_set.begin(), value_set.end(), is_object);
+
   // Find the last value from the value set
   for (const auto &entry : value_set)
   {
     if (is_object_descriptor2t(entry))
     {
       const object_descriptor2t &o = to_object_descriptor2t(entry);
+      if (has_object && is_null_object2t(o.object))
+      {
+        if (beside_null)
+          *beside_null = true;
+        continue;
+      }
       value = points_to_object(l1_value, o.object, value);
     }
   }
@@ -196,12 +212,32 @@ expr2tc goto_symext::isinstance_subject_of(const isinstance2t &obj)
   return value;
 }
 
+// isinstance on a pointer that is NULL on some paths and points to an object
+// on others: NULL is None, an instance of nothing isinstance asks about, so it
+// is tested rather than answered from the last object (#10434).
+void goto_symext::guard_isinstance_beside_null(expr2tc &expr)
+{
+  if (
+    !is_isinstance2t(expr) || asks_whether_traced(to_isinstance2t(expr).side_2))
+    return;
+  const isinstance2t &obj = to_isinstance2t(expr);
+  bool beside_null = false;
+  const expr2tc subject = isinstance_subject_of(obj, &beside_null);
+  if (!beside_null)
+    return;
+  const expr2tc operand = obj.side_1;
+  expr2tc answer = isinstance2tc(subject, obj.side_2);
+  simplify_python_builtins(answer);
+  expr = and2tc(notequal2tc(operand, gen_zero(operand->type)), answer);
+}
+
 void goto_symext::simplify_python_builtins(expr2tc &expr)
 {
   expr->Foreach_operand([this](expr2tc &e) {
     if (!is_nil_expr(e))
       simplify_python_builtins(e);
   });
+  guard_isinstance_beside_null(expr);
 
   if (is_isinstance2t(expr))
   {
