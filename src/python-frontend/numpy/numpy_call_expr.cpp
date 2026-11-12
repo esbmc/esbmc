@@ -13742,6 +13742,15 @@ exprt numpy_call_expr::scalar_binary_call(
       "TypeError: numpy." + function +
       "() is only supported on number "
       "literals with constant folding");
+  // power of floats takes the bounded model either way, not the C pow model
+  // `**` would reach.
+  if (function == "power" && !(lhs.is_int && rhs.is_int))
+    return bounded_math(converter_, call_)
+      .binary(
+        "pow",
+        from_double(to_double(lhs), double_type()),
+        from_double(to_double(rhs), double_type()),
+        math_module::numpy);
   return unfolded_scalar_binary(function, lhs, rhs, t);
 }
 

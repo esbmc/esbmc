@@ -21,6 +21,35 @@ static expr2tc between(const expr2tc &value, double low, double high)
     lessthanequal2tc(value, double_constant(value->type, high)));
 }
 
+// __builtin_bounded_<f>(a, b) of hypot or arctan2: arguments constant by now
+// get the C library's value within the ulps bound, exact where C99 fixes
+// the result; the caller's relations bound any other arguments.
+void goto_symext::symex_bounded_binary_math(
+  const code_function_call2t &call,
+  const std::string &function)
+{
+  const expr2tc &ret = call.ret;
+  expr2tc a = call.operands[0], b = call.operands[1];
+  cur_state->rename(a);
+  cur_state->rename(b);
+  do_simplify(a);
+  do_simplify(b);
+  symex_assign(code_assign2tc(ret, gen_nondet(ret->type)));
+  if (!is_constant_floatbv2t(a) || !is_constant_floatbv2t(b))
+    return;
+  const double first = to_constant_floatbv2t(a).value.to_double();
+  const double second = to_constant_floatbv2t(b).value.to_double();
+  const double value = transcendental::host_value(function, first, second);
+  const bool special = first == 0.0 || second == 0.0 || !std::isfinite(first) ||
+                       !std::isfinite(second);
+  const transcendental::interval result =
+    special ? transcendental::interval{value, value}
+            : transcendental::within_ulps(value);
+  if (std::isnan(result.low))
+    return;
+  assume(between(ret, result.low, result.high));
+}
+
 void goto_symext::symex_bounded_math(
   const code_function_call2t &call,
   const std::string &function)
@@ -28,6 +57,13 @@ void goto_symext::symex_bounded_math(
   const expr2tc &ret = call.ret;
   if (is_nil_expr(ret))
     return;
+  // The host's values must be those of the default rounding mode.
+  if (call.operands.size() == 2 && transcendental::is_bounded_binary(function))
+  {
+    const host_rounding_mode rounding_guard(FE_TONEAREST);
+    symex_bounded_binary_math(call, function);
+    return;
+  }
   // The host's values must be those of the default rounding mode.
   const host_rounding_mode rounding_guard(FE_TONEAREST);
   expr2tc x = call.operands[0];

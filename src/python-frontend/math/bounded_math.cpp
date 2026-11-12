@@ -686,42 +686,10 @@ exprt bounded_math::squares_relation(
       square, ieee("ieee_sub", sum, radius), ieee("ieee_add", sum, radius)));
 }
 
-// arctan2(|y|, x) of a regular (x, y), from the Taylor series of arctan on
-// t = min/max, taken to (t - 1)/(t + 1) past tan(pi/8) so that the series
-// of 19 terms is within 3e-17, then moved to the octant of (x, y).
-exprt bounded_math::arctan2_estimate(const exprt &y, const exprt &x)
-{
-  static const double pi = std::numbers::pi;
-  const exprt ax = abs_value(x), ay = abs_value(y);
-  const exprt steep = binary_relation_exprt(ay, ">", ax);
-  const exprt t =
-    ieee("ieee_div", if_exprt(steep, ax, ay), if_exprt(steep, ay, ax));
-  const exprt far = greater(t, 0.41421356237309503);
-  const exprt one = number(1.0);
-  const exprt u = if_exprt(
-    far,
-    ieee("ieee_div", ieee("ieee_sub", t, one), ieee("ieee_add", t, one)),
-    t);
-  const exprt w = ieee("ieee_mul", u, u);
-  exprt series = number(1.0 / 37);
-  for (int k = 17; k >= 0; --k)
-    series = ieee(
-      "ieee_add",
-      number((k % 2 ? -1.0 : 1.0) / (2 * k + 1)),
-      ieee("ieee_mul", w, series));
-  const exprt angle = ieee(
-    "ieee_add",
-    if_exprt(far, number(pi / 4), number(0.0)),
-    ieee("ieee_mul", u, series));
-  const exprt octant =
-    if_exprt(steep, ieee("ieee_sub", number(pi / 2), angle), angle);
-  return if_exprt(less(x, 0.0), ieee("ieee_sub", number(pi), octant), octant);
-}
-
 // The special values of C99 F.9.1.4 are exact; otherwise the result lies in
 // the quadrant of (x, y), on the side of pi/4 or 3*pi/4 that |y| >= |x| picks,
-// and within 1e-13 of arctan2_estimate, which covers its rounding and
-// NumPy's ulps.
+// and is the magnitude of what symex gives arguments that are constant by
+// then: the C library's value within the ulps bound.
 exprt bounded_math::arctan2(const exprt &y, const exprt &x)
 {
   static const double pi = std::numbers::pi, half_pi = pi / 2,
@@ -747,16 +715,10 @@ exprt bounded_math::arctan2(const exprt &y, const exprt &x)
       between(
         magnitude, number(below(half_pi)), number(above(three_quarter_pi))),
       between(magnitude, number(below(three_quarter_pi)), number(above(pi)))));
-  const exprt estimate = arctan2_estimate(y, x);
-  const exprt tolerance = number(1e-13);
+  const exprt library = bounded_binary_call("arctan2", y, x);
   assume(or_exprt(
     not_exprt(regular),
-    and_exprt(
-      in_quadrant,
-      between(
-        magnitude,
-        ieee("ieee_sub", estimate, tolerance),
-        ieee("ieee_add", estimate, tolerance)))));
+    and_exprt(in_quadrant, equality_exprt(magnitude, abs_value(library)))));
   exprt negated("unary-", double_type());
   negated.copy_to_operands(magnitude);
   const exprt general = if_exprt(sign_bit(y), negated, magnitude);
@@ -814,6 +776,36 @@ exprt bounded_math::bounded_call(
   call.arguments().push_back(x);
   call.arguments().push_back(
     module == math_module::math ? exprt(true_exprt()) : false_exprt());
+  call.type() = double_type();
+  call.location() = converter_.get_location_from_decl(call_);
+  return fresh("$math$", call);
+}
+
+// Symex gives arguments that are constant by then the C library's value
+// within the ulps bound (exact at C99's special values), and anything else
+// no constraint.
+exprt bounded_math::bounded_binary_call(
+  const std::string &function,
+  const exprt &a,
+  const exprt &b)
+{
+  const std::string name = "__builtin_bounded_" + function;
+  const std::string id = "c:@F@" + name;
+  code_typet type;
+  type.return_type() = double_type();
+  type.arguments().push_back(code_typet::argumentt(double_type()));
+  type.arguments().push_back(code_typet::argumentt(double_type()));
+  if (!converter_.symbol_table_.find_symbol(id))
+    converter_.add_symbol(converter_.create_symbol(
+      converter_.python_file(),
+      name,
+      id,
+      converter_.get_location_from_decl(call_),
+      type));
+  code_function_callt call;
+  call.function() = symbol_exprt(id, type);
+  call.arguments().push_back(a);
+  call.arguments().push_back(b);
   call.type() = double_type();
   call.location() = converter_.get_location_from_decl(call_);
   return fresh("$math$", call);
