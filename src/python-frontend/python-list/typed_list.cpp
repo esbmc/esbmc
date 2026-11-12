@@ -102,24 +102,26 @@ exprt python_list::typed_literal()
 
 exprt python_list::typed_nondet(const exprt &max_size)
 {
-  // nondet_int() never returns the smallest int unless ints are unbounded
-  // (#9923), and the builder's elements are nondet_int()s.
+  // The builder's elements are nondet_int()s, which never return the smallest
+  // int unless ints are unbounded (#9923).
   const bool exclude_min = !config.options.get_bool_option("int-encoding");
-  const std::vector<exprt> args{
-    build_typecast(to_value_expr(max_size, converter_.ns), typed_int_type()),
-    exclude_min ? exprt(true_exprt()) : exprt(false_exprt())};
-  return typed_new_list("c:@F@__ESBMC_tlist_nondet", args);
+  return typed_new_list(
+    "c:@F@__ESBMC_tlist_nondet",
+    {build_typecast(to_value_expr(max_size, converter_.ns), typed_int_type()),
+     exclude_min ? exprt(true_exprt()) : exprt(false_exprt())});
 }
 
 exprt python_list::typed_element(const exprt &list, const exprt &index)
 {
   // The same index normalisation and IndexError as an untyped list, then
   // the element itself as an lvalue, so a store needs nothing else.
-  const typet int_type = typed_int_type();
+  const typet slot_type = symbol_typet("tag-struct __ESBMC_PySlot");
   const element_storage storage{
-    "c:@F@__ESBMC_tlist_at", "slot", pointer_typet(int_type)};
-  return build_dereference(
-    build_list_at_call(list, index, list_value_, storage), int_type);
+    "c:@F@__ESBMC_tlist_at", "slot", pointer_typet(slot_type)};
+  return build_deref_member(
+    build_list_at_call(list, index, list_value_, storage),
+    "v",
+    typed_int_type());
 }
 
 exprt python_list::typed_append(const exprt &list, const exprt &value)

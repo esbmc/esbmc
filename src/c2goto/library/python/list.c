@@ -752,8 +752,8 @@ PyObject *__ESBMC_list_at(PyListObject *l, size_t index)
  * qualify. Every operation on such a list is one of the __ESBMC_tlist_*
  * functions below or a direct `slot[i]` access the converter emits. */
 
-/* Symex binds the result to a fresh infinite array of int64. */
-long long *__ESBMC_create_inf_i64()
+/* Symex binds the result to a fresh infinite array of PySlot. */
+PySlot *__ESBMC_create_inf_slots()
 {
   return NULL;
 }
@@ -766,7 +766,7 @@ PyListObject *__ESBMC_tlist_create()
   l->size = 0;
   l->is_tuple = false;
   l->may_nest = &__ESBMC_list_nest_no;
-  l->slot = __ESBMC_create_inf_i64();
+  l->slot = __ESBMC_create_inf_slots();
   return l;
 }
 
@@ -818,12 +818,12 @@ PyListObject *__ESBMC_tlist_nondet(long long max_size, bool exclude_min)
 
 void __ESBMC_tlist_push(PyListObject *l, long long value)
 {
-  l->slot[l->size] = value;
+  l->slot[l->size].v = value;
   l->size++;
 }
 
 /* The element __ESBMC_list_at would return, with the same claim. */
-long long *__ESBMC_tlist_at(PyListObject *l, size_t index)
+PySlot *__ESBMC_tlist_at(PyListObject *l, size_t index)
 {
   __ESBMC_assert(index < l->size, "IndexError: out-of-bounds read in list");
   return &l->slot[index];

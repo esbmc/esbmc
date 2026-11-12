@@ -1314,10 +1314,14 @@ void goto_symext::run_intrinsic(
   }
 
   // The element storage of a typed Python list (python/list.c).
-  if (symname == "c:@F@__ESBMC_create_inf_i64")
+  if (symname == "c:@F@__ESBMC_create_inf_slots")
   {
     assert(func_call.operands.size() == 0 && "Wrong signature");
-    symex_mem_inf(func_call.ret, get_int64_type(), cur_state->guard);
+    const symbolt *slot_symbol =
+      new_context.find_symbol("tag-struct __ESBMC_PySlot");
+    assert(slot_symbol);
+    symex_mem_inf(
+      func_call.ret, migrate_symbol_type(*slot_symbol), cur_state->guard);
     return;
   }
 

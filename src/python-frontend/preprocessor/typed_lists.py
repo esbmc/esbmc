@@ -483,10 +483,24 @@ class TypedListGate:
             params = self.functions[node.func.id].args.args
             for arg, param in zip(node.args, params):
                 self._flow_into((node.func.id, param.arg), arg, scope)
+            if not self._result_followed(node, scope):
+                self.classes.poison_loc((node.func.id, RETURN),
+                                        f"result used in {_describe(_parent(node))}")
         elif isinstance(node.func, ast.Name) and node.func.id.startswith(
                 "__ESBMC_") and node.func.id not in _PLAIN_INTRINSICS:
             for name in _names_in(node):
                 self.classes.poison_loc(scope.loc(name), f"used in {node.func.id}")
+
+    def _result_followed(self, call, scope):
+        """Whether the list an analysed call returns reaches only a location
+        `_flow_into` joins it to, or is dropped."""
+        parent = _parent(call)
+        if isinstance(parent, ast.Expr) or (_single_name_target(parent) is not None
+                                            and parent.value is call):
+            return True
+        if isinstance(parent, ast.Return):
+            return scope.name != MODULE
+        return isinstance(parent, ast.Call) and call in parent.args and self._analysed_call(parent)
 
     def _record_name(self, node, scope):
         loc = scope.loc(node.id)
