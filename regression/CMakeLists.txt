@@ -407,6 +407,7 @@ if(APPLE)
                     ${TEST_GENERATION}
                     ltl
                     goto-transcoder
+                    goto2lean
                     loop-invariants
        )
 elseif(WIN32)
@@ -487,6 +488,7 @@ else()
                     ltl
                     goto-coverage
                     goto-transcoder
+                    goto2lean
                     parallel-solving
                     loop-invariants
                     function_contract

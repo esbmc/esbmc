@@ -1,0 +1,4 @@
+CORE
+main.c
+--goto2lean --ir
+^ERROR: goto2lean: unsupported --ir without --no-simplify: ESBMC's simplifier folds constants with fixed-width wraparound, which Lean's Int does not$

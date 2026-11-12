@@ -495,6 +495,10 @@ int esbmc_parseoptionst::doit()
   optionst options;
   get_command_line_options(options);
 
+  // A --goto2lean run that fails anywhere must not leave an earlier proof file.
+  if (cmdline.isset("goto2lean") && !options.get_option("output").empty())
+    std::remove(options.get_option("output").c_str());
+
   // for solidity: detect .sol files in positional args or via --sol
   {
     bool is_solidity = cmdline.isset("sol");

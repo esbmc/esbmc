@@ -1,0 +1,6 @@
+CORE
+main.c
+--goto2lean
+^  \(∃ i : BitVec 32, \(\(x < i\) ∨ \(x = \(4294967295#32\)\)\)\) ∧ \($
+^  \(∀ i : BitVec 32, \(i ≤ \(4294967295#32\)\)\) ∧ \($
+bv_decide only handles quantifier-free goals
