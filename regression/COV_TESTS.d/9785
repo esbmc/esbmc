@@ -15,3 +15,8 @@ regression/esbmc/github_9785_int_base_stores
 regression/esbmc/github_9785_int_base_stores_fail
 regression/esbmc/github_9785_int_base_pointer_member
 regression/esbmc/github_9785_int_base_pointer_member_fail
+regression/esbmc/github_9785_array_flattener
+regression/esbmc/github_9785_two_targets
+regression/esbmc/github_9785_two_targets_fail
+regression/esbmc/github_9785_push_pop
+regression/esbmc/github_9785_push_pop_fail
