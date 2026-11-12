@@ -22,7 +22,7 @@ using namespace python_expr;
 namespace
 {
 using dynamic_type_detail::assigned_value_at;
-using dynamic_type_detail::collect_branch_literal_kinds;
+using dynamic_type_detail::collect_if_node_literal_kinds;
 using dynamic_type_detail::count_bindings;
 using dynamic_type_detail::single_assigned_value;
 
@@ -611,34 +611,36 @@ std::unordered_set<std::string> dynamic_type_handler::detect_dynamic_type_names(
     }
   }
 
-  const nlohmann::json callables = converter_.kind_module_body();
-  auto collect = [&](const nlohmann::json &block) {
-    return collect_branch_literal_kinds(
-      block, kinds, leaf_count, leaf_total, *scope_body, callables);
-  };
-  const bool keeps_value =
-    !if_node.contains("orelse") || if_node["orelse"].empty();
-  if (
-    !if_node.contains("body") || !collect(if_node["body"]) ||
-    (!keeps_value && !collect(if_node["orelse"])))
+  if (!collect_if_node_literal_kinds(
+        if_node,
+        kinds,
+        leaf_count,
+        leaf_total,
+        *scope_body,
+        converter_.kind_module_body()))
     return dynamic_type_names;
 
+  // A path through a leaf that assigns nothing keeps the name's value, or
+  // leaves it unbound, so that a read there raises.
   for (auto &[name, kind_set] : kinds)
+  {
+    const symbolt *existing =
+      converter_.symbol_table().find_symbol(bound_symbol_id(name).to_string());
     if (
-      leaf_count[name] == leaf_total &&
-      joins_divergent_kinds(name, kind_set, keeps_value))
+      joins_divergent_kinds(
+        name, existing, kind_set, existing && leaf_count[name] < leaf_total))
       dynamic_type_names.insert(name);
+  }
 
   return dynamic_type_names;
 }
 
 bool dynamic_type_handler::joins_divergent_kinds(
   const std::string &name,
+  const symbolt *existing,
   std::unordered_set<std::string> &kinds,
   bool keeps_value) const
 {
-  const symbolt *existing =
-    converter_.symbol_table().find_symbol(bound_symbol_id(name).to_string());
   const bool declared_any = existing && existing->get_type() == any_type();
   if (
     existing && !declared_any &&
@@ -662,6 +664,60 @@ bool dynamic_type_handler::joins_divergent_kinds(
     return false;
   kinds.erase("");
   return dynamic_type_detail::kinds_diverge(kinds);
+}
+
+std::unordered_set<std::string>
+dynamic_type_handler::detect_dynamic_type_attributes(
+  const std::string &class_name) const
+{
+  std::unordered_set<std::string> result;
+  const nlohmann::json &module_body = converter_.ast()["body"];
+
+  const nlohmann::json *class_node = nullptr;
+  for (const auto &stmt : module_body)
+  {
+    if (
+      stmt.is_object() && stmt.value("_type", "") == "ClassDef" &&
+      stmt.value("name", "") == class_name)
+    {
+      class_node = &stmt;
+      break;
+    }
+  }
+  if (!class_node || !class_node->contains("body"))
+    return result;
+
+  // Attribute names this class assigns via self.<attr>.
+  std::unordered_set<std::string> self_attrs;
+  for (const auto &member : (*class_node)["body"])
+  {
+    if (member.value("_type", "") != "FunctionDef" || !member.contains("body"))
+      continue;
+    for (const auto &stmt : member["body"])
+    {
+      auto [target, value] = dynamic_type_detail::assign_target_value(stmt);
+      (void)value;
+      if (
+        target && target->value("_type", "") == "Attribute" &&
+        target->contains("value") && (*target)["value"].is_object() &&
+        (*target)["value"].value("_type", "") == "Name" &&
+        (*target)["value"].value("id", "") == "self")
+        self_attrs.insert(target->value("attr", ""));
+    }
+  }
+
+  for (const auto &attr : self_attrs)
+  {
+    if (
+      dynamic_type_detail::classes_declaring_attribute(module_body, attr)
+        .size() > 1)
+      continue;
+    if (dynamic_type_detail::kinds_diverge(
+          dynamic_type_detail::collect_attribute_literal_kinds(
+            module_body, attr)))
+      result.insert(attr);
+  }
+  return result;
 }
 
 void dynamic_type_handler::declare_dynamic_type_names(
@@ -723,7 +779,7 @@ void dynamic_type_handler::declare_dynamic_type_names(
         continue;
       exprt existing_value = build_symbol(*existing_symbol);
       for (const codet &instr : build_tag_field_assigns(
-             *alias_symbol_ptr, existing_value, alias_location))
+             build_symbol(*alias_symbol_ptr), existing_value, alias_location))
         converter_.add_instruction(instr);
       continue;
     }
@@ -919,7 +975,7 @@ exprt dynamic_type_handler::build_scalar_payload(
 }
 
 std::vector<codet> dynamic_type_handler::build_tag_field_assigns(
-  symbolt &tag_symbol,
+  const exprt &tag_expr,
   const exprt &rhs,
   const locationt &location,
   const std::optional<std::string> &interned_text)
@@ -946,8 +1002,6 @@ std::vector<codet> dynamic_type_handler::build_tag_field_assigns(
   if (type_handler_.is_string_type(type_id_source))
     type_id_source = pointer_typet(char_type());
   exprt type_id_value = type_handler_.tagged_scalar_type_id(type_id_source);
-
-  exprt tag_expr = build_symbol(tag_symbol);
 
   code_assignt value_assign(
     build_member(tag_expr, "value", pointer_typet(empty_typet())), tag_value);
@@ -994,7 +1048,21 @@ void dynamic_type_handler::assign(
   symbolt *tag_symbol = find_tag_symbol(name);
 
   for (const codet &instr : build_tag_field_assigns(
-         *tag_symbol, rhs, location, interned_str_text(value_node)))
+         build_symbol(*tag_symbol),
+         rhs,
+         location,
+         interned_str_text(value_node)))
+    target_block.copy_to_operands(instr);
+}
+
+void dynamic_type_handler::assign_to_lvalue(
+  const exprt &rhs,
+  const locationt &location,
+  const exprt &tagged_lvalue,
+  codet &target_block)
+{
+  for (const codet &instr :
+       build_tag_field_assigns(tagged_lvalue, rhs, location))
     target_block.copy_to_operands(instr);
 }
 
@@ -1602,7 +1670,7 @@ exprt dynamic_type_handler::build_tagged_value(
   target_block.copy_to_operands(tag_decl);
 
   for (const codet &instr :
-       build_tag_field_assigns(tag_symbol, value, location))
+       build_tag_field_assigns(build_symbol(tag_symbol), value, location))
     target_block.copy_to_operands(instr);
 
   return build_symbol(tag_symbol);

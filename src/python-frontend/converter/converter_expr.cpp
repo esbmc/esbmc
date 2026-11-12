@@ -1728,6 +1728,8 @@ std::optional<exprt> python_converter::try_dispatch_dict_subscript(
   else if (is_call_bound_dict(base))
     check_type = !type_handler_.type_to_string(expected_type).empty();
 
+  expected_type = dict_read_function_type(element).value_or(expected_type);
+
   // Pass the expected type to the dict handler
   // If empty, the handler will use its default heuristics
   return dict_handler_->handle_dict_subscript(

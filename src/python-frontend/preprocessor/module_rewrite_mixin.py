@@ -656,6 +656,7 @@ class ModuleRewriteMixin:
                 self.called_names.add(n.func.id)
         self.referenced_names = _referenced_names(node)
         self.outer_stored_names = self._outer_stored_names(node)
+        self.rebindable_names = self._rebindable_names(node)
         self._scan_fixed_receivers(node)
         self._scan_subscript_stored_values(node)
         self.variable_names = self._variable_names(node)

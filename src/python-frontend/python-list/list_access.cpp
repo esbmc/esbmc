@@ -138,6 +138,18 @@ exprt python_list::build_list_at_call(
       gen_zero(obj_type));
   }
 
+  // A lowered for-loop reads the list whose current size its condition has
+  // just compared the index with, so the read needs no bounds check (#10259).
+  if (element.value("esbmc_in_bounds", false))
+  {
+    const exprt list_ptr =
+      list.type().is_pointer() ? list : build_address_of(list);
+    return build_add(
+      build_deref_member(list_ptr, "items", obj_type),
+      build_typecast(index, size_type()),
+      obj_type);
+  }
+
   // A discarded type probe only reads this call's type, and the real RHS
   // build re-emits the whole check; normalizing here would emit a second
   // __ESBMC_list_size call and IndexError guard per subscript assignment.

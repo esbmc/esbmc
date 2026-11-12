@@ -120,6 +120,7 @@ const std::string kEsbmcAssume = "__ESBMC_assume";
 const std::string kVerifierAssume = "__VERIFIER_assume";
 const std::string kEsbmcAssert = "__ESBMC_assert";
 const std::string kEsbmcUnreachable = "__ESBMC_unreachable";
+const std::string kEsbmcUnroll = "__ESBMC_unroll";
 const std::string kLoopInvariant = "__loop_invariant";
 const std::string kEsbmcLoopInvariant = "__ESBMC_loop_invariant";
 const std::string kEsbmcRequires = "__ESBMC_requires";
@@ -2023,6 +2024,46 @@ reuses_c_model(const nlohmann::json &call, const symbol_id &function_id)
            call["func"].value("_type", "") == "Attribute");
 }
 
+// __ESBMC_unreachable and __ESBMC_unroll lower to calls to the C intrinsics
+// of the same names. Symex's intrinsic handler in symex_main.cpp fires on
+// __ESBMC_unreachable under --enable-unreachability-intrinsic.
+// apply_intrinsic_unroller binds __ESBMC_unroll(n) to the loop that follows
+// it, so that loop is unwound n + 1 times whatever --unwind or k says.
+// Returns nil for any other callee.
+exprt function_call_builder::build_c_intrinsic_call(
+  const symbol_id &function_id) const
+{
+  const std::string &func_name = function_id.get_function();
+  const bool is_unroll = func_name == kEsbmcUnroll;
+  if (!is_unroll && !is_unreachable_call(function_id))
+    return nil_exprt();
+
+  if (call_["args"].size() != (is_unroll ? 1 : 0))
+    throw std::runtime_error(
+      func_name +
+      (is_unroll ? " takes exactly one argument" : " takes no arguments"));
+
+  code_typet fn_type;
+  fn_type.return_type() = empty_typet();
+  if (is_unroll)
+    fn_type.arguments().push_back(code_typet::argumentt(int_type()));
+
+  locationt location = converter_.get_location_from_decl(call_);
+  const std::string symbol_name = "c:@F@" + func_name;
+  if (converter_.symbol_table().find_symbol(symbol_name) == nullptr)
+    converter_.add_symbol(converter_.create_symbol(
+      converter_.python_file(), func_name, symbol_name, location, fn_type));
+
+  code_function_callt call;
+  call.function() = symbol_exprt(symbol_name, fn_type);
+  if (is_unroll)
+    call.arguments().push_back(
+      build_typecast(converter_.get_expr(call_["args"][0]), int_type()));
+  call.type() = empty_typet();
+  call.location() = location;
+  return call;
+}
+
 exprt function_call_builder::build() const
 {
   if (call_["func"]["_type"] == "Attribute")
@@ -2215,27 +2256,9 @@ exprt function_call_builder::build() const
     return cover_code;
   }
 
-  // __ESBMC_unreachable: emit a call to the C-style symbol so symex's
-  // intrinsic handler in symex_main.cpp fires under
-  // --enable-unreachability-intrinsic. Lowering matches the atomic_*
-  // pattern below: register a void(void) symbol id and call it.
-  if (is_unreachable_call(function_id))
-  {
-    if (!call_["args"].empty())
-      throw std::runtime_error("__ESBMC_unreachable takes no arguments");
-
-    code_typet fn_type;
-    fn_type.return_type() = empty_typet();
-
-    locationt location = converter_.get_location_from_decl(call_);
-    converter_.ensure_void_void_intrinsic(kEsbmcUnreachable, location);
-
-    code_function_callt call;
-    call.function() = symbol_exprt("c:@F@" + kEsbmcUnreachable, fn_type);
-    call.type() = empty_typet();
-    call.location() = location;
-    return call;
-  }
+  exprt intrinsic_call = build_c_intrinsic_call(function_id);
+  if (!intrinsic_call.is_nil())
+    return intrinsic_call;
 
   // __ESBMC_atomic_begin / __ESBMC_atomic_end: thin wrappers around the C
   // intrinsics with the same names. Emitting a call to a symbol whose

@@ -52,6 +52,18 @@ list_elem_info python_list::get_tagged_element_info(
   return tagged_info;
 }
 
+// The width of a str held in a fixed char buffer, or 0 for any other type.
+static size_t str_buffer_width(const typet &type)
+{
+  if (
+    !type.is_array() || !type_utils::is_char_storage(type.subtype()) ||
+    !to_array_type(type).size().is_constant())
+    return 0;
+  return binary2integer(
+           to_constant_expr(to_array_type(type).size()).value().c_str(), false)
+    .to_uint64();
+}
+
 // The pointer p in `(*p).type_id == ...`, the condition of the read that
 // extract_pyobject_value builds for a list element of erased (any) type; nil
 // when \p key has no such condition.
@@ -260,22 +272,19 @@ list_elem_info python_list::get_list_element_info(
       from_integer(1, strlen_result.get_type()),
       strlen_result.get_type());
   }
-  // A char array at the fixed tuple-string-member width may be NUL-padded
-  // (#5571): its identity for membership and dict-key comparisons is the
-  // content, not the storage width. Store and probe with content-length + 1
-  // bytes so a padded 'B' (unpacked from a tuple) and a tight 'B' literal
-  // agree on size. The length is a loop-free ITE chain over the fixed width
+  // A char array may be NUL-padded: a str unpacked from a tuple (#5571) or
+  // read by input() (#10376). Its identity for membership and dict-key
+  // comparisons is the content, not the storage width. Store and probe with
+  // content-length + 1 bytes so a padded 'B' and a tight 'B' literal agree on
+  // size. The length is a loop-free ITE chain over the fixed width
   // — a strlen() call here would hide the size behind a loop and return
   // garbage under --no-unwinding-assertions with a small --unwind (the
   // github_3560_2_fail false-SUCCESSFUL). Content without a NUL (e.g. a
   // fully symbolic buffer) keeps the full width, the pre-#5571 behaviour.
-  else if (
-    elem_symbol.get_type() ==
-    type_handler_.get_typet("str", tuple_handler::tuple_str_member_size))
+  else if (const size_t width = str_buffer_width(elem_symbol.get_type()))
   {
-    exprt sz =
-      from_integer(BigInt(tuple_handler::tuple_str_member_size), size_type());
-    for (size_t i = tuple_handler::tuple_str_member_size; i-- > 0;)
+    exprt sz = from_integer(BigInt(width), size_type());
+    for (size_t i = width; i-- > 0;)
     {
       exprt ch =
         build_index(build_symbol(elem_symbol), from_integer(i, index_type()));
@@ -901,7 +910,7 @@ void python_list::emit_list_copy(
   // lists are shared (Python shallow-copy semantics) rather than corrupted by
   // a pointee byte-copy (esbmc/esbmc#5102).
   const shallow_push_call shallow_push =
-    select_shallow_push(src, from_integer(BigInt(0), size_type()));
+    select_shallow_push(src, from_integer(uniform_elem_size(src), size_type()));
   const symbolt *push_obj_sym = shallow_push.func;
   assert(size_sym && at_sym && push_obj_sym);
 

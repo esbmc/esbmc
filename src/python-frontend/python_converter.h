@@ -953,6 +953,10 @@ private:
   /// still be dispatched). The caller MUST fall through to the existing
   /// handling on the empty result.
   std::string get_python_type_category(const typet &t) const;
+  exprt char_operand_type_error(
+    const std::string &op,
+    const exprt &lhs,
+    const exprt &rhs);
 
   bool is_bytes_literal(const nlohmann::json &element);
 
@@ -1203,6 +1207,7 @@ private:
     std::vector<code_blockt> &effects,
     bool &contains_non_boolean);
 
+  exprt get_value_expr(const nlohmann::json &node);
   exprt get_boolop_operand(
     const nlohmann::json &operand,
     std::vector<code_blockt> &effects);
@@ -3165,6 +3170,9 @@ private:
   static const nlohmann::json *
   reordering_builtin_arg(const nlohmann::json &ast_node);
 
+  void record_annotated_list_elem_type(
+    const nlohmann::json &ast_node,
+    const std::string &lhs_id);
   void copy_elem_types_from_reordering_builtin(
     const nlohmann::json &ast_node,
     const std::string &lhs_id);
@@ -3434,6 +3442,10 @@ private:
     const std::string &exception,
     const std::string &message,
     const typet &type);
+  exprt str_arithmetic_type_error(
+    const std::string &op,
+    const exprt &lhs,
+    const exprt &rhs);
   void reject_unmodelled_array_arithmetic(
     const std::string &op,
     const exprt &lhs,
@@ -3957,6 +3969,12 @@ private:
   bool dict_values(
     const nlohmann::json &container,
     std::vector<nlohmann::json> &out);
+  typet stored_function_code_type(const nlohmann::json &value);
+  /// The type of a value read `d[k]` of a dict that holds functions: a
+  /// pointer to their one signature. A read has one static type, so a dict
+  /// that also holds other values, or functions whose signatures differ or
+  /// are not known, is refused (#10341). Nothing when it holds no function.
+  std::optional<typet> dict_read_function_type(const nlohmann::json &element);
   typet subscript_call_return_type(
     const exprt &func_ptr,
     const nlohmann::json &func_node);

@@ -22,14 +22,21 @@ public:
   dynamic_type_handler(python_converter &converter, type_handler &type_handler);
 
   /**
-   * @brief Names assigned genuinely incompatible literal types across
-   * every branch of `if_node`, following nested if/else (including elif)
-   * on either side; a name must be assigned in every branch to qualify. The
-   * value a name holds before the `if` counts as one more branch, and a
-   * name `C.v` stands for class C's own attribute v
+   * @brief Names assigned genuinely incompatible literal types across the
+   * branches of `if_node`, following nested if/else (including elif)
+   * on either side. A branch that does not assign a name, such as the
+   * missing else of an elif chain, keeps the value the name holds before the
+   * `if`, and a name `C.v` stands for class C's own attribute v
    */
   std::unordered_set<std::string>
   detect_dynamic_type_names(const nlohmann::json &if_node) const;
+
+  /**
+   * @brief Attribute names of `class_name` assigned incompatible literal
+   * kinds anywhere in the program.
+   */
+  std::unordered_set<std::string>
+  detect_dynamic_type_attributes(const std::string &class_name) const;
 
   /**
    * @brief Declares (or aliases) each name's tagged-object symbol before
@@ -83,6 +90,15 @@ public:
    * variable was aliased for it; no-op otherwise
    */
   void resolve_read(symbolt *&symbol) const;
+
+  /**
+   * @brief Fills in a tagged-object lvalue's fields from a plain RHS value.
+   */
+  void assign_to_lvalue(
+    const exprt &rhs,
+    const locationt &location,
+    const exprt &tagged_lvalue,
+    codet &target_block);
 
   /**
    * @brief Dispatches Eq/NotEq/Lt/LtE/Gt/GtE between a tagged-scalar
@@ -217,7 +233,7 @@ private:
    * literal, whose tags then share one payload
    */
   std::vector<codet> build_tag_field_assigns(
-    symbolt &tag_symbol,
+    const exprt &tag_expr,
     const exprt &rhs,
     const locationt &location,
     const std::optional<std::string> &interned_text = std::nullopt);
@@ -252,12 +268,13 @@ private:
   symbolt *find_tag_symbol(const std::string &name) const;
 
   /**
-   * @brief Whether `name`, assigned `kinds` on every branch of an `if`,
-   * holds a num on one path and a str on another after it; `keeps_value`
-   * says the `if` has no else
+   * @brief Whether `name`, bound to `existing` before an `if` and assigned
+   * `kinds` on its branches, holds a num on one path and a str on another
+   * after it; `keeps_value` says some branch keeps `existing`
    */
   bool joins_divergent_kinds(
     const std::string &name,
+    const symbolt *existing,
     std::unordered_set<std::string> &kinds,
     bool keeps_value) const;
 

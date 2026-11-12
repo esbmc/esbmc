@@ -634,10 +634,23 @@ static bool is_bitwise_binop(const nlohmann::json &value)
          bitwise.count(value["op"].value("_type", "")) != 0;
 }
 
-/// An arithmetic return is taken for a double, a bit operation for an int.
+/// An arithmetic return is taken for a double, a bit operation or a sign on an
+/// int literal (`-1`) for an int.
 static void
 note_expression_return(TypeFlags &flags, const nlohmann::json &value)
 {
+  if (value["_type"] == "UnaryOp")
+  {
+    const std::string op = value["op"].value("_type", "");
+    const nlohmann::json &operand = value["operand"];
+    if (
+      (op == "USub" || op == "UAdd") && operand["_type"] == "Constant" &&
+      !operand.contains("_bigint") && operand["value"].is_number_integer())
+    {
+      flags.has_int = true;
+      return;
+    }
+  }
   (is_bitwise_binop(value) ? flags.has_int : flags.has_float) = true;
 }
 

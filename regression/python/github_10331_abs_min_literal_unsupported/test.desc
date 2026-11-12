@@ -1,0 +1,5 @@
+CORE
+main.py
+--multi-property
+^VERIFICATION FAILED$
+FAILED .* line +9 +Unsupported: abs\(\) of the smallest int
