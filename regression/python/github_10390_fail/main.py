@@ -8,7 +8,7 @@ def pick(x):
     return None
 
 
-x = random.randint(-20, 20)
+x = random.randint(-20, -1)
 v = pick(x)
 if x < 0:
     assert v != -1
