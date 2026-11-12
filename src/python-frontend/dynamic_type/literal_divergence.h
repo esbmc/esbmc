@@ -530,8 +530,8 @@ classify_branch_literal_assigns(
 }
 
 // Collects, per name, the literal kinds assigned to it across every leaf
-// reachable from `block`, following elif/nested if-else chains. Returns
-// false if any such chain is dangling (no final else).
+// reachable from `block`, following elif/nested if-else chains. A chain with
+// no final else ends in an empty leaf, which assigns nothing.
 inline bool collect_branch_literal_kinds(
   const nlohmann::json &block,
   std::unordered_map<std::string, std::unordered_set<std::string>> &kinds,
@@ -545,9 +545,7 @@ inline bool collect_branch_literal_kinds(
     block[0].value("_type", "") == "If")
   {
     const auto &nested = block[0];
-    if (
-      !nested.contains("body") || !nested.contains("orelse") ||
-      nested["orelse"].empty())
+    if (!nested.contains("body") || !nested.contains("orelse"))
       return false;
 
     return collect_branch_literal_kinds(
@@ -585,9 +583,7 @@ inline bool collect_if_node_literal_kinds(
   const nlohmann::json &scope_body,
   const nlohmann::json &module_body = nlohmann::json())
 {
-  if (!if_node.contains("body"))
-    return false;
-  if (!if_node.contains("orelse") || if_node["orelse"].empty())
+  if (!if_node.contains("body") || !if_node.contains("orelse"))
     return false;
 
   return collect_branch_literal_kinds(
