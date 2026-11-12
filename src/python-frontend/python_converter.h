@@ -3171,6 +3171,9 @@ private:
   static const nlohmann::json *
   reordering_builtin_arg(const nlohmann::json &ast_node);
 
+  void record_annotated_list_elem_type(
+    const nlohmann::json &ast_node,
+    const std::string &lhs_id);
   void copy_elem_types_from_reordering_builtin(
     const nlohmann::json &ast_node,
     const std::string &lhs_id);
