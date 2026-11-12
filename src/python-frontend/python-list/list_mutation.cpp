@@ -963,13 +963,13 @@ void python_list::emit_list_copy(
     std::hash<std::string>{}(converter_.get_type_handler().type_to_string(
       converter_.get_type_handler().get_list_type())),
     config.ansi_c.address_width));
-  exprt push_call = build_call_expr(
-    *push_obj_sym,
-    bool_type(),
-    {build_symbol(dst),
-     build_symbol(tmp_obj),
-     list_type_id_arg,
-     shallow_push.last_arg});
+  std::vector<exprt> push_args{
+    build_symbol(dst), build_symbol(tmp_obj), list_type_id_arg};
+  push_args.insert(
+    push_args.end(),
+    shallow_push.trailing_args.begin(),
+    shallow_push.trailing_args.end());
+  exprt push_call = build_call_expr(*push_obj_sym, bool_type(), push_args);
   push_call.location() = loc;
   body.copy_to_operands(converter_.convert_expression_to_code(push_call));
 
@@ -1508,7 +1508,7 @@ python_list::shallow_push_call python_list::select_list_extend(
   const bool tagged = has_tagged_elements(src);
   const symbolt *func = converter_.symbol_table().find_symbol(
     tagged ? "c:@F@__ESBMC_list_extend_tagged" : "c:@F@__ESBMC_list_extend");
-  return {func, tagged ? tagged_float_type_id(true) : untagged_elem_size};
+  return {func, {tagged ? tagged_float_type_id(true) : untagged_elem_size}};
 }
 
 python_list::shallow_push_call python_list::select_shallow_push(
@@ -1519,7 +1519,9 @@ python_list::shallow_push_call python_list::select_shallow_push(
   const symbolt *func = converter_.symbol_table().find_symbol(
     tagged ? "c:@F@__ESBMC_list_push_shallow_tagged"
            : "c:@F@__ESBMC_list_push_shallow");
-  return {func, tagged ? tagged_float_type_id(true) : untagged_last_arg};
+  if (tagged)
+    return {func, {tagged_float_type_id(true)}};
+  return {func, {untagged_last_arg, tagged_float_type_id(true)}};
 }
 
 BigInt python_list::uniform_elem_size(const exprt &list) const
@@ -1739,7 +1741,10 @@ exprt python_list::build_extend_list_call(
   extend_func_call.function() = build_symbol(*extend_target.func);
   extend_func_call.arguments().push_back(build_symbol(list));
   extend_func_call.arguments().push_back(actual_list);
-  extend_func_call.arguments().push_back(extend_target.last_arg);
+  extend_func_call.arguments().insert(
+    extend_func_call.arguments().end(),
+    extend_target.trailing_args.begin(),
+    extend_target.trailing_args.end());
   extend_func_call.type() = empty_typet();
   extend_func_call.location() = location;
 
