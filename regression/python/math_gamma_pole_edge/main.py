@@ -16,3 +16,9 @@ if y >= 172.0 and y <= 200.0:
     except OverflowError:
         raised = True
     assert raised
+tiny = False
+try:
+    math.gamma(-1e-320)
+except OverflowError:
+    tiny = True
+assert tiny

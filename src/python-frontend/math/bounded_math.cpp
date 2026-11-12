@@ -929,8 +929,16 @@ exprt bounded_math::special_cases(
 exprt bounded_math::gamma_family(const std::string &function, const exprt &x)
 {
   const bool gamma = function == "gamma";
-  const exprt positive_part = bounded_call(function, x, math_module::math);
   const exprt zero = number(0.0);
+  // The pieces cover x > 0 only, so a constant x <= 0 must not reach them.
+  const exprt positive_part = bounded_call(
+    function,
+    if_exprt(binary_relation_exprt(x, ">", zero), x, number(1.0)),
+    math_module::math);
+  // CPython's gamma of a tiny x is 1/x, which overflows below this magnitude.
+  const exprt tiny_negative = and_exprt(
+    binary_relation_exprt(x, "<", zero),
+    binary_relation_exprt(x, ">", number(-5.5626846462680084e-309)));
   const exprt pole =
     and_exprt(binary_relation_exprt(x, "<=", zero), is_integral(x));
   const exprt negative_infinity =
@@ -938,13 +946,19 @@ exprt bounded_math::gamma_family(const std::string &function, const exprt &x)
   const exprt between_poles = fresh("$math$", nil_exprt());
   const exprt finite =
     not_exprt(or_exprt(is_nan(between_poles), is_infinite(between_poles)));
+  // gamma only underflows to zero well below x = -170.
+  const exprt underflow = and_exprt(
+    binary_relation_exprt(x, "<", number(-170.0)),
+    equality_exprt(between_poles, zero));
   assume(
     gamma ? and_exprt(
               finite,
-              if_exprt(
-                even_floor(x),
-                binary_relation_exprt(between_poles, ">=", zero),
-                binary_relation_exprt(between_poles, "<=", zero)))
+              or_exprt(
+                underflow,
+                if_exprt(
+                  even_floor(x),
+                  binary_relation_exprt(between_poles, ">", zero),
+                  binary_relation_exprt(between_poles, "<", zero))))
           : finite);
   const exprt result = if_exprt(
     is_nan(x),
@@ -956,7 +970,10 @@ exprt bounded_math::gamma_family(const std::string &function, const exprt &x)
         pole,
         number(gamma ? NAN : inf),
         if_exprt(
-          binary_relation_exprt(x, "<", zero), between_poles, positive_part))));
+          binary_relation_exprt(x, "<", zero),
+          gamma ? if_exprt(tiny_negative, number(-inf), between_poles)
+                : between_poles,
+          positive_part))));
   raise_if(
     or_exprt(pole, gamma ? negative_infinity : false_exprt()),
     "ValueError",
