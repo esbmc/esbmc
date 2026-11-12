@@ -2,6 +2,8 @@
 #include <sstream>
 #include <util/expr/base_type.h>
 #include <util/expr/expr_util.h>
+#include <util/expr/type_byte_size.h>
+#include <util/lang/c_types.h>
 #include <util/message/message.h>
 #include <util/message/format.h>
 
@@ -629,6 +631,38 @@ smt_astt smt_solver_baset::address_holds(
   return convert_ast(holds);
 }
 
+/* The address @p ptr takes, when it is the address of a known object. Every
+ * address-space version holds the same start for that object, so naming it
+ * directly saves the solver relating array reads (#9785). */
+expr2tc smt_solver_baset::static_address_of(const expr2tc &ptr)
+{
+  const expr2tc *p = &ptr;
+  while (is_typecast2t(*p) && is_pointer_type(to_typecast2t(*p).from))
+    p = &to_typecast2t(*p).from;
+  if (!is_address_of2t(*p))
+    return expr2tc();
+
+  const expr2tc base = get_base_object(to_address_of2t(*p).ptr_obj);
+  if (
+    !is_symbol2t(base) ||
+    renumber_map.back().count(to_symbol2t(base).get_symbol_name()))
+    return expr2tc();
+
+  convert_ast(*p);
+  const auto it = pointer_logic.back().objects.find(base);
+  if (
+    it == pointer_logic.back().objects.end() ||
+    !addr_space_data.back().count(it->second))
+    return expr2tc();
+  const expr2tc start = symbol2tc(
+    ptraddr_type2(), "__ESBMC_ptr_obj_start_" + std::to_string(it->second));
+  return add2tc(
+    ptraddr_type2(),
+    start,
+    typecast2tc(
+      ptraddr_type2(), compute_pointer_offset(to_address_of2t(*p).ptr_obj)));
+}
+
 smt_astt smt_solver_baset::convert_typecast_from_ptr(const typecast2t &cast)
 {
   type2tc addr_type = ptraddr_type2();
@@ -639,19 +673,23 @@ smt_astt smt_solver_baset::convert_typecast_from_ptr(const typecast2t &cast)
 
   expr2tc obj_num = pointer_object2tc(addr_type, cast.from);
 
-  expr2tc from_addr_space = index2tc(
-    addr_space_type,
-    symbol2tc(addr_space_arr_type, get_cur_addrspace_ident()),
-    obj_num);
+  expr2tc address = static_address_of(cast.from);
+  if (is_nil_expr(address))
+  {
+    expr2tc from_addr_space = index2tc(
+      addr_space_type,
+      symbol2tc(addr_space_arr_type, get_cur_addrspace_ident()),
+      obj_num);
 
-  // We've now grabbed the pointer struct, now get the first element. Represent
-  // as fetching the first element of the struct representation.
-  const struct_type2t &addr_space_ty = to_struct_type(addr_space_type);
-  expr2tc from_start = member2tc(
-    addr_space_ty.members[0], from_addr_space, addr_space_ty.member_names[0]);
+    // We've now grabbed the pointer struct, now get the first element.
+    // Represent as fetching the first element of the struct representation.
+    const struct_type2t &addr_space_ty = to_struct_type(addr_space_type);
+    expr2tc from_start = member2tc(
+      addr_space_ty.members[0], from_addr_space, addr_space_ty.member_names[0]);
 
-  expr2tc ptr_offs = pointer_offset2tc(diff_type, cast.from);
-  expr2tc address = add2tc(addr_type, from_start, ptr_offs);
+    expr2tc ptr_offs = pointer_offset2tc(diff_type, cast.from);
+    address = add2tc(addr_type, from_start, ptr_offs);
+  }
   expr2tc pointer = address;
 
   /* Object 0 is NULL and occupies the single address 0; finalize_pointer_chain

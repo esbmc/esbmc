@@ -1011,6 +1011,7 @@ public:
     bool in_range);
   /** Typecast a pointer to an integer */
   smt_astt convert_typecast_from_ptr(const typecast2t &cast);
+  expr2tc static_address_of(const expr2tc &ptr);
   /** Typecast structs to other structs */
   smt_astt convert_typecast_to_struct(const typecast2t &cast);
   /** Despatch a typecast expression to a more specific typecast method */
