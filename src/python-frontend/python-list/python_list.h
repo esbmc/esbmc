@@ -69,6 +69,11 @@ public:
   exprt typed_element(const exprt &list, const exprt &index);
   exprt typed_append(const exprt &list, const exprt &value);
   exprt typed_binop();
+  /// A call the gate flagged: a typed nondet_list builder, or sorted(x) of
+  /// a typed x, whose result is typed when the gate typed the call and is
+  /// otherwise the sorted ints in an untyped list.
+  static bool is_typed_call(const nlohmann::json &call);
+  exprt typed_call(const std::string &func_name);
 
   /**
    * @brief Materialize a fresh list from already-evaluated element values.
@@ -1031,6 +1036,7 @@ private:
   typet typed_int_type() const;
   exprt typed_int_temp(const nlohmann::json &node, const exprt &value);
   exprt typed_new_list(const char *create, const std::vector<exprt> &args);
+  exprt typed_sorted();
   code_function_callt
   typed_push(const nlohmann::json &node, const exprt &list, const exprt &value);
 

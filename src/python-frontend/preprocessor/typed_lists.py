@@ -26,6 +26,9 @@ import ast
 import copy
 
 TYPED_FLAG = "esbmc_typed_list"
+# On a `sorted(x)` call of a typed x whose result is only compared by `==` or
+# `!=` with a list: the converter sorts x and copies it into an untyped list.
+UNTYPED_RESULT_FLAG = "esbmc_typed_list_source"
 
 MODULE = "<module>"
 RETURN = "<return>"
@@ -36,6 +39,7 @@ _INT_UNARYOPS = (ast.USub, ast.UAdd, ast.Invert)
 _NESTED_SCOPES = (ast.Lambda, ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.ListComp,
                   ast.SetComp, ast.DictComp, ast.GeneratorExp)
 _INT_BUILDER = "_nondet_list_int"
+_TRUTH_TESTS = (ast.If, ast.While, ast.IfExp, ast.Assert)
 _LIST_ANNOTATIONS = ("list", "List")
 _VERIFIER_MODULES = ("_sv_verifier", "esbmc")
 # Intrinsics whose arguments the converter lowers as ordinary expressions; a
@@ -231,6 +235,7 @@ class TypedListGate:
         self.accesses = []  # (scope, Subscript, stored value or None)
         self.appends = []  # (scope, Call)
         self.calls = []  # calls of followed functions
+        self.sorts = []  # (scope, Call)
 
     # --- scopes and the functions whose calls carry lists -------------------
 
@@ -324,7 +329,8 @@ class TypedListGate:
 
     def _is_int_subscript(self, expr, scope):
         """An item of a typed list or of a dict whose items are ints."""
-        if getattr(expr, "_typed_access", False) and self.classes.typed(scope.loc(expr.value.id)):
+        if getattr(expr, "_typed_access", False) and self.classes.typed(
+                scope.loc(_list_name(expr.value).id)):
             return True
         return (isinstance(expr.value, ast.Name) and not isinstance(expr.slice, ast.Slice)
                 and self.int_dicts.get(scope.loc(expr.value.id), False))
@@ -480,6 +486,8 @@ class TypedListGate:
             return _repetition(value) is not None or (isinstance(value.op, ast.Add) and all(
                 isinstance(o, ast.Name) or self._allocation_shape(o)
                 for o in (value.left, value.right)))
+        if self._sorted_call(value):
+            return True
         return (isinstance(value, ast.Call) and isinstance(value.func, ast.Name)
                 and value.func.id == _INT_BUILDER and _INT_BUILDER not in self.shadowed
                 and len(value.args) == 1 and not value.keywords
@@ -502,6 +510,14 @@ class TypedListGate:
             self.classes.union(loc, (value.func.id, RETURN))
         else:
             self.classes.poison_loc(loc, f"holds {_describe(value)}")
+
+    def _sorted_call(self, value):
+        """`sorted(x)` or `sorted(x, reverse=<bool>)` of a list name."""
+        return (isinstance(value, ast.Call) and isinstance(value.func, ast.Name)
+                and value.func.id == "sorted" and "sorted" not in self.shadowed
+                and len(value.args) == 1 and isinstance(value.args[0], ast.Name)
+                and all(k.arg == "reverse" and isinstance(k.value, ast.Constant)
+                        and isinstance(k.value.value, bool) for k in value.keywords))
 
     def _analysed_call(self, value):
         return (isinstance(value, ast.Call) and isinstance(value.func, ast.Name)
@@ -673,6 +689,35 @@ class TypedListGate:
         self.accesses.append((scope, subscript, value))
         return None
 
+    def _rule_truth(self, node, _scope):
+        """`if x`, `while x`, `not x`, `bool(x)` and the like: `len(x) != 0`."""
+        parent = _parent(node)
+        if isinstance(parent, _TRUTH_TESTS) and parent.test is node:
+            return None
+        if isinstance(parent, ast.UnaryOp) and isinstance(parent.op, ast.Not):
+            return None
+        if (isinstance(parent, ast.Call) and isinstance(parent.func, ast.Name)
+                and parent.func.id == "bool" and parent.args == [node] and not parent.keywords):
+            return "passed to a shadowed bool" if "bool" in self.shadowed else None
+        return NOT_MINE
+
+    def _rule_sorted(self, node, scope):
+        """`sorted(x)`: a fresh list, typed or not depending on its use."""
+        call = _parent(node)
+        if not (isinstance(call, ast.Call) and node in call.args
+                and isinstance(call.func, ast.Name) and call.func.id == "sorted"):
+            return NOT_MINE
+        if not self._sorted_call(call):
+            return "passed to sorted with key= or a shadowed sorted"
+        parent = _parent(call)
+        if (isinstance(parent, ast.Subscript) and parent.value is call
+                and isinstance(parent.ctx, ast.Load) and not isinstance(parent.slice, ast.Slice)):
+            setattr(parent, "_typed_access", True)
+        elif not (self._result_followed(call, scope) or _compared(call)):
+            return f"sorted result used in {_describe(parent)}"
+        self.sorts.append((scope, call))
+        return None
+
     def _rule_method(self, node, scope):
         attribute = _parent(node)
         if not (isinstance(attribute, ast.Attribute) and attribute.value is node):
@@ -694,7 +739,7 @@ class TypedListGate:
 
     # The uses of a list name the typed model implements, tried in order.
     USE_RULES = (_rule_concatenated, _rule_len, _rule_analysed_call, _rule_alias, _rule_subscript,
-                 _rule_method)
+                 _rule_truth, _rule_sorted, _rule_method)
 
     # The list methods it implements.
     METHOD_RULES = {"append": _method_append}
@@ -725,6 +770,25 @@ class TypedListGate:
         for scope, call in self.appends:
             if not self.is_int(call.args[0], scope):
                 poison(scope.loc(call.func.value.id), "appends a non-int")
+        return self._check_sorts() or changed
+
+    def _check_sorts(self):
+        """Poison x of a `sorted(x)` whose result the typed model cannot
+        hold: read by a non-int index or stored into an untyped list. True
+        when anything changed."""
+        changed = False
+        for scope, value, loc in self.allocations:
+            source = self._sorted_call(value) and scope.loc(value.args[0].id)
+            if source and self.classes.typed(source) and not self.classes.typed(loc):
+                self.classes.poison_loc(source, "sorted into an untyped list")
+                changed = True
+        for scope, call in self.sorts:
+            subscript = _parent(call)
+            source = scope.loc(call.args[0].id)
+            if (getattr(subscript, "_typed_access", False) and self.classes.typed(source)
+                    and not self.is_int(subscript.slice, scope)):
+                self.classes.poison_loc(source, "sorted and indexed by a non-int")
+                changed = True
         return changed
 
     def _allocation_poison(self, value, scope):
@@ -735,7 +799,10 @@ class TypedListGate:
                 return "built from a non-int"
             if repetition is not None and not all(self.is_int(e, scope) for e in repetition):
                 return "repeats a non-int or a non-int number of times"
-            if isinstance(node, ast.Call) and not self.is_int(node.args[0], scope):
+            if self._sorted_call(node):
+                if not self.classes.typed(scope.loc(node.args[0].id)):
+                    return "sorted from an untyped list"
+            elif isinstance(node, ast.Call) and not self.is_int(node.args[0], scope):
                 return "built with a non-int size"
         return None
 
@@ -767,6 +834,15 @@ class TypedListGate:
             if self.classes.typed(loc):
                 for node in _shape_nodes(value):
                     setattr(node, TYPED_FLAG, True)
+        for scope, call in self.sorts:
+            if not self.classes.typed(scope.loc(call.args[0].id)):
+                continue
+            subscript = _parent(call)
+            if getattr(subscript, "_typed_access", False):
+                setattr(subscript, TYPED_FLAG, True)
+                setattr(call, TYPED_FLAG, True)
+            elif not getattr(call, TYPED_FLAG, False):
+                setattr(call, UNTYPED_RESULT_FLAG, True)
         for scope, subscript, _ in self.accesses:
             if self.classes.typed(scope.loc(subscript.value.id)):
                 setattr(subscript, TYPED_FLAG, True)
@@ -846,6 +922,18 @@ def _dict_item_use(name):
                                                         ast.Assign) and holder.targets == [parent]:
         return holder.value
     return _ESCAPES
+
+
+def _compared(node):
+    """Whether @p node is an operand of `==` or `!=` only."""
+    parent = _parent(node)
+    return isinstance(parent, ast.Compare) and all(
+        isinstance(op, (ast.Eq, ast.NotEq)) for op in parent.ops)
+
+
+def _list_name(node):
+    """The list name of a typed access: `x` of `x[i]` or of `sorted(x)[i]`."""
+    return node.args[0] if isinstance(node, ast.Call) else node
 
 
 def _describe(node):
