@@ -16,6 +16,9 @@ int main(void)
   char small[3];
   assert(strxfrm(small, "hello", sizeof small) == 5);
 
+  setlocale(LC_COLLATE, "C");
+  assert(strcoll("b", "a") > 0);
+
   locale_t c = newlocale(LC_ALL_MASK, "C", 0);
   assert(strcoll_l("x", "y", c) < 0);
   char o[4];

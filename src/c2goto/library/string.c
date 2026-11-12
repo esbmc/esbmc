@@ -153,24 +153,33 @@ __ESBMC_HIDE:;
   return 0;
 }
 
-/* Only the C locale is modelled, whose collation is strcmp's
- * (C11 7.24.4.3, 7.24.4.5). */
+extern _Bool __ESBMC_c_collation;
+
+/* Only the C locale's collation, strcmp's, is modelled (C11 7.24.4.3). */
 int strcoll(const char *s1, const char *s2)
 {
 __ESBMC_HIDE:;
-  return strcmp(s1, s2);
+  int r = strcmp(s1, s2);
+  return __ESBMC_c_collation ? r : nondet_int();
 }
 
 size_t strxfrm(char *dst, const char *src, size_t n)
 {
 __ESBMC_HIDE:;
   size_t len = strlen(src);
-  if (len < n)
+  if (__ESBMC_c_collation && len < n)
+  {
     memcpy(dst, src, len + 1);
-  else
-    /* C11 7.24.4.5p3: the contents of the array are indeterminate. */
-    for (size_t i = 0; i < n; i++)
-      dst[i] = nondet_char();
+    return len;
+  }
+  if (!__ESBMC_c_collation)
+    len = nondet_ulong();
+  /* C11 7.24.4.5p3: when the result does not fit, the array's contents are
+   * indeterminate. */
+  for (size_t i = 0; i < n && i < len; i++)
+    dst[i] = nondet_char();
+  if (len < n)
+    dst[len] = '\0';
   return len;
 }
 
