@@ -5691,6 +5691,31 @@ static bool is_float_literal(const nlohmann::json &node)
          node["value"].is_number_float();
 }
 
+/// A list literal is converted into a temporary list, which the lowered
+/// \p call receives as its first argument (#10462).
+static void copy_list_literal_elem_types(
+  element_type_registry &registry,
+  const typet &list_type,
+  const nlohmann::json &literal,
+  const exprt &call,
+  const std::string &dest)
+{
+  if (!call.is_function_call())
+    return;
+  const auto &args = to_code_function_call(to_code(call)).arguments();
+  if (args.empty() || !args[0].is_symbol() || args[0].type() != list_type)
+    return;
+  const std::string &src = args[0].identifier().as_string();
+  // The literal's ints are promoted to float when it also holds a float, so a
+  // float list is only known to hold floats when every element is one.
+  const auto &elts = literal["elts"];
+  if (
+    registry.uniform_element_type(src).is_floatbv() &&
+    !std::all_of(elts.begin(), elts.end(), is_float_literal))
+    return;
+  copy_homogeneous_elem_types(registry, src, dest);
+}
+
 /// Copy the element types of the list named \p name, whose registry id is
 /// \p src, to \p dest. A list with nothing recorded, such as one a
 /// nondet_list builder returns, still declares its element type in its
@@ -5764,25 +5789,10 @@ void python_converter::copy_elem_types_from_reordering_builtin(
     return;
   }
 
-  // A list literal is converted into a temporary list, which the lowered call
-  // receives as its first argument (#10462).
   if (arg.value("_type", "") == "List")
   {
-    if (!call.is_function_call())
-      return;
-    const auto &args = to_code_function_call(to_code(call)).arguments();
-    if (
-      args.empty() || !args[0].is_symbol() ||
-      args[0].type() != type_handler_.get_list_type())
-      return;
-    const std::string &src = args[0].identifier().as_string();
-    // The literal's ints are promoted to float when it also holds a float, so
-    // a float list is only known to hold floats when every element is one.
-    if (
-      element_type_registry_.uniform_element_type(src).is_floatbv() &&
-      !std::all_of(arg["elts"].begin(), arg["elts"].end(), is_float_literal))
-      return;
-    copy_homogeneous_elem_types(element_type_registry_, src, lhs_id);
+    copy_list_literal_elem_types(
+      element_type_registry_, type_handler_.get_list_type(), arg, call, lhs_id);
     return;
   }
 
