@@ -5428,6 +5428,26 @@ exprt python_converter::str_pointer_add_error(
       type_handler_.get_python_type_name(rhs.type()) + "'");
 }
 
+// A Python int is signed, so an unsigned operand meeting one (a len() result)
+// is read as signed rather than the int read as unsigned: otherwise
+// len(l) - 4 wraps (#10494). NumPy integers keep their own promotion rules.
+static void read_unsigned_as_python_int(exprt &lhs, exprt &rhs)
+{
+  if (
+    type_utils::is_numpy_numeric_element(lhs.type()) ||
+    type_utils::is_numpy_numeric_element(rhs.type()))
+    return;
+  auto widen_to_signed = [](exprt &unsigned_op, const exprt &signed_op) {
+    const unsigned width =
+      std::max(bv_width(unsigned_op.type()), bv_width(signed_op.type()));
+    unsigned_op = typecast_exprt(unsigned_op, signedbv_typet(width));
+  };
+  if (lhs.type().is_unsignedbv() && rhs.type().is_signedbv())
+    widen_to_signed(lhs, rhs);
+  else if (rhs.type().is_unsignedbv() && lhs.type().is_signedbv())
+    widen_to_signed(rhs, lhs);
+}
+
 exprt python_converter::build_binary_expression(
   const std::string &op,
   exprt &lhs,
@@ -5454,26 +5474,7 @@ exprt python_converter::build_binary_expression(
     return static_cast<const bv_typet &>(t).get_width();
   };
 
-  // A Python int is signed, so an unsigned operand meeting one (a len()
-  // result) is read as signed rather than the int read as unsigned: otherwise
-  // len(l) - 4 wraps (#10494). NumPy integers keep their own promotion rules.
-  {
-    auto is_numpy = [](const typet &t) {
-      return type_utils::is_numpy_numeric_element(t);
-    };
-    auto widen_to_signed = [&](exprt &unsigned_op, const exprt &signed_op) {
-      const unsigned width =
-        std::max(bit_width(unsigned_op.type()), bit_width(signed_op.type()));
-      unsigned_op = typecast_exprt(unsigned_op, signedbv_typet(width));
-    };
-    if (!is_numpy(lhs.type()) && !is_numpy(rhs.type()))
-    {
-      if (lhs.type().is_unsignedbv() && rhs.type().is_signedbv())
-        widen_to_signed(lhs, rhs);
-      else if (rhs.type().is_unsignedbv() && lhs.type().is_signedbv())
-        widen_to_signed(rhs, lhs);
-    }
-  }
+  read_unsigned_as_python_int(lhs, rhs);
 
   // Reconcile the int/float and float/float-width mixes the arms below do
   // not cover, following the C usual arithmetic conversions (CPython agrees
