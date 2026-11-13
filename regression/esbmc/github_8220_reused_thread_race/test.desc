@@ -1,0 +1,4 @@
+CORE
+main.c
+--sv-comp --z3 --data-races-check-only --no-assertions --no-pointer-check --no-bounds-check --timeout 60s
+^VERIFICATION FAILED$
