@@ -48,6 +48,7 @@ _CODE = "esbmc_fv_code"
 _IDENTITY = "esbmc_fv_identity"
 _CALLABLE = "esbmc_fv_callable"
 _CHOSEN = "esbmc_fv_chosen"
+_DIRECT = "esbmc_fv_direct"
 _RETURN = "esbmc_fv_return"
 _NESTED = (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda, ast.ClassDef, ast.ListComp,
            ast.SetComp, ast.DictComp, ast.GeneratorExp)
@@ -1124,7 +1125,7 @@ class _Plan:
         elif not isinstance(element.ctx, ast.Load):
             raise _Refused
         elif _is_callee(outer, element) and self._element_kind(element) == 0:
-            self._check_site(outer)
+            self._check_element_call(outer)
         else:
             self._check_value(element)
 
@@ -1259,6 +1260,57 @@ class _Plan:
             return True
         return self._is_element(expr) and self._element_kind(expr) == 0
 
+    def _check_element_call(self, call):
+        """A call through an element: of a fixed function when its position always holds one."""
+        fn = self._fixed_function(call.func)
+        if fn is not None and not call.keywords and _takes_positional(fn, len(call.args)):
+            setattr(call, _DIRECT, fn.name)
+        else:
+            self._check_site(call)
+
+    def _fixed_function(self, element):
+        """The function at the constant position `element` of a holder that a module-level
+        statement before the read binds once to a display, and that is only read by position."""
+        name = getattr(element.value, "id", None)
+        position = getattr(element.slice, "value", None)
+        values = self.values.get(name, [])
+        if not (isinstance(position, int) and len(values) == 1 and isinstance(
+                values[0],
+            (ast.List, ast.Tuple)) and -len(values[0].elts) <= position < len(values[0].elts)
+                and self._read_by_position(name, values[0], element)):
+            return None
+        item = values[0].elts[position]
+        if not (isinstance(item, ast.Name) and item.id in self.functions):
+            return None
+        group, code = self.functions[item.id]
+        return self.groups[group][code]
+
+    def _read_by_position(self, name, display, element):
+        """`name` is bound only by the module-level statement that holds `display`, which runs
+        before the statement of `element`, and every other use of `name` reads it by position
+        or measures it."""
+        binding, read = self._top_statement(display), self._top_statement(element)
+        if not isinstance(binding, ast.Assign) or binding.value is not display or read is None \
+                or self._nested(element) \
+                or self.module.body.index(binding) >= self.module.body.index(read):
+            return False
+        return all(
+            self._binds_or_reads_by_position(node, binding) for node in ast.walk(self.module)
+            if isinstance(node, ast.Name) and node.id == name)
+
+    def _binds_or_reads_by_position(self, node, binding):
+        """`node` is bound by `binding`, read by position, or measured by `len`."""
+        parent = self.parents[id(node)]
+        return isinstance(node.ctx, ast.Store) and self._top_statement(node) is binding or \
+            isinstance(parent, ast.Subscript) and parent.value is node and \
+            isinstance(parent.ctx, ast.Load) or _is_builtin_call(parent, "len", node)
+
+    def _top_statement(self, node):
+        """The statement of the module body that holds `node`, or None."""
+        while node is not None and self.parents.get(id(node)) is not self.module:
+            node = self.parents.get(id(node))
+        return node
+
     def _check_site(self, call):
         """A call through a holder: every function of its group must take its arguments."""
         group = self.holders[self._site_holder(call)]
@@ -1343,6 +1395,17 @@ class _Codes(ast.NodeTransformer):
         return node
 
 
+class _Direct(ast.NodeTransformer):
+    """Call the fixed function of a call through a constant position directly."""
+
+    def visit_Call(self, node):
+        self.generic_visit(node)
+        name = getattr(node, _DIRECT, None)
+        if name is not None:
+            node.func = ast.copy_location(ast.Name(name, ast.Load()), node.func)
+        return node
+
+
 class _Returns(ast.NodeTransformer):
     """Replace `return h(args)` by one `return f(args)` per function of h's group."""
 
@@ -1412,8 +1475,9 @@ class _Dispatch:
         return stmts[:i] + [ast.copy_location(ast.If(stmt.test, *branches), stmt)], total
 
     def _split(self, stmts, i, site, before):
-        rest = stmts[i:]
-        stored = self._renamed(stmts, i, before)
+        end = i + _joined_from(stmts[i:], before | _assigned(stmts[:i]))
+        rest = stmts[i:end]
+        stored = self._renamed(stmts[:end], i, before)
         group = getattr(site, _SITE)
         callee = site.func
         setattr(site, _CHOSEN, True)
@@ -1428,7 +1492,8 @@ class _Dispatch:
                 raise _Refused
             arms.append(body)
         delattr(site, _CHOSEN)
-        return stmts[:i] + _chain(arms, callee, stmts[i]), total
+        tail, leaves = self.statements(stmts[end:], before | _visible_names(stmts[:end]))
+        return stmts[:i] + _chain(arms, callee, stmts[i]) + tail, total + leaves * bool(tail)
 
     def _renamed(self, stmts, i, before):
         """The names that `stmts[i:]` bind, which each arm renames; refuse when it cannot."""
@@ -1451,6 +1516,25 @@ class _Dispatch:
                 if isinstance(node, ast.Name) and node.id in stored:
                     base = re.sub(rf"^{_PREFIX}\d+_", "", node.id)
                     node.id = f"{_PREFIX}{self.arms}_{base}"
+
+
+def _assigned(stmts):
+    """The names that `stmts` assign, in any scope."""
+    return {
+        n.id
+        for s in stmts
+        for n in ast.walk(s) if isinstance(n, ast.Name) and not isinstance(n.ctx, ast.Load)
+    }
+
+
+def _joined_from(rest, earlier):
+    """The first position of `rest`, after the call at its start, from which no statement names
+    what the statements before it assign or `earlier` holds. The arms of a dispatch join there,
+    so what follows is not copied. `len(rest)` when there is no such position."""
+    for end in range(1, len(rest)):
+        if not (_assigned(rest[:end]) | earlier) & _bound_names(rest[end:]):
+            return end
+    return len(rest)
 
 
 def _hoisted_in_groups(module, path):
@@ -1497,13 +1581,14 @@ def dispatch_mixed_function_values(module, path):
         plan.check_param_holders()
         plan.check_imported()
         _Codes().visit(candidate)
+        _Direct().visit(candidate)
         _Returns(plan.groups).visit(candidate)
         candidate.body, _ = _Dispatch(plan.groups, plan.holders).statements(candidate.body)
         _check_hoisted_dispatched(candidate)
     except _Refused:
         return
     for node in ast.walk(candidate):
-        for mark in (_SITE, _CODE, _IDENTITY, _CALLABLE, _CHOSEN):
+        for mark in (_SITE, _CODE, _IDENTITY, _CALLABLE, _CHOSEN, _DIRECT):
             if hasattr(node, mark):
                 delattr(node, mark)
     module.body = candidate.body
