@@ -1050,6 +1050,8 @@ std::optional<exprt> dispatch_search_string_methods(
     return folded;
   search_args_parsedt parsed =
     parse_string_search_args(method_name, args, keyword_values, converter);
+  parsed.needle =
+    self.read_tagged_str_argument(parsed.needle, method_name, get_location());
 
   if (method_name == "find")
   {
