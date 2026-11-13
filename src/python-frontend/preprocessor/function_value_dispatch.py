@@ -25,6 +25,7 @@ function_value_types refuses the call as before.
 
 import ast
 import copy
+import functools
 import itertools
 import re
 
@@ -34,7 +35,7 @@ from preprocessor.function_value_modules import lift_module_functions
 from preprocessor.function_value_params import (specialise_function_parameters,
                                                 specialise_function_parameters_in_order)
 from preprocessor.function_value_types import (_REFLECTIVE, _REFLECTIVE_ATTRS, _Analysis,
-                                               _bound_names, _differ, _own_nodes)
+                                               _bound_names, _differ, _own_nodes, _unpacked)
 
 # The most copies of the rest of the module that one module may need.
 _CAP = 32
@@ -562,6 +563,102 @@ def _parameter_of(fn, call, expr):
                 None)
 
 
+def _merge(a, b):
+    """The shape of a value that has shape `a` or shape `b`; refuse when they disagree.
+
+    A tuple lists the shapes of a list's elements by position. Lists of different lengths
+    agree when their common positions do: reading past the end raises IndexError on both
+    paths alike."""
+    if a is None or b is None:
+        raise _Refused
+    if a == b:
+        return a
+    if isinstance(a, int) and isinstance(b, int):
+        raise _Refused
+    if isinstance(a, int):
+        a, b = b, a
+    if isinstance(b, int):
+        if b == 0:
+            raise _Refused
+        for item in a:
+            _merge(item, b - 1)
+        return b
+    return tuple(
+        _merge(x, y) if y is not None else x
+        for x, y in itertools.zip_longest(a, b[:len(a)])) + b[len(a):]
+
+
+def _uniform(shape):
+    """The shape that every element of `shape` has, or None."""
+    if isinstance(shape, int):
+        return shape - 1 if shape > 0 else None
+    try:
+        return functools.reduce(_merge, shape)
+    except _Refused:
+        return None
+
+
+def _uniform_container(items):
+    """The shape of a list or dict whose elements have the shapes `items`."""
+    common = _uniform(items)
+    if not isinstance(common, int):
+        raise _Refused
+    return common + 1
+
+
+def _element_shape(shape, index):
+    """The shape of the element `index` of a value of shape `shape`.
+
+    A list whose elements differ is read only at a constant position."""
+    common = _uniform(shape)
+    if common is not None:
+        return common
+    position = index.value if isinstance(index, ast.Constant) else None
+    if isinstance(shape, tuple) and isinstance(position, int) and 0 <= position < len(shape):
+        return shape[position]
+    raise _Refused
+
+
+def _starred_unpacked(target, value):
+    """Whether each starred name in `target` takes a list of the expressions of `value`."""
+    if isinstance(target, ast.Starred):
+        return isinstance(target.value, ast.Name)
+    if not any(isinstance(n, ast.Starred) for n in ast.walk(target)):
+        return True
+    pairs = _unpacked(target, value) if isinstance(target, (ast.Tuple, ast.List)) else None
+    return pairs is not None and all(_starred_unpacked(sub, elt) for sub, elt in pairs)
+
+
+def _reads_off(chain, value):
+    """Whether the display `value` gives the name `chain[0]` of the target `chain[-1]` its own
+    expression, or its own list of expressions; `chain` runs from the name to the target."""
+    for target, sub in zip(reversed(chain), reversed(chain[:-1])):
+        if isinstance(target, ast.Starred):
+            continue
+        pairs = _unpacked(target, value)
+        if pairs is None:
+            return False
+        value = next(elt for s, elt in pairs if s is sub)
+    return True
+
+
+def _without_starred(target, value):
+    """`target = value`, a display unpacked into a target with a starred name, with that name
+    bound to a list display of the elements it takes instead."""
+    pairs = _unpacked(target, value) if isinstance(target, (ast.Tuple, ast.List)) else None
+    if pairs is None:
+        return target, value
+    targets, values = [], []
+    for sub, elt in pairs:
+        if isinstance(sub, ast.Starred):
+            sub, elt = sub.value, ast.List(elt, ast.Load())
+        elif any(isinstance(n, ast.Starred) for n in ast.walk(sub)):
+            sub, elt = _without_starred(sub, elt)
+        targets.append(sub)
+        values.append(elt)
+    return type(target)(targets, ast.Store()), ast.Tuple(values, ast.Load())
+
+
 def _chain(arms, callee, origin):
     """`if callee == 0: arms[0] elif ...: ... else: arms[-1]`, located at `origin`."""
     chain = arms[-1]
@@ -656,22 +753,23 @@ class _Plan:
         if isinstance(target, ast.Name):
             if target.id in self.holders:
                 self.values[target.id].append(value)
-        elif isinstance(target, (ast.Tuple, ast.List)) and isinstance(
-                value, (ast.Tuple, ast.List)) and len(target.elts) == len(value.elts):
-            for sub, elt in zip(target.elts, value.elts):
-                self._bind(sub, elt)
+        elif isinstance(target, (ast.Tuple, ast.List)):
+            for sub, elt in _unpacked(target, value) or []:
+                if isinstance(sub, ast.Starred):
+                    self._bind(sub.value, ast.List(elt, ast.Load()))
+                else:
+                    self._bind(sub, elt)
 
     def _kind(self, name, seen):
-        """How deep `name` nests functions: 0 for a function, 1 for a list or dict of them."""
+        """The shape of `name`: 0 for a function, n + 1 for a list or dict whose elements all
+        have shape n, or a tuple of the shapes of a list's elements by position."""
         if name in self.kinds:
             return self.kinds[name]
         if name in seen or not self.values[name]:
             raise _Refused
         seen.add(name)
-        kinds = {self._value_kind(value, seen) for value in self.values[name]}
-        if len(kinds) != 1:
-            raise _Refused
-        self.kinds[name] = kinds.pop()
+        self.kinds[name] = functools.reduce(_merge,
+                                            (self._value_kind(v, seen) for v in self.values[name]))
         return self.kinds[name]
 
     def _value_kind(self, expr, seen):
@@ -681,29 +779,25 @@ class _Plan:
             if expr.id in self.holders:
                 return self._kind(expr.id, seen)
         elif isinstance(expr, ast.IfExp):
-            kinds = {self._value_kind(expr.body, seen), self._value_kind(expr.orelse, seen)}
-            if len(kinds) == 1:
-                return kinds.pop()
+            return _merge(self._value_kind(expr.body, seen), self._value_kind(expr.orelse, seen))
         elif isinstance(expr, (ast.List, ast.Tuple, ast.Dict)):
             return self._literal_kind(expr, seen)
         elif self._is_element(expr):
-            depth = self._value_kind(expr.value, seen)
-            if depth > 0:
-                return depth - 1
+            return _element_shape(self._value_kind(expr.value, seen), expr.slice)
         elif self._is_returner_call(expr):
             return 0
         elif self._is_holder_slice(expr):
-            return self._value_kind(expr.value, seen)
+            return _uniform_container(self._value_kind(expr.value, seen))
         raise _Refused
 
     def _literal_kind(self, literal, seen):
         items = literal.values if isinstance(literal, ast.Dict) else literal.elts
         if not items or None in getattr(literal, "keys", []):
             raise _Refused
-        kinds = {self._value_kind(item, seen) for item in items}
-        if len(kinds) != 1:
-            raise _Refused
-        return kinds.pop() + 1
+        kinds = tuple(self._value_kind(item, seen) for item in items)
+        if isinstance(literal, ast.Dict):
+            return _uniform_container(kinds)
+        return kinds
 
     def _call_result_group(self, expr):
         """The group of the functions that call `expr` returns, or None.
@@ -738,12 +832,11 @@ class _Plan:
         return _is_pure_index(expr.slice)
 
     def _element_kind(self, expr):
-        """How deep the value of the element `expr` nests functions, or None."""
-        depth = 0
-        while isinstance(expr, ast.Subscript):
-            expr, depth = expr.value, depth + 1
-        kind = self.kinds.get(expr.id)
-        return None if kind is None else kind - depth
+        """The shape of the holder or element `expr`, or None."""
+        if isinstance(expr, ast.Subscript):
+            kind = self._element_kind(expr.value)
+            return None if kind is None else _element_shape(kind, expr.slice)
+        return self.kinds.get(expr.id)
 
     # uses
     def check_uses(self):
@@ -1027,8 +1120,7 @@ class _Plan:
         if isinstance(element.ctx, ast.Store):
             self._check_element_store(element, outer)
         elif isinstance(element.ctx, ast.Del):
-            if not isinstance(outer, ast.Delete):
-                raise _Refused
+            self._check_element_delete(element, outer)
         elif not isinstance(element.ctx, ast.Load):
             raise _Refused
         elif _is_callee(outer, element) and self._element_kind(element) == 0:
@@ -1036,12 +1128,17 @@ class _Plan:
         else:
             self._check_value(element)
 
+    def _check_element_delete(self, element, delete):
+        """`del xs[i]` shifts the elements after `i`, so they must all have one shape."""
+        if not isinstance(delete, ast.Delete) or _uniform(self._element_kind(
+                element.value)) is None:
+            raise _Refused
+
     def _check_element_store(self, element, assign):
         """`xs[i] = value` stores a value as deep as the elements of `xs`."""
         if not (isinstance(assign, ast.Assign) and assign.targets == [element]):
             raise _Refused
-        if self._value_kind(assign.value, set()) != self._element_kind(element):
-            raise _Refused
+        _merge(self._value_kind(assign.value, set()), self._element_kind(element))
 
     def _is_membership(self, parent, node):
         return isinstance(parent, ast.Compare) and len(parent.ops) == 1 and isinstance(
@@ -1059,26 +1156,17 @@ class _Plan:
             return len(call.args) == 1 and isinstance(call.args[0], ast.Dict) and \
                 self._value_kind(call.args[0], set()) == self.kinds[node.id]
         return attribute.attr == "setdefault" and len(call.args) == 2 and \
-            self._value_kind(call.args[1], set()) == self.kinds[node.id] - 1
+            self._value_kind(call.args[1], set()) == _uniform(self.kinds[node.id])
 
     def _assign_target(self, node):
         """Whether `node` is bound by an assignment whose value for it can be read off."""
-        path = []
-        parent = self.parents[id(node)]
-        child = node
-        while isinstance(parent, (ast.Tuple, ast.List)):
-            path.append(parent.elts.index(child))
-            child, parent = parent, self.parents[id(parent)]
-        if not isinstance(parent, ast.Assign):
-            return False
-        value = parent.value
-        target = child
-        for index in reversed(path):
-            if not (isinstance(value,
-                               (ast.Tuple, ast.List)) and len(value.elts) == len(target.elts)):
-                return False
-            value, target = value.elts[index], target.elts[index]
-        return not any(isinstance(n, ast.Starred) for t in parent.targets for n in ast.walk(t))
+        chain = [node]
+        while isinstance(self.parents[id(chain[-1])], (ast.Tuple, ast.List, ast.Starred)):
+            chain.append(self.parents[id(chain[-1])])
+        assign = self.parents[id(chain[-1])]
+        return isinstance(assign, ast.Assign) and _reads_off(chain, assign.value) and (
+            _starred_unpacked(assign.targets[0], assign.value) if len(assign.targets) == 1 else
+            not any(isinstance(n, ast.Starred) for t in assign.targets for n in ast.walk(t)))
 
     def _plain_targets(self, assign):
         """Whether every target of `assign` is a name, an element or a tuple of them."""
@@ -1087,6 +1175,8 @@ class _Plan:
     def _plain_target(self, target):
         if isinstance(target, (ast.Tuple, ast.List)):
             return all(self._plain_target(t) for t in target.elts)
+        if isinstance(target, ast.Starred):
+            return self._plain_target(target.value)
         return isinstance(target, ast.Name) or self._is_element(target)
 
     def _check_value(self, expr):
@@ -1223,6 +1313,14 @@ class _Plan:
 
 class _Codes(ast.NodeTransformer):
     """Replace each function of a group by its code, `is` by `==` and `callable` by True."""
+
+    def visit_Assign(self, node):
+        """Also bind a starred name to a list display of the elements it takes."""
+        self.generic_visit(node)
+        if len(node.targets) == 1 and any(
+                isinstance(n, ast.Starred) for n in ast.walk(node.targets[0])):
+            node.targets[0], node.value = _without_starred(node.targets[0], node.value)
+        return node
 
     def visit_Name(self, node):
         code = getattr(node, _CODE, None)
