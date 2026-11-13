@@ -236,6 +236,77 @@ static std::string stored_expr_kind(const nlohmann::json &rhs, bool by_key)
   return literal.type_name();
 }
 
+/// The annotation that types the value `rhs` in the scope `func`: that of a
+/// variable bound once, or the return annotation of a module-level function.
+/// Null for any other value (#10432).
+static nlohmann::json stored_value_annotation(
+  const nlohmann::json &ast,
+  const nlohmann::json &rhs,
+  const std::string &func)
+{
+  const std::string type = rhs.value("_type", "");
+  const std::string var = rhs.value("id", "");
+  if (type == "Name" && json_utils::count_name_bindings(ast, var) == 1)
+  {
+    const nlohmann::json decl = json_utils::find_var_decl(var, func, ast);
+    return decl.is_object() ? decl.value("annotation", nlohmann::json())
+                            : nlohmann::json();
+  }
+  if (type != "Call" || rhs["func"].value("_type", "") != "Name")
+    return nlohmann::json();
+  const nlohmann::json def =
+    json_utils::try_find_function(ast["body"], rhs["func"].value("id", ""));
+  return def.is_object() ? def.value("returns", nlohmann::json())
+                         : nlohmann::json();
+}
+
+/// The scalar type the annotation `node` names: `int`, `float`, `bool` or
+/// `str`, else empty.
+static typet
+scalar_annotation_type(const nlohmann::json &node, type_handler &handler)
+{
+  const std::string id = node.is_object() && node.value("_type", "") == "Name"
+                           ? node.value("id", "")
+                           : "";
+  if (id == "bool")
+    return bool_type();
+  if (id == "int" || id == "float")
+    return handler.get_typet(id, 0);
+  if (id == "str")
+    return gen_pointer_type(char_type());
+  return empty_typet();
+}
+
+/// The literal kind (see stored_expr_kind) of a value of the scalar type
+/// `node` annotates, "?" for any other annotation.
+static std::string annotated_kind(const nlohmann::json &node)
+{
+  static const std::map<std::string, std::string> kinds = {
+    {"bool", "boolean"},
+    {"int", "number"},
+    {"float", "number"},
+    {"str", "string"}};
+  const auto it = kinds.find(
+    node.is_object() && node.value("_type", "") == "Name" ? node.value("id", "")
+                                                          : "");
+  return it == kinds.end() ? "?" : it->second;
+}
+
+/// The kind of the stored value `rhs` that is not a literal: that of the
+/// scalar type it is annotated with (see annotated_kind), or the class that a
+/// constructor call builds.
+static std::string
+stored_value_kind(const nlohmann::json &ast, const nlohmann::json &rhs)
+{
+  const std::string callee =
+    rhs.value("_type", "") == "Call" && rhs["func"].value("_type", "") == "Name"
+      ? rhs["func"].value("id", "")
+      : "";
+  if (!callee.empty() && json_utils::is_class(callee, ast))
+    return "class " + callee;
+  return annotated_kind(stored_value_annotation(ast, rhs, ""));
+}
+
 /// The kind of the literal that the statement `stmt` stores into the dict
 /// `name` by subscript, "?" for any other value, and "" if it stores nothing.
 /// With @p by_key it is the kind of the stored key instead.
@@ -257,7 +328,8 @@ static std::string stored_literal_kind(
   const auto &rhs = by_key ? target["slice"] : stmt["value"];
   if (!by_key && reads_back_from(ast, rhs, name))
     return "";
-  return stored_expr_kind(rhs, by_key);
+  const std::string kind = stored_expr_kind(rhs, by_key);
+  return kind == "?" && !by_key ? stored_value_kind(ast, rhs) : kind;
 }
 
 /// Whether every statement of `body` that stores into the dict `name` by
@@ -309,6 +381,23 @@ stored_literal_type(const nlohmann::json &rhs, type_handler &handler)
   if (lit.is_string())
     return gen_pointer_type(char_type());
   return empty_typet();
+}
+
+/// The value type that storing `rhs` in the scope `func` gives a dict: that
+/// of a literal (a list only when @p only_lists), or the scalar type a
+/// variable or a call is annotated with. Empty for any other value.
+static typet stored_value_type(
+  const nlohmann::json &ast,
+  const nlohmann::json &rhs,
+  const std::string &func,
+  bool only_lists,
+  type_handler &handler)
+{
+  const std::string kind = rhs.value("_type", "");
+  if (kind == "Constant" || (kind == "List" && only_lists))
+    return stored_literal_type(rhs, handler);
+  return scalar_annotation_type(
+    stored_value_annotation(ast, rhs, func), handler);
 }
 
 typet python_dict_handler::resolve_stored_key_type(const exprt &dict_expr)
@@ -612,15 +701,16 @@ typet python_dict_handler::resolve_expected_type_for_dict_subscript(
               return;
             const auto &rhs = stmt["value"];
 
-            const std::string rhs_kind = rhs.value("_type", std::string());
-            if (rhs_kind == "Constant" || (rhs_kind == "List" && only_lists))
+            const typet stored = stored_value_type(
+              converter_.get_ast_json(),
+              rhs,
+              converter_.get_current_func_name(),
+              only_lists,
+              type_handler_);
+            if (!stored.is_empty())
             {
-              const typet stored = stored_literal_type(rhs, type_handler_);
-              if (!stored.is_empty())
-              {
-                candidate = stored;
-                have_candidate = true;
-              }
+              candidate = stored;
+              have_candidate = true;
               return;
             }
 
