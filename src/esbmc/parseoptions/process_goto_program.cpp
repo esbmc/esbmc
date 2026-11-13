@@ -362,7 +362,10 @@ static void record_early_answer(
     options.set_option(
       "python-no-checked-exception",
       no_reachable_property(
-        goto_functions, context, !reports_unwinding_failure(options, cmdline)));
+        goto_functions,
+        context,
+        !reports_unwinding_failure(options, cmdline),
+        !options.get_bool_option("no-pointer-check")));
 }
 
 bool esbmc_parseoptionst::process_goto_program(
