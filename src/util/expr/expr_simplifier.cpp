@@ -611,6 +611,17 @@ static expr2tc fold_bitnot_plus_const(
   return expr2tc();
 }
 
+/// True if @p e is a negative signed constant whose negation still fits
+/// @p type, so it is not the type's minimum.
+static bool
+is_negatable_negative_constant(const expr2tc &e, const type2tc &type)
+{
+  if (!is_signedbv_type(type) || !is_constant_int2t(e))
+    return false;
+  const BigInt &value = to_constant_int2t(e).value;
+  return value.is_negative() && -value < BigInt::power2(type->get_width() - 1);
+}
+
 /// Bitvector-only add identities that reassociation leaves behind (#626).
 static expr2tc simplify_add_bv_identities(
   const type2tc &type,
@@ -706,15 +717,13 @@ expr2tc add2t::do_simplify() const
   // x + (negative constant c) -> x - (-c). The reassoc rebuild can produce
   // an `add(x, -c)` once neg2t::do_simplify folds neg(constant) into a
   // negative constant, after which the `is_neg2t` peepholes above no
-  // longer match. Catch the value-shaped form too.
-  if (
-    is_signedbv_type(type) && is_constant_int2t(side_2) &&
-    to_constant_int2t(side_2).value.is_negative())
+  // longer match. Catch the value-shaped form too. The type's minimum is
+  // left alone: its negation wraps back to itself, and x - min is x + 2^(w-1)
+  // under --ir.
+  if (is_negatable_negative_constant(side_2, type))
     return sub2tc(
       type, side_1, from_integer(-to_constant_int2t(side_2).value, type));
-  if (
-    is_signedbv_type(type) && is_constant_int2t(side_1) &&
-    to_constant_int2t(side_1).value.is_negative())
+  if (is_negatable_negative_constant(side_1, type))
     return sub2tc(
       type, side_2, from_integer(-to_constant_int2t(side_1).value, type));
 
