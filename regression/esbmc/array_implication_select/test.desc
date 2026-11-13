@@ -1,0 +1,4 @@
+CORE
+main.c
+--array-implication-select
+^VERIFICATION SUCCESSFUL$
