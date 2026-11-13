@@ -1105,6 +1105,21 @@ reads_only(const nlohmann::json &node, const std::set<std::string> &params)
   return true;
 }
 
+/// How many of the parameters in @p args are named @p name.
+static size_t
+own_parameters_named(const nlohmann::json &args, const std::string &name)
+{
+  size_t n = 0;
+  for (const char *field : {"posonlyargs", "args", "kwonlyargs"})
+    if (args.contains(field))
+      for (const auto &arg : args[field])
+        n += arg.value("arg", "") == name;
+  for (const char *field : {"vararg", "kwarg"})
+    if (args.contains(field) && args[field].is_object())
+      n += args[field].value("arg", "") == name;
+  return n;
+}
+
 /// The lambda @p name is bound to in @p body: `name = lambda ...`, or
 /// `name = make()` where `make` returns a lambda reading only its parameters.
 static nlohmann::json lambda_bound_to(
@@ -1153,7 +1168,7 @@ const symbolt *python_converter::lambda_copy_for_call(
   const std::string name = call["func"].value("id", "");
   if (
     !type.is_pointer() || !type.subtype().is_code() ||
-    current_func_name_.find("lam") == 0 || count_bindings(*ast_json, name) != 1)
+    current_func_name_.find("lam") == 0)
     return nullptr;
 
   nlohmann::json scope = json_utils::find_function_by_path(
@@ -1163,7 +1178,11 @@ const symbolt *python_converter::lambda_copy_for_call(
   nlohmann::json lambda = lambda_bound_to(name, scope["body"], *ast_json);
   if (lambda.empty())
     lambda = lambda_bound_to(name, (*ast_json)["body"], *ast_json);
-  if (lambda.empty())
+  // A parameter of the lambda named like it (`x = lambda x: ...`) binds only
+  // inside the lambda (#10558).
+  if (
+    lambda.empty() || count_bindings(*ast_json, name) !=
+                        1 + own_parameters_named(lambda["args"], name))
     return nullptr;
 
   const std::vector<std::optional<typet>> types =
