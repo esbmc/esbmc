@@ -84,7 +84,8 @@ type2tc uint_type2()
 
 typet bool_type()
 {
-  typet result = bool_typet();
+  // Callers get a shared node; copy-on-write detaches it before any change.
+  static const typet result = bool_typet();
   return result;
 }
 

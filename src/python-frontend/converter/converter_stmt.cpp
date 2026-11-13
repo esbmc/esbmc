@@ -968,8 +968,10 @@ void python_converter::adjust_statement_types(exprt &lhs, exprt &rhs) const
   // Case 6: Align bit-widths between LHS and RHS if they differ. Never
   // "align" a tuple struct against a non-tuple: demoting the LHS symbol to
   // the scalar's type corrupts already-emitted tuple member reads (see the
-  // fresh-alias gate in get_var_assign).
+  // fresh-alias gate in get_var_assign). Nor a tagged slot: get_var_assign
+  // boxes the value into its fields (#8974).
   else if (
+    !type_handler_.is_tagged_scalar_type(lhs_type) &&
     lhs_type.width() != rhs_type.width() &&
     tuple_handler_->is_tuple_type(lhs_type) ==
       tuple_handler_->is_tuple_type(rhs_type))
@@ -5900,6 +5902,27 @@ void python_converter::record_annotated_list_elem_type(
     element_type_registry_.record(lhs_id, std::string(), elem_type);
 }
 
+/// The symbol the textually last `return` of \p code that returns one hands
+/// back, at any depth, else nil. A function that returns a list from inside a
+/// loop and None after it ends in `return None`.
+static exprt last_returned_symbol(const exprt &code)
+{
+  if (
+    code.id() == "code" && to_code(code).get_statement() == "return" &&
+    code.operands().size() == 1 && code.op0().is_symbol())
+    return code.op0();
+  exprt found = nil_exprt();
+  for (const exprt &op : code.operands())
+    if (exprt ret = last_returned_symbol(op); !ret.is_nil())
+      found = ret;
+  return found;
+}
+
+static exprt last_returned_symbol(const symbolt *function)
+{
+  return function ? last_returned_symbol(function->get_value()) : nil_exprt();
+}
+
 void python_converter::handle_function_call_rhs(
   const nlohmann::json &ast_node,
   symbolt *lhs_symbol,
@@ -6002,11 +6025,12 @@ void python_converter::handle_function_call_rhs(
   if (rhs.type() == type_handler_.get_list_type())
   {
     if (
-      auto ret = get_return_from_func(rhs.op1().identifier().c_str());
+      const exprt ret =
+        last_returned_symbol(symbol_table_.find_symbol(rhs.op1().identifier()));
       !ret.is_nil())
     {
       element_type_registry_.assign_from(
-        ret.op0().identifier().as_string(), lhs.identifier().as_string());
+        ret.identifier().as_string(), lhs.identifier().as_string());
     }
 
     // If nothing is recorded for the LHS yet
@@ -10489,6 +10513,22 @@ void python_converter::get_return_with_conditional_spelling(
   get_return_statements(ast_node, target_block);
 }
 
+// A tagged value's fields cannot be returned through a plain scalar slot
+// (#8974).
+static void reject_tagged_scalar_return(
+  const type_handler &types,
+  const typet &value_type,
+  const typet &return_type)
+{
+  if (
+    types.is_tagged_scalar_type(value_type) &&
+    (types.is_numeric_scalar_type(return_type) ||
+     types.is_string_type(return_type)))
+    throw std::runtime_error(
+      "returning a dynamically-typed value from a function whose return type "
+      "is not dynamic is not yet supported");
+}
+
 void python_converter::get_return_statements(
   const nlohmann::json &ast_node,
   codet &target_block)
@@ -10546,8 +10586,11 @@ void python_converter::get_return_statements(
   locationt location = get_location_from_decl(ast_node);
 
   // Coerces `val` to a tagged-object value when the function's return type
-  // is tagged. No-op when `val` is already tagged.
+  // is tagged. No-op when `val` is already tagged; refuses a tagged `val`
+  // returned through a str or number slot.
   auto coerce_to_tagged_return = [&](exprt &val) {
+    reject_tagged_scalar_return(
+      type_handler_, val.type(), current_func_return_type_);
     if (
       !type_handler_.is_tagged_scalar_type(current_func_return_type_) ||
       type_handler_.is_tagged_scalar_type(val.type()))

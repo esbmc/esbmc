@@ -6617,6 +6617,9 @@ typet python_converter::optional_return_type(
     !returns_none(function_node["body"]) &&
     !type_utils::annotation_admits_none(returns))
     return typet();
+  // A list is a pointer, NULL for None, as Optional[list] declares it.
+  if (declared == type_handler_.get_list_type())
+    return declared;
   if (!unannotated)
     return type_handler_.build_optional_type(declared);
 

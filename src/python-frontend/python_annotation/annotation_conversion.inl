@@ -2233,6 +2233,18 @@ inline std::string no_top_level_return_type(const nlohmann::json &body)
   return has_return_value(body) ? "" : "NoneType";
 }
 
+/// Whether a function whose value returns infer \p inferred_type can take it
+/// as its return annotation. With a None return too, only a list can: the
+/// converter returns a list as a pointer, NULL for None, as for an
+/// Optional[list] annotation. Any other type is left unannotated for the
+/// converter to wrap in an Optional.
+static bool
+inferred_return_holds_none(const std::string &inferred_type, bool returns_none)
+{
+  return !returns_none || inferred_type == "list" ||
+         inferred_type.rfind("list[", 0) == 0;
+}
+
 template <class Json>
 std::string python_annotation<Json>::get_function_return_type(
   const std::string &func_name,
@@ -2387,7 +2399,9 @@ std::string python_annotation<Json>::get_function_return_type(
               // If the body also has `return None` paths, the function
               // actually returns Optional[T] regardless of the annotation.
               // Return "" so the converter handles this as Optional.
-              if (has_return_none(func_elem["body"]))
+              if (!inferred_return_holds_none(
+                    returns["id"].template get<std::string>(),
+                    has_return_none(func_elem["body"])))
               {
                 functions_in_analysis_.erase(func_name);
                 return "";
@@ -2436,7 +2450,8 @@ std::string python_annotation<Json>::get_function_return_type(
     if (!inferred_type.empty() && inferred_type != "NoneType")
     {
       // Found a non-None return type; check for mixed value+None returns
-      if (has_return_none(func_elem["body"]))
+      if (!inferred_return_holds_none(
+            inferred_type, has_return_none(func_elem["body"])))
       {
         // Mixed returns: leave unannotated so converter handles via Optional
         functions_in_analysis_.erase(func_name);
@@ -6853,15 +6868,12 @@ void python_annotation<Json>::annotate_function(Json &function_element)
       infer_from_return_statements(function_element["body"], func_name);
 
     // Only add annotation if we successfully inferred a type from return
-    // statements and the function does not have mixed value+None returns
+    // statements that also covers any None return
     if (!inferred_type.empty() && inferred_type != "NoneType")
     {
-      // Check if there are also None returns (mixed value+None)
-      // If so, leave the annotation as null for the converter to handle
-      // via Optional wrapping
-      bool has_none_return = has_return_none(function_element["body"]);
-
-      if (!has_none_return)
+      if (
+        inferred_return_holds_none(
+          inferred_type, has_return_none(function_element["body"])))
       {
         // Update the function node to include the return type annotation.
         // Marked _inferred_annotation so a downstream converter check (e.g.
