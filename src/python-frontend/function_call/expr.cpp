@@ -3307,6 +3307,11 @@ exprt function_call_expr::handle_list_sort() const
   size_t float_type_id = 0;
   converter_.get_element_type_registry().type_flags(
     list_id, converter_.get_type_handler(), type_flag, float_type_id);
+  // Element reads are typed by position, and the positions of the int and
+  // float elements after the sort depend on their values.
+  if (type_flag == 3)
+    throw std::runtime_error(
+      "Unsupported: sort() over a list mixing int and float");
 
   // ── Locate the C model function ────────────────────────────────────────────
   const symbolt *sort_func =
@@ -3329,13 +3334,6 @@ exprt function_call_expr::handle_list_sort() const
   // __ESBMC_list_reverse model. Wrap both calls in a code_blockt.
   if (reverse.is_false())
     return sort_call;
-  // The element type registry is reversed at conversion time, so a reverse
-  // known only at run time needs elements of one type, which it leaves
-  // unchanged.
-  if (!reverse.is_true() && type_flag == 3)
-    throw std::runtime_error(
-      "sort(reverse=...) over a mixed int/float list requires a constant "
-      "boolean");
 
   const symbolt *reverse_func =
     converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_reverse");
