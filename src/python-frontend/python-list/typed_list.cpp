@@ -140,6 +140,51 @@ exprt python_list::typed_append(const exprt &list, const exprt &value)
   return typed_push(list_value_, list, value);
 }
 
+exprt python_list::typed_extend(const exprt &list, const exprt &source)
+{
+  code_function_callt call;
+  call.function() =
+    build_symbol(model_function(converter_, "c:@F@__ESBMC_tlist_extend"));
+  call.arguments() = {list, source};
+  call.type() = empty_typet();
+  call.location() = converter_.get_location_from_decl(list_value_);
+  return call;
+}
+
+exprt python_list::typed_compare(
+  const exprt &lhs,
+  const exprt &rhs,
+  bool negate)
+{
+  const locationt location = converter_.get_location_from_decl(list_value_);
+  symbolt &eq = converter_.create_tmp_symbol(
+    list_value_, "$tlist_eq$", bool_type(), exprt());
+  code_declt decl(build_symbol(eq));
+  decl.location() = location;
+  converter_.add_instruction(decl);
+
+  code_function_callt call;
+  call.function() =
+    build_symbol(model_function(converter_, "c:@F@__ESBMC_tlist_eq"));
+  call.arguments() = {lhs, rhs};
+  call.lhs() = build_symbol(eq);
+  call.type() = bool_type();
+  call.location() = location;
+  converter_.add_instruction(call);
+  return negate ? exprt(not_exprt(build_symbol(eq))) : build_symbol(eq);
+}
+
+exprt python_list::typed_or_untyped_compare(
+  const exprt &lhs,
+  const exprt &rhs,
+  const std::string &op)
+{
+  // The gate flags a comparison only for == and != of two typed lists.
+  if (is_typed(list_value_))
+    return typed_compare(lhs, rhs, op == "NotEq");
+  return compare(lhs, rhs, op);
+}
+
 exprt python_list::typed_binop()
 {
   // `a + b`, `[x] * n` or `n * [x]`, operands evaluated left to right. A

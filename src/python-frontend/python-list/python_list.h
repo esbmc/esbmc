@@ -68,6 +68,14 @@ public:
   exprt typed_nondet(const exprt &max_size);
   exprt typed_element(const exprt &list, const exprt &index);
   exprt typed_append(const exprt &list, const exprt &value);
+  exprt typed_extend(const exprt &list, const exprt &source);
+  /// `a == b`, or `a != b` when @p negate, of two typed lists.
+  exprt typed_compare(const exprt &lhs, const exprt &rhs, bool negate);
+  /// A list comparison, typed when the gate flagged it, else compare().
+  exprt typed_or_untyped_compare(
+    const exprt &lhs,
+    const exprt &rhs,
+    const std::string &op);
   exprt typed_binop();
   /// A call the gate flagged: a typed nondet_list builder, or sorted(x) of
   /// a typed x, whose result is typed when the gate typed the call and is
