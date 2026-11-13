@@ -6453,6 +6453,14 @@ python_annotation<Json>::preprocess_receiver_method_calls(bool inside_functions)
   return typed;
 }
 
+/// Runs preprocess_self_method_calls until it types no further parameter.
+template <class Json>
+void python_annotation<Json>::settle_self_method_calls()
+{
+  while (preprocess_self_method_calls())
+    ;
+}
+
 /// Types the methods called on a receiver that only the specialised copies
 /// of a def resolve, then infers again what depended on those parameters
 /// (#9661).
@@ -6461,6 +6469,9 @@ void python_annotation<Json>::retype_methods_called_on_receivers()
 {
   if (preprocess_receiver_method_calls(true).empty())
     return;
+  // A method those calls typed passes its parameters on through `self.m()`
+  // (#10590).
+  settle_self_method_calls();
   const auto forget_inferred_return = [](Json &def) {
     if (
       def["returns"].is_object() &&
