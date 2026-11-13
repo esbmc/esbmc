@@ -1252,7 +1252,10 @@ void goto_symext::run_intrinsic(
     require_new_object_pointer_lvalue(func_call);
     const expr2tc &lhs = func_call.ret;
     const type2tc base = to_pointer_type(lhs->type).subtype;
-    const guard2tc &guard = cur_state->guard;
+    // An assignment guard, which is not the path guard: symex_assign adds
+    // the path guard itself. Passing the path guard here would make the
+    // binding an ite with the old value, which no constant propagates through.
+    const guard2tc guard;
 
     // Build a single dynamic struct value (mirrors symex_mem's size_is_one
     // path) — typed (sized symbolically by the struct), guaranteed valid (no
@@ -1282,7 +1285,7 @@ void goto_symext::run_intrinsic(
     expr2tc rhs = address_of2tc(new_type, obj);
     do_simplify(rhs);
     expr2tc ptr_rhs = rhs;
-    guard2tc alloc_guard = guard;
+    guard2tc alloc_guard = cur_state->guard;
     if (rhs->type != lhs->type)
       rhs = typecast2tc(lhs->type, rhs);
     cur_state->rename(rhs);
@@ -1305,10 +1308,9 @@ void goto_symext::run_intrinsic(
       new_context.find_symbol("tag-struct __ESBMC_PyObj");
     assert(list_object_symbol);
 
+    // As for __ESBMC_new_object, the path guard is not an assignment guard.
     symex_mem_inf(
-      func_call.ret,
-      migrate_symbol_type(*list_object_symbol),
-      cur_state->guard);
+      func_call.ret, migrate_symbol_type(*list_object_symbol), guard2tc());
 
     return;
   }
