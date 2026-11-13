@@ -25,6 +25,8 @@
 
 extern const struct group_opt_templ all_cmd_options[];
 
+class goto_slice_cachet;
+
 class esbmc_parseoptionst : public parseoptions_baset, public language_uit
 {
 public:
@@ -60,10 +62,14 @@ protected:
 
   virtual bool
   process_goto_program(optionst &options, goto_functionst &goto_functions);
-  void report_goto_slice(
-    const goto_functionst &goto_functions,
+  void setup_goto_slice(
+    goto_functionst &goto_functions,
     const optionst &options,
     bool is_k_induction);
+  /// The program the step \p options selects runs: its slice under
+  /// --goto-slice, \p goto_functions otherwise.
+  goto_functionst &
+  program_for(goto_functionst &goto_functions, const optionst &options);
 
   void configure_sv_comp_threads(
     optionst &options,
@@ -192,6 +198,7 @@ protected:
   std::vector<std::pair<locationt, std::string>> reachable_state_invariants;
 
   // coverage mode
+  std::shared_ptr<goto_slice_cachet> goto_slice;
   bool is_coverage;
 
 private:

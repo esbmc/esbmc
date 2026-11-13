@@ -78,11 +78,7 @@ struct slicedt
   }
 };
 
-slicedt slice(
-  std::string src,
-  slice_stept step = slice_stept::base_case,
-  bool pointer_check = false,
-  bool keep_nondets = false)
+slicedt slice_with(std::string src, const slice_criteriont &c)
 {
   slicedt s;
   s.functions =
@@ -91,14 +87,21 @@ slicedt slice(
   andersent points_to;
   points_to(s.functions);
   REQUIRE(!points_to.escapes());
+  s.result = goto_slicert(s.functions, points_to).slice(c);
+  return s;
+}
 
+slicedt slice(
+  std::string src,
+  slice_stept step = slice_stept::base_case,
+  bool pointer_check = false,
+  bool keep_nondets = false)
+{
   slice_criteriont c;
   c.step = step;
   c.pointer_check = pointer_check;
-  c.no_assertions = step == slice_stept::forward_condition;
   c.keep_nondets = keep_nondets;
-  s.result = goto_slicert(s.functions, points_to).slice(c);
-  return s;
+  return slice_with(src, c);
 }
 } // namespace
 
@@ -277,25 +280,6 @@ TEST_CASE(
   CHECK(unchecked.removed(unchecked.store()));
 }
 
-TEST_CASE(
-  "goto-slicer forward condition drops user assertions",
-  "[goto-slicer]")
-{
-  const std::string src = R"(
-    int nondet_int();
-    int main()
-    {
-      int x = nondet_int();
-      __ESBMC_assert(x != 3, "");
-      return 0;
-    }
-  )";
-  const slicedt base = slice(src);
-  CHECK(!base.removed(base.assignment("x")));
-  const slicedt forward = slice(src, slice_stept::forward_condition);
-  CHECK(forward.removed(forward.assignment("x")));
-}
-
 TEST_CASE("goto-slicer resolves calls through pointers", "[goto-slicer]")
 {
   const auto indirect_call =
@@ -370,4 +354,182 @@ TEST_CASE("goto-slicer keeps a stored index a check reads", "[goto-slicer]")
   CHECK(!checked.removed(store_to_a(checked)));
   const slicedt unchecked = slice(src);
   CHECK(unchecked.removed(store_to_a(unchecked)));
+}
+
+namespace
+{
+/// The instructions of main in \p functions, in order.
+std::vector<const goto_programt::instructiont *>
+main_instructions(const goto_functionst &functions)
+{
+  std::vector<const goto_programt::instructiont *> result;
+  for (const auto &i : functions.function_map.at("c:@F@main").body.instructions)
+    result.push_back(&i);
+  return result;
+}
+
+goto_functionst compile(std::string src)
+{
+  return goto_factory::get_goto_functions(
+           src, goto_factory::Architecture::BIT_64)
+    .functions;
+}
+} // namespace
+
+TEST_CASE("goto-slicer rewrites a copy, not the original", "[goto-slicer]")
+{
+  goto_functionst functions = compile(R"(
+    int a;
+    int nondet_int();
+    int main()
+    {
+      int x = 0;
+      while (1)
+        x++;
+      int *p = &a;
+      int v = nondet_int() + 1;
+      *p = v;
+      return 0;
+    }
+  )");
+  functions.update();
+  optionst options;
+  andersent points_to;
+  points_to(functions);
+  goto_slice_cachet cache(functions, options, points_to, false, false);
+  const goto_functionst &sliced = cache.program_for(slice_stept::base_case);
+  REQUIRE(&sliced != &functions);
+
+  const auto before = main_instructions(functions);
+  const auto after = main_instructions(sliced);
+  REQUIRE(before.size() == after.size());
+
+  bool collapsed = false, zeroed = false;
+  for (size_t i = 0; i < before.size(); ++i)
+  {
+    CHECK(before[i]->location_number == after[i]->location_number);
+    if (before[i]->is_backwards_goto())
+    {
+      CHECK(after[i]->is_assume());
+      collapsed = true;
+    }
+    if (
+      before[i]->is_assign() &&
+      is_dereference2t(to_code_assign2t(before[i]->code).target))
+    {
+      CHECK(!is_constant_int2t(to_code_assign2t(before[i]->code).source));
+      const expr2tc &source = to_code_assign2t(after[i]->code).source;
+      CHECK(is_constant_int2t(source));
+      zeroed = true;
+    }
+  }
+  CHECK(collapsed);
+  CHECK(zeroed);
+}
+
+TEST_CASE(
+  "goto-slicer keeps overwriting a pointer under leak checks",
+  "[goto-slicer]")
+{
+  // g = 0 drops the last reference to the allocation: that is the leak.
+  const std::string src = R"(
+    #include <stdlib.h>
+    int *g;
+    int main()
+    {
+      g = malloc(sizeof(int));
+      g = 0;
+      return 0;
+    }
+  )";
+  const auto overwrite =
+    [](const slicedt &s) -> const goto_programt::instructiont & {
+    const goto_programt::instructiont *last = nullptr;
+    for (const auto &i : s.main_body().instructions)
+      if (i.is_assign())
+      {
+        const expr2tc &target = to_code_assign2t(i.code).target;
+        if (is_symbol2t(target) && to_symbol2t(target).thename == "c:@g")
+          last = &i;
+      }
+    REQUIRE(last);
+    return *last;
+  };
+  slice_criteriont c;
+  c.pointer_check = false;
+  c.memory_leak_check = true;
+  c.no_reachable_memory_leak = true;
+  const slicedt leak = slice_with(src, c);
+  CHECK(!leak.removed(overwrite(leak)));
+  const slicedt plain = slice(src);
+  CHECK(plain.removed(overwrite(plain)));
+}
+
+TEST_CASE("goto-slicer keeps sprintf but not printf", "[goto-slicer]")
+{
+  // sprintf writes its buffer and symex checks that write; printf only prints.
+  const auto src = [](const std::string &call) {
+    return R"(
+      #include <stdio.h>
+      int main()
+      {
+        char buf[8];
+        int x = 3;
+        )" +
+           call + R"(;
+        return 0;
+      }
+    )";
+  };
+  const slicedt to_buffer = slice(src("sprintf(buf, \"%d\", x)"));
+  CHECK(!to_buffer.removed(to_buffer.assignment("x")));
+  const slicedt to_stdout = slice(src("printf(\"%d\", x)"));
+  CHECK(to_stdout.removed(to_stdout.assignment("x")));
+}
+
+TEST_CASE(
+  "goto-slicer keeps an index into a dereferenced object",
+  "[goto-slicer]")
+{
+  // The pointer check bounds the whole offset, the array index included.
+  const std::string src = R"(
+    struct S { int v[2]; };
+    int main()
+    {
+      struct S s;
+      struct S *p = &s;
+      int i = 1;
+      p->v[i] = 0;
+      return 0;
+    }
+  )";
+  const slicedt checked = slice(src, slice_stept::base_case, true);
+  CHECK(!checked.removed(checked.assignment("i")));
+  const slicedt unchecked = slice(src);
+  CHECK(unchecked.removed(unchecked.assignment("i")));
+}
+
+TEST_CASE(
+  "goto-slicer counts an address Andersen loses as taken",
+  "[goto-slicer]")
+{
+  // &x escapes through a double, which Andersen widens without recording x.
+  const auto src = [](const char *checked) {
+    return std::string(R"(
+      int x, y;
+      int main()
+      {
+        double d = (double)(unsigned long)&x;
+        int *p = (int *)(unsigned long)d;
+        *p = 5;
+        __ESBMC_assert()") +
+           checked + R"( == 0, "");
+        return 0;
+      }
+    )";
+  };
+  const slicedt reached = slice(src("x"));
+  CHECK(!reached.removed(reached.store()));
+  const slicedt unrelated = slice(src("y"));
+  CHECK(unrelated.removed(unrelated.store()));
 }
