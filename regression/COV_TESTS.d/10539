@@ -31,7 +31,6 @@ regression/goto2lean/unsupported_expression_dereference
 regression/goto2lean/unsupported_global_variable
 regression/goto2lean/unsupported_indirect_call
 regression/goto2lean/unsupported_int_mode_bitwise
-regression/goto2lean/int_mode_constant_fold
 regression/goto2lean/unsupported_int_mode_unchecked_division
 regression/goto2lean/unsupported_intrinsic
 regression/goto2lean/unsupported_jump_out_of_branch

@@ -1,6 +1,6 @@
 CORE
 main.py
---function check --goto2lean --ir --no-simplify
+--function check --goto2lean --ir
 ^def mid \(lo : Int\) \(hi : Int\) \(post : Int → Prop\) : Prop :=$
 Int\.tdiv \(lo \+ hi\) \(2 : Int\)
 ^theorem check_safe : ∀ \(lo : Int\) \(hi : Int\), Prog\.check lo hi \(fun _ => True\) := by$

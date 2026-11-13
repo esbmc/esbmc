@@ -117,10 +117,9 @@ those goals also end in `sorry`.
 
 ## Unbounded integers
 
-With `--ir`, integers become Lean's unbounded `Int`, matching
-ESBMC's integer encoding, and the generated proof uses `omega` instead of
-`bv_decide`. This is the mode to use for Python, whose integers do not
-overflow:
+With `--ir`, integers become Lean's unbounded `Int`, matching ESBMC's
+integer encoding, and the generated proof uses `omega` instead of `bv_decide`.
+This is the mode to use for Python, whose integers do not overflow:
 
 ```bash
 esbmc mid.py --function check --ir --goto2lean --output mid.lean
