@@ -1,0 +1,5 @@
+CORE
+main.py
+--python-check-exceptions ZeroDivisionError --stack-limit 1
+Stack limit property was violated
+^VERIFICATION FAILED$
