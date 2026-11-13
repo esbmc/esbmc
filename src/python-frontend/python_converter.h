@@ -2029,6 +2029,7 @@ private:
   exprt get_class_dunder_attribute(const nlohmann::json &element);
   exprt get_class_attribute(const nlohmann::json &element);
   exprt get_class_name(const nlohmann::json &value);
+  exprt get_function_name(const nlohmann::json &value);
   exprt
   get_module_member(const std::string &var_name, const nlohmann::json &element);
   void reject_method_value(const std::string &class_name, const std::string &m)
