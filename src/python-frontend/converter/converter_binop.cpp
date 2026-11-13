@@ -2128,7 +2128,7 @@ exprt python_converter::handle_tagged_scalar_binop(
       op, lhs, rhs, get_location_from_decl(element));
     return dynamic_type_handler_.handle_comparison(op, lhs, rhs);
   }
-  if (op == "Add" || op == "Sub" || op == "Div")
+  if (dynamic_type_handler::is_tagged_arithmetic(op))
   {
     const locationt location = get_location_from_decl(element);
     dynamic_type_handler_.guard_type_error(op, lhs, rhs, location);
