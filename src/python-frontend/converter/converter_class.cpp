@@ -1407,14 +1407,9 @@ bool python_converter::is_tagged_value_expr(
   if (kind == "BinOp")
     return is_tagged_value_expr(value["left"], func_node, clazz) &&
            is_tagged_value_expr(value["right"], func_node, clazz);
-  if (
-    kind == "Attribute" && value["value"].value("_type", "") == "Name" &&
-    value["value"].value("id", "") == "self")
-  {
-    const irep_idt attr = value.value("attr", "");
-    return clazz.has_component(attr) && type_handler_.is_tagged_scalar_type(
-                                          clazz.get_component(attr).type());
-  }
+  if (kind == "Attribute")
+    return type_handler_.is_tagged_scalar_type(
+      self_attribute_type(value, clazz));
   if (kind != "Name" || !func_node.contains("args"))
     return false;
   const std::string name = value.value("id", "");
@@ -1427,6 +1422,90 @@ bool python_converter::is_tagged_value_expr(
                name,
                i);
   return false;
+}
+
+/// The type of `self.a.b...` @p node reads, through the components of
+/// @p clazz and of the classes they hold, else nil.
+typet python_converter::self_attribute_type(
+  const nlohmann::json &node,
+  const struct_typet &clazz) const
+{
+  const nlohmann::json &base = node["value"];
+  const struct_typet *owner = &clazz;
+  if (base.value("_type", "") == "Attribute")
+  {
+    typet held = ns.follow(self_attribute_type(base, clazz));
+    if (held.is_pointer())
+      held = ns.follow(held.subtype());
+    if (!held.is_struct())
+      return typet();
+    owner = &to_struct_type(held);
+  }
+  else if (base.value("_type", "") != "Name" || base.value("id", "") != "self")
+    return typet();
+  const irep_idt attr = node.value("attr", "");
+  return owner->has_component(attr) ? owner->get_component(attr).type()
+                                    : typet();
+}
+
+/// Retype each attribute of @p clazz that is stored None and values of unknown
+/// type, carrying a None flag, to the tagged type when every value is built
+/// only from tagged operands and only the methods of @p class_node store into
+/// it. The flag records None, so the slot never holds one (#10350).
+void python_converter::tag_none_flagged_attributes(
+  const nlohmann::json &class_node,
+  struct_typet &clazz) const
+{
+  for (auto &component : clazz.components())
+  {
+    const std::string attr = component.get_name().as_string();
+    if (!none_flagged_attributes_.count(attr) || component.type() != any_type())
+      continue;
+    attribute_writest all;
+    for (const nlohmann::json *body : reachable_module_bodies())
+      all.walk(*body, attr);
+    self_store_count count;
+    for (const auto &method : class_node["body"])
+      if (method.value("_type", "") == "FunctionDef")
+        count_self_stores(method, method["body"], attr, clazz, count);
+    if (count.tagged > 0 && !count.untagged && count.stores == all.writes)
+      component.type() = type_handler_.get_tagged_object_type();
+  }
+}
+
+/// Counts the stores into `self.<attr>` in @p node, a part of @p method's
+/// body, and whether each stores None, a value built only from tagged
+/// operands, or anything else.
+void python_converter::count_self_stores(
+  const nlohmann::json &method,
+  const nlohmann::json &node,
+  const std::string &attr,
+  const struct_typet &clazz,
+  self_store_count &count) const
+{
+  if (node.is_object())
+  {
+    if (const nlohmann::json *value = attribute_store_value(node, attr))
+    {
+      const nlohmann::json &target = node.value("_type", "") == "Assign"
+                                       ? node["targets"][0]
+                                       : node["target"];
+      ++count.stores;
+      if (target["value"].value("id", "") != "self")
+        count.untagged = true;
+      else if (is_tagged_value_expr(*value, method, clazz))
+        ++count.tagged;
+      else if (!literal_scalar_kind(*value).empty())
+        count.untagged = true;
+    }
+    // A nested function or class is a scope of its own.
+    const std::string kind = node.value("_type", "");
+    if (kind == "FunctionDef" || kind == "ClassDef" || kind == "Lambda")
+      return;
+  }
+  for (const auto &child : node)
+    if (child.is_structured())
+      count_self_stores(method, child, attr, clazz, count);
 }
 
 /// The type of an attribute that @p fallback gives Any: tagged when the stored
@@ -1448,6 +1527,17 @@ void python_converter::get_attributes_from_self(
 {
   const nlohmann::json &method_body =
     func_node.contains("body") ? func_node.at("body") : func_node;
+
+  // Attributes assigned incompatible literal kinds get the tagged-object type.
+  const std::unordered_set<std::string> dynamic_type_attrs =
+    dynamic_type_handler_.detect_dynamic_type_attributes(current_class_name_);
+  auto push_attr_component = [&](const std::string &attr_name, typet type) {
+    if (dynamic_type_attrs.count(attr_name))
+      type = type_handler_.get_tagged_object_type();
+    struct_typet::componentt comp =
+      python_frontend::build_component(current_class_name_, attr_name, type);
+    clazz.components().push_back(comp);
+  };
 
   // Build a map of parameter name -> annotation from the function signature.
   // Used to recover the declared type when the body annotation is uninformative
@@ -1531,11 +1621,7 @@ void python_converter::get_attributes_from_self(
           continue;
         }
         if (!clazz.has_component(attr_name))
-        {
-          struct_typet::componentt comp = python_frontend::build_component(
-            current_class_name_, attr_name, type);
-          clazz.components().push_back(comp);
-        }
+          push_attr_component(attr_name, type);
         continue;
       }
       else
@@ -1686,11 +1772,7 @@ void python_converter::get_attributes_from_self(
       }
 
       if (!clazz.has_component(attr_name))
-      {
-        struct_typet::componentt comp = python_frontend::build_component(
-          current_class_name_, attr_name, type);
-        clazz.components().push_back(comp);
-      }
+        push_attr_component(attr_name, type);
     }
     else if (
       stmt.contains("_type") && stmt["_type"] == "Assign" &&
@@ -1709,11 +1791,7 @@ void python_converter::get_attributes_from_self(
       const std::string &attr_name = stmt["targets"][0]["attr"];
 
       if (!clazz.has_component(attr_name))
-      {
-        struct_typet::componentt comp = python_frontend::build_component(
-          current_class_name_, attr_name, type);
-        clazz.components().push_back(comp);
-      }
+        push_attr_component(attr_name, type);
     }
   }
 }

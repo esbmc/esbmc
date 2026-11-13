@@ -178,13 +178,14 @@ const struct group_opt_templ all_cmd_options[] = {
     {"funsigned-char", NULL, "Make \"char\" unsigned by default"},
     {"fms-extensions", NULL, "Enable microsoft C extensions"},
     {"argv-max-args",
-     boost::program_options::value<int>()->default_value(2)->value_name("nr"),
-     "Maximum number of argv entries backed with nondet strings (default 2). "
+     boost::program_options::value<int>()->default_value(5)->value_name("nr"),
+     "Maximum number of argv (and envp) entries backed with nondet strings "
+     "(default 5). "
      "Higher values widen coverage at the cost of a larger SMT formula."},
     {"argv-max-strlen",
      boost::program_options::value<int>()->default_value(256)->value_name("nr"),
      "Maximum length (in bytes, including the null terminator) of each backed "
-     "argv string (default 256)."},
+     "argv or envp string (default 256)."},
     {"gcc-nested-functions",
      NULL,
      "Enable GCC nested functions extension (source-level lambda lifting)"},
@@ -261,6 +262,13 @@ const struct group_opt_templ all_cmd_options[] = {
      {"nondet-str-length",
       boost::program_options::value<int>()->default_value(16)->value_name("nr"),
       "Set maximum length for non-deterministic strings (default is 16)"},
+     {"python-typed-lists",
+      NULL,
+      "Keep a list whose every element is an int in an int64 array instead of "
+      "one untyped cell per element (default on)"},
+     {"no-python-typed-lists",
+      NULL,
+      "Keep every list in one untyped cell per element"},
      {"python-list-compare-depth",
       boost::program_options::value<int>()->default_value(4)->value_name("nr"),
       "Set maximum nesting depth for Python list comparison (default is 4)"},
@@ -470,6 +478,10 @@ const struct group_opt_templ all_cmd_options[] = {
      boost::program_options::value<std::string>(),
      "Redirect all output to a file (no stdout/stderr)"},
     {"goto2c", NULL, "Translate the GOTO program to C"},
+    {"goto2lean",
+     NULL,
+     "Translate the GOTO program reachable from the entry function to Lean 4 "
+     "(prototype; scalar fragment)"},
     {"generate-testcase",
      NULL,
      "If a solution is found, generates a testcase in XML"},

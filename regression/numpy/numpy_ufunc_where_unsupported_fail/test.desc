@@ -1,4 +1,4 @@
 CORE
 main.py
 --incremental-bmc
-^ERROR: TypeError: numpy.add\(\) keyword 'where' is not supported$
+^ERROR: TypeError: numpy.maximum\(\) keyword 'where' is not supported$

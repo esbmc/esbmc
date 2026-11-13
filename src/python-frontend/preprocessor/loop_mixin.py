@@ -879,8 +879,8 @@ class LoopMixin:
             )
 
         exit_calls = [
-            self.ensure_all_locations(ast.Expr(value=make_exit_call(i)), node)
-            for i in range(len(node.items) - 1, -1, -1)
+            self.ensure_all_locations(ast.copy_location(ast.Expr(value=make_exit_call(i)), node),
+                                      node) for i in range(len(node.items) - 1, -1, -1)
         ]
 
         # When every manager's class defines (or inherits) __exit__, lower to
@@ -982,7 +982,9 @@ class LoopMixin:
                                                                    loop_id)
 
         # Step 5: Create the while loop
-        while_stmt = self._create_enumerate_while_loop(node, target_info, loop_id)
+        holds_list = (isinstance(iterable, ast.Name)
+                      and self.known_variable_types.get(iterable.id) in ("list", "List"))
+        while_stmt = self._create_enumerate_while_loop(node, target_info, loop_id, holds_list)
 
         # Step 6: Combine everything and ensure proper AST locations
         result = setup_statements + [while_stmt]
@@ -1289,16 +1291,23 @@ class LoopMixin:
 
         return [iter_assign, index_assign, array_index_assign, length_assign]
 
-    def _create_enumerate_while_loop(self, node, target_info, loop_id):
-        """Create the while loop for enumerate transformation."""
-        array_index_var = f"ESBMC_array_index_{loop_id}"
-        length_var = f"ESBMC_length_{loop_id}"
+    def _create_enumerate_while_loop(self, node, target_info, loop_id, holds_list):
+        """Create the while loop for enumerate transformation.
 
-        # Create while condition: ESBMC_array_index < ESBMC_length
+        Over a list, CPython's iterator re-reads the length on every step, so it
+        sees the body resize the list; the element read that follows the
+        comparison then needs no bounds check (#10259).
+        """
+        array_index_var = f"ESBMC_array_index_{loop_id}"
+        if holds_list:
+            bound = self._create_len_call(node, f"ESBMC_iter_{loop_id}")
+        else:
+            bound = self.create_name_node(f"ESBMC_length_{loop_id}", ast.Load(), node)
+
         while_cond = ast.Compare(
             left=self.create_name_node(array_index_var, ast.Load(), node),
             ops=[ast.Lt()],
-            comparators=[self.create_name_node(length_var, ast.Load(), node)],
+            comparators=[bound],
         )
         self.ensure_all_locations(while_cond, node)
 
@@ -1307,6 +1316,10 @@ class LoopMixin:
             loop_body = self._create_unpacking_loop_body(node, target_info, loop_id)
         else:  # single variable
             loop_body = self._create_single_var_loop_body(node, target_info, loop_id)
+        if holds_list:
+            for read in (n for stmt in loop_body for n in ast.walk(stmt)):
+                if isinstance(read, ast.Subscript):
+                    read.esbmc_in_bounds = True
 
         # Add increment statements
         loop_body.extend(self._create_increment_statements(node, loop_id))
@@ -1445,6 +1458,30 @@ class LoopMixin:
                 transformed_body.append(transformed_statement)
         return transformed_body
 
+    def _range_zero_step_check(self, step, node):
+        """`if step == 0: raise ValueError(...)`, or nothing for a literal step.
+
+        A literal zero step is rejected before this is reached.
+        """
+        if isinstance(step, ast.Constant):
+            return []
+        check = ast.If(
+            test=ast.Compare(left=step, ops=[ast.Eq()], comparators=[ast.Constant(value=0)]),
+            body=[
+                ast.Raise(
+                    exc=ast.Call(
+                        func=ast.Name(id="ValueError", ctx=ast.Load()),
+                        args=[ast.Constant(value="range() arg 3 must not be zero")],
+                        keywords=[],
+                    ),
+                    cause=None,
+                )
+            ],
+            orelse=[],
+        )
+        self.ensure_all_locations(check, node)
+        return [check]
+
     def _transform_range_for(self, node):  # pylint: disable=too-many-locals
         """Transform range-based for loops to while loops"""
         # Add validation for range arguments
@@ -1480,11 +1517,7 @@ class LoopMixin:
         else:
             step = ast.Constant(value=1)
 
-        # Step validation - Python raises ValueError if step == 0
-        step_validation = ast.Assert(
-            test=ast.Compare(left=step, ops=[ast.NotEq()], comparators=[ast.Constant(value=0)]),
-            msg=ast.Constant(value="range() arg 3 must not be zero"),
-        )
+        step_validation = self._range_zero_step_check(step, node)
 
         # Create assignment for the start variable
         start_assign = ast.AnnAssign(
@@ -1574,10 +1607,10 @@ class LoopMixin:
         ] + transformed_body)
 
         # Create the while statement
-        while_stmt = ast.While(test=while_cond, body=while_body, orelse=[])
+        while_stmt = ast.copy_location(ast.While(test=while_cond, body=while_body, orelse=[]), node)
 
         # Return the transformed statements
-        return [step_validation, start_assign, has_next_assign, while_stmt]
+        return step_validation + [start_assign, has_next_assign, while_stmt]
 
     @staticmethod
     def _body_destructures_name(body, name):
@@ -2513,6 +2546,7 @@ class LoopMixin:
         # Create loop body with unique variable names
         transformed_body = self._create_loop_body(node, target_var_name, iter_var_name, index_var,
                                                   element_type, full_element_ann)
+        self._mark_element_read_in_bounds(node, iter_var_name, transformed_body[0].value)
 
         # Create the while statement
         while_stmt = ast.While(test=while_cond, body=transformed_body, orelse=[])
@@ -2527,14 +2561,47 @@ class LoopMixin:
 
         return result
 
+    def _holds_iterated_list(self, node, iter_var_name):
+        """Whether the loop over @p node holds the list it iterates and re-reads
+        its length on every step."""
+        return (isinstance(node.iter, ast.Name)
+                and self.known_variable_types.get(iter_var_name) in ("list", "List"))
+
+    def _mark_element_read_in_bounds(self, node, iter_var_name, read):
+        """Mark @p read as needing no bounds check when the loop condition has
+        just re-read the length of the list the name still holds (#10259)."""
+        if self._holds_iterated_list(node, iter_var_name) and self._loop_keeps_name(
+                node, iter_var_name):
+            read.esbmc_in_bounds = True
+
+    def _loop_keeps_name(self, node, name):
+        """Whether the loop @p node cannot rebind @p name: its target and body
+        never mention it, and no scope declares it global or nonlocal."""
+        if self.rebindable_names is None or name in self.rebindable_names:
+            return False
+        parts = [node.target] + node.body
+        return not any(
+            isinstance(n, ast.Name) and n.id == name for part in parts for n in ast.walk(part))
+
+    @staticmethod
+    def _rebindable_names(module):
+        """Names a global or nonlocal declaration lets another scope rebind; None
+        when the module can rebind names dynamically."""
+        names = set()
+        for n in ast.walk(module):
+            if isinstance(n, (ast.Global, ast.Nonlocal)):
+                names.update(n.names)
+            elif isinstance(n, ast.Name) and n.id in ("exec", "eval", "globals", "locals", "vars"):
+                return None
+        return names
+
     def _create_iteration_bound(  # pylint: disable=too-many-arguments,too-many-positional-arguments
             self, node, loop_id, iter_var_name, index_var, length_var, element_type,
             full_element_ann):
         """Return the setup statements and while condition bounding the index."""
         # CPython's list iterator re-reads the length of the list object on every
         # step, so it sees the body resize the list but not rebind the name.
-        if (isinstance(node.iter, ast.Name)
-                and self.known_variable_types.get(iter_var_name) in ("list", "List")):
+        if self._holds_iterated_list(node, iter_var_name):
             list_ref = f"ESBMC_iter_{loop_id}"
             list_assign = self._create_iter_assignment(node, "list", list_ref, element_type,
                                                        full_element_ann)

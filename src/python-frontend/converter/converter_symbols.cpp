@@ -7,6 +7,7 @@
 #include <util/message/message.h>
 
 #include <algorithm>
+#include <climits>
 #include <functional>
 #include <optional>
 #include <regex>
@@ -387,6 +388,54 @@ const nlohmann::json *python_converter::sole_binding(
     found = &stmt;
   }
   return found;
+}
+
+/// Whether @p node stores into or deletes an attribute named @p name, as
+/// `m.name = f` does when it rebinds a global of module `m`.
+static bool
+writes_attribute(const nlohmann::json &node, const std::string &name)
+{
+  if (
+    node.is_object() && node.value("_type", "") == "Attribute" &&
+    node.value("attr", "") == name &&
+    node.value("ctx", nlohmann::json::object()).value("_type", "") != "Load")
+    return true;
+  return node.is_structured() &&
+         std::any_of(node.begin(), node.end(), [&](const nlohmann::json &c) {
+           return writes_attribute(c, name);
+         });
+}
+
+const symbolt *python_converter::module_alias_target(const symbolt &alias) const
+{
+  const exprt &value = alias.get_value();
+  if (!value.is_address_of() || !value.op0().is_symbol())
+    return nullptr;
+  const std::string file =
+    ::symbol_id::from_string(alias.id.as_string()).get_filename();
+  const auto module = std::find_if(
+    module_ast_pool_.begin(), module_ast_pool_.end(), [&](const auto &m) {
+      return m.second.value("filename", "") == file;
+    });
+  if (module == module_ast_pool_.end())
+    return nullptr;
+
+  const std::string name = alias.name.as_string();
+  const nlohmann::json &body = module->second["body"];
+  const auto binds = [&](const nlohmann::json &stmt) {
+    return may_bind_name(stmt, name, true);
+  };
+  const auto binding = std::find_if(body.begin(), body.end(), binds);
+  if (
+    binding == body.end() || binding->value("_type", "") != "Assign" ||
+    std::any_of(std::next(binding), body.end(), binds))
+    return nullptr;
+  for (const nlohmann::json *module_body : reachable_module_bodies())
+    if (writes_attribute(*module_body, name))
+      return nullptr;
+
+  const symbolt *target = symbol_table_.find_symbol(value.op0().identifier());
+  return target && target->get_type().is_code() ? target : nullptr;
 }
 
 using scope_bindings = python_converter::scope_bindings;
@@ -1457,6 +1506,44 @@ bool python_converter::is_imported_module(const std::string &module_name) const
     return false;
 
   return json_utils::is_module(module_name, *ast_json);
+}
+
+// `from pkg import sub` binds a module only when `pkg` does not bind `sub`
+// itself and `pkg.sub` was collected from its own file, as submodule_imports
+// decides; otherwise it binds a member such as `from random import random`.
+bool python_converter::names_module_object(const std::string &name, int line)
+  const
+{
+  if (json_utils::count_name_bindings(*ast_json, name) != 1)
+    return false;
+  for (const auto &stmt : (*ast_json)["body"])
+  {
+    const std::string kind = stmt.value("_type", "");
+    if (
+      (kind != "Import" && kind != "ImportFrom") ||
+      stmt.value("end_lineno", INT_MAX) >= line)
+      continue;
+    for (const auto &alias : stmt["names"])
+    {
+      const std::string member = alias["name"];
+      const auto &asname = alias["asname"];
+      if ((asname.is_string() ? asname.get<std::string>() : member) != name)
+        continue;
+      if (kind == "Import")
+        return true;
+      if (!stmt["module"].is_string())
+        return false;
+      const auto package = module_ast_pool_.find(stmt["module"]);
+      if (
+        package == module_ast_pool_.end() ||
+        json_utils::count_name_bindings(package->second, member))
+        return false;
+      const std::string file = module_file(package->first + "." + member);
+      return !file.empty() &&
+             file != package->second.value("filename", std::string());
+    }
+  }
+  return false;
 }
 
 /// Stem of the file being converted, i.e. the module name it would be imported

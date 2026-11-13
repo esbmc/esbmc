@@ -28,7 +28,10 @@ X nondet_X() { X val; return val; }
 The same functions are also available under the SV-COMP `__VERIFIER_nondet_X`
 spelling. More generally, **any function whose body is unavailable returns a
 fresh non-deterministic value of its return type**, so an external function that
-is declared but not defined behaves like a `nondet_` call.
+is declared but not defined behaves like a `nondet_` call. A call through a
+function pointer that matches no function in the program is skipped, and its
+result is non-deterministic in the same way, unless `--closed-world-fnptr`
+makes such a call unreachable.
 
 `__ESBMC_assume(e)` ignores the current execution when `e` is false, and is a
 no-op otherwise (also available as `__VERIFIER_assume`):

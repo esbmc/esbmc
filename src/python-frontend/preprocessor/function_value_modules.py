@@ -16,6 +16,8 @@ from preprocessor.function_value_methods import (_DYNAMIC, KIND_ATTRIBUTE, _bind
 from preprocessor.function_value_types import _Analysis
 
 LIFTED = "_esbmc_mf_"
+# The `__name__` of the function a lifted def stands for.
+DEFINED_NAME = "esbmc_defined_name"
 
 
 def _module_imports(module):
@@ -32,7 +34,7 @@ def _sole_function(analysis, dotted, name):
     path = analysis.local_module(dotted)
     if path is None:
         return None
-    fn = analysis.module_def(path, name)
+    fn = analysis.module_def(path, name) or analysis.aliased_def(path, name)
     if fn is None or fn.decorator_list or _binding_count(analysis.loaded[path], name) != 1:
         return None
     args = fn.args
@@ -40,11 +42,11 @@ def _sole_function(analysis, dotted, name):
     return fn if plain else None
 
 
-def _wrapper(receiver, fn, anchor):
+def _wrapper(receiver, name, fn, anchor):
     params = [a.arg for a in fn.args.args]
-    call = ast.Call(ast.Attribute(ast.Name(receiver, ast.Load()), fn.name, ast.Load()),
+    call = ast.Call(ast.Attribute(ast.Name(receiver, ast.Load()), name, ast.Load()),
                     [ast.Name(p, ast.Load()) for p in params], [])
-    wrapper = ast.FunctionDef(name=f"{LIFTED}{receiver}_{fn.name}",
+    wrapper = ast.FunctionDef(name=f"{LIFTED}{receiver}_{name}",
                               args=ast.arguments([], [ast.arg(p) for p in params], None, [], [],
                                                  None, []),
                               body=[ast.Return(call)],
@@ -52,7 +54,8 @@ def _wrapper(receiver, fn, anchor):
                               returns=None,
                               type_comment=None,
                               type_params=[])
-    setattr(wrapper, KIND_ATTRIBUTE, f"module:{receiver}.{fn.name}")
+    setattr(wrapper, KIND_ATTRIBUTE, f"module:{receiver}.{name}")
+    setattr(wrapper, DEFINED_NAME, fn.name)
     return ast.copy_location(wrapper, anchor)
 
 
@@ -92,7 +95,7 @@ def _liftable(module, analysis, receiver, dotted, values):
     if None in functions.values() or any(p.arg == receiver for fn in functions.values()
                                          for p in fn.args.args):
         return None
-    return list(functions.values())
+    return functions
 
 
 def lift_module_functions(module, path):
@@ -100,16 +103,21 @@ def lift_module_functions(module, path):
     if {n.id for n in ast.walk(module) if isinstance(n, ast.Name)} & _DYNAMIC:
         return False
     analysis = _Analysis(module, path)
-    changed = False
+    lifts = []
     for receiver, (stmt, dotted) in _module_imports(module).items():
         values = _values(module, receiver)
         functions = _liftable(module, analysis, receiver, dotted, values)
-        if functions is None:
-            continue
+        if functions is not None:
+            lifts.append((receiver, stmt, values, functions))
+    # An alias reads a def under a second name, and the two lifts would compare unequal.
+    reached = [id(fn) for *_, functions in lifts for fn in functions.values()]
+    if len(reached) != len(set(reached)):
+        return False
+    for receiver, stmt, values, functions in lifts:
         _ReadLifted(receiver, {id(v) for v in values}).visit(module)
         position = module.body.index(stmt) + 1
-        module.body[position:position] = [_wrapper(receiver, fn, stmt) for fn in functions]
-        changed = True
-    if changed:
+        module.body[position:position] = [
+            _wrapper(receiver, name, fn, stmt) for name, fn in functions.items()
+        ]
         ast.fix_missing_locations(module)
-    return changed
+    return bool(lifts)

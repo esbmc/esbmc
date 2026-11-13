@@ -1,0 +1,12 @@
+- entry_type: invariant_set
+  metadata:
+    format_version: "2.0"
+  content:
+  - invariant:
+      type: location_invariant
+      location:
+        file_name: main.c
+        line: 7
+        function: main
+      value: "x >= 0"
+      format: c_expression
