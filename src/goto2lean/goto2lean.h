@@ -86,7 +86,9 @@ private:
   functiont *cur = nullptr;
 
   void collect(const std::string &id, std::set<std::string> &on_stack);
+  void check_startup_code() const;
   std::string translate_function(const std::string &id);
+  std::string proof_script() const;
 
   std::string trans(
     std::size_t pc,
@@ -95,6 +97,35 @@ private:
     const loopt *loop,
     const std::string &on_end,
     unsigned ind);
+  std::string trans_decl(
+    std::size_t pc,
+    std::size_t end,
+    scopet &scope,
+    const loopt *loop,
+    const std::string &on_end,
+    unsigned ind);
+  std::string trans_assign(
+    std::size_t pc,
+    std::size_t end,
+    scopet &scope,
+    const loopt *loop,
+    const std::string &on_end,
+    unsigned ind);
+  std::string trans_call(
+    std::size_t pc,
+    std::size_t end,
+    scopet &scope,
+    const loopt *loop,
+    const std::string &on_end,
+    unsigned ind);
+  std::string trans_goto(
+    std::size_t pc,
+    std::size_t end,
+    const scopet &scope,
+    const loopt *loop,
+    const std::string &on_end,
+    unsigned ind);
+  std::size_t branch_join(std::size_t pc, std::size_t t, std::size_t end) const;
   std::string trans_loop(
     std::size_t pc,
     std::size_t end,
@@ -113,8 +144,29 @@ private:
     const std::string &on_end,
     unsigned ind);
 
+  std::string value_in(const scopet &scope, const expr2tc &e);
+  std::string prop_in(const scopet &scope, const expr2tc &e);
+  std::string bind(scopet &scope, const expr2tc &sym);
+
   std::string value(const expr2tc &e);
+  std::string symbol_value(const irep_idt &id);
+  std::string int_literal(const expr2tc &e) const;
+  std::string int_division(const expr2tc &e);
+  std::string bv_division(const expr2tc &e);
+  std::string bitwise(const expr2tc &e);
+  std::string cast(const expr2tc &e);
+  std::string relation(const expr2tc &e);
+  std::string overflow(const expr2tc &e);
+  std::string overflow_neg(const expr2tc &e);
+  void reject_under_ir(const expr2tc &e) const;
+  std::string infix(const expr2tc &a, const std::string &op, const expr2tc &b);
+  std::string infix(const expr2tc &e, const std::string &op);
+  std::string apply(const std::string &fn, const expr2tc &a, const expr2tc &b);
+
   std::string prop(const expr2tc &e);
+  std::string connective(const expr2tc &e, const std::string &op);
+  std::string prop_relation(const expr2tc &e);
+  std::string quantifier(const expr2tc &e);
   std::string type(const type2tc &t);
   std::string var_name(const irep_idt &id);
   std::string source_name(const irep_idt &id) const;

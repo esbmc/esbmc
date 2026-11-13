@@ -368,6 +368,14 @@ static bool answered_without_bmc(const optionst &options)
   return early;
 }
 
+// A --goto2lean run that fails anywhere must not leave an earlier proof file.
+static void
+remove_stale_lean_output(const cmdlinet &cmdline, const optionst &options)
+{
+  if (cmdline.isset("goto2lean") && !options.get_option("output").empty())
+    std::remove(options.get_option("output").c_str());
+}
+
 int esbmc_parseoptionst::doit()
 {
   // Configure msg output
@@ -494,10 +502,7 @@ int esbmc_parseoptionst::doit()
   // Parse ESBMC options (CMD + set internal options)
   optionst options;
   get_command_line_options(options);
-
-  // A --goto2lean run that fails anywhere must not leave an earlier proof file.
-  if (cmdline.isset("goto2lean") && !options.get_option("output").empty())
-    std::remove(options.get_option("output").c_str());
+  remove_stale_lean_output(cmdline, options);
 
   // for solidity: detect .sol files in positional args or via --sol
   {
