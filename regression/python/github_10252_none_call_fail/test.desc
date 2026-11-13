@@ -1,0 +1,5 @@
+CORE
+main.py
+--python-check-exceptions TypeError,AttributeError
+dereference failure: NULL pointer
+^VERIFICATION FAILED$
