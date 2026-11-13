@@ -2205,6 +2205,7 @@ exprt function_call_builder::build() const
       throw std::runtime_error("__ESBMC_assume requires one boolean argument");
 
     exprt condition = converter_.get_expr(call_["args"][0]);
+    converter_.convert_function_call_to_side_effect(condition);
     if (!condition.type().is_bool())
       condition = build_typecast(condition, bool_type());
 
@@ -2226,6 +2227,7 @@ exprt function_call_builder::build() const
         "__ESBMC_assert takes one or two arguments (cond[, msg])");
 
     exprt condition = converter_.get_expr(args[0]);
+    converter_.convert_function_call_to_side_effect(condition);
     if (!condition.type().is_bool())
       condition = build_typecast(condition, bool_type());
 
