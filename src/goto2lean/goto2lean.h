@@ -80,7 +80,9 @@ private:
   std::vector<irep_idt> qbinders;
   std::map<std::string, std::string> fn_names;
   std::vector<std::string> aux_defs;
-  bool has_loops = false, has_quantifiers = false;
+  bool has_loops = false;
+  // a quantifier the generated proof script cannot introduce by itself
+  bool manual_quantifiers = false;
   unsigned join_count = 0;
 
   functiont *cur = nullptr;
@@ -146,6 +148,7 @@ private:
 
   std::string value_in(const scopet &scope, const expr2tc &e);
   std::string prop_in(const scopet &scope, const expr2tc &e);
+  std::string asserted(const scopet &scope, const expr2tc &guard);
   std::string bind(scopet &scope, const expr2tc &sym);
 
   std::string value(const expr2tc &e);

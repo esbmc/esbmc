@@ -87,7 +87,8 @@ including the result for a zero divisor.
 
 ## Proving the theorem
 
-For programs without loops or quantifiers, the generated proof is automatic:
+For programs without loops, whose only quantifiers are asserted `∀`s, the
+generated proof is automatic:
 it unfolds the definitions and calls `bv_decide`, which either proves the
 theorem or prints a counterexample.
 
@@ -108,8 +109,11 @@ theorem main_safe : Prog.main (fun _ => True) := by
 
 A wrong invariant is refuted with a concrete counterexample, which makes this a
 natural place for an LLM to propose an invariant and for Lean to check it.
-Goals with `∀`/`∃` quantifiers (`__ESBMC_forall`, `__ESBMC_exists`) also end in
-`sorry`, because `bv_decide` handles only quantifier-free goals.
+An asserted `∀` (`__ESBMC_forall`), alone or in a conjunction, is proved
+automatically: the script introduces the bound variable and `bv_decide` decides
+the rest. An `∃` (`__ESBMC_exists`) needs a witness, and a quantifier in an
+assumption, a branch condition or under a negation needs an instantiation, so
+those goals also end in `sorry`.
 
 ## Unbounded integers
 

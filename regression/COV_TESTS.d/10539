@@ -13,6 +13,8 @@ regression/goto2lean/negative_constant
 regression/goto2lean/output_unwritable
 regression/goto2lean/overflow_check
 regression/goto2lean/overflow_kinds
+regression/goto2lean/quantifier_forall
+regression/goto2lean/quantifier_negated
 regression/goto2lean/quantifiers
 regression/goto2lean/reserved_names
 regression/goto2lean/return_in_loop

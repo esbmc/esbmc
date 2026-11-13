@@ -156,6 +156,30 @@ expr2tc strip_bool_roundtrip(const expr2tc &e)
   return e;
 }
 
+bool has_quantifier(const expr2tc &e)
+{
+  if (is_forall2t(e) || is_exists2t(e))
+    return true;
+  bool found = false;
+  e->foreach_operand([&found](const expr2tc &op) {
+    found = found || (!is_nil_expr(op) && has_quantifier(op));
+  });
+  return found;
+}
+
+// The generated script introduces a ∀ that is the goal or a conjunct of it.
+// An ∃ needs a witness and a quantified hypothesis an instantiation.
+bool script_introduces_quantifiers(const expr2tc &raw)
+{
+  expr2tc e = strip_bool_roundtrip(raw);
+  if (is_and2t(e))
+    return script_introduces_quantifiers(to_and2t(e).side_1) &&
+           script_introduces_quantifiers(to_and2t(e).side_2);
+  if (is_forall2t(e))
+    return script_introduces_quantifiers(to_forall2t(e).side_2);
+  return !has_quantifier(e);
+}
+
 bool mentions(const expr2tc &e, const irep_idt &id)
 {
   if (is_nil_expr(e))
@@ -652,7 +676,7 @@ std::string goto2leant::prop_relation(const expr2tc &e)
 
 std::string goto2leant::quantifier(const expr2tc &e)
 {
-  has_quantifiers = true;
+  manual_quantifiers = true;
   bool all = is_forall2t(e);
   const expr2tc &binder =
     quantifier_binder(all ? to_forall2t(e).side_1 : to_exists2t(e).side_1);
@@ -746,6 +770,15 @@ std::string goto2leant::prop_in(const scopet &scope, const expr2tc &e)
   return prop(e);
 }
 
+std::string goto2leant::asserted(const scopet &scope, const expr2tc &guard)
+{
+  const bool manual = manual_quantifiers;
+  std::string g = prop_in(scope, guard);
+  if (script_introduces_quantifiers(guard))
+    manual_quantifiers = manual;
+  return g;
+}
+
 std::string goto2leant::bind(scopet &scope, const expr2tc &sym)
 {
   const irep_idt &id = to_symbol2t(sym).thename;
@@ -807,7 +840,7 @@ std::string goto2leant::trans(
 
   case ASSERT:
   {
-    std::string g = prop_in(scope, I.guard);
+    std::string g = asserted(scope, I.guard);
     return p + "-- " + I.location.comment().as_string() + "\n" + p + g +
            " ∧ (\n" + next() + ")";
   }
@@ -1148,12 +1181,13 @@ void goto2leant::check_startup_code() const
 std::string goto2leant::proof_script() const
 {
   std::ostringstream out;
-  if (has_loops || has_quantifiers)
+  if (has_loops || manual_quantifiers)
   {
     out << "  -- Not closed automatically: "
         << (has_loops
               ? "each loop needs an invariant (apply Prog.<loop>.coinduct)"
-              : "bv_decide only handles quantifier-free goals")
+              : "only an asserted ∀ is introduced automatically; any other "
+                "quantifier needs a manual proof")
         << ".\n  sorry\n";
     return out.str();
   }
