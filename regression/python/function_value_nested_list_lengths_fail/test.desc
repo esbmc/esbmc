@@ -2,4 +2,4 @@ CORE
 main.py
 
 ^VERIFICATION FAILED$
-IndexError
+^\s*FAILED\s+\[.*line\s+18\s+uncaught exception: IndexError
