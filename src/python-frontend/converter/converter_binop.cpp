@@ -423,6 +423,29 @@ nlohmann::json ast_node(const char *type, const nlohmann::json &loc)
   return node;
 }
 
+// `builtin(value)`, as the conversion CPython applies before formatting.
+nlohmann::json builtin_call(const char *builtin, const nlohmann::json &value)
+{
+  nlohmann::json call = ast_node("Call", value);
+  call["func"] = ast_node("Name", value);
+  call["func"]["id"] = builtin;
+  call["func"]["ctx"] = {{"_type", "Load"}};
+  call["args"] = nlohmann::json::array({value});
+  call["keywords"] = nlohmann::json::array();
+  return call;
+}
+
+// The operand of %f: a float as it is, an int or a bool through float().
+std::optional<nlohmann::json>
+percent_f_operand(const nlohmann::json &value, const typet &type)
+{
+  if (percent_d_accepts(type))
+    return builtin_call("float", value);
+  if (type.is_floatbv())
+    return value;
+  return std::nullopt;
+}
+
 // The f-string part for one %s/%d/%i/%f conversion of `value`; `precision`
 // is that of a `%.<digits>f`, or -1 when the spec has none.
 std::optional<nlohmann::json> formatted_part(
@@ -436,20 +459,17 @@ std::optional<nlohmann::json> formatted_part(
   if (conversion == 'f')
   {
     // The f-string lowering renders at most 15 fractional digits.
-    if (!type.is_floatbv() || precision > 15)
+    const std::optional<nlohmann::json> operand =
+      percent_f_operand(value, type);
+    if (!operand || precision > 15)
       return std::nullopt;
+    value = *operand;
   }
   else if (conversion == 'd' || conversion == 'i')
   {
     if (!percent_d_accepts(type))
       return std::nullopt;
-    nlohmann::json call = ast_node("Call", value);
-    call["func"] = ast_node("Name", value);
-    call["func"]["id"] = "int";
-    call["func"]["ctx"] = {{"_type", "Load"}};
-    call["args"] = nlohmann::json::array({value});
-    call["keywords"] = nlohmann::json::array();
-    value = call;
+    value = builtin_call("int", value);
   }
   else if (conversion != 's' || !percent_s_accepts(type))
     return std::nullopt;
@@ -2102,9 +2122,31 @@ exprt python_converter::get_percent_format_expr(
   // len("ab")), which materialises it correctly when consumed inline by
   // len()/==. Building the array directly left it unaddressable inline.
   nlohmann::json folded = left;
-  folded["value"] =
-    py_percent_format(left["value"].get<std::string>(), args, mapping);
+  folded["value"] = percent_format_or_refusal(left, args, mapping);
   return get_expr(folded);
+}
+
+std::string python_converter::percent_format_or_refusal(
+  const nlohmann::json &left,
+  const std::vector<nlohmann::json> &args,
+  const std::map<std::string, nlohmann::json> &mapping)
+{
+  try
+  {
+    return py_percent_format(left["value"].get<std::string>(), args, mapping);
+  }
+  catch (const std::runtime_error &e)
+  {
+    // Such as an operand whose type is known only at run time. The program
+    // goes wrong only on a path that formats it, so the refusal is planted
+    // there, where it runs exactly when Python would run the formatting.
+    const std::string message = e.what();
+    if (!has_prefix(message, "unsupported") || !can_emit_operand_statement())
+      throw;
+    end_path_as_unsupported(
+      "U" + message.substr(1), get_location_from_decl(left));
+    return "";
+  }
 }
 
 exprt python_converter::get_fstring_in_order(const nlohmann::json &joined)
