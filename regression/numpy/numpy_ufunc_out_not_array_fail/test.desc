@@ -1,4 +1,5 @@
 CORE
 main.py
 --incremental-bmc
-^ERROR: TypeError: return arrays must be of ArrayType$
+^VERIFICATION FAILED$
+^  uncaught exception: TypeError$
