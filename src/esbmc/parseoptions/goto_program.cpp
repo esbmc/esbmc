@@ -230,10 +230,8 @@ void esbmc_parseoptionst::configure_sv_comp_threads(
     options.set_option("incremental-bmc", true);
   }
 
-  // A truncated schedule space still reports SUCCESSFUL, so this trades the
-  // soundness of "true" verdicts for coverage.
-  if (options.get_option("context-bound").empty())
-    options.set_option("context-bound", "3");
+  // No --context-bound default: a truncated schedule space would still report
+  // SUCCESSFUL, so only the falsification rounds below are bounded.
   options.set_option("cswitch-skip-readonly-globals", true);
   // Bounded rounds first can only report a violation (#6831, #6947); they
   // cannot run with --multi-property. A boost default makes cmdline.isset
