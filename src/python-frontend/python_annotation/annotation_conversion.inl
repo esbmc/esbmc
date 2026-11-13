@@ -846,7 +846,7 @@ python_annotation<Json>::get_dict_literal_type(const Json &dict_value)
 // ---------- dispatchers ----------
 
 /// @p type, or @p fallback when @p type is unknown.
-static std::string known_or(std::string type, std::string fallback)
+inline std::string known_or(std::string type, std::string fallback)
 {
   return type.empty() ? fallback : type;
 }
