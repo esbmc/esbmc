@@ -279,14 +279,12 @@ goto2leant::goto2leant(
   const goto_functionst &goto_functions,
   const std::string &entry,
   bool int_mode,
-  bool div_checked,
-  bool simplifier_on)
+  bool div_checked)
   : ns(ns),
     goto_functions(goto_functions),
     entry(entry),
     int_mode(int_mode),
-    div_checked(div_checked),
-    simplifier_on(simplifier_on)
+    div_checked(div_checked)
 {
 }
 
@@ -1225,10 +1223,6 @@ std::string goto2leant::translate()
       "goto2lean: entry function " + entry + " not found");
 
   check_startup_code();
-  if (int_mode && simplifier_on)
-    unsupported(
-      "--ir without --no-simplify: ESBMC's simplifier folds constants with "
-      "fixed-width wraparound, which Lean's Int does not");
 
   std::set<std::string> on_stack;
   collect(entry_id, on_stack);

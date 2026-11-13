@@ -117,19 +117,17 @@ those goals also end in `sorry`.
 
 ## Unbounded integers
 
-With `--ir --no-simplify`, integers become Lean's unbounded `Int`, matching
+With `--ir`, integers become Lean's unbounded `Int`, matching
 ESBMC's integer encoding, and the generated proof uses `omega` instead of
 `bv_decide`. This is the mode to use for Python, whose integers do not
 overflow:
 
 ```bash
-esbmc mid.py --function check --ir --no-simplify --goto2lean --output mid.lean
+esbmc mid.py --function check --ir --goto2lean --output mid.lean
 ```
 
-`--no-simplify` is required: ESBMC's simplifier folds constant expressions
-with fixed-width wraparound even under `--ir`, which `Int` does not. In this
-mode bitwise operators, shifts and overflow checks are rejected, and so is
-division by a variable when `--no-div-by-zero-check` is given.
+In this mode bitwise operators, shifts and overflow checks are rejected, and
+so is division by a variable when `--no-div-by-zero-check` is given.
 
 ## What is supported
 
