@@ -136,7 +136,8 @@ division by a variable when `--no-div-by-zero-check` is given.
 - `_Bool` and fixed-width integers, assignments, structured `if`/`else`,
   loops (without nested loops or calls inside them), early returns and
   non-recursive calls.
-- Quantifiers in assertions and assumptions.
+- Quantifiers in assertions and assumptions. Only an asserted `∀` is proved
+  automatically; the rest end in `sorry`.
 - Calls to functions without a body: their result becomes nondeterministic.
 
 Rejected with `ERROR: goto2lean: unsupported …`: arrays, pointers, structs,
