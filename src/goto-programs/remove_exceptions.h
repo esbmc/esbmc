@@ -63,3 +63,7 @@ std::vector<irep_idt> python_checked_exceptions(const optionst &options);
 /// address-taken function seeded as a root.
 std::set<irep_idt>
 entry_reachable_functions(const goto_functionst &gf, const contextt &context);
+
+/// The functions whose address is taken in a body or a static initialiser.
+std::set<irep_idt>
+address_taken_functions(const goto_functionst &gf, const contextt &context);
