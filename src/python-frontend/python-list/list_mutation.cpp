@@ -757,6 +757,7 @@ namespace
 enum class store_kind
 {
   other,
+  boolean,
   integer,
   floating,
   string,
@@ -767,7 +768,9 @@ enum class store_kind
 
 store_kind kind_of(const typet &type, python_converter &converter)
 {
-  if (type.is_signedbv() || type.is_unsignedbv() || type.is_bool())
+  if (type.is_bool())
+    return store_kind::boolean;
+  if (type.is_signedbv() || type.is_unsignedbv())
     return store_kind::integer;
   if (type.is_floatbv())
     return store_kind::floating;
@@ -889,8 +892,12 @@ std::optional<exprt> python_list::build_element_replacement(
   // A later constant-index read takes the slot's type from the registry. A
   // reference of the slot's own type leaves the slot types as they were.
   const nlohmann::json &target = assignment_target(op);
+  // A bool is stored widened to a long, but its slot still reads as a bool.
   if (lhs.type() != rhs.type() || literal_subscript_index(target) != SIZE_MAX)
-    record_element_store(target, info.elem_symbol->id.as_string(), value_type);
+    record_element_store(
+      target,
+      info.elem_symbol->id.as_string(),
+      rhs.type().is_bool() ? rhs.type() : value_type);
   return set_at;
 }
 
@@ -1117,16 +1124,17 @@ exprt python_list::repeat_at_runtime(const exprt &source, const exprt &count)
 {
   const locationt location = converter_.get_location_from_decl(list_value_);
   symbolt &result = create_list();
+  const typet count_type = long_long_int_type();
   symbolt &bound = converter_.create_tmp_symbol(
-    list_value_, "$list_rep_count$", int_type(), exprt());
+    list_value_, "$list_rep_count$", count_type, exprt());
   converter_.add_instruction(code_declt(build_symbol(bound)));
   converter_.add_instruction(code_assignt(
     build_symbol(bound),
-    count.type() == int_type() ? count : build_typecast(count, int_type())));
+    count.type() == count_type ? count : build_typecast(count, count_type)));
   symbolt &counter = converter_.create_tmp_symbol(
-    list_value_, "counter", int_type(), gen_zero(int_type()));
+    list_value_, "counter", count_type, gen_zero(count_type));
   converter_.add_instruction(
-    code_assignt(build_symbol(counter), gen_zero(int_type())));
+    code_assignt(build_symbol(counter), gen_zero(count_type)));
 
   code_blockt body;
   code_blockt *const outer = converter_.current_block;
@@ -1135,7 +1143,7 @@ exprt python_list::repeat_at_runtime(const exprt &source, const exprt &count)
   converter_.current_block = outer;
   body.copy_to_operands(code_assignt(
     build_symbol(counter),
-    build_add(build_symbol(counter), gen_one(int_type()), int_type())));
+    build_add(build_symbol(counter), gen_one(count_type), count_type)));
 
   codet loop;
   loop.set_statement("while");
@@ -1947,6 +1955,10 @@ exprt python_list::build_shallow_copy_call(
   const exprt &src_list,
   const nlohmann::json &element)
 {
+  // list(l) or l.copy() of a typed list, whose result the gate left untyped.
+  if (reads_typed(element))
+    return typed_copy(src_list);
+
   const locationt location = converter_.get_location_from_decl(element);
   const typet list_type = converter_.get_type_handler().get_list_type();
 

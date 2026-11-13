@@ -350,6 +350,13 @@ static void record_early_answer(
         options.get_bool_option("no-unwinding-assertions")));
 }
 
+static bool
+should_check_after_violation(const optionst &options, bool is_coverage)
+{
+  return options.get_bool_option("multi-property") || is_coverage ||
+         options.get_bool_option("validate-violation-witness");
+}
+
 bool esbmc_parseoptionst::process_goto_program(
   optionst &options,
   goto_functionst &goto_functions)
@@ -388,8 +395,9 @@ bool esbmc_parseoptionst::process_goto_program(
 
     // Claims after a violation are still checked, so no pass may treat a
     // failed assertion as the end of its path (#7900).
+    // Witness validation filters non-target claims during symbolic execution.
     const bool checks_past_violation =
-      options.get_bool_option("multi-property") || is_coverage;
+      should_check_after_violation(options, is_coverage);
 
     // For coverage mode, treat extra input files (cmdline.args[1:]) as include
     // files so that the coverage location_pool covers all input sources.

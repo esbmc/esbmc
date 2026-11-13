@@ -1,4 +1,5 @@
 #include <stdbool.h>
+#include <limits.h>
 #include <stdlib.h>
 #include <stdint.h> // SIZE_MAX
 #include <string.h>
@@ -104,6 +105,8 @@ PyListObject *__ESBMC_list_create()
   l->size = 0;
   l->is_tuple = false;
   l->may_nest = &__ESBMC_list_nest_no;
+  // Unused by an untyped list, but left unset it is one free pointer per list.
+  l->slot = NULL;
   return l;
 }
 
@@ -766,6 +769,401 @@ PyObject *__ESBMC_list_at(PyListObject *l, size_t index)
 {
   __ESBMC_assert(index < l->size, "IndexError: out-of-bounds read in list");
   return &l->items[index];
+}
+
+/* Typed lists (#10451). A list the frontend proves holds only ints keeps
+ * them in `slot`, an infinite array of int64, instead of one untyped cell per
+ * element. Reads and writes then select one array element, with no pointer
+ * per element and no byte offsets. The frontend's gate decides which lists
+ * qualify. Every operation on such a list is one of the __ESBMC_tlist_*
+ * functions below or a direct `slot[i]` access the converter emits. */
+
+/* Symex binds the result to a fresh infinite array of PySlot. */
+PySlot *__ESBMC_create_inf_slots()
+{
+  return NULL;
+}
+
+PyListObject *__ESBMC_tlist_create()
+{
+  PyListObject *l = __ESBMC_alloca(sizeof(PyListObject));
+  l->type = &__ESBMC_list_type;
+  l->items = NULL;
+  l->size = 0;
+  l->is_tuple = false;
+  l->may_nest = &__ESBMC_list_nest_no;
+  l->slot = __ESBMC_create_inf_slots();
+  return l;
+}
+
+void __ESBMC_tlist_push(PyListObject *l, long long value);
+
+/* _nondet_size(max_size): a size in [0, max_size]. Test-case generation
+ * reads the list's length from this function's nondet. */
+long long __ESBMC_tlist_nondet_size(long long max_size)
+{
+  long long size = nondet_long();
+  __ESBMC_assume(size >= 0);
+  __ESBMC_assume(size <= max_size);
+  return size;
+}
+
+/* One element of _nondet_list_int: nondet_int(), which never returns the
+ * smallest int unless ints are unbounded (#9923). Test-case generation reads
+ * the element from this function's nondet. */
+static void __ESBMC_tlist_nondet_push(PyListObject *l, bool exclude_min)
+{
+  long long value = nondet_long();
+  if (exclude_min)
+    __ESBMC_assume(value != LLONG_MIN);
+  __ESBMC_tlist_push(l, value);
+}
+
+/* The list _nondet_list_int(max_size) builds, with the same loops: the first
+ * is unwound in full for up to 8 elements, so the builder does not decide how
+ * deep the program is explored, and the rest come from an ordinary loop. */
+PyListObject *__ESBMC_tlist_nondet(long long max_size, bool exclude_min)
+{
+  PyListObject *l = __ESBMC_tlist_create();
+  long long size = __ESBMC_tlist_nondet_size(max_size);
+  long long i = 0;
+  __ESBMC_unroll(8);
+  while (i < 8 && i < size)
+  {
+    __ESBMC_tlist_nondet_push(l, exclude_min);
+    i++;
+  }
+  if (max_size > 8)
+    while (i < size)
+    {
+      __ESBMC_tlist_nondet_push(l, exclude_min);
+      i++;
+    }
+  return l;
+}
+
+void __ESBMC_tlist_push(PyListObject *l, long long value)
+{
+  l->slot[l->size].v = value;
+  l->size++;
+}
+
+/* a + b: a fresh list holding the elements of a, then those of b. */
+PyListObject *__ESBMC_tlist_concat(const PyListObject *a, const PyListObject *b)
+{
+  PyListObject *l = __ESBMC_tlist_create();
+  size_t i = 0;
+  while (i < a->size)
+  {
+    __ESBMC_tlist_push(l, a->slot[i].v);
+    i++;
+  }
+  i = 0;
+  while (i < b->size)
+  {
+    __ESBMC_tlist_push(l, b->slot[i].v);
+    i++;
+  }
+  return l;
+}
+
+/* [value] * count: empty for a count below one, as in CPython. As in
+ * __ESBMC_tlist_nondet, the first 8 elements come from a loop unwound in
+ * full, so a small constant count does not depend on the unwinding bound,
+ * as it does not for an untyped list. */
+PyListObject *__ESBMC_tlist_repeat(long long value, long long count)
+{
+  PyListObject *l = __ESBMC_tlist_create();
+  long long i = 0;
+  __ESBMC_unroll(8);
+  while (i < 8 && i < count)
+  {
+    __ESBMC_tlist_push(l, value);
+    i++;
+  }
+  while (i < count)
+  {
+    __ESBMC_tlist_push(l, value);
+    i++;
+  }
+  return l;
+}
+
+/* The element __ESBMC_list_at would return, with the same claim. */
+PySlot *__ESBMC_tlist_at(PyListObject *l, size_t index)
+{
+  __ESBMC_assert(index < l->size, "IndexError: out-of-bounds read in list");
+  return &l->slot[index];
+}
+
+/* One comparator of a sorting network over (valid, value) pairs, valid
+ * ones first: *a gets the pair that comes first. */
+static inline void __ESBMC_tlist_order(
+  bool *va,
+  long long *a,
+  bool *vb,
+  long long *b,
+  bool reverse)
+{
+  bool swap = *vb && (!*va || (reverse ? *b > *a : *b < *a));
+  bool vx = *va;
+  long long x = *a;
+  *va = swap ? *vb : vx;
+  *a = swap ? *b : x;
+  *vb = swap ? vx : *vb;
+  *b = swap ? x : *b;
+}
+
+#define __ESBMC_TLIST_ORDER(i, j)                                              \
+  __ESBMC_tlist_order(&ok##i, &v##i, &ok##j, &v##j, reverse)
+
+/* sorted(src) or sorted(src, reverse=True), as a fresh typed list. Equal ints
+ * are indistinguishable, so stability needs no care. Up to 8 elements go
+ * through a fixed 19-comparator network in which the unused slots sort last,
+ * so the sort adds no loop and no path. Longer lists use an insertion sort. */
+PyListObject *__ESBMC_tlist_sorted(const PyListObject *src, bool reverse)
+{
+  PyListObject *l = __ESBMC_tlist_create();
+  size_t n = src->size;
+  l->size = n;
+  if (n > 8)
+  {
+    size_t i = 0;
+    while (i < n)
+    {
+      l->slot[i].v = src->slot[i].v;
+      i++;
+    }
+    i = 1;
+    while (i < n)
+    {
+      long long x = l->slot[i].v;
+      size_t j = i;
+      while (j > 0 && (reverse ? l->slot[j - 1].v < x : l->slot[j - 1].v > x))
+      {
+        l->slot[j].v = l->slot[j - 1].v;
+        j--;
+      }
+      l->slot[j].v = x;
+      i++;
+    }
+    return l;
+  }
+
+  bool ok0 = n > 0, ok1 = n > 1, ok2 = n > 2, ok3 = n > 3;
+  bool ok4 = n > 4, ok5 = n > 5, ok6 = n > 6, ok7 = n > 7;
+  long long v0 = src->slot[0].v, v1 = src->slot[1].v;
+  long long v2 = src->slot[2].v, v3 = src->slot[3].v;
+  long long v4 = src->slot[4].v, v5 = src->slot[5].v;
+  long long v6 = src->slot[6].v, v7 = src->slot[7].v;
+  __ESBMC_TLIST_ORDER(0, 2);
+  __ESBMC_TLIST_ORDER(1, 3);
+  __ESBMC_TLIST_ORDER(4, 6);
+  __ESBMC_TLIST_ORDER(5, 7);
+  __ESBMC_TLIST_ORDER(0, 4);
+  __ESBMC_TLIST_ORDER(1, 5);
+  __ESBMC_TLIST_ORDER(2, 6);
+  __ESBMC_TLIST_ORDER(3, 7);
+  __ESBMC_TLIST_ORDER(0, 1);
+  __ESBMC_TLIST_ORDER(2, 3);
+  __ESBMC_TLIST_ORDER(4, 5);
+  __ESBMC_TLIST_ORDER(6, 7);
+  __ESBMC_TLIST_ORDER(2, 4);
+  __ESBMC_TLIST_ORDER(3, 5);
+  __ESBMC_TLIST_ORDER(1, 4);
+  __ESBMC_TLIST_ORDER(3, 6);
+  __ESBMC_TLIST_ORDER(1, 2);
+  __ESBMC_TLIST_ORDER(3, 4);
+  __ESBMC_TLIST_ORDER(5, 6);
+  l->slot[0].v = v0;
+  l->slot[1].v = v1;
+  l->slot[2].v = v2;
+  l->slot[3].v = v3;
+  l->slot[4].v = v4;
+  l->slot[5].v = v5;
+  l->slot[6].v = v6;
+  l->slot[7].v = v7;
+  return l;
+}
+
+#undef __ESBMC_TLIST_ORDER
+
+/* The untyped list holding the elements of typed list t, for a use of a
+ * typed list's sorted copy that the typed model does not implement. */
+PyListObject *__ESBMC_tlist_to_list(const PyListObject *t, size_t int_type_id)
+{
+  PyListObject *l = __ESBMC_list_create();
+  size_t i = 0;
+  while (i < t->size)
+  {
+    __ESBMC_list_push(l, &t->slot[i].v, int_type_id, sizeof(long long), 0, 1);
+    i++;
+  }
+  return l;
+}
+
+/* One bound of a slice with a nonzero step, clamped as
+ * PySlice_AdjustIndices does to a list of `size` elements. */
+static long long
+__ESBMC_tlist_clamp(long long size, long long bound, long long step)
+{
+  if (bound < 0)
+  {
+    bound += size;
+    if (bound < 0)
+      bound = step < 0 ? -1 : 0;
+  }
+  else if (bound >= size)
+    bound = step < 0 ? size - 1 : size;
+  return bound;
+}
+
+/* The clamped *start and *stop of a slice with a nonzero step, and its
+ * length. A bound the program leaves out (has_* false) takes the value
+ * PySlice_Unpack's default clamps to, without passing that default's extreme
+ * value through any arithmetic. */
+static long long __ESBMC_tlist_slice_length(
+  long long size,
+  bool has_start,
+  long long *start,
+  bool has_stop,
+  long long *stop,
+  long long step)
+{
+  *start = has_start  ? __ESBMC_tlist_clamp(size, *start, step)
+           : step < 0 ? size - 1
+                      : 0;
+  *stop = has_stop   ? __ESBMC_tlist_clamp(size, *stop, step)
+          : step < 0 ? -1
+                     : size;
+  if (step < 0)
+    return *stop < *start ? (*start - *stop - 1) / -step + 1 : 0;
+  return *start < *stop ? (*stop - *start - 1) / step + 1 : 0;
+}
+
+/* l[start:stop:step], step != 0, as a fresh typed list: an element-wise copy
+ * from l's slots, with no cell per element. list(l) and l.copy() are
+ * l[::1]. */
+PyListObject *__ESBMC_tlist_slice(
+  const PyListObject *l,
+  bool has_start,
+  long long start,
+  bool has_stop,
+  long long stop,
+  long long step)
+{
+  long long n = __ESBMC_tlist_slice_length(
+    l->size, has_start, &start, has_stop, &stop, step);
+  PyListObject *r = __ESBMC_tlist_create();
+  for (long long j = 0; j < n; j++)
+    r->slot[j].v = l->slot[start + j * step].v;
+  r->size = n;
+  return r;
+}
+
+/* The same slice as an untyped list, for a result the frontend's gate leaves
+ * untyped: each element is pushed as an int whose type hash is
+ * int_type_id. */
+PyListObject *__ESBMC_tlist_slice_untyped(
+  const PyListObject *l,
+  bool has_start,
+  long long start,
+  bool has_stop,
+  long long stop,
+  long long step,
+  size_t int_type_id)
+{
+  long long n = __ESBMC_tlist_slice_length(
+    l->size, has_start, &start, has_stop, &stop, step);
+  PyListObject *r = __ESBMC_list_create();
+  for (long long j = 0; j < n; j++)
+    __ESBMC_list_push(
+      r, &l->slot[start + j * step].v, int_type_id, sizeof(long long), 0, 1);
+  return r;
+}
+
+/* l.extend(m): m's elements appended to l. m may be l itself, so its size
+ * is read first. As in __ESBMC_tlist_repeat, the first 8 elements come from
+ * a loop unwound in full. */
+void __ESBMC_tlist_extend(PyListObject *l, const PyListObject *m)
+{
+  size_t n = m->size;
+  size_t base = l->size;
+  size_t i = 0;
+  __ESBMC_unroll(8);
+  while (i < 8 && i < n)
+  {
+    l->slot[base + i].v = m->slot[i].v;
+    i++;
+  }
+  while (i < n)
+  {
+    l->slot[base + i].v = m->slot[i].v;
+    i++;
+  }
+  l->size = base + n;
+}
+
+/* a == b, element by element over a's size. The first 8 elements are one
+ * formula with no path per element: an element at or past the size does not
+ * take part. Longer lists compare the rest in a loop. */
+bool __ESBMC_tlist_eq(const PyListObject *a, const PyListObject *b)
+{
+  size_t n = a->size;
+  bool eq = n == b->size;
+  size_t i = 0;
+  __ESBMC_unroll(8);
+  while (i < 8)
+  {
+    eq = eq && (i >= n || a->slot[i].v == b->slot[i].v);
+    i++;
+  }
+  while (i < n)
+  {
+    eq = eq && a->slot[i].v == b->slot[i].v;
+    i++;
+  }
+  return eq;
+}
+
+/* l[start:stop:step] = src for typed lists, as __ESBMC_list_slice_assign
+ * does it over the slots: a step of 1 replaces the slice with all of src,
+ * shifting the tail, and any other step needs src as long as the slice. The
+ * frontend lowers a literal zero step to its ValueError before the call.
+ * Bounds are passed as for __ESBMC_tlist_slice. */
+void __ESBMC_tlist_slice_assign(
+  PyListObject *l,
+  bool has_start,
+  long long start,
+  bool has_stop,
+  long long stop,
+  long long step,
+  const PyListObject *src)
+{
+  long long size = l->size;
+  long long n =
+    __ESBMC_tlist_slice_length(size, has_start, &start, has_stop, &stop, step);
+  if (src == l)
+    src = __ESBMC_tlist_slice(l, false, 0, false, 0, 1);
+  long long m = src->size;
+  if (step == 1)
+  {
+    if (m < n)
+      for (long long k = start + n; k < size; k++)
+        l->slot[k - n + m].v = l->slot[k].v;
+    else if (m > n)
+      for (long long k = size - 1; k >= start + n; k--)
+        l->slot[k - n + m].v = l->slot[k].v;
+    l->size = size - n + m;
+  }
+  else
+    __ESBMC_assert(
+      m == n,
+      "ValueError: attempt to assign sequence of different size to extended "
+      "slice");
+  long long writes = step != 1 && n < m ? n : m;
+  for (long long j = 0; j < writes; j++)
+    l->slot[start + j * step].v = src->slot[j].v;
 }
 
 bool __ESBMC_list_set_at(
