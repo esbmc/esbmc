@@ -2400,24 +2400,42 @@ exprt python_converter::get_right_operand_after_left(
   return rhs;
 }
 
+// The int constant that @p value, the conversion of @p node, holds when
+// @p node names a variable bound once to it, or else @p value.
+exprt python_converter::once_bound_int(
+  const nlohmann::json &node,
+  const exprt &value) const
+{
+  const symbolt *symbol =
+    value.is_symbol() ? symbol_table_.find_symbol(value.identifier()) : nullptr;
+  if (
+    !symbol || symbol->get_value().is_nil() ||
+    node.value("_type", "") != "Name" ||
+    count_bindings(*ast_json, node.value("id", "")) != 1)
+    return value;
+  expr2tc bound;
+  migrate_expr(symbol->get_value(), bound);
+  simplify(bound);
+  if (!is_constant_int2t(bound) || !is_signedbv_type(bound))
+    return value;
+  return migrate_expr_back(bound);
+}
+
 // An exponent named by a variable bound once to a small int constant is that
 // constant, so `2 ** n` is an int as `2 ** 3` is (#8944). A larger one would
-// overflow an int anyway and keeps the pow() path.
+// overflow an int anyway, and a negative one yields a float, so both keep the
+// pow() path.
 exprt python_converter::once_bound_exponent(
   const nlohmann::json &right,
   const exprt &rhs) const
 {
-  const symbolt *exponent =
-    rhs.is_symbol() ? symbol_table_.find_symbol(rhs.identifier()) : nullptr;
+  const exprt exponent = once_bound_int(right, rhs);
   BigInt value;
   if (
-    !exponent || !exponent->get_value().is_constant() ||
-    !exponent->get_value().type().is_signedbv() ||
-    to_integer(exponent->get_value(), value) || value > 64 ||
-    right.value("_type", "") != "Name" ||
-    count_bindings(*ast_json, right.value("id", "")) != 1)
+    !exponent.is_constant() || to_integer(exponent, value) || value < 0 ||
+    value > 64)
     return rhs;
-  return exponent->get_value();
+  return exponent;
 }
 
 // The element a literal `[A, B][k]` or `(A, B)[k]` reads at a constant k, or
