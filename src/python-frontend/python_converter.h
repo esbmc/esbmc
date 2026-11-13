@@ -3218,6 +3218,7 @@ private:
     const std::string &lhs_id);
   void copy_elem_types_from_reordering_builtin(
     const nlohmann::json &ast_node,
+    const exprt &call,
     const std::string &lhs_id);
 
   /**
