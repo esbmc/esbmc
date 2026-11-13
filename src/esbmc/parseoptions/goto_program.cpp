@@ -961,8 +961,7 @@ static void translate_to_lean_if_requested(
             goto_functions,
             entry,
             options.get_bool_option("int-encoding"),
-            !options.get_bool_option("no-div-by-zero-check"),
-            !options.get_bool_option("no-simplify"))
+            !options.get_bool_option("no-div-by-zero-check"))
             .translate();
   }
   catch (const goto2lean_unsupported &e)

@@ -28,8 +28,7 @@ public:
     const goto_functionst &goto_functions,
     const std::string &entry,
     bool int_mode = false,
-    bool div_checked = true,
-    bool simplifier_on = false);
+    bool div_checked = true);
 
   std::string translate();
 
@@ -69,7 +68,6 @@ private:
   // --ir: integers are unbounded, so they become Lean `Int`, not `BitVec n`.
   bool int_mode;
   bool div_checked; // a zero divisor fails ESBMC's division-by-zero check
-  bool simplifier_on;
   std::map<std::string, int> divisor_signs; // constant divisor -> Int.sign
 
   std::vector<std::string> order;     // callees before callers
