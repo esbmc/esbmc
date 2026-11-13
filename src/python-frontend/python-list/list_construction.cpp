@@ -156,6 +156,9 @@ exprt python_list::build_symbolic_fill_list(
 
 exprt python_list::get()
 {
+  if (is_typed(list_value_))
+    return typed_literal();
+
   symbolt &list_symbol = create_list();
 
   const std::string &list_id = list_symbol.id.as_string();

@@ -119,7 +119,13 @@ void counterexample_value(
     out << "(assignment removed)";
   else
   {
-    out << " = " << from_expr(ns, "", value);
+    // --ir does not bound the value; from_expr would wrap it to the width
+    if (
+      config.options.get_bool_option("ir") && is_constant_int2t(value) &&
+      is_bv_type(value))
+      out << " = " << integer2string(to_constant_int2t(value).value);
+    else
+      out << " = " << from_expr(ns, "", value);
 
     // Don't print the bit-vector if we're running on integer/real mode
     if (is_constant_expr(value) && !config.options.get_bool_option("ir"))
