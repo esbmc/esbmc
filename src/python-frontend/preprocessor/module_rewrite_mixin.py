@@ -8,6 +8,7 @@ from preprocessor.binding_sites import binding_sites
 from preprocessor.bound_method_dispatch import _scope_nodes, dispatch_rebound_methods
 from preprocessor.bound_method_values import lower_method_values
 from preprocessor.check_type_lowering import lower_check_type
+from preprocessor.class_copies import copy_classes_per_argument_kinds
 from preprocessor.dotted_imports import alias_dotted_imports
 from preprocessor.decorator_lowering import lower_user_decorators
 from preprocessor.dict_splat import spell_out_dict_splats
@@ -628,6 +629,7 @@ class ModuleRewriteMixin:
         module imports."""
         if entry:
             _rename_builtin_defs(node)
+            copy_classes_per_argument_kinds(node)
         inline_literal_eval(node)
         _drop_none_slice_bounds(node)
         lower_coroutines(node, self.module_name)
