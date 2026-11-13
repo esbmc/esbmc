@@ -598,7 +598,7 @@ void goto_symext::symex_assert()
 
   // Don't convert if it's an user provided assertion and we're running in
   // no assertion mode or forward condition
-  if (cur_state->source.pc->location.user_provided() && no_assertions)
+  if (cur_state->source.pc->is_user_assertion() && no_assertions)
     return;
 
   const goto_programt::instructiont &instruction = *cur_state->source.pc;

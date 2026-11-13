@@ -32,6 +32,7 @@
 #include <esbmc/ranking_synthesis.h>
 #include <esbmc/non_termination.h>
 #include <goto-programs/goto_loop_simplify.h>
+#include <goto-programs/goto_slicer.h>
 #include <goto-programs/goto_invariant_synthesis.h>
 #include <goto-programs/goto_loop_invariant.h>
 #include <goto-programs/abstract-interpretation/interval_analysis.h>
@@ -173,6 +174,74 @@ apply_rounding_mode(goto_functionst &goto_functions, const cmdlinet &cmdline)
       "--{} has no effect: this program performs no floating-point rounding",
       selected_flag);
   return false;
+}
+
+/// The reason --goto-slice cannot run, or nullptr if it can.
+static const char *goto_slice_excluded(
+  const goto_functionst &goto_functions,
+  const optionst &options,
+  const cmdlinet &cmdline,
+  bool is_coverage)
+{
+  if (is_coverage)
+    return "coverage modes";
+  if (options.get_bool_option("termination"))
+    return "--termination";
+  if (cmdline.isset("ltl"))
+    return "--ltl";
+  // These add claims or assumptions after the slice point.
+  if (
+    cmdline.isset("data-races-check") ||
+    cmdline.isset("data-races-check-only") || cmdline.isset("restrict-check") ||
+    cmdline.isset("restrict-assume"))
+    return "data-race and restrict checks";
+  if (spawns_threads(goto_functions))
+    return "a program that may create threads";
+  return nullptr;
+}
+
+void esbmc_parseoptionst::report_goto_slice(
+  const goto_functionst &goto_functions,
+  const optionst &options,
+  bool is_k_induction)
+{
+  if (
+    const char *reason =
+      goto_slice_excluded(goto_functions, options, cmdline, is_coverage))
+  {
+    log_warning("--goto-slice is ignored for {}", reason);
+    return;
+  }
+
+  andersent points_to;
+  points_to(goto_functions);
+  if (points_to.escapes())
+  {
+    log_warning("--goto-slice is ignored: the program contains inline asm");
+    return;
+  }
+
+  const bool keep_nondets = cmdline.isset("witness-output") ||
+                            cmdline.isset("witness-output-yaml") ||
+                            cmdline.isset("witness-output-graphml") ||
+                            cmdline.isset("generate-testcase") ||
+                            cmdline.isset("generate-ctest-testcase") ||
+                            cmdline.isset("generate-pytest-testcase");
+
+  std::vector<std::pair<slice_stept, const char *>> steps{
+    {slice_stept::base_case, "base case"}};
+  if (is_k_induction || cmdline.isset("incremental-bmc"))
+    steps.emplace_back(slice_stept::forward_condition, "forward condition");
+  if (is_k_induction && !options.get_bool_option("disable-inductive-step"))
+    steps.emplace_back(slice_stept::inductive_step, "inductive step");
+
+  const goto_slicert slicer(goto_functions, points_to);
+  for (const auto &[step, name] : steps)
+    log_status(
+      "GOTO slice ({}): {}",
+      name,
+      slicer.slice(slice_criteriont::from_options(options, step, keep_nondets))
+        .summary());
 }
 
 static void apply_gcse(
@@ -576,6 +645,9 @@ bool esbmc_parseoptionst::process_goto_program(
     // that was only reachable via the marker. Both transformations
     // corrupt the termination CFG. The marker block is intentionally
     // small and ignoring it costs nothing.
+    if (cmdline.isset("goto-slice"))
+      report_goto_slice(goto_functions, options, is_k_induction);
+
     const bool skip_cleanup_for_termination =
       options.get_bool_option("termination");
     if (!(cmdline.isset("no-remove-no-op") || skip_cleanup_for_termination))

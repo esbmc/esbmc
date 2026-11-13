@@ -140,18 +140,6 @@ bool mentions_va_arg(const goto_functiont &function)
   return found;
 }
 
-/// Whether symex runs \p function itself, whatever its body: an intrinsic, a
-/// builtin or an input function, any of which may write through its arguments.
-/// Keep in step with goto_symext::symex_step's FUNCTION_CALL case.
-bool symex_runs(const irep_idt &function)
-{
-  const std::string &name = function.as_string();
-  return has_prefix(name, "c:@F@__ESBMC") ||
-         has_prefix(name, "c:@F@__CPROVER") ||
-         has_prefix(name, "c:@F@__builtin") || name == "c:@F@scanf" ||
-         name == "c:@F@sscanf" || name == "c:@F@fscanf";
-}
-
 expr2tc return_symbol(const irep_idt &fn)
 {
   return symbol2tc(pointer_type2(), "andersen::return::" + fn.as_string());
@@ -366,6 +354,16 @@ namest find_allocators(const goto_functionst &goto_functions)
   return allocators;
 }
 } // namespace
+
+bool andersent::symex_runs(const irep_idt &function)
+{
+  // Keep in step with goto_symext::symex_step's FUNCTION_CALL case.
+  const std::string &name = function.as_string();
+  return has_prefix(name, "c:@F@__ESBMC") ||
+         has_prefix(name, "c:@F@__CPROVER") ||
+         has_prefix(name, "c:@F@__builtin") || name == "c:@F@scanf" ||
+         name == "c:@F@sscanf" || name == "c:@F@fscanf";
+}
 
 andersent::andersent()
 {
@@ -1151,4 +1149,46 @@ void andersent::get_reference_set(locationt, const expr2tc &expr, valuest &dest)
   }
 
   to_object_descriptors(*n, dest);
+}
+
+std::vector<expr2tc> andersent::addressed_objects() const
+{
+  std::unordered_set<node_id> seen;
+  std::vector<expr2tc> objects;
+  for (const constraintt &c : constraints)
+    if (
+      c.kind == constraint_kindt::ADDRESS_OF && seen.insert(c.rhs).second &&
+      !is_nondet_object(node_to_expr[c.rhs]))
+      objects.push_back(node_to_expr[c.rhs]);
+  return objects;
+}
+
+bool andersent::carries_address(const expr2tc &e) const
+{
+  if (is_nil_expr(e) || is_constant_number(e))
+    return false;
+  if (everything_escapes || is_address_of2t(e))
+    return true;
+  // An unconstrained value names no object; any other side effect allocates.
+  if (is_sideeffect2t(e))
+    return to_sideeffect2t(e).kind != sideeffect2t::allockind::nondet;
+
+  const expr2tc base = base_object(e);
+  if (is_dereference2t(base))
+    return true;
+  if (is_symbol2t(base) || is_dynamic_object2t(base))
+  {
+    const node_id *n = find_node(base);
+    if (n == nullptr)
+      return false;
+    for (node_id pointee : points_to(*n))
+      if (pointee == TOP || !is_nondet_object(node_to_expr[pointee]))
+        return true;
+    return false;
+  }
+
+  bool found = false;
+  e->foreach_operand(
+    [&](const expr2tc &op) { found = found || carries_address(op); });
+  return found;
 }

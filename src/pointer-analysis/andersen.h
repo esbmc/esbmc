@@ -108,6 +108,11 @@ public:
   /// symex's memory model, not to C's.
   static constexpr const char *nondet_object_name = "andersen::nondet";
 
+  /// Whether symex runs \p function itself, whatever its body: an intrinsic,
+  /// a builtin or an input function, any of which may write through its
+  /// arguments.
+  static bool symex_runs(const irep_idt &function);
+
   /// True iff \p object is that sentinel.
   static bool is_nondet_object(const expr2tc &object)
   {
@@ -201,6 +206,19 @@ public:
   {
     return solved;
   }
+
+  /// Every object a pointer may hold the address of: each variable whose
+  /// address is taken and each allocation site. What a TOP answer can reach.
+  std::vector<expr2tc> addressed_objects() const;
+
+  /// True iff every query answers TOP (see \ref everything_escapes).
+  bool escapes() const
+  {
+    return everything_escapes;
+  }
+
+  /// Whether the value of \p e may hold an address after \ref solve.
+  bool carries_address(const expr2tc &e) const;
 
   /// @}
 

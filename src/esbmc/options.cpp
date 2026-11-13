@@ -1104,6 +1104,10 @@ const struct group_opt_templ all_cmd_options[] = {
      NULL,
      "Adds intermediate variables to precompute common sub-expressions between "
      "assignments"},
+    {"goto-slice",
+     NULL,
+     "Report the instructions, loops and calls no property depends on (does "
+     "not change the program yet)"},
     {"add-symex-value-sets",
      NULL,
      "Enable value-set analysis for pointers and add assumes to the "

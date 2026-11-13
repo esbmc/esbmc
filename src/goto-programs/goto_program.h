@@ -357,6 +357,13 @@ public:
       return type == ASSERT;
     }
 
+    /// A user-written assertion: the claims symex skips under
+    /// --no-assertions, as in the forward condition.
+    bool is_user_assertion() const
+    {
+      return is_assert() && location.user_provided();
+    }
+
     inline bool is_loop_invariant() const
     {
       return type == LOOP_INVARIANT;

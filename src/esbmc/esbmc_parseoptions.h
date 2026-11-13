@@ -59,6 +59,10 @@ protected:
 
   virtual bool
   process_goto_program(optionst &options, goto_functionst &goto_functions);
+  void report_goto_slice(
+    const goto_functionst &goto_functions,
+    const optionst &options,
+    bool is_k_induction);
 
   /// Whether the run needs the loop-invariant machinery.
   bool wants_loop_invariants() const;

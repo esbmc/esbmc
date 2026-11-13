@@ -12,3 +12,4 @@ new_unit_test(rw-set-test "rw_set.test.cpp" "mode_table_obj;gotoprograms;pointer
 new_unit_test(exception-typeid-test "exception_typeid.test.cpp" "test_goto_factory;clangcppfrontend;clibs;filesystem;langapi")
 new_unit_test(remove-sideeffects-irep2-test "remove_sideeffects_irep2.test.cpp" "test_goto_factory;clangcppfrontend;clibs;filesystem;langapi")
 new_unit_test(invariant-synthesis-predicates-test "invariant_synthesis_predicates.test.cpp" "mode_table_obj;gotoprograms;langapi")
+new_unit_test(goto-slicer-test "goto_slicer.test.cpp" "test_goto_factory;gotoprograms;pointeranalysis;clangcppfrontend;clibs;filesystem;langapi")
