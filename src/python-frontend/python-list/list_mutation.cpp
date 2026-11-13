@@ -1954,6 +1954,10 @@ exprt python_list::build_shallow_copy_call(
   const exprt &src_list,
   const nlohmann::json &element)
 {
+  // list(l) or l.copy() of a typed list, whose result the gate left untyped.
+  if (reads_typed(element))
+    return typed_copy(src_list);
+
   const locationt location = converter_.get_location_from_decl(element);
   const typet list_type = converter_.get_type_handler().get_list_type();
 

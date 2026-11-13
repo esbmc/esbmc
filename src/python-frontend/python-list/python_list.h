@@ -5,6 +5,7 @@
 #include <python-frontend/type/element_type_registry.h>
 #include <util/irep/type.h>
 #include <util/irep/expr.h>
+#include <util/irep/std_code.h>
 #include <util/irep/std_expr.h>
 #include <util/symtab/symbol.h>
 #include <functional>
@@ -59,6 +60,42 @@ public:
     bool from_right = false);
 
   exprt get();
+
+  /// Typed lists (#10451): the lowering of the nodes the frontend's gate
+  /// (preprocessor/typed_lists.py) flags. Defined in typed_list.cpp.
+  static bool is_typed(const nlohmann::json &node);
+  exprt typed_literal();
+  exprt typed_nondet(const exprt &max_size);
+  exprt typed_element(const exprt &list, const exprt &index);
+  exprt typed_append(const exprt &list, const exprt &value);
+  exprt typed_extend(const exprt &list, const exprt &source);
+  /// `a == b`, or `a != b` when @p negate, of two typed lists.
+  exprt typed_compare(const exprt &lhs, const exprt &rhs, bool negate);
+  /// A list comparison, typed when the gate flagged it, else compare().
+  exprt typed_or_untyped_compare(
+    const exprt &lhs,
+    const exprt &rhs,
+    const std::string &op);
+  exprt typed_binop();
+  /// A call the gate flagged: a typed nondet_list builder, or sorted(x) of
+  /// a typed x, whose result is typed when the gate typed the call and is
+  /// otherwise the sorted ints in an untyped list.
+  static bool is_typed_call(const nlohmann::json &call);
+  exprt typed_call(const std::string &func_name);
+  /// A slice, list() or copy() of a typed list. The result is typed when the
+  /// gate flagged the node, else an untyped list of the same ints.
+  static bool reads_typed(const nlohmann::json &node);
+  /// An element access or a slice of a typed list.
+  static bool is_typed_subscript(const nlohmann::json &node);
+  exprt typed_subscript(const exprt &list, const nlohmann::json &slice);
+  exprt typed_slice(const exprt &list, const nlohmann::json &slice);
+  /// `x[a:b:c] = y` into a typed x from a typed y, a slice of one, or
+  /// reversed() of either: the slots are copied and x resized as in CPython.
+  void typed_slice_assign(
+    const exprt &list,
+    const nlohmann::json &slice,
+    const nlohmann::json &value);
+  exprt typed_copy(const exprt &list);
 
   /**
    * @brief Materialize a fresh list from already-evaluated element values.
@@ -542,6 +579,13 @@ public:
     const std::vector<nlohmann::json> &indices,
     const nlohmann::json &element);
 
+  /// `x[a:b:c] = value`: typed_slice_assign for a typed x, else
+  /// handle_slice_assignment.
+  void assign_slice(
+    const exprt &list,
+    const nlohmann::json &slice,
+    const nlohmann::json &value);
+
   /**
    * @brief Lower a list slice assignment l[lower:upper:step] = value to a
    * __ESBMC_list_slice_assign model call. The step must be a constant literal
@@ -1017,6 +1061,21 @@ public:
     codet &target_block);
 
 private:
+  // Helpers of the typed-list lowerings in typed_list.cpp.
+  typet typed_int_type() const;
+  exprt typed_int_type_id() const;
+  exprt typed_int_temp(const nlohmann::json &node, const exprt &value);
+  exprt typed_new_list(const char *create, const std::vector<exprt> &args);
+  exprt typed_sorted();
+  long long typed_slice_step(const nlohmann::json &slice);
+  std::vector<exprt> typed_slice_bounds(const nlohmann::json &slice);
+  code_function_callt
+  typed_push(const nlohmann::json &node, const exprt &list, const exprt &value);
+  exprt typed_copy_call(
+    const exprt &list,
+    const std::vector<exprt> &bounds,
+    long long step);
+
   /// The type of one literal element; a name whose binding has no static type
   /// (such as `x or None`) is read at its symbol's type, as the list stored it.
   typet literal_or_bound_element_type(
@@ -1074,10 +1133,26 @@ private:
     const exprt &count,
     const std::vector<exprt> &list_elems);
 
+  /// Where a list keeps its elements: the model function that returns a
+  /// pointer to one after asserting the index is in range, the member that
+  /// points at the first, and the type of a pointer to one.
+  struct element_storage
+  {
+    const char *at_function;
+    const char *member;
+    typet pointer_type;
+  };
+  element_storage untyped_storage() const;
+
   exprt build_list_at_call(
     const exprt &list,
     const exprt &index,
     const nlohmann::json &element);
+  exprt build_list_at_call(
+    const exprt &list,
+    const exprt &index,
+    const nlohmann::json &element,
+    const element_storage &storage);
 
   exprt bind_list_element(const exprt &list_at_call);
 
