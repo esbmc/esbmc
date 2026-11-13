@@ -1017,8 +1017,9 @@ const struct group_opt_templ all_cmd_options[] = {
      NULL,
      "Enable extrapolation in abstract states (all)"},
     {"interval-analysis-extrapolate-limit",
-     boost::program_options::value<int>()->default_value(1)->value_name("nr"),
-     "Set limit for reaching a fixpoint (default is 1)"},
+     boost::program_options::value<int>()->default_value(3)->value_name("nr"),
+     "Number of times a loop head may change before it is widened (default "
+     "is 3)"},
     {"interval-analysis-extrapolate-under-approximate",
      NULL,
      "Assume integers will not overflow (Integers)"},
