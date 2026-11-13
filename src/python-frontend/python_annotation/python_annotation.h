@@ -245,6 +245,7 @@ private:
     const Json &body);
   bool is_array_operand(const Json &operand, const Json &body);
   std::string operand_annotation_type(const Json &decl);
+  std::string name_operand_type(const Json &name, const Json &body);
   std::string get_type_from_rhs_variable(const Json &element, const Json &body);
   bool holds_callable_value(const std::string &name) const;
   std::string get_type_from_call(const Json &element);
