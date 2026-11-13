@@ -1316,21 +1316,84 @@ exprt dynamic_type_handler::build_sub_literal(
      from_integer(BigInt(tagged_is_left ? 1 : 0), int_type())});
 }
 
-/// The scalar.c function and result type of `/` or `//` (#10555) with
-/// @p suffix ("" for a literal operand, "_dyn" for two tags).
+/// The scalar.c function and result type of `/`, `//` (#10555), `*` or `%`
+/// on numbers, with @p suffix ("" for a literal operand, "_dyn" for two tags).
 static std::pair<std::string, typet>
 division_function(const std::string &op, const std::string &suffix)
 {
-  if (op == "FloorDiv")
-    return {
-      "c:@F@__python_scalar_floordiv_num" + suffix,
-      signedbv_typet(config.ansi_c.long_long_int_width)};
-  return {"c:@F@__python_scalar_div_num" + suffix, double_type()};
+  static const std::unordered_map<std::string, std::string> names = {
+    {"FloorDiv", "floordiv"}, {"Mult", "mul"}, {"Mod", "mod"}};
+  const auto name = names.find(op);
+  if (name == names.end())
+    return {"c:@F@__python_scalar_div_num" + suffix, double_type()};
+  return {
+    "c:@F@__python_scalar_" + name->second + "_num" + suffix,
+    signedbv_typet(config.ansi_c.long_long_int_width)};
 }
 
 bool dynamic_type_handler::is_tagged_arithmetic(const std::string &op)
 {
-  return op == "Add" || op == "Sub" || op == "Div" || op == "FloorDiv";
+  static const std::unordered_set<std::string> ops = {
+    "Add", "Sub", "Div", "FloorDiv", "Mult", "Mod"};
+  return ops.count(op) != 0;
+}
+
+/// Where `*` or `%` on @p lhs and @p rhs is valid in CPython but not on
+/// numbers: a str repeated by an int, or a str formatted by `%`. Neither is
+/// modelled here. False for any other operator.
+exprt dynamic_type_handler::unmodelled_str_operand(
+  const std::string &op,
+  const exprt &lhs,
+  const exprt &rhs) const
+{
+  if (op != "Mult" && op != "Mod")
+    return false_exprt();
+  const exprt str_id =
+    type_handler_.tagged_scalar_type_id(pointer_typet(char_type()));
+  // Whether @p operand holds a str, or else an int or a bool.
+  auto kind = [&](const exprt &operand, bool str) -> exprt {
+    const typet &type = operand.type();
+    if (!type_handler_.is_tagged_scalar_type(type))
+    {
+      const bool integral =
+        type.is_signedbv() || type.is_unsignedbv() || type.is_bool();
+      return gen_boolean(!str && integral);
+    }
+    const exprt type_id = build_member(operand, "type_id", size_type());
+    if (str)
+      return build_equal(type_id, str_id);
+    return type_handler_.tagged_scalar_type_matches(
+      type_id, long_long_int_type());
+  };
+  if (op == "Mod")
+    return kind(lhs, true);
+  return build_or(
+    build_and(kind(lhs, true), kind(rhs, false)),
+    build_and(kind(lhs, false), kind(rhs, true)));
+}
+
+/// Claims, as unsupported, that @p lhs `op` @p rhs is not a str repeated or
+/// formatted, then assumes it.
+void dynamic_type_handler::claim_numeric_operands(
+  const std::string &op,
+  const exprt &lhs,
+  const exprt &rhs,
+  const locationt &location)
+{
+  const exprt unmodelled = unmodelled_str_operand(op, lhs, rhs);
+  if (unmodelled.is_false())
+    return;
+  if (!converter_.can_emit_runtime_guard())
+    throw std::runtime_error(
+      "operator '" + op + "' on a dynamically-typed str is not yet supported");
+  code_assertt check(build_not(unmodelled));
+  check.location() = location;
+  check.location().user_provided(true);
+  check.location().comment(
+    op == "Mod" ? "Unsupported: % formatting of a dynamically-typed str"
+                : "Unsupported: repeating a dynamically-typed str");
+  converter_.add_instruction(check);
+  converter_.add_instruction(code_assumet(build_not(unmodelled)));
 }
 
 exprt dynamic_type_handler::build_div_literal(
@@ -1344,7 +1407,8 @@ exprt dynamic_type_handler::build_div_literal(
     !literal.type().is_bool() && !literal.type().is_signedbv() &&
     !literal.type().is_unsignedbv())
     throw std::runtime_error(
-      "dividing a dynamically-typed variable by this literal type is not "
+      "operator '" + op +
+      "' between a dynamically-typed variable and this literal type is not "
       "yet supported");
 
   const auto [div_name, div_type] = division_function(op, "");
@@ -1366,7 +1430,8 @@ exprt dynamic_type_handler::build_div_literal(
       pointer_typet(signedbv_typet(config.ansi_c.long_long_int_width))),
     signedbv_typet(config.ansi_c.long_long_int_width));
   exprt divisor = tagged_is_left ? lit_value : tagged_numeric_value;
-  guard_zero_division(divisor, type_matches, location);
+  if (op != "Mult")
+    guard_zero_division(divisor, type_matches, location);
 
   return build_call_expr(
     *div_func,
@@ -1386,6 +1451,7 @@ exprt dynamic_type_handler::handle_arithmetic(
   const bool lhs_tagged = type_handler_.is_tagged_scalar_type(lhs.type());
   const bool rhs_tagged = type_handler_.is_tagged_scalar_type(rhs.type());
   refuse_float_tag_operation(lhs, rhs);
+  claim_numeric_operands(op, lhs, rhs, location);
 
   // Equality can settle a type_id mismatch without knowing either type;
   // arithmetic cannot, since it needs the concrete type to pick an operation.
@@ -1497,8 +1563,9 @@ exprt dynamic_type_handler::build_div_tagged(
       build_member(rhs, "value", pointer_typet(empty_typet())),
       pointer_typet(signedbv_typet(config.ansi_c.long_long_int_width))),
     signedbv_typet(config.ansi_c.long_long_int_width));
-  guard_zero_division(
-    rhs_numeric_value, build_and(lhs_is_num, rhs_is_num), location);
+  if (op != "Mult")
+    guard_zero_division(
+      rhs_numeric_value, build_and(lhs_is_num, rhs_is_num), location);
 
   return build_call_expr(
     *div_func,
@@ -1520,8 +1587,10 @@ exprt dynamic_type_handler::operands_type_ok(
   {
     const exprt &tagged = lhs_tagged ? lhs : rhs;
     const exprt &literal = lhs_tagged ? rhs : lhs;
-    return type_handler_.tagged_scalar_type_matches(
-      build_member(tagged, "type_id", size_type()), literal.type());
+    return build_or(
+      type_handler_.tagged_scalar_type_matches(
+        build_member(tagged, "type_id", size_type()), literal.type()),
+      unmodelled_str_operand(op, lhs, rhs));
   }
 
   exprt lhs_type_id = build_member(lhs, "type_id", size_type());
@@ -1532,7 +1601,7 @@ exprt dynamic_type_handler::operands_type_ok(
     type_handler_.tagged_scalar_type_matches(rhs_type_id, long_long_int_type());
   exprt both_num = build_and(lhs_is_num, rhs_is_num);
   if (op != "Add" && is_tagged_arithmetic(op))
-    return both_num;
+    return build_or(both_num, unmodelled_str_operand(op, lhs, rhs));
   if (op == "Add")
   {
     exprt str_type_id =
@@ -1558,7 +1627,12 @@ void dynamic_type_handler::guard_type_error(
     return;
 
   static const std::unordered_map<std::string, std::string> symbols = {
-    {"Add", "+"}, {"Sub", "-"}, {"Div", "/"}, {"FloorDiv", "//"}};
+    {"Add", "+"},
+    {"Sub", "-"},
+    {"Div", "/"},
+    {"FloorDiv", "//"},
+    {"Mult", "*"},
+    {"Mod", "%"}};
   auto symbol = symbols.find(op);
   const std::string message =
     symbol == symbols.end()
