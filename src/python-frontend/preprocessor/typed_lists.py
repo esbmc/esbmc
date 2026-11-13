@@ -199,6 +199,44 @@ def _ends_in_exit(body):
     return bool(body) and isinstance(body[-1], (ast.Return, ast.Raise))
 
 
+def _is_none(node):
+    return isinstance(node, ast.Constant) and node.value is None
+
+
+def _stored_value(target):
+    """The value `x[i] = v` or `x[i], y = v, w` stores into @p target, else
+    None."""
+    holder = _parent(target)
+    if isinstance(holder, ast.Assign) and holder.targets == [target]:
+        return holder.value
+    return _unpacked_value(target)
+
+
+def _none_tested(node):
+    """Whether @p node is compared only by `is None` or `is not None`."""
+    compare = _parent(node)
+    if not (isinstance(compare, ast.Compare) and len(compare.ops) == 1
+            and isinstance(compare.ops[0], (ast.Is, ast.IsNot))):
+        return False
+    return _is_none(compare.comparators[0] if compare.left is node else compare.left)
+
+
+def _unpacked_value(target):
+    """The value `a[i], b = x, y` stores into its target @p target, paired
+    by position as the converter's desugaring pairs them, else None."""
+    holder = _parent(target)
+    assign = _parent(holder)
+    if not (isinstance(holder, (ast.Tuple, ast.List)) and isinstance(assign, ast.Assign)
+            and assign.targets == [holder] and isinstance(assign.value, (ast.Tuple, ast.List))
+            and len(assign.value.elts) == len(holder.elts)):
+        return None
+    if not all(isinstance(t, (ast.Name, ast.Subscript, ast.Attribute)) for t in holder.elts):
+        return None
+    if any(isinstance(v, ast.Starred) for v in assign.value.elts):
+        return None
+    return assign.value.elts[[id(t) for t in holder.elts].index(id(target))]
+
+
 class _Scope:
     """A module or a top-level function: its statements and which names are
     its own."""
@@ -252,6 +290,7 @@ class TypedListGate:
         self.copies = []  # (scope, slice/list()/copy() node, source Name)
         self.compares = []  # (scope, Compare)
         self.extends = []  # (scope, Call)
+        self.slice_stores = []  # (scope, Subscript stored by a slice)
 
     # --- scopes and the functions whose calls carry lists -------------------
 
@@ -393,7 +432,7 @@ class TypedListGate:
                 for param in scope.params:
                     self._bind(scope, param, None)
             elif not _ends_in_exit(scope.body):
-                self._bind_location((scope.name, RETURN), None, scope)
+                self._bind_location((scope.name, RETURN), ast.Constant(value=None), scope)
             for node in _walk_scope(scope.body):
                 self._collect_flow_bindings(node, scope)
                 self._collect_name_bindings(node, scope)
@@ -553,7 +592,7 @@ class TypedListGate:
             self.classes.union(loc, scope.loc(value.id))
         elif self._analysed_call(value):
             self.classes.union(loc, (value.func.id, RETURN))
-        else:
+        elif not (loc[1] == RETURN and _is_none(value)):
             self.classes.poison_loc(loc, f"holds {_describe(value)}")
 
     def _sorted_call(self, value):
@@ -594,8 +633,6 @@ class TypedListGate:
             self.classes.poison_loc(ret, "returned by a function not followed")
             for param in scope.params:
                 self.classes.poison_loc((scope.name, param), "parameter of a function not followed")
-        elif not _ends_in_exit(scope.body):
-            self.classes.poison_loc(ret, "a function that may return None")
         func = self.top_defs[scope.name]
         if func.returns is not None and _is_list_annotation(
                 func.returns) and not _allowed_list_annotation(func.returns):
@@ -631,11 +668,8 @@ class TypedListGate:
     def _record_return(self, node, scope):
         if scope.name == MODULE:
             return
-        loc = (scope.name, RETURN)
-        if node.value is None:
-            self.classes.poison_loc(loc, "a function that may return None")
-        else:
-            self._flow_into(loc, node.value, scope)
+        if node.value is not None:
+            self._flow_into((scope.name, RETURN), node.value, scope)
 
     def _record_call(self, node, scope):
         if self._analysed_call(node):
@@ -660,7 +694,7 @@ class TypedListGate:
             return True
         if isinstance(parent, ast.Return):
             return scope.name != MODULE
-        if self._list_compare(parent):
+        if self._list_compare(parent) or _none_tested(call):
             return True
         return isinstance(parent, ast.Call) and call in parent.args and self._analysed_call(parent)
 
@@ -714,8 +748,8 @@ class TypedListGate:
     # stored into the list, have it checked to be an int in `_check_values`.
 
     def _rule_concatenated(self, node, _scope):
-        """An operand of `x + y` built into a list: it was joined to the
-        result when recorded."""
+        """An operand of `x + y` built into a list, or the y of `x[a:b] = y`
+        or `x[a:b] = reversed(y)`: it was joined to x when recorded."""
         return None if getattr(node, "_typed_operand", False) else NOT_MINE
 
     def _rule_compared(self, node, _scope):
@@ -751,15 +785,11 @@ class TypedListGate:
         if not (isinstance(subscript, ast.Subscript) and subscript.value is node):
             return NOT_MINE
         if isinstance(subscript.slice, ast.Slice):
-            if self._copy_source(subscript) is None:
-                return "sliced"
-            self.copies.append((scope, subscript, node))
-            return None
-        holder = _parent(subscript)
+            return self._slice_use(node, subscript, scope)
         if isinstance(subscript.ctx, ast.Store):
-            if not (isinstance(holder, ast.Assign) and holder.targets == [subscript]):
-                return f"element bound by {_describe(holder)}"
-            value = holder.value
+            value = _stored_value(subscript)
+            if value is None:
+                return f"element bound by {_describe(_parent(subscript))}"
         elif isinstance(subscript.ctx, ast.Load):
             value = None
         else:
@@ -767,6 +797,55 @@ class TypedListGate:
         setattr(subscript, "_typed_access", True)
         self.accesses.append((scope, subscript, value))
         return None
+
+    def _slice_use(self, node, subscript, scope):
+        """`x[a:b:c]`, a copy, or a slice store into x."""
+        if isinstance(subscript.ctx, ast.Store):
+            return self._slice_store(node, subscript, scope)
+        if self._copy_source(subscript) is None:
+            return "sliced"
+        self.copies.append((scope, subscript, node))
+        return None
+
+    def _slice_store(self, node, subscript, scope):
+        """`x[a:b:c] = y`, `x[a:b:c] = y[d:e:f]` or the same with
+        `reversed(...)` around the value: x and y are typed together, since
+        the slots are copied from one to the other. A fresh list as the value
+        is an allocation into x."""
+        holder = _parent(subscript)
+        if not (isinstance(holder, ast.Assign) and holder.targets == [subscript]
+                and _literal_step(subscript.slice.step)):
+            return f"slice bound by {_describe(holder)}"
+        self.slice_stores.append((scope, subscript))
+        if self._allocation_shape(holder.value):
+            self._flow_into(scope.loc(node.id), holder.value, scope)
+            return None
+        source = self._slice_store_source(holder.value)
+        if source is None:
+            return f"slice assigned {_describe(holder.value)}"
+        if not isinstance(_parent(source), ast.Subscript):
+            # A sliced y is recorded as a copy by its own use.
+            setattr(source, "_typed_operand", True)
+        self.classes.union(scope.loc(node.id), scope.loc(source.id))
+        return None
+
+    def _slice_store_source(self, value):
+        """The list name whose elements slice store value @p value holds."""
+        if self._builtin_call(value, "reversed"):
+            value = value.args[0]
+        if isinstance(value, ast.Subscript) and isinstance(value.slice, ast.Slice):
+            value = value.value if self._plain_slice(value) else None
+        return value if isinstance(value, ast.Name) else None
+
+    def _builtin_call(self, value, name):
+        """Whether @p value is `name(x)` of the builtin @p name."""
+        return (isinstance(value, ast.Call) and isinstance(value.func, ast.Name)
+                and value.func.id == name and name not in self.shadowed and len(value.args) == 1
+                and not value.keywords and not isinstance(value.args[0], ast.Starred))
+
+    def _rule_none_test(self, node, _scope):
+        """`x is None` and `x is not None`: a test of the pointer alone."""
+        return None if _none_tested(node) else NOT_MINE
 
     def _rule_truth(self, node, _scope):
         """`if x`, `while x`, `not x`, `bool(x)` and the like: `len(x) != 0`."""
@@ -847,7 +926,8 @@ class TypedListGate:
 
     # The uses of a list name the typed model implements, tried in order.
     USE_RULES = (_rule_concatenated, _rule_len, _rule_analysed_call, _rule_alias, _rule_list_call,
-                 _rule_subscript, _rule_truth, _rule_sorted, _rule_method, _rule_compared)
+                 _rule_subscript, _rule_none_test, _rule_truth, _rule_sorted, _rule_method,
+                 _rule_compared)
 
     # The list methods it implements.
     METHOD_RULES = {"append": _method_append, "copy": _method_copy, "extend": _method_extend}
@@ -898,10 +978,11 @@ class TypedListGate:
         return changed
 
     def _check_copies(self):
-        """Poison the source of a slice whose bounds may not be ints. True
-        when anything changed."""
+        """Poison the source of a slice, or the target of a slice store, whose
+        bounds may not be ints. True when anything changed."""
         changed = False
-        for scope, node, source in self.copies:
+        stores = [(scope, node, node.value) for scope, node in self.slice_stores]
+        for scope, node, source in self.copies + stores:
             bounds = (node.slice.lower, node.slice.upper) if isinstance(node, ast.Subscript) else ()
             loc = scope.loc(source.id)
             if self.classes.typed(loc) and not all(b is None or self.is_int(b, scope)
@@ -1015,6 +1096,14 @@ class TypedListGate:
         for scope, node, source in self.copies:
             if self.classes.typed(scope.loc(source.id)):
                 setattr(node, SOURCE_FLAG, True)
+        for scope, node in self.slice_stores:
+            if self.classes.typed(scope.loc(node.value.id)):
+                setattr(node, TYPED_FLAG, True)
+                # reversed(y[a:b]) copies the slice into a typed list first.
+                value = _parent(node).value
+                if self._builtin_call(value, "reversed") and isinstance(
+                        value.args[0], ast.Subscript):
+                    setattr(value.args[0], TYPED_FLAG, True)
 
     def builder_sites(self):
         """(typed, poison reason) for each nondet_list builder site."""

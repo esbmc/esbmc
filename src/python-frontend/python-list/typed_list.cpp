@@ -284,7 +284,7 @@ exprt python_list::typed_copy_call(
   return result;
 }
 
-exprt python_list::typed_slice(const exprt &list, const nlohmann::json &slice)
+long long python_list::typed_slice_step(const nlohmann::json &slice)
 {
   // The gate admits only a missing step or an int literal, maybe negated.
   long long step = 1;
@@ -297,11 +297,13 @@ exprt python_list::typed_slice(const exprt &list, const nlohmann::json &slice)
     if (slice["step"]["_type"] == "UnaryOp")
       step = -step;
   }
-  // The raise diverts control, so the slice built after it is dead.
+  // The raise diverts control, so what is built after it is dead.
   emit_slice_zero_step_raise(slice, step == 0);
-  if (step == 0)
-    step = 1;
+  return step == 0 ? 1 : step;
+}
 
+std::vector<exprt> python_list::typed_slice_bounds(const nlohmann::json &slice)
+{
   // Each bound is passed as (given, value). The model computes a missing
   // bound's default itself.
   std::vector<exprt> bounds;
@@ -313,7 +315,60 @@ exprt python_list::typed_slice(const exprt &list, const nlohmann::json &slice)
       given ? typed_int_temp(slice[name], converter_.get_expr(slice[name]))
             : from_integer(0, typed_int_type()));
   }
-  return typed_copy_call(list, bounds, step);
+  return bounds;
+}
+
+exprt python_list::typed_slice(const exprt &list, const nlohmann::json &slice)
+{
+  const long long step = typed_slice_step(slice);
+  return typed_copy_call(list, typed_slice_bounds(slice), step);
+}
+
+void python_list::assign_slice(
+  const exprt &list,
+  const nlohmann::json &slice,
+  const nlohmann::json &value)
+{
+  if (!is_typed(list_value_))
+    return handle_slice_assignment(list, slice, value);
+  typed_slice_assign(
+    list.type().is_pointer() ? list : build_address_of(list), slice, value);
+}
+
+void python_list::typed_slice_assign(
+  const exprt &list,
+  const nlohmann::json &slice,
+  const nlohmann::json &value)
+{
+  // The value is a typed list, a fresh one, or reversed() of a list or a
+  // slice, which is its copy with step -1. It is evaluated before the
+  // target's slice, as in CPython.
+  const bool reversed =
+    value["_type"] == "Call" && value["func"].value("id", "") == "reversed";
+  exprt source = converter_.get_expr(reversed ? value["args"][0] : value);
+  const exprt missing = from_integer(0, typed_int_type());
+  if (reversed)
+    source = typed_new_list(
+      "c:@F@__ESBMC_tlist_slice",
+      {source,
+       false_exprt(),
+       missing,
+       false_exprt(),
+       missing,
+       from_integer(-1, typed_int_type())});
+
+  const long long step = typed_slice_step(slice);
+  code_function_callt call;
+  call.function() =
+    build_symbol(model_function(converter_, "c:@F@__ESBMC_tlist_slice_assign"));
+  call.arguments() = {list};
+  for (const exprt &bound : typed_slice_bounds(slice))
+    call.arguments().push_back(bound);
+  call.arguments().push_back(from_integer(step, typed_int_type()));
+  call.arguments().push_back(source);
+  call.type() = empty_typet();
+  call.location() = converter_.get_location_from_decl(slice);
+  converter_.add_instruction(call);
 }
 
 exprt python_list::typed_copy(const exprt &list)

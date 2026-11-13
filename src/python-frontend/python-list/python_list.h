@@ -89,6 +89,12 @@ public:
   static bool is_typed_subscript(const nlohmann::json &node);
   exprt typed_subscript(const exprt &list, const nlohmann::json &slice);
   exprt typed_slice(const exprt &list, const nlohmann::json &slice);
+  /// `x[a:b:c] = y` into a typed x from a typed y, a slice of one, or
+  /// reversed() of either: the slots are copied and x resized as in CPython.
+  void typed_slice_assign(
+    const exprt &list,
+    const nlohmann::json &slice,
+    const nlohmann::json &value);
   exprt typed_copy(const exprt &list);
 
   /**
@@ -573,6 +579,13 @@ public:
     const std::vector<nlohmann::json> &indices,
     const nlohmann::json &element);
 
+  /// `x[a:b:c] = value`: typed_slice_assign for a typed x, else
+  /// handle_slice_assignment.
+  void assign_slice(
+    const exprt &list,
+    const nlohmann::json &slice,
+    const nlohmann::json &value);
+
   /**
    * @brief Lower a list slice assignment l[lower:upper:step] = value to a
    * __ESBMC_list_slice_assign model call. The step must be a constant literal
@@ -1054,6 +1067,8 @@ private:
   exprt typed_int_temp(const nlohmann::json &node, const exprt &value);
   exprt typed_new_list(const char *create, const std::vector<exprt> &args);
   exprt typed_sorted();
+  long long typed_slice_step(const nlohmann::json &slice);
+  std::vector<exprt> typed_slice_bounds(const nlohmann::json &slice);
   code_function_callt
   typed_push(const nlohmann::json &node, const exprt &list, const exprt &value);
   exprt typed_copy_call(
