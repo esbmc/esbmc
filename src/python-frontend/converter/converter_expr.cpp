@@ -2663,9 +2663,10 @@ exprt python_converter::get_class_dunder_attribute(
     return nil_exprt();
   if (element["attr"] == "__class__")
     return get_class_attribute(element);
-  if (element["attr"] == "__name__")
-    return get_class_name(element["value"]);
-  return nil_exprt();
+  if (element["attr"] != "__name__")
+    return nil_exprt();
+  const exprt name = get_class_name(element["value"]);
+  return name.is_nil() ? get_function_name(element["value"]) : name;
 }
 
 exprt python_converter::get_class_attribute(const nlohmann::json &element)
@@ -2714,6 +2715,40 @@ exprt python_converter::get_class_name(const nlohmann::json &value)
     throw std::runtime_error(
       "__name__ of a class not known statically is not supported");
   return string_builder_->build_string_literal(name);
+}
+
+// A function value whose `__name__` get_function_name could not fold.
+static void
+reject_function_name_read(const typet &type, const std::string &attr_name)
+{
+  if (type.is_code() && attr_name == "__name__")
+    throw std::runtime_error(
+      "__name__ of a function not known statically is not supported");
+}
+
+// `f.__name__` when the one binding of `f` is a module-level def or lambda
+// ahead of the read. Nil otherwise.
+exprt python_converter::get_function_name(const nlohmann::json &value)
+{
+  if (value.value("_type", "") != "Name")
+    return nil_exprt();
+  const std::string name = value["id"].get<std::string>();
+  const nlohmann::json &body = (*ast_json)["body"];
+  if (dynamic_type_detail::count_bindings(body, name) != 1)
+    return nil_exprt();
+  for (const auto &stmt : body)
+  {
+    const nlohmann::json *assigned =
+      dynamic_type_detail::assigned_value_at(stmt, name);
+    const bool is_def = stmt.value("_type", "") == "FunctionDef" &&
+                        stmt.value("name", "") == name;
+    const bool is_lambda = assigned && assigned->value("_type", "") == "Lambda";
+    if (
+      (is_def || is_lambda) &&
+      stmt.value("lineno", 0) < value.value("lineno", 0))
+      return string_builder_->build_string_literal(is_def ? name : "<lambda>");
+  }
+  return nil_exprt();
 }
 
 // `module.member` for an imported module, unless a local binding shadows the
@@ -3439,6 +3474,7 @@ exprt python_converter::get_expr(const nlohmann::json &element)
       const typet &symbol_type = (symbol->get_type().is_pointer())
                                    ? symbol->get_type().subtype()
                                    : symbol->get_type();
+      reject_function_name_read(symbol_type, attr_name);
 
       // Handle union types
       if (
