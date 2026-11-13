@@ -20,8 +20,8 @@
 /// is the same rewrite without the write. The counter may step by a constant
 /// that cannot wrap past hi, and other scalars may change by `v += c` with c
 /// fixed: each gets its closed form. Runs before --goto-unwind, goto_check
-/// and the k-induction passes.
-void goto_array_loop_summary(
+/// and the k-induction passes. Returns the number of loops summarised.
+unsigned goto_array_loop_summary(
   goto_functionst &goto_functions,
   contextt &context,
   const optionst &options,

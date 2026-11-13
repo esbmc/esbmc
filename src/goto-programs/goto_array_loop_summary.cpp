@@ -582,7 +582,7 @@ void summarise(
 }
 } // namespace
 
-void goto_array_loop_summary(
+unsigned goto_array_loop_summary(
   goto_functionst &goto_functions,
   contextt &context,
   const optionst &options,
@@ -591,7 +591,7 @@ void goto_array_loop_summary(
   // A summary writes the whole array at once, so another thread could no
   // longer observe it half written.
   if (spawns_threads(goto_functions))
-    return;
+    return 0;
 
   // Whether goto_check, which runs later, can add a check to a body this pass
   // accepts. Pointer checks cannot: such a body has no pointers.
@@ -648,4 +648,5 @@ void goto_array_loop_summary(
     goto_functions.update();
     log_status("Summarised {} array loop(s)", summarised);
   }
+  return summarised;
 }

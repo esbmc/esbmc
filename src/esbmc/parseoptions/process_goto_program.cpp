@@ -477,12 +477,13 @@ bool esbmc_parseoptionst::process_goto_program(
       !cmdline.isset("no-summarize-array-loops") &&
       !cmdline.isset("uninitialised-vars-check") && !cmdline.isset("goto2c") &&
       !is_coverage && !cmdline.isset("loop-invariant") &&
-      !cmdline.isset("loop-invariant-check"))
+      !cmdline.isset("loop-invariant-check") &&
       goto_array_loop_summary(
         goto_functions,
         context,
         options,
-        cmdline.isset("summarize-array-loops"));
+        cmdline.isset("summarize-array-loops")))
+      options.set_option("array-loops-summarised", true);
 
     // Apply all the initialized algorithms
     for (auto &algorithm : goto_preprocess_algorithms)

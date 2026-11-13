@@ -711,11 +711,16 @@ void violation_yaml_goto_trace(
   yml.verified_file = options.get_option("input-file");
   log_progress("Generating Violation Yaml Witness for: {}", yml.verified_file);
 
+  // A summarised loop runs one iteration at a nondet index and the trace
+  // skips the others, so a waypoint would bind to a visit the trace left out.
+  // Those before the first summary would hold, but slicing can drop its steps.
+  const bool summarised = options.get_bool_option("array-loops-summarised");
   auto nondet_visits_ahead = nondet_branch_visits(goto_trace);
   size_t branching_waypoints = 0;
   for (const auto &step : goto_trace.steps)
   {
-    push_nondet_return_waypoints(ns, step, yml, options);
+    if (!summarised)
+      push_nondet_return_waypoints(ns, step, yml, options);
 
     switch (step.type)
     {
@@ -749,7 +754,7 @@ void violation_yaml_goto_trace(
            the waypoint's value is the whole condition's, and a validator would
            apply it to another operand. */
         if (
-          branching_waypoints >= max_branching_waypoints ||
+          summarised || branching_waypoints >= max_branching_waypoints ||
           !input_file_check(step.pc->location) ||
           step.pc->location.get_line().empty() ||
           (!step.nondet_dependent && ahead == 0) || step.condition_operand)
