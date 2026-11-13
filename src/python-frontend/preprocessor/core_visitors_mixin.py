@@ -1646,6 +1646,7 @@ class CoreVisitorsMixin:
             return None
 
         node = self.generic_visit(node)
+
         self._update_known_literal_for_simple_assign(node)
         self._track_static_seq_binding(node)
         self._maybe_track_seq_iterator(node)
