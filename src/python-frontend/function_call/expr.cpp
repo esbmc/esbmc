@@ -7507,6 +7507,7 @@ std::optional<exprt> function_call_expr::try_indirect_variable_call()
     symbolt *var_symbol = symbol_table.find_symbol(var_sid.to_string());
     if (var_symbol && !var_symbol->get_type().is_code())
     {
+      converter_.refuse_keywords_through_value(call_);
       side_effect_expr_function_callt call;
       call.location() = converter_.get_location_from_decl(call_);
       call.type() = any_type();

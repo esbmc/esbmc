@@ -851,6 +851,23 @@ private:
     const nlohmann::json &call,
     const side_effect_expr_function_callt &call_expr);
 
+  /// The type of a call through a function value whose target the converter
+  /// cannot tell, @p untyped unless it may give a tagged value.
+  typet
+  untyped_call_type(const nlohmann::json &call, const typet &untyped) const;
+
+  /// Throws for a call through a function value that passes keyword
+  /// arguments, which such a call drops.
+  void refuse_keywords_through_value(const nlohmann::json &call) const;
+
+  /// Refuses the path where the call @p call of @p element, which the
+  /// preprocessor found may reach functions returning different types, goes
+  /// to anything but a def it marked to return a tagged value.
+  void guard_tagged_callee(const exprt &call, const nlohmann::json &element);
+  /// Writes the body of the check guard_tagged_callee calls, once every
+  /// module is converted.
+  void define_tagged_callee();
+
   exprt get_function_body_or_unsupported(const nlohmann::json &function_node);
 
   /// Moves the declaration of each local first assigned in a nested block of

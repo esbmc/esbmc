@@ -3767,6 +3767,7 @@ exprt python_converter::get_expr(const nlohmann::json &element)
       expr = get_lambda_expr(element);
     else
       expr = get_call_expr(element);
+    guard_tagged_callee(expr, element);
     break;
   }
   // Ternary operator

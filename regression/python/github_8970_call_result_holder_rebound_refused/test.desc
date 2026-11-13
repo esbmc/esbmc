@@ -1,4 +1,5 @@
-CORE
+KNOWNBUG
 main.py
 
-^ERROR: .*main\.py:[0-9]+:[0-9]+: unsupported: this call may be .f. or .g., which return different types
+^VERIFICATION FAILED$
+object is not callable

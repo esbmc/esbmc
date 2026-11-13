@@ -1170,6 +1170,8 @@ void python_converter::convert()
   if (building_library)
     return;
 
+  define_tagged_callee();
+
   // Create python_user_main function containing only user code
   code_typet user_main_type;
   user_main_type.return_type() = empty_typet();
