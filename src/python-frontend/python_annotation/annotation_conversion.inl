@@ -845,6 +845,12 @@ python_annotation<Json>::get_dict_literal_type(const Json &dict_value)
 
 // ---------- dispatchers ----------
 
+/// @p type, or @p fallback when @p type is unknown.
+static std::string known_or(std::string type, std::string fallback)
+{
+  return type.empty() ? fallback : type;
+}
+
 // The type of the value a call such as abs(a - b), len(list) or A()
 // returns, or "" when unknown.
 template <class Json>
@@ -902,7 +908,87 @@ std::string python_annotation<Json>::get_call_type(const Json &arg)
     }
   }
 
-  return module_call_type(arg);
+  return known_or(user_method_call_type(arg), module_call_type(arg));
+}
+
+/// Whether @p name, or a class it derives from, is @p base.
+template <class Json>
+static bool derives_from(
+  const Json &body,
+  const std::string &name,
+  const std::string &base,
+  std::set<std::string> &visited)
+{
+  if (name == base)
+    return true;
+  const Json cls = json_utils::find_class(body, name);
+  if (cls.empty() || !visited.insert(name).second || !cls.contains("bases"))
+    return false;
+  for (const Json &b : cls["bases"])
+    if (
+      b.contains("id") &&
+      derives_from(body, b["id"].template get<std::string>(), base, visited))
+      return true;
+  return false;
+}
+
+/// Whether a class derived from @p cls defines @p method itself, so an
+/// instance typed @p cls may run another body.
+template <class Json>
+static bool overridden_below(
+  const Json &body,
+  const std::string &cls,
+  const std::string &method)
+{
+  for (const Json &stmt : body)
+  {
+    if (stmt.value("_type", "") != "ClassDef" || stmt["name"] == cls)
+      continue;
+    std::set<std::string> visited;
+    if (
+      derives_from(
+        body, stmt["name"].template get<std::string>(), cls, visited) &&
+      !json_utils::try_find_function(stmt["body"], method).empty())
+      return true;
+  }
+  return false;
+}
+
+/// The type `receiver.method(...)` returns when the receiver is an instance
+/// of a class the program defines, such as `p.clone()`, or "" when unknown.
+/// Without it a parameter fed the call stays `void *` (#10381). Only a
+/// single-base chain is walked, and a method a subclass overrides is left
+/// unknown, since the instance may be of that subclass.
+template <class Json>
+std::string python_annotation<Json>::user_method_call_type(const Json &call)
+{
+  const Json &func = call["func"];
+  if (func["_type"] != "Attribute" || !func.contains("value"))
+    return "";
+  const std::string method = func["attr"].template get<std::string>();
+  const std::string receiver = get_argument_type(func["value"]);
+  if (
+    !json_utils::is_class(receiver, ast_) ||
+    overridden_below(ast_["body"], receiver, method))
+    return "";
+  std::set<std::string> visited;
+  for (std::string cls = receiver; visited.insert(cls).second;)
+  {
+    const Json node = json_utils::find_class(ast_["body"], cls);
+    if (node.empty())
+      return "";
+    const Json def = json_utils::try_find_function(node["body"], method);
+    if (!def.empty())
+    {
+      const std::string type = method_return_type(def, cls);
+      return type == "Any" ? "" : type;
+    }
+    const Json &bases = node["bases"];
+    if (bases.size() != 1 || !bases[0].contains("id"))
+      return "";
+    cls = bases[0]["id"].template get<std::string>();
+  }
+  return "";
 }
 
 /// The type @p call returns when @p func_name is copied per call type
