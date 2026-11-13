@@ -6,6 +6,32 @@
 #include <functional>
 #include <unordered_set>
 
+// round(x) or round(x, ndigits) as CPython computes it. Answers nullopt where
+// the converter decides: a result outside long long, an OverflowError, or a
+// negative ndigits on an int.
+static std::optional<PyConstValue>
+eval_round(const PyConstValue &x, const std::optional<long long> ndigits)
+{
+  if (x.kind == PyConstValue::INT)
+    return !ndigits || *ndigits >= 0 ? std::optional<PyConstValue>(x)
+                                     : std::nullopt;
+  if (x.kind != PyConstValue::FLOAT)
+    return std::nullopt;
+  if (ndigits)
+  {
+    const std::optional<double> rounded = round_to_ndigits_ties_even(
+      x.float_val,
+      static_cast<int>(std::clamp<long long>(*ndigits, -1000, 1000)));
+    if (!rounded)
+      return std::nullopt;
+    return PyConstValue::make_float(*rounded);
+  }
+  const double rounded = round_ties_to_even(x.float_val);
+  if (!(rounded >= -9223372036854775808.0 && rounded < 9223372036854775808.0))
+    return std::nullopt;
+  return PyConstValue::make_int(static_cast<long long>(rounded));
+}
+
 bool PyConstValue::is_truthy() const
 {
   switch (kind)
@@ -1848,39 +1874,12 @@ python_consteval::eval_expr(const nlohmann::json &node, const Env &env)
       auto arg = eval_expr(node["args"][0], env);
       if (!arg)
         return std::nullopt;
-
       if (node["args"].size() == 1)
-      {
-        // round(x) -> int
-        if (arg->kind == PyConstValue::INT)
-          return PyConstValue::make_int(arg->int_val);
-        if (arg->kind != PyConstValue::FLOAT)
-          return std::nullopt;
-        // A result outside long long (or a NaN) is left to the converter,
-        // which neither wraps it nor folds an infinity.
-        const double rounded = round_ties_to_even(arg->float_val);
-        if (!(rounded >= -9223372036854775808.0 &&
-              rounded < 9223372036854775808.0))
-          return std::nullopt;
-        return PyConstValue::make_int(static_cast<long long>(rounded));
-      }
-
-      // round(int, n) is an int, and is the int itself for n >= 0; a float
-      // operand gives a float. Other cases are left to the converter.
+        return eval_round(*arg, std::nullopt);
       auto ndigits = eval_expr(node["args"][1], env);
       if (!ndigits || ndigits->kind != PyConstValue::INT)
         return std::nullopt;
-      if (arg->kind == PyConstValue::INT)
-        return ndigits->int_val >= 0 ? std::optional<PyConstValue>(*arg)
-                                     : std::nullopt;
-      if (arg->kind != PyConstValue::FLOAT)
-        return std::nullopt;
-      const std::optional<double> rounded = round_to_ndigits_ties_even(
-        arg->float_val,
-        static_cast<int>(std::clamp<long long>(ndigits->int_val, -1000, 1000)));
-      if (!rounded)
-        return std::nullopt;
-      return PyConstValue::make_float(*rounded);
+      return eval_round(*arg, ndigits->int_val);
     }
 
     // Built-in: min(), max()
