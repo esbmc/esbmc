@@ -748,6 +748,8 @@ public:
     return it == class_object_names_.end() ? nullptr : &it->second;
   }
 
+  exprt once_bound_int(const nlohmann::json &node, const exprt &value) const;
+
 private:
   // Hoists @p operand once and plants @p emit_guards over its value where the
   // operand is evaluated, also inside an and/or tail or a while test.
@@ -954,6 +956,12 @@ private:
     const std::vector<nlohmann::json> &args,
     const std::map<std::string, nlohmann::json> &mapping,
     const std::vector<typet> &arg_types);
+  /// The literal \p left formatted with \p args, or "" on a path that is
+  /// ended as unsupported because the formatting cannot be modelled.
+  std::string percent_format_or_refusal(
+    const nlohmann::json &left,
+    const std::vector<nlohmann::json> &args,
+    const std::map<std::string, nlohmann::json> &mapping);
 
   /// Coarse Python-level type category used to decide whether two operands
   /// in an `Eq`/`NotEq` comparison are cross-type (Python's rule: different
@@ -1714,6 +1722,24 @@ private:
     const nlohmann::json &value,
     const nlohmann::json &func_node,
     const struct_typet &clazz) const;
+  typet self_attribute_type(
+    const nlohmann::json &node,
+    const struct_typet &clazz) const;
+  struct self_store_count
+  {
+    size_t stores = 0;
+    size_t tagged = 0;
+    bool untagged = false;
+  };
+  void count_self_stores(
+    const nlohmann::json &method,
+    const nlohmann::json &node,
+    const std::string &attr,
+    const struct_typet &clazz,
+    self_store_count &count) const;
+  void tag_none_flagged_attributes(
+    const nlohmann::json &class_node,
+    struct_typet &clazz) const;
   typet unannotated_attribute_type(
     const nlohmann::json &value,
     const nlohmann::json &func_node,
@@ -3206,6 +3232,16 @@ private:
    * @param target_block The code block to add generated code to.
    */
   std::string user_class_of(const typet &type);
+  void
+  add_presence_flags(const nlohmann::json &class_node, struct_typet &clazz);
+  exprt presence_flag_of(const exprt &member) const;
+  void clear_presence_flags(const code_typet &type, exprt &body) const;
+  exprt
+  guard_presence_flagged_read(const nlohmann::json &element, const exprt &expr);
+  void set_presence_flag(
+    const exprt &lhs,
+    const nlohmann::json &ast_node,
+    codet &target_block) const;
   void reject_attribute_added_on_some_paths(
     const std::string &receiver,
     const std::string &class_name,
@@ -3315,6 +3351,30 @@ private:
   /// Runtime dispatch for a tagged-scalar (PyObject-shaped) operand, which none
   /// of the static-type-driven paths can handle. Throws for an operator this
   /// mode does not model.
+  void box_into_tagged_slot(
+    const exprt &rhs,
+    const locationt &location,
+    const exprt &lhs,
+    codet &target_block);
+  exprt compare_none_flagged(
+    const std::string &op,
+    const exprt &lhs,
+    const exprt &rhs,
+    const nlohmann::json &left,
+    const nlohmann::json &right);
+  exprt tagged_equality(
+    const std::string &op,
+    const exprt &lhs,
+    const exprt &rhs,
+    const nlohmann::json &left,
+    const nlohmann::json &right);
+  exprt tagged_identity(
+    const std::string &op,
+    const exprt &lhs,
+    const exprt &rhs,
+    const nlohmann::json &left,
+    const nlohmann::json &right,
+    const nlohmann::json &element);
   exprt handle_tagged_scalar_binop(
     const std::string &op,
     const exprt &lhs,
@@ -3322,6 +3382,20 @@ private:
     const nlohmann::json &left,
     const nlohmann::json &right,
     const nlohmann::json &element);
+  exprt tagged_membership(
+    const std::string &op,
+    exprt lhs,
+    exprt rhs,
+    const nlohmann::json &right,
+    const nlohmann::json &element);
+  std::optional<exprt>
+  tagged_equals_any(const exprt &tagged, const nlohmann::json &right);
+  exprt tagged_key_membership(
+    const exprt &tagged,
+    exprt rhs,
+    const exprt &is_str,
+    const nlohmann::json &element,
+    bool invert);
 
   /// `d1 | d2` (PEP 584) on two dicts; nil if either operand is not a dict.
   /// Throws for the other bitwise operators on dicts.
@@ -3784,6 +3858,10 @@ private:
     const exprt &lhs,
     const exprt &rhs,
     const locationt &loc);
+  /// Reports \p message as an unsupported construct where the path reaches
+  /// \p loc, and ends the path there.
+  void
+  end_path_as_unsupported(const std::string &message, const locationt &loc);
 
   // =========================================================================
   // Member variables
@@ -3831,6 +3909,11 @@ private:
   /// The operands of the `is`, `is not`, `==` or `!=` being converted: a
   /// type() call that is one of them may yield unknown_class_name.
   std::array<const nlohmann::json *, 2> type_compared_operands_{};
+  /// The operands of the operator being converted, which read a tagged
+  /// attribute's None flag themselves (#10350).
+  std::array<const nlohmann::json *, 2> none_aware_operands_{};
+  exprt
+  guard_none_flagged_read(const nlohmann::json &element, const exprt &expr);
   string_handler string_handler_;
   python_math math_handler_;
   complex_handler complex_handler_;

@@ -111,6 +111,8 @@ public:
    * @brief Dispatches Add/Sub/Div between a tagged-scalar operand and a
    * literal
    */
+  /// Whether handle_arithmetic implements binary operator @p op.
+  static bool is_tagged_arithmetic(const std::string &op);
   exprt handle_arithmetic(
     const std::string &op,
     const exprt &lhs,
@@ -310,7 +312,17 @@ private:
     const exprt &tagged,
     const exprt &literal,
     bool tagged_is_left);
+  exprt unmodelled_str_operand(
+    const std::string &op,
+    const exprt &lhs,
+    const exprt &rhs) const;
+  void claim_numeric_operands(
+    const std::string &op,
+    const exprt &lhs,
+    const exprt &rhs,
+    const locationt &location);
   exprt build_div_literal(
+    const std::string &op,
     const exprt &tagged,
     const exprt &literal,
     bool tagged_is_left,
@@ -318,6 +330,7 @@ private:
   exprt build_add_tagged(const exprt &lhs, const exprt &rhs);
   exprt build_sub_tagged(const exprt &lhs, const exprt &rhs);
   exprt build_div_tagged(
+    const std::string &op,
     const exprt &lhs,
     const exprt &rhs,
     const locationt &location);
