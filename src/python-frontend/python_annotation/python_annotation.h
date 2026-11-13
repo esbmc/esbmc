@@ -76,6 +76,11 @@ public:
   bool preprocess_self_method_calls();
   std::string self_call_arg_type(const Json &arg, const Json &caller);
   bool is_instance_call(const Json &func) const;
+  bool receiver_method_call(
+    const Json &node,
+    Json &receiver,
+    std::string &method,
+    Json &args) const;
   Json *class_method(const std::string &cls, const Json &method);
   /// Sentinel recorded for a call-site argument this pass cannot type; never
   /// a valid Python type name, so it can only block, never be annotated.
@@ -120,6 +125,7 @@ private:
   std::map<Json *, std::set<std::string>> constructor_arg_types_;
   std::set<Json *> constructor_typed_params_;
   void refuse_mixed_constructor_args() const;
+  void mark_mixed_constructor_classes();
   // Implementations live in annotation_conversion.inl unless noted.
 
   // ----- AST lookup and walk helpers -----
@@ -191,6 +197,13 @@ private:
 
   // The type every element of the literal in `[a, b, ...][i]` shares, or "Any".
   std::string subscript_type_from_list_literal(const Json &subscript_node);
+
+  // Whether @p body appends to the list @p name an item whose type is known
+  // and differs from @p element_type.
+  bool list_gains_other_type(
+    const std::string &name,
+    const std::string &element_type,
+    const Json &body);
   bool
   is_imported_name_in_body(const std::string &name, const Json &stmts) const;
   bool is_imported_name(const std::string &name) const;

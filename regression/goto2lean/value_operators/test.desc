@@ -1,0 +1,33 @@
+CORE
+main.c
+--goto2lean --no-div-by-zero-check
+^  let m := \(a \* b\);$
+^  let um := \(a % b\);$
+^  let sm := \(BitVec\.srem x y\);$
+^  let bn := \(~~~a\);$
+^  let ba := \(a &&& b\);$
+^  let bo := \(a \|\|\| b\);$
+^  let bx := \(a \^\^\^ b\);$
+^  let sl := \(a <<< \(1#32\)\);$
+^  let sr := \(a >>> \(1#32\)\);$
+^  let as := \(BitVec\.sshiftRight' x \(1#32\)\);$
+^  let t := \(if \(a != 0#32\) then a else b\);$
+^  let c := \(BitVec\.ult a b\);$
+^  let lt := \(if \(BitVec\.slt x y\) then 1#32 else 0#32\);$
+^  let le := \(if \(BitVec\.sle x y\) then 1#32 else 0#32\);$
+^  let gt := \(if \(BitVec\.slt y x\) then 1#32 else 0#32\);$
+^  let ge := \(if \(BitVec\.sle y x\) then 1#32 else 0#32\);$
+^  let ule := \(if \(BitVec\.ule a b\) then 1#32 else 0#32\);$
+^  let ugt := \(if \(BitVec\.ult b a\) then 1#32 else 0#32\);$
+^  let uge := \(if \(BitVec\.ule b a\) then 1#32 else 0#32\);$
+^  let eq := \(if \(a == b\) then 1#32 else 0#32\);$
+^  let ne := \(if \(a != b\) then 1#32 else 0#32\);$
+^  let nt := \(if \(!\(x != 0#32\)\) then 1#32 else 0#32\);$
+^  let an := \(if \(\(x != 0#32\) && \(y != 0#32\)\) then 1#32 else 0#32\);$
+^  let orr := \(if \(\(x != 0#32\) \|\| \(y != 0#32\)\) then 1#32 else 0#32\);$
+^  let wide := \(BitVec\.signExtend 64 x\);$
+^  let uw := \(BitVec\.setWidth 64 a\);$
+^  let nar := \(BitVec\.setWidth 8 a\);$
+^  let same := x;$
+^  let tb := true;$
+^  \(\(a ≠ b\) ∨ True\) ∧ \($

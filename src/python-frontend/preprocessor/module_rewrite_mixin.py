@@ -22,6 +22,7 @@ from preprocessor.function_value_dispatch import dispatch_mixed_function_values
 from preprocessor.function_value_types import reject_mixed_function_values
 from preprocessor.iter_next_lowering import lower_iter_next
 from preprocessor.receiver_classes import refuse_path_dependent_receivers
+from preprocessor.receiver_split import split_path_dependent_receivers
 from preprocessor.class_value_calls import dispatch_class_value_calls
 from preprocessor.sibling_defs import define_read_siblings_first
 from preprocessor.skipped_base_init import refuse_skipped_base_init
@@ -81,6 +82,17 @@ def _rename_shadowed_classes(module):
                 taken.add(renamed)
                 stmt.name = renamed
                 break
+
+
+def _drop_none_slice_bounds(module):
+    """`x[a:None:None]` is `x[a::]`: drop a literal `None` slice bound so
+    every slice handler takes its omitted-bound default (#10468)."""
+    for n in ast.walk(module):
+        if isinstance(n, ast.Slice):
+            for key in ("lower", "upper", "step"):
+                bound = getattr(n, key)
+                if isinstance(bound, ast.Constant) and bound.value is None:
+                    setattr(n, key, None)
 
 
 _BUILTIN_FUNCTIONS = {
@@ -617,6 +629,7 @@ class ModuleRewriteMixin:
         if entry:
             _rename_builtin_defs(node)
         inline_literal_eval(node)
+        _drop_none_slice_bounds(node)
         lower_coroutines(node, self.module_name)
         route_array_typecodes(node, self.module_name)
         lower_check_type(node, self.module_name)
@@ -639,6 +652,7 @@ class ModuleRewriteMixin:
         define_read_siblings_first(node)
         if entry:
             dispatch_class_value_calls(node)
+            split_path_dependent_receivers(node, self.module_name)
         refuse_path_dependent_receivers(node, self.module_name)
         refuse_skipped_base_init(node, self.module_name)
         self.expand_unittest_main(node)

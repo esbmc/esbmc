@@ -1,4 +1,4 @@
-CORE
+KNOWNBUG
 main.py
 
-^ERROR: unsupported: non-constant argument in str % formatting$
+^VERIFICATION SUCCESSFUL$

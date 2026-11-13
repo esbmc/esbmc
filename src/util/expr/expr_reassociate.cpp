@@ -2,6 +2,7 @@
 
 #include <irep2/irep2_utils.h>
 #include <util/arith/arith_tools.h>
+#include <util/config/config.h>
 #include <util/lang/c_types.h>
 
 #include <optional>
@@ -357,11 +358,14 @@ optimize_terms(const type2tc &chain_type, const std::vector<signed_term> &terms)
     // sign-extended value (e.g. (s8)100 + (s8)100 = (s8)-56). For
     // non-pointer chains the wrap is part of the bv semantics and the
     // unfolded chain has the same wrap, so we only refuse the fold for
-    // pointer-typed chains. Treat the constants as opaque non-constant
+    // pointer-typed chains, and under --ir, where the emitted magnitude
+    // must itself fit (#10537). Treat the constants as opaque non-constant
     // leaves and keep them in the result.
     if (
-      is_pointer_type(chain_type) &&
-      !fits_in_signed_type(acc_negative ? -acc_value : acc_value, const_type))
+      (is_pointer_type(chain_type) &&
+       !fits_in_signed_type(
+         acc_negative ? -acc_value : acc_value, const_type)) ||
+      int_encoding_fold_wraps(acc_value, const_type))
     {
       // Re-emit each constant in original signed_term form so the result
       // matches the input list (no spurious "changed" signal).
@@ -541,6 +545,9 @@ optimize_mul_terms(const std::vector<expr2tc> &terms)
     result.push_back(from_integer(BigInt(0), const_type));
     return result;
   }
+
+  if (int_encoding_fold_wraps(acc, const_type))
+    return std::nullopt;
 
   // If the folded constant is 1, it's the multiplicative identity and can be
   // dropped — unless the result would be empty, in which case we keep a
@@ -944,6 +951,12 @@ std::optional<std::vector<expr2tc>> optimize_bitxor_terms(
   return result;
 }
 } // namespace
+
+bool int_encoding_fold_wraps(const BigInt &value, const type2tc &type)
+{
+  return config.options.get_bool_option("int-encoding") &&
+         !fits_in_signed_type(value, type);
+}
 
 bool reassociate_arith(expr2tc &expr)
 {

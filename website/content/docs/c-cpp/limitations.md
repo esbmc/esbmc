@@ -43,10 +43,11 @@ should not, or vice versa.
 
 ## Exceptions
 
-- Under `--lower-exceptions`, a `pthread` start routine reached through a
-  computed function pointer — or one that is both called directly and used as a
-  start routine — cannot be given a sound per-function uncaught-escape check,
-  and is declined as unsupported. Declining is sound: ESBMC never validates a
+- In a program that throws or catches, a `pthread` start routine reached
+  through a computed function pointer, or one that is both called directly and
+  used as a start routine, cannot be given a sound per-function uncaught-escape
+  check, so exception lowering declines the program with `ERROR: exception
+  lowering: cannot lower ...`. Declining is sound: ESBMC never validates a
   buggy program as a result, it reports that it cannot analyse it.
 - Some exception-handling regression tests remain marked `KNOWNBUG`
   ([#4402](https://github.com/esbmc/esbmc/issues/4402)).
@@ -105,8 +106,6 @@ call shape works.
   execution terminates. The cap is an *assumption* rather than an assertion, so
   a defect needing more entries than it allows is excluded silently, where the
   container models assert instead and report `capacity exceeded`.
-- `std::nexttoward` resolves as an overload but has no model in ESBMC's libc,
-  so it returns a nondeterministic value rather than the C99 result.
 
 ## Time and clocks
 
