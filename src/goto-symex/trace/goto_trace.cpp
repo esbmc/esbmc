@@ -108,6 +108,15 @@ void goto_trace_stept::output(const namespacet &ns, std::ostream &out) const
   out << "\n";
 }
 
+std::string trace_value_string(const namespacet &ns, const expr2tc &value)
+{
+  if (
+    config.options.get_bool_option("ir") && is_constant_int2t(value) &&
+    is_bv_type(value))
+    return integer2string(to_constant_int2t(value).value);
+  return from_expr(ns, "", value);
+}
+
 void counterexample_value(
   std::ostream &out,
   const namespacet &ns,
@@ -119,7 +128,7 @@ void counterexample_value(
     out << "(assignment removed)";
   else
   {
-    out << " = " << from_expr(ns, "", value);
+    out << " = " << trace_value_string(ns, value);
 
     // Don't print the bit-vector if we're running on integer/real mode
     if (is_constant_expr(value) && !config.options.get_bool_option("ir"))
@@ -957,6 +966,7 @@ static void show_stack_frame(
 
 static void show_function_call_trace(
   std::ostream &out,
+  const namespacet &ns,
   const goto_tracet &goto_trace,
   const goto_trace_stept &last_step)
 {
@@ -990,7 +1000,7 @@ static void show_function_call_trace(
     // emit outermost-of-new first to preserve call order.
     size_t n_new = cur.size() - common;
     for (size_t k = n_new; k-- > 0;)
-      show_stack_frame(out, cur[k].function, cur[k]);
+      show_stack_frame(out, frame_function_name(ns, cur[k].function), cur[k]);
     prev = cur;
     if (&s == &last_step)
       break;
@@ -1024,9 +1034,6 @@ static void show_failed_property(
     for (const auto &frame : step.stack_trace)
       show_stack_frame(out, frame_function_name(ns, frame.function), frame);
   }
-  if (config.options.get_bool_option("show-funccall-trace"))
-    show_function_call_trace(out, goto_trace, step);
-
   out << "  " << step.comment << "\n";
   // A reached coverage probe carries no weakness: its guard is the
   // constant `false` the instrumentation put there, not the program's
@@ -1041,6 +1048,8 @@ static void show_failed_property(
     if (step.pc->is_assert())
       out << "  " << from_expr(ns, "", step.pc->guard) << "\n";
   }
+  if (config.options.get_bool_option("show-funccall-trace"))
+    show_function_call_trace(out, ns, goto_trace, step);
 }
 
 void show_goto_trace(

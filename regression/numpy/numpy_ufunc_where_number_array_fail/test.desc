@@ -1,4 +1,5 @@
 CORE
 main.py
 --incremental-bmc
-^ERROR: TypeError: Cannot cast array data from dtype\('int64'\) to dtype\('bool'\) according to the rule 'safe'$
+^VERIFICATION FAILED$
+^  uncaught exception: TypeError$

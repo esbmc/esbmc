@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# pylint: disable=bad-indentation  # the file is indented with 2 spaces throughout
 
 import os
 import argparse
@@ -29,6 +30,7 @@ class Result:
   err_timeout = 7
   err_memout = 8
   err_unwinding_assertion = 9
+  err_crash = 10
   unknown = 11
   fail_memcleanup = 12
   fail_termination = 13
@@ -61,6 +63,8 @@ class Result:
       return True
     if res == Result.err_timeout:
       return True
+    if res == Result.err_crash:
+      return True
     if res == Result.unknown:
       return True
     return False
@@ -91,6 +95,17 @@ PYTHON_EXCEPTION_FAMILIES = {
 # Parsed by the CLI entry point at the bottom; do_exec() is the only reader.
 args = None
 
+# ESBMC's exit status for an uncaught exception (sysexits.h EX_SOFTWARE).
+ESBMC_INTERNAL_ERROR = 70
+
+
+def abnormal_exit_line(returncode):
+  if returncode < 0:
+    return f"ERROR: ESBMC exited abnormally (signal {-returncode})\n"
+  if returncode == ESBMC_INTERNAL_ERROR:
+    return f"ERROR: ESBMC exited abnormally (exit code {returncode})\n"
+  return ""
+
 def do_exec(cmd_line, timeout=None, cwd=None):
 
   if args.dry_run:
@@ -106,7 +121,7 @@ def do_exec(cmd_line, timeout=None, cwd=None):
     p.communicate()
     return b"ERROR: Timed out\n"
 
-  return stdout + stderr
+  return stdout + stderr + abnormal_exit_line(p.returncode).encode()
 
 # Function to run esbmc
 def run(cmd_line, timeout=None):
@@ -319,6 +334,11 @@ def classify_violation(violated, prop):
   None means this violation decides nothing here, which parse_result reads as
   "keep looking" -- a run that also printed SUCCESSFUL is then read as true.
   """
+  if ("witness invariant" in violated
+      or "loop invariant base case" in violated
+      or "loop invariant inductive step" in violated):
+    return Result.unknown
+
   if "unwinding assertion loop" in violated:
     return Result.err_unwinding_assertion
 
@@ -384,6 +404,9 @@ def parse_result(the_output, prop):
   if re.search(r"^ERROR: Out of memory$", the_output, re.MULTILINE):
     return Result.err_memout
 
+  if re.search(r"^ERROR: ESBMC exited abnormally", the_output, re.MULTILINE):
+    return Result.err_crash  # benchexec scores it ERROR, not unknown (#8097)
+
   return Result.unknown
 
 def python_false_string(the_result):
@@ -391,31 +414,25 @@ def python_false_string(the_result):
   return "FALSE(%s)" % exception if exception else "FALSE"
 
 
+RESULT_STRINGS = {
+  Result.fail_memcleanup: "FALSE_MEMCLEANUP",
+  Result.fail_memtrack: "FALSE_MEMTRACK",
+  Result.fail_free: "FALSE_FREE",
+  Result.fail_deref: "FALSE_DEREF",
+  Result.fail_overflow: "FALSE_OVERFLOW",
+  Result.fail_reach: "FALSE_REACH",
+  Result.fail_termination: "FALSE_TERMINATION",
+  Result.fail_race: "FALSE_DATARACE",
+  Result.success: "TRUE",
+  Result.err_timeout: "Timed out",
+  Result.err_unwinding_assertion: "Unknown",
+  Result.err_memout: "Unknown",
+  Result.err_crash: "ERROR",
+  Result.unknown: "Unknown",
+}
+
+
 def get_result_string(the_result):
-  if the_result == Result.fail_memcleanup:
-    return "FALSE_MEMCLEANUP"
-
-  if the_result == Result.fail_memtrack:
-    return "FALSE_MEMTRACK"
-
-  if the_result == Result.fail_free:
-    return "FALSE_FREE"
-
-  if the_result == Result.fail_deref:
-    return "FALSE_DEREF"
-
-  if the_result == Result.fail_overflow:
-    return "FALSE_OVERFLOW"
-
-  if the_result == Result.fail_reach:
-    return "FALSE_REACH"
-
-  if the_result == Result.fail_termination:
-    return "FALSE_TERMINATION"
-
-  if the_result == Result.fail_race:
-    return "FALSE_DATARACE"
-
   if the_result == Result.fail_python:
     # A task definition whose expected verdict carries no subproperty accepts
     # any result starting with "false" (benchexec result.get_result_category).
@@ -423,20 +440,8 @@ def get_result_string(the_result):
     # names its exception when the violation reports exactly one.
     return python_false_string(the_result)
 
-  if the_result == Result.success:
-    return "TRUE"
-
-  if the_result == Result.err_timeout:
-    return "Timed out"
-
-  if the_result == Result.err_unwinding_assertion:
-    return "Unknown"
-
-  if the_result == Result.err_memout:
-    return "Unknown"
-
-  if the_result == Result.unknown:
-    return "Unknown"
+  if the_result in RESULT_STRINGS:
+    return RESULT_STRINGS[the_result]
 
   exit(0)
 
@@ -484,6 +489,10 @@ def python_exception_flags(prop):
   return "--python-check-exceptions " + ",".join(PYTHON_EXCEPTION_FAMILIES[prop]) + " "
 
 
+def python_search_flags(strat):
+  return strategy_flags(strat) + "--k-step 2 --unlimited-k-steps "
+
+
 def get_command_line(strat, prop, arch, benchmark, dargs, esbmc_ci, keep_loops=False):
   if prop in PYTHON_EXCEPTION_FAMILIES:
     # A Python task is a whole program whose only specification is that an
@@ -502,8 +511,7 @@ def get_command_line(strat, prop, arch, benchmark, dargs, esbmc_ci, keep_loops=F
     # already carries --unlimited-k-steps in dargs.
     return (
       esbmc_path + "--sv-comp " + benchmark + " "
-      + strategy_flags(strat) + "--k-step 2 --unlimited-k-steps "
-      + python_exception_flags(prop))
+      + python_search_flags(strat) + python_exception_flags(prop))
 
   command_line = esbmc_path + dargs
 
@@ -625,7 +633,6 @@ def confirmed_by_integer_encoding(esbmc_command_line, the_output, prop, elapsed)
 # its launcher are embedded at the end of this section, so the wrapper stays one
 # file; they are written to a temporary directory for each replay.
 REPLAY_BUDGET = 20
-VALUES_RUN_TIMEOUT = 60
 MIN_REPLAY_BUDGET = 2
 REPLAY_MEMORY = 2 * 1024 ** 3
 REPLAY_FILE_SIZE = 200 * 1024 ** 2
@@ -1106,7 +1113,7 @@ def verify(strat, prop, arch, benchmark, dargs, esbmc_ci, witness_path, validate
       return res
     esbmc_command_line = esbmc_command_line.replace(strategy_flags(strat), "--incremental-bmc ")
   if prop in PYTHON_EXCEPTION_FAMILIES and not witness_path:
-    return verify_python(esbmc_command_line, prop, benchmark, started)
+    return verify_python(esbmc_command_line, prop, benchmark, started, python_search_flags(strat))
   output = run(esbmc_command_line)
   elapsed = time.monotonic() - started
   res = parse_result(output.decode(), prop)
@@ -1119,8 +1126,13 @@ def counterexample_values(esbmc_command_line, prop, values_dir, elapsed):
   """Run ESBMC again on a violation it found, asking for the values of the
   nondet calls on the failing path. The flags change the front end (a walrus in
   a boolean operand is refused under them), so the first run never carries
-  them. Returns whether the second run found the violation too."""
-  budget = min(VALUES_RUN_TIMEOUT, 1.5 * elapsed + 10, TOTAL_BUDGET - elapsed - IR_RERUN_TIMEOUT)
+  them. Returns whether the second run found the violation too.
+
+  Checking the violation's own bound costs about what the first run's last
+  step did, which can be most of the first run, so the run may take as long as
+  the first one did, with a margin, out of what the replay leaves. The --ir
+  re-run, which comes after, gets what is left."""
+  budget = min(1.5 * elapsed + 10, TOTAL_BUDGET - elapsed - REPLAY_BUDGET)
   if budget < MIN_REPLAY_BUDGET:
     return False
   output = run(esbmc_command_line + values_flags(values_dir), budget)
@@ -1142,15 +1154,33 @@ def confirmed_by_cpython(esbmc_command_line, prop, benchmark, elapsed, started):
     shutil.rmtree(values_dir, ignore_errors=True)
 
 
-def verify_python(esbmc_command_line, prop, benchmark, started):
+# The bound at which k-induction's base case, or incremental BMC, found its
+# violation.
+VIOLATION_BOUND = re.compile(r"^Bug found \(k = (\d+)\)$", re.MULTILINE)
+
+
+def at_violation_bound(esbmc_command_line, search_flags, the_output):
+  """The first run's command line, checking only the bound at which it found
+  its violation instead of searching from k = 1 again. A path that would loop
+  past the bound is cut, not failed, so what the run reports is a violation
+  within the bound, as the first run's was. Without a bound it is unchanged."""
+  bounds = VIOLATION_BOUND.findall(COUNTEREXAMPLE.sub("", the_output))
+  if not bounds or search_flags not in esbmc_command_line:
+    return esbmc_command_line
+  return esbmc_command_line.replace(
+    search_flags, "--unwind " + bounds[-1] + " --no-unwinding-assertions ")
+
+
+def verify_python(esbmc_command_line, prop, benchmark, started, search_flags):
   """One run of a Python task. A FALSE stays FALSE when replaying ESBMC's
   counterexample in CPython ends with the property's exception, or else when a
-  --ir re-run repeats it."""
+  --ir re-run repeats it. Both re-runs check only the violation's bound."""
   output = run(esbmc_command_line)
   elapsed = time.monotonic() - started
   res = parse_result(output.decode(), prop)
   if res != Result.fail_python:
     return res
+  esbmc_command_line = at_violation_bound(esbmc_command_line, search_flags, output.decode())
   if replay_possible(benchmark) and confirmed_by_cpython(esbmc_command_line, prop, benchmark, elapsed, started):
     print("CPython replay of the counterexample confirms the violation")
     return res

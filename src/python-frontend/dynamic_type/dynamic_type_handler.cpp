@@ -15,6 +15,8 @@
 #include <util/lang/c_types.h>
 #include <util/lang/python_types.h>
 #include <algorithm>
+#include <functional>
+#include <optional>
 #include <cctype>
 
 using namespace python_expr;
@@ -82,6 +84,30 @@ std::string nondet_call_kind(const nlohmann::json &call)
   return callee == "nondet_int" || callee == "nondet_bool" ? "num" : "";
 }
 
+// The kind of arithmetic on operands of kind `operand_kind`, e.g. `n + 1`
+// (#9812), `-n` or `abs(n)`; none when `value` is no such arithmetic.
+std::optional<std::string> arithmetic_kind(
+  const nlohmann::json &value,
+  const std::function<std::string(const nlohmann::json &)> &operand_kind)
+{
+  const std::string type = value.value("_type", "");
+  if (type == "BinOp")
+    return dynamic_type_detail::binop_kind(
+      value["op"].value("_type", ""),
+      operand_kind(value["left"]),
+      operand_kind(value["right"]));
+  if (type == "UnaryOp")
+    return dynamic_type_detail::unary_kind(
+      value["op"].value("_type", ""), operand_kind(value["operand"]));
+  if (
+    type == "Call" && value["func"].value("id", "") == "abs" &&
+    value["args"].size() == 1 &&
+    value.value("keywords", nlohmann::json::array()).empty())
+    return dynamic_type_detail::unary_kind(
+      "UAdd", operand_kind(value["args"][0]));
+  return std::nullopt;
+}
+
 // Classifies a single `return <literal>` or `return <param>` statement:
 // "num", "str", or "" if neither applies.
 std::string classify_return_literal_kind(
@@ -100,20 +126,12 @@ std::string classify_return_literal_kind(
     auto it = param_kinds.find(value.value("id", ""));
     return it == param_kinds.end() ? "" : it->second;
   }
-  // Arithmetic on a parameter, e.g. `return n + 1` (#9812).
-  if (value.value("_type", "") == "BinOp")
-  {
-    auto operand_kind = [&](const char *side) {
-      return classify_return_literal_kind(
-        {{"_type", "Return"}, {"value", value[side]}},
-        param_kinds,
-        module_body);
-    };
-    return dynamic_type_detail::binop_kind(
-      value["op"].value("_type", ""),
-      operand_kind("left"),
-      operand_kind("right"));
-  }
+  const auto arithmetic = arithmetic_kind(value, [&](const nlohmann::json &op) {
+    return classify_return_literal_kind(
+      {{"_type", "Return"}, {"value", op}}, param_kinds, module_body);
+  });
+  if (arithmetic)
+    return *arithmetic;
   if (value.value("_type", "") == "Call")
   {
     const std::string kind = nondet_call_kind(value);
@@ -243,19 +261,34 @@ bool is_param(const nlohmann::json &function_node, const std::string &name)
   return false;
 }
 
-// True when a return in `block` (if/else arms included) yields a Name that
-// is not one of `function_node`'s own parameters.
+// True when `value` reads a Name that is not one of `function_node`'s own
+// parameters.
+bool reads_free_name(
+  const nlohmann::json &value,
+  const nlohmann::json &function_node)
+{
+  if (
+    value.is_object() && value.value("_type", "") == "Name" &&
+    !is_param(function_node, value.value("id", "")))
+    return true;
+  if (value.is_structured())
+    for (const auto &child : value)
+      if (reads_free_name(child, function_node))
+        return true;
+  return false;
+}
+
+// True when a return in `block` (if/else arms included) yields a value that
+// reads a Name that is not one of `function_node`'s own parameters.
 bool returns_free_name(
   const nlohmann::json &block,
   const nlohmann::json &function_node)
 {
   for (const auto &stmt : block)
   {
-    const nlohmann::json &value = stmt.value("value", nlohmann::json());
     if (
-      stmt.value("_type", "") == "Return" && value.is_object() &&
-      value.value("_type", "") == "Name" &&
-      !is_param(function_node, value.value("id", "")))
+      stmt.value("_type", "") == "Return" &&
+      reads_free_name(stmt.value("value", nlohmann::json()), function_node))
       return true;
     for (const char *arm : {"body", "orelse"})
       if (
@@ -1036,6 +1069,14 @@ exprt dynamic_type_handler::module_name_payload(
     build_address_of(build_symbol(*object)), pointer_typet(empty_typet()));
 }
 
+exprt dynamic_type_handler::int_payload(const exprt &value) const
+{
+  const symbolt *copy_func =
+    converter_.symbol_table().find_symbol("c:@F@__python_scalar_int_copy");
+  assert(copy_func && "__python_scalar_int_copy not found in symbol table");
+  return build_call_expr(*copy_func, pointer_typet(empty_typet()), {value});
+}
+
 exprt dynamic_type_handler::build_scalar_payload(
   const exprt &rhs,
   const locationt &location,
@@ -1078,6 +1119,9 @@ exprt dynamic_type_handler::build_scalar_payload(
   // storage, which goes DEAD at branch exit, so it needs an explicit copy.
   if (value_to_store.type().is_pointer())
     return build_typecast(build_symbol(backing), pointer_typet(empty_typet()));
+
+  if (value_to_store.type() == long_long_int_type())
+    return int_payload(build_symbol(backing));
 
   const symbolt *copy_func =
     converter_.symbol_table().find_symbol("c:@F@__python_scalar_tag_copy");
@@ -1418,7 +1462,88 @@ exprt dynamic_type_handler::build_sub_literal(
      from_integer(BigInt(tagged_is_left ? 1 : 0), int_type())});
 }
 
+/// The scalar.c function and result type of `/`, `//` (#10555), `*` or `%`
+/// on numbers, with @p suffix ("" for a literal operand, "_dyn" for two tags).
+static std::pair<std::string, typet>
+division_function(const std::string &op, const std::string &suffix)
+{
+  static const std::unordered_map<std::string, std::string> names = {
+    {"FloorDiv", "floordiv"}, {"Mult", "mul"}, {"Mod", "mod"}};
+  const auto name = names.find(op);
+  if (name == names.end())
+    return {"c:@F@__python_scalar_div_num" + suffix, double_type()};
+  return {
+    "c:@F@__python_scalar_" + name->second + "_num" + suffix,
+    signedbv_typet(config.ansi_c.long_long_int_width)};
+}
+
+bool dynamic_type_handler::is_tagged_arithmetic(const std::string &op)
+{
+  static const std::unordered_set<std::string> ops = {
+    "Add", "Sub", "Div", "FloorDiv", "Mult", "Mod"};
+  return ops.count(op) != 0;
+}
+
+/// Where `*` or `%` on @p lhs and @p rhs is valid in CPython but not on
+/// numbers: a str repeated by an int, or a str formatted by `%`. Neither is
+/// modelled here. False for any other operator.
+exprt dynamic_type_handler::unmodelled_str_operand(
+  const std::string &op,
+  const exprt &lhs,
+  const exprt &rhs) const
+{
+  if (op != "Mult" && op != "Mod")
+    return false_exprt();
+  const exprt str_id =
+    type_handler_.tagged_scalar_type_id(pointer_typet(char_type()));
+  // Whether @p operand holds a str, or else an int or a bool.
+  auto kind = [&](const exprt &operand, bool str) -> exprt {
+    const typet &type = operand.type();
+    if (!type_handler_.is_tagged_scalar_type(type))
+    {
+      const bool integral =
+        type.is_signedbv() || type.is_unsignedbv() || type.is_bool();
+      return gen_boolean(!str && integral);
+    }
+    const exprt type_id = build_member(operand, "type_id", size_type());
+    if (str)
+      return build_equal(type_id, str_id);
+    return type_handler_.tagged_scalar_type_matches(
+      type_id, long_long_int_type());
+  };
+  if (op == "Mod")
+    return kind(lhs, true);
+  return build_or(
+    build_and(kind(lhs, true), kind(rhs, false)),
+    build_and(kind(lhs, false), kind(rhs, true)));
+}
+
+/// Claims, as unsupported, that @p lhs `op` @p rhs is not a str repeated or
+/// formatted, then assumes it.
+void dynamic_type_handler::claim_numeric_operands(
+  const std::string &op,
+  const exprt &lhs,
+  const exprt &rhs,
+  const locationt &location)
+{
+  const exprt unmodelled = unmodelled_str_operand(op, lhs, rhs);
+  if (unmodelled.is_false())
+    return;
+  if (!converter_.can_emit_runtime_guard())
+    throw std::runtime_error(
+      "operator '" + op + "' on a dynamically-typed str is not yet supported");
+  code_assertt check(build_not(unmodelled));
+  check.location() = location;
+  check.location().user_provided(true);
+  check.location().comment(
+    op == "Mod" ? "Unsupported: % formatting of a dynamically-typed str"
+                : "Unsupported: repeating a dynamically-typed str");
+  converter_.add_instruction(check);
+  converter_.add_instruction(code_assumet(build_not(unmodelled)));
+}
+
 exprt dynamic_type_handler::build_div_literal(
+  const std::string &op,
   const exprt &tagged,
   const exprt &literal,
   bool tagged_is_left,
@@ -1428,12 +1553,13 @@ exprt dynamic_type_handler::build_div_literal(
     !literal.type().is_bool() && !literal.type().is_signedbv() &&
     !literal.type().is_unsignedbv())
     throw std::runtime_error(
-      "dividing a dynamically-typed variable by this literal type is not "
+      "operator '" + op +
+      "' between a dynamically-typed variable and this literal type is not "
       "yet supported");
 
-  const symbolt *div_func =
-    converter_.symbol_table().find_symbol("c:@F@__python_scalar_div_num");
-  assert(div_func && "__python_scalar_div_num not found in symbol table");
+  const auto [div_name, div_type] = division_function(op, "");
+  const symbolt *div_func = converter_.symbol_table().find_symbol(div_name);
+  assert(div_func && "scalar division function not found in symbol table");
 
   exprt tagged_addr = build_address_of(tagged);
   exprt lit_value =
@@ -1450,11 +1576,12 @@ exprt dynamic_type_handler::build_div_literal(
       pointer_typet(signedbv_typet(config.ansi_c.long_long_int_width))),
     signedbv_typet(config.ansi_c.long_long_int_width));
   exprt divisor = tagged_is_left ? lit_value : tagged_numeric_value;
-  guard_zero_division(divisor, type_matches, location);
+  if (op != "Mult")
+    guard_zero_division(divisor, type_matches, location);
 
   return build_call_expr(
     *div_func,
-    double_type(),
+    div_type,
     {tagged_addr,
      build_typecast(type_matches, int_type()),
      lit_value,
@@ -1470,6 +1597,7 @@ exprt dynamic_type_handler::handle_arithmetic(
   const bool lhs_tagged = type_handler_.is_tagged_scalar_type(lhs.type());
   const bool rhs_tagged = type_handler_.is_tagged_scalar_type(rhs.type());
   refuse_float_tag_operation(lhs, rhs);
+  claim_numeric_operands(op, lhs, rhs, location);
 
   // Equality can settle a type_id mismatch without knowing either type;
   // arithmetic cannot, since it needs the concrete type to pick an operation.
@@ -1479,8 +1607,7 @@ exprt dynamic_type_handler::handle_arithmetic(
       return build_add_tagged(lhs, rhs);
     if (op == "Sub")
       return build_sub_tagged(lhs, rhs);
-    assert(op == "Div" && "unexpected operator routed to handle_arithmetic");
-    return build_div_tagged(lhs, rhs, location);
+    return build_div_tagged(op, lhs, rhs, location);
   }
 
   if (op == "Add")
@@ -1491,9 +1618,8 @@ exprt dynamic_type_handler::handle_arithmetic(
     return lhs_tagged ? build_sub_literal(lhs, rhs, /*tagged_is_left=*/true)
                       : build_sub_literal(rhs, lhs, /*tagged_is_left=*/false);
 
-  assert(op == "Div" && "unexpected operator routed to handle_arithmetic");
-  return lhs_tagged ? build_div_literal(lhs, rhs, true, location)
-                    : build_div_literal(rhs, lhs, false, location);
+  return lhs_tagged ? build_div_literal(op, lhs, rhs, true, location)
+                    : build_div_literal(op, rhs, lhs, false, location);
 }
 
 exprt dynamic_type_handler::build_neg_tagged(
@@ -1562,13 +1688,14 @@ exprt dynamic_type_handler::build_sub_tagged(const exprt &lhs, const exprt &rhs)
 }
 
 exprt dynamic_type_handler::build_div_tagged(
+  const std::string &op,
   const exprt &lhs,
   const exprt &rhs,
   const locationt &location)
 {
-  const symbolt *div_func =
-    converter_.symbol_table().find_symbol("c:@F@__python_scalar_div_num_dyn");
-  assert(div_func && "__python_scalar_div_num_dyn not found in symbol table");
+  const auto [div_name, div_type] = division_function(op, "_dyn");
+  const symbolt *div_func = converter_.symbol_table().find_symbol(div_name);
+  assert(div_func && "scalar division function not found in symbol table");
 
   exprt lhs_type_id = build_member(lhs, "type_id", size_type());
   exprt rhs_type_id = build_member(rhs, "type_id", size_type());
@@ -1582,12 +1709,13 @@ exprt dynamic_type_handler::build_div_tagged(
       build_member(rhs, "value", pointer_typet(empty_typet())),
       pointer_typet(signedbv_typet(config.ansi_c.long_long_int_width))),
     signedbv_typet(config.ansi_c.long_long_int_width));
-  guard_zero_division(
-    rhs_numeric_value, build_and(lhs_is_num, rhs_is_num), location);
+  if (op != "Mult")
+    guard_zero_division(
+      rhs_numeric_value, build_and(lhs_is_num, rhs_is_num), location);
 
   return build_call_expr(
     *div_func,
-    double_type(),
+    div_type,
     {build_address_of(lhs),
      build_typecast(lhs_is_num, int_type()),
      build_address_of(rhs),
@@ -1605,8 +1733,10 @@ exprt dynamic_type_handler::operands_type_ok(
   {
     const exprt &tagged = lhs_tagged ? lhs : rhs;
     const exprt &literal = lhs_tagged ? rhs : lhs;
-    return type_handler_.tagged_scalar_type_matches(
-      build_member(tagged, "type_id", size_type()), literal.type());
+    return build_or(
+      type_handler_.tagged_scalar_type_matches(
+        build_member(tagged, "type_id", size_type()), literal.type()),
+      unmodelled_str_operand(op, lhs, rhs));
   }
 
   exprt lhs_type_id = build_member(lhs, "type_id", size_type());
@@ -1616,8 +1746,8 @@ exprt dynamic_type_handler::operands_type_ok(
   exprt rhs_is_num =
     type_handler_.tagged_scalar_type_matches(rhs_type_id, long_long_int_type());
   exprt both_num = build_and(lhs_is_num, rhs_is_num);
-  if (op == "Sub" || op == "Div")
-    return both_num;
+  if (op != "Add" && is_tagged_arithmetic(op))
+    return build_or(both_num, unmodelled_str_operand(op, lhs, rhs));
   if (op == "Add")
   {
     exprt str_type_id =
@@ -1643,7 +1773,12 @@ void dynamic_type_handler::guard_type_error(
     return;
 
   static const std::unordered_map<std::string, std::string> symbols = {
-    {"Add", "+"}, {"Sub", "-"}, {"Div", "/"}};
+    {"Add", "+"},
+    {"Sub", "-"},
+    {"Div", "/"},
+    {"FloorDiv", "//"},
+    {"Mult", "*"},
+    {"Mod", "%"}};
   auto symbol = symbols.find(op);
   const std::string message =
     symbol == symbols.end()

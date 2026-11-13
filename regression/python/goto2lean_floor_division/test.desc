@@ -1,0 +1,6 @@
+CORE
+main.py
+--function check --goto2lean
+^def half \(n : BitVec 64\) \(post : BitVec 64 → Prop\) : Prop :=$
+^theorem check_safe : ∀ \(n : BitVec 64\), Prog\.check n \(fun _ => True\) := by$
+BitVec\.smtSDiv

@@ -349,7 +349,95 @@ exprt python_converter::get_len_on_class_instance(const nlohmann::json &element)
   if (exprt bound = get_len_on_bound_instance(arg, element); bound.is_not_nil())
     return bound;
 
+  if (
+    exprt computed = get_len_on_computed_instance(arg, location);
+    computed.is_not_nil())
+    return computed;
+
   return get_len_on_list_element(arg, location);
+}
+
+static bool names_class(const nlohmann::json &node, const std::string &cls)
+{
+  if (
+    node.is_object() &&
+    (node.value("id", "") == cls || node.value("attr", "") == cls))
+    return true;
+  return node.is_structured() &&
+         std::any_of(node.begin(), node.end(), [&](const nlohmann::json &c) {
+           return names_class(c, cls);
+         });
+}
+
+static bool derives_from(const nlohmann::json &ast, const std::string &cls)
+{
+  if (ast.is_object() && ast.value("_type", "") == "ClassDef")
+    for (const auto &base : ast["bases"])
+      if (names_class(base, cls))
+        return true;
+  return ast.is_structured() &&
+         std::any_of(ast.begin(), ast.end(), [&](const nlohmann::json &child) {
+           return derives_from(child, cls);
+         });
+}
+
+// len(a * n), len(f()), len(mod.C()): the AST names no class, but the
+// converted type does (#10505). That type is the static class, so it is the
+// runtime class only when no class in the program derives from it.
+exprt python_converter::get_len_on_computed_instance(
+  const nlohmann::json &arg,
+  const locationt &location)
+{
+  const std::string kind = arg.value("_type", "");
+  if (kind != "BinOp" && kind != "Call")
+    return nil_exprt();
+  const typet probed = probe_expr(arg).type();
+  const typet &cls_type = probed.is_pointer() ? probed.subtype() : probed;
+  if (!is_user_class_pointer(probed) && !is_user_class_struct_type(probed))
+    return nil_exprt();
+
+  const std::string cls = class_name_of(cls_type);
+  bool derived = derives_from(*entry_ast_, cls) || derives_from(*ast_json, cls);
+  if (extra_asts_)
+    for (const nlohmann::json &ast : *extra_asts_)
+      derived = derived || derives_from(ast, cls);
+  for (const auto &module : module_ast_pool_)
+    derived = derived || derives_from(module.second, cls);
+  if (derived)
+    throw std::runtime_error(
+      "len() of an expression whose class '" + cls +
+      "' has subclasses is not supported");
+
+  exprt value = get_expr(arg);
+  symbolt tmp = create_return_temp_variable(probed, location, "len_arg");
+  symbol_table_.add(tmp);
+  exprt object = symbol_expr(tmp);
+  code_declt decl(object);
+  decl.location() = location;
+  current_block->copy_to_operands(decl);
+  convert_function_call_to_side_effect(value);
+  code_assignt store(object, value);
+  store.location() = location;
+  current_block->copy_to_operands(store);
+
+  if (object.type().is_pointer())
+  {
+    code_ifthenelset none_guard;
+    none_guard.cond() = equality_exprt(object, gen_zero(object.type()));
+    codet raise("expression");
+    raise.copy_to_operands(
+      get_exception_handler().gen_exception_raise(
+        "TypeError", "object of type 'NoneType' has no len()"));
+    none_guard.then_case() = raise;
+    none_guard.location() = location;
+    current_block->copy_to_operands(none_guard);
+  }
+
+  const exprt dunder = dispatch_unary_dunder_operator("len", object, location);
+  if (dunder.is_nil())
+    return get_exception_handler().gen_exception_raise(
+      "TypeError", "object of type '" + cls + "' has no len()");
+  return checked_len_result(dunder, location);
 }
 
 // len(self): an unannotated name whose symbol is bound to a class instance.
@@ -1017,6 +1105,21 @@ reads_only(const nlohmann::json &node, const std::set<std::string> &params)
   return true;
 }
 
+/// How many of the parameters in @p args are named @p name.
+static size_t
+own_parameters_named(const nlohmann::json &args, const std::string &name)
+{
+  size_t n = 0;
+  for (const char *field : {"posonlyargs", "args", "kwonlyargs"})
+    if (args.contains(field))
+      for (const auto &arg : args[field])
+        n += arg.value("arg", "") == name;
+  for (const char *field : {"vararg", "kwarg"})
+    if (args.contains(field) && args[field].is_object())
+      n += args[field].value("arg", "") == name;
+  return n;
+}
+
 /// The lambda @p name is bound to in @p body: `name = lambda ...`, or
 /// `name = make()` where `make` returns a lambda reading only its parameters.
 static nlohmann::json lambda_bound_to(
@@ -1065,7 +1168,7 @@ const symbolt *python_converter::lambda_copy_for_call(
   const std::string name = call["func"].value("id", "");
   if (
     !type.is_pointer() || !type.subtype().is_code() ||
-    current_func_name_.find("lam") == 0 || count_bindings(*ast_json, name) != 1)
+    current_func_name_.find("lam") == 0)
     return nullptr;
 
   nlohmann::json scope = json_utils::find_function_by_path(
@@ -1075,7 +1178,11 @@ const symbolt *python_converter::lambda_copy_for_call(
   nlohmann::json lambda = lambda_bound_to(name, scope["body"], *ast_json);
   if (lambda.empty())
     lambda = lambda_bound_to(name, (*ast_json)["body"], *ast_json);
-  if (lambda.empty())
+  // A parameter of the lambda named like it (`x = lambda x: ...`) binds only
+  // inside the lambda (#10558).
+  if (
+    lambda.empty() || count_bindings(*ast_json, name) !=
+                        1 + own_parameters_named(lambda["args"], name))
     return nullptr;
 
   const std::vector<std::optional<typet>> types =
@@ -1601,6 +1708,25 @@ append_default_arguments(const code_typet &type, exprt::operandst &args)
   return args.size() == params.size();
 }
 
+/// For user-defined functions, unknown kwargs are a TypeError. Free builtins
+/// and models (e.g. sorted(key=...), max(key=...)) skip them, but a model
+/// class method that dropped one would verify a call whose effect it never
+/// modelled, such as Counter.update(a=1) (#10500).
+static void reject_unknown_keyword(
+  const nlohmann::json &ast,
+  const symbolt &func,
+  const std::string &arg_name)
+{
+  const std::string name = func.name.as_string();
+  if (search_function_in_ast(ast, name))
+    throw std::runtime_error(
+      "Unknown keyword argument: " + arg_name + " in function " + name);
+  if (func.id.as_string().find("@C@") != std::string::npos)
+    throw std::runtime_error(
+      "Unsupported: keyword argument '" + arg_name +
+      "' to the modelled method " + name);
+}
+
 exprt python_converter::get_function_call(const nlohmann::json &element)
 {
   if (!element.contains("func") || element["_type"] != "Call")
@@ -1940,6 +2066,8 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
         list_node["elts"].push_back(elt);
       }
       copy_location_fields_from_decl(element, list_node);
+      // A result the typed-list gate typed is built typed (#10451).
+      list_node["esbmc_typed_list"] = python_list::is_typed(element);
       python_list list(*this, list_node);
       return list.get();
     }
@@ -2013,6 +2141,18 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
       if (!var_symbol->get_type().subtype().is_code())
         func_ptr_expr = python_expr::build_typecast(
           func_ptr_expr, gen_pointer_type(code_typet()));
+      else
+      {
+        // A function-or-None value holds None as a null pointer; calling it
+        // raises TypeError in CPython (#10568).
+        const exprt not_callable =
+          python_expr::decay_function_to_pointer(not_callable_function(
+            var_symbol->get_type().subtype(), none_type(), call.location()));
+        func_ptr_expr = if_exprt(
+          equality_exprt(func_ptr_expr, gen_zero(func_ptr_expr.type())),
+          not_callable,
+          func_ptr_expr);
+      }
       call.function() = func_ptr_expr;
 
       // Resolve return type from the concrete target function stored in
@@ -2346,13 +2486,7 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
       auto it = param_positions.find(arg_name);
       if (it == param_positions.end())
       {
-        // For user-defined functions, unknown kwargs are a TypeError.
-        // For builtins/models (e.g. sorted(key=...), max(key=...)), silently
-        // skip.
-        if (search_function_in_ast(*ast_json, func_symbol->name.as_string()))
-          throw std::runtime_error(
-            "Unknown keyword argument: " + arg_name + " in function " +
-            func_symbol->name.as_string());
+        reject_unknown_keyword(*ast_json, *func_symbol, arg_name);
         continue;
       }
 
