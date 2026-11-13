@@ -223,6 +223,7 @@ private:
   std::string module_call_type(const Json &call);
   std::string
   specialised_call_type(const std::string &func_name, const Json &call);
+  std::string user_method_call_type(const Json &call);
   std::string get_attribute_type(const Json &arg);
   std::string class_attribute_type(
     const std::string &cls,
