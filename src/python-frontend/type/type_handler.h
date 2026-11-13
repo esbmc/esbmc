@@ -305,6 +305,9 @@ public:
     const exprt &tagged_type_id,
     const typet &literal_type) const;
 
+  // Whether a tag holds an int, a bool or a float.
+  exprt tagged_scalar_is_number(const exprt &tagged_type_id) const;
+
   exprt tagged_scalar_byte_size(const exprt &value) const;
 
   // A Python str is a char array or char*.

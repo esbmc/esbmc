@@ -1316,6 +1316,14 @@ exprt type_handler::tagged_scalar_type_matches(
     python_expr::build_equal(tagged_type_id, bool_id));
 }
 
+exprt type_handler::tagged_scalar_is_number(const exprt &tagged_type_id) const
+{
+  return python_expr::build_or(
+    tagged_scalar_type_matches(tagged_type_id, long_long_int_type()),
+    python_expr::build_equal(
+      tagged_type_id, tagged_scalar_type_id(double_type())));
+}
+
 exprt type_handler::tagged_scalar_byte_size(const exprt &value) const
 {
   if (value.type().is_array())

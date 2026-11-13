@@ -291,9 +291,14 @@ private:
    */
   exprt build_literal_compare_call(
     const std::string &num_func_name,
+    const std::string &float_func_name,
     const std::string &str_func_name,
     const exprt &tagged,
     const exprt &literal);
+
+  exprt float_type_id() const;
+  // Whether `tagged` holds an int, a bool or a float, as a C int argument.
+  exprt is_number_arg(const exprt &tagged) const;
 
   exprt build_eq_literal(const exprt &tagged, const exprt &literal);
   exprt build_ordered_literal(
