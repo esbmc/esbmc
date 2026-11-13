@@ -262,7 +262,13 @@ exprt python_list::typed_subscript(
 {
   if (reads_typed(list_value_))
     return typed_slice(list, slice);
-  return typed_element(list, converter_.get_expr(slice));
+  const exprt element = typed_element(list, converter_.get_expr(slice));
+  // A bool list holds 0 or 1 in each slot; a store writes the slot itself.
+  if (
+    list_value_.value("esbmc_typed_bool", false) &&
+    list_value_["ctx"].value("_type", "") == "Load")
+    return build_typecast(element, bool_type());
+  return element;
 }
 
 exprt python_list::typed_copy_call(

@@ -26,6 +26,8 @@ import ast
 import copy
 
 TYPED_FLAG = "esbmc_typed_list"
+# On a typed node of a list whose elements are bools, held as 0 or 1.
+BOOL_FLAG = "esbmc_typed_bool"
 # On a `sorted(x)` call of a typed x whose result is only compared by `==` or
 # `!=` with a list: the converter sorts x and copies it into an untyped list.
 UNTYPED_RESULT_FLAG = "esbmc_typed_list_source"
@@ -163,7 +165,7 @@ def _allowed_list_annotation(annotation):
         return annotation.id in _LIST_ANNOTATIONS
     return (isinstance(annotation, ast.Subscript) and isinstance(annotation.value, ast.Name)
             and annotation.value.id in _LIST_ANNOTATIONS and isinstance(annotation.slice, ast.Name)
-            and annotation.slice.id == "int")
+            and annotation.slice.id in ("int", "bool"))
 
 
 def _declaration(node):
@@ -277,6 +279,9 @@ class TypedListGate:
         self.functions = {}
         self.bindings = {}
         self.int_vars = {}
+        self.bool_vars = {}
+        self.bool_roots = set()  # classes whose elements are bools
+        self.annotated = []  # (location, whether its list annotation says bool)
         self.dict_stores = {}  # dict location: [(stored value, scope)]
         self.int_dicts = {}
         self.shadowed = set()
@@ -384,11 +389,45 @@ class TypedListGate:
 
     def _is_int_subscript(self, expr, scope):
         """An item of a typed list or of a dict whose items are ints."""
-        if getattr(expr, "_typed_access", False) and self.classes.typed(
-                scope.loc(_list_name(expr.value).id)):
-            return True
+        if self._typed_read(expr, scope):
+            return not self._holds_bools(scope.loc(_list_name(expr.value).id))
         return (isinstance(expr.value, ast.Name) and not isinstance(expr.slice, ast.Slice)
                 and self.int_dicts.get(scope.loc(expr.value.id), False))
+
+    def _typed_read(self, expr, scope):
+        return getattr(expr, "_typed_access", False) and self.classes.typed(
+            scope.loc(_list_name(expr.value).id))
+
+    def _holds_bools(self, loc):
+        return self.classes.find(loc) in self.bool_roots
+
+    def is_bool(self, expr, scope):
+        """Whether @p expr always evaluates to a bool."""
+        if isinstance(expr, ast.Constant):
+            return isinstance(expr.value, bool)
+        if isinstance(expr, ast.UnaryOp):
+            return isinstance(expr.op, ast.Not)
+        if isinstance(expr, ast.Compare):
+            # Ints and bools compare to a bool; other operands may not.
+            return all(
+                self.is_int(o, scope) or self.is_bool(o, scope)
+                for o in [expr.left] + expr.comparators)
+        if isinstance(expr, ast.BoolOp):
+            return all(self.is_bool(v, scope) for v in expr.values)
+        if isinstance(expr, ast.IfExp):
+            return self.is_bool(expr.body, scope) and self.is_bool(expr.orelse, scope)
+        if isinstance(expr, ast.Name):
+            return self.bool_vars.get(scope.loc(expr.id), False)
+        if isinstance(expr, ast.Subscript):
+            return self._typed_read(expr, scope) and self._holds_bools(
+                scope.loc(_list_name(expr.value).id))
+        return False
+
+    def is_element(self, expr, scope, loc):
+        """Whether @p expr is an element of the kind list @p loc holds."""
+        if self._holds_bools(loc):
+            return self.is_bool(expr, scope)
+        return self.is_int(expr, scope)
 
     def _is_int_call(self, call):
         if call.keywords:
@@ -519,13 +558,15 @@ class TypedListGate:
         is, given the variables and dicts currently assumed int."""
         self.int_vars = dict.fromkeys(self.bindings, True)
         self.int_dicts = dict.fromkeys(self.dict_stores, True)
+        self.bool_vars = dict.fromkeys(self.bindings, True)
         changed = True
         while changed:
             changed = False
-            for facts, sources in ((self.int_vars, self.bindings), (self.int_dicts,
-                                                                    self.dict_stores)):
+            for facts, sources, test in ((self.int_vars, self.bindings, self.is_int),
+                                         (self.int_dicts, self.dict_stores, self.is_int),
+                                         (self.bool_vars, self.bindings, self.is_bool)):
                 for loc, values in sources.items():
-                    if facts[loc] and not all(value is not None and self.is_int(value, scope)
+                    if facts[loc] and not all(value is not None and test(value, scope)
                                               for value, scope in values):
                         facts[loc] = False
                         changed = True
@@ -634,13 +675,19 @@ class TypedListGate:
             for param in scope.params:
                 self.classes.poison_loc((scope.name, param), "parameter of a function not followed")
         func = self.top_defs[scope.name]
-        if func.returns is not None and _is_list_annotation(
-                func.returns) and not _allowed_list_annotation(func.returns):
-            self.classes.poison_loc(ret, "annotated with another list type")
+        self._note_annotation(ret, func.returns)
         for arg in func.args.args:
-            if arg.annotation is not None and _is_list_annotation(
-                    arg.annotation) and not _allowed_list_annotation(arg.annotation):
-                self.classes.poison_loc((scope.name, arg.arg), "annotated with another list type")
+            self._note_annotation((scope.name, arg.arg), arg.annotation)
+
+    def _note_annotation(self, loc, annotation):
+        """Poison @p loc for a list annotation the typed model disagrees
+        with; record the element kind `list[int]` or `list[bool]` names."""
+        if annotation is None or not _is_list_annotation(annotation):
+            return
+        if not _allowed_list_annotation(annotation):
+            self.classes.poison_loc(loc, "annotated with another list type")
+        elif isinstance(annotation, ast.Subscript):
+            self.annotated.append((loc, annotation.slice.id == "bool"))
 
     def _nested_names(self, node, scope):
         """The names nested scope @p node uses."""
@@ -660,9 +707,8 @@ class TypedListGate:
     def _record_assignment(self, node, scope):
         target = _single_name_target(node)
         loc = scope.loc(target.id)
-        if isinstance(node, ast.AnnAssign) and _is_list_annotation(
-                node.annotation) and not _allowed_list_annotation(node.annotation):
-            self.classes.poison_loc(loc, "annotated with another list type")
+        if isinstance(node, ast.AnnAssign):
+            self._note_annotation(loc, node.annotation)
         self._flow_into(loc, node.value, scope)
 
     def _record_return(self, node, scope):
@@ -725,7 +771,9 @@ class TypedListGate:
         loc = scope.loc(node.id)
         if not isinstance(node.ctx, ast.Load):
             parent = _parent(node)
-            if _single_name_target(parent) is not node and not _declaration(parent):
+            if _declaration(parent):
+                self._note_annotation(loc, parent.annotation)
+            elif _single_name_target(parent) is not node:
                 self.classes.poison_loc(loc, f"bound by {_describe(parent)}")
             return
         reason = self._classify_use(node, scope)
@@ -946,18 +994,24 @@ class TypedListGate:
                 changed = True
 
         for scope, value, loc in self.allocations:
-            reason = self._allocation_poison(value, scope)
+            reason = self._allocation_poison(value, scope, loc)
             if reason is not None:
                 poison(loc, reason)
         for scope, subscript, value in self.accesses:
             loc = scope.loc(subscript.value.id)
             if not self.is_int(subscript.slice, scope):
                 poison(loc, "indexed by a non-int " + ast.unparse(subscript.slice))
-            elif value is not None and not self.is_int(value, scope):
-                poison(loc, "stores a non-int element")
+            elif value is not None and not self.is_element(value, scope, loc):
+                poison(loc, "stores an element of another kind")
         for scope, call in self.appends:
-            if not self.is_int(call.args[0], scope):
-                poison(scope.loc(call.func.value.id), "appends a non-int")
+            loc = scope.loc(call.func.value.id)
+            if not self.is_element(call.args[0], scope, loc):
+                poison(loc, "appends an element of another kind")
+        for loc, reason in self._untyped_bool_results():
+            poison(loc, reason)
+        for loc, bools in self.annotated:
+            if bools != self._holds_bools(loc):
+                poison(loc, "annotated with another element kind")
         changed = self._check_copies() or changed
         changed = self._check_compares() or changed
         return self._check_sorts() or changed
@@ -1010,25 +1064,87 @@ class TypedListGate:
                 changed = True
         return changed
 
-    def _allocation_poison(self, value, scope):
-        """Why allocation @p value may hold a non-int, else None."""
+    def _allocation_poison(self, value, scope, loc):
+        """Why allocation @p value into @p loc may hold an element of another
+        kind than @p loc's, else None."""
         for node in _shape_nodes(value):
-            source = self._copy_source(node)
+            source = self._derived_source(node)
             if source is not None:
                 if not self.classes.typed(scope.loc(source.id)):
                     return "copied from a list not typed"
+                if self._holds_bools(scope.loc(source.id)) != self._holds_bools(loc):
+                    return "copied from a list of another kind"
                 continue
             repetition = _repetition(node)
-            if isinstance(node, ast.List) and not all(self.is_int(e, scope) for e in node.elts):
-                return "built from a non-int"
-            if repetition is not None and not all(self.is_int(e, scope) for e in repetition):
-                return "repeats a non-int or a non-int number of times"
-            if self._sorted_call(node):
-                if not self.classes.typed(scope.loc(node.args[0].id)):
-                    return "sorted from an untyped list"
-            elif isinstance(node, ast.Call) and not self.is_int(node.args[0], scope):
-                return "built with a non-int size"
+            if isinstance(node,
+                          ast.List) and not all(self.is_element(e, scope, loc) for e in node.elts):
+                return "built from an element of another kind"
+            if repetition is not None and not (self.is_element(repetition[0], scope, loc)
+                                               and self.is_int(repetition[1], scope)):
+                return "repeats an element of another kind or a non-int number of times"
+            if isinstance(node, ast.Call) and not (self.is_int(node.args[0], scope)
+                                                   and not self._holds_bools(loc)):
+                return "built with a non-int size or into a bool list"
         return None
+
+    def _derived_source(self, node):
+        """The list name a copy or `sorted()` allocation reads, else None."""
+        if self._sorted_call(node):
+            return node.args[0]
+        return self._copy_source(node)
+
+    def _untyped_bool_results(self):
+        """(location, reason) for each bool list whose copy or sorted copy
+        the converter would hand to the untyped model, which reads its slots
+        as ints."""
+        typed_nodes = {
+            id(node)
+            for _, value, loc in self.allocations if self.classes.typed(loc)
+            for node in _shape_nodes(value)
+        }
+        for _, node in self.slice_stores:
+            value = _parent(node).value
+            if isinstance(value, ast.Call) and isinstance(value.args[0], ast.Subscript):
+                typed_nodes.add(id(value.args[0]))
+        for scope, node, source in self.copies:
+            if self._holds_bools(scope.loc(source.id)) and id(node) not in typed_nodes:
+                yield scope.loc(source.id), "a bool list copied into an untyped list"
+        for scope, call in self.sorts:
+            if (self._holds_bools(scope.loc(call.args[0].id))
+                    and not getattr(_parent(call), "_typed_access", False)
+                    and id(call) not in typed_nodes):
+                yield scope.loc(call.args[0].id), "a bool list sorted into an untyped list"
+
+    def _seed_bool_lists(self):
+        """Classes that some site fills with a bool literal, a comparison or a
+        `not`, or that are annotated `list[bool]`, and the copies of them.
+        Every other class holds ints; a class filled with both kinds is
+        poisoned by the checks."""
+        values, edges = self._stored_values()
+        self.bool_roots = {self.classes.find(loc) for loc, v in values if _literal_bool(v)}
+        self.bool_roots |= {self.classes.find(loc) for loc, bools in self.annotated if bools}
+        changed = True
+        while changed:
+            grown = {self.classes.find(dst) for dst, src in edges if self._holds_bools(src)}
+            changed = not grown <= self.bool_roots
+            self.bool_roots |= grown
+
+    def _stored_values(self):
+        """(location, value) for each element a site stores, and (copy,
+        source) for each allocation that copies or sorts a list."""
+        values = [(scope.loc(s.value.id), v) for scope, s, v in self.accesses if v is not None]
+        values += [(scope.loc(c.func.value.id), c.args[0]) for scope, c in self.appends]
+        edges = []
+        for scope, value, loc in self.allocations:
+            for node in _shape_nodes(value):
+                source = self._derived_source(node)
+                if source is not None:
+                    edges.append((loc, scope.loc(source.id)))
+                elif isinstance(node, ast.List):
+                    values += [(loc, e) for e in node.elts]
+                elif _repetition(node) is not None:
+                    values.append((loc, _repetition(node)[0]))
+        return values, edges
 
     def run(self):
         _unshare(self.module)
@@ -1042,6 +1158,7 @@ class TypedListGate:
         self._collect_bindings()
         self._poison_unfollowed_bindings()
         self._collect_dict_stores()
+        self._seed_bool_lists()
         while True:
             self._compute_int_vars()
             if not self._check_values():
@@ -1065,12 +1182,15 @@ class TypedListGate:
             subscript = _parent(call)
             if getattr(subscript, "_typed_access", False):
                 setattr(subscript, TYPED_FLAG, True)
+                setattr(subscript, BOOL_FLAG, self._holds_bools(scope.loc(call.args[0].id)))
                 setattr(call, TYPED_FLAG, True)
             elif not getattr(call, TYPED_FLAG, False):
                 setattr(call, UNTYPED_RESULT_FLAG, True)
         for scope, subscript, _ in self.accesses:
-            if self.classes.typed(scope.loc(subscript.value.id)):
+            loc = scope.loc(subscript.value.id)
+            if self.classes.typed(loc):
                 setattr(subscript, TYPED_FLAG, True)
+                setattr(subscript, BOOL_FLAG, self._holds_bools(loc))
         for scope, call in self.appends + self.extends:
             if self.classes.typed(scope.loc(call.func.value.id)):
                 setattr(call, TYPED_FLAG, True)
@@ -1109,6 +1229,13 @@ class TypedListGate:
         """(typed, poison reason) for each nondet_list builder site."""
         return [(self.classes.typed(loc), self.classes.poison.get(self.classes.find(loc)))
                 for _, value, loc in self.allocations if isinstance(value, ast.Call)]
+
+
+def _literal_bool(value):
+    """A bool literal, a comparison or a `not`."""
+    return (isinstance(value, ast.Constant) and isinstance(value.value, bool)
+            or isinstance(value, ast.Compare)
+            or isinstance(value, ast.UnaryOp) and isinstance(value.op, ast.Not))
 
 
 def _repetition(node):
