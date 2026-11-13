@@ -1,16 +1,29 @@
 #include <goto-programs/goto_array_loop_summary.h>
 #include <irep2/irep2_utils.h>
+#include <util/arith/arith_tools.h>
+#include <util/lang/c_types.h>
 #include <util/symtab/symbol_generator.h>
 
 namespace
 {
 using targett = goto_programt::targett;
 
-/// A loop `head: IF !(i < hi) GOTO exit; body; i = i + 1; GOTO head`.
+/// A scalar `v` the body updates once per iteration by `v = v + delta`, or
+/// `v - delta` when `minus`, with delta the same in every iteration.
+struct inductiont
+{
+  targett update;
+  expr2tc v, delta;
+  bool minus;
+};
+
+/// A loop `head: IF !(i < hi) GOTO exit; body; i = i + step; GOTO head`.
 struct loopt
 {
   targett head, incr, back;
   expr2tc i, hi;
+  BigInt step;
+  std::vector<inductiont> vars;
   // The single write `a[idx] = value`, if any, and the guards of the GOTOs
   // before it, each of which skips the rest of the iteration.
   targett write;
@@ -113,6 +126,27 @@ bool reads_only_own_element(const expr2tc &e, const loopt &loop)
   return ok;
 }
 
+/// The largest value of a bitvector type.
+BigInt type_max(const type2tc &t)
+{
+  return power(2, t->get_width() - (is_signedbv_type(t) ? 1 : 0)) - 1;
+}
+
+/// An upper bound on e: its value if constant, else the largest value of the
+/// narrower unsigned type it widens, else of its own type.
+BigInt upper_bound(const expr2tc &e)
+{
+  if (is_constant_int2t(e))
+    return to_constant_int2t(e).value;
+  if (is_typecast2t(e))
+  {
+    const type2tc &from = to_typecast2t(e).from->type;
+    if (is_unsignedbv_type(from) && from->get_width() < e->type->get_width())
+      return type_max(from);
+  }
+  return type_max(e->type);
+}
+
 bool mentions(const expr2tc &e, const expr2tc &sym)
 {
   if (is_nil_expr(e))
@@ -129,6 +163,7 @@ bool match(
   goto_programt &body,
   targett back,
   bool assert_keeps_state,
+  bool exact_wrap,
   loopt &loop)
 {
   if (!is_true(back->guard) || back->targets.size() != 1)
@@ -149,22 +184,42 @@ bool match(
   if (!is_symbol2t(loop.i) || !is_bv_type(loop.i))
     return false;
 
+  // Updates of other counters may follow i's: no read of i comes after it.
+  auto updates_itself = [](const goto_programt::instructiont &ins) {
+    if (!ins.is_assign())
+      return false;
+    const code_assign2t &assign = to_code_assign2t(ins.code);
+    return is_symbol2t(assign.target) &&
+           ((is_add2t(assign.source) &&
+             to_add2t(assign.source).side_1 == assign.target) ||
+            (is_sub2t(assign.source) &&
+             to_sub2t(assign.source).side_1 == assign.target));
+  };
   loop.incr = std::prev(back);
+  while (loop.incr != loop.head && updates_itself(*loop.incr) &&
+         to_code_assign2t(loop.incr->code).target != loop.i)
+    --loop.incr;
   if (loop.incr == loop.head || !loop.incr->is_assign())
     return false;
   const code_assign2t &step = to_code_assign2t(loop.incr->code);
   if (
     step.target != loop.i || !is_add2t(step.source) ||
     to_add2t(step.source).side_1 != loop.i ||
-    !is_constant_int2t(to_add2t(step.source).side_2) ||
-    to_constant_int2t(to_add2t(step.source).side_2).value != 1)
+    !is_constant_int2t(to_add2t(step.source).side_2))
+    return false;
+  loop.step = to_constant_int2t(to_add2t(step.source).side_2).value;
+  // The last iteration's increment must not wrap past hi. Counting is in
+  // unsigned arithmetic, which needs exact_wrap.
+  if (
+    loop.step < 1 || (loop.step != 1 && !exact_wrap) ||
+    upper_bound(loop.hi) + loop.step - 1 > type_max(loop.i->type))
     return false;
 
   loop.write = body.instructions.end();
   std::vector<expr2tc> reads;
-  for (targett it = std::next(loop.head); it != loop.incr; ++it)
+  for (targett it = std::next(loop.head); it != back; ++it)
   {
-    if (it->is_location() || it->is_skip())
+    if (it == loop.incr || it->is_location() || it->is_skip())
       continue;
     if (it->is_assert())
     {
@@ -186,6 +241,27 @@ bool match(
       reads.push_back(it->guard);
       loop.skips.push_back(it->guard);
     }
+    else if (it->is_assign() && is_symbol2t(to_code_assign2t(it->code).target))
+    {
+      const code_assign2t &assign = to_code_assign2t(it->code);
+      const expr2tc &v = assign.target;
+      if (
+        v == loop.i || !is_bv_type(v) || !exact_wrap ||
+        !(is_add2t(assign.source) || is_sub2t(assign.source)))
+        return false;
+      const expr2tc &lhs = is_add2t(assign.source)
+                             ? to_add2t(assign.source).side_1
+                             : to_sub2t(assign.source).side_1;
+      const expr2tc &delta = is_add2t(assign.source)
+                               ? to_add2t(assign.source).side_2
+                               : to_sub2t(assign.source).side_2;
+      if (lhs != v)
+        return false;
+      for (const inductiont &var : loop.vars)
+        if (var.v == v)
+          return false;
+      loop.vars.push_back({it, v, delta, is_sub2t(assign.source)});
+    }
     else if (it->is_assign() && loop.write == body.instructions.end())
     {
       const code_assign2t &assign = to_code_assign2t(it->code);
@@ -193,6 +269,7 @@ bool match(
         !is_index2t(assign.target) ||
         !is_symbol2t(to_index2t(assign.target).source_value) ||
         !is_array_type(to_index2t(assign.target).source_value) ||
+        !is_number_type(assign.target) ||
         !is_counter_index(to_index2t(assign.target).index, loop.i))
         return false;
       loop.write = it;
@@ -216,6 +293,20 @@ bool match(
     !reads_only_own_element(loop.hi, loop) || mentions(loop.hi, loop.i) ||
     (!is_nil_expr(loop.array) && mentions(loop.hi, loop.array)))
     return false;
+  // Each update happens every iteration, by an amount no iteration changes.
+  if (!loop.vars.empty() && !loop.skips.empty())
+    return false;
+  for (const inductiont &var : loop.vars)
+  {
+    if (
+      !reads_only_own_element(var.delta, loop) || mentions(var.delta, loop.i) ||
+      mentions(loop.hi, var.v) ||
+      (!is_nil_expr(loop.array) && mentions(var.delta, loop.array)))
+      return false;
+    for (const inductiont &other : loop.vars)
+      if (mentions(var.delta, other.v))
+        return false;
+  }
 
   // Nothing outside the loop may jump into it past the head.
   for (const auto &ins : body.instructions)
@@ -298,6 +389,47 @@ void summarise(
     return t;
   };
 
+  // All counting is in unsigned arithmetic, which wraps as the loop's own
+  // updates do; i still holds its value on entry until the end.
+  auto as_unsigned = [](const expr2tc &x, unsigned width) {
+    const type2tc u = get_uint_type(width);
+    return x->type == u ? x : typecast2tc(u, x);
+  };
+  const unsigned width = loop.i->type->get_width();
+  const expr2tc step = constant_int2tc(get_uint_type(width), loop.step);
+  auto distance = [&](const expr2tc &x) {
+    return sub2tc(
+      step->type, as_unsigned(x, width), as_unsigned(loop.i, width));
+  };
+  // The number of iterations before the one whose counter is x.
+  auto iterations = [&](const expr2tc &x) {
+    return loop.step == 1 ? distance(x) : div2tc(step->type, distance(x), step);
+  };
+  // Whether some iteration's counter is x, given i <= x < hi.
+  auto on_stride = [&](const expr2tc &x) -> expr2tc {
+    if (loop.step == 1)
+      return gen_true_expr();
+    return equality2tc(
+      modulus2tc(step->type, distance(x), step), gen_zero(step->type));
+  };
+  std::vector<expr2tc> entry;
+  for (const inductiont &var : loop.vars)
+  {
+    entry.push_back(fresh(var.v->type, "loop_entry$"));
+    add(ASSIGN)->code = code_assign2tc(entry.back(), var.v);
+  }
+  // v after n updates.
+  auto value_after = [&](std::size_t idx, const expr2tc &n) {
+    const inductiont &var = loop.vars[idx];
+    const unsigned w = var.v->type->get_width();
+    const expr2tc change =
+      mul2tc(get_uint_type(w), as_unsigned(var.delta, w), as_unsigned(n, w));
+    const expr2tc start = as_unsigned(entry[idx], w);
+    const expr2tc sum = var.minus ? sub2tc(start->type, start, change)
+                                  : add2tc(start->type, start, change);
+    return sum->type == var.v->type ? sum : typecast2tc(var.v->type, sum);
+  };
+
   // One iteration at a nondet index in [i, hi): the checks in the body hold
   // for every iteration exactly when they hold for this one.
   std::vector<targett> skips;
@@ -328,9 +460,12 @@ void summarise(
         type2tc(),
         sideeffect2t::allockind::nondet));
     const targett enter = add(GOTO);
-    enter->guard =
-      not2tc(and2tc(lessthanequal2tc(loop.i, k), lessthan2tc(k, loop.hi)));
+    enter->guard = not2tc(conjunction(
+      {lessthanequal2tc(loop.i, k), lessthan2tc(k, loop.hi), on_stride(k)}));
     skips.push_back(enter);
+    for (std::size_t idx = 0; idx < loop.vars.size(); ++idx)
+      add(ASSIGN)->code =
+        code_assign2tc(loop.vars[idx].v, value_after(idx, iterations(k)));
     bool loaded = false;
     for (targett it = std::next(loop.head); it != loop.incr; ++it)
     {
@@ -371,14 +506,28 @@ void summarise(
       index_type == loop.i->type ? j : typecast2tc(loop.i->type, j);
     std::vector<expr2tc> conds{
       lessthanequal2tc(index_at(loop, loop.i), j),
-      lessthan2tc(j, index_at(loop, loop.hi))};
+      lessthan2tc(j, index_at(loop, loop.hi)),
+      on_stride(counter)};
     for (expr2tc skip : loop.skips)
     {
       replace(skip, loop.i, counter);
       conds.push_back(not2tc(skip));
     }
+    // Counter first: the closed forms read i as its value on entry.
     expr2tc value = to_code_assign2t(loop.write->code).source;
     replace(value, loop.i, counter);
+    for (std::size_t idx = 0; idx < loop.vars.size(); ++idx)
+    {
+      // The updates the write sees: those of earlier iterations, and this
+      // one's if it comes first.
+      bool before = false;
+      for (targett it = loop.head; it != loop.write; ++it)
+        before = before || it == loop.vars[idx].update;
+      expr2tc n = iterations(counter);
+      if (before)
+        n = add2tc(n->type, n, gen_one(n->type));
+      replace(value, loop.vars[idx].v, value_after(idx, n));
+    }
     if (loop.nondet)
     {
       // Each iteration stores its own nondet value: element j of one fresh
@@ -404,7 +553,28 @@ void summarise(
     lambda->code =
       code_assign2tc(loop.array, array_lambda2tc(loop.array->type, j, element));
   }
-  add(ASSIGN)->code = code_assign2tc(loop.i, loop.hi);
+  // ceil((hi - i) / step) iterations; hi + step - 1 does not wrap.
+  const expr2tc total = loop.step == 1
+                          ? iterations(loop.hi)
+                          : div2tc(
+                              step->type,
+                              add2tc(
+                                step->type,
+                                distance(loop.hi),
+                                constant_int2tc(step->type, loop.step - 1)),
+                              step);
+  for (std::size_t idx = 0; idx < loop.vars.size(); ++idx)
+    add(ASSIGN)->code =
+      code_assign2tc(loop.vars[idx].v, value_after(idx, total));
+  expr2tc last = loop.hi;
+  if (loop.step != 1)
+  {
+    last = add2tc(
+      step->type, as_unsigned(loop.i, width), mul2tc(step->type, step, total));
+    if (last->type != loop.i->type)
+      last = typecast2tc(loop.i->type, last);
+  }
+  add(ASSIGN)->code = code_assign2tc(loop.i, last);
 
   const targett exit = std::next(loop.back);
   body.instructions.erase(std::next(loop.head), exit);
@@ -415,7 +585,8 @@ void summarise(
 void goto_array_loop_summary(
   goto_functionst &goto_functions,
   contextt &context,
-  const optionst &options)
+  const optionst &options,
+  bool assert_loops)
 {
   // A summary writes the whole array at once, so another thread could no
   // longer observe it half written.
@@ -433,6 +604,11 @@ void goto_array_loop_summary(
                        options.get_bool_option("clz-zero-check");
   const bool assert_keeps_state =
     keeps_state(verifier_assert, goto_functions, context);
+  // Closed forms count in unsigned arithmetic: an overflow check would flag
+  // it, and --ir does not wrap it.
+  const bool exact_wrap = !options.get_bool_option("overflow-check") &&
+                          !options.get_bool_option("unsigned-overflow-check") &&
+                          !options.get_bool_option("int-encoding");
   symbol_generator names("c:@__ESBMC_array_loop$");
   unsigned summarised = 0;
   Forall_goto_functions (f, goto_functions)
@@ -440,12 +616,26 @@ void goto_array_loop_summary(
     if (!f->second.body_available)
       continue;
     goto_programt &body = f->second.body;
+    // __ESBMC_unroll bounds the loop after it only once this pass has run.
+    bool unrolls = false;
+    for (const auto &ins : body.instructions)
+      unrolls =
+        unrolls || (ins.is_function_call() &&
+                    is_symbol2t(to_code_function_call2t(ins.code).function) &&
+                    has_prefix(
+                      to_symbol2t(to_code_function_call2t(ins.code).function)
+                        .get_symbol_name(),
+                      "c:@F@__ESBMC_unroll"));
+    if (unrolls)
+      continue;
     for (targett it = body.instructions.begin(); it != body.instructions.end();
          ++it)
     {
       loopt loop;
       if (
-        !it->is_backwards_goto() || !match(body, it, assert_keeps_state, loop))
+        !it->is_backwards_goto() || it->pragma_unroll_count != 0 ||
+        !match(body, it, assert_keeps_state, exact_wrap, loop) ||
+        (!assert_loops && is_nil_expr(loop.array)))
         continue;
       targett exit = std::next(it);
       summarise(body, loop, loop.checks || checked, context, names);

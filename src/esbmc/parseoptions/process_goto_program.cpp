@@ -471,11 +471,18 @@ bool esbmc_parseoptionst::process_goto_program(
     // Before --goto-unwind unrolls the loops, interval analysis and
     // k-induction see them, and goto_check instruments the iteration the
     // summary keeps. The uninitialised-variable check would read the lambda's
-    // unwritten elements, and C has no lambda for --goto2c to print.
+    // unwritten elements, C has no lambda for --goto2c to print, and coverage
+    // and loop invariants are about the loop the summary removes.
     if (
-      cmdline.isset("summarize-array-loops") &&
-      !cmdline.isset("uninitialised-vars-check") && !cmdline.isset("goto2c"))
-      goto_array_loop_summary(goto_functions, context, options);
+      !cmdline.isset("no-summarize-array-loops") &&
+      !cmdline.isset("uninitialised-vars-check") && !cmdline.isset("goto2c") &&
+      !is_coverage && !cmdline.isset("loop-invariant") &&
+      !cmdline.isset("loop-invariant-check"))
+      goto_array_loop_summary(
+        goto_functions,
+        context,
+        options,
+        cmdline.isset("summarize-array-loops"));
 
     // Apply all the initialized algorithms
     for (auto &algorithm : goto_preprocess_algorithms)

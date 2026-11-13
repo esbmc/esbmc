@@ -1125,8 +1125,10 @@ const struct group_opt_templ all_cmd_options[] = {
      "model requires constant thread ids)"},
     {"summarize-array-loops",
      NULL,
-     "Replace counting loops that only write a[i] by their effect "
-     "(prototype)"},
+     "Also summarise counting loops that write no array"},
+    {"no-summarize-array-loops",
+     NULL,
+     "Do not replace counting loops that only write a[i] by their effect"},
     {"gcse",
      NULL,
      "Adds intermediate variables to precompute common sub-expressions between "
