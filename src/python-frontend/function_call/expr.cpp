@@ -7188,6 +7188,182 @@ std::optional<exprt> function_call_expr::fold_sum_over_tuple(
   return migrate_expr_back(acc);
 }
 
+std::optional<exprt> function_call_expr::build_mixed_numeric_call(
+  const exprt &list_arg,
+  const std::string &list_id,
+  bool has_default_kwarg)
+{
+  const std::string &func_name = function_id_.get_function();
+  if (func_name == "sorted" && sorts_mixed_numeric(list_id))
+    return sort_mixed_numeric_literal();
+  if (!converter_.get_element_type_registry().has_mixed_numeric(list_id))
+    return std::nullopt;
+  // Inline the comparison to avoid type confusion when passing the list to
+  // the max_float/min_float models.
+  if ((func_name != "min" && func_name != "max") || has_default_kwarg)
+    return std::nullopt;
+  irep_idt comparison_op = (func_name == "max") ? exprt::i_gt : exprt::i_lt;
+  python_list list_helper(converter_, call_["args"][0]);
+  return list_helper.build_min_max_for_mixed_numeric(
+    list_arg, list_id, func_name, comparison_op);
+}
+
+namespace
+{
+// A numeric constant of a list literal: an int, or a finite float.
+struct numeric_constant
+{
+  bool is_int;
+  long long int_value;
+  double float_value;
+};
+
+// An int constant, negated when @p negated. An int beyond long long, or a
+// negative one under negation, is refused.
+std::optional<numeric_constant>
+int_constant_of(const nlohmann::json &value, bool negated)
+{
+  if (
+    !value.is_number_integer() ||
+    (value.is_number_unsigned() &&
+     value.get<unsigned long long>() >
+       static_cast<unsigned long long>(std::numeric_limits<long long>::max())))
+    return std::nullopt;
+  const long long i = value.get<long long>();
+  if (negated && i < 0)
+    return std::nullopt;
+  return numeric_constant{true, negated ? -i : i, 0.0};
+}
+
+std::optional<numeric_constant> numeric_constant_of(const nlohmann::json &elt)
+{
+  const bool negated = elt.value("_type", "") == "UnaryOp" &&
+                       elt["op"].value("_type", "") == "USub";
+  const nlohmann::json &node = negated ? elt["operand"] : elt;
+  if (node.value("_type", "") != "Constant")
+    return std::nullopt;
+  const nlohmann::json &value = node["value"];
+  if (value.is_number_float())
+  {
+    const double f = negated ? -value.get<double>() : value.get<double>();
+    if (!std::isfinite(f))
+      return std::nullopt;
+    return numeric_constant{false, 0, f};
+  }
+  if (value.is_boolean() && !negated)
+    return numeric_constant{true, value.get<bool>() ? 1 : 0, 0.0};
+  return int_constant_of(value, negated);
+}
+
+// Python's exact comparison of an int with a finite float. A double of
+// magnitude 2^53 or more is integral, so it compares as an integer. Below
+// that, converting the int to double keeps the order, and only an int of
+// magnitude below 2^53, which converts exactly, can compare equal.
+int compare_int_float(long long i, double f)
+{
+  const double two_63 = 9223372036854775808.0;
+  if (std::fabs(f) < 9007199254740992.0)
+  {
+    const double d = static_cast<double>(i);
+    return (d > f) - (d < f);
+  }
+  if (f >= two_63)
+    return -1;
+  if (f < -two_63)
+    return 1;
+  const long long g = static_cast<long long>(f);
+  return (i > g) - (i < g);
+}
+
+bool numeric_less(const numeric_constant &a, const numeric_constant &b)
+{
+  if (a.is_int && b.is_int)
+    return a.int_value < b.int_value;
+  if (!a.is_int && !b.is_int)
+    return a.float_value < b.float_value;
+  if (a.is_int)
+    return compare_int_float(a.int_value, b.float_value) < 0;
+  return compare_int_float(b.int_value, a.float_value) > 0;
+}
+
+// The constant reverse= of a sorted() call; throws for any other keyword.
+bool constant_reverse_keyword(const nlohmann::json &call)
+{
+  bool reverse = false;
+  for (const auto &kw : call.value("keywords", nlohmann::json::array()))
+  {
+    const nlohmann::json &value = kw["value"];
+    if (
+      kw.value("arg", "") != "reverse" ||
+      value.value("_type", "") != "Constant" || !value["value"].is_boolean())
+      throw std::runtime_error(
+        "Unsupported: sorted() over a mixed int/float list takes only a "
+        "constant reverse= keyword");
+    reverse = value["value"].get<bool>();
+  }
+  return reverse;
+}
+} // namespace
+
+bool function_call_expr::sorts_mixed_numeric(const std::string &list_id) const
+{
+  const element_type_registry &registry =
+    converter_.get_element_type_registry();
+  if (registry.has_mixed_numeric(list_id))
+    return true;
+  // A list literal mixing int and float is stored as floats, so its record
+  // shows only the int elements' promotion to double.
+  const auto *recorded = registry.find(list_id);
+  if (!recorded)
+    return false;
+  bool has_int = false, has_float = false;
+  for (const auto &[elem_id, elem_type] : *recorded)
+  {
+    const symbolt *elem = converter_.find_symbol(elem_id);
+    const bool promoted =
+      elem && elem->get_value().id() == "typecast" &&
+      type_utils::is_integer_type(elem->get_value().op0().type());
+    has_int |= promoted;
+    has_float |= !promoted && elem_type.is_floatbv();
+  }
+  return has_int && has_float;
+}
+
+exprt function_call_expr::sort_mixed_numeric_literal()
+{
+  const bool reverse = constant_reverse_keyword(call_);
+  const nlohmann::json &arg = call_["args"][0];
+  const std::string unsupported =
+    "Unsupported: sorted() over a mixed int/float list that is not a literal "
+    "of numeric constants";
+  if (arg.value("_type", "") != "List")
+    throw std::runtime_error(unsupported);
+
+  std::vector<std::pair<numeric_constant, nlohmann::json>> elements;
+  for (const auto &elt : arg["elts"])
+  {
+    const std::optional<numeric_constant> value = numeric_constant_of(elt);
+    if (!value)
+      throw std::runtime_error(unsupported);
+    elements.emplace_back(*value, elt);
+  }
+
+  // Python's sort is stable for reverse=True too, so equal elements keep
+  // their order either way.
+  std::stable_sort(
+    elements.begin(), elements.end(), [reverse](const auto &a, const auto &b) {
+      return reverse ? numeric_less(b.first, a.first)
+                     : numeric_less(a.first, b.first);
+    });
+
+  // Built from the converted elements, not as a literal, which would store
+  // the ints promoted to float.
+  std::vector<exprt> sorted_elems;
+  for (const auto &element : elements)
+    sorted_elems.push_back(converter_.get_expr(element.second));
+  return python_list(converter_, arg).build_list_from_exprs(sorted_elems);
+}
+
 std::optional<exprt> function_call_expr::apply_builtin_dispatch(
   std::string &actual_func_name,
   bool is_user_imported,
@@ -7257,19 +7433,10 @@ std::optional<exprt> function_call_expr::apply_builtin_dispatch(
         converter_.get_element_type_registry().homogeneous_element_type(
           list_id, func_name);
 
-      // Mixed int/float list: inline the comparison to avoid type confusion
-      // when passing the list to max_float/min_float model functions.
       if (
-        elem_type.is_floatbv() && (func_name == "min" || func_name == "max") &&
-        converter_.get_element_type_registry().has_mixed_numeric(list_id) &&
-        !has_default_kwarg)
-      {
-        irep_idt comparison_op =
-          (func_name == "max") ? exprt::i_gt : exprt::i_lt;
-        python_list list_helper(converter_, call_["args"][0]);
-        return list_helper.build_min_max_for_mixed_numeric(
-          list_arg, list_id, func_name, comparison_op);
-      }
+        std::optional<exprt> mixed =
+          build_mixed_numeric_call(list_arg, list_id, has_default_kwarg))
+        return mixed;
     }
     reject_unfoldable_key(call_, func_name, is_sorted_min_max);
 
