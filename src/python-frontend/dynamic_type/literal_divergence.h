@@ -643,7 +643,9 @@ inline std::string kind_after_statement(
   const std::string &prior,
   const nlohmann::json &module_body)
 {
-  if (assigns_name(stmt, name) && stmt.contains("value"))
+  if (
+    assigns_name(stmt, name) && stmt.contains("value") &&
+    !stmt["value"].is_null())
     return classify_literal_value_kind(stmt["value"], module_body);
   return count_bindings(stmt, name) == 0 ? prior : "";
 }
