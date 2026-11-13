@@ -619,6 +619,77 @@ dynamic_type_handler::dynamic_type_handler(
 {
 }
 
+// True if `value` names or derives from an already-tagged symbol.
+bool dynamic_type_handler::value_references_tagged_identifier(
+  const nlohmann::json &value) const
+{
+  if (!value.is_object())
+    return false;
+
+  const std::string kind = value.value("_type", "");
+  if (kind == "Name" && value.contains("id"))
+  {
+    symbol_id sid = converter_.create_symbol_id();
+    sid.set_object(value["id"].get<std::string>());
+    const symbolt *sym = converter_.symbol_table().find_symbol(sid.to_string());
+    return sym && type_handler_.is_tagged_scalar_type(sym->get_type());
+  }
+
+  if (kind == "BinOp")
+    return value_references_tagged_identifier(
+             value.value("left", nlohmann::json())) ||
+           value_references_tagged_identifier(
+             value.value("right", nlohmann::json()));
+
+  return false;
+}
+
+// True if every leaf assigns `name`, and one derives it from a tagged
+// identifier.
+bool dynamic_type_handler::if_node_joins_tagged_derived_value(
+  const nlohmann::json &if_node,
+  const std::string &name) const
+{
+  if (!if_node.contains("body") || !if_node.contains("orelse"))
+    return false;
+
+  bool any_tagged_derived = false;
+  for (const nlohmann::json *block : {&if_node["body"], &if_node["orelse"]})
+  {
+    if (!block->is_array())
+      return false;
+
+    const nlohmann::json *assigned_value = nullptr;
+    for (const auto &stmt : *block)
+    {
+      if (!stmt.is_object())
+        continue;
+      const std::string stmt_type = stmt.value("_type", "");
+      nlohmann::json target;
+      if (
+        stmt_type == "Assign" && stmt.contains("targets") &&
+        stmt["targets"].size() == 1)
+        target = stmt["targets"][0];
+      else if (stmt_type == "AnnAssign" && stmt.contains("target"))
+        target = stmt["target"];
+      else
+        continue;
+
+      if (
+        target.value("_type", "") == "Name" && target.value("id", "") == name &&
+        stmt.contains("value") && !stmt["value"].is_null())
+        assigned_value = &stmt["value"];
+    }
+
+    if (!assigned_value)
+      return false;
+    if (value_references_tagged_identifier(*assigned_value))
+      any_tagged_derived = true;
+  }
+
+  return any_tagged_derived;
+}
+
 std::unordered_set<std::string> dynamic_type_handler::detect_dynamic_type_names(
   const nlohmann::json &if_node) const
 {
@@ -663,6 +734,48 @@ std::unordered_set<std::string> dynamic_type_handler::detect_dynamic_type_names(
       joins_divergent_kinds(
         name, existing, kind_set, existing && leaf_count[name] < leaf_total))
       dynamic_type_names.insert(name);
+  }
+
+  // A name the scan above missed because its value is an expression
+  // derived from an already-tagged identifier, e.g. `y = x + 1` vs `y = x`.
+  std::unordered_set<std::string> candidates;
+  for (const nlohmann::json *block : {&if_node["body"], &if_node["orelse"]})
+    if (block->is_array())
+      for (const auto &stmt : *block)
+      {
+        if (!stmt.is_object())
+          continue;
+        const std::string stmt_type = stmt.value("_type", "");
+        nlohmann::json target;
+        if (
+          stmt_type == "Assign" && stmt.contains("targets") &&
+          stmt["targets"].size() == 1)
+          target = stmt["targets"][0];
+        else if (stmt_type == "AnnAssign" && stmt.contains("target"))
+          target = stmt["target"];
+        else
+          continue;
+        if (target.value("_type", "") == "Name" && target.contains("id"))
+          candidates.insert(target["id"].get<std::string>());
+      }
+
+  for (const std::string &name : candidates)
+  {
+    if (dynamic_type_names.count(name))
+      continue;
+    if (!if_node_joins_tagged_derived_value(if_node, name))
+      continue;
+
+    symbol_id sid = converter_.create_symbol_id();
+    sid.set_object(name);
+    const symbolt *existing =
+      converter_.symbol_table().find_symbol(sid.to_string());
+    if (
+      existing && !type_handler_.is_numeric_scalar_type(existing->get_type()) &&
+      !type_handler_.is_string_type(existing->get_type()))
+      continue;
+
+    dynamic_type_names.insert(name);
   }
 
   return dynamic_type_names;
@@ -1815,6 +1928,13 @@ bool dynamic_type_handler::scope_assigns_divergent_literal_types(
 {
   return dynamic_type_detail::scope_assigns_divergent_literal_types(
     name, scope_body, module_body);
+}
+
+std::string dynamic_type_handler::classify_literal_kind(
+  const nlohmann::json &value_node) const
+{
+  return dynamic_type_detail::classify_literal_value_kind(
+    value_node, converter_.ast()["body"]);
 }
 
 exprt dynamic_type_handler::build_tagged_value(

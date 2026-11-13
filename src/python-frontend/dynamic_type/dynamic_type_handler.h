@@ -174,6 +174,9 @@ public:
     const nlohmann::json &scope_body,
     const nlohmann::json &module_body = nlohmann::json()) const;
 
+  /// "str"/"num" for a literal value or call; "" otherwise
+  std::string classify_literal_kind(const nlohmann::json &value_node) const;
+
   /**
    * @brief Builds a tagged-object temporary from an already-converted
    * value, for use as either a RETURN value or a function-call ARGUMENT
@@ -229,6 +232,15 @@ public:
   };
 
 private:
+  /// True if `value` names or derives from an already-tagged symbol
+  bool value_references_tagged_identifier(const nlohmann::json &value) const;
+
+  /// True if every leaf assigns `name`, and one derives it from a tagged
+  /// identifier
+  bool if_node_joins_tagged_derived_value(
+    const nlohmann::json &if_node,
+    const std::string &name) const;
+
   /**
    * @brief Builds the instructions that fill a tagged-object symbol's four
    * fields (value/type_id/size/float_idx) from an already-converted value.

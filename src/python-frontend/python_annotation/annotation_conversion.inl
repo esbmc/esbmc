@@ -6139,6 +6139,8 @@ bool python_annotation<Json>::preprocess_constructor_calls(Json &node)
         for (size_t i = 1; i < params.size() && (i - 1) < call_args.size(); ++i)
         {
           Json &param = params[i];
+          if (dynamic_constructor_params_.count(&param))
+            continue;
           // Only annotate if the parameter is not yet annotated;
           // do not overwrite explicit annotations (e.g.,
           // Optional["List"]) with a less-specific type inferred from a
@@ -6824,21 +6826,22 @@ void python_annotation<Json>::collect_function_call_arg_types(
 }
 
 /// A constructor parameter typed from its first call keeps that type for
-/// every call, so a str passed where a number was first, or the reverse, is
-/// converted wrongly. A copy of the class per type would be needed (#10024).
+/// every call, so a str/number mix converts wrongly. Undoes the premature
+/// annotation instead, leaving the parameter Any for the converter's own
+/// tagged-scalar call-site scan to type.
 template <class Json>
-void python_annotation<Json>::refuse_mixed_constructor_args() const
+void python_annotation<Json>::settle_mixed_constructor_args()
 {
   for (const auto &[param, types] : constructor_arg_types_)
   {
     const bool has_str = types.count("str") != 0;
     const bool has_number =
       types.count("int") || types.count("float") || types.count("bool");
-    if (has_str && has_number)
-      throw std::runtime_error(
-        "unsupported: constructor parameter '" +
-        (*param)["arg"].template get<std::string>() +
-        "' is passed a str and a number");
+    if (!has_str || !has_number)
+      continue;
+    (*param)["annotation"] = nullptr;
+    constructor_typed_params_.erase(param);
+    dynamic_constructor_params_.insert(param);
   }
 }
 
@@ -6866,7 +6869,7 @@ void python_annotation<Json>::add_type_annotation()
   // type that parameter gets from a later call (GitHub #8963).
   while (preprocess_constructor_calls(ast_))
     ;
-  refuse_mixed_constructor_args();
+  settle_mixed_constructor_args();
   for (const auto &[param, types] : inherited_init_args_)
     if (
       types.size() == 1 && !types.begin()->empty() &&
