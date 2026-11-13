@@ -5,6 +5,7 @@ import itertools
 from collections import Counter, defaultdict
 
 from preprocessor.bound_method_dispatch import _scope_nodes
+from preprocessor.bound_method_values import constructions_in
 # pylint: disable=too-many-boolean-expressions
 
 
@@ -1130,15 +1131,6 @@ class ClassContextMixin:
                     keyword.value = ast.copy_location(ast.Constant(value=None), keyword.value)
 
     @staticmethod
-    def _construction(stmt):
-        """`(o, C)` for a statement `o = C(...)`, else None."""
-        if (isinstance(stmt, ast.Assign) and len(stmt.targets) == 1
-                and isinstance(stmt.targets[0], ast.Name) and isinstance(stmt.value, ast.Call)
-                and isinstance(stmt.value.func, ast.Name)):
-            return stmt.targets[0].id, stmt.value.func.id
-        return None
-
-    @staticmethod
     def _assigned_attributes(module):
         """The attribute names `module` assigns or deletes anywhere."""
         return {
@@ -1215,8 +1207,7 @@ class ClassContextMixin:
         }
         self.fixed_receivers = {
             name: methods[cls]
-            for name, cls in filter(None, map(self._construction, module.body))
-            if counts[name] == 1 and cls in methods
+            for name, cls in constructions_in(module.body) if counts[name] == 1 and cls in methods
         }
         self.once_bound_names = {name for name, count in counts.items() if count == 1}
         # Holding the nodes keeps their ids from being reused.
