@@ -1,5 +1,5 @@
 # The imported call() calls the function it is given, which returns str or
-# int, so passing it is refused.
+# int. call() reads no name of its module, so a copy of it is dispatched.
 from helper import call
 
 
