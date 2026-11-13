@@ -73,7 +73,7 @@ target_link_libraries(esbmc-driver PUBLIC
                             ${LD_FRONTEND_TARGETS}
                             ${GOTO_CONTRACTOR_TARGETS} ${JIMPLE_FRONTEND_TARGETS}
                             clangcfrontend clangcppfrontend symex langapi transition-system-extraction transition-system-engines
-                            solvers clibs gotoalgorithms cache ESBMC::boost goto2c ${OS_INCLUDE_LIBS}
+                            solvers clibs gotoalgorithms cache ESBMC::boost goto2c goto2lean ${OS_INCLUDE_LIBS}
                             nlohmann_json::nlohmann_json)
 
 add_executable(esbmc main.cpp globals.cpp ${CMAKE_CURRENT_BINARY_DIR}/buildidobj.c)
