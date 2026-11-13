@@ -2664,9 +2664,12 @@ bool python_converter::may_rebind_left(
          (right_runs_user_code || calls_user_code(right));
 }
 
+// Also `a + b` and `[x] * n` building a typed list (#10451).
 std::optional<exprt>
 python_converter::try_lowered_compare(const nlohmann::json &element)
 {
+  if (python_list::is_typed(element) && element["_type"] == "BinOp")
+    return python_list(*this, element).typed_binop();
   std::optional<exprt> bound = try_numpy_dtype_compare(element);
   if (!bound)
     bound = try_numpy_string_membership(element);
@@ -2843,7 +2846,7 @@ exprt python_converter::checked_erased_int(
   // Only a value that can come from sources of different known kinds can be
   // anything but the int the cast below assumes.
   value_kinds kinds(*ast_json);
-  if (!kinds.may_be_non_number(node, kinds.scope_of(current_func_name_)))
+  if (!kinds.may_be_non_int(node, kinds.scope_of(current_func_name_)))
     return operand;
 
   const locationt location = get_location_from_decl(element);
@@ -5461,7 +5464,7 @@ exprt python_converter::handle_list_operations(
      op == "GtE"))
   {
     python_list list(*this, element);
-    return list.compare(lhs, rhs, op);
+    return list.typed_or_untyped_compare(lhs, rhs, op);
   }
 
   // List concatenation: also handle Any-typed (void*) right operand, which

@@ -47,12 +47,15 @@ const nlohmann::json &params(const nlohmann::json &fn)
 const std::string &builtin_kind(const std::string &name)
 {
   static const std::string none;
-  static const std::string str = "str", num = "num";
+  static const std::string str = "str", num = "num", real = "float";
   static const std::set<std::string> strs = {
     "str", "repr", "format", "chr", "hex", "oct", "bin"};
   static const std::set<std::string> nums = {
-    "int", "float", "len", "abs", "round", "ord", "bool", "isinstance"};
-  return strs.count(name) ? str : nums.count(name) ? num : none;
+    "int", "len", "round", "ord", "bool", "isinstance"};
+  return strs.count(name)   ? str
+         : nums.count(name) ? num
+         : name == "float"  ? real
+                            : none;
 }
 /// The kind of a literal, an f-string or a comparison, else null.
 const char *literal_kind(const nlohmann::json &expr)
@@ -69,19 +72,24 @@ const char *literal_kind(const nlohmann::json &expr)
     return "str";
   if (v.is_null())
     return "none";
+  if (v.is_number_float())
+    return "float";
   return v.is_number() || v.is_boolean() ? "num" : nullptr;
 }
 
 /// The kind of `a op b` from its operands' kinds: str only for two strs, a
-/// number for numbers, else unknown.
+/// float for `/` or a float operand, a number for numbers, else unknown.
 const char *binop_kind(
   const std::set<std::string> &left,
-  const std::set<std::string> &right)
+  const std::set<std::string> &right,
+  const std::string &op)
 {
   if (left == std::set<std::string>{"str"} && right == left)
     return "str";
   if (left.count("str") || right.count("str"))
     return nullptr;
+  if (op == "Div" || left.count("float") || right.count("float"))
+    return "float";
   return left.count("num") || right.count("num") ? "num" : nullptr;
 }
 
@@ -123,13 +131,14 @@ void value_kinds::index(const nlohmann::json &node, const nlohmann::json *scope)
   }
 }
 
-bool value_kinds::may_be_non_number(
+bool value_kinds::may_be_non_int(
   const nlohmann::json &expr,
   const nlohmann::json &scope)
 {
   std::set<std::string> kinds;
   kinds_of(expr, scope, kinds, 0);
-  return kinds.size() > 1 || kinds.count("str") || kinds.count("none");
+  return kinds.size() > 1 || kinds.count("str") || kinds.count("none") ||
+         kinds.count("float");
 }
 
 const nlohmann::json &
@@ -340,6 +349,12 @@ void value_kinds::call_kinds(
   const nlohmann::json &func = call["func"];
   if (node_type(func) == "Name" && !top_level_def(func.value("id", "")))
   {
+    // abs() returns its argument's kind.
+    if (func.value("id", "") == "abs" && call["args"].size() == 1)
+    {
+      kinds_of(call["args"][0], scope, out, depth + 1);
+      return;
+    }
     const std::string kind = builtin_kind(func.value("id", ""));
     if (!kind.empty())
     {
@@ -391,7 +406,7 @@ void value_kinds::kinds_of(
     std::set<std::string> left, right;
     kinds_of(expr["left"], scope, left, depth + 1);
     kinds_of(expr["right"], scope, right, depth + 1);
-    if (const char *kind = binop_kind(left, right))
+    if (const char *kind = binop_kind(left, right, node_type(expr["op"])))
       out.insert(kind);
   }
   else if (t == "UnaryOp")

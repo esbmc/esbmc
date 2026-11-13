@@ -888,6 +888,7 @@ protected:
   expr2tc
   isinstance_subject_of(const isinstance2t &obj, bool *beside_null = nullptr);
   void guard_isinstance_beside_null(expr2tc &expr);
+  void split_isinstance_over_objects(expr2tc &expr);
 
   void volatile_check(expr2tc &expr);
 

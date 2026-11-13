@@ -918,8 +918,10 @@ std::optional<exprt> dispatch_one_arg_string_methods(
       arg_name,
       0,
       method_name + "() requires one argument");
-    return (self.*handler)(
-      get_receiver_expr(), converter.get_expr(*arg_node), get_location());
+    const exprt receiver = get_receiver_expr();
+    const exprt argument = self.read_tagged_str_argument(
+      converter.get_expr(*arg_node), method_name, get_location());
+    return (self.*handler)(receiver, argument, get_location());
   }
 
   return std::nullopt;
@@ -1048,6 +1050,8 @@ std::optional<exprt> dispatch_search_string_methods(
     return folded;
   search_args_parsedt parsed =
     parse_string_search_args(method_name, args, keyword_values, converter);
+  parsed.needle =
+    self.read_tagged_str_argument(parsed.needle, method_name, get_location());
 
   if (method_name == "find")
   {

@@ -1825,8 +1825,13 @@ exprt function_call_expr::build_constant_from_arg() const
   // Simply changing expr.type() on an integer expression creates IR where
   // the type tag says float but the operation is bitvector arithmetic,
   // causing sort mismatches in the SMT encoder.
+  // A call statement nested in that cast is never hoisted, and reaches the
+  // solver as is (#10359).
   if (func_name == "float" && !expr.type().is_floatbv())
+  {
+    converter_.convert_function_call_to_side_effect(expr);
     return build_float_conversion(guard_none_to_float(expr), t);
+  }
 
   if (func_name != "str")
     expr = retype_or_typecast(expr, t);
@@ -3302,6 +3307,11 @@ exprt function_call_expr::handle_list_sort() const
   size_t float_type_id = 0;
   converter_.get_element_type_registry().type_flags(
     list_id, converter_.get_type_handler(), type_flag, float_type_id);
+  // Element reads are typed by position, and the positions of the int and
+  // float elements after the sort depend on their values.
+  if (type_flag == 3)
+    throw std::runtime_error(
+      "Unsupported: sort() over a list mixing int and float");
 
   // ── Locate the C model function ────────────────────────────────────────────
   const symbolt *sort_func =
@@ -3324,13 +3334,6 @@ exprt function_call_expr::handle_list_sort() const
   // __ESBMC_list_reverse model. Wrap both calls in a code_blockt.
   if (reverse.is_false())
     return sort_call;
-  // The element type registry is reversed at conversion time, so a reverse
-  // known only at run time needs elements of one type, which it leaves
-  // unchanged.
-  if (!reverse.is_true() && type_flag == 3)
-    throw std::runtime_error(
-      "sort(reverse=...) over a mixed int/float list requires a constant "
-      "boolean");
 
   const symbolt *reverse_func =
     converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_reverse");
@@ -3851,6 +3854,8 @@ exprt function_call_expr::handle_list_method() const
 {
   const std::string &method_name = function_id_.get_function();
 
+  if (python_list::is_typed(call_))
+    return handle_typed_list_method();
   if (method_name == "append")
     return handle_list_append();
   if (method_name == "insert")
@@ -4201,6 +4206,22 @@ exprt function_call_expr::handle_numpy_astype() const
     converter_.update_symbol(*converter_.current_lhs);
   }
   return build_symbol(result_sym);
+}
+
+/// A method call on a typed list (#10451), one the gate's _METHOD_RULES
+/// accepted.
+exprt function_call_expr::handle_typed_list_method() const
+{
+  const std::string &method_name = function_id_.get_function();
+  python_list list(converter_, call_);
+  const exprt receiver = converter_.get_expr(call_["func"]["value"]);
+  if (method_name == "append")
+    return list.typed_append(receiver, converter_.get_expr(call_["args"][0]));
+  if (method_name == "copy")
+    return list.typed_copy(receiver);
+  if (method_name == "extend")
+    return list.typed_extend(receiver, converter_.get_expr(call_["args"][0]));
+  throw std::runtime_error("Unsupported typed list method: " + method_name);
 }
 
 exprt function_call_expr::handle_list_append() const
@@ -7188,24 +7209,17 @@ std::optional<exprt> function_call_expr::fold_sum_over_tuple(
   return migrate_expr_back(acc);
 }
 
-std::optional<exprt> function_call_expr::build_mixed_numeric_call(
-  const exprt &list_arg,
-  const std::string &list_id,
-  bool has_default_kwarg)
+std::optional<exprt>
+function_call_expr::build_mixed_numeric_call(const std::string &list_id)
 {
   const std::string &func_name = function_id_.get_function();
-  if (func_name == "sorted" && sorts_mixed_numeric(list_id))
+  if (
+    (func_name != "sorted" && func_name != "min" && func_name != "max") ||
+    !sorts_mixed_numeric(list_id))
+    return std::nullopt;
+  if (func_name == "sorted")
     return sort_mixed_numeric_literal();
-  if (!converter_.get_element_type_registry().has_mixed_numeric(list_id))
-    return std::nullopt;
-  // Inline the comparison to avoid type confusion when passing the list to
-  // the max_float/min_float models.
-  if ((func_name != "min" && func_name != "max") || has_default_kwarg)
-    return std::nullopt;
-  irep_idt comparison_op = (func_name == "max") ? exprt::i_gt : exprt::i_lt;
-  python_list list_helper(converter_, call_["args"][0]);
-  return list_helper.build_min_max_for_mixed_numeric(
-    list_arg, list_id, func_name, comparison_op);
+  return select_mixed_numeric_literal(func_name == "max");
 }
 
 namespace
@@ -7303,6 +7317,27 @@ bool constant_reverse_keyword(const nlohmann::json &call)
   }
   return reverse;
 }
+
+// The elements of a literal of int and float constants, in order.
+std::vector<std::pair<numeric_constant, nlohmann::json>>
+mixed_numeric_literal(const nlohmann::json &arg, const std::string &func_name)
+{
+  const std::string unsupported = "Unsupported: " + func_name +
+                                  "() over a mixed int/float list that is not "
+                                  "a literal of numeric constants";
+  if (arg.value("_type", "") != "List")
+    throw std::runtime_error(unsupported);
+
+  std::vector<std::pair<numeric_constant, nlohmann::json>> elements;
+  for (const auto &elt : arg["elts"])
+  {
+    const std::optional<numeric_constant> value = numeric_constant_of(elt);
+    if (!value)
+      throw std::runtime_error(unsupported);
+    elements.emplace_back(*value, elt);
+  }
+  return elements;
+}
 } // namespace
 
 bool function_call_expr::sorts_mixed_numeric(const std::string &list_id) const
@@ -7329,24 +7364,25 @@ bool function_call_expr::sorts_mixed_numeric(const std::string &list_id) const
   return has_int && has_float;
 }
 
+exprt function_call_expr::select_mixed_numeric_literal(bool is_max)
+{
+  const auto elements =
+    mixed_numeric_literal(call_["args"][0], function_id_.get_function());
+  // The first of equal extremes wins, as in Python.
+  auto best = elements.begin();
+  for (auto it = std::next(best); it != elements.end(); ++it)
+    if (
+      is_max ? numeric_less(best->first, it->first)
+             : numeric_less(it->first, best->first))
+      best = it;
+  return converter_.get_expr(best->second);
+}
+
 exprt function_call_expr::sort_mixed_numeric_literal()
 {
   const bool reverse = constant_reverse_keyword(call_);
   const nlohmann::json &arg = call_["args"][0];
-  const std::string unsupported =
-    "Unsupported: sorted() over a mixed int/float list that is not a literal "
-    "of numeric constants";
-  if (arg.value("_type", "") != "List")
-    throw std::runtime_error(unsupported);
-
-  std::vector<std::pair<numeric_constant, nlohmann::json>> elements;
-  for (const auto &elt : arg["elts"])
-  {
-    const std::optional<numeric_constant> value = numeric_constant_of(elt);
-    if (!value)
-      throw std::runtime_error(unsupported);
-    elements.emplace_back(*value, elt);
-  }
+  auto elements = mixed_numeric_literal(arg, "sorted");
 
   // Python's sort is stable for reverse=True too, so equal elements keep
   // their order either way.
@@ -7433,9 +7469,7 @@ std::optional<exprt> function_call_expr::apply_builtin_dispatch(
         converter_.get_element_type_registry().homogeneous_element_type(
           list_id, func_name);
 
-      if (
-        std::optional<exprt> mixed =
-          build_mixed_numeric_call(list_arg, list_id, has_default_kwarg))
+      if (std::optional<exprt> mixed = build_mixed_numeric_call(list_id))
         return mixed;
     }
     reject_unfoldable_key(call_, func_name, is_sorted_min_max);

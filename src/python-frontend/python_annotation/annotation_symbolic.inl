@@ -160,7 +160,8 @@ void python_annotation<Json>::rewrite_specialized_calls(
   const std::string &original_name,
   size_t param_index,
   const std::unordered_map<std::string, std::string> &specialized_names,
-  Json &node)
+  Json &node,
+  const caller_scopet &scope)
 {
   if (node.is_object())
   {
@@ -172,7 +173,8 @@ void python_annotation<Json>::rewrite_specialized_calls(
       node.contains("args") && node["args"].is_array() &&
       param_index < node["args"].size())
     {
-      std::string arg_type = get_argument_type(node["args"][param_index]);
+      // Typed in the caller's scope, as specializable_at_call_sites typed it.
+      std::string arg_type = caller_arg_type(node["args"][param_index], scope);
       if (
         arg_type.empty() && node["args"][param_index].contains("_type") &&
         node["args"][param_index]["_type"] == "Name" &&
@@ -188,15 +190,16 @@ void python_annotation<Json>::rewrite_specialized_calls(
         node["func"]["id"] = it->second;
     }
 
+    const caller_scopet inner = inner_scope(node, scope);
     for (auto it = node.begin(); it != node.end(); ++it)
       rewrite_specialized_calls(
-        original_name, param_index, specialized_names, it.value());
+        original_name, param_index, specialized_names, it.value(), inner);
   }
   else if (node.is_array())
   {
     for (auto &element : node)
       rewrite_specialized_calls(
-        original_name, param_index, specialized_names, element);
+        original_name, param_index, specialized_names, element, scope);
   }
 }
 
@@ -327,7 +330,7 @@ void python_annotation<Json>::apply_pending_specializations()
       insert_it, specialized_nodes.begin(), specialized_nodes.end());
 
     rewrite_specialized_calls(
-      func_name, param_index, specialized_names, ast_);
+      func_name, param_index, specialized_names, ast_, caller_scopet());
 
     if (deferred_none_functions_.count(func_name) != 0)
       for (Json &node : ast_["body"])

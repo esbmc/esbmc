@@ -42,6 +42,7 @@ _CAP = 32
 _PREFIX = "_esbmc_fv"
 _HOISTED = "_esbmc_hc"
 _INLINED = "_esbmc_in"
+_LAMBDA_PARAM = "_esbmc_lp_"
 # Marks left on nodes between checking a use and rewriting it.
 _SITE = "esbmc_fv_site"
 _CODE = "esbmc_fv_code"
@@ -249,6 +250,76 @@ def _reads_before_store(steps, last, local):
         if isinstance(st, ast.Assign):
             stored |= {t.id for t in st.targets}
     return False
+
+
+def _lambdas_as_defs(module):
+    """Rewrite each module-level `f = lambda ...: body` to `def f(...): return body`, so that a
+    lambda calling its parameter dispatches like such a def. Only when the assignment is the
+    one binding of `f` and every read of `f` calls it, so nothing sees the function's name."""
+    for i, stmt in enumerate(module.body):
+        if not (isinstance(stmt, ast.Assign) and len(stmt.targets) == 1
+                and isinstance(stmt.targets[0], ast.Name) and isinstance(stmt.value, ast.Lambda)):
+            continue
+        name = stmt.targets[0].id
+        if _binds_elsewhere(module, name, stmt.targets[0]) or not _only_called(module, name):
+            continue
+        lam = _unshadowed(stmt.value, name, module)
+        if lam is None:
+            continue
+        fn = ast.FunctionDef(name=name,
+                             args=lam.args,
+                             body=[ast.Return(lam.body)],
+                             decorator_list=[],
+                             returns=None,
+                             type_params=[])
+        module.body[i] = ast.fix_missing_locations(ast.copy_location(fn, stmt))
+
+
+def _unshadowed(lam, name, module):
+    """`lam` with a parameter named `name` renamed, so the def `name` does not shadow itself.
+    None when the parameter cannot be renamed."""
+    params = lam.args.posonlyargs + lam.args.args
+    if all(p.arg != name for p in params + lam.args.kwonlyargs):
+        return lam
+    fresh = _LAMBDA_PARAM + name
+    if not _renamable(lam, name, fresh, module):
+        return None
+    for node in [p for p in params if p.arg == name]:
+        node.arg = fresh
+    for node in ast.walk(lam.body):
+        if isinstance(node, ast.Name) and node.id == name:
+            node.id = fresh
+    return lam
+
+
+def _renamable(lam, name, fresh, module):
+    """Whether the positional parameter `name` of `lam` can become `fresh`: the body has no
+    scope of its own, `fresh` is unused and no call passes `name` by keyword."""
+    keywords = {k.arg for n in ast.walk(module) if isinstance(n, ast.Call) for k in n.keywords}
+    return name in [p.arg for p in lam.args.posonlyargs + lam.args.args] and \
+        not any(isinstance(n, _NESTED) for n in ast.walk(lam.body)) and \
+        fresh not in _bound_names([module]) and name not in keywords
+
+
+def _binds_elsewhere(module, name, target):
+    """Whether `module` binds `name` other than at `target`. A parameter of that name is a
+    local of its own scope, so it does not count."""
+    for node in ast.walk(module):
+        if isinstance(node, ast.Name) and node.id == name and not isinstance(
+                node.ctx, ast.Load) and node is not target:
+            return True
+        if name in (getattr(node, "name", None), getattr(node, "asname", None)) or isinstance(
+                node, (ast.Global, ast.Nonlocal)) and name in node.names:
+            return True
+    return False
+
+
+def _only_called(module, name):
+    """Every read of `name` in `module` is the callee of a call."""
+    parents = _parents(module)
+    return all(
+        isinstance(parents[id(n)], ast.Call) and parents[id(n)].func is n for n in ast.walk(module)
+        if isinstance(n, ast.Name) and n.id == name and isinstance(n.ctx, ast.Load))
 
 
 def _inline_once_defs(module):
@@ -1592,6 +1663,7 @@ def dispatch_mixed_function_values(module, path):
         specialise_function_parameters_in_order(module)
         return
     try:
+        _lambdas_as_defs(candidate)
         _inline_once_defs(candidate)
         original = _propagated(candidate, path)
         lifted = lift_nested_defs(candidate,

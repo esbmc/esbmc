@@ -796,6 +796,7 @@ private:
 
   void load_c_intrisics(code_blockt &block);
 
+  bool rhs_skips_type_probe(const nlohmann::json &value) const;
   void get_var_assign(const nlohmann::json &ast_node, codet &target_block);
 
   void preregister_global_variables(const nlohmann::json &ast_body);
@@ -2028,6 +2029,7 @@ private:
   exprt get_class_dunder_attribute(const nlohmann::json &element);
   exprt get_class_attribute(const nlohmann::json &element);
   exprt get_class_name(const nlohmann::json &value);
+  exprt get_function_name(const nlohmann::json &value);
   exprt
   get_module_member(const std::string &var_name, const nlohmann::json &element);
   void reject_method_value(const std::string &class_name, const std::string &m)

@@ -74,6 +74,7 @@ public:
   preprocess_receiver_method_calls(bool inside_functions = false);
   void retype_methods_called_on_receivers();
   bool preprocess_self_method_calls();
+  void settle_self_method_calls();
   std::string self_call_arg_type(const Json &arg, const Json &caller);
   bool is_instance_call(const Json &func) const;
   bool receiver_method_call(
@@ -221,6 +222,9 @@ private:
   std::string get_dict_literal_type(const Json &dict_value);
   std::string get_call_type(const Json &arg);
   std::string module_call_type(const Json &call);
+  std::string
+  specialised_call_type(const std::string &func_name, const Json &call);
+  std::string user_method_call_type(const Json &call);
   std::string get_attribute_type(const Json &arg);
   std::string class_attribute_type(
     const std::string &cls,
@@ -356,11 +360,21 @@ private:
     const std::string &class_name) const;
   std::string
   resolve_name_assigned_class(const std::string &name, const Json &node);
+  struct caller_scopet
+  {
+    std::string root;
+    std::string ctx;
+    std::string class_prefix;
+    bool in_lambda = false;
+  };
+  static caller_scopet
+  inner_scope(const Json &node, const caller_scopet &scope);
   void rewrite_specialized_calls(
     const std::string &original_name,
     size_t param_index,
     const std::unordered_map<std::string, std::string> &specialized_names,
-    Json &node);
+    Json &node,
+    const caller_scopet &scope);
   void apply_pending_specializations();
   // Returns the ancestors of a class (including itself) in BFS order via
   // "bases". Handles multiple inheritance and cycle-safe (visited guard).
@@ -409,13 +423,6 @@ private:
   std::string infer_parameter_type_from_calls(
     size_t param_index,
     const std::vector<Json> &function_calls);
-  struct caller_scopet
-  {
-    std::string root;
-    std::string ctx;
-    std::string class_prefix;
-    bool in_lambda = false;
-  };
   std::string caller_arg_type(const Json &arg, const caller_scopet &scope);
   void collect_caller_arg_types(
     const std::string &callee,
@@ -426,7 +433,8 @@ private:
   std::vector<std::string> caller_arg_types(
     const std::string &func_name,
     size_t index,
-    const Json &search_context);
+    const Json &search_context,
+    const std::string &root);
   std::string infer_parameter_type_at_call_sites(
     const std::string &func_name,
     size_t param_index,
@@ -436,7 +444,8 @@ private:
     const std::string &func_name,
     size_t param_index,
     std::vector<std::string> &call_types,
-    const Json &search_context);
+    const Json &search_context,
+    const std::string &call_site_context);
   void infer_parameter_types(Json &function_element);
 
   // ----- top-level orchestration entry points -----
@@ -483,6 +492,8 @@ private:
   // re-entry means the self-reference is indirect (the returned name's binding
   // calls the function), which the return-expression scan cannot see.
   std::set<std::string> functions_reentered_;
+  // Functions whose per-call return type specialised_call_type is computing.
+  std::set<std::string> specialising_calls_;
   std::set<std::string> resolving_rhs_vars_;
   // Per (scope, name): the Optional[T] annotation of a name stored None and
   // one scalar type T, decided before any of its stores is annotated.
