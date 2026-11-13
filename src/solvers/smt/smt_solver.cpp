@@ -1808,26 +1808,8 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
     // Reads reduce in the simplifier; only a use of the whole array gets
     // here. Name it and define every element with a quantifier.
     const array_lambda2t &lambda = to_array_lambda2t(expr);
-    const array_type2t &arr_type = to_array_type(expr->type);
-    // ponytail: a small constant size is spelled out element by element,
-    // since a quantifier costs more there; past the limit, the forall.
-    if (
-      !arr_type.size_is_infinite && is_constant_int2t(arr_type.array_size) &&
-      to_constant_int2t(arr_type.array_size).value <= (1 << 20))
-    {
-      std::vector<expr2tc> members;
-      const uint64_t size =
-        to_constant_int2t(arr_type.array_size).value.to_uint64();
-      for (uint64_t k = 0; k < size; ++k)
-      {
-        expr2tc element = index2tc(
-          arr_type.subtype, expr, constant_int2tc(lambda.binder->type, k));
-        simplify(element);
-        members.push_back(element);
-      }
-      a = convert_ast(constant_array2tc(expr->type, members));
-      break;
-    }
+    // Spelling out the elements instead measured slower on TRUE tasks
+    // (k-induction re-encodes them every step), as slow as unwinding.
     const expr2tc array = symbol2tc(
       expr->type, fmt::format("__ESBMC_array_lambda_{}", quantifier_counter));
     const expr2tc bound = symbol2tc(
@@ -1835,6 +1817,7 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
       fmt::format("__ESBMC_quantifier_{}", quantifier_counter++));
     expr2tc body = lambda.body->clone();
     replace_name_in_body(lambda.binder, bound, body);
+    const array_type2t &arr_type = to_array_type(expr->type);
     const expr2tc element = index2tc(arr_type.subtype, array, bound);
     expr2tc definition = equality2tc(element, body);
     // The solver narrows the index to the bits the size needs, so indices
