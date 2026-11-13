@@ -1992,31 +1992,7 @@ std::string python_annotation<Json>::get_type_from_binary_expr(
   {
     // If the LHS of the binary operation is a variable, its type is retrieved
     if (lhs["_type"] == "Name")
-    {
-      // Retrieve the type from the variable declaration within the current
-      // function body
-      Json left_op = find_annotated_assign(lhs["id"], body["body"]);
-
-      // If not found in the function body, try to retrieve it from the function
-      // arguments
-      if (left_op.empty() && body.contains("args"))
-        left_op = find_annotated_assign(lhs["id"], body["args"]["args"]);
-
-      // Check current function scope for function parameters
-      if (
-        left_op.empty() && current_func != nullptr &&
-        (*current_func).contains("args"))
-      {
-        left_op =
-          find_annotated_assign(lhs["id"], (*current_func)["args"]["args"]);
-      }
-
-      type = operand_annotation_type(left_op);
-      // As a fallback, check global scope for prior annotation
-      if (type.empty())
-        type = operand_annotation_type(
-          find_annotated_assign(lhs["id"], ast_["body"]));
-    }
+      type = name_operand_type(lhs, body);
     else if (lhs["_type"] == "UnaryOp")
     {
       const auto &operand = lhs["operand"];
@@ -2123,6 +2099,31 @@ python_annotation<Json>::named_call_type(const Json &call, const Json &body)
       return std::nullopt;
     throw;
   }
+}
+
+/// The type of a name operand: its annotation as a local, a parameter or a
+/// global, or else str when its only binding is a str. Arguments type an
+/// unannotated parameter before the caller's assignments are annotated, so
+/// without the last step `t1 + t2` of two str names is not a str (#10520).
+template <class Json>
+std::string
+python_annotation<Json>::name_operand_type(const Json &name, const Json &body)
+{
+  const std::string id = name["id"];
+  Json decl = find_annotated_assign(id, body["body"]);
+  if (decl.empty() && body.contains("args"))
+    decl = find_annotated_assign(id, body["args"]["args"]);
+  if (
+    decl.empty() && current_func != nullptr && (*current_func).contains("args"))
+    decl = find_annotated_assign(id, (*current_func)["args"]["args"]);
+  std::string type = operand_annotation_type(decl);
+  if (type.empty())
+    type = operand_annotation_type(find_annotated_assign(id, ast_["body"]));
+  if (
+    type.empty() && !is_rebound_in_scope(id) &&
+    get_argument_type(name) == "str")
+    type = "str";
+  return type;
 }
 
 /// The type a declaration's annotation names, or empty. A `list[T]` or

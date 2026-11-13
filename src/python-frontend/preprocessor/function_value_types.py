@@ -378,12 +378,53 @@ class _Analysis:
         path = self.local_module(".".join(imports[node.id].split(".") + list(reversed(dotted[1:]))))
         if path is None:
             return None
-        stmt = self.module_def(path, expr.attr)
+        stmt = self.module_def(path, expr.attr) or self.aliased_def(path, expr.attr)
         if stmt is None:
             return None
-        key = ("imported", path, stmt.name)
-        self.add_member(key, stmt, f"{imports[node.id]}.{stmt.name}", self.def_kind(stmt))
+        key = ("imported", path, expr.attr)
+        self.add_member(key, stmt, f"{imports[node.id]}.{expr.attr}", self.def_kind(stmt))
         return key
+
+    def aliased_def(self, path, name):
+        """The function that the one binding of `name` in the module at `path`, an assignment
+        `name = f` or `name = m.f`, names: a def of that module or of a module it imports."""
+        from preprocessor.function_value_methods import _binding_count
+        tree = self._load(path)
+        if _binding_count(tree, name) != 1:
+            return None
+        value = next((stmt.value for stmt in tree.body
+                      if isinstance(stmt, ast.Assign) and [ast.unparse(t)
+                                                           for t in stmt.targets] == [name]), None)
+        if isinstance(value, ast.Name) and _binding_count(tree, value.id) == 1:
+            return self.module_def(path, value.id)
+        if (isinstance(value, ast.Attribute) and isinstance(value.value, ast.Name)
+                and _binding_count(tree, value.value.id) == 1):
+            module = self.imported_module(tree, path, value.value.id)
+            return module and self.module_def(module, value.attr)
+        return None
+
+    def imported_module(self, tree, path, name):
+        """The source file of the local module a top-level import binds to `name` in `tree`,
+        the module at `path`, or None."""
+        for stmt in tree.body:
+            if not isinstance(stmt, (ast.Import, ast.ImportFrom)):
+                continue
+            for alias in stmt.names:
+                if (alias.asname or alias.name) != name:
+                    continue
+                if isinstance(stmt, ast.Import):
+                    return self.local_module(alias.name)
+                dotted = ".".join(filter(None, [stmt.module, alias.name]))
+                if stmt.level == 0:
+                    return self.local_module(dotted)
+                base = os.path.abspath(path)
+                for _ in range(stmt.level):
+                    base = os.path.dirname(base)
+                module = os.path.join(base, *dotted.split("."))
+                return next((candidate
+                             for candidate in (module + ".py", os.path.join(module, "__init__.py"))
+                             if os.path.isfile(candidate)), None)
+        return None
 
     def call(self, expr, scope):
         """Record a call of a method by its name or of a function value."""
