@@ -2040,6 +2040,7 @@ reuses_c_model(const nlohmann::json &call, const symbol_id &function_id)
            call["func"].value("_type", "") == "Attribute");
 }
 
+// A typed list's builder and sorted() lower to their C models (#10451).
 // __ESBMC_unreachable and __ESBMC_unroll lower to calls to the C intrinsics
 // of the same names. Symex's intrinsic handler in symex_main.cpp fires on
 // __ESBMC_unreachable under --enable-unreachability-intrinsic.
@@ -2050,6 +2051,10 @@ exprt function_call_builder::build_c_intrinsic_call(
   const symbol_id &function_id) const
 {
   const std::string &func_name = function_id.get_function();
+  // A typed list's nondet_list(nondet_int) builder or sorted() (#10451).
+  if (python_list::is_typed_call(call_))
+    return python_list(converter_, call_).typed_call(func_name);
+
   const bool is_unroll = func_name == kEsbmcUnroll;
   if (!is_unroll && !is_unreachable_call(function_id))
     return nil_exprt();
@@ -2205,6 +2210,7 @@ exprt function_call_builder::build() const
       throw std::runtime_error("__ESBMC_assume requires one boolean argument");
 
     exprt condition = converter_.get_expr(call_["args"][0]);
+    converter_.convert_function_call_to_side_effect(condition);
     if (!condition.type().is_bool())
       condition = build_typecast(condition, bool_type());
 
@@ -2226,6 +2232,7 @@ exprt function_call_builder::build() const
         "__ESBMC_assert takes one or two arguments (cond[, msg])");
 
     exprt condition = converter_.get_expr(args[0]);
+    converter_.convert_function_call_to_side_effect(condition);
     if (!condition.type().is_bool())
       condition = build_typecast(condition, bool_type());
 

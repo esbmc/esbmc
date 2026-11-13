@@ -1,0 +1,6 @@
+regression/python/range_literal_step_no_claim
+regression/python/range_variable_step_claim
+regression/python/range_zero_step_caught
+regression/python/range_zero_step_caught_fail
+regression/python/range_zero_step_check_exceptions
+regression/python/range_zero_step_check_exceptions_fail

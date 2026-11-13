@@ -1,0 +1,4 @@
+CORE
+main.c
+--sv-comp --timeout 60s
+^VERIFICATION FAILED$

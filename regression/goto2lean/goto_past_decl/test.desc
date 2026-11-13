@@ -1,0 +1,5 @@
+CORE
+main.c
+--goto2lean
+^    let join_2 := \(fun \(x : BitVec 32\) =>$
+^      join_2 x\) ∧$

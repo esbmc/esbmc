@@ -75,6 +75,7 @@ void link_python_model_bodies([[maybe_unused]] goto_functionst &goto_functions)
 #include <goto-programs/mark_decl_as_non_det.h>
 #include <goto-programs/assign_params_as_non_det.h>
 #include <goto2c/goto2c.h>
+#include <goto2lean/goto2lean.h>
 #include <util/irep/irep.h>
 #include <langapi/languages.h>
 #include <langapi/mode.h>
@@ -230,17 +231,16 @@ void esbmc_parseoptionst::configure_sv_comp_threads(
     options.set_option("incremental-bmc", true);
   }
 
-  // A truncated schedule space still reports SUCCESSFUL, so this trades the
-  // soundness of "true" verdicts for coverage.
-  if (!cmdline.isset("context-bound"))
-    options.set_option("context-bound", "3");
+  // No --context-bound default: a truncated schedule space would still report
+  // SUCCESSFUL, so only the falsification rounds below are bounded.
   options.set_option("cswitch-skip-readonly-globals", true);
-  // One bounded round first can only report a violation (#6831, #6947); it
-  // cannot run with --multi-property.
+  // Bounded rounds first can only report a violation (#6831, #6947); they
+  // cannot run with --multi-property. A boost default makes cmdline.isset
+  // true, so test the option itself (#8220).
   if (
-    !cmdline.isset("falsify-context-bound") &&
+    options.get_option("falsify-context-bound").empty() &&
     !options.get_bool_option("multi-property"))
-    options.set_option("falsify-context-bound", "1");
+    options.set_option("falsify-context-bound", "3");
 
   // --smt-symex-guard makes sibling schedules share a solver context (#6831,
   // #7043). A data-race run keeps a race claim open on every schedule and
@@ -938,6 +938,51 @@ bool esbmc_parseoptionst::parse_goto_program(
   return false;
 }
 
+// With --goto2lean, writes the Lean translation and exits.
+static void translate_to_lean_if_requested(
+  const cmdlinet &cmdline,
+  const optionst &options,
+  const namespacet &ns,
+  const goto_functionst &goto_functions)
+{
+  if (!cmdline.isset("goto2lean"))
+    return;
+  const std::string entry = cmdline.isset("function")
+                              ? cmdline.getval("function")
+                              : std::string("main");
+  // driver.cpp removed any earlier --output file before the front end ran.
+  const std::string &filename = options.get_option("output");
+  std::string res;
+  try
+  {
+    res = goto2leant(
+            ns,
+            goto_functions,
+            entry,
+            options.get_bool_option("int-encoding"),
+            !options.get_bool_option("no-div-by-zero-check"))
+            .translate();
+  }
+  catch (const goto2lean_unsupported &e)
+  {
+    log_error("{}", e.what());
+    std::exit(1);
+  }
+  if (!filename.empty())
+  {
+    std::ofstream out(filename);
+    out << res;
+    if (!out)
+    {
+      log_error("goto2lean: cannot write {}", filename);
+      std::exit(1);
+    }
+  }
+  else
+    std::cout << res;
+  std::exit(0); // its own status: failures exit 1, front-end errors 6
+}
+
 // This method provides different output methods for the given GOTO program.
 // Depending on the provided options this method can:
 //
@@ -1088,6 +1133,8 @@ bool esbmc_parseoptionst::output_goto_program(
         std::cout << res;
       return true;
     }
+
+    translate_to_lean_if_requested(cmdline, options, ns, goto_functions);
   }
 
   catch (const char *e)
