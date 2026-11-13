@@ -222,6 +222,8 @@ class TypedListGate:
         self.functions = {}
         self.bindings = {}
         self.int_vars = {}
+        self.dict_stores = {}  # dict location: [(stored value, scope)]
+        self.int_dicts = {}
         self.shadowed = set()
         self.verifier_modules = set()
         # Sites recorded once and checked again each round.
@@ -317,9 +319,15 @@ class TypedListGate:
         if isinstance(expr, ast.Call):
             return self._is_int_call(expr)
         if isinstance(expr, ast.Subscript):
-            return (getattr(expr, "_typed_access", False)
-                    and self.classes.typed(scope.loc(expr.value.id)))
+            return self._is_int_subscript(expr, scope)
         return False
+
+    def _is_int_subscript(self, expr, scope):
+        """An item of a typed list or of a dict whose items are ints."""
+        if getattr(expr, "_typed_access", False) and self.classes.typed(scope.loc(expr.value.id)):
+            return True
+        return (isinstance(expr.value, ast.Name) and not isinstance(expr.slice, ast.Slice)
+                and self.int_dicts.get(scope.loc(expr.value.id), False))
 
     def _is_int_call(self, call):
         if call.keywords:
@@ -413,18 +421,53 @@ class TypedListGate:
     def _bind(self, scope, name, value):
         self._bind_location(scope.loc(name), value, scope)
 
+    def _collect_dict_stores(self):
+        """The values stored into each dict variable bound only to dict
+        displays and used only to read or store one item by subscript. Any
+        other binding or use, including one in a nested scope, leaves the
+        dict out."""
+        stores = {
+            loc: [(v, scope) for display, scope in values for v in display.values]
+            for loc, values in self.bindings.items() if loc[1] != RETURN and all(
+                isinstance(v, ast.Dict) and None not in v.keys for v, _ in values)
+        }
+        escaped = set()
+        for scope in self.scopes:
+            escaped |= self._record_dict_uses(scope, stores)
+        self.dict_stores = {loc: values for loc, values in stores.items() if loc not in escaped}
+
+    def _record_dict_uses(self, scope, stores):
+        """Add the values @p scope stores into the dicts of @p stores; the
+        locations it lets escape."""
+        names = set(scope.declared)
+        escaped = set()
+        for node in _walk_scope(scope.body):
+            if isinstance(node, _NESTED_SCOPES):
+                names |= self._nested_names(node, scope)
+            elif isinstance(node, ast.Name) and scope.loc(node.id) in stores:
+                stored = _dict_item_use(node)
+                if stored is _ESCAPES:
+                    escaped.add(scope.loc(node.id))
+                elif stored is not None:
+                    stores[scope.loc(node.id)].append((stored, scope))
+        return escaped | {scope.loc(name) for name in names} | {(MODULE, name) for name in names}
+
     def _compute_int_vars(self):
         """Greatest fixpoint: a variable is int when every binding of it stores
-        an int, given the variables currently assumed int."""
+        an int, and a dict's items are ints when every value stored into it
+        is, given the variables and dicts currently assumed int."""
         self.int_vars = dict.fromkeys(self.bindings, True)
+        self.int_dicts = dict.fromkeys(self.dict_stores, True)
         changed = True
         while changed:
             changed = False
-            for loc, values in self.bindings.items():
-                if self.int_vars[loc] and not all(value is not None and self.is_int(value, scope)
-                                                  for value, scope in values):
-                    self.int_vars[loc] = False
-                    changed = True
+            for facts, sources in ((self.int_vars, self.bindings), (self.int_dicts,
+                                                                    self.dict_stores)):
+                for loc, values in sources.items():
+                    if facts[loc] and not all(value is not None and self.is_int(value, scope)
+                                              for value, scope in values):
+                        facts[loc] = False
+                        changed = True
 
     # --- recording sites ---------------------------------------------------
 
@@ -433,6 +476,10 @@ class TypedListGate:
         its elements are checked later."""
         if isinstance(value, ast.List):
             return not any(isinstance(e, ast.Starred) for e in value.elts)
+        if isinstance(value, ast.BinOp):
+            return _repetition(value) is not None or (isinstance(value.op, ast.Add) and all(
+                isinstance(o, ast.Name) or self._allocation_shape(o)
+                for o in (value.left, value.right)))
         return (isinstance(value, ast.Call) and isinstance(value.func, ast.Name)
                 and value.func.id == _INT_BUILDER and _INT_BUILDER not in self.shadowed
                 and len(value.args) == 1 and not value.keywords
@@ -443,6 +490,12 @@ class TypedListGate:
         if self._allocation_shape(value):
             self.allocations.append((scope, value, loc))
             self.classes.allocate(loc)
+            # A list concatenated into a typed list is read as one, so the
+            # two are typed together.
+            for node in _shape_nodes(value):
+                for operand in _concatenated_names(node):
+                    setattr(operand, "_typed_operand", True)
+                    self.classes.union(loc, scope.loc(operand.id))
         elif isinstance(value, ast.Name):
             self.classes.union(loc, scope.loc(value.id))
         elif self._analysed_call(value):
@@ -489,16 +542,18 @@ class TypedListGate:
                     arg.annotation) and not _allowed_list_annotation(arg.annotation):
                 self.classes.poison_loc((scope.name, arg.arg), "annotated with another list type")
 
-    def _record_nested(self, node, scope):
+    def _nested_names(self, node, scope):
+        """The names nested scope @p node uses."""
         if scope.name == MODULE and node in self.top_defs.values():
             # A followed function is its own scope; only what the definition
             # evaluates here is a use.
             parts = node.decorator_list + node.args.defaults + node.args.kw_defaults
-            names = set().union(*(_names_in(p) for p in parts if p is not None))
-        else:
-            names = _names_in(node)
+            return set().union(*(_names_in(p) for p in parts if p is not None))
+        return _names_in(node)
+
+    def _record_nested(self, node, scope):
         reason = f"used in a nested {type(node).__name__}"
-        for name in names:
+        for name in self._nested_names(node, scope):
             self.classes.poison_loc(scope.loc(name), reason)
             self.classes.poison_loc((MODULE, name), reason)
 
@@ -570,6 +625,11 @@ class TypedListGate:
     # converter needs flagged (see `accesses` and `appends`) and, for a value
     # stored into the list, have it checked to be an int in `_check_values`.
 
+    def _rule_concatenated(self, node, _scope):
+        """An operand of `x + y` built into a list: it was joined to the
+        result when recorded."""
+        return None if getattr(node, "_typed_operand", False) else NOT_MINE
+
     def _rule_len(self, node, _scope):
         parent = _parent(node)
         if not (isinstance(parent, ast.Call) and isinstance(parent.func, ast.Name)
@@ -633,7 +693,8 @@ class TypedListGate:
         return None
 
     # The uses of a list name the typed model implements, tried in order.
-    USE_RULES = (_rule_len, _rule_analysed_call, _rule_alias, _rule_subscript, _rule_method)
+    USE_RULES = (_rule_concatenated, _rule_len, _rule_analysed_call, _rule_alias, _rule_subscript,
+                 _rule_method)
 
     # The list methods it implements.
     METHOD_RULES = {"append": _method_append}
@@ -652,10 +713,9 @@ class TypedListGate:
                 changed = True
 
         for scope, value, loc in self.allocations:
-            if isinstance(value, ast.List) and not all(self.is_int(e, scope) for e in value.elts):
-                poison(loc, "built from a non-int")
-            elif isinstance(value, ast.Call) and not self.is_int(value.args[0], scope):
-                poison(loc, "built with a non-int size")
+            reason = self._allocation_poison(value, scope)
+            if reason is not None:
+                poison(loc, reason)
         for scope, subscript, value in self.accesses:
             loc = scope.loc(subscript.value.id)
             if not self.is_int(subscript.slice, scope):
@@ -666,6 +726,18 @@ class TypedListGate:
             if not self.is_int(call.args[0], scope):
                 poison(scope.loc(call.func.value.id), "appends a non-int")
         return changed
+
+    def _allocation_poison(self, value, scope):
+        """Why allocation @p value may hold a non-int, else None."""
+        for node in _shape_nodes(value):
+            repetition = _repetition(node)
+            if isinstance(node, ast.List) and not all(self.is_int(e, scope) for e in node.elts):
+                return "built from a non-int"
+            if repetition is not None and not all(self.is_int(e, scope) for e in repetition):
+                return "repeats a non-int or a non-int number of times"
+            if isinstance(node, ast.Call) and not self.is_int(node.args[0], scope):
+                return "built with a non-int size"
+        return None
 
     def run(self):
         _unshare(self.module)
@@ -678,6 +750,7 @@ class TypedListGate:
             self._record_scope(scope)
         self._collect_bindings()
         self._poison_unfollowed_bindings()
+        self._collect_dict_stores()
         while True:
             self._compute_int_vars()
             if not self._check_values():
@@ -686,12 +759,14 @@ class TypedListGate:
         for node in ast.walk(self.module):
             node.__dict__.pop("_typed_parent", None)
             node.__dict__.pop("_typed_access", None)
+            node.__dict__.pop("_typed_operand", None)
         return self
 
     def _flag(self):
         for _, value, loc in self.allocations:
             if self.classes.typed(loc):
-                setattr(value, TYPED_FLAG, True)
+                for node in _shape_nodes(value):
+                    setattr(node, TYPED_FLAG, True)
         for scope, subscript, _ in self.accesses:
             if self.classes.typed(scope.loc(subscript.value.id)):
                 setattr(subscript, TYPED_FLAG, True)
@@ -709,6 +784,68 @@ class TypedListGate:
         """(typed, poison reason) for each nondet_list builder site."""
         return [(self.classes.typed(loc), self.classes.poison.get(self.classes.find(loc)))
                 for _, value, loc in self.allocations if isinstance(value, ast.Call)]
+
+
+def _repetition(node):
+    """(element, count) of `[element] * count` or `count * [element]`, else
+    None."""
+    if not (isinstance(node, ast.BinOp) and isinstance(node.op, ast.Mult)):
+        return None
+    for seq, count in ((node.left, node.right), (node.right, node.left)):
+        if isinstance(seq, ast.List) and len(
+                seq.elts) == 1 and not isinstance(seq.elts[0], ast.Starred):
+            return seq.elts[0], count
+    return None
+
+
+def _shape_nodes(value):
+    """The allocations allocation @p value is built from: itself and, through
+    `+`, every operand that is not a list name."""
+    yield value
+    if isinstance(value, ast.BinOp) and isinstance(value.op, ast.Add):
+        for operand in (value.left, value.right):
+            if not isinstance(operand, ast.Name):
+                yield from _shape_nodes(operand)
+
+
+def _concatenated_names(node):
+    if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Add):
+        return [o for o in (node.left, node.right) if isinstance(o, ast.Name)]
+    return []
+
+
+_ESCAPES = object()
+_DICT_ANNOTATIONS = ("dict", "Dict")
+
+
+def _int_dict_annotation(annotation):
+    if isinstance(annotation, ast.Name):
+        return annotation.id in _DICT_ANNOTATIONS
+    return (isinstance(annotation, ast.Subscript) and isinstance(annotation.value, ast.Name)
+            and annotation.value.id in _DICT_ANNOTATIONS
+            and isinstance(annotation.slice, ast.Tuple) and len(annotation.slice.elts) == 2
+            and isinstance(annotation.slice.elts[1], ast.Name)
+            and annotation.slice.elts[1].id == "int")
+
+
+def _dict_item_use(name):
+    """For name @p name of a dict: the value `d[k] = v` stores, None for a
+    read `d[k]` or for the binding itself, _ESCAPES for any other use."""
+    parent = _parent(name)
+    if not isinstance(name.ctx, ast.Load):
+        # The binding of a dict display; its annotation must agree.
+        annotated = isinstance(parent, ast.AnnAssign)
+        return _ESCAPES if annotated and not _int_dict_annotation(parent.annotation) else None
+    if not (isinstance(parent, ast.Subscript) and parent.value is name
+            and not isinstance(parent.slice, ast.Slice)):
+        return _ESCAPES
+    if isinstance(parent.ctx, ast.Load):
+        return None
+    holder = _parent(parent)
+    if isinstance(parent.ctx, ast.Store) and isinstance(holder,
+                                                        ast.Assign) and holder.targets == [parent]:
+        return holder.value
+    return _ESCAPES
 
 
 def _describe(node):

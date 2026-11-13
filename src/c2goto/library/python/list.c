@@ -848,6 +848,47 @@ void __ESBMC_tlist_push(PyListObject *l, long long value)
   l->size++;
 }
 
+/* a + b: a fresh list holding the elements of a, then those of b. */
+PyListObject *__ESBMC_tlist_concat(const PyListObject *a, const PyListObject *b)
+{
+  PyListObject *l = __ESBMC_tlist_create();
+  size_t i = 0;
+  while (i < a->size)
+  {
+    __ESBMC_tlist_push(l, a->slot[i].v);
+    i++;
+  }
+  i = 0;
+  while (i < b->size)
+  {
+    __ESBMC_tlist_push(l, b->slot[i].v);
+    i++;
+  }
+  return l;
+}
+
+/* [value] * count: empty for a count below one, as in CPython. As in
+ * __ESBMC_tlist_nondet, the first 8 elements come from a loop unwound in
+ * full, so a small constant count does not depend on the unwinding bound,
+ * as it does not for an untyped list. */
+PyListObject *__ESBMC_tlist_repeat(long long value, long long count)
+{
+  PyListObject *l = __ESBMC_tlist_create();
+  long long i = 0;
+  __ESBMC_unroll(8);
+  while (i < 8 && i < count)
+  {
+    __ESBMC_tlist_push(l, value);
+    i++;
+  }
+  while (i < count)
+  {
+    __ESBMC_tlist_push(l, value);
+    i++;
+  }
+  return l;
+}
+
 /* The element __ESBMC_list_at would return, with the same claim. */
 PySlot *__ESBMC_tlist_at(PyListObject *l, size_t index)
 {

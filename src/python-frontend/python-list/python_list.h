@@ -68,6 +68,7 @@ public:
   exprt typed_nondet(const exprt &max_size);
   exprt typed_element(const exprt &list, const exprt &index);
   exprt typed_append(const exprt &list, const exprt &value);
+  exprt typed_binop();
 
   /**
    * @brief Materialize a fresh list from already-evaluated element values.
