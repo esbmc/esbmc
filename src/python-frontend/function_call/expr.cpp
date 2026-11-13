@@ -8436,6 +8436,26 @@ static bool names_as_base(const std::string &cls, const nlohmann::json &ast)
          });
 }
 
+// len(f()) of a dict or of a class instance, len(a * 2): a named one takes
+// its own path, but an inline value reaches the size builtin, where strlen
+// would read the struct bytes (#10505).
+exprt function_call_expr::size_of_aggregate(
+  const exprt &arg,
+  const locationt &location)
+{
+  if (!is_size_builtin())
+    return nil_exprt();
+  if (
+    converter_.get_dict_handler()->is_dict_type(
+      converter_.ns.follow(arg.type())))
+    return build_dict_size_call(arg);
+  if (
+    function_id_.get_function() == "strlen" &&
+    converter_.is_user_class_pointer(arg.type()))
+    return len_of_instance(arg, location);
+  return nil_exprt();
+}
+
 exprt function_call_expr::len_of_instance(
   exprt object,
   const locationt &location)
@@ -8771,19 +8791,8 @@ std::optional<exprt> function_call_expr::build_positional_arguments(
       return list_size_func_call;
     }
 
-    // len(f()) where f returns a dict: a named dict takes __ESBMC_len_dict,
-    // but an inline call reaches here and strlen would read the struct bytes.
-    if (
-      is_size_builtin() && converter_.get_dict_handler()->is_dict_type(
-                             converter_.ns.follow(arg.type())))
-      return build_dict_size_call(arg);
-
-    // len(a * 2) or len(f()): the AST names no class, so the instance reaches
-    // here and strlen would read the struct bytes (#10505).
-    if (
-      function_id_.get_function() == "strlen" &&
-      converter_.is_user_class_pointer(arg.type()))
-      return len_of_instance(arg, location);
+    if (exprt size = size_of_aggregate(arg, location); size.is_not_nil())
+      return size;
 
     // Handle function calls used as arguments
     if (arg.is_code() && arg.is_function_call())
