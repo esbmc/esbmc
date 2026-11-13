@@ -65,7 +65,10 @@ bool goto_symext::check_incremental(const expr2tc &expr, const std::string &msg)
   return false;
 }
 
-void goto_symext::claim(const expr2tc &claim_expr, const std::string &msg)
+void goto_symext::claim(
+  const expr2tc &claim_expr,
+  const std::string &msg,
+  bool user_assertion)
 {
   // Can happen when evaluating certain special intrinsics. Gulp.
   if (cur_state->guard.is_false())
@@ -123,7 +126,7 @@ void goto_symext::claim(const expr2tc &claim_expr, const std::string &msg)
     check_incremental(new_expr, msg))
     return; // claim fully resolved by incremental solving
 
-  symex_witness_assert(new_expr, msg);
+  symex_witness_assert(new_expr, msg, user_assertion);
 
   // add assertion to the target equation
   assertion(new_expr, msg);
@@ -662,7 +665,11 @@ void goto_symext::symex_assert()
   simplify_python_builtins(tmp);
 
   claim_skips_deferred = instruction.location.get_bool("ends_path");
-  claim(tmp, msg);
+  claim(
+    tmp,
+    msg,
+    instruction.location.user_provided() &&
+      instruction.location.property() == "assertion");
   claim_skips_deferred = false;
 }
 
@@ -1325,7 +1332,7 @@ void goto_symext::run_intrinsic(
     if (func_call.operands.size() < 2)
       return;
     size_t seg_idx = to_constant_int2t(func_call.operands[0]).value.to_uint64();
-    if (seg_idx != cur_state->cur_seg)
+    if (seg_idx >= cur_state->witness_segs.size())
       return;
 
     // pc has already been incremented past this intrinsic call; step back one
@@ -1350,13 +1357,14 @@ void goto_symext::run_intrinsic(
     expr2tc arg = func_call.operands[1];
     cur_state->rename(arg);
 
+    const expr2tc position = witness_position();
+    const expr2tc active = witness_segment_guard(seg_idx, position);
     if (matched->action == waypoint::avoid)
-      assume(not2tc(arg));
-    else
-      assume(arg);
+      arg = not2tc(arg);
+    assume(implies2tc(active, arg));
 
     if (matched->action != waypoint::avoid)
-      cur_state->advance_witness_position();
+      advance_witness_position(seg_idx, position);
     return;
   }
 

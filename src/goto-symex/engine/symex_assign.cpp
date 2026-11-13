@@ -363,6 +363,7 @@ goto_symext &goto_symext::operator=(const goto_symext &sym)
   total_stack_limit = sym.total_stack_limit;
   no_return_value_opt = sym.no_return_value_opt;
   validate_witness = sym.validate_witness;
+  witness_cursor = sym.witness_cursor;
 
   // Art ptr is shared
   art1 = sym.art1;

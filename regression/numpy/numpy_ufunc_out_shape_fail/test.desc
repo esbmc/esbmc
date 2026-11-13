@@ -1,4 +1,5 @@
 CORE
 main.py
 --incremental-bmc
-^ERROR: ValueError: non-broadcastable output operand with shape \(1,\) doesn't match the broadcast shape \(3,\)$
+^VERIFICATION FAILED$
+^  uncaught exception: ValueError$

@@ -274,11 +274,13 @@ exprt python_list::create_vla(
   symbolt &result = create_list();
 
   // Materialise the count (which may be a compound expression such as m + 1)
-  // into an int symbol to use as the loop bound.
+  // into a symbol of the Python int width: a narrower bound would wrap a large
+  // negative count into a positive one (#10490).
+  const typet count_type = long_long_int_type();
   exprt bound_value =
-    (count.type() == int_type()) ? count : build_typecast(count, int_type());
+    (count.type() == count_type) ? count : build_typecast(count, count_type);
   symbolt &bound = converter_.create_tmp_symbol(
-    element, "$list_rep_count$", int_type(), exprt());
+    element, "$list_rep_count$", count_type, exprt());
   code_declt bound_decl(build_symbol(bound));
   bound_decl.location() = location;
   converter_.add_instruction(bound_decl);
@@ -288,13 +290,13 @@ exprt python_list::create_vla(
 
   // counter = 0
   symbolt &counter = converter_.create_tmp_symbol(
-    element, "counter", int_type(), gen_zero(int_type()));
-  code_assignt counter_code(build_symbol(counter), gen_zero(int_type()));
+    element, "counter", count_type, gen_zero(count_type));
+  code_assignt counter_code(build_symbol(counter), gen_zero(count_type));
   counter_code.location() = location;
   converter_.add_instruction(counter_code);
 
   // while (counter < bound) { push each elem in order; counter += 1; }
-  // (counter and bound are both int_type — same width)
+  // (counter and bound are both count_type — same width)
   exprt cond = build_less_than(build_symbol(counter), build_symbol(bound));
 
   code_blockt then;
@@ -302,7 +304,7 @@ exprt python_list::create_vla(
     then.copy_to_operands(build_push_list_call(result, element, list_elem));
 
   exprt incr =
-    build_add(build_symbol(counter), gen_one(int_type()), int_type());
+    build_add(build_symbol(counter), gen_one(count_type), count_type);
   code_assignt update(build_symbol(counter), incr);
   then.copy_to_operands(update);
 
