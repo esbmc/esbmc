@@ -233,12 +233,56 @@ void goto_symext::guard_isinstance_beside_null(expr2tc &expr)
   expr = and2tc(notequal2tc(operand, gen_zero(operand->type)), answer);
 }
 
+// isinstance on a pointer the value set pairs with several objects: one
+// answer per object, each under the condition that the pointer points to it.
+// Answering from one of them alone decides the test for every path.
+void goto_symext::split_isinstance_over_objects(expr2tc &expr)
+{
+  if (
+    !is_isinstance2t(expr) || asks_whether_traced(to_isinstance2t(expr).side_2))
+    return;
+  const isinstance2t &obj = to_isinstance2t(expr);
+  if (!is_pointer_type(obj.side_1->type) || is_tuple_element(obj.side_1))
+    return;
+
+  expr2tc l1_value = obj.side_1;
+  cur_state->top().level1.rename(l1_value);
+  value_setst::valuest value_set;
+  cur_state->value_set.get_value_set(l1_value, value_set);
+  std::vector<expr2tc> objects;
+  // An unknown or invalid entry names no object to answer for, as in
+  // isinstance_subject_of.
+  for (const auto &entry : value_set)
+  {
+    if (!is_object_descriptor2t(entry))
+      continue;
+    const expr2tc &object = to_object_descriptor2t(entry).object;
+    if (!is_null_object2t(object))
+      objects.push_back(object);
+  }
+  if (objects.size() < 2)
+    return;
+
+  expr2tc operand = obj.side_1;
+  cur_state->rename(operand);
+  expr2tc result = gen_false_expr();
+  for (const expr2tc &object : objects)
+  {
+    const expr2tc address = address_of2tc(object->type, object);
+    expr2tc answer = isinstance2tc(address, obj.side_2);
+    simplify_python_builtins(answer);
+    result = or2tc(result, and2tc(same_object2tc(operand, address), answer));
+  }
+  expr = result;
+}
+
 void goto_symext::simplify_python_builtins(expr2tc &expr)
 {
   expr->Foreach_operand([this](expr2tc &e) {
     if (!is_nil_expr(e))
       simplify_python_builtins(e);
   });
+  split_isinstance_over_objects(expr);
   guard_isinstance_beside_null(expr);
 
   if (is_isinstance2t(expr))

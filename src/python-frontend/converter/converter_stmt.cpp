@@ -2039,6 +2039,17 @@ void python_converter::handle_list_literal_unpacking(
   }
 }
 
+// Whether an assignment's value has a type known without building it, so
+// get_var_assign need not build it once more to probe its type.
+bool python_converter::rhs_skips_type_probe(const nlohmann::json &value) const
+{
+  const std::string kind = value.value("_type", std::string());
+  // A typed-list operation (#10451) builds a list or an int.
+  return dict_handler_->is_dict_literal(value) || kind == "List" ||
+         kind == "ListComp" || python_list::is_typed(value) ||
+         python_list::reads_typed(value);
+}
+
 exprt python_converter::get_rhs_with_dict_resolution(
   const nlohmann::json &ast_node,
   const typet &target_type)
@@ -5616,7 +5627,10 @@ exprt python_converter::not_callable_function(
   body.copy_to_operands(code_expressiont(
     get_exception_handler().gen_exception_raise(
       "TypeError",
-      "'" + type_handler_.type_to_string(value) + "' object is not callable")));
+      "'" +
+        (value == none_type() ? "NoneType"
+                              : type_handler_.type_to_string(value)) +
+        "' object is not callable")));
   symbol.set_value(body);
   return symbol_expr(*symbol_table_.move_symbol_to_context(symbol));
 }
@@ -8055,9 +8069,8 @@ void python_converter::get_var_assign(
         container_is_list && ast_node.contains("value") &&
         !ast_node["value"].is_null())
       {
-        python_list list_handler(*this, target);
-        list_handler.handle_slice_assignment(
-          container_expr, target["slice"], ast_node["value"]);
+        python_list(*this, target)
+          .assign_slice(container_expr, target["slice"], ast_node["value"]);
         return;
       }
 
@@ -8137,14 +8150,9 @@ void python_converter::get_var_assign(
         // list-construction cost on construction-heavy programs (#5121). Calls
         // are skipped too, to avoid re-running their side effects (e.g. a
         // second list.pop()).
-        const std::string rhs_kind =
-          ast_node["value"].value("_type", std::string());
-        const bool rhs_kind_skips_type_probe =
-          dict_handler_->is_dict_literal(ast_node["value"]) ||
-          rhs_kind == "List" || rhs_kind == "ListComp";
-        if (!rhs_kind_skips_type_probe)
+        if (!rhs_skips_type_probe(ast_node["value"]))
         {
-          if (rhs_kind != "Call")
+          if (ast_node["value"].value("_type", std::string()) != "Call")
           {
             // Discarded probe: suppress the ZeroDivisionError guard so a
             // division here is not emitted (and its divisor not evaluated) an

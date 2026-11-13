@@ -796,6 +796,7 @@ private:
 
   void load_c_intrisics(code_blockt &block);
 
+  bool rhs_skips_type_probe(const nlohmann::json &value) const;
   void get_var_assign(const nlohmann::json &ast_node, codet &target_block);
 
   void preregister_global_variables(const nlohmann::json &ast_body);
@@ -2028,6 +2029,7 @@ private:
   exprt get_class_dunder_attribute(const nlohmann::json &element);
   exprt get_class_attribute(const nlohmann::json &element);
   exprt get_class_name(const nlohmann::json &value);
+  exprt get_function_name(const nlohmann::json &value);
   exprt
   get_module_member(const std::string &var_name, const nlohmann::json &element);
   void reject_method_value(const std::string &class_name, const std::string &m)
@@ -3684,6 +3686,10 @@ private:
   typet optional_return_type(
     const nlohmann::json &function_node,
     const typet &declared);
+  typet union_return_type(
+    const nlohmann::json &return_node,
+    const nlohmann::json &function_node,
+    bool &is_optional);
   exprt wrap_in_optional(const exprt &value, const typet &optional_type);
   /// \p value wrapped when \p type is an Optional<T> struct, else unchanged.
   exprt wrap_if_optional(const exprt &value, const typet &type)

@@ -65,7 +65,10 @@ bool goto_symext::check_incremental(const expr2tc &expr, const std::string &msg)
   return false;
 }
 
-void goto_symext::claim(const expr2tc &claim_expr, const std::string &msg)
+void goto_symext::claim(
+  const expr2tc &claim_expr,
+  const std::string &msg,
+  bool user_assertion)
 {
   // Can happen when evaluating certain special intrinsics. Gulp.
   if (cur_state->guard.is_false())
@@ -123,7 +126,7 @@ void goto_symext::claim(const expr2tc &claim_expr, const std::string &msg)
     check_incremental(new_expr, msg))
     return; // claim fully resolved by incremental solving
 
-  symex_witness_assert(new_expr, msg);
+  symex_witness_assert(new_expr, msg, user_assertion);
 
   // add assertion to the target equation
   assertion(new_expr, msg);
@@ -662,7 +665,11 @@ void goto_symext::symex_assert()
   simplify_python_builtins(tmp);
 
   claim_skips_deferred = instruction.location.get_bool("ends_path");
-  claim(tmp, msg);
+  claim(
+    tmp,
+    msg,
+    instruction.location.user_provided() &&
+      instruction.location.property() == "assertion");
   claim_skips_deferred = false;
 }
 
@@ -685,6 +692,12 @@ require_new_object_pointer_lvalue(const code_function_call2t &func_call)
     get_type_id(func_call.ret->type),
     loc.empty() ? "" : (" at " + loc));
   abort();
+}
+
+/// The type @p ptr points to; nil when @p ptr is nil.
+static type2tc pointee_type_or_nil(const expr2tc &ptr)
+{
+  return is_nil_expr(ptr) ? type2tc() : to_pointer_type(ptr->type).subtype;
 }
 
 void goto_symext::run_intrinsic(
@@ -1297,19 +1310,13 @@ void goto_symext::run_intrinsic(
     return;
   }
 
-  if (has_prefix(symname, "c:@F@__ESBMC_create_inf_obj"))
+  // __ESBMC_create_inf_obj and __ESBMC_create_inf_slots (python/list.c): a
+  // fresh infinite array of what the result points to.
+  if (has_prefix(symname, "c:@F@__ESBMC_create_inf_"))
   {
     assert(func_call.operands.size() == 0 && "Wrong signature");
-
-    const symbolt *list_object_symbol =
-      new_context.find_symbol("tag-struct __ESBMC_PyObj");
-    assert(list_object_symbol);
-
     symex_mem_inf(
-      func_call.ret,
-      migrate_symbol_type(*list_object_symbol),
-      cur_state->guard);
-
+      func_call.ret, pointee_type_or_nil(func_call.ret), cur_state->guard);
     return;
   }
 
@@ -1325,7 +1332,7 @@ void goto_symext::run_intrinsic(
     if (func_call.operands.size() < 2)
       return;
     size_t seg_idx = to_constant_int2t(func_call.operands[0]).value.to_uint64();
-    if (seg_idx != cur_state->cur_seg)
+    if (seg_idx >= cur_state->witness_segs.size())
       return;
 
     // pc has already been incremented past this intrinsic call; step back one
@@ -1350,13 +1357,14 @@ void goto_symext::run_intrinsic(
     expr2tc arg = func_call.operands[1];
     cur_state->rename(arg);
 
+    const expr2tc position = witness_position();
+    const expr2tc active = witness_segment_guard(seg_idx, position);
     if (matched->action == waypoint::avoid)
-      assume(not2tc(arg));
-    else
-      assume(arg);
+      arg = not2tc(arg);
+    assume(implies2tc(active, arg));
 
     if (matched->action != waypoint::avoid)
-      cur_state->advance_witness_position();
+      advance_witness_position(seg_idx, position);
     return;
   }
 

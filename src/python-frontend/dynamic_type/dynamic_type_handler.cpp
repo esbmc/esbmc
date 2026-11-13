@@ -15,6 +15,8 @@
 #include <util/lang/c_types.h>
 #include <util/lang/python_types.h>
 #include <algorithm>
+#include <functional>
+#include <optional>
 #include <cctype>
 
 using namespace python_expr;
@@ -82,6 +84,30 @@ std::string nondet_call_kind(const nlohmann::json &call)
   return callee == "nondet_int" || callee == "nondet_bool" ? "num" : "";
 }
 
+// The kind of arithmetic on operands of kind `operand_kind`, e.g. `n + 1`
+// (#9812), `-n` or `abs(n)`; none when `value` is no such arithmetic.
+std::optional<std::string> arithmetic_kind(
+  const nlohmann::json &value,
+  const std::function<std::string(const nlohmann::json &)> &operand_kind)
+{
+  const std::string type = value.value("_type", "");
+  if (type == "BinOp")
+    return dynamic_type_detail::binop_kind(
+      value["op"].value("_type", ""),
+      operand_kind(value["left"]),
+      operand_kind(value["right"]));
+  if (type == "UnaryOp")
+    return dynamic_type_detail::unary_kind(
+      value["op"].value("_type", ""), operand_kind(value["operand"]));
+  if (
+    type == "Call" && value["func"].value("id", "") == "abs" &&
+    value["args"].size() == 1 &&
+    value.value("keywords", nlohmann::json::array()).empty())
+    return dynamic_type_detail::unary_kind(
+      "UAdd", operand_kind(value["args"][0]));
+  return std::nullopt;
+}
+
 // Classifies a single `return <literal>` or `return <param>` statement:
 // "num", "str", or "" if neither applies.
 std::string classify_return_literal_kind(
@@ -100,20 +126,12 @@ std::string classify_return_literal_kind(
     auto it = param_kinds.find(value.value("id", ""));
     return it == param_kinds.end() ? "" : it->second;
   }
-  // Arithmetic on a parameter, e.g. `return n + 1` (#9812).
-  if (value.value("_type", "") == "BinOp")
-  {
-    auto operand_kind = [&](const char *side) {
-      return classify_return_literal_kind(
-        {{"_type", "Return"}, {"value", value[side]}},
-        param_kinds,
-        module_body);
-    };
-    return dynamic_type_detail::binop_kind(
-      value["op"].value("_type", ""),
-      operand_kind("left"),
-      operand_kind("right"));
-  }
+  const auto arithmetic = arithmetic_kind(value, [&](const nlohmann::json &op) {
+    return classify_return_literal_kind(
+      {{"_type", "Return"}, {"value", op}}, param_kinds, module_body);
+  });
+  if (arithmetic)
+    return *arithmetic;
   if (value.value("_type", "") == "Call")
   {
     const std::string kind = nondet_call_kind(value);
@@ -243,19 +261,34 @@ bool is_param(const nlohmann::json &function_node, const std::string &name)
   return false;
 }
 
-// True when a return in `block` (if/else arms included) yields a Name that
-// is not one of `function_node`'s own parameters.
+// True when `value` reads a Name that is not one of `function_node`'s own
+// parameters.
+bool reads_free_name(
+  const nlohmann::json &value,
+  const nlohmann::json &function_node)
+{
+  if (
+    value.is_object() && value.value("_type", "") == "Name" &&
+    !is_param(function_node, value.value("id", "")))
+    return true;
+  if (value.is_structured())
+    for (const auto &child : value)
+      if (reads_free_name(child, function_node))
+        return true;
+  return false;
+}
+
+// True when a return in `block` (if/else arms included) yields a value that
+// reads a Name that is not one of `function_node`'s own parameters.
 bool returns_free_name(
   const nlohmann::json &block,
   const nlohmann::json &function_node)
 {
   for (const auto &stmt : block)
   {
-    const nlohmann::json &value = stmt.value("value", nlohmann::json());
     if (
-      stmt.value("_type", "") == "Return" && value.is_object() &&
-      value.value("_type", "") == "Name" &&
-      !is_param(function_node, value.value("id", "")))
+      stmt.value("_type", "") == "Return" &&
+      reads_free_name(stmt.value("value", nlohmann::json()), function_node))
       return true;
     for (const char *arm : {"body", "orelse"})
       if (

@@ -4796,17 +4796,74 @@ static bool returns_param_value(
          (is_param(value["left"]) || is_param(value["right"]));
 }
 
-// Safe as a `Compare` (always bool) or as the parameter's own value. Anything
-// else, e.g. `v * 2`, may itself evaluate to a tagged value the fixed return
-// type can't hold.
+// `node` names something `func_def` binds: a parameter, a local or itself.
+static bool
+names_own_binding(const nlohmann::json &node, const nlohmann::json &func_def)
+{
+  if (!node.is_structured())
+    return false;
+  if (
+    node.is_object() && node.value("_type", std::string()) == "Name" &&
+    count_bindings(func_def, node.value("id", std::string())) > 0)
+    return true;
+  for (const auto &child : node)
+    if (names_own_binding(child, func_def))
+      return true;
+  return false;
+}
+
+// `func_def` is no generator and no `return` anywhere in it reads a name the
+// function binds, so what it returns does not depend on its arguments.
+static bool returns_ignore_arguments(
+  const nlohmann::json &node,
+  const nlohmann::json &func_def)
+{
+  if (!node.is_structured())
+    return true;
+  const std::string type = node.is_object() ? node.value("_type", "") : "";
+  if (
+    type == "Yield" || type == "YieldFrom" ||
+    (type == "Return" &&
+     names_own_binding(node.value("value", nlohmann::json()), func_def)))
+    return false;
+  for (const auto &child : node)
+    if (!returns_ignore_arguments(child, func_def))
+      return false;
+  return true;
+}
+
+// A call of a plain module-level function whose result does not depend on
+// its arguments, so passing it a tagged value leaves its type as it is.
+static bool calls_argument_blind_function(
+  const nlohmann::json &value,
+  const nlohmann::json &module_body)
+{
+  if (
+    value.value("_type", std::string()) != "Call" ||
+    value["func"].value("_type", std::string()) != "Name")
+    return false;
+  const std::string name = value["func"].value("id", std::string());
+  const nlohmann::json *def = find_function_def(module_body, name);
+  return def != nullptr &&
+         def->value("decorator_list", nlohmann::json::array()).empty() &&
+         count_bindings(module_body, name) == 1 &&
+         returns_ignore_arguments((*def)["body"], *def);
+}
+
+// Safe as a `Compare` (always bool), as the parameter's own value, or as a
+// call whose result does not depend on its arguments. Anything else, e.g.
+// `v * 2`, may itself evaluate to a tagged value the fixed return type can't
+// hold.
 static bool return_value_safe_for_tagged_param(
   const nlohmann::json &value,
   const std::string &param_name,
-  const nlohmann::json &func_def)
+  const nlohmann::json &func_def,
+  const nlohmann::json &module_body)
 {
   return !references_name(value, param_name) ||
          value.value("_type", std::string()) == "Compare" ||
-         returns_param_value(value, param_name, func_def);
+         returns_param_value(value, param_name, func_def) ||
+         calls_argument_blind_function(value, module_body);
 }
 
 // True if some `return` statement anywhere in 'body' would be unsafe once
@@ -4814,7 +4871,8 @@ static bool return_value_safe_for_tagged_param(
 static bool any_return_unsafe_for_tagged_param(
   const nlohmann::json &body,
   const std::string &param_name,
-  const nlohmann::json &func_def)
+  const nlohmann::json &func_def,
+  const nlohmann::json &module_body)
 {
   if (!body.is_array())
     return false;
@@ -4825,12 +4883,13 @@ static bool any_return_unsafe_for_tagged_param(
     if (
       stmt.value("_type", std::string()) == "Return" &&
       stmt.contains("value") && !stmt["value"].is_null() &&
-      !return_value_safe_for_tagged_param(stmt["value"], param_name, func_def))
+      !return_value_safe_for_tagged_param(
+        stmt["value"], param_name, func_def, module_body))
       return true;
     for (const char *key : {"body", "orelse"})
       if (
-        stmt.contains(key) &&
-        any_return_unsafe_for_tagged_param(stmt[key], param_name, func_def))
+        stmt.contains(key) && any_return_unsafe_for_tagged_param(
+                                stmt[key], param_name, func_def, module_body))
         return true;
   }
   return false;
@@ -4870,12 +4929,14 @@ static void count_param_returns(
 // what the tagged value or operation gives.
 static bool tagged_param_return_unsafe(
   const nlohmann::json &func_def,
-  const std::string &param_name)
+  const std::string &param_name,
+  const nlohmann::json &module_body)
 {
   if (!func_def.contains("body"))
     return false;
   if (
-    any_return_unsafe_for_tagged_param(func_def["body"], param_name, func_def))
+    any_return_unsafe_for_tagged_param(
+      func_def["body"], param_name, func_def, module_body))
     return true;
   size_t bare = 0;
   size_t other = 0;
@@ -5051,7 +5112,7 @@ static bool tagging_leaks_into_return(
 {
   const nlohmann::json *func_def = find_callee_def(module_body, callee);
   return func_def != nullptr &&
-         tagged_param_return_unsafe(*func_def, param_name);
+         tagged_param_return_unsafe(*func_def, param_name, module_body);
 }
 
 bool python_converter::try_infer_dynamic_param_type(
@@ -6598,6 +6659,26 @@ static bool returns_str_literal_or_none(const nlohmann::json &body)
   return has_str && !other;
 }
 
+/// The return type a PEP 604 union annotation declares. `T | None` is typed
+/// as a parameter's annotation is, so it agrees with `Optional[T]`: a list
+/// is a pointer, NULL for None, and a scalar gets the Optional<T> struct. A
+/// union without None is its widest scalar.
+typet python_converter::union_return_type(
+  const nlohmann::json &return_node,
+  const nlohmann::json &function_node,
+  bool &is_optional)
+{
+  if (type_utils::annotation_admits_none(return_node))
+  {
+    is_optional = true;
+    return get_type_from_annotation(return_node, function_node);
+  }
+  TypeFlags flags = type_utils::extract_binop_union_types(return_node);
+  if (!flags.has_float && !flags.has_int && !flags.has_bool)
+    log_warning("Union with no recognized types, defaulting to pointer");
+  return type_utils::select_widest_type(flags, any_type());
+}
+
 /// The Optional<T> type a function returns when it can return None but its
 /// declared return type cannot hold it, or an empty type (#8016). Python does
 /// not enforce annotations, so `-> int` with a `return None` path is Optional
@@ -7038,12 +7119,8 @@ void python_converter::get_function_definition(
   }
   else if (return_node["_type"] == "BinOp")
   {
-    // Handle PEP 604 union syntax: int | bool
-    TypeFlags flags = type_utils::extract_binop_union_types(return_node);
-    type.return_type() = type_utils::select_widest_type(flags, any_type());
-
-    if (!flags.has_float && !flags.has_int && !flags.has_bool)
-      log_warning("Union with no recognized types, defaulting to pointer");
+    type.return_type() =
+      union_return_type(return_node, function_node, annotation_is_optional);
   }
   else if (return_node["_type"] == "Tuple")
   {

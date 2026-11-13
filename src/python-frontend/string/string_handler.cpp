@@ -3242,26 +3242,55 @@ exprt string_handler::read_tagged_str_receiver(
     throw std::runtime_error(
       "calling '" + method +
       "' on a dynamically-typed variable is not yet supported");
-  if (converter_.in_type_probe())
-    return build_typecast(
-      build_member(receiver, "value", pointer_typet(empty_typet())),
-      pointer_typet(char_type()));
-  if (!converter_.can_emit_runtime_guard())
-    throw std::runtime_error(
-      "calling '" + method +
-      "' on a dynamically-typed variable is not yet supported");
-
-  const exprt is_str = converter_.dynamic_type_handler_.build_isinstance_check(
-    receiver, "str", false);
-  converter_.emit_guarded_raise(
-    build_not(is_str),
+  return read_tagged_str(
+    receiver,
     "AttributeError",
     "object has no attribute '" + method + "'",
+    "calling '" + method +
+      "' on a dynamically-typed variable is not yet supported",
     converter_.get_location_from_decl(call_json));
+}
 
-  return build_typecast(
-    build_member(receiver, "value", pointer_typet(empty_typet())),
+exprt string_handler::read_tagged_str_argument(
+  const exprt &argument,
+  const std::string &method,
+  const locationt &location)
+{
+  if (!converter_.get_type_handler().is_tagged_scalar_type(argument.type()))
+    return argument;
+
+  const std::string refusal = "passing a dynamically-typed variable to '" +
+                              method + "' is not yet supported";
+  if (!argument.is_symbol())
+    throw std::runtime_error(refusal);
+  return read_tagged_str(
+    argument,
+    "TypeError",
+    method + "() argument must be str",
+    refusal,
+    location);
+}
+
+exprt string_handler::read_tagged_str(
+  const exprt &tagged,
+  const std::string &exception,
+  const std::string &message,
+  const std::string &refusal,
+  const locationt &location)
+{
+  const exprt str = build_typecast(
+    build_member(tagged, "value", pointer_typet(empty_typet())),
     pointer_typet(char_type()));
+  if (converter_.in_type_probe())
+    return str;
+  if (!converter_.can_emit_runtime_guard())
+    throw std::runtime_error(refusal);
+
+  const exprt is_str = converter_.dynamic_type_handler_.build_isinstance_check(
+    tagged, "str", false);
+  converter_.emit_guarded_raise(
+    build_not(is_str), exception, message, location);
+  return str;
 }
 
 exprt string_handler::handle_string_attribute_call(
