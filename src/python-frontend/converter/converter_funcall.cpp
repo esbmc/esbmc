@@ -2120,6 +2120,18 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
       if (!var_symbol->get_type().subtype().is_code())
         func_ptr_expr = python_expr::build_typecast(
           func_ptr_expr, gen_pointer_type(code_typet()));
+      else
+      {
+        // A function-or-None value holds None as a null pointer; calling it
+        // raises TypeError in CPython (#10568).
+        const exprt not_callable =
+          python_expr::decay_function_to_pointer(not_callable_function(
+            var_symbol->get_type().subtype(), none_type(), call.location()));
+        func_ptr_expr = if_exprt(
+          equality_exprt(func_ptr_expr, gen_zero(func_ptr_expr.type())),
+          not_callable,
+          func_ptr_expr);
+      }
       call.function() = func_ptr_expr;
 
       // Resolve return type from the concrete target function stored in
