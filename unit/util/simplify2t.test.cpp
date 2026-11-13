@@ -2053,6 +2053,33 @@ TEST_CASE(
   REQUIRE(to_equality2t(result).side_1 == inner);
 }
 
+TEST_CASE("Store on an array lambda stays a lambda", "[array_lambda]")
+{
+  const type2tc int32 = get_int_type(32);
+  const type2tc int64 = get_int_type(64);
+  const type2tc arr =
+    array_type2tc(int32, constant_int2tc(int32, BigInt(10)), false);
+  const expr2tc j = symbol2tc(int32, "j");
+  const expr2tc lambda = array_lambda2tc(
+    arr, j, add2tc(int32, j, constant_int2tc(int32, BigInt(1))));
+  // The index has another width than the binder.
+  const expr2tc stored = with2tc(
+                           arr,
+                           lambda,
+                           constant_int2tc(int64, BigInt(3)),
+                           constant_int2tc(int32, BigInt(7)))
+                           ->simplify();
+  REQUIRE(is_array_lambda2t(stored));
+  auto read = [&](int x) {
+    const expr2tc r =
+      index2tc(int32, stored, constant_int2tc(int64, BigInt(x)))->simplify();
+    REQUIRE(is_constant_int2t(r));
+    return to_constant_int2t(r).value;
+  };
+  REQUIRE(read(3) == 7);
+  REQUIRE(read(4) == 5);
+}
+
 #if 0
 TEST_CASE("Division simplification: 0 / x = 0", "[arithmetic][div]")
 {

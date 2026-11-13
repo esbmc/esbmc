@@ -1483,6 +1483,26 @@ expr2tc with2t::do_simplify() const
       return with2tc(type, inner.source_value, update_field, update_value);
   }
 
+  // A store on a lambda stays a lambda, so reads still simplify and the solver
+  // never needs the whole array as a quantified term.
+  if (is_array_lambda2t(source_value))
+  {
+    const array_lambda2t &lambda = to_array_lambda2t(source_value);
+    expr2tc j = lambda.binder;
+    expr2tc idx = update_field;
+    const unsigned jw = j->type->get_width(), iw = idx->type->get_width();
+    if (j->type != idx->type && jw == iw)
+      return expr2tc();
+    if (jw < iw)
+      j = typecast2tc(idx->type, j);
+    else if (iw < jw)
+      idx = typecast2tc(j->type, idx);
+    return array_lambda2tc(
+      type,
+      lambda.binder,
+      if2tc(lambda.body->type, equality2tc(j, idx), update_value, lambda.body));
+  }
+
   if (is_constant_struct2t(source_value))
   {
     const constant_struct2t &c_struct = to_constant_struct2t(source_value);
