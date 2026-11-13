@@ -1,0 +1,5 @@
+CORE
+main.py
+--python-check-exceptions AssertionError --show-claims
+^GOTO program processing time
+\A(?![\s\S]*range\(\) arg 3)[\s\S]*\Z
