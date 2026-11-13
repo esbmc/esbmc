@@ -2334,7 +2334,7 @@ inline std::string no_top_level_return_type(const nlohmann::json &body)
 /// converter returns a list as a pointer, NULL for None, as for an
 /// Optional[list] annotation. Any other type is left unannotated for the
 /// converter to wrap in an Optional.
-static bool
+inline bool
 inferred_return_holds_none(const std::string &inferred_type, bool returns_none)
 {
   return !returns_none || inferred_type == "list" ||
