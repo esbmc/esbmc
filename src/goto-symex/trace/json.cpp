@@ -197,7 +197,7 @@ json serialize_value(const namespacet &ns, const expr2tc &expr)
         }
         else
         {
-          return from_expr(ns, "", expr);
+          return trace_value_string(ns, expr);
         }
       }
       catch (const std::runtime_error &e)

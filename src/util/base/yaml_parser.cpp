@@ -397,7 +397,8 @@ std::string yaml_parser::build_violation_witness_source(
 std::string yaml_parser::build_injected_source(
   const std::string &source_path,
   const std::string &original_path,
-  const std::vector<invariant> &invariants)
+  const std::vector<invariant> &invariants,
+  const std::map<size_t, size_t> &body_ends)
 {
   std::unordered_map<size_t, std::vector<const invariant *>> by_line;
   by_line.reserve(invariants.size());
@@ -408,9 +409,14 @@ std::string yaml_parser::build_injected_source(
   if (!in)
     return {};
 
+  std::map<size_t, size_t> closing_braces;
+  for (const auto &body : body_ends)
+    ++closing_braces[body.second];
+
   std::ostringstream out;
   std::string line_text;
   size_t line_num = 0;
+  size_t offset = 0;
 
   while (std::getline(in, line_text))
   {
@@ -418,6 +424,8 @@ std::string yaml_parser::build_injected_source(
     auto it = by_line.find(line_num);
     if (it != by_line.end())
     {
+      if (body_ends.count(line_num))
+        out << '{';
       for (const invariant *inv : it->second)
       {
         switch (inv->type)
@@ -428,7 +436,7 @@ std::string yaml_parser::build_injected_source(
             "Injecting loop invariant at line {}: {}", line_num, inv->value);
           break;
         case invariant::location_invariant:
-          out << "__ESBMC_assert((_Bool)(" << inv->value
+          out << "__ESBMC_witness_assert((_Bool)(" << inv->value
               << "), \"witness invariant\");\n";
           out << "__ESBMC_assume((_Bool)(" << inv->value << "));\n";
           log_progress(
@@ -444,7 +452,19 @@ std::string yaml_parser::build_injected_source(
       }
       out << "#line " << line_num << " \"" << original_path << "\"\n";
     }
-    out << line_text << "\n";
+    size_t copied = 0;
+    while (!closing_braces.empty() &&
+           closing_braces.begin()->first <= offset + line_text.size())
+    {
+      const auto close = closing_braces.begin();
+      const size_t end = close->first - offset;
+      out << line_text.substr(copied, end - copied)
+          << std::string(close->second, '}');
+      copied = end;
+      closing_braces.erase(close);
+    }
+    out << line_text.substr(copied) << "\n";
+    offset += line_text.size() + 1;
   }
 
   return out.str();

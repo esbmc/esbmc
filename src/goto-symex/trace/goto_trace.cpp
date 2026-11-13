@@ -108,6 +108,15 @@ void goto_trace_stept::output(const namespacet &ns, std::ostream &out) const
   out << "\n";
 }
 
+std::string trace_value_string(const namespacet &ns, const expr2tc &value)
+{
+  if (
+    config.options.get_bool_option("ir") && is_constant_int2t(value) &&
+    is_bv_type(value))
+    return integer2string(to_constant_int2t(value).value);
+  return from_expr(ns, "", value);
+}
+
 void counterexample_value(
   std::ostream &out,
   const namespacet &ns,
@@ -119,7 +128,7 @@ void counterexample_value(
     out << "(assignment removed)";
   else
   {
-    out << " = " << from_expr(ns, "", value);
+    out << " = " << trace_value_string(ns, value);
 
     // Don't print the bit-vector if we're running on integer/real mode
     if (is_constant_expr(value) && !config.options.get_bool_option("ir"))

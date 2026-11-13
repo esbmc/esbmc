@@ -2,4 +2,4 @@ CORE
 main.py
 
 ^VERIFICATION FAILED$
-file .*main\.py line 11 column 0$
+^  FAILED .* uncaught exception: TypeError$

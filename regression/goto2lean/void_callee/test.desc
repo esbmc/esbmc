@@ -1,0 +1,7 @@
+CORE
+main.c
+--goto2lean
+^def h \(post : Unit → Prop\) : Prop :=\n  post \(\)$
+^  -- call to g \(no body\): ignored$
+^  True ∧ \(\n  True →$
+^  simp only \[Prog\.h, Prog\.main\]$
