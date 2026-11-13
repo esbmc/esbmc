@@ -312,6 +312,15 @@ private:
     const exprt &tagged,
     const exprt &literal,
     bool tagged_is_left);
+  exprt unmodelled_str_operand(
+    const std::string &op,
+    const exprt &lhs,
+    const exprt &rhs) const;
+  void claim_numeric_operands(
+    const std::string &op,
+    const exprt &lhs,
+    const exprt &rhs,
+    const locationt &location);
   exprt build_div_literal(
     const std::string &op,
     const exprt &tagged,

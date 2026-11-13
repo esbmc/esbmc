@@ -332,6 +332,46 @@ static long long __python_floordiv_ll(long long a, long long b)
   return q;
 }
 
+// Python's a % b on ints: the remainder takes the sign of b. The caller has
+// raised ZeroDivisionError for b == 0.
+static long long __python_mod_ll(long long a, long long b)
+{
+  long long r = a % b;
+  if (r != 0 && (r < 0) != (b < 0))
+    r += b;
+  return r;
+}
+
+long long __python_scalar_mul_num(
+  const PyObject *tagged,
+  int type_matches,
+  long long value,
+  int tagged_is_left)
+{
+__ESBMC_HIDE:;
+  __ESBMC_assert(
+    tagged && type_matches, "TypeError: unsupported operand type(s) for *");
+  if (!tagged || !type_matches)
+    return 0;
+  return *(const long long *)tagged->value * value;
+}
+
+long long __python_scalar_mod_num(
+  const PyObject *tagged,
+  int type_matches,
+  long long value,
+  int tagged_is_left)
+{
+__ESBMC_HIDE:;
+  __ESBMC_assert(
+    tagged && type_matches, "TypeError: unsupported operand type(s) for %");
+  if (!tagged || !type_matches)
+    return 0;
+  long long tagged_val = *(const long long *)tagged->value;
+  return tagged_is_left ? __python_mod_ll(tagged_val, value)
+                        : __python_mod_ll(value, tagged_val);
+}
+
 long long __python_scalar_floordiv_num(
   const PyObject *tagged,
   int type_matches,
@@ -378,6 +418,37 @@ __ESBMC_HIDE:;
     return 0.0;
   return (double)(*(const long long *)lhs->value) /
          (double)(*(const long long *)rhs->value);
+}
+
+long long __python_scalar_mul_num_dyn(
+  const PyObject *lhs,
+  int lhs_is_num,
+  const PyObject *rhs,
+  int rhs_is_num)
+{
+__ESBMC_HIDE:;
+  __ESBMC_assert(
+    lhs && rhs && lhs_is_num && rhs_is_num,
+    "TypeError: unsupported operand type(s) for *");
+  if (!lhs || !rhs || !lhs_is_num || !rhs_is_num)
+    return 0;
+  return *(const long long *)lhs->value * *(const long long *)rhs->value;
+}
+
+long long __python_scalar_mod_num_dyn(
+  const PyObject *lhs,
+  int lhs_is_num,
+  const PyObject *rhs,
+  int rhs_is_num)
+{
+__ESBMC_HIDE:;
+  __ESBMC_assert(
+    lhs && rhs && lhs_is_num && rhs_is_num,
+    "TypeError: unsupported operand type(s) for %");
+  if (!lhs || !rhs || !lhs_is_num || !rhs_is_num)
+    return 0;
+  return __python_mod_ll(
+    *(const long long *)lhs->value, *(const long long *)rhs->value);
 }
 
 long long __python_scalar_floordiv_num_dyn(
