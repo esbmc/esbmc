@@ -238,20 +238,104 @@ def _calls_known(module, classes, receivers):
         for n in _own_nodes(module.body[-1:]) if isinstance(n, ast.Call))
 
 
-def split_path_dependent_receivers(module, module_name):
-    """Split the entry module where it binds a receiver, when that clears the refusal."""
-    classes, returns = _module_classes(module)
-    if len(classes) < 2 or not _refused(module, module_name):
-        return
-    receivers = set(_scope_receivers(module, module, classes, returns))
-    if not receivers:
-        return
+def _kinds(value, known):
+    """The builtin types `value` may evaluate to, or None when not known here.
+    `known` holds the types of names bound only to values of known types."""
+    if isinstance(value, ast.Constant):
+        return {type(value.value).__name__}
+    if isinstance(value, ast.Name):
+        return known.get(value.id)
+    if isinstance(value, ast.IfExp):
+        body, orelse = _kinds(value.body, known), _kinds(value.orelse, known)
+        return None if body is None or orelse is None else body | orelse
+    if not isinstance(value, ast.Call):
+        return None
+    name = getattr(value.func, "id", None) or getattr(value.func, "attr", "")
+    if isinstance(value.func, ast.Name) and name in ("int", "float"):
+        return {name}
+    if name in ("nondet_int", "nondet_float"):
+        return {name[len("nondet_"):]}
+    return None
+
+
+def _number_kinds(module):
+    """The builtin types of each module-level name bound only to values of
+    known types, through at most one copy to another name."""
+    bindings = {}
+    for node in _own_nodes(module.body):
+        if isinstance(node, ast.Name) and not isinstance(node.ctx, ast.Load):
+            bindings.setdefault(node.id, [])
+        if (isinstance(node, ast.Assign) and len(node.targets) == 1
+                and isinstance(node.targets[0], ast.Name)):
+            bindings.setdefault(node.targets[0].id, []).append(node.value)
+    known = {}
+    for _ in range(2):
+        known = {
+            name: set().union(*kinds)
+            for name, values in bindings.items()
+            for kinds in [[_kinds(v, known) for v in values]] if values and None not in kinds
+        }
+    return known
+
+
+def _int_or_float_names(module):
+    """The module-level names bound to an int on some paths and a float on
+    others, all by one top-level statement. A binding outside it would stay
+    on the module's own path, where the converter gives each binding its own
+    symbol."""
+    statements = {}
+    for stmt in module.body:
+        for node in _own_nodes([stmt]):
+            if isinstance(node, ast.Name) and not isinstance(node.ctx, ast.Load):
+                statements.setdefault(node.id, set()).add(id(stmt))
+    return {
+        name
+        for name, kinds in _number_kinds(module).items()
+        if kinds == {"int", "float"} and len(statements[name]) == 1
+    }
+
+
+def _numbers_only(module):
+    """Whether the split statement of `module` calls only builtins and
+    `_sv_verifier`, stores only into names and tests identity only between
+    `type()` results. Anything else may see the int and the float copies as
+    one value or one parameter."""
+    bound = binding_sites(module)
+    for node in _own_nodes(module.body[-1:]):
+        if isinstance(node, ast.Call) and not _is_builtin_call(node, bound):
+            return False
+        if isinstance(node, (ast.Attribute, ast.Subscript)) and not isinstance(node.ctx, ast.Load):
+            return False
+        if isinstance(node, ast.Compare) and any(
+                isinstance(op, (ast.Is, ast.IsNot)) for op in node.ops) and not all(
+                    isinstance(e, ast.Call) and getattr(e.func, "id", None) == "type"
+                    for e in [node.left] + node.comparators):
+            return False
+    return True
+
+
+def _split(module, names):
+    """`module` split at the first `if` that binds one of `names`, or None."""
     candidate = copy.deepcopy(module)
     try:
-        candidate.body = _Splitter(receivers).block(candidate.body, frozenset())
+        candidate.body = _Splitter(names).block(candidate.body, frozenset())
     except _Refused:
+        return None
+    return ast.fix_missing_locations(candidate)
+
+
+def split_path_dependent_receivers(module, module_name):
+    """Split the entry module where it binds a receiver, when that clears the
+    refusal, or else where it binds a name to an int or a float by path
+    (#8973)."""
+    classes, returns = _module_classes(module)
+    receivers = set()
+    if len(classes) >= 2 and _refused(module, module_name):
+        receivers = set(_scope_receivers(module, module, classes, returns))
+    names = receivers or _int_or_float_names(module)
+    candidate = names and _split(module, names)
+    if not candidate or _refused(candidate, module_name):
         return
-    ast.fix_missing_locations(candidate)
-    if (_calls_known(candidate, classes, receivers)
-            and not (_passes_receiver(candidate, receivers) or _refused(candidate, module_name))):
+    if (_calls_known(candidate, classes, receivers) and not _passes_receiver(candidate, receivers)
+            if receivers else _numbers_only(candidate)):
         module.body = candidate.body
