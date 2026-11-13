@@ -2455,9 +2455,10 @@ static void collect_self_stores(
 
 // Adds to @p clazz a presence flag `<attr>$set` for each attribute that
 // `__init__` of @p class_node stores on `self` only inside a block and that
-// nothing else binds: no other method, no class-level assignment and no base.
-// An instance whose constructor took no such path lacks the attribute, and a
-// read of it raises AttributeError (#10587).
+// nothing else binds: no other method and no base. An instance whose
+// constructor took no such path lacks the attribute, and a read of it raises
+// AttributeError (#10587), or reads the class attribute it would have
+// shadowed (#10588).
 void python_converter::add_presence_flags(
   const nlohmann::json &class_node,
   struct_typet &clazz)
@@ -2478,7 +2479,11 @@ void python_converter::add_presence_flags(
   {
     if (top.count(attr) || elsewhere.count(attr))
       continue;
-    if (assigns_class_attribute(class_node["body"], attr))
+    // A class attribute is read where the instance has not shadowed it,
+    // which needs the class found by name.
+    if (
+      assigns_class_attribute(class_node["body"], attr) &&
+      json_utils::find_class((*ast_json)["body"], class_name).empty())
       continue;
     bool base_binds = false;
     for (const auto &base : class_node["bases"])
@@ -2521,6 +2526,12 @@ exprt python_converter::guard_presence_flagged_read(
   const typet object_type = ns.follow(to_member_expr(expr).struct_op().type());
   const std::string class_name =
     extract_class_name_from_tag(to_struct_type(object_type).tag().as_string());
+  // An instance that has not shadowed a class attribute reads it (#10588).
+  symbol_id class_attr(current_python_file, class_name, "");
+  class_attr.set_object(element.value("attr", ""));
+  if (const symbolt *shadowed = find_symbol(class_attr.to_string()))
+    return if_exprt(
+      flag, expr, typecast_exprt(symbol_expr(*shadowed), expr.type()));
   emit_guarded_raise(
     not_exprt(flag),
     "AttributeError",
