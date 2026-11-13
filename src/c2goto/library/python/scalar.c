@@ -143,6 +143,16 @@ __ESBMC_HIDE:;
   __ESBMC_assume(!is_float);
 }
 
+static inline void __python_scalar_refuse_float_operand(
+  const PyObject *lhs,
+  const PyObject *rhs,
+  size_t float_type_id)
+{
+__ESBMC_HIDE:;
+  __python_scalar_refuse_float(
+    lhs->type_id == float_type_id || rhs->type_id == float_type_id);
+}
+
 // `is_number` says `tagged` holds an int, a bool or a float.
 int __python_scalar_eq_num(
   const PyObject *tagged,
@@ -450,8 +460,7 @@ __ESBMC_HIDE:;
     "TypeError: unsupported operand type(s) for -");
   if (!lhs || !rhs || !lhs_is_num || !rhs_is_num)
     return 0;
-  __python_scalar_refuse_float(
-    lhs->type_id == float_type_id || rhs->type_id == float_type_id);
+  __python_scalar_refuse_float_operand(lhs, rhs, float_type_id);
   return *(const long long *)lhs->value - *(const long long *)rhs->value;
 }
 
@@ -468,8 +477,7 @@ __ESBMC_HIDE:;
     "TypeError: unsupported operand type(s) for /");
   if (!lhs || !rhs || !lhs_is_num || !rhs_is_num)
     return 0.0;
-  __python_scalar_refuse_float(
-    lhs->type_id == float_type_id || rhs->type_id == float_type_id);
+  __python_scalar_refuse_float_operand(lhs, rhs, float_type_id);
   return (double)(*(const long long *)lhs->value) /
          (double)(*(const long long *)rhs->value);
 }
@@ -478,38 +486,33 @@ __ESBMC_HIDE:;
 // it comes back as a tagged object, not a raw scalar. The str buffer's
 // __ESBMC_alloca storage survives past this call, like
 // __python_scalar_tag_copy.
-PyObject __python_scalar_add_obj_dyn(
+static inline PyObject __python_scalar_add_nums(
   const PyObject *lhs,
-  int lhs_is_num,
-  int lhs_is_str,
   const PyObject *rhs,
-  int rhs_is_num,
-  int rhs_is_str,
   size_t num_type_id,
-  size_t str_type_id,
   size_t float_type_id)
 {
 __ESBMC_HIDE:;
-  int both_num = lhs && rhs && lhs_is_num && rhs_is_num;
-  int both_str = lhs && rhs && lhs_is_str && rhs_is_str;
-  __ESBMC_assert(
-    both_num || both_str, "TypeError: unsupported operand type(s) for +");
-  __python_scalar_refuse_float(
-    both_num &&
-    (lhs->type_id == float_type_id || rhs->type_id == float_type_id));
-
+  __python_scalar_refuse_float_operand(lhs, rhs, float_type_id);
   PyObject result;
   result.float_idx = 0;
+  long long *sum = __ESBMC_alloca(sizeof(long long));
+  *sum = *(const long long *)lhs->value + *(const long long *)rhs->value;
+  result.value = sum;
+  result.type_id = num_type_id;
+  result.size = sizeof(long long);
+  return result;
+}
 
-  if (both_num)
-  {
-    long long *sum = __ESBMC_alloca(sizeof(long long));
-    *sum = *(const long long *)lhs->value + *(const long long *)rhs->value;
-    result.value = sum;
-    result.type_id = num_type_id;
-    result.size = sizeof(long long);
-    return result;
-  }
+static inline PyObject __python_scalar_add_strs(
+  const PyObject *lhs,
+  const PyObject *rhs,
+  int both_str,
+  size_t str_type_id)
+{
+__ESBMC_HIDE:;
+  PyObject result;
+  result.float_idx = 0;
 
   // both_str. `.size` includes the trailing '\0' on each side, stripped so
   // the result ends up with exactly one, at the end. Lengths are only known
@@ -540,4 +543,25 @@ __ESBMC_HIDE:;
   result.type_id = str_type_id;
   result.size = lhs_len + rhs_len + 1;
   return result;
+}
+
+PyObject __python_scalar_add_obj_dyn(
+  const PyObject *lhs,
+  int lhs_is_num,
+  int lhs_is_str,
+  const PyObject *rhs,
+  int rhs_is_num,
+  int rhs_is_str,
+  size_t num_type_id,
+  size_t str_type_id,
+  size_t float_type_id)
+{
+__ESBMC_HIDE:;
+  int both_num = lhs && rhs && lhs_is_num && rhs_is_num;
+  int both_str = lhs && rhs && lhs_is_str && rhs_is_str;
+  __ESBMC_assert(
+    both_num || both_str, "TypeError: unsupported operand type(s) for +");
+  if (both_num)
+    return __python_scalar_add_nums(lhs, rhs, num_type_id, float_type_id);
+  return __python_scalar_add_strs(lhs, rhs, both_str, str_type_id);
 }
