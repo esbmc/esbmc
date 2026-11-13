@@ -1,5 +1,5 @@
 CORE
 main.py
---witness-output-graphml -
+--witness-output-graphml - --no-python-typed-lists
 ^VERIFICATION FAILED$
 key="originfile">[^<]*list\.c

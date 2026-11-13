@@ -316,6 +316,14 @@ private:
   std::optional<exprt> try_numpy_math_constant();
   std::optional<exprt> try_bounded_ufunc(const std::string &function);
   exprt bounded_binary_ufunc(const std::string &function);
+  std::optional<exprt> try_runtime_power(const std::string &function);
+  bool may_hold_float(const nlohmann::json &arg);
+  std::optional<exprt> try_arithmetic_ufunc(const std::string &function);
+  exprt integer_power(const exprt &base, const exprt &exponent);
+  exprt arithmetic_element(
+    const std::string &function,
+    const typet &leaf,
+    const std::vector<exprt> &x);
   exprt broadcast_elements(
     const std::vector<exprt> &operands,
     const std::vector<std::size_t> &shape,
@@ -325,11 +333,18 @@ private:
   std::vector<std::size_t> ufunc_shape(
     const std::vector<exprt> &operands,
     std::optional<std::size_t> out_index);
+  /// An exception NumPy raises for a selected element `when` holds.
+  struct ufunc_check
+  {
+    std::string type, message;
+    std::function<exprt(const std::vector<exprt> &)> when;
+  };
   exprt apply_ufunc(
     const std::string &function,
     const std::vector<exprt> &inputs,
     const typet &leaf,
-    const std::function<exprt(const std::vector<exprt> &)> &f);
+    const std::function<exprt(const std::vector<exprt> &)> &f,
+    const ufunc_check *check = nullptr);
   std::optional<exprt> ufunc_mask(const std::string &function);
   exprt mask_operand(const std::string &function, const nlohmann::json &node);
   exprt boolean_mask(const std::string &function, const nlohmann::json &node);
@@ -344,6 +359,23 @@ private:
   };
   std::optional<ufunc_output>
   ufunc_out(const std::string &function, std::size_t arity, const typet &leaf);
+  struct ufunc_plan
+  {
+    std::optional<ufunc_output> out;
+    std::optional<exprt> mask;
+    std::vector<exprt> operands;
+    std::vector<std::size_t> shape;
+  };
+  exprt ufunc_error_value(const std::vector<exprt> &inputs, const typet &leaf);
+  exprt selected_fault(
+    const ufunc_check &check,
+    const std::optional<exprt> &mask,
+    const std::vector<exprt> &e,
+    const std::vector<exprt> &elements);
+  ufunc_plan plan_ufunc(
+    const std::string &function,
+    const std::vector<exprt> &inputs,
+    const typet &leaf);
   exprt out_operand(const std::string &function, const nlohmann::json &node);
   void reject_unwritable_out(const exprt &target);
   exprt write_out(const exprt &target, const exprt &result);

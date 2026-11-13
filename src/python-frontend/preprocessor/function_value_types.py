@@ -47,6 +47,29 @@ def _differ(a, b):
     return not ("num" in (a, b) and {a, b} <= _NUMERIC)
 
 
+def _unpacked(target, value):
+    """Pair each element of the tuple or list target `target` with the expression of the display
+    `value` it takes, or a starred element with the list of expressions it takes; None when
+    `value` is not a display of a matching length."""
+    if not isinstance(value,
+                      (ast.Tuple, ast.List)) or any(isinstance(e, ast.Starred) for e in value.elts):
+        return None
+    starred = [i for i, sub in enumerate(target.elts) if isinstance(sub, ast.Starred)]
+    if not starred:
+        return list(zip(target.elts, value.elts)) if len(target.elts) == len(value.elts) else None
+    first, rest = starred[0], len(value.elts) - len(target.elts) + 1
+    if rest < 0:
+        return None
+    middle = (target.elts[first], value.elts[first:first + rest])
+    return list(zip(target.elts[:first], value.elts)) + [middle] + list(
+        zip(target.elts[first + 1:], value.elts[first + rest:]))
+
+
+def _unstarred(target):
+    """The name or target that the starred `target` binds, or `target` itself."""
+    return target.value if isinstance(target, ast.Starred) else target
+
+
 class _Scope:
     """A function, lambda or the module, with the names it binds."""
 
@@ -355,12 +378,53 @@ class _Analysis:
         path = self.local_module(".".join(imports[node.id].split(".") + list(reversed(dotted[1:]))))
         if path is None:
             return None
-        stmt = self.module_def(path, expr.attr)
+        stmt = self.module_def(path, expr.attr) or self.aliased_def(path, expr.attr)
         if stmt is None:
             return None
-        key = ("imported", path, stmt.name)
-        self.add_member(key, stmt, f"{imports[node.id]}.{stmt.name}", self.def_kind(stmt))
+        key = ("imported", path, expr.attr)
+        self.add_member(key, stmt, f"{imports[node.id]}.{expr.attr}", self.def_kind(stmt))
         return key
+
+    def aliased_def(self, path, name):
+        """The function that the one binding of `name` in the module at `path`, an assignment
+        `name = f` or `name = m.f`, names: a def of that module or of a module it imports."""
+        from preprocessor.function_value_methods import _binding_count
+        tree = self._load(path)
+        if _binding_count(tree, name) != 1:
+            return None
+        value = next((stmt.value for stmt in tree.body
+                      if isinstance(stmt, ast.Assign) and [ast.unparse(t)
+                                                           for t in stmt.targets] == [name]), None)
+        if isinstance(value, ast.Name) and _binding_count(tree, value.id) == 1:
+            return self.module_def(path, value.id)
+        if (isinstance(value, ast.Attribute) and isinstance(value.value, ast.Name)
+                and _binding_count(tree, value.value.id) == 1):
+            module = self.imported_module(tree, path, value.value.id)
+            return module and self.module_def(module, value.attr)
+        return None
+
+    def imported_module(self, tree, path, name):
+        """The source file of the local module a top-level import binds to `name` in `tree`,
+        the module at `path`, or None."""
+        for stmt in tree.body:
+            if not isinstance(stmt, (ast.Import, ast.ImportFrom)):
+                continue
+            for alias in stmt.names:
+                if (alias.asname or alias.name) != name:
+                    continue
+                if isinstance(stmt, ast.Import):
+                    return self.local_module(alias.name)
+                dotted = ".".join(filter(None, [stmt.module, alias.name]))
+                if stmt.level == 0:
+                    return self.local_module(dotted)
+                base = os.path.abspath(path)
+                for _ in range(stmt.level):
+                    base = os.path.dirname(base)
+                module = os.path.join(base, *dotted.split("."))
+                return next((candidate
+                             for candidate in (module + ".py", os.path.join(module, "__init__.py"))
+                             if os.path.isfile(candidate)), None)
+        return None
 
     def call(self, expr, scope):
         """Record a call of a method by its name or of a function value."""
@@ -444,9 +508,7 @@ class _Analysis:
 
     def _statement(self, node, scope):
         if isinstance(node, ast.Assign):
-            value = self.value(node.value, scope)
-            for target in node.targets:
-                self._bind(target, value, node.value, scope)
+            self._assign(node, scope)
         elif isinstance(node, ast.AnnAssign) and node.value is not None:
             self._bind(node.target, self.value(node.value, scope), node.value, scope)
         elif isinstance(node, (ast.For, ast.AsyncFor)):
@@ -467,19 +529,37 @@ class _Analysis:
             if default is not None:
                 self.union(self.keyword_key(fn, arg.arg), self.value(default, scope))
 
+    def _assign(self, node, scope):
+        """Bind the targets of `node`. A display unpacked into every target binds each target to
+        its own element only."""
+        value = None if all(
+            isinstance(t, (ast.Tuple, ast.List)) and _unpacked(t, node.value) is not None
+            for t in node.targets) else self.value(node.value, scope)
+        for target in node.targets:
+            self._bind(target, value, node.value, scope)
+
     def _bind(self, target, value, value_node, scope):
         if isinstance(target, ast.Name):
             self.union(self.name_key(target.id, scope), value)
         elif self.dicts and isinstance(target, ast.Subscript):
             self.union(self.value(target.value, scope), value)
         elif isinstance(target, (ast.Tuple, ast.List)):
-            if isinstance(value_node,
-                          (ast.Tuple, ast.List)) and len(value_node.elts) == len(target.elts):
-                for sub, elt in zip(target.elts, value_node.elts):
-                    self._bind(sub, self.value(elt, scope), elt, scope)
-            else:
+            pairs = _unpacked(target, value_node)
+            if pairs is None:
                 for sub in target.elts:
-                    self._bind(sub, value, None, scope)
+                    self._bind(_unstarred(sub), value, None, scope)
+            for sub, elt in pairs or []:
+                self._bind_element(sub, elt, scope)
+
+    def _bind_element(self, sub, elt, scope):
+        """Bind `sub` to the expression `elt`, or a starred `sub` to the list of expressions."""
+        if isinstance(sub, ast.Starred):
+            key = ("elements", id(sub))
+            for item in elt:
+                self.union(key, self.value(item, scope))
+            self._bind(sub.value, key, None, scope)
+        else:
+            self._bind(sub, self.value(elt, scope), elt, scope)
 
     # return kinds
     def def_kind(self, fn):

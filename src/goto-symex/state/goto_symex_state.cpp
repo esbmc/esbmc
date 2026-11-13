@@ -23,7 +23,6 @@ goto_symex_statet::goto_symex_statet(
 {
   use_value_set = true;
   num_instructions = 0;
-  cur_seg = 0;
   thread_ended = false;
   guard.make_true();
 }
@@ -51,9 +50,7 @@ goto_symex_statet &goto_symex_statet::operator=(const goto_symex_statet &state)
   no_propagation = state.no_propagation;
   call_stack = state.call_stack;
   witness_segs = state.witness_segs;
-  cur_seg = state.cur_seg;
-  witness_guard = state.witness_guard;
-  cycle_branch_map = state.cycle_branch_map;
+  witness_locations = state.witness_locations;
   return *this;
 }
 
@@ -1357,11 +1354,4 @@ std::vector<stack_framet> goto_symex_statet::gen_stack_trace() const
   }
 
   return trace;
-}
-
-void goto_symex_statet::advance_witness_position()
-{
-  if (cur_seg < witness_segs.size())
-    ++cur_seg;
-  witness_guard = guard;
 }

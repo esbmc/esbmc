@@ -1,0 +1,5 @@
+CORE
+main.c
+--goto2lean
+^def end_loop1 \(n : BitVec 32\) \(i : BitVec 32\)$
+^def «end» \(n : BitVec 32\) \(post : BitVec 32 → Prop\) : Prop :=$

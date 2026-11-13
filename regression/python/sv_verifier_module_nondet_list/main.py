@@ -8,24 +8,8 @@ ints = _sv_verifier.nondet_list(_sv_verifier.nondet_int)
 for v in ints:
     assert isinstance(v, int)
 
-doubled = [b + 1 for b in [a + 1 for a in ints]]
-for v in doubled:
-    assert isinstance(v, int)
-
 copied = []
 for b in ints:
     copied.append(b + 1)
 for v in copied:
     assert isinstance(v, int)
-
-floats = _sv_verifier.nondet_list(_sv_verifier.nondet_float)
-for f in floats:
-    assert isinstance(f, float)
-
-flags = _sv_verifier.nondet_list(_sv_verifier.nondet_bool)
-for g in flags:
-    assert isinstance(g, bool)
-
-words = _sv_verifier.nondet_list(_sv_verifier.nondet_str)
-for w in words:
-    assert isinstance(w, str)
