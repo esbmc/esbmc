@@ -539,6 +539,29 @@ def _call_directly(stmt, group, callee, fn):
             setattr(node, _SITE, None)
 
 
+def _bound_arguments(fn, call):
+    """The expression `call` binds to each positional parameter of `fn`: an argument, a keyword
+    or the default, or None for none of them."""
+    params = fn.args.posonlyargs + fn.args.args
+    keywords = {k.arg: k.value for k in call.keywords}
+    defaults = dict(zip(reversed(params), reversed(fn.args.defaults)))
+    bound = {}
+    for i, param in enumerate(params):
+        if i < len(call.args):
+            bound[param.arg] = call.args[i]
+        elif param in fn.args.args and param.arg in keywords:
+            bound[param.arg] = keywords[param.arg]
+        else:
+            bound[param.arg] = defaults.get(param)
+    return bound
+
+
+def _parameter_of(fn, call, expr):
+    """The parameter of `fn` that `call` binds `expr` to, or None."""
+    return next((param for param, value in _bound_arguments(fn, call).items() if value is expr),
+                None)
+
+
 def _chain(arms, callee, origin):
     """`if callee == 0: arms[0] elif ...: ... else: arms[-1]`, located at `origin`."""
     chain = arms[-1]
@@ -804,7 +827,7 @@ class _Plan:
         if _is_callee(parent, node) and node.id in self.callable_names:
             return
         if self._nested(node) or self._takes_dispatched_parameter(node.id):
-            if not self._is_returned_read(node):
+            if not self._is_nested_read(node, parent):
                 raise _Refused
             return
         if isinstance(node.ctx, ast.Store):
@@ -818,6 +841,26 @@ class _Plan:
             self._check_function_holder(node, parent)
         else:
             self._check_container_holder(node, parent)
+
+    def _is_nested_read(self, node, parent):
+        """Whether `node`, read inside a def, is a read that the rewrite handles: a returned call
+        or a function as the default of a dispatched parameter, which then reads as its code."""
+        if self._is_dispatched_default(node, parent):
+            setattr(node, _CODE, self.functions[node.id][1])
+            return True
+        return self._is_returned_read(node)
+
+    def _is_dispatched_default(self, node, parent):
+        """Whether `node` names a function as the default of a parameter that a module-level def
+        dispatches on."""
+        fn = self.parents.get(id(parent))
+        if not (isinstance(parent, ast.arguments) and isinstance(fn, ast.FunctionDef)
+                and self.defs.get(fn.name) is fn and node.id in self.functions):
+            return False
+        params = fn.args.posonlyargs + fn.args.args
+        defaults = dict(zip(reversed(fn.args.defaults), reversed(params)))
+        param = defaults.get(node)
+        return param is not None and param.arg in self.param_holders.get(fn.name, {})
 
     def _takes_dispatched_parameter(self, name):
         """Whether the def `name` dispatches on one of its parameters, not only on a local."""
@@ -912,15 +955,16 @@ class _Plan:
             raise _Refused
 
     def _check_dispatched_arguments(self, call):
-        """Every parameter of the callee that is dispatched on gets a function positionally."""
+        """Every parameter of the callee that is dispatched on gets a function, by position, by
+        keyword or from its default."""
         fn = self.defs[call.func.id]
         holders = self.param_holders[fn.name]
-        if any(isinstance(a, ast.Starred)
-               for a in call.args) or any(k.arg is None or k.arg in holders for k in call.keywords):
+        if any(isinstance(a, ast.Starred) for a in call.args) or any(k.arg is None
+                                                                     for k in call.keywords):
             raise _Refused
-        for i, param in enumerate(a.arg for a in fn.args.posonlyargs + fn.args.args):
-            if param in holders and not (i < len(call.args)
-                                         and self._is_function_value(call.args[i], call)):
+        for param, value in _bound_arguments(fn, call).items():
+            if param in holders and not (value is not None
+                                         and self._is_function_value(value, call)):
                 raise _Refused
 
     def _is_function_value(self, expr, site):
@@ -1063,15 +1107,16 @@ class _Plan:
             raise _Refused
 
     def _is_dispatched_argument(self, parent, expr):
-        """Whether `expr` is passed positionally to a parameter that the callee dispatches on."""
+        """Whether `expr` is passed, by position or keyword, to a parameter that the callee
+        dispatches on."""
+        if isinstance(parent, ast.keyword):
+            parent = self.parents[id(parent)]
         if not (isinstance(parent, ast.Call) and isinstance(parent.func, ast.Name)
-                and parent.func.id in self.param_holders and expr in parent.args
+                and parent.func.id in self.param_holders
                 and not any(isinstance(a, ast.Starred) for a in parent.args)):
             return False
         fn = self.defs[parent.func.id]
-        params = fn.args.posonlyargs + fn.args.args
-        index = parent.args.index(expr)
-        return index < len(params) and params[index].arg in self.param_holders[fn.name]
+        return _parameter_of(fn, parent, expr) in self.param_holders[fn.name]
 
     def _is_plain_value(self, parent, expr):
         """Whether `expr` is the whole value of an assignment to names."""
