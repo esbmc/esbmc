@@ -236,6 +236,20 @@ static std::string stored_expr_kind(const nlohmann::json &rhs, bool by_key)
   return literal.type_name();
 }
 
+/// The node whose bindings of `var` are the ones a read in the scope `func`
+/// sees: `func` itself when it binds `var`, else the whole module (#10489).
+static nlohmann::json binding_scope(
+  const nlohmann::json &ast,
+  const std::string &var,
+  const std::string &func)
+{
+  const nlohmann::json function = json_utils::find_function_by_path(
+    ast, json_utils::split_function_path(func));
+  return function.is_object() && json_utils::count_name_bindings(function, var)
+           ? function
+           : ast;
+}
+
 /// The annotation that types the value `rhs` in the scope `func`: that of a
 /// variable bound once, or the return annotation of a module-level function.
 /// Null for any other value (#10432).
@@ -246,7 +260,9 @@ static nlohmann::json stored_value_annotation(
 {
   const std::string type = rhs.value("_type", "");
   const std::string var = rhs.value("id", "");
-  if (type == "Name" && json_utils::count_name_bindings(ast, var) == 1)
+  if (
+    type == "Name" &&
+    json_utils::count_name_bindings(binding_scope(ast, var, func), var) == 1)
   {
     const nlohmann::json decl = json_utils::find_var_decl(var, func, ast);
     return decl.is_object() ? decl.value("annotation", nlohmann::json())
