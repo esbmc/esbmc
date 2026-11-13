@@ -6,4 +6,6 @@ main.py
 ^ +FAILED +\[global\.assertion\.3\] +line +8 +assertion
 ^ +FAILED +\[global\.assertion\.4\] +line +10 +assertion
 ^ +FAILED +\[global\.assertion\.5\] +line +12 +assertion
+^ +FAILED +\[global\.assertion\.6\] +line +14 +assertion
+^ +FAILED +\[global\.assertion\.7\] +line +17 +assertion
 ^VERIFICATION FAILED$

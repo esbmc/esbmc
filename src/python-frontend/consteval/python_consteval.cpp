@@ -7,21 +7,28 @@
 #include <unordered_set>
 
 // round(x) or round(x, ndigits) as CPython computes it. Answers nullopt where
-// the converter decides: a result outside long long, an OverflowError, or a
-// negative ndigits on an int.
+// the converter decides: a result outside long long or an OverflowError.
 static std::optional<PyConstValue>
 eval_round(const PyConstValue &x, const std::optional<long long> ndigits)
 {
-  if (x.kind == PyConstValue::INT)
-    return !ndigits || *ndigits >= 0 ? std::optional<PyConstValue>(x)
-                                     : std::nullopt;
+  const int n =
+    ndigits ? static_cast<int>(std::clamp<long long>(*ndigits, -1000, 1000))
+            : 0;
+  // bool is an int subclass, and round() of either gives an int
+  if (x.kind == PyConstValue::INT || x.kind == PyConstValue::BOOL)
+  {
+    const std::optional<long long> rounded = round_int_to_ndigits(
+      x.kind == PyConstValue::BOOL ? x.bool_val : x.int_val, n);
+    if (!rounded)
+      return std::nullopt;
+    return PyConstValue::make_int(*rounded);
+  }
   if (x.kind != PyConstValue::FLOAT)
     return std::nullopt;
   if (ndigits)
   {
-    const std::optional<double> rounded = round_to_ndigits_ties_even(
-      x.float_val,
-      static_cast<int>(std::clamp<long long>(*ndigits, -1000, 1000)));
+    const std::optional<double> rounded =
+      round_to_ndigits_ties_even(x.float_val, n);
     if (!rounded)
       return std::nullopt;
     return PyConstValue::make_float(*rounded);

@@ -8,5 +8,10 @@ elif k == 2:
     assert round(1.95, 1) == 2.0
 elif k == 3:
     assert round(-0.445, 2) == -0.44
-else:
+elif k == 4:
     assert round(9007199254740993, 0) == 9007199254740992
+elif k == 5:
+    assert round(123456789012345666, -1) == 123456789012345664
+else:
+    y = round(123456789012345666, -1)
+    assert y == 123456789012345664

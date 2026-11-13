@@ -1,4 +1,5 @@
 #include <python-frontend/math/python_round.h>
+#include <climits>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
@@ -70,4 +71,33 @@ round_to_ndigits_ties_even(const double value, const int ndigits)
   if (std::isinf(rounded))
     return std::nullopt;
   return std::signbit(value) ? -rounded : rounded;
+}
+
+std::optional<long long>
+round_int_to_ndigits(const long long value, int ndigits)
+{
+  if (ndigits >= 0)
+    return value;
+  // |value| < 2**63 < 10**19, so past 18 digits only 0 or +-10**19 can result.
+  if (ndigits < -18)
+  {
+    const unsigned long long magnitude =
+      value < 0 ? 0ULL - static_cast<unsigned long long>(value)
+                : static_cast<unsigned long long>(value);
+    if (ndigits == -19 && magnitude > 5000000000000000000ULL)
+      return std::nullopt;
+    return 0;
+  }
+
+  long long scale = 1;
+  for (; ndigits < 0; ++ndigits)
+    scale *= 10;
+  long long quotient = value / scale;
+  const long long remainder = value % scale;
+  const long long twice = 2 * (remainder < 0 ? -remainder : remainder);
+  if (twice > scale || (twice == scale && quotient % 2 != 0))
+    quotient += value < 0 ? -1 : 1;
+  if ((quotient < 0 ? -quotient : quotient) > LLONG_MAX / scale)
+    return std::nullopt;
+  return quotient * scale;
 }

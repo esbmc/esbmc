@@ -2221,6 +2221,20 @@ exprt function_call_expr::handle_round(nlohmann::json &arg) const
         return expr;
       }
     }
+    else if (ndigits && arg["value"].is_number_integer())
+    {
+      const long long val = arg["value"].get<long long>();
+      const std::optional<long long> rounded =
+        round_int_to_ndigits(is_negated ? -val : val, *ndigits);
+      if (rounded)
+      {
+        arg["value"] = *rounded;
+        arg["type"] = "int";
+        exprt expr = converter_.get_expr(arg);
+        expr.type() = type_handler_.get_typet("int", 0);
+        return expr;
+      }
+    }
     else if (ndigits)
     {
       double val = arg["value"].get<double>();
