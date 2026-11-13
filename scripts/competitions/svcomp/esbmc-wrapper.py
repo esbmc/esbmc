@@ -456,9 +456,9 @@ esbmc_dargs += "--no-align-check --k-step 2 --unlimited-k-steps "
 # <https://github.com/esbmc/esbmc/pull/1190#issuecomment-1637047028>
 esbmc_dargs += "--no-vla-size-check "
 
-# Loop summaries keep the original locations on the iteration they copy, and
-# their witnesses are not validated yet (#10563).
-esbmc_dargs += "--no-summarize-array-loops "
+# Summarise counting loops over arrays, including loops that only assert, so
+# k-induction needs no unwinding of them (#10563).
+esbmc_dargs += "--summarize-array-loops "
 
 
 def check_if_benchmark_contains_pthread(benchmark):
@@ -1185,6 +1185,7 @@ MAX_ECHO = 1000000
 # Unlike SV-COMP, Test-Comp runs assume allocation succeeds.
 testcomp_dargs = "--sv-comp --no-div-by-zero-check --force-malloc-success --state-hashing --add-symex-value-sets "
 testcomp_dargs += "--no-align-check --k-step 2 --floatbv --unlimited-k-steps --no-vla-size-check "
+# Test vectors from loop summaries are not validated yet (#10563).
 testcomp_dargs += "--no-summarize-array-loops "
 
 
