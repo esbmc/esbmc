@@ -165,7 +165,7 @@ def _allowed_list_annotation(annotation):
         return annotation.id in _LIST_ANNOTATIONS
     return (isinstance(annotation, ast.Subscript) and isinstance(annotation.value, ast.Name)
             and annotation.value.id in _LIST_ANNOTATIONS and isinstance(annotation.slice, ast.Name)
-            and annotation.slice.id in ("int", "bool"))
+            and annotation.slice.id in ("int", "bool", "Any"))
 
 
 def _declaration(node):
@@ -1164,6 +1164,7 @@ class TypedListGate:
             if not self._check_values():
                 break
         self._flag()
+        self._retype_int_reads()
         for node in ast.walk(self.module):
             node.__dict__.pop("_typed_parent", None)
             node.__dict__.pop("_typed_access", None)
@@ -1211,6 +1212,27 @@ class TypedListGate:
                     if self._sorted_call(node):
                         setattr(node, TYPED_FLAG, True)
                 setattr(compare, TYPED_FLAG, True)
+
+    def _retype_int_reads(self):
+        """Annotate `x: Any = l[i]` of a typed l as `x: int` when every value
+        x is bound to is an int, so x holds the element as an int rather than
+        an untyped pointer. A loop over a list the preprocessor cannot type
+        binds its target this way."""
+        annotations = {}
+        for scope in self.scopes:
+            for node in _walk_scope(scope.body):
+                target = _single_name_target(node)
+                if isinstance(node, ast.AnnAssign) and target is not None:
+                    annotations.setdefault(scope.loc(target.id), []).append(node)
+        for loc, nodes in annotations.items():
+            if not self.int_vars.get(loc, False) or not all(
+                    isinstance(n.annotation, ast.Name) and n.annotation.id in ("Any", "int")
+                    for n in nodes):
+                continue
+            for node in nodes:
+                if node.annotation.id == "Any" and getattr(node.value, TYPED_FLAG, False):
+                    node.annotation = ast.copy_location(ast.Name(id="int", ctx=ast.Load()),
+                                                        node.annotation)
 
     def _flag_copies(self):
         for scope, node, source in self.copies:
