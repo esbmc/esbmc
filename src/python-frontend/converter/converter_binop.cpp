@@ -1977,18 +1977,27 @@ exprt python_converter::tagged_identity_by_payload(
 {
   if (!can_emit_runtime_guard())
     return nil_exprt();
+  // Copies of a tag share its payload, so equal payloads are one object.
+  // Values that are not equal are never one object. Equal values with
+  // their own payloads may or may not be, as CPython may intern them.
   const typet payload = pointer_typet(empty_typet());
-  code_assertt check(
-    python_expr::build_equal(
-      python_expr::build_member(lhs, "value", payload),
-      python_expr::build_member(rhs, "value", payload)));
+  const exprt same_payload = python_expr::build_equal(
+    python_expr::build_member(lhs, "value", payload),
+    python_expr::build_member(rhs, "value", payload));
+  // A float tag has no comparison yet, so only equal payloads decide then.
+  const exprt differ =
+    dynamic_type_detail::float_tags_possible()
+      ? exprt(false_exprt())
+      : python_expr::build_not(
+          dynamic_type_handler_.handle_comparison("Eq", lhs, rhs));
+  code_assertt check(python_expr::build_or(same_payload, differ));
   check.location() = get_location_from_decl(element);
   check.location().user_provided(true);
   check.location().comment(
     "Unsupported: 'is' between two dynamically-typed values that are not "
     "known to be one object");
   current_block->copy_to_operands(check);
-  return migrate_expr_back(op == "Is" ? gen_true_expr() : gen_false_expr());
+  return op == "Is" ? same_payload : python_expr::build_not(same_payload);
 }
 
 /// `is` between a tagged value and a name whose identity the tag cannot
