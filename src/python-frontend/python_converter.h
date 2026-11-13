@@ -956,6 +956,12 @@ private:
     const std::vector<nlohmann::json> &args,
     const std::map<std::string, nlohmann::json> &mapping,
     const std::vector<typet> &arg_types);
+  /// The literal \p left formatted with \p args, or "" on a path that is
+  /// ended as unsupported because the formatting cannot be modelled.
+  std::string percent_format_or_refusal(
+    const nlohmann::json &left,
+    const std::vector<nlohmann::json> &args,
+    const std::map<std::string, nlohmann::json> &mapping);
 
   /// Coarse Python-level type category used to decide whether two operands
   /// in an `Eq`/`NotEq` comparison are cross-type (Python's rule: different
@@ -3852,6 +3858,10 @@ private:
     const exprt &lhs,
     const exprt &rhs,
     const locationt &loc);
+  /// Reports \p message as an unsupported construct where the path reaches
+  /// \p loc, and ends the path there.
+  void
+  end_path_as_unsupported(const std::string &message, const locationt &loc);
 
   // =========================================================================
   // Member variables
