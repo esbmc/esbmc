@@ -2174,6 +2174,13 @@ static bool fold_round_to_int(nlohmann::json &arg, const bool is_negated)
   return true;
 }
 
+// round(int, n) with n >= 0 is the int itself, not a float of it.
+static bool
+round_keeps_int(const nlohmann::json &arg, const std::optional<int> &ndigits)
+{
+  return ndigits && *ndigits >= 0 && arg["value"].is_number_integer();
+}
+
 exprt function_call_expr::handle_round(nlohmann::json &arg) const
 {
   const auto &args = call_["args"];
@@ -2204,10 +2211,7 @@ exprt function_call_expr::handle_round(nlohmann::json &arg) const
   // Compile-time evaluation for numeric literals
   if (arg.contains("value") && arg["value"].is_number())
   {
-    // round(int, n) with n >= 0 is the int itself, not a float of it
-    const bool int_unchanged =
-      ndigits && *ndigits >= 0 && arg["value"].is_number_integer();
-    if (!has_ndigits || int_unchanged)
+    if (!has_ndigits || round_keeps_int(arg, ndigits))
     {
       // round(x) -> nearest integer (returns int)
       if (fold_round_to_int(arg, is_negated))
