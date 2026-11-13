@@ -2822,6 +2822,140 @@ exprt function_call_expr::handle_complex() const
   return make_complex(real_part, imag_part);
 }
 
+namespace
+{
+bool is_int_like(const typet &t)
+{
+  return t.is_signedbv() || t.is_unsignedbv() || t.is_bool();
+}
+
+// An int or float constant, compared exactly as CPython compares them.
+struct numeric_constantt
+{
+  bool is_float = false;
+  BigInt i;
+  ieee_floatt f;
+};
+
+std::optional<numeric_constantt> numeric_constant_of(const exprt &e)
+{
+  expr2tc e2;
+  migrate_expr(e, e2);
+  if (expr2tc s = e2->simplify(); !is_nil_expr(s))
+    e2 = s;
+  numeric_constantt c;
+  if (is_constant_int2t(e2))
+    c.i = to_constant_int2t(e2).value;
+  else if (is_constant_bool2t(e2))
+    c.i = to_constant_bool2t(e2).value ? 1 : 0;
+  else if (is_constant_floatbv2t(e2))
+  {
+    c.is_float = true;
+    c.f = to_constant_floatbv2t(e2).value;
+  }
+  else
+    return std::nullopt;
+  return c;
+}
+
+// Sign of i - f for a float f that is not NaN.
+int compare_int_float(const BigInt &i, const ieee_floatt &f)
+{
+  if (f.is_infinity())
+    return f.get_sign() ? 1 : -1;
+  const BigInt whole = f.to_integer();
+  if (i != whole)
+    return i < whole ? -1 : 1;
+  // whole is f rounded toward zero, so any remainder has the sign of f.
+  ieee_floatt w(f.spec);
+  w.from_integer(whole);
+  if (w == f)
+    return 0;
+  return f.get_sign() ? 1 : -1;
+}
+
+bool numeric_less(const numeric_constantt &a, const numeric_constantt &b)
+{
+  if (!a.is_float && !b.is_float)
+    return a.i < b.i;
+  if (a.is_float && b.is_float)
+    return a.f < b.f;
+  if ((a.is_float && a.f.is_NaN()) || (b.is_float && b.f.is_NaN()))
+    return false;
+  return a.is_float ? compare_int_float(b.i, a.f) > 0
+                    : compare_int_float(a.i, b.f) < 0;
+}
+
+// min()/max() return the selected argument itself, so over int and float
+// arguments the result type depends on the values. Select it here when every
+// argument is a constant; otherwise the caller still promotes to float.
+std::optional<exprt> select_mixed_int_float(
+  const std::vector<exprt> &exprs,
+  const std::string &func_name)
+{
+  const auto is_float = [](const exprt &e) { return e.type().is_floatbv(); };
+  const auto is_int = [](const exprt &e) { return is_int_like(e.type()); };
+  if (
+    std::none_of(exprs.begin(), exprs.end(), is_float) ||
+    std::none_of(exprs.begin(), exprs.end(), is_int))
+    return std::nullopt;
+
+  std::vector<numeric_constantt> values;
+  for (const exprt &e : exprs)
+  {
+    std::optional<numeric_constantt> c = numeric_constant_of(e);
+    if (!c)
+      return std::nullopt;
+    values.push_back(*c);
+  }
+
+  // CPython keeps the first of equal extremes: an argument replaces the
+  // current one only if it compares strictly greater (max) or less (min).
+  const bool is_max = func_name == "max";
+  size_t best = 0;
+  for (size_t k = 1; k < values.size(); ++k)
+    if (
+      is_max ? numeric_less(values[best], values[k])
+             : numeric_less(values[k], values[best]))
+      best = k;
+  return exprs[best];
+}
+
+typet common_min_max_type(
+  const std::vector<exprt> &exprs,
+  const std::string &func_name,
+  const namespacet &ns)
+{
+  typet result_type = exprs[0].type();
+  for (size_t i = 1; i < exprs.size(); ++i)
+  {
+    const typet &t = exprs[i].type();
+    if (base_type_eq(result_type, t, ns))
+      continue;
+    if (result_type.is_floatbv() && t.is_signedbv())
+      continue; // keep float
+    else if (result_type.is_signedbv() && t.is_floatbv())
+      result_type = t; // promote int -> float
+    else if (
+      (result_type.is_signedbv() || result_type.is_unsignedbv()) &&
+      (t.is_signedbv() || t.is_unsignedbv()))
+    {
+      unsigned wa = result_type.is_signedbv()
+                      ? to_signedbv_type(result_type).get_width()
+                      : to_unsignedbv_type(result_type).get_width();
+      unsigned wb = t.is_signedbv() ? to_signedbv_type(t).get_width()
+                                    : to_unsignedbv_type(t).get_width();
+      result_type = signedbv_typet(std::max(wa, wb));
+    }
+    else
+      throw std::runtime_error(
+        func_name + "() arguments must be of comparable types: got " +
+        result_type.pretty() + " and " + t.pretty());
+  }
+  return result_type;
+}
+} // namespace
+
 exprt function_call_expr::handle_min_max(
   const std::string &func_name,
   irep_idt comparison_op) const
@@ -2943,33 +3077,11 @@ exprt function_call_expr::handle_min_max(
           func_name + "([...])");
     }
 
-  // Determine common promoted type across all arguments.
-  typet result_type = exprs[0].type();
-  for (size_t i = 1; i < exprs.size(); ++i)
-  {
-    const typet &t = exprs[i].type();
-    if (base_type_eq(result_type, t, converter_.ns))
-      continue;
-    if (result_type.is_floatbv() && t.is_signedbv())
-      continue; // keep float
-    else if (result_type.is_signedbv() && t.is_floatbv())
-      result_type = t; // promote int -> float
-    else if (
-      (result_type.is_signedbv() || result_type.is_unsignedbv()) &&
-      (t.is_signedbv() || t.is_unsignedbv()))
-    {
-      unsigned wa = result_type.is_signedbv()
-                      ? to_signedbv_type(result_type).get_width()
-                      : to_unsignedbv_type(result_type).get_width();
-      unsigned wb = t.is_signedbv() ? to_signedbv_type(t).get_width()
-                                    : to_unsignedbv_type(t).get_width();
-      result_type = signedbv_typet(std::max(wa, wb));
-    }
-    else
-      throw std::runtime_error(
-        func_name + "() arguments must be of comparable types: got " +
-        result_type.pretty() + " and " + t.pretty());
-  }
+  if (std::optional<exprt> selected = select_mixed_int_float(exprs, func_name))
+    return *selected;
+
+  const typet result_type =
+    common_min_max_type(exprs, func_name, converter_.ns);
 
   // Cast all args to the common type.
   for (auto &e : exprs)
