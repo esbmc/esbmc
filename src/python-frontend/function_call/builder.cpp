@@ -2040,7 +2040,7 @@ reuses_c_model(const nlohmann::json &call, const symbol_id &function_id)
            call["func"].value("_type", "") == "Attribute");
 }
 
-// A typed nondet_list builder lowers to its C model (#10451).
+// A typed list's builder and sorted() lower to their C models (#10451).
 // __ESBMC_unreachable and __ESBMC_unroll lower to calls to the C intrinsics
 // of the same names. Symex's intrinsic handler in symex_main.cpp fires on
 // __ESBMC_unreachable under --enable-unreachability-intrinsic.
@@ -2051,10 +2051,9 @@ exprt function_call_builder::build_c_intrinsic_call(
   const symbol_id &function_id) const
 {
   const std::string &func_name = function_id.get_function();
-  // A nondet_list(nondet_int) builder whose list the gate typed (#10451).
-  if (python_list::is_typed(call_) && func_name == "_nondet_list_int")
-    return python_list(converter_, call_)
-      .typed_nondet(converter_.get_expr(call_["args"][0]));
+  // A typed list's nondet_list(nondet_int) builder or sorted() (#10451).
+  if (python_list::is_typed_call(call_))
+    return python_list(converter_, call_).typed_call(func_name);
 
   const bool is_unroll = func_name == kEsbmcUnroll;
   if (!is_unroll && !is_unreachable_call(function_id))

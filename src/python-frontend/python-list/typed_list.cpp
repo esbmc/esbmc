@@ -156,3 +156,40 @@ exprt python_list::typed_binop()
     build_typecast(to_value_expr(args[1], converter_.ns), typed_int_type());
   return typed_new_list("c:@F@__ESBMC_tlist_repeat", args);
 }
+
+bool python_list::is_typed_call(const nlohmann::json &call)
+{
+  const std::string func = call["func"].value("id", "");
+  return (is_typed(call) && func == "_nondet_list_int") ||
+         ((is_typed(call) || call.value("esbmc_typed_list_source", false)) &&
+          func == "sorted");
+}
+
+exprt python_list::typed_call(const std::string &func_name)
+{
+  if (func_name == "sorted")
+    return typed_sorted();
+  return typed_nondet(converter_.get_expr(list_value_["args"][0]));
+}
+
+exprt python_list::typed_sorted()
+{
+  bool reverse = false;
+  for (const auto &keyword : list_value_["keywords"])
+    reverse = keyword["value"]["value"].get<bool>();
+  const exprt sorted = typed_new_list(
+    "c:@F@__ESBMC_tlist_sorted",
+    {converter_.get_expr(list_value_["args"][0]),
+     reverse ? exprt(true_exprt()) : exprt(false_exprt())});
+  if (is_typed(list_value_))
+    return sorted;
+
+  // The gate found a use of the result the typed model does not implement:
+  // hand it an untyped list holding the same ints.
+  const std::string int_name =
+    converter_.get_type_handler().type_to_string(typed_int_type());
+  constant_exprt int_type_id(size_type());
+  int_type_id.set_value(integer2binary(
+    std::hash<std::string>{}(int_name), config.ansi_c.address_width));
+  return typed_new_list("c:@F@__ESBMC_tlist_to_list", {sorted, int_type_id});
+}

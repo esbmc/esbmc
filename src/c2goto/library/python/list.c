@@ -896,6 +896,112 @@ PySlot *__ESBMC_tlist_at(PyListObject *l, size_t index)
   return &l->slot[index];
 }
 
+/* One comparator of a sorting network over (valid, value) pairs, valid
+ * ones first: *a gets the pair that comes first. */
+static inline void __ESBMC_tlist_order(
+  bool *va,
+  long long *a,
+  bool *vb,
+  long long *b,
+  bool reverse)
+{
+  bool swap = *vb && (!*va || (reverse ? *b > *a : *b < *a));
+  bool vx = *va;
+  long long x = *a;
+  *va = swap ? *vb : vx;
+  *a = swap ? *b : x;
+  *vb = swap ? vx : *vb;
+  *b = swap ? x : *b;
+}
+
+#define __ESBMC_TLIST_ORDER(i, j)                                              \
+  __ESBMC_tlist_order(&ok##i, &v##i, &ok##j, &v##j, reverse)
+
+/* sorted(src) or sorted(src, reverse=True), as a fresh typed list. Equal ints
+ * are indistinguishable, so stability needs no care. Up to 8 elements go
+ * through a fixed 19-comparator network in which the unused slots sort last,
+ * so the sort adds no loop and no path. Longer lists use an insertion sort. */
+PyListObject *__ESBMC_tlist_sorted(const PyListObject *src, bool reverse)
+{
+  PyListObject *l = __ESBMC_tlist_create();
+  size_t n = src->size;
+  l->size = n;
+  if (n > 8)
+  {
+    size_t i = 0;
+    while (i < n)
+    {
+      l->slot[i].v = src->slot[i].v;
+      i++;
+    }
+    i = 1;
+    while (i < n)
+    {
+      long long x = l->slot[i].v;
+      size_t j = i;
+      while (j > 0 && (reverse ? l->slot[j - 1].v < x : l->slot[j - 1].v > x))
+      {
+        l->slot[j].v = l->slot[j - 1].v;
+        j--;
+      }
+      l->slot[j].v = x;
+      i++;
+    }
+    return l;
+  }
+
+  bool ok0 = n > 0, ok1 = n > 1, ok2 = n > 2, ok3 = n > 3;
+  bool ok4 = n > 4, ok5 = n > 5, ok6 = n > 6, ok7 = n > 7;
+  long long v0 = src->slot[0].v, v1 = src->slot[1].v;
+  long long v2 = src->slot[2].v, v3 = src->slot[3].v;
+  long long v4 = src->slot[4].v, v5 = src->slot[5].v;
+  long long v6 = src->slot[6].v, v7 = src->slot[7].v;
+  __ESBMC_TLIST_ORDER(0, 2);
+  __ESBMC_TLIST_ORDER(1, 3);
+  __ESBMC_TLIST_ORDER(4, 6);
+  __ESBMC_TLIST_ORDER(5, 7);
+  __ESBMC_TLIST_ORDER(0, 4);
+  __ESBMC_TLIST_ORDER(1, 5);
+  __ESBMC_TLIST_ORDER(2, 6);
+  __ESBMC_TLIST_ORDER(3, 7);
+  __ESBMC_TLIST_ORDER(0, 1);
+  __ESBMC_TLIST_ORDER(2, 3);
+  __ESBMC_TLIST_ORDER(4, 5);
+  __ESBMC_TLIST_ORDER(6, 7);
+  __ESBMC_TLIST_ORDER(2, 4);
+  __ESBMC_TLIST_ORDER(3, 5);
+  __ESBMC_TLIST_ORDER(1, 4);
+  __ESBMC_TLIST_ORDER(3, 6);
+  __ESBMC_TLIST_ORDER(1, 2);
+  __ESBMC_TLIST_ORDER(3, 4);
+  __ESBMC_TLIST_ORDER(5, 6);
+  l->slot[0].v = v0;
+  l->slot[1].v = v1;
+  l->slot[2].v = v2;
+  l->slot[3].v = v3;
+  l->slot[4].v = v4;
+  l->slot[5].v = v5;
+  l->slot[6].v = v6;
+  l->slot[7].v = v7;
+  return l;
+}
+
+#undef __ESBMC_TLIST_ORDER
+
+/* The untyped list holding the elements of typed list t, for a use of a
+ * typed list's sorted copy that the typed model does not implement. */
+PyListObject *__ESBMC_tlist_to_list(const PyListObject *t, size_t int_type_id)
+{
+  PyListObject *l = __ESBMC_list_create();
+  size_t i = 0;
+  while (i < t->size)
+  {
+    __ESBMC_list_push(l, &t->slot[i].v, int_type_id, sizeof(long long), 0, 1);
+    i++;
+  }
+  return l;
+}
+
 bool __ESBMC_list_set_at(
   PyListObject *l,
   size_t index,
