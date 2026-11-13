@@ -372,24 +372,44 @@ def _split_module_holders(module, module_name, classes):
     module.body = candidate.body
 
 
-def _kinds(value, known):
+def _kinds(value, known, returns):
     """The builtin types `value` may evaluate to, or None when not known here.
-    `known` holds the types of names bound only to values of known types."""
+    `known` holds the types of names bound only to values of known types, and
+    `returns` the types of what functions return."""
     if isinstance(value, ast.Constant):
         return {type(value.value).__name__}
     if isinstance(value, ast.Name):
         return known.get(value.id)
     if isinstance(value, ast.IfExp):
-        body, orelse = _kinds(value.body, known), _kinds(value.orelse, known)
+        body, orelse = _kinds(value.body, known, returns), _kinds(value.orelse, known, returns)
         return None if body is None or orelse is None else body | orelse
     if not isinstance(value, ast.Call):
         return None
     name = getattr(value.func, "id", None) or getattr(value.func, "attr", "")
+    if isinstance(value.func, ast.Name) and name in returns:
+        return returns[name]
     if isinstance(value.func, ast.Name) and name in ("int", "float"):
         return {name}
     if name in ("nondet_int", "nondet_float"):
         return {name[len("nondet_"):]}
     return None
+
+
+def _return_kinds(module):
+    """The builtin types each plain function returns, when it ends in a
+    `return` and every `return` in it gives a value of known type."""
+    plain = _plain_functions(module, binding_sites(module))
+    returns = {}
+    for fn in module.body:
+        if isinstance(fn, ast.FunctionDef) and fn.name in plain and isinstance(
+                fn.body[-1], ast.Return):
+            kinds = [
+                _kinds(r.value, {}, {}) if r.value else None for r in ast.walk(fn)
+                if isinstance(r, ast.Return)
+            ]
+            if None not in kinds:
+                returns[fn.name] = set().union(*kinds)
+    return returns
 
 
 def _number_kinds(module):
@@ -402,12 +422,14 @@ def _number_kinds(module):
         if (isinstance(node, ast.Assign) and len(node.targets) == 1
                 and isinstance(node.targets[0], ast.Name)):
             bindings.setdefault(node.targets[0].id, []).append(node.value)
+    returns = _return_kinds(module)
     known = {}
     for _ in range(2):
         known = {
             name: set().union(*kinds)
             for name, values in bindings.items()
-            for kinds in [[_kinds(v, known) for v in values]] if values and None not in kinds
+            for kinds in [[_kinds(v, known, returns) for v in values]]
+            if values and None not in kinds
         }
     return known
 
@@ -429,14 +451,47 @@ def _int_or_float_names(module):
     }
 
 
+def _reads_only_own_names(fn):
+    """Whether `fn` reads no name but its own parameters and locals and the
+    builtins, so that it cannot see a copy of a split name."""
+    own = {a.arg for a in ast.walk(fn.args) if isinstance(a, ast.arg)}
+    own |= {
+        n.id
+        for n in ast.walk(fn) if isinstance(n, ast.Name) and not isinstance(n.ctx, ast.Load)
+    }
+    return all(n.id in own or hasattr(builtins, n.id) for n in ast.walk(fn)
+               if isinstance(n, ast.Name) and isinstance(n.ctx, ast.Load))
+
+
+def _closed_functions(module, bound):
+    """The plain functions of `module` that read only their own names."""
+    plain = _plain_functions(module, bound)
+    return {
+        fn.name
+        for fn in module.body
+        if isinstance(fn, ast.FunctionDef) and fn.name in plain and _reads_only_own_names(fn)
+    }
+
+
+def _calls_nothing_split(call, bound, closed):
+    """Whether `call` calls a builtin, `_sv_verifier` or a function of
+    `closed` with no arguments, so that it sees no copy of a split name."""
+    if _is_builtin_call(call, bound):
+        return True
+    return isinstance(call.func,
+                      ast.Name) and call.func.id in closed and not (call.args or call.keywords)
+
+
 def _numbers_only(module):
-    """Whether the split statement of `module` calls only builtins and
-    `_sv_verifier`, stores only into names and tests identity only between
+    """Whether the split statement of `module` calls only builtins,
+    `_sv_verifier` and, with no arguments, plain functions that read only
+    their own names, stores only into names and tests identity only between
     `type()` results. Anything else may see the int and the float copies as
     one value or one parameter."""
     bound = binding_sites(module)
+    closed = _closed_functions(module, bound)
     for node in _own_nodes(module.body[-1:]):
-        if isinstance(node, ast.Call) and not _is_builtin_call(node, bound):
+        if isinstance(node, ast.Call) and not _calls_nothing_split(node, bound, closed):
             return False
         if isinstance(node, (ast.Attribute, ast.Subscript)) and not isinstance(node.ctx, ast.Load):
             return False
