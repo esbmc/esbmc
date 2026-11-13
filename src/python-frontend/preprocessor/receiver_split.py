@@ -33,8 +33,8 @@ import re
 from preprocessor.binding_sites import binding_sites
 from preprocessor.function_value_dispatch import _NESTED, _UNCOPYABLE, _visible_names
 from preprocessor.function_value_types import _REFLECTIVE
-from preprocessor.receiver_classes import (_module_classes, _own_nodes, _scope_receivers,
-                                           refuse_path_dependent_receivers)
+from preprocessor.receiver_classes import (_module_classes, _own_nodes, _scope_blocks,
+                                           _scope_receivers, refuse_path_dependent_receivers)
 from preprocessor.unbound_locals import _located
 
 _CAP = 32
@@ -238,6 +238,140 @@ def _calls_known(module, classes, receivers):
         for n in _own_nodes(module.body[-1:]) if isinstance(n, ast.Call))
 
 
+def _from_imported(module):
+    """The dotted names a top-level `from m import x` may bind as modules."""
+    return [
+        f"{s.module}.{a.name}" for s in module.body
+        if isinstance(s, ast.ImportFrom) and s.module and not s.level for a in s.names
+    ]
+
+
+def _distinct_imports(module):
+    """Per name a top-level `import` binds and nothing else does, the module
+    it binds; empty unless every import of `module` binds a module no other
+    binds, so that two such names are one module only when they are one name.
+    `from pkg import sub` may bind the module `pkg.sub`."""
+    sites = binding_sites(module)
+    imports = [a for s in module.body if isinstance(s, ast.Import) for a in s.names]
+    names = {
+        a.asname or a.name.split(".")[0]: a.name if a.asname else a.name.split(".")[0]
+        for a in imports
+    }
+    bound = list(names.values()) + _from_imported(module)
+    if len(set(bound)) != len(bound) or any(sites[name] != 1 for name in names):
+        return {}
+    return names
+
+
+def _module_leaves(value, modules):
+    """The names of `modules` that `value`, a name or a conditional of names,
+    may evaluate to; None for anything else."""
+    if isinstance(value, ast.Name):
+        return {value.id} if value.id in modules else None
+    if isinstance(value, ast.IfExp):
+        body, orelse = _module_leaves(value.body, modules), _module_leaves(value.orelse, modules)
+        return None if body is None or orelse is None else body | orelse
+    return None
+
+
+def _module_holders(module, modules):
+    """The module-level names bound only to one of several `modules`."""
+    sites = binding_sites(module)
+    found = {}
+    for node in _own_nodes(module.body):
+        if (isinstance(node, ast.Assign) and len(node.targets) == 1
+                and isinstance(node.targets[0], ast.Name)):
+            leaves = _module_leaves(node.value, modules)
+            found.setdefault(node.targets[0].id, []).append(leaves)
+    return {
+        name
+        for name, leaves in found.items()
+        if None not in leaves and len(set().union(*leaves)) > 1 and sites[name] == len(leaves)
+    }
+
+
+def _held_modules(candidate, modules):
+    """Per copy of a holder in the split `candidate`, the module its one
+    binding assigns, when that binding opens its block and so runs before
+    every read of the copy; each such binding becomes `pass`."""
+    sites = binding_sites(candidate)
+    held = {}
+    for block in _scope_blocks(candidate.body):
+        first = block[0] if block else None
+        if (isinstance(first, ast.Assign) and len(first.targets) == 1
+                and isinstance(first.targets[0], ast.Name)
+                and first.targets[0].id.startswith(_PREFIX) and isinstance(first.value, ast.Name)
+                and first.value.id in modules and sites[first.targets[0].id] == 1):
+            held[first.targets[0].id] = first.value.id
+            block[0] = ast.copy_location(ast.Pass(), first)
+    return held
+
+
+class _ModuleReads(ast.NodeTransformer):
+    """Read each held copy as its module, and decide identity tests between
+    modules, which are the same module only when they are the same name."""
+
+    def __init__(self, held, modules):
+        self.held = held
+        self.modules = modules
+
+    def visit_Name(self, node):  # pylint: disable=invalid-name,missing-function-docstring
+        if isinstance(node.ctx, ast.Load) and node.id in self.held:
+            return ast.copy_location(ast.Name(id=self.held[node.id], ctx=ast.Load()), node)
+        return node
+
+    def visit_Compare(self, node):  # pylint: disable=invalid-name,missing-function-docstring
+        self.generic_visit(node)
+        sides = [node.left] + node.comparators
+        if not (len(node.ops) == 1 and isinstance(node.ops[0], (ast.Is, ast.IsNot))
+                and all(isinstance(s, ast.Name) and s.id in self.modules for s in sides)):
+            return node
+        same = sides[0].id == sides[1].id
+        return ast.copy_location(ast.Constant(same == isinstance(node.ops[0], ast.Is)), node)
+
+
+def _module_reads_only(module, holders, modules):
+    """Whether every read of a holder is the object of an attribute read or a
+    side of an `is` or `is not` test with one of `modules`."""
+    for parent in ast.walk(module):
+        for node in ast.iter_child_nodes(parent):
+            if not (isinstance(node, ast.Name) and isinstance(node.ctx, ast.Load)
+                    and node.id in holders):
+                continue
+            if isinstance(parent, ast.Attribute):
+                continue
+            sides = [parent.left] + parent.comparators if isinstance(parent, ast.Compare) else []
+            if not (len(sides) == 2 and isinstance(parent.ops[0], (ast.Is, ast.IsNot)) and all(
+                    isinstance(s, ast.Name) and (s.id in modules or s.id in holders)
+                    for s in sides)):
+                return False
+    return True
+
+
+def _split_module_holders(module, module_name, classes):
+    """Split the entry module where it binds a name to one of several
+    imported modules, and read each copy as its module (#10379). The
+    converter holds no module in a variable."""
+    modules = _distinct_imports(module)
+    holders = _module_holders(module, modules)
+    if not holders or not _module_reads_only(module, holders, modules):
+        return
+    candidate = copy.deepcopy(module)
+    try:
+        candidate.body = _Splitter(holders).block(candidate.body, frozenset())
+    except _Refused:
+        return
+    held = _held_modules(candidate, modules)
+    _ModuleReads(held, modules).visit(candidate)
+    ast.fix_missing_locations(candidate)
+    if (any(
+            isinstance(n, ast.Name) and n.id.startswith(_PREFIX) and _base(n.id) in holders
+            for n in ast.walk(candidate)) or not _calls_known(candidate, classes, set())
+            or _refused(candidate, module_name)):
+        return
+    module.body = candidate.body
+
+
 def _kinds(value, known):
     """The builtin types `value` may evaluate to, or None when not known here.
     `known` holds the types of names bound only to values of known types."""
@@ -332,6 +466,8 @@ def split_path_dependent_receivers(module, module_name):
     receivers = set()
     if len(classes) >= 2 and _refused(module, module_name):
         receivers = set(_scope_receivers(module, module, classes, returns))
+    if not receivers:
+        _split_module_holders(module, module_name, classes)
     names = receivers or _int_or_float_names(module)
     candidate = names and _split(module, names)
     if not candidate or _refused(candidate, module_name):
