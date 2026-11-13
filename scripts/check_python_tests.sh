@@ -197,6 +197,11 @@ ignored_dirs=(
   "github_6281"
   "github_6281_used"
   "github_6281_fail"
+  # These end with an exception outside their --python-check-exceptions
+  # family (ValueError, NameError), which the ESBMC run reports nothing for,
+  # so CPython exits non-zero although ESBMC verifies SUCCESSFUL.
+  "reraise_handler_var_reassigned"
+  "reraise_handler_var_shadowed"
 )
 
 # Prefixes for ESBMC-specific regression directories that are not suitable for
