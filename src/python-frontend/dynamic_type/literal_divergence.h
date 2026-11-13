@@ -634,9 +634,24 @@ inline bool ifexp_arms_diverge(
          kinds_diverge({then_kind, else_kind});
 }
 
+// The literal kind `stmt` leaves `name` bound to, given `prior`, the kind
+// before it: `prior` when `stmt` does not bind `name`, else the kind of a
+// plain assignment, else "".
+inline std::string kind_after_statement(
+  const nlohmann::json &stmt,
+  const std::string &name,
+  const std::string &prior,
+  const nlohmann::json &module_body)
+{
+  if (assigns_name(stmt, name) && stmt.contains("value"))
+    return classify_literal_value_kind(stmt["value"], module_body);
+  return count_bindings(stmt, name) == 0 ? prior : "";
+}
+
 // True if some top-level `If` in `scope_body`, or a conditional expression
-// bound to `name`, assigns `name` genuinely incompatible literal kinds across
-// every branch.
+// bound to `name`, assigns `name` genuinely incompatible literal kinds. An
+// `If` whose branches do not all assign `name` joins them with the kind
+// bound before it.
 inline bool scope_assigns_divergent_literal_types(
   const std::string &name,
   const nlohmann::json &scope_body,
@@ -645,10 +660,13 @@ inline bool scope_assigns_divergent_literal_types(
   if (!scope_body.is_array())
     return false;
 
+  std::string prior_kind;
   for (const auto &stmt : scope_body)
   {
     if (!stmt.is_object())
       continue;
+    const std::string before = prior_kind;
+    prior_kind = kind_after_statement(stmt, name, before, module_body);
     if (
       assigns_name(stmt, name) && stmt.contains("value") &&
       ifexp_arms_diverge(stmt["value"], module_body))
@@ -664,9 +682,15 @@ inline bool scope_assigns_divergent_literal_types(
       continue;
 
     auto it = kinds.find(name);
-    if (
-      it != kinds.end() && leaf_count[name] == leaf_total &&
-      kinds_diverge(it->second))
+    if (it == kinds.end())
+      continue;
+    if (leaf_count[name] < leaf_total)
+    {
+      if (before.empty())
+        continue;
+      it->second.insert(before);
+    }
+    if (kinds_diverge(it->second))
       return true;
   }
   return false;
