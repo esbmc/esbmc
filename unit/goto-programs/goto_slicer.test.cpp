@@ -335,3 +335,39 @@ TEST_CASE("goto-slicer resolves calls through pointers", "[goto-slicer]")
   )");
   CHECK(!relevant.removed(indirect_call(relevant)));
 }
+
+TEST_CASE("goto-slicer keeps a stored index a check reads", "[goto-slicer]")
+{
+  // a[1] = 5 writes no pointer, but p[a[1]] reads it as an index, so the
+  // pointer check depends on it.
+  const std::string src = R"(
+    int buf[8];
+    int main()
+    {
+      int a[2];
+      int *p = buf;
+      a[1] = 5;
+      p[a[1]] = 0;
+      return 0;
+    }
+  )";
+  const auto store_to_a =
+    [](const slicedt &s) -> const goto_programt::instructiont & {
+    for (const auto &i : s.main_body().instructions)
+      if (i.is_assign() && is_index2t(to_code_assign2t(i.code).target))
+      {
+        const expr2tc &source =
+          to_index2t(to_code_assign2t(i.code).target).source_value;
+        if (
+          is_symbol2t(source) &&
+          ends_with(to_symbol2t(source).thename.as_string(), "@a"))
+          return i;
+      }
+    FAIL("no store to a");
+    abort();
+  };
+  const slicedt checked = slice(src, slice_stept::base_case, true);
+  CHECK(!checked.removed(store_to_a(checked)));
+  const slicedt unchecked = slice(src);
+  CHECK(unchecked.removed(store_to_a(unchecked)));
+}
