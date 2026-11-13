@@ -23,6 +23,11 @@
 /// @returns true if any rewrite was performed.
 bool reassociate_arith(expr2tc &expr);
 
+/// Under --ir integers are unbounded: true when @p value lies outside @p
+/// type's range, so folding it into a constant of @p type would wrap. Such a
+/// fold is left to the solver (#10537).
+bool int_encoding_fold_wraps(const BigInt &value, const type2tc &type);
+
 /// Reassociate the mul chain rooted at @p expr, in place.
 ///
 /// Flattens nested `mul` nodes into a list of leaves, folds all constant

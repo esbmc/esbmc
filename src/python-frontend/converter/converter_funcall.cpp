@@ -349,7 +349,95 @@ exprt python_converter::get_len_on_class_instance(const nlohmann::json &element)
   if (exprt bound = get_len_on_bound_instance(arg, element); bound.is_not_nil())
     return bound;
 
+  if (
+    exprt computed = get_len_on_computed_instance(arg, location);
+    computed.is_not_nil())
+    return computed;
+
   return get_len_on_list_element(arg, location);
+}
+
+static bool names_class(const nlohmann::json &node, const std::string &cls)
+{
+  if (
+    node.is_object() &&
+    (node.value("id", "") == cls || node.value("attr", "") == cls))
+    return true;
+  return node.is_structured() &&
+         std::any_of(node.begin(), node.end(), [&](const nlohmann::json &c) {
+           return names_class(c, cls);
+         });
+}
+
+static bool derives_from(const nlohmann::json &ast, const std::string &cls)
+{
+  if (ast.is_object() && ast.value("_type", "") == "ClassDef")
+    for (const auto &base : ast["bases"])
+      if (names_class(base, cls))
+        return true;
+  return ast.is_structured() &&
+         std::any_of(ast.begin(), ast.end(), [&](const nlohmann::json &child) {
+           return derives_from(child, cls);
+         });
+}
+
+// len(a * n), len(f()), len(mod.C()): the AST names no class, but the
+// converted type does (#10505). That type is the static class, so it is the
+// runtime class only when no class in the program derives from it.
+exprt python_converter::get_len_on_computed_instance(
+  const nlohmann::json &arg,
+  const locationt &location)
+{
+  const std::string kind = arg.value("_type", "");
+  if (kind != "BinOp" && kind != "Call")
+    return nil_exprt();
+  const typet probed = probe_expr(arg).type();
+  const typet &cls_type = probed.is_pointer() ? probed.subtype() : probed;
+  if (!is_user_class_pointer(probed) && !is_user_class_struct_type(probed))
+    return nil_exprt();
+
+  const std::string cls = class_name_of(cls_type);
+  bool derived = derives_from(*entry_ast_, cls) || derives_from(*ast_json, cls);
+  if (extra_asts_)
+    for (const nlohmann::json &ast : *extra_asts_)
+      derived = derived || derives_from(ast, cls);
+  for (const auto &module : module_ast_pool_)
+    derived = derived || derives_from(module.second, cls);
+  if (derived)
+    throw std::runtime_error(
+      "len() of an expression whose class '" + cls +
+      "' has subclasses is not supported");
+
+  exprt value = get_expr(arg);
+  symbolt tmp = create_return_temp_variable(probed, location, "len_arg");
+  symbol_table_.add(tmp);
+  exprt object = symbol_expr(tmp);
+  code_declt decl(object);
+  decl.location() = location;
+  current_block->copy_to_operands(decl);
+  convert_function_call_to_side_effect(value);
+  code_assignt store(object, value);
+  store.location() = location;
+  current_block->copy_to_operands(store);
+
+  if (object.type().is_pointer())
+  {
+    code_ifthenelset none_guard;
+    none_guard.cond() = equality_exprt(object, gen_zero(object.type()));
+    codet raise("expression");
+    raise.copy_to_operands(
+      get_exception_handler().gen_exception_raise(
+        "TypeError", "object of type 'NoneType' has no len()"));
+    none_guard.then_case() = raise;
+    none_guard.location() = location;
+    current_block->copy_to_operands(none_guard);
+  }
+
+  const exprt dunder = dispatch_unary_dunder_operator("len", object, location);
+  if (dunder.is_nil())
+    return get_exception_handler().gen_exception_raise(
+      "TypeError", "object of type '" + cls + "' has no len()");
+  return checked_len_result(dunder, location);
 }
 
 // len(self): an unannotated name whose symbol is bound to a class instance.
@@ -729,6 +817,42 @@ binding_precedes(const nlohmann::json &scope, const std::string &name, int line)
   return std::nullopt;
 }
 
+/// Whether the top-level binding of \p name in \p module is a constant, or a
+/// call of a module function bound once whose every return value is a
+/// constant, so that \p name holds a value that cannot be called (#10430).
+static bool
+binds_constant_result(const nlohmann::json &module, const std::string &name)
+{
+  for (const auto &stmt : module["body"])
+  {
+    const nlohmann::json *target = binding_target(stmt);
+    if (
+      target == nullptr || target->value("id", "") != name ||
+      stmt["value"].is_null())
+      continue;
+    const nlohmann::json &value = stmt["value"];
+    if (value.value("_type", "") == "Constant")
+      return true;
+    if (
+      value.value("_type", "") != "Call" ||
+      value["func"].value("_type", "") != "Name")
+      return false;
+    const std::string callee = value["func"]["id"];
+    const nlohmann::json function =
+      json_utils::try_find_function(module["body"], callee);
+    if (
+      !function.contains("body") ||
+      json_utils::count_name_bindings(module, callee) != 1)
+      return false;
+    std::vector<nlohmann::json> values;
+    json_utils::collect_return_values(function["body"], values);
+    return std::all_of(values.begin(), values.end(), [](const auto &v) {
+      return v.value("_type", "") == "Constant";
+    });
+  }
+  return false;
+}
+
 /// Whether the call on \p line follows the one top-level `from m import` that
 /// binds \p name to the variable \p file defines as its only binding.
 std::optional<bool> python_converter::import_binds_before(
@@ -766,9 +890,19 @@ std::optional<bool> python_converter::import_binds_before(
   return line > (*import)["end_lineno"].get<int>();
 }
 
+/// Whether \p name is a builtin the program may rebind, or is bound to a value
+/// that cannot be called.
+static bool
+may_name_non_callable(const nlohmann::json &module, const std::string &name)
+{
+  return python_annotation_intrinsics::builtin_functions().count(name) ||
+         binds_constant_result(module, name);
+}
+
 /// A builtin called after the program rebound its name to a value that cannot
-/// be called raises the TypeError of calling that value (#10162). The name
-/// is looked up in the scope first, so the builtin runs only while it is
+/// be called raises the TypeError of calling that value (#10162), and so does
+/// a name bound to such a value, as a decorator returning one binds it. The
+/// name is looked up in the scope first, so the builtin runs only while it is
 /// unbound; a binding whose position against the call is not known is
 /// refused rather than guessed.
 std::optional<exprt>
@@ -778,8 +912,7 @@ python_converter::call_rebound_builtin(const nlohmann::json &element)
   if (
     func.value("_type", "") != "Name" ||
     !is_program_file(current_python_file) ||
-    !python_annotation_intrinsics::builtin_functions().count(
-      func["id"].get<std::string>()))
+    !may_name_non_callable(*ast_json, func["id"].get<std::string>()))
     return std::nullopt;
 
   const std::string name = func["id"];
@@ -805,7 +938,7 @@ python_converter::call_rebound_builtin(const nlohmann::json &element)
 
   if (!bound)
     throw std::runtime_error(
-      "unsupported: call of builtin '" + name +
+      "unsupported: call of '" + name +
       "', which the program rebinds to a value that is not callable");
   if (!*bound)
     return std::nullopt;

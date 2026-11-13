@@ -1,0 +1,6 @@
+CORE
+main.c
+--goto2lean --unsigned-overflow-check
+^  ¬\(\(BitVec\.uaddOverflow lo hi\) = true\) ∧ \($
+^  ¬\(\(\(2#32\) == 0#32\) = true\) ∧ \($
+^  post \(BitVec\.smtUDiv \(lo \+ hi\) \(2#32\)\)\)\)$

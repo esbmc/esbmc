@@ -1200,6 +1200,14 @@ private:
     const nlohmann::json &slice_node,
     bool literal_zero_step);
 
+  exprt str_slice_step(
+    const nlohmann::json &slice_node,
+    long long step_val,
+    bool literal_step);
+
+  void
+  refuse_nonconstant_step(const nlohmann::json &slice_node, bool constant_step);
+
   exprt normalize_and_scale_index(
     const exprt &index,
     long long length,

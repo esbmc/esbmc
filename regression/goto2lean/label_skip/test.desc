@@ -1,0 +1,4 @@
+CORE
+main.c
+--goto2lean
+^def v \(c : BitVec 32\) \(post : Unit → Prop\) : Prop :=\n  let join_1 := \(\n    post \(\)\);$

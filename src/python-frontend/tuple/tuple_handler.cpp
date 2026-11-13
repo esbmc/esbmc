@@ -411,7 +411,8 @@ exprt tuple_handler::handle_tuple_subscript(
       [&](const std::string &key, long long fallback) -> long long {
       if (!slice.contains(key) || slice[key].is_null())
         return fallback;
-      exprt e = converter_.get_expr(slice[key]);
+      const exprt e =
+        converter_.once_bound_int(slice[key], converter_.get_expr(slice[key]));
       if (e.is_constant())
         return binary2integer(to_constant_expr(e).value().c_str(), true)
           .to_int64();

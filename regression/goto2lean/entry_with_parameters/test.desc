@@ -1,0 +1,4 @@
+CORE
+main.c
+--goto2lean --function mid
+^theorem mid_safe : ∀ \(lo : BitVec 32\) \(hi : BitVec 32\), Prog\.mid lo hi \(fun _ => True\) := by$

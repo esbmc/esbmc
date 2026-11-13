@@ -6617,6 +6617,9 @@ typet python_converter::optional_return_type(
     !returns_none(function_node["body"]) &&
     !type_utils::annotation_admits_none(returns))
     return typet();
+  // A list is a pointer, NULL for None, as Optional[list] declares it.
+  if (declared == type_handler_.get_list_type())
+    return declared;
   if (!unannotated)
     return type_handler_.build_optional_type(declared);
 
@@ -7253,6 +7256,7 @@ void python_converter::get_function_definition(
     // own unconditional statements — see the retype gate in get_var_assign.
     function_body = get_function_body_or_unsupported(function_node);
     prepend_runtime_numpy_view_prologue(id.to_string(), function_body);
+    clear_presence_flags(type, function_body);
   }
 
   // Restore saved function return type (for nested function defs)

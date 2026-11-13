@@ -20,6 +20,7 @@
 #include <python-frontend/tuple/tuple_handler.h>
 #include <python-frontend/type/type_handler.h>
 #include <python-frontend/type/type_utils.h>
+#include <python-frontend/python_annotation/annotation_intrinsics.h>
 #include <python-frontend/python_expr_builder.h>
 #include <util/arith/arith_tools.h>
 #include <util/expr/base_type.h>
@@ -579,6 +580,35 @@ std::optional<exprt> function_call_expr::list_isinstance(
     and2tc(notequal2tc(obj2, gen_zero(obj2->type)), not2tc(tuple2)));
 }
 
+/// isinstance(obj, str) answered from obj's static type. get_typet("str")
+/// returns char[0], which the generic encoding lowers to an empty array
+/// constant, and simplify_python_builtins would then have to recover the
+/// answer from value-set state. A char array is always a str. A char pointer
+/// is one unless it is NULL, which is how None reaches a `str` parameter
+/// (#10442). Empty unless both obj and @p expected_type are str-typed.
+std::optional<exprt> function_call_expr::str_isinstance(
+  const exprt &obj,
+  const typet &expected_type,
+  const std::string &type_name) const
+{
+  if (
+    !expected_type.is_array() ||
+    !type_utils::is_char_storage(to_array_type(expected_type).subtype()))
+    return std::nullopt;
+  const typet &obj_type = obj.type();
+  if (
+    !(obj_type.is_array() || obj_type.is_pointer()) ||
+    !type_utils::is_char_storage(obj_type.subtype()))
+    return std::nullopt;
+  if (type_name == "type")
+    return isinstance_str_as_type(obj);
+  if (obj_type.is_array())
+    return true_exprt();
+  expr2tc obj2;
+  migrate_expr(obj, obj2);
+  return migrate_expr_back(notequal2tc(obj2, gen_zero(obj2->type)));
+}
+
 exprt function_call_expr::isinstance_operand(
   const nlohmann::json &node,
   const std::function<exprt(const std::string &)> &build,
@@ -890,25 +920,10 @@ exprt function_call_expr::handle_isinstance() const
     if (std::optional<exprt> listed = list_isinstance(obj_expr, type_name))
       return *listed;
 
-    // String special case: get_typet("str") returns char[0], which the
-    // generic encoding lowers to gen_zero(char[0]) — an empty array
-    // constant. simplify_python_builtins then has to recover the answer
-    // from value-set state, which is fragile (e.g. depends on operational
-    // model layout). When obj's static type is already a char-array or
-    // char-pointer (a Python str), short-circuit to true here.
     if (
-      expected_type.is_array() &&
-      type_utils::is_char_storage(to_array_type(expected_type).subtype()))
-    {
-      const typet &obj_type = obj_expr.type();
-      if (
-        (obj_type.is_array() &&
-         type_utils::is_char_storage(obj_type.subtype())) ||
-        (obj_type.is_pointer() &&
-         type_utils::is_char_storage(obj_type.subtype())))
-        return type_name == "type" ? isinstance_str_as_type(obj_expr)
-                                   : true_exprt();
-    }
+      std::optional<exprt> str =
+        str_isinstance(obj_expr, expected_type, type_name))
+      return *str;
 
     exprt t;
 
@@ -1944,6 +1959,32 @@ exprt function_call_expr::handle_issubclass() const
   return false_exprt();
 }
 
+bool function_call_expr::is_callable_name(const std::string &name) const
+{
+  const auto &ast = converter_.ast();
+
+  // Builtin type constructors / builtin functions, user classes, and
+  // user functions are all callable.
+  if (
+    type_utils::is_builtin_type(name) || json_utils::is_class(name, ast) ||
+    json_utils::search_function_in_ast(ast, name))
+    return true;
+
+  // A builtin function such as len or print, unless the program may rebind
+  // its name (a star import can too).
+  if (
+    python_annotation_intrinsics::builtin_functions().count(name) &&
+    json_utils::count_name_bindings(ast, name) == 0 &&
+    json_utils::count_name_bindings(ast, "*") == 0)
+    return true;
+
+  // Otherwise it is an ordinary variable: callable iff its class defines
+  // __call__.
+  const std::string var_type = type_handler_.get_var_type(name);
+  return !var_type.empty() && json_utils::is_class(var_type, ast) &&
+         method_exists_in_class_hierarchy(var_type, "__call__");
+}
+
 exprt function_call_expr::handle_callable() const
 {
   const auto &args = call_["args"];
@@ -1965,26 +2006,7 @@ exprt function_call_expr::handle_callable() const
     return false_exprt();
 
   if (node_type == "Name")
-  {
-    const std::string name = arg["id"].get<std::string>();
-    const auto &ast = converter_.ast();
-
-    // Builtin type constructors / builtin functions, user classes, and
-    // user functions are all callable.
-    if (
-      type_utils::is_builtin_type(name) || json_utils::is_class(name, ast) ||
-      json_utils::search_function_in_ast(ast, name))
-      return true_exprt();
-
-    // Otherwise it is an ordinary variable: callable iff its class defines
-    // __call__.
-    const std::string var_type = type_handler_.get_var_type(name);
-    if (
-      !var_type.empty() && json_utils::is_class(var_type, ast) &&
-      method_exists_in_class_hierarchy(var_type, "__call__"))
-      return true_exprt();
-    return false_exprt();
-  }
+    return gen_boolean(is_callable_name(arg["id"].get<std::string>()));
 
   // Conservative default for forms we do not statically resolve.
   return false_exprt();

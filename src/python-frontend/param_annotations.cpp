@@ -637,7 +637,11 @@ private:
 
     for (size_t i = 0; i < params.size() && i < call["args"].size(); ++i)
     {
-      if (!is_list_annotation(params[i].value("annotation", nlohmann::json())))
+      // An unannotated parameter is bound only when every call site passes a
+      // list of tuples, so it is retyped exactly as a bare `list` would be.
+      const nlohmann::json annotation =
+        params[i].value("annotation", nlohmann::json());
+      if (!annotation.is_null() && !is_list_annotation(annotation))
         continue;
 
       const nlohmann::json elem =
@@ -701,7 +705,8 @@ private:
 
       nlohmann::json &body = modules_[module].write->at("body");
       nlohmann::json &def = *find_function(body, func);
-      nlohmann::json &annotation = def["args"]["args"][param]["annotation"];
+      nlohmann::json &arg = def["args"]["args"][param];
+      nlohmann::json &annotation = arg["annotation"];
 
       // Write once. A binding is only produced in the round where every call
       // site of the parameter is typable, and each site's type then comes from
@@ -716,7 +721,8 @@ private:
       if (names_alias(body, placeholder))
         retype_placeholder(def, placeholder, *elem);
 
-      annotation = list_annotation_of(*elem, annotation);
+      annotation =
+        list_annotation_of(*elem, annotation.is_null() ? arg : annotation);
       changed = true;
     }
     return changed;

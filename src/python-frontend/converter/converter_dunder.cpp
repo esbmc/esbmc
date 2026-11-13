@@ -519,6 +519,19 @@ exprt python_converter::refuse_mixed_constructor_arg(
     "instances";
   if (!can_emit_runtime_guard())
     throw std::runtime_error(message);
+  end_path_as_unsupported(message, loc);
+  const typet &number =
+    holds_mixed_constructor_arg(lhs) ? rhs.type() : lhs.type();
+  return side_effect_expr_nondett(
+    number.is_signedbv() || number.is_floatbv()
+      ? number
+      : type_handler::python_int_typet());
+}
+
+void python_converter::end_path_as_unsupported(
+  const std::string &message,
+  const locationt &loc)
+{
   // Not the constant false, which CFG cleanup reads as the end of the
   // function and so drops the assume.
   const exprt never = not_exprt(true_exprt());
@@ -528,12 +541,6 @@ exprt python_converter::refuse_mixed_constructor_arg(
   check.location().comment(message);
   add_instruction(check);
   add_instruction(code_assumet(never));
-  const typet &number =
-    holds_mixed_constructor_arg(lhs) ? rhs.type() : lhs.type();
-  return side_effect_expr_nondett(
-    number.is_signedbv() || number.is_floatbv()
-      ? number
-      : type_handler::python_int_typet());
 }
 
 exprt python_converter::dispatch_dunder_operator(
