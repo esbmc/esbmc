@@ -243,6 +243,30 @@ irep_typedefs(isnone);
 irep_typedefs(new_object);
 irep_typedefs(sizeof);
 irep_typedefs(uninterpreted_func);
+irep_typedefs(array_lambda);
+
+/** The array whose element at each index `binder` is `body`. A loop
+ *  summary builds one, so a read reduces to `body` at that index instead of
+ *  a chain of one store per iteration. */
+class array_lambda2t : public expr2t
+{
+public:
+  expr2tc binder, body;
+  array_lambda2t(
+    const type2tc &type,
+    const expr2tc &binder,
+    const expr2tc &body)
+    : expr2t(type, array_lambda_id), binder(binder), body(body)
+  {
+  }
+  array_lambda2t(const array_lambda2t &ref) = default;
+
+  static constexpr auto fields = std::make_tuple(
+    &expr2t::type,
+    &array_lambda2t::binder,
+    &array_lambda2t::body);
+  static std::string field_names[esbmct::num_type_fields];
+};
 
 class exists2t : public expr2t
 {

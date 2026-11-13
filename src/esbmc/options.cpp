@@ -1123,6 +1123,10 @@ const struct group_opt_templ all_cmd_options[] = {
      NULL,
      "Disable constant propagation (unsupported with concurrency: the pthread "
      "model requires constant thread ids)"},
+    {"summarize-array-loops",
+     NULL,
+     "Replace counting loops that only write a[i] by their effect "
+     "(prototype)"},
     {"gcse",
      NULL,
      "Adds intermediate variables to precompute common sub-expressions between "

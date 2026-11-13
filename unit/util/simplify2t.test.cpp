@@ -2019,6 +2019,40 @@ TEST_CASE(
   REQUIRE((is_nil_expr(result) || is_lessthan2t(result)));
 }
 
+TEST_CASE("Array lambda read: (lambda j. j + 1)[3] = 4", "[array_lambda]")
+{
+  const type2tc int32 = get_int_type(32);
+  const type2tc arr =
+    array_type2tc(int32, constant_int2tc(int32, BigInt(10)), false);
+  const expr2tc j = symbol2tc(int32, "j");
+  const expr2tc lambda = array_lambda2tc(
+    arr, j, add2tc(int32, j, constant_int2tc(int32, BigInt(1))));
+  const expr2tc result =
+    index2tc(int32, lambda, constant_int2tc(int32, BigInt(3)))->simplify();
+  REQUIRE(is_constant_int2t(result));
+  REQUIRE(to_constant_int2t(result).value == 4);
+}
+
+TEST_CASE(
+  "Array lambda read leaves an inner lambda binding the same name",
+  "[array_lambda]")
+{
+  const type2tc int32 = get_int_type(32);
+  const type2tc arr =
+    array_type2tc(int32, constant_int2tc(int32, BigInt(10)), false);
+  const type2tc bools =
+    array_type2tc(get_bool_type(), constant_int2tc(int32, BigInt(10)), false);
+  const expr2tc j = symbol2tc(int32, "j");
+  const expr2tc inner = array_lambda2tc(arr, j, j);
+  const expr2tc outer =
+    array_lambda2tc(bools, j, equality2tc(inner, symbol2tc(arr, "a")));
+  const expr2tc result =
+    index2tc(get_bool_type(), outer, constant_int2tc(int32, BigInt(3)))
+      ->simplify();
+  REQUIRE(is_equality2t(result));
+  REQUIRE(to_equality2t(result).side_1 == inner);
+}
+
 #if 0
 TEST_CASE("Division simplification: 0 / x = 0", "[arithmetic][div]")
 {

@@ -161,3 +161,4 @@ IREP2_EXPR(uninterpreted_func,    "uninterpreted_func")
 // position is expr2t::expr_id, so inserting mid-list renumbers every later
 // kind.
 IREP2_EXPR(ieee_rem,              "ieee_rem")
+IREP2_EXPR(array_lambda,          "array_lambda")

@@ -1,0 +1,4 @@
+CORE
+main.c
+--summarize-array-loops --unwind 51 --no-unwinding-assertions
+^VERIFICATION SUCCESSFUL$
