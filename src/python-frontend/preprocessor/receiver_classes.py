@@ -650,15 +650,22 @@ def _check_inline_constructions(module, classes, returns, module_name):
                 raise exc
 
 
-def refuse_path_dependent_receivers(module, module_name):
+def _module_classes(module):
+    """The classes of `module` by name, and the class each of its functions
+    is annotated to return."""
     classes = {s.name: s for s in module.body if isinstance(s, ast.ClassDef)}
-    if len(classes) < 2:
-        return
     returns = {
         s.name: s.returns.id
         for s in module.body if isinstance(s, ast.FunctionDef) and isinstance(s.returns, ast.Name)
         and s.returns.id in classes
     }
+    return classes, returns
+
+
+def refuse_path_dependent_receivers(module, module_name):
+    classes, returns = _module_classes(module)
+    if len(classes) < 2:
+        return
     _check_inline_constructions(module, classes, returns, module_name)
     scopes = [module] + [
         node

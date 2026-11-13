@@ -22,6 +22,7 @@ from preprocessor.function_value_dispatch import dispatch_mixed_function_values
 from preprocessor.function_value_types import reject_mixed_function_values
 from preprocessor.iter_next_lowering import lower_iter_next
 from preprocessor.receiver_classes import refuse_path_dependent_receivers
+from preprocessor.receiver_split import split_path_dependent_receivers
 from preprocessor.class_value_calls import dispatch_class_value_calls
 from preprocessor.sibling_defs import define_read_siblings_first
 from preprocessor.skipped_base_init import refuse_skipped_base_init
@@ -651,6 +652,7 @@ class ModuleRewriteMixin:
         define_read_siblings_first(node)
         if entry:
             dispatch_class_value_calls(node)
+            split_path_dependent_receivers(node, self.module_name)
         refuse_path_dependent_receivers(node, self.module_name)
         refuse_skipped_base_init(node, self.module_name)
         self.expand_unittest_main(node)

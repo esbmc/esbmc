@@ -1137,6 +1137,19 @@ exprt python_converter::create_lhs_expression(
   return lhs;
 }
 
+/// Box plain @p rhs into tagged slot @p lhs. None is held by the slot's None
+/// flag alone, which the store has set (#10350).
+void python_converter::box_into_tagged_slot(
+  const exprt &rhs,
+  const locationt &location,
+  const exprt &lhs,
+  codet &target_block)
+{
+  if (rhs.type() == none_type() && none_flag_of_attribute(lhs).is_not_nil())
+    return;
+  dynamic_type_handler_.assign_to_lvalue(rhs, location, lhs, target_block);
+}
+
 /// A tagged value stored into an untagged attribute slot would overrun or
 /// misread the object. The other direction (an untagged value into a
 /// tagged slot) is a plain box, handled later in get_var_assign.
@@ -5707,6 +5720,45 @@ static void copy_homogeneous_elem_types(
   registry.assign_from(src, dest);
 }
 
+/// A float constant, or one negated or made positive.
+static bool is_float_literal(const nlohmann::json &node)
+{
+  if (node.value("_type", "") == "UnaryOp")
+  {
+    const std::string op =
+      node.contains("op") ? node["op"].value("_type", "") : std::string();
+    return (op == "USub" || op == "UAdd") && node.contains("operand") &&
+           is_float_literal(node["operand"]);
+  }
+  return node.value("_type", "") == "Constant" && node.contains("value") &&
+         node["value"].is_number_float();
+}
+
+/// A list literal is converted into a temporary list, which the lowered
+/// \p call receives as its first argument (#10462).
+static void copy_list_literal_elem_types(
+  element_type_registry &registry,
+  const typet &list_type,
+  const nlohmann::json &literal,
+  const exprt &call,
+  const std::string &dest)
+{
+  if (!call.is_function_call())
+    return;
+  const auto &args = to_code_function_call(to_code(call)).arguments();
+  if (args.empty() || !args[0].is_symbol() || args[0].type() != list_type)
+    return;
+  const std::string &src = args[0].identifier().as_string();
+  // The literal's ints are promoted to float when it also holds a float, so a
+  // float list is only known to hold floats when every element is one.
+  const auto &elts = literal["elts"];
+  if (
+    registry.uniform_element_type(src).is_floatbv() &&
+    !std::all_of(elts.begin(), elts.end(), is_float_literal))
+    return;
+  copy_homogeneous_elem_types(registry, src, dest);
+}
+
 /// Copy the element types of the list named \p name, whose registry id is
 /// \p src, to \p dest. A list with nothing recorded, such as one a
 /// nondet_list builder returns, still declares its element type in its
@@ -5763,6 +5815,7 @@ python_converter::reordering_builtin_arg(const nlohmann::json &ast_node)
 
 void python_converter::copy_elem_types_from_reordering_builtin(
   const nlohmann::json &ast_node,
+  const exprt &call,
   const std::string &lhs_id)
 {
   const nlohmann::json *arg_p = reordering_builtin_arg(ast_node);
@@ -5776,6 +5829,13 @@ void python_converter::copy_elem_types_from_reordering_builtin(
     arg_sid.set_object(arg["id"].get<std::string>());
     copy_named_list_elem_types(
       *this, element_type_registry_, arg, arg_sid.to_string(), lhs_id);
+    return;
+  }
+
+  if (arg.value("_type", "") == "List")
+  {
+    copy_list_literal_elem_types(
+      element_type_registry_, type_handler_.get_list_type(), arg, call, lhs_id);
     return;
   }
 
@@ -6038,7 +6098,7 @@ void python_converter::handle_function_call_rhs(
     // fall back to the called function's return-type annotation
     // to determine the element type.
     const std::string &lhs_id = lhs.identifier().as_string();
-    copy_elem_types_from_reordering_builtin(ast_node, lhs_id);
+    copy_elem_types_from_reordering_builtin(ast_node, rhs, lhs_id);
     if (element_type_registry_.size(lhs_id) == 0)
       record_annotated_list_elem_type(ast_node, lhs_id);
 
@@ -8615,6 +8675,7 @@ void python_converter::get_var_assign(
     rhs = tuple_handler_->coerce_to_tuple_type(
       rhs, lhs.type(), get_location_from_decl(ast_node), target_block);
     set_none_flag(lhs, ast_node, target_block);
+    set_presence_flag(lhs, ast_node, target_block);
 
     // Propagate $input_str$ → $input_len$ companion mapping so that len()
     // on any alias of an input() string can use the symbolic length directly.
@@ -8823,8 +8884,7 @@ void python_converter::get_var_assign(
       type_handler_.is_tagged_scalar_type(lhs.type()) &&
       !type_handler_.is_tagged_scalar_type(rhs.type()))
     {
-      dynamic_type_handler_.assign_to_lvalue(
-        rhs, location_begin, lhs, target_block);
+      box_into_tagged_slot(rhs, location_begin, lhs, target_block);
       current_lhs = nullptr;
       return;
     }
