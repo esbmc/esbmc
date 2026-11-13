@@ -8604,6 +8604,78 @@ exprt function_call_expr::build_dict_size_call(const exprt &dict)
   return list_size_func_call;
 }
 
+// Whether a class in @p ast lists @p cls as a base, by name or as a module
+// attribute (`class A(array.array)`).
+static bool names_as_base(const std::string &cls, const nlohmann::json &ast)
+{
+  if (ast.is_object() && ast.value("_type", "") == "ClassDef")
+    for (const auto &base : ast["bases"])
+      if (base.value("id", "") == cls || base.value("attr", "") == cls)
+        return true;
+  return ast.is_structured() &&
+         std::any_of(ast.begin(), ast.end(), [&](const nlohmann::json &c) {
+           return names_as_base(cls, c);
+         });
+}
+
+// len(f()) of a dict or of a class instance, len(a * 2): a named one takes
+// its own path, but an inline value reaches the size builtin, where strlen
+// would read the struct bytes (#10505).
+exprt function_call_expr::size_of_aggregate(
+  const exprt &arg,
+  const locationt &location)
+{
+  if (!is_size_builtin())
+    return nil_exprt();
+  if (
+    converter_.get_dict_handler()->is_dict_type(
+      converter_.ns.follow(arg.type())))
+    return build_dict_size_call(arg);
+  if (
+    function_id_.get_function() == "strlen" &&
+    converter_.is_user_class_pointer(arg.type()))
+    return len_of_instance(arg, location);
+  return nil_exprt();
+}
+
+exprt function_call_expr::len_of_instance(
+  exprt object,
+  const locationt &location)
+{
+  if (object.is_function_call())
+    object = converter_.store_call_result(object, location, "len");
+  const std::string cls = converter_.class_name_of(object.type().subtype());
+  // The object may be an instance of any subclass of its static class (#9835).
+  const std::optional<std::string> owner =
+    converter_.family_method_owner(cls, "__len__");
+  if (owner && owner->empty())
+    return converter_.get_exception_handler().gen_exception_raise(
+      "TypeError", "object of type '" + cls + "' has no len()");
+  // A model class such as array has no MRO in the program's AST; its static
+  // class is exact when no class in the program derives from it.
+  const exprt dunder =
+    owner || !names_as_base(cls, converter_.ast())
+      ? converter_.dispatch_unary_dunder_operator("len", object, location)
+      : nil_exprt();
+  if (dunder.is_nil())
+    throw std::runtime_error(
+      "len() of an instance of class '" + cls +
+      "' is not supported when its subclasses or bases leave __len__ "
+      "unresolved");
+
+  // A call typed Optional[C] may return None.
+  code_ifthenelset none_guard;
+  none_guard.cond() = equality_exprt(object, gen_zero(object.type()));
+  codet raise("expression");
+  raise.copy_to_operands(converter_.get_exception_handler().gen_exception_raise(
+    "TypeError", "object of type 'NoneType' has no len()"));
+  none_guard.then_case() = raise;
+  none_guard.location() = location;
+  converter_.current_block->copy_to_operands(none_guard);
+
+  return converter_.checked_len_result(dunder, location);
+}
+
 exprt function_call_expr::fold_from_bytes_byteorder(
   exprt arg,
   const nlohmann::json &node,
@@ -8901,12 +8973,8 @@ std::optional<exprt> function_call_expr::build_positional_arguments(
       return list_size_func_call;
     }
 
-    // len(f()) where f returns a dict: a named dict takes __ESBMC_len_dict,
-    // but an inline call reaches here and strlen would read the struct bytes.
-    if (
-      is_size_builtin() && converter_.get_dict_handler()->is_dict_type(
-                             converter_.ns.follow(arg.type())))
-      return build_dict_size_call(arg);
+    if (exprt size = size_of_aggregate(arg, location); size.is_not_nil())
+      return size;
 
     // Handle function calls used as arguments
     if (arg.is_code() && arg.is_function_call())
