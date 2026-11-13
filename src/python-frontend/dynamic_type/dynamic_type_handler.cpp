@@ -712,9 +712,10 @@ dynamic_type_handler::detect_dynamic_type_attributes(
       dynamic_type_detail::classes_declaring_attribute(module_body, attr)
         .size() > 1)
       continue;
-    if (dynamic_type_detail::kinds_diverge(
-          dynamic_type_detail::collect_attribute_literal_kinds(
-            module_body, attr)))
+    if (
+      dynamic_type_detail::kinds_diverge(
+        dynamic_type_detail::collect_attribute_literal_kinds(
+          module_body, attr)))
       result.insert(attr);
   }
   return result;
@@ -1315,7 +1316,25 @@ exprt dynamic_type_handler::build_sub_literal(
      from_integer(BigInt(tagged_is_left ? 1 : 0), int_type())});
 }
 
+/// The scalar.c function and result type of `/` or `//` (#10555) with
+/// @p suffix ("" for a literal operand, "_dyn" for two tags).
+static std::pair<std::string, typet>
+division_function(const std::string &op, const std::string &suffix)
+{
+  if (op == "FloorDiv")
+    return {
+      "c:@F@__python_scalar_floordiv_num" + suffix,
+      signedbv_typet(config.ansi_c.long_long_int_width)};
+  return {"c:@F@__python_scalar_div_num" + suffix, double_type()};
+}
+
+bool dynamic_type_handler::is_tagged_arithmetic(const std::string &op)
+{
+  return op == "Add" || op == "Sub" || op == "Div" || op == "FloorDiv";
+}
+
 exprt dynamic_type_handler::build_div_literal(
+  const std::string &op,
   const exprt &tagged,
   const exprt &literal,
   bool tagged_is_left,
@@ -1328,9 +1347,9 @@ exprt dynamic_type_handler::build_div_literal(
       "dividing a dynamically-typed variable by this literal type is not "
       "yet supported");
 
-  const symbolt *div_func =
-    converter_.symbol_table().find_symbol("c:@F@__python_scalar_div_num");
-  assert(div_func && "__python_scalar_div_num not found in symbol table");
+  const auto [div_name, div_type] = division_function(op, "");
+  const symbolt *div_func = converter_.symbol_table().find_symbol(div_name);
+  assert(div_func && "scalar division function not found in symbol table");
 
   exprt tagged_addr = build_address_of(tagged);
   exprt lit_value =
@@ -1351,7 +1370,7 @@ exprt dynamic_type_handler::build_div_literal(
 
   return build_call_expr(
     *div_func,
-    double_type(),
+    div_type,
     {tagged_addr,
      build_typecast(type_matches, int_type()),
      lit_value,
@@ -1376,8 +1395,7 @@ exprt dynamic_type_handler::handle_arithmetic(
       return build_add_tagged(lhs, rhs);
     if (op == "Sub")
       return build_sub_tagged(lhs, rhs);
-    assert(op == "Div" && "unexpected operator routed to handle_arithmetic");
-    return build_div_tagged(lhs, rhs, location);
+    return build_div_tagged(op, lhs, rhs, location);
   }
 
   if (op == "Add")
@@ -1388,9 +1406,8 @@ exprt dynamic_type_handler::handle_arithmetic(
     return lhs_tagged ? build_sub_literal(lhs, rhs, /*tagged_is_left=*/true)
                       : build_sub_literal(rhs, lhs, /*tagged_is_left=*/false);
 
-  assert(op == "Div" && "unexpected operator routed to handle_arithmetic");
-  return lhs_tagged ? build_div_literal(lhs, rhs, true, location)
-                    : build_div_literal(rhs, lhs, false, location);
+  return lhs_tagged ? build_div_literal(op, lhs, rhs, true, location)
+                    : build_div_literal(op, rhs, lhs, false, location);
 }
 
 exprt dynamic_type_handler::build_neg_tagged(
@@ -1459,13 +1476,14 @@ exprt dynamic_type_handler::build_sub_tagged(const exprt &lhs, const exprt &rhs)
 }
 
 exprt dynamic_type_handler::build_div_tagged(
+  const std::string &op,
   const exprt &lhs,
   const exprt &rhs,
   const locationt &location)
 {
-  const symbolt *div_func =
-    converter_.symbol_table().find_symbol("c:@F@__python_scalar_div_num_dyn");
-  assert(div_func && "__python_scalar_div_num_dyn not found in symbol table");
+  const auto [div_name, div_type] = division_function(op, "_dyn");
+  const symbolt *div_func = converter_.symbol_table().find_symbol(div_name);
+  assert(div_func && "scalar division function not found in symbol table");
 
   exprt lhs_type_id = build_member(lhs, "type_id", size_type());
   exprt rhs_type_id = build_member(rhs, "type_id", size_type());
@@ -1484,7 +1502,7 @@ exprt dynamic_type_handler::build_div_tagged(
 
   return build_call_expr(
     *div_func,
-    double_type(),
+    div_type,
     {build_address_of(lhs),
      build_typecast(lhs_is_num, int_type()),
      build_address_of(rhs),
@@ -1513,7 +1531,7 @@ exprt dynamic_type_handler::operands_type_ok(
   exprt rhs_is_num =
     type_handler_.tagged_scalar_type_matches(rhs_type_id, long_long_int_type());
   exprt both_num = build_and(lhs_is_num, rhs_is_num);
-  if (op == "Sub" || op == "Div")
+  if (op != "Add" && is_tagged_arithmetic(op))
     return both_num;
   if (op == "Add")
   {
@@ -1540,7 +1558,7 @@ void dynamic_type_handler::guard_type_error(
     return;
 
   static const std::unordered_map<std::string, std::string> symbols = {
-    {"Add", "+"}, {"Sub", "-"}, {"Div", "/"}};
+    {"Add", "+"}, {"Sub", "-"}, {"Div", "/"}, {"FloorDiv", "//"}};
   auto symbol = symbols.find(op);
   const std::string message =
     symbol == symbols.end()
