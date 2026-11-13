@@ -4356,6 +4356,13 @@ static bool is_str_operand_type(const typet &t)
          type_utils::is_string_type(t);
 }
 
+static const char *str_or_bytes_name(const typet &t)
+{
+  if (is_str_operand_type(t))
+    return "str";
+  return type_utils::is_bytes_array(t) ? "bytes" : nullptr;
+}
+
 // `str` has no arithmetic beyond `+` (below) or ordering against anything
 // but `str`; `*` is string repetition and is handled elsewhere. Reaching
 // generic arithmetic with a char-array operand otherwise asserts
@@ -4366,7 +4373,16 @@ exprt python_converter::str_arithmetic_type_error(
   const exprt &rhs)
 {
   static const std::map<std::string, std::string> arith_symbols = {
-    {"Sub", "-"}, {"Div", "/"}, {"FloorDiv", "//"}, {"Pow", "**"}};
+    {"Sub", "-"},
+    {"Div", "/"},
+    {"FloorDiv", "//"},
+    {"Pow", "**"},
+    {"MatMult", "@"},
+    {"BitAnd", "&"},
+    {"BitOr", "|"},
+    {"BitXor", "^"},
+    {"LShift", "<<"},
+    {"RShift", ">>"}};
   const auto arith_it = arith_symbols.find(op);
   static const std::set<std::string> ordering_ops = {"Lt", "LtE", "Gt", "GtE"};
   const bool is_ordering = ordering_ops.count(op) != 0;
@@ -4375,11 +4391,13 @@ exprt python_converter::str_arithmetic_type_error(
 
   const bool lhs_char = is_str_operand_type(lhs.type());
   const bool rhs_char = is_str_operand_type(rhs.type());
-  if (lhs_char && rhs_char && !is_ordering)
+  const char *lhs_seq = str_or_bytes_name(lhs.type());
+  const char *rhs_seq = str_or_bytes_name(rhs.type());
+  if (lhs_seq && rhs_seq && !is_ordering)
     return get_exception_handler().gen_exception_raise(
       "TypeError",
-      "unsupported operand type(s) for " + arith_it->second +
-        ": 'str' and 'str'");
+      "unsupported operand type(s) for " + arith_it->second + ": '" + lhs_seq +
+        "' and '" + rhs_seq + "'");
   if (lhs_char == rhs_char)
     return nil_exprt();
 
@@ -4458,6 +4476,12 @@ exprt python_converter::handle_array_operations(
     }
     return nil_exprt();
   }
+
+  // Before the element-wise lowering, which would take bytes for a numeric
+  // array.
+  const exprt str_error = str_arithmetic_type_error(op, lhs, rhs);
+  if (!str_error.is_nil())
+    return str_error;
 
   // `bytes + bytes` is concatenation (bytes.__add__). Route it here early,
   // since bytes and a numpy array share the same underlying
@@ -4586,10 +4610,6 @@ exprt python_converter::handle_array_operations(
     }
   }
   reject_unmodelled_array_arithmetic(op, lhs, rhs, element);
-
-  const exprt str_error = str_arithmetic_type_error(op, lhs, rhs);
-  if (!str_error.is_nil())
-    return str_error;
 
   // Handle string concatenation -- only valid for char-arrays. Numeric
   // arrays (e.g. ``np.array([1, 2, 3])``, modelled as ``long int [N]``)
