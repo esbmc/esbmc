@@ -86,6 +86,19 @@ class Counter:
         """Return all recorded counts."""
         return self.data.values()
 
+    def update(self, iterable: list[tuple[int, int]] = None) -> None:
+        """Counter.update with no argument leaves the counts unchanged.
+
+        Adding counts from an iterable or mapping is not modelled. Keyword
+        arguments are refused at conversion.
+        """
+        __ESBMC_assert(iterable is None, "Counter.update with an argument is not modelled")
+
+    def clear(self) -> None:
+        """Remove every recorded key."""
+        self.data = {}
+        self.count = 0
+
     def __bool__(self) -> bool:
         """Return True iff at least one key has been recorded."""
         return self.count != 0
