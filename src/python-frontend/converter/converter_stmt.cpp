@@ -5603,7 +5603,10 @@ exprt python_converter::not_callable_function(
   body.copy_to_operands(code_expressiont(
     get_exception_handler().gen_exception_raise(
       "TypeError",
-      "'" + type_handler_.type_to_string(value) + "' object is not callable")));
+      "'" +
+        (value == none_type() ? "NoneType"
+                              : type_handler_.type_to_string(value)) +
+        "' object is not callable")));
   symbol.set_value(body);
   return symbol_expr(*symbol_table_.move_symbol_to_context(symbol));
 }
