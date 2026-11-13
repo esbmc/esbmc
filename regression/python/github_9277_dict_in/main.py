@@ -1,4 +1,4 @@
-# KNOWNBUG: `in` on a tagged key is refused. The key is an int or its str, and the dict holds both.
+# `in` on a tagged key: the key is an int or its str, and the dict holds both.
 d = {1: 0, "1": 1}
 n = abs(nondet_int()) % 3
 c = nondet_bool()
