@@ -1,0 +1,14 @@
+K: int = 0
+
+
+def f(arr: list[int]) -> int:
+    ends = {}
+    n = 0
+    for i in range(len(arr)):
+        if i > 0 and arr[ends[1] + 5] < 5:
+            n = n + 1
+        ends[1] = K
+    return n
+
+
+assert f([3, 7]) == 1

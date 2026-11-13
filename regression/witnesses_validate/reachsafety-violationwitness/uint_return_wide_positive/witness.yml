@@ -1,0 +1,21 @@
+- entry_type: violation_sequence
+  metadata:
+    format_version: '2.0'
+  content:
+  - segment:
+    - waypoint:
+        type: function_return
+        action: follow
+        constraint:
+          format: ext_c_expression
+          value: \result < 4294967296LL
+        location:
+          file_name: main.c
+          line: 8
+  - segment:
+    - waypoint:
+        type: target
+        action: follow
+        location:
+          file_name: main.c
+          line: 9

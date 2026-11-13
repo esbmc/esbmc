@@ -2664,9 +2664,12 @@ bool python_converter::may_rebind_left(
          (right_runs_user_code || calls_user_code(right));
 }
 
+// Also `a + b` and `[x] * n` building a typed list (#10451).
 std::optional<exprt>
 python_converter::try_lowered_compare(const nlohmann::json &element)
 {
+  if (python_list::is_typed(element) && element["_type"] == "BinOp")
+    return python_list(*this, element).typed_binop();
   std::optional<exprt> bound = try_numpy_dtype_compare(element);
   if (!bound)
     bound = try_numpy_string_membership(element);
@@ -2843,7 +2846,7 @@ exprt python_converter::checked_erased_int(
   // Only a value that can come from sources of different known kinds can be
   // anything but the int the cast below assumes.
   value_kinds kinds(*ast_json);
-  if (!kinds.may_be_non_number(node, kinds.scope_of(current_func_name_)))
+  if (!kinds.may_be_non_int(node, kinds.scope_of(current_func_name_)))
     return operand;
 
   const locationt location = get_location_from_decl(element);
@@ -5461,7 +5464,7 @@ exprt python_converter::handle_list_operations(
      op == "GtE"))
   {
     python_list list(*this, element);
-    return list.compare(lhs, rhs, op);
+    return list.typed_or_untyped_compare(lhs, rhs, op);
   }
 
   // List concatenation: also handle Any-typed (void*) right operand, which
@@ -5708,6 +5711,26 @@ exprt python_converter::str_pointer_add_error(
       type_handler_.get_python_type_name(rhs.type()) + "'");
 }
 
+// A Python int is signed, so an unsigned operand meeting one (a len() result)
+// is read as signed rather than the int read as unsigned: otherwise
+// len(l) - 4 wraps (#10494). NumPy integers keep their own promotion rules.
+static void read_unsigned_as_python_int(exprt &lhs, exprt &rhs)
+{
+  if (
+    type_utils::is_numpy_numeric_element(lhs.type()) ||
+    type_utils::is_numpy_numeric_element(rhs.type()))
+    return;
+  auto widen_to_signed = [](exprt &unsigned_op, const exprt &signed_op) {
+    const unsigned width =
+      std::max(bv_width(unsigned_op.type()), bv_width(signed_op.type()));
+    unsigned_op = typecast_exprt(unsigned_op, signedbv_typet(width));
+  };
+  if (lhs.type().is_unsignedbv() && rhs.type().is_signedbv())
+    widen_to_signed(lhs, rhs);
+  else if (rhs.type().is_unsignedbv() && lhs.type().is_signedbv())
+    widen_to_signed(rhs, lhs);
+}
+
 exprt python_converter::build_binary_expression(
   const std::string &op,
   exprt &lhs,
@@ -5733,6 +5756,8 @@ exprt python_converter::build_binary_expression(
       return 1;
     return static_cast<const bv_typet &>(t).get_width();
   };
+
+  read_unsigned_as_python_int(lhs, rhs);
 
   // Reconcile the int/float and float/float-width mixes the arms below do
   // not cover, following the C usual arithmetic conversions (CPython agrees
