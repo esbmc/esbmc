@@ -1,0 +1,4 @@
+KNOWNBUG
+main.py
+--python-check-exceptions ZeroDivisionError,FloatingPointError --python-exception-census
+^VERIFICATION FAILED$

@@ -82,6 +82,25 @@ languaget *new_python_language()
   return new python_languaget;
 }
 
+// The census proves the listed exception types cannot escape, so without a
+// list there is nothing for it to prove. It also ends the run, which an option
+// asking for a dump of a later stage must not suffer.
+static bool census_applicable()
+{
+  for (const char *dump :
+       {"parse-tree-only",
+        "parse-tree-too",
+        "symbol-table-only",
+        "symbol-table-too",
+        "goto-functions-only",
+        "goto-functions-too",
+        "show-vcc"})
+    if (config.options.get_bool_option(dump))
+      return false;
+  return config.options.get_bool_option("python-exception-census") &&
+         !config.options.get_option("python-check-exceptions").empty();
+}
+
 // Options the forked parser needs to know about. ``--deadlock-check`` makes it
 // load the deadlock-aware threading model (models/threading_deadlock.py); the
 // C frontend handles the analogous swap via preprocessor #defines
@@ -95,6 +114,11 @@ static void append_parser_flags(std::vector<std::string> &args)
   for (const auto &[option, flag] : flags)
     if (config.options.get_bool_option(option))
       args.push_back(flag);
+
+  if (census_applicable())
+    args.push_back(
+      "--exception-census=" +
+      config.options.get_option("python-check-exceptions"));
 }
 
 // The interpreter named by --python, else the first of python3/python on
@@ -170,6 +194,19 @@ bool python_languaget::parse(const std::string &path)
   // parser/__main__.py execution failed
   if (process.exit_code())
     exit(process.exit_code());
+
+  // The exception census found no construct that can raise a checked type, so
+  // there is nothing to convert and the property holds.
+  std::ifstream census_marker(
+    (fs::path(ast_output_dir) / "exception-census-pass").string());
+  if (census_marker.good())
+  {
+    std::string summary;
+    std::getline(census_marker, summary);
+    log_status("{}", summary);
+    log_success("\nVERIFICATION SUCCESSFUL");
+    exit(0);
+  }
 
   std::stringstream script_path;
   script_path << ast_output_dir << "/" << script.stem().string() << ".json";
