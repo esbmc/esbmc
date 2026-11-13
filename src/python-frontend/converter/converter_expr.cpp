@@ -1580,9 +1580,8 @@ std::optional<exprt> python_converter::resolve_subscript_base(
       materialize_list_function_call(array, element["value"], *current_block);
 
   // A typed list (#10451) is read and written through its own storage.
-  if (python_list::is_typed(element))
-    return python_list(*this, element)
-      .typed_element(array, get_expr(element["slice"]));
+  if (python_list::is_typed_subscript(element))
+    return python_list(*this, element).typed_subscript(array, element["slice"]);
 
   return std::nullopt;
 }
