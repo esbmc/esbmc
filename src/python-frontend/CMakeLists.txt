@@ -91,6 +91,7 @@ add_library(pythonfrontend STATIC
             string/char_utils.cpp
             math/math_guard_utils.cpp
             math/parse_float.cpp
+            math/python_round.cpp
             tuple/tuple_handler.cpp
             math/convert_float_literal.cpp
             dynamic_type/dynamic_type_handler.cpp)
