@@ -1274,12 +1274,12 @@ class _Plan:
         name = getattr(element.value, "id", None)
         position = getattr(element.slice, "value", None)
         values = self.values.get(name, [])
-        if not (isinstance(position, int) and len(values) == 1 and isinstance(
-                values[0],
-            (ast.List, ast.Tuple)) and -len(values[0].elts) <= position < len(values[0].elts)
-                and self._read_by_position(name, values[0], element)):
+        display = values[0] if len(values) == 1 else None
+        if not (isinstance(position, int) and isinstance(display, (ast.List, ast.Tuple))
+                and -len(display.elts) <= position < len(display.elts)
+                and self._read_by_position(name, display, element)):
             return None
-        item = values[0].elts[position]
+        item = display.elts[position]
         if not (isinstance(item, ast.Name) and item.id in self.functions):
             return None
         group, code = self.functions[item.id]
