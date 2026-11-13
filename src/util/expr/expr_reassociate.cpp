@@ -266,8 +266,9 @@ rebuild_chain(const type2tc &type, const std::vector<signed_term> &terms)
 /// the pointer offset width before the SMT bv add (smt_memspace.cpp). A
 /// fold that wraps a narrow constant (e.g. (s8)100 + (s8)100 = (s8)-56)
 /// would change the sign-extended offset value, silently shifting the
-/// pointer. For non-pointer chains the wrap matches bv semantics, so this
-/// guard is only enforced when the chain root is pointer-typed.
+/// pointer. It also gates signed folds: a wrapped constant matches bv
+/// semantics, but --ir encodes it as the wrapped integer, so
+/// `(x + INT64_MAX) + 1` would become `x + INT64_MIN` (#10546).
 static bool fits_in_signed_type(const BigInt &value, const type2tc &type)
 {
   if (!is_signedbv_type(type) && !is_unsignedbv_type(type))
@@ -355,12 +356,11 @@ optimize_terms(const type2tc &chain_type, const std::vector<signed_term> &terms)
     // sign-extends c to the pointer offset width before the SMT bv add.
     // Folding two narrow constants whose sum wraps would change the
     // sign-extended value (e.g. (s8)100 + (s8)100 = (s8)-56). For
-    // non-pointer chains the wrap is part of the bv semantics and the
-    // unfolded chain has the same wrap, so we only refuse the fold for
-    // pointer-typed chains. Treat the constants as opaque non-constant
-    // leaves and keep them in the result.
+    // signed chains the same wrap is wrong under --ir, so refuse the fold
+    // for both. Treat the constants as opaque non-constant leaves and keep
+    // them in the result.
     if (
-      is_pointer_type(chain_type) &&
+      (is_pointer_type(chain_type) || is_signedbv_type(const_type)) &&
       !fits_in_signed_type(acc_negative ? -acc_value : acc_value, const_type))
     {
       // Re-emit each constant in original signed_term form so the result
@@ -551,6 +551,10 @@ optimize_mul_terms(const std::vector<expr2tc> &terms)
       result.push_back(from_integer(acc, const_type));
     return result;
   }
+
+  // A signed product that wraps is wrong under --ir, as for add chains.
+  if (is_signedbv_type(const_type) && !fits_in_signed_type(acc, const_type))
+    return std::nullopt;
 
   result.push_back(from_integer(acc, const_type));
   return result;
