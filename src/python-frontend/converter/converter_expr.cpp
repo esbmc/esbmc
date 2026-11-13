@@ -1579,6 +1579,10 @@ std::optional<exprt> python_converter::resolve_subscript_base(
     array =
       materialize_list_function_call(array, element["value"], *current_block);
 
+  // A typed list (#10451) is read and written through its own storage.
+  if (python_list::is_typed_subscript(element))
+    return python_list(*this, element).typed_subscript(array, element["slice"]);
+
   return std::nullopt;
 }
 
@@ -2430,6 +2434,154 @@ static bool class_binds_attribute(
     return false;
   }
   return true;
+}
+
+// Collects in @p nested the attributes stored on `self` in @p node below the
+// top level of a method body, and in @p top those stored at it.
+static void collect_self_stores(
+  const nlohmann::json &node,
+  bool at_top,
+  std::set<std::string> &top,
+  std::set<std::string> &nested)
+{
+  if (!node.is_structured())
+    return;
+  if (
+    node.is_object() && node.value("_type", "") == "Attribute" &&
+    node["value"].value("id", "") == "self" &&
+    node.value("ctx", nlohmann::json()).value("_type", "") != "Load")
+    (at_top ? top : nested).insert(node.value("attr", ""));
+  // The statements of a block below the method body are nested.
+  const bool block = node.is_object() && node.contains("body");
+  for (const auto &child : node)
+    collect_self_stores(child, at_top && !block, top, nested);
+}
+
+// Adds to @p clazz a presence flag `<attr>$set` for each attribute that
+// `__init__` of @p class_node stores on `self` only inside a block and that
+// nothing else binds: no other method and no base. An instance whose
+// constructor took no such path lacks the attribute, and a read of it raises
+// AttributeError (#10587), or reads the class attribute it would have
+// shadowed (#10588).
+void python_converter::add_presence_flags(
+  const nlohmann::json &class_node,
+  struct_typet &clazz)
+{
+  std::set<std::string> top, nested, elsewhere;
+  for (const auto &method : class_node["body"])
+  {
+    if (method.value("_type", "") != "FunctionDef")
+      continue;
+    if (method.value("name", "") == "__init__")
+      for (const auto &stmt : method["body"])
+        collect_self_stores(stmt, true, top, nested);
+    else
+      collect_self_stores(method["body"], true, elsewhere, elsewhere);
+  }
+  const std::string class_name = class_node.value("name", "");
+  for (const std::string &attr : nested)
+  {
+    if (top.count(attr) || elsewhere.count(attr))
+      continue;
+    // A class attribute is read where the instance has not shadowed it,
+    // which needs the class found by name.
+    if (
+      assigns_class_attribute(class_node["body"], attr) &&
+      json_utils::find_class((*ast_json)["body"], class_name).empty())
+      continue;
+    bool base_binds = false;
+    for (const auto &base : class_node["bases"])
+      base_binds |=
+        class_binds_attribute(*ast_json, base.value("id", ""), attr);
+    if (base_binds)
+      continue;
+    const std::string flag = attr + "$set";
+    if (!clazz.has_component(flag))
+      clazz.components().push_back(
+        python_frontend::build_component(class_name, flag, bool_type()));
+  }
+}
+
+// The presence flag of the attribute @p member reads, or nil when it has none.
+exprt python_converter::presence_flag_of(const exprt &member) const
+{
+  if (!member.is_member())
+    return nil_exprt();
+  const exprt &object = to_member_expr(member).struct_op();
+  const typet followed = ns.follow(object.type());
+  const std::string flag =
+    to_member_expr(member).get_component_name().as_string() + "$set";
+  if (!followed.is_struct() || !to_struct_type(followed).has_component(flag))
+    return nil_exprt();
+  return member_exprt(object, flag, bool_type());
+}
+
+// A read of an attribute with a presence flag raises AttributeError where
+// the flag is clear (#10587).
+exprt python_converter::guard_presence_flagged_read(
+  const nlohmann::json &element,
+  const exprt &expr)
+{
+  if (is_converting_lhs || element.value("_type", "") != "Attribute")
+    return expr;
+  const exprt flag = presence_flag_of(expr);
+  if (flag.is_nil() || in_rhs_type_probe_)
+    return expr;
+  const typet object_type = ns.follow(to_member_expr(expr).struct_op().type());
+  const std::string class_name =
+    extract_class_name_from_tag(to_struct_type(object_type).tag().as_string());
+  // An instance that has not shadowed a class attribute reads it (#10588).
+  symbol_id class_attr(current_python_file, class_name, "");
+  class_attr.set_object(element.value("attr", ""));
+  if (const symbolt *shadowed = find_symbol(class_attr.to_string()))
+    return if_exprt(
+      flag, expr, typecast_exprt(symbol_expr(*shadowed), expr.type()));
+  emit_guarded_raise(
+    not_exprt(flag),
+    "AttributeError",
+    "'" + class_name + "' object has no attribute '" +
+      element.value("attr", "") + "'",
+    get_location_from_decl(element));
+  return expr;
+}
+
+// Sets the presence flag of an attribute store.
+void python_converter::set_presence_flag(
+  const exprt &lhs,
+  const nlohmann::json &ast_node,
+  codet &target_block) const
+{
+  const exprt flag = presence_flag_of(lhs);
+  if (flag.is_nil())
+    return;
+  code_assignt assign(flag, true_exprt());
+  assign.location() = get_location_from_decl(ast_node);
+  target_block.copy_to_operands(assign);
+}
+
+// A constructor first clears the presence flags of its class: no attribute
+// they guard is set before its store runs.
+void python_converter::clear_presence_flags(const code_typet &type, exprt &body)
+  const
+{
+  if (type.return_type().id() != "constructor" || type.arguments().empty())
+    return;
+  const symbolt *cls = symbol_table_.find_symbol("tag-" + current_class_name_);
+  if (!cls || !cls->get_type().is_struct())
+    return;
+  const struct_typet &clazz = to_struct_type(cls->get_type());
+  const exprt self = symbol_exprt(
+    type.arguments().front().get_identifier(), type.arguments().front().type());
+  exprt::operandst clears;
+  for (const auto &component : clazz.components())
+  {
+    const std::string name = component.get_name().as_string();
+    if (name.size() > 4 && name.compare(name.size() - 4, 4, "$set") == 0)
+      clears.push_back(code_assignt(
+        member_exprt(dereference_exprt(self, clazz), name, bool_type()),
+        false_exprt()));
+  }
+  body.operands().insert(body.operands().begin(), clears.begin(), clears.end());
 }
 
 // A store `obj.attr = v` from outside the class, of an attribute the class
@@ -3613,6 +3765,38 @@ exprt python_converter::get_expr(const nlohmann::json &element)
   }
   }
 
+  return guard_none_flagged_read(
+    element, guard_presence_flagged_read(element, expr));
+}
+
+/// A tagged attribute holds None only through its None flag (#10350). A read
+/// other than an operand of an operator, which reads the flag itself, would
+/// take the payload: where the flag is set, claim it as unsupported.
+exprt python_converter::guard_none_flagged_read(
+  const nlohmann::json &element,
+  const exprt &expr)
+{
+  if (
+    is_converting_lhs || !type_handler_.is_tagged_scalar_type(expr.type()) ||
+    std::find(
+      none_aware_operands_.begin(), none_aware_operands_.end(), &element) !=
+      none_aware_operands_.end())
+    return expr;
+  const exprt flag = none_flag_of_attribute(expr);
+  // A type probe of an assignment's value is converted again for real.
+  if (flag.is_nil() || in_rhs_type_probe_)
+    return expr;
+  const std::string message = "Unsupported: reading attribute '" +
+                              element.value("attr", "") +
+                              "', which may hold None, as a value";
+  if (!can_emit_runtime_guard())
+    throw std::runtime_error(message);
+  code_assertt check{not_exprt(flag)};
+  check.location() = get_location_from_decl(element);
+  check.location().user_provided(true);
+  check.location().comment(message);
+  add_instruction(check);
+  add_instruction(code_assumet(not_exprt(flag)));
   return expr;
 }
 

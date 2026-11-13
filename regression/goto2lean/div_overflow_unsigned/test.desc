@@ -1,0 +1,4 @@
+CORE
+main.c
+--goto2lean --unsigned-overflow-check --no-div-by-zero-check
+^  ¬\(\(y == 0#32\) = true\) ∧ \($

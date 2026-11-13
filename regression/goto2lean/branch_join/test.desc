@@ -1,0 +1,8 @@
+CORE
+main.c
+--goto2lean
+^  let join_1 := \(fun \(x : BitVec 32\) \(hi : BitVec 32\) =>$
+^    \(\(BitVec\.slt hi x = true\) →$
+^def sign \(x : BitVec 32\) \(post : BitVec 32 → Prop\) : Prop :=$
+^      let s := \(-\(1#32\)\);$
+^  \(BitVec\.sle lo hi = true\) →$

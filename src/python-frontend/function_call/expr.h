@@ -651,6 +651,7 @@ private:
   exprt handle_list_method() const;
   exprt none_if_assigned(exprt call) const;
   exprt handle_list_append() const;
+  exprt handle_typed_list_method() const;
   exprt handle_list_insert() const;
   exprt handle_list_extend() const;
   exprt handle_list_clear() const;
@@ -1016,6 +1017,38 @@ private:
   std::optional<exprt>
   fold_sum_over_tuple(bool is_user_imported, bool is_numpy_model_call);
 
+  /**
+   * min()/max()/sorted() over a list mixing int and float, which the
+   * list[float] models would read as all-float.
+   *
+   * @return the inline result, or nullopt when the list is not mixed or the
+   *         call is not one of these.
+   */
+  std::optional<exprt> build_mixed_numeric_call(const std::string &list_id);
+
+  /// Whether the sorted() argument registered as @p list_id mixes int and
+  /// float elements.
+  bool sorts_mixed_numeric(const std::string &list_id) const;
+
+  /**
+   * sorted() over a list literal of int and float constants, reordered at
+   * conversion time so that each element keeps its own type.
+   *
+   * @throws std::runtime_error for any other mixed int/float argument, whose
+   *         element types per position are not known statically.
+   */
+  exprt sort_mixed_numeric_literal();
+
+  /**
+   * min() (@p is_max false) or max() over a list literal of int and float
+   * constants, selected at conversion time so that the result keeps the
+   * selected element's own type.
+   *
+   * @throws std::runtime_error for any other mixed int/float argument, whose
+   *         result type depends on the element values.
+   */
+  exprt select_mixed_numeric_literal(bool is_max);
+
   /*
    * Typed-builtin dispatch for min/max/sum/sorted/reversed: appends the
    * _float/_str/_default suffix to actual_func_name based on element type, and
@@ -1127,6 +1160,8 @@ private:
   bool is_size_builtin() const;
   bool is_list_typed(const typet &type) const;
   exprt build_dict_size_call(const exprt &dict);
+  exprt len_of_instance(exprt object, const locationt &location);
+  exprt size_of_aggregate(const exprt &arg, const locationt &location);
   std::optional<exprt> build_positional_arguments(
     code_function_callt &call,
     size_t param_offset,
