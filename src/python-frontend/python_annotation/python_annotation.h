@@ -74,6 +74,7 @@ public:
   preprocess_receiver_method_calls(bool inside_functions = false);
   void retype_methods_called_on_receivers();
   bool preprocess_self_method_calls();
+  void settle_self_method_calls();
   std::string self_call_arg_type(const Json &arg, const Json &caller);
   bool is_instance_call(const Json &func) const;
   bool receiver_method_call(
