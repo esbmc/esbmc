@@ -1,0 +1,5 @@
+CORE
+main.cpp
+--goto2lean
+^def mid \(lo : BitVec 32\) \(hi : BitVec 32\) \(post : BitVec 32 → Prop\) : Prop :=$
+^theorem main_safe : Prog\.main \(fun _ => True\) := by$

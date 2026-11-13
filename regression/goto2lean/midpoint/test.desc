@@ -1,0 +1,9 @@
+CORE
+main.c
+--goto2lean
+^def mid \(lo : BitVec 32\) \(hi : BitVec 32\) \(post : BitVec 32 → Prop\) : Prop :=$
+^  post \(BitVec\.smtUDiv \(lo \+ hi\) \(2#32\)\)$
+^  ∀ lo : BitVec 32,$
+^  \(lo ≤ hi\) →$
+^  \(\(lo ≤ m\) ∧ \(m ≤ hi\)\) ∧ \($
+^  all_goals bv_decide$
