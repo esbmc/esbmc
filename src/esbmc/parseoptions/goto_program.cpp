@@ -940,7 +940,7 @@ bool esbmc_parseoptionst::output_goto_program(
       cmdline.isset("goto-functions-only"))
     {
       std::ostringstream oss;
-      goto_functions.output(ns, oss);
+      program_for(goto_functions, options).output(ns, oss);
       log_status("{}", oss.str());
       if (cmdline.isset("goto-functions-only"))
         exit(0);

@@ -187,6 +187,15 @@ static const char *goto_slice_excluded(
     return "coverage modes";
   if (options.get_bool_option("termination"))
     return "--termination";
+  // It skips proved claims in the program a step runs; the steps would no
+  // longer share that.
+  if (options.get_bool_option("multi-property"))
+    return "--multi-property";
+  // The stack check counts the declared locals a slice removes.
+  if (
+    atol(options.get_option("stack-limit").c_str()) > 0 ||
+    atol(options.get_option("total-stack-limit").c_str()) > 0)
+    return "stack limits";
   if (cmdline.isset("ltl"))
     return "--ltl";
   // These add claims or assumptions after the slice point.
@@ -200,8 +209,8 @@ static const char *goto_slice_excluded(
   return nullptr;
 }
 
-void esbmc_parseoptionst::report_goto_slice(
-  const goto_functionst &goto_functions,
+void esbmc_parseoptionst::setup_goto_slice(
+  goto_functionst &goto_functions,
   const optionst &options,
   bool is_k_induction)
 {
@@ -210,6 +219,12 @@ void esbmc_parseoptionst::report_goto_slice(
       goto_slice_excluded(goto_functions, options, cmdline, is_coverage))
   {
     log_warning("--goto-slice is ignored for {}", reason);
+    return;
+  }
+
+  if (ts_strategy_requested())
+  {
+    log_warning("--goto-slice is ignored for the transition-system strategies");
     return;
   }
 
@@ -228,20 +243,28 @@ void esbmc_parseoptionst::report_goto_slice(
                             cmdline.isset("generate-ctest-testcase") ||
                             cmdline.isset("generate-pytest-testcase");
 
-  std::vector<std::pair<slice_stept, const char *>> steps{
-    {slice_stept::base_case, "base case"}};
-  if (is_k_induction || cmdline.isset("incremental-bmc"))
-    steps.emplace_back(slice_stept::forward_condition, "forward condition");
+  std::vector<slice_stept> steps{slice_stept::base_case};
   if (is_k_induction && !options.get_bool_option("disable-inductive-step"))
-    steps.emplace_back(slice_stept::inductive_step, "inductive step");
+    steps.push_back(slice_stept::inductive_step);
 
-  const goto_slicert slicer(goto_functions, points_to);
-  for (const auto &[step, name] : steps)
-    log_status(
-      "GOTO slice ({}): {}",
-      name,
-      slicer.slice(slice_criteriont::from_options(options, step, keep_nondets))
-        .summary());
+  goto_slice = std::make_shared<goto_slice_cachet>(
+    goto_functions,
+    options,
+    points_to,
+    keep_nondets,
+    cmdline.isset("k-induction-parallel"));
+  goto_slice->report(steps);
+}
+
+goto_functionst &esbmc_parseoptionst::program_for(
+  goto_functionst &goto_functions,
+  const optionst &options)
+{
+  if (!goto_slice)
+    return goto_functions;
+  if (options.get_bool_option("inductive-step"))
+    return goto_slice->program_for(slice_stept::inductive_step);
+  return goto_slice->program_for(slice_stept::base_case);
 }
 
 static void apply_gcse(
@@ -645,9 +668,6 @@ bool esbmc_parseoptionst::process_goto_program(
     // that was only reachable via the marker. Both transformations
     // corrupt the termination CFG. The marker block is intentionally
     // small and ignoring it costs nothing.
-    if (cmdline.isset("goto-slice"))
-      report_goto_slice(goto_functions, options, is_k_induction);
-
     const bool skip_cleanup_for_termination =
       options.get_bool_option("termination");
     if (!(cmdline.isset("no-remove-no-op") || skip_cleanup_for_termination))
@@ -921,6 +941,9 @@ bool esbmc_parseoptionst::process_goto_program(
       goto_coveraget tmp(ns, goto_functions, filename);
       tmp.negating_asserts(tgt_fname);
     }
+
+    if (cmdline.isset("goto-slice"))
+      setup_goto_slice(goto_functions, options, is_k_induction);
   }
 
   catch (const char *e)

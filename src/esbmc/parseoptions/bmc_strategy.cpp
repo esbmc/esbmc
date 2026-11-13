@@ -586,7 +586,7 @@ int esbmc_parseoptionst::do_context_bound_deepening(
   {
     options.set_option("context-bound", std::to_string(cb));
 
-    bmct bmc(goto_functions, options, context);
+    bmct bmc(program_for(goto_functions, options), options, context);
     log_progress("Checking with context bound {}", cb);
 
     const int res = do_bmc(bmc);
@@ -692,7 +692,7 @@ int esbmc_parseoptionst::falsify_with_bounded_schedules(
   for (int cb = 1; cb <= max_cb; ++cb)
   {
     options.set_option("context-bound", std::to_string(cb));
-    bmct bmc(goto_functions, options, context);
+    bmct bmc(program_for(goto_functions, options), options, context);
     log_progress("Falsifying with context bound {}", cb);
 
     const int res = do_bmc(bmc);

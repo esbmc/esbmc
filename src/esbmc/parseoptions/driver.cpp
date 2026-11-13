@@ -325,7 +325,7 @@ int esbmc_parseoptionst::run_chosen_strategy(
     return do_bmc_strategy(options, goto_functions);
 
   // No strategy chosen: rely on the simplifier and the flags set through CMD.
-  bmct bmc(goto_functions, options, context);
+  bmct bmc(program_for(goto_functions, options), options, context);
   return do_bmc(bmc);
 }
 

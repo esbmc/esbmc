@@ -2,7 +2,11 @@
 
 #include <irep2/irep2_utils.h>
 #include <pointer-analysis/andersen.h>
+#include <util/base/prefix.h>
 #include <util/config/options.h>
+#include <util/message/message.h>
+
+#include <cassert>
 
 #include <algorithm>
 #include <functional>
@@ -38,14 +42,45 @@ struct accesst
 class locationst
 {
 public:
-  explicit locationst(andersent &points_to) : points_to(points_to)
+  locationst(andersent &points_to, const goto_functionst &goto_functions)
+    : points_to(points_to)
   {
-    for (const expr2tc &obj : points_to.addressed_objects())
+    std::vector<expr2tc> objects = points_to.addressed_objects();
+    // Andersen records an address only where it can follow it; one that
+    // escapes into a value it gives up on (a double, say) is still taken.
+    std::function<void(const expr2tc &)> taken = [&](const expr2tc &e) {
+      if (is_nil_expr(e))
+        return;
+      if (is_address_of2t(e))
+      {
+        expr2tc obj = to_address_of2t(e).ptr_obj;
+        while (is_member2t(obj) ||
+               (is_index2t(obj) && !is_pointer_index(obj)) ||
+               is_typecast2t(obj))
+          obj = is_member2t(obj)  ? to_member2t(obj).source_value
+                : is_index2t(obj) ? to_index2t(obj).source_value
+                                  : to_typecast2t(obj).from;
+        if (is_symbol2t(obj))
+          objects.push_back(obj);
+      }
+      e->foreach_operand(taken);
+    };
+    forall_goto_functions (f, goto_functions)
+      forall_goto_program_instructions (i, f->second.body)
+      {
+        taken(i->code);
+        taken(i->guard);
+      }
+
+    for (const expr2tc &obj : objects)
     {
       top.push_back(object(obj));
       if (is_symbol2t(obj))
         top_names.push_back(to_symbol2t(obj).thename);
     }
+    std::sort(top_names.begin(), top_names.end());
+    top_names.erase(
+      std::unique(top_names.begin(), top_names.end()), top_names.end());
     std::sort(top.begin(), top.end());
     top.erase(std::unique(top.begin(), top.end()), top.end());
     in_top.resize(count);
@@ -68,9 +103,18 @@ public:
   {
     const auto it = by_name.try_emplace(id, count);
     if (it.second)
+    {
+      // ESBMC's model state (__ESBMC_alloc, ...), which symex reads in
+      // checks no instruction spells out.
+      if (has_prefix(id.as_string(), "c:@__ESBMC_"))
+        implicit.push_back(count);
       ++count;
+    }
     return it.first->second;
   }
+
+  /// Read by symex itself, so relevant under every criterion.
+  std::vector<slice_loct> implicit;
 
   void reads(const expr2tc &e, accesst &out)
   {
@@ -99,6 +143,17 @@ public:
       reads(index.source_value, out);
       reads(index.index, out);
       pointees(index.source_value, out);
+      return;
+    }
+    if (is_code_printf2t(e))
+    {
+      // %s and friends read what their pointer operands point to.
+      for (const expr2tc &op : to_code_printf2t(e).operands)
+      {
+        reads(op, out);
+        if (is_pointer_type(op->type))
+          pointees(op, out);
+      }
       return;
     }
     e->foreach_operand([&](const expr2tc &op) { reads(op, out); });
@@ -186,6 +241,17 @@ public:
       reads(to_index2t(e).source_value, out);
       reads(to_index2t(e).index, out);
     }
+    else if (is_index2t(e))
+    {
+      // Inside a dereferenced object the index is part of the offset checked.
+      reads(to_index2t(e).index, out);
+      check_reads(to_index2t(e).source_value, out);
+    }
+    else if (is_byte_extract2t(e))
+    {
+      reads(to_byte_extract2t(e).source_offset, out);
+      check_reads(to_byte_extract2t(e).source_value, out);
+    }
     else
       e->foreach_operand([&](const expr2tc &op) { check_reads(op, out); });
   }
@@ -209,6 +275,21 @@ public:
     return result;
   }
 
+  /// The objects \p pointer may point to.
+  void pointees(const expr2tc &pointer, accesst &out)
+  {
+    value_setst::valuest values;
+    points_to.get_values(goto_programt::const_targett(), pointer, values);
+    for (const expr2tc &v : values)
+    {
+      if (!is_object_descriptor2t(v))
+        out.top = true;
+      // Symex resolves a dereference of an unconstrained pointer to an
+      // invalid object, which no other access reaches.
+      else if (!andersent::is_nondet_object(to_object_descriptor2t(v).object))
+        out.add(object(to_object_descriptor2t(v).object));
+    }
+  }
   static bool is_pointer_index(const expr2tc &e)
   {
     return is_index2t(e) && is_pointer_type(to_index2t(e).source_value->type);
@@ -240,21 +321,6 @@ private:
     if (it.second)
       ++count;
     return it.first->second;
-  }
-
-  void pointees(const expr2tc &pointer, accesst &out)
-  {
-    value_setst::valuest values;
-    points_to.get_values(goto_programt::const_targett(), pointer, values);
-    for (const expr2tc &v : values)
-    {
-      if (!is_object_descriptor2t(v))
-        out.top = true;
-      // Symex resolves a dereference of an unconstrained pointer to an
-      // invalid object, which no other access reaches.
-      else if (!andersent::is_nondet_object(to_object_descriptor2t(v).object))
-        out.add(object(to_object_descriptor2t(v).object));
-    }
   }
 };
 
@@ -319,7 +385,11 @@ struct goto_slicert::programt
     bool nondet = false;
     /// DECL or DEAD of an address-taken variable.
     bool lifetime = false;
+    /// An assignment whose value may carry an address.
     bool stores_address = false;
+    /// Writes or ends a variable that may hold an address: overwriting the
+    /// last reference to an object leaks it.
+    bool holds_address = false;
     /// A backward GOTO, or a jump out of a loop: what decides when it exits.
     bool loop_control = false;
     /// An exit test at the head of a collapsible loop.
@@ -347,6 +417,7 @@ struct goto_slicert::programt
   std::vector<unsigned> top_definers;
   std::vector<slice_loct> top;
   std::vector<bool> in_top;
+  std::vector<slice_loct> implicit;
 };
 
 namespace
@@ -358,6 +429,7 @@ struct slice_statet
 {
   const programt &p;
   const bool drop_inductive_step;
+  const bool collapse_loops;
   std::vector<uint8_t> kept;
   std::vector<bool> relevant;
   std::vector<bool> live;
@@ -365,9 +437,10 @@ struct slice_statet
   bool top_read = false;
   std::vector<unsigned> work;
 
-  slice_statet(const programt &p, bool drop_inductive_step)
+  slice_statet(const programt &p, bool drop_inductive_step, bool collapse_loops)
     : p(p),
       drop_inductive_step(drop_inductive_step),
+      collapse_loops(collapse_loops),
       kept(p.nodes.size(), NOT_KEPT),
       relevant(p.definers.size(), false),
       live(p.functions.size(), false)
@@ -477,7 +550,7 @@ struct slice_statet
     {
       const programt::functiont &fn = p.functions[p.nodes[loop.head].function];
       const auto &pre = prefixes[p.nodes[loop.head].function];
-      if (!any(pre, fn.begin, loop.body, loop.backedge))
+      if (collapse_loops && !any(pre, fn.begin, loop.body, loop.backedge))
         continue;
       for (unsigned h = loop.head; h < loop.body; ++h)
         if (kept[h] != FULL && !excluded(h))
@@ -491,7 +564,7 @@ struct slice_statet
 
   bool collapsed(const programt::loopt &loop) const
   {
-    if (!loop.collapsible)
+    if (!collapse_loops || !loop.collapsible)
       return false;
     for (unsigned i = loop.body; i < loop.backedge; ++i)
       if (kept[i] != NOT_KEPT)
@@ -510,7 +583,7 @@ public:
     : p(p),
       goto_functions(goto_functions),
       points_to(points_to),
-      locations(points_to)
+      locations(points_to, goto_functions)
   {
   }
 
@@ -642,11 +715,14 @@ private:
       const code_assign2t &assign = to_code_assign2t(instr.code);
       locations.writes(assign.target, n.defs, n.uses);
       locations.reads(assign.source, n.uses);
+      describe_printf_writes(assign.source, n);
       n.allocates = is_allocation(assign.source);
       n.frees = n.allocates; // realloc
       n.nondet = contains_nondet(assign.source);
       // A check-only store keeps its value when it may carry an address.
       n.stores_address = points_to.carries_address(assign.source);
+      n.holds_address =
+        n.stores_address || points_to.carries_address(assign.target);
       if (n.stores_address)
         locations.reads(assign.source, n.check_uses);
       break;
@@ -660,6 +736,8 @@ private:
       const slice_loct l = locations.named(name);
       n.defs.add(l);
       n.lifetime = l < locations.in_top.size() && locations.in_top[l];
+      n.holds_address =
+        points_to.carries_address(symbol2tc(pointer_type2(), name));
       break;
     }
 
@@ -682,7 +760,10 @@ private:
         locations.reads(instr.code, n.uses);
       }
       else if (is_code_expression2t(instr.code) || is_code_printf2t(instr.code))
+      {
         locations.reads(instr.code, n.uses);
+        describe_printf_writes(instr.code, n);
+      }
       else
         n.always = !is_nil_expr(instr.code);
       n.counted = n.counted && !is_nil_expr(instr.code);
@@ -700,13 +781,33 @@ private:
     }
   }
 
+  /// sprintf and the rest of the family but printf write through their
+  /// pointer operands; symex runs them, so they are always kept.
+  void describe_printf_writes(const expr2tc &e, nodet &n)
+  {
+    if (!is_code_printf2t(e))
+      return;
+    const code_printf2t &printf = to_code_printf2t(e);
+    if (
+      printf.kind == printf_kindt::PRINTF ||
+      printf.kind == printf_kindt::VPRINTF)
+      return;
+    n.always = true;
+    for (const expr2tc &op : printf.operands)
+      if (is_pointer_type(op->type))
+        locations.pointees(op, n.defs);
+  }
+
   void describe_call(unsigned i)
   {
     nodet &n = p.nodes[i];
     const code_function_call2t &call =
       to_code_function_call2t(n.instruction->code);
     if (!is_nil_expr(call.ret))
+    {
+      n.holds_address = points_to.carries_address(call.ret);
       locations.writes(call.ret, n.defs, n.uses);
+    }
     for (const expr2tc &arg : call.operands)
       locations.reads(arg, n.uses);
     if (!is_symbol2t(call.function))
@@ -727,7 +828,15 @@ private:
         // A bodyless callee: symex gives it a fresh result and runs only the
         // intrinsics, which may write through their arguments.
         if (andersent::symex_runs(name))
+        {
           n.always = true;
+          for (const expr2tc &arg : call.operands)
+            if (!is_nil_expr(arg) && is_pointer_type(arg->type))
+            {
+              locations.pointees(arg, n.uses);
+              locations.pointees(arg, n.defs);
+            }
+        }
         else if (!is_nil_expr(call.ret))
           n.nondet = true;
         continue;
@@ -835,6 +944,7 @@ private:
   {
     p.definers.assign(locations.size(), {});
     p.top = locations.top;
+    p.implicit = locations.implicit;
     p.in_top = locations.in_top;
     p.in_top.resize(locations.size(), false);
     for (unsigned i = 0; i < p.nodes.size(); ++i)
@@ -852,6 +962,20 @@ private:
 };
 } // namespace
 
+namespace
+{
+/// A check-only store whose value nothing reads and whose right-hand side
+/// neither carries an address nor needs its own dereference check.
+bool zeroable(const nodet &n)
+{
+  if (!n.instruction->is_assign() || n.stores_address)
+    return false;
+  const expr2tc &source = to_code_assign2t(n.instruction->code).source;
+  return !locationst::dereferences(source) &&
+         (is_number_type(source->type) || is_bool_type(source->type));
+}
+} // namespace
+
 slice_criteriont slice_criteriont::from_options(
   const optionst &options,
   slice_stept step,
@@ -863,9 +987,18 @@ slice_criteriont slice_criteriont::from_options(
   c.memory_leak_check = options.get_bool_option("memory-leak-check");
   c.no_reachable_memory_leak =
     options.get_bool_option("no-reachable-memory-leak");
-  c.no_assertions = options.get_bool_option("no-assertions") ||
-                    step == slice_stept::forward_condition;
+  c.no_assertions = options.get_bool_option("no-assertions");
   c.keep_nondets = keep_nondets && step == slice_stept::base_case;
+  // The k-step strategies ask a bounded question only through the forward
+  // condition, which a collapsed loop answers soundly.
+  const bool k_step = options.get_bool_option("k-induction") ||
+                      options.get_bool_option("k-induction-parallel") ||
+                      options.get_bool_option("incremental-bmc") ||
+                      options.get_bool_option("falsification");
+  const bool bounded = atol(options.get_option("unwind").c_str()) > 0 ||
+                       !options.get_option("unwindset").empty();
+  c.collapse_loops =
+    k_step || !bounded || options.get_bool_option("no-unwinding-assertions");
   return c;
 }
 
@@ -892,7 +1025,9 @@ goto_slicert::~goto_slicert() = default;
 slice_resultt goto_slicert::slice(const slice_criteriont &c) const
 {
   const programt &p = *program;
-  slice_statet s(p, c.step != slice_stept::inductive_step);
+  slice_statet s(p, c.step != slice_stept::inductive_step, c.collapse_loops);
+  for (slice_loct l : p.implicit)
+    s.mark(l);
 
   for (unsigned i = 0; i < p.nodes.size(); ++i)
   {
@@ -903,7 +1038,7 @@ slice_resultt goto_slicert::slice(const slice_criteriont &c) const
       (instr.is_assert() && !(c.no_assertions && instr.is_user_assertion())) ||
       ((c.pointer_check || c.memory_leak_check) && (n.allocates || n.frees)) ||
       (c.pointer_check && n.lifetime) ||
-      (c.memory_leak_check && c.no_reachable_memory_leak && n.stores_address) ||
+      (c.memory_leak_check && c.no_reachable_memory_leak && n.holds_address) ||
       (c.keep_nondets && n.nondet);
     if (full)
       s.keep(i, FULL);
@@ -938,6 +1073,8 @@ slice_resultt goto_slicert::slice(const slice_criteriont &c) const
     {
       ++result.check_only_instructions;
       result.check_only.insert(n.instruction);
+      if (zeroable(n))
+        result.zeroed.insert(n.instruction);
     }
   }
 
@@ -947,8 +1084,119 @@ slice_resultt goto_slicert::slice(const slice_criteriont &c) const
     if (s.collapsed(loop))
     {
       ++result.collapsed_loops;
-      result.collapsed.insert(p.nodes[loop.backedge].instruction);
+      // Nothing in the body changes the exit tests, so the loop either exits
+      // on its first test or never.
+      const goto_programt::instructiont &back =
+        *p.nodes[loop.backedge].instruction;
+      expr2tc exits = not2tc(back.guard);
+      for (unsigned h = loop.head; h < loop.body; ++h)
+        exits = or2tc(p.nodes[h].instruction->guard, exits);
+      result.collapsed.emplace(&back, exits);
     }
   }
   return result;
+}
+
+void apply_slice(
+  const goto_functionst &analysed,
+  goto_functionst &target,
+  const slice_resultt &result)
+{
+  for (auto &[name, function] : target.function_map)
+  {
+    const auto &from = analysed.function_map.at(name).body.instructions;
+    assert(from.size() == function.body.instructions.size());
+    auto source = from.begin();
+    for (auto &instruction : function.body.instructions)
+    {
+      const goto_programt::instructiont *key = &*source++;
+      if (
+        const auto it = result.collapsed.find(key);
+        it != result.collapsed.end())
+        instruction.make_assumption(it->second);
+      else if (result.removed.count(key))
+        instruction.make_skip();
+      else if (result.zeroed.count(key))
+      {
+        code_assign2t &assign = to_code_assign2t(instruction.code);
+        assign.source = gen_zero(assign.source->type);
+      }
+    }
+  }
+}
+
+goto_slice_cachet::goto_slice_cachet(
+  goto_functionst &program,
+  const optionst &options,
+  andersent &points_to,
+  bool keep_nondets,
+  bool in_place)
+  : original(program),
+    options(options),
+    keep_nondets(keep_nondets),
+    in_place(in_place),
+    slicer(std::make_unique<goto_slicert>(program, points_to))
+{
+}
+
+goto_slice_cachet::~goto_slice_cachet() = default;
+
+const slice_resultt &goto_slice_cachet::result_for(slice_stept step)
+{
+  // A slice in place changed the program the analysis describes.
+  assert(!sliced_in_place);
+  if (const auto it = results.find(step); it != results.end())
+    return it->second;
+  return results
+    .emplace(
+      step,
+      slicer->slice(
+        slice_criteriont::from_options(options, step, keep_nondets)))
+    .first->second;
+}
+
+void goto_slice_cachet::report(const std::vector<slice_stept> &steps)
+{
+  static const std::map<slice_stept, const char *> names{
+    {slice_stept::base_case, "base case"},
+    {slice_stept::inductive_step, "inductive step"}};
+  for (slice_stept step : steps)
+    log_status(
+      "GOTO slice ({}): {}", names.at(step), result_for(step).summary());
+}
+
+goto_functionst &goto_slice_cachet::program_for(slice_stept step)
+{
+  if (sliced_in_place)
+  {
+    if (*sliced_in_place != step)
+      throw "--goto-slice: a parallel step asked for another step's program";
+    return original;
+  }
+  if (const auto it = programs.find(step); it != programs.end())
+    return it->second;
+
+  const slice_resultt &result = result_for(step);
+  if (in_place)
+  {
+    apply_slice(original, original, result);
+    sliced_in_place = step;
+    slicer.reset();
+    results.clear();
+    return original;
+  }
+
+  goto_functionst &copy = programs[step];
+  for (const auto &[name, function] : original.function_map)
+  {
+    goto_functiont &to = copy.function_map[name];
+    to.type = function.type;
+    to.body_available = function.body_available;
+    to.exception_spec = function.exception_spec;
+    to.inlined_funcs = function.inlined_funcs;
+    // copy_from, not copy construction: that renumbers locations.
+    to.body.copy_from(function.body);
+  }
+  apply_slice(original, copy, result);
+  return copy;
 }

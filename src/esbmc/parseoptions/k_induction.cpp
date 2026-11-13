@@ -500,7 +500,7 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
     for (uint64_t k_step = k_step_base; k_step <= max_k_step;
          k_step += k_step_inc)
     {
-      bmct bmc(goto_functions, options, context);
+      bmct bmc(program_for(goto_functions, options), options, context);
       bmc.options.set_option("unwind", integer2string(k_step));
 
       log_progress("Checking base case, k = {:d}\n", k_step);
@@ -606,7 +606,7 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
     for (uint64_t k_step = k_step_base + 1; k_step <= max_k_step;
          k_step += k_step_inc)
     {
-      bmct bmc(goto_functions, options, context);
+      bmct bmc(program_for(goto_functions, options), options, context);
       bmc.options.set_option("unwind", integer2string(k_step));
 
       log_status("Checking forward condition, k = {:d}", k_step);
@@ -677,7 +677,7 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
     for (uint64_t k_step = k_step_base + 1; k_step <= max_k_step;
          k_step += k_step_inc)
     {
-      bmct bmc(goto_functions, options, context);
+      bmct bmc(program_for(goto_functions, options), options, context);
 
       bmc.options.set_option("unwind", integer2string(k_step));
 
@@ -759,7 +759,7 @@ tvt esbmc_parseoptionst::is_base_case_violated(
   options.set_option("partial-loops", false);
   options.set_option("unwind", integer2string(k_step));
 
-  bmct bmc(goto_functions, options, context);
+  bmct bmc(program_for(goto_functions, options), options, context);
 
   log_progress("Checking base case, k = {:d}", k_step);
   switch (do_bmc(bmc))
@@ -822,7 +822,7 @@ tvt esbmc_parseoptionst::does_forward_condition_hold(
   options.set_option("no-assertions", true);
   options.set_option("unwind", integer2string(k_step));
 
-  bmct bmc(goto_functions, options, context);
+  bmct bmc(program_for(goto_functions, options), options, context);
 
   log_progress("Checking forward condition, k = {:d}", k_step);
   auto res = do_bmc(bmc);
@@ -887,7 +887,7 @@ tvt esbmc_parseoptionst::is_inductive_step_violated(
   options.set_option("partial-loops", true);
   options.set_option("unwind", integer2string(k_step));
 
-  bmct bmc(goto_functions, options, context);
+  bmct bmc(program_for(goto_functions, options), options, context);
 
   log_progress("Checking inductive step, k = {:d}", k_step);
   smt_resultt res = static_cast<smt_resultt>(do_bmc(bmc));
@@ -967,7 +967,7 @@ void esbmc_parseoptionst::diagnose_unknown_properties(
   options.set_option("unwind", integer2string(k_step));
   options.set_option("diagnose-unknown-properties", true);
 
-  bmct bmc(goto_functions, options, context);
+  bmct bmc(program_for(goto_functions, options), options, context);
 
   log_progress(
     "\nDiagnosing unresolved properties (inductive step, k = {:d}):", k_step);
