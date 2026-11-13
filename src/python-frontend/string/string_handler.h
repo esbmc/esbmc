@@ -315,6 +315,26 @@ public:
     const nlohmann::json &call_json);
 
   /**
+   * @brief The str a tagged argument of str method `method` holds, after
+   * raising TypeError on the paths where it holds another type. Any other
+   * argument is returned unchanged.
+   */
+  exprt read_tagged_str_argument(
+    const exprt &argument,
+    const std::string &method,
+    const locationt &location);
+
+  /// The char pointer of the str @p tagged holds, behind a guard raising
+  /// @p exception with @p message where it holds another type. @p refusal
+  /// stops the conversion where no guard can be planted.
+  exprt read_tagged_str(
+    const exprt &tagged,
+    const std::string &exception,
+    const std::string &message,
+    const std::string &refusal,
+    const locationt &location);
+
+  /**
    * @brief Try fast-path folding for len() when argument is string-like.
    *
    * Returns non-nil when a compile-time or cheap symbolic shortcut is
