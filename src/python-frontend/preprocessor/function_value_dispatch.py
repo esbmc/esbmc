@@ -614,7 +614,7 @@ def _element_shape(shape, index):
     if common is not None:
         return common
     position = index.value if isinstance(index, ast.Constant) else None
-    if isinstance(shape, tuple) and type(position) is int and 0 <= position < len(shape):
+    if isinstance(shape, tuple) and isinstance(position, int) and 0 <= position < len(shape):
         return shape[position]
     raise _Refused
 
