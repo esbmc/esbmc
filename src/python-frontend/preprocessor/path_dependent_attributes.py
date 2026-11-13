@@ -89,14 +89,20 @@ def _constructed_class(module, call, classes):
         return None
     cls = classes.get(func.id)
     for name in path:
-        nested = [s for s in cls.body
-                  if isinstance(s, ast.ClassDef) and s.name == name] if cls is not None else []
-        bound = [
-            n for n in ast.walk(cls)
-            if getattr(n, "name", None) == name or isinstance(n, ast.Name) and n.id == name
-        ] if cls is not None else []
-        cls = nested[0] if len(nested) == 1 and len(bound) == 1 else None
+        cls = _nested_class(cls, name)
     return cls
+
+
+def _nested_class(cls, name):
+    """The class `name` nested in `cls`, when `cls` binds `name` once."""
+    if cls is None:
+        return None
+    nested = [s for s in cls.body if isinstance(s, ast.ClassDef) and s.name == name]
+    bound = [
+        n for n in ast.walk(cls)
+        if getattr(n, "name", None) == name or isinstance(n, ast.Name) and n.id == name
+    ]
+    return nested[0] if len(nested) == 1 and len(bound) == 1 else None
 
 
 def _class_lacks(classes, cls, attr):
@@ -376,13 +382,18 @@ def _receiver_escapes(module, use, receiver):
         and id(n) not in allowed for n in ast.walk(module))
 
 
+def _one_receiver_used(use):
+    """Whether `use` is supported, stores the attribute through one receiver
+    and calls, reads or deletes it."""
+    return (use.ok and bool(use.stores) and len(use.receivers) == 1
+            and bool(use.calls or use.reads or use.deletes))
+
+
 def _binding(module, use, scopes):
     """The statement binding the one receiver of `use`, when one statement
     binds it, in the function or module scope of every use, and a store of
     the attribute sits in a block nested in that scope."""
-    if not use.ok or not use.stores or len(use.receivers) != 1:
-        return None
-    if not (use.calls or use.reads or use.deletes):
+    if not _one_receiver_used(use):
         return None
     scope = {scopes[id(n)] for n in use.nodes}
     bound = _bindings(module, next(iter(use.receivers)))
