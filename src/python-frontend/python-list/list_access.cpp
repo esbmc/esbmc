@@ -7,6 +7,31 @@
 using namespace python_expr;
 using namespace python_list_detail;
 
+// index < 0 ? len + index : index, in a signed type. Unsigned, a negative
+// index wraps to the right position only under bit-vector encoding: under
+// integer encoding len + (size_t)-1 is len + 2^64 - 1 (#10481).
+static expr2tc normalize_negative_index(const exprt &index, const exprt &len)
+{
+  const type2tc signed_t2 = migrate_type(signed_size_type());
+  expr2tc index2, len2;
+  migrate_expr(build_typecast(index, signed_size_type()), index2);
+  migrate_expr(build_typecast(len, signed_size_type()), len2);
+  return if2tc(
+    signed_t2,
+    lessthan2tc(index2, gen_zero(signed_t2)),
+    add2tc(signed_t2, len2, index2),
+    index2);
+}
+
+static expr2tc index_out_of_range(const expr2tc &position, const exprt &len)
+{
+  expr2tc len2;
+  migrate_expr(build_typecast(len, signed_size_type()), len2);
+  return or2tc(
+    lessthan2tc(position, gen_zero(position->type)),
+    greaterthanequal2tc(position, len2));
+}
+
 static exprt normalize_positive_slice_bound_expr(
   const exprt &bound,
   const exprt &logical_len)
@@ -126,16 +151,17 @@ exprt python_list::build_list_at_call(
   {
     const exprt size = build_deref_member(list, "size", size_type());
     exprt position = build_typecast(index, size_type());
+    exprt in_range = build_less_than(position, size);
     if (index_may_be_negative)
-      position = build_if(
-        build_less_than(index, gen_zero(index.type())),
-        build_add(size, position, size_type()),
-        position);
+    {
+      const expr2tc normalized = normalize_negative_index(index, size);
+      position = build_typecast(migrate_expr_back(normalized), size_type());
+      in_range =
+        not_exprt(migrate_expr_back(index_out_of_range(normalized, size)));
+    }
     const exprt items = build_deref_member(list, "items", obj_type);
     return build_if(
-      build_less_than(position, size),
-      build_add(items, position, obj_type),
-      gen_zero(obj_type));
+      in_range, build_add(items, position, obj_type), gen_zero(obj_type));
   }
 
   // A lowered for-loop reads the list whose current size its condition has
@@ -185,25 +211,10 @@ exprt python_list::build_list_at_call(
   size_call.location() = location;
   converter_.add_instruction(size_call);
 
-  // Convert index to size_t for comparison and arithmetic
-  exprt index_as_size = build_typecast(index, size_type());
-
-  // Create: actual_index = (index < 0) ? (size + index) : index
-  // (V.3: build the negative-index normalization in IREP2.)
-  const type2tc size_t2 = migrate_type(size_type());
-  expr2tc index2, index_as_size2, size_var2;
-  migrate_expr(index, index2);
-  migrate_expr(index_as_size, index_as_size2);
-  migrate_expr(build_symbol(size_var), size_var2);
-
-  expr2tc is_negative = lessthan2tc(index2, gen_zero(index2->type));
-  // For negative: size + index (since index is negative, this is
-  // size - abs(index)).
-  expr2tc positive_index = add2tc(size_t2, size_var2, index_as_size2);
-  // Choose between positive conversion or original.
-  expr2tc converted_index2 =
-    if2tc(size_t2, is_negative, positive_index, index_as_size2);
-  exprt converted_index = migrate_expr_back(converted_index2);
+  const expr2tc position =
+    normalize_negative_index(index, build_symbol(size_var));
+  exprt converted_index =
+    build_typecast(migrate_expr_back(position), size_type());
 
   if (!config.options.get_bool_option("no-bounds-check"))
   {
@@ -214,8 +225,8 @@ exprt python_list::build_list_at_call(
     // the error, matching CPython and the negative-index path. This path is
     // only reached for signed indices; provably-non-negative unsigned indices
     // (loop counters) early-return above without a bounds call, so the hot path
-    // is unaffected. oob = converted_index >= size (V.3: IREP2).
-    expr2tc oob = greaterthanequal2tc(converted_index2, size_var2);
+    // is unaffected.
+    expr2tc oob = index_out_of_range(position, build_symbol(size_var));
 
     exprt raise = converter_.get_exception_handler().gen_exception_raise(
       "IndexError", "list index out of range");
@@ -764,26 +775,16 @@ exprt python_list::index_bool_mask_rows(
 
   exprt rows_member = build_member(array, "rows", rows_array_type);
   exprt count_member = build_member(array, "count", size_type());
-  exprt index_as_size = build_typecast(index, size_type());
 
-  // actual_index = (index < 0) ? (count + index) : index, normalized
-  // against the logical row count rather than the buffer's physical
-  // capacity (mirrors build_list_at_call's negative-index handling).
-  const type2tc size_t2 = migrate_type(size_type());
-  expr2tc index2, index_as_size2, count2;
-  migrate_expr(index, index2);
-  migrate_expr(index_as_size, index_as_size2);
-  migrate_expr(count_member, count2);
-
-  expr2tc is_negative = lessthan2tc(index2, gen_zero(index2->type));
-  expr2tc positive_index = add2tc(size_t2, count2, index_as_size2);
-  expr2tc converted_index2 =
-    if2tc(size_t2, is_negative, positive_index, index_as_size2);
-  exprt converted_index = migrate_expr_back(converted_index2);
+  // Normalized against the logical row count rather than the buffer's
+  // physical capacity (mirrors build_list_at_call's negative-index handling).
+  const expr2tc position = normalize_negative_index(index, count_member);
+  exprt converted_index =
+    build_typecast(migrate_expr_back(position), size_type());
 
   if (!config.options.get_bool_option("no-bounds-check"))
   {
-    expr2tc oob = greaterthanequal2tc(converted_index2, count2);
+    expr2tc oob = index_out_of_range(position, count_member);
 
     exprt raise = converter_.get_exception_handler().gen_exception_raise(
       "IndexError", "index out of range for boolean-mask row selection");
@@ -3564,6 +3565,14 @@ exprt python_list::handle_range_slice(
       step_info.literal))
     return *slice_copy;
 
+  // Only a non-char array has a run-time step lowering
+  // (build_symbolic_step_slice); everywhere else step_val would silently be 1.
+  const bool has_runtime_step_lowering =
+    resolved_array_type.is_array() &&
+    !type_utils::is_char_storage(resolved_array_type.subtype());
+  if (!step_info.literal && !has_runtime_step_lowering)
+    throw std::runtime_error("Slice with a non-constant step is not supported");
+
   if (is_string_slice)
   {
     locationt location = converter_.get_location_from_decl(slice_node);
@@ -4469,18 +4478,10 @@ void python_list::handle_subscript_assign_none(
       size_call.location() = location;
       converter_.add_instruction(size_call);
 
-      exprt index_as_size = build_typecast(idx_expr, size_type());
-      expr2tc index2, index_as_size2, size_var2;
-      migrate_expr(idx_expr, index2);
-      migrate_expr(index_as_size, index_as_size2);
-      migrate_expr(build_symbol(size_var), size_var2);
-
-      expr2tc is_negative = lessthan2tc(index2, gen_zero(index2->type));
-      expr2tc positive_index =
-        add2tc(migrate_type(size_type()), size_var2, index_as_size2);
-      expr2tc converted = if2tc(
-        migrate_type(size_type()), is_negative, positive_index, index_as_size2);
-      idx_expr = migrate_expr_back(converted);
+      idx_expr = build_typecast(
+        migrate_expr_back(
+          normalize_negative_index(idx_expr, build_symbol(size_var))),
+        size_type());
     }
     else
     {
@@ -4896,6 +4897,15 @@ static typet declared_elem_type_or(
 // literal List AST node, giving a compile-time element count to normalize a
 // negative index against. Split out of normalize_index_access_position to
 // keep that function's own decision count down.
+// The length a negative constant index counts back from. The recorded element
+// types follow appends and pops, the literal does not.
+static size_t known_length(
+  const element_type_registry::entries *recorded,
+  const nlohmann::json &list_node)
+{
+  return recorded ? recorded->size() : list_node["value"]["elts"].size();
+}
+
 static bool is_literal_list_backed(const nlohmann::json &list_node)
 {
   return list_node.contains("value") &&
@@ -4970,7 +4980,7 @@ void python_list::normalize_index_access_position(
       // (append/insert/extend), so we must resolve the negative index
       // at runtime via build_list_at_call using __ESBMC_list_size.
       index = slice_node["operand"]["value"].get<size_t>();
-      index = list_node["value"]["elts"].size() - index;
+      index = known_length(recorded_elem_types(array), list_node) - index;
     }
     // A pointer-typed array without a literal list backing it (e.g. a numpy
     // row/column view, which has no AST list assignment to read a
