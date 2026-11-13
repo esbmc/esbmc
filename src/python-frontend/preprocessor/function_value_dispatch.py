@@ -31,7 +31,7 @@ import re
 
 from preprocessor.function_value_lift import lift_nested_defs
 from preprocessor.function_value_methods import lift_bound_methods
-from preprocessor.function_value_modules import lift_module_functions
+from preprocessor.function_value_modules import DEFINED_NAME, lift_module_functions
 from preprocessor.function_value_params import (specialise_function_parameters,
                                                 specialise_function_parameters_in_order)
 from preprocessor.function_value_types import (_REFLECTIVE, _REFLECTIVE_ATTRS, _Analysis,
@@ -50,6 +50,7 @@ _CALLABLE = "esbmc_fv_callable"
 _CHOSEN = "esbmc_fv_chosen"
 _DIRECT = "esbmc_fv_direct"
 _RETURN = "esbmc_fv_return"
+_NAMES = "esbmc_fv_names"
 _NESTED = (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda, ast.ClassDef, ast.ListComp,
            ast.SetComp, ast.DictComp, ast.GeneratorExp)
 # Statements that cannot be copied into an arm: their bindings are not plain names.
@@ -1194,8 +1195,17 @@ class _Plan:
             self._check_identity(parent)
         elif _is_builtin_call(parent, "callable", expr) and not _rebinds(self.module, "callable"):
             setattr(parent, _CALLABLE, True)
+        elif isinstance(parent, ast.Attribute) and parent.attr == "__name__":
+            setattr(parent, _NAMES, self._defined_names(expr))
         else:
             raise _Refused
+
+    def _defined_names(self, expr):
+        """The `__name__` of each function `expr` may be, in the order of their codes."""
+        fns = self.groups[self._code_group(expr)]
+        if any(fn.name.startswith("_esbmc") and not hasattr(fn, DEFINED_NAME) for fn in fns):
+            raise _Refused
+        return [getattr(fn, DEFINED_NAME, fn.name) for fn in fns]
 
     def _is_dispatched_argument(self, parent, expr):
         """Whether `expr` is passed, by position or keyword, to a parameter that the callee
@@ -1364,7 +1374,8 @@ class _Plan:
 
 
 class _Codes(ast.NodeTransformer):
-    """Replace each function of a group by its code, `is` by `==` and `callable` by True."""
+    """Replace each function of a group by its code, `is` by `==`, `callable` by True and
+    `__name__` by the name of the function the code stands for."""
 
     def visit_Assign(self, node):
         """Also bind a starred name to a list display of the elements it takes."""
@@ -1387,6 +1398,17 @@ class _Codes(ast.NodeTransformer):
                 ast.NotEq() if isinstance(node.ops[0], (ast.IsNot, ast.NotEq)) else ast.Eq()
             ]
         return node
+
+    def visit_Attribute(self, node):
+        names = getattr(node, _NAMES, None)
+        self.generic_visit(node)
+        if names is None:
+            return node
+        chain = ast.Constant(names[-1])
+        for code in range(len(names) - 2, -1, -1):
+            test = ast.Compare(copy.deepcopy(node.value), [ast.Eq()], [ast.Constant(code)])
+            chain = ast.IfExp(test, ast.Constant(names[code]), chain)
+        return ast.copy_location(chain, node)
 
     def visit_Call(self, node):
         if getattr(node, _CALLABLE, False):
@@ -1588,7 +1610,7 @@ def dispatch_mixed_function_values(module, path):
     except _Refused:
         return
     for node in ast.walk(candidate):
-        for mark in (_SITE, _CODE, _IDENTITY, _CALLABLE, _CHOSEN, _DIRECT):
+        for mark in (_SITE, _CODE, _IDENTITY, _CALLABLE, _CHOSEN, _DIRECT, _NAMES):
             if hasattr(node, mark):
                 delattr(node, mark)
     module.body = candidate.body
