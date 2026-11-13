@@ -1,5 +1,5 @@
 # code exists only when the branch is taken, so the read raises
-# AttributeError on the other path; conversion refuses the store.
+# AttributeError on the other path.
 class A:
     pass
 
