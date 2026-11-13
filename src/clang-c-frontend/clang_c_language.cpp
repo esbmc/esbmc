@@ -805,6 +805,7 @@ std::string clang_c_languaget::internal_additions()
 # 1 "esbmc_intrinsics.h" 1
 void __ESBMC_assume(_Bool);
 void __ESBMC_assert(_Bool, const char *);
+void __ESBMC_witness_assert(_Bool, const char *);
 void __ESBMC_cover(_Bool);
 _Bool __ESBMC_same_object(const void *, const void *);
 void __ESBMC_yield();

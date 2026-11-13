@@ -436,7 +436,7 @@ std::string yaml_parser::build_injected_source(
             "Injecting loop invariant at line {}: {}", line_num, inv->value);
           break;
         case invariant::location_invariant:
-          out << "__ESBMC_assert((_Bool)(" << inv->value
+          out << "__ESBMC_witness_assert((_Bool)(" << inv->value
               << "), \"witness invariant\");\n";
           out << "__ESBMC_assume((_Bool)(" << inv->value << "));\n";
           log_progress(

@@ -625,6 +625,13 @@ protected:
 
   void rewrite_short_circuit_as_ternary(exprt &expr);
 
+  void do_esbmc_assert(
+    const exprt &lhs,
+    const exprt &function,
+    const exprt::operandst &arguments,
+    goto_programt &dest,
+    const std::string &base_name);
+
   // The same four hooks differ only in arity and in which argument carries the
   // failing expression; `expr_arg` names the latter.
   void do_assert_fail(
