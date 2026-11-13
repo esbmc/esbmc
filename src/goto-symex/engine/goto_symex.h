@@ -316,6 +316,10 @@ protected:
     const locationt &loc,
     const expr2tc &position,
     bool return_statement = false);
+  expr2tc witness_assert_target_guard(
+    const std::string &msg,
+    bool application_assertion,
+    const expr2tc &position);
   void advance_witness_position(size_t segment, const expr2tc &position);
 
   /**

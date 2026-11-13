@@ -149,6 +149,32 @@ expr2tc parse_infinity(ParseState &ps, bool neg)
   return constant_floatbv2tc(inf);
 }
 
+expr2tc parse_integer(clang::NumericLiteralParser &parser, bool neg)
+{
+  llvm::APInt val(64, 0);
+  if (parser.GetIntegerValue(val))
+    return expr2tc();
+
+  const BigInt n(val.getZExtValue());
+  const std::pair<type2tc, type2tc> candidates[] = {
+    {int_type2(), uint_type2()},
+    {long_int_type2(), long_uint_type2()},
+    {long_long_int_type2(), long_long_uint_type2()}};
+  const size_t first = parser.isLongLong ? 2 : parser.isLong ? 1 : 0;
+  // C11 6.4.4.1: decimal literals without U only try signed types.
+  for (size_t i = first; i < 3; ++i)
+  {
+    const auto &[signed_type, unsigned_type] = candidates[i];
+    if (!parser.isUnsigned && n < BigInt::power2(signed_type->get_width() - 1))
+      return from_integer(neg ? -n : n, signed_type);
+    if (
+      (parser.isUnsigned || parser.getRadix() != 10) &&
+      n < BigInt::power2(unsigned_type->get_width()))
+      return from_integer(neg ? -n : n, unsigned_type);
+  }
+  return expr2tc();
+}
+
 expr2tc parse_number(ParseState &ps)
 {
   bool neg = false;
@@ -179,28 +205,7 @@ expr2tc parse_number(ParseState &ps)
   if (!parser.isIntegerLiteral())
     return expr2tc();
 
-  llvm::APInt val(64, 0);
-  if (parser.GetIntegerValue(val))
-    return expr2tc();
-
-  const BigInt n(val.getZExtValue());
-  const std::pair<type2tc, type2tc> candidates[] = {
-    {int_type2(), uint_type2()},
-    {long_int_type2(), long_uint_type2()},
-    {long_long_int_type2(), long_long_uint_type2()}};
-  const size_t first = parser.isLongLong ? 2 : parser.isLong ? 1 : 0;
-  // C11 6.4.4.1: decimal literals without U only try signed types.
-  for (size_t i = first; i < 3; ++i)
-  {
-    const auto &[signed_type, unsigned_type] = candidates[i];
-    if (!parser.isUnsigned && n < BigInt::power2(signed_type->get_width() - 1))
-      return from_integer(neg ? -n : n, signed_type);
-    if (
-      (parser.isUnsigned || parser.getRadix() != 10) &&
-      n < BigInt::power2(unsigned_type->get_width()))
-      return from_integer(neg ? -n : n, unsigned_type);
-  }
-  return expr2tc();
+  return parse_integer(parser, neg);
 }
 
 expr2tc parse_constraint_value(ParseState &ps)

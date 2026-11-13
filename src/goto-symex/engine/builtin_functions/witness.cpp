@@ -314,6 +314,39 @@ void goto_symext::symex_witness_main_return()
     matched);
 }
 
+expr2tc goto_symext::witness_assert_target_guard(
+  const std::string &msg,
+  bool application_assertion,
+  const expr2tc &position)
+{
+  // A witness writer reports a claim in a bundled model, e.g. the leak check
+  // in exit(), at its innermost call site in the program.
+  const locationt *loc = &cur_state->source.pc->location;
+  for (auto it = cur_state->call_stack.rbegin();
+       it != cur_state->call_stack.rend() &&
+       file_operations::is_bundled_source(loc->get_file().as_string());
+       ++it)
+    if (
+      it->calling_location.is_set &&
+      it->calling_location.pc != it->calling_location.prog->instructions.end())
+      loc = &it->calling_location.pc->location;
+
+  // A final segment matches a violation on any visit to the target, not only
+  // the first (sv-witnesses Witness-Format.md, "Matching a Final Segment").
+  expr2tc matched = gen_false_expr();
+  if (cur_state->source.pc->location.property() != "error label")
+    matched = witness_target_guard(*loc, position);
+  if (
+    memory_leak_check && !no_reachable_memleak && !application_assertion &&
+    cur_state->source.pc->function == "__ESBMC_main" &&
+    has_prefix(msg, "dereference failure: forgotten memory:"))
+    matched = or2tc(
+      matched,
+      witness_segment_guard(cur_state->witness_segs.size() + 1, position));
+
+  return matched;
+}
+
 void goto_symext::symex_witness_assert(
   expr2tc &new_expr,
   const std::string &msg,
@@ -327,34 +360,12 @@ void goto_symext::symex_witness_assert(
     has_prefix(msg, "termination abort-call marker"))
     return;
 
-  // A witness writer reports a claim in a bundled model, e.g. the leak check
-  // in exit(), at its innermost call site in the program.
-  const locationt *loc = &cur_state->source.pc->location;
   const bool application_assertion =
-    user_assertion &&
-    !file_operations::is_bundled_source(loc->get_file().as_string());
-  for (auto it = cur_state->call_stack.rbegin();
-       it != cur_state->call_stack.rend() &&
-       file_operations::is_bundled_source(loc->get_file().as_string());
-       ++it)
-    if (
-      it->calling_location.is_set &&
-      it->calling_location.pc != it->calling_location.prog->instructions.end())
-      loc = &it->calling_location.pc->location;
-
-  // A final segment matches a violation on any visit to the target, not only
-  // the first (sv-witnesses Witness-Format.md, "Matching a Final Segment").
+    user_assertion && !file_operations::is_bundled_source(
+                        cur_state->source.pc->location.get_file().as_string());
   const expr2tc position = witness_position();
-  expr2tc matched = gen_false_expr();
-  if (cur_state->source.pc->location.property() != "error label")
-    matched = witness_target_guard(*loc, position);
-  if (
-    memory_leak_check && !no_reachable_memleak && !application_assertion &&
-    cur_state->source.pc->function == "__ESBMC_main" &&
-    has_prefix(msg, "dereference failure: forgotten memory:"))
-    matched = or2tc(
-      matched,
-      witness_segment_guard(cur_state->witness_segs.size() + 1, position));
+  const expr2tc matched =
+    witness_assert_target_guard(msg, application_assertion, position);
 
   // A memory violation before the target cannot be part of a valid prefix.
   const bool memory_check =
