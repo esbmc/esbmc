@@ -646,16 +646,8 @@ void goto_symext::symex_assert()
   if (cur_state->guard.is_false())
     return;
 
-  // Don't convert if it's a user-provided assertion and we're running in
-  // no assertion mode. Exception: coverage instrumentation asserts inherit
-  // user_provided(true) so they show up in counterexample traces — they
-  // are NOT user safety properties and must survive --no-assertions
-  // (otherwise the Solidity coverage auto-enable in esbmc_parseoptions
-  // would silently disable branch/condition coverage instrumentation).
-  if (
-    cur_state->source.pc->location.user_provided() && no_assertions &&
-    cur_state->source.pc->location.property().as_string() !=
-      "instrumented assertion")
+  // Don't convert a user-provided assertion in no assertion mode.
+  if (cur_state->source.pc->is_user_assertion() && no_assertions)
     return;
 
   const goto_programt::instructiont &instruction = *cur_state->source.pc;

@@ -60,6 +60,10 @@ protected:
 
   virtual bool
   process_goto_program(optionst &options, goto_functionst &goto_functions);
+  void report_goto_slice(
+    const goto_functionst &goto_functions,
+    const optionst &options,
+    bool is_k_induction);
 
   void configure_sv_comp_threads(
     optionst &options,

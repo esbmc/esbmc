@@ -356,6 +356,15 @@ public:
       return type == ASSERT;
     }
 
+    /// A user-written assertion: the claims symex skips under
+    /// --no-assertions, as in the forward condition. Coverage asserts are
+    /// marked user_provided only to appear in traces, so they are excluded.
+    bool is_user_assertion() const
+    {
+      return is_assert() && location.user_provided() &&
+             location.property().as_string() != "instrumented assertion";
+    }
+
     inline bool is_loop_invariant() const
     {
       return type == LOOP_INVARIANT;
