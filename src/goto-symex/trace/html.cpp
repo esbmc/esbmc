@@ -626,7 +626,7 @@ void html_report::print_file_table(
       if (is_nil_expr(step.value))
         oss << " (assignment removed)";
       else
-        oss << " = " << from_expr(ns, "", step.value);
+        oss << " = " << trace_value_string(ns, step.value);
     }
     else if (step.pc->is_function_call())
     {

@@ -206,6 +206,10 @@ void generate_goto_trace_in_correctness_graphml_format(
   const namespacet &ns,
   const goto_tracet &goto_trace);
 
+/// A trace value as text. Under --ir a bit-vector is not bounded by its width,
+/// so it is printed as the model's integer rather than wrapped by from_expr.
+std::string trace_value_string(const namespacet &ns, const expr2tc &value);
+
 void counterexample_value(
   std::ostream &out,
   const namespacet &ns,

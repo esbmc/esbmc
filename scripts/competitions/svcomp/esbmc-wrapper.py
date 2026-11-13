@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# pylint: disable=bad-indentation  # the file is indented with 2 spaces throughout
 
 import os
 import argparse
@@ -29,6 +30,7 @@ class Result:
   err_timeout = 7
   err_memout = 8
   err_unwinding_assertion = 9
+  err_crash = 10
   unknown = 11
   fail_memcleanup = 12
   fail_termination = 13
@@ -61,6 +63,8 @@ class Result:
       return True
     if res == Result.err_timeout:
       return True
+    if res == Result.err_crash:
+      return True
     if res == Result.unknown:
       return True
     return False
@@ -91,6 +95,17 @@ PYTHON_EXCEPTION_FAMILIES = {
 # Parsed by the CLI entry point at the bottom; do_exec() is the only reader.
 args = None
 
+# ESBMC's exit status for an uncaught exception (sysexits.h EX_SOFTWARE).
+ESBMC_INTERNAL_ERROR = 70
+
+
+def abnormal_exit_line(returncode):
+  if returncode < 0:
+    return f"ERROR: ESBMC exited abnormally (signal {-returncode})\n"
+  if returncode == ESBMC_INTERNAL_ERROR:
+    return f"ERROR: ESBMC exited abnormally (exit code {returncode})\n"
+  return ""
+
 def do_exec(cmd_line, timeout=None, cwd=None):
 
   if args.dry_run:
@@ -106,7 +121,7 @@ def do_exec(cmd_line, timeout=None, cwd=None):
     p.communicate()
     return b"ERROR: Timed out\n"
 
-  return stdout + stderr
+  return stdout + stderr + abnormal_exit_line(p.returncode).encode()
 
 # Function to run esbmc
 def run(cmd_line, timeout=None):
@@ -389,6 +404,9 @@ def parse_result(the_output, prop):
   if re.search(r"^ERROR: Out of memory$", the_output, re.MULTILINE):
     return Result.err_memout
 
+  if re.search(r"^ERROR: ESBMC exited abnormally", the_output, re.MULTILINE):
+    return Result.err_crash  # benchexec scores it ERROR, not unknown (#8097)
+
   return Result.unknown
 
 def python_false_string(the_result):
@@ -396,31 +414,25 @@ def python_false_string(the_result):
   return "FALSE(%s)" % exception if exception else "FALSE"
 
 
+RESULT_STRINGS = {
+  Result.fail_memcleanup: "FALSE_MEMCLEANUP",
+  Result.fail_memtrack: "FALSE_MEMTRACK",
+  Result.fail_free: "FALSE_FREE",
+  Result.fail_deref: "FALSE_DEREF",
+  Result.fail_overflow: "FALSE_OVERFLOW",
+  Result.fail_reach: "FALSE_REACH",
+  Result.fail_termination: "FALSE_TERMINATION",
+  Result.fail_race: "FALSE_DATARACE",
+  Result.success: "TRUE",
+  Result.err_timeout: "Timed out",
+  Result.err_unwinding_assertion: "Unknown",
+  Result.err_memout: "Unknown",
+  Result.err_crash: "ERROR",
+  Result.unknown: "Unknown",
+}
+
+
 def get_result_string(the_result):
-  if the_result == Result.fail_memcleanup:
-    return "FALSE_MEMCLEANUP"
-
-  if the_result == Result.fail_memtrack:
-    return "FALSE_MEMTRACK"
-
-  if the_result == Result.fail_free:
-    return "FALSE_FREE"
-
-  if the_result == Result.fail_deref:
-    return "FALSE_DEREF"
-
-  if the_result == Result.fail_overflow:
-    return "FALSE_OVERFLOW"
-
-  if the_result == Result.fail_reach:
-    return "FALSE_REACH"
-
-  if the_result == Result.fail_termination:
-    return "FALSE_TERMINATION"
-
-  if the_result == Result.fail_race:
-    return "FALSE_DATARACE"
-
   if the_result == Result.fail_python:
     # A task definition whose expected verdict carries no subproperty accepts
     # any result starting with "false" (benchexec result.get_result_category).
@@ -428,20 +440,8 @@ def get_result_string(the_result):
     # names its exception when the violation reports exactly one.
     return python_false_string(the_result)
 
-  if the_result == Result.success:
-    return "TRUE"
-
-  if the_result == Result.err_timeout:
-    return "Timed out"
-
-  if the_result == Result.err_unwinding_assertion:
-    return "Unknown"
-
-  if the_result == Result.err_memout:
-    return "Unknown"
-
-  if the_result == Result.unknown:
-    return "Unknown"
+  if the_result in RESULT_STRINGS:
+    return RESULT_STRINGS[the_result]
 
   exit(0)
 

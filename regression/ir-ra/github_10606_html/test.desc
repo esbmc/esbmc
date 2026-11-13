@@ -1,0 +1,6 @@
+CORE
+main.c
+--ir --z3 --generate-html-report
+^VERIFICATION FAILED$
+CHECK_FILE report-1.html contains <td>n = -1</td>
+CHECK_FILE report-1.html absent n = 4294967295
