@@ -1,0 +1,4 @@
+CORE
+main.py
+--unwind 8
+^ERROR: len\(\) of an expression whose class 'C' has subclasses is not supported$

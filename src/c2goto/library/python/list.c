@@ -45,14 +45,16 @@ bool __ESBMC_list_retyped = false;
  * C23 6.5.1p7 otherwise allows only for character types. ESBMC likewise drops
  * its alignment claim on a packed member, and that claim used to fire ahead of
  * the invalid-pointer dereference behind #4780 and hide it. */
-struct __attribute__((packed, may_alias)) __ESBMC_unaligned_u64
+struct __attribute__((packed, may_alias)) __ESBMC_unaligned_i64
 {
-  uint64_t v;
+  int64_t v;
 };
 
-static inline uint64_t __ESBMC_load_u64(const void *p)
+// Signed, as an int payload is: under integer encoding an int64 object read
+// as uint64_t need not equal the same value read elsewhere (#10493).
+static inline int64_t __ESBMC_load_i64(const void *p)
 {
-  return ((const struct __ESBMC_unaligned_u64 *)p)->v;
+  return ((const struct __ESBMC_unaligned_i64 *)p)->v;
 }
 
 // Optimized value comparison - avoids memcmp loop unrolling for common sizes
@@ -64,13 +66,13 @@ __ESBMC_values_equal(const void *a, const void *b, size_t size)
   // Direct comparison for common sizes - no loop needed
   // Python frontend maps: int/float -> 8 bytes, bool -> 1 byte
   if (size == 8)
-    return __ESBMC_load_u64(a) == __ESBMC_load_u64(b);
+    return __ESBMC_load_i64(a) == __ESBMC_load_i64(b);
   if (size == 1)
     return *(const unsigned char *)a == *(const unsigned char *)b;
   if (size == 16)
-    return __ESBMC_load_u64(a) == __ESBMC_load_u64(b) &&
-           __ESBMC_load_u64((const unsigned char *)a + 8) ==
-             __ESBMC_load_u64((const unsigned char *)b + 8);
+    return __ESBMC_load_i64(a) == __ESBMC_load_i64(b) &&
+           __ESBMC_load_i64((const unsigned char *)a + 8) ==
+             __ESBMC_load_i64((const unsigned char *)b + 8);
   // Fallback for larger/unusual sizes. A word-wise compare loop here would
   // unwind --unwind times on every symbolic-size comparison, with no benefit
   // to any converging test (large-struct compares only occur in tests that
@@ -401,20 +403,37 @@ static bool __ESBMC_list_push_shallow_sz(
     __ESBMC_list_set_may_nest(l);
     return true;
   }
+  // A float is read back from __ESBMC_float_buf at float_idx. Without a
+  // float_type_id the copy gets no entry of its own, so it shares the
+  // source's, whose entries are written once, as __ESBMC_list_store_elem and
+  // __ESBMC_list_extend do (#10428). float_idx is set in the element's one
+  // store: a second store to items[size - 1] made every copy several times
+  // slower to solve.
+  const void *value = o->value;
+  size_t size = elem_size;
+  double temp;
+  if (elem_size == 0)
+  {
+    size = o->size;
+    // As __ESBMC_list_push_object: a float's value is read from float_buf.
+    if (o->size == 8 && float_type_id != 0 && o->type_id == float_type_id)
+    {
+      temp = __ESBMC_float_buf[o->float_idx];
+      value = &temp;
+    }
+  }
+  PyObject *item = &l->items[l->size];
+  size_t float_idx;
+  item->value =
+    __ESBMC_copy_value(value, size, o->type_id, float_type_id, &float_idx, 0);
+  item->float_idx = float_type_id != 0 ? float_idx : o->float_idx;
+  item->type_id = o->type_id;
+  item->size = size;
+  l->size++;
   // With list_type_id known, the test above has ruled out a nested list, so
-  // the scalar copy below leaves may_nest as it was.
-  const bool *may_nest = l->may_nest;
-  if (elem_size != 0)
-    __ESBMC_list_push(l, o->value, o->type_id, elem_size, float_type_id, 0);
-  else
-    __ESBMC_list_push_object(l, o, float_type_id, 0);
-  // A float is read back from __ESBMC_float_buf at float_idx, whose entries
-  // are written once, so the copy shares the source's entry, as
-  // __ESBMC_list_store_elem and __ESBMC_list_extend do. A push with no
-  // float_type_id leaves it 0, which reads some other float (#10428).
-  l->items[l->size - 1].float_idx = o->float_idx;
-  if (list_type_id != 0)
-    l->may_nest = may_nest;
+  // may_nest stays as it was.
+  if (list_type_id == 0)
+    __ESBMC_list_set_may_nest(l);
   return true;
 }
 
@@ -1142,21 +1161,21 @@ static inline bool __ESBMC_key_equal(const void *a, const void *b, size_t size)
   if (a == b)
     return true;
   if (size == 8)
-    return *(const uint64_t *)a == *(const uint64_t *)b;
+    return *(const int64_t *)a == *(const int64_t *)b;
   if (size == 1)
     return *(const uint8_t *)a == *(const uint8_t *)b;
   if (size == 16)
-    return ((const uint64_t *)a)[0] == ((const uint64_t *)b)[0] &&
-           ((const uint64_t *)a)[1] == ((const uint64_t *)b)[1];
+    return ((const int64_t *)a)[0] == ((const int64_t *)b)[0] &&
+           ((const int64_t *)a)[1] == ((const int64_t *)b)[1];
   if (size == 24)
-    return ((const uint64_t *)a)[0] == ((const uint64_t *)b)[0] &&
-           ((const uint64_t *)a)[1] == ((const uint64_t *)b)[1] &&
-           ((const uint64_t *)a)[2] == ((const uint64_t *)b)[2];
+    return ((const int64_t *)a)[0] == ((const int64_t *)b)[0] &&
+           ((const int64_t *)a)[1] == ((const int64_t *)b)[1] &&
+           ((const int64_t *)a)[2] == ((const int64_t *)b)[2];
   if (size == 32)
-    return ((const uint64_t *)a)[0] == ((const uint64_t *)b)[0] &&
-           ((const uint64_t *)a)[1] == ((const uint64_t *)b)[1] &&
-           ((const uint64_t *)a)[2] == ((const uint64_t *)b)[2] &&
-           ((const uint64_t *)a)[3] == ((const uint64_t *)b)[3];
+    return ((const int64_t *)a)[0] == ((const int64_t *)b)[0] &&
+           ((const int64_t *)a)[1] == ((const int64_t *)b)[1] &&
+           ((const int64_t *)a)[2] == ((const int64_t *)b)[2] &&
+           ((const int64_t *)a)[3] == ((const int64_t *)b)[3];
   return memcmp(a, b, size) == 0;
 }
 

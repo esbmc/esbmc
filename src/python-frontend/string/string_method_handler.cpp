@@ -55,9 +55,18 @@ static bool get_constant_int(const exprt &expr, long long &out)
   // rejected every valid integer constant (and accepted non-constants with an
   // unset value), so width/fill string methods — center/ljust/rjust/zfill and
   // expandtabs's tabsize — silently fell back to a nondet/default result.
-  if (to_integer(expr, tmp))
+  if (!to_integer(expr, tmp))
+  {
+    out = tmp.to_int64();
+    return true;
+  }
+  // A negative literal such as -1 is not a constant until folded.
+  expr2tc folded;
+  migrate_expr(expr, folded);
+  simplify(folded);
+  if (!is_constant_int2t(folded))
     return false;
-  out = tmp.to_int64();
+  out = to_constant_int2t(folded).value.to_int64();
   return true;
 }
 

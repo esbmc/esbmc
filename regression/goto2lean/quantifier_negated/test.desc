@@ -1,0 +1,6 @@
+CORE
+main.c
+--goto2lean
+^  ¬\(∀ i : BitVec 32, \(i < x\)\) ∧ \($
+any other quantifier needs a manual proof
+^  sorry$

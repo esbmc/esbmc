@@ -1,0 +1,5 @@
+CORE
+main.c
+--goto2lean --ir
+^  let q := \(Int\.tdiv a \(-\(2 : Int\)\)\);$
+^    show Int\.sign \(-2 : Int\) = -1 from rfl,$
