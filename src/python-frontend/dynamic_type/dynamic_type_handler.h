@@ -249,6 +249,9 @@ private:
     std::vector<codet> &instructions,
     exprt &elem_size);
 
+  /// A fresh, int-typed copy of the int @p value as a tag's `.value`.
+  exprt int_payload(const exprt &value) const;
+
   /// A fresh copy of @p rhs as a tag's `.value`; sets @p elem_size.
   exprt build_scalar_payload(
     const exprt &rhs,
