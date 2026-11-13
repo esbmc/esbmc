@@ -1714,6 +1714,24 @@ private:
     const nlohmann::json &value,
     const nlohmann::json &func_node,
     const struct_typet &clazz) const;
+  typet self_attribute_type(
+    const nlohmann::json &node,
+    const struct_typet &clazz) const;
+  struct self_store_count
+  {
+    size_t stores = 0;
+    size_t tagged = 0;
+    bool untagged = false;
+  };
+  void count_self_stores(
+    const nlohmann::json &method,
+    const nlohmann::json &node,
+    const std::string &attr,
+    const struct_typet &clazz,
+    self_store_count &count) const;
+  void tag_none_flagged_attributes(
+    const nlohmann::json &class_node,
+    struct_typet &clazz) const;
   typet unannotated_attribute_type(
     const nlohmann::json &value,
     const nlohmann::json &func_node,
@@ -3315,6 +3333,30 @@ private:
   /// Runtime dispatch for a tagged-scalar (PyObject-shaped) operand, which none
   /// of the static-type-driven paths can handle. Throws for an operator this
   /// mode does not model.
+  void box_into_tagged_slot(
+    const exprt &rhs,
+    const locationt &location,
+    const exprt &lhs,
+    codet &target_block);
+  exprt compare_none_flagged(
+    const std::string &op,
+    const exprt &lhs,
+    const exprt &rhs,
+    const nlohmann::json &left,
+    const nlohmann::json &right);
+  exprt tagged_equality(
+    const std::string &op,
+    const exprt &lhs,
+    const exprt &rhs,
+    const nlohmann::json &left,
+    const nlohmann::json &right);
+  exprt tagged_identity(
+    const std::string &op,
+    const exprt &lhs,
+    const exprt &rhs,
+    const nlohmann::json &left,
+    const nlohmann::json &right,
+    const nlohmann::json &element);
   exprt handle_tagged_scalar_binop(
     const std::string &op,
     const exprt &lhs,
@@ -3831,6 +3873,11 @@ private:
   /// The operands of the `is`, `is not`, `==` or `!=` being converted: a
   /// type() call that is one of them may yield unknown_class_name.
   std::array<const nlohmann::json *, 2> type_compared_operands_{};
+  /// The operands of the operator being converted, which read a tagged
+  /// attribute's None flag themselves (#10350).
+  std::array<const nlohmann::json *, 2> none_aware_operands_{};
+  exprt
+  guard_none_flagged_read(const nlohmann::json &element, const exprt &expr);
   string_handler string_handler_;
   python_math math_handler_;
   complex_handler complex_handler_;

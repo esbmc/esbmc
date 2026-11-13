@@ -1137,6 +1137,19 @@ exprt python_converter::create_lhs_expression(
   return lhs;
 }
 
+/// Box plain @p rhs into tagged slot @p lhs. None is held by the slot's None
+/// flag alone, which the store has set (#10350).
+void python_converter::box_into_tagged_slot(
+  const exprt &rhs,
+  const locationt &location,
+  const exprt &lhs,
+  codet &target_block)
+{
+  if (rhs.type() == none_type() && none_flag_of_attribute(lhs).is_not_nil())
+    return;
+  dynamic_type_handler_.assign_to_lvalue(rhs, location, lhs, target_block);
+}
+
 /// A tagged value stored into an untagged attribute slot would overrun or
 /// misread the object. The other direction (an untagged value into a
 /// tagged slot) is a plain box, handled later in get_var_assign.
@@ -8801,8 +8814,7 @@ void python_converter::get_var_assign(
       type_handler_.is_tagged_scalar_type(lhs.type()) &&
       !type_handler_.is_tagged_scalar_type(rhs.type()))
     {
-      dynamic_type_handler_.assign_to_lvalue(
-        rhs, location_begin, lhs, target_block);
+      box_into_tagged_slot(rhs, location_begin, lhs, target_block);
       current_lhs = nullptr;
       return;
     }
