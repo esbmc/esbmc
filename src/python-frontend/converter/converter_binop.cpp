@@ -2035,6 +2035,83 @@ exprt python_converter::fold_tagged_identity(
 /// A tagged-scalar operand needs runtime dispatch instead of any of the
 /// static-type-driven paths, none of which know how to handle a PyObject-shaped
 /// operand.
+static bool is_none_literal(const nlohmann::json &node)
+{
+  return node.value("_type", "") == "Constant" && node.contains("value") &&
+         node["value"].is_null();
+}
+
+/// Whether operand @p node, with None flag @p flag or nil, is None.
+static exprt operand_is_none(const exprt &flag, const nlohmann::json &node)
+{
+  if (flag.is_not_nil())
+    return flag;
+  return is_none_literal(node) ? exprt(true_exprt()) : exprt(false_exprt());
+}
+
+/// `is`, `is not`, `==` or `!=` on a tagged attribute that holds None through
+/// its None flag (#10350): None is identical and equal to None only. Nil when
+/// neither operand has a flag; arithmetic and ordering raise TypeError on the
+/// flag before this.
+exprt python_converter::compare_none_flagged(
+  const std::string &op,
+  const exprt &lhs,
+  const exprt &rhs,
+  const nlohmann::json &left,
+  const nlohmann::json &right)
+{
+  const exprt lhs_flag = none_flag_of_attribute(lhs);
+  const exprt rhs_flag = none_flag_of_attribute(rhs);
+  if (lhs_flag.is_nil() && rhs_flag.is_nil())
+    return nil_exprt();
+  const bool literal_none = is_none_literal(left) || is_none_literal(right);
+  const bool identity = op == "Is" || op == "IsNot";
+  if (identity && !literal_none)
+    throw std::runtime_error(
+      "an identity test of an attribute that may hold None against a value "
+      "is not yet supported");
+  const exprt lhs_none = operand_is_none(lhs_flag, left);
+  const exprt rhs_none = operand_is_none(rhs_flag, right);
+  // Two values that are not None compare as before.
+  const exprt values =
+    literal_none ? exprt(false_exprt())
+                 : dynamic_type_handler_.handle_comparison("Eq", lhs, rhs);
+  const exprt same = or_exprt(
+    and_exprt(lhs_none, rhs_none),
+    and_exprt(and_exprt(not_exprt(lhs_none), not_exprt(rhs_none)), values));
+  return op == "Is" || op == "Eq" ? same : exprt(not_exprt(same));
+}
+
+/// `==` or `!=` with a tagged operand.
+exprt python_converter::tagged_equality(
+  const std::string &op,
+  const exprt &lhs,
+  const exprt &rhs,
+  const nlohmann::json &left,
+  const nlohmann::json &right)
+{
+  const exprt flagged = compare_none_flagged(op, lhs, rhs, left, right);
+  return flagged.is_not_nil()
+           ? flagged
+           : dynamic_type_handler_.handle_comparison(op, lhs, rhs);
+}
+
+/// `is` or `is not` with a tagged operand that a None flag or the operands'
+/// names decide, else nil.
+exprt python_converter::tagged_identity(
+  const std::string &op,
+  const exprt &lhs,
+  const exprt &rhs,
+  const nlohmann::json &left,
+  const nlohmann::json &right,
+  const nlohmann::json &element)
+{
+  const exprt flagged = compare_none_flagged(op, lhs, rhs, left, right);
+  return flagged.is_not_nil()
+           ? flagged
+           : fold_tagged_identity(op, lhs, rhs, left, right, element);
+}
+
 exprt python_converter::handle_tagged_scalar_binop(
   const std::string &op,
   const exprt &lhs,
@@ -2044,7 +2121,7 @@ exprt python_converter::handle_tagged_scalar_binop(
   const nlohmann::json &element)
 {
   if (op == "Eq" || op == "NotEq")
-    return dynamic_type_handler_.handle_comparison(op, lhs, rhs);
+    return tagged_equality(op, lhs, rhs, left, right);
   if (type_utils::is_ordered_comparison(op))
   {
     dynamic_type_handler_.guard_type_error(
@@ -2065,7 +2142,7 @@ exprt python_converter::handle_tagged_scalar_binop(
   if (op == "Is" || op == "IsNot")
   {
     if (
-      exprt folded = fold_tagged_identity(op, lhs, rhs, left, right, element);
+      exprt folded = tagged_identity(op, lhs, rhs, left, right, element);
       folded.is_not_nil())
       return folded;
     const auto &other =
@@ -2288,7 +2365,9 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
   exprt *saved_lhs = current_lhs;
   current_lhs = nullptr;
   const auto saved_compared = type_compared_operands_;
+  const auto saved_none_aware = none_aware_operands_;
   type_compared_operands_ = {};
+  none_aware_operands_ = {&left, &right};
   if (element.contains("ops") && element["ops"].size() == 1)
   {
     const std::string cmp = element["ops"][0]["_type"];
@@ -2302,6 +2381,7 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
   exprt rhs =
     get_right_operand_after_left(element, left, left_value, right, lhs);
   type_compared_operands_ = saved_compared;
+  none_aware_operands_ = saved_none_aware;
   current_lhs = saved_lhs;
   if (element.value("_type", "") == "BinOp")
   {

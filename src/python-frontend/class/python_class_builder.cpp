@@ -354,6 +354,7 @@ void python_class_builder::add_self_attrs(struct_typet &st)
   for (const auto &n : cls_.at("body"))
     if (n.value("_type", "") == "FunctionDef")
       conv_.get_attributes_from_self(n, st);
+  conv_.tag_none_flagged_attributes(cls_, st);
 }
 
 /* Generates a default constructor (__init__) when none is provided,

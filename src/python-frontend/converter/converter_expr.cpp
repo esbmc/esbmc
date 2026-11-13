@@ -3613,6 +3613,37 @@ exprt python_converter::get_expr(const nlohmann::json &element)
   }
   }
 
+  return guard_none_flagged_read(element, expr);
+}
+
+/// A tagged attribute holds None only through its None flag (#10350). A read
+/// other than an operand of an operator, which reads the flag itself, would
+/// take the payload: where the flag is set, claim it as unsupported.
+exprt python_converter::guard_none_flagged_read(
+  const nlohmann::json &element,
+  const exprt &expr)
+{
+  if (
+    is_converting_lhs || !type_handler_.is_tagged_scalar_type(expr.type()) ||
+    std::find(
+      none_aware_operands_.begin(), none_aware_operands_.end(), &element) !=
+      none_aware_operands_.end())
+    return expr;
+  const exprt flag = none_flag_of_attribute(expr);
+  // A type probe of an assignment's value is converted again for real.
+  if (flag.is_nil() || in_rhs_type_probe_)
+    return expr;
+  const std::string message = "Unsupported: reading attribute '" +
+                              element.value("attr", "") +
+                              "', which may hold None, as a value";
+  if (!can_emit_runtime_guard())
+    throw std::runtime_error(message);
+  code_assertt check{not_exprt(flag)};
+  check.location() = get_location_from_decl(element);
+  check.location().user_provided(true);
+  check.location().comment(message);
+  add_instruction(check);
+  add_instruction(code_assumet(not_exprt(flag)));
   return expr;
 }
 
