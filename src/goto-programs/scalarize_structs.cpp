@@ -325,8 +325,13 @@ private:
 };
 } // namespace
 
-void scalarize_structs(goto_functionst &goto_functions, contextt &context)
+void scalarize_structs(
+  goto_functionst &goto_functions,
+  contextt &context,
+  const optionst &options)
 {
+  if (!options.get_bool_option("scalarize-structs"))
+    return;
   if (spawns_threads(goto_functions))
   {
     log_warning(

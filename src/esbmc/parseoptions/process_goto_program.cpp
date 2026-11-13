@@ -501,8 +501,7 @@ bool esbmc_parseoptionst::process_goto_program(
       unreported_exceptions(options),
       python_checked_exceptions(options));
 
-    if (cmdline.isset("scalarize-structs"))
-      scalarize_structs(goto_functions, context);
+    scalarize_structs(goto_functions, context, options);
 
     // do partial inlining
     if (!cmdline.isset("no-inlining"))
