@@ -1035,8 +1035,16 @@ void interval_domaint::transform(
     break;
 
   case FUNCTION_CALL:
-    havoc_written_arguments(to_code_function_call2t(instruction.code), &ai);
+  {
+    const code_function_call2t &call =
+      to_code_function_call2t(instruction.code);
+    havoc_written_arguments(call, &ai);
+    enters_recursion =
+      std::next(from) != to &&
+      ai.reentered_locals(
+        ai.function_of(from), to_symbol2t(call.function).thename);
     break;
+  }
 
   case END_FUNCTION:
   case ATOMIC_BEGIN:
@@ -1291,12 +1299,12 @@ bool interval_domaint::join(
   // to expend much time on this.
   copy_if_needed();
 
-  // Widen only where a cycle closes: a loop's back edge, or a call into a
-  // function's entry (recursion). Widening at a guard inside the body would
-  // throw away the bound the loop condition just gave.
+  // Widen only where a cycle closes: a loop's back edge, or a recursive call
+  // into a function's entry. Widening at a guard inside the body, or on entry
+  // to a callee the loop calls, would throw away the bound the guard just gave.
   const bool closes_cycle =
     (from->is_goto() && to->location_number <= from->location_number) ||
-    (from->is_function_call() && std::next(from) != to);
+    b.enters_recursion;
 
   // Prevent short-circuit
   bool result = join(

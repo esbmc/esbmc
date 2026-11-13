@@ -278,6 +278,9 @@ public:
   /// Times a join that closes a cycle changed this state; widening waits for
   /// fixpoint_limit of them, so a variable with few values keeps its bounds.
   unsigned cycle_changes = 0;
+  /// Set on the state a call carries into its callee's entry when the callee
+  /// can call back into the caller.
+  bool enters_recursion = false;
 
   static std::shared_ptr<interval_map> get_empty()
   {
