@@ -3224,6 +3224,16 @@ private:
    * @param target_block The code block to add generated code to.
    */
   std::string user_class_of(const typet &type);
+  void
+  add_presence_flags(const nlohmann::json &class_node, struct_typet &clazz);
+  exprt presence_flag_of(const exprt &member) const;
+  void clear_presence_flags(const code_typet &type, exprt &body) const;
+  exprt
+  guard_presence_flagged_read(const nlohmann::json &element, const exprt &expr);
+  void set_presence_flag(
+    const exprt &lhs,
+    const nlohmann::json &ast_node,
+    codet &target_block) const;
   void reject_attribute_added_on_some_paths(
     const std::string &receiver,
     const std::string &class_name,
