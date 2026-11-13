@@ -319,6 +319,11 @@ def classify_violation(violated, prop):
   None means this violation decides nothing here, which parse_result reads as
   "keep looking" -- a run that also printed SUCCESSFUL is then read as true.
   """
+  if ("witness invariant" in violated
+      or "loop invariant base case" in violated
+      or "loop invariant inductive step" in violated):
+    return Result.unknown
+
   if "unwinding assertion loop" in violated:
     return Result.err_unwinding_assertion
 
