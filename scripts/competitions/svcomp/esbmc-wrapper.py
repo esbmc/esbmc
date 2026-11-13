@@ -555,6 +555,10 @@ def get_command_line(strat, prop, arch, benchmark, dargs, esbmc_ci, keep_loops=F
   elif prop == Property.reach:
     command_line += "--enable-unreachability-intrinsic "
     command_line += "--no-pointer-check --interval-analysis --no-bounds-check --error-label ERROR "
+    # Interval arithmetic with widening keeps a counter's bounds through the
+    # k-induction havoc, e.g. j >= 0 for `for (int j = 0; j < N; j++)`.
+    command_line += ("--interval-analysis-arithmetic --interval-analysis-extrapolate "
+                     "--interval-analysis-extrapolate-under-approximate ")
     if not keep_loops:
       command_line += "--goto-unwind --unlimited-goto-unwind "
   elif prop == Property.datarace:
