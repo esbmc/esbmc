@@ -3017,9 +3017,11 @@ bool function_call_expr::receiver_is_non_dict_object() const
   // lookup_python_symbol but is kept warning-free: is_dict_method_call is a
   // discriminator, so a miss here must stay silent (a genuine dict whose
   // receiver does not resolve through these scopes still defers to the dict
-  // handler below — the safe direction).
+  // handler below — the safe direction). The receiver lives in the file being
+  // converted, not in the callee's: a model class such as Counter has its
+  // methods in the model file (#10500).
   const std::string var_name = recv["id"].get<std::string>();
-  const std::string filename = function_id_.get_filename();
+  const std::string &filename = converter_.python_file();
   const symbolt *sym = converter_.find_symbol(
     "py:" + filename + "@F@" + converter_.current_function_name() + "@" +
     var_name);
@@ -4933,7 +4935,8 @@ static std::optional<double> literal_value(const nlohmann::json &node)
 static bool
 keeps_library_value(const std::string &function, const nlohmann::json &args)
 {
-  static const std::set<std::string> approximated = {"cbrt", "erf", "erfc"};
+  static const std::set<std::string> approximated = {
+    "cbrt", "erf", "erfc", "gamma", "lgamma", "pow"};
   if (
     approximated.count(function) ||
     !std::all_of(args.begin(), args.end(), is_number_literal) ||

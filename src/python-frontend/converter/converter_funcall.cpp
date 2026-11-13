@@ -1708,6 +1708,25 @@ append_default_arguments(const code_typet &type, exprt::operandst &args)
   return args.size() == params.size();
 }
 
+/// For user-defined functions, unknown kwargs are a TypeError. Free builtins
+/// and models (e.g. sorted(key=...), max(key=...)) skip them, but a model
+/// class method that dropped one would verify a call whose effect it never
+/// modelled, such as Counter.update(a=1) (#10500).
+static void reject_unknown_keyword(
+  const nlohmann::json &ast,
+  const symbolt &func,
+  const std::string &arg_name)
+{
+  const std::string name = func.name.as_string();
+  if (search_function_in_ast(ast, name))
+    throw std::runtime_error(
+      "Unknown keyword argument: " + arg_name + " in function " + name);
+  if (func.id.as_string().find("@C@") != std::string::npos)
+    throw std::runtime_error(
+      "Unsupported: keyword argument '" + arg_name +
+      "' to the modelled method " + name);
+}
+
 exprt python_converter::get_function_call(const nlohmann::json &element)
 {
   if (!element.contains("func") || element["_type"] != "Call")
@@ -2467,13 +2486,7 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
       auto it = param_positions.find(arg_name);
       if (it == param_positions.end())
       {
-        // For user-defined functions, unknown kwargs are a TypeError.
-        // For builtins/models (e.g. sorted(key=...), max(key=...)), silently
-        // skip.
-        if (search_function_in_ast(*ast_json, func_symbol->name.as_string()))
-          throw std::runtime_error(
-            "Unknown keyword argument: " + arg_name + " in function " +
-            func_symbol->name.as_string());
+        reject_unknown_keyword(*ast_json, *func_symbol, arg_name);
         continue;
       }
 
