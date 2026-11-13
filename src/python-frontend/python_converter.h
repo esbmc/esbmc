@@ -3322,6 +3322,20 @@ private:
     const nlohmann::json &left,
     const nlohmann::json &right,
     const nlohmann::json &element);
+  exprt tagged_membership(
+    const std::string &op,
+    exprt lhs,
+    exprt rhs,
+    const nlohmann::json &right,
+    const nlohmann::json &element);
+  std::optional<exprt>
+  tagged_equals_any(const exprt &tagged, const nlohmann::json &right);
+  exprt tagged_key_membership(
+    const exprt &tagged,
+    exprt rhs,
+    const exprt &is_str,
+    const nlohmann::json &element,
+    bool invert);
 
   /// `d1 | d2` (PEP 584) on two dicts; nil if either operand is not a dict.
   /// Throws for the other bitwise operators on dicts.

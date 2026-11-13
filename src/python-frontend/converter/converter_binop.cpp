@@ -10,6 +10,7 @@
 #include <python-frontend/python-list/python_list.h>
 #include <python-frontend/math/python_math.h>
 #include <util/base/host_rounding_mode.h>
+#include <python-frontend/string/string_builder.h>
 #include <python-frontend/string/string_handler.h>
 #include <python-frontend/tuple/tuple_handler.h>
 #include <python-frontend/dynamic_type/dynamic_type_handler.h>
@@ -2077,9 +2078,119 @@ exprt python_converter::handle_tagged_scalar_binop(
         op == "IsNot" ? gen_true_expr() : gen_false_expr());
   }
 
-  throw std::runtime_error(
-    "operator '" + op +
-    "' on a dynamically-typed variable is not yet supported");
+  return tagged_membership(op, lhs, rhs, right, element);
+}
+
+/// `x in c` or `x not in c` with a dynamically-typed operand (#10349): the
+/// membership test of each type the tag may hold, chosen by its type_id. A
+/// tagged x is read as an int or a str, a tagged c as a str. Where the tag
+/// holds a type CPython rejects there, TypeError is raised.
+exprt python_converter::tagged_membership(
+  const std::string &op,
+  exprt lhs,
+  exprt rhs,
+  const nlohmann::json &right,
+  const nlohmann::json &element)
+{
+  const bool lhs_tagged = type_handler_.is_tagged_scalar_type(lhs.type());
+  const bool rhs_tagged = type_handler_.is_tagged_scalar_type(rhs.type());
+  if ((op != "In" && op != "NotIn") || lhs_tagged == rhs_tagged)
+    throw std::runtime_error(
+      "operator '" + op +
+      "' on a dynamically-typed variable is not yet supported");
+  const bool invert = op == "NotIn";
+  const exprt &tagged = lhs_tagged ? lhs : rhs;
+  const exprt type_id =
+    python_expr::build_member(tagged, "type_id", size_type());
+  const exprt is_str = python_expr::build_equal(
+    type_id, type_handler_.tagged_scalar_type_id(pointer_typet(char_type())));
+  exprt str_view = python_expr::build_typecast(
+    python_expr::build_member(tagged, "value", pointer_typet(empty_typet())),
+    pointer_typet(char_type()));
+  const locationt location = get_location_from_decl(element);
+  // A str operand: the raise diverts every other type before it is read.
+  if (rhs_tagged || type_utils::is_string_type(rhs.type()))
+  {
+    emit_guarded_raise(
+      python_expr::build_not(is_str),
+      "TypeError",
+      rhs_tagged ? "argument of type is not iterable"
+                 : "'in <string>' requires string as left operand",
+      location);
+    return rhs_tagged
+             ? handle_membership_operator(lhs, str_view, element, invert)
+             : handle_membership_operator(str_view, rhs, element, invert);
+  }
+  if (std::optional<exprt> any_equal = tagged_equals_any(lhs, right))
+    return invert ? python_expr::build_not(*any_equal) : *any_equal;
+  return tagged_key_membership(lhs, rhs, is_str, element, invert);
+}
+
+/// `x == e` for some element e of a tuple or list display @p right of
+/// constants, for a tagged x: membership in a sequence is equality with an
+/// element. Nil for any other container.
+std::optional<exprt> python_converter::tagged_equals_any(
+  const exprt &tagged,
+  const nlohmann::json &right)
+{
+  const std::string kind = right.value("_type", "");
+  if (kind != "Tuple" && kind != "List")
+    return std::nullopt;
+  exprt any = false_exprt();
+  for (const auto &elt : right["elts"])
+  {
+    if (elt.value("_type", "") != "Constant")
+      return std::nullopt;
+    any = python_expr::build_or(
+      any,
+      dynamic_type_handler_.handle_comparison("Eq", tagged, get_expr(elt)));
+  }
+  return any;
+}
+
+/// `x in c` for a tagged x and another container c: the membership test of x
+/// read as an int or as a str, chosen by its type_id. Each view reads the
+/// payload only where the tag holds that type. A float is not modelled here.
+exprt python_converter::tagged_key_membership(
+  const exprt &tagged,
+  exprt rhs,
+  const exprt &is_str,
+  const nlohmann::json &element,
+  bool invert)
+{
+  const exprt type_id =
+    python_expr::build_member(tagged, "type_id", size_type());
+  const exprt is_num =
+    type_handler_.tagged_scalar_type_matches(type_id, long_long_int_type());
+  const exprt payload =
+    python_expr::build_member(tagged, "value", pointer_typet(empty_typet()));
+  exprt num_view = python_expr::build_if(
+    is_num,
+    python_expr::build_dereference(
+      python_expr::build_typecast(payload, pointer_typet(long_long_int_type())),
+      long_long_int_type()),
+    from_integer(0, long_long_int_type()));
+  exprt str_view = python_expr::build_if(
+    is_str,
+    python_expr::build_typecast(payload, pointer_typet(char_type())),
+    string_handler_.get_array_base_address(
+      string_builder_->build_string_literal("")));
+  if (!can_emit_runtime_guard())
+    throw std::runtime_error(
+      "operator 'In' on a dynamically-typed variable is not yet supported");
+  code_assertt check(python_expr::build_or(is_num, is_str));
+  check.location() = get_location_from_decl(element);
+  check.location().user_provided(true);
+  check.location().comment(
+    "Unsupported: a membership test of a dynamically-typed float");
+  add_instruction(check);
+  add_instruction(code_assumet(python_expr::build_or(is_num, is_str)));
+  exprt rhs_copy = rhs;
+  const exprt in_num =
+    handle_membership_operator(num_view, rhs_copy, element, invert);
+  const exprt in_str =
+    handle_membership_operator(str_view, rhs, element, invert);
+  return python_expr::build_if(is_num, in_num, in_str);
 }
 
 exprt python_converter::get_percent_format_expr(
