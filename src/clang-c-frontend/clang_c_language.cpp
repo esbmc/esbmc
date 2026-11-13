@@ -410,10 +410,8 @@ static void parse_witness_constraints(std::vector<waypoint> &waypoints)
   }
 }
 
-static clang::SourceLocation witness_statement_end(
-  const clang::Stmt *statement,
-  const clang::SourceManager &source_manager,
-  const clang::LangOptions &language)
+static const clang::Stmt *
+witness_terminal_statement(const clang::Stmt *statement)
 {
   while (true)
   {
@@ -439,6 +437,15 @@ static clang::SourceLocation witness_statement_end(
     else
       break;
   }
+  return statement;
+}
+
+static clang::SourceLocation witness_statement_end(
+  const clang::Stmt *statement,
+  const clang::SourceManager &source_manager,
+  const clang::LangOptions &language)
+{
+  statement = witness_terminal_statement(statement);
   const auto end = statement->getEndLoc();
   if (
     end.isInvalid() || end.isMacroID() ||
@@ -467,24 +474,78 @@ static clang::SourceLocation witness_statement_end(
     end, clang::tok::semi, source_manager, language, false);
 }
 
-static std::optional<std::map<size_t, size_t>> witness_body_ends(
-  const std::string &intrinsics,
-  const std::vector<std::string> &compiler_args,
-  const std::vector<invariant> &invariants)
+static bool
+is_witness_control_body(const clang::Stmt *statement, const clang::Stmt *parent)
 {
-  auto ast = buildASTs(intrinsics, compiler_args);
-  if (ast_failed(ast))
-    return std::nullopt;
-  const auto &context = ast->getASTContext();
-  const auto &source_manager = context.getSourceManager();
+  if (const auto *branch = llvm::dyn_cast_or_null<clang::IfStmt>(parent))
+    return statement == branch->getThen() || statement == branch->getElse();
+  if (const auto *loop = llvm::dyn_cast_or_null<clang::WhileStmt>(parent))
+    return statement == loop->getBody();
+  if (const auto *loop = llvm::dyn_cast_or_null<clang::DoStmt>(parent))
+    return statement == loop->getBody();
+  if (const auto *loop = llvm::dyn_cast_or_null<clang::ForStmt>(parent))
+    return statement == loop->getBody();
+  if (const auto *loop = llvm::dyn_cast_or_null<clang::CXXForRangeStmt>(parent))
+    return statement == loop->getBody();
+  return false;
+}
+
+class witness_body_locatort
+{
+public:
+  witness_body_locatort(
+    const clang::ASTContext &context,
+    const std::vector<invariant> &invariants)
+    : context(context), source_manager(context.getSourceManager())
+  {
+    for (const auto &inv : invariants)
+      pending.insert(static_cast<size_t>(inv.line.to_int64()));
+  }
+
+  std::optional<std::map<size_t, size_t>> locate()
+  {
+    visit_declarations(context.getTranslationUnitDecl());
+    if (!pending.empty())
+      return std::nullopt;
+    return body_ends;
+  }
+
+private:
+  const clang::ASTContext &context;
+  const clang::SourceManager &source_manager;
   std::set<size_t> pending;
-  for (const auto &inv : invariants)
-    pending.insert(static_cast<size_t>(inv.line.to_int64()));
   std::map<size_t, size_t> body_ends;
-  auto visit_statement = [&](
-                           auto &&self,
-                           const clang::Stmt *statement,
-                           const clang::Stmt *parent) -> void {
+
+  void record_site(
+    const clang::Stmt *statement,
+    const clang::Stmt *parent,
+    size_t line)
+  {
+    const auto begin = statement->getBeginLoc();
+    const bool wrap = is_witness_control_body(statement, parent);
+    const bool block =
+      parent && llvm::isa<clang::CompoundStmt>(parent) &&
+      parent->getBeginLoc().isFileID() &&
+      source_manager.isWrittenInMainFile(parent->getBeginLoc());
+    if (!block && !wrap)
+      return;
+    const auto prefix =
+      source_manager.getBufferData(source_manager.getMainFileID())
+        .take_front(source_manager.getFileOffset(begin));
+    if (!prefix.substr(prefix.rfind('\n') + 1).trim().empty())
+      return;
+    const auto end = wrap ? witness_statement_end(
+                              statement, source_manager, context.getLangOpts())
+                          : begin;
+    if (end.isInvalid())
+      return;
+    if (wrap)
+      body_ends.emplace(line, source_manager.getFileOffset(end));
+    pending.erase(line);
+  }
+
+  void visit_statement(const clang::Stmt *statement, const clang::Stmt *parent)
+  {
     if (!statement || pending.empty())
       return;
     const auto begin = statement->getBeginLoc();
@@ -495,53 +556,14 @@ static std::optional<std::map<size_t, size_t>> witness_body_ends(
         pending.count(line) &&
         !llvm::isa<clang::LabelStmt, clang::SwitchCase, clang::AttributedStmt>(
           statement))
-      {
-        bool wrap = false;
-        if (const auto *branch = llvm::dyn_cast_or_null<clang::IfStmt>(parent))
-          wrap =
-            statement == branch->getThen() || statement == branch->getElse();
-        else if (
-          const auto *loop = llvm::dyn_cast_or_null<clang::WhileStmt>(parent))
-          wrap = statement == loop->getBody();
-        else if (
-          const auto *loop = llvm::dyn_cast_or_null<clang::DoStmt>(parent))
-          wrap = statement == loop->getBody();
-        else if (
-          const auto *loop = llvm::dyn_cast_or_null<clang::ForStmt>(parent))
-          wrap = statement == loop->getBody();
-        else if (
-          const auto *loop =
-            llvm::dyn_cast_or_null<clang::CXXForRangeStmt>(parent))
-          wrap = statement == loop->getBody();
-        const auto prefix =
-          source_manager.getBufferData(source_manager.getMainFileID())
-            .take_front(source_manager.getFileOffset(begin));
-        const bool block =
-          parent && llvm::isa<clang::CompoundStmt>(parent) &&
-          parent->getBeginLoc().isFileID() &&
-          source_manager.isWrittenInMainFile(parent->getBeginLoc());
-        if (
-          (block || wrap) &&
-          prefix.substr(prefix.rfind('\n') + 1).trim().empty())
-        {
-          const auto end =
-            wrap ? witness_statement_end(
-                     statement, source_manager, context.getLangOpts())
-                 : begin;
-          if (end.isValid())
-          {
-            if (wrap)
-              body_ends.emplace(line, source_manager.getFileOffset(end));
-            pending.erase(line);
-          }
-        }
-      }
+        record_site(statement, parent, line);
     }
     for (const auto *child : statement->children())
-      self(self, child, statement);
-  };
-  auto visit_declarations =
-    [&](auto &&self, const clang::DeclContext *declarations) -> void {
+      visit_statement(child, statement);
+  }
+
+  void visit_declarations(const clang::DeclContext *declarations)
+  {
     for (const auto *declaration : declarations->decls())
     {
       if (pending.empty())
@@ -552,15 +574,58 @@ static std::optional<std::map<size_t, size_t>> witness_body_ends(
         continue;
       if (
         const auto *function = llvm::dyn_cast<clang::FunctionDecl>(declaration))
-        visit_statement(visit_statement, function->getBody(), nullptr);
+        visit_statement(function->getBody(), nullptr);
       if (const auto *nested = llvm::dyn_cast<clang::DeclContext>(declaration))
-        self(self, nested);
+        visit_declarations(nested);
     }
-  };
-  visit_declarations(visit_declarations, context.getTranslationUnitDecl());
-  if (!pending.empty())
+  }
+};
+
+static std::optional<std::map<size_t, size_t>> witness_body_ends(
+  const std::string &intrinsics,
+  const std::vector<std::string> &compiler_args,
+  const std::vector<invariant> &invariants)
+{
+  auto ast = buildASTs(intrinsics, compiler_args);
+  if (ast_failed(ast))
     return std::nullopt;
-  return body_ends;
+  return witness_body_locatort(ast->getASTContext(), invariants).locate();
+}
+
+static std::optional<file_operations::tmp_file> inject_correctness_witness(
+  const std::string &intrinsics,
+  const std::string &actual_path,
+  const std::string &path,
+  std::vector<std::string> &compiler_args,
+  const std::vector<invariant> &invariants)
+{
+  auto body_ends = witness_body_ends(intrinsics, compiler_args, invariants);
+  if (!body_ends)
+  {
+    log_error(
+      "Cannot safely locate witness injection sites in the original AST");
+    return std::nullopt;
+  }
+  std::string content = yaml_parser::build_injected_source(
+    actual_path, path, invariants, *body_ends);
+  if (content.empty())
+  {
+    log_error("Failed to build injected source for '{}'", path);
+    return std::nullopt;
+  }
+  auto injected = write_witness_tmp(content);
+  if (!injected)
+  {
+    log_error("Failed to write injected source for '{}'", path);
+    return std::nullopt;
+  }
+  compiler_args.insert(
+    compiler_args.end() - 1,
+    {"-Xclang",
+     "-remap-file",
+     "-Xclang",
+     actual_path + ";" + injected->path()});
+  return injected;
 }
 
 bool clang_c_languaget::parse(const std::string &path)
@@ -592,33 +657,10 @@ bool clang_c_languaget::parse(const std::string &path)
     auto invariants = yaml_parser::read_invariants(witness_path);
     if (!invariants.empty())
     {
-      auto body_ends =
-        witness_body_ends(intrinsics, new_compiler_args, invariants);
-      if (!body_ends)
-      {
-        log_error(
-          "Cannot safely locate witness injection sites in the original AST");
-        return true;
-      }
-      std::string content = yaml_parser::build_injected_source(
-        actual_path, path, invariants, *body_ends);
-      if (content.empty())
-      {
-        log_error("Failed to build injected source for '{}'", path);
-        return true;
-      }
-      correctness_injected = write_witness_tmp(content);
+      correctness_injected = inject_correctness_witness(
+        intrinsics, actual_path, path, new_compiler_args, invariants);
       if (!correctness_injected)
-      {
-        log_error("Failed to write injected source for '{}'", path);
         return true;
-      }
-      new_compiler_args.insert(
-        new_compiler_args.end() - 1,
-        {"-Xclang",
-         "-remap-file",
-         "-Xclang",
-         actual_path + ";" + correctness_injected->path()});
     }
   }
   else if (config.options.get_bool_option("validate-violation-witness"))
