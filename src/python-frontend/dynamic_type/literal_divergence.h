@@ -174,6 +174,20 @@ inline std::string binop_kind(
   return left == "num" && right == "num" && integer_ops.count(op) ? "num" : "";
 }
 
+// The kind of `op operand`: `not` gives a bool, `-`, `+` and `~` keep a
+// number's kind (`~` only an int's); "" for any other operand.
+inline std::string unary_kind(const std::string &op, const std::string &operand)
+{
+  if (op == "Not")
+    return "num";
+  if (op == "Invert")
+    return operand == "num" ? "num" : "";
+  return (op == "USub" || op == "UAdd") &&
+             (operand == "num" || operand == "float")
+           ? operand
+           : "";
+}
+
 // The kind a module-level def named `callee` returns, by its annotation.
 inline std::string annotated_return_kind(
   const std::string &callee,
