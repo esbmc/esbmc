@@ -158,12 +158,13 @@ expr2tc strip_bool_roundtrip(const expr2tc &e)
 
 bool has_quantifier(const expr2tc &e)
 {
+  if (is_nil_expr(e))
+    return false;
   if (is_forall2t(e) || is_exists2t(e))
     return true;
   bool found = false;
-  e->foreach_operand([&found](const expr2tc &op) {
-    found = found || (!is_nil_expr(op) && has_quantifier(op));
-  });
+  e->foreach_operand(
+    [&found](const expr2tc &op) { found = found || has_quantifier(op); });
   return found;
 }
 
