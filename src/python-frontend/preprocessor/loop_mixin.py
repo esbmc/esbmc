@@ -879,8 +879,8 @@ class LoopMixin:
             )
 
         exit_calls = [
-            self.ensure_all_locations(ast.Expr(value=make_exit_call(i)), node)
-            for i in range(len(node.items) - 1, -1, -1)
+            self.ensure_all_locations(ast.copy_location(ast.Expr(value=make_exit_call(i)), node),
+                                      node) for i in range(len(node.items) - 1, -1, -1)
         ]
 
         # When every manager's class defines (or inherits) __exit__, lower to
@@ -1594,7 +1594,7 @@ class LoopMixin:
         ] + transformed_body)
 
         # Create the while statement
-        while_stmt = ast.While(test=while_cond, body=while_body, orelse=[])
+        while_stmt = ast.copy_location(ast.While(test=while_cond, body=while_body, orelse=[]), node)
 
         # Return the transformed statements
         return step_validation + [start_assign, has_next_assign, while_stmt]
