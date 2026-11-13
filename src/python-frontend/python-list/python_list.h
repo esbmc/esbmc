@@ -550,6 +550,7 @@ public:
    * @param slice_node The Slice AST node holding lower/upper/step
    * @param value_node The AST node of the assigned (right-hand side) value
    */
+  void forget_static_length(const exprt &list);
   void handle_slice_assignment(
     const exprt &list_expr,
     const nlohmann::json &slice_node,

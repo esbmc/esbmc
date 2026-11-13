@@ -922,6 +922,14 @@ exprt dynamic_type_handler::module_name_payload(
     build_address_of(build_symbol(*object)), pointer_typet(empty_typet()));
 }
 
+exprt dynamic_type_handler::int_payload(const exprt &value) const
+{
+  const symbolt *copy_func =
+    converter_.symbol_table().find_symbol("c:@F@__python_scalar_int_copy");
+  assert(copy_func && "__python_scalar_int_copy not found in symbol table");
+  return build_call_expr(*copy_func, pointer_typet(empty_typet()), {value});
+}
+
 exprt dynamic_type_handler::build_scalar_payload(
   const exprt &rhs,
   const locationt &location,
@@ -964,6 +972,9 @@ exprt dynamic_type_handler::build_scalar_payload(
   // storage, which goes DEAD at branch exit, so it needs an explicit copy.
   if (value_to_store.type().is_pointer())
     return build_typecast(build_symbol(backing), pointer_typet(empty_typet()));
+
+  if (value_to_store.type() == long_long_int_type())
+    return int_payload(build_symbol(backing));
 
   const symbolt *copy_func =
     converter_.symbol_table().find_symbol("c:@F@__python_scalar_tag_copy");
@@ -1610,6 +1621,33 @@ exprt dynamic_type_handler::build_isinstance_check(
   throw std::runtime_error(
     "isinstance() against this type is not yet supported for a "
     "dynamically-typed variable");
+}
+
+exprt dynamic_type_handler::build_len(
+  const exprt &tagged,
+  const locationt &location)
+{
+  if (!converter_.in_type_probe())
+  {
+    if (!converter_.can_emit_operand_statement())
+      throw std::runtime_error(
+        "len() of a dynamically-typed variable here is not yet supported");
+    exprt is_str = build_equal(
+      build_member(tagged, "type_id", size_type()),
+      type_handler_.tagged_scalar_type_id(pointer_typet(char_type())));
+    converter_.emit_guarded_raise(
+      build_not(is_str), "TypeError", "object has no len()", location);
+  }
+
+  const symbolt *strlen_func = converter_.symbol_table().find_symbol(
+    "c:@F@__python_scalar_strlen_bounded");
+  assert(
+    strlen_func && "__python_scalar_strlen_bounded not found in symbol table");
+  exprt chars = build_typecast(
+    build_member(tagged, "value", pointer_typet(empty_typet())),
+    pointer_typet(char_type()));
+  return build_typecast(
+    build_call_expr(*strlen_func, size_type(), {chars}), long_long_int_type());
 }
 
 exprt dynamic_type_handler::build_truthiness(const exprt &tagged)

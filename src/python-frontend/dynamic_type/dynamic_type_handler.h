@@ -144,6 +144,9 @@ public:
     const std::string &type_name,
     bool type_is_user_class) const;
 
+  /// len(@p tagged): the length of the str it holds, else a TypeError.
+  exprt build_len(const exprt &tagged, const locationt &location);
+
   /// Python truthiness of a tagged value, decided by its runtime type.
   exprt build_truthiness(const exprt &tagged);
 
@@ -245,6 +248,9 @@ private:
     const locationt &location,
     std::vector<codet> &instructions,
     exprt &elem_size);
+
+  /// A fresh, int-typed copy of the int @p value as a tag's `.value`.
+  exprt int_payload(const exprt &value) const;
 
   /// A fresh copy of @p rhs as a tag's `.value`; sets @p elem_size.
   exprt build_scalar_payload(
