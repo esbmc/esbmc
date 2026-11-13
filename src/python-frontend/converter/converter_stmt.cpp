@@ -8615,6 +8615,7 @@ void python_converter::get_var_assign(
     rhs = tuple_handler_->coerce_to_tuple_type(
       rhs, lhs.type(), get_location_from_decl(ast_node), target_block);
     set_none_flag(lhs, ast_node, target_block);
+    set_presence_flag(lhs, ast_node, target_block);
 
     // Propagate $input_str$ → $input_len$ companion mapping so that len()
     // on any alias of an input() string can use the symbolic length directly.
