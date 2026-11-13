@@ -31,6 +31,7 @@ import re
 
 from preprocessor.function_value_lift import lift_nested_defs
 from preprocessor.function_value_methods import lift_bound_methods
+from preprocessor.function_value_imports import copy_imported_functions
 from preprocessor.function_value_modules import DEFINED_NAME, lift_module_functions
 from preprocessor.function_value_params import (specialise_function_parameters,
                                                 specialise_function_parameters_in_order)
@@ -1651,12 +1652,19 @@ def _check_hoisted_dispatched(module):
             raise _Refused
 
 
+def _lift_module_values(module, path):
+    """Bring the functions of other modules that `module` uses as values, or calls with them,
+    into `module`; return whether any was."""
+    lifted = lift_module_functions(module, path)
+    return copy_imported_functions(module, path) or lifted
+
+
 def dispatch_mixed_function_values(module, path):
     """Rewrite calls through mixed function values into dispatches, when every use allows it."""
     candidate = copy.deepcopy(module)
     lifted_methods = _may_lift_methods(module) and lift_bound_methods(candidate)
     lifted_methods = specialise_function_parameters(candidate) or lifted_methods
-    lifted_methods = lift_module_functions(candidate, path) or lifted_methods
+    lifted_methods = _lift_module_values(candidate, path) or lifted_methods
     base = candidate if lifted_methods else module
     original = _propagated(base, path)
     if not _mixed_groups(original):
