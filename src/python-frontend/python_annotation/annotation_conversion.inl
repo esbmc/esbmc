@@ -2233,10 +2233,8 @@ std::string python_annotation<Json>::get_type_from_binary_expr(
   return promote_to_float_operand(stmt, type);
 }
 
-/// Whether `+` with a left operand of unknown type, or `*` with an int count
-/// on the left, has a str right operand: the result is then a str. Left as
-/// Any, an unannotated parameter the result is passed to is read as a list
-/// (#10535).
+/// Whether `+` on an untyped left operand, or `*` on an int count, has a str
+/// right operand, making the result a str (#10535).
 template <class Json>
 bool python_annotation<Json>::is_str_operation(
   const Json &stmt,

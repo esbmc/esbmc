@@ -2,3 +2,7 @@ regression/python/github_10535
 regression/python/github_10535_fail
 regression/python/github_10535_repeat
 regression/python/github_10535_repeat_fail
+regression/python/github_10535_ifexp
+regression/python/github_10535_ifexp_fail
+regression/python/github_10535_slice
+regression/python/github_10535_slice_fail
