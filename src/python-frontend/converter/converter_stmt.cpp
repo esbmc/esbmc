@@ -120,10 +120,9 @@ bool is_incompatible_scalar_string_retype(
 
 // Whether the rebinding needs a fresh symbol. An int rebound to a float would
 // otherwise promote the shared symbol in place, so reads before the rebind see
-// a float (#8402); a number rebound to a list would retype them as the list.
-// Those cases are taken only on the unconditional spine: an alias made in a
-// conditional body is dropped at the join, where the in-place retype is still
-// needed.
+// a float (#8402). That case is taken only on the unconditional spine: an alias
+// made in a conditional body is dropped at the join, where the in-place
+// promotion is still needed.
 bool is_scalar_retype(
   const type_handler &th,
   const typet &lhs,
@@ -131,9 +130,7 @@ bool is_scalar_retype(
   bool on_spine)
 {
   return is_incompatible_scalar_string_retype(th, lhs, rhs) ||
-         (on_spine &&
-          ((type_utils::is_integer_type(lhs) && rhs.is_floatbv()) ||
-           (th.is_numeric_scalar_type(lhs) && rhs == th.get_list_type())));
+         (on_spine && type_utils::is_integer_type(lhs) && rhs.is_floatbv());
 }
 
 using python_frontend::is_literal_int_node;
@@ -6875,6 +6872,25 @@ static bool is_read_in_other_scope(
     nested || (scope && node.value("name", "") != current));
 }
 
+// A number rebound to a list on the function's spine: retyping its one symbol
+// in place would retype the reads before the rebind as the list. The fresh
+// slot is taken only for a name no other scope sees, since a module-level,
+// `global` or `nonlocal` name, or one a nested scope reads, would keep being
+// read through the old symbol. "@" names no def, so every nested scope counts.
+bool python_converter::is_local_number_to_list_rebind(
+  const exprt &lhs,
+  const exprt &rhs,
+  const symbol_id &sid) const
+{
+  return enclosing_function_node_ != nullptr &&
+         block_nesting_ == function_body_depth_ + 1 &&
+         sid.get_function() == current_func_name_ && !is_global_variable(sid) &&
+         type_handler_.is_numeric_scalar_type(lhs.type()) &&
+         rhs.type() == type_handler_.get_list_type() &&
+         !is_read_in_other_scope(
+           (*enclosing_function_node_)["body"], sid.get_object(), "@", false);
+}
+
 // A NumPy array rebound to another shape or dtype where it cannot get its own
 // symbol (in a branch or loop, or read by another function): retyping the
 // symbol in place would retype every read of the earlier binding.
@@ -8666,7 +8682,8 @@ void python_converter::get_var_assign(
           lhs.type(),
           rhs.type(),
           block_nesting_ == function_body_depth_ + 1) ||
-        needs_fresh_retype_slot(lhs, rhs, orig_id))
+        needs_fresh_retype_slot(lhs, rhs, orig_id) ||
+        is_local_number_to_list_rebind(lhs, rhs, sid))
       {
         symbolt *new_symbol_ptr = mint_retyped_symbol(
           *lhs_symbol, orig_id, rhs.type(), location_begin, sid, target_block);

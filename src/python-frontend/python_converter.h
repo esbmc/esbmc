@@ -2739,6 +2739,10 @@ private:
     const exprt &lhs,
     const exprt &rhs,
     const std::string &lhs_id) const;
+  bool is_local_number_to_list_rebind(
+    const exprt &lhs,
+    const exprt &rhs,
+    const symbol_id &sid) const;
   bool is_numpy_array_to_view_rebind(
     const exprt &lhs,
     const exprt &rhs,
