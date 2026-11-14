@@ -44,3 +44,13 @@ contiguous_strides(const std::vector<long long> &shape)
     strides[axis - 1] = strides[axis] * shape[axis];
   return strides;
 }
+
+// A Python int index is signed. An unsigned one such as len(xs) is cast so
+// that build_list_at_call still emits the catchable IndexError guard instead
+// of leaving an out-of-range read to the model's hard assertion (#10716).
+inline exprt signed_list_index(const exprt &index)
+{
+  return index.type().is_unsignedbv()
+           ? python_expr::build_typecast(index, signed_size_type())
+           : index;
+}

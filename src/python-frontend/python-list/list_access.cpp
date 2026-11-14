@@ -5167,6 +5167,7 @@ exprt python_list::handle_index_access(
   {
     // Handle list types (symbol-based)
     typet elem_type;
+    pos_expr = signed_list_index(pos_expr);
 
     reject_unresolved_element_read(array, slice_node);
 
