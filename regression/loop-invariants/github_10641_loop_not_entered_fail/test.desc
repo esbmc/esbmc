@@ -1,0 +1,5 @@
+CORE
+main.c
+--loop-invariant-check --overflow-check
+^VERIFICATION FAILED$
+^  FAILED .*line 17  arithmetic overflow on add$

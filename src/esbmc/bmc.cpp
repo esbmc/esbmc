@@ -309,9 +309,9 @@ void bmct::successful_trace(const symex_target_equationt &eq [[maybe_unused]])
 
 // Whether \p step is a loop-invariant havoc that \p smt_conv's model executes.
 // The combined schema (--validate-correctness-witness, --loop-invariant) runs
-// its havoc on a branch that ends in ASSUME(false), so a claim later in the
-// linear SSA can still be violated on a path that never took it. Without a
-// model to read, count the havoc.
+// its havoc on a side branch, so a claim later in the linear SSA can still be
+// violated on a path that never ran it. Without a model to read, count the
+// havoc.
 static bool runs_invariant_havoc(
   smt_convt &smt_conv,
   const symex_target_equationt::SSA_stept &step)
@@ -344,7 +344,7 @@ static bool is_loop_invariant_obligation(const locationt &location)
 }
 
 // Attached to a claim downgraded from Failed to Unknown because the only trace
-// violating it runs through a --loop-invariant-check havoc (issue #7480).
+// violating it runs through a loop-invariant havoc (issue #7480).
 static const char *const weak_invariant_note =
   "loop invariant too weak to prove this claim: the counterexample is against "
   "the havoc abstraction, not a reachable state of the program";

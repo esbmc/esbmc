@@ -107,7 +107,7 @@ protected:
   std::atomic<bool> vacuity_detected{false};
 
   // Set when a violated claim was only violated downstream of a
-  // --loop-invariant-check havoc; consulted by report_result to map a verdict
+  // loop-invariant havoc; consulted by report_result to map a verdict
   // with no concrete violation from FAILED to UNKNOWN (issue #7480). Atomic
   // because multi_property_check writes from parallel job threads.
   std::atomic<bool> weak_invariant_detected{false};
