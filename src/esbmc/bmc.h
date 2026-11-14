@@ -239,7 +239,8 @@ private:
     const claim_slicer &claim,
     const property_locationt &loc,
     bool inductive_step,
-    symex_target_equationt &local_eq);
+    symex_target_equationt &local_eq,
+    smt_convt &smt_conv);
 
   /// Record a verdict for every assertion in \p eq that \p smt_conv's model
   /// falsifies, so the report names them even when the counterexample itself
