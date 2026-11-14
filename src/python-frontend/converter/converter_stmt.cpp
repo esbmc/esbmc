@@ -10667,30 +10667,58 @@ static void reject_tagged_scalar_return(
 }
 
 // A local retyped across str and number (#4770) lives in a fresh slot of the
-// new type, while the function's return type may follow the first binding.
+// new type, while a type read off its first binding, such as the function's
+// return type or a callee's parameter type, may follow the old kind.
 // Converting the slot would read the bytes of one kind as the other (#10700).
+// The kind @p value holds, "str" or "number", when it is such a slot and
+// @p target is of the other kind; else nullptr.
+static const char *retyped_kind_mismatch(
+  const type_handler &types,
+  const std::unordered_map<std::string, std::string> &retype_aliases,
+  const exprt &value,
+  const typet &target)
+{
+  if (!value.is_symbol())
+    return nullptr;
+  const bool value_is_str = types.is_string_type(value.type());
+  if (
+    !(value_is_str && types.is_numeric_scalar_type(target)) &&
+    !(types.is_numeric_scalar_type(value.type()) &&
+      types.is_string_type(target)))
+    return nullptr;
+  const std::string id = value.identifier().as_string();
+  for (const auto &alias : retype_aliases)
+    if (alias.second == id)
+      return value_is_str ? "str" : "number";
+  return nullptr;
+}
+
 static void reject_retyped_return(
   const type_handler &types,
   const std::unordered_map<std::string, std::string> &retype_aliases,
   const exprt &value,
   const typet &return_type)
 {
-  if (!value.is_symbol())
-    return;
-  const bool value_is_str = types.is_string_type(value.type());
-  if (
-    !(value_is_str && types.is_numeric_scalar_type(return_type)) &&
-    !(types.is_numeric_scalar_type(value.type()) &&
-      types.is_string_type(return_type)))
-    return;
-  const std::string id = value.identifier().as_string();
-  for (const auto &alias : retype_aliases)
-    if (alias.second == id)
-      throw std::runtime_error(
-        "unsupported: returning a variable rebound to a " +
-        std::string(value_is_str ? "str" : "number") +
-        " from a function typed to return a " +
-        (value_is_str ? "number" : "str"));
+  const char *kind =
+    retyped_kind_mismatch(types, retype_aliases, value, return_type);
+  if (kind)
+    throw std::runtime_error(
+      "unsupported: returning a variable rebound to a " + std::string(kind) +
+      " from a function typed to return a " +
+      (std::string(kind) == "str" ? "number" : "str"));
+}
+
+void python_converter::reject_retyped_argument(
+  const exprt &argument,
+  const typet &param_type) const
+{
+  const char *kind =
+    retyped_kind_mismatch(type_handler_, retype_aliases_, argument, param_type);
+  if (kind)
+    throw std::runtime_error(
+      "unsupported: passing a variable rebound to a " + std::string(kind) +
+      " to a parameter typed as a " +
+      (std::string(kind) == "str" ? "number" : "str"));
 }
 
 void python_converter::get_return_statements(
