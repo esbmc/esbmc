@@ -1051,6 +1051,14 @@ class CPythonReplayTest(unittest.TestCase):
         esbmc = self.verify_after(PY_INDEXERROR, 100)
         self.assertAlmostEqual(esbmc.timeouts[1], 1.5 * 100 + 10, delta=1)
 
+    def test_a_quick_violation_still_gives_the_values_run_its_floor(self):
+        esbmc = self.verify_after(PY_INDEXERROR, 7)
+        self.assertAlmostEqual(esbmc.timeouts[1], wrapper.VALUES_MIN_BUDGET, delta=1)
+
+    def test_a_values_run_near_the_limit_stays_within_what_the_replay_leaves(self):
+        esbmc = self.verify_after(PY_INDEXERROR, wrapper.TOTAL_BUDGET - wrapper.REPLAY_BUDGET - 30)
+        self.assertAlmostEqual(esbmc.timeouts[1], 30, delta=1)
+
     def test_a_confirmation_checks_only_the_violations_bound(self):
         esbmc = self.verify_after(PY_INDEXERROR + "\nBug found (k = 53)\n", 10, "pass\n")
         self.assertIn("--k-induction", esbmc.calls[0])
