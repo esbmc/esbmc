@@ -235,6 +235,19 @@ smt_astt array_convt::mk_store(
   return mast;
 }
 
+void array_convt::record_index(unsigned int arrid, const expr2tc &idx)
+{
+  // A cross-id ITE or equality needs its arrays to share one index set, and
+  // join_array_indexes only runs at an ITE or before solving. Hand the index
+  // to every array already joined to this one, so that add_new_indexes never
+  // re-executes a joining ITE against a remote array lacking it.
+  idx_record r = {idx, ctx->ctx_level};
+  array_indexes[arrid].insert(r);
+  if (arrid < array_relations.size())
+    for (auto const &joined : array_relations[arrid])
+      array_indexes[joined.array_id].insert(r);
+}
+
 smt_astt array_convt::mk_unbounded_select(
   const array_ast *ma,
   const expr2tc &real_idx,
@@ -244,9 +257,7 @@ smt_astt array_convt::mk_unbounded_select(
   // gets constrained at the end of conversion to tie up with the correct
   // value.
 
-  // Record that we've accessed this index.
-  idx_record new_idx_rec = {real_idx, ctx->ctx_level};
-  array_indexes[ma->base_array_id].insert(new_idx_rec);
+  record_index(ma->base_array_id, real_idx);
 
   // Corner case: if the idx we're selecting is the last one updated, just
   // use that piece of AST. This simplifies things later.
@@ -313,9 +324,7 @@ smt_astt array_convt::mk_unbounded_store(
   // Store everything about this store, and suitably adjust all fields in the
   // array at the end of conversion so that they're all consistent.
 
-  // Record that we've accessed this index.
-  idx_record new_idx_rec = {idx, ctx->ctx_level};
-  array_indexes[ma->base_array_id].insert(new_idx_rec);
+  record_index(ma->base_array_id, idx);
 
   // More nuanced: allocate a new array representation.
   array_ast *newarr = new_ast(ressort);

@@ -99,6 +99,7 @@ private:
   /// For `recv.method(...)`: the AttributeError of a None receiver or the
   /// str-method lowering, or nil when neither applies.
   exprt build_method_call_on_receiver() const;
+  exprt build_attribute_call() const;
 
   /// The call to the C intrinsic for __ESBMC_unreachable() or
   /// __ESBMC_unroll(n), or nil for any other callee.

@@ -193,9 +193,13 @@ public:
     const typet &result_type,
     const locationt &location);
 
-  /// Throws when a tag may hold a float and `lhs op rhs` is not a str
-  /// operation.
-  void refuse_float_tag_operation(const exprt &lhs, const exprt &rhs) const;
+  /// When a tag may hold a float and `lhs op rhs` is not a str operation,
+  /// reports a tagged operand holding a float as unsupported at runtime, or
+  /// throws where no runtime check can be planted.
+  void refuse_float_tag_operation(
+    const exprt &lhs,
+    const exprt &rhs,
+    const locationt &location) const;
 
   /// Throws the shared "tagged argument, no known parameter type" refusal.
   [[noreturn]] void refuse_tagged_argument() const;

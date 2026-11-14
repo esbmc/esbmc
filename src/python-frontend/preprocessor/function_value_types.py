@@ -775,6 +775,8 @@ def _tag_mixed_returns(analysis, module, path):
     trees.update((os.path.realpath(p), tree) for p, tree in analysis.loaded.items())
     owners = {id(node): file for file, tree in trees.items() for node in ast.walk(tree)}
     groups = analysis.mixed_groups()
+    if not groups:
+        return False
     calls = [entry for entries, _ in groups.values() for entry in entries]
     members = [member for _, group in groups.values() for member in group]
     if not _taggable(analysis, module, trees, owners, groups):
@@ -783,7 +785,7 @@ def _tag_mixed_returns(analysis, module, path):
         _tag(node, owners[id(node)], main, ("def", node.name))
     for call, _, _, _, result in calls:
         if result is not None:
-            _tag(call, owners[id(call)], main, ("call", call.lineno, call.col_offset))
+            _tag(call, owners[id(call)], main, _call_key(call))
     module.esbmc_tagged_returns = True
     return True
 
@@ -873,6 +875,13 @@ def _bound_otherwise(analysis, key):
 _IMPORTED_TAGS = {}
 
 
+def _call_key(call):
+    """The key of `call` in `_IMPORTED_TAGS`: where it starts and where it ends, since `f().m()`
+    starts where its callee `f()` does."""
+    return ("call", call.lineno, call.col_offset, getattr(call, "end_lineno", None),
+            getattr(call, "end_col_offset", None))
+
+
 def _tag(node, file, main, key):
     """Mark `node`, of the module in `file`, now when that is the module being prepared."""
     attribute = "esbmc_tagged_return" if key[0] == "def" else "esbmc_tagged_call"
@@ -891,7 +900,7 @@ def apply_imported_tags(module, path):
         if isinstance(node, ast.FunctionDef) and node in module.body:
             key = ("def", node.name)
         elif isinstance(node, ast.Call):
-            key = ("call", node.lineno, node.col_offset)
+            key = _call_key(node)
         else:
             continue
         if key in tags:
@@ -904,7 +913,11 @@ def reject_mixed_function_values(module, path):
     analysis = _Analysis(module, path)
     analysis.propagate()
     found = analysis.mixed_call()
-    if found is None or _tag_mixed_returns(analysis, module, path):
+    # The marks follow values through dicts too, so that a call through a dict value, which
+    # the converter refuses on its own, is tagged as well.
+    with_dicts = _Analysis(module, path, dicts=True)
+    with_dicts.propagate()
+    if _tag_mixed_returns(with_dicts, module, path) or found is None:
         return
     call, passed, (first, first_kind), (second, second_kind) = found
     what = "a function passed here" if passed else "this call"
