@@ -558,7 +558,7 @@ def get_command_line(strat, prop, arch, benchmark, dargs, esbmc_ci, keep_loops=F
     command_line += "--no-pointer-check --no-bounds-check --memory-leak-check --no-assertions "
   elif prop == Property.reach:
     command_line += "--enable-unreachability-intrinsic "
-    command_line += "--no-pointer-check --interval-analysis --no-bounds-check --error-label ERROR "
+    command_line += "--no-pointer-check --interval-analysis --no-bounds-check "
     if not keep_loops:
       command_line += "--goto-unwind --unlimited-goto-unwind "
   elif prop == Property.datarace:
