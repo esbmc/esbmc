@@ -28,6 +28,7 @@
 
 #include <algorithm>
 #include <climits>
+#include <filesystem>
 #include <optional>
 #include <sstream>
 
@@ -2186,7 +2187,7 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
 
     if (var_symbol && var_symbol->get_type().is_pointer())
     {
-      refuse_keywords_through_value(element);
+      const nlohmann::json positional = keywords_as_positional(element);
       // This is an indirect call through function pointer
       side_effect_expr_function_callt call;
       call.location() = get_location_from_decl(element);
@@ -2239,7 +2240,7 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
       }
 
       resolved |=
-        call_lambda_copy(element, *var_symbol, call, resolved_func_type);
+        call_lambda_copy(positional, *var_symbol, call, resolved_func_type);
 
       // Try to get return type from the pointer's subtype
       if (!resolved && var_symbol->get_type().subtype().is_code())
@@ -2255,9 +2256,9 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
         call.type() = any_type();
 
       // Process arguments
-      if (element.contains("args"))
+      if (positional.contains("args"))
       {
-        for (const auto &arg_element : element["args"])
+        for (const auto &arg_element : positional["args"])
         {
           exprt arg_expr = to_value_expr(get_expr(arg_element), ns);
           // The pointer target only carries a return type, no parameter
@@ -2279,7 +2280,7 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
 
       if (!resolved)
         return dispatch_mismatched_callees(
-          python_expr::build_symbol(*var_symbol), element, call);
+          python_expr::build_symbol(*var_symbol), positional, call);
       return call;
     }
   }
@@ -2881,14 +2882,105 @@ static bool used_as_value(const nlohmann::json &node, const std::string &name)
   return false;
 }
 
-void python_converter::refuse_keywords_through_value(
-  const nlohmann::json &call) const
+/// Whether any string in @p node is @p name.
+static bool mentions(const nlohmann::json &node, const std::string &name)
 {
-  // A call through a function value passes only positional arguments.
-  if (!call.value("keywords", nlohmann::json::array()).empty())
+  if (node.is_string())
+    return node.get_ref<const std::string &>() == name;
+  if (!node.is_structured())
+    return false;
+  for (const auto &child : node)
+    if (mentions(child, name))
+      return true;
+  return false;
+}
+
+/// The modules of @p pool and @p entry other than @p module that name it, so
+/// may bind or call what it holds.
+static std::vector<const nlohmann::json *> modules_naming(
+  const nlohmann::json &module,
+  const nlohmann::json *entry,
+  const std::map<std::string, nlohmann::json> &pool)
+{
+  const std::string name =
+    std::filesystem::path(module.value("filename", "")).stem().string();
+  std::vector<const nlohmann::json *> others;
+  if (entry != &module)
+    others.push_back(entry);
+  for (const auto &[_, other] : pool)
+    if (
+      &other != &module &&
+      (mentions(other, name) || mentions(other, "__main__")))
+      others.push_back(&other);
+  return others;
+}
+
+/// The positional parameters every candidate takes, and how many of them
+/// are positional-only. None when they differ, or when one takes a
+/// keyword-only or variadic parameter.
+static std::optional<std::pair<std::vector<std::string>, std::size_t>>
+shared_positional_parameters(
+  const std::vector<function_values::candidate> &candidates)
+{
+  std::optional<std::pair<std::vector<std::string>, std::size_t>> shared;
+  for (const function_values::candidate &c : candidates)
+  {
+    const nlohmann::json &args = (*c.def)["args"];
+    if (
+      !args["kwonlyargs"].empty() || args["vararg"].is_object() ||
+      args["kwarg"].is_object())
+      return std::nullopt;
+    std::pair<std::vector<std::string>, std::size_t> own{
+      {}, args["posonlyargs"].size()};
+    for (const char *field : {"posonlyargs", "args"})
+      for (const auto &arg : args[field])
+        own.first.push_back(arg.value("arg", ""));
+    if (shared && *shared != own)
+      return std::nullopt;
+    shared = std::move(own);
+  }
+  return shared;
+}
+
+nlohmann::json
+python_converter::keywords_as_positional(const nlohmann::json &call)
+{
+  nlohmann::json positional = call;
+  const nlohmann::json keywords =
+    call.value("keywords", nlohmann::json::array());
+  if (keywords.empty())
+    return positional;
+  auto refuse = [] {
     throw std::runtime_error(
       "keyword arguments in a call through a function value are not yet "
       "supported");
+  };
+  const auto candidates =
+    function_values(
+      *ast_json, modules_naming(*ast_json, entry_ast_, module_ast_pool_))
+      .of(call["func"]);
+  const nlohmann::json &args = call["args"];
+  if (!candidates || std::any_of(args.begin(), args.end(), [](const auto &a) {
+        return a.value("_type", "") == "Starred";
+      }))
+    refuse();
+  const auto parameters = shared_positional_parameters(*candidates);
+  if (!parameters)
+    refuse();
+  const auto &[names, posonly] = *parameters;
+  // Each keyword names, in order, the parameter after the arguments before
+  // it, so passing it there binds the same parameter of every function.
+  for (const auto &keyword : keywords)
+  {
+    const std::size_t index = positional["args"].size();
+    if (
+      !keyword["arg"].is_string() || index < posonly || index >= names.size() ||
+      keyword["arg"] != names[index])
+      refuse();
+    positional["args"].push_back(keyword["value"]);
+  }
+  positional["keywords"] = nlohmann::json::array();
+  return positional;
 }
 
 static const char tagged_callee_id[] = "py:$tagged_callee$";

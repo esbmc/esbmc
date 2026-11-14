@@ -859,9 +859,12 @@ private:
   typet
   untyped_call_type(const nlohmann::json &call, const typet &untyped) const;
 
-  /// Throws for a call through a function value that passes keyword
-  /// arguments, which such a call drops.
-  void refuse_keywords_through_value(const nlohmann::json &call) const;
+  /// @p call with its keyword arguments passed by position, for a call
+  /// through a function value, which passes only positional arguments.
+  /// Throws unless every function the value may hold has the same
+  /// positional parameters and the keywords name, in order, the ones after
+  /// the positional arguments.
+  nlohmann::json keywords_as_positional(const nlohmann::json &call);
 
   /// Refuses the path where the call @p call of @p element, which the
   /// preprocessor found may reach functions returning different types, goes
