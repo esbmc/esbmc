@@ -5703,6 +5703,20 @@ void python_converter::hoist_raising_arm(
     hoist(else_expr, else_side_effects);
 }
 
+/// The code type of \p arm, a function named by a symbol or a choice
+/// between such functions, which decay_function_choice made a pointer; null
+/// for any other value.
+static const typet *chosen_function_type(const exprt &arm)
+{
+  if (arm.type().is_code() && arm.is_symbol())
+    return &arm.type();
+  if (
+    arm.id() == "if" && arm.type().is_pointer() &&
+    arm.type().subtype().is_code())
+    return &arm.type().subtype();
+  return nullptr;
+}
+
 /// A choice between two functions of one type is a pointer to either. The
 /// result of a choice between types would have no single type (#8404). An
 /// arm that cannot be called becomes a function that raises when it is,
@@ -5730,11 +5744,13 @@ void python_converter::decay_function_choice(
   else if (then_not_callable)
     then =
       not_callable_function(else_expr.type(), then.type(), then.location());
-  if (
-    !then.type().is_code() || !else_expr.type().is_code() ||
-    !then.is_symbol() || !else_expr.is_symbol())
+  // An arm that is itself a choice between functions is already a pointer
+  // to one, so `f if c else (g if d else h)` decays like two names.
+  const typet *then_code = chosen_function_type(then);
+  const typet *else_code = chosen_function_type(else_expr);
+  if (!then_code || !else_code || (!then.is_symbol() && !else_expr.is_symbol()))
     return;
-  if (then.type() != else_expr.type())
+  if (*then_code != *else_code)
     throw std::runtime_error(
       "a conditional expression choosing between functions of different "
       "types is not supported");
