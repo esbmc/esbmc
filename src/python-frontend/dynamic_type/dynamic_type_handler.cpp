@@ -745,18 +745,29 @@ dynamic_type_handler::detect_dynamic_type_attributes(
   }
 
   for (const auto &attr : self_attrs)
-  {
-    if (
-      dynamic_type_detail::classes_declaring_attribute(module_body, attr)
-        .size() > 1)
-      continue;
-    if (
-      dynamic_type_detail::kinds_diverge(
-        dynamic_type_detail::collect_attribute_literal_kinds(
-          module_body, attr)))
+    if (attribute_kinds_diverge(attr))
       result.insert(attr);
-  }
   return result;
+}
+
+// Only one class declares `attr`, and the stores into an attribute of that
+// name across every module the program reaches assign it diverging literal
+// kinds: an instance of an imported class may be rebound by the entry module.
+bool dynamic_type_handler::attribute_kinds_diverge(
+  const std::string &attr) const
+{
+  std::unordered_set<std::string> owners;
+  std::unordered_set<std::string> kinds;
+  for (const nlohmann::json *body : converter_.reachable_module_bodies())
+  {
+    const auto declaring =
+      dynamic_type_detail::classes_declaring_attribute(*body, attr);
+    owners.insert(declaring.begin(), declaring.end());
+    const auto assigned =
+      dynamic_type_detail::collect_attribute_literal_kinds(*body, attr);
+    kinds.insert(assigned.begin(), assigned.end());
+  }
+  return owners.size() <= 1 && dynamic_type_detail::kinds_diverge(kinds);
 }
 
 void dynamic_type_handler::declare_dynamic_type_names(
