@@ -77,9 +77,10 @@ public:
     const exprt &rhs,
     const std::string &op);
   exprt typed_binop();
-  /// A call the gate flagged: a typed nondet_list builder, or sorted(x) of
-  /// a typed x, whose result is typed when the gate typed the call and is
-  /// otherwise the sorted ints in an untyped list.
+  /// A call the gate flagged: a typed nondet_list builder, max(x) or min(x)
+  /// of a typed x, a typed dict's store, or sorted(x) of a typed x, whose
+  /// result is typed when the gate typed the call and is otherwise the sorted
+  /// ints in an untyped list.
   static bool is_typed_call(const nlohmann::json &call);
   exprt typed_call(const std::string &func_name);
   /// A slice, list() or copy() of a typed list. The result is typed when the
@@ -96,6 +97,10 @@ public:
     const nlohmann::json &slice,
     const nlohmann::json &value);
   exprt typed_copy(const exprt &list);
+  /// A read `d[k]` of a typed dict, which the gate keeps in a typed list
+  /// of its keys and values in turn.
+  static bool is_typed_dict_read(const nlohmann::json &node);
+  exprt typed_dict_get(const exprt &dict, const nlohmann::json &key);
 
   /**
    * @brief Materialize a fresh list from already-evaluated element values.
@@ -1045,6 +1050,8 @@ private:
   exprt typed_int_temp(const nlohmann::json &node, const exprt &value);
   exprt typed_new_list(const char *create, const std::vector<exprt> &args);
   exprt typed_sorted();
+  exprt typed_extremum(const std::string &func_name);
+  exprt typed_dict_set();
   long long typed_slice_step(const nlohmann::json &slice);
   std::vector<exprt> typed_slice_bounds(const nlohmann::json &slice);
   code_function_callt

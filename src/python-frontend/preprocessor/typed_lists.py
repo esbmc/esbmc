@@ -33,6 +33,11 @@ BOOL_FLAG = "esbmc_typed_bool"
 UNTYPED_RESULT_FLAG = "esbmc_typed_list_source"
 # On a slice, list() or copy() of a typed list, whose result may be untyped.
 SOURCE_FLAG = "esbmc_typed_source"
+# On a read `d[k]` of a typed dict, and on the `__ESBMC_tdict_set(d, v, k)`
+# call that replaces a store `d[k] = v`. A typed dict is a typed list holding
+# its keys and values in turn, in insertion order.
+DICT_FLAG = "esbmc_typed_dict"
+DICT_SET = "__ESBMC_tdict_set"
 
 MODULE = "<module>"
 RETURN = "<return>"
@@ -292,6 +297,7 @@ class TypedListGate:
         self.appends = []  # (scope, Call)
         self.calls = []  # calls of followed functions
         self.sorts = []  # (scope, Call)
+        self.extrema = []  # (scope, Call of max or min)
         self.copies = []  # (scope, slice/list()/copy() node, source Name)
         self.compares = []  # (scope, Compare)
         self.extends = []  # (scope, Call)
@@ -382,7 +388,7 @@ class TypedListGate:
         if isinstance(expr, ast.IfExp):
             return self.is_int(expr.body, scope) and self.is_int(expr.orelse, scope)
         if isinstance(expr, ast.Call):
-            return self._is_int_call(expr)
+            return self._is_int_call(expr, scope)
         if isinstance(expr, ast.Subscript):
             return self._is_int_subscript(expr, scope)
         return False
@@ -429,7 +435,10 @@ class TypedListGate:
             return self.is_bool(expr, scope)
         return self.is_int(expr, scope)
 
-    def _is_int_call(self, call):
+    def _is_int_call(self, call, scope):
+        if self._extremum_call(call):
+            loc = scope.loc(call.args[0].id)
+            return self.classes.typed(loc) and not self._holds_bools(loc)
         if call.keywords:
             return False
         if isinstance(call.func, ast.Attribute):
@@ -643,6 +652,13 @@ class TypedListGate:
                 and len(value.args) == 1 and isinstance(value.args[0], ast.Name)
                 and all(k.arg == "reverse" and isinstance(k.value, ast.Constant)
                         and isinstance(k.value.value, bool) for k in value.keywords))
+
+    def _extremum_call(self, value):
+        """`max(x)` or `min(x)` of a list name."""
+        return (isinstance(value, ast.Call) and isinstance(value.func, ast.Name)
+                and value.func.id in ("max", "min") and value.func.id not in self.shadowed
+                and len(value.args) == 1 and isinstance(value.args[0], ast.Name)
+                and not value.keywords)
 
     def _analysed_call(self, value):
         return (isinstance(value, ast.Call) and isinstance(value.func, ast.Name)
@@ -924,6 +940,14 @@ class TypedListGate:
         self.sorts.append((scope, call))
         return None
 
+    def _rule_extremum(self, node, scope):
+        """`max(x)` and `min(x)`: an int read from the slots."""
+        call = _parent(node)
+        if not self._extremum_call(call):
+            return NOT_MINE
+        self.extrema.append((scope, call))
+        return None
+
     def _rule_list_call(self, node, scope):
         """`list(x)`, a copy."""
         call = _parent(node)
@@ -974,8 +998,8 @@ class TypedListGate:
 
     # The uses of a list name the typed model implements, tried in order.
     USE_RULES = (_rule_concatenated, _rule_len, _rule_analysed_call, _rule_alias, _rule_list_call,
-                 _rule_subscript, _rule_none_test, _rule_truth, _rule_sorted, _rule_method,
-                 _rule_compared)
+                 _rule_subscript, _rule_none_test, _rule_truth, _rule_sorted, _rule_extremum,
+                 _rule_method, _rule_compared)
 
     # The list methods it implements.
     METHOD_RULES = {"append": _method_append, "copy": _method_copy, "extend": _method_extend}
@@ -1114,6 +1138,14 @@ class TypedListGate:
                     and not getattr(_parent(call), "_typed_access", False)
                     and id(call) not in typed_nodes):
                 yield scope.loc(call.args[0].id), "a bool list sorted into an untyped list"
+        yield from self._bool_extrema()
+
+    def _bool_extrema(self):
+        """max() or min() of a bool list returns a bool, not the int the
+        typed model reads."""
+        for scope, call in self.extrema:
+            if self._holds_bools(scope.loc(call.args[0].id)):
+                yield scope.loc(call.args[0].id), "a bool list passed to " + call.func.id
 
     def _seed_bool_lists(self):
         """Classes that some site fills with a bool literal, a comparison or a
@@ -1165,6 +1197,7 @@ class TypedListGate:
                 break
         self._flag()
         self._retype_int_reads()
+        self._lower_typed_dicts()
         for node in ast.walk(self.module):
             node.__dict__.pop("_typed_parent", None)
             node.__dict__.pop("_typed_access", None)
@@ -1192,8 +1225,15 @@ class TypedListGate:
             if self.classes.typed(loc):
                 setattr(subscript, TYPED_FLAG, True)
                 setattr(subscript, BOOL_FLAG, self._holds_bools(loc))
+        self._flag_calls()
+        self._flag_copies()
+
+    def _flag_calls(self):
         for scope, call in self.appends + self.extends:
             if self.classes.typed(scope.loc(call.func.value.id)):
+                setattr(call, TYPED_FLAG, True)
+        for scope, call in self.extrema:
+            if self.classes.typed(scope.loc(call.args[0].id)):
                 setattr(call, TYPED_FLAG, True)
         # A call whose result is a typed list: a converter path that builds
         # the result itself instead of calling the function must build it
@@ -1201,7 +1241,6 @@ class TypedListGate:
         for call in self.calls:
             if self.classes.typed((call.func.id, RETURN)):
                 setattr(call, TYPED_FLAG, True)
-        self._flag_copies()
 
     def _flag_compares(self):
         """Flag a comparison of two typed lists and a `sorted(x)` operand of
@@ -1247,10 +1286,70 @@ class TypedListGate:
                         value.args[0], ast.Subscript):
                     setattr(value.args[0], TYPED_FLAG, True)
 
+    def _typed_dict_sites(self, loc):
+        """The reads and stores of dict @p loc when the typed model holds it
+        exactly, else None: every binding an unannotated display with
+        distinct int literal keys, every key and value an int."""
+        if not self.int_dicts.get(loc, False):
+            return None
+        if not all(self._exact_display(display) for display, _ in self.bindings[loc]):
+            return None
+        sites = []
+        for scope in self.scopes:
+            for node in _walk_scope(scope.body):
+                if (isinstance(node, ast.Name) and isinstance(node.ctx, ast.Load)
+                        and scope.loc(node.id) == loc):
+                    subscript = _parent(node)
+                    if not self.is_int(subscript.slice, scope):
+                        return None
+                    sites.append(subscript)
+        return sites
+
+    def _exact_display(self, display):
+        """An unannotated display whose keys are distinct int literals."""
+        if not isinstance(_parent(display), ast.Assign) or not all(
+                isinstance(k, ast.Constant) and self.is_int(k, None) for k in display.keys):
+            return False
+        keys = [k.value for k in display.keys]
+        return len(set(keys)) == len(keys)
+
+    def _lower_typed_dicts(self):
+        """Hold each dict the typed model covers in a typed list: a display
+        becomes the list of its keys and values, a read is flagged, and a
+        store becomes a call that evaluates the value before the key, as
+        CPython does."""
+        for loc in self.dict_stores:
+            sites = self._typed_dict_sites(loc)
+            if sites is None:
+                continue
+            for display, _ in self.bindings[loc]:
+                elts = [e for pair in zip(display.keys, display.values) for e in pair]
+                listed = ast.copy_location(ast.List(elts=elts, ctx=ast.Load()), display)
+                setattr(listed, TYPED_FLAG, True)
+                _parent(display).value = listed
+            for subscript in sites:
+                if isinstance(subscript.ctx, ast.Load):
+                    setattr(subscript, DICT_FLAG, True)
+                    continue
+                holder = _parent(subscript)
+                call = ast.Call(func=ast.Name(id=DICT_SET, ctx=ast.Load()),
+                                args=[subscript.value, holder.value, subscript.slice],
+                                keywords=[])
+                setattr(call, DICT_FLAG, True)
+                _replace_statement(holder, ast.copy_location(ast.Expr(value=call), holder))
+
     def builder_sites(self):
         """(typed, poison reason) for each nondet_list builder site."""
         return [(self.classes.typed(loc), self.classes.poison.get(self.classes.find(loc)))
                 for _, value, loc in self.allocations if isinstance(value, ast.Call)]
+
+
+def _replace_statement(old, new):
+    parent = _parent(old)
+    for _, field in ast.iter_fields(parent):
+        if isinstance(field, list) and old in field:
+            field[field.index(old)] = new
+            return
 
 
 def _literal_bool(value):
