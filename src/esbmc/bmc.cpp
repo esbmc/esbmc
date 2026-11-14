@@ -307,6 +307,19 @@ void bmct::successful_trace(const symex_target_equationt &eq [[maybe_unused]])
   }
 }
 
+// Whether \p step is a loop-invariant havoc that \p smt_conv's model executes.
+// The combined schema (--validate-correctness-witness, --loop-invariant) runs
+// its havoc on a side branch, so a claim later in the linear SSA can still be
+// violated on a path that never ran it. Without a model to read, count the
+// havoc.
+static bool runs_invariant_havoc(
+  smt_convt &smt_conv,
+  const symex_target_equationt::SSA_stept &step)
+{
+  return step.is_assignment() && step.source.pc->loop_invariant_havoc &&
+         (!smt_conv.has_model() || !smt_conv.l_get(step.guard).is_false());
+}
+
 // Obligations the schema discharges from the havoc'd state on purpose: does
 // the body preserve the invariant, does it respect the assigns clause. Both
 // are statements about the annotation rather than about a reachable state, so
@@ -331,12 +344,13 @@ static bool is_loop_invariant_obligation(const locationt &location)
 }
 
 // Attached to a claim downgraded from Failed to Unknown because the only trace
-// violating it runs through a --loop-invariant-check havoc (issue #7480).
+// violating it runs through a loop-invariant havoc (issue #7480).
 static const char *const weak_invariant_note =
   "loop invariant too weak to prove this claim: the counterexample is against "
   "the havoc abstraction, not a reachable state of the program";
 
 void bmct::record_satisfiable_claim(
+  smt_convt &smt_conv,
   const claim_slicer &claim,
   const property_locationt &loc,
   bool inductive_step,
@@ -365,8 +379,20 @@ void bmct::record_satisfiable_claim(
 
   // A claim downstream of the havoc is unknowable only while the abstraction
   // admits it holding (issue #7585).
+  bool after_invariant_havoc = false;
+  for (const auto &step : local_eq.SSA_steps)
+  {
+    if (step.is_assert() && !step.ignore)
+      break;
+    if (runs_invariant_havoc(smt_conv, step))
+    {
+      after_invariant_havoc = true;
+      break;
+    }
+  }
+
   if (
-    claim.claim_after_invariant_havoc &&
+    after_invariant_havoc &&
     !is_loop_invariant_obligation(claim.claim_location) &&
     check_claim_unsatisfiable(local_eq) != P_UNSATISFIABLE)
   {
@@ -392,14 +418,15 @@ void bmct::record_violated_properties(
   if (!smt_conv.has_model())
     return;
 
-  // Symex emits a linear trace, so once the loop-invariant schema's havoc has
-  // run every later claim on it is checked against the abstract state.
+  // Symex emits a linear trace, so once the model has run the loop-invariant
+  // schema's havoc every later claim on it is checked against the abstract
+  // state.
   bool seen_invariant_havoc = false;
   size_t claim_index = 0;
 
   for (const auto &step : eq.SSA_steps)
   {
-    if (step.is_assignment() && step.source.pc->loop_invariant_havoc)
+    if (runs_invariant_havoc(smt_conv, step))
       seen_invariant_havoc = true;
 
     if (!step.is_assert() || step.ignore)
@@ -426,6 +453,47 @@ void bmct::record_violated_properties(
       property_location(*step.source.pc, description),
       weak_invariant ? weak_invariant_note : "");
   }
+}
+
+void bmct::solve_past_the_abstraction(
+  smt_resultt result,
+  symex_target_equationt &eq)
+{
+  // Inductive-step and forward-condition models witness no violation, and a
+  // --smt-during-symex solver cannot be replaced by a fresh one.
+  if (
+    result != P_SATISFIABLE || options.get_bool_option("inductive-step") ||
+    options.get_bool_option("forward-condition") ||
+    options.get_bool_option("smt-during-symex"))
+    return;
+
+  std::vector<symex_target_equationt::SSA_stept *> set_aside;
+  while (runtime_solver->has_model())
+  {
+    record_violated_properties(*runtime_solver, eq);
+    if (!violates_only_the_abstraction())
+      break;
+
+    const size_t before = set_aside.size();
+    for (auto &step : eq.SSA_steps)
+      if (
+        step.is_assert() && !step.ignore &&
+        !runtime_solver->l_get(step.cond_expr).is_true())
+      {
+        step.ignore = true;
+        set_aside.push_back(&step);
+      }
+    if (set_aside.size() == before)
+      break;
+
+    std::unique_ptr<smt_convt> next(create_solver("", ns, options));
+    if (run_decision_procedure(*next, eq) != P_SATISFIABLE)
+      break;
+    runtime_solver = std::move(next);
+  }
+
+  for (auto *step : set_aside)
+    step->ignore = false;
 }
 
 void bmct::error_trace(smt_convt &smt_conv, const symex_target_equationt &eq)
@@ -2720,6 +2788,7 @@ smt_resultt bmct::run_thread(std::shared_ptr<symex_target_equationt> &eq)
         solver_result.bounded_loop_truncations);
 
     smt_resultt result = run_decision_procedure(*runtime_solver, *eq);
+    solve_past_the_abstraction(result, *eq);
 
     // Per-claim vacuity probe in single-property mode: a whole-equation
     // reachability check would silently miss a vacuous claim whenever some
@@ -3578,7 +3647,7 @@ smt_resultt bmct::multi_property_check(
                        "invariant, requires clause, or upstream assume"
                      : "");
       else if (solver_result == P_SATISFIABLE)
-        record_satisfiable_claim(claim, claim_ploc, is, local_eq);
+        record_satisfiable_claim(*solver_ptr, claim, claim_ploc, is, local_eq);
       else
       {
         // No answer at all. A coverage run suppresses the verdict that would

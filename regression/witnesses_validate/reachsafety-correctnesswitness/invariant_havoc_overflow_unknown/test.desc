@@ -1,0 +1,5 @@
+CORE
+main.c
+--overflow-check --k-induction --validate-correctness-witness --witness witness.yml
+^VERIFICATION UNKNOWN$
+^  UNKNOWN .*arithmetic overflow on add \(loop invariant too weak

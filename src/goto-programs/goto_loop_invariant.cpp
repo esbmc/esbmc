@@ -1075,6 +1075,7 @@ void goto_loop_invariant_combinedt::insert_invariant_verification_branch(
     t->code = code_assign2tc(var, gen_nondet(var->type));
     t->location = loop_head->location;
     t->location.comment("loop invariant havoc (verification branch)");
+    t->loop_invariant_havoc = true;
   }
 
   // [4c] ASSUME(INV)  — constrain the havoc'd state
