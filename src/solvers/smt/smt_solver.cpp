@@ -1662,7 +1662,11 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
   }
   case expr2t::bitnot_id:
   {
-    a = mk_bvnot(args[0]);
+    // Over unbounded integers ~x is exactly -x - 1.
+    if (int_encoding)
+      a = mk_sub(mk_neg(args[0]), mk_smt_int(BigInt(1)));
+    else
+      a = mk_bvnot(args[0]);
     break;
   }
   case expr2t::not_id:
