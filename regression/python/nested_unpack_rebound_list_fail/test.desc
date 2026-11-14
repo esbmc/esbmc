@@ -1,0 +1,5 @@
+CORE
+main.py
+
+^  assertion a == 1$
+^VERIFICATION FAILED$
