@@ -5243,12 +5243,59 @@ void collect_read_names(
     if (child.is_structured() && !(key == "func" && node.is_object()))
       collect_read_names(child, names);
 }
+
+void collect_plain_bindings(
+  const nlohmann::json &node,
+  const std::string &name,
+  std::vector<const nlohmann::json *> &values)
+{
+  if (const auto *value = json_utils::plain_assigned_value(node, name))
+    values.push_back(value);
+  if (node.is_structured())
+    for (const auto &child : node)
+      if (child.is_structured())
+        collect_plain_bindings(child, name, values);
+}
+
+bool has_uniform_tuple_bindings(
+  const nlohmann::json &module,
+  const std::string &name,
+  size_t bindings)
+{
+  std::vector<const nlohmann::json *> values;
+  collect_plain_bindings(module, name, values);
+  if (values.size() != bindings)
+    return false;
+
+  // Every binding must produce tuples with the same runtime representation.
+  std::optional<size_t> arity;
+  for (const auto *value : values)
+  {
+    if (value->value("_type", "") != "List" || (*value)["elts"].empty())
+      return false;
+    for (const auto &tuple : (*value)["elts"])
+    {
+      if (tuple.value("_type", "") != "Tuple")
+        return false;
+      const auto &members = tuple["elts"];
+      if (!arity)
+        arity = members.size();
+      if (
+        members.size() != *arity ||
+        !std::all_of(members.begin(), members.end(), [](const auto &member) {
+          return member.value("_type", "") == "Constant" &&
+                 member["value"].is_number_integer();
+        }))
+        return false;
+    }
+  }
+  return true;
+}
 } // namespace
 
 // The registry records types flow-insensitively, and a store through an alias
 // does not update it. Trust it only for lists the right-hand side builds
-// itself or reads from a variable bound once, to a plain literal, and named
-// nowhere else, so no branch, loop or alias can have changed its elements.
+// itself or reads from a variable named only at its bindings and this use.
 bool python_converter::unpack_record_is_trusted(
   const nlohmann::json &value) const
 {
@@ -5258,10 +5305,16 @@ bool python_converter::unpack_record_is_trusted(
   {
     const nlohmann::json decl =
       json_utils::find_var_decl(name, current_function_name(), ast());
+    const size_t bindings = json_utils::count_name_bindings(ast(), name);
+    if (json_utils::count_name_nodes(ast(), name) != bindings + 1)
+      return false;
     if (
-      json_utils::count_name_bindings(ast(), name) != 1 ||
-      json_utils::count_name_nodes(ast(), name) != 2 ||
-      !decl.contains("value") || !is_plain_literal(decl["value"]))
+      bindings > 1 && value.value("_type", "") == "Name" &&
+      has_uniform_tuple_bindings(ast(), name, bindings))
+      continue;
+    if (
+      bindings != 1 || !decl.contains("value") ||
+      !is_plain_literal(decl["value"]))
       return false;
   }
   return true;
