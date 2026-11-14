@@ -9377,6 +9377,10 @@ exprt numpy_call_expr::bind_once(const exprt &value)
   code_declt decl(symbol);
   decl.location() = converter_.get_location_from_decl(call_);
   converter_.add_instruction(decl);
+  // The type probe of an assignment converts its value again for real; only
+  // the type is wanted here, so a call it binds must not run twice.
+  if (converter_.in_type_probe())
+    return symbol;
   if (value.id() == "code" && value.get("statement") == "function_call")
   {
     code_function_callt call = to_code_function_call(to_code(value));
