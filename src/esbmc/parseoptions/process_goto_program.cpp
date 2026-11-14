@@ -521,10 +521,14 @@ bool esbmc_parseoptionst::process_goto_program(
       apply_gcse(goto_functions, context, cmdline);
 
     // Under --termination, goto_termination does its own havoc, so
-    // goto_k_induction must not also run (#6031).
+    // goto_k_induction must not also run (#6031). Witness validation forces
+    // the k-induction option, so under --incremental-bmc the strategy runs
+    // an inductive step that needs the havoc too (#10640).
     bool is_k_induction =
       (cmdline.isset("inductive-step") || cmdline.isset("k-induction") ||
-       cmdline.isset("k-induction-parallel") || ts_strategy_requested()) &&
+       cmdline.isset("k-induction-parallel") || ts_strategy_requested() ||
+       (cmdline.isset("validate-correctness-witness") &&
+        options.get_bool_option("incremental-bmc"))) &&
       !options.get_bool_option("termination");
 
     // --termination reuses k-induction's havoc machinery via
