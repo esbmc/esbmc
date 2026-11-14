@@ -2836,6 +2836,22 @@ exprt python_converter::handle_dict_bitwise(
   throw std::runtime_error("bitwise operations on dict are not supported");
 }
 
+// Only a value that can come from sources of different known kinds can be
+// anything but the int an erased operand is cast to. value_kinds follows the
+// calls of module-level defs only, so in a method it knows nothing of the
+// arguments a name such as a parameter was given (#10625).
+static bool erased_operand_may_be_non_int(
+  const nlohmann::json &ast,
+  const nlohmann::json &node,
+  const std::string &function,
+  bool in_class)
+{
+  if (in_class && node.value("_type", "") == "Name")
+    return true;
+  value_kinds kinds(ast);
+  return kinds.may_be_non_int(node, kinds.scope_of(function));
+}
+
 exprt python_converter::checked_erased_int(
   exprt operand,
   const nlohmann::json &node,
@@ -2843,10 +2859,8 @@ exprt python_converter::checked_erased_int(
 {
   if (operand.type().subtype().id() != "empty" || !current_block)
     return operand;
-  // Only a value that can come from sources of different known kinds can be
-  // anything but the int the cast below assumes.
-  value_kinds kinds(*ast_json);
-  if (!kinds.may_be_non_int(node, kinds.scope_of(current_func_name_)))
+  if (!erased_operand_may_be_non_int(
+        *ast_json, node, current_func_name_, !current_class_name_.empty()))
     return operand;
 
   const locationt location = get_location_from_decl(element);
