@@ -128,10 +128,10 @@ void pre_register_addresses(
 
 /// PathReachable asks only whether the path is feasible, ignoring the claim:
 /// UNSAT over the kept claims means every discharge was vacuous. Satisfiable
-/// asks whether the claim can hold, in the same shape the violation query
-/// uses, so that negating the implication forces its antecedents -- conjoining
-/// `cond` instead would be satisfied by leaving the path untaken, which makes
-/// every claim look satisfiable (issue #7585).
+/// asks whether the violation can be avoided, in the same shape the violation
+/// query uses, so that negating the implication forces the execution guard --
+/// conjoining `cond` instead would be satisfied by falsifying that free symbol,
+/// which makes every claim look avoidable (issues #7585, #10642).
 void encode_assertion(
   equation_conversion_statet &state,
   symex_target_equationt::SSA_stept &step,
