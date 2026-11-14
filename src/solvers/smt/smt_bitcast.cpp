@@ -278,10 +278,23 @@ void smt_solver_baset::record_flattened_pointer(
     flatten_count++};
   step_flattens.insert(flat.id);
 
-  for (const ptr_flatten_entry &prev : ptr_flatten_history)
-    assert_ast(mk_implies(
-      mk_and(mk_and(flat.guard, prev.guard), mk_eq(address, prev.address)),
-      pointer->eq(this, prev.pointer)));
+  /* Flattens at one address under live guards are one pointer. Each names
+   * its pointer as a function of the address, so the solver relates pairs on
+   * demand: pairwise implications here were quadratic (#9785). */
+  const size_t members =
+    struct_union_members(pointer->sort->get_tuple_type()).size();
+  ast_vec same;
+  for (size_t m = 0; m < members; m++)
+  {
+    smt_astt member = pointer->project(this, m);
+    same.push_back(member->eq(
+      this,
+      mk_smt_uninterpreted_function(
+        "__ESBMC_flattened_pointer_" + std::to_string(m),
+        {address},
+        member->sort)));
+  }
+  assert_ast(mk_implies(flat.guard, make_n_ary_and(same)));
 
   ptr_flatten_history.push_back(flat);
 }
