@@ -119,11 +119,17 @@ def _inside(node, parents, kinds):
     return False
 
 
-def _functions(module):
-    """The names bound once in `module`, by a function it defines at the top."""
+def _binding_counts(module):
     bound = Counter(n.id for n in ast.walk(module)
                     if isinstance(n, ast.Name) and not isinstance(n.ctx, ast.Load))
-    bound.update(n.name for n in ast.walk(module) if isinstance(n, (ast.FunctionDef, ast.ClassDef)))
+    bound.update(n.name for n in ast.walk(module)
+                 if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)))
+    return bound
+
+
+def _functions(module):
+    """The names bound once in `module`, by a function it defines at the top."""
+    bound = _binding_counts(module)
     return {s.name for s in module.body if isinstance(s, ast.FunctionDef) and bound[s.name] == 1}
 
 
@@ -161,14 +167,40 @@ def _declared_return(method, analysis):
     return ast.Name(id=kind, ctx=ast.Load()) if kind in _KNOWN_RETURNS else None
 
 
+def _method_read(node, receivers):
+    return (isinstance(node, ast.Attribute) and isinstance(node.ctx, ast.Load)
+            and isinstance(node.value, ast.Name)
+            and node.attr in receivers.get(node.value.id, (0, ()))[1])
+
+
+def _reads_name(scope, name):
+    return any(
+        isinstance(n, ast.Name) and n.id == name and isinstance(n.ctx, ast.Load)
+        for n in ast.walk(scope))
+
+
+def _read_above(module, receivers):
+    """The `o.m` of each top-level `a = o.m`, `a` bound nowhere else, that a
+    def or class above it reads `a` in. The per-binding rewrite of `a(...)`
+    reaches only the calls below the binding (#10635)."""
+    bound = _binding_counts(module)
+    scopes = (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)
+    return [
+        stmt.value for index, stmt in enumerate(module.body) if isinstance(stmt, ast.Assign)
+        and len(stmt.targets) == 1 and isinstance(stmt.targets[0], ast.Name)
+        and _method_read(stmt.value, receivers) and bound[stmt.targets[0].id] == 1 and any(
+            isinstance(s, scopes) and _reads_name(s, stmt.targets[0].id)
+            for s in module.body[:index])
+    ]
+
+
 def _read_sites(module, receivers):
     parents = _parents(module)
     functions = _functions(module)
     return [
-        n for n in ast.walk(module) if isinstance(n, ast.Attribute) and isinstance(n.ctx, ast.Load)
-        and isinstance(n.value, ast.Name) and n.attr in receivers.get(n.value.id, (
-            0, ()))[1] and _passed_on(n, parents, functions)
-    ]
+        n for n in ast.walk(module)
+        if _method_read(n, receivers) and _passed_on(n, parents, functions)
+    ] + _read_above(module, receivers)
 
 
 class _Reads(ast.NodeTransformer):

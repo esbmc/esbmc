@@ -1120,6 +1120,23 @@ own_parameters_named(const nlohmann::json &args, const std::string &name)
   return n;
 }
 
+/// The variable a call `name(...)` reads its callee from, `name` being
+/// \p func. A function body is converted before the module binds a global it
+/// calls through (#10635).
+symbolt *python_converter::find_callee_variable(const nlohmann::json &func)
+{
+  symbol_id sid = create_symbol_id();
+  sid.set_object(func["id"].get<std::string>());
+  if (symbolt *symbol = find_symbol(sid.to_string()))
+    return symbol;
+  if (current_func_name_.empty())
+    return nullptr;
+  symbolt *symbol = find_global_symbol(sid);
+  if (symbol)
+    guard_unbound_global(symbol->id.as_string(), sid.get_object(), func);
+  return symbol;
+}
+
 /// The lambda @p name is bound to in @p body: `name = lambda ...`, or
 /// `name = make()` where `make` returns a lambda reading only its parameters.
 static nlohmann::json lambda_bound_to(
@@ -2164,12 +2181,8 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
   // Handle indirect calls through function pointer variables
   if (element["func"]["_type"] == "Name")
   {
-    std::string func_name = element["func"]["id"].get<std::string>();
-
     // Try to find as a variable first
-    symbol_id var_sid = create_symbol_id();
-    var_sid.set_object(func_name);
-    symbolt *var_symbol = find_symbol(var_sid.to_string());
+    symbolt *var_symbol = find_callee_variable(element["func"]);
 
     if (var_symbol && var_symbol->get_type().is_pointer())
     {
