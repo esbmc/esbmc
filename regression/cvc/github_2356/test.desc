@@ -1,0 +1,5 @@
+CORE
+main.c
+--cvc5 --ir
+^  x = -5$
+^VERIFICATION FAILED$
