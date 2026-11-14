@@ -70,6 +70,19 @@ static bool get_constant_int(const exprt &expr, long long &out)
   return true;
 }
 
+// A symbolic width must not produce an arbitrary string: that could turn a
+// correct assertion into a spurious counterexample (or hide a real failure).
+// Until symbolic padding is modelled, reject it rather than guess a result.
+static long long
+require_constant_padding_width(const exprt &width_arg, const char *method)
+{
+  long long width = 0;
+  if (!get_constant_int(width_arg, width))
+    throw std::runtime_error(
+      std::string(method) + "() width must be a constant integer");
+  return width;
+}
+
 // Extract the constant byte values of a bytes receiver (literal or a variable
 // resolved to its literal). Bytes are modelled as a non-char int array, which
 // distinguishes them from a str (char array). Returns false for a non-constant
@@ -3743,12 +3756,7 @@ exprt string_handler::handle_string_center(
   if (!string_builder_)
     throw std::runtime_error("string_builder not set for center()");
 
-  long long width = 0;
-  if (!get_constant_int(width_arg, width))
-  {
-    log_debug("python-string", "center() on non-constant width: nondet string");
-    return build_nondet_string_fallback(location);
-  }
+  const long long width = require_constant_padding_width(width_arg, "center");
 
   char fill = ' ';
   if (!fill_arg.is_nil())
@@ -3797,12 +3805,7 @@ exprt string_handler::handle_string_ljust(
   if (!string_builder_)
     throw std::runtime_error("string_builder not set for ljust()");
 
-  long long width = 0;
-  if (!get_constant_int(width_arg, width))
-  {
-    log_debug("python-string", "ljust() on non-constant width: nondet string");
-    return build_nondet_string_fallback(location);
-  }
+  const long long width = require_constant_padding_width(width_arg, "ljust");
 
   char fill = ' ';
   if (!fill_arg.is_nil())
@@ -3843,12 +3846,7 @@ exprt string_handler::handle_string_rjust(
   if (!string_builder_)
     throw std::runtime_error("string_builder not set for rjust()");
 
-  long long width = 0;
-  if (!get_constant_int(width_arg, width))
-  {
-    log_debug("python-string", "rjust() on non-constant width: nondet string");
-    return build_nondet_string_fallback(location);
-  }
+  const long long width = require_constant_padding_width(width_arg, "rjust");
 
   char fill = ' ';
   if (!fill_arg.is_nil())
@@ -3888,12 +3886,7 @@ exprt string_handler::handle_string_zfill(
   if (!string_builder_)
     throw std::runtime_error("string_builder not set for zfill()");
 
-  long long width = 0;
-  if (!get_constant_int(width_arg, width))
-  {
-    log_debug("python-string", "zfill() on non-constant width: nondet string");
-    return build_nondet_string_fallback(location);
-  }
+  const long long width = require_constant_padding_width(width_arg, "zfill");
 
   if (width <= static_cast<long long>(input.size()))
     return string_builder_->build_string_literal(input);

@@ -1,0 +1,4 @@
+regression/python/github_10495_symbolic_ljust
+regression/python/github_10495_symbolic_rjust
+regression/python/github_10495_symbolic_center
+regression/python/github_10495_symbolic_zfill

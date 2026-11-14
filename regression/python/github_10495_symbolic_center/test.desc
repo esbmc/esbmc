@@ -1,0 +1,4 @@
+CORE
+main.py
+
+^ERROR: center\(\) width must be a constant integer$
