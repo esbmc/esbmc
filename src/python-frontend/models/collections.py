@@ -82,6 +82,39 @@ class Counter:
             self.count = self.count + 1
         self.data[key] = value
 
+    # The frontend is monomorphic, so a str or int key gets its own copy of
+    # __getitem__ / __setitem__; python_converter::keyed_dunder_name picks it
+    # from the key's type at the subscript (#10501).
+    def __getitem_str__(self, key: str) -> int:
+        """``__getitem__`` for a str key."""
+        try:
+            return self.data[key]
+        except KeyError:
+            return 0
+
+    def __setitem_str__(self, key: str, value: int) -> None:
+        """``__setitem__`` for a str key."""
+        try:
+            self.data[key]
+        except KeyError:
+            self.count = self.count + 1
+        self.data[key] = value
+
+    def __getitem_int__(self, key: int) -> int:
+        """``__getitem__`` for an int key."""
+        try:
+            return self.data[key]
+        except KeyError:
+            return 0
+
+    def __setitem_int__(self, key: int, value: int) -> None:
+        """``__setitem__`` for an int key."""
+        try:
+            self.data[key]
+        except KeyError:
+            self.count = self.count + 1
+        self.data[key] = value
+
     def values(self) -> list[int]:
         """Return all recorded counts."""
         return self.data.values()
