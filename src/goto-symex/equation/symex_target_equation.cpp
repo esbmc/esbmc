@@ -31,7 +31,38 @@ struct equation_conversion_statet
   // Subterms already searched by register_sliced_addresses: steps share
   // them, so a per-step set would make the walk quadratic (#9150).
   std::unordered_set<const expr2t *> sliced_seen;
+  // Whether a kept step casts an integer to a pointer. Without one, objects
+  // registered for sliced steps only add layout constraints.
+  bool has_int_to_pointer_cast = false;
 };
+
+/// Whether @p root casts an integer other than a null pointer constant to a
+/// pointer. Subterms in @p seen are skipped and added to it.
+bool casts_int_to_pointer(
+  const expr2tc &root,
+  std::unordered_set<const expr2t *> &seen)
+{
+  bool found = false;
+  std::function<void(const expr2tc &)> walk = [&](const expr2tc &e) {
+    if (!e || found || !seen.insert(e.get()).second)
+      return;
+    if (is_typecast2t(e) && is_pointer_type(e->type))
+    {
+      const expr2tc &from = to_typecast2t(e).from;
+      found = !is_pointer_type(from->type) &&
+              !(is_constant_int2t(from) && to_constant_int2t(from).value == 0);
+    }
+    e->foreach_operand([&](const expr2tc &op) { walk(op); });
+  };
+  walk(root);
+  return found;
+}
+
+bool casts_int_to_pointer(const expr2tc &root)
+{
+  std::unordered_set<const expr2t *> seen;
+  return casts_int_to_pointer(root, seen);
+}
 
 /// The object at the root of the index/member chain @p obj selects from.
 expr2tc address_base(expr2tc obj)
@@ -202,7 +233,8 @@ void convert_internal_step(
 {
   if (step.ignore)
   {
-    register_sliced_addresses(ns, smt_conv, state.sliced_seen, step);
+    if (state.has_int_to_pointer_cast)
+      register_sliced_addresses(ns, smt_conv, state.sliced_seen, step);
     step.cond_expr = gen_true_expr();
     return;
   }
@@ -446,6 +478,15 @@ void symex_target_equationt::convert(smt_convt &smt_conv, assertion_modet mode)
 
   equation_conversion_statet state;
   state.assumpt_expr = gen_true_expr();
+  {
+    std::unordered_set<const expr2t *> cast_seen;
+    state.has_int_to_pointer_cast = std::any_of(
+      SSA_steps.begin(), SSA_steps.end(), [&](const SSA_stept &step) {
+        return !step.ignore && (casts_int_to_pointer(step.guard, cast_seen) ||
+                                casts_int_to_pointer(step.cond, cast_seen) ||
+                                casts_int_to_pointer(step.rhs, cast_seen));
+      });
+  }
 
   for (auto &SSA_step : SSA_steps)
     convert_internal_step(
@@ -667,27 +708,6 @@ runtime_encoded_equationt::runtime_encoded_equationt(
 }
 
 runtime_encoded_equationt::~runtime_encoded_equationt() = default;
-
-/// Whether @p root casts an integer other than a null pointer constant to a
-/// pointer.
-static bool casts_int_to_pointer(const expr2tc &root)
-{
-  bool found = false;
-  std::unordered_set<const expr2t *> seen;
-  std::function<void(const expr2tc &)> walk = [&](const expr2tc &e) {
-    if (!e || found || !seen.insert(e.get()).second)
-      return;
-    if (is_typecast2t(e) && is_pointer_type(e->type))
-    {
-      const expr2tc &from = to_typecast2t(e).from;
-      found = !is_pointer_type(from->type) &&
-              !(is_constant_int2t(from) && to_constant_int2t(from).value == 0);
-    }
-    e->foreach_operand([&](const expr2tc &op) { walk(op); });
-  };
-  walk(root);
-  return found;
-}
 
 /// Steps are converted as symex makes them, so a cast converted before a
 /// static object's address first appears would miss that object (#9273):
