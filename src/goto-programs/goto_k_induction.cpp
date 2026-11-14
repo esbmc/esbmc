@@ -100,6 +100,15 @@ bool get_entry_cond_rec(
         return true;
     */
 
+    // A guard read after a write is not a condition on the state at the head,
+    // where the inductive step assumes it: `x++; if (x != 5) break;` must not
+    // become x == 5 at the head.
+    if (
+      !tmp_head->is_goto() && !tmp_head->is_skip() &&
+      !tmp_head->is_location() && tmp_head->type != DEAD &&
+      !tmp_head->is_assert() && !tmp_head->is_assume())
+      return false;
+
     if (tmp_head->is_goto() && !tmp_head->is_backwards_goto())
     {
       expr2tc g = tmp_head->guard;
