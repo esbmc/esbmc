@@ -1,5 +1,5 @@
 CORE
 main.c
---no-standard-checks
+--no-standard-checks --no-summarize-array-loops
 ^WARNING: constant propagation gave up on a `with` chain past 1024 symbolic updates
 ^VERIFICATION SUCCESSFUL$

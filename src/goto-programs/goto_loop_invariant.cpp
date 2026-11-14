@@ -939,7 +939,26 @@ void goto_loop_invariant_combinedt::process_loops_combined()
     insert_invariant_verification_branch(loop);
 }
 
+/// Constrain the copied iteration to one another would follow. A do-while's
+/// exit test lives on its back edge, so the copy may be the last iteration, and
+/// a head invariant need not hold where the loop exits: `x <= 4` on
+/// `do x++; while (x < 5)` holds at every head and is false once the exiting
+/// iteration leaves x == 5. No-op for the unconditional back edge of a while or
+/// for loop (issue #7494).
+static void
+assume_continue_cond(goto_programt::targett loop_exit, goto_programt &out)
+{
+  if (!loop_exit->is_goto() || is_true(loop_exit->guard))
+    return;
+
+  auto t = out.add_instruction(ASSUME);
+  t->guard = loop_exit->guard;
+  t->location = loop_exit->location;
+  t->location.comment("loop continue condition (verification branch)");
+}
+
 void goto_loop_invariant_combinedt::copy_loop_body(
+  goto_programt::targett loop_head,
   goto_programt::targett body_begin,
   goto_programt::targett loop_exit,
   goto_programt &out) const
@@ -962,12 +981,27 @@ void goto_loop_invariant_combinedt::copy_loop_body(
     target_vector.push_back(copied_t);
   }
 
-  // A jump to the back edge ends the iteration. Left on the original it would
-  // leave the copy for the real loop and skip the checks that follow the copy.
+  // Falling off the body or jumping to the back edge takes the back edge, and
+  // a jump to the head starts the next iteration without the back edge's test.
+  // Left on the original, either would leave the copy for the real loop and
+  // skip the checks that follow it. A jump out of the loop ends the branch: an
+  // iteration that exits need not keep the invariant, and the havoced state
+  // must not reach the code after the loop.
+  goto_programt::targett skip_leave = out.add_instruction(GOTO);
+  skip_leave->location = loop_exit->location;
+  goto_programt::targett leave = out.add_instruction(ASSUME);
+  leave->guard = gen_false_expr();
+  leave->location = loop_exit->location;
+  leave->location.comment("loop exit (verification branch)");
+  goto_programt::targett back_edge = out.add_instruction(SKIP);
+  back_edge->location = loop_exit->location;
+  skip_leave->targets.push_back(back_edge);
+  assume_continue_cond(loop_exit, out);
   goto_programt::targett end = out.add_instruction(SKIP);
   end->location = loop_exit->location;
 
   // rewrite targets using index-based mapping
+  bool exits = false;
   for (unsigned i = 0; i < target_vector.size(); i++)
   {
     goto_programt::targett t = target_vector[i];
@@ -975,11 +1009,23 @@ void goto_loop_invariant_combinedt::copy_loop_body(
     {
       std::map<goto_programt::targett, unsigned>::const_iterator m_it =
         target_map.find(target);
-      if (m_it != target_map.end()) // intra-loop?
+      if (target == loop_head)
+        target = end;
+      else if (m_it != target_map.end()) // intra-loop?
         target = target_vector[m_it->second];
       else if (target == loop_exit)
-        target = end;
+        target = back_edge;
+      else
+      {
+        target = leave;
+        exits = true;
+      }
     }
+  }
+  if (!exits)
+  {
+    out.instructions.erase(skip_leave);
+    out.instructions.erase(leave);
   }
 }
 
@@ -1001,24 +1047,6 @@ static goto_programt::targett
 loop_body_begin(goto_programt::targett loop_head, const expr2tc &entry_cond)
 {
   return is_nil_expr(entry_cond) ? loop_head : std::next(loop_head);
-}
-
-/// Constrain the copied iteration to one another would follow. A do-while's
-/// exit test lives on its back edge, so the copy may be the last iteration, and
-/// a head invariant need not hold where the loop exits: `x <= 4` on
-/// `do x++; while (x < 5)` holds at every head and is false once the exiting
-/// iteration leaves x == 5. No-op for the unconditional back edge of a while or
-/// for loop (issue #7494).
-static void
-assume_continue_cond(goto_programt::targett loop_exit, goto_programt &out)
-{
-  if (!loop_exit->is_goto() || is_true(loop_exit->guard))
-    return;
-
-  auto t = out.add_instruction(ASSUME);
-  t->guard = loop_exit->guard;
-  t->location = loop_exit->location;
-  t->location.comment("loop continue condition (verification branch)");
 }
 
 void goto_loop_invariant_combinedt::insert_invariant_verification_branch(
@@ -1045,7 +1073,8 @@ void goto_loop_invariant_combinedt::insert_invariant_verification_branch(
   const expr2tc entry_cond = loop_entry_cond(loop_head);
 
   goto_programt body_copy;
-  copy_loop_body(loop_body_begin(loop_head, entry_cond), loop_exit, body_copy);
+  copy_loop_body(
+    loop_head, loop_body_begin(loop_head, entry_cond), loop_exit, body_copy);
 
   // ── 4. Build Branch 1 ─────────────────────────────────────────────────────
   const auto &loop_vars = loop.get_modified_loop_vars();
@@ -1099,11 +1128,6 @@ void goto_loop_invariant_combinedt::insert_invariant_verification_branch(
 
   // [4e] One iteration of the loop body
   branch1.destructive_insert(branch1.instructions.end(), body_copy);
-
-  // [4e'] Only an iteration another would follow has to preserve the invariant.
-  // PR #3777 describes this for the copied body; it never bit because a
-  // do-while's body was not copied at all (issue #7494).
-  assume_continue_cond(loop_exit, branch1);
 
   // [4f] Inductive-step ASSERT(INV)
   for (const auto &instr : side_effects.instructions)

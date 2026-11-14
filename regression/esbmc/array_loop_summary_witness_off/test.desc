@@ -1,0 +1,6 @@
+CORE
+main.c
+--witness-output-yaml - --no-summarize-array-loops --unwind 101 --no-unwinding-assertions
+^VERIFICATION FAILED$
+type: "branching"
+type: "function_return"

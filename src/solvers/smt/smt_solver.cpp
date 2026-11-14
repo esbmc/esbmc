@@ -469,6 +469,7 @@ static bool walks_operands(const expr2tc &expr)
   case expr2t::pointer_offset_id:
   case expr2t::pointer_object_id:
   case expr2t::pointer_capability_id:
+  case expr2t::array_lambda_id:
     return false;
   default:
     return true;
@@ -675,6 +676,7 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
   case expr2t::pointer_offset_id:
   case expr2t::pointer_object_id:
   case expr2t::pointer_capability_id:
+  case expr2t::array_lambda_id:
     break; // Don't convert their operands
 
   default:
@@ -1799,6 +1801,38 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
 
     a = mk_quantifier(
       is_forall2t(expr), {convert_ast(bound_symbol)}, convert_ast(expanded));
+    break;
+  }
+  case expr2t::array_lambda_id:
+  {
+    // Reads reduce in the simplifier; only a use of the whole array gets
+    // here. Name it and define every element with a quantifier.
+    const array_lambda2t &lambda = to_array_lambda2t(expr);
+    // Spelling out the elements instead measured slower on TRUE tasks
+    // (k-induction re-encodes them every step), as slow as unwinding.
+    const expr2tc array = symbol2tc(
+      expr->type, fmt::format("__ESBMC_array_lambda_{}", quantifier_counter));
+    const expr2tc bound = symbol2tc(
+      lambda.binder->type,
+      fmt::format("__ESBMC_quantifier_{}", quantifier_counter++));
+    expr2tc body = lambda.body->clone();
+    replace_name_in_body(lambda.binder, bound, body);
+    const array_type2t &arr_type = to_array_type(expr->type);
+    const expr2tc element = index2tc(arr_type.subtype, array, bound);
+    expr2tc definition = equality2tc(element, body);
+    // The solver narrows the index to the bits the size needs, so indices
+    // past the end alias real elements: define only those inside it.
+    if (!arr_type.size_is_infinite && !is_nil_expr(arr_type.array_size))
+    {
+      const expr2tc zero = gen_zero(bound->type);
+      const expr2tc size = typecast2tc(bound->type, arr_type.array_size);
+      definition = implies2tc(
+        and2tc(lessthanequal2tc(zero, bound), lessthan2tc(bound, size)),
+        definition);
+    }
+    assert_ast(
+      mk_quantifier(true, {convert_ast(bound)}, convert_ast(definition)));
+    a = convert_ast(array);
     break;
   }
   case expr2t::uninterpreted_func_id:

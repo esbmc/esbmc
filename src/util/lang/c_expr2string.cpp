@@ -2693,6 +2693,9 @@ std::string c_expr2stringt::convert(const exprt &src, unsigned &precedence)
   else if (src.id() == "exists")
     return convert_quantifier(src, "EXISTS", precedence = 2);
 
+  else if (src.id() == "array_lambda")
+    return convert_quantifier(src, "LAMBDA", precedence = 2);
+
   else if (src.id() == "with")
     return convert_with(src, precedence = 2);
 

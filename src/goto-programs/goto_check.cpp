@@ -1368,6 +1368,7 @@ void goto_checkt::check_rec(
 
   case expr2t::forall_id:
   case expr2t::exists_id:
+  case expr2t::array_lambda_id:
     // A quantifier binds a fresh logical variable ranging over its whole type;
     // its body is a pure predicate, not executed code. Runtime safety checks
     // (bounds, overflow, div-by-zero) over the bound variable are meaningless

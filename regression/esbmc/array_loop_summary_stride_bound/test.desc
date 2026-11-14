@@ -1,0 +1,4 @@
+CORE
+main.c
+--summarize-array-loops
+^VERIFICATION SUCCESSFUL$

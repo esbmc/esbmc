@@ -1035,8 +1035,16 @@ void interval_domaint::transform(
     break;
 
   case FUNCTION_CALL:
-    havoc_written_arguments(to_code_function_call2t(instruction.code), &ai);
+  {
+    const code_function_call2t &call =
+      to_code_function_call2t(instruction.code);
+    havoc_written_arguments(call, &ai);
+    enters_recursion =
+      std::next(from) != to &&
+      ai.reentered_locals(
+        ai.function_of(from), to_symbol2t(call.function).thename);
     break;
+  }
 
   case END_FUNCTION:
   case ATOMIC_BEGIN:
@@ -1268,6 +1276,7 @@ bool interval_domaint::join(
 
 bool interval_domaint::join(
   const interval_domaint &b,
+  const goto_programt::const_targett &from,
   const goto_programt::const_targett &to)
 {
   if (b.is_bottom() || is_top())
@@ -1290,11 +1299,18 @@ bool interval_domaint::join(
   // to expend much time on this.
   copy_if_needed();
 
-  const bool is_if_goto = to->is_goto() && !is_true(to->guard);
-  const bool is_guard = to->is_assume() || to->is_assert() || is_if_goto;
+  // Widen only where a cycle closes: a loop's back edge, or a recursive call
+  // into a function's entry. Widening at a guard inside the body, or on entry
+  // to a callee the loop calls, would throw away the bound the guard just gave.
+  const bool closes_cycle =
+    (from->is_goto() && to->location_number <= from->location_number) ||
+    b.enters_recursion;
 
   // Prevent short-circuit
-  bool result = join(*intervals, *b.intervals, is_guard);
+  bool result = join(
+    *intervals, *b.intervals, closes_cycle && cycle_changes >= fixpoint_limit);
+  if (result && closes_cycle)
+    ++cycle_changes;
   return result;
 }
 
@@ -1869,7 +1885,7 @@ void interval_domaint::set_options(const optionst &options)
     options.get_bool_option("ub-shift-check");
 
   auto fixpoint_str = options.get_option("interval-analysis-extrapolate-limit");
-  fixpoint_limit = fixpoint_str.empty() ? 5 : atoi(fixpoint_str.c_str());
+  fixpoint_limit = fixpoint_str.empty() ? 3 : atoi(fixpoint_str.c_str());
 
   widening_extrapolate =
     options.get_bool_option("interval-analysis-extrapolate");
@@ -1930,7 +1946,7 @@ bool interval_domaint::keep_checked_arithmetic = false;
 thread_local bool interval_domaint::skip_inductive_step_instructions = false;
 
 // Widening options
-unsigned interval_domaint::fixpoint_limit = 5;
+unsigned interval_domaint::fixpoint_limit = 3;
 bool interval_domaint::widening_under_approximate_bound = false;
 bool interval_domaint::widening_extrapolate = false;
 bool interval_domaint::widening_narrowing = false;

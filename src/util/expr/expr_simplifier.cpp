@@ -1498,6 +1498,26 @@ expr2tc with2t::do_simplify() const
       return with2tc(type, inner.source_value, update_field, update_value);
   }
 
+  // A store on a lambda stays a lambda, so reads still simplify and the solver
+  // never needs the whole array as a quantified term.
+  if (is_array_lambda2t(source_value))
+  {
+    const array_lambda2t &lambda = to_array_lambda2t(source_value);
+    expr2tc j = lambda.binder;
+    expr2tc idx = update_field;
+    const unsigned jw = j->type->get_width(), iw = idx->type->get_width();
+    if (j->type != idx->type && jw == iw)
+      return expr2tc();
+    if (jw < iw)
+      j = typecast2tc(idx->type, j);
+    else if (iw < jw)
+      idx = typecast2tc(j->type, idx);
+    return array_lambda2tc(
+      type,
+      lambda.binder,
+      if2tc(lambda.body->type, equality2tc(j, idx), update_value, lambda.body));
+  }
+
   if (is_constant_struct2t(source_value))
   {
     const constant_struct2t &c_struct = to_constant_struct2t(source_value);
@@ -2082,12 +2102,43 @@ static expr2tc resolve_with_chain_lookup(
   return expr2tc();
 }
 
+static void
+substitute_binder(expr2tc &e, const irep_idt &binder, const expr2tc &value)
+{
+  if (is_symbol2t(e))
+  {
+    if (to_symbol2t(e).thename == binder)
+      e = value;
+    return;
+  }
+  // A nested lambda binding the same name shadows it.
+  if (
+    is_array_lambda2t(e) &&
+    to_symbol2t(to_array_lambda2t(e).binder).thename == binder)
+    return;
+  e->Foreach_operand(
+    [&binder, &value](expr2tc &op) { substitute_binder(op, binder, value); });
+}
+
 expr2tc index2t::do_simplify() const
 {
   // expr2t::simplify walks operands bottom-up before invoking do_simplify,
   // so source_value and index are already simplified.
   const expr2tc &src = source_value;
   const expr2tc &idx_e = index;
+
+  if (is_array_lambda2t(src))
+  {
+    const array_lambda2t &lambda = to_array_lambda2t(src);
+    expr2tc body = lambda.body;
+    // Reads may index with another integer type than the binder's.
+    const expr2tc idx = idx_e->type == lambda.binder->type
+                          ? idx_e
+                          : typecast2tc(lambda.binder->type, idx_e);
+    substitute_binder(body, to_symbol2t(lambda.binder).thename, idx);
+    expr2tc simplified = body->simplify();
+    return is_nil_expr(simplified) ? body : simplified;
+  }
 
   if (is_with2t(src))
   {
