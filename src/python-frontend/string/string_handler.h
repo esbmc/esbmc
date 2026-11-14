@@ -99,6 +99,14 @@ public:
   /// ASCII value this is also ascii().
   exprt build_repr(const exprt &value, const locationt &location);
 
+  /// Copy a string array into a fresh temporary and return the temporary.
+  /// Symex bounds a string model's loops only over a named object: a
+  /// literal's address does not constant-propagate into the callee (#7559).
+  exprt bind_string_to_tmp(
+    const exprt &str,
+    const std::string &name,
+    const locationt &location);
+
   /// The rendered text of one f-string replacement field.
   exprt format_fstring_part(const nlohmann::json &value);
 
@@ -323,6 +331,13 @@ public:
     const exprt &argument,
     const std::string &method,
     const locationt &location);
+
+  /// @p receiver, held in a temporary when it is not a symbol, so that it can
+  /// be read more than once; @p refusal stops the conversion where it cannot.
+  exprt held_tagged_receiver(
+    const exprt &receiver,
+    const nlohmann::json &call_json,
+    const std::string &refusal);
 
   /// The char pointer of the str @p tagged holds, behind a guard raising
   /// @p exception with @p message where it holds another type. @p refusal
