@@ -2048,36 +2048,26 @@ static expr2tc resolve_with_chain_lookup(
   const expr2tc &source,
   const expr2tc &lookup_index)
 {
-  expr2tc current = source;
-
-  // Collect all WITH operations in reverse order (most recent first)
-  std::vector<std::pair<expr2tc, expr2tc>> updates; // field, value pairs
-
-  while (is_with2t(current))
-  {
-    const with2t &with_op = to_with2t(current);
-    updates.push_back({with_op.update_field, with_op.update_value});
-    current = with_op.source_value;
-  }
-
   // Walk most-recent first. A matching update wins. A provably distinct
   // constant-index update is transparent — we can step over it. A symbolic
   // update we can't reason about stops the walk: any later read could alias.
-  bool lookup_is_const = is_constant_int2t(lookup_index);
-  for (const auto &update : updates)
+  const bool lookup_is_const = is_constant_int2t(lookup_index);
+  const expr2tc *current = &source;
+  for (; is_with2t(*current); current = &to_with2t(*current).source_value)
   {
-    if (index_values_equal(update.first, lookup_index))
-      return update.second;
+    const with2t &w = to_with2t(*current);
+    if (index_values_equal(w.update_field, lookup_index))
+      return w.update_value;
 
-    if (!(lookup_is_const && is_constant_int2t(update.first)))
+    if (!(lookup_is_const && is_constant_int2t(w.update_field)))
       return expr2tc(); // can't prove non-aliasing, give up
   }
 
   // All updates were distinct constant indices and didn't match. The read
   // sees through to the chain's base. Returning index(base, lookup) lets
   // the constant-array / constant-array-of arms below fire on the base.
-  if (current != source)
-    return index2tc(elem_type, current, lookup_index);
+  if (*current != source)
+    return index2tc(elem_type, *current, lookup_index);
 
   return expr2tc();
 }

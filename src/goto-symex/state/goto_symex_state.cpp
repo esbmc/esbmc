@@ -869,6 +869,20 @@ expr2tc goto_symex_statet::pin_symbolic_updates(
                     : pin_chain_updates(*this, rhs, l2_lhs);
 }
 
+/// constant_propagation of @p rhs, an array write over the chain @p state
+/// already carries for its object. Only the newest update can change the
+/// verdict, unless it is one array_with_chain_may_propagate counts or bounds.
+static bool
+extension_propagates(const goto_symex_statet &state, const expr2tc &rhs)
+{
+  const with2t &w = to_with2t(rhs);
+  if (
+    to_array_type(rhs->type).size_is_infinite ||
+    !state.constant_propagation(w.update_value))
+    return state.constant_propagation(rhs);
+  return !incremental_strategy_active();
+}
+
 bool goto_symex_statet::constant_propagation_reference(
   const expr2tc &expr) const
 {
@@ -906,7 +920,25 @@ void goto_symex_statet::assignment(expr2tc &lhs, const expr2tc &rhs)
 
   expr2tc l1_lhs = lhs;
 
-  expr2tc const_value = constant_propagation(rhs) ? rhs : expr2tc();
+  // A write into a carried array extends the chain the object already carries.
+  // That chain was accepted, and its writes reached the object's value set,
+  // when it was assigned, so only the newest update needs looking at:
+  // re-walking the chain made a loop of N writes quadratic in symex.
+  bool extends_carried = false;
+  if (is_with2t(rhs) && is_array_type(rhs))
+  {
+    const expr2tc carried =
+      level2
+        .current_value(
+          renaming::level2t::name_record(to_symbol2t(std::as_const(l1_lhs))))
+        .constant;
+    // Identity, not ==, which on distinct nodes would walk the chain.
+    extends_carried = to_with2t(rhs).source_value.get() == carried.get();
+  }
+
+  const bool propagates = extends_carried ? extension_propagates(*this, rhs)
+                                          : constant_propagation(rhs);
+  expr2tc const_value = propagates ? rhs : expr2tc();
   level2.make_assignment(lhs, const_value, rhs);
 
   // #7597: propagation is a whole-object decision, so one member written a
@@ -925,7 +957,7 @@ void goto_symex_statet::assignment(expr2tc &lhs, const expr2tc &rhs)
   if (use_value_set)
   {
     // update value sets
-    expr2tc l1_rhs = shallow_array_update(rhs, l1_lhs);
+    expr2tc l1_rhs = shallow_array_update(rhs, l1_lhs, extends_carried);
     level2.get_original_name(l1_rhs);
 
     value_set.assign(l1_lhs, l1_rhs);
@@ -948,25 +980,34 @@ static bool has_symbolic_array_size(const type2tc &type)
 /* A propagated array write carries every earlier write to the same object
  * under its top-level `with`. Those earlier values are already in the L1
  * object's value set, so only the newest update is new: re-walking the chain
- * per write made long Python list builds quadratic (#8090). */
+ * per write made long Python list builds quadratic (#8090). When the write
+ * @p extends_carried, the chain is the one this object carries, so its base
+ * need not be found. */
 expr2tc goto_symex_statet::shallow_array_update(
   const expr2tc &rhs,
-  const expr2tc &l1_lhs) const
+  const expr2tc &l1_lhs,
+  bool extends_carried) const
 {
   if (!is_with2t(rhs) || !is_array_type(rhs))
     return rhs;
 
   const with2t &top_write = to_with2t(rhs);
-  const expr2tc *base = &top_write.source_value;
-  while (is_with2t(*base))
-    base = &to_with2t(*base).source_value;
-  if (!is_symbol2t(*base) || is_symbol2t(top_write.source_value))
+  if (is_symbol2t(top_write.source_value))
     return rhs;
 
-  expr2tc l1_base = *base;
-  level2.get_original_name(l1_base);
-  if (l1_base != l1_lhs)
-    return rhs;
+  if (!extends_carried)
+  {
+    const expr2tc *base = &top_write.source_value;
+    while (is_with2t(*base))
+      base = &to_with2t(*base).source_value;
+    if (!is_symbol2t(*base))
+      return rhs;
+
+    expr2tc l1_base = *base;
+    level2.get_original_name(l1_base);
+    if (l1_base != l1_lhs)
+      return rhs;
+  }
 
   return with2tc(
     rhs->type, l1_lhs, top_write.update_field, top_write.update_value);
