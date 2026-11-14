@@ -863,7 +863,9 @@ expr2tc interval_domaint::make_expression_helper(const expr2tc &symbol) const
     c_implicit_typecast(v, symbol->type, *migrate_namespace_lookup);
     return v;
   };
-  if (interval.singleton())
+  // A float bound is moved out by one ulp, so a float singleton becomes a
+  // range: an equality would name the next float up (#10240).
+  if (interval.singleton() && !std::is_same_v<T, real_intervalt>)
   {
     expr2tc value = make_expression_value(interval, src.type, true);
     conjuncts.push_back(equality2tc(typecast(value), symbol));
@@ -1071,6 +1073,11 @@ void interval_domaint::transform(
     // Let's do an assignment for all parameters!
     for (size_t i = 0; i < function.arguments.size(); i++)
     {
+      // Only a prototype with no definition leaves a parameter unnamed, and
+      // every unnamed parameter would share one entry (#10187).
+      if (function.argument_names[i].empty())
+        continue;
+
       const type2tc &arg_type = function.arguments[i];
       const expr2tc arg_symbol =
         symbol2tc(arg_type, function.argument_names[i]);
@@ -1856,6 +1863,10 @@ void interval_domaint::set_options(const optionst &options)
     options.get_bool_option("interval-analysis-eval-assumptions");
   enable_ibex_contractor =
     options.get_bool_option("interval-analysis-ibex-contractor");
+  keep_checked_arithmetic =
+    options.get_bool_option("overflow-check") ||
+    options.get_bool_option("unsigned-overflow-check") ||
+    options.get_bool_option("ub-shift-check");
 
   auto fixpoint_str = options.get_option("interval-analysis-extrapolate-limit");
   fixpoint_limit = fixpoint_str.empty() ? 5 : atoi(fixpoint_str.c_str());
@@ -1915,6 +1926,7 @@ bool interval_domaint::enable_assume_asserts = true;
 bool interval_domaint::skip_user_assertions = false;
 bool interval_domaint::enable_eval_assumptions = true;
 bool interval_domaint::enable_ibex_contractor = false;
+bool interval_domaint::keep_checked_arithmetic = false;
 thread_local bool interval_domaint::skip_inductive_step_instructions = false;
 
 // Widening options

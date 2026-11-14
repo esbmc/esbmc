@@ -1,4 +1,5 @@
 # call(5) is never reached, but the parameter would then take a value that is no function.
+# Each copy of `call` that runs calls one function directly (#10679).
 def f():
     return "a"
 

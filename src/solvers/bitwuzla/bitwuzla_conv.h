@@ -183,6 +183,11 @@ public:
   std::unordered_map<std::string, bitwuzla::Term> uf_decls;
 
 private:
+  bitwuzla::Result check_sat(const std::vector<bitwuzla::Term> &assumptions);
+
+  /** Bitwuzla cannot be destroyed after check_sat threw (#10054). */
+  bool check_sat_threw = false;
+
   /** Identifies a sort by kind plus the two values that parameterise it: the
    *  bit-width for bit-vectors, (exponent, significand) for floating-point, and
    *  the domain and range sorts' addresses for arrays -- identity rather than

@@ -38,6 +38,8 @@ const std::map<std::string, math_spec> &specs()
 {
   static const double pi = std::numbers::pi, half_pi = pi / 2;
   static const double above_minus_one = std::nextafter(-1.0, 0.0);
+  // The nearest double to where gamma, and so lgamma, is smallest.
+  static const double gamma_min = 1.4616321603398799;
   static const double below_one = std::nextafter(1.0, 0.0);
   static const std::map<std::string, math_spec> table = {
     {"exp", {-inf, inf, 0.0, inf, {}, false}},
@@ -89,7 +91,39 @@ const std::map<std::string, math_spec> &specs()
       {-1.0, 1.0}}},
     {"cbrt", {-inf, inf, -inf, inf, {}, false}},
     {"erf", {-inf, inf, -1.0, 1.0, {}, false}},
-    {"erfc", {-inf, inf, 0.0, 2.0, {}, false}}};
+    {"erfc", {-inf, inf, 0.0, 2.0, {}, false}},
+    // Pieces for x > 0 only, monotone on each side of the minimum at
+    // gamma_min; the non-positive arguments are bounded by the caller.
+    {"gamma",
+     {DBL_TRUE_MIN,
+      inf,
+      0.0,
+      inf,
+      {},
+      false,
+      {},
+      -inf,
+      inf,
+      {},
+      {gamma_min,
+       5.5626846462680035e-309,
+       5.5626846462680084e-309,
+       171.62437695630271,
+       171.62437695630274,
+       23.0,
+       24.0}}},
+    {"lgamma",
+     {DBL_TRUE_MIN,
+      inf,
+      -0.125,
+      inf,
+      {},
+      false,
+      {},
+      -inf,
+      inf,
+      {},
+      {gamma_min, 2.5599833278516383e+305, 2.5599833278516387e+305}}}};
   return table;
 }
 
@@ -99,6 +133,15 @@ const math_spec &spec_of(const std::string &function)
   if (it == specs().end())
     throw std::runtime_error("Unsupported Numpy unary function: " + function);
   return it->second;
+}
+
+// CPython keeps exact factorials for gamma of 1..23, and lgamma(1) =
+// lgamma(2) = 0.
+bool cpython_exact(const std::string &function, double x)
+{
+  if (function == "gamma")
+    return x >= 1.0 && x <= 23.0 && x == std::floor(x);
+  return function == "lgamma" && (x == 1.0 || x == 2.0);
 }
 
 // Exact for every implementation: a correctly rounded square root, an odd
@@ -112,6 +155,8 @@ bool exact_everywhere(const std::string &function, double x, double value)
     "log", "log2", "log10", "arccos", "arccosh"};
   int exponent = 0;
   const bool power_of_two = x > 0 && std::frexp(x, &exponent) == 0.5;
+  if (cpython_exact(function, x))
+    return true;
   return function == "sqrt" || function == "rint" || !std::isfinite(value) ||
          !std::isfinite(x) ||
          (x == 0.0 &&
@@ -124,7 +169,7 @@ bool exact_everywhere(const std::string &function, double x, double value)
 // (--python-math-ulps): 8 by default, as NumPy's vectorised code differs
 // from libm (SVML on AVX-512 is tested to 4 ulps of the exact value), and 0
 // for a correctly rounded library.
-double max_ulps()
+double ulps_option()
 {
   const std::string option = config.options.get_option("python-math-ulps");
   if (option.empty())
@@ -136,13 +181,25 @@ double max_ulps()
 }
 
 // Past the largest double the spacing below it continues, not infinity.
+double spacing_at(double magnitude)
+{
+  return magnitude == DBL_MAX ? magnitude - std::nextafter(magnitude, 0.0)
+                              : std::nextafter(magnitude, inf) - magnitude;
+}
+
 double ulps(double value)
 {
-  const double magnitude = std::fabs(value);
-  const double spacing = magnitude == DBL_MAX
-                           ? magnitude - std::nextafter(magnitude, 0.0)
-                           : std::nextafter(magnitude, inf) - magnitude;
-  return max_ulps() * spacing;
+  return ulps_option() * spacing_at(std::fabs(value));
+}
+
+// How far a result may lie from the host's value. CPython computes gamma and
+// lgamma itself (within about 10 ulps, and lgamma within an absolute error
+// near its zeros at 1 and 2), whatever the C library is.
+double ulps_of(const std::string &function, double value)
+{
+  if (transcendental::cpython_implements(function))
+    return 64 * spacing_at(std::max(std::fabs(value), 1.0));
+  return ulps(value);
 }
 
 // The results around x: at x itself, or near it, where only a zero keeps
@@ -158,8 +215,8 @@ interval around(const std::string &function, double x, bool at_x)
   const double low = value > 0 ? std::max(spec.range_low, 0.0) : spec.range_low;
   const double high =
     value < 0 ? std::min(spec.range_high, 0.0) : spec.range_high;
-  return {
-    std::max(value - ulps(value), low), std::min(value + ulps(value), high)};
+  const double radius = ulps_of(function, value);
+  return {std::max(value - radius, low), std::min(value + radius, high)};
 }
 
 // tan grows towards its pole, so the pole lies past the nearest double on
@@ -251,6 +308,16 @@ bool transcendental::is_bounded(const std::string &function)
   return specs().count(function) != 0;
 }
 
+double transcendental::max_ulps()
+{
+  return ulps_option();
+}
+
+bool transcendental::cpython_implements(const std::string &function)
+{
+  return function == "gamma" || function == "lgamma";
+}
+
 bool transcendental::is_odd(const std::string &function)
 {
   static const std::set<std::string> odd = {
@@ -298,6 +365,8 @@ double transcendental::host_value(const std::string &function, double x)
     {"cbrt", [](double v) { return std::cbrt(v); }},
     {"erf", [](double v) { return std::erf(v); }},
     {"erfc", [](double v) { return std::erfc(v); }},
+    {"gamma", [](double v) { return std::tgamma(v); }},
+    {"lgamma", [](double v) { return std::lgamma(v); }},
     {"rint", [](double v) { return std::rint(v); }}};
   auto it = functions.find(function);
   if (it == functions.end())
@@ -324,7 +393,7 @@ const std::vector<piece> &transcendental::pieces(const std::string &function)
 
 bool transcendental::is_bounded_binary(const std::string &function)
 {
-  return function == "hypot" || function == "arctan2";
+  return function == "hypot" || function == "arctan2" || function == "pow";
 }
 
 double
@@ -334,6 +403,8 @@ transcendental::host_value(const std::string &function, double a, double b)
     return std::hypot(a, b);
   if (function == "arctan2")
     return std::atan2(a, b);
+  if (function == "pow")
+    return std::pow(a, b);
   throw std::runtime_error("Unsupported Numpy binary function: " + function);
 }
 

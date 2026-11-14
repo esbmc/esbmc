@@ -76,7 +76,12 @@ execution_statet::execution_statet(
       {
         state.witness_segs.resize(wps.back().segment_idx + 1);
         for (const auto &wp : wps)
+        {
           state.witness_segs[wp.segment_idx].push_back(wp);
+          auto &segments = state.witness_locations[{wp.type, wp.line_id}];
+          if (segments.empty() || segments.back() != wp.segment_idx)
+            segments.push_back(wp.segment_idx);
+        }
       }
     }
   }
@@ -108,6 +113,10 @@ execution_statet::execution_statet(
   nondet_count = 0;
 
   thread_cswitch_threshold = (options.get_bool_option("ltl")) ? 3 : 2;
+  // Ordinary SSA storage lets replay progress follow deferred-path merges.
+  if (validate_witness)
+    witness_cursor = materialise_old_snapshot(
+      constant_int2tc(get_uint64_type(), 0), guard2tc());
 }
 
 execution_statet::execution_statet(const execution_statet &ex)
@@ -414,9 +423,12 @@ void execution_statet::symex_assign(
     analyze_assign(code);
 }
 
-void execution_statet::claim(const expr2tc &expr, const std::string &msg)
+void execution_statet::claim(
+  const expr2tc &expr,
+  const std::string &msg,
+  bool user_assertion)
 {
-  goto_symext::claim(expr, msg);
+  goto_symext::claim(expr, msg, user_assertion);
 
   if (threads_state.size() >= thread_cswitch_threshold)
     analyze_read(expr);
@@ -530,14 +542,6 @@ expr2tc execution_statet::get_guard_identifier()
 
 void execution_statet::switch_to_thread(unsigned int i)
 {
-  // A violation sequence orders waypoints along the interleaved execution,
-  // so the next thread resumes matching where this one stopped.
-  const goto_symex_statet &from = threads_state[active_thread];
-  goto_symex_statet &to = threads_state[i];
-  to.cur_seg = from.cur_seg;
-  to.witness_guard = from.witness_guard;
-  to.cycle_branch_map = from.cycle_branch_map;
-
   last_active_thread = active_thread;
   active_thread = i;
   cur_state = &threads_state[active_thread];
@@ -893,6 +897,7 @@ unsigned int execution_statet::add_thread(const goto_programt *prog)
   new_state.global_guard.make_true();
   new_state.global_guard.add(get_guard_identifier());
   new_state.witness_segs = cur_state->witness_segs;
+  new_state.witness_locations = cur_state->witness_locations;
   threads_state.push_back(new_state);
   if (threads_state.size() > art1->reduction_stats.peak_threads)
     art1->reduction_stats.peak_threads = threads_state.size();
@@ -1739,14 +1744,15 @@ std::shared_ptr<execution_statet> schedule_execution_statet::clone() const
 
 void schedule_execution_statet::claim(
   const expr2tc &expr,
-  const std::string &msg)
+  const std::string &msg,
+  bool user_assertion)
 {
   unsigned int tmp_total, tmp_remaining, tmp_simplified;
 
   tmp_total = total_claims;
   tmp_remaining = remaining_claims;
   tmp_simplified = simplified_claims;
-  execution_statet::claim(expr, msg);
+  execution_statet::claim(expr, msg, user_assertion);
 
   tmp_total = total_claims - tmp_total;
   tmp_remaining = remaining_claims - tmp_remaining;

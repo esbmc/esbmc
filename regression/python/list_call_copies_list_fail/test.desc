@@ -2,4 +2,4 @@ CORE
 main.py
 --unwind 8 --no-unwinding-assertions
 ^VERIFICATION FAILED$
-^  FAILED .* line +4 +assertion .*list_size.* == \(unsigned long int\)3$
+^  FAILED .* line +4 +assertion \(signed long int\).*list_size.* == 3$

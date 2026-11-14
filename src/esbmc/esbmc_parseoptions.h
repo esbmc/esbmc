@@ -61,6 +61,10 @@ protected:
   virtual bool
   process_goto_program(optionst &options, goto_functionst &goto_functions);
 
+  void configure_sv_comp_threads(
+    optionst &options,
+    const goto_functionst &goto_functions);
+
   /// Whether the run needs the loop-invariant machinery.
   bool wants_loop_invariants() const;
 

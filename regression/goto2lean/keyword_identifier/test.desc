@@ -1,0 +1,5 @@
+CORE
+main.c
+--goto2lean
+^  ∀ «_» : BitVec 32,$
+^  \(«_» = «_»\) ∧ \($

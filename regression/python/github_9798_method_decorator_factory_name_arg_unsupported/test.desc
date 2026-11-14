@@ -1,0 +1,4 @@
+CORE
+main.py
+
+^ERROR: .*main.py:12:5: a decorator this program defines on a method, nested function or class is not supported$

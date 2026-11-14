@@ -56,6 +56,7 @@ add_library(pythonfrontend STATIC
             python-list/list_string_ops.cpp
             python-list/list_comprehension.cpp
             python-list/list_set_ops.cpp
+            python-list/typed_list.cpp
             math/python_math.cpp
             math/bounded_math.cpp
             set/python_set.cpp
@@ -80,6 +81,7 @@ add_library(pythonfrontend STATIC
             numpy/numpy_dtype.cpp
             numpy/numpy_random.cpp
             numpy/numpy_nditer.cpp
+            numpy/dense_spectrum.cpp
             numpy/ndarray_shape.cpp
             function_call/builder.cpp
             string/string_builder.cpp
@@ -90,6 +92,7 @@ add_library(pythonfrontend STATIC
             string/char_utils.cpp
             math/math_guard_utils.cpp
             math/parse_float.cpp
+            math/python_round.cpp
             tuple/tuple_handler.cpp
             math/convert_float_literal.cpp
             dynamic_type/dynamic_type_handler.cpp)

@@ -1,24 +1,32 @@
 import ast
+import builtins
 import copy
+import types
 from collections import Counter
 
 from preprocessor.binding_sites import binding_sites
 from preprocessor.bound_method_dispatch import _scope_nodes, dispatch_rebound_methods
 from preprocessor.bound_method_values import lower_method_values
 from preprocessor.check_type_lowering import lower_check_type
+from preprocessor.class_copies import copy_classes_per_argument_kinds
 from preprocessor.dotted_imports import alias_dotted_imports
 from preprocessor.decorator_lowering import lower_user_decorators
 from preprocessor.dict_splat import spell_out_dict_splats
 from preprocessor.itertools_lowering import lower_itertools
 from preprocessor.literal_eval_inlining import inline_literal_eval
 from preprocessor.coroutine_lowering import lower_coroutines
+from preprocessor.array_typecodes import route_array_typecodes
 from preprocessor.match_lowering import lower_match_statements
 from preprocessor.namedtuple_lowering import lower_namedtuples
+from preprocessor.not_callable_values import wrap_never_callable_values
 from preprocessor.open_lowering import lower_builtin_open
 from preprocessor.function_value_dispatch import dispatch_mixed_function_values
-from preprocessor.function_value_types import reject_mixed_function_values
+from preprocessor.function_value_params import inline_def_aliases, raise_not_callable_arms
+from preprocessor.function_value_types import apply_imported_tags, reject_mixed_function_values
+from preprocessor.held_method_tags import tag_held_methods
 from preprocessor.iter_next_lowering import lower_iter_next
 from preprocessor.receiver_classes import refuse_path_dependent_receivers
+from preprocessor.receiver_split import split_path_dependent_receivers
 from preprocessor.class_value_calls import dispatch_class_value_calls
 from preprocessor.sibling_defs import define_read_siblings_first
 from preprocessor.skipped_base_init import refuse_skipped_base_init
@@ -78,6 +86,63 @@ def _rename_shadowed_classes(module):
                 taken.add(renamed)
                 stmt.name = renamed
                 break
+
+
+def _drop_none_slice_bounds(module):
+    """`x[a:None:None]` is `x[a::]`: drop a literal `None` slice bound so
+    every slice handler takes its omitted-bound default (#10468)."""
+    for n in ast.walk(module):
+        if isinstance(n, ast.Slice):
+            for key in ("lower", "upper", "step"):
+                bound = getattr(n, key)
+                if isinstance(bound, ast.Constant) and bound.value is None:
+                    setattr(n, key, None)
+
+
+_BUILTIN_FUNCTIONS = {
+    name
+    for name, value in vars(builtins).items() if isinstance(value, types.BuiltinFunctionType)
+}
+
+
+def _has_star_import(module):
+    return any(
+        isinstance(n, ast.ImportFrom) and any(a.name == "*" for a in n.names)
+        for n in ast.walk(module))
+
+
+def _read_before_def(module, i):
+    """Whether `module.body[i]`'s name occurs in an earlier top-level
+    statement or in the def's own header, which runs before it binds."""
+    stmt = module.body[i]
+    header = [stmt.args, *stmt.decorator_list] + ([stmt.returns] if stmt.returns else [])
+    return any(
+        isinstance(n, ast.Name) and n.id == stmt.name for part in module.body[:i] + header
+        for n in ast.walk(part))
+
+
+def _rename_builtin_defs(module):
+    """Rename a module-level `def len(...)` and every read of `len`, so that
+    the converter calls it instead of the builtin (#10159). Only when the def
+    binds the name nowhere else and nothing reads the name before the def
+    runs: every read then means the def."""
+    if _has_star_import(module):
+        return  # a star import binds names that binding_sites cannot see
+    sites = binding_sites(module)
+    taken = set(sites) | {n.id for n in ast.walk(module) if isinstance(n, ast.Name)}
+    for i, stmt in enumerate(module.body):
+        if (not isinstance(stmt, ast.FunctionDef) or stmt.name not in _BUILTIN_FUNCTIONS
+                or sites[stmt.name] != 1 or _read_before_def(module, i)):
+            continue
+        name = stmt.name
+        renamed = f"{name}__esbmc_user"
+        while renamed in taken:
+            renamed += "_"
+        taken.add(renamed)
+        stmt.name = renamed
+        for n in ast.walk(module):
+            if isinstance(n, ast.Name) and n.id == name:
+                n.id = renamed
 
 
 def _referenced_names(module):
@@ -550,20 +615,32 @@ class ModuleRewriteMixin:
             imp = ast.Import(names=[ast.alias(name=modules[name], asname=alias)])
             module_node.body[i] = ast.fix_missing_locations(ast.copy_location(imp, stmt))
 
-    def _lower_decorators(self, node):
-        """Lower decorators, and refuse a call through mixed functions that a factory leaves."""
+    def _lower_decorators(self, node, entry):
+        """Lower decorators, dispatch over the defs they leave, and refuse a mixed call left."""
         decorated = any(getattr(n, "decorator_list", None) for n in ast.walk(node))
         lower_user_decorators(node, self.module_name)
-        if decorated:
-            reject_mixed_function_values(node, self.module_name)
+        if not decorated:
+            return
+        if entry:
+            dispatch_mixed_function_values(node, self.module_name)
+        reject_mixed_function_values(node, self.module_name)
 
     def prepare_module(self, node, alias_seed=frozenset(), wrapper_seed=None, entry=False):
         """Run pre-visit analyses and range-alias/wrapper canonicalization.
 
         `entry` marks the program itself, whose module-level names no other
         module imports."""
+        if entry:
+            _rename_builtin_defs(node)
+            inline_def_aliases(node)
+            raise_not_callable_arms(node)
+            copy_classes_per_argument_kinds(node)
+        else:
+            apply_imported_tags(node, self.module_name)
         inline_literal_eval(node)
+        _drop_none_slice_bounds(node)
         lower_coroutines(node, self.module_name)
+        route_array_typecodes(node, self.module_name)
         lower_check_type(node, self.module_name)
         lower_builtin_open(node, self.module_name)
         _rename_shadowed_classes(node)
@@ -575,15 +652,19 @@ class ModuleRewriteMixin:
         self._scan_fixed_receivers(node)
         lower_method_values(node, self.fixed_receivers)
         if entry:
+            wrap_never_callable_values(node)
             dispatch_mixed_function_values(node, self.module_name)
         reject_mixed_function_values(node, self.module_name)
+        if entry:
+            tag_held_methods(node)
         lower_match_statements(node)
         lower_itertools(node)
         lower_namedtuples(node, self.module_name)
-        self._lower_decorators(node)
+        self._lower_decorators(node, entry)
         define_read_siblings_first(node)
         if entry:
             dispatch_class_value_calls(node)
+            split_path_dependent_receivers(node, self.module_name)
         refuse_path_dependent_receivers(node, self.module_name)
         refuse_skipped_base_init(node, self.module_name)
         self.expand_unittest_main(node)
@@ -601,6 +682,7 @@ class ModuleRewriteMixin:
                 self.called_names.add(n.func.id)
         self.referenced_names = _referenced_names(node)
         self.outer_stored_names = self._outer_stored_names(node)
+        self.rebindable_names = self._rebindable_names(node)
         self._scan_fixed_receivers(node)
         self._scan_subscript_stored_values(node)
         self.variable_names = self._variable_names(node)

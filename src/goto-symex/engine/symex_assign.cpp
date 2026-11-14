@@ -363,6 +363,7 @@ goto_symext &goto_symext::operator=(const goto_symext &sym)
   total_stack_limit = sym.total_stack_limit;
   no_return_value_opt = sym.no_return_value_opt;
   validate_witness = sym.validate_witness;
+  witness_cursor = sym.witness_cursor;
 
   // Art ptr is shared
   art1 = sym.art1;
@@ -1387,7 +1388,9 @@ void goto_symext::symex_assign_extract(
   }
 
   // OK: accuml now has a bitblob sized expression that can be assigned into
-  // the relevant field.
+  // the relevant field, which may be signed.
+  if (accuml->type != ex.from->type)
+    accuml = bitcast2tc(ex.from->type, accuml);
   symex_assign_rec(ex.from, full_lhs, accuml, full_rhs, guard, hidden);
 }
 

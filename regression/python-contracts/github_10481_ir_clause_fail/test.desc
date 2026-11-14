@@ -1,0 +1,5 @@
+CORE
+main.py
+--ir --enforce-contract last --unwind 9 --no-unwinding-assertions
+^VERIFICATION FAILED$
+^  contract ensures

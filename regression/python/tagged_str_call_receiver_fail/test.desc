@@ -1,0 +1,5 @@
+CORE
+main.py
+--unwind 3 --no-unwinding-assertions
+^VERIFICATION FAILED$
+^\s*FAILED\s+\[.*line\s+13\s+uncaught exception: AttributeError

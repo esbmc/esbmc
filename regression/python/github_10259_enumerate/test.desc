@@ -1,0 +1,5 @@
+CORE
+main.py
+--python-check-exceptions IndexError --show-claims
+^GOTO program processing time
+\A(?![\s\S]*IndexError)[\s\S]*\Z

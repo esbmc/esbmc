@@ -2252,6 +2252,8 @@ void goto_convertt::convert_switch(const codet &code, goto_programt &dest)
       }
   }
 
+  evaluate_unguarded_switch_value(argument, code.location(), tmp_cases);
+
   {
     goto_programt::targett d_jump = tmp_cases.add_instruction();
     d_jump->make_goto(
@@ -2267,6 +2269,21 @@ void goto_convertt::convert_switch(const codet &code, goto_programt &dest)
 
   // restore old targets
   old_targets.restore(targets);
+}
+
+// C11 6.8.4.2: the controlling expression is evaluated even when no case guard
+// reads it, so its checks (e.g. a NULL dereference) must still fire.
+void goto_convertt::evaluate_unguarded_switch_value(
+  const exprt &value,
+  const locationt &location,
+  goto_programt &dest)
+{
+  if (!targets.cases.empty())
+    return;
+
+  code_expressiont eval(value);
+  eval.location() = location;
+  copy(eval, OTHER, dest);
 }
 
 void goto_convertt::convert_break(const code_breakt &code, goto_programt &dest)

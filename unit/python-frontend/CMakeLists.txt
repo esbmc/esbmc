@@ -12,6 +12,7 @@ new_unit_test(irep2_type_roundtrip_test "irep2_type_roundtrip_test.cpp" "${PYTHO
 new_unit_test(python_adjust_test "python_adjust_test.cpp" "${PYTHON_TEST_LIBS};util_esbmc;bigint")
 new_unit_test(function_call_cache_test "function_call_cache_test.cpp" "${PYTHON_TEST_LIBS}")
 new_unit_test(json_utils_alias_test "json_utils_alias_test.cpp" "${PYTHON_TEST_LIBS}")
+new_unit_test(model_path_test "model_path_test.cpp" "${PYTHON_TEST_LIBS}")
 new_unit_test(model_goto_blob_test "model_goto_blob_test.cpp" "${PYTHON_TEST_LIBS};gotoprograms;langapi;util_esbmc;bigint")
 new_unit_test(element_type_registry_test "element_type_registry_test.cpp" "${PYTHON_TEST_LIBS};util_esbmc;bigint")
 if(NOT WIN32)

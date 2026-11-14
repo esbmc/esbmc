@@ -1,0 +1,6 @@
+CORE
+main.c
+--ir --z3 --generate-json-report
+^VERIFICATION FAILED$
+CHECK_FILE report.json contains "value": "-1"
+CHECK_FILE report.json absent "value": "4294967295"

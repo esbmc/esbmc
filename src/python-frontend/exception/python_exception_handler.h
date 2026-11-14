@@ -7,6 +7,7 @@
 #include <nlohmann/json.hpp>
 #include <functional>
 #include <string>
+#include <vector>
 
 class python_converter;
 class type_handler;
@@ -198,6 +199,32 @@ private:
 
   /// Names the spill temporaries inject_finally_before_escapes introduces.
   unsigned finally_spill_count_ = 0;
+
+  // The exception an enclosing handler is handling, saved on entry to it. A
+  // bare `raise` restores it: by then a nested handler may have overwritten
+  // the in-flight state.
+  struct handled_exceptiont
+  {
+    std::string function;
+    std::string var; // the variable a `raise var` re-raises it from, or ""
+    std::vector<exprt> saved; // copies of the exception-state globals
+  };
+  std::vector<handled_exceptiont> handled_;
+
+  // Pushes onto @p handled_stack the state that a handler re-raising with a
+  // bare `raise` saves on entry, and returns the statements saving it.
+  code_blockt save_handled_exception(
+    const nlohmann::json &element,
+    std::vector<handled_exceptiont> &handled_stack);
+
+  // The saved state a `raise` of @p exc restores: the innermost for a bare
+  // `raise`, the handler binding the variable for `raise var`.
+  const handled_exceptiont *handled_by(const nlohmann::json &exc) const;
+  bool reraises_handled(const nlohmann::json &exc) const;
+  void restore_handled_exception(
+    const nlohmann::json &exc,
+    const locationt &location,
+    codet &block) const;
 
   exprt make_finally_rethrow_handler(const nlohmann::json &element);
 

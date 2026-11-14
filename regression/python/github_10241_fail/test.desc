@@ -1,0 +1,5 @@
+CORE
+main.py
+--unwind 5
+^VERIFICATION FAILED$
+Unsupported: a dict lookup with a key whose type is not known

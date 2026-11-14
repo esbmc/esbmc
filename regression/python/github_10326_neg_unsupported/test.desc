@@ -1,0 +1,4 @@
+CORE
+main.py
+
+^ERROR: Unsupported: arithmetic on a value whose class differs between instances$

@@ -142,10 +142,11 @@ then produce ambiguity errors at parse time.
 - Destructor chains for members and bases, including virtual base destructors
 - Destructors run on return paths, for discarded results, and for temporaries
   destroyed mid-expression
-- Objects with static storage duration are destroyed after `main` returns and
-  the `atexit` handlers have run: constructed function-local statics first,
-  then globals in reverse definition order. A failing
-  assertion in such a destructor is reported
+- Objects with static storage duration are destroyed after `main` returns or
+  `exit` is called, once the `atexit` handlers have run: constructed
+  function-local statics first, then globals in reverse definition order. A
+  static array of class type is destroyed element by element in reverse order.
+  A failing assertion in such a destructor is reported
 
 {{< callout type="warning" >}}
 The order in which constructors and destructors run is not correct in every
@@ -228,8 +229,8 @@ case. See [Limitations](/docs/c-cpp/limitations#constructor-and-destructor-order
 
 ### Exceptions
 
-`try` / `catch` / `throw` are supported directly. Passing `--lower-exceptions`
-additionally lowers exception handling into explicit control flow, which enables:
+`try` / `catch` / `throw` are supported. ESBMC always lowers exception handling
+into explicit control flow, which also covers:
 
 - `noexcept` and `throw()` exception specifications
 - Dynamic exception specifications, with `unexpected` / `bad_exception` recovery
@@ -244,9 +245,14 @@ Other exception behaviour:
 - `dynamic_cast<T&>` throws `std::bad_cast` on a failed reference cast
 - `std::out_of_range` is thrown rather than asserted by `at` on `std::vector`,
   `std::string`, `std::deque`, `std::array` and `std::string_view`, by
-  `std::string::substr` and `std::string::erase` on a bad position, and by
-  `std::map::at` and `std::unordered_map::at` on a missing key (`map::at` no
-  longer inserts it)
+  `std::string::substr` and `std::string::erase` on a bad position, by
+  `std::string::insert`, `std::string_view::substr` and `std::string_view::copy`
+  on a position past the end, and by `std::map::at` and `std::unordered_map::at`
+  on a missing key (`map::at` no longer inserts it)
+- `std::vector::reserve` throws `std::length_error` for a request above
+  `max_size()`
+- `std::get` on a `std::variant` that holds another alternative throws
+  `std::bad_variant_access`
 - `std::bad_cast` and `std::bad_typeid` derive from `std::exception` with a
   virtual `what()`
 - The exception-state globals are thread-local, so each thread raises, catches
@@ -282,7 +288,7 @@ by regression tests under `regression/esbmc-cpp*`.
 | `<deque>` | Const iteration; lexicographic `<`/`<=`/`>`/`>=` with const-qualified comparators; `back()` returns `reference`, so `d.back() = x` is a write through the container, and `const_iterator` converts from `iterator` |
 | `<map>` | Const `at`, `emplace`, `try_emplace`, `insert_or_assign`, C++20 `contains`; const `find`/`count`/`lower_bound`/`upper_bound`/`equal_range`. Const iterators compare by position rather than by a cached pair, so two iterators into equal-keyed entries stay distinct. `mapped_type` may be incomplete |
 | `<set>` | Const-correct const iterators, `emplace`, C++20 `contains` |
-| `<unordered_map>`, `<unordered_set>` | `<unordered_map>` provides `std::unordered_multimap` and `<unordered_set>` `std::unordered_multiset`. Per [unord.multimap] the multimap's `insert` never rejects an equivalent key, `erase(k)` removes every match and returns how many, and there is no `operator[]`/`at` |
+| `<unordered_map>`, `<unordered_set>` | All four containers take an `initializer_list`, so `std::unordered_set<int> s{5}` holds one element. `<unordered_map>` provides `std::unordered_multimap` and `<unordered_set>` `std::unordered_multiset`. Per [unord.multimap] the multimap's `insert` never rejects an equivalent key, `erase(k)` removes every match and returns how many, and there is no `operator[]`/`at` |
 | `<array>` | `iterator` / `const_iterator` typedefs; usable in C++11 |
 | `<queue>`, `<stack>`, `<bitset>` | Includes `std::priority_queue` |
 | `<flat_map>`, `<flat_set>` | C++23. Keys are held sorted in a vector; `<flat_map>` keeps keys and mapped values in two containers sorted in step, so its iterator dereferences to a pair of references as [flat.map.overview] specifies. `flat_set::operator==` compares elements rather than comparator equivalence ([tab:container.req]) |
@@ -362,7 +368,7 @@ members are `constexpr`, and `char_traits<char>` compares as `unsigned char`
 | --- | --- |
 | `<algorithm>` | Including the C++11 algorithms and `move_backward` |
 | `<numeric>` | `iota`, `gcd`, `lcm`, `reduce` |
-| `<cmath>` | The C99 `<cmath>` functions resolve in namespace `std`, as [cmath.syn] requires: the classifiers `std::isnan`, `std::isinf`, `std::isfinite`, `std::isnormal` and `std::signbit` are re-declared as `std::` overloads lowered to ESBMC's native FP intrinsics, and `std::ilogb`, `logb`, `scalbn`, `scalbln`, `fma`, `remquo`, `lround`, `llround`, `lrint`, `llrint`, `nexttoward` and `nan` resolve as well (`nexttoward` has no model in ESBMC's libc and returns a nondeterministic value). `fmod`, `remainder` and `remquo` lower to the solver's exact FP remainder rather than being computed as `x - y*(int)(x/y)`, which double-rounded and overflowed the cast for a large quotient |
+| `<cmath>` | The C99 `<cmath>` functions resolve in namespace `std`, as [cmath.syn] requires: the classifiers `std::isnan`, `std::isinf`, `std::isfinite`, `std::isnormal` and `std::signbit` are re-declared as `std::` overloads lowered to ESBMC's native FP intrinsics, and `std::ilogb`, `logb`, `scalbn`, `scalbln`, `fma`, `remquo`, `lround`, `llround`, `lrint`, `llrint`, `nexttoward` and `nan` resolve as well. `fmod`, `remainder` and `remquo` lower to the solver's exact FP remainder rather than being computed as `x - y*(int)(x/y)`, which double-rounded and overflowed the cast for a large quotient |
 | `<complex>`, `<random>` | |
 
 `std::min(double, double)` returns `double`. It was declared to return `int`, so
@@ -415,7 +421,8 @@ does not have; and `jthread`.
 `<cinttypes>`, `<ciso646>`, `<climits>`, `<clocale>`, `<cmath>`, `<csetjmp>`,
 `<csignal>`, `<cstdalign>`, `<cstdarg>`, `<cstdbool>`, `<cstddef>`,
 `<cstdint>`, `<cstdio>`, `<cstdlib>`, `<cstring>`, `<ctgmath>`, `<ctime>`,
-`<cuchar>`, `<cwchar>` and `<cwctype>` are available.
+`<cuchar>`, `<cwchar>` and `<cwctype>` are available. `<csetjmp>` declares
+`std::jmp_buf` and `std::longjmp`.
 `<cstdio>` also declares POSIX `getline`, modelled as returning a fresh buffer
 of nondeterministic bytes read from the stream.
 

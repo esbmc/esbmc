@@ -1183,6 +1183,9 @@ bool goto_symext::make_return_assignment(expr2tc &assign, const expr2tc &code)
 
 void goto_symext::symex_return(const expr2tc &code)
 {
+  if (validate_witness && memory_leak_check && !no_reachable_memleak)
+    symex_witness_main_return();
+
   // we treat this like an unconditional
   // goto to the end of the function
 

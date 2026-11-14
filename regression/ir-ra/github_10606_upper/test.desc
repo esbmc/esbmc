@@ -1,0 +1,5 @@
+CORE
+main.c
+--ir --z3
+^VERIFICATION FAILED$
+^  n = 4294967296$

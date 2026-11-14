@@ -6,6 +6,11 @@ void fix_symbolt::fix_symbol(symbolt &symbol)
   if (it != type_map.end())
     symbol.id = it->second.id();
 
+  // replace() writes through every node it visits, which unshares shared
+  // types across the whole symbol even when there is nothing to replace.
+  if (type_map.empty() && expr_map.empty())
+    return;
+
   typet t = symbol.get_type();
   replace(t);
   symbol.set_type(std::move(t));

@@ -1,0 +1,5 @@
+CORE
+main.py
+--goto-functions-only --no-python-typed-lists
+list_push_shallow\(.*:6\$py_list\$[0-9]+, .*:6tmp_list_at[0-9]+, [0-9]+, 8\)$
+list_push_shallow\(.*:7\$py_list\$[0-9]+, .*:7tmp_list_at[0-9]+, [0-9]+, 8\)$

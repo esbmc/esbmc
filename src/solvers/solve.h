@@ -29,6 +29,9 @@ smt_convt *create_solver(
 /// will choose from whatever is built in at solver-creation time).
 void check_solver_availability(const optionst &options);
 
+/// Whether \p name is a solver backend built into this binary.
+bool solver_built_in(const std::string &name);
+
 /// The solver create_solver("", ...) will use for these options, without
 /// logging the choice; "" if no backend can be picked implicitly.
 std::string effective_solver_name(const optionst &options);

@@ -95,6 +95,32 @@ The **Branch Coverage: 100%** indicates all branches have been tested.
 **Listing reached branches.** Add `--branch-coverage-claims` to print each
 reached branch guard with its source location alongside the summary.
 
+**Accumulating coverage across runs.** `--coverage-covered-set FILE` keeps a
+JSON record of the branches reached so far, keyed by the branch condition and
+its source location. ESBMC reads the file at the start of a branch-coverage run,
+does not instrument the branches it lists again, and writes the merged set back
+at the end. The denominator is still every branch in the program, so a branch
+counts once however many runs reach it:
+
+```bash
+$ esbmc prog.c --branch-coverage --coverage-covered-set covered.json   # prog.c reaches one branch
+Branches : 2
+Reached : 1
+Branch Coverage: 50%
+$ esbmc prog.c --branch-coverage --coverage-covered-set covered.json   # prog.c edited to reach the other
+Branches : 2
+Reached : 2
+Branch Coverage: 100%
+```
+
+**Runs that do not finish.** When a branch-coverage run is stopped by
+`--timeout`, `SIGTERM` or `SIGINT`, ESBMC still prints the `[Coverage]` block
+with what it has reached so far, marked as partial:
+
+```
+Branch Coverage: 50% (partial: run terminated before verification concluded)
+```
+
 ### Condition Coverage
 
 Condition coverage verifies that each boolean sub-expression in conditional

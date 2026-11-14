@@ -510,6 +510,7 @@ std::vector<expr2tc> symex_slicet::get_nondet_symbols(const expr2tc &expr)
   {
   case expr2t::constant_struct_id:
   case expr2t::constant_union_id:
+  case expr2t::constant_array_id:
   {
     std::vector<expr2tc> symbols;
     expr->foreach_operand([&symbols](const expr2tc &member) {
@@ -522,6 +523,15 @@ std::vector<expr2tc> symex_slicet::get_nondet_symbols(const expr2tc &expr)
   // e.g. an element of an array of structs: `arr WITH [1:={ .a=nondet0 }]`
   case expr2t::with_id:
     return get_nondet_symbols(to_with2t(expr).update_value);
+
+  // e.g. a store through a pointer whose targets hold struct literals:
+  // `SAME-OBJECT(p, &g1) ? { .a=0, .b=nondet1 } : { .a=0, .b=0 }` (#10332)
+  case expr2t::if_id:
+  {
+    std::vector<expr2tc> symbols = get_nondet_symbols(to_if2t(expr).true_value);
+    return symbols.empty() ? get_nondet_symbols(to_if2t(expr).false_value)
+                           : symbols;
+  }
 
   default:
   {

@@ -1,0 +1,5 @@
+CORE
+main.py
+--python-check-exceptions IndexError
+IndexError: pop from empty list
+^VERIFICATION FAILED$

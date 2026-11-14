@@ -1,0 +1,4 @@
+CORE
+main.py
+--python-check-exceptions ZeroDivisionError --goto-functions-only
+^\s*(\d+: )?ASSERT c:@__ESBMC_exc_thrown == 0 \|\| c:@__ESBMC_exc_typeid == \d+ // uncaught exception$

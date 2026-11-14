@@ -1,4 +1,4 @@
 CORE
 main.py
 --incremental-bmc
-^ERROR: TypeError: numpy.linalg.eig currently supports only constant 2D real numeric matrices$
+^ERROR: TypeError: numpy.linalg.eig of a run-time matrix supports only symmetric 2x2 matrices$

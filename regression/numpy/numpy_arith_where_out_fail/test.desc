@@ -1,0 +1,5 @@
+CORE
+main.py
+--incremental-bmc
+^VERIFICATION FAILED$
+^  FAILED +\[global\.assertion\.\d+\] +line 6 +assertion o\[1\] == 4\.0$

@@ -1,0 +1,7 @@
+CORE
+main.c
+--goto2lean --ir
+^def mid \(lo : Int\) \(hi : Int\) \(post : Int → Prop\) : Prop :=$
+^  post \(lo \+ \(Int\.tdiv \(hi - lo\) \(2 : Int\)\)\)$
+^    show Int\.sign \(2 : Int\) = 1 from rfl\]$
+^  all_goals \(repeat. split\) <;> \(try simp_all\) <;> omega$

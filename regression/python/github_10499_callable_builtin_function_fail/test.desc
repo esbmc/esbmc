@@ -1,0 +1,5 @@
+CORE
+main.py
+
+^  FAILED +\[global\.assertion\.2\]  line 2 
+^VERIFICATION FAILED$

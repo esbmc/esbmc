@@ -1,0 +1,5 @@
+CORE
+main.py
+
+^  assertion .*__len__.* == 5$
+^VERIFICATION FAILED$

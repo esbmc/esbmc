@@ -1,0 +1,8 @@
+regression/python/github_8970_decorated
+regression/python/github_8970_decorated_factory_refused
+regression/python/github_8970_decorated_fail
+regression/python/github_8970_module_attr
+regression/python/github_8970_module_attr_default_refused
+regression/python/github_8970_module_attr_fail
+regression/python/github_8970_module_attr_rebound_refused
+regression/python/github_8970_module_attr_store_refused

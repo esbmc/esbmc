@@ -1,0 +1,4 @@
+CORE
+main.py
+--incremental-bmc
+^ERROR: TypeError: numpy.linalg.svd of a run-time matrix supports only compute_uv=False on 2x2 matrices$

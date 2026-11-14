@@ -680,25 +680,29 @@ exprt string_handler::build_repr(const exprt &value, const locationt &location)
 
   exprt string_copy = value;
   exprt str = ensure_null_terminated_string(string_copy);
-  // Symex bounds the model's loops only over a named object: a literal's
-  // address does not constant-propagate into the callee (#7559).
   if (str.type().is_array() && !str.is_symbol())
-  {
-    symbolt &tmp =
-      converter_.create_tmp_symbol(location, "$repr_arg$", str.type(), exprt());
-    code_declt decl(symbol_expr(tmp));
-    decl.location() = location;
-    converter_.add_instruction(decl);
-    code_assignt assign(symbol_expr(tmp), str);
-    assign.location() = location;
-    converter_.add_instruction(assign);
-    str = symbol_expr(tmp);
-  }
+    str = bind_string_to_tmp(str, "$repr_arg$", location);
   exprt str_addr = get_array_base_address(str);
   exprt repr_call =
     build_call_expr(*repr_symbol, pointer_typet(char_type()), {str_addr});
   repr_call.location() = location;
   return repr_call;
+}
+
+exprt string_handler::bind_string_to_tmp(
+  const exprt &str,
+  const std::string &name,
+  const locationt &location)
+{
+  symbolt &tmp =
+    converter_.create_tmp_symbol(location, name, str.type(), exprt());
+  code_declt decl(symbol_expr(tmp));
+  decl.location() = location;
+  converter_.add_instruction(decl);
+  code_assignt assign(symbol_expr(tmp), str);
+  assign.location() = location;
+  converter_.add_instruction(assign);
+  return symbol_expr(tmp);
 }
 
 exprt string_handler::build_fstring_conversion(
@@ -3235,33 +3239,82 @@ exprt string_handler::read_tagged_str_receiver(
   if (!converter_.get_type_handler().is_tagged_scalar_type(receiver.type()))
     return receiver;
 
-  // The receiver is read twice, so only a symbol qualifies, and the guard
-  // must run exactly where the call is evaluated. A type probe is discarded,
-  // so it only needs the type of the str the real conversion reads.
-  if (!receiver.is_symbol() || !type_utils::is_str_only_method(method))
-    throw std::runtime_error(
-      "calling '" + method +
-      "' on a dynamically-typed variable is not yet supported");
-  if (converter_.in_type_probe())
-    return build_typecast(
-      build_member(receiver, "value", pointer_typet(empty_typet())),
-      pointer_typet(char_type()));
-  if (!converter_.can_emit_runtime_guard())
-    throw std::runtime_error(
-      "calling '" + method +
-      "' on a dynamically-typed variable is not yet supported");
-
-  const exprt is_str = converter_.dynamic_type_handler_.build_isinstance_check(
-    receiver, "str", false);
-  converter_.emit_guarded_raise(
-    build_not(is_str),
+  const std::string refusal =
+    "calling '" + method +
+    "' on a dynamically-typed variable is not yet supported";
+  if (!type_utils::is_str_only_method(method))
+    throw std::runtime_error(refusal);
+  return read_tagged_str(
+    held_tagged_receiver(receiver, call_json, refusal),
     "AttributeError",
     "object has no attribute '" + method + "'",
+    refusal,
     converter_.get_location_from_decl(call_json));
+}
 
-  return build_typecast(
-    build_member(receiver, "value", pointer_typet(empty_typet())),
+exprt string_handler::held_tagged_receiver(
+  const exprt &receiver,
+  const nlohmann::json &call_json,
+  const std::string &refusal)
+{
+  // The receiver is read twice, so one that is not a symbol, such as the
+  // result of `f().strip()`, is first held in a temporary where the call is
+  // evaluated. A type probe is discarded, so it only needs the type.
+  if (receiver.is_symbol() || converter_.in_type_probe())
+    return receiver;
+  if (!converter_.can_emit_operand_statement())
+    throw std::runtime_error(refusal);
+  exprt held = converter_.store_call_result(
+    receiver, converter_.get_location_from_decl(call_json), "tagged_recv");
+  held = converter_.hoist_side_effecting_operand(
+    held, call_json, "$tagged_recv$");
+  if (!held.is_symbol())
+    throw std::runtime_error(refusal);
+  return held;
+}
+
+exprt string_handler::read_tagged_str_argument(
+  const exprt &argument,
+  const std::string &method,
+  const locationt &location)
+{
+  if (!converter_.get_type_handler().is_tagged_scalar_type(argument.type()))
+    return argument;
+
+  const std::string refusal = "passing a dynamically-typed variable to '" +
+                              method + "' is not yet supported";
+  if (!argument.is_symbol())
+    throw std::runtime_error(refusal);
+  return read_tagged_str(
+    argument,
+    "TypeError",
+    method + "() argument must be str",
+    refusal,
+    location);
+}
+
+exprt string_handler::read_tagged_str(
+  const exprt &tagged,
+  const std::string &exception,
+  const std::string &message,
+  const std::string &refusal,
+  const locationt &location)
+{
+  const exprt str = build_typecast(
+    build_member(tagged, "value", pointer_typet(empty_typet())),
     pointer_typet(char_type()));
+  if (converter_.in_type_probe())
+    return str;
+  // In an and/or tail the guard goes to the operand's own block, which runs
+  // only where the operand is evaluated, as for len().
+  if (!converter_.can_emit_operand_statement())
+    throw std::runtime_error(refusal);
+
+  const exprt is_str = converter_.dynamic_type_handler_.build_isinstance_check(
+    tagged, "str", false);
+  converter_.emit_guarded_raise(
+    build_not(is_str), exception, message, location);
+  return str;
 }
 
 exprt string_handler::handle_string_attribute_call(
