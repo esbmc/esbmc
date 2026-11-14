@@ -1186,6 +1186,103 @@ bool __ESBMC_tlist_eq(const PyListObject *a, const PyListObject *b)
   return eq;
 }
 
+/* list(range(start, stop)): the ints from start up to stop, none when stop
+ * is not above start. As in __ESBMC_tlist_repeat, the first 8 come from a
+ * loop unwound in full. */
+PyListObject *__ESBMC_tlist_range(long long start, long long stop)
+{
+  PyListObject *l = __ESBMC_tlist_create();
+  long long v = start;
+  __ESBMC_unroll(8);
+  while (v - start < 8 && v < stop)
+  {
+    __ESBMC_tlist_push(l, v);
+    v++;
+  }
+  while (v < stop)
+  {
+    __ESBMC_tlist_push(l, v);
+    v++;
+  }
+  return l;
+}
+
+/* heapq on a typed list, as CPython's Lib/heapq.py sifts it, so the slots
+ * hold the same elements in the same order. The sifts take the slots and
+ * the size, so each access is one array element. */
+static void __ESBMC_tlist_siftdown(PySlot *slot, size_t startpos, size_t pos)
+{
+  long long newitem = slot[pos].v;
+  while (pos > startpos)
+  {
+    size_t parentpos = (pos - 1) >> 1;
+    long long parent = slot[parentpos].v;
+    if (!(newitem < parent))
+      break;
+    slot[pos].v = parent;
+    pos = parentpos;
+  }
+  slot[pos].v = newitem;
+}
+
+static void __ESBMC_tlist_siftup(PySlot *slot, size_t endpos, size_t pos)
+{
+  size_t startpos = pos;
+  long long newitem = slot[pos].v;
+  size_t childpos = (pos << 1) + 1;
+  while (childpos < endpos)
+  {
+    size_t rightpos = childpos + 1;
+    if (rightpos < endpos && !(slot[childpos].v < slot[rightpos].v))
+      childpos = rightpos;
+    slot[pos].v = slot[childpos].v;
+    pos = childpos;
+    childpos = (pos << 1) + 1;
+  }
+  slot[pos].v = newitem;
+  __ESBMC_tlist_siftdown(slot, startpos, pos);
+}
+
+void __ESBMC_tlist_heapify(PyListObject *heap)
+{
+  PySlot *slot = heap->slot;
+  size_t n = heap->size;
+  size_t i = n >> 1;
+  while (i > 0)
+  {
+    i--;
+    __ESBMC_tlist_siftup(slot, n, i);
+  }
+}
+
+/* heappop of a non-empty heap; the frontend raises IndexError on an empty
+ * one first. */
+long long __ESBMC_tlist_heappop(PyListObject *heap)
+{
+  PySlot *slot = heap->slot;
+  size_t n = heap->size - 1;
+  heap->size = n;
+  long long lastelt = slot[n].v;
+  if (n == 0)
+    return lastelt;
+  long long returnitem = slot[0].v;
+  slot[0].v = lastelt;
+  __ESBMC_tlist_siftup(slot, n, 0);
+  return returnitem;
+}
+
+long long __ESBMC_tlist_heappushpop(PyListObject *heap, long long item)
+{
+  PySlot *slot = heap->slot;
+  size_t n = heap->size;
+  if (n == 0 || !(slot[0].v < item))
+    return item;
+  long long smallest = slot[0].v;
+  slot[0].v = item;
+  __ESBMC_tlist_siftup(slot, n, 0);
+  return smallest;
+}
+
 /* l[start:stop:step] = src for typed lists, as __ESBMC_list_slice_assign
  * does it over the slots: a step of 1 replaces the slice with all of src,
  * shifting the tail, and any other step needs src as long as the slice. The

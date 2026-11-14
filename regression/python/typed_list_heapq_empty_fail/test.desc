@@ -1,0 +1,5 @@
+CORE
+main.py
+--python-typed-lists --unwind 5
+^VERIFICATION FAILED$
+IndexError

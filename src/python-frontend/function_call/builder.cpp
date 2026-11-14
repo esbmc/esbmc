@@ -2086,11 +2086,19 @@ exprt function_call_builder::build_c_intrinsic_call(
   return call;
 }
 
+// A typed heapq call, or a method call on its receiver.
+exprt function_call_builder::build_attribute_call() const
+{
+  if (python_list::is_typed_heapq_call(call_))
+    return python_list(converter_, call_).typed_heapq();
+  return build_method_call_on_receiver();
+}
+
 exprt function_call_builder::build() const
 {
   if (call_["func"]["_type"] == "Attribute")
   {
-    exprt handled_method = build_method_call_on_receiver();
+    exprt handled_method = build_attribute_call();
     if (!handled_method.is_nil())
       return handled_method;
   }

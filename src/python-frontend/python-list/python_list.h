@@ -83,6 +83,15 @@ public:
   /// ints in an untyped list.
   static bool is_typed_call(const nlohmann::json &call);
   exprt typed_call(const std::string &func_name);
+  /// `heapq.heapify(x)`, `heapq.heappop(x)` or `heapq.heappushpop(x, v)` of
+  /// a typed x, sifted in x's slots.
+  static bool is_typed_heapq_call(const nlohmann::json &call);
+  exprt typed_heapq();
+  /// `list(range(stop))` or `list(range(start, stop))` the gate typed.
+  exprt typed_range();
+  /// `list(range(...))`: typed when the gate typed it.
+  static exprt
+  list_of_range(python_converter &converter, const nlohmann::json &element);
   /// A slice, list() or copy() of a typed list. The result is typed when the
   /// gate flagged the node, else an untyped list of the same ints.
   static bool reads_typed(const nlohmann::json &node);
@@ -1052,6 +1061,7 @@ private:
   exprt typed_sorted();
   exprt typed_extremum(const std::string &func_name);
   exprt typed_dict_set();
+  exprt typed_int_call(const char *model, const std::vector<exprt> &args);
   long long typed_slice_step(const nlohmann::json &slice);
   std::vector<exprt> typed_slice_bounds(const nlohmann::json &slice);
   code_function_callt
