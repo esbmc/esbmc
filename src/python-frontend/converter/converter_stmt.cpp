@@ -120,9 +120,10 @@ bool is_incompatible_scalar_string_retype(
 
 // Whether the rebinding needs a fresh symbol. An int rebound to a float would
 // otherwise promote the shared symbol in place, so reads before the rebind see
-// a float (#8402). That case is taken only on the unconditional spine: an alias
-// made in a conditional body is dropped at the join, where the in-place
-// promotion is still needed.
+// a float (#8402); a number rebound to a list would retype them as the list.
+// Those cases are taken only on the unconditional spine: an alias made in a
+// conditional body is dropped at the join, where the in-place retype is still
+// needed.
 bool is_scalar_retype(
   const type_handler &th,
   const typet &lhs,
@@ -130,7 +131,9 @@ bool is_scalar_retype(
   bool on_spine)
 {
   return is_incompatible_scalar_string_retype(th, lhs, rhs) ||
-         (on_spine && type_utils::is_integer_type(lhs) && rhs.is_floatbv());
+         (on_spine &&
+          ((type_utils::is_integer_type(lhs) && rhs.is_floatbv()) ||
+           (th.is_numeric_scalar_type(lhs) && rhs == th.get_list_type())));
 }
 
 using python_frontend::is_literal_int_node;
