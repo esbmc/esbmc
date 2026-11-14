@@ -203,11 +203,20 @@ public:
     const typet &value,
     const locationt &location);
   bool slot_only_called(const node_slot &slot);
+  bool imported_argument_only_called(
+    const nlohmann::json &call,
+    std::size_t index) const;
   bool ifexp_only_called(const nlohmann::json &ifexp);
+  void decay_not_callable_arm(
+    exprt &arm,
+    code_blockt &side_effects,
+    const exprt &function);
   void decay_function_choice(
     const nlohmann::json &ifexp,
     exprt &then,
-    exprt &else_expr);
+    code_blockt &then_side_effects,
+    exprt &else_expr,
+    code_blockt &else_side_effects);
   void hoist_raising_arm(
     exprt &then,
     code_blockt &then_side_effects,
