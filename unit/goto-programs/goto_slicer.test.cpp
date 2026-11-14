@@ -533,3 +533,37 @@ TEST_CASE(
   const slicedt unrelated = slice(src("y"));
   CHECK(unrelated.removed(unrelated.store()));
 }
+
+TEST_CASE(
+  "goto-slicer keeps a checked jump's guard when it skips kept code",
+  "[goto-slicer]")
+{
+  // The guard dereferences p, so the jump starts as check-only; the RETURN it
+  // skips is kept, so the jump, and the a[0] its guard reads, are kept too.
+  const slicedt s = slice(
+    R"(
+    int comp(char *p)
+    {
+      if (p[0] != 'a')
+        return -1;
+      return 0;
+    }
+    int main()
+    {
+      char a[1];
+      a[0] = 'a';
+      __ESBMC_assert(comp(a) == 0, "");
+      return 0;
+    }
+  )",
+    slice_stept::base_case,
+    true);
+  bool found = false;
+  for (const auto &i : s.main_body().instructions)
+    if (i.is_assign() && is_index2t(to_code_assign2t(i.code).target))
+    {
+      CHECK(!s.removed(i));
+      found = true;
+    }
+  CHECK(found);
+}

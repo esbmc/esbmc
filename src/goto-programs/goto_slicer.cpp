@@ -536,7 +536,7 @@ struct slice_statet
       {
         const nodet &n = p.nodes[i];
         if (
-          n.target && *n.target > i && !n.head && kept[i] == NOT_KEPT &&
+          n.target && *n.target > i && !n.head && kept[i] != FULL &&
           any(prefix, fn.begin, i + 1, *n.target))
         {
           keep(i, FULL);
