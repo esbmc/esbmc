@@ -23,6 +23,8 @@ class PreprocessorStateMixin:
         self.is_entry_module = False
         self.hoisted_classes = {}
         self._builtin_shadow_names = None
+        # The parameters of the defs being visited: a call through one is no call of a def.
+        self._enclosing_params = frozenset()
         self._unobservable_builtin_keys = frozenset()
         self._closed_lambda_bindings = {}
         self._fixed_length_starred = {}
