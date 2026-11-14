@@ -2738,7 +2738,8 @@ private:
   bool needs_fresh_retype_slot(
     const exprt &lhs,
     const exprt &rhs,
-    const std::string &lhs_id) const;
+    const std::string &lhs_id,
+    const symbol_id &sid) const;
   bool is_local_number_to_list_rebind(
     const exprt &lhs,
     const exprt &rhs,

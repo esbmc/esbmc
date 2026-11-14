@@ -6813,14 +6813,16 @@ std::string python_converter::call_return_class(const nlohmann::json &rhs) const
 bool python_converter::needs_fresh_retype_slot(
   const exprt &lhs,
   const exprt &rhs,
-  const std::string &lhs_id) const
+  const std::string &lhs_id,
+  const symbol_id &sid) const
 {
   const bool tuple_to_nontuple_rebind =
     tuple_handler_->is_tuple_type(lhs.type()) && !rhs.type().is_empty() &&
     !tuple_handler_->is_tuple_type(rhs.type()) && !rhs.type().is_code() &&
     !(rhs.type().is_pointer() && rhs.type().subtype().id() == "empty");
   return tuple_to_nontuple_rebind ||
-         needs_fresh_numpy_array_slot(lhs, rhs, lhs_id);
+         needs_fresh_numpy_array_slot(lhs, rhs, lhs_id) ||
+         is_local_number_to_list_rebind(lhs, rhs, sid);
 }
 
 bool python_converter::needs_fresh_numpy_array_slot(
@@ -8682,8 +8684,7 @@ void python_converter::get_var_assign(
           lhs.type(),
           rhs.type(),
           block_nesting_ == function_body_depth_ + 1) ||
-        needs_fresh_retype_slot(lhs, rhs, orig_id) ||
-        is_local_number_to_list_rebind(lhs, rhs, sid))
+        needs_fresh_retype_slot(lhs, rhs, orig_id, sid))
       {
         symbolt *new_symbol_ptr = mint_retyped_symbol(
           *lhs_symbol, orig_id, rhs.type(), location_begin, sid, target_block);
