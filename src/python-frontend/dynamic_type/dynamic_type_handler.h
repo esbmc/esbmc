@@ -229,6 +229,8 @@ public:
   };
 
 private:
+  bool attribute_kinds_diverge(const std::string &attr) const;
+
   /**
    * @brief Builds the instructions that fill a tagged-object symbol's four
    * fields (value/type_id/size/float_idx) from an already-converted value.

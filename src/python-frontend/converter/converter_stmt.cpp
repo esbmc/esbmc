@@ -1436,6 +1436,11 @@ void python_converter::handle_assignment_type_adjustments(
   reject_attribute_class_change(lhs, rhs, ast_node, is_ctor_call);
   reject_list_slot_class_change(lhs, ast_node, is_ctor_call);
   reject_attribute_scalar_change(lhs, rhs);
+  // get_var_assign boxes the value into a tagged slot's fields.
+  if (
+    lhs.is_member() && type_handler_.is_tagged_scalar_type(lhs.type()) &&
+    !type_handler_.is_tagged_scalar_type(rhs.type()))
+    return;
   const bool has_annotation =
     ast_node.contains("annotation") && !ast_node["annotation"].is_null();
 
