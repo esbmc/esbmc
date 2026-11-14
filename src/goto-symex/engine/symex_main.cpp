@@ -178,14 +178,13 @@ void goto_symext::assertion(
   expr2tc expr = the_assertion;
   cur_state->guard.guard_expr(expr);
   cur_state->global_guard.guard_expr(expr);
-  expr2tc expr_neg = not2tc(the_assertion);
-  cur_state->guard.guard_expr(expr_neg);
-  cur_state->global_guard.guard_expr(expr_neg);
+  expr2tc path_cond = the_assertion;
+  cur_state->guard.guard_expr(path_cond);
   remaining_claims++;
   target->assertion(
     cur_state->guard.as_expr(),
     expr,
-    expr_neg,
+    path_cond,
     msg,
     cur_state->gen_stack_trace(),
     cur_state->source,

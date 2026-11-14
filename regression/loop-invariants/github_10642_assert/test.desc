@@ -1,0 +1,5 @@
+CORE
+main.c
+--loop-invariant-check
+^\s+UNKNOWN\s+\[main\.assertion\.3\]\s+line\s+10\s+assertion y == 5 \(loop invariant too weak
+^VERIFICATION UNKNOWN$

@@ -128,10 +128,11 @@ void pre_register_addresses(
 
 /// PathReachable asks only whether the path is feasible, ignoring the claim:
 /// UNSAT over the kept claims means every discharge was vacuous. Satisfiable
-/// asks whether the claim can hold, in the same shape the violation query
-/// uses, so that negating the implication forces its antecedents -- conjoining
-/// `cond` instead would be satisfied by leaving the path untaken, which makes
-/// every claim look satisfiable (issue #7585).
+/// asks whether some feasible path does not violate the claim, in the same
+/// shape the violation query uses, so that negating the implication forces
+/// the assumptions. A path that skips the claim counts: otherwise a guarded
+/// `assert(0)`, such as reach_error(), holds on no path and every violation
+/// of it looks forced (issue #10642).
 void encode_assertion(
   equation_conversion_statet &state,
   symex_target_equationt::SSA_stept &step,
@@ -146,8 +147,8 @@ void encode_assertion(
     return;
   }
 
-  const expr2tc &claim =
-    mode == mode_t::Satisfiable ? step.cond_neg : step.cond;
+  const expr2tc claim =
+    mode == mode_t::Satisfiable ? not2tc(step.path_cond) : step.cond;
   step.cond_expr = implies2tc(state.assumpt_expr, claim);
   state.assertions.push_back(not2tc(step.cond_expr));
 }
@@ -337,7 +338,7 @@ void symex_target_equationt::assumption(
 void symex_target_equationt::assertion(
   const expr2tc &guard,
   const expr2tc &cond,
-  const expr2tc &cond_neg,
+  const expr2tc &path_cond,
   const std::string &msg,
   std::vector<stack_framet> stack_trace,
   const sourcet &source,
@@ -348,7 +349,7 @@ void symex_target_equationt::assertion(
 
   SSA_step.guard = guard;
   SSA_step.cond = cond;
-  SSA_step.cond_neg = cond_neg;
+  SSA_step.path_cond = path_cond;
   SSA_step.type = symex_targett::ASSERT;
   SSA_step.source = source;
   SSA_step.comment = msg;
