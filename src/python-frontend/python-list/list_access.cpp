@@ -32,6 +32,17 @@ static expr2tc index_out_of_range(const expr2tc &position, const exprt &len)
     greaterthanequal2tc(position, len2));
 }
 
+// The position \p index reads in a list of length \p len, in a signed type.
+static expr2tc
+list_position(const exprt &index, const exprt &len, bool may_be_negative)
+{
+  if (may_be_negative)
+    return normalize_negative_index(index, len);
+  expr2tc position;
+  migrate_expr(build_typecast(index, signed_size_type()), position);
+  return position;
+}
+
 static exprt normalize_positive_slice_bound_expr(
   const exprt &bound,
   const exprt &logical_len)
@@ -237,11 +248,7 @@ exprt python_list::build_list_at_call(
   converter_.add_instruction(size_call);
 
   const exprt size = build_symbol(size_var);
-  expr2tc position;
-  if (index_may_be_negative)
-    position = normalize_negative_index(index, size);
-  else
-    migrate_expr(build_typecast(index, signed_size_type()), position);
+  const expr2tc position = list_position(index, size, index_may_be_negative);
   exprt converted_index =
     build_typecast(migrate_expr_back(position), size_type());
 
