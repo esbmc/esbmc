@@ -1,0 +1,6 @@
+CORE
+main.c
+--goto2lean
+^  \(lo ≤ hi\) →$
+^  \(\(lo ≤ m\) ∧ \(m ≤ hi\)\) ∧ \($
+^  all_goals bv_decide$

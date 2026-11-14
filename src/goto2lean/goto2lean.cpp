@@ -822,7 +822,10 @@ std::string goto2leant::trans(
     // (printf, free, ...) carries semantics this translation does not model.
     if (!is_code_expression2t(I.code))
       unsupported("statement " + get_expr_id(I.code), I.location);
-    value_in(scope, to_code_expression2t(I.code).operand);
+    // glibc's assert leaves `(void) sizeof (e)`, which is not evaluated
+    // (C11 6.5.3.4p2).
+    if (!is_sizeof2t(to_code_expression2t(I.code).operand))
+      value_in(scope, to_code_expression2t(I.code).operand);
     return next();
 
   case DECL:
