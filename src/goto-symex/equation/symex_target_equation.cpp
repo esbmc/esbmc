@@ -126,6 +126,35 @@ void pre_register_addresses(
   }
 }
 
+/// An automatic or dynamic object whose address a sliced step takes is still
+/// exposed from that step on, so register it there, in program order, for a
+/// later int-to-ptr cast to reach, as it does under --no-slice (#9272).
+void register_sliced_addresses(
+  const namespacet &ns,
+  smt_convt &smt_conv,
+  const symex_target_equationt::SSA_stept &step)
+{
+  std::unordered_set<const expr2t *> seen;
+  std::function<void(const expr2tc &)> walk = [&](const expr2tc &e) {
+    if (!e || !seen.insert(e.get()).second)
+      return;
+    if (is_address_of2t(e) && !static_address_base(ns, e))
+    {
+      expr2tc obj = to_address_of2t(e).ptr_obj;
+      while (is_index2t(obj) || is_member2t(obj))
+        obj = is_index2t(obj) ? to_index2t(obj).source_value
+                              : to_member2t(obj).source_value;
+      // Only the base, and only of constant size: anything else would encode
+      // SSA symbols the slicer may have left unassigned (#10293).
+      if (is_symbol2t(obj) && !has_variable_size(ns, obj->type))
+        smt_conv.convert_ast(address_of2tc(pointer_type2tc(obj->type), obj));
+    }
+    e->foreach_operand([&](const expr2tc &op) { walk(op); });
+  };
+  walk(step.cond);
+  walk(step.rhs);
+}
+
 /// PathReachable asks only whether the path is feasible, ignoring the claim:
 /// UNSAT over the kept claims means every discharge was vacuous. Satisfiable
 /// asks whether the claim can hold, in the same shape the violation query
@@ -164,6 +193,7 @@ void convert_internal_step(
 {
   if (step.ignore)
   {
+    register_sliced_addresses(ns, smt_conv, step);
     step.cond_expr = gen_true_expr();
     return;
   }
