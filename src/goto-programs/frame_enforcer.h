@@ -178,6 +178,10 @@ private:
     const locationt &loc,
     const std::string &comment);
 
+  /// The snapshot @p entry's variable is compared with: its latest post-havoc
+  /// snapshot in ASSERT mode if there is one, else its pre-state snapshot.
+  expr2tc frame_baseline(const snapshot_entryt &entry, frame_modet mode) const;
+
   /// Counter for generating unique snapshot names
   size_t snapshot_counter;
 

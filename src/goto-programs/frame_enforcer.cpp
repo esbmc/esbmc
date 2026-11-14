@@ -55,6 +55,19 @@ expr2tc frame_enforcert::capture(
   return snap_sym;
 }
 
+expr2tc frame_enforcert::frame_baseline(
+  const snapshot_entryt &entry,
+  frame_modet mode) const
+{
+  if (mode == frame_modet::ASSERT)
+    for (auto it = post_havoc_snapshots.rbegin();
+         it != post_havoc_snapshots.rend();
+         ++it)
+      if (it->original_expr == entry.original_expr)
+        return it->snapshot_sym;
+  return entry.snapshot_sym;
+}
+
 static const expr2tc &strip_typecasts(const expr2tc &e)
 {
   const expr2tc *leaf = &e;
@@ -454,11 +467,7 @@ void frame_enforcert::enforce_frame_rule(
   for (const auto &entry : active_snapshots)
   {
     const expr2tc &var = entry.original_expr;
-    expr2tc snap = entry.snapshot_sym;
-    if (mode == frame_modet::ASSERT)
-      for (const auto &post : post_havoc_snapshots)
-        if (post.original_expr == var)
-          snap = post.snapshot_sym;
+    const expr2tc snap = frame_baseline(entry, mode);
 
     // Check if this variable is directly in the assigns set
     bool is_assigned = false;
