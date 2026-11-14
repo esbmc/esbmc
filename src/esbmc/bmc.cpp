@@ -455,6 +455,37 @@ void bmct::record_violated_properties(
   }
 }
 
+void bmct::solve_past_the_abstraction(symex_target_equationt &eq)
+{
+  std::vector<symex_target_equationt::SSA_stept *> set_aside;
+  while (runtime_solver->has_model())
+  {
+    record_violated_properties(*runtime_solver, eq);
+    if (!violates_only_the_abstraction())
+      break;
+
+    const size_t before = set_aside.size();
+    for (auto &step : eq.SSA_steps)
+      if (
+        step.is_assert() && !step.ignore &&
+        !runtime_solver->l_get(step.cond_expr).is_true())
+      {
+        step.ignore = true;
+        set_aside.push_back(&step);
+      }
+    if (set_aside.size() == before)
+      break;
+
+    std::unique_ptr<smt_convt> next(create_solver("", ns, options));
+    if (run_decision_procedure(*next, eq) != P_SATISFIABLE)
+      break;
+    runtime_solver = std::move(next);
+  }
+
+  for (auto *step : set_aside)
+    step->ignore = false;
+}
+
 void bmct::error_trace(smt_convt &smt_conv, const symex_target_equationt &eq)
 {
   if (options.get_bool_option("result-only"))
@@ -2747,6 +2778,11 @@ smt_resultt bmct::run_thread(std::shared_ptr<symex_target_equationt> &eq)
         solver_result.bounded_loop_truncations);
 
     smt_resultt result = run_decision_procedure(*runtime_solver, *eq);
+    if (
+      result == P_SATISFIABLE && !options.get_bool_option("inductive-step") &&
+      !options.get_bool_option("forward-condition") &&
+      !options.get_bool_option("smt-during-symex"))
+      solve_past_the_abstraction(*eq);
 
     // Per-claim vacuity probe in single-property mode: a whole-equation
     // reachability check would silently miss a vacuous claim whenever some

@@ -253,6 +253,12 @@ private:
     smt_convt &smt_conv,
     const symex_target_equationt &eq);
 
+  /// A model that refutes only the loop-invariant abstraction can hide a real
+  /// violation of another claim. Set its claims aside and solve again until a
+  /// model refutes the program or none is left; runtime_solver then holds the
+  /// last satisfying model.
+  void solve_past_the_abstraction(symex_target_equationt &eq);
+
   /// Source files whose assertions come from ESBMC's own operational models,
   /// so the report can sort them after the user's code. Empty for Python,
   /// where a hidden body does not imply a model (remove_library_assertions).
