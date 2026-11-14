@@ -988,6 +988,66 @@ PyListObject *__ESBMC_tlist_sorted(const PyListObject *src, bool reverse)
 
 #undef __ESBMC_TLIST_ORDER
 
+/* A typed dict holds its keys and values in turn in a typed list, in
+ * insertion order. The slot of key's value, or NULL when key is absent. The
+ * first 8 entries are one formula with no path per entry; a dict with more
+ * scans the rest in a loop. */
+PySlot *__ESBMC_tdict_at(PyListObject *d, long long key)
+{
+  size_t n = d->size;
+  size_t at = 0;
+  size_t i = 0;
+  __ESBMC_unroll(8);
+  while (i < 16)
+  {
+    at = i < n && d->slot[i].v == key ? i + 1 : at;
+    i += 2;
+  }
+  while (i < n)
+  {
+    at = d->slot[i].v == key ? i + 1 : at;
+    i += 2;
+  }
+  return at ? &d->slot[at] : NULL;
+}
+
+/* d[key] = value: overwrite key's value, or append the entry. */
+void __ESBMC_tdict_set(PyListObject *d, long long value, long long key)
+{
+  PySlot *slot = __ESBMC_tdict_at(d, key);
+  if (slot)
+  {
+    slot->v = value;
+    return;
+  }
+  __ESBMC_tlist_push(d, key);
+  __ESBMC_tlist_push(d, value);
+}
+
+/* max(l), or min(l) when is_min, of a non-empty typed list. The first 8
+ * elements are one formula with no path per element: an element at or past
+ * the size does not take part. Longer lists scan the rest in a loop. */
+long long __ESBMC_tlist_extremum(const PyListObject *l, bool is_min)
+{
+  size_t n = l->size;
+  long long r = l->slot[0].v;
+  size_t i = 1;
+  __ESBMC_unroll(7);
+  while (i < 8)
+  {
+    long long v = l->slot[i].v;
+    r = i < n && (is_min ? v < r : v > r) ? v : r;
+    i++;
+  }
+  while (i < n)
+  {
+    long long v = l->slot[i].v;
+    r = (is_min ? v < r : v > r) ? v : r;
+    i++;
+  }
+  return r;
+}
+
 /* The untyped list holding the elements of typed list t, for a use of a
  * typed list's sorted copy that the typed model does not implement. */
 PyListObject *__ESBMC_tlist_to_list(const PyListObject *t, size_t int_type_id)

@@ -2040,7 +2040,8 @@ reuses_c_model(const nlohmann::json &call, const symbol_id &function_id)
            call["func"].value("_type", "") == "Attribute");
 }
 
-// A typed list's builder and sorted() lower to their C models (#10451).
+// A typed list's builder, sorted(), max() and min(), and a typed dict's
+// store, lower to their C models (#10451).
 // __ESBMC_unreachable and __ESBMC_unroll lower to calls to the C intrinsics
 // of the same names. Symex's intrinsic handler in symex_main.cpp fires on
 // __ESBMC_unreachable under --enable-unreachability-intrinsic.

@@ -1,0 +1,5 @@
+CORE
+main.py
+--goto-functions-only
+=tlist_extremum\(arr, 1\)$
+=tlist_extremum\(arr, 0\)$
