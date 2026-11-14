@@ -220,31 +220,6 @@ bool python_converter::is_instance_attribute(
   return false;
 }
 
-// Appends what each plain assignment to `name` under `node` assigns, outside
-// nested scopes. A binding these miss is still counted by count_name_bindings,
-// which then forces the fallback.
-static void collect_assigned_values(
-  const nlohmann::json &node,
-  const std::string &name,
-  std::vector<const nlohmann::json *> &values)
-{
-  if (node.is_object())
-  {
-    const std::string kind = node.value("_type", "");
-    if (
-      kind == "FunctionDef" || kind == "AsyncFunctionDef" ||
-      kind == "ClassDef" || kind == "Lambda")
-      return;
-    if (
-      const nlohmann::json *value =
-        json_utils::plain_assigned_value(node, name))
-      values.push_back(value);
-  }
-  for (const auto &child : node)
-    if (child.is_structured())
-      collect_assigned_values(child, name, values);
-}
-
 // `value`, or every value assigned to the local it names when plain
 // assignments are all of that local's bindings in `method` (#9073).
 static std::vector<const nlohmann::json *>
@@ -254,7 +229,8 @@ assigned_values(const nlohmann::json &value, const nlohmann::json &method)
     return {&value};
   const std::string name = value["id"].get<std::string>();
   std::vector<const nlohmann::json *> values;
-  collect_assigned_values(method["body"], name, values);
+  json_utils::collect_plain_assigned_values(
+    method["body"], name, values, /*stop_at_nested_scopes=*/true);
   if (
     values.empty() ||
     values.size() != json_utils::count_name_bindings(method, name))

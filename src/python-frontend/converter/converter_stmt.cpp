@@ -5227,26 +5227,14 @@ void collect_read_names(
       collect_read_names(child, names);
 }
 
-void collect_plain_bindings(
-  const nlohmann::json &node,
-  const std::string &name,
-  std::vector<const nlohmann::json *> &values)
-{
-  if (const auto *value = json_utils::plain_assigned_value(node, name))
-    values.push_back(value);
-  if (node.is_structured())
-    for (const auto &child : node)
-      if (child.is_structured())
-        collect_plain_bindings(child, name, values);
-}
-
 bool has_uniform_tuple_bindings(
   const nlohmann::json &module,
   const std::string &name,
   size_t bindings)
 {
   std::vector<const nlohmann::json *> values;
-  collect_plain_bindings(module, name, values);
+  json_utils::collect_plain_assigned_values(
+    module, name, values, /*stop_at_nested_scopes=*/false);
   if (values.size() != bindings)
     return false;
 
@@ -5278,7 +5266,9 @@ bool has_uniform_tuple_bindings(
 
 // The registry records types flow-insensitively, and a store through an alias
 // does not update it. Trust it only for lists the right-hand side builds
-// itself or reads from a variable named only at its bindings and this use.
+// itself or reads from a variable named only at its bindings and this use,
+// bound either once to a plain literal or only to nonempty lists of same-arity
+// integer-constant tuples.
 bool python_converter::unpack_record_is_trusted(
   const nlohmann::json &value) const
 {

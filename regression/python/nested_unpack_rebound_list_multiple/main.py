@@ -1,6 +1,8 @@
 # GitHub #10600
+import random
+
 pairs = [(1, 2), (3, 4)]
-swapped = nondet_bool()
+swapped = random.random() < 0.5
 if swapped:
     pairs = [(3, 4), (1, 2)]
 (a, b), (c, d) = pairs
