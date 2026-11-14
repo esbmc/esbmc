@@ -940,6 +940,7 @@ void goto_loop_invariant_combinedt::process_loops_combined()
 }
 
 void goto_loop_invariant_combinedt::copy_loop_body(
+  goto_programt::targett loop_head,
   goto_programt::targett body_begin,
   goto_programt::targett loop_exit,
   goto_programt &out) const
@@ -964,10 +965,22 @@ void goto_loop_invariant_combinedt::copy_loop_body(
 
   // A jump to the back edge ends the iteration. Left on the original it would
   // leave the copy for the real loop and skip the checks that follow the copy.
+  // A jump out of the loop ends the branch: an iteration that exits need not
+  // keep the invariant, and the havoced state must not reach the code after
+  // the loop. A loop whose head is not its exit test (an interval ASSUME
+  // inserted before it) has its exit test copied too.
+  goto_programt::targett skip_leave = out.add_instruction(GOTO);
+  goto_programt::targett leave = out.add_instruction(ASSUME);
+  leave->guard = gen_false_expr();
+  leave->location = loop_exit->location;
+  leave->location.comment("loop exit (verification branch)");
   goto_programt::targett end = out.add_instruction(SKIP);
   end->location = loop_exit->location;
+  skip_leave->targets.push_back(end);
+  skip_leave->location = loop_exit->location;
 
   // rewrite targets using index-based mapping
+  bool exits = false;
   for (unsigned i = 0; i < target_vector.size(); i++)
   {
     goto_programt::targett t = target_vector[i];
@@ -977,9 +990,19 @@ void goto_loop_invariant_combinedt::copy_loop_body(
         target_map.find(target);
       if (m_it != target_map.end()) // intra-loop?
         target = target_vector[m_it->second];
-      else if (target == loop_exit)
+      else if (target == loop_exit || target == loop_head)
         target = end;
+      else
+      {
+        target = leave;
+        exits = true;
+      }
     }
+  }
+  if (!exits)
+  {
+    out.instructions.erase(skip_leave);
+    out.instructions.erase(leave);
   }
 }
 
@@ -1045,7 +1068,8 @@ void goto_loop_invariant_combinedt::insert_invariant_verification_branch(
   const expr2tc entry_cond = loop_entry_cond(loop_head);
 
   goto_programt body_copy;
-  copy_loop_body(loop_body_begin(loop_head, entry_cond), loop_exit, body_copy);
+  copy_loop_body(
+    loop_head, loop_body_begin(loop_head, entry_cond), loop_exit, body_copy);
 
   // ── 4. Build Branch 1 ─────────────────────────────────────────────────────
   const auto &loop_vars = loop.get_modified_loop_vars();
