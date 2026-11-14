@@ -357,6 +357,23 @@ should_check_after_violation(const optionst &options, bool is_coverage)
          options.get_bool_option("validate-violation-witness");
 }
 
+// Under --termination, goto_termination does its own havoc, so
+// goto_k_induction must not also run (#6031). Witness validation forces the
+// k-induction option, so under --incremental-bmc the strategy runs an
+// inductive step that needs the havoc too (#10640).
+static bool needs_k_induction_havoc(
+  const cmdlinet &cmdline,
+  const optionst &options,
+  bool ts_strategy)
+{
+  if (options.get_bool_option("termination"))
+    return false;
+  return cmdline.isset("inductive-step") || cmdline.isset("k-induction") ||
+         cmdline.isset("k-induction-parallel") || ts_strategy ||
+         (cmdline.isset("validate-correctness-witness") &&
+          options.get_bool_option("incremental-bmc"));
+}
+
 bool esbmc_parseoptionst::process_goto_program(
   optionst &options,
   goto_functionst &goto_functions)
@@ -520,16 +537,8 @@ bool esbmc_parseoptionst::process_goto_program(
     if (cmdline.isset("gcse"))
       apply_gcse(goto_functions, context, cmdline);
 
-    // Under --termination, goto_termination does its own havoc, so
-    // goto_k_induction must not also run (#6031). Witness validation forces
-    // the k-induction option, so under --incremental-bmc the strategy runs
-    // an inductive step that needs the havoc too (#10640).
     bool is_k_induction =
-      (cmdline.isset("inductive-step") || cmdline.isset("k-induction") ||
-       cmdline.isset("k-induction-parallel") || ts_strategy_requested() ||
-       (cmdline.isset("validate-correctness-witness") &&
-        options.get_bool_option("incremental-bmc"))) &&
-      !options.get_bool_option("termination");
+      needs_k_induction_havoc(cmdline, options, ts_strategy_requested());
 
     // --termination reuses k-induction's havoc machinery via
     // goto_termination, so the post-havoc invariant injection applies
