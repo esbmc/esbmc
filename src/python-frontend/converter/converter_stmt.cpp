@@ -7272,9 +7272,23 @@ bool python_converter::element_kinds_differ(
   return !ka.empty() && !kb.empty() && ka != kb;
 }
 
+/// Whether list arms @p a and @p b record the same element types, so either's
+/// record types a read of `a if c else b`.
+static bool list_arms_record_alike(
+  const element_type_registry &registry,
+  const exprt &a,
+  const exprt &b)
+{
+  return a.is_symbol() && b.is_symbol() &&
+         registry.same_element_types(
+           a.identifier().as_string(), b.identifier().as_string());
+}
+
 /// The list arm of `None if c else xs` (or `xs if c else None`): the None arm
-/// holds no elements, so the binding's element types are the list arm's.
-static const exprt &list_arm_of_optional(const exprt &rhs)
+/// holds no elements, so the binding's element types are the list arm's. For
+/// `xs if c else ys` it is xs when ys records the same element types.
+static const exprt &
+list_arm_of_conditional(const exprt &rhs, const element_type_registry &registry)
 {
   if (rhs.id() != "if")
     return rhs;
@@ -7282,6 +7296,8 @@ static const exprt &list_arm_of_optional(const exprt &rhs)
   if (ite.true_case().is_zero())
     return ite.false_case();
   if (ite.false_case().is_zero())
+    return ite.true_case();
+  if (list_arms_record_alike(registry, ite.true_case(), ite.false_case()))
     return ite.true_case();
   return rhs;
 }
@@ -7291,7 +7307,7 @@ void python_converter::propagate_list_type_info(
   const exprt &assigned,
   symbolt *lhs_symbol)
 {
-  const exprt &rhs = list_arm_of_optional(assigned);
+  const exprt &rhs = list_arm_of_conditional(assigned, element_type_registry_);
   const std::string &lhs_identifier = lhs.identifier().as_string();
   const std::string &rhs_identifier = rhs.identifier().as_string();
   // The registry keeps one record per name, so a rebinding under a branch or
@@ -9739,8 +9755,9 @@ static exprt coerce_ternary_branch(
   return typecast_exprt(branch, result_type);
 }
 
-/// A result temp for `None if c else xs` takes the element types of xs.
-static void copy_optional_list_arm_types(
+/// A result temp for `None if c else xs` takes the element types of xs, and
+/// one for `xs if c else ys` those of xs when ys records the same.
+static void copy_list_arm_types(
   element_type_registry &registry,
   const exprt &then,
   const exprt &else_expr,
@@ -9751,6 +9768,8 @@ static void copy_optional_list_arm_types(
   const exprt &value_arm = then_is_none ? else_expr : then;
   if (then_is_none != else_is_none && value_arm.is_symbol())
     registry.assign_from(value_arm.identifier().as_string(), result_id);
+  else if (list_arms_record_alike(registry, then, else_expr))
+    registry.assign_from(then.identifier().as_string(), result_id);
 }
 
 exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
@@ -10296,7 +10315,7 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
         create_return_temp_variable(result_type, location, "ternary_result");
       symbol_table_.add(result_symbol);
       exprt result_expr = symbol_expr(result_symbol);
-      copy_optional_list_arm_types(
+      copy_list_arm_types(
         element_type_registry_,
         then,
         else_expr,
