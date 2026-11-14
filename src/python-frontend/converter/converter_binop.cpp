@@ -18,6 +18,7 @@
 #include <python-frontend/type/type_utils.h>
 #include <irep2/irep2_utils.h>
 #include <util/arith/arith_tools.h>
+#include <util/arith/ieee_float.h>
 #include <util/lang/c_typecast.h>
 #include <util/lang/c_types.h>
 #include <util/expr/expr_util.h>
@@ -4045,6 +4046,56 @@ exprt python_converter::numpy_float_remainder(
       other_sign, python_expr::build_add(mod, y, type), mod));
 }
 
+// x rounded down to an integral value, exactly.
+static exprt floor_of(const exprt &x)
+{
+  expr2tc x2;
+  migrate_expr(x, x2);
+  return migrate_expr_back(nearbyint2tc(
+    x2->type,
+    x2,
+    constant_int2tc(
+      get_int32_type(), BigInt(ieee_floatt::ROUND_TO_MINUS_INF))));
+}
+
+// NumPy's npy_divmod quotient: (x - fmod(x, y)) / y, one lower when the
+// remainder moves to the divisor's sign, snapped to the nearest integer; a
+// zero divisor gives x / y, and a zero quotient takes the sign of x / y.
+exprt python_converter::numpy_float_floor_divide(
+  const exprt &x,
+  const exprt &y,
+  const typet &type)
+{
+  const nlohmann::json no_node;
+  const exprt mod = cast_to(math_handler_.handle_fmod(x, y, no_node), type);
+  const exprt zero = gen_zero(type);
+  const exprt one = cast_to(from_double(1.0, double_type()), type);
+  const exprt half = cast_to(from_double(0.5, double_type()), type);
+  const exprt quotient = numpy_element_op("Div", x, y, type);
+  const exprt moved = python_expr::build_and(
+    python_expr::build_notequal(mod, zero),
+    python_expr::build_xor(
+      python_expr::build_less_than(y, zero),
+      python_expr::build_less_than(mod, zero)));
+  const exprt exact =
+    numpy_element_op("Div", python_expr::build_sub(x, mod, type), y, type);
+  const exprt div = python_expr::build_if(
+    moved, python_expr::build_sub(exact, one, type), exact);
+  const exprt floor = floor_of(div);
+  const exprt snapped = python_expr::build_if(
+    python_expr::build_greater_than(
+      python_expr::build_sub(div, floor, type), half),
+    python_expr::build_add(floor, one, type),
+    floor);
+  const exprt signed_zero =
+    cast_to(math_handler_.handle_copysign(zero, quotient, no_node), type);
+  return python_expr::build_if(
+    python_expr::build_equal(y, zero),
+    quotient,
+    python_expr::build_if(
+      python_expr::build_equal(div, zero), signed_zero, snapped));
+}
+
 // `x op y` for one element pair, both already of `type`. Integer `//` and
 // `%` by zero give 0, as NumPy does (with a warning, not an exception).
 exprt python_converter::numpy_element_op(
@@ -4057,6 +4108,8 @@ exprt python_converter::numpy_element_op(
     return cast_to(math_handler_.handle_power(x, y), type);
   if (op == "Mod" && type.is_floatbv())
     return numpy_float_remainder(x, y, type);
+  if (op == "FloorDiv" && type.is_floatbv())
+    return numpy_float_floor_divide(x, y, type);
   exprt raw(python_frontend::map_operator(op, type), type);
   raw.copy_to_operands(x, y);
   if (op == "FloorDiv")

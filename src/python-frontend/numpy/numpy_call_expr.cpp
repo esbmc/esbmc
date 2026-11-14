@@ -4864,8 +4864,7 @@ numpy_call_expr::try_early_result(const std::string &function)
   if (std::optional<exprt> narrow = try_narrow_operand_call(function))
     return narrow;
 
-  static const std::set<std::string> model_only = {
-    "remainder", "nextafter", "isclose"};
+  static const std::set<std::string> model_only = {"nextafter", "isclose"};
   if (std::optional<exprt> predicate = try_float_predicate(function))
     return predicate;
   if (std::optional<exprt> bounded = try_bounded_ufunc(function))
@@ -8262,6 +8261,9 @@ static std::optional<std::size_t> arithmetic_arity(const std::string &name)
     {"true_divide", 2},
     {"power", 2},
     {"pow", 2},
+    {"floor_divide", 2},
+    {"remainder", 2},
+    {"mod", 2},
     {"square", 1},
     {"negative", 1},
     {"positive", 1},
@@ -8373,10 +8375,16 @@ exprt numpy_call_expr::arithmetic_element(
     {"square", {"ieee_mul", "*"}},
     {"divide", {"ieee_div", "/"}},
     {"true_divide", {"ieee_div", "/"}}};
+  // NumPy's // and %, shared with the array operators.
+  static const std::map<std::string, std::string> divisions = {
+    {"floor_divide", "FloorDiv"}, {"remainder", "Mod"}, {"mod", "Mod"}};
   const exprt &a = x.front(), &b = x.back();
   if (
     function == "negative" || function == "positive" || function == "absolute")
     return unary_element(function, a);
+  if (
+    const auto division = divisions.find(function); division != divisions.end())
+    return converter_.numpy_element_op(division->second, a, b, leaf);
   if ((function == "power" || function == "pow") && !leaf.is_floatbv())
     return integer_power(a, b);
   if (function == "power" || function == "pow")
@@ -8399,7 +8407,14 @@ std::optional<exprt>
 numpy_call_expr::try_arithmetic_ufunc(const std::string &function)
 {
   static const std::set<std::string> own_route = {
-    "true_divide", "square", "negative", "positive", "absolute"};
+    "true_divide",
+    "square",
+    "negative",
+    "positive",
+    "absolute",
+    "floor_divide",
+    "remainder",
+    "mod"};
   const std::optional<std::size_t> arity = arithmetic_arity(function);
   if (!arity || (!own_route.count(function) && !masks_or_writes(call_, *arity)))
     return std::nullopt;
