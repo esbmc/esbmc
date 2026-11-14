@@ -44,6 +44,8 @@ public:
   BigInt line = c_nonset;
   BigInt column = c_nonset;
   std::string function;
+  // Empty omits it, which the format reads as the main thread.
+  std::string thread_id;
   irep_idt line_id;
   irep_idt column_id;
   irep_idt function_id;

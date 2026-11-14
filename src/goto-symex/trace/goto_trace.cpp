@@ -676,11 +676,17 @@ static void push_violation_targets(
     yml.segments.push_back(witness_target_waypoint(
       step.pc, step.stack_trace, yml.verified_file, options));
   if (step.racing_access)
+  {
     yml.racing_target = witness_target_waypoint(
       step.racing_access->pc,
       step.racing_access->stack_trace,
       yml.verified_file,
       options);
+    // The targets must not share a thread_id, and no waypoint registers the
+    // spawned threads that an integer one would name (#10747).
+    yml.segments.back().thread_id = "any";
+    yml.racing_target->thread_id = "any";
+  }
 }
 
 /* A validator binds a branching waypoint to the next visit of its source

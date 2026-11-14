@@ -193,7 +193,8 @@ void create_correctness_yaml_emitter(
 void create_violation_yaml_emitter(
   std::string &verifiedfile,
   optionst &options,
-  YAML::Emitter &root);
+  YAML::Emitter &root,
+  const std::string &format_version);
 
 void create_waypoint(const waypoint &wp, YAML::Emitter &waypoint);
 void create_invariant(const invariant &inv, YAML::Emitter &out);

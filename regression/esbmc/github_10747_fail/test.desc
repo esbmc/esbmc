@@ -1,0 +1,6 @@
+CORE
+main.c
+--data-races-check --no-assertions --witness-output-yaml -
+^VERIFICATION FAILED$
+^    format_version: "2\.4"$
+(?s)- waypoint:\s+type: "target"(?:(?!waypoint:).)*?thread_id: any\s+- waypoint:\s+type: "target"(?:(?!waypoint:).)*?thread_id: any
