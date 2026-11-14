@@ -62,6 +62,8 @@ bool is_imported_numpy_module_alias(
   const nlohmann::json &ast,
   const std::string &name);
 
+struct node_slot;
+
 // One `Call` node together with the name of the function whose body it
 // textually appears in (empty for a module-level call). Declared here (Impl
 // in converter_funcdef.cpp) so python_converter can cache the whole-AST scan
@@ -200,7 +202,12 @@ public:
     const typet &function,
     const typet &value,
     const locationt &location);
-  void decay_function_choice(exprt &then, exprt &else_expr);
+  bool slot_only_called(const node_slot &slot);
+  bool ifexp_only_called(const nlohmann::json &ifexp);
+  void decay_function_choice(
+    const nlohmann::json &ifexp,
+    exprt &then,
+    exprt &else_expr);
   void hoist_raising_arm(
     exprt &then,
     code_blockt &then_side_effects,
