@@ -2228,7 +2228,34 @@ std::string python_annotation<Json>::get_type_from_binary_expr(
     }
   }
 
+  if (is_str_operation(stmt, type, body))
+    return "str";
   return promote_to_float_operand(stmt, type);
+}
+
+/// Whether `+` with a left operand of unknown type, or `*` with an int count
+/// on the left, has a str right operand: the result is then a str. Left as
+/// Any, an unannotated parameter the result is passed to is read as a list
+/// (#10535).
+template <class Json>
+bool python_annotation<Json>::is_str_operation(
+  const Json &stmt,
+  const std::string &left_type,
+  const Json &body)
+{
+  const Json &expr = stmt.contains("value") ? stmt["value"] : stmt;
+  if (!expr.contains("op") || !expr["op"].is_object())
+    return false;
+  const std::string op = expr["op"].value("_type", "");
+  const bool unknown = left_type.empty() || left_type == "Any";
+  const bool count = left_type == "int" || left_type == "bool";
+  if (!(op == "Add" && unknown) && !(op == "Mult" && (unknown || count)))
+    return false;
+  const Json &rhs = expr["right"];
+  const std::string rhs_kind = rhs.value("_type", "");
+  if (rhs_kind == "Name")
+    return name_operand_type(rhs, body) == "str";
+  return rhs_kind == "Constant" && get_type_from_constant(rhs) == "str";
 }
 
 /// The type a call of a name returns, or nullopt when the name holds a
