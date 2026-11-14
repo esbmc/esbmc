@@ -2961,32 +2961,43 @@ void python_converter::guard_tagged_callee(
   current_block->copy_to_operands(check);
 }
 
+/// Adds to @p holds that @p callee is a marked def of @p body, in @p module,
+/// or a marked method of a class it defines, which an attribute holds.
+void python_converter::add_marked_callees(
+  exprt &holds,
+  const exprt &callee,
+  const nlohmann::json &module,
+  const nlohmann::json &body,
+  const std::string &clazz) const
+{
+  for (const auto &def : body)
+  {
+    if (clazz.empty() && def.value("_type", "") == "ClassDef")
+      add_marked_callees(holds, callee, module, def["body"], def["name"]);
+    if (!def.contains("esbmc_tagged_return"))
+      continue;
+    if (
+      const symbolt *function = symbol_table_.find_symbol(
+        symbol_id(module["filename"], clazz, def["name"]).to_string()))
+      holds.copy_to_operands(equality_exprt(
+        callee,
+        python_expr::build_typecast(
+          python_expr::build_address_of(symbol_expr(*function)),
+          pointer_typet(empty_typet()))));
+  }
+}
+
 void python_converter::define_tagged_callee()
 {
   symbolt *helper = symbol_table_.find_symbol(tagged_callee_id);
   if (!helper)
     return;
-  const typet pointer = pointer_typet(empty_typet());
   const exprt callee = symbol_expr(
     *symbol_table_.find_symbol(std::string(tagged_callee_id) + "@callee"));
   exprt holds("or", bool_typet());
-  auto add_marked = [&](const nlohmann::json &module) {
-    for (const auto &def : module["body"])
-    {
-      if (!def.contains("esbmc_tagged_return"))
-        continue;
-      if (
-        const symbolt *function = symbol_table_.find_symbol(
-          symbol_id(module["filename"], "", def["name"]).to_string()))
-        holds.copy_to_operands(equality_exprt(
-          callee,
-          python_expr::build_typecast(
-            python_expr::build_address_of(symbol_expr(*function)), pointer)));
-    }
-  };
-  add_marked(*entry_ast_);
+  add_marked_callees(holds, callee, *entry_ast_, (*entry_ast_)["body"], "");
   for (const auto &[name, module] : module_ast_pool_)
-    add_marked(module);
+    add_marked_callees(holds, callee, module, module["body"], "");
   gen_or(holds);
   code_blockt body;
   code_returnt result;
