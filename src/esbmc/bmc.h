@@ -94,10 +94,10 @@ protected:
   // discharge was vacuous: the path assumptions alone are unsatisfiable.
   smt_resultt check_vacuity(symex_target_equationt &local_eq) const;
 
-  /// Whether the kept claim can hold at all on a feasible path.
+  /// Whether some feasible execution avoids violating the kept claim.
   smt_resultt check_claim_unsatisfiable(symex_target_equationt &local_eq) const;
 
-  /// Whether the invariant leaves one claim no way to hold (issue #7585).
+  /// Whether the invariant leaves one claim no way to be avoided (#10642).
   bool invariant_refutes(const symex_target_equationt &eq, size_t claim_index);
 
   // Set by the vacuity probe when at least one kept claim discharged

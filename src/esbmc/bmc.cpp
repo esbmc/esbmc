@@ -364,7 +364,7 @@ void bmct::record_satisfiable_claim(
   }
 
   // A claim downstream of the havoc is unknowable only while the abstraction
-  // admits it holding (issue #7585).
+  // admits an execution that avoids it (issues #7585, #10642).
   if (
     claim.claim_after_invariant_havoc &&
     !is_loop_invariant_obligation(claim.claim_location) &&
@@ -663,9 +663,9 @@ void bmct::report_violation()
     report_unknown();
 }
 
-/// UNSAT iff no feasible path satisfies the kept claim. A violation found
-/// downstream of a loop-invariant havoc is then one the invariant itself
-/// forces, not an artefact of the abstraction (issue #7585).
+/// UNSAT iff every feasible execution violates the kept claim. A violation
+/// found downstream of a loop-invariant havoc is then one the invariant itself
+/// forces, not an artefact of the abstraction (issues #7585, #10642).
 smt_resultt
 bmct::check_claim_unsatisfiable(symex_target_equationt &local_eq) const
 {
@@ -675,7 +675,8 @@ bmct::check_claim_unsatisfiable(symex_target_equationt &local_eq) const
   return solver->dec_solve();
 }
 
-/// Whether the invariant leaves the claim at \p claim_index no way to hold.
+/// Whether the invariant leaves the claim at \p claim_index no way to be
+/// avoided.
 /// The single-formula path has no per-claim equation, so slice one the way
 /// multi_property_check does and run the same probe.
 bool bmct::invariant_refutes(
