@@ -443,19 +443,12 @@ bool simple_slice::run(symex_target_equationt::SSA_stepst &steps)
 bool claim_slicer::run(symex_target_equationt::SSA_stepst &steps)
 {
   sliced = 0;
-  claim_after_invariant_havoc = false;
   fine_timet algorithm_start = current_time();
   size_t counter = 1;
-  bool seen_invariant_havoc = false;
   for (symex_target_equationt::SSA_stepst::iterator it = steps.begin();
        it != steps.end();
        ++it)
   {
-    // Symex emits a linear trace, so once the loop-invariant schema's havoc
-    // has run every later claim on it is in the abstract state.
-    if (it->is_assignment() && it->source.pc->loop_invariant_havoc)
-      seen_invariant_havoc = true;
-
     // just find the next assertion
     if (it->is_assert())
     {
@@ -479,7 +472,6 @@ bool claim_slicer::run(symex_target_equationt::SSA_stepst &steps)
                                 : property_key(*it->source.pc, claim_comment);
         claim_ploc = property_location(*it->source.pc, claim_comment);
         claim_instruction = &*it->source.pc;
-        claim_after_invariant_havoc = seen_invariant_havoc;
         continue;
       }
 

@@ -236,6 +236,7 @@ private:
   /// Unknown when the model witnesses only the invariant abstraction rather
   /// than a reachable state (issue #7480).
   void record_satisfiable_claim(
+    smt_convt &smt_conv,
     const claim_slicer &claim,
     const property_locationt &loc,
     bool inductive_step,
