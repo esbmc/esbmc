@@ -1666,10 +1666,25 @@ python_converter::dict_function_return_type(const nlohmann::json &container)
   return shared;
 }
 
+/// A call through a subscript passes only positional arguments, so a keyword
+/// argument would be dropped.
+static void refuse_subscript_keywords(const nlohmann::json &call)
+{
+  if (!call.value("keywords", nlohmann::json::array()).empty())
+    throw std::runtime_error(
+      "keyword arguments in a call through a function value are not yet "
+      "supported");
+}
+
 typet python_converter::subscript_call_return_type(
   const exprt &func_ptr,
-  const nlohmann::json &func_node)
+  const nlohmann::json &call)
 {
+  // The preprocessor found the functions this call may reach, which return
+  // a tagged value.
+  if (call.contains("esbmc_tagged_call"))
+    return type_handler_.get_tagged_object_type();
+  const nlohmann::json &func_node = call["func"];
   // A function read from a list keeps its code type, so its own return type
   // is known; the enclosing function's return type is only a guess.
   const typet &ptr_type = func_ptr.type();
@@ -2165,7 +2180,8 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
     side_effect_expr_function_callt call;
     call.location() = get_location_from_decl(element);
     call.function() = func_ptr;
-    call.type() = subscript_call_return_type(func_ptr, func_node);
+    call.type() = subscript_call_return_type(func_ptr, element);
+    refuse_subscript_keywords(element);
     if (element.contains("args"))
       for (const auto &arg : element["args"])
       {

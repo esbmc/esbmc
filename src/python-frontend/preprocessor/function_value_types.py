@@ -775,6 +775,8 @@ def _tag_mixed_returns(analysis, module, path):
     trees.update((os.path.realpath(p), tree) for p, tree in analysis.loaded.items())
     owners = {id(node): file for file, tree in trees.items() for node in ast.walk(tree)}
     groups = analysis.mixed_groups()
+    if not groups:
+        return False
     calls = [entry for entries, _ in groups.values() for entry in entries]
     members = [member for _, group in groups.values() for member in group]
     if not _taggable(analysis, module, trees, owners, groups):
@@ -904,7 +906,11 @@ def reject_mixed_function_values(module, path):
     analysis = _Analysis(module, path)
     analysis.propagate()
     found = analysis.mixed_call()
-    if found is None or _tag_mixed_returns(analysis, module, path):
+    # The marks follow values through dicts too, so that a call through a dict value, which
+    # the converter refuses on its own, is tagged as well.
+    with_dicts = _Analysis(module, path, dicts=True)
+    with_dicts.propagate()
+    if _tag_mixed_returns(with_dicts, module, path) or found is None:
         return
     call, passed, (first, first_kind), (second, second_kind) = found
     what = "a function passed here" if passed else "this call"

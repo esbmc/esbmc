@@ -4137,9 +4137,10 @@ private:
   /// that also holds other values, or functions whose signatures differ or
   /// are not known, is refused (#10341). Nothing when it holds no function.
   std::optional<typet> dict_read_function_type(const nlohmann::json &element);
-  typet subscript_call_return_type(
-    const exprt &func_ptr,
-    const nlohmann::json &func_node);
+  /// The return type of @p call, a call through a subscript, with
+  /// @p func_ptr the value called.
+  typet
+  subscript_call_return_type(const exprt &func_ptr, const nlohmann::json &call);
   std::optional<std::vector<std::size_t>>
   numpy_filled_array_shape(const nlohmann::json &value) const;
   const std::optional<std::pair<typet, numpy_scalar_pointer_view_infot>> &
