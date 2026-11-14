@@ -633,33 +633,75 @@ static void mark_type_messages(nlohmann::json &node)
     mark_type_messages(child);
 }
 
-// A bare `raise` in @p node run by the same frame (a nested function is not
-// searched).
-static bool reraises(const nlohmann::json &node)
+// Whether @p exc, a Raise's exception, is a bare `raise` or, with @p var not
+// empty, the name @p var.
+static bool raises_var(const nlohmann::json &exc, const std::string &var)
+{
+  return exc.is_null() ||
+         (!var.empty() && exc.is_object() && exc.value("_type", "") == "Name" &&
+          exc.value("id", "") == var);
+}
+
+// A bare `raise`, or a `raise var` when @p var is not empty, in @p node run by
+// the same frame (a nested function is not searched).
+static bool reraises(const nlohmann::json &node, const std::string &var = "")
 {
   if (node.is_array())
-    return std::any_of(node.begin(), node.end(), reraises);
+    return std::any_of(node.begin(), node.end(), [&](const auto &item) {
+      return reraises(item, var);
+    });
   if (!node.is_object())
     return false;
   const std::string type = node.value("_type", "");
   if (type == "FunctionDef" || type == "AsyncFunctionDef" || type == "Lambda")
     return false;
-  if (type == "Raise" && node.contains("exc") && node["exc"].is_null())
+  if (type == "Raise" && node.contains("exc") && raises_var(node["exc"], var))
     return true;
   for (const auto &item : node.items())
-    if (reraises(item.value()))
+    if (reraises(item.value(), var))
       return true;
   return false;
+}
+
+/// Whether @p node rebinds @p name: stores to it, deletes it, or binds it in
+/// an `except ... as`.
+static bool rebinds(const nlohmann::json &node, const std::string &name)
+{
+  if (
+    node.is_object() &&
+    ((node.value("_type", "") == "Name" && node.value("id", "") == name &&
+      node.contains("ctx") && node["ctx"].value("_type", "") != "Load") ||
+     (node.value("_type", "") == "ExceptHandler" && node.contains("name") &&
+      node["name"].is_string() && node["name"] == name)))
+    return true;
+  if (node.is_structured())
+    for (const auto &child : node)
+      if (rebinds(child, name))
+        return true;
+  return false;
+}
+
+/// The variable a handler binds the caught exception to, when its body never
+/// rebinds it, so a `raise` of it re-raises what the handler is handling
+/// (#10242); "" otherwise.
+static std::string reraisable_var(const nlohmann::json &handler)
+{
+  if (!handler.contains("name") || !handler["name"].is_string())
+    return "";
+  const std::string name = handler["name"];
+  return rebinds(handler["body"], name) ? "" : name;
 }
 
 code_blockt python_exception_handler::save_handled_exception(
   const nlohmann::json &element,
   std::vector<handled_exceptiont> &handled_stack)
 {
-  if (!reraises(element["body"]))
+  const std::string var = reraisable_var(element);
+  if (!reraises(element["body"], var))
     return code_blockt();
   handled_exceptiont handled;
   handled.function = converter_.current_function_name();
+  handled.var = var;
   contextt &context = converter_.symbol_table();
   create_exception_state_symbols(context);
   const locationt location = converter_.get_location_from_decl(element);
@@ -686,23 +728,41 @@ code_blockt python_exception_handler::save_handled_exception(
   return saves;
 }
 
+const python_exception_handler::handled_exceptiont *
+python_exception_handler::handled_by(const nlohmann::json &exc) const
+{
+  if (exc.is_null())
+    return handled_.empty() ? nullptr : &handled_.back();
+  for (auto it = handled_.rbegin(); it != handled_.rend(); ++it)
+    if (!it->var.empty() && raises_var(exc, it->var))
+      return &*it;
+  return nullptr;
+}
+
+bool python_exception_handler::reraises_handled(const nlohmann::json &exc) const
+{
+  const handled_exceptiont *handled = handled_by(exc);
+  return exc.is_null() ||
+         (handled && handled->function == converter_.current_function_name());
+}
+
 void python_exception_handler::restore_handled_exception(
+  const nlohmann::json &exc,
   const locationt &location,
   codet &block) const
 {
-  if (
-    handled_.empty() ||
-    handled_.back().function != converter_.current_function_name())
+  const handled_exceptiont *handled = handled_by(exc);
+  if (!handled || handled->function != converter_.current_function_name())
     return;
   const char *globals[] = {
     exception_globals::typeid_id,
     exception_globals::value_id,
     exception_globals::site_id};
-  for (std::size_t i = 0; i < handled_.back().saved.size(); ++i)
+  for (std::size_t i = 0; i < handled->saved.size(); ++i)
   {
     code_assignt restore(
       build_symbol(*converter_.symbol_table().find_symbol(globals[i])),
-      handled_.back().saved[i]);
+      handled->saved[i]);
     restore.location() = location;
     block.copy_to_operands(restore);
   }
@@ -714,13 +774,15 @@ void python_exception_handler::get_raise_statement(
 {
   locationt location = converter_.get_location_from_decl(element);
 
-  // Bare 'raise' (Raise.exc is null) re-raises the active exception.
-  // Lower it to a cpp-throw with no operand and an empty exception_list;
-  // remove_exceptions re-raises from the global exception state (#5075),
-  // which is first restored to what the enclosing handler is handling.
-  if (element["exc"].is_null())
+  // Bare 'raise' (Raise.exc is null) re-raises the active exception, and so
+  // does `raise e` of a handler's variable e (#10242): e holds a copy cast to
+  // the handler's type, which would lose the caught type. Lower it to a
+  // cpp-throw with no operand and an empty exception_list; remove_exceptions
+  // re-raises from the global exception state (#5075), which is first
+  // restored to what the handler is handling.
+  if (reraises_handled(element["exc"]))
   {
-    restore_handled_exception(location, block);
+    restore_handled_exception(element["exc"], location, block);
 
     side_effect_exprt side("cpp-throw", empty_typet());
     side.location() = location;

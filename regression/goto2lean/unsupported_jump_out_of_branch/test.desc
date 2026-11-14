@@ -1,0 +1,4 @@
+CORE
+main.c
+--goto2lean
+^ERROR: goto2lean: unsupported unstructured jump out of a branch at .*main\.c:9$

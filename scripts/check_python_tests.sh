@@ -197,6 +197,11 @@ ignored_dirs=(
   "github_6281"
   "github_6281_used"
   "github_6281_fail"
+  # These end with an exception outside their --python-check-exceptions
+  # family (ValueError, NameError), which the ESBMC run reports nothing for,
+  # so CPython exits non-zero although ESBMC verifies SUCCESSFUL.
+  "reraise_handler_var_reassigned"
+  "reraise_handler_var_shadowed"
 )
 
 # Prefixes for ESBMC-specific regression directories that are not suitable for
@@ -275,8 +280,17 @@ for dir in */; do
   else
     PYTHON_CMD="python3"
   fi
-  (cd "$dir" && $PYTHON_CMD main.py > /dev/null 2>&1)
-  result=$?
+  runs=1
+  # A random draw makes one CPython run a coin flip, so a _fail test must raise
+  # in some run and any other test must exit 0 in all of them.
+  if grep -qE '^[[:space:]]*(import random|from random import)' "$dir/main.py"; then
+    runs=30
+  fi
+  result=0
+  for ((run = 0; run < runs && result == 0; run++)); do
+    (cd "$dir" && $PYTHON_CMD main.py > /dev/null 2>&1)
+    result=$?
+  done
 
   if [[ "$dir" == *fail* ]]; then
     if [ $result -eq 0 ]; then

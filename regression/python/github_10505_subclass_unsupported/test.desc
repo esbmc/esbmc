@@ -1,0 +1,4 @@
+CORE
+main.py
+
+^ERROR: len\(\) of an expression whose class 'Base' has subclasses is not supported$

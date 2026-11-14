@@ -206,6 +206,7 @@ private:
   struct handled_exceptiont
   {
     std::string function;
+    std::string var; // the variable a `raise var` re-raises it from, or ""
     std::vector<exprt> saved; // copies of the exception-state globals
   };
   std::vector<handled_exceptiont> handled_;
@@ -216,7 +217,14 @@ private:
     const nlohmann::json &element,
     std::vector<handled_exceptiont> &handled_stack);
 
-  void restore_handled_exception(const locationt &location, codet &block) const;
+  // The saved state a `raise` of @p exc restores: the innermost for a bare
+  // `raise`, the handler binding the variable for `raise var`.
+  const handled_exceptiont *handled_by(const nlohmann::json &exc) const;
+  bool reraises_handled(const nlohmann::json &exc) const;
+  void restore_handled_exception(
+    const nlohmann::json &exc,
+    const locationt &location,
+    codet &block) const;
 
   exprt make_finally_rethrow_handler(const nlohmann::json &element);
 

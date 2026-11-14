@@ -20,10 +20,9 @@ public:
   explicit value_kinds(const nlohmann::json &module);
 
   /// Whether `expr`, read in `scope` (a function definition or the module),
-  /// may produce a value that is not a number: it has sources of two
-  /// different known kinds, or one of them is a str or None.
-  bool
-  may_be_non_number(const nlohmann::json &expr, const nlohmann::json &scope);
+  /// may produce a value that is not an int: it has sources of two
+  /// different known kinds, or one of them is a str, a float or None.
+  bool may_be_non_int(const nlohmann::json &expr, const nlohmann::json &scope);
 
   /// The top-level function called `function_name`, or the module.
   const nlohmann::json &scope_of(const std::string &function_name) const;

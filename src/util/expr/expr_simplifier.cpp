@@ -427,8 +427,14 @@ static expr2tc simplify_arith_2ops(
     // Fix rounding when a bv overflow occurs. Only the bv arm yields a
     // constant_int2t result, so this reproduces the original per-arm fixup.
     if (!is_nil_expr(simpl_res) && is_constant_int2t(simpl_res))
+    {
+      if (
+        int_encoding_fold_wraps(
+          to_constant_int2t(simpl_res).value, simpl_res->type))
+        return expr2tc();
       simpl_res =
         from_integer(to_constant_int2t(simpl_res).value, simpl_res->type);
+    }
   }
 
   return typecast_check_return(type, simpl_res);
@@ -573,7 +579,8 @@ static expr2tc fold_bitnot_plus_const(
     return is_bitnot2t(e) && e->type == type ? to_bitnot2t(e).value : expr2tc();
   };
   auto is_const = [&type](const expr2tc &e) {
-    return is_constant_int2t(e) && e->type == type;
+    return is_constant_int2t(e) && e->type == type &&
+           !int_encoding_fold_wraps(to_constant_int2t(e).value - 1, type);
   };
   auto decrement = [&type](const expr2tc &c) {
     return from_integer(to_constant_int2t(c).value - 1, type);
@@ -709,12 +716,14 @@ expr2tc add2t::do_simplify() const
   // longer match. Catch the value-shaped form too.
   if (
     is_signedbv_type(type) && is_constant_int2t(side_2) &&
-    to_constant_int2t(side_2).value.is_negative())
+    to_constant_int2t(side_2).value.is_negative() &&
+    !int_encoding_fold_wraps(-to_constant_int2t(side_2).value, type))
     return sub2tc(
       type, side_1, from_integer(-to_constant_int2t(side_2).value, type));
   if (
     is_signedbv_type(type) && is_constant_int2t(side_1) &&
-    to_constant_int2t(side_1).value.is_negative())
+    to_constant_int2t(side_1).value.is_negative() &&
+    !int_encoding_fold_wraps(-to_constant_int2t(side_1).value, type))
     return sub2tc(
       type, side_2, from_integer(-to_constant_int2t(side_1).value, type));
 
@@ -1327,8 +1336,14 @@ static expr2tc simplify_arith_1op(const type2tc &type, const expr2tc &value)
     // Properly handle truncation when an overflow occurs
     // or when the result gets out of the bounds of the type
     if (!is_nil_expr(simpl_res) && is_constant_int2t(simpl_res))
+    {
+      if (
+        int_encoding_fold_wraps(
+          to_constant_int2t(simpl_res).value, simpl_res->type))
+        return expr2tc();
       simpl_res =
         from_integer(to_constant_int2t(simpl_res).value, simpl_res->type);
+    }
   }
   else if (is_fixedbv_type(value))
   {
@@ -2783,6 +2798,9 @@ static expr2tc do_bit_munge_operation(
      * past the width. Require 0 <= br < 64 and otherwise leave the shift
      * symbolic for the solver. */
     can_eval &= !is_shift || (br >= 0 && br < 64);
+    if constexpr (std::is_same_v<constructor, shl2t>)
+      can_eval =
+        can_eval && !int_encoding_fold_wraps(bl * BigInt::power2(r), type);
     if (can_eval)
     {
       uint64_t res = opfunc(l, r);
@@ -3585,6 +3603,8 @@ static std::optional<expr2tc> fold_constant_bv_source(
     // type: from_integer(BigInt, type2tc) truncates/sign-extends to the
     // destination width via the same binary round-trip the legacy
     // from_integer + to_integer pair performed.
+    if (int_encoding_fold_wraps(theint.value, type))
+      return expr2tc();
     return from_integer(theint.value, type);
   }
 

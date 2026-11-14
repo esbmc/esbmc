@@ -111,6 +111,8 @@ public:
    * @brief Dispatches Add/Sub/Div between a tagged-scalar operand and a
    * literal
    */
+  /// Whether handle_arithmetic implements binary operator @p op.
+  static bool is_tagged_arithmetic(const std::string &op);
   exprt handle_arithmetic(
     const std::string &op,
     const exprt &lhs,
@@ -191,9 +193,13 @@ public:
     const typet &result_type,
     const locationt &location);
 
-  /// Throws when a tag may hold a float and `lhs op rhs` is not a str
-  /// operation.
-  void refuse_float_tag_operation(const exprt &lhs, const exprt &rhs) const;
+  /// When a tag may hold a float and `lhs op rhs` is not a str operation,
+  /// reports a tagged operand holding a float as unsupported at runtime, or
+  /// throws where no runtime check can be planted.
+  void refuse_float_tag_operation(
+    const exprt &lhs,
+    const exprt &rhs,
+    const locationt &location) const;
 
   /// Throws the shared "tagged argument, no known parameter type" refusal.
   [[noreturn]] void refuse_tagged_argument() const;
@@ -248,6 +254,9 @@ private:
     const locationt &location,
     std::vector<codet> &instructions,
     exprt &elem_size);
+
+  /// A fresh, int-typed copy of the int @p value as a tag's `.value`.
+  exprt int_payload(const exprt &value) const;
 
   /// A fresh copy of @p rhs as a tag's `.value`; sets @p elem_size.
   exprt build_scalar_payload(
@@ -307,7 +316,17 @@ private:
     const exprt &tagged,
     const exprt &literal,
     bool tagged_is_left);
+  exprt unmodelled_str_operand(
+    const std::string &op,
+    const exprt &lhs,
+    const exprt &rhs) const;
+  void claim_numeric_operands(
+    const std::string &op,
+    const exprt &lhs,
+    const exprt &rhs,
+    const locationt &location);
   exprt build_div_literal(
+    const std::string &op,
     const exprt &tagged,
     const exprt &literal,
     bool tagged_is_left,
@@ -315,6 +334,7 @@ private:
   exprt build_add_tagged(const exprt &lhs, const exprt &rhs);
   exprt build_sub_tagged(const exprt &lhs, const exprt &rhs);
   exprt build_div_tagged(
+    const std::string &op,
     const exprt &lhs,
     const exprt &rhs,
     const locationt &location);

@@ -1,0 +1,8 @@
+CORE
+main.c
+--goto2lean
+^  ∀ s : BitVec 32,\n  let s := \(s \+ \(1#32\)\);$
+^  ∀ a : BitVec 32,\n  id a \(fun
+^  ∀ t : BitVec 32,\n  ∀ «tmp\$4» : BitVec 32,$
+^    ∀ u : BitVec 32,\n    ∀ «tmp\$5» : BitVec 32,$
+^      let u := «tmp\$5»;$

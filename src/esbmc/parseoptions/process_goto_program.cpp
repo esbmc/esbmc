@@ -29,6 +29,7 @@
 #include <goto-programs/goto_convert_functions.h>
 #include <goto-programs/goto_inline.h>
 #include <goto-programs/goto_k_induction.h>
+#include <goto-programs/scalarize_structs.h>
 #include <goto-programs/goto_termination.h>
 #include <esbmc/ranking_synthesis.h>
 #include <esbmc/non_termination.h>
@@ -350,6 +351,30 @@ static void record_early_answer(
         options.get_bool_option("no-unwinding-assertions")));
 }
 
+static bool
+should_check_after_violation(const optionst &options, bool is_coverage)
+{
+  return options.get_bool_option("multi-property") || is_coverage ||
+         options.get_bool_option("validate-violation-witness");
+}
+
+// Under --termination, goto_termination does its own havoc, so
+// goto_k_induction must not also run (#6031). Witness validation forces the
+// k-induction option, so under --incremental-bmc the strategy runs an
+// inductive step that needs the havoc too (#10640).
+static bool needs_k_induction_havoc(
+  const cmdlinet &cmdline,
+  const optionst &options,
+  bool ts_strategy)
+{
+  if (options.get_bool_option("termination"))
+    return false;
+  return cmdline.isset("inductive-step") || cmdline.isset("k-induction") ||
+         cmdline.isset("k-induction-parallel") || ts_strategy ||
+         (cmdline.isset("validate-correctness-witness") &&
+          options.get_bool_option("incremental-bmc"));
+}
+
 bool esbmc_parseoptionst::process_goto_program(
   optionst &options,
   goto_functionst &goto_functions)
@@ -388,8 +413,9 @@ bool esbmc_parseoptionst::process_goto_program(
 
     // Claims after a violation are still checked, so no pass may treat a
     // failed assertion as the end of its path (#7900).
+    // Witness validation filters non-target claims during symbolic execution.
     const bool checks_past_violation =
-      options.get_bool_option("multi-property") || is_coverage;
+      should_check_after_violation(options, is_coverage);
 
     // For coverage mode, treat extra input files (cmdline.args[1:]) as include
     // files so that the coverage location_pool covers all input sources.
@@ -500,6 +526,8 @@ bool esbmc_parseoptionst::process_goto_program(
       unreported_exceptions(options),
       python_checked_exceptions(options));
 
+    scalarize_structs(goto_functions, context, options);
+
     // do partial inlining
     if (!cmdline.isset("no-inlining"))
     {
@@ -512,12 +540,8 @@ bool esbmc_parseoptionst::process_goto_program(
     if (cmdline.isset("gcse"))
       apply_gcse(goto_functions, context, cmdline);
 
-    // Under --termination, goto_termination does its own havoc, so
-    // goto_k_induction must not also run (#6031).
     bool is_k_induction =
-      (cmdline.isset("inductive-step") || cmdline.isset("k-induction") ||
-       cmdline.isset("k-induction-parallel") || ts_strategy_requested()) &&
-      !options.get_bool_option("termination");
+      needs_k_induction_havoc(cmdline, options, ts_strategy_requested());
 
     // --termination reuses k-induction's havoc machinery via
     // goto_termination, so the post-havoc invariant injection applies

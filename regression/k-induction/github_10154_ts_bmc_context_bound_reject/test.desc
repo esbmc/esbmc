@@ -1,0 +1,5 @@
+CORE
+main.c
+--ts-bmc --incremental-context-bound --unwind 6
+^ERROR: --incremental-context-bound cannot be combined with --ts-bmc$
+\A(?![\s\S]*VERIFICATION)[\s\S]*\Z

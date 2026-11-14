@@ -1632,6 +1632,37 @@ static void collect_nondet_bytes(
   }
 }
 
+using off_trace_mapt =
+  std::unordered_map<std::string, const goto_programt::instructiont *>;
+
+// A store through a pointer with several targets makes one step per target;
+// the one the trace takes is the input (#10315). A step at another instruction
+// that reads an off-trace nondet, e.g. the phi after an untaken branch, does
+// not emit it. Returns whether the step is on the trace.
+static bool track_on_trace(
+  const symex_target_equationt::SSA_stept &step,
+  const std::vector<expr2tc> &nondets,
+  smt_convt &smt_conv,
+  off_trace_mapt &off_trace,
+  std::unordered_set<std::string> &seen_nondets)
+{
+  const goto_programt::instructiont *const pc = &*step.source.pc;
+  const bool on_trace = smt_conv.l_get(step.guard).is_true();
+  for (const expr2tc &nondet_expr : nondets)
+  {
+    const std::string &name = to_symbol2t(nondet_expr).thename.as_string();
+    if (!on_trace)
+    {
+      off_trace.emplace(name, pc);
+      continue;
+    }
+    const auto it = off_trace.find(name);
+    if (it != off_trace.end() && it->second != pc)
+      seen_nondets.insert(name);
+  }
+  return on_trace;
+}
+
 // Shared nondet collection logic (used by both TestComp and CTest)
 std::vector<collected_nondet_value> collect_nondet_values(
   const symex_target_equationt &target,
@@ -1640,8 +1671,7 @@ std::vector<collected_nondet_value> collect_nondet_values(
 {
   std::vector<collected_nondet_value> results;
   std::unordered_set<std::string> seen_nondets;
-  std::unordered_map<std::string, const goto_programt::instructiont *>
-    off_trace;
+  off_trace_mapt off_trace;
 
   for (auto const &SSA_step : target.SSA_steps)
   {
@@ -1655,27 +1685,11 @@ std::vector<collected_nondet_value> collect_nondet_values(
       if (nondets.empty())
         continue;
 
+      if (!track_on_trace(SSA_step, nondets, smt_conv, off_trace, seen_nondets))
+        continue;
+
       const std::string file_path =
         SSA_step.source.pc->location.file().as_string();
-      // A store through a pointer with several targets makes one step per
-      // target; the one the trace takes is the input (#10315). A step at
-      // another instruction that reads an off-trace nondet, e.g. the phi after
-      // an untaken branch, does not emit it.
-      const goto_programt::instructiont *const pc = &*SSA_step.source.pc;
-      if (!smt_conv.l_get(SSA_step.guard).is_true())
-      {
-        for (const expr2tc &nondet_expr : nondets)
-          off_trace.emplace(to_symbol2t(nondet_expr).thename.as_string(), pc);
-        continue;
-      }
-      for (const expr2tc &nondet_expr : nondets)
-      {
-        const std::string &name = to_symbol2t(nondet_expr).thename.as_string();
-        const auto it = off_trace.find(name);
-        if (it != off_trace.end() && it->second != pc)
-          seen_nondets.insert(name);
-      }
-
       if (
         harness_inputs_only &&
         SSA_step.source.pc->location.function() == "__VERIFIER_nondet_memory" &&

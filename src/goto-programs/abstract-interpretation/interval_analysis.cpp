@@ -136,7 +136,8 @@ static void optimize_expression(expr2tc &expr, const interval_domaint &state)
 
 void optimize_function(
   const ait<interval_domaint> &interval_analysis,
-  goto_functiont &goto_function)
+  goto_functiont &goto_function,
+  bool preserve_branching)
 {
   // Inline optimizations
   Forall_goto_program_instructions (i_it, goto_function.body)
@@ -145,7 +146,9 @@ void optimize_function(
 
     // Singleton Propagation
     optimize_expression(i_it->code, d);
-    optimize_expression(i_it->guard, d);
+    // Replay needs the source branch even when its direction is known.
+    if (!preserve_branching || !i_it->is_goto())
+      optimize_expression(i_it->guard, d);
   }
 }
 
@@ -564,10 +567,10 @@ void interval_analysis(
     csv << oss.str();
   }
 
+  const bool preserve_branching =
+    options.get_bool_option("validate-violation-witness");
   Forall_goto_functions (f_it, goto_functions)
-  {
-    optimize_function(interval_analysis, f_it->second);
-  }
+    optimize_function(interval_analysis, f_it->second, preserve_branching);
 
   if (instrument_mode == INTERVAL_INSTRUMENTATION_MODE::LOOP_MODE)
     instrument_loops(interval_analysis, goto_functions);

@@ -10,6 +10,7 @@
 #include <python-frontend/function_call/expr.h>
 #include <python-frontend/math/complex_handler.h>
 #include <python-frontend/math/complex_handler_utils.h>
+#include <python-frontend/math/python_round.h>
 #include <python-frontend/python-list/python_list.h>
 #include <python-frontend/json_utils.h>
 #include <python-frontend/lambda/python_lambda.h>
@@ -20,6 +21,7 @@
 #include <python-frontend/tuple/tuple_handler.h>
 #include <python-frontend/type/type_handler.h>
 #include <python-frontend/type/type_utils.h>
+#include <python-frontend/python_annotation/annotation_intrinsics.h>
 #include <python-frontend/python_expr_builder.h>
 #include <util/arith/arith_tools.h>
 #include <util/expr/base_type.h>
@@ -49,73 +51,6 @@ using namespace python_expr;
 
 namespace
 {
-// value - floor(value) is exact for a double, so a tie is exactly 0.5.
-double round_ties_to_even(const double value)
-{
-  const double lower = std::floor(value);
-  const double diff = value - lower;
-  if (diff < 0.5)
-    return lower;
-  if (diff > 0.5)
-    return lower + 1.0;
-  return std::fmod(lower, 2.0) == 0.0 ? lower : lower + 1.0;
-}
-
-// CPython rounds the exact binary value half to even at the ndigits-th decimal
-// digit and reads the decimal result back (float_round_impl in
-// Objects/floatobject.c). printf's %f conversion of a double is exact.
-// Answers nullopt where CPython raises OverflowError.
-std::optional<double>
-round_to_ndigits_ties_even(const double value, const int ndigits)
-{
-  if (!std::isfinite(value) || ndigits > 323)
-    return value;
-  if (ndigits < -308)
-    return 0.0 * value;
-
-  if (ndigits >= 0)
-  {
-    std::vector<char> buf(
-      std::snprintf(nullptr, 0, "%.*f", ndigits, value) + 1);
-    std::snprintf(buf.data(), buf.size(), "%.*f", ndigits, value);
-    return std::strtod(buf.data(), nullptr);
-  }
-
-  // Round the integer digits at 10**-ndigits; a nonzero fraction breaks a tie
-  // away from zero.
-  const double magnitude = std::fabs(value);
-  const double whole = std::trunc(magnitude);
-  std::vector<char> buf(std::snprintf(nullptr, 0, "%.0f", whole) + 1);
-  std::snprintf(buf.data(), buf.size(), "%.0f", whole);
-  const std::size_t k = -static_cast<long>(ndigits);
-  std::string digits(buf.data());
-  if (digits.size() <= k)
-    digits.insert(0, k + 1 - digits.size(), '0');
-
-  const std::size_t keep = digits.size() - k;
-  const std::string half = "5" + std::string(k - 1, '0');
-  const int cmp = digits.compare(keep, k, half);
-  const bool round_up =
-    cmp > 0 ||
-    (cmp == 0 && (magnitude != whole || (digits[keep - 1] - '0') % 2 != 0));
-
-  digits.replace(keep, k, k, '0');
-  if (round_up)
-  {
-    std::size_t i = keep;
-    while (i > 0 && digits[i - 1] == '9')
-      digits[--i] = '0';
-    if (i == 0)
-      digits.insert(0, 1, '1');
-    else
-      ++digits[i - 1];
-  }
-  const double rounded = std::strtod(digits.c_str(), nullptr);
-  if (std::isinf(rounded))
-    return std::nullopt;
-  return std::signbit(value) ? -rounded : rounded;
-}
-
 // Check if an AST node is a known-empty literal (falsy in Python).
 // Needed because ESBMC's IR represents empty containers as non-NULL
 // pointers/structs, making them appear truthy at the IR level.
@@ -579,6 +514,35 @@ std::optional<exprt> function_call_expr::list_isinstance(
     and2tc(notequal2tc(obj2, gen_zero(obj2->type)), not2tc(tuple2)));
 }
 
+/// isinstance(obj, str) answered from obj's static type. get_typet("str")
+/// returns char[0], which the generic encoding lowers to an empty array
+/// constant, and simplify_python_builtins would then have to recover the
+/// answer from value-set state. A char array is always a str. A char pointer
+/// is one unless it is NULL, which is how None reaches a `str` parameter
+/// (#10442). Empty unless both obj and @p expected_type are str-typed.
+std::optional<exprt> function_call_expr::str_isinstance(
+  const exprt &obj,
+  const typet &expected_type,
+  const std::string &type_name) const
+{
+  if (
+    !expected_type.is_array() ||
+    !type_utils::is_char_storage(to_array_type(expected_type).subtype()))
+    return std::nullopt;
+  const typet &obj_type = obj.type();
+  if (
+    !(obj_type.is_array() || obj_type.is_pointer()) ||
+    !type_utils::is_char_storage(obj_type.subtype()))
+    return std::nullopt;
+  if (type_name == "type")
+    return isinstance_str_as_type(obj);
+  if (obj_type.is_array())
+    return true_exprt();
+  expr2tc obj2;
+  migrate_expr(obj, obj2);
+  return migrate_expr_back(notequal2tc(obj2, gen_zero(obj2->type)));
+}
+
 exprt function_call_expr::isinstance_operand(
   const nlohmann::json &node,
   const std::function<exprt(const std::string &)> &build,
@@ -665,15 +629,17 @@ exprt function_call_expr::bind_isinstance_call(exprt &obj_expr) const
 /// The list item a read `*(T *)item->value` of a scalar element comes from, or
 /// nil. The cast is the frontend's guess at the element's type; the item's
 /// type_id records the type it was stored with. A dict value read types the
-/// item with the followed struct rather than its tag, hence the follow.
+/// item with the followed struct rather than its tag, hence the follow. A dict
+/// value of no known type is read as `(char *)item->value` (#10432).
 static exprt list_item_of_scalar_read(
   const exprt &read,
   const typet &item_type,
   const namespacet &ns)
 {
-  if (read.id() != "dereference" || read.op0().id() != "typecast")
+  const exprt &cast = read.id() == "dereference" ? read.op0() : read;
+  if (cast.id() != "typecast")
     return nil_exprt();
-  const exprt &value = read.op0().op0();
+  const exprt &value = cast.op0();
   if (
     value.id() != "member" || value.get("component_name") != "value" ||
     ns.follow(value.op0().type()) != ns.follow(item_type))
@@ -890,25 +856,10 @@ exprt function_call_expr::handle_isinstance() const
     if (std::optional<exprt> listed = list_isinstance(obj_expr, type_name))
       return *listed;
 
-    // String special case: get_typet("str") returns char[0], which the
-    // generic encoding lowers to gen_zero(char[0]) — an empty array
-    // constant. simplify_python_builtins then has to recover the answer
-    // from value-set state, which is fragile (e.g. depends on operational
-    // model layout). When obj's static type is already a char-array or
-    // char-pointer (a Python str), short-circuit to true here.
     if (
-      expected_type.is_array() &&
-      type_utils::is_char_storage(to_array_type(expected_type).subtype()))
-    {
-      const typet &obj_type = obj_expr.type();
-      if (
-        (obj_type.is_array() &&
-         type_utils::is_char_storage(obj_type.subtype())) ||
-        (obj_type.is_pointer() &&
-         type_utils::is_char_storage(obj_type.subtype())))
-        return type_name == "type" ? isinstance_str_as_type(obj_expr)
-                                   : true_exprt();
-    }
+      std::optional<exprt> str =
+        str_isinstance(obj_expr, expected_type, type_name))
+      return *str;
 
     exprt t;
 
@@ -1944,6 +1895,32 @@ exprt function_call_expr::handle_issubclass() const
   return false_exprt();
 }
 
+bool function_call_expr::is_callable_name(const std::string &name) const
+{
+  const auto &ast = converter_.ast();
+
+  // Builtin type constructors / builtin functions, user classes, and
+  // user functions are all callable.
+  if (
+    type_utils::is_builtin_type(name) || json_utils::is_class(name, ast) ||
+    json_utils::search_function_in_ast(ast, name))
+    return true;
+
+  // A builtin function such as len or print, unless the program may rebind
+  // its name (a star import can too).
+  if (
+    python_annotation_intrinsics::builtin_functions().count(name) &&
+    json_utils::count_name_bindings(ast, name) == 0 &&
+    json_utils::count_name_bindings(ast, "*") == 0)
+    return true;
+
+  // Otherwise it is an ordinary variable: callable iff its class defines
+  // __call__.
+  const std::string var_type = type_handler_.get_var_type(name);
+  return !var_type.empty() && json_utils::is_class(var_type, ast) &&
+         method_exists_in_class_hierarchy(var_type, "__call__");
+}
+
 exprt function_call_expr::handle_callable() const
 {
   const auto &args = call_["args"];
@@ -1965,26 +1942,7 @@ exprt function_call_expr::handle_callable() const
     return false_exprt();
 
   if (node_type == "Name")
-  {
-    const std::string name = arg["id"].get<std::string>();
-    const auto &ast = converter_.ast();
-
-    // Builtin type constructors / builtin functions, user classes, and
-    // user functions are all callable.
-    if (
-      type_utils::is_builtin_type(name) || json_utils::is_class(name, ast) ||
-      json_utils::search_function_in_ast(ast, name))
-      return true_exprt();
-
-    // Otherwise it is an ordinary variable: callable iff its class defines
-    // __call__.
-    const std::string var_type = type_handler_.get_var_type(name);
-    if (
-      !var_type.empty() && json_utils::is_class(var_type, ast) &&
-      method_exists_in_class_hierarchy(var_type, "__call__"))
-      return true_exprt();
-    return false_exprt();
-  }
+    return gen_boolean(is_callable_name(arg["id"].get<std::string>()));
 
   // Conservative default for forms we do not statically resolve.
   return false_exprt();
@@ -2218,6 +2176,13 @@ static bool fold_round_to_int(nlohmann::json &arg, const bool is_negated)
   return true;
 }
 
+// round(int, n) with n >= 0 is the int itself, not a float of it.
+static bool
+round_keeps_int(const nlohmann::json &arg, const std::optional<int> &ndigits)
+{
+  return ndigits && *ndigits >= 0 && arg["value"].is_number_integer();
+}
+
 exprt function_call_expr::handle_round(nlohmann::json &arg) const
 {
   const auto &args = call_["args"];
@@ -2248,11 +2213,25 @@ exprt function_call_expr::handle_round(nlohmann::json &arg) const
   // Compile-time evaluation for numeric literals
   if (arg.contains("value") && arg["value"].is_number())
   {
-    if (!has_ndigits)
+    if (!has_ndigits || round_keeps_int(arg, ndigits))
     {
       // round(x) -> nearest integer (returns int)
       if (fold_round_to_int(arg, is_negated))
       {
+        exprt expr = converter_.get_expr(arg);
+        expr.type() = type_handler_.get_typet("int", 0);
+        return expr;
+      }
+    }
+    else if (ndigits && arg["value"].is_number_integer())
+    {
+      const long long val = arg["value"].get<long long>();
+      const std::optional<long long> rounded =
+        round_int_to_ndigits(is_negated ? -val : val, *ndigits);
+      if (rounded)
+      {
+        arg["value"] = *rounded;
+        arg["type"] = "int";
         exprt expr = converter_.get_expr(arg);
         expr.type() = type_handler_.get_typet("int", 0);
         return expr;
@@ -2800,6 +2779,140 @@ exprt function_call_expr::handle_complex() const
   return make_complex(real_part, imag_part);
 }
 
+namespace
+{
+bool is_int_like(const typet &t)
+{
+  return t.is_signedbv() || t.is_unsignedbv() || t.is_bool();
+}
+
+// An int or float constant, compared exactly as CPython compares them.
+struct numeric_constantt
+{
+  bool is_float = false;
+  BigInt i;
+  ieee_floatt f;
+};
+
+std::optional<numeric_constantt> numeric_constant_of(const exprt &e)
+{
+  expr2tc e2;
+  migrate_expr(e, e2);
+  if (expr2tc s = e2->simplify(); !is_nil_expr(s))
+    e2 = s;
+  numeric_constantt c;
+  if (is_constant_int2t(e2))
+    c.i = to_constant_int2t(e2).value;
+  else if (is_constant_bool2t(e2))
+    c.i = to_constant_bool2t(e2).value ? 1 : 0;
+  else if (is_constant_floatbv2t(e2))
+  {
+    c.is_float = true;
+    c.f = to_constant_floatbv2t(e2).value;
+  }
+  else
+    return std::nullopt;
+  return c;
+}
+
+// Sign of i - f for a float f that is not NaN.
+int compare_int_float(const BigInt &i, const ieee_floatt &f)
+{
+  if (f.is_infinity())
+    return f.get_sign() ? 1 : -1;
+  const BigInt whole = f.to_integer();
+  if (i != whole)
+    return i < whole ? -1 : 1;
+  // whole is f rounded toward zero, so any remainder has the sign of f.
+  ieee_floatt w(f.spec);
+  w.from_integer(whole);
+  if (w == f)
+    return 0;
+  return f.get_sign() ? 1 : -1;
+}
+
+bool numeric_less(const numeric_constantt &a, const numeric_constantt &b)
+{
+  if (!a.is_float && !b.is_float)
+    return a.i < b.i;
+  if (a.is_float && b.is_float)
+    return a.f < b.f;
+  if ((a.is_float && a.f.is_NaN()) || (b.is_float && b.f.is_NaN()))
+    return false;
+  return a.is_float ? compare_int_float(b.i, a.f) > 0
+                    : compare_int_float(a.i, b.f) < 0;
+}
+
+// min()/max() return the selected argument itself, so over int and float
+// arguments the result type depends on the values. Select it here when every
+// argument is a constant; otherwise the caller still promotes to float.
+std::optional<exprt> select_mixed_int_float(
+  const std::vector<exprt> &exprs,
+  const std::string &func_name)
+{
+  const auto is_float = [](const exprt &e) { return e.type().is_floatbv(); };
+  const auto is_int = [](const exprt &e) { return is_int_like(e.type()); };
+  if (
+    std::none_of(exprs.begin(), exprs.end(), is_float) ||
+    std::none_of(exprs.begin(), exprs.end(), is_int))
+    return std::nullopt;
+
+  std::vector<numeric_constantt> values;
+  for (const exprt &e : exprs)
+  {
+    std::optional<numeric_constantt> c = numeric_constant_of(e);
+    if (!c)
+      return std::nullopt;
+    values.push_back(*c);
+  }
+
+  // CPython keeps the first of equal extremes: an argument replaces the
+  // current one only if it compares strictly greater (max) or less (min).
+  const bool is_max = func_name == "max";
+  size_t best = 0;
+  for (size_t k = 1; k < values.size(); ++k)
+    if (
+      is_max ? numeric_less(values[best], values[k])
+             : numeric_less(values[k], values[best]))
+      best = k;
+  return exprs[best];
+}
+
+typet common_min_max_type(
+  const std::vector<exprt> &exprs,
+  const std::string &func_name,
+  const namespacet &ns)
+{
+  typet result_type = exprs[0].type();
+  for (size_t i = 1; i < exprs.size(); ++i)
+  {
+    const typet &t = exprs[i].type();
+    if (base_type_eq(result_type, t, ns))
+      continue;
+    if (result_type.is_floatbv() && t.is_signedbv())
+      continue; // keep float
+    else if (result_type.is_signedbv() && t.is_floatbv())
+      result_type = t; // promote int -> float
+    else if (
+      (result_type.is_signedbv() || result_type.is_unsignedbv()) &&
+      (t.is_signedbv() || t.is_unsignedbv()))
+    {
+      unsigned wa = result_type.is_signedbv()
+                      ? to_signedbv_type(result_type).get_width()
+                      : to_unsignedbv_type(result_type).get_width();
+      unsigned wb = t.is_signedbv() ? to_signedbv_type(t).get_width()
+                                    : to_unsignedbv_type(t).get_width();
+      result_type = signedbv_typet(std::max(wa, wb));
+    }
+    else
+      throw std::runtime_error(
+        func_name + "() arguments must be of comparable types: got " +
+        result_type.pretty() + " and " + t.pretty());
+  }
+  return result_type;
+}
+} // namespace
+
 exprt function_call_expr::handle_min_max(
   const std::string &func_name,
   irep_idt comparison_op) const
@@ -2921,33 +3034,11 @@ exprt function_call_expr::handle_min_max(
           func_name + "([...])");
     }
 
-  // Determine common promoted type across all arguments.
-  typet result_type = exprs[0].type();
-  for (size_t i = 1; i < exprs.size(); ++i)
-  {
-    const typet &t = exprs[i].type();
-    if (base_type_eq(result_type, t, converter_.ns))
-      continue;
-    if (result_type.is_floatbv() && t.is_signedbv())
-      continue; // keep float
-    else if (result_type.is_signedbv() && t.is_floatbv())
-      result_type = t; // promote int -> float
-    else if (
-      (result_type.is_signedbv() || result_type.is_unsignedbv()) &&
-      (t.is_signedbv() || t.is_unsignedbv()))
-    {
-      unsigned wa = result_type.is_signedbv()
-                      ? to_signedbv_type(result_type).get_width()
-                      : to_unsignedbv_type(result_type).get_width();
-      unsigned wb = t.is_signedbv() ? to_signedbv_type(t).get_width()
-                                    : to_unsignedbv_type(t).get_width();
-      result_type = signedbv_typet(std::max(wa, wb));
-    }
-    else
-      throw std::runtime_error(
-        func_name + "() arguments must be of comparable types: got " +
-        result_type.pretty() + " and " + t.pretty());
-  }
+  if (std::optional<exprt> selected = select_mixed_int_float(exprs, func_name))
+    return *selected;
+
+  const typet result_type =
+    common_min_max_type(exprs, func_name, converter_.ns);
 
   // Cast all args to the common type.
   for (auto &e : exprs)

@@ -28,7 +28,8 @@ public:
   static bool is_bounded(const std::string &function);
   /// hypot and arctan2.
   static bool is_bounded_binary(const std::string &function);
-  /// is_bounded() or exact (sqrt).
+  /// The numpy.* functions with a run-time model: is_bounded() but for the
+  /// math-only gamma and lgamma, or exact (sqrt).
   static bool has_runtime_model(const std::string &function);
   static double host_value(const std::string &function, double x);
   /// x lies outside the domain, poles included, where math.* raises.
@@ -39,8 +40,9 @@ public:
   /// The result for a number known only at run time, which is read once.
   exprt
   runtime(const std::string &function, const exprt &x, math_module module);
-  /// hypot(a, b) or arctan2(a, b), each argument read once. NumPy and
-  /// math.* agree on both: neither raises, and an overflow is an infinity.
+  /// hypot(a, b), arctan2(a, b) or pow(a, b), each argument read once.
+  /// NumPy and math.* agree on hypot and arctan2: neither raises, and an
+  /// overflow is an infinity; math.pow raises Python's errors.
   exprt binary(
     const std::string &function,
     const exprt &a,
@@ -68,9 +70,24 @@ private:
     const std::string &function,
     const exprt &x,
     const exprt &value);
+  exprt gamma_family(const std::string &function, const exprt &x);
+  exprt power(const exprt &a, const exprt &b, math_module module);
+  exprt constant_power(double base, double exponent, math_module module);
+  exprt power_infinite_exponent(const exprt &x, const exprt &y);
+  exprt power_infinite_base(const exprt &x, const exprt &y, const exprt &odd);
+  exprt power_zero_base(const exprt &x, const exprt &y, const exprt &odd);
+  exprt power_magnitude(const exprt &a, const exprt &y, const exprt &regular);
+  exprt power_overflow(const exprt &a, const exprt &y, const exprt &m);
+  exprt power_literal_exponent(const exprt &a, const exprt &y, const exprt &m);
+  exprt relative_to(const exprt &product, const exprt &m, std::size_t steps);
   exprt hypot(const exprt &x, const exprt &y);
   exprt hypot_of_runtime(const std::vector<exprt> &args);
   exprt arctan2(const exprt &y, const exprt &x);
+  exprt squares_relation(const exprt &x, const exprt &y, const exprt &r);
+  exprt bounded_binary_call(
+    const std::string &function,
+    const exprt &a,
+    const exprt &b);
   exprt fresh(const std::string &name, const exprt &value);
   exprt read_once(const exprt &x);
   exprt within(double low, double high);

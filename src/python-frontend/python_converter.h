@@ -62,6 +62,8 @@ bool is_imported_numpy_module_alias(
   const nlohmann::json &ast,
   const std::string &name);
 
+struct node_slot;
+
 // One `Call` node together with the name of the function whose body it
 // textually appears in (empty for a module-level call). Declared here (Impl
 // in converter_funcdef.cpp) so python_converter can cache the whole-AST scan
@@ -200,7 +202,12 @@ public:
     const typet &function,
     const typet &value,
     const locationt &location);
-  void decay_function_choice(exprt &then, exprt &else_expr);
+  bool slot_only_called(const node_slot &slot);
+  bool ifexp_only_called(const nlohmann::json &ifexp);
+  void decay_function_choice(
+    const nlohmann::json &ifexp,
+    exprt &then,
+    exprt &else_expr);
   void hoist_raising_arm(
     exprt &then,
     code_blockt &then_side_effects,
@@ -532,9 +539,12 @@ public:
   /// import binds, as `mk` after `from helper import mk` and `helper.mk`
   /// after `import helper`.
   nlohmann::json callable_function_stubs() const;
+  nlohmann::json callable_function_stubs(const nlohmann::json &module) const;
   /// The stubs followed by the current module's own statements, which a name
   /// read off the module is resolved against.
   nlohmann::json kind_module_body() const;
+  /// kind_module_body for the module whose AST is \p module.
+  nlohmann::json kind_module_body(const nlohmann::json &module) const;
   /// Whether a straight-line retype moved @p id's value to another symbol.
   bool is_retyped(const irep_idt &id) const
   {
@@ -748,6 +758,8 @@ public:
     return it == class_object_names_.end() ? nullptr : &it->second;
   }
 
+  exprt once_bound_int(const nlohmann::json &node, const exprt &value) const;
+
 private:
   // Hoists @p operand once and plants @p emit_guards over its value where the
   // operand is evaluated, also inside an and/or tail or a while test.
@@ -794,6 +806,7 @@ private:
 
   void load_c_intrisics(code_blockt &block);
 
+  bool rhs_skips_type_probe(const nlohmann::json &value) const;
   void get_var_assign(const nlohmann::json &ast_node, codet &target_block);
 
   void preregister_global_variables(const nlohmann::json &ast_body);
@@ -847,6 +860,26 @@ private:
     const exprt &callee,
     const nlohmann::json &call,
     const side_effect_expr_function_callt &call_expr);
+
+  /// The type of a call through a function value whose target the converter
+  /// cannot tell, @p untyped unless it may give a tagged value.
+  typet
+  untyped_call_type(const nlohmann::json &call, const typet &untyped) const;
+
+  /// @p call with its keyword arguments passed by position, for a call
+  /// through a function value, which passes only positional arguments.
+  /// Throws unless every function the value may hold has the same
+  /// positional parameters and the keywords name, in order, the ones after
+  /// the positional arguments.
+  nlohmann::json keywords_as_positional(const nlohmann::json &call);
+
+  /// Refuses the path where the call @p call of @p element, which the
+  /// preprocessor found may reach functions returning different types, goes
+  /// to anything but a def it marked to return a tagged value.
+  void guard_tagged_callee(const exprt &call, const nlohmann::json &element);
+  /// Writes the body of the check guard_tagged_callee calls, once every
+  /// module is converted.
+  void define_tagged_callee();
 
   exprt get_function_body_or_unsupported(const nlohmann::json &function_node);
 
@@ -954,6 +987,12 @@ private:
     const std::vector<nlohmann::json> &args,
     const std::map<std::string, nlohmann::json> &mapping,
     const std::vector<typet> &arg_types);
+  /// The literal \p left formatted with \p args, or "" on a path that is
+  /// ended as unsupported because the formatting cannot be modelled.
+  std::string percent_format_or_refusal(
+    const nlohmann::json &left,
+    const std::vector<nlohmann::json> &args,
+    const std::map<std::string, nlohmann::json> &mapping);
 
   /// Coarse Python-level type category used to decide whether two operands
   /// in an `Eq`/`NotEq` comparison are cross-type (Python's rule: different
@@ -1285,6 +1324,11 @@ private:
   bool is_program_file(const std::string &file) const;
 
   exprt get_function_call(const nlohmann::json &ast_block);
+  void coerce_struct_argument(
+    const nlohmann::json &element,
+    const typet &param_type,
+    const typet &arg_actual_type,
+    exprt &arg);
   /// A Call expression: folded into the caller when it passes a numpy view
   /// to a simple function, converted as a call otherwise.
   exprt get_call_expr(const nlohmann::json &element);
@@ -1299,6 +1343,9 @@ private:
   exprt get_len_on_bound_instance(
     const nlohmann::json &arg,
     const nlohmann::json &element);
+  exprt get_len_on_computed_instance(
+    const nlohmann::json &arg,
+    const locationt &location);
   static exprt list_element_type_id(const exprt &value);
   std::size_t count_user_classes();
   exprt checked_len_result(const exprt &len_call, const locationt &location);
@@ -1632,6 +1679,12 @@ private:
     size_t param_index,
     std::set<std::string> &visiting) const;
 
+  /// The entry module imports \p callee of the module being converted by
+  /// name and passes it, at \p param_index, a name that holds an int or a
+  /// str by path.
+  bool entry_module_passes_tagged(const std::string &callee, size_t param_index)
+    const;
+
   typet ctor_param_attr_type(
     const std::vector<const nlohmann::json *> &module_bodies,
     const std::string &class_name,
@@ -1714,6 +1767,24 @@ private:
     const nlohmann::json &value,
     const nlohmann::json &func_node,
     const struct_typet &clazz) const;
+  typet self_attribute_type(
+    const nlohmann::json &node,
+    const struct_typet &clazz) const;
+  struct self_store_count
+  {
+    size_t stores = 0;
+    size_t tagged = 0;
+    bool untagged = false;
+  };
+  void count_self_stores(
+    const nlohmann::json &method,
+    const nlohmann::json &node,
+    const std::string &attr,
+    const struct_typet &clazz,
+    self_store_count &count) const;
+  void tag_none_flagged_attributes(
+    const nlohmann::json &class_node,
+    struct_typet &clazz) const;
   typet unannotated_attribute_type(
     const nlohmann::json &value,
     const nlohmann::json &func_node,
@@ -1999,6 +2070,7 @@ private:
   exprt get_class_dunder_attribute(const nlohmann::json &element);
   exprt get_class_attribute(const nlohmann::json &element);
   exprt get_class_name(const nlohmann::json &value);
+  exprt get_function_name(const nlohmann::json &value);
   exprt
   get_module_member(const std::string &var_name, const nlohmann::json &element);
   void reject_method_value(const std::string &class_name, const std::string &m)
@@ -2368,6 +2440,10 @@ private:
   once_bound_exponent(const nlohmann::json &right, const exprt &rhs) const;
   symbolt *find_enclosing_scope_symbol(symbol_id sid) const;
   symbolt *find_global_symbol(const symbol_id &sid);
+  symbolt *find_callee_variable(const nlohmann::json &func);
+  symbolt *forward_function_global(
+    const std::string &name,
+    const nlohmann::json &binding);
   bool operand_has_type(const nlohmann::json &operand, const std::string &type)
     const;
   exprt
@@ -3189,6 +3265,7 @@ private:
     const std::string &lhs_id);
   void copy_elem_types_from_reordering_builtin(
     const nlohmann::json &ast_node,
+    const exprt &call,
     const std::string &lhs_id);
 
   /**
@@ -3206,6 +3283,16 @@ private:
    * @param target_block The code block to add generated code to.
    */
   std::string user_class_of(const typet &type);
+  void
+  add_presence_flags(const nlohmann::json &class_node, struct_typet &clazz);
+  exprt presence_flag_of(const exprt &member) const;
+  void clear_presence_flags(const code_typet &type, exprt &body) const;
+  exprt
+  guard_presence_flagged_read(const nlohmann::json &element, const exprt &expr);
+  void set_presence_flag(
+    const exprt &lhs,
+    const nlohmann::json &ast_node,
+    codet &target_block) const;
   void reject_attribute_added_on_some_paths(
     const std::string &receiver,
     const std::string &class_name,
@@ -3315,6 +3402,30 @@ private:
   /// Runtime dispatch for a tagged-scalar (PyObject-shaped) operand, which none
   /// of the static-type-driven paths can handle. Throws for an operator this
   /// mode does not model.
+  void box_into_tagged_slot(
+    const exprt &rhs,
+    const locationt &location,
+    const exprt &lhs,
+    codet &target_block);
+  exprt compare_none_flagged(
+    const std::string &op,
+    const exprt &lhs,
+    const exprt &rhs,
+    const nlohmann::json &left,
+    const nlohmann::json &right);
+  exprt tagged_equality(
+    const std::string &op,
+    const exprt &lhs,
+    const exprt &rhs,
+    const nlohmann::json &left,
+    const nlohmann::json &right);
+  exprt tagged_identity(
+    const std::string &op,
+    const exprt &lhs,
+    const exprt &rhs,
+    const nlohmann::json &left,
+    const nlohmann::json &right,
+    const nlohmann::json &element);
   exprt handle_tagged_scalar_binop(
     const std::string &op,
     const exprt &lhs,
@@ -3322,6 +3433,20 @@ private:
     const nlohmann::json &left,
     const nlohmann::json &right,
     const nlohmann::json &element);
+  exprt tagged_membership(
+    const std::string &op,
+    exprt lhs,
+    exprt rhs,
+    const nlohmann::json &right,
+    const nlohmann::json &element);
+  std::optional<exprt>
+  tagged_equals_any(const exprt &tagged, const nlohmann::json &right);
+  exprt tagged_key_membership(
+    const exprt &tagged,
+    exprt rhs,
+    const exprt &is_str,
+    const nlohmann::json &element,
+    bool invert);
 
   /// `d1 | d2` (PEP 584) on two dicts; nil if either operand is not a dict.
   /// Throws for the other bitwise operators on dicts.
@@ -3606,6 +3731,10 @@ private:
   typet optional_return_type(
     const nlohmann::json &function_node,
     const typet &declared);
+  typet union_return_type(
+    const nlohmann::json &return_node,
+    const nlohmann::json &function_node,
+    bool &is_optional);
   exprt wrap_in_optional(const exprt &value, const typet &optional_type);
   /// \p value wrapped when \p type is an Optional<T> struct, else unchanged.
   exprt wrap_if_optional(const exprt &value, const typet &type)
@@ -3784,6 +3913,10 @@ private:
     const exprt &lhs,
     const exprt &rhs,
     const locationt &loc);
+  /// Reports \p message as an unsupported construct where the path reaches
+  /// \p loc, and ends the path there.
+  void
+  end_path_as_unsupported(const std::string &message, const locationt &loc);
 
   // =========================================================================
   // Member variables
@@ -3831,6 +3964,11 @@ private:
   /// The operands of the `is`, `is not`, `==` or `!=` being converted: a
   /// type() call that is one of them may yield unknown_class_name.
   std::array<const nlohmann::json *, 2> type_compared_operands_{};
+  /// The operands of the operator being converted, which read a tagged
+  /// attribute's None flag themselves (#10350).
+  std::array<const nlohmann::json *, 2> none_aware_operands_{};
+  exprt
+  guard_none_flagged_read(const nlohmann::json &element, const exprt &expr);
   string_handler string_handler_;
   python_math math_handler_;
   complex_handler complex_handler_;
@@ -4006,9 +4144,10 @@ private:
   /// that also holds other values, or functions whose signatures differ or
   /// are not known, is refused (#10341). Nothing when it holds no function.
   std::optional<typet> dict_read_function_type(const nlohmann::json &element);
-  typet subscript_call_return_type(
-    const exprt &func_ptr,
-    const nlohmann::json &func_node);
+  /// The return type of @p call, a call through a subscript, with
+  /// @p func_ptr the value called.
+  typet
+  subscript_call_return_type(const exprt &func_ptr, const nlohmann::json &call);
   std::optional<std::vector<std::size_t>>
   numpy_filled_array_shape(const nlohmann::json &value) const;
   const std::optional<std::pair<typet, numpy_scalar_pointer_view_infot>> &

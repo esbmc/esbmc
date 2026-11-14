@@ -103,6 +103,8 @@ BigInt cvc5_convt::get_bv(smt_astt a, bool is_signed)
 {
   auto const *ca = to_solver_smt_ast<cvc5_smt_ast>(a);
   cvc5::Term e = slv.getValue(ca->a);
+  if (int_encoding)
+    return string2integer(e.getIntegerValue());
   std::string str = e.getBitVectorValue();
   return binary2integer(str, is_signed);
 }

@@ -1,0 +1,4 @@
+CORE
+main.c
+--goto2lean --output missing/out.lean
+^ERROR: goto2lean: cannot write missing/out\.lean$

@@ -262,6 +262,13 @@ const struct group_opt_templ all_cmd_options[] = {
      {"nondet-str-length",
       boost::program_options::value<int>()->default_value(16)->value_name("nr"),
       "Set maximum length for non-deterministic strings (default is 16)"},
+     {"python-typed-lists",
+      NULL,
+      "Keep a list whose every element is an int in an int64 array instead of "
+      "one untyped cell per element (default on)"},
+     {"no-python-typed-lists",
+      NULL,
+      "Keep every list in one untyped cell per element"},
      {"python-list-compare-depth",
       boost::program_options::value<int>()->default_value(4)->value_name("nr"),
       "Set maximum nesting depth for Python list comparison (default is 4)"},
@@ -471,6 +478,10 @@ const struct group_opt_templ all_cmd_options[] = {
      boost::program_options::value<std::string>(),
      "Redirect all output to a file (no stdout/stderr)"},
     {"goto2c", NULL, "Translate the GOTO program to C"},
+    {"goto2lean",
+     NULL,
+     "Translate the GOTO program reachable from the entry function to Lean 4 "
+     "(prototype; scalar fragment)"},
     {"generate-testcase",
      NULL,
      "If a solution is found, generates a testcase in XML"},
@@ -1123,6 +1134,10 @@ const struct group_opt_templ all_cmd_options[] = {
      NULL,
      "Disable constant propagation (unsupported with concurrency: the pthread "
      "model requires constant thread ids)"},
+    {"scalarize-structs",
+     NULL,
+     "Give each field of a struct variable whose address is never taken a "
+     "variable of its own, so that writing a field does not copy the struct"},
     {"gcse",
      NULL,
      "Adds intermediate variables to precompute common sub-expressions between "

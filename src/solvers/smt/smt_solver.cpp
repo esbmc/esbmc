@@ -285,6 +285,12 @@ void smt_solver_baset::pop_ctx()
     ptr_flow, [this](const auto &kv) { return kv.second.first >= ctx_level; });
   if (base_addrspace_tied && *base_addrspace_tied >= ctx_level)
     base_addrspace_tied.reset();
+  std::erase_if(addrspace_stores, [this](const addrspace_storet &s) {
+    return s.level >= ctx_level;
+  });
+  for (addrspace_storet &s : addrspace_stores)
+    if (s.asserted_at && *s.asserted_at >= ctx_level)
+      s.asserted_at.reset();
   std::erase_if(int_to_ptr_objects, [this](const int_to_ptr_objectt &c) {
     return c.level >= ctx_level;
   });
@@ -1662,7 +1668,7 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
   }
   case expr2t::bitnot_id:
   {
-    a = mk_bvnot(args[0]);
+    a = convert_bitnot(args[0]);
     break;
   }
   case expr2t::not_id:
@@ -4916,6 +4922,14 @@ smt_astt smt_solver_baset::mk_bvnot(smt_astt a)
 {
   (void)a;
   abort();
+}
+
+smt_astt smt_solver_baset::convert_bitnot(smt_astt a)
+{
+  // Over unbounded integers ~x is exactly -x - 1.
+  if (int_encoding)
+    return mk_sub(mk_neg(a), mk_smt_int(BigInt(1)));
+  return mk_bvnot(a);
 }
 
 smt_astt smt_solver_baset::mk_bvxor(smt_astt a, smt_astt b)

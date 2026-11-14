@@ -287,8 +287,14 @@ static void add_function_stub(
 
 nlohmann::json python_converter::callable_function_stubs() const
 {
+  return callable_function_stubs(*ast_json);
+}
+
+nlohmann::json
+python_converter::callable_function_stubs(const nlohmann::json &module) const
+{
   nlohmann::json stubs = nlohmann::json::array();
-  for (const auto &stmt : (*ast_json)["body"])
+  for (const auto &stmt : module["body"])
   {
     const std::string type = stmt.value("_type", "");
     if (type == "FunctionDef")
@@ -319,8 +325,14 @@ nlohmann::json python_converter::callable_function_stubs() const
 
 nlohmann::json python_converter::kind_module_body() const
 {
-  nlohmann::json body = callable_function_stubs();
-  for (const auto &stmt : (*ast_json)["body"])
+  return kind_module_body(*ast_json);
+}
+
+nlohmann::json
+python_converter::kind_module_body(const nlohmann::json &module) const
+{
+  nlohmann::json body = callable_function_stubs(module);
+  for (const auto &stmt : module["body"])
     body.push_back(stmt);
   return body;
 }
@@ -550,6 +562,10 @@ void python_converter::convert_module_imports(code_blockt &all_imports_block)
   for (auto &entry : module_ast_pool_)
     modules.push_back({&entry.second, &entry.second, entry.first});
   python_param_annotations::propagate_tuple_list_params(modules);
+  // The scalar pass may point the entry module's calls at the copies it makes
+  // of an imported function (#10431). The entry AST is the front end's own,
+  // not yet converted.
+  modules.front().write = const_cast<nlohmann::json *>(ast_json);
   python_param_annotations::propagate_scalar_params(modules);
 
   auto convert_import = [&](const nlohmann::json &node) {
@@ -1165,6 +1181,8 @@ void python_converter::convert()
 
   if (building_library)
     return;
+
+  define_tagged_callee();
 
   // Create python_user_main function containing only user code
   code_typet user_main_type;

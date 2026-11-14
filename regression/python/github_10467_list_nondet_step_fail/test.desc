@@ -1,0 +1,5 @@
+KNOWNBUG
+main.py
+
+^VERIFICATION FAILED$
+^\s+FAILED\s+\[global\.assertion\.[0-9]+\]\s+line\s+5\s+assertion

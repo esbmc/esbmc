@@ -155,6 +155,14 @@ static bool returns_value_without_yield(const nlohmann::json &node)
   return value_return && !yields;
 }
 
+// `node[key]` when it is a number, else `fallback`. A statement the
+// preprocessor synthesised can carry a null location field.
+static int number_or(const nlohmann::json &node, const char *key, int fallback)
+{
+  const auto it = node.find(key);
+  return it != node.end() && it->is_number() ? it->get<int>() : fallback;
+}
+
 void return_none_on_fall_off(nlohmann::json &node)
 {
   if (!node.is_structured())
@@ -167,8 +175,9 @@ void return_none_on_fall_off(nlohmann::json &node)
     never_falls_off(node["body"]) || !returns_value_without_yield(node["body"]))
     return;
   nlohmann::json &body = node["body"];
-  const int line = body.back().value("end_lineno", node.value("lineno", 0));
-  const int col = body.back().value("col_offset", 0);
+  const int line =
+    number_or(body.back(), "end_lineno", number_or(node, "lineno", 0));
+  const int col = number_or(body.back(), "col_offset", 0);
   const nlohmann::json at = {
     {"lineno", line},
     {"col_offset", col},

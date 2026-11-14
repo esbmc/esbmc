@@ -1137,6 +1137,19 @@ exprt python_converter::create_lhs_expression(
   return lhs;
 }
 
+/// Box plain @p rhs into tagged slot @p lhs. None is held by the slot's None
+/// flag alone, which the store has set (#10350).
+void python_converter::box_into_tagged_slot(
+  const exprt &rhs,
+  const locationt &location,
+  const exprt &lhs,
+  codet &target_block)
+{
+  if (rhs.type() == none_type() && none_flag_of_attribute(lhs).is_not_nil())
+    return;
+  dynamic_type_handler_.assign_to_lvalue(rhs, location, lhs, target_block);
+}
+
 /// A tagged value stored into an untagged attribute slot would overrun or
 /// misread the object. The other direction (an untagged value into a
 /// tagged slot) is a plain box, handled later in get_var_assign.
@@ -2024,6 +2037,17 @@ void python_converter::handle_list_literal_unpacking(
     assign.location() = get_location_from_decl(ast_node);
     target_block.copy_to_operands(assign);
   }
+}
+
+// Whether an assignment's value has a type known without building it, so
+// get_var_assign need not build it once more to probe its type.
+bool python_converter::rhs_skips_type_probe(const nlohmann::json &value) const
+{
+  const std::string kind = value.value("_type", std::string());
+  // A typed-list operation (#10451) builds a list or an int.
+  return dict_handler_->is_dict_literal(value) || kind == "List" ||
+         kind == "ListComp" || python_list::is_typed(value) ||
+         python_list::reads_typed(value);
 }
 
 exprt python_converter::get_rhs_with_dict_resolution(
@@ -3408,6 +3432,22 @@ std::optional<nlohmann::json> python_converter::select_return_value_for_call(
   return result.value;
 }
 
+/// A call through a parameter that a substitution turned from @p node into
+/// @p out, a call of a def bound once in @p ast, is a direct call. It needs
+/// no check that it reaches a def returning a tagged value, so drop its mark.
+static void drop_direct_call_mark(
+  nlohmann::json &out,
+  const nlohmann::json &node,
+  const nlohmann::json &ast)
+{
+  if (
+    out.contains("esbmc_tagged_call") && out["func"] != node["func"] &&
+    out["func"].value("_type", "") == "Name" &&
+    !json_utils::try_find_function(ast["body"], out["func"]["id"]).empty() &&
+    count_bindings(ast, out["func"]["id"]) == 1)
+    out.erase("esbmc_tagged_call");
+}
+
 nlohmann::json python_converter::substitute_call_arguments(
   const nlohmann::json &node,
   const nlohmann::json &call_node) const
@@ -3443,6 +3483,7 @@ nlohmann::json python_converter::substitute_call_arguments(
     nlohmann::json out = node;
     for (auto it = out.begin(); it != out.end(); ++it)
       it.value() = substitute_call_arguments(it.value(), call_node);
+    drop_direct_call_mark(out, node, *ast_json);
     return out;
   }
 
@@ -5603,7 +5644,10 @@ exprt python_converter::not_callable_function(
   body.copy_to_operands(code_expressiont(
     get_exception_handler().gen_exception_raise(
       "TypeError",
-      "'" + type_handler_.type_to_string(value) + "' object is not callable")));
+      "'" +
+        (value == none_type() ? "NoneType"
+                              : type_handler_.type_to_string(value)) +
+        "' object is not callable")));
   symbol.set_value(body);
   return symbol_expr(*symbol_table_.move_symbol_to_context(symbol));
 }
@@ -5656,17 +5700,29 @@ void python_converter::hoist_raising_arm(
 
 /// A choice between two functions of one type is a pointer to either. The
 /// result of a choice between types would have no single type (#8404). An
-/// arm that cannot be called becomes a function that raises when it is.
-void python_converter::decay_function_choice(exprt &then, exprt &else_expr)
+/// arm that cannot be called becomes a function that raises when it is,
+/// which is exact only when the value of \p ifexp is never read but by a call.
+void python_converter::decay_function_choice(
+  const nlohmann::json &ifexp,
+  exprt &then,
+  exprt &else_expr)
 {
-  if (
-    then.type().is_code() && then.is_symbol() &&
-    !may_be_callable(else_expr.type()))
+  const auto not_callable_beside = [this](const exprt &arm, const exprt &fn) {
+    return fn.type().is_code() && fn.is_symbol() &&
+           !may_be_callable(arm.type());
+  };
+  const bool else_not_callable = not_callable_beside(else_expr, then);
+  const bool then_not_callable =
+    !else_not_callable && not_callable_beside(then, else_expr);
+  if ((else_not_callable || then_not_callable) && !ifexp_only_called(ifexp))
+    throw std::runtime_error(
+      "a conditional expression choosing between a function and a value "
+      "that cannot be called is supported only when its value is only "
+      "called");
+  if (else_not_callable)
     else_expr = not_callable_function(
       then.type(), else_expr.type(), else_expr.location());
-  else if (
-    else_expr.type().is_code() && else_expr.is_symbol() &&
-    !may_be_callable(then.type()))
+  else if (then_not_callable)
     then =
       not_callable_function(else_expr.type(), then.type(), then.location());
   if (
@@ -5705,6 +5761,45 @@ static void copy_homogeneous_elem_types(
     return;
 
   registry.assign_from(src, dest);
+}
+
+/// A float constant, or one negated or made positive.
+static bool is_float_literal(const nlohmann::json &node)
+{
+  if (node.value("_type", "") == "UnaryOp")
+  {
+    const std::string op =
+      node.contains("op") ? node["op"].value("_type", "") : std::string();
+    return (op == "USub" || op == "UAdd") && node.contains("operand") &&
+           is_float_literal(node["operand"]);
+  }
+  return node.value("_type", "") == "Constant" && node.contains("value") &&
+         node["value"].is_number_float();
+}
+
+/// A list literal is converted into a temporary list, which the lowered
+/// \p call receives as its first argument (#10462).
+static void copy_list_literal_elem_types(
+  element_type_registry &registry,
+  const typet &list_type,
+  const nlohmann::json &literal,
+  const exprt &call,
+  const std::string &dest)
+{
+  if (!call.is_function_call())
+    return;
+  const auto &args = to_code_function_call(to_code(call)).arguments();
+  if (args.empty() || !args[0].is_symbol() || args[0].type() != list_type)
+    return;
+  const std::string &src = args[0].identifier().as_string();
+  // The literal's ints are promoted to float when it also holds a float, so a
+  // float list is only known to hold floats when every element is one.
+  const auto &elts = literal["elts"];
+  if (
+    registry.uniform_element_type(src).is_floatbv() &&
+    !std::all_of(elts.begin(), elts.end(), is_float_literal))
+    return;
+  copy_homogeneous_elem_types(registry, src, dest);
 }
 
 /// Copy the element types of the list named \p name, whose registry id is
@@ -5763,6 +5858,7 @@ python_converter::reordering_builtin_arg(const nlohmann::json &ast_node)
 
 void python_converter::copy_elem_types_from_reordering_builtin(
   const nlohmann::json &ast_node,
+  const exprt &call,
   const std::string &lhs_id)
 {
   const nlohmann::json *arg_p = reordering_builtin_arg(ast_node);
@@ -5776,6 +5872,13 @@ void python_converter::copy_elem_types_from_reordering_builtin(
     arg_sid.set_object(arg["id"].get<std::string>());
     copy_named_list_elem_types(
       *this, element_type_registry_, arg, arg_sid.to_string(), lhs_id);
+    return;
+  }
+
+  if (arg.value("_type", "") == "List")
+  {
+    copy_list_literal_elem_types(
+      element_type_registry_, type_handler_.get_list_type(), arg, call, lhs_id);
     return;
   }
 
@@ -5902,6 +6005,27 @@ void python_converter::record_annotated_list_elem_type(
     element_type_registry_.record(lhs_id, std::string(), elem_type);
 }
 
+/// The symbol the textually last `return` of \p code that returns one hands
+/// back, at any depth, else nil. A function that returns a list from inside a
+/// loop and None after it ends in `return None`.
+static exprt last_returned_symbol(const exprt &code)
+{
+  if (
+    code.id() == "code" && to_code(code).get_statement() == "return" &&
+    code.operands().size() == 1 && code.op0().is_symbol())
+    return code.op0();
+  exprt found = nil_exprt();
+  for (const exprt &op : code.operands())
+    if (exprt ret = last_returned_symbol(op); !ret.is_nil())
+      found = ret;
+  return found;
+}
+
+static exprt last_returned_symbol(const symbolt *function)
+{
+  return function ? last_returned_symbol(function->get_value()) : nil_exprt();
+}
+
 void python_converter::handle_function_call_rhs(
   const nlohmann::json &ast_node,
   symbolt *lhs_symbol,
@@ -6004,11 +6128,12 @@ void python_converter::handle_function_call_rhs(
   if (rhs.type() == type_handler_.get_list_type())
   {
     if (
-      auto ret = get_return_from_func(rhs.op1().identifier().c_str());
+      const exprt ret =
+        last_returned_symbol(symbol_table_.find_symbol(rhs.op1().identifier()));
       !ret.is_nil())
     {
       element_type_registry_.assign_from(
-        ret.op0().identifier().as_string(), lhs.identifier().as_string());
+        ret.identifier().as_string(), lhs.identifier().as_string());
     }
 
     // If nothing is recorded for the LHS yet
@@ -6016,7 +6141,7 @@ void python_converter::handle_function_call_rhs(
     // fall back to the called function's return-type annotation
     // to determine the element type.
     const std::string &lhs_id = lhs.identifier().as_string();
-    copy_elem_types_from_reordering_builtin(ast_node, lhs_id);
+    copy_elem_types_from_reordering_builtin(ast_node, rhs, lhs_id);
     if (element_type_registry_.size(lhs_id) == 0)
       record_annotated_list_elem_type(ast_node, lhs_id);
 
@@ -7176,9 +7301,23 @@ bool python_converter::element_kinds_differ(
   return !ka.empty() && !kb.empty() && ka != kb;
 }
 
+/// Whether list arms @p a and @p b record the same element types, so either's
+/// record types a read of `a if c else b`.
+static bool list_arms_record_alike(
+  const element_type_registry &registry,
+  const exprt &a,
+  const exprt &b)
+{
+  return a.is_symbol() && b.is_symbol() &&
+         registry.same_element_types(
+           a.identifier().as_string(), b.identifier().as_string());
+}
+
 /// The list arm of `None if c else xs` (or `xs if c else None`): the None arm
-/// holds no elements, so the binding's element types are the list arm's.
-static const exprt &list_arm_of_optional(const exprt &rhs)
+/// holds no elements, so the binding's element types are the list arm's. For
+/// `xs if c else ys` it is xs when ys records the same element types.
+static const exprt &
+list_arm_of_conditional(const exprt &rhs, const element_type_registry &registry)
 {
   if (rhs.id() != "if")
     return rhs;
@@ -7186,6 +7325,8 @@ static const exprt &list_arm_of_optional(const exprt &rhs)
   if (ite.true_case().is_zero())
     return ite.false_case();
   if (ite.false_case().is_zero())
+    return ite.true_case();
+  if (list_arms_record_alike(registry, ite.true_case(), ite.false_case()))
     return ite.true_case();
   return rhs;
 }
@@ -7195,7 +7336,7 @@ void python_converter::propagate_list_type_info(
   const exprt &assigned,
   symbolt *lhs_symbol)
 {
-  const exprt &rhs = list_arm_of_optional(assigned);
+  const exprt &rhs = list_arm_of_conditional(assigned, element_type_registry_);
   const std::string &lhs_identifier = lhs.identifier().as_string();
   const std::string &rhs_identifier = rhs.identifier().as_string();
   // The registry keeps one record per name, so a rebinding under a branch or
@@ -7723,6 +7864,17 @@ bool python_converter::try_dispatch_dunder_setitem(
   return true;
 }
 
+// Skipping a str store into a numeric attribute would leave the attribute's
+// old value for every later read of it (#10663).
+static void refuse_dropped_attribute_store(const exprt &lhs)
+{
+  if (lhs.is_member())
+    throw std::runtime_error(
+      "unsupported: attribute '" + lhs.component_name().as_string() +
+      "' holds a number and is assigned a str; an attribute whose type "
+      "changes is not modelled");
+}
+
 void python_converter::get_var_assign(
   const nlohmann::json &ast_node,
   codet &target_block)
@@ -7973,9 +8125,8 @@ void python_converter::get_var_assign(
         container_is_list && ast_node.contains("value") &&
         !ast_node["value"].is_null())
       {
-        python_list list_handler(*this, target);
-        list_handler.handle_slice_assignment(
-          container_expr, target["slice"], ast_node["value"]);
+        python_list(*this, target)
+          .assign_slice(container_expr, target["slice"], ast_node["value"]);
         return;
       }
 
@@ -8055,14 +8206,9 @@ void python_converter::get_var_assign(
         // list-construction cost on construction-heavy programs (#5121). Calls
         // are skipped too, to avoid re-running their side effects (e.g. a
         // second list.pop()).
-        const std::string rhs_kind =
-          ast_node["value"].value("_type", std::string());
-        const bool rhs_kind_skips_type_probe =
-          dict_handler_->is_dict_literal(ast_node["value"]) ||
-          rhs_kind == "List" || rhs_kind == "ListComp";
-        if (!rhs_kind_skips_type_probe)
+        if (!rhs_skips_type_probe(ast_node["value"]))
         {
-          if (rhs_kind != "Call")
+          if (ast_node["value"].value("_type", std::string()) != "Call")
           {
             // Discarded probe: suppress the ZeroDivisionError guard so a
             // division here is not emitted (and its divisor not evaluated) an
@@ -8545,6 +8691,7 @@ void python_converter::get_var_assign(
       (lhs.type().is_floatbv() || lhs.type().is_signedbv() ||
        lhs.type().is_unsignedbv() || lhs.type().is_bool()))
     {
+      refuse_dropped_attribute_store(lhs);
       // Still emit the RHS as a void call so exceptions/side-effects are
       // preserved (e.g. chr() out-of-range ValueError, or a method that mutates
       // `self` while returning a string that does not fit the annotated scalar
@@ -8593,6 +8740,7 @@ void python_converter::get_var_assign(
     rhs = tuple_handler_->coerce_to_tuple_type(
       rhs, lhs.type(), get_location_from_decl(ast_node), target_block);
     set_none_flag(lhs, ast_node, target_block);
+    set_presence_flag(lhs, ast_node, target_block);
 
     // Propagate $input_str$ → $input_len$ companion mapping so that len()
     // on any alias of an input() string can use the symbolic length directly.
@@ -8801,8 +8949,7 @@ void python_converter::get_var_assign(
       type_handler_.is_tagged_scalar_type(lhs.type()) &&
       !type_handler_.is_tagged_scalar_type(rhs.type()))
     {
-      dynamic_type_handler_.assign_to_lvalue(
-        rhs, location_begin, lhs, target_block);
+      box_into_tagged_slot(rhs, location_begin, lhs, target_block);
       current_lhs = nullptr;
       return;
     }
@@ -9649,8 +9796,9 @@ static exprt coerce_ternary_branch(
   return typecast_exprt(branch, result_type);
 }
 
-/// A result temp for `None if c else xs` takes the element types of xs.
-static void copy_optional_list_arm_types(
+/// A result temp for `None if c else xs` takes the element types of xs, and
+/// one for `xs if c else ys` those of xs when ys records the same.
+static void copy_list_arm_types(
   element_type_registry &registry,
   const exprt &then,
   const exprt &else_expr,
@@ -9661,6 +9809,8 @@ static void copy_optional_list_arm_types(
   const exprt &value_arm = then_is_none ? else_expr : then;
   if (then_is_none != else_is_none && value_arm.is_symbol())
     registry.assign_from(value_arm.identifier().as_string(), result_id);
+  else if (list_arms_record_alike(registry, then, else_expr))
+    registry.assign_from(then.identifier().as_string(), result_id);
 }
 
 exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
@@ -10157,7 +10307,7 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
     then = to_value_expr(then, ns);
     else_expr = to_value_expr(else_expr, ns);
     hoist_raising_arm(then, then_side_effects, else_expr, else_side_effects);
-    decay_function_choice(then, else_expr);
+    decay_function_choice(ast_node, then, else_expr);
 
     bool then_is_none = (then.type() == none_type());
     bool else_is_none = (else_expr.type() == none_type());
@@ -10206,7 +10356,7 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
         create_return_temp_variable(result_type, location, "ternary_result");
       symbol_table_.add(result_symbol);
       exprt result_expr = symbol_expr(result_symbol);
-      copy_optional_list_arm_types(
+      copy_list_arm_types(
         element_type_registry_,
         then,
         else_expr,
@@ -10507,6 +10657,33 @@ static void reject_tagged_scalar_return(
       "is not dynamic is not yet supported");
 }
 
+// A local retyped across str and number (#4770) lives in a fresh slot of the
+// new type, while the function's return type may follow the first binding.
+// Converting the slot would read the bytes of one kind as the other (#10700).
+static void reject_retyped_return(
+  const type_handler &types,
+  const std::unordered_map<std::string, std::string> &retype_aliases,
+  const exprt &value,
+  const typet &return_type)
+{
+  if (!value.is_symbol())
+    return;
+  const bool value_is_str = types.is_string_type(value.type());
+  if (
+    !(value_is_str && types.is_numeric_scalar_type(return_type)) &&
+    !(types.is_numeric_scalar_type(value.type()) &&
+      types.is_string_type(return_type)))
+    return;
+  const std::string id = value.identifier().as_string();
+  for (const auto &alias : retype_aliases)
+    if (alias.second == id)
+      throw std::runtime_error(
+        "unsupported: returning a variable rebound to a " +
+        std::string(value_is_str ? "str" : "number") +
+        " from a function typed to return a " +
+        (value_is_str ? "number" : "str"));
+}
+
 void python_converter::get_return_statements(
   const nlohmann::json &ast_node,
   codet &target_block)
@@ -10756,6 +10933,8 @@ void python_converter::get_return_statements(
       return_value, current_func_return_type_, location, target_block);
     return_value = coerce_optional_return(return_value, location, target_block);
 
+    reject_retyped_return(
+      type_handler_, retype_aliases_, return_value, current_func_return_type_);
     coerce_to_tagged_return(return_value);
     return_value =
       check_float_fits_int_return(ast_node, return_value, target_block);
