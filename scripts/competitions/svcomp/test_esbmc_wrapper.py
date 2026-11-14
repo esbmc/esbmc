@@ -2,6 +2,8 @@
 """Self-test. Run: python3 scripts/competitions/svcomp/test_esbmc_wrapper.py"""
 
 import argparse
+import contextlib
+import io
 import shlex
 import importlib.util
 import os
@@ -414,6 +416,43 @@ class AbnormalExitTest(unittest.TestCase):
 
     def test_a_normal_exit_without_a_verdict_is_unknown(self):
         self.assertEqual(self.verdict("echo 'VERIFICATION UNKNOWN'; exit 6"), "Unknown")
+
+
+class EchoTest(unittest.TestCase):
+    """benchexec reads FALSE, TRUE or DONE on any output line as the verdict,
+    so echoing ESBMC's quote of a witness invariant must not carry them
+    (#10643)."""
+
+    INVARIANT = ("Injecting loop invariant at line 5: "
+                 "0 <= i && i <= 10 && STATIC_CONST_FALSE == 0")
+
+    def setUp(self):
+        self.saved_args = wrapper.args
+        wrapper.args = argparse.Namespace(dry_run=False)
+
+    def tearDown(self):
+        wrapper.args = self.saved_args
+
+    def echoed(self, script):
+        printed = io.StringIO()
+        with contextlib.redirect_stdout(printed):
+            output = wrapper.run("sh -c " + shlex.quote(script)).decode()
+        return output, printed.getvalue()
+
+    def test_quoted_source_does_not_carry_a_verdict_word(self):
+        output, printed = self.echoed(
+            f"echo '{self.INVARIANT}'; echo 'TRUE DONE FALSE_DEREF'; "
+            "echo 'VERIFICATION SUCCESSFUL'")
+        for word in ("FALSE", "TRUE", "DONE"):
+            self.assertNotIn(word, printed)
+        self.assertIn("STATIC_CONST_false == 0", printed)
+        self.assertEqual(
+            wrapper.get_result_string(wrapper.parse_result(output, wrapper.Property.reach)),
+            "TRUE")
+
+    def test_the_parsed_output_is_unchanged(self):
+        output, _ = self.echoed(f"echo '{self.INVARIANT}'")
+        self.assertEqual(output, self.INVARIANT + "\n")
 
 # The scalar model's own TypeError on `r + 1`, where `r` is an int on one path
 # and a str on the other.
