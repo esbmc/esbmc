@@ -109,7 +109,7 @@ public:
   /// A read `d[k]` of a typed dict, which the gate keeps in a typed list
   /// of its keys and values in turn.
   static bool is_typed_dict_read(const nlohmann::json &node);
-  exprt typed_dict_get(const exprt &dict, const nlohmann::json &key);
+  exprt typed_dict_get();
 
   /**
    * @brief Materialize a fresh list from already-evaluated element values.
@@ -830,7 +830,6 @@ public:
    */
   typet infer_literal_element_type(const nlohmann::json &list_literal);
 
-
   /**
    * @brief Create a list from a range() call
    * @param converter The python converter instance
@@ -1062,6 +1061,13 @@ private:
   exprt typed_extremum(const std::string &func_name);
   exprt typed_dict_set();
   exprt typed_int_call(const char *model, const std::vector<exprt> &args);
+  exprt typed_dict_in();
+  exprt typed_dict_max();
+  exprt typed_str_codes();
+  using json_range = std::vector<nlohmann::json>;
+  std::vector<exprt>
+  typed_dict_key(const nlohmann::json &dict, const json_range &key);
+  exprt typed_dict_slot(const std::vector<exprt> &args);
   long long typed_slice_step(const nlohmann::json &slice);
   std::vector<exprt> typed_slice_bounds(const nlohmann::json &slice);
   code_function_callt
