@@ -7819,6 +7819,17 @@ bool python_converter::try_dispatch_dunder_setitem(
   return true;
 }
 
+// Skipping a str store into a numeric attribute would leave the attribute's
+// old value for every later read of it (#10663).
+static void refuse_dropped_attribute_store(const exprt &lhs)
+{
+  if (lhs.is_member())
+    throw std::runtime_error(
+      "unsupported: attribute '" + lhs.component_name().as_string() +
+      "' holds a number and is assigned a str; an attribute whose type "
+      "changes is not modelled");
+}
+
 void python_converter::get_var_assign(
   const nlohmann::json &ast_node,
   codet &target_block)
@@ -8635,6 +8646,7 @@ void python_converter::get_var_assign(
       (lhs.type().is_floatbv() || lhs.type().is_signedbv() ||
        lhs.type().is_unsignedbv() || lhs.type().is_bool()))
     {
+      refuse_dropped_attribute_store(lhs);
       // Still emit the RHS as a void call so exceptions/side-effects are
       // preserved (e.g. chr() out-of-range ValueError, or a method that mutates
       // `self` while returning a string that does not fit the annotated scalar
