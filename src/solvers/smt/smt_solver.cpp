@@ -2239,24 +2239,27 @@ smt_astt smt_solver_baset::convert_terminal(const expr2tc &expr)
     ir_ieee_api->assert_symbol_range(name, sym_ast, sym);
 
     if (
-      ir_ieee && is_floatbv_type(sym.type) &&
+      int_encoding && is_floatbv_type(sym.type) &&
       name.rfind("nondet$symex::nondet", 0) == 0)
     {
-      smt_astt nan_pred =
-        mk_fresh(mk_bool_sort(), "ir_ieee::nondet_nan::", nullptr);
-      ir_ieee_api->store_nan_pred(sym_ast, nan_pred);
-
       // A nondet float is otherwise an unconstrained real. Without this,
       // it can take a value strictly between 0 and the smallest subnormal
       // (a magnitude no floating-point operation ever produces), which
-      // breaks identities like x+0==x now that mk_subnormal_flush()
-      // distinguishes that gap from zero. Representability doesn't depend
-      // on a rounding mode, so pass a nil expr2tc: mk_subnormal_flush falls
-      // back to its magnitude-only threshold, which is the correct (not
-      // merely conservative) check here.
+      // breaks identities like x+0==x and f+g>=f for g>0 now that
+      // arithmetic results in that gap are flushed to zero (#2578).
+      // Representability doesn't depend on a rounding mode, so pass a nil
+      // expr2tc: mk_subnormal_flush falls back to its magnitude-only
+      // threshold, which is the correct (not merely conservative) check here.
       const floatbv_type2t &fbv_type = to_floatbv_type(sym.type);
       assert_ast(
         mk_eq(sym_ast, mk_subnormal_flush(sym_ast, fbv_type, expr2tc())));
+
+      if (!ir_ieee)
+        return sym_ast;
+
+      smt_astt nan_pred =
+        mk_fresh(mk_bool_sort(), "ir_ieee::nondet_nan::", nullptr);
+      ir_ieee_api->store_nan_pred(sym_ast, nan_pred);
 
       // The other half of representability: a magnitude strictly between
       // max_normal and the infinity sentinel is a value no operation can
