@@ -1187,7 +1187,7 @@ exprt dynamic_type_handler::handle_comparison(
   const bool lhs_tagged = type_handler_.is_tagged_scalar_type(lhs.type());
   const bool rhs_tagged = type_handler_.is_tagged_scalar_type(rhs.type());
   const bool ordered = type_utils::is_ordered_comparison(op);
-  refuse_float_tag_operation(lhs, rhs);
+  refuse_float_tag_operation(lhs, rhs, lhs.location());
 
   if (lhs_tagged && rhs_tagged)
   {
@@ -1488,7 +1488,7 @@ exprt dynamic_type_handler::handle_arithmetic(
 {
   const bool lhs_tagged = type_handler_.is_tagged_scalar_type(lhs.type());
   const bool rhs_tagged = type_handler_.is_tagged_scalar_type(rhs.type());
-  refuse_float_tag_operation(lhs, rhs);
+  refuse_float_tag_operation(lhs, rhs, location);
   claim_numeric_operands(op, lhs, rhs, location);
 
   // Equality can settle a type_id mismatch without knowing either type;
@@ -1519,7 +1519,7 @@ exprt dynamic_type_handler::build_neg_tagged(
   const locationt &location)
 {
   exprt zero = from_integer(0, signedbv_typet(config.ansi_c.int_width));
-  refuse_float_tag_operation(zero, tagged);
+  refuse_float_tag_operation(zero, tagged, location);
   guard_type_error("Sub", zero, tagged, location);
   return build_sub_literal(tagged, zero, /*tagged_is_left=*/false);
 }
@@ -1971,16 +1971,40 @@ exprt dynamic_type_handler::build_numeric_conversion(
 
 void dynamic_type_handler::refuse_float_tag_operation(
   const exprt &lhs,
-  const exprt &rhs) const
+  const exprt &rhs,
+  const locationt &location) const
 {
   if (
     !dynamic_type_detail::float_tags_possible() ||
     type_handler_.is_string_type(lhs.type()) ||
-    type_handler_.is_string_type(rhs.type()))
+    type_handler_.is_string_type(rhs.type()) || converter_.in_type_probe())
     return;
-  throw std::runtime_error(
-    "arithmetic or comparison on a dynamically-typed variable that may hold "
-    "a float is not yet supported");
+  const bool lhs_tagged = type_handler_.is_tagged_scalar_type(lhs.type());
+  const bool rhs_tagged = type_handler_.is_tagged_scalar_type(rhs.type());
+  if (
+    !converter_.can_emit_runtime_guard() ||
+    (!lhs_tagged && lhs.type().is_floatbv()) ||
+    (!rhs_tagged && rhs.type().is_floatbv()))
+    throw std::runtime_error(
+      "arithmetic or comparison on a dynamically-typed variable that may "
+      "hold a float is not yet supported");
+  // The operations do not model a float payload, so a path that reaches
+  // them with one is reported as unsupported and goes no further.
+  for (const exprt *operand : {&lhs, &rhs})
+  {
+    if (!type_handler_.is_tagged_scalar_type(operand->type()))
+      continue;
+    const exprt not_float = build_not(build_equal(
+      build_member(*operand, "type_id", size_type()),
+      type_handler_.tagged_scalar_type_id(double_type())));
+    code_assertt check(not_float);
+    check.location() = location;
+    check.location().user_provided(true);
+    check.location().comment(
+      "Unsupported: arithmetic or comparison on a dynamically-typed float");
+    converter_.add_instruction(check);
+    converter_.add_instruction(code_assumet(not_float));
+  }
 }
 
 void dynamic_type_handler::refuse_tagged_argument() const
