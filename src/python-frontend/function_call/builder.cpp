@@ -1,3 +1,4 @@
+#include <python-frontend/model_path.h>
 #include <python-frontend/function_call/builder.h>
 #include <python-frontend/exception/python_exception_handler.h>
 #include <python-frontend/function_call/expr.h>
@@ -119,6 +120,7 @@ const std::string kEsbmcAssume = "__ESBMC_assume";
 const std::string kVerifierAssume = "__VERIFIER_assume";
 const std::string kEsbmcAssert = "__ESBMC_assert";
 const std::string kEsbmcUnreachable = "__ESBMC_unreachable";
+const std::string kEsbmcUnroll = "__ESBMC_unroll";
 const std::string kLoopInvariant = "__loop_invariant";
 const std::string kEsbmcLoopInvariant = "__ESBMC_loop_invariant";
 const std::string kEsbmcRequires = "__ESBMC_requires";
@@ -648,8 +650,7 @@ bool function_call_builder::is_numpy_call(const symbol_id &function_id) const
 
   const std::string &filename = function_id.get_filename();
 
-  return boost::algorithm::ends_with(filename, "/models/numpy.py") ||
-         filename.find("/numpy/linalg") != std::string::npos;
+  return model_path::is_numpy_model(filename);
 }
 
 bool function_call_builder::is_assume_call(const symbol_id &function_id) const
@@ -1799,6 +1800,22 @@ exprt function_call_builder::len_of_bitvector_operand(
   return from_integer(1, long_long_int_type());
 }
 
+bool function_call_builder::is_scalar_len_operand(const typet &type) const
+{
+  return type.is_signedbv() || type.is_unsignedbv() ||
+         converter_.get_type_handler().is_tagged_scalar_type(type);
+}
+
+exprt function_call_builder::len_of_scalar_operand(
+  const nlohmann::json &arg,
+  const exprt &operand) const
+{
+  if (converter_.get_type_handler().is_tagged_scalar_type(operand.type()))
+    return converter_.dynamic_type_handler_.build_len(
+      operand, converter_.get_location_from_decl(call_));
+  return len_of_bitvector_operand(arg, operand.type());
+}
+
 static std::string none_has_no_attribute(const nlohmann::json &call)
 {
   return "'NoneType' object has no attribute '" +
@@ -2023,6 +2040,51 @@ reuses_c_model(const nlohmann::json &call, const symbol_id &function_id)
            call["func"].value("_type", "") == "Attribute");
 }
 
+// A typed list's builder and sorted() lower to their C models (#10451).
+// __ESBMC_unreachable and __ESBMC_unroll lower to calls to the C intrinsics
+// of the same names. Symex's intrinsic handler in symex_main.cpp fires on
+// __ESBMC_unreachable under --enable-unreachability-intrinsic.
+// apply_intrinsic_unroller binds __ESBMC_unroll(n) to the loop that follows
+// it, so that loop is unwound n + 1 times whatever --unwind or k says.
+// Returns nil for any other callee.
+exprt function_call_builder::build_c_intrinsic_call(
+  const symbol_id &function_id) const
+{
+  const std::string &func_name = function_id.get_function();
+  // A typed list's nondet_list(nondet_int) builder or sorted() (#10451).
+  if (python_list::is_typed_call(call_))
+    return python_list(converter_, call_).typed_call(func_name);
+
+  const bool is_unroll = func_name == kEsbmcUnroll;
+  if (!is_unroll && !is_unreachable_call(function_id))
+    return nil_exprt();
+
+  if (call_["args"].size() != (is_unroll ? 1 : 0))
+    throw std::runtime_error(
+      func_name +
+      (is_unroll ? " takes exactly one argument" : " takes no arguments"));
+
+  code_typet fn_type;
+  fn_type.return_type() = empty_typet();
+  if (is_unroll)
+    fn_type.arguments().push_back(code_typet::argumentt(int_type()));
+
+  locationt location = converter_.get_location_from_decl(call_);
+  const std::string symbol_name = "c:@F@" + func_name;
+  if (converter_.symbol_table().find_symbol(symbol_name) == nullptr)
+    converter_.add_symbol(converter_.create_symbol(
+      converter_.python_file(), func_name, symbol_name, location, fn_type));
+
+  code_function_callt call;
+  call.function() = symbol_exprt(symbol_name, fn_type);
+  if (is_unroll)
+    call.arguments().push_back(
+      build_typecast(converter_.get_expr(call_["args"][0]), int_type()));
+  call.type() = empty_typet();
+  call.location() = location;
+  return call;
+}
+
 exprt function_call_builder::build() const
 {
   if (call_["func"]["_type"] == "Attribute")
@@ -2057,8 +2119,8 @@ exprt function_call_builder::build() const
       }
     }
 
-    if (arg_expr.type().is_signedbv() || arg_expr.type().is_unsignedbv())
-      return len_of_bitvector_operand(call_["args"][0], arg_expr.type());
+    if (is_scalar_len_operand(arg_expr.type()))
+      return len_of_scalar_operand(call_["args"][0], arg_expr);
 
     typet len_arg_type = converter_.ns.follow(arg_expr.type());
     if (len_arg_type.is_array() && len_arg_type.subtype() != char_type())
@@ -2148,6 +2210,7 @@ exprt function_call_builder::build() const
       throw std::runtime_error("__ESBMC_assume requires one boolean argument");
 
     exprt condition = converter_.get_expr(call_["args"][0]);
+    converter_.convert_function_call_to_side_effect(condition);
     if (!condition.type().is_bool())
       condition = build_typecast(condition, bool_type());
 
@@ -2169,6 +2232,7 @@ exprt function_call_builder::build() const
         "__ESBMC_assert takes one or two arguments (cond[, msg])");
 
     exprt condition = converter_.get_expr(args[0]);
+    converter_.convert_function_call_to_side_effect(condition);
     if (!condition.type().is_bool())
       condition = build_typecast(condition, bool_type());
 
@@ -2215,27 +2279,9 @@ exprt function_call_builder::build() const
     return cover_code;
   }
 
-  // __ESBMC_unreachable: emit a call to the C-style symbol so symex's
-  // intrinsic handler in symex_main.cpp fires under
-  // --enable-unreachability-intrinsic. Lowering matches the atomic_*
-  // pattern below: register a void(void) symbol id and call it.
-  if (is_unreachable_call(function_id))
-  {
-    if (!call_["args"].empty())
-      throw std::runtime_error("__ESBMC_unreachable takes no arguments");
-
-    code_typet fn_type;
-    fn_type.return_type() = empty_typet();
-
-    locationt location = converter_.get_location_from_decl(call_);
-    converter_.ensure_void_void_intrinsic(kEsbmcUnreachable, location);
-
-    code_function_callt call;
-    call.function() = symbol_exprt("c:@F@" + kEsbmcUnreachable, fn_type);
-    call.type() = empty_typet();
-    call.location() = location;
-    return call;
-  }
+  exprt intrinsic_call = build_c_intrinsic_call(function_id);
+  if (!intrinsic_call.is_nil())
+    return intrinsic_call;
 
   // __ESBMC_atomic_begin / __ESBMC_atomic_end: thin wrappers around the C
   // intrinsics with the same names. Emitting a call to a symbol whose

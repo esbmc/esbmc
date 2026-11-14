@@ -1,0 +1,4 @@
+CORE
+main.c
+--data-races-check-only --incremental-bmc --max-k-step 2 --z3 --tuple-node-flattener
+^VERIFICATION SUCCESSFUL$

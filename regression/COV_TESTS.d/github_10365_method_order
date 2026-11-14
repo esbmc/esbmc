@@ -1,0 +1,3 @@
+regression/python/github_8370_call_before_definition_fail
+regression/python/github_8370_branch_before_definition
+regression/python/github_8370_branch_before_definition_fail

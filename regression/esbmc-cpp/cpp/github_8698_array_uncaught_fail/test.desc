@@ -2,4 +2,4 @@ CORE
 main.cpp
 --std c++17 --unwind 8
 ^VERIFICATION FAILED$
-^\s*FAILED\s+\[main\.assertion\.3\]\s+line\s+6\s+uncaught exception: class std::out_of_range$
+^\s*FAILED\s+\[main\.assertion\.2\]\s+line\s+6\s+uncaught exception: class std::out_of_range$

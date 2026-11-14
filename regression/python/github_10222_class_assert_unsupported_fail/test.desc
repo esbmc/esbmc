@@ -1,0 +1,4 @@
+CORE
+main.py
+
+^ERROR: .*line 3 .*the body of class .A. has a statement of kind Assert, which is not supported$

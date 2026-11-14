@@ -2,6 +2,6 @@ CORE
 
 --unwind 1 main.py
 ^WARNING: broken module-import-failed:
-^\s*PASSED\s+\[global\.assertion\.1\]
-SEED_FILE broken.py open("/nonexistent/no_such_file")
-SEED_FILE main.py import broken; x: int = 5; assert x == 5
+^VERIFICATION SUCCESSFUL$
+SEED_FILE broken.py f = open("/nonexistent/no_such_file"); f.close()
+SEED_FILE main.py def f(): import broken

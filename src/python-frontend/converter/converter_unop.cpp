@@ -99,11 +99,12 @@ exprt python_converter::build_emptiness_check(
 
   // A string is empty when strlen(a) == 0.
   // In Python, a non-empty string is truthy; only "" is falsy.
-  if (type_utils::is_string_type(value.type()))
+  const locationt str_location = get_location_from_decl(element);
+  const exprt str_truth = apply_string_truthiness(value, str_location);
+  if (!value.type().is_bool() && str_truth.type().is_bool())
   {
-    locationt location = get_location_from_decl(element);
-    exprt is_empty = not_exprt(apply_string_truthiness(value, location));
-    is_empty.location() = location;
+    exprt is_empty = not_exprt(str_truth);
+    is_empty.location() = str_location;
     return is_empty;
   }
 

@@ -1,0 +1,6 @@
+regression/python/github_10257
+regression/python/github_10257_claims
+regression/python/github_10257_fail
+regression/python/github_10257_funcptr_fail
+regression/esbmc-cpp/try_catch/github_10257_unreachable_throw
+regression/esbmc-cpp/try_catch/github_10257_reachable_throw_fail

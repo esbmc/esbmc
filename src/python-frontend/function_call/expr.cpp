@@ -1,3 +1,4 @@
+#include <python-frontend/model_path.h>
 #include <python-frontend/function_call/expr.h>
 #include <python-frontend/math/bounded_math.h>
 #include <python-frontend/math/cmath_lowering_policy.h>
@@ -593,6 +594,14 @@ bool function_call_expr::is_unmodelled_base_instantiation() const
 {
   return function_type_ == FunctionType::Constructor &&
          converter_.unmodelled_base_classes_.count(function_id_.get_class());
+}
+
+bool function_call_expr::is_module_object_call() const
+{
+  const auto &func = call_["func"];
+  return func.value("_type", "") == "Name" &&
+         converter_.names_module_object(
+           func["id"].get<std::string>(), call_.value("lineno", 0));
 }
 
 void function_call_expr::refuse_unmodelled_base_instance(
@@ -1294,6 +1303,24 @@ constant_zero_bytes(const nlohmann::json &arg)
   return std::vector<uint8_t>(static_cast<size_t>(n), 0);
 }
 
+// The literal a name is bound to, when the program binds it once and reads it
+// only at @p arg, so no store, call or alias can have changed it; else @p arg.
+nlohmann::json
+function_call_expr::once_bound_literal(const nlohmann::json &arg) const
+{
+  if (!arg.is_object() || arg.value("_type", "") != "Name")
+    return arg;
+  const std::string name = arg.value("id", "");
+  const nlohmann::json &ast = converter_.ast();
+  if (
+    json_utils::count_name_bindings(ast, name) != 1 ||
+    json_utils::count_name_nodes(ast, name) != 2)
+    return arg;
+  const nlohmann::json decl =
+    json_utils::find_var_decl(name, converter_.current_function_name(), ast);
+  return decl.contains("value") ? decl["value"] : arg;
+}
+
 // bytes(...) constructor. The generic constructor path relabels the
 // argument expression's type as the bytes array type without converting the
 // value; for a list/int argument that yields a list-pointer (or scalar) value
@@ -1302,7 +1329,11 @@ constant_zero_bytes(const nlohmann::json &arg)
 exprt function_call_expr::handle_bytes_constructor(
   const nlohmann::json &arg) const
 {
-  std::optional<std::vector<uint8_t>> bytes = constant_byte_elements(arg);
+  const nlohmann::json source = once_bound_literal(arg);
+  std::optional<std::vector<uint8_t>> bytes = constant_byte_elements(source);
+  // The name is still read, for the NameError of a global not yet bound.
+  if (bytes && source != arg)
+    converter_.get_expr(arg);
   if (!bytes)
     bytes = constant_zero_bytes(arg);
   if (bytes)
@@ -1794,8 +1825,13 @@ exprt function_call_expr::build_constant_from_arg() const
   // Simply changing expr.type() on an integer expression creates IR where
   // the type tag says float but the operation is bitvector arithmetic,
   // causing sort mismatches in the SMT encoder.
+  // A call statement nested in that cast is never hoisted, and reaches the
+  // solver as is (#10359).
   if (func_name == "float" && !expr.type().is_floatbv())
+  {
+    converter_.convert_function_call_to_side_effect(expr);
     return build_float_conversion(guard_none_to_float(expr), t);
+  }
 
   if (func_name != "str")
     expr = retype_or_typecast(expr, t);
@@ -2981,9 +3017,11 @@ bool function_call_expr::receiver_is_non_dict_object() const
   // lookup_python_symbol but is kept warning-free: is_dict_method_call is a
   // discriminator, so a miss here must stay silent (a genuine dict whose
   // receiver does not resolve through these scopes still defers to the dict
-  // handler below — the safe direction).
+  // handler below — the safe direction). The receiver lives in the file being
+  // converted, not in the callee's: a model class such as Counter has its
+  // methods in the model file (#10500).
   const std::string var_name = recv["id"].get<std::string>();
-  const std::string filename = function_id_.get_filename();
+  const std::string &filename = converter_.python_file();
   const symbolt *sym = converter_.find_symbol(
     "py:" + filename + "@F@" + converter_.current_function_name() + "@" +
     var_name);
@@ -3271,6 +3309,11 @@ exprt function_call_expr::handle_list_sort() const
   size_t float_type_id = 0;
   converter_.get_element_type_registry().type_flags(
     list_id, converter_.get_type_handler(), type_flag, float_type_id);
+  // Element reads are typed by position, and the positions of the int and
+  // float elements after the sort depend on their values.
+  if (type_flag == 3)
+    throw std::runtime_error(
+      "Unsupported: sort() over a list mixing int and float");
 
   // ── Locate the C model function ────────────────────────────────────────────
   const symbolt *sort_func =
@@ -3293,13 +3336,6 @@ exprt function_call_expr::handle_list_sort() const
   // __ESBMC_list_reverse model. Wrap both calls in a code_blockt.
   if (reverse.is_false())
     return sort_call;
-  // The element type registry is reversed at conversion time, so a reverse
-  // known only at run time needs elements of one type, which it leaves
-  // unchanged.
-  if (!reverse.is_true() && type_flag == 3)
-    throw std::runtime_error(
-      "sort(reverse=...) over a mixed int/float list requires a constant "
-      "boolean");
 
   const symbolt *reverse_func =
     converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_reverse");
@@ -3614,7 +3650,13 @@ const symbolt *
 function_call_expr::find_callee_symbol(const std::string &func_symbol_id)
 {
   if (function_type_ != FunctionType::InstanceMethod)
-    return cached_find_symbol(func_symbol_id);
+  {
+    const symbolt *symbol = cached_find_symbol(func_symbol_id);
+    const bool module_global = symbol && !symbol->is_type &&
+                               !symbol->get_type().is_code() &&
+                               call_["func"]["_type"] == "Attribute";
+    return module_global ? converter_.module_alias_target(*symbol) : symbol;
+  }
   if (function_id_.get_class().empty())
     return nullptr;
   // find_symbol falls back to a module global of the method's name, which is
@@ -3638,6 +3680,17 @@ bool function_call_expr::receiver_class_defines_method(
     converter_.find_imported_class_module(cls).first;
   return module &&
          json_utils::class_defines_method((*module)["body"], cls, method_name);
+}
+
+/// `b.set()` or `b.type()` where b's class defines the method: the builtin
+/// of that name must not claim the call.
+bool function_call_expr::is_user_method_named_like_builtin() const
+{
+  const std::string &name = function_id_.get_function();
+  return call_["func"]["_type"] == "Attribute" &&
+         (type_utils::is_builtin_type(name) ||
+          type_utils::is_consensus_type(name)) &&
+         receiver_class_defines_method(name);
 }
 
 bool function_call_expr::receiver_is_literal() const
@@ -3803,6 +3856,8 @@ exprt function_call_expr::handle_list_method() const
 {
   const std::string &method_name = function_id_.get_function();
 
+  if (python_list::is_typed(call_))
+    return handle_typed_list_method();
   if (method_name == "append")
     return handle_list_append();
   if (method_name == "insert")
@@ -3836,11 +3891,11 @@ exprt function_call_expr::handle_list_method() const
   throw std::runtime_error("Unsupported list method: " + method_name);
 }
 
-/// An in-place list method returns None, so assigned to a name the call runs
-/// and the name holds None rather than the model function's own result
-/// (#10160). Other value positions are left alone: the and/or, conditional and
-/// str() lowerings copy or fold a None-typed operand and would drop or repeat
-/// the call.
+/// An in-place list method returns None, so assigned to a name or read as an
+/// and/or operand the call runs and its value is None rather than the model
+/// function's own result (#10160). Other value positions are left alone: the
+/// conditional and str() lowerings copy or fold a None-typed operand and would
+/// drop or repeat the call.
 exprt function_call_expr::none_if_assigned(exprt call) const
 {
   static const std::set<std::string> in_place = {
@@ -4153,6 +4208,22 @@ exprt function_call_expr::handle_numpy_astype() const
     converter_.update_symbol(*converter_.current_lhs);
   }
   return build_symbol(result_sym);
+}
+
+/// A method call on a typed list (#10451), one the gate's _METHOD_RULES
+/// accepted.
+exprt function_call_expr::handle_typed_list_method() const
+{
+  const std::string &method_name = function_id_.get_function();
+  python_list list(converter_, call_);
+  const exprt receiver = converter_.get_expr(call_["func"]["value"]);
+  if (method_name == "append")
+    return list.typed_append(receiver, converter_.get_expr(call_["args"][0]));
+  if (method_name == "copy")
+    return list.typed_copy(receiver);
+  if (method_name == "extend")
+    return list.typed_extend(receiver, converter_.get_expr(call_["args"][0]));
+  throw std::runtime_error("Unsupported typed list method: " + method_name);
 }
 
 exprt function_call_expr::handle_list_append() const
@@ -4864,7 +4935,8 @@ static std::optional<double> literal_value(const nlohmann::json &node)
 static bool
 keeps_library_value(const std::string &function, const nlohmann::json &args)
 {
-  static const std::set<std::string> approximated = {"cbrt", "erf", "erfc"};
+  static const std::set<std::string> approximated = {
+    "cbrt", "erf", "erfc", "gamma", "lgamma", "pow"};
   if (
     approximated.count(function) ||
     !std::all_of(args.begin(), args.end(), is_number_literal) ||
@@ -5414,6 +5486,15 @@ function_call_expr::get_dispatch_table()
      },
      "instantiating a class derived from an unmodelled one"},
 
+    {[this]() { return is_module_object_call(); },
+     [this]() {
+       exprt raise = converter_.get_exception_handler().gen_exception_raise(
+         "TypeError", "'module' object is not callable");
+       raise.location() = converter_.get_location_from_decl(call_);
+       return raise;
+     },
+     "calling a module"},
+
     {[this]() { return is_abstract_instantiation(); },
      [this]() { return abstract_instantiation_error(call_); },
      "instantiating an abstract class"},
@@ -5765,6 +5846,8 @@ exprt function_call_expr::get()
     return *raise;
   if (std::optional<exprt> number = try_int_of_numpy_scalar())
     return *number;
+  if (is_user_method_named_like_builtin())
+    return handle_general_function_call();
 
   // Use dispatch table to handle special function types
   auto dispatch_table = get_dispatch_table();
@@ -5888,12 +5971,8 @@ exprt function_call_expr::handle_general_function_call()
   // e.g. "from other import sum" defines a user sum that shadows the builtin
   bool is_user_imported =
     converter_.find_imported_symbol(function_id_.to_string()) != nullptr;
-  const bool is_numpy_model_call = [](const std::string &filename) {
-    std::string normalized = filename;
-    std::replace(normalized.begin(), normalized.end(), '\\', '/');
-    return boost::algorithm::ends_with(
-      normalized, std::string{"/models/numpy.py"});
-  }(function_id_.get_filename());
+  const bool is_numpy_model_call =
+    model_path::is_model(function_id_.get_filename(), "numpy.py");
 
   if (std::optional<exprt> rounded = try_handle_round(is_user_imported))
     return *rounded;
@@ -7133,6 +7212,197 @@ std::optional<exprt> function_call_expr::fold_sum_over_tuple(
   return migrate_expr_back(acc);
 }
 
+std::optional<exprt>
+function_call_expr::build_mixed_numeric_call(const std::string &list_id)
+{
+  const std::string &func_name = function_id_.get_function();
+  if (
+    (func_name != "sorted" && func_name != "min" && func_name != "max") ||
+    !sorts_mixed_numeric(list_id))
+    return std::nullopt;
+  if (func_name == "sorted")
+    return sort_mixed_numeric_literal();
+  return select_mixed_numeric_literal(func_name == "max");
+}
+
+namespace
+{
+// A numeric constant of a list literal: an int, or a finite float.
+struct numeric_constant
+{
+  bool is_int;
+  long long int_value;
+  double float_value;
+};
+
+// An int constant, negated when @p negated. An int beyond long long, or a
+// negative one under negation, is refused.
+std::optional<numeric_constant>
+int_constant_of(const nlohmann::json &value, bool negated)
+{
+  if (
+    !value.is_number_integer() ||
+    (value.is_number_unsigned() &&
+     value.get<unsigned long long>() >
+       static_cast<unsigned long long>(std::numeric_limits<long long>::max())))
+    return std::nullopt;
+  const long long i = value.get<long long>();
+  if (negated && i < 0)
+    return std::nullopt;
+  return numeric_constant{true, negated ? -i : i, 0.0};
+}
+
+std::optional<numeric_constant> numeric_constant_of(const nlohmann::json &elt)
+{
+  const bool negated = elt.value("_type", "") == "UnaryOp" &&
+                       elt["op"].value("_type", "") == "USub";
+  const nlohmann::json &node = negated ? elt["operand"] : elt;
+  if (node.value("_type", "") != "Constant")
+    return std::nullopt;
+  const nlohmann::json &value = node["value"];
+  if (value.is_number_float())
+  {
+    const double f = negated ? -value.get<double>() : value.get<double>();
+    if (!std::isfinite(f))
+      return std::nullopt;
+    return numeric_constant{false, 0, f};
+  }
+  if (value.is_boolean() && !negated)
+    return numeric_constant{true, value.get<bool>() ? 1 : 0, 0.0};
+  return int_constant_of(value, negated);
+}
+
+// Python's exact comparison of an int with a finite float. A double of
+// magnitude 2^53 or more is integral, so it compares as an integer. Below
+// that, converting the int to double keeps the order, and only an int of
+// magnitude below 2^53, which converts exactly, can compare equal.
+int compare_int_float(long long i, double f)
+{
+  const double two_63 = 9223372036854775808.0;
+  if (std::fabs(f) < 9007199254740992.0)
+  {
+    const double d = static_cast<double>(i);
+    return (d > f) - (d < f);
+  }
+  if (f >= two_63)
+    return -1;
+  if (f < -two_63)
+    return 1;
+  const long long g = static_cast<long long>(f);
+  return (i > g) - (i < g);
+}
+
+bool numeric_less(const numeric_constant &a, const numeric_constant &b)
+{
+  if (a.is_int && b.is_int)
+    return a.int_value < b.int_value;
+  if (!a.is_int && !b.is_int)
+    return a.float_value < b.float_value;
+  if (a.is_int)
+    return compare_int_float(a.int_value, b.float_value) < 0;
+  return compare_int_float(b.int_value, a.float_value) > 0;
+}
+
+// The constant reverse= of a sorted() call; throws for any other keyword.
+bool constant_reverse_keyword(const nlohmann::json &call)
+{
+  bool reverse = false;
+  for (const auto &kw : call.value("keywords", nlohmann::json::array()))
+  {
+    const nlohmann::json &value = kw["value"];
+    if (
+      kw.value("arg", "") != "reverse" ||
+      value.value("_type", "") != "Constant" || !value["value"].is_boolean())
+      throw std::runtime_error(
+        "Unsupported: sorted() over a mixed int/float list takes only a "
+        "constant reverse= keyword");
+    reverse = value["value"].get<bool>();
+  }
+  return reverse;
+}
+
+// The elements of a literal of int and float constants, in order.
+std::vector<std::pair<numeric_constant, nlohmann::json>>
+mixed_numeric_literal(const nlohmann::json &arg, const std::string &func_name)
+{
+  const std::string unsupported = "Unsupported: " + func_name +
+                                  "() over a mixed int/float list that is not "
+                                  "a literal of numeric constants";
+  if (arg.value("_type", "") != "List")
+    throw std::runtime_error(unsupported);
+
+  std::vector<std::pair<numeric_constant, nlohmann::json>> elements;
+  for (const auto &elt : arg["elts"])
+  {
+    const std::optional<numeric_constant> value = numeric_constant_of(elt);
+    if (!value)
+      throw std::runtime_error(unsupported);
+    elements.emplace_back(*value, elt);
+  }
+  return elements;
+}
+} // namespace
+
+bool function_call_expr::sorts_mixed_numeric(const std::string &list_id) const
+{
+  const element_type_registry &registry =
+    converter_.get_element_type_registry();
+  if (registry.has_mixed_numeric(list_id))
+    return true;
+  // A list literal mixing int and float is stored as floats, so its record
+  // shows only the int elements' promotion to double.
+  const auto *recorded = registry.find(list_id);
+  if (!recorded)
+    return false;
+  bool has_int = false, has_float = false;
+  for (const auto &[elem_id, elem_type] : *recorded)
+  {
+    const symbolt *elem = converter_.find_symbol(elem_id);
+    const bool promoted =
+      elem && elem->get_value().id() == "typecast" &&
+      type_utils::is_integer_type(elem->get_value().op0().type());
+    has_int |= promoted;
+    has_float |= !promoted && elem_type.is_floatbv();
+  }
+  return has_int && has_float;
+}
+
+exprt function_call_expr::select_mixed_numeric_literal(bool is_max)
+{
+  const auto elements =
+    mixed_numeric_literal(call_["args"][0], function_id_.get_function());
+  // The first of equal extremes wins, as in Python.
+  auto best = elements.begin();
+  for (auto it = std::next(best); it != elements.end(); ++it)
+    if (
+      is_max ? numeric_less(best->first, it->first)
+             : numeric_less(it->first, best->first))
+      best = it;
+  return converter_.get_expr(best->second);
+}
+
+exprt function_call_expr::sort_mixed_numeric_literal()
+{
+  const bool reverse = constant_reverse_keyword(call_);
+  const nlohmann::json &arg = call_["args"][0];
+  auto elements = mixed_numeric_literal(arg, "sorted");
+
+  // Python's sort is stable for reverse=True too, so equal elements keep
+  // their order either way.
+  std::stable_sort(
+    elements.begin(), elements.end(), [reverse](const auto &a, const auto &b) {
+      return reverse ? numeric_less(b.first, a.first)
+                     : numeric_less(a.first, b.first);
+    });
+
+  // Built from the converted elements, not as a literal, which would store
+  // the ints promoted to float.
+  std::vector<exprt> sorted_elems;
+  for (const auto &element : elements)
+    sorted_elems.push_back(converter_.get_expr(element.second));
+  return python_list(converter_, arg).build_list_from_exprs(sorted_elems);
+}
+
 std::optional<exprt> function_call_expr::apply_builtin_dispatch(
   std::string &actual_func_name,
   bool is_user_imported,
@@ -7202,19 +7472,8 @@ std::optional<exprt> function_call_expr::apply_builtin_dispatch(
         converter_.get_element_type_registry().homogeneous_element_type(
           list_id, func_name);
 
-      // Mixed int/float list: inline the comparison to avoid type confusion
-      // when passing the list to max_float/min_float model functions.
-      if (
-        elem_type.is_floatbv() && (func_name == "min" || func_name == "max") &&
-        converter_.get_element_type_registry().has_mixed_numeric(list_id) &&
-        !has_default_kwarg)
-      {
-        irep_idt comparison_op =
-          (func_name == "max") ? exprt::i_gt : exprt::i_lt;
-        python_list list_helper(converter_, call_["args"][0]);
-        return list_helper.build_min_max_for_mixed_numeric(
-          list_arg, list_id, func_name, comparison_op);
-      }
+      if (std::optional<exprt> mixed = build_mixed_numeric_call(list_id))
+        return mixed;
     }
     reject_unfoldable_key(call_, func_name, is_sorted_min_max);
 
@@ -7248,6 +7507,7 @@ std::optional<exprt> function_call_expr::try_indirect_variable_call()
     symbolt *var_symbol = symbol_table.find_symbol(var_sid.to_string());
     if (var_symbol && !var_symbol->get_type().is_code())
     {
+      converter_.refuse_keywords_through_value(call_);
       side_effect_expr_function_callt call;
       call.location() = converter_.get_location_from_decl(call_);
       call.type() = any_type();
@@ -7536,6 +7796,32 @@ forward_function_node(const nlohmann::json &ast, const std::string &name)
     ast, json_utils::split_function_path(name));
 }
 
+/// The type a forward-referenced function annotated `-> ret_cls` returns,
+/// mirroring the type its `def` is converted to. A str is a char pointer, not
+/// the char array get_typet names: typing the call as an array while the callee
+/// returns a pointer leaves the caller's result a different type (#10442).
+/// Stage 1 object-model migration (#3067): a user-defined class is a Cls*
+/// reference, not the value struct. Resolving it by value leaves the call typed
+/// as a struct while the callee actually returns a pointer, which crashes on
+/// `return f(...)` with a struct-vs-pointer irep2_cast_error. @overload stubs
+/// resolve per call site, so they stay by value (consistent with
+/// call_return_class).
+static typet forward_return_type(
+  const std::string &ret_cls,
+  const nlohmann::json &func_node,
+  const nlohmann::json &ast,
+  const type_handler &types)
+{
+  if (ret_cls == "str")
+    return gen_pointer_type(char_type());
+  const typet type = types.get_typet(ret_cls);
+  if (
+    json_utils::is_class(ret_cls, ast) &&
+    !json_utils::has_overload_decorator(func_node))
+    return gen_pointer_type(type);
+  return type;
+}
+
 /// The constant a forward-referenced function always returns, or nil. Only a
 /// body that is a lone `return <constant>` is converted: the callee's
 /// statements would otherwise be converted in the caller's scope.
@@ -7782,7 +8068,7 @@ std::optional<exprt> function_call_expr::resolve_missing_function_symbol(
   {
     // Find in global scope
     function_id_.set_class("");
-    func_symbol = converter_.find_symbol(function_id_.to_string());
+    func_symbol = find_callee_symbol(function_id_.to_string());
 
     if (!func_symbol)
     {
@@ -7817,22 +8103,11 @@ std::optional<exprt> function_call_expr::resolve_missing_function_symbol(
           {
             const auto &returns = func_node["returns"];
             if (returns.contains("id"))
-            {
-              const std::string ret_cls = returns["id"].get<std::string>();
-              return_type = type_handler_.get_typet(ret_cls);
-              // Stage 1 object-model migration (#3067): mirror the funcdef
-              // migration — a forward-referenced function returning a
-              // user-defined class returns a Cls* reference, not the value
-              // struct. Resolving it by value here leaves the call typed as a
-              // struct while the callee actually returns a pointer, which
-              // crashes on `return f(...)` with a struct-vs-pointer
-              // irep2_cast_error. @overload stubs resolve per call site, so
-              // leave them by value (consistent with call_return_class).
-              if (
-                json_utils::is_class(ret_cls, converter_.ast()) &&
-                !json_utils::has_overload_decorator(func_node))
-                return_type = gen_pointer_type(return_type);
-            }
+              return_type = forward_return_type(
+                returns["id"].get<std::string>(),
+                func_node,
+                converter_.ast(),
+                type_handler_);
           }
           exprt const_return = forward_constant_return(func_node);
           if (!const_return.is_nil())
@@ -8257,6 +8532,64 @@ void function_call_expr::refuse_float_to_int_argument(
       "passing a float to an int parameter is not supported");
 }
 
+// `2 ** e` with a non-constant int `e` is lowered to an exact double by
+// power_of_two, so it can be passed to an int parameter where it is an int in
+// CPython. A negative `e` gives a float and a large one does not fit the
+// parameter; both are refused at run time (#10228).
+exprt function_call_expr::int_power_of_two_argument(
+  const nlohmann::json &node,
+  const exprt &arg,
+  const typet &param_type) const
+{
+  if (
+    !arg.type().is_floatbv() || !param_type.is_signedbv() ||
+    node.value("_type", "") != "BinOp" ||
+    node["op"].value("_type", "") != "Pow" ||
+    node["left"].value("_type", "") != "Constant" ||
+    !node["left"]["value"].is_number_integer() ||
+    node["left"]["value"].get<long long>() != 2 ||
+    node["right"].value("_type", "") != "Name" ||
+    config.ansi_c.double_width != 64 ||
+    config.options.get_bool_option("int-encoding") ||
+    !converter_.can_emit_runtime_guard())
+    return arg;
+
+  const typet exponent_type = converter_.get_expr(node["right"]).type();
+  if (!exponent_type.is_signedbv() && !exponent_type.is_unsignedbv())
+    return arg;
+
+  // Read the power once, here, so the guard and the argument see one value
+  // even if a later argument rebinds the exponent.
+  const locationt location = converter_.get_location_from_decl(call_);
+  symbolt &tmp =
+    converter_.create_tmp_symbol(call_, "$pow_arg$", arg.type(), exprt());
+  code_declt decl(build_symbol(tmp));
+  decl.location() = location;
+  converter_.add_instruction(decl);
+  code_assignt assign(build_symbol(tmp), arg);
+  assign.location() = location;
+  converter_.add_instruction(assign);
+  const exprt power = build_symbol(tmp);
+
+  // power_of_two is exact, so 1 <= 2 ** e <= 2 ** (width - 2) holds exactly
+  // when 0 <= e <= width - 2.
+  const exprt in_range = and_exprt(
+    binary_relation_exprt(power, ">=", from_double(1.0, arg.type())),
+    binary_relation_exprt(
+      power,
+      "<=",
+      from_double(std::ldexp(1.0, bv_width(param_type) - 2), arg.type())));
+  code_assertt check(in_range);
+  check.location() = location;
+  check.location().user_provided(true);
+  check.location().comment(
+    "Unsupported: an int raised to a power that is negative or too large, "
+    "passed to an int parameter");
+  converter_.add_instruction(check);
+  converter_.add_instruction(code_assumet(in_range));
+  return typecast_exprt(power, param_type);
+}
+
 static std::optional<std::string> string_literal(const nlohmann::json &node)
 {
   if (node.value("_type", "") == "Constant" && node["value"].is_string())
@@ -8307,6 +8640,78 @@ exprt function_call_expr::build_dict_size_call(const exprt &dict)
     build_member(bound, "keys", type_handler_.get_list_type()));
   list_size_func_call.type() = signedbv_typet(64);
   return list_size_func_call;
+}
+
+// Whether a class in @p ast lists @p cls as a base, by name or as a module
+// attribute (`class A(array.array)`).
+static bool names_as_base(const std::string &cls, const nlohmann::json &ast)
+{
+  if (ast.is_object() && ast.value("_type", "") == "ClassDef")
+    for (const auto &base : ast["bases"])
+      if (base.value("id", "") == cls || base.value("attr", "") == cls)
+        return true;
+  return ast.is_structured() &&
+         std::any_of(ast.begin(), ast.end(), [&](const nlohmann::json &c) {
+           return names_as_base(cls, c);
+         });
+}
+
+// len(f()) of a dict or of a class instance, len(a * 2): a named one takes
+// its own path, but an inline value reaches the size builtin, where strlen
+// would read the struct bytes (#10505).
+exprt function_call_expr::size_of_aggregate(
+  const exprt &arg,
+  const locationt &location)
+{
+  if (!is_size_builtin())
+    return nil_exprt();
+  if (
+    converter_.get_dict_handler()->is_dict_type(
+      converter_.ns.follow(arg.type())))
+    return build_dict_size_call(arg);
+  if (
+    function_id_.get_function() == "strlen" &&
+    converter_.is_user_class_pointer(arg.type()))
+    return len_of_instance(arg, location);
+  return nil_exprt();
+}
+
+exprt function_call_expr::len_of_instance(
+  exprt object,
+  const locationt &location)
+{
+  if (object.is_function_call())
+    object = converter_.store_call_result(object, location, "len");
+  const std::string cls = converter_.class_name_of(object.type().subtype());
+  // The object may be an instance of any subclass of its static class (#9835).
+  const std::optional<std::string> owner =
+    converter_.family_method_owner(cls, "__len__");
+  if (owner && owner->empty())
+    return converter_.get_exception_handler().gen_exception_raise(
+      "TypeError", "object of type '" + cls + "' has no len()");
+  // A model class such as array has no MRO in the program's AST; its static
+  // class is exact when no class in the program derives from it.
+  const exprt dunder =
+    owner || !names_as_base(cls, converter_.ast())
+      ? converter_.dispatch_unary_dunder_operator("len", object, location)
+      : nil_exprt();
+  if (dunder.is_nil())
+    throw std::runtime_error(
+      "len() of an instance of class '" + cls +
+      "' is not supported when its subclasses or bases leave __len__ "
+      "unresolved");
+
+  // A call typed Optional[C] may return None.
+  code_ifthenelset none_guard;
+  none_guard.cond() = equality_exprt(object, gen_zero(object.type()));
+  codet raise("expression");
+  raise.copy_to_operands(converter_.get_exception_handler().gen_exception_raise(
+    "TypeError", "object of type 'NoneType' has no len()"));
+  none_guard.then_case() = raise;
+  none_guard.location() = location;
+  converter_.current_block->copy_to_operands(none_guard);
+
+  return converter_.checked_len_result(dunder, location);
 }
 
 exprt function_call_expr::fold_from_bytes_byteorder(
@@ -8374,6 +8779,7 @@ std::optional<exprt> function_call_expr::build_positional_arguments(
 
     if (param_idx < params.size())
     {
+      arg = int_power_of_two_argument(arg_node, arg, params[param_idx].type());
       refuse_float_to_int_argument(arg, params[param_idx].type(), *func_symbol);
       arg = coerce_tagged_argument(arg, params[param_idx].type(), location);
     }
@@ -8605,12 +9011,8 @@ std::optional<exprt> function_call_expr::build_positional_arguments(
       return list_size_func_call;
     }
 
-    // len(f()) where f returns a dict: a named dict takes __ESBMC_len_dict,
-    // but an inline call reaches here and strlen would read the struct bytes.
-    if (
-      is_size_builtin() && converter_.get_dict_handler()->is_dict_type(
-                             converter_.ns.follow(arg.type())))
-      return build_dict_size_call(arg);
+    if (exprt size = size_of_aggregate(arg, location); size.is_not_nil())
+      return size;
 
     // Handle function calls used as arguments
     if (arg.is_code() && arg.is_function_call())
@@ -8871,6 +9273,8 @@ void function_call_expr::forward_keyword_arguments(
         if (params[i].get_base_name().as_string() == kw_name)
         {
           exprt kw_val = converter_.get_expr(kw["value"]);
+          kw_val =
+            int_power_of_two_argument(kw["value"], kw_val, params[i].type());
           refuse_float_to_int_argument(kw_val, params[i].type(), func_symbol);
           kw_val = coerce_tagged_argument(kw_val, params[i].type(), location);
           if (call.arguments().size() <= i)

@@ -1,0 +1,4 @@
+CORE
+main.py
+
+^ERROR: .*line 6 .*the body of class .A. has a statement of kind Assign, which is not supported$

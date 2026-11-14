@@ -128,6 +128,13 @@ public:
   {
   }
 
+  static std::set<irep_idt>
+  reachable_functions(const goto_functionst &gf, const contextt &context)
+  {
+    return compute_entry_reachable(
+      build_call_graph(gf), collect_address_taken(gf, context));
+  }
+
   void run(goto_functionst &goto_functions)
   {
     // Turn dynamic_cast<T&> bad_cast intrinsics into ordinary THROWs first, so
@@ -198,15 +205,8 @@ public:
           if (!is_nil_expr(t.operand))
           {
             registry.register_chain(t.exception_list);
-            // Record the dynamic type (front) for the typed uncaught-exception
-            // partition; dedup while preserving first-seen order.
             const irep_idt &dyn = t.exception_list.front();
-            if (
-              std::find(
-                thrown_dynamic_types_.begin(),
-                thrown_dynamic_types_.end(),
-                dyn) == thrown_dynamic_types_.end())
-              thrown_dynamic_types_.push_back(dyn);
+            record_thrown_type(fn.first, dyn);
             const locationt loc = raise_location(body, it);
             raise_location_[&*it] = loc;
             raise_site_id_[&*it] = record_throw_site(
@@ -478,6 +478,8 @@ private:
   // name_to_id, which the exception_typeidt constructor seeds from *every* type
   // symbol, not just exception types.
   std::vector<irep_idt> thrown_dynamic_types_;
+  // The subset raised in at least one function of entry_reachable_.
+  std::set<irep_idt> reachable_thrown_types_;
   /// One statement a type is raised from, and the id the lowering stamps on the
   /// exception state there.
   struct throw_sitet
@@ -528,6 +530,19 @@ private:
       if (is_located(it->location))
         return it->location;
     return body.begin()->location;
+  }
+
+  /// Records \p type, the dynamic type of a raise in \p fn, for the typed
+  /// uncaught-exception partition, keeping first-seen order without duplicates.
+  void record_thrown_type(const irep_idt &fn, const irep_idt &type)
+  {
+    if (
+      std::find(
+        thrown_dynamic_types_.begin(), thrown_dynamic_types_.end(), type) ==
+      thrown_dynamic_types_.end())
+      thrown_dynamic_types_.push_back(type);
+    if (entry_reachable_.count(fn))
+      reachable_thrown_types_.insert(type);
   }
 
   /// Records the raise of \p type at \p loc, in function \p fn, and returns the
@@ -1732,6 +1747,9 @@ private:
 
     for (const irep_idt &name : thrown_dynamic_types_)
     {
+      // #10257: also kept out of known_disj, so a missed caller fails.
+      if (reports_escape(name) && !reachable_thrown_types_.count(name))
+        continue;
       expr2tc eq = typeid_eq(name);
       known_disj = is_nil_expr(known_disj) ? eq : or2tc(known_disj, eq);
       if (!reports_escape(name))
@@ -2171,4 +2189,10 @@ std::vector<irep_idt> python_checked_exceptions(const optionst &options)
   for (std::string name; std::getline(listed, name, ',');)
     checked.emplace_back(name);
   return checked;
+}
+
+std::set<irep_idt>
+entry_reachable_functions(const goto_functionst &gf, const contextt &context)
+{
+  return exception_loweringt::reachable_functions(gf, context);
 }

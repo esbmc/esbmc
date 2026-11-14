@@ -26,17 +26,24 @@ void python_dict_handler::check_value_type(
   converter_.add_instruction(check);
 }
 
-/// A key whose type was lost (`void *`) hashes like no stored key, so its
-/// lookup would raise KeyError on every path (#10241). Where the lookup runs,
+/// A key stored at its lost type (`void *`) hashes like no stored key, so its
+/// lookup would raise KeyError on every path (#10241). A list element read at
+/// that type carries its own type and is not one. Where the lookup runs,
 /// report it as unsupported and end the path instead.
 void python_dict_handler::refuse_untyped_key(
-  const exprt &key,
+  const typet &key_type,
   const locationt &location)
 {
-  if (!key.type().is_pointer() || !key.type().subtype().is_empty())
-    return;
-  const std::string message =
-    "Unsupported: a dict lookup with a key whose type is not known";
+  if (key_type.is_pointer() && key_type.subtype().is_empty())
+    refuse(
+      "Unsupported: a dict lookup with a key whose type is not known",
+      location);
+}
+
+void python_dict_handler::refuse(
+  const std::string &message,
+  const locationt &location)
+{
   if (!converter_.can_emit_runtime_guard())
     throw std::runtime_error(message);
   // Not the constant false, which CFG cleanup reads as the end of the
@@ -107,6 +114,36 @@ static bool reads_other_kind(
          (expected && kinds.size() == 1 && *kinds.begin() != expected);
 }
 
+/// Stop a read of @p dict_expr at @p slice_node of no known @p read_type when
+/// a value it can see is neither a scalar nor a str: the char pointer it
+/// defaults to would read that value as a str (#10432).
+void python_dict_handler::refuse_untyped_aggregate_read(
+  const exprt &dict_expr,
+  const nlohmann::json &slice_node,
+  const typet &read_type,
+  const locationt &location)
+{
+  const bool untyped = read_type.is_nil() || read_type.is_empty();
+  const std::string vals_id =
+    untyped && dict_expr.is_symbol()
+      ? get_internal_list_id(dict_expr.identifier().as_string(), false)
+      : std::string();
+  const element_type_registry::entries *entries =
+    vals_id.empty() ? nullptr
+                    : converter_.get_element_type_registry().find(
+                        vals_id, type_slot::dict_value_types);
+  if (!entries)
+    return;
+  const std::string key = dict_key_id(slice_node, converter_.get_ast_json());
+  for (const element_type_registry::entry &e : *entries)
+    if (
+      (key.empty() || e.first.empty() || e.first == key) &&
+      !scalar_kind(e.second) && !type_handler_.is_tagged_scalar_type(e.second))
+      return refuse(
+        "Unsupported: a dict read of a value whose type is not known",
+        location);
+}
+
 /// Whether a read of @p dict_expr at @p slice_node, whose recorded values are
 /// @p entries, yields the stored item as a tagged scalar: every value is
 /// tagged, the values it can see are not all of @p read_type's kind, or the
@@ -158,7 +195,6 @@ exprt python_dict_handler::handle_dict_subscript(
     resolved_type = resolve_expected_type_for_dict_subscript(dict_expr);
 
   exprt key_expr = get_key_expr(slice_node);
-  refuse_untyped_key(key_expr, location);
 
   // Get dict.keys and dict.values
   exprt keys_member = build_member(dict_expr, "keys", list_type);
@@ -185,6 +221,7 @@ exprt python_dict_handler::handle_dict_subscript(
   python_list list_handler(converter_, slice_node);
   list_elem_info key_info =
     list_handler.get_lookup_key_info(slice_node, key_expr);
+  refuse_untyped_key(key_info.elem_symbol->get_type(), location);
 
   // Call try_find_index(keys, key, type_hash, size) — returns SIZE_MAX if
   // absent
@@ -538,6 +575,8 @@ exprt python_dict_handler::handle_dict_subscript(
     if (!struct_value.is_nil())
       return struct_value;
   }
+
+  refuse_untyped_aggregate_read(dict_expr, slice_node, resolved_type, location);
 
   // Default: cast void* to char* for string values
   exprt value_as_string =

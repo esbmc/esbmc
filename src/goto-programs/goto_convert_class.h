@@ -292,6 +292,10 @@ protected:
     const locationt &location,
     goto_programt &dest);
   void convert_switch(const codet &code, goto_programt &dest);
+  void evaluate_unguarded_switch_value(
+    const exprt &value,
+    const locationt &location,
+    goto_programt &dest);
   void convert_break(const code_breakt &code, goto_programt &dest);
   void convert_return(const code_returnt &code, goto_programt &dest);
   void remove_return_value_sideeffects(exprt &value, goto_programt &dest);
@@ -620,6 +624,13 @@ protected:
     bool result_is_used);
 
   void rewrite_short_circuit_as_ternary(exprt &expr);
+
+  void do_esbmc_assert(
+    const exprt &lhs,
+    const exprt &function,
+    const exprt::operandst &arguments,
+    goto_programt &dest,
+    const std::string &base_name);
 
   // The same four hooks differ only in arity and in which argument carries the
   // failing expression; `expr_arg` names the latter.

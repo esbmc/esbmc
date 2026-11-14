@@ -12,7 +12,9 @@
 /// Whether a NULL pointer to @p subt is how the frontend spells Python None.
 static bool null_is_none(const type2tc &subt, const namespacet &ns)
 {
-  if (is_empty_type(subt) || is_struct_type(subt) || is_array_type(subt))
+  if (
+    is_empty_type(subt) || is_struct_type(subt) || is_array_type(subt) ||
+    is_code_type(subt))
     return true;
   return is_symbol_type(subt) &&
          ns.follow(migrate_type_back(subt)).id() == "struct";
@@ -108,15 +110,26 @@ static expr2tc isinstance_subject(expr2tc value, const expr2tc &operand)
            : value;
 }
 
+// The marker the frontend plants (#10251): a null `void *` for the type.
+static bool asks_whether_traced(const expr2tc &expect_type)
+{
+  return !is_nil_expr(expect_type) && is_pointer_type(expect_type->type) &&
+         is_empty_type(to_pointer_type(expect_type->type).subtype);
+}
+
+static bool is_untyped_pointer(const expr2tc &value)
+{
+  return is_symbol2t(value) && is_pointer_type(value->type) &&
+         is_empty_type(to_pointer_type(value->type).subtype);
+}
+
 // An untyped (`void *`) operand that neither constant propagation nor the
 // value set traced back to its object carries no Python type, so no answer is
 // sound: comparing `void *` itself would say "no" to every type. Fail only if
 // this path is reachable, and end it so no check after it relies on the guess.
 void goto_symext::reject_untyped_isinstance(const expr2tc &value)
 {
-  if (
-    !is_symbol2t(value) || !is_pointer_type(value->type) ||
-    !is_empty_type(to_pointer_type(value->type).subtype))
+  if (!is_untyped_pointer(value))
     return;
   claim(gen_false_expr(), "isinstance() on a value whose type was lost");
   assume(gen_false_expr());
@@ -147,12 +160,130 @@ static expr2tc points_to_object(
   return says_nothing ? current : object;
 }
 
+// The value isinstance inspects once the value set has been consulted: the
+// object the operand points to, or the operand itself when nothing is known.
+// NULL beside another object is None on some paths only: it is skipped and
+// @p beside_null set, so the caller tests NULL itself (#10434).
+expr2tc
+goto_symext::isinstance_subject_of(const isinstance2t &obj, bool *beside_null)
+{
+  expr2tc value = obj.side_1;
+  value_setst::valuest value_set;
+  // The value-set map is keyed by the L1 symbol name (e.g. "...@x?1!0"); the
+  // isinstance operand arrives as an L0 symbol, so an unrenamed lookup misses
+  // and the points-to set comes back empty/unknown. Rename to L1 first. This
+  // matters for the object-model migration (#3067): a class instance is a
+  // `Class*` allocated by `new_object`; when that allocation is guarded
+  // (e.g. inside `if c:`), constant propagation cannot recover the concrete
+  // object from the renamed pointer, so the value-set is the only way to find
+  // the pointed-to struct and resolve the type. The L1 rename keeps the
+  // symbol shape (cur_state->rename may wrap it in a typecast), so we can
+  // index the map directly.
+  expr2tc l1_value = value;
+  cur_state->top().level1.rename(l1_value);
+  cur_state->value_set.get_value_set(l1_value, value_set);
+
+  const auto is_object = [](const expr2tc &entry) {
+    return is_object_descriptor2t(entry) &&
+           !is_null_object2t(to_object_descriptor2t(entry).object);
+  };
+  const bool has_object =
+    std::any_of(value_set.begin(), value_set.end(), is_object);
+
+  // Find the last value from the value set
+  for (const auto &entry : value_set)
+  {
+    if (is_object_descriptor2t(entry))
+    {
+      const object_descriptor2t &o = to_object_descriptor2t(entry);
+      if (has_object && is_null_object2t(o.object))
+      {
+        if (beside_null)
+          *beside_null = true;
+        continue;
+      }
+      value = points_to_object(l1_value, o.object, value);
+    }
+  }
+
+  cur_state->rename(value);
+  value = isinstance_subject(value, obj.side_1);
+
+  if (is_address_of2t(value))
+    value = to_address_of2t(value).ptr_obj;
+  return value;
+}
+
+// isinstance on a pointer that is NULL on some paths and points to an object
+// on others: NULL is None, an instance of nothing isinstance asks about, so it
+// is tested rather than answered from the last object (#10434).
+void goto_symext::guard_isinstance_beside_null(expr2tc &expr)
+{
+  if (
+    !is_isinstance2t(expr) || asks_whether_traced(to_isinstance2t(expr).side_2))
+    return;
+  const isinstance2t &obj = to_isinstance2t(expr);
+  bool beside_null = false;
+  const expr2tc subject = isinstance_subject_of(obj, &beside_null);
+  if (!beside_null)
+    return;
+  const expr2tc operand = obj.side_1;
+  expr2tc answer = isinstance2tc(subject, obj.side_2);
+  simplify_python_builtins(answer);
+  expr = and2tc(notequal2tc(operand, gen_zero(operand->type)), answer);
+}
+
+// isinstance on a pointer the value set pairs with several objects: one
+// answer per object, each under the condition that the pointer points to it.
+// Answering from one of them alone decides the test for every path.
+void goto_symext::split_isinstance_over_objects(expr2tc &expr)
+{
+  if (
+    !is_isinstance2t(expr) || asks_whether_traced(to_isinstance2t(expr).side_2))
+    return;
+  const isinstance2t &obj = to_isinstance2t(expr);
+  if (!is_pointer_type(obj.side_1->type) || is_tuple_element(obj.side_1))
+    return;
+
+  expr2tc l1_value = obj.side_1;
+  cur_state->top().level1.rename(l1_value);
+  value_setst::valuest value_set;
+  cur_state->value_set.get_value_set(l1_value, value_set);
+  std::vector<expr2tc> objects;
+  // An unknown or invalid entry names no object to answer for, as in
+  // isinstance_subject_of.
+  for (const auto &entry : value_set)
+  {
+    if (!is_object_descriptor2t(entry))
+      continue;
+    const expr2tc &object = to_object_descriptor2t(entry).object;
+    if (!is_null_object2t(object))
+      objects.push_back(object);
+  }
+  if (objects.size() < 2)
+    return;
+
+  expr2tc operand = obj.side_1;
+  cur_state->rename(operand);
+  expr2tc result = gen_false_expr();
+  for (const expr2tc &object : objects)
+  {
+    const expr2tc address = address_of2tc(object->type, object);
+    expr2tc answer = isinstance2tc(address, obj.side_2);
+    simplify_python_builtins(answer);
+    result = or2tc(result, and2tc(same_object2tc(operand, address), answer));
+  }
+  expr = result;
+}
+
 void goto_symext::simplify_python_builtins(expr2tc &expr)
 {
   expr->Foreach_operand([this](expr2tc &e) {
     if (!is_nil_expr(e))
       simplify_python_builtins(e);
   });
+  split_isinstance_over_objects(expr);
+  guard_isinstance_beside_null(expr);
 
   if (is_isinstance2t(expr))
   {
@@ -176,36 +307,15 @@ void goto_symext::simplify_python_builtins(expr2tc &expr)
       }
     }
 
-    value_setst::valuest value_set;
-    // The value-set map is keyed by the L1 symbol name (e.g. "...@x?1!0"); the
-    // isinstance operand arrives as an L0 symbol, so an unrenamed lookup misses
-    // and the points-to set comes back empty/unknown. Rename to L1 first. This
-    // matters for the object-model migration (#3067): a class instance is a
-    // `Class*` allocated by `new_object`; when that allocation is guarded
-    // (e.g. inside `if c:`), constant propagation cannot recover the concrete
-    // object from the renamed pointer, so the value-set is the only way to find
-    // the pointed-to struct and resolve the type. The L1 rename keeps the
-    // symbol shape (cur_state->rename may wrap it in a typecast), so we can
-    // index the map directly.
-    expr2tc l1_value = value;
-    cur_state->top().level1.rename(l1_value);
-    cur_state->value_set.get_value_set(l1_value, value_set);
+    value = isinstance_subject_of(obj);
 
-    // Find the last value from the value set
-    for (const auto &obj : value_set)
+    // The frontend's visible refusal (#10251) asks only whether the type was
+    // traced: a `void *` second operand stands for no type at all.
+    if (asks_whether_traced(expect_type))
     {
-      if (is_object_descriptor2t(obj))
-      {
-        const object_descriptor2t &o = to_object_descriptor2t(obj);
-        value = points_to_object(l1_value, o.object, value);
-      }
+      expr = is_untyped_pointer(value) ? gen_false_expr() : gen_true_expr();
+      return;
     }
-
-    cur_state->rename(value);
-    value = isinstance_subject(value, obj.side_1);
-
-    if (is_address_of2t(value))
-      value = to_address_of2t(value).ptr_obj;
 
     reject_untyped_isinstance(value);
 

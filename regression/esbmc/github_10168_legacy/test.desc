@@ -1,0 +1,5 @@
+CORE
+main.c
+--no-irep2-native-body
+^VERIFICATION FAILED$
+^  dereference failure: NULL pointer$

@@ -1,0 +1,7 @@
+regression/python/github_10228
+regression/python/github_10228_fail
+regression/python/github_10228_keyword
+regression/python/github_10228_negative_fail
+regression/python/github_10228_float_exponent_unsupported
+regression/python/github_10228_arg_order_fail
+regression/python/github_10228_bound_unsupported

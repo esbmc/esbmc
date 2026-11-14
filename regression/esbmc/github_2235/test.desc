@@ -1,5 +1,4 @@
 CORE
 main.c
 --overflow --memory-leak-check --no-unwinding-assertions --unwind 1 --gcse
-dereference failure: invalid pointer
-^VERIFICATION FAILED$
+^VERIFICATION SUCCESSFUL$

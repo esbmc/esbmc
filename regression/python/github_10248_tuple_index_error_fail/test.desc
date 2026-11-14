@@ -1,0 +1,5 @@
+CORE
+main.py
+--sv-comp --k-induction --max-inductive-step 3 --k-step 2 --unlimited-k-steps --python-check-exceptions KeyError,IndexError
+^\s*FAILED\s+\[f\.assertion\.1\]\s+line 4\s+uncaught exception: IndexError$
+^VERIFICATION FAILED$

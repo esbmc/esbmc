@@ -31,15 +31,25 @@ def _plain_method(method):
             and not any(isinstance(n, (ast.Yield, ast.YieldFrom)) for n in ast.walk(method)))
 
 
-def _instance(stmt, classes):
-    """`(o, C)` for a statement `o = C(...)` of a class in `classes`, else None."""
-    if not (isinstance(stmt, ast.Assign) and len(stmt.targets) == 1
-            and isinstance(stmt.targets[0], ast.Name)):
-        return None
-    call = stmt.value
-    if isinstance(call, ast.Call) and isinstance(call.func, ast.Name) and call.func.id in classes:
-        return stmt.targets[0].id, classes[call.func.id]
-    return None
+def constructions(stmt):
+    """`(o, C)` for each `o` that a statement `o = C(...)`, or `o, p = C(...), D(...)`
+    without a star, binds to a call of the name `C`."""
+    if not (isinstance(stmt, ast.Assign) and len(stmt.targets) == 1):
+        return []
+    target, value = stmt.targets[0], stmt.value
+    pairs = [(target, value)]
+    if isinstance(target, ast.Tuple) and isinstance(value, ast.Tuple):
+        starred = any(isinstance(e, ast.Starred) for e in target.elts + value.elts)
+        if starred or len(target.elts) != len(value.elts):
+            return []
+        pairs = zip(target.elts, value.elts)
+    return [(t.id, v.func.id) for t, v in pairs
+            if isinstance(t, ast.Name) and isinstance(v, ast.Call) and isinstance(v.func, ast.Name)]
+
+
+def constructions_in(body):
+    """The `(o, C)` of `constructions` for every statement of `body`."""
+    return [pair for stmt in body for pair in constructions(stmt)]
 
 
 def _receivers(module, fixed_receivers):
@@ -48,13 +58,13 @@ def _receivers(module, fixed_receivers):
     classes = {s.name: s for s in module.body if isinstance(s, ast.ClassDef)}
     found = {}
     for index, stmt in enumerate(module.body):
-        built = _instance(stmt, classes)
-        if built and built[0] in fixed_receivers:
-            found[built[0]] = (index, {
-                m.name: m
-                for m in built[1].body if isinstance(m, ast.FunctionDef)
-                and m.name in fixed_receivers[built[0]] and _plain_method(m)
-            })
+        for name, cls in constructions(stmt):
+            if name in fixed_receivers and cls in classes:
+                found[name] = (index, {
+                    m.name: m
+                    for m in classes[cls].body if isinstance(m, ast.FunctionDef)
+                    and m.name in fixed_receivers[name] and _plain_method(m)
+                })
     return found
 
 
@@ -73,7 +83,7 @@ def _passed_on(node, parents, functions):
     if isinstance(parent, ast.Call):
         return isinstance(parent.func, ast.Name) and parent.func.id in functions
     if isinstance(parent, ast.Return):
-        return not _inside_class(parent, parents)
+        return not _inside(parent, parents, ast.ClassDef)
     if isinstance(parent, (ast.List, ast.Tuple, ast.Set)) or (isinstance(parent, ast.Dict)
                                                               and node in parent.values):
         return _held(parent, parents, functions)
@@ -81,19 +91,30 @@ def _passed_on(node, parents, functions):
         parent, parents, functions)
 
 
+def _names_only(target):
+    """Whether `target` binds names only, directly or by unpacking without a star."""
+    if isinstance(target, (ast.Tuple, ast.List)):
+        return all(_names_only(t) for t in target.elts)
+    return isinstance(target, ast.Name)
+
+
 def _held(container, parents, functions):
     parent = parents.get(id(container))
     if isinstance(parent, ast.Assign):
-        return all(isinstance(t, ast.Name) for t in parent.targets)
+        if all(isinstance(t, ast.Name) for t in parent.targets):
+            return True
+        # An unpacking only at module level, where its names are globals.
+        return all(_names_only(t) for t in parent.targets) and not _inside(
+            parent, parents, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))
     if isinstance(parent, ast.AnnAssign):
         return isinstance(parent.target, ast.Name)
     return _passed_on(container, parents, functions)
 
 
-def _inside_class(node, parents):
+def _inside(node, parents, kinds):
     while id(node) in parents:
         node = parents[id(node)]
-        if isinstance(node, ast.ClassDef):
+        if isinstance(node, kinds):
             return True
     return False
 

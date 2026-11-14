@@ -77,10 +77,11 @@ jobs:
         # regression/floats, the floating-point semantics suite. Linux already
         # exercises the full regression suite on every PR; running it again on
         # Windows mostly costs runner time. Tests genuinely Windows-specific
-        # (path handling, line endings, Clang frontend) live inside esbmc/.
+        # (path handling, line endings, Clang frontend) live inside esbmc/ or
+        # carry the platform-sensitive label (regression/CMakeLists.txt).
         # On push events, run everything.
         if [[ "${{ github.event_name }}" == "pull_request" ]]; then
-          ctest -j4 --output-on-failure --progress -L 'esbmc/|floats/' . -C RelWithDebInfo
+          ctest -j4 --output-on-failure --progress -L 'esbmc/|floats/|^platform-sensitive$' . -C RelWithDebInfo
         else
           ctest -j4 --output-on-failure --progress . -C RelWithDebInfo
         fi

@@ -25,7 +25,8 @@ The CWE ids appear in:
 
 - the textual counterexample, on a `CWE: CWE-476, CWE-125` line immediately
   after the violated-property comment;
-- the JSON trace (`--output-json`), as an `assertion.cwe` array of integers;
+- the JSON report (`--generate-json-report`), as an `assertion.cwe` array of
+  integers;
 - the GraphML violation witness, as a `<data key="cwe">` node on the violation
   node;
 - the SARIF report (`--sarif-output <path|->`), as `result.taxa[]` references

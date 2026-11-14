@@ -1,0 +1,4 @@
+regression/python/github_10243_bool_divisor
+regression/python/github_10243_bool_divisor_divmod_fail
+regression/python/github_10243_bool_divisor_fail
+regression/python/github_10243_bool_divisor_truediv_fail

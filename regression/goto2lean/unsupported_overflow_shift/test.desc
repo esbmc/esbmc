@@ -1,0 +1,4 @@
+CORE
+main.c
+--goto2lean --overflow-check
+^ERROR: goto2lean: unsupported overflow check on shl$

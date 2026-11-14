@@ -8,20 +8,22 @@ from preprocessor.binding_sites import binding_sites
 from preprocessor.bound_method_dispatch import _scope_nodes, dispatch_rebound_methods
 from preprocessor.bound_method_values import lower_method_values
 from preprocessor.check_type_lowering import lower_check_type
+from preprocessor.class_copies import copy_classes_per_argument_kinds
 from preprocessor.dotted_imports import alias_dotted_imports
 from preprocessor.decorator_lowering import lower_user_decorators
 from preprocessor.dict_splat import spell_out_dict_splats
 from preprocessor.itertools_lowering import lower_itertools
 from preprocessor.literal_eval_inlining import inline_literal_eval
 from preprocessor.coroutine_lowering import lower_coroutines
-from preprocessor.array_typecodes import reject_unmodelled_array_typecodes
+from preprocessor.array_typecodes import route_array_typecodes
 from preprocessor.match_lowering import lower_match_statements
 from preprocessor.namedtuple_lowering import lower_namedtuples
 from preprocessor.open_lowering import lower_builtin_open
 from preprocessor.function_value_dispatch import dispatch_mixed_function_values
-from preprocessor.function_value_types import reject_mixed_function_values
+from preprocessor.function_value_types import apply_imported_tags, reject_mixed_function_values
 from preprocessor.iter_next_lowering import lower_iter_next
 from preprocessor.receiver_classes import refuse_path_dependent_receivers
+from preprocessor.receiver_split import split_path_dependent_receivers
 from preprocessor.class_value_calls import dispatch_class_value_calls
 from preprocessor.sibling_defs import define_read_siblings_first
 from preprocessor.skipped_base_init import refuse_skipped_base_init
@@ -81,6 +83,17 @@ def _rename_shadowed_classes(module):
                 taken.add(renamed)
                 stmt.name = renamed
                 break
+
+
+def _drop_none_slice_bounds(module):
+    """`x[a:None:None]` is `x[a::]`: drop a literal `None` slice bound so
+    every slice handler takes its omitted-bound default (#10468)."""
+    for n in ast.walk(module):
+        if isinstance(n, ast.Slice):
+            for key in ("lower", "upper", "step"):
+                bound = getattr(n, key)
+                if isinstance(bound, ast.Constant) and bound.value is None:
+                    setattr(n, key, None)
 
 
 _BUILTIN_FUNCTIONS = {
@@ -616,9 +629,13 @@ class ModuleRewriteMixin:
         module imports."""
         if entry:
             _rename_builtin_defs(node)
+            copy_classes_per_argument_kinds(node)
+        else:
+            apply_imported_tags(node, self.module_name)
         inline_literal_eval(node)
+        _drop_none_slice_bounds(node)
         lower_coroutines(node, self.module_name)
-        reject_unmodelled_array_typecodes(node, self.module_name)
+        route_array_typecodes(node, self.module_name)
         lower_check_type(node, self.module_name)
         lower_builtin_open(node, self.module_name)
         _rename_shadowed_classes(node)
@@ -639,6 +656,7 @@ class ModuleRewriteMixin:
         define_read_siblings_first(node)
         if entry:
             dispatch_class_value_calls(node)
+            split_path_dependent_receivers(node, self.module_name)
         refuse_path_dependent_receivers(node, self.module_name)
         refuse_skipped_base_init(node, self.module_name)
         self.expand_unittest_main(node)
@@ -656,6 +674,7 @@ class ModuleRewriteMixin:
                 self.called_names.add(n.func.id)
         self.referenced_names = _referenced_names(node)
         self.outer_stored_names = self._outer_stored_names(node)
+        self.rebindable_names = self._rebindable_names(node)
         self._scan_fixed_receivers(node)
         self._scan_subscript_stored_values(node)
         self.variable_names = self._variable_names(node)

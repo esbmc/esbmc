@@ -9,6 +9,7 @@
 #include <solvers/smt/smt_result.h>
 #include <solvers/smtlib/smtlib_conv.h>
 #include <solvers/solve.h>
+#include <algorithm>
 #include <cctype>
 #include <charconv>
 #include <clang-c-frontend/clang_c_language.h>
@@ -44,6 +45,7 @@
 #include <goto-programs/remove_unreachable.h>
 #include <goto-programs/remove_library_assertions.h>
 #include <goto-programs/remove_exceptions.h>
+#include <goto-programs/python_exception_reachability.h>
 #include <goto-programs/lower_longjmp.h>
 #include <goto-programs/set_claims.h>
 #include <goto-programs/show_claims.h>
@@ -213,6 +215,13 @@ static void apply_gcse(
 //
 // \param options - various options used by the processing methods,
 // \param goto_functions - reference to the GOTO program to be processed.
+// TS extraction reads the havoc as the loop-head state, so it needs every loop
+// entered; its fallback runs no inductive step (#10201).
+static contextt *loop_entry_flags(bool ts_strategy, contextt &context)
+{
+  return ts_strategy ? nullptr : &context;
+}
+
 // Exceptions whose escape is not reported as a failed property.
 static std::set<irep_idt> unreported_exceptions(const optionst &options)
 {
@@ -288,6 +297,66 @@ static void use_fp2bv_for_unsupported_formats(
   options.set_option("fp2bv", true);
 }
 
+// The early answer skips symex and the verdict path, so it must not run when an
+// option adds claims in symex or asks for output from them (#10252).
+static bool early_answer_allowed(
+  const optionst &options,
+  const cmdlinet &cmdline,
+  bool checks_past_violation)
+{
+  static const char *const bypassed[] = {
+    "termination",
+    "enable-unreachability-intrinsic",
+    "memory-leak-check",
+    "ltl",
+    "witness-output",
+    "witness-output-graphml",
+    "witness-output-yaml",
+    "proof-cache",
+    "smt-formula-only",
+    "smt-formula-too",
+    "smt-model",
+    "show-vcc",
+    "symex-ssa-trace",
+    "ssa-trace",
+    "ssa-symbol-table",
+    "show-symex-value-sets",
+    "program-too",
+    "check-vacuity",
+    "memstats",
+    "cov-report-json",
+    "schedule",
+    "ts-bmc"};
+  return !python_checked_exceptions(options).empty() &&
+         !checks_past_violation && !options.get_bool_option("termination") &&
+         std::none_of(std::begin(bypassed), std::end(bypassed), [&](auto name) {
+           return cmdline.isset(name);
+         });
+}
+
+static void record_early_answer(
+  optionst &options,
+  const cmdlinet &cmdline,
+  const goto_functionst &goto_functions,
+  const contextt &context,
+  bool checks_past_violation)
+{
+  if (early_answer_allowed(options, cmdline, checks_past_violation))
+    options.set_option(
+      "python-no-checked-exception",
+      no_reachable_property(
+        goto_functions,
+        context,
+        options.get_bool_option("no-unwinding-assertions")));
+}
+
+static bool
+should_check_after_violation(const optionst &options, bool is_coverage)
+{
+  return options.get_bool_option("multi-property") || is_coverage ||
+         options.get_bool_option("validate-violation-witness");
+}
+
 bool esbmc_parseoptionst::process_goto_program(
   optionst &options,
   goto_functionst &goto_functions)
@@ -326,8 +395,9 @@ bool esbmc_parseoptionst::process_goto_program(
 
     // Claims after a violation are still checked, so no pass may treat a
     // failed assertion as the end of its path (#7900).
+    // Witness validation filters non-target claims during symbolic execution.
     const bool checks_past_violation =
-      options.get_bool_option("multi-property") || is_coverage;
+      should_check_after_violation(options, is_coverage);
 
     // For coverage mode, treat extra input files (cmdline.args[1:]) as include
     // files so that the coverage location_pool covers all input sources.
@@ -508,7 +578,7 @@ bool esbmc_parseoptionst::process_goto_program(
       remove_no_op(goto_functions);
       goto_loop_invariant_combined(goto_functions);
       disable_is_if_unsound(
-        goto_k_induction(goto_functions, ns, checks_past_violation));
+        goto_k_induction(goto_functions, &context, checks_past_violation));
     }
     else
     {
@@ -521,8 +591,10 @@ bool esbmc_parseoptionst::process_goto_program(
       {
         reachable_state_invariants =
           assume_reachable_loop_states(goto_functions, ns, 10000);
-        disable_is_if_unsound(
-          goto_k_induction(goto_functions, ns, checks_past_violation));
+        disable_is_if_unsound(goto_k_induction(
+          goto_functions,
+          loop_entry_flags(ts_strategy_requested(), context),
+          checks_past_violation));
       }
 
       if (wants_loop_invariants())
@@ -929,6 +1001,9 @@ bool esbmc_parseoptionst::process_goto_program(
       goto_coveraget tmp(ns, goto_functions, filename);
       tmp.negating_asserts(tgt_fname);
     }
+
+    record_early_answer(
+      options, cmdline, goto_functions, context, checks_past_violation);
   }
 
   catch (const char *e)

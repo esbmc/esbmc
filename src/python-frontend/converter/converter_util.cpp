@@ -1,3 +1,4 @@
+#include <python-frontend/model_path.h>
 #include <python-frontend/python_expr_builder.h>
 #include <python-frontend/python_converter.h>
 #include <python-frontend/symbol_id.h>
@@ -171,11 +172,12 @@ bool python_converter::is_program_file(const std::string &file) const
 
 bool python_converter::is_model_file(const nlohmann::json &node) const
 {
-  const std::string file = get_location_from_decl(node).file().as_string();
-  if (is_program_file(file))
+  const std::string location = get_location_from_decl(node).file().as_string();
+  if (is_program_file(location))
     return false;
 
-  if (file.find("/models/") != std::string::npos)
+  const std::string file = model_path::normalised(location);
+  if (model_path::in_models(file))
     return true;
 
   if (file.find('/') == std::string::npos)
@@ -188,7 +190,7 @@ bool python_converter::is_model_file(const nlohmann::json &node) const
   const std::string suffix = "/models/" + file;
   for (const auto &entry : imported_modules)
   {
-    const std::string &path = entry.second;
+    const std::string path = model_path::normalised(entry.second);
     if (
       path.size() >= suffix.size() &&
       path.compare(path.size() - suffix.size(), suffix.size(), suffix) == 0)

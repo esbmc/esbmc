@@ -13,6 +13,12 @@ that binds it. A call through a value merges each function of its group's
 arguments into that function's parameters and its returns into the call's
 result, until nothing changes. A function whose return type cannot be told
 from its source never causes a rejection.
+
+When every function of such a group is a module-level def returning a str, an
+int or a bool, the call is accepted instead: each def is marked to return a
+tagged value, which carries its type, and each call through the group to give
+one. The converter checks at each call that the value called is one of the
+marked defs.
 """
 
 import ast
@@ -26,6 +32,9 @@ _NONDET_PREFIX = "nondet_"
 _SHOWN = {"num": "int or float", "function": "a function"}
 # Operators no str, list or set supports, so their result is a number.
 _NUMERIC_ONLY_OPS = (ast.FloorDiv, ast.Pow, ast.LShift, ast.RShift)
+# The return types a tagged value carries for a call through a function value. A float is
+# left out: the tagged operations do not all model one.
+_TAGGABLE = {"str", "int", "bool"}
 _BUILTIN_RESULTS = {
     "str": "str",
     "int": "int",
@@ -45,6 +54,29 @@ def _differ(a, b):
     if a == b:
         return False
     return not ("num" in (a, b) and {a, b} <= _NUMERIC)
+
+
+def _unpacked(target, value):
+    """Pair each element of the tuple or list target `target` with the expression of the display
+    `value` it takes, or a starred element with the list of expressions it takes; None when
+    `value` is not a display of a matching length."""
+    if not isinstance(value,
+                      (ast.Tuple, ast.List)) or any(isinstance(e, ast.Starred) for e in value.elts):
+        return None
+    starred = [i for i, sub in enumerate(target.elts) if isinstance(sub, ast.Starred)]
+    if not starred:
+        return list(zip(target.elts, value.elts)) if len(target.elts) == len(value.elts) else None
+    first, rest = starred[0], len(value.elts) - len(target.elts) + 1
+    if rest < 0:
+        return None
+    middle = (target.elts[first], value.elts[first:first + rest])
+    return list(zip(target.elts[:first], value.elts)) + [middle] + list(
+        zip(target.elts[first + 1:], value.elts[first + rest:]))
+
+
+def _unstarred(target):
+    """The name or target that the starred `target` binds, or `target` itself."""
+    return target.value if isinstance(target, ast.Starred) else target
 
 
 class _Scope:
@@ -355,12 +387,53 @@ class _Analysis:
         path = self.local_module(".".join(imports[node.id].split(".") + list(reversed(dotted[1:]))))
         if path is None:
             return None
-        stmt = self.module_def(path, expr.attr)
+        stmt = self.module_def(path, expr.attr) or self.aliased_def(path, expr.attr)
         if stmt is None:
             return None
-        key = ("imported", path, stmt.name)
-        self.add_member(key, stmt, f"{imports[node.id]}.{stmt.name}", self.def_kind(stmt))
+        key = ("imported", path, expr.attr)
+        self.add_member(key, stmt, f"{imports[node.id]}.{expr.attr}", self.def_kind(stmt))
         return key
+
+    def aliased_def(self, path, name):
+        """The function that the one binding of `name` in the module at `path`, an assignment
+        `name = f` or `name = m.f`, names: a def of that module or of a module it imports."""
+        from preprocessor.function_value_methods import _binding_count
+        tree = self._load(path)
+        if _binding_count(tree, name) != 1:
+            return None
+        value = next((stmt.value for stmt in tree.body
+                      if isinstance(stmt, ast.Assign) and [ast.unparse(t)
+                                                           for t in stmt.targets] == [name]), None)
+        if isinstance(value, ast.Name) and _binding_count(tree, value.id) == 1:
+            return self.module_def(path, value.id)
+        if (isinstance(value, ast.Attribute) and isinstance(value.value, ast.Name)
+                and _binding_count(tree, value.value.id) == 1):
+            module = self.imported_module(tree, path, value.value.id)
+            return module and self.module_def(module, value.attr)
+        return None
+
+    def imported_module(self, tree, path, name):
+        """The source file of the local module a top-level import binds to `name` in `tree`,
+        the module at `path`, or None."""
+        for stmt in tree.body:
+            if not isinstance(stmt, (ast.Import, ast.ImportFrom)):
+                continue
+            for alias in stmt.names:
+                if (alias.asname or alias.name) != name:
+                    continue
+                if isinstance(stmt, ast.Import):
+                    return self.local_module(alias.name)
+                dotted = ".".join(filter(None, [stmt.module, alias.name]))
+                if stmt.level == 0:
+                    return self.local_module(dotted)
+                base = os.path.abspath(path)
+                for _ in range(stmt.level):
+                    base = os.path.dirname(base)
+                module = os.path.join(base, *dotted.split("."))
+                return next((candidate
+                             for candidate in (module + ".py", os.path.join(module, "__init__.py"))
+                             if os.path.isfile(candidate)), None)
+        return None
 
     def call(self, expr, scope):
         """Record a call of a method by its name or of a function value."""
@@ -444,9 +517,7 @@ class _Analysis:
 
     def _statement(self, node, scope):
         if isinstance(node, ast.Assign):
-            value = self.value(node.value, scope)
-            for target in node.targets:
-                self._bind(target, value, node.value, scope)
+            self._assign(node, scope)
         elif isinstance(node, ast.AnnAssign) and node.value is not None:
             self._bind(node.target, self.value(node.value, scope), node.value, scope)
         elif isinstance(node, (ast.For, ast.AsyncFor)):
@@ -467,19 +538,37 @@ class _Analysis:
             if default is not None:
                 self.union(self.keyword_key(fn, arg.arg), self.value(default, scope))
 
+    def _assign(self, node, scope):
+        """Bind the targets of `node`. A display unpacked into every target binds each target to
+        its own element only."""
+        value = None if all(
+            isinstance(t, (ast.Tuple, ast.List)) and _unpacked(t, node.value) is not None
+            for t in node.targets) else self.value(node.value, scope)
+        for target in node.targets:
+            self._bind(target, value, node.value, scope)
+
     def _bind(self, target, value, value_node, scope):
         if isinstance(target, ast.Name):
             self.union(self.name_key(target.id, scope), value)
         elif self.dicts and isinstance(target, ast.Subscript):
             self.union(self.value(target.value, scope), value)
         elif isinstance(target, (ast.Tuple, ast.List)):
-            if isinstance(value_node,
-                          (ast.Tuple, ast.List)) and len(value_node.elts) == len(target.elts):
-                for sub, elt in zip(target.elts, value_node.elts):
-                    self._bind(sub, self.value(elt, scope), elt, scope)
-            else:
+            pairs = _unpacked(target, value_node)
+            if pairs is None:
                 for sub in target.elts:
-                    self._bind(sub, value, None, scope)
+                    self._bind(_unstarred(sub), value, None, scope)
+            for sub, elt in pairs or []:
+                self._bind_element(sub, elt, scope)
+
+    def _bind_element(self, sub, elt, scope):
+        """Bind `sub` to the expression `elt`, or a starred `sub` to the list of expressions."""
+        if isinstance(sub, ast.Starred):
+            key = ("elements", id(sub))
+            for item in elt:
+                self.union(key, self.value(item, scope))
+            self._bind(sub.value, key, None, scope)
+        else:
+            self._bind(sub, self.value(elt, scope), elt, scope)
 
     # return kinds
     def def_kind(self, fn):
@@ -662,13 +751,160 @@ class _Analysis:
                 seen.append((name, kind))
         return None
 
+    def mixed_groups(self):
+        """The calls through each group whose functions return different types, and its
+        functions with their return types, None when the source does not tell it."""
+        resolved = self.flow_kinds()
+        groups = {}
+        for entry in self.calls:
+            root = self.find(entry[1])
+            members = [(node, kind if kind is not None else resolved.get(id(node)))
+                       for node, _, kind in self.members.get(root, {}).values()]
+            known = [kind for _, kind in members if kind is not None]
+            if any(_differ(a, b) for a in known for b in known):
+                groups.setdefault(root, ([], members))[0].append(entry)
+        return groups
+
+
+def _tag_mixed_returns(analysis, module, path):
+    """Mark each function a mixed call may reach to return a tagged value, and each such call
+    to give one, when `_taggable` holds. The marks for another module wait in `_IMPORTED_TAGS`
+    until that module is prepared. Whether they were marked."""
+    main = os.path.realpath(path or "")
+    trees = {main: module}
+    trees.update((os.path.realpath(p), tree) for p, tree in analysis.loaded.items())
+    owners = {id(node): file for file, tree in trees.items() for node in ast.walk(tree)}
+    groups = analysis.mixed_groups()
+    calls = [entry for entries, _ in groups.values() for entry in entries]
+    members = [member for _, group in groups.values() for member in group]
+    if not _taggable(analysis, module, trees, owners, groups):
+        return False
+    for node, _ in members:
+        _tag(node, owners[id(node)], main, ("def", node.name))
+    for call, _, _, _, result in calls:
+        if result is not None:
+            _tag(call, owners[id(call)], main, ("call", call.lineno, call.col_offset))
+    module.esbmc_tagged_returns = True
+    return True
+
+
+def _taggable(analysis, module, trees, owners, groups):
+    """Whether every call through `groups` is in `module` or a module it loads, or passes a
+    group to a function a `from` import binds, every function of them is a sole module-level
+    def of one of those modules that returns a scalar, and every name holding one is bound
+    only where the analysis follows it."""
+    module_scope = analysis.scopes[id(module)]
+    for entries, members in groups.values():
+        if not all(_followed_call(analysis, module_scope, owners, entry) for entry in entries):
+            return False
+        if not all(
+                _sole_scalar_def(analysis, trees.get(owners.get(id(node))), node, kind)
+                for node, kind in members):
+            return False
+    return not any(
+        _bound_otherwise(analysis, key)
+        for key in list(analysis.parent) if key[0] == "name" and analysis.find(key) in groups)
+
+
+def _followed_call(analysis, module_scope, owners, entry):
+    """Whether the call of `entry` is in a module the analysis read, and one that passes a
+    function on calls a def that a `from` import of this module binds."""
+    call, result = entry[0], entry[-1]
+    if id(call) not in owners:
+        return False
+    return result is not None or (id(call) not in analysis.imported_calls and isinstance(
+        call.func, ast.Name) and analysis.from_imported_def(call.func.id, module_scope) is not None)
+
+
+def _sole_scalar_def(analysis, tree, node, kind):
+    """Whether `node` is the one undecorated def of its name at the top of `tree`, bound only
+    by that def, and returns a type in `_TAGGABLE`."""
+    if kind not in _TAGGABLE or tree is None or not any(node is stmt for stmt in tree.body):
+        return False
+    defs = sum(isinstance(stmt, ast.FunctionDef) and stmt.name == node.name for stmt in tree.body)
+    return defs == 1 and not node.decorator_list and not analysis._rebound(
+        node.name, analysis.scopes[id(tree)])
+
+
+def _names_bound_by(node):
+    """The names `node` binds to a value the analysis does not follow, or that a `from` import
+    binds; empty for any other node."""
+    if isinstance(node, (ast.Import, ast.ImportFrom)):
+        return {a.asname or a.name.split(".")[0] for a in node.names}
+    if isinstance(node, (ast.ClassDef, ast.ExceptHandler)):
+        return {node.name}
+    if isinstance(node, (ast.Global, ast.Nonlocal)):
+        return set(node.names)
+    parts = {
+        ast.For: lambda n: [n.target],
+        ast.AsyncFor: lambda n: [n.target],
+        ast.With: lambda n: [i.optional_vars for i in n.items if i.optional_vars],
+        ast.AsyncWith: lambda n: [i.optional_vars for i in n.items if i.optional_vars],
+        ast.AugAssign: lambda n: [n.target],
+        ast.NamedExpr: lambda n: [n.target],
+        ast.Delete: lambda n: n.targets,
+        ast.match_case: lambda n: [n.pattern],
+    }.get(type(node))
+    return _bound_names(parts(node)) if parts else set()
+
+
+def _bound_otherwise(analysis, key):
+    """Whether the name of `key` is bound in its scope other than by assignment or by one def or
+    top-level `from` import, so it may hold a value the analysis does not see."""
+    node = analysis.scopes[key[1]].node
+    definitions = 0
+    for sub in _own_nodes(node):
+        if isinstance(sub, ast.ImportFrom) and any(a.name == "*" for a in sub.names):
+            return True
+        if isinstance(sub, (ast.FunctionDef, ast.AsyncFunctionDef)) and sub.name == key[2]:
+            definitions += 1
+        elif key[2] not in _names_bound_by(sub):
+            continue
+        elif not isinstance(sub, ast.ImportFrom) or not any(sub is top for top in node.body):
+            return True
+        else:
+            definitions += 1
+        if definitions > 1:
+            return True
+    return False
+
+
+# Marks for the defs and calls of imported modules, by file, then by name or position.
+_IMPORTED_TAGS = {}
+
+
+def _tag(node, file, main, key):
+    """Mark `node`, of the module in `file`, now when that is the module being prepared."""
+    attribute = "esbmc_tagged_return" if key[0] == "def" else "esbmc_tagged_call"
+    if file == main:
+        setattr(node, attribute, True)
+    else:
+        _IMPORTED_TAGS.setdefault(file, {})[key] = attribute
+
+
+def apply_imported_tags(module, path):
+    """Mark the defs and calls of `module` that a module importing it found mixed."""
+    tags = _IMPORTED_TAGS.get(os.path.realpath(path or ""))
+    if not tags:
+        return
+    for node in ast.walk(module):
+        if isinstance(node, ast.FunctionDef) and node in module.body:
+            key = ("def", node.name)
+        elif isinstance(node, ast.Call):
+            key = ("call", node.lineno, node.col_offset)
+        else:
+            continue
+        if key in tags:
+            setattr(node, tags[key], True)
+
 
 def reject_mixed_function_values(module, path):
-    """Raise NotImplementedError at a call through a value whose functions disagree."""
+    """Raise NotImplementedError at a call through a value whose functions disagree, unless
+    they all return scalars that a tagged value can carry."""
     analysis = _Analysis(module, path)
     analysis.propagate()
     found = analysis.mixed_call()
-    if found is None:
+    if found is None or _tag_mixed_returns(analysis, module, path):
         return
     call, passed, (first, first_kind), (second, second_kind) = found
     what = "a function passed here" if passed else "this call"

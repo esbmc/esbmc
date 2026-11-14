@@ -1,0 +1,8 @@
+CORE
+main.c
+--multi-property
+^\s*PASSED\s+\[main\.null-pointer-dereference\.\d+\]\s+line\s+9\s
+^\s*FAILED\s+\[main\.assertion\.\d+\]\s+line\s+9\s+assertion envp\[0\]\[0\] == envp\[1\]\[0\]$
+^\s*FAILED\s+\[main\.array-bounds-violated\.\d+\]\s+line\s+10\s
+^\s*FAILED\s+\[main\.null-pointer-dereference\.\d+\]\s+line\s+12\s
+^VERIFICATION FAILED$

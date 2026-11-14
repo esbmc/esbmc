@@ -1,0 +1,5 @@
+CORE
+main.py
+--unwind 4
+^  Unsupported: an int raised to a power that is negative or too large, passed to an int parameter$
+^VERIFICATION FAILED$

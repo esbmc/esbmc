@@ -1,0 +1,4 @@
+CORE
+main.c
+--enable-unreachability-intrinsic --error-label ERROR --validate-violation-witness --witness witness.yml
+^VERIFICATION SUCCESSFUL$

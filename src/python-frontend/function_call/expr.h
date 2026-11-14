@@ -163,6 +163,8 @@ private:
 
   bool is_unmodelled_base_instantiation() const;
 
+  bool is_module_object_call() const;
+
   /// Refuse creating \p class_name, which derives from a class that has no
   /// model: its instances lack whatever that base provides.
   [[noreturn]] void
@@ -298,6 +300,7 @@ private:
   exprt handle_int_to_bytes() const;
 
   exprt handle_bytes_constructor(const nlohmann::json &arg) const;
+  nlohmann::json once_bound_literal(const nlohmann::json &arg) const;
 
   /*
    * Folds a zero-argument int method on a constant literal receiver
@@ -359,6 +362,10 @@ private:
     const nlohmann::json &arg,
     const exprt &value) const;
   exprt handle_isinstance() const;
+  void plant_untyped_isinstance_refusal(
+    const exprt &operand,
+    const exprt &answer,
+    const exprt &binding) const;
 
   /// Binds a call operand of isinstance to a temporary, so it runs exactly
   /// once even when the check reads it per type or folds without reading it.
@@ -367,6 +374,10 @@ private:
   exprt bind_isinstance_call(exprt &obj_expr) const;
   std::optional<exprt>
   list_isinstance(const exprt &obj, const std::string &type_name) const;
+  std::optional<exprt> str_isinstance(
+    const exprt &obj,
+    const typet &expected_type,
+    const std::string &type_name) const;
 
   /// isinstance's test against the classinfo @p node: @p build of its
   /// @p type_name, or, for a variable holding a runtime class value (#8390),
@@ -422,6 +433,7 @@ private:
    * a class defining __call__).
    */
   exprt handle_callable() const;
+  bool is_callable_name(const std::string &name) const;
 
   exprt handle_type_call() const;
   exprt tagged_scalar_class(const exprt &tagged) const;
@@ -623,9 +635,12 @@ private:
   bool receiver_is_tracked_numpy_view(const std::string &recv_type) const;
   bool receiver_is_binop_or_list_symbol() const;
   bool receiver_class_defines_method(const std::string &method_name) const;
+  bool is_user_method_named_like_builtin() const;
 
   /// The callee's symbol. An instance method of no known class has none: it
-  /// must not bind to a module function of the same name (#9658).
+  /// must not bind to a module function of the same name (#9658). A global
+  /// of a module called as `m.name()` stands for the function it is bound to,
+  /// and for none when that binding is not known.
   const symbolt *find_callee_symbol(const std::string &func_symbol_id);
   bool receiver_is_literal() const;
   void reject_unresolved_user_method(const std::string &method_name) const;
@@ -636,6 +651,7 @@ private:
   exprt handle_list_method() const;
   exprt none_if_assigned(exprt call) const;
   exprt handle_list_append() const;
+  exprt handle_typed_list_method() const;
   exprt handle_list_insert() const;
   exprt handle_list_extend() const;
   exprt handle_list_clear() const;
@@ -1001,6 +1017,38 @@ private:
   std::optional<exprt>
   fold_sum_over_tuple(bool is_user_imported, bool is_numpy_model_call);
 
+  /**
+   * min()/max()/sorted() over a list mixing int and float, which the
+   * list[float] models would read as all-float.
+   *
+   * @return the inline result, or nullopt when the list is not mixed or the
+   *         call is not one of these.
+   */
+  std::optional<exprt> build_mixed_numeric_call(const std::string &list_id);
+
+  /// Whether the sorted() argument registered as @p list_id mixes int and
+  /// float elements.
+  bool sorts_mixed_numeric(const std::string &list_id) const;
+
+  /**
+   * sorted() over a list literal of int and float constants, reordered at
+   * conversion time so that each element keeps its own type.
+   *
+   * @throws std::runtime_error for any other mixed int/float argument, whose
+   *         element types per position are not known statically.
+   */
+  exprt sort_mixed_numeric_literal();
+
+  /**
+   * min() (@p is_max false) or max() over a list literal of int and float
+   * constants, selected at conversion time so that the result keeps the
+   * selected element's own type.
+   *
+   * @throws std::runtime_error for any other mixed int/float argument, whose
+   *         result type depends on the element values.
+   */
+  exprt select_mixed_numeric_literal(bool is_max);
+
   /*
    * Typed-builtin dispatch for min/max/sum/sorted/reversed: appends the
    * _float/_str/_default suffix to actual_func_name based on element type, and
@@ -1103,10 +1151,17 @@ private:
     const typet &param_type,
     const symbolt &callee) const;
 
+  exprt int_power_of_two_argument(
+    const nlohmann::json &node,
+    const exprt &arg,
+    const typet &param_type) const;
+
   typet dict_param_value_type(const symbolt *func, size_t idx) const;
   bool is_size_builtin() const;
   bool is_list_typed(const typet &type) const;
   exprt build_dict_size_call(const exprt &dict);
+  exprt len_of_instance(exprt object, const locationt &location);
+  exprt size_of_aggregate(const exprt &arg, const locationt &location);
   std::optional<exprt> build_positional_arguments(
     code_function_callt &call,
     size_t param_offset,

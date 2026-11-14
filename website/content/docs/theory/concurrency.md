@@ -46,7 +46,8 @@ A *context switch* is a point where execution passes from one thread to another.
 search to schedules with few preemptions. This is the context-bounding idea [2]:
 in practice, many concurrency bugs manifest within a small number of context
 switches, so a small bound finds them cheaply while keeping the formula
-tractable. The default is unbounded (`-1`).
+tractable. The default is unbounded (`-1`). Leaving a thread that has already
+ended does not count against the bound.
 
 ### Iterative deepening on the bound
 
@@ -133,7 +134,7 @@ interleaving), ESBMC offers concurrency-specific checks:
 | Check | Flag |
 |---|---|
 | Data races (unsynchronised conflicting accesses to shared state) | `--data-races-check` |
-| Deadlock (global and local, over mutexes and read/write locks) | `--deadlock-check` |
+| Deadlock (global and local, over mutexes, read/write locks, barriers and spinlocks) | `--deadlock-check` |
 | Lock-acquisition ordering | `--lock-order-check` |
 | Atomicity at visible assignments | `--atomicity-check` |
 
@@ -147,6 +148,12 @@ programs verified `SUCCESSFUL`
 ([#7768](https://github.com/esbmc/esbmc/issues/7768)). The result is now stored
 through a thread-local after the call.
 
+A write inside an atomic block is still visible to the race check, so
+`--data-races-check` reports a plain read of the same object in another thread.
+An access to an `_Atomic` object, including an `_Atomic` member or array
+element, is not a race, but a plain access to memory it overlaps still is, and
+an `_Atomic` pointer does not exempt the object it points to.
+
 ## Modelled synchronisation primitives
 
 The checks above reason over ESBMC's operational model of the threading API
@@ -158,7 +165,15 @@ rather than the host implementation. On the POSIX side that model covers:
 | Read/write locks | `pthread_rwlock_rdlock` / `wrlock` participate in the wait graph, so a genuine rwlock deadlock is reported |
 | Barriers | `pthread_barrier_init` / `wait` / `destroy`, with waiter accounting |
 | Spinlocks | `pthread_spin_lock` / `trylock` / `unlock` |
-| Condition variables, semaphores | `pthread_cond_*`, `sem_*` |
+| Condition variables, semaphores | `pthread_cond_*`, `sem_*`. `sem_trywait` fails with `EAGAIN` instead of blocking, and `sem_timedwait` may fail with `ETIMEDOUT`; the timeout value is not modelled |
+| Thread-specific data | `pthread_key_create`, `pthread_getspecific` and `pthread_setspecific` keep one value per thread and key. `pthread_exit` runs the cleanup handlers before the key destructors, and the destructors run before `pthread_join` returns, interleaved with other threads |
+
+Every mutex, spinlock and read/write lock release, every read/write lock
+acquire, and a thread that starts waiting at a barrier is a context switch
+point, so another thread can run between the operation and the caller's next
+access. A deadlock on a barrier or spinlock, as on a mutex, a read/write lock
+or a condition variable, is asserted only under `--deadlock-check`; without it,
+a schedule in which every thread is blocked is discarded rather than reported.
 
 C11 `<threads.h>` (`thrd_*`, `mtx_*`, `cnd_*`, `tss_*`) is lowered onto the same
 model, as are C++'s `<thread>`, `<mutex>`, `<shared_mutex>` and

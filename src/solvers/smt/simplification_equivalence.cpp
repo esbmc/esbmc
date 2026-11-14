@@ -61,11 +61,11 @@ const expr2tc &rounding_mode_of(const expr2tc &expr)
 /** Whether every backend can build the rounding mode @p expr asks for.
  *
  *  A symbolic rounding mode makes convert_rounding_mode() build an ite over all
- *  five modes, ROUND_TO_AWAY among them, and the Z3 and CVC5 backends abort()
- *  on that one rather than returning a term -- so does a literal ROUND_TO_AWAY.
+ *  five modes, ROUND_TO_AWAY among them, and the CVC5 backend aborts on that
+ *  one rather than returning a term -- so does a literal ROUND_TO_AWAY.
  *  abort() is not something check()'s catch can turn back into a decline, so
  *  the shape has to be refused before conversion sees it. The abort is a defect
- *  in those backends (Bitwuzla builds RNA happily) and is reachable without
+ *  in that backend (Bitwuzla and Z3 build RNA) and is reachable without
  *  this check at all; declining here is not a fix for it. */
 bool convertible_rounding_mode(const expr2tc &expr)
 {

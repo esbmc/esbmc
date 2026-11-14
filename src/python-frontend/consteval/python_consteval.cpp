@@ -1,35 +1,43 @@
 #include <python-frontend/consteval/python_consteval.h>
 #include <big-int/bigint.hh>
+#include <python-frontend/math/python_round.h>
 #include <algorithm>
 #include <cctype>
 #include <cmath>
 #include <functional>
 #include <unordered_set>
 
-// value - floor(value) is exact for a double, so a tie is exactly 0.5.
-static double round_ties_to_even_consteval(const double value)
+// round(x) or round(x, ndigits) as CPython computes it. Answers nullopt where
+// the converter decides: a result outside long long or an OverflowError.
+static std::optional<PyConstValue>
+eval_round(const PyConstValue &x, const std::optional<long long> ndigits)
 {
-  const double lower = std::floor(value);
-  const double diff = value - lower;
-  if (diff < 0.5)
-    return lower;
-  if (diff > 0.5)
-    return lower + 1.0;
-  return std::fmod(lower, 2.0) == 0.0 ? lower : lower + 1.0;
-}
-
-// round(x) is an int, folded only when the rounded float is exact and fits.
-static std::optional<PyConstValue> round_consteval(const PyConstValue &arg)
-{
-  if (arg.kind == PyConstValue::INT)
-    return arg;
-  if (arg.kind == PyConstValue::FLOAT && std::isfinite(arg.float_val))
+  const int n =
+    ndigits ? static_cast<int>(std::clamp<long long>(*ndigits, -1000, 1000))
+            : 0;
+  // bool is an int subclass, and round() of either gives an int
+  if (x.kind == PyConstValue::INT || x.kind == PyConstValue::BOOL)
   {
-    const double rounded = round_ties_to_even_consteval(arg.float_val);
-    if (rounded >= -9223372036854775808.0 && rounded < 9223372036854775808.0)
-      return PyConstValue::make_int(static_cast<long long>(rounded));
+    const std::optional<long long> rounded = round_int_to_ndigits(
+      x.kind == PyConstValue::BOOL ? x.bool_val : x.int_val, n);
+    if (!rounded)
+      return std::nullopt;
+    return PyConstValue::make_int(*rounded);
   }
-  return std::nullopt;
+  if (x.kind != PyConstValue::FLOAT)
+    return std::nullopt;
+  if (ndigits)
+  {
+    const std::optional<double> rounded =
+      round_to_ndigits_ties_even(x.float_val, n);
+    if (!rounded)
+      return std::nullopt;
+    return PyConstValue::make_float(*rounded);
+  }
+  const double rounded = round_ties_to_even(x.float_val);
+  if (!(rounded >= -9223372036854775808.0 && rounded < 9223372036854775808.0))
+    return std::nullopt;
+  return PyConstValue::make_int(static_cast<long long>(rounded));
 }
 
 bool PyConstValue::is_truthy() const
@@ -1877,18 +1885,12 @@ python_consteval::eval_expr(const nlohmann::json &node, const Env &env)
       auto arg = eval_expr(node["args"][0], env);
       if (!arg)
         return std::nullopt;
-
       if (node["args"].size() == 1)
-        return round_consteval(*arg);
-
-      // round(int, n) is an int, unchanged for n >= 0. round(float, n) rounds
-      // the exact binary value, which scaling here cannot reproduce.
+        return eval_round(*arg, std::nullopt);
       auto ndigits = eval_expr(node["args"][1], env);
-      if (
-        ndigits && ndigits->kind == PyConstValue::INT &&
-        ndigits->int_val >= 0 && arg->kind == PyConstValue::INT)
-        return arg;
-      return std::nullopt;
+      if (!ndigits || ndigits->kind != PyConstValue::INT)
+        return std::nullopt;
+      return eval_round(*arg, ndigits->int_val);
     }
 
     // Built-in: min(), max()
