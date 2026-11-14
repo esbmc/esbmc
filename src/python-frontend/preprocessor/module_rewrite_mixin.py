@@ -23,6 +23,7 @@ from preprocessor.open_lowering import lower_builtin_open
 from preprocessor.function_value_dispatch import dispatch_mixed_function_values
 from preprocessor.function_value_params import inline_def_aliases, raise_not_callable_arms
 from preprocessor.function_value_types import apply_imported_tags, reject_mixed_function_values
+from preprocessor.held_method_tags import tag_held_methods
 from preprocessor.iter_next_lowering import lower_iter_next
 from preprocessor.receiver_classes import refuse_path_dependent_receivers
 from preprocessor.receiver_split import split_path_dependent_receivers
@@ -654,6 +655,8 @@ class ModuleRewriteMixin:
             wrap_never_callable_values(node)
             dispatch_mixed_function_values(node, self.module_name)
         reject_mixed_function_values(node, self.module_name)
+        if entry:
+            tag_held_methods(node)
         lower_match_statements(node)
         lower_itertools(node)
         lower_namedtuples(node, self.module_name)

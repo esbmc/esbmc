@@ -873,6 +873,12 @@ private:
   /// the positional arguments.
   nlohmann::json keywords_as_positional(const nlohmann::json &call);
 
+  void add_marked_callees(
+    exprt &holds,
+    const exprt &callee,
+    const nlohmann::json &module,
+    const nlohmann::json &body,
+    const std::string &clazz) const;
   /// Refuses the path where the call @p call of @p element, which the
   /// preprocessor found may reach functions returning different types, goes
   /// to anything but a def it marked to return a tagged value.
