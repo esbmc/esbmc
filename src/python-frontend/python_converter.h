@@ -2416,6 +2416,10 @@ private:
   once_bound_exponent(const nlohmann::json &right, const exprt &rhs) const;
   symbolt *find_enclosing_scope_symbol(symbol_id sid) const;
   symbolt *find_global_symbol(const symbol_id &sid);
+  symbolt *find_callee_variable(const nlohmann::json &func);
+  symbolt *forward_function_global(
+    const std::string &name,
+    const nlohmann::json &binding);
   bool operand_has_type(const nlohmann::json &operand, const std::string &type)
     const;
   exprt
