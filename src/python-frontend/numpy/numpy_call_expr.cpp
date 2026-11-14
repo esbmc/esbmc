@@ -8264,6 +8264,7 @@ static std::optional<std::size_t> arithmetic_arity(const std::string &name)
     {"floor_divide", 2},
     {"remainder", 2},
     {"mod", 2},
+    {"fmod", 2},
     {"square", 1},
     {"negative", 1},
     {"positive", 1},
@@ -8285,9 +8286,9 @@ arithmetic_leaf(const std::string &function, const std::vector<exprt> &operands)
     const typet &leaf = array_leaf_type(operand.type());
     if (leaf.is_bool() || !is_number_type(leaf))
       throw std::runtime_error(
-        "TypeError: numpy." + function + "() of a " +
-        (leaf.is_bool() ? "bool" : "non-numeric") +
-        " operand is not supported");
+        "TypeError: numpy." + function + "() of " +
+        (leaf.is_bool() ? "a bool operand" : "this operand") +
+        " is not supported");
     floating = floating || leaf.is_floatbv();
   }
   return floating ? double_type() : signedbv_typet(64);
@@ -8362,6 +8363,34 @@ static exprt unary_element(const std::string &function, const exprt &x)
     binary_relation_exprt(x, "<", from_integer(0, x.type())), negated, x);
 }
 
+// floor_divide, remainder/mod or fmod of one element pair: NumPy's // and %
+// as the array operators compute them, or C's fmod, whose remainder keeps
+// the dividend's sign. An integer zero divisor gives 0, and -1 divides any
+// integer, the smallest included.
+std::optional<exprt> numpy_call_expr::division_element(
+  const std::string &function,
+  const typet &leaf,
+  const exprt &a,
+  const exprt &b)
+{
+  static const std::map<std::string, std::string> python_ops = {
+    {"floor_divide", "FloorDiv"}, {"remainder", "Mod"}, {"mod", "Mod"}};
+  if (const auto op = python_ops.find(function); op != python_ops.end())
+    return converter_.numpy_element_op(op->second, a, b, leaf);
+  if (function != "fmod")
+    return std::nullopt;
+  if (leaf.is_floatbv())
+    return converter_.get_math_handler().handle_fmod(a, b, nlohmann::json());
+  exprt truncated("mod", leaf);
+  truncated.copy_to_operands(a, b);
+  return if_exprt(
+    or_exprt(
+      equality_exprt(b, from_integer(0, leaf)),
+      equality_exprt(b, from_integer(-1, leaf))),
+    from_integer(0, leaf),
+    truncated);
+}
+
 // One element of an arithmetic ufunc, its operands already of `leaf`.
 exprt numpy_call_expr::arithmetic_element(
   const std::string &function,
@@ -8375,16 +8404,12 @@ exprt numpy_call_expr::arithmetic_element(
     {"square", {"ieee_mul", "*"}},
     {"divide", {"ieee_div", "/"}},
     {"true_divide", {"ieee_div", "/"}}};
-  // NumPy's // and %, shared with the array operators.
-  static const std::map<std::string, std::string> divisions = {
-    {"floor_divide", "FloorDiv"}, {"remainder", "Mod"}, {"mod", "Mod"}};
   const exprt &a = x.front(), &b = x.back();
   if (
     function == "negative" || function == "positive" || function == "absolute")
     return unary_element(function, a);
-  if (
-    const auto division = divisions.find(function); division != divisions.end())
-    return converter_.numpy_element_op(division->second, a, b, leaf);
+  if (std::optional<exprt> quotient = division_element(function, leaf, a, b))
+    return *quotient;
   if ((function == "power" || function == "pow") && !leaf.is_floatbv())
     return integer_power(a, b);
   if (function == "power" || function == "pow")
@@ -8414,7 +8439,8 @@ numpy_call_expr::try_arithmetic_ufunc(const std::string &function)
     "absolute",
     "floor_divide",
     "remainder",
-    "mod"};
+    "mod",
+    "fmod"};
   const std::optional<std::size_t> arity = arithmetic_arity(function);
   if (!arity || (!own_route.count(function) && !masks_or_writes(call_, *arity)))
     return std::nullopt;
