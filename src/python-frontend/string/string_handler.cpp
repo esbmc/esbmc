@@ -3235,20 +3235,38 @@ exprt string_handler::read_tagged_str_receiver(
   if (!converter_.get_type_handler().is_tagged_scalar_type(receiver.type()))
     return receiver;
 
-  // The receiver is read twice, so only a symbol qualifies, and the guard
-  // must run exactly where the call is evaluated. A type probe is discarded,
-  // so it only needs the type of the str the real conversion reads.
-  if (!receiver.is_symbol() || !type_utils::is_str_only_method(method))
-    throw std::runtime_error(
-      "calling '" + method +
-      "' on a dynamically-typed variable is not yet supported");
+  const std::string refusal =
+    "calling '" + method +
+    "' on a dynamically-typed variable is not yet supported";
+  if (!type_utils::is_str_only_method(method))
+    throw std::runtime_error(refusal);
   return read_tagged_str(
-    receiver,
+    held_tagged_receiver(receiver, call_json, refusal),
     "AttributeError",
     "object has no attribute '" + method + "'",
-    "calling '" + method +
-      "' on a dynamically-typed variable is not yet supported",
+    refusal,
     converter_.get_location_from_decl(call_json));
+}
+
+exprt string_handler::held_tagged_receiver(
+  const exprt &receiver,
+  const nlohmann::json &call_json,
+  const std::string &refusal)
+{
+  // The receiver is read twice, so one that is not a symbol, such as the
+  // result of `f().strip()`, is first held in a temporary where the call is
+  // evaluated. A type probe is discarded, so it only needs the type.
+  if (receiver.is_symbol() || converter_.in_type_probe())
+    return receiver;
+  if (!converter_.can_emit_operand_statement())
+    throw std::runtime_error(refusal);
+  exprt held = converter_.store_call_result(
+    receiver, converter_.get_location_from_decl(call_json), "tagged_recv");
+  held = converter_.hoist_side_effecting_operand(
+    held, call_json, "$tagged_recv$");
+  if (!held.is_symbol())
+    throw std::runtime_error(refusal);
+  return held;
 }
 
 exprt string_handler::read_tagged_str_argument(
@@ -3283,7 +3301,9 @@ exprt string_handler::read_tagged_str(
     pointer_typet(char_type()));
   if (converter_.in_type_probe())
     return str;
-  if (!converter_.can_emit_runtime_guard())
+  // In an and/or tail the guard goes to the operand's own block, which runs
+  // only where the operand is evaluated, as for len().
+  if (!converter_.can_emit_operand_statement())
     throw std::runtime_error(refusal);
 
   const exprt is_str = converter_.dynamic_type_handler_.build_isinstance_check(
