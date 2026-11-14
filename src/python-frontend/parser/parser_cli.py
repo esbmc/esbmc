@@ -260,6 +260,9 @@ def main(*, deps: CliDeps) -> int | None:
     if "--typed-lists" in sys.argv[3:]:
         # pylint: disable-next=import-outside-toplevel
         from preprocessor.typed_lists import mark_typed_lists
+        # pylint: disable-next=import-outside-toplevel
+        from preprocessor.char_strings import type_char_strings
+        type_char_strings(tree)
         mark_typed_lists(tree)
 
     deps.generate_ast_json_fn(tree, filename, None, output_dir)

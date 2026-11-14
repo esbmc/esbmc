@@ -33,6 +33,10 @@ const std::map<std::string, std::string> &builtin_functions()
     {"zip", "zip"},
     {"reversed", "list"},
     {"sorted", "list"},
+    // Typed list and dict operations the preprocessor writes (#10451).
+    {"__ESBMC_str_codes", "list"},
+    {"__ESBMC_tdict_in", "bool"},
+    {"__ESBMC_tdict_max", "int"},
 
     // I/O functions
     {"print", "NoneType"},

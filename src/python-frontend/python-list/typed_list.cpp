@@ -1,4 +1,5 @@
 #include "python_list_internal.h"
+#include <python-frontend/string/string_handler.h>
 
 using namespace python_expr;
 
@@ -216,8 +217,11 @@ exprt python_list::typed_binop()
 bool python_list::is_typed_call(const nlohmann::json &call)
 {
   const std::string func = call["func"].value("id", "");
+  if (func == "__ESBMC_str_codes")
+    return true;
   if (call.value("esbmc_typed_dict", false))
-    return func == "__ESBMC_tdict_set";
+    return func == "__ESBMC_tdict_set" || func == "__ESBMC_tdict_in" ||
+           func == "__ESBMC_tdict_max";
   return (is_typed(call) &&
           (func == "_nondet_list_int" || func == "max" || func == "min")) ||
          ((is_typed(call) || call.value("esbmc_typed_list_source", false)) &&
@@ -232,6 +236,12 @@ exprt python_list::typed_call(const std::string &func_name)
     return typed_extremum(func_name);
   if (func_name == "__ESBMC_tdict_set")
     return typed_dict_set();
+  if (func_name == "__ESBMC_tdict_in")
+    return typed_dict_in();
+  if (func_name == "__ESBMC_tdict_max")
+    return typed_dict_max();
+  if (func_name == "__ESBMC_str_codes")
+    return typed_str_codes();
   return typed_nondet(converter_.get_expr(list_value_["args"][0]));
 }
 
@@ -293,10 +303,22 @@ bool python_list::is_typed_dict_read(const nlohmann::json &node)
   return node.is_object() && node.value("esbmc_typed_dict", false);
 }
 
-exprt python_list::typed_dict_get(const exprt &dict, const nlohmann::json &key)
+std::vector<exprt>
+python_list::typed_dict_key(const nlohmann::json &dict, const json_range &key)
 {
-  // d[k] of a typed dict: KeyError when k is absent, else its value.
-  const exprt key_value = typed_int_temp(key, converter_.get_expr(key));
+  // The dict, the key's arity, and its one or two ints, each evaluated once
+  // in order.
+  std::vector<exprt> args{converter_.get_expr(dict), exprt()};
+  for (const nlohmann::json &part : key)
+    args.push_back(typed_int_temp(part, converter_.get_expr(part)));
+  args[1] = from_integer(args.size() - 2, size_type());
+  if (args.size() == 3)
+    args.push_back(from_integer(0, typed_int_type()));
+  return args;
+}
+
+exprt python_list::typed_dict_slot(const std::vector<exprt> &args)
+{
   const locationt location = converter_.get_location_from_decl(list_value_);
   const typet slot_type =
     pointer_typet(symbol_typet("tag-struct __ESBMC_PySlot"));
@@ -308,39 +330,131 @@ exprt python_list::typed_dict_get(const exprt &dict, const nlohmann::json &key)
   code_function_callt call;
   call.function() =
     build_symbol(model_function(converter_, "c:@F@__ESBMC_tdict_at"));
-  call.arguments() = {dict, key_value};
+  call.arguments() = args;
   call.lhs() = build_symbol(slot);
   call.type() = slot_type;
   call.location() = location;
   converter_.add_instruction(call);
+  return build_symbol(slot);
+}
 
+exprt python_list::typed_dict_get()
+{
+  // d[k] of a typed dict, whose key the gate wrote as a tuple of its ints:
+  // KeyError when k is absent, else its value.
+  const nlohmann::json &key = list_value_["slice"]["elts"];
+  const std::vector<exprt> args =
+    typed_dict_key(list_value_["value"], json_range(key.begin(), key.end()));
+  // A Counter reads 0 for a missing key and does not insert it.
+  if (list_value_.value("esbmc_typed_dict_default", false))
+    return typed_dict_value("c:@F@__ESBMC_tdict_get0", args);
+  const exprt slot = typed_dict_slot(args);
   codet throw_code("expression");
   throw_code.operands().push_back(
     converter_.get_exception_handler().gen_exception_raise(
       "KeyError", "key not found in dictionary"));
   code_ifthenelset guard;
-  guard.cond() = build_equal(build_symbol(slot), gen_zero(slot_type));
+  guard.cond() = build_equal(slot, gen_zero(slot.type()));
   guard.then_case() = throw_code;
-  guard.location() = location;
+  guard.location() = converter_.get_location_from_decl(list_value_);
   converter_.add_instruction(guard);
-  return build_deref_member(build_symbol(slot), "v", typed_int_type());
+  return build_deref_member(slot, "v", typed_int_type());
+}
+
+exprt python_list::typed_dict_value(
+  const char *model,
+  const std::vector<exprt> &args)
+{
+  const locationt location = converter_.get_location_from_decl(list_value_);
+  const typet int_type = typed_int_type();
+  symbolt &value = converter_.create_tmp_symbol(
+    list_value_, "$tdict_value$", int_type, exprt());
+  code_declt decl(build_symbol(value));
+  decl.location() = location;
+  converter_.add_instruction(decl);
+  code_function_callt call;
+  call.function() = build_symbol(model_function(converter_, model));
+  call.arguments() = args;
+  call.lhs() = build_symbol(value);
+  call.type() = int_type;
+  call.location() = location;
+  converter_.add_instruction(call);
+  return build_symbol(value);
+}
+
+exprt python_list::typed_dict_max()
+{
+  // __ESBMC_tdict_max(d, arity) for `max(d.values())`: CPython's ValueError
+  // on an empty dict, else its largest value.
+  const nlohmann::json &args = list_value_["args"];
+  const exprt dict = converter_.get_expr(args[0]);
+  codet throw_code("expression");
+  throw_code.operands().push_back(
+    converter_.get_exception_handler().gen_exception_raise(
+      "ValueError", "max() arg is an empty sequence"));
+  code_ifthenelset guard;
+  guard.cond() = build_equal(
+    build_deref_member(dict, "size", size_type()), gen_zero(size_type()));
+  guard.then_case() = throw_code;
+  guard.location() = converter_.get_location_from_decl(list_value_);
+  converter_.add_instruction(guard);
+  return typed_dict_value(
+    "c:@F@__ESBMC_tdict_max",
+    {dict, from_integer(args[1]["value"].get<long long>(), size_type())});
+}
+
+exprt python_list::typed_dict_in()
+{
+  // __ESBMC_tdict_in(d, *key) for `k in d`.
+  const nlohmann::json &args = list_value_["args"];
+  const exprt slot = typed_dict_slot(
+    typed_dict_key(args[0], json_range(args.begin() + 1, args.end())));
+  return not_exprt(build_equal(slot, gen_zero(slot.type())));
 }
 
 exprt python_list::typed_dict_set()
 {
-  // __ESBMC_tdict_set(d, v, k) for `d[k] = v`: the value is evaluated before
-  // the key, as CPython does.
+  // __ESBMC_tdict_set(d, v, *key) for `d[k] = v`: the value is evaluated
+  // before the key, as CPython does.
   const nlohmann::json &args = list_value_["args"];
-  const exprt dict = converter_.get_expr(args[0]);
   const exprt value = typed_int_temp(args[1], converter_.get_expr(args[1]));
-  const exprt key = typed_int_temp(args[2], converter_.get_expr(args[2]));
+  std::vector<exprt> call_args =
+    typed_dict_key(args[0], json_range(args.begin() + 2, args.end()));
+  call_args.insert(call_args.begin() + 1, value);
   code_function_callt call;
   call.function() =
     build_symbol(model_function(converter_, "c:@F@__ESBMC_tdict_set"));
-  call.arguments() = {dict, value, key};
+  call.arguments() = call_args;
   call.type() = empty_typet();
   call.location() = converter_.get_location_from_decl(list_value_);
   return call;
+}
+
+exprt python_list::typed_str_codes()
+{
+  // __ESBMC_str_codes(nondet_str()): the codes of the nondet buffer's
+  // characters, its length the buffer's own length symbol. The copy covers
+  // the buffer's whole capacity, so no character is dropped.
+  const exprt str = converter_.get_expr(list_value_["args"][0]);
+  const int capacity = string_handler::nondet_str_buffer_size() - 1;
+  const auto &lengths = converter_.input_str_to_len_sym_;
+  const bool buffer = str.is_address_of() && str.op0().id() == "index" &&
+                      str.op0().op0().is_symbol();
+  auto it = buffer ? lengths.find(str.op0().op0().identifier().as_string())
+                   : lengths.end();
+  if (it == lengths.end() || capacity > 64)
+    throw std::runtime_error("unsupported: a str held as character codes");
+  const symbolt *length = converter_.find_symbol(it->second);
+  const exprt list = typed_new_list(
+    "c:@F@__ESBMC_tlist_from_chars",
+    {str,
+     build_typecast(build_symbol(*length), size_type()),
+     from_integer(capacity, size_type())});
+  if (is_typed(list_value_))
+    return list;
+  // The gate left the codes untyped: an untyped list of the same ints.
+  return typed_new_list(
+    "c:@F@__ESBMC_tlist_to_list", {list, typed_int_type_id()});
 }
 
 bool python_list::reads_typed(const nlohmann::json &node)
