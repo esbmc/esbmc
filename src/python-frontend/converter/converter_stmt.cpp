@@ -1436,6 +1436,11 @@ void python_converter::handle_assignment_type_adjustments(
   reject_attribute_class_change(lhs, rhs, ast_node, is_ctor_call);
   reject_list_slot_class_change(lhs, ast_node, is_ctor_call);
   reject_attribute_scalar_change(lhs, rhs);
+  // get_var_assign boxes the value into a tagged slot's fields.
+  if (
+    lhs.is_member() && type_handler_.is_tagged_scalar_type(lhs.type()) &&
+    !type_handler_.is_tagged_scalar_type(rhs.type()))
+    return;
   const bool has_annotation =
     ast_node.contains("annotation") && !ast_node["annotation"].is_null();
 
@@ -5698,6 +5703,20 @@ void python_converter::hoist_raising_arm(
     hoist(else_expr, else_side_effects);
 }
 
+/// The code type of \p arm, a function named by a symbol or a choice
+/// between such functions, which decay_function_choice made a pointer; null
+/// for any other value.
+static const typet *chosen_function_type(const exprt &arm)
+{
+  if (arm.type().is_code() && arm.is_symbol())
+    return &arm.type();
+  if (
+    arm.id() == "if" && arm.type().is_pointer() &&
+    arm.type().subtype().is_code())
+    return &arm.type().subtype();
+  return nullptr;
+}
+
 /// A choice between two functions of one type is a pointer to either. The
 /// result of a choice between types would have no single type (#8404). An
 /// arm that cannot be called becomes a function that raises when it is,
@@ -5725,11 +5744,13 @@ void python_converter::decay_function_choice(
   else if (then_not_callable)
     then =
       not_callable_function(else_expr.type(), then.type(), then.location());
-  if (
-    !then.type().is_code() || !else_expr.type().is_code() ||
-    !then.is_symbol() || !else_expr.is_symbol())
+  // An arm that is itself a choice between functions is already a pointer
+  // to one, so `f if c else (g if d else h)` decays like two names.
+  const typet *then_code = chosen_function_type(then);
+  const typet *else_code = chosen_function_type(else_expr);
+  if (!then_code || !else_code || (!then.is_symbol() && !else_expr.is_symbol()))
     return;
-  if (then.type() != else_expr.type())
+  if (*then_code != *else_code)
     throw std::runtime_error(
       "a conditional expression choosing between functions of different "
       "types is not supported");
@@ -6813,14 +6834,16 @@ std::string python_converter::call_return_class(const nlohmann::json &rhs) const
 bool python_converter::needs_fresh_retype_slot(
   const exprt &lhs,
   const exprt &rhs,
-  const std::string &lhs_id) const
+  const std::string &lhs_id,
+  const symbol_id &sid) const
 {
   const bool tuple_to_nontuple_rebind =
     tuple_handler_->is_tuple_type(lhs.type()) && !rhs.type().is_empty() &&
     !tuple_handler_->is_tuple_type(rhs.type()) && !rhs.type().is_code() &&
     !(rhs.type().is_pointer() && rhs.type().subtype().id() == "empty");
   return tuple_to_nontuple_rebind ||
-         needs_fresh_numpy_array_slot(lhs, rhs, lhs_id);
+         needs_fresh_numpy_array_slot(lhs, rhs, lhs_id) ||
+         is_local_number_to_list_rebind(lhs, rhs, sid);
 }
 
 bool python_converter::needs_fresh_numpy_array_slot(
@@ -6870,6 +6893,25 @@ static bool is_read_in_other_scope(
     name,
     current,
     nested || (scope && node.value("name", "") != current));
+}
+
+// A number rebound to a list on the function's spine: retyping its one symbol
+// in place would retype the reads before the rebind as the list. The fresh
+// slot is taken only for a name no other scope sees, since a module-level,
+// `global` or `nonlocal` name, or one a nested scope reads, would keep being
+// read through the old symbol. "@" names no def, so every nested scope counts.
+bool python_converter::is_local_number_to_list_rebind(
+  const exprt &lhs,
+  const exprt &rhs,
+  const symbol_id &sid) const
+{
+  return enclosing_function_node_ != nullptr &&
+         block_nesting_ == function_body_depth_ + 1 &&
+         sid.get_function() == current_func_name_ && !is_global_variable(sid) &&
+         type_handler_.is_numeric_scalar_type(lhs.type()) &&
+         rhs.type() == type_handler_.get_list_type() &&
+         !is_read_in_other_scope(
+           (*enclosing_function_node_)["body"], sid.get_object(), "@", false);
 }
 
 // A NumPy array rebound to another shape or dtype where it cannot get its own
@@ -8667,7 +8709,7 @@ void python_converter::get_var_assign(
           lhs.type(),
           rhs.type(),
           block_nesting_ == function_body_depth_ + 1) ||
-        needs_fresh_retype_slot(lhs, rhs, orig_id))
+        needs_fresh_retype_slot(lhs, rhs, orig_id, sid))
       {
         symbolt *new_symbol_ptr = mint_retyped_symbol(
           *lhs_symbol, orig_id, rhs.type(), location_begin, sid, target_block);
