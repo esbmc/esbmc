@@ -1,6 +1,4 @@
-/* Past the element-wise cap the post-havoc frame on global is withheld, so
-   the compliance check must compare the body against the havoc'd value, not
-   the value before the loop. Here the body also writes global[5]. */
+/* The body also writes global[5], outside the clause. */
 int global[512];
 
 int main()

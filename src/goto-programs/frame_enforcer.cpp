@@ -29,7 +29,7 @@ void frame_enforcert::materialize_snapshots(
   {
     snapshot_entryt entry;
     entry.original_expr = var;
-    entry.snapshot_sym = capture(var, dest, loc);
+    entry.snapshot_sym = capture(var, dest, loc, "frame: capture pre-state");
     active_snapshots.push_back(entry);
   }
 }
@@ -37,7 +37,8 @@ void frame_enforcert::materialize_snapshots(
 expr2tc frame_enforcert::capture(
   const expr2tc &var,
   goto_programt &dest,
-  const locationt &loc)
+  const locationt &loc,
+  const std::string &comment)
 {
   expr2tc snap_sym =
     create_snapshot_symbol(var, snapshot_prefix, snapshot_counter++);
@@ -50,7 +51,7 @@ expr2tc frame_enforcert::capture(
   goto_programt::targett assign_inst = dest.add_instruction(ASSIGN);
   assign_inst->code = code_assign2tc(snap_sym, var);
   assign_inst->location = loc;
-  assign_inst->location.comment("frame: capture pre-state");
+  assign_inst->location.comment(comment);
   return snap_sym;
 }
 
@@ -481,7 +482,8 @@ void frame_enforcert::enforce_frame_rule(
     // compliance is judged against its value after the havoc.
     if (withhold_whole_object_frame(mode, classified, var))
     {
-      post_havoc_snapshots.push_back({var, capture(var, dest, loc)});
+      post_havoc_snapshots.push_back(
+        {var, capture(var, dest, loc, "frame: capture post-havoc state")});
       continue;
     }
 

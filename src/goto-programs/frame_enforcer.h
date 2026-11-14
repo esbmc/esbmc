@@ -69,6 +69,8 @@ public:
   ///
   /// ASSUME mode (loops): constrains search space for k-induction
   /// ASSERT mode (contracts): checks assigns clause compliance
+  /// An array whose ASSUME is withheld is snapshotted again there, and a later
+  /// ASSERT on the same enforcer compares it against that post-havoc copy.
   ///
   /// \param explicit_assigns Variables explicitly allowed to change
   /// \param dest GOTO program to append instructions to
@@ -170,8 +172,11 @@ private:
 
   std::string snapshot_prefix;
 
-  expr2tc
-  capture(const expr2tc &var, goto_programt &dest, const locationt &loc);
+  expr2tc capture(
+    const expr2tc &var,
+    goto_programt &dest,
+    const locationt &loc,
+    const std::string &comment);
 
   /// Counter for generating unique snapshot names
   size_t snapshot_counter;

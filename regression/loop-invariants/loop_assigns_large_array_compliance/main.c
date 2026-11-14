@@ -1,6 +1,4 @@
-/* Past the element-wise cap the post-havoc frame on global is withheld, so
-   the compliance check must compare the body against the havoc'd value, not
-   the value before the loop: the body writes only the granted global[3]. */
+/* The body writes only the granted element of an array past the cap. */
 int global[512];
 
 int main()
