@@ -324,6 +324,13 @@ public:
     const std::string &method,
     const locationt &location);
 
+  /// @p receiver, held in a temporary when it is not a symbol, so that it can
+  /// be read more than once; @p refusal stops the conversion where it cannot.
+  exprt held_tagged_receiver(
+    const exprt &receiver,
+    const nlohmann::json &call_json,
+    const std::string &refusal);
+
   /// The char pointer of the str @p tagged holds, behind a guard raising
   /// @p exception with @p message where it holds another type. @p refusal
   /// stops the conversion where no guard can be planted.
