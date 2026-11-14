@@ -164,6 +164,15 @@ private:
   /// Active snapshot entries from the most recent materialize_snapshots call
   std::vector<snapshot_entryt> active_snapshots;
 
+  /// Arrays whose post-havoc frame was withheld, snapshotted after the havoc
+  /// for the compliance assertion.
+  std::vector<snapshot_entryt> post_havoc_snapshots;
+
+  std::string snapshot_prefix;
+
+  expr2tc
+  capture(const expr2tc &var, goto_programt &dest, const locationt &loc);
+
   /// Counter for generating unique snapshot names
   size_t snapshot_counter;
 
