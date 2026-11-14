@@ -353,10 +353,10 @@ void python_annotation<Json>::apply_pending_specializations()
   pending_specializations_.clear();
 }
 
-// A per-type copy passes its now-typed parameter on to functions whose
-// parameters were inferred before the copy existed, and so stayed untyped.
-// Infer them again so the copies' calls specialize them in turn (#10438).
-// Returns whether a specialization is pending.
+// A per-type copy passes its now-typed parameter on to top-level functions
+// whose parameters were inferred before the copy existed, and so stayed
+// untyped. Infer those again so the copies' calls specialize them in turn
+// (#10438). Returns whether a specialization is pending.
 template <class Json>
 bool python_annotation<Json>::specialize_callees_of_copies()
 {
@@ -365,16 +365,31 @@ bool python_annotation<Json>::specialize_callees_of_copies()
     if (element.value("_type", "") != "FunctionDef")
       continue;
     const Json &params = element["args"]["args"];
-    const bool untyped =
-      std::any_of(params.begin(), params.end(), [](const Json &param) {
-        return !param.contains("annotation") || param["annotation"].is_null();
-      });
-    if (!untyped)
+    if (std::all_of(params.begin(), params.end(), has_annotation))
       continue;
     current_func_name_context_ = element["name"].template get<std::string>();
+    current_func = &element;
     infer_parameter_types(element);
   }
   current_func_name_context_.clear();
+  current_func = nullptr;
+  // A bool copy types `x + x` as bool rather than int, so such a callee is
+  // left untyped, where its arithmetic is refused rather than truncated. A
+  // function already copied is not copied again, which bounds the rounds.
+  pending_specializations_.erase(
+    std::remove_if(
+      pending_specializations_.begin(),
+      pending_specializations_.end(),
+      [&](const pending_specializationt &spec) {
+        return std::count(
+                 spec.class_types.begin(), spec.class_types.end(), "bool") ||
+               !json_utils::try_find_function(
+                  ast_["body"],
+                  build_specialized_function_name(
+                    spec.function_name, spec.class_types.front()))
+                  .empty();
+      }),
+    pending_specializations_.end());
   return !pending_specializations_.empty();
 }
 

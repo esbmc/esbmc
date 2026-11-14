@@ -1,3 +1,4 @@
+# GitHub #10438
 def square(x):
     return x * x
 
