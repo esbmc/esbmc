@@ -193,9 +193,15 @@ void create_correctness_yaml_emitter(
 void create_violation_yaml_emitter(
   std::string &verifiedfile,
   optionst &options,
-  YAML::Emitter &root);
+  YAML::Emitter &root,
+  const std::string &format_version);
 
-void create_waypoint(const waypoint &wp, YAML::Emitter &waypoint);
+/// @p any_thread writes `thread_id: any`, which format 2.4 allows only on a
+/// target waypoint.
+void create_waypoint(
+  const waypoint &wp,
+  YAML::Emitter &waypoint,
+  bool any_thread = false);
 void create_invariant(const invariant &inv, YAML::Emitter &out);
 
 /**
