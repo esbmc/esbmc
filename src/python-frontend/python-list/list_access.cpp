@@ -97,7 +97,8 @@ build_nonnegative_slice_span(const exprt &lower, const exprt &upper)
 exprt python_list::build_list_at_call(
   const exprt &list,
   const exprt &index_expr,
-  const nlohmann::json &element)
+  const nlohmann::json &element,
+  bool source_index)
 {
   // A call such as len(s) in the index is still a statement. Nested as an
   // argument it is never lowered and reaches the solver unconverted (#9932).
@@ -153,7 +154,12 @@ exprt python_list::build_list_at_call(
   // A discarded type probe only reads this call's type, and the real RHS
   // build re-emits the whole check; normalizing here would emit a second
   // __ESBMC_list_size call and IndexError guard per subscript assignment.
-  if (!index_may_be_negative || converter_.in_rhs_type_probe_)
+  // A source subscript such as xs[len(xs)] has an unsigned index that can
+  // still be too large, and needs the catchable IndexError guard (#10716).
+  const bool bounds_check = !config.options.get_bool_option("no-bounds-check");
+  if (
+    (!index_may_be_negative && !(source_index && bounds_check)) ||
+    converter_.in_rhs_type_probe_)
   {
     exprt index_as_size = build_typecast(index, size_type());
     exprt list_at_call = build_call_expr(
@@ -202,19 +208,21 @@ exprt python_list::build_list_at_call(
   expr2tc positive_index = add2tc(size_t2, size_var2, index_as_size2);
   // Choose between positive conversion or original.
   expr2tc converted_index2 =
-    if2tc(size_t2, is_negative, positive_index, index_as_size2);
+    index_may_be_negative
+      ? if2tc(size_t2, is_negative, positive_index, index_as_size2)
+      : index_as_size2;
   exprt converted_index = migrate_expr_back(converted_index2);
 
-  if (!config.options.get_bool_option("no-bounds-check"))
+  if (bounds_check)
   {
     // Runtime guard for any out-of-bounds normalized index -- both an
     // underflowed negative index (e.g. `[][-1]`) and a too-large non-negative
     // index. Raising a catchable IndexError here (rather than letting the read
     // trip __ESBMC_list_at's hard assert) lets `try/except IndexError` observe
-    // the error, matching CPython and the negative-index path. This path is
-    // only reached for signed indices; provably-non-negative unsigned indices
-    // (loop counters) early-return above without a bounds call, so the hot path
-    // is unaffected. oob = converted_index >= size (V.3: IREP2).
+    // the error, matching CPython and the negative-index path. Unsigned
+    // indices other than source subscripts (loop counters) early-return above
+    // without a bounds call, so the hot path is unaffected.
+    // oob = converted_index >= size (V.3: IREP2).
     expr2tc oob = greaterthanequal2tc(converted_index2, size_var2);
 
     exprt raise = converter_.get_exception_handler().gen_exception_raise(
@@ -4682,7 +4690,8 @@ std::optional<exprt> python_list::resolve_nested_list_element(
         // empty) fall through to the dynamic __ESBMC_list_at path below.
         if (!elem_id.empty())
         {
-          exprt list_at_call = build_list_at_call(array, pos_expr, list_value_);
+          exprt list_at_call =
+            build_list_at_call(array, pos_expr, list_value_, true);
           exprt inner_ptr = extract_pyobject_value(list_at_call, elem_type);
 
           // As a store target the subscript must stay an lvalue into the
@@ -5587,7 +5596,7 @@ exprt python_list::handle_index_access(
       elem_type = gen_pointer_type(elem_type);
 
     // Build list access and cast result
-    exprt list_at_call = build_list_at_call(array, pos_expr, list_value_);
+    exprt list_at_call = build_list_at_call(array, pos_expr, list_value_, true);
 
     if (dispatch_numeric)
       list_at_call = bind_list_element(list_at_call);
