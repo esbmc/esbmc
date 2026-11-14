@@ -1,0 +1,4 @@
+CORE
+main.py
+--show-claims
+^  uncaught exception: ZeroDivisionError$
