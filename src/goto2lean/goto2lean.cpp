@@ -444,6 +444,8 @@ std::string goto2leant::value(const expr2tc &e)
     return overflow(e);
   case expr2t::overflow_neg_id:
     return overflow_neg(e);
+  case expr2t::sizeof_id:
+    return value(typecast2tc(e->type, to_sizeof2t(e).value));
   case expr2t::forall_id:
   case expr2t::exists_id:
     unsupported(
