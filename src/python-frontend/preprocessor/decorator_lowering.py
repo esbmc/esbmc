@@ -445,6 +445,87 @@ def _refuse_nested_decorators(module, user_functions, module_name):
                         module_name)
 
 
+def _module_scope_nodes(node):
+    """The nodes of `node` that run in the module's scope: a nested def, lambda,
+    class or comprehension contributes only itself and what it evaluates there."""
+    yield node
+    if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+        children = node.decorator_list
+        if not isinstance(node, ast.ClassDef):
+            children = children + node.args.defaults + [d for d in node.args.kw_defaults if d]
+    elif isinstance(node, (ast.Lambda, ast.ListComp, ast.SetComp, ast.DictComp, ast.GeneratorExp)):
+        children = []
+    else:
+        children = list(ast.iter_child_nodes(node))
+    for child in children:
+        yield from _module_scope_nodes(child)
+
+
+def _module_decorated(top):
+    """The defs and classes of the top-level statement `top` whose decorators the
+    module scope evaluates, and the methods of a top-level class, whose
+    decorators read module names that the class body does not bind."""
+    scoped = [n for n in _module_scope_nodes(top) if hasattr(n, "decorator_list")]
+    if isinstance(top, ast.ClassDef):
+        scoped += [s for s in top.body if isinstance(s, (ast.FunctionDef, ast.AsyncFunctionDef))]
+    return scoped
+
+
+def _class_bindings(top):
+    """The names the body of the top-level class `top` binds, which its methods'
+    decorators read in place of the module's; empty for any other statement."""
+    if not isinstance(top, ast.ClassDef):
+        return set()
+    return {b for stmt in top.body for n in _module_scope_nodes(stmt) for b in _bound_names(n)}
+
+
+def _module_bindings(module, name):
+    """How many times the module scope binds `name`; any `global name` counts too."""
+    count = sum(name in _bound_names(n) for n in _module_scope_nodes(module))
+    return count + sum(isinstance(n, ast.Global) and name in n.names for n in ast.walk(module))
+
+
+def _alias_target(name, position, module):
+    """The def `name` stands for at the top-level statement `position`: `name`
+    itself bound once in the module scope, by a top-level `name = d` before it,
+    where `d` is a top-level def bound once before that; else None."""
+    defs = {s.name: i for i, s in enumerate(module.body) if isinstance(s, ast.FunctionDef)}
+    for i, stmt in enumerate(module.body[:position]):
+        if isinstance(stmt, ast.Assign) and [_target_id(t) for t in stmt.targets] == [name]:
+            value = stmt.value
+            if isinstance(value, ast.Name) and value.id in defs and defs[value.id] < i and \
+                    _module_bindings(module, name) == 1 and _module_bindings(module, value.id) == 1:
+                return value.id
+    return None
+
+
+def _target_id(target):
+    return target.id if isinstance(target, ast.Name) else None
+
+
+def _resolve_decorator_aliases(module, module_name):
+    """Spell `@a`, where `a = d` names a def this program defines, as `@d`.
+    A decorator named by any other assignment is refused: the converter would
+    ignore it and run the undecorated function."""
+    defs = {s.name for s in module.body if isinstance(s, ast.FunctionDef)}
+    assigned = {
+        n.id
+        for n in ast.walk(module) if isinstance(n, ast.Name) and isinstance(n.ctx, ast.Store)
+    }
+    for position, top in enumerate(module.body):
+        shadowed = _class_bindings(top)
+        for node in _module_decorated(top):
+            for decorator in node.decorator_list:
+                root = _decorator_root(decorator)
+                if not isinstance(root, ast.Name) or root.id in defs or root.id not in assigned:
+                    continue
+                target = None if root.id in shadowed else _alias_target(root.id, position, module)
+                if target is None:
+                    _refuse(decorator, f"the decorator @{ast.unparse(decorator)}, bound by an "
+                            "assignment,", module_name)
+                root.id = target
+
+
 def lower_user_decorators(module, module_name):
     """Rebind each top-level function decorated by a top-level function of this
     module, using the definition of the decorator that precedes it. Such a
@@ -456,6 +537,7 @@ def lower_user_decorators(module, module_name):
         for s in module.body if isinstance(s, ast.FunctionDef)
     }
     bind_counts = Counter(name for node in ast.walk(module) for name in _bound_names(node))
+    _resolve_decorator_aliases(module, module_name)
     defined = {}
     body = []
     for stmt in module.body:
