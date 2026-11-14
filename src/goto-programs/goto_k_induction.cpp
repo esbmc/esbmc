@@ -2257,6 +2257,314 @@ bool calls_nondet_memory(const goto_functionst &goto_functions)
 
 /// Havocs what the loop of \p w writes and transforms it for the inductive
 /// step. Returns false when a write through a pointer stays uncovered.
+/// The storage a list-model loop writes through list pointers: for each list
+/// pointer, its scalar fields and the pointer fields it writes elements
+/// through. Keyed by the pointer as an expression of the scope it is read in.
+struct list_writest
+{
+  /// `p->g` for each scalar field written.
+  std::set<expr2tc> scalars;
+  /// `p->f` for each pointer field whose pointee's elements are written.
+  std::set<expr2tc> elements;
+};
+
+/// `p` for `p->f`.
+const expr2tc &list_pointer(const expr2tc &field)
+{
+  return to_dereference2t(to_member2t(field).source_value).value;
+}
+
+/// The names a function declares or takes as parameters: storage of its own
+/// frame, which no other function writes unless its address is taken.
+std::set<irep_idt> frame_names(const goto_functiont &fn)
+{
+  std::set<irep_idt> names;
+  if (!is_nil_type(fn.type) && is_code_type(fn.type))
+    for (const irep_idt &n : to_code_type(fn.type).argument_names)
+      names.insert(n);
+  for (const auto &i : fn.body.instructions)
+    if (i.is_decl())
+      names.insert(to_code_decl2t(i.code).value);
+  return names;
+}
+
+/// `p` for `p->f` with \p p a symbol and `f` a field of `*p`.
+expr2tc field_base(const expr2tc &e, irep_idt &field)
+{
+  if (!is_member2t(e))
+    return expr2tc();
+  const member2t &m = to_member2t(e);
+  if (!is_dereference2t(m.source_value))
+    return expr2tc();
+  const expr2tc &ptr = to_dereference2t(m.source_value).value;
+  if (!is_symbol2t(ptr))
+    return expr2tc();
+  field = m.member;
+  return ptr;
+}
+
+/// The pointer an element write goes through: `p->f` for a write to
+/// `p->f[e]...` or `*(p->f + e)...`. Nil for anything else.
+expr2tc element_base(expr2tc lhs)
+{
+  while (
+    is_member2t(lhs) ||
+    (is_index2t(lhs) && !is_pointer_type(to_index2t(lhs).source_value->type)))
+    lhs = is_member2t(lhs) ? to_member2t(lhs).source_value
+                           : to_index2t(lhs).source_value;
+  expr2tc ptr;
+  if (is_index2t(lhs))
+    ptr = to_index2t(lhs).source_value;
+  else if (is_dereference2t(lhs))
+  {
+    ptr = to_dereference2t(lhs).value;
+    while (is_add2t(ptr) || is_typecast2t(ptr))
+      ptr = is_add2t(ptr) ? (is_pointer_type(to_add2t(ptr).side_1->type)
+                               ? to_add2t(ptr).side_1
+                               : to_add2t(ptr).side_2)
+                          : to_typecast2t(ptr).from;
+  }
+  else
+    return expr2tc();
+  irep_idt field;
+  if (is_nil_expr(field_base(ptr, field)) || !is_pointer_type(ptr->type))
+    return expr2tc();
+  return ptr;
+}
+
+/// Records the write to \p lhs in \p out. False when it is not a write to a
+/// named variable, a scalar field `p->g`, or an element through a pointer
+/// field `p->f[e]`, with `p` a symbol.
+bool record_list_write(const expr2tc &lhs, list_writest &out)
+{
+  // A named write is the modified-variable havoc's, as for any loop.
+  if (is_nil_expr(lhs) || is_symbol2t(lhs))
+    return true;
+  irep_idt field;
+  const expr2tc base = field_base(lhs, field);
+  if (!is_nil_expr(base))
+  {
+    // A pointer field written would move what an element write goes through.
+    if (
+      is_pointer_type(lhs->type) || is_struct_type(lhs->type) ||
+      is_union_type(lhs->type) || is_array_type(lhs->type))
+      return false;
+    out.scalars.insert(lhs);
+    return true;
+  }
+  const expr2tc through = element_base(lhs);
+  if (is_nil_expr(through))
+    return false;
+  out.elements.insert(through);
+  return true;
+}
+
+/// \p e with the symbols \p by maps replaced.
+expr2tc rebind(const expr2tc &e, const std::map<irep_idt, expr2tc> &by)
+{
+  if (is_symbol2t(e))
+  {
+    auto it = by.find(to_symbol2t(e).thename);
+    return it == by.end() ? e : it->second;
+  }
+  expr2tc copy = e;
+  copy->Foreach_operand([&](expr2tc &op) {
+    if (!is_nil_expr(op))
+      op = rebind(op, by);
+  });
+  return copy;
+}
+
+bool list_writes_of_range(
+  const goto_functionst &goto_functions,
+  goto_programt::const_targett begin,
+  goto_programt::const_targett end,
+  std::vector<irep_idt> &in_progress,
+  list_writest &out);
+
+/// Restates a callee's list writes \p from in the caller, through the
+/// arguments \p by gives its parameters. Only a parameter maps to the caller,
+/// and only onto a symbol of the same type: a callee local pointing into a
+/// list is not tracked.
+bool bind_list_writes(
+  const std::set<expr2tc> &from,
+  const std::map<irep_idt, expr2tc> &by,
+  std::set<expr2tc> &to)
+{
+  for (const expr2tc &field : from)
+  {
+    const expr2tc &ptr = list_pointer(field);
+    const expr2tc arg = rebind(ptr, by);
+    if (arg == ptr || !is_symbol2t(arg) || arg->type != ptr->type)
+      return false;
+    to.insert(rebind(field, by));
+  }
+  return true;
+}
+
+/// A bodyless intrinsic with no pointer argument cannot write through one.
+bool writes_no_pointer_argument(const code_function_call2t &call)
+{
+  return std::none_of(
+    call.operands.begin(), call.operands.end(), [](const expr2tc &a) {
+      return is_pointer_type(a->type);
+    });
+}
+
+/// The list writes of a call, restated in the caller: each pointer parameter
+/// the callee writes through must receive a symbol, and the callee must never
+/// reassign it.
+bool list_writes_of_call(
+  const goto_functionst &goto_functions,
+  const code_function_call2t &call,
+  std::vector<irep_idt> &in_progress,
+  list_writest &out)
+{
+  if (
+    !record_list_write(call.ret, out) || is_nil_expr(call.function) ||
+    !is_symbol2t(call.function))
+    return false;
+  const irep_idt &name = to_symbol2t(call.function).thename;
+  auto fn = goto_functions.function_map.find(name);
+  if (fn == goto_functions.function_map.end() || !fn->second.body_available)
+    return writes_no_pointer_argument(call);
+  if (
+    std::find(in_progress.begin(), in_progress.end(), name) !=
+      in_progress.end() ||
+    is_nil_type(fn->second.type) || !is_code_type(fn->second.type))
+    return false;
+  const auto &params = to_code_type(fn->second.type).argument_names;
+  if (params.size() != call.operands.size())
+    return false;
+  list_writest callee;
+  in_progress.push_back(name);
+  const bool ok = list_writes_of_range(
+    goto_functions,
+    fn->second.body.instructions.begin(),
+    fn->second.body.instructions.end(),
+    in_progress,
+    callee);
+  in_progress.pop_back();
+  if (!ok)
+    return false;
+  std::map<irep_idt, expr2tc> by;
+  for (size_t i = 0; i < params.size(); i++)
+    by[params[i]] = call.operands[i];
+  return bind_list_writes(callee.scalars, by, out.scalars) &&
+         bind_list_writes(callee.elements, by, out.elements);
+}
+
+/// Collects the list writes of [begin, end) of \p fn. False when an
+/// instruction there may write anything else, or moves a list pointer.
+bool list_writes_of_range(
+  const goto_functionst &goto_functions,
+  goto_programt::const_targett begin,
+  goto_programt::const_targett end,
+  std::vector<irep_idt> &in_progress,
+  list_writest &out)
+{
+  std::set<irep_idt> assigned;
+  for (auto it = begin; it != end; ++it)
+  {
+    switch (it->type)
+    {
+    case ASSIGN:
+      if (!record_list_write(to_code_assign2t(it->code).target, out))
+        return false;
+      if (is_symbol2t(to_code_assign2t(it->code).target))
+        assigned.insert(to_symbol2t(to_code_assign2t(it->code).target).thename);
+      break;
+    case FUNCTION_CALL:
+    {
+      const code_function_call2t &call = to_code_function_call2t(it->code);
+      if (!list_writes_of_call(goto_functions, call, in_progress, out))
+        return false;
+      if (!is_nil_expr(call.ret) && is_symbol2t(call.ret))
+        assigned.insert(to_symbol2t(call.ret).thename);
+      break;
+    }
+    case DECL:
+    case DEAD:
+    case GOTO:
+    case ASSUME:
+    case ASSERT:
+    case SKIP:
+    case LOCATION:
+    case RETURN:
+    case END_FUNCTION:
+      break;
+    default:
+      return false;
+    }
+  }
+  // A list pointer must hold one value throughout: written elements and
+  // fields are then those of the objects it points to at the start.
+  for (const auto *m : {&out.scalars, &out.elements})
+    for (const expr2tc &field : *m)
+      if (assigned.count(to_symbol2t(list_pointer(field)).thename))
+        return false;
+  return true;
+}
+
+/// A loop whose only writes through pointers are to scalar fields `p->g` and to
+/// elements `p->f[e]` through pointer fields, for pointers `p` that are
+/// locals or parameters of its function, never address-taken and never
+/// assigned in the loop, directly or by a callee it hands them to. Python's
+/// list operations (`append`, `extend`, `[x] * n`, ...) and their models are
+/// such loops: they write a list's size and its slot array. Havoc exactly that
+/// at the loop head: each such field, and whole the object each written-through
+/// field points to. No write in the loop moves `p` or any pointer field, so
+/// the objects are the same in every iteration and the havoc over-approximates
+/// every write. It acts on the objects symex resolves at the head, so lists
+/// from one allocation site are havoced each on its own. Named variables the
+/// loop writes are havoced as for any loop.
+bool cover_field_writes(
+  const goto_functionst &goto_functions,
+  const goto_functiont &fn,
+  const loop_writest &w,
+  havocst &havocs)
+{
+  list_writest writes;
+  std::vector<irep_idt> in_progress{w.function};
+  if (!list_writes_of_range(
+        goto_functions,
+        w.loop.get_original_loop_head(),
+        w.loop.get_original_loop_exit(),
+        in_progress,
+        writes))
+    return false;
+  const std::set<irep_idt> frame = frame_names(fn);
+  for (const auto *m : {&writes.scalars, &writes.elements})
+    for (const expr2tc &field : *m)
+    {
+      const irep_idt &p = to_symbol2t(list_pointer(field)).thename;
+      if (
+        !frame.count(p) || w.address_taken.count(p) ||
+        names(w.loop.get_modified_loop_vars(), p))
+        return false;
+    }
+  havocs.vars.assign(writes.scalars.begin(), writes.scalars.end());
+  havocs.through.assign(writes.elements.begin(), writes.elements.end());
+  return true;
+}
+
+/// Whether what the loop writes through pointers is covered: by the objects
+/// and pointers havoc_written_objects resolves, or by the field havocs in
+/// \p lists.
+bool covers_pointer_writes(
+  const goto_functionst &goto_functions,
+  const goto_functiont &goto_function,
+  const loop_writest &w,
+  loopst::loop_varst &through,
+  havocst &lists)
+{
+  // Validated on Python programs only, so C and C++ keep today's behaviour.
+  return !w.loop.writes_through_pointer() ||
+         havoc_written_objects(w, through) ||
+         (w.decides && config.language.lid == language_idt::PYTHON &&
+          cover_field_writes(goto_functions, goto_function, w, lists));
+}
+
 bool havoc_loop(
   entry_flagst &entry_flags,
   goto_functionst &goto_functions,
@@ -2268,12 +2576,17 @@ bool havoc_loop(
   // Before the empty-modified-set skip: a loop that only writes through
   // pointers has no named modified variables until they are resolved.
   loopst::loop_varst through;
+  havocst lists;
   bool covered =
-    !loop.writes_through_pointer() || havoc_written_objects(w, through);
-  if (loop.get_modified_loop_vars().empty() && through.empty())
+    covers_pointer_writes(goto_functions, goto_function, w, through, lists);
+  havocst havocs{ordered(through), lists.vars, {}};
+  havocs.through.insert(
+    havocs.through.end(), lists.through.begin(), lists.through.end());
+  if (
+    loop.get_modified_loop_vars().empty() && havocs.through.empty() &&
+    havocs.vars.empty())
     return covered;
 
-  havocst havocs{ordered(through), {}, {}};
   for (const expr2tc &var : havoc_targets(loop))
     if (
       w.derivations.keeps_object(
