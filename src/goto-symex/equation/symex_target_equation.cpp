@@ -28,7 +28,19 @@ struct equation_conversion_statet
   // Negated discharge condition per kept assertion (or the path
   // assumption alone in vacuity mode). OR'd together and asserted once.
   std::vector<expr2tc> assertions;
+  // Subterms already searched by register_sliced_addresses: steps share
+  // them, so a per-step set would make the walk quadratic (#9150).
+  std::unordered_set<const expr2t *> sliced_seen;
 };
+
+/// The object at the root of the index/member chain @p obj selects from.
+expr2tc address_base(expr2tc obj)
+{
+  while (is_index2t(obj) || is_member2t(obj))
+    obj = is_index2t(obj) ? to_index2t(obj).source_value
+                          : to_member2t(obj).source_value;
+  return obj;
+}
 
 /// The object @p e takes the address of, when that object has static storage
 /// duration (a literal, a static variable or a function); otherwise nil.
@@ -37,10 +49,7 @@ expr2tc static_address_base(const namespacet &ns, const expr2tc &e)
   if (!is_address_of2t(e))
     return expr2tc();
   // Unwrap index/member chains (e.g. &""[0]) to reach the literal base.
-  expr2tc obj = to_address_of2t(e).ptr_obj;
-  while (is_index2t(obj) || is_member2t(obj))
-    obj = is_index2t(obj) ? to_index2t(obj).source_value
-                          : to_member2t(obj).source_value;
+  const expr2tc obj = address_base(to_address_of2t(e).ptr_obj);
   const symbolt *sym =
     is_symbol2t(obj) ? ns.lookup(to_symbol2t(obj).thename) : nullptr;
   if (
@@ -132,18 +141,15 @@ void pre_register_addresses(
 void register_sliced_addresses(
   const namespacet &ns,
   smt_convt &smt_conv,
+  std::unordered_set<const expr2t *> &seen,
   const symex_target_equationt::SSA_stept &step)
 {
-  std::unordered_set<const expr2t *> seen;
   std::function<void(const expr2tc &)> walk = [&](const expr2tc &e) {
     if (!e || !seen.insert(e.get()).second)
       return;
     if (is_address_of2t(e) && !static_address_base(ns, e))
     {
-      expr2tc obj = to_address_of2t(e).ptr_obj;
-      while (is_index2t(obj) || is_member2t(obj))
-        obj = is_index2t(obj) ? to_index2t(obj).source_value
-                              : to_member2t(obj).source_value;
+      const expr2tc obj = address_base(to_address_of2t(e).ptr_obj);
       // Only the base, and only of constant size: anything else would encode
       // SSA symbols the slicer may have left unassigned (#10293).
       if (is_symbol2t(obj) && !has_variable_size(ns, obj->type))
@@ -151,8 +157,11 @@ void register_sliced_addresses(
     }
     e->foreach_operand([&](const expr2tc &op) { walk(op); });
   };
-  walk(step.cond);
-  walk(step.rhs);
+  for (const expr2tc *e : {&step.guard, &step.cond, &step.rhs})
+    walk(*e);
+  if (step.output_data)
+    for (const expr2tc &arg : step.output_data->output_args)
+      walk(arg);
 }
 
 /// PathReachable asks only whether the path is feasible, ignoring the claim:
@@ -193,7 +202,7 @@ void convert_internal_step(
 {
   if (step.ignore)
   {
-    register_sliced_addresses(ns, smt_conv, step);
+    register_sliced_addresses(ns, smt_conv, state.sliced_seen, step);
     step.cond_expr = gen_true_expr();
     return;
   }
