@@ -5725,9 +5725,20 @@ exprt python_converter::str_pointer_add_error(
       type_handler_.get_python_type_name(rhs.type()) + "'");
 }
 
+// Whether \p e reads a variable of a declared fixed-width unsigned type
+// (uint64, Gwei, ...), which wraps; a len() result is still a call here.
+static bool reads_unsigned_variable(const exprt &e)
+{
+  if (e.is_symbol())
+    return e.type().is_unsignedbv();
+  return std::any_of(
+    e.operands().begin(), e.operands().end(), reads_unsigned_variable);
+}
+
 // A Python int is signed, so an unsigned operand meeting one (a len() result)
 // is read as signed rather than the int read as unsigned: otherwise
-// len(l) - 4 wraps (#10494). NumPy integers keep their own promotion rules.
+// len(l) - 4 wraps (#10494). NumPy integers keep their own promotion rules,
+// and so do declared unsigned variables, or uint64 n >= 2^63 reads negative.
 static void read_unsigned_as_python_int(exprt &lhs, exprt &rhs)
 {
   if (
@@ -5739,9 +5750,13 @@ static void read_unsigned_as_python_int(exprt &lhs, exprt &rhs)
       std::max(bv_width(unsigned_op.type()), bv_width(signed_op.type()));
     unsigned_op = typecast_exprt(unsigned_op, signedbv_typet(width));
   };
-  if (lhs.type().is_unsignedbv() && rhs.type().is_signedbv())
+  if (
+    lhs.type().is_unsignedbv() && rhs.type().is_signedbv() &&
+    !reads_unsigned_variable(lhs))
     widen_to_signed(lhs, rhs);
-  else if (rhs.type().is_unsignedbv() && lhs.type().is_signedbv())
+  else if (
+    rhs.type().is_unsignedbv() && lhs.type().is_signedbv() &&
+    !reads_unsigned_variable(rhs))
     widen_to_signed(rhs, lhs);
 }
 
