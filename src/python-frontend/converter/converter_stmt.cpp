@@ -45,6 +45,7 @@
 #include <array>
 #include <functional>
 #include <numeric>
+#include <set>
 #include <stdexcept>
 
 using namespace json_utils;
@@ -7272,9 +7273,59 @@ bool python_converter::element_kinds_differ(
   return !ka.empty() && !kb.empty() && ka != kb;
 }
 
+/// Whether lists @p a and @p b record the same element types at every index,
+/// including those of nested lists. Lists whose elements share one scalar
+/// type match whatever their lengths. A pair already being compared, as in a
+/// list that holds itself, matches.
+static bool same_element_types(
+  const element_type_registry &registry,
+  const type_handler &types,
+  const std::string &a,
+  const std::string &b,
+  std::set<std::pair<std::string, std::string>> &visiting)
+{
+  if (!visiting.emplace(a, b).second)
+    return true;
+  const typet uniform = registry.uniform_element_type(a);
+  if (
+    !uniform.is_nil() && uniform != types.get_list_type() &&
+    uniform == registry.uniform_element_type(b))
+    return true;
+  const element_type_registry::entries *ea = registry.find(a);
+  const element_type_registry::entries *eb = registry.find(b);
+  if (!ea || !eb || ea->size() != eb->size())
+    return false;
+  for (size_t i = 0; i < ea->size(); ++i)
+  {
+    const auto &[id_a, type_a] = (*ea)[i];
+    const auto &[id_b, type_b] = (*eb)[i];
+    if (type_a != type_b)
+      return false;
+    if (
+      (registry.find(id_a) || registry.find(id_b)) &&
+      !same_element_types(registry, types, id_a, id_b, visiting))
+      return false;
+  }
+  return true;
+}
+
+static bool same_element_types(
+  const element_type_registry &registry,
+  const type_handler &types,
+  const std::string &a,
+  const std::string &b)
+{
+  std::set<std::pair<std::string, std::string>> visiting;
+  return same_element_types(registry, types, a, b, visiting);
+}
+
 /// The list arm of `None if c else xs` (or `xs if c else None`): the None arm
-/// holds no elements, so the binding's element types are the list arm's.
-static const exprt &list_arm_of_optional(const exprt &rhs)
+/// holds no elements, so the binding's element types are the list arm's. Of
+/// `xs if c else ys`, xs when ys records the same element types.
+static const exprt &list_arm_of_conditional(
+  const exprt &rhs,
+  const element_type_registry &registry,
+  const type_handler &types)
 {
   if (rhs.id() != "if")
     return rhs;
@@ -7282,6 +7333,14 @@ static const exprt &list_arm_of_optional(const exprt &rhs)
   if (ite.true_case().is_zero())
     return ite.false_case();
   if (ite.false_case().is_zero())
+    return ite.true_case();
+  if (
+    ite.true_case().is_symbol() && ite.false_case().is_symbol() &&
+    same_element_types(
+      registry,
+      types,
+      ite.true_case().identifier().as_string(),
+      ite.false_case().identifier().as_string()))
     return ite.true_case();
   return rhs;
 }
@@ -7291,7 +7350,8 @@ void python_converter::propagate_list_type_info(
   const exprt &assigned,
   symbolt *lhs_symbol)
 {
-  const exprt &rhs = list_arm_of_optional(assigned);
+  const exprt &rhs =
+    list_arm_of_conditional(assigned, element_type_registry_, type_handler_);
   const std::string &lhs_identifier = lhs.identifier().as_string();
   const std::string &rhs_identifier = rhs.identifier().as_string();
   // The registry keeps one record per name, so a rebinding under a branch or
@@ -9739,18 +9799,31 @@ static exprt coerce_ternary_branch(
   return typecast_exprt(branch, result_type);
 }
 
-/// A result temp for `None if c else xs` takes the element types of xs.
-static void copy_optional_list_arm_types(
+/// A result temp for `None if c else xs` takes the element types of xs, and
+/// one for `xs if c else ys` those of xs when ys records the same ones.
+static void copy_list_arm_types(
   element_type_registry &registry,
+  const type_handler &types,
   const exprt &then,
   const exprt &else_expr,
   bool then_is_none,
   bool else_is_none,
   const std::string &result_id)
 {
-  const exprt &value_arm = then_is_none ? else_expr : then;
-  if (then_is_none != else_is_none && value_arm.is_symbol())
-    registry.assign_from(value_arm.identifier().as_string(), result_id);
+  if (then_is_none != else_is_none)
+  {
+    const exprt &value_arm = then_is_none ? else_expr : then;
+    if (value_arm.is_symbol())
+      registry.assign_from(value_arm.identifier().as_string(), result_id);
+    return;
+  }
+  if (!then.is_symbol() || !else_expr.is_symbol())
+    return;
+  const std::string &then_id = then.identifier().as_string();
+  if (
+    same_element_types(
+      registry, types, then_id, else_expr.identifier().as_string()))
+    registry.assign_from(then_id, result_id);
 }
 
 exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
@@ -10296,8 +10369,9 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
         create_return_temp_variable(result_type, location, "ternary_result");
       symbol_table_.add(result_symbol);
       exprt result_expr = symbol_expr(result_symbol);
-      copy_optional_list_arm_types(
+      copy_list_arm_types(
         element_type_registry_,
+        type_handler_,
         then,
         else_expr,
         then_is_none,
