@@ -320,6 +320,14 @@ private:
   bool may_hold_float(const nlohmann::json &arg);
   std::optional<exprt> try_arithmetic_ufunc(const std::string &function);
   exprt integer_power(const exprt &base, const exprt &exponent);
+  std::optional<exprt>
+  unary_element(const std::string &function, const exprt &x);
+  exprt reciprocal_element(const exprt &x);
+  std::optional<exprt> power_element(
+    const std::string &function,
+    const typet &leaf,
+    const exprt &a,
+    const exprt &b);
   std::optional<exprt> division_element(
     const std::string &function,
     const typet &leaf,

@@ -8225,13 +8225,17 @@ numpy_call_expr::try_bounded_ufunc(const std::string &function)
     "TypeError: numpy." + function + " of this argument is not supported");
 }
 
-// hypot or arctan2 of numbers, arrays or views, broadcast as NumPy does.
+// hypot, arctan2, power or float_power of numbers, arrays or views in
+// float64, broadcast as NumPy does.
 exprt numpy_call_expr::bounded_binary_ufunc(const std::string &function)
 {
   std::vector<exprt> operands;
   for (const nlohmann::json &arg : {call_["args"][0], call_["args"][1]})
   {
+    numeric_value number;
     std::optional<exprt> literal = literal_array_operand(arg);
+    if (!literal && try_extract_numeric_constant(arg, number))
+      literal = from_double(to_double(number), double_type());
     operands.push_back(literal ? *literal : elementwise_operand(function, arg));
   }
   const exprt &a = operands[0], &b = operands[1];
@@ -8239,7 +8243,8 @@ exprt numpy_call_expr::bounded_binary_ufunc(const std::string &function)
     if (!is_number_type(array_leaf_type(operand.type())))
       throw std::runtime_error(
         "TypeError: numpy." + function + " of a non-number is not supported");
-  const std::string model = function == "power" ? "pow" : function;
+  const std::string model =
+    function == "power" || function == "float_power" ? "pow" : function;
   return apply_ufunc(
     function, {a, b}, double_type(), [&](const std::vector<exprt> &x) {
       return bounded_math(converter_, call_)
@@ -8265,10 +8270,12 @@ static std::optional<std::size_t> arithmetic_arity(const std::string &name)
     {"remainder", 2},
     {"mod", 2},
     {"fmod", 2},
+    {"float_power", 2},
     {"square", 1},
     {"negative", 1},
     {"positive", 1},
-    {"absolute", 1}};
+    {"absolute", 1},
+    {"reciprocal", 1}};
   auto it = arity.find(name);
   if (it == arity.end())
     return std::nullopt;
@@ -8347,9 +8354,10 @@ exprt numpy_call_expr::integer_power(const exprt &base, const exprt &exponent)
   return result;
 }
 
-// negative, positive or absolute of one element of `leaf`; absolute of the
-// smallest integer wraps to itself, as NumPy's does.
-static exprt unary_element(const std::string &function, const exprt &x)
+// negative, positive, absolute or reciprocal of one element of `leaf`;
+// absolute of the smallest integer wraps to itself, as NumPy's does.
+std::optional<exprt>
+numpy_call_expr::unary_element(const std::string &function, const exprt &x)
 {
   if (function == "positive")
     return x;
@@ -8357,10 +8365,55 @@ static exprt unary_element(const std::string &function, const exprt &x)
   negated.copy_to_operands(x);
   if (function == "negative")
     return negated;
+  if (function == "reciprocal")
+    return reciprocal_element(x);
+  if (function != "absolute")
+    return std::nullopt;
   if (x.type().is_floatbv())
     return abs_double(x);
+  return exprt(if_exprt(
+    binary_relation_exprt(x, "<", from_integer(0, x.type())), negated, x));
+}
+
+// 1 / x in x's dtype: IEEE division for a float, and for an integer the
+// quotient truncated, as NumPy's loop converts 1.0 / x; that conversion of
+// 1.0 / 0 is up to the platform, so a zero gives any value.
+exprt numpy_call_expr::reciprocal_element(const exprt &x)
+{
+  const typet &type = x.type();
+  if (type.is_floatbv())
+  {
+    exprt quotient("ieee_div", type);
+    quotient.copy_to_operands(from_double(1.0, type), x);
+    quotient.add("rounding_mode") =
+      symbol_exprt("c:@__ESBMC_rounding_mode", int_type());
+    return quotient;
+  }
+  const auto is = [&](int value) {
+    return equality_exprt(x, from_integer(value, type));
+  };
   return if_exprt(
-    binary_relation_exprt(x, "<", from_integer(0, x.type())), negated, x);
+    is(1),
+    from_integer(1, type),
+    if_exprt(
+      is(-1),
+      from_integer(-1, type),
+      if_exprt(is(0), nondet_value(type, "$ufunc$"), from_integer(0, type))));
+}
+
+// power of one element pair: by squaring in int64, or the bounded pow.
+std::optional<exprt> numpy_call_expr::power_element(
+  const std::string &function,
+  const typet &leaf,
+  const exprt &a,
+  const exprt &b)
+{
+  if (function != "power" && function != "pow")
+    return std::nullopt;
+  if (!leaf.is_floatbv())
+    return integer_power(a, b);
+  return bounded_math(converter_, call_)
+    .binary("pow", a, b, math_module::numpy);
 }
 
 // floor_divide, remainder/mod or fmod of one element pair: NumPy's // and %
@@ -8405,16 +8458,12 @@ exprt numpy_call_expr::arithmetic_element(
     {"divide", {"ieee_div", "/"}},
     {"true_divide", {"ieee_div", "/"}}};
   const exprt &a = x.front(), &b = x.back();
-  if (
-    function == "negative" || function == "positive" || function == "absolute")
-    return unary_element(function, a);
+  if (std::optional<exprt> unary = unary_element(function, a))
+    return *unary;
   if (std::optional<exprt> quotient = division_element(function, leaf, a, b))
     return *quotient;
-  if ((function == "power" || function == "pow") && !leaf.is_floatbv())
-    return integer_power(a, b);
-  if (function == "power" || function == "pow")
-    return bounded_math(converter_, call_)
-      .binary("pow", a, b, math_module::numpy);
+  if (std::optional<exprt> power = power_element(function, leaf, a, b))
+    return *power;
   const auto &[ieee_op_id, integer_op] = ops.at(function);
   exprt result(leaf.is_floatbv() ? ieee_op_id : integer_op, leaf);
   result.copy_to_operands(a, b);
@@ -8440,11 +8489,16 @@ numpy_call_expr::try_arithmetic_ufunc(const std::string &function)
     "floor_divide",
     "remainder",
     "mod",
-    "fmod"};
+    "fmod",
+    "float_power",
+    "reciprocal"};
   const std::optional<std::size_t> arity = arithmetic_arity(function);
   if (!arity || (!own_route.count(function) && !masks_or_writes(call_, *arity)))
     return std::nullopt;
   reject_ufunc_keywords_and_arity(call_, function, *arity);
+  // float_power is power computed in float64, as the bounded route does.
+  if (function == "float_power")
+    return bounded_binary_ufunc(function);
   std::vector<exprt> inputs;
   // Converted as the program wrote them: an integer literal keeps its dtype.
   for (std::size_t i = 0; i < *arity; ++i)
