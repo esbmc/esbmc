@@ -29,6 +29,7 @@
 #include <goto-programs/goto_convert_functions.h>
 #include <goto-programs/goto_inline.h>
 #include <goto-programs/goto_k_induction.h>
+#include <goto-programs/scalarize_structs.h>
 #include <goto-programs/goto_termination.h>
 #include <esbmc/ranking_synthesis.h>
 #include <esbmc/non_termination.h>
@@ -524,6 +525,8 @@ bool esbmc_parseoptionst::process_goto_program(
       ns,
       unreported_exceptions(options),
       python_checked_exceptions(options));
+
+    scalarize_structs(goto_functions, context, options);
 
     // do partial inlining
     if (!cmdline.isset("no-inlining"))
