@@ -575,6 +575,10 @@ public:
   /// import binds, as `mk` after `from helper import mk` and `helper.mk`
   /// after `import helper`.
   nlohmann::json callable_function_stubs() const;
+  /// Refuse passing @p argument, a local retyped across str and number, to a
+  /// parameter of @p param_type, which is of the kind the local first held.
+  void
+  reject_retyped_argument(const exprt &argument, const typet &param_type) const;
   nlohmann::json callable_function_stubs(const nlohmann::json &module) const;
   /// The stubs followed by the current module's own statements, which a name
   /// read off the module is resolved against.
