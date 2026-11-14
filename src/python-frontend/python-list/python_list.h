@@ -1148,12 +1148,14 @@ private:
   exprt build_list_at_call(
     const exprt &list,
     const exprt &index,
-    const nlohmann::json &element);
+    const nlohmann::json &element,
+    bool source_index = false);
   exprt build_list_at_call(
     const exprt &list,
     const exprt &index,
     const nlohmann::json &element,
-    const element_storage &storage);
+    const element_storage &storage,
+    bool source_index = false);
 
   exprt bind_list_element(const exprt &list_at_call);
 

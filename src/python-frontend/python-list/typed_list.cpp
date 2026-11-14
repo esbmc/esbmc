@@ -131,7 +131,7 @@ exprt python_list::typed_element(const exprt &list, const exprt &index)
   const element_storage storage{
     "c:@F@__ESBMC_tlist_at", "slot", pointer_typet(slot_type)};
   return build_deref_member(
-    build_list_at_call(list, index, list_value_, storage),
+    build_list_at_call(list, index, list_value_, storage, true),
     "v",
     typed_int_type());
 }
