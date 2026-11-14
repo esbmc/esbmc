@@ -783,7 +783,7 @@ def _tag_mixed_returns(analysis, module, path):
         _tag(node, owners[id(node)], main, ("def", node.name))
     for call, _, _, _, result in calls:
         if result is not None:
-            _tag(call, owners[id(call)], main, ("call", call.lineno, call.col_offset))
+            _tag(call, owners[id(call)], main, _call_key(call))
     module.esbmc_tagged_returns = True
     return True
 
@@ -873,6 +873,13 @@ def _bound_otherwise(analysis, key):
 _IMPORTED_TAGS = {}
 
 
+def _call_key(call):
+    """The key of `call` in `_IMPORTED_TAGS`: where it starts and where it ends, since `f().m()`
+    starts where its callee `f()` does."""
+    return ("call", call.lineno, call.col_offset, getattr(call, "end_lineno", None),
+            getattr(call, "end_col_offset", None))
+
+
 def _tag(node, file, main, key):
     """Mark `node`, of the module in `file`, now when that is the module being prepared."""
     attribute = "esbmc_tagged_return" if key[0] == "def" else "esbmc_tagged_call"
@@ -891,7 +898,7 @@ def apply_imported_tags(module, path):
         if isinstance(node, ast.FunctionDef) and node in module.body:
             key = ("def", node.name)
         elif isinstance(node, ast.Call):
-            key = ("call", node.lineno, node.col_offset)
+            key = _call_key(node)
         else:
             continue
         if key in tags:
