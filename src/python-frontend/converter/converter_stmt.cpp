@@ -10306,12 +10306,7 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
         /*is_function_body=*/false,
         /*is_loop_body=*/type == "While");
     else if (type == "IfExp")
-    {
-      code_blockt *saved_block = current_block;
-      current_block = &then_side_effects;
-      then = get_expr(ast_node["body"]);
-      current_block = saved_block;
-    }
+      then = get_ifexp_arm(ast_node, "body", then_side_effects);
     else
       then = get_expr(ast_node["body"]);
   }
@@ -10327,12 +10322,7 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
     if (ast_node["orelse"].is_array())
       else_expr = get_block(ast_node["orelse"]);
     else if (type == "IfExp")
-    {
-      code_blockt *saved_block = current_block;
-      current_block = &else_side_effects;
-      else_expr = get_expr(ast_node["orelse"]);
-      current_block = saved_block;
-    }
+      else_expr = get_ifexp_arm(ast_node, "orelse", else_side_effects);
     else
       else_expr = get_expr(ast_node["orelse"]);
   }
@@ -10379,6 +10369,11 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
         result_type = then.type(); // Use pointer type as result
       }
     }
+
+    refuse_int_ifexp_arm(
+      ast_node, then, result_type, then_side_effects, location);
+    refuse_int_ifexp_arm(
+      ast_node, else_expr, result_type, else_side_effects, location);
 
     take_str_branch_truth(result_type, then, else_expr, location);
 
@@ -10449,6 +10444,36 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
     else_expr,
     get_location_from_decl(ast_node));
 }
+exprt python_converter::get_ifexp_arm(
+  const nlohmann::json &ifexp,
+  const char *arm,
+  code_blockt &effects)
+{
+  code_blockt *saved_block = current_block;
+  const nlohmann::json *saved_result = lambda_result_;
+  current_block = &effects;
+  if (is_lambda_result(ifexp))
+    lambda_result_ = &ifexp[arm];
+  exprt value = get_expr(ifexp[arm]);
+  current_block = saved_block;
+  lambda_result_ = saved_result;
+  return value;
+}
+
+void python_converter::refuse_int_ifexp_arm(
+  const nlohmann::json &ifexp,
+  const exprt &value,
+  const typet &result_type,
+  code_blockt &effects,
+  const locationt &location) const
+{
+  const typet &type = value.type();
+  if (
+    current_block && is_lambda_result(ifexp) && result_type.is_floatbv() &&
+    (type_utils::is_integer_type(type) || type.is_bool()))
+    refuse_int_lambda_result(false_exprt(), effects, location);
+}
+
 exprt python_converter::box_value_on_heap(
   const exprt &value,
   const locationt &location,
