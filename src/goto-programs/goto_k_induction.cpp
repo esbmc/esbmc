@@ -2266,6 +2266,22 @@ struct list_writest
   std::set<expr2tc> scalars;
   /// `p->f` for each pointer field whose pointee's elements are written.
   std::set<expr2tc> elements;
+  /// For each local pointer declared in the range and set only from calls
+  /// that return an address inside `p->f`'s pointee, those fields `p->f`.
+  std::map<irep_idt, std::set<expr2tc>> into;
+  /// Locals assigned in the range by anything else.
+  std::set<irep_idt> poisoned;
+  /// Locals declared in the range.
+  std::set<irep_idt> declared;
+  /// Locals written through in the range, to be resolved with `into`.
+  std::set<irep_idt> written_through;
+  /// Every local some range here resolved a write through, whose address
+  /// must never be taken.
+  std::set<irep_idt> through_locals;
+  /// The fields `p->f` this function returns an address inside, when every
+  /// return does; empty otherwise.
+  std::set<expr2tc> returns_into;
+  bool returns_other = false;
 };
 
 /// `p` for `p->f`.
@@ -2332,6 +2348,70 @@ expr2tc element_base(expr2tc lhs)
   return ptr;
 }
 
+/// The local `t` a write to `t->g`, `*t` or `t[e]` goes through.
+expr2tc written_through_local(expr2tc lhs)
+{
+  while (
+    is_member2t(lhs) ||
+    (is_index2t(lhs) && !is_pointer_type(to_index2t(lhs).source_value->type)))
+    lhs = is_member2t(lhs) ? to_member2t(lhs).source_value
+                           : to_index2t(lhs).source_value;
+  expr2tc ptr;
+  if (is_index2t(lhs))
+    ptr = to_index2t(lhs).source_value;
+  else if (is_dereference2t(lhs))
+    ptr = to_dereference2t(lhs).value;
+  else
+    return expr2tc();
+  while (is_add2t(ptr) || is_typecast2t(ptr))
+    ptr = is_add2t(ptr) ? (is_pointer_type(to_add2t(ptr).side_1->type)
+                             ? to_add2t(ptr).side_1
+                             : to_add2t(ptr).side_2)
+                        : to_typecast2t(ptr).from;
+  return is_symbol2t(ptr) ? ptr : expr2tc();
+}
+
+/// Notes a write through a local `t`, resolved at the end of the range.
+bool record_write_into(const expr2tc &lhs, list_writest &out)
+{
+  const expr2tc t = written_through_local(lhs);
+  if (is_nil_expr(t))
+    return false;
+  out.written_through.insert(to_symbol2t(t).thename);
+  return true;
+}
+
+/// Turns each write through a local into element writes through the fields
+/// `p->f` it points inside. The local must be declared in the range and set
+/// there only by calls returning an address inside those pointees.
+bool resolve_writes_into(list_writest &out)
+{
+  const auto resolves = [&out](const irep_idt &t) {
+    return out.into.count(t) && !out.poisoned.count(t) && out.declared.count(t);
+  };
+  // A field write `t->g` through such a local writes inside the pointee too.
+  for (auto it = out.scalars.begin(); it != out.scalars.end();)
+  {
+    const irep_idt &t = to_symbol2t(list_pointer(*it)).thename;
+    if (!resolves(t))
+    {
+      ++it;
+      continue;
+    }
+    out.written_through.insert(t);
+    it = out.scalars.erase(it);
+  }
+  for (const irep_idt &t : out.written_through)
+  {
+    auto it = out.into.find(t);
+    if (it == out.into.end() || out.poisoned.count(t) || !out.declared.count(t))
+      return false;
+    out.elements.insert(it->second.begin(), it->second.end());
+    out.through_locals.insert(t);
+  }
+  return true;
+}
+
 /// Records the write to \p lhs in \p out. False when it is not a write to a
 /// named variable, a scalar field `p->g`, or an element through a pointer
 /// field `p->f[e]`, with `p` a symbol.
@@ -2354,7 +2434,7 @@ bool record_list_write(const expr2tc &lhs, list_writest &out)
   }
   const expr2tc through = element_base(lhs);
   if (is_nil_expr(through))
-    return false;
+    return record_write_into(lhs, out);
   out.elements.insert(through);
   return true;
 }
@@ -2400,6 +2480,46 @@ bool bind_list_writes(
     to.insert(rebind(field, by));
   }
   return true;
+}
+
+/// Notes in \p out where a call's result points, when the callee returns an
+/// address inside a parameter's `p->f` pointee on every path.
+void bind_returned_address(
+  const code_function_call2t &call,
+  const list_writest &callee,
+  const std::map<irep_idt, expr2tc> &by,
+  list_writest &out)
+{
+  if (is_nil_expr(call.ret) || !is_symbol2t(call.ret))
+    return;
+  const irep_idt &t = to_symbol2t(call.ret).thename;
+  std::set<expr2tc> fields;
+  if (
+    callee.returns_other || callee.returns_into.empty() ||
+    !bind_list_writes(callee.returns_into, by, fields))
+  {
+    out.poisoned.insert(t);
+    return;
+  }
+  out.into[t].insert(fields.begin(), fields.end());
+}
+
+/// Records what a `return` hands back: an address inside `p->f`'s pointee
+/// (`&p->f[e]` or `p->f + e`), or something else.
+void record_return(const expr2tc &value, list_writest &out)
+{
+  if (is_nil_expr(value) || !is_pointer_type(value->type))
+    return;
+  expr2tc obj = value;
+  if (is_address_of2t(obj))
+    obj = to_address_of2t(obj).ptr_obj;
+  else
+    obj = dereference2tc(get_empty_type(), value);
+  const expr2tc through = element_base(obj);
+  if (is_nil_expr(through))
+    out.returns_other = true;
+  else
+    out.returns_into.insert(through);
 }
 
 /// A bodyless intrinsic with no pointer argument cannot write through one.
@@ -2450,8 +2570,31 @@ bool list_writes_of_call(
   std::map<irep_idt, expr2tc> by;
   for (size_t i = 0; i < params.size(); i++)
     by[params[i]] = call.operands[i];
-  return bind_list_writes(callee.scalars, by, out.scalars) &&
-         bind_list_writes(callee.elements, by, out.elements);
+  if (
+    !bind_list_writes(callee.scalars, by, out.scalars) ||
+    !bind_list_writes(callee.elements, by, out.elements))
+    return false;
+  out.through_locals.insert(
+    callee.through_locals.begin(), callee.through_locals.end());
+  bind_returned_address(call, callee, by, out);
+  return true;
+}
+
+/// Records an assignment to \p target; a local assigned here is poisoned
+/// for resolving writes through it.
+bool record_assign(
+  const expr2tc &target,
+  std::set<irep_idt> &assigned,
+  list_writest &out)
+{
+  if (!record_list_write(target, out))
+    return false;
+  if (is_symbol2t(target))
+  {
+    assigned.insert(to_symbol2t(target).thename);
+    out.poisoned.insert(to_symbol2t(target).thename);
+  }
+  return true;
 }
 
 /// Collects the list writes of [begin, end) of \p fn. False when an
@@ -2469,10 +2612,8 @@ bool list_writes_of_range(
     switch (it->type)
     {
     case ASSIGN:
-      if (!record_list_write(to_code_assign2t(it->code).target, out))
+      if (!record_assign(to_code_assign2t(it->code).target, assigned, out))
         return false;
-      if (is_symbol2t(to_code_assign2t(it->code).target))
-        assigned.insert(to_symbol2t(to_code_assign2t(it->code).target).thename);
       break;
     case FUNCTION_CALL:
     {
@@ -2484,19 +2625,25 @@ bool list_writes_of_range(
       break;
     }
     case DECL:
+      out.declared.insert(to_code_decl2t(it->code).value);
+      break;
+    case RETURN:
+      record_return(to_code_return2t(it->code).operand, out);
+      break;
     case DEAD:
     case GOTO:
     case ASSUME:
     case ASSERT:
     case SKIP:
     case LOCATION:
-    case RETURN:
     case END_FUNCTION:
       break;
     default:
       return false;
     }
   }
+  if (!resolve_writes_into(out))
+    return false;
   // A list pointer must hold one value throughout: written elements and
   // fields are then those of the objects it points to at the start.
   for (const auto *m : {&out.scalars, &out.elements})
@@ -2534,6 +2681,9 @@ bool cover_field_writes(
         writes))
     return false;
   const std::set<irep_idt> frame = frame_names(fn);
+  for (const irep_idt &t : writes.through_locals)
+    if (w.address_taken.count(t))
+      return false;
   for (const auto *m : {&writes.scalars, &writes.elements})
     for (const expr2tc &field : *m)
     {
