@@ -10626,6 +10626,33 @@ static void reject_tagged_scalar_return(
       "is not dynamic is not yet supported");
 }
 
+// A local retyped across str and number (#4770) lives in a fresh slot of the
+// new type, while the function's return type may follow the first binding.
+// Converting the slot would read the bytes of one kind as the other (#10700).
+static void reject_retyped_return(
+  const type_handler &types,
+  const std::unordered_map<std::string, std::string> &retype_aliases,
+  const exprt &value,
+  const typet &return_type)
+{
+  if (!value.is_symbol())
+    return;
+  const bool value_is_str = types.is_string_type(value.type());
+  if (
+    !(value_is_str && types.is_numeric_scalar_type(return_type)) &&
+    !(types.is_numeric_scalar_type(value.type()) &&
+      types.is_string_type(return_type)))
+    return;
+  const std::string id = value.identifier().as_string();
+  for (const auto &alias : retype_aliases)
+    if (alias.second == id)
+      throw std::runtime_error(
+        "unsupported: returning a variable rebound to a " +
+        std::string(value_is_str ? "str" : "number") +
+        " from a function typed to return a " +
+        (value_is_str ? "number" : "str"));
+}
+
 void python_converter::get_return_statements(
   const nlohmann::json &ast_node,
   codet &target_block)
@@ -10875,6 +10902,8 @@ void python_converter::get_return_statements(
       return_value, current_func_return_type_, location, target_block);
     return_value = coerce_optional_return(return_value, location, target_block);
 
+    reject_retyped_return(
+      type_handler_, retype_aliases_, return_value, current_func_return_type_);
     coerce_to_tagged_return(return_value);
     return_value =
       check_float_fits_int_return(ast_node, return_value, target_block);
