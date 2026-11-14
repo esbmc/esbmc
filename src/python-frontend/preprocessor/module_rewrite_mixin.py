@@ -18,6 +18,7 @@ from preprocessor.coroutine_lowering import lower_coroutines
 from preprocessor.array_typecodes import route_array_typecodes
 from preprocessor.match_lowering import lower_match_statements
 from preprocessor.namedtuple_lowering import lower_namedtuples
+from preprocessor.not_callable_values import wrap_never_callable_values
 from preprocessor.open_lowering import lower_builtin_open
 from preprocessor.function_value_dispatch import dispatch_mixed_function_values
 from preprocessor.function_value_params import inline_def_aliases
@@ -649,6 +650,7 @@ class ModuleRewriteMixin:
         self._scan_fixed_receivers(node)
         lower_method_values(node, self.fixed_receivers)
         if entry:
+            wrap_never_callable_values(node)
             dispatch_mixed_function_values(node, self.module_name)
         reject_mixed_function_values(node, self.module_name)
         lower_match_statements(node)
