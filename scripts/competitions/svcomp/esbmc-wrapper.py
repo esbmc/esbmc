@@ -123,12 +123,23 @@ def do_exec(cmd_line, timeout=None, cwd=None):
 
   return stdout + stderr + abnormal_exit_line(p.returncode).encode()
 
+# benchexec's ESBMC tool-info takes the verdict from any output line containing
+# FALSE, TRUE or DONE (tools/esbmc.py determine_result). ESBMC quotes source
+# text, e.g. an injected witness invariant naming STATIC_CONST_FALSE, so the
+# echo lower-cases these words and only the wrapper's own verdict carries them.
+VERDICT_WORD = re.compile(r"FALSE|TRUE|DONE")
+
+
+def echo(text):
+  print(VERDICT_WORD.sub(lambda word: word.group(0).lower(), text))
+
+
 # Function to run esbmc
 def run(cmd_line, timeout=None):
   print("Verifying with ESBMC")
-  print("Command: " + cmd_line)
+  echo("Command: " + cmd_line)
   out = do_exec(cmd_line, timeout)
-  print(out.decode())
+  echo(out.decode())
   return out
 
 # A property table row, e.g. "  FAILED       [main.assertion.1]  line 7  x != 0".
@@ -1291,14 +1302,14 @@ def testcomp_command_line(strat, goal, arch, benchmark, coverage):
 
 def testcomp_run(cmd_line):
   print("Verifying with ESBMC")
-  print("Command: " + cmd_line)
+  echo("Command: " + cmd_line)
   out = do_exec(cmd_line, cwd=TEST_DIR).decode(errors="replace")
   # The result is parsed from the full output; only the tail is echoed
   if len(out) > MAX_ECHO:
     print(f"[... {len(out) - MAX_ECHO} characters of ESBMC output omitted ...]")
-    print(out[-MAX_ECHO:])
+    echo(out[-MAX_ECHO:])
   else:
-    print(out)
+    echo(out)
   return out
 
 
