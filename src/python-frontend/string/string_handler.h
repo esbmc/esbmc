@@ -99,6 +99,14 @@ public:
   /// ASCII value this is also ascii().
   exprt build_repr(const exprt &value, const locationt &location);
 
+  /// Copy a string array into a fresh temporary and return the temporary.
+  /// Symex bounds a string model's loops only over a named object: a
+  /// literal's address does not constant-propagate into the callee (#7559).
+  exprt bind_string_to_tmp(
+    const exprt &str,
+    const std::string &name,
+    const locationt &location);
+
   /// The rendered text of one f-string replacement field.
   exprt format_fstring_part(const nlohmann::json &value);
 
