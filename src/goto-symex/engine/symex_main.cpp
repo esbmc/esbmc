@@ -178,8 +178,12 @@ void goto_symext::assertion(
   expr2tc expr = the_assertion;
   cur_state->guard.guard_expr(expr);
   cur_state->global_guard.guard_expr(expr);
-  expr2tc expr_neg = not2tc(the_assertion);
+  // Negate after the path guard but before the execution guard: the probe
+  // must leave the path free to be untaken, yet keep the execution guard (a
+  // free symbol) forced (issue #10642).
+  expr2tc expr_neg = the_assertion;
   cur_state->guard.guard_expr(expr_neg);
+  expr_neg = not2tc(expr_neg);
   cur_state->global_guard.guard_expr(expr_neg);
   remaining_claims++;
   target->assertion(
