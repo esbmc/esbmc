@@ -24,6 +24,7 @@ or ``METHOD_RULES`` (and, for a new kind of allocation, a shape in
 
 import ast
 import copy
+import itertools
 
 TYPED_FLAG = "esbmc_typed_list"
 # On a typed node of a list whose elements are bools, held as 0 or 1.
@@ -38,6 +39,9 @@ SOURCE_FLAG = "esbmc_typed_source"
 # its keys and values in turn, in insertion order.
 DICT_FLAG = "esbmc_typed_dict"
 DICT_SET = "__ESBMC_tdict_set"
+# On a `heapq.heapify(x)`, `heapq.heappop(x)` or `heapq.heappushpop(x, v)` call
+# of a typed x.
+HEAPQ_FLAG = "esbmc_typed_heapq"
 
 MODULE = "<module>"
 RETURN = "<return>"
@@ -51,6 +55,9 @@ _INT_BUILDER = "_nondet_list_int"
 _TRUTH_TESTS = (ast.If, ast.While, ast.IfExp, ast.Assert)
 _LIST_ANNOTATIONS = ("list", "List")
 _VERIFIER_MODULES = ("_sv_verifier", "esbmc")
+# The heapq functions the typed model implements, by their number of
+# arguments. The first is the heap.
+_HEAPQ_FUNCTIONS = {"heapify": 1, "heappop": 1, "heappushpop": 2}
 # Intrinsics whose arguments the converter lowers as ordinary expressions; a
 # list used in any other __ESBMC_ call (a contract clause) is not followed.
 _PLAIN_INTRINSICS = ("__ESBMC_assume", "__ESBMC_assert")
@@ -291,6 +298,7 @@ class TypedListGate:
         self.int_dicts = {}
         self.shadowed = set()
         self.verifier_modules = set()
+        self.heapq_modules = set()
         # Sites recorded once and checked again each round.
         self.allocations = []  # (scope, value node, location)
         self.accesses = []  # (scope, Subscript, stored value or None)
@@ -298,6 +306,7 @@ class TypedListGate:
         self.calls = []  # calls of followed functions
         self.sorts = []  # (scope, Call)
         self.extrema = []  # (scope, Call of max or min)
+        self.heap_calls = []  # (scope, Call of a heapq function)
         self.copies = []  # (scope, slice/list()/copy() node, source Name)
         self.compares = []  # (scope, Compare)
         self.extends = []  # (scope, Call)
@@ -435,8 +444,13 @@ class TypedListGate:
             return self.is_bool(expr, scope)
         return self.is_int(expr, scope)
 
+    def _slot_read_call(self, call):
+        """`max(x)`, `min(x)`, `heapq.heappop(x)` or `heapq.heappushpop(x, v)`:
+        an int read from the slots of x."""
+        return self._extremum_call(call) or (self._heapq_call(call) and call.func.attr != "heapify")
+
     def _is_int_call(self, call, scope):
-        if self._extremum_call(call):
+        if self._slot_read_call(call):
             loc = scope.loc(call.args[0].id)
             return self.classes.typed(loc) and not self._holds_bools(loc)
         if call.keywords:
@@ -455,12 +469,13 @@ class TypedListGate:
             return len(call.args) == 1 and not isinstance(call.args[0], ast.Starred)
         return call.func.id == "nondet_int" and not call.args
 
-    def _verifier_modules(self):
-        """Names bound only by `import _sv_verifier` or `import esbmc`."""
+    def _verifier_modules(self, modules=_VERIFIER_MODULES):
+        """Names bound only by `import` of one of @p modules, by default
+        `_sv_verifier` and `esbmc`."""
         imported = {
             alias.asname or alias.name
             for node in ast.walk(self.module) if isinstance(node, ast.Import)
-            for alias in node.names if alias.name in _VERIFIER_MODULES
+            for alias in node.names if alias.name in modules
         }
         other = set()
         for node in ast.walk(self.module):
@@ -468,7 +483,7 @@ class TypedListGate:
                 other.add(node.id)
             elif not isinstance(node, ast.alias) or not isinstance(_parent(node), ast.Import):
                 other.update(_bound_without_name_node(node))
-            elif node.name not in _VERIFIER_MODULES:
+            elif node.name not in modules:
                 other.add(node.asname or node.name.split(".")[0])
         return imported - other
 
@@ -607,9 +622,10 @@ class TypedListGate:
         return None
 
     def _derived_list(self, value):
-        """Whether @p value is `sorted(x)`, a slice of x, `list(x)` or
-        `x.copy()`."""
-        return bool(self._sorted_call(value)) or self._copy_source(value) is not None
+        """Whether @p value is `sorted(x)`, a slice of x, `list(x)`,
+        `x.copy()` or `list(range(...))`."""
+        return bool(self._sorted_call(value)) or self._copy_source(
+            value) is not None or self._range_list(value)
 
     def _allocation_shape(self, value):
         """Whether @p value builds a fresh list the typed model could hold;
@@ -766,11 +782,14 @@ class TypedListGate:
         return (isinstance(node, ast.Compare) and len(node.ops) == 1
                 and isinstance(node.ops[0], (ast.Eq, ast.NotEq)) and all(
                     isinstance(o, ast.Name) or self._analysed_call(o) or self._sorted_call(o)
-                    for o in (node.left, node.comparators[0])))
+                    or self._range_list(o) for o in (node.left, node.comparators[0])))
 
     def _compared_loc(self, operand, scope):
         """The location whose typing decides operand @p operand of a list
-        comparison."""
+        comparison; None for `list(range(...))`, typed when its bounds are
+        ints."""
+        if self._range_list(operand):
+            return None
         if isinstance(operand, ast.Name):
             return scope.loc(operand.id)
         if self._analysed_call(operand):
@@ -780,8 +799,22 @@ class TypedListGate:
     def _typed_compare(self, compare, scope):
         """Whether both operands of list comparison @p compare are typed."""
         return all(
-            self.classes.typed(self._compared_loc(o, scope))
-            for o in (compare.left, compare.comparators[0]))
+            self._ranges_ints(o, scope) if self._range_list(o) else self.classes.
+            typed(self._compared_loc(o, scope)) for o in (compare.left, compare.comparators[0]))
+
+    def _range_list(self, value):
+        """`list(range(a))` or `list(range(a, b))` of the builtins."""
+        if not self._builtin_call(value, "list"):
+            return False
+        inner = value.args[0]
+        return (isinstance(inner, ast.Call) and isinstance(inner.func, ast.Name)
+                and inner.func.id == "range" and "range" not in self.shadowed
+                and len(inner.args) in (1, 2) and not inner.keywords
+                and not any(isinstance(a, ast.Starred) for a in inner.args))
+
+    def _ranges_ints(self, value, scope):
+        """Whether the bounds of `list(range(...))` @p value are ints."""
+        return all(self.is_int(a, scope) for a in value.args[0].args)
 
     def _record_name(self, node, scope):
         loc = scope.loc(node.id)
@@ -948,6 +981,27 @@ class TypedListGate:
         self.extrema.append((scope, call))
         return None
 
+    def _heapq_call(self, call):
+        """`heapq.<f>(x, ...)` of a list name x and a function f the typed
+        model implements, with its number of positional arguments."""
+        return (isinstance(call, ast.Call) and isinstance(call.func, ast.Attribute)
+                and isinstance(call.func.value, ast.Name)
+                and call.func.value.id in self.heapq_modules
+                and len(call.args) == _HEAPQ_FUNCTIONS.get(call.func.attr) and not call.keywords
+                and isinstance(call.args[0], ast.Name)
+                and not any(isinstance(a, ast.Starred) for a in call.args))
+
+    def _rule_heapq(self, node, scope):
+        """The heap of `heapq.heapify(x)`, `heapq.heappop(x)` or
+        `heapq.heappushpop(x, v)`, sifted in its slots as CPython's heapq does."""
+        call = _parent(node)
+        if not (self._heapq_call(call) and call.args[0] is node):
+            return NOT_MINE
+        if call.func.attr == "heapify" and not isinstance(_parent(call), ast.Expr):
+            return "heapify used as a value"
+        self.heap_calls.append((scope, call))
+        return None
+
     def _rule_list_call(self, node, scope):
         """`list(x)`, a copy."""
         call = _parent(node)
@@ -999,7 +1053,7 @@ class TypedListGate:
     # The uses of a list name the typed model implements, tried in order.
     USE_RULES = (_rule_concatenated, _rule_len, _rule_analysed_call, _rule_alias, _rule_list_call,
                  _rule_subscript, _rule_none_test, _rule_truth, _rule_sorted, _rule_extremum,
-                 _rule_method, _rule_compared)
+                 _rule_heapq, _rule_method, _rule_compared)
 
     # The list methods it implements.
     METHOD_RULES = {"append": _method_append, "copy": _method_copy, "extend": _method_extend}
@@ -1031,7 +1085,7 @@ class TypedListGate:
             loc = scope.loc(call.func.value.id)
             if not self.is_element(call.args[0], scope, loc):
                 poison(loc, "appends an element of another kind")
-        for loc, reason in self._untyped_bool_results():
+        for loc, reason in itertools.chain(self._untyped_bool_results(), self._heap_poisons()):
             poison(loc, reason)
         for loc, bools in self.annotated:
             if bools != self._holds_bools(loc):
@@ -1050,7 +1104,7 @@ class TypedListGate:
                 continue
             for operand in (compare.left, compare.comparators[0]):
                 loc = self._compared_loc(operand, scope)
-                if not self._sorted_call(operand) and self.classes.typed(loc):
+                if loc is not None and not self._sorted_call(operand) and self.classes.typed(loc):
                     self.classes.poison_loc(loc, "compared with a list not typed")
                     changed = True
         return changed
@@ -1091,6 +1145,8 @@ class TypedListGate:
     def _allocation_poison(self, value, scope, loc):
         """Why allocation @p value into @p loc may hold an element of another
         kind than @p loc's, else None."""
+        if self._range_list(value):
+            return self._range_poison(value, scope, loc)
         for node in _shape_nodes(value):
             source = self._derived_source(node)
             if source is not None:
@@ -1110,6 +1166,12 @@ class TypedListGate:
                                                    and not self._holds_bools(loc)):
                 return "built with a non-int size or into a bool list"
         return None
+
+    def _range_poison(self, value, scope, loc):
+        """Why `list(range(...))` @p value may not be held in @p loc, else None."""
+        if self._ranges_ints(value, scope) and not self._holds_bools(loc):
+            return None
+        return "built from a range of non-ints or into a bool list"
 
     def _derived_source(self, node):
         """The list name a copy or `sorted()` allocation reads, else None."""
@@ -1146,6 +1208,16 @@ class TypedListGate:
         for scope, call in self.extrema:
             if self._holds_bools(scope.loc(call.args[0].id)):
                 yield scope.loc(call.args[0].id), "a bool list passed to " + call.func.id
+
+    def _heap_poisons(self):
+        """(location, reason) for each heap the typed heapq model cannot
+        sift: a bool list, or one pushed a non-int."""
+        for scope, call in self.heap_calls:
+            loc = scope.loc(call.args[0].id)
+            if self._holds_bools(loc):
+                yield loc, "a bool list passed to heapq"
+            elif call.func.attr == "heappushpop" and not self.is_int(call.args[1], scope):
+                yield loc, "pushes an element of another kind"
 
     def _seed_bool_lists(self):
         """Classes that some site fills with a bool literal, a comparison or a
@@ -1184,6 +1256,7 @@ class TypedListGate:
             for child in ast.iter_child_nodes(node):
                 setattr(child, "_typed_parent", node)
         self.verifier_modules = self._verifier_modules()
+        self.heapq_modules = self._verifier_modules(("heapq", ))
         self._build_scopes()
         for scope in self.scopes:
             self._record_scope(scope)
@@ -1235,6 +1308,7 @@ class TypedListGate:
         for scope, call in self.extrema:
             if self.classes.typed(scope.loc(call.args[0].id)):
                 setattr(call, TYPED_FLAG, True)
+        self._flag_heap_calls()
         # A call whose result is a typed list: a converter path that builds
         # the result itself instead of calling the function must build it
         # typed.
@@ -1242,13 +1316,18 @@ class TypedListGate:
             if self.classes.typed((call.func.id, RETURN)):
                 setattr(call, TYPED_FLAG, True)
 
+    def _flag_heap_calls(self):
+        for scope, call in self.heap_calls:
+            if self.classes.typed(scope.loc(call.args[0].id)):
+                setattr(call, HEAPQ_FLAG, True)
+
     def _flag_compares(self):
         """Flag a comparison of two typed lists and a `sorted(x)` operand of
         one, which then builds a typed result."""
         for scope, compare in self.compares:
             if self._typed_compare(compare, scope):
                 for node in (compare.left, compare.comparators[0]):
-                    if self._sorted_call(node):
+                    if self._sorted_call(node) or self._range_list(node):
                         setattr(node, TYPED_FLAG, True)
                 setattr(compare, TYPED_FLAG, True)
 
