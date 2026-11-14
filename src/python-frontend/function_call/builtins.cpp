@@ -3040,6 +3040,11 @@ exprt function_call_expr::handle_min_max(
   const typet result_type =
     common_min_max_type(exprs, func_name, converter_.ns);
 
+  const bool refuses_int = hoist_int_lambda_min_max(exprs, result_type);
+  std::vector<bool> is_float;
+  for (const exprt &e : exprs)
+    is_float.push_back(e.type().is_floatbv());
+
   // Cast all args to the common type.
   for (auto &e : exprs)
     if (!base_type_eq(e.type(), result_type, converter_.ns))
@@ -3051,6 +3056,7 @@ exprt function_call_expr::handle_min_max(
   const type2tc rt2 = migrate_type(result_type);
   expr2tc result2;
   migrate_expr(exprs[0], result2);
+  expr2tc returns_float2 = constant_bool2tc(is_float[0]);
   for (size_t i = 1; i < exprs.size(); ++i)
   {
     expr2tc e2;
@@ -3058,9 +3064,46 @@ exprt function_call_expr::handle_min_max(
     expr2tc cond = comparison_op == exprt::i_lt ? lessthan2tc(e2, result2)
                                                 : greaterthan2tc(e2, result2);
     result2 = if2tc(rt2, cond, e2, result2);
+    returns_float2 = if2tc(
+      get_bool_type(), cond, constant_bool2tc(is_float[i]), returns_float2);
   }
 
+  if (refuses_int)
+    converter_.refuse_int_lambda_result(
+      migrate_expr_back(returns_float2),
+      *converter_.current_block,
+      converter_.get_location_from_decl(call_));
+
   return migrate_expr_back(result2);
+}
+
+bool function_call_expr::hoist_int_lambda_min_max(
+  std::vector<exprt> &exprs,
+  const typet &result_type) const
+{
+  if (
+    !converter_.current_block || !converter_.is_lambda_result(call_) ||
+    !result_type.is_floatbv() ||
+    std::none_of(exprs.begin(), exprs.end(), [](const exprt &e) {
+      return is_int_like(e.type());
+    }))
+    return false;
+  const locationt location = converter_.get_location_from_decl(call_);
+  for (exprt &e : exprs)
+  {
+    if (e.is_constant())
+      continue;
+    symbolt &tmp =
+      converter_.create_tmp_symbol(call_, "$min_max$", e.type(), exprt());
+    code_declt decl(build_symbol(tmp));
+    decl.location() = location;
+    converter_.add_instruction(decl);
+    code_assignt assign(build_symbol(tmp), e);
+    assign.location() = location;
+    converter_.add_instruction(assign);
+    e = build_symbol(tmp);
+  }
+  return true;
 }
 
 // Whether a print() `file=` target is a standard stream (None is stdout),
