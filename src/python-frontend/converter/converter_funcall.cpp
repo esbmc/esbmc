@@ -1133,6 +1133,9 @@ static nlohmann::json lambda_bound_to(
     if (target == nullptr || target->value("id", "") != name)
       continue;
     const nlohmann::json &value = stmt["value"];
+    // A bare annotation `name: T` binds nothing.
+    if (value.is_null())
+      continue;
     if (value.value("_type", "") == "Lambda")
       return value;
     if (
@@ -1727,6 +1730,52 @@ static void reject_unknown_keyword(
       "' to the modelled method " + name);
 }
 
+/// Passes a struct argument to a pointer parameter by address. An rvalue
+/// struct is first materialised in a temporary.
+void python_converter::coerce_struct_argument(
+  const nlohmann::json &element,
+  const typet &param_type,
+  const typet &arg_actual_type,
+  exprt &arg)
+{
+  // Handle union types: if param is pointer and arg is struct (or
+  // symbol to struct), take address. This is the post-processing pass
+  // for general pointer-to-struct coercion. NOTE:
+  // function_call_expr.cpp also has an earlier coercion pass that
+  // specifically handles char[0]* union parameters (str | T pattern).
+  // These two mechanisms are complementary: the pass here handles the
+  // general case; the earlier pass handles the specific char[0]* union
+  // representation and also materialises non-symbol struct temporaries.
+  if (
+    param_type.is_pointer() && arg_actual_type.is_struct() &&
+    !arg.is_address_of() && !arg_actual_type.is_pointer())
+  {
+    // Rvalue structs (e.g. the constant `__ESBMC_PySliceObj` produced
+    // by `a[i:j]`, or a call returning a by-value class instance)
+    // cannot be the operand of `address_of` at the SMT level.
+    // Materialise them in a temp symbol first so the address we hand to
+    // the callee points at a real lvalue.
+    if (!arg.is_symbol())
+    {
+      assert(
+        current_block &&
+        "rvalue struct argument requires a statement-level block to "
+        "materialise into");
+      locationt loc = get_location_from_decl(element);
+      symbolt &tmp = create_tmp_symbol(
+        element, "$struct_arg$", arg_actual_type, gen_zero(arg_actual_type));
+      code_declt tmp_decl(symbol_expr(tmp));
+      tmp_decl.location() = loc;
+      current_block->copy_to_operands(tmp_decl);
+      code_assignt tmp_assign(symbol_expr(tmp), arg);
+      tmp_assign.location() = loc;
+      current_block->copy_to_operands(tmp_assign);
+      arg = symbol_expr(tmp);
+    }
+    arg = gen_address_of(arg);
+  }
+}
+
 exprt python_converter::get_function_call(const nlohmann::json &element)
 {
   if (!element.contains("func") || element["_type"] != "Call")
@@ -2124,6 +2173,7 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
 
     if (var_symbol && var_symbol->get_type().is_pointer())
     {
+      refuse_keywords_through_value(element);
       // This is an indirect call through function pointer
       side_effect_expr_function_callt call;
       call.location() = get_location_from_decl(element);
@@ -2659,45 +2709,10 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
           // so a struct is passed to a pointer parameter (#4558/#4564).
           if (arg_actual_type.id() == "symbol")
             arg_actual_type = ns.follow(arg_actual_type);
-          // Handle union types: if param is pointer and arg is struct (or
-          // symbol to struct), take address. This is the post-processing pass
-          // for general pointer-to-struct coercion. NOTE:
-          // function_call_expr.cpp also has an earlier coercion pass that
-          // specifically handles char[0]* union parameters (str | T pattern).
-          // These two mechanisms are complementary: the pass here handles the
-          // general case; the earlier pass handles the specific char[0]* union
-          // representation and also materialises non-symbol struct temporaries.
-          if (
-            param_type.is_pointer() && arg_actual_type.is_struct() &&
-            !arg.is_address_of() && !arg_actual_type.is_pointer())
-          {
-            // Rvalue structs (e.g. the constant `__ESBMC_PySliceObj` produced
-            // by `a[i:j]`, or a call returning a by-value class instance)
-            // cannot be the operand of `address_of` at the SMT level.
-            // Materialise them in a temp symbol first so the address we hand to
-            // the callee points at a real lvalue.
-            if (!arg.is_symbol())
-            {
-              assert(
-                current_block &&
-                "rvalue struct argument requires a statement-level block to "
-                "materialise into");
-              locationt loc = get_location_from_decl(element);
-              symbolt &tmp = create_tmp_symbol(
-                element,
-                "$struct_arg$",
-                arg_actual_type,
-                gen_zero(arg_actual_type));
-              code_declt tmp_decl(symbol_expr(tmp));
-              tmp_decl.location() = loc;
-              current_block->copy_to_operands(tmp_decl);
-              code_assignt tmp_assign(symbol_expr(tmp), arg);
-              tmp_assign.location() = loc;
-              current_block->copy_to_operands(tmp_assign);
-              arg = symbol_expr(tmp);
-            }
-            arg = gen_address_of(arg);
-          }
+          // A raising argument raises before the call is made.
+          if (arg.statement() == "cpp-throw")
+            return arg;
+          coerce_struct_argument(element, param_type, arg_actual_type, arg);
 
           // Propagate instance attributes set on this parameter back to the
           // caller's argument. This models Python's pass-by-object-reference:
@@ -2853,16 +2868,146 @@ static bool used_as_value(const nlohmann::json &node, const std::string &name)
   return false;
 }
 
+void python_converter::refuse_keywords_through_value(
+  const nlohmann::json &call) const
+{
+  // A call through a function value passes only positional arguments.
+  if (!call.value("keywords", nlohmann::json::array()).empty())
+    throw std::runtime_error(
+      "keyword arguments in a call through a function value are not yet "
+      "supported");
+}
+
+static const char tagged_callee_id[] = "py:$tagged_callee$";
+
+static bool has_side_effect(const exprt &e)
+{
+  if (e.id() == "sideeffect")
+    return true;
+  for (const exprt &sub : e.operands())
+    if (has_side_effect(sub))
+      return true;
+  return false;
+}
+
+void python_converter::guard_tagged_callee(
+  const exprt &call,
+  const nlohmann::json &element)
+{
+  if (!element.contains("esbmc_tagged_call"))
+    return;
+  if (
+    !type_handler_.is_tagged_scalar_type(call.type()) ||
+    call.id() != "sideeffect" || call.statement() != "function_call")
+    throw std::runtime_error(
+      "a call through a function value that may return different types is "
+      "not yet supported here");
+  const exprt &callee = to_side_effect_expr_function_call(call).function();
+  if (callee.type().is_code() || in_type_probe())
+    return;
+  // The check reads the callee ahead of the call, so it must have no effect
+  // and be reached exactly where the call is.
+  if (has_side_effect(callee) || !can_emit_operand_statement())
+    throw std::runtime_error(
+      "a call through a function value that may return different types is "
+      "not yet supported here");
+  // The defs it may hold are not all converted yet, so the check is a call
+  // whose body define_tagged_callee writes once they are.
+  const typet pointer = pointer_typet(empty_typet());
+  symbolt *helper = symbol_table_.find_symbol(tagged_callee_id);
+  if (!helper)
+  {
+    const std::string param_id = std::string(tagged_callee_id) + "@callee";
+    code_typet type;
+    type.return_type() = bool_typet();
+    code_typet::argumentt param(pointer);
+    param.cmt_base_name("callee");
+    param.cmt_identifier(param_id);
+    param.identifier(param_id);
+    type.arguments().push_back(param);
+    symbolt param_symbol =
+      create_symbol("", "callee", param_id, locationt(), pointer);
+    param_symbol.lvalue = true;
+    param_symbol.is_parameter = true;
+    param_symbol.file_local = true;
+    symbol_table_.add(param_symbol);
+    symbolt symbol =
+      create_symbol("", "$tagged_callee$", tagged_callee_id, locationt(), type);
+    helper = symbol_table_.move_symbol_to_context(symbol);
+  }
+  side_effect_expr_function_callt holds;
+  holds.function() = symbol_expr(*helper);
+  holds.arguments().push_back(python_expr::build_typecast(callee, pointer));
+  holds.type() = bool_typet();
+  code_assertt check(holds);
+  check.location() = get_location_from_decl(element);
+  check.location().user_provided(true);
+  check.location().comment(
+    "Unsupported: call through a function value that may hold something "
+    "other than the functions found for it");
+  current_block->copy_to_operands(check);
+}
+
+void python_converter::define_tagged_callee()
+{
+  symbolt *helper = symbol_table_.find_symbol(tagged_callee_id);
+  if (!helper)
+    return;
+  const typet pointer = pointer_typet(empty_typet());
+  const exprt callee = symbol_expr(
+    *symbol_table_.find_symbol(std::string(tagged_callee_id) + "@callee"));
+  exprt holds("or", bool_typet());
+  auto add_marked = [&](const nlohmann::json &module) {
+    for (const auto &def : module["body"])
+    {
+      if (!def.contains("esbmc_tagged_return"))
+        continue;
+      if (
+        const symbolt *function = symbol_table_.find_symbol(
+          symbol_id(module["filename"], "", def["name"]).to_string()))
+        holds.copy_to_operands(equality_exprt(
+          callee,
+          python_expr::build_typecast(
+            python_expr::build_address_of(symbol_expr(*function)), pointer)));
+    }
+  };
+  add_marked(*entry_ast_);
+  for (const auto &[name, module] : module_ast_pool_)
+    add_marked(module);
+  gen_or(holds);
+  code_blockt body;
+  code_returnt result;
+  result.return_value() = holds;
+  body.copy_to_operands(result);
+  helper->set_value(body);
+}
+
+typet python_converter::untyped_call_type(
+  const nlohmann::json &call,
+  const typet &untyped) const
+{
+  if (call.contains("esbmc_tagged_call"))
+    return type_handler_.get_tagged_object_type();
+  if (
+    type_handler_.is_tagged_scalar_type(current_func_return_type_) &&
+    dynamic_type_handler_.parameter_call_returns_tagged(call))
+    return current_func_return_type_;
+  // The call may reach a def that returns a tagged value, which an untyped
+  // result would read as something else.
+  if (entry_ast_->value("esbmc_tagged_returns", false))
+    throw std::runtime_error(
+      "a call through a function value that may return a dynamically-typed "
+      "value is not yet supported here");
+  return untyped;
+}
+
 exprt python_converter::dispatch_mismatched_callees(
   const exprt &callee,
   const nlohmann::json &call,
   const side_effect_expr_function_callt &call_expr)
 {
   side_effect_expr_function_callt typed = call_expr;
-  if (
-    type_handler_.is_tagged_scalar_type(current_func_return_type_) &&
-    dynamic_type_handler_.parameter_call_returns_tagged(call))
-    typed.type() = current_func_return_type_;
+  typed.type() = untyped_call_type(call, call_expr.type());
   exprt result = typed;
   if (!current_block)
     return result;

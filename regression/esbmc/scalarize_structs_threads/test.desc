@@ -1,0 +1,5 @@
+CORE
+main.c
+--scalarize-structs
+^WARNING: --scalarize-structs is ignored: the program may create threads$
+^VERIFICATION SUCCESSFUL$

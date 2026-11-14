@@ -1,0 +1,4 @@
+CORE
+main.py
+--show-claims
+Unsupported: arithmetic on a value whose type was lost$

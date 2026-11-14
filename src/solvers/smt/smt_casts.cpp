@@ -2,6 +2,8 @@
 #include <sstream>
 #include <util/expr/base_type.h>
 #include <util/expr/expr_util.h>
+#include <util/expr/type_byte_size.h>
+#include <util/lang/c_types.h>
 #include <util/message/message.h>
 #include <util/message/format.h>
 
@@ -499,7 +501,8 @@ smt_astt smt_solver_baset::convert_typecast_to_ptr(const typecast2t &cast)
     if (i == 1)
       continue; // Skip invalid, it contains everything.
 
-    // Calculate ptr offset were it this
+    // Calculate ptr offset were it this; dereferencet's offset_within()
+    // relies on it being target - start.
     smt_astt offs = int_encoding ? mk_sub(target, obj_starts[i])
                                  : mk_bvsub(target, obj_starts[i]);
 
@@ -533,11 +536,9 @@ smt_astt smt_solver_baset::convert_typecast_to_ptr(const typecast2t &cast)
 
   if (from_byte_update)
   {
-    expr2tc addrspace =
-      symbol2tc(addr_space_arr_type, get_cur_addrspace_ident());
     assert_ast(mk_implies(
       not_matched,
-      address_holds(output_sym, addrspace, cast_to_unsigned, false)));
+      address_holds(output_sym, cur_addrspace(), cast_to_unsigned, false)));
     return output;
   }
 
@@ -573,9 +574,7 @@ smt_astt smt_solver_baset::name_object_by_value(
       "__ESBMC_int_to_ptr_object", {convert_ast(target)}, obj->sort)));
   int_to_ptr_objects.push_back({obj, ctx_level, {}});
 
-  expr2tc addrspace =
-    from_byte_update ? symbol2tc(addr_space_arr_type, get_cur_addrspace_ident())
-                     : base_addrspace_array();
+  unsigned int addrspace = from_byte_update ? cur_addrspace() : base_addrspace;
   assert_ast(mk_implies(
     not_matched, address_holds(ptr, addrspace, target, !from_byte_update)));
   return pointer;
@@ -607,26 +606,53 @@ void smt_solver_baset::close_int_to_ptr_objects()
  *  @p target; with @p in_range, that object's range also holds @p target. */
 smt_astt smt_solver_baset::address_holds(
   const expr2tc &ptr,
-  const expr2tc &addrspace,
+  unsigned int addrspace,
   const expr2tc &target,
   bool in_range)
 {
-  const struct_type2t &as = to_struct_type(addr_space_type);
-  expr2tc range = index2tc(
-    addr_space_type, addrspace, pointer_object2tc(ptraddr_type2(), ptr));
-  expr2tc start = member2tc(as.members[0], range, as.member_names[0]);
+  expr2tc obj = pointer_object2tc(ptraddr_type2(), ptr);
+  expr2tc start = addrspace_read(addrspace, 0, obj);
   expr2tc offs =
     pointer_offset2tc(get_int_type(config.ansi_c.address_width), ptr);
   expr2tc holds = equality2tc(
     add2tc(ptraddr_type2(), start, typecast2tc(ptraddr_type2(), offs)), target);
   if (in_range)
   {
-    expr2tc end = member2tc(as.members[1], range, as.member_names[1]);
+    expr2tc end = addrspace_read(addrspace, 1, obj);
     holds = and2tc(
       holds,
       and2tc(lessthanequal2tc(start, target), lessthanequal2tc(target, end)));
   }
   return convert_ast(holds);
+}
+
+/* The address @p ptr takes, when it is the address of a known object. Every
+ * address-space version holds the same start for that object, so naming it
+ * directly saves the solver relating array reads (#9785). */
+expr2tc smt_solver_baset::static_address_of(const expr2tc &ptr)
+{
+  const expr2tc *p = &ptr;
+  while (is_typecast2t(*p) && is_pointer_type(to_typecast2t(*p).from))
+    p = &to_typecast2t(*p).from;
+  if (!is_address_of2t(*p))
+    return expr2tc();
+
+  const expr2tc base = get_base_object(to_address_of2t(*p).ptr_obj);
+  if (
+    !is_symbol2t(base) ||
+    renumber_map.back().count(to_symbol2t(base).get_symbol_name()))
+    return expr2tc();
+
+  // Converting the address registers the object; add_object() then names it.
+  convert_ast(*p);
+  const unsigned int id = pointer_logic.back().add_object(base);
+  const expr2tc start =
+    symbol2tc(ptraddr_type2(), "__ESBMC_ptr_obj_start_" + std::to_string(id));
+  return add2tc(
+    ptraddr_type2(),
+    start,
+    typecast2tc(
+      ptraddr_type2(), compute_pointer_offset(to_address_of2t(*p).ptr_obj)));
 }
 
 smt_astt smt_solver_baset::convert_typecast_from_ptr(const typecast2t &cast)
@@ -639,19 +665,14 @@ smt_astt smt_solver_baset::convert_typecast_from_ptr(const typecast2t &cast)
 
   expr2tc obj_num = pointer_object2tc(addr_type, cast.from);
 
-  expr2tc from_addr_space = index2tc(
-    addr_space_type,
-    symbol2tc(addr_space_arr_type, get_cur_addrspace_ident()),
-    obj_num);
+  expr2tc address = static_address_of(cast.from);
+  if (is_nil_expr(address))
+  {
+    expr2tc from_start = addrspace_read(cur_addrspace(), 0, obj_num);
 
-  // We've now grabbed the pointer struct, now get the first element. Represent
-  // as fetching the first element of the struct representation.
-  const struct_type2t &addr_space_ty = to_struct_type(addr_space_type);
-  expr2tc from_start = member2tc(
-    addr_space_ty.members[0], from_addr_space, addr_space_ty.member_names[0]);
-
-  expr2tc ptr_offs = pointer_offset2tc(diff_type, cast.from);
-  expr2tc address = add2tc(addr_type, from_start, ptr_offs);
+    expr2tc ptr_offs = pointer_offset2tc(diff_type, cast.from);
+    address = add2tc(addr_type, from_start, ptr_offs);
+  }
   expr2tc pointer = address;
 
   /* Object 0 is NULL and occupies the single address 0; finalize_pointer_chain

@@ -285,6 +285,12 @@ void smt_solver_baset::pop_ctx()
     ptr_flow, [this](const auto &kv) { return kv.second.first >= ctx_level; });
   if (base_addrspace_tied && *base_addrspace_tied >= ctx_level)
     base_addrspace_tied.reset();
+  std::erase_if(addrspace_stores, [this](const addrspace_storet &s) {
+    return s.level >= ctx_level;
+  });
+  for (addrspace_storet &s : addrspace_stores)
+    if (s.asserted_at && *s.asserted_at >= ctx_level)
+      s.asserted_at.reset();
   std::erase_if(int_to_ptr_objects, [this](const int_to_ptr_objectt &c) {
     return c.level >= ctx_level;
   });

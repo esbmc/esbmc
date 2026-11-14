@@ -243,7 +243,10 @@ bool has_divergent_returns(
   const param_kinds_t &param_kinds,
   const nlohmann::json &module_body)
 {
-  return has_divergent_literal_returns(
+  // The preprocessor marks the functions a call through a function value may
+  // reach when they return scalars of different types.
+  return function_node.contains("esbmc_tagged_return") ||
+         has_divergent_literal_returns(
            function_node, param_kinds, module_body) ||
          has_divergent_ifexp_return(function_node, param_kinds, module_body);
 }
@@ -448,9 +451,11 @@ bool calls_dynamic_function(
   const nlohmann::json &module_body,
   unsigned depth)
 {
-  if (
-    !value.is_object() || value.value("_type", "") != "Call" ||
-    value["func"].value("_type", "") != "Name")
+  if (!value.is_object() || value.value("_type", "") != "Call")
+    return false;
+  if (value.contains("esbmc_tagged_call"))
+    return true;
+  if (value["func"].value("_type", "") != "Name")
     return false;
   const nlohmann::json *callee = find_callee_def(
     function_node["body"], module_body, value["func"].value("id", ""));

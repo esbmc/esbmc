@@ -1,0 +1,5 @@
+CORE
+main.c
+--scalarize-structs
+^\s+y written through q$
+^VERIFICATION FAILED$
