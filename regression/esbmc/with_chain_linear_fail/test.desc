@@ -1,0 +1,5 @@
+CORE
+main.c
+--unwind 8001
+^VERIFICATION FAILED$
+^  assertion a\[i\] == i$
