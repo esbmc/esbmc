@@ -62,6 +62,8 @@ bool is_imported_numpy_module_alias(
   const nlohmann::json &ast,
   const std::string &name);
 
+struct node_slot;
+
 // One `Call` node together with the name of the function whose body it
 // textually appears in (empty for a module-level call). Declared here (Impl
 // in converter_funcdef.cpp) so python_converter can cache the whole-AST scan
@@ -200,7 +202,12 @@ public:
     const typet &function,
     const typet &value,
     const locationt &location);
-  void decay_function_choice(exprt &then, exprt &else_expr);
+  bool slot_only_called(const node_slot &slot);
+  bool ifexp_only_called(const nlohmann::json &ifexp);
+  void decay_function_choice(
+    const nlohmann::json &ifexp,
+    exprt &then,
+    exprt &else_expr);
   void hoist_raising_arm(
     exprt &then,
     code_blockt &then_side_effects,
@@ -866,6 +873,12 @@ private:
   /// the positional arguments.
   nlohmann::json keywords_as_positional(const nlohmann::json &call);
 
+  void add_marked_callees(
+    exprt &holds,
+    const exprt &callee,
+    const nlohmann::json &module,
+    const nlohmann::json &body,
+    const std::string &clazz) const;
   /// Refuses the path where the call @p call of @p element, which the
   /// preprocessor found may reach functions returning different types, goes
   /// to anything but a def it marked to return a tagged value.
@@ -3861,6 +3874,13 @@ private:
   symbolt *find_dunder_method(
     const std::string &class_name,
     const std::string &dunder_name);
+  /// The operational model's per-key-type copy of @p dunder that a subscript
+  /// of a @p class_name instance with key @p key_node reaches, such as
+  /// Counter's `__getitem_str__`; @p dunder itself when there is none.
+  std::string keyed_dunder_name(
+    const std::string &class_name,
+    const std::string &dunder,
+    const nlohmann::json &key_node);
 
   /// Class @p value_node is an instance of, or "" when it is not an instance.
   /// Resolves both a bound name and a constructor temporary.
@@ -4137,9 +4157,10 @@ private:
   /// that also holds other values, or functions whose signatures differ or
   /// are not known, is refused (#10341). Nothing when it holds no function.
   std::optional<typet> dict_read_function_type(const nlohmann::json &element);
-  typet subscript_call_return_type(
-    const exprt &func_ptr,
-    const nlohmann::json &func_node);
+  /// The return type of @p call, a call through a subscript, with
+  /// @p func_ptr the value called.
+  typet
+  subscript_call_return_type(const exprt &func_ptr, const nlohmann::json &call);
   std::optional<std::vector<std::size_t>>
   numpy_filled_array_shape(const nlohmann::json &value) const;
   const std::optional<std::pair<typet, numpy_scalar_pointer_view_infot>> &

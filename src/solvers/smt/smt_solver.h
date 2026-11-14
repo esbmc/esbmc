@@ -232,6 +232,7 @@ public:
    *  frame per level and overflow the stack. The operand walk inside this
    *  body therefore hits the cache instead of recursing. */
   smt_astt convert_ast_node(const expr2tc &expr);
+  smt_astt convert_bitnot(smt_astt a);
 
   /** Convert one of the two-operand IEEE arithmetic nodes (add/sub/mul/div/
    *  rem), which share an operand layout and differ only in the solver call

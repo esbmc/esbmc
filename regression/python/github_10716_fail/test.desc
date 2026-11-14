@@ -1,0 +1,5 @@
+CORE
+main.py
+
+^Violated property:\n  file .*main\.py line 7 column 0\n  assertion v == 1$
+^VERIFICATION FAILED$

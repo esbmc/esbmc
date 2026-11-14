@@ -24,6 +24,7 @@ or ``METHOD_RULES`` (and, for a new kind of allocation, a shape in
 
 import ast
 import copy
+import itertools
 
 TYPED_FLAG = "esbmc_typed_list"
 # On a typed node of a list whose elements are bools, held as 0 or 1.
@@ -38,6 +39,13 @@ SOURCE_FLAG = "esbmc_typed_source"
 # its keys and values in turn, in insertion order.
 DICT_FLAG = "esbmc_typed_dict"
 DICT_SET = "__ESBMC_tdict_set"
+# On a `heapq.heapify(x)`, `heapq.heappop(x)` or `heapq.heappushpop(x, v)` call
+# of a typed x.
+HEAPQ_FLAG = "esbmc_typed_heapq"
+DICT_IN = "__ESBMC_tdict_in"
+DICT_MAX = "__ESBMC_tdict_max"
+# On a read of a typed Counter: a missing key reads 0 and is not inserted.
+DICT_DEFAULT_FLAG = "esbmc_typed_dict_default"
 
 MODULE = "<module>"
 RETURN = "<return>"
@@ -48,9 +56,14 @@ _INT_UNARYOPS = (ast.USub, ast.UAdd, ast.Invert)
 _NESTED_SCOPES = (ast.Lambda, ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.ListComp,
                   ast.SetComp, ast.DictComp, ast.GeneratorExp)
 _INT_BUILDER = "_nondet_list_int"
+# The list of a nondet str's character codes (preprocessor/char_strings.py).
+_STR_CODES = "__ESBMC_str_codes"
 _TRUTH_TESTS = (ast.If, ast.While, ast.IfExp, ast.Assert)
 _LIST_ANNOTATIONS = ("list", "List")
 _VERIFIER_MODULES = ("_sv_verifier", "esbmc")
+# The heapq functions the typed model implements, by their number of
+# arguments. The first is the heap.
+_HEAPQ_FUNCTIONS = {"heapify": 1, "heappop": 1, "heappushpop": 2}
 # Intrinsics whose arguments the converter lowers as ordinary expressions; a
 # list used in any other __ESBMC_ call (a contract clause) is not followed.
 _PLAIN_INTRINSICS = ("__ESBMC_assume", "__ESBMC_assert")
@@ -289,8 +302,10 @@ class TypedListGate:
         self.annotated = []  # (location, whether its list annotation says bool)
         self.dict_stores = {}  # dict location: [(stored value, scope)]
         self.int_dicts = {}
+        self.counter_names = set()  # names of collections.Counter
         self.shadowed = set()
         self.verifier_modules = set()
+        self.heapq_modules = set()
         # Sites recorded once and checked again each round.
         self.allocations = []  # (scope, value node, location)
         self.accesses = []  # (scope, Subscript, stored value or None)
@@ -298,6 +313,7 @@ class TypedListGate:
         self.calls = []  # calls of followed functions
         self.sorts = []  # (scope, Call)
         self.extrema = []  # (scope, Call of max or min)
+        self.heap_calls = []  # (scope, Call of a heapq function)
         self.copies = []  # (scope, slice/list()/copy() node, source Name)
         self.compares = []  # (scope, Compare)
         self.extends = []  # (scope, Call)
@@ -435,8 +451,13 @@ class TypedListGate:
             return self.is_bool(expr, scope)
         return self.is_int(expr, scope)
 
+    def _slot_read_call(self, call):
+        """`max(x)`, `min(x)`, `heapq.heappop(x)` or `heapq.heappushpop(x, v)`:
+        an int read from the slots of x."""
+        return self._extremum_call(call) or (self._heapq_call(call) and call.func.attr != "heapify")
+
     def _is_int_call(self, call, scope):
-        if self._extremum_call(call):
+        if self._slot_read_call(call):
             loc = scope.loc(call.args[0].id)
             return self.classes.typed(loc) and not self._holds_bools(loc)
         if call.keywords:
@@ -451,16 +472,26 @@ class TypedListGate:
             return self.int_vars.get((call.func.id, RETURN), False)
         if call.func.id in self.shadowed:
             return False
-        if call.func.id == "len":
-            return len(call.args) == 1 and not isinstance(call.args[0], ast.Starred)
-        return call.func.id == "nondet_int" and not call.args
+        return self._is_int_builtin(call, scope)
 
-    def _verifier_modules(self):
-        """Names bound only by `import _sv_verifier` or `import esbmc`."""
+    def _is_int_builtin(self, call, scope):
+        """`len(x)`, `nondet_int()`, `int()`, or `max` or `min` of ints."""
+        name, args = call.func.id, call.args
+        if any(isinstance(a, ast.Starred) for a in args):
+            return False
+        if name == "len":
+            return len(args) == 1
+        if name in ("max", "min"):
+            return len(args) >= 2 and all(self.is_int(a, scope) for a in args)
+        return name in ("nondet_int", "int") and not args
+
+    def _verifier_modules(self, modules=_VERIFIER_MODULES):
+        """Names bound only by `import` of one of @p modules, by default
+        `_sv_verifier` and `esbmc`."""
         imported = {
             alias.asname or alias.name
             for node in ast.walk(self.module) if isinstance(node, ast.Import)
-            for alias in node.names if alias.name in _VERIFIER_MODULES
+            for alias in node.names if alias.name in modules
         }
         other = set()
         for node in ast.walk(self.module):
@@ -468,7 +499,7 @@ class TypedListGate:
                 other.add(node.id)
             elif not isinstance(node, ast.alias) or not isinstance(_parent(node), ast.Import):
                 other.update(_bound_without_name_node(node))
-            elif node.name not in _VERIFIER_MODULES:
+            elif node.name not in modules:
                 other.add(node.asname or node.name.split(".")[0])
         return imported - other
 
@@ -535,15 +566,38 @@ class TypedListGate:
         displays and used only to read or store one item by subscript. Any
         other binding or use, including one in a nested scope, leaves the
         dict out."""
+        self.counter_names = self._counter_names()
         stores = {
-            loc: [(v, scope) for display, scope in values for v in display.values]
-            for loc, values in self.bindings.items() if loc[1] != RETURN and all(
-                isinstance(v, ast.Dict) and None not in v.keys for v, _ in values)
+            loc: [(v, scope) for display, scope in values for v in _display_values(display)]
+            for loc, values in self.bindings.items()
+            if loc[1] != RETURN and all(self._dict_binding(v) for v, _ in values)
         }
         escaped = set()
         for scope in self.scopes:
             escaped |= self._record_dict_uses(scope, stores)
         self.dict_stores = {loc: values for loc, values in stores.items() if loc not in escaped}
+
+    def _counter_names(self):
+        """Names bound only by `from collections import Counter`."""
+        imported, other = set(), set()
+        for node in ast.walk(self.module):
+            if isinstance(node, ast.ImportFrom) and node.module == "collections":
+                imported |= {a.asname or a.name for a in node.names if a.name == "Counter"}
+                other |= {a.asname or a.name for a in node.names if a.name != "Counter"}
+            elif isinstance(node, ast.Name) and not isinstance(node.ctx, ast.Load):
+                other.add(node.id)
+            elif not isinstance(node, ast.alias) or not isinstance(
+                    _parent(node), ast.ImportFrom) or _parent(node).module != "collections":
+                other.update(_bound_without_name_node(node))
+        return imported - other
+
+    def _counter_call(self, value):
+        return (isinstance(value, ast.Call) and isinstance(value.func, ast.Name)
+                and value.func.id in self.counter_names and not value.args and not value.keywords)
+
+    def _dict_binding(self, value):
+        """A dict display with no `**`, or `Counter()`."""
+        return (isinstance(value, ast.Dict) and None not in value.keys) or self._counter_call(value)
 
     def _record_dict_uses(self, scope, stores):
         """Add the values @p scope stores into the dicts of @p stores; the
@@ -607,9 +661,10 @@ class TypedListGate:
         return None
 
     def _derived_list(self, value):
-        """Whether @p value is `sorted(x)`, a slice of x, `list(x)` or
-        `x.copy()`."""
-        return bool(self._sorted_call(value)) or self._copy_source(value) is not None
+        """Whether @p value is `sorted(x)`, a slice of x, `list(x)`,
+        `x.copy()` or `list(range(...))`."""
+        return bool(self._sorted_call(value)) or self._copy_source(
+            value) is not None or self._range_list(value)
 
     def _allocation_shape(self, value):
         """Whether @p value builds a fresh list the typed model could hold;
@@ -623,9 +678,9 @@ class TypedListGate:
         if self._derived_list(value):
             return True
         return (isinstance(value, ast.Call) and isinstance(value.func, ast.Name)
-                and value.func.id == _INT_BUILDER and _INT_BUILDER not in self.shadowed
-                and len(value.args) == 1 and not value.keywords
-                and not isinstance(value.args[0], ast.Starred))
+                and value.func.id in (_INT_BUILDER, _STR_CODES)
+                and value.func.id not in self.shadowed and len(value.args) == 1
+                and not value.keywords and not isinstance(value.args[0], ast.Starred))
 
     def _flow_into(self, loc, value, scope):
         """Record that @p value is stored to location @p loc."""
@@ -766,11 +821,14 @@ class TypedListGate:
         return (isinstance(node, ast.Compare) and len(node.ops) == 1
                 and isinstance(node.ops[0], (ast.Eq, ast.NotEq)) and all(
                     isinstance(o, ast.Name) or self._analysed_call(o) or self._sorted_call(o)
-                    for o in (node.left, node.comparators[0])))
+                    or self._range_list(o) for o in (node.left, node.comparators[0])))
 
     def _compared_loc(self, operand, scope):
         """The location whose typing decides operand @p operand of a list
-        comparison."""
+        comparison; None for `list(range(...))`, typed when its bounds are
+        ints."""
+        if self._range_list(operand):
+            return None
         if isinstance(operand, ast.Name):
             return scope.loc(operand.id)
         if self._analysed_call(operand):
@@ -780,8 +838,22 @@ class TypedListGate:
     def _typed_compare(self, compare, scope):
         """Whether both operands of list comparison @p compare are typed."""
         return all(
-            self.classes.typed(self._compared_loc(o, scope))
-            for o in (compare.left, compare.comparators[0]))
+            self._ranges_ints(o, scope) if self._range_list(o) else self.classes.
+            typed(self._compared_loc(o, scope)) for o in (compare.left, compare.comparators[0]))
+
+    def _range_list(self, value):
+        """`list(range(a))` or `list(range(a, b))` of the builtins."""
+        if not self._builtin_call(value, "list"):
+            return False
+        inner = value.args[0]
+        return (isinstance(inner, ast.Call) and isinstance(inner.func, ast.Name)
+                and inner.func.id == "range" and "range" not in self.shadowed
+                and len(inner.args) in (1, 2) and not inner.keywords
+                and not any(isinstance(a, ast.Starred) for a in inner.args))
+
+    def _ranges_ints(self, value, scope):
+        """Whether the bounds of `list(range(...))` @p value are ints."""
+        return all(self.is_int(a, scope) for a in value.args[0].args)
 
     def _record_name(self, node, scope):
         loc = scope.loc(node.id)
@@ -948,6 +1020,27 @@ class TypedListGate:
         self.extrema.append((scope, call))
         return None
 
+    def _heapq_call(self, call):
+        """`heapq.<f>(x, ...)` of a list name x and a function f the typed
+        model implements, with its number of positional arguments."""
+        return (isinstance(call, ast.Call) and isinstance(call.func, ast.Attribute)
+                and isinstance(call.func.value, ast.Name)
+                and call.func.value.id in self.heapq_modules
+                and len(call.args) == _HEAPQ_FUNCTIONS.get(call.func.attr) and not call.keywords
+                and isinstance(call.args[0], ast.Name)
+                and not any(isinstance(a, ast.Starred) for a in call.args))
+
+    def _rule_heapq(self, node, scope):
+        """The heap of `heapq.heapify(x)`, `heapq.heappop(x)` or
+        `heapq.heappushpop(x, v)`, sifted in its slots as CPython's heapq does."""
+        call = _parent(node)
+        if not (self._heapq_call(call) and call.args[0] is node):
+            return NOT_MINE
+        if call.func.attr == "heapify" and not isinstance(_parent(call), ast.Expr):
+            return "heapify used as a value"
+        self.heap_calls.append((scope, call))
+        return None
+
     def _rule_list_call(self, node, scope):
         """`list(x)`, a copy."""
         call = _parent(node)
@@ -999,7 +1092,7 @@ class TypedListGate:
     # The uses of a list name the typed model implements, tried in order.
     USE_RULES = (_rule_concatenated, _rule_len, _rule_analysed_call, _rule_alias, _rule_list_call,
                  _rule_subscript, _rule_none_test, _rule_truth, _rule_sorted, _rule_extremum,
-                 _rule_method, _rule_compared)
+                 _rule_heapq, _rule_method, _rule_compared)
 
     # The list methods it implements.
     METHOD_RULES = {"append": _method_append, "copy": _method_copy, "extend": _method_extend}
@@ -1031,7 +1124,7 @@ class TypedListGate:
             loc = scope.loc(call.func.value.id)
             if not self.is_element(call.args[0], scope, loc):
                 poison(loc, "appends an element of another kind")
-        for loc, reason in self._untyped_bool_results():
+        for loc, reason in itertools.chain(self._untyped_bool_results(), self._heap_poisons()):
             poison(loc, reason)
         for loc, bools in self.annotated:
             if bools != self._holds_bools(loc):
@@ -1050,7 +1143,7 @@ class TypedListGate:
                 continue
             for operand in (compare.left, compare.comparators[0]):
                 loc = self._compared_loc(operand, scope)
-                if not self._sorted_call(operand) and self.classes.typed(loc):
+                if loc is not None and not self._sorted_call(operand) and self.classes.typed(loc):
                     self.classes.poison_loc(loc, "compared with a list not typed")
                     changed = True
         return changed
@@ -1091,6 +1184,8 @@ class TypedListGate:
     def _allocation_poison(self, value, scope, loc):
         """Why allocation @p value into @p loc may hold an element of another
         kind than @p loc's, else None."""
+        if self._range_list(value):
+            return self._range_poison(value, scope, loc)
         for node in _shape_nodes(value):
             source = self._derived_source(node)
             if source is not None:
@@ -1106,10 +1201,21 @@ class TypedListGate:
             if repetition is not None and not (self.is_element(repetition[0], scope, loc)
                                                and self.is_int(repetition[1], scope)):
                 return "repeats an element of another kind or a non-int number of times"
-            if isinstance(node, ast.Call) and not (self.is_int(node.args[0], scope)
-                                                   and not self._holds_bools(loc)):
+            if isinstance(node, ast.Call) and not self._builder_ok(node, scope, loc):
                 return "built with a non-int size or into a bool list"
         return None
+
+    def _builder_ok(self, call, scope, loc):
+        """A nondet int builder of an int size, or the character codes of a
+        nondet str, into a list of ints."""
+        sized = call.func.id == _STR_CODES or self.is_int(call.args[0], scope)
+        return sized and not self._holds_bools(loc)
+
+    def _range_poison(self, value, scope, loc):
+        """Why `list(range(...))` @p value may not be held in @p loc, else None."""
+        if self._ranges_ints(value, scope) and not self._holds_bools(loc):
+            return None
+        return "built from a range of non-ints or into a bool list"
 
     def _derived_source(self, node):
         """The list name a copy or `sorted()` allocation reads, else None."""
@@ -1146,6 +1252,16 @@ class TypedListGate:
         for scope, call in self.extrema:
             if self._holds_bools(scope.loc(call.args[0].id)):
                 yield scope.loc(call.args[0].id), "a bool list passed to " + call.func.id
+
+    def _heap_poisons(self):
+        """(location, reason) for each heap the typed heapq model cannot
+        sift: a bool list, or one pushed a non-int."""
+        for scope, call in self.heap_calls:
+            loc = scope.loc(call.args[0].id)
+            if self._holds_bools(loc):
+                yield loc, "a bool list passed to heapq"
+            elif call.func.attr == "heappushpop" and not self.is_int(call.args[1], scope):
+                yield loc, "pushes an element of another kind"
 
     def _seed_bool_lists(self):
         """Classes that some site fills with a bool literal, a comparison or a
@@ -1184,6 +1300,7 @@ class TypedListGate:
             for child in ast.iter_child_nodes(node):
                 setattr(child, "_typed_parent", node)
         self.verifier_modules = self._verifier_modules()
+        self.heapq_modules = self._verifier_modules(("heapq", ))
         self._build_scopes()
         for scope in self.scopes:
             self._record_scope(scope)
@@ -1235,6 +1352,7 @@ class TypedListGate:
         for scope, call in self.extrema:
             if self.classes.typed(scope.loc(call.args[0].id)):
                 setattr(call, TYPED_FLAG, True)
+        self._flag_heap_calls()
         # A call whose result is a typed list: a converter path that builds
         # the result itself instead of calling the function must build it
         # typed.
@@ -1242,13 +1360,18 @@ class TypedListGate:
             if self.classes.typed((call.func.id, RETURN)):
                 setattr(call, TYPED_FLAG, True)
 
+    def _flag_heap_calls(self):
+        for scope, call in self.heap_calls:
+            if self.classes.typed(scope.loc(call.args[0].id)):
+                setattr(call, HEAPQ_FLAG, True)
+
     def _flag_compares(self):
         """Flag a comparison of two typed lists and a `sorted(x)` operand of
         one, which then builds a typed result."""
         for scope, compare in self.compares:
             if self._typed_compare(compare, scope):
                 for node in (compare.left, compare.comparators[0]):
-                    if self._sorted_call(node):
+                    if self._sorted_call(node) or self._range_list(node):
                         setattr(node, TYPED_FLAG, True)
                 setattr(compare, TYPED_FLAG, True)
 
@@ -1287,23 +1410,80 @@ class TypedListGate:
                     setattr(value.args[0], TYPED_FLAG, True)
 
     def _typed_dict_sites(self, loc):
-        """The reads and stores of dict @p loc when the typed model holds it
-        exactly, else None: every binding an unannotated display with
-        distinct int literal keys, every key and value an int."""
-        if not self.int_dicts.get(loc, False):
-            return None
-        if not all(self._exact_display(display) for display, _ in self.bindings[loc]):
+        """(sites, key arity, whether a Counter) for dict @p loc when the
+        typed model holds it exactly, else None. A site is (node, key
+        components) for each read, store, `in` test, truth test and
+        `max(d.values())`, its components None when it takes no key. Every
+        binding an unannotated display with distinct int literal keys or a
+        `Counter()`, every value an int, and every key an int or a tuple of
+        as many ints."""
+        displays = [display for display, _ in self.bindings[loc]]
+        counter = self._dict_kind(displays)
+        if not self.int_dicts.get(loc, False) or counter is None:
             return None
         sites = []
+        # A key's shape: 0 for an int, else the length of its tuple, since
+        # `d[5]` and `d[5,]` are different items.
+        shapes = {0} if any(getattr(d, "keys", None) for d in displays) else set()
         for scope in self.scopes:
             for node in _walk_scope(scope.body):
                 if (isinstance(node, ast.Name) and isinstance(node.ctx, ast.Load)
                         and scope.loc(node.id) == loc):
-                    subscript = _parent(node)
-                    if not self.is_int(subscript.slice, scope):
+                    site = self._dict_site(node, scope)
+                    if site is None:
                         return None
-                    sites.append(subscript)
-        return sites
+                    shapes |= site[2]
+                    sites.append(site[:2])
+        if len(shapes) > 1:
+            return None
+        return sites, max(shapes.pop() if shapes else 0, 1), counter
+
+    def _dict_kind(self, displays):
+        """True for a Counter, False for a dict of displays, None for a mix
+        or a display the model cannot hold."""
+        counters = {self._counter_call(d) for d in displays}
+        if len(counters) != 1:
+            return None
+        if counters == {True}:
+            return True if all(isinstance(_parent(d), ast.Assign) for d in displays) else None
+        return False if all(self._exact_display(d) for d in displays) else None
+
+    def _dict_site(self, name, scope):
+        """(site, key components, key shapes) for use @p name of a typed
+        dict, or None for a key the model does not take."""
+        if _truth_test(name) or _max_of_values(name):
+            return name, None, set()
+        site = _parent(name)
+        key = site.left if isinstance(site, ast.Compare) else site.slice
+        shaped = self._key_components(key, scope)
+        # The model takes keys of at most two ints.
+        if shaped is None or shaped[0] > 2:
+            return None
+        return site, shaped[1], {shaped[0]}
+
+    def _key_components(self, key, scope):
+        """(shape, int expressions) of key @p key: the key itself, the items
+        of a tuple display, or the items of a name bound only to tuple
+        displays of ints. None for any other key."""
+        if self.is_int(key, scope):
+            return 0, [key]
+        if isinstance(key, ast.Tuple):
+            ok = key.elts and all(self.is_int(e, scope) for e in key.elts)
+            return (len(key.elts), key.elts) if ok else None
+        return self._tuple_name_components(key, scope) if isinstance(key, ast.Name) else None
+
+    def _tuple_name_components(self, key, scope):
+        values = self.bindings.get(scope.loc(key.id), [])
+        arities = {len(v.elts) if isinstance(v, ast.Tuple) else 0 for v, _ in values}
+        if not values or len(arities) != 1 or 0 in arities or not all(
+                all(self.is_int(e, s) for e in v.elts) for v, s in values):
+            return None
+        arity = arities.pop()
+        return arity, [
+            ast.Subscript(value=ast.Name(id=key.id, ctx=ast.Load()),
+                          slice=ast.Constant(value=i),
+                          ctx=ast.Load()) for i in range(arity)
+        ]
 
     def _exact_display(self, display):
         """An unannotated display whose keys are distinct int literals."""
@@ -1319,29 +1499,101 @@ class TypedListGate:
         store becomes a call that evaluates the value before the key, as
         CPython does."""
         for loc in self.dict_stores:
-            sites = self._typed_dict_sites(loc)
-            if sites is None:
+            typed = self._typed_dict_sites(loc)
+            if typed is None:
                 continue
+            sites, arity, counter = typed
             for display, _ in self.bindings[loc]:
-                elts = [e for pair in zip(display.keys, display.values) for e in pair]
+                pairs = zip(display.keys, display.values) if isinstance(display, ast.Dict) else []
+                elts = [e for pair in pairs for e in pair]
                 listed = ast.copy_location(ast.List(elts=elts, ctx=ast.Load()), display)
                 setattr(listed, TYPED_FLAG, True)
                 _parent(display).value = listed
-            for subscript in sites:
-                if isinstance(subscript.ctx, ast.Load):
-                    setattr(subscript, DICT_FLAG, True)
-                    continue
-                holder = _parent(subscript)
-                call = ast.Call(func=ast.Name(id=DICT_SET, ctx=ast.Load()),
-                                args=[subscript.value, holder.value, subscript.slice],
-                                keywords=[])
-                setattr(call, DICT_FLAG, True)
-                _replace_statement(holder, ast.copy_location(ast.Expr(value=call), holder))
+            for site, components in sites:
+                if components is None:
+                    _lower_dict_whole(site, arity)
+                else:
+                    _lower_dict_site(site, components, counter)
 
     def builder_sites(self):
         """(typed, poison reason) for each nondet_list builder site."""
         return [(self.classes.typed(loc), self.classes.poison.get(self.classes.find(loc)))
                 for _, value, loc in self.allocations if isinstance(value, ast.Call)]
+
+
+def _dict_call(name, args):
+    call = ast.Call(func=ast.Name(id=name, ctx=ast.Load()), args=args, keywords=[])
+    setattr(call, DICT_FLAG, True)
+    return call
+
+
+def _display_values(binding):
+    return binding.values if isinstance(binding, ast.Dict) else []
+
+
+def _in_test(name):
+    """`k in d` or `k not in d`."""
+    parent = _parent(name)
+    return (isinstance(parent, ast.Compare) and len(parent.ops) == 1
+            and isinstance(parent.ops[0], (ast.In, ast.NotIn)) and parent.comparators == [name])
+
+
+def _truth_test(name):
+    """`if d`, `while d`, `x if d else y` or `not d`: whether d has an item."""
+    parent = _parent(name)
+    return ((isinstance(parent, _TRUTH_TESTS) and parent.test is name)
+            or (isinstance(parent, ast.UnaryOp) and isinstance(parent.op, ast.Not)))
+
+
+def _max_of_values(name):
+    """`max(d.values())`."""
+    attribute = _parent(name)
+    values = _parent(attribute)
+    call = _parent(values)
+    return (isinstance(attribute, ast.Attribute) and attribute.attr == "values"
+            and isinstance(values, ast.Call) and values.func is attribute and not values.args
+            and not values.keywords and isinstance(call, ast.Call)
+            and isinstance(call.func, ast.Name) and call.func.id == "max" and call.args == [values]
+            and not call.keywords)
+
+
+def _lower_dict_whole(name, arity):
+    """A truth test is the typed list's own: it has a slot when the dict has
+    an item. `max(d.values())` becomes __ESBMC_tdict_max(d, arity)."""
+    if _max_of_values(name):
+        call = _parent(_parent(_parent(name)))
+        _replace_node(call,
+                      ast.copy_location(_dict_call(DICT_MAX, [name, ast.Constant(arity)]), call))
+
+
+def _lower_dict_site(site, components, counter=False):
+    """Lower a read, a store or an `in` test of a typed dict. A store calls
+    __ESBMC_tdict_set(d, v, *key), which evaluates the value before the key,
+    as CPython does."""
+    if isinstance(site, ast.Compare):
+        found = _dict_call(DICT_IN, [site.comparators[0]] + components)
+        test = found if isinstance(site.ops[0], ast.In) else ast.UnaryOp(op=ast.Not(),
+                                                                         operand=found)
+        _replace_node(site, ast.copy_location(test, site))
+    elif isinstance(site.ctx, ast.Load):
+        setattr(site, DICT_FLAG, True)
+        setattr(site, DICT_DEFAULT_FLAG, counter)
+        site.slice = ast.Tuple(elts=components, ctx=ast.Load())
+    else:
+        holder = _parent(site)
+        call = _dict_call(DICT_SET, [site.value, holder.value] + components)
+        _replace_statement(holder, ast.copy_location(ast.Expr(value=call), holder))
+
+
+def _replace_node(old, new):
+    parent = _parent(old)
+    for name, field in ast.iter_fields(parent):
+        if field is old:
+            setattr(parent, name, new)
+            return
+        if isinstance(field, list) and old in field:
+            field[field.index(old)] = new
+            return
 
 
 def _replace_statement(old, new):
@@ -1409,6 +1661,8 @@ def _dict_item_use(name):
         # The binding of a dict display; its annotation must agree.
         annotated = isinstance(parent, ast.AnnAssign)
         return _ESCAPES if annotated and not _int_dict_annotation(parent.annotation) else None
+    if _in_test(name) or _truth_test(name) or _max_of_values(name):
+        return None
     if not (isinstance(parent, ast.Subscript) and parent.value is name
             and not isinstance(parent.slice, ast.Slice)):
         return _ESCAPES

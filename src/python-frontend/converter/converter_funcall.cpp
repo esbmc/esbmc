@@ -1666,10 +1666,25 @@ python_converter::dict_function_return_type(const nlohmann::json &container)
   return shared;
 }
 
+/// A call through a subscript passes only positional arguments, so a keyword
+/// argument would be dropped.
+static void refuse_subscript_keywords(const nlohmann::json &call)
+{
+  if (!call.value("keywords", nlohmann::json::array()).empty())
+    throw std::runtime_error(
+      "keyword arguments in a call through a function value are not yet "
+      "supported");
+}
+
 typet python_converter::subscript_call_return_type(
   const exprt &func_ptr,
-  const nlohmann::json &func_node)
+  const nlohmann::json &call)
 {
+  // The preprocessor found the functions this call may reach, which return
+  // a tagged value.
+  if (call.contains("esbmc_tagged_call"))
+    return type_handler_.get_tagged_object_type();
+  const nlohmann::json &func_node = call["func"];
   // A function read from a list keeps its code type, so its own return type
   // is known; the enclosing function's return type is only a guess.
   const typet &ptr_type = func_ptr.type();
@@ -1919,8 +1934,7 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
       list_arg["_type"] == "Call" && list_arg["func"]["_type"] == "Name" &&
       list_arg["func"]["id"] == "range")
     {
-      return python_list::build_list_from_range(
-        *this, list_arg["args"], element);
+      return python_list::list_of_range(*this, element);
     }
 
     // Handle list(iterable) where iterable evaluates to a list — e.g.
@@ -2165,7 +2179,8 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
     side_effect_expr_function_callt call;
     call.location() = get_location_from_decl(element);
     call.function() = func_ptr;
-    call.type() = subscript_call_return_type(func_ptr, func_node);
+    call.type() = subscript_call_return_type(func_ptr, element);
+    refuse_subscript_keywords(element);
     if (element.contains("args"))
       for (const auto &arg : element["args"])
       {
@@ -3053,32 +3068,43 @@ void python_converter::guard_tagged_callee(
   current_block->copy_to_operands(check);
 }
 
+/// Adds to @p holds that @p callee is a marked def of @p body, in @p module,
+/// or a marked method of a class it defines, which an attribute holds.
+void python_converter::add_marked_callees(
+  exprt &holds,
+  const exprt &callee,
+  const nlohmann::json &module,
+  const nlohmann::json &body,
+  const std::string &clazz) const
+{
+  for (const auto &def : body)
+  {
+    if (clazz.empty() && def.value("_type", "") == "ClassDef")
+      add_marked_callees(holds, callee, module, def["body"], def["name"]);
+    if (!def.contains("esbmc_tagged_return"))
+      continue;
+    if (
+      const symbolt *function = symbol_table_.find_symbol(
+        symbol_id(module["filename"], clazz, def["name"]).to_string()))
+      holds.copy_to_operands(equality_exprt(
+        callee,
+        python_expr::build_typecast(
+          python_expr::build_address_of(symbol_expr(*function)),
+          pointer_typet(empty_typet()))));
+  }
+}
+
 void python_converter::define_tagged_callee()
 {
   symbolt *helper = symbol_table_.find_symbol(tagged_callee_id);
   if (!helper)
     return;
-  const typet pointer = pointer_typet(empty_typet());
   const exprt callee = symbol_expr(
     *symbol_table_.find_symbol(std::string(tagged_callee_id) + "@callee"));
   exprt holds("or", bool_typet());
-  auto add_marked = [&](const nlohmann::json &module) {
-    for (const auto &def : module["body"])
-    {
-      if (!def.contains("esbmc_tagged_return"))
-        continue;
-      if (
-        const symbolt *function = symbol_table_.find_symbol(
-          symbol_id(module["filename"], "", def["name"]).to_string()))
-        holds.copy_to_operands(equality_exprt(
-          callee,
-          python_expr::build_typecast(
-            python_expr::build_address_of(symbol_expr(*function)), pointer)));
-    }
-  };
-  add_marked(*entry_ast_);
+  add_marked_callees(holds, callee, *entry_ast_, (*entry_ast_)["body"], "");
   for (const auto &[name, module] : module_ast_pool_)
-    add_marked(module);
+    add_marked_callees(holds, callee, module, module["body"], "");
   gen_or(holds);
   code_blockt body;
   code_returnt result;

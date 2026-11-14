@@ -1624,7 +1624,7 @@ std::optional<exprt> python_converter::resolve_subscript_base(
   // A typed list (#10451) is read and written through its own storage, as
   // is a typed dict.
   if (python_list::is_typed_dict_read(element))
-    return python_list(*this, element).typed_dict_get(array, element["slice"]);
+    return python_list(*this, element).typed_dict_get();
   if (python_list::is_typed_subscript(element))
     return python_list(*this, element).typed_subscript(array, element["slice"]);
 
@@ -2149,8 +2149,12 @@ std::optional<exprt> python_converter::try_dispatch_dunder_getitem(
 
   nlohmann::json args = nlohmann::json::array();
   args.push_back(slice);
-  nlohmann::json call_node =
-    build_dunder_call(element["value"], "__getitem__", args, element);
+  nlohmann::json call_node = build_dunder_call(
+    element["value"],
+    keyed_dunder_name(
+      instance_class_name(element["value"]), "__getitem__", slice),
+    args,
+    element);
   return get_function_call(call_node);
 }
 
