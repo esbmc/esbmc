@@ -582,6 +582,13 @@ bool clang_cpp_convertert::get_struct_union_class_fields(
     if (annotate_class_field(*field, type, comp))
       return true;
 
+    // A data member of empty class type takes one byte ([intro.object]/8)
+    // unless it is [[no_unique_address]]; add_padding reserves it (#2180).
+    const clang::CXXRecordDecl *field_rd =
+      field->getType()->getAsCXXRecordDecl();
+    if (field_rd && field_rd->isEmpty() && !field->isZeroSize(*ASTContext))
+      comp.set("#empty_class_member", true);
+
     type.components().push_back(comp);
   }
 

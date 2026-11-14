@@ -287,7 +287,23 @@ static void add_padding(struct_typet &type, const namespacet &ns)
     }
 
     type2tc thetype = migrate_type(it_type);
-    offset += type_byte_size(thetype, &ns);
+    const BigInt size = type_byte_size(thetype, &ns);
+    offset += size;
+
+    // A C++ data member of empty class type has no components, yet occupies
+    // one byte ([intro.object]/8). The pad follows it so the loop counts it.
+    if (it->get_bool("#empty_class_member") && size == 0)
+    {
+      const std::string name = std::string(pad_prefix) + it->get_name().c_str();
+      const auto next = std::next(it);
+      if (next == components.end() || next->get_name() != name)
+      {
+        struct_typet::componentt byte(
+          name, name, unsignedbv_typet(config.ansi_c.char_width));
+        byte.set_is_padding(true);
+        it = std::prev(components.insert(next, byte));
+      }
+    }
   }
 
   // any explicit alignment for the struct?
