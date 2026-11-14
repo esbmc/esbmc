@@ -1191,8 +1191,7 @@ inline void collect_plain_assigned_values(
   }
   for (const auto &child : node)
     if (child.is_structured())
-      collect_plain_assigned_values(
-        child, name, values, stop_at_nested_scopes);
+      collect_plain_assigned_values(child, name, values, stop_at_nested_scopes);
 }
 
 // The value a top-level `name = ...` or `name: T = ...` statement assigns.
