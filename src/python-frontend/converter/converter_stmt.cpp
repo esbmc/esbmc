@@ -5717,6 +5717,26 @@ static const typet *chosen_function_type(const exprt &arm)
   return nullptr;
 }
 
+/// The arm of a function-or-value conditional that cannot be called becomes a
+/// function raising TypeError. It is still evaluated, in its own branch, as
+/// CPython evaluates it before the call raises.
+void python_converter::decay_not_callable_arm(
+  exprt &arm,
+  code_blockt &side_effects,
+  const exprt &function)
+{
+  // A type probe converts the expression a second time and drops it.
+  if (!arm.is_constant() && !arm.is_symbol() && !in_type_probe())
+  {
+    if (!current_block || !safe_to_emit_side_effecting_statement())
+      throw std::runtime_error(
+        "a conditional expression choosing between a function and a call "
+        "whose value cannot be called is not supported here");
+    side_effects.copy_to_operands(code_expressiont(arm));
+  }
+  arm = not_callable_function(function.type(), arm.type(), arm.location());
+}
+
 /// A choice between two functions of one type is a pointer to either. The
 /// result of a choice between types would have no single type (#8404). An
 /// arm that cannot be called becomes a function that raises when it is,
@@ -5724,7 +5744,9 @@ static const typet *chosen_function_type(const exprt &arm)
 void python_converter::decay_function_choice(
   const nlohmann::json &ifexp,
   exprt &then,
-  exprt &else_expr)
+  code_blockt &then_side_effects,
+  exprt &else_expr,
+  code_blockt &else_side_effects)
 {
   const auto not_callable_beside = [this](const exprt &arm, const exprt &fn) {
     return fn.type().is_code() && fn.is_symbol() &&
@@ -5739,11 +5761,9 @@ void python_converter::decay_function_choice(
       "that cannot be called is supported only when its value is only "
       "called");
   if (else_not_callable)
-    else_expr = not_callable_function(
-      then.type(), else_expr.type(), else_expr.location());
+    decay_not_callable_arm(else_expr, else_side_effects, then);
   else if (then_not_callable)
-    then =
-      not_callable_function(else_expr.type(), then.type(), then.location());
+    decay_not_callable_arm(then, then_side_effects, else_expr);
   // An arm that is itself a choice between functions is already a pointer
   // to one, so `f if c else (g if d else h)` decays like two names.
   const typet *then_code = chosen_function_type(then);
@@ -10343,7 +10363,8 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
     then = to_value_expr(then, ns);
     else_expr = to_value_expr(else_expr, ns);
     hoist_raising_arm(then, then_side_effects, else_expr, else_side_effects);
-    decay_function_choice(ast_node, then, else_expr);
+    decay_function_choice(
+      ast_node, then, then_side_effects, else_expr, else_side_effects);
 
     bool then_is_none = (then.type() == none_type());
     bool else_is_none = (else_expr.type() == none_type());
