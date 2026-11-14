@@ -1086,6 +1086,12 @@ class ClassContextMixin:
         spec.name = name
         for param, cls in bindings:
             self._replace_reads(spec.body, param, cls)
+        # A call through a parameter that now names a def is a direct call,
+        # which needs no check that it reaches a def returning a tagged value.
+        bound = {cls for _, cls in bindings}
+        for node in ast.walk(spec):
+            if isinstance(node, ast.Call) and getattr(node.func, "id", None) in bound:
+                node.__dict__.pop("esbmc_tagged_call", None)
         return spec
 
     def _specialise_type_parameters(self, module, func, known, calls, taken):

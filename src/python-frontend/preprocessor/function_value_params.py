@@ -9,6 +9,7 @@ module unchanged.
 
 import ast
 
+from preprocessor.binding_sites import binding_sites
 from preprocessor.function_value_methods import _binding_count, _is_local_to, _module_scope_walk
 from preprocessor.function_value_types import _own_nodes
 
@@ -139,3 +140,44 @@ def specialise_function_parameters_in_order(module):
             return False
         ran = ran or _runs_code(stmt)
     return specialise_function_parameters(module)
+
+
+def _def_alias(stmt, sites, defs):
+    """The name `stmt` binds when it is `alias = f`, `alias` bound only there and `f` a def of
+    `defs`, else None."""
+    if not (isinstance(stmt, ast.Assign) and len(stmt.targets) == 1
+            and isinstance(stmt.targets[0], ast.Name)):
+        return None
+    alias = stmt.targets[0].id
+    named = isinstance(stmt.value, ast.Name) and stmt.value.id in defs
+    return alias if named and sites[alias] == 1 else None
+
+
+def _reads_after(module, at, name):
+    """The reads of `name` in `module`, or None unless all are at module level after
+    `module.body[at]`."""
+    reads = [
+        n for n in ast.walk(module)
+        if isinstance(n, ast.Name) and n.id == name and isinstance(n.ctx, ast.Load)
+    ]
+    later = {
+        id(n)
+        for n in _own_nodes(ast.Module(body=module.body[at + 1:], type_ignores=[]))
+        if isinstance(n, ast.Name)
+    }
+    return reads if all(id(n) in later for n in reads) else None
+
+
+def inline_def_aliases(module):
+    """Read `alias` as `f` where the module binds `alias = f` once, `f` being a def it binds
+    once, and reads `alias` only at module level after that binding.
+
+    The analyses of calls through a function value follow calls by the name of a def, so
+    `c = f; c(g)` hides from them what `f(g)` shows. Every read of `alias` sees `f`, so the
+    program means the same."""
+    sites = binding_sites(module)
+    defs = {s.name for s in module.body if isinstance(s, ast.FunctionDef) and sites[s.name] == 1}
+    for at, stmt in enumerate(module.body):
+        alias = _def_alias(stmt, sites, defs)
+        for read in (alias and _reads_after(module, at, alias)) or []:
+            read.id = stmt.value.id

@@ -1,5 +1,5 @@
-# Call sites pass functions returning different types, so the call through
-# the parameter is refused (#8351, #8404).
+# Call sites pass functions returning different types through the parameter
+# (#8351, #8404). Each copy of `apply` calls its function directly (#10679).
 def apply(f, a: int):
     r = f(a)
     return r
