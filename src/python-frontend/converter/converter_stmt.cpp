@@ -3432,6 +3432,22 @@ std::optional<nlohmann::json> python_converter::select_return_value_for_call(
   return result.value;
 }
 
+/// A call through a parameter that a substitution turned from @p node into
+/// @p out, a call of a def bound once in @p ast, is a direct call. It needs
+/// no check that it reaches a def returning a tagged value, so drop its mark.
+static void drop_direct_call_mark(
+  nlohmann::json &out,
+  const nlohmann::json &node,
+  const nlohmann::json &ast)
+{
+  if (
+    out.contains("esbmc_tagged_call") && out["func"] != node["func"] &&
+    out["func"].value("_type", "") == "Name" &&
+    !json_utils::try_find_function(ast["body"], out["func"]["id"]).empty() &&
+    count_bindings(ast, out["func"]["id"]) == 1)
+    out.erase("esbmc_tagged_call");
+}
+
 nlohmann::json python_converter::substitute_call_arguments(
   const nlohmann::json &node,
   const nlohmann::json &call_node) const
@@ -3467,6 +3483,7 @@ nlohmann::json python_converter::substitute_call_arguments(
     nlohmann::json out = node;
     for (auto it = out.begin(); it != out.end(); ++it)
       it.value() = substitute_call_arguments(it.value(), call_node);
+    drop_direct_call_mark(out, node, *ast_json);
     return out;
   }
 
