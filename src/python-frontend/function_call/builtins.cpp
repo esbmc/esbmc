@@ -3040,10 +3040,7 @@ exprt function_call_expr::handle_min_max(
   const typet result_type =
     common_min_max_type(exprs, func_name, converter_.ns);
 
-  const bool refuses_int = hoist_int_lambda_min_max(exprs, result_type);
-  std::vector<bool> is_float;
-  for (const exprt &e : exprs)
-    is_float.push_back(e.type().is_floatbv());
+  refuse_int_lambda_min_max(exprs, result_type, comparison_op);
 
   // Cast all args to the common type.
   for (auto &e : exprs)
@@ -3056,7 +3053,6 @@ exprt function_call_expr::handle_min_max(
   const type2tc rt2 = migrate_type(result_type);
   expr2tc result2;
   migrate_expr(exprs[0], result2);
-  expr2tc returns_float2 = constant_bool2tc(is_float[0]);
   for (size_t i = 1; i < exprs.size(); ++i)
   {
     expr2tc e2;
@@ -3064,22 +3060,15 @@ exprt function_call_expr::handle_min_max(
     expr2tc cond = comparison_op == exprt::i_lt ? lessthan2tc(e2, result2)
                                                 : greaterthan2tc(e2, result2);
     result2 = if2tc(rt2, cond, e2, result2);
-    returns_float2 = if2tc(
-      get_bool_type(), cond, constant_bool2tc(is_float[i]), returns_float2);
   }
-
-  if (refuses_int)
-    converter_.refuse_int_lambda_result(
-      migrate_expr_back(returns_float2),
-      *converter_.current_block,
-      converter_.get_location_from_decl(call_));
 
   return migrate_expr_back(result2);
 }
 
-bool function_call_expr::hoist_int_lambda_min_max(
+void function_call_expr::refuse_int_lambda_min_max(
   std::vector<exprt> &exprs,
-  const typet &result_type) const
+  const typet &result_type,
+  irep_idt comparison_op) const
 {
   if (
     !converter_.current_block || !converter_.is_lambda_result(call_) ||
@@ -3087,7 +3076,9 @@ bool function_call_expr::hoist_int_lambda_min_max(
     std::none_of(exprs.begin(), exprs.end(), [](const exprt &e) {
       return is_int_like(e.type());
     }))
-    return false;
+    return;
+  // The selection is read twice, by the result and by the assertion, so each
+  // operand is evaluated once into a temporary.
   const locationt location = converter_.get_location_from_decl(call_);
   for (exprt &e : exprs)
   {
@@ -3103,7 +3094,28 @@ bool function_call_expr::hoist_int_lambda_min_max(
     converter_.add_instruction(assign);
     e = build_symbol(tmp);
   }
-  return true;
+
+  // handle_min_max's selection chain, tracking whether it selects a float.
+  const type2tc rt2 = migrate_type(result_type);
+  expr2tc best2,
+    returns_float2 = constant_bool2tc(exprs[0].type().is_floatbv());
+  migrate_expr(build_typecast(exprs[0], result_type), best2);
+  for (size_t i = 1; i < exprs.size(); ++i)
+  {
+    expr2tc e2;
+    migrate_expr(build_typecast(exprs[i], result_type), e2);
+    const expr2tc cond = comparison_op == exprt::i_lt
+                           ? lessthan2tc(e2, best2)
+                           : greaterthan2tc(e2, best2);
+    best2 = if2tc(rt2, cond, e2, best2);
+    returns_float2 = if2tc(
+      get_bool_type(),
+      cond,
+      constant_bool2tc(exprs[i].type().is_floatbv()),
+      returns_float2);
+  }
+  converter_.refuse_int_lambda_result(
+    migrate_expr_back(returns_float2), *converter_.current_block, location);
 }
 
 // Whether a print() `file=` target is a standard stream (None is stdout),

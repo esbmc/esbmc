@@ -607,12 +607,12 @@ private:
    */
   exprt
   handle_min_max(const std::string &func_name, irep_idt comparison_op) const;
-  /// Whether min()/max() over @p exprs is a lambda's result that may select
-  /// an int where the result is a float (#10671); if so, each operand is
-  /// evaluated once into a temporary, as the selection is then read twice.
-  bool hoist_int_lambda_min_max(
+  /// Refuses min()/max() over @p exprs, a lambda's result, where it selects
+  /// an int while @p result_type is a float (#10671).
+  void refuse_int_lambda_min_max(
     std::vector<exprt> &exprs,
-    const typet &result_type) const;
+    const typet &result_type,
+    irep_idt comparison_op) const;
 
   // Tuple method detection and handling (count, index)
   bool is_tuple_method_call() const;
