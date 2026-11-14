@@ -1,0 +1,4 @@
+CORE
+main.c
+--32 --no-pointer-check --no-bounds-check --data-races-check-only --no-assertions
+^VERIFICATION SUCCESSFUL$
