@@ -524,6 +524,15 @@ exprt string_builder::concatenate_strings_via_c_function(
   exprt lhs_str = ensure_null_terminated_string(const_cast<exprt &>(lhs));
   exprt rhs_str = ensure_null_terminated_string(const_cast<exprt &>(rhs));
 
+  // Over a literal's address the model's copy runs to its 511-byte cap, and
+  // a second concat of that result never stops unwinding (#10579).
+  if (lhs_str.is_constant() && lhs_str.type().is_array())
+    lhs_str =
+      str_handler_->bind_string_to_tmp(lhs_str, "$concat_arg$", location);
+  if (rhs_str.is_constant() && rhs_str.type().is_array())
+    rhs_str =
+      str_handler_->bind_string_to_tmp(rhs_str, "$concat_arg$", location);
+
   // Get base addresses (pointers) for the strings
   exprt lhs_addr = str_handler_->get_array_base_address(lhs_str);
   exprt rhs_addr = str_handler_->get_array_base_address(rhs_str);
