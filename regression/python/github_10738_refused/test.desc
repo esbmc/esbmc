@@ -1,0 +1,4 @@
+CORE
+main.py
+
+a variable that holds an Optional value is assigned a str or a value of unknown type

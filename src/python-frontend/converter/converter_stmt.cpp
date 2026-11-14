@@ -1425,6 +1425,38 @@ void python_converter::adopt_none_rhs(
   }
 }
 
+/// The type of the value @p rhs stores: a call statement's return type.
+static const typet &stored_type(const exprt &rhs)
+{
+  if (rhs.is_code() && rhs.statement() == "function_call")
+    return to_code_type(to_code_function_call(to_code(rhs)).function().type())
+      .return_type();
+  return rhs.type();
+}
+
+// An Optional[T] struct holds a scalar or a dict and a None flag. A str, or
+// a pointer a called function is declared to return, stored into it would be
+// read back as a T (#10738). Another expression of pointer type may still be
+// typed by its later lowering.
+static void reject_optional_pointer_store(
+  const exprt &lhs,
+  const exprt &rhs,
+  const typet &none,
+  const namespacet &ns)
+{
+  const typet &type = stored_type(rhs);
+  const bool returned_pointer = rhs.is_code() && type.is_pointer();
+  if (
+    !type_utils::is_optional_struct(lhs.type()) || type == none ||
+    !(returned_pointer || type_utils::is_string_type(type)))
+    return;
+  const typet &value = to_struct_type(lhs.type()).get_component("value").type();
+  if (ns.follow(type) != ns.follow(value))
+    throw std::runtime_error(
+      "unsupported: a variable that holds an Optional value is assigned a "
+      "str or a value of unknown type");
+}
+
 void python_converter::handle_assignment_type_adjustments(
   symbolt *lhs_symbol,
   exprt &lhs,
@@ -1436,6 +1468,7 @@ void python_converter::handle_assignment_type_adjustments(
   reject_attribute_class_change(lhs, rhs, ast_node, is_ctor_call);
   reject_list_slot_class_change(lhs, ast_node, is_ctor_call);
   reject_attribute_scalar_change(lhs, rhs);
+  reject_optional_pointer_store(lhs, rhs, none_type(), ns);
   // get_var_assign boxes the value into a tagged slot's fields.
   if (
     lhs.is_member() && type_handler_.is_tagged_scalar_type(lhs.type()) &&
