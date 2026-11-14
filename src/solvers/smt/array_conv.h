@@ -192,6 +192,7 @@ public:
   // Array constraint beating
 
   void join_array_indexes();
+  void record_index(unsigned int arrid, const expr2tc &idx);
   void add_array_equalities();
   void add_array_equality(
     unsigned int arr1_id,
