@@ -914,6 +914,10 @@ public:
   smt_astt convert_bitcast_to_fp(const expr2tc &from, const type2tc &to_type);
   smt_astt
   convert_bitcast_to_struct(const expr2tc &from, const type2tc &to_type);
+  /** Under --ir, read the low bits of the integer @p from as a value of the
+   *  same-width integer type @p to_type of the other signedness. */
+  smt_astt
+  convert_int_mode_reinterpret(const expr2tc &from, const type2tc &to_type);
   /** Flatten a pointer to the machine representation a bitcast reinterprets,
    *  and rebuild it from one; see the comment on the definitions in
    *  smt_bitcast.cpp. */

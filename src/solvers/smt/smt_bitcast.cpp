@@ -777,6 +777,23 @@ static bool is_vector_bitcast(const type2tc &from, const type2tc &to)
          !is_structure_type(from) && !is_structure_type(to);
 }
 
+smt_astt smt_solver_baset::convert_int_mode_reinterpret(
+  const expr2tc &from,
+  const type2tc &to_type)
+{
+  assert(int_encoding);
+  const unsigned width = to_type->get_width();
+  smt_astt modulus = mk_smt_int(BigInt::power2(width));
+  // SMT-LIB integer mod is Euclidean, so this is the unsigned low-bit value.
+  smt_astt low_bits = mk_mod(convert_ast(from), modulus);
+  if (!is_signedbv_type(to_type))
+    return low_bits;
+  return mk_ite(
+    mk_ge(low_bits, mk_smt_int(BigInt::power2(width - 1))),
+    mk_sub(low_bits, modulus),
+    low_bits);
+}
+
 smt_astt smt_solver_baset::convert_bitcast(const expr2tc &expr)
 {
   assert(is_bitcast2t(expr));
@@ -818,6 +835,12 @@ smt_astt smt_solver_baset::convert_bitcast(const expr2tc &expr)
     // are real-encoded; fall back to value-based typecast.
     if (int_encoding && (is_fixedbv_type(from) || is_floatbv_type(from)))
       return convert_ast(typecast2tc(to_type, from));
+
+    if (
+      int_encoding && is_bv_type(from) &&
+      from->type->get_width() == to_type->get_width() &&
+      is_signedbv_type(from) != is_signedbv_type(to_type))
+      return convert_int_mode_reinterpret(from, to_type);
 
     if (is_floatbv_type(from))
       return fp_api->mk_from_fp_to_bv(convert_ast(from));
