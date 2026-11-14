@@ -662,8 +662,8 @@ symbolt *python_converter::find_enclosing_scope_symbol(symbol_id sid) const
   return find_symbol(sid.global_to_string());
 }
 
-/// The name \p stmt binds, if it is a def or an annotated assignment to a
-/// name; otherwise empty.
+/// The name \p stmt binds, if it is a def or an assignment to one name;
+/// otherwise empty.
 static std::string module_binding_name(const nlohmann::json &stmt)
 {
   const std::string kind = stmt.value("_type", "");
@@ -671,6 +671,8 @@ static std::string module_binding_name(const nlohmann::json &stmt)
     return stmt["name"].get<std::string>();
   if (kind == "AnnAssign")
     return stmt["target"].value("id", "");
+  if (kind == "Assign" && stmt["targets"].size() == 1)
+    return stmt["targets"][0].value("id", "");
   return "";
 }
 
@@ -812,7 +814,11 @@ symbolt *python_converter::find_global_symbol(const symbol_id &sid)
     [this](const nlohmann::json &operand, const std::string &type) {
       return operand_has_type(operand, type);
     });
-  if (!binding || binding->value("_type", "") != "AnnAssign")
+  if (!binding)
+    return nullptr;
+  if (binding->value("_type", "") == "Assign")
+    return forward_function_global(sid.get_object(), *binding);
+  if (binding->value("_type", "") != "AnnAssign")
     return nullptr;
   nlohmann::json annotated = *binding;
   annotated.erase("_inferred_annotation");
@@ -823,6 +829,42 @@ symbolt *python_converter::find_global_symbol(const symbol_id &sid)
   if (symbol)
     track_unbound_global(global.to_string(), *binding, symbol->get_type());
   return symbol;
+}
+
+/// The global \p name of the module binding \p binding, `name = f` with `f`
+/// a module function bound once and already converted, registered as a
+/// pointer to `f` for a read converted before the binding (#10635); else
+/// nullptr.
+symbolt *python_converter::forward_function_global(
+  const std::string &name,
+  const nlohmann::json &binding)
+{
+  const nlohmann::json &value = binding["value"];
+  if (value.value("_type", "") != "Name")
+    return nullptr;
+  const std::string fn = value["id"].get<std::string>();
+  const symbolt *def = symbol_table_.find_symbol(
+    symbol_id(current_python_file, "", fn).to_string());
+  if (
+    !def || !def->get_type().is_code() ||
+    json_utils::count_name_bindings(*ast_json, fn) != 1)
+    return nullptr;
+  symbol_id sid(current_python_file, "", "");
+  sid.set_object(name);
+  const std::string module_name =
+    current_python_file.substr(0, current_python_file.find_last_of("."));
+  symbolt symbol = create_symbol(
+    module_name,
+    name,
+    sid.to_string(),
+    get_location_from_decl(binding),
+    gen_pointer_type(def->get_type()));
+  symbol.lvalue = true;
+  symbol.file_local = false;
+  symbol.is_extern = false;
+  symbolt *added = symbol_table_.move_symbol_to_context(symbol);
+  track_unbound_global(sid.to_string(), binding, added->get_type());
+  return added;
 }
 
 /// The module function \p name as a value, or nil. A function the module

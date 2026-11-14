@@ -1,0 +1,6 @@
+CORE
+main.c
+--scalarize-structs --unwind 5 --no-unwinding-assertions --no-slice
+^Scalarized 1 struct variable\(s\)$
+^  s\.total = 18 \(00000000 00000000 00000000 00010010\)$
+^VERIFICATION FAILED$

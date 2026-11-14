@@ -1,0 +1,5 @@
+CORE
+main.c
+--scalarize-structs
+^Scalarized 1 struct variable\(s\)$
+^VERIFICATION SUCCESSFUL$

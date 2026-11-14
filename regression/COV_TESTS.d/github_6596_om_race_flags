@@ -1,0 +1,2 @@
+regression/esbmc-unix/github_6596_uninit_ptr_norace
+regression/esbmc-unix/github_6596_uninit_ptr_race_fail

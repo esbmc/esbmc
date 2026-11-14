@@ -1120,6 +1120,23 @@ own_parameters_named(const nlohmann::json &args, const std::string &name)
   return n;
 }
 
+/// The variable a call `name(...)` reads its callee from, `name` being
+/// \p func. A function body is converted before the module binds a global it
+/// calls through (#10635).
+symbolt *python_converter::find_callee_variable(const nlohmann::json &func)
+{
+  symbol_id sid = create_symbol_id();
+  sid.set_object(func["id"].get<std::string>());
+  if (symbolt *symbol = find_symbol(sid.to_string()))
+    return symbol;
+  if (current_func_name_.empty())
+    return nullptr;
+  symbolt *symbol = find_global_symbol(sid);
+  if (symbol)
+    guard_unbound_global(symbol->id.as_string(), sid.get_object(), func);
+  return symbol;
+}
+
 /// The lambda @p name is bound to in @p body: `name = lambda ...`, or
 /// `name = make()` where `make` returns a lambda reading only its parameters.
 static nlohmann::json lambda_bound_to(
@@ -1133,6 +1150,9 @@ static nlohmann::json lambda_bound_to(
     if (target == nullptr || target->value("id", "") != name)
       continue;
     const nlohmann::json &value = stmt["value"];
+    // A bare annotation `name: T` binds nothing.
+    if (value.is_null())
+      continue;
     if (value.value("_type", "") == "Lambda")
       return value;
     if (
@@ -1727,6 +1747,52 @@ static void reject_unknown_keyword(
       "' to the modelled method " + name);
 }
 
+/// Passes a struct argument to a pointer parameter by address. An rvalue
+/// struct is first materialised in a temporary.
+void python_converter::coerce_struct_argument(
+  const nlohmann::json &element,
+  const typet &param_type,
+  const typet &arg_actual_type,
+  exprt &arg)
+{
+  // Handle union types: if param is pointer and arg is struct (or
+  // symbol to struct), take address. This is the post-processing pass
+  // for general pointer-to-struct coercion. NOTE:
+  // function_call_expr.cpp also has an earlier coercion pass that
+  // specifically handles char[0]* union parameters (str | T pattern).
+  // These two mechanisms are complementary: the pass here handles the
+  // general case; the earlier pass handles the specific char[0]* union
+  // representation and also materialises non-symbol struct temporaries.
+  if (
+    param_type.is_pointer() && arg_actual_type.is_struct() &&
+    !arg.is_address_of() && !arg_actual_type.is_pointer())
+  {
+    // Rvalue structs (e.g. the constant `__ESBMC_PySliceObj` produced
+    // by `a[i:j]`, or a call returning a by-value class instance)
+    // cannot be the operand of `address_of` at the SMT level.
+    // Materialise them in a temp symbol first so the address we hand to
+    // the callee points at a real lvalue.
+    if (!arg.is_symbol())
+    {
+      assert(
+        current_block &&
+        "rvalue struct argument requires a statement-level block to "
+        "materialise into");
+      locationt loc = get_location_from_decl(element);
+      symbolt &tmp = create_tmp_symbol(
+        element, "$struct_arg$", arg_actual_type, gen_zero(arg_actual_type));
+      code_declt tmp_decl(symbol_expr(tmp));
+      tmp_decl.location() = loc;
+      current_block->copy_to_operands(tmp_decl);
+      code_assignt tmp_assign(symbol_expr(tmp), arg);
+      tmp_assign.location() = loc;
+      current_block->copy_to_operands(tmp_assign);
+      arg = symbol_expr(tmp);
+    }
+    arg = gen_address_of(arg);
+  }
+}
+
 exprt python_converter::get_function_call(const nlohmann::json &element)
 {
   if (!element.contains("func") || element["_type"] != "Call")
@@ -2115,12 +2181,8 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
   // Handle indirect calls through function pointer variables
   if (element["func"]["_type"] == "Name")
   {
-    std::string func_name = element["func"]["id"].get<std::string>();
-
     // Try to find as a variable first
-    symbol_id var_sid = create_symbol_id();
-    var_sid.set_object(func_name);
-    symbolt *var_symbol = find_symbol(var_sid.to_string());
+    symbolt *var_symbol = find_callee_variable(element["func"]);
 
     if (var_symbol && var_symbol->get_type().is_pointer())
     {
@@ -2660,45 +2722,10 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
           // so a struct is passed to a pointer parameter (#4558/#4564).
           if (arg_actual_type.id() == "symbol")
             arg_actual_type = ns.follow(arg_actual_type);
-          // Handle union types: if param is pointer and arg is struct (or
-          // symbol to struct), take address. This is the post-processing pass
-          // for general pointer-to-struct coercion. NOTE:
-          // function_call_expr.cpp also has an earlier coercion pass that
-          // specifically handles char[0]* union parameters (str | T pattern).
-          // These two mechanisms are complementary: the pass here handles the
-          // general case; the earlier pass handles the specific char[0]* union
-          // representation and also materialises non-symbol struct temporaries.
-          if (
-            param_type.is_pointer() && arg_actual_type.is_struct() &&
-            !arg.is_address_of() && !arg_actual_type.is_pointer())
-          {
-            // Rvalue structs (e.g. the constant `__ESBMC_PySliceObj` produced
-            // by `a[i:j]`, or a call returning a by-value class instance)
-            // cannot be the operand of `address_of` at the SMT level.
-            // Materialise them in a temp symbol first so the address we hand to
-            // the callee points at a real lvalue.
-            if (!arg.is_symbol())
-            {
-              assert(
-                current_block &&
-                "rvalue struct argument requires a statement-level block to "
-                "materialise into");
-              locationt loc = get_location_from_decl(element);
-              symbolt &tmp = create_tmp_symbol(
-                element,
-                "$struct_arg$",
-                arg_actual_type,
-                gen_zero(arg_actual_type));
-              code_declt tmp_decl(symbol_expr(tmp));
-              tmp_decl.location() = loc;
-              current_block->copy_to_operands(tmp_decl);
-              code_assignt tmp_assign(symbol_expr(tmp), arg);
-              tmp_assign.location() = loc;
-              current_block->copy_to_operands(tmp_assign);
-              arg = symbol_expr(tmp);
-            }
-            arg = gen_address_of(arg);
-          }
+          // A raising argument raises before the call is made.
+          if (arg.statement() == "cpp-throw")
+            return arg;
+          coerce_struct_argument(element, param_type, arg_actual_type, arg);
 
           // Propagate instance attributes set on this parameter back to the
           // caller's argument. This models Python's pass-by-object-reference:

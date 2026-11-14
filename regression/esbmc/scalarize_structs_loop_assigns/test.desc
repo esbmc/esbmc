@@ -1,0 +1,5 @@
+CORE
+main.c
+--scalarize-structs --loop-invariant-check --loop-frame-rule
+^Scalarized 1 struct variable\(s\)$
+^VERIFICATION SUCCESSFUL$
