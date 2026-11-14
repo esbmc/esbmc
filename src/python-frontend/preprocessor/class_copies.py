@@ -1,12 +1,12 @@
-"""Copy a class per int/float signature of its constructor calls.
+"""Copy a class per int/float/str signature of its constructor calls.
 
 `Box(1)` and `Box(0.5)` give one `__init__` parameter an int at one call and a float at the
-other. The converter types the attribute it stores once, so one of the calls is converted
-wrongly or refused. When every call passes arguments whose type is int or float on sight, each
-signature after the first gets its own copy of the class, which is the same code under another
-name. The copy is exact only while nothing can observe the name, so any use of the class other
-than a direct module-level call, and any reflection anywhere in the module, keeps the module
-unchanged.
+other, and `Box("a")` a str. The converter types the attribute it stores once, so one of the
+calls is converted wrongly or refused. When every call passes arguments whose type is int, float
+or str on sight, each signature after the first gets its own copy of the class, which is the
+same code under another name. The copy is exact only while nothing can observe the name, so
+any use of the class other than a direct module-level call, and any reflection anywhere in the
+module, keeps the module unchanged.
 """
 
 import ast
@@ -27,13 +27,29 @@ _SCOPES = (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda, ast.ClassDef)
 _SAME_KIND_OPS = (ast.Add, ast.Sub, ast.Mult, ast.Mod, ast.FloorDiv)
 
 
+def _type_tests(module):
+    """The `str` names that are only the type a value is tested against, as in
+    `isinstance(x, str)` or `check_type(x, str)`."""
+    return {
+        id(n.args[1])
+        for n in ast.walk(module) if isinstance(n, ast.Call) and len(n.args) == 2
+        and getattr(n.func, "id", getattr(n.func, "attr", None)) in ("isinstance", "check_type")
+        and isinstance(n.args[1], ast.Name) and n.args[1].id == "str"
+    }
+
+
+def _reflects(node, tests):
+    return isinstance(node, ast.Name) and node.id in _REFLECTION and id(node) not in tests
+
+
 def _observes_classes(module):
     """Whether the module can read a class's name or identity other than by naming it, or runs
     code when a class is created."""
+    tests = _type_tests(module)
     return any(
-        isinstance(n, ast.Name) and n.id in _REFLECTION or isinstance(n, ast.Attribute)
-        and n.attr in _DUNDERS or isinstance(n, ast.JoinedStr) or isinstance(n, ast.ClassDef)
-        and n.keywords or isinstance(n, ast.FunctionDef) and n.name == "__init_subclass__"
+        _reflects(n, tests) or isinstance(n, ast.Attribute) and n.attr in _DUNDERS
+        or isinstance(n, ast.JoinedStr) or isinstance(n, ast.ClassDef) and n.keywords
+        or isinstance(n, ast.FunctionDef) and n.name == "__init_subclass__"
         for n in ast.walk(module))
 
 
@@ -83,8 +99,22 @@ def _plain_init(cls, module):
     return init
 
 
+def _arithmetic_kind(op, kinds):
+    """The kind of an arithmetic result whose operands have `kinds`, or None. Only adding two
+    strs gives a str."""
+    if None in kinds:
+        return None
+    if "str" in kinds:
+        return "str" if kinds == {"str"} and isinstance(op, ast.Add) else None
+    if isinstance(op, ast.Div):
+        return "float"
+    if isinstance(op, _SAME_KIND_OPS + (ast.USub, ast.UAdd)):
+        return "float" if "float" in kinds else "int"
+    return None
+
+
 class _Typer:
-    """The int or float type of a module-level expression, when its form alone shows it."""
+    """The int, float or str type of a module-level expression, when its form alone shows it."""
 
     def __init__(self, module, sites):
         self.module = module
@@ -102,9 +132,9 @@ class _Typer:
         if depth > 32:
             return None
         if isinstance(node, ast.Constant):
-            return {int: "int", float: "float"}.get(type(node.value))
+            return {int: "int", float: "float", str: "str"}.get(type(node.value))
         if isinstance(node, ast.UnaryOp) and isinstance(node.op, (ast.USub, ast.UAdd)):
-            return self.kind(node.operand, depth + 1)
+            return _arithmetic_kind(node.op, {self.kind(node.operand, depth + 1)})
         if isinstance(node, ast.BinOp):
             return self._binop_kind(node, depth)
         if isinstance(node, ast.Name):
@@ -117,15 +147,9 @@ class _Typer:
         return None
 
     def _binop_kind(self, node, depth):
-        left = self.kind(node.left, depth + 1)
-        right = self.kind(node.right, depth + 1)
-        if left is None or right is None:
-            return None
-        if isinstance(node.op, ast.Div):
-            return "float"
-        if isinstance(node.op, _SAME_KIND_OPS):
-            return "float" if "float" in (left, right) else "int"
-        return None
+        return _arithmetic_kind(node.op,
+                                {self.kind(node.left, depth + 1),
+                                 self.kind(node.right, depth + 1)})
 
     def _call_kind(self, call):
         func = call.func
@@ -138,7 +162,7 @@ class _Typer:
             name = func.attr
         else:
             return None
-        if not call.args and name in ("nondet_int", "nondet_float"):
+        if not call.args and name in ("nondet_int", "nondet_float", "nondet_str"):
             return name[len("nondet_"):]
         return None
 

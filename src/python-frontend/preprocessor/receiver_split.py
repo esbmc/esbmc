@@ -473,25 +473,66 @@ def _closed_functions(module, bound):
     }
 
 
-def _calls_nothing_split(call, bound, closed):
-    """Whether `call` calls a builtin, `_sv_verifier` or a function of
-    `closed` with no arguments, so that it sees no copy of a split name."""
+# The nodes of a lambda body whose result type follows from its parameter types alone. A
+# conditional, a call or `**` may give an int or a float for the same parameter types.
+_NUMERIC_NODES = (ast.Name, ast.Load, ast.Constant, ast.BinOp, ast.UnaryOp, ast.Compare, ast.Add,
+                  ast.Sub, ast.Mult, ast.Div, ast.FloorDiv, ast.Mod, ast.USub, ast.UAdd, ast.Eq,
+                  ast.NotEq, ast.Lt, ast.LtE, ast.Gt, ast.GtE)
+
+
+def _numeric_lambda(lam):
+    """Whether `lam` computes only arithmetic and comparisons of its own
+    parameters and of number literals."""
+    params = {a.arg for a in ast.walk(lam.args) if isinstance(a, ast.arg)}
+    return not lam.args.defaults and all(
+        isinstance(n, _NUMERIC_NODES) and (not isinstance(n, ast.Name) or n.id in params) and
+        (not isinstance(n, ast.Constant) or type(n.value) in (int, float))
+        for n in ast.walk(lam.body))
+
+
+def _numeric_lambdas(module, bound):
+    """The module-level names bound only to one lambda that `_numeric_lambda`
+    accepts. The converter converts such a lambda again for each call that
+    passes an int where it takes a float, so each copy of a split name gets
+    a result of its own type. A parameter named like the lambda binds only
+    inside it."""
+    found = set()
+    for stmt in module.body:
+        if not (isinstance(stmt, ast.Assign) and len(stmt.targets) == 1
+                and isinstance(stmt.targets[0], ast.Name) and isinstance(stmt.value, ast.Lambda)
+                and _numeric_lambda(stmt.value)):
+            continue
+        name = stmt.targets[0].id
+        own = sum(isinstance(a, ast.arg) and a.arg == name for a in ast.walk(stmt.value.args))
+        if bound[name] == 1 + own:
+            found.add(name)
+    return found
+
+
+def _calls_nothing_split(call, bound, closed, lambdas):
+    """Whether `call` calls a builtin, `_sv_verifier`, a function of `closed`
+    with no arguments or a lambda of `lambdas` with positional arguments, so
+    that it sees no copy of a split name but those it is passed."""
     if _is_builtin_call(call, bound):
         return True
-    return isinstance(call.func,
-                      ast.Name) and call.func.id in closed and not (call.args or call.keywords)
+    if not isinstance(call.func, ast.Name) or call.keywords:
+        return False
+    if call.func.id in lambdas:
+        return not any(isinstance(a, ast.Starred) for a in call.args)
+    return call.func.id in closed and not call.args
 
 
 def _numbers_only(module):
     """Whether the split statement of `module` calls only builtins,
-    `_sv_verifier` and, with no arguments, plain functions that read only
-    their own names, stores only into names and tests identity only between
-    `type()` results. Anything else may see the int and the float copies as
+    `_sv_verifier`, lambdas of `_numeric_lambdas` and, with no arguments,
+    plain functions that read only their own names, stores only into names
+    and tests identity only between `type()` results. Anything else may see the int and the float copies as
     one value or one parameter."""
     bound = binding_sites(module)
     closed = _closed_functions(module, bound)
+    lambdas = _numeric_lambdas(module, bound)
     for node in _own_nodes(module.body[-1:]):
-        if isinstance(node, ast.Call) and not _calls_nothing_split(node, bound, closed):
+        if isinstance(node, ast.Call) and not _calls_nothing_split(node, bound, closed, lambdas):
             return False
         if isinstance(node, (ast.Attribute, ast.Subscript)) and not isinstance(node.ctx, ast.Load):
             return False

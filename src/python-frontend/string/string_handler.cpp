@@ -680,25 +680,29 @@ exprt string_handler::build_repr(const exprt &value, const locationt &location)
 
   exprt string_copy = value;
   exprt str = ensure_null_terminated_string(string_copy);
-  // Symex bounds the model's loops only over a named object: a literal's
-  // address does not constant-propagate into the callee (#7559).
   if (str.type().is_array() && !str.is_symbol())
-  {
-    symbolt &tmp =
-      converter_.create_tmp_symbol(location, "$repr_arg$", str.type(), exprt());
-    code_declt decl(symbol_expr(tmp));
-    decl.location() = location;
-    converter_.add_instruction(decl);
-    code_assignt assign(symbol_expr(tmp), str);
-    assign.location() = location;
-    converter_.add_instruction(assign);
-    str = symbol_expr(tmp);
-  }
+    str = bind_string_to_tmp(str, "$repr_arg$", location);
   exprt str_addr = get_array_base_address(str);
   exprt repr_call =
     build_call_expr(*repr_symbol, pointer_typet(char_type()), {str_addr});
   repr_call.location() = location;
   return repr_call;
+}
+
+exprt string_handler::bind_string_to_tmp(
+  const exprt &str,
+  const std::string &name,
+  const locationt &location)
+{
+  symbolt &tmp =
+    converter_.create_tmp_symbol(location, name, str.type(), exprt());
+  code_declt decl(symbol_expr(tmp));
+  decl.location() = location;
+  converter_.add_instruction(decl);
+  code_assignt assign(symbol_expr(tmp), str);
+  assign.location() = location;
+  converter_.add_instruction(assign);
+  return symbol_expr(tmp);
 }
 
 exprt string_handler::build_fstring_conversion(

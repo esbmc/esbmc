@@ -3432,6 +3432,22 @@ std::optional<nlohmann::json> python_converter::select_return_value_for_call(
   return result.value;
 }
 
+/// A call through a parameter that a substitution turned from @p node into
+/// @p out, a call of a def bound once in @p ast, is a direct call. It needs
+/// no check that it reaches a def returning a tagged value, so drop its mark.
+static void drop_direct_call_mark(
+  nlohmann::json &out,
+  const nlohmann::json &node,
+  const nlohmann::json &ast)
+{
+  if (
+    out.contains("esbmc_tagged_call") && out["func"] != node["func"] &&
+    out["func"].value("_type", "") == "Name" &&
+    !json_utils::try_find_function(ast["body"], out["func"]["id"]).empty() &&
+    count_bindings(ast, out["func"]["id"]) == 1)
+    out.erase("esbmc_tagged_call");
+}
+
 nlohmann::json python_converter::substitute_call_arguments(
   const nlohmann::json &node,
   const nlohmann::json &call_node) const
@@ -3467,6 +3483,7 @@ nlohmann::json python_converter::substitute_call_arguments(
     nlohmann::json out = node;
     for (auto it = out.begin(); it != out.end(); ++it)
       it.value() = substitute_call_arguments(it.value(), call_node);
+    drop_direct_call_mark(out, node, *ast_json);
     return out;
   }
 
@@ -5726,17 +5743,29 @@ void python_converter::hoist_raising_arm(
 
 /// A choice between two functions of one type is a pointer to either. The
 /// result of a choice between types would have no single type (#8404). An
-/// arm that cannot be called becomes a function that raises when it is.
-void python_converter::decay_function_choice(exprt &then, exprt &else_expr)
+/// arm that cannot be called becomes a function that raises when it is,
+/// which is exact only when the value of \p ifexp is never read but by a call.
+void python_converter::decay_function_choice(
+  const nlohmann::json &ifexp,
+  exprt &then,
+  exprt &else_expr)
 {
-  if (
-    then.type().is_code() && then.is_symbol() &&
-    !may_be_callable(else_expr.type()))
+  const auto not_callable_beside = [this](const exprt &arm, const exprt &fn) {
+    return fn.type().is_code() && fn.is_symbol() &&
+           !may_be_callable(arm.type());
+  };
+  const bool else_not_callable = not_callable_beside(else_expr, then);
+  const bool then_not_callable =
+    !else_not_callable && not_callable_beside(then, else_expr);
+  if ((else_not_callable || then_not_callable) && !ifexp_only_called(ifexp))
+    throw std::runtime_error(
+      "a conditional expression choosing between a function and a value "
+      "that cannot be called is supported only when its value is only "
+      "called");
+  if (else_not_callable)
     else_expr = not_callable_function(
       then.type(), else_expr.type(), else_expr.location());
-  else if (
-    else_expr.type().is_code() && else_expr.is_symbol() &&
-    !may_be_callable(then.type()))
+  else if (then_not_callable)
     then =
       not_callable_function(else_expr.type(), then.type(), then.location());
   if (
@@ -7315,9 +7344,23 @@ bool python_converter::element_kinds_differ(
   return !ka.empty() && !kb.empty() && ka != kb;
 }
 
+/// Whether list arms @p a and @p b record the same element types, so either's
+/// record types a read of `a if c else b`.
+static bool list_arms_record_alike(
+  const element_type_registry &registry,
+  const exprt &a,
+  const exprt &b)
+{
+  return a.is_symbol() && b.is_symbol() &&
+         registry.same_element_types(
+           a.identifier().as_string(), b.identifier().as_string());
+}
+
 /// The list arm of `None if c else xs` (or `xs if c else None`): the None arm
-/// holds no elements, so the binding's element types are the list arm's.
-static const exprt &list_arm_of_optional(const exprt &rhs)
+/// holds no elements, so the binding's element types are the list arm's. For
+/// `xs if c else ys` it is xs when ys records the same element types.
+static const exprt &
+list_arm_of_conditional(const exprt &rhs, const element_type_registry &registry)
 {
   if (rhs.id() != "if")
     return rhs;
@@ -7325,6 +7368,8 @@ static const exprt &list_arm_of_optional(const exprt &rhs)
   if (ite.true_case().is_zero())
     return ite.false_case();
   if (ite.false_case().is_zero())
+    return ite.true_case();
+  if (list_arms_record_alike(registry, ite.true_case(), ite.false_case()))
     return ite.true_case();
   return rhs;
 }
@@ -7334,7 +7379,7 @@ void python_converter::propagate_list_type_info(
   const exprt &assigned,
   symbolt *lhs_symbol)
 {
-  const exprt &rhs = list_arm_of_optional(assigned);
+  const exprt &rhs = list_arm_of_conditional(assigned, element_type_registry_);
   const std::string &lhs_identifier = lhs.identifier().as_string();
   const std::string &rhs_identifier = rhs.identifier().as_string();
   // The registry keeps one record per name, so a rebinding under a branch or
@@ -7851,8 +7896,12 @@ bool python_converter::try_dispatch_dunder_setitem(
   args.push_back(ast_node["value"]);
   std::optional<exprt> setitem_call;
   if (has_dunder_method(target["value"], "__setitem__"))
-    setitem_call = get_function_call(
-      build_dunder_call(target["value"], "__setitem__", args, ast_node));
+    setitem_call = get_function_call(build_dunder_call(
+      target["value"],
+      keyed_dunder_name(
+        instance_class_name(target["value"]), "__setitem__", target["slice"]),
+      args,
+      ast_node));
   else
     setitem_call = dispatch_item_dunder_by_type(
       container, target["value"], "__setitem__", args);
@@ -9794,8 +9843,9 @@ static exprt coerce_ternary_branch(
   return typecast_exprt(branch, result_type);
 }
 
-/// A result temp for `None if c else xs` takes the element types of xs.
-static void copy_optional_list_arm_types(
+/// A result temp for `None if c else xs` takes the element types of xs, and
+/// one for `xs if c else ys` those of xs when ys records the same.
+static void copy_list_arm_types(
   element_type_registry &registry,
   const exprt &then,
   const exprt &else_expr,
@@ -9806,6 +9856,8 @@ static void copy_optional_list_arm_types(
   const exprt &value_arm = then_is_none ? else_expr : then;
   if (then_is_none != else_is_none && value_arm.is_symbol())
     registry.assign_from(value_arm.identifier().as_string(), result_id);
+  else if (list_arms_record_alike(registry, then, else_expr))
+    registry.assign_from(then.identifier().as_string(), result_id);
 }
 
 exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
@@ -10302,7 +10354,7 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
     then = to_value_expr(then, ns);
     else_expr = to_value_expr(else_expr, ns);
     hoist_raising_arm(then, then_side_effects, else_expr, else_side_effects);
-    decay_function_choice(then, else_expr);
+    decay_function_choice(ast_node, then, else_expr);
 
     bool then_is_none = (then.type() == none_type());
     bool else_is_none = (else_expr.type() == none_type());
@@ -10351,7 +10403,7 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
         create_return_temp_variable(result_type, location, "ternary_result");
       symbol_table_.add(result_symbol);
       exprt result_expr = symbol_expr(result_symbol);
-      copy_optional_list_arm_types(
+      copy_list_arm_types(
         element_type_registry_,
         then,
         else_expr,
@@ -10652,6 +10704,33 @@ static void reject_tagged_scalar_return(
       "is not dynamic is not yet supported");
 }
 
+// A local retyped across str and number (#4770) lives in a fresh slot of the
+// new type, while the function's return type may follow the first binding.
+// Converting the slot would read the bytes of one kind as the other (#10700).
+static void reject_retyped_return(
+  const type_handler &types,
+  const std::unordered_map<std::string, std::string> &retype_aliases,
+  const exprt &value,
+  const typet &return_type)
+{
+  if (!value.is_symbol())
+    return;
+  const bool value_is_str = types.is_string_type(value.type());
+  if (
+    !(value_is_str && types.is_numeric_scalar_type(return_type)) &&
+    !(types.is_numeric_scalar_type(value.type()) &&
+      types.is_string_type(return_type)))
+    return;
+  const std::string id = value.identifier().as_string();
+  for (const auto &alias : retype_aliases)
+    if (alias.second == id)
+      throw std::runtime_error(
+        "unsupported: returning a variable rebound to a " +
+        std::string(value_is_str ? "str" : "number") +
+        " from a function typed to return a " +
+        (value_is_str ? "number" : "str"));
+}
+
 void python_converter::get_return_statements(
   const nlohmann::json &ast_node,
   codet &target_block)
@@ -10901,6 +10980,8 @@ void python_converter::get_return_statements(
       return_value, current_func_return_type_, location, target_block);
     return_value = coerce_optional_return(return_value, location, target_block);
 
+    reject_retyped_return(
+      type_handler_, retype_aliases_, return_value, current_func_return_type_);
     coerce_to_tagged_return(return_value);
     return_value =
       check_float_fits_int_return(ast_node, return_value, target_block);
