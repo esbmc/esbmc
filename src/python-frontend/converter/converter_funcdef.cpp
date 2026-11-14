@@ -4850,10 +4850,31 @@ static bool calls_argument_blind_function(
          returns_ignore_arguments((*def)["body"], *def);
 }
 
-// Safe as a `Compare` (always bool), as the parameter's own value, or as a
-// call whose result does not depend on its arguments. Anything else, e.g.
-// `v * 2`, may itself evaluate to a tagged value the fixed return type can't
-// hold.
+// `value` is `+` between the parameter and a str literal, which gives a str
+// or raises TypeError whatever the parameter holds.
+static bool
+concatenates_str_literal(const nlohmann::json &value, const std::string &param)
+{
+  if (
+    value.value("_type", std::string()) != "BinOp" ||
+    value["op"].value("_type", std::string()) != "Add")
+    return false;
+  auto is_param = [&](const nlohmann::json &node) {
+    return node.value("_type", std::string()) == "Name" &&
+           node.value("id", std::string()) == param;
+  };
+  auto is_str = [](const nlohmann::json &node) {
+    return node.value("_type", std::string()) == "Constant" &&
+           node.contains("value") && node["value"].is_string();
+  };
+  return (is_param(value["left"]) && is_str(value["right"])) ||
+         (is_str(value["left"]) && is_param(value["right"]));
+}
+
+// Safe as a `Compare` (always bool), as the parameter's own value, as a str
+// concatenation with a literal, or as a call whose result does not depend on
+// its arguments. Anything else, e.g. `v * 2`, may itself evaluate to a tagged
+// value the fixed return type can't hold.
 static bool return_value_safe_for_tagged_param(
   const nlohmann::json &value,
   const std::string &param_name,
@@ -4863,6 +4884,7 @@ static bool return_value_safe_for_tagged_param(
   return !references_name(value, param_name) ||
          value.value("_type", std::string()) == "Compare" ||
          returns_param_value(value, param_name, func_def) ||
+         concatenates_str_literal(value, param_name) ||
          calls_argument_blind_function(value, module_body);
 }
 
@@ -5115,6 +5137,62 @@ static bool tagging_leaks_into_return(
          tagged_param_return_unsafe(*func_def, param_name, module_body);
 }
 
+// `body` binds `name` only by `from <module> import name`, where <module>
+// is the one `module_file` holds.
+static bool imports_by_own_name(
+  const nlohmann::json &body,
+  const std::string &name,
+  const std::string &module_file,
+  const std::unordered_map<std::string, std::string> &modules)
+{
+  if (dynamic_type_detail::count_bindings(body, name) != 1)
+    return false;
+  for (const auto &stmt : body)
+  {
+    if (stmt.value("_type", "") != "ImportFrom" || !stmt["module"].is_string())
+      continue;
+    const auto module = modules.find(stmt["module"].get<std::string>());
+    if (module == modules.end() || module->second != module_file)
+      continue;
+    for (const auto &alias : stmt["names"])
+      if (
+        alias.value("name", "") == name &&
+        alias.value("asname", nlohmann::json()).is_null())
+        return true;
+  }
+  return false;
+}
+
+bool python_converter::entry_module_passes_tagged(
+  const std::string &callee,
+  size_t param_index) const
+{
+  if (
+    entry_ast_ == nullptr || entry_ast_ == ast_json ||
+    callee.find('.') != std::string::npos)
+    return false;
+  const nlohmann::json &body = (*entry_ast_)["body"];
+  if (!imports_by_own_name(body, callee, current_python_file, imported_modules))
+    return false;
+  const nlohmann::json callables = kind_module_body(*entry_ast_);
+  std::vector<call_context> sites;
+  collect_call_contexts(body, nullptr, "", sites);
+  for (const call_context &site : sites)
+  {
+    const nlohmann::json *arg =
+      call_site_argument(*site.call, body, callee, param_index);
+    if (arg == nullptr || arg->value("_type", "") != "Name")
+      continue;
+    const nlohmann::json &scope =
+      site.function == nullptr ? body : (*site.function)["body"];
+    if (
+      dynamic_type_handler_.scope_assigns_divergent_literal_types(
+        arg->value("id", ""), scope, callables))
+      return true;
+  }
+  return false;
+}
+
 bool python_converter::try_infer_dynamic_param_type(
   const std::string &callee,
   const std::string &param_name,
@@ -5178,7 +5256,7 @@ bool python_converter::infer_dynamic_param_forwarded(
       tagged = tagged || (arg != nullptr && diverges_at_site(*arg, site));
     }
   visiting.erase(key);
-  return tagged;
+  return tagged || entry_module_passes_tagged(callee, param_index);
 }
 
 std::optional<typet> python_converter::try_infer_bytes_param_size(

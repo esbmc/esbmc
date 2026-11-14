@@ -1,4 +1,5 @@
 #include <python-frontend/param_annotations.h>
+#include <python-frontend/dynamic_type/literal_divergence.h>
 #include <python-frontend/json_utils.h>
 
 #include <algorithm>
@@ -1035,7 +1036,8 @@ private:
   /// A Name argument is typed only when it is a parameter of @p scope, by the
   /// annotation element_type_name reads (#10431), or when its module binds it
   /// exactly once, by a plain assignment, to a value literal_scalar_type can
-  /// type or with an annotation naming its type.
+  /// type or with an annotation naming its type. A name whose type depends on
+  /// the path, as `s = a if c else 1` gives, is left to the converter.
   std::string name_type(
     const nlohmann::json &name,
     size_t module,
@@ -1047,7 +1049,9 @@ private:
     const nlohmann::json &ast = *modules_[module].read;
     if (
       has_star_import(ast["body"]) ||
-      json_utils::count_name_bindings(ast, id) != 1)
+      json_utils::count_name_bindings(ast, id) != 1 ||
+      dynamic_type_detail::scope_assigns_divergent_literal_types(
+        id, ast["body"]))
       return "";
     const nlohmann::json *stmt = plain_assignment(ast, id);
     if (!stmt)

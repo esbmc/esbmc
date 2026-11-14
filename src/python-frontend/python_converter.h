@@ -532,9 +532,12 @@ public:
   /// import binds, as `mk` after `from helper import mk` and `helper.mk`
   /// after `import helper`.
   nlohmann::json callable_function_stubs() const;
+  nlohmann::json callable_function_stubs(const nlohmann::json &module) const;
   /// The stubs followed by the current module's own statements, which a name
   /// read off the module is resolved against.
   nlohmann::json kind_module_body() const;
+  /// kind_module_body for the module whose AST is \p module.
+  nlohmann::json kind_module_body(const nlohmann::json &module) const;
   /// Whether a straight-line retype moved @p id's value to another symbol.
   bool is_retyped(const irep_idt &id) const
   {
@@ -1660,6 +1663,12 @@ private:
     const std::string &param_name,
     size_t param_index,
     std::set<std::string> &visiting) const;
+
+  /// The entry module imports \p callee of the module being converted by
+  /// name and passes it, at \p param_index, a name that holds an int or a
+  /// str by path.
+  bool entry_module_passes_tagged(const std::string &callee, size_t param_index)
+    const;
 
   typet ctor_param_attr_type(
     const std::vector<const nlohmann::json *> &module_bodies,
