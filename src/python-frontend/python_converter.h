@@ -3849,6 +3849,13 @@ private:
   symbolt *find_dunder_method(
     const std::string &class_name,
     const std::string &dunder_name);
+  /// The operational model's per-key-type copy of @p dunder that a subscript
+  /// of a @p class_name instance with key @p key_node reaches, such as
+  /// Counter's `__getitem_str__`; @p dunder itself when there is none.
+  std::string keyed_dunder_name(
+    const std::string &class_name,
+    const std::string &dunder,
+    const nlohmann::json &key_node);
 
   /// Class @p value_node is an instance of, or "" when it is not an instance.
   /// Resolves both a bound name and a constructor temporary.

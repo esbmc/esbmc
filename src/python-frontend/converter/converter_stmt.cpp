@@ -7808,8 +7808,12 @@ bool python_converter::try_dispatch_dunder_setitem(
   args.push_back(ast_node["value"]);
   std::optional<exprt> setitem_call;
   if (has_dunder_method(target["value"], "__setitem__"))
-    setitem_call = get_function_call(
-      build_dunder_call(target["value"], "__setitem__", args, ast_node));
+    setitem_call = get_function_call(build_dunder_call(
+      target["value"],
+      keyed_dunder_name(
+        instance_class_name(target["value"]), "__setitem__", target["slice"]),
+      args,
+      ast_node));
   else
     setitem_call = dispatch_item_dunder_by_type(
       container, target["value"], "__setitem__", args);

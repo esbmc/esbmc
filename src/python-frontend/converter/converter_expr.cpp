@@ -2146,8 +2146,12 @@ std::optional<exprt> python_converter::try_dispatch_dunder_getitem(
 
   nlohmann::json args = nlohmann::json::array();
   args.push_back(slice);
-  nlohmann::json call_node =
-    build_dunder_call(element["value"], "__getitem__", args, element);
+  nlohmann::json call_node = build_dunder_call(
+    element["value"],
+    keyed_dunder_name(
+      instance_class_name(element["value"]), "__getitem__", slice),
+    args,
+    element);
   return get_function_call(call_node);
 }
 
