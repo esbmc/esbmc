@@ -218,6 +218,44 @@ bool element_type_registry::mixes_str_and_number(
   return any(is_str) && any(is_number);
 }
 
+bool element_type_registry::same_element_types(
+  const std::string &a,
+  const std::string &b,
+  type_slot slot) const
+{
+  // Bounds the walk when a list records itself as an element (l.append(l)).
+  constexpr size_t max_depth = 8;
+  std::vector<std::pair<std::string, std::string>> pending{{a, b}};
+  for (size_t depth = 0; !pending.empty(); ++depth)
+  {
+    if (depth == max_depth)
+      return false;
+    std::vector<std::pair<std::string, std::string>> next;
+    for (const auto &[x, y] : pending)
+    {
+      if (x == y)
+        continue;
+      const entries *ex = find(x, slot), *ey = find(y, slot);
+      if (!ex || !ey || ex->size() != ey->size())
+        return false;
+      for (size_t i = 0; i < ex->size(); ++i)
+      {
+        const entry &l = (*ex)[i], &r = (*ey)[i];
+        if (l.second != r.second)
+          return false;
+        const bool l_rec = !l.first.empty() && find(l.first, slot);
+        const bool r_rec = !r.first.empty() && find(r.first, slot);
+        if (l_rec != r_rec)
+          return false;
+        if (l_rec)
+          next.emplace_back(l.first, r.first);
+      }
+    }
+    pending = std::move(next);
+  }
+  return true;
+}
+
 typet element_type_registry::uniform_element_type(
   const std::string &id,
   type_slot slot) const
