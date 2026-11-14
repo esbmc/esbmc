@@ -1,0 +1,4 @@
+CORE
+main.c
+--goto2lean --no-div-by-zero-check
+^  let q := \(BitVec\.smtUDiv x y\);$

@@ -10,6 +10,7 @@
 #include <python-frontend/python-list/python_list.h>
 #include <python-frontend/math/python_math.h>
 #include <util/base/host_rounding_mode.h>
+#include <python-frontend/string/string_builder.h>
 #include <python-frontend/string/string_handler.h>
 #include <python-frontend/tuple/tuple_handler.h>
 #include <python-frontend/dynamic_type/dynamic_type_handler.h>
@@ -423,6 +424,29 @@ nlohmann::json ast_node(const char *type, const nlohmann::json &loc)
   return node;
 }
 
+// `builtin(value)`, as the conversion CPython applies before formatting.
+nlohmann::json builtin_call(const char *builtin, const nlohmann::json &value)
+{
+  nlohmann::json call = ast_node("Call", value);
+  call["func"] = ast_node("Name", value);
+  call["func"]["id"] = builtin;
+  call["func"]["ctx"] = {{"_type", "Load"}};
+  call["args"] = nlohmann::json::array({value});
+  call["keywords"] = nlohmann::json::array();
+  return call;
+}
+
+// The operand of %f: a float as it is, an int or a bool through float().
+std::optional<nlohmann::json>
+percent_f_operand(const nlohmann::json &value, const typet &type)
+{
+  if (percent_d_accepts(type))
+    return builtin_call("float", value);
+  if (type.is_floatbv())
+    return value;
+  return std::nullopt;
+}
+
 // The f-string part for one %s/%d/%i/%f conversion of `value`; `precision`
 // is that of a `%.<digits>f`, or -1 when the spec has none.
 std::optional<nlohmann::json> formatted_part(
@@ -436,20 +460,17 @@ std::optional<nlohmann::json> formatted_part(
   if (conversion == 'f')
   {
     // The f-string lowering renders at most 15 fractional digits.
-    if (!type.is_floatbv() || precision > 15)
+    const std::optional<nlohmann::json> operand =
+      percent_f_operand(value, type);
+    if (!operand || precision > 15)
       return std::nullopt;
+    value = *operand;
   }
   else if (conversion == 'd' || conversion == 'i')
   {
     if (!percent_d_accepts(type))
       return std::nullopt;
-    nlohmann::json call = ast_node("Call", value);
-    call["func"] = ast_node("Name", value);
-    call["func"]["id"] = "int";
-    call["func"]["ctx"] = {{"_type", "Load"}};
-    call["args"] = nlohmann::json::array({value});
-    call["keywords"] = nlohmann::json::array();
-    value = call;
+    value = builtin_call("int", value);
   }
   else if (conversion != 's' || !percent_s_accepts(type))
     return std::nullopt;
@@ -1977,18 +1998,27 @@ exprt python_converter::tagged_identity_by_payload(
 {
   if (!can_emit_runtime_guard())
     return nil_exprt();
+  // Copies of a tag share its payload, so equal payloads are one object.
+  // Values that are not equal are never one object. Equal values with
+  // their own payloads may or may not be, as CPython may intern them.
   const typet payload = pointer_typet(empty_typet());
-  code_assertt check(
-    python_expr::build_equal(
-      python_expr::build_member(lhs, "value", payload),
-      python_expr::build_member(rhs, "value", payload)));
+  const exprt same_payload = python_expr::build_equal(
+    python_expr::build_member(lhs, "value", payload),
+    python_expr::build_member(rhs, "value", payload));
+  // A float tag has no comparison yet, so only equal payloads decide then.
+  const exprt differ =
+    dynamic_type_detail::float_tags_possible()
+      ? exprt(false_exprt())
+      : python_expr::build_not(
+          dynamic_type_handler_.handle_comparison("Eq", lhs, rhs));
+  code_assertt check(python_expr::build_or(same_payload, differ));
   check.location() = get_location_from_decl(element);
   check.location().user_provided(true);
   check.location().comment(
     "Unsupported: 'is' between two dynamically-typed values that are not "
     "known to be one object");
   current_block->copy_to_operands(check);
-  return migrate_expr_back(op == "Is" ? gen_true_expr() : gen_false_expr());
+  return op == "Is" ? same_payload : python_expr::build_not(same_payload);
 }
 
 /// `is` between a tagged value and a name whose identity the tag cannot
@@ -2035,6 +2065,83 @@ exprt python_converter::fold_tagged_identity(
 /// A tagged-scalar operand needs runtime dispatch instead of any of the
 /// static-type-driven paths, none of which know how to handle a PyObject-shaped
 /// operand.
+static bool is_none_literal(const nlohmann::json &node)
+{
+  return node.value("_type", "") == "Constant" && node.contains("value") &&
+         node["value"].is_null();
+}
+
+/// Whether operand @p node, with None flag @p flag or nil, is None.
+static exprt operand_is_none(const exprt &flag, const nlohmann::json &node)
+{
+  if (flag.is_not_nil())
+    return flag;
+  return is_none_literal(node) ? exprt(true_exprt()) : exprt(false_exprt());
+}
+
+/// `is`, `is not`, `==` or `!=` on a tagged attribute that holds None through
+/// its None flag (#10350): None is identical and equal to None only. Nil when
+/// neither operand has a flag; arithmetic and ordering raise TypeError on the
+/// flag before this.
+exprt python_converter::compare_none_flagged(
+  const std::string &op,
+  const exprt &lhs,
+  const exprt &rhs,
+  const nlohmann::json &left,
+  const nlohmann::json &right)
+{
+  const exprt lhs_flag = none_flag_of_attribute(lhs);
+  const exprt rhs_flag = none_flag_of_attribute(rhs);
+  if (lhs_flag.is_nil() && rhs_flag.is_nil())
+    return nil_exprt();
+  const bool literal_none = is_none_literal(left) || is_none_literal(right);
+  const bool identity = op == "Is" || op == "IsNot";
+  if (identity && !literal_none)
+    throw std::runtime_error(
+      "an identity test of an attribute that may hold None against a value "
+      "is not yet supported");
+  const exprt lhs_none = operand_is_none(lhs_flag, left);
+  const exprt rhs_none = operand_is_none(rhs_flag, right);
+  // Two values that are not None compare as before.
+  const exprt values =
+    literal_none ? exprt(false_exprt())
+                 : dynamic_type_handler_.handle_comparison("Eq", lhs, rhs);
+  const exprt same = or_exprt(
+    and_exprt(lhs_none, rhs_none),
+    and_exprt(and_exprt(not_exprt(lhs_none), not_exprt(rhs_none)), values));
+  return op == "Is" || op == "Eq" ? same : exprt(not_exprt(same));
+}
+
+/// `==` or `!=` with a tagged operand.
+exprt python_converter::tagged_equality(
+  const std::string &op,
+  const exprt &lhs,
+  const exprt &rhs,
+  const nlohmann::json &left,
+  const nlohmann::json &right)
+{
+  const exprt flagged = compare_none_flagged(op, lhs, rhs, left, right);
+  return flagged.is_not_nil()
+           ? flagged
+           : dynamic_type_handler_.handle_comparison(op, lhs, rhs);
+}
+
+/// `is` or `is not` with a tagged operand that a None flag or the operands'
+/// names decide, else nil.
+exprt python_converter::tagged_identity(
+  const std::string &op,
+  const exprt &lhs,
+  const exprt &rhs,
+  const nlohmann::json &left,
+  const nlohmann::json &right,
+  const nlohmann::json &element)
+{
+  const exprt flagged = compare_none_flagged(op, lhs, rhs, left, right);
+  return flagged.is_not_nil()
+           ? flagged
+           : fold_tagged_identity(op, lhs, rhs, left, right, element);
+}
+
 exprt python_converter::handle_tagged_scalar_binop(
   const std::string &op,
   const exprt &lhs,
@@ -2044,14 +2151,14 @@ exprt python_converter::handle_tagged_scalar_binop(
   const nlohmann::json &element)
 {
   if (op == "Eq" || op == "NotEq")
-    return dynamic_type_handler_.handle_comparison(op, lhs, rhs);
+    return tagged_equality(op, lhs, rhs, left, right);
   if (type_utils::is_ordered_comparison(op))
   {
     dynamic_type_handler_.guard_type_error(
       op, lhs, rhs, get_location_from_decl(element));
     return dynamic_type_handler_.handle_comparison(op, lhs, rhs);
   }
-  if (op == "Add" || op == "Sub" || op == "Div")
+  if (dynamic_type_handler::is_tagged_arithmetic(op))
   {
     const locationt location = get_location_from_decl(element);
     dynamic_type_handler_.guard_type_error(op, lhs, rhs, location);
@@ -2065,7 +2172,7 @@ exprt python_converter::handle_tagged_scalar_binop(
   if (op == "Is" || op == "IsNot")
   {
     if (
-      exprt folded = fold_tagged_identity(op, lhs, rhs, left, right, element);
+      exprt folded = tagged_identity(op, lhs, rhs, left, right, element);
       folded.is_not_nil())
       return folded;
     const auto &other =
@@ -2077,9 +2184,119 @@ exprt python_converter::handle_tagged_scalar_binop(
         op == "IsNot" ? gen_true_expr() : gen_false_expr());
   }
 
-  throw std::runtime_error(
-    "operator '" + op +
-    "' on a dynamically-typed variable is not yet supported");
+  return tagged_membership(op, lhs, rhs, right, element);
+}
+
+/// `x in c` or `x not in c` with a dynamically-typed operand (#10349): the
+/// membership test of each type the tag may hold, chosen by its type_id. A
+/// tagged x is read as an int or a str, a tagged c as a str. Where the tag
+/// holds a type CPython rejects there, TypeError is raised.
+exprt python_converter::tagged_membership(
+  const std::string &op,
+  exprt lhs,
+  exprt rhs,
+  const nlohmann::json &right,
+  const nlohmann::json &element)
+{
+  const bool lhs_tagged = type_handler_.is_tagged_scalar_type(lhs.type());
+  const bool rhs_tagged = type_handler_.is_tagged_scalar_type(rhs.type());
+  if ((op != "In" && op != "NotIn") || lhs_tagged == rhs_tagged)
+    throw std::runtime_error(
+      "operator '" + op +
+      "' on a dynamically-typed variable is not yet supported");
+  const bool invert = op == "NotIn";
+  const exprt &tagged = lhs_tagged ? lhs : rhs;
+  const exprt type_id =
+    python_expr::build_member(tagged, "type_id", size_type());
+  const exprt is_str = python_expr::build_equal(
+    type_id, type_handler_.tagged_scalar_type_id(pointer_typet(char_type())));
+  exprt str_view = python_expr::build_typecast(
+    python_expr::build_member(tagged, "value", pointer_typet(empty_typet())),
+    pointer_typet(char_type()));
+  const locationt location = get_location_from_decl(element);
+  // A str operand: the raise diverts every other type before it is read.
+  if (rhs_tagged || type_utils::is_string_type(rhs.type()))
+  {
+    emit_guarded_raise(
+      python_expr::build_not(is_str),
+      "TypeError",
+      rhs_tagged ? "argument of type is not iterable"
+                 : "'in <string>' requires string as left operand",
+      location);
+    return rhs_tagged
+             ? handle_membership_operator(lhs, str_view, element, invert)
+             : handle_membership_operator(str_view, rhs, element, invert);
+  }
+  if (std::optional<exprt> any_equal = tagged_equals_any(lhs, right))
+    return invert ? python_expr::build_not(*any_equal) : *any_equal;
+  return tagged_key_membership(lhs, rhs, is_str, element, invert);
+}
+
+/// `x == e` for some element e of a tuple or list display @p right of
+/// constants, for a tagged x: membership in a sequence is equality with an
+/// element. Nil for any other container.
+std::optional<exprt> python_converter::tagged_equals_any(
+  const exprt &tagged,
+  const nlohmann::json &right)
+{
+  const std::string kind = right.value("_type", "");
+  if (kind != "Tuple" && kind != "List")
+    return std::nullopt;
+  exprt any = false_exprt();
+  for (const auto &elt : right["elts"])
+  {
+    if (elt.value("_type", "") != "Constant")
+      return std::nullopt;
+    any = python_expr::build_or(
+      any,
+      dynamic_type_handler_.handle_comparison("Eq", tagged, get_expr(elt)));
+  }
+  return any;
+}
+
+/// `x in c` for a tagged x and another container c: the membership test of x
+/// read as an int or as a str, chosen by its type_id. Each view reads the
+/// payload only where the tag holds that type. A float is not modelled here.
+exprt python_converter::tagged_key_membership(
+  const exprt &tagged,
+  exprt rhs,
+  const exprt &is_str,
+  const nlohmann::json &element,
+  bool invert)
+{
+  const exprt type_id =
+    python_expr::build_member(tagged, "type_id", size_type());
+  const exprt is_num =
+    type_handler_.tagged_scalar_type_matches(type_id, long_long_int_type());
+  const exprt payload =
+    python_expr::build_member(tagged, "value", pointer_typet(empty_typet()));
+  exprt num_view = python_expr::build_if(
+    is_num,
+    python_expr::build_dereference(
+      python_expr::build_typecast(payload, pointer_typet(long_long_int_type())),
+      long_long_int_type()),
+    from_integer(0, long_long_int_type()));
+  exprt str_view = python_expr::build_if(
+    is_str,
+    python_expr::build_typecast(payload, pointer_typet(char_type())),
+    string_handler_.get_array_base_address(
+      string_builder_->build_string_literal("")));
+  if (!can_emit_runtime_guard())
+    throw std::runtime_error(
+      "operator 'In' on a dynamically-typed variable is not yet supported");
+  code_assertt check(python_expr::build_or(is_num, is_str));
+  check.location() = get_location_from_decl(element);
+  check.location().user_provided(true);
+  check.location().comment(
+    "Unsupported: a membership test of a dynamically-typed float");
+  add_instruction(check);
+  add_instruction(code_assumet(python_expr::build_or(is_num, is_str)));
+  exprt rhs_copy = rhs;
+  const exprt in_num =
+    handle_membership_operator(num_view, rhs_copy, element, invert);
+  const exprt in_str =
+    handle_membership_operator(str_view, rhs, element, invert);
+  return python_expr::build_if(is_num, in_num, in_str);
 }
 
 exprt python_converter::get_percent_format_expr(
@@ -2102,9 +2319,31 @@ exprt python_converter::get_percent_format_expr(
   // len("ab")), which materialises it correctly when consumed inline by
   // len()/==. Building the array directly left it unaddressable inline.
   nlohmann::json folded = left;
-  folded["value"] =
-    py_percent_format(left["value"].get<std::string>(), args, mapping);
+  folded["value"] = percent_format_or_refusal(left, args, mapping);
   return get_expr(folded);
+}
+
+std::string python_converter::percent_format_or_refusal(
+  const nlohmann::json &left,
+  const std::vector<nlohmann::json> &args,
+  const std::map<std::string, nlohmann::json> &mapping)
+{
+  try
+  {
+    return py_percent_format(left["value"].get<std::string>(), args, mapping);
+  }
+  catch (const std::runtime_error &e)
+  {
+    // Such as an operand whose type is known only at run time. The program
+    // goes wrong only on a path that formats it, so the refusal is planted
+    // there, where it runs exactly when Python would run the formatting.
+    const std::string message = e.what();
+    if (!has_prefix(message, "unsupported") || !can_emit_operand_statement())
+      throw;
+    end_path_as_unsupported(
+      "U" + message.substr(1), get_location_from_decl(left));
+    return "";
+  }
 }
 
 exprt python_converter::get_fstring_in_order(const nlohmann::json &joined)
@@ -2203,24 +2442,42 @@ exprt python_converter::get_right_operand_after_left(
   return rhs;
 }
 
+// The int constant that @p value, the conversion of @p node, holds when
+// @p node names a variable bound once to it, or else @p value.
+exprt python_converter::once_bound_int(
+  const nlohmann::json &node,
+  const exprt &value) const
+{
+  const symbolt *symbol =
+    value.is_symbol() ? symbol_table_.find_symbol(value.identifier()) : nullptr;
+  if (
+    !symbol || symbol->get_value().is_nil() ||
+    node.value("_type", "") != "Name" ||
+    count_bindings(*ast_json, node.value("id", "")) != 1)
+    return value;
+  expr2tc bound;
+  migrate_expr(symbol->get_value(), bound);
+  simplify(bound);
+  if (!is_constant_int2t(bound) || !is_signedbv_type(bound))
+    return value;
+  return migrate_expr_back(bound);
+}
+
 // An exponent named by a variable bound once to a small int constant is that
 // constant, so `2 ** n` is an int as `2 ** 3` is (#8944). A larger one would
-// overflow an int anyway and keeps the pow() path.
+// overflow an int anyway, and a negative one yields a float, so both keep the
+// pow() path.
 exprt python_converter::once_bound_exponent(
   const nlohmann::json &right,
   const exprt &rhs) const
 {
-  const symbolt *exponent =
-    rhs.is_symbol() ? symbol_table_.find_symbol(rhs.identifier()) : nullptr;
+  const exprt exponent = once_bound_int(right, rhs);
   BigInt value;
   if (
-    !exponent || !exponent->get_value().is_constant() ||
-    !exponent->get_value().type().is_signedbv() ||
-    to_integer(exponent->get_value(), value) || value > 64 ||
-    right.value("_type", "") != "Name" ||
-    count_bindings(*ast_json, right.value("id", "")) != 1)
+    !exponent.is_constant() || to_integer(exponent, value) || value < 0 ||
+    value > 64)
     return rhs;
-  return exponent->get_value();
+  return exponent;
 }
 
 // The element a literal `[A, B][k]` or `(A, B)[k]` reads at a constant k, or
@@ -2288,7 +2545,9 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
   exprt *saved_lhs = current_lhs;
   current_lhs = nullptr;
   const auto saved_compared = type_compared_operands_;
+  const auto saved_none_aware = none_aware_operands_;
   type_compared_operands_ = {};
+  none_aware_operands_ = {&left, &right};
   if (element.contains("ops") && element["ops"].size() == 1)
   {
     const std::string cmp = element["ops"][0]["_type"];
@@ -2302,6 +2561,7 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
   exprt rhs =
     get_right_operand_after_left(element, left, left_value, right, lhs);
   type_compared_operands_ = saved_compared;
+  none_aware_operands_ = saved_none_aware;
   current_lhs = saved_lhs;
   if (element.value("_type", "") == "BinOp")
   {
@@ -2404,9 +2664,12 @@ bool python_converter::may_rebind_left(
          (right_runs_user_code || calls_user_code(right));
 }
 
+// Also `a + b` and `[x] * n` building a typed list (#10451).
 std::optional<exprt>
 python_converter::try_lowered_compare(const nlohmann::json &element)
 {
+  if (python_list::is_typed(element) && element["_type"] == "BinOp")
+    return python_list(*this, element).typed_binop();
   std::optional<exprt> bound = try_numpy_dtype_compare(element);
   if (!bound)
     bound = try_numpy_string_membership(element);
@@ -2583,7 +2846,7 @@ exprt python_converter::checked_erased_int(
   // Only a value that can come from sources of different known kinds can be
   // anything but the int the cast below assumes.
   value_kinds kinds(*ast_json);
-  if (!kinds.may_be_non_number(node, kinds.scope_of(current_func_name_)))
+  if (!kinds.may_be_non_int(node, kinds.scope_of(current_func_name_)))
     return operand;
 
   const locationt location = get_location_from_decl(element);
@@ -4356,6 +4619,13 @@ static bool is_str_operand_type(const typet &t)
          type_utils::is_string_type(t);
 }
 
+static const char *str_or_bytes_name(const typet &t)
+{
+  if (is_str_operand_type(t))
+    return "str";
+  return type_utils::is_bytes_array(t) ? "bytes" : nullptr;
+}
+
 // `str` has no arithmetic beyond `+` (below) or ordering against anything
 // but `str`; `*` is string repetition and is handled elsewhere. Reaching
 // generic arithmetic with a char-array operand otherwise asserts
@@ -4366,7 +4636,16 @@ exprt python_converter::str_arithmetic_type_error(
   const exprt &rhs)
 {
   static const std::map<std::string, std::string> arith_symbols = {
-    {"Sub", "-"}, {"Div", "/"}, {"FloorDiv", "//"}, {"Pow", "**"}};
+    {"Sub", "-"},
+    {"Div", "/"},
+    {"FloorDiv", "//"},
+    {"Pow", "**"},
+    {"MatMult", "@"},
+    {"BitAnd", "&"},
+    {"BitOr", "|"},
+    {"BitXor", "^"},
+    {"LShift", "<<"},
+    {"RShift", ">>"}};
   const auto arith_it = arith_symbols.find(op);
   static const std::set<std::string> ordering_ops = {"Lt", "LtE", "Gt", "GtE"};
   const bool is_ordering = ordering_ops.count(op) != 0;
@@ -4375,11 +4654,13 @@ exprt python_converter::str_arithmetic_type_error(
 
   const bool lhs_char = is_str_operand_type(lhs.type());
   const bool rhs_char = is_str_operand_type(rhs.type());
-  if (lhs_char && rhs_char && !is_ordering)
+  const char *lhs_seq = str_or_bytes_name(lhs.type());
+  const char *rhs_seq = str_or_bytes_name(rhs.type());
+  if (lhs_seq && rhs_seq && !is_ordering)
     return get_exception_handler().gen_exception_raise(
       "TypeError",
-      "unsupported operand type(s) for " + arith_it->second +
-        ": 'str' and 'str'");
+      "unsupported operand type(s) for " + arith_it->second + ": '" + lhs_seq +
+        "' and '" + rhs_seq + "'");
   if (lhs_char == rhs_char)
     return nil_exprt();
 
@@ -4458,6 +4739,12 @@ exprt python_converter::handle_array_operations(
     }
     return nil_exprt();
   }
+
+  // Before the element-wise lowering, which would take bytes for a numeric
+  // array.
+  const exprt str_error = str_arithmetic_type_error(op, lhs, rhs);
+  if (!str_error.is_nil())
+    return str_error;
 
   // `bytes + bytes` is concatenation (bytes.__add__). Route it here early,
   // since bytes and a numpy array share the same underlying
@@ -4586,10 +4873,6 @@ exprt python_converter::handle_array_operations(
     }
   }
   reject_unmodelled_array_arithmetic(op, lhs, rhs, element);
-
-  const exprt str_error = str_arithmetic_type_error(op, lhs, rhs);
-  if (!str_error.is_nil())
-    return str_error;
 
   // Handle string concatenation -- only valid for char-arrays. Numeric
   // arrays (e.g. ``np.array([1, 2, 3])``, modelled as ``long int [N]``)
@@ -5181,7 +5464,7 @@ exprt python_converter::handle_list_operations(
      op == "GtE"))
   {
     python_list list(*this, element);
-    return list.compare(lhs, rhs, op);
+    return list.typed_or_untyped_compare(lhs, rhs, op);
   }
 
   // List concatenation: also handle Any-typed (void*) right operand, which
@@ -5428,6 +5711,26 @@ exprt python_converter::str_pointer_add_error(
       type_handler_.get_python_type_name(rhs.type()) + "'");
 }
 
+// A Python int is signed, so an unsigned operand meeting one (a len() result)
+// is read as signed rather than the int read as unsigned: otherwise
+// len(l) - 4 wraps (#10494). NumPy integers keep their own promotion rules.
+static void read_unsigned_as_python_int(exprt &lhs, exprt &rhs)
+{
+  if (
+    type_utils::is_numpy_numeric_element(lhs.type()) ||
+    type_utils::is_numpy_numeric_element(rhs.type()))
+    return;
+  auto widen_to_signed = [](exprt &unsigned_op, const exprt &signed_op) {
+    const unsigned width =
+      std::max(bv_width(unsigned_op.type()), bv_width(signed_op.type()));
+    unsigned_op = typecast_exprt(unsigned_op, signedbv_typet(width));
+  };
+  if (lhs.type().is_unsignedbv() && rhs.type().is_signedbv())
+    widen_to_signed(lhs, rhs);
+  else if (rhs.type().is_unsignedbv() && lhs.type().is_signedbv())
+    widen_to_signed(rhs, lhs);
+}
+
 exprt python_converter::build_binary_expression(
   const std::string &op,
   exprt &lhs,
@@ -5453,6 +5756,8 @@ exprt python_converter::build_binary_expression(
       return 1;
     return static_cast<const bv_typet &>(t).get_width();
   };
+
+  read_unsigned_as_python_int(lhs, rhs);
 
   // Reconcile the int/float and float/float-width mixes the arms below do
   // not cover, following the C usual arithmetic conversions (CPython agrees

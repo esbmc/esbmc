@@ -1,0 +1,9 @@
+CORE
+main.c
+--goto2lean
+^def main_loop1 \(n : BitVec 32\) \(s : BitVec 32\) \(i : BitVec 32\)$
+^coinductive_fixpoint$
+^  main_loop1 n s i post ret\)$
+^  main_loop1 n s i \(fun \(n : BitVec 32\) \(s : BitVec 32\) \(i : BitVec 32\) =>$
+each loop needs an invariant
+^  sorry$
