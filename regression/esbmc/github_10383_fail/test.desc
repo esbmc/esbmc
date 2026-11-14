@@ -1,0 +1,5 @@
+CORE
+main.c
+--std c2x
+^VERIFICATION FAILED$
+nonzero

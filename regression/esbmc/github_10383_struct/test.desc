@@ -1,0 +1,4 @@
+CORE
+main.c
+--std c2x --z3
+^VERIFICATION SUCCESSFUL$
