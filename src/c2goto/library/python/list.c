@@ -988,39 +988,101 @@ PyListObject *__ESBMC_tlist_sorted(const PyListObject *src, bool reverse)
 
 #undef __ESBMC_TLIST_ORDER
 
-/* A typed dict holds its keys and values in turn in a typed list, in
- * insertion order. The slot of key's value, or NULL when key is absent. The
- * first 8 entries are one formula with no path per entry; a dict with more
- * scans the rest in a loop. */
-PySlot *__ESBMC_tdict_at(PyListObject *d, long long key)
+/* The typed list of the character codes of s[0..n), for a nondet str whose
+ * buffer holds cap characters, n <= cap <= 64. The copy is straight-line. */
+PyListObject *__ESBMC_tlist_from_chars(const char *s, size_t n, size_t cap)
+{
+  PyListObject *l = __ESBMC_tlist_create();
+  size_t i = 0;
+  __ESBMC_unroll(64);
+  while (i < cap)
+  {
+    l->slot[i].v = s[i];
+    i++;
+  }
+  l->size = n;
+  return l;
+}
+
+/* A typed dict holds each entry as its key, then its value, in a typed list,
+ * in insertion order. A key is one int, or a tuple of arity ints (at most
+ * two, the second passed in k1). The slot of key's value, or NULL when key is
+ * absent. The first 16 entries are one formula with no path per entry; a dict
+ * with more scans the rest in a loop. */
+PySlot *
+__ESBMC_tdict_at(PyListObject *d, size_t arity, long long k0, long long k1)
 {
   size_t n = d->size;
+  size_t stride = arity + 1;
   size_t at = 0;
-  size_t i = 0;
-  __ESBMC_unroll(8);
-  while (i < 16)
+  size_t e = 0;
+  __ESBMC_unroll(16);
+  while (e < 16)
   {
-    at = i < n && d->slot[i].v == key ? i + 1 : at;
-    i += 2;
+    size_t i = e * stride;
+    at = i < n && d->slot[i].v == k0 && (arity < 2 || d->slot[i + 1].v == k1)
+           ? i + arity
+           : at;
+    e++;
   }
+  size_t i = 16 * stride;
   while (i < n)
   {
-    at = d->slot[i].v == key ? i + 1 : at;
-    i += 2;
+    at = d->slot[i].v == k0 && (arity < 2 || d->slot[i + 1].v == k1) ? i + arity
+                                                                     : at;
+    i += stride;
   }
   return at ? &d->slot[at] : NULL;
 }
 
-/* d[key] = value: overwrite key's value, or append the entry. */
-void __ESBMC_tdict_set(PyListObject *d, long long value, long long key)
+/* A Counter's d[key]: its value, or 0 when key is absent. */
+long long
+__ESBMC_tdict_get0(PyListObject *d, size_t arity, long long k0, long long k1)
 {
-  PySlot *slot = __ESBMC_tdict_at(d, key);
+  PySlot *slot = __ESBMC_tdict_at(d, arity, k0, k1);
+  return slot ? slot->v : 0;
+}
+
+/* max(d.values()) of a non-empty typed dict, read as for __ESBMC_tdict_at. */
+long long __ESBMC_tdict_max(const PyListObject *d, size_t arity)
+{
+  size_t n = d->size;
+  size_t stride = arity + 1;
+  long long r = d->slot[arity].v;
+  size_t e = 1;
+  __ESBMC_unroll(15);
+  while (e < 16)
+  {
+    size_t i = e * stride + arity;
+    r = i < n && d->slot[i].v > r ? d->slot[i].v : r;
+    e++;
+  }
+  size_t i = 16 * stride + arity;
+  while (i < n)
+  {
+    r = d->slot[i].v > r ? d->slot[i].v : r;
+    i += stride;
+  }
+  return r;
+}
+
+/* d[key] = value: overwrite key's value, or append the entry. */
+void __ESBMC_tdict_set(
+  PyListObject *d,
+  long long value,
+  size_t arity,
+  long long k0,
+  long long k1)
+{
+  PySlot *slot = __ESBMC_tdict_at(d, arity, k0, k1);
   if (slot)
   {
     slot->v = value;
     return;
   }
-  __ESBMC_tlist_push(d, key);
+  __ESBMC_tlist_push(d, k0);
+  if (arity > 1)
+    __ESBMC_tlist_push(d, k1);
   __ESBMC_tlist_push(d, value);
 }
 
