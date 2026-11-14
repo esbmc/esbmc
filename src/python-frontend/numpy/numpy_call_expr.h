@@ -320,6 +320,7 @@ private:
   bool may_hold_float(const nlohmann::json &arg);
   std::optional<exprt> try_arithmetic_ufunc(const std::string &function);
   exprt integer_power(const exprt &base, const exprt &exponent);
+  std::optional<exprt> try_refused_operand_kind(const std::string &function);
   std::optional<exprt>
   unary_element(const std::string &function, const exprt &x);
   exprt reciprocal_element(const exprt &x);

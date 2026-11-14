@@ -4861,6 +4861,8 @@ static void reject_unlowered_ufunc_keywords(
 std::optional<exprt>
 numpy_call_expr::try_early_result(const std::string &function)
 {
+  if (std::optional<exprt> refused = try_refused_operand_kind(function))
+    return refused;
   if (std::optional<exprt> narrow = try_narrow_operand_call(function))
     return narrow;
 
@@ -8275,6 +8277,7 @@ static std::optional<std::size_t> arithmetic_arity(const std::string &name)
     {"negative", 1},
     {"positive", 1},
     {"absolute", 1},
+    {"fabs", 1},
     {"reciprocal", 1}};
   auto it = arity.find(name);
   if (it == arity.end())
@@ -8282,12 +8285,14 @@ static std::optional<std::size_t> arithmetic_arity(const std::string &name)
   return it->second;
 }
 
-// The dtype NumPy computes an arithmetic ufunc in: float64 for division or
-// any float operand, int64 for integers. Booleans and other types reject.
+// The dtype NumPy computes an arithmetic ufunc in: float64 for division,
+// fabs or any float operand, int64 for integers. Booleans and other types
+// reject.
 static typet
 arithmetic_leaf(const std::string &function, const std::vector<exprt> &operands)
 {
-  bool floating = function == "divide" || function == "true_divide";
+  bool floating =
+    function == "divide" || function == "true_divide" || function == "fabs";
   for (const exprt &operand : operands)
   {
     const typet &leaf = array_leaf_type(operand.type());
@@ -8354,8 +8359,8 @@ exprt numpy_call_expr::integer_power(const exprt &base, const exprt &exponent)
   return result;
 }
 
-// negative, positive, absolute or reciprocal of one element of `leaf`;
-// absolute of the smallest integer wraps to itself, as NumPy's does.
+// negative, positive, absolute, fabs or reciprocal of one element of
+// `leaf`; absolute of the smallest integer wraps to itself, as NumPy's does.
 std::optional<exprt>
 numpy_call_expr::unary_element(const std::string &function, const exprt &x)
 {
@@ -8367,7 +8372,7 @@ numpy_call_expr::unary_element(const std::string &function, const exprt &x)
     return negated;
   if (function == "reciprocal")
     return reciprocal_element(x);
-  if (function != "absolute")
+  if (function != "absolute" && function != "fabs")
     return std::nullopt;
   if (x.type().is_floatbv())
     return abs_double(x);
@@ -8491,7 +8496,8 @@ numpy_call_expr::try_arithmetic_ufunc(const std::string &function)
     "mod",
     "fmod",
     "float_power",
-    "reciprocal"};
+    "reciprocal",
+    "fabs"};
   const std::optional<std::size_t> arity = arithmetic_arity(function);
   if (!arity || (!own_route.count(function) && !masks_or_writes(call_, *arity)))
     return std::nullopt;
@@ -13534,6 +13540,29 @@ numpy_call_expr::try_narrow_float_reduce(const std::string &function)
   return complex_value_reduce(function, *narrow_float_mean_nodes(operand));
 }
 
+// The name of the ufunc that has no NumPy loop for operands of `kind`:
+// strings for any of these, and complex numbers for the real-only ones.
+static std::optional<std::string>
+refusing_ufunc(const std::string &function, numpy_dtypet::kindt kind)
+{
+  static const std::map<std::string, std::string> real_only = {
+    {"floor_divide", "floor_divide"},
+    {"remainder", "remainder"},
+    {"mod", "remainder"},
+    {"fmod", "fmod"},
+    {"fabs", "fabs"}};
+  if (const auto name = real_only.find(function); name != real_only.end())
+    return kind == numpy_dtypet::kindt::string ||
+               kind == numpy_dtypet::kindt::complex
+             ? std::optional<std::string>(name->second)
+             : std::nullopt;
+  if (function != "float_power" && function != "reciprocal")
+    return std::nullopt;
+  return kind == numpy_dtypet::kindt::string
+           ? std::optional<std::string>(function)
+           : std::nullopt;
+}
+
 void numpy_call_expr::reject_unmodelled_operands(
   const std::string &function) const
 {
@@ -13551,7 +13580,10 @@ void numpy_call_expr::reject_unmodelled_operands(
     "sort",
     "argsort"};
   reject_array_copy_with_dtype(function);
+  // NumPy's own TypeError for these is raised by try_refused_operand_kind.
   const auto reject = [&function](kindt kind) {
+    if (refusing_ufunc(function, kind))
+      return;
     throw std::runtime_error(
       "TypeError: numpy." + function + "() over a " + numpy_kind_name(kind) +
       " array is not supported");
@@ -14159,6 +14191,35 @@ numpy_call_expr::try_narrow_operand_call(const std::string &function)
       "TypeError: numpy." + function +
       "() over a dtype narrower than 64 bits is not supported");
   return call_with_narrow_constructors_bound(function);
+}
+
+// NumPy's TypeError for an operand dtype the ufunc has no loop for, raised
+// where the call runs.
+std::optional<exprt>
+numpy_call_expr::try_refused_operand_kind(const std::string &function)
+{
+  using kindt = numpy_dtypet::kindt;
+  for (const nlohmann::json &arg : call_.value("args", nlohmann::json::array()))
+  {
+    const std::optional<std::string> name =
+      is_string_operand(arg)    ? refusing_ufunc(function, kindt::string)
+      : is_complex_operand(arg) ? refusing_ufunc(function, kindt::complex)
+                                : std::nullopt;
+    if (!name)
+      continue;
+    raise_linalg(
+      "TypeError",
+      "ufunc '" + *name +
+        "' not supported for the input types, and the inputs could not be "
+        "safely coerced to any supported types according to the casting rule "
+        "''safe''",
+      true_exprt());
+    const exprt *lhs = converter_.current_lhs;
+    return nondet_value(
+      lhs && lhs->type().is_array() ? lhs->type() : typet(double_type()),
+      "$ufunc$");
+  }
+  return std::nullopt;
 }
 
 exprt numpy_call_expr::get()
