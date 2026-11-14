@@ -801,6 +801,8 @@ public:
    *  the appropriate method in the subclassing solver converter for the
    * terminal conversion */
   smt_astt convert_terminal(const expr2tc &expr);
+  /** Constrain a nondet float symbol under --ir to values a float can hold. */
+  void assert_nondet_float_representable(smt_astt sym_ast, const type2tc &type);
 
   /** Flatten pointer arithmetic. When faced with an addition or subtraction
    *  between a pointer and some integer or other pointer, perform whatever
