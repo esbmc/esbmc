@@ -455,8 +455,18 @@ void bmct::record_violated_properties(
   }
 }
 
-void bmct::solve_past_the_abstraction(symex_target_equationt &eq)
+void bmct::solve_past_the_abstraction(
+  smt_resultt result,
+  symex_target_equationt &eq)
 {
+  // Inductive-step and forward-condition models witness no violation, and a
+  // --smt-during-symex solver cannot be replaced by a fresh one.
+  if (
+    result != P_SATISFIABLE || options.get_bool_option("inductive-step") ||
+    options.get_bool_option("forward-condition") ||
+    options.get_bool_option("smt-during-symex"))
+    return;
+
   std::vector<symex_target_equationt::SSA_stept *> set_aside;
   while (runtime_solver->has_model())
   {
@@ -2778,11 +2788,7 @@ smt_resultt bmct::run_thread(std::shared_ptr<symex_target_equationt> &eq)
         solver_result.bounded_loop_truncations);
 
     smt_resultt result = run_decision_procedure(*runtime_solver, *eq);
-    if (
-      result == P_SATISFIABLE && !options.get_bool_option("inductive-step") &&
-      !options.get_bool_option("forward-condition") &&
-      !options.get_bool_option("smt-during-symex"))
-      solve_past_the_abstraction(*eq);
+    solve_past_the_abstraction(result, *eq);
 
     // Per-claim vacuity probe in single-property mode: a whole-equation
     // reachability check would silently miss a vacuous claim whenever some
