@@ -634,6 +634,7 @@ def confirmed_by_integer_encoding(esbmc_command_line, the_output, prop, elapsed)
 # file; they are written to a temporary directory for each replay.
 REPLAY_BUDGET = 20
 MIN_REPLAY_BUDGET = 2
+VALUES_MIN_BUDGET = 60
 REPLAY_MEMORY = 2 * 1024 ** 3
 REPLAY_FILE_SIZE = 200 * 1024 ** 2
 REPLAY_MAX_RUNS = 32
@@ -1131,8 +1132,14 @@ def counterexample_values(esbmc_command_line, prop, values_dir, elapsed):
   Checking the violation's own bound costs about what the first run's last
   step did, which can be most of the first run, so the run may take as long as
   the first one did, with a margin, out of what the replay leaves. The --ir
-  re-run, which comes after, gets what is left."""
-  budget = min(1.5 * elapsed + 10, TOTAL_BUDGET - elapsed - REPLAY_BUDGET)
+  re-run, which comes after, gets what is left.
+
+  The run's solver time does not follow the first run's: the same formula,
+  with its terms in another order, can take several times as long. So the run
+  gets at least VALUES_MIN_BUDGET seconds, still out of what the replay
+  leaves."""
+  budget = min(max(1.5 * elapsed + 10, VALUES_MIN_BUDGET),
+               TOTAL_BUDGET - elapsed - REPLAY_BUDGET)
   if budget < MIN_REPLAY_BUDGET:
     return False
   output = run(esbmc_command_line + values_flags(values_dir), budget)

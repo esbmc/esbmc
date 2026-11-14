@@ -94,10 +94,10 @@ protected:
   // discharge was vacuous: the path assumptions alone are unsatisfiable.
   smt_resultt check_vacuity(symex_target_equationt &local_eq) const;
 
-  /// Whether the kept claim can hold at all on a feasible path.
+  /// Whether some feasible execution avoids violating the kept claim.
   smt_resultt check_claim_unsatisfiable(symex_target_equationt &local_eq) const;
 
-  /// Whether the invariant leaves one claim no way to hold (issue #7585).
+  /// Whether the invariant leaves one claim no way to be avoided (#10642).
   bool invariant_refutes(const symex_target_equationt &eq, size_t claim_index);
 
   // Set by the vacuity probe when at least one kept claim discharged
@@ -107,7 +107,7 @@ protected:
   std::atomic<bool> vacuity_detected{false};
 
   // Set when a violated claim was only violated downstream of a
-  // loop-invariant havoc; consulted by report_result to map a verdict
+  // --loop-invariant-check havoc; consulted by report_result to map a verdict
   // with no concrete violation from FAILED to UNKNOWN (issue #7480). Atomic
   // because multi_property_check writes from parallel job threads.
   std::atomic<bool> weak_invariant_detected{false};
@@ -236,11 +236,11 @@ private:
   /// Unknown when the model witnesses only the invariant abstraction rather
   /// than a reachable state (issue #7480).
   void record_satisfiable_claim(
-    smt_convt &smt_conv,
     const claim_slicer &claim,
     const property_locationt &loc,
     bool inductive_step,
-    symex_target_equationt &local_eq);
+    symex_target_equationt &local_eq,
+    smt_convt &smt_conv);
 
   /// Record a verdict for every assertion in \p eq that \p smt_conv's model
   /// falsifies, so the report names them even when the counterexample itself

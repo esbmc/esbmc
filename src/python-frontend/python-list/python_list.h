@@ -77,11 +77,21 @@ public:
     const exprt &rhs,
     const std::string &op);
   exprt typed_binop();
-  /// A call the gate flagged: a typed nondet_list builder, or sorted(x) of
-  /// a typed x, whose result is typed when the gate typed the call and is
-  /// otherwise the sorted ints in an untyped list.
+  /// A call the gate flagged: a typed nondet_list builder, max(x) or min(x)
+  /// of a typed x, a typed dict's store, or sorted(x) of a typed x, whose
+  /// result is typed when the gate typed the call and is otherwise the sorted
+  /// ints in an untyped list.
   static bool is_typed_call(const nlohmann::json &call);
   exprt typed_call(const std::string &func_name);
+  /// `heapq.heapify(x)`, `heapq.heappop(x)` or `heapq.heappushpop(x, v)` of
+  /// a typed x, sifted in x's slots.
+  static bool is_typed_heapq_call(const nlohmann::json &call);
+  exprt typed_heapq();
+  /// `list(range(stop))` or `list(range(start, stop))` the gate typed.
+  exprt typed_range();
+  /// `list(range(...))`: typed when the gate typed it.
+  static exprt
+  list_of_range(python_converter &converter, const nlohmann::json &element);
   /// A slice, list() or copy() of a typed list. The result is typed when the
   /// gate flagged the node, else an untyped list of the same ints.
   static bool reads_typed(const nlohmann::json &node);
@@ -96,6 +106,10 @@ public:
     const nlohmann::json &slice,
     const nlohmann::json &value);
   exprt typed_copy(const exprt &list);
+  /// A read `d[k]` of a typed dict, which the gate keeps in a typed list
+  /// of its keys and values in turn.
+  static bool is_typed_dict_read(const nlohmann::json &node);
+  exprt typed_dict_get();
 
   /**
    * @brief Materialize a fresh list from already-evaluated element values.
@@ -816,7 +830,6 @@ public:
    */
   typet infer_literal_element_type(const nlohmann::json &list_literal);
 
-
   /**
    * @brief Create a list from a range() call
    * @param converter The python converter instance
@@ -1045,6 +1058,16 @@ private:
   exprt typed_int_temp(const nlohmann::json &node, const exprt &value);
   exprt typed_new_list(const char *create, const std::vector<exprt> &args);
   exprt typed_sorted();
+  exprt typed_extremum(const std::string &func_name);
+  exprt typed_dict_set();
+  exprt typed_int_call(const char *model, const std::vector<exprt> &args);
+  exprt typed_dict_in();
+  exprt typed_dict_max();
+  exprt typed_str_codes();
+  using json_range = std::vector<nlohmann::json>;
+  std::vector<exprt>
+  typed_dict_key(const nlohmann::json &dict, const json_range &key);
+  exprt typed_dict_slot(const std::vector<exprt> &args);
   long long typed_slice_step(const nlohmann::json &slice);
   std::vector<exprt> typed_slice_bounds(const nlohmann::json &slice);
   code_function_callt
@@ -1125,12 +1148,14 @@ private:
   exprt build_list_at_call(
     const exprt &list,
     const exprt &index,
-    const nlohmann::json &element);
+    const nlohmann::json &element,
+    bool source_index = false);
   exprt build_list_at_call(
     const exprt &list,
     const exprt &index,
     const nlohmann::json &element,
-    const element_storage &storage);
+    const element_storage &storage,
+    bool source_index = false);
 
   exprt bind_list_element(const exprt &list_at_call);
 

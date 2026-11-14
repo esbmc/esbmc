@@ -1,0 +1,7 @@
+CORE
+main.c
+--32 --overflow-check --k-induction --validate-correctness-witness --witness witness.yml
+REQUIRES arch32
+
+UNKNOWN +\[main\.arithmetic-overflow\.1\].*loop invariant too weak
+^VERIFICATION UNKNOWN$
