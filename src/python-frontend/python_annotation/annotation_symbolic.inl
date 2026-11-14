@@ -353,6 +353,31 @@ void python_annotation<Json>::apply_pending_specializations()
   pending_specializations_.clear();
 }
 
+// A per-type copy passes its now-typed parameter on to functions whose
+// parameters were inferred before the copy existed, and so stayed untyped.
+// Infer them again so the copies' calls specialize them in turn (#10438).
+// Returns whether a specialization is pending.
+template <class Json>
+bool python_annotation<Json>::specialize_callees_of_copies()
+{
+  for (Json &element : ast_["body"])
+  {
+    if (element.value("_type", "") != "FunctionDef")
+      continue;
+    const Json &params = element["args"]["args"];
+    const bool untyped =
+      std::any_of(params.begin(), params.end(), [](const Json &param) {
+        return !param.contains("annotation") || param["annotation"].is_null();
+      });
+    if (!untyped)
+      continue;
+    current_func_name_context_ = element["name"].template get<std::string>();
+    infer_parameter_types(element);
+  }
+  current_func_name_context_.clear();
+  return !pending_specializations_.empty();
+}
+
 // Returns the ancestors of a class (including itself) in BFS order via
 // "bases". Handles multiple inheritance and cycle-safe (visited guard).
 // "object" is intentionally excluded — it has no ESBMC IR representation.
