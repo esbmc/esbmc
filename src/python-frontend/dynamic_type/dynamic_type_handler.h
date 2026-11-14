@@ -193,9 +193,13 @@ public:
     const typet &result_type,
     const locationt &location);
 
-  /// Throws when a tag may hold a float and `lhs op rhs` is not a str
-  /// operation.
-  void refuse_float_tag_operation(const exprt &lhs, const exprt &rhs) const;
+  /// When a tag may hold a float and `lhs op rhs` is not a str operation,
+  /// reports a tagged operand holding a float as unsupported at runtime, or
+  /// throws where no runtime check can be planted.
+  void refuse_float_tag_operation(
+    const exprt &lhs,
+    const exprt &rhs,
+    const locationt &location) const;
 
   /// Throws the shared "tagged argument, no known parameter type" refusal.
   [[noreturn]] void refuse_tagged_argument() const;
@@ -229,6 +233,8 @@ public:
   };
 
 private:
+  bool attribute_kinds_diverge(const std::string &attr) const;
+
   /**
    * @brief Builds the instructions that fill a tagged-object symbol's four
    * fields (value/type_id/size/float_idx) from an already-converted value.

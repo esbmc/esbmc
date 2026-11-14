@@ -2040,7 +2040,8 @@ reuses_c_model(const nlohmann::json &call, const symbol_id &function_id)
            call["func"].value("_type", "") == "Attribute");
 }
 
-// A typed list's builder and sorted() lower to their C models (#10451).
+// A typed list's builder, sorted(), max() and min(), and a typed dict's
+// store, lower to their C models (#10451).
 // __ESBMC_unreachable and __ESBMC_unroll lower to calls to the C intrinsics
 // of the same names. Symex's intrinsic handler in symex_main.cpp fires on
 // __ESBMC_unreachable under --enable-unreachability-intrinsic.
@@ -2085,11 +2086,19 @@ exprt function_call_builder::build_c_intrinsic_call(
   return call;
 }
 
+// A typed heapq call, or a method call on its receiver.
+exprt function_call_builder::build_attribute_call() const
+{
+  if (python_list::is_typed_heapq_call(call_))
+    return python_list(converter_, call_).typed_heapq();
+  return build_method_call_on_receiver();
+}
+
 exprt function_call_builder::build() const
 {
   if (call_["func"]["_type"] == "Attribute")
   {
-    exprt handled_method = build_method_call_on_receiver();
+    exprt handled_method = build_attribute_call();
     if (!handled_method.is_nil())
       return handled_method;
   }

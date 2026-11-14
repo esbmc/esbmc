@@ -287,8 +287,14 @@ static void add_function_stub(
 
 nlohmann::json python_converter::callable_function_stubs() const
 {
+  return callable_function_stubs(*ast_json);
+}
+
+nlohmann::json
+python_converter::callable_function_stubs(const nlohmann::json &module) const
+{
   nlohmann::json stubs = nlohmann::json::array();
-  for (const auto &stmt : (*ast_json)["body"])
+  for (const auto &stmt : module["body"])
   {
     const std::string type = stmt.value("_type", "");
     if (type == "FunctionDef")
@@ -319,8 +325,14 @@ nlohmann::json python_converter::callable_function_stubs() const
 
 nlohmann::json python_converter::kind_module_body() const
 {
-  nlohmann::json body = callable_function_stubs();
-  for (const auto &stmt : (*ast_json)["body"])
+  return kind_module_body(*ast_json);
+}
+
+nlohmann::json
+python_converter::kind_module_body(const nlohmann::json &module) const
+{
+  nlohmann::json body = callable_function_stubs(module);
+  for (const auto &stmt : module["body"])
     body.push_back(stmt);
   return body;
 }

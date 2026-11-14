@@ -18,9 +18,12 @@ from preprocessor.coroutine_lowering import lower_coroutines
 from preprocessor.array_typecodes import route_array_typecodes
 from preprocessor.match_lowering import lower_match_statements
 from preprocessor.namedtuple_lowering import lower_namedtuples
+from preprocessor.not_callable_values import wrap_never_callable_values
 from preprocessor.open_lowering import lower_builtin_open
 from preprocessor.function_value_dispatch import dispatch_mixed_function_values
+from preprocessor.function_value_params import inline_def_aliases, raise_not_callable_arms
 from preprocessor.function_value_types import apply_imported_tags, reject_mixed_function_values
+from preprocessor.held_method_tags import tag_held_methods
 from preprocessor.iter_next_lowering import lower_iter_next
 from preprocessor.receiver_classes import refuse_path_dependent_receivers
 from preprocessor.receiver_split import split_path_dependent_receivers
@@ -629,6 +632,8 @@ class ModuleRewriteMixin:
         module imports."""
         if entry:
             _rename_builtin_defs(node)
+            inline_def_aliases(node)
+            raise_not_callable_arms(node)
             copy_classes_per_argument_kinds(node)
         else:
             apply_imported_tags(node, self.module_name)
@@ -647,8 +652,11 @@ class ModuleRewriteMixin:
         self._scan_fixed_receivers(node)
         lower_method_values(node, self.fixed_receivers)
         if entry:
+            wrap_never_callable_values(node)
             dispatch_mixed_function_values(node, self.module_name)
         reject_mixed_function_values(node, self.module_name)
+        if entry:
+            tag_held_methods(node)
         lower_match_statements(node)
         lower_itertools(node)
         lower_namedtuples(node, self.module_name)
