@@ -1133,6 +1133,9 @@ static nlohmann::json lambda_bound_to(
     if (target == nullptr || target->value("id", "") != name)
       continue;
     const nlohmann::json &value = stmt["value"];
+    // A bare annotation `name: T` binds nothing.
+    if (value.is_null())
+      continue;
     if (value.value("_type", "") == "Lambda")
       return value;
     if (
