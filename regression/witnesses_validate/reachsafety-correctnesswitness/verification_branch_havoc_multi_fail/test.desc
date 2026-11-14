@@ -1,0 +1,7 @@
+CORE
+main.c
+--32 --overflow-check --k-induction --multi-property --validate-correctness-witness --witness witness.yml
+REQUIRES arch32
+
+FAILED +\[main\.arithmetic-overflow\.2\] +line 5 +arithmetic overflow on add$
+^VERIFICATION FAILED$

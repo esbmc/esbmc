@@ -1,0 +1,12 @@
+- entry_type: invariant_set
+  metadata:
+    format_version: "2.0"
+  content:
+  - invariant:
+      type: loop_invariant
+      location:
+        file_name: main.c
+        line: 3
+        function: main
+      value: "0 <= i && i <= 4"
+      format: c_expression
