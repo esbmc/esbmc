@@ -78,13 +78,14 @@ public:
     unsigned loop_number) = 0;
 
   // record an assertion
-  /// \p cond_neg is \p cond with the claim negated under the same guards, so
-  /// a probe can ask whether the claim *holds* on this path using the same
-  /// encoding the violation query uses (issue #7585).
+  /// \p path_cond is `guard -> claim` without the execution guard that
+  /// \p cond also carries: that guard is a free literal a violation forces
+  /// true, so a probe asking whether the claim can hold or be skipped must not
+  /// be able to falsify it (issues #7585, #10642).
   virtual void assertion(
     const expr2tc &guard,
     const expr2tc &cond,
-    const expr2tc &cond_neg,
+    const expr2tc &path_cond,
     const std::string &msg,
     std::vector<stack_framet> stack_trace,
     const sourcet &source,

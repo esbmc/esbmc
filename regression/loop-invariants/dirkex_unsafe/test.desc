@@ -1,4 +1,5 @@
 CORE
 main.c
 --loop-invariant-check
-^VERIFICATION FAILED$
+^\s+UNKNOWN\s+\[main\.assertion\.3\]\s+line\s+23\s+.*\(loop invariant too weak
+^VERIFICATION UNKNOWN$

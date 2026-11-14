@@ -67,7 +67,7 @@ public:
   void assertion(
     const expr2tc &guard,
     const expr2tc &cond,
-    const expr2tc &cond_neg,
+    const expr2tc &path_cond,
     const std::string &msg,
     std::vector<stack_framet> stack_trace,
     const sourcet &source,
@@ -85,10 +85,11 @@ public:
   /// How an assertion is encoded.
   ///   Violated       -- `not(assumpt -> cond)`: can the claim be violated?
   ///   PathReachable  -- `assumpt`: is the path to it feasible at all?
-  ///   Satisfiable    -- `not(assumpt -> cond_neg)`: can the claim hold? UNSAT
-  ///                     means no feasible path satisfies it, so a violation
-  ///                     found against an over-approximation is one the
-  ///                     approximation's own constraints force (issue #7585).
+  ///   Satisfiable    -- `not(assumpt -> not(path_cond))`: can the claim hold
+  ///                     or its path be skipped? UNSAT means every feasible
+  ///                     path violates it, so a violation found against an
+  ///                     over-approximation is one the approximation's own
+  ///                     constraints force (issues #7585, #10642).
   enum class assertion_modet
   {
     Violated,
@@ -152,8 +153,8 @@ public:
     // std::string) and dedups the payload across the many steps that share
     // a message.
     expr2tc cond;
-    /// `cond` with the claim negated under the same guards (issue #7585).
-    expr2tc cond_neg;
+    /// `guard -> claim` without the execution guard (issue #10642).
+    expr2tc path_cond;
     irep_idt comment;
 
     // OUTPUT-step payload. OUTPUT steps are rare (only printf-family
@@ -209,7 +210,7 @@ public:
         original_lhs(o.original_lhs),
         original_rhs(o.original_rhs),
         cond(o.cond),
-        cond_neg(o.cond_neg),
+        path_cond(o.path_cond),
         comment(o.comment),
         output_data(
           o.output_data ? std::make_unique<output_datat>(*o.output_data)
