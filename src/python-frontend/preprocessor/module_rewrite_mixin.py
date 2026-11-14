@@ -21,7 +21,7 @@ from preprocessor.namedtuple_lowering import lower_namedtuples
 from preprocessor.not_callable_values import wrap_never_callable_values
 from preprocessor.open_lowering import lower_builtin_open
 from preprocessor.function_value_dispatch import dispatch_mixed_function_values
-from preprocessor.function_value_params import inline_def_aliases
+from preprocessor.function_value_params import inline_def_aliases, raise_not_callable_arms
 from preprocessor.function_value_types import apply_imported_tags, reject_mixed_function_values
 from preprocessor.iter_next_lowering import lower_iter_next
 from preprocessor.receiver_classes import refuse_path_dependent_receivers
@@ -632,6 +632,7 @@ class ModuleRewriteMixin:
         if entry:
             _rename_builtin_defs(node)
             inline_def_aliases(node)
+            raise_not_callable_arms(node)
             copy_classes_per_argument_kinds(node)
         else:
             apply_imported_tags(node, self.module_name)
