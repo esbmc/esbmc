@@ -2,8 +2,8 @@ import ast
 from typing import cast, TypeGuard
 from .dataflow_solver import analyze_function, infer_type_from_expr, collect_known_classes, InferenceContext, collect_function_argument_types
 from .lattice import *
+from .lattice import IntType, ListType, StrType, TupleType, BoolType, UnionType, InstanceType,NoneType, AnyType, Unknown, Bottom, Type, CallableType, ComplexType, FloatType
 from .cfg_builder import UnsupportedCFGError
-from collections import Counter
 
 
 def derive_param_and_return_types(
@@ -23,6 +23,10 @@ def derive_param_and_return_types(
     ret_type = Bottom()
 
     for typ in return_types.values():
+        if isinstance(typ, (Unknown, AnyType),):
+            ret_type = Unknown()
+            break
+        
         ret_type = ret_type.join(typ)
 
     param_types = {}
@@ -384,7 +388,7 @@ def is_typed_assignment(stmt, merged, already_annotated) -> TypeGuard[ast.Assign
     return True
 
 
-def module_annotation_adds_information(stmt, inferred_type, context):
+def module_annotation_adds_information(stmt, inferred_type, context, env,):
 
     if not isinstance(stmt, ast.Assign):
         return False
@@ -399,10 +403,7 @@ def module_annotation_adds_information(stmt, inferred_type, context):
         return True
 
     initial_type = infer_type_from_expr(
-        stmt.value,
-        {},
-        context,
-    )
+        stmt.value, env, context, )
 
     if not can_make_annotation(initial_type):
         return True
@@ -489,13 +490,19 @@ def process_statements(statements, merged, already_annotated, context):
             continue
 
         if is_typed_assignment(stmt, merged, already_annotated):
-            name = stmt.targets[0].id
+            assert isinstance(stmt, ast.Assign)
+
+            target = stmt.targets[0]
+            assert isinstance(target, ast.Name)
+
+            name = target.id
             t = merged[name]
 
             if not module_annotation_adds_information(
                     stmt,
                     t,
                     context,
+                    merged,
             ):
                 new_body.append(stmt)
                 continue
@@ -836,13 +843,20 @@ def analyze_module_body(
         raise RuntimeError("Internal pytype error: "
                            "module wrapper is not a FunctionDef")
 
+    try:
+        return analyze_function(wrapper, context,)
+
+    except UnsupportedCFGError as exc:
+        print("[PYTYPE] skipping module body:", exc,)
+        return None
+
     #wrapper = wrapper_node
 
     #wrapper.body = list(module_statements)
 
     #ast.fix_missing_locations(wrapper)
 
-    return analyze_function(wrapper, context)
+    #return analyze_function(wrapper, context)
 
 
 def annotate_module_assignments(
@@ -902,6 +916,7 @@ def annotate_module_assignments(
                     stmt,
                     inferred_type,
                     context,
+                    merged,
             ):
                 new_body.append(stmt)
                 continue
@@ -971,90 +986,191 @@ def collect_module_reassigned_names(module_node: ast.Module, ) -> set[str]:
 
 def annotate_ast(ast_node, opts=None):
     ast.fix_missing_locations(ast_node)
+
     known_classes = collect_known_classes(ast_node)
-    context = InferenceContext(known_classes=known_classes)
-    collect_function_argument_types(ast_node, context)
+    context = InferenceContext(
+        known_classes=known_classes
+    )
+
+    function_nodes = [
+        node
+        for node in ast.walk(ast_node)
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef,),)
+    ]
 
     out_envs_by_func = {}
     return_types_by_func = {}
 
-    for node in ast.walk(ast_node):
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            result = None
+    max_interprocedural_iters = 10
+
+    for iteration in range(max_interprocedural_iters):
+        print(
+            "[PYTYPE] interprocedural iteration",
+            iteration + 1,
+        )
+
+        old_params = dict(
+            context.function_params
+        )
+
+        old_returns = dict(
+            context.function_returns
+        )
+
+        # Recompute function argument types using the
+        # information currently available about function
+        # parameters and return values.
+        collect_function_argument_types(
+            ast_node,
+            context,
+        )
+
+        current_out_envs = {}
+        current_return_types = {}
+
+        for node in function_nodes:
             try:
-                result = analyze_function(node, context)
+                result = analyze_function(
+                    node,
+                    context,
+                )
             except UnsupportedCFGError as exc:
-                print(f"[PYTYPE] skipping {node.name}: {exc}")
+                print(
+                    f"[PYTYPE] skipping "
+                    f"{node.name}: {exc}"
+                )
                 continue
-           # if result is None:
-             #   print(f"[PYTYPE] Skipping {node.name}: no convergence")
-             #   continue
 
             if result is None:
                 print(
-                    f"[PYTYPE] Skipping {node.name}: "
+                    f"[PYTYPE] Skipping "
+                    f"{node.name}: "
                     "no convergence"
                 )
                 continue
-            
-            print(f"[PYTYPE] Converged: {node.name}")
-            cfg, in_envs, out_envs, return_types = result
 
-         
+            print(
+                f"[PYTYPE] Converged: "
+                f"{node.name}"
+            )
 
-            _, ret_type = derive_param_and_return_types(node, out_envs, return_types, context)
+            (cfg, in_envs, out_envs, return_types,) = result
 
-            ret_type, return_types = return_type_uncertain_case(
+            _, ret_type = (
+                derive_param_and_return_types(
+                    node,
+                    out_envs,
+                    return_types,
+                    context,
+                )
+            )
+
+            (ret_type, return_types,) = return_type_uncertain_case(
                 node,
                 out_envs,
                 return_types,
                 ret_type,
             )
 
-            if isinstance(ret_type, (Bottom, Unknown)):
+            if isinstance(ret_type, (Bottom, Unknown, ),):
                 context.function_returns.pop(
                     node.name,
                     None,
                 )
             else:
-                context.function_returns[node.name] = ret_type
-
-                collect_function_argument_types(ast_node, context,)
+                context.function_returns[
+                    node.name
+                ] = ret_type
 
             print(
-                "[PYTYPE] suppressing uncertain return type:",
+                "[FUNCTION RETURN]",
                 node.name,
+                "=>",
                 ret_type,
             )
 
-            ret_type = Unknown()
-
-            #if not isinstance(ret_type, (Bottom, Unknown)):
-            #  context.function_returns[node.name] = ret_type
-
-            print("[FUNCTION RETURN]", node.name, "=>", ret_type)
-
             print(cfg)
             print(out_envs)
-            out_envs_by_func[node] = out_envs
-            return_types_by_func[node] = return_types
 
-        # param_types, ret_type = derive_param_and_return_types(node, out_envs, return_types, context,)
+            current_out_envs[node] = (
+                out_envs
+            )
+
+            current_return_types[node] = (
+                return_types
+            )
+
+        # Some calls can only be inferred after the
+        # return types above have become known.
+        collect_function_argument_types(
+            ast_node,
+            context,
+        )
+
+        # Keep the results from the latest analysis
+        # iteration. These will be used for annotation
+        # after the interprocedural fixpoint is reached.
+        out_envs_by_func = current_out_envs
+        return_types_by_func = (
+            current_return_types
+        )
+
+        if (
+            context.function_params
+            == old_params
+            and context.function_returns
+            == old_returns
+        ):
+            print(
+                "[PYTYPE] interprocedural "
+                "analysis converged"
+            )
+            break
+
+    else:
+        print(
+            "[PYTYPE] interprocedural "
+            "analysis reached iteration limit"
+        )
+
+    # Only annotate functions after the interprocedural
+    # information has stabilised.
     annotate_module_with_outenvs(
         ast_node,
         out_envs_by_func,
         return_types_by_func,
         context,
     )
-    module_result = analyze_module_body(ast_node, context)
-    if module_result is not None:
-        (module_cfg, module_in_envs, module_out_envs, module_return_types) = module_result
 
-        print("[PYTYPE] Converged: <module>")
+    # Analyze module-level statements separately.
+    # Unsupported module CFG constructs must not make
+    # the annotation pass abort.
+    try:
+        module_result = analyze_module_body(
+            ast_node,
+            context,
+        )
+    except UnsupportedCFGError as exc:
+        print(
+            "[PYTYPE] skipping module body:",
+            exc,
+        )
+        module_result = None
+
+    if module_result is not None:
+        (
+            module_cfg,
+            module_in_envs,
+            module_out_envs,
+            module_return_types,
+        ) = module_result
+
+        print(
+            "[PYTYPE] Converged: <module>"
+        )
         print(module_cfg)
         print(module_out_envs)
 
-        # Write inferred module-level types back into the AST.
         annotate_module_assignments(
             ast_node,
             module_out_envs,

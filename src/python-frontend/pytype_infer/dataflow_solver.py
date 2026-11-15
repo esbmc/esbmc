@@ -1,6 +1,7 @@
 import ast
-from typing import Dict, List, Any, cast
+from typing import Dict, List, Any
 from dataclasses import dataclass, field
+from .lattice import DictType, ListType, BoolType, StrType, TupleType, Unknown, NoneType, Type
 from .lattice import *
 from .cfg_builder import *
 
@@ -50,6 +51,52 @@ def parse_none_condition(cond):
 
     return None
 
+class CallArgumentCollector(ast.NodeVisitor):
+    def __init__(
+        self,
+        env,
+        collected,
+        context,
+    ):
+        self.env = env
+        self.collected = collected
+        self.context = context
+
+    def visit_Call(self, node):
+        if (
+            isinstance(node.func, ast.Name)
+            and node.args
+        ):
+            arg_types = []
+
+            for arg in node.args:
+                arg_type = infer_type_from_expr(
+                    arg,
+                    self.env,
+                    self.context,
+                )
+
+                arg_types.append(arg_type)
+
+            merge_call_argument_types(
+                self.collected,
+                node.func.id,
+                arg_types,
+            )
+
+        self.generic_visit(node)
+
+    def visit_FunctionDef(self, node):
+        return
+
+    def visit_AsyncFunctionDef(self, node):
+        return
+
+    def visit_ClassDef(self, node):
+        return
+
+    def visit_Lambda(self, node):
+        return
 
 def parse_condition(cond):
     result = parse_isinstance_condition(cond)
@@ -882,13 +929,106 @@ def transfer_return(stmt, env, context):
     return env, return_type
 
 
-def transfer_assign(stmt, env, context):
+def transfer_assign(
+    stmt,
+    env,
+    context,
+):
     for target in stmt.targets:
         if isinstance(target, ast.Name):
-            assign_name(target, stmt.value, env, context)
+            assign_name(
+                target,
+                stmt.value,
+                env,
+                context,
+            )
 
         elif isinstance(target, ast.Subscript):
-            assign_subscript(target, stmt.value, env, context)
+            assign_subscript(
+                target,
+                stmt.value,
+                env,
+                context,
+            )
+
+        elif isinstance(
+            target,
+            (ast.Tuple, ast.List),
+        ):
+            value_type = infer_type_from_expr(
+                stmt.value,
+                env,
+                context,
+            )
+
+            bind_target_type(
+                target,
+                value_type,
+                env,
+            )
+
+    return env
+
+def merge_call_argument_types(
+    collected,
+    name,
+    arg_types,
+):
+    if name not in collected:
+        collected[name] = arg_types
+        return
+
+    previous = collected[name]
+
+    for i in range(
+        min(
+            len(previous),
+            len(arg_types),
+        )
+    ):
+        current = arg_types[i]
+
+        if isinstance(
+            previous[i],
+            Unknown,
+        ):
+            continue
+
+        if isinstance(
+            current,
+            Unknown,
+        ):
+            previous[i] = Unknown()
+            continue
+
+        previous[i] = previous[i].join(
+            current
+        )
+
+def function_parameter_environment(
+    func_node,
+    context,
+):
+    env = {}
+
+    inferred_params = context.function_params.get(
+        func_node.name,
+        [],
+    )
+
+    for i, arg in enumerate(
+        func_node.args.args
+    ):
+        if arg.annotation is not None:
+            env[arg.arg] = infer_annotation_type(
+                arg.annotation
+            )
+
+        elif i < len(inferred_params):
+            env[arg.arg] = inferred_params[i]
+
+        else:
+            env[arg.arg] = Unknown()
 
     return env
 
@@ -1038,47 +1178,61 @@ def transfer_annassign(stmt, env, context,):
     return env    """
 
 
-def collect_function_argument_types(tree, context):
+def collect_function_argument_types(
+    tree,
+    context,
+    max_iters=10,
+):
+    for _ in range(max_iters):
+        collected = {}
 
-    collected = {}
-    
-    for node in ast.walk(tree):
-        if not isinstance(node, ast.Call):
-            continue
+        module_collector = CallArgumentCollector(
+            {},
+            collected,
+            context,
+        )
 
-        if not isinstance(node.func, ast.Name):
-            continue
-
-        if not node.args:
-            continue
-
-        name = node.func.id
-
-        arg_types = []
-
-        for arg in node.args:
-            typ = infer_type_from_expr(arg, {}, context)
-            arg_types.append(typ)
-
-        if name not in collected:
-            collected[name] = arg_types
-            continue
-
-        previous = collected[name]
-
-        for i in range(min(len(previous), len(arg_types))):
-            current = arg_types[i]
-
-            if isinstance(previous[i], Unknown):
+        for stmt in tree.body:
+            if isinstance(
+                stmt,
+                (
+                    ast.FunctionDef,
+                    ast.AsyncFunctionDef,
+                    ast.ClassDef,
+                ),
+            ):
                 continue
 
-            if isinstance(current, Unknown):
-                previous[i] = Unknown()
+            module_collector.visit(stmt)
+
+        for node in ast.walk(tree):
+            if not isinstance(
+                node,
+                (
+                    ast.FunctionDef,
+                    ast.AsyncFunctionDef,
+                ),
+            ):
                 continue
 
-            previous[i] = previous[i].join(current)
+            env = function_parameter_environment(
+                node,
+                context,
+            )
 
-    context.function_name = collected
+            collector = CallArgumentCollector(
+                env,
+                collected,
+                context,
+            )
+
+            for stmt in node.body:
+                collector.visit(stmt)
+
+        if collected == context.function_params:
+            return
+
+        context.function_params = collected
 
 def transfer_expr(
     stmt: ast.Expr,
@@ -1405,6 +1559,33 @@ def infer_tuple_literal_type(expr, env, context):
     elems = [infer_type_from_expr(element, env, context) for element in expr.elts]
     return TupleType(elems)
 
+def infer_tuple_constructor_type(expr, env, context,):
+    if expr.keywords:
+        return Unknown()
+
+    if len(expr.args) == 0:
+        return TupleType([])
+
+    if len(expr.args) !=1:
+        return Unknown()
+
+    arg = expr.args[0]
+
+    if isinstance(arg, ast.Tuple):
+        return infer_tuple_literal_type(arg, env, context,)
+
+    if isinstance(arg, ast.List):
+        return TupleType([infer_type_from_expr(element, env, context,) for element in arg.elts])
+
+    arg_type = infer_type_from_expr(arg, env, context,)
+
+    if isinstance(arg_type, TupleType):
+        return TupleType(list(arg_type.elems))
+
+    return Unknown()
+
+
+
 
 def infer_dict_literal_type(expr, env, context):
     key_type = Unknown()
@@ -1672,7 +1853,7 @@ def infer_builtin_call_type(name, expr, env, context):
         return DictType(Unknown(), Unknown())
 
     if name == "tuple":
-        return TupleType([])
+        return infer_tuple_constructor_type(expr, env, context,)
 
     if name == "complex":
         return ComplexType()
@@ -1963,12 +2144,12 @@ def infer_tuple_subscript_type(
         if index_expr.upper is not None:
             if (isinstance(index_expr.upper, ast.Constant)
                     and not isinstance(index_expr.upper.value, int)
-                    and not isinstance(index_expr.upper_value, bool)):
+                    and not isinstance(index_expr.upper.value, bool)):
                 upper = index_expr.upper.value
 
             elif (isinstance(index_expr.upper, ast.UnaryOp)
                   and isinstance(index_expr.upper.op, ast.USub)
-                  and isinstance(index_expr, upper.operand, ast.Constant)
+                  and isinstance(index_expr.upper.operand, ast.Constant)
                   and isinstance(index_expr.upper.operand.value, int)):
                 upper = -index_expr.upper.operand.value
 
@@ -1977,9 +2158,9 @@ def infer_tuple_subscript_type(
 
         if index_expr.step is not None:
             if (isinstance(index_expr.step, ast.Constant)
-                    and isinstance(index_expr.step.value, bool)
-                    and not isinstance(index_expr.step.value)):
-                step = index_expr.step_value
+                    and isinstance(index_expr.step.value, int)
+                    and not isinstance(index_expr.step.value, bool)):
+                step = index_expr.step.value
 
             elif (isinstance(index_expr.step, ast.UnaryOp)
                   and isinstance(index_expr.step.op, ast.USub)
