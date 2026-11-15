@@ -64,10 +64,13 @@ def esbmc_cmd(binary, row, extra):
     return [binary, str(row / desc[1])] + flags + extra
 
 
-def measure(binary, row, extra, solver, bw_python, timeout):
-    """Measure one corpus row; returns a dict of the recorded numbers."""
+def measure(args, row):
+    """Measure one corpus row with the parsed command-line options; returns a dict of the
+    recorded numbers."""
+    binary, timeout, extra = args.esbmc, args.timeout, shlex.split(args.flags)
     res = {"row": row.name}
-    out, res["wall"], res["rss"] = run(esbmc_cmd(binary, row, extra + ["--" + solver]), timeout)
+    out, res["wall"], res["rss"] = run(esbmc_cmd(binary, row, extra + ["--" + args.solver]),
+                                       timeout)
     for key, pat in PATTERNS.items():
         m = re.search(pat, out, re.M)
         res[key] = m.groups() if m else None
@@ -79,7 +82,7 @@ def measure(binary, row, extra, solver, bw_python, timeout):
             res["bw_result"] = "no VCC" if "0 remaining" in dump else "no dump"
             return res
         res["bytes"] = os.path.getsize(smt)
-        bw_out, _, _ = run([bw_python, "-c", BITWUZLA_SOLVE, smt], timeout)
+        bw_out, _, _ = run([args.bitwuzla_python, "-c", BITWUZLA_SOLVE, smt], timeout)
         m = re.search(r"time=([\d.]+)", bw_out)
         res["bw"] = float(m.group(1)) if m else None
         res["bw_result"] = "sat" if "\nsat" in "\n" + bw_out else (
@@ -116,9 +119,7 @@ def main():
           f"{args.solver} s | Bitwuzla (SMT-LIB) s | wall s | peak MiB |")
     print("|---|---|---|---|---|---|---|---|---|---|")
     for row in rows:
-        res = measure(args.esbmc, row, shlex.split(args.flags), args.solver, args.bitwuzla_python,
-                      args.timeout)
-        print(fmt(res), flush=True)
+        print(fmt(measure(args, row)), flush=True)
 
 
 if __name__ == "__main__":
