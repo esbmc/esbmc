@@ -384,25 +384,30 @@ remove_stale_lean_output(const cmdlinet &cmdline, const optionst &options)
     std::remove(options.get_option("output").c_str());
 }
 
+// Reopen stderr rather than open a new stream, so that what clang and LLVM
+// write to stderr (diagnostics, -v under --verbosity) reaches the file too.
+static bool redirect_output(const cmdlinet &cmdline)
+{
+  if (!cmdline.isset("file-output"))
+    return true;
+  const char *path = cmdline.getval("file-output");
+  if (!freopen(path, "w+", stderr))
+  {
+    messaget::state.out = stdout;
+    log_error("Cannot open {}", path);
+    return false;
+  }
+  messaget::state.out = stderr;
+  // freopen makes stderr fully buffered; clang writes to the descriptor
+  // directly, so keep our lines in order with its.
+  messaget::state.set_flushln();
+  return true;
+}
+
 int esbmc_parseoptionst::doit()
 {
-  // Configure msg output
-  if (cmdline.isset("file-output"))
-  {
-    // Reopen stderr rather than open a new stream, so that what clang and LLVM
-    // write to stderr (diagnostics, -v under --verbosity) reaches the file too.
-    if (!freopen(cmdline.getval("file-output"), "w+", stderr))
-    {
-      messaget::state.out = stdout;
-      log_error("Cannot open {}", cmdline.getval("file-output"));
-      return 1;
-    }
-    out = stderr;
-    messaget::state.out = stderr;
-    // freopen makes stderr fully buffered; clang writes to the descriptor
-    // directly, so keep our lines in order with its.
-    messaget::state.set_flushln();
-  }
+  if (!redirect_output(cmdline))
+    return 1;
 
   // Print a banner with version info to stdout
   {
