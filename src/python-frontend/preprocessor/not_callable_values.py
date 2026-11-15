@@ -3,8 +3,9 @@
 `get()()`, where `get` returns a function on one path and an int on another, raises TypeError
 on the int path. The converter gives the result of `get()` one type, so it refuses such a call
 or reads the int as a function. When every use of such a value is a call of a call's result,
-the value `v` is replaced by `_esbmc_not_callable_of_<n>(v)`, which evaluates `v` and returns a
-function of `n` parameters raising TypeError: calling it has the effect calling `v` has.
+directly or through a name that result is bound to (#10678), the value `v` is replaced by
+`_esbmc_not_callable_of_<n>(v)`, which evaluates `v` and returns a function of `n` parameters
+raising TypeError: calling it has the effect calling `v` has.
 
 The value may reach the call through a conditional expression, a name that is only called or
 returned, the return of a module-level function whose results are only called, and a
@@ -33,6 +34,8 @@ class _Flow:
         }
         self.seen = set()
         self.counts = {}
+        self.returns = 0
+        self.returned_calls = set()
 
     def bindings(self, name):
         if name not in self.counts:
@@ -83,6 +86,8 @@ class _Flow:
         parent = self.parents.get(id(expr))
         if isinstance(parent, ast.Call) and parent.func is expr:
             calls.append(parent)
+            if self.returns:
+                self.returned_calls.add(id(parent))
             return True
         if isinstance(parent, ast.IfExp) and expr is not parent.test:
             return self.only_called(parent, calls)
@@ -107,7 +112,11 @@ class _Flow:
 
     def results_only_called(self, fn, calls):
         """Whether every result of the module-level def `fn` is only called."""
-        return self.calls_of_def(fn, lambda call: self.only_called(call, calls))
+        self.returns += 1
+        try:
+            return self.calls_of_def(fn, lambda call: self.only_called(call, calls))
+        finally:
+            self.returns -= 1
 
     def calls_of_def(self, fn, check):
         """Whether every read of the module-level def `fn` is a call that `check` accepts,
@@ -201,10 +210,12 @@ def _never_callable(flow, expr):
         isinstance(n.value, ast.Constant) for n in _own_nodes(fn) if isinstance(n, ast.Return))
 
 
-def _arity(calls):
-    """The number of positional arguments every call of a call's result in `calls` passes."""
-    if not calls or any(not isinstance(c.func, ast.Call) or c.keywords or any(
-            isinstance(a, ast.Starred) for a in c.args) for c in calls):
+def _arity(calls, flow):
+    """The number of positional arguments every call in `calls` passes, each of a call's
+    result: directly, or through a name that a def's result reaches (#10678)."""
+    if not calls or any((not isinstance(c.func, ast.Call) and id(c) not in flow.returned_calls)
+                        or c.keywords or any(isinstance(a, ast.Starred) for a in c.args)
+                        for c in calls):
         return None
     counts = {len(c.args) for c in calls}
     return counts.pop() if len(counts) == 1 else None
@@ -240,8 +251,9 @@ def _called_values(module, flow):
         if not _never_callable(flow, node) or isinstance(flow.parents.get(id(node)), ast.Return):
             continue
         flow.seen = set()
+        flow.returned_calls = set()
         calls = []
-        arity = _arity(calls) if flow.only_called(node, calls) else None
+        arity = _arity(calls, flow) if flow.only_called(node, calls) else None
         if arity is not None:
             found.append((node, arity))
     return found

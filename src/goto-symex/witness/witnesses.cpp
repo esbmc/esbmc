@@ -108,8 +108,15 @@ void yamlt::generate_yaml(
   const std::string &output_path_override)
 {
   YAML::Emitter yaml_emitter;
+  /* An absent thread_id means thread 0, so the two racing targets would both
+     claim the main thread. Format 2.4 is the first to allow `thread_id: any`
+     on a target (#10747). */
   if (this->witness_type == yamlt::VIOLATION)
-    create_violation_yaml_emitter(this->verified_file, options, yaml_emitter);
+    create_violation_yaml_emitter(
+      this->verified_file,
+      options,
+      yaml_emitter,
+      racing_target ? "2.4" : "2.1");
   else
     create_correctness_yaml_emitter(this->verified_file, options, yaml_emitter);
 
@@ -122,9 +129,11 @@ void yamlt::generate_yaml(
       yaml_emitter << YAML::BeginMap;
       yaml_emitter << YAML::Key << "segment" << YAML::Value << YAML::BeginSeq;
 
-      create_waypoint(waypoint, yaml_emitter);
-      if (racing_target && &waypoint == &this->segments.back())
-        create_waypoint(*racing_target, yaml_emitter);
+      const bool race_segment =
+        racing_target && &waypoint == &this->segments.back();
+      create_waypoint(waypoint, yaml_emitter, race_segment);
+      if (race_segment)
+        create_waypoint(*racing_target, yaml_emitter, true);
 
       yaml_emitter << YAML::EndSeq;
       yaml_emitter << YAML::EndMap;
@@ -193,7 +202,10 @@ std::string trim(const std::string &str)
   return str.substr(first_non_whitespace, length);
 }
 
-void create_waypoint(const waypoint &wp, YAML::Emitter &waypoint)
+void create_waypoint(
+  const waypoint &wp,
+  YAML::Emitter &waypoint,
+  bool any_thread)
 {
   waypoint << YAML::BeginMap;
   waypoint << YAML::Key << "waypoint" << YAML::Value << YAML::BeginMap;
@@ -252,6 +264,9 @@ void create_waypoint(const waypoint &wp, YAML::Emitter &waypoint)
   waypoint << YAML::Key << "function" << YAML::Value << YAML::DoubleQuoted
            << wp.function;
   waypoint << YAML::EndMap;
+
+  if (any_thread)
+    waypoint << YAML::Key << "thread_id" << YAML::Value << "any";
 
   waypoint << YAML::EndMap;
   waypoint << YAML::EndMap;
@@ -827,11 +842,12 @@ static std::string yaml_specification(const optionst &options)
 void _create_yaml_metadata_emitter(
   const std::string &verifiedfile,
   const optionst &options,
-  YAML::Emitter &metadata)
+  YAML::Emitter &metadata,
+  const std::string &format_version = "2.1")
 {
   metadata << YAML::BeginMap;
   metadata << YAML::Key << "format_version" << YAML::Value << YAML::DoubleQuoted
-           << "2.1";
+           << format_version;
 
   std::string uuid =
     boost::uuids::to_string(boost::uuids::random_generator()());
@@ -949,7 +965,8 @@ void create_correctness_yaml_emitter(
 void create_violation_yaml_emitter(
   std::string &verifiedfile,
   optionst &options,
-  YAML::Emitter &root)
+  YAML::Emitter &root,
+  const std::string &format_version)
 {
   root << YAML::BeginSeq;
   root << YAML::BeginMap;
@@ -957,7 +974,7 @@ void create_violation_yaml_emitter(
        << "violation_sequence";
 
   root << YAML::Key << "metadata";
-  _create_yaml_metadata_emitter(verifiedfile, options, root);
+  _create_yaml_metadata_emitter(verifiedfile, options, root, format_version);
 }
 
 void check_replace_invalid_assignment(std::string &assignment)

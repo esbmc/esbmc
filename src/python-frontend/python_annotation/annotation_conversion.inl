@@ -1509,6 +1509,21 @@ std::string python_annotation<Json>::class_attribute_type(
   return "";
 }
 
+/// Whether @p node stores to an attribute named @p attr on an instance of the
+/// class being typed. A copy of the class (@p in_copy) stores into `self` only
+/// on its own instances.
+template <class Json>
+static bool
+stores_attribute(const Json &node, const std::string &attr, bool in_copy)
+{
+  if (
+    node.value("_type", "") != "Attribute" || node.value("attr", "") != attr ||
+    (node.contains("ctx") && node["ctx"].value("_type", "") == "Load"))
+    return false;
+  return !in_copy || !node["value"].is_object() ||
+         node["value"].value("id", "") != "self";
+}
+
 /// Counts the nodes under @p node that may store to an attribute named
 /// @p attr, a `setattr` call or a `__class__` read, and the uses of @p name
 /// outside annotations.
@@ -1518,21 +1533,23 @@ static void count_attr_writers(
   const std::string &attr,
   const std::string &name,
   size_t &stores,
-  size_t &name_reads)
+  size_t &name_reads,
+  const std::set<const Json *> &copies,
+  bool in_copy = false)
 {
   if (node.is_array())
   {
     for (const Json &child : node)
-      count_attr_writers(child, attr, name, stores, name_reads);
+      count_attr_writers(
+        child, attr, name, stores, name_reads, copies, in_copy);
     return;
   }
   if (!node.is_object())
     return;
+  in_copy |= copies.count(&node) != 0;
   const std::string type = node.value("_type", "");
-  const std::string ctx =
-    node.contains("ctx") ? node["ctx"].value("_type", "") : "";
   if (
-    (type == "Attribute" && node.value("attr", "") == attr && ctx != "Load") ||
+    stores_attribute(node, attr, in_copy) ||
     (type == "Attribute" && node.value("attr", "") == "__class__") ||
     (type == "Name" && node.value("id", "") == "setattr"))
     ++stores;
@@ -1540,14 +1557,79 @@ static void count_attr_writers(
     ++name_reads;
   for (auto it = node.begin(); it != node.end(); ++it)
     if (it.key() != "annotation" && it.key() != "returns")
-      count_attr_writers(it.value(), attr, name, stores, name_reads);
+      count_attr_writers(
+        it.value(), attr, name, stores, name_reads, copies, in_copy);
+}
+
+/// How many times the AST node @p node itself binds or declares @p name.
+template <class Json>
+static size_t own_bindings(const Json &node, const std::string &name)
+{
+  const std::string kind = node.value("_type", "");
+  if (kind == "Global" || kind == "Nonlocal")
+    return std::count(node["names"].begin(), node["names"].end(), name);
+  if (kind == "alias")
+    return (node["asname"].is_string() ? node["asname"] : node["name"]) == name;
+  const bool is_def = kind == "FunctionDef" || kind == "AsyncFunctionDef" ||
+                      kind == "ClassDef";
+  const bool stored =
+    kind == "Name" && node.contains("ctx") &&
+    node["ctx"].value("_type", "") != "Load" && node.value("id", "") == name;
+  return stored || (kind == "arg" && node.value("arg", "") == name) ||
+         (is_def && node.value("name", "") == name);
+}
+
+/// How many places in @p node bind or declare @p name, in any scope.
+template <class Json>
+static size_t binding_count(const Json &node, const std::string &name)
+{
+  if (!node.is_structured())
+    return 0;
+  size_t count = node.is_object() ? own_bindings(node, name) : 0;
+  for (const Json &child : node)
+    count += binding_count(child, name);
+  return count;
+}
+
+/// Whether @p arg, passed at a constructor call, holds a @p type wherever the
+/// call is: a literal of that type, or a name bound once in the module, by a
+/// top-level assignment whose value has that type.
+template <class Json>
+bool python_annotation<Json>::argument_has_type(
+  const Json &arg,
+  const std::string &type)
+{
+  if (arg.value("_type", "") == "Constant")
+    return get_argument_type(arg) == type;
+  if (
+    arg.value("_type", "") != "Name" ||
+    binding_count(ast_, arg["id"].template get<std::string>()) != 1)
+    return false;
+  for (const Json &stmt : ast_["body"])
+  {
+    const std::string kind = stmt.value("_type", "");
+    const Json *target = kind == "Assign" && stmt["targets"].size() == 1
+                           ? &stmt["targets"][0]
+                         : kind == "AnnAssign" ? &stmt["target"]
+                                               : nullptr;
+    if (
+      !target || target->value("_type", "") != "Name" ||
+      (*target)["id"] != arg["id"] || stmt["value"].is_null())
+      continue;
+    const std::string saved = current_func_name_context_;
+    current_func_name_context_.clear();
+    const std::string value_type = get_argument_type(stmt["value"]);
+    current_func_name_context_ = saved;
+    return value_type == type;
+  }
+  return false;
 }
 
 /// The declared type of `self.attr` in a method of the class being annotated,
 /// or empty. An unannotated attribute takes the type of its first
 /// constructor call, so the type is given only when the attribute is stored
 /// once, by `__init__` of a class used only in plain calls, from a literal of
-/// that type or from a parameter that every call passes such a literal.
+/// that type or from a parameter that every call passes such a value.
 template <class Json>
 std::string python_annotation<Json>::self_attribute_type(const Json &node)
 {
@@ -1569,7 +1651,13 @@ std::string python_annotation<Json>::self_attribute_type(const Json &node)
       continue;
     size_t stores = 0;
     size_t name_reads = 0;
-    count_attr_writers(ast_["body"], attr, cls, stores, name_reads);
+    count_attr_writers(
+      ast_["body"],
+      attr,
+      cls,
+      stores,
+      name_reads,
+      json_utils::class_copies_of(ast_, cls));
     const Json annotation = json_utils::find_attr_annotation(class_node, attr);
     const std::vector<Json> calls = find_function_calls(cls, ast_["body"]);
     if (stores != 1 || annotation.empty() || calls.size() != name_reads)
@@ -1592,8 +1680,7 @@ std::string python_annotation<Json>::self_attribute_type(const Json &node)
     {
       if (
         !call["keywords"].empty() || call["args"].size() < index ||
-        call["args"][index - 1].value("_type", "") != "Constant" ||
-        get_argument_type(call["args"][index - 1]) != type)
+        !argument_has_type(call["args"][index - 1], type))
         return "";
       for (const Json &arg : call["args"])
         if (arg.value("_type", "") == "Starred")
@@ -2228,7 +2315,32 @@ std::string python_annotation<Json>::get_type_from_binary_expr(
     }
   }
 
+  if (is_str_operation(stmt, type, body))
+    return "str";
   return promote_to_float_operand(stmt, type);
+}
+
+/// Whether `+` on an untyped left operand, or `*` on an int count, has a str
+/// right operand, making the result a str (#10535).
+template <class Json>
+bool python_annotation<Json>::is_str_operation(
+  const Json &stmt,
+  const std::string &left_type,
+  const Json &body)
+{
+  const Json &expr = stmt.contains("value") ? stmt["value"] : stmt;
+  if (!expr.contains("op") || !expr["op"].is_object())
+    return false;
+  const std::string op = expr["op"].value("_type", "");
+  const bool unknown = left_type.empty() || left_type == "Any";
+  const bool count = left_type == "int" || left_type == "bool";
+  if (!(op == "Add" && unknown) && !(op == "Mult" && (unknown || count)))
+    return false;
+  const Json &rhs = expr["right"];
+  const std::string rhs_kind = rhs.value("_type", "");
+  if (rhs_kind == "Name")
+    return name_operand_type(rhs, body) == "str";
+  return rhs_kind == "Constant" && get_type_from_constant(rhs) == "str";
 }
 
 /// The type a call of a name returns, or nullopt when the name holds a
@@ -4545,7 +4657,8 @@ InferResult python_annotation<Json>::infer_self_attribute_copy(
     stmt["targets"][0]["attr"].template get<std::string>(),
     "",
     stores,
-    name_reads);
+    name_reads,
+    json_utils::class_copies_of(ast_, current_class_name_));
   if (stores != 1)
     return InferResult::UNKNOWN;
   inferred_type = self_attribute_type(stmt["value"]);
