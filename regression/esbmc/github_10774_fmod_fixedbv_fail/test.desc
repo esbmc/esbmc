@@ -1,0 +1,5 @@
+CORE
+main.c
+--fixedbv --no-div-by-zero-check
+^VERIFICATION FAILED$
+fmod\(5,3\) is 2, not 1

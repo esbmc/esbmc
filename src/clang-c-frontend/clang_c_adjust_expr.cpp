@@ -1573,6 +1573,11 @@ static const char *float_lowering_id(
   const irep_idt &identifier,
   const side_effect_expr_function_callt &expr)
 {
+  // The fixedbv model build has no floatbv operands to give these nodes; its
+  // calls keep the C bodies, as a program's fixedbv calls do (#10774).
+  if (config.ansi_c.use_fixed_for_float)
+    return nullptr;
+
   /* c2goto compiles the models with this same binary, and libm/remainder.c's
    * own call is what puts ieee_rem into the model. The shape test would strip
    * it there, so only a program's call is checked -- which is where a
