@@ -78,9 +78,10 @@ public:
     unsigned loop_number) = 0;
 
   // record an assertion
-  /// \p cond_neg is \p cond with the claim negated under the same guards, so
-  /// a probe can ask whether the claim *holds* on this path using the same
-  /// encoding the violation query uses (issue #7585).
+  /// \p cond_neg is `exec_guard -> !(guard -> claim)`, so a probe can ask
+  /// whether some execution avoids the violation, by holding the claim or by
+  /// leaving its path untaken, in the encoding the violation query uses
+  /// (issues #7585, #10642).
   virtual void assertion(
     const expr2tc &guard,
     const expr2tc &cond,

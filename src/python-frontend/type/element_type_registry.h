@@ -144,6 +144,14 @@ public:
     const std::string &id,
     type_slot slot = type_slot::elements) const;
 
+  /// True when @p a and @p b are both recorded with the same element types, and
+  /// every recorded element of one pairs with an equally recorded element of
+  /// the other, so a read through either types alike.
+  bool same_element_types(
+    const std::string &a,
+    const std::string &b,
+    type_slot slot = type_slot::elements) const;
+
   /// The shared type of every recorded element, or nil when nothing is
   /// recorded or the elements disagree.
   typet uniform_element_type(

@@ -1,0 +1,6 @@
+CORE
+main.c
+--witness-output-yaml -
+^VERIFICATION FAILED$
+^    format_version: "2\.1"$
+(?s)\A(?!.*thread_id)

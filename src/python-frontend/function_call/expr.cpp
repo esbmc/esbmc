@@ -7507,7 +7507,8 @@ std::optional<exprt> function_call_expr::try_indirect_variable_call()
     symbolt *var_symbol = symbol_table.find_symbol(var_sid.to_string());
     if (var_symbol && !var_symbol->get_type().is_code())
     {
-      converter_.refuse_keywords_through_value(call_);
+      const nlohmann::json positional =
+        converter_.keywords_as_positional(call_);
       side_effect_expr_function_callt call;
       call.location() = converter_.get_location_from_decl(call_);
       call.type() = any_type();
@@ -7541,7 +7542,7 @@ std::optional<exprt> function_call_expr::try_indirect_variable_call()
         resolved = true;
       }
 
-      for (const auto &arg_node : call_["args"])
+      for (const auto &arg_node : positional["args"])
       {
         exprt arg = converter_.get_expr(arg_node);
         if (type_handler_.is_tagged_scalar_type(arg.type()))
@@ -7552,7 +7553,7 @@ std::optional<exprt> function_call_expr::try_indirect_variable_call()
       }
       if (!resolved)
         return converter_.dispatch_mismatched_callees(
-          build_symbol(*var_symbol), call_, call);
+          build_symbol(*var_symbol), positional, call);
       return call;
     }
   }
@@ -8781,6 +8782,7 @@ std::optional<exprt> function_call_expr::build_positional_arguments(
     {
       arg = int_power_of_two_argument(arg_node, arg, params[param_idx].type());
       refuse_float_to_int_argument(arg, params[param_idx].type(), *func_symbol);
+      converter_.reject_retyped_argument(arg, params[param_idx].type());
       arg = coerce_tagged_argument(arg, params[param_idx].type(), location);
     }
     else if (type_handler_.is_tagged_scalar_type(arg.type()))

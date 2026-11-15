@@ -923,8 +923,13 @@ std::vector<std::optional<typet>> python_lambda::narrowed_parameter_types(
   bool narrowed = false;
   for (size_t i = 0; i < params.size(); ++i)
   {
-    const std::optional<typet> arg =
-      scalar_argument_type(call["args"][i], scope, type_handler_);
+    const nlohmann::json &passed = call["args"][i];
+    std::optional<typet> arg =
+      scalar_argument_type(passed, scope, type_handler_);
+    // A name bound other than once at the top of the scope, such as in a
+    // branch, still has the type of its variable.
+    if (!arg && passed.value("_type", "") == "Name")
+      arg = converter_.get_expr(passed).type();
     const bool narrows =
       arg && arg->is_signedbv() && params[i].type().is_floatbv();
     narrowed |= narrows;

@@ -232,6 +232,7 @@ public:
    *  frame per level and overflow the stack. The operand walk inside this
    *  body therefore hits the cache instead of recursing. */
   smt_astt convert_ast_node(const expr2tc &expr);
+  smt_astt convert_bitnot(smt_astt a);
 
   /** Convert one of the two-operand IEEE arithmetic nodes (add/sub/mul/div/
    *  rem), which share an operand layout and differ only in the solver call
@@ -801,6 +802,8 @@ public:
    *  the appropriate method in the subclassing solver converter for the
    * terminal conversion */
   smt_astt convert_terminal(const expr2tc &expr);
+  /** Constrain a nondet float symbol under --ir to values a float can hold. */
+  void assert_nondet_float_representable(smt_astt sym_ast, const type2tc &type);
 
   /** Flatten pointer arithmetic. When faced with an addition or subtraction
    *  between a pointer and some integer or other pointer, perform whatever

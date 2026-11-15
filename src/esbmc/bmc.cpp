@@ -330,6 +330,34 @@ static bool is_loop_invariant_obligation(const locationt &location)
          property == "assigns compliance";
 }
 
+// Whether \p step is a loop-invariant havoc that \p smt_conv's model runs
+// through. Witness validation havocs only on a side branch before the real
+// loop, so a havoc earlier in the trace need not lie on the violating path
+// (issue #10641). A guard the model leaves undetermined counts as run.
+static bool runs_invariant_havoc(
+  const symex_target_equationt::SSA_stept &step,
+  smt_convt &smt_conv)
+{
+  return step.is_assignment() && step.source.pc->loop_invariant_havoc &&
+         !smt_conv.l_get(step.guard).is_false();
+}
+
+// Whether the model of \p eq runs a loop-invariant havoc before the one claim
+// the claim slicer kept.
+static bool model_runs_invariant_havoc(
+  const symex_target_equationt &eq,
+  smt_convt &smt_conv)
+{
+  for (const auto &step : eq.SSA_steps)
+  {
+    if (step.is_assert() && !step.ignore)
+      return false;
+    if (runs_invariant_havoc(step, smt_conv))
+      return true;
+  }
+  return false;
+}
+
 // Attached to a claim downgraded from Failed to Unknown because the only trace
 // violating it runs through a --loop-invariant-check havoc (issue #7480).
 static const char *const weak_invariant_note =
@@ -340,7 +368,8 @@ void bmct::record_satisfiable_claim(
   const claim_slicer &claim,
   const property_locationt &loc,
   bool inductive_step,
-  symex_target_equationt &local_eq)
+  symex_target_equationt &local_eq,
+  smt_convt &smt_conv)
 {
   // Neither answer refutes the program. An inductive-step run starts from an
   // arbitrary state, and a claim downstream of a loop-invariant havoc is
@@ -364,10 +393,11 @@ void bmct::record_satisfiable_claim(
   }
 
   // A claim downstream of the havoc is unknowable only while the abstraction
-  // admits it holding (issue #7585).
+  // admits an execution that avoids it (issues #7585, #10642).
   if (
     claim.claim_after_invariant_havoc &&
     !is_loop_invariant_obligation(claim.claim_location) &&
+    model_runs_invariant_havoc(local_eq, smt_conv) &&
     check_claim_unsatisfiable(local_eq) != P_UNSATISFIABLE)
   {
     weak_invariant_detected = true;
@@ -399,7 +429,7 @@ void bmct::record_violated_properties(
 
   for (const auto &step : eq.SSA_steps)
   {
-    if (step.is_assignment() && step.source.pc->loop_invariant_havoc)
+    if (runs_invariant_havoc(step, smt_conv))
       seen_invariant_havoc = true;
 
     if (!step.is_assert() || step.ignore)
@@ -426,6 +456,47 @@ void bmct::record_violated_properties(
       property_location(*step.source.pc, description),
       weak_invariant ? weak_invariant_note : "");
   }
+}
+
+void bmct::solve_past_the_abstraction(
+  smt_resultt result,
+  symex_target_equationt &eq)
+{
+  // Inductive-step and forward-condition models witness no violation, and a
+  // --smt-during-symex solver cannot be replaced by a fresh one.
+  if (
+    result != P_SATISFIABLE || options.get_bool_option("inductive-step") ||
+    options.get_bool_option("forward-condition") ||
+    options.get_bool_option("smt-during-symex"))
+    return;
+
+  std::vector<symex_target_equationt::SSA_stept *> set_aside;
+  while (runtime_solver->has_model())
+  {
+    record_violated_properties(*runtime_solver, eq);
+    if (!violates_only_the_abstraction())
+      break;
+
+    const size_t before = set_aside.size();
+    for (auto &step : eq.SSA_steps)
+      if (
+        step.is_assert() && !step.ignore &&
+        !runtime_solver->l_get(step.cond_expr).is_true())
+      {
+        step.ignore = true;
+        set_aside.push_back(&step);
+      }
+    if (set_aside.size() == before)
+      break;
+
+    std::unique_ptr<smt_convt> next(create_solver("", ns, options));
+    if (run_decision_procedure(*next, eq) != P_SATISFIABLE)
+      break;
+    runtime_solver = std::move(next);
+  }
+
+  for (auto *step : set_aside)
+    step->ignore = false;
 }
 
 void bmct::error_trace(smt_convt &smt_conv, const symex_target_equationt &eq)
@@ -663,9 +734,9 @@ void bmct::report_violation()
     report_unknown();
 }
 
-/// UNSAT iff no feasible path satisfies the kept claim. A violation found
-/// downstream of a loop-invariant havoc is then one the invariant itself
-/// forces, not an artefact of the abstraction (issue #7585).
+/// UNSAT iff every feasible execution violates the kept claim. A violation
+/// found downstream of a loop-invariant havoc is then one the invariant itself
+/// forces, not an artefact of the abstraction (issues #7585, #10642).
 smt_resultt
 bmct::check_claim_unsatisfiable(symex_target_equationt &local_eq) const
 {
@@ -675,7 +746,8 @@ bmct::check_claim_unsatisfiable(symex_target_equationt &local_eq) const
   return solver->dec_solve();
 }
 
-/// Whether the invariant leaves the claim at \p claim_index no way to hold.
+/// Whether the invariant leaves the claim at \p claim_index no way to be
+/// avoided.
 /// The single-formula path has no per-claim equation, so slice one the way
 /// multi_property_check does and run the same probe.
 bool bmct::invariant_refutes(
@@ -2720,6 +2792,7 @@ smt_resultt bmct::run_thread(std::shared_ptr<symex_target_equationt> &eq)
         solver_result.bounded_loop_truncations);
 
     smt_resultt result = run_decision_procedure(*runtime_solver, *eq);
+    solve_past_the_abstraction(result, *eq);
 
     // Per-claim vacuity probe in single-property mode: a whole-equation
     // reachability check would silently miss a vacuous claim whenever some
@@ -3578,7 +3651,7 @@ smt_resultt bmct::multi_property_check(
                        "invariant, requires clause, or upstream assume"
                      : "");
       else if (solver_result == P_SATISFIABLE)
-        record_satisfiable_claim(claim, claim_ploc, is, local_eq);
+        record_satisfiable_claim(claim, claim_ploc, is, local_eq, *solver_ptr);
       else
       {
         // No answer at all. A coverage run suppresses the verdict that would

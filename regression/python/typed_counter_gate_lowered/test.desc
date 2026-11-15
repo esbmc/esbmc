@@ -1,0 +1,6 @@
+CORE
+main.py
+--goto-functions-only
+=tlist_from_chars\(
+=tdict_get0\(c, 2,
+=tdict_max\(c, 2\)
