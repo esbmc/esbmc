@@ -13,6 +13,8 @@
 
 #include <util/irep/std_code.h>
 #include <util/irep/std_expr.h>
+#include <util/base/prefix.h>
+#include <string_view>
 
 void ai_baset::output(const goto_functionst &goto_functions, std::ostream &out)
   const
@@ -75,39 +77,172 @@ void ai_baset::initialize(const goto_functionst &goto_functions)
     initialize(it->second);
   find_call_cycles(goto_functions);
   taken.emplace();
-  std::unordered_map<irep_idt, irep_idt, irep_id_hash> declared_in;
-  for (const auto &[function, decls] : function_locals)
-    for (const expr2tc &decl : decls)
-      declared_in.emplace(to_code_decl2t(decl).value, function);
-
-  // A body may name another function's local, as a Python nonlocal does.
-  std::unordered_set<irep_idt, irep_id_hash> shared;
   forall_goto_functions (f_it, goto_functions)
     forall_goto_program_instructions (i_it, f_it->second.body)
     {
       get_address_taken(i_it->code, *taken);
       get_address_taken(i_it->guard, *taken);
-      std::unordered_set<expr2tc, irep2_hash> symbols;
-      get_symbols(i_it->code, symbols);
-      get_symbols(i_it->guard, symbols);
-      for (const expr2tc &symbol : symbols)
-      {
-        auto it = declared_in.find(to_symbol2t(symbol).thename);
-        if (it != declared_in.end() && it->second != f_it->first)
-          shared.insert(it->first);
-      }
     }
+  find_writes(goto_functions);
+}
 
-  private_locals.clear();
-  for (const auto &[function, decls] : function_locals)
+/* The first argument a body-less call that symex models may write through,
+ * or none: the input functions write past their format, its intrinsics and
+ * builtins anywhere. An intrinsic missing from read_only is assumed to write,
+ * which costs precision, never soundness. */
+std::optional<size_t> first_written_argument(const irep_idt &callee)
+{
+  static const std::unordered_set<std::string_view> read_only = {
+    "c:@F@__ESBMC_memcmp",
+    "c:@F@__ESBMC_memchr",
+    "c:@F@__ESBMC_r_ok",
+    "c:@F@__ESBMC_is_fresh",
+    "c:@F@__ESBMC_get_object_size",
+    "c:@F@__ESBMC_builtin_object_size"};
+  const std::string &id = callee.as_string();
+  if (id == "c:@F@scanf")
+    return 1;
+  if (id == "c:@F@sscanf" || id == "c:@F@fscanf")
+    return 2;
+  if (
+    read_only.count(id) ||
+    !(has_prefix(id, "c:@F@__ESBMC") || has_prefix(id, "c:@F@__builtin")))
+    return std::nullopt;
+  return 0;
+}
+
+/// Adds to @p w what assigning to @p target writes.
+static void add_target(const expr2tc &target, ai_baset::writest &w)
+{
+  if (is_if2t(target))
   {
-    std::vector<irep_idt> &ids = private_locals[function];
-    for (const expr2tc &decl : decls)
+    add_target(to_if2t(target).true_value, w);
+    add_target(to_if2t(target).false_value, w);
+    return;
+  }
+  expr2tc base = target;
+  while (is_member2t(base) || is_typecast2t(base) ||
+         (is_index2t(base) && !is_pointer_type(to_index2t(base).source_value)))
+    base = is_member2t(base)     ? to_member2t(base).source_value
+           : is_typecast2t(base) ? to_typecast2t(base).from
+                                 : to_index2t(base).source_value;
+  if (is_symbol2t(base))
+    w.symbols.insert(to_symbol2t(base).thename);
+  else
+    w.through_pointer = true;
+}
+
+void ai_baset::find_writes(const goto_functionst &goto_functions)
+{
+  function_writes.clear();
+  std::unordered_map<irep_idt, std::vector<irep_idt>, irep_id_hash> callees;
+  forall_goto_functions (f_it, goto_functions)
+  {
+    writest &w = function_writes[f_it->first];
+    // Symex runs its own model of these whatever their body; the domain
+    // havocs what their arguments point to on the way in.
+    w.through_pointer = first_written_argument(f_it->first).has_value();
+    forall_goto_program_instructions (i_it, f_it->second.body)
+      switch (i_it->type)
+      {
+      case ASSIGN:
+        add_target(to_code_assign2t(i_it->code).target, w);
+        break;
+      case DECL:
+        w.symbols.insert(to_code_decl2t(i_it->code).value);
+        break;
+      case RETURN:
+      {
+        // The domain assigns the return value and havocs the parameters of
+        // the function the instruction names, which inlining keeps.
+        w.symbols.insert(fmt::format("c:{}:ret", i_it->function));
+        const auto f = goto_functions.function_map.find(i_it->function);
+        if (f != goto_functions.function_map.end())
+          for (const irep_idt &name :
+               to_code_type(f->second.type).argument_names)
+            w.symbols.insert(name);
+        break;
+      }
+      case FUNCTION_CALL:
+      {
+        const code_function_call2t &call = to_code_function_call2t(i_it->code);
+        if (!is_nil_expr(call.ret))
+          add_target(call.ret, w);
+        if (!is_symbol2t(call.function))
+        {
+          w.anything = true;
+          break;
+        }
+        const irep_idt &name = to_symbol2t(call.function).thename;
+        callees[f_it->first].push_back(name);
+        // A body-less callee may write what its pointer arguments reach.
+        const auto f = goto_functions.function_map.find(name);
+        if (f == goto_functions.function_map.end() || !f->second.body_available)
+          for (const expr2tc &arg : call.operands)
+            w.through_pointer |= is_pointer_type(arg);
+        break;
+      }
+      case GOTO:
+      case ASSUME:
+      case ASSERT:
+      case SKIP:
+      case LOCATION:
+      case DEAD:
+      case END_FUNCTION:
+      case ATOMIC_BEGIN:
+      case ATOMIC_END:
+      case LOOP_INVARIANT:
+      case NO_INSTRUCTION_TYPE:
+        break;
+      default:
+        w.through_pointer = true;
+      }
+  }
+
+  // A local another function writes by name, as a Python nonlocal does, is
+  // not private to its frame.
+  std::unordered_map<irep_idt, irep_idt, irep_id_hash> writer;
+  std::unordered_set<irep_idt, irep_id_hash> shared;
+  for (const auto &[f, w] : function_writes)
+    for (const irep_idt &symbol : w.symbols)
     {
-      const irep_idt &id = to_code_decl2t(decl).value;
-      if (!taken->count(id) && !shared.count(id))
-        ids.push_back(id);
+      const auto [it, first] = writer.emplace(symbol, f);
+      if (!first && it->second != f)
+        shared.insert(symbol);
     }
+  private_locals.clear();
+  forall_goto_functions (f_it, goto_functions)
+  {
+    std::vector<irep_idt> &ids = private_locals[f_it->first];
+    for (const expr2tc &decl : function_locals[f_it->first])
+      ids.push_back(to_code_decl2t(decl).value);
+    if (!is_nil_type(f_it->second.type))
+      for (const irep_idt &name :
+           to_code_type(f_it->second.type).argument_names)
+        ids.push_back(name);
+    std::erase_if(ids, [&](const irep_idt &id) {
+      return taken->count(id) || shared.count(id);
+    });
+  }
+
+  for (bool changed = true; changed;)
+  {
+    changed = false;
+    for (auto &[f, w] : function_writes)
+      for (const irep_idt &g : callees[f])
+      {
+        const auto it = function_writes.find(g);
+        if (g == f || it == function_writes.end())
+          continue;
+        const writest &c = it->second;
+        const size_t size = w.symbols.size();
+        w.symbols.insert(c.symbols.begin(), c.symbols.end());
+        changed |= w.symbols.size() != size ||
+                   (c.through_pointer && !w.through_pointer) ||
+                   (c.anything && !w.anything);
+        w.through_pointer |= c.through_pointer;
+        w.anything |= c.anything;
+      }
   }
 }
 

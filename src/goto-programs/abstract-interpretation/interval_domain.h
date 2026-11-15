@@ -228,8 +228,10 @@ public:
    * @param expr
    */
   void havoc_rec(const expr2tc &expr);
-  void
-  restore_caller_locals(goto_programt::const_targett call, const ai_baset &ai);
+  void restore_unwritten(
+    goto_programt::const_targett call,
+    const irep_idt &callee,
+    const ai_baset &ai);
   /// Forgets what a write to the lvalue \p target may change, through a
   /// pointer as havoc_through_pointer does.
   void havoc_target(const expr2tc &target, const ai_baset *ai = nullptr);
