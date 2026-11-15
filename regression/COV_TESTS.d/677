@@ -1,0 +1,3 @@
+regression/esbmc/github_677
+regression/esbmc/github_677_mask_safe
+regression/esbmc/github_677_mask_fail
