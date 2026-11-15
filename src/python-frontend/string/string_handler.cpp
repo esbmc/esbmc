@@ -3214,6 +3214,22 @@ exprt string_handler::try_len_fast_path_from_name_arg(
     }
   }
 
+  // chr() returns one code point or raises, whatever bytes hold it (#7552).
+  // The binding is read directly: get_var_value follows `b = a` to a's first
+  // binding, which need not be its only one. `*` counts a star import, which
+  // may rebind chr.
+  const nlohmann::json &ast = converter_.get_ast_json();
+  const nlohmann::json decl = json_utils::find_var_decl(
+    var_name, converter_.get_current_func_name(), ast);
+  if (
+    decl.contains("value") && decl["value"].value("_type", "") == "Call" &&
+    decl["value"]["func"].value("_type", "") == "Name" &&
+    decl["value"]["func"].value("id", "") == "chr" &&
+    json_utils::count_name_bindings(ast, var_name) == 1 &&
+    json_utils::count_name_bindings(ast, "chr") == 0 &&
+    json_utils::count_name_bindings(ast, "*") == 0)
+    return from_integer(1, size_type());
+
   return nil_exprt();
 }
 
