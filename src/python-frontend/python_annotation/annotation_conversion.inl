@@ -6912,6 +6912,8 @@ void python_annotation<Json>::add_type_annotation()
   }
 
   apply_pending_specializations();
+  while (specialize_callees_of_copies())
+    ;
   retype_methods_called_on_receivers();
   mark_mixed_constructor_classes();
 }

@@ -353,6 +353,53 @@ void python_annotation<Json>::apply_pending_specializations()
   pending_specializations_.clear();
 }
 
+// A function called only from per-type copies, with their parameter, has no
+// typed call site until the copies exist, so its parameter stayed untyped
+// (#10438). Infer it again now, which may queue copies of it in turn. Each
+// round specializes a function not specialized before, so this terminates.
+template <class Json>
+bool python_annotation<Json>::specialize_callees_of_copies()
+{
+  Json copies = Json::array();
+  std::unordered_set<std::string> specialized;
+  for (const Json &node : ast_["body"])
+  {
+    const std::string name = node.value("name", "");
+    const size_t copy = name.find("__esbmc_poly_");
+    if (node.value("_type", "") == "FunctionDef" && copy != std::string::npos)
+    {
+      copies.push_back(node);
+      specialized.insert(name.substr(0, copy));
+    }
+  }
+
+  for (Json &fn : ast_["body"])
+  {
+    const std::string name = fn.value("name", "");
+    if (
+      fn.value("_type", "") != "FunctionDef" ||
+      name.find("__esbmc_poly_") != std::string::npos ||
+      specialized.count(name) != 0 || find_function_calls(name, copies).empty())
+      continue;
+    const Json &params = fn["args"]["args"];
+    if (std::none_of(params.begin(), params.end(), [](const Json &param) {
+          return param.value("annotation", Json()).is_null();
+        }))
+      continue;
+    current_func_name_context_ = name;
+    current_func = &fn;
+    parent_func = nullptr;
+    infer_parameter_types(fn);
+  }
+  current_func_name_context_.clear();
+  current_func = nullptr;
+
+  if (pending_specializations_.empty())
+    return false;
+  apply_pending_specializations();
+  return true;
+}
+
 // Returns the ancestors of a class (including itself) in BFS order via
 // "bases". Handles multiple inheritance and cycle-safe (visited guard).
 // "object" is intentionally excluded — it has no ESBMC IR representation.
