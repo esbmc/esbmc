@@ -381,6 +381,7 @@ private:
     Json &node,
     const caller_scopet &scope);
   void apply_pending_specializations();
+  bool specialize_callees_of_copies();
   // Returns the ancestors of a class (including itself) in BFS order via
   // "bases". Handles multiple inheritance and cycle-safe (visited guard).
   // "object" is intentionally excluded — it has no ESBMC IR representation.
