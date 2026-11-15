@@ -6458,7 +6458,9 @@ expr2tc ieee_rem2t::do_simplify() const
   // left to the solver. What does fold are the operand facts that decide the
   // result no matter what the other side is (IEEE 754 remainder; the
   // operation is exact, so no rounding mode participates).
-  assert(is_floatbv_type(type));
+  // Under --fixedbv the libm models' ieee_rem nodes are fixedbv (#10774).
+  if (!is_floatbv_type(type))
+    return expr2tc();
   const ieee_float_spect spec(to_floatbv_type(type));
 
   if (is_constant_floatbv2t(side_1))
