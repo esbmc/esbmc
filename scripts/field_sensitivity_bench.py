@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Measure the #7521 field-sensitivity corpus (regression/field-sensitivity).
 
-For each row, run ESBMC with Z3 and record symex time, SSA assignments, solver
-time and peak memory; then dump the formula with --smtlib --output, record its
+For each row, run ESBMC with Z3 (or --solver) and record symex time, SSA
+assignments, solver time and peak memory; then dump the formula with --smtlib --output, record its
 size and solve it with the Bitwuzla Python bindings (pip install bitwuzla).
 Prints a Markdown table. Pass --flags to compare a mode such as
 --field-sensitive-ssa against the same binary without it.
@@ -64,10 +64,10 @@ def esbmc_cmd(binary, row, extra):
     return [binary, str(row / desc[1])] + flags + extra
 
 
-def measure(binary, row, extra, bw_python, timeout):
+def measure(binary, row, extra, solver, bw_python, timeout):
     """Measure one corpus row; returns a dict of the recorded numbers."""
     res = {"row": row.name}
-    out, res["wall"], res["rss"] = run(esbmc_cmd(binary, row, extra + ["--z3"]), timeout)
+    out, res["wall"], res["rss"] = run(esbmc_cmd(binary, row, extra + ["--" + solver]), timeout)
     for key, pat in PATTERNS.items():
         m = re.search(pat, out, re.M)
         res[key] = m.groups() if m else None
@@ -105,6 +105,7 @@ def main():
     ap.add_argument("--esbmc", default="esbmc")
     ap.add_argument("--flags", default="", help="extra ESBMC flags for every row")
     ap.add_argument("--rows", default=".", help="regex selecting corpus rows")
+    ap.add_argument("--solver", default="z3", help="ESBMC solver backend, e.g. bitwuzla")
     ap.add_argument("--bitwuzla-python",
                     default=sys.executable,
                     help="Python interpreter that can import bitwuzla")
@@ -112,10 +113,11 @@ def main():
     args = ap.parse_args()
     rows = sorted(p for p in CORPUS.iterdir() if p.is_dir() and re.search(args.rows, p.name))
     print("| row | verdict | symex s | SSA steps | after slicing | SMT-LIB bytes | "
-          "Z3 s | Bitwuzla s | wall s | peak MiB |")
+          f"{args.solver} s | Bitwuzla (SMT-LIB) s | wall s | peak MiB |")
     print("|---|---|---|---|---|---|---|---|---|---|")
     for row in rows:
-        res = measure(args.esbmc, row, shlex.split(args.flags), args.bitwuzla_python, args.timeout)
+        res = measure(args.esbmc, row, shlex.split(args.flags), args.solver, args.bitwuzla_python,
+                      args.timeout)
         print(fmt(res), flush=True)
 
 
