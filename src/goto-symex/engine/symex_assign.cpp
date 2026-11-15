@@ -1,4 +1,3 @@
-#include <pointer-analysis/field_census.h>
 #include <algorithm>
 #include <cassert>
 #include <climits>
@@ -191,12 +190,6 @@ goto_symext::goto_symext(
     inductive_step(options.get_bool_option("inductive-step")),
     validate_witness(options.get_bool_option("validate-violation-witness"))
 {
-  if (options.get_bool_option("field-sensitivity-census"))
-  {
-    field_census::enabled = true;
-    field_census::ns = &ns;
-  }
-
   const std::string &set = options.get_option("unwindset");
   unsigned int length = set.length();
 

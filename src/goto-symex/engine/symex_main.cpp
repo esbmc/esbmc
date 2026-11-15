@@ -1,4 +1,3 @@
-#include <pointer-analysis/field_census.h>
 #include <cassert>
 #include <optional>
 #include <goto-symex/scheduler/execution_state.h>
@@ -411,9 +410,6 @@ void goto_symext::symex_step(reachability_treet &art)
   // Remember the first loop we're entering
   if (inductive_step && instruction.loop_number && !first_loop)
     first_loop = instruction.loop_number;
-
-  if (field_census::enabled)
-    field_census::note_instruction(instruction);
 
   // actually do instruction
   switch (instruction.type)
