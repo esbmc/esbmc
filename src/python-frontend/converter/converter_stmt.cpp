@@ -10809,19 +10809,65 @@ static const char *retyped_kind_mismatch(
   return nullptr;
 }
 
-static void reject_retyped_return(
+// A str returned from a function typed to return a number, or the reverse,
+// has no conversion matching Python: it would read the bytes of one kind as the
+// other. Gives "<value kind> from a function typed to return a <return kind>".
+static std::optional<std::string> str_number_return_mismatch(
   const type_handler &types,
-  const std::unordered_map<std::string, std::string> &retype_aliases,
-  const exprt &value,
+  const typet &value_type,
   const typet &return_type)
 {
-  const char *kind =
-    retyped_kind_mismatch(types, retype_aliases, value, return_type);
-  if (kind)
-    throw std::runtime_error(
-      "unsupported: returning a variable rebound to a " + std::string(kind) +
-      " from a function typed to return a " +
-      (std::string(kind) == "str" ? "number" : "str"));
+  if (
+    types.is_string_type(value_type) &&
+    types.is_numeric_scalar_type(return_type))
+    return "str from a function typed to return a number";
+  if (
+    types.is_numeric_scalar_type(value_type) &&
+    types.is_string_type(return_type))
+    return "number from a function typed to return a str";
+  return std::nullopt;
+}
+
+void python_converter::guard_str_number_return(
+  const nlohmann::json &value_node,
+  exprt &value,
+  const locationt &location)
+{
+  const auto mismatch = str_number_return_mismatch(
+    type_handler_, value.type(), current_func_return_type_);
+  if (!mismatch)
+    return;
+  // A local retyped across str and number (#4770) lives in a fresh slot of the
+  // new type, while the function's return type may follow the first binding
+  // (#10700).
+  if (value.is_symbol())
+  {
+    if (
+      retyped_kind_mismatch(
+        type_handler_, retype_aliases_, value, current_func_return_type_))
+      throw std::runtime_error(
+        "unsupported: returning a variable rebound to a " + *mismatch);
+    return;
+  }
+  // A container element keeps the kind it was stored with, such as that slot
+  // put in a list (#10736). Other values are left alone: a char * also stands
+  // for some unions, e.g. int | list[int] | None.
+  if (value_node["_type"] != "Subscript")
+    return;
+  // Refused where it is returned, so a sibling return that is never reached
+  // still verifies. The value is evaluated first: an exception it raises is
+  // what Python reports.
+  const std::string message = "Unsupported: returning a " + *mismatch;
+  if (!can_emit_runtime_guard())
+    throw std::runtime_error(message);
+  symbolt &tmp =
+    create_tmp_symbol(location, "$returned$", value.type(), exprt());
+  code_declt decl(symbol_expr(tmp));
+  decl.copy_to_operands(value);
+  decl.location() = location;
+  add_instruction(decl);
+  value = symbol_expr(tmp);
+  end_path_as_unsupported(message, location);
 }
 
 void python_converter::reject_retyped_argument(
@@ -11086,8 +11132,7 @@ void python_converter::get_return_statements(
       return_value, current_func_return_type_, location, target_block);
     return_value = coerce_optional_return(return_value, location, target_block);
 
-    reject_retyped_return(
-      type_handler_, retype_aliases_, return_value, current_func_return_type_);
+    guard_str_number_return(ast_node["value"], return_value, location);
     coerce_to_tagged_return(return_value);
     return_value =
       check_float_fits_int_return(ast_node, return_value, target_block);

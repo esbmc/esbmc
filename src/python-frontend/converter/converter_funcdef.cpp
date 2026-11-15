@@ -573,7 +573,9 @@ bool python_converter::function_has_missing_return_paths(
 
 /// Constructors ("constructor" return type) and library/import models, whose
 /// void calls exist only for side effects, are left as-is; a module the program
-/// imports is promoted unless is_model_file() says it is a model (#10112).
+/// imports is promoted unless is_model_file() says it is a model (#10112). A
+/// model annotated `-> None` is promoted as well, since a caller may bind its
+/// result (`r = heapq.heapify(h)`, #10705).
 /// Generators (functions containing `yield`) also have an empty return type
 /// here but do NOT implicitly return None — calling one yields a generator
 /// object — so they must not be promoted.
@@ -581,9 +583,17 @@ bool python_converter::returns_implicit_none(
   const nlohmann::json &function_node,
   const code_typet &type)
 {
-  return type.return_type().is_empty() && !is_loading_models &&
-         !(is_importing_module && is_model_file(function_node)) &&
-         !function_is_generator(function_node);
+  if (!type.return_type().is_empty() || function_is_generator(function_node))
+    return false;
+  if (
+    !is_loading_models &&
+    !(is_importing_module && is_model_file(function_node)))
+    return true;
+  const nlohmann::json &annotation =
+    resolve_return_annotation_node(function_node);
+  return annotation.is_object() &&
+         annotation.value("_type", "") == "Constant" &&
+         annotation.contains("value") && annotation["value"].is_null();
 }
 
 bool python_converter::function_is_generator(
