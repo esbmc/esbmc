@@ -10842,8 +10842,9 @@ void python_converter::guard_str_number_return(
   // (#10700).
   if (value.is_symbol())
   {
-    if (retyped_kind_mismatch(
-          type_handler_, retype_aliases_, value, current_func_return_type_))
+    if (
+      retyped_kind_mismatch(
+        type_handler_, retype_aliases_, value, current_func_return_type_))
       throw std::runtime_error(
         "unsupported: returning a variable rebound to a " + *mismatch);
     return;
