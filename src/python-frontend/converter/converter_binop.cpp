@@ -5774,8 +5774,7 @@ static bool is_ring_op(const std::string &op)
          op == "BitAnd" || op == "BitOr" || op == "BitXor";
 }
 
-static void
-read_as_signed(bool ring, exprt &unsigned_op, exprt &signed_op)
+static void read_as_signed(bool ring, exprt &unsigned_op, exprt &signed_op)
 {
   const bool tagged = is_wrapping_unsigned(unsigned_op.type());
   if (tagged && ring)
