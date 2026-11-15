@@ -98,6 +98,13 @@ public:
   const std::vector<expr2tc> *
   reentered_locals(const irep_idt &caller, const irep_idt &callee) const;
 
+  /// The locals @p function declares that no other body names and no code
+  /// takes the address of, so only its own frame can change them.
+  const std::vector<irep_idt> &private_locals_of(const irep_idt &function) const
+  {
+    return private_locals.at(function);
+  }
+
   /// The symbols whose address the analysed functions take, the only ones a
   /// write through a pointer can change; nullptr when one program was analysed
   /// on its own.
@@ -118,7 +125,10 @@ protected:
   std::unordered_map<const goto_programt::instructiont *, irep_idt>
     call_site_function;
   std::unordered_map<irep_idt, unsigned, irep_id_hash> call_cycle;
-  std::unordered_map<irep_idt, std::vector<expr2tc>, irep_id_hash> cycle_locals;
+  std::unordered_map<irep_idt, std::vector<expr2tc>, irep_id_hash>
+    function_locals;
+  std::unordered_map<irep_idt, std::vector<irep_idt>, irep_id_hash>
+    private_locals;
   std::optional<std::unordered_set<irep_idt, irep_id_hash>> taken;
 
   // overload to add a factory

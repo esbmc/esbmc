@@ -1035,16 +1035,8 @@ void interval_domaint::transform(
     break;
 
   case FUNCTION_CALL:
-  {
-    const code_function_call2t &call =
-      to_code_function_call2t(instruction.code);
-    havoc_written_arguments(call, &ai);
-    enters_recursion =
-      std::next(from) != to &&
-      ai.reentered_locals(
-        ai.function_of(from), to_symbol2t(call.function).thename);
+    havoc_written_arguments(to_code_function_call2t(instruction.code), &ai);
     break;
-  }
 
   case END_FUNCTION:
   case ATOMIC_BEGIN:
@@ -1065,6 +1057,9 @@ void interval_domaint::transform(
    * its execution. We can deal with this by just checking if the target
    * instruction is a function call!
    */
+  if (from->is_end_function() && std::prev(to)->is_function_call())
+    apply_return(std::prev(to), ai, ns);
+
   if (to->is_function_call())
   {
     const code_function_call2t &code_function_call =
@@ -1106,10 +1101,6 @@ void interval_domaint::transform(
       assign(code_assign2tc(arg_symbol, arg_value), is_recursive_arg);
     }
   }
-
-  to--;
-  if (from->is_end_function() && to->is_function_call())
-    apply_return(to, ai, ns);
 }
 
 /// The edge from the callee's END_FUNCTION back to @p call. A body is entered
@@ -1133,6 +1124,8 @@ void interval_domaint::apply_return(
       havoc_rec(decl);
     havoc_arguments(caller, ns);
   }
+  else
+    restore_caller_locals(call, ai);
 
   if (is_nil_expr(code.ret))
     return;
@@ -1150,6 +1143,30 @@ void interval_domaint::apply_return(
   expr2tc return_var =
     symbol2tc(code.ret->type, fmt::format("c:{}:ret", callee));
   assign(code_assign2tc(code.ret, return_var));
+}
+
+/// A callee outside the caller's call cycle cannot change the caller's private
+/// locals, so they still hold their values at @p call. The callee's exit state
+/// joins every call site's and may be widened.
+void interval_domaint::restore_caller_locals(
+  goto_programt::const_targett call,
+  const ai_baset &ai)
+{
+  const std::unique_ptr<ai_domain_baset> at_call =
+    ai.abstract_state_before(call);
+  const interval_domaint &before =
+    static_cast<const interval_domaint &>(*at_call);
+  if (before.is_bottom())
+    return;
+  copy_if_needed();
+  for (const irep_idt &id : ai.private_locals_of(ai.function_of(call)))
+  {
+    auto it = before.intervals->find(id);
+    if (it == before.intervals->end())
+      intervals->erase(id);
+    else
+      (*intervals)[id] = it->second;
+  }
 }
 
 template <class Interval>
@@ -1299,12 +1316,12 @@ bool interval_domaint::join(
   // to expend much time on this.
   copy_if_needed();
 
-  // Widen only where a cycle closes: a loop's back edge, or a recursive call
-  // into a function's entry. Widening at a guard inside the body, or on entry
-  // to a callee the loop calls, would throw away the bound the guard just gave.
+  // Widen only where a cycle closes: a loop's back edge, or a call into a
+  // function's entry (recursion). Widening at a guard inside the body would
+  // throw away the bound the loop condition just gave.
   const bool closes_cycle =
     (from->is_goto() && to->location_number <= from->location_number) ||
-    b.enters_recursion;
+    (from->is_function_call() && std::next(from) != to);
 
   // Prevent short-circuit
   bool result = join(

@@ -228,6 +228,8 @@ public:
    * @param expr
    */
   void havoc_rec(const expr2tc &expr);
+  void
+  restore_caller_locals(goto_programt::const_targett call, const ai_baset &ai);
   /// Forgets what a write to the lvalue \p target may change, through a
   /// pointer as havoc_through_pointer does.
   void havoc_target(const expr2tc &target, const ai_baset *ai = nullptr);
@@ -278,9 +280,6 @@ public:
   /// Times a join that closes a cycle changed this state; widening waits for
   /// fixpoint_limit of them, so a variable with few values keeps its bounds.
   unsigned cycle_changes = 0;
-  /// Set on the state a call carries into its callee's entry when the callee
-  /// can call back into the caller.
-  bool enters_recursion = false;
 
   static std::shared_ptr<interval_map> get_empty()
   {

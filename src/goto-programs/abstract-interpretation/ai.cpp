@@ -75,12 +75,40 @@ void ai_baset::initialize(const goto_functionst &goto_functions)
     initialize(it->second);
   find_call_cycles(goto_functions);
   taken.emplace();
+  std::unordered_map<irep_idt, irep_idt, irep_id_hash> declared_in;
+  for (const auto &[function, decls] : function_locals)
+    for (const expr2tc &decl : decls)
+      declared_in.emplace(to_code_decl2t(decl).value, function);
+
+  // A body may name another function's local, as a Python nonlocal does.
+  std::unordered_set<irep_idt, irep_id_hash> shared;
   forall_goto_functions (f_it, goto_functions)
     forall_goto_program_instructions (i_it, f_it->second.body)
     {
       get_address_taken(i_it->code, *taken);
       get_address_taken(i_it->guard, *taken);
+      std::unordered_set<expr2tc, irep2_hash> symbols;
+      get_symbols(i_it->code, symbols);
+      get_symbols(i_it->guard, symbols);
+      for (const expr2tc &symbol : symbols)
+      {
+        auto it = declared_in.find(to_symbol2t(symbol).thename);
+        if (it != declared_in.end() && it->second != f_it->first)
+          shared.insert(it->first);
+      }
     }
+
+  private_locals.clear();
+  for (const auto &[function, decls] : function_locals)
+  {
+    std::vector<irep_idt> &ids = private_locals[function];
+    for (const expr2tc &decl : decls)
+    {
+      const irep_idt &id = to_code_decl2t(decl).value;
+      if (!taken->count(id) && !shared.count(id))
+        ids.push_back(id);
+    }
+  }
 }
 
 /// Tarjan's strongly connected components over the direct calls; a call
@@ -90,7 +118,7 @@ void ai_baset::find_call_cycles(const goto_functionst &goto_functions)
 {
   call_site_function.clear();
   call_cycle.clear();
-  cycle_locals.clear();
+  function_locals.clear();
 
   std::unordered_map<irep_idt, std::vector<irep_idt>, irep_id_hash> callees;
   forall_goto_functions (f_it, goto_functions)
@@ -152,13 +180,12 @@ void ai_baset::find_call_cycles(const goto_functionst &goto_functions)
       visit(f_it->first);
 
   forall_goto_functions (f_it, goto_functions)
-    if (call_cycle.count(f_it->first))
-    {
-      std::vector<expr2tc> &locals = cycle_locals[f_it->first];
-      forall_goto_program_instructions (i_it, f_it->second.body)
-        if (i_it->is_decl())
-          locals.push_back(i_it->code);
-    }
+  {
+    std::vector<expr2tc> &locals = function_locals[f_it->first];
+    forall_goto_program_instructions (i_it, f_it->second.body)
+      if (i_it->is_decl())
+        locals.push_back(i_it->code);
+  }
 }
 
 const std::vector<expr2tc> *
@@ -170,7 +197,7 @@ ai_baset::reentered_locals(const irep_idt &caller, const irep_idt &callee) const
     caller_cycle == call_cycle.end() || callee_cycle == call_cycle.end() ||
     caller_cycle->second != callee_cycle->second)
     return nullptr;
-  return &cycle_locals.at(caller);
+  return &function_locals.at(caller);
 }
 
 void ai_baset::finalize()
