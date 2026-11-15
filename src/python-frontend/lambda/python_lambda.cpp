@@ -785,19 +785,24 @@ std::optional<typet> subscript_element_type(
 namespace
 {
 /// Argument @p index of every call through a module-level name bound to a
-/// call of the function that returns @p lambda, as in `f = make()` then
+/// call of @p function, which returns @p lambda, as in `f = make()` then
 /// `f(3)`. False when such a name is bound some other way too, or called
 /// from a nested scope.
 bool arguments_through_return(
   const nlohmann::json &ast,
   const nlohmann::json &lambda,
+  const std::string &function,
   size_t index,
   std::vector<const nlohmann::json *> &out)
 {
   for (const auto &def : ast["body"])
   {
+    // Per-type copies of a def share its source positions, so only the def
+    // being converted can tell which calls reach this copy of the lambda.
     bool returns_lambda = false;
-    if (def.value("_type", "") == "FunctionDef")
+    if (
+      def.value("_type", "") == "FunctionDef" &&
+      def.value("name", "") == function)
       for (const auto &stmt : def["body"])
         returns_lambda |= stmt.value("_type", "") == "Return" &&
                           stmt["value"].is_object() &&
@@ -826,6 +831,7 @@ bool arguments_through_return(
 std::vector<std::optional<typet>> returned_lambda_argument_types(
   const nlohmann::json &ast,
   const nlohmann::json &lambda,
+  const std::string &function,
   type_handler &types)
 {
   std::vector<std::optional<typet>> result;
@@ -833,7 +839,7 @@ std::vector<std::optional<typet>> returned_lambda_argument_types(
   {
     std::vector<const nlohmann::json *> args;
     std::optional<typet> agreed;
-    bool known = arguments_through_return(ast, lambda, i, args);
+    bool known = arguments_through_return(ast, lambda, function, i, args);
     for (const nlohmann::json *arg : args)
     {
       const std::optional<typet> one = scalar_argument_type(*arg, ast, types);
@@ -863,7 +869,10 @@ std::vector<std::optional<typet>> python_lambda::call_site_argument_types(
     find_binding_scope(converter_.ast(), element, bound_name);
   if (scope == nullptr || bound_name.empty())
     return returned_lambda_argument_types(
-      converter_.ast(), element, type_handler_);
+      converter_.ast(),
+      element,
+      converter_.get_current_func_name(),
+      type_handler_);
 
   const nlohmann::json *name_scope =
     enclosing_scope(converter_.ast(), element, &converter_.ast());
