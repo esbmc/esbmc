@@ -6,7 +6,9 @@
 > `--field-sensitive-ssa` (default off): symex gives each field of an
 > eligible local, parameter or return slot its own SSA name. It meets the 2x
 > bar on the Phase 1 corpus rows and changes no verdict on the C and C++
-> suites or a Python sample, but it still changes some trace text (§8.5). Two
+> suites or a Python sample, but it still changes some trace text (§8.5).
+> §8.6 traces the remaining changes to §3's own design and needs a decision on
+> the Phase 1 trace gate before more code goes in. Two
 > mitigations are merged: #10037 stopped phi merges of wide structs from
 > scaling with the square of the width, and #10527 added the opt-in GOTO pass
 > `--scalarize-structs`. Line numbers are from master at `d3104e99c2`.
@@ -396,4 +398,48 @@ verdict:
 
 Not measured in Phase 1: GraphML and YAML witness files under the flag, the
 k-induction suite with the flag, and the remaining 9023 Python tests.
+
+### 8.6 Phase 1 trace gate: what blocks it
+
+Re-measured on 2026-11-16 at `a60262602` (master `f1c5ee1b4`), Bitwuzla,
+each `CORE` test of `regression/esbmc` run with and without the flag, 30 s
+per run. Of 3442 tests, none changes verdict and 5 time out both ways. Output
+differs in 84; 57 differ only in line order (parallel solving, k-induction,
+multi-property), 4 only in timings, AST addresses or quoting, and 3 are this
+PR's own tests. The other 20:
+
+| Cause | Tests |
+|---|---|
+| A member write prints the member's value where master prints the whole struct, because master's model read of `member(s#k, f)` is not a value for a pointer, bit-field or union member | `counterexample_aggregate_component_fail`, `github_10135_fail`, `github_10135_irep2_only_fail`, `github_1093` |
+| A step is dropped or added. Master's struct arm of `constant_propagation` folds `s WITH [f := e]` while `e` is symbolic (`goto_symex_state.cpp:438-500`), so a reader reads either `s#k` or nothing of `s`; per-field propagation folds a different set, and the slicer then keeps different steps | `github_1476_fail`, `github_1590-local`, `github_5868_div_fail`, `github_7597-literal_fail`, `github_7521_uintptr_fail`, `overflow-result3`, `overflow-result4`, `overflow-result-all-fail` |
+| A reassembled struct prints differently: master reads the struct from the solver as one tuple, the flag reads each field, so a pointer member prints `0` instead of `{ .pointer_object=nil, ... }`, an array `{ 6, 7 }` instead of `(signed long int [2])0x7...6` | `github_5393_array_member_fail`, `github_5393_array_member_dyn_offset_fail`, `github_7855-tie-hides-deref`, `github_7965_fail`, `pointer_repr_branch_flow_fail`, `struct_array_ite_new_index_fail` |
+| `--incremental-bmc` calls the solver one time more or fewer, since a claim folds to a constant at a different bound | `github_5868_div`, `github_7597-literal` |
+
+Tried and reverted: slicing a split object at object granularity (a kept
+field step keeps the object's earlier field steps, back to its last whole
+write, as `s' == s WITH [f := v]` does). It removes `overflow-result3` and
+`overflow-result4` and adds no new difference in the suite, but on
+
+```c
+struct S s; s.b = 2; s.a = nondet_int(); assert(s.a != 5);
+```
+
+it prints three steps where master prints none, because master folds the
+nondet member write into the assertion. It trades one difference for another.
+
+Every row comes from a choice §3 makes: fields propagate on their own, the
+slicer works per field, and a struct is read back from its fields. Matching
+master's text byte for byte means copying master's struct-level propagation,
+slicing and tuple model read onto the fields, which is most of the cost the
+split removes. The gate needs one of:
+
+1. Keep "no trace text change" and accept that the per-field propagation and
+   slicing in §3 go: fields propagate and slice as their whole object would.
+   The equation stays O(writes), but slicing removes less.
+2. Replace it with Invariant 4 as written: every printed step that both runs
+   print shows the same value for every lvalue master pins down, verdicts are
+   unchanged, and the four rows above are the accepted differences, each
+   pinned by a test.
+
+Phase 1 cannot meet its gate until this is decided.
 
