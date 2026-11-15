@@ -1330,7 +1330,8 @@ std::optional<exprt> dispatch_decode_join_method(
 // A name with one binding to an integer literal is just as constant as the
 // literal itself. Do not fold reassigned names or loop variables.
 static exprt padding_width_expression(
-  const nlohmann::json &node, python_converter &converter)
+  const nlohmann::json &node,
+  python_converter &converter)
 {
   exprt width = converter.get_expr(node);
   if (node.value("_type", "") != "Name")
