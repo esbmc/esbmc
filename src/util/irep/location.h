@@ -57,6 +57,18 @@ public:
   {
     this->function(function);
   }
+
+  /// A goto that tests one operand of a lowered && or ||: its direction is
+  /// not the whole condition's, so a witness names none for it (#10769).
+  bool is_short_circuit_operand() const
+  {
+    return get_bool("#short_circuit_operand");
+  }
+
+  void set_short_circuit_operand()
+  {
+    set("#short_circuit_operand", true);
+  }
 };
 
 std::ostream &operator<<(std::ostream &out, const locationt &location);

@@ -2027,7 +2027,10 @@ void goto_convertt::convert_while(const codet &code, goto_programt &dest)
 
   // do the v label
   goto_programt::targett v = tmp_branch.instructions.begin();
+  const bool operand = v->location.is_short_circuit_operand();
   v->location = code.location();
+  if (operand)
+    v->location.set_short_circuit_operand();
 
   // do the y label
   goto_programt tmp_y;
@@ -2689,8 +2692,7 @@ void goto_convertt::convert_ifthenelse(const codet &c, goto_programt &dest)
     code_ifthenelset new_if0, new_if1;
     new_if0.op0() = code.cond().op0();
     new_if1.op0() = code.cond().op1();
-    new_if0.location() = location;
-    new_if1.location() = location;
+    new_if0.location() = new_if1.location() = short_circuit_operand(location);
     new_if0.set("#short_circuit", true);
     new_if1.set("#short_circuit", true);
     new_if1.op1() = code.then_case();
@@ -2812,6 +2814,7 @@ void goto_convertt::generate_conditional_branch(
   // Splitting would leave the temporaries of a short-circuit operand alive
   // past the condition, which is one full-expression ([class.temporary]/4).
   const bool split = !has_destructible_sideeffect(guard);
+  const locationt operand = short_circuit_operand(location);
 
   if (split && guard.is_and())
   {
@@ -2829,7 +2832,7 @@ void goto_convertt::generate_conditional_branch(
     in_short_circuit = true;
     forall_expr_list (it, op)
       generate_conditional_branch(
-        boolean_negate(*it), target_false, location, dest);
+        boolean_negate(*it), target_false, operand, dest);
     in_short_circuit = outer_short_circuit;
 
     goto_programt::targett t_true = dest.add_instruction();
@@ -2854,7 +2857,7 @@ void goto_convertt::generate_conditional_branch(
     const bool outer_short_circuit = in_short_circuit;
     in_short_circuit = true;
     forall_expr_list (it, op)
-      generate_conditional_branch(*it, target_true, location, dest);
+      generate_conditional_branch(*it, target_true, operand, dest);
     in_short_circuit = outer_short_circuit;
 
     goto_programt::targett t_false = dest.add_instruction();
