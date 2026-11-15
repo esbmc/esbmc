@@ -3742,6 +3742,11 @@ wrapped_result_type(const std::string &op, const exprt &lhs, const exprt &rhs)
   return typet();
 }
 
+static exprt wrap_to_type(const typet &type, const exprt &result)
+{
+  return type.id().empty() ? result : typecast_exprt(result, type);
+}
+
 exprt python_converter::build_arithmetic_binop(
   const std::string &op,
   exprt lhs,
@@ -3752,8 +3757,8 @@ exprt python_converter::build_arithmetic_binop(
     return math_handler_.handle_modulo(lhs, rhs, element);
 
   const typet wraps_to = wrapped_result_type(op, lhs, rhs);
-  auto wrap = [&wraps_to](const exprt &result) -> exprt {
-    return wraps_to.id().empty() ? result : typecast_exprt(result, wraps_to);
+  auto wrap = [&wraps_to](const exprt &result) {
+    return wrap_to_type(wraps_to, result);
   };
 
   // Build the binary expression
@@ -5763,6 +5768,30 @@ exprt python_converter::str_pointer_add_error(
 // /, //, % or >> is computed exactly instead, so both widen one bit past it:
 // uint64 n >= 2^63 is not negative and n > -1 holds. build_arithmetic_binop
 // wraps a //, % or >> result back to the uint64.
+static bool is_ring_op(const std::string &op)
+{
+  return op == "Add" || op == "Sub" || op == "Mult" || op == "LShift" ||
+         op == "BitAnd" || op == "BitOr" || op == "BitXor";
+}
+
+static void
+read_as_signed(bool ring, exprt &unsigned_op, exprt &signed_op)
+{
+  const bool tagged = is_wrapping_unsigned(unsigned_op.type());
+  if (tagged && ring)
+  {
+    signed_op = typecast_exprt(signed_op, unsigned_op.type());
+    return;
+  }
+  const signedbv_typet wide(
+    std::max(
+      bv_width(unsigned_op.type()) + (tagged ? 1 : 0),
+      bv_width(signed_op.type())));
+  unsigned_op = typecast_exprt(unsigned_op, wide);
+  if (tagged)
+    signed_op = typecast_exprt(signed_op, wide);
+}
+
 static void
 read_unsigned_as_python_int(const std::string &op, exprt &lhs, exprt &rhs)
 {
@@ -5770,33 +5799,14 @@ read_unsigned_as_python_int(const std::string &op, exprt &lhs, exprt &rhs)
     type_utils::is_numpy_numeric_element(lhs.type()) ||
     type_utils::is_numpy_numeric_element(rhs.type()))
     return;
-  const bool ring = op == "Add" || op == "Sub" || op == "Mult" ||
-                    op == "LShift" || op == "BitAnd" || op == "BitOr" ||
-                    op == "BitXor";
-  auto read = [&](exprt &unsigned_op, exprt &signed_op) {
-    const bool tagged = is_wrapping_unsigned(unsigned_op.type());
-    if (tagged && ring)
-    {
-      signed_op = typecast_exprt(signed_op, unsigned_op.type());
-      return;
-    }
-    const signedbv_typet wide(
-      std::max(
-        bv_width(unsigned_op.type()) + (tagged ? 1 : 0),
-        bv_width(signed_op.type())));
-    unsigned_op = typecast_exprt(unsigned_op, wide);
-    if (tagged)
-      signed_op = typecast_exprt(signed_op, wide);
-  };
-  const bool lhs_tagged = is_wrapping_unsigned(lhs.type());
-  const bool rhs_tagged = is_wrapping_unsigned(rhs.type());
+  const bool ring = is_ring_op(op);
   if (lhs.type().is_unsignedbv() && rhs.type().is_signedbv())
-    read(lhs, rhs);
+    read_as_signed(ring, lhs, rhs);
   else if (rhs.type().is_unsignedbv() && lhs.type().is_signedbv())
-    read(rhs, lhs);
+    read_as_signed(ring, rhs, lhs);
   else if (
-    lhs.type().is_unsignedbv() && rhs.type().is_unsignedbv() && !lhs_tagged &&
-    rhs_tagged)
+    lhs.type().is_unsignedbv() && rhs.type().is_unsignedbv() &&
+    !is_wrapping_unsigned(lhs.type()) && is_wrapping_unsigned(rhs.type()))
     lhs = typecast_exprt(lhs, rhs.type());
 }
 
