@@ -223,9 +223,12 @@ Every row pins `--z3` and unwinds its loops fully.
 | `global_callee` | a global struct written through `d->f` in a callee, 200 calls |
 | `plc_db` | a PLC data block (`_Bool`, `short`, `int` tags) passed by pointer to the cycle function, 20 cycles, with branches |
 
-Z3 does not finish `plc_db` at 512 or 2048 fields, so those four rows are
-`KNOWNBUG` with `--timeout 30s`. They become `CORE` once a phase brings
-them within budget. The struct-heavy SV-COMP tasks are covered by the census
+Z3 does not finish `plc_db` at 512 or 2048 fields; after 30 s it holds
+1 GB and 4 GB. `test.desc` cannot set a timeout, so those four rows run with
+`--smtlib --output /dev/null` and pin only that symex finishes and emits a
+non-trivial formula. The bench script removes those flags and measures their
+verdicts. A phase that brings them within budget turns them into verdict
+tests. The struct-heavy SV-COMP tasks are covered by the census
 in §8.3 rather than copied into the corpus.
 
 ### 8.2 Baselines

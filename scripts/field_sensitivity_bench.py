@@ -56,10 +56,11 @@ def run(cmd, timeout):
 def esbmc_cmd(binary, row, extra):
     """ESBMC command line for a corpus row, without its solver and timeout flags."""
     desc = (row / "test.desc").read_text().splitlines()
-    flags = [f for f in shlex.split(desc[2]) if f != "--z3"]
-    if "--timeout" in flags:
-        i = flags.index("--timeout")
-        del flags[i:i + 2]
+    flags = shlex.split(desc[2])
+    for opt, arity in (("--z3", 0), ("--smtlib", 0), ("--output", 1)):
+        if opt in flags:
+            k = flags.index(opt)
+            del flags[k:k + 1 + arity]
     return [binary, str(row / desc[1])] + flags + extra
 
 
