@@ -51,10 +51,10 @@ def run(cmd, timeout):
         timer.cancel()
         proc.returncode = os.waitstatus_to_exitcode(status)
     return out, time.perf_counter() - start, usage.ru_maxrss / 1024
-    """ESBMC command line for a corpus row, without its solver and timeout flags."""
 
 
 def esbmc_cmd(binary, row, extra):
+    """ESBMC command line for a corpus row, without its solver and timeout flags."""
     desc = (row / "test.desc").read_text().splitlines()
     flags = [f for f in shlex.split(desc[2]) if f != "--z3"]
     if "--timeout" in flags:
