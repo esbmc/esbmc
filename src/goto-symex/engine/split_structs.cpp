@@ -23,20 +23,25 @@ public:
     any_escapes
   };
 
+  /* The use the operands of @p e inherit from a use @p use of @p e. */
+  static uset use_under(const expr2tc &e, uset use)
+  {
+    if (
+      is_address_of2t(e) ||
+      (is_sideeffect2t(e) &&
+       to_sideeffect2t(e).kind != sideeffect2t::allockind::nondet))
+      return uset::any_escapes;
+    const bool reinterprets = is_byte_extract2t(e) || is_byte_update2t(e) ||
+                              is_bitcast2t(e) || is_typecast2t(e);
+    return use == uset::plain && reinterprets ? uset::whole_escapes : use;
+  }
+
   /* One walk over @p e; a member of a symbol is not a use of the whole. */
   void note(const expr2tc &e, uset use = uset::plain)
   {
     if (is_nil_expr(e))
       return;
-    if (
-      is_address_of2t(e) ||
-      (is_sideeffect2t(e) &&
-       to_sideeffect2t(e).kind != sideeffect2t::allockind::nondet))
-      use = uset::any_escapes;
-    else if (
-      use == uset::plain && (is_byte_extract2t(e) || is_byte_update2t(e) ||
-                             is_bitcast2t(e) || is_typecast2t(e)))
-      use = uset::whole_escapes;
+    use = use_under(e, use);
 
     if (is_symbol2t(e))
     {
@@ -107,26 +112,20 @@ bool splittable(const symbolt &s, const type2tc &type)
 }
 } // namespace
 
-void split_structst::analyse(
+bool split_structst::enabled(
   const goto_functionst &goto_functions,
-  const namespacet &ns,
-  contextt &context,
-  const optionst &options,
-  const std::unordered_set<irep_idt, irep_id_hash> &address_taken_locals)
+  const optionst &options)
 {
-  split.clear();
-  index.clear();
-  untracked_fields.clear();
   if (
     !options.get_bool_option("field-sensitive-ssa") ||
     atol(options.get_option("stack-limit").c_str()) > 0 ||
     atol(options.get_option("total-stack-limit").c_str()) > 0)
-    return;
+    return false;
   if (spawns_threads(goto_functions))
   {
     log_warning(
       "--field-sensitive-ssa is ignored: the program may create threads");
-    return;
+    return false;
   }
   // These read program inputs off the SSA steps that read a nondet symbol,
   // which a split nondet write spreads over its fields.
@@ -138,8 +137,49 @@ void split_structst::analyse(
     if (options.get_bool_option(reads_inputs))
     {
       log_warning("--field-sensitive-ssa is ignored with --{}", reads_inputs);
-      return;
+      return false;
     }
+  return true;
+}
+
+void split_structst::add_fields(
+  const symbolt &s,
+  const struct_type2t &st,
+  contextt &context)
+{
+  std::vector<expr2tc> &fields = split[s.id];
+  auto &member_index = index[s.id];
+  for (size_t k = 0; k < st.members.size(); k++)
+  {
+    member_index.emplace(st.member_names[k], k);
+    const std::string id = id2string(s.id) + "::" + std::to_string(k);
+    fields.push_back(symbol2tc(st.members[k], id));
+    if (is_untracked_scalar(st.members[k]))
+      untracked_fields.insert(id);
+    if (context.find_symbol(id))
+      continue;
+    symbolt var = s;
+    var.id = id;
+    var.name = id2string(s.name) + "." + id2string(st.member_pretty_names[k]);
+    var.is_parameter = false;
+    var.set_type(st.members[k]);
+    var.set_value(expr2tc());
+    context.add(var);
+  }
+}
+
+void split_structst::analyse(
+  const goto_functionst &goto_functions,
+  const namespacet &ns,
+  contextt &context,
+  const optionst &options,
+  const std::unordered_set<irep_idt, irep_id_hash> &address_taken_locals)
+{
+  split.clear();
+  index.clear();
+  untracked_fields.clear();
+  if (!enabled(goto_functions, options))
+    return;
 
   split_scant scan;
   for (const auto &[name, f] : goto_functions.function_map)
@@ -155,27 +195,7 @@ void split_structst::analyse(
     if (!s || !splittable(*s, type))
       continue;
 
-    const struct_type2t &st = to_struct_type(type);
-    std::vector<expr2tc> &fields = split[name];
-    auto &member_index = index[name];
-    for (size_t k = 0; k < st.members.size(); k++)
-    {
-      member_index.emplace(st.member_names[k], k);
-      const std::string id = id2string(name) + "::" + std::to_string(k);
-      fields.push_back(symbol2tc(st.members[k], id));
-      if (is_untracked_scalar(st.members[k]))
-        untracked_fields.insert(id);
-      if (context.find_symbol(id))
-        continue;
-      symbolt var = *s;
-      var.id = id;
-      var.name =
-        id2string(s->name) + "." + id2string(st.member_pretty_names[k]);
-      var.is_parameter = false;
-      var.set_type(st.members[k]);
-      var.set_value(expr2tc());
-      context.add(var);
-    }
+    add_fields(*s, to_struct_type(type), context);
   }
   if (!split.empty())
     log_status("Field-sensitive SSA splits {} struct object(s)", split.size());

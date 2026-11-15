@@ -61,6 +61,14 @@ public:
   expr2tc whole(const expr2tc &sym) const;
 
 private:
+  /// Whether the options and the program allow any split at all.
+  static bool
+  enabled(const goto_functionst &goto_functions, const optionst &options);
+
+  /// Record the field symbols of @p s, of type @p st, and add them to
+  /// @p context.
+  void add_fields(const symbolt &s, const struct_type2t &st, contextt &context);
+
   std::unordered_map<irep_idt, std::vector<expr2tc>, irep_id_hash> split;
   /// Member name to field index, per split object.
   std::unordered_map<
