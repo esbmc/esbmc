@@ -3975,6 +3975,10 @@ private:
   /// \p loc, and ends the path there.
   void
   end_path_as_unsupported(const std::string &message, const locationt &loc);
+  void guard_str_number_return(
+    const nlohmann::json &value_node,
+    exprt &value,
+    const locationt &location);
 
   // =========================================================================
   // Member variables

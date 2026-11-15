@@ -189,12 +189,10 @@ smt_astt cvc5_convt::mk_div(smt_astt a, smt_astt b)
   assert(a->sort->id == SMT_SORT_INT || a->sort->id == SMT_SORT_REAL);
   assert(b->sort->id == SMT_SORT_INT || b->sort->id == SMT_SORT_REAL);
   assert(a->sort->id == b->sort->id);
-  assert(a->sort->id == SMT_SORT_INT || a->sort->id == SMT_SORT_REAL);
-  assert(b->sort->id == SMT_SORT_INT || b->sort->id == SMT_SORT_REAL);
-  assert(a->sort->id == b->sort->id);
   return new_ast(
     slv.mkTerm(
-      cvc5::Kind::INTS_DIVISION,
+      a->sort->id == SMT_SORT_REAL ? cvc5::Kind::DIVISION
+                                   : cvc5::Kind::INTS_DIVISION,
       {to_solver_smt_ast<cvc5_smt_ast>(a)->a,
        to_solver_smt_ast<cvc5_smt_ast>(b)->a}),
     a->sort);

@@ -1111,6 +1111,28 @@ std::string python_annotation<Json>::container_literal_type(
   return "";
 }
 
+/// The type every element of the list literal \p value has, or empty when
+/// \p value is not a list literal or its elements differ or are untyped.
+/// Unlike get_list_type_from_literal, it never falls back to int.
+template <class Json>
+std::string
+python_annotation<Json>::common_literal_element_type(const Json &value)
+{
+  if (
+    !value.is_object() || value.value("_type", "") != "List" ||
+    !value.contains("elts") || value["elts"].empty())
+    return "";
+  std::string common;
+  for (const Json &elt : value["elts"])
+  {
+    const std::string type = get_argument_type(elt);
+    if (type.empty() || type == "Any" || (!common.empty() && type != common))
+      return "";
+    common = type;
+  }
+  return common;
+}
+
 template <class Json>
 std::string python_annotation<Json>::get_argument_type(const Json &arg)
 {
@@ -1184,6 +1206,15 @@ std::string python_annotation<Json>::get_argument_type(const Json &arg)
             arg["slice"]["_type"] == "Slice")
             return elem.empty() ? "list" : "list[" + elem + "]";
 
+          // The for-loop lowering annotates an iterable whose element type it
+          // cannot tell as list[Any]: recover it from a list literal value.
+          if (elem.empty() || elem == "Any")
+          {
+            const std::string common =
+              common_literal_element_type(var_node.value("value", Json()));
+            if (!common.empty())
+              return common;
+          }
           return elem.empty() ? "Any" : elem;
         }
         // Simple name annotation (e.g., list without subtype)
