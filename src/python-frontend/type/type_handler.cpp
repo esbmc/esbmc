@@ -650,7 +650,7 @@ typet type_handler::get_typet(const std::string &ast_type, size_t type_size)
 
   // Custom large unsigned integer types (used in Ethereum, BLS, etc.)
   if (ast_type == "uint256" || ast_type == "BLSFieldElement")
-    return lower_to_seam(unsignedbv_type2tc(256));
+    return lower_to_seam(unsignedbv_type2tc(256), "fixed_width_unsigned");
 
   // bytes — immutable sequences of bytes
   // Here modeled as array of signed integers (8-bit).

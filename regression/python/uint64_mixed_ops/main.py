@@ -8,3 +8,4 @@ assert big % 7 == 6
 assert big >> 63 == 1
 assert big >> uint64(63) == 1
 assert len([1, 2]) + big > big
+assert big / -2 < 0

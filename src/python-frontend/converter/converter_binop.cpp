@@ -5753,7 +5753,7 @@ exprt python_converter::str_pointer_add_error(
 // len(l) - 4 wraps (#10494). NumPy integers keep their own promotion rules.
 // A declared fixed-width unsigned (uint64, ...) wraps under a ring operation,
 // so the other operand converts to it whichever side it is on; a comparison,
-// //, % or >> is computed exactly instead, so both widen one bit past it:
+// /, //, % or >> is computed exactly instead, so both widen one bit past it:
 // uint64 n >= 2^63 is not negative and n > -1 holds. build_arithmetic_binop
 // wraps a //, % or >> result back to the uint64.
 static void
@@ -5773,8 +5773,6 @@ read_unsigned_as_python_int(const std::string &op, exprt &lhs, exprt &rhs)
       signed_op = typecast_exprt(signed_op, unsigned_op.type());
       return;
     }
-    if (tagged && op == "Div")
-      return;
     const signedbv_typet wide(
       std::max(
         bv_width(unsigned_op.type()) + (tagged ? 1 : 0),
