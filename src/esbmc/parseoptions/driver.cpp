@@ -389,10 +389,19 @@ int esbmc_parseoptionst::doit()
   // Configure msg output
   if (cmdline.isset("file-output"))
   {
-    FILE *f = fopen(cmdline.getval("file-output"), "w+");
-    /* TODO: handle failure */
-    out = f;
-    messaget::state.out = f;
+    // Reopen stderr rather than open a new stream, so that what clang and LLVM
+    // write to stderr (diagnostics, -v under --verbosity) reaches the file too.
+    if (!freopen(cmdline.getval("file-output"), "w+", stderr))
+    {
+      messaget::state.out = stdout;
+      log_error("Cannot open {}", cmdline.getval("file-output"));
+      return 1;
+    }
+    out = stderr;
+    messaget::state.out = stderr;
+    // freopen makes stderr fully buffered; clang writes to the descriptor
+    // directly, so keep our lines in order with its.
+    messaget::state.set_flushln();
   }
 
   // Print a banner with version info to stdout

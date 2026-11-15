@@ -1,0 +1,6 @@
+CORE
+main.c
+--file-output out.txt
+^ESBMC version
+CHECK_FILE out.txt contains warning: array index 2 is past the end of the array
+CHECK_FILE out.txt contains ^VERIFICATION FAILED$
