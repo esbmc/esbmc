@@ -42,8 +42,7 @@ print("time=%.3f" % (time.perf_counter() - t))
 def run(cmd, timeout):
     """Run cmd, return (stdout+stderr, wall seconds, peak RSS in MiB)."""
     start = time.perf_counter()
-    with subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                          text=True) as proc:
+    with subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True) as proc:
         timer = threading.Timer(timeout, proc.kill)
         timer.start()
         out = proc.stdout.read()
@@ -52,11 +51,11 @@ def run(cmd, timeout):
         timer.cancel()
         proc.returncode = os.waitstatus_to_exitcode(status)
     return out, time.perf_counter() - start, usage.ru_maxrss / 1024
+    """ESBMC command line for a corpus row, without its solver and timeout flags."""
 
 
 def esbmc_cmd(binary, row, extra):
     desc = (row / "test.desc").read_text().splitlines()
-    # The bench picks the solver and timeout itself.
     flags = [f for f in shlex.split(desc[2]) if f != "--z3"]
     if "--timeout" in flags:
         i = flags.index("--timeout")
@@ -105,18 +104,17 @@ def main():
     ap.add_argument("--esbmc", default="esbmc")
     ap.add_argument("--flags", default="", help="extra ESBMC flags for every row")
     ap.add_argument("--rows", default=".", help="regex selecting corpus rows")
-    ap.add_argument("--bitwuzla-python", default=sys.executable,
+    ap.add_argument("--bitwuzla-python",
+                    default=sys.executable,
                     help="Python interpreter that can import bitwuzla")
     ap.add_argument("--timeout", type=int, default=900)
     args = ap.parse_args()
-    rows = sorted(p for p in CORPUS.iterdir()
-                  if p.is_dir() and re.search(args.rows, p.name))
+    rows = sorted(p for p in CORPUS.iterdir() if p.is_dir() and re.search(args.rows, p.name))
     print("| row | verdict | symex s | SSA steps | after slicing | SMT-LIB bytes | "
           "Z3 s | Bitwuzla s | wall s | peak MiB |")
     print("|---|---|---|---|---|---|---|---|---|---|")
     for row in rows:
-        res = measure(args.esbmc, row, shlex.split(args.flags), args.bitwuzla_python,
-                      args.timeout)
+        res = measure(args.esbmc, row, shlex.split(args.flags), args.bitwuzla_python, args.timeout)
         print(fmt(res), flush=True)
 
 
