@@ -1450,7 +1450,8 @@ std::optional<exprt> dispatch_spacing_and_padding_methods(
       0,
       "zfill() requires one argument");
     return self.handle_string_zfill(
-      get_receiver_expr(), padding_width_expression(*width_node, converter),
+      get_receiver_expr(),
+      padding_width_expression(*width_node, converter),
       get_location());
   }
 
