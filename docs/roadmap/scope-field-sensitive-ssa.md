@@ -1,11 +1,14 @@
 # Scope: field-sensitive SSA in goto-symex (#7521)
 
-> **Status at 2026-11-14: Phase 0 not started.** Two mitigations are merged:
-> #10037 stopped phi merges of wide structs from scaling with the square of
-> the width, and #10527 added the opt-in GOTO pass `--scalarize-structs`. Symex
-> itself still gives a struct one SSA name, so a field write makes a new value
-> of the whole struct. This document plans the symex change. Line numbers are
-> from master at `d3104e99c2`.
+> **Status at 2026-11-15: Phase 0 in review, gate partly met (see §8).** The
+> corpus is in `regression/field-sensitivity/` with baselines, and the census
+> has been run and reverted. Baselines cover Z3 and ESBMC's Bitwuzla backend;
+> the census covers the full C, C++ and Python suites and 259 SV-COMP tasks. Two
+> mitigations are merged: #10037 stopped phi merges of wide structs from
+> scaling with the square of the width, and #10527 added the opt-in GOTO pass
+> `--scalarize-structs`. Symex itself still gives a struct one SSA name, so a
+> field write makes a new value of the whole struct. This document plans the
+> symex change. Line numbers are from master at `d3104e99c2`.
 
 ## 1. What is left after #10037 and #10527
 
@@ -205,4 +208,133 @@ pointer-written member).
 
 ## 8. Census and measurements
 
-Empty until Phase 0.
+### 8.1 Corpus
+
+`regression/field-sensitivity/` holds five shapes at 8, 512 and 2048 fields,
+each as a pair: a safe program expecting `VERIFICATION SUCCESSFUL` and a
+`_fail` variant that changes one constant and expects `VERIFICATION FAILED`.
+Every row pins `--z3` and unwinds its loops fully.
+
+| Shape | Program |
+|---|---|
+| `repro7521` | the #7521 reproducer: one field written, read in a 100 x 20 x 10 loop |
+| `local_writes` | a local struct, 8 field writes x 200 cycles, nondet start value |
+| `local_addr_once` | the same, with the first write made through `&s` |
+| `global_callee` | a global struct written through `d->f` in a callee, 200 calls |
+| `plc_db` | a PLC data block (`_Bool`, `short`, `int` tags) passed by pointer to the cycle function, 20 cycles, with branches |
+
+Z3 does not finish `plc_db` at 512 or 2048 fields; after 30 s it holds
+1 GB and 4 GB. `test.desc` cannot set a timeout, so those four rows run with
+`--smtlib --output /dev/null` and pin only that symex finishes and emits a
+non-trivial formula. The bench script removes those flags and measures their
+verdicts. A phase that brings them within budget turns them into verdict
+tests. The struct-heavy SV-COMP tasks are covered by the census
+in §8.3 rather than copied into the corpus.
+
+### 8.2 Baselines
+
+Master `a1d98c9a1f`, RelWithDebInfo, Z3 4.13.3, Bitwuzla 0.10.0 (PyPI
+bindings), measured on 2026-11-15 on one 4-core container with
+`scripts/field_sensitivity_bench.py`. Symex time and SSA steps are from the
+Z3 run. "SMT-LIB bytes" is the size of the `--smtlib --output` dump, and the
+"Bitwuzla s" column is the time to parse and solve that dump; §8.2.1 times
+ESBMC's own Bitwuzla backend. The SMT-LIB backend encodes tuples differently from
+Z3's native API, so on `plc_db` the dump stays the same size at every width
+while Z3 times out.
+
+| Row | Symex s | SSA steps | After slicing | SMT-LIB bytes | Z3 s | Bitwuzla s | Peak MiB |
+|---|---|---|---|---|---|---|---|
+| repro7521_w8 | 0.725 | 24415 | 1 | no VCC | - | - | 122 |
+| repro7521_w512 | 0.686 | 24415 | 1 | no VCC | - | - | 122 |
+| repro7521_w2048 | 0.685 | 24415 | 1 | no VCC | - | - | 124 |
+| repro7521_w2048_fail | 0.675 | 26415 | 2 | 2411 | 0.000 | 0.001 | 143 |
+| local_writes_w8 | 0.544 | 1821 | 1606 | 108814 | 0.016 | 0.004 | 365 |
+| local_writes_w512 | 1.418 | 1821 | 1606 | 147166 | 0.708 | 0.004 | 561 |
+| local_writes_w2048 | 4.514 | 1821 | 1606 | 267998 | 4.995 | 0.005 | 1261 |
+| local_addr_once_w8 | 0.602 | 1822 | 1606 | 108814 | 0.017 | 0.003 | 365 |
+| local_addr_once_w512 | 1.390 | 1822 | 1606 | 147166 | 0.775 | 0.004 | 562 |
+| local_addr_once_w2048 | 4.242 | 1822 | 1606 | 267998 | 5.079 | 0.004 | 1262 |
+| global_callee_w8 | 0.162 | 2021 | 1605 | 108254 | 0.014 | 0.003 | 136 |
+| global_callee_w512 | 0.713 | 2021 | 1605 | 108254 | 0.131 | 0.003 | 170 |
+| global_callee_w2048 | 2.601 | 2021 | 1605 | 108254 | 0.461 | 0.003 | 284 |
+| plc_db_w8 | 0.021 | 455 | 276 | 220423 | 6.393 | 0.024 | 151 |
+| plc_db_w512 | 0.131 | 455 | 276 | 220423 | >120 | 0.024 | 1155 |
+| plc_db_w2048 | 0.430 | 455 | 276 | 220423 | >120 (>900 once) | 0.024 | 4057 |
+
+The `_fail` rows differ from their safe rows by at most 22 % in symex time.
+Their Z3 times are up to 57 % higher (`global_callee_w2048_fail`: 0.72 s),
+except `plc_db_w8_fail`, which takes 3.1 s. Against the 2x bar (2048 fields vs 8 fields),
+symex time is 0.94x on `repro7521`, which already passes, 8.3x on
+`local_writes`, 7.0x on `local_addr_once`, 16x on `global_callee` and 20x on
+`plc_db`. Z3 time grows 312x on `local_writes`, 33x on `global_callee`, and
+from 6.4 s to over 120 s on `plc_db`. Peak memory grows 3.5x on
+`local_writes` and 27x on `plc_db`.
+
+#### 8.2.1 ESBMC's Bitwuzla backend
+
+Same binary and container, built with ESBMC's Bitwuzla backend (Bitwuzla
+0.9.0, the version `DOWNLOAD_DEPENDENCIES` pins, built from git with
+CaDiCaL 2.1.2), measured on 2026-11-15 with
+`scripts/field_sensitivity_bench.py --solver bitwuzla`. All 30 rows give
+their expected verdict.
+
+| Row | Symex s | Bitwuzla s | Peak MiB |
+|---|---|---|---|
+| repro7521_w8 / w512 / w2048 | 0.705 / 0.641 / 0.687 | no VCC | 122 / 122 / 125 |
+| local_writes_w8 / w512 / w2048 | 0.565 / 1.369 / 4.717 | 0.002 / 0.002 / 0.001 | 344 / 345 / 371 |
+| local_addr_once_w8 / w512 / w2048 | 1.026 / 1.300 / 4.617 | 0.001 / 0.001 / 0.002 | 345 / 345 / 371 |
+| global_callee_w8 / w512 / w2048 | 0.161 / 0.821 / 2.516 | 0.001 / 0.003 / 0.002 | 122 / 132 / 196 |
+| plc_db_w8 / w512 / w2048 | 0.021 / 0.117 / 0.422 | 0.028 / 0.017 / 0.021 | 122 / 128 / 204 |
+
+Bitwuzla's solve time stays flat with width on every row, and it decides
+the `plc_db` rows at 512 and 2048 fields, including their `_fail` variants,
+in under 0.03 s, where Z3 runs past 120 s and 4 GB. Symex does not depend on the
+solver and its times are close to the Z3 run, so the 2x bar is missed on the same rows under both
+solvers, and the gap there is symex, not solving. The `plc_db` rows at 512
+and 2048 fields stay pinned to formula generation because the regression
+tests pin Z3.
+
+### 8.3 Census
+
+A debug option, `--field-sensitivity-census` (added and reverted in the
+Phase 0 PR), classified each struct or union object (by L0 name) that symex
+reached: never address-taken; address-taken with every dereference resolving
+to a constant offset and building no `byte_extract`, `byte_update` or
+`bitcast`; byte-level (a dynamic offset, a reinterpreting access, a byte
+operation in the program, or `memcpy`/`memmove`/`memcmp`/`memchr`/`memset`
+over it); union. Leaves count flattened members, including padding members.
+Each test ran with its `test.desc` flags under a 30 s limit, and each suite
+under a 570 s budget. Counts are summed over tests, so an object in the
+libc or C++ operational models counts once per test that reaches it.
+
+| Set | Tests with a census | Objects | Never address-taken | Constant field paths | Byte-level | Union | Max leaves |
+|---|---|---|---|---|---|---|---|
+| C (`regression/esbmc`) | 3308 / 3439 | 2018 | 1064 (53 %) | 585 (29 %) | 180 (9 %) | 189 | 201 |
+| C++ (`esbmc-cpp/cpp`) | 1437 / 1466 | 37608 | 22581 (60 %) | 11660 (31 %) | 3349 (9 %) | 18 | 49 |
+| Python (`regression/python`) | 9042 / 9739 | 55678 | 22293 (40 %) | 31663 (57 %) | 1722 (3 %) | 0 | 21 |
+| SV-COMP sample (259 tasks: ldv-memsafety, ldv-regression, list-properties, forester-heap, heap-manipulation, ntdrivers-simplified; `--unwind 3`) | 257 / 259 | 263 | 13 (5 %) | 209 (79 %) | 33 (13 %) | 8 | 18 |
+| Corpus | 30 / 30 | 30 | 12 | 18 | 0 | 0 | 2049 |
+
+Further counts. Struct objects that are globals: 886 in C, 32414 in C++,
+32999 in Python and 109 in SV-COMP. Heap objects: 182, 75, 12566 and 89.
+Objects with a nested struct or union member: 142, 4936, 340 and 23. In C,
+294 of the 732 tests that reach a struct reach one that is address-taken with
+constant field paths only, and 151 reach a byte-level one. No object in any
+set has more than 4096 leaves, and outside the corpus none has more than 201,
+so the Phase 3 cap of 4096 binds only synthetic inputs.
+
+The Python row was measured on 2026-11-15 with Python 3.11, 4 tests in
+parallel, each under a 30 s limit, in six 570 s batches. 697 tests printed
+no census, because they stop in the frontend or hit the limit (not split).
+In this run the first 1192 tests give 8267 objects (never address-taken
+4026, constant field paths 4073, byte-level 168), against 8762 (4023, 4570,
+169) in the earlier partial run; the difference is in the constant field
+path and heap counts.
+
+On the corpus, the census put `repro7521` and `local_writes` in Phase 1
+(never address-taken), and `local_addr_once`, `global_callee` and `plc_db` in
+Phase 2 (constant field paths), as designed.
+
+### 8.4 Not measured in Phase 0
+
+- The census on the full SV-COMP set.
