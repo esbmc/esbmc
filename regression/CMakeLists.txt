@@ -409,6 +409,7 @@ if(APPLE)
                     goto-transcoder
                     goto2lean
                     loop-invariants
+                    field-sensitivity
        )
 elseif(WIN32)
     # FUTURE: Add floats-regression esbmc-cpp/cpp
@@ -491,6 +492,7 @@ else()
                     goto2lean
                     parallel-solving
                     loop-invariants
+                    field-sensitivity
                     function_contract
                     witnesses_validate/reachsafety-violationwitness
                     witnesses_validate/reachsafety-correctnesswitness

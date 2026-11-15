@@ -1,0 +1,4 @@
+CORE
+main.c
+--unwind 201
+^VERIFICATION SUCCESSFUL$
