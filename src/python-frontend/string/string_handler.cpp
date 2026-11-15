@@ -3092,14 +3092,30 @@ bool string_handler::is_single_binding(const std::string &var_name)
   return assign_count == 1 && !has_augassign;
 }
 
+// Whether @p var_name's only binding in @p ast is a call to the builtin chr(),
+// which returns one code point or raises, whatever bytes hold it (#7552). The
+// binding is read directly: get_var_value follows `b = a` to a's first
+// binding, which need not be its only one. `*` counts a star import, which may
+// rebind chr.
+static bool binds_only_builtin_chr(
+  const nlohmann::json &ast,
+  const std::string &function,
+  const std::string &var_name)
+{
+  const nlohmann::json decl =
+    json_utils::find_var_decl(var_name, function, ast);
+  return decl.contains("value") && decl["value"].value("_type", "") == "Call" &&
+         decl["value"]["func"].value("_type", "") == "Name" &&
+         decl["value"]["func"].value("id", "") == "chr" &&
+         json_utils::count_name_bindings(ast, var_name) == 1 &&
+         json_utils::count_name_bindings(ast, "chr") == 0 &&
+         json_utils::count_name_bindings(ast, "*") == 0;
+}
+
 exprt string_handler::try_len_fast_path_from_name_arg(
   const nlohmann::json &arg_json)
 {
-  const std::string arg_type =
-    (arg_json.contains("_type") && arg_json["_type"].is_string())
-      ? arg_json["_type"].get<std::string>()
-      : "";
-  if (!(arg_type == "Name" && arg_json.contains("id")))
+  if (arg_json.value("_type", "") != "Name" || !arg_json.contains("id"))
     return nil_exprt();
 
   const std::string var_name = arg_json["id"].get<std::string>();
@@ -3213,6 +3229,11 @@ exprt string_handler::try_len_fast_path_from_name_arg(
       return from_integer(BigInt(utf8_codepoint_count(text)), size_type());
     }
   }
+
+  if (
+    binds_only_builtin_chr(
+      converter_.get_ast_json(), converter_.get_current_func_name(), var_name))
+    return from_integer(1, size_type());
 
   return nil_exprt();
 }

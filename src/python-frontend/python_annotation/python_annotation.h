@@ -157,6 +157,7 @@ private:
   std::string get_type_from_lhs(const std::string &id, const Json &body);
   std::string get_list_subtype(const Json &list);
   std::string get_list_type_from_literal(const Json &list_arg);
+  std::string common_literal_element_type(const Json &value);
   std::string subscript_annotation_type(const Json &annotation);
   std::string
   container_literal_type(const std::string &base_type, const Json &value);
@@ -381,6 +382,7 @@ private:
     Json &node,
     const caller_scopet &scope);
   void apply_pending_specializations();
+  bool specialize_callees_of_copies();
   // Returns the ancestors of a class (including itself) in BFS order via
   // "bases". Handles multiple inheritance and cycle-safe (visited guard).
   // "object" is intentionally excluded — it has no ESBMC IR representation.
