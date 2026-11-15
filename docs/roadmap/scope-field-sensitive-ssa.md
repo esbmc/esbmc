@@ -3,7 +3,8 @@
 > **Status at 2026-11-15: Phase 0 in review, gate partly met (see §8).** The
 > corpus is in `regression/field-sensitivity/` with baselines, and the census
 > has been run and reverted. Baselines cover Z3 and ESBMC's Bitwuzla backend;
-> the census covers the full C, C++ and Python suites and 259 SV-COMP tasks. Two
+> the census covers the full C, C++ and Python suites and two SV-COMP samples
+> (259 tasks, then 1215 drawn from every category). Two
 > mitigations are merged: #10037 stopped phi merges of wide structs from
 > scaling with the square of the width, and #10527 added the opt-in GOTO pass
 > `--scalarize-structs`. Symex itself still gives a struct one SSA name, so a
@@ -313,6 +314,7 @@ libc or C++ operational models counts once per test that reaches it.
 | C++ (`esbmc-cpp/cpp`) | 1437 / 1466 | 37608 | 22581 (60 %) | 11660 (31 %) | 3349 (9 %) | 18 | 49 |
 | Python (`regression/python`) | 9042 / 9739 | 55678 | 22293 (40 %) | 31663 (57 %) | 1722 (3 %) | 0 | 21 |
 | SV-COMP sample (259 tasks: ldv-memsafety, ldv-regression, list-properties, forester-heap, heap-manipulation, ntdrivers-simplified; `--unwind 3`) | 257 / 259 | 263 | 13 (5 %) | 209 (79 %) | 33 (13 %) | 8 | 18 |
+| SV-COMP stratified sample (1215 tasks, up to 40 per category from all 36 C categories; `--unwind 3`) | 1153 / 1215 | 6058 | 4143 (68 %) | 1096 (18 %) | 99 (2 %) | 720 | 243 |
 | Corpus | 30 / 30 | 30 | 12 | 18 | 0 | 0 | 2049 |
 
 Further counts. Struct objects that are globals: 886 in C, 32414 in C++,
@@ -320,8 +322,24 @@ Further counts. Struct objects that are globals: 886 in C, 32414 in C++,
 Objects with a nested struct or union member: 142, 4936, 340 and 23. In C,
 294 of the 732 tests that reach a struct reach one that is address-taken with
 constant field paths only, and 151 reach a byte-level one. No object in any
-set has more than 4096 leaves, and outside the corpus none has more than 201,
+set has more than 4096 leaves, and outside the corpus none has more than 243,
 so the Phase 3 cap of 4096 binds only synthetic inputs.
+
+The stratified SV-COMP sample was measured on 2026-11-15 with the census
+commit, Z3, sv-benchmarks `main` at that date, each task's data model, 4
+tasks in parallel, each under a 30 s limit (1871 s in all). Tasks were drawn
+with seed 7521 from every C `.set` file except `Unused_*` and the witness
+sets. 60 tasks hit the limit before symex finished and 2 aborted; 39 of the
+62 are in `DeviceDriversLinux64`, `DeviceDriversLinux64Large` and
+`Sequentialized`. In this sample, struct globals number 1734, heap objects
+112 and objects with a nested member 826. The largest object outside the
+corpus has 243 leaves, in `DeviceDriversLinux64`. Most of the 720 unions
+(555) are in `Intel-TDX-Module`, and `uthash` is the only category where
+byte-level objects are the majority (29 of 31). The two concurrency
+categories reach 371 objects: 319 never address-taken, 45 with
+constant field paths and 7 unions, which is the input to Phase 4's
+multithreading decision. 15 of the 36 categories reach no struct or union
+object, 2 of them because no sampled task finished symex.
 
 The Python row was measured on 2026-11-15 with Python 3.11, 4 tests in
 parallel, each under a 30 s limit, in six 570 s batches. 697 tests printed
@@ -337,4 +355,7 @@ Phase 2 (constant field paths), as designed.
 
 ### 8.4 Not measured in Phase 0
 
-- The census on the full SV-COMP set.
+- The census on the full SV-COMP set (about 33000 C tasks). At the rate of
+  the stratified sample (1.5 s of wall time per task, 4 in parallel) that is
+  about 14 hours on one 4-core container. §8.3 covers every category through
+  the sample instead.
