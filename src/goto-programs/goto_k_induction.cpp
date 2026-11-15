@@ -47,6 +47,232 @@ struct branch_cache_entryt
 using marked_branchst =
   std::unordered_map<const instructiont *, branch_cache_entryt>;
 
+/// Each forward jump's guard over the values the variables hold at the loop
+/// head, where the inductive step assumes it; nil when the body may have
+/// changed what the guard reads in a way the guard cannot be rewritten over.
+using head_guardst = std::unordered_map<const instructiont *, expr2tc>;
+
+/// What the body has written so far, walking it from the head in order.
+struct head_valuest
+{
+  /// Each written symbol's value over the head's values; nil when unknown.
+  std::unordered_map<irep_idt, expr2tc, irep_id_hash> written;
+  /// A call or a write through a pointer may have changed any symbol but the
+  /// function's own locals whose address no code takes.
+  bool opaque = false;
+  const std::unordered_set<irep_idt, irep_id_hash> &frame_private;
+
+  expr2tc at_head(const expr2tc &e) const
+  {
+    if (is_sideeffect2t(e))
+      return expr2tc();
+    if (is_address_of2t(e))
+      return is_symbol2t(to_address_of2t(e).ptr_obj) ? e : expr2tc();
+    // A pointer may reach anything but the frame's private locals.
+    if (
+      is_dereference2t(e) &&
+      (opaque ||
+       std::any_of(written.begin(), written.end(), [this](const auto &w) {
+         return !frame_private.count(w.first);
+       })))
+      return expr2tc();
+    if (is_symbol2t(e))
+    {
+      const irep_idt &name = to_symbol2t(e).thename;
+      const auto it = written.find(name);
+      if (it != written.end())
+        return it->second;
+      return opaque && !frame_private.count(name) ? expr2tc() : e;
+    }
+    expr2tc result = e;
+    bool known = true;
+    result->Foreach_operand([&](expr2tc &op) {
+      if (known && !is_nil_expr(op))
+      {
+        op = at_head(op);
+        known = !is_nil_expr(op);
+      }
+    });
+    return known ? result : expr2tc();
+  }
+};
+
+void for_each_subexpr(
+  const expr2tc &e,
+  const std::function<void(const expr2tc &)> &f);
+
+/// Calls @p write with each symbol @p instr may write, or with nil when it may
+/// write what a pointer reaches or anything a callee can.
+void for_each_write(
+  const instructiont &instr,
+  const std::function<void(const expr2tc &)> &write)
+{
+  if (instr.is_assign())
+  {
+    expr2tc base = to_code_assign2t(instr.code).target;
+    while (is_index2t(base) || is_member2t(base) || is_typecast2t(base))
+      base = is_index2t(base)    ? to_index2t(base).source_value
+             : is_member2t(base) ? to_member2t(base).source_value
+                                 : to_typecast2t(base).from;
+    write(is_symbol2t(base) ? base : expr2tc());
+  }
+  else if (instr.is_decl())
+    write(symbol2tc(get_empty_type(), to_code_decl2t(instr.code).value));
+  else if (instr.is_function_call())
+  {
+    const expr2tc &ret = to_code_function_call2t(instr.code).ret;
+    if (!is_nil_expr(ret) && is_symbol2t(ret))
+      write(ret);
+    write(expr2tc());
+  }
+  else if (
+    !instr.is_goto() && !instr.is_skip() && !instr.is_location() &&
+    instr.type != DEAD && !instr.is_assert() && !instr.is_assume())
+    write(expr2tc());
+}
+
+/// What the inductive step may assume about the state at a loop head.
+struct head_conditionst
+{
+  /// Each forward jump's guard over the head's values; nil when the body may
+  /// have changed what it reads in a way it cannot be rewritten over.
+  head_guardst guards;
+  /// The jumps that leave the loop: they cannot reach its back edge again but
+  /// through its head.
+  std::unordered_set<const instructiont *> exits;
+  /// Conditions an exit test leaves holding at every head but the first.
+  std::vector<expr2tc> invariants;
+};
+
+/// Rewrites each forward jump's guard in [@p loop_head, @p loop_exit) over the
+/// head's values. A value is substituted only while every instruction walked
+/// so far runs whenever the jump does; past an inner jump the writes may not
+/// have happened, so what they write becomes unknown.
+///
+/// Without @p rewrite, no guard after the body's first write is kept.
+///
+/// An exit test every iteration passes, that reads what the body wrote before
+/// it but nothing the body writes after it, also holds at every later head:
+/// the iteration that reaches the back edge did not exit there.
+head_conditionst head_guards(
+  const goto_programt &body,
+  const goto_programt::targett &loop_head,
+  const goto_programt::targett &loop_exit,
+  const std::unordered_set<irep_idt, irep_id_hash> &address_taken,
+  bool rewrite)
+{
+  // What reaches the back edge without passing the head again. Code past the
+  // back edge may jump back into the body.
+  std::unordered_map<const instructiont *, std::vector<const instructiont *>>
+    predecessors;
+  for (auto it = body.instructions.begin(); it != body.instructions.end(); ++it)
+  {
+    goto_programt::const_targetst successors;
+    body.get_successors(it, successors);
+    for (const auto &successor : successors)
+      if (successor != body.instructions.end())
+        predecessors[&*successor].push_back(&*it);
+  }
+  std::unordered_set<const instructiont *> rejoins;
+  std::vector<const instructiont *> work{&*loop_exit};
+  while (!work.empty())
+  {
+    const instructiont *node = work.back();
+    work.pop_back();
+    if (rejoins.insert(node).second && node != &*loop_head)
+      for (const instructiont *p : predecessors[node])
+        work.push_back(p);
+  }
+
+  std::unordered_set<irep_idt, irep_id_hash> frame_private;
+  for (const auto &instr : body.instructions)
+    if (instr.is_decl())
+    {
+      const irep_idt &name = to_code_decl2t(instr.code).value;
+      if (!address_taken.count(name))
+        frame_private.insert(name);
+    }
+
+  // An inner loop repeats the writes between its head and its back edge.
+  bool straight = true;
+  for (auto it = loop_head; it != loop_exit; ++it)
+    if (it->is_backwards_goto())
+      straight = false;
+
+  head_valuest values{{}, false, frame_private};
+  head_conditionst result;
+  std::vector<goto_programt::targett> exits;
+  std::unordered_set<irep_idt, irep_id_hash> declared;
+  bool wrote = false;
+  for (auto it = loop_head; it != loop_exit; ++it)
+  {
+    if (it->is_goto())
+    {
+      const bool leaves = !rejoins.count(&*it->targets.front());
+      if (!it->is_backwards_goto())
+      {
+        expr2tc g = rewrite || !wrote ? values.at_head(it->guard) : expr2tc();
+        if (straight && leaves && !is_nil_expr(g) && g != it->guard)
+          exits.push_back(it);
+        if (leaves && rewrite)
+          result.exits.insert(&*it);
+        result.guards[&*it] = std::move(g);
+      }
+      if (!leaves)
+        straight = false;
+      continue;
+    }
+    wrote = wrote || (!it->is_skip() && !it->is_location() &&
+                      it->type != DEAD && !it->is_assert() && !it->is_assume());
+    if (it->is_decl())
+      declared.insert(to_code_decl2t(it->code).value);
+    else if (it->is_assign() && is_symbol2t(to_code_assign2t(it->code).target))
+    {
+      const code_assign2t &assign = to_code_assign2t(it->code);
+      values.written[to_symbol2t(assign.target).thename] =
+        straight ? values.at_head(assign.source) : expr2tc();
+      continue;
+    }
+    for_each_write(*it, [&](const expr2tc &symbol) {
+      if (is_nil_expr(symbol))
+        values.opaque = true;
+      else
+        values.written[to_symbol2t(symbol).thename] = expr2tc();
+    });
+  }
+
+  // What the body may write between each exit test and the back edge.
+  std::unordered_set<irep_idt, irep_id_hash> written_after;
+  bool opaque_after = false;
+  auto exit = exits.rbegin();
+  for (auto it = loop_exit; exit != exits.rend();)
+  {
+    --it;
+    if (it == *exit)
+    {
+      bool holds = true;
+      for_each_subexpr(it->guard, [&](const expr2tc &e) {
+        holds = holds && !is_dereference2t(e);
+        if (!is_symbol2t(e))
+          return;
+        const irep_idt &name = to_symbol2t(e).thename;
+        holds = holds && !written_after.count(name) && !declared.count(name) &&
+                (!opaque_after || frame_private.count(name));
+      });
+      if (holds)
+        result.invariants.push_back(not2tc(it->guard));
+      ++exit;
+    }
+    for_each_write(*it, [&](const expr2tc &symbol) {
+      if (is_nil_expr(symbol))
+        opaque_after = true;
+      else
+        written_after.insert(to_symbol2t(symbol).thename);
+    });
+  }
+  return result;
+}
+
 /// Walk the loop body and collect, into @p guards, the conditions under
 /// which control flows from @p loop_head to @p loop_exit. Used by
 /// transform_loop to derive the entry condition of the loop (the
@@ -59,6 +285,7 @@ using marked_branchst =
 bool get_entry_cond_rec(
   const goto_programt::targett &loop_head,
   const goto_programt::targett &loop_exit,
+  const head_conditionst &conditions,
   guardst &guards,
   marked_branchst &cache)
 {
@@ -100,18 +327,18 @@ bool get_entry_cond_rec(
         return true;
     */
 
-    // A guard read after a write is not a condition on the state at the head,
-    // where the inductive step assumes it: `x++; if (x != 5) break;` must not
-    // become x == 5 at the head.
-    if (
-      !tmp_head->is_goto() && !tmp_head->is_skip() &&
-      !tmp_head->is_location() && tmp_head->type != DEAD &&
-      !tmp_head->is_assert() && !tmp_head->is_assume())
-      return false;
-
     if (tmp_head->is_goto() && !tmp_head->is_backwards_goto())
     {
-      expr2tc g = tmp_head->guard;
+      // The guard is assumed at the head, so it must read the head's values:
+      // `x++; if (x != 5) break;` assumes x + 1 == 5 there, not x == 5.
+      expr2tc g = conditions.guards.at(&*tmp_head);
+      if (is_nil_expr(g))
+      {
+        // An exit the head's values cannot express adds no condition.
+        if (conditions.exits.count(&*tmp_head))
+          continue;
+        return false;
+      }
       simplify(g);
 
       // If the guard is false, we can skip it right away
@@ -130,7 +357,11 @@ bool get_entry_cond_rec(
       {
         true_branch_guard[branch].add(g);
         true_branch = get_entry_cond_rec(
-          tmp_head->targets.front(), loop_exit, true_branch_guard, cache);
+          tmp_head->targets.front(),
+          loop_exit,
+          conditions,
+          true_branch_guard,
+          cache);
       }
 
       // Walk the false branch
@@ -142,7 +373,7 @@ bool get_entry_cond_rec(
         make_not(g);
         false_branch_guard[branch].add(g);
         false_branch = get_entry_cond_rec(
-          ++new_tmp_head, loop_exit, false_branch_guard, cache);
+          ++new_tmp_head, loop_exit, conditions, false_branch_guard, cache);
       }
 
       // Cache: store BOTH the recursion's reach-status at this branch
@@ -283,9 +514,17 @@ void make_nondet_assign(
   goto_programt::targett &loop_head,
   const havocst &havocs,
   const expr2tc &flag,
-  const expr2tc &entry)
+  const expr2tc &entry,
+  const std::vector<std::pair<expr2tc, expr2tc>> &held)
 {
   goto_programt dest;
+  for (const auto &[held_flag, invariant] : held)
+  {
+    goto_programt::targett t = dest.add_instruction(ASSIGN);
+    t->inductive_step_instruction = true;
+    t->code = code_assign2tc(held_flag, invariant);
+    t->location = loop_head->location;
+  }
   if (!is_nil_expr(flag))
   {
     goto_programt::targett t = dest.add_instruction(ASSIGN);
@@ -391,7 +630,8 @@ void assume_loop_entry_cond_before_loop(
   goto_functiont &goto_function,
   goto_programt::targett &loop_head,
   const expr2tc &combined_expr,
-  const expr2tc &flag)
+  const expr2tc &flag,
+  const std::vector<std::pair<expr2tc, expr2tc>> &held)
 {
   // Combine all per-branch loop-entry guards into one ASSUME and
   // insert it via raw `insert(loop_head, ...)` immediately before the
@@ -440,13 +680,20 @@ void assume_loop_entry_cond_before_loop(
   // and no ASSUME was inserted, regressing post-loop assertions in
   // loop-invariants, incremental-smt, witnesses_validate and
   // esbmc-solidity (issue #4846).
-  if (is_nil_expr(combined_expr))
+  expr2tc guard = is_nil_expr(combined_expr) || is_nil_expr(flag)
+                    ? combined_expr
+                    : or2tc(not2tc(flag), combined_expr);
+  for (const auto &[held_flag, invariant] : held)
+  {
+    const expr2tc kept = or2tc(not2tc(held_flag), invariant);
+    guard = is_nil_expr(guard) ? kept : and2tc(guard, kept);
+  }
+  if (is_nil_expr(guard))
     return;
 
   goto_programt::instructiont instruction;
   instruction.type = ASSUME;
-  instruction.guard =
-    is_nil_expr(flag) ? combined_expr : or2tc(not2tc(flag), combined_expr);
+  instruction.guard = guard;
   instruction.inductive_step_instruction = true;
   instruction.location = loop_head->location;
   goto_function.body.instructions.insert(loop_head, instruction);
@@ -575,6 +822,7 @@ void transform_loop(
   goto_functiont &goto_function,
   loopst &loop,
   const havocst &havocs,
+  const std::unordered_set<irep_idt, irep_id_hash> &address_taken,
   bool continue_past_failed_assertions)
 {
   goto_programt::targett loop_head = loop.get_original_loop_head();
@@ -591,7 +839,12 @@ void transform_loop(
   // call.
   marked_branchst cache;
   guardst guards;
-  get_entry_cond_rec(loop_head, loop_exit, guards, cache);
+  // havoc_object cannot be made conditional, so a loop that writes through a
+  // pointer gets no flag.
+  const bool can_flag = entry_flags.context && havocs.through.empty();
+  const head_conditionst at_head = head_guards(
+    goto_function.body, loop_head, loop_exit, address_taken, can_flag);
+  get_entry_cond_rec(loop_head, loop_exit, at_head, guards, cache);
 
   // Remove loop conditions not related to the written variables
   remove_unrelated_loop_cond(guards, loop);
@@ -605,27 +858,28 @@ void transform_loop(
   // assume_loop_entry_cond_before_loop runs the iterator is correct
   // and the ASSUME ends up between the havocs and the IF.
 
-  // A state before the loop that fails the head test skips the loop, so it
-  // keeps its values and the entry assumption does not apply to it: assuming
-  // it there would drop every path that skips the loop (#10154). Only the head
-  // test can tell: a test later in the body may read what the body wrote
-  // before it. havoc_object cannot be made conditional, so a loop that writes
-  // through a pointer keeps the plain assumption.
+  // A state before the loop that fails the entry condition leaves the loop in
+  // its first iteration, so it keeps its values and the entry assumption does
+  // not apply to it: assuming it there would drop every path that leaves early
+  // (#10154). Every guard is over the head's values, so the state before the
+  // loop can be tested; without a flag, guards after a write are not kept.
   const expr2tc entry = entry_condition(guards);
-  const auto head_guard = guards.find(&*loop_head);
-  const expr2tc head_test =
-    head_guard == guards.end() ? expr2tc() : head_guard->second.as_expr();
-  const expr2tc flag = !entry_flags.context || is_nil_expr(entry) ||
-                           is_nil_expr(head_test) || is_true(head_test) ||
-                           !havocs.through.empty()
-                         ? expr2tc()
-                         : entry_flags.fresh();
+  const expr2tc flag =
+    can_flag && !is_nil_expr(entry) ? entry_flags.fresh() : expr2tc();
+
+  // The first head sees the state before the loop, so an invariant that holds
+  // there holds at every head. A jump into the body starts elsewhere.
+  std::vector<std::pair<expr2tc, expr2tc>> held;
+  if (entry_flags.context && entry_jumps.empty())
+    for (const expr2tc &invariant : at_head.invariants)
+      held.emplace_back(entry_flags.fresh(), invariant);
 
   // Create the nondet assignments on the beginning of the loop
-  make_nondet_assign(goto_function, loop_head, havocs, flag, head_test);
+  make_nondet_assign(goto_function, loop_head, havocs, flag, entry, held);
 
   // Assume the loop entry condition before going into the loop
-  assume_loop_entry_cond_before_loop(goto_function, loop_head, entry, flag);
+  assume_loop_entry_cond_before_loop(
+    goto_function, loop_head, entry, flag, held);
 
   retarget_back_edge(loop_head, loop_exit);
 
@@ -2309,7 +2563,12 @@ bool havoc_loop(
       havoc_object->type;
   }
   transform_loop(
-    entry_flags, goto_function, loop, havocs, continue_past_failed_assertions);
+    entry_flags,
+    goto_function,
+    loop,
+    havocs,
+    w.address_taken,
+    continue_past_failed_assertions);
   return covered;
 }
 
