@@ -23,3 +23,4 @@ assert ident(big) >= 1
 assert Box(big).v >= 1
 assert (1 + big) // 2 == 2**62 + 3
 assert big > -1
+assert -1 < big

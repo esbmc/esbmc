@@ -5728,9 +5728,10 @@ exprt python_converter::str_pointer_add_error(
 // A Python int is signed, so an unsigned operand meeting one (a len() result)
 // is read as signed rather than the int read as unsigned: otherwise
 // len(l) - 4 wraps (#10494). NumPy integers keep their own promotion rules.
-// A declared fixed-width unsigned (uint64, ...) wraps in arithmetic, so the
-// int converts to it whichever side it is on, but compares exactly, so both
-// widen one bit past it: uint64 n >= 2^63 is not negative and n > -1 holds.
+// A declared fixed-width unsigned (uint64, ...) wraps under a ring operation,
+// so the other operand converts to it whichever side it is on; a comparison,
+// //, % or >> is exact instead, so both widen one bit past it: uint64
+// n >= 2^63 is not negative, n > -1 holds and uint64(7) // -2 is -4.
 static void
 read_unsigned_as_python_int(const std::string &op, exprt &lhs, exprt &rhs)
 {
@@ -5738,27 +5739,41 @@ read_unsigned_as_python_int(const std::string &op, exprt &lhs, exprt &rhs)
     type_utils::is_numpy_numeric_element(lhs.type()) ||
     type_utils::is_numpy_numeric_element(rhs.type()))
     return;
-  auto widen_to_signed = [](exprt &unsigned_op, exprt &signed_op, bool both) {
-    const unsigned width = std::max(
-      bv_width(unsigned_op.type()) + (both ? 1 : 0),
-      bv_width(signed_op.type()));
-    const signedbv_typet wide(width);
+  const bool ring = op == "Add" || op == "Sub" || op == "Mult" ||
+                    op == "LShift" || op == "BitAnd" || op == "BitOr" ||
+                    op == "BitXor";
+  auto read = [&](exprt &unsigned_op, exprt &signed_op) {
+    const bool tagged = type_utils::is_fixed_width_unsigned(unsigned_op.type());
+    if (tagged && ring)
+    {
+      signed_op = typecast_exprt(signed_op, unsigned_op.type());
+      return;
+    }
+    if (tagged && op == "Div")
+      return;
+    const signedbv_typet wide(
+      std::max(
+        bv_width(unsigned_op.type()) + (tagged ? 1 : 0),
+        bv_width(signed_op.type())));
     unsigned_op = typecast_exprt(unsigned_op, wide);
-    if (both && signed_op.type() != wide)
+    if (tagged)
       signed_op = typecast_exprt(signed_op, wide);
   };
-  auto read = [&](exprt &unsigned_op, exprt &signed_op) {
-    if (!type_utils::is_fixed_width_unsigned(unsigned_op.type()))
-      widen_to_signed(unsigned_op, signed_op, false);
-    else if (type_utils::is_relational_op(op))
-      widen_to_signed(unsigned_op, signed_op, true);
-    else
-      signed_op = typecast_exprt(signed_op, unsigned_op.type());
-  };
+  const bool lhs_tagged = type_utils::is_fixed_width_unsigned(lhs.type());
+  const bool rhs_tagged = type_utils::is_fixed_width_unsigned(rhs.type());
   if (lhs.type().is_unsignedbv() && rhs.type().is_signedbv())
     read(lhs, rhs);
   else if (rhs.type().is_unsignedbv() && lhs.type().is_signedbv())
     read(rhs, lhs);
+  else if (
+    lhs.type().is_unsignedbv() && rhs.type().is_unsignedbv() &&
+    lhs_tagged != rhs_tagged)
+  {
+    if (lhs_tagged)
+      rhs = typecast_exprt(rhs, lhs.type());
+    else
+      lhs = typecast_exprt(lhs, rhs.type());
+  }
 }
 
 exprt python_converter::build_binary_expression(
