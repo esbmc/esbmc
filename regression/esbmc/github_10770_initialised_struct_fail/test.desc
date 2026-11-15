@@ -1,0 +1,7 @@
+CORE
+main.c
+--witness-output-yaml -
+^VERIFICATION FAILED$
+type: "function_return"
+value: "\\\\result == 7"
+line: 13$

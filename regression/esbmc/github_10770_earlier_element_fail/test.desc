@@ -1,0 +1,7 @@
+CORE
+main.c
+--witness-output-yaml -
+^VERIFICATION FAILED$
+(?s)\A(?:(?!function_return).)*type: "function_return"(?:(?!function_return).)*\Z
+value: "\\\\result == 9"
+line: 13$

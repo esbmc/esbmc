@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <cassert>
 #include <goto-symex/trace/build_goto_trace.h>
 #include <goto-symex/equation/slice.h>
@@ -289,26 +290,48 @@ static void record_violated_reads(
   collect_nondet_reads(smt_conv, step.pc->guard, ssa_cond, step.nondet_reads);
 }
 
+/* The nondet symbols already met, with the instruction of the step each one
+ * first appeared in, and those already given a waypoint. */
+struct nondet_returnst
+{
+  std::unordered_map<irep_idt, const goto_programt::instructiont *> origin;
+  std::unordered_set<irep_idt> recorded;
+};
+
 /* Record what a __VERIFIER_nondet_*() call returned on this path: the nondet
  * symbol its `lhs = NONDET` lowering assigns, not the whole lhs object. */
 static void record_nondet_return(
   smt_convt &smt_conv,
   const symex_target_equationt::SSA_stept &step,
   std::list<std::pair<locationt, expr2tc>> &out,
-  std::unordered_set<irep_idt> &seen)
+  nondet_returnst &nondets)
 {
-  if (!step.is_assignment() || step.ignore)
+  if (!step.is_assignment())
     return;
 
-  // get_nondet_symbol also returns a plain symbol: a phi merge placed at the
-  // call would name another variable's value. A store through a pointer with
-  // several targets writes one call's nondet symbol into each of them.
-  const expr2tc nondet = symex_slicet::get_nondet_symbol(step.rhs);
-  if (
-    !nondet || !is_symbol2t(nondet) ||
-    !has_prefix(to_symbol2t(nondet).thename, "nondet$") ||
-    seen.count(to_symbol2t(nondet).thename))
+  // A store into an initialised array or struct is folded into the aggregate,
+  // which also holds earlier calls' values (#10770). A symbol belongs to the
+  // step it first appears in, sliced or off-trace ones included, so a later
+  // call never takes it. A store through a pointer with several targets writes
+  // one call's symbol in one step per target, all at the same instruction.
+  const goto_programt::instructiont *const pc = &*step.source.pc;
+  std::vector<expr2tc> own;
+  for (const expr2tc &nondet : symex_slicet::get_nondet_symbols(step.rhs))
+  {
+    const irep_idt &name = to_symbol2t(nondet).thename;
+    if (
+      nondets.origin.emplace(name, pc).first->second == pc &&
+      !nondets.recorded.count(name) &&
+      std::none_of(own.begin(), own.end(), [&name](const expr2tc &e) {
+        return to_symbol2t(e).thename == name;
+      }))
+      own.push_back(nondet);
+  }
+
+  // A step with two calls' values cannot say which `)` each belongs to.
+  if (own.size() != 1 || step.ignore)
     return;
+  const expr2tc &nondet = own.front();
 
   // Other nondet assignments (an uninitialised local, a contract's havoc of a
   // call's result) are not at a nondet call in the source.
@@ -322,7 +345,7 @@ static void record_nondet_return(
   if (!is_nil_expr(value) && is_constant_expr(value))
   {
     out.emplace_back(*rparen, value);
-    seen.insert(to_symbol2t(nondet).thename);
+    nondets.recorded.insert(to_symbol2t(nondet).thename);
   }
 }
 
@@ -495,7 +518,7 @@ void build_goto_trace(
     std::unordered_set<const goto_programt::instructiont *>>
     operand_gotos;
   std::list<std::pair<locationt, expr2tc>> nondet_returns;
-  std::unordered_set<irep_idt> nondet_seen;
+  nondet_returnst nondet_calls;
 
   // l_get() memoises against the current model internally (the cache is
   // cleared on every solve / context change), so the thousands of repeated
@@ -505,7 +528,7 @@ void build_goto_trace(
   {
     inputs.note_assignment(SSA_step);
     race_flags.note_assignment(smt_conv, SSA_step);
-    record_nondet_return(smt_conv, SSA_step, nondet_returns, nondet_seen);
+    record_nondet_return(smt_conv, SSA_step, nondet_returns, nondet_calls);
 
     // Hidden steps are internal SSA bookkeeping (e.g. phi-merge nodes at
     // control-flow joins). They carry a synthesised value and a source
