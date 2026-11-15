@@ -231,6 +231,7 @@ private:
     const std::string &attr,
     bool constructed_only = false);
   std::string self_attribute_type(const Json &node);
+  bool argument_has_type(const Json &arg, const std::string &type);
   InferResult
   infer_self_attribute_copy(const Json &stmt, std::string &inferred_type);
   std::string get_operand_type(const Json &node);

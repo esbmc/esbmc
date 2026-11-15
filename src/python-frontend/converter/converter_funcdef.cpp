@@ -4753,6 +4753,43 @@ static bool argument_only_called(
            module, call["func"]["id"].get<std::string>(), index);
 }
 
+/// Whether \p call calls a def that a top-level `from m import f` of a module
+/// of the program binds, bound nowhere else here, and that def only calls its
+/// positional parameter \p index.
+bool python_converter::imported_argument_only_called(
+  const nlohmann::json &call,
+  std::size_t index) const
+{
+  const nlohmann::json &func = call["func"];
+  if (func.value("_type", "") != "Name")
+    return false;
+  const std::string name = func["id"].get<std::string>();
+  if (count_binders(*ast_json, name) != 1)
+    return false;
+  for (const auto &stmt : (*ast_json)["body"])
+  {
+    if (
+      stmt.value("_type", "") != "ImportFrom" || stmt.value("level", 0) != 0 ||
+      !stmt["module"].is_string())
+      continue;
+    const auto module =
+      module_ast_pool_.find(stmt["module"].get<std::string>());
+    for (const auto &alias : stmt["names"])
+    {
+      const bool binds_name = alias["asname"].is_string()
+                                ? alias["asname"] == name
+                                : alias["name"] == name;
+      if (binds_name && module != module_ast_pool_.end())
+      {
+        nlohmann::json direct = call;
+        direct["func"]["id"] = alias["name"];
+        return argument_only_called(module->second, direct, index);
+      }
+    }
+  }
+  return false;
+}
+
 /// Whether \p stmt binds its value to a single name only ever called.
 static bool
 bound_name_only_called(const nlohmann::json &module, const nlohmann::json &stmt)
@@ -4771,7 +4808,8 @@ bool python_converter::slot_only_called(const node_slot &slot)
   const nlohmann::json &parent = *slot.parent;
   const std::string kind = parent.value("_type", "");
   if (kind == "Call" && slot.field == "args")
-    return argument_only_called(*ast_json, parent, slot.index);
+    return argument_only_called(*ast_json, parent, slot.index) ||
+           imported_argument_only_called(parent, slot.index);
   if (slot.index >= 0)
     return false;
   if (kind == "Call")
