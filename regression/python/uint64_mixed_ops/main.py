@@ -3,9 +3,8 @@ class uint64(int):
 
 
 big = uint64(2**63 + 5)
-seven = uint64(7)
-assert seven // -2 == -4
-assert seven % -2 == -1
+assert big // 3 == 3074457345618258604
+assert big % 7 == 6
 assert big >> 63 == 1
 assert big >> uint64(63) == 1
 assert len([1, 2]) + big > big

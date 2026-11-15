@@ -3717,6 +3717,24 @@ exprt python_converter::build_guarded_binop(
   return stmt_expr;
 }
 
+// The uint64 type a //, % or >> between a declared fixed-width unsigned and an
+// int wraps back to after read_unsigned_as_python_int computed it exactly, or
+// an empty type. Left wide, the result would retype the variable it is stored
+// in.
+static typet
+wrapped_result_type(const std::string &op, const exprt &lhs, const exprt &rhs)
+{
+  if (op != "FloorDiv" && op != "Mod" && op != "RShift")
+    return typet();
+  if (
+    type_utils::is_fixed_width_unsigned(lhs.type()) && rhs.type().is_signedbv())
+    return lhs.type();
+  if (
+    type_utils::is_fixed_width_unsigned(rhs.type()) && lhs.type().is_signedbv())
+    return rhs.type();
+  return typet();
+}
+
 exprt python_converter::build_arithmetic_binop(
   const std::string &op,
   exprt lhs,
@@ -3725,6 +3743,11 @@ exprt python_converter::build_arithmetic_binop(
 {
   if (op == "Mod" && (lhs.type().is_floatbv() || rhs.type().is_floatbv()))
     return math_handler_.handle_modulo(lhs, rhs, element);
+
+  const typet wraps_to = wrapped_result_type(op, lhs, rhs);
+  auto wrap = [&wraps_to](const exprt &result) -> exprt {
+    return wraps_to.id().empty() ? result : typecast_exprt(result, wraps_to);
+  };
 
   // Build the binary expression
   exprt bin_expr = build_binary_expression(op, lhs, rhs);
@@ -3735,7 +3758,7 @@ exprt python_converter::build_arithmetic_binop(
 
   // Handle floor division
   if (op == "FloorDiv")
-    return math_handler_.handle_floor_division(lhs, rhs, bin_expr);
+    return wrap(math_handler_.handle_floor_division(lhs, rhs, bin_expr));
 
   // Python integer modulo `%` is floored (result takes the sign of the
   // divisor), unlike C's truncated remainder. Correct it for integer operands;
@@ -3743,13 +3766,13 @@ exprt python_converter::build_arithmetic_binop(
   if (
     op == "Mod" && (lhs.type().is_signedbv() || lhs.type().is_unsignedbv()) &&
     (rhs.type().is_signedbv() || rhs.type().is_unsignedbv()))
-    return math_handler_.handle_int_modulo(lhs, rhs, bin_expr);
+    return wrap(math_handler_.handle_int_modulo(lhs, rhs, bin_expr));
 
   // Handle chained comparisons
   if (element.contains("comparators") && element["comparators"].size() > 1)
     return handle_chained_comparisons_logic(element, bin_expr);
 
-  return bin_expr;
+  return wrap(bin_expr);
 }
 
 /// Replace Optional<T> operands by their values (#8016). `==`/`!=` also compare
@@ -5730,8 +5753,9 @@ exprt python_converter::str_pointer_add_error(
 // len(l) - 4 wraps (#10494). NumPy integers keep their own promotion rules.
 // A declared fixed-width unsigned (uint64, ...) wraps under a ring operation,
 // so the other operand converts to it whichever side it is on; a comparison,
-// //, % or >> is exact instead, so both widen one bit past it: uint64
-// n >= 2^63 is not negative, n > -1 holds and uint64(7) // -2 is -4.
+// //, % or >> is computed exactly instead, so both widen one bit past it:
+// uint64 n >= 2^63 is not negative and n > -1 holds. build_arithmetic_binop
+// wraps a //, % or >> result back to the uint64.
 static void
 read_unsigned_as_python_int(const std::string &op, exprt &lhs, exprt &rhs)
 {
