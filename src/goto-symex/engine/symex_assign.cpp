@@ -539,7 +539,6 @@ void goto_symext::symex_assign(
   expr2tc original_lhs = code.target;
   expr2tc lhs = split_rewrite(code.target);
   expr2tc rhs = split_rewrite(code.source);
-  const bool split_whole = lhs != code.target && is_constant_struct2t(lhs);
 
   replace_nondet(lhs);
   replace_nondet(rhs);
@@ -577,7 +576,7 @@ void goto_symext::symex_assign(
   bool hidden_ssa = hidden || cur_state->top().hidden;
   if (!hidden_ssa)
   {
-    auto const maybe_symbol = get_base_object(split_whole ? code.target : lhs);
+    auto const maybe_symbol = assigned_object(lhs, code.target);
     if (is_symbol2t(maybe_symbol))
     {
       auto const s = to_symbol2t(maybe_symbol).thename.as_string();
@@ -587,10 +586,7 @@ void goto_symext::symex_assign(
   }
 
   guard2tc g(guard); // NOT the state guard!
-  if (split_whole)
-    symex_assign_split(lhs, original_lhs, rhs, g, hidden_ssa);
-  else
-    symex_assign_rec(lhs, original_lhs, rhs, expr2tc(), g, hidden_ssa);
+  symex_assign_target(lhs, original_lhs, rhs, g, hidden_ssa);
 
   if (validate_witness && is_symbol2t(original_lhs))
   {
@@ -778,11 +774,41 @@ goto_symext::split_fields(const irep_idt &name) const
   return art1 ? art1->split_structs.fields(name) : nullptr;
 }
 
+expr2tc
+goto_symext::assigned_object(const expr2tc &lhs, const expr2tc &target) const
+{
+  return get_base_object(is_split_whole(target) ? target : lhs);
+}
+
+bool goto_symext::is_split_whole(const expr2tc &target) const
+{
+  return is_symbol2t(target) && split_fields(to_symbol2t(target).thename);
+}
+
+void goto_symext::symex_assign_target(
+  const expr2tc &lhs,
+  const expr2tc &original_lhs,
+  expr2tc &rhs,
+  guard2tc &guard,
+  const bool hidden)
+{
+  if (is_split_whole(original_lhs))
+    symex_assign_split(lhs, original_lhs, rhs, guard, hidden);
+  else
+    symex_assign_rec(lhs, original_lhs, rhs, expr2tc(), guard, hidden);
+}
+
 expr2tc goto_symext::split_rewrite(const expr2tc &e) const
 {
   if (!art1 || art1->split_structs.empty())
     return e;
   return art1->split_structs.rewrite(e);
+}
+
+void goto_symext::split_rewrite_operands(std::vector<expr2tc> &operands) const
+{
+  for (expr2tc &op : operands)
+    op = split_rewrite(op);
 }
 
 void goto_symext::symex_assign_split(

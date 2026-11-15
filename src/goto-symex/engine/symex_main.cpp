@@ -496,8 +496,7 @@ void goto_symext::symex_step(reachability_treet &art)
     code_function_call2t &call = to_code_function_call2t(deref_code);
     // The result slot stays whole here: symex_assign splits it, and the trace
     // names it as written.
-    for (expr2tc &arg : call.operands)
-      arg = split_rewrite(arg);
+    split_rewrite_operands(call.operands);
 
     if (!is_nil_expr(call.ret))
     {

@@ -1295,6 +1295,23 @@ protected:
   /** @p e with each split struct object replaced by its fields. */
   expr2tc split_rewrite(const expr2tc &e) const;
 
+  void split_rewrite_operands(std::vector<expr2tc> &operands) const;
+
+  /** The base object of @p lhs, or of @p target, the source form of
+   *  @p lhs, when that names a split object as a whole. */
+  expr2tc assigned_object(const expr2tc &lhs, const expr2tc &target) const;
+
+  /** Whether @p target names a split object as a whole. */
+  bool is_split_whole(const expr2tc &target) const;
+
+  /** Assign @p rhs to @p original_lhs through @p lhs, its split form. */
+  void symex_assign_target(
+    const expr2tc &lhs,
+    const expr2tc &original_lhs,
+    expr2tc &rhs,
+    guard2tc &guard,
+    const bool hidden);
+
   /** Assign @p rhs to the split object @p full_lhs, whose fields @p lhs
    *  holds, as one field step per member. Every step but the last is hidden;
    *  the last prints the whole struct, as an unsplit assignment would. */
