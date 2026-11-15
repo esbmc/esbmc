@@ -2,6 +2,7 @@
 #include <numeric>
 #include <langapi/language_util.h>
 #include <pointer-analysis/dereference.h>
+#include <pointer-analysis/field_census.h>
 #include <pointer-analysis/value_set.h>
 #include <sstream>
 #include <util/arith/arith_tools.h>
@@ -1317,7 +1318,11 @@ expr2tc dereferencet::build_reference_to(
 
   // Call reference building methods. For the given data object in value,
   // an expression of type type will be constructed that reads from it.
+  const bool census_const_offset = is_constant_int2t(final_offset);
   build_reference_rec(value, final_offset, type, tmp_guard, mode, alignment);
+  if (field_census::enabled)
+    field_census::note_deref(
+      root_object, census_const_offset && !field_census::reinterprets(value));
 
   return value;
 }

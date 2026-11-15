@@ -1154,6 +1154,10 @@ const struct group_opt_templ all_cmd_options[] = {
      {"double-assign-check",
       NULL,
       "Check for duplicate SSA symbol assignments"},
+     {"field-sensitivity-census",
+      NULL,
+      "Classify the struct objects symex sees by field-sensitivity "
+      "eligibility (#7521)"},
      {"no-pointer-relation-check",
       NULL,
       "Do not check whether pointers in order relations refer to the same "

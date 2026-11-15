@@ -1,3 +1,4 @@
+#include <pointer-analysis/field_census.h>
 #include <cassert>
 #include <goto-symex/scheduler/execution_state.h>
 #include <goto-symex/engine/goto_symex.h>
@@ -1022,6 +1023,9 @@ void goto_symext::intrinsic_memcpy_impl(
   expr2tc src_deref = dereference2tc(get_empty_type(), src_arg);
   internal_deref_items.clear();
   dereference(src_deref, dereferencet::INTERNAL);
+  if (field_census::enabled)
+    for (const auto &census_item : internal_deref_items)
+      field_census::note_deref(census_item.object, false);
 
   if (!internal_deref_items.size())
   {
@@ -1117,6 +1121,9 @@ void goto_symext::intrinsic_memcpy_impl(
   // Readings are sorted... now go for writings
   expr2tc dst_deref = dereference2tc(get_empty_type(), dst_arg);
   dereference(dst_deref, dereferencet::INTERNAL);
+  if (field_census::enabled)
+    for (const auto &census_item : internal_deref_items)
+      field_census::note_deref(census_item.object, false);
 
   for (dereference_callbackt::internal_item &item : internal_deref_items)
   {
@@ -1233,6 +1240,9 @@ bool goto_symext::memcmp_resolve_operand(
   internal_deref_items.clear();
   expr2tc deref = dereference2tc(get_empty_type(), ptr);
   dereference(deref, dereferencet::INTERNAL);
+  if (field_census::enabled)
+    for (const auto &census_item : internal_deref_items)
+      field_census::note_deref(census_item.object, false);
 
   // Exactly one target object — a single concrete primitive region.
   if (internal_deref_items.size() != 1)
@@ -1510,6 +1520,9 @@ void goto_symext::intrinsic_memchr(
   internal_deref_items.clear();
   expr2tc deref = dereference2tc(get_empty_type(), buf_arg);
   dereference(deref, dereferencet::INTERNAL);
+  if (field_census::enabled)
+    for (const auto &census_item : internal_deref_items)
+      field_census::note_deref(census_item.object, false);
 
   if (!internal_deref_items.size())
   {
@@ -1692,6 +1705,9 @@ void goto_symext::intrinsic_memset(
   internal_deref_items.clear();
   expr2tc deref = dereference2tc(get_empty_type(), arg0);
   dereference(deref, dereferencet::INTERNAL);
+  if (field_census::enabled)
+    for (const auto &census_item : internal_deref_items)
+      field_census::note_deref(census_item.object, false);
 
   /* Preconditions for the optimization:
    * A: It should point to someplace

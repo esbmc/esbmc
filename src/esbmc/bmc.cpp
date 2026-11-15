@@ -1,3 +1,4 @@
+#include <pointer-analysis/field_census.h>
 #include <csignal>
 #include <memory>
 #ifdef _WIN32
@@ -2678,6 +2679,9 @@ smt_resultt bmct::run_thread(std::shared_ptr<symex_target_equationt> &eq)
       "Symex completed in: {}s ({} assignments)",
       time2string(symex_stop - symex_start),
       eq->SSA_steps.size());
+
+    if (field_census::enabled)
+      field_census::report();
 
     if (options.get_bool_option("double-assign-check"))
     {
