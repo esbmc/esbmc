@@ -231,6 +231,7 @@ private:
     const std::string &attr,
     bool constructed_only = false);
   std::string self_attribute_type(const Json &node);
+  bool argument_has_type(const Json &arg, const std::string &type);
   InferResult
   infer_self_attribute_copy(const Json &stmt, std::string &inferred_type);
   std::string get_operand_type(const Json &node);
@@ -250,6 +251,10 @@ private:
   bool is_array_operand(const Json &operand, const Json &body);
   std::string operand_annotation_type(const Json &decl);
   std::string name_operand_type(const Json &name, const Json &body);
+  bool is_str_operation(
+    const Json &stmt,
+    const std::string &left_type,
+    const Json &body);
   std::string get_type_from_rhs_variable(const Json &element, const Json &body);
   bool holds_callable_value(const std::string &name) const;
   std::string get_type_from_call(const Json &element);

@@ -1425,6 +1425,38 @@ void python_converter::adopt_none_rhs(
   }
 }
 
+/// The type of the value @p rhs stores: a call statement's return type.
+static const typet &stored_type(const exprt &rhs)
+{
+  if (rhs.is_code() && rhs.statement() == "function_call")
+    return to_code_type(to_code_function_call(to_code(rhs)).function().type())
+      .return_type();
+  return rhs.type();
+}
+
+// An Optional[T] struct holds a scalar or a dict and a None flag. A str, or
+// a pointer a called function is declared to return, stored into it would be
+// read back as a T (#10738). Another expression of pointer type may still be
+// typed by its later lowering.
+static void reject_optional_pointer_store(
+  const exprt &lhs,
+  const exprt &rhs,
+  const typet &none,
+  const namespacet &ns)
+{
+  const typet &type = stored_type(rhs);
+  const bool returned_pointer = rhs.is_code() && type.is_pointer();
+  if (
+    !type_utils::is_optional_struct(lhs.type()) || type == none ||
+    !(returned_pointer || type_utils::is_string_type(type)))
+    return;
+  const typet &value = to_struct_type(lhs.type()).get_component("value").type();
+  if (ns.follow(type) != ns.follow(value))
+    throw std::runtime_error(
+      "unsupported: a variable that holds an Optional value is assigned a "
+      "str or a value of unknown type");
+}
+
 void python_converter::handle_assignment_type_adjustments(
   symbolt *lhs_symbol,
   exprt &lhs,
@@ -1436,6 +1468,7 @@ void python_converter::handle_assignment_type_adjustments(
   reject_attribute_class_change(lhs, rhs, ast_node, is_ctor_call);
   reject_list_slot_class_change(lhs, ast_node, is_ctor_call);
   reject_attribute_scalar_change(lhs, rhs);
+  reject_optional_pointer_store(lhs, rhs, none_type(), ns);
   // get_var_assign boxes the value into a tagged slot's fields.
   if (
     lhs.is_member() && type_handler_.is_tagged_scalar_type(lhs.type()) &&
@@ -5717,6 +5750,26 @@ static const typet *chosen_function_type(const exprt &arm)
   return nullptr;
 }
 
+/// The arm of a function-or-value conditional that cannot be called becomes a
+/// function raising TypeError. It is still evaluated, in its own branch, as
+/// CPython evaluates it before the call raises.
+void python_converter::decay_not_callable_arm(
+  exprt &arm,
+  code_blockt &side_effects,
+  const exprt &function)
+{
+  // A type probe converts the expression a second time and drops it.
+  if (!arm.is_constant() && !arm.is_symbol() && !in_type_probe())
+  {
+    if (!current_block || !safe_to_emit_side_effecting_statement())
+      throw std::runtime_error(
+        "a conditional expression choosing between a function and a call "
+        "whose value cannot be called is not supported here");
+    side_effects.copy_to_operands(code_expressiont(arm));
+  }
+  arm = not_callable_function(function.type(), arm.type(), arm.location());
+}
+
 /// A choice between two functions of one type is a pointer to either. The
 /// result of a choice between types would have no single type (#8404). An
 /// arm that cannot be called becomes a function that raises when it is,
@@ -5724,7 +5777,9 @@ static const typet *chosen_function_type(const exprt &arm)
 void python_converter::decay_function_choice(
   const nlohmann::json &ifexp,
   exprt &then,
-  exprt &else_expr)
+  code_blockt &then_side_effects,
+  exprt &else_expr,
+  code_blockt &else_side_effects)
 {
   const auto not_callable_beside = [this](const exprt &arm, const exprt &fn) {
     return fn.type().is_code() && fn.is_symbol() &&
@@ -5739,11 +5794,9 @@ void python_converter::decay_function_choice(
       "that cannot be called is supported only when its value is only "
       "called");
   if (else_not_callable)
-    else_expr = not_callable_function(
-      then.type(), else_expr.type(), else_expr.location());
+    decay_not_callable_arm(else_expr, else_side_effects, then);
   else if (then_not_callable)
-    then =
-      not_callable_function(else_expr.type(), then.type(), then.location());
+    decay_not_callable_arm(then, then_side_effects, else_expr);
   // An arm that is itself a choice between functions is already a pointer
   // to one, so `f if c else (g if d else h)` decays like two names.
   const typet *then_code = chosen_function_type(then);
@@ -10306,12 +10359,7 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
         /*is_function_body=*/false,
         /*is_loop_body=*/type == "While");
     else if (type == "IfExp")
-    {
-      code_blockt *saved_block = current_block;
-      current_block = &then_side_effects;
-      then = get_expr(ast_node["body"]);
-      current_block = saved_block;
-    }
+      then = get_ifexp_arm(ast_node, "body", then_side_effects);
     else
       then = get_expr(ast_node["body"]);
   }
@@ -10327,12 +10375,7 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
     if (ast_node["orelse"].is_array())
       else_expr = get_block(ast_node["orelse"]);
     else if (type == "IfExp")
-    {
-      code_blockt *saved_block = current_block;
-      current_block = &else_side_effects;
-      else_expr = get_expr(ast_node["orelse"]);
-      current_block = saved_block;
-    }
+      else_expr = get_ifexp_arm(ast_node, "orelse", else_side_effects);
     else
       else_expr = get_expr(ast_node["orelse"]);
   }
@@ -10353,7 +10396,8 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
     then = to_value_expr(then, ns);
     else_expr = to_value_expr(else_expr, ns);
     hoist_raising_arm(then, then_side_effects, else_expr, else_side_effects);
-    decay_function_choice(ast_node, then, else_expr);
+    decay_function_choice(
+      ast_node, then, then_side_effects, else_expr, else_side_effects);
 
     bool then_is_none = (then.type() == none_type());
     bool else_is_none = (else_expr.type() == none_type());
@@ -10379,6 +10423,11 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
         result_type = then.type(); // Use pointer type as result
       }
     }
+
+    refuse_int_ifexp_arm(
+      ast_node, then, result_type, then_side_effects, location);
+    refuse_int_ifexp_arm(
+      ast_node, else_expr, result_type, else_side_effects, location);
 
     take_str_branch_truth(result_type, then, else_expr, location);
 
@@ -10449,6 +10498,36 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
     else_expr,
     get_location_from_decl(ast_node));
 }
+exprt python_converter::get_ifexp_arm(
+  const nlohmann::json &ifexp,
+  const char *arm,
+  code_blockt &effects)
+{
+  code_blockt *saved_block = current_block;
+  const nlohmann::json *saved_result = lambda_result_;
+  current_block = &effects;
+  if (is_lambda_result(ifexp))
+    lambda_result_ = &ifexp[arm];
+  exprt value = get_expr(ifexp[arm]);
+  current_block = saved_block;
+  lambda_result_ = saved_result;
+  return value;
+}
+
+void python_converter::refuse_int_ifexp_arm(
+  const nlohmann::json &ifexp,
+  const exprt &value,
+  const typet &result_type,
+  code_blockt &effects,
+  const locationt &location) const
+{
+  const typet &type = value.type();
+  if (
+    current_block && is_lambda_result(ifexp) && result_type.is_floatbv() &&
+    (type_utils::is_integer_type(type) || type.is_bool()))
+    refuse_int_lambda_result(false_exprt(), effects, location);
+}
+
 exprt python_converter::box_value_on_heap(
   const exprt &value,
   const locationt &location,
@@ -10704,30 +10783,58 @@ static void reject_tagged_scalar_return(
 }
 
 // A local retyped across str and number (#4770) lives in a fresh slot of the
-// new type, while the function's return type may follow the first binding.
+// new type, while a type read off its first binding, such as the function's
+// return type or a callee's parameter type, may follow the old kind.
 // Converting the slot would read the bytes of one kind as the other (#10700).
+// The kind @p value holds, "str" or "number", when it is such a slot and
+// @p target is of the other kind; else nullptr.
+static const char *retyped_kind_mismatch(
+  const type_handler &types,
+  const std::unordered_map<std::string, std::string> &retype_aliases,
+  const exprt &value,
+  const typet &target)
+{
+  if (!value.is_symbol())
+    return nullptr;
+  const bool value_is_str = types.is_string_type(value.type());
+  if (
+    !(value_is_str && types.is_numeric_scalar_type(target)) &&
+    !(types.is_numeric_scalar_type(value.type()) &&
+      types.is_string_type(target)))
+    return nullptr;
+  const std::string id = value.identifier().as_string();
+  for (const auto &alias : retype_aliases)
+    if (alias.second == id)
+      return value_is_str ? "str" : "number";
+  return nullptr;
+}
+
 static void reject_retyped_return(
   const type_handler &types,
   const std::unordered_map<std::string, std::string> &retype_aliases,
   const exprt &value,
   const typet &return_type)
 {
-  if (!value.is_symbol())
-    return;
-  const bool value_is_str = types.is_string_type(value.type());
-  if (
-    !(value_is_str && types.is_numeric_scalar_type(return_type)) &&
-    !(types.is_numeric_scalar_type(value.type()) &&
-      types.is_string_type(return_type)))
-    return;
-  const std::string id = value.identifier().as_string();
-  for (const auto &alias : retype_aliases)
-    if (alias.second == id)
-      throw std::runtime_error(
-        "unsupported: returning a variable rebound to a " +
-        std::string(value_is_str ? "str" : "number") +
-        " from a function typed to return a " +
-        (value_is_str ? "number" : "str"));
+  const char *kind =
+    retyped_kind_mismatch(types, retype_aliases, value, return_type);
+  if (kind)
+    throw std::runtime_error(
+      "unsupported: returning a variable rebound to a " + std::string(kind) +
+      " from a function typed to return a " +
+      (std::string(kind) == "str" ? "number" : "str"));
+}
+
+void python_converter::reject_retyped_argument(
+  const exprt &argument,
+  const typet &param_type) const
+{
+  const char *kind =
+    retyped_kind_mismatch(type_handler_, retype_aliases_, argument, param_type);
+  if (kind)
+    throw std::runtime_error(
+      "unsupported: passing a variable rebound to a " + std::string(kind) +
+      " to a parameter typed as a " +
+      (std::string(kind) == "str" ? "number" : "str"));
 }
 
 void python_converter::get_return_statements(

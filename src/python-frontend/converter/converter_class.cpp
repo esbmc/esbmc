@@ -1299,13 +1299,35 @@ struct attribute_writest
           : "");
   }
 
-  void walk(const nlohmann::json &n, const std::string &attr_name)
+  // The class copies of the class being typed (#10662). Their own `self`
+  // stores reach only their own instances, so they do not type this class.
+  std::set<const nlohmann::json *> copies;
+
+  void walk(
+    const nlohmann::json &n,
+    const std::string &attr_name,
+    bool in_copy = false)
   {
     if (n.is_object())
+    {
+      in_copy |= copies.count(&n) != 0;
+      if (in_copy && is_self_store(n, attr_name))
+        return;
       visit(n, attr_name);
+    }
     for (const auto &child : n)
       if (child.is_structured())
-        walk(child, attr_name);
+        walk(child, attr_name, in_copy);
+  }
+
+  static bool is_self_store(const nlohmann::json &n, const std::string &attr)
+  {
+    if (!attribute_store_value(n, attr))
+      return false;
+    const nlohmann::json &target =
+      n.value("_type", "") == "Assign" ? n["targets"][0] : n["target"];
+    return target["value"].value("_type", "") == "Name" &&
+           target["value"].value("id", "") == "self";
   }
 };
 
@@ -1327,6 +1349,7 @@ bool stores_none_into(const nlohmann::json &n, const std::string &attr_name)
 typet python_converter::none_attribute_type(const std::string &attr_name) const
 {
   attribute_writest found;
+  found.copies = json_utils::class_copies_of(*ast_json, current_class_name_);
   for (const nlohmann::json *body : reachable_module_bodies())
     found.walk(*body, attr_name);
   if (found.setattr_call || found.writes != found.stores)
