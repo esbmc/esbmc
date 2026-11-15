@@ -294,7 +294,7 @@ static void record_violated_reads(
 static void record_nondet_return(
   smt_convt &smt_conv,
   const symex_target_equationt::SSA_stept &step,
-  std::list<std::pair<locationt, expr2tc>> &out,
+  std::list<goto_trace_stept::nondet_returnt> &out,
   std::unordered_set<irep_idt> &seen)
 {
   if (!step.is_assignment() || step.ignore)
@@ -321,7 +321,7 @@ static void record_nondet_return(
   expr2tc value = smt_conv.get(nondet);
   if (!is_nil_expr(value) && is_constant_expr(value))
   {
-    out.emplace_back(*rparen, value);
+    out.push_back({*rparen, value, step.source.thread_nr});
     seen.insert(to_symbol2t(nondet).thename);
   }
 }
@@ -332,6 +332,7 @@ static void record_nondet_return(
 static void record_spawn(
   smt_convt &smt_conv,
   const symex_target_equationt::SSA_stept &step,
+  size_t nondet_returns_before,
   std::list<goto_trace_stept::spawnt> &out)
 {
   if (
@@ -355,7 +356,8 @@ static void record_spawn(
   out.push_back(
     {static_cast<unsigned>(to_constant_int2t(step.rhs).value.to_uint64()),
      step.source.thread_nr,
-     {call, step.stack_trace()}});
+     {call, step.stack_trace()},
+     nondet_returns_before});
 }
 
 /* Tracks which SSA symbols were computed from constants alone. A branch whose
@@ -526,7 +528,7 @@ void build_goto_trace(
     const goto_programt *,
     std::unordered_set<const goto_programt::instructiont *>>
     operand_gotos;
-  std::list<std::pair<locationt, expr2tc>> nondet_returns;
+  std::list<goto_trace_stept::nondet_returnt> nondet_returns;
   std::unordered_set<irep_idt> nondet_seen;
   std::list<goto_trace_stept::spawnt> spawns;
 
@@ -539,7 +541,7 @@ void build_goto_trace(
     inputs.note_assignment(SSA_step);
     race_flags.note_assignment(smt_conv, SSA_step);
     record_nondet_return(smt_conv, SSA_step, nondet_returns, nondet_seen);
-    record_spawn(smt_conv, SSA_step, spawns);
+    record_spawn(smt_conv, SSA_step, nondet_returns.size(), spawns);
 
     // Hidden steps are internal SSA bookkeeping (e.g. phi-merge nodes at
     // control-flow joins). They carry a synthesised value and a source

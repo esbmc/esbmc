@@ -1152,6 +1152,36 @@ std::optional<locationt> nondet_call_rparen(const locationt &call)
   return std::nullopt;
 }
 
+/* The line and column of the ')' that closes a '(' just before @p column on
+   @p line, skipping literals. A comment could hold either, so give up on one.
+ */
+static std::optional<std::pair<size_t, size_t>>
+closing_paren(const std::vector<std::string> &lines, size_t line, size_t column)
+{
+  size_t depth = 1;
+  char quote = 0;
+  for (size_t l = line, c = column; l < lines.size(); ++l, c = 0)
+    for (; c < lines[l].size(); ++c)
+    {
+      const char ch = lines[l][c];
+      const char next = c + 1 < lines[l].size() ? lines[l][c + 1] : 0;
+      if (quote)
+      {
+        c += ch == '\\';
+        quote = ch == quote ? 0 : quote;
+      }
+      else if (ch == '"' || ch == '\'')
+        quote = ch;
+      else if (ch == '/' && (next == '/' || next == '*'))
+        return std::nullopt;
+      else if (ch == '(')
+        ++depth;
+      else if (ch == ')' && --depth == 0)
+        return std::make_pair(l, c);
+    }
+  return std::nullopt;
+}
+
 std::optional<locationt> call_rparen(const locationt &call)
 {
   size_t line, column;
@@ -1159,35 +1189,16 @@ std::optional<locationt> call_rparen(const locationt &call)
   if (lines == nullptr)
     return std::nullopt;
 
-  static const std::regex head(R"(^\w+\s*\()");
+  static const std::regex head(R"(^(?:\(\s*void\s*\)\s*)?\w+\s*\()");
   std::smatch m;
   const std::string rest = (*lines)[line].substr(column);
   if (!std::regex_search(rest, m, head))
     return std::nullopt;
 
-  // Count parentheses up to the one closing the call, skipping literals.
-  size_t depth = 1;
-  char quote = 0;
-  size_t c = column + m.length(0);
-  for (size_t l = line; l < lines->size(); ++l, c = 0)
-    for (; c < (*lines)[l].size(); ++c)
-    {
-      const char ch = (*lines)[l][c];
-      if (quote)
-      {
-        if (ch == '\\')
-          ++c;
-        else if (ch == quote)
-          quote = 0;
-      }
-      else if (ch == '"' || ch == '\'')
-        quote = ch;
-      else if (ch == '(')
-        ++depth;
-      else if (ch == ')' && --depth == 0)
-        return moved_to(call, l, c);
-    }
-  return std::nullopt;
+  const auto rparen = closing_paren(*lines, line, column + m.length(0));
+  if (!rparen)
+    return std::nullopt;
+  return moved_to(call, rparen->first, rparen->second);
 }
 
 std::string read_line(std::string file, BigInt line_number)
