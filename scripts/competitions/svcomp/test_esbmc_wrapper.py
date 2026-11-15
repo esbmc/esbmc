@@ -841,10 +841,16 @@ class CPythonReplayTest(unittest.TestCase):
     def verify(self, prop, first, source, witness, **options):
         """Run verify() on a task whose first ESBMC run says FALSE with `witness`
         as its recorded values; returns the verdict and the ESBMC command lines.
-        Options: ir, files, verifier, values_run."""
+        Options: ir, files, verifier, values_run, verifier_above (the task sits
+        in python/<project>/ under a python/_sv_verifier.py, as in sv-benchmarks)."""
         esbmc = FakeEsbmc(first, self.PASSED if options.get("ir") is None else options["ir"],
                           witness, options.get("values_run"))
-        with tempfile.TemporaryDirectory() as task:
+        with tempfile.TemporaryDirectory() as root:
+            task = root
+            if options.get("verifier_above"):
+                task = os.path.join(root, "python", "project")
+                os.makedirs(task)
+                write_task(os.path.join(root, "python"), "", {"_sv_verifier.py": options["verifier_above"]})
             write_task(task, source, options.get("files"))
             with mock.patch.object(wrapper, "run", esbmc), \
                     mock.patch.object(wrapper, "REPLAY_VERIFIER", options.get("verifier") or wrapper.REPLAY_VERIFIER):
@@ -977,6 +983,15 @@ class CPythonReplayTest(unittest.TestCase):
                 files={"_sv_verifier.py": "def nondet_int():\n    return 0\n"})
         self.assertEqual(verdict, "Unknown")
         self.assertEqual(len(self.ir_calls(calls)), 1)
+
+    def test_a_verifier_module_above_the_task_does_not_stop_the_replay(self):
+        verdict, calls = self.verify(
+            wrapper.Property.py_datalookup, PY_INDEXERROR,
+            self.HEADER + "xs = _sv_verifier.nondet_list(_sv_verifier.nondet_int)\nxs[3]\n",
+            "witness = [\n    {'list0': [1]},\n]\n",
+            verifier_above="def nondet_int():\n    return 0\n")
+        self.assertEqual(verdict, "FALSE(IndexError)")
+        self.assertEqual(len(self.ir_calls(calls)), 0)
 
     def test_a_replay_that_does_not_end_falls_back_within_its_budget(self):
         started = time.monotonic()
