@@ -2,6 +2,5 @@ CORE
 main.c
 --witness-output-yaml -
 ^VERIFICATION FAILED$
-type: "function_return"
-value: "\\\\result == 7"
-line: 13$
+(?s)\A(?:(?!function_return).)*type: "function_return"(?:(?!function_return).)*\Z
+value: "\\\\result == 7"\n.*\n.*\n.*\n *line: 13\n

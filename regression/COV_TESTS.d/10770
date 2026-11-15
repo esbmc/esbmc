@@ -1,3 +1,5 @@
 regression/esbmc/github_10770_earlier_element_fail
 regression/esbmc/github_10770_initialised_array_fail
 regression/esbmc/github_10770_initialised_struct_fail
+regression/esbmc/github_10770_multi_target_first_fail
+regression/esbmc/github_10770_multi_target_second_fail
