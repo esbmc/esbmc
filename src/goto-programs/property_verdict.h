@@ -61,6 +61,13 @@ std::string property_key(
   const goto_programt::instructiont &pc,
   const std::string &description);
 
+/// Makes \p copy name the same property as \p original in property_key: a
+/// --goto-slice step runs a copy of the program, and its assertions are the
+/// original's. Register before any run; lookups are not locked.
+void alias_property_instruction(
+  const goto_programt::instructiont &copy,
+  const goto_programt::instructiont &original);
+
 /// A verdict together with where it applies and a note explaining how it was
 /// reached -- that a discharge came from interval analysis rather than the
 /// solver, or that it was vacuous. The note is empty when the verdict needs no

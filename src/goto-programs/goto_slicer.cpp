@@ -1,4 +1,5 @@
 #include <goto-programs/goto_slicer.h>
+#include <goto-programs/property_verdict.h>
 
 #include <irep2/irep2_utils.h>
 #include <pointer-analysis/andersen.h>
@@ -1243,5 +1244,11 @@ goto_functionst &goto_slice_cachet::program_for(slice_stept step)
     to.body.copy_from(function.body);
   }
   apply_slice(original, copy, result);
+  for (const auto &[name, function] : original.function_map)
+  {
+    auto from = function.body.instructions.begin();
+    for (const auto &instruction : copy.function_map.at(name).body.instructions)
+      alias_property_instruction(instruction, *from++);
+  }
   return copy;
 }

@@ -4,6 +4,7 @@
 
 #include <cstdint>
 #include <cstdlib>
+#include <unordered_map>
 
 property_verdict_tablet goto_functionst::property_verdicts;
 
@@ -43,16 +44,34 @@ property_locationt property_location(
   return loc;
 }
 
+namespace
+{
+std::unordered_map<
+  const goto_programt::instructiont *,
+  const goto_programt::instructiont *>
+  property_aliases;
+}
+
+void alias_property_instruction(
+  const goto_programt::instructiont &copy,
+  const goto_programt::instructiont &original)
+{
+  property_aliases[&copy] = &original;
+}
+
 std::string property_key(
   const goto_programt::instructiont &pc,
   const std::string &description)
 {
   const std::string key = description + " at " + pc.location.as_string();
+  if (!is_own_assertion(pc, description))
+    return key;
   // The node's address, not its location_number: --bidirectional inserts an
   // ASSERT mid-run and renumbers the program, but no instruction moves.
-  return is_own_assertion(pc, description)
-           ? key + "\t@" + std::to_string(reinterpret_cast<std::uintptr_t>(&pc))
-           : key;
+  const auto alias = property_aliases.find(&pc);
+  const goto_programt::instructiont *node =
+    alias == property_aliases.end() ? &pc : alias->second;
+  return key + "\t@" + std::to_string(reinterpret_cast<std::uintptr_t>(node));
 }
 
 void property_verdict_tablet::record(
