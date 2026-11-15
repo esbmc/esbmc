@@ -1,2 +1,4 @@
 regression/python/uint64_above_int64_max
 regression/python/uint64_above_int64_max_fail
+regression/python/len_operand_signed
+regression/python/len_operand_signed_fail
