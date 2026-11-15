@@ -3717,18 +3717,27 @@ exprt python_converter::build_guarded_binop(
   return stmt_expr;
 }
 
-// The uint64 type a //, % or >> of a declared fixed-width unsigned by an int
-// wraps back to after read_unsigned_as_python_int computed it exactly, or an
-// empty type: left wide, the result would retype the uint64 variable it is
-// stored in. With the int on the left the result stays wide, as the int
-// variable it is stored in would truncate it.
+// A declared fixed-width unsigned, which wraps. Under --ir integers are
+// unbounded, so it is an ordinary Python int there.
+static bool is_wrapping_unsigned(const typet &type)
+{
+  return !config.options.get_bool_option("int-encoding") &&
+         type_utils::is_fixed_width_unsigned(type);
+}
+
+// The type to wrap a //, % or >> of a declared fixed-width unsigned (uint64,
+// uint256, ...) by an int or bool back to, once read_unsigned_as_python_int
+// has computed it exactly; empty otherwise. Left wide, the result would
+// retype the variable it is stored in. With the int on the left it stays
+// wide, as the int variable it is stored in would truncate it.
 static typet
 wrapped_result_type(const std::string &op, const exprt &lhs, const exprt &rhs)
 {
   if (op != "FloorDiv" && op != "Mod" && op != "RShift")
     return typet();
   if (
-    type_utils::is_fixed_width_unsigned(lhs.type()) && rhs.type().is_signedbv())
+    is_wrapping_unsigned(lhs.type()) &&
+    (rhs.type().is_signedbv() || rhs.type().is_bool()))
     return lhs.type();
   return typet();
 }
@@ -5765,7 +5774,7 @@ read_unsigned_as_python_int(const std::string &op, exprt &lhs, exprt &rhs)
                     op == "LShift" || op == "BitAnd" || op == "BitOr" ||
                     op == "BitXor";
   auto read = [&](exprt &unsigned_op, exprt &signed_op) {
-    const bool tagged = type_utils::is_fixed_width_unsigned(unsigned_op.type());
+    const bool tagged = is_wrapping_unsigned(unsigned_op.type());
     if (tagged && ring)
     {
       signed_op = typecast_exprt(signed_op, unsigned_op.type());
@@ -5779,8 +5788,8 @@ read_unsigned_as_python_int(const std::string &op, exprt &lhs, exprt &rhs)
     if (tagged)
       signed_op = typecast_exprt(signed_op, wide);
   };
-  const bool lhs_tagged = type_utils::is_fixed_width_unsigned(lhs.type());
-  const bool rhs_tagged = type_utils::is_fixed_width_unsigned(rhs.type());
+  const bool lhs_tagged = is_wrapping_unsigned(lhs.type());
+  const bool rhs_tagged = is_wrapping_unsigned(rhs.type());
   if (lhs.type().is_unsignedbv() && rhs.type().is_signedbv())
     read(lhs, rhs);
   else if (rhs.type().is_unsignedbv() && lhs.type().is_signedbv())

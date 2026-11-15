@@ -6,3 +6,5 @@ regression/python/uint64_mixed_ops
 regression/python/uint64_mixed_ops_fail
 regression/python/uint64_int_left_mod
 regression/python/uint64_int_left_mod_fail
+regression/python/uint256_above_int255_max
+regression/python/uint256_above_int255_max_fail

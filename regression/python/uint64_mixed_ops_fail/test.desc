@@ -2,4 +2,4 @@ CORE
 main.py
 
 ^VERIFICATION FAILED$
-^\s+file .*main\.py line 6 column
+^\s+file .*main\.py line 7 column
