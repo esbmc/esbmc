@@ -567,3 +567,87 @@ TEST_CASE(
     }
   CHECK(found);
 }
+
+TEST_CASE(
+  "goto-slicer reads a VLA size through a pointer type",
+  "[goto-slicer]")
+{
+  // p - q scales by the row length m, which only q's type mentions.
+  const slicedt s = slice(R"(
+    int nondet_int();
+    int main()
+    {
+      int m = nondet_int();
+      int a[3][m];
+      int (*p)[m] = a + 2;
+      int (*q)[m] = a;
+      __ESBMC_assert(p - q == 2, "");
+      return 0;
+    }
+  )");
+  unsigned vla_sizes = 0;
+  for (const auto &i : s.main_body().instructions)
+    if (i.is_assign())
+    {
+      const expr2tc &target = to_code_assign2t(i.code).target;
+      if (
+        is_symbol2t(target) && to_symbol2t(target).thename.as_string().find(
+                                 "vla-size") != std::string::npos)
+      {
+        CHECK(!s.removed(i));
+        ++vla_sizes;
+      }
+    }
+  CHECK(vla_sizes > 0);
+}
+
+TEST_CASE("goto-slicer keeps a realloc under pointer checks", "[goto-slicer]")
+{
+  // The frontend wraps realloc in `p == 0 ? MALLOC : REALLOC`; it frees p.
+  const std::string src = R"(
+    #include <stdlib.h>
+    int main()
+    {
+      int *p = malloc(sizeof(int));
+      int *q = realloc(p, 8);
+      return 0;
+    }
+  )";
+  const auto realloc_call =
+    [](const slicedt &s) -> const goto_programt::instructiont & {
+    for (const auto &i : s.main_body().instructions)
+      if (i.is_assign() && is_if2t(to_code_assign2t(i.code).source))
+        return i;
+    FAIL("no realloc");
+    abort();
+  };
+  const slicedt checked = slice(src, slice_stept::base_case, true);
+  CHECK(!checked.removed(realloc_call(checked)));
+  const slicedt unchecked = slice(src);
+  CHECK(unchecked.removed(realloc_call(unchecked)));
+}
+
+TEST_CASE(
+  "goto-slicer lets a bodyless call write its pointer argument",
+  "[goto-slicer]")
+{
+  // --unknown-method-args-check makes the call set p to an invalid pointer.
+  const auto src = [](const char *read) {
+    return std::string(R"(
+      void unknown(int *a);
+      int g;
+      int main()
+      {
+        int *p = &g;
+        unknown(p);
+        __ESBMC_assert()") +
+           read + R"(, "");
+        return 0;
+      }
+    )";
+  };
+  const slicedt reads_p = slice(src("p != 0"));
+  CHECK(!reads_p.removed(reads_p.call("unknown")));
+  const slicedt unrelated = slice(src("1"));
+  CHECK(unrelated.removed(unrelated.call("unknown")));
+}

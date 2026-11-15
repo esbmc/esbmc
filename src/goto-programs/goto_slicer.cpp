@@ -290,6 +290,31 @@ public:
         out.add(object(to_object_descriptor2t(v).object));
     }
   }
+  /// The sizes of the variable-length array types anywhere in \p e: a VLA's
+  /// size, and a pointer-to-VLA's stride, live in its type.
+  void type_reads(const expr2tc &e, accesst &out)
+  {
+    if (is_nil_expr(e))
+      return;
+    for (type2tc t = e->type; !is_nil_type(t);)
+    {
+      if (is_array_type(t))
+      {
+        const array_type2t &array = to_array_type(t);
+        if (
+          !is_nil_expr(array.array_size) &&
+          !is_constant_int2t(array.array_size))
+          reads(array.array_size, out);
+        t = array.subtype;
+      }
+      else if (is_pointer_type(t))
+        t = to_pointer_type(t).subtype;
+      else
+        break;
+    }
+    e->foreach_operand([&](const expr2tc &op) { type_reads(op, out); });
+  }
+
   static bool is_pointer_index(const expr2tc &e)
   {
     return is_index2t(e) && is_pointer_type(to_index2t(e).source_value->type);
@@ -340,22 +365,25 @@ bool contains_nondet(const expr2tc &e)
 
 bool is_allocation(const expr2tc &e)
 {
-  expr2tc r = e;
-  while (is_typecast2t(r))
-    r = to_typecast2t(r).from;
-  if (!is_sideeffect2t(r))
+  if (is_nil_expr(e))
     return false;
-  switch (to_sideeffect2t(r).kind)
-  {
-  case sideeffect2t::allockind::malloc:
-  case sideeffect2t::allockind::realloc:
-  case sideeffect2t::allockind::alloca:
-  case sideeffect2t::allockind::cpp_new:
-  case sideeffect2t::allockind::cpp_new_arr:
-    return true;
-  default:
-    return false;
-  }
+  if (is_sideeffect2t(e))
+    switch (to_sideeffect2t(e).kind)
+    {
+    case sideeffect2t::allockind::malloc:
+    case sideeffect2t::allockind::realloc:
+    case sideeffect2t::allockind::alloca:
+    case sideeffect2t::allockind::cpp_new:
+    case sideeffect2t::allockind::cpp_new_arr:
+      return true;
+    default:
+      break;
+    }
+  // `p == 0 ? MALLOC(..) : REALLOC(p, ..)` allocates, and frees p.
+  bool found = false;
+  e->foreach_operand(
+    [&found](const expr2tc &op) { found = found || is_allocation(op); });
+  return found;
 }
 
 enum : uint8_t
@@ -699,6 +727,11 @@ private:
                      locationst::dereferences(instr.guard);
     locations.check_reads(instr.code, n.check_uses);
     locations.check_reads(instr.guard, n.check_uses);
+    for (accesst *a : {&n.uses, &n.check_uses})
+    {
+      locations.type_reads(instr.code, *a);
+      locations.type_reads(instr.guard, *a);
+    }
 
     switch (instr.type)
     {
@@ -716,6 +749,8 @@ private:
       locations.writes(assign.target, n.defs, n.uses);
       locations.reads(assign.source, n.uses);
       describe_printf_writes(assign.source, n);
+      // An object's size, which symex reads in checks no instruction shows.
+      n.always = n.always || is_dynamic_size2t(assign.target);
       n.allocates = is_allocation(assign.source);
       n.frees = n.allocates; // realloc
       n.nondet = contains_nondet(assign.source);
@@ -837,8 +872,18 @@ private:
               locations.pointees(arg, n.defs);
             }
         }
-        else if (!is_nil_expr(call.ret))
-          n.nondet = true;
+        else
+        {
+          if (!is_nil_expr(call.ret))
+            n.nondet = true;
+          // --unknown-method-args-check invalidates its pointer arguments.
+          for (const expr2tc &arg : call.operands)
+            if (
+              !is_nil_expr(arg) && is_pointer_type(arg->type) &&
+              (is_symbol2t(arg) || is_member2t(arg) || is_index2t(arg) ||
+               is_dereference2t(arg)))
+              locations.writes(arg, n.defs, n.uses);
+        }
         continue;
       }
       const unsigned f = it->second;
