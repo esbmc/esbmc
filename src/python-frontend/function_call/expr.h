@@ -607,6 +607,12 @@ private:
    */
   exprt
   handle_min_max(const std::string &func_name, irep_idt comparison_op) const;
+  /// Refuses min()/max() over @p exprs, a lambda's result, where it selects
+  /// an int while @p result_type is a float (#10671).
+  void refuse_int_lambda_min_max(
+    std::vector<exprt> &exprs,
+    const typet &result_type,
+    irep_idt comparison_op) const;
 
   // Tuple method detection and handling (count, index)
   bool is_tuple_method_call() const;

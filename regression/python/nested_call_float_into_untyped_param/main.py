@@ -1,3 +1,4 @@
+# GitHub #10438
 def add(x, y):
     return x + y
 
