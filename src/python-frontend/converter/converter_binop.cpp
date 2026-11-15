@@ -3717,10 +3717,11 @@ exprt python_converter::build_guarded_binop(
   return stmt_expr;
 }
 
-// The uint64 type a //, % or >> between a declared fixed-width unsigned and an
-// int wraps back to after read_unsigned_as_python_int computed it exactly, or
-// an empty type. Left wide, the result would retype the variable it is stored
-// in.
+// The uint64 type a //, % or >> of a declared fixed-width unsigned by an int
+// wraps back to after read_unsigned_as_python_int computed it exactly, or an
+// empty type: left wide, the result would retype the uint64 variable it is
+// stored in. With the int on the left the result stays wide, as the int
+// variable it is stored in would truncate it.
 static typet
 wrapped_result_type(const std::string &op, const exprt &lhs, const exprt &rhs)
 {
@@ -3729,9 +3730,6 @@ wrapped_result_type(const std::string &op, const exprt &lhs, const exprt &rhs)
   if (
     type_utils::is_fixed_width_unsigned(lhs.type()) && rhs.type().is_signedbv())
     return lhs.type();
-  if (
-    type_utils::is_fixed_width_unsigned(rhs.type()) && lhs.type().is_signedbv())
-    return rhs.type();
   return typet();
 }
 
@@ -5788,14 +5786,9 @@ read_unsigned_as_python_int(const std::string &op, exprt &lhs, exprt &rhs)
   else if (rhs.type().is_unsignedbv() && lhs.type().is_signedbv())
     read(rhs, lhs);
   else if (
-    lhs.type().is_unsignedbv() && rhs.type().is_unsignedbv() &&
-    lhs_tagged != rhs_tagged)
-  {
-    if (lhs_tagged)
-      rhs = typecast_exprt(rhs, lhs.type());
-    else
-      lhs = typecast_exprt(lhs, rhs.type());
-  }
+    lhs.type().is_unsignedbv() && rhs.type().is_unsignedbv() && !lhs_tagged &&
+    rhs_tagged)
+    lhs = typecast_exprt(lhs, rhs.type());
 }
 
 exprt python_converter::build_binary_expression(

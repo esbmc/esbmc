@@ -4,3 +4,5 @@ regression/python/len_operand_signed
 regression/python/len_operand_signed_fail
 regression/python/uint64_mixed_ops
 regression/python/uint64_mixed_ops_fail
+regression/python/uint64_int_left_mod
+regression/python/uint64_int_left_mod_fail
