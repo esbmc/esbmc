@@ -3,7 +3,7 @@
 > **Status at 2026-11-15: Phase 0 in review, gate partly met (see §8).** The
 > corpus is in `regression/field-sensitivity/` with baselines, and the census
 > has been run and reverted. Baselines cover Z3 and ESBMC's Bitwuzla backend;
-> the census covers the first 1192 Python tests and 259 SV-COMP tasks. Two
+> the census covers the full C, C++ and Python suites and 259 SV-COMP tasks. Two
 > mitigations are merged: #10037 stopped phi merges of wide structs from
 > scaling with the square of the width, and #10527 added the opt-in GOTO pass
 > `--scalarize-structs`. Symex itself still gives a struct one SSA name, so a
@@ -311,17 +311,25 @@ libc or C++ operational models counts once per test that reaches it.
 |---|---|---|---|---|---|---|---|
 | C (`regression/esbmc`) | 3308 / 3439 | 2018 | 1064 (53 %) | 585 (29 %) | 180 (9 %) | 189 | 201 |
 | C++ (`esbmc-cpp/cpp`) | 1437 / 1466 | 37608 | 22581 (60 %) | 11660 (31 %) | 3349 (9 %) | 18 | 49 |
-| Python (`regression/python`, first 1192 in name order) | 1142 / 1192 | 8762 | 4023 (46 %) | 4570 (52 %) | 169 (2 %) | 0 | 7 |
+| Python (`regression/python`) | 9042 / 9739 | 55678 | 22293 (40 %) | 31663 (57 %) | 1722 (3 %) | 0 | 21 |
 | SV-COMP sample (259 tasks: ldv-memsafety, ldv-regression, list-properties, forester-heap, heap-manipulation, ntdrivers-simplified; `--unwind 3`) | 257 / 259 | 263 | 13 (5 %) | 209 (79 %) | 33 (13 %) | 8 | 18 |
 | Corpus | 30 / 30 | 30 | 12 | 18 | 0 | 0 | 2049 |
 
 Further counts. Struct objects that are globals: 886 in C, 32414 in C++,
-4017 in Python and 109 in SV-COMP. Heap objects: 182, 75, 2210 and 89.
-Objects with a nested struct or union member: 142, 4936, 23 and 23. In C,
+32999 in Python and 109 in SV-COMP. Heap objects: 182, 75, 12566 and 89.
+Objects with a nested struct or union member: 142, 4936, 340 and 23. In C,
 294 of the 732 tests that reach a struct reach one that is address-taken with
 constant field paths only, and 151 reach a byte-level one. No object in any
 set has more than 4096 leaves, and outside the corpus none has more than 201,
 so the Phase 3 cap of 4096 binds only synthetic inputs.
+
+The Python row was measured on 2026-11-15 with Python 3.11, 4 tests in
+parallel, each under a 30 s limit, in six 570 s batches. 697 tests printed
+no census, because they stop in the frontend or hit the limit (not split).
+In this run the first 1192 tests give 8267 objects (never address-taken
+4026, constant field paths 4073, byte-level 168), against 8762 (4023, 4570,
+169) in the earlier partial run; the difference is in the constant field
+path and heap counts.
 
 On the corpus, the census put `repro7521` and `local_writes` in Phase 1
 (never address-taken), and `local_addr_once`, `global_callee` and `plc_db` in
@@ -329,5 +337,4 @@ Phase 2 (constant field paths), as designed.
 
 ### 8.4 Not measured in Phase 0
 
-- The census on the full SV-COMP set and on the Python tests after the first
-  1192.
+- The census on the full SV-COMP set.
