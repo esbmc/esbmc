@@ -1,4 +1,4 @@
 CORE
 main.c
---unwind 201
+--unwind 201 --z3
 ^VERIFICATION FAILED$

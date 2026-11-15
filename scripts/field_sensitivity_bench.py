@@ -56,7 +56,12 @@ def run(cmd, timeout):
 
 def esbmc_cmd(binary, row, extra):
     desc = (row / "test.desc").read_text().splitlines()
-    return [binary, str(row / desc[1])] + shlex.split(desc[2]) + extra
+    # The bench picks the solver and timeout itself.
+    flags = [f for f in shlex.split(desc[2]) if f != "--z3"]
+    if "--timeout" in flags:
+        i = flags.index("--timeout")
+        del flags[i:i + 2]
+    return [binary, str(row / desc[1])] + flags + extra
 
 
 def measure(binary, row, extra, bw_python, timeout):
