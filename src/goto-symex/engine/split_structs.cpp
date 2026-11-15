@@ -34,9 +34,8 @@ public:
        to_sideeffect2t(e).kind != sideeffect2t::allockind::nondet))
       use = uset::any_escapes;
     else if (
-      use == uset::plain &&
-      (is_byte_extract2t(e) || is_byte_update2t(e) || is_bitcast2t(e) ||
-       is_typecast2t(e)))
+      use == uset::plain && (is_byte_extract2t(e) || is_byte_update2t(e) ||
+                             is_bitcast2t(e) || is_typecast2t(e)))
       use = uset::whole_escapes;
 
     if (is_symbol2t(e))
