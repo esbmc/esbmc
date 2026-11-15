@@ -545,6 +545,16 @@ bool clang_cpp_convertert::get_struct_union_class(const clang::RecordDecl &rd)
   return clang_c_convertert::get_struct_union_class(rd);
 }
 
+/* A data member of empty class type takes one byte ([intro.object]/8) unless
+ * it is [[no_unique_address]]. */
+static bool is_empty_class_member(
+  const clang::FieldDecl &field,
+  const clang::ASTContext &ctx)
+{
+  const clang::CXXRecordDecl *rd = field.getType()->getAsCXXRecordDecl();
+  return rd && rd->isEmpty() && !field.isZeroSize(ctx);
+}
+
 bool clang_cpp_convertert::get_struct_union_class_fields(
   const clang::RecordDecl &rd,
   struct_union_typet &type)
@@ -582,11 +592,8 @@ bool clang_cpp_convertert::get_struct_union_class_fields(
     if (annotate_class_field(*field, type, comp))
       return true;
 
-    // A data member of empty class type takes one byte ([intro.object]/8)
-    // unless it is [[no_unique_address]]; add_padding reserves it (#2180).
-    const clang::CXXRecordDecl *field_rd =
-      field->getType()->getAsCXXRecordDecl();
-    if (field_rd && field_rd->isEmpty() && !field->isZeroSize(*ASTContext))
+    // add_padding reserves the byte such a member occupies (#2180).
+    if (is_empty_class_member(*field, *ASTContext))
       comp.set("#empty_class_member", true);
 
     type.components().push_back(comp);
