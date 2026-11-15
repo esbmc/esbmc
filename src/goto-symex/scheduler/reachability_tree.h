@@ -6,6 +6,7 @@
 #include <goto-programs/goto_program.h>
 #include <goto-symex/scheduler/execution_state.h>
 #include <goto-symex/engine/goto_symex.h>
+#include <goto-symex/engine/split_structs.h>
 #include <goto-symex/state/renaming.h>
 #include <goto-symex/equation/symex_target_equation.h>
 
@@ -499,6 +500,9 @@ public:
   {
     return s.static_lifetime || s.get_type().is_dynamic_set();
   }
+
+  /** The struct objects --field-sensitive-ssa splits into fields. */
+  split_structst split_structs;
 
   bool is_address_taken_local(const irep_idt &name) const
   {

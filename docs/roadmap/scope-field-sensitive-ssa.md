@@ -1,14 +1,15 @@
 # Scope: field-sensitive SSA in goto-symex (#7521)
 
-> **Status at 2026-11-15: Phase 0 in review, gate partly met (see §8).** The
-> corpus is in `regression/field-sensitivity/` with baselines, and the census
-> has been run and reverted. Baselines cover Z3 and ESBMC's Bitwuzla backend;
-> the census covers the full C, C++ and Python suites and 259 SV-COMP tasks. Two
+> **Status at 2026-11-15: Phase 0 merged (#10773); Phase 1 in draft review,
+> gate partly met (see §8.5).** The corpus is in `regression/field-sensitivity/`
+> with baselines, and the census has been run and reverted. Phase 1 adds
+> `--field-sensitive-ssa` (default off): symex gives each field of an
+> eligible local, parameter or return slot its own SSA name. It meets the 2x
+> bar on the Phase 1 corpus rows and changes no verdict on the C and C++
+> suites or a Python sample, but it still changes some trace text (§8.5). Two
 > mitigations are merged: #10037 stopped phi merges of wide structs from
 > scaling with the square of the width, and #10527 added the opt-in GOTO pass
-> `--scalarize-structs`. Symex itself still gives a struct one SSA name, so a
-> field write makes a new value of the whole struct. This document plans the
-> symex change. Line numbers are from master at `d3104e99c2`.
+> `--scalarize-structs`. Line numbers are from master at `d3104e99c2`.
 
 ## 1. What is left after #10037 and #10527
 
@@ -338,3 +339,61 @@ Phase 2 (constant field paths), as designed.
 ### 8.4 Not measured in Phase 0
 
 - The census on the full SV-COMP set.
+
+### 8.5 Phase 1 measurements
+
+Branch `feat/field-sensitive-ssa-phase1` on master `f1c5ee1b4`, RelWithDebInfo,
+Z3 4.13.3 and ESBMC's Bitwuzla 0.9.0 backend, one 4-core container,
+2026-11-15. Symex seconds from `scripts/field_sensitivity_bench.py
+--flags=--field-sensitive-ssa`; the flag changes no SSA step count on these rows.
+
+| Row | 8 fields | 512 | 2048 | 2048 / 8 | Without the flag, 2048 |
+|---|---|---|---|---|---|
+| `local_writes` (Z3) | 0.017 | 0.018 | 0.019 | 1.1x | 6.39 |
+| `local_writes` (Bitwuzla) | 0.019 | 0.018 | 0.021 | 1.1x | 6.28 |
+| `repro7521` (Z3) | 0.794 | 0.931 | 1.249 | 1.6x | 0.83 |
+| `repro7521` (Bitwuzla) | 0.792 | 0.875 | 1.146 | 1.4x | 0.84 |
+
+Peak memory on `local_writes_w2048` falls from 1262 MiB to 135 MiB (Z3) and
+from 370 MiB to 123 MiB (Bitwuzla); wall time from 19.1 s to 0.30 s with Z3.
+`local_addr_once`, `global_callee` and `plc_db` are Phase 2 rows: nothing in
+them is split and their times match the unflagged run.
+
+The rest of `repro7521`'s cost is per call: `fun` is called 100 times and
+each call declares, initialises and retires 2048 fields. A nondet write of a
+whole split object gives each field narrower than a pointer a fresh L2 name
+instead of an assignment step, and `pop_frame` skips the value-set erase for
+those fields; before both, the row took 13.9 s at 2048 fields.
+
+Flag forced on against off, each `test.desc` command run twice, 30 s per run:
+
+| Suite | Tests | With a split object | Verdict changes | Output changes |
+|---|---|---|---|---|
+| C (`regression/esbmc`) | 3443 | 590 | 0 | 49 |
+| C++ (`esbmc-cpp/cpp`) | 1466 | 823 | 0 | 9 |
+| Python (first 726 of 9749) | 726 | 24 | 0 | 0 |
+
+In C++, 7 of the 9 output changes are k-induction or parallel-solving output
+order and one (`ch16_4`) is a counterexample that violates one of two
+assertions on the same line instead of both. Of the 49 C output changes, 19 are timing
+lines the comparison did not filter. The remaining 30, all with the same
+verdict:
+
+- 7 print the member written (`v.un.i = 9`) where master prints the whole
+  struct that symex rewrote (`v.un.i = { .un=9, .t=0 }`).
+- 7 lose a whole-struct step because the slicer keeps the fields a property
+  needs, not the whole object; with `--no-slice` the step comes back.
+- 6 print other values: a pointer member of a printed struct reads `0`
+  where master prints `{ .pointer_object=nil, .pointer_offset=nil }`, and an
+  uninitialised struct prints `{ .a = 0 }` where master prints every member.
+  Master itself prints these differently under Z3 and Bitwuzla.
+- 3 (`github_4309-struct`, `github_4312-*`) enumerated fewer
+  `--all-witnesses` inputs; the flag is now ignored with `--all-witnesses`
+  and the test-generation options, which read inputs off SSA steps.
+- The rest are k-induction or parallel-solving output order. In C++,
+  `github_7797_flat_set` unwinds a loop past iterations master rules out by
+  constant propagation; the extra unwinding assertions pass.
+
+Not measured in Phase 1: GraphML and YAML witness files under the flag, the
+k-induction suite with the flag, and the remaining 9023 Python tests.
+

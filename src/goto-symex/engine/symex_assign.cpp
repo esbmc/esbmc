@@ -7,6 +7,7 @@
 #include <goto-symex/engine/dynamic_allocation.h>
 #include <goto-symex/scheduler/execution_state.h>
 #include <goto-symex/engine/goto_symex.h>
+#include <goto-symex/scheduler/reachability_tree.h>
 #include <goto-symex/witness/witnesses.h>
 #include <util/lang/c_types.h>
 #include <util/symtab/cprover_prefix.h>
@@ -536,8 +537,9 @@ void goto_symext::symex_assign(
   }
 
   expr2tc original_lhs = code.target;
-  expr2tc lhs = code.target;
-  expr2tc rhs = code.source;
+  expr2tc lhs = split_rewrite(code.target);
+  expr2tc rhs = split_rewrite(code.source);
+  const bool split_whole = lhs != code.target && is_constant_struct2t(lhs);
 
   replace_nondet(lhs);
   replace_nondet(rhs);
@@ -575,7 +577,7 @@ void goto_symext::symex_assign(
   bool hidden_ssa = hidden || cur_state->top().hidden;
   if (!hidden_ssa)
   {
-    auto const maybe_symbol = get_base_object(lhs);
+    auto const maybe_symbol = get_base_object(split_whole ? code.target : lhs);
     if (is_symbol2t(maybe_symbol))
     {
       auto const s = to_symbol2t(maybe_symbol).thename.as_string();
@@ -585,7 +587,10 @@ void goto_symext::symex_assign(
   }
 
   guard2tc g(guard); // NOT the state guard!
-  symex_assign_rec(lhs, original_lhs, rhs, expr2tc(), g, hidden_ssa);
+  if (split_whole)
+    symex_assign_split(lhs, original_lhs, rhs, g, hidden_ssa);
+  else
+    symex_assign_rec(lhs, original_lhs, rhs, expr2tc(), g, hidden_ssa);
 
   if (validate_witness && is_symbol2t(original_lhs))
   {
@@ -683,7 +688,8 @@ void goto_symext::symex_assign_symbol(
   expr2tc &rhs,
   expr2tc &full_rhs,
   guard2tc &guard,
-  const bool hidden)
+  const bool hidden,
+  const bool full_rhs_after_write)
 {
   // put assignment guard in rhs
   if (!guard.is_true())
@@ -692,7 +698,7 @@ void goto_symext::symex_assign_symbol(
   cur_state->rename(rhs);
   do_simplify(rhs);
 
-  if (!is_nil_expr(full_rhs))
+  if (!is_nil_expr(full_rhs) && !full_rhs_after_write)
   {
     cur_state->rename(full_rhs);
     do_simplify(full_rhs);
@@ -701,6 +707,12 @@ void goto_symext::symex_assign_symbol(
   expr2tc renamed_lhs = lhs;
   cur_state->rename_type(renamed_lhs);
   cur_state->assignment(renamed_lhs, rhs);
+
+  if (!is_nil_expr(full_rhs) && full_rhs_after_write)
+  {
+    cur_state->rename(full_rhs);
+    do_simplify(full_rhs);
+  }
 
   // A guarded assignment wrapped rhs in an ite above, so only genuine
   // unconditional copies reach the copy-chain map.
@@ -757,6 +769,55 @@ void goto_symext::symex_assign_structure(
     expr2tc rhs_memb = member2tc(it, rhs, structtype.member_names[i]);
     symex_assign_rec(lhs_memb, full_lhs, rhs_memb, full_rhs, guard, hidden);
     i++;
+  }
+}
+
+const std::vector<expr2tc> *
+goto_symext::split_fields(const irep_idt &name) const
+{
+  return art1 ? art1->split_structs.fields(name) : nullptr;
+}
+
+expr2tc goto_symext::split_rewrite(const expr2tc &e) const
+{
+  if (!art1 || art1->split_structs.empty())
+    return e;
+  return art1->split_structs.rewrite(e);
+}
+
+void goto_symext::symex_assign_split(
+  const expr2tc &lhs,
+  const expr2tc &full_lhs,
+  expr2tc &rhs,
+  guard2tc &guard,
+  const bool hidden)
+{
+  const struct_type2t &st = to_struct_type(lhs->type);
+  const std::vector<expr2tc> &fields =
+    to_constant_struct2t(lhs).datatype_members;
+  const size_t last = fields.size() - 1;
+  const bool nondet = guard.is_true() && is_symbol2t(rhs) &&
+                      has_prefix(to_symbol2t(rhs).thename, "nondet$symex::");
+  for (size_t k = 0; k <= last; k++)
+  {
+    // A fresh L2 name is as free as a nondet value; only a field the value
+    // set could track needs the assignment step.
+    if (
+      nondet && k != last &&
+      split_structst::is_untracked_scalar(fields[k]->type))
+    {
+      expr2tc l1_field = fields[k];
+      cur_state->top().level1.rename(l1_field);
+      cur_state->level2.make_assignment(l1_field, expr2tc(), expr2tc());
+      continue;
+    }
+    expr2tc rhs_k = is_constant_struct2t(rhs)
+                      ? to_constant_struct2t(rhs).datatype_members[k]
+                      : member2tc(st.members[k], rhs, st.member_names[k]);
+    // The step that prints reads every field after its write.
+    expr2tc full_rhs = k == last && !hidden ? lhs : expr2tc();
+    symex_assign_symbol(
+      fields[k], full_lhs, rhs_k, full_rhs, guard, hidden || k != last, true);
   }
 }
 

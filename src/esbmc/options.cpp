@@ -1138,6 +1138,10 @@ const struct group_opt_templ all_cmd_options[] = {
      NULL,
      "Give each field of a struct variable whose address is never taken a "
      "variable of its own, so that writing a field does not copy the struct"},
+    {"field-sensitive-ssa",
+     NULL,
+     "Experimental: give each field of a local struct whose address is never "
+     "taken its own SSA name in symex (single-threaded programs only)"},
     {"gcse",
      NULL,
      "Adds intermediate variables to precompute common sub-expressions between "
