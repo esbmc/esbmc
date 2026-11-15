@@ -80,9 +80,8 @@ static void guard_symbolic_padding_width(
   const char *method,
   const locationt &location)
 {
-  const std::string message =
-    std::string("Unsupported: ") + method +
-    "() symbolic width may require padding";
+  const std::string message = std::string("Unsupported: ") + method +
+                              "() symbolic width may require padding";
   if (!converter.can_emit_runtime_guard())
     throw std::runtime_error(message);
 
@@ -1331,8 +1330,7 @@ std::optional<exprt> dispatch_decode_join_method(
 // A name with one binding to an integer literal is just as constant as the
 // literal itself. Do not fold reassigned names or loop variables.
 static exprt padding_width_expression(
-  const nlohmann::json &node,
-  python_converter &converter)
+  const nlohmann::json &node, python_converter &converter)
 {
   exprt width = converter.get_expr(node);
   if (node.value("_type", "") != "Name")
