@@ -18,4 +18,4 @@ def ident(n: uint64) -> uint64:
 
 
 big = uint64(2**63 + 5)
-assert half(uint64(2**63 + 5)) < 0
+assert half(big) < 0

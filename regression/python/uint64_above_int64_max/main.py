@@ -21,3 +21,5 @@ big = uint64(2**63 + 5)
 assert half(big) == 2**62 + 3
 assert ident(big) >= 1
 assert Box(big).v >= 1
+assert (1 + big) // 2 == 2**62 + 3
+assert big > -1

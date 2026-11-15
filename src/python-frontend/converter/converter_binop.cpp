@@ -5727,28 +5727,38 @@ exprt python_converter::str_pointer_add_error(
 
 // A Python int is signed, so an unsigned operand meeting one (a len() result)
 // is read as signed rather than the int read as unsigned: otherwise
-// len(l) - 4 wraps (#10494). NumPy integers keep their own promotion rules,
-// and a declared fixed-width unsigned keeps wrapping, or uint64 n >= 2^63
-// reads negative.
-static void read_unsigned_as_python_int(exprt &lhs, exprt &rhs)
+// len(l) - 4 wraps (#10494). NumPy integers keep their own promotion rules.
+// A declared fixed-width unsigned (uint64, ...) wraps in arithmetic, so the
+// int converts to it whichever side it is on, but compares exactly, so both
+// widen one bit past it: uint64 n >= 2^63 is not negative and n > -1 holds.
+static void
+read_unsigned_as_python_int(const std::string &op, exprt &lhs, exprt &rhs)
 {
   if (
     type_utils::is_numpy_numeric_element(lhs.type()) ||
     type_utils::is_numpy_numeric_element(rhs.type()))
     return;
-  auto widen_to_signed = [](exprt &unsigned_op, const exprt &signed_op) {
-    const unsigned width =
-      std::max(bv_width(unsigned_op.type()), bv_width(signed_op.type()));
-    unsigned_op = typecast_exprt(unsigned_op, signedbv_typet(width));
+  auto widen_to_signed = [](exprt &unsigned_op, exprt &signed_op, bool both) {
+    const unsigned width = std::max(
+      bv_width(unsigned_op.type()) + (both ? 1 : 0),
+      bv_width(signed_op.type()));
+    const signedbv_typet wide(width);
+    unsigned_op = typecast_exprt(unsigned_op, wide);
+    if (both && signed_op.type() != wide)
+      signed_op = typecast_exprt(signed_op, wide);
   };
-  if (
-    lhs.type().is_unsignedbv() && rhs.type().is_signedbv() &&
-    !type_utils::is_fixed_width_unsigned(lhs.type()))
-    widen_to_signed(lhs, rhs);
-  else if (
-    rhs.type().is_unsignedbv() && lhs.type().is_signedbv() &&
-    !type_utils::is_fixed_width_unsigned(rhs.type()))
-    widen_to_signed(rhs, lhs);
+  auto read = [&](exprt &unsigned_op, exprt &signed_op) {
+    if (!type_utils::is_fixed_width_unsigned(unsigned_op.type()))
+      widen_to_signed(unsigned_op, signed_op, false);
+    else if (type_utils::is_relational_op(op))
+      widen_to_signed(unsigned_op, signed_op, true);
+    else
+      signed_op = typecast_exprt(signed_op, unsigned_op.type());
+  };
+  if (lhs.type().is_unsignedbv() && rhs.type().is_signedbv())
+    read(lhs, rhs);
+  else if (rhs.type().is_unsignedbv() && lhs.type().is_signedbv())
+    read(rhs, lhs);
 }
 
 exprt python_converter::build_binary_expression(
@@ -5777,7 +5787,7 @@ exprt python_converter::build_binary_expression(
     return static_cast<const bv_typet &>(t).get_width();
   };
 
-  read_unsigned_as_python_int(lhs, rhs);
+  read_unsigned_as_python_int(op, lhs, rhs);
 
   // Reconcile the int/float and float/float-width mixes the arms below do
   // not cover, following the C usual arithmetic conversions (CPython agrees
