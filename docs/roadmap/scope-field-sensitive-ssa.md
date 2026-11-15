@@ -2,8 +2,8 @@
 
 > **Status at 2026-11-15: Phase 0 in review, gate partly met (see §8).** The
 > corpus is in `regression/field-sensitivity/` with baselines, and the census
-> has been run and reverted. Bitwuzla times are for ESBMC's SMT-LIB dump, not
-> its Bitwuzla backend, and the SV-COMP census covers 259 tasks. Two
+> has been run and reverted. Baselines cover Z3 and ESBMC's Bitwuzla backend;
+> the census covers the first 1192 Python tests and 259 SV-COMP tasks. Two
 > mitigations are merged: #10037 stopped phi merges of wide structs from
 > scaling with the square of the width, and #10527 added the opt-in GOTO pass
 > `--scalarize-structs`. Symex itself still gives a struct one SSA name, so a
@@ -237,9 +237,8 @@ Master `a1d98c9a1f`, RelWithDebInfo, Z3 4.13.3, Bitwuzla 0.10.0 (PyPI
 bindings), measured on 2026-11-15 on one 4-core container with
 `scripts/field_sensitivity_bench.py`. Symex time and SSA steps are from the
 Z3 run. "SMT-LIB bytes" is the size of the `--smtlib --output` dump, and the
-Bitwuzla column is the time to parse and solve that dump. ESBMC's own
-Bitwuzla backend could not be built in this sandbox, because the CaDiCaL
-download was blocked. The SMT-LIB backend encodes tuples differently from
+"Bitwuzla s" column is the time to parse and solve that dump; §8.2.1 times
+ESBMC's own Bitwuzla backend. The SMT-LIB backend encodes tuples differently from
 Z3's native API, so on `plc_db` the dump stays the same size at every width
 while Z3 times out.
 
@@ -270,6 +269,30 @@ symex time is 0.94x on `repro7521`, which already passes, 8.3x on
 `plc_db`. Z3 time grows 312x on `local_writes`, 33x on `global_callee`, and
 from 6.4 s to over 120 s on `plc_db`. Peak memory grows 3.5x on
 `local_writes` and 27x on `plc_db`.
+
+#### 8.2.1 ESBMC's Bitwuzla backend
+
+Same binary and container, built with ESBMC's Bitwuzla backend (Bitwuzla
+0.9.0, the version `DOWNLOAD_DEPENDENCIES` pins, built from git with
+CaDiCaL 2.1.2), measured on 2026-11-15 with
+`scripts/field_sensitivity_bench.py --solver bitwuzla`. All 30 rows give
+their expected verdict.
+
+| Row | Symex s | Bitwuzla s | Peak MiB |
+|---|---|---|---|
+| repro7521_w8 / w512 / w2048 | 0.705 / 0.641 / 0.687 | no VCC | 122 / 122 / 125 |
+| local_writes_w8 / w512 / w2048 | 0.565 / 1.369 / 4.717 | 0.002 / 0.002 / 0.001 | 344 / 345 / 371 |
+| local_addr_once_w8 / w512 / w2048 | 1.026 / 1.300 / 4.617 | 0.001 / 0.001 / 0.002 | 345 / 345 / 371 |
+| global_callee_w8 / w512 / w2048 | 0.161 / 0.821 / 2.516 | 0.001 / 0.003 / 0.002 | 122 / 132 / 196 |
+| plc_db_w8 / w512 / w2048 | 0.021 / 0.117 / 0.422 | 0.028 / 0.017 / 0.021 | 122 / 128 / 204 |
+
+Bitwuzla's solve time stays flat with width on every row, and it decides
+the `plc_db` rows at 512 and 2048 fields, including their `_fail` variants,
+in under 0.03 s, where Z3 runs past 120 s and 4 GB. Symex does not depend on the
+solver and its times are close to the Z3 run, so the 2x bar is missed on the same rows under both
+solvers, and the gap there is symex, not solving. The `plc_db` rows at 512
+and 2048 fields stay pinned to formula generation because the regression
+tests pin Z3.
 
 ### 8.3 Census
 
@@ -306,6 +329,5 @@ Phase 2 (constant field paths), as designed.
 
 ### 8.4 Not measured in Phase 0
 
-- ESBMC's Bitwuzla backend end to end (see §8.2).
 - The census on the full SV-COMP set and on the Python tests after the first
   1192.
