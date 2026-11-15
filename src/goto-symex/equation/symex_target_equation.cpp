@@ -172,9 +172,12 @@ void pre_register_addresses(
 void register_sliced_addresses(
   const namespacet &ns,
   smt_convt &smt_conv,
-  std::unordered_set<const expr2t *> &seen,
+  equation_conversion_statet &state,
   const symex_target_equationt::SSA_stept &step)
 {
+  if (!state.has_int_to_pointer_cast)
+    return;
+  std::unordered_set<const expr2t *> &seen = state.sliced_seen;
   std::function<void(const expr2tc &)> walk = [&](const expr2tc &e) {
     if (!e || !seen.insert(e.get()).second)
       return;
@@ -233,8 +236,7 @@ void convert_internal_step(
 {
   if (step.ignore)
   {
-    if (state.has_int_to_pointer_cast)
-      register_sliced_addresses(ns, smt_conv, state.sliced_seen, step);
+    register_sliced_addresses(ns, smt_conv, state, step);
     step.cond_expr = gen_true_expr();
     return;
   }
