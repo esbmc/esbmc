@@ -1,0 +1,3 @@
+regression/esbmc/github_10749_thread_target_witness_fail
+regression/esbmc/github_10749_schedule_witness_fail
+regression/esbmc/github_10747_thread_assert_witness_fail

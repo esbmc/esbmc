@@ -110,13 +110,13 @@ void yamlt::generate_yaml(
   YAML::Emitter yaml_emitter;
   /* An absent thread_id means thread 0, so the two racing targets would both
      claim the main thread. Format 2.4 is the first to allow `thread_id: any`
-     on a target (#10747). */
+     on a target (#10747); 2.1 has no thread_id at all. */
   if (this->witness_type == yamlt::VIOLATION)
     create_violation_yaml_emitter(
       this->verified_file,
       options,
       yaml_emitter,
-      racing_target ? "2.4" : "2.1");
+      racing_target || thread_ids ? "2.4" : "2.1");
   else
     create_correctness_yaml_emitter(this->verified_file, options, yaml_emitter);
 
@@ -216,6 +216,9 @@ void create_waypoint(
   else if (wp.type == waypoint::assumption)
     waypoint << YAML::Key << "type" << YAML::Value << YAML::DoubleQuoted
              << "assumption";
+  else if (wp.type == waypoint::function_enter)
+    waypoint << YAML::Key << "type" << YAML::Value << YAML::DoubleQuoted
+             << "function_enter";
   else if (wp.type == waypoint::function_return)
     waypoint << YAML::Key << "type" << YAML::Value << YAML::DoubleQuoted
              << "function_return";
@@ -267,6 +270,8 @@ void create_waypoint(
 
   if (any_thread)
     waypoint << YAML::Key << "thread_id" << YAML::Value << "any";
+  else if (wp.thread_nr != 0)
+    waypoint << YAML::Key << "thread_id" << YAML::Value << wp.thread_nr;
 
   waypoint << YAML::EndMap;
   waypoint << YAML::EndMap;
@@ -1085,15 +1090,18 @@ BigInt get_line_number(
   return line_count;
 }
 
-std::optional<locationt> nondet_call_rparen(const locationt &call)
+/* The source lines of @p call's file, with @p line and @p column set to where
+   @p call starts in them, 0-based; null when there is no such position. */
+static const std::vector<std::string> *
+source_at(const locationt &call, size_t &line, size_t &column)
 {
   // One cached copy per source file, never freed; witnesses read few files.
   static std::unordered_map<std::string, std::vector<std::string>> files;
   const std::string file = call.get_file().as_string();
-  const size_t line = std::atoi(call.get_line().c_str());
-  const size_t column = std::atoi(call.get_column().c_str());
+  line = std::atoi(call.get_line().c_str());
+  column = std::atoi(call.get_column().c_str());
   if (file.empty() || line == 0 || column == 0)
-    return std::nullopt;
+    return nullptr;
   auto [it, fresh] = files.try_emplace(file);
   if (fresh)
   {
@@ -1103,28 +1111,82 @@ std::optional<locationt> nondet_call_rparen(const locationt &call)
   }
   const std::vector<std::string> &lines = it->second;
   if (line > lines.size() || column > lines[line - 1].size())
+    return nullptr;
+  --line;
+  --column;
+  return &lines;
+}
+
+static locationt moved_to(const locationt &call, size_t line, size_t column)
+{
+  locationt l = call;
+  l.set_line(line + 1);
+  l.set_column(column + 1);
+  return l;
+}
+
+std::optional<locationt> nondet_call_rparen(const locationt &call)
+{
+  size_t line, column;
+  const std::vector<std::string> *lines = source_at(call, line, column);
+  if (lines == nullptr)
     return std::nullopt;
 
   static const std::regex head(R"(^\w*nondet\w*\s*\()");
   std::smatch m;
-  const std::string rest = lines[line - 1].substr(column - 1);
+  const std::string rest = (*lines)[line].substr(column);
   if (!std::regex_search(rest, m, head))
     return std::nullopt;
 
   // The calls take no arguments: the ')' is the next non-blank character.
-  size_t c = column - 1 + m.length(0);
-  for (size_t l = line - 1; l < lines.size(); ++l, c = 0)
+  size_t c = column + m.length(0);
+  for (size_t l = line; l < lines->size(); ++l, c = 0)
   {
-    const size_t p = lines[l].find_first_not_of(" \t", c);
+    const size_t p = (*lines)[l].find_first_not_of(" \t", c);
     if (p == std::string::npos)
       continue;
-    if (lines[l][p] != ')')
+    if ((*lines)[l][p] != ')')
       return std::nullopt;
-    locationt rparen = call;
-    rparen.set_line(l + 1);
-    rparen.set_column(p + 1);
-    return rparen;
+    return moved_to(call, l, p);
   }
+  return std::nullopt;
+}
+
+std::optional<locationt> call_rparen(const locationt &call)
+{
+  size_t line, column;
+  const std::vector<std::string> *lines = source_at(call, line, column);
+  if (lines == nullptr)
+    return std::nullopt;
+
+  static const std::regex head(R"(^\w+\s*\()");
+  std::smatch m;
+  const std::string rest = (*lines)[line].substr(column);
+  if (!std::regex_search(rest, m, head))
+    return std::nullopt;
+
+  // Count parentheses up to the one closing the call, skipping literals.
+  size_t depth = 1;
+  char quote = 0;
+  size_t c = column + m.length(0);
+  for (size_t l = line; l < lines->size(); ++l, c = 0)
+    for (; c < (*lines)[l].size(); ++c)
+    {
+      const char ch = (*lines)[l][c];
+      if (quote)
+      {
+        if (ch == '\\')
+          ++c;
+        else if (ch == quote)
+          quote = 0;
+      }
+      else if (ch == '"' || ch == '\'')
+        quote = ch;
+      else if (ch == '(')
+        ++depth;
+      else if (ch == ')' && --depth == 0)
+        return moved_to(call, l, c);
+    }
   return std::nullopt;
 }
 

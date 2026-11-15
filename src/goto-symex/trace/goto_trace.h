@@ -95,6 +95,16 @@ public:
   };
   std::optional<accesst> racing_access;
 
+  /* The threads spawned since the previous step, in creation order: each
+   * thread's number, the spawning thread's, and the spawning call. */
+  struct spawnt
+  {
+    unsigned thread_nr;
+    unsigned parent_nr;
+    accesst call;
+  };
+  std::list<spawnt> spawns;
+
   /* The nondet calls made since the previous step, this one included: each
    * call's ')' paired with the value it returned. A call nested in an
    * expression returns into a hidden temporary with no step of its own, so a
