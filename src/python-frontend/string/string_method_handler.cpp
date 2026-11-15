@@ -70,17 +70,33 @@ static bool get_constant_int(const exprt &expr, long long &out)
   return true;
 }
 
-// A symbolic width must not produce an arbitrary string: that could turn a
-// correct assertion into a spurious counterexample (or hide a real failure).
-// Until symbolic padding is modelled, reject it rather than guess a result.
-static long long
-require_constant_padding_width(const exprt &width_arg, const char *method)
+// Padding with an unresolved width is exact when it cannot extend the
+// receiver. Otherwise report the unmodelled case as an assertion at the call
+// site, rather than aborting conversion or returning an arbitrary string.
+static void guard_symbolic_padding_width(
+  python_converter &converter,
+  const exprt &width_arg,
+  long long unpadded_width,
+  const char *method,
+  const locationt &location)
 {
-  long long width = 0;
-  if (!get_constant_int(width_arg, width))
-    throw std::runtime_error(
-      std::string(method) + "() width must be a constant integer");
-  return width;
+  const std::string message =
+    std::string("Unsupported: ") + method +
+    "() symbolic width may require padding";
+  if (!converter.can_emit_runtime_guard())
+    throw std::runtime_error(message);
+
+  const exprt no_padding =
+    width_arg.type().is_signedbv() || width_arg.type().is_unsignedbv()
+      ? build_less_equal(
+          width_arg, from_integer(unpadded_width, width_arg.type()))
+      : not_exprt(true_exprt());
+  code_assertt check(no_padding);
+  check.location() = location;
+  check.location().user_provided(true);
+  check.location().comment(message);
+  converter.add_instruction(check);
+  converter.add_instruction(code_assumet(no_padding));
 }
 
 // Extract the constant byte values of a bytes receiver (literal or a variable
@@ -1312,6 +1328,34 @@ std::optional<exprt> dispatch_decode_join_method(
   return std::nullopt;
 }
 
+// A name with one binding to an integer literal is just as constant as the
+// literal itself. Do not fold reassigned names or loop variables.
+static exprt padding_width_expression(
+  const nlohmann::json &node,
+  python_converter &converter)
+{
+  exprt width = converter.get_expr(node);
+  if (node.value("_type", "") != "Name")
+    return width;
+
+  const std::string name = node.value("id", "");
+  const nlohmann::json &ast = converter.get_ast_json();
+  if (name.empty() || json_utils::count_name_bindings(ast, name) != 1)
+    return width;
+
+  const nlohmann::json declaration =
+    json_utils::find_var_decl(name, converter.get_current_func_name(), ast);
+  if (!declaration.is_object() || !declaration.contains("value"))
+    return width;
+  const nlohmann::json &value = declaration["value"];
+  if (
+    !value.is_object() || value.value("_type", "") != "Constant" ||
+    !value.contains("value") || !value["value"].is_number_integer())
+    return width;
+
+  return from_integer(value["value"].get<long long>(), width.type());
+}
+
 std::optional<exprt> dispatch_spacing_and_padding_methods(
   string_handler &self,
   const std::string &method_name,
@@ -1387,7 +1431,7 @@ std::optional<exprt> dispatch_spacing_and_padding_methods(
     const nlohmann::json *fill_node = resolve_positional_or_keyword_arg(
       method_name, args, keyword_values, "fillchar", 1, false);
 
-    exprt width_arg = converter.get_expr(*width_node);
+    exprt width_arg = padding_width_expression(*width_node, converter);
     exprt fill_arg = fill_node ? converter.get_expr(*fill_node) : nil_exprt();
     return (self.*handler)(
       get_receiver_expr(), width_arg, fill_arg, get_location());
@@ -1407,7 +1451,8 @@ std::optional<exprt> dispatch_spacing_and_padding_methods(
       0,
       "zfill() requires one argument");
     return self.handle_string_zfill(
-      get_receiver_expr(), converter.get_expr(*width_node), get_location());
+      get_receiver_expr(), padding_width_expression(*width_node, converter),
+      get_location());
   }
 
   if (method_name == "expandtabs")
@@ -3747,16 +3792,28 @@ exprt string_handler::handle_string_center(
   const locationt &location)
 {
   std::string input;
-  if (!try_extract_const_string_expr(string_obj, input))
+  const bool input_constant = try_extract_const_string_expr(string_obj, input);
+  long long width = 0;
+  if (!get_constant_int(width_arg, width))
   {
+    guard_symbolic_padding_width(
+      converter_,
+      width_arg,
+      input_constant ? static_cast<long long>(input.size()) : 0,
+      "center",
+      location);
+    return string_obj;
+  }
+  if (!input_constant)
+  {
+    if (width <= 0)
+      return string_obj;
     log_debug(
       "python-string", "center() on non-constant receiver: nondet string");
     return build_nondet_string_fallback(location);
   }
   if (!string_builder_)
     throw std::runtime_error("string_builder not set for center()");
-
-  const long long width = require_constant_padding_width(width_arg, "center");
 
   char fill = ' ';
   if (!fill_arg.is_nil())
@@ -3796,16 +3853,28 @@ exprt string_handler::handle_string_ljust(
   const locationt &location)
 {
   std::string input;
-  if (!try_extract_const_string_expr(string_obj, input))
+  const bool input_constant = try_extract_const_string_expr(string_obj, input);
+  long long width = 0;
+  if (!get_constant_int(width_arg, width))
   {
+    guard_symbolic_padding_width(
+      converter_,
+      width_arg,
+      input_constant ? static_cast<long long>(input.size()) : 0,
+      "ljust",
+      location);
+    return string_obj;
+  }
+  if (!input_constant)
+  {
+    if (width <= 0)
+      return string_obj;
     log_debug(
       "python-string", "ljust() on non-constant receiver: nondet string");
     return build_nondet_string_fallback(location);
   }
   if (!string_builder_)
     throw std::runtime_error("string_builder not set for ljust()");
-
-  const long long width = require_constant_padding_width(width_arg, "ljust");
 
   char fill = ' ';
   if (!fill_arg.is_nil())
@@ -3837,16 +3906,28 @@ exprt string_handler::handle_string_rjust(
   const locationt &location)
 {
   std::string input;
-  if (!try_extract_const_string_expr(string_obj, input))
+  const bool input_constant = try_extract_const_string_expr(string_obj, input);
+  long long width = 0;
+  if (!get_constant_int(width_arg, width))
   {
+    guard_symbolic_padding_width(
+      converter_,
+      width_arg,
+      input_constant ? static_cast<long long>(input.size()) : 0,
+      "rjust",
+      location);
+    return string_obj;
+  }
+  if (!input_constant)
+  {
+    if (width <= 0)
+      return string_obj;
     log_debug(
       "python-string", "rjust() on non-constant receiver: nondet string");
     return build_nondet_string_fallback(location);
   }
   if (!string_builder_)
     throw std::runtime_error("string_builder not set for rjust()");
-
-  const long long width = require_constant_padding_width(width_arg, "rjust");
 
   char fill = ' ';
   if (!fill_arg.is_nil())
@@ -3877,16 +3958,28 @@ exprt string_handler::handle_string_zfill(
   const locationt &location)
 {
   std::string input;
-  if (!try_extract_const_string_expr(string_obj, input))
+  const bool input_constant = try_extract_const_string_expr(string_obj, input);
+  long long width = 0;
+  if (!get_constant_int(width_arg, width))
   {
+    guard_symbolic_padding_width(
+      converter_,
+      width_arg,
+      input_constant ? static_cast<long long>(input.size()) : 0,
+      "zfill",
+      location);
+    return string_obj;
+  }
+  if (!input_constant)
+  {
+    if (width <= 0)
+      return string_obj;
     log_debug(
       "python-string", "zfill() on non-constant receiver: nondet string");
     return build_nondet_string_fallback(location);
   }
   if (!string_builder_)
     throw std::runtime_error("string_builder not set for zfill()");
-
-  const long long width = require_constant_padding_width(width_arg, "zfill");
 
   if (width <= static_cast<long long>(input.size()))
     return string_builder_->build_string_literal(input);

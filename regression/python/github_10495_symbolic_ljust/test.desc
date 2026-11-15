@@ -1,4 +1,4 @@
 CORE
 main.py
 
-^ERROR: ljust\(\) width must be a constant integer$
+^VERIFICATION SUCCESSFUL$
