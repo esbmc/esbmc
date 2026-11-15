@@ -2029,8 +2029,7 @@ void goto_convertt::convert_while(const codet &code, goto_programt &dest)
   goto_programt::targett v = tmp_branch.instructions.begin();
   const bool operand = v->location.is_short_circuit_operand();
   v->location = code.location();
-  if (operand)
-    v->location.set_short_circuit_operand();
+  v->location.set_short_circuit_operand(operand);
 
   // do the y label
   goto_programt tmp_y;

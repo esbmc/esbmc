@@ -478,6 +478,8 @@ condition_operand_gotos(const goto_programt &prog)
     }
     if (instruction.is_goto() && !is_true(instruction.guard))
       run[instruction.location.get_column()].push_back(&instruction);
+    if (instruction.location.is_short_circuit_operand())
+      operands.insert(&instruction);
   }
   end_run();
   return operands;
@@ -600,8 +602,7 @@ void build_goto_trace(
       if (fresh)
         it->second = condition_operand_gotos(*SSA_step.source.prog);
       goto_trace_step.condition_operand =
-        it->second.count(&*SSA_step.source.pc) ||
-        SSA_step.source.pc->location.is_short_circuit_operand();
+        it->second.count(&*SSA_step.source.pc);
     }
     goto_trace_step.nondet_returns.swap(nondet_returns);
 

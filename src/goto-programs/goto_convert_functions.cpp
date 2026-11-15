@@ -1160,8 +1160,7 @@ bool goto_convert_functionst::convert_native_rec(
     goto_programt::targett v = tmp_branch.instructions.begin();
     const bool operand = v->location.is_short_circuit_operand();
     v->location = location;
-    if (operand)
-      v->location.set_short_circuit_operand();
+    v->location.set_short_circuit_operand(operand);
 
     goto_programt tmp_y;
     goto_programt::targett y = tmp_y.add_instruction();

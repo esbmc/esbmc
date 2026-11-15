@@ -65,9 +65,12 @@ public:
     return get_bool("#short_circuit_operand");
   }
 
-  void set_short_circuit_operand()
+  void set_short_circuit_operand(bool operand = true)
   {
-    set("#short_circuit_operand", true);
+    if (operand)
+      set("#short_circuit_operand", true);
+    else
+      remove("#short_circuit_operand");
   }
 };
 
