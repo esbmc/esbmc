@@ -1,7 +1,8 @@
 # Scope: field-sensitive SSA in goto-symex (#7521)
 
 > **Status at 2026-11-16: Phase 0 merged (#10773); Phase 1 in review (#10778),
-> gate partly met (see §8.5).** The corpus is in `regression/field-sensitivity/`
+> gate partly met (see §8.5); the trace gate is unmet because split pointer
+> fields print other values than master (§8.6).** The corpus is in `regression/field-sensitivity/`
 > with baselines, and the census has been run and reverted. Phase 1 adds
 > `--field-sensitive-ssa` (default off): symex gives each field of an
 > eligible local, parameter or return slot its own SSA name. It meets the 2x
@@ -534,4 +535,36 @@ Decided on 2026-11-16: option 2. Byte-identical traces are no longer a gate
 for any phase; Invariant 4 is. The four rows above are accepted. Each still
 needs a test pinning one example of it, so that a further change to how a
 split object prints fails a test instead of passing unnoticed.
+
+Pinned on 2026-11-16 at `70d965f06`, each test failing when
+`--field-sensitive-ssa` is dropped from it and passing under Z3 and Bitwuzla:
+
+| Row | Test |
+|---|---|
+| member value | `field_sensitive_ssa_print_member_fail` (`v.un.i = 9`) |
+| step dropped | `field_sensitive_ssa_print_slice_fail` (no step for an uninitialised struct) |
+| reassembled struct | `field_sensitive_ssa_print_array_fail` (`.pair={ 6, 7 }`) |
+| `--incremental-bmc` | `field_sensitive_ssa_print_incremental` (both claims fold) |
+
+The third row is not only formatting. Master prints the correct value of a
+pointer member in five of its six tests, and the flag prints another value
+under both solvers:
+
+| Test | Master | Flag, Z3 | Flag, Bitwuzla |
+|---|---|---|---|
+| `github_5393_array_member_fail` | `.a=(void *)4660` | `.a=0` | `.a={ .pointer_object=nil, ... }` |
+| `github_5393_array_member_dyn_offset_fail` | `.a=5` | `.a=0` | `.a=0` |
+| `github_7855-tie-hides-deref`, `github_7965_fail`, `pointer_repr_branch_flow_fail` | `.next=( struct node *)8` | `{ .next = 0 }` | `{ .next = 0 }` |
+
+With `--no-slice`, `dyn_offset` prints `.a=5` again, so there the slicer drops
+the field's step and the model leaves the field free. `github_7965_fail`
+still prints `0`, and `github_5393_array_member_fail` prints
+`.a=&__memset_impl`: the print step reads the pointer field symbol from the
+model, while master evaluates the right-hand side (`(void *)CONCAT(...)`,
+`&container->node` with `container` NULL). That breaks Invariant 4, so the
+pointer half of the third row is not accepted, and the Phase 1 trace gate is
+unmet until a split pointer field prints the value master prints. The array
+half (`{ 6, 7 }` for the same bytes) keeps the value and stays accepted.
+`struct_array_ite_new_index_fail` prints other nondet values under Z3 and
+`nil` per element under Bitwuzla, where master prints `.e=nil`.
 
