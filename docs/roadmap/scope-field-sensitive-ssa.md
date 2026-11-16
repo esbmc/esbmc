@@ -5,8 +5,9 @@
 > with baselines, and the census has been run and reverted. Phase 1 adds
 > `--field-sensitive-ssa` (default off): symex gives each field of an
 > eligible local, parameter or return slot its own SSA name. It meets the 2x
-> bar on the Phase 1 corpus rows and changes no verdict on the C and C++
-> suites or a Python sample, but it still changes some trace text (§8.5).
+> bar on the Phase 1 corpus rows and changes no verdict on the C, C++ and
+> k-induction suites or two Python samples, and no correctness witness, but it
+> still changes some trace text and violation witnesses (§8.5).
 > §8.6 traces the remaining changes to §3's own design and needs a decision on
 > the Phase 1 trace gate before more code goes in. Two
 > mitigations are merged: #10037 stopped phi merges of wide structs from
@@ -396,8 +397,33 @@ verdict:
   `github_7797_flat_set` unwinds a loop past iterations master rules out by
   constant propagation; the extra unwinding assertions pass.
 
-Not measured in Phase 1: GraphML and YAML witness files under the flag, the
-k-induction suite with the flag, and the remaining 9023 Python tests.
+Witnesses, k-induction and more Python, measured on 2026-11-16 at
+`34ecc9021` (master `f1c5ee1b4`), Z3 4.13.3 only (Bitwuzla's dependencies
+could not be downloaded in that container), `CORE` tests, flag forced on
+against off, 30 s per run. Output is compared after dropping timings, temp
+paths and the "is ignored" warning.
+
+| Suite | Tests run | With a split object | Verdict changes | Witness file changes | Other output changes |
+|---|---|---|---|---|---|
+| `k-induction`, `k-induction-parallel` | 277 | 78 | 0 | not written | 0 (38 line order only, all in `-parallel`, none split) |
+| C, expects `VERIFICATION FAILED`, GraphML + YAML | 1516 | 242 | 0 | 12 GraphML, 2 YAML | only §8.6 tests and `github_1087`, `github_1093` |
+| C, expects `VERIFICATION SUCCESSFUL`, GraphML + YAML | 1617 | 282 | 0 | 0 | `github_5868_div`, `github_7597-literal` (§8.6) |
+| Python, every 8th test after the first 726 | 706 | 60 | 0 | not written | 0 |
+
+Every violation-witness change is in a test that also prints a different
+trace, so the witnesses follow §8.6 and add no new cause. Two tests are new
+to the list, both with a different counterexample but the same property
+verdicts: `github_1087` picks another value for `num_players`, and
+`github_1093` reports the NULL dereference in `strncpy` before the invalid
+free at line 47. With `--multi-property`, `github_1093` gives the same 5
+FAILED and 28 PASSED claims with and without the flag. One Python output
+difference (`github_5444_dictcomp_param_fail`, `ESBMC_compvar_0_v` against
+`_1_v`) also shows up between two runs without the flag.
+`github_2153_5` took 32.5 s without the flag and 32.1 s with it, nothing
+split; it times out at 30 s either way.
+
+Still not measured in Phase 1: the other 8095 Python tests, these suites
+under Bitwuzla, and an SV-COMP run.
 
 Patch coverage, measured on 2026-11-16 with an `ENABLE_COVERAGE` build at
 `e66e161ba`: 287 of the 320 instrumented lines the branch adds under `src/`
