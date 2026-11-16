@@ -18,6 +18,7 @@
 #include <python-frontend/type/type_utils.h>
 #include <irep2/irep2_utils.h>
 #include <util/arith/arith_tools.h>
+#include <util/arith/ieee_float.h>
 #include <util/lang/c_typecast.h>
 #include <util/lang/c_types.h>
 #include <util/expr/expr_util.h>
@@ -3717,6 +3718,36 @@ exprt python_converter::build_guarded_binop(
   return stmt_expr;
 }
 
+// A declared fixed-width unsigned, which wraps. Under --ir integers are
+// unbounded, so it is an ordinary Python int there.
+static bool is_wrapping_unsigned(const typet &type)
+{
+  return !config.options.get_bool_option("int-encoding") &&
+         type_utils::is_fixed_width_unsigned(type);
+}
+
+// The type to wrap a //, % or >> of a declared fixed-width unsigned (uint64,
+// uint256, ...) by an int or bool back to, once read_unsigned_as_python_int
+// has computed it exactly; empty otherwise. Left wide, the result would
+// retype the variable it is stored in. With the int on the left it stays
+// wide, as the int variable it is stored in would truncate it.
+static typet
+wrapped_result_type(const std::string &op, const exprt &lhs, const exprt &rhs)
+{
+  if (op != "FloorDiv" && op != "Mod" && op != "RShift")
+    return typet();
+  if (
+    is_wrapping_unsigned(lhs.type()) &&
+    (rhs.type().is_signedbv() || rhs.type().is_bool()))
+    return lhs.type();
+  return typet();
+}
+
+static exprt wrap_to_type(const typet &type, const exprt &result)
+{
+  return type.id().empty() ? result : typecast_exprt(result, type);
+}
+
 exprt python_converter::build_arithmetic_binop(
   const std::string &op,
   exprt lhs,
@@ -3725,6 +3756,11 @@ exprt python_converter::build_arithmetic_binop(
 {
   if (op == "Mod" && (lhs.type().is_floatbv() || rhs.type().is_floatbv()))
     return math_handler_.handle_modulo(lhs, rhs, element);
+
+  const typet wraps_to = wrapped_result_type(op, lhs, rhs);
+  auto wrap = [&wraps_to](const exprt &result) {
+    return wrap_to_type(wraps_to, result);
+  };
 
   // Build the binary expression
   exprt bin_expr = build_binary_expression(op, lhs, rhs);
@@ -3735,7 +3771,7 @@ exprt python_converter::build_arithmetic_binop(
 
   // Handle floor division
   if (op == "FloorDiv")
-    return math_handler_.handle_floor_division(lhs, rhs, bin_expr);
+    return wrap(math_handler_.handle_floor_division(lhs, rhs, bin_expr));
 
   // Python integer modulo `%` is floored (result takes the sign of the
   // divisor), unlike C's truncated remainder. Correct it for integer operands;
@@ -3743,13 +3779,13 @@ exprt python_converter::build_arithmetic_binop(
   if (
     op == "Mod" && (lhs.type().is_signedbv() || lhs.type().is_unsignedbv()) &&
     (rhs.type().is_signedbv() || rhs.type().is_unsignedbv()))
-    return math_handler_.handle_int_modulo(lhs, rhs, bin_expr);
+    return wrap(math_handler_.handle_int_modulo(lhs, rhs, bin_expr));
 
   // Handle chained comparisons
   if (element.contains("comparators") && element["comparators"].size() > 1)
     return handle_chained_comparisons_logic(element, bin_expr);
 
-  return bin_expr;
+  return wrap(bin_expr);
 }
 
 /// Replace Optional<T> operands by their values (#8016). `==`/`!=` also compare
@@ -4045,6 +4081,56 @@ exprt python_converter::numpy_float_remainder(
       other_sign, python_expr::build_add(mod, y, type), mod));
 }
 
+// x rounded down to an integral value, exactly.
+static exprt floor_of(const exprt &x)
+{
+  expr2tc x2;
+  migrate_expr(x, x2);
+  return migrate_expr_back(nearbyint2tc(
+    x2->type,
+    x2,
+    constant_int2tc(
+      get_int32_type(), BigInt(ieee_floatt::ROUND_TO_MINUS_INF))));
+}
+
+// NumPy's npy_divmod quotient: (x - fmod(x, y)) / y, one lower when the
+// remainder moves to the divisor's sign, snapped to the nearest integer; a
+// zero divisor gives x / y, and a zero quotient takes the sign of x / y.
+exprt python_converter::numpy_float_floor_divide(
+  const exprt &x,
+  const exprt &y,
+  const typet &type)
+{
+  const nlohmann::json no_node;
+  const exprt mod = cast_to(math_handler_.handle_fmod(x, y, no_node), type);
+  const exprt zero = gen_zero(type);
+  const exprt one = cast_to(from_double(1.0, double_type()), type);
+  const exprt half = cast_to(from_double(0.5, double_type()), type);
+  const exprt quotient = numpy_element_op("Div", x, y, type);
+  const exprt moved = python_expr::build_and(
+    python_expr::build_notequal(mod, zero),
+    python_expr::build_xor(
+      python_expr::build_less_than(y, zero),
+      python_expr::build_less_than(mod, zero)));
+  const exprt exact =
+    numpy_element_op("Div", python_expr::build_sub(x, mod, type), y, type);
+  const exprt div = python_expr::build_if(
+    moved, python_expr::build_sub(exact, one, type), exact);
+  const exprt floor = floor_of(div);
+  const exprt snapped = python_expr::build_if(
+    python_expr::build_greater_than(
+      python_expr::build_sub(div, floor, type), half),
+    python_expr::build_add(floor, one, type),
+    floor);
+  const exprt signed_zero =
+    cast_to(math_handler_.handle_copysign(zero, quotient, no_node), type);
+  return python_expr::build_if(
+    python_expr::build_equal(y, zero),
+    quotient,
+    python_expr::build_if(
+      python_expr::build_equal(div, zero), signed_zero, snapped));
+}
+
 // `x op y` for one element pair, both already of `type`. Integer `//` and
 // `%` by zero give 0, as NumPy does (with a warning, not an exception).
 exprt python_converter::numpy_element_op(
@@ -4057,6 +4143,8 @@ exprt python_converter::numpy_element_op(
     return cast_to(math_handler_.handle_power(x, y), type);
   if (op == "Mod" && type.is_floatbv())
     return numpy_float_remainder(x, y, type);
+  if (op == "FloorDiv" && type.is_floatbv())
+    return numpy_float_floor_divide(x, y, type);
   exprt raw(python_frontend::map_operator(op, type), type);
   raw.copy_to_operands(x, y);
   if (op == "FloorDiv")
@@ -5728,21 +5816,50 @@ exprt python_converter::str_pointer_add_error(
 // A Python int is signed, so an unsigned operand meeting one (a len() result)
 // is read as signed rather than the int read as unsigned: otherwise
 // len(l) - 4 wraps (#10494). NumPy integers keep their own promotion rules.
-static void read_unsigned_as_python_int(exprt &lhs, exprt &rhs)
+// A declared fixed-width unsigned (uint64, ...) wraps under a ring operation,
+// so the other operand converts to it whichever side it is on; a comparison,
+// /, //, % or >> is computed exactly instead, so both widen one bit past it:
+// uint64 n >= 2^63 is not negative and n > -1 holds. build_arithmetic_binop
+// wraps a //, % or >> result back to the uint64.
+static bool is_ring_op(const std::string &op)
+{
+  return op == "Add" || op == "Sub" || op == "Mult" || op == "LShift" ||
+         op == "BitAnd" || op == "BitOr" || op == "BitXor";
+}
+
+static void read_as_signed(bool ring, exprt &unsigned_op, exprt &signed_op)
+{
+  const bool tagged = is_wrapping_unsigned(unsigned_op.type());
+  if (tagged && ring)
+  {
+    signed_op = typecast_exprt(signed_op, unsigned_op.type());
+    return;
+  }
+  const signedbv_typet wide(
+    std::max(
+      bv_width(unsigned_op.type()) + (tagged ? 1 : 0),
+      bv_width(signed_op.type())));
+  unsigned_op = typecast_exprt(unsigned_op, wide);
+  if (tagged)
+    signed_op = typecast_exprt(signed_op, wide);
+}
+
+static void
+read_unsigned_as_python_int(const std::string &op, exprt &lhs, exprt &rhs)
 {
   if (
     type_utils::is_numpy_numeric_element(lhs.type()) ||
     type_utils::is_numpy_numeric_element(rhs.type()))
     return;
-  auto widen_to_signed = [](exprt &unsigned_op, const exprt &signed_op) {
-    const unsigned width =
-      std::max(bv_width(unsigned_op.type()), bv_width(signed_op.type()));
-    unsigned_op = typecast_exprt(unsigned_op, signedbv_typet(width));
-  };
+  const bool ring = is_ring_op(op);
   if (lhs.type().is_unsignedbv() && rhs.type().is_signedbv())
-    widen_to_signed(lhs, rhs);
+    read_as_signed(ring, lhs, rhs);
   else if (rhs.type().is_unsignedbv() && lhs.type().is_signedbv())
-    widen_to_signed(rhs, lhs);
+    read_as_signed(ring, rhs, lhs);
+  else if (
+    lhs.type().is_unsignedbv() && rhs.type().is_unsignedbv() &&
+    !is_wrapping_unsigned(lhs.type()) && is_wrapping_unsigned(rhs.type()))
+    lhs = typecast_exprt(lhs, rhs.type());
 }
 
 exprt python_converter::build_binary_expression(
@@ -5771,7 +5888,7 @@ exprt python_converter::build_binary_expression(
     return static_cast<const bv_typet &>(t).get_width();
   };
 
-  read_unsigned_as_python_int(lhs, rhs);
+  read_unsigned_as_python_int(op, lhs, rhs);
 
   // Reconcile the int/float and float/float-width mixes the arms below do
   // not cover, following the C usual arithmetic conversions (CPython agrees

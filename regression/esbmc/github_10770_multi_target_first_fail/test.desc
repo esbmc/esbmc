@@ -1,0 +1,6 @@
+CORE
+main.c
+--witness-output-yaml -
+^VERIFICATION FAILED$
+(?s)\A(?:(?!function_return).)*(?:type: "function_return"(?:(?!function_return).)*){2}\Z
+value: "\\\\result == 3"\n.*\n.*\n.*\n *line: 16\n

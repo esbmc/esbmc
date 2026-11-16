@@ -620,17 +620,20 @@ bool binds_by_field(const nlohmann::json &node, const std::string &name)
            : field == name;
 }
 
+bool binds_here(const nlohmann::json &node, const std::string &name)
+{
+  return node.value("_type", "") == "Name"
+           ? node.value("id", "") == name &&
+               node["ctx"].value("_type", "") != "Load"
+           : binds_by_field(node, name);
+}
+
 } // namespace
 
 /// Every construct under @p node that binds @p name, in any nested scope too.
 size_t count_bindings(const nlohmann::json &node, const std::string &name)
 {
-  size_t n = 0;
-  if (node.is_object())
-    n += node.value("_type", "") == "Name"
-           ? node.value("id", "") == name &&
-               node["ctx"].value("_type", "") != "Load"
-           : binds_by_field(node, name);
+  size_t n = node.is_object() ? binds_here(node, name) : 0;
   for (const auto &child : node)
     if (child.is_structured())
       n += count_bindings(child, name);
@@ -702,6 +705,32 @@ assigned_scalar_type(const nlohmann::json &stmt, type_handler &types)
   return annotated;
 }
 
+/// count_bindings, except that a parameter of a function or lambda nested in
+/// @p scope is left out: it binds a local of that nested scope, never @p name
+/// in @p scope.
+size_t count_scope_bindings(
+  const nlohmann::json &node,
+  const std::string &name,
+  const nlohmann::json &scope,
+  bool nested = false)
+{
+  size_t n = 0;
+  bool opens = false;
+  if (node.is_object())
+  {
+    const std::string kind = node.value("_type", "");
+    if (nested && kind == "arg")
+      return 0;
+    n += binds_here(node, name);
+    opens = &node != &scope && (kind == "FunctionDef" ||
+                                kind == "AsyncFunctionDef" || kind == "Lambda");
+  }
+  for (const auto &child : node)
+    if (child.is_structured())
+      n += count_scope_bindings(child, name, scope, nested || opens);
+  return n;
+}
+
 /// The scalar type of a call argument: a literal, or a name every binding of
 /// which, in the scope the lambda resolves names in, is a top-level
 /// assignment agreeing on one scalar type. Any other binding -- a parameter,
@@ -733,7 +762,7 @@ std::optional<typet> scalar_argument_type(
     agreed = one;
     ++bindings;
   }
-  if (bindings != count_bindings(scope, name))
+  if (bindings != count_scope_bindings(scope, name, scope))
     return std::nullopt;
   return agreed;
 }
@@ -785,19 +814,23 @@ std::optional<typet> subscript_element_type(
 namespace
 {
 /// Argument @p index of every call through a module-level name bound to a
-/// call of the function that returns @p lambda, as in `f = make()` then
+/// call of @p function, which returns @p lambda, as in `f = make()` then
 /// `f(3)`. False when such a name is bound some other way too, or called
-/// from a nested scope.
+/// from a nested scope. Per-type copies of @p function return a lambda at the
+/// same position, so only calls of @p function itself count.
 bool arguments_through_return(
   const nlohmann::json &ast,
   const nlohmann::json &lambda,
+  const std::string &function,
   size_t index,
   std::vector<const nlohmann::json *> &out)
 {
   for (const auto &def : ast["body"])
   {
     bool returns_lambda = false;
-    if (def.value("_type", "") == "FunctionDef")
+    if (
+      def.value("_type", "") == "FunctionDef" &&
+      def.value("name", "") == function)
       for (const auto &stmt : def["body"])
         returns_lambda |= stmt.value("_type", "") == "Return" &&
                           stmt["value"].is_object() &&
@@ -826,6 +859,7 @@ bool arguments_through_return(
 std::vector<std::optional<typet>> returned_lambda_argument_types(
   const nlohmann::json &ast,
   const nlohmann::json &lambda,
+  const std::string &function,
   type_handler &types)
 {
   std::vector<std::optional<typet>> result;
@@ -833,7 +867,7 @@ std::vector<std::optional<typet>> returned_lambda_argument_types(
   {
     std::vector<const nlohmann::json *> args;
     std::optional<typet> agreed;
-    bool known = arguments_through_return(ast, lambda, i, args);
+    bool known = arguments_through_return(ast, lambda, function, i, args);
     for (const nlohmann::json *arg : args)
     {
       const std::optional<typet> one = scalar_argument_type(*arg, ast, types);
@@ -863,7 +897,10 @@ std::vector<std::optional<typet>> python_lambda::call_site_argument_types(
     find_binding_scope(converter_.ast(), element, bound_name);
   if (scope == nullptr || bound_name.empty())
     return returned_lambda_argument_types(
-      converter_.ast(), element, type_handler_);
+      converter_.ast(),
+      element,
+      converter_.get_current_func_name(),
+      type_handler_);
 
   const nlohmann::json *name_scope =
     enclosing_scope(converter_.ast(), element, &converter_.ast());
