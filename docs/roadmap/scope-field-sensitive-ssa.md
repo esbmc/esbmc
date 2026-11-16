@@ -1,19 +1,20 @@
 # Scope: field-sensitive SSA in goto-symex (#7521)
 
-> **Status at 2026-11-16: Phase 0 merged (#10773); Phase 1 in review (#10778),
-> gate partly met (see §8.5); the trace gate is unmet because split pointer
-> fields print other values than master (§8.6).** The corpus is in `regression/field-sensitivity/`
-> with baselines, and the census has been run and reverted. Phase 1 adds
-> `--field-sensitive-ssa` (default off): symex gives each field of an
-> eligible local, parameter or return slot its own SSA name. It meets the 2x
-> bar on the Phase 1 corpus rows and changes no verdict on the C, C++ (Z3 and Bitwuzla) and
-> k-induction suites or three Python samples (3132 tests), and no correctness witness, but it
-> still changes some trace text and violation witnesses (§8.5).
-> §8.6 traces the remaining changes to §3's own design; the Phase 1 trace gate
-> is now Invariant 4 (same values), with those changes accepted. Two
-> mitigations are merged: #10037 stopped phi merges of wide structs from
-> scaling with the square of the width, and #10527 added the opt-in GOTO pass
-> `--scalarize-structs`. Line numbers are from master at `d3104e99c2`.
+> **Status at 2026-11-16: Phase 0 merged (#10773); Phase 1 merged (#10778)
+> with its trace gate unmet; the follow-up in §8.7 makes a split pointer field
+> print the value master prints, which meets that gate.** The corpus is in
+> `regression/field-sensitivity/` with baselines, and the census has been run
+> and reverted. Phase 1 adds `--field-sensitive-ssa` (default off): symex
+> gives each field of an eligible local, parameter or return slot its own SSA
+> name. It meets the 2x bar on the Phase 1 corpus rows and changes no verdict
+> on the C, C++ (Z3 and Bitwuzla) and k-induction suites or three Python
+> samples (3132 tests), and no correctness witness. It still changes some
+> trace text and violation witnesses in the ways §8.6 accepts under
+> Invariant 4 (same values). Phase 2
+> (structs reached through pointers) is next. Two mitigations are merged:
+> #10037 stopped phi merges of wide structs from scaling with the square of
+> the width, and #10527 added the opt-in GOTO pass `--scalarize-structs`.
+> Line numbers are from master at `d3104e99c2`.
 
 ## 1. What is left after #10037 and #10527
 
@@ -543,7 +544,7 @@ Pinned on 2026-11-16 at `70d965f06`, each test failing when
 |---|---|
 | member value | `field_sensitive_ssa_print_member_fail` (`v.un.i = 9`) |
 | step dropped | `field_sensitive_ssa_print_slice_fail` (no step for an uninitialised struct) |
-| reassembled struct | `field_sensitive_ssa_print_array_fail` (`.pair={ 6, 7 }`) |
+| reassembled struct | `field_sensitive_ssa_print_array_fail` (`.pair={ 6, 7 }`); replaced in §8.7 |
 | `--incremental-bmc` | `field_sensitive_ssa_print_incremental` (both claims fold) |
 
 The third row is not only formatting. Master prints the correct value of a
@@ -568,3 +569,65 @@ half (`{ 6, 7 }` for the same bytes) keeps the value and stays accepted.
 `struct_array_ite_new_index_fail` prints other nondet values under Z3 and
 `nil` per element under Bitwuzla, where master prints `.e=nil`.
 
+### 8.7 Phase 1 trace follow-up
+
+A whole write to a split object, `back = *p`, used to print the struct of its
+field symbols read from the model after the write. The model of a pointer
+field that symex built from integer bytes (`(void *)CONCAT(...)`) is not those
+bytes, so the field printed as `0` or `nil`. The printing step now evaluates
+the stored value, renamed before any field is written, as master's
+whole-struct step does. A nondet write still reads its fields after the
+write, because a field narrower than a pointer gets a fresh L2 name that the
+nondet symbol does not constrain.
+
+Measured on 2026-11-16 on master `b7db9deed`, RelWithDebInfo, LLVM 18,
+Z3 4.13.3 and ESBMC's Bitwuzla 0.9.0 backend, 30 s per run, `CORE` tests,
+default solver Bitwuzla unless the test pins one:
+
+| Comparison | Tests | With a split object | Verdict changes | Output changes |
+|---|---|---|---|---|
+| C, flag on, before vs after this change | 3332 | 550 | 0 | the five pointer tests below, plus noise (AST addresses, timings, proof-cache reuse, `--k-induction-parallel` order) |
+| C++, flag on, before vs after | 1357 | 717 | 0 | `cpp_sum_class` (`--k-induction-parallel` order) |
+| Python, every 10th test, flag on, before vs after | 925 | 71 | 0 | 0 |
+| `k-induction`, flag on, before vs after | 235 | 79 | 0 | 0 |
+| C tests above that split and expect `VERIFICATION FAILED`, GraphML and YAML violation witnesses, before vs after | 225 | 225 | - | 0 witness files |
+| C, flag off vs on, after | 3332 | 550 | 0 | 19 tests, all in §8.6's other rows or VCC-count lines; none prints another value |
+
+`github_8702_strtod` runs in 28-29 s with and without the change and the
+flag, so it sometimes passes the 30 s limit; its verdict does not change.
+
+Under both solvers, these now print what master prints:
+
+| Test | Prints, with and without the flag |
+|---|---|
+| `github_5393_array_member_fail` | `back = { .a=(void *)4660, .pair=(signed long int [2])0x70000000000000006 }` |
+| `github_5393_array_member_dyn_offset_fail` | `back = { .a=5, ... }` |
+| `github_7855-tie-hides-deref`, `github_7965_fail`, `pointer_repr_branch_flow_fail` | `copy = { .next=( struct node *)8 }` |
+
+The array half of §8.6's third row is gone too: `.pair` prints as master
+prints it. `field_sensitive_ssa_print_array_fail` pinned the old text, so it is
+replaced by `field_sensitive_ssa_print_pointer_fail`, which adds a pointer
+member and pins master's text for the whole struct. It fails when the
+printing step reads the fields after the write instead (it prints
+`.a={ .pointer_object=nil, ... }` under Bitwuzla). In
+`struct_array_ite_new_index_fail` the flag still prints other values for
+uninitialised elements, which master does not pin down either.
+
+The Phase 1 corpus rows still meet the 2x bar with the flag: `local_writes`
+2048 vs 8 fields is 0.018 s vs 0.029 s (Z3) and 0.019 s vs 0.023 s
+(Bitwuzla); `repro7521` is 1.32 s vs 0.81 s (1.6x, Z3) and 1.23 s vs 0.76 s
+(1.6x, Bitwuzla). All 24 rows give their expected verdict.
+
+Each arm of the new condition was hit by a temporarily instrumented build on
+a small C harness (a nondet whole write, a whole copy, a struct return), with
+the same counts under Z3 and Bitwuzla: 3 writes print the stored value, 1
+nondet and 2 hidden writes read the fields. A write under an assignment guard
+that is not true does not reach a split object: every such caller writes
+through a dereference, which makes the object address-taken. It keeps the old
+behaviour.
+
+With this, every §8.6 row left is accepted under Invariant 4, and the Phase 1
+trace gate is met. The third row now holds only
+`struct_array_ite_new_index_fail`, whose differing values are ones master
+leaves free. Not measured in this follow-up:
+`k-induction-parallel`, the rest of the Python suite, and an SV-COMP run.

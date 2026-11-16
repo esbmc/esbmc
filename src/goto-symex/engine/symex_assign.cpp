@@ -824,6 +824,17 @@ void goto_symext::symex_assign_split(
   const size_t last = fields.size() - 1;
   const bool nondet = guard.is_true() && is_symbol2t(rhs) &&
                       has_prefix(to_symbol2t(rhs).thename, "nondet$symex::");
+  // The step that prints evaluates the stored value, as the unsplit object's
+  // step does: a pointer field built from integer bytes reads back from the
+  // model as another value. A nondet write leaves some fields unconnected to
+  // its symbol, so it reads every field after its write instead.
+  expr2tc printed = lhs;
+  if (!hidden && guard.is_true() && !nondet)
+  {
+    printed = rhs;
+    cur_state->rename(printed);
+    do_simplify(printed);
+  }
   for (size_t k = 0; k <= last; k++)
   {
     // A fresh L2 name is as free as a nondet value; only a field the value
@@ -840,8 +851,7 @@ void goto_symext::symex_assign_split(
     expr2tc rhs_k = is_constant_struct2t(rhs)
                       ? to_constant_struct2t(rhs).datatype_members[k]
                       : member2tc(st.members[k], rhs, st.member_names[k]);
-    // The step that prints reads every field after its write.
-    expr2tc full_rhs = k == last && !hidden ? lhs : expr2tc();
+    expr2tc full_rhs = k == last && !hidden ? printed : expr2tc();
     symex_assign_symbol(
       fields[k], full_lhs, rhs_k, full_rhs, guard, hidden || k != last, true);
   }

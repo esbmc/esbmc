@@ -3,6 +3,7 @@
 
 struct S
 {
+  void *a;
   int x;
   long pair[2];
 };
@@ -10,6 +11,7 @@ struct S
 int main(void)
 {
   struct S t;
+  t.a = (void *)0x1234;
   t.x = 1;
   t.pair[0] = 6;
   t.pair[1] = 7;

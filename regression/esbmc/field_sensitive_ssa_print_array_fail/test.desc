@@ -1,5 +1,0 @@
-CORE
-main.c
---field-sensitive-ssa --64
-^  back = \{ \.x=1, \.pair=\{ 6, 7 \} \}$
-^VERIFICATION FAILED$
