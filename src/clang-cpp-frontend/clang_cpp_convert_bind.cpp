@@ -177,6 +177,47 @@ bool clang_cpp_convertert::get_vft_binding_expr_function(
   return false;
 }
 
+void clang_cpp_convertert::set_forwarding_body(
+  symbolt &thunk_symb,
+  const exprt &function,
+  const exprt &this_arg,
+  const locationt &location)
+{
+  const code_typet &code_type = to_code_type(thunk_symb.get_type());
+  const code_typet::argumentst &args = code_type.arguments();
+
+  side_effect_expr_function_callt call;
+  call.function() = function;
+  call.type() = code_type.return_type();
+  call.location() = location;
+  call.arguments().push_back(this_arg);
+  for (std::size_t i = 1; i < args.size(); ++i)
+    call.arguments().push_back(
+      symbol_expr(*ns.lookup(args[i].cmt_identifier())));
+
+  code_blockt body;
+  body.location() = location;
+  if (call.type().is_empty())
+  {
+    code_expressiont expr(call);
+    expr.location() = location;
+    body.copy_to_operands(expr);
+  }
+  else
+  {
+    code_returnt ret;
+    ret.return_value() = call;
+    ret.location() = location;
+    body.copy_to_operands(ret);
+  }
+
+  const namespacet *old_ns = std::exchange(migrate_namespace_lookup, &ns);
+  expr2tc body2;
+  migrate_expr(body, body2);
+  migrate_namespace_lookup = old_ns;
+  thunk_symb.set_value(body2);
+}
+
 bool clang_cpp_convertert::get_virtual_member_function_pointer(
   const clang::CXXMethodDecl &md,
   exprt &new_expr)
@@ -213,39 +254,81 @@ bool clang_cpp_convertert::get_virtual_member_function_pointer(
     if (get_vft_binding_expr_function(md, function, vtable_ptr_deref))
       return true;
 
-    side_effect_expr_function_callt call;
-    call.function() = function;
-    call.type() = code_type.return_type();
-    call.location() = method->location;
-    for (const auto &arg : args)
-      call.arguments().push_back(symbol_expr(*ns.lookup(arg.cmt_identifier())));
-
-    code_blockt body;
-    body.location() = method->location;
-    if (call.type().is_empty())
-    {
-      code_expressiont expr(call);
-      expr.location() = method->location;
-      body.copy_to_operands(expr);
-    }
-    else
-    {
-      code_returnt ret;
-      ret.return_value() = call;
-      ret.location() = method->location;
-      body.copy_to_operands(ret);
-    }
-
-    const namespacet *old_ns = std::exchange(migrate_namespace_lookup, &ns);
-    expr2tc body2;
-    migrate_expr(body, body2);
-    migrate_namespace_lookup = old_ns;
-    thunk_symb.set_value(body2);
+    set_forwarding_body(thunk_symb, function, this_expr, method->location);
 
     thunk = context.move_symbol_to_context(thunk_symb);
   }
 
   new_expr = symbol_expr(*thunk);
+  return false;
+}
+
+bool clang_cpp_convertert::get_base_to_derived_member_pointer(
+  const clang::CastExpr &cast,
+  exprt &expr,
+  const typet &type)
+{
+  /*
+   * [conv.mem]/2: `&B::f` converted to a pointer to member of a class D
+   * derived from B still designates B::f, called on the B subobject. A
+   * member-function pointer is a plain function pointer taking `this` first,
+   * so point it at a function that takes D's `this` and forwards the B
+   * subobject: base_member::D::f(this, args) returns f((B *)this, args).
+   */
+  const auto *mpt = cast.getType()->getAs<clang::MemberPointerType>();
+  const clang::CXXRecordDecl *derived =
+    mpt ? mpt->getMostRecentCXXRecordDecl() : nullptr;
+  if (
+    !derived || !mpt->isMemberFunctionPointer() || !expr.is_address_of() ||
+    expr.op0().id() != "symbol" || cast.path_size() == 0)
+    return clang_c_convertert::get_base_to_derived_member_pointer(
+      cast, expr, type);
+
+  const symbolt *method = ns.lookup(expr.op0().identifier());
+  if (!method || !method->get_type().is_code())
+    return clang_c_convertert::get_base_to_derived_member_pointer(
+      cast, expr, type);
+
+  std::string derived_name, derived_id;
+  get_decl_name(*derived, derived_name, derived_id);
+
+  const std::string thunk_id =
+    base_member_prefix + derived_id + "::" + method->id.as_string();
+  const symbolt *thunk = context.find_symbol(thunk_id);
+  if (!thunk)
+  {
+    typet thunk_type = method->get_type();
+    code_typet &code_type = to_code_type(thunk_type);
+    // A forwarding body cannot pass on the arguments of an ellipsis.
+    if (code_type.has_ellipsis())
+      return clang_c_convertert::get_base_to_derived_member_pointer(
+        cast, expr, type);
+    const typet base_this = code_type.arguments().front().type();
+    code_type.arguments().front().type() =
+      pointer_typet(symbol_typet(derived_id));
+
+    symbolt thunk_symb;
+    thunk_symb.id = thunk_id;
+    thunk_symb.name = base_member_prefix + method->name.as_string();
+    thunk_symb.mode = mode;
+    thunk_symb.location = method->location;
+    thunk_symb.module = method->module;
+    thunk_symb.set_type(migrate_type(thunk_type));
+    add_thunk_method_arguments(thunk_symb);
+
+    exprt this_expr = symbol_expr(*ns.lookup(
+      to_code_type(thunk_symb.get_type()).arguments()[0].cmt_identifier()));
+    convert_derived_to_base(
+      this_expr, base_this, cast.path_begin(), cast.path_end(), true, true);
+
+    set_forwarding_body(
+      thunk_symb, symbol_expr(*method), this_expr, method->location);
+
+    thunk = context.move_symbol_to_context(thunk_symb);
+  }
+
+  expr = exprt("address_of", type);
+  expr.copy_to_operands(symbol_expr(*thunk));
   return false;
 }
 
