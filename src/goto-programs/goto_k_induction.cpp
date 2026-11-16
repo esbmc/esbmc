@@ -142,6 +142,19 @@ struct head_conditionst
   std::unordered_set<const instructiont *> exits;
   /// Conditions an exit test leaves holding at every head but the first.
   std::vector<expr2tc> invariants;
+  /// Each instruction's place from the head to the back edge. An earlier
+  /// loop's transformation may have put a havoc block, still numbered 0, where
+  /// a jump lands, so location numbers cannot tell a back jump.
+  std::unordered_map<const instructiont *, size_t> positions;
+  /// What reaches the back edge without passing the head again. Code past the
+  /// back edge may jump back into the body.
+  std::unordered_set<const instructiont *> rejoins;
+
+  bool jumps_back(const instructiont &jump) const
+  {
+    const auto target = positions.find(&*jump.targets.front());
+    return target != positions.end() && target->second <= positions.at(&jump);
+  }
 };
 
 /// Rewrites each forward jump's guard in [@p loop_head, @p loop_exit) over the
@@ -161,8 +174,14 @@ head_conditionst head_guards(
   const std::unordered_set<irep_idt, irep_id_hash> &address_taken,
   bool rewrite)
 {
-  // What reaches the back edge without passing the head again. Code past the
-  // back edge may jump back into the body.
+  head_conditionst result;
+  for (auto it = loop_head;; ++it)
+  {
+    result.positions.emplace(&*it, result.positions.size());
+    if (it == loop_exit)
+      break;
+  }
+
   std::unordered_map<const instructiont *, std::vector<const instructiont *>>
     predecessors;
   for (auto it = body.instructions.begin(); it != body.instructions.end(); ++it)
@@ -173,7 +192,7 @@ head_conditionst head_guards(
       if (successor != body.instructions.end())
         predecessors[&*successor].push_back(&*it);
   }
-  std::unordered_set<const instructiont *> rejoins;
+  std::unordered_set<const instructiont *> &rejoins = result.rejoins;
   std::vector<const instructiont *> work{&*loop_exit};
   while (!work.empty())
   {
@@ -196,11 +215,10 @@ head_conditionst head_guards(
   // An inner loop repeats the writes between its head and its back edge.
   bool straight = true;
   for (auto it = loop_head; it != loop_exit; ++it)
-    if (it->is_backwards_goto())
+    if (it->is_goto() && result.jumps_back(*it))
       straight = false;
 
   head_valuest values{{}, false, frame_private};
-  head_conditionst result;
   std::vector<goto_programt::targett> exits;
   std::unordered_set<irep_idt, irep_id_hash> declared;
   bool wrote = false;
@@ -209,7 +227,7 @@ head_conditionst head_guards(
     if (it->is_goto())
     {
       const bool leaves = !rejoins.count(&*it->targets.front());
-      if (!it->is_backwards_goto())
+      if (!result.jumps_back(*it))
       {
         expr2tc g = rewrite || !wrote ? values.at_head(it->guard) : expr2tc();
         if (straight && leaves && !is_nil_expr(g) && g != it->guard)
@@ -292,13 +310,11 @@ bool get_entry_cond_rec(
   // Let's walk the loop and collect the constraints to enter the
   // loop. This might be messy because of side-effects
 
-  // entry and exit numbers
-  auto const &entry_number = loop_head->location_number;
-  auto const &exit_number = loop_exit->location_number;
-
-  // We jumped outside the loop, don't collect this constraint
-  if (entry_number > exit_number)
-    return true;
+  // We jumped outside the loop, don't collect this constraint. A jump that
+  // comes back into the body adds none either, and program order cannot walk
+  // it.
+  if (!conditions.positions.count(&*loop_head))
+    return !conditions.rejoins.count(&*loop_head);
 
   goto_programt::targett tmp_head = loop_head;
   for (; tmp_head != loop_exit; tmp_head++)
@@ -327,7 +343,7 @@ bool get_entry_cond_rec(
         return true;
     */
 
-    if (tmp_head->is_goto() && !tmp_head->is_backwards_goto())
+    if (tmp_head->is_goto() && !conditions.jumps_back(*tmp_head))
     {
       // The guard is assumed at the head, so it must read the head's values:
       // `x++; if (x != 5) break;` assumes x + 1 == 5 there, not x == 5.
