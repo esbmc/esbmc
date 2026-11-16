@@ -1,12 +1,12 @@
 # Scope: field-sensitive SSA in goto-symex (#7521)
 
-> **Status at 2026-11-16: Phase 0 merged (#10773); Phase 1 in draft review,
+> **Status at 2026-11-16: Phase 0 merged (#10773); Phase 1 in review (#10778),
 > gate partly met (see §8.5).** The corpus is in `regression/field-sensitivity/`
 > with baselines, and the census has been run and reverted. Phase 1 adds
 > `--field-sensitive-ssa` (default off): symex gives each field of an
 > eligible local, parameter or return slot its own SSA name. It meets the 2x
 > bar on the Phase 1 corpus rows and changes no verdict on the C, C++ and
-> k-induction suites or two Python samples, and no correctness witness, but it
+> k-induction suites or three Python samples (3132 tests), and no correctness witness, but it
 > still changes some trace text and violation witnesses (§8.5).
 > §8.6 traces the remaining changes to §3's own design and needs a decision on
 > the Phase 1 trace gate before more code goes in. Two
@@ -422,8 +422,34 @@ difference (`github_5444_dictcomp_param_fail`, `ESBMC_compvar_0_v` against
 `github_2153_5` took 32.5 s without the flag and 32.1 s with it, nothing
 split; it times out at 30 s either way.
 
-Still not measured in Phase 1: the other 8095 Python tests, these suites
-under Bitwuzla, and an SV-COMP run.
+Bitwuzla, measured on 2026-11-16 with the branch merged into master
+`6c46544cd`, ESBMC's Bitwuzla 0.9.0 backend as the default solver (tests that
+pin `--z3` keep it), `CORE` tests, flag forced on against off, 30 s per run.
+Output is compared after dropping timings, temp paths, the "splits" notice and
+the assignment counts in the VCC summary lines.
+
+| Suite | Tests run | With a split object | Verdict changes | Output changes |
+|---|---|---|---|---|
+| `k-induction`, `k-induction-parallel` | 277 | 79 | 0 | 0 outside `-parallel`; 41 in `-parallel`, none split, and two runs without the flag differ in 42 of 42 |
+| Python, the next 1700 tests after the first 726, skipping every 8th | 1700 | 236 | 0 | 2 split, 5 not split |
+
+The 5 unsplit Python changes are names built from heap addresses
+(`ESBMC_unpack_temp_<address>`) and temp directories, which also differ
+between two runs without the flag. The 2 split ones,
+`github_10323_list_reversed_fail` and `github_10493_ir_fail`, print the same
+steps and violate the same property, but the solver gives another value to
+a nondet list element (`*(unsigned long int *)copied = 0` against `-1`), as
+`github_1087` does in the C witness run. 4 Python tests time out both ways.
+
+Still not measured in Phase 1: the other 6395 Python tests, the C, C++ and
+witness suites again under Bitwuzla on this merge, and an SV-COMP run.
+
+The `static llvm-22 DebugOpt` job on `2fb2595b6` failed on
+`regression/consensus/integer_squareroot` (loop invariant base case) and
+`regression/python/dict23` (120 s timeout). That job tested the PR merged into
+master `f1c5ee1b4`. Merged into master `6c46544cd`, both pass with and without
+the flag, under Z3 and Bitwuzla; `dict23` takes 4.7 s. With the flag off the
+branch splits nothing, and the branch was merged with master to re-run CI.
 
 Patch coverage, measured on 2026-11-16 with an `ENABLE_COVERAGE` build at
 `e66e161ba`: 287 of the 320 instrumented lines the branch adds under `src/`
