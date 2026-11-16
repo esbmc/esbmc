@@ -8,8 +8,8 @@
 > bar on the Phase 1 corpus rows and changes no verdict on the C, C++ (Z3 and Bitwuzla) and
 > k-induction suites or three Python samples (3132 tests), and no correctness witness, but it
 > still changes some trace text and violation witnesses (§8.5).
-> §8.6 traces the remaining changes to §3's own design and needs a decision on
-> the Phase 1 trace gate before more code goes in. Two
+> §8.6 traces the remaining changes to §3's own design; the Phase 1 trace gate
+> is now Invariant 4 (same values), with those changes accepted. Two
 > mitigations are merged: #10037 stopped phi merges of wide structs from
 > scaling with the square of the width, and #10527 added the opt-in GOTO pass
 > `--scalarize-structs`. Line numbers are from master at `d3104e99c2`.
@@ -131,7 +131,9 @@ size and solver time under Bitwuzla and Z3; census numbers recorded in §8.
   does.
 
 **Gate:** the flag forced on for the C, C++ and Python suites changes no
-verdict and no trace text; the local-struct rows of the corpus meet the 2x bar;
+verdict and keeps Invariant 4; the trace text may change only in the four
+ways §8.6 accepts, each pinned by a test; the local-struct rows of the corpus
+meet the 2x bar;
 every new branch proved live (Mode C-Live), dual solver.
 
 ### Phase 2: structs reached through pointers
@@ -184,7 +186,10 @@ witnesses validate as before (`witnesses_validate` suite).
    is either always split or never split.
 3. No byte-level access reaches a split object. A path that would need one is
    an eligibility bug, and debug builds assert on it.
-4. Traces and witnesses print the same values with and without the flag.
+4. Traces and witnesses print the same values with and without the flag:
+   every step both runs print shows the same value for every lvalue the run
+   without the flag pins down. Steps may be added or dropped, and a struct may
+   print field by field (§8.6).
 
 ## 6. Risks
 
@@ -483,7 +488,7 @@ bring it to 320 of 320. Each new test fails under a mutation of the code it
 pins; with the thread exclusion removed, `_threads` reports a false
 VERIFICATION FAILED.
 
-### 8.6 Phase 1 trace gate: what blocks it
+### 8.6 Phase 1 trace gate
 
 Re-measured on 2026-11-16 at `a60262602` (master `f1c5ee1b4`), Bitwuzla,
 each `CORE` test of `regression/esbmc` run with and without the flag, 30 s
@@ -525,5 +530,8 @@ split removes. The gate needs one of:
    unchanged, and the four rows above are the accepted differences, each
    pinned by a test.
 
-Phase 1 cannot meet its gate until this is decided.
+Decided on 2026-11-16: option 2. Byte-identical traces are no longer a gate
+for any phase; Invariant 4 is. The four rows above are accepted. Each still
+needs a test pinning one example of it, so that a further change to how a
+split object prints fails a test instead of passing unnoticed.
 
