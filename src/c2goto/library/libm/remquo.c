@@ -89,11 +89,11 @@
 #ifdef __ESBMC_FIXEDBV
 fixedbv_remquo_def(float, remquof, int, unsigned);
 fixedbv_remquo_def(double, remquo, long long, unsigned long long);
-#if __SIZEOF_POINTER__ == 8 /* 32-bit fixedbv long double is not 64 bits */
+#  if __SIZEOF_POINTER__ == 8 /* 32-bit fixedbv long double is not 64 bits */
 fixedbv_remquo_def(long double, remquol, long long, unsigned long long);
-#else
+#  else
 remquo_def(long double, remquol, isnan, isinf, llrintl, remainderl);
-#endif
+#  endif
 #else
 remquo_def(float, remquof, isnan, isinf, llrintf, remainderf);
 remquo_def(double, remquo, isnan, isinf, llrint, remainder);

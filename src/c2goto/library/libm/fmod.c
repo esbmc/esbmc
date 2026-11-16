@@ -57,11 +57,11 @@
 #ifdef __ESBMC_FIXEDBV
 fixedbv_fmod_def(float, fmodf, int, unsigned);
 fixedbv_fmod_def(double, fmod, long long, unsigned long long);
-#if __SIZEOF_POINTER__ == 8 /* 32-bit fixedbv long double is not 64 bits */
+#  if __SIZEOF_POINTER__ == 8 /* 32-bit fixedbv long double is not 64 bits */
 fixedbv_fmod_def(long double, fmodl, long long, unsigned long long);
-#else
+#  else
 fmod_def(long double, fmodl, remainderl, fabsl);
-#endif
+#  endif
 #else
 fmod_def(float, fmodf, remainderf, fabsf);
 fmod_def(double, fmod, remainder, fabs);
