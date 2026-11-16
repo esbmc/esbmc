@@ -290,24 +290,20 @@ bool function_call_expr::is_class_object_operand(
 }
 
 /// A name bound an int on one path and a float on another has one static C
-/// type, so isinstance would answer from that type on every path (#8417).
-void function_call_expr::refuse_isinstance_on_path_dependent_number(
+/// type, so isinstance() and type() would answer from that type on every path
+/// (#8417).
+void function_call_expr::refuse_on_path_dependent_number(
   const nlohmann::json &obj_arg,
-  const std::vector<nlohmann::json> &types) const
+  const std::string &builtin) const
 {
-  const bool asks_number =
-    std::any_of(types.begin(), types.end(), [](const nlohmann::json &t) {
-      const std::string id = t.value("id", "");
-      return id == "int" || id == "float" || id == "bool";
-    });
-  if (!asks_number || obj_arg.value("_type", "") != "Name")
+  if (obj_arg.value("_type", "") != "Name")
     return;
   if (
     dynamic_type_detail::is_path_dependent_number(
       converter_.scope_numeric_bindings(
         obj_arg["id"].get<std::string>(), obj_arg.value("lineno", 0), true)))
     throw std::runtime_error(
-      "isinstance() on '" + obj_arg["id"].get<std::string>() +
+      builtin + "() on '" + obj_arg["id"].get<std::string>() +
       "', which holds an int or a float depending on the path, is not "
       "supported");
 }
@@ -774,7 +770,13 @@ exprt function_call_expr::handle_isinstance() const
   const auto &obj_arg = args[0];
   std::vector<nlohmann::json> types;
   collect_classinfo(args[1], types);
-  refuse_isinstance_on_path_dependent_number(obj_arg, types);
+  const bool asks_number =
+    std::any_of(types.begin(), types.end(), [](const nlohmann::json &t) {
+      const std::string id = t.value("id", "");
+      return id == "int" || id == "float" || id == "bool";
+    });
+  if (asks_number)
+    refuse_on_path_dependent_number(obj_arg, "isinstance");
   refuse_isinstance_on_guessed_return(obj_arg, types);
   refuse_type_of_symbolic_int_power(obj_arg, obj_expr);
 
@@ -1565,6 +1567,7 @@ exprt function_call_expr::handle_type_call() const
 
   exprt arg_expr = converter_.get_expr(args[0]);
   refuse_type_of_symbolic_int_power(args[0], arg_expr);
+  refuse_on_path_dependent_number(args[0], "type");
   if (python_converter::is_class_object(arg_expr))
     return converter_.make_class_object("type");
   const std::string instance_class = exact_instance_class(args[0], arg_expr);

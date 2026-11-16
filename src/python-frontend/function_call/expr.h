@@ -347,9 +347,9 @@ private:
   void refuse_isinstance_on_guessed_return(
     const nlohmann::json &obj_arg,
     const std::vector<nlohmann::json> &types) const;
-  void refuse_isinstance_on_path_dependent_number(
+  void refuse_on_path_dependent_number(
     const nlohmann::json &obj_arg,
-    const std::vector<nlohmann::json> &types) const;
+    const std::string &builtin) const;
   void plant_unsupported(const std::string &message) const;
   void refuse_abs_unless(const exprt &representable) const;
   exprt refuse_unrepresentable_abs(exprt operand) const;
