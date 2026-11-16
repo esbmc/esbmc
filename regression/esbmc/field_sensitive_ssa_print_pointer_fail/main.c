@@ -18,14 +18,11 @@ struct pair
 
 struct node *alias;
 struct container *container;
-
 int nondet_int(void);
 
 int main(void)
 {
-  void *storage = malloc(sizeof(struct node));
-  if (!storage)
-    return 0;
+  void *storage = malloc(8);
   alias = storage;
   alias->next = &container->node;
   struct node copy = *(struct node *)storage;
