@@ -1,0 +1,7 @@
+CORE
+main.c
+--field-sensitive-ssa --64 --no-slice
+^  copy = \{ \.next=\( struct node \*\)\(\(unsigned char \*\)0 \+ 8\) \}$
+^  t = \{ \.a=5, \.b=2 \}$
+^  t = \{ \.a=2, \.b=5 \}$
+^VERIFICATION FAILED$
