@@ -6,6 +6,7 @@
 #  define _INC_TIME_INL
 #  define time crt_time
 #endif
+#include <limits.h>
 #include <time.h>
 #undef time
 #undef difftime
@@ -183,9 +184,48 @@ __ESBMC_HIDE:;
   return __VERIFIER_nondet_time_t();
 }
 
+static long long __esbmc_floor_div(long long a, long long b)
+{
+__ESBMC_HIDE:;
+  long long q = a / b;
+  if (a % b < 0)
+    --q;
+  return q;
+}
+
+/* Days between 1970-01-01 and y-m-d (m in [1,12]) in the proleptic Gregorian
+   calendar; days_from_civil/civil_from_days are H. Hinnant's "chrono-Compatible
+   Low-Level Date Algorithms". */
+static long long __esbmc_days_from_civil(long long y, long long m, long long d)
+{
+__ESBMC_HIDE:;
+  y -= m <= 2;
+  long long era = __esbmc_floor_div(y, 400);
+  long long yoe = y - era * 400;
+  long long doy = (153 * (m > 2 ? m - 3 : m + 9) + 2) / 5 + d - 1;
+  long long doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+  return era * 146097 + doe - 719468;
+}
+
+static void
+__esbmc_civil_from_days(long long z, long long *y, long long *m, long long *d)
+{
+__ESBMC_HIDE:;
+  z += 719468;
+  long long era = __esbmc_floor_div(z, 146097);
+  long long doe = z - era * 146097;
+  long long yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
+  long long doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+  long long mp = (5 * doy + 2) / 153;
+  *d = doy - (153 * mp + 2) / 5 + 1;
+  *m = mp < 10 ? mp + 3 : mp - 9;
+  *y = yoe + era * 400 + (*m <= 2);
+}
+
 /* ── timegm (GNU/BSD) ── */
-/* mktime's UTC counterpart: same in-place normalisation, but the fields are
-   read as UTC rather than local time, so tm_isdst plays no part. */
+/* mktime's UTC counterpart, with no time zone or DST to account for, so every
+   field is normalised exactly: an out-of-range tm_sec carries into tm_min and
+   on up to tm_year, and tm_wday/tm_yday are recomputed from the result. */
 time_t timegm(struct tm *timeptr)
 {
 __ESBMC_HIDE:;
@@ -193,20 +233,41 @@ __ESBMC_HIDE:;
   if (timeptr == NULL)
     return (time_t)-1;
 
-  __esbmc_normalize_tm_mon(timeptr);
   timeptr->tm_isdst = 0;
-  /* glibc ignores tm_wday/tm_yday on input and recomputes them from the
-     normalised date. Deriving them needs a calendar this model does not have,
-     so havoc them: a caller must not read back what it wrote. */
-  timeptr->tm_wday = nondet_int();
-  __ESBMC_assume(timeptr->tm_wday >= 0 && timeptr->tm_wday <= 6);
-  timeptr->tm_yday = nondet_int();
-  __ESBMC_assume(timeptr->tm_yday >= 0 && timeptr->tm_yday <= 365);
-
+  /* gmtime's buffer already holds a normalised date. */
   if (timeptr == &__esbmc_gmtime_buf)
     return __esbmc_gmtime_last_input;
 
-  return __VERIFIER_nondet_time_t();
+  long long mon_carry = __esbmc_floor_div(timeptr->tm_mon, 12);
+  long long secs =
+    timeptr->tm_sec + 60LL * timeptr->tm_min + 3600LL * timeptr->tm_hour;
+  long long day_carry = __esbmc_floor_div(secs, 86400);
+  long long days = __esbmc_days_from_civil(
+                     1900LL + timeptr->tm_year + mon_carry,
+                     timeptr->tm_mon - 12 * mon_carry + 1,
+                     1) +
+                   (timeptr->tm_mday - 1LL) + day_carry;
+  secs -= 86400 * day_carry;
+
+  long long y, m, d;
+  __esbmc_civil_from_days(days, &y, &m, &d);
+  long long t = days * 86400 + secs;
+  /* glibc fails with EOVERFLOW and leaves the date alone when the normalised
+     year does not fit tm_year or the result does not fit time_t. */
+  if (y - 1900 > INT_MAX || y - 1900 < INT_MIN || (time_t)t != t)
+    return (time_t)-1;
+
+  timeptr->tm_sec = secs % 60;
+  timeptr->tm_min = secs / 60 % 60;
+  timeptr->tm_hour = secs / 3600;
+  timeptr->tm_mday = d;
+  timeptr->tm_mon = m - 1;
+  timeptr->tm_year = y - 1900;
+  /* 1970-01-01 was a Thursday. */
+  timeptr->tm_wday = days - 7 * __esbmc_floor_div(days + 4, 7) + 4;
+  timeptr->tm_yday = days - __esbmc_days_from_civil(y, 1, 1);
+
+  return t;
 }
 
 /* C17 7.27.3.1: the result has the form "Sun Sep 16 01:03:52 1973\n\0";
