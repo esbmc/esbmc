@@ -5,7 +5,7 @@
 > with baselines, and the census has been run and reverted. Phase 1 adds
 > `--field-sensitive-ssa` (default off): symex gives each field of an
 > eligible local, parameter or return slot its own SSA name. It meets the 2x
-> bar on the Phase 1 corpus rows and changes no verdict on the C, C++ and
+> bar on the Phase 1 corpus rows and changes no verdict on the C, C++ (Z3 and Bitwuzla) and
 > k-induction suites or three Python samples (3132 tests), and no correctness witness, but it
 > still changes some trace text and violation witnesses (§8.5).
 > §8.6 traces the remaining changes to §3's own design and needs a decision on
@@ -441,7 +441,29 @@ steps and violate the same property, but the solver gives another value to
 a nondet list element (`*(unsigned long int *)copied = 0` against `-1`), as
 `github_1087` does in the C witness run. 4 Python tests time out both ways.
 
-Still not measured in Phase 1: the other 6395 Python tests, the C, C++ and
+C++ under Bitwuzla, measured on 2026-11-16 with the branch merged into master
+`de72a905e` (LLVM 18), each `CORE` test of `regression/esbmc-cpp/cpp` run
+with and without the flag, 30 s per run, Bitwuzla unless the test pins a
+solver: 1355 tests, 715 split, 26 ignore the flag (threads), 0 verdict
+changes, 9 fail to parse or error out both ways. Apart from the flag's own
+status line, 41 differ in output and none in a counterexample trace:
+
+- 37 print another assignment count in `Generated N VCC(s)`.
+- `github_7797_flat_set`: two loop guards that master folds stay symbolic, so
+  two loops unwind to the `--unwind 6` bound; the unwinding assertions hold
+  and symex plus solving takes 0.91 s against 1.03 s. Same cause as the second
+  row of §8.6.
+- `cpp_sum_class` (`--k-induction-parallel` order),
+  `tuple_structured_binding` (`--incremental-bmc` folds a claim at another
+  step) and `intrinsic_unroll_while_decl_true` (temporary directory in
+  `--verbosity 9` output).
+
+Flag off, `ctest -L esbmc-cpp/cpp` on the same build: 1458 of 1466 pass; the
+8 failures (`ch8_5`, five `github_7433*`, two `github_8698_*_uncaught_fail`)
+are the 8 reported above, and `github_7433_throw_site` prints `my_error`
+where the test expects `struct my_error` under LLVM 18.
+
+Still not measured in Phase 1: the other 6395 Python tests, the C and
 witness suites again under Bitwuzla on this merge, and an SV-COMP run.
 
 The `static llvm-22 DebugOpt` job on `2fb2595b6` failed on
