@@ -1,0 +1,6 @@
+CORE
+main.c
+--file-output out.txt
+\A(?![\s\S]*using the result of an assignment)
+CHECK_FILE out.txt contains using the result of an assignment as a condition
+CHECK_FILE out.txt contains ^VERIFICATION FAILED$

@@ -14,6 +14,8 @@ extern "C"
 #  include <sys/time.h>
 #  include <sys/types.h>
 }
+#else
+#  include <io.h>
 #endif
 
 #include <esbmc/bmc.h>
@@ -393,6 +395,19 @@ int esbmc_parseoptionst::doit()
     /* TODO: handle failure */
     out = f;
     messaget::state.out = f;
+    if (f)
+    {
+      // clang writes its diagnostics and -v output to file descriptor 2
+      // directly, bypassing messaget (#664). Line buffering keeps the two
+      // writers in order.
+      messaget::state.set_flushln();
+      fflush(stderr);
+#ifdef _WIN32
+      _dup2(_fileno(f), 2);
+#else
+      dup2(fileno(f), STDERR_FILENO);
+#endif
+    }
   }
 
   // Print a banner with version info to stdout
