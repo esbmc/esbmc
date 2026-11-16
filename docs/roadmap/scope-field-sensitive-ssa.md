@@ -620,3 +620,27 @@ its SUCCESSFUL counterpart and cannot fail on a print-only change. The new
 branch and the three values the printing step can take (none, the fields, the
 right-hand side) were each hit by small C programs, with the same counts under
 Z3 and Bitwuzla, using temporary instrumentation.
+
+Each `CORE` test of `regression/esbmc-cpp/cpp` with and without the flag,
+Bitwuzla unless the test pins a solver: 1355 tests, 0 verdict changes, and the
+only output changes are the two §8.5 lists (`cpp_sum_class` in
+`--k-induction-parallel` order, `github_7797_flat_set` unwinding to the bound).
+Every 30th test of `regression/python`: 300 tests, 0 verdict changes, one
+output change: `github_9185_raise_local_fail` gains a step
+`err = { .message = 0 }`; with `--no-slice` master prints
+`.message={ .pointer_object=nil, .pointer_offset=nil }` there, a value the
+model leaves free, and the same `.v`.
+
+Symex seconds on `repro7521` with the flag, three runs each, medians, against
+the same build with the change reverted:
+
+| Solver | 8 fields | 2048 fields | 2048 / 8 | Reverted, 2048 / 8 |
+|---|---|---|---|---|
+| Z3 | 0.764 | 1.282 | 1.68x | 1.64x |
+| Bitwuzla | 0.753 | 1.267 | 1.68x | 1.67x |
+
+`local_writes` stays at 0.016 to 0.035 s at every width (about 1.0x) under
+both solvers.
+
+Not measured here: the rest of the Python suite with the flag, witness files,
+and an SV-COMP run.
