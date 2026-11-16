@@ -508,6 +508,8 @@ private:
   assume_near(const exprt &residual, const exprt &bound, const exprt &excused);
   std::vector<std::pair<exprt, exprt>>
   runtime_eigenvalues(const std::vector<std::vector<exprt>> &m);
+  std::vector<std::pair<exprt, exprt>>
+  runtime_eigenvalues_3x3(const std::vector<std::vector<exprt>> &m);
   exprt runtime_eigen_pairs(const std::vector<std::vector<exprt>> &m);
   exprt runtime_singular_values(const std::vector<std::vector<exprt>> &m);
   exprt dense_svd_factors(const std::vector<std::vector<double>> &m);

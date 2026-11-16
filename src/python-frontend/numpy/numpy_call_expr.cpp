@@ -7628,7 +7628,114 @@ numpy_call_expr::runtime_eigenvalues(const std::vector<std::vector<exprt>> &m)
   return {{re1, im1}, {re2, im2}};
 }
 
-// eig of a 2x2 matrix known only at run time: the eigenvalues as
+// The eigenvalues of a 3x3 matrix known only at run time, as (real, imag)
+// pairs: a real eigenvalue t (a real 3x3 matrix always has one) and the two
+// roots of the quadratic that deflating it leaves, a real pair or a
+// conjugate pair with the positive imaginary part first, before or after t.
+// LAPACK's are those of a matrix within lapack_tolerance S of m (S the sum
+// of the entries' magnitudes, at least its 2-norm and every eigenvalue's
+// magnitude), so det(m - t I), the sum of all three and the sum of their
+// pairwise products are within 144, 6 and 24 times lapack_tolerance S^3, S
+// and S^2 of zero, the trace and the sum of the principal 2x2 minors (the
+// first-order perturbation, doubled for the rest and for rounding). These
+// fix the spectrum, and leave the solver one root to find at a time.
+std::vector<std::pair<exprt, exprt>> numpy_call_expr::runtime_eigenvalues_3x3(
+  const std::vector<std::vector<exprt>> &m)
+{
+  raise_linalg(
+    "LinAlgError",
+    "Array must not contain infs or NaNs",
+    not_exprt(entries_finite(m)));
+  const auto mul = [](const exprt &x, const exprt &y) {
+    return ieee_op("ieee_mul", x, y);
+  };
+  const auto add = [](const exprt &x, const exprt &y) {
+    return ieee_op("ieee_add", x, y);
+  };
+  const auto sub = [](const exprt &x, const exprt &y) {
+    return ieee_op("ieee_sub", x, y);
+  };
+  const exprt tolerance = from_double(lapack_tolerance, double_type());
+  const exprt scale = entry_scale(m);
+  const exprt trace = add(add(m[0][0], m[1][1]), m[2][2]);
+  exprt minors = nil_exprt();
+  for (std::size_t i = 0; i < 3; ++i)
+    for (std::size_t j = i + 1; j < 3; ++j)
+    {
+      const exprt minor = sub(mul(m[i][i], m[j][j]), mul(m[i][j], m[j][i]));
+      minors = minors.is_nil() ? minor : add(minors, minor);
+    }
+  const exprt t = lapack_value(0.0, INFINITY);
+  std::vector<std::vector<exprt>> shifted = m;
+  for (std::size_t i = 0; i < 3; ++i)
+    shifted[i][i] = sub(m[i][i], t);
+  const exprt characteristic = cofactor_terms(shifted).first;
+  const exprt sum_bound =
+    within_floor(product({from_double(6.0, double_type()), tolerance, scale}));
+  const exprt pair_bound = within_floor(
+    product({from_double(24.0, double_type()), tolerance, scale, scale}));
+  const exprt root_bound = within_floor(product(
+    {from_double(144.0, double_type()), tolerance, scale, scale, scale}));
+  // While 1000 S^3 is finite, so is every term below.
+  const exprt excused = any_not_finite(
+    {root_bound,
+     trace,
+     minors,
+     product({from_double(1e3, double_type()), scale, scale, scale})});
+  const exprt re1 = lapack_value(0.0, INFINITY),
+              re2 = lapack_value(0.0, INFINITY);
+  const exprt im1 = lapack_value(0.0, INFINITY),
+              im2 = lapack_value(0.0, INFINITY);
+  const exprt zero = from_double(0.0, double_type());
+  const exprt reach = ieee_op("ieee_add", scale, scale);
+  exprt::operandst within;
+  for (const exprt &part : {t, re1, re2, im1, im2})
+    within.push_back(binary_relation_exprt(abs_double(part), "<=", reach));
+  code_assumet bounded{or_exprt(excused, and_exprt(within))};
+  bounded.location() = converter_.get_location_from_decl(call_);
+  converter_.add_instruction(bounded);
+  code_assumet shape{or_exprt(
+    and_exprt(equality_exprt(im1, zero), equality_exprt(im2, zero)),
+    and_exprt(
+      and_exprt(
+        equality_exprt(re1, re2), equality_exprt(im2, negate_double(im1))),
+      binary_relation_exprt(im1, ">", zero)))};
+  shape.location() = converter_.get_location_from_decl(call_);
+  converter_.add_instruction(shape);
+  const exprt rest = add(re1, re2);
+  assume_near(characteristic, root_bound, excused);
+  assume_near(sub(add(rest, t), trace), sum_bound, excused);
+  assume_near(
+    sub(add(sub(mul(re1, re2), mul(im1, im2)), mul(t, rest)), minors),
+    pair_bound,
+    excused);
+  const exprt first = nondet_bool();
+  const auto at = [&](const exprt &when_first, const exprt &otherwise) {
+    return if_exprt(first, when_first, otherwise);
+  };
+  const exprt w = stored(complex_array(
+    {make_complex(at(t, re1), at(zero, im1)),
+     make_complex(at(re1, re2), at(im1, im2)),
+     make_complex(at(re2, t), at(im2, zero))}));
+  // The trace relation again over the eigenvalues in the order the program
+  // reads them, which a sum over the results then matches.
+  std::vector<std::pair<exprt, exprt>> positions;
+  exprt total = nil_exprt();
+  for (std::size_t k = 0; k < 3; ++k)
+  {
+    const exprt value =
+      index_exprt(w, from_integer(k, size_type()), get_complex_struct_type());
+    positions.emplace_back(
+      complex_part(value, "real"), complex_part(value, "imag"));
+    total = total.is_nil() ? value
+                           : converter_.get_complex_handler().handle_binary_op(
+                               "Add", total, value, nlohmann::json::object());
+  }
+  assume_near(sub(complex_part(total, "real"), trace), sum_bound, excused);
+  return positions;
+}
+
+// eig of a 2x2 or 3x3 matrix known only at run time: the eigenvalues as
 // runtime_eigenvalues bounds them, each with a unit eigenvector whose
 // residual stays within lapack_tolerance S of zero (LAPACK's pair is exact
 // for a matrix within rounding of m). A real eigenvalue's eigenvector is
@@ -7638,7 +7745,8 @@ exprt numpy_call_expr::runtime_eigen_pairs(
   const std::vector<std::vector<exprt>> &m)
 {
   const std::size_t n = m.size();
-  const std::vector<std::pair<exprt, exprt>> spectrum = runtime_eigenvalues(m);
+  const std::vector<std::pair<exprt, exprt>> spectrum =
+    n == 2 ? runtime_eigenvalues(m) : runtime_eigenvalues_3x3(m);
   const exprt tolerance = from_double(lapack_tolerance, double_type());
   const exprt scale = entry_scale(m);
   const exprt residual =
@@ -7743,26 +7851,6 @@ static std::vector<std::vector<double>> constant_matrix(
   return real_matrix(matrix);
 }
 
-// A 2x2 list literal whose off-diagonal entries are the same name or
-// constant, which makes its eigenvalues real at run time.
-static bool is_symmetric_2x2_literal(const nlohmann::json &arg)
-{
-  if (!is_list_literal(arg) || arg["elts"].size() != 2)
-    return false;
-  const nlohmann::json &rows = arg["elts"];
-  if (
-    !is_list_literal(rows[0]) || !is_list_literal(rows[1]) ||
-    rows[0]["elts"].size() != 2 || rows[1]["elts"].size() != 2)
-    return false;
-  const nlohmann::json &upper = rows[0]["elts"][1], &lower = rows[1]["elts"][0];
-  const std::string kind = upper.value("_type", "");
-  if (kind != lower.value("_type", ""))
-    return false;
-  if (kind == "Name")
-    return upper["id"] == lower["id"];
-  return kind == "Constant" && upper["value"] == lower["value"];
-}
-
 // The diagnostic for an operand no numpy.linalg route can read.
 [[noreturn]] static void reject_linalg_operand(const std::string &function)
 {
@@ -7795,10 +7883,6 @@ exprt numpy_call_expr::linalg_unary(
     reject_linalg_operand(function);
   if (const std::optional<linalg_fault> fault = shape_fault(*shape, square))
     return raise_linalg_fault(fault->type, fault->message);
-  if (function == "eig" && !is_symmetric_2x2_literal(arg))
-    throw std::runtime_error(
-      "TypeError: numpy.linalg.eig of a run-time matrix supports only "
-      "symmetric 2x2 matrices");
   return runtime_linalg(function, m);
 }
 
@@ -7821,8 +7905,8 @@ exprt numpy_call_expr::runtime_linalg(
   return runtime_decomposition(function, m);
 }
 
-// eig, eigvals and svd(compute_uv=False) of a 2x2 matrix known only at run
-// time; eig's matrix is symmetric (linalg_unary checks it).
+// eig and eigvals of a matrix known only at run time, up to 3x3
+// (runtime_linalg checks the order), and svd(compute_uv=False) of a 2x2 one.
 exprt numpy_call_expr::runtime_decomposition(
   const std::string &function,
   const std::vector<std::vector<exprt>> &m)
@@ -7832,16 +7916,17 @@ exprt numpy_call_expr::runtime_decomposition(
     throw std::runtime_error(
       "TypeError: numpy.linalg.svd of a run-time matrix supports only "
       "compute_uv=False on 2x2 matrices");
-  if (!two_by_two)
-    throw std::runtime_error(
-      "TypeError: numpy.linalg." + function +
-      " of a run-time matrix supports only 2x2 matrices");
-  if (function == "eig")
-    return runtime_eigen_pairs(m);
   if (function == "svd")
     return runtime_singular_values(m);
+  if (m.size() == 1)
+    throw std::runtime_error(
+      "TypeError: numpy.linalg." + function +
+      " of a run-time matrix supports only 2x2 and 3x3 matrices");
+  if (function == "eig")
+    return runtime_eigen_pairs(m);
   std::vector<exprt> values;
-  for (const auto &[re, im] : runtime_eigenvalues(m))
+  for (const auto &[re, im] :
+       two_by_two ? runtime_eigenvalues(m) : runtime_eigenvalues_3x3(m))
     values.push_back(make_complex(re, im));
   return complex_array(values);
 }
