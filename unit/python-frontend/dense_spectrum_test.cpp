@@ -5,7 +5,6 @@
 
 #include <cmath>
 #include <complex>
-#include <stdexcept>
 
 using dense_spectrum::complex_vector;
 using dense_spectrum::matrix;
@@ -145,17 +144,93 @@ TEST_CASE("singular_system_of factors rectangular matrices", "[dense_spectrum]")
   }
 }
 
+namespace
+{
+double dot(const std::vector<double> &a, const std::vector<double> &b)
+{
+  double sum = 0;
+  for (std::size_t i = 0; i < a.size(); ++i)
+    sum += a[i] * b[i];
+  return sum;
+}
+
+// The rows of `vectors` are orthonormal and orthogonal to those of `known`.
+void require_orthonormal(const matrix &vectors, const matrix &known = {})
+{
+  for (std::size_t a = 0; a < vectors.size(); ++a)
+  {
+    for (std::size_t b = 0; b < vectors.size(); ++b)
+      REQUIRE(std::fabs(dot(vectors[a], vectors[b]) - (a == b)) < 1e-12);
+    for (const auto &k : known)
+      REQUIRE(std::fabs(dot(vectors[a], k)) < 1e-12);
+  }
+}
+
+void require_reconstructs(
+  const matrix &a,
+  const dense_spectrum::singular_system &system)
+{
+  for (std::size_t i = 0; i < a.size(); ++i)
+    for (std::size_t j = 0; j < a[0].size(); ++j)
+    {
+      double sum = 0;
+      for (std::size_t k = 0; k < system.sigma.size(); ++k)
+        sum += system.u[k][i] * system.sigma[k] * system.v[k][j];
+      REQUIRE(std::fabs(sum - a[i][j]) < 1e-12);
+    }
+}
+} // namespace
+
 TEST_CASE(
-  "singular_system_of refuses factors LAPACK may rotate",
+  "singular_system_of completes rank deficient factors",
   "[dense_spectrum]")
 {
-  // Rank 1: the second right singular vector of the reduced factors lies
-  // anywhere in a plane.
-  REQUIRE_THROWS_AS(
-    dense_spectrum::singular_system_of({{1, 2, 3}, {2, 4, 6}}, false),
-    std::runtime_error);
-  // A 1x3 matrix's full Vh completes a plane.
-  REQUIRE_THROWS_AS(
-    dense_spectrum::singular_system_of({{1, 2, 3}}, true), std::runtime_error);
-  REQUIRE_NOTHROW(dense_spectrum::singular_system_of({{1, 2, 3}}, false));
+  SECTION("a zero singular value of the reduced factors")
+  {
+    const matrix a = {{1, 2, 3}, {2, 4, 6}};
+    const auto system = dense_spectrum::singular_system_of(a, false);
+    REQUIRE(system.rank == 1);
+    REQUIRE(system.u.size() == 2);
+    REQUIRE(system.v.size() == 2);
+    REQUIRE(system.sigma[1] < 1e-12);
+    // The reduced Vh keeps one vector of a plane, which v_rest spans.
+    REQUIRE(system.u_rest.size() == 1);
+    REQUIRE(system.v_rest.size() == 2);
+    require_orthonormal(system.u);
+    require_orthonormal(system.v);
+    require_orthonormal(system.v_rest, {system.v[0]});
+    require_reconstructs(a, system);
+  }
+  SECTION("a full factor completing a plane, through the transpose")
+  {
+    const matrix a = {{1, 2, 3}};
+    const auto system = dense_spectrum::singular_system_of(a, true);
+    REQUIRE(system.rank == 1);
+    REQUIRE(system.v.size() == 3);
+    REQUIRE(system.v_rest.size() == 2);
+    REQUIRE(system.u_rest.empty());
+    require_orthonormal(system.v);
+    require_orthonormal(system.v_rest, {system.v[0]});
+    require_reconstructs(a, system);
+  }
+  SECTION("a full factor completing a plane directly")
+  {
+    const matrix a = {{1}, {2}, {2}};
+    const auto system = dense_spectrum::singular_system_of(a, true);
+    REQUIRE(system.u.size() == 3);
+    REQUIRE(system.u_rest.size() == 2);
+    require_orthonormal(system.u);
+    require_orthonormal(system.u_rest, {system.u[0]});
+    require_reconstructs(a, system);
+  }
+  SECTION("a zero matrix has rank zero and no gap to divide by")
+  {
+    const matrix a = {{0, 0}, {0, 0}, {0, 0}};
+    const auto system = dense_spectrum::singular_system_of(a, true);
+    REQUIRE(system.rank == 0);
+    REQUIRE(system.sigma[0] == 0);
+    REQUIRE(system.u_rest.size() == 3);
+    require_orthonormal(system.u);
+    require_orthonormal(system.v);
+  }
 }
