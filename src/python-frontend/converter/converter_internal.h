@@ -90,6 +90,10 @@ inline std::string map_operator(const std::string &op, const typet &type)
       return std::tolower(c);
     });
 
+  // A right shift of an unsigned value fills with zeros, not the sign bit.
+  if (type.is_unsignedbv() && lower_op == "rshift")
+    return "lshr";
+
   // If the type is floating-point, use IEEE-specific operators.
   if (type.is_floatbv())
   {
