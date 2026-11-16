@@ -30,6 +30,13 @@ struct aligned
   int x;
 };
 
+struct with_array
+{
+  int a[2];
+  int n;
+  empty d;
+};
+
 static holder g;
 
 int main()
@@ -52,5 +59,10 @@ int main()
   int v;
   memcpy(&v, (char *)&a + offsetof(aligned, x), sizeof v);
   assert(v == 3);
+
+  with_array w{{1, 2}, 3, {}};
+  with_array copy = w;
+  copy.n = 4;
+  assert(copy.a[1] == 2 && copy.n == 4 && w.n == 3);
   return 0;
 }
