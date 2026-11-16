@@ -279,6 +279,9 @@ bool clang_c_convertert::get_decl(const clang::Decl &decl, exprt &new_expr)
   // C++20 concept definitions: clang evaluates the constraint at template
   // instantiation time, so the ConceptDecl itself has no runtime form.
   case clang::Decl::Concept:
+
+  // #pragma comment only passes directives to the linker (#2320).
+  case clang::Decl::PragmaComment:
     break;
 
   // We pretty much ignore this information, clang does the expansion for us.
