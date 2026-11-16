@@ -1,0 +1,6 @@
+CORE
+main.c
+--witness-output-yaml -
+^VERIFICATION FAILED$
+(?s)type: "branching"(?:(?!type:).)*?^\s+line: 14$
+(?s)\A(?!.*type: "branching"(?:(?!type:).)*?^\s+line: 1[67]$)
