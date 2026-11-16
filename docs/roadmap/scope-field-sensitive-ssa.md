@@ -1,16 +1,17 @@
 # Scope: field-sensitive SSA in goto-symex (#7521)
 
-> **Status at 2026-11-16: Phase 0 merged (#10773); Phase 1 in review (#10778),
-> gate partly met (see §8.5); the trace gate is unmet because split pointer
-> fields print other values than master (§8.6).** The corpus is in `regression/field-sensitivity/`
+> **Status at 2026-11-16: Phase 0 merged (#10773); Phase 1 merged (#10778)
+> with its trace gate unmet; the follow-up that fixes the gate is in review
+> (§8.7).** The corpus is in `regression/field-sensitivity/`
 > with baselines, and the census has been run and reverted. Phase 1 adds
 > `--field-sensitive-ssa` (default off): symex gives each field of an
 > eligible local, parameter or return slot its own SSA name. It meets the 2x
 > bar on the Phase 1 corpus rows and changes no verdict on the C, C++ (Z3 and Bitwuzla) and
-> k-induction suites or three Python samples (3132 tests), and no correctness witness, but it
-> still changes some trace text and violation witnesses (§8.5).
-> §8.6 traces the remaining changes to §3's own design; the Phase 1 trace gate
-> is now Invariant 4 (same values), with those changes accepted. Two
+> k-induction suites or three Python samples (3132 tests), and no correctness witness.
+> The Phase 1 trace gate is Invariant 4 (same values), with the §8.6 changes
+> accepted. As merged, a split pointer field printed another value than master;
+> §8.7 makes a whole write of a split struct print its right-hand side, which
+> removes that and the rest of §8.6's "reassembled struct" row. Two
 > mitigations are merged: #10037 stopped phi merges of wide structs from
 > scaling with the square of the width, and #10527 added the opt-in GOTO pass
 > `--scalarize-structs`. Line numbers are from master at `d3104e99c2`.
@@ -568,3 +569,54 @@ half (`{ 6, 7 }` for the same bytes) keeps the value and stays accepted.
 `struct_array_ite_new_index_fail` prints other nondet values under Z3 and
 `nil` per element under Bitwuzla, where master prints `.e=nil`.
 
+
+### 8.7 Phase 1 trace gate: split pointer fields
+
+The step for a whole write of a split struct printed the struct of its field
+symbols, read back from the model one field at a time. A pointer field's
+model value is an object and an offset, and `pointer_logict::pointer_expr`
+prints any pointer into the NULL object as `NULL`, so `&container->node` with
+`container` NULL printed `0`. Master prints the right-hand side evaluated in
+the model, which keeps `(struct node *)8`. `symex_assign_split` now hands the
+printing step the right-hand side, renamed before any field is written, as a
+whole write of an unsplit struct does. A nondet write has no right-hand side
+to show and still prints its fields.
+
+Measured on 2026-11-16 at `ebadfe075` (master `1a3fba6c7`), RelWithDebInfo,
+LLVM 18, Z3 4.13.3 and ESBMC's Bitwuzla 0.9.0 backend, one 4-core container.
+
+The five pointer tests of §8.6 now print master's trace, line for line, under
+both solvers: `github_5393_array_member_fail`,
+`github_5393_array_member_dyn_offset_fail`, `github_7855-tie-hides-deref`,
+`github_7965_fail` and `pointer_repr_branch_flow_fail`. So does
+`field_sensitive_ssa_print_array_fail` (`.pair=(signed long int [2])0x7...6`),
+whose test now expects master's text. `struct_array_ite_new_index_fail` still
+prints other values for `w1`, which the program never initialises, so master
+does not pin them either.
+
+Each `CORE` test of `regression/esbmc` with and without the flag, default
+solver, 30 s per run: 3330 tests, 0 verdict changes (11 tests that already
+pass the flag report an option error when it is given twice). After dropping
+timings, witness UUIDs and the "splits" notice, 20 differ in output: 4 only in
+line order, and 16 in the remaining §8.6 rows (member value, step dropped or
+added, `--incremental-bmc`). One test is new to that list:
+`github_10770_initialised_struct_fail` gains a step `t.f = 7` that master
+folds into its assertion. `github_7521_uintptr_fail` prints `*p = 0` where
+master prints `*p = 5`: the write `*p = 5` is two SSA steps, one per object
+`p` may point to, and with the flag the value set lists those objects in the
+other order, so the trace prints the other step. Master prints `*p = 0` itself
+on a variant of the program; its verdicts do not change with the flag.
+
+Flag off, `ctest -L esbmc/`: 3474 tests, 17 failures, the same 17 failing on
+master's code in this container. `ctest -L esbmc-cpp/cpp`: 1466 tests, the 8
+failures §8.5 lists. Python, every 12th test: 814 tests, one failure
+(`github_7559_literal`, the parser rejects it under this container's Python).
+
+`field_sensitive_ssa_print_pointer_fail` pins the pointer value and a
+self-reading whole write (`t = (struct pair){t.b, t.a}`); with the change
+reverted it prints `.next = 0` and fails under both solvers, as does
+`field_sensitive_ssa_print_array_fail`. `field_sensitive_ssa_print_pointer` is
+its SUCCESSFUL counterpart and cannot fail on a print-only change. The new
+branch and the three values the printing step can take (none, the fields, the
+right-hand side) were each hit by small C programs, with the same counts under
+Z3 and Bitwuzla, using temporary instrumentation.
