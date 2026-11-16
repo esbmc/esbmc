@@ -1,0 +1,3 @@
+regression/esbmc/field_sensitive_ssa_copy
+regression/esbmc/field_sensitive_ssa_copy_fail
+regression/esbmc/field_sensitive_ssa_trace_fail
