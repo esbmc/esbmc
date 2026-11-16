@@ -47,7 +47,8 @@ struct complex_eigen_system
 };
 
 // Singular values in descending order with unit left and right singular
-// vectors u[k] and v[k] of a square matrix.
+// vectors u[k] and v[k]: min(m, n) of each for the reduced factors, and m
+// and n for the full ones.
 struct singular_system
 {
   std::vector<double> sigma;
@@ -71,6 +72,7 @@ complex_eigen_system_of(const std::string &function, const matrix &m);
 // The singular values only, which any rounding keeps well conditioned.
 std::vector<double> singular_values_of(const matrix &m);
 
-// Throws when the factors cannot be checked against m.
-singular_system singular_system_of(const matrix &m);
+// Throws when the factors cannot be checked against m, or when the full
+// factors would need a basis of a null space LAPACK may rotate freely.
+singular_system singular_system_of(const matrix &m, bool full = true);
 } // namespace dense_spectrum

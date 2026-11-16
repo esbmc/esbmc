@@ -8,6 +8,7 @@
 #include <python-frontend/function_call/expr.h>
 #include <python-frontend/python-list/python_list.h>
 #include <nlohmann/json.hpp>
+#include <array>
 #include <functional>
 #include <optional>
 #include <utility>
@@ -483,6 +484,13 @@ private:
   std::vector<exprt> eigenvalue_pair(const std::vector<std::vector<double>> &m);
   exprt singular_values(const std::vector<std::vector<double>> &m);
   bool svd_values_only() const;
+  bool svd_flag(const std::string &name, bool fallback) const;
+  void bind_svd_relations(
+    const std::vector<std::vector<double>> &m,
+    const dense_spectrum::singular_system &system,
+    const std::array<exprt, 3> &factors,
+    const std::pair<double, double> &radii,
+    const std::vector<double> &sign_free);
   exprt linalg_decomposition(
     const std::string &function,
     const std::vector<std::vector<double>> &m);

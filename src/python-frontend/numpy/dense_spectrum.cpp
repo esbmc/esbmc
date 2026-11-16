@@ -516,7 +516,7 @@ namespace
 // orthogonal, accumulating the rotations in v, so that A v = w.
 void orthogonalise_columns(mat &w, mat &v)
 {
-  const std::size_t n = w.size();
+  const std::size_t n = w[0].size();
   for (int sweep = 0; sweep < 60; ++sweep)
   {
     bool rotated = false;
@@ -524,7 +524,7 @@ void orthogonalise_columns(mat &w, mat &v)
       for (std::size_t q = p + 1; q < n; ++q)
       {
         real alpha = 0, beta = 0, gamma = 0;
-        for (std::size_t i = 0; i < n; ++i)
+        for (std::size_t i = 0; i < w.size(); ++i)
         {
           alpha += w[i][p] * w[i][p];
           beta += w[i][q] * w[i][q];
@@ -556,9 +556,10 @@ struct jacobi_result
   mat u, v; // columns as rows: u[k], v[k]
 };
 
+// A matrix with at least as many rows as columns.
 jacobi_result jacobi_svd(const matrix &m)
 {
-  const std::size_t n = m.size();
+  const std::size_t n = m[0].size();
   mat w = widen(m), v(n, vec(n, 0));
   for (std::size_t i = 0; i < n; ++i)
     v[i][i] = 1;
@@ -616,13 +617,12 @@ vec completion(const mat &basis, const vec &hint)
 
 real reconstruction_error(const mat &a, const jacobi_result &r)
 {
-  const std::size_t n = a.size();
   real worst = 0;
-  for (std::size_t i = 0; i < n; ++i)
-    for (std::size_t j = 0; j < n; ++j)
+  for (std::size_t i = 0; i < a.size(); ++i)
+    for (std::size_t j = 0; j < a[i].size(); ++j)
     {
       real sum = 0;
-      for (std::size_t k = 0; k < n; ++k)
+      for (std::size_t k = 0; k < r.sigma.size(); ++k)
         sum += r.u[k][i] * r.sigma[k] * r.v[k][j];
       worst = std::max(worst, std::fabs(sum - a[i][j]));
     }
@@ -646,23 +646,62 @@ matrix narrow(const mat &m)
     out.emplace_back(row.begin(), row.end());
   return out;
 }
+
+matrix transposed(const matrix &m)
+{
+  return narrow(transpose(widen(m)));
+}
+
+[[noreturn]] void reject_factors(const std::string &reason)
+{
+  throw std::runtime_error(
+    "TypeError: numpy.linalg.svd factors of " + reason + " are not supported");
+}
+
+// The left singular vectors of a matrix with at least as many rows as
+// columns: A v / sigma, which loses accuracy as sigma shrinks, so the last
+// one of a square matrix is the unit vector the others fix up to its sign.
+// A full factor adds the unit vector orthogonal to them, which is unique up
+// to its sign only when it completes a basis on its own.
+void left_vectors(jacobi_result &r, std::size_t rows, bool full)
+{
+  const std::size_t n = r.sigma.size();
+  for (std::size_t k = 0; k + 1 < n; ++k)
+    r.u[k] = unit(r.u[k]);
+  if (rows == n)
+  {
+    r.u[n - 1] = completion(r.u, r.u[n - 1]);
+    return;
+  }
+  if (!(r.sigma[n - 1] > 1e-12L * r.sigma[0]))
+    reject_factors("a non-square matrix with a zero singular value");
+  r.u[n - 1] = unit(r.u[n - 1]);
+  if (!full)
+    return;
+  if (rows - n > 1)
+    reject_factors(
+      "full_matrices=True with more than one row or column past the square");
+  r.u.push_back(completion(r.u, vec(rows, 0)));
+}
 } // namespace
 
 std::vector<double> singular_values_of(const matrix &m)
 {
-  const vec sigma = jacobi_svd(m).sigma;
+  const vec sigma =
+    jacobi_svd(m.size() < m[0].size() ? transposed(m) : m).sigma;
   return std::vector<double>(sigma.begin(), sigma.end());
 }
 
-singular_system singular_system_of(const matrix &m)
+singular_system singular_system_of(const matrix &m, bool full)
 {
-  const std::size_t n = m.size();
+  if (m.size() < m[0].size())
+  {
+    singular_system system = singular_system_of(transposed(m), full);
+    std::swap(system.u, system.v);
+    return system;
+  }
   jacobi_result r = jacobi_svd(m);
-  // A v / sigma loses accuracy as sigma shrinks; the last left vector of a
-  // square matrix is fixed, up to its sign, by the others.
-  for (std::size_t k = 0; k + 1 < n; ++k)
-    r.u[k] = unit(r.u[k]);
-  r.u[n - 1] = completion(r.u, r.u[n - 1]);
+  left_vectors(r, m.size(), full);
   const mat a = widen(m);
   const real norm = frobenius(a);
   if (

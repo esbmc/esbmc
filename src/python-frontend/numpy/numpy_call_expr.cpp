@@ -743,6 +743,9 @@ struct singular_matrix_error : std::runtime_error
 // Matrices larger than this reject before any result is built: the
 // cofactor determinant and every unrolled result grow with the order.
 constexpr std::size_t max_linalg_order = 6;
+// The products of three svd results that the reconstruction relations of a
+// constant matrix may hold (rows x columns x singular values).
+constexpr std::size_t max_reconstruction_products = 12;
 
 // The real square matrix a numpy.linalg function reads, checked as NumPy
 // checks it: rows of different lengths raise NumPy's ValueError, and a
@@ -6721,20 +6724,17 @@ diagonal_singular_triples(const std::vector<std::vector<double>> &m)
   return triples;
 }
 
-// The order of the square matrix svd decomposes.
+// The order of the square matrix svd decomposes, or 0 for a rectangular
+// one; neither dimension may exceed max_linalg_order.
 static std::size_t svd_order(const std::vector<std::vector<double>> &m)
 {
   const std::size_t n = m.size();
-  if (!std::all_of(
-        m.begin(), m.end(), [n](const auto &row) { return row.size() == n; }))
-    throw std::runtime_error(
-      "TypeError: numpy.linalg.svd supports only square matrices currently");
-  if (n > max_linalg_order)
+  if (std::max(n, m[0].size()) > max_linalg_order)
     throw std::runtime_error(
       "TypeError: numpy.linalg.svd supports only matrices up to " +
       std::to_string(max_linalg_order) + "x" +
       std::to_string(max_linalg_order));
-  return n;
+  return m[0].size() == n ? n : 0;
 }
 
 // svd(compute_uv=False): the singular values in descending order. A 2x2
@@ -6747,7 +6747,9 @@ exprt numpy_call_expr::singular_values(
   const std::size_t n = svd_order(m);
   std::vector<double> sigma;
   double radius = 1e-12 * frobenius_norm(m);
-  if (n == 2)
+  if (n == 0)
+    sigma = dense_spectrum::singular_values_of(m);
+  else if (n == 2)
   {
     const double a = m[0][0], b = m[0][1], c = m[1][0], d = m[1][1];
     const double largest =
@@ -6765,8 +6767,7 @@ exprt numpy_call_expr::singular_values(
     sigma = dense_spectrum::singular_values_of(m);
   std::vector<exprt> values;
   for (double value : sigma)
-    values.push_back(
-      n == 2 ? lapack_value(value, radius) : lapack_value(value, radius));
+    values.push_back(lapack_value(value, radius));
   assume_singular_order(values);
   return double_array(values);
 }
@@ -7835,6 +7836,61 @@ exprt numpy_call_expr::runtime_singular_values(
   return double_array(sigmas);
 }
 
+static exprt element(const exprt &array, std::size_t i)
+{
+  return index_exprt(
+    array, from_integer(i, size_type()), array.type().subtype());
+}
+
+static exprt summed(const std::vector<exprt> &terms)
+{
+  exprt sum = terms.front();
+  for (std::size_t k = 1; k < terms.size(); ++k)
+    sum = ieee_op("ieee_add", sum, terms[k]);
+  return sum;
+}
+
+// u[i][0] * s[0] * vh[0][j] + ... over the first k singular values, as a
+// program spells A[i][j] reconstructed from svd's (U, S, Vh).
+static exprt reconstructed_entry(
+  const std::array<exprt, 3> &factors,
+  std::size_t i,
+  std::size_t j,
+  std::size_t k)
+{
+  std::vector<exprt> terms;
+  for (std::size_t l = 0; l < k; ++l)
+    terms.push_back(ieee_op(
+      "ieee_mul",
+      ieee_op(
+        "ieee_mul", element(element(factors[0], i), l), element(factors[1], l)),
+      element(element(factors[2], l), j)));
+  return summed(terms);
+}
+
+// The sum of the products of columns a and b of U (`columns`), or of rows a
+// and b of Vh, each `length` long.
+static exprt factor_product(
+  const exprt &factor,
+  std::size_t a,
+  std::size_t b,
+  std::size_t length,
+  bool columns)
+{
+  std::vector<exprt> terms;
+  for (std::size_t i = 0; i < length; ++i)
+    terms.push_back(
+      columns ? ieee_op(
+                  "ieee_mul",
+                  element(element(factor, i), a),
+                  element(element(factor, i), b))
+              : ieee_op(
+                  "ieee_mul",
+                  element(element(factor, a), i),
+                  element(element(factor, b), i)));
+  return summed(terms);
+}
+
 // The real matrix of a constant operand: det and inv check its order too.
 static std::vector<std::vector<double>> constant_matrix(
   const std::string &function,
@@ -8505,13 +8561,34 @@ exprt numpy_call_expr::linalg_decomposition(
   return svd_values_only() ? singular_values(m) : svd_factors(m);
 }
 
+// The value of svd's boolean keyword `name` (the preprocessor binds the
+// positional ones to their names), `fallback` when absent. Only a constant
+// is read, so the keyword is evaluated once, at conversion.
+bool numpy_call_expr::svd_flag(const std::string &name, bool fallback) const
+{
+  for (const auto &kw : call_.value("keywords", nlohmann::json::array()))
+  {
+    if (kw.value("arg", "") != name)
+      continue;
+    const nlohmann::json &value = kw["value"];
+    if (
+      value.value("_type", "") != "Constant" || !value.contains("value") ||
+      !(value["value"].is_boolean() || value["value"].is_number_integer()))
+      throw std::runtime_error(
+        "TypeError: numpy.linalg.svd keyword '" + name +
+        "' must be a constant boolean");
+    return value["value"].is_boolean() ? value["value"].get<bool>()
+                                       : value["value"].get<long long>() != 0;
+  }
+  return fallback;
+}
+
 bool numpy_call_expr::svd_values_only() const
 {
-  bool values_only = false;
-  for (const auto &kw : call_.value("keywords", nlohmann::json::array()))
-    values_only = values_only || (kw.value("arg", "") == "compute_uv" &&
-                                  kw["value"].value("value", true) == false);
-  return values_only;
+  if (svd_flag("hermitian", false))
+    throw std::runtime_error(
+      "TypeError: numpy.linalg.svd(hermitian=True) is not supported");
+  return !svd_flag("compute_uv", true);
 }
 
 // A 2x2 matrix: v are the eigenvectors of A^T A, u1 = A v1 / sigma1 and u2
@@ -8571,8 +8648,8 @@ singular_gap(const std::vector<singular_triple> &triples, double rounding)
 exprt numpy_call_expr::svd_factors(const std::vector<std::vector<double>> &m)
 {
   const std::size_t n = svd_order(m);
-  const bool diagonal = is_diagonal(m);
-  if (!diagonal && n > 2)
+  const bool diagonal = n != 0 && is_diagonal(m);
+  if (!diagonal && n != 2)
     return dense_svd_factors(m);
   const std::vector<singular_triple> triples =
     diagonal ? diagonal_singular_triples(m) : singular_triples_2x2(m);
@@ -8614,24 +8691,102 @@ exprt numpy_call_expr::svd_factors(const std::vector<std::vector<double>> &m)
     {double_array(u_rows), double_array(sigmas), double_array(vh_rows)});
 }
 
-// svd's (U, S, Vh) of a dense square matrix larger than 2x2 whose singular
-// values are distinct: each factor within the radius the gap between them
-// allows of the extended-precision one, which singular_system_of checked
-// against the reconstruction and orthogonality relations. LAPACK picks the
-// sign per singular triple (independently for a singular value within
-// rounding of zero).
+// The reconstruction and orthogonality relations of svd's factors as a
+// program spells them over the stored results: each entry of
+// U[:, :k] diag(S) Vh[:k, :] within its bound of A's, and the columns of U
+// and the rows of Vh orthonormal within theirs. They hold at every point of
+// the factors' boxes (a singular value whose vectors take independent signs
+// counts as either sign), so they restrict nothing; they let a solver relate
+// the results to the matrix without exploring the boxes.
+void numpy_call_expr::bind_svd_relations(
+  const std::vector<std::vector<double>> &m,
+  const dense_spectrum::singular_system &system,
+  const std::array<exprt, 3> &factors,
+  const std::pair<double, double> &radii,
+  const std::vector<double> &sign_free)
+{
+  const double value_radius = radii.first, r = radii.second;
+  const std::size_t k = system.sigma.size();
+  // A program subtracts each entry of A from its reconstruction, and 1 from
+  // the norm of a singular vector, but compares two vectors' product with 0
+  // directly.
+  const auto near = [&](const exprt &sum, double target, double bound) {
+    const exprt measured =
+      std::isnan(target)
+        ? sum
+        : ieee_op("ieee_sub", sum, from_double(target, double_type()));
+    code_assumet within{binary_relation_exprt(
+      abs_double(measured), "<=", from_double(bound, double_type()))};
+    within.location() = converter_.get_location_from_decl(call_);
+    converter_.add_instruction(within);
+  };
+  // Each reconstructed entry is a sum of k products of three results; past
+  // max_reconstruction_products of them a solver takes minutes to find a
+  // counterexample, so a larger matrix keeps only the orthogonality ones.
+  const bool reconstruct =
+    m.size() * m[0].size() * k <= max_reconstruction_products;
+  for (std::size_t i = 0; reconstruct && i < m.size(); ++i)
+    for (std::size_t j = 0; j < m[i].size(); ++j)
+    {
+      std::vector<std::vector<box_factor>> terms;
+      for (std::size_t l = 0; l < k; ++l)
+        terms.push_back(
+          {{system.u[l][i], r},
+           sign_free[l] > 0 ? box_factor{0.0, sign_free[l]}
+                            : box_factor{system.sigma[l], value_radius},
+           {system.v[l][j], r}});
+      near(
+        reconstructed_entry(factors, i, j, k),
+        m[i][j],
+        implied_bound(terms, m[i][j]));
+    }
+  for (bool columns : {true, false})
+  {
+    const dense_spectrum::matrix &vectors = columns ? system.u : system.v;
+    for (std::size_t a = 0; a < vectors.size(); ++a)
+      for (std::size_t b = a; b < vectors.size(); ++b)
+      {
+        std::vector<std::vector<box_factor>> terms;
+        for (std::size_t i = 0; i < vectors[a].size(); ++i)
+          terms.push_back({{vectors[a][i], r}, {vectors[b][i], r}});
+        near(
+          factor_product(
+            columns ? factors[0] : factors[2],
+            a,
+            b,
+            vectors[a].size(),
+            columns),
+          a == b ? 1.0 : NAN,
+          implied_bound(terms, a == b ? 1.0 : 0.0));
+      }
+  }
+}
+
+// svd's (U, S, Vh) of a dense matrix (square and larger than 2x2, or
+// rectangular) whose singular values are distinct: each factor within the
+// radius the gap between them allows of the extended-precision one, which
+// singular_system_of checked against the reconstruction and orthogonality
+// relations. LAPACK picks the sign per singular triple (independently for a
+// singular value within rounding of zero, and for each vector that only
+// completes a full factor). U is m x m and Vh n x n with full_matrices, and
+// m x k and k x n without (k = min(m, n)).
 exprt numpy_call_expr::dense_svd_factors(
   const std::vector<std::vector<double>> &m)
 {
   const dense_spectrum::singular_system system =
-    dense_spectrum::singular_system_of(m);
+    dense_spectrum::singular_system_of(m, svd_flag("full_matrices", true));
+  const std::size_t k = system.sigma.size();
   const double norm = frobenius_norm(m);
   const double value_radius = 1e-12 * norm;
   std::vector<singular_triple> triples;
-  for (std::size_t k = 0; k < system.sigma.size(); ++k)
-    triples.push_back({system.sigma[k], system.u[k], system.v[k]});
-  const double vector_radius =
-    1e-12 * (1 + norm / singular_gap(triples, 2 * value_radius));
+  for (std::size_t j = 0; j < k; ++j)
+    triples.push_back({system.sigma[j], system.u[j], system.v[j]});
+  double gap = singular_gap(triples, 2 * value_radius);
+  // A vector that completes a full factor spans what A's range (or row
+  // space) leaves, as accurate as the smallest singular value allows.
+  if (system.u.size() > k || system.v.size() > k)
+    gap = std::min(gap, system.sigma.back());
+  const double vector_radius = 1e-12 * (1 + norm / gap);
   if (vector_radius > 1e-6)
     throw std::runtime_error(
       "TypeError: numpy.linalg.svd of a matrix larger than 2x2 with close "
@@ -8644,14 +8799,21 @@ exprt numpy_call_expr::dense_svd_factors(
   };
   std::vector<std::vector<exprt>> us, vs;
   std::vector<exprt> sigmas;
-  for (const singular_triple &t : triples)
+  std::vector<double> sign_free;
+  for (std::size_t j = 0; j < k; ++j)
   {
+    const singular_triple &t = triples[j];
     sigmas.push_back(lapack_value(t.sigma, value_radius));
+    const bool tied = t.sigma > value_radius;
+    sign_free.push_back(tied ? 0.0 : t.sigma + value_radius);
     const exprt flip = nondet_bool();
-    const exprt flip_v = t.sigma <= value_radius ? nondet_bool() : flip;
     us.push_back(signed_by(flip, box(t.u)));
-    vs.push_back(signed_by(flip_v, box(t.v)));
+    vs.push_back(signed_by(tied ? flip : nondet_bool(), box(t.v)));
   }
+  for (std::size_t j = k; j < system.u.size(); ++j)
+    us.push_back(with_any_sign(box(system.u[j])));
+  for (std::size_t j = k; j < system.v.size(); ++j)
+    vs.push_back(with_any_sign(box(system.v[j])));
   assume_singular_order(sigmas);
   std::vector<exprt> u_rows, vh_rows;
   for (std::size_t i = 0; i < m.size(); ++i)
@@ -8660,10 +8822,15 @@ exprt numpy_call_expr::dense_svd_factors(
     for (const auto &u : us)
       row.push_back(u[i]);
     u_rows.push_back(double_array(row));
-    vh_rows.push_back(double_array(vs[i]));
   }
-  return linalg_tuple(
-    {double_array(u_rows), double_array(sigmas), double_array(vh_rows)});
+  for (const auto &v : vs)
+    vh_rows.push_back(double_array(v));
+  const exprt u = stored(double_array(u_rows));
+  const exprt s = stored(double_array(sigmas));
+  const exprt vh = stored(double_array(vh_rows));
+  bind_svd_relations(
+    m, system, {u, s, vh}, {value_radius, vector_radius}, sign_free);
+  return linalg_tuple({u, s, vh});
 }
 
 // NumPy evaluates these with its own vectorised code where the CPU has it
