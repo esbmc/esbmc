@@ -177,6 +177,23 @@ bool clang_cpp_convertert::get_vft_binding_expr_function(
   return false;
 }
 
+symbolt clang_cpp_convertert::make_forwarding_symbol(
+  const std::string &id,
+  const std::string &name_prefix,
+  const symbolt &method,
+  const type2tc &type)
+{
+  symbolt thunk_symb;
+  thunk_symb.id = id;
+  thunk_symb.name = name_prefix + method.name.as_string();
+  thunk_symb.mode = mode;
+  thunk_symb.location = method.location;
+  thunk_symb.module = method.module;
+  thunk_symb.set_type(type);
+  add_thunk_method_arguments(thunk_symb);
+  return thunk_symb;
+}
+
 void clang_cpp_convertert::set_forwarding_body(
   symbolt &thunk_symb,
   const exprt &function,
@@ -235,14 +252,8 @@ bool clang_cpp_convertert::get_virtual_member_function_pointer(
   const symbolt *thunk = context.find_symbol(thunk_id);
   if (!thunk)
   {
-    symbolt thunk_symb;
-    thunk_symb.id = thunk_id;
-    thunk_symb.name = vcall_prefix + method->name.as_string();
-    thunk_symb.mode = mode;
-    thunk_symb.location = method->location;
-    thunk_symb.module = method->module;
-    thunk_symb.set_type(method->get_type2());
-    add_thunk_method_arguments(thunk_symb);
+    symbolt thunk_symb = make_forwarding_symbol(
+      thunk_id, vcall_prefix, *method, method->get_type2());
 
     const code_typet &code_type = to_code_type(thunk_symb.get_type());
     const code_typet::argumentst &args = code_type.arguments();
@@ -280,12 +291,12 @@ bool clang_cpp_convertert::get_base_to_derived_member_pointer(
     mpt ? mpt->getMostRecentCXXRecordDecl() : nullptr;
   if (
     !derived || !mpt->isMemberFunctionPointer() || !expr.is_address_of() ||
-    expr.op0().id() != "symbol" || cast.path_size() == 0)
+    expr.op0().id() != "symbol")
     return clang_c_convertert::get_base_to_derived_member_pointer(
       cast, expr, type);
 
   const symbolt *method = ns.lookup(expr.op0().identifier());
-  if (!method || !method->get_type().is_code())
+  if (!method)
     return clang_c_convertert::get_base_to_derived_member_pointer(
       cast, expr, type);
 
@@ -307,14 +318,8 @@ bool clang_cpp_convertert::get_base_to_derived_member_pointer(
     code_type.arguments().front().type() =
       pointer_typet(symbol_typet(derived_id));
 
-    symbolt thunk_symb;
-    thunk_symb.id = thunk_id;
-    thunk_symb.name = base_member_prefix + method->name.as_string();
-    thunk_symb.mode = mode;
-    thunk_symb.location = method->location;
-    thunk_symb.module = method->module;
-    thunk_symb.set_type(migrate_type(thunk_type));
-    add_thunk_method_arguments(thunk_symb);
+    symbolt thunk_symb = make_forwarding_symbol(
+      thunk_id, base_member_prefix, *method, migrate_type(thunk_type));
 
     exprt this_expr = symbol_expr(*ns.lookup(
       to_code_type(thunk_symb.get_type()).arguments()[0].cmt_identifier()));

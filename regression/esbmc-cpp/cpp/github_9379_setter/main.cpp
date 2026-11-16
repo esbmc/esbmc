@@ -1,6 +1,6 @@
 // #9379: a member-function pointer converted from a non-first base binds
 // `this` to that base's subobject, also through a pointer and for a virtual
-// member of a deeper derived class.
+// member of a deeper derived class and in a hierarchy with a virtual base.
 #include <cassert>
 struct A
 {
@@ -42,6 +42,16 @@ struct D : C
     return d;
   }
 };
+struct V
+{
+  int v;
+  V() : v(7)
+  {
+  }
+};
+struct E : virtual V, A, B
+{
+};
 int main()
 {
   C c;
@@ -55,5 +65,8 @@ int main()
   D d;
   int (D::*pv)() = &B::vget;
   assert((d.*pv)() == 4);
+  E e;
+  int (E::*pe)(int, int) = &B::add;
+  assert((e.*pe)(0, 1) == 3);
   return 0;
 }

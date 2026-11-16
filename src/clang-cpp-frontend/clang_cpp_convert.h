@@ -788,6 +788,12 @@ protected:
     const clang::CastExpr &cast,
     exprt &expr,
     const typet &type) override;
+  /// Symbol, with argument symbols, of a function named after `method`.
+  symbolt make_forwarding_symbol(
+    const std::string &id,
+    const std::string &name_prefix,
+    const symbolt &method,
+    const type2tc &type);
   /// Body of a function forwarding its arguments to `function`, with `this_arg`
   /// in place of its own `this`; returns what `function` returns.
   void set_forwarding_body(
