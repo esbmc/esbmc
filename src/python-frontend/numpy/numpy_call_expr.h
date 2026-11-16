@@ -520,6 +520,8 @@ private:
   runtime_eigenvalues_3x3(const std::vector<std::vector<exprt>> &m);
   exprt runtime_eigen_pairs(const std::vector<std::vector<exprt>> &m);
   exprt runtime_singular_values(const std::vector<std::vector<exprt>> &m);
+  exprt runtime_singular_values_of(const std::vector<std::vector<exprt>> &m);
+  exprt runtime_svd_factors(const std::vector<std::vector<exprt>> &m);
   exprt dense_svd_factors(const std::vector<std::vector<double>> &m);
   void bind_complex_eigenvector(
     const std::vector<std::vector<exprt>> &m,

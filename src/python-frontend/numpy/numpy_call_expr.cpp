@@ -7836,6 +7836,36 @@ exprt numpy_call_expr::runtime_singular_values(
   return double_array(sigmas);
 }
 
+// The k x k minors of m (rows and columns in increasing order).
+static std::vector<exprt>
+minors_of(const std::vector<std::vector<exprt>> &m, std::size_t k)
+{
+  const std::size_t rows = m.size(), cols = m[0].size();
+  std::vector<exprt> minors;
+  std::vector<bool> row_pick(rows, false), col_pick(cols, false);
+  std::fill(row_pick.begin(), row_pick.begin() + k, true);
+  do
+  {
+    std::fill(col_pick.begin(), col_pick.end(), false);
+    std::fill(col_pick.begin(), col_pick.begin() + k, true);
+    do
+    {
+      std::vector<std::vector<exprt>> sub;
+      for (std::size_t i = 0; i < rows; ++i)
+      {
+        if (!row_pick[i])
+          continue;
+        sub.emplace_back();
+        for (std::size_t j = 0; j < cols; ++j)
+          if (col_pick[j])
+            sub.back().push_back(m[i][j]);
+      }
+      minors.push_back(cofactor_terms(sub).first);
+    } while (std::prev_permutation(col_pick.begin(), col_pick.end()));
+  } while (std::prev_permutation(row_pick.begin(), row_pick.end()));
+  return minors;
+}
+
 static exprt element(const exprt &array, std::size_t i)
 {
   return index_exprt(
@@ -7889,6 +7919,128 @@ static exprt factor_product(
                   element(element(factor, a), i),
                   element(element(factor, b), i)));
   return summed(terms);
+}
+
+// The singular values of a matrix known only at run time, up to 3x3 and
+// other than 2x2: LAPACK's are those of a matrix within lapack_tolerance S
+// of m (S the sum of the entries' magnitudes), so by Cauchy-Binet the
+// elementary symmetric functions of their squares are within 36, 144 and 72
+// times lapack_tolerance S^2, S^4 and S^6 of the sums of the squared 1x1,
+// 2x2 and 3x3 minors (twice the first-order perturbation). Each is at most
+// 2S, and they are non-negative and descending.
+exprt numpy_call_expr::runtime_singular_values_of(
+  const std::vector<std::vector<exprt>> &m)
+{
+  raise_linalg(
+    "LinAlgError", "SVD did not converge", not_exprt(entries_finite(m)));
+  const std::size_t k = std::min(m.size(), m[0].size());
+  const exprt tolerance = from_double(lapack_tolerance, double_type());
+  const exprt scale = entry_scale(m);
+  const exprt squared = product({scale, scale});
+  std::vector<exprt> sigmas;
+  for (std::size_t j = 0; j < k; ++j)
+    sigmas.push_back(lapack_value(0.0, INFINITY));
+  assume_singular_order(sigmas);
+  const exprt excused = any_not_finite(
+    {product({from_double(1e3, double_type()), squared, squared, squared})});
+  exprt::operandst within;
+  for (const exprt &sigma : sigmas)
+    within.push_back(
+      binary_relation_exprt(sigma, "<=", ieee_op("ieee_add", scale, scale)));
+  code_assumet bounded{or_exprt(excused, and_exprt(within))};
+  bounded.location() = converter_.get_location_from_decl(call_);
+  converter_.add_instruction(bounded);
+  const double factors[] = {36.0, 144.0, 72.0};
+  exprt power = squared;
+  for (std::size_t order = 1; order <= k; ++order)
+  {
+    exprt target = nil_exprt(), symmetric = nil_exprt();
+    for (const exprt &minor : minors_of(m, order))
+    {
+      const exprt term = ieee_op("ieee_mul", minor, minor);
+      target = target.is_nil() ? term : ieee_op("ieee_add", target, term);
+    }
+    std::vector<bool> pick(k, false);
+    std::fill(pick.begin(), pick.begin() + order, true);
+    do
+    {
+      std::vector<exprt> chosen;
+      for (std::size_t j = 0; j < k; ++j)
+        if (pick[j])
+          chosen.push_back(sigmas[j]);
+      const exprt root = product(chosen);
+      const exprt term = ieee_op("ieee_mul", root, root);
+      symmetric =
+        symmetric.is_nil() ? term : ieee_op("ieee_add", symmetric, term);
+    } while (std::prev_permutation(pick.begin(), pick.end()));
+    assume_near(
+      ieee_op("ieee_sub", symmetric, target),
+      within_floor(product(
+        {from_double(factors[order - 1], double_type()), tolerance, power})),
+      excused);
+    power = product({power, squared});
+  }
+  return double_array(sigmas);
+}
+
+// svd's (U, S, Vh) of a matrix known only at run time, up to 3x3: S as
+// runtime_singular_values_of bounds it, and factors whose entries LAPACK's
+// backward stability ties to m: U[:, :k] diag(S) Vh[:k, :] within
+// 4 lapack_tolerance S of m entry by entry, and the columns of U and the
+// rows of Vh orthonormal within 2 lapack_tolerance (n u for LAPACK, plus
+// rounding). The signs and the completing vectors are left free.
+exprt numpy_call_expr::runtime_svd_factors(
+  const std::vector<std::vector<exprt>> &m)
+{
+  const std::size_t rows = m.size(), cols = m[0].size();
+  const std::size_t k = std::min(rows, cols);
+  const bool full = svd_flag("full_matrices", true);
+  const exprt s = stored(runtime_singular_values_of(m));
+  const auto factor = [&](std::size_t r, std::size_t c) {
+    std::vector<exprt> out_rows;
+    for (std::size_t i = 0; i < r; ++i)
+    {
+      std::vector<exprt> row;
+      for (std::size_t j = 0; j < c; ++j)
+        row.push_back(lapack_value(0.0, INFINITY));
+      out_rows.push_back(double_array(row));
+    }
+    return stored(double_array(out_rows));
+  };
+  const std::array<exprt, 3> factors = {
+    factor(rows, full ? rows : k), s, factor(full ? cols : k, cols)};
+  const exprt tolerance = from_double(lapack_tolerance, double_type());
+  const exprt scale = entry_scale(m);
+  const exprt reconstruction =
+    within_floor(product({from_double(4.0, double_type()), tolerance, scale}));
+  const exprt excused =
+    any_not_finite({reconstruction, product({scale, scale})});
+  for (std::size_t i = 0; i < rows; ++i)
+    for (std::size_t j = 0; j < cols; ++j)
+      assume_near(
+        ieee_op("ieee_sub", reconstructed_entry(factors, i, j, k), m[i][j]),
+        reconstruction,
+        excused);
+  const exprt unit =
+    within_floor(product({from_double(2.0, double_type()), tolerance}));
+  const exprt one = from_double(1.0, double_type());
+  for (bool columns : {true, false})
+  {
+    const std::size_t count = full ? (columns ? rows : cols) : k;
+    for (std::size_t a = 0; a < count; ++a)
+      for (std::size_t b = a; b < count; ++b)
+      {
+        const exprt sum = factor_product(
+          columns ? factors[0] : factors[2],
+          a,
+          b,
+          columns ? rows : cols,
+          columns);
+        assume_near(
+          a == b ? ieee_op("ieee_sub", sum, one) : sum, unit, false_exprt());
+      }
+  }
+  return linalg_tuple({factors[0], factors[1], factors[2]});
 }
 
 // The real matrix of a constant operand: det and inv check its order too.
@@ -7950,7 +8102,7 @@ exprt numpy_call_expr::runtime_linalg(
 {
   if (m.empty())
     reject_linalg_operand(function);
-  if (m.size() > 3)
+  if (m.size() > 3 || m[0].size() > 3)
     throw std::runtime_error(
       "TypeError: numpy.linalg." + function +
       " supports only run-time matrices up to 3x3");
@@ -7961,19 +8113,18 @@ exprt numpy_call_expr::runtime_linalg(
   return runtime_decomposition(function, m);
 }
 
-// eig and eigvals of a matrix known only at run time, up to 3x3
-// (runtime_linalg checks the order), and svd(compute_uv=False) of a 2x2 one.
+// eig, eigvals and svd of a matrix known only at run time, up to 3x3
+// (runtime_linalg checks the order).
 exprt numpy_call_expr::runtime_decomposition(
   const std::string &function,
   const std::vector<std::vector<exprt>> &m)
 {
   const bool two_by_two = m.size() == 2 && m[0].size() == 2;
-  if (function == "svd" && (!svd_values_only() || !two_by_two))
-    throw std::runtime_error(
-      "TypeError: numpy.linalg.svd of a run-time matrix supports only "
-      "compute_uv=False on 2x2 matrices");
+  if (function == "svd" && !svd_values_only())
+    return runtime_svd_factors(m);
   if (function == "svd")
-    return runtime_singular_values(m);
+    return two_by_two ? runtime_singular_values(m)
+                      : runtime_singular_values_of(m);
   if (m.size() == 1)
     throw std::runtime_error(
       "TypeError: numpy.linalg." + function +
