@@ -569,7 +569,7 @@ def get_command_line(strat, prop, arch, benchmark, dargs, esbmc_ci, keep_loops=F
     command_line += "--no-pointer-check --no-bounds-check --memory-leak-check --no-assertions "
   elif prop == Property.reach:
     command_line += "--enable-unreachability-intrinsic "
-    command_line += "--no-pointer-check --interval-analysis --no-bounds-check --error-label ERROR "
+    command_line += "--no-pointer-check --interval-analysis --no-bounds-check "
     if not keep_loops:
       command_line += "--goto-unwind --unlimited-goto-unwind "
   elif prop == Property.datarace:
@@ -660,16 +660,12 @@ def values_flags(values_dir):
 
 
 def task_provides_verifier(benchmark):
-  """Does the task, or a directory above it, hold its own _sv_verifier.py?
-  Its nondet_* calls then cannot be fed the counterexample's values."""
-  directory = os.path.dirname(os.path.abspath(benchmark))
-  while True:
-    if os.path.isfile(os.path.join(directory, "_sv_verifier.py")):
-      return True
-    parent = os.path.dirname(directory)
-    if parent == directory:
-      return False
-    directory = parent
+  """Does the task's own directory hold a _sv_verifier.py? Its nondet_* calls
+  then cannot be fed the counterexample's values. One in a directory above,
+  such as sv-benchmarks' python/_sv_verifier.py, does not matter: the replay
+  runs a copy of the task's directory alone, with only that copy and the
+  stand-in on its module path."""
+  return os.path.isfile(os.path.join(os.path.dirname(os.path.abspath(benchmark)), "_sv_verifier.py"))
 
 
 def copy_task(benchmark, destination):

@@ -1,0 +1,5 @@
+CORE
+main.c
+--overflow-check --k-induction --validate-correctness-witness --witness witness.yml
+^VERIFICATION FAILED$
+^  FAILED .*line 7  arithmetic overflow on add$
