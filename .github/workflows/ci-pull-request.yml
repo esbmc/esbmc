@@ -255,7 +255,21 @@ jobs:
               exit 0
             fi
 
-            yapf --in-place "${files[@]}"
+            parseable=()
+            for f in "${files[@]}"; do
+              if python3 -c 'import ast, sys; ast.parse(open(sys.argv[1], "rb").read())' "$f" 2>/dev/null; then
+                parseable+=("$f")
+              else
+                echo "Skipping unparseable Python file: $f"
+              fi
+            done
+
+            if [ "${#parseable[@]}" -eq 0 ]; then
+              echo "No parseable Python files to format."
+              exit 0
+            fi
+
+            yapf --in-place "${parseable[@]}"
 
         - name: Auto-commit formatting changes
           uses: stefanzweifel/git-auto-commit-action@v7
