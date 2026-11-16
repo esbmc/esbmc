@@ -54,6 +54,7 @@ static time_t __esbmc_localtime_last_input;
 /* ── Ghost state for gmtime/timegm roundtrip ── */
 static struct tm __esbmc_gmtime_buf;
 static time_t __esbmc_gmtime_last_input;
+static struct tm __esbmc_gmtime_out;
 
 /* ── Static string buffers for asctime/ctime ── */
 static char __esbmc_asctime_buf[26];
@@ -126,6 +127,7 @@ __ESBMC_HIDE:;
   __ESBMC_assert(timer != NULL, "gmtime argument must not be NULL");
   __esbmc_gmtime_last_input = *timer;
   __esbmc_fill_tm_nondet(&__esbmc_gmtime_buf);
+  __esbmc_gmtime_out = __esbmc_gmtime_buf;
   return &__esbmc_gmtime_buf;
 }
 
@@ -234,8 +236,16 @@ __ESBMC_HIDE:;
     return (time_t)-1;
 
   timeptr->tm_isdst = 0;
-  /* gmtime's buffer already holds a normalised date. */
-  if (timeptr == &__esbmc_gmtime_buf)
+  /* gmtime's buffer, unchanged since gmtime filled it, maps back to the
+     time gmtime was given. */
+  if (
+    timeptr == &__esbmc_gmtime_buf &&
+    timeptr->tm_sec == __esbmc_gmtime_out.tm_sec &&
+    timeptr->tm_min == __esbmc_gmtime_out.tm_min &&
+    timeptr->tm_hour == __esbmc_gmtime_out.tm_hour &&
+    timeptr->tm_mday == __esbmc_gmtime_out.tm_mday &&
+    timeptr->tm_mon == __esbmc_gmtime_out.tm_mon &&
+    timeptr->tm_year == __esbmc_gmtime_out.tm_year)
     return __esbmc_gmtime_last_input;
 
   long long mon_carry = __esbmc_floor_div(timeptr->tm_mon, 12);
