@@ -1,1 +1,3 @@
 regression/esbmc/github_9272
+regression/esbmc/github_9272_member
+regression/esbmc/github_9272_object_fail
