@@ -743,6 +743,9 @@ struct singular_matrix_error : std::runtime_error
 // Matrices larger than this reject before any result is built: the
 // cofactor determinant and every unrolled result grow with the order.
 constexpr std::size_t max_linalg_order = 6;
+// The products of three svd results that the reconstruction relations of a
+// constant matrix may hold (rows x columns x singular values).
+constexpr std::size_t max_reconstruction_products = 12;
 
 // The real square matrix a numpy.linalg function reads, checked as NumPy
 // checks it: rows of different lengths raise NumPy's ValueError, and a
@@ -6208,6 +6211,88 @@ exprt numpy_call_expr::nondet_value(const typet &type, const std::string &name)
   return value;
 }
 
+namespace
+{
+// A factor of a product: any value within `radius` of `center`.
+struct box_factor
+{
+  double center, radius;
+};
+} // namespace
+
+// An upper bound on |sum of the products - target| for every choice of the
+// factors in their boxes, evaluated in doubles: the products' spread from
+// their centres, plus the rounding of each product and sum.
+static double
+implied_bound(const std::vector<std::vector<box_factor>> &terms, double target)
+{
+  long double residual = -static_cast<long double>(target), spread = 0,
+              magnitude = std::fabs(static_cast<long double>(target));
+  for (const auto &term : terms)
+  {
+    long double centre = 1, high = 1;
+    for (const box_factor &f : term)
+    {
+      centre *= f.center;
+      high *= std::fabs(static_cast<long double>(f.center)) + f.radius;
+    }
+    residual += centre;
+    spread += high - std::fabs(centre);
+    magnitude += high;
+  }
+  return static_cast<double>(
+    2 * (std::fabs(residual) + spread + 8 * DBL_EPSILON * magnitude) + 1e-300L);
+}
+
+static eigen_bounds widest(const eigen_bounds &a, const eigen_bounds &b)
+{
+  return {std::max(a.residual, b.residual), std::max(a.norm, b.norm)};
+}
+
+static dense_spectrum::complex_vector as_complex(const std::vector<double> &v)
+{
+  return dense_spectrum::complex_vector(v.begin(), v.end());
+}
+
+// Bounds on the complex residual and norm relations of (lambda, v) for
+// every value in their boxes: A v - lambda v has real part
+// sum_j a_ij re_j - lr re_i + li im_i and imaginary part
+// sum_j a_ij im_j - lr im_i - li re_i, and its magnitude is at most the sum
+// of theirs.
+static eigen_bounds pair_bounds(
+  const std::vector<std::vector<double>> &m,
+  std::complex<double> lambda,
+  double value_radius,
+  const dense_spectrum::complex_vector &v,
+  double vector_radius)
+{
+  const double lr = lambda.real(), li = lambda.imag();
+  const double r = vector_radius;
+  eigen_bounds bounds{0.0, 0.0};
+  std::vector<std::vector<box_factor>> squares;
+  for (std::size_t i = 0; i < m.size(); ++i)
+  {
+    std::vector<std::vector<box_factor>> re, im;
+    for (std::size_t j = 0; j < m.size(); ++j)
+    {
+      re.push_back({{m[i][j], 0.0}, {v[j].real(), r}});
+      im.push_back({{m[i][j], 0.0}, {v[j].imag(), r}});
+    }
+    re.push_back({{-lr, value_radius}, {v[i].real(), r}});
+    re.push_back({{li, value_radius}, {v[i].imag(), r}});
+    im.push_back({{-lr, value_radius}, {v[i].imag(), r}});
+    im.push_back({{-li, value_radius}, {v[i].real(), r}});
+    bounds.residual = std::max(
+      bounds.residual, implied_bound(re, 0.0) + implied_bound(im, 0.0));
+    squares.push_back({{v[i].real(), r}, {v[i].real(), r}});
+    squares.push_back({{v[i].imag(), r}, {v[i].imag(), r}});
+  }
+  bounds.norm = implied_bound(squares, 1.0);
+  return bounds;
+}
+
+static exprt conjugate(const exprt &z);
+
 // How far LAPACK may round the eigenvalues of a 2x2 matrix that is not
 // diagonal: a triangular one keeps its diagonal exactly, and close
 // eigenvalues of one that is not symmetric are ill-conditioned (the error
@@ -6266,8 +6351,9 @@ numpy_call_expr::eigenvalue_pair(const std::vector<std::vector<double>> &m)
   for (const auto &[re, im] : pair)
     both.push_back(
       make_complex(lapack_value(re, radius), lapack_value(im, imag_radius)));
+  // LAPACK's dlanv2 returns a complex pair as exact conjugates.
   if (square < 0 && !triangular)
-    return both;
+    return {both[0], conjugate(both[0])};
   const exprt swap = nondet_bool();
   return {if_exprt(swap, both[1], both[0]), if_exprt(swap, both[0], both[1])};
 }
@@ -6298,6 +6384,8 @@ exprt numpy_call_expr::eigenvalues(const std::vector<std::vector<double>> &m)
     if (!is_diagonal(m))
       values = in_any_order(values);
   }
+  else if (!dense_spectrum::has_real_spectrum(m))
+    return complex_spectrum(m, false);
   else
     values = dense_eigenvalues(m);
   exprt array(
@@ -6382,7 +6470,8 @@ numpy_call_expr::signed_column(const std::vector<double> &exact, double radius)
 void numpy_call_expr::eigen_pair_2x2(
   const std::vector<std::vector<double>> &m,
   std::vector<exprt> &values,
-  std::vector<std::vector<exprt>> &columns)
+  std::vector<std::vector<exprt>> &columns,
+  eigen_bounds &bounds)
 {
   const double a = m[0][0], b = m[0][1], c = m[1][0], d = m[1][1];
   const double mid = (a + d) / 2, half = (a - d) / 2;
@@ -6405,12 +6494,22 @@ void numpy_call_expr::eigen_pair_2x2(
   const double vector_radius = 1e-12 * (1 + norm / gap);
   std::vector<exprt> found_values;
   std::vector<std::vector<exprt>> found_columns;
+  const double value_radius = eigenvalue_radius(m, square);
+  bounds = {0.0, 0.0};
   for (double lambda : lambdas)
   {
-    found_values.push_back(lapack_value(lambda, eigenvalue_radius(m, square)));
-    found_columns.push_back(signed_column(
-      unit_eigenvector_2x2(m, lambda),
-      vector_radius < 1 ? vector_radius : INFINITY));
+    const std::vector<double> v = unit_eigenvector_2x2(m, lambda);
+    found_values.push_back(lapack_value(lambda, value_radius));
+    found_columns.push_back(
+      signed_column(v, vector_radius < 1 ? vector_radius : INFINITY));
+    bounds = widest(
+      bounds,
+      pair_bounds(
+        m,
+        {lambda, 0.0},
+        value_radius,
+        as_complex(v),
+        vector_radius < 1 ? vector_radius : INFINITY));
   }
   const exprt swap = nondet_bool();
   for (std::size_t k = 0; k < 2; ++k)
@@ -6466,15 +6565,7 @@ exprt numpy_call_expr::linalg_tuple(const std::vector<exprt> &parts)
   std::vector<expr2tc> members;
   for (const exprt &part : parts)
   {
-    symbolt &tmp =
-      converter_.create_tmp_symbol(call_, "$linalg$", part.type(), exprt());
-    const exprt symbol = symbol_expr(tmp);
-    code_declt decl(symbol);
-    decl.location() = converter_.get_location_from_decl(call_);
-    converter_.add_instruction(decl);
-    code_assignt assign(symbol, part);
-    assign.location() = decl.location();
-    converter_.add_instruction(assign);
+    const exprt symbol = part.id() == "symbol" ? part : stored(part);
     types.push_back(part.type());
     expr2tc member;
     migrate_expr(symbol, member);
@@ -6483,6 +6574,22 @@ exprt numpy_call_expr::linalg_tuple(const std::vector<exprt> &parts)
   const struct_typet type =
     converter_.get_tuple_handler().create_tuple_struct_type(types);
   return migrate_expr_back(constant_struct2tc(migrate_type(type), members));
+}
+
+// A temporary holding `value`, which the relations over a result read as
+// the program does.
+exprt numpy_call_expr::stored(const exprt &value)
+{
+  symbolt &tmp =
+    converter_.create_tmp_symbol(call_, "$linalg$", value.type(), exprt());
+  const exprt symbol = symbol_expr(tmp);
+  code_declt decl(symbol);
+  decl.location() = converter_.get_location_from_decl(call_);
+  converter_.add_instruction(decl);
+  code_assignt assign(symbol, value);
+  assign.location() = decl.location();
+  converter_.add_instruction(assign);
+  return symbol;
 }
 
 static exprt double_array(const std::vector<exprt> &values)
@@ -6495,6 +6602,53 @@ static exprt double_array(const std::vector<exprt> &values)
   return array;
 }
 
+static std::vector<std::vector<exprt>>
+constant_matrix_entries(const std::vector<std::vector<double>> &m)
+{
+  std::vector<std::vector<exprt>> entries;
+  for (const auto &row : m)
+    entries.push_back(constant_row(row));
+  return entries;
+}
+
+// The relations a constant matrix's eigenvectors satisfy at every point of
+// their boxes, unless a bound is not finite.
+static std::optional<eigen_relation> literal_relation(const eigen_bounds &b)
+{
+  if (!std::isfinite(b.residual) || !std::isfinite(b.norm))
+    return std::nullopt;
+  return eigen_relation{
+    from_double(b.residual, double_type()),
+    from_double(b.norm, double_type()),
+    false_exprt()};
+}
+
+// A complex128 array of `values`.
+static exprt complex_array(const std::vector<exprt> &values)
+{
+  exprt array(
+    "array",
+    array_typet(
+      get_complex_struct_type(), from_integer(values.size(), size_type())));
+  for (const exprt &value : values)
+    array.copy_to_operands(value);
+  return array;
+}
+
+// The complex128 matrix whose columns are `columns`.
+static exprt complex_columns(const std::vector<std::vector<exprt>> &columns)
+{
+  std::vector<exprt> rows;
+  for (std::size_t i = 0; i < columns.size(); ++i)
+  {
+    std::vector<exprt> row;
+    for (const auto &column : columns)
+      row.push_back(column[i]);
+    rows.push_back(complex_array(row));
+  }
+  return double_array(rows);
+}
+
 // eig of a real matrix whose eigenvalues are real: the eigenvalues, and unit
 // eigenvectors as the columns of the second result. A diagonal matrix keeps
 // its entries and the identity, as LAPACK's dgeev leaves it.
@@ -6502,8 +6656,11 @@ exprt numpy_call_expr::eigen_decomposition(
   const std::vector<std::vector<double>> &m)
 {
   const std::size_t n = require_square(m);
+  if (!is_diagonal(m) && !dense_spectrum::has_real_spectrum(m))
+    return complex_spectrum(m, true);
   std::vector<exprt> values;
   std::vector<std::vector<exprt>> columns;
+  eigen_bounds bounds{INFINITY, INFINITY};
   if (is_diagonal(m))
     for (std::size_t j = 0; j < n; ++j)
     {
@@ -6514,18 +6671,24 @@ exprt numpy_call_expr::eigen_decomposition(
       columns.push_back(column);
     }
   else if (n == 2)
-    eigen_pair_2x2(m, values, columns);
+    eigen_pair_2x2(m, values, columns, bounds);
   else
-    dense_eigen_pairs(m, values, columns);
-  std::vector<exprt> rows;
-  for (std::size_t i = 0; i < n; ++i)
+    dense_eigen_pairs(m, values, columns, bounds);
+  const exprt zero = from_double(0.0, double_type());
+  std::vector<exprt> complex_values;
+  std::vector<std::vector<exprt>> complex_columns_;
+  for (std::size_t k = 0; k < n; ++k)
   {
-    std::vector<exprt> row;
-    for (std::size_t j = 0; j < n; ++j)
-      row.push_back(columns[j][i]);
-    rows.push_back(double_array(row));
+    complex_values.push_back(make_complex(values[k], zero));
+    complex_columns_.emplace_back();
+    for (const exprt &x : columns[k])
+      complex_columns_.back().push_back(make_complex(x, zero));
   }
-  return linalg_tuple({double_array(values), double_array(rows)});
+  return bound_eigen_tuple(
+    constant_matrix_entries(m),
+    complex_values,
+    complex_columns_,
+    literal_relation(bounds));
 }
 
 namespace
@@ -6561,20 +6724,17 @@ diagonal_singular_triples(const std::vector<std::vector<double>> &m)
   return triples;
 }
 
-// The order of the square matrix svd decomposes.
+// The order of the square matrix svd decomposes, or 0 for a rectangular
+// one; neither dimension may exceed max_linalg_order.
 static std::size_t svd_order(const std::vector<std::vector<double>> &m)
 {
   const std::size_t n = m.size();
-  if (!std::all_of(
-        m.begin(), m.end(), [n](const auto &row) { return row.size() == n; }))
-    throw std::runtime_error(
-      "TypeError: numpy.linalg.svd supports only square matrices currently");
-  if (n > max_linalg_order)
+  if (std::max(n, m[0].size()) > max_linalg_order)
     throw std::runtime_error(
       "TypeError: numpy.linalg.svd supports only matrices up to " +
       std::to_string(max_linalg_order) + "x" +
       std::to_string(max_linalg_order));
-  return n;
+  return m[0].size() == n ? n : 0;
 }
 
 // svd(compute_uv=False): the singular values in descending order. A 2x2
@@ -6587,7 +6747,9 @@ exprt numpy_call_expr::singular_values(
   const std::size_t n = svd_order(m);
   std::vector<double> sigma;
   double radius = 1e-12 * frobenius_norm(m);
-  if (n == 2)
+  if (n == 0)
+    sigma = dense_spectrum::singular_values_of(m);
+  else if (n == 2)
   {
     const double a = m[0][0], b = m[0][1], c = m[1][0], d = m[1][1];
     const double largest =
@@ -6605,8 +6767,7 @@ exprt numpy_call_expr::singular_values(
     sigma = dense_spectrum::singular_values_of(m);
   std::vector<exprt> values;
   for (double value : sigma)
-    values.push_back(
-      n == 2 ? lapack_value(value, radius) : lapack_value(value, radius));
+    values.push_back(lapack_value(value, radius));
   assume_singular_order(values);
   return double_array(values);
 }
@@ -6667,11 +6828,20 @@ exprt numpy_call_expr::selected_box(
   const std::vector<double> &exacts,
   double radius)
 {
+  return selected_box(slot, exacts, std::vector<double>(exacts.size(), radius));
+}
+
+// Any double within radii[k] of exacts[k], k the value of `slot`.
+exprt numpy_call_expr::selected_box(
+  const exprt &slot,
+  const std::vector<double> &exacts,
+  const std::vector<double> &radii)
+{
   std::vector<double> lows, highs;
-  for (double x : exacts)
+  for (std::size_t k = 0; k < exacts.size(); ++k)
   {
-    lows.push_back(x - radius);
-    highs.push_back(x + radius);
+    lows.push_back(exacts[k] - radii[k]);
+    highs.push_back(exacts[k] + radii[k]);
   }
   const exprt result = lapack_value(0.0, INFINITY);
   code_assumet within{and_exprt(
@@ -6682,39 +6852,6 @@ exprt numpy_call_expr::selected_box(
   return result;
 }
 
-namespace
-{
-// A factor of a product: any value within `radius` of `center`.
-struct box_factor
-{
-  double center, radius;
-};
-} // namespace
-
-// An upper bound on |sum of the products - target| for every choice of the
-// factors in their boxes, evaluated in doubles: the products' spread from
-// their centres, plus the rounding of each product and sum.
-static double
-implied_bound(const std::vector<std::vector<box_factor>> &terms, double target)
-{
-  long double residual = -static_cast<long double>(target), spread = 0,
-              magnitude = std::fabs(static_cast<long double>(target));
-  for (const auto &term : terms)
-  {
-    long double centre = 1, high = 1;
-    for (const box_factor &f : term)
-    {
-      centre *= f.center;
-      high *= std::fabs(static_cast<long double>(f.center)) + f.radius;
-    }
-    residual += centre;
-    spread += high - std::fabs(centre);
-    magnitude += high;
-  }
-  return static_cast<double>(
-    2 * (std::fabs(residual) + spread + 8 * DBL_EPSILON * magnitude) + 1e-300L);
-}
-
 // eig of a dense matrix larger than 2x2 whose eigenvalues are real and
 // distinct: each eigenvalue within its radius with its unit eigenvector of
 // arbitrary sign, the pairs in any order. The residual and norm relations
@@ -6723,7 +6860,8 @@ implied_bound(const std::vector<std::vector<box_factor>> &terms, double target)
 void numpy_call_expr::dense_eigen_pairs(
   const std::vector<std::vector<double>> &m,
   std::vector<exprt> &values,
-  std::vector<std::vector<exprt>> &columns)
+  std::vector<std::vector<exprt>> &columns,
+  eigen_bounds &bounds)
 {
   if (m.size() > max_linalg_order)
     throw std::runtime_error(
@@ -6735,26 +6873,16 @@ void numpy_call_expr::dense_eigen_pairs(
   const double value_radius =
     *std::max_element(system.value_radius.begin(), system.value_radius.end());
   const double vector_radius = system.vector_radius;
-  double residual = 0.0, norm = 0.0;
+  bounds = {0.0, 0.0};
   for (std::size_t k = 0; k < system.values.size(); ++k)
-  {
-    const std::vector<double> &v = system.vectors[k];
-    std::vector<std::vector<box_factor>> squares;
-    for (std::size_t i = 0; i < m.size(); ++i)
-    {
-      std::vector<std::vector<box_factor>> terms;
-      for (std::size_t j = 0; j < m.size(); ++j)
-        terms.push_back({{m[i][j], 0.0}, {v[j], vector_radius}});
-      terms.push_back(
-        {{-system.values[k], value_radius}, {v[i], vector_radius}});
-      residual = std::max(residual, implied_bound(terms, 0.0));
-      squares.push_back({{v[i], vector_radius}, {v[i], vector_radius}});
-    }
-    norm = std::max(norm, implied_bound(squares, 1.0));
-  }
-  std::vector<std::vector<exprt>> entries;
-  for (const auto &row : m)
-    entries.push_back(constant_row(row));
+    bounds = widest(
+      bounds,
+      pair_bounds(
+        m,
+        {system.values[k], 0.0},
+        value_radius,
+        as_complex(system.vectors[k]),
+        vector_radius));
   for (const exprt &slot : permutation_slots(system.values.size()))
   {
     values.push_back(selected_box(slot, system.values, value_radius));
@@ -6767,13 +6895,6 @@ void numpy_call_expr::dense_eigen_pairs(
       v.push_back(selected_box(slot, components, vector_radius));
     }
     columns.push_back(with_any_sign(v));
-    bind_eigenvector(
-      entries,
-      values.back(),
-      columns.back(),
-      from_double(residual, double_type()),
-      from_double(norm, double_type()),
-      false_exprt());
   }
 }
 
@@ -6789,6 +6910,283 @@ static exprt is_finite_double(const exprt &value)
   expr2tc value2;
   migrate_expr(value, value2);
   return migrate_expr_back(not2tc(or2tc(isnan2tc(value2), isinf2tc(value2))));
+}
+
+// The residual and norm relations of a complex eigenvector as a program
+// over the complex128 results spells them: the real and imaginary parts of
+// A v - lambda v within `relation.residual` (each is at most its
+// magnitude), the sum of |v_i|^2 within `relation.norm` of 1 and, for a real
+// eigenvalue's real vector, the real part of the sum of v_i * v_i minus 1.
+// Bounding the parts rather than abs() keeps the relations free of square
+// roots, which makes counterexamples slow to find.
+void numpy_call_expr::bind_complex_eigenvector(
+  const std::vector<std::vector<exprt>> &m,
+  const exprt &lambda,
+  const std::vector<exprt> &v,
+  const eigen_relation &relation)
+{
+  complex_handler &complex = converter_.get_complex_handler();
+  const nlohmann::json none = nlohmann::json::object();
+  const auto op = [&](const char *name, const exprt &x, const exprt &y) {
+    return complex.handle_binary_op(name, x, y, none);
+  };
+  const auto near =
+    [&](
+      const exprt &z, const char *part, const exprt &bound, const exprt &when) {
+      code_assumet within{or_exprt(
+        or_exprt(not_exprt(when), relation.excused),
+        binary_relation_exprt(abs_double(complex_part(z, part)), "<=", bound))};
+      within.location() = converter_.get_location_from_decl(call_);
+      converter_.add_instruction(within);
+    };
+  const exprt one = from_double(1.0, double_type());
+  for (std::size_t i = 0; i < m.size(); ++i)
+  {
+    exprt sum = op("Mult", m[i][0], v[0]);
+    for (std::size_t j = 1; j < m.size(); ++j)
+      sum = op("Add", sum, op("Mult", m[i][j], v[j]));
+    const exprt residual = op("Sub", sum, op("Mult", lambda, v[i]));
+    for (const char *part : {"real", "imag"})
+      near(residual, part, relation.residual, true_exprt());
+  }
+  exprt squares = nil_exprt(), products = nil_exprt();
+  for (const exprt &x : v)
+  {
+    const exprt re = complex_part(x, "real"), im = complex_part(x, "imag");
+    for (const exprt &term :
+         {ieee_op("ieee_mul", re, re), ieee_op("ieee_mul", im, im)})
+      squares = squares.is_nil() ? term : ieee_op("ieee_add", squares, term);
+    const exprt product = op("Mult", x, x);
+    products = products.is_nil() ? product : op("Add", products, product);
+  }
+  code_assumet unit{binary_relation_exprt(
+    abs_double(ieee_op("ieee_sub", squares, one)), "<=", relation.norm)};
+  unit.location() = converter_.get_location_from_decl(call_);
+  converter_.add_instruction(unit);
+  // A real vector's v.v has no imaginary part to bound.
+  near(
+    op("Sub", products, one),
+    "real",
+    relation.norm,
+    equality_exprt(
+      complex_part(lambda, "imag"), from_double(0.0, double_type())));
+}
+
+static exprt conjugate(const exprt &z)
+{
+  return make_complex(
+    complex_part(z, "real"), negate_double(complex_part(z, "imag")));
+}
+
+static exprt negated_complex(const exprt &z)
+{
+  return make_complex(
+    negate_double(complex_part(z, "real")),
+    negate_double(complex_part(z, "imag")));
+}
+
+// The orders LAPACK may return a spectrum in: its blocks (a real
+// eigenvalue, or a conjugate pair with the positive imaginary part first)
+// in any order, as the indices of the eigenvalues at each position.
+static std::vector<std::vector<std::size_t>>
+block_orders(const std::vector<std::complex<double>> &values)
+{
+  std::vector<std::vector<std::size_t>> blocks;
+  for (std::size_t k = 0; k < values.size(); ++k)
+  {
+    blocks.push_back({k});
+    if (values[k].imag() > 0)
+      blocks.back().push_back(++k);
+  }
+  std::vector<std::size_t> permutation(blocks.size());
+  std::iota(permutation.begin(), permutation.end(), 0);
+  std::vector<std::vector<std::size_t>> orders;
+  do
+  {
+    orders.emplace_back();
+    for (std::size_t block : permutation)
+      orders.back().insert(
+        orders.back().end(), blocks[block].begin(), blocks[block].end());
+  } while (std::next_permutation(permutation.begin(), permutation.end()));
+  return orders;
+}
+
+static exprt
+select_index(const exprt &choice, const std::vector<std::size_t> &values)
+{
+  exprt chosen = from_integer(values.back(), size_type());
+  for (std::size_t i = values.size() - 1; i-- > 0;)
+    chosen = if_exprt(
+      equality_exprt(choice, from_integer(i, size_type())),
+      from_integer(values[i], size_type()),
+      chosen);
+  return chosen;
+}
+
+// The index of the eigenvalue at each position under one of `orders`,
+// chosen nondeterministically; second[p] holds when position p has the
+// conjugate of the eigenvalue before it.
+std::vector<exprt> numpy_call_expr::spectrum_order(
+  const std::vector<std::vector<std::size_t>> &orders,
+  const std::vector<bool> &is_second,
+  std::vector<exprt> &second)
+{
+  exprt choice = from_integer(0, size_type());
+  if (orders.size() > 1)
+  {
+    choice = nondet_value(size_type(), "$order$");
+    code_assumet bounded{binary_relation_exprt(
+      choice, "<", from_integer(orders.size(), size_type()))};
+    bounded.location() = converter_.get_location_from_decl(call_);
+    converter_.add_instruction(bounded);
+  }
+  std::vector<exprt> slots;
+  for (std::size_t p = 0; p < orders.front().size(); ++p)
+  {
+    std::vector<std::size_t> at, flags;
+    for (const auto &order : orders)
+    {
+      at.push_back(order[p]);
+      flags.push_back(is_second[order[p]] ? 1 : 0);
+    }
+    slots.push_back(select_index(choice, at));
+    second.push_back(equality_exprt(
+      select_index(choice, flags), from_integer(1, size_type())));
+  }
+  return slots;
+}
+
+// eig and eigvals of a real matrix with a complex conjugate pair, which
+// NumPy returns as complex128: each eigenvalue within its radius, each pair
+// exactly conjugate with the positive imaginary part first, the blocks in
+// any order. An eigenvector is within the radius of one of its candidates
+// (LAPACK makes its largest component real), with either sign, and the
+// second of a pair is the conjugate of the first.
+exprt numpy_call_expr::complex_spectrum(
+  const std::vector<std::vector<double>> &m,
+  bool with_vectors)
+{
+  const std::string function = with_vectors ? "eig" : "eigvals";
+  if (m.size() > max_linalg_order)
+    throw std::runtime_error(
+      "TypeError: numpy.linalg." + function + " supports only matrices up to " +
+      std::to_string(max_linalg_order) + "x" +
+      std::to_string(max_linalg_order));
+  const dense_spectrum::complex_eigen_system system =
+    dense_spectrum::complex_eigen_system_of(function, m);
+  std::vector<double> re, im, re_radius, im_radius;
+  std::vector<bool> is_second;
+  for (std::size_t k = 0; k < system.values.size(); ++k)
+  {
+    re.push_back(system.values[k].real());
+    im.push_back(system.values[k].imag());
+    re_radius.push_back(system.value_radius[k]);
+    im_radius.push_back(im.back() == 0.0 ? 0.0 : system.value_radius[k]);
+    is_second.push_back(im.back() < 0);
+  }
+  std::vector<exprt> second;
+  const std::vector<exprt> slots =
+    spectrum_order(block_orders(system.values), is_second, second);
+  std::vector<exprt> values;
+  for (std::size_t p = 0; p < slots.size(); ++p)
+  {
+    const exprt own = make_complex(
+      selected_box(slots[p], re, re_radius),
+      selected_box(slots[p], im, im_radius));
+    values.push_back(
+      p == 0 ? own : if_exprt(second[p], conjugate(values[p - 1]), own));
+  }
+  if (!with_vectors)
+    return complex_array(values);
+  eigen_bounds bounds{0.0, 0.0};
+  const std::vector<std::vector<exprt>> columns =
+    eigenvector_columns(m, system, slots, second, bounds);
+  return bound_eigen_tuple(
+    constant_matrix_entries(m), values, columns, literal_relation(bounds));
+}
+
+// eig's (w, v), its eigenvector relations read from the stored results.
+exprt numpy_call_expr::bound_eigen_tuple(
+  const std::vector<std::vector<exprt>> &m,
+  const std::vector<exprt> &values,
+  const std::vector<std::vector<exprt>> &columns,
+  const std::optional<eigen_relation> &relation)
+{
+  const exprt w = stored(complex_array(values));
+  const exprt v = stored(complex_columns(columns));
+  if (relation)
+    for (std::size_t p = 0; p < values.size(); ++p)
+    {
+      std::vector<exprt> column;
+      for (std::size_t i = 0; i < values.size(); ++i)
+        column.push_back(index_exprt(
+          index_exprt(v, from_integer(i, size_type()), v.type().subtype()),
+          from_integer(p, size_type()),
+          get_complex_struct_type()));
+      bind_complex_eigenvector(
+        m,
+        index_exprt(w, from_integer(p, size_type()), get_complex_struct_type()),
+        column,
+        *relation);
+    }
+  return linalg_tuple({w, v});
+}
+
+// The eigenvector at each position of complex_spectrum's eigenvalues.
+std::vector<std::vector<exprt>> numpy_call_expr::eigenvector_columns(
+  const std::vector<std::vector<double>> &m,
+  const dense_spectrum::complex_eigen_system &system,
+  const std::vector<exprt> &slots,
+  const std::vector<exprt> &second,
+  eigen_bounds &bounds)
+{
+  const std::size_t n = m.size();
+  const double r = system.vector_radius;
+  std::vector<std::size_t> first, last;
+  std::vector<std::vector<double>> re(n), im(n), im_radius(n);
+  for (std::size_t k = 0; k < system.candidates.size(); ++k)
+  {
+    first.push_back(re[0].size());
+    for (const auto &candidate : system.candidates[k])
+    {
+      for (std::size_t i = 0; i < n; ++i)
+      {
+        re[i].push_back(candidate.vector[i].real());
+        im[i].push_back(candidate.vector[i].imag());
+        const bool exact =
+          candidate.real_component == n || candidate.real_component == i;
+        im_radius[i].push_back(exact ? 0.0 : r);
+      }
+      bounds = widest(
+        bounds,
+        pair_bounds(
+          m, system.values[k], system.value_radius[k], candidate.vector, r));
+    }
+    last.push_back(re[0].size());
+  }
+  std::vector<std::vector<exprt>> columns;
+  for (std::size_t p = 0; p < slots.size(); ++p)
+  {
+    const exprt pick = nondet_value(size_type(), "$phase$");
+    code_assumet among{and_exprt(
+      binary_relation_exprt(pick, ">=", select_index(slots[p], first)),
+      binary_relation_exprt(pick, "<", select_index(slots[p], last)))};
+    among.location() = converter_.get_location_from_decl(call_);
+    converter_.add_instruction(among);
+    const exprt flip = nondet_bool();
+    std::vector<exprt> column;
+    for (std::size_t i = 0; i < n; ++i)
+    {
+      const exprt own = make_complex(
+        selected_box(pick, re[i], r), selected_box(pick, im[i], im_radius[i]));
+      const exprt signed_own = if_exprt(flip, negated_complex(own), own);
+      column.push_back(
+        p == 0 ? signed_own
+               : if_exprt(second[p], conjugate(columns[p - 1][i]), signed_own));
+    }
+    columns.push_back(column);
+  }
+  return columns;
 }
 
 // The value of a cofactor expansion and the sum of its terms' magnitudes.
@@ -7231,61 +7629,179 @@ numpy_call_expr::runtime_eigenvalues(const std::vector<std::vector<exprt>> &m)
   return {{re1, im1}, {re2, im2}};
 }
 
-// Binds v as a unit eigenvector of m for `lambda`: |m v - lambda v| within
-// `residual` and |v.v - 1| within `norm`, unless `excused`.
-void numpy_call_expr::bind_eigenvector(
-  const std::vector<std::vector<exprt>> &m,
-  const exprt &lambda,
-  const std::vector<exprt> &v,
-  const exprt &residual,
-  const exprt &norm,
-  const exprt &excused)
+// The eigenvalues of a 3x3 matrix known only at run time, as (real, imag)
+// pairs: a real eigenvalue t (a real 3x3 matrix always has one) and the two
+// roots of the quadratic that deflating it leaves, a real pair or a
+// conjugate pair with the positive imaginary part first, before or after t.
+// LAPACK's are those of a matrix within lapack_tolerance S of m (S the sum
+// of the entries' magnitudes, at least its 2-norm and every eigenvalue's
+// magnitude), so det(m - t I), the sum of all three and the sum of their
+// pairwise products are within 144, 6 and 24 times lapack_tolerance S^3, S
+// and S^2 of zero, the trace and the sum of the principal 2x2 minors (the
+// first-order perturbation, doubled for the rest and for rounding). These
+// fix the spectrum, and leave the solver one root to find at a time.
+std::vector<std::pair<exprt, exprt>> numpy_call_expr::runtime_eigenvalues_3x3(
+  const std::vector<std::vector<exprt>> &m)
 {
-  for (std::size_t i = 0; i < m.size(); ++i)
-    assume_near(
-      ieee_op(
-        "ieee_sub", dot_double(m[i], v), ieee_op("ieee_mul", lambda, v[i])),
-      residual,
-      excused);
+  raise_linalg(
+    "LinAlgError",
+    "Array must not contain infs or NaNs",
+    not_exprt(entries_finite(m)));
+  const auto mul = [](const exprt &x, const exprt &y) {
+    return ieee_op("ieee_mul", x, y);
+  };
+  const auto add = [](const exprt &x, const exprt &y) {
+    return ieee_op("ieee_add", x, y);
+  };
+  const auto sub = [](const exprt &x, const exprt &y) {
+    return ieee_op("ieee_sub", x, y);
+  };
+  const exprt tolerance = from_double(lapack_tolerance, double_type());
+  const exprt scale = entry_scale(m);
+  const exprt trace = add(add(m[0][0], m[1][1]), m[2][2]);
+  exprt minors = nil_exprt();
+  for (std::size_t i = 0; i < 3; ++i)
+    for (std::size_t j = i + 1; j < 3; ++j)
+    {
+      const exprt minor = sub(mul(m[i][i], m[j][j]), mul(m[i][j], m[j][i]));
+      minors = minors.is_nil() ? minor : add(minors, minor);
+    }
+  const exprt t = lapack_value(0.0, INFINITY);
+  std::vector<std::vector<exprt>> shifted = m;
+  for (std::size_t i = 0; i < 3; ++i)
+    shifted[i][i] = sub(m[i][i], t);
+  const exprt characteristic = cofactor_terms(shifted).first;
+  const exprt sum_bound =
+    within_floor(product({from_double(6.0, double_type()), tolerance, scale}));
+  const exprt pair_bound = within_floor(
+    product({from_double(24.0, double_type()), tolerance, scale, scale}));
+  const exprt root_bound = within_floor(product(
+    {from_double(144.0, double_type()), tolerance, scale, scale, scale}));
+  // While 1000 S^3 is finite, so is every term below.
+  const exprt excused = any_not_finite(
+    {root_bound,
+     trace,
+     minors,
+     product({from_double(1e3, double_type()), scale, scale, scale})});
+  const exprt re1 = lapack_value(0.0, INFINITY),
+              re2 = lapack_value(0.0, INFINITY);
+  const exprt im1 = lapack_value(0.0, INFINITY),
+              im2 = lapack_value(0.0, INFINITY);
+  const exprt zero = from_double(0.0, double_type());
+  const exprt reach = ieee_op("ieee_add", scale, scale);
+  exprt::operandst within;
+  for (const exprt &part : {t, re1, re2, im1, im2})
+    within.push_back(binary_relation_exprt(abs_double(part), "<=", reach));
+  code_assumet bounded{or_exprt(excused, and_exprt(within))};
+  bounded.location() = converter_.get_location_from_decl(call_);
+  converter_.add_instruction(bounded);
+  code_assumet shape{or_exprt(
+    and_exprt(equality_exprt(im1, zero), equality_exprt(im2, zero)),
+    and_exprt(
+      and_exprt(
+        equality_exprt(re1, re2), equality_exprt(im2, negate_double(im1))),
+      binary_relation_exprt(im1, ">", zero)))};
+  shape.location() = converter_.get_location_from_decl(call_);
+  converter_.add_instruction(shape);
+  const exprt rest = add(re1, re2);
+  assume_near(characteristic, root_bound, excused);
+  assume_near(sub(add(rest, t), trace), sum_bound, excused);
   assume_near(
-    ieee_op("ieee_sub", dot_double(v, v), from_double(1.0, double_type())),
-    norm,
-    false_exprt());
+    sub(add(sub(mul(re1, re2), mul(im1, im2)), mul(t, rest)), minors),
+    pair_bound,
+    excused);
+  const exprt first = nondet_bool();
+  const auto at = [&](const exprt &when_first, const exprt &otherwise) {
+    return if_exprt(first, when_first, otherwise);
+  };
+  const exprt w = stored(complex_array(
+    {make_complex(at(t, re1), at(zero, im1)),
+     make_complex(at(re1, re2), at(im1, im2)),
+     make_complex(at(re2, t), at(im2, zero))}));
+  // The trace relation again over the eigenvalues in the order the program
+  // reads them, which a sum over the results then matches.
+  std::vector<std::pair<exprt, exprt>> positions;
+  exprt total = nil_exprt();
+  for (std::size_t k = 0; k < 3; ++k)
+  {
+    const exprt value =
+      index_exprt(w, from_integer(k, size_type()), get_complex_struct_type());
+    positions.emplace_back(
+      complex_part(value, "real"), complex_part(value, "imag"));
+    total = total.is_nil() ? value
+                           : converter_.get_complex_handler().handle_binary_op(
+                               "Add", total, value, nlohmann::json::object());
+  }
+  assume_near(sub(complex_part(total, "real"), trace), sum_bound, excused);
+  return positions;
 }
 
-// eig of a symmetric 2x2 matrix known only at run time: real eigenvalues as
-// runtime_eigenvalues bounds them, each with its unit eigenvector.
+// eig of a 2x2 or 3x3 matrix known only at run time: the eigenvalues as
+// runtime_eigenvalues bounds them, each with a unit eigenvector whose
+// residual stays within lapack_tolerance S of zero (LAPACK's pair is exact
+// for a matrix within rounding of m). A real eigenvalue's eigenvector is
+// real, and the second of a conjugate pair has the conjugate of the first's;
+// the phase LAPACK picks is left free.
 exprt numpy_call_expr::runtime_eigen_pairs(
   const std::vector<std::vector<exprt>> &m)
 {
-  const std::vector<std::pair<exprt, exprt>> values = runtime_eigenvalues(m);
-  code_assumet real{
-    equality_exprt(values[0].second, from_double(0.0, double_type()))};
-  real.location() = converter_.get_location_from_decl(call_);
-  converter_.add_instruction(real);
-  // LAPACK's pair is exact for a matrix within rounding of m, so its
-  // residual stays within lapack_tolerance S, S the sum of m's entries'
-  // magnitudes.
+  const std::size_t n = m.size();
+  const std::vector<std::pair<exprt, exprt>> spectrum =
+    n == 2 ? runtime_eigenvalues(m) : runtime_eigenvalues_3x3(m);
   const exprt tolerance = from_double(lapack_tolerance, double_type());
   const exprt scale = entry_scale(m);
-  const exprt bound = within_floor(ieee_op("ieee_mul", tolerance, scale));
+  const exprt residual =
+    within_floor(product({from_double(2.0, double_type()), tolerance, scale}));
+  const exprt zero = from_double(0.0, double_type());
+  std::vector<exprt> values;
   std::vector<std::vector<exprt>> columns;
-  for (const auto &value : values)
+  for (std::size_t k = 0; k < n; ++k)
   {
-    columns.push_back(
-      {lapack_value(0.0, INFINITY), lapack_value(0.0, INFINITY)});
-    bind_eigenvector(
-      m,
-      value.first,
-      columns.back(),
-      bound,
-      within_floor(tolerance),
-      any_not_finite(
-        {bound, ieee_op("ieee_mul", from_double(2.0, double_type()), scale)}));
+    const auto &[re, im] = spectrum[k];
+    values.push_back(make_complex(re, im));
+    std::vector<exprt> column;
+    exprt::operandst real_vector, conjugate_vector;
+    for (std::size_t i = 0; i < n; ++i)
+    {
+      const exprt x = lapack_value(0.0, INFINITY),
+                  y = lapack_value(0.0, INFINITY);
+      column.push_back(make_complex(x, y));
+      real_vector.push_back(equality_exprt(y, zero));
+      if (k > 0)
+      {
+        const exprt &before = columns[k - 1][i];
+        conjugate_vector.push_back(and_exprt(
+          equality_exprt(x, complex_part(before, "real")),
+          equality_exprt(y, negate_double(complex_part(before, "imag")))));
+      }
+    }
+    code_assumet real{
+      or_exprt(not_exprt(equality_exprt(im, zero)), and_exprt(real_vector))};
+    real.location() = converter_.get_location_from_decl(call_);
+    converter_.add_instruction(real);
+    if (k > 0)
+    {
+      const auto &[before_re, before_im] = spectrum[k - 1];
+      code_assumet conjugate{or_exprt(
+        not_exprt(and_exprt(
+          and_exprt(
+            equality_exprt(re, before_re),
+            equality_exprt(im, negate_double(before_im))),
+          binary_relation_exprt(before_im, ">", zero))),
+        and_exprt(conjugate_vector))};
+      conjugate.location() = real.location();
+      converter_.add_instruction(conjugate);
+    }
+    columns.push_back(column);
   }
-  return linalg_tuple(
-    {double_array({values[0].first, values[1].first}),
-     columns_as_matrix(columns)});
+  return bound_eigen_tuple(
+    m,
+    values,
+    columns,
+    eigen_relation{
+      residual,
+      within_floor(product({from_double(2.0, double_type()), tolerance})),
+      any_not_finite({residual, product({scale, scale})})});
 }
 
 // svd(compute_uv=False) of a 2x2 matrix known only at run time: LAPACK's
@@ -7320,6 +7836,213 @@ exprt numpy_call_expr::runtime_singular_values(
   return double_array(sigmas);
 }
 
+// The k x k minors of m (rows and columns in increasing order).
+static std::vector<exprt>
+minors_of(const std::vector<std::vector<exprt>> &m, std::size_t k)
+{
+  const std::size_t rows = m.size(), cols = m[0].size();
+  std::vector<exprt> minors;
+  std::vector<bool> row_pick(rows, false), col_pick(cols, false);
+  std::fill(row_pick.begin(), row_pick.begin() + k, true);
+  do
+  {
+    std::fill(col_pick.begin(), col_pick.end(), false);
+    std::fill(col_pick.begin(), col_pick.begin() + k, true);
+    do
+    {
+      std::vector<std::vector<exprt>> sub;
+      for (std::size_t i = 0; i < rows; ++i)
+      {
+        if (!row_pick[i])
+          continue;
+        sub.emplace_back();
+        for (std::size_t j = 0; j < cols; ++j)
+          if (col_pick[j])
+            sub.back().push_back(m[i][j]);
+      }
+      minors.push_back(cofactor_terms(sub).first);
+    } while (std::prev_permutation(col_pick.begin(), col_pick.end()));
+  } while (std::prev_permutation(row_pick.begin(), row_pick.end()));
+  return minors;
+}
+
+static exprt element(const exprt &array, std::size_t i)
+{
+  return index_exprt(
+    array, from_integer(i, size_type()), array.type().subtype());
+}
+
+static exprt summed(const std::vector<exprt> &terms)
+{
+  exprt sum = terms.front();
+  for (std::size_t k = 1; k < terms.size(); ++k)
+    sum = ieee_op("ieee_add", sum, terms[k]);
+  return sum;
+}
+
+// u[i][0] * s[0] * vh[0][j] + ... over the first k singular values, as a
+// program spells A[i][j] reconstructed from svd's (U, S, Vh).
+static exprt reconstructed_entry(
+  const std::array<exprt, 3> &factors,
+  std::size_t i,
+  std::size_t j,
+  std::size_t k)
+{
+  std::vector<exprt> terms;
+  for (std::size_t l = 0; l < k; ++l)
+    terms.push_back(ieee_op(
+      "ieee_mul",
+      ieee_op(
+        "ieee_mul", element(element(factors[0], i), l), element(factors[1], l)),
+      element(element(factors[2], l), j)));
+  return summed(terms);
+}
+
+// The sum of the products of columns a and b of U (`columns`), or of rows a
+// and b of Vh, each `length` long.
+static exprt factor_product(
+  const exprt &factor,
+  std::size_t a,
+  std::size_t b,
+  std::size_t length,
+  bool columns)
+{
+  std::vector<exprt> terms;
+  for (std::size_t i = 0; i < length; ++i)
+    terms.push_back(
+      columns ? ieee_op(
+                  "ieee_mul",
+                  element(element(factor, i), a),
+                  element(element(factor, i), b))
+              : ieee_op(
+                  "ieee_mul",
+                  element(element(factor, a), i),
+                  element(element(factor, b), i)));
+  return summed(terms);
+}
+
+// The singular values of a matrix known only at run time, up to 3x3 and
+// other than 2x2: LAPACK's are those of a matrix within lapack_tolerance S
+// of m (S the sum of the entries' magnitudes), so by Cauchy-Binet the
+// elementary symmetric functions of their squares are within 36, 144 and 72
+// times lapack_tolerance S^2, S^4 and S^6 of the sums of the squared 1x1,
+// 2x2 and 3x3 minors (twice the first-order perturbation). Each is at most
+// 2S, and they are non-negative and descending.
+exprt numpy_call_expr::runtime_singular_values_of(
+  const std::vector<std::vector<exprt>> &m)
+{
+  raise_linalg(
+    "LinAlgError", "SVD did not converge", not_exprt(entries_finite(m)));
+  const std::size_t k = std::min(m.size(), m[0].size());
+  const exprt tolerance = from_double(lapack_tolerance, double_type());
+  const exprt scale = entry_scale(m);
+  const exprt squared = product({scale, scale});
+  std::vector<exprt> sigmas;
+  for (std::size_t j = 0; j < k; ++j)
+    sigmas.push_back(lapack_value(0.0, INFINITY));
+  assume_singular_order(sigmas);
+  const exprt excused = any_not_finite(
+    {product({from_double(1e3, double_type()), squared, squared, squared})});
+  exprt::operandst within;
+  for (const exprt &sigma : sigmas)
+    within.push_back(
+      binary_relation_exprt(sigma, "<=", ieee_op("ieee_add", scale, scale)));
+  code_assumet bounded{or_exprt(excused, and_exprt(within))};
+  bounded.location() = converter_.get_location_from_decl(call_);
+  converter_.add_instruction(bounded);
+  const double factors[] = {36.0, 144.0, 72.0};
+  exprt power = squared;
+  for (std::size_t order = 1; order <= k; ++order)
+  {
+    exprt target = nil_exprt(), symmetric = nil_exprt();
+    for (const exprt &minor : minors_of(m, order))
+    {
+      const exprt term = ieee_op("ieee_mul", minor, minor);
+      target = target.is_nil() ? term : ieee_op("ieee_add", target, term);
+    }
+    std::vector<bool> pick(k, false);
+    std::fill(pick.begin(), pick.begin() + order, true);
+    do
+    {
+      std::vector<exprt> chosen;
+      for (std::size_t j = 0; j < k; ++j)
+        if (pick[j])
+          chosen.push_back(sigmas[j]);
+      const exprt root = product(chosen);
+      const exprt term = ieee_op("ieee_mul", root, root);
+      symmetric =
+        symmetric.is_nil() ? term : ieee_op("ieee_add", symmetric, term);
+    } while (std::prev_permutation(pick.begin(), pick.end()));
+    assume_near(
+      ieee_op("ieee_sub", symmetric, target),
+      within_floor(product(
+        {from_double(factors[order - 1], double_type()), tolerance, power})),
+      excused);
+    power = product({power, squared});
+  }
+  return double_array(sigmas);
+}
+
+// svd's (U, S, Vh) of a matrix known only at run time, up to 3x3: S as
+// runtime_singular_values_of bounds it, and factors whose entries LAPACK's
+// backward stability ties to m: U[:, :k] diag(S) Vh[:k, :] within
+// 4 lapack_tolerance S of m entry by entry, and the columns of U and the
+// rows of Vh orthonormal within 2 lapack_tolerance (n u for LAPACK, plus
+// rounding). The signs and the completing vectors are left free.
+exprt numpy_call_expr::runtime_svd_factors(
+  const std::vector<std::vector<exprt>> &m)
+{
+  const std::size_t rows = m.size(), cols = m[0].size();
+  const std::size_t k = std::min(rows, cols);
+  const bool full = svd_flag("full_matrices", true);
+  const exprt s = stored(runtime_singular_values_of(m));
+  const auto factor = [&](std::size_t r, std::size_t c) {
+    std::vector<exprt> out_rows;
+    for (std::size_t i = 0; i < r; ++i)
+    {
+      std::vector<exprt> row;
+      for (std::size_t j = 0; j < c; ++j)
+        row.push_back(lapack_value(0.0, INFINITY));
+      out_rows.push_back(double_array(row));
+    }
+    return stored(double_array(out_rows));
+  };
+  const std::array<exprt, 3> factors = {
+    factor(rows, full ? rows : k), s, factor(full ? cols : k, cols)};
+  const exprt tolerance = from_double(lapack_tolerance, double_type());
+  const exprt scale = entry_scale(m);
+  const exprt reconstruction =
+    within_floor(product({from_double(4.0, double_type()), tolerance, scale}));
+  const exprt excused =
+    any_not_finite({reconstruction, product({scale, scale})});
+  for (std::size_t i = 0; i < rows; ++i)
+    for (std::size_t j = 0; j < cols; ++j)
+      assume_near(
+        ieee_op("ieee_sub", reconstructed_entry(factors, i, j, k), m[i][j]),
+        reconstruction,
+        excused);
+  const exprt unit =
+    within_floor(product({from_double(2.0, double_type()), tolerance}));
+  const exprt one = from_double(1.0, double_type());
+  for (bool columns : {true, false})
+  {
+    const std::size_t count = full ? (columns ? rows : cols) : k;
+    for (std::size_t a = 0; a < count; ++a)
+      for (std::size_t b = a; b < count; ++b)
+      {
+        const exprt sum = factor_product(
+          columns ? factors[0] : factors[2],
+          a,
+          b,
+          columns ? rows : cols,
+          columns);
+        assume_near(
+          a == b ? ieee_op("ieee_sub", sum, one) : sum, unit, false_exprt());
+      }
+  }
+  return linalg_tuple({factors[0], factors[1], factors[2]});
+}
+
 // The real matrix of a constant operand: det and inv check its order too.
 static std::vector<std::vector<double>> constant_matrix(
   const std::string &function,
@@ -7334,26 +8057,6 @@ static std::vector<std::vector<double>> constant_matrix(
           "TypeError: numpy.linalg." + function +
           " does not support complex-valued matrices");
   return real_matrix(matrix);
-}
-
-// A 2x2 list literal whose off-diagonal entries are the same name or
-// constant, which makes its eigenvalues real at run time.
-static bool is_symmetric_2x2_literal(const nlohmann::json &arg)
-{
-  if (!is_list_literal(arg) || arg["elts"].size() != 2)
-    return false;
-  const nlohmann::json &rows = arg["elts"];
-  if (
-    !is_list_literal(rows[0]) || !is_list_literal(rows[1]) ||
-    rows[0]["elts"].size() != 2 || rows[1]["elts"].size() != 2)
-    return false;
-  const nlohmann::json &upper = rows[0]["elts"][1], &lower = rows[1]["elts"][0];
-  const std::string kind = upper.value("_type", "");
-  if (kind != lower.value("_type", ""))
-    return false;
-  if (kind == "Name")
-    return upper["id"] == lower["id"];
-  return kind == "Constant" && upper["value"] == lower["value"];
 }
 
 // The diagnostic for an operand no numpy.linalg route can read.
@@ -7388,10 +8091,6 @@ exprt numpy_call_expr::linalg_unary(
     reject_linalg_operand(function);
   if (const std::optional<linalg_fault> fault = shape_fault(*shape, square))
     return raise_linalg_fault(fault->type, fault->message);
-  if (function == "eig" && !is_symmetric_2x2_literal(arg))
-    throw std::runtime_error(
-      "TypeError: numpy.linalg.eig of a run-time matrix supports only "
-      "symmetric 2x2 matrices");
   return runtime_linalg(function, m);
 }
 
@@ -7403,7 +8102,7 @@ exprt numpy_call_expr::runtime_linalg(
 {
   if (m.empty())
     reject_linalg_operand(function);
-  if (m.size() > 3)
+  if (m.size() > 3 || m[0].size() > 3)
     throw std::runtime_error(
       "TypeError: numpy.linalg." + function +
       " supports only run-time matrices up to 3x3");
@@ -7414,29 +8113,29 @@ exprt numpy_call_expr::runtime_linalg(
   return runtime_decomposition(function, m);
 }
 
-// eig, eigvals and svd(compute_uv=False) of a 2x2 matrix known only at run
-// time; eig's matrix is symmetric (linalg_unary checks it).
+// eig, eigvals and svd of a matrix known only at run time, up to 3x3
+// (runtime_linalg checks the order).
 exprt numpy_call_expr::runtime_decomposition(
   const std::string &function,
   const std::vector<std::vector<exprt>> &m)
 {
   const bool two_by_two = m.size() == 2 && m[0].size() == 2;
-  if (function == "svd" && (!svd_values_only() || !two_by_two))
-    throw std::runtime_error(
-      "TypeError: numpy.linalg.svd of a run-time matrix supports only "
-      "compute_uv=False on 2x2 matrices");
-  if (!two_by_two)
+  if (function == "svd" && !svd_values_only())
+    return runtime_svd_factors(m);
+  if (function == "svd")
+    return two_by_two ? runtime_singular_values(m)
+                      : runtime_singular_values_of(m);
+  if (m.size() == 1)
     throw std::runtime_error(
       "TypeError: numpy.linalg." + function +
-      " of a run-time matrix supports only 2x2 matrices");
+      " of a run-time matrix supports only 2x2 and 3x3 matrices");
   if (function == "eig")
     return runtime_eigen_pairs(m);
-  if (function == "svd")
-    return runtime_singular_values(m);
   std::vector<exprt> values;
-  for (const auto &[re, im] : runtime_eigenvalues(m))
+  for (const auto &[re, im] :
+       two_by_two ? runtime_eigenvalues(m) : runtime_eigenvalues_3x3(m))
     values.push_back(make_complex(re, im));
-  return double_array(values);
+  return complex_array(values);
 }
 
 exprt numpy_call_expr::constant_linalg(
@@ -7916,7 +8615,11 @@ exprt numpy_call_expr::raise_linalg_fault(
     return double_array(
       {make_complex(gen_zero(double_type()), gen_zero(double_type()))});
   if (function == "eig")
-    return linalg_tuple({zero, square});
+  {
+    const exprt c =
+      make_complex(gen_zero(double_type()), gen_zero(double_type()));
+    return linalg_tuple({complex_array({c}), complex_columns({{c}})});
+  }
   if (function == "svd")
     return svd_values_only() ? zero : linalg_tuple({square, zero, square});
   return function == "inv" ? square : zero;
@@ -8009,13 +8712,34 @@ exprt numpy_call_expr::linalg_decomposition(
   return svd_values_only() ? singular_values(m) : svd_factors(m);
 }
 
+// The value of svd's boolean keyword `name` (the preprocessor binds the
+// positional ones to their names), `fallback` when absent. Only a constant
+// is read, so the keyword is evaluated once, at conversion.
+bool numpy_call_expr::svd_flag(const std::string &name, bool fallback) const
+{
+  for (const auto &kw : call_.value("keywords", nlohmann::json::array()))
+  {
+    if (kw.value("arg", "") != name)
+      continue;
+    const nlohmann::json &value = kw["value"];
+    if (
+      value.value("_type", "") != "Constant" || !value.contains("value") ||
+      !(value["value"].is_boolean() || value["value"].is_number_integer()))
+      throw std::runtime_error(
+        "TypeError: numpy.linalg.svd keyword '" + name +
+        "' must be a constant boolean");
+    return value["value"].is_boolean() ? value["value"].get<bool>()
+                                       : value["value"].get<long long>() != 0;
+  }
+  return fallback;
+}
+
 bool numpy_call_expr::svd_values_only() const
 {
-  bool values_only = false;
-  for (const auto &kw : call_.value("keywords", nlohmann::json::array()))
-    values_only = values_only || (kw.value("arg", "") == "compute_uv" &&
-                                  kw["value"].value("value", true) == false);
-  return values_only;
+  if (svd_flag("hermitian", false))
+    throw std::runtime_error(
+      "TypeError: numpy.linalg.svd(hermitian=True) is not supported");
+  return !svd_flag("compute_uv", true);
 }
 
 // A 2x2 matrix: v are the eigenvectors of A^T A, u1 = A v1 / sigma1 and u2
@@ -8075,8 +8799,8 @@ singular_gap(const std::vector<singular_triple> &triples, double rounding)
 exprt numpy_call_expr::svd_factors(const std::vector<std::vector<double>> &m)
 {
   const std::size_t n = svd_order(m);
-  const bool diagonal = is_diagonal(m);
-  if (!diagonal && n > 2)
+  const bool diagonal = n != 0 && is_diagonal(m);
+  if (!diagonal && n != 2)
     return dense_svd_factors(m);
   const std::vector<singular_triple> triples =
     diagonal ? diagonal_singular_triples(m) : singular_triples_2x2(m);
@@ -8118,24 +8842,102 @@ exprt numpy_call_expr::svd_factors(const std::vector<std::vector<double>> &m)
     {double_array(u_rows), double_array(sigmas), double_array(vh_rows)});
 }
 
-// svd's (U, S, Vh) of a dense square matrix larger than 2x2 whose singular
-// values are distinct: each factor within the radius the gap between them
-// allows of the extended-precision one, which singular_system_of checked
-// against the reconstruction and orthogonality relations. LAPACK picks the
-// sign per singular triple (independently for a singular value within
-// rounding of zero).
+// The reconstruction and orthogonality relations of svd's factors as a
+// program spells them over the stored results: each entry of
+// U[:, :k] diag(S) Vh[:k, :] within its bound of A's, and the columns of U
+// and the rows of Vh orthonormal within theirs. They hold at every point of
+// the factors' boxes (a singular value whose vectors take independent signs
+// counts as either sign), so they restrict nothing; they let a solver relate
+// the results to the matrix without exploring the boxes.
+void numpy_call_expr::bind_svd_relations(
+  const std::vector<std::vector<double>> &m,
+  const dense_spectrum::singular_system &system,
+  const std::array<exprt, 3> &factors,
+  const std::pair<double, double> &radii,
+  const std::vector<double> &sign_free)
+{
+  const double value_radius = radii.first, r = radii.second;
+  const std::size_t k = system.sigma.size();
+  // A program subtracts each entry of A from its reconstruction, and 1 from
+  // the norm of a singular vector, but compares two vectors' product with 0
+  // directly.
+  const auto near = [&](const exprt &sum, double target, double bound) {
+    const exprt measured =
+      std::isnan(target)
+        ? sum
+        : ieee_op("ieee_sub", sum, from_double(target, double_type()));
+    code_assumet within{binary_relation_exprt(
+      abs_double(measured), "<=", from_double(bound, double_type()))};
+    within.location() = converter_.get_location_from_decl(call_);
+    converter_.add_instruction(within);
+  };
+  // Each reconstructed entry is a sum of k products of three results; past
+  // max_reconstruction_products of them a solver takes minutes to find a
+  // counterexample, so a larger matrix keeps only the orthogonality ones.
+  const bool reconstruct =
+    m.size() * m[0].size() * k <= max_reconstruction_products;
+  for (std::size_t i = 0; reconstruct && i < m.size(); ++i)
+    for (std::size_t j = 0; j < m[i].size(); ++j)
+    {
+      std::vector<std::vector<box_factor>> terms;
+      for (std::size_t l = 0; l < k; ++l)
+        terms.push_back(
+          {{system.u[l][i], r},
+           sign_free[l] > 0 ? box_factor{0.0, sign_free[l]}
+                            : box_factor{system.sigma[l], value_radius},
+           {system.v[l][j], r}});
+      near(
+        reconstructed_entry(factors, i, j, k),
+        m[i][j],
+        implied_bound(terms, m[i][j]));
+    }
+  for (bool columns : {true, false})
+  {
+    const dense_spectrum::matrix &vectors = columns ? system.u : system.v;
+    for (std::size_t a = 0; a < vectors.size(); ++a)
+      for (std::size_t b = a; b < vectors.size(); ++b)
+      {
+        std::vector<std::vector<box_factor>> terms;
+        for (std::size_t i = 0; i < vectors[a].size(); ++i)
+          terms.push_back({{vectors[a][i], r}, {vectors[b][i], r}});
+        near(
+          factor_product(
+            columns ? factors[0] : factors[2],
+            a,
+            b,
+            vectors[a].size(),
+            columns),
+          a == b ? 1.0 : NAN,
+          implied_bound(terms, a == b ? 1.0 : 0.0));
+      }
+  }
+}
+
+// svd's (U, S, Vh) of a dense matrix (square and larger than 2x2, or
+// rectangular) whose singular values are distinct: each factor within the
+// radius the gap between them allows of the extended-precision one, which
+// singular_system_of checked against the reconstruction and orthogonality
+// relations. LAPACK picks the sign per singular triple (independently for a
+// singular value within rounding of zero, and for each vector that only
+// completes a full factor). U is m x m and Vh n x n with full_matrices, and
+// m x k and k x n without (k = min(m, n)).
 exprt numpy_call_expr::dense_svd_factors(
   const std::vector<std::vector<double>> &m)
 {
   const dense_spectrum::singular_system system =
-    dense_spectrum::singular_system_of(m);
+    dense_spectrum::singular_system_of(m, svd_flag("full_matrices", true));
+  const std::size_t k = system.sigma.size();
   const double norm = frobenius_norm(m);
   const double value_radius = 1e-12 * norm;
   std::vector<singular_triple> triples;
-  for (std::size_t k = 0; k < system.sigma.size(); ++k)
-    triples.push_back({system.sigma[k], system.u[k], system.v[k]});
-  const double vector_radius =
-    1e-12 * (1 + norm / singular_gap(triples, 2 * value_radius));
+  for (std::size_t j = 0; j < k; ++j)
+    triples.push_back({system.sigma[j], system.u[j], system.v[j]});
+  double gap = singular_gap(triples, 2 * value_radius);
+  // A vector that completes a full factor spans what A's range (or row
+  // space) leaves, as accurate as the smallest singular value allows.
+  if (system.u.size() > k || system.v.size() > k)
+    gap = std::min(gap, system.sigma.back());
+  const double vector_radius = 1e-12 * (1 + norm / gap);
   if (vector_radius > 1e-6)
     throw std::runtime_error(
       "TypeError: numpy.linalg.svd of a matrix larger than 2x2 with close "
@@ -8148,14 +8950,21 @@ exprt numpy_call_expr::dense_svd_factors(
   };
   std::vector<std::vector<exprt>> us, vs;
   std::vector<exprt> sigmas;
-  for (const singular_triple &t : triples)
+  std::vector<double> sign_free;
+  for (std::size_t j = 0; j < k; ++j)
   {
+    const singular_triple &t = triples[j];
     sigmas.push_back(lapack_value(t.sigma, value_radius));
+    const bool tied = t.sigma > value_radius;
+    sign_free.push_back(tied ? 0.0 : t.sigma + value_radius);
     const exprt flip = nondet_bool();
-    const exprt flip_v = t.sigma <= value_radius ? nondet_bool() : flip;
     us.push_back(signed_by(flip, box(t.u)));
-    vs.push_back(signed_by(flip_v, box(t.v)));
+    vs.push_back(signed_by(tied ? flip : nondet_bool(), box(t.v)));
   }
+  for (std::size_t j = k; j < system.u.size(); ++j)
+    us.push_back(with_any_sign(box(system.u[j])));
+  for (std::size_t j = k; j < system.v.size(); ++j)
+    vs.push_back(with_any_sign(box(system.v[j])));
   assume_singular_order(sigmas);
   std::vector<exprt> u_rows, vh_rows;
   for (std::size_t i = 0; i < m.size(); ++i)
@@ -8164,10 +8973,15 @@ exprt numpy_call_expr::dense_svd_factors(
     for (const auto &u : us)
       row.push_back(u[i]);
     u_rows.push_back(double_array(row));
-    vh_rows.push_back(double_array(vs[i]));
   }
-  return linalg_tuple(
-    {double_array(u_rows), double_array(sigmas), double_array(vh_rows)});
+  for (const auto &v : vs)
+    vh_rows.push_back(double_array(v));
+  const exprt u = stored(double_array(u_rows));
+  const exprt s = stored(double_array(sigmas));
+  const exprt vh = stored(double_array(vh_rows));
+  bind_svd_relations(
+    m, system, {u, s, vh}, {value_radius, vector_radius}, sign_free);
+  return linalg_tuple({u, s, vh});
 }
 
 // NumPy evaluates these with its own vectorised code where the CPU has it

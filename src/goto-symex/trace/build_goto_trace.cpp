@@ -469,7 +469,8 @@ struct race_flag_trackert
 
 /* The conditional gotos that share their column with another in a run of
  * instructions on one line: a && or || condition becomes one goto per operand,
- * all at the statement's location. */
+ * all at the statement's location. goto-convert marks the operand gotos it
+ * makes, but not the goto that then tests the lowered condition's value. */
 static std::unordered_set<const goto_programt::instructiont *>
 condition_operand_gotos(const goto_programt &prog)
 {
@@ -492,6 +493,8 @@ condition_operand_gotos(const goto_programt &prog)
     }
     if (instruction.is_goto() && !is_true(instruction.guard))
       run[instruction.location.get_column()].push_back(&instruction);
+    if (instruction.location.is_short_circuit_operand())
+      operands.insert(&instruction);
   }
   end_run();
   return operands;
