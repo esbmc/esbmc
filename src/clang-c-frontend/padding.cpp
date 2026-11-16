@@ -113,6 +113,29 @@ raise_to_explicit_alignment(BigInt &max_alignment, const exprt &alignment)
     max_alignment = value;
 }
 
+/* A C++ data member of empty class type has no components, yet occupies one
+ * byte ([intro.object]/8). Insert that byte after `member` unless it is there
+ * already; return the iterator to `member` so the caller's loop visits the
+ * byte next and counts it. */
+static struct_typet::componentst::iterator reserve_empty_class_member_byte(
+  struct_typet::componentst &components,
+  struct_typet::componentst::iterator member,
+  const BigInt &member_size)
+{
+  if (!member->get_bool("#empty_class_member") || member_size != 0)
+    return member;
+
+  const std::string name = std::string(pad_prefix) + member->get_name().c_str();
+  const auto next = std::next(member);
+  if (next != components.end() && next->get_name() == name)
+    return member;
+
+  struct_typet::componentt byte(
+    name, name, unsignedbv_typet(config.ansi_c.char_width));
+  byte.set_is_padding(true);
+  return std::prev(components.insert(next, byte));
+}
+
 static void add_padding(struct_typet &type, const namespacet &ns)
 {
   /* components only exist for complete types */
@@ -287,7 +310,9 @@ static void add_padding(struct_typet &type, const namespacet &ns)
     }
 
     type2tc thetype = migrate_type(it_type);
-    offset += type_byte_size(thetype, &ns);
+    const BigInt size = type_byte_size(thetype, &ns);
+    offset += size;
+    it = reserve_empty_class_member_byte(components, it, size);
   }
 
   // any explicit alignment for the struct?

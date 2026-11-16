@@ -156,6 +156,18 @@ bool esbmc_parseoptionst::get_goto_program(
       "GOTO program creation time: {}s",
       time2string(create_stop - create_start));
 
+    if (
+      options.get_bool_option("validate-violation-witness") &&
+      spawns_threads(goto_functions))
+    {
+      log_status(
+        "Violation witness validation is not supported for concurrent "
+        "programs");
+      log_fail("VERIFICATION UNKNOWN");
+      options.set_option("skip-bmc", true);
+      return false;
+    }
+
 #ifdef __GLIBC__
     /* Building the GOTO program allocates and frees the whole
      * operational-model library, and with one arena (see main.cpp) those blocks
