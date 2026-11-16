@@ -657,6 +657,12 @@ void goto_symext::symex_assert()
 
   const goto_programt::instructiont &instruction = *cur_state->source.pc;
 
+  // A --bidirectional block asserts that an inductive-step start state is
+  // unreachable, at the loop exit rather than the head; it is not a program
+  // property, so a violation of it outside the inductive step is no bug.
+  if (instruction.inductive_assertion && !inductive_step)
+    return;
+
   const std::string msg = assertion_message(ns, instruction);
 
   expr2tc tmp = instruction.guard;
