@@ -2,5 +2,6 @@ CORE
 main.c
 --witness-output-yaml -
 ^VERIFICATION FAILED$
-^    format_version: "2\.1"$
+^    format_version: "2\.4"$
+(?s)type: "function_enter"(?:(?!waypoint:).)*line: 12\s+column: 30
 (?s)\A(?!.*thread_id)

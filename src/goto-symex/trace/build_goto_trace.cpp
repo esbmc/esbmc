@@ -299,7 +299,7 @@ using nondet_originst =
 static void record_nondet_return(
   smt_convt &smt_conv,
   const symex_target_equationt::SSA_stept &step,
-  std::list<std::pair<locationt, expr2tc>> &out,
+  std::list<goto_trace_stept::nondet_returnt> &out,
   nondet_originst &origin)
 {
   if (!step.is_assignment())
@@ -336,9 +336,43 @@ static void record_nondet_return(
   expr2tc value = smt_conv.get(nondet);
   if (!is_nil_expr(value) && is_constant_expr(value))
   {
-    out.emplace_back(*rparen, value);
+    out.push_back({*rparen, value, step.source.thread_nr});
     origin[to_symbol2t(nondet).thename] = nullptr;
   }
+}
+
+/* Record a thread spawned on this path. The spawn intrinsic assigns the new
+ * thread's number to the call's result in a hidden step, after run_intrinsic
+ * has moved the pc past the call. */
+static void record_spawn(
+  smt_convt &smt_conv,
+  const symex_target_equationt::SSA_stept &step,
+  size_t nondet_returns_before,
+  std::list<goto_trace_stept::spawnt> &out)
+{
+  if (
+    !step.is_assignment() || !step.source.prog ||
+    step.source.pc == step.source.prog->instructions.begin() ||
+    !is_constant_int2t(step.rhs))
+    return;
+
+  const goto_programt::const_targett call = std::prev(step.source.pc);
+  if (!call->is_function_call())
+    return;
+  const code_function_call2t &code = to_code_function_call2t(call->code);
+  if (
+    !is_symbol2t(code.function) ||
+    to_symbol2t(code.function).thename != "c:@F@__ESBMC_spawn_thread" ||
+    !is_symbol2t(step.original_lhs) || !is_symbol2t(code.ret) ||
+    to_symbol2t(step.original_lhs).thename != to_symbol2t(code.ret).thename ||
+    !smt_conv.l_get(step.guard).is_true())
+    return;
+
+  out.push_back(
+    {static_cast<unsigned>(to_constant_int2t(step.rhs).value.to_uint64()),
+     step.source.thread_nr,
+     {call, step.stack_trace()},
+     nondet_returns_before});
 }
 
 /* Tracks which SSA symbols were computed from constants alone. A branch whose
@@ -512,8 +546,9 @@ void build_goto_trace(
     const goto_programt *,
     std::unordered_set<const goto_programt::instructiont *>>
     operand_gotos;
-  std::list<std::pair<locationt, expr2tc>> nondet_returns;
+  std::list<goto_trace_stept::nondet_returnt> nondet_returns;
   nondet_originst nondet_origin;
+  std::list<goto_trace_stept::spawnt> spawns;
 
   // l_get() memoises against the current model internally (the cache is
   // cleared on every solve / context change), so the thousands of repeated
@@ -524,6 +559,7 @@ void build_goto_trace(
     inputs.note_assignment(SSA_step);
     race_flags.note_assignment(smt_conv, SSA_step);
     record_nondet_return(smt_conv, SSA_step, nondet_returns, nondet_origin);
+    record_spawn(smt_conv, SSA_step, nondet_returns.size(), spawns);
 
     // Hidden steps are internal SSA bookkeeping (e.g. phi-merge nodes at
     // control-flow joins). They carry a synthesised value and a source
@@ -620,6 +656,7 @@ void build_goto_trace(
         it->second.count(&*SSA_step.source.pc);
     }
     goto_trace_step.nondet_returns.swap(nondet_returns);
+    goto_trace_step.spawns.swap(spawns);
 
     goto_trace.steps.push_back(goto_trace_step);
   }
