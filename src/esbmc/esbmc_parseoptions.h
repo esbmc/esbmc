@@ -9,6 +9,7 @@
 #include <util/config/parseoptions.h>
 #include <goto-programs/goto_functions_algorithm.h>
 #include <util/base/threeval.h>
+#include <optional>
 #include <string_view>
 
 // Macro to determine if color output should be enabled
@@ -59,6 +60,10 @@ protected:
 
   virtual bool
   process_goto_program(optionst &options, goto_functionst &goto_functions);
+
+  void configure_sv_comp_threads(
+    optionst &options,
+    const goto_functionst &goto_functions);
 
   /// Whether the run needs the loop-invariant machinery.
   bool wants_loop_invariants() const;
@@ -167,6 +172,20 @@ protected:
   // Dead-store advisories (CWE-563) collected by --dead-store-check during
   // goto preprocessing; surfaced textually and (via bmct) in SARIF.
   std::vector<dead_store_advisoryt> dead_store_advisories;
+
+  // Head of the loop the recurrent-set check proved non-terminating; the
+  // non-termination witness names it.
+  std::optional<locationt> non_termination_loop;
+
+  // Heads of the loops the ranking check proved terminating; the
+  // non-termination witness does not name them.
+  std::vector<locationt> terminating_loops;
+
+  // Witness transition invariants (loop head, C expression) from a
+  // ranking-function termination proof.
+  std::vector<std::pair<locationt, std::string>> ranking_transition_invariants;
+  /// The reachable-state invariants assume_reachable_loop_states inserted.
+  std::vector<std::pair<locationt, std::string>> reachable_state_invariants;
 
   // coverage mode
   bool is_coverage;

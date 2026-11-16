@@ -16,15 +16,10 @@
 // shape at the wrapper/enforce-mode level; this is its replace-mode call-
 // site counterpart).
 //
-// Note on what this test does and does not exercise: the region-snapshot
-// copy loop IS built here (materialize_ptr_region_old_snapshot, reused
-// from the enforce-mode path) rather than aborting, but for this exact
-// shape its result is provably unused -- nothing at the replaced call site
-// ever reads from loop_invariant's text, so the copy loop is sliced away
-// before reaching SMT encoding (confirmed: "Slicing time: ... removed N
-// assignments" is measurably larger with the loop_invariant's region
-// reference present than without it, for an otherwise-identical VCC
-// count). What this test DOES prove is the abort is gone and the separate,
+// Note on what this test does and does not exercise: nothing at the
+// replaced call site reads loop_invariant's text, so the region snapshot it
+// names is dropped before materialisation and no copy loop is built
+// (#7627). What this test DOES prove is the abort is gone and the separate,
 // literal-indexed ensures conjuncts genuinely constrain the caller (see
 // the _fail sibling). A quantified old(ptr)[j] referenced directly inside
 // ensures's own forall -- the only way to make the region-snapshot

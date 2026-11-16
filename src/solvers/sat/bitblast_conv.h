@@ -96,7 +96,7 @@ public:
     unsigned int low,
     const smt_sort *s);
   virtual tvt l_get(const smt_ast *a);
-  virtual void assert_ast(const smt_ast *a);
+  virtual void assert_ast_in_solver(const smt_ast *a);
 
   // Some gunk
   expr2tc get_bool(const smt_ast *a);

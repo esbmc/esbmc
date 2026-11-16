@@ -304,6 +304,8 @@ exprt python_math::handle(
     return handle_copysign(std::move(lhs), std::move(rhs), element);
   if (func_name == "hypot")
     return handle_hypot(std::move(lhs), std::move(rhs), element);
+  if (func_name == "ldexp")
+    return handle_ldexp(std::move(lhs), rhs, element);
 
   return nil_exprt();
 }
@@ -508,11 +510,43 @@ const symbolt &python_math::get_c_math_symbol_cached(
   return *symbol;
 }
 
+static bool has_side_effect(const expr2tc &e)
+{
+  bool found = is_sideeffect2t(e);
+  e->foreach_operand(
+    [&found](const expr2tc &op) { found = found || has_side_effect(op); });
+  return found;
+}
+
+/// pow(x, 0.5) as sqrt(x), which the solver decides far faster (#10552).
+/// They differ only where pow takes -0.0 to +0.0 and -inf to +inf (C11
+/// F.10.4.4), so those two inputs are guarded.
+static exprt sqrt_for_half_power(const expr2tc &x)
+{
+  const type2tc &type = x->type;
+  const expr2tc zero = gen_zero(type);
+  expr2tc inf;
+  migrate_expr(from_double(INFINITY, migrate_type_back(type)), inf);
+  const expr2tc root = ieee_sqrt2tc(
+    type, x, symbol2tc(get_int32_type(), "c:@__ESBMC_rounding_mode"));
+  return migrate_expr_back(if2tc(
+    type,
+    and2tc(isinf2tc(x), lessthan2tc(x, zero)),
+    inf,
+    if2tc(type, equality2tc(x, zero), zero, root)));
+}
+
 exprt python_math::handle_power_symbolic(exprt base, exprt exp)
 {
   // Convert arguments to double type if needed
   exprt double_base = promote_to_double_if_needed(std::move(base));
   exprt double_exp = promote_to_double_if_needed(std::move(exp));
+
+  // The guards read the base three times, so a call or nondet keeps pow().
+  expr2tc x;
+  migrate_expr(double_base, x);
+  if (try_resolve_constant_double(double_exp) == 0.5 && !has_side_effect(x))
+    return sqrt_for_half_power(x);
 
   // Create the function call.
   // Always return double result: Python power with float operands returns float
@@ -1056,6 +1090,30 @@ exprt python_math::handle_divmod(
     dividend = typecast_exprt(dividend, int_like(divisor));
   if (is_any_ptr(divisor))
     divisor = typecast_exprt(divisor, int_like(dividend));
+  // A bool operand is an int in arithmetic: divmod(7, True) == (7, 0).
+  if (dividend.type().is_bool())
+    dividend = typecast_exprt(dividend, int_like(divisor));
+  if (divisor.type().is_bool())
+    divisor = typecast_exprt(divisor, int_like(dividend));
+
+  // A zero divisor raises a catchable ZeroDivisionError, as `//` and `%` do.
+  if (
+    converter.can_emit_runtime_guard() &&
+    (divisor.type().is_signedbv() || divisor.type().is_unsignedbv() ||
+     divisor.type().is_floatbv()))
+  {
+    dividend =
+      converter.hoist_side_effecting_operand(dividend, element, "$divmod_lhs$");
+    divisor =
+      converter.hoist_side_effecting_operand(divisor, element, "$divmod_rhs$");
+    exprt is_zero("=", bool_type());
+    is_zero.copy_to_operands(divisor, gen_zero(divisor.type()));
+    converter.emit_guarded_raise(
+      is_zero,
+      "ZeroDivisionError",
+      "division by zero",
+      converter.get_location_from_decl(element));
+  }
   return handle_numeric_divmod(
     std::move(dividend), std::move(divisor), element);
 }
@@ -1308,12 +1366,7 @@ exprt python_math::handle_pow(
     return from_double(std::pow(*base_const, *exp_const), double_type());
   }
 
-  base = promote_to_double_if_needed(std::move(base));
-  exp = promote_to_double_if_needed(std::move(exp));
-
-  // Create the function call expression
-  exprt pow_call = build_c_math_call_expr(
-    get_c_math_symbol_cached("c:@F@pow", "pow"), double_type(), {base, exp});
+  exprt pow_call = handle_power_symbolic(std::move(base), std::move(exp));
   pow_call.location() = converter.get_location_from_decl(element);
 
   return pow_call;
@@ -1342,13 +1395,14 @@ exprt python_math::handle_trunc(exprt operand, const nlohmann::json &element)
     const double ll_max =
       static_cast<double>(std::numeric_limits<long long>::max());
     if (truncated >= ll_min && truncated <= ll_max)
-      return from_integer(static_cast<long long>(truncated), int_type());
+      return from_integer(
+        static_cast<long long>(truncated), long_long_int_type());
   }
 
   operand = converter.guard_nonfinite_float_to_int(std::move(operand), element);
   exprt trunc_call =
     build_unary_c_math_call("c:@F@trunc", "trunc", std::move(operand), element);
-  exprt to_int("typecast", int_type());
+  exprt to_int("typecast", long_long_int_type());
   to_int.copy_to_operands(trunc_call);
   return to_int;
 }
@@ -1375,6 +1429,32 @@ exprt python_math::handle_fmod(
   fmod_call.location() = converter.get_location_from_decl(element);
 
   return fmod_call;
+}
+
+exprt python_math::handle_ldexp(
+  exprt x,
+  const exprt &i,
+  const nlohmann::json &element)
+{
+  if (!type_utils::is_integer_type(i.type()) && !i.type().is_bool())
+    return nil_exprt();
+  // C's ldexp takes an int. Past 2200 every finite nonzero x has already
+  // overflowed or underflowed (2^-1074 to 2^1024 spans 2098), so clamp.
+  const typet wide = long_long_int_type();
+  const exprt n = typecast_exprt(i, wide);
+  const exprt high = from_integer(2200, wide);
+  const exprt low = from_integer(-2200, wide);
+  const exprt clamped = if_exprt(
+    binary_relation_exprt(n, ">", high),
+    high,
+    if_exprt(binary_relation_exprt(n, "<", low), low, n));
+  exprt call = build_c_math_call_expr(
+    get_c_math_symbol_cached("c:@F@ldexp", "ldexp"),
+    double_type(),
+    {promote_to_double_if_needed(std::move(x)),
+     typecast_exprt(clamped, int_type())});
+  call.location() = converter.get_location_from_decl(element);
+  return call;
 }
 
 exprt python_math::handle_copysign(

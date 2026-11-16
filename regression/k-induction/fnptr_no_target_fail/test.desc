@@ -1,0 +1,5 @@
+CORE
+main.c
+--k-induction --max-k-step 4 --no-pointer-check --no-bounds-check
+Disabling inductive step
+^VERIFICATION FAILED$

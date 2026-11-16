@@ -1,0 +1,7 @@
+CORE
+main.c
+--witness-output-yaml w.yml
+^VERIFICATION FAILED$
+CHECK_FILE w.yml contains type: "branching"
+CHECK_FILE w.yml absent line: 0$
+CHECK_FILE w.yml contains line: 8$

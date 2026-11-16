@@ -104,18 +104,47 @@ extern "C"
 /// The forked k-induction processes each keep their own property table, and
 /// the one that concludes the run reports its base-case bound as PASSED (D4 of
 /// docs/roadmap/multi-property-strategy-plan.md). The other flags listed turn
-/// --multi-property on. --termination runs the sequential driver instead.
+/// --multi-property on. The TS strategies never run under this driver, yet
+/// they drop the loop-entry flags its inductive step needs (#10154).
+/// --termination runs the sequential driver instead.
 static bool k_induction_parallel_conflicts(const cmdlinet &cmdline)
 {
   if (!cmdline.isset("k-induction-parallel") || cmdline.isset("termination"))
     return false;
 
   for (const char *incompatible :
-       {"multi-property", "all-witnesses", "parallel-solving"})
+       {"multi-property",
+        "all-witnesses",
+        "parallel-solving",
+        "ts-bmc",
+        "ts-check"})
     if (cmdline.isset(incompatible))
     {
       log_error(
         "--k-induction-parallel cannot be combined with --{}", incompatible);
+      return true;
+    }
+  return false;
+}
+
+/// --smt-during-symex builds one solver during symex, and the equation it
+/// leaves refers to that solver's terms, so the --parallel-solving jobs would
+/// all share it unsynchronised (issue #10103). The other flags imply it.
+static bool parallel_solving_conflicts(const cmdlinet &cmdline)
+{
+  if (!cmdline.isset("parallel-solving"))
+    return false;
+
+  for (const char *incompatible :
+       {"smt-during-symex",
+        "smt-thread-guard",
+        "smt-symex-guard",
+        "smt-symex-assert",
+        "smt-symex-assume"})
+    if (cmdline.isset(incompatible))
+    {
+      log_error(
+        "--parallel-solving cannot be combined with --{}", incompatible);
       return true;
     }
   return false;
@@ -233,6 +262,9 @@ static bool incompatible_flags(const cmdlinet &cmdline)
   if (k_induction_parallel_conflicts(cmdline))
     return true;
 
+  if (parallel_solving_conflicts(cmdline))
+    return true;
+
   // --incremental-context-bound owns the outer verification loop, re-running
   // do_bmc per context bound; the unwinding strategies each drive an outer
   // loop of their own, so only one driver can own the run (issue #6480).
@@ -243,7 +275,9 @@ static bool incompatible_flags(const cmdlinet &cmdline)
           "falsification",
           "k-induction",
           "k-induction-parallel",
-          "loop-invariant"})
+          "loop-invariant",
+          "ts-bmc",
+          "ts-check"})
       if (cmdline.isset(incompatible))
       {
         log_error(
@@ -321,12 +355,33 @@ int esbmc_parseoptionst::run_chosen_strategy(
   if (
     cmdline.isset("termination") || cmdline.isset("incremental-bmc") ||
     cmdline.isset("falsification") || cmdline.isset("k-induction") ||
-    cmdline.isset("loop-invariant"))
+    cmdline.isset("loop-invariant") ||
+    // --sv-comp switches a program that starts a thread to incremental BMC.
+    options.get_bool_option("incremental-bmc"))
     return do_bmc_strategy(options, goto_functions);
 
   // No strategy chosen: rely on the simplifier and the flags set through CMD.
   bmct bmc(goto_functions, options, context);
   return do_bmc(bmc);
+}
+
+// --skip-bmc leaves silently; an early answer (#10252) prints its verdict.
+static bool answered_without_bmc(const optionst &options)
+{
+  if (options.get_bool_option("skip-bmc"))
+    return true;
+  const bool early = options.get_bool_option("python-no-checked-exception");
+  if (early)
+    log_success("\nVERIFICATION SUCCESSFUL");
+  return early;
+}
+
+// A --goto2lean run that fails anywhere must not leave an earlier proof file.
+static void
+remove_stale_lean_output(const cmdlinet &cmdline, const optionst &options)
+{
+  if (cmdline.isset("goto2lean") && !options.get_option("output").empty())
+    std::remove(options.get_option("output").c_str());
 }
 
 int esbmc_parseoptionst::doit()
@@ -455,6 +510,7 @@ int esbmc_parseoptionst::doit()
   // Parse ESBMC options (CMD + set internal options)
   optionst options;
   get_command_line_options(options);
+  remove_stale_lean_output(cmdline, options);
 
   // for solidity: detect .sol files in positional args or via --sol
   {
@@ -497,13 +553,11 @@ int esbmc_parseoptionst::doit()
         cmdline.isset("neurosym") || cmdline.isset("default-solver");
       if (!user_picked_solver && !incremental_mode)
       {
-        const std::string padded =
-          std::string(" ") + ESBMC_AVAILABLE_SOLVERS + " ";
         const char *preferred[] = {"bitwuzla", "cvc5", "boolector", "z3"};
         const char *chosen = nullptr;
         for (const char *name : preferred)
         {
-          if (padded.find(std::string(" ") + name + " ") != std::string::npos)
+          if (solver_built_in(name))
           {
             chosen = name;
             break;
@@ -554,7 +608,7 @@ int esbmc_parseoptionst::doit()
     return 1;
 
   // Leave without doing any Bounded Model Checking
-  if (options.get_bool_option("skip-bmc"))
+  if (answered_without_bmc(options))
     return 0;
 
   // A violation found under a bounded schedule space is genuine whichever

@@ -1,0 +1,7 @@
+CORE
+main.c
+--smtlib --smt-formula-only --output out.smt2 --64
+^SMT formula written to output file out\.smt2$
+CHECK_FILE out.smt2 contains \(\(_ extract 4 0\) \|__ESBMC_ptr_obj_start_\d+\|\)
+CHECK_FILE out.smt2 contains \(\(_ extract 3 0\) \|__ESBMC_ptr_obj_start_\d+\|\)
+CHECK_FILE out.smt2 absent bvurem

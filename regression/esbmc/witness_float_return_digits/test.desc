@@ -1,0 +1,6 @@
+CORE
+main.c
+--64 --witness-output-yaml w.yml
+^VERIFICATION FAILED$
+CHECK_FILE w.yml contains \\\\result == 1\.00000105e\+1f
+CHECK_FILE w.yml contains \\\\result == 1\.0000000000000002e\+0

@@ -15,6 +15,7 @@
 #include <util/base/threeval.h>
 #include <vector>
 
+class goto_functionst;
 class smt_convt;
 
 class symex_target_equationt : public symex_targett
@@ -84,10 +85,11 @@ public:
   /// How an assertion is encoded.
   ///   Violated       -- `not(assumpt -> cond)`: can the claim be violated?
   ///   PathReachable  -- `assumpt`: is the path to it feasible at all?
-  ///   Satisfiable    -- `not(assumpt -> cond_neg)`: can the claim hold? UNSAT
-  ///                     means no feasible path satisfies it, so a violation
-  ///                     found against an over-approximation is one the
-  ///                     approximation's own constraints force (issue #7585).
+  ///   Satisfiable    -- `not(assumpt -> cond_neg)`: can the violation be
+  ///                     avoided? UNSAT means every feasible execution
+  ///                     violates the claim, so a violation found against an
+  ///                     over-approximation is one the approximation's own
+  ///                     constraints force (issues #7585, #10642).
   enum class assertion_modet
   {
     Violated,
@@ -151,7 +153,7 @@ public:
     // std::string) and dedups the payload across the many steps that share
     // a message.
     expr2tc cond;
-    /// `cond` with the claim negated under the same guards (issue #7585).
+    /// `cond` negated under the execution guard only (issue #10642).
     expr2tc cond_neg;
     irep_idt comment;
 
@@ -342,6 +344,7 @@ public:
     smt_convt &smt_conv,
     assertion_modet mode = assertion_modet::Violated) override;
   void flush_latest_instructions();
+  void pre_register_addresses(const goto_functionst &goto_functions);
 
   tvt ask_solver_question(const expr2tc &question);
 

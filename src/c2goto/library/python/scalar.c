@@ -47,6 +47,17 @@ __ESBMC_HIDE:;
   return copied;
 }
 
+// Copies an int into storage of its own type, so the store and every read
+// of `.value` stay whole-word rather than byte-level (which wraps at 64 bits
+// under --ir).
+void *__python_scalar_int_copy(long long value)
+{
+__ESBMC_HIDE:;
+  long long *copied = __ESBMC_alloca(sizeof(long long));
+  *copied = value;
+  return copied;
+}
+
 int __python_scalar_eq_num(
   const PyObject *tagged,
   int type_matches,
@@ -192,6 +203,21 @@ __ESBMC_HIDE:;
   return (a->size > b->size) - (a->size < b->size);
 }
 
+// Python truthiness of a tagged scalar: a str is falsy iff empty, a float iff
+// 0.0, an int or bool iff 0.
+int __python_scalar_truthy(
+  const PyObject *tagged,
+  size_t str_type_id,
+  size_t float_type_id)
+{
+__ESBMC_HIDE:;
+  if (tagged->type_id == str_type_id)
+    return *(const char *)tagged->value != '\0';
+  if (tagged->type_id == float_type_id)
+    return *(const double *)tagged->value != 0.0;
+  return *(const long long *)tagged->value != 0;
+}
+
 // Bounded strlen for a runtime string pointer -- a plain strlen never
 // finishes unwinding over a symbolic buffer.
 size_t __python_scalar_strlen_bounded(const char *s)
@@ -296,6 +322,72 @@ __ESBMC_HIDE:;
                         : (double)value / (double)tagged_val;
 }
 
+// Python's a // b on ints: the quotient rounded towards negative infinity.
+// The caller has raised ZeroDivisionError for b == 0.
+static long long __python_floordiv_ll(long long a, long long b)
+{
+  long long q = a / b;
+  if (a % b != 0 && (a < 0) != (b < 0))
+    q--;
+  return q;
+}
+
+// Python's a % b on ints: the remainder takes the sign of b. The caller has
+// raised ZeroDivisionError for b == 0.
+static long long __python_mod_ll(long long a, long long b)
+{
+  long long r = a % b;
+  if (r != 0 && (r < 0) != (b < 0))
+    r += b;
+  return r;
+}
+
+long long __python_scalar_mul_num(
+  const PyObject *tagged,
+  int type_matches,
+  long long value,
+  int tagged_is_left)
+{
+__ESBMC_HIDE:;
+  __ESBMC_assert(
+    tagged && type_matches, "TypeError: unsupported operand type(s) for *");
+  if (!tagged || !type_matches)
+    return 0;
+  return *(const long long *)tagged->value * value;
+}
+
+long long __python_scalar_mod_num(
+  const PyObject *tagged,
+  int type_matches,
+  long long value,
+  int tagged_is_left)
+{
+__ESBMC_HIDE:;
+  __ESBMC_assert(
+    tagged && type_matches, "TypeError: unsupported operand type(s) for %");
+  if (!tagged || !type_matches)
+    return 0;
+  long long tagged_val = *(const long long *)tagged->value;
+  return tagged_is_left ? __python_mod_ll(tagged_val, value)
+                        : __python_mod_ll(value, tagged_val);
+}
+
+long long __python_scalar_floordiv_num(
+  const PyObject *tagged,
+  int type_matches,
+  long long value,
+  int tagged_is_left)
+{
+__ESBMC_HIDE:;
+  __ESBMC_assert(
+    tagged && type_matches, "TypeError: unsupported operand type(s) for //");
+  if (!tagged || !type_matches)
+    return 0;
+  long long tagged_val = *(const long long *)tagged->value;
+  return tagged_is_left ? __python_floordiv_ll(tagged_val, value)
+                        : __python_floordiv_ll(value, tagged_val);
+}
+
 // Both operands tagged, so lhs/rhs already match the AST order.
 long long __python_scalar_sub_num_dyn(
   const PyObject *lhs,
@@ -326,6 +418,53 @@ __ESBMC_HIDE:;
     return 0.0;
   return (double)(*(const long long *)lhs->value) /
          (double)(*(const long long *)rhs->value);
+}
+
+long long __python_scalar_mul_num_dyn(
+  const PyObject *lhs,
+  int lhs_is_num,
+  const PyObject *rhs,
+  int rhs_is_num)
+{
+__ESBMC_HIDE:;
+  __ESBMC_assert(
+    lhs && rhs && lhs_is_num && rhs_is_num,
+    "TypeError: unsupported operand type(s) for *");
+  if (!lhs || !rhs || !lhs_is_num || !rhs_is_num)
+    return 0;
+  return *(const long long *)lhs->value * *(const long long *)rhs->value;
+}
+
+long long __python_scalar_mod_num_dyn(
+  const PyObject *lhs,
+  int lhs_is_num,
+  const PyObject *rhs,
+  int rhs_is_num)
+{
+__ESBMC_HIDE:;
+  __ESBMC_assert(
+    lhs && rhs && lhs_is_num && rhs_is_num,
+    "TypeError: unsupported operand type(s) for %");
+  if (!lhs || !rhs || !lhs_is_num || !rhs_is_num)
+    return 0;
+  return __python_mod_ll(
+    *(const long long *)lhs->value, *(const long long *)rhs->value);
+}
+
+long long __python_scalar_floordiv_num_dyn(
+  const PyObject *lhs,
+  int lhs_is_num,
+  const PyObject *rhs,
+  int rhs_is_num)
+{
+__ESBMC_HIDE:;
+  __ESBMC_assert(
+    lhs && rhs && lhs_is_num && rhs_is_num,
+    "TypeError: unsupported operand type(s) for //");
+  if (!lhs || !rhs || !lhs_is_num || !rhs_is_num)
+    return 0;
+  return __python_floordiv_ll(
+    *(const long long *)lhs->value, *(const long long *)rhs->value);
 }
 
 // Both operands tagged, so the result's own type is only known at runtime --

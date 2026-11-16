@@ -13,7 +13,9 @@
 #include <pointer-analysis/value_set.h>
 #include <set>
 #include <stack>
+#include <unordered_map>
 #include <string>
+#include <utility>
 #include <irep2/irep2_guard.h>
 #include <util/base/i2string.h>
 #include <irep2/irep2.h>
@@ -372,6 +374,8 @@ public:
   void rename(expr2tc &expr);
 
   void rename_type(expr2tc &expr);
+  /** rename_type for \p expr itself, not its operands. */
+  void rename_own_type(expr2tc &expr);
   void rename_array_sizes(type2tc &type);
 
   /**
@@ -527,19 +531,14 @@ public:
 
   /// witness_segs[seg]: all actionable waypoints per segment
   std::vector<std::vector<waypoint>> witness_segs;
-  size_t cur_seg;
-  /// Set to true the first time the target assertion is allowed through.
-  /// Subsequent assertions at the target line (from continuation calls after
-  /// the witness call chain returns) are filtered to avoid false positives.
-  bool witness_target_reached;
+  std::map<std::pair<waypoint::Type, irep_idt>, std::vector<size_t>>
+    witness_locations;
 
-  /// Pre-built O(1) lookup for branching(cycle) waypoints.
-  /// Maps line_id → direction_true (from wp.value == "true").
-  /// Populated at init time; queried on every forward-goto without touching
-  /// cur_seg (cycle branching is a persistent constraint, not a one-shot).
-  std::unordered_map<irep_idt, bool> cycle_branch_map;
-
-  void advance_witness_position();
+private:
+  /** Renamed shared subexpressions: original node -> (original, renamed). */
+  using renamed_exprst =
+    std::unordered_map<const expr2t *, std::pair<expr2tc, expr2tc>>;
+  void rename(expr2tc &expr, renamed_exprst &renamed);
 };
 
 #endif

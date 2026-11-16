@@ -588,6 +588,15 @@ bool try_step_recognition(
   return true;
 }
 
+/// A for/while loop: @p loop_head is a forward exit test that jumps to just
+/// past the unconditional back-edge @p loop_exit.
+bool is_top_test_loop(inst_iter loop_head, inst_iter loop_exit)
+{
+  return loop_head->is_goto() && !loop_head->is_backwards_goto() &&
+         is_true(loop_exit->guard) && loop_head->targets.size() == 1 &&
+         *loop_head->targets.begin() == std::next(loop_exit);
+}
+
 /// One pass over a function. Returns true iff any loop was erased (so
 /// the caller can iterate to fixpoint).
 bool simplify_function_once(
@@ -659,18 +668,17 @@ bool simplify_function_once(
     //   loop_head: body                   (no exit-test at top)
     //              IF cond GOTO loop_head (conditional back-edge)
     //
-    // Discrimination: if loop_head is a forward GOTO, it's the for/while
-    // exit IF — body starts after it, post-loop code starts at the IF's
-    // target. Otherwise it's do-while — body starts at loop_head, post-
-    // loop code starts after the back-edge.
+    // Discrimination: a for/while loop has an unconditional back-edge and a
+    // head that jumps to just past it — body starts after the head, post-loop
+    // code at the head's target. Anything else is do-while — body starts at
+    // loop_head, post-loop code after the back-edge. A do-while whose body
+    // opens with an `if` also starts with a forward GOTO (#9498).
     inst_iter body_first;
     inst_iter after_loop;
     expr2tc exit_guard;
     bool is_dowhile;
-    if (loop_head->is_goto() && !loop_head->is_backwards_goto())
+    if (is_top_test_loop(loop_head, loop_exit))
     {
-      if (loop_head->targets.size() != 1)
-        continue;
       body_first = std::next(loop_head);
       after_loop = *loop_head->targets.begin();
       // The IF's guard IS the exit condition (semantically: "GOTO E

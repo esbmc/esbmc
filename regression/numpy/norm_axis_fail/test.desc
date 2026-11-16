@@ -1,4 +1,5 @@
 CORE
 main.py
 --incremental-bmc
-^ERROR: TypeError: numpy.linalg.norm axis is not supported$
+^VERIFICATION FAILED$
+^  assertion result\[0\] == 1.0$

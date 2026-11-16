@@ -51,11 +51,16 @@ returns a definite verdict:
 
 1. **Recurrent-set non-termination.** Looks for a cheap witness that a loop can
    stay live forever: a reachable set of states the loop can re-enter
-   indefinitely under some input. It targets `while (1)` controller loops that
-   read an input, validate it, and dispatch to a state-machine update — if the
-   solver finds an input under which no branch fires, the loop sits at a fixed
-   point and never exits. This pass only ever reports `FALSE` (non-terminating)
-   or abstains.
+   indefinitely under some input. It targets `while (1)` controller loops in
+   the entry function that read an input, check it against a finite set of
+   valid values, and dispatch to a state-machine update. Starting from the
+   globals' initial values, ESBMC runs the loop for every valid input, up to 24
+   iterations, and looks for a state that repeats before the loop exits. It
+   first runs the loop on concrete values and asks the solver only when that
+   search is inconclusive. A repeated state is a lasso: the inputs can drive
+   the loop around it forever. Because the search starts from the initial
+   state, a state the program never reaches cannot produce a verdict. This pass
+   only ever reports `FALSE` (non-terminating) or abstains.
 
 2. **Ranking-function synthesis.** Tries to *prove* termination by exhibiting a
    **ranking function** — an integer measure of the loop state that is bounded
@@ -112,6 +117,43 @@ esbmc file.c --termination --max-inductive-step 3 --interval-analysis
 - `--interval-analysis` — supply the ranking and recurrent-set passes with
   per-loop numeric bounds (see [Interval Analysis](/docs/theory/interval-analysis));
   tighter ranges help the supporting-invariant synthesis converge.
+
+## Witnesses {#witnesses}
+
+With `--witness-output-yaml` (or `--witness-output`), a termination verdict
+writes a witness whose specification is `F end` (`LTL(F end)` in GraphML):
+
+- **Non-termination.** A verdict from the recurrent-set pass or the inductive
+  step writes a violation witness with one `cycle` waypoint at the head of the
+  loop that can run forever.
+- **Termination by a ranking function.** The ranking pass writes a correctness
+  witness. Each top-level loop of `main` gets a `loop_transition_invariant`
+  stating that the measure decreases, e.g. `\at(x, AnyPrev) > x`, or one
+  disjunct per measure for a lexicographic proof. Inner loops, loops in called
+  functions, `do`-`while` loops and measures that read through a pointer get no
+  invariant.
+
+For the non-terminating loop `while (x > 0) x = 1;` on line 6:
+
+```sh
+esbmc file.c --termination --witness-output-yaml witness.yml
+```
+
+```yaml
+      specification: "F end"
+  ...
+        - waypoint:
+            type: "assumption"
+            action: "cycle"
+            constraint:
+              value: "1"
+              format: "c_expression"
+            location:
+              file_name: "file.c"
+              line: 6
+              column: 3
+              function: "main"
+```
 
 ## References
 

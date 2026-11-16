@@ -1,7 +1,5 @@
 # An argument before the star that has an effect is evaluated before the
-# length check raises, as in CPython. KNOWNBUG: the frontend emits the check
-# first, with the old lowering as with this one. Two lengths keep the length of
-# rest unknown before the run.
+# length check raises, as in CPython.
 def add3(a, b, c):
     return a + b + c
 

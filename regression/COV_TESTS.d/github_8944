@@ -1,3 +1,11 @@
 regression/python/github_8944
+regression/python/github_8944_constant
 regression/python/github_8944_fail
+regression/python/github_8944_float_base
+regression/python/github_8944_isinstance_unsupported
+regression/python/github_8944_lazy_unsupported
+regression/python/github_8944_name_unsupported
+regression/python/github_8944_negative_unsupported
 regression/python/github_8944_rebound_fail
+regression/python/github_8944_type_unsupported
+regression/python/github_8944_value

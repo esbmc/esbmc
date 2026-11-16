@@ -287,8 +287,14 @@ static void add_function_stub(
 
 nlohmann::json python_converter::callable_function_stubs() const
 {
+  return callable_function_stubs(*ast_json);
+}
+
+nlohmann::json
+python_converter::callable_function_stubs(const nlohmann::json &module) const
+{
   nlohmann::json stubs = nlohmann::json::array();
-  for (const auto &stmt : (*ast_json)["body"])
+  for (const auto &stmt : module["body"])
   {
     const std::string type = stmt.value("_type", "");
     if (type == "FunctionDef")
@@ -315,6 +321,20 @@ nlohmann::json python_converter::callable_function_stubs() const
     }
   }
   return stubs;
+}
+
+nlohmann::json python_converter::kind_module_body() const
+{
+  return kind_module_body(*ast_json);
+}
+
+nlohmann::json
+python_converter::kind_module_body(const nlohmann::json &module) const
+{
+  nlohmann::json body = callable_function_stubs(module);
+  for (const auto &stmt : module["body"])
+    body.push_back(stmt);
+  return body;
 }
 
 /// The source file of the AST emitted for @p module, or "" when there is none.
@@ -542,6 +562,10 @@ void python_converter::convert_module_imports(code_blockt &all_imports_block)
   for (auto &entry : module_ast_pool_)
     modules.push_back({&entry.second, &entry.second, entry.first});
   python_param_annotations::propagate_tuple_list_params(modules);
+  // The scalar pass may point the entry module's calls at the copies it makes
+  // of an imported function (#10431). The entry AST is the front end's own,
+  // not yet converted.
+  modules.front().write = const_cast<nlohmann::json *>(ast_json);
   python_param_annotations::propagate_scalar_params(modules);
 
   auto convert_import = [&](const nlohmann::json &node) {
@@ -676,19 +700,6 @@ static std::string receiver_named_parameter(const nlohmann::json &node)
   return "";
 }
 
-/// Whether \p node carries the builtin @staticmethod decorator. A dotted
-/// spelling names some other object, so only a bare Name counts.
-static bool is_staticmethod(const nlohmann::json &node)
-{
-  if (!node.contains("decorator_list"))
-    return false;
-
-  for (const auto &decorator : node["decorator_list"])
-    if (decorator["_type"] == "Name" && decorator["id"] == "staticmethod")
-      return true;
-  return false;
-}
-
 void python_converter::find_entry_function(
   const std::string &target,
   nlohmann::json &node,
@@ -731,7 +742,7 @@ void python_converter::find_entry_function(
   // no constructor built would verify against a nondet pointer rather than an
   // instance, so refuse instead (#6938 P4.5). The decorator decides this, not
   // the receiver's name, which Python does not fix.
-  if (!is_staticmethod(node))
+  if (!json_utils::is_staticmethod_def(node))
     throw std::runtime_error(
       "--function: '" + target +
       "' is not a @staticmethod, and its receiver is a class instance the "
@@ -1170,6 +1181,8 @@ void python_converter::convert()
 
   if (building_library)
     return;
+
+  define_tagged_callee();
 
   // Create python_user_main function containing only user code
   code_typet user_main_type;

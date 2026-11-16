@@ -1,0 +1,5 @@
+CORE
+main.py
+
+^\s+FAILED\s+\[global\.assertion\.\d+\]\s+line\s+5\s+assertion \(signed int\)\(b\[0\]\) == 116
+^VERIFICATION FAILED$

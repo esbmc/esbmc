@@ -1,0 +1,5 @@
+CORE
+main.c
+--64 --unwind 20
+^  assertion n == 4$
+^VERIFICATION FAILED$

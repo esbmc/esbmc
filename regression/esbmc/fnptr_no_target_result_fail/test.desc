@@ -1,0 +1,6 @@
+CORE
+main.c
+--no-pointer-check
+^No target candidate for function call \*ext_cb$
+^  FAILED       \[main\.assertion\.1\]  line 9  result unchanged$
+^VERIFICATION FAILED$

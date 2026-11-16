@@ -1,0 +1,5 @@
+CORE
+main.c
+--unwind 3 --multi-property
+^  FAILED +\[main\.assertion\.[0-9]+\] +line +18 +assertion aflag == 0$
+^VERIFICATION FAILED$

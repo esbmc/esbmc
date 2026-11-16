@@ -1,0 +1,5 @@
+CORE
+main.c
+--64 --clang-c-irep2-adjust-only
+^  assertion n == n$
+^VERIFICATION FAILED$

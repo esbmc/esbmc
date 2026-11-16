@@ -265,7 +265,10 @@ public:
    *  @param expr Expression that we're asserting is true.
    *  @param msg Textual message explaining this assertion.
    */
-  void claim(const expr2tc &expr, const std::string &msg) override;
+  void claim(
+    const expr2tc &expr,
+    const std::string &msg,
+    bool user_assertion = false) override;
 
   /**
    *  Perform a jump across GOTO code.
@@ -490,12 +493,15 @@ public:
    *  an address-taken local count as shared: copying a pointer to it accesses
    *  nothing. Intrinsics that read through a pointer argument are keyed where
    *  symex dispatches them.
+   *  @param all_shared When non-null, receives every shared object the pointer
+   *  may reach; the result is still the first of them.
    */
   expr2tc resolve_pointer_target(
     const namespacet &ns,
     const expr2tc &ptr,
     bool &to_global,
-    bool through_deref);
+    bool through_deref,
+    std::vector<expr2tc> *all_shared = nullptr);
 
   /**
    *  Record what a dereference reaches when the pointer it goes through is not
@@ -847,7 +853,10 @@ public:
   schedule_execution_statet(const schedule_execution_statet &ref) = default;
   std::shared_ptr<execution_statet> clone() const override;
   ~schedule_execution_statet() override;
-  void claim(const expr2tc &expr, const std::string &msg) override;
+  void claim(
+    const expr2tc &expr,
+    const std::string &msg,
+    bool user_assertion = false) override;
   void note_bounded_loop_truncation() override
   {
     goto_symext::note_bounded_loop_truncation();

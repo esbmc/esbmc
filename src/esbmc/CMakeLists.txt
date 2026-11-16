@@ -73,7 +73,7 @@ target_link_libraries(esbmc-driver PUBLIC
                             ${LD_FRONTEND_TARGETS}
                             ${GOTO_CONTRACTOR_TARGETS} ${JIMPLE_FRONTEND_TARGETS}
                             clangcfrontend clangcppfrontend symex langapi transition-system-extraction transition-system-engines
-                            solvers clibs gotoalgorithms cache ESBMC::boost goto2c ${OS_INCLUDE_LIBS}
+                            solvers clibs gotoalgorithms cache ESBMC::boost goto2c goto2lean ${OS_INCLUDE_LIBS}
                             nlohmann_json::nlohmann_json)
 
 add_executable(esbmc main.cpp globals.cpp ${CMAKE_CURRENT_BINARY_DIR}/buildidobj.c)
@@ -89,19 +89,27 @@ endif()
 # allocation-heavy symex path. MIMALLOC_TARGET is empty if mimalloc was
 # requested but unavailable.
 if(MIMALLOC_TARGET STREQUAL "mimalloc-obj")
-  # Fully-static build: add mimalloc's object file to the link AND allow
-  # multiple definitions. glibc's static malloc.o defines malloc/free/realloc
+  # Add mimalloc's object file to the link. Under -static, also allow
+  # multiple definitions: glibc's static malloc.o defines malloc/free/realloc
   # as *strong* symbols (and gets force-pulled by other libs), so neither
   # archive ordering nor object-file preference avoids the clash — only
   # --allow-multiple-definition lets the link succeed, taking mimalloc's
   # definition (linked first) and dropping libc's. This is the standard
   # workaround for overriding malloc under -static glibc.
   target_sources(esbmc PRIVATE $<TARGET_OBJECTS:mimalloc-obj>)
-  target_link_options(esbmc PRIVATE LINKER:--allow-multiple-definition)
+  if(BUILD_STATIC)
+    target_link_options(esbmc PRIVATE LINKER:--allow-multiple-definition)
+  endif()
 elseif(MIMALLOC_TARGET)
   # Shared/dynamic libc: the archive override interposes fine. Link last so its
   # malloc/operator new override wins.
   target_link_libraries(esbmc PRIVATE ${MIMALLOC_TARGET})
+endif()
+if(MIMALLOC_TARGET)
+  target_compile_definitions(esbmc PRIVATE ESBMC_MIMALLOC)
+  if(MIMALLOC_TARGET STREQUAL "mimalloc-obj")
+    target_include_directories(esbmc PRIVATE ${mimalloc_SOURCE_DIR}/include)
+  endif()
 endif()
 install(TARGETS esbmc DESTINATION bin)
 install(FILES ${CMAKE_SOURCE_DIR}/include/esbmc.h DESTINATION include)

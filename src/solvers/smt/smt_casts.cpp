@@ -2,6 +2,8 @@
 #include <sstream>
 #include <util/expr/base_type.h>
 #include <util/expr/expr_util.h>
+#include <util/expr/type_byte_size.h>
+#include <util/lang/c_types.h>
 #include <util/message/message.h>
 #include <util/message/format.h>
 
@@ -237,10 +239,27 @@ smt_solver_baset::convert_typecast_to_ints_intmode(const typecast2t &cast)
     return convert_ast(cast.from);
 
   if (is_bv_type(cast.type) && is_bv_type(cast.from))
+  {
     // NB: this means negative numbers assigned to unsigned ints remain
     // negative. This IMO is one of the inaccuracies accepted by the use of
     // ir mode.
-    return convert_ast(cast.from);
+    smt_astt value = convert_ast(cast.from);
+    const unsigned width = cast.type->get_width();
+    if (
+      !is_concat2t(cast.from) || !is_unsignedbv_type(cast.from) ||
+      !is_signedbv_type(cast.type) || cast.from->type->get_width() != width)
+      return value;
+
+    // Bytes joined into an unsigned value read back as a signed one, so a
+    // value above the signed maximum is negative (#9531). Other casts keep
+    // their value: the extra branch slows every --ir solve that has one.
+    const BigInt modulus = BigInt::power2(width);
+    const BigInt half = BigInt::power2(width - 1);
+    return mk_ite(
+      mk_ge(value, mk_smt_int(half)),
+      mk_sub(value, mk_smt_int(modulus)),
+      value);
+  }
 
   smt_astt a = convert_ast(cast.from);
 
@@ -454,8 +473,7 @@ smt_astt smt_solver_baset::convert_typecast_to_ptr(const typecast2t &cast)
   }
 
   // Create a fresh new variable; encode implications that if the integer is
-  // in the relevant range, that the value is the relevant id / offset. If none
-  // are matched, match the invalid pointer.
+  // in the relevant range, that the value is the relevant id / offset.
   // Technically C doesn't allow for any variable to hold an invalid pointer,
   // except through initialization.
 
@@ -483,7 +501,8 @@ smt_astt smt_solver_baset::convert_typecast_to_ptr(const typecast2t &cast)
     if (i == 1)
       continue; // Skip invalid, it contains everything.
 
-    // Calculate ptr offset were it this
+    // Calculate ptr offset were it this; dereferencet's offset_within()
+    // relies on it being target - start.
     smt_astt offs = int_encoding ? mk_sub(target, obj_starts[i])
                                  : mk_bvsub(target, obj_starts[i]);
 
@@ -500,17 +519,7 @@ smt_astt smt_solver_baset::convert_typecast_to_ptr(const typecast2t &cast)
     assert_ast(imp);
   }
 
-  // If none of the above, match invalid.
-  smt_astt was_matched = make_n_ary_or(guards);
-  smt_astt not_matched = mk_not(was_matched);
-
-  smt_astt id = convert_terminal(
-    constant_int2tc(int_type, pointer_logic.back().get_invalid_object()));
-
-  smt_astt one = convert_terminal(constant_int2tc(int_type, BigInt(1)));
-  smt_astt offs = int_encoding ? mk_sub(target, one) : mk_bvsub(target, one);
-  smt_astt inv_obj = id;
-  smt_astt inv_offs = offs;
+  smt_astt not_matched = mk_not(make_n_ary_or(guards));
 
   // Cast from a byte-updated pointer: either the direct BV-mode update
   // byte_update<uint>(bitcast<uint>(ptr), ...) or a struct-field extraction
@@ -521,31 +530,129 @@ smt_astt smt_solver_baset::convert_typecast_to_ptr(const typecast2t &cast)
     is_byte_update2t(cast.from) ||
     (is_extract2t(cast.from) && is_byte_update2t(to_extract2t(cast.from).from));
 
+  if (!options.get_bool_option("smt-during-symex"))
+    return name_object_by_value(
+      output_sym, cast_to_unsigned, not_matched, from_byte_update);
+
   if (from_byte_update)
   {
-    const struct_type2t &as = to_struct_type(addr_space_type);
-    expr2tc obj_num = pointer_object2tc(ptraddr_type2(), output_sym);
-    expr2tc from_addr = index2tc(
-      addr_space_type,
-      symbol2tc(addr_space_arr_type, get_cur_addrspace_ident()),
-      obj_num);
-    expr2tc from_start =
-      member2tc(as.members[0], from_addr, as.member_names[0]);
-    expr2tc ptr_offs =
-      pointer_offset2tc(get_int_type(config.ansi_c.address_width), output_sym);
-    expr2tc address = add2tc(
-      ptraddr_type2(), from_start, typecast2tc(ptraddr_type2(), ptr_offs));
-    smt_astt addr = convert_ast(address);
-    assert_ast(mk_implies(not_matched, addr->eq(this, target)));
+    assert_ast(mk_implies(
+      not_matched,
+      address_holds(output_sym, cur_addrspace(), cast_to_unsigned, false)));
     return output;
   }
 
-  smt_astt obj_eq = inv_obj->eq(this, output_obj);
-  smt_astt offs_eq = inv_offs->eq(this, output_offs);
-  smt_astt is_inv = mk_and(obj_eq, offs_eq);
-
-  assert_ast(mk_implies(not_matched, is_inv));
+  // If none of the above, match invalid.
+  smt_astt id = convert_terminal(
+    constant_int2tc(int_type, pointer_logic.back().get_invalid_object()));
+  smt_astt one = convert_terminal(constant_int2tc(int_type, BigInt(1)));
+  smt_astt offs = int_encoding ? mk_sub(target, one) : mk_bvsub(target, one);
+  assert_ast(mk_implies(
+    not_matched,
+    mk_and(id->eq(this, output_obj), offs->eq(this, output_offs))));
   return output;
+}
+
+/* An integer names one pointer wherever it is converted: its object is a
+ * function of the integer (#7855). A conversion before an allocation must then
+ * be free to name that object, so where no object registered so far holds the
+ * integer the pointer is in any object whose range does -- INVALID's always
+ * does -- read from the base address-space version, which every object's range
+ * reaches; pre_solve() then closes it over the registered objects. */
+smt_astt smt_solver_baset::name_object_by_value(
+  const expr2tc &ptr,
+  const expr2tc &target,
+  smt_astt not_matched,
+  bool from_byte_update)
+{
+  tie_base_addrspace_to_objects();
+  smt_astt pointer = convert_ast(ptr);
+  smt_astt obj = pointer->project(this, 0);
+  assert_ast(obj->eq(
+    this,
+    mk_smt_uninterpreted_function(
+      "__ESBMC_int_to_ptr_object", {convert_ast(target)}, obj->sort)));
+  int_to_ptr_objects.push_back({obj, ctx_level, {}});
+
+  unsigned int addrspace = from_byte_update ? cur_addrspace() : base_addrspace;
+  assert_ast(mk_implies(
+    not_matched, address_holds(ptr, addrspace, target, !from_byte_update)));
+  return pointer;
+}
+
+/* A pointer made from an integer names INVALID or a registered object: ids are
+ * handed out densely, so one below the largest registered. Sound only once
+ * every object is registered, hence never under --smt-during-symex, where
+ * conversion goes on after a solve (name_object_by_value is not used there). */
+void smt_solver_baset::close_int_to_ptr_objects()
+{
+  type2tc int_type = ptraddr_type2();
+  smt_astt invalid = convert_terminal(
+    constant_int2tc(int_type, pointer_logic.back().get_invalid_object()));
+  smt_astt bound = convert_terminal(
+    constant_int2tc(int_type, addr_space_data.back().rbegin()->first + 1));
+  for (int_to_ptr_objectt &c : int_to_ptr_objects)
+  {
+    if (c.closed_at)
+      continue;
+    smt_astt below =
+      int_encoding ? mk_lt(c.object, bound) : mk_bvult(c.object, bound);
+    assert_ast(mk_or(c.object->eq(this, invalid), below));
+    c.closed_at = ctx_level;
+  }
+}
+
+/** @p ptr's address, its object's start in @p addrspace plus its offset, is
+ *  @p target; with @p in_range, that object's range also holds @p target. */
+smt_astt smt_solver_baset::address_holds(
+  const expr2tc &ptr,
+  unsigned int addrspace,
+  const expr2tc &target,
+  bool in_range)
+{
+  expr2tc obj = pointer_object2tc(ptraddr_type2(), ptr);
+  expr2tc start = addrspace_read(addrspace, 0, obj);
+  expr2tc offs =
+    pointer_offset2tc(get_int_type(config.ansi_c.address_width), ptr);
+  expr2tc holds = equality2tc(
+    add2tc(ptraddr_type2(), start, typecast2tc(ptraddr_type2(), offs)), target);
+  if (in_range)
+  {
+    expr2tc end = addrspace_read(addrspace, 1, obj);
+    holds = and2tc(
+      holds,
+      and2tc(lessthanequal2tc(start, target), lessthanequal2tc(target, end)));
+  }
+  return convert_ast(holds);
+}
+
+/* The address @p ptr takes, when it is the address of a known object. Every
+ * address-space version holds the same start for that object, so naming it
+ * directly saves the solver relating array reads (#9785). */
+expr2tc smt_solver_baset::static_address_of(const expr2tc &ptr)
+{
+  const expr2tc *p = &ptr;
+  while (is_typecast2t(*p) && is_pointer_type(to_typecast2t(*p).from))
+    p = &to_typecast2t(*p).from;
+  if (!is_address_of2t(*p))
+    return expr2tc();
+
+  const expr2tc base = get_base_object(to_address_of2t(*p).ptr_obj);
+  if (
+    !is_symbol2t(base) ||
+    renumber_map.back().count(to_symbol2t(base).get_symbol_name()))
+    return expr2tc();
+
+  // Converting the address registers the object; add_object() then names it.
+  convert_ast(*p);
+  const unsigned int id = pointer_logic.back().add_object(base);
+  const expr2tc start =
+    symbol2tc(ptraddr_type2(), "__ESBMC_ptr_obj_start_" + std::to_string(id));
+  return add2tc(
+    ptraddr_type2(),
+    start,
+    typecast2tc(
+      ptraddr_type2(), compute_pointer_offset(to_address_of2t(*p).ptr_obj)));
 }
 
 smt_astt smt_solver_baset::convert_typecast_from_ptr(const typecast2t &cast)
@@ -558,19 +665,14 @@ smt_astt smt_solver_baset::convert_typecast_from_ptr(const typecast2t &cast)
 
   expr2tc obj_num = pointer_object2tc(addr_type, cast.from);
 
-  expr2tc from_addr_space = index2tc(
-    addr_space_type,
-    symbol2tc(addr_space_arr_type, get_cur_addrspace_ident()),
-    obj_num);
+  expr2tc address = static_address_of(cast.from);
+  if (is_nil_expr(address))
+  {
+    expr2tc from_start = addrspace_read(cur_addrspace(), 0, obj_num);
 
-  // We've now grabbed the pointer struct, now get the first element. Represent
-  // as fetching the first element of the struct representation.
-  const struct_type2t &addr_space_ty = to_struct_type(addr_space_type);
-  expr2tc from_start = member2tc(
-    addr_space_ty.members[0], from_addr_space, addr_space_ty.member_names[0]);
-
-  expr2tc ptr_offs = pointer_offset2tc(diff_type, cast.from);
-  expr2tc address = add2tc(addr_type, from_start, ptr_offs);
+    expr2tc ptr_offs = pointer_offset2tc(diff_type, cast.from);
+    address = add2tc(addr_type, from_start, ptr_offs);
+  }
   expr2tc pointer = address;
 
   /* Object 0 is NULL and occupies the single address 0; finalize_pointer_chain

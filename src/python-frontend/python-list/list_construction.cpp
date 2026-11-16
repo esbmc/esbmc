@@ -48,7 +48,8 @@ exprt python_list::build_symbolic_fill_list(
   const exprt &size,
   const exprt &fill_value,
   const typet &elem_type,
-  const exprt *index_base)
+  const exprt *index_base,
+  const exprt *index_step)
 {
   using namespace python_list_detail;
   locationt location = converter_.get_location_from_decl(list_value_);
@@ -121,8 +122,12 @@ exprt python_list::build_symbolic_fill_list(
 
   exprt pushed = fill_value;
   if (index_base)
-    pushed = build_add(
-      base, build_typecast(build_symbol(index_var), elem_type), elem_type);
+  {
+    exprt offset = build_typecast(build_symbol(index_var), elem_type);
+    if (index_step)
+      offset = build_mul(offset, *index_step, elem_type);
+    pushed = build_add(base, offset, elem_type);
+  }
 
   exprt push_call = build_push_list_call(result, list_value_, pushed);
 
@@ -151,6 +156,9 @@ exprt python_list::build_symbolic_fill_list(
 
 exprt python_list::get()
 {
+  if (is_typed(list_value_))
+    return typed_literal();
+
   symbolt &list_symbol = create_list();
 
   const std::string &list_id = list_symbol.id.as_string();
@@ -266,11 +274,13 @@ exprt python_list::create_vla(
   symbolt &result = create_list();
 
   // Materialise the count (which may be a compound expression such as m + 1)
-  // into an int symbol to use as the loop bound.
+  // into a symbol of the Python int width: a narrower bound would wrap a large
+  // negative count into a positive one (#10490).
+  const typet count_type = long_long_int_type();
   exprt bound_value =
-    (count.type() == int_type()) ? count : build_typecast(count, int_type());
+    (count.type() == count_type) ? count : build_typecast(count, count_type);
   symbolt &bound = converter_.create_tmp_symbol(
-    element, "$list_rep_count$", int_type(), exprt());
+    element, "$list_rep_count$", count_type, exprt());
   code_declt bound_decl(build_symbol(bound));
   bound_decl.location() = location;
   converter_.add_instruction(bound_decl);
@@ -280,13 +290,13 @@ exprt python_list::create_vla(
 
   // counter = 0
   symbolt &counter = converter_.create_tmp_symbol(
-    element, "counter", int_type(), gen_zero(int_type()));
-  code_assignt counter_code(build_symbol(counter), gen_zero(int_type()));
+    element, "counter", count_type, gen_zero(count_type));
+  code_assignt counter_code(build_symbol(counter), gen_zero(count_type));
   counter_code.location() = location;
   converter_.add_instruction(counter_code);
 
   // while (counter < bound) { push each elem in order; counter += 1; }
-  // (counter and bound are both int_type — same width)
+  // (counter and bound are both count_type — same width)
   exprt cond = build_less_than(build_symbol(counter), build_symbol(bound));
 
   code_blockt then;
@@ -294,7 +304,7 @@ exprt python_list::create_vla(
     then.copy_to_operands(build_push_list_call(result, element, list_elem));
 
   exprt incr =
-    build_add(build_symbol(counter), gen_one(int_type()), int_type());
+    build_add(build_symbol(counter), gen_one(count_type), count_type);
   code_assignt update(build_symbol(counter), incr);
   then.copy_to_operands(update);
 
@@ -430,6 +440,55 @@ void python_list::set_list_symbolic_size(
   }
 }
 
+static exprt build_div(const exprt &a, const exprt &b, const typet &t)
+{
+  exprt div(exprt::div, t);
+  div.copy_to_operands(a, b);
+  return div;
+}
+
+// The number of elements range(start, stop, step) yields: the ceiling of
+// (stop - start) / step, or zero when the range runs the other way.
+static exprt range_count(
+  const exprt &start,
+  const exprt &stop,
+  const exprt &step,
+  const typet &t)
+{
+  const exprt zero = gen_zero(t);
+  const exprt one = gen_one(t);
+  const exprt neg_step = build_sub(zero, step, t);
+  const exprt up = build_div(
+    build_sub(build_add(build_sub(stop, start, t), step, t), one, t), step, t);
+  const exprt down = build_div(
+    build_sub(build_add(build_sub(start, stop, t), neg_step, t), one, t),
+    neg_step,
+    t);
+  return build_if(
+    build_less_than(zero, step),
+    build_if(build_less_than(start, stop), up, zero),
+    build_if(
+      build_less_than(step, zero),
+      build_if(build_less_than(stop, start), down, zero),
+      zero));
+}
+
+static void raise_on_zero_step(
+  python_converter &converter,
+  const exprt &step,
+  const nlohmann::json &element)
+{
+  exprt raise = converter.get_exception_handler().gen_exception_raise(
+    "ValueError", "range() arg 3 must not be zero");
+  codet throw_code("expression");
+  throw_code.operands().push_back(raise);
+  code_ifthenelset guard;
+  guard.cond() = build_equal(step, gen_zero(step.type()));
+  guard.then_case() = throw_code;
+  guard.location() = converter.get_location_from_decl(element);
+  converter.add_instruction(guard);
+}
+
 exprt python_list::handle_symbolic_range(
   python_converter &converter,
   const nlohmann::json &range_args,
@@ -444,12 +503,7 @@ exprt python_list::handle_symbolic_range(
   converter.copy_location_fields_from_decl(element, list_node);
   python_list builder(converter, list_node);
 
-  // A symbolic step still needs a sign-dependent ceiling division, so
-  // range(a, b, s) keeps the empty list it has always produced.
-  if (range_args.size() > 2)
-    return builder.get();
-
-  const bool has_start = range_args.size() == 2;
+  const bool has_start = range_args.size() >= 2;
   exprt stop = converter.get_expr(range_args[has_start ? 1 : 0]);
   const typet elem_type = stop.type();
 
@@ -464,33 +518,36 @@ exprt python_list::handle_symbolic_range(
                   ? build_typecast(converter.get_expr(range_args[0]), elem_type)
                   : gen_zero(elem_type);
 
-  // Python gives an empty list when the range runs backwards, so clamp the
-  // count rather than letting a negative size reach the fill loop, whose
-  // own guard would raise ValueError on one.
-  exprt span = build_sub(stop, start, elem_type);
-  exprt count =
-    build_if(build_less_than(start, stop), span, gen_zero(elem_type));
+  const exprt step =
+    range_args.size() == 3
+      ? build_typecast(converter.get_expr(range_args[2]), elem_type)
+      : gen_one(elem_type);
+  if (range_args.size() == 3)
+    raise_on_zero_step(converter, step, element);
+
+  // Python gives an empty list when the range runs backwards, so the count is
+  // clamped rather than letting a negative size reach the fill loop.
+  const exprt count = range_args.size() == 3
+                        ? range_count(start, stop, step, elem_type)
+                        : build_if(
+                            build_less_than(start, stop),
+                            build_sub(stop, start, elem_type),
+                            gen_zero(elem_type));
 
   if (materialise_elements)
     return builder.build_symbolic_fill_list(
       build_typecast(count, size_type()),
       gen_zero(elem_type),
       elem_type,
-      &start);
+      &start,
+      &step);
 
-  // A bare `range(...)` keeps exactly what it did before. Recording a size
-  // without contents is not an option: `x in range(a, b)` reads them, and
-  // leaving them unwritten turns `0 not in range(1, 10)` into a false alarm.
-  // Materialising is not an option either, because `len(range(n))` under a
-  // fixed --unwind cannot afford the loop. Each half needs its own change,
-  // so this path is out of scope here.
-  if (!has_start)
-  {
-    exprt list_expr = builder.get();
-    set_list_symbolic_size(converter, list_expr, stop, element);
-    return list_expr;
-  }
-  return builder.get();
+  // A bare `range(...)` records its length but not its elements:
+  // materialising them would cost `len(range(n))` a loop that a fixed
+  // --unwind cannot afford, so its elements read as unconstrained values.
+  exprt list_expr = builder.get();
+  set_list_symbolic_size(converter, list_expr, count, element);
+  return list_expr;
 }
 
 exprt python_list::build_concrete_range(

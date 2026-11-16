@@ -666,6 +666,14 @@ void python_list::assign_unpack_target(
     new_symbol.file_local = true;
     new_symbol.is_extern = false;
     var_symbol = converter_.symbol_table().move_symbol_to_context(new_symbol);
+    // Without a declaration a local is shared by every frame of a recursive
+    // call
+    if (!converter_.get_current_func_name().empty())
+    {
+      code_declt decl(build_symbol(*var_symbol));
+      decl.location() = loc;
+      target_block.copy_to_operands(decl);
+    }
   }
   code_assignt assign(build_symbol(*var_symbol), val);
   assign.location() = loc;

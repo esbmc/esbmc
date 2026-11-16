@@ -97,6 +97,10 @@ const struct group_opt_templ all_cmd_options[] = {
     {"show-stacktrace",
      NULL,
      "Show the stack trace of function call in the counterexample"},
+    {"show-funccall-trace",
+     NULL,
+     "Show the chronological sequence of function calls leading to the "
+     "counterexample (reentrancy-aware)"},
     {"simplify-trace",
      NULL,
      "Simplify the trace and exclude the assignments whose variables are not "
@@ -174,13 +178,14 @@ const struct group_opt_templ all_cmd_options[] = {
     {"funsigned-char", NULL, "Make \"char\" unsigned by default"},
     {"fms-extensions", NULL, "Enable microsoft C extensions"},
     {"argv-max-args",
-     boost::program_options::value<int>()->default_value(2)->value_name("nr"),
-     "Maximum number of argv entries backed with nondet strings (default 2). "
+     boost::program_options::value<int>()->default_value(5)->value_name("nr"),
+     "Maximum number of argv (and envp) entries backed with nondet strings "
+     "(default 5). "
      "Higher values widen coverage at the cost of a larger SMT formula."},
     {"argv-max-strlen",
      boost::program_options::value<int>()->default_value(256)->value_name("nr"),
      "Maximum length (in bytes, including the null terminator) of each backed "
-     "argv string (default 256)."},
+     "argv or envp string (default 256)."},
     {"gcc-nested-functions",
      NULL,
      "Enable GCC nested functions extension (source-level lambda lifting)"},
@@ -189,7 +194,10 @@ const struct group_opt_templ all_cmd_options[] = {
      "Enable SV-COMP mode: suppress GCC-acceptable frontend diagnostics "
      "(int/pointer conversions), treat __builtin_unreachable as a no-op, emit "
      "physical line numbers for witnesses, and avoid malloc/free in the "
-     "fopen/fclose models. Set automatically by the SV-COMP wrapper."},
+     "fopen/fclose models. A program that can start a thread is verified with "
+     "incremental BMC over schedules of at most three context switches, "
+     "without interval analysis or --goto-unwind. Set automatically by the "
+     "SV-COMP wrapper."},
     /* Read by clang_c_language.cpp, which is built unconditionally, so these
      * must not sit in a frontend-gated group (#7345). */
     {"clang-c-irep2-adjust",
@@ -243,12 +251,24 @@ const struct group_opt_templ all_cmd_options[] = {
      {"python-no-fold",
       NULL,
       "Disable NumPy constant folding in the Python frontend"},
+     {"python-math-ulps",
+      boost::program_options::value<int>()->value_name("n"),
+      "How many ulps a math or NumPy transcendental function's result may "
+      "lie from the C library's value (default 8); 0 assumes a correctly "
+      "rounded library"},
      {"python-typecheck",
       NULL,
       "Type-check the input with mypy --strict and print the report."},
      {"nondet-str-length",
       boost::program_options::value<int>()->default_value(16)->value_name("nr"),
       "Set maximum length for non-deterministic strings (default is 16)"},
+     {"python-typed-lists",
+      NULL,
+      "Keep a list whose every element is an int in an int64 array instead of "
+      "one untyped cell per element (default on)"},
+     {"no-python-typed-lists",
+      NULL,
+      "Keep every list in one untyped cell per element"},
      {"python-list-compare-depth",
       boost::program_options::value<int>()->default_value(4)->value_name("nr"),
       "Set maximum nesting depth for Python list comparison (default is 4)"},
@@ -458,6 +478,10 @@ const struct group_opt_templ all_cmd_options[] = {
      boost::program_options::value<std::string>(),
      "Redirect all output to a file (no stdout/stderr)"},
     {"goto2c", NULL, "Translate the GOTO program to C"},
+    {"goto2lean",
+     NULL,
+     "Translate the GOTO program reachable from the entry function to Lean 4 "
+     "(prototype; scalar fragment)"},
     {"generate-testcase",
      NULL,
      "If a solution is found, generates a testcase in XML"},
@@ -828,6 +852,10 @@ const struct group_opt_templ all_cmd_options[] = {
      NULL,
      "Do not check that a floating-point to integer conversion is in range "
      "(C11 6.3.1.4p1); the rest of --overflow-check is unaffected"},
+    {"no-fp-overflow-check",
+     NULL,
+     "Do not check floating-point arithmetic for overflow; integer overflow "
+     "checks under --overflow-check are unaffected"},
     {"no-unlimited-scanf-check",
      NULL,
      "Do not do overflow check for scanf/fscanf with unlimited character "
@@ -1048,6 +1076,12 @@ const struct group_opt_templ all_cmd_options[] = {
      {"branch-coverage-claims",
       NULL,
       "Enable branch-coverage and shows all reached claims"},
+     {"coverage-covered-set",
+      boost::program_options::value<std::string>()->value_name("path"),
+      "Cross-run persisted covered-set for --branch-coverage. Read at "
+      "start (edges already witnessed are not re-instrumented, cutting "
+      "SMT cost) and merge-written at end. The denominator stays the "
+      "full static universe, so skipping never inflates coverage"},
      {"branch-function-coverage",
       NULL,
       "Show the coverage of branches and function entry"},
@@ -1100,6 +1134,10 @@ const struct group_opt_templ all_cmd_options[] = {
      NULL,
      "Disable constant propagation (unsupported with concurrency: the pthread "
      "model requires constant thread ids)"},
+    {"scalarize-structs",
+     NULL,
+     "Give each field of a struct variable whose address is never taken a "
+     "variable of its own, so that writing a field does not copy the struct"},
     {"gcse",
      NULL,
      "Adds intermediate variables to precompute common sub-expressions between "

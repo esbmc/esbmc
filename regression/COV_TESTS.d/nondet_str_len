@@ -1,0 +1,5 @@
+regression/python/nondet_str_len_bytes
+regression/python/nondet_str_len_bytes_fail
+regression/python/nondet_str_len_guard_kind
+regression/python/nondet_str_len_guard_kind_fail
+regression/python/nondet_str_len_ir

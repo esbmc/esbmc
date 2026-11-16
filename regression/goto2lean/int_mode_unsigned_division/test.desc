@@ -1,0 +1,5 @@
+CORE
+main.c
+--goto2lean --ir
+^  let q := \(x / \(2 : Int\)\);$
+^  let r := \(x % \(2 : Int\)\);$

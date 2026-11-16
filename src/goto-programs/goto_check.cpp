@@ -39,7 +39,8 @@ public:
       enable_is_instance_check(options.get_bool_option("is-instance-check")),
       enable_clz_zero_check(options.get_bool_option("clz-zero-check")),
       disable_fp_conversion_check(
-        options.get_bool_option("no-fp-conversion-check"))
+        options.get_bool_option("no-fp-conversion-check")),
+      disable_fp_overflow_check(options.get_bool_option("no-fp-overflow-check"))
   {
   }
 
@@ -159,6 +160,7 @@ protected:
   bool enable_is_instance_check;
   bool enable_clz_zero_check;
   bool disable_fp_conversion_check;
+  bool disable_fp_overflow_check;
 };
 
 void goto_checkt::div_by_zero_check(
@@ -194,7 +196,7 @@ void goto_checkt::float_overflow_check(
   const guard2tc &guard,
   const locationt &loc)
 {
-  if (!enable_overflow_check)
+  if (!enable_overflow_check || disable_fp_overflow_check)
     return;
 
   // First, check type.
@@ -437,6 +439,18 @@ solidity_skips_overflow_check(const expr2tc &expr, const locationt &loc)
          (loc.get("#sol_unchecked") == "1" || is_shl2t(expr));
 }
 
+/* Atomic read-modify-write on a signed type wraps silently (C11 7.17.7.5p3;
+ * GCC gives its __sync/__atomic builtins the same semantics). Their names are
+ * reserved, so a body under one is the frontend's model of that builtin. */
+static bool wraps_signed(const expr2tc &expr, const locationt &loc)
+{
+  const std::string &function = loc.function().as_string();
+  return is_signedbv_type(expr->type) &&
+         (has_prefix(function, "__sync_") ||
+          has_prefix(function, "__atomic_") ||
+          has_prefix(function, "__c11_atomic_"));
+}
+
 static expr2tc overflow_expr(const expr2tc &expr)
 {
   if (is_neg2t(expr))
@@ -445,6 +459,39 @@ static expr2tc overflow_expr(const expr2tc &expr)
   if (is_abs2t(expr))
     return overflow_neg2tc(to_abs2t(expr).value);
   return overflow2tc(expr);
+}
+
+// The claim that `expr` does not overflow. Before C++20, [expr.shift]/2
+// (CWG 1457, which clang also applies to C++98) defines a signed shift of a
+// non-negative E1 when E1 * 2^E2 fits the corresponding unsigned type, so only
+// shifting a bit past the top overflows; `1 << 31` does not. A negative E1 or
+// an out-of-range E2 is the undefined-shift check's.
+static expr2tc no_overflow_claim(const expr2tc &expr)
+{
+  if (
+    !is_shl2t(expr) || !is_signedbv_type(*expr->get_sub_expr(0)) ||
+    config.language.cpp_std < cxx_stdt::cpp98)
+  {
+    expr2tc overflow = overflow_expr(expr);
+    make_not(overflow);
+    return overflow;
+  }
+  const expr2tc &e1 = to_shl2t(expr).side_1;
+  const expr2tc &e2 = to_shl2t(expr).side_2;
+  const type2tc u = get_uint_type(e1->type->get_width());
+  const expr2tc width =
+    constant_int2tc(e2->type, BigInt(e1->type->get_width()));
+  return or2tc(
+    or2tc(
+      lessthan2tc(e1, gen_zero(e1->type)),
+      or2tc(
+        lessthan2tc(e2, gen_zero(e2->type)), greaterthanequal2tc(e2, width))),
+    lessthanequal2tc(
+      typecast2tc(u, e1),
+      lshr2tc(
+        u,
+        constant_int2tc(u, power(2, e1->type->get_width()) - 1),
+        typecast2tc(u, e2))));
 }
 
 void goto_checkt::overflow_check(
@@ -461,7 +508,7 @@ void goto_checkt::overflow_check(
   if (is_lshr2t(expr) || is_ashr2t(expr))
     return;
 
-  if (solidity_skips_overflow_check(expr, loc))
+  if (solidity_skips_overflow_check(expr, loc) || wraps_signed(expr, loc))
     return;
 
   // First, check type.
@@ -489,12 +536,8 @@ void goto_checkt::overflow_check(
     config.language.cpp_std >= cxx_stdt::cpp20)
     return;
 
-  // add overflow subgoal
-  expr2tc overflow = overflow_expr(expr);
-  make_not(overflow);
-
   add_guarded_claim(
-    overflow,
+    no_overflow_claim(expr),
     "arithmetic overflow on " + get_expr_id(expr),
     "overflow",
     loc,
@@ -1439,13 +1482,28 @@ static bool has_checked_operand(const expr2tc &code)
          is_code_cpp_delete2t(code) || is_code_cpp_del_array2t(code);
 }
 
+/// The first instruction from @p it that k-induction did not add. Its havocs
+/// and entry-condition ASSUME restate expressions the program evaluates, and
+/// checks, elsewhere; a check placed on them would run in the base case too,
+/// on the state before the loop.
+static goto_programt::instructionst::iterator skip_inductive_step(
+  goto_programt::instructionst::iterator it,
+  goto_programt::instructionst::iterator end)
+{
+  while (it != end && it->inductive_step_instruction)
+    ++it;
+  return it;
+}
+
 void goto_checkt::goto_check(goto_programt &goto_program)
 {
+  const goto_programt::instructionst::iterator end =
+    goto_program.instructions.end();
   // Not a ranged loop because we need it to be an iterator :/
   for (goto_programt::instructionst::iterator it =
-         goto_program.instructions.begin();
-       it != goto_program.instructions.end();
-       ++it)
+         skip_inductive_step(goto_program.instructions.begin(), end);
+       it != end;
+       it = skip_inductive_step(std::next(it), end))
   {
     goto_programt::instructiont &i = *it;
     const locationt &loc = i.location;

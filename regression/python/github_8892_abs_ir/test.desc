@@ -1,0 +1,5 @@
+CORE
+main.py
+--ir
+^VERIFICATION SUCCESSFUL$
+^\*\* 0 of 1 properties failed, 1 passed$

@@ -1,0 +1,4 @@
+CORE
+main.py
+
+^ERROR: unsupported: parameter 'b' of imported 'A' is passed values of different types \(int, str\)$

@@ -21,11 +21,6 @@ case, tracked by the umbrella issue
 A program whose correctness depends on one of these orderings may verify when it
 should not, or vice versa.
 
-A function-local static *array* with a dynamic initialiser is still initialised
-before `main`, so its initialiser's side effects happen even if the function is
-never called. Other dynamically initialised local statics are initialised on
-the first pass through their declaration, as [stmt.dcl]/3 requires.
-
 ## Containers
 
 - **`insert` on a nested `std::vector` does not converge under an unbounded
@@ -48,10 +43,11 @@ the first pass through their declaration, as [stmt.dcl]/3 requires.
 
 ## Exceptions
 
-- Under `--lower-exceptions`, a `pthread` start routine reached through a
-  computed function pointer — or one that is both called directly and used as a
-  start routine — cannot be given a sound per-function uncaught-escape check,
-  and is declined as unsupported. Declining is sound: ESBMC never validates a
+- In a program that throws or catches, a `pthread` start routine reached
+  through a computed function pointer, or one that is both called directly and
+  used as a start routine, cannot be given a sound per-function uncaught-escape
+  check, so exception lowering declines the program with `ERROR: exception
+  lowering: cannot lower ...`. Declining is sound: ESBMC never validates a
   buggy program as a result, it reports that it cannot analyse it.
 - Some exception-handling regression tests remain marked `KNOWNBUG`
   ([#4402](https://github.com/esbmc/esbmc/issues/4402)).
@@ -110,9 +106,6 @@ call shape works.
   execution terminates. The cap is an *assumption* rather than an assertion, so
   a defect needing more entries than it allows is excluded silently, where the
   container models assert instead and report `capacity exceeded`.
-- `std::ilogb`, `std::logb` and `std::nexttoward` resolve as overloads but have
-  no model in ESBMC's libc, so they return a nondeterministic value rather than
-  the C99 result.
 
 ## Time and clocks
 

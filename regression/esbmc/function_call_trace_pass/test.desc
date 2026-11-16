@@ -1,0 +1,4 @@
+CORE
+main.c
+--show-funccall-trace
+^VERIFICATION SUCCESSFUL$

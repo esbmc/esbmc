@@ -1,0 +1,5 @@
+CORE
+main.c
+--bitwuzla --64 --ts-bmc --ts-push-pop --ts-no-fallback --max-k-step 10
+^TS BMC step 10: safe
+^VERIFICATION UNKNOWN$

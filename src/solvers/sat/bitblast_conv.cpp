@@ -13,7 +13,7 @@ bitblast_convt::~bitblast_convt()
 {
 }
 
-void bitblast_convt::assert_ast(smt_astt a)
+void bitblast_convt::assert_ast_in_solver(smt_astt a)
 {
   assert(a->sort->id == SMT_SORT_BOOL);
   const bitblast_smt_ast *ba = bitblast_ast_downcast(a);

@@ -45,6 +45,9 @@ private:
 
   /// Format value for C code
   std::string format_c_value(const expr2tc &value) const;
+  std::vector<test_variable> collect_test_variables(
+    const symex_target_equationt &target,
+    smt_convt &smt_conv) const;
 
 public:
   ctest_generator() = default;

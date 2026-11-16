@@ -1,0 +1,5 @@
+CORE
+main.c
+--k-induction --validate-correctness-witness --witness witness.yml
+^  FAILED       \[main.assertion.2\]  line 10  loop invariant inductive step$
+^VERIFICATION FAILED$

@@ -1,0 +1,6 @@
+CORE
+main.c
+--multi-property
+^VERIFICATION FAILED$
+FAILED .* line 19 +dereference failure: invalidated dynamic object$
+FAILED .* line 20 +dereference failure: invalidated dynamic object$

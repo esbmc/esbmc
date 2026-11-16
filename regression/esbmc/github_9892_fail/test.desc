@@ -1,0 +1,5 @@
+CORE
+main.c
+--memory-leak-check --no-reachable-memory-leak
+^VERIFICATION FAILED$
+FAILED +\[main\.memory-leak\.1\].*forgotten memory

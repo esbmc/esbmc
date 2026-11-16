@@ -73,6 +73,10 @@ std::size_t ext_int_representation_bytes(const typet &type);
  * type's layout. */
 BigInt alignment(const typet &type, const namespacet &ns);
 
+/* Whether a member's alignment counts toward its record's: padding never does,
+ * and an unnamed bit-field does only where the target says so (#9383). */
+bool raises_record_alignment(const struct_union_typet::componentt &c);
+
 /* The alignment an access of `bytes` bytes needs: 8-byte scalars take the
  * target's ABI alignment, which i386 puts at 4 (#8694). */
 BigInt access_alignment(const BigInt &bytes);

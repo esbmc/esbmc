@@ -1,4 +1,0 @@
-CORE
-main.py
---incremental-bmc
-^ERROR: TypeError: numpy.linalg.svd currently supports only constant 2D real numeric matrices

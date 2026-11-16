@@ -24,6 +24,9 @@
 class bmct
 {
 public:
+  /// Loop invariants (loop head, C expression) for a correctness witness.
+  std::vector<std::pair<locationt, std::string>> loop_invariants;
+
   bmct(goto_functionst &funcs, optionst &opts, contextt &_context);
 
   optionst &options;
@@ -91,10 +94,10 @@ protected:
   // discharge was vacuous: the path assumptions alone are unsatisfiable.
   smt_resultt check_vacuity(symex_target_equationt &local_eq) const;
 
-  /// Whether the kept claim can hold at all on a feasible path.
+  /// Whether some feasible execution avoids violating the kept claim.
   smt_resultt check_claim_unsatisfiable(symex_target_equationt &local_eq) const;
 
-  /// Whether the invariant leaves one claim no way to hold (issue #7585).
+  /// Whether the invariant leaves one claim no way to be avoided (#10642).
   bool invariant_refutes(const symex_target_equationt &eq, size_t claim_index);
 
   // Set by the vacuity probe when at least one kept claim discharged
@@ -236,7 +239,8 @@ private:
     const claim_slicer &claim,
     const property_locationt &loc,
     bool inductive_step,
-    symex_target_equationt &local_eq);
+    symex_target_equationt &local_eq,
+    smt_convt &smt_conv);
 
   /// Record a verdict for every assertion in \p eq that \p smt_conv's model
   /// falsifies, so the report names them even when the counterexample itself
@@ -248,6 +252,13 @@ private:
   void record_violated_properties(
     smt_convt &smt_conv,
     const symex_target_equationt &eq);
+
+  /// A model that refutes only the loop-invariant abstraction can hide a real
+  /// violation of another claim. After a satisfiable \p result, set its claims
+  /// aside and solve again until a model refutes the program or none is left;
+  /// runtime_solver then holds the last satisfying model.
+  void
+  solve_past_the_abstraction(smt_resultt result, symex_target_equationt &eq);
 
   /// Source files whose assertions come from ESBMC's own operational models,
   /// so the report can sort them after the user's code. Empty for Python,
@@ -322,7 +333,8 @@ void report_coverage(
   std::unordered_set<std::string> &reached_claims,
   const std::unordered_multiset<std::string> &reached_mul_claims,
   pytest_generator &pytest_gen,
-  ctest_generator &ctest_gen);
+  ctest_generator &ctest_gen,
+  const std::string &partial_reason = "");
 
 /// Record why a coverage measurement is not exhaustive; the reason is listed
 /// under the closing COVERAGE ANALYSIS INCOMPLETE line.

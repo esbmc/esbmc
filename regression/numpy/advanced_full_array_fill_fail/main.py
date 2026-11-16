@@ -1,4 +1,5 @@
 import numpy as np
 
-a = np.full(3, (1, 2, 3))
-assert a[2] == 3
+b = np.array([300, 2])
+a = np.full((1, 2), b, dtype=np.int8)
+assert a[0][0] == 300

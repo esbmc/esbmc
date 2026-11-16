@@ -1,0 +1,4 @@
+CORE
+main.py
+
+^ERROR: reading attribute .f., which holds a bound method, as a value is not supported$

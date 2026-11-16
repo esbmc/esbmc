@@ -60,3 +60,16 @@ TEST_CASE(
   REQUIRE(string2integer("13") == std::size_t{13});
   REQUIRE(string2integer("c0fefe", 16) == std::size_t{0xc0fefe});
 }
+TEST_CASE(
+  "binary conversions wider than a machine word",
+  "[core][util][mp_arith]")
+{
+  const std::string bits = "101" + std::string(100, '0') + "11";
+  const BigInt value = BigInt(5) * BigInt::power2(102) + 3;
+  REQUIRE(binary2integer(bits, false) == value);
+  REQUIRE(binary2integer(bits, true) == value - BigInt::power2(105));
+  REQUIRE(integer2binary(value, 105) == bits);
+  REQUIRE(integer2binary(value - BigInt::power2(105), 105) == bits);
+  REQUIRE(integer2binary(value, 3) == "011");
+  REQUIRE(integer2binary(-1, 70) == std::string(70, '1'));
+}

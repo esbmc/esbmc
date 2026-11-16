@@ -6,8 +6,9 @@ tested before that read. A name is left alone when the analysis cannot see all
 of its bindings (walrus, except-as, del, import, nested def, match capture,
 global/nonlocal) or when a nested scope references it.
 
-Module-level code gets the same check, raising NameError, for a name bound only
-by module-level defs, such as a call placed above the def of its function.
+Module-level code gets the same check, raising NameError, for a global bound
+only by module-level defs and assignments, such as a call placed above the def
+of its function or a read of a name bound in an `if` that was not taken.
 """
 
 import ast
@@ -276,23 +277,53 @@ def _guard_function(func):
 
 
 def _module_candidates(module):
-    """Return the globals bound only by module-level defs the analysis sees."""
+    """Return the globals bound only by module-level defs and assignments the
+    analysis sees."""
     if any(isinstance(node, ast.Match) for node in ast.walk(module)):
         return set()
-    defs, excluded = set(), set()
+    bound, tracked, excluded = set(), set(), set()
     for node in _own_scope_nodes(module):
+        for target in _binding_targets(node):
+            tracked.update(id(name) for name in _target_names(target))
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            defs.add(node.name)
+            bound.add(node.name)
         elif isinstance(node, ast.ClassDef):
             excluded.add(node.name)
         elif isinstance(node, ast.Name) and not isinstance(node.ctx, ast.Load):
-            excluded.add(node.id)
+            bound.add(node.id)
+            if id(node) not in tracked or isinstance(node.ctx, ast.Del):
+                excluded.add(node.id)
         elif not isinstance(node, _NESTED_SCOPES):
             excluded |= _untracked_names(node)
     hidden = _names_bound_elsewhere(module)
     if hidden is None:
         return set()
-    return {name for name in defs - excluded - hidden if not hasattr(builtins, name)}
+    return {name for name in bound - excluded - hidden if not hasattr(builtins, name)}
+
+
+def _unguarded_parts(node):
+    """Return the parts of `node` that `_unconditional_reads` does not look into."""
+    if isinstance(node, ast.BoolOp):
+        return node.values[1:]
+    if isinstance(node, ast.IfExp):
+        return [node.body, node.orelse]
+    if isinstance(node, ast.ExceptHandler):
+        return [node.type]
+    if isinstance(node, ast.Assert):
+        return [node.msg]
+    return []
+
+
+def _unguarded_reads(module):
+    """Return the names a nested scope of `module` mentions, or its own code
+    may read where no guard is placed."""
+    names = set()
+    for node in _own_scope_nodes(module):
+        if isinstance(node, _NESTED_SCOPES):
+            names |= _untracked_names(node)
+        for part in filter(None, _unguarded_parts(node)):
+            names.update(n.id for n in ast.walk(part) if isinstance(n, ast.Name))
+    return names
 
 
 def _names_bound_elsewhere(module):
@@ -309,22 +340,27 @@ def _names_bound_elsewhere(module):
 
 
 def _guard_module(module):
+    """Return the globals each of whose reads raises NameError when unbound."""
     candidates = _module_candidates(module)
     if not candidates:
-        return
+        return set()
+    checked = candidates - _unguarded_reads(module)
     analysis = _Analysis(candidates)
     analysis.flow(module.body, set())
     flagged = set().union(*analysis.unsafe_reads.values())
     if not flagged:
-        return
+        return checked
     body = _Rewriter(flagged, analysis.unsafe_reads, _global_error).rewrite(module.body)
     module.body = _located([_flag_assign(name, False) for name in sorted(flagged)], body[0]) + body
+    return checked
 
 
 def guard_unbound_locals(module):
     """Make every function in `module` raise UnboundLocalError on an unbound read,
-    and its module-level code raise NameError on a read of a def not yet run."""
-    _guard_module(module)
+    and its module-level code raise NameError on a read of a global not yet bound.
+    Return the globals that only module-level code reads, so are all checked."""
+    checked = _guard_module(module)
     for node in ast.walk(module):
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
             _guard_function(node)
+    return checked

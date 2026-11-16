@@ -65,7 +65,10 @@ bool goto_symext::check_incremental(const expr2tc &expr, const std::string &msg)
   return false;
 }
 
-void goto_symext::claim(const expr2tc &claim_expr, const std::string &msg)
+void goto_symext::claim(
+  const expr2tc &claim_expr,
+  const std::string &msg,
+  bool user_assertion)
 {
   // Can happen when evaluating certain special intrinsics. Gulp.
   if (cur_state->guard.is_false())
@@ -123,7 +126,7 @@ void goto_symext::claim(const expr2tc &claim_expr, const std::string &msg)
     check_incremental(new_expr, msg))
     return; // claim fully resolved by incremental solving
 
-  symex_witness_assert(new_expr, msg);
+  symex_witness_assert(new_expr, msg, user_assertion);
 
   // add assertion to the target equation
   assertion(new_expr, msg);
@@ -175,8 +178,12 @@ void goto_symext::assertion(
   expr2tc expr = the_assertion;
   cur_state->guard.guard_expr(expr);
   cur_state->global_guard.guard_expr(expr);
-  expr2tc expr_neg = not2tc(the_assertion);
+  // Negate after the path guard but before the execution guard: the probe
+  // must leave the path free to be untaken, yet keep the execution guard (a
+  // free symbol) forced (issue #10642).
+  expr2tc expr_neg = the_assertion;
   cur_state->guard.guard_expr(expr_neg);
+  expr_neg = not2tc(expr_neg);
   cur_state->global_guard.guard_expr(expr_neg);
   remaining_claims++;
   target->assertion(
@@ -217,6 +224,36 @@ bool goto_symext::is_assume_false(const expr2tc &assumption)
   return is_false(assumption);
 }
 
+static bool fits_in_bv(const BigInt &v, const type2tc &type)
+{
+  const unsigned w = type->get_width();
+  if (is_signedbv_type(type))
+    return v >= -BigInt::power2(w - 1) && v < BigInt::power2(w - 1);
+  return v >= 0 && v < BigInt::power2(w);
+}
+
+// C promotes a narrow operand, so `flag == 1` arrives as `(int)flag == 1`.
+// A value-preserving widening is lifted onto the narrow symbol when the
+// constant fits it (#9852).
+static void lift_narrow_widening(expr2tc &sym_side, expr2tc &const_side)
+{
+  if (!is_typecast2t(sym_side) || !is_constant_int2t(const_side))
+    return;
+  const expr2tc narrow = to_typecast2t(sym_side).from;
+  const type2tc &wide = sym_side->type;
+  if (!is_symbol2t(narrow) || !is_bv_type(narrow) || !is_bv_type(wide))
+    return;
+  if (
+    narrow->type->get_width() >= wide->get_width() ||
+    (is_signedbv_type(narrow) && is_unsignedbv_type(wide)))
+    return;
+  const BigInt v = to_constant_int2t(const_side).value;
+  if (!fits_in_bv(v, narrow->type))
+    return;
+  const_side = constant_int2tc(narrow->type, v);
+  sym_side = narrow;
+}
+
 void goto_symext::propagate_assume_equality(const expr2tc &the_assumption)
 {
   expr2tc c = the_assumption;
@@ -227,8 +264,18 @@ void goto_symext::propagate_assume_equality(const expr2tc &the_assumption)
     return;
 
   const equality2t &eq = to_equality2t(c);
-  expr2tc lhs = eq.side_1;
-  expr2tc rhs = eq.side_2;
+  // A contract's ensures compares the havocked result through a cast to its
+  // own type, `(int *)return_value$0 == &a` (#7066).
+  auto strip_noop_casts = [](expr2tc e) {
+    while (is_typecast2t(e) && to_typecast2t(e).from->type == e->type)
+      e = to_typecast2t(e).from;
+    return e;
+  };
+  expr2tc lhs = strip_noop_casts(eq.side_1);
+  expr2tc rhs = strip_noop_casts(eq.side_2);
+
+  lift_narrow_widening(lhs, rhs);
+  lift_narrow_widening(rhs, lhs);
 
   // Only propagate when the other side is a constant: a symbol == symbol
   // assumption must NOT be turned into an assignment, as that perturbs the
@@ -596,9 +643,16 @@ void goto_symext::symex_assert()
   if (cur_state->guard.is_false())
     return;
 
-  // Don't convert if it's an user provided assertion and we're running in
-  // no assertion mode or forward condition
-  if (cur_state->source.pc->location.user_provided() && no_assertions)
+  // Don't convert if it's a user-provided assertion and we're running in
+  // no assertion mode. Exception: coverage instrumentation asserts inherit
+  // user_provided(true) so they show up in counterexample traces — they
+  // are NOT user safety properties and must survive --no-assertions
+  // (otherwise the Solidity coverage auto-enable in esbmc_parseoptions
+  // would silently disable branch/condition coverage instrumentation).
+  if (
+    cur_state->source.pc->location.user_provided() && no_assertions &&
+    cur_state->source.pc->location.property().as_string() !=
+      "instrumented assertion")
     return;
 
   const goto_programt::instructiont &instruction = *cur_state->source.pc;
@@ -615,7 +669,11 @@ void goto_symext::symex_assert()
   simplify_python_builtins(tmp);
 
   claim_skips_deferred = instruction.location.get_bool("ends_path");
-  claim(tmp, msg);
+  claim(
+    tmp,
+    msg,
+    instruction.location.user_provided() &&
+      instruction.location.property() == "assertion");
   claim_skips_deferred = false;
 }
 
@@ -638,6 +696,12 @@ require_new_object_pointer_lvalue(const code_function_call2t &func_call)
     get_type_id(func_call.ret->type),
     loc.empty() ? "" : (" at " + loc));
   abort();
+}
+
+/// The type @p ptr points to; nil when @p ptr is nil.
+static type2tc pointee_type_or_nil(const expr2tc &ptr)
+{
+  return is_nil_expr(ptr) ? type2tc() : to_pointer_type(ptr->type).subtype;
 }
 
 void goto_symext::run_intrinsic(
@@ -1250,19 +1314,13 @@ void goto_symext::run_intrinsic(
     return;
   }
 
-  if (has_prefix(symname, "c:@F@__ESBMC_create_inf_obj"))
+  // __ESBMC_create_inf_obj and __ESBMC_create_inf_slots (python/list.c): a
+  // fresh infinite array of what the result points to.
+  if (has_prefix(symname, "c:@F@__ESBMC_create_inf_"))
   {
     assert(func_call.operands.size() == 0 && "Wrong signature");
-
-    const symbolt *list_object_symbol =
-      new_context.find_symbol("tag-struct __ESBMC_PyObj");
-    assert(list_object_symbol);
-
     symex_mem_inf(
-      func_call.ret,
-      migrate_symbol_type(*list_object_symbol),
-      cur_state->guard);
-
+      func_call.ret, pointee_type_or_nil(func_call.ret), cur_state->guard);
     return;
   }
 
@@ -1278,7 +1336,7 @@ void goto_symext::run_intrinsic(
     if (func_call.operands.size() < 2)
       return;
     size_t seg_idx = to_constant_int2t(func_call.operands[0]).value.to_uint64();
-    if (seg_idx != cur_state->cur_seg)
+    if (seg_idx >= cur_state->witness_segs.size())
       return;
 
     // pc has already been incremented past this intrinsic call; step back one
@@ -1303,13 +1361,14 @@ void goto_symext::run_intrinsic(
     expr2tc arg = func_call.operands[1];
     cur_state->rename(arg);
 
+    const expr2tc position = witness_position();
+    const expr2tc active = witness_segment_guard(seg_idx, position);
     if (matched->action == waypoint::avoid)
-      assume(not2tc(arg));
-    else
-      assume(arg);
+      arg = not2tc(arg);
+    assume(implies2tc(active, arg));
 
     if (matched->action != waypoint::avoid)
-      cur_state->advance_witness_position();
+      advance_witness_position(seg_idx, position);
     return;
   }
 
@@ -1494,6 +1553,111 @@ void add_content_edges(
       discover(cobj);
     }
   }
+}
+
+/* The pointer-typed parts of the global `root` that a value-set entry's
+ * suffix names, or none when they cannot be enumerated. */
+std::vector<expr2tc>
+leak_root_pointers(const expr2tc &root, const std::string &suffix)
+{
+  std::vector<expr2tc> sub_exprs = {root};
+  std::string rest = suffix;
+  /* A zero-size array, such as a flexible array member, expands to none. */
+  while (!rest.empty() && !sub_exprs.empty())
+  {
+    /* The suffix consists of a sequence of components, which are either
+     * "[]" or ".name" where name is the name of some member of a
+     * structure type. */
+    if (rest[0] == '.')
+    {
+      const type2tc type = sub_exprs[0]->type;
+      assert(is_structure_type(type));
+      const std::vector<irep_idt> names = struct_union_member_names(type);
+      const auto comp = match_leading_component(names, rest.substr(1));
+      if (!comp)
+      {
+        /* The suffix names a member of a different definition of this
+         * struct: linking a program's own `struct tm` against the libc
+         * model's leaves the model's buffers typed by one and their
+         * value-set entries by the other. Ignore the root, as for an
+         * array of no size below. */
+        return {};
+      }
+      const auto [n, len] = *comp;
+      const type2tc member_type = struct_union_members(type)[n];
+      for (expr2tc &p : sub_exprs)
+        p = member2tc(member_type, p, names[n]);
+      rest.erase(0, 1 + len);
+      continue;
+    }
+
+    assert(has_prefix(rest, "[]"));
+    rest.erase(0, 2);
+    const type2tc &type = sub_exprs[0]->type;
+    assert(is_array_type(type));
+    const array_type2t &array_type = to_array_type(type);
+    const expr2tc &size = array_type.array_size;
+    if (!size)
+    {
+      /* The user is doing evil things like pointing to infinite-size
+       * arrays. Bad user. Those arrays are not "global symbols" in the
+       * sense of --no-reachable-memory-leak; ignore those. */
+      return {};
+    }
+
+    if (is_constant_int2t(size))
+    {
+      /* This could be huge. TODO: switch to the case below. */
+      uint64_t n = to_constant_int2t(size).value.to_uint64();
+      std::vector<expr2tc> new_sub_exprs;
+      new_sub_exprs.reserve(n * sub_exprs.size());
+      for (const expr2tc &p : sub_exprs)
+        for (uint64_t i = 0; i < n; i++)
+          new_sub_exprs.emplace_back(
+            index2tc(array_type.subtype, p, gen_long(size->type, i)));
+      sub_exprs = std::move(new_sub_exprs);
+      continue;
+    }
+
+    /* TODO: Missing implementation.
+     *
+     * We cannot just use a new symbol for the index since this
+     * expression is used in a negated context. I.e. we will need to
+     * encode a condition whose negation is true if and only if the
+     * target 'adr' is *not* reachable from this array.
+     * Exists index, s.t. "array[index] is the same object as 'adr'"
+     * does not satisfy this requirement: solvers are free to choose an
+     * 'index' where the same-object condition is false. Instead, the
+     * counter-example needs to include a witness that 'adr' is *not*
+     * reachable from the array.
+     *
+     * XXX fbrausse: Can we use the inductive counting construction from
+     *   Immerman and Szelepcsényi proving co-NL = NL here?
+     *   Alternatively, we might be able to use Savitch's theorem to
+     *   construct a deterministic expression for reachability and
+     *   negate that. Might even be faster since the expression
+     *   constructed in DSPACE(log^2(n)) should be handled faster than
+     *   the time it takes to solve a formula constructed in DTIME(n^2).
+     */
+
+    // this is a workaround because there is no implementation, yet
+    return {};
+  }
+  return sub_exprs;
+}
+
+/* `g`, further restricted for a heap object `src` to while it is allocated: a
+ * pointer left in freed memory reaches nothing, as reading it is itself
+ * invalid. */
+expr2tc while_allocated(
+  const std::string &src,
+  const std::map<std::string, expr2tc> &node_adr,
+  const expr2tc &g)
+{
+  if (!has_prefix(src, "symex_dynamic::"))
+    return g;
+  const expr2tc live = not2tc(deallocated_obj2tc(node_adr.at(src)));
+  return g ? and2tc(live, g) : live;
 }
 
 } // namespace
@@ -1777,81 +1941,8 @@ void goto_symext::add_memory_leak_checks()
        * symbol based on the suffix so that we catch all the pointers. If
        * the suffix is empty, sym_expr2 already has pointer type. Otherwise
        * the symbol has a compound type. */
-      std::vector<expr2tc> sub_exprs = {sym_expr2};
-      std::string rest = e.suffix;
-      while (!rest.empty())
-      {
-        /* The suffix consists of a sequence of components, which are either
-         * "[]" or ".name" where name is the name of some member of a
-         * structure type. */
-        if (rest[0] == '.')
-        {
-          const type2tc type = sub_exprs[0]->type;
-          assert(is_structure_type(type));
-          const std::vector<irep_idt> names = struct_union_member_names(type);
-          const auto [n, len] =
-            match_leading_component(names, rest.substr(1)).value();
-          const type2tc member_type = struct_union_members(type)[n];
-          for (expr2tc &p : sub_exprs)
-            p = member2tc(member_type, p, names[n]);
-          rest.erase(0, 1 + len);
-          continue;
-        }
-
-        assert(has_prefix(rest, "[]"));
-        rest.erase(0, 2);
-        const type2tc &type = sub_exprs[0]->type;
-        assert(is_array_type(type));
-        const array_type2t &array_type = to_array_type(type);
-        const expr2tc &size = array_type.array_size;
-        if (!size)
-        {
-          /* The user is doing evil things like pointing to infinite-size
-           * arrays. Bad user. Those arrays are not "global symbols" in the
-           * sense of --no-reachable-memory-leak; ignore those. */
-          sub_exprs.clear();
-          break;
-        }
-
-        if (is_constant_int2t(size))
-        {
-          /* This could be huge. TODO: switch to the case below. */
-          uint64_t n = to_constant_int2t(size).value.to_uint64();
-          std::vector<expr2tc> new_sub_exprs;
-          new_sub_exprs.reserve(n * sub_exprs.size());
-          for (const expr2tc &p : sub_exprs)
-            for (uint64_t i = 0; i < n; i++)
-              new_sub_exprs.emplace_back(
-                index2tc(array_type.subtype, p, gen_long(size->type, i)));
-          sub_exprs = std::move(new_sub_exprs);
-          continue;
-        }
-
-        /* TODO: Missing implementation.
-         *
-         * We cannot just use a new symbol for the index since this
-         * expression is used in a negated context. I.e. we will need to
-         * encode a condition whose negation is true if and only if the
-         * target 'adr' is *not* reachable from this array.
-         * Exists index, s.t. "array[index] is the same object as 'adr'"
-         * does not satisfy this requirement: solvers are free to choose an
-         * 'index' where the same-object condition is false. Instead, the
-         * counter-example needs to include a witness that 'adr' is *not*
-         * reachable from the array.
-         *
-         * XXX fbrausse: Can we use the inductive counting construction from
-         *   Immerman and Szelepcsényi proving co-NL = NL here?
-         *   Alternatively, we might be able to use Savitch's theorem to
-         *   construct a deterministic expression for reachability and
-         *   negate that. Might even be faster since the expression
-         *   constructed in DSPACE(log^2(n)) should be handled faster than
-         *   the time it takes to solve a formula constructed in DTIME(n^2).
-         */
-
-        // this is a workaround because there is no implementation, yet
-        sub_exprs.clear();
-        break;
-      }
+      const std::vector<expr2tc> sub_exprs =
+        leak_root_pointers(sym_expr2, e.suffix);
       if (sub_exprs.empty()) /* this target is not to be handled */
         continue;
 
@@ -1956,9 +2047,10 @@ void goto_symext::add_memory_leak_checks()
 
     /* Phase 2: least fixpoint of the reachability conditions. Global symbols
      * are unconditionally reachable; every other symbol is reachable under the
-     * disjunction, over its incoming edges, of (source reachable) and (edge
-     * condition). Propagating only the disjuncts added by the previous round
-     * keeps each round's formula linear in the number of edges.
+     * disjunction, over its incoming edges, of (source reachable), (edge
+     * condition) and, for a heap source, (source allocated). Propagating only
+     * the disjuncts added by the previous round keeps each round's formula
+     * linear in the number of edges.
      *
      * A symbol reachable in some execution is reachable there along a simple
      * path, and a simple path leaves its root once and thereafter only visits
@@ -1976,11 +2068,12 @@ void goto_symext::add_memory_leak_checks()
     for (size_t round = 0; round < node_adr.size() && !delta.empty(); round++)
     {
       std::map<std::string, expr2tc> contrib;
-      for (const auto &[src, g_src] : delta)
+      for (const auto &[src, reach_src] : delta)
       {
         auto eit = out_edges.find(src);
         if (eit == out_edges.end())
           continue;
+        const expr2tc g_src = while_allocated(src, node_adr, reach_src);
         for (const auto &[dst, cond] : eit->second)
         {
           expr2tc g = g_src ? and2tc(g_src, cond) : cond;

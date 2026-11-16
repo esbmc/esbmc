@@ -6,11 +6,12 @@
 #include <map>
 #include <string>
 #include <vector>
-#include <mutex>
+#include <atomic>
 
 #define SHARING
 
 #include <util/irep/irep_idt.h>
+#include <util/base/threads.h>
 
 typedef std::hash<irep_idt> irep_id_hash;
 
@@ -59,19 +60,10 @@ public:
   {
   }
 
-  inline irept(const irept &irep)
+  inline irept(const irept &irep) : data(irep.data)
   {
-    // We only need to lock the source's data to safely read the pointer
-    // and increment its reference count.
-    dt *source_data = nullptr;
-    if (irep.data)
-    {
-      std::lock_guard<std::mutex> lock(irep.data->dt_mutex);
-      source_data = irep.data;
-      if (source_data)
-        source_data->ref_count++;
-    }
-    data = source_data;
+    if (data)
+      counter_add(data->ref_count, 1u, std::memory_order_relaxed);
   }
 
   inline irept &operator=(const irept &irep)
@@ -79,14 +71,9 @@ public:
     if (this == &irep)
       return *this;
 
-    dt *new_data = nullptr;
-    if (irep.data)
-    {
-      std::lock_guard<std::mutex> lock(irep.data->dt_mutex);
-      new_data = irep.data;
-      if (new_data)
-        new_data->ref_count++;
-    }
+    dt *new_data = irep.data;
+    if (new_data)
+      counter_add(new_data->ref_count, 1u, std::memory_order_relaxed);
 
     dt *old_data = data;
     data = new_data;
@@ -1327,8 +1314,7 @@ public:
   {
   public:
 #ifdef SHARING
-    unsigned ref_count;
-    mutable std::mutex dt_mutex;
+    std::atomic<unsigned> ref_count;
 #endif
 
     irep_idt data;

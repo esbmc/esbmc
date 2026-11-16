@@ -55,6 +55,7 @@ _reported_cycles: set[tuple[str, ...]] = set()
 _reported_resolution_failures: set[tuple[str, str, str]] = set()
 _reported_unmodelled: set[str] = set()
 _unmodelled_modules: dict[str, ModuleType] = {}
+_raising_modules: set[str] = set()
 
 
 @dataclass(frozen=True)
@@ -76,6 +77,7 @@ def reset_state() -> None:
     _reported_resolution_failures.clear()
     _reported_unmodelled.clear()
     _unmodelled_modules.clear()
+    _raising_modules.clear()
     imported_signature_sources.clear()
     default_helper_exports.clear()
 
@@ -105,6 +107,9 @@ def _mark_import_resolution(
     node.full_path = full_path
     node.module_not_found = not ok
     node.module_resolution_reason = reason
+
+
+_SV_VERIFIER = "_sv_verifier"
 
 
 def _has_model_file(module_name: str, output_dir: str) -> bool:
@@ -162,6 +167,7 @@ def _is_imported_model(module_name: str) -> bool:
         "unittest",
         "sys",
         "subprocess",
+        "array",
     }
     return module_name in models
 
@@ -269,6 +275,13 @@ def import_module_by_name(
             except ImportError:
                 pass
 
+        if module_name == _SV_VERIFIER:
+            # BenchExec cloud workers receive only the task's own files, so the
+            # benchmark set's _sv_verifier.py may be absent (#9796).
+            stub = _normalize_existing_path(os.path.join(output_dir, "stubs", _SV_VERIFIER + ".py"))
+            if stub is not None:
+                return stub
+
         # Keep legacy error text: regression tests assert this exact line.
         _resolver_error(f"Module '{module_name}' not found.")
         return None
@@ -286,7 +299,23 @@ def import_module_by_name(
         # the same way. The module parsed; it failed executing, so the reason
         # must not claim otherwise.
         _resolver_warning(f"{module_name} module-import-failed: {exc}")
+        return _raising_module_file(module_name)
+
+
+def _raising_module_file(module_name: str) -> str | None:
+    """The source of a module whose body raised on import, located without running it.
+
+    What the body raises is the program's behaviour, so the body must still
+    be converted (#10223).
+    """
+    try:
+        spec = importlib.util.find_spec(module_name)
+    except Exception:  # pylint: disable=broad-except
         return None
+    if spec is None:
+        return None
+    _raising_modules.add(module_name)
+    return spec.origin
 
 
 def _collect_import_targets(
@@ -310,8 +339,13 @@ def _collect_import_targets(
     return module_names, imported_elements
 
 
-def process_imports(node: ast.Import | ast.ImportFrom, output_dir: str) -> None:
-    """Collect import targets and attach best-effort resolution metadata."""
+def process_imports(node: ast.Import | ast.ImportFrom,
+                    output_dir: str,
+                    module_level: bool = False) -> None:
+    """Collect import targets and attach best-effort resolution metadata.
+
+    `module_level` says `node` is a statement of its module's body.
+    """
     module_names, imported_elements = _collect_import_targets(node)
     if not module_names:
         return
@@ -332,6 +366,11 @@ def process_imports(node: ast.Import | ast.ImportFrom, output_dir: str) -> None:
                 module_imports[module_name]['specific_names'].add(elem.name)
 
         module = import_module_by_name(module_name, output_dir)
+        # The converter runs a module's body in place of a module-level import
+        # only, and a `from` import of named elements emits only those, so
+        # anywhere else its exception would be lost.
+        if module_name in _raising_modules and not (module_level and imported_elements is None):
+            module = None
         if module is None:
             _warn_resolution_failure(module_name, node, "module-not-found")
             _mark_import_resolution(node, ok=False, reason="module-not-found")
@@ -386,9 +425,10 @@ def _unmodelled_import_bindings(stmts: list[ast.stmt]) -> dict[str, object]:
     return objects
 
 
-def _mark_unmodelled_class_bases(tree: ast.Module) -> None:
-    """Mark each class base that CPython resolves to a class of a module with
-    no model. The converter has no such class to derive from and skips it
+def _mark_unmodelled_classes(tree: ast.Module) -> None:
+    """Mark each class base, and each annotation of a top-level function,
+    method or variable, that CPython resolves to a class of a module with no
+    model. The converter has no such class to derive from and skips it
     (#9161), which is sound only once CPython would create the class: it
     evaluates the bases when the definition runs."""
     bound = Counter(name for node in ast.walk(tree) for name in _bound_names(node))
@@ -398,22 +438,73 @@ def _mark_unmodelled_class_bases(tree: ast.Module) -> None:
             return objects.get(node.id) if bound[node.id] == 1 else None
         if isinstance(node, ast.Attribute):
             owner = resolve(node.value, objects)
-            return None if owner is None else getattr(owner, node.attr, None)
+            value = None if owner is None else getattr(owner, node.attr, None)
+            # A submodule is an attribute only if something imported it, which
+            # may be the parser itself rather than the program.
+            return None if isinstance(value, ModuleType) else value
         return None
 
-    # A top-level class only, after the imports: CPython raises NameError for
-    # a base read before its import has run, and a star import may rebind it.
+    def mark_annotations(stmts: list[ast.stmt], objects: dict[str, object]) -> None:
+        for annotation, expr in _annotations(stmts):
+            if isinstance(resolve(expr, objects), type):
+                annotation.unmodelled_class = True
+
+    def mark_calls(objects: dict[str, object]) -> None:
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Call) and isinstance(resolve(node.func, objects), type):
+                node.unmodelled_class = True
+
+    # Refusing a call is sound whatever the name is bound to when it runs.
+    mark_calls(_unmodelled_import_bindings(tree.body))
+
+    # A top-level definition only, after the imports: CPython raises NameError
+    # for a name read before its import has run, and a star import may rebind
+    # it.
     for index, stmt in enumerate(tree.body):
         before = tree.body[:index]
-        if not isinstance(stmt, ast.ClassDef) or stmt.keywords or _has_star_import(before):
+        if _has_star_import(before):
             continue
         objects = _unmodelled_import_bindings(before)
+        if not isinstance(stmt, ast.ClassDef):
+            mark_annotations([stmt], objects)
+            continue
+        if stmt.keywords:
+            continue
+        mark_annotations(stmt.body, objects)
         bases = [resolve(base, objects) for base in stmt.bases]
         if not bases or not all(isinstance(base, type) for base in bases):
             continue
         if _can_create_class(stmt.name, bases):
             for base in stmt.bases:
                 base.unmodelled_class = True
+
+
+def _annotations(stmts: list[ast.stmt]) -> list[tuple[ast.expr, ast.expr]]:
+    """Each parameter, return and variable annotation of `stmts` spelled as a
+    name, with the expression it spells. A string annotation is never
+    evaluated."""
+    annotations = []
+    for stmt in stmts:
+        if isinstance(stmt, ast.AnnAssign):
+            annotations.append(stmt.annotation)
+        if not isinstance(stmt, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        args = stmt.args
+        params = args.posonlyargs + args.args + args.kwonlyargs + [args.vararg, args.kwarg]
+        annotations += [param.annotation for param in params if param is not None]
+        annotations.append(stmt.returns)
+        annotations += [n.annotation for n in ast.walk(stmt) if isinstance(n, ast.AnnAssign)]
+    found = []
+    for annotation in filter(None, annotations):
+        expr = annotation
+        if isinstance(annotation, ast.Constant) and isinstance(annotation.value, str):
+            try:
+                expr = ast.parse(annotation.value.strip(), mode="eval").body
+            except SyntaxError:
+                continue
+        if isinstance(expr, (ast.Name, ast.Attribute)):
+            found.append((annotation, expr))
+    return found
 
 
 def _has_star_import(stmts: list[ast.stmt]) -> bool:
@@ -446,7 +537,10 @@ def _is_submodule_import(package_name: str, name: str) -> bool:
     # CPython reads the package attribute first; only a missing one, or the
     # submodule itself, falls through to importing `package_name.name`.
     attr = getattr(package, name, None)
-    if attr is not None and getattr(attr, "__name__", None) != qualname:
+    # type(), not getattr or isinstance: a proxy object may raise on any
+    # attribute read (#9311).
+    is_submodule = issubclass(type(attr), ModuleType) and attr.__name__ == qualname
+    if attr is not None and not is_submodule:
         return False
     try:
         spec = importlib.util.find_spec(qualname)
@@ -696,7 +790,7 @@ def process_collected_imports(output_dir: str,
                     callbacks.rewrite_relative_import(subnode, module_name)
                     for imported_name in _extract_module_names(subnode):
                         import_graph[module_name].add(imported_name)
-                    process_imports(subnode, output_dir)
+                    process_imports(subnode, output_dir, subnode in tree.body)
             _warn_if_cycle(import_graph, module_name)
 
     callbacks.propagate_range_aliases(parsed_trees)
@@ -846,9 +940,9 @@ def _finalize_parsed_trees(parsed_trees: ParsedTreeState, entry_tree: ast.Module
     if entry_tree is not None:
         _request_vararg_specializations(entry_tree, parsed_trees)
         _request_type_specializations(entry_tree, parsed_trees)
-        _mark_unmodelled_class_bases(entry_tree)
+        _mark_unmodelled_classes(entry_tree)
     for tree, _filename, _pp in parsed_trees.values():
-        _mark_unmodelled_class_bases(tree)
+        _mark_unmodelled_classes(tree)
     started: set[str] = set()
     done: set[str] = set()
     for module_name in parsed_trees:

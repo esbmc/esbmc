@@ -1,0 +1,4 @@
+CORE
+main.c
+--goto2lean --ir
+^ERROR: goto2lean: unsupported bitand under --ir \(unbounded integers\)$

@@ -1,0 +1,25 @@
+- entry_type: "violation_sequence"
+  metadata:
+    format_version: "2.1"
+    producer:
+      name: "ESBMC"
+      version: "8.3.0"
+    task:
+      input_files:
+        - "main.c"
+      specification: "F end"
+      data_model: "LP64"
+      language: "C"
+  content:
+    - segment:
+        - waypoint:
+            type: "assumption"
+            action: "cycle"
+            constraint:
+              value: "0"
+              format: "c_expression"
+            location:
+              file_name: "main.c"
+              line: 22
+              column: 3
+              function: "main"

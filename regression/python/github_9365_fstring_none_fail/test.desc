@@ -1,0 +1,6 @@
+CORE
+main.py
+
+^  FAILED\s+\[global\.assertion\.1\]\s+line\s+2\s+assertion
+^\*\* 1 of \d+ properties failed
+^VERIFICATION FAILED$

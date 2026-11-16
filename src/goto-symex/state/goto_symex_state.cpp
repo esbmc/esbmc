@@ -23,8 +23,6 @@ goto_symex_statet::goto_symex_statet(
 {
   use_value_set = true;
   num_instructions = 0;
-  cur_seg = 0;
-  witness_target_reached = false;
   thread_ended = false;
   guard.make_true();
 }
@@ -52,9 +50,7 @@ goto_symex_statet &goto_symex_statet::operator=(const goto_symex_statet &state)
   no_propagation = state.no_propagation;
   call_stack = state.call_stack;
   witness_segs = state.witness_segs;
-  cur_seg = state.cur_seg;
-  witness_target_reached = state.witness_target_reached;
-  cycle_branch_map = state.cycle_branch_map;
+  witness_locations = state.witness_locations;
   return *this;
 }
 
@@ -645,11 +641,13 @@ static expr2tc pin_literal_elements(
                                    : pin_array_literal(state, rhs, l2_lhs);
 }
 
-/// The value @p arm holds for member @p name, or nil when the shape does not
-/// say. Deliberately not member2tc(..)->simplify(): expr2t::simplify walks the
-/// operands before applying the projection, so asking a large carried value for
-/// one member would cost the size of the whole value, once per member.
-static expr2tc project_member(const expr2tc &arm, const irep_idt &name)
+/// The value @p arm holds for member @p name, number @p i of @p arm's type, or
+/// nil when the shape does not say. Deliberately not member2tc(..)->simplify():
+/// expr2t::simplify walks the operands before applying the projection, so
+/// asking a large carried value for one member would cost the size of the whole
+/// value, once per member.
+static expr2tc
+project_member(const expr2tc &arm, size_t i, const irep_idt &name)
 {
   const expr2tc *cur = &arm;
   while (is_with2t(*cur) && is_struct_type((*cur)->type))
@@ -663,11 +661,8 @@ static expr2tc project_member(const expr2tc &arm, const irep_idt &name)
   }
   if (!is_constant_struct2t(*cur))
     return expr2tc();
-  const std::optional<unsigned> i =
-    struct_union_get_component_number((*cur)->type, name);
-  if (!i)
-    return expr2tc();
-  return to_constant_struct2t(*cur).datatype_members[*i];
+  // A with2t has its source's type, so the literal has @p arm's type.
+  return to_constant_struct2t(*cur).datatype_members[i];
 }
 
 /// The value @p arm holds at index @p i, or nil when the shape does not say --
@@ -764,7 +759,7 @@ static expr2tc pin_phi_members(
       phi,
       st.members.size(),
       [&](const expr2tc &arm, size_t i) {
-        return project_member(arm, st.member_names[i]);
+        return project_member(arm, i, st.member_names[i]);
       },
       [&](size_t i) {
         return member2tc(st.members[i], l2_lhs, st.member_names[i]);
@@ -989,14 +984,19 @@ void goto_symex_statet::rename_type(expr2tc &expr)
    * would (rightly) fire. Recurse first so source_value's type is
    * already in its renamed form by the time we rebuild the parent. */
   expr->Foreach_operand([this](expr2tc &expr) { rename_type(expr); });
+  rename_own_type(expr);
+}
 
+void goto_symex_statet::rename_own_type(expr2tc &expr)
+{
   // expr->type is const; rename symbolic array sizes on a CoW-detached copy
   // and, if it changed, rebuild the expression with the renamed type.
-  if (has_symbolic_array_size(expr->type))
+  const type2tc &type = std::as_const(expr)->type;
+  if (has_symbolic_array_size(type))
   {
-    type2tc renamed = expr->type;
+    type2tc renamed = type;
     rename_array_sizes(renamed);
-    if (renamed != expr->type)
+    if (renamed != type)
       expr = expr->with_type(renamed);
   }
 }
@@ -1077,15 +1077,36 @@ void goto_symex_statet::rename_quantified(
 
 void goto_symex_statet::rename(expr2tc &expr)
 {
+  renamed_exprst renamed;
+  rename(expr, renamed);
+}
+
+void goto_symex_statet::rename(expr2tc &expr, renamed_exprst &renamed)
+{
   // rename all the symbols with their last known value
 
   if (is_nil_expr(expr))
     return;
 
-  rename_type(expr);
+  // Rename a shared subexpression once: a tree walk is exponential in the
+  // depth of the sharing (#9785). The entry keeps the original alive, so its
+  // address is not reused for another node.
+  expr2tc original;
+  const expr2t *node = std::as_const(expr).get();
+  if (!is_symbol2t(expr) && node->refcount.load(std::memory_order_relaxed) > 1)
+  {
+    auto it = renamed.find(node);
+    if (it != renamed.end())
+    {
+      expr = it->second.second;
+      return;
+    }
+    original = expr;
+  }
 
   if (is_symbol2t(expr))
   {
+    rename_own_type(expr);
     type2tc origtype = expr->type;
     top().level1.rename(expr);
     level2.rename(expr);
@@ -1093,18 +1114,25 @@ void goto_symex_statet::rename(expr2tc &expr)
   }
   else if (is_address_of2t(expr))
   {
+    rename_type(expr);
     address_of2t &addrof = to_address_of2t(expr);
     rename_address(addrof.ptr_obj);
   }
   else if (is_forall2t(expr) || is_exists2t(expr))
   {
+    rename_type(expr);
     rename_quantified(expr, {});
   }
   else
   {
-    // do this recursively
-    expr->Foreach_operand([this](expr2tc &e) { rename(e); });
+    // Operands first, as in rename_type.
+    expr->Foreach_operand([this, &renamed](expr2tc &e) { rename(e, renamed); });
+    rename_own_type(expr);
   }
+
+  if (original)
+    renamed.emplace(
+      std::as_const(original).get(), std::make_pair(original, expr));
 }
 
 void goto_symex_statet::rename_address(expr2tc &expr)
@@ -1315,10 +1343,4 @@ std::vector<stack_framet> goto_symex_statet::gen_stack_trace() const
   }
 
   return trace;
-}
-
-void goto_symex_statet::advance_witness_position()
-{
-  if (cur_seg < witness_segs.size())
-    ++cur_seg;
 }

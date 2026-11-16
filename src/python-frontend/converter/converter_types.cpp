@@ -58,10 +58,31 @@ exprt python_converter::unwrap_optional_if_needed(
   // Extract the value field. V.3: IREP2 member access (round-trip).
   expr2tc b2;
   migrate_expr(materialize_optional(expr, element), b2);
-  return migrate_expr_back(member2tc(
+  // build_optional_type pads the payload; other tuples stay unpadded.
+  return tuple_handler_->strip_padding(migrate_expr_back(member2tc(
     migrate_type(to_struct_type(expr.type()).get_component("value").type()),
     b2,
-    "value"));
+    "value")));
+}
+
+exprt python_converter::optional_tuple_payload(
+  const exprt &value,
+  const nlohmann::json &element,
+  const std::string &message)
+{
+  if (!type_utils::is_optional_struct(value.type()))
+    return value;
+  const typet &payload =
+    to_struct_type(value.type()).get_component("value").type();
+  if (!tuple_handler_->is_tuple_type(ns.follow(payload)))
+    return value;
+  const exprt optional = materialize_optional(value, element);
+  emit_guarded_raise(
+    member_exprt(optional, "is_none", bool_type()),
+    "TypeError",
+    message,
+    get_location_from_decl(element));
+  return unwrap_optional_if_needed(optional, element);
 }
 
 exprt python_converter::wrap_in_optional(
@@ -437,6 +458,29 @@ typet python_converter::get_optional_type(const nlohmann::json &slice)
 static bool names_list_annotation(const std::string &name)
 {
   return name == "list" || name == "List" || name == "Sequence";
+}
+
+/// The type an annotation spelling class \p name stands for. A class of a
+/// module with no model has no type of its own, so the value is opaque.
+typet python_converter::named_annotation_type(
+  const nlohmann::json &annotation_node,
+  const std::string &name,
+  size_t type_size)
+{
+  if (annotation_node.value("unmodelled_class", false))
+    return any_type();
+  return type_handler_.get_typet(name, type_size);
+}
+
+typet python_converter::dict_annotation_value_type(
+  const nlohmann::json &annotation)
+{
+  if (
+    !annotation.is_object() || annotation.value("_type", "") != "Subscript" ||
+    !annotation["slice"].contains("elts") ||
+    annotation["slice"]["elts"].size() != 2)
+    return typet();
+  return get_type_from_annotation(annotation["slice"]["elts"][1], annotation);
 }
 
 typet python_converter::get_type_from_annotation(
@@ -836,7 +880,8 @@ typet python_converter::get_type_from_annotation(
   }
   else if (
     annotation_node["_type"] == "Attribute" && annotation_node.contains("attr"))
-    return type_handler_.get_typet(annotation_node["attr"].get<std::string>());
+    return named_annotation_type(
+      annotation_node, annotation_node["attr"].get<std::string>());
   else if (annotation_node.contains("id"))
   {
     std::string type_id = annotation_node["id"].get<std::string>();
@@ -912,6 +957,15 @@ typet python_converter::infer_tuple_struct_from_value(
   return tuple_handler_->create_tuple_struct_type(elem_types);
 }
 
+/// A str operand of any length decays to a char pointer, as in an IfExp.
+static bool decay_str_operand(typet &type)
+{
+  if (!type.is_array() || !type_utils::is_string_type(type))
+    return false;
+  type = pointer_typet(type.subtype());
+  return true;
+}
+
 exprt python_converter::extract_type_from_boolean_op(const exprt &bool_op)
 {
   // Only OR and AND are special
@@ -927,6 +981,7 @@ exprt python_converter::extract_type_from_boolean_op(const exprt &bool_op)
   typet found_type = empty_typet();
   assert(found_type.is_empty());
 
+  bool has_bool = false, has_str = false;
   for (exprt e : bool_op.operands())
   {
     // First, try to solve the underlying type...
@@ -934,11 +989,11 @@ exprt python_converter::extract_type_from_boolean_op(const exprt &bool_op)
       e = extract_type_from_boolean_op(e);
 
     typet operand_type = e.type();
+    has_bool |= operand_type.is_bool();
     if (operand_type.is_empty() || operand_type.is_bool())
       continue;
 
-    // Arrays are special, they have a length property which we don't care about
-    // right now
+    has_str |= decay_str_operand(operand_type);
     if (operand_type.is_array())
       return gen_zero(any_type());
 
@@ -953,5 +1008,8 @@ exprt python_converter::extract_type_from_boolean_op(const exprt &bool_op)
     }
   }
 
+  // A bool operand can be the result, and a bool is not a char pointer.
+  if (has_str && has_bool)
+    return gen_zero(any_type());
   return found_type.is_empty() ? gen_zero(any_type()) : gen_zero(found_type);
 }

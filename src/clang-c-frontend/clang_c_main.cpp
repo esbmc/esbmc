@@ -104,7 +104,35 @@ void clang_c_maint::add_exit_code(codet &dest, const locationt &location)
     atexit_call.function() = symbol_exprt("c:@F@__ESBMC_atexit_handler");
     dest.move_to_operands(atexit_call);
   }
-  static_lifetime_destroy(dest);
+
+  // exit() in the C library model calls this too.
+  code_blockt destructors;
+  static_lifetime_destroy(destructors);
+  const bool any = destructors.has_operands();
+
+  symbolt *existing = context.find_symbol(static_destructors_id);
+  if (existing != nullptr)
+    existing->set_value(std::move(destructors));
+  else
+  {
+    symbolt fn;
+    fn.id = static_destructors_id;
+    fn.name = "__ESBMC_static_destructors";
+    fn.location = location;
+    code_typet type;
+    type.return_type() = empty_typet();
+    fn.set_type(migrate_type(type));
+    fn.set_value(std::move(destructors));
+    context.move(fn);
+  }
+
+  if (any)
+  {
+    code_function_callt call;
+    call.location() = location;
+    call.function() = symbol_exprt(static_destructors_id, code_typet());
+    dest.move_to_operands(call);
+  }
 }
 
 bool clang_c_maint::clang_main()
@@ -291,7 +319,7 @@ bool clang_c_maint::clang_main()
           }
         return x < min ? min : x;
       };
-      const int max_args = get_int_opt("argv-max-args", 2, 0);
+      const int max_args = get_int_opt("argv-max-args", 5, 0);
       // Soft cap: max_strlen feeds a single SMT range so it scales for free,
       // but max_args drives a build-time loop that materialises 2 symbols
       // and ~5 init statements per iteration — a typo here causes OOM
@@ -306,77 +334,88 @@ bool clang_c_maint::clang_main()
       const int max_strlen = get_int_opt("argv-max-strlen", 256, 1);
       typet char_t = argv_symbol.get_type().subtype().subtype();
 
-      for (int ai = 0; ai < max_args; ++ai)
-      {
-        // Nondet length for this string (uninitialized static ⟹ nondet in
-        // symex).
-        std::string lname = "__ESBMC_argv_len_" + std::to_string(ai);
-        symbolt len_sym;
-        len_sym.name = irep_idt(lname);
-        len_sym.id = irep_idt("c:@" + lname);
-        len_sym.set_type(migrate_type(uint_type()));
-        len_sym.static_lifetime = true;
-        len_sym.lvalue = true;
-        symbolt *len_ptr = nullptr;
-        context.move(len_sym, len_ptr);
+      // Back array[0 .. max_args-1] with separate nondet strings on the
+      // paths where the slot is below count.
+      auto back_with_strings = [&](
+                                 const symbolt &array_symbol,
+                                 const symbolt &count_symbol,
+                                 const std::string &prefix) {
+        for (int ai = 0; ai < max_args; ++ai)
+        {
+          // Nondet length for this string (uninitialized static ⟹ nondet in
+          // symex).
+          std::string lname = prefix + "_len_" + std::to_string(ai);
+          symbolt len_sym;
+          len_sym.name = irep_idt(lname);
+          len_sym.id = irep_idt("c:@" + lname);
+          len_sym.set_type(migrate_type(uint_type()));
+          len_sym.static_lifetime = true;
+          len_sym.lvalue = true;
+          symbolt *len_ptr = nullptr;
+          context.move(len_sym, len_ptr);
 
-        exprt len = symbol_expr(*len_ptr);
+          exprt len = symbol_expr(*len_ptr);
 
-        // Bound the length unconditionally; the backing is always present even
-        // when ai >= argc (the string simply won't be accessed on those paths).
-        exprt ge_one(">=", bool_type());
-        ge_one.copy_to_operands(len, from_integer(1, uint_type()));
-        init_code.copy_to_operands(code_assumet(ge_one));
+          // Bound the length unconditionally; the backing is always present
+          // even when ai >= count (the string simply won't be accessed on those
+          // paths).
+          exprt ge_one(">=", bool_type());
+          ge_one.copy_to_operands(len, from_integer(1, uint_type()));
+          init_code.copy_to_operands(code_assumet(ge_one));
 
-        exprt le_max("<=", bool_type());
-        le_max.copy_to_operands(len, from_integer(max_strlen, uint_type()));
-        init_code.copy_to_operands(code_assumet(le_max));
+          exprt le_max("<=", bool_type());
+          le_max.copy_to_operands(len, from_integer(max_strlen, uint_type()));
+          init_code.copy_to_operands(code_assumet(le_max));
 
-        // char[len] static symbol — symbolic array size mirrors argv' itself.
-        std::string sname = "__ESBMC_argv_str_" + std::to_string(ai);
-        symbolt str_sym;
-        str_sym.name = irep_idt(sname);
-        str_sym.id = irep_idt("c:@" + sname);
-        str_sym.set_type(migrate_type(array_typet(char_t, len)));
-        str_sym.static_lifetime = true;
-        str_sym.lvalue = true;
-        symbolt *str_ptr = nullptr;
-        context.move(str_sym, str_ptr);
+          // char[len] static symbol — symbolic array size mirrors the array
+          // itself.
+          std::string sname = prefix + "_str_" + std::to_string(ai);
+          symbolt str_sym;
+          str_sym.name = irep_idt(sname);
+          str_sym.id = irep_idt("c:@" + sname);
+          str_sym.set_type(migrate_type(array_typet(char_t, len)));
+          str_sym.static_lifetime = true;
+          str_sym.lvalue = true;
+          symbolt *str_ptr = nullptr;
+          context.move(str_sym, str_ptr);
 
-        // Set __ESBMC_alloc_size for the string (same pattern as argv').
-        exprt str_ds("dynamic_size", size_type());
-        str_ds.copy_to_operands(gen_address_of(symbol_expr(*str_ptr)));
-        init_code.copy_to_operands(code_assignt(str_ds, len));
+          // Set __ESBMC_alloc_size for the string (same pattern as the array).
+          exprt str_ds("dynamic_size", size_type());
+          str_ds.copy_to_operands(gen_address_of(symbol_expr(*str_ptr)));
+          init_code.copy_to_operands(code_assignt(str_ds, len));
 
-        // Enforce null-termination: str[len-1] == '\0'.  Without this the
-        // solver may pick len=1 with str[0]!='\0', then strncpy reads str[1]
-        // which is out-of-bounds for a 1-element array.
-        exprt len_minus_one("-", uint_type());
-        len_minus_one.copy_to_operands(len, from_integer(1, uint_type()));
-        index_exprt last_char(symbol_expr(*str_ptr), len_minus_one, char_t);
-        exprt null_term("=", bool_type());
-        null_term.copy_to_operands(last_char, gen_zero(char_t));
-        init_code.copy_to_operands(code_assumet(null_term));
+          // Enforce null-termination: str[len-1] == '\0'.  Without this the
+          // solver may pick len=1 with str[0]!='\0', then strncpy reads str[1]
+          // which is out-of-bounds for a 1-element array.
+          exprt len_minus_one("-", uint_type());
+          len_minus_one.copy_to_operands(len, from_integer(1, uint_type()));
+          index_exprt last_char(symbol_expr(*str_ptr), len_minus_one, char_t);
+          exprt null_term("=", bool_type());
+          null_term.copy_to_operands(last_char, gen_zero(char_t));
+          init_code.copy_to_operands(code_assumet(null_term));
 
-        exprt cond_lt("<", bool_type());
-        cond_lt.copy_to_operands(
-          from_integer(ai, argc_symbol.get_type()), symbol_expr(argc_symbol));
+          exprt cond_lt("<", bool_type());
+          cond_lt.copy_to_operands(
+            from_integer(ai, count_symbol.get_type()),
+            symbol_expr(count_symbol));
 
-        index_exprt argv_ai(
-          symbol_expr(argv_symbol),
-          from_integer(ai, index_type()),
-          argv_symbol.get_type().subtype());
+          index_exprt slot(
+            symbol_expr(array_symbol),
+            from_integer(ai, index_type()),
+            array_symbol.get_type().subtype());
 
-        index_exprt str_first(
-          symbol_expr(*str_ptr), gen_zero(index_type()), char_t);
-        exprt addr_str("address_of", argv_symbol.get_type().subtype());
-        addr_str.copy_to_operands(str_first);
+          index_exprt str_first(
+            symbol_expr(*str_ptr), gen_zero(index_type()), char_t);
+          exprt addr_str("address_of", array_symbol.get_type().subtype());
+          addr_str.copy_to_operands(str_first);
 
-        code_ifthenelset if_assign;
-        if_assign.cond() = cond_lt;
-        if_assign.then_case() = code_assignt(argv_ai, addr_str);
-        init_code.copy_to_operands(if_assign);
-      }
+          code_ifthenelset if_assign;
+          if_assign.cond() = cond_lt;
+          if_assign.then_case() = code_assignt(slot, addr_str);
+          init_code.copy_to_operands(if_assign);
+        }
+      };
+      back_with_strings(argv_symbol, argc_symbol, "__ESBMC_argv");
 
       exprt::operandst &operands = call.arguments();
 
@@ -409,8 +448,10 @@ bool clang_c_maint::clang_main()
         const symbolt &envp_symbol = *ns.lookup("envp'");
         const symbolt &envp_size_symbol = *ns.lookup("envp_size'");
 
+        // The environment may be empty, so envp[0] may be NULL.
         exprt envp_ge(">=", bool_type());
-        envp_ge.copy_to_operands(symbol_expr(envp_size_symbol), one);
+        envp_ge.copy_to_operands(
+          symbol_expr(envp_size_symbol), gen_zero(envp_size_symbol.get_type()));
 
         init_code.copy_to_operands(code_assumet(envp_ge));
 
@@ -430,10 +471,22 @@ bool clang_c_maint::clang_main()
         // Logic to perform this ^ moved into goto_check, rather than load
         // irep2 with additional baggage.
 
-        exprt is_null("=", bool_type());
-        is_null.copy_to_operands(envp_index, null);
+        // Assign rather than assume the terminator: envp' has no SSA record
+        // before the guarded stores below, and symex gives no phi to a name
+        // assigned on only one path, so envp[0] would be backed even when
+        // envp_size is 0.
+        init_code.copy_to_operands(code_assignt(envp_index, null));
 
-        init_code.copy_to_operands(code_assumet(is_null));
+        exprt envp_count("+", uint_type());
+        envp_count.copy_to_operands(symbol_expr(envp_size_symbol), one);
+        exprt envp_bytes("*", uint_type());
+        envp_bytes.copy_to_operands(envp_count, char_pointer_size);
+        exprt envp_dynamic_size("dynamic_size", size_type());
+        envp_dynamic_size.copy_to_operands(
+          gen_address_of(symbol_expr(envp_symbol)));
+        init_code.copy_to_operands(code_assignt(envp_dynamic_size, envp_bytes));
+
+        back_with_strings(envp_symbol, envp_size_symbol, "__ESBMC_envp");
 
         exprt &op2 = operands[2];
         const exprt &arg2 = arguments[2];

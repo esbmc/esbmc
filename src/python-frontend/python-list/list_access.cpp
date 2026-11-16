@@ -1,3 +1,4 @@
+#include <python-frontend/numpy/numpy_reducer_shared.h>
 #include "python_list_internal.h"
 #include <python-frontend/python-dict/python_dict_handler.h>
 #include <algorithm>
@@ -7,6 +8,42 @@
 
 using namespace python_expr;
 using namespace python_list_detail;
+
+// index < 0 ? len + index : index, in a signed type. Unsigned, a negative
+// index wraps to the right position only under bit-vector encoding: under
+// integer encoding len + (size_t)-1 is len + 2^64 - 1 (#10481).
+static expr2tc normalize_negative_index(const exprt &index, const exprt &len)
+{
+  const type2tc signed_t2 = migrate_type(signed_size_type());
+  expr2tc index2, len2;
+  migrate_expr(build_typecast(index, signed_size_type()), index2);
+  migrate_expr(build_typecast(len, signed_size_type()), len2);
+  return if2tc(
+    signed_t2,
+    lessthan2tc(index2, gen_zero(signed_t2)),
+    add2tc(signed_t2, len2, index2),
+    index2);
+}
+
+static expr2tc index_out_of_range(const expr2tc &position, const exprt &len)
+{
+  expr2tc len2;
+  migrate_expr(build_typecast(len, signed_size_type()), len2);
+  return or2tc(
+    lessthan2tc(position, gen_zero(position->type)),
+    greaterthanequal2tc(position, len2));
+}
+
+// The position \p index reads in a list of length \p len, in a signed type.
+static expr2tc
+list_position(const exprt &index, const exprt &len, bool may_be_negative)
+{
+  if (may_be_negative)
+    return normalize_negative_index(index, len);
+  expr2tc position;
+  migrate_expr(build_typecast(index, signed_size_type()), position);
+  return position;
+}
 
 static exprt normalize_positive_slice_bound_expr(
   const exprt &bound,
@@ -95,15 +132,38 @@ build_nonnegative_slice_span(const exprt &lower, const exprt &upper)
   return build_typecast(migrate_expr_back(span), size_type());
 }
 
+python_list::element_storage python_list::untyped_storage() const
+{
+  return {
+    "c:@F@__ESBMC_list_at",
+    "items",
+    pointer_typet(converter_.get_type_handler().get_list_element_type())};
+}
+
 exprt python_list::build_list_at_call(
   const exprt &list,
-  const exprt &index,
-  const nlohmann::json &element)
+  const exprt &index_expr,
+  const nlohmann::json &element,
+  bool source_index)
 {
-  pointer_typet obj_type(converter_.get_type_handler().get_list_element_type());
+  return build_list_at_call(
+    list, index_expr, element, untyped_storage(), source_index);
+}
+
+exprt python_list::build_list_at_call(
+  const exprt &list,
+  const exprt &index_expr,
+  const nlohmann::json &element,
+  const element_storage &storage,
+  bool source_index)
+{
+  // A call such as len(s) in the index is still a statement. Nested as an
+  // argument it is never lowered and reaches the solver unconverted (#9932).
+  const exprt index = to_value_expr(index_expr, converter_.ns);
+  const typet &obj_type = storage.pointer_type;
 
   const symbolt *list_at_func_sym =
-    converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_at");
+    converter_.symbol_table().find_symbol(storage.at_function);
   assert(list_at_func_sym);
 
   locationt location = converter_.get_location_from_decl(element);
@@ -124,22 +184,40 @@ exprt python_list::build_list_at_call(
   {
     const exprt size = build_deref_member(list, "size", size_type());
     exprt position = build_typecast(index, size_type());
+    exprt in_range = build_less_than(position, size);
     if (index_may_be_negative)
-      position = build_if(
-        build_less_than(index, gen_zero(index.type())),
-        build_add(size, position, size_type()),
-        position);
-    const exprt items = build_deref_member(list, "items", obj_type);
+    {
+      const expr2tc normalized = normalize_negative_index(index, size);
+      position = build_typecast(migrate_expr_back(normalized), size_type());
+      in_range =
+        not_exprt(migrate_expr_back(index_out_of_range(normalized, size)));
+    }
+    const exprt items = build_deref_member(list, storage.member, obj_type);
     return build_if(
-      build_less_than(position, size),
-      build_add(items, position, obj_type),
-      gen_zero(obj_type));
+      in_range, build_add(items, position, obj_type), gen_zero(obj_type));
+  }
+
+  // A lowered for-loop reads the list whose current size its condition has
+  // just compared the index with, so the read needs no bounds check (#10259).
+  if (element.value("esbmc_in_bounds", false))
+  {
+    const exprt list_ptr =
+      list.type().is_pointer() ? list : build_address_of(list);
+    return build_add(
+      build_deref_member(list_ptr, storage.member, obj_type),
+      build_typecast(index, size_type()),
+      obj_type);
   }
 
   // A discarded type probe only reads this call's type, and the real RHS
   // build re-emits the whole check; normalizing here would emit a second
   // __ESBMC_list_size call and IndexError guard per subscript assignment.
-  if (!index_may_be_negative || converter_.in_rhs_type_probe_)
+  // A source subscript such as xs[len(xs)] has an unsigned index that can
+  // still be too large, and needs the catchable IndexError guard (#10716).
+  const bool bounds_check = !config.options.get_bool_option("no-bounds-check");
+  if (
+    (!index_may_be_negative && !(source_index && bounds_check)) ||
+    converter_.in_rhs_type_probe_)
   {
     exprt index_as_size = build_typecast(index, size_type());
     exprt list_at_call = build_call_expr(
@@ -171,37 +249,21 @@ exprt python_list::build_list_at_call(
   size_call.location() = location;
   converter_.add_instruction(size_call);
 
-  // Convert index to size_t for comparison and arithmetic
-  exprt index_as_size = build_typecast(index, size_type());
+  const exprt size = build_symbol(size_var);
+  const expr2tc position = list_position(index, size, index_may_be_negative);
+  exprt converted_index =
+    build_typecast(migrate_expr_back(position), size_type());
 
-  // Create: actual_index = (index < 0) ? (size + index) : index
-  // (V.3: build the negative-index normalization in IREP2.)
-  const type2tc size_t2 = migrate_type(size_type());
-  expr2tc index2, index_as_size2, size_var2;
-  migrate_expr(index, index2);
-  migrate_expr(index_as_size, index_as_size2);
-  migrate_expr(build_symbol(size_var), size_var2);
-
-  expr2tc is_negative = lessthan2tc(index2, gen_zero(index2->type));
-  // For negative: size + index (since index is negative, this is
-  // size - abs(index)).
-  expr2tc positive_index = add2tc(size_t2, size_var2, index_as_size2);
-  // Choose between positive conversion or original.
-  expr2tc converted_index2 =
-    if2tc(size_t2, is_negative, positive_index, index_as_size2);
-  exprt converted_index = migrate_expr_back(converted_index2);
-
-  if (!config.options.get_bool_option("no-bounds-check"))
+  if (bounds_check)
   {
     // Runtime guard for any out-of-bounds normalized index -- both an
     // underflowed negative index (e.g. `[][-1]`) and a too-large non-negative
     // index. Raising a catchable IndexError here (rather than letting the read
     // trip __ESBMC_list_at's hard assert) lets `try/except IndexError` observe
-    // the error, matching CPython and the negative-index path. This path is
-    // only reached for signed indices; provably-non-negative unsigned indices
-    // (loop counters) early-return above without a bounds call, so the hot path
-    // is unaffected. oob = converted_index >= size (V.3: IREP2).
-    expr2tc oob = greaterthanequal2tc(converted_index2, size_var2);
+    // the error, matching CPython and the negative-index path. Unsigned
+    // indices other than source subscripts (loop counters) early-return above
+    // without a bounds call, so the hot path is unaffected.
+    expr2tc oob = index_out_of_range(position, size);
 
     exprt raise = converter_.get_exception_handler().gen_exception_raise(
       "IndexError", "list index out of range");
@@ -251,13 +313,94 @@ exprt python_list::bind_list_element(const exprt &list_at_call)
   return build_symbol(elem_obj);
 }
 
+// The bound of a string slice, read as a literal; @p fallback when absent.
+static long long string_slice_bound(
+  const nlohmann::json &bound,
+  long long fallback,
+  bool &literal)
+{
+  if (bound.is_null())
+    return fallback;
+  numeric_value value;
+  if (!try_extract_numeric_constant(bound, value) || !value.is_int)
+  {
+    literal = false;
+    return fallback;
+  }
+  return value.int_value;
+}
+
+// A slice of a fixed-width string array, as a copy of its elements. The caller
+// registers the copy against its source, so a write through either rejects
+// instead of diverging from NumPy's shared storage (ADR-NP-003, step 1).
+exprt python_list::numpy_string_slice_copy(
+  const exprt &array,
+  const nlohmann::json &slice_node)
+{
+  BigInt extent;
+  if (to_integer(to_array_type(array.type()).size(), extent))
+    throw std::runtime_error(
+      "TypeError: slicing a numpy string array of run-time length is not "
+      "supported");
+  const long long n = extent.to_int64();
+  bool literal = true;
+  const long long step = string_slice_bound(slice_node["step"], 1, literal);
+  if (step == 0)
+    throw std::runtime_error("ValueError: slice step cannot be zero");
+  long long lo =
+    string_slice_bound(slice_node["lower"], step > 0 ? 0 : n - 1, literal);
+  long long hi =
+    string_slice_bound(slice_node["upper"], step > 0 ? n : -n - 1, literal);
+  if (!literal)
+    throw std::runtime_error(
+      "TypeError: slicing a numpy string array with run-time bounds is not "
+      "supported");
+  const auto clamp = [&](long long bound) {
+    if (bound < 0)
+      bound += n;
+    const long long low = step > 0 ? 0 : -1;
+    const long long high = step > 0 ? n : n - 1;
+    return bound < low ? low : (bound > high ? high : bound);
+  };
+  lo = clamp(lo);
+  hi = clamp(hi);
+  std::vector<exprt> elements;
+  for (long long i = lo; step > 0 ? i < hi : i > hi; i += step)
+    elements.push_back(
+      index_exprt(array, from_integer(i, size_type()), array.type().subtype()));
+  const typet type = converter_.get_type_handler().build_array(
+    array.type().subtype(), elements.size());
+  exprt copy = gen_zero(type);
+  copy.operands() = exprt::operandst(elements.begin(), elements.end());
+  symbolt &tmp = converter_.create_tmp_symbol(
+    list_value_, "$numpy_string_slice$", type, copy);
+  code_declt decl(build_symbol(tmp));
+  decl.operands().push_back(copy);
+  converter_.add_instruction(decl);
+  if (converter_.current_lhs)
+  {
+    converter_.current_lhs->type() = type;
+    converter_.update_symbol(*converter_.current_lhs);
+  }
+  return build_symbol(tmp);
+}
+
 exprt python_list::index(const exprt &array, const nlohmann::json &slice_node)
 {
   if (slice_node["_type"] == "Slice") // arr[lower:upper]
   {
-    if (type_utils::is_numpy_string_array(array.type()))
+    if (
+      array.type().is_pointer() && array.type().subtype().is_array() &&
+      type_utils::is_char_storage(
+        type_utils::array_scalar_type(array.type().subtype())))
       throw std::runtime_error(
-        "TypeError: slicing a numpy string array is not supported");
+        "TypeError: a slice of a numpy string array parameter is not "
+        "supported");
+    if (type_utils::is_numpy_string_array(array.type()))
+    {
+      converter_.reject_unsafe_numpy_string_slice(list_value_["value"]);
+      return numpy_string_slice_copy(array, slice_node);
+    }
     return handle_range_slice(array, slice_node);
   }
   else
@@ -669,26 +812,16 @@ exprt python_list::index_bool_mask_rows(
 
   exprt rows_member = build_member(array, "rows", rows_array_type);
   exprt count_member = build_member(array, "count", size_type());
-  exprt index_as_size = build_typecast(index, size_type());
 
-  // actual_index = (index < 0) ? (count + index) : index, normalized
-  // against the logical row count rather than the buffer's physical
-  // capacity (mirrors build_list_at_call's negative-index handling).
-  const type2tc size_t2 = migrate_type(size_type());
-  expr2tc index2, index_as_size2, count2;
-  migrate_expr(index, index2);
-  migrate_expr(index_as_size, index_as_size2);
-  migrate_expr(count_member, count2);
-
-  expr2tc is_negative = lessthan2tc(index2, gen_zero(index2->type));
-  expr2tc positive_index = add2tc(size_t2, count2, index_as_size2);
-  expr2tc converted_index2 =
-    if2tc(size_t2, is_negative, positive_index, index_as_size2);
-  exprt converted_index = migrate_expr_back(converted_index2);
+  // Normalized against the logical row count rather than the buffer's
+  // physical capacity (mirrors build_list_at_call's negative-index handling).
+  const expr2tc position = normalize_negative_index(index, count_member);
+  exprt converted_index =
+    build_typecast(migrate_expr_back(position), size_type());
 
   if (!config.options.get_bool_option("no-bounds-check"))
   {
-    expr2tc oob = greaterthanequal2tc(converted_index2, count2);
+    expr2tc oob = index_out_of_range(position, count_member);
 
     exprt raise = converter_.get_exception_handler().gen_exception_raise(
       "IndexError", "index out of range for boolean-mask row selection");
@@ -829,6 +962,17 @@ struct slice_step_info
   bool literal;
 };
 
+slice_step_info constant_slice_step(const BigInt &step)
+{
+  slice_step_info info{step.to_int64(), false, true};
+  if (info.value == 0)
+  {
+    info.literal_zero = true;
+    info.value = 1;
+  }
+  return info;
+}
+
 slice_step_info get_slice_step_info(const nlohmann::json &slice_node)
 {
   slice_step_info info{1, false, true};
@@ -842,14 +986,42 @@ slice_step_info get_slice_step_info(const nlohmann::json &slice_node)
     info.literal = false;
     return info;
   }
+  return constant_slice_step(literal_value);
+}
 
-  info.value = literal_value.to_int64();
-  if (info.value == 0)
-  {
-    info.literal_zero = true;
-    info.value = 1;
-  }
-  return info;
+// A step named by a variable bound once to an int constant is that constant,
+// so `s = 2; l[::s]` slices as `l[::2]` does.
+slice_step_info once_bound_slice_step(
+  python_converter &converter,
+  const nlohmann::json &slice_node,
+  const slice_step_info &info)
+{
+  if (info.literal || slice_node["step"].value("_type", "") != "Name")
+    return info;
+  const nlohmann::json &step_node = slice_node["step"];
+  const exprt value =
+    converter.once_bound_int(step_node, converter.get_expr(step_node));
+  BigInt step;
+  if (!value.is_constant() || to_integer(value, step))
+    return info;
+  return constant_slice_step(step);
+}
+
+// The char pointer __python_str_slice reads: a str pointer, or a str held in
+// an array whose step is only known at run time. nullopt otherwise.
+std::optional<exprt> str_slice_model_operand(
+  const exprt &array,
+  const typet &type,
+  bool constant_step)
+{
+  if (!type_utils::is_char_storage(type.subtype()))
+    return std::nullopt;
+  if (type.is_pointer())
+    return array;
+  if (constant_step || !type.is_array())
+    return std::nullopt;
+  return build_address_of(
+    build_index(array, gen_zero(size_type()), type.subtype()));
 }
 
 bool can_build_scalar_pointer_view(
@@ -2042,7 +2214,8 @@ exprt python_list::emit_ll_temp(
 // np.eye/np.full can bind list objects; only numeric storage is strided.
 static bool is_numeric_storage(const typet &elem_type)
 {
-  return is_number(elem_type) || elem_type.is_bool();
+  return is_number(elem_type) || elem_type.is_bool() ||
+         is_complex_type(elem_type);
 }
 
 std::optional<python_list::strided_view_desc> python_list::contiguous_view_desc(
@@ -3159,6 +3332,52 @@ std::optional<exprt> python_list::try_copy_numpy_pointer_view_slice(
   return build_symbol(result);
 }
 
+// The step of a str slice as a run-time value. A step that is not a constant
+// is held in a temporary and raises ValueError when it is zero.
+exprt python_list::str_slice_step(
+  const nlohmann::json &slice_node,
+  long long step_val,
+  bool literal_step)
+{
+  const signedbv_typet ll_type(64);
+  if (literal_step)
+    return from_integer(step_val, ll_type);
+  exprt step = converter_.get_expr(slice_node["step"]);
+  if (!step.type().is_signedbv())
+  {
+    refuse_nonconstant_step(slice_node, false);
+    return from_integer(step_val, ll_type);
+  }
+  const exprt held = emit_ll_temp(
+    slice_node,
+    "$slice_step$",
+    remove_function_calls_recursive(step, slice_node));
+  code_ifthenelset guard;
+  guard.cond() = build_equal(held, gen_zero(ll_type));
+  guard.then_case() =
+    code_expressiont(converter_.get_exception_handler().gen_exception_raise(
+      "ValueError", "slice step cannot be zero"));
+  guard.location() = converter_.get_location_from_decl(slice_node);
+  converter_.add_instruction(guard);
+  return held;
+}
+
+// A slice whose step is neither a literal nor a once-bound constant is refused
+// where only a constant step is modelled, instead of slicing with step 1.
+void python_list::refuse_nonconstant_step(
+  const nlohmann::json &slice_node,
+  bool constant_step)
+{
+  if (constant_step)
+    return;
+  code_assertt check{false_exprt()};
+  check.location() = converter_.get_location_from_decl(slice_node);
+  check.location().user_provided(true);
+  check.location().comment(
+    "Unsupported: slicing with a step that is not a constant");
+  converter_.add_instruction(check);
+}
+
 void python_list::emit_slice_zero_step_raise(
   const nlohmann::json &slice_node,
   bool literal_zero_step)
@@ -3352,14 +3571,14 @@ void python_list::copy_dict_view_elem_types(
   if (!src.empty())
     elem_types().assign_from(src, sliced_id);
 
-  // Tuple values live in the dict_value_types slot rather than the
-  // values-list's elements slot, so the copy above is a no-op for them.
+  // Values live in the dict_value_types slot rather than the values-list's
+  // elements slot, so the copy above is a no-op for them.
   if (component == "values" && elem_types().size(sliced_id) == 0)
   {
-    const typet tuple_t =
-      converter_.get_dict_handler()->recorded_tuple_value_type(dict_sym);
-    if (!tuple_t.is_nil() && !tuple_t.is_empty())
-      elem_types().record(sliced_id, std::string(), tuple_t);
+    const typet value_t =
+      converter_.get_dict_handler()->recorded_value_type(dict_sym);
+    if (!value_t.is_nil() && !value_t.is_empty())
+      elem_types().record(sliced_id, std::string(), value_t);
   }
 }
 
@@ -3396,7 +3615,7 @@ std::optional<exprt> python_list::try_build_numpy_param_slice_view(
 {
   if (
     !array.is_symbol() || !resolved_array_type.is_pointer() ||
-    resolved_array_type.subtype() == char_type())
+    type_utils::is_char_storage(resolved_array_type.subtype()))
     return std::nullopt;
   const std::string id = array.identifier().as_string();
   if (
@@ -3414,7 +3633,7 @@ bool python_list::is_runtime_numpy_slice(
   const typet &elem_type,
   const nlohmann::json &slice_node) const
 {
-  if (elem_type == char_type())
+  if (type_utils::is_char_storage(elem_type))
     return false;
   if (!get_slice_step_info(slice_node).literal)
     return true;
@@ -3438,20 +3657,19 @@ exprt python_list::handle_range_slice(
   // Handle regular array/string slicing (not list slicing)
   // String parameters come as pointer-to-char, so handle both arrays and char
   // pointers
-  bool is_string_slice = (resolved_array_type != resolved_list_type &&
-                          resolved_array_type.is_array()) ||
-                         (resolved_array_type.is_pointer() &&
-                          resolved_array_type.subtype() == char_type());
+  bool is_string_slice =
+    (resolved_array_type != resolved_list_type &&
+     resolved_array_type.is_array()) ||
+    (resolved_array_type.is_pointer() &&
+     type_utils::is_char_storage(resolved_array_type.subtype()));
 
   // Determine step value (default 1).
-  const slice_step_info step_info = get_slice_step_info(slice_node);
-  const long long step_val = step_info.value;
+  const slice_step_info literal_step = get_slice_step_info(slice_node);
   // Python raises ValueError on step==0. Raise it from the frontend (a
   // cpp-throw) so try/except ValueError can catch it — a code_assert would be
   // an uncatchable property violation. The raise diverts control, so the rest
   // of the slice IR (kept consistent with step_val==1) is a dead path.
-  emit_slice_zero_step_raise(slice_node, step_info.literal_zero);
-  bool negative_step = (step_val < 0);
+  emit_slice_zero_step_raise(slice_node, literal_step.literal_zero);
 
   if (
     std::optional<exprt> param_view =
@@ -3463,32 +3681,41 @@ exprt python_list::handle_range_slice(
       array,
       resolved_array_type.subtype(),
       slice_node,
-      step_val,
-      step_info.literal))
+      literal_step.value,
+      literal_step.literal))
     return *slice_copy;
+
+  const slice_step_info step_info =
+    once_bound_slice_step(converter_, slice_node, literal_step);
+  emit_slice_zero_step_raise(
+    slice_node, step_info.literal_zero != literal_step.literal_zero);
+  const long long step_val = step_info.value;
+  bool negative_step = (step_val < 0);
 
   if (is_string_slice)
   {
     locationt location = converter_.get_location_from_decl(slice_node);
 
     // For pointer types (function parameters), delegate to __python_str_slice
-    // which uses __ESBMC_alloca and survives function returns.
+    // which uses __ESBMC_alloca and survives function returns. It also takes a
+    // step only known at run time.
     if (
-      resolved_array_type.is_pointer() &&
-      resolved_array_type.subtype() == char_type())
+      std::optional<exprt> str =
+        str_slice_model_operand(array, resolved_array_type, step_info.literal))
     {
       const symbolt &slice_func_ref = get_str_slice_sym();
 
       // Extract start/end bounds from slice node
       auto get_bound_expr =
-        [&](const std::string &name, long long default_val) -> exprt {
+        [&](const std::string &name, const exprt &default_val) -> exprt {
         if (!slice_node.contains(name) || slice_node[name].is_null())
-          return from_integer(default_val, signedbv_typet(64));
+          return default_val;
 
         const auto &bound = slice_node[name];
         if (bound["_type"] == "UnaryOp" && bound["op"]["_type"] == "USub")
         {
           exprt abs_value = converter_.get_expr(bound["operand"]);
+          abs_value = remove_function_calls_recursive(abs_value, slice_node);
           // 0 - (int64)abs_value: both operands are signedbv64 (same width).
           return build_sub(
             from_integer(0, signedbv_typet(64)),
@@ -3500,21 +3727,27 @@ exprt python_list::handle_range_slice(
         return build_typecast(e, signedbv_typet(64));
       };
 
+      exprt step_expr = str_slice_step(slice_node, step_val, step_info.literal);
       // Defaults: for positive step start=0,end=MAX; for negative step
       // start=MAX,end=MIN We use large sentinel values; __python_str_slice
       // clamps them
-      long long start_default = negative_step ? 999999 : 0;
-      long long end_default = negative_step ? -999999 : 999999;
-
-      exprt start_expr = get_bound_expr("lower", start_default);
-      exprt end_expr = get_bound_expr("upper", end_default);
-      exprt step_expr = from_integer(step_val, signedbv_typet(64));
+      const signedbv_typet ll_type(64);
+      const exprt negative = build_less_than(step_expr, gen_zero(ll_type));
+      exprt start_expr = get_bound_expr(
+        "lower",
+        build_if(negative, from_integer(999999, ll_type), gen_zero(ll_type)));
+      exprt end_expr = get_bound_expr(
+        "upper",
+        build_if(
+          negative,
+          from_integer(-999999, ll_type),
+          from_integer(999999, ll_type)));
 
       // Call __python_str_slice(s, start, end, step) as side-effect expression
       exprt slice_call = build_call_expr(
         slice_func_ref,
         pointer_typet(char_type()),
-        {array, start_expr, end_expr, step_expr});
+        {*str, start_expr, end_expr, step_expr});
       slice_call.location() = location;
 
       return slice_call;
@@ -3556,7 +3789,7 @@ exprt python_list::handle_range_slice(
       elem_type = src_type.subtype();
       array_len = to_size_expr(src_type.size());
       // For char arrays (strings), exclude null terminator from logical length
-      logical_len = (elem_type == char_type())
+      logical_len = (type_utils::is_char_storage(elem_type))
                       ? size_sub(array_len, gen_one(size_type()))
                       : array_len;
     }
@@ -3616,7 +3849,7 @@ exprt python_list::handle_range_slice(
     // arrays (e.g. bytes, modelled as wide-int arrays) must NOT carry a phantom
     // null element: len() counts elements there, so an extra slot would
     // over-count. Size the result accordingly.
-    const bool needs_null_term = (elem_type == char_type());
+    const bool needs_null_term = (type_utils::is_char_storage(elem_type));
     exprt result_size = slice_len;
     if (step_info.literal)
     {
@@ -3767,6 +4000,7 @@ exprt python_list::handle_range_slice(
   }
 
   // Handle list slicing
+  refuse_nonconstant_step(slice_node, step_info.literal);
   symbolt &sliced_list = create_list();
   const locationt location = converter_.get_location_from_decl(list_value_);
 
@@ -4326,6 +4560,15 @@ void python_list::handle_slice_assignment(
      elem_size});
   call.location() = location;
   converter_.add_instruction(converter_.convert_expression_to_code(call));
+  forget_static_length(list_expr);
+}
+
+// A slice assignment may change the list's length, which the recorded entries
+// behind the constant-index bounds check do not follow (#10447).
+void python_list::forget_static_length(const exprt &list)
+{
+  if (list.is_symbol())
+    converter_.mark_list_call_escaped(list.identifier().as_string());
 }
 
 void python_list::handle_subscript_assign_none(
@@ -4362,18 +4605,10 @@ void python_list::handle_subscript_assign_none(
       size_call.location() = location;
       converter_.add_instruction(size_call);
 
-      exprt index_as_size = build_typecast(idx_expr, size_type());
-      expr2tc index2, index_as_size2, size_var2;
-      migrate_expr(idx_expr, index2);
-      migrate_expr(index_as_size, index_as_size2);
-      migrate_expr(build_symbol(size_var), size_var2);
-
-      expr2tc is_negative = lessthan2tc(index2, gen_zero(index2->type));
-      expr2tc positive_index =
-        add2tc(migrate_type(size_type()), size_var2, index_as_size2);
-      expr2tc converted = if2tc(
-        migrate_type(size_type()), is_negative, positive_index, index_as_size2);
-      idx_expr = migrate_expr_back(converted);
+      idx_expr = build_typecast(
+        migrate_expr_back(
+          normalize_negative_index(idx_expr, build_symbol(size_var))),
+        size_type());
     }
     else
     {
@@ -4576,15 +4811,20 @@ std::optional<exprt> python_list::resolve_nested_list_element(
         
         if (!elem_id.empty())
         {
-          exprt list_at_call = build_list_at_call(array, pos_expr, list_value_);
+          exprt list_at_call =
+            build_list_at_call(array, pos_expr, list_value_, true);
           exprt inner_ptr = extract_pyobject_value(list_at_call, elem_type);
 
           // As a store target the subscript must stay an lvalue into the
           // slot: binding it to the temporary below sends `xs[0] = xs[1]`
           // into a dead local and leaves xs untouched, so len(xs[0]) keeps
           // answering the overwritten element's length (#7360). Reads
-          // nested inside a target still take the temp path.
-          if (converter_.is_store_target(list_value_))
+          // nested inside a target still take the temp path. A type probe
+          // skips the IndexError guard, so a temp read there would run
+          // unguarded ahead of the real build (#9909).
+          if (
+            converter_.is_store_target(list_value_) ||
+            converter_.in_rhs_type_probe_)
             return inner_ptr;
 
           const locationt loc = converter_.get_location_from_decl(list_value_);
@@ -4707,6 +4947,27 @@ typet python_list::tagged_elem_type_or(
   return th.is_tagged_scalar_type(uniform) ? uniform : fallback;
 }
 
+/// A tuple type re-derived from the literal sizes a str member by its text,
+/// not as the push laid it out, so the read would copy a different struct.
+/// A bool member is left out: the solver cannot select it from such a read.
+typet python_list::recorded_tuple_type_or(
+  const exprt &array,
+  const typet &fallback) const
+{
+  if (!fallback.is_struct() || !array.is_symbol())
+    return fallback;
+  const typet recorded =
+    elem_types().uniform_element_type(array.identifier().as_string());
+  if (!recorded.is_struct())
+    return fallback;
+  const auto &members = to_struct_type(recorded).components();
+  const bool has_bool = std::any_of(
+    members.begin(), members.end(), [](const struct_typet::componentt &c) {
+      return c.type().is_bool();
+    });
+  return has_bool ? fallback : recorded;
+}
+
 bool python_list::is_numpy_param_negative_index_target(const exprt &array) const
 {
   return array.type().is_pointer() && array.is_symbol() &&
@@ -4729,10 +4990,52 @@ static bool array_size_negative_index_target(
           list_node["value"].value("_type", "") != "List");
 }
 
+// A variable index into a literal of user calls reads every element at the
+// recorded type, so the recorded types must agree.
+static void reject_unresolved_call_elements(
+  const nlohmann::json &list_node,
+  const element_type_registry &recorded,
+  const std::string &list_name)
+{
+  const nlohmann::json &literal = list_node.value("value", nlohmann::json());
+  const bool holds_call =
+    literal.contains("elts") &&
+    std::any_of(
+      literal["elts"].begin(),
+      literal["elts"].end(),
+      [](const nlohmann::json &e) { return e.value("_type", "") == "Call"; });
+  if (holds_call && recorded.uniform_element_type(list_name) == typet())
+    throw std::runtime_error("Invalid type");
+}
+
+// The element type a variable's own annotation declares, when \p elem_type is
+// still unknown after following `alias = list_var` to the declaration. Kept
+// out of handle_index_access so the lookup adds no decision point to it.
+static typet declared_elem_type_or(
+  const typet &elem_type,
+  const nlohmann::json &list_node,
+  const type_handler &th)
+{
+  if (
+    elem_type != typet() || list_node.is_null() ||
+    list_node.value("_type", "") != "AnnAssign")
+    return elem_type;
+  return get_elem_type_from_annotation(list_node, th);
+}
+
 // True when `list_node` is a variable declaration whose initializer is a
 // literal List AST node, giving a compile-time element count to normalize a
 // negative index against. Split out of normalize_index_access_position to
 // keep that function's own decision count down.
+// The length a negative constant index counts back from. The recorded element
+// types follow appends and pops, the literal does not.
+static size_t known_length(
+  const element_type_registry::entries *recorded,
+  const nlohmann::json &list_node)
+{
+  return recorded ? recorded->size() : list_node["value"]["elts"].size();
+}
+
 static bool is_literal_list_backed(const nlohmann::json &list_node)
 {
   return list_node.contains("value") &&
@@ -4794,7 +5097,7 @@ void python_list::normalize_index_access_position(
       BigInt s = binary2integer(t.size().value().c_str(), true);
 
       // For char arrays (strings), exclude null terminator from logical length
-      if (t.subtype() == char_type())
+      if (type_utils::is_char_storage(t.subtype()))
         s -= 1;
 
       v += s;
@@ -4807,7 +5110,7 @@ void python_list::normalize_index_access_position(
       // (append/insert/extend), so we must resolve the negative index
       // at runtime via build_list_at_call using __ESBMC_list_size.
       index = slice_node["operand"]["value"].get<size_t>();
-      index = list_node["value"]["elts"].size() - index;
+      index = known_length(recorded_elem_types(array), list_node) - index;
     }
     // A pointer-typed array without a literal list backing it (e.g. a numpy
     // row/column view, which has no AST list assignment to read a
@@ -4874,10 +5177,12 @@ exprt python_list::handle_index_access(
     array, slice_node, list_node, pos_expr, index);
 
   // Handle different array types
-  const bool is_char_array = resolved_array_type.is_array() &&
-                             resolved_array_type.subtype() == char_type();
-  const bool is_char_ptr = resolved_array_type.is_pointer() &&
-                           resolved_array_type.subtype() == char_type();
+  const bool is_char_array =
+    resolved_array_type.is_array() &&
+    type_utils::is_char_storage(resolved_array_type.subtype());
+  const bool is_char_ptr =
+    resolved_array_type.is_pointer() &&
+    type_utils::is_char_storage(resolved_array_type.subtype());
 
   if (
     (array.type().is_symbol() || array.type().subtype().is_symbol()) &&
@@ -5020,6 +5325,9 @@ exprt python_list::handle_index_access(
           }
         }
 
+        elem_type = declared_elem_type_or(
+          elem_type, list_node, converter_.get_type_handler());
+
         if (!list_node.is_null() && list_node["_type"] == "arg")
         {
           elem_type = get_elem_type_from_annotation(
@@ -5104,7 +5412,8 @@ exprt python_list::handle_index_access(
             // Infer element type from the literal, accounting for the
             // int->float promotion applied to mixed numeric literals at
             // construction.
-            elem_type = infer_literal_element_type(list_node["value"]);
+            elem_type = recorded_tuple_type_or(
+              array, infer_literal_element_type(list_node["value"]));
           }
         }
       }
@@ -5118,7 +5427,10 @@ exprt python_list::handle_index_access(
     {
       const std::string &list_name = array.identifier().as_string();
       if (elem_types().find(list_name))
+      {
+        reject_unresolved_call_elements(list_node, elem_types(), list_name);
         elem_type = elem_types().last_element_type(list_name);
+      }
     }
 
     // Nested subscript chains like W[i][j] where the base is a Name with a
@@ -5415,7 +5727,7 @@ exprt python_list::handle_index_access(
       elem_type = gen_pointer_type(elem_type);
 
     // Build list access and cast result
-    exprt list_at_call = build_list_at_call(array, pos_expr, list_value_);
+    exprt list_at_call = build_list_at_call(array, pos_expr, list_value_, true);
 
     if (dispatch_numeric)
       list_at_call = bind_list_element(list_at_call);
@@ -5430,23 +5742,35 @@ exprt python_list::handle_index_access(
   // Handle static string indexing with IndexError on out-of-bounds
   if (is_char_array)
   {
-    exprt idx = pos_expr;
-    if (idx.type() != size_type())
-      idx = build_typecast(idx, size_type());
+    const typet ll_type = signedbv_typet(64);
+    const locationt loc = converter_.get_location_from_decl(list_value_);
 
     // Logical string length excludes the null terminator
-    exprt array_size = to_array_type(resolved_array_type).size();
-    if (array_size.type() != size_type())
-      array_size = build_typecast(array_size, size_type());
-    // str_len = array_size - 1. array_size is typecast to size_type above, so
-    // both operands share width; build the subtraction in IREP2 (V.3).
-    exprt str_len =
-      build_sub(array_size, from_integer(1, size_type()), size_type());
+    const exprt str_len = build_sub(
+      build_typecast(to_array_type(resolved_array_type).size(), ll_type),
+      from_integer(1, ll_type),
+      ll_type);
 
-    // Emit: if (idx >= str_len) throw IndexError("string index out of range")
-    // (idx is typecast to size_type above; str_len is a size_type subtraction —
-    // both operands share width.)
-    exprt oob_cond = build_greater_equal(idx, str_len);
+    symbolt &idx_sym = converter_.create_tmp_symbol(
+      list_value_, "$str_idx$", ll_type, gen_zero(ll_type));
+    const exprt idx = build_symbol(idx_sym);
+    code_declt idx_decl(idx);
+    idx_decl.location() = loc;
+    converter_.add_instruction(idx_decl);
+    code_assignt idx_init(idx, build_typecast(pos_expr, ll_type));
+    idx_init.location() = loc;
+    converter_.add_instruction(idx_init);
+
+    // A negative index counts from the end: idx += len(s)
+    const exprt is_negative = build_less_than(idx, from_integer(0, ll_type));
+    code_assignt normalize(idx, build_add(idx, str_len, ll_type));
+    normalize.location() = loc;
+    code_ifthenelset norm_guard;
+    norm_guard.cond() = is_negative;
+    norm_guard.then_case() = normalize;
+    norm_guard.location() = loc;
+    norm_guard.location().property("skipped");
+    converter_.add_instruction(norm_guard);
 
     exprt raise = converter_.get_exception_handler().gen_exception_raise(
       "IndexError", "string index out of range");
@@ -5454,7 +5778,7 @@ exprt python_list::handle_index_access(
     throw_code.operands().push_back(raise);
 
     code_ifthenelset guard;
-    guard.cond() = oob_cond;
+    guard.cond() = build_or(is_negative, build_greater_equal(idx, str_len));
     guard.then_case() = throw_code;
     converter_.add_instruction(guard);
 
@@ -5464,7 +5788,7 @@ exprt python_list::handle_index_access(
     // resorting to a fragile width-only heuristic.
     typet char_t = char_type();
     type_utils::set_cpp_type(char_t, "char");
-    return build_index(array, idx, char_t);
+    return build_index(array, build_typecast(idx, size_type()), char_t);
   }
 
   // For char* (string function parameter), implement Python single-index
@@ -5526,6 +5850,7 @@ exprt python_list::handle_index_access(
     norm_guard.then_case() = normalize;
     norm_guard.location() = loc;
     norm_guard.location().property("skipped");
+    norm_guard.location().property("skipped");
     converter_.add_instruction(norm_guard);
 
     // --- 4. OOB check: if (idx < 0 || idx >= (ll)len) raise IndexError ---
@@ -5563,7 +5888,88 @@ exprt python_list::handle_index_access(
     return slice_call;
   }
 
+  pos_expr = guard_bytes_param_index(array, resolved_array_type, pos_expr);
+
   return build_numpy_array_index_access(array, pos_expr, slice_node);
+}
+
+// A bytes parameter decays to a pointer to its elements, so its length is the
+// element count of the object it addresses, as len() reads it.
+bool python_list::is_bytes_param_pointer(
+  const exprt &array,
+  const typet &resolved_array_type) const
+{
+  return array.is_symbol() && resolved_array_type.is_pointer() &&
+         type_utils::is_integer_type(resolved_array_type.subtype()) &&
+         list_value_.contains("value") &&
+         list_value_["value"].value("_type", "") == "Name" &&
+         converter_.get_type_handler().get_var_type(
+           list_value_["value"]["id"].get<std::string>()) == "bytes" &&
+         converter_.can_emit_runtime_guard() &&
+         converter_.symbol_table().find_symbol(
+           "c:@F@__ESBMC_get_object_size") != nullptr;
+}
+
+/// `d[i]` on a bytes parameter: CPython's negative index and IndexError,
+/// which the pointer read alone does not raise. Any other access returns
+/// `pos_expr` unchanged.
+exprt python_list::guard_bytes_param_index(
+  const exprt &array,
+  const typet &resolved_array_type,
+  const exprt &pos_expr)
+{
+  if (!is_bytes_param_pointer(array, resolved_array_type))
+    return pos_expr;
+
+  const typet ll_type = signedbv_typet(64);
+  const locationt loc = converter_.get_location_from_decl(list_value_);
+  const symbolt &size_fn =
+    *converter_.symbol_table().find_symbol("c:@F@__ESBMC_get_object_size");
+
+  symbolt &len_sym = converter_.create_tmp_symbol(
+    list_value_, "$bytes_len$", ll_type, gen_zero(ll_type));
+  const exprt len = build_symbol(len_sym);
+  code_declt len_decl(len);
+  len_decl.location() = loc;
+  converter_.add_instruction(len_decl);
+  code_function_callt size_call;
+  size_call.function() = build_symbol(size_fn);
+  size_call.lhs() = len;
+  size_call.arguments().push_back(array);
+  size_call.location() = loc;
+  converter_.add_instruction(size_call);
+
+  symbolt &idx_sym = converter_.create_tmp_symbol(
+    list_value_, "$bytes_idx$", ll_type, gen_zero(ll_type));
+  const exprt idx = build_symbol(idx_sym);
+  code_declt idx_decl(idx);
+  idx_decl.location() = loc;
+  converter_.add_instruction(idx_decl);
+  code_assignt idx_init(idx, build_typecast(pos_expr, ll_type));
+  idx_init.location() = loc;
+  converter_.add_instruction(idx_init);
+
+  code_ifthenelset norm_guard;
+  norm_guard.cond() = build_less_than(idx, from_integer(0, ll_type));
+  norm_guard.then_case() = code_assignt(idx, build_add(idx, len, ll_type));
+  norm_guard.location() = loc;
+  norm_guard.location().property("skipped");
+  converter_.add_instruction(norm_guard);
+
+  exprt raise = converter_.get_exception_handler().gen_exception_raise(
+    "IndexError", "index out of range");
+  codet throw_code("expression");
+  throw_code.operands().push_back(raise);
+  code_ifthenelset oob_guard;
+  oob_guard.cond() = build_or(
+    build_less_than(idx, from_integer(0, ll_type)),
+    build_greater_equal(idx, len));
+  oob_guard.then_case() = throw_code;
+  oob_guard.location() = loc;
+  oob_guard.location().property("skipped");
+  converter_.add_instruction(oob_guard);
+
+  return idx;
 }
 
 exprt python_list::extract_pyobject_value(
@@ -5693,7 +6099,8 @@ exprt python_list::extract_pyobject_value(
   // value. For all other types, the void* contains a pointer to the value.
   if (
     elem_type.is_pointer() &&
-    (elem_type.subtype() == char_type() || elem_type.subtype() == bool_type()))
+    (type_utils::is_char_storage(elem_type.subtype()) ||
+     elem_type.subtype() == bool_type()))
   {
     // String and None case: cast void* directly to the pointer type (no
     // dereference needed)

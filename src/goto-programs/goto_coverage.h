@@ -4,6 +4,10 @@
 #include <langapi/language_util.h>
 #include <map>
 #include <unordered_set>
+#include <array>
+#include <atomic>
+#include <map>
+#include <mutex>
 
 class goto_coveraget
 {
@@ -95,7 +99,10 @@ public:
   // the spanning-set denominator.
   static std::set<std::pair<std::string, std::string>>
     k_path_spanning_redundant;
-  // all instrumented claims (condition, location) for JSON report
+  // all instrumented claims (condition, location) for JSON report.
+  // For branch coverage this is the *static universe* (every in-scope
+  // decision edge, built with NO covered-set skip applied) so the
+  // denominator never shrinks when edges are skipped (Item 2c).
   static std::set<std::pair<std::string, std::string>> all_claims;
   // Guard text of the opposite direction for each claim in all_claims, keyed
   // the same way. A probe assert(c) left unviolated proves !c infeasible, so
@@ -106,8 +113,91 @@ public:
   static std::map<std::pair<std::string, std::string>, std::string>
     claim_negation;
 
+  // Cross-run persisted covered-set (Item 2). covered_set holds the
+  // (guard_str, location.as_string()) edge keys loaded from the JSON at
+  // branch_coverage() entry; an edge present here is NOT re-instrumented
+  // this run (its assert pair is skipped) but still counted in the
+  // denominator via all_claims. covered_set_outpath, when non-empty, is
+  // where bmc.cpp merge-writes the accumulated set at run end. Static so
+  // the run-end report path (bmc.cpp) can read them like total_branch /
+  // all_claims.
+  static std::set<std::pair<std::string, std::string>> covered_set;
+  static std::string covered_set_outpath;
+
+  // How many claims this run has handed to the solver and got an answer for,
+  // and how many it had, for the partial report of a run that did not finish.
+  // Atomic because jobs update it from several threads under
+  // --parallel-solving.
+  static std::atomic<size_t> live_decided;
+  static std::atomic<size_t> claims_total_atomic;
+
+  // Item 2e: serialize covered_set to covered_set_outpath crash-safely
+  // (write a .tmp then atomic rename). Called both incrementally as
+  // each edge is witnessed P_SATISFIABLE (bmc.cpp) and once at run end,
+  // so a mid-run kill still persists every edge proven so far and
+  // bounded re-runs accumulate monotonically. No-op if outpath empty.
+  static void write_covered_set_atomic();
+
+  // "data even on UNKNOWN": an external kill (SIGALRM from esbmc's own
+  // --timeout, or SIGTERM/SIGINT from timeout(1)/CI/orchestrator) lands
+  // mid-solve, so report_coverage (the stdout "Branch Coverage:" line,
+  // only reached at a normal conclude/exhaustion point) never runs even
+  // though the numerator is already known. The signal handler reads
+  // this async-signal-safe snapshot and emits a SOUND LOWER BOUND
+  // before _exit. It is EXACT once any report_coverage has run (every
+  // such call re-syncs the active counter to its authoritative value);
+  // between the first per-claim hook and the first report it is a
+  // lower bound. Handler does only atomic loads + write(2); it never
+  // touches the std::set (mid-mutation under SIGALRM).
+  //   branch_cov_active   — set once branch-coverage mode is live
+  //   total_branch_atomic — |all_claims| (denominator), set at
+  //                          instrumentation, pre-solve; mirrors
+  //                          total_branch
+  //   covered_set_mode    — true iff --coverage-covered-set given; it
+  //                          selects which numerator the handler reads
+  //   live_reached        — DEFAULT mode numerator == reached_claims
+  //                          .size() (the canonical bmc.cpp:901 count,
+  //                          which intentionally includes non-universe
+  //                          entries); updated under reached_claims_
+  //                          mutex at the per-claim hook
+  //   covered_run         — COVERED-SET mode numerator == count of
+  //                          universe edges newly witnessed+persisted
+  //                          THIS run (covered_set.emplace().second at
+  //                          the Item 2e hook). A loaded prior set only
+  //                          raises true coverage, so this is a sound
+  //                          lower bound on the covered-set authoritative
+  //                          |all_claims ∩ (covered_set ∪ reached)|.
+  static std::atomic<bool> branch_cov_active;
+  static std::atomic<size_t> total_branch_atomic;
+  static std::atomic<bool> covered_set_mode;
+  static std::atomic<size_t> live_reached;
+  static std::atomic<size_t> covered_run;
+
   std::string target_function = "";
   bool cov_assume_asserts = false;
+  // When non-empty (set from --contract), branch_coverage() instruments
+  // ONLY decisions whose lexically-declaring Solidity contract equals this
+  // name (location's "sol_decl_contract", stamped by the frontend). This
+  // makes per-contract branch coverage count C's own source decisions
+  // only; inherited/library decisions are attributed to their own
+  // declaring contract and excluded. Empty => no scoping (unchanged
+  // whole-unit behaviour, e.g. C/C++/no --contract).
+  std::string scope_contract = "";
+
+  // Path to the cross-run covered-set JSON (--coverage-covered-set).
+  // Empty => disabled (no load, no skip, no write-back; behaviour
+  // identical to before Item 2). Read at branch_coverage() entry.
+  std::string covered_set_path = "";
+
+  // Item 5-d: contracts whose own decisions are excluded from branch
+  // coverage entirely (--coverage-exclude-contract, repeatable). A
+  // decision whose "sol_decl_contract" is in this set is dropped BEFORE
+  // all_claims.insert, so it counts in NEITHER the denominator NOR the
+  // numerator (true dependency exclusion, e.g. OpenZeppelin under
+  // --coverage-whole-unit). Empty => no exclusion. In default
+  // per-contract mode scope_contract already filters foreign decisions,
+  // so this set is a no-op there by construction.
+  std::set<std::string> exclude_contracts;
 
   // k-path coverage knobs (see #4325 "Decided defaults").
   // n  : prefix depth — number of consecutive branches in each witness
@@ -122,6 +212,16 @@ public:
   size_t k_path_max_goals = 10000;
 
 protected:
+  void load_covered_set();
+  void instrument_branch_instruction(
+    goto_programt &goto_program,
+    goto_programt::targett &it);
+  void instrument_decision(
+    goto_programt &goto_program,
+    goto_programt::targett &it,
+    const expr2tc &cond,
+    bool cond_reverts,
+    bool neg_reverts);
   expr2tc handle_single_guard(const expr2tc &expr, bool top_level);
   void handle_operands_guard(
     const expr2tc &expr,
@@ -137,6 +237,18 @@ protected:
     const expr2tc &pre_cond,
     goto_programt &goto_program,
     goto_programt::instructiont::targett &it);
+
+  // Foundry revert fidelity: conservative straight-line walk from an edge's
+  // first instruction. Returns true iff the edge unconditionally reaches a
+  // revert terminator (a FUNCTION_CALL to a `#sol_error` function — a lowered
+  // `revert CustomError(...)`) before any control-flow change (goto/return/
+  // end/throw/catch) or downstream merge, so a nested conditional revert never
+  // taints the enclosing edge. Used by branch_coverage() to stamp the reverting
+  // edge's probe with `sol_revert_edge`; the Foundry generator reads that off
+  // the covered claim to emit `vm.expectRevert()`.
+  bool edge_reaches_error_revert(
+    goto_programt::const_targett it,
+    goto_programt::const_targett end) const;
 
   namespacet ns;
   goto_functionst &goto_functions;

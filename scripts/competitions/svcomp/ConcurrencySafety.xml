@@ -8,29 +8,29 @@
   
   <option name="-s">kinduction</option>
 
-  <rundefinition name="SV-COMP26_unreach-call">
-    <tasks name="ConcurrencySafety-Main">
+  <rundefinition name="SV-COMP27_unreach-call">
+    <tasks name="C.unreach-call.Concurrency">
       <includesfile>$HOME/sv-benchmarks/c/Concurrency.set</includesfile>
       <propertyfile>$HOME/sv-benchmarks/c/properties/unreach-call.prp</propertyfile>
     </tasks>
   </rundefinition>
 
-  <rundefinition name="SV-COMP26_no-data-race">
-    <tasks name="NoDataRace-Main">
+  <rundefinition name="SV-COMP27_no-data-race">
+    <tasks name="C.no-data-race.Concurrency">
       <includesfile>$HOME/sv-benchmarks/c/Concurrency.set</includesfile>
       <propertyfile>$HOME/sv-benchmarks/c/properties/no-data-race.prp</propertyfile>
     </tasks>
   </rundefinition>
 
-  <rundefinition name="SV-COMP26_valid-memsafety">
-    <tasks name="ConcurrencySafety-MemSafety">
+  <rundefinition name="SV-COMP27_valid-memsafety">
+    <tasks name="C.valid-memsafety.Concurrency">
       <includesfile>$HOME/sv-benchmarks/c/Concurrency.set</includesfile>
       <propertyfile>$HOME/sv-benchmarks/c/properties/valid-memsafety.prp</propertyfile>
     </tasks>
   </rundefinition>
 
-  <rundefinition name="SV-COMP26_no-overflow">
-    <tasks name="ConcurrencySafety-NoOverflows">
+  <rundefinition name="SV-COMP27_no-overflow">
+    <tasks name="C.no-overflow.Concurrency">
       <includesfile>$HOME/sv-benchmarks/c/Concurrency.set</includesfile>
       <propertyfile>$HOME/sv-benchmarks/c/properties/no-overflow.prp</propertyfile>
     </tasks>

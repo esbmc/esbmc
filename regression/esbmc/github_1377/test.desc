@@ -1,5 +1,5 @@
 THOROUGH
 main.c
---unwind 1 --no-unwinding-assertions --k-induction --overflow --z3 -Wno-error=implicit-function-declaration
+--unwind 1 --no-unwinding-assertions --k-induction --max-inductive-step 1 --overflow --z3 -Wno-error=implicit-function-declaration
 
 ^VERIFICATION FAILED$

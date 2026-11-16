@@ -1,0 +1,5 @@
+CORE
+main.c
+--goto2lean
+^  \(∀ i : BitVec 32, \(\(i ≤ \(i \+ x\)\) ∨ \(\(4294967285#32\) < i\)\)\) ∧ \($
+^  all_goals bv_decide$

@@ -1,0 +1,5 @@
+CORE
+main.c
+
+^VERIFICATION FAILED$
+^  assertion p\[i\] == 0x01010100u$

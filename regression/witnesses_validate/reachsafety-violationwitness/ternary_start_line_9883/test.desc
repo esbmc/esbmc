@@ -1,0 +1,5 @@
+CORE
+main.c
+--validate-violation-witness --witness witness.yml
+
+^VERIFICATION SUCCESSFUL$

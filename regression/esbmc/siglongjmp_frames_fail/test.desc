@@ -1,0 +1,6 @@
+CORE
+main.c
+--multi-property
+^VERIFICATION FAILED$
+assertion g == 0
+assertion g == 1

@@ -5,6 +5,7 @@
 #if __cplusplus >= 201103L
 
 #include "cstddef"
+#include "exception"
 #include "type_traits"
 #include "utility"
 
@@ -20,6 +21,19 @@ namespace std
 {
 
 inline constexpr size_t variant_npos = static_cast<size_t>(-1);
+
+// [variant.bad.access]
+class bad_variant_access : public exception
+{
+public:
+  bad_variant_access() noexcept
+  {
+  }
+  const char *what() const noexcept override
+  {
+    return "bad variant access";
+  }
+};
 
 // [variant.monostate]: a unit type, so that a variant whose first alternative
 // is not default-constructible can still be default-constructed. All values
@@ -230,6 +244,8 @@ template <size_t I, class... Types>
 constexpr typename __variant_detail::__nth<I, Types...>::type &
 get(variant<Types...> &v)
 {
+  if (v.index() != I)
+    throw bad_variant_access(); // [variant.get]/3
   if constexpr (I == 0)
     return v.__s0_;
   else if constexpr (I == 1)
@@ -244,6 +260,8 @@ template <size_t I, class... Types>
 constexpr const typename __variant_detail::__nth<I, Types...>::type &
 get(const variant<Types...> &v)
 {
+  if (v.index() != I)
+    throw bad_variant_access(); // [variant.get]/3
   if constexpr (I == 0)
     return v.__s0_;
   else if constexpr (I == 1)

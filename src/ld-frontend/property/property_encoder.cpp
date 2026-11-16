@@ -3,8 +3,10 @@
 #include <util/lang/c_types.h>
 #include <util/expr/expr_util.h>
 #include <util/symtab/symbol.h>
+#include <algorithm>
 #include <cctype>
 #include <stdexcept>
+#include <string>
 
 property_encoder::property_encoder(
   contextt &context,
@@ -18,16 +20,62 @@ static std::string ld_name(const std::string &var)
   return "ld::" + var;
 }
 
+static std::string find_iec_operator(const std::string &s)
+{
+  for (size_t i = 0; i < s.size();)
+  {
+    if (!std::isalpha(static_cast<unsigned char>(s[i])) && s[i] != '_')
+    {
+      ++i;
+      continue;
+    }
+
+    size_t start = i;
+    while (i < s.size() &&
+           (std::isalnum(static_cast<unsigned char>(s[i])) || s[i] == '_'))
+      ++i;
+
+    std::string token = s.substr(start, i - start);
+    std::transform(
+      token.begin(), token.end(), token.begin(), [](unsigned char c) {
+        return std::toupper(c);
+      });
+
+    if (token == "AND" || token == "OR" || token == "NOT" || token == "XOR")
+      return token;
+  }
+
+  return {};
+}
+
+static std::string
+undeclared_message(const std::string &name, const LdProperty &p)
+{
+  const std::string prefix = "property '" + p.id + "': ";
+  const std::string iec_op = find_iec_operator(name);
+
+  if (!iec_op.empty())
+    return prefix + "IEC operator '" + iec_op + "' in '" + name +
+           "'; expressions use C operators (!, &&, ||)";
+
+  if (name.find_first_of(" \t") != std::string::npos)
+    return prefix + "unsupported syntax in '" + name + "'";
+
+  return prefix + "undeclared variable '" + name + "'";
+}
+
 symbol_exprt
 property_encoder::var_expr(const std::string &name, const LdProperty &p) const
 {
   const symbolt *sym = context_.find_symbol(ld_name(name));
+
   if (!sym)
-    throw std::runtime_error(
-      "property '" + p.id + "': undeclared variable '" + name + "'");
+    throw std::runtime_error(undeclared_message(name, p));
+
   if (!sym->get_type().is_bool())
     throw std::runtime_error(
       "property '" + p.id + "': variable '" + name + "' is not BOOL");
+
   return symbol_exprt(ld_name(name), sym->get_type());
 }
 
@@ -108,7 +156,6 @@ exprt property_encoder::parse_bool_expr(
   // Negation.
   if (s.front() == '!')
     return not_exprt(parse_bool_expr(s.substr(1), p));
-
   return var_expr(s, p);
 }
 

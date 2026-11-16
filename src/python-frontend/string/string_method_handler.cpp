@@ -1,5 +1,7 @@
 #include <python-frontend/string/char_utils.h>
 #include <python-frontend/exception/exception_utils.h>
+#include <python-frontend/exception/python_exception_handler.h>
+#include <python-frontend/json_utils.h>
 #include <python-frontend/math/python_int_overflow.h>
 #include <python-frontend/python-list/python_list.h>
 #include <util/base/host_rounding_mode.h>
@@ -53,10 +55,47 @@ static bool get_constant_int(const exprt &expr, long long &out)
   // rejected every valid integer constant (and accepted non-constants with an
   // unset value), so width/fill string methods — center/ljust/rjust/zfill and
   // expandtabs's tabsize — silently fell back to a nondet/default result.
-  if (to_integer(expr, tmp))
+  if (!to_integer(expr, tmp))
+  {
+    out = tmp.to_int64();
+    return true;
+  }
+  // A negative literal such as -1 is not a constant until folded.
+  expr2tc folded;
+  migrate_expr(expr, folded);
+  simplify(folded);
+  if (!is_constant_int2t(folded))
     return false;
-  out = tmp.to_int64();
+  out = to_constant_int2t(folded).value.to_int64();
   return true;
+}
+
+// Padding with an unresolved width is exact when it cannot extend the
+// receiver. Otherwise report the unmodelled case as an assertion at the call
+// site, rather than aborting conversion or returning an arbitrary string.
+static void guard_symbolic_padding_width(
+  python_converter &converter,
+  const exprt &width_arg,
+  long long unpadded_width,
+  const char *method,
+  const locationt &location)
+{
+  const std::string message = std::string("Unsupported: ") + method +
+                              "() symbolic width may require padding";
+  if (!converter.can_emit_runtime_guard())
+    throw std::runtime_error(message);
+
+  const exprt no_padding =
+    width_arg.type().is_signedbv() || width_arg.type().is_unsignedbv()
+      ? build_less_equal(
+          width_arg, from_integer(unpadded_width, width_arg.type()))
+      : not_exprt(true_exprt());
+  code_assertt check(no_padding);
+  check.location() = location;
+  check.location().user_provided(true);
+  check.location().comment(message);
+  converter.add_instruction(check);
+  converter.add_instruction(code_assumet(no_padding));
 }
 
 // Extract the constant byte values of a bytes receiver (literal or a variable
@@ -95,6 +134,13 @@ static bool extract_constant_bytes(
     out.push_back(static_cast<uint8_t>(v.to_int64() & 0xff));
   }
   return true;
+}
+
+static bool is_ascii(const std::string &s)
+{
+  return std::all_of(s.begin(), s.end(), [](char c) {
+    return static_cast<unsigned char>(c) < 0x80;
+  });
 }
 
 static char to_lower_char(char c)
@@ -660,6 +706,35 @@ struct split_method_argst
 
 static bool is_none_literal_json(const nlohmann::json &node);
 
+/// Reads the constant sep of split()/rsplit() into \p separator, "" when it is
+/// omitted or None. An explicit empty sep yields the ValueError CPython raises.
+static std::optional<exprt> read_split_separator(
+  const std::string &method_name,
+  const nlohmann::json *sep_node,
+  const nlohmann::json &receiver_json,
+  python_converter &converter,
+  std::string &separator)
+{
+  if (sep_node == nullptr || is_none_literal_json(*sep_node))
+  {
+    separator = "";
+    return std::nullopt;
+  }
+  if (!string_handler::extract_constant_string(*sep_node, converter, separator))
+    throw std::runtime_error(
+      method_name + "() only supports constant sep in minimal support");
+  if (!separator.empty())
+    return std::nullopt;
+
+  // Raising here would drop the calls in the receiver, which CPython
+  // evaluates before split() rejects the separator.
+  if (json_utils::ast_contains_call(receiver_json))
+    throw std::runtime_error(
+      method_name + "() with an empty sep on a call receiver is unsupported");
+  return converter.get_exception_handler().gen_exception_raise(
+    "ValueError", "empty separator");
+}
+
 std::optional<exprt> dispatch_split_method(
   const std::string &method_name,
   const nlohmann::json &receiver_json,
@@ -690,16 +765,10 @@ std::optional<exprt> dispatch_split_method(
   const nlohmann::json *maxsplit_node = resolve_positional_or_keyword_arg(
     method_name, args, keyword_values, "maxsplit", 1, false);
 
-  if (sep_node == nullptr || is_none_literal_json(*sep_node))
-  {
-    parsed.separator = "";
-  }
-  else if (!string_handler::extract_constant_string(
-             *sep_node, converter, parsed.separator))
-  {
-    throw std::runtime_error(
-      method_name + "() only supports constant sep in minimal support");
-  }
+  if (
+    std::optional<exprt> raise = read_split_separator(
+      method_name, sep_node, receiver_json, converter, parsed.separator))
+    return raise;
 
   if (maxsplit_node != nullptr)
   {
@@ -783,16 +852,20 @@ std::optional<exprt> dispatch_no_arg_string_methods(
 {
   using no_arg_handler_t =
     exprt (string_handler::*)(const exprt &, const locationt &);
-  static constexpr std::array<std::pair<const char *, no_arg_handler_t>, 13>
+  static constexpr std::array<std::pair<const char *, no_arg_handler_t>, 17>
     no_arg_handlers = {{
       {"capitalize", &string_handler::handle_string_capitalize},
       {"title", &string_handler::handle_string_title},
       {"swapcase", &string_handler::handle_string_swapcase},
       {"casefold", &string_handler::handle_string_casefold},
       {"isdigit", &string_handler::handle_string_isdigit},
+      {"isascii", &string_handler::handle_string_isascii},
       {"isalnum", &string_handler::handle_string_isalnum},
       {"isupper", &string_handler::handle_string_isupper},
       {"isnumeric", &string_handler::handle_string_isnumeric},
+      {"isdecimal", &string_handler::handle_string_isdecimal},
+      {"istitle", &string_handler::handle_string_istitle},
+      {"isprintable", &string_handler::handle_string_isprintable},
       {"isidentifier", &string_handler::handle_string_isidentifier},
       {"islower", &string_handler::handle_string_islower},
       {"lower", &string_handler::handle_string_lower},
@@ -873,8 +946,10 @@ std::optional<exprt> dispatch_one_arg_string_methods(
       arg_name,
       0,
       method_name + "() requires one argument");
-    return (self.*handler)(
-      get_receiver_expr(), converter.get_expr(*arg_node), get_location());
+    const exprt receiver = get_receiver_expr();
+    const exprt argument = self.read_tagged_str_argument(
+      converter.get_expr(*arg_node), method_name, get_location());
+    return (self.*handler)(receiver, argument, get_location());
   }
 
   return std::nullopt;
@@ -1003,6 +1078,8 @@ std::optional<exprt> dispatch_search_string_methods(
     return folded;
   search_args_parsedt parsed =
     parse_string_search_args(method_name, args, keyword_values, converter);
+  parsed.needle =
+    self.read_tagged_str_argument(parsed.needle, method_name, get_location());
 
   if (method_name == "find")
   {
@@ -1182,9 +1259,7 @@ std::optional<exprt> dispatch_decode_join_method(
           if (
             !string_handler::extract_constant_string(
               receiver_json["func"]["value"], converter, inner) ||
-            !std::all_of(inner.begin(), inner.end(), [](char c) {
-              return static_cast<unsigned char>(c) < 0x80;
-            }))
+            !is_ascii(inner))
             return nil_exprt();
         }
         return converter.get_expr(receiver_json["func"]["value"]);
@@ -1229,9 +1304,7 @@ std::optional<exprt> dispatch_decode_join_method(
       encode_utf8 &&
       string_handler::extract_constant_string(receiver_json, converter, s))
     {
-      if (std::all_of(s.begin(), s.end(), [](char c) {
-            return static_cast<unsigned char>(c) < 0x80;
-          }))
+      if (is_ascii(s))
         return converter.get_string_builder().build_raw_byte_array(
           std::vector<uint8_t>(s.begin(), s.end()));
     }
@@ -1252,6 +1325,34 @@ std::optional<exprt> dispatch_decode_join_method(
   }
 
   return std::nullopt;
+}
+
+// A name with one binding to an integer literal is just as constant as the
+// literal itself. Do not fold reassigned names or loop variables.
+static exprt padding_width_expression(
+  const nlohmann::json &node,
+  python_converter &converter)
+{
+  exprt width = converter.get_expr(node);
+  if (node.value("_type", "") != "Name")
+    return width;
+
+  const std::string name = node.value("id", "");
+  const nlohmann::json &ast = converter.get_ast_json();
+  if (name.empty() || json_utils::count_name_bindings(ast, name) != 1)
+    return width;
+
+  const nlohmann::json declaration =
+    json_utils::find_var_decl(name, converter.get_current_func_name(), ast);
+  if (!declaration.is_object() || !declaration.contains("value"))
+    return width;
+  const nlohmann::json &value = declaration["value"];
+  if (
+    !value.is_object() || value.value("_type", "") != "Constant" ||
+    !value.contains("value") || !value["value"].is_number_integer())
+    return width;
+
+  return from_integer(value["value"].get<long long>(), width.type());
 }
 
 std::optional<exprt> dispatch_spacing_and_padding_methods(
@@ -1329,7 +1430,7 @@ std::optional<exprt> dispatch_spacing_and_padding_methods(
     const nlohmann::json *fill_node = resolve_positional_or_keyword_arg(
       method_name, args, keyword_values, "fillchar", 1, false);
 
-    exprt width_arg = converter.get_expr(*width_node);
+    exprt width_arg = padding_width_expression(*width_node, converter);
     exprt fill_arg = fill_node ? converter.get_expr(*fill_node) : nil_exprt();
     return (self.*handler)(
       get_receiver_expr(), width_arg, fill_arg, get_location());
@@ -1349,7 +1450,9 @@ std::optional<exprt> dispatch_spacing_and_padding_methods(
       0,
       "zfill() requires one argument");
     return self.handle_string_zfill(
-      get_receiver_expr(), converter.get_expr(*width_node), get_location());
+      get_receiver_expr(),
+      padding_width_expression(*width_node, converter),
+      get_location());
   }
 
   if (method_name == "expandtabs")
@@ -1497,7 +1600,7 @@ exprt string_handler::build_affix_tuple_match(
         binary2integer(it->value().as_string(), it->type().is_signedbv());
       if (val == 0)
         return true;
-      out += static_cast<char>(val.to_uint64());
+      out += static_cast<char>(val.to_int64());
     }
     return true;
   };
@@ -1724,6 +1827,33 @@ exprt string_handler::handle_string_isdigit(
   return isdigit_call;
 }
 
+exprt string_handler::handle_string_isascii(
+  const exprt &string_obj,
+  const locationt &location)
+{
+  if (string_obj.type().is_unsignedbv() || string_obj.type().is_signedbv())
+  {
+    exprt byte = typecast_exprt(string_obj, unsignedbv_typet(8));
+    exprt result("<", bool_type());
+    result.copy_to_operands(byte, from_integer(0x80, unsignedbv_typet(8)));
+    result.location() = location;
+    return result;
+  }
+
+  exprt string_copy = string_obj;
+  exprt str_addr =
+    get_array_base_address(ensure_null_terminated_string(string_copy));
+  symbolt *isascii_symbol =
+    find_cached_c_function_symbol("c:@F@__python_str_isascii");
+  if (!isascii_symbol)
+    throw std::runtime_error(
+      "__python_str_isascii function not found in symbol table");
+
+  exprt call = build_call_expr(*isascii_symbol, bool_type(), {str_addr});
+  call.location() = location;
+  return call;
+}
+
 exprt string_handler::handle_string_isalpha(
   const exprt &string_obj,
   const locationt &location)
@@ -1853,7 +1983,7 @@ exprt string_handler::handle_string_lstrip(
         auto is_whitespace = [](const exprt &ch) -> bool {
           BigInt char_val =
             binary2integer(ch.value().as_string(), ch.type().is_signedbv());
-          char c = static_cast<char>(char_val.to_uint64());
+          char c = static_cast<char>(char_val.to_int64());
           return c == ' ' || c == '\t' || c == '\n' || c == '\v' || c == '\f' ||
                  c == '\r';
         };
@@ -1883,12 +2013,12 @@ exprt string_handler::handle_string_lstrip(
         auto is_in_strip_set = [&strip_set](const exprt &ch) -> bool {
           BigInt cv =
             binary2integer(ch.value().as_string(), ch.type().is_signedbv());
-          char c = static_cast<char>(cv.to_uint64());
+          char c = static_cast<char>(cv.to_int64());
           for (const auto &sc : strip_set)
           {
             BigInt sv =
               binary2integer(sc.value().as_string(), sc.type().is_signedbv());
-            if (c == static_cast<char>(sv.to_uint64()))
+            if (c == static_cast<char>(sv.to_int64()))
               return true;
           }
           return false;
@@ -2028,7 +2158,7 @@ exprt string_handler::handle_string_strip(
         auto is_whitespace = [](const exprt &ch) -> bool {
           BigInt char_val =
             binary2integer(ch.value().as_string(), ch.type().is_signedbv());
-          char c = static_cast<char>(char_val.to_uint64());
+          char c = static_cast<char>(char_val.to_int64());
           return c == ' ' || c == '\t' || c == '\n' || c == '\v' || c == '\f' ||
                  c == '\r';
         };
@@ -2061,12 +2191,12 @@ exprt string_handler::handle_string_strip(
         auto is_in_strip_set = [&strip_set](const exprt &ch) -> bool {
           BigInt cv =
             binary2integer(ch.value().as_string(), ch.type().is_signedbv());
-          char c = static_cast<char>(cv.to_uint64());
+          char c = static_cast<char>(cv.to_int64());
           for (const auto &sc : strip_set)
           {
             BigInt sv =
               binary2integer(sc.value().as_string(), sc.type().is_signedbv());
-            if (c == static_cast<char>(sv.to_uint64()))
+            if (c == static_cast<char>(sv.to_int64()))
               return true;
           }
           return false;
@@ -2185,7 +2315,7 @@ exprt string_handler::handle_string_rstrip(
         auto is_whitespace = [](const exprt &ch) -> bool {
           BigInt char_val =
             binary2integer(ch.value().as_string(), ch.type().is_signedbv());
-          char c = static_cast<char>(char_val.to_uint64());
+          char c = static_cast<char>(char_val.to_int64());
           return c == ' ' || c == '\t' || c == '\n' || c == '\v' || c == '\f' ||
                  c == '\r';
         };
@@ -2215,12 +2345,12 @@ exprt string_handler::handle_string_rstrip(
         auto is_in_strip_set = [&strip_set](const exprt &ch) -> bool {
           BigInt cv =
             binary2integer(ch.value().as_string(), ch.type().is_signedbv());
-          char c = static_cast<char>(cv.to_uint64());
+          char c = static_cast<char>(cv.to_int64());
           for (const auto &sc : strip_set)
           {
             BigInt sv =
               binary2integer(sc.value().as_string(), sc.type().is_signedbv());
-            if (c == static_cast<char>(sv.to_uint64()))
+            if (c == static_cast<char>(sv.to_int64()))
               return true;
           }
           return false;
@@ -3559,6 +3689,74 @@ exprt string_handler::handle_string_isnumeric(
   return from_integer(1, bool_type());
 }
 
+/// Calls the str predicate model \p name of string.c on \p string_obj.
+exprt string_handler::call_str_predicate_model(
+  const std::string &name,
+  const exprt &string_obj,
+  const locationt &location)
+{
+  const std::string id = "c:@F@__python_str_" + name;
+  const symbolt *sym = find_cached_c_function_symbol(id);
+  if (!sym)
+    throw std::runtime_error(id + " not found in the operational model");
+  exprt s_copy = string_obj;
+  exprt s_addr = get_array_base_address(ensure_null_terminated_string(s_copy));
+  exprt call = build_call_expr(*sym, bool_type(), {s_addr});
+  call.location() = location;
+  return call;
+}
+
+// A non-ASCII receiver goes to the model, which leaves it nondet: its bytes
+// are UTF-8, and CPython classifies code points, so e.g. Arabic-Indic digits
+// are decimal.
+exprt string_handler::handle_string_isdecimal(
+  const exprt &string_obj,
+  const locationt &location)
+{
+  std::string input;
+  if (!try_extract_const_string_expr(string_obj, input) || !is_ascii(input))
+    return call_str_predicate_model("isdecimal", string_obj, location);
+  const bool all_digits =
+    !input.empty() && std::all_of(input.begin(), input.end(), [](char c) {
+      return c >= '0' && c <= '9';
+    });
+  return from_integer(all_digits ? 1 : 0, bool_type());
+}
+
+exprt string_handler::handle_string_istitle(
+  const exprt &string_obj,
+  const locationt &location)
+{
+  std::string input;
+  if (!try_extract_const_string_expr(string_obj, input) || !is_ascii(input))
+    return call_str_predicate_model("istitle", string_obj, location);
+  bool cased = false;
+  bool prev_cased = false;
+  for (char ch : input)
+  {
+    const unsigned char uch = static_cast<unsigned char>(ch);
+    const bool upper = std::isupper(uch);
+    const bool lower = std::islower(uch);
+    if ((upper && prev_cased) || (lower && !prev_cased))
+      return from_integer(0, bool_type());
+    prev_cased = upper || lower;
+    cased = cased || prev_cased;
+  }
+  return from_integer(cased ? 1 : 0, bool_type());
+}
+
+exprt string_handler::handle_string_isprintable(
+  const exprt &string_obj,
+  const locationt &location)
+{
+  std::string input;
+  if (!try_extract_const_string_expr(string_obj, input) || !is_ascii(input))
+    return call_str_predicate_model("isprintable", string_obj, location);
+  const bool printable = std::all_of(
+    input.begin(), input.end(), [](char c) { return c >= 0x20 && c != 0x7f; });
+  return from_integer(printable ? 1 : 0, bool_type());
+}
+
 exprt string_handler::handle_string_isidentifier(
   const exprt &string_obj,
   const locationt &location)
@@ -3594,21 +3792,28 @@ exprt string_handler::handle_string_center(
   const locationt &location)
 {
   std::string input;
-  if (!try_extract_const_string_expr(string_obj, input))
+  const bool input_constant = try_extract_const_string_expr(string_obj, input);
+  long long width = 0;
+  if (!get_constant_int(width_arg, width))
   {
+    guard_symbolic_padding_width(
+      converter_,
+      width_arg,
+      input_constant ? static_cast<long long>(input.size()) : 0,
+      "center",
+      location);
+    return string_obj;
+  }
+  if (!input_constant)
+  {
+    if (width <= 0)
+      return string_obj;
     log_debug(
       "python-string", "center() on non-constant receiver: nondet string");
     return build_nondet_string_fallback(location);
   }
   if (!string_builder_)
     throw std::runtime_error("string_builder not set for center()");
-
-  long long width = 0;
-  if (!get_constant_int(width_arg, width))
-  {
-    log_debug("python-string", "center() on non-constant width: nondet string");
-    return build_nondet_string_fallback(location);
-  }
 
   char fill = ' ';
   if (!fill_arg.is_nil())
@@ -3648,21 +3853,28 @@ exprt string_handler::handle_string_ljust(
   const locationt &location)
 {
   std::string input;
-  if (!try_extract_const_string_expr(string_obj, input))
+  const bool input_constant = try_extract_const_string_expr(string_obj, input);
+  long long width = 0;
+  if (!get_constant_int(width_arg, width))
   {
+    guard_symbolic_padding_width(
+      converter_,
+      width_arg,
+      input_constant ? static_cast<long long>(input.size()) : 0,
+      "ljust",
+      location);
+    return string_obj;
+  }
+  if (!input_constant)
+  {
+    if (width <= 0)
+      return string_obj;
     log_debug(
       "python-string", "ljust() on non-constant receiver: nondet string");
     return build_nondet_string_fallback(location);
   }
   if (!string_builder_)
     throw std::runtime_error("string_builder not set for ljust()");
-
-  long long width = 0;
-  if (!get_constant_int(width_arg, width))
-  {
-    log_debug("python-string", "ljust() on non-constant width: nondet string");
-    return build_nondet_string_fallback(location);
-  }
 
   char fill = ' ';
   if (!fill_arg.is_nil())
@@ -3694,21 +3906,28 @@ exprt string_handler::handle_string_rjust(
   const locationt &location)
 {
   std::string input;
-  if (!try_extract_const_string_expr(string_obj, input))
+  const bool input_constant = try_extract_const_string_expr(string_obj, input);
+  long long width = 0;
+  if (!get_constant_int(width_arg, width))
   {
+    guard_symbolic_padding_width(
+      converter_,
+      width_arg,
+      input_constant ? static_cast<long long>(input.size()) : 0,
+      "rjust",
+      location);
+    return string_obj;
+  }
+  if (!input_constant)
+  {
+    if (width <= 0)
+      return string_obj;
     log_debug(
       "python-string", "rjust() on non-constant receiver: nondet string");
     return build_nondet_string_fallback(location);
   }
   if (!string_builder_)
     throw std::runtime_error("string_builder not set for rjust()");
-
-  long long width = 0;
-  if (!get_constant_int(width_arg, width))
-  {
-    log_debug("python-string", "rjust() on non-constant width: nondet string");
-    return build_nondet_string_fallback(location);
-  }
 
   char fill = ' ';
   if (!fill_arg.is_nil())
@@ -3739,21 +3958,28 @@ exprt string_handler::handle_string_zfill(
   const locationt &location)
 {
   std::string input;
-  if (!try_extract_const_string_expr(string_obj, input))
+  const bool input_constant = try_extract_const_string_expr(string_obj, input);
+  long long width = 0;
+  if (!get_constant_int(width_arg, width))
   {
+    guard_symbolic_padding_width(
+      converter_,
+      width_arg,
+      input_constant ? static_cast<long long>(input.size()) : 0,
+      "zfill",
+      location);
+    return string_obj;
+  }
+  if (!input_constant)
+  {
+    if (width <= 0)
+      return string_obj;
     log_debug(
       "python-string", "zfill() on non-constant receiver: nondet string");
     return build_nondet_string_fallback(location);
   }
   if (!string_builder_)
     throw std::runtime_error("string_builder not set for zfill()");
-
-  long long width = 0;
-  if (!get_constant_int(width_arg, width))
-  {
-    log_debug("python-string", "zfill() on non-constant width: nondet string");
-    return build_nondet_string_fallback(location);
-  }
 
   if (width <= static_cast<long long>(input.size()))
     return string_builder_->build_string_literal(input);

@@ -1,0 +1,5 @@
+CORE
+main.c
+--replace-call-with-contract pick
+^VERIFICATION FAILED$
+^  the write through p reaches a$

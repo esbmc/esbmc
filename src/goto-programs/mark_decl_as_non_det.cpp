@@ -28,8 +28,9 @@ bool mark_decl_as_non_det::runOnFunction(
     // concurrency operational models (data-races).
     if (has_prefix(s->name, "return_value$"))
       continue;
-    // Is the value initialized?
-    if (s->get_value().is_nil())
+    // Is the value initialized? A jump past the declaration skips its
+    // initializer (C11 6.2.4p6).
+    if (s->get_value().is_nil() || it->location.get_bool("#skipped_init"))
     {
       // Initialize it with nondet then
       expr2tc new_value =
@@ -41,6 +42,9 @@ bool mark_decl_as_non_det::runOnFunction(
       insert_pos++;
       auto t = F.second.body.instructions.insert(insert_pos, ASSIGN);
       t->location = it->location;
+      // Tag this assignment: it models an uninitialised local, not a call to
+      // __VERIFIER_nondet_*(), so it must not become a test-case input.
+      t->location.set("#decl_nondet", true);
       t->code = new_value;
       t->function = it->function;
     }

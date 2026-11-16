@@ -179,6 +179,25 @@ static bool is_constant_operand(const expr2tc &op)
   return !is_nil_expr(op) && is_constant_int2t(op);
 }
 
+/// The operation of a __builtin_{s,u}{add,sub,mul}*_overflow call.
+static expr2tc overflow_operation(
+  const code_function_call2t &func_call,
+  const std::string &symname)
+{
+  const type2tc &type = to_code_type(func_call.function->type).arguments[0];
+  const expr2tc &lhs = func_call.operands[0];
+  const expr2tc &rhs = func_call.operands[1];
+  const std::string op = symname.substr(std::string("c:@F@__builtin_s").size());
+  if (has_prefix(op, "mul"))
+    return mul2tc(type, lhs, rhs);
+  if (has_prefix(op, "add"))
+    return add2tc(type, lhs, rhs);
+  if (has_prefix(op, "sub"))
+    return sub2tc(type, lhs, rhs);
+  log_error("Unknown overflow intrinsics");
+  abort();
+}
+
 bool goto_symext::run_builtin(
   const code_function_call2t &func_call,
   const std::string &symname)
@@ -194,32 +213,12 @@ bool goto_symext::run_builtin(
     assert(ends_with(symname, "_overflow"));
     assert(func_call.operands.size() == 3);
 
-    const auto &func_type = to_code_type(func_call.function->type);
+    [[maybe_unused]] const auto &func_type =
+      to_code_type(func_call.function->type);
     assert(func_type.arguments[0] == func_type.arguments[1]);
     assert(is_pointer_type(func_type.arguments[2]));
 
-    bool is_mult = has_prefix(symname, "c:@F@__builtin_smul") ||
-                   has_prefix(symname, "c:@F@__builtin_umul");
-    bool is_add = has_prefix(symname, "c:@F@__builtin_sadd") ||
-                  has_prefix(symname, "c:@F@__builtin_uadd");
-    bool is_sub = has_prefix(symname, "c:@F@__builtin_ssub") ||
-                  has_prefix(symname, "c:@F@__builtin_usub");
-
-    expr2tc op;
-    if (is_mult)
-      op = mul2tc(
-        func_type.arguments[0], func_call.operands[0], func_call.operands[1]);
-    else if (is_add)
-      op = add2tc(
-        func_type.arguments[0], func_call.operands[0], func_call.operands[1]);
-    else if (is_sub)
-      op = sub2tc(
-        func_type.arguments[0], func_call.operands[0], func_call.operands[1]);
-    else
-    {
-      log_error("Unknown overflow intrinsics");
-      abort();
-    }
+    const expr2tc op = overflow_operation(func_call, symname);
 
     // Perform overflow check and assign it to the return object
     if (!is_nil_expr(func_call.ret))
@@ -235,6 +234,12 @@ bool goto_symext::run_builtin(
     return true;
   }
 
+  if (has_prefix(symname, "c:@F@__builtin_bounded_"))
+  {
+    symex_bounded_math(
+      func_call, symname.substr(std::string("c:@F@__builtin_bounded_").size()));
+    return true;
+  }
   if (has_prefix(symname, "c:@F@__builtin_constant_p"))
   {
     expr2tc op1 = func_call.operands[0];

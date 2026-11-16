@@ -1,0 +1,4 @@
+CORE
+main.py
+--incremental-bmc
+^ERROR: TypeError: membership of a call's value in a numpy string array is not supported$

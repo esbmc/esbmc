@@ -1,6 +1,5 @@
-# Issue #8920: list(gen(*xs)) is inlined only behind a single length guard,
-# so a generator with defaults among the starred slots is still refused when
-# the length of xs is not known before the run.
+# Issue #8920: list(gen(*xs)) with defaults among the starred slots. Each
+# length of xs gets its own copy of t (#9797), so the length is known there.
 def gen(a, b=1):
     yield a
     yield b

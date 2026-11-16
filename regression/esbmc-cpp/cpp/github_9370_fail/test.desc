@@ -1,0 +1,5 @@
+CORE
+main.cpp
+--std c++17 --unwind 20
+^  assertion r != o \+ 2 \|\| o\[0\] != 3 \|\| o\[1\] != 1$
+^VERIFICATION FAILED$

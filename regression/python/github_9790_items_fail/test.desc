@@ -1,0 +1,5 @@
+CORE
+main.py
+--no-bounds-check
+^VERIFICATION FAILED$
+main\.py line 3

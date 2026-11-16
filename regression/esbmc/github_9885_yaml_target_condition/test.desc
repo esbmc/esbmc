@@ -1,0 +1,5 @@
+CORE
+main.c
+--witness-output-yaml -
+^VERIFICATION FAILED$
+type: "target"\n.*\n.*\n.*\n\s*line: 9\n\s*column: 7$

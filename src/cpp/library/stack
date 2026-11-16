@@ -27,7 +27,9 @@ public:
     size_t container_size = ctnr.size();
     __ESBMC_assert(
       container_size <= STACK_CAPACITY, "container too large for stack");
-    _top = 0;
+    for (typename Container::const_iterator it = ctnr.begin(); it != ctnr.end();
+         ++it)
+      buf[_top++] = *it;
   }
 
   ~stack()
@@ -99,7 +101,9 @@ public:
     size_t container_size = ctnr.size();
     __ESBMC_assert(
       container_size <= STACK_CAPACITY, "container too large for stack");
-    _top = 0;
+    for (typename list<T>::const_iterator it = ctnr.begin(); it != ctnr.end();
+         ++it)
+      buf[_top++] = *it;
   }
 
   ~stack()

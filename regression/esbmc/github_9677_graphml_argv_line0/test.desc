@@ -1,0 +1,7 @@
+CORE
+main.c
+--no-slice --witness-output-graphml w.graphml
+^VERIFICATION FAILED$
+CHECK_FILE w.graphml absent <data key="startline">0</data>
+CHECK_FILE w.graphml contains <data key="startline">7</data>
+CHECK_FILE w.graphml contains <data key="startline">3</data>

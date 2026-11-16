@@ -139,8 +139,8 @@ exprt python_converter::compare_constants_internal(
   {
     // Check if both are char arrays (strings)
     if (
-      lhs.type().subtype() == char_type() &&
-      rhs.type().subtype() == char_type())
+      type_utils::is_char_storage(lhs.type().subtype()) &&
+      type_utils::is_char_storage(rhs.type().subtype()))
     {
       if (is_class_object(lhs) || is_class_object(rhs))
         return compare_class_objects(op, lhs, rhs);
@@ -262,12 +262,14 @@ exprt python_converter::handle_type_mismatches(
     return nil_exprt();
 
   // Check if both are string types (either array or pointer to char)
-  bool lhs_is_string =
-    (lhs.type().is_array() && lhs.type().subtype() == char_type()) ||
-    (lhs.type().is_pointer() && lhs.type().subtype() == char_type());
-  bool rhs_is_string =
-    (rhs.type().is_array() && rhs.type().subtype() == char_type()) ||
-    (rhs.type().is_pointer() && rhs.type().subtype() == char_type());
+  bool lhs_is_string = (lhs.type().is_array() &&
+                        type_utils::is_char_storage(lhs.type().subtype())) ||
+                       (lhs.type().is_pointer() &&
+                        type_utils::is_char_storage(lhs.type().subtype()));
+  bool rhs_is_string = (rhs.type().is_array() &&
+                        type_utils::is_char_storage(rhs.type().subtype())) ||
+                       (rhs.type().is_pointer() &&
+                        type_utils::is_char_storage(rhs.type().subtype()));
 
   // If both are strings (regardless of array vs pointer), let strcmp handle it
   if (lhs_is_string && rhs_is_string)
@@ -281,8 +283,10 @@ exprt python_converter::handle_type_mismatches(
   if (lhs.type().is_array() && rhs.type().is_array())
   {
     // Check if these are different semantic types (list vs string)
-    bool lhs_is_string_array = (lhs.type().subtype() == char_type());
-    bool rhs_is_string_array = (rhs.type().subtype() == char_type());
+    bool lhs_is_string_array =
+      (type_utils::is_char_storage(lhs.type().subtype()));
+    bool rhs_is_string_array =
+      (type_utils::is_char_storage(rhs.type().subtype()));
 
     // If one is a string array and the other is not, they're different types
     if (lhs_is_string_array != rhs_is_string_array)
@@ -319,7 +323,7 @@ static bool either_is_string(const exprt &lhs, const exprt &rhs)
 static bool is_constant_char_array(const exprt &expr)
 {
   return expr.is_constant() && expr.type().is_array() &&
-         expr.type().subtype() == char_type();
+         type_utils::is_char_storage(expr.type().subtype());
 }
 
 // A pointer to the characters of `expr`, reading an Any (void *) operand as
@@ -327,7 +331,8 @@ static bool is_constant_char_array(const exprt &expr)
 static exprt char_pointer_of(const exprt &expr)
 {
   exprt ptr = expr.type().is_pointer() ? expr : address_of_exprt(expr);
-  if (ptr.type().subtype().is_empty())
+  // An Optional[str] points to a char array; index its chars, not arrays.
+  if (ptr.type().subtype().is_empty() || ptr.type().subtype().is_array())
     ptr = typecast_exprt(ptr, gen_pointer_type(char_type()));
   return ptr;
 }
@@ -1176,6 +1181,65 @@ exprt python_converter::handle_erased_type_comparison(
   return op == "Is" || op == "Eq" ? result : not_exprt(result);
 }
 
+// The classes `elts` names, or none unless each element names a class.
+static std::vector<std::string>
+named_classes(const nlohmann::json &elts, const nlohmann::json &ast)
+{
+  std::vector<std::string> classes;
+  for (const auto &elt : elts)
+  {
+    if (elt.value("_type", "") != "Name")
+      return {};
+    const std::string id = elt["id"];
+    if (!type_utils::is_type_identifier(id) && !json_utils::is_class(id, ast))
+      return {};
+    classes.push_back(id);
+  }
+  return classes;
+}
+
+exprt python_converter::listed_class_value(const nlohmann::json &node)
+{
+  if (
+    node.value("_type", "") != "Subscript" ||
+    node["value"].value("_type", "") != "List")
+    return nil_exprt();
+  const nlohmann::json &slice = node["slice"];
+  const std::string kind = slice.value("_type", "");
+  // The index is converted again, so it must have no side effects.
+  if (kind != "Name" && kind != "Constant" && kind != "UnaryOp")
+    return nil_exprt();
+  if (kind == "UnaryOp" && slice["operand"].value("_type", "") != "Constant")
+    return nil_exprt();
+
+  const std::vector<std::string> classes =
+    named_classes(node["value"]["elts"], *ast_json);
+  if (classes.empty())
+    return nil_exprt();
+  const exprt index = get_expr(slice);
+  if (!type_utils::is_integer_type(index.type()))
+    return nil_exprt();
+
+  // An index out of range already raised IndexError where the subscript
+  // itself was converted, so the last class needs no test of its own.
+  const std::size_t n = classes.size();
+  const auto at = [&](long long i) {
+    exprt eq("=", bool_type());
+    eq.copy_to_operands(index, from_integer(i, index.type()));
+    return eq;
+  };
+  exprt cls = class_value(classes.back());
+  for (std::size_t k = n - 1; k-- > 0;)
+  {
+    const long long pos = static_cast<long long>(k);
+    cls = if_exprt(
+      or_exprt(at(pos), at(pos - static_cast<long long>(n))),
+      class_value(classes[k]),
+      cls);
+  }
+  return cls;
+}
+
 exprt python_converter::handle_type_comparison(
   const std::string &op,
   const exprt &lhs,
@@ -1198,6 +1262,17 @@ exprt python_converter::handle_type_comparison(
       "type() of a value whose class is not known statically is compared "
       "as nondet");
     return side_effect_expr_nondett(bool_type());
+  }
+  const exprt left_listed = listed_class_value(left);
+  const exprt right_listed = listed_class_value(right);
+  if (left_listed.is_not_nil() || right_listed.is_not_nil())
+  {
+    const exprt listed = compare_class_values(
+      op,
+      left_listed.is_nil() ? lhs : left_listed,
+      right_listed.is_nil() ? rhs : right_listed);
+    if (listed.is_not_nil())
+      return listed;
   }
   return handle_type_identity_check(op, lhs, rhs, left, right);
 }
@@ -1299,7 +1374,8 @@ static bool may_hold_class(const exprt &expr)
 {
   const typet &t = expr.type();
   return (t.is_array() || t.is_pointer()) &&
-         (t.subtype() == char_type() || t.subtype().id() == "empty");
+         (type_utils::is_char_storage(t.subtype()) ||
+          t.subtype().id() == "empty");
 }
 
 /// Whether an operand the fold could not resolve to a class may still be
@@ -1329,7 +1405,7 @@ static void refuse_possible_class(
   const std::string kind = node.value("_type", "");
   if (
     !resolved && (type.is_array() || type.is_pointer()) &&
-    type.subtype() == char_type() && kind != "Constant" &&
+    type_utils::is_char_storage(type.subtype()) && kind != "Constant" &&
     kind != "JoinedStr" && !is_type_call(node))
     throw std::runtime_error(
       "Unsupported: 'is' between a class and a value that may hold one");

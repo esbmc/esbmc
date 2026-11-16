@@ -99,6 +99,14 @@ public:
   /// ASCII value this is also ascii().
   exprt build_repr(const exprt &value, const locationt &location);
 
+  /// Copy a string array into a fresh temporary and return the temporary.
+  /// Symex bounds a string model's loops only over a named object: a
+  /// literal's address does not constant-propagate into the callee (#7559).
+  exprt bind_string_to_tmp(
+    const exprt &str,
+    const std::string &name,
+    const locationt &location);
+
   /// The rendered text of one f-string replacement field.
   exprt format_fstring_part(const nlohmann::json &value);
 
@@ -107,8 +115,23 @@ public:
   /// A bounded, NUL-terminated str of nondet content, as nondet_str() gives.
   exprt build_nondet_string(const locationt &location);
 
+  /// CPython's default object repr, @p prefix followed by the address as 1 to
+  /// 16 nondet lowercase hex digits and ">".
+  exprt build_default_object_repr(
+    const std::string &prefix,
+    const locationt &location);
+
   /// The nondet str buffer size: --nondet-str-length plus the NUL.
   static int nondet_str_buffer_size();
+  void assume_length_in_buffer(
+    const exprt &length,
+    int buffer_size,
+    const locationt &location);
+  void assume_no_nul_before(
+    const exprt &array,
+    const exprt &length,
+    int buffer_size,
+    const locationt &location);
 
   /**
    * @brief Extract string content from array operands
@@ -300,6 +323,33 @@ public:
     const nlohmann::json &call_json);
 
   /**
+   * @brief The str a tagged argument of str method `method` holds, after
+   * raising TypeError on the paths where it holds another type. Any other
+   * argument is returned unchanged.
+   */
+  exprt read_tagged_str_argument(
+    const exprt &argument,
+    const std::string &method,
+    const locationt &location);
+
+  /// @p receiver, held in a temporary when it is not a symbol, so that it can
+  /// be read more than once; @p refusal stops the conversion where it cannot.
+  exprt held_tagged_receiver(
+    const exprt &receiver,
+    const nlohmann::json &call_json,
+    const std::string &refusal);
+
+  /// The char pointer of the str @p tagged holds, behind a guard raising
+  /// @p exception with @p message where it holds another type. @p refusal
+  /// stops the conversion where no guard can be planted.
+  exprt read_tagged_str(
+    const exprt &tagged,
+    const std::string &exception,
+    const std::string &message,
+    const std::string &refusal,
+    const locationt &location);
+
+  /**
    * @brief Try fast-path folding for len() when argument is string-like.
    *
    * Returns non-nil when a compile-time or cheap symbolic shortcut is
@@ -369,6 +419,9 @@ public:
    */
   exprt
   handle_string_isdigit(const exprt &string_obj, const locationt &location);
+
+  exprt
+  handle_string_isascii(const exprt &string_obj, const locationt &location);
 
   /**
    * @brief Handle str.isalpha() method
@@ -724,6 +777,20 @@ public:
     const exprt &string_obj,
     [[maybe_unused]] const locationt &location);
 
+  exprt
+  handle_string_isdecimal(const exprt &string_obj, const locationt &location);
+
+  exprt
+  handle_string_istitle(const exprt &string_obj, const locationt &location);
+
+  exprt
+  handle_string_isprintable(const exprt &string_obj, const locationt &location);
+
+  exprt call_str_predicate_model(
+    const std::string &name,
+    const exprt &string_obj,
+    const locationt &location);
+
   /**
    * @brief Handle str.isidentifier() method
    */
@@ -930,6 +997,8 @@ private:
 
   exprt constant_to_string(const exprt &expr);
 
+  exprt pointer_to_string(const exprt &expr);
+
   exprt build_string_index_result(
     const nlohmann::json &call,
     const exprt &find_expr,
@@ -957,6 +1026,8 @@ private:
     const nlohmann::json &arg_json,
     const exprt &arg_expr);
   exprt try_len_fast_path_from_name_arg(const nlohmann::json &arg_json);
+  bool is_single_binding(const std::string &var_name);
+  exprt recorded_length(const nlohmann::json &arg_json, const exprt &arg_expr);
 
   /**
    * @brief Convert float bits to string representation

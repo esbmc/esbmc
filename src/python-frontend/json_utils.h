@@ -8,6 +8,7 @@
 #include <string>
 #include <functional>
 #include <map>
+#include <set>
 #include <unordered_map>
 #include <vector>
 #include <nlohmann/json.hpp>
@@ -119,6 +120,28 @@ inline std::string dotted_to_path(const std::string &module_name)
   std::string result = module_name;
   std::replace(result.begin(), result.end(), '.', '/');
   return result;
+}
+
+/// The classes of @p module that the class copy pass made from the same class
+/// as @p cls, other than @p cls itself: `<base>` and each
+/// `<base>__esbmc_poly_<signature>`. A `self` store in one of them reaches only
+/// its own instances.
+template <typename JsonType>
+std::set<const JsonType *>
+class_copies_of(const JsonType &module, const std::string &cls)
+{
+  static const std::string marker = "__esbmc_poly_";
+  const std::string base = cls.substr(0, cls.find(marker));
+  std::set<const JsonType *> copies;
+  for (const auto &stmt : module["body"])
+  {
+    const std::string name = stmt.value("name", "");
+    if (
+      stmt.value("_type", "") == "ClassDef" && name != cls &&
+      (name == base || name.rfind(base + marker, 0) == 0))
+      copies.insert(&stmt);
+  }
+  return copies;
 }
 
 template <typename JsonType>
@@ -260,6 +283,20 @@ bool is_property_def(const JsonType &function_def)
       if (
         dec.value("_type", std::string()) == "Name" &&
         dec.value("id", std::string()) == "property")
+        return true;
+  return false;
+}
+
+/// Whether @p function_def carries the builtin @staticmethod decorator; a
+/// dotted spelling names some other object.
+template <typename JsonType>
+bool is_staticmethod_def(const JsonType &function_def)
+{
+  if (function_def.contains("decorator_list"))
+    for (const auto &dec : function_def["decorator_list"])
+      if (
+        dec.value("_type", std::string()) == "Name" &&
+        dec.value("id", std::string()) == "staticmethod")
         return true;
   return false;
 }
@@ -435,6 +472,21 @@ void collect_class_definition_lines(
     }
     collect_class_definition_lines(child.value(), class_name, lines);
   }
+}
+
+/// Whether a class under @p ast lists @p name as a base.
+template <typename JsonType>
+bool has_subclass(const std::string &name, const JsonType &ast)
+{
+  if (ast.is_object() && ast.value("_type", "") == "ClassDef")
+    for (const auto &base : ast["bases"])
+      if (base.value("id", "") == name)
+        return true;
+  if (!ast.is_object() && !ast.is_array())
+    return false;
+  return std::any_of(ast.begin(), ast.end(), [&](const auto &child) {
+    return has_subclass(name, child);
+  });
 }
 
 template <typename JsonType>
@@ -1109,24 +1161,42 @@ count_name_bindings(const nlohmann::json &node, const std::string &name)
   return n;
 }
 
-// The value a top-level `name = ...` or `name: T = ...` statement assigns.
+// Counts every Name node under `node` that is `name`, read or bound.
+inline std::size_t
+count_name_nodes(const nlohmann::json &node, const std::string &name)
+{
+  std::size_t n = node.is_object() && node.value("_type", "") == "Name" &&
+                  node.value("id", "") == name;
+  for (const auto &child : node)
+    if (child.is_structured())
+      n += count_name_nodes(child, name);
+  return n;
+}
+
+// The value `stmt` assigns when it is a plain `name = ...` or `name: T = ...`.
 inline const nlohmann::json *
-top_level_value(const nlohmann::json &module, const std::string &name)
+plain_assigned_value(const nlohmann::json &stmt, const std::string &name)
 {
   auto binds = [&](const nlohmann::json &target) {
     return target.value("_type", "") == "Name" && target["id"] == name;
   };
+  const std::string type = stmt.is_object() ? stmt.value("_type", "") : "";
+  if (
+    type == "Assign" && stmt["targets"].size() == 1 &&
+    binds(stmt["targets"][0]))
+    return &stmt["value"];
+  if (type == "AnnAssign" && binds(stmt["target"]) && !stmt["value"].is_null())
+    return &stmt["value"];
+  return nullptr;
+}
+
+// The value a top-level `name = ...` or `name: T = ...` statement assigns.
+inline const nlohmann::json *
+top_level_value(const nlohmann::json &module, const std::string &name)
+{
   for (const auto &stmt : module["body"])
-  {
-    const std::string type = stmt.value("_type", "");
-    if (
-      type == "Assign" && stmt["targets"].size() == 1 &&
-      binds(stmt["targets"][0]))
-      return &stmt["value"];
-    if (
-      type == "AnnAssign" && binds(stmt["target"]) && !stmt["value"].is_null())
-      return &stmt["value"];
-  }
+    if (const nlohmann::json *value = plain_assigned_value(stmt, name))
+      return value;
   return nullptr;
 }
 

@@ -1,0 +1,13 @@
+regression/python/github_8913
+regression/python/github_8913_fail
+regression/python/github_8913_function
+regression/python/github_8913_get
+regression/python/github_8913_get_fail
+regression/python/github_8913_insert_pop
+regression/python/github_8913_insert_pop_fail
+regression/python/github_8913_pop_append
+regression/python/github_8913_pop_append_fail
+regression/python/github_8913_pop_once
+regression/python/github_8913_pop_once_fail
+regression/python/github_8913_shunting_yard
+regression/python/github_8913_strs

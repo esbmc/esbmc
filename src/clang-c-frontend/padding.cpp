@@ -90,6 +90,15 @@ capped_alignment(const typet &member, const typet &record, const namespacet &ns)
   return std::min(a, string2integer(cap));
 }
 
+static void raise_record_alignment(
+  BigInt &max_alignment,
+  const struct_typet::componentt &member,
+  const BigInt &a)
+{
+  if (raises_record_alignment(member) && max_alignment < a)
+    max_alignment = a;
+}
+
 /* Read the constant's value, not its `#cformat` text. constant_exprt stores the
  * value in `value` and a decimal rendering in `#cformat`; the latter is a
  * presentation attribute that a node built any other way need not carry, and
@@ -102,6 +111,29 @@ raise_to_explicit_alignment(BigInt &max_alignment, const exprt &alignment)
     return;
   if (value > max_alignment)
     max_alignment = value;
+}
+
+/* A C++ data member of empty class type has no components, yet occupies one
+ * byte ([intro.object]/8). Insert that byte after `member` unless it is there
+ * already; return the iterator to `member` so the caller's loop visits the
+ * byte next and counts it. */
+static struct_typet::componentst::iterator reserve_empty_class_member_byte(
+  struct_typet::componentst &components,
+  struct_typet::componentst::iterator member,
+  const BigInt &member_size)
+{
+  if (!member->get_bool("#empty_class_member") || member_size != 0)
+    return member;
+
+  const std::string name = std::string(pad_prefix) + member->get_name().c_str();
+  const auto next = std::next(member);
+  if (next != components.end() && next->get_name() == name)
+    return member;
+
+  struct_typet::componentt byte(
+    name, name, unsignedbv_typet(config.ansi_c.char_width));
+  byte.set_is_padding(true);
+  return std::prev(components.insert(next, byte));
 }
 
 static void add_padding(struct_typet &type, const namespacet &ns)
@@ -204,8 +236,7 @@ static void add_padding(struct_typet &type, const namespacet &ns)
         // Otherwise, ANSI-C says that bit-fields do not get padded!
         // We consider the type for max_alignment, however.
         a = capped_alignment(it_type, type, ns);
-        if (max_alignment < a)
-          max_alignment = a;
+        raise_record_alignment(max_alignment, *it, a);
 
         std::size_t w = string2integer(it_type.width().as_string()).to_uint64();
         bit_field_bits += w;
@@ -241,8 +272,7 @@ static void add_padding(struct_typet &type, const namespacet &ns)
     assert(bit_field_bits == 0);
     assert(a > 0);
 
-    if (max_alignment < a)
-      max_alignment = a;
+    raise_record_alignment(max_alignment, *it, a);
 
     if (a != 1)
     {
@@ -280,7 +310,9 @@ static void add_padding(struct_typet &type, const namespacet &ns)
     }
 
     type2tc thetype = migrate_type(it_type);
-    offset += type_byte_size(thetype, &ns);
+    const BigInt size = type_byte_size(thetype, &ns);
+    offset += size;
+    it = reserve_empty_class_member_byte(components, it, size);
   }
 
   // any explicit alignment for the struct?

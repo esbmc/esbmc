@@ -10,7 +10,11 @@ STDOUT: int = -2
 DEVNULL: int = -3
 
 
-class CalledProcessError(Exception):
+class SubprocessError(Exception):
+    pass
+
+
+class CalledProcessError(SubprocessError):
 
     def __init__(self,
                  returncode: int,

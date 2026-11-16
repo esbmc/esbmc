@@ -10,13 +10,17 @@ the converter already does for the module's `nondet_*` functions.
 import ast
 import builtins
 import copy
+import importlib
+import importlib.machinery
 import importlib.util
 import os
+import sys
 from collections import Counter
 
 _MODULE = "_sv_verifier"
 _FUNCTIONS = ("check_type", "_matches_type")
 _ITERABLES = ("list", "set")
+_DYNAMIC_BINDERS = ("globals", "vars", "exec", "eval", "setattr", "__import__")
 
 
 def _bound_names(node):
@@ -90,6 +94,55 @@ def _imports(module):
     return origins, star_modules
 
 
+def _module_exports(tree):
+    """The names the module `tree` binds statically, and every string it holds
+    (which covers `__all__`), or None when it may bind others dynamically."""
+    names = {b for n in _scope_nodes(tree.body) for b in _bound_names(n)}
+    for n in ast.walk(tree):
+        if isinstance(n, ast.ImportFrom) and any(a.name == "*" for a in n.names):
+            return None
+        if isinstance(n, ast.Name) and n.id in _DYNAMIC_BINDERS:
+            return None
+        if isinstance(n, ast.Global):
+            names.update(n.names)
+        if isinstance(n, ast.Constant) and isinstance(n.value, str):
+            names.add(n.value)
+    return names
+
+
+def _find_spec(module):
+    """The spec of `module`, found without importing its parent packages."""
+    top, *subs = module.split(".")
+    try:
+        spec = importlib.util.find_spec(top)
+        for part in subs:
+            if spec is None or spec.submodule_search_locations is None:
+                return None
+            spec = importlib.machinery.PathFinder.find_spec(part, spec.submodule_search_locations)
+    except (ImportError, ValueError):
+        return None
+    return spec
+
+
+def _star_exports(module):
+    """A superset of the names `from module import *` binds, or None when
+    they cannot be told without running user code."""
+    spec = _find_spec(module)
+    if spec is None:
+        return None
+    origin = spec.origin
+    if origin and origin.endswith(".py"):
+        tree = _parse(origin)
+        return None if tree is None else _module_exports(tree)
+    if (origin == "built-in" or isinstance(spec.loader, importlib.machinery.ExtensionFileLoader)) \
+            and module.split(".")[0] in sys.stdlib_module_names:
+        try:
+            return set(dir(importlib.import_module(module)))
+        except ImportError:
+            return None
+    return None
+
+
 def _is_ellipsis(node):
     return isinstance(node, ast.Constant) and node.value is Ellipsis
 
@@ -99,8 +152,13 @@ class _Lowering:
     def __init__(self, module, module_name):
         self.module = module
         self.module_name = module_name
-        self.counts = Counter(b for n in ast.walk(module) for b in _bound_names(n))
+        self.counts = Counter(b for n in _scope_nodes(module.body) for b in _bound_names(n))
+        for n in ast.walk(module):
+            if isinstance(n, ast.Global):
+                self.counts.update({name: 2 for name in n.names})
+        self.local_names = []
         self.origins, self.star_modules = _imports(module)
+        self.star_exports = {m: _star_exports(m) for m in self.star_modules}
         self.classes = {s.name: s for s in module.body if isinstance(s, ast.ClassDef)}
         self.fresh = 0
 
@@ -115,13 +173,19 @@ class _Lowering:
         if not isinstance(expr, ast.Name):
             return None
         root = expr.id
+        if any(root in names for names in self.local_names):
+            return None
         if self.counts[root] == 1 and root in self.origins:
             return self.origins[root] + path
         if self.counts[root] == 1 and root in self.classes:
             return ["", root] + path
-        if self.counts[root] == 0 and not self.star_modules and hasattr(builtins, root):
+        if self.counts[root] == 0 and not self.star_binds(root) and hasattr(builtins, root):
             return ["builtins", root] + path
         return None
+
+    def star_binds(self, name):
+        """Whether a `from M import *` of this module may bind `name`."""
+        return any(names is None or name in names for names in self.star_exports.values())
 
     def is_class(self, path):
         if path[0] == "builtins":
@@ -299,6 +363,17 @@ class _CallSites(ast.NodeTransformer):
         if isinstance(node.value, ast.Call) and self.lowering.is_function(node.value.func):
             return self.lowering.lower(node)
         return self.generic_visit(node)
+
+    def visit_FunctionDef(self, node):
+        names = {b for n in ast.walk(node.args) for b in _bound_names(n)}
+        names |= {b for n in _scope_nodes(node.body) for b in _bound_names(n)}
+        self.lowering.local_names.append(names)
+        try:
+            return self.generic_visit(node)
+        finally:
+            self.lowering.local_names.pop()
+
+    visit_AsyncFunctionDef = visit_FunctionDef
 
     def visit_Name(self, node):
         return self.refuse_other_use(node)

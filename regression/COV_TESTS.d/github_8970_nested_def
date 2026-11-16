@@ -1,0 +1,6 @@
+regression/python/github_8970_nested_def
+regression/python/github_8970_nested_def_closure_refused
+regression/python/github_8970_nested_def_fail
+regression/python/github_8970_nested_def_identity_refused
+regression/python/github_8970_nested_def_other_fail
+regression/python/github_8970_nested_def_rebound_refused

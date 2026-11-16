@@ -94,9 +94,11 @@ nondet_model_scopet classify_nondet_model(const std::string &function_name)
     scope.size = true;
     scope.dict = true;
   }
-  else if (base == "_nondet_size")
+  else if (base == "_nondet_size" || base == "__ESBMC_tlist_nondet_size")
     scope.size = true;
-  else if (base.rfind("_nondet_list_", 0) == 0 || base == "nondet_list")
+  else if (
+    base.rfind("_nondet_list_", 0) == 0 || base == "nondet_list" ||
+    base == "__ESBMC_tlist_nondet_push")
     scope.list = true;
   else if (base.rfind("_nondet_dict_", 0) == 0 || base == "nondet_dict")
   {
@@ -759,7 +761,10 @@ void pytest_generator::collect(
 
   for (auto const &SSA_step : target.SSA_steps)
   {
-    if (SSA_step.ignore || !smt_conv.l_get(SSA_step.guard).is_true())
+    // A #decl_nondet init (mark_decl_as_non_det) is not a program input.
+    if (
+      SSA_step.ignore || !smt_conv.l_get(SSA_step.guard).is_true() ||
+      SSA_step.source.pc->location.get_bool("#decl_nondet"))
       continue;
 
     if (SSA_step.is_assignment())
@@ -794,13 +799,14 @@ void pytest_generator::collect(
         if (!scope.dict_key_kind.empty())
           dict_key_kind = scope.dict_key_kind;
 
-        // Track the role of internal variables.  The builders hold the size
-        // in `size`/`bound` and produce each element from an anonymous
-        // `nondet_T()` call, so anything else nondet in scope is an element
-        // (a dict's keys are concrete constants, only its values are nondet).
+        // Track the role of internal variables. A size helper's only input is
+        // the size, which reaches `size` through a temporary since #9923. The
+        // builders produce each element from an anonymous `nondet_T()` call, so
+        // anything else nondet in scope is an element (a dict's keys are
+        // concrete constants, only its values are nondet).
         if (scope.any())
         {
-          if (var_name == "size")
+          if (scope.size)
           {
             is_list_size = true;
             is_dict_size = in_nondet_dict;
@@ -1272,7 +1278,10 @@ void pytest_generator::generate_single(
   // Traverse SSA steps to extract nondet variables
   for (auto const &SSA_step : target.SSA_steps)
   {
-    if (SSA_step.ignore || !smt_conv.l_get(SSA_step.guard).is_true())
+    // A #decl_nondet init (mark_decl_as_non_det) is not a program input.
+    if (
+      SSA_step.ignore || !smt_conv.l_get(SSA_step.guard).is_true() ||
+      SSA_step.source.pc->location.get_bool("#decl_nondet"))
       continue;
 
     if (SSA_step.is_assignment())
@@ -1305,13 +1314,14 @@ void pytest_generator::generate_single(
         if (!scope.dict_key_kind.empty())
           dict_key_kind = scope.dict_key_kind;
 
-        // Track the role of internal variables.  The builders hold the size
-        // in `size`/`bound` and produce each element from an anonymous
-        // `nondet_T()` call, so anything else nondet in scope is an element
-        // (a dict's keys are concrete constants, only its values are nondet).
+        // Track the role of internal variables. A size helper's only input is
+        // the size, which reaches `size` through a temporary since #9923. The
+        // builders produce each element from an anonymous `nondet_T()` call, so
+        // anything else nondet in scope is an element (a dict's keys are
+        // concrete constants, only its values are nondet).
         if (scope.any())
         {
-          if (var_name == "size")
+          if (scope.size)
           {
             is_list_size = true;
             is_dict_size = in_nondet_dict;

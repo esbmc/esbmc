@@ -123,7 +123,7 @@ smt_resultt z3_convt::dec_solve_assuming(const ast_vec &assumptions)
   return P_ERROR;
 }
 
-void z3_convt::assert_ast(smt_astt a)
+void z3_convt::assert_ast_in_solver(smt_astt a)
 {
   z3::expr theval = to_solver_smt_ast<z3_smt_ast>(a)->a;
   solver.add(theval);
@@ -246,6 +246,31 @@ smt_astt z3_convt::mk_bvmul(smt_astt a, smt_astt b)
   return new_ast(
     (to_solver_smt_ast<z3_smt_ast>(a)->a * to_solver_smt_ast<z3_smt_ast>(b)->a),
     a->sort);
+}
+
+smt_astt z3_convt::overflow_arith(const expr2tc &expr)
+{
+  const overflow2t &overflow = to_overflow2t(expr);
+  const expr2tc &op1 = *overflow.operand->get_sub_expr(0);
+  const expr2tc &op2 = *overflow.operand->get_sub_expr(1);
+
+  // Z3's predicates avoid the generic check's double-width multiplier (#9222).
+  if (
+    int_encoding || !is_mul2t(overflow.operand) || !is_bv_type(op1) ||
+    op1->type != op2->type)
+    return smt_solver_baset::overflow_arith(expr);
+
+  const z3::expr &a = to_solver_smt_ast<z3_smt_ast>(convert_ast(op1))->a;
+  const z3::expr &b = to_solver_smt_ast<z3_smt_ast>(convert_ast(op2))->a;
+  const bool is_signed = is_signedbv_type(op1);
+
+  z3::expr no_overflow =
+    z3::to_expr(z3_ctx, Z3_mk_bvmul_no_overflow(z3_ctx, a, b, is_signed));
+  if (is_signed)
+    no_overflow = no_overflow &&
+                  z3::to_expr(z3_ctx, Z3_mk_bvmul_no_underflow(z3_ctx, a, b));
+
+  return new_ast(!no_overflow, boolean_sort);
 }
 
 smt_astt z3_convt::mk_mod(smt_astt a, smt_astt b)
@@ -408,25 +433,8 @@ smt_astt z3_convt::mk_bvneg(smt_astt a)
 
 smt_astt z3_convt::mk_bvnot(smt_astt a)
 {
-  if (int_encoding)
-  {
-    assert(a->sort->id == SMT_SORT_INT);
-    z3::expr a_expr = to_solver_smt_ast<z3_smt_ast>(a)->a;
-    // Get the signedbv bit-width
-    size_t bit_width = signed_size_type2()->get_width();
-    // Convert integer to bit-vector
-    z3::expr a_bv = z3::int2bv(bit_width, a_expr);
-    // Apply bitwise NOT (~x)
-    z3::expr not_bv = ~a_bv;
-    // Convert back to integer
-    z3::expr int_not = z3::bv2int(not_bv, true); // 'true' = signed conversion
-    return new_ast(int_not, mk_int_sort());
-  }
-  else
-  {
-    assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
-    return new_ast((~to_solver_smt_ast<z3_smt_ast>(a)->a), a->sort);
-  }
+  assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
+  return new_ast((~to_solver_smt_ast<z3_smt_ast>(a)->a), a->sort);
 }
 
 smt_astt z3_convt::mk_bvxor(smt_astt a, smt_astt b)
@@ -968,6 +976,9 @@ smt_astt z3_convt::mk_smt_fpbv_rm(ieee_floatt::rounding_modet rm)
   {
   case ieee_floatt::ROUND_TO_EVEN:
     return new_ast(z3::to_expr(z3_ctx, Z3_mk_fpa_rne(z3_ctx)), s);
+
+  case ieee_floatt::ROUND_TO_AWAY:
+    return new_ast(z3::to_expr(z3_ctx, Z3_mk_fpa_rna(z3_ctx)), s);
 
   case ieee_floatt::ROUND_TO_MINUS_INF:
     return new_ast(z3::to_expr(z3_ctx, Z3_mk_fpa_rtn(z3_ctx)), s);

@@ -1,0 +1,6 @@
+CORE
+main.c
+--no-bounds-check --witness-output-yaml -
+^VERIFICATION FAILED$
+value: "\\\\result == -?\d+"\n\s+format: "ext_c_expression"\n\s+location:\n\s+file_name: "[^"]*main\.c"\n\s+line: 10$
+(?s)\A(?:(?!\n  a\[).)*\Z

@@ -1,0 +1,11 @@
+regression/python/github_9324_abs_negative
+regression/python/github_9324_append_refused
+regression/python/github_9324_augassign_refused
+regression/python/github_9324_global_index_refused
+regression/python/github_9324_index_expr
+regression/python/github_9324_index_expr_fail
+regression/python/github_9324_out_of_range_fail
+regression/python/github_9324_rebound_refused
+regression/python/github_9325_slice
+regression/python/github_9325_slice_empty_fail
+regression/python/github_9325_slice_fail

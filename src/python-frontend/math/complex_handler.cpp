@@ -5,6 +5,7 @@
 #include <python-frontend/type/type_handler.h>
 
 #include <irep2/irep2_utils.h>
+#include <map>
 #include <util/arith/arith_tools.h>
 #include <util/lang/c_types.h>
 #include <util/expr/expr_util.h>
@@ -26,6 +27,8 @@ exprt complex_member(const exprt &base, const irep_idt &name, const typet &t)
 {
   expr2tc base2;
   migrate_expr(base, base2);
+  if (is_complex64_type(base.type()))
+    return migrate_expr_back(complex_part(base2, name));
   return migrate_expr_back(member2tc(migrate_type(t), base2, name));
 }
 
@@ -95,7 +98,7 @@ exprt complex_handler::complex_mul(const exprt &x, const exprt &y) const
   migrate_expr(y, y2);
 
   auto mem = [&](const expr2tc &b, const irep_idt &n) {
-    return member2tc(dt2, b, n);
+    return complex_part(b, n);
   };
   expr2tc xr = mem(x2, "real"), xi = mem(x2, "imag");
   expr2tc yr = mem(y2, "real"), yi = mem(y2, "imag");
@@ -129,10 +132,10 @@ exprt complex_handler::complex_div(
   migrate_expr(x, x2);
   migrate_expr(y, y2);
   migrate_expr(from_double(0.0, cached_double_type()), zero);
-  const expr2tc xr = member2tc(dt2, x2, "real");
-  const expr2tc xi = member2tc(dt2, x2, "imag");
-  const expr2tc yr = member2tc(dt2, y2, "real");
-  const expr2tc yi = member2tc(dt2, y2, "imag");
+  const expr2tc xr = complex_part(x2, "real");
+  const expr2tc xi = complex_part(x2, "imag");
+  const expr2tc yr = complex_part(y2, "real");
+  const expr2tc yi = complex_part(y2, "imag");
 
   auto ieee_mul = [&](const expr2tc &a, const expr2tc &b) {
     return ieee_mul2tc(dt2, a, b, rm);
@@ -330,6 +333,69 @@ exprt complex_handler::normalize_numeric_expr(const exprt &value) const
 // Public entry points
 // -----------------------------------------------------------------------
 
+static std::string op_symbol(const std::string &op_name)
+{
+  static const std::map<std::string, std::string> symbols = {
+    {"Add", "+"}, {"Sub", "-"}, {"Mult", "*"}, {"Div", "/"}, {"Pow", "**"}};
+  const auto symbol = symbols.find(op_name);
+  return symbol == symbols.end() ? op_name : symbol->second;
+}
+
+// A complex number with an array, or a complex64 element, follows NumPy. Nil
+// for a pair of Python numbers.
+// NEP 50: a Python number compared with a complex64 scalar is complex64 too.
+exprt complex_handler::compare_complex64_with_number(
+  const std::string &op,
+  const exprt &lhs,
+  const exprt &rhs,
+  const nlohmann::json &element) const
+{
+  if (
+    element.value("_type", "") != "Compare" ||
+    is_complex64_type(lhs.type()) == is_complex64_type(rhs.type()))
+    return nil_exprt();
+  const bool left_narrow = is_complex64_type(lhs.type());
+  const exprt &other = left_narrow ? rhs : lhs;
+  const nlohmann::json &other_node =
+    left_narrow ? element["comparators"][0] : element["left"];
+  if (!converter_.is_weak_numpy_operand(other_node, other.type()))
+    return nil_exprt();
+  const exprt wide = promote_to_complex(other);
+  const exprt rounded = complex_as_element(
+    complex_part(wide, "real"),
+    complex_part(wide, "imag"),
+    left_narrow ? lhs.type() : rhs.type());
+  return handle_binary_op(
+    op, left_narrow ? lhs : rounded, left_narrow ? rounded : rhs, element);
+}
+
+exprt complex_handler::numpy_complex_operation(
+  const std::string &op,
+  const exprt &lhs,
+  const exprt &rhs,
+  const nlohmann::json &element) const
+{
+  const exprt compared = compare_complex64_with_number(op, lhs, rhs, element);
+  if (!compared.is_nil())
+    return compared;
+  if (
+    element.value("_type", "") == "AugAssign" && lhs.type().is_array() &&
+    !type_utils::is_numpy_complex_array(lhs.type()))
+    throw std::runtime_error(
+      "TypeError: an in-place numpy operation that cannot cast its result to "
+      "the array's dtype is not supported");
+  if (
+    element.value("_type", "") != "BinOp" ||
+    (!lhs.type().is_array() && !rhs.type().is_array() &&
+     !type_utils::is_numpy_scalar_type(lhs.type()) &&
+     !type_utils::is_numpy_scalar_type(rhs.type())))
+    return nil_exprt();
+  exprt x = lhs;
+  exprt y = rhs;
+  return converter_.numpy_or_array_operation(
+    op, x, y, element["left"], element["right"], element);
+}
+
 exprt complex_handler::handle_binary_op(
   const std::string &op,
   const exprt &lhs,
@@ -338,21 +404,11 @@ exprt complex_handler::handle_binary_op(
 {
   clear_cache();
 
-  // ---- helper lambdas (lightweight, capturing *this) ----
+  const exprt numpy_result = numpy_complex_operation(op, lhs, rhs, element);
+  if (!numpy_result.is_nil())
+    return numpy_result;
 
-  auto op_symbol = [](const std::string &op_name) -> std::string {
-    if (op_name == "Add")
-      return "+";
-    if (op_name == "Sub")
-      return "-";
-    if (op_name == "Mult")
-      return "*";
-    if (op_name == "Div")
-      return "/";
-    if (op_name == "Pow")
-      return "**";
-    return op_name;
-  };
+  // ---- helper lambdas (lightweight, capturing *this) ----
 
   auto expr_python_type_name = [&](const exprt &e) -> std::string {
     const typet &t = e.type();
@@ -576,10 +632,10 @@ exprt complex_handler::handle_binary_op(
     expr2tc lhs2, rhs2;
     migrate_expr(lhs_complex, lhs2);
     migrate_expr(rhs_complex, rhs2);
-    const expr2tc a = member2tc(dt2, lhs2, "real");
-    const expr2tc b = member2tc(dt2, lhs2, "imag");
-    const expr2tc c = member2tc(dt2, rhs2, "real");
-    const expr2tc d = member2tc(dt2, rhs2, "imag");
+    const expr2tc a = complex_part(lhs2, "real");
+    const expr2tc b = complex_part(lhs2, "imag");
+    const expr2tc c = complex_part(rhs2, "real");
+    const expr2tc d = complex_part(rhs2, "imag");
 
     if (op == "Eq" || op == "NotEq")
     {
@@ -638,8 +694,8 @@ exprt complex_handler::handle_unary_op(
   expr2tc operand2, zero;
   migrate_expr(operand, operand2);
   migrate_expr(from_double(0.0, cached_double_type()), zero);
-  const expr2tc real = member2tc(dt2, operand2, "real");
-  const expr2tc imag = member2tc(dt2, operand2, "imag");
+  const expr2tc real = complex_part(operand2, "real");
+  const expr2tc imag = complex_part(operand2, "imag");
 
   const expr2tc neg_real = ieee_sub2tc(dt2, zero, real, rm);
   const expr2tc neg_imag = ieee_sub2tc(dt2, zero, imag, rm);
@@ -706,7 +762,11 @@ exprt complex_handler::handle_attribute_access(
     base = std::move(deref);
   }
 
-  return complex_member(base, attr, cached_double_type());
+  const exprt part = complex_member(base, attr, cached_double_type());
+  // A complex64 component is a float32, which NEP 50 compares in float32.
+  return is_complex64_type(base.type())
+           ? exprt(typecast_exprt(part, float_type()))
+           : part;
 }
 
 // -----------------------------------------------------------------------

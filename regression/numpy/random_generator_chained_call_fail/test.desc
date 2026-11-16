@@ -1,0 +1,4 @@
+CORE
+main.py
+--incremental-bmc
+^ERROR: TypeError: numpy\.random\.default_rng\(\) chained generator calls are not supported$

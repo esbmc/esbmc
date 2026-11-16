@@ -1,0 +1,5 @@
+CORE
+main.py
+
+^\s+FAILED\s+\[global\.assertion\.\d+\]\s+line\s+5\s+assertion IEEE_ADD\(vx, vy\) != 2\.0$
+^VERIFICATION FAILED$

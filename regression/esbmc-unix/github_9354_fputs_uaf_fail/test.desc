@@ -1,0 +1,5 @@
+CORE
+main.c
+--64 --unwind 8
+^VERIFICATION FAILED$
+FAILED +\[strlen\.invalidated-dynamic-object\.[0-9]+\].*dereference failure: invalidated dynamic object

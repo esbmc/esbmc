@@ -18,17 +18,22 @@ properties:
     # kind-specific fields (see below)
 ```
 
-The `id` names the property. The optional `description` is copied verbatim into
+The `id` names the property; a file that repeats an `id` is refused. The
+optional `description` is copied verbatim into
 the assertion comment, so it appears in the ESBMC counterexample and identifies
 which property failed. Variable names in expressions must match the identifiers
 declared in the PLCopen XML `<variable name="...">` elements exactly
-(case-sensitive).
+(case-sensitive), and each must be a `BOOL`; any other type is rejected with a
+diagnostic.
 
 ## Property kinds
 
 ### `mutual_exclusion`
 
-Two or more BOOL variables are never simultaneously `TRUE`.
+Of two or more BOOL variables, no two are `TRUE` at the same time. With three or
+more variables the check is pairwise, so two of them energised together
+violate it even while a third is off
+([#8214](https://github.com/esbmc/esbmc/pull/8214)).
 
 ```yaml
 - id: P1

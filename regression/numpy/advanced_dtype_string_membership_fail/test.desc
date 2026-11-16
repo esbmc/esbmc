@@ -1,4 +1,5 @@
 CORE
 main.py
 --incremental-bmc
-^ERROR: TypeError: membership in a numpy string array is not supported$
+^VERIFICATION FAILED$
+^  file .*main\.py line 10 column 0$

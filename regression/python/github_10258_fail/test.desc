@@ -1,0 +1,5 @@
+CORE
+main.py
+--python-check-exceptions ZeroDivisionError,AssertionError
+^VERIFICATION FAILED$
+uncaught exception: ZeroDivisionError

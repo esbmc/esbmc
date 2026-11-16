@@ -1,4 +1,4 @@
 CORE
 main.py
 --incremental-bmc
-^ERROR: TypeError: slicing a numpy string array is not supported$
+^ERROR: TypeError: passing a numpy string array to sum\(\) is not supported$

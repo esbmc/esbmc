@@ -1,0 +1,13 @@
+regression/python/github_9837
+regression/python/github_9837_alias
+regression/python/github_9837_bool
+regression/python/github_9837_fail
+regression/python/github_9837_float
+regression/python/github_9837_float_fail
+regression/python/github_9837_function
+regression/python/github_9837_function_fail
+regression/python/github_9837_handler
+regression/python/github_9837_handler_fail
+regression/python/github_9837_mixed_function
+regression/python/github_9837_none
+regression/python/github_9837_nonempty

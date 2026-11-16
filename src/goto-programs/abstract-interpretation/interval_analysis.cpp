@@ -47,6 +47,33 @@ inline void optimize_expr_interval(expr2tc &expr, const interval_domaint &state)
   }
 }
 
+/// Whether goto_check would check arithmetic in \p expr for overflow.
+static bool has_checked_arithmetic(const expr2tc &expr)
+{
+  if (is_nil_expr(expr))
+    return false;
+  switch (expr->expr_id)
+  {
+  case expr2t::add_id:
+  case expr2t::sub_id:
+  case expr2t::mul_id:
+  case expr2t::div_id:
+  case expr2t::modulus_id:
+  case expr2t::neg_id:
+  case expr2t::abs_id:
+  case expr2t::shl_id:
+  case expr2t::ashr_id:
+  case expr2t::lshr_id:
+    return true;
+  default:
+    break;
+  }
+  bool found = false;
+  expr->foreach_operand(
+    [&found](const expr2tc &e) { found = found || has_checked_arithmetic(e); });
+  return found;
+}
+
 static void optimize_expression(expr2tc &expr, const interval_domaint &state)
 {
   // Preconditions
@@ -87,6 +114,15 @@ static void optimize_expression(expr2tc &expr, const interval_domaint &state)
     return;
   }
 
+  // goto_check adds its overflow claims after this pass, on the arithmetic
+  // itself: folding an expression that contains it would drop the claim.
+  if (interval_domaint::keep_checked_arithmetic && has_checked_arithmetic(expr))
+  {
+    expr->Foreach_operand(
+      [&state](expr2tc &e) { optimize_expression(e, state); });
+    return;
+  }
+
   if (interval_domaint::enable_wrapped_intervals)
     optimize_expr_interval<wrapped_interval>(expr, state);
   else
@@ -100,7 +136,8 @@ static void optimize_expression(expr2tc &expr, const interval_domaint &state)
 
 void optimize_function(
   const ait<interval_domaint> &interval_analysis,
-  goto_functiont &goto_function)
+  goto_functiont &goto_function,
+  bool preserve_branching)
 {
   // Inline optimizations
   Forall_goto_program_instructions (i_it, goto_function.body)
@@ -109,7 +146,9 @@ void optimize_function(
 
     // Singleton Propagation
     optimize_expression(i_it->code, d);
-    optimize_expression(i_it->guard, d);
+    // Replay needs the source branch even when its direction is known.
+    if (!preserve_branching || !i_it->is_goto())
+      optimize_expression(i_it->guard, d);
   }
 }
 
@@ -247,6 +286,36 @@ struct scoped_skip_inductive
 };
 } // namespace
 
+/// The interval state at loop head \p head, or null when it is missing or
+/// proves that the loop body is never entered: the exit test, the first
+/// instruction from \p head past goto_check's claims, is a forward conditional
+/// jump out of the loop (past \p back_edge) whose negated guard is infeasible.
+/// Bounding the variables there would contradict k-induction's entry-condition
+/// assume and make the inductive step vacuously true.
+static const interval_domaint *loop_head_state(
+  const ait<interval_domaint> &interval_analysis,
+  const goto_programt::targett &head,
+  const goto_programt::targett &back_edge)
+{
+  auto state_iterator = interval_analysis.state_map.find(head);
+  if (state_iterator == interval_analysis.state_map.end())
+    return nullptr;
+  goto_programt::targett test = head;
+  while (test != back_edge && test->is_assert())
+    ++test;
+  const bool exits_loop =
+    test->is_goto() && test->targets.size() == 1 &&
+    test->targets.front()->location_number > back_edge->location_number;
+  if (!exits_loop)
+    return &state_iterator->second;
+  auto test_state = interval_analysis.state_map.find(test);
+  if (test_state == interval_analysis.state_map.end())
+    return nullptr;
+  interval_domaint entered = test_state->second;
+  entered.assume(not2tc(test->guard));
+  return entered.is_bottom() ? nullptr : &state_iterator->second;
+}
+
 void instrument_loop_bounds_after_kind(
   goto_functionst &goto_functions,
   const namespacet &ns,
@@ -257,6 +326,9 @@ void instrument_loop_bounds_after_kind(
   // The transparency flag makes the havoc'd assignments and entry-condition
   // assumes no-ops in the transformer, so the state at each loop head
   // matches what it was in the *original* program (before k-induction).
+  // goto_check inserts its claims without renumbering, and finding the
+  // back-edges below compares location numbers.
+  goto_functions.update();
   interval_domaint::set_options(options);
   scoped_skip_inductive _skip_guard;
 
@@ -335,9 +407,13 @@ void instrument_loop_bounds_after_kind(
           if (!pre_it->inductive_step_instruction || !pre_it->is_assign())
             break;
           const code_assign2t &a = to_code_assign2t(pre_it->code);
+          // A havoc that applies only when the loop is entered is
+          // `x = flag ? NONDET : x` (#10154).
+          const expr2tc &source =
+            is_if2t(a.source) ? to_if2t(a.source).true_value : a.source;
           if (
-            is_symbol2t(a.target) && is_sideeffect2t(a.source) &&
-            to_sideeffect2t(a.source).kind == sideeffect2t::allockind::nondet)
+            is_symbol2t(a.target) && is_sideeffect2t(source) &&
+            to_sideeffect2t(source).kind == sideeffect2t::allockind::nondet)
             symbols.insert(a.target);
         } while (pre_it != f_it->second.body.instructions.begin());
       }
@@ -347,10 +423,11 @@ void instrument_loop_bounds_after_kind(
       // Build the bounds expression at the insert position from the
       // (transparency-aware) interval domain state.
       std::vector<expr2tc> symbol_constraints;
-      auto state_iterator = interval_analysis.state_map.find(insert_pos);
-      if (state_iterator == interval_analysis.state_map.end())
+      const interval_domaint *state =
+        loop_head_state(interval_analysis, insert_pos, b_it);
+      if (!state)
         continue;
-      const interval_domaint &d = state_iterator->second;
+      const interval_domaint &d = *state;
       for (const auto &symbol_expr : symbols)
       {
         expr2tc tmp = d.make_expression(symbol_expr);
@@ -368,6 +445,9 @@ void instrument_loop_bounds_after_kind(
       instruction.make_assumption(conjunction(symbol_constraints));
       instruction.inductive_step_instruction = true;
       instruction.location = insert_pos->location;
+      // insert_pos may be a goto_check claim, whose description is not ours.
+      instruction.location.remove("comment");
+      instruction.location.remove("property");
       instruction.function = insert_pos->function;
       f_it->second.body.insert_swap(insert_pos, instruction);
     }
@@ -487,10 +567,10 @@ void interval_analysis(
     csv << oss.str();
   }
 
+  const bool preserve_branching =
+    options.get_bool_option("validate-violation-witness");
   Forall_goto_functions (f_it, goto_functions)
-  {
-    optimize_function(interval_analysis, f_it->second);
-  }
+    optimize_function(interval_analysis, f_it->second, preserve_branching);
 
   if (instrument_mode == INTERVAL_INSTRUMENTATION_MODE::LOOP_MODE)
     instrument_loops(interval_analysis, goto_functions);

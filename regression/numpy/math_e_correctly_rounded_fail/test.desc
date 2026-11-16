@@ -1,0 +1,5 @@
+CORE
+main.py
+--incremental-bmc --python-math-ulps 0
+^VERIFICATION FAILED$
+^  assertion .*: bound$

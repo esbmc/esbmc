@@ -1,0 +1,5 @@
+CORE
+main.c
+--overflow-check --k-induction --max-k-step 15
+^VERIFICATION FAILED$
+line 12

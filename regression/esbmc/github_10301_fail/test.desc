@@ -1,0 +1,5 @@
+CORE
+main.c
+
+^VERIFICATION FAILED$
+FAILED.*invalid-pointer-freed.*line 6.*dereference failure: invalid pointer freed$

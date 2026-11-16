@@ -1,0 +1,5 @@
+regression/python/github_9643
+regression/python/github_9643_builtin
+regression/python/github_9643_fail
+regression/python/github_9643_global_refused
+regression/python/github_9643_local_refused

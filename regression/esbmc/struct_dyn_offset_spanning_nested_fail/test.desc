@@ -1,0 +1,5 @@
+CORE
+main.c
+
+^VERIFICATION FAILED$
+^  assertion s\[i\]\.t\.c == 0x0201 && s\[i\]\.d == 0$

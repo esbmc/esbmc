@@ -183,6 +183,16 @@ BMC program time: 0.040s
 VERIFICATION SUCCESSFUL
 ```
 
+`--sv-comp`, which the SV-COMP wrapper sets, chooses the configuration for
+concurrent programs itself. After building the GOTO program, ESBMC checks
+whether `main` can start a thread. If it can, and `--termination` is not set,
+ESBMC prints `The program can start a thread: verifying its schedules`, drops
+`--interval-analysis` and `--goto-unwind`, replaces `--k-induction` with
+`--incremental-bmc` (except when validating a correctness witness), and uses
+`--context-bound 3` unless you give a bound. Schedules beyond the context bound
+are not explored, so `VERIFICATION SUCCESSFUL` in this configuration does not
+cover them.
+
 ## Verifying Python Programs
 
 ESBMC has a dedicated Python frontend. See the [Python](/docs/python) section for
@@ -205,10 +215,10 @@ int main() {
 }
 ```
 
-If we call ESBMC as `esbmc main.c --witness-output main.graphml`, where `main.c` is the C program we want to verify, while `main.graphml` stores the counterexample in graphml format, then ESBMC will produce the following output:
+If we call ESBMC as `esbmc main.c --witness-output-graphml main.graphml`, where `main.c` is the C program we want to verify, while `main.graphml` stores the counterexample in graphml format, then ESBMC will produce the following output:
 
 ```sh
-esbmc main.c --witness-output main.graphml
+esbmc main.c --witness-output-graphml main.graphml
 ```
 
 ```xml
@@ -293,6 +303,13 @@ esbmc main.c --witness-output main.graphml
 ```
     
 We recommend reading [Exchange Format for Violation Witnesses and Correctness Witnesses](https://github.com/sosy-lab/sv-witnesses) to obtain further information about violation and correctness witnesses in graphml format.
+
+`--witness-output-yaml PATH` writes the witness in the YAML format instead, and
+`--witness-output NAME` writes both, to `NAME.graphml` and `NAME.yml`. YAML
+witnesses declare `format_version: "2.1"`. In a violation witness, each
+`__VERIFIER_nondet_*()` call on the path gets a `function_return` waypoint at
+the call's closing `)`, with a constraint such as `\result == 2147483647` in
+`ext_c_expression` format.
 
 A GraphML trace step that comes from a header or from one of ESBMC's operational
 models is emitted with an `originfile` naming the file it came from, and keeps
@@ -391,7 +408,9 @@ algorithm works, see
 | `--k-induction` | Base case + forward condition + inductive step | Yes |
 
 `--max-k-step N` caps the unwind bound (default 50); `--k-step N` changes the
-increment granularity.
+increment granularity. ESBMC stops with an error if `--k-step` or
+`--base-k-step` is not smaller than `--max-k-step`, or if `--base-k-step` is
+below 1.
 
 ### Extracting a transition system (experimental)
 
@@ -405,9 +424,30 @@ unbounded loop in `main`, and extracts it as a transition system: the initial
 state, a one-iteration step relation, the loop's inputs and the bad-state
 conditions, sliced to what the properties depend on. It prints one `TS-CHECK`
 line saying whether extraction succeeded (`TS-CHECK accepted ...` or
-`TS-CHECK rejected`) and stops with `VERIFICATION UNKNOWN`; it proves nothing.
-`--ts-dump` also prints the extracted system. No verification engine consumes
-it yet ([#8081](https://github.com/esbmc/esbmc/pull/8081)).
+`TS-CHECK rejected`) and stops with `VERIFICATION UNKNOWN`; it proves nothing
+([#8081](https://github.com/esbmc/esbmc/pull/8081)).
+
+```sh
+esbmc file.c --ts-bmc --max-k-step 20
+```
+
+`--ts-bmc` runs bounded model checking over the extracted system: it unrolls
+the step relation one bound at a time, up to `--max-k-step` (or without limit
+under `--unlimited-k-steps`), and reports `VERIFICATION FAILED` with a
+counterexample at the first bound that reaches a bad state. A run that passes
+the last bound without one ends `VERIFICATION UNKNOWN`. A program that is not a
+transition system falls back to the ordinary BMC strategy
+([#8655](https://github.com/esbmc/esbmc/pull/8655)). Related options:
+
+- `--ts-no-fallback` — report `VERIFICATION UNKNOWN` instead of falling back
+  when the program is not a transition system.
+- `--ts-no-live-filter` — keep every havocked variable as state rather than
+  slicing the system to the properties' cone of influence.
+- `--ts-fresh-solver` — solve each bound as one formula in a new solver,
+  instead of one incremental solver queried under assumptions.
+- `--ts-push-pop` — query the incremental solver with push/pop instead of
+  assumptions; meant as a cross-check.
+- `--ts-dump` — with any other `--ts` option, also print the extracted system.
 
 ## Reusing common subexpressions
 
@@ -461,15 +501,22 @@ long long x = (long long)d;      /* undefined */
 VERIFICATION FAILED
 ```
 
-The existing cast check was gated on `--int-encoding`, so the default bitvector
+The existing cast check was gated on the integer encoding (`--ir`), so the default bitvector
 mode had no check at all and reported `VERIFICATION SUCCESSFUL` here
 ([#7622](https://github.com/esbmc/esbmc/pull/7622)). Truncation is toward zero,
 so the representable operands are exactly `[MIN, MAX + 1)`; a NaN operand fails
 both comparisons, which is correct — that conversion is equally undefined.
 
 `--no-fp-conversion-check` turns just this check off and leaves the rest of
-`--overflow-check` in place. The check is disabled under `--sv-comp`, whose
-no-overflow property covers signed-integer arithmetic only.
+`--overflow-check` in place.
+
+`--overflow-check` also checks that floating-point `+`, `-`, `*` and `/` on
+finite operands do not produce an infinity
+(`arithmetic overflow on floating-point ieee_mul`).
+`--no-fp-overflow-check` turns just that check off; integer overflow is still
+checked. The SV-COMP wrapper passes both `--no-fp-conversion-check` and
+`--no-fp-overflow-check` for the no-overflow property, which covers
+signed-integer arithmetic only; `--sv-comp` on its own disables neither check.
 
 ## Function-pointer calls with no target
 
@@ -485,6 +532,37 @@ Use it when the program under verification is the whole program — no dynamic
 loading, no linker-supplied implementations — so a pointer with no compatible
 target genuinely cannot be called. It is off by default because assuming the
 world is closed can prune real behaviour when it is not.
+
+## Arguments of `main`
+
+For `main(int argc, char **argv)`, ESBMC gives `argc` a nondeterministic value
+of at least 1 and backs `argv[0]` to `argv[4]` with separate nondeterministic
+strings of up to 256 bytes, including the null terminator. For
+`main(int argc, char **argv, char **envp)`, the first five `envp` entries are
+backed the same way, and `envp[0]` may be NULL, as it is for an empty
+environment. Two options change the bounds:
+
+- `--argv-max-args N`: number of `argv` (and `envp`) entries backed with
+  strings (default 5).
+- `--argv-max-strlen N`: maximum length of each backed string, including the
+  null terminator (default 256).
+
+Reading an `argv` entry past the bound is reported as an invalid-pointer dereference
+even when the real program would read a valid string, so raise
+`--argv-max-args` if the program reads more arguments. Higher values make the
+SMT formula larger.
+
+```c
+int main(int argc, char **argv)
+{
+  if (argc == 6)
+    return argv[4][0] + argv[5][0];
+  return 0;
+}
+```
+
+`esbmc file.c` reports `dereference failure: invalid pointer` on `argv[5]`;
+`esbmc file.c --argv-max-args 6` reports `VERIFICATION SUCCESSFUL`.
 
 ## Verifying modules that span multiple files
 
@@ -544,6 +622,29 @@ arithmetic overflow on mul
 
 VERIFICATION FAILED
 ```
+
+## Reading a CBMC goto-binary
+
+`--binary` reads a goto-binary instead of source code, including one written by
+CBMC or by a tool built on it, such as Kani. ESBMC's own additions are linked in
+unless `--no-cprover-additions` is given.
+
+Kani tags its informational assertions with the `reachability_check` and
+`cover` property classes; CBMC reports them as failures and Kani's driver
+discounts them. `--ignore-property-class CLASS` skips the assertions tagged with
+`CLASS`, and may be repeated. Without it ESBMC keeps CBMC's verdict
+([#8157](https://github.com/esbmc/esbmc/pull/8157)):
+
+```sh
+esbmc harness.goto --binary --function <harness> \
+  --ignore-property-class reachability_check --ignore-property-class cover
+```
+
+`--reserve-first-page` places no object below address 4096, as CBMC does, so a
+pointer made from a small integer never aliases a real object. It is off by
+default, because some SV-COMP harnesses accept an allocation only at a low
+address; a Kani or verify-rust-std run needs it
+([#8288](https://github.com/esbmc/esbmc/pull/8288)).
 
 ## Checking `restrict` pointer aliasing
 
@@ -660,6 +761,55 @@ after it were never decided, and saying they passed would be wrong:
 Adding `--multi-property` decides all three, and appends the solver and its
 decision-procedure time to the summary.
 
+A claim that no path reaches within the bound is left out of the table by
+default. `--report-unreached-claims` lists each one as passed, marks it
+`(never reached)` and counts it in the summary, so an assertion that is dead
+under the bound is not mistaken for a proved one
+([#8875](https://github.com/esbmc/esbmc/pull/8875)):
+
+```
+  PASSED       [main.assertion.1]  line 6  assertion 0 (never reached)
+  PASSED       [main.assertion.2]  line 7  assertion x == 0
+
+** 0 of 2 properties failed, 2 passed (1 never reached)
+```
+
+## Showing the calls behind a violation
+
+`--show-stacktrace` prints the call stack at the violated property.
+`--show-funccall-trace` instead prints every function call on the
+counterexample path, in the order the calls were made, including calls that had
+already returned:
+
+```c
+#include <assert.h>
+int nondet_int(void);
+int g;
+void setup(int v) { g = v; }
+void check(void) { assert(g != 3); }
+int main(void)
+{
+  setup(nondet_int());
+  check();
+  return 0;
+}
+```
+
+```sh
+esbmc file.c --show-funccall-trace
+```
+
+```
+Violated property:
+  file file.c line 5 column 20 function check
+  assertion g != 3
+  g != 3
+Function call trace:
+  main at file file.c line 6 column 1
+  setup at file file.c line 8 column 3 function main
+  check at file file.c line 9 column 3 function main
+```
+
 ## Bounding the stack
 
 ```sh
@@ -698,6 +848,7 @@ continues until all bugs are found. Relevant options:
 - `--all-witnesses` — after a property is violated, enumerate further inputs that also violate it (implies `--multi-property`; see below).
 - `--max-witnesses N` — cap witnesses per property (default 16; 0 = unlimited).
 - `--full-traces` — print every trace state per witness instead of the 50 nearest the failure (only meaningful with `--all-witnesses`).
+- `--parallel-solving`: solve each VCC in parallel (implies `--multi-property`). It cannot be combined with `--smt-during-symex` or the flags that imply it (`--smt-thread-guard`, `--smt-symex-guard`, `--smt-symex-assert`, `--smt-symex-assume`); ESBMC stops with an error instead.
 
 A claim the solver never decided — an error, or a formula handed off without an
 answer under `--smt-formula-only` — is no longer folded into
@@ -903,6 +1054,12 @@ SMT-LIB2 solver given via `--bitwuzllob-model-prog CMD` /
 `--neurosym-model-prog CMD` (e.g. `"z3 -in"`). Neither backend is ever picked
 implicitly, and NeuroSym rejects `--ir` and incremental strategies.
 
+`--bitwuzla-opt name=value` passes an option to Bitwuzla, spelled as on
+Bitwuzla's command line without the leading dashes, e.g.
+`--bitwuzla-opt rewrite-level=1`. It may be repeated, and an option Bitwuzla
+does not recognise is reported as a Bitwuzla error
+([#8655](https://github.com/esbmc/esbmc/pull/8655)).
+
 Floating-point arithmetic is encoded with the SMT floating-point theory
 (`fp.add`, `fp.lt`, …) on every backend that offers it — Bitwuzla, Z3, MathSAT,
 CVC4/CVC5 — and lowered to bit-vectors elsewhere. `--fp2bv` forces the
@@ -910,7 +1067,14 @@ bit-vector lowering on any backend, which is the encoding to reach for when a
 property depends on the sign of a NaN: the theory cannot represent it
 ([#7021](https://github.com/esbmc/esbmc/issues/7021)). `fmod`, `remainder` and
 `remquo` are always lowered through a bit-vector round-trip, since the theory's
-`fp.rem` is far slower to solve.
+`fp.rem` is far slower to solve. When reachable code uses a floating-point
+format the selected solver cannot build natively, such as the 96-bit
+`long double` of `--32 --i386-linux` under Bitwuzla, ESBMC switches that run to
+the bit-vector lowering and says so:
+
+```
+The program uses a floating-point format bitwuzla does not support natively; encoding floating-point as bit-vectors
+```
 
 An alternative default solver can be set with `--default-solver SOLVER` (the
 name without the `--`), which suits a shell alias or the `ESBMC_OPTS`

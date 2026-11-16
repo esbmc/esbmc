@@ -1,0 +1,5 @@
+CORE
+main.py
+
+^VERIFICATION FAILED$
+Unsupported: the type of a value returned by a function whose return type could not be inferred

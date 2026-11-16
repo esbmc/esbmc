@@ -1,4 +1,5 @@
 CORE
 main.py
 --incremental-bmc
-^ERROR: numpy.linalg.LinAlgError: Singular matrix$
+^VERIFICATION FAILED$
+^  uncaught exception: LinAlgError$

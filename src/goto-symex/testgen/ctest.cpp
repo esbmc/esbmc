@@ -275,6 +275,20 @@ std::string ctest_generator::type_to_verifier_string(const type2tc &type) const
   return "int"; // Fallback
 }
 
+std::vector<ctest_generator::test_variable>
+ctest_generator::collect_test_variables(
+  const symex_target_equationt &target,
+  smt_convt &smt_conv) const
+{
+  std::vector<test_variable> vars;
+  for (const auto &val : collect_nondet_values(target, smt_conv))
+    vars.push_back(
+      {type_to_verifier_string(val.type),
+       type_to_c_string(val.type),
+       format_c_value(val.value_expr)});
+  return vars;
+}
+
 std::string ctest_generator::format_c_value(const expr2tc &value) const
 {
   if (is_constant_int2t(value))
@@ -362,25 +376,13 @@ void ctest_generator::collect(
 {
   (void)ns;
 
-  std::vector<test_variable> current_test;
-
   // Extract function name if not already set
   std::string extracted_func_name;
   if (function_name.empty())
     extracted_func_name = extract_function_name(target, smt_conv);
 
-  // Use the SHARED collection logic from witnesses.cpp
-  auto collected_values = collect_nondet_values(target, smt_conv);
-
-  // Convert collected values to test_variable format
-  for (const auto &val : collected_values)
-  {
-    test_variable var;
-    var.verifier_type = type_to_verifier_string(val.type);
-    var.c_type = type_to_c_string(val.type);
-    var.value = format_c_value(val.value_expr);
-    current_test.push_back(var);
-  }
+  std::vector<test_variable> current_test =
+    collect_test_variables(target, smt_conv);
 
   // Store collected data if we found any nondet values
   if (!current_test.empty())
@@ -720,37 +722,8 @@ void ctest_generator::generate_single(
 
   const std::vector<std::string> &src_files = config.args;
 
-  std::unordered_set<std::string> seen_nondets;
-  std::vector<test_variable> test_vars;
-
-  for (auto const &SSA_step : target.SSA_steps)
-  {
-    if (SSA_step.ignore || !smt_conv.l_get(SSA_step.guard).is_true())
-      continue;
-
-    if (SSA_step.is_assignment())
-    {
-      auto nondet_expr = symex_slicet::get_nondet_symbol(SSA_step.rhs);
-      if (!nondet_expr || !is_symbol2t(nondet_expr))
-        continue;
-
-      const symbol2t &sym = to_symbol2t(nondet_expr);
-      if (!has_prefix(sym.thename.as_string(), "nondet$"))
-        continue;
-
-      if (seen_nondets.count(sym.thename.as_string()))
-        continue;
-      seen_nondets.insert(sym.thename.as_string());
-
-      auto concrete_value = smt_conv.get(nondet_expr);
-
-      test_variable var;
-      var.verifier_type = type_to_verifier_string(concrete_value->type);
-      var.c_type = type_to_c_string(concrete_value->type);
-      var.value = format_c_value(concrete_value);
-      test_vars.push_back(var);
-    }
-  }
+  std::vector<test_variable> test_vars =
+    collect_test_variables(target, smt_conv);
 
   if (test_vars.empty())
   {

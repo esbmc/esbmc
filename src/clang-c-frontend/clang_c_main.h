@@ -23,6 +23,8 @@ protected:
   void add_exit_code(codet &dest, const locationt &location);
 
   contextt &context;
+  static constexpr const char *static_destructors_id =
+    "c:@F@__ESBMC_static_destructors";
 };
 
 #endif /* CLANG_C_FRONTEND_CLANG_C_MAIN_H_ */

@@ -20,8 +20,11 @@ extern "C"
 #include <esbmc/esbmc_parseoptions.h>
 #include <goto-symex/engine/goto_symex.h>
 #include <goto-symex/trace/goto_trace.h>
+#include <optional>
+#include <unordered_set>
 #include <goto-symex/trace/sarif.h>
 #include <util/base/cwe_mapping.h>
+#include <util/base/yaml_parser.h>
 #include <solvers/smt/smt_result.h>
 #include <solvers/smtlib/smtlib_conv.h>
 #include <solvers/solve.h>
@@ -91,39 +94,235 @@ extern "C"
 #  include <goto-programs/goto_contractor.h>
 #endif
 
-// Emit CWE-835 (non-termination / infinite loop) into the structured
-// outputs when --termination refutes the termination property.
-//
-// A non-termination verdict is proven by UNSAT at a loop exit marker, so
-// unlike a normal property violation it has no counterexample trace to
-// drive the structured emitters. We synthesise a single-step trace
-// anchored to a real termination-marker ASSERT instruction: that gives a
-// valid `pc` and a source location, and lets the existing emitters reuse
-// the util/cwe_mapping single source of truth (@p comment matches the
-// "non-terminating execution" rule -> CWE-835).
-//
-// CWE-835 is a loop weakness, so a per-loop marker is preferred as the
-// anchor; an abort-call marker is only a fallback. Markers in library
-// helpers (body.hide) rank below both, so the anchor never lands in
-// ESBMC's own installed sources. The inductive-step verdict is a
-// whole-program property, so with several loops present the chosen
-// marker is a best-effort representative location — only the CWE id
-// (835) is guaranteed, not that it is the specific non-terminating loop.
-static void report_non_termination_cwe(
-  optionst &options,
-  const namespacet &ns,
+// The back edge of the innermost loop that leaves through @p marker: one that
+// jumps to it, holds it (a return exit), or falls through to it (a do-while).
+static std::optional<goto_programt::const_targett> loop_of_marker(
   const goto_functionst &goto_functions,
-  const std::string &comment)
+  goto_programt::const_targett marker)
 {
-  // The YAML (SV-COMP 2.0) witness format has no CWE field — CWE support is
-  // GraphML-only — so it is deliberately not emitted here.
-  const bool want_sarif = !options.get_option("sarif-output").empty();
-  const bool want_graphml =
-    !options.get_option("witness-output-graphml").empty();
-  const bool want_json = options.get_bool_option("generate-json-report");
-  if (!(want_sarif || want_graphml || want_json))
-    return;
+  std::optional<goto_programt::const_targett> best;
+  const auto fn = goto_functions.function_map.find(marker->function);
+  if (fn == goto_functions.function_map.end())
+    return best;
+  const goto_programt::instructionst &body = fn->second.body.instructions;
+  const unsigned m = marker->location_number;
+  for (auto b = body.begin(); b != body.end(); ++b)
+  {
+    if (!b->is_backwards_goto())
+      continue;
+    const auto h = b->targets.front();
+    const unsigned lo = h->location_number, hi = b->location_number;
+    bool exits = (m >= lo && m <= hi) || std::next(b) == marker;
+    for (auto p = h; !exits && p != std::next(b); ++p)
+      exits =
+        p->is_goto() && !p->targets.empty() && p->targets.front() == marker;
+    if (exits && (!best || lo > (*best)->targets.front()->location_number))
+      best = b;
+  }
+  return best;
+}
 
+using function_sett = std::unordered_set<irep_idt, irep_id_hash>;
+using instruction_sett =
+  std::unordered_set<const goto_programt::instructiont *>;
+
+static const goto_functionst::function_mapt::value_type *callee_of(
+  const goto_functionst &goto_functions,
+  const goto_programt::instructiont &i)
+{
+  if (!i.is_function_call())
+    return nullptr;
+  const expr2tc &f = to_code_function_call2t(i.code).function;
+  if (!is_symbol2t(f))
+    return nullptr;
+  const auto it = goto_functions.function_map.find(to_symbol2t(f).thename);
+  if (
+    it == goto_functions.function_map.end() || !it->second.body_available ||
+    it->second.body.instructions.empty())
+    return nullptr;
+  return &*it;
+}
+
+// Successors of @p it on a path the inductive step keeps once it shows every
+// termination marker unreachable: a marker (a false ASSERT) ends the path, as
+// get_successors already has it, and a call falls through only to a callee in
+// @p returns.
+static goto_programt::const_targetst live_successors(
+  const goto_functionst &goto_functions,
+  const function_sett &returns,
+  const goto_programt &body,
+  goto_programt::const_targett it)
+{
+  goto_programt::const_targetst next;
+  const auto *callee = callee_of(goto_functions, *it);
+  if (!callee || returns.count(callee->first))
+    body.get_successors(it, next);
+  return next;
+}
+
+// Whether a live path from @p from reaches @p to through @p body's
+// instructions numbered [lo, hi].
+static bool live_path(
+  const goto_functionst &goto_functions,
+  const function_sett &returns,
+  const goto_programt &body,
+  goto_programt::const_targett from,
+  goto_programt::const_targett to,
+  unsigned lo,
+  unsigned hi)
+{
+  instruction_sett seen;
+  std::vector<goto_programt::const_targett> work{from};
+  while (!work.empty())
+  {
+    const auto it = work.back();
+    work.pop_back();
+    if (it == to)
+      return true;
+    if (
+      it == body.instructions.end() || it->location_number < lo ||
+      it->location_number > hi || !seen.insert(&*it).second)
+      continue;
+    for (const auto &n : live_successors(goto_functions, returns, body, it))
+      work.push_back(n);
+  }
+  return false;
+}
+
+// The functions with a live path from entry to END_FUNCTION.
+static function_sett returning_functions(const goto_functionst &goto_functions)
+{
+  function_sett returns;
+  for (bool changed = true; changed;)
+  {
+    changed = false;
+    for (const auto &[id, fn] : goto_functions.function_map)
+      if (
+        fn.body_available && !fn.body.instructions.empty() &&
+        !returns.count(id) &&
+        live_path(
+          goto_functions,
+          returns,
+          fn.body,
+          fn.body.instructions.begin(),
+          std::prev(fn.body.instructions.end()),
+          0,
+          std::numeric_limits<unsigned>::max()))
+      {
+        returns.insert(id);
+        changed = true;
+      }
+  }
+  return returns;
+}
+
+// The instructions a live path from the entry point reaches.
+static instruction_sett live_instructions(
+  const goto_functionst &goto_functions,
+  const function_sett &returns)
+{
+  instruction_sett live;
+  std::vector<std::pair<const goto_programt *, goto_programt::const_targett>>
+    work;
+  const auto enter = [&work](const goto_functiont &fn) {
+    work.emplace_back(&fn.body, fn.body.instructions.begin());
+  };
+  const auto main = goto_functions.function_map.find(goto_functions.main_id());
+  if (main != goto_functions.function_map.end())
+    enter(main->second);
+  while (!work.empty())
+  {
+    const auto [body, it] = work.back();
+    work.pop_back();
+    if (it == body->instructions.end() || !live.insert(&*it).second)
+      continue;
+    if (const auto *callee = callee_of(goto_functions, *it))
+      enter(callee->second);
+    for (const auto &n : live_successors(goto_functions, returns, *body, it))
+      work.emplace_back(body, n);
+  }
+  return live;
+}
+
+// The back edges of the loops that can run forever in the refuting inductive
+// step: a live path reaches the back edge from the entry point and leads from
+// the loop head to it, and the ranking check did not prove the loop
+// terminating.
+static instruction_sett loops_that_may_run_forever(
+  const goto_functionst &goto_functions,
+  const std::vector<locationt> &terminating_loops)
+{
+  const function_sett returns = returning_functions(goto_functions);
+  const instruction_sett live = live_instructions(goto_functions, returns);
+  instruction_sett forever;
+  for (const auto &[id, fn] : goto_functions.function_map)
+    for (auto b = fn.body.instructions.begin(); b != fn.body.instructions.end();
+         ++b)
+    {
+      if (!b->is_backwards_goto() || !live.count(&*b))
+        continue;
+      const auto head = b->targets.front();
+      const std::string at = head->location.as_string();
+      if (
+        live_path(
+          goto_functions,
+          returns,
+          fn.body,
+          head,
+          b,
+          head->location_number,
+          b->location_number) &&
+        std::none_of(
+          terminating_loops.begin(),
+          terminating_loops.end(),
+          [&at](const locationt &l) { return l.as_string() == at; }))
+        forever.insert(&*b);
+    }
+  return forever;
+}
+
+// Whether one user loop that can run forever holds, between its head and back
+// edge, the line of every cycle waypoint of the witness. Validation applies a
+// cycle waypoint once and the inductive step proves non-termination on its
+// own, so this is what keeps it from confirming a cycle that is not passed
+// infinitely often. A cycle in a function the loop calls is not accepted.
+static bool cycle_on_loop_that_may_run_forever(
+  const goto_functionst &goto_functions,
+  const std::vector<locationt> &terminating_loops,
+  const std::vector<waypoint> &waypoints)
+{
+  std::vector<irep_idt> lines;
+  for (const waypoint &wp : waypoints)
+    if (wp.action == waypoint::cycle)
+      lines.push_back(wp.line_id);
+
+  const instruction_sett forever =
+    loops_that_may_run_forever(goto_functions, terminating_loops);
+  for (const auto &[id, fn] : goto_functions.function_map)
+  {
+    if (fn.body.hide)
+      continue;
+    for (auto b = fn.body.instructions.begin(); b != fn.body.instructions.end();
+         ++b)
+      if (
+        forever.count(&*b) &&
+        std::all_of(lines.begin(), lines.end(), [&](const irep_idt &line) {
+          return std::any_of(
+            goto_programt::const_targett(b->targets.front()),
+            std::next(b),
+            [&line](const goto_programt::instructiont &i) {
+              return !line.empty() && i.location.get_line() == line;
+            });
+        }))
+        return true;
+  }
+  return false;
+}
+
+static std::optional<goto_programt::const_targett> find_termination_marker(
+  const goto_functionst &goto_functions,
+  const std::vector<locationt> &terminating_loops)
+{
   // Anchor candidates, best first. A user-source location always beats a
   // library helper: goto_termination inserts per-loop markers into helpers
   // too (see the marker pass there), and __ESBMC_atexit_handler's
@@ -131,13 +330,28 @@ static void report_non_termination_cwe(
   // function_map is ordered by mangled id, `c:@F@__ESBMC_atexit_handler`
   // sorts before `c:@F@main`, so scanning without this rank anchors the
   // CWE to ESBMC's own stdlib.c instead of the user's loop.
+  //
+  // A loop that cannot run forever in the refuting inductive step ranks last:
+  // one only reached past a marker, which that step showed unreachable (in a
+  // function nothing calls, or past another loop's exit), one that leaves on
+  // every pass, or one the ranking check proved terminating. The YAML cycle
+  // waypoint names the marker's loop, and a validator rejects one that is not
+  // passed infinitely often.
   enum anchor_rankt
   {
     USER_LOOP = 0,
     USER_ABORT,
     LIB_LOOP,
     LIB_ABORT,
+    FINITE_LOOP,
     NO_ANCHOR
+  };
+
+  const instruction_sett forever =
+    loops_that_may_run_forever(goto_functions, terminating_loops);
+  const auto may_run_forever = [&](goto_programt::const_targett marker) {
+    const auto back_edge = loop_of_marker(goto_functions, marker);
+    return back_edge && forever.count(&**back_edge);
   };
 
   goto_programt::const_targett marker;
@@ -161,6 +375,8 @@ static void report_non_termination_cwe(
         rank = is_lib ? LIB_ABORT : USER_ABORT;
       else
         continue;
+      if (rank < best && !may_run_forever(it))
+        rank = FINITE_LOOP;
       if (rank < best)
       {
         marker = it;
@@ -171,6 +387,48 @@ static void report_non_termination_cwe(
       break;
   }
   if (best == NO_ANCHOR)
+    return std::nullopt;
+  return marker;
+}
+
+// Emit CWE-835 (non-termination / infinite loop) into the structured
+// outputs when --termination refutes the termination property.
+//
+// A non-termination verdict is proven by UNSAT at a loop exit marker, so
+// unlike a normal property violation it has no counterexample trace to
+// drive the structured emitters. We synthesise a single-step trace
+// anchored to a real termination-marker ASSERT instruction: that gives a
+// valid `pc` and a source location, and lets the existing emitters reuse
+// the util/cwe_mapping single source of truth (@p comment matches the
+// "non-terminating execution" rule -> CWE-835).
+//
+// CWE-835 is a loop weakness, so a per-loop marker is preferred as the
+// anchor; an abort-call marker is only a fallback. Markers in library
+// helpers (body.hide) rank below both, so the anchor never lands in
+// ESBMC's own installed sources. The inductive-step verdict is a
+// whole-program property, so with several loops present the chosen
+// marker is a best-effort representative location — only the CWE id
+// (835) is guaranteed, not that it is the specific non-terminating loop.
+static void report_non_termination_cwe(
+  optionst &options,
+  const namespacet &ns,
+  const goto_functionst &goto_functions,
+  const std::string &comment,
+  const std::optional<locationt> &proved_loop,
+  const std::vector<locationt> &terminating_loops)
+{
+  // The YAML witness has no CWE field, so it carries only the cycle waypoint.
+  const bool want_yaml = !options.get_option("witness-output-yaml").empty();
+  const bool want_sarif = !options.get_option("sarif-output").empty();
+  const bool want_graphml =
+    !options.get_option("witness-output-graphml").empty();
+  const bool want_json = options.get_bool_option("generate-json-report");
+  if (!(want_sarif || want_graphml || want_json || want_yaml))
+    return;
+
+  const auto marker =
+    find_termination_marker(goto_functions, terminating_loops);
+  if (!marker)
     return;
 
   goto_tracet trace;
@@ -179,12 +437,25 @@ static void report_non_termination_cwe(
   step.thread_nr = 0;
   step.type = symex_targett::ASSERT;
   step.guard = false; // a violated assert
-  step.pc = marker;
+  step.pc = *marker;
   step.comment = comment;
   trace.steps.push_back(step);
 
   if (want_graphml)
     violation_graphml_goto_trace(options, ns, trace);
+  if (want_yaml)
+  {
+    // The recurrent-set check names its loop; the inductive step does not,
+    // so the marker's loop is a best-effort pick when there are several. A
+    // cycle waypoint must be passed on every iteration, and the marker itself
+    // sits on the loop's exit path, which runs at most once.
+    const auto back_edge = loop_of_marker(goto_functions, *marker);
+    non_termination_yaml_goto_trace(
+      options,
+      proved_loop ? *proved_loop
+      : back_edge ? (*back_edge)->targets.front()->location
+                  : (*marker)->location);
+  }
   if (want_json)
     generate_json_report("1", ns, trace);
   if (want_sarif)
@@ -279,7 +550,7 @@ int esbmc_parseoptionst::do_bmc_strategy(
       "--base-k-step ({}) must be smaller than --max-k-step ({}).",
       k_step_base,
       max_k_step);
-    abort();
+    return 1;
   }
 
   // Track whether any violation was found across all k steps.
@@ -401,6 +672,11 @@ int esbmc_parseoptionst::do_bmc_strategy(
       // report success immediately without unwinding.
       if (options.get_bool_option("termination-ranking-proved"))
       {
+        write_correctness_witnesses(
+          options,
+          namespacet(context),
+          goto_tracet(),
+          ranking_transition_invariants);
         log_success(
           "\nRanking function shows all executions terminate\n"
           "VERIFICATION SUCCESSFUL");
@@ -416,7 +692,13 @@ int esbmc_parseoptionst::do_bmc_strategy(
         const std::string comment =
           "Recurrent set shows a non-terminating execution";
         const namespacet ns(context);
-        report_non_termination_cwe(options, ns, goto_functions, comment);
+        report_non_termination_cwe(
+          options,
+          ns,
+          goto_functions,
+          comment,
+          non_termination_loop,
+          terminating_loops);
         const std::string cwes = format_cwe_list(cwe_for(comment));
         std::string msg = "\n" + comment + "\n";
         if (!cwes.empty())
@@ -448,6 +730,20 @@ int esbmc_parseoptionst::do_bmc_strategy(
       // gate is needed.
       if (k_step > 1)
       {
+        // The inductive step confirms a witness without reading where its
+        // cycle is. A cycle off every loop the step can show runs forever is
+        // UNKNOWN, not rejected: it may lie on a loop the step cannot decide.
+        if (
+          options.get_bool_option("validate-violation-witness") &&
+          !cycle_on_loop_that_may_run_forever(
+            goto_functions,
+            terminating_loops,
+            yaml_parser::get_waypoints(options.get_option("witness"))))
+        {
+          log_status("The witness cycle is not on a loop that can run forever");
+          log_fail("VERIFICATION UNKNOWN");
+          return 0;
+        }
         tvt is_res =
           is_inductive_step_violated(options, goto_functions, k_step);
         // Symex may have set disable-inductive-step mid-run (function
@@ -462,7 +758,13 @@ int esbmc_parseoptionst::do_bmc_strategy(
             "Inductive step shows a non-terminating execution (k = {})",
             k_step);
           const namespacet ns(context);
-          report_non_termination_cwe(options, ns, goto_functions, comment);
+          report_non_termination_cwe(
+            options,
+            ns,
+            goto_functions,
+            comment,
+            non_termination_loop,
+            terminating_loops);
           const std::string cwes = format_cwe_list(cwe_for(comment));
           std::string msg = "\n" + comment;
           if (!cwes.empty())

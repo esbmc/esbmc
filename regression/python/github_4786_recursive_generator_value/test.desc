@@ -1,0 +1,4 @@
+CORE
+main.py
+--unwind 3 --no-unwinding-assertions
+^ERROR: .*main\.py:3:14: using the generator returned by recursive generator 'g' other than as a for-loop iterable is not supported$

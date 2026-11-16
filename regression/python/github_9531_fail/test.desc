@@ -1,0 +1,4 @@
+CORE
+main.py
+--ir --z3
+^VERIFICATION FAILED$

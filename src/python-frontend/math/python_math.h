@@ -536,6 +536,10 @@ public:
    */
   exprt handle_hypot(exprt lhs, exprt rhs, const nlohmann::json &element);
 
+  /// ldexp(x, i) for an int @p i, which is read more than once; nil for any
+  /// other @p i.
+  exprt handle_ldexp(exprt x, const exprt &i, const nlohmann::json &element);
+
   /**
    * @brief Handle dist function (math.dist) for tuple arguments
    */

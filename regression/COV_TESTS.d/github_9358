@@ -1,0 +1,4 @@
+regression/esbmc/github_9358
+regression/esbmc/github_9358_fail
+regression/esbmc/github_9358_other_args
+regression/esbmc/github_9358_vprintf

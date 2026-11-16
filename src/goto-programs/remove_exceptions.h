@@ -58,3 +58,8 @@ bool checks_exception(
 
 /// The exception types --python-check-exceptions lists, or none without it.
 std::vector<irep_idt> python_checked_exceptions(const optionst &options);
+
+/// The functions reachable from the whole-program entry, with every
+/// address-taken function seeded as a root.
+std::set<irep_idt>
+entry_reachable_functions(const goto_functionst &gf, const contextt &context);

@@ -1,0 +1,4 @@
+CORE
+main.py
+
+^ERROR: using method 'C.m1' as a value is not supported$

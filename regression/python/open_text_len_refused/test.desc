@@ -1,0 +1,4 @@
+CORE
+main.py
+
+^ERROR: .*main\.py:3:19: a file from open\(\) is supported only through read\(\), readline\(\), write\(\), close\(\), \.name, \.closed, a with statement or a for loop$

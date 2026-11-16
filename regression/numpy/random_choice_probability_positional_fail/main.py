@@ -1,6 +1,4 @@
 import numpy as np
 
-try:
-    np.random.choice([1, 2], None, True, [0.5, 0.5])
-except TypeError:
-    assert False
+x = np.random.choice([1, 2], None, True, [0.5, 0.5])
+assert x == 1 or x == 2

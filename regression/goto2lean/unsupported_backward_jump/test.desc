@@ -1,0 +1,4 @@
+CORE
+main.c
+--goto2lean
+^ERROR: goto2lean: unsupported backward conditional jump at .*main\.c:8$

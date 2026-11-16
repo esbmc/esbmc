@@ -962,6 +962,11 @@ void goto_loop_invariant_combinedt::copy_loop_body(
     target_vector.push_back(copied_t);
   }
 
+  // A jump to the back edge ends the iteration. Left on the original it would
+  // leave the copy for the real loop and skip the checks that follow the copy.
+  goto_programt::targett end = out.add_instruction(SKIP);
+  end->location = loop_exit->location;
+
   // rewrite targets using index-based mapping
   for (unsigned i = 0; i < target_vector.size(); i++)
   {
@@ -972,6 +977,8 @@ void goto_loop_invariant_combinedt::copy_loop_body(
         target_map.find(target);
       if (m_it != target_map.end()) // intra-loop?
         target = target_vector[m_it->second];
+      else if (target == loop_exit)
+        target = end;
     }
   }
 }
@@ -1068,6 +1075,7 @@ void goto_loop_invariant_combinedt::insert_invariant_verification_branch(
     t->code = code_assign2tc(var, gen_nondet(var->type));
     t->location = loop_head->location;
     t->location.comment("loop invariant havoc (verification branch)");
+    t->loop_invariant_havoc = true;
   }
 
   // [4c] ASSUME(INV)  — constrain the havoc'd state

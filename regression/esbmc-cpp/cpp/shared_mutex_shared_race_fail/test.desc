@@ -1,4 +1,4 @@
 CORE
 main.cpp
---std c++17 --context-bound 2
+--std c++17 --context-bound 3
 ^VERIFICATION FAILED$

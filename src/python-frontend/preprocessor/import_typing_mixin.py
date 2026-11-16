@@ -71,7 +71,31 @@ class ImportTypingMixin:
             )
         return node
 
+    @staticmethod
+    def _spelled_subscript(annotation):
+        """The subscript a whole-string annotation such as "Optional[Node]"
+        spells, or None if it is not a string spelling one."""
+        if not (isinstance(annotation, ast.Constant) and isinstance(annotation.value, str)):
+            return None
+        try:
+            spelled = ast.parse(annotation.value.strip(), mode="eval").body
+        except SyntaxError:
+            return None
+        return spelled if isinstance(spelled, ast.Subscript) else None
+
     def _resolve_annotation_aliases(self, annotation):
+        """Resolve type aliases in an annotation. Only a whole-string annotation
+        is read as the type it spells: a string nested in it may be a value, as
+        in Literal["a[0]"]."""
+        spelled = self._spelled_subscript(annotation)
+        if spelled is None:
+            return self._resolve_aliases_in(annotation)
+        resolved = self._resolve_aliases_in(spelled)
+        for node in ast.walk(resolved):
+            ast.copy_location(node, annotation)
+        return resolved
+
+    def _resolve_aliases_in(self, annotation):
         """Recursively resolve type aliases in an annotation AST node."""
         if annotation is None:
             return None
@@ -79,25 +103,26 @@ class ImportTypingMixin:
         if isinstance(annotation, ast.Name):
             if annotation.id in self.type_aliases:
                 copied = self._copy_annotation_node(self.type_aliases[annotation.id])
-                return self._resolve_annotation_aliases(copied)
+                return self._resolve_aliases_in(copied)
             return annotation
 
         if isinstance(annotation, ast.Subscript):
-            resolved_value = self._resolve_annotation_aliases(annotation.value)
+            resolved_value = self._resolve_aliases_in(annotation.value)
             resolved_slice = annotation.slice
             if isinstance(annotation.slice, ast.Index):
-                resolved_slice = ast.Index(
-                    value=self._resolve_annotation_aliases(annotation.slice.value))
+                resolved_slice = ast.Index(value=self._resolve_aliases_in(annotation.slice.value))
             elif not isinstance(annotation.slice, (ast.Slice, ast.ExtSlice)):
-                resolved_slice = self._resolve_annotation_aliases(annotation.slice)
+                resolved_slice = self._resolve_aliases_in(annotation.slice)
             return ast.Subscript(value=resolved_value, slice=resolved_slice, ctx=ast.Load())
 
         if isinstance(annotation, ast.Tuple):
-            resolved_elts = [self._resolve_annotation_aliases(e) for e in annotation.elts]
+            resolved_elts = [self._resolve_aliases_in(e) for e in annotation.elts]
             return ast.Tuple(elts=resolved_elts, ctx=ast.Load())
 
         if isinstance(annotation, ast.Attribute):
-            resolved_value = self._resolve_annotation_aliases(annotation.value)
+            resolved_value = self._resolve_aliases_in(annotation.value)
+            if resolved_value is annotation.value:
+                return annotation
             return ast.Attribute(value=resolved_value, attr=annotation.attr, ctx=ast.Load())
 
         return annotation

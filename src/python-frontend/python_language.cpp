@@ -95,6 +95,13 @@ static void append_parser_flags(std::vector<std::string> &args)
   for (const auto &[option, flag] : flags)
     if (config.options.get_bool_option(option))
       args.push_back(flag);
+
+  // The annotation checks of --is-instance-check read list items as tagged
+  // cells, which a typed list does not have.
+  if (
+    !config.options.get_bool_option("no-python-typed-lists") &&
+    !config.options.get_bool_option("is-instance-check"))
+    args.push_back("--typed-lists");
 }
 
 // The interpreter named by --python, else the first of python3/python on
@@ -282,6 +289,8 @@ bool python_languaget::typecheck(contextt &context, const std::string &)
   try
   {
     // Generate symbol table
+    alias_numpy_string_views(ast);
+    alias_numpy_ufunc_outputs(ast);
     python_converter converter(context, &ast, global_scope_, &extra_asts);
     converter.convert();
   }

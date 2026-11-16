@@ -1,0 +1,6 @@
+regression/python/github_9829
+regression/python/github_9829_fail
+regression/python/github_9829_order
+regression/python/github_9829_order_fail
+regression/python/github_9829_float_unsupported
+regression/python/github_9829_builtin_unsupported

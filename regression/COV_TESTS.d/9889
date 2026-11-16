@@ -1,0 +1,4 @@
+regression/bitwuzla/ts_bmc_longjmp_declined
+regression/cstd/jump_unreach_fail
+regression/esbmc/longjmp_through_pointer
+regression/esbmc/longjmp_through_pointer_fail

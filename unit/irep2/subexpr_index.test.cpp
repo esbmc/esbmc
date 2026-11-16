@@ -1,5 +1,5 @@
 // H-A8: get_sub_expr index accumulation over the real exprs. The generic walk
-// (do_get_sub_expr in irep2_utils.cpp) accumulates an offset `it` across
+// (do_get_sub_expr in irep2_dispatch.h) accumulates an offset `it` across
 // fields and, on a std::vector field, returns &item[idx - it]. This checks
 // that indexing returns the *correct* element (not just non-null), including
 // the case where the vector field is reached with it > 0.

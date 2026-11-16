@@ -1,0 +1,8 @@
+CORE
+main.c
+--goto2lean --output out.lean
+^GOTO program creation time
+SEED_FILE out.lean stale proof
+CHECK_FILE out.lean contains ^theorem main_safe : Prog\.main \(fun _ => True\) := by$
+CHECK_FILE out.lean contains ^  \(x = x\) ∧ \($
+CHECK_FILE out.lean absent stale proof

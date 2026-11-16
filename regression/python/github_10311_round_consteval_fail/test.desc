@@ -1,0 +1,11 @@
+CORE
+main.py
+--multi-property
+^ +FAILED +\[global\.assertion\.1\] +line +4 +assertion
+^ +FAILED +\[global\.assertion\.2\] +line +6 +assertion
+^ +FAILED +\[global\.assertion\.3\] +line +8 +assertion
+^ +FAILED +\[global\.assertion\.4\] +line +10 +assertion
+^ +FAILED +\[global\.assertion\.5\] +line +12 +assertion
+^ +FAILED +\[global\.assertion\.6\] +line +14 +assertion
+^ +FAILED +\[global\.assertion\.7\] +line +17 +assertion
+^VERIFICATION FAILED$

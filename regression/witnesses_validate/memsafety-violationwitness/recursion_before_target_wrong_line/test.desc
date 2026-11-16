@@ -1,0 +1,5 @@
+CORE
+main.c
+--memory-leak-check --incremental-bmc --validate-violation-witness --witness witness.yml
+^VERIFICATION SUCCESSFUL$
+^Solution found by the forward condition; all states are reachable \(k = 2\)$

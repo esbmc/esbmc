@@ -1,0 +1,5 @@
+CORE
+main.py
+
+^VERIFICATION FAILED$
+^\s*FAILED\s+\[.*line\s+19\s+uncaught exception: IndexError

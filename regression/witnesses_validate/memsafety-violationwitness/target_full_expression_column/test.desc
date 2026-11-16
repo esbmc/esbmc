@@ -1,0 +1,4 @@
+CORE
+main.c
+--sv-comp --no-assertions --validate-violation-witness --witness witness.yml
+^VERIFICATION FAILED$

@@ -1,0 +1,5 @@
+CORE
+main.cpp
+--std c++17 --unwind 20
+^  assertion s.size\(\) != 1$
+^VERIFICATION FAILED$

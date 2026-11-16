@@ -1,0 +1,5 @@
+CORE
+main.c
+--64 --unwind 20
+^  PASSED .* assertion done == 1$
+^VERIFICATION SUCCESSFUL$

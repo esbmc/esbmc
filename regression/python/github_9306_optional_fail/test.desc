@@ -1,0 +1,5 @@
+CORE
+main.py
+--unwind 5
+^VERIFICATION FAILED$
+assertion .*contains_tmp[0-9]+ == 1$

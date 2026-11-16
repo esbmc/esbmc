@@ -1,0 +1,5 @@
+CORE
+main.py
+
+^VERIFICATION FAILED$
+Unsupported: calling method 'foo' on a value whose class is not known$

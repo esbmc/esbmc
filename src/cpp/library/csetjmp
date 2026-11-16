@@ -1,1 +1,10 @@
+#pragma once
+
 #include <setjmp.h>
+
+// [csetjmp.syn]: setjmp stays a macro; jmp_buf and longjmp are in std.
+namespace std
+{
+using ::jmp_buf;
+using ::longjmp;
+} // namespace std

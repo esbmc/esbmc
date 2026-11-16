@@ -547,7 +547,9 @@ void reachability_treet::create_next_state()
       {new_state, scheduler_framet{}, next_thread_id});
 
     /* Make it active, make it follow on from previous state... */
-    if (new_state->get_active_state_number() != next_thread_id)
+    // Leaving a thread that has ended is not a preemption.
+    const unsigned int from = new_state->get_active_state_number();
+    if (from != next_thread_id && !new_state->threads_state[from].thread_ended)
       new_state->increment_context_switch();
 
     new_state->switch_to_thread(next_thread_id);

@@ -1,0 +1,8 @@
+regression/esbmc/github_10769_assign_or_fail
+regression/esbmc/github_10769_return_and_lines_fail
+regression/esbmc/github_10769_return_and_one_line_fail
+regression/esbmc/github_10769_if_and_lines_fail
+regression/esbmc/github_10769_while_and_lines_fail
+regression/esbmc/github_10769_while_or_lines_fail
+regression/esbmc/github_10769_while_pure_first_fail
+regression/esbmc/github_10769_while_pure_first_legacy_fail

@@ -609,3 +609,28 @@ def _fullmatch_flags(pattern: str, string: str, flags: int) -> bool:
     if mode == 1:
         return fullmatch(pattern.lower(), string.lower())
     return fullmatch(pattern, string)
+
+
+class Pattern:
+    """re.Pattern; its matchers return the same bool as the module functions."""
+
+    def __init__(self, pattern: str, flags: int) -> None:
+        self.pattern: str = pattern
+        self.flags: int = flags
+
+    def match(self, string: str) -> bool:
+        """re.match with this pattern and its flags."""
+        return _match_flags(self.pattern, string, self.flags)
+
+    def search(self, string: str) -> bool:
+        """re.search with this pattern and its flags."""
+        return _search_flags(self.pattern, string, self.flags)
+
+    def fullmatch(self, string: str) -> bool:
+        """re.fullmatch with this pattern and its flags."""
+        return _fullmatch_flags(self.pattern, string, self.flags)
+
+
+def compile(pattern: str, flags: int = 0) -> Pattern:
+    """Compile pattern; matching is deferred to the module matchers."""
+    return Pattern(pattern, flags)

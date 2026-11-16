@@ -1,0 +1,5 @@
+CORE
+main.c
+--validate-violation-witness --witness witness.yml
+^\s+FAILED\s+\[main\.invalidated-dynamic-object\.\d+\]\s+line 15
+^VERIFICATION FAILED$

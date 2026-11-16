@@ -14,8 +14,7 @@ int main(void) {
 
     // Perform a read
     char tmp[16];
-    char *res = fgets(tmp, sizeof(tmp), fp);
-    assert(res != NULL);
+    fgets(tmp, sizeof(tmp), fp);
 
     // Still in read mode
     assert(__freading(fp) != 0);

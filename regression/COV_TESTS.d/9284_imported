@@ -1,0 +1,3 @@
+regression/python/github_9284_imported_default_str_refused
+regression/python/github_9284_imported_str_passthrough
+regression/python/github_9284_imported_str_passthrough_fail

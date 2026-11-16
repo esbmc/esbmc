@@ -1,0 +1,5 @@
+CORE
+main.py
+--unwind 5 --multi-property --no-pointer-check --no-align-check
+FAILED +\[f\.assertion\.[0-9]+\] +line 7 +uncaught exception: AttributeError
+^VERIFICATION FAILED$

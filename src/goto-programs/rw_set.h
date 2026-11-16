@@ -14,11 +14,11 @@ public:
   struct entryt
   {
     irep_idt object;
-    bool r, w, deref;
+    bool r, w, deref, atomic;
     guard2tc guard;
     expr2tc original_expr;
 
-    entryt() : r(false), w(false), deref(false)
+    entryt() : r(false), w(false), deref(false), atomic(false)
     {
     }
 

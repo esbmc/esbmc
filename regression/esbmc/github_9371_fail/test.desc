@@ -1,0 +1,5 @@
+CORE
+main.c
+--64
+^  FAILED +\[main\.assertion\.1\]  line 17  assertion !\(isinf\(__real__ r\) \|\| isinf\(__imag__ r\)\)$
+^VERIFICATION FAILED$

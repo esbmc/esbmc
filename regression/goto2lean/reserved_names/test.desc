@@ -1,0 +1,7 @@
+CORE
+main.c
+--goto2lean
+^  let result_1 := c;$
+^  let post_1 := c;$
+^  let ret_1 := c;$
+^  \(\(result_1 = post_1\) ∧ \(post_1 = ret_1\)\) ∧ \($

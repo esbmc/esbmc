@@ -1,4 +1,4 @@
 CORE
 main.py
 --incremental-bmc
-^ERROR: Unsupported dtype value: V8$
+^ERROR: TypeError: numpy void dtypes are not supported$

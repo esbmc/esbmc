@@ -1,5 +1,0 @@
-CORE
-main.c
---sv-comp --force-malloc-success
-^VERIFICATION FAILED$
-^\s+assertion p != NULL$

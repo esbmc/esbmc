@@ -1,0 +1,5 @@
+CORE
+main.py
+--unwind 5
+^\s+FAILED\s+\[lookup\.assertion\.\d+\]\s+line\s+19\s+assertion
+^VERIFICATION FAILED$

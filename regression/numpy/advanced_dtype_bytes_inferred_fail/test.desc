@@ -1,0 +1,4 @@
+CORE
+main.py
+--incremental-bmc
+^ERROR: TypeError: numpy\.array\(\) of bytes without an S<n> dtype is not supported$

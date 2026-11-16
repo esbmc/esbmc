@@ -149,6 +149,51 @@ void clang_cpp_maint::convert_expression_to_code(exprt &expr)
   expr.swap(code);
 }
 
+// Finds the destructor of @p type, unless calling it would do nothing: its
+// body is empty, or it has no symbol, as for the OM's exception slot table.
+static bool
+find_destructor(const namespacet &ns, const typet &type, code_function_callt &d)
+{
+  if (!get_destructor(ns, type, d))
+    return false;
+  const symbolt *symbol = ns.lookup(d.function().identifier());
+  if (symbol == nullptr)
+    return false;
+  const exprt &body = symbol->get_value();
+  return !(body.statement() == "block" && body.operands().empty());
+}
+
+// Appends to @p dest a call of @p destructor on @p object, or on each of its
+// elements in reverse order of construction ([class.dtor]/13).
+static void destroy_object(
+  const namespacet &ns,
+  const exprt &object,
+  const code_function_callt &destructor,
+  code_blockt &dest)
+{
+  const typet &type = ns.follow(object.type());
+  if (!type.is_array())
+  {
+    code_function_callt call = destructor;
+    call.arguments().push_back(address_of_exprt(object));
+    dest.move_to_operands(call);
+    return;
+  }
+
+  BigInt count;
+  if (to_integer(to_array_type(type).size(), count))
+    return;
+  for (BigInt i = count; i > 0;)
+  {
+    i = i - 1;
+    destroy_object(
+      ns,
+      index_exprt(object, from_integer(i, index_type()), type.subtype()),
+      destructor,
+      dest);
+  }
+}
+
 // [basic.start.term]/1: objects with static storage duration are destroyed
 // after main returns, in reverse order of the completion of their
 // constructors. A function-local static with a dynamic initializer is
@@ -162,27 +207,33 @@ void clang_cpp_maint::static_lifetime_destroy(codet &dest)
   std::vector<codet> local_statics, globals;
 
   context.foreach_operand_in_order([&](const symbolt &s) {
-    code_function_callt destructor;
     if (
       !s.static_lifetime || s.is_extern || s.is_type ||
-      s.get_type().is_code() || has_prefix(s.id, "c:@N@std@") ||
-      !get_destructor(ns, s.get_type(), destructor))
+      s.get_type().is_code() || has_prefix(s.id, "c:@N@std@"))
       return;
 
-    destructor.arguments().push_back(address_of_exprt(symbol_expr(s)));
+    const typet *element = &ns.follow(s.get_type());
+    while (element->is_array())
+      element = &ns.follow(element->subtype());
+    code_function_callt destructor;
+    if (!find_destructor(ns, *element, destructor))
+      return;
     destructor.location() = s.location;
+
+    code_blockt destructors;
+    destroy_object(ns, symbol_expr(s), destructor, destructors);
 
     const symbolt *guard =
       context.find_symbol(s.id.as_string() + "$init_guard");
     if (guard == nullptr)
     {
-      globals.push_back(destructor);
+      globals.push_back(destructors);
       return;
     }
 
     code_ifthenelset if_constructed;
     if_constructed.cond() = symbol_expr(*guard);
-    if_constructed.then_case() = destructor;
+    if_constructed.then_case() = destructors;
     local_statics.push_back(if_constructed);
   });
 

@@ -1,0 +1,9 @@
+regression/python/github_8892_abs_call_once
+regression/python/github_8892_abs_ir
+regression/python/github_8892_abs_min
+regression/python/github_8892_abs_min_constant_unsupported
+regression/python/github_8892_abs_min_excluded
+regression/python/github_8892_abs_min_excluded_fail
+regression/python/github_8892_abs_min_expr_unsupported
+regression/python/github_8892_abs_min_literal_unsupported
+regression/python/github_8892_abs_min_unsupported

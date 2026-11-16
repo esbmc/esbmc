@@ -8,6 +8,11 @@
 #include <util/irep/location.h>
 #include <util/base/prefix.h>
 
+// Defined here rather than beside the other goto_functionst statics in
+// bmc.cpp: symex writes this set, and not every symex client links bmc.cpp.
+std::set<std::string> goto_functionst::truncated_loops;
+std::mutex goto_functionst::truncated_loops_mutex;
+
 void goto_convertt::convert_function_call(
   const code_function_callt &function_call,
   goto_programt &dest)

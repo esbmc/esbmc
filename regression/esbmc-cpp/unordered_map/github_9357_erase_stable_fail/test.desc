@@ -1,0 +1,5 @@
+CORE
+main.cpp
+--std c++17 --unwind 20
+^VERIFICATION FAILED$
+^\s*FAILED\s+\[main\.assertion\.\d+\]\s+line\s+13\s+assertion r != 20$

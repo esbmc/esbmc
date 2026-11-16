@@ -1,0 +1,6 @@
+CORE
+main.py
+
+^  x = 15 
+^  FAILED +\[global\.assertion\.1\] +line 4 +assertion r != 15$
+^VERIFICATION FAILED$

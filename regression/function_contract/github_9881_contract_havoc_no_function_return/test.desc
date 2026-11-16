@@ -1,0 +1,6 @@
+CORE
+main.c
+--replace-call-with-contract "*" --witness-output-yaml -
+^VERIFICATION FAILED$
+value: "\\\\result == 5"\n.*\n.*\n.*\n *line: 16\n *column: 33$
+(?s)\A(?!.*result == 42)

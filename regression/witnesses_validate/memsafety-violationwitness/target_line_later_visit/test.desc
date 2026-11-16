@@ -1,0 +1,5 @@
+CORE
+main.c
+--validate-violation-witness --witness witness.yml
+^\s+FAILED\s+\[main\.heap-array-bounds-violated\.\d+\]\s+line 9
+^VERIFICATION FAILED$

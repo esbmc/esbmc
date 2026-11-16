@@ -1,0 +1,5 @@
+CORE
+main.c
+--show-funccall-trace
+^Violated property:\n  file \S*main\.c line 7 column 20 function check\n  assertion g != 3\n  .*\nFunction call trace:\n  main at file \S*main\.c line 8 column 1\n  setup at file \S*main\.c line 10 column 3 function main\n  check at file \S*main\.c line 11 column 3 function main$
+^VERIFICATION FAILED$

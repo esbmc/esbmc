@@ -1,0 +1,4 @@
+CORE
+main.c
+--printf-check --no-pointer-check
+^VERIFICATION SUCCESSFUL$

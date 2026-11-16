@@ -1,0 +1,5 @@
+CORE
+main.py
+
+^  assertion \(signed long int\)a < 2147483648$
+^VERIFICATION FAILED$

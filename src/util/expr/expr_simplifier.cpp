@@ -5,6 +5,7 @@
 #include <vector>
 
 #include <util/arith/arith_tools.h>
+#include <util/config/config.h>
 #include <util/expr/base_type.h>
 #include <util/lang/c_types.h>
 #include <util/expr/expr_reassociate.h>
@@ -426,8 +427,14 @@ static expr2tc simplify_arith_2ops(
     // Fix rounding when a bv overflow occurs. Only the bv arm yields a
     // constant_int2t result, so this reproduces the original per-arm fixup.
     if (!is_nil_expr(simpl_res) && is_constant_int2t(simpl_res))
+    {
+      if (
+        int_encoding_fold_wraps(
+          to_constant_int2t(simpl_res).value, simpl_res->type))
+        return expr2tc();
       simpl_res =
         from_integer(to_constant_int2t(simpl_res).value, simpl_res->type);
+    }
   }
 
   return typecast_check_return(type, simpl_res);
@@ -572,7 +579,8 @@ static expr2tc fold_bitnot_plus_const(
     return is_bitnot2t(e) && e->type == type ? to_bitnot2t(e).value : expr2tc();
   };
   auto is_const = [&type](const expr2tc &e) {
-    return is_constant_int2t(e) && e->type == type;
+    return is_constant_int2t(e) && e->type == type &&
+           !int_encoding_fold_wraps(to_constant_int2t(e).value - 1, type);
   };
   auto decrement = [&type](const expr2tc &c) {
     return from_integer(to_constant_int2t(c).value - 1, type);
@@ -708,12 +716,14 @@ expr2tc add2t::do_simplify() const
   // longer match. Catch the value-shaped form too.
   if (
     is_signedbv_type(type) && is_constant_int2t(side_2) &&
-    to_constant_int2t(side_2).value.is_negative())
+    to_constant_int2t(side_2).value.is_negative() &&
+    !int_encoding_fold_wraps(-to_constant_int2t(side_2).value, type))
     return sub2tc(
       type, side_1, from_integer(-to_constant_int2t(side_2).value, type));
   if (
     is_signedbv_type(type) && is_constant_int2t(side_1) &&
-    to_constant_int2t(side_1).value.is_negative())
+    to_constant_int2t(side_1).value.is_negative() &&
+    !int_encoding_fold_wraps(-to_constant_int2t(side_1).value, type))
     return sub2tc(
       type, side_2, from_integer(-to_constant_int2t(side_1).value, type));
 
@@ -1326,8 +1336,14 @@ static expr2tc simplify_arith_1op(const type2tc &type, const expr2tc &value)
     // Properly handle truncation when an overflow occurs
     // or when the result gets out of the bounds of the type
     if (!is_nil_expr(simpl_res) && is_constant_int2t(simpl_res))
+    {
+      if (
+        int_encoding_fold_wraps(
+          to_constant_int2t(simpl_res).value, simpl_res->type))
+        return expr2tc();
       simpl_res =
         from_integer(to_constant_int2t(simpl_res).value, simpl_res->type);
+    }
   }
   else if (is_fixedbv_type(value))
   {
@@ -2782,6 +2798,9 @@ static expr2tc do_bit_munge_operation(
      * past the width. Require 0 <= br < 64 and otherwise leave the shift
      * symbolic for the solver. */
     can_eval &= !is_shift || (br >= 0 && br < 64);
+    if constexpr (std::is_same_v<constructor, shl2t>)
+      can_eval =
+        can_eval && !int_encoding_fold_wraps(bl * BigInt::power2(r), type);
     if (can_eval)
     {
       uint64_t res = opfunc(l, r);
@@ -3584,6 +3603,8 @@ static std::optional<expr2tc> fold_constant_bv_source(
     // type: from_integer(BigInt, type2tc) truncates/sign-extends to the
     // destination width via the same binary round-trip the legacy
     // from_integer + to_integer pair performed.
+    if (int_encoding_fold_wraps(theint.value, type))
+      return expr2tc();
     return from_integer(theint.value, type);
   }
 
@@ -4841,12 +4862,19 @@ struct Lessthantor
   }
 };
 
+/// Under --ir an integer is unbounded, so its type does not bound its value
+/// and folds that rely on the type's range are unsound (#9534).
+static bool type_bounds_value()
+{
+  return !config.options.get_bool_option("int-encoding");
+}
+
 /// Type-extreme detector. For an integer constant @p c against bv type @p t,
 /// reports whether the constant equals the type's representable max or min.
 /// Used to short-circuit ordered comparisons against the bounds of the type.
 static bool is_type_max(const BigInt &c, const type2tc &t)
 {
-  if (!is_bv_type(t))
+  if (!is_bv_type(t) || !type_bounds_value())
     return false;
   unsigned w = t->get_width();
   if (is_signedbv_type(t))
@@ -4856,7 +4884,7 @@ static bool is_type_max(const BigInt &c, const type2tc &t)
 
 static bool is_type_min(const BigInt &c, const type2tc &t)
 {
-  if (!is_bv_type(t))
+  if (!is_bv_type(t) || !type_bounds_value())
     return false;
   if (is_signedbv_type(t))
     return c == -BigInt::power2(t->get_width() - 1);
@@ -4868,6 +4896,8 @@ static bool is_type_min(const BigInt &c, const type2tc &t)
 // (the C promotion `(int)a_u16` shape — the sign bit is never set).
 static bool is_provably_nonneg(const expr2tc &e)
 {
+  if (!type_bounds_value())
+    return false;
   if (is_unsignedbv_type(e))
     return true;
   if (is_typecast2t(e))
@@ -5998,19 +6028,10 @@ struct Signbittor
   }
 };
 
+// No fold of signbit(neg(x)) or signbit(abs(x)): under --fixedbv and --ir
+// neither flips or clears the sign the way IEEE 754 does.
 expr2tc signbit2t::do_simplify() const
 {
-  // signbit(abs(x)) = false. IEEE 754 absoluteValue clears the sign bit
-  // unconditionally, including for NaN payloads.
-  if (is_abs2t(operand))
-    return gen_false_expr();
-
-  // signbit(neg(x)) = !signbit(x). IEEE 754 negate flips the sign bit
-  // unconditionally — same caveat for NaN, but the bit flip is
-  // architecture-independent at the IR level.
-  if (is_neg2t(operand))
-    return not2tc(signbit2tc(to_neg2t(operand).value));
-
   return simplify_floatbv_1op<Signbittor, signbit2t>(type, operand);
 }
 
@@ -6079,6 +6100,14 @@ expr2tc bswap2t::do_simplify() const
   // For a signedbv result type, from_integer will reinterpret the
   // unsigned bit pattern as signed via the same binary round-trip.
   return from_integer(new_value, type);
+}
+
+/// The 2-op float functors fold into a copy of the first operand; drop its
+/// source spelling, which c_expr2string would print in place of the value.
+static void drop_float_cformat(expr2tc &e)
+{
+  if (is_constant_floatbv2t(e))
+    to_constant_floatbv2t(e).cformat = irep_idt();
 }
 
 template <template <typename> class TFunctor, typename constructor>
@@ -6199,6 +6228,7 @@ static expr2tc simplify_floatbv_2ops(
       rounding_mode,
       is_constant,
       get_value);
+    drop_float_cformat(simpl_res);
   }
   else
   {
@@ -6428,7 +6458,9 @@ expr2tc ieee_rem2t::do_simplify() const
   // left to the solver. What does fold are the operand facts that decide the
   // result no matter what the other side is (IEEE 754 remainder; the
   // operation is exact, so no rounding mode participates).
-  assert(is_floatbv_type(type));
+  // Under --fixedbv the libm models' ieee_rem nodes are fixedbv (#10774).
+  if (!is_floatbv_type(type))
+    return expr2tc();
   const ieee_float_spect spec(to_floatbv_type(type));
 
   if (is_constant_floatbv2t(side_1))
@@ -6466,6 +6498,26 @@ expr2tc ieee_rem2t::do_simplify() const
   return expr2tc();
 }
 
+// Whether fma(x, y, z) is a NaN whatever the rounding mode.
+static bool
+fma_yields_nan(const ieee_floatt &x, const ieee_floatt &y, const ieee_floatt &z)
+{
+  // A NaN operand gives NaN. So does 0 * Inf or Inf * 0, which is a domain
+  // error whether or not z is a NaN.
+  if (x.is_NaN() || y.is_NaN() || z.is_NaN())
+    return true;
+  if ((x.is_zero() && y.is_infinity()) || (y.is_zero() && x.is_infinity()))
+    return true;
+
+  // If x*y is an exact infinity and z is an infinity with the opposite sign,
+  // NaN is returned and FE_INVALID is raised. The exact product of two finite
+  // operands is finite even when rounding it alone would overflow, so test the
+  // operands rather than a rounded x * y (#9426).
+  const bool product_sign = x.get_sign() != y.get_sign();
+  return (x.is_infinity() || y.is_infinity()) && z.is_infinity() &&
+         product_sign != z.get_sign();
+}
+
 expr2tc ieee_fma2t::do_simplify() const
 {
   assert(is_floatbv_type(type));
@@ -6484,44 +6536,10 @@ expr2tc ieee_fma2t::do_simplify() const
   ieee_floatt n2 = to_constant_floatbv2t(value_2).value;
   ieee_floatt n3 = to_constant_floatbv2t(value_3).value;
 
-  // If x or y are NaN, NaN is returned
-  if (n1.is_NaN() || n2.is_NaN())
-  {
-    n1.make_NaN();
-    return constant_floatbv2tc(n1);
-  }
-
-  // If x is zero and y is infinite or if x is infinite and y is zero,
-  // and z is not a NaN, a domain error shall occur, and either a NaN,
-  // or an implementation-defined value shall be returned.
-
-  // If x is zero and y is infinite or if x is infinite and y is zero,
-  // and z is a NaN, then NaN is returned and FE_INVALID may be raised
-  if ((n1.is_zero() && n2.is_infinity()) || (n2.is_zero() && n1.is_infinity()))
-  {
-    n1.make_NaN();
-    return constant_floatbv2tc(n1);
-  }
-
-  // If z is NaN, and x*y aren't 0*Inf or Inf*0, then NaN is returned
-  // (without FE_INVALID)
-  if (n3.is_NaN())
-  {
-    n1.make_NaN();
-    return constant_floatbv2tc(n1);
-  }
-
-  // If x*y is an exact infinity and z is an infinity with the opposite sign,
-  // NaN is returned and FE_INVALID is raised
-  n1 *= n2;
-  if (
-    (n1.is_infinity() && n3.is_infinity()) && (n1.get_sign() != n3.get_sign()))
-  {
-    n1.make_NaN();
-    return constant_floatbv2tc(n1);
-  }
-
-  return expr2tc();
+  if (!fma_yields_nan(n1, n2, n3))
+    return expr2tc();
+  n1.make_NaN();
+  return constant_floatbv2tc(n1);
 }
 
 expr2tc ieee_sqrt2t::do_simplify() const

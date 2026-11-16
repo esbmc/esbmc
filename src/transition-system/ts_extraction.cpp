@@ -118,14 +118,12 @@ bool calls_are_supported(
       return false;
     }
     const irep_idt &name = to_symbol2t(callee).thename;
-    // src/c2goto/library/setjmp.c models these as __ESBMC_unreachable(): the
-    // marker means "not modelled", but with the unreachability intrinsic
-    // enabled it becomes a reachable-error property, so every program using
-    // them reports a violation that is not in the program. Decline instead.
+    // lower_longjmp turns these into control flow across frames, which
+    // extraction has not been validated against. Decline instead.
     if (
       name == "c:@F@setjmp" || name == "c:@F@_setjmp" || name == "c:@F@longjmp")
     {
-      log_warning("calls {}, which ESBMC does not model", name.as_string());
+      log_warning("calls {}, which extraction declines", name.as_string());
       return false;
     }
     if (std::find(stack.begin(), stack.end(), name) != stack.end())

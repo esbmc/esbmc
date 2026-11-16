@@ -1,0 +1,4 @@
+THOROUGH
+main.py
+--incremental-bmc
+^ERROR: TypeError: numpy element-wise 'RShift' mixing uint64 with another type or shifting it is not supported$

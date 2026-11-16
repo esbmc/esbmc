@@ -1,0 +1,5 @@
+CORE
+main.c
+
+^VERIFICATION FAILED$
+FAILED.*assertion s\[i\]\.h == 0x0304

@@ -1,0 +1,9 @@
+CORE
+main.c
+--termination --max-inductive-step 3 --k-step 2 --unlimited-k-steps --no-pointer-check --no-bounds-check --witness-output-yaml -
+^VERIFICATION FAILED$
+non-terminating execution
+action: "cycle"
+line: 6$
+column: 3$
+specification: "F end"

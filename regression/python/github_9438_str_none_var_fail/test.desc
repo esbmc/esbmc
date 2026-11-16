@@ -1,0 +1,6 @@
+CORE
+main.py
+--unwind 5 --multi-property
+PASSED .*line +3 +assertion
+FAILED .*line +4 +assertion
+^VERIFICATION FAILED$

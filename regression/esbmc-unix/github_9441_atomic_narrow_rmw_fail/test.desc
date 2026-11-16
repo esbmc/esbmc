@@ -1,0 +1,5 @@
+CORE
+main.c
+--64 --no-standard-checks --unwind 20
+^  FAILED +\[main\.assertion\.[0-9]+\] .*assertion c == 2$
+^VERIFICATION FAILED$

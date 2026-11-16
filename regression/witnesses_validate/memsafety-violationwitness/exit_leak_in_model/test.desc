@@ -1,0 +1,5 @@
+CORE
+main.c
+--memory-leak-check --no-reachable-memory-leak --no-abnormal-memory-leak --incremental-bmc --validate-violation-witness --witness witness.yml
+^\s+FAILED\s+\[exit\.memory-leak\.\d+\]
+^VERIFICATION FAILED$

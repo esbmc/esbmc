@@ -1,0 +1,5 @@
+CORE
+main.c
+--parallel-solving --smt-symex-guard
+^ERROR: --parallel-solving cannot be combined with --smt-symex-guard$
+\A(?![\s\S]*VERIFICATION)[\s\S]*\Z

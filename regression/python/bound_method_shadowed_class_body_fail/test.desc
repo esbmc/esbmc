@@ -1,0 +1,4 @@
+CORE
+main.py
+
+^ERROR: Cannot infer type for class attribute 'a' in class 'K'\. Please add explicit type annotation\.$

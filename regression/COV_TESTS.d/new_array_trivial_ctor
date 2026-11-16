@@ -1,0 +1,2 @@
+regression/esbmc-cpp/cpp/new_array_trivial_ctor_no_loop
+regression/esbmc-cpp/cpp/new_array_trivial_ctor_no_loop_fail

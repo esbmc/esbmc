@@ -1,0 +1,6 @@
+CORE
+main.c
+--32 --no-pointer-check --witness-output-yaml -
+^VERIFICATION FAILED$
+value: "\\\\result == 5"
+(?s)\A(?!.*result == 5.*result == 5)

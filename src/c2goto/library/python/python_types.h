@@ -40,6 +40,15 @@ typedef struct __ESBMC_PyObj
 } PyObject;
 
 /**
+ * @brief One element of a typed list: an int. A struct rather than a bare
+ * integer so the element array is accessed element-wise, as `items` is.
+ */
+typedef struct __ESBMC_PySlot
+{
+  long long v;
+} PySlot;
+
+/**
  * @brief Minimal representation of a Python-like list object.
  *
  * Example usage in C:
@@ -57,7 +66,15 @@ typedef struct __ESBMC_PyListObj
   PyObject *items; /**< Array of PyObject items (SMT infinite array concept) */
   size_t size;     /**< Number of elements currently in use */
   bool is_tuple;   /**< Built by tuple(x), which the model keeps as a list */
+  const bool *may_nest; /**< Whether an element may be a nested list */
+  /** Element storage of a typed list, whose every element is an int, else
+   *  unused. A typed list leaves items NULL. */
+  PySlot *slot;
 } PyListObject;
+
+/* The two targets of PyListObject::may_nest, defined in list.c. */
+extern const bool __ESBMC_list_nest_no;
+extern const bool __ESBMC_list_nest_yes;
 
 /**
  * @brief Minimal representation of a Python slice object.

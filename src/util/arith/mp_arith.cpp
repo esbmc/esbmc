@@ -1,3 +1,4 @@
+#include <bitset>
 #include <cassert>
 #include <cctype>
 #include <cstdlib>
@@ -61,11 +62,13 @@ const std::string integer2binary(const BigInt &n, std::size_t width)
     a = a - 1;
   }
 
-  std::size_t len = a.digits(2) + 2;
-  std::vector<char> buffer(len);
-  char *s = a.as_string(buffer.data(), len, 2);
-
-  std::string result(s);
+  // Read off the bytes: as_string() divides the whole number once per digit,
+  // which is quadratic in its width.
+  std::vector<unsigned char> bytes(a.digits(256) + 1);
+  a.dump(bytes.data(), bytes.size());
+  std::string result;
+  for (unsigned char byte : bytes)
+    result += std::bitset<8>(byte).to_string();
 
   if (result.size() < width)
   {
@@ -91,6 +94,19 @@ const std::string integer2string(const BigInt &n, unsigned base)
 
   std::string result(s);
 
+  return result;
+}
+
+/* Through the bytes: BigInt's own parser multiplies the whole number once per
+ * digit, which is quadratic in its width. */
+static BigInt unsigned_binary2integer(const char *s, std::size_t len)
+{
+  std::vector<unsigned char> bytes((len + 7) / 8);
+  for (std::size_t i = 0; i < len; i++)
+    if (s[len - 1 - i] == '1')
+      bytes[bytes.size() - 1 - i / 8] |= 1 << i % 8;
+  BigInt result;
+  result.load(bytes.data(), bytes.size());
   return result;
 }
 
@@ -135,10 +151,10 @@ const BigInt binary2integer(const std::string &n, bool is_signed)
 
   if (is_signed && n[0] == '1')
   {
-    BigInt result(n.c_str() + 1, 2);
+    BigInt result = unsigned_binary2integer(n.c_str() + 1, n.size() - 1);
     result -= BigInt(1) << (n.size() - 1);
     return result;
   }
   else
-    return BigInt(n.c_str(), 2);
+    return unsigned_binary2integer(n.c_str(), n.size());
 }

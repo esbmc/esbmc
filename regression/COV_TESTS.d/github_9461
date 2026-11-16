@@ -1,0 +1,7 @@
+regression/python/github_9461
+regression/python/github_9461_fail
+regression/python/github_9461_method
+regression/python/github_9461_method_fail
+regression/python/github_9461_local
+regression/python/github_9461_list_attr
+regression/python/github_9461_set_literal_attr

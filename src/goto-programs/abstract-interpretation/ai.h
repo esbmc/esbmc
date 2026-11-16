@@ -7,6 +7,10 @@
 #include <iosfwd>
 #include <map>
 #include <memory>
+#include <optional>
+#include <unordered_map>
+#include <unordered_set>
+#include <vector>
 #include <goto-programs/abstract-interpretation/ai_domain.h>
 #include <goto-programs/goto_functions.h>
 #include <util/base/xml.h>
@@ -87,7 +91,36 @@ public:
   virtual void
   output(const goto_functionst &goto_functions, std::ostream &out) const;
 
+  /// The DECLs of @p caller when it shares a call-graph cycle with @p callee,
+  /// so a nested activation of @p caller, whose locals have the same symbols,
+  /// may have left its own values in the state at the return site; nullptr
+  /// otherwise.
+  const std::vector<expr2tc> *
+  reentered_locals(const irep_idt &caller, const irep_idt &callee) const;
+
+  /// The symbols whose address the analysed functions take, the only ones a
+  /// write through a pointer can change; nullptr when one program was analysed
+  /// on its own.
+  const std::unordered_set<irep_idt, irep_id_hash> *address_taken() const
+  {
+    return taken ? &*taken : nullptr;
+  }
+
+  /// The function whose body holds the FUNCTION_CALL @p call.
+  const irep_idt &function_of(goto_programt::const_targett call) const
+  {
+    return call_site_function.at(&*call);
+  }
+
 protected:
+  void find_call_cycles(const goto_functionst &goto_functions);
+
+  std::unordered_map<const goto_programt::instructiont *, irep_idt>
+    call_site_function;
+  std::unordered_map<irep_idt, unsigned, irep_id_hash> call_cycle;
+  std::unordered_map<irep_idt, std::vector<expr2tc>, irep_id_hash> cycle_locals;
+  std::optional<std::unordered_set<irep_idt, irep_id_hash>> taken;
+
   // overload to add a factory
   virtual void initialize(const goto_programt &);
   virtual void initialize(const goto_functiont &);

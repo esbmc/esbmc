@@ -170,15 +170,14 @@ public:
     // reached.
     bool flipped_guard;
 
-    // Set on the nondet assignments the standalone --loop-invariant-check
-    // schema emits in place of a loop. Every claim symex reaches after one of
-    // them is checked against the invariant's over-approximation, so a
-    // violation there means the invariant is too weak to carry the claim, not
-    // that the program can reach the state (issue #7480). A boolean rather
-    // than a test on location.comment(): the combined --loop-invariant pass
-    // emits "loop invariant havoc (verification branch)", whose downstream
-    // claims are *not* abstracted, and that comment is user-visible text
-    // rather than an interface.
+    // Set on the nondet assignments a loop-invariant schema emits: the
+    // standalone --loop-invariant-check havoc in place of a loop, and the
+    // combined pass's verification-branch havoc. A claim violated on a path
+    // that runs one of them is checked against the invariant's
+    // over-approximation, so the violation means the invariant is too weak to
+    // carry the claim, not that the program can reach the state (issues #7480,
+    // #10641). A boolean rather than a test on location.comment(), which is
+    // user-visible text rather than an interface.
     bool loop_invariant_havoc;
 
     // Set by convert_switch: decimal strings of all case constants whose
@@ -759,6 +758,20 @@ public:
 bool operator<(
   const goto_programt::const_targett i1,
   const goto_programt::const_targett i2);
+
+/// Whether \p it is the last case test of a switch, so failing it takes the
+/// default. convert_switch emits the tests back to back, separated only by
+/// checks on the switch value, and ends them with the default jump (or the
+/// SKIP that optimize_guarded_gotos leaves of it).
+inline bool is_last_switch_case_test(goto_programt::const_targett it)
+{
+  if (it->switch_case_ids.empty())
+    return false;
+  do
+    ++it;
+  while (it->is_assert() || it->is_assume());
+  return !it->is_goto() || it->switch_case_ids.empty();
+}
 
 struct const_target_hash
 {

@@ -1,0 +1,8 @@
+CORE
+main.py
+--multi-property
+^\s+FAILED\s+\[global\.assertion\.\d+\]\s+line\s+28\s+assertion !r1
+^\s+FAILED\s+\[global\.assertion\.\d+\]\s+line\s+30\s+assertion !r2
+^\s+FAILED\s+\[global\.assertion\.\d+\]\s+line\s+32\s+assertion !r3
+^\s+FAILED\s+\[global\.assertion\.\d+\]\s+line\s+34\s+assertion !r4
+^VERIFICATION FAILED$

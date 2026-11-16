@@ -1,6 +1,5 @@
-# Call sites that disagree on the element type give no usable type for the
-# unpacked parameter. The unpacking refuses it rather than reading the
-# elements untyped and reporting a verdict that does not hold.
+# Call sites that disagree on the element type each get a copy of the
+# function typed for theirs, so the unpacking reads typed elements (#9545).
 
 
 def head_rest(arr):

@@ -1,0 +1,39 @@
+- entry_type: violation_sequence
+  metadata:
+    format_version: '2.0'
+    uuid: cad095f1-6161-4356-ae1e-036466ebd3b1
+    creation_time: '2026-10-26T22:24:44Z'
+    producer:
+      name: Bubaak
+      version: 0.9.3
+      description: Found by KLEE 3.3-pre
+    task:
+      input_files:
+      - /home/cwd/sv-benchmarks/c/array-fpi/brs1f.c
+      input_file_hashes:
+        /home/cwd/sv-benchmarks/c/array-fpi/brs1f.c: fe1910830bc3102860b57f7d3f4ff0e5b69512d166716df5ac3d870ad811a3df
+      specification: CHECK( init(main()), LTL(G ! call(reach_error())) )
+      data_model: ILP32
+      language: C
+  content:
+  - segment:
+    - waypoint:
+        type: function_return
+        action: follow
+        constraint:
+          format: acsl_expression
+          value: \result == 1
+        location:
+          file_name: /home/cwd/sv-benchmarks/c/array-fpi/brs1f.c
+          line: 31
+          column: 28
+          function: main
+  - segment:
+    - waypoint:
+        type: target
+        action: follow
+        location:
+          file_name: /home/cwd/sv-benchmarks/c/array-fpi/brs1f.c
+          line: 15
+          column: 58
+          function: __VERIFIER_assert

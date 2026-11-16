@@ -1,0 +1,5 @@
+CORE
+main.c
+--memory-leak-check --incremental-bmc --validate-violation-witness --witness witness.yml
+^\s+FAILED\s+\[main\.memory-leak\.\d+\]\s+line 18
+^VERIFICATION FAILED$

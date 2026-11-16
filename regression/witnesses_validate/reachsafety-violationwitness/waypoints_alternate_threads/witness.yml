@@ -1,0 +1,46 @@
+- entry_type: "violation_sequence"
+  metadata:
+    format_version: "2.1"
+    producer:
+      name: "ESBMC"
+      version: "8.6.0"
+    task:
+      input_files:
+        - "main.c"
+      specification: "G ! call(reach_error())"
+      data_model: "LP64"
+      language: "C"
+  content:
+    - segment:
+        - waypoint:
+            type: "function_return"
+            action: "follow"
+            constraint:
+              value: "\\result == 4"
+              format: "ext_c_expression"
+            location:
+              file_name: "main.c"
+              line: 19
+              column: 29
+              function: "main"
+    - segment:
+        - waypoint:
+            type: "function_return"
+            action: "follow"
+            constraint:
+              value: "\\result == 3"
+              format: "ext_c_expression"
+            location:
+              file_name: "main.c"
+              line: 10
+              column: 33
+              function: "t"
+    - segment:
+        - waypoint:
+            type: "target"
+            action: "follow"
+            location:
+              file_name: "main.c"
+              line: 11
+              column: 3
+              function: "t"

@@ -1,0 +1,4 @@
+CORE
+main.c
+--goto2lean
+^  let k := \(BitVec\.ofInt 32 \(-3\)\);$

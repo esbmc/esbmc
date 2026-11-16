@@ -1,0 +1,6 @@
+CORE
+main.c
+--z3 --overflow-check --unsigned-overflow-check --smt-formula-only
+bvsmul_noovfl
+bvsmul_noudfl
+bvumul_noovfl

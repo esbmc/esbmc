@@ -2,9 +2,8 @@
 // triggered a false alarm because nmemb*size wrapped to 0, malloc(0) was
 // called, and data[0] got a nondet (non-zero) value.
 //
-// After the overflow fix, __ESBMC_assume(nmemb <= SIZE_MAX/size) prunes
-// the n=2^30 path entirely: the assertion is never evaluated on the
-// overflow path, so no false positive fires.  ESBMC should report
+// calloc now returns NULL when nmemb*size overflows (#9361), so the
+// assertion below is guarded away on the overflow path.  ESBMC should report
 // VERIFICATION SUCCESSFUL (no counterexample found).
 #include <stdlib.h>
 #include <limits.h>
@@ -22,8 +21,7 @@ int main(void)
   // Previously this bypassed memset and gave nondet data[0].
   int n = 1073741824;
   int *data = (int *)calloc((size_t)n, sizeof(int));
-  // If calloc succeeds, data must be zeroed.  The overflow path is pruned,
-  // so ESBMC will not explore this path -> VERIFICATION SUCCESSFUL.
+  // If calloc succeeds, data must be zeroed.  On overflow it returns NULL.
   if (data)
     verifier_assert(data[0] == 0);
   free(data);

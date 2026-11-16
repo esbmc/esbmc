@@ -2,10 +2,11 @@
 #define CPROVER_GOTO_SYMEX_GOTO_TRACE_H
 
 #include <fstream>
-#include <goto-programs/goto_program.h>
+#include <goto-programs/goto_functions.h>
 #include <goto-symex/equation/symex_target.h>
 
 #include <map>
+#include <optional>
 #include <irep2/irep2.h>
 #include <util/irep/migrate.h>
 #include <util/config/cmdline.h>
@@ -59,6 +60,14 @@ public:
   // for assume, assert, goto
   bool guard;
 
+  /* For a branching step: whether its condition reads a nondet value or a
+   * symbol no earlier step computed from constants. */
+  bool nondet_dependent = true;
+
+  /* For a branching step: whether it tests one operand of a && or ||
+   * condition, whose own direction is not the condition's. */
+  bool condition_operand = false;
+
   // for assert
   std::string comment;
 
@@ -76,6 +85,21 @@ public:
    * each paired with its value in this counterexample. A witness has nothing
    * else to record them from (#7858). */
   std::list<std::pair<expr2tc, expr2tc>> nondet_reads;
+
+  /* For a violated data race assert: the access by another thread that set the
+   * race flag slot the assert reads, i.e. the other half of the race. */
+  struct accesst
+  {
+    goto_programt::const_targett pc;
+    std::vector<stack_framet> stack_trace;
+  };
+  std::optional<accesst> racing_access;
+
+  /* The nondet calls made since the previous step, this one included: each
+   * call's ')' paired with the value it returned. A call nested in an
+   * expression returns into a hidden temporary with no step of its own, so a
+   * witness has nothing else to record it from (#9881). */
+  std::list<std::pair<locationt, expr2tc>> nondet_returns;
 
   // for OUTPUT
   std::string format_string;
@@ -143,17 +167,37 @@ void violation_yaml_goto_trace(
   optionst &options,
   const namespacet &ns,
   const goto_tracet &goto_trace,
+  const goto_functionst &goto_functions,
   const std::string &output_path_override = "");
+
+/// Write a YAML violation witness for a non-terminating execution: one cycle
+/// waypoint at the loop that the termination marker @p loc belongs to.
+void non_termination_yaml_goto_trace(optionst &options, const locationt &loc);
 
 void correctness_graphml_goto_trace(
   optionst &options,
   const namespacet &ns,
   const goto_tracet &goto_trace);
 
+/// @p transition_invariants and @p loop_invariants are (loop head, C
+/// expression) pairs written as loop_transition_invariant and loop_invariant
+/// entries.
 void correctness_yaml_goto_trace(
   optionst &options,
   const namespacet &ns,
-  const goto_tracet &goto_trace);
+  const goto_tracet &goto_trace,
+  const std::vector<std::pair<locationt, std::string>> &transition_invariants =
+    {},
+  const std::vector<std::pair<locationt, std::string>> &loop_invariants = {});
+
+/// Write the correctness witnesses (GraphML and/or YAML) the options request.
+void write_correctness_witnesses(
+  optionst &options,
+  const namespacet &ns,
+  const goto_tracet &goto_trace,
+  const std::vector<std::pair<locationt, std::string>> &transition_invariants =
+    {},
+  const std::vector<std::pair<locationt, std::string>> &loop_invariants = {});
 
 void generate_goto_trace_in_correctness_graphml_format(
   std::string &witness_output,
@@ -161,6 +205,10 @@ void generate_goto_trace_in_correctness_graphml_format(
   int &specification,
   const namespacet &ns,
   const goto_tracet &goto_trace);
+
+/// A trace value as text. Under --ir a bit-vector is not bounded by its width,
+/// so it is printed as the model's integer rather than wrapped by from_expr.
+std::string trace_value_string(const namespacet &ns, const expr2tc &value);
 
 void counterexample_value(
   std::ostream &out,

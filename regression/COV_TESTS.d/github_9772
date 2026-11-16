@@ -1,0 +1,5 @@
+regression/python/github_9772_constant
+regression/python/github_9772_sum
+regression/python/github_9772_sum_fail
+regression/python/github_9772_two_bounds
+regression/python/github_9772_unused_var

@@ -99,11 +99,12 @@ exprt python_converter::build_emptiness_check(
 
   // A string is empty when strlen(a) == 0.
   // In Python, a non-empty string is truthy; only "" is falsy.
-  if (type_utils::is_string_type(value.type()))
+  const locationt str_location = get_location_from_decl(element);
+  const exprt str_truth = apply_string_truthiness(value, str_location);
+  if (!value.type().is_bool() && str_truth.type().is_bool())
   {
-    locationt location = get_location_from_decl(element);
-    exprt is_empty = not_exprt(apply_string_truthiness(value, location));
-    is_empty.location() = location;
+    exprt is_empty = not_exprt(str_truth);
+    is_empty.location() = str_location;
     return is_empty;
   }
 
@@ -158,6 +159,28 @@ exprt python_converter::build_emptiness_check(
   return nil_exprt();
 }
 
+exprt python_converter::handle_tagged_unary_operator(
+  const std::string &op,
+  const exprt &operand,
+  const nlohmann::json &element)
+{
+  if (op == "USub")
+    return dynamic_type_handler_.build_neg_tagged(
+      operand, get_location_from_decl(element));
+  if (op == "Not")
+    return not_exprt(tagged_truthiness(operand, element["operand"]));
+  throw std::runtime_error(
+    "operator '" + op +
+    "' on a dynamically-typed variable is not yet supported");
+}
+
+static void reject_complex_truth_value(const typet &type)
+{
+  if (is_complex_type(type))
+    throw std::runtime_error(
+      "TypeError: the truth value of a complex number is not supported");
+}
+
 exprt python_converter::get_unary_operator_expr(const nlohmann::json &element)
 {
   typet type = current_element_type;
@@ -180,15 +203,8 @@ exprt python_converter::get_unary_operator_expr(const nlohmann::json &element)
 
   // A tagged operand needs runtime dispatch.
   if (type_handler_.is_tagged_scalar_type(unary_sub.type()))
-  {
-    std::string unary_op = element["op"]["_type"].get<std::string>();
-    if (unary_op == "USub")
-      return dynamic_type_handler_.build_neg_tagged(
-        unary_sub, get_location_from_decl(element));
-    throw std::runtime_error(
-      "operator '" + unary_op +
-      "' on a dynamically-typed variable is not yet supported");
-  }
+    return handle_tagged_unary_operator(
+      element["op"]["_type"].get<std::string>(), unary_sub, element);
 
   // A plain str has no unary minus; reaching the generic arithmetic builder
   // below asserts internally instead of raising.
@@ -218,6 +234,7 @@ exprt python_converter::get_unary_operator_expr(const nlohmann::json &element)
   type = unary_numeric_type(op, unary_sub.type(), type);
   if (op == "Not")
   {
+    reject_complex_truth_value(ns.follow(unary_sub.type()));
     // An optional's value is zero when it is None, and `not None` is True.
     unary_sub = unwrap_optional_if_needed(unary_sub, element);
     exprt is_empty = build_emptiness_check(unary_sub, element);

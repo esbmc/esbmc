@@ -75,6 +75,9 @@ void goto_symext::volatile_check(expr2tc &expr)
   if (!options.get_bool_option("volatile-check"))
     return;
 
+  if (is_address_of2t(expr))
+    return;
+
   if (is_symbol2t(expr))
   {
     const symbol2t &s = to_symbol2t(expr);

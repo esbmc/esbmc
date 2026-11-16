@@ -1,0 +1,5 @@
+CORE
+main.c
+--k-induction --k-step 2 --max-k-step 1
+^ESBMC version
+^ERROR: --k-step \(2\) must be smaller than --max-k-step \(1\)\.

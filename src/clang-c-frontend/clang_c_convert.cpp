@@ -1698,6 +1698,12 @@ bool clang_c_convertert::get_builtin_type(
   const clang::BuiltinType &bt,
   typet &new_type)
 {
+  if (auto it = builtin_types.find(bt.getKind()); it != builtin_types.end())
+  {
+    new_type = it->second;
+    return false;
+  }
+
   std::string c_type;
 
   switch (bt.getKind())
@@ -2126,6 +2132,7 @@ bool clang_c_convertert::get_builtin_type(
   }
 
   new_type.cpp_type(c_type);
+  builtin_types.emplace(bt.getKind(), new_type);
   return false;
 }
 
@@ -2506,6 +2513,10 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     if (get_expr(*p.getSubExpr(), new_expr))
       return true;
 
+    // A parenthesised ternary keeps the location of its ? (#9883).
+    if (llvm::isa<clang::ConditionalOperator>(p.getSubExpr()->IgnoreParens()))
+      return false;
+
     break;
   }
 
@@ -2669,6 +2680,24 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
             result.Val.getInt().getZExtValue(), bv_width(size_type())),
           integer2string(result.Val.getInt().getZExtValue()),
           size_type()));
+
+      // C17 6.5.3.4p2: an operand of variable length array type is evaluated.
+      // Only a side-effecting one is kept, and only its address, as clang's
+      // codegen does: the array itself is never read, so `sizeof *p` checks
+      // no dereference of p.
+      if (
+        !unary.isArgumentType() &&
+        unary.getTypeOfArgument()->isVariableArrayType() &&
+        unary.getArgumentExpr()->HasSideEffects(*ASTContext))
+      {
+        exprt operand;
+        if (get_expr(*unary.getArgumentExpr(), operand))
+          return true;
+
+        new_expr = exprt("comma", sizeof_expr.type());
+        new_expr.copy_to_operands(address_of_exprt(operand), sizeof_expr);
+        break;
+      }
 
       new_expr = sizeof_expr;
       break;
@@ -2947,13 +2976,16 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     exprt if_expr("if", t);
     if_expr.copy_to_operands(cond, then, else_expr);
 
-    // Record the column of the ? token on the expression location so that
-    // goto_sideeffects can propagate it to the IF instruction when lowering
-    // this ternary for branching waypoints.
+    // A branching waypoint for a ternary points at its ?, so locate the
+    // expression there: goto_sideeffects copies this location to the IF
+    // instruction it lowers the ternary to (#9883).
     clang::PresumedLoc qLoc;
     get_presumed_location(ternary_if.getQuestionLoc(), qLoc);
     if (!qLoc.isInvalid())
+    {
+      location.set_line(qLoc.getLine());
       location.set_column(qLoc.getColumn());
+    }
 
     new_expr = if_expr;
     break;
@@ -3139,10 +3171,14 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
         inits.operands().at(0) = init;
 
         // set which field is being initialized
-        auto init_union_field = init_stmt.getInitializedFieldInUnion();
-        if (init_union_field)
-          to_union_expr(inits).set_component_name(
-            init_union_field->getName().str());
+        if (auto *fd = init_stmt.getInitializedFieldInUnion())
+        {
+          // Name the field as its component is named: an anonymous member
+          // has no source name.
+          std::string name, id;
+          get_decl_name(*fd, name, id);
+          to_union_expr(inits).set_component_name(id);
+        }
       }
     }
     else if (t.id() == typet::t_complex && init_stmt.getNumInits() == 2)
@@ -3317,7 +3353,11 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
           return true;
         inits.operands().at(0) = init;
         if (auto *fd = init_stmt.getInitializedFieldInUnion())
-          to_union_expr(inits).set_component_name(fd->getName().str());
+        {
+          std::string name, id;
+          get_decl_name(*fd, name, id);
+          to_union_expr(inits).set_component_name(id);
+        }
       }
     }
     else if (args.empty())
@@ -4303,6 +4343,46 @@ bool clang_c_convertert::get_cast_expr(
 
   switch (cast.getCastKind())
   {
+  case clang::CK_LValueToRValue:
+  {
+    if (
+      config.options.get_bool_option("volatile-check") &&
+      cast.getSubExpr()->getType().isVolatileQualified())
+    {
+      locationt location;
+      get_start_location_from_stmt(cast, location);
+      const std::string path = location.file().as_string();
+      symbolt &snapshot =
+        anon_symbol.new_symbol(context, type, path + "$volatile_read$");
+      get_default_symbol(
+        snapshot,
+        get_modulename_from_path(path),
+        type,
+        snapshot.name,
+        snapshot.id,
+        location);
+      snapshot.file_local = true;
+
+      // Keep the original access so pointer and bounds checks still apply.
+      code_blockt body;
+      code_declt load(symbol_expr(snapshot), expr);
+      load.location() = location;
+      body.move_to_operands(load);
+      // Preserve bit-field widths before conversion (C11 6.7.2.1/10).
+      exprt nondet = side_effect_exprt("nondet", expr.type());
+      gen_typecast(ns, nondet, type);
+      code_expressiont result(nondet);
+      result.location() = location;
+      body.move_to_operands(result);
+      side_effect_exprt read("statement_expression", type);
+      read.copy_to_operands(body);
+      read.location() = location;
+      expr = read;
+    }
+    gen_typecast(ns, expr, type);
+    break;
+  }
+
   case clang::CK_ArrayToPointerDecay:
   case clang::CK_FunctionToPointerDecay:
   case clang::CK_BuiltinFnToFnPtr:
@@ -4369,6 +4449,18 @@ bool clang_c_convertert::get_cast_expr(
 
     if (routed)
     {
+      // [conv.ptr]/3: a null pointer converts to a null pointer, not to the
+      // base subobject's offset from null. CK_UncheckedDerivedToBase only
+      // feeds member access, which is UB on null. A side-effecting operand is
+      // left unguarded rather than evaluated twice, as in
+      // clang_c_adjust::adjust_derived_to_base.
+      if (
+        ptr_mode && cast.getCastKind() == clang::CK_DerivedToBase &&
+        !cast.getSubExpr()->HasSideEffects(*ASTContext))
+        cur = if_exprt(
+          equality_exprt(expr, gen_zero(expr.type())),
+          gen_zero(cur.type()),
+          cur);
       expr = cur;
       break;
     }
@@ -4438,7 +4530,6 @@ bool clang_c_convertert::get_cast_expr(
   case clang::CK_FloatingCast:
 
   case clang::CK_ToVoid:
-  case clang::CK_LValueToRValue:
 
   case clang::CK_PointerToBoolean:
   case clang::CK_PointerToIntegral:
@@ -5840,10 +5931,24 @@ void clang_c_convertert::set_location(
     return;
   }
 
-  location.set_line(line);
-  location.set_file(filename);
-  location.set_column(column);
-  if (!function_name.empty())
+  // Share each field equal to the previous location's rather than build a
+  // fresh node per AST node (#10190).
+  auto reuse = [&](const char *field, bool same) {
+    if (same)
+      location.set(field, last_loc.find(field));
+    return same;
+  };
+  if (!reuse("line", last_loc_valid && line == last_loc_line))
+    location.set_line(line);
+  if (!reuse("file", last_loc_valid && last_loc_filename == filename))
+    location.set_file(filename);
+  auto [col, inserted] = column_nodes.try_emplace(column);
+  if (inserted)
+    col->second.id(std::to_string(column));
+  location.set("column", col->second);
+  if (
+    !function_name.empty() &&
+    !reuse("function", last_loc_valid && last_loc_function == function_name))
     location.set_function(function_name);
 
   last_loc = location;

@@ -1,0 +1,5 @@
+CORE
+main.c
+--big-endian --no-slice
+^  u\.s\.v\[0\] = \{ \.c=1
+^VERIFICATION FAILED$

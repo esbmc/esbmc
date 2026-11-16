@@ -1,0 +1,5 @@
+CORE
+main.c
+
+^VERIFICATION FAILED$
+assertion g.shadow\[k \+ 3\] == 12

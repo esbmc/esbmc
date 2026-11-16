@@ -1,0 +1,8 @@
+regression/python/github_9956
+regression/python/github_9956_fail
+regression/python/github_9956_generator_arg
+regression/python/github_9956_inline
+regression/python/github_9956_list
+regression/python/github_9956_reversed
+regression/python/github_9956_two_targets
+regression/python/github_9956_zip_arg

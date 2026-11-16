@@ -1,0 +1,4 @@
+CORE
+main.py
+--incremental-bmc
+^ERROR: TypeError: rebinding a name that holds a numpy scalar is not supported as an operand of a numpy operation$

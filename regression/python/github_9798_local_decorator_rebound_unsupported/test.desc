@@ -1,0 +1,4 @@
+CORE
+main.py
+
+^ERROR: .*main.py:15:5: a decorator a function body defines is not supported$

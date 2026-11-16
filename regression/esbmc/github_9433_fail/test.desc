@@ -1,0 +1,5 @@
+CORE
+main.c
+--64 --unwind 20
+^VERIFICATION FAILED$
+assertion pthread_getspecific\(k1\) != &a$

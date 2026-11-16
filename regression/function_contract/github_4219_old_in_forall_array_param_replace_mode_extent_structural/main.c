@@ -1,24 +1,10 @@
-// Structural counterpart to github_4219_old_in_forall_array_param_replace_
-// mode_loopinv_{pass,fail} (identical contract and callee), added because
-// neither of those tests' VERDICTS actually depends on the region
-// snapshot's extent being correct: under this contract's exact shape, the
-// copy loop materialize_old_snapshots_at_callsite builds is read only from
-// loop_invariant, which --replace-call-with-contract never checks, so the
-// snapshot is sliced away before SMT encoding regardless of whether the
-// extent computed for it is right or wrong. Confirmed directly by mutation:
-// forcing find_callsite_is_fresh_extent's resolved extent to a constant
-// 1 byte (instead of the correct, rebound N * sizeof(int)) leaves the
-// entire function_contract suite passing, _loopinv_pass and _loopinv_fail
-// included.
-//
-// This test instead inspects the emitted GOTO program directly, via
-// --goto-functions-only, BEFORE slicing removes the snapshot -- the
-// region-copy loop's own exit condition names its element count literally
-// (`old_region_i_bump_call_<N> < 5`), which the required pattern below
-// pins. The same 1-byte-extent mutation that leaves every end-to-end
-// verdict unchanged flips this bound to `< 1`, making this the one test in
-// the suite that actually fails if the resolved extent is wrong rather
-// than merely absent.
+// Pins the extent find_callsite_is_fresh_extent resolves for a region
+// snapshot under --replace-call-with-contract. The forall ensures reads
+// __ESBMC_old(r[k]), so the call site builds the region-copy loop, whose exit
+// condition names the element count literally (`old_region_i_bump_call_<N> <
+// 5`). Forcing the resolved extent to 1 byte flips this bound to `< 1`. A
+// snapshot read only from loop_invariant is not built at all (#7627), which
+// is why the ensures, not the loop_invariant, carries the region reference.
 #define N 5
 
 void bump(int r[N], int c)
@@ -30,6 +16,8 @@ void bump(int r[N], int c)
   __ESBMC_ensures(r[2] == __ESBMC_old(r[2]) + c);
   __ESBMC_ensures(r[3] == __ESBMC_old(r[3]) + c);
   __ESBMC_ensures(r[4] == __ESBMC_old(r[4]) + c);
+  __ESBMC_ensures(
+    __ESBMC_forall(&k, !(k < N) || r[k] == __ESBMC_old(r[k]) + c));
   __ESBMC_assigns(r[0], r[1], r[2], r[3], r[4]);
 
   unsigned i;

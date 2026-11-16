@@ -1,0 +1,9 @@
+regression/python/github_8971_is_payload_attr
+regression/python/github_8971_is_payload_fail
+regression/python/github_8971_is_payload_isnot
+regression/python/github_8971_is_payload_name
+regression/python/github_8971_is_payload_native_twice
+regression/python/github_8971_is_payload_returned
+regression/python/github_8971_is_payload_unknown
+regression/python/github_8971_is_payload_lazy_unsupported
+regression/python/github_8971_is_payload_ternary

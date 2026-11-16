@@ -1,7 +1,7 @@
 # str() of an argument whose type the frontend cannot statically resolve — an
 # unannotated helper parameter reached only on a dead path, left as either the
 # any_type (void*) or, after dynamic retyping, the generic list pointer — must
-# be handled gracefully (treated as an int) instead of aborting conversion with
+# be handled gracefully instead of aborting conversion with
 # "TypeError: str() expects a string argument". See esbmc/esbmc#4807 (108).
 def count_void(arr):
 

@@ -1,0 +1,4 @@
+CORE
+main.py
+--incremental-bmc
+^ERROR: TypeError: binding an element of a numpy string array that is written or measured with len\(\) is not supported$

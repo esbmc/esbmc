@@ -1,0 +1,5 @@
+CORE
+main.py
+--no-bounds-check
+^VERIFICATION FAILED$
+line\s+4\s+assertion .*->type_id ==

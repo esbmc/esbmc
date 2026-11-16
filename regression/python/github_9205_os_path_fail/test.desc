@@ -1,0 +1,5 @@
+CORE
+main.py
+--unwind 4
+FAILED.*line +8 +assertion
+^VERIFICATION FAILED$

@@ -49,6 +49,29 @@ if(NOT ESBMC_LINKER STREQUAL "default" AND NOT MSVC)
 endif()
 
 #############################
+# Duplicate-library warnings
+#############################
+# Static libraries in a dependency cycle (util_esbmc <-> irep2, ...) are listed
+# twice so single-pass linkers resolve them. Apple's ld searches every archive
+# anyway and, since Xcode 15, warns once per link about each repeat.
+if(APPLE)
+  include(CheckCXXSourceCompiles)
+  set(CMAKE_REQUIRED_LINK_OPTIONS "-Wl,-no_warn_duplicate_libraries")
+  set(_ld default)
+  if(ESBMC_LINKER_IN_USE)
+    set(_ld ${ESBMC_LINKER_IN_USE})
+    list(APPEND CMAKE_REQUIRED_LINK_OPTIONS "-fuse-ld=${_ld}")
+  endif()
+  # Keyed on the linker: ld64.lld 18 rejects the flag.
+  check_cxx_source_compiles("int main(){return 0;}"
+    ESBMC_LINKER_NO_WARN_DUPLICATE_LIBRARIES_${_ld})
+  unset(CMAKE_REQUIRED_LINK_OPTIONS)
+  if(ESBMC_LINKER_NO_WARN_DUPLICATE_LIBRARIES_${_ld})
+    add_link_options("-Wl,-no_warn_duplicate_libraries")
+  endif()
+endif()
+
+#############################
 # Link-time optimization
 #############################
 if(ENABLE_IPO)

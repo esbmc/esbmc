@@ -1,0 +1,5 @@
+CORE
+main.c
+--no-bounds-check
+^VERIFICATION FAILED$
+assertion g.tail == 0

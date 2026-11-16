@@ -1,0 +1,4 @@
+CORE
+main.c
+--negating-property main:7
+^VERIFICATION SUCCESSFUL$

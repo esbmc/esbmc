@@ -1,0 +1,4 @@
+CORE
+main.py
+--incremental-bmc
+^ERROR: TypeError: astype\(\) from a complex dtype to a real one is not supported$

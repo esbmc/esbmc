@@ -702,6 +702,9 @@ public:
 
   void reserve(size_type n)
   {
+    // [vector.capacity]: length_error if n > max_size().
+    if (n > max_size())
+      throw std::length_error();
     if (n > _capacity)
     {
       // realloc in place, as assign() already does: it preserves [0, _size),
@@ -801,6 +804,8 @@ public:
       int new_capacity = _capacity * 2;
       if (new_capacity < 1)
         new_capacity = 1;
+      if (new_capacity > VECTOR_CAPACITY)
+        new_capacity = VECTOR_CAPACITY;
       reserve(new_capacity);
     }
 
@@ -831,6 +836,9 @@ public:
 
   iterator insert(iterator position, const T &x)
   {
+    // x may be an element of this vector, which the growth and shift below
+    // would move or free before it is read ([vector.modifiers]).
+    const T copy(x);
     size_type at = position - buf;
 
     // Check if we need to grow capacity
@@ -860,7 +868,7 @@ public:
 
     // And now install the new value: slot at is live unless it is the one
     // past the last element, which the shift above left raw.
-    __put(at, x, _size);
+    __put(at, copy, _size);
     _size++;
     return buf + at;
   }
@@ -903,6 +911,7 @@ public:
     if (count == 0)
       return buf + (pos - buf);
 
+    const T copy(value);
     size_type at = pos - buf;
 
     // Ensure we have enough capacity
@@ -935,7 +944,7 @@ public:
 
     // Insert the new values
     for (size_type i = 0; i < count; i++)
-      __put(at + i, value, _size);
+      __put(at + i, copy, _size);
 
     _size += count;
     return buf + at;

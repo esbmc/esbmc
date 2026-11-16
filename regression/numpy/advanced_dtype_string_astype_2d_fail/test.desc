@@ -1,0 +1,4 @@
+CORE
+main.py
+--incremental-bmc
+^ERROR: TypeError: astype\(\) of a numpy string array to this dtype is not supported$

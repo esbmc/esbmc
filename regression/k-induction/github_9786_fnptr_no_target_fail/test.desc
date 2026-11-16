@@ -1,0 +1,6 @@
+CORE
+main.c
+--k-induction --max-k-step 6 --no-pointer-check
+^  FAILED       \[main\.assertion\.1\]  line  9  result unchanged$
+^Bug found \(k = 1\)$
+^VERIFICATION FAILED$

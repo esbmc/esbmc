@@ -1,0 +1,5 @@
+CORE
+main.c
+--parallel-solving --smt-during-symex
+^ERROR: --parallel-solving cannot be combined with --smt-during-symex$
+\A(?![\s\S]*VERIFICATION)[\s\S]*\Z

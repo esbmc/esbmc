@@ -1,0 +1,5 @@
+CORE
+main.c
+--termination --k-step 2 --max-inductive-step 3 --no-assertions --no-pointer-check --no-bounds-check --witness-output-yaml witness.yml
+^Ranking function shows all executions terminate$
+^Generating Correctness Yaml Witness for: .*main\.c$

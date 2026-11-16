@@ -1,10 +1,10 @@
-"""Answer `getattr` with a default and `hasattr` on an attribute that a scope
-adds to its own instance on only some paths (#8964).
+"""Lower an attribute that a scope adds to its own instance on only some
+paths (#8964, #10584).
 
 The converter refuses such a store: the instance's struct cannot tell a path
 that set the attribute from one that did not. When the attribute is stored
-and read nowhere else, and only through `getattr` with a default or
-`hasattr`, its value and whether it is set are two local variables instead:
+and used nowhere else, its value and whether it is set are two local
+variables instead:
 
     b = B()                      b = B()
                                  esbmc_has_b_code = False
@@ -13,6 +13,15 @@ and read nowhere else, and only through `getattr` with a default or
                                      esbmc_has_b_code = True
     getattr(b, "code", 0)        esbmc_b_code if esbmc_has_b_code else 0
     hasattr(b, "code")           esbmc_has_b_code
+    y = b.code                   if not esbmc_has_b_code:
+                                     raise AttributeError(...)
+                                 y = esbmc_b_code
+    del b.code                   if not esbmc_has_b_code:
+                                     raise AttributeError(...)
+                                 esbmc_has_b_code = False
+
+A plain read or `del` is lowered only where its statement always evaluates
+it, so the raise can run before the statement.
 
 The receiver must be a name bound once, by constructing a class of the
 module, in the one scope holding every use of the attribute. Anything that
@@ -22,6 +31,7 @@ leaves the program unchanged.
 
 import ast
 import builtins
+import sys
 
 _HOOKS = {
     "setattr", "delattr", "vars", "dir", "globals", "locals", "eval", "exec", "__dict__",
@@ -65,10 +75,39 @@ def _builtin_lacks(base, attr):
             or isinstance(cls, type) and issubclass(cls, BaseException)) and not hasattr(cls, attr)
 
 
-def _class_lacks(classes, name, attr):
-    """Whether class `name` of the module, and each class it derives from,
-    leaves `attr` to its instances."""
-    cls = classes.get(name)
+def _constructed_class(module, call, classes):
+    """The class `call` constructs: `C()` of a class of the module, or `A.B()`
+    of a class nested in one, each bound once. None for any other value."""
+    if not isinstance(call, ast.Call):
+        return None
+    path = []
+    func = call.func
+    while isinstance(func, ast.Attribute):
+        path.insert(0, func.attr)
+        func = func.value
+    if not isinstance(func, ast.Name) or len(_bindings(module, func.id)) != 1:
+        return None
+    cls = classes.get(func.id)
+    for name in path:
+        cls = _nested_class(cls, name)
+    return cls
+
+
+def _nested_class(cls, name):
+    """The class `name` nested in `cls`, when `cls` binds `name` once."""
+    if cls is None:
+        return None
+    nested = [s for s in cls.body if isinstance(s, ast.ClassDef) and s.name == name]
+    bound = [
+        n for n in ast.walk(cls)
+        if getattr(n, "name", None) == name or isinstance(n, ast.Name) and n.id == name
+    ]
+    return nested[0] if len(nested) == 1 and len(bound) == 1 else None
+
+
+def _class_lacks(classes, cls, attr):
+    """Whether class `cls`, and each class it derives from, leaves `attr` to
+    its instances."""
     if cls is None or cls.decorator_list or cls.keywords:
         return False
     if any(
@@ -77,8 +116,8 @@ def _class_lacks(classes, name, attr):
             for n in ast.walk(cls)):
         return False
     return all(
-        isinstance(b, ast.Name) and
-        (_builtin_lacks(b.id, attr) if b.id not in classes else _class_lacks(classes, b.id, attr))
+        isinstance(b, ast.Name) and (_builtin_lacks(b.id, attr) if b.id not in
+                                     classes else _class_lacks(classes, classes[b.id], attr))
         for b in cls.bases)
 
 
@@ -91,6 +130,8 @@ class _Uses:
         self.nodes = []
         self.stores = []
         self.calls = []
+        self.reads = []  # (Attribute, the statement that always evaluates it)
+        self.deletes = []  # `del obj.attr` statements
 
     def add(self, receiver, node):
         if not isinstance(receiver, ast.Name):
@@ -129,10 +170,55 @@ def _supported_call(node):
     return len(node.args) == 3 and isinstance(node.args[2], (ast.Constant, ast.Name))
 
 
+_SIMPLE_STATEMENTS = (ast.Assign, ast.AnnAssign, ast.AugAssign, ast.Expr, ast.Assert, ast.Return)
+
+
+def _evaluating_statement(node, parents):
+    """The simple statement that evaluates `node` whenever it runs, or None
+    when `node` sits in a part its statement may skip: an and/or operand
+    after the first, a branch of a conditional expression, an assert
+    message, a lambda or a comprehension."""
+    child, parent = node, parents.get(id(node))
+    while parent is not None and not isinstance(parent, ast.stmt):
+        skipped = (isinstance(parent, ast.BoolOp) and child is not parent.values[0]
+                   or isinstance(parent, ast.IfExp) and child is not parent.test
+                   or isinstance(parent, (ast.Lambda, ast.ListComp, ast.SetComp, ast.DictComp,
+                                          ast.GeneratorExp, ast.NamedExpr)))
+        if skipped:
+            return None
+        child, parent = parent, parents.get(id(parent))
+    if isinstance(parent, ast.Assert) and child is parent.msg:
+        return None
+    return parent if isinstance(parent, _SIMPLE_STATEMENTS) else None
+
+
+def _delete_statement(node, parents):
+    """The `del obj.attr` statement of attribute `node`, deleting it alone."""
+    parent = parents.get(id(node))
+    return parent if isinstance(parent, ast.Delete) and parent.targets == [node] else None
+
+
+def _record_attribute_use(use, node, stores, parents):
+    """Record attribute `node`: a store, a read its statement always
+    evaluates, or a lone `del`. Any other use leaves the attribute alone."""
+    use.add(node.value, node)
+    if id(node) in stores:
+        return
+    if isinstance(node.ctx, ast.Load):
+        statement = _evaluating_statement(node, parents)
+        use.ok &= statement is not None
+        use.reads.append((node, statement))
+    else:
+        statement = _delete_statement(node, parents)
+        use.ok &= statement is not None
+        use.deletes.append(statement)
+
+
 def _uses_by_attribute(module):
     """Each attribute name's uses, or None when a use names it dynamically."""
     uses = {}
     stores = set()
+    parents = {id(c): n for n in ast.walk(module) for c in ast.iter_child_nodes(n)}
     for n in ast.walk(module):
         target = _store_target(n)
         if target is not None:
@@ -143,9 +229,7 @@ def _uses_by_attribute(module):
         if attr == "":
             return None
         if isinstance(n, ast.Attribute):
-            use = uses.setdefault(n.attr, _Uses())
-            use.ok &= id(n) in stores
-            use.add(n.value, n)
+            _record_attribute_use(uses.setdefault(n.attr, _Uses()), n, stores, parents)
         elif attr is not None:
             use = uses.setdefault(attr, _Uses())
             use.ok &= _supported_call(n)
@@ -156,10 +240,17 @@ def _uses_by_attribute(module):
 
 class _Rewrite(ast.NodeTransformer):
 
-    def __init__(self, calls, has, value):
-        self.calls = {id(c) for c in calls}
+    def __init__(self, use, has, value):
+        self.calls = {id(c) for c in use.calls}
+        self.reads = {id(read) for read, _ in use.reads}
         self.has = has
         self.value = value
+
+    def visit_Attribute(self, node):
+        self.generic_visit(node)
+        if id(node) not in self.reads:
+            return node
+        return ast.copy_location(ast.Name(id=self.value, ctx=ast.Load()), node)
 
     def visit_Call(self, node):
         self.generic_visit(node)
@@ -178,16 +269,35 @@ def _set(name, value, at):
         at)
 
 
-def _insert_after(module, stmt, extra):
+def _splice(module, stmt, before, after):
+    """Put `before` ahead of `stmt` and `after` in its place after it."""
     for node in ast.walk(module):
         for _, value in ast.iter_fields(node):
             if isinstance(value, list) and any(s is stmt for s in value):
                 index = next(i for i, s in enumerate(value) if s is stmt)
-                value[index + 1:index + 1] = [extra]
+                value[index:index + 1] = before + after
                 return
 
 
-def _lower(module, use, binding, has, value):
+def _insert_after(module, stmt, extra):
+    _splice(module, stmt, [], [stmt, extra])
+
+
+def _raise_unless_set(has, class_name, attr, at):
+    """`if not has: raise AttributeError(...)`, as CPython words it."""
+    message = f"'{class_name}' object has no attribute '{attr}'"
+    error = ast.Call(func=ast.Name(id="AttributeError", ctx=ast.Load()),
+                     args=[ast.Constant(value=message)],
+                     keywords=[])
+    check = ast.If(test=ast.UnaryOp(op=ast.Not(), operand=ast.Name(id=has, ctx=ast.Load())),
+                   body=[ast.Raise(exc=error, cause=None)],
+                   orelse=[])
+    return ast.fix_missing_locations(ast.copy_location(check, at))
+
+
+def _lower(module, use, binding, names, owner):
+    has, value, attr = names
+    class_name = owner.name
     for store in use.stores:
         name = ast.Name(id=value, ctx=ast.Store())
         if isinstance(store, ast.Assign):
@@ -197,7 +307,16 @@ def _lower(module, use, binding, has, value):
             store.simple = 1
         _insert_after(module, store, _set(has, True, store))
     _insert_after(module, binding, _set(has, False, binding))
-    _Rewrite(use.calls, has, value).visit(module)
+    checked = []
+    for _, statement in use.reads:
+        if not any(statement is s for s in checked):
+            checked.append(statement)
+            _splice(module, statement, [_raise_unless_set(has, class_name, attr, statement)],
+                    [statement])
+    for statement in use.deletes:
+        _splice(module, statement, [_raise_unless_set(has, class_name, attr, statement)],
+                [_set(has, False, statement)])
+    _Rewrite(use, has, value).visit(module)
 
 
 def _mentioned(module):
@@ -209,20 +328,72 @@ def _mentioned(module):
     }
 
 
+def _imports_user_code(node):
+    """Whether an import may run code that reaches this module's names, or
+    binds a name this pass relies on."""
+    if isinstance(node, ast.ImportFrom):
+        names = [node.module or ""]
+        if node.level or any(a.name in ("*", "getattr", "hasattr") for a in node.names):
+            return True
+    else:
+        names = [a.name for a in node.names]
+    return any(
+        n.split(".")[0] not in sys.stdlib_module_names and n != "_sv_verifier" for n in names)
+
+
 def _reachable_otherwise(module, mentioned):
     """Whether something other than the nodes this pass rewrites may reach an
-    attribute: another module, a hook, a class pattern, or a rebound getattr
-    or hasattr."""
-    return (any(isinstance(n, (ast.Import, ast.ImportFrom, ast.Match)) for n in ast.walk(module))
+    attribute: a module other than the standard library's, a hook, a class
+    pattern, or a rebound getattr or hasattr."""
+    nodes = list(ast.walk(module))
+    imports = [n for n in nodes if isinstance(n, (ast.Import, ast.ImportFrom))]
+    return (any(isinstance(n, ast.Match) for n in nodes) or any(map(_imports_user_code, imports))
             or bool(mentioned & _HOOKS) or bool(_bindings(module, "getattr"))
             or bool(_bindings(module, "hasattr")))
+
+
+def _harmless_reads(module):
+    """Names that a `raise`, an `isinstance` test or a call of the
+    `_sv_verifier` module reads, none of which can set an attribute of the
+    instance. `_sv_verifier.check_type` has become an `isinstance` test here."""
+    harmless = set()
+    rebound = bool(_bindings(module, "isinstance"))
+    for n in ast.walk(module):
+        if isinstance(n, ast.Raise) and isinstance(n.exc, ast.Name):
+            harmless.add(id(n.exc))
+        elif not isinstance(n, ast.Call) or not n.args:
+            continue
+        elif (isinstance(n.func, ast.Attribute) and isinstance(n.func.value, ast.Name)
+              and n.func.value.id == "_sv_verifier"):
+            harmless |= {id(a) for a in n.args}
+        elif isinstance(n.func, ast.Name) and n.func.id == "isinstance" and not rebound:
+            harmless.add(id(n.args[0]))
+    return harmless
+
+
+def _receiver_escapes(module, use, receiver):
+    """Whether `receiver` is read other than as the object of `use`, so an
+    imported function could be handed the instance and set the attribute."""
+    allowed = {id(n.value) for n in use.nodes if isinstance(n, ast.Attribute)}
+    allowed |= {id(c.args[0]) for c in use.calls}
+    allowed |= _harmless_reads(module)
+    return any(
+        isinstance(n, ast.Name) and isinstance(n.ctx, ast.Load) and n.id == receiver
+        and id(n) not in allowed for n in ast.walk(module))
+
+
+def _one_receiver_used(use):
+    """Whether `use` is supported, stores the attribute through one receiver
+    and calls, reads or deletes it."""
+    return (use.ok and bool(use.stores) and len(use.receivers) == 1
+            and bool(use.calls or use.reads or use.deletes))
 
 
 def _binding(module, use, scopes):
     """The statement binding the one receiver of `use`, when one statement
     binds it, in the function or module scope of every use, and a store of
     the attribute sits in a block nested in that scope."""
-    if not use.ok or not use.stores or not use.calls or len(use.receivers) != 1:
+    if not _one_receiver_used(use):
         return None
     scope = {scopes[id(n)] for n in use.nodes}
     bound = _bindings(module, next(iter(use.receivers)))
@@ -244,6 +415,7 @@ def lower_path_dependent_attributes(module):
     uses = _uses_by_attribute(module)
     if uses is None:
         return
+    has_imports = any(isinstance(n, (ast.Import, ast.ImportFrom)) for n in ast.walk(module))
     classes = {s.name: s for s in module.body if isinstance(s, ast.ClassDef)}
     scopes = _scopes(module)
     for attr, use in uses.items():
@@ -252,9 +424,8 @@ def lower_path_dependent_attributes(module):
             continue
         receiver = binding.targets[0].id
         has, value = f"esbmc_has_{receiver}_{attr}", f"esbmc_{receiver}_{attr}"
-        call = binding.value
-        cls = call.func.id if isinstance(call, ast.Call) and isinstance(call.func, ast.Name) else ""
-        if (len(_bindings(module, cls)) != 1 or not _class_lacks(classes, cls, attr)
-                or {has, value} & mentioned):
+        cls = _constructed_class(module, binding.value, classes)
+        if (cls is None or not _class_lacks(classes, cls, attr) or {has, value} & mentioned
+                or has_imports and _receiver_escapes(module, use, receiver)):
             continue
-        _lower(module, use, binding, has, value)
+        _lower(module, use, binding, (has, value, attr), cls)

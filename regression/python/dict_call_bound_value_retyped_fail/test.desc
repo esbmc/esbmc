@@ -1,0 +1,5 @@
+CORE
+main.py
+
+^VERIFICATION FAILED$
+Unsupported: a dict value whose type differs from the one inferred

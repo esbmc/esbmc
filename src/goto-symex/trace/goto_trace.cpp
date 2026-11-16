@@ -5,12 +5,13 @@
 #include <goto-symex/witness/witnesses.h>
 
 #include <regex>
+#include <unordered_map>
 #include <langapi/language_util.h>
 #include <langapi/languages.h>
 #include <util/arith/arith_tools.h>
 #include <util/base/cwe_mapping.h>
 #include <util/irep/std_types.h>
-#include <optional>
+#include <util/symtab/namespace.h>
 #include <ostream>
 
 void goto_tracet::output(const class namespacet &ns, std::ostream &out) const
@@ -107,6 +108,15 @@ void goto_trace_stept::output(const namespacet &ns, std::ostream &out) const
   out << "\n";
 }
 
+std::string trace_value_string(const namespacet &ns, const expr2tc &value)
+{
+  if (
+    config.options.get_bool_option("ir") && is_constant_int2t(value) &&
+    is_bv_type(value))
+    return integer2string(to_constant_int2t(value).value);
+  return from_expr(ns, "", value);
+}
+
 void counterexample_value(
   std::ostream &out,
   const namespacet &ns,
@@ -118,7 +128,7 @@ void counterexample_value(
     out << "(assignment removed)";
   else
   {
-    out << " = " << from_expr(ns, "", value);
+    out << " = " << trace_value_string(ns, value);
 
     // Don't print the bit-vector if we're running on integer/real mode
     if (is_constant_expr(value) && !config.options.get_bool_option("ir"))
@@ -316,12 +326,14 @@ static waypoint witness_waypoint(
 /* README-YAML.md requires a waypoint's file_name to be one of the task's input
    files, so a step inside a header or an operational model is reported at its
    innermost call site that is one. Null when no frame qualifies. */
-static const locationt *witness_input_location(const goto_trace_stept &step)
+static const locationt *witness_input_location(
+  goto_programt::const_targett pc,
+  const std::vector<stack_framet> &stack_trace)
 {
-  if (input_file_check(step.pc->location))
-    return &step.pc->location;
+  if (input_file_check(pc->location))
+    return &pc->location;
 
-  for (const auto &frame : step.stack_trace)
+  for (const auto &frame : stack_trace)
     if (
       frame.src != nullptr && frame.src->is_set &&
       input_file_check(frame.src->pc->location))
@@ -335,13 +347,14 @@ static const locationt *witness_input_location(const goto_trace_stept &step)
    than dropped: a file_name the validator was never given makes the witness
    ill-formed, while a line it cannot match only costs confirmation. */
 static waypoint witness_target_waypoint(
-  const goto_trace_stept &step,
+  goto_programt::const_targett pc,
+  const std::vector<stack_framet> &stack_trace,
   const std::string &verified_file,
   optionst &options)
 {
-  const locationt *loc = witness_input_location(step);
-  waypoint wp =
-    witness_waypoint(loc ? *loc : step.pc->location, verified_file, options);
+  const locationt *loc = witness_input_location(pc, stack_trace);
+  waypoint wp = witness_waypoint(
+    loc ? full_expression_start(*loc) : pc->location, verified_file, options);
   wp.type = waypoint::target;
   if (loc == nullptr)
     wp.file = verified_file;
@@ -445,7 +458,12 @@ void violation_graphml_goto_trace(
         (step.pc->is_other() && is_nil_expr(step.lhs)) ||
         step.pc->is_function_call())
       {
-        std::string assignment = get_formated_assignment(ns, step, false);
+        /* The argv setup in __ESBMC_main has no line; an edge for it would
+           carry startline 0 (#9677). */
+        if (step.pc->location.get_line().empty())
+          break;
+
+        std::string assignment = get_formated_assignment(ns, step);
 
         graph.check_create_new_thread(step.thread_nr, prev_node);
         prev_node = graph.edges.back().to_node;
@@ -472,55 +490,248 @@ void violation_graphml_goto_trace(
   }
 }
 
-/* The \result value of a nondet call, when this step carries one a validator
-   can act on. */
-static std::optional<waypoint> witness_nondet_waypoint(
+/* A function_return waypoint for each nondet call made up to @p step. It sits
+   at the call's ')' and names the value the call returned, not the value of
+   the expression the call is part of (#9881). */
+static void push_nondet_return_waypoints(
   const namespacet &ns,
   const goto_trace_stept &step,
-  const std::string &verified_file,
+  yamlt &yml,
   optionst &options)
 {
-  if (is_nil_expr(step.rhs) || !find_nondet_in_expr(step.rhs))
-    return {};
+  for (const auto &[rparen, value] : step.nondet_returns)
+  {
+    if (!input_file_check(rparen))
+      continue;
 
-  if (!input_file_check(step.pc->location))
-    return {};
+    std::string result = from_expr(ns, "", value, presentationt::WITNESS);
+    check_replace_invalid_assignment(result);
+    if (result.empty())
+      continue;
 
-  std::string assignment = get_formated_assignment(ns, step, true);
-  if (assignment.empty())
-    return {};
+    // `\result == NAN` holds for no value, NaN included, so a NaN result
+    // gets no waypoint.
+    if (
+      is_constant_floatbv2t(value) &&
+      to_constant_floatbv2t(value).value.is_NaN())
+      continue;
 
-  // Extract just the value part ("lhs == value" -> "value") for \result
-  std::string value_str;
-  auto eq_pos = assignment.find(" == ");
-  if (eq_pos != std::string::npos)
-    value_str = assignment.substr(eq_pos + 4);
+    waypoint wp = witness_waypoint(rparen, yml.verified_file, options);
+    wp.type = waypoint::function_return;
+    wp.value = "\\result == " + result;
+    yml.segments.push_back(wp);
+  }
+}
 
-  waypoint wp = witness_waypoint(step.pc->location, verified_file, options);
-  wp.type = waypoint::function_return;
-  wp.value = "\\result == " + value_str;
-  return wp;
+/* Branches in a recursive trace number in the hundreds of thousands (#9689),
+   and a witness that size cannot be loaded by the validator. Dropping a
+   branching waypoint only weakens guidance. */
+static constexpr size_t max_branching_waypoints = 1000;
+
+/* Whether @p entry can call itself, directly or through other functions. */
+static bool
+recursive(const goto_functionst &goto_functions, const irep_idt &entry)
+{
+  std::unordered_set<irep_idt, irep_id_hash> seen;
+  std::vector<irep_idt> todo{entry};
+  while (!todo.empty())
+  {
+    const auto it = goto_functions.function_map.find(todo.back());
+    todo.pop_back();
+    if (it == goto_functions.function_map.end())
+      continue;
+    for (const auto &i : it->second.body.instructions)
+    {
+      if (!i.is_function_call())
+        continue;
+      const expr2tc &callee = to_code_function_call2t(i.code).function;
+      if (!is_symbol2t(callee) || to_symbol2t(callee).thename == entry)
+        return true;
+      if (seen.insert(to_symbol2t(callee).thename).second)
+        todo.push_back(to_symbol2t(callee).thename);
+    }
+  }
+  return false;
+}
+
+/* The entry function, whose `}` locates the end of __ESBMC_main. */
+static const goto_functionst::function_mapt::value_type *entry_function(
+  const goto_functionst &goto_functions,
+  const goto_trace_stept &violation)
+{
+  for (const auto &f : goto_functions.function_map)
+    if (
+      f.first != violation.pc->function &&
+      !f.second.body.instructions.empty() &&
+      f.second.body.instructions.back().location == violation.pc->location)
+      return &f;
+  return nullptr;
+}
+
+/* Where the path resumes in @p body after its last step there. */
+static goto_programt::const_targett resume_point(
+  const goto_tracet &goto_trace,
+  const goto_trace_stept &violation,
+  const irep_idt &function,
+  const goto_programt &body)
+{
+  const goto_trace_stept *last = nullptr;
+  for (const auto &step : goto_trace.steps)
+  {
+    if (&step == &violation)
+      break;
+    if (step.thread_nr == violation.thread_nr && step.pc->function == function)
+      last = &step;
+  }
+  if (last == nullptr)
+    return body.instructions.begin();
+  const goto_programt::const_targett pc = last->pc;
+  if (last->type == symex_targett::BREANCHING && pc->is_goto())
+    return last->guard != pc->flipped_guard ? pc->targets.front()
+                                            : std::next(pc);
+  return pc->is_goto() || pc->is_return() || pc->is_end_function()
+           ? pc
+           : std::next(pc);
+}
+
+/* The `return` every path from @p pc leaves the function by, or null when
+   paths can leave by different ones or fall off the end. */
+static const goto_programt::instructiont *
+sole_return(goto_programt::const_targett pc)
+{
+  const goto_programt::instructiont *ret = nullptr;
+  for (; !pc->is_end_function(); ++pc)
+  {
+    if (pc->is_return())
+    {
+      if (ret != nullptr)
+        return nullptr;
+      ret = &*pc;
+    }
+    if (
+      pc->is_goto() && !is_false(pc->guard) &&
+      (pc->targets.front()->location_number <= pc->location_number ||
+       pc->targets.front()->is_end_function()))
+      return nullptr;
+  }
+  return ret != nullptr && std::prev(pc)->is_return() ? ret : nullptr;
+}
+
+/* A valid-memtrack violation at program exit is checked at the end of
+   __ESBMC_main, located at the entry function's `}`. The witness format makes
+   its target the `return` the path left the entry function by (#9939). The
+   path is replayed from the branch directions the trace records; from a branch
+   it does not record, the `return` must be the only one ahead. Branching steps
+   carry no stack trace, so a recursive entry function is not replayed. */
+static const goto_programt::instructiont *memtrack_return(
+  const goto_tracet &goto_trace,
+  const goto_functionst &goto_functions,
+  const goto_trace_stept &violation)
+{
+  if (
+    !violation.pc->is_end_function() ||
+    violation.pc->function != "__ESBMC_main" ||
+    !has_prefix(violation.comment, "dereference failure: forgotten memory"))
+    return nullptr;
+
+  const auto *entry = entry_function(goto_functions, violation);
+  if (entry == nullptr || recursive(goto_functions, entry->first))
+    return nullptr;
+
+  auto pc =
+    resume_point(goto_trace, violation, entry->first, entry->second.body);
+  for (; !pc->is_return(); ++pc)
+  {
+    if (pc->is_end_function())
+      return nullptr;
+    if (!pc->is_goto() || is_false(pc->guard))
+      continue;
+    if (
+      !is_true(pc->guard) ||
+      pc->targets.front()->location_number <= pc->location_number)
+      return sole_return(pc);
+    pc = std::prev(pc->targets.front());
+  }
+  return &*pc;
+}
+
+/* The failed assertion's access, and for a data race the access it raced
+   with. */
+static void push_violation_targets(
+  yamlt &yml,
+  const goto_tracet &goto_trace,
+  const goto_functionst &goto_functions,
+  const goto_trace_stept &step,
+  optionst &options)
+{
+  const goto_programt::instructiont *ret =
+    memtrack_return(goto_trace, goto_functions, step);
+  if (ret != nullptr && input_file_check(ret->location))
+  {
+    waypoint wp = witness_waypoint(ret->location, yml.verified_file, options);
+    wp.type = waypoint::target;
+    yml.segments.push_back(wp);
+  }
+  else
+    yml.segments.push_back(witness_target_waypoint(
+      step.pc, step.stack_trace, yml.verified_file, options));
+  if (step.racing_access)
+    yml.racing_target = witness_target_waypoint(
+      step.racing_access->pc,
+      step.racing_access->stack_trace,
+      yml.verified_file,
+      options);
+}
+
+/* A validator binds a branching waypoint to the next visit of its source
+   location, not of its instruction: --goto-unwind copies a loop body. */
+static std::string branch_location(const goto_trace_stept &step)
+{
+  const locationt &l = step.pc->location;
+  return id2string(l.get_file()) + ":" + id2string(l.get_line()) + ":" +
+         id2string(l.get_column());
+}
+
+/* The nondet-dependent visits of each branch location up to the violation. */
+static std::unordered_map<std::string, size_t>
+nondet_branch_visits(const goto_tracet &goto_trace)
+{
+  std::unordered_map<std::string, size_t> visits;
+  for (const auto &step : goto_trace.steps)
+  {
+    if (step.type == symex_targett::ASSERT && !step.guard)
+      break;
+    if (
+      step.type == symex_targett::BREANCHING && step.pc->is_goto() &&
+      step.nondet_dependent)
+      ++visits[branch_location(step)];
+  }
+  return visits;
 }
 
 void violation_yaml_goto_trace(
   optionst &options,
   const namespacet &ns,
   const goto_tracet &goto_trace,
+  const goto_functionst &goto_functions,
   const std::string &output_path_override)
 {
   yamlt yml(yamlt::VIOLATION);
   yml.verified_file = options.get_option("input-file");
   log_progress("Generating Violation Yaml Witness for: {}", yml.verified_file);
 
+  auto nondet_visits_ahead = nondet_branch_visits(goto_trace);
+  size_t branching_waypoints = 0;
   for (const auto &step : goto_trace.steps)
   {
+    push_nondet_return_waypoints(ns, step, yml, options);
+
     switch (step.type)
     {
     case symex_targett::ASSERT:
       if (!step.guard)
       {
-        yml.segments.push_back(
-          witness_target_waypoint(step, yml.verified_file, options));
+        push_violation_targets(yml, goto_trace, goto_functions, step, options);
 
         /* having printed a property violation, don't print more steps. */
 
@@ -532,11 +743,34 @@ void violation_yaml_goto_trace(
     case symex_targett::BREANCHING:
       if (step.pc->is_goto())
       {
+        size_t &ahead = nondet_visits_ahead[branch_location(step)];
+        if (step.nondet_dependent)
+          --ahead;
+
         /* A validator cannot match a follow waypoint against a file it was
-           not given; dropping one only weakens guidance. */
-        if (!input_file_check(step.pc->location))
+           not given; dropping one only weakens guidance. witnesslint also
+           rejects line 0, e.g. the argv setup in __ESBMC_main (#9650). A
+           branch fixed by the program text gets none, as on deep recursion
+           they number in the hundreds of thousands (#9689), unless a
+           nondet-dependent visit of its location follows: a validator would
+           bind that visit's waypoint to this one. The ones kept can fill the
+           cap before a later nondet waypoint. An operand of && or || gets none:
+           the waypoint's value is the whole condition's, and a validator would
+           apply it to another operand. */
+        if (
+          branching_waypoints >= max_branching_waypoints ||
+          !input_file_check(step.pc->location) ||
+          step.pc->location.get_line().empty() ||
+          (!step.nondet_dependent && ahead == 0) || step.condition_operand)
           break;
 
+        /* A switch would take one waypoint naming the case it enters, but
+           CPAchecker cannot parse any switch waypoint and the format does not
+           require one, so emit none (#9882). */
+        if (!step.pc->switch_case_ids.empty())
+          break;
+
+        ++branching_waypoints;
         waypoint wp =
           witness_waypoint(step.pc->location, yml.verified_file, options);
         wp.type = waypoint::branching;
@@ -545,23 +779,25 @@ void violation_yaml_goto_trace(
       }
       break;
 
-    case symex_targett::ASSIGNMENT:
-      if (
-        step.pc->is_assign() || step.pc->is_return() ||
-        (step.pc->is_other() && is_nil_expr(step.lhs)) ||
-        step.pc->is_function_call())
-      {
-        if (
-          auto wp =
-            witness_nondet_waypoint(ns, step, yml.verified_file, options))
-          yml.segments.push_back(*wp);
-      }
-      break;
-
     default:
       continue;
     }
   }
+}
+
+void non_termination_yaml_goto_trace(optionst &options, const locationt &loc)
+{
+  yamlt yml(yamlt::VIOLATION);
+  yml.verified_file = options.get_option("input-file");
+  log_progress(
+    "Generating Non-Termination Yaml Witness for: {}", yml.verified_file);
+
+  waypoint wp = witness_waypoint(loc, yml.verified_file, options);
+  wp.type = waypoint::assumption;
+  wp.action = waypoint::cycle;
+  wp.value = "1";
+  yml.segments.push_back(wp);
+  yml.generate_yaml(options);
 }
 
 void correctness_graphml_goto_trace(
@@ -615,14 +851,55 @@ void correctness_graphml_goto_trace(
 void correctness_yaml_goto_trace(
   optionst &options,
   const namespacet &ns [[maybe_unused]],
-  const goto_tracet &goto_trace [[maybe_unused]])
+  const goto_tracet &goto_trace [[maybe_unused]],
+  const std::vector<std::pair<locationt, std::string>> &transition_invariants,
+  const std::vector<std::pair<locationt, std::string>> &loop_invariants)
 {
   yamlt yml(yamlt::CORRECTNESS);
   yml.verified_file = options.get_option("input-file");
   log_progress(
     "Generating Correctness Yaml Witness for: {}", yml.verified_file);
 
+  // A transition invariant relates two states, so only ext_c_expression can
+  // write it; a loop invariant is plain C.
+  auto add = [&](const auto &invariants, invariant::Type type) {
+    for (const auto &[loc, value] : invariants)
+    {
+      const waypoint at = witness_waypoint(loc, yml.verified_file, options);
+      invariant inv;
+      inv.type = type;
+      inv.file = at.file;
+      inv.line = at.line;
+      inv.column = at.column;
+      inv.function = at.function;
+      inv.value = value;
+      inv.format =
+        type == invariant::loop_invariant ? "c_expression" : "ext_c_expression";
+      yml.invariants.push_back(inv);
+    }
+  };
+  add(transition_invariants, invariant::loop_transition_invariant);
+  add(loop_invariants, invariant::loop_invariant);
+
   yml.generate_yaml(options);
+}
+
+void write_correctness_witnesses(
+  optionst &options,
+  const namespacet &ns,
+  const goto_tracet &goto_trace,
+  const std::vector<std::pair<locationt, std::string>> &transition_invariants,
+  const std::vector<std::pair<locationt, std::string>> &loop_invariants)
+{
+  if (options.get_bool_option("result-only"))
+    return;
+
+  if (!options.get_option("witness-output-graphml").empty())
+    correctness_graphml_goto_trace(options, ns, goto_trace);
+
+  if (!options.get_option("witness-output-yaml").empty())
+    correctness_yaml_goto_trace(
+      options, ns, goto_trace, transition_invariants, loop_invariants);
 }
 
 void appendInfo(
@@ -666,6 +943,115 @@ frame_function_name(const namespacet &ns, const irep_idt &id)
   return fn ? fn->name : id;
 }
 
+/// A call binds its arguments at the callee's first instruction, whatever
+/// that instruction is, so such a step cannot be recognised by its pc.
+static bool binds_parameter(const namespacet &ns, const goto_trace_stept &step)
+{
+  if (!is_symbol2t(step.original_lhs))
+    return false;
+  const symbolt *s = ns.lookup(to_symbol2t(step.original_lhs).thename);
+  return s != nullptr && s->is_parameter;
+}
+
+static void show_stack_frame(
+  std::ostream &out,
+  const irep_idt &name,
+  const stack_framet &frame)
+{
+  out << "  " << name;
+  if (frame.src != nullptr && frame.src->pc->location.is_not_nil())
+    out << " at " << frame.src->pc->location;
+  out << std::endl;
+}
+
+static void show_function_call_trace(
+  std::ostream &out,
+  const namespacet &ns,
+  const goto_tracet &goto_trace,
+  const goto_trace_stept &last_step)
+{
+  // Print chronological function-call trace.
+  // Each step carries the call stack at that point (innermost-first,
+  // outermost-last). Diff each step's stack against the previous to
+  // detect newly pushed frames and emit them in call order.
+  out << "Function call trace:" << std::endl;
+  std::vector<stack_framet> prev;
+  for (const auto &s : goto_trace.steps)
+  {
+    const auto &cur = s.stack_trace;
+    // Skip steps captured outside any function context (global
+    // initializers, per-tx reseed scaffolding, etc.). Their
+    // stack_trace is empty even though the program clearly has
+    // frames on the call stack at that moment; treating that as
+    // a reset would falsely re-emit the entire chain on the
+    // next non-empty step.
+    if (cur.empty())
+    {
+      if (&s == &last_step)
+        break;
+      continue;
+    }
+    // Common suffix length (outermost end of both vectors).
+    size_t common = 0;
+    while (common < prev.size() && common < cur.size() &&
+           prev[prev.size() - 1 - common] == cur[cur.size() - 1 - common])
+      ++common;
+    // New frames live at the front of `cur` (innermost end);
+    // emit outermost-of-new first to preserve call order.
+    size_t n_new = cur.size() - common;
+    for (size_t k = n_new; k-- > 0;)
+      show_stack_frame(out, frame_function_name(ns, cur[k].function), cur[k]);
+    prev = cur;
+    if (&s == &last_step)
+      break;
+  }
+}
+
+static void show_failed_property(
+  std::ostream &out,
+  const namespacet &ns,
+  const goto_tracet &goto_trace,
+  const goto_trace_stept &step,
+  bool reachability_trace,
+  bool simplify_trace)
+{
+  show_state_header(out, step, step.pc->location, step.step_nr, simplify_trace);
+  out << (reachability_trace ? "Reached:" : "Violated property:") << "\n";
+  if (!step.pc->location.is_nil())
+  {
+    if (simplify_trace)
+    {
+      out << "  ";
+      show_simplified_location(out, step.pc->location);
+    }
+    else
+      out << "  " << step.pc->location << "\n";
+  }
+  if (config.options.get_bool_option("show-stacktrace"))
+  {
+    // Print stack trace
+    out << "Stack trace:" << std::endl;
+    for (const auto &frame : step.stack_trace)
+      show_stack_frame(out, frame_function_name(ns, frame.function), frame);
+  }
+  out << "  " << step.comment << "\n";
+  // A reached coverage probe carries no weakness: its guard is the
+  // constant `false` the instrumentation put there, not the program's
+  // own condition, so neither a CWE nor the guard text says anything
+  // about the program.
+  if (!reachability_trace)
+  {
+    std::string cwes = format_cwe_list(cwe_for(step.comment));
+    if (!cwes.empty())
+      out << "  CWE: " << cwes << "\n";
+
+    if (step.pc->is_assert())
+      out << "  " << from_expr(ns, "", step.pc->guard) << "\n";
+  }
+  if (config.options.get_bool_option("show-funccall-trace"))
+    show_function_call_trace(out, ns, goto_trace, step);
+}
+
 void show_goto_trace(
   std::ostream &out,
   const namespacet &ns,
@@ -688,53 +1074,8 @@ void show_goto_trace(
     case symex_targett::ASSERT:
       if (!step.guard)
       {
-        show_state_header(
-          out, step, step.pc->location, step.step_nr, simplify_trace);
-        out << (reachability_trace ? "Reached:" : "Violated property:") << "\n";
-        if (!step.pc->location.is_nil())
-        {
-          if (simplify_trace)
-          {
-            out << "  ";
-            show_simplified_location(out, step.pc->location);
-          }
-          else
-            out << "  " << step.pc->location << "\n";
-        }
-        if (config.options.get_bool_option("show-stacktrace"))
-        {
-          // Print stack trace
-          out << "Stack trace:" << std::endl;
-          for (const auto &it : step.stack_trace)
-          {
-            const irep_idt &name = frame_function_name(ns, it.function);
-            if (it.src == nullptr)
-              out << "  " << name << std::endl;
-            else
-            {
-              out << "  " << name;
-              if (it.src->pc->location.is_not_nil())
-                out << " at " << it.src->pc->location << std::endl;
-              else
-                out << std::endl;
-            }
-          }
-        }
-
-        out << "  " << step.comment << "\n";
-        // A reached coverage probe carries no weakness: its guard is the
-        // constant `false` the instrumentation put there, not the program's
-        // own condition, so neither a CWE nor the guard text says anything
-        // about the program.
-        if (!reachability_trace)
-        {
-          std::string cwes = format_cwe_list(cwe_for(step.comment));
-          if (!cwes.empty())
-            out << "  CWE: " << cwes << "\n";
-
-          if (step.pc->is_assert())
-            out << "  " << from_expr(ns, "", step.pc->guard) << "\n";
-        }
+        show_failed_property(
+          out, ns, goto_trace, step, reachability_trace, simplify_trace);
 
         // The trace ends at the assert that terminated it.
         return;
@@ -745,7 +1086,7 @@ void show_goto_trace(
       if (
         step.pc->is_assign() || step.pc->is_return() ||
         (step.pc->is_other() && is_nil_expr(step.lhs)) ||
-        step.pc->is_function_call())
+        step.pc->is_function_call() || binds_parameter(ns, step))
       {
         if (simplify_trace)
         {

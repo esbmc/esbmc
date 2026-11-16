@@ -103,6 +103,8 @@ BigInt cvc5_convt::get_bv(smt_astt a, bool is_signed)
 {
   auto const *ca = to_solver_smt_ast<cvc5_smt_ast>(a);
   cvc5::Term e = slv.getValue(ca->a);
+  if (int_encoding)
+    return string2integer(e.getIntegerValue());
   std::string str = e.getBitVectorValue();
   return binary2integer(str, is_signed);
 }
@@ -187,12 +189,10 @@ smt_astt cvc5_convt::mk_div(smt_astt a, smt_astt b)
   assert(a->sort->id == SMT_SORT_INT || a->sort->id == SMT_SORT_REAL);
   assert(b->sort->id == SMT_SORT_INT || b->sort->id == SMT_SORT_REAL);
   assert(a->sort->id == b->sort->id);
-  assert(a->sort->id == SMT_SORT_INT || a->sort->id == SMT_SORT_REAL);
-  assert(b->sort->id == SMT_SORT_INT || b->sort->id == SMT_SORT_REAL);
-  assert(a->sort->id == b->sort->id);
   return new_ast(
     slv.mkTerm(
-      cvc5::Kind::INTS_DIVISION,
+      a->sort->id == SMT_SORT_REAL ? cvc5::Kind::DIVISION
+                                   : cvc5::Kind::INTS_DIVISION,
       {to_solver_smt_ast<cvc5_smt_ast>(a)->a,
        to_solver_smt_ast<cvc5_smt_ast>(b)->a}),
     a->sort);
@@ -618,7 +618,7 @@ smt_astt cvc5_convt::mk_smt_fpbv_neg(smt_astt op)
     op->sort);
 }
 
-void cvc5_convt::assert_ast(smt_astt a)
+void cvc5_convt::assert_ast_in_solver(smt_astt a)
 {
   auto const *ca = to_solver_smt_ast<cvc5_smt_ast>(a);
   slv.assertFormula(ca->a);

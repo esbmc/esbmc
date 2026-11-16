@@ -1,0 +1,5 @@
+CORE
+main.c
+--termination --max-inductive-step 3 --k-step 2 --unlimited-k-steps --no-pointer-check --no-bounds-check --witness-output-yaml -
+^VERIFICATION SUCCESSFUL$
+\A(?![\s\S]*action: "cycle")[\s\S]*\Z

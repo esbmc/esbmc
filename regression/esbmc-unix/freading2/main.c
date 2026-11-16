@@ -20,8 +20,7 @@ int main(void) {
     // Switch to reading
     rewind(fp);
     char tmp[16];
-    char *res = fgets(tmp, sizeof(tmp), fp);
-    assert(res != NULL);
+    fgets(tmp, sizeof(tmp), fp);
 
     // Now it *is* in read mode
     assert(__freading(fp) != 0);

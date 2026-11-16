@@ -1,0 +1,4 @@
+CORE
+main.py
+--incremental-bmc
+^ERROR: TypeError: an in-place numpy operation that cannot cast its result to the array's dtype is not supported$

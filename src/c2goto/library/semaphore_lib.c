@@ -1,4 +1,5 @@
 #include <semaphore.h>
+#include <errno.h>
 #include <limits.h>
 #include <pthread.h>
 
@@ -11,6 +12,7 @@
 extern unsigned short int __ESBMC_num_threads_running;
 extern unsigned short int __ESBMC_blocked_threads_count;
 extern void __ESBMC_release_blocked_threads(unsigned int waiters);
+_Bool nondet_bool(void);
 
 /************************* Sem manipulation routines ************************/
 
@@ -83,6 +85,51 @@ __ESBMC_HIDE:;
     __ESBMC_sem_lock_field(*__sem) = 1;
   __ESBMC_atomic_end();
   return 0;
+}
+
+// POSIX sem_trywait: take the semaphore if its value is positive, otherwise
+// fail with EAGAIN instead of blocking.
+int sem_trywait(sem_t *__sem)
+{
+__ESBMC_HIDE:;
+  int ret = 0;
+  __ESBMC_atomic_begin();
+  sem_init_check(__sem);
+  if (__ESBMC_sem_lock_field(*__sem) == 0)
+  {
+    __ESBMC_sem_count_field(*__sem) -= 1;
+    if (!__ESBMC_sem_count_field(*__sem))
+      __ESBMC_sem_lock_field(*__sem) = 1;
+  }
+  else
+  {
+    errno = EAGAIN;
+    ret = -1;
+  }
+  __ESBMC_atomic_end();
+  return ret;
+}
+
+// POSIX sem_timedwait: a semaphore that can be locked at once is taken;
+// otherwise it is either posted before the timeout, so the wait succeeds, or
+// the call fails with ETIMEDOUT. A timed wait never deadlocks, so the waiting
+// arm does not use sem_wait_check.
+int sem_timedwait(sem_t *__sem, const struct timespec *__abstime)
+{
+__ESBMC_HIDE:;
+  (void)__abstime;
+  _Bool timed_out = 0;
+  __ESBMC_atomic_begin();
+  sem_init_check(__sem);
+  if (__ESBMC_sem_lock_field(*__sem) != 0)
+    timed_out = nondet_bool();
+  __ESBMC_atomic_end();
+  if (timed_out)
+  {
+    errno = ETIMEDOUT;
+    return -1;
+  }
+  return sem_wait_nocheck(__sem);
 }
 
 int sem_post(sem_t *__sem)

@@ -1,0 +1,4 @@
+CORE
+main.py
+--incremental-bmc
+^ERROR: TypeError: non-ASCII bytes in a numpy bytes array are not supported$

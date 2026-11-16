@@ -1,0 +1,4 @@
+CORE
+main.py
+
+^ERROR: split\(\) with an empty sep on a call receiver is unsupported$
