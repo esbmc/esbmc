@@ -1,0 +1,6 @@
+CORE
+main.c
+--unwind 6 --no-irep2-native-body --witness-output-yaml -
+^VERIFICATION FAILED$
+(?s)type: "branching"(?:(?!type:).)*?^\s+line: 16$
+(?s)\A(?!.*type: "branching"(?:(?!type:).)*?^\s+line: 1[01]$)
