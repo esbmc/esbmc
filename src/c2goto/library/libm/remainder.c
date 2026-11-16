@@ -54,7 +54,11 @@
 /* remquo's fixedbv body is exact and does not call back here. */
 fixedbv_remainder_def(float, remainderf, remquof);
 fixedbv_remainder_def(double, remainder, remquo);
+#if __SIZEOF_POINTER__ == 8 /* 32-bit fixedbv long double is not 64 bits */
 fixedbv_remainder_def(long double, remainderl, remquol);
+#else
+remainder_def(long double, remainderl, isnan, isinf, llrintl);
+#endif
 #else
 remainder_def(float, remainderf, isnan, isinf, llrintf);
 remainder_def(double, remainder, isnan, isinf, llrint);

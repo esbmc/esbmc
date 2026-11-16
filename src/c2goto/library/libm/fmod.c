@@ -55,12 +55,13 @@
   }
 
 #ifdef __ESBMC_FIXEDBV
-_Static_assert(
-  sizeof(long double) == sizeof(long long),
-  "fixedbv long double is 64 bits wide");
 fixedbv_fmod_def(float, fmodf, int, unsigned);
 fixedbv_fmod_def(double, fmod, long long, unsigned long long);
+#if __SIZEOF_POINTER__ == 8 /* 32-bit fixedbv long double is not 64 bits */
 fixedbv_fmod_def(long double, fmodl, long long, unsigned long long);
+#else
+fmod_def(long double, fmodl, remainderl, fabsl);
+#endif
 #else
 fmod_def(float, fmodf, remainderf, fabsf);
 fmod_def(double, fmod, remainder, fabs);
