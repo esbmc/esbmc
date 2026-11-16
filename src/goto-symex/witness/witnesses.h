@@ -144,6 +144,9 @@ public:
   /// The earlier of two racing accesses; written beside the last waypoint
   /// in a final segment of two targets, as a no-data-race witness requires.
   std::optional<waypoint> racing_target;
+  /// Whether the waypoints carry thread IDs, registered by function_enter
+  /// waypoints on the thread-creating calls.
+  bool thread_ids = false;
   std::vector<invariant> invariants;
 
   yamlt(typet t)
@@ -247,6 +250,11 @@ bool is_valid_witness_expr(
 /// the source; nullopt when the text there is not such a call. A YAML
 /// function_return waypoint sits on it (#9881).
 std::optional<locationt> nondet_call_rparen(const locationt &call);
+
+/// The ')' closing the call whose callee name starts at @p call, read from
+/// the source; nullopt when the text there is not such a call. A YAML
+/// function_enter waypoint sits on it.
+std::optional<locationt> call_rparen(const locationt &call);
 
 BigInt get_line_number(
   const std::string &verified_file,
