@@ -1,14 +1,19 @@
 # Scope: field-sensitive SSA in goto-symex (#7521)
 
-> **Status at 2026-11-15: Phase 0 in review, gate partly met (see §8).** The
-> corpus is in `regression/field-sensitivity/` with baselines, and the census
-> has been run and reverted. Baselines cover Z3 and ESBMC's Bitwuzla backend;
-> the census covers the full C, C++ and Python suites and 259 SV-COMP tasks. Two
+> **Status at 2026-11-16: Phase 0 merged (#10773); Phase 1 in review (#10778),
+> gate partly met (see §8.5); the trace gate is unmet because split pointer
+> fields print other values than master (§8.6).** The corpus is in `regression/field-sensitivity/`
+> with baselines, and the census has been run and reverted. Phase 1 adds
+> `--field-sensitive-ssa` (default off): symex gives each field of an
+> eligible local, parameter or return slot its own SSA name. It meets the 2x
+> bar on the Phase 1 corpus rows and changes no verdict on the C, C++ (Z3 and Bitwuzla) and
+> k-induction suites or three Python samples (3132 tests), and no correctness witness, but it
+> still changes some trace text and violation witnesses (§8.5).
+> §8.6 traces the remaining changes to §3's own design; the Phase 1 trace gate
+> is now Invariant 4 (same values), with those changes accepted. Two
 > mitigations are merged: #10037 stopped phi merges of wide structs from
 > scaling with the square of the width, and #10527 added the opt-in GOTO pass
-> `--scalarize-structs`. Symex itself still gives a struct one SSA name, so a
-> field write makes a new value of the whole struct. This document plans the
-> symex change. Line numbers are from master at `d3104e99c2`.
+> `--scalarize-structs`. Line numbers are from master at `d3104e99c2`.
 
 ## 1. What is left after #10037 and #10527
 
@@ -127,7 +132,9 @@ size and solver time under Bitwuzla and Z3; census numbers recorded in §8.
   does.
 
 **Gate:** the flag forced on for the C, C++ and Python suites changes no
-verdict and no trace text; the local-struct rows of the corpus meet the 2x bar;
+verdict and keeps Invariant 4; the trace text may change only in the four
+ways §8.6 accepts, each pinned by a test; the local-struct rows of the corpus
+meet the 2x bar;
 every new branch proved live (Mode C-Live), dual solver.
 
 ### Phase 2: structs reached through pointers
@@ -180,7 +187,10 @@ witnesses validate as before (`witnesses_validate` suite).
    is either always split or never split.
 3. No byte-level access reaches a split object. A path that would need one is
    an eligibility bug, and debug builds assert on it.
-4. Traces and witnesses print the same values with and without the flag.
+4. Traces and witnesses print the same values with and without the flag:
+   every step both runs print shows the same value for every lvalue the run
+   without the flag pins down. Steps may be added or dropped, and a struct may
+   print field by field (§8.6).
 
 ## 6. Risks
 
@@ -338,3 +348,223 @@ Phase 2 (constant field paths), as designed.
 ### 8.4 Not measured in Phase 0
 
 - The census on the full SV-COMP set.
+
+### 8.5 Phase 1 measurements
+
+Branch `feat/field-sensitive-ssa-phase1` on master `f1c5ee1b4`, RelWithDebInfo,
+Z3 4.13.3 and ESBMC's Bitwuzla 0.9.0 backend, one 4-core container,
+2026-11-15. Symex seconds from `scripts/field_sensitivity_bench.py
+--flags=--field-sensitive-ssa`; the flag changes no SSA step count on these rows.
+
+| Row | 8 fields | 512 | 2048 | 2048 / 8 | Without the flag, 2048 |
+|---|---|---|---|---|---|
+| `local_writes` (Z3) | 0.017 | 0.018 | 0.019 | 1.1x | 6.39 |
+| `local_writes` (Bitwuzla) | 0.019 | 0.018 | 0.021 | 1.1x | 6.28 |
+| `repro7521` (Z3) | 0.794 | 0.931 | 1.249 | 1.6x | 0.83 |
+| `repro7521` (Bitwuzla) | 0.792 | 0.875 | 1.146 | 1.4x | 0.84 |
+
+Peak memory on `local_writes_w2048` falls from 1262 MiB to 135 MiB (Z3) and
+from 370 MiB to 123 MiB (Bitwuzla); wall time from 19.1 s to 0.30 s with Z3.
+`local_addr_once`, `global_callee` and `plc_db` are Phase 2 rows: nothing in
+them is split and their times match the unflagged run.
+
+The rest of `repro7521`'s cost is per call: `fun` is called 100 times and
+each call declares, initialises and retires 2048 fields. A nondet write of a
+whole split object gives each field narrower than a pointer a fresh L2 name
+instead of an assignment step, and `pop_frame` skips the value-set erase for
+those fields; before both, the row took 13.9 s at 2048 fields.
+
+Flag forced on against off, each `test.desc` command run twice, 30 s per run:
+
+| Suite | Tests | With a split object | Verdict changes | Output changes |
+|---|---|---|---|---|
+| C (`regression/esbmc`) | 3443 | 590 | 0 | 49 |
+| C++ (`esbmc-cpp/cpp`) | 1466 | 823 | 0 | 9 |
+| Python (first 726 of 9749) | 726 | 24 | 0 | 0 |
+
+In C++, 7 of the 9 output changes are k-induction or parallel-solving output
+order and one (`ch16_4`) is a counterexample that violates one of two
+assertions on the same line instead of both. Of the 49 C output changes, 19 are timing
+lines the comparison did not filter. The remaining 30, all with the same
+verdict:
+
+- 7 print the member written (`v.un.i = 9`) where master prints the whole
+  struct that symex rewrote (`v.un.i = { .un=9, .t=0 }`).
+- 7 lose a whole-struct step because the slicer keeps the fields a property
+  needs, not the whole object; with `--no-slice` the step comes back.
+- 6 print other values: a pointer member of a printed struct reads `0`
+  where master prints `{ .pointer_object=nil, .pointer_offset=nil }`, and an
+  uninitialised struct prints `{ .a = 0 }` where master prints every member.
+  Master itself prints these differently under Z3 and Bitwuzla.
+- 3 (`github_4309-struct`, `github_4312-*`) enumerated fewer
+  `--all-witnesses` inputs; the flag is now ignored with `--all-witnesses`
+  and the test-generation options, which read inputs off SSA steps.
+- The rest are k-induction or parallel-solving output order. In C++,
+  `github_7797_flat_set` unwinds a loop past iterations master rules out by
+  constant propagation; the extra unwinding assertions pass.
+
+Witnesses, k-induction and more Python, measured on 2026-11-16 at
+`34ecc9021` (master `f1c5ee1b4`), Z3 4.13.3 only (Bitwuzla's dependencies
+could not be downloaded in that container), `CORE` tests, flag forced on
+against off, 30 s per run. Output is compared after dropping timings, temp
+paths and the "is ignored" warning.
+
+| Suite | Tests run | With a split object | Verdict changes | Witness file changes | Other output changes |
+|---|---|---|---|---|---|
+| `k-induction`, `k-induction-parallel` | 277 | 78 | 0 | not written | 0 (38 line order only, all in `-parallel`, none split) |
+| C, expects `VERIFICATION FAILED`, GraphML + YAML | 1516 | 242 | 0 | 12 GraphML, 2 YAML | only §8.6 tests and `github_1087`, `github_1093` |
+| C, expects `VERIFICATION SUCCESSFUL`, GraphML + YAML | 1617 | 282 | 0 | 0 | `github_5868_div`, `github_7597-literal` (§8.6) |
+| Python, every 8th test after the first 726 | 706 | 60 | 0 | not written | 0 |
+
+Every violation-witness change is in a test that also prints a different
+trace, so the witnesses follow §8.6 and add no new cause. Two tests are new
+to the list, both with a different counterexample but the same property
+verdicts: `github_1087` picks another value for `num_players`, and
+`github_1093` reports the NULL dereference in `strncpy` before the invalid
+free at line 47. With `--multi-property`, `github_1093` gives the same 5
+FAILED and 28 PASSED claims with and without the flag. One Python output
+difference (`github_5444_dictcomp_param_fail`, `ESBMC_compvar_0_v` against
+`_1_v`) also shows up between two runs without the flag.
+`github_2153_5` took 32.5 s without the flag and 32.1 s with it, nothing
+split; it times out at 30 s either way.
+
+Bitwuzla, measured on 2026-11-16 with the branch merged into master
+`6c46544cd`, ESBMC's Bitwuzla 0.9.0 backend as the default solver (tests that
+pin `--z3` keep it), `CORE` tests, flag forced on against off, 30 s per run.
+Output is compared after dropping timings, temp paths, the "splits" notice and
+the assignment counts in the VCC summary lines.
+
+| Suite | Tests run | With a split object | Verdict changes | Output changes |
+|---|---|---|---|---|
+| `k-induction`, `k-induction-parallel` | 277 | 79 | 0 | 0 outside `-parallel`; 41 in `-parallel`, none split, and two runs without the flag differ in 42 of 42 |
+| Python, the next 1700 tests after the first 726, skipping every 8th | 1700 | 236 | 0 | 2 split, 5 not split |
+
+The 5 unsplit Python changes are names built from heap addresses
+(`ESBMC_unpack_temp_<address>`) and temp directories, which also differ
+between two runs without the flag. The 2 split ones,
+`github_10323_list_reversed_fail` and `github_10493_ir_fail`, print the same
+steps and violate the same property, but the solver gives another value to
+a nondet list element (`*(unsigned long int *)copied = 0` against `-1`), as
+`github_1087` does in the C witness run. 4 Python tests time out both ways.
+
+C++ under Bitwuzla, measured on 2026-11-16 with the branch merged into master
+`de72a905e` (LLVM 18), each `CORE` test of `regression/esbmc-cpp/cpp` run
+with and without the flag, 30 s per run, Bitwuzla unless the test pins a
+solver: 1355 tests, 715 split, 26 ignore the flag (threads), 0 verdict
+changes, 9 fail to parse or error out both ways. Apart from the flag's own
+status line, 41 differ in output and none in a counterexample trace:
+
+- 37 print another assignment count in `Generated N VCC(s)`.
+- `github_7797_flat_set`: two loop guards that master folds stay symbolic, so
+  two loops unwind to the `--unwind 6` bound; the unwinding assertions hold
+  and symex plus solving takes 0.91 s against 1.03 s. Same cause as the second
+  row of §8.6.
+- `cpp_sum_class` (`--k-induction-parallel` order),
+  `tuple_structured_binding` (`--incremental-bmc` folds a claim at another
+  step) and `intrinsic_unroll_while_decl_true` (temporary directory in
+  `--verbosity 9` output).
+
+Flag off, `ctest -L esbmc-cpp/cpp` on the same build: 1458 of 1466 pass; the
+8 failures (`ch8_5`, five `github_7433*`, two `github_8698_*_uncaught_fail`)
+are the 8 reported above, and `github_7433_throw_site` prints `my_error`
+where the test expects `struct my_error` under LLVM 18.
+
+Still not measured in Phase 1: the other 6395 Python tests, the C and
+witness suites again under Bitwuzla on this merge, and an SV-COMP run.
+
+The `static llvm-22 DebugOpt` job on `2fb2595b6` failed on
+`regression/consensus/integer_squareroot` (loop invariant base case) and
+`regression/python/dict23` (120 s timeout). That job tested the PR merged into
+master `f1c5ee1b4`. Merged into master `6c46544cd`, both pass with and without
+the flag, under Z3 and Bitwuzla; `dict23` takes 4.7 s. With the flag off the
+branch splits nothing, and the branch was merged with master to re-run CI.
+
+Patch coverage, measured on 2026-11-16 with an `ENABLE_COVERAGE` build at
+`e66e161ba`: 287 of the 320 instrumented lines the branch adds under `src/`
+run in the branch's own three tests (Codecov reported 23 %, because the
+coverage job runs only the tests listed in `regression/COV_TESTS.d`, and these
+were not listed). Four more tests (`field_sensitive_ssa_members`, `_threads`,
+`_loop_clauses`, `_all_witnesses`) and two existing witness-validation tests
+bring it to 320 of 320. Each new test fails under a mutation of the code it
+pins; with the thread exclusion removed, `_threads` reports a false
+VERIFICATION FAILED.
+
+### 8.6 Phase 1 trace gate
+
+Re-measured on 2026-11-16 at `a60262602` (master `f1c5ee1b4`), Bitwuzla,
+each `CORE` test of `regression/esbmc` run with and without the flag, 30 s
+per run. Of 3442 tests, none changes verdict and 5 time out both ways. Output
+differs in 84; 57 differ only in line order (parallel solving, k-induction,
+multi-property), 4 only in timings, AST addresses or quoting, and 3 are this
+PR's own tests. The other 20:
+
+| Cause | Tests |
+|---|---|
+| A member write prints the member's value where master prints the whole struct, because master's model read of `member(s#k, f)` is not a value for a pointer, bit-field or union member | `counterexample_aggregate_component_fail`, `github_10135_fail`, `github_10135_irep2_only_fail`, `github_1093` |
+| A step is dropped or added. Master's struct arm of `constant_propagation` folds `s WITH [f := e]` while `e` is symbolic (`goto_symex_state.cpp:438-500`), so a reader reads either `s#k` or nothing of `s`; per-field propagation folds a different set, and the slicer then keeps different steps | `github_1476_fail`, `github_1590-local`, `github_5868_div_fail`, `github_7597-literal_fail`, `github_7521_uintptr_fail`, `overflow-result3`, `overflow-result4`, `overflow-result-all-fail` |
+| A reassembled struct prints differently: master reads the struct from the solver as one tuple, the flag reads each field, so a pointer member prints `0` instead of `{ .pointer_object=nil, ... }`, an array `{ 6, 7 }` instead of `(signed long int [2])0x7...6` | `github_5393_array_member_fail`, `github_5393_array_member_dyn_offset_fail`, `github_7855-tie-hides-deref`, `github_7965_fail`, `pointer_repr_branch_flow_fail`, `struct_array_ite_new_index_fail` |
+| `--incremental-bmc` calls the solver one time more or fewer, since a claim folds to a constant at a different bound | `github_5868_div`, `github_7597-literal` |
+
+Tried and reverted: slicing a split object at object granularity (a kept
+field step keeps the object's earlier field steps, back to its last whole
+write, as `s' == s WITH [f := v]` does). It removes `overflow-result3` and
+`overflow-result4` and adds no new difference in the suite, but on
+
+```c
+struct S s; s.b = 2; s.a = nondet_int(); assert(s.a != 5);
+```
+
+it prints three steps where master prints none, because master folds the
+nondet member write into the assertion. It trades one difference for another.
+
+Every row comes from a choice §3 makes: fields propagate on their own, the
+slicer works per field, and a struct is read back from its fields. Matching
+master's text byte for byte means copying master's struct-level propagation,
+slicing and tuple model read onto the fields, which is most of the cost the
+split removes. The gate needs one of:
+
+1. Keep "no trace text change" and accept that the per-field propagation and
+   slicing in §3 go: fields propagate and slice as their whole object would.
+   The equation stays O(writes), but slicing removes less.
+2. Replace it with Invariant 4 as written: every printed step that both runs
+   print shows the same value for every lvalue master pins down, verdicts are
+   unchanged, and the four rows above are the accepted differences, each
+   pinned by a test.
+
+Decided on 2026-11-16: option 2. Byte-identical traces are no longer a gate
+for any phase; Invariant 4 is. The four rows above are accepted. Each still
+needs a test pinning one example of it, so that a further change to how a
+split object prints fails a test instead of passing unnoticed.
+
+Pinned on 2026-11-16 at `70d965f06`, each test failing when
+`--field-sensitive-ssa` is dropped from it and passing under Z3 and Bitwuzla:
+
+| Row | Test |
+|---|---|
+| member value | `field_sensitive_ssa_print_member_fail` (`v.un.i = 9`) |
+| step dropped | `field_sensitive_ssa_print_slice_fail` (no step for an uninitialised struct) |
+| reassembled struct | `field_sensitive_ssa_print_array_fail` (`.pair={ 6, 7 }`) |
+| `--incremental-bmc` | `field_sensitive_ssa_print_incremental` (both claims fold) |
+
+The third row is not only formatting. Master prints the correct value of a
+pointer member in five of its six tests, and the flag prints another value
+under both solvers:
+
+| Test | Master | Flag, Z3 | Flag, Bitwuzla |
+|---|---|---|---|
+| `github_5393_array_member_fail` | `.a=(void *)4660` | `.a=0` | `.a={ .pointer_object=nil, ... }` |
+| `github_5393_array_member_dyn_offset_fail` | `.a=5` | `.a=0` | `.a=0` |
+| `github_7855-tie-hides-deref`, `github_7965_fail`, `pointer_repr_branch_flow_fail` | `.next=( struct node *)8` | `{ .next = 0 }` | `{ .next = 0 }` |
+
+With `--no-slice`, `dyn_offset` prints `.a=5` again, so there the slicer drops
+the field's step and the model leaves the field free. `github_7965_fail`
+still prints `0`, and `github_5393_array_member_fail` prints
+`.a=&__memset_impl`: the print step reads the pointer field symbol from the
+model, while master evaluates the right-hand side (`(void *)CONCAT(...)`,
+`&container->node` with `container` NULL). That breaks Invariant 4, so the
+pointer half of the third row is not accepted, and the Phase 1 trace gate is
+unmet until a split pointer field prints the value master prints. The array
+half (`{ 6, 7 }` for the same bytes) keeps the value and stays accepted.
+`struct_array_ite_new_index_fail` prints other nondet values under Z3 and
+`nil` per element under Bitwuzla, where master prints `.e=nil`.
+

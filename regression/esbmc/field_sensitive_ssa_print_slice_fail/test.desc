@@ -1,0 +1,5 @@
+CORE
+main.c
+--field-sensitive-ssa
+^State 1 file [^\n]*main\.c line 12 column
+^VERIFICATION FAILED$

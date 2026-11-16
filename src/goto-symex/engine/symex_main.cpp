@@ -430,7 +430,7 @@ void goto_symext::symex_step(reachability_treet &art)
 
   case GOTO:
   {
-    expr2tc tmp(instruction.guard);
+    expr2tc tmp = split_rewrite(instruction.guard);
     replace_nondet(tmp);
     volatile_check(tmp);
 
@@ -494,6 +494,9 @@ void goto_symext::symex_step(reachability_treet &art)
     replace_nondet(deref_code);
 
     code_function_call2t &call = to_code_function_call2t(deref_code);
+    // The result slot stays whole here: symex_assign splits it, and the trace
+    // names it as written.
+    split_rewrite_operands(call.operands);
 
     if (!is_nil_expr(call.ret))
     {
@@ -610,7 +613,7 @@ void goto_symext::symex_assume()
   if (cur_state->guard.is_false())
     return;
 
-  expr2tc cond = cur_state->source.pc->guard;
+  expr2tc cond = split_rewrite(cur_state->source.pc->guard);
   const bool ends_path = cur_state->source.pc->location.get_bool("ends_path");
 
   replace_nondet(cond);
@@ -659,7 +662,7 @@ void goto_symext::symex_assert()
 
   const std::string msg = assertion_message(ns, instruction);
 
-  expr2tc tmp = instruction.guard;
+  expr2tc tmp = split_rewrite(instruction.guard);
   replace_nondet(tmp);
 
   dereference(tmp, dereferencet::READ);
