@@ -157,6 +157,7 @@ private:
   std::string get_type_from_lhs(const std::string &id, const Json &body);
   std::string get_list_subtype(const Json &list);
   std::string get_list_type_from_literal(const Json &list_arg);
+  std::string common_literal_element_type(const Json &value);
   std::string subscript_annotation_type(const Json &annotation);
   std::string
   container_literal_type(const std::string &base_type, const Json &value);
@@ -231,6 +232,7 @@ private:
     const std::string &attr,
     bool constructed_only = false);
   std::string self_attribute_type(const Json &node);
+  bool argument_has_type(const Json &arg, const std::string &type);
   InferResult
   infer_self_attribute_copy(const Json &stmt, std::string &inferred_type);
   std::string get_operand_type(const Json &node);
@@ -250,6 +252,10 @@ private:
   bool is_array_operand(const Json &operand, const Json &body);
   std::string operand_annotation_type(const Json &decl);
   std::string name_operand_type(const Json &name, const Json &body);
+  bool is_str_operation(
+    const Json &stmt,
+    const std::string &left_type,
+    const Json &body);
   std::string get_type_from_rhs_variable(const Json &element, const Json &body);
   bool holds_callable_value(const std::string &name) const;
   std::string get_type_from_call(const Json &element);
@@ -376,6 +382,7 @@ private:
     Json &node,
     const caller_scopet &scope);
   void apply_pending_specializations();
+  bool specialize_callees_of_copies();
   // Returns the ancestors of a class (including itself) in BFS order via
   // "bases". Handles multiple inheritance and cycle-safe (visited guard).
   // "object" is intentionally excluded — it has no ESBMC IR representation.

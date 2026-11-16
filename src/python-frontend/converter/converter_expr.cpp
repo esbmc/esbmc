@@ -538,7 +538,9 @@ exprt python_converter::get_lambda_body_expr(
   const bool saved_lazy = in_lazy_operand_;
   const bool saved_own_block = in_operand_effects_block_;
   const unsigned saved_conditional = conditional_expr_depth_;
+  const nlohmann::json *saved_result = lambda_result_;
   current_block = &block;
+  lambda_result_ = &body;
   converting_lambda_body_ = false;
   in_lazy_operand_ = false;
   in_operand_effects_block_ = false;
@@ -558,11 +560,26 @@ exprt python_converter::get_lambda_body_expr(
     result = symbol_expr(tmp);
   }
   current_block = saved_block;
+  lambda_result_ = saved_result;
   converting_lambda_body_ = saved_lambda;
   in_lazy_operand_ = saved_lazy;
   in_operand_effects_block_ = saved_own_block;
   conditional_expr_depth_ = saved_conditional;
   return result;
+}
+
+void python_converter::refuse_int_lambda_result(
+  const exprt &returns_float,
+  code_blockt &block,
+  const locationt &location) const
+{
+  code_assertt check{returns_float};
+  check.location() = location;
+  check.location().user_provided(true);
+  check.location().comment(
+    "Unsupported: a lambda returning an int where it may also return a "
+    "float");
+  block.copy_to_operands(check);
 }
 
 exprt python_converter::get_named_expr(const nlohmann::json &element)
