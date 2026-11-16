@@ -1,5 +1,7 @@
 #pragma once
 
+#include <python-frontend/numpy/dense_spectrum.h>
+
 #include <python-frontend/numpy/numpy_dtype.h>
 #include <python-frontend/numpy/numpy_reducer_shared.h>
 
@@ -33,6 +35,21 @@ numpy_literal_with_dtype(const nlohmann::json &call, const nlohmann::json &ast);
 
 enum class norm_order;
 struct norm_value;
+
+// Bounds on an eigenvector's residual |A v - lambda v| and on |v.v - 1|.
+struct eigen_bounds
+{
+  double residual;
+  double norm;
+};
+
+// The same bounds as expressions, which constrain nothing when `excused`.
+struct eigen_relation
+{
+  exprt residual;
+  exprt norm;
+  exprt excused;
+};
 
 class numpy_call_expr : public function_call_expr
 {
@@ -444,16 +461,22 @@ private:
     const exprt &slot,
     const std::vector<double> &exacts,
     double radius);
+  exprt selected_box(
+    const exprt &slot,
+    const std::vector<double> &exacts,
+    const std::vector<double> &radii);
   std::vector<exprt>
   dense_eigenvalues(const std::vector<std::vector<double>> &m);
   void dense_eigen_pairs(
     const std::vector<std::vector<double>> &m,
     std::vector<exprt> &values,
-    std::vector<std::vector<exprt>> &columns);
+    std::vector<std::vector<exprt>> &columns,
+    eigen_bounds &bounds);
   void eigen_pair_2x2(
     const std::vector<std::vector<double>> &m,
     std::vector<exprt> &values,
-    std::vector<std::vector<exprt>> &columns);
+    std::vector<std::vector<exprt>> &columns,
+    eigen_bounds &bounds);
   std::vector<exprt>
   signed_column(const std::vector<double> &exact, double radius);
   exprt linalg_tuple(const std::vector<exprt> &parts);
@@ -488,13 +511,30 @@ private:
   exprt runtime_eigen_pairs(const std::vector<std::vector<exprt>> &m);
   exprt runtime_singular_values(const std::vector<std::vector<exprt>> &m);
   exprt dense_svd_factors(const std::vector<std::vector<double>> &m);
-  void bind_eigenvector(
+  void bind_complex_eigenvector(
     const std::vector<std::vector<exprt>> &m,
     const exprt &lambda,
     const std::vector<exprt> &v,
-    const exprt &residual,
-    const exprt &norm,
-    const exprt &excused);
+    const eigen_relation &relation);
+  exprt complex_spectrum(
+    const std::vector<std::vector<double>> &m,
+    bool with_vectors);
+  std::vector<exprt> spectrum_order(
+    const std::vector<std::vector<std::size_t>> &orders,
+    const std::vector<bool> &is_second,
+    std::vector<exprt> &second);
+  std::vector<std::vector<exprt>> eigenvector_columns(
+    const std::vector<std::vector<double>> &m,
+    const dense_spectrum::complex_eigen_system &system,
+    const std::vector<exprt> &slots,
+    const std::vector<exprt> &second,
+    eigen_bounds &bounds);
+  exprt bound_eigen_tuple(
+    const std::vector<std::vector<exprt>> &m,
+    const std::vector<exprt> &values,
+    const std::vector<std::vector<exprt>> &columns,
+    const std::optional<eigen_relation> &relation);
+  exprt stored(const exprt &value);
   exprt symbolic_det(const std::vector<std::vector<exprt>> &m);
   exprt symbolic_norm(const nlohmann::json &arg, norm_order order);
   exprt linalg_norm(const std::function<void(nlohmann::json &)> &unwrap);

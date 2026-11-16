@@ -266,6 +266,252 @@ eigen_system real_eigen_system(const std::string &function, const matrix &m)
 
 namespace
 {
+using cplx = std::complex<real>;
+using cvec = std::vector<cplx>;
+
+// x with (m - shift I) x = b for a complex shift, as shifted_solve.
+cvec complex_shifted_solve(const mat &real_m, cplx shift, cvec b)
+{
+  const std::size_t n = real_m.size();
+  std::vector<cvec> m(n, cvec(n));
+  for (std::size_t i = 0; i < n; ++i)
+  {
+    for (std::size_t j = 0; j < n; ++j)
+      m[i][j] = real_m[i][j];
+    m[i][i] -= shift;
+  }
+  for (std::size_t k = 0; k < n; ++k)
+  {
+    std::size_t p = k;
+    for (std::size_t i = k + 1; i < n; ++i)
+      if (std::abs(m[i][k]) > std::abs(m[p][k]))
+        p = i;
+    std::swap(m[p], m[k]);
+    std::swap(b[p], b[k]);
+    if (m[k][k] == cplx(0))
+      m[k][k] = 1e-30L;
+    for (std::size_t i = k + 1; i < n; ++i)
+    {
+      const cplx f = m[i][k] / m[k][k];
+      for (std::size_t j = k; j < n; ++j)
+        m[i][j] -= f * m[k][j];
+      b[i] -= f * b[k];
+    }
+  }
+  cvec x(n);
+  for (std::size_t i = n; i-- > 0;)
+  {
+    cplx sum = b[i];
+    for (std::size_t j = i + 1; j < n; ++j)
+      sum -= m[i][j] * x[j];
+    x[i] = sum / m[i][i];
+  }
+  return x;
+}
+
+cvec complex_unit(cvec v)
+{
+  real sum = 0;
+  for (const cplx &x : v)
+    sum += std::norm(x);
+  const real length = std::sqrt(sum);
+  for (cplx &x : v)
+    x /= length;
+  return v;
+}
+
+// Newton's method on det(A - lambda I), as refine, for a complex root.
+cplx complex_refine(const mat &a, cplx lambda)
+{
+  const std::size_t n = a.size();
+  for (int iteration = 0; iteration < 20; ++iteration)
+  {
+    cplx trace = 0;
+    for (std::size_t j = 0; j < n; ++j)
+    {
+      cvec e(n, 0);
+      e[j] = 1;
+      trace += complex_shifted_solve(a, lambda, e)[j];
+    }
+    const cplx step = cplx(1) / trace;
+    lambda += step;
+    if (!(std::abs(step) > 1e-21L))
+      break;
+  }
+  return lambda;
+}
+
+cvec complex_eigenvector(const mat &a, cplx lambda)
+{
+  cvec v(a.size(), 1);
+  for (int iteration = 0; iteration < 4; ++iteration)
+    v = complex_unit(complex_shifted_solve(a, lambda, v));
+  return v;
+}
+
+real complex_residual(const mat &a, cplx lambda, const cvec &v)
+{
+  real sum = 0;
+  for (std::size_t i = 0; i < a.size(); ++i)
+  {
+    cplx r = -lambda * v[i];
+    for (std::size_t j = 0; j < a.size(); ++j)
+      r += a[i][j] * v[j];
+    sum += std::norm(r);
+  }
+  return std::sqrt(sum);
+}
+
+// The eigenvalues of `a` (scaled to unit norm): the real ones refined as
+// real numbers, and each complex pair as its upper member and conjugate.
+cvec spectrum(const std::string &function, const mat &a)
+{
+  cvec values;
+  for (const cplx &root : roots(characteristic_polynomial(a)))
+  {
+    if (std::fabs(root.imag()) <= 1e-6L)
+      values.emplace_back(refine(a, root.real()), 0);
+    else if (root.imag() > 0)
+    {
+      const cplx lambda = complex_refine(a, root);
+      values.push_back(lambda);
+      values.push_back(std::conj(lambda));
+    }
+  }
+  if (values.size() != a.size())
+    reject_spectrum(function, "eigenvalues that cannot be paired");
+  return values;
+}
+
+// LAPACK scales each eigenvector of a complex eigenvalue so that its
+// largest component is real: one normalisation of `v` per component whose
+// magnitude is within `slack` of the largest, that component made real.
+std::vector<eigenvector_candidate> phase_candidates(const cvec &v, real slack)
+{
+  real largest = 0;
+  for (const cplx &x : v)
+    largest = std::max(largest, std::norm(x));
+  std::vector<eigenvector_candidate> candidates;
+  for (std::size_t k = 0; k < v.size(); ++k)
+  {
+    if (std::norm(v[k]) < largest - slack)
+      continue;
+    const cplx phase = std::conj(v[k]) / std::abs(v[k]);
+    complex_vector candidate;
+    for (const cplx &x : v)
+      candidate.emplace_back(x * phase);
+    candidate[k] = {static_cast<double>(std::abs(v[k])), 0.0};
+    candidates.push_back({candidate, k});
+  }
+  return candidates;
+}
+
+std::vector<eigenvector_candidate>
+conjugates(const std::vector<eigenvector_candidate> &candidates)
+{
+  std::vector<eigenvector_candidate> out = candidates;
+  for (eigenvector_candidate &candidate : out)
+    for (std::complex<double> &x : candidate.vector)
+      x = std::conj(x);
+  return out;
+}
+
+// The eigenvector candidates of the k-th eigenvalue, given the unit vector
+// inverse iteration found for it.
+std::vector<eigenvector_candidate> eigenvector_candidates(
+  const cvec &values,
+  std::size_t k,
+  const cvec &v,
+  const std::vector<std::vector<eigenvector_candidate>> &earlier,
+  real slack)
+{
+  if (values[k].imag() < 0)
+    return conjugates(earlier.back());
+  if (values[k].imag() > 0)
+    return phase_candidates(v, slack);
+  complex_vector real_vector;
+  real length = 0;
+  for (const cplx &x : v)
+    length += x.real() * x.real();
+  for (const cplx &x : v)
+    real_vector.emplace_back(
+      static_cast<double>(x.real() / std::sqrt(length)), 0.0);
+  return {{real_vector, v.size()}};
+}
+} // namespace
+
+bool has_real_spectrum(const matrix &m)
+{
+  const mat wide = widen(m);
+  const real norm = frobenius(wide);
+  mat a = wide;
+  for (vec &row : a)
+    for (real &x : row)
+      x /= norm;
+  for (const std::complex<real> &root : roots(characteristic_polynomial(a)))
+    if (std::fabs(root.imag()) > 1e-6L)
+      return false;
+  return true;
+}
+
+complex_eigen_system
+complex_eigen_system_of(const std::string &function, const matrix &m)
+{
+  const mat wide = widen(m);
+  const real norm = frobenius(wide);
+  mat a = wide;
+  for (vec &row : a)
+    for (real &x : row)
+      x /= norm;
+  const cvec values = spectrum(function, a);
+  real gap = INFINITY;
+  for (std::size_t i = 0; i < values.size(); ++i)
+    for (std::size_t j = i + 1; j < values.size(); ++j)
+      gap = std::min(gap, std::abs(values[i] - values[j]));
+  const mat at = transpose(a);
+  std::vector<cvec> vectors;
+  std::vector<real> condition;
+  real conditions = 0;
+  for (const cplx &lambda : values)
+  {
+    const cvec v = complex_eigenvector(a, lambda),
+               w = complex_eigenvector(at, lambda);
+    if (!(complex_residual(a, lambda, v) <= check_tolerance))
+      reject_spectrum(function, "an eigenvector that cannot be checked");
+    cplx product = 0;
+    for (std::size_t i = 0; i < v.size(); ++i)
+      product += w[i] * v[i];
+    condition.push_back(1 / std::abs(product));
+    conditions += condition.back();
+    vectors.push_back(v);
+  }
+  if (!(4 * backward_error * conditions < gap))
+    reject_spectrum(function, "repeated or ill-conditioned eigenvalues");
+  // Making the largest component real turns an error r in each component
+  // into at most r (1 + sqrt(n)) more, as that component is at least
+  // 1 / sqrt(n).
+  const real vector_radius =
+    (2 * backward_error * conditions / gap + backward_error) *
+    (2 + 2 * std::sqrt(static_cast<real>(m.size())));
+  if (function == "eig" && vector_radius > 1e-6L)
+    reject_spectrum(function, "ill-conditioned eigenvectors");
+  complex_eigen_system system;
+  system.vector_radius = static_cast<double>(vector_radius);
+  for (std::size_t k = 0; k < values.size(); ++k)
+  {
+    const cplx value = values[k] * norm;
+    system.values.emplace_back(
+      static_cast<double>(value.real()), static_cast<double>(value.imag()));
+    system.value_radius.push_back(
+      static_cast<double>(2 * backward_error * condition[k] * norm));
+    system.candidates.push_back(eigenvector_candidates(
+      values, k, vectors[k], system.candidates, 8 * vector_radius));
+  }
+  return system;
+}
+
+namespace
+{
 // One-sided Jacobi: rotates the columns of w (initially A) until they are
 // orthogonal, accumulating the rotations in v, so that A v = w.
 void orthogonalise_columns(mat &w, mat &v)

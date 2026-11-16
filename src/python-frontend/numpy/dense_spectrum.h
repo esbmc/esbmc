@@ -1,5 +1,6 @@
 #pragma once
 
+#include <complex>
 #include <string>
 #include <vector>
 
@@ -21,6 +22,30 @@ struct eigen_system
   double vector_radius;
 };
 
+using complex_vector = std::vector<std::complex<double>>;
+
+// The eigenvalues of a real matrix with a complex conjugate pair, each pair
+// adjacent with its positive imaginary part first (real eigenvalues have a
+// zero one). candidates[k] lists the unit eigenvectors LAPACK may return for
+// values[k]: a real one for a real eigenvalue; for a complex one, one per
+// component that may be the largest, which LAPACK makes real (the second of
+// a pair has the conjugates of the first's).
+// An eigenvector LAPACK may return, with the component whose imaginary part
+// it sets to exactly zero (vector.size() for a real vector).
+struct eigenvector_candidate
+{
+  complex_vector vector;
+  std::size_t real_component;
+};
+
+struct complex_eigen_system
+{
+  std::vector<std::complex<double>> values;
+  std::vector<double> value_radius;
+  std::vector<std::vector<eigenvector_candidate>> candidates;
+  double vector_radius;
+};
+
 // Singular values in descending order with unit left and right singular
 // vectors u[k] and v[k] of a square matrix.
 struct singular_system
@@ -33,6 +58,15 @@ struct singular_system
 // spectrum is complex, or too close to repeated to bound the eigenvalues
 // (and, for eig, the eigenvectors).
 eigen_system real_eigen_system(const std::string &function, const matrix &m);
+
+// Whether every eigenvalue of `m` is real (up to the separation the dense
+// routes need to tell a complex pair from a repeated real eigenvalue).
+bool has_real_spectrum(const matrix &m);
+
+// Throws, as real_eigen_system does, when the spectrum is too close to
+// repeated to bound it.
+complex_eigen_system
+complex_eigen_system_of(const std::string &function, const matrix &m);
 
 // The singular values only, which any rounding keeps well conditioned.
 std::vector<double> singular_values_of(const matrix &m);
