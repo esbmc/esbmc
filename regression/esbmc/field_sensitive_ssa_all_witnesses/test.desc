@@ -1,0 +1,5 @@
+CORE
+main.c
+--field-sensitive-ssa --all-witnesses
+^WARNING: --field-sensitive-ssa is ignored with --all-witnesses$
+^VERIFICATION FAILED$

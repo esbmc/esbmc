@@ -1,6 +1,6 @@
 # Scope: field-sensitive SSA in goto-symex (#7521)
 
-> **Status at 2026-11-15: Phase 0 merged (#10773); Phase 1 in draft review,
+> **Status at 2026-11-16: Phase 0 merged (#10773); Phase 1 in draft review,
 > gate partly met (see §8.5).** The corpus is in `regression/field-sensitivity/`
 > with baselines, and the census has been run and reverted. Phase 1 adds
 > `--field-sensitive-ssa` (default off): symex gives each field of an
@@ -398,6 +398,16 @@ verdict:
 
 Not measured in Phase 1: GraphML and YAML witness files under the flag, the
 k-induction suite with the flag, and the remaining 9023 Python tests.
+
+Patch coverage, measured on 2026-11-16 with an `ENABLE_COVERAGE` build at
+`e66e161ba`: 287 of the 320 instrumented lines the branch adds under `src/`
+run in the branch's own three tests (Codecov reported 23 %, because the
+coverage job runs only the tests listed in `regression/COV_TESTS.d`, and these
+were not listed). Four more tests (`field_sensitive_ssa_members`, `_threads`,
+`_loop_clauses`, `_all_witnesses`) and two existing witness-validation tests
+bring it to 320 of 320. Each new test fails under a mutation of the code it
+pins; with the thread exclusion removed, `_threads` reports a false
+VERIFICATION FAILED.
 
 ### 8.6 Phase 1 trace gate: what blocks it
 
