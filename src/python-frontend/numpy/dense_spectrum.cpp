@@ -481,7 +481,12 @@ complex_eigen_system_of(const std::string &function, const matrix &m)
     cplx product = 0;
     for (std::size_t i = 0; i < v.size(); ++i)
       product += w[i] * v[i];
-    condition.push_back(1 / std::abs(product));
+    // Orthogonal left and right eigenvectors mean an infinitely
+    // ill-conditioned (defective) eigenvalue.
+    const real overlap = std::abs(product);
+    if (!(overlap > 0))
+      reject_spectrum(function, "repeated or ill-conditioned eigenvalues");
+    condition.push_back(1 / overlap);
     conditions += condition.back();
     vectors.push_back(v);
   }
