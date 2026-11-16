@@ -347,6 +347,9 @@ private:
   void refuse_isinstance_on_guessed_return(
     const nlohmann::json &obj_arg,
     const std::vector<nlohmann::json> &types) const;
+  void refuse_isinstance_on_path_dependent_number(
+    const nlohmann::json &obj_arg,
+    const std::vector<nlohmann::json> &types) const;
   void refuse_on_path_dependent_number(
     const nlohmann::json &obj_arg,
     const std::string &builtin) const;

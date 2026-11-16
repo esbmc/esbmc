@@ -308,6 +308,19 @@ void function_call_expr::refuse_on_path_dependent_number(
       "supported");
 }
 
+void function_call_expr::refuse_isinstance_on_path_dependent_number(
+  const nlohmann::json &obj_arg,
+  const std::vector<nlohmann::json> &types) const
+{
+  const bool asks_number =
+    std::any_of(types.begin(), types.end(), [](const nlohmann::json &t) {
+      const std::string id = t.value("id", "");
+      return id == "int" || id == "float" || id == "bool";
+    });
+  if (asks_number)
+    refuse_on_path_dependent_number(obj_arg, "isinstance");
+}
+
 /// Plants an assertion that the SV-COMP wrapper reads as Unknown, or stops the
 /// conversion where no statement can be planted.
 void function_call_expr::plant_unsupported(const std::string &message) const
@@ -770,13 +783,7 @@ exprt function_call_expr::handle_isinstance() const
   const auto &obj_arg = args[0];
   std::vector<nlohmann::json> types;
   collect_classinfo(args[1], types);
-  const bool asks_number =
-    std::any_of(types.begin(), types.end(), [](const nlohmann::json &t) {
-      const std::string id = t.value("id", "");
-      return id == "int" || id == "float" || id == "bool";
-    });
-  if (asks_number)
-    refuse_on_path_dependent_number(obj_arg, "isinstance");
+  refuse_isinstance_on_path_dependent_number(obj_arg, types);
   refuse_isinstance_on_guessed_return(obj_arg, types);
   refuse_type_of_symbolic_int_power(obj_arg, obj_expr);
 
