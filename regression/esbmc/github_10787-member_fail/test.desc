@@ -1,0 +1,5 @@
+CORE
+main.c
+
+^  FAILED +\[main\.pointer-arithmetic-out-of-bounds\.\d+\] +line 10 +pointer arithmetic out of bounds: array `s' upper bound$
+^VERIFICATION FAILED$

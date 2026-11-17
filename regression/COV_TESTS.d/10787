@@ -1,0 +1,6 @@
+regression/esbmc/github_10787
+regression/esbmc/github_10787_fail
+regression/esbmc/github_10787-member_fail
+regression/esbmc/github_10787-flag
+regression/esbmc/github_10787-no-bounds
+regression/z3/github_9225_ptrdiff_ir
