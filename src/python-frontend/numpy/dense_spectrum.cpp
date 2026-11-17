@@ -588,7 +588,7 @@ jacobi_result jacobi_svd(const matrix &m)
   return result;
 }
 
-// The unit vector orthogonal to the first n - 1 rows of `basis`, on the side
+// A unit vector orthogonal to the orthonormal rows of `basis`, on the side
 // `hint` points to.
 vec completion(const mat &basis, const vec &hint)
 {
@@ -600,11 +600,11 @@ vec completion(const mat &basis, const vec &hint)
     vec x(n, 0);
     x[e] = 1;
     for (int pass = 0; pass < 2; ++pass)
-      for (std::size_t k = 0; k + 1 < n; ++k)
+      for (const vec &known : basis)
       {
-        const real projection = dot(x, basis[k]);
+        const real projection = dot(x, known);
         for (std::size_t i = 0; i < n; ++i)
-          x[i] -= projection * basis[k][i];
+          x[i] -= projection * known[i];
       }
     const real length = std::sqrt(dot(x, x));
     if (length > best_length)
@@ -657,36 +657,36 @@ matrix transposed(const matrix &m)
   return narrow(transpose(widen(m)));
 }
 
-[[noreturn]] void reject_factors(const std::string &reason)
+// The number of singular values above the rounding of a matrix of
+// Frobenius norm `norm`.
+std::size_t numerical_rank(const vec &sigma, real norm)
 {
-  throw std::runtime_error(
-    "TypeError: numpy.linalg.svd factors of " + reason + " are not supported");
+  std::size_t rank = 0;
+  while (rank < sigma.size() && sigma[rank] > 2e-12L * norm)
+    ++rank;
+  return rank;
 }
 
-// The left singular vectors of a matrix with at least as many rows as
-// columns: A v / sigma, which loses accuracy as sigma shrinks, so the last
-// one of a square matrix is the unit vector the others fix up to its sign.
-// A full factor adds the unit vector orthogonal to them, which is unique up
-// to its sign only when it completes a basis on its own.
-void left_vectors(jacobi_result &r, std::size_t rows, bool full)
+// All `rows` left singular vectors of a matrix with at least as many rows
+// as columns: A v / sigma for the first `rank`, which loses accuracy as
+// sigma shrinks, so the last one of a square matrix of full rank is the
+// unit vector the others fix up to its sign. The others complete an
+// orthonormal basis.
+void left_vectors(jacobi_result &r, std::size_t rows, std::size_t rank)
 {
   const std::size_t n = r.sigma.size();
-  for (std::size_t k = 0; k + 1 < n; ++k)
-    r.u[k] = unit(r.u[k]);
-  if (rows == n)
-  {
-    r.u[n - 1] = completion(r.u, r.u[n - 1]);
-    return;
-  }
-  if (!(r.sigma[n - 1] > 1e-12L * r.sigma[0]))
-    reject_factors("a non-square matrix with a zero singular value");
-  r.u[n - 1] = unit(r.u[n - 1]);
-  if (!full)
-    return;
-  if (rows - n > 1)
-    reject_factors(
-      "full_matrices=True with more than one row or column past the square");
-  r.u.push_back(completion(r.u, vec(rows, 0)));
+  const std::size_t computed = rank == rows ? rank - 1 : rank;
+  mat basis;
+  for (std::size_t k = 0; k < computed; ++k)
+    basis.push_back(unit(r.u[k]));
+  for (std::size_t k = computed; k < rows; ++k)
+    basis.push_back(completion(basis, k < n ? r.u[k] : vec(rows, 0)));
+  r.u = basis;
+}
+
+matrix rows_from(const mat &m, std::size_t first)
+{
+  return narrow(mat(m.begin() + first, m.end()));
 }
 } // namespace
 
@@ -703,21 +703,29 @@ singular_system singular_system_of(const matrix &m, bool full)
   {
     singular_system system = singular_system_of(transposed(m), full);
     std::swap(system.u, system.v);
+    std::swap(system.u_rest, system.v_rest);
     return system;
   }
   jacobi_result r = jacobi_svd(m);
-  left_vectors(r, m.size(), full);
   const mat a = widen(m);
   const real norm = frobenius(a);
+  const std::size_t rank = numerical_rank(r.sigma, norm);
+  left_vectors(r, m.size(), rank);
   if (
     !(reconstruction_error(a, r) <= check_tolerance * norm) ||
     !(orthogonality_error(r.u) <= check_tolerance) ||
     !(orthogonality_error(r.v) <= check_tolerance))
     throw std::runtime_error(
       "TypeError: numpy.linalg.svd factors of this matrix cannot be checked");
+  const matrix u_rest = rows_from(r.u, rank), v_rest = rows_from(r.v, rank);
+  if (!full)
+    r.u.resize(r.sigma.size());
   return {
     std::vector<double>(r.sigma.begin(), r.sigma.end()),
     narrow(r.u),
-    narrow(r.v)};
+    narrow(r.v),
+    rank,
+    u_rest,
+    v_rest};
 }
 } // namespace dense_spectrum

@@ -48,11 +48,17 @@ struct complex_eigen_system
 
 // Singular values in descending order with unit left and right singular
 // vectors u[k] and v[k]: min(m, n) of each for the reduced factors, and m
-// and n for the full ones.
+// and n for the full ones. The first `rank` singular values are above
+// rounding; the vectors past them only complete an orthonormal basis, and
+// LAPACK may return any other basis of the space they span, of which
+// u_rest and v_rest are one (m - rank and n - rank vectors, even for the
+// reduced factors).
 struct singular_system
 {
   std::vector<double> sigma;
   matrix u, v;
+  std::size_t rank;
+  matrix u_rest, v_rest;
 };
 
 // Throws a "TypeError: numpy.linalg.<function> ..." diagnostic when the
@@ -72,7 +78,6 @@ complex_eigen_system_of(const std::string &function, const matrix &m);
 // The singular values only, which any rounding keeps well conditioned.
 std::vector<double> singular_values_of(const matrix &m);
 
-// Throws when the factors cannot be checked against m, or when the full
-// factors would need a basis of a null space LAPACK may rotate freely.
+// Throws when the factors cannot be checked against m.
 singular_system singular_system_of(const matrix &m, bool full = true);
 } // namespace dense_spectrum

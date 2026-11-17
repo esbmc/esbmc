@@ -490,7 +490,30 @@ private:
     const dense_spectrum::singular_system &system,
     const std::array<exprt, 3> &factors,
     const std::pair<double, double> &radii,
-    const std::vector<double> &sign_free);
+    const std::array<bool, 2> &free);
+  void relate_near(const exprt &sum, double target, double bound);
+  void relate_orthogonality(
+    const exprt &factor,
+    bool columns,
+    const dense_spectrum::matrix &vectors,
+    std::size_t count,
+    double radius);
+  void relate_free_vectors(
+    const std::vector<std::vector<double>> &m,
+    const exprt &factor,
+    bool columns,
+    std::size_t count,
+    std::size_t rank);
+  std::vector<std::vector<exprt>> vectors_past_rank(
+    const dense_spectrum::matrix &vectors,
+    const dense_spectrum::matrix &rest,
+    std::size_t rank,
+    double radius);
+  std::vector<std::vector<exprt>> plane_vectors(
+    const dense_spectrum::matrix &plane,
+    std::size_t count,
+    double radius,
+    std::size_t rank);
   exprt linalg_decomposition(
     const std::string &function,
     const std::vector<std::vector<double>> &m);

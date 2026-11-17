@@ -8842,106 +8842,263 @@ exprt numpy_call_expr::svd_factors(const std::vector<std::vector<double>> &m)
     {double_array(u_rows), double_array(sigmas), double_array(vh_rows)});
 }
 
+// Assumes |sum - target| <= bound. A program subtracts each entry of A from
+// its reconstruction, and 1 from the norm of a singular vector, but compares
+// two vectors' product with 0 directly (a NaN target).
+void numpy_call_expr::relate_near(const exprt &sum, double target, double bound)
+{
+  const exprt measured =
+    std::isnan(target)
+      ? sum
+      : ieee_op("ieee_sub", sum, from_double(target, double_type()));
+  code_assumet within{binary_relation_exprt(
+    abs_double(measured), "<=", from_double(bound, double_type()))};
+  within.location() = converter_.get_location_from_decl(call_);
+  converter_.add_instruction(within);
+}
+
+// The orthonormality relations of the first `count` columns of U
+// (`columns`) or rows of Vh, each within `radius` of `vectors`.
+void numpy_call_expr::relate_orthogonality(
+  const exprt &factor,
+  bool columns,
+  const dense_spectrum::matrix &vectors,
+  std::size_t count,
+  double radius)
+{
+  const std::size_t length = vectors.front().size();
+  for (std::size_t a = 0; a < count; ++a)
+    for (std::size_t b = a; b < count; ++b)
+    {
+      std::vector<std::vector<box_factor>> terms;
+      for (std::size_t i = 0; i < length; ++i)
+        terms.push_back({{vectors[a][i], radius}, {vectors[b][i], radius}});
+      relate_near(
+        factor_product(factor, a, b, length, columns),
+        a == b ? 1.0 : NAN,
+        implied_bound(terms, a == b ? 1.0 : 0.0));
+    }
+}
+
 // The reconstruction and orthogonality relations of svd's factors as a
 // program spells them over the stored results: each entry of
 // U[:, :k] diag(S) Vh[:k, :] within its bound of A's, and the columns of U
 // and the rows of Vh orthonormal within theirs. They hold at every point of
-// the factors' boxes (a singular value whose vectors take independent signs
-// counts as either sign), so they restrict nothing; they let a solver relate
-// the results to the matrix without exploring the boxes.
+// the factors' boxes (a singular value past the rank, whose vectors take
+// independent signs, counts as either sign; a vector of a `free` side past
+// the rank as any unit vector), so they restrict nothing; they let a solver
+// relate the results to the matrix without exploring the boxes.
 void numpy_call_expr::bind_svd_relations(
   const std::vector<std::vector<double>> &m,
   const dense_spectrum::singular_system &system,
   const std::array<exprt, 3> &factors,
   const std::pair<double, double> &radii,
-  const std::vector<double> &sign_free)
+  const std::array<bool, 2> &free)
 {
   const double value_radius = radii.first, r = radii.second;
-  const std::size_t k = system.sigma.size();
-  // A program subtracts each entry of A from its reconstruction, and 1 from
-  // the norm of a singular vector, but compares two vectors' product with 0
-  // directly.
-  const auto near = [&](const exprt &sum, double target, double bound) {
-    const exprt measured =
-      std::isnan(target)
-        ? sum
-        : ieee_op("ieee_sub", sum, from_double(target, double_type()));
-    code_assumet within{binary_relation_exprt(
-      abs_double(measured), "<=", from_double(bound, double_type()))};
-    within.location() = converter_.get_location_from_decl(call_);
-    converter_.add_instruction(within);
+  const std::size_t k = system.sigma.size(), rank = system.rank;
+  const auto component = [&](bool side, std::size_t l, double centre) {
+    return side && l >= rank ? box_factor{0.0, 1.0 + 1e-9}
+                             : box_factor{centre, r};
   };
   // Each reconstructed entry is a sum of k products of three results; past
-  // max_reconstruction_products of them a solver takes minutes to find a
-  // counterexample, so a larger matrix keeps only the orthogonality ones.
+  // max_reconstruction_products of them, or with a term over a vector no
+  // box bounds, a solver takes minutes to find a counterexample, so the
+  // matrix keeps only the orthogonality ones.
   const bool reconstruct =
-    m.size() * m[0].size() * k <= max_reconstruction_products;
+    m.size() * m[0].size() * k <= max_reconstruction_products &&
+    (rank == k || !(free[0] || free[1]));
   for (std::size_t i = 0; reconstruct && i < m.size(); ++i)
     for (std::size_t j = 0; j < m[i].size(); ++j)
     {
       std::vector<std::vector<box_factor>> terms;
       for (std::size_t l = 0; l < k; ++l)
         terms.push_back(
-          {{system.u[l][i], r},
-           sign_free[l] > 0 ? box_factor{0.0, sign_free[l]}
-                            : box_factor{system.sigma[l], value_radius},
-           {system.v[l][j], r}});
-      near(
+          {component(free[0], l, system.u[l][i]),
+           l < rank ? box_factor{system.sigma[l], value_radius}
+                    : box_factor{0.0, system.sigma[l] + value_radius},
+           component(free[1], l, system.v[l][j])});
+      relate_near(
         reconstructed_entry(factors, i, j, k),
         m[i][j],
         implied_bound(terms, m[i][j]));
     }
-  for (bool columns : {true, false})
+  relate_orthogonality(
+    factors[0], true, system.u, free[0] ? rank : system.u.size(), r);
+  relate_orthogonality(
+    factors[2], false, system.v, free[1] ? rank : system.v.size(), r);
+  if (free[0])
+    relate_free_vectors(m, factors[0], true, system.u.size(), rank);
+  if (free[1])
+    relate_free_vectors(m, factors[2], false, system.v.size(), rank);
+}
+
+// A v for each row of Vh past the rank (A^T u for each column of U,
+// `columns`), as a program spells it: within rounding of zero, as LAPACK's
+// A is within lapack_tolerance ||A|| of U diag(S) Vh, its vectors are
+// orthonormal within 2 lapack_tolerance and its singular values past the
+// rank within 4e-12 ||A||. The orthonormality of these vectors, a product
+// of two unknowns, is left to plane_vectors' construction: as a relation it
+// makes a solver take minutes to find a counterexample.
+void numpy_call_expr::relate_free_vectors(
+  const std::vector<std::vector<double>> &m,
+  const exprt &factor,
+  bool columns,
+  std::size_t count,
+  std::size_t rank)
+{
+  const std::size_t length = columns ? m.size() : m[0].size();
+  const std::size_t others = columns ? m[0].size() : m.size();
+  const double norm = frobenius_norm(m);
+  const double k = static_cast<double>(std::min(length, others));
+  const double image =
+    1e-12 * norm * (2 + 2 * static_cast<double>(rank) + 4 * k) +
+    1e-14 * (1 + norm);
+  for (std::size_t a = rank; a < count; ++a)
+    for (std::size_t o = 0; o < others; ++o)
+    {
+      std::vector<exprt> terms;
+      for (std::size_t i = 0; i < length; ++i)
+        terms.push_back(ieee_op(
+          "ieee_mul",
+          from_double(columns ? m[i][o] : m[o][i], double_type()),
+          columns ? element(element(factor, i), a)
+                  : element(element(factor, a), i)));
+      relate_near(summed(terms), NAN, image);
+    }
+}
+
+// The `count` (one or two) vectors past the rank of a factor whose first
+// `rank` leave a plane, which LAPACK may return as any orthonormal pair in
+// it. With b1, b2 the computed plane, the first is a b1 + b b2 for some
+// a^2 + b^2 within 1e-10 of 1 and the second +-(-b b1 + a b2): orthonormal
+// up to the components' slack, which covers how far LAPACK's plane lies
+// from the computed one (the first `rank` vectors within `radius` per
+// component, orthogonal to it within 2 lapack_tolerance) and LAPACK's own
+// orthogonality. Two products of unknowns per factor, where orthonormality
+// relations over free components take a solver minutes.
+std::vector<std::vector<exprt>> numpy_call_expr::plane_vectors(
+  const dense_spectrum::matrix &plane,
+  std::size_t count,
+  double radius,
+  std::size_t rank)
+{
+  const std::size_t length = plane.front().size();
+  const double tilt =
+    1.01 * std::sqrt(static_cast<double>(rank)) *
+    (std::sqrt(static_cast<double>(length)) * radius + 2 * lapack_tolerance);
+  const double slack = 4 * tilt + 16 * lapack_tolerance + 1e-15;
+  // The coefficients and components of unit vectors lie within [-1, 1].
+  const double unit_box = 1 + 1e-9;
+  const exprt a = lapack_value(0.0, unit_box), b = lapack_value(0.0, unit_box);
+  relate_near(
+    ieee_op("ieee_add", ieee_op("ieee_mul", a, a), ieee_op("ieee_mul", b, b)),
+    1.0,
+    1e-10);
+  const exprt flip = nondet_bool();
+  std::vector<std::vector<exprt>> vectors;
+  for (std::size_t c = 0; c < count; ++c)
   {
-    const dense_spectrum::matrix &vectors = columns ? system.u : system.v;
-    for (std::size_t a = 0; a < vectors.size(); ++a)
-      for (std::size_t b = a; b < vectors.size(); ++b)
-      {
-        std::vector<std::vector<box_factor>> terms;
-        for (std::size_t i = 0; i < vectors[a].size(); ++i)
-          terms.push_back({{vectors[a][i], r}, {vectors[b][i], r}});
-        near(
-          factor_product(
-            columns ? factors[0] : factors[2],
-            a,
-            b,
-            vectors[a].size(),
-            columns),
-          a == b ? 1.0 : NAN,
-          implied_bound(terms, a == b ? 1.0 : 0.0));
-      }
+    const exprt p = c == 0 ? a : negate_double(b), q = c == 0 ? b : a;
+    std::vector<exprt> vector;
+    for (std::size_t i = 0; i < length; ++i)
+    {
+      const exprt centre = ieee_op(
+        "ieee_add",
+        ieee_op("ieee_mul", p, from_double(plane[0][i], double_type())),
+        ieee_op("ieee_mul", q, from_double(plane[1][i], double_type())));
+      const exprt x = lapack_value(0.0, unit_box);
+      relate_near(
+        ieee_op(
+          "ieee_sub",
+          x,
+          c == 0 ? centre : if_exprt(flip, negate_double(centre), centre)),
+        NAN,
+        slack);
+      vector.push_back(x);
+    }
+    vectors.push_back(vector);
   }
+  return vectors;
+}
+
+// The vectors of a factor past the rank: a single one, which completes the
+// space the others leave, fixed up to its sign; one or two in a plane, as
+// plane_vectors gives them.
+std::vector<std::vector<exprt>> numpy_call_expr::vectors_past_rank(
+  const dense_spectrum::matrix &vectors,
+  const dense_spectrum::matrix &rest,
+  std::size_t rank,
+  double radius)
+{
+  if (rest.size() > 2)
+    throw std::runtime_error(
+      "TypeError: numpy.linalg.svd factors whose singular vectors past the "
+      "rank span three or more dimensions are not supported");
+  const std::size_t count = vectors.size() - rank;
+  if (rest.size() == 2 && count > 0)
+    return plane_vectors(rest, count, radius, rank);
+  std::vector<std::vector<exprt>> out;
+  for (std::size_t j = rank; j < vectors.size(); ++j)
+  {
+    std::vector<exprt> components;
+    for (double component : vectors[j])
+      components.push_back(lapack_value(component, radius));
+    out.push_back(with_any_sign(components));
+  }
+  return out;
+}
+
+// How far LAPACK's singular vectors of the values above rounding may lie
+// from the computed ones: as the gaps between those values, and between the
+// smallest of them and the rest (zero singular values, or the vectors that
+// complete a full factor), allow.
+static double determined_vector_radius(
+  const dense_spectrum::singular_system &system,
+  double value_radius,
+  double norm)
+{
+  const std::size_t rank = system.rank;
+  std::vector<singular_triple> triples;
+  for (std::size_t j = 0; j < rank; ++j)
+    triples.push_back({system.sigma[j], system.u[j], system.v[j]});
+  double gap = singular_gap(triples, 2 * value_radius);
+  const bool completed = rank < system.u.size() || rank < system.v.size();
+  if (rank > 0 && completed)
+    gap = std::min(
+      gap,
+      system.sigma[rank - 1] -
+        (rank < system.sigma.size() ? system.sigma[rank] : 0.0));
+  return 1e-12 * (1 + norm / gap);
 }
 
 // svd's (U, S, Vh) of a dense matrix (square and larger than 2x2, or
-// rectangular) whose singular values are distinct: each factor within the
-// radius the gap between them allows of the extended-precision one, which
-// singular_system_of checked against the reconstruction and orthogonality
-// relations. LAPACK picks the sign per singular triple (independently for a
-// singular value within rounding of zero, and for each vector that only
-// completes a full factor). U is m x m and Vh n x n with full_matrices, and
-// m x k and k x n without (k = min(m, n)).
+// rectangular) whose singular values above rounding are distinct: each
+// singular triple of those within the radius the gaps allow of the
+// extended-precision one, which singular_system_of checked against the
+// reconstruction and orthogonality relations, with a sign LAPACK picks per
+// triple. The vectors past the rank (zero singular values, and the extra
+// ones of a full factor) span what the others leave: a single one is fixed
+// up to its sign, and two or more are any orthonormal basis of that space.
+// U is m x m and Vh n x n with full_matrices, and m x k and k x n without
+// (k = min(m, n)).
 exprt numpy_call_expr::dense_svd_factors(
   const std::vector<std::vector<double>> &m)
 {
   const dense_spectrum::singular_system system =
     dense_spectrum::singular_system_of(m, svd_flag("full_matrices", true));
-  const std::size_t k = system.sigma.size();
+  const std::size_t k = system.sigma.size(), rank = system.rank;
   const double norm = frobenius_norm(m);
   const double value_radius = 1e-12 * norm;
-  std::vector<singular_triple> triples;
-  for (std::size_t j = 0; j < k; ++j)
-    triples.push_back({system.sigma[j], system.u[j], system.v[j]});
-  double gap = singular_gap(triples, 2 * value_radius);
-  // A vector that completes a full factor spans what A's range (or row
-  // space) leaves, as accurate as the smallest singular value allows.
-  if (system.u.size() > k || system.v.size() > k)
-    gap = std::min(gap, system.sigma.back());
-  const double vector_radius = 1e-12 * (1 + norm / gap);
+  const double vector_radius =
+    determined_vector_radius(system, value_radius, norm);
   if (vector_radius > 1e-6)
     throw std::runtime_error(
       "TypeError: numpy.linalg.svd of a matrix larger than 2x2 with close "
       "singular values is not supported");
+  // A side is free when its first `rank` vectors leave a plane.
+  const std::array<bool, 2> free = {
+    system.u_rest.size() == 2, system.v_rest.size() == 2};
   const auto box = [&](const std::vector<double> &vector) {
     std::vector<exprt> components;
     for (double component : vector)
@@ -8950,21 +9107,20 @@ exprt numpy_call_expr::dense_svd_factors(
   };
   std::vector<std::vector<exprt>> us, vs;
   std::vector<exprt> sigmas;
-  std::vector<double> sign_free;
   for (std::size_t j = 0; j < k; ++j)
+    sigmas.push_back(lapack_value(system.sigma[j], value_radius));
+  for (std::size_t j = 0; j < rank; ++j)
   {
-    const singular_triple &t = triples[j];
-    sigmas.push_back(lapack_value(t.sigma, value_radius));
-    const bool tied = t.sigma > value_radius;
-    sign_free.push_back(tied ? 0.0 : t.sigma + value_radius);
     const exprt flip = nondet_bool();
-    us.push_back(signed_by(flip, box(t.u)));
-    vs.push_back(signed_by(tied ? flip : nondet_bool(), box(t.v)));
+    us.push_back(signed_by(flip, box(system.u[j])));
+    vs.push_back(signed_by(flip, box(system.v[j])));
   }
-  for (std::size_t j = k; j < system.u.size(); ++j)
-    us.push_back(with_any_sign(box(system.u[j])));
-  for (std::size_t j = k; j < system.v.size(); ++j)
-    vs.push_back(with_any_sign(box(system.v[j])));
+  for (auto &u :
+       vectors_past_rank(system.u, system.u_rest, rank, vector_radius))
+    us.push_back(u);
+  for (auto &v :
+       vectors_past_rank(system.v, system.v_rest, rank, vector_radius))
+    vs.push_back(v);
   assume_singular_order(sigmas);
   std::vector<exprt> u_rows, vh_rows;
   for (std::size_t i = 0; i < m.size(); ++i)
@@ -8980,7 +9136,7 @@ exprt numpy_call_expr::dense_svd_factors(
   const exprt s = stored(double_array(sigmas));
   const exprt vh = stored(double_array(vh_rows));
   bind_svd_relations(
-    m, system, {u, s, vh}, {value_radius, vector_radius}, sign_free);
+    m, system, {u, s, vh}, {value_radius, vector_radius}, free);
   return linalg_tuple({u, s, vh});
 }
 
