@@ -4238,6 +4238,12 @@ exprt python_list::handle_range_slice(
       const size_t end =
         has_upper ? std::min(upper_bound, elts_size) : elts_size;
 
+      // A mixed int/float literal stores every element as a float, so a slice
+      // of it must read them as floats too.
+      const typet source_numeric =
+        array.is_symbol()
+          ? elem_types().numeric_element_type(array.identifier().as_string())
+          : typet();
       for (size_t i = begin; i < end; ++i)
       {
         exprt element = decay_function_to_pointer(
@@ -4259,7 +4265,7 @@ exprt python_list::handle_range_slice(
         elem_types().record(
           sliced_list.id.as_string(),
           element.identifier().as_string(),
-          element.type());
+          source_numeric.is_floatbv() ? source_numeric : element.type());
       }
     }
   }
@@ -4272,6 +4278,14 @@ exprt python_list::handle_range_slice(
   copy_dict_view_elem_types(array, sliced_id);
 
   copy_list_of_dict_view_elem_types(array, sliced_id);
+
+  if (elem_types().size(sliced_id) == 0 && array.is_symbol())
+  {
+    const typet source_numeric =
+      elem_types().numeric_element_type(array.identifier().as_string());
+    if (source_numeric.is_floatbv())
+      elem_types().record(sliced_id, std::string(), source_numeric);
+  }
 
   if (elem_types().size(sliced_id) == 0)
   {
