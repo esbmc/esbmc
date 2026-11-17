@@ -115,8 +115,8 @@ class VarargMixin:
         extra = arity - len(args.args)
         named = {arg.arg for arg in args.args}
         if (args.kwonlyargs or args.posonlyargs or extra < 0 or (args.vararg is None and extra)
-                or (args.vararg is None and args.kwarg is None)
-                or (kwnames and args.kwarg is None) or named.intersection(kwnames)):
+                or (args.vararg is None and args.kwarg is None) or (kwnames and args.kwarg is None)
+                or named.intersection(kwnames)):
             return False
         pad = [f"_esbmc_va_{i}" for i in range(extra)]
         kw_pad = [f"_esbmc_kw_{i}" for i in range(len(kwnames))]
