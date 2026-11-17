@@ -1359,11 +1359,51 @@ void goto_symext::symex_printf(const expr2tc &lhs, expr2tc &rhs)
     cur_state->guard.as_expr(), cur_state->source, fmt.as_string(), args);
 }
 
-// One entry per conversion that takes an argument: true if it assigns an
-// input item, false for %n, which the return value does not count.
-static std::vector<bool> scanf_conversions(const std::string &fmt)
+// A format that is not a literal says nothing about what an argument receives.
+static constexpr uint64_t unknown_store_bytes = UINT64_MAX;
+
+struct scanf_conversion
 {
-  std::vector<bool> conversions;
+  // False for %n, which the return value does not count.
+  bool assigns;
+  // Bytes stored (C11 7.21.6.2); 0 for %s and %[, which write from the target
+  // to the end of its object.
+  uint64_t bytes;
+};
+
+static uint64_t scanf_store_bytes(
+  char conversion,
+  const std::string &length,
+  uint64_t field_width)
+{
+  const auto &ansi = config.ansi_c;
+  unsigned bits = ansi.int_width;
+  if (conversion == 'c')
+    bits = (length == "l" ? ansi.wchar_t_width : ansi.char_width) *
+           std::max<uint64_t>(field_width, 1);
+  else if (conversion == 'p')
+    bits = ansi.address_width;
+  else if (std::string("fFeEgGaA").find(conversion) != std::string::npos)
+    bits = length == "L"   ? ansi.long_double_width
+           : length == "l" ? ansi.double_width
+                           : ansi.single_width;
+  else if (length == "hh")
+    bits = ansi.char_width;
+  else if (length == "h")
+    bits = ansi.short_int_width;
+  else if (length == "l")
+    bits = ansi.long_int_width;
+  else if (length == "ll" || length == "j")
+    bits = ansi.long_long_int_width;
+  else if (length == "z" || length == "t")
+    bits = ansi.address_width;
+  return bits / 8;
+}
+
+// One entry per conversion that takes an argument.
+static std::vector<scanf_conversion> scanf_conversions(const std::string &fmt)
+{
+  std::vector<scanf_conversion> conversions;
   for (size_t i = 0; i + 1 < fmt.length(); ++i)
   {
     if (fmt[i] != '%')
@@ -1371,19 +1411,119 @@ static std::vector<bool> scanf_conversions(const std::string &fmt)
     if (fmt[++i] == '%')
       continue;
 
-    // Width and length modifiers. '*' is left out: a suppressed conversion
-    // takes no argument.
+    // Field width and length modifiers. '*' is left out: a suppressed
+    // conversion takes no argument.
+    uint64_t field_width = 0;
+    std::string length;
     while (i < fmt.length() &&
            std::string("-+ #0123456789.hlLzjt").find(fmt[i]) !=
              std::string::npos)
+    {
+      if (isdigit(fmt[i]))
+        field_width =
+          std::min<uint64_t>(field_width * 10 + (fmt[i] - '0'), 1 << 20);
+      else if (std::string("hlLzjt").find(fmt[i]) != std::string::npos)
+        length += fmt[i];
       ++i;
+    }
 
     if (
       i < fmt.length() &&
       std::string("diouxXfFeEgGaAcsp[n").find(fmt[i]) != std::string::npos)
-      conversions.push_back(fmt[i] != 'n');
+    {
+      const bool open_ended = fmt[i] == 's' || fmt[i] == '[';
+      conversions.push_back(
+        {fmt[i] != 'n',
+         open_ended ? 0 : scanf_store_bytes(fmt[i], length, field_width)});
+    }
   }
   return conversions;
+}
+
+// Largest tail a %s / %[ store havocs byte by byte; beyond it the whole object
+// is havocked, which over-approximates.
+static constexpr uint64_t max_unrolled_tail = 256;
+
+static bool object_byte_size(const type2tc &type, uint64_t &size)
+{
+  try
+  {
+    size = type_byte_size(type).to_uint64();
+    return true;
+  }
+  catch (const array_type2t::dyn_sized_array_excp &)
+  {
+  }
+  catch (const array_type2t::inf_sized_array_excp &)
+  {
+  }
+  return false;
+}
+
+void goto_symext::symex_scanf_store(
+  const dereference_callbackt::internal_item &item,
+  const expr2tc &operand,
+  uint64_t store_bytes,
+  const guard2tc &stored)
+{
+  const auto havoc_object = [&]() {
+    symex_assign(
+      code_assign2tc(item.object, gen_nondet(item.object->type)),
+      false,
+      stored);
+  };
+
+  const bool big_endian =
+    config.ansi_c.endianess == configt::ansi_ct::IS_BIG_ENDIAN;
+  const auto havoc_byte = [&](const expr2tc &pos) {
+    symex_assign(
+      code_assign2tc(
+        byte_extract2tc(get_uint8_type(), item.object, pos, big_endian),
+        gen_nondet(get_uint8_type())),
+      false,
+      stored);
+  };
+
+  if (store_bytes == unknown_store_bytes)
+    return havoc_object();
+
+  expr2tc offset = item.offset;
+  simplify(offset);
+  const bool constant_offset = is_constant_int2t(offset);
+  const uint64_t start =
+    constant_offset ? to_constant_int2t(offset).as_ulong() : 0;
+  uint64_t size = 0;
+  const bool sized = object_byte_size(item.object->type, size);
+
+  if (store_bytes == 0)
+  {
+    if (
+      !sized || !constant_offset || start >= size ||
+      size - start > max_unrolled_tail)
+      return havoc_object();
+
+    for (uint64_t pos = start; pos < size; ++pos)
+      havoc_byte(gen_ulong(pos));
+    return;
+  }
+
+  // The static pointee type may be wider than the conversion (e.g. %hhd
+  // through an int *); the wider of the two is stored.
+  if (is_pointer_type(operand))
+  {
+    const type2tc &pointee = to_pointer_type(operand->type).subtype;
+    if (is_number_type(pointee) || is_pointer_type(pointee))
+      store_bytes =
+        std::max<uint64_t>(store_bytes, (pointee->get_width() + 7) / 8);
+  }
+
+  if (
+    constant_offset && sized &&
+    (start + store_bytes > size || (start == 0 && store_bytes == size)))
+    return havoc_object();
+
+  for (uint64_t k = 0; k < store_bytes; ++k)
+    havoc_byte(add2tc(offset->type, offset, gen_long(offset->type, k)));
 }
 
 void goto_symext::symex_input(const code_function_call2t &func_call)
@@ -1412,7 +1552,8 @@ void goto_symext::symex_input(const code_function_call2t &func_call)
   cur_state->rename(fmt_operand);
 
   const size_t available_args = func_call.operands.size() - (fmt_idx + 1);
-  std::vector<bool> conversions(available_args, true);
+  std::vector<scanf_conversion> conversions(
+    available_args, {true, unknown_store_bytes});
   const expr2tc &base_expr = get_base_object(fmt_operand);
   if (is_constant_string2t(base_expr))
     conversions =
@@ -1422,7 +1563,10 @@ void goto_symext::symex_input(const code_function_call2t &func_call)
   // C11 7.21.6.2p16: EOF if input fails before the first conversion, else the
   // number of items assigned, which a matching failure can leave below the
   // number of conversions.
-  const long items = std::count(conversions.begin(), conversions.end(), true);
+  const long items = std::count_if(
+    conversions.begin(), conversions.end(), [](const scanf_conversion &c) {
+      return c.assigns;
+    });
   expr2tc count = gen_nondet(int_type2());
   replace_nondet(count);
   assume(and2tc(
@@ -1439,7 +1583,7 @@ void goto_symext::symex_input(const code_function_call2t &func_call)
     // Item k is stored only when the k conversions before it matched too,
     // and a %n target only when every item before it was assigned.
     guard2tc stored;
-    if (conversions[i])
+    if (conversions[i].assigns)
       stored.add(greaterthan2tc(count, gen_long(int_type2(), assigned++)));
     else if (assigned > 0)
       stored.add(greaterthanequal2tc(count, gen_long(int_type2(), assigned)));
@@ -1454,16 +1598,7 @@ void goto_symext::symex_input(const code_function_call2t &func_call)
       assert(is_symbol2t(item.object) && "This only works for variables");
       check_read_only_write(item.object, and2tc(stored.as_expr(), item.guard));
 
-      auto type = item.object->type;
-      expr2tc val = sideeffect2tc(
-        type,
-        expr2tc(),
-        expr2tc(),
-        std::vector<expr2tc>(),
-        type2tc(),
-        sideeffect2t::allockind::nondet);
-
-      symex_assign(code_assign2tc(item.object, val), false, stored);
+      symex_scanf_store(item, operand, conversions[i].bytes, stored);
     }
   }
 
