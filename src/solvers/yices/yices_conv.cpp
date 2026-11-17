@@ -124,8 +124,8 @@ smt_resultt yices_convt::dec_solve_assuming(const ast_vec &assumptions)
   {
     term_vector_t core;
     yices_init_term_vector(&core);
-    yices_get_unsat_core(yices_ctx, &core);
-    unsat_core_terms.insert(core.data, core.data + core.size);
+    if (yices_get_unsat_core(yices_ctx, &core) == 0)
+      unsat_core_terms.insert(core.data, core.data + core.size);
     yices_delete_term_vector(&core);
     return P_UNSATISFIABLE;
   }

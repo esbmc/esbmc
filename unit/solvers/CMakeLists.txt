@@ -2,6 +2,13 @@
 # canonical ENABLE_<solver> flag so the suite still builds when the user
 # disables a solver.
 
+new_unit_test(solver_unsat_assumptions_test
+              "solver_unsat_assumptions.test.cpp"
+              "solvers;util_esbmc;filesystem;bigint")
+# solver_config.h says which backends this build has.
+target_include_directories(solver_unsat_assumptions_test
+  PRIVATE ${CMAKE_BINARY_DIR}/src/solvers)
+
 if(ENABLE_Z3)
   # Link against `solverz3` (the static lib carrying z3_conv.cpp) rather
   # than ${Z3_LIB} directly: solverz3 already pulls in fmt::fmt, the right
