@@ -53,6 +53,8 @@ reachability_treet::reachability_treet(
     options.get_bool_option("cswitch-skip-readonly-globals");
   scan_program_writes();
   scan_address_taken();
+  split_structs.analyse(
+    goto_functions, ns, context, options, address_taken_locals);
 }
 
 /* Insert `name` into `out` if it names a storage-bearing user global. */

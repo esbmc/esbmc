@@ -1,7 +1,7 @@
 /* --loop-invariant copies the loop body, so assert(n != 7) is two claims.
-   --multi-fail-fast skips the second copy at k = 1 once the first fails;
-   the base case at k = 2 has to solve it rather than drop it with its
-   twin. */
+   --multi-fail-fast skips the second copy at k = 1 once the first, which
+   runs after the havoc, is decided; the base case at k = 2 has to solve it
+   rather than drop it with its twin. */
 #include <assert.h>
 
 unsigned nondet_uint();

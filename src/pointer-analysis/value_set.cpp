@@ -1076,10 +1076,15 @@ void value_sett::get_value_set_rec(
   if (is_bitor2t(expr) || is_bitand2t(expr) || is_bitxor2t(expr))
   {
     assert(expr->get_num_sub_exprs() == 2);
+    // A bitwise operation on an address, e.g. aligning it with a mask, moves
+    // it by an amount that depends on the address itself, so the operand's
+    // offset no longer holds (#677).
+    object_mapt operand_set;
     get_value_set_rec_cached(
-      *expr->get_sub_expr(0), dest, suffix, original_type);
+      *expr->get_sub_expr(0), operand_set, suffix, original_type);
     get_value_set_rec_cached(
-      *expr->get_sub_expr(1), dest, suffix, original_type);
+      *expr->get_sub_expr(1), operand_set, suffix, original_type);
+    offset_pointer_arith_objects(operand_set, expr, std::nullopt, dest);
     return;
   }
 

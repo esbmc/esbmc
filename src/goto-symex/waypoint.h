@@ -44,6 +44,8 @@ public:
   BigInt line = c_nonset;
   BigInt column = c_nonset;
   std::string function;
+  // The thread executing it in a violation witness ESBMC writes; 0 is main.
+  unsigned thread_nr = 0;
   irep_idt line_id;
   irep_idt column_id;
   irep_idt function_id;

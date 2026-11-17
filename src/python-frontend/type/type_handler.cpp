@@ -610,7 +610,9 @@ typet type_handler::get_typet(const std::string &ast_type, size_t type_size)
   if (
     ast_type == "uint" || ast_type == "uint64" || ast_type == "Epoch" ||
     ast_type == "Slot" || ast_type == "Gwei")
-    return lower_to_seam(unsignedbv_type2tc(config.ansi_c.long_long_int_width));
+    return lower_to_seam(
+      unsignedbv_type2tc(config.ansi_c.long_long_int_width),
+      "fixed_width_unsigned");
 
   // bool — represents True/False
   if (ast_type == "bool")
@@ -648,7 +650,7 @@ typet type_handler::get_typet(const std::string &ast_type, size_t type_size)
 
   // Custom large unsigned integer types (used in Ethereum, BLS, etc.)
   if (ast_type == "uint256" || ast_type == "BLSFieldElement")
-    return lower_to_seam(unsignedbv_type2tc(256));
+    return lower_to_seam(unsignedbv_type2tc(256), "fixed_width_unsigned");
 
   // bytes — immutable sequences of bytes
   // Here modeled as array of signed integers (8-bit).

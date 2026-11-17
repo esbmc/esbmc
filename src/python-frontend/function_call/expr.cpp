@@ -8782,6 +8782,7 @@ std::optional<exprt> function_call_expr::build_positional_arguments(
     {
       arg = int_power_of_two_argument(arg_node, arg, params[param_idx].type());
       refuse_float_to_int_argument(arg, params[param_idx].type(), *func_symbol);
+      converter_.reject_retyped_argument(arg, params[param_idx].type());
       arg = coerce_tagged_argument(arg, params[param_idx].type(), location);
     }
     else if (type_handler_.is_tagged_scalar_type(arg.type()))

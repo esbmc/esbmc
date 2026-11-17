@@ -8,6 +8,7 @@ add_library(symex
   engine/symex_stack.cpp
   engine/symex_valid_object.cpp
   engine/dynamic_allocation.cpp
+  engine/split_structs.cpp
   engine/builtin_functions/memory_alloc.cpp
   engine/builtin_functions/io.cpp
   engine/builtin_functions/cpp_memory.cpp

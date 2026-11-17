@@ -1,0 +1,5 @@
+CORE
+main.c
+--loop-invariant-check --loop-frame-rule
+^VERIFICATION FAILED$
+^\s+FAILED\s+\[main\.assertion\.1\]\s+line\s+10\s+assigns compliance: c:@global not in assigns clause$

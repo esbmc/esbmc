@@ -2,6 +2,8 @@
 """Self-test. Run: python3 scripts/competitions/svcomp/test_esbmc_wrapper.py"""
 
 import argparse
+import contextlib
+import io
 import shlex
 import importlib.util
 import os
@@ -414,6 +416,43 @@ class AbnormalExitTest(unittest.TestCase):
 
     def test_a_normal_exit_without_a_verdict_is_unknown(self):
         self.assertEqual(self.verdict("echo 'VERIFICATION UNKNOWN'; exit 6"), "Unknown")
+
+
+class EchoTest(unittest.TestCase):
+    """benchexec reads FALSE, TRUE or DONE on any output line as the verdict,
+    so echoing ESBMC's quote of a witness invariant must not carry them
+    (#10643)."""
+
+    INVARIANT = ("Injecting loop invariant at line 5: "
+                 "0 <= i && i <= 10 && STATIC_CONST_FALSE == 0")
+
+    def setUp(self):
+        self.saved_args = wrapper.args
+        wrapper.args = argparse.Namespace(dry_run=False)
+
+    def tearDown(self):
+        wrapper.args = self.saved_args
+
+    def echoed(self, script):
+        printed = io.StringIO()
+        with contextlib.redirect_stdout(printed):
+            output = wrapper.run("sh -c " + shlex.quote(script)).decode()
+        return output, printed.getvalue()
+
+    def test_quoted_source_does_not_carry_a_verdict_word(self):
+        output, printed = self.echoed(
+            f"echo '{self.INVARIANT}'; echo 'TRUE DONE FALSE_DEREF'; "
+            "echo 'VERIFICATION SUCCESSFUL'")
+        for word in ("FALSE", "TRUE", "DONE"):
+            self.assertNotIn(word, printed)
+        self.assertIn("STATIC_CONST_false == 0", printed)
+        self.assertEqual(
+            wrapper.get_result_string(wrapper.parse_result(output, wrapper.Property.reach)),
+            "TRUE")
+
+    def test_the_parsed_output_is_unchanged(self):
+        output, _ = self.echoed(f"echo '{self.INVARIANT}'")
+        self.assertEqual(output, self.INVARIANT + "\n")
 
 # The scalar model's own TypeError on `r + 1`, where `r` is an int on one path
 # and a str on the other.
@@ -841,10 +880,16 @@ class CPythonReplayTest(unittest.TestCase):
     def verify(self, prop, first, source, witness, **options):
         """Run verify() on a task whose first ESBMC run says FALSE with `witness`
         as its recorded values; returns the verdict and the ESBMC command lines.
-        Options: ir, files, verifier, values_run."""
+        Options: ir, files, verifier, values_run, verifier_above (the task sits
+        in python/<project>/ under a python/_sv_verifier.py, as in sv-benchmarks)."""
         esbmc = FakeEsbmc(first, self.PASSED if options.get("ir") is None else options["ir"],
                           witness, options.get("values_run"))
-        with tempfile.TemporaryDirectory() as task:
+        with tempfile.TemporaryDirectory() as root:
+            task = root
+            if options.get("verifier_above"):
+                task = os.path.join(root, "python", "project")
+                os.makedirs(task)
+                write_task(os.path.join(root, "python"), "", {"_sv_verifier.py": options["verifier_above"]})
             write_task(task, source, options.get("files"))
             with mock.patch.object(wrapper, "run", esbmc), \
                     mock.patch.object(wrapper, "REPLAY_VERIFIER", options.get("verifier") or wrapper.REPLAY_VERIFIER):
@@ -977,6 +1022,15 @@ class CPythonReplayTest(unittest.TestCase):
                 files={"_sv_verifier.py": "def nondet_int():\n    return 0\n"})
         self.assertEqual(verdict, "Unknown")
         self.assertEqual(len(self.ir_calls(calls)), 1)
+
+    def test_a_verifier_module_above_the_task_does_not_stop_the_replay(self):
+        verdict, calls = self.verify(
+            wrapper.Property.py_datalookup, PY_INDEXERROR,
+            self.HEADER + "xs = _sv_verifier.nondet_list(_sv_verifier.nondet_int)\nxs[3]\n",
+            "witness = [\n    {'list0': [1]},\n]\n",
+            verifier_above="def nondet_int():\n    return 0\n")
+        self.assertEqual(verdict, "FALSE(IndexError)")
+        self.assertEqual(len(self.ir_calls(calls)), 0)
 
     def test_a_replay_that_does_not_end_falls_back_within_its_budget(self):
         started = time.monotonic()
@@ -1477,6 +1531,23 @@ class ThreadedTaskCommandLineTest(unittest.TestCase):
         self.assertIn("--k-induction", cmd)
         self.assertIn("--interval-analysis", cmd)
         self.assertNotIn("--context-bound", cmd)
+
+
+class PointerArithCheckTest(unittest.TestCase):
+    """Forming an out-of-range &a[i] dereferences nothing, so memsafety runs
+    without the claim that reports it (#10787)."""
+
+    def command(self, prop):
+        with tempfile.NamedTemporaryFile("w", suffix=".i") as f:
+            f.write("int main() { return 0; }\n")
+            f.flush()
+            return wrapper.get_command_line("kinduction", prop, 64, f.name, "", False)
+
+    def test_memsafety_disables_it(self):
+        self.assertIn("--no-pointer-arith-check", self.command(wrapper.Property.memory))
+
+    def test_memsafety_keeps_bounds_checks(self):
+        self.assertNotIn("--no-bounds-check", self.command(wrapper.Property.memory))
 
 
 class OverflowFallbackTest(unittest.TestCase):

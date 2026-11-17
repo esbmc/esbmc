@@ -203,11 +203,20 @@ public:
     const typet &value,
     const locationt &location);
   bool slot_only_called(const node_slot &slot);
+  bool imported_argument_only_called(
+    const nlohmann::json &call,
+    std::size_t index) const;
   bool ifexp_only_called(const nlohmann::json &ifexp);
+  void decay_not_callable_arm(
+    exprt &arm,
+    code_blockt &side_effects,
+    const exprt &function);
   void decay_function_choice(
     const nlohmann::json &ifexp,
     exprt &then,
-    exprt &else_expr);
+    code_blockt &then_side_effects,
+    exprt &else_expr,
+    code_blockt &else_side_effects);
   void hoist_raising_arm(
     exprt &then,
     code_blockt &then_side_effects,
@@ -566,6 +575,10 @@ public:
   /// import binds, as `mk` after `from helper import mk` and `helper.mk`
   /// after `import helper`.
   nlohmann::json callable_function_stubs() const;
+  /// Refuse passing @p argument, a local retyped across str and number, to a
+  /// parameter of @p param_type, which is of the kind the local first held.
+  void
+  reject_retyped_argument(const exprt &argument, const typet &param_type) const;
   nlohmann::json callable_function_stubs(const nlohmann::json &module) const;
   /// The stubs followed by the current module's own statements, which a name
   /// read off the module is resolved against.
@@ -3630,6 +3643,8 @@ private:
     const nlohmann::json &element);
   exprt
   numpy_float_remainder(const exprt &x, const exprt &y, const typet &type);
+  exprt
+  numpy_float_floor_divide(const exprt &x, const exprt &y, const typet &type);
   exprt numpy_element_op(
     const std::string &op,
     const exprt &x,
@@ -3962,6 +3977,10 @@ private:
   /// \p loc, and ends the path there.
   void
   end_path_as_unsupported(const std::string &message, const locationt &loc);
+  void guard_str_number_return(
+    const nlohmann::json &value_node,
+    exprt &value,
+    const locationt &location);
 
   // =========================================================================
   // Member variables

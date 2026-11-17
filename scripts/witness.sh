@@ -7,6 +7,8 @@ BENCHEXEC_COMMON_FLAGS="-o $HOME/witness-output/ -N 9 --read-only-dir / --overla
 # Witness files are moved from esbmc-output once here.
 setup () {
     echo "Setting up $VALIDATOR validation..."
+    # Without the directory, mv renames a lone run-set directory to it.
+    mkdir -p $HOME/witness-files
     rm -rf $HOME/witness-files/*
     mv $HOME/esbmc-output/*.files/* $HOME/witness-files
     rm -rf $HOME/witness-output $HOME/witness-output.zip

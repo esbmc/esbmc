@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <cassert>
 #include <cstring>
 #include <goto-symex/trace/goto_trace.h>
@@ -490,37 +491,35 @@ void violation_graphml_goto_trace(
   }
 }
 
-/* A function_return waypoint for each nondet call made up to @p step. It sits
-   at the call's ')' and names the value the call returned, not the value of
-   the expression the call is part of (#9881). */
-static void push_nondet_return_waypoints(
+/* A function_return waypoint for a nondet call. It sits at the call's ')'
+   and names the value the call returned, not the value of the expression
+   the call is part of (#9881). */
+static void push_nondet_return_waypoint(
   const namespacet &ns,
-  const goto_trace_stept &step,
+  const goto_trace_stept::nondet_returnt &call,
   yamlt &yml,
   optionst &options)
 {
-  for (const auto &[rparen, value] : step.nondet_returns)
-  {
-    if (!input_file_check(rparen))
-      continue;
+  const auto &[rparen, value, thread_nr] = call;
+  if (!input_file_check(rparen))
+    return;
 
-    std::string result = from_expr(ns, "", value, presentationt::WITNESS);
-    check_replace_invalid_assignment(result);
-    if (result.empty())
-      continue;
+  std::string result = from_expr(ns, "", value, presentationt::WITNESS);
+  check_replace_invalid_assignment(result);
+  if (result.empty())
+    return;
 
-    // `\result == NAN` holds for no value, NaN included, so a NaN result
-    // gets no waypoint.
-    if (
-      is_constant_floatbv2t(value) &&
-      to_constant_floatbv2t(value).value.is_NaN())
-      continue;
+  // `\result == NAN` holds for no value, NaN included, so a NaN result
+  // gets no waypoint.
+  if (
+    is_constant_floatbv2t(value) && to_constant_floatbv2t(value).value.is_NaN())
+    return;
 
-    waypoint wp = witness_waypoint(rparen, yml.verified_file, options);
-    wp.type = waypoint::function_return;
-    wp.value = "\\result == " + result;
-    yml.segments.push_back(wp);
-  }
+  waypoint wp = witness_waypoint(rparen, yml.verified_file, options);
+  wp.type = waypoint::function_return;
+  wp.value = "\\result == " + result;
+  wp.thread_nr = yml.thread_ids ? thread_nr : 0;
+  yml.segments.push_back(wp);
 }
 
 /* Branches in a recursive trace number in the hundreds of thousands (#9689),
@@ -662,19 +661,22 @@ static void push_violation_targets(
   const goto_tracet &goto_trace,
   const goto_functionst &goto_functions,
   const goto_trace_stept &step,
+  unsigned thread_nr,
   optionst &options)
 {
   const goto_programt::instructiont *ret =
     memtrack_return(goto_trace, goto_functions, step);
+  waypoint wp;
   if (ret != nullptr && input_file_check(ret->location))
   {
-    waypoint wp = witness_waypoint(ret->location, yml.verified_file, options);
+    wp = witness_waypoint(ret->location, yml.verified_file, options);
     wp.type = waypoint::target;
-    yml.segments.push_back(wp);
   }
   else
-    yml.segments.push_back(witness_target_waypoint(
-      step.pc, step.stack_trace, yml.verified_file, options));
+    wp = witness_target_waypoint(
+      step.pc, step.stack_trace, yml.verified_file, options);
+  wp.thread_nr = thread_nr;
+  yml.segments.push_back(wp);
   if (step.racing_access)
     yml.racing_target = witness_target_waypoint(
       step.racing_access->pc,
@@ -709,6 +711,105 @@ nondet_branch_visits(const goto_tracet &goto_trace)
   return visits;
 }
 
+/* The ')' of the thread-creating call in the input file, where the
+   function_enter waypoint registering @p spawn sits. */
+static std::optional<locationt>
+spawn_rparen(const goto_trace_stept::spawnt &spawn)
+{
+  const locationt *loc =
+    witness_input_location(spawn.call.pc, spawn.call.stack_trace);
+  return loc ? call_rparen(*loc) : std::nullopt;
+}
+
+/* The format numbers a spawned thread by the order of the function_enter
+   waypoints registering it, ESBMC by its creation order on the path. The two
+   agree, so waypoints can carry thread IDs, when every thread spawned before
+   the violation gets one (#10749). */
+static bool registrable_spawns(const goto_tracet &goto_trace)
+{
+  unsigned spawned = 0;
+  for (const auto &step : goto_trace.steps)
+  {
+    for (const auto &spawn : step.spawns)
+      if (spawn.thread_nr != ++spawned || !spawn_rparen(spawn))
+        return false;
+    if (step.thread_nr > spawned)
+      return false;
+    if (step.type == symex_targett::ASSERT && !step.guard)
+      break;
+  }
+  return spawned != 0;
+}
+
+static unsigned waypoint_thread(const yamlt &yml, const goto_trace_stept &step)
+{
+  return yml.thread_ids ? step.thread_nr : 0;
+}
+
+/* The waypoints of the calls made since the previous step, in the order they
+   ran: each nondet call's function_return and, when threads are registered,
+   each spawn's function_enter. Whether there was a registered spawn. */
+static bool push_call_waypoints(
+  const namespacet &ns,
+  const goto_trace_stept &step,
+  yamlt &yml,
+  optionst &options)
+{
+  auto call = step.nondet_returns.begin();
+  size_t pushed = 0;
+  auto push_returns_up_to = [&](size_t end) {
+    for (; pushed < end; ++pushed, ++call)
+      push_nondet_return_waypoint(ns, *call, yml, options);
+  };
+
+  for (const auto &spawn : step.spawns)
+  {
+    if (!yml.thread_ids)
+      break;
+    push_returns_up_to(spawn.nondet_returns_before);
+    waypoint wp =
+      witness_waypoint(*spawn_rparen(spawn), yml.verified_file, options);
+    wp.type = waypoint::function_enter;
+    wp.thread_nr = spawn.parent_nr;
+    yml.segments.push_back(wp);
+  }
+  push_returns_up_to(step.nondet_returns.size());
+  return yml.thread_ids && !step.spawns.empty();
+}
+
+/* A validator cannot match a follow waypoint against a file it was
+   not given; dropping one only weakens guidance. witnesslint also
+   rejects line 0, e.g. the argv setup in __ESBMC_main (#9650). A
+   branch fixed by the program text gets none, as on deep recursion
+   they number in the hundreds of thousands (#9689), unless a
+   nondet-dependent visit of its location follows: a validator would
+   bind that visit's waypoint to this one. The ones kept can fill the
+   cap before a later nondet waypoint. After a registered spawn the
+   schedule orders the threads' branches, and only the segments can
+   pass that order on, so every branch gets one (#10749). An operand
+   of && or || gets none: the waypoint's value is the whole
+   condition's, and a validator would apply it to another operand. */
+static bool keeps_branching_waypoint(
+  const goto_trace_stept &step,
+  size_t ahead,
+  bool spawned,
+  size_t branching_waypoints)
+{
+  return branching_waypoints < max_branching_waypoints &&
+         input_file_check(step.pc->location) &&
+         !step.pc->location.get_line().empty() &&
+         (step.nondet_dependent || ahead != 0 || spawned) &&
+         !step.condition_operand;
+}
+
+static bool has_race(const goto_tracet &goto_trace)
+{
+  return std::any_of(
+    goto_trace.steps.begin(), goto_trace.steps.end(), [](const auto &step) {
+      return step.racing_access.has_value();
+    });
+}
+
 void violation_yaml_goto_trace(
   optionst &options,
   const namespacet &ns,
@@ -720,18 +821,25 @@ void violation_yaml_goto_trace(
   yml.verified_file = options.get_option("input-file");
   log_progress("Generating Violation Yaml Witness for: {}", yml.verified_file);
 
+  yml.thread_ids = registrable_spawns(goto_trace);
+  /* A race's final segment holds the earlier access, which no waypoint after
+     it may follow, so only nondet branches are kept there. */
+  const bool race = has_race(goto_trace);
+  bool spawned = false;
   auto nondet_visits_ahead = nondet_branch_visits(goto_trace);
   size_t branching_waypoints = 0;
   for (const auto &step : goto_trace.steps)
   {
-    push_nondet_return_waypoints(ns, step, yml, options);
+    spawned |= push_call_waypoints(ns, step, yml, options) && !race;
+    const unsigned thread_nr = waypoint_thread(yml, step);
 
     switch (step.type)
     {
     case symex_targett::ASSERT:
       if (!step.guard)
       {
-        push_violation_targets(yml, goto_trace, goto_functions, step, options);
+        push_violation_targets(
+          yml, goto_trace, goto_functions, step, thread_nr, options);
 
         /* having printed a property violation, don't print more steps. */
 
@@ -747,21 +855,8 @@ void violation_yaml_goto_trace(
         if (step.nondet_dependent)
           --ahead;
 
-        /* A validator cannot match a follow waypoint against a file it was
-           not given; dropping one only weakens guidance. witnesslint also
-           rejects line 0, e.g. the argv setup in __ESBMC_main (#9650). A
-           branch fixed by the program text gets none, as on deep recursion
-           they number in the hundreds of thousands (#9689), unless a
-           nondet-dependent visit of its location follows: a validator would
-           bind that visit's waypoint to this one. The ones kept can fill the
-           cap before a later nondet waypoint. An operand of && or || gets none:
-           the waypoint's value is the whole condition's, and a validator would
-           apply it to another operand. */
-        if (
-          branching_waypoints >= max_branching_waypoints ||
-          !input_file_check(step.pc->location) ||
-          step.pc->location.get_line().empty() ||
-          (!step.nondet_dependent && ahead == 0) || step.condition_operand)
+        if (!keeps_branching_waypoint(
+              step, ahead, spawned, branching_waypoints))
           break;
 
         /* A switch would take one waypoint naming the case it enters, but
@@ -775,6 +870,7 @@ void violation_yaml_goto_trace(
           witness_waypoint(step.pc->location, yml.verified_file, options);
         wp.type = waypoint::branching;
         wp.value = !step.guard ? "true" : "false";
+        wp.thread_nr = thread_nr;
         yml.segments.push_back(wp);
       }
       break;

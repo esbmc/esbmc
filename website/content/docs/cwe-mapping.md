@@ -52,6 +52,7 @@ substring table ordered longest-substring-first.
 | `dereference failure: forgotten memory`                      | 401                                         |
 | `array bounds violated: heap object`                         | 122, 125, 129, 131, 193, 787                |
 | `array bounds violated`                                      | 121, 125, 129, 131, 193, 787                |
+| `pointer arithmetic out of bounds`                           | 823                                         |
 | `Access to object out of bounds: heap object`                | 122, 125, 787, 823                          |
 | `Access to object out of bounds`                             | 125, 787, 823                               |
 | `dereference failure: memset of memory segment`              | 120, 125, 787                               |
