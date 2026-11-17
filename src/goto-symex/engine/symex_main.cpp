@@ -1075,6 +1075,7 @@ void goto_symext::run_intrinsic(
       assert(
         is_symbol2t(item.object) &&
         "__ESBMC_init_object only works for variables");
+      check_read_only_write(item.object, item.guard);
 
       // Get the length of the type. This will propagate an exception for
       // dynamic/infinite sized arrays (as expected)
