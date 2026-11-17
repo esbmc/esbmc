@@ -17,3 +17,4 @@ regression/esbmc/scanf_vla_target
 regression/esbmc/scanf_void_pointer_target
 regression/esbmc/scanf_wider_conversion_fail
 regression/esbmc/scanf_nonliteral_format_fail
+regression/esbmc/scanf_conversion_widths

@@ -1451,13 +1451,10 @@ static bool object_byte_size(const type2tc &type, uint64_t &size)
     size = type_byte_size(type).to_uint64();
     return true;
   }
-  catch (const array_type2t::dyn_sized_array_excp &)
+  catch (const array_type2t::array_size_excp &)
   {
+    return false;
   }
-  catch (const array_type2t::inf_sized_array_excp &)
-  {
-  }
-  return false;
 }
 
 void goto_symext::symex_scanf_store(
