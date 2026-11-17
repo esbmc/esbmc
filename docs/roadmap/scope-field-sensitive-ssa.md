@@ -4,8 +4,9 @@
 > with the §8.7 trace fix merged (#10799). §8.8 hides a split struct's
 > printed write when its right-hand side reads a definition the slicer
 > removed; with it, the Phase 1 trace gate is met on the C and C++ suites and
-> a tenth of the Python suite. Phase 1 still lacks a full Python run and a
-> Bitwuzla re-run of §8.8; Phase 2 is next.** The corpus is in `regression/field-sensitivity/`
+> a tenth of the Python suite under Z3, and on the same C and C++ suites and
+> a twentieth of the Python suite under Bitwuzla. Phase 1 still lacks a full
+> Python run; Phase 2 is next.** The corpus is in `regression/field-sensitivity/`
 > with baselines, and the census has been run and reverted. Phase 1 adds
 > `--field-sensitive-ssa` (default off): symex gives each field of an
 > eligible local, parameter or return slot its own SSA name. It meets the 2x
@@ -669,9 +670,7 @@ sliced formula as in the full one and does not hide a step.
 
 Measured on 2026-11-17 on master `d93aabc32`, RelWithDebInfo, LLVM 18, Z3
 4.13.3, one 4-core container, flag forced on, the change against the same
-build without it, 30 s per run. ESBMC's Bitwuzla backend could not be built
-in this container (the CaDiCaL download is refused); the change runs before
-the solver.
+build without it, 30 s per run. The Bitwuzla re-run is below.
 
 | Suite | Tests | Verdict changes | Output changes |
 |---|---|---|---|
@@ -701,4 +700,28 @@ Symex seconds with the flag, Z3, three runs each, medians:
 |---|---|---|
 | `repro7521` | 0.822 / 1.216 (1.48x) | 0.822 / 1.271 (1.55x) |
 | `local_writes` | 0.019 / 0.023 (1.2x) | 0.019 / 0.021 (1.1x) |
+
+Re-run with Bitwuzla on 2026-11-17 at `512c450bb`, the same build setup
+with ESBMC's Bitwuzla 0.9.0 backend (CaDiCaL 2.1.2 cloned with git, as the
+tarball download is refused), flag forced on, `--bitwuzla` replacing any
+solver option of the test, 30 s per run:
+
+| Suite | Tests | Verdict changes | Output changes |
+|---|---|---|---|
+| C (`regression/esbmc`, `CORE`) | 3348 | 0 | the same 4 hidden steps as with Z3; under Bitwuzla master prints `node = { .tag={ .pointer_object=nil, .pointer_offset=nil }, ... }` in `github_1093` and `tmpl = { .a={ .pointer_object=nil, .pointer_offset=nil }, .pair={ 0, 0 } }` in `github_5393_array_member_fail` |
+| C++ (`esbmc-cpp/cpp`, `CORE`) | 1359 | 0 | 0 (`cpp_sum_class` line order only) |
+| Python, every 20th `CORE` test from the 6th | 461 | 0 | 0 |
+
+62 C tests use `--ir`, which Bitwuzla rejects; both builds error out on
+them, and the Z3 run above covers them. `github_2630_1` again changes claim
+order under `--parallel-solving`.
+
+Symex seconds, both solvers, the same binaries, three runs each, medians:
+
+| Row | Solver | Without the change, 8 / 2048 fields | With it, 8 / 2048 fields |
+|---|---|---|---|
+| `repro7521` | Z3 | 0.747 / 1.240 (1.66x) | 0.759 / 1.260 (1.66x) |
+| `repro7521` | Bitwuzla | 0.736 / 1.262 (1.71x) | 0.770 / 1.353 (1.76x) |
+| `local_writes` | Z3 | 0.016 / 0.019 (1.2x) | 0.016 / 0.022 (1.4x) |
+| `local_writes` | Bitwuzla | 0.017 / 0.016 (0.9x) | 0.016 / 0.018 (1.1x) |
 
