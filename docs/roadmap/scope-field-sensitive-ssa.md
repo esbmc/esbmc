@@ -6,7 +6,7 @@
 > removed; with it, the Phase 1 trace gate is met on the C and C++ suites and
 > a tenth of the Python suite under Z3, and on the same C and C++ suites and
 > a twentieth of the Python suite under Bitwuzla, and the flag changes no
-> verdict on a further 970 Python tests. Phase 1 still lacks a full Python run
+> verdict on a further 1940 Python tests. Phase 1 still lacks a full Python run
 > and an SV-COMP run; Phase 2 is next.** The corpus is in `regression/field-sensitivity/`
 > with baselines, and the census has been run and reverted. Phase 1 adds
 > `--field-sensitive-ssa` (default off): symex gives each field of an
@@ -749,5 +749,18 @@ RelWithDebInfo, LLVM 18, Z3 4.13.3 and ESBMC's Bitwuzla 0.9.0 backend:
   assumptions in the same order; the YAML witnesses are identical apart from
   UUIDs and timestamps.
 
-Still not measured: the rest of the Python suite with the flag, and an
-SV-COMP run.
+Measured on 2026-11-17 at the PR head `e9787f1f`, RelWithDebInfo, LLVM 18,
+Z3 4.8.12, flag forced on against off, 30 s per run:
+
+- Python, `CORE` tests 3670 to 4639 in name order (`LC_ALL=C`, 0-based;
+  970 tests, from `github_7552_index_fail`): 0 verdict changes. Three tests
+  (`github_8283_dict_zip_nondet`, `github_8418`,
+  `github_8488_functools_reduce`) time out with and without the flag. After
+  dropping timings, the "splits" notice, temporary model paths and
+  address-derived temporary names, 3 differ in output, each only in the
+  symex assignment count: `github_8130_reverse_fail` (836 against 839),
+  `github_8404_alias_parameter_refused` (166 against 175) and
+  `github_8404_passed_to_imported_refused` (159 against 168).
+
+Still not measured: the Python `CORE` tests outside positions 2700 to 4639
+and the earlier samples, and an SV-COMP run.
