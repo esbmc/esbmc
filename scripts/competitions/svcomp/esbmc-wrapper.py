@@ -560,6 +560,9 @@ def get_command_line(strat, prop, arch, benchmark, dargs, esbmc_ci, keep_loops=F
     command_line += "--no-pointer-check --no-bounds-check --overflow-check --no-assertions --no-fp-conversion-check --no-fp-overflow-check "
   elif prop == Property.memory:
     command_line += "--memory-leak-check --no-reachable-memory-leak --no-assertions "
+    # Forming an out-of-range &a[i] is undefined but dereferences nothing, so
+    # it is not a valid-deref violation (#10787).
+    command_line += "--no-pointer-arith-check "
     # It seems SV-COMP doesn't want to check for memleaks on abort()
     # see also <https://github.com/esbmc/esbmc/issues/1259>
     command_line += "--no-abnormal-memory-leak "

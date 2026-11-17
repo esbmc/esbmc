@@ -2,6 +2,7 @@
 #include <cctype>
 #include <util/lang/c_builtins.h>
 #include <util/lang/c_expr2string.h>
+#include <util/lang/c_types.h>
 #include <langapi/language_util.h>
 #include <util/arith/arith_tools.h>
 #include <util/expr/array_name.h>
@@ -24,6 +25,8 @@ public:
     : ns(_ns),
       options(_options),
       disable_bounds_check(options.get_bool_option("no-bounds-check")),
+      disable_pointer_arith_check(
+        options.get_bool_option("no-pointer-arith-check")),
       disable_pointer_check(options.get_bool_option("no-pointer-check")),
       disable_div_by_zero_check(
         options.get_bool_option("no-div-by-zero-check")),
@@ -58,15 +61,26 @@ protected:
     const locationt &loc,
     bool address);
 
+  /// Check the index2t @p index whose address is formed (#10787).
+  void check_index_address(
+    const expr2tc &index,
+    guard2tc &guard,
+    const locationt &loc,
+    bool one_past);
+
   void div_by_zero_check(
     const expr2tc &expr,
     const guard2tc &guard,
     const locationt &loc);
 
+  /// @p address: @p expr only forms an address; @p one_past: the address may
+  /// also be one past the last element (C11 6.5.6p8).
   void bounds_check(
     const expr2tc &expr,
     const guard2tc &guard,
-    const locationt &loc);
+    const locationt &loc,
+    bool address = false,
+    bool one_past = false);
 
   void pointer_rel_check(
     const expr2tc &expr,
@@ -149,6 +163,7 @@ protected:
   std::set<expr2tc> assertions;
 
   bool disable_bounds_check;
+  bool disable_pointer_arith_check;
   bool disable_pointer_check;
   bool disable_div_by_zero_check;
   bool disable_pointer_relation_check;
@@ -1175,12 +1190,11 @@ static bool may_be_over_allocated(const expr2tc &expr, const namespacet &ns)
 void goto_checkt::bounds_check(
   const expr2tc &expr,
   const guard2tc &guard,
-  const locationt &loc)
+  const locationt &loc,
+  bool address,
+  bool one_past)
 {
-  (void)guard;
-  (void)loc;
-
-  if (disable_bounds_check)
+  if (disable_bounds_check || (address && disable_pointer_arith_check))
     return;
 
   if (!is_index2t(expr))
@@ -1222,26 +1236,49 @@ void goto_checkt::bounds_check(
   if (is_array_type(t) && to_array_type(t).size_is_infinite)
     return;
 
-  std::string name =
-    "array bounds violated: " + array_name(ns, ind.source_value);
+  std::string name = (address ? "pointer arithmetic out of bounds: "
+                              : "array bounds violated: ") +
+                     array_name(ns, ind.source_value);
+  const std::string property = address ? "pointer arithmetic" : "array bounds";
   const expr2tc &the_index = ind.index;
 
   // Lower bound: index must be non-negative (>= 0)
   expr2tc zero = gen_zero(the_index->type);
   assert(!is_nil_expr(zero));
 
-  expr2tc lower = greaterthanequal2tc(the_index, zero);
-  add_guarded_claim(lower, name + " lower bound", "array bounds", loc, guard);
+  // An unsigned index widened to a signed type cannot be negative; --ir does
+  // not know that (#9225).
+  const bool widened_unsigned =
+    is_typecast2t(the_index) &&
+    is_unsignedbv_type(to_typecast2t(the_index).from) &&
+    to_typecast2t(the_index).from->type->get_width() <
+      the_index->type->get_width();
+  if (!(address && widened_unsigned))
+  {
+    expr2tc lower = greaterthanequal2tc(the_index, zero);
+    add_guarded_claim(lower, name + " lower bound", property, loc, guard);
+  }
 
   assert(is_array_type(t) || is_vector_type(t));
 
   const expr2tc &array_size = is_array_type(t) ? to_array_type(t).array_size
                                                : to_vector_type(t).array_size;
 
-  // Cast size to index type
-  expr2tc casted_size = typecast2tc(the_index->type, array_size);
-  expr2tc upper = lessthan2tc(the_index, casted_size);
-  add_guarded_claim(upper, name + " upper bound", "array bounds", loc, guard);
+  expr2tc upper;
+  if (address)
+  {
+    // A VLA's size may not fit the index type (#8048), so compare in a type
+    // that holds both.
+    type2tc wide = get_int_type(
+      std::max(the_index->type->get_width(), array_size->type->get_width()) +
+      1);
+    expr2tc i = typecast2tc(wide, the_index);
+    expr2tc n = typecast2tc(wide, array_size);
+    upper = one_past ? lessthanequal2tc(i, n) : lessthan2tc(i, n);
+  }
+  else
+    upper = lessthan2tc(the_index, typecast2tc(the_index->type, array_size));
+  add_guarded_claim(upper, name + " upper bound", property, loc, guard);
 }
 
 void goto_checkt::add_guarded_claim(
@@ -1274,6 +1311,17 @@ void goto_checkt::add_guarded_claim(
   }
 }
 
+void goto_checkt::check_index_address(
+  const expr2tc &index,
+  guard2tc &guard,
+  const locationt &loc,
+  bool one_past)
+{
+  check_rec(to_index2t(index).source_value, guard, loc, true);
+  check_rec(to_index2t(index).index, guard, loc, false);
+  bounds_check(index, guard, loc, true, one_past);
+}
+
 void goto_checkt::check_rec(
   const expr2tc &expr,
   guard2tc &guard,
@@ -1292,8 +1340,8 @@ void goto_checkt::check_rec(
       break;
 
     case expr2t::index_id:
-      check_rec(to_index2t(expr).source_value, guard, loc, true);
-      check_rec(to_index2t(expr).index, guard, loc, false);
+      // The element is designated, not read: &a[i].f needs i < size.
+      check_index_address(expr, guard, loc, false);
       break;
 
     default:
@@ -1308,8 +1356,23 @@ void goto_checkt::check_rec(
   switch (expr->expr_id)
   {
   case expr2t::address_of_id:
-    check_rec(to_address_of2t(expr).ptr_obj, guard, loc, true);
+  {
+    expr2tc obj = to_address_of2t(expr).ptr_obj;
+    // The frontend writes &a[i] of array type as &a[i][0]; the zero indexes add
+    // no offset, so a[i] keeps the one-past allowance below.
+    while (is_index2t(obj) && is_index2t(to_index2t(obj).source_value) &&
+           is_constant_int2t(to_index2t(obj).index) &&
+           to_constant_int2t(to_index2t(obj).index).value.is_zero())
+      obj = to_index2t(obj).source_value;
+    if (!is_index2t(obj))
+    {
+      check_rec(obj, guard, loc, true);
+      return;
+    }
+    // &a[i] is a + i, which may point one past the end (C11 6.5.6p8).
+    check_index_address(obj, guard, loc, true);
     return;
+  }
 
   case expr2t::and_id:
   case expr2t::or_id:
