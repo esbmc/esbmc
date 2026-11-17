@@ -1,0 +1,6 @@
+CORE
+main.c
+--multi-property
+\A(?![\s\S]*FAILED[^\n]*write access to const object)
+FAILED[^\n]*NULL pointer on DST
+^VERIFICATION FAILED$

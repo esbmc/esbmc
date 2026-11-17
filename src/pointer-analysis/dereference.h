@@ -751,9 +751,11 @@ public:
     return sym.static_lifetime && sym.get_type().cmt_constant();
   }
 
-  /** Fail a write to @p object under @p guard when it is a string literal or
-   *  a const static object. For callers that dereference in INTERNAL mode and
-   *  then write the objects found. */
+  /** Whether @p object lies in a string literal (C11 6.4.5p7) or a const
+   *  static object. */
+  static bool is_read_only(const expr2tc &object, const namespacet &ns);
+
+  /** Fail a write to @p object under @p guard when it is read-only. */
   void read_only_write_check(const expr2tc &object, const guard2tc &guard);
 
   void set_block_assertions(void)

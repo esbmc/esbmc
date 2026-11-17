@@ -3454,26 +3454,30 @@ void dereferencet::valid_check(
   }
 }
 
+bool dereferencet::is_read_only(const expr2tc &object, const namespacet &ns)
+{
+  const expr2tc &symbol = get_symbol(object);
+  if (is_constant_string2t(symbol))
+    return true;
+  const symbolt *sym =
+    is_symbol2t(symbol) ? ns.lookup(to_symbol2t(symbol).thename) : nullptr;
+  return sym != nullptr && is_const_static(*sym);
+}
+
 void dereferencet::read_only_write_check(
   const expr2tc &object,
   const guard2tc &guard)
 {
+  if (!is_read_only(object, ns))
+    return;
   const expr2tc &symbol = get_symbol(object);
-  if (is_constant_string2t(symbol))
-  {
-    dereference_failure(
-      "pointer dereference", "write access to string constant", guard);
-    return;
-  }
-  if (!is_symbol2t(symbol))
-    return;
-  const symbolt *sym = ns.lookup(to_symbol2t(symbol).thename);
-  if (sym && is_const_static(*sym))
-    dereference_failure(
-      "pointer dereference",
-      "write access to const object `" + get_pretty_name(sym->id.as_string()) +
-        "'",
-      guard);
+  dereference_failure(
+    "pointer dereference",
+    is_constant_string2t(symbol)
+      ? "write access to string constant"
+      : "write access to const object `" +
+          get_pretty_name(to_symbol2t(symbol).thename.as_string()) + "'",
+    guard);
 }
 
 // True when `obj`'s base object is a heap allocation (malloc/calloc/realloc):

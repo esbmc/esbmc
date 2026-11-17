@@ -960,7 +960,12 @@ bool goto_symext::memcpy_symbolic_length(
     res = update_object_byte(res, dst_off + i, new_byte, be);
   }
 
-  check_read_only_write(dst_obj, greaterthan2tc(n_arg, gen_zero(n_t)));
+  check_read_only_write(
+    dst_obj,
+    and2tc(
+      greaterthan2tc(n_arg, gen_zero(n_t)),
+      same_object2tc(
+        dst_arg, address_of2tc(pointer_type2tc(dst_obj->type), dst_obj))));
   symex_assign(code_assign2tc(dst_obj, res), false, cur_state->guard);
   return true;
 }
@@ -1734,27 +1739,11 @@ void goto_symext::intrinsic_memset(
   // dereferences and reports the proper violation via valid_check() in
   // dereference.cpp.
   for (const auto &item : internal_deref_items)
-  {
-    const expr2tc *base = &item.object;
-    while (is_member2t(*base))
-      base = &to_member2t(*base).source_value;
-    while (is_index2t(*base))
-      base = &to_index2t(*base).source_value;
-    if (is_constant_string2t(*base))
+    if (dereferencet::is_read_only(item.object, ns))
     {
       bump_call(func_call, "c:@F@__memset_impl");
       return;
     }
-    if (is_symbol2t(*base))
-    {
-      const symbolt *sym = ns.lookup(to_symbol2t(*base).thename);
-      if (sym != nullptr && dereferencet::is_const_static(*sym))
-      {
-        bump_call(func_call, "c:@F@__memset_impl");
-        return;
-      }
-    }
-  }
 
   // Where are we pointing to?
   for (auto &item : internal_deref_items)
@@ -1879,12 +1868,12 @@ void goto_symext::intrinsic_havoc_object(const code_function_call2t &call)
   dereference(deref, dereferencet::INTERNAL);
   for (const auto &item : internal_deref_items)
   {
+    check_read_only_write(item.object, item.guard);
     // Anything else is a constant, such as a string literal, or a function.
     if (!is_symbol2t(item.object) || is_code_type(item.object->type))
       continue;
     expr2tc target_guard = item.guard;
     cur_state->rename(target_guard);
-    check_read_only_write(item.object, target_guard);
     guard2tc guard = cur_state->guard;
     guard.add(target_guard);
     symex_assign(
