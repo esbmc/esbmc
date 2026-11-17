@@ -8932,11 +8932,22 @@ singular_gap(const std::vector<singular_triple> &triples, double rounding)
 // vectors has an arbitrary sign, flipped together so U @ diag(S) @ Vh keeps
 // A unless the singular value is zero; their components are as accurate as
 // the gap between the singular values allows.
+// Whether svd's factors of a matrix that is not diagonal take the dense
+// route: any but a 2x2 matrix, and a 2x2 one whose singular value is
+// repeated, as its vectors may be any rotation of the plane.
+static bool dense_factor_route(const std::vector<std::vector<double>> &m)
+{
+  if (svd_order(m) != 2)
+    return true;
+  const std::vector<singular_triple> triples = singular_triples_2x2(m);
+  return triples[0].sigma - triples[1].sigma <= 2e-12 * frobenius_norm(m);
+}
+
 exprt numpy_call_expr::svd_factors(const std::vector<std::vector<double>> &m)
 {
   const std::size_t n = svd_order(m);
   const bool diagonal = n != 0 && is_diagonal(m);
-  if (!diagonal && n != 2)
+  if (!diagonal && dense_factor_route(m))
     return dense_svd_factors(m);
   const std::vector<singular_triple> triples =
     diagonal ? diagonal_singular_triples(m) : singular_triples_2x2(m);
