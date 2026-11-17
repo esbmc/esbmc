@@ -27,6 +27,10 @@
  * 2. Accessing the results of an analysis, by looking up the state map
  * 3. Outputting the results of the analysis;
  */
+/// The first argument a body-less call that symex models may write through,
+/// or none.
+std::optional<size_t> first_written_argument(const irep_idt &callee);
+
 class ai_baset
 {
 public:
@@ -98,6 +102,28 @@ public:
   const std::vector<expr2tc> *
   reentered_locals(const irep_idt &caller, const irep_idt &callee) const;
 
+  /// What a function, and every function it calls, may write.
+  struct writest
+  {
+    std::unordered_set<irep_idt, irep_id_hash> symbols;
+    /// Through a pointer, which reaches only the symbols whose address is
+    /// taken.
+    bool through_pointer = false;
+    /// Through a function pointer: anything.
+    bool anything = false;
+  };
+  const writest &writes_of(const irep_idt &function) const
+  {
+    return function_writes.at(function);
+  }
+
+  /// The locals and parameters of @p function that only its own frame can
+  /// write: no code takes their address and no other function names them.
+  const std::vector<irep_idt> &private_locals_of(const irep_idt &function) const
+  {
+    return private_locals.at(function);
+  }
+
   /// The symbols whose address the analysed functions take, the only ones a
   /// write through a pointer can change; nullptr when one program was analysed
   /// on its own.
@@ -114,11 +140,16 @@ public:
 
 protected:
   void find_call_cycles(const goto_functionst &goto_functions);
+  void find_writes(const goto_functionst &goto_functions);
 
   std::unordered_map<const goto_programt::instructiont *, irep_idt>
     call_site_function;
   std::unordered_map<irep_idt, unsigned, irep_id_hash> call_cycle;
-  std::unordered_map<irep_idt, std::vector<expr2tc>, irep_id_hash> cycle_locals;
+  std::unordered_map<irep_idt, std::vector<expr2tc>, irep_id_hash>
+    function_locals;
+  std::unordered_map<irep_idt, writest, irep_id_hash> function_writes;
+  std::unordered_map<irep_idt, std::vector<irep_idt>, irep_id_hash>
+    private_locals;
   std::optional<std::unordered_set<irep_idt, irep_id_hash>> taken;
 
   // overload to add a factory
