@@ -1,2 +1,1 @@
-regression/esbmc/github_6759_if_not_guard
 regression/esbmc-solidity/github_6759_decl_init_location

@@ -1057,9 +1057,7 @@ bool goto_convert_functionst::convert_native_rec(
 
     goto_programt tmp_v;
     goto_programt::targett v = tmp_v.add_instruction();
-    expr2tc negated_cond = cond;
-    make_not(negated_cond);
-    v->make_goto(has_else ? y : z, negated_cond);
+    v->make_goto(has_else ? y : z, not2tc(cond));
     v->location = location;
 
     goto_programt tmp_w;

@@ -1,4 +1,0 @@
-CORE
-main.c
---goto-functions-only
-^\s*IF \(_Bool\)ok THEN GOTO 1$
