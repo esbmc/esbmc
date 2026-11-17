@@ -82,6 +82,14 @@ protected:
     bool address = false,
     bool one_past = false);
 
+  void add_index_claims(
+    const index2t &ind,
+    const type2tc &t,
+    const guard2tc &guard,
+    const locationt &loc,
+    bool address,
+    bool one_past);
+
   void pointer_rel_check(
     const expr2tc &expr,
     const guard2tc &guard,
@@ -1209,6 +1217,41 @@ address_upper_bound(const expr2tc &index, const expr2tc &size, bool one_past)
   return one_past ? lessthanequal2tc(i, n) : lessthan2tc(i, n);
 }
 
+void goto_checkt::add_index_claims(
+  const index2t &ind,
+  const type2tc &t,
+  const guard2tc &guard,
+  const locationt &loc,
+  bool address,
+  bool one_past)
+{
+  std::string name = (address ? "pointer arithmetic out of bounds: "
+                              : "array bounds violated: ") +
+                     array_name(ns, ind.source_value);
+  const std::string property = address ? "pointer arithmetic" : "array bounds";
+  const expr2tc &the_index = ind.index;
+
+  // Lower bound: index must be non-negative (>= 0)
+  expr2tc zero = gen_zero(the_index->type);
+  assert(!is_nil_expr(zero));
+
+  if (!(address && is_widened_unsigned(the_index)))
+  {
+    expr2tc lower = greaterthanequal2tc(the_index, zero);
+    add_guarded_claim(lower, name + " lower bound", property, loc, guard);
+  }
+
+  assert(is_array_type(t) || is_vector_type(t));
+
+  const expr2tc &array_size = is_array_type(t) ? to_array_type(t).array_size
+                                               : to_vector_type(t).array_size;
+
+  const expr2tc upper =
+    address ? address_upper_bound(the_index, array_size, one_past)
+            : lessthan2tc(the_index, typecast2tc(the_index->type, array_size));
+  add_guarded_claim(upper, name + " upper bound", property, loc, guard);
+}
+
 void goto_checkt::bounds_check(
   const expr2tc &expr,
   const guard2tc &guard,
@@ -1258,31 +1301,7 @@ void goto_checkt::bounds_check(
   if (is_array_type(t) && to_array_type(t).size_is_infinite)
     return;
 
-  std::string name = (address ? "pointer arithmetic out of bounds: "
-                              : "array bounds violated: ") +
-                     array_name(ns, ind.source_value);
-  const std::string property = address ? "pointer arithmetic" : "array bounds";
-  const expr2tc &the_index = ind.index;
-
-  // Lower bound: index must be non-negative (>= 0)
-  expr2tc zero = gen_zero(the_index->type);
-  assert(!is_nil_expr(zero));
-
-  if (!(address && is_widened_unsigned(the_index)))
-  {
-    expr2tc lower = greaterthanequal2tc(the_index, zero);
-    add_guarded_claim(lower, name + " lower bound", property, loc, guard);
-  }
-
-  assert(is_array_type(t) || is_vector_type(t));
-
-  const expr2tc &array_size = is_array_type(t) ? to_array_type(t).array_size
-                                               : to_vector_type(t).array_size;
-
-  const expr2tc upper =
-    address ? address_upper_bound(the_index, array_size, one_past)
-            : lessthan2tc(the_index, typecast2tc(the_index->type, array_size));
-  add_guarded_claim(upper, name + " upper bound", property, loc, guard);
+  add_index_claims(ind, t, guard, loc, address, one_past);
 }
 
 void goto_checkt::add_guarded_claim(
