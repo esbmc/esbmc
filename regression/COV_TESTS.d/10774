@@ -1,2 +1,9 @@
+regression/esbmc/github_10774_fmod_fixedbv
+regression/esbmc/github_10774_fmod_fixedbv_fail
+regression/esbmc/github_10774_interval_fixedbv
+regression/esbmc/github_10774_remainder_fixedbv
+regression/esbmc/github_10774_nearbyint_fixedbv
+regression/esbmc/github_10774_remainder_ties_fixedbv
+regression/esbmc/github_10774_symbolic_fixedbv
 regression/floats-regression/github_10774
 regression/floats-regression/github_10774_fail

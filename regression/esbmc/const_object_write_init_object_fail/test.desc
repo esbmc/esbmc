@@ -1,0 +1,5 @@
+CORE
+main.c
+
+^  dereference failure: write access to const object `t'$
+^VERIFICATION FAILED$

@@ -845,6 +845,10 @@ const struct group_opt_templ all_cmd_options[] = {
      "ESBMC generates inside model code (see --no-standard-checks), renumbers "
      "--claim, and is unsupported for Python"},
     {"no-bounds-check", NULL, "Do not do array bounds check"},
+    {"no-pointer-arith-check",
+     NULL,
+     "Do not check that &a[i] stays within a or one past its end (C11 "
+     "6.5.6p8); --no-bounds-check also disables it"},
     {"no-div-by-zero-check", NULL, "Do not do division by zero check"},
     {"no-pointer-check", NULL, "Do not do pointer check"},
     {"no-align-check", NULL, "Do not check pointer alignment"},
@@ -1028,8 +1032,9 @@ const struct group_opt_templ all_cmd_options[] = {
      NULL,
      "Enable extrapolation in abstract states (all)"},
     {"interval-analysis-extrapolate-limit",
-     boost::program_options::value<int>()->default_value(1)->value_name("nr"),
-     "Set limit for reaching a fixpoint (default is 1)"},
+     boost::program_options::value<int>()->default_value(3)->value_name("nr"),
+     "Number of times a loop head may change before it is widened (default "
+     "is 3)"},
     {"interval-analysis-extrapolate-under-approximate",
      NULL,
      "Assume integers will not overflow (Integers)"},
@@ -1134,6 +1139,12 @@ const struct group_opt_templ all_cmd_options[] = {
      NULL,
      "Disable constant propagation (unsupported with concurrency: the pthread "
      "model requires constant thread ids)"},
+    {"summarize-array-loops",
+     NULL,
+     "Also summarise counting loops that write no array"},
+    {"no-summarize-array-loops",
+     NULL,
+     "Do not replace counting loops that only write a[i] by their effect"},
     {"scalarize-structs",
      NULL,
      "Give each field of a struct variable whose address is never taken a "

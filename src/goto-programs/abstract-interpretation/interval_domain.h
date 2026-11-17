@@ -118,15 +118,18 @@ protected:
    * @return True if the join increases the set represented by *this, False if
    *   there is no change.
    */
-  bool join(const interval_domaint &b, const goto_programt::const_targett &to);
+  bool join(
+    const interval_domaint &b,
+    const goto_programt::const_targett &from,
+    const goto_programt::const_targett &to);
 
 public:
   bool merge(
     const interval_domaint &b,
-    goto_programt::const_targett,
+    goto_programt::const_targett from,
     goto_programt::const_targett to)
   {
-    const bool result = join(b, to);
+    const bool result = join(b, from, to);
     copied = false;
     return result;
   }
@@ -225,6 +228,10 @@ public:
    * @param expr
    */
   void havoc_rec(const expr2tc &expr);
+  void restore_unwritten(
+    goto_programt::const_targett call,
+    const irep_idt &callee,
+    const ai_baset &ai);
   /// Forgets what a write to the lvalue \p target may change, through a
   /// pointer as havoc_through_pointer does.
   void havoc_target(const expr2tc &target, const ai_baset *ai = nullptr);
@@ -272,6 +279,9 @@ public:
 
   std::shared_ptr<interval_map> intervals;
   bool copied = false;
+  /// Times a join that closes a cycle changed this state; widening waits for
+  /// fixpoint_limit of them, so a variable with few values keeps its bounds.
+  unsigned cycle_changes = 0;
 
   static std::shared_ptr<interval_map> get_empty()
   {

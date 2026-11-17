@@ -383,6 +383,10 @@ bool goto_symex_statet::constant_propagation(const expr2tc &expr) const
   if (is_array_type(expr) && !array_may_propagate(expr))
     return false;
 
+  // One node however many elements it defines, so carrying it costs nothing.
+  if (is_array_lambda2t(expr))
+    return true;
+
   if (is_vector_type(expr))
     return true;
 
@@ -1122,6 +1126,13 @@ void goto_symex_statet::rename(expr2tc &expr, renamed_exprst &renamed)
   {
     rename_type(expr);
     rename_quantified(expr, {});
+  }
+  else if (is_array_lambda2t(expr))
+  {
+    rename_type(expr);
+    array_lambda2t &lambda = to_array_lambda2t(expr);
+    rename_quantified(lambda.body, {to_symbol2t(lambda.binder).thename});
+    top().level1.rename(lambda.binder);
   }
   else
   {

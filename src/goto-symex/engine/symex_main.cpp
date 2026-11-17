@@ -660,6 +660,12 @@ void goto_symext::symex_assert()
 
   const goto_programt::instructiont &instruction = *cur_state->source.pc;
 
+  // A --bidirectional block asserts, before the loop's back-edge, that an
+  // inductive-step start state is unreachable. It is not a program property,
+  // so a violation of it outside the inductive step is no bug (#10128).
+  if (instruction.inductive_assertion && !inductive_step)
+    return;
+
   const std::string msg = assertion_message(ns, instruction);
 
   expr2tc tmp = split_rewrite(instruction.guard);
@@ -1069,6 +1075,7 @@ void goto_symext::run_intrinsic(
       assert(
         is_symbol2t(item.object) &&
         "__ESBMC_init_object only works for variables");
+      check_read_only_write(item.object, item.guard);
 
       // Get the length of the type. This will propagate an exception for
       // dynamic/infinite sized arrays (as expected)

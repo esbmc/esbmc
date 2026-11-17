@@ -467,12 +467,12 @@ protected:
    *  all threads. */
   std::unordered_set<irep_idt, irep_id_hash> ever_written_globals;
 
-  /** Globals whose address is taken anywhere in the program (including the
-   *  global initialisers in __ESBMC_main). ESBMC normalises every array/
-   *  function decay into an explicit address_of, so a global that never
-   *  appears under an address_of can never enter any pointer's value set and
-   *  therefore can never be the target of a write through a pointer. */
-  std::unordered_set<irep_idt, irep_id_hash> address_taken_globals;
+  /** Globals a write through a pointer may change: those whose address is
+   *  taken anywhere in the program (including the global initialisers in
+   *  __ESBMC_main), less const objects. ESBMC normalises every array/function
+   *  decay into an explicit address_of, so a global that never appears under
+   *  an address_of can never enter any pointer's value set. */
+  std::unordered_set<irep_idt, irep_id_hash> pointer_writable_globals;
 
   /** Non-static locals whose address is taken anywhere. The pointer may reach
    *  another thread, so MPOR keys their accesses as it does a global's. */
@@ -481,7 +481,7 @@ protected:
   /** Set when the static scan sees a write through a pointer it cannot
    *  resolve. On its own this no longer disables the optimisation globally:
    *  an unresolved write can only land on a global whose address escaped, so
-   *  may_be_written() gates this flag on address_taken_globals. */
+   *  may_be_written() gates this flag on pointer_writable_globals. */
   bool any_indirect_write = false;
 
   /** Master switch; wired to --cswitch-skip-readonly-globals. */
@@ -491,7 +491,7 @@ protected:
    *  that may be written. */
   void scan_program_writes();
 
-  /** Fill address_taken_globals and address_taken_locals from every body. */
+  /** Fill pointer_writable_globals and address_taken_locals from every body. */
   void scan_address_taken();
 
 public:
@@ -526,7 +526,7 @@ public:
       return true;
     // A write through an unresolved pointer can only target a global whose
     // address has escaped; a never-address-taken global stays read-only.
-    return any_indirect_write && address_taken_globals.count(name) != 0;
+    return any_indirect_write && pointer_writable_globals.count(name) != 0;
   }
 
 protected:

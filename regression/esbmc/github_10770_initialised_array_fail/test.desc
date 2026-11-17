@@ -1,6 +1,6 @@
 CORE
 main.c
---unwind 4 --witness-output-yaml -
+--unwind 4 --witness-output-yaml - --no-summarize-array-loops
 ^VERIFICATION FAILED$
 (?s)\A(?:(?!function_return).)*(?:type: "function_return"(?:(?!function_return).)*){3}\Z
 (?s)result == 1".*result == 2".*result == 5"
