@@ -234,3 +234,74 @@ TEST_CASE(
     require_orthonormal(system.v);
   }
 }
+
+TEST_CASE(
+  "complex_input_eigen_system bounds a complex matrix's spectrum",
+  "[dense_spectrum]")
+{
+  using cd = std::complex<double>;
+  const auto residual_of = [](
+                             const dense_spectrum::complex_matrix &a,
+                             cd lambda,
+                             const complex_vector &v) {
+    double worst = 0;
+    for (std::size_t i = 0; i < a.size(); ++i)
+    {
+      cd r = -lambda * v[i];
+      for (std::size_t j = 0; j < a.size(); ++j)
+        r += a[i][j] * v[j];
+      worst = std::max(worst, std::abs(r));
+    }
+    return worst;
+  };
+  SECTION("a 3x3 spectrum with no conjugate pairs")
+  {
+    const dense_spectrum::complex_matrix a = {
+      {{1, 1}, {2, 0}, {0, 0}},
+      {{0, 0}, {2, 0.5}, {1, 0}},
+      {{0, 1}, {0, 0}, {3, 0}}};
+    const auto system = dense_spectrum::complex_input_eigen_system("eig", a);
+    REQUIRE(system.values.size() == 3);
+    cd trace = 0;
+    for (std::size_t k = 0; k < 3; ++k)
+    {
+      trace += system.values[k];
+      REQUIRE(system.value_radius[k] > 0);
+      REQUIRE(system.value_radius[k] < 1e-9);
+      REQUIRE_FALSE(system.candidates[k].empty());
+      for (const auto &candidate : system.candidates[k])
+      {
+        REQUIRE(residual_of(a, system.values[k], candidate.vector) < 1e-12);
+        REQUIRE(std::fabs(norm_squared(candidate.vector) - 1) < 1e-12);
+        const cd largest = candidate.vector[candidate.real_component];
+        REQUIRE(largest.imag() == 0);
+        for (const cd &x : candidate.vector)
+          REQUIRE(std::abs(x) <= std::abs(largest) + 1e-9);
+      }
+    }
+    REQUIRE(std::abs(trace - cd(6, 1.5)) < 1e-12);
+  }
+  SECTION("a real eigenvalue of a complex matrix has a complex vector")
+  {
+    const dense_spectrum::complex_matrix a = {
+      {{1, 0}, {0, 0}}, {{5, 0}, {2, 1}}};
+    const auto system = dense_spectrum::complex_input_eigen_system("eig", a);
+    bool seen = false;
+    for (std::size_t k = 0; k < 2; ++k)
+      if (std::abs(system.values[k] - cd(1, 0)) < 1e-12)
+      {
+        seen = true;
+        const auto &candidate = system.candidates[k].front();
+        REQUIRE(candidate.real_component == 1);
+        REQUIRE(candidate.vector[0].imag() != 0);
+      }
+    REQUIRE(seen);
+  }
+  SECTION("eigenvalues too close to bound are refused")
+  {
+    const dense_spectrum::complex_matrix a = {
+      {{1, 0}, {3, 0}}, {{0, 0}, {1, 1e-9}}};
+    REQUIRE_THROWS_AS(
+      dense_spectrum::complex_input_eigen_system("eig", a), std::runtime_error);
+  }
+}
