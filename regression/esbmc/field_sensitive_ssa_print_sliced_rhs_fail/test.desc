@@ -1,0 +1,5 @@
+KNOWNBUG
+main.c
+--field-sensitive-ssa
+^  s = \{ \.a=-?[0-9]*[13579], \.b=5 \}$
+^VERIFICATION FAILED$

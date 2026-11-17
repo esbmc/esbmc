@@ -1,0 +1,5 @@
+CORE
+main.c
+--field-sensitive-ssa --64
+^  copy = \{ \.next=\( struct node \*\)8 \}$
+^VERIFICATION FAILED$

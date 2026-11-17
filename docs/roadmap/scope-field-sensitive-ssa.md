@@ -1,8 +1,9 @@
 # Scope: field-sensitive SSA in goto-symex (#7521)
 
-> **Status at 2026-11-16: Phase 0 merged (#10773); Phase 1 in review (#10778),
-> gate partly met (see §8.5); the trace gate is unmet because split pointer
-> fields print other values than master (§8.6).** The corpus is in `regression/field-sensitivity/`
+> **Status at 2026-11-16: Phase 0 merged (#10773); Phase 1 merged (#10778)
+> before its trace gate was met. A split whole-struct write now prints its
+> right-hand side, as master does, but the gate is still unmet where the
+> slicer drops what that right-hand side reads (§8.6).** The corpus is in `regression/field-sensitivity/`
 > with baselines, and the census has been run and reverted. Phase 1 adds
 > `--field-sensitive-ssa` (default off): symex gives each field of an
 > eligible local, parameter or return slot its own SSA name. It meets the 2x
@@ -502,7 +503,7 @@ PR's own tests. The other 20:
 |---|---|
 | A member write prints the member's value where master prints the whole struct, because master's model read of `member(s#k, f)` is not a value for a pointer, bit-field or union member | `counterexample_aggregate_component_fail`, `github_10135_fail`, `github_10135_irep2_only_fail`, `github_1093` |
 | A step is dropped or added. Master's struct arm of `constant_propagation` folds `s WITH [f := e]` while `e` is symbolic (`goto_symex_state.cpp:438-500`), so a reader reads either `s#k` or nothing of `s`; per-field propagation folds a different set, and the slicer then keeps different steps | `github_1476_fail`, `github_1590-local`, `github_5868_div_fail`, `github_7597-literal_fail`, `github_7521_uintptr_fail`, `overflow-result3`, `overflow-result4`, `overflow-result-all-fail` |
-| A reassembled struct prints differently: master reads the struct from the solver as one tuple, the flag reads each field, so a pointer member prints `0` instead of `{ .pointer_object=nil, ... }`, an array `{ 6, 7 }` instead of `(signed long int [2])0x7...6` | `github_5393_array_member_fail`, `github_5393_array_member_dyn_offset_fail`, `github_7855-tie-hides-deref`, `github_7965_fail`, `pointer_repr_branch_flow_fail`, `struct_array_ite_new_index_fail` |
+| A struct the model leaves free prints other free values (Z3) or `nil` per element instead of one `nil` (Bitwuzla) | `struct_array_ite_new_index_fail` |
 | `--incremental-bmc` calls the solver one time more or fewer, since a claim folds to a constant at a different bound | `github_5868_div`, `github_7597-literal` |
 
 Tried and reverted: slicing a split object at object granularity (a kept
@@ -543,28 +544,29 @@ Pinned on 2026-11-16 at `70d965f06`, each test failing when
 |---|---|
 | member value | `field_sensitive_ssa_print_member_fail` (`v.un.i = 9`) |
 | step dropped | `field_sensitive_ssa_print_slice_fail` (no step for an uninitialised struct) |
-| reassembled struct | `field_sensitive_ssa_print_array_fail` (`.pair={ 6, 7 }`) |
+| free struct | none, the values are free; `field_sensitive_ssa_print_array_fail` and `_print_pointer_fail` pin master's values for a copied struct |
 | `--incremental-bmc` | `field_sensitive_ssa_print_incremental` (both claims fold) |
 
-The third row is not only formatting. Master prints the correct value of a
-pointer member in five of its six tests, and the flag prints another value
-under both solvers:
+Until 2026-11-16 the free-struct row also held five tests where the flag printed a
+pointer member as `0` (`github_7965_fail`: `.next=( struct node *)8` on
+master), breaking Invariant 4. The print step rebuilt the struct from its field
+symbols after the write, so a field the slicer dropped had no model value and
+an integer-to-pointer cast read back as `0`. It now prints the right-hand side,
+renamed before any field is written, as an unsplit struct does; a nondet
+initialisation still prints its fields. Re-measured with the fix, Bitwuzla, 30 s
+per run: of 3331 `CORE` tests, none changes verdict, the five tests print what
+master prints, and the 28 that still differ print no other value: a member
+value, a step added or dropped, an assignment count, line order, AST addresses,
+or `struct_array_ite_new_index_fail`'s `nil`. The fix adds no difference.
+Like master, it also prints an unevaluated right-hand side such as
+`s = dynamic_1_value.in`.
 
-| Test | Master | Flag, Z3 | Flag, Bitwuzla |
-|---|---|---|---|
-| `github_5393_array_member_fail` | `.a=(void *)4660` | `.a=0` | `.a={ .pointer_object=nil, ... }` |
-| `github_5393_array_member_dyn_offset_fail` | `.a=5` | `.a=0` | `.a=0` |
-| `github_7855-tie-hides-deref`, `github_7965_fail`, `pointer_repr_branch_flow_fail` | `.next=( struct node *)8` | `{ .next = 0 }` | `{ .next = 0 }` |
-
-With `--no-slice`, `dyn_offset` prints `.a=5` again, so there the slicer drops
-the field's step and the model leaves the field free. `github_7965_fail`
-still prints `0`, and `github_5393_array_member_fail` prints
-`.a=&__memset_impl`: the print step reads the pointer field symbol from the
-model, while master evaluates the right-hand side (`(void *)CONCAT(...)`,
-`&container->node` with `container` NULL). That breaks Invariant 4, so the
-pointer half of the third row is not accepted, and the Phase 1 trace gate is
-unmet until a split pointer field prints the value master prints. The array
-half (`{ 6, 7 }` for the same bytes) keeps the value and stays accepted.
-`struct_array_ite_new_index_fail` prints other nondet values under Z3 and
-`nil` per element under Bitwuzla, where master prints `.e=nil`.
+The gate is still unmet. The right-hand side can read a symbol defined only by
+a field step the slicer drops, and the model then leaves it free:
+`field_sensitive_ssa_print_sliced_rhs_fail` (KNOWNBUG) prints
+`s = { .a=0, .b=5 }` for `s = {nondet_int() | 1, nondet_int()}`, `.a=1` under
+`--no-slice`, where master prints no step for `s`. Two fixes, neither tried:
+the slicer keeps what a kept step's printed right-hand side reads, which grows
+the formula, or the trace prints `nil` for a value whose defining step was
+sliced.
 
