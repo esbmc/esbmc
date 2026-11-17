@@ -1,17 +1,18 @@
 # Scope: field-sensitive SSA in goto-symex (#7521)
 
-> **Status at 2026-11-16: Phase 0 merged (#10773); Phase 1 merged (#10778)
-> with its trace gate unmet; the follow-up that fixes the gate is in review
-> (§8.7).** The corpus is in `regression/field-sensitivity/`
+> **Status at 2026-11-17: Phase 0 merged (#10773); Phase 1 merged (#10778)
+> with the §8.7 trace fix merged (#10799). §8.8 hides a split struct's
+> printed write when its right-hand side reads a definition the slicer
+> removed; with it, the Phase 1 trace gate is met on the C and C++ suites and
+> a tenth of the Python suite. Phase 1 still lacks a full Python run and a
+> Bitwuzla re-run of §8.8; Phase 2 is next.** The corpus is in `regression/field-sensitivity/`
 > with baselines, and the census has been run and reverted. Phase 1 adds
 > `--field-sensitive-ssa` (default off): symex gives each field of an
 > eligible local, parameter or return slot its own SSA name. It meets the 2x
 > bar on the Phase 1 corpus rows and changes no verdict on the C, C++ (Z3 and Bitwuzla) and
 > k-induction suites or three Python samples (3132 tests), and no correctness witness.
 > The Phase 1 trace gate is Invariant 4 (same values), with the §8.6 changes
-> accepted. As merged, a split pointer field printed another value than master;
-> §8.7 makes a whole write of a split struct print its right-hand side, which
-> removes that and the rest of §8.6's "reassembled struct" row. Two
+> accepted. Two
 > mitigations are merged: #10037 stopped phi merges of wide structs from
 > scaling with the square of the width, and #10527 added the opt-in GOTO pass
 > `--scalarize-structs`. Line numbers are from master at `d3104e99c2`.
@@ -644,3 +645,60 @@ both solvers.
 
 Not measured here: the rest of the Python suite with the flag, witness files,
 and an SV-COMP run.
+
+### 8.8 Phase 1 trace gate: printed right-hand sides of sliced definitions
+
+§8.7 prints a whole write of a split struct as its right-hand side. The
+slicer keeps only the field steps a property reads, so that right-hand side
+can read a symbol whose defining step was sliced; the model leaves it free
+and the trace prints a value the program cannot produce. On
+
+```c
+int v = nondet_int() | 1;
+struct S s = {v, nondet_int()};
+assert(s.b != 5);
+```
+
+master without the flag prints no step for `s`; with the flag, master
+`d93aabc32` prints `s = { .a=0, .b=5 }` although `v` is odd. Under the flag
+the slicer now records the left-hand sides of the assignments it removes and
+hides a kept step whose printed right-hand side reads one of them, as it
+already drops a branching step that reads a sliced value (#9884). A symbol
+with no defining step (a fresh L2 name of a nondet write) is as free in the
+sliced formula as in the full one and does not hide a step.
+
+Measured on 2026-11-17 on master `d93aabc32`, RelWithDebInfo, LLVM 18, Z3
+4.13.3, one 4-core container, flag forced on, the change against the same
+build without it, 30 s per run. ESBMC's Bitwuzla backend could not be built
+in this container (the CaDiCaL download is refused); the change runs before
+the solver.
+
+| Suite | Tests | Verdict changes | Output changes |
+|---|---|---|---|
+| C (`regression/esbmc`, `CORE`) | 3348 | 0 | 4 hidden steps: `field_sensitive_ssa_print_sliced_rhs_fail`, `github_1093` (`node = { .tag=0, .value=invalid-object }`), `github_5393_array_member_fail` and `_dyn_offset_fail` (`tmpl = { .a = 0 }`) |
+| C++ (`esbmc-cpp/cpp`, `CORE`) | 1359 | 0 | 0 (`cpp_sum_class` differs in `--k-induction-parallel` line order only) |
+| Python, every 10th `CORE` test | 923 | 0 | 0 |
+
+`time_h_difftime_antisymmetry` (C) and `github_8971_is_payload_unknown`
+(Python) run close to 30 s and timed out in one run each; re-run, both give
+the same verdict with and without the change (31.3 s and 29.6 s; 25.8 s and
+27.2 s). `github_2630_1` changes claim order under `--parallel-solving`
+between two runs of the same binary.
+
+The four hidden steps fall under the "step dropped" row of §8.6: in
+`github_1093` and both `github_5393` tests master without the flag prints
+the declaration of an uninitialised struct, which the flag printed with
+other values (§8.6, "reassembled struct"). `field_sensitive_ssa_print_sliced_rhs_fail`
+pins the change: without it the test prints `s = { .a=0, .b=5 }` and fails.
+
+Each new branch was reached with temporary instrumentation, flag forced on
+over the C suite: a removed definition recorded (3106 tests), a step hidden
+(6), the walk finding a removed definition (6) or none (97), and the walk
+skipping a shared subterm (`struct_array_ite_new_index` and its `_fail`).
+Symex seconds with the flag, Z3, three runs each, medians:
+
+| Row | Without the change, 8 / 2048 fields | With it, 8 / 2048 fields |
+|---|---|---|
+| `repro7521` | 0.822 / 1.216 (1.48x) | 0.822 / 1.271 (1.55x) |
+| `local_writes` | 0.019 / 0.023 (1.2x) | 0.019 / 0.021 (1.1x) |
+
