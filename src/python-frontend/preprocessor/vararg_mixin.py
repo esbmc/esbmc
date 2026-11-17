@@ -46,13 +46,24 @@ class VarargMixin:
             if not self._called_only_by(cls, calls, parents, bind_counts):
                 continue
             init = self._plain_init(cls)
-            if init is None or any(
-                    call.keywords or any(isinstance(arg, ast.Starred) for arg in call.args)
-                    for call in calls):
+            signatures = {self._construction_signature(call) for call in calls}
+            if init is None or len(signatures) != 1 or None in signatures:
                 continue
-            arities = {len(call.args) for call in calls}
-            if len(arities) == 1:
-                self._fix_init_arity(init, arities.pop() + 1)
+            arity, kwnames = signatures.pop()
+            if self._fix_init_arity(init, arity + 1, kwnames):
+                for call in calls:
+                    call.args += [kw.value for kw in call.keywords]
+                    call.keywords = []
+
+    @staticmethod
+    def _construction_signature(call):
+        """The positional count and keyword names of `call`, or None when a
+        `*` or `**` splat or a repeated keyword hides what it passes."""
+        names = tuple(kw.arg for kw in call.keywords)
+        if (None in names or len(set(names)) != len(names)
+                or any(isinstance(arg, ast.Starred) for arg in call.args)):
+            return None
+        return len(call.args), names
 
     def _index_module(self, module):
         """Parent links, binding counts and calls by callee name for `module`."""
@@ -97,23 +108,38 @@ class VarargMixin:
             node.value.func, ast.Name) and node.value.func.id == "super")
 
     @staticmethod
-    def _fix_init_arity(init, arity):
-        """Replace `init`'s *args by the `arity` positional parameters it packs."""
+    def _fix_init_arity(init, arity, kwnames=()):
+        """Replace `init`'s *args and **kwargs by the `arity` positional
+        parameters and the `kwnames` keywords they pack; whether it did (#9074)."""
         args = init.args
         extra = arity - len(args.args)
-        if args.vararg is None or args.kwarg or args.kwonlyargs or args.posonlyargs or extra < 0:
-            return
+        named = {arg.arg for arg in args.args}
+        if (args.kwonlyargs or args.posonlyargs or extra < 0 or (args.vararg is None and extra)
+                or (args.vararg is None and args.kwarg is None)
+                or (kwnames and args.kwarg is None) or named.intersection(kwnames)):
+            return False
         pad = [f"_esbmc_va_{i}" for i in range(extra)]
-        pack = ast.Assign(targets=[ast.Name(id=args.vararg.arg, ctx=ast.Store())],
-                          value=ast.Tuple(elts=[ast.Name(id=name, ctx=ast.Load()) for name in pad],
-                                          ctx=ast.Load()))
-        args.args += [ast.arg(arg=name) for name in pad]
+        kw_pad = [f"_esbmc_kw_{i}" for i in range(len(kwnames))]
+        packs = []
+        if args.vararg is not None:
+            packs.append(
+                ast.Assign(targets=[ast.Name(id=args.vararg.arg, ctx=ast.Store())],
+                           value=ast.Tuple(elts=[ast.Name(id=name, ctx=ast.Load()) for name in pad],
+                                           ctx=ast.Load())))
+        if args.kwarg is not None:
+            packs.append(
+                ast.Assign(targets=[ast.Name(id=args.kwarg.arg, ctx=ast.Store())],
+                           value=ast.Dict(keys=[ast.Constant(value=name) for name in kwnames],
+                                          values=[ast.Name(id=n, ctx=ast.Load()) for n in kw_pad])))
+        args.args += [ast.arg(arg=name) for name in pad + kw_pad]
         args.vararg = None
+        args.kwarg = None
         # Every construction passes all the parameters, and a default would
         # otherwise attach to the trailing packed ones.
         args.defaults = []
-        init.body.insert(0, ast.copy_location(pack, init.body[0]))
+        init.body[:0] = [ast.copy_location(pack, init.body[0]) for pack in packs]
         ast.fix_missing_locations(init)
+        return True
 
     def _scan_vararg_alias_calls(self, module):
         """Map each call through a module-level alias of a variadic def to the def.
