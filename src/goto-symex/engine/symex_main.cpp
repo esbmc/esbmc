@@ -1072,11 +1072,6 @@ void goto_symext::run_intrinsic(
 
     for (const auto &item : internal_deref_items)
     {
-      assert(
-        is_symbol2t(item.object) &&
-        "__ESBMC_init_object only works for variables");
-      check_read_only_write(item.object, item.guard);
-
       // Get the length of the type. This will propagate an exception for
       // dynamic/infinite sized arrays (as expected)
       try
@@ -1094,20 +1089,10 @@ void goto_symext::run_intrinsic(
           "__ESBMC_init_object does not support infinite-length arrays");
         abort();
       }
-      expr2tc val = sideeffect2tc(
-        item.object->type,
-        expr2tc(),
-        expr2tc(),
-        std::vector<expr2tc>(),
-        type2tc(),
-        sideeffect2t::allockind::nondet);
-
-      expr2tc target_guard = item.guard;
-      cur_state->rename(target_guard);
-      guard2tc write_guard = cur_state->guard;
-      write_guard.add(target_guard);
-      symex_assign(code_assign2tc(item.object, val), false, write_guard);
     }
+    std::vector<write_targett> targets;
+    collect_write_targets(guard2tc(), targets);
+    write_nondet_targets(targets);
 
     return;
   }

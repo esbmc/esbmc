@@ -1,2 +1,4 @@
 regression/esbmc/github_10812_scanf_literal
 regression/esbmc/github_10812_scanf_literal_fail
+regression/esbmc/github_10812_init_object_literal
+regression/esbmc/github_10812_init_object_literal_fail
