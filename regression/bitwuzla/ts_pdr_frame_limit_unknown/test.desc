@@ -1,0 +1,5 @@
+CORE
+main.c
+--bitwuzla --no-pointer-check --no-bounds-check --ts-pdr --max-k-step 2
+^PDR: frame limit reached$
+^VERIFICATION UNKNOWN$
