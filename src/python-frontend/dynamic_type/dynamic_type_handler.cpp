@@ -243,7 +243,10 @@ bool has_divergent_returns(
   const param_kinds_t &param_kinds,
   const nlohmann::json &module_body)
 {
-  return has_divergent_literal_returns(
+  // The preprocessor marks the functions a call through a function value may
+  // reach when they return scalars of different types.
+  return function_node.contains("esbmc_tagged_return") ||
+         has_divergent_literal_returns(
            function_node, param_kinds, module_body) ||
          has_divergent_ifexp_return(function_node, param_kinds, module_body);
 }
@@ -448,9 +451,11 @@ bool calls_dynamic_function(
   const nlohmann::json &module_body,
   unsigned depth)
 {
-  if (
-    !value.is_object() || value.value("_type", "") != "Call" ||
-    value["func"].value("_type", "") != "Name")
+  if (!value.is_object() || value.value("_type", "") != "Call")
+    return false;
+  if (value.contains("esbmc_tagged_call"))
+    return true;
+  if (value["func"].value("_type", "") != "Name")
     return false;
   const nlohmann::json *callee = find_callee_def(
     function_node["body"], module_body, value["func"].value("id", ""));
@@ -740,18 +745,29 @@ dynamic_type_handler::detect_dynamic_type_attributes(
   }
 
   for (const auto &attr : self_attrs)
-  {
-    if (
-      dynamic_type_detail::classes_declaring_attribute(module_body, attr)
-        .size() > 1)
-      continue;
-    if (
-      dynamic_type_detail::kinds_diverge(
-        dynamic_type_detail::collect_attribute_literal_kinds(
-          module_body, attr)))
+    if (attribute_kinds_diverge(attr))
       result.insert(attr);
-  }
   return result;
+}
+
+// Only one class declares `attr`, and the stores into an attribute of that
+// name across every module the program reaches assign it diverging literal
+// kinds: an instance of an imported class may be rebound by the entry module.
+bool dynamic_type_handler::attribute_kinds_diverge(
+  const std::string &attr) const
+{
+  std::unordered_set<std::string> owners;
+  std::unordered_set<std::string> kinds;
+  for (const nlohmann::json *body : converter_.reachable_module_bodies())
+  {
+    const auto declaring =
+      dynamic_type_detail::classes_declaring_attribute(*body, attr);
+    owners.insert(declaring.begin(), declaring.end());
+    const auto assigned =
+      dynamic_type_detail::collect_attribute_literal_kinds(*body, attr);
+    kinds.insert(assigned.begin(), assigned.end());
+  }
+  return owners.size() <= 1 && dynamic_type_detail::kinds_diverge(kinds);
 }
 
 void dynamic_type_handler::declare_dynamic_type_names(
@@ -1182,7 +1198,7 @@ exprt dynamic_type_handler::handle_comparison(
   const bool lhs_tagged = type_handler_.is_tagged_scalar_type(lhs.type());
   const bool rhs_tagged = type_handler_.is_tagged_scalar_type(rhs.type());
   const bool ordered = type_utils::is_ordered_comparison(op);
-  refuse_float_tag_operation(lhs, rhs);
+  refuse_float_tag_operation(lhs, rhs, lhs.location());
 
   if (lhs_tagged && rhs_tagged)
   {
@@ -1483,7 +1499,7 @@ exprt dynamic_type_handler::handle_arithmetic(
 {
   const bool lhs_tagged = type_handler_.is_tagged_scalar_type(lhs.type());
   const bool rhs_tagged = type_handler_.is_tagged_scalar_type(rhs.type());
-  refuse_float_tag_operation(lhs, rhs);
+  refuse_float_tag_operation(lhs, rhs, location);
   claim_numeric_operands(op, lhs, rhs, location);
 
   // Equality can settle a type_id mismatch without knowing either type;
@@ -1514,7 +1530,7 @@ exprt dynamic_type_handler::build_neg_tagged(
   const locationt &location)
 {
   exprt zero = from_integer(0, signedbv_typet(config.ansi_c.int_width));
-  refuse_float_tag_operation(zero, tagged);
+  refuse_float_tag_operation(zero, tagged, location);
   guard_type_error("Sub", zero, tagged, location);
   return build_sub_literal(tagged, zero, /*tagged_is_left=*/false);
 }
@@ -1966,16 +1982,40 @@ exprt dynamic_type_handler::build_numeric_conversion(
 
 void dynamic_type_handler::refuse_float_tag_operation(
   const exprt &lhs,
-  const exprt &rhs) const
+  const exprt &rhs,
+  const locationt &location) const
 {
   if (
     !dynamic_type_detail::float_tags_possible() ||
     type_handler_.is_string_type(lhs.type()) ||
-    type_handler_.is_string_type(rhs.type()))
+    type_handler_.is_string_type(rhs.type()) || converter_.in_type_probe())
     return;
-  throw std::runtime_error(
-    "arithmetic or comparison on a dynamically-typed variable that may hold "
-    "a float is not yet supported");
+  const bool lhs_tagged = type_handler_.is_tagged_scalar_type(lhs.type());
+  const bool rhs_tagged = type_handler_.is_tagged_scalar_type(rhs.type());
+  if (
+    !converter_.can_emit_runtime_guard() ||
+    (!lhs_tagged && lhs.type().is_floatbv()) ||
+    (!rhs_tagged && rhs.type().is_floatbv()))
+    throw std::runtime_error(
+      "arithmetic or comparison on a dynamically-typed variable that may "
+      "hold a float is not yet supported");
+  // The operations do not model a float payload, so a path that reaches
+  // them with one is reported as unsupported and goes no further.
+  for (const exprt *operand : {&lhs, &rhs})
+  {
+    if (!type_handler_.is_tagged_scalar_type(operand->type()))
+      continue;
+    const exprt not_float = build_not(build_equal(
+      build_member(*operand, "type_id", size_type()),
+      type_handler_.tagged_scalar_type_id(double_type())));
+    code_assertt check(not_float);
+    check.location() = location;
+    check.location().user_provided(true);
+    check.location().comment(
+      "Unsupported: arithmetic or comparison on a dynamically-typed float");
+    converter_.add_instruction(check);
+    converter_.add_instruction(code_assumet(not_float));
+  }
 }
 
 void dynamic_type_handler::refuse_tagged_argument() const

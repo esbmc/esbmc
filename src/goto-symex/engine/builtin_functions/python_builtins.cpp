@@ -223,6 +223,10 @@ void goto_symext::guard_isinstance_beside_null(expr2tc &expr)
     !is_isinstance2t(expr) || asks_whether_traced(to_isinstance2t(expr).side_2))
     return;
   const isinstance2t &obj = to_isinstance2t(expr);
+  // Only a pointer can be None. A number the value set pairs with NULL stays
+  // its own subject, so guarding it would re-enter this guard forever.
+  if (!is_pointer_type(obj.side_1->type))
+    return;
   bool beside_null = false;
   const expr2tc subject = isinstance_subject_of(obj, &beside_null);
   if (!beside_null)

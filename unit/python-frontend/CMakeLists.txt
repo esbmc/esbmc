@@ -15,6 +15,7 @@ new_unit_test(json_utils_alias_test "json_utils_alias_test.cpp" "${PYTHON_TEST_L
 new_unit_test(model_path_test "model_path_test.cpp" "${PYTHON_TEST_LIBS}")
 new_unit_test(model_goto_blob_test "model_goto_blob_test.cpp" "${PYTHON_TEST_LIBS};gotoprograms;langapi;util_esbmc;bigint")
 new_unit_test(element_type_registry_test "element_type_registry_test.cpp" "${PYTHON_TEST_LIBS};util_esbmc;bigint")
+new_unit_test(dense_spectrum_test "dense_spectrum_test.cpp" "${PYTHON_TEST_LIBS}")
 if(NOT WIN32)
 new_unit_test(function_call_expr_error_test "function_call_expr_error_test.cpp" "${PYTHON_TEST_LIBS};util_esbmc;bigint")
 endif()

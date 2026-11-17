@@ -130,6 +130,7 @@ void goto_symext::symex_witness_function_return(
   expr2tc ret_val,
   const irep_idt &call_line)
 {
+  ret_val = split_rewrite(ret_val);
   // Promote narrow results before comparing them (C11 6.3.1.1, 6.3.1.8).
   const bool promoted = is_bool_type(ret_val->type) ||
                         (is_bv_type(ret_val->type) &&

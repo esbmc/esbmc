@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# pylint: disable=bad-indentation  # the file is indented with 2 spaces throughout
 
 import os
 import argparse
@@ -29,6 +30,7 @@ class Result:
   err_timeout = 7
   err_memout = 8
   err_unwinding_assertion = 9
+  err_crash = 10
   unknown = 11
   fail_memcleanup = 12
   fail_termination = 13
@@ -61,6 +63,8 @@ class Result:
       return True
     if res == Result.err_timeout:
       return True
+    if res == Result.err_crash:
+      return True
     if res == Result.unknown:
       return True
     return False
@@ -91,6 +95,17 @@ PYTHON_EXCEPTION_FAMILIES = {
 # Parsed by the CLI entry point at the bottom; do_exec() is the only reader.
 args = None
 
+# ESBMC's exit status for an uncaught exception (sysexits.h EX_SOFTWARE).
+ESBMC_INTERNAL_ERROR = 70
+
+
+def abnormal_exit_line(returncode):
+  if returncode < 0:
+    return f"ERROR: ESBMC exited abnormally (signal {-returncode})\n"
+  if returncode == ESBMC_INTERNAL_ERROR:
+    return f"ERROR: ESBMC exited abnormally (exit code {returncode})\n"
+  return ""
+
 def do_exec(cmd_line, timeout=None, cwd=None):
 
   if args.dry_run:
@@ -106,14 +121,25 @@ def do_exec(cmd_line, timeout=None, cwd=None):
     p.communicate()
     return b"ERROR: Timed out\n"
 
-  return stdout + stderr
+  return stdout + stderr + abnormal_exit_line(p.returncode).encode()
+
+# benchexec's ESBMC tool-info takes the verdict from any output line containing
+# FALSE, TRUE or DONE (tools/esbmc.py determine_result). ESBMC quotes source
+# text, e.g. an injected witness invariant naming STATIC_CONST_FALSE, so the
+# echo lower-cases these words and only the wrapper's own verdict carries them.
+VERDICT_WORD = re.compile(r"FALSE|TRUE|DONE")
+
+
+def echo(text):
+  print(VERDICT_WORD.sub(lambda word: word.group(0).lower(), text))
+
 
 # Function to run esbmc
 def run(cmd_line, timeout=None):
   print("Verifying with ESBMC")
-  print("Command: " + cmd_line)
+  echo("Command: " + cmd_line)
   out = do_exec(cmd_line, timeout)
-  print(out.decode())
+  echo(out.decode())
   return out
 
 # A property table row, e.g. "  FAILED       [main.assertion.1]  line 7  x != 0".
@@ -389,6 +415,9 @@ def parse_result(the_output, prop):
   if re.search(r"^ERROR: Out of memory$", the_output, re.MULTILINE):
     return Result.err_memout
 
+  if re.search(r"^ERROR: ESBMC exited abnormally", the_output, re.MULTILINE):
+    return Result.err_crash  # benchexec scores it ERROR, not unknown (#8097)
+
   return Result.unknown
 
 def python_false_string(the_result):
@@ -396,31 +425,25 @@ def python_false_string(the_result):
   return "FALSE(%s)" % exception if exception else "FALSE"
 
 
+RESULT_STRINGS = {
+  Result.fail_memcleanup: "FALSE_MEMCLEANUP",
+  Result.fail_memtrack: "FALSE_MEMTRACK",
+  Result.fail_free: "FALSE_FREE",
+  Result.fail_deref: "FALSE_DEREF",
+  Result.fail_overflow: "FALSE_OVERFLOW",
+  Result.fail_reach: "FALSE_REACH",
+  Result.fail_termination: "FALSE_TERMINATION",
+  Result.fail_race: "FALSE_DATARACE",
+  Result.success: "TRUE",
+  Result.err_timeout: "Timed out",
+  Result.err_unwinding_assertion: "Unknown",
+  Result.err_memout: "Unknown",
+  Result.err_crash: "ERROR",
+  Result.unknown: "Unknown",
+}
+
+
 def get_result_string(the_result):
-  if the_result == Result.fail_memcleanup:
-    return "FALSE_MEMCLEANUP"
-
-  if the_result == Result.fail_memtrack:
-    return "FALSE_MEMTRACK"
-
-  if the_result == Result.fail_free:
-    return "FALSE_FREE"
-
-  if the_result == Result.fail_deref:
-    return "FALSE_DEREF"
-
-  if the_result == Result.fail_overflow:
-    return "FALSE_OVERFLOW"
-
-  if the_result == Result.fail_reach:
-    return "FALSE_REACH"
-
-  if the_result == Result.fail_termination:
-    return "FALSE_TERMINATION"
-
-  if the_result == Result.fail_race:
-    return "FALSE_DATARACE"
-
   if the_result == Result.fail_python:
     # A task definition whose expected verdict carries no subproperty accepts
     # any result starting with "false" (benchexec result.get_result_category).
@@ -428,20 +451,8 @@ def get_result_string(the_result):
     # names its exception when the violation reports exactly one.
     return python_false_string(the_result)
 
-  if the_result == Result.success:
-    return "TRUE"
-
-  if the_result == Result.err_timeout:
-    return "Timed out"
-
-  if the_result == Result.err_unwinding_assertion:
-    return "Unknown"
-
-  if the_result == Result.err_memout:
-    return "Unknown"
-
-  if the_result == Result.unknown:
-    return "Unknown"
+  if the_result in RESULT_STRINGS:
+    return RESULT_STRINGS[the_result]
 
   exit(0)
 
@@ -553,6 +564,9 @@ def get_command_line(strat, prop, arch, benchmark, dargs, esbmc_ci, keep_loops=F
     command_line += "--no-pointer-check --no-bounds-check --overflow-check --no-assertions --no-fp-conversion-check --no-fp-overflow-check "
   elif prop == Property.memory:
     command_line += "--memory-leak-check --no-reachable-memory-leak --no-assertions "
+    # Forming an out-of-range &a[i] is undefined but dereferences nothing, so
+    # it is not a valid-deref violation (#10787).
+    command_line += "--no-pointer-arith-check "
     # It seems SV-COMP doesn't want to check for memleaks on abort()
     # see also <https://github.com/esbmc/esbmc/issues/1259>
     command_line += "--no-abnormal-memory-leak "
@@ -562,7 +576,7 @@ def get_command_line(strat, prop, arch, benchmark, dargs, esbmc_ci, keep_loops=F
     command_line += "--no-pointer-check --no-bounds-check --memory-leak-check --no-assertions "
   elif prop == Property.reach:
     command_line += "--enable-unreachability-intrinsic "
-    command_line += "--no-pointer-check --interval-analysis --no-bounds-check --error-label ERROR "
+    command_line += "--no-pointer-check --interval-analysis --no-bounds-check "
     # Interval arithmetic with widening keeps a counter's bounds through the
     # k-induction havoc, e.g. j >= 0 for `for (int j = 0; j < N; j++)`.
     command_line += ("--interval-analysis-arithmetic --interval-analysis-extrapolate "
@@ -642,6 +656,7 @@ def confirmed_by_integer_encoding(esbmc_command_line, the_output, prop, elapsed)
 # file; they are written to a temporary directory for each replay.
 REPLAY_BUDGET = 20
 MIN_REPLAY_BUDGET = 2
+VALUES_MIN_BUDGET = 60
 REPLAY_MEMORY = 2 * 1024 ** 3
 REPLAY_FILE_SIZE = 200 * 1024 ** 2
 REPLAY_MAX_RUNS = 32
@@ -656,16 +671,12 @@ def values_flags(values_dir):
 
 
 def task_provides_verifier(benchmark):
-  """Does the task, or a directory above it, hold its own _sv_verifier.py?
-  Its nondet_* calls then cannot be fed the counterexample's values."""
-  directory = os.path.dirname(os.path.abspath(benchmark))
-  while True:
-    if os.path.isfile(os.path.join(directory, "_sv_verifier.py")):
-      return True
-    parent = os.path.dirname(directory)
-    if parent == directory:
-      return False
-    directory = parent
+  """Does the task's own directory hold a _sv_verifier.py? Its nondet_* calls
+  then cannot be fed the counterexample's values. One in a directory above,
+  such as sv-benchmarks' python/_sv_verifier.py, does not matter: the replay
+  runs a copy of the task's directory alone, with only that copy and the
+  stand-in on its module path."""
+  return os.path.isfile(os.path.join(os.path.dirname(os.path.abspath(benchmark)), "_sv_verifier.py"))
 
 
 def copy_task(benchmark, destination):
@@ -1139,8 +1150,14 @@ def counterexample_values(esbmc_command_line, prop, values_dir, elapsed):
   Checking the violation's own bound costs about what the first run's last
   step did, which can be most of the first run, so the run may take as long as
   the first one did, with a margin, out of what the replay leaves. The --ir
-  re-run, which comes after, gets what is left."""
-  budget = min(1.5 * elapsed + 10, TOTAL_BUDGET - elapsed - REPLAY_BUDGET)
+  re-run, which comes after, gets what is left.
+
+  The run's solver time does not follow the first run's: the same formula,
+  with its terms in another order, can take several times as long. So the run
+  gets at least VALUES_MIN_BUDGET seconds, still out of what the replay
+  leaves."""
+  budget = min(max(1.5 * elapsed + 10, VALUES_MIN_BUDGET),
+               TOTAL_BUDGET - elapsed - REPLAY_BUDGET)
   if budget < MIN_REPLAY_BUDGET:
     return False
   output = run(esbmc_command_line + values_flags(values_dir), budget)
@@ -1294,14 +1311,14 @@ def testcomp_command_line(strat, goal, arch, benchmark, coverage):
 
 def testcomp_run(cmd_line):
   print("Verifying with ESBMC")
-  print("Command: " + cmd_line)
+  echo("Command: " + cmd_line)
   out = do_exec(cmd_line, cwd=TEST_DIR).decode(errors="replace")
   # The result is parsed from the full output; only the tail is echoed
   if len(out) > MAX_ECHO:
     print(f"[... {len(out) - MAX_ECHO} characters of ESBMC output omitted ...]")
-    print(out[-MAX_ECHO:])
+    echo(out[-MAX_ECHO:])
   else:
-    print(out)
+    echo(out)
   return out
 
 

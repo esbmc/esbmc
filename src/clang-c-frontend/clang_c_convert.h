@@ -32,6 +32,7 @@ class CompoundAssignOperator;
 class UnaryOperator;
 class AtomicExpr;
 class CastExpr;
+class CXXBaseSpecifier;
 class NamedDecl;
 class PresumedLoc;
 class SourceLocation;
@@ -306,6 +307,22 @@ protected:
   virtual bool get_member_expr(const clang::MemberExpr &memb, exprt &new_expr);
 
   bool get_cast_expr(const clang::CastExpr &cast, exprt &new_expr);
+
+  /// Convert `expr` to its base subobject along the cast path [path_begin,
+  /// path_end). `checked` maps a null pointer to null (CK_DerivedToBase);
+  /// `operand_is_pure` allows `expr` to be read twice for that check.
+  void convert_derived_to_base(
+    exprt &expr,
+    const typet &type,
+    const clang::CXXBaseSpecifier *const *path_begin,
+    const clang::CXXBaseSpecifier *const *path_end,
+    bool checked,
+    bool operand_is_pure);
+
+  virtual bool get_base_to_derived_member_pointer(
+    const clang::CastExpr &cast,
+    exprt &expr,
+    const typet &type);
 
   void get_default_symbol(
     symbolt &symbol,

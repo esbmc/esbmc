@@ -1,0 +1,5 @@
+CORE
+main.py
+
+^VERIFICATION FAILED$
+^\s*FAILED\s+\[global\.assertion\.\d+\]\s+line 14\s+assertion

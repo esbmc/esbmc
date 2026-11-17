@@ -1,0 +1,5 @@
+CORE
+main.c
+--field-sensitive-ssa --64
+^  back = \{ \.x=1, \.pair=\(signed long int \[2\]\)0x70000000000000006 \}$
+^VERIFICATION FAILED$

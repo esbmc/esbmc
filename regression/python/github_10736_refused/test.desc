@@ -1,0 +1,5 @@
+CORE
+main.py
+
+^VERIFICATION FAILED$
+FAILED\s+\[f\.assertion\.\d+\]\s+line\s+4\s+Unsupported: returning a str from a function typed to return a number$

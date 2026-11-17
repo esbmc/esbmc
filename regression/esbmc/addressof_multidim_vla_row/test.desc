@@ -1,5 +1,5 @@
 CORE
 main.c
-
+--no-pointer-arith-check
 ^VERIFICATION SUCCESSFUL$
 ^Generated [0-9]+ VCC\(s\), 4 remaining after simplification

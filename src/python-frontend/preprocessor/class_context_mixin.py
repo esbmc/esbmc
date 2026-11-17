@@ -5,6 +5,7 @@ import itertools
 from collections import Counter, defaultdict
 
 from preprocessor.bound_method_dispatch import _scope_nodes
+from preprocessor.bound_method_values import constructions_in
 # pylint: disable=too-many-boolean-expressions
 
 
@@ -1085,6 +1086,12 @@ class ClassContextMixin:
         spec.name = name
         for param, cls in bindings:
             self._replace_reads(spec.body, param, cls)
+        # A call through a parameter that now names a def is a direct call,
+        # which needs no check that it reaches a def returning a tagged value.
+        bound = {cls for _, cls in bindings}
+        for node in ast.walk(spec):
+            if isinstance(node, ast.Call) and getattr(node.func, "id", None) in bound:
+                node.__dict__.pop("esbmc_tagged_call", None)
         return spec
 
     def _specialise_type_parameters(self, module, func, known, calls, taken):
@@ -1128,15 +1135,6 @@ class ClassContextMixin:
             for keyword in call.keywords:
                 if keyword.arg == params[index]:
                     keyword.value = ast.copy_location(ast.Constant(value=None), keyword.value)
-
-    @staticmethod
-    def _construction(stmt):
-        """`(o, C)` for a statement `o = C(...)`, else None."""
-        if (isinstance(stmt, ast.Assign) and len(stmt.targets) == 1
-                and isinstance(stmt.targets[0], ast.Name) and isinstance(stmt.value, ast.Call)
-                and isinstance(stmt.value.func, ast.Name)):
-            return stmt.targets[0].id, stmt.value.func.id
-        return None
 
     @staticmethod
     def _assigned_attributes(module):
@@ -1215,8 +1213,7 @@ class ClassContextMixin:
         }
         self.fixed_receivers = {
             name: methods[cls]
-            for name, cls in filter(None, map(self._construction, module.body))
-            if counts[name] == 1 and cls in methods
+            for name, cls in constructions_in(module.body) if counts[name] == 1 and cls in methods
         }
         self.once_bound_names = {name for name, count in counts.items() if count == 1}
         # Holding the nodes keeps their ids from being reused.

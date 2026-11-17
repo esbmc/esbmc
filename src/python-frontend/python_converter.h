@@ -62,6 +62,8 @@ bool is_imported_numpy_module_alias(
   const nlohmann::json &ast,
   const std::string &name);
 
+struct node_slot;
+
 // One `Call` node together with the name of the function whose body it
 // textually appears in (empty for a module-level call). Declared here (Impl
 // in converter_funcdef.cpp) so python_converter can cache the whole-AST scan
@@ -200,7 +202,21 @@ public:
     const typet &function,
     const typet &value,
     const locationt &location);
-  void decay_function_choice(exprt &then, exprt &else_expr);
+  bool slot_only_called(const node_slot &slot);
+  bool imported_argument_only_called(
+    const nlohmann::json &call,
+    std::size_t index) const;
+  bool ifexp_only_called(const nlohmann::json &ifexp);
+  void decay_not_callable_arm(
+    exprt &arm,
+    code_blockt &side_effects,
+    const exprt &function);
+  void decay_function_choice(
+    const nlohmann::json &ifexp,
+    exprt &then,
+    code_blockt &then_side_effects,
+    exprt &else_expr,
+    code_blockt &else_side_effects);
   void hoist_raising_arm(
     exprt &then,
     code_blockt &then_side_effects,
@@ -442,6 +458,33 @@ public:
   /// the body, ahead of its return, each time the lambda is called.
   exprt get_lambda_body_expr(const nlohmann::json &body, code_blockt &block);
 
+  /// The node a lambda returns, while its body is being converted.
+  bool is_lambda_result(const nlohmann::json &node) const
+  {
+    return &node == lambda_result_;
+  }
+  /// A lambda has one return type, so an int it returns where it may also
+  /// return a float would read back as a float (#10671). Plants into @p block
+  /// an assertion, refusing the call, that @p returns_float holds.
+  void refuse_int_lambda_result(
+    const exprt &returns_float,
+    code_blockt &block,
+    const locationt &location) const;
+  /// Arm @p arm of the conditional expression @p ifexp, with what it plants
+  /// going to @p effects, which runs only where that arm is taken.
+  exprt get_ifexp_arm(
+    const nlohmann::json &ifexp,
+    const char *arm,
+    code_blockt &effects);
+  /// Refuses @p value, an arm of @p ifexp joined into @p result_type, where
+  /// it is an int a lambda returns as a float.
+  void refuse_int_ifexp_arm(
+    const nlohmann::json &ifexp,
+    const exprt &value,
+    const typet &result_type,
+    code_blockt &effects,
+    const locationt &location) const;
+
   // A raise lowers to a jump to the function's end, which every later state
   // then merges with, so a guard that only replaces an operational-model
   // assert is planted only where an enclosing `try` can catch it.
@@ -532,9 +575,16 @@ public:
   /// import binds, as `mk` after `from helper import mk` and `helper.mk`
   /// after `import helper`.
   nlohmann::json callable_function_stubs() const;
+  /// Refuse passing @p argument, a local retyped across str and number, to a
+  /// parameter of @p param_type, which is of the kind the local first held.
+  void
+  reject_retyped_argument(const exprt &argument, const typet &param_type) const;
+  nlohmann::json callable_function_stubs(const nlohmann::json &module) const;
   /// The stubs followed by the current module's own statements, which a name
   /// read off the module is resolved against.
   nlohmann::json kind_module_body() const;
+  /// kind_module_body for the module whose AST is \p module.
+  nlohmann::json kind_module_body(const nlohmann::json &module) const;
   /// Whether a straight-line retype moved @p id's value to another symbol.
   bool is_retyped(const irep_idt &id) const
   {
@@ -850,6 +900,32 @@ private:
     const exprt &callee,
     const nlohmann::json &call,
     const side_effect_expr_function_callt &call_expr);
+
+  /// The type of a call through a function value whose target the converter
+  /// cannot tell, @p untyped unless it may give a tagged value.
+  typet
+  untyped_call_type(const nlohmann::json &call, const typet &untyped) const;
+
+  /// @p call with its keyword arguments passed by position, for a call
+  /// through a function value, which passes only positional arguments.
+  /// Throws unless every function the value may hold has the same
+  /// positional parameters and the keywords name, in order, the ones after
+  /// the positional arguments.
+  nlohmann::json keywords_as_positional(const nlohmann::json &call);
+
+  void add_marked_callees(
+    exprt &holds,
+    const exprt &callee,
+    const nlohmann::json &module,
+    const nlohmann::json &body,
+    const std::string &clazz) const;
+  /// Refuses the path where the call @p call of @p element, which the
+  /// preprocessor found may reach functions returning different types, goes
+  /// to anything but a def it marked to return a tagged value.
+  void guard_tagged_callee(const exprt &call, const nlohmann::json &element);
+  /// Writes the body of the check guard_tagged_callee calls, once every
+  /// module is converted.
+  void define_tagged_callee();
 
   exprt get_function_body_or_unsupported(const nlohmann::json &function_node);
 
@@ -1294,6 +1370,11 @@ private:
   bool is_program_file(const std::string &file) const;
 
   exprt get_function_call(const nlohmann::json &ast_block);
+  void coerce_struct_argument(
+    const nlohmann::json &element,
+    const typet &param_type,
+    const typet &arg_actual_type,
+    exprt &arg);
   /// A Call expression: folded into the caller when it passes a numpy view
   /// to a simple function, converted as a call otherwise.
   exprt get_call_expr(const nlohmann::json &element);
@@ -1643,6 +1724,12 @@ private:
     const std::string &param_name,
     size_t param_index,
     std::set<std::string> &visiting) const;
+
+  /// The entry module imports \p callee of the module being converted by
+  /// name and passes it, at \p param_index, a name that holds an int or a
+  /// str by path.
+  bool entry_module_passes_tagged(const std::string &callee, size_t param_index)
+    const;
 
   typet ctor_param_attr_type(
     const std::vector<const nlohmann::json *> &module_bodies,
@@ -2399,6 +2486,10 @@ private:
   once_bound_exponent(const nlohmann::json &right, const exprt &rhs) const;
   symbolt *find_enclosing_scope_symbol(symbol_id sid) const;
   symbolt *find_global_symbol(const symbol_id &sid);
+  symbolt *find_callee_variable(const nlohmann::json &func);
+  symbolt *forward_function_global(
+    const std::string &name,
+    const nlohmann::json &binding);
   bool operand_has_type(const nlohmann::json &operand, const std::string &type)
     const;
   exprt
@@ -2693,7 +2784,12 @@ private:
   bool needs_fresh_retype_slot(
     const exprt &lhs,
     const exprt &rhs,
-    const std::string &lhs_id) const;
+    const std::string &lhs_id,
+    const symbol_id &sid) const;
+  bool is_local_number_to_list_rebind(
+    const exprt &lhs,
+    const exprt &rhs,
+    const symbol_id &sid) const;
   bool is_numpy_array_to_view_rebind(
     const exprt &lhs,
     const exprt &rhs,
@@ -3547,6 +3643,8 @@ private:
     const nlohmann::json &element);
   exprt
   numpy_float_remainder(const exprt &x, const exprt &y, const typet &type);
+  exprt
+  numpy_float_floor_divide(const exprt &x, const exprt &y, const typet &type);
   exprt numpy_element_op(
     const std::string &op,
     const exprt &x,
@@ -3823,6 +3921,13 @@ private:
   symbolt *find_dunder_method(
     const std::string &class_name,
     const std::string &dunder_name);
+  /// The operational model's per-key-type copy of @p dunder that a subscript
+  /// of a @p class_name instance with key @p key_node reaches, such as
+  /// Counter's `__getitem_str__`; @p dunder itself when there is none.
+  std::string keyed_dunder_name(
+    const std::string &class_name,
+    const std::string &dunder,
+    const nlohmann::json &key_node);
 
   /// Class @p value_node is an instance of, or "" when it is not an instance.
   /// Resolves both a bound name and a constructor temporary.
@@ -3872,6 +3977,10 @@ private:
   /// \p loc, and ends the path there.
   void
   end_path_as_unsupported(const std::string &message, const locationt &loc);
+  void guard_str_number_return(
+    const nlohmann::json &value_node,
+    exprt &value,
+    const locationt &location);
 
   // =========================================================================
   // Member variables
@@ -3957,6 +4066,7 @@ private:
   // dead code and evaluate a side-effecting divisor an extra time).
   bool converting_defaults_ = false;
   bool converting_lambda_body_ = false;
+  const nlohmann::json *lambda_result_ = nullptr;
   std::map<std::string, irep_idt> lambda_copies_;
   bool in_rhs_type_probe_ = false;
   // Set while probe_expr() evaluates a node only to inspect its result.
@@ -4099,9 +4209,10 @@ private:
   /// that also holds other values, or functions whose signatures differ or
   /// are not known, is refused (#10341). Nothing when it holds no function.
   std::optional<typet> dict_read_function_type(const nlohmann::json &element);
-  typet subscript_call_return_type(
-    const exprt &func_ptr,
-    const nlohmann::json &func_node);
+  /// The return type of @p call, a call through a subscript, with
+  /// @p func_ptr the value called.
+  typet
+  subscript_call_return_type(const exprt &func_ptr, const nlohmann::json &call);
   std::optional<std::vector<std::size_t>>
   numpy_filled_array_shape(const nlohmann::json &value) const;
   const std::optional<std::pair<typet, numpy_scalar_pointer_view_infot>> &

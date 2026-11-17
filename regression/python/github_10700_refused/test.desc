@@ -1,0 +1,4 @@
+CORE
+main.py
+
+unsupported: returning a variable rebound to a str from a function typed to return a number$

@@ -100,6 +100,12 @@ protected:
   bool has_destructible_sideeffect(const exprt &expr);
   bool splits_and_condition(const exprt &cond);
 
+  static locationt short_circuit_operand(locationt location)
+  {
+    location.set_short_circuit_operand();
+    return location;
+  }
+
   // Used by remove_sideeffects() to process a quantifier body expression.
   // Recursively walks || and && sub-expressions without converting them to
   // short-circuit ITE chains, so that bound variables remain reachable by

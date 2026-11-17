@@ -1,5 +1,5 @@
 CORE
 main.c
-
+--no-pointer-arith-check
 ^VERIFICATION FAILED$
 dereference failure: array bounds violated

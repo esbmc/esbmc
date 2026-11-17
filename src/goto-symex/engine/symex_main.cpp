@@ -178,8 +178,12 @@ void goto_symext::assertion(
   expr2tc expr = the_assertion;
   cur_state->guard.guard_expr(expr);
   cur_state->global_guard.guard_expr(expr);
-  expr2tc expr_neg = not2tc(the_assertion);
+  // Negate after the path guard but before the execution guard: the probe
+  // must leave the path free to be untaken, yet keep the execution guard (a
+  // free symbol) forced (issue #10642).
+  expr2tc expr_neg = the_assertion;
   cur_state->guard.guard_expr(expr_neg);
+  expr_neg = not2tc(expr_neg);
   cur_state->global_guard.guard_expr(expr_neg);
   remaining_claims++;
   target->assertion(
@@ -426,7 +430,7 @@ void goto_symext::symex_step(reachability_treet &art)
 
   case GOTO:
   {
-    expr2tc tmp(instruction.guard);
+    expr2tc tmp = split_rewrite(instruction.guard);
     replace_nondet(tmp);
     volatile_check(tmp);
 
@@ -490,6 +494,9 @@ void goto_symext::symex_step(reachability_treet &art)
     replace_nondet(deref_code);
 
     code_function_call2t &call = to_code_function_call2t(deref_code);
+    // The result slot stays whole here: symex_assign splits it, and the trace
+    // names it as written.
+    split_rewrite_operands(call.operands);
 
     if (!is_nil_expr(call.ret))
     {
@@ -606,7 +613,7 @@ void goto_symext::symex_assume()
   if (cur_state->guard.is_false())
     return;
 
-  expr2tc cond = cur_state->source.pc->guard;
+  expr2tc cond = split_rewrite(cur_state->source.pc->guard);
   const bool ends_path = cur_state->source.pc->location.get_bool("ends_path");
 
   replace_nondet(cond);
@@ -653,9 +660,15 @@ void goto_symext::symex_assert()
 
   const goto_programt::instructiont &instruction = *cur_state->source.pc;
 
+  // A --bidirectional block asserts, before the loop's back-edge, that an
+  // inductive-step start state is unreachable. It is not a program property,
+  // so a violation of it outside the inductive step is no bug (#10128).
+  if (instruction.inductive_assertion && !inductive_step)
+    return;
+
   const std::string msg = assertion_message(ns, instruction);
 
-  expr2tc tmp = instruction.guard;
+  expr2tc tmp = split_rewrite(instruction.guard);
   replace_nondet(tmp);
 
   dereference(tmp, dereferencet::READ);

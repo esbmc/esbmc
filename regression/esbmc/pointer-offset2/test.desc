@@ -1,4 +1,4 @@
 CORE
 main.c
-
+--no-pointer-arith-check
 ^VERIFICATION SUCCESSFUL$

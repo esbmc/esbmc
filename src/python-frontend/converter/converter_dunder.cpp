@@ -4,6 +4,7 @@
 #include <python-frontend/symbol_id.h>
 #include <python-frontend/type/type_handler.h>
 #include <python-frontend/json_utils.h>
+#include <python-frontend/model_path.h>
 #include <util/lang/c_types.h>
 #include <util/expr/expr_util.h>
 #include <util/lang/python_types.h>
@@ -75,6 +76,25 @@ symbolt *python_converter::find_dunder_method(
 
   return find_function_in_base_classes(
     class_name, sid.to_string(), dunder_name, false);
+}
+
+std::string python_converter::keyed_dunder_name(
+  const std::string &class_name,
+  const std::string &dunder,
+  const nlohmann::json &key_node)
+{
+  const std::string kind = type_handler_.get_operand_type(key_node);
+  if (kind != "str" && kind != "int")
+    return dunder;
+  const std::string variant =
+    dunder.substr(0, dunder.size() - 2) + "_" + kind + "__";
+  const symbolt *method = find_dunder_method(class_name, variant);
+  if (
+    !method ||
+    !model_path::in_models(
+      model_path::normalised(method->location.get_file().as_string())))
+    return dunder;
+  return variant;
 }
 
 std::string

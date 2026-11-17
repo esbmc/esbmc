@@ -1,0 +1,5 @@
+CORE
+main.c
+--field-sensitive-ssa --no-slice
+^  v\.un\.i = 9 \(
+^VERIFICATION FAILED$
