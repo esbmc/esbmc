@@ -1,5 +1,4 @@
-/* The native body dispatcher must emit the same if-guard as the legacy
- * round-trip, which peels the condition's `!` instead of wrapping it (#6759). */
+/* #6759 */
 int y;
 
 void f(int ok)

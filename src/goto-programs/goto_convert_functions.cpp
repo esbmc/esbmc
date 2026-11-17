@@ -861,8 +861,7 @@ bool goto_convert_functionst::convert_native_rec(
     if (initializer.is_not_nil())
     {
       code_assignt assign(var, initializer);
-      // convert_decl_initializer reads the location through a const codet, so
-      // a nil one stays nil there; emitted_location would render it blank.
+      // Nil stays nil: convert_decl_initializer reads it via a const codet.
       assign.location() = decl.location;
       copy(assign, ASSIGN, dest);
     }
