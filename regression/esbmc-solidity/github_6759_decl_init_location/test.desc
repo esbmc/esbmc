@@ -1,0 +1,4 @@
+CORE
+contract.solast
+--sol contract.sol --goto-functions-only
+// \d+ no location\n\s*ASSIGN old_sender=msg_sender;$

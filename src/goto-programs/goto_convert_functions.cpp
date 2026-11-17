@@ -861,9 +861,9 @@ bool goto_convert_functionst::convert_native_rec(
     if (initializer.is_not_nil())
     {
       code_assignt assign(var, initializer);
-      // The DECL above keeps its nil location: convert_decl emits it before the
-      // mutable access emitted_location reproduces.
-      assign.location() = emitted_location(decl.location);
+      // convert_decl_initializer reads the location through a const codet, so
+      // a nil one stays nil there; emitted_location would render it blank.
+      assign.location() = decl.location;
       copy(assign, ASSIGN, dest);
     }
 
@@ -1058,7 +1058,9 @@ bool goto_convert_functionst::convert_native_rec(
 
     goto_programt tmp_v;
     goto_programt::targett v = tmp_v.add_instruction();
-    v->make_goto(has_else ? y : z, not2tc(cond));
+    expr2tc negated_cond = cond;
+    make_not(negated_cond);
+    v->make_goto(has_else ? y : z, negated_cond);
     v->location = location;
 
     goto_programt tmp_w;
