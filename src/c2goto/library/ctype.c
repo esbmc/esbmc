@@ -151,3 +151,55 @@ CTYPE_L(tolower)
 #  undef toupper_l
 CTYPE_L(toupper)
 #endif
+
+/* glibc's ctype.h macros index the class table __ctype_b_loc() points to with
+ * any value from -128 to 255. glibc stores each class bit in big-endian order.
+ * Only the C locale is modelled, so bytes outside ASCII belong to no class. */
+#if __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
+#  define CTYPE_BIT(b) (1 << (b))
+#else
+#  define CTYPE_BIT(b) ((b) < 8 ? (1 << (b)) << 8 : (1 << (b)) >> 8)
+#endif
+#define CTYPE_UPPER(c) ((c) >= 'A' && (c) <= 'Z')
+#define CTYPE_LOWER(c) ((c) >= 'a' && (c) <= 'z')
+#define CTYPE_DIGIT(c) ((c) >= '0' && (c) <= '9')
+#define CTYPE_ALNUM(c) (CTYPE_UPPER(c) || CTYPE_LOWER(c) || CTYPE_DIGIT(c))
+#define CTYPE_GRAPH(c) ((c) > ' ' && (c) < 0x7f)
+#define CTYPE_CLASSES(c)                                                       \
+  (CTYPE_UPPER(c) * CTYPE_BIT(0) | CTYPE_LOWER(c) * CTYPE_BIT(1) |             \
+   (CTYPE_UPPER(c) || CTYPE_LOWER(c)) * CTYPE_BIT(2) |                         \
+   CTYPE_DIGIT(c) * CTYPE_BIT(3) |                                             \
+   (CTYPE_DIGIT(c) || ((c) >= 'A' && (c) <= 'F') ||                            \
+    ((c) >= 'a' && (c) <= 'f')) *                                              \
+     CTYPE_BIT(4) |                                                            \
+   ((c) == ' ' || ((c) >= '\t' && (c) <= '\r')) * CTYPE_BIT(5) |               \
+   ((c) == ' ' || CTYPE_GRAPH(c)) * CTYPE_BIT(6) |                             \
+   CTYPE_GRAPH(c) * CTYPE_BIT(7) |                                             \
+   ((c) == ' ' || (c) == '\t') * CTYPE_BIT(8) |                                \
+   ((c) < ' ' || (c) == 0x7f) * CTYPE_BIT(9) |                                 \
+   (CTYPE_GRAPH(c) && !CTYPE_ALNUM(c)) * CTYPE_BIT(10) |                       \
+   CTYPE_ALNUM(c) * CTYPE_BIT(11))
+#define CTYPE_ROW(c)                                                           \
+  CTYPE_CLASSES(c), CTYPE_CLASSES(c + 1), CTYPE_CLASSES(c + 2),                \
+    CTYPE_CLASSES(c + 3), CTYPE_CLASSES(c + 4), CTYPE_CLASSES(c + 5),          \
+    CTYPE_CLASSES(c + 6), CTYPE_CLASSES(c + 7), CTYPE_CLASSES(c + 8),          \
+    CTYPE_CLASSES(c + 9), CTYPE_CLASSES(c + 10), CTYPE_CLASSES(c + 11),        \
+    CTYPE_CLASSES(c + 12), CTYPE_CLASSES(c + 13), CTYPE_CLASSES(c + 14),       \
+    CTYPE_CLASSES(c + 15)
+
+static const unsigned short ctype_b[384] = {
+  [128] = CTYPE_ROW(0),
+  CTYPE_ROW(16),
+  CTYPE_ROW(32),
+  CTYPE_ROW(48),
+  CTYPE_ROW(64),
+  CTYPE_ROW(80),
+  CTYPE_ROW(96),
+  CTYPE_ROW(112)};
+
+const unsigned short **__ctype_b_loc(void)
+{
+__ESBMC_HIDE:;
+  static const unsigned short *table = ctype_b + 128;
+  return &table;
+}
