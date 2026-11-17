@@ -36,8 +36,24 @@ struct equation_conversion_statet
   bool has_int_to_pointer_cast = false;
 };
 
+/// Whether an object of @p type can hold a pointer. Conservative on an
+/// unresolved tag.
+bool holds_pointer(const type2tc &type)
+{
+  if (is_pointer_type(type) || is_symbol_type(type))
+    return true;
+  if (is_array_type(type) || is_vector_type(type))
+    return holds_pointer(array_or_vector_subtype(type));
+  if (!is_struct_type(type) && !is_union_type(type))
+    return false;
+  const std::vector<type2tc> members = struct_union_members(type);
+  return std::any_of(members.begin(), members.end(), holds_pointer);
+}
+
 /// Whether @p root casts an integer other than a null pointer constant to a
-/// pointer. Subterms in @p seen are skipped and added to it.
+/// pointer, or reads a pointer out of the bytes of another object, as a union
+/// member or memcpy does (#10798). Subterms in @p seen are skipped and added
+/// to it.
 bool casts_int_to_pointer(
   const expr2tc &root,
   std::unordered_set<const expr2t *> &seen)
@@ -52,6 +68,12 @@ bool casts_int_to_pointer(
       found = !is_pointer_type(from->type) &&
               !(is_constant_int2t(from) && to_constant_int2t(from).value == 0);
     }
+    else if (is_bitcast2t(e) && holds_pointer(e->type))
+      found = !holds_pointer(to_bitcast2t(e).from->type);
+    else if (
+      is_byte_update2t(e) ||
+      (is_member2t(e) && is_union_type(to_member2t(e).source_value->type)))
+      found = holds_pointer(e->type);
     e->foreach_operand([&](const expr2tc &op) { walk(op); });
   };
   walk(root);
