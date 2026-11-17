@@ -256,3 +256,14 @@ void goto_symext::dereference(
   else
     dereference.dereference_expr(expr, guard, mode);
 }
+
+void goto_symext::check_read_only_write(
+  const expr2tc &object,
+  const expr2tc &cond)
+{
+  guard2tc guard;
+  guard.add(cond);
+  symex_dereference_statet symex_dereference_state(*this, *cur_state);
+  dereferencet(ns, new_context, options, symex_dereference_state)
+    .read_only_write_check(object, guard);
+}

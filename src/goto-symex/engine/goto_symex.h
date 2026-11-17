@@ -2011,6 +2011,11 @@ protected:
    *  the dereference code and the caller, who will inspect the contents after
    *  a call to dereference (in INTERNAL mode) completes. */
   std::list<dereference_callbackt::internal_item> internal_deref_items;
+
+  /** Fail an intrinsic's write to @p object, made when @p cond holds, if the
+   *  object is read-only, as valid_check does for a WRITE-mode dereference. */
+  void check_read_only_write(const expr2tc &object, const expr2tc &cond);
+
   /** Analyze the shared varables in a function call, this is because an
    * argumemt may be renamed to constant bool in symex_function_call_code(),
    * while we need to get the information for context switch.*/

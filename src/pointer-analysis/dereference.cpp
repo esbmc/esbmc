@@ -3386,12 +3386,8 @@ void dereferencet::valid_check(
   if (is_constant_string2t(symbol))
   {
     // always valid, but can't write
-
     if (is_write(mode))
-    {
-      dereference_failure(
-        "pointer dereference", "write access to string constant", guard);
-    }
+      read_only_write_check(object, guard);
   }
   else if (is_nil_expr(symbol))
   {
@@ -3452,19 +3448,36 @@ void dereferencet::valid_check(
         return;
       }
 
-      /* Writes to globals of const-qualified type are not allowed either. */
-      if (
-        is_write(mode) && sym.static_lifetime && sym.get_type().cmt_constant())
-      {
-        dereference_failure(
-          "pointer dereference",
-          "write access to const object `" +
-            get_pretty_name(sym.id.as_string()) + "'",
-          guard);
-        return;
-      }
+      if (is_write(mode))
+        read_only_write_check(object, guard);
     }
   }
+}
+
+bool dereferencet::is_read_only(const expr2tc &object, const namespacet &ns)
+{
+  const expr2tc &symbol = get_symbol(object);
+  if (is_constant_string2t(symbol))
+    return true;
+  const symbolt *sym =
+    is_symbol2t(symbol) ? ns.lookup(to_symbol2t(symbol).thename) : nullptr;
+  return sym != nullptr && is_const_static(*sym);
+}
+
+void dereferencet::read_only_write_check(
+  const expr2tc &object,
+  const guard2tc &guard)
+{
+  if (!is_read_only(object, ns))
+    return;
+  const expr2tc &symbol = get_symbol(object);
+  dereference_failure(
+    "pointer dereference",
+    is_constant_string2t(symbol)
+      ? "write access to string constant"
+      : "write access to const object `" +
+          get_pretty_name(to_symbol2t(symbol).thename.as_string()) + "'",
+    guard);
 }
 
 // True when `obj`'s base object is a heap allocation (malloc/calloc/realloc):
