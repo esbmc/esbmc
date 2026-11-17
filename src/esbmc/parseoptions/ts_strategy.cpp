@@ -11,6 +11,38 @@
 #include <limits>
 #include <sstream>
 
+/// Exit codes as for ts_enginet::bmc.
+static int run_pdr(
+  const transition_systemt &ts,
+  const namespacet &ns,
+  optionst &options,
+  uint64_t max_k)
+{
+  ts_pdrt pdr(ts, ns, options);
+  unsigned depth = 0;
+  switch (pdr.run(max_k, depth))
+  {
+  case ts_pdrt::resultt::safe:
+    log_success(
+      "\nSolution found by PDR (invariant checked)\nVERIFICATION SUCCESSFUL");
+    return 0;
+  case ts_pdrt::resultt::unsafe:
+  {
+    log_status("PDR found a violation at step {}; replaying with BMC", depth);
+    ts_enginet replay(ts, ns, options);
+    const int rc = replay.bmc(depth, false);
+    if (rc != 1)
+      log_error("BMC did not reproduce the PDR counterexample");
+    return rc;
+  }
+  case ts_pdrt::resultt::unknown:
+    break;
+  }
+  log_status("PDR: {}", pdr.reason);
+  log_fail("\nVERIFICATION UNKNOWN");
+  return 0;
+}
+
 bool esbmc_parseoptionst::ts_strategy_requested() const
 {
   return cmdline.isset("ts-check") || cmdline.isset("ts-bmc") ||
@@ -75,30 +107,7 @@ int esbmc_parseoptionst::do_ts_strategy(
   namespacet ns(context);
 
   if (cmdline.isset("ts-pdr"))
-  {
-    ts_pdrt pdr(ts, ns, options);
-    unsigned depth = 0;
-    switch (pdr.run(max_k, depth))
-    {
-    case ts_pdrt::resultt::safe:
-      log_success(
-        "\nSolution found by PDR (invariant checked)\nVERIFICATION SUCCESSFUL");
-      return 0;
-    case ts_pdrt::resultt::unsafe:
-    {
-      log_status("PDR found a violation at step {}; replaying with BMC", depth);
-      ts_enginet replay(ts, ns, options);
-      const int rc = replay.bmc(depth, false);
-      if (rc != 1)
-        log_error("BMC did not reproduce the PDR counterexample");
-      return rc;
-    }
-    case ts_pdrt::resultt::unknown:
-      log_status("PDR: {}", pdr.reason);
-      log_fail("\nVERIFICATION UNKNOWN");
-      return 0;
-    }
-  }
+    return run_pdr(ts, ns, options, max_k);
 
   if (cmdline.isset("ts-fresh-solver"))
   {

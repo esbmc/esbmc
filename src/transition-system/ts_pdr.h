@@ -10,7 +10,7 @@
 /// IC3/PDR over bit-level cubes of the transition system's state. Frames are
 /// delta-encoded clause sets, each level enabled by an activation literal, so
 /// every query runs in the one solver the base engine set up.
-class ts_pdrt : public ts_enginet
+class ts_pdrt : protected ts_enginet
 {
 public:
   ts_pdrt(
@@ -76,6 +76,14 @@ private:
   smt_resultt
   solve(const std::vector<expr2tc> &assumptions, const std::string &kind);
   cubet model_cube();
+  /// Solve with `assumptions` plus the literals of `c` (next-state ones if
+  /// `next`). On UNSAT, `core` holds the literals of `c` the proof used.
+  smt_resultt solve_with_cube(
+    std::vector<expr2tc> assumptions,
+    const cubet &c,
+    bool next,
+    const std::string &kind,
+    cubet &core);
   /// Shrink the state cube `s` of the last SAT model to the bits that, with
   /// the same inputs, still force `target`.
   cubet lift(const cubet &s, const expr2tc &target);

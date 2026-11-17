@@ -45,6 +45,9 @@ protected:
   bool check_prefix();
   void assume_prefix();
   void add_step(unsigned step);
+  /// What a step must satisfy to reach the next: its assumptions, the
+  /// back-edge guard and no violation.
+  expr2tc step_constraint(unsigned step) const;
   void close_step(unsigned step);
   smt_resultt solve_bad(unsigned step, bool push_pop);
   void report_counterexample(unsigned step);

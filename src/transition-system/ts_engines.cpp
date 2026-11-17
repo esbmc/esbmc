@@ -142,14 +142,22 @@ void ts_enginet::add_step(unsigned step)
   solver->assert_expr(implies2tc(bad_literal(step), disjunction(violated)));
 }
 
+expr2tc ts_enginet::step_constraint(unsigned step) const
+{
+  ts_step_renamert at(ts, step);
+  std::vector<expr2tc> c;
+  for (const expr2tc &a : ts.body_assumes)
+    c.push_back(at(a));
+  c.push_back(at(ts.back_guard));
+  for (const auto &p : ts.bad)
+    c.push_back(not2tc(at(p.violated)));
+  return conjunction(c);
+}
+
 void ts_enginet::close_step(unsigned step)
 {
   ts_step_renamert at(ts, step), next(ts, step + 1);
-  for (const expr2tc &a : ts.body_assumes)
-    solver->assert_expr(at(a));
-  solver->assert_expr(at(ts.back_guard));
-  for (const auto &p : ts.bad)
-    solver->assert_expr(not2tc(at(p.violated)));
+  solver->assert_expr(step_constraint(step));
   for (size_t i = 0; i < ts.states.size(); i++)
     solver->define(equality2tc(next(ts.states[i].pre), at(ts.states[i].post)));
 }

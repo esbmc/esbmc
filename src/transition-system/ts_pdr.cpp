@@ -34,17 +34,12 @@ ts_pdrt::ts_pdrt(
 {
   add_step(0);
   act_trans = symbol2tc(get_bool_type(), "ts$act$trans");
-  std::vector<expr2tc> trans;
   ts_step_renamert at(ts, 0);
-  for (const expr2tc &a : ts.body_assumes)
-    trans.push_back(at(a));
-  trans.push_back(at(ts.back_guard));
   std::vector<expr2tc> violated;
   for (const auto &p : ts.bad)
     violated.push_back(at(p.violated));
   bad_expr = violated.empty() ? gen_false_expr() : disjunction(violated);
-  trans.push_back(not2tc(bad_expr));
-  trans_expr = conjunction(trans);
+  trans_expr = step_constraint(0);
   solver->assert_expr(implies2tc(act_trans, trans_expr));
 }
 
@@ -67,10 +62,41 @@ void collect_shared(
   e->foreach_operand(
     [&](const expr2tc &op) { collect_shared(op, ts, out, seen); });
 }
+
+/// Values fixed before the loop that the step reads, by name.
+std::map<std::string, expr2tc> shared_values(const transition_systemt &ts)
+{
+  std::map<std::string, expr2tc> shared;
+  std::unordered_set<const expr2t *> seen;
+  for (const auto *es : {&ts.body_defs, &ts.body_assumes, &ts.invariants})
+    for (const expr2tc &e : *es)
+      collect_shared(e, ts, shared, seen);
+  for (const auto &p : ts.bad)
+    collect_shared(p.violated, ts, shared, seen);
+  for (const auto &s : ts.states)
+    collect_shared(s.post, ts, shared, seen);
+  collect_shared(ts.back_guard, ts, shared, seen);
+  return shared;
+}
+
+/// Bit b of a constant initial value, or -1 if `init` is not a constant.
+int init_bit_value(const expr2tc &init, unsigned width, unsigned b)
+{
+  if (!is_nil_expr(init) && is_constant_bool2t(init))
+    return to_constant_bool2t(init).value ? 1 : 0;
+  if (!is_nil_expr(init) && is_constant_int2t(init))
+    return value_bit(to_constant_int2t(init).value, width, b) ? 1 : 0;
+  return -1;
+}
 } // namespace
 
 bool ts_pdrt::build_bits()
 {
+  if (options_->get_bool_option("int-encoding"))
+  {
+    reason = "PDR needs bit-vector encoding";
+    return false;
+  }
   // State components: the loop's live state, then every value fixed before
   // the loop that the step reads. The latter never change, but a cube that
   // omitted them would let each query choose them afresh.
@@ -82,17 +108,7 @@ bool ts_pdrt::build_bits()
       ts.at_step(ts.states[k].pre, 0), ts.at_step(ts.states[k].post, 0));
     names.push_back(ts.states[k].name);
   }
-  std::map<std::string, expr2tc> shared;
-  std::unordered_set<const expr2t *> seen;
-  for (const auto *es : {&ts.body_defs, &ts.body_assumes, &ts.invariants})
-    for (const expr2tc &e : *es)
-      collect_shared(e, ts, shared, seen);
-  for (const auto &p : ts.bad)
-    collect_shared(p.violated, ts, shared, seen);
-  for (const auto &s : ts.states)
-    collect_shared(s.post, ts, shared, seen);
-  collect_shared(ts.back_guard, ts, shared, seen);
-  for (const auto &[name, sym] : shared)
+  for (const auto &[name, sym] : shared_values(ts))
   {
     components.emplace_back(sym, sym);
     names.push_back(name);
@@ -122,20 +138,12 @@ bool ts_pdrt::build_bits()
     component_cur.push_back(cur);
     const type2tc &t = cur->type;
     expr2tc init = k < ts.states.size() ? ts.states[k].init : expr2tc();
-    auto init_value = [&](unsigned b) {
-      if (!is_nil_expr(init) && is_constant_bool2t(init))
-        return to_constant_bool2t(init).value ? 1 : 0;
-      if (!is_nil_expr(init) && is_constant_int2t(init))
-        return value_bit(to_constant_int2t(init).value, t->get_width(), b) ? 1
-                                                                           : 0;
-      return -1;
-    };
     const bool shared = cur == next;
     if (is_bool_type(t))
     {
       bit_of.emplace_back(k, 0);
       add_bit(cur, next, shared);
-      init_bit.push_back(init_value(0));
+      init_bit.push_back(init_bit_value(init, 1, 0));
     }
     else if (is_bv_type(t) && t->get_width() <= 64)
       for (unsigned b = 0; b < t->get_width(); b++)
@@ -145,7 +153,7 @@ bool ts_pdrt::build_bits()
           equality2tc(extract2tc(bit_type, cur, b, b), one),
           equality2tc(extract2tc(bit_type, next, b, b), one),
           shared);
-        init_bit.push_back(init_value(b));
+        init_bit.push_back(init_bit_value(init, t->get_width(), b));
       }
     else
     {
@@ -189,7 +197,7 @@ ts_pdrt::solve(const std::vector<expr2tc> &assumptions, const std::string &kind)
   smt_resultt res = solver->dec_solve_assuming(assumptions);
   auto &[count, seconds] = query_stats[kind];
   count++;
-  seconds += std::stod(time2string(current_time() - start));
+  seconds += (current_time() - start) / 1000.0;
   if (res != smt_resultt::P_SATISFIABLE && res != smt_resultt::P_UNSATISFIABLE)
     throw std::runtime_error("solver error");
   return res;
@@ -201,6 +209,8 @@ ts_pdrt::cubet ts_pdrt::model_cube()
   for (const expr2tc &component : component_cur)
   {
     expr2tc v = solver->get(component);
+    if (is_nil_expr(v))
+      throw std::runtime_error("state value missing from the model");
     if (is_constant_bool2t(v))
       values.push_back(to_constant_bool2t(v).value ? 1 : 0);
     else if (is_constant_int2t(v))
@@ -229,25 +239,43 @@ ts_pdrt::cubet ts_pdrt::lift(const cubet &s, const expr2tc &target)
     if (!is_nil_expr(value) && is_constant_expr(value))
       inputs.push_back(equality2tc(sym, value));
   }
-  std::vector<expr2tc> assumptions{conjunction(inputs), not2tc(target)};
+  cubet core;
+  if (
+    solve_with_cube(
+      {conjunction(inputs), not2tc(target)}, s, false, "lift", core) ==
+    smt_resultt::P_SATISFIABLE)
+    return s;
+  return core;
+}
+
+smt_resultt ts_pdrt::solve_with_cube(
+  std::vector<expr2tc> assumptions,
+  const cubet &c,
+  bool next,
+  const std::string &kind,
+  cubet &core)
+{
   std::unordered_map<expr2tc, unsigned, irep2_hash> index;
-  for (unsigned i = 0; i < s.size(); i++)
+  for (unsigned i = 0; i < c.size(); i++)
   {
-    expr2tc lit = literal(s[i], false);
+    expr2tc lit = literal(c[i], next);
     index.emplace(lit, i);
     assumptions.push_back(lit);
   }
-  if (solve(assumptions, "lift") == smt_resultt::P_SATISFIABLE)
-    return s;
-  cubet core;
+  smt_resultt res = solve(assumptions, kind);
+  if (res == smt_resultt::P_SATISFIABLE)
+    return res;
+  core.clear();
   for (const expr2tc &u : solver->unsat_assumptions())
   {
     auto it = index.find(u);
     if (it != index.end())
-      core.push_back(s[it->second]);
+      core.push_back(c[it->second]);
   }
   std::sort(core.begin(), core.end());
-  return core;
+  // Two bits can share one literal, e.g. booleans with the same next value.
+  core.erase(std::unique(core.begin(), core.end()), core.end());
+  return res;
 }
 
 bool ts_pdrt::intersects_init(const cubet &c)
@@ -287,25 +315,8 @@ bool ts_pdrt::relative_inductive(const cubet &c, unsigned level, cubet &core)
   std::vector<expr2tc> assumptions = frame(level - 1);
   assumptions.push_back(act_trans);
   assumptions.push_back(not2tc(cube_expr(c, false)));
-  std::unordered_map<expr2tc, unsigned, irep2_hash> index;
-  for (unsigned i = 0; i < c.size(); i++)
-  {
-    expr2tc lit = literal(c[i], true);
-    index.emplace(lit, i);
-    assumptions.push_back(lit);
-  }
-  if (solve(assumptions, "relative-induction") == smt_resultt::P_SATISFIABLE)
-    return false;
-
-  core.clear();
-  for (const expr2tc &u : solver->unsat_assumptions())
-  {
-    auto it = index.find(u);
-    if (it != index.end())
-      core.push_back(c[it->second]);
-  }
-  std::sort(core.begin(), core.end());
-  return true;
+  return solve_with_cube(assumptions, c, true, "relative-induction", core) ==
+         smt_resultt::P_UNSATISFIABLE;
 }
 
 ts_pdrt::cubet
@@ -421,8 +432,10 @@ bool ts_pdrt::check_invariant(unsigned from_level)
 
   // A second solver, so the check does not rely on how frames were encoded.
   ts_pdrt fresh(ts, ns, *options_);
-  if (!fresh.build_bits() || !fresh.check_prefix())
+  // run() has already shown the prefix cannot fail.
+  if (!fresh.build_bits())
     return false;
+  fresh.assume_prefix();
   std::vector<expr2tc> cur, next;
   for (const cubet &c : cubes)
   {
