@@ -498,11 +498,16 @@ bool esbmc_parseoptionst::process_goto_program(
     // k-induction see them, and goto_check instruments the iteration the
     // summary keeps. The uninitialised-variable check would read the lambda's
     // unwritten elements, C has no lambda for --goto2c to print, and coverage
-    // and loop invariants are about the loop the summary removes.
+    // and loop invariants are about the loop the summary removes. A generated
+    // test replays the nondet calls the trace records, and the summary removes
+    // the ones inside the loop (#10821).
+    const bool generates_test = cmdline.isset("generate-testcase") ||
+                                cmdline.isset("generate-ctest-testcase") ||
+                                cmdline.isset("generate-pytest-testcase");
     if (
       !cmdline.isset("no-summarize-array-loops") &&
       !cmdline.isset("uninitialised-vars-check") && !cmdline.isset("goto2c") &&
-      !is_coverage && !cmdline.isset("loop-invariant") &&
+      !is_coverage && !generates_test && !cmdline.isset("loop-invariant") &&
       !cmdline.isset("loop-invariant-check") &&
       goto_array_loop_summary(
         goto_functions,
