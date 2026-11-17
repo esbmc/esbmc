@@ -317,3 +317,23 @@ TEST_CASE(
   REQUIRE(std::fabs(values[1] - 1) < 1e-15);
   REQUIRE(std::fabs(values[2] - 4) < 1e-15);
 }
+
+TEST_CASE("close spectra keep their computed values", "[dense_spectrum]")
+{
+  SECTION("symmetric eigenvalues a small gap apart stay apart")
+  {
+    const auto values = dense_spectrum::symmetric_eigenvalues(
+      {{1, 1e-10, 0}, {1e-10, 1 + 1e-9, 0}, {0, 0, 3}});
+    REQUIRE(values[1] - values[0] > 9e-10);
+    REQUIRE(std::fabs(values[0] + values[1] - (2 + 1e-9)) < 1e-15);
+  }
+  SECTION("a repeated singular value's computed plane reconstructs A")
+  {
+    const matrix a = {{4, 4, 1}, {-4, 2, 2}, {2, -4, 2}};
+    const auto system = dense_spectrum::singular_system_of(a, true);
+    REQUIRE(std::fabs(system.sigma[0] - system.sigma[1]) < 1e-12);
+    require_orthonormal(system.u);
+    require_orthonormal(system.v);
+    require_reconstructs(a, system);
+  }
+}
