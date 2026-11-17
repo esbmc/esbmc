@@ -305,3 +305,15 @@ TEST_CASE(
       dense_spectrum::complex_input_eigen_system("eig", a), std::runtime_error);
   }
 }
+
+TEST_CASE(
+  "symmetric_eigenvalues keeps a repeated eigenvalue's multiplicity",
+  "[dense_spectrum]")
+{
+  const auto values =
+    dense_spectrum::symmetric_eigenvalues({{2, 1, 1}, {1, 2, 1}, {1, 1, 2}});
+  REQUIRE(values.size() == 3);
+  REQUIRE(std::fabs(values[0] - 1) < 1e-15);
+  REQUIRE(std::fabs(values[1] - 1) < 1e-15);
+  REQUIRE(std::fabs(values[2] - 4) < 1e-15);
+}
