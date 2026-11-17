@@ -1,9 +1,10 @@
 # Scope: field-sensitive SSA in goto-symex (#7521)
 
-> **Status at 2026-11-16: Phase 0 merged (#10773); Phase 1 merged (#10778)
-> before its trace gate was met. A split whole-struct write now prints its
-> right-hand side, as master does, but the gate is still unmet where the
-> slicer drops what that right-hand side reads (§8.6).** The corpus is in `regression/field-sensitivity/`
+> **Status at 2026-11-17: Phase 0 merged (#10773); Phase 1 merged (#10778)
+> before its trace gate was met. #10802 makes a split whole-struct write print
+> its right-hand side, as master does, and hides that step where the slicer
+> dropped a definition the right-hand side reads; with it, every remaining
+> trace change is one §8.6 accepts (§8.6). SV-COMP not yet run.** The corpus is in `regression/field-sensitivity/`
 > with baselines, and the census has been run and reverted. Phase 1 adds
 > `--field-sensitive-ssa` (default off): symex gives each field of an
 > eligible local, parameter or return slot its own SSA name. It meets the 2x
@@ -561,12 +562,29 @@ or `struct_array_ite_new_index_fail`'s `nil`. The fix adds no difference.
 Like master, it also prints an unevaluated right-hand side such as
 `s = dynamic_1_value.in`.
 
-The gate is still unmet. The right-hand side can read a symbol defined only by
-a field step the slicer drops, and the model then leaves it free:
-`field_sensitive_ssa_print_sliced_rhs_fail` (KNOWNBUG) prints
-`s = { .a=0, .b=5 }` for `s = {nondet_int() | 1, nondet_int()}`, `.a=1` under
-`--no-slice`, where master prints no step for `s`. Two fixes, neither tried:
-the slicer keeps what a kept step's printed right-hand side reads, which grows
-the formula, or the trace prints `nil` for a value whose defining step was
-sliced.
+The right-hand side can also read a symbol defined only by a field step the
+slicer drops, and the model then leaves it free: for
+`s = {nondet_int() | 1, nondet_int()}` with only `s.b` read, the flag printed
+`s = { .a=0, .b=5 }` (`.a=1` under `--no-slice`), where master prints no step
+for `s`. Under the flag the slicer now hides a kept step whose printed
+right-hand side reads a definition it removed, as it already drops a branching
+step that reads one (#9884). A symbol with no defining step, such as a nondet
+field, is as free in the full formula and does not hide the step. Keeping the
+definitions instead would grow the formula. `field_sensitive_ssa_print_sliced_rhs_fail`
+pins it and fails without the change under Z3 and Bitwuzla.
+
+Measured on 2026-11-17, flag on, this change against #10802 without it,
+Bitwuzla, 30 s per run, output compared after dropping timings and witness
+uuids:
+
+| Suite | Tests with a verdict | Verdict changes | Output changes |
+|---|---|---|---|
+| C (`regression/esbmc`, `CORE`) | 3209 of 3332 | 0 | 5 hide a step: the new test, `github_1093` (`node = { .tag={ .pointer_object=nil, ... }, ... }`), `github_5393_array_member_fail` (`tmpl = { .a={ .pointer_object=nil, ... }, ... }`), `github_5393_array_member_dyn_offset_fail` (`tmpl = { .a = 0 }`, master `.a=5`); 3 timing or line order |
+| C++ (`esbmc-cpp/cpp`) | 1327 of 1355 | 0 | 1, k-induction-parallel line order |
+| Python, every 10th test | 870 of 927 | 0 | 2, pointer addresses in temporary names |
+| C, flag off | 3209 of 3332 | 0 | only the new test, which passes the flag |
+
+`repro7521`, 2048 vs 8 fields, symex seconds: 1.25-1.31 vs 0.84-0.85 (1.5x)
+under Z3 and 1.21-1.31 vs 0.84-0.86 (1.5x) under Bitwuzla, unchanged from
+before the change; slicing takes 0.01 s more. `local_writes` stays about 1.1x.
 

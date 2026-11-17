@@ -227,6 +227,27 @@ bool symex_slicet::reads_sliced(const expr2tc &expr)
   return sliced_reads[expr.get()];
 }
 
+bool symex_slicet::reads_sliced_definition(const expr2tc &expr) const
+{
+  // Worklist with a visited set: a renamed rhs can share subterms deeply.
+  std::unordered_set<const expr2t *> seen;
+  std::vector<const expr2tc *> worklist{&expr};
+  while (!worklist.empty())
+  {
+    const expr2tc &cur = *worklist.back();
+    worklist.pop_back();
+    if (is_nil_expr(cur) || !seen.insert(cur.get()).second)
+      continue;
+    if (
+      is_symbol2t(cur) &&
+      sliced_definitions.count(to_symbol2t(cur).get_symbol_name()))
+      return true;
+    cur->foreach_operand(
+      [&worklist](const expr2tc &op) { worklist.push_back(&op); });
+  }
+  return false;
+}
+
 void symex_slicet::run_on_assert(symex_target_equationt::SSA_stept &SSA_step)
 {
   scan_array_uses(SSA_step.guard);
@@ -301,6 +322,8 @@ void symex_slicet::run_on_assignment(
     // we don't really need it
     SSA_step.ignore = true;
     ++sliced;
+    if (hide_unconstrained_prints)
+      sliced_definitions.insert(to_symbol2t(SSA_step.lhs).get_symbol_name());
     log_debug(
       "slice",
       "slice ignoring assignment to symbol {}",
