@@ -433,25 +433,8 @@ smt_astt z3_convt::mk_bvneg(smt_astt a)
 
 smt_astt z3_convt::mk_bvnot(smt_astt a)
 {
-  if (int_encoding)
-  {
-    assert(a->sort->id == SMT_SORT_INT);
-    z3::expr a_expr = to_solver_smt_ast<z3_smt_ast>(a)->a;
-    // Get the signedbv bit-width
-    size_t bit_width = signed_size_type2()->get_width();
-    // Convert integer to bit-vector
-    z3::expr a_bv = z3::int2bv(bit_width, a_expr);
-    // Apply bitwise NOT (~x)
-    z3::expr not_bv = ~a_bv;
-    // Convert back to integer
-    z3::expr int_not = z3::bv2int(not_bv, true); // 'true' = signed conversion
-    return new_ast(int_not, mk_int_sort());
-  }
-  else
-  {
-    assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
-    return new_ast((~to_solver_smt_ast<z3_smt_ast>(a)->a), a->sort);
-  }
+  assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
+  return new_ast((~to_solver_smt_ast<z3_smt_ast>(a)->a), a->sort);
 }
 
 smt_astt z3_convt::mk_bvxor(smt_astt a, smt_astt b)
@@ -993,6 +976,9 @@ smt_astt z3_convt::mk_smt_fpbv_rm(ieee_floatt::rounding_modet rm)
   {
   case ieee_floatt::ROUND_TO_EVEN:
     return new_ast(z3::to_expr(z3_ctx, Z3_mk_fpa_rne(z3_ctx)), s);
+
+  case ieee_floatt::ROUND_TO_AWAY:
+    return new_ast(z3::to_expr(z3_ctx, Z3_mk_fpa_rna(z3_ctx)), s);
 
   case ieee_floatt::ROUND_TO_MINUS_INF:
     return new_ast(z3::to_expr(z3_ctx, Z3_mk_fpa_rtn(z3_ctx)), s);

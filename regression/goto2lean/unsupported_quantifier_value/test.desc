@@ -1,0 +1,4 @@
+CORE
+main.c
+--goto2lean
+^ERROR: goto2lean: unsupported quantifier used as a value \(only guards of ASSERT, ASSUME and GOTO\)$

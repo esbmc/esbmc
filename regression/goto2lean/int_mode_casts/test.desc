@@ -1,0 +1,6 @@
+CORE
+main.c
+--goto2lean --ir
+^  ∀ x : Int,$
+\(x != \(0 : Int\)\)
+then \(1 : Int\) else \(0 : Int\)

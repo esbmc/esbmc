@@ -1,0 +1,5 @@
+CORE
+main.py
+--unwind 7
+^VERIFICATION FAILED$
+FAILED .*line +8 +assertion seen == 3$

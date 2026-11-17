@@ -1,0 +1,5 @@
+CORE
+main.c
+
+^  assertion s\[i \+ 1\]\.a == 0$
+^VERIFICATION FAILED$

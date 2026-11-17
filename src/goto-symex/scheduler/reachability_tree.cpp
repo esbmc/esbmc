@@ -53,6 +53,8 @@ reachability_treet::reachability_treet(
     options.get_bool_option("cswitch-skip-readonly-globals");
   scan_program_writes();
   scan_address_taken();
+  split_structs.analyse(
+    goto_functions, ns, context, options, address_taken_locals);
 }
 
 /* Insert `name` into `out` if it names a storage-bearing user global. */
@@ -322,10 +324,20 @@ void reachability_treet::scan_address_taken()
     for (const auto &ins : f_it->second.body.instructions)
     {
       collect_address_taken(
-        ins.code, ns, address_taken_globals, address_taken_locals);
+        ins.code, ns, pointer_writable_globals, address_taken_locals);
       collect_address_taken(
-        ins.guard, ns, address_taken_globals, address_taken_locals);
+        ins.guard, ns, pointer_writable_globals, address_taken_locals);
     }
+
+  if (!readonly_global_opt)
+    return;
+  // Writing a const object is UB (C11 6.7.3p6), so no thread changes one. The
+  // pointer check reports such a write as "write access to const object".
+  for (auto it = pointer_writable_globals.begin();
+       it != pointer_writable_globals.end();)
+    it = dereferencet::is_const_static(*ns.lookup(*it))
+           ? pointer_writable_globals.erase(it)
+           : std::next(it);
 }
 
 void reachability_treet::setup_for_new_explore()

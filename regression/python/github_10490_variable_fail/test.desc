@@ -1,0 +1,5 @@
+CORE
+main.py
+--unwind 6 --no-unwinding-assertions
+\[f.assertion.1\] +line +9 +assertion
+^VERIFICATION FAILED$

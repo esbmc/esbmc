@@ -279,6 +279,9 @@ bool clang_c_convertert::get_decl(const clang::Decl &decl, exprt &new_expr)
   // C++20 concept definitions: clang evaluates the constraint at template
   // instantiation time, so the ConceptDecl itself has no runtime form.
   case clang::Decl::Concept:
+
+  // #pragma comment only passes directives to the linker (#2320).
+  case clang::Decl::PragmaComment:
     break;
 
   // We pretty much ignore this information, clang does the expansion for us.
@@ -1698,6 +1701,12 @@ bool clang_c_convertert::get_builtin_type(
   const clang::BuiltinType &bt,
   typet &new_type)
 {
+  if (auto it = builtin_types.find(bt.getKind()); it != builtin_types.end())
+  {
+    new_type = it->second;
+    return false;
+  }
+
   std::string c_type;
 
   switch (bt.getKind())
@@ -2126,6 +2135,7 @@ bool clang_c_convertert::get_builtin_type(
   }
 
   new_type.cpp_type(c_type);
+  builtin_types.emplace(bt.getKind(), new_type);
   return false;
 }
 
@@ -4322,6 +4332,114 @@ void clang_c_convertert::rewrite_builtin_ref(
   }
 }
 
+void clang_c_convertert::convert_derived_to_base(
+  exprt &expr,
+  const typet &type,
+  const clang::CXXBaseSpecifier *const *path_begin,
+  const clang::CXXBaseSpecifier *const *path_end,
+  bool checked,
+  bool operand_is_pure)
+{
+  // Route the derived->base conversion structurally through the nested
+  // base-subobject components ("@base@<id>") added by
+  // get_base_components_methods, rather than adjusting a byte offset. For a
+  // pointer we take the address of the subobject member; for an lvalue we
+  // select the subobject member directly. Multi-level bases chain one hop
+  // per CXXBaseSpecifier on the cast path. This is sound in ESBMC's
+  // dereference model (no char* arithmetic). See #1866, #3894.
+  bool routed = true;
+  exprt cur = expr;
+  const bool ptr_mode = cur.type().is_pointer();
+  for (auto it = path_begin; it != path_end; ++it)
+  {
+    const clang::CXXBaseSpecifier *spec = *it;
+    const clang::CXXRecordDecl *base_decl =
+      spec->getType()->getAsCXXRecordDecl();
+    // Virtual bases have a dynamic offset and no static @base@ subobject
+    // yet; fall back to the plain typecast (handled below).
+    if (spec->isVirtual() || !base_decl)
+    {
+      routed = false;
+      break;
+    }
+    std::string base_name, base_id;
+    get_decl_name(*base_decl, base_name, base_id);
+    const symbolt *base_sym = context.find_symbol(base_id);
+    if (!base_sym)
+    {
+      routed = false;
+      break;
+    }
+    const typet base_t = symbol_typet(base_sym->id);
+    const irep_idt comp = base_subobject_name(base_id);
+    // Only route structurally when the current class actually carries the
+    // nested subobject: a hierarchy containing a virtual base keeps the
+    // legacy flattened layout, so fall back to the plain typecast there.
+    const typet cur_struct =
+      ns.follow(ptr_mode ? cur.type().subtype() : cur.type());
+    if (
+      !cur_struct.is_struct() ||
+      !to_struct_type(cur_struct).has_component(comp))
+    {
+      routed = false;
+      break;
+    }
+    if (ptr_mode)
+    {
+      // dereference_exprt(op, tp) types the node tp.subtype(): tp is the
+      // pointer, not the pointee.
+      dereference_exprt deref(cur, cur.type());
+      member_exprt m(deref, comp, base_t);
+      cur = address_of_exprt(m);
+    }
+    else
+      cur = member_exprt(cur, comp, base_t);
+  }
+
+  if (routed)
+  {
+    // [conv.ptr]/3: a null pointer converts to a null pointer, not to the
+    // base subobject's offset from null. CK_UncheckedDerivedToBase only
+    // feeds member access, which is UB on null. A side-effecting operand is
+    // left unguarded rather than evaluated twice, as in
+    // clang_c_adjust::adjust_derived_to_base.
+    if (ptr_mode && checked && operand_is_pure)
+      cur = if_exprt(
+        equality_exprt(expr, gen_zero(expr.type())), gen_zero(cur.type()), cur);
+    expr = cur;
+    return;
+  }
+
+  // No @base@ path: the hierarchy kept the legacy flattened layout, where a
+  // non-primary base's members sit at a non-zero displacement inside the
+  // derived object. Left unadjusted, `this` in a base method addresses the
+  // derived object's leading storage instead (#7025). Padding is not in
+  // place until the adjust pass, so only mark the conversion here;
+  // clang_c_adjust::adjust_derived_to_base resolves the displacement and
+  // leaves the expression untouched when there is none.
+  // A chain of unchecked casts overwrites the marker on the same node rather
+  // than nesting, which is what we want: the unchecked fallback leaves the
+  // expression's type alone, so the surviving outermost marker names the
+  // final base and the displacement is computed in one hop.
+  const typet &base_t = type.is_pointer() ? type.subtype() : type;
+  if (base_t.id() == "symbol")
+    expr.set("#derived_to_base", base_t.identifier());
+
+  if (checked)
+    // Preserve prior fallback: CK_DerivedToBase always typecast;
+    // CK_UncheckedDerivedToBase was a no-op.
+    gen_typecast(ns, expr, type);
+}
+
+bool clang_c_convertert::get_base_to_derived_member_pointer(
+  const clang::CastExpr &,
+  exprt &expr,
+  const typet &type)
+{
+  expr = typecast_exprt(expr, type);
+  return false;
+}
+
 bool clang_c_convertert::get_cast_expr(
   const clang::CastExpr &cast,
   exprt &new_expr)
@@ -4383,103 +4501,14 @@ bool clang_c_convertert::get_cast_expr(
 
   case clang::CK_UncheckedDerivedToBase:
   case clang::CK_DerivedToBase:
-  {
-    // Route the derived->base conversion structurally through the nested
-    // base-subobject components ("@base@<id>") added by
-    // get_base_components_methods, rather than adjusting a byte offset. For a
-    // pointer we take the address of the subobject member; for an lvalue we
-    // select the subobject member directly. Multi-level bases chain one hop
-    // per CXXBaseSpecifier on the cast path. This is sound in ESBMC's
-    // dereference model (no char* arithmetic). See #1866, #3894.
-    bool routed = true;
-    exprt cur = expr;
-    const bool ptr_mode = cur.type().is_pointer();
-    for (auto it = cast.path_begin(); it != cast.path_end(); ++it)
-    {
-      const clang::CXXBaseSpecifier *spec = *it;
-      const clang::CXXRecordDecl *base_decl =
-        spec->getType()->getAsCXXRecordDecl();
-      // Virtual bases have a dynamic offset and no static @base@ subobject
-      // yet; fall back to the plain typecast (handled below).
-      if (spec->isVirtual() || !base_decl)
-      {
-        routed = false;
-        break;
-      }
-      std::string base_name, base_id;
-      get_decl_name(*base_decl, base_name, base_id);
-      const symbolt *base_sym = context.find_symbol(base_id);
-      if (!base_sym)
-      {
-        routed = false;
-        break;
-      }
-      const typet base_t = symbol_typet(base_sym->id);
-      const irep_idt comp = base_subobject_name(base_id);
-      // Only route structurally when the current class actually carries the
-      // nested subobject: a hierarchy containing a virtual base keeps the
-      // legacy flattened layout, so fall back to the plain typecast there.
-      const typet cur_struct =
-        ns.follow(ptr_mode ? cur.type().subtype() : cur.type());
-      if (
-        !cur_struct.is_struct() ||
-        !to_struct_type(cur_struct).has_component(comp))
-      {
-        routed = false;
-        break;
-      }
-      if (ptr_mode)
-      {
-        // dereference_exprt(op, tp) types the node tp.subtype(): tp is the
-        // pointer, not the pointee.
-        dereference_exprt deref(cur, cur.type());
-        member_exprt m(deref, comp, base_t);
-        cur = address_of_exprt(m);
-      }
-      else
-        cur = member_exprt(cur, comp, base_t);
-    }
-
-    if (routed)
-    {
-      // [conv.ptr]/3: a null pointer converts to a null pointer, not to the
-      // base subobject's offset from null. CK_UncheckedDerivedToBase only
-      // feeds member access, which is UB on null. A side-effecting operand is
-      // left unguarded rather than evaluated twice, as in
-      // clang_c_adjust::adjust_derived_to_base.
-      if (
-        ptr_mode && cast.getCastKind() == clang::CK_DerivedToBase &&
-        !cast.getSubExpr()->HasSideEffects(*ASTContext))
-        cur = if_exprt(
-          equality_exprt(expr, gen_zero(expr.type())),
-          gen_zero(cur.type()),
-          cur);
-      expr = cur;
-      break;
-    }
-
-    // No @base@ path: the hierarchy kept the legacy flattened layout, where a
-    // non-primary base's members sit at a non-zero displacement inside the
-    // derived object. Left unadjusted, `this` in a base method addresses the
-    // derived object's leading storage instead (#7025). Padding is not in
-    // place until the adjust pass, so only mark the conversion here;
-    // clang_c_adjust::adjust_derived_to_base resolves the displacement and
-    // leaves the expression untouched when there is none.
-    // A chain of unchecked casts overwrites the marker on the same node rather
-    // than nesting, which is what we want: the unchecked fallback leaves the
-    // expression's type alone, so the surviving outermost marker names the
-    // final base and the displacement is computed in one hop.
-    const typet &base_t = type.is_pointer() ? type.subtype() : type;
-    if (base_t.id() == "symbol")
-      expr.set("#derived_to_base", base_t.identifier());
-
-    if (cast.getCastKind() == clang::CK_DerivedToBase)
-      // Preserve prior fallback: CK_DerivedToBase always typecast;
-      // CK_UncheckedDerivedToBase was a no-op.
-      gen_typecast(ns, expr, type);
-
+    convert_derived_to_base(
+      expr,
+      type,
+      cast.path_begin(),
+      cast.path_end(),
+      cast.getCastKind() == clang::CK_DerivedToBase,
+      !cast.getSubExpr()->HasSideEffects(*ASTContext));
     break;
-  }
 
   case clang::CK_BaseToDerived:
   {
@@ -4543,6 +4572,10 @@ bool clang_c_convertert::get_cast_expr(
   // dereferences expr.op0() assuming a literal &Class::member operand, which
   // segfaults when the operand is a variable of member-pointer type.
   case clang::CK_BaseToDerivedMemberPointer:
+    if (get_base_to_derived_member_pointer(cast, expr, type))
+      return true;
+    break;
+
   case clang::CK_ReinterpretMemberPointer:
     expr = typecast_exprt(expr, type);
     break;
@@ -5924,10 +5957,24 @@ void clang_c_convertert::set_location(
     return;
   }
 
-  location.set_line(line);
-  location.set_file(filename);
-  location.set_column(column);
-  if (!function_name.empty())
+  // Share each field equal to the previous location's rather than build a
+  // fresh node per AST node (#10190).
+  auto reuse = [&](const char *field, bool same) {
+    if (same)
+      location.set(field, last_loc.find(field));
+    return same;
+  };
+  if (!reuse("line", last_loc_valid && line == last_loc_line))
+    location.set_line(line);
+  if (!reuse("file", last_loc_valid && last_loc_filename == filename))
+    location.set_file(filename);
+  auto [col, inserted] = column_nodes.try_emplace(column);
+  if (inserted)
+    col->second.id(std::to_string(column));
+  location.set("column", col->second);
+  if (
+    !function_name.empty() &&
+    !reuse("function", last_loc_valid && last_loc_function == function_name))
     location.set_function(function_name);
 
   last_loc = location;

@@ -1,5 +1,5 @@
 CORE
 main.c
---unwind 6
+--unwind 6 --no-pointer-arith-check
 ^VERIFICATION FAILED$
 array bounds violated

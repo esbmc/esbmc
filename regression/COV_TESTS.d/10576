@@ -1,0 +1,16 @@
+regression/ir-ra/github_10537_add_chain
+regression/ir-ra/github_10537_add_int_min
+regression/ir-ra/github_10537_bitnot_plus_int_min_fail
+regression/ir-ra/github_10537_char_wrap
+regression/ir-ra/github_10537_char_wrap_fail
+regression/ir-ra/github_10537_mul_chain
+regression/ir-ra/github_10537_multiplication
+regression/ir-ra/github_10537_narrowing_cast
+regression/ir-ra/github_10537_negation
+regression/ir-ra/github_10537_shift_left_fail
+regression/ir-ra/github_10537_signed_wrap
+regression/ir-ra/github_10537_sub_chain_fail
+regression/ir-ra/github_10537_unsigned_minus_one_fail
+regression/ir-ra/github_10537_unsigned_wrap
+regression/esbmc/github_2357_5
+regression/ir-ra/github_10537_pointer_chain

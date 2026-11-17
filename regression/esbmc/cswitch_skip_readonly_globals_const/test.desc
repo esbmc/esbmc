@@ -1,0 +1,5 @@
+CORE
+main.c
+--context-bound 3 --cswitch-skip-readonly-globals
+^Thread interleavings 7$(?![\s\S]*Thread interleavings)
+^VERIFICATION SUCCESSFUL$

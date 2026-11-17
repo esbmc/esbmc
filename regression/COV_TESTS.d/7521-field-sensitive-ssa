@@ -1,0 +1,9 @@
+regression/esbmc/field_sensitive_ssa_copy
+regression/esbmc/field_sensitive_ssa_copy_fail
+regression/esbmc/field_sensitive_ssa_trace_fail
+regression/esbmc/field_sensitive_ssa_members
+regression/esbmc/field_sensitive_ssa_threads
+regression/esbmc/field_sensitive_ssa_loop_clauses
+regression/esbmc/field_sensitive_ssa_all_witnesses
+regression/esbmc/field_sensitive_ssa_print_pointer
+regression/esbmc/field_sensitive_ssa_print_pointer_fail

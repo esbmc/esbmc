@@ -1,0 +1,5 @@
+CORE
+main.c
+--goto2lean --std c23
+^  let s := \(4#64\);$
+^  let b := \(4#64\);$

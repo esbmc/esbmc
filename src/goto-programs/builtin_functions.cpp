@@ -221,6 +221,44 @@ void goto_convertt::emit_assert_fail_noreturn(
   a->location.user_provided(true);
 }
 
+void goto_convertt::do_esbmc_assert(
+  const exprt &lhs,
+  const exprt &function,
+  const exprt::operandst &arguments,
+  goto_programt &dest,
+  const std::string &base_name)
+{
+  if (arguments.empty() || arguments.size() > 2)
+  {
+    log_error("`{}' expected to have one or two arguments", base_name);
+    abort();
+  }
+
+  const bool is_witness = base_name == "__ESBMC_witness_assert";
+  if (options.get_bool_option("no-assertions") && !is_witness)
+    return;
+
+  goto_programt::targett t = dest.add_instruction(ASSERT);
+  migrate_expr(arguments[0], t->guard);
+
+  std::string description;
+  if (arguments.size() == 1)
+    description = "ESBMC assertion";
+  else
+    get_string_constant(arguments[1], description);
+
+  t->location = function.location();
+  t->location.user_provided(!is_witness);
+  t->location.property(is_witness ? "witness-invariant" : "assertion");
+  t->location.comment(description);
+
+  if (lhs.is_not_nil())
+  {
+    log_error("{} expected not to have LHS", base_name);
+    abort();
+  }
+}
+
 void goto_convertt::do_assert_fail(
   const exprt &function,
   const exprt::operandst &arguments,
@@ -438,6 +476,18 @@ void goto_convertt::do_realloc(
   goto_programt &dest)
 {
   assert(arguments.size() == 2 && "realloc requires two arguments");
+
+  // `realloc(p, n);` with the result discarded still frees p on success.
+  if (lhs.is_nil())
+  {
+    const typet ptr_type = pointer_typet(empty_typet());
+    do_realloc(
+      symbol_exprt(new_tmp_symbol(ptr_type).id, ptr_type),
+      function,
+      arguments,
+      dest);
+    return;
+  }
 
   // Create a null pointer expression (workaround for missing
   // null_pointer_exprt)
@@ -1314,6 +1364,11 @@ static bool is_alloca_function(const std::string &base_name)
          base_name == "__ESBMC_alloca";
 }
 
+static bool is_esbmc_assert(const std::string &base_name)
+{
+  return base_name == "__ESBMC_assert" || base_name == "__ESBMC_witness_assert";
+}
+
 void goto_convertt::do_function_call_symbol(
   const exprt &lhs,
   const exprt &function,
@@ -1739,39 +1794,8 @@ void goto_convertt::do_function_call_symbol(
     assignment.location() = function.location();
     copy(assignment, ASSIGN, dest);
   }
-  else if (base_name == "__ESBMC_assert")
-  {
-    // 1 argument --> Default assertion
-    // 2 arguments --> Normal assertion + MSG
-    if (arguments.size() > 2)
-    {
-      log_error("`{}' expected to have two arguments", id2string(base_name));
-      abort();
-    }
-
-    if (options.get_bool_option("no-assertions"))
-      return;
-
-    goto_programt::targett t = dest.add_instruction(ASSERT);
-    migrate_expr(arguments[0], t->guard);
-
-    std::string description;
-    if (arguments.size() == 1)
-      description = "ESBMC assertion";
-    else
-      get_string_constant(arguments[1], description);
-
-    t->location = function.location();
-    t->location.user_provided(true);
-    t->location.property("assertion");
-    t->location.comment(description);
-
-    if (lhs.is_not_nil())
-    {
-      log_error("{} expected not to have LHS", id2string(base_name));
-      abort();
-    }
-  }
+  else if (is_esbmc_assert(base_name))
+    do_esbmc_assert(lhs, function, arguments, dest, base_name);
   else if (
     base_name == "__VERIFIER_error" || base_name == "reach_error" ||
     base_name == "__builtin_unreachable")

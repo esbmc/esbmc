@@ -1,6 +1,7 @@
 #pragma once
 
 #include <goto-symex/witness/witnesses.h>
+#include <map>
 #include <string>
 #include <vector>
 #include <yaml-cpp/yaml.h>
@@ -28,10 +29,12 @@ public:
   // with witness intrinsic calls inserted before each annotated line.
   // `#line` directives after each injection refer to `original_path` so that
   // Clang source locations point back to the real file.
+  // body_ends maps unbraced control-body start lines to exclusive end offsets.
   static std::string build_injected_source(
     const std::string &source_path,
     const std::string &original_path,
-    const std::vector<invariant> &invariants);
+    const std::vector<invariant> &invariants,
+    const std::map<size_t, size_t> &body_ends = {});
 
   // Reads the source file at `source_path` and returns a new source string
   // with `__ESBMC_witness_assume` calls injected before each assumption

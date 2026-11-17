@@ -1,0 +1,5 @@
+assert "ab".ljust(-1) == "ab"
+assert "ab".rjust(-1) == "ab"
+assert "ab".center(-1) == "ab"
+assert "ab".zfill(-1) == "ab"
+assert "ab".ljust(3) == "ab "

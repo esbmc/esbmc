@@ -1555,7 +1555,7 @@ void goto_convertt::rewrite_short_circuit_as_ternary(exprt &expr)
 
     // This is a hack for now. We need to solve this properly by
     // correctly tracking all locations through all GOTO transformations
-    op.location() = expr.location();
+    op.location() = short_circuit_operand(expr.location());
 
     if (!op.is_boolean())
     {
@@ -1584,7 +1584,6 @@ void goto_convertt::rewrite_short_circuit_as_ternary(exprt &expr)
   }
 
   expr.swap(tmp);
-  expr.location() = tmp.location();
 }
 
 void goto_convertt::remove_sideeffects(

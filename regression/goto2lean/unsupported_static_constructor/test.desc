@@ -1,0 +1,4 @@
+CORE
+main.cpp
+--goto2lean
+^ERROR: goto2lean: unsupported assertion in start-up code S \(static constructor or module code\)

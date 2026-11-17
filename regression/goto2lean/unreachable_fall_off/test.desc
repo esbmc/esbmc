@@ -1,0 +1,4 @@
+CORE
+main.c
+--goto2lean
+^    False →\n    ∀ result : BitVec 32, post result\)\);$

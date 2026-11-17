@@ -764,6 +764,37 @@ static bool is_vector_bitcast(const type2tc &from, const type2tc &to)
          !is_structure_type(from) && !is_structure_type(to);
 }
 
+/** The --ir leg of convert_bitcast to an integer type. Null when bits need
+ *  no reinterpreting in integer mode. */
+smt_astt smt_solver_baset::convert_int_mode_bitcast_to_bv(
+  const expr2tc &from,
+  const type2tc &to_type)
+{
+  if (!int_encoding)
+    return nullptr;
+
+  // Fixed- and floating-point values are real-encoded: cast by value.
+  if (is_fixedbv_type(from) || is_floatbv_type(from))
+    return convert_ast(typecast2tc(to_type, from));
+
+  const unsigned width = to_type->get_width();
+  if (
+    !is_bv_type(from) || from->type->get_width() != width ||
+    is_signedbv_type(from) == is_signedbv_type(to_type))
+    return nullptr;
+
+  // A typecast would keep the value; a bitcast reads the low bits, which
+  // SMT-LIB's Euclidean mod gives as an unsigned value.
+  smt_astt modulus = mk_smt_int(BigInt::power2(width));
+  smt_astt low_bits = mk_mod(convert_ast(from), modulus);
+  if (!is_signedbv_type(to_type))
+    return low_bits;
+  return mk_ite(
+    mk_ge(low_bits, mk_smt_int(BigInt::power2(width - 1))),
+    mk_sub(low_bits, modulus),
+    low_bits);
+}
+
 smt_astt smt_solver_baset::convert_bitcast(const expr2tc &expr)
 {
   assert(is_bitcast2t(expr));
@@ -801,10 +832,8 @@ smt_astt smt_solver_baset::convert_bitcast(const expr2tc &expr)
   }
   else if (is_bv_type(to_type))
   {
-    // Under integer encoding (--ir/--ir-ieee), fixed- and floating-point values
-    // are real-encoded; fall back to value-based typecast.
-    if (int_encoding && (is_fixedbv_type(from) || is_floatbv_type(from)))
-      return convert_ast(typecast2tc(to_type, from));
+    if (smt_astt int_mode = convert_int_mode_bitcast_to_bv(from, to_type))
+      return int_mode;
 
     if (is_floatbv_type(from))
       return fp_api->mk_from_fp_to_bv(convert_ast(from));

@@ -1,0 +1,5 @@
+CORE
+main.py
+--python-check-exceptions ZeroDivisionError --show-vcc
+^Starting Bounded Model Checking$
+^VERIFICATION CONDITIONS:$

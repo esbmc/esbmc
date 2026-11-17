@@ -74,8 +74,14 @@ public:
   preprocess_receiver_method_calls(bool inside_functions = false);
   void retype_methods_called_on_receivers();
   bool preprocess_self_method_calls();
+  void settle_self_method_calls();
   std::string self_call_arg_type(const Json &arg, const Json &caller);
   bool is_instance_call(const Json &func) const;
+  bool receiver_method_call(
+    const Json &node,
+    Json &receiver,
+    std::string &method,
+    Json &args) const;
   Json *class_method(const std::string &cls, const Json &method);
   /// Sentinel recorded for a call-site argument this pass cannot type; never
   /// a valid Python type name, so it can only block, never be annotated.
@@ -120,6 +126,7 @@ private:
   std::map<Json *, std::set<std::string>> constructor_arg_types_;
   std::set<Json *> constructor_typed_params_;
   void refuse_mixed_constructor_args() const;
+  void mark_mixed_constructor_classes();
   // Implementations live in annotation_conversion.inl unless noted.
 
   // ----- AST lookup and walk helpers -----
@@ -150,6 +157,7 @@ private:
   std::string get_type_from_lhs(const std::string &id, const Json &body);
   std::string get_list_subtype(const Json &list);
   std::string get_list_type_from_literal(const Json &list_arg);
+  std::string common_literal_element_type(const Json &value);
   std::string subscript_annotation_type(const Json &annotation);
   std::string
   container_literal_type(const std::string &base_type, const Json &value);
@@ -162,6 +170,7 @@ private:
   // lists (issue #5022). Returns "" when no append is found or the element
   // type does not resolve concretely (then the caller keeps the bare list).
   std::string recover_list_type_from_appends(const std::string &var_name);
+  std::string heap_list_type(const Json &body, const std::string &var_name);
   std::string bare_list_subscript_type(
     const Json &var_node,
     const std::string &var_name,
@@ -190,6 +199,13 @@ private:
 
   // The type every element of the literal in `[a, b, ...][i]` shares, or "Any".
   std::string subscript_type_from_list_literal(const Json &subscript_node);
+
+  // Whether @p body appends to the list @p name an item whose type is known
+  // and differs from @p element_type.
+  bool list_gains_other_type(
+    const std::string &name,
+    const std::string &element_type,
+    const Json &body);
   bool
   is_imported_name_in_body(const std::string &name, const Json &stmts) const;
   bool is_imported_name(const std::string &name) const;
@@ -207,12 +223,16 @@ private:
   std::string get_dict_literal_type(const Json &dict_value);
   std::string get_call_type(const Json &arg);
   std::string module_call_type(const Json &call);
+  std::string
+  specialised_call_type(const std::string &func_name, const Json &call);
+  std::string user_method_call_type(const Json &call);
   std::string get_attribute_type(const Json &arg);
   std::string class_attribute_type(
     const std::string &cls,
     const std::string &attr,
     bool constructed_only = false);
   std::string self_attribute_type(const Json &node);
+  bool argument_has_type(const Json &arg, const std::string &type);
   InferResult
   infer_self_attribute_copy(const Json &stmt, std::string &inferred_type);
   std::string get_operand_type(const Json &node);
@@ -231,6 +251,11 @@ private:
     const Json &body);
   bool is_array_operand(const Json &operand, const Json &body);
   std::string operand_annotation_type(const Json &decl);
+  std::string name_operand_type(const Json &name, const Json &body);
+  bool is_str_operation(
+    const Json &stmt,
+    const std::string &left_type,
+    const Json &body);
   std::string get_type_from_rhs_variable(const Json &element, const Json &body);
   bool holds_callable_value(const std::string &name) const;
   std::string get_type_from_call(const Json &element);
@@ -341,12 +366,23 @@ private:
     const std::string &class_name) const;
   std::string
   resolve_name_assigned_class(const std::string &name, const Json &node);
+  struct caller_scopet
+  {
+    std::string root;
+    std::string ctx;
+    std::string class_prefix;
+    bool in_lambda = false;
+  };
+  static caller_scopet
+  inner_scope(const Json &node, const caller_scopet &scope);
   void rewrite_specialized_calls(
     const std::string &original_name,
     size_t param_index,
     const std::unordered_map<std::string, std::string> &specialized_names,
-    Json &node);
+    Json &node,
+    const caller_scopet &scope);
   void apply_pending_specializations();
+  bool specialize_callees_of_copies();
   // Returns the ancestors of a class (including itself) in BFS order via
   // "bases". Handles multiple inheritance and cycle-safe (visited guard).
   // "object" is intentionally excluded — it has no ESBMC IR representation.
@@ -394,13 +430,6 @@ private:
   std::string infer_parameter_type_from_calls(
     size_t param_index,
     const std::vector<Json> &function_calls);
-  struct caller_scopet
-  {
-    std::string root;
-    std::string ctx;
-    std::string class_prefix;
-    bool in_lambda = false;
-  };
   std::string caller_arg_type(const Json &arg, const caller_scopet &scope);
   void collect_caller_arg_types(
     const std::string &callee,
@@ -411,7 +440,8 @@ private:
   std::vector<std::string> caller_arg_types(
     const std::string &func_name,
     size_t index,
-    const Json &search_context);
+    const Json &search_context,
+    const std::string &root);
   std::string infer_parameter_type_at_call_sites(
     const std::string &func_name,
     size_t param_index,
@@ -421,7 +451,8 @@ private:
     const std::string &func_name,
     size_t param_index,
     std::vector<std::string> &call_types,
-    const Json &search_context);
+    const Json &search_context,
+    const std::string &call_site_context);
   void infer_parameter_types(Json &function_element);
 
   // ----- top-level orchestration entry points -----
@@ -468,6 +499,8 @@ private:
   // re-entry means the self-reference is indirect (the returned name's binding
   // calls the function), which the return-expression scan cannot see.
   std::set<std::string> functions_reentered_;
+  // Functions whose per-call return type specialised_call_type is computing.
+  std::set<std::string> specialising_calls_;
   std::set<std::string> resolving_rhs_vars_;
   // Per (scope, name): the Optional[T] annotation of a name stored None and
   // one scalar type T, decided before any of its stores is annotated.

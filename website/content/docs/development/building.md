@@ -115,9 +115,8 @@ For Python, Solidity or IBEX support see
 brew install llvm@21 z3 boost cmake ninja python bison
 ```
 
-> [!NOTE] On macOS, `-DDOWNLOAD_DEPENDENCIES` must be combined with `-DLLVM_DIR`
-> so only the portable libraries are downloaded — the prebuilt LLVM/Z3 it would
-> otherwise fetch are Linux binaries.
+> [!NOTE] On macOS, `-DDOWNLOAD_DEPENDENCIES` downloads no LLVM. Without
+> `-DLLVM_DIR` it uses Homebrew's `llvm@22`.
 
 ### Get the source
 

@@ -334,9 +334,9 @@ class Decimal:
         # 0 / 0 = NaN
         if self._int == 0 and other._int == 0:
             return Decimal(0, 0, 0, 2)
-        # x / 0 = Inf
+        # CPython raises decimal.DivisionByZero, a ZeroDivisionError subclass
         if other._int == 0:
-            return Decimal(result_sign, 0, 0, 1)
+            raise ZeroDivisionError("division by zero")
         # Scale numerator by 10^28
         numerator: int = self._int
         i: int = 0
@@ -369,9 +369,9 @@ class Decimal:
         # 0 // 0 = NaN
         if self._int == 0 and other._int == 0:
             return Decimal(0, 0, 0, 2)
-        # x // 0 = Inf
+        # CPython raises decimal.DivisionByZero, a ZeroDivisionError subclass
         if other._int == 0:
-            return Decimal(result_sign, 0, 0, 1)
+            raise ZeroDivisionError("division by zero")
         # Align exponents
         self_int: int = self._int
         other_int: int = other._int

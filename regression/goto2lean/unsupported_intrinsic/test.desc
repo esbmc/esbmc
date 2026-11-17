@@ -1,0 +1,4 @@
+CORE
+main.c
+--goto2lean --enable-unreachability-intrinsic
+^ERROR: goto2lean: unsupported call to intrinsic __ESBMC_unreachable

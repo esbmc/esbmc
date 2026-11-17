@@ -484,6 +484,7 @@ protected:
   // if a class/struct has vptr component, it needs to be initialized in ctor
   bool has_vptr_component = false;
   std::string thunk_prefix = "thunk::";
+  std::string base_member_prefix = "base_member::";
   std::string vcall_prefix = "virtual_call::";
   using function_switch = std::map<irep_idt, exprt>;
   using switch_table = std::map<irep_idt, function_switch>;
@@ -783,6 +784,24 @@ protected:
   bool get_virtual_member_function_pointer(
     const clang::CXXMethodDecl &md,
     exprt &new_expr);
+  bool get_base_to_derived_member_pointer(
+    const clang::CastExpr &cast,
+    exprt &expr,
+    const typet &type) override;
+  /// Symbol, with argument symbols, of a function named after `method`.
+  symbolt make_forwarding_symbol(
+    const std::string &id,
+    const std::string &name_prefix,
+    const symbolt &method,
+    const type2tc &type);
+  /// Body of a function forwarding its arguments to `function`, with `this_arg`
+  /// in place of its own `this`; returns what `function` returns.
+  void set_forwarding_body(
+    symbolt &thunk_symb,
+    const exprt &function,
+    const exprt &this_arg,
+    const locationt &location);
+
   bool get_unary_operator_expr(
     const clang::UnaryOperator &uniop,
     exprt &new_expr) override;

@@ -125,6 +125,11 @@ static std::string resolve_user_solver_choice(const optionst &options)
   return solver_name;
 }
 
+bool solver_built_in(const std::string &name)
+{
+  return esbmc_solvers.count(name) > 0;
+}
+
 std::string effective_solver_name(const optionst &options)
 {
   std::string name = resolve_user_solver_choice(options);

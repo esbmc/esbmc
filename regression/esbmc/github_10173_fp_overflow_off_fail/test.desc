@@ -1,0 +1,5 @@
+CORE
+main.c
+--overflow-check --no-fp-conversion-check --no-fp-overflow-check --no-pointer-check --no-bounds-check --no-assertions
+^VERIFICATION FAILED$
+arithmetic overflow on add

@@ -19,8 +19,8 @@ public:
    * sub-expressions.
    *
    * The special token \result is emitted as symbol2tc(int64, "\\result").
-   * Integer constants are emitted as constant_int2tc(int64, N). Callers are
-   * responsible for retyping these nodes to the target type before use.
+   * Integer constants retain their C literal types. Callers are responsible
+   * for applying arithmetic conversions after substituting the result.
    *
    * @param expr The expression string to parse.
    * @return The parsed IRep2 expression, or a null expr2tc on parse error.

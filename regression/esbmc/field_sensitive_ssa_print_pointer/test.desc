@@ -1,0 +1,4 @@
+CORE
+main.c
+--field-sensitive-ssa --64
+^VERIFICATION SUCCESSFUL$

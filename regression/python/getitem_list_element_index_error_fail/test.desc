@@ -1,0 +1,5 @@
+CORE
+main.py
+--unwind 6 --no-unwinding-assertions
+^VERIFICATION FAILED$
+^\s+FAILED\s+\[__getitem__\.assertion\.\d+\]\s+line\s+6\s+uncaught exception: IndexError$

@@ -1,0 +1,5 @@
+CORE
+main.py
+--sv-comp --k-induction --max-inductive-step 3 --k-step 2 --unlimited-k-steps --python-check-exceptions AssertionError
+^Solution found by the forward condition; all states are reachable \(k = [13]\)$
+^VERIFICATION SUCCESSFUL$

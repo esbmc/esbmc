@@ -160,7 +160,8 @@ void python_annotation<Json>::rewrite_specialized_calls(
   const std::string &original_name,
   size_t param_index,
   const std::unordered_map<std::string, std::string> &specialized_names,
-  Json &node)
+  Json &node,
+  const caller_scopet &scope)
 {
   if (node.is_object())
   {
@@ -172,7 +173,8 @@ void python_annotation<Json>::rewrite_specialized_calls(
       node.contains("args") && node["args"].is_array() &&
       param_index < node["args"].size())
     {
-      std::string arg_type = get_argument_type(node["args"][param_index]);
+      // Typed in the caller's scope, as specializable_at_call_sites typed it.
+      std::string arg_type = caller_arg_type(node["args"][param_index], scope);
       if (
         arg_type.empty() && node["args"][param_index].contains("_type") &&
         node["args"][param_index]["_type"] == "Name" &&
@@ -188,15 +190,16 @@ void python_annotation<Json>::rewrite_specialized_calls(
         node["func"]["id"] = it->second;
     }
 
+    const caller_scopet inner = inner_scope(node, scope);
     for (auto it = node.begin(); it != node.end(); ++it)
       rewrite_specialized_calls(
-        original_name, param_index, specialized_names, it.value());
+        original_name, param_index, specialized_names, it.value(), inner);
   }
   else if (node.is_array())
   {
     for (auto &element : node)
       rewrite_specialized_calls(
-        original_name, param_index, specialized_names, element);
+        original_name, param_index, specialized_names, element, scope);
   }
 }
 
@@ -327,7 +330,7 @@ void python_annotation<Json>::apply_pending_specializations()
       insert_it, specialized_nodes.begin(), specialized_nodes.end());
 
     rewrite_specialized_calls(
-      func_name, param_index, specialized_names, ast_);
+      func_name, param_index, specialized_names, ast_, caller_scopet());
 
     if (deferred_none_functions_.count(func_name) != 0)
       for (Json &node : ast_["body"])
@@ -348,6 +351,46 @@ void python_annotation<Json>::apply_pending_specializations()
   }
 
   pending_specializations_.clear();
+}
+
+// A per-type copy passes its now-typed parameter on to top-level functions
+// whose parameters were inferred before the copy existed, and so stayed
+// untyped. Infer those again so the copies' calls specialize them in turn
+// (#10438). Returns whether a specialization is pending.
+template <class Json>
+bool python_annotation<Json>::specialize_callees_of_copies()
+{
+  for (Json &element : ast_["body"])
+  {
+    if (element.value("_type", "") != "FunctionDef")
+      continue;
+    const Json &params = element["args"]["args"];
+    if (std::all_of(params.begin(), params.end(), has_annotation))
+      continue;
+    current_func_name_context_ = element["name"].template get<std::string>();
+    current_func = &element;
+    infer_parameter_types(element);
+  }
+  current_func_name_context_.clear();
+  current_func = nullptr;
+  // A bool copy types `x + x` as bool rather than int, so such a callee is
+  // left untyped, where its arithmetic is refused rather than truncated. A
+  // function already copied is not copied again, which bounds the rounds.
+  pending_specializations_.erase(
+    std::remove_if(
+      pending_specializations_.begin(),
+      pending_specializations_.end(),
+      [&](const pending_specializationt &spec) {
+        return std::count(
+                 spec.class_types.begin(), spec.class_types.end(), "bool") ||
+               !json_utils::try_find_function(
+                  ast_["body"],
+                  build_specialized_function_name(
+                    spec.function_name, spec.class_types.front()))
+                  .empty();
+      }),
+    pending_specializations_.end());
+  return !pending_specializations_.empty();
 }
 
 // Returns the ancestors of a class (including itself) in BFS order via

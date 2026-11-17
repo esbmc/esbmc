@@ -265,7 +265,10 @@ public:
    *  @param expr Expression that we're asserting is true.
    *  @param msg Textual message explaining this assertion.
    */
-  void claim(const expr2tc &expr, const std::string &msg) override;
+  void claim(
+    const expr2tc &expr,
+    const std::string &msg,
+    bool user_assertion = false) override;
 
   /**
    *  Perform a jump across GOTO code.
@@ -850,7 +853,10 @@ public:
   schedule_execution_statet(const schedule_execution_statet &ref) = default;
   std::shared_ptr<execution_statet> clone() const override;
   ~schedule_execution_statet() override;
-  void claim(const expr2tc &expr, const std::string &msg) override;
+  void claim(
+    const expr2tc &expr,
+    const std::string &msg,
+    bool user_assertion = false) override;
   void note_bounded_loop_truncation() override
   {
     goto_symext::note_bounded_loop_truncation();

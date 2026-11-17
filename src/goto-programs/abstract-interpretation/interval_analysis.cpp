@@ -47,6 +47,33 @@ inline void optimize_expr_interval(expr2tc &expr, const interval_domaint &state)
   }
 }
 
+/// Whether goto_check would check arithmetic in \p expr for overflow.
+static bool has_checked_arithmetic(const expr2tc &expr)
+{
+  if (is_nil_expr(expr))
+    return false;
+  switch (expr->expr_id)
+  {
+  case expr2t::add_id:
+  case expr2t::sub_id:
+  case expr2t::mul_id:
+  case expr2t::div_id:
+  case expr2t::modulus_id:
+  case expr2t::neg_id:
+  case expr2t::abs_id:
+  case expr2t::shl_id:
+  case expr2t::ashr_id:
+  case expr2t::lshr_id:
+    return true;
+  default:
+    break;
+  }
+  bool found = false;
+  expr->foreach_operand(
+    [&found](const expr2tc &e) { found = found || has_checked_arithmetic(e); });
+  return found;
+}
+
 static void optimize_expression(expr2tc &expr, const interval_domaint &state)
 {
   // Preconditions
@@ -87,6 +114,15 @@ static void optimize_expression(expr2tc &expr, const interval_domaint &state)
     return;
   }
 
+  // goto_check adds its overflow claims after this pass, on the arithmetic
+  // itself: folding an expression that contains it would drop the claim.
+  if (interval_domaint::keep_checked_arithmetic && has_checked_arithmetic(expr))
+  {
+    expr->Foreach_operand(
+      [&state](expr2tc &e) { optimize_expression(e, state); });
+    return;
+  }
+
   if (interval_domaint::enable_wrapped_intervals)
     optimize_expr_interval<wrapped_interval>(expr, state);
   else
@@ -100,7 +136,8 @@ static void optimize_expression(expr2tc &expr, const interval_domaint &state)
 
 void optimize_function(
   const ait<interval_domaint> &interval_analysis,
-  goto_functiont &goto_function)
+  goto_functiont &goto_function,
+  bool preserve_branching)
 {
   // Inline optimizations
   Forall_goto_program_instructions (i_it, goto_function.body)
@@ -109,7 +146,9 @@ void optimize_function(
 
     // Singleton Propagation
     optimize_expression(i_it->code, d);
-    optimize_expression(i_it->guard, d);
+    // Replay needs the source branch even when its direction is known.
+    if (!preserve_branching || !i_it->is_goto())
+      optimize_expression(i_it->guard, d);
   }
 }
 
@@ -368,9 +407,13 @@ void instrument_loop_bounds_after_kind(
           if (!pre_it->inductive_step_instruction || !pre_it->is_assign())
             break;
           const code_assign2t &a = to_code_assign2t(pre_it->code);
+          // A havoc that applies only when the loop is entered is
+          // `x = flag ? NONDET : x` (#10154).
+          const expr2tc &source =
+            is_if2t(a.source) ? to_if2t(a.source).true_value : a.source;
           if (
-            is_symbol2t(a.target) && is_sideeffect2t(a.source) &&
-            to_sideeffect2t(a.source).kind == sideeffect2t::allockind::nondet)
+            is_symbol2t(a.target) && is_sideeffect2t(source) &&
+            to_sideeffect2t(source).kind == sideeffect2t::allockind::nondet)
             symbols.insert(a.target);
         } while (pre_it != f_it->second.body.instructions.begin());
       }
@@ -524,10 +567,10 @@ void interval_analysis(
     csv << oss.str();
   }
 
+  const bool preserve_branching =
+    options.get_bool_option("validate-violation-witness");
   Forall_goto_functions (f_it, goto_functions)
-  {
-    optimize_function(interval_analysis, f_it->second);
-  }
+    optimize_function(interval_analysis, f_it->second, preserve_branching);
 
   if (instrument_mode == INTERVAL_INSTRUMENTATION_MODE::LOOP_MODE)
     instrument_loops(interval_analysis, goto_functions);

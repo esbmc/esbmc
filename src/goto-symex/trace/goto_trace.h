@@ -95,11 +95,29 @@ public:
   };
   std::optional<accesst> racing_access;
 
+  /* The threads spawned since the previous step, in creation order: each
+   * thread's number, the spawning thread's, the spawning call, and how many
+   * of nondet_returns came before it. */
+  struct spawnt
+  {
+    unsigned thread_nr;
+    unsigned parent_nr;
+    accesst call;
+    size_t nondet_returns_before;
+  };
+  std::list<spawnt> spawns;
+
   /* The nondet calls made since the previous step, this one included: each
-   * call's ')' paired with the value it returned. A call nested in an
-   * expression returns into a hidden temporary with no step of its own, so a
-   * witness has nothing else to record it from (#9881). */
-  std::list<std::pair<locationt, expr2tc>> nondet_returns;
+   * call's ')', the value it returned and the thread that made it. A call
+   * nested in an expression returns into a hidden temporary with no step of
+   * its own, so a witness has nothing else to record it from (#9881). */
+  struct nondet_returnt
+  {
+    locationt rparen;
+    expr2tc value;
+    unsigned thread_nr;
+  };
+  std::list<nondet_returnt> nondet_returns;
 
   // for OUTPUT
   std::string format_string;
@@ -205,6 +223,10 @@ void generate_goto_trace_in_correctness_graphml_format(
   int &specification,
   const namespacet &ns,
   const goto_tracet &goto_trace);
+
+/// A trace value as text. Under --ir a bit-vector is not bounded by its width,
+/// so it is printed as the model's integer rather than wrapped by from_expr.
+std::string trace_value_string(const namespacet &ns, const expr2tc &value);
 
 void counterexample_value(
   std::ostream &out,

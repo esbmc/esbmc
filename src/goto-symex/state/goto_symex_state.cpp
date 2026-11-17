@@ -23,7 +23,6 @@ goto_symex_statet::goto_symex_statet(
 {
   use_value_set = true;
   num_instructions = 0;
-  cur_seg = 0;
   thread_ended = false;
   guard.make_true();
 }
@@ -51,9 +50,7 @@ goto_symex_statet &goto_symex_statet::operator=(const goto_symex_statet &state)
   no_propagation = state.no_propagation;
   call_stack = state.call_stack;
   witness_segs = state.witness_segs;
-  cur_seg = state.cur_seg;
-  witness_guard = state.witness_guard;
-  cycle_branch_map = state.cycle_branch_map;
+  witness_locations = state.witness_locations;
   return *this;
 }
 
@@ -385,6 +382,10 @@ bool goto_symex_statet::constant_propagation(const expr2tc &expr) const
 
   if (is_array_type(expr) && !array_may_propagate(expr))
     return false;
+
+  // One node however many elements it defines, so carrying it costs nothing.
+  if (is_array_lambda2t(expr))
+    return true;
 
   if (is_vector_type(expr))
     return true;
@@ -1126,6 +1127,13 @@ void goto_symex_statet::rename(expr2tc &expr, renamed_exprst &renamed)
     rename_type(expr);
     rename_quantified(expr, {});
   }
+  else if (is_array_lambda2t(expr))
+  {
+    rename_type(expr);
+    array_lambda2t &lambda = to_array_lambda2t(expr);
+    rename_quantified(lambda.body, {to_symbol2t(lambda.binder).thename});
+    top().level1.rename(lambda.binder);
+  }
   else
   {
     // Operands first, as in rename_type.
@@ -1346,11 +1354,4 @@ std::vector<stack_framet> goto_symex_statet::gen_stack_trace() const
   }
 
   return trace;
-}
-
-void goto_symex_statet::advance_witness_position()
-{
-  if (cur_seg < witness_segs.size())
-    ++cur_seg;
-  witness_guard = guard;
 }

@@ -1,0 +1,4 @@
+CORE
+main.py
+--goto2lean
+^ERROR: goto2lean: unsupported assertion in start-up code python_user_main \(static constructor or module code\)

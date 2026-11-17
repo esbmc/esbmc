@@ -4,6 +4,7 @@
 #include <unordered_set>
 #include <goto-symex/scheduler/execution_state.h>
 #include <goto-symex/engine/goto_symex.h>
+#include <goto-symex/scheduler/reachability_tree.h>
 #include <langapi/language_util.h>
 #include <util/arith/arith_tools.h>
 #include <util/expr/base_type.h>
@@ -516,10 +517,9 @@ bool goto_symext::symex_uninterpreted_function(
 // A local lives from entry to its block (C11 6.2.4p6), and a jump past its
 // declaration must not leave it naming the caller's instance or a global.
 // Its DECL may be gone as unreachable, as in `switch (k) { int y; ... }`.
-static void give_locals_fresh_instances(
+void goto_symext::give_locals_fresh_instances(
   const goto_functiont &goto_function,
-  goto_symex_statet &state,
-  goto_symex_statet::framet &frame)
+  goto_symex_statet::framet &frame) const
 {
   std::set<irep_idt> locals;
   get_local_identifiers(goto_function, locals);
@@ -527,8 +527,13 @@ static void give_locals_fresh_instances(
     if (instruction.type == DEAD)
       locals.insert(to_code_dead2t(instruction.code).value);
   for (const irep_idt &id : locals)
-    frame.level1.rename(
-      symbol2tc(get_empty_type(), id), ++state.variable_instance_nums[id]);
+  {
+    const unsigned n = ++cur_state->variable_instance_nums[id];
+    frame.level1.rename(symbol2tc(get_empty_type(), id), n);
+    if (const std::vector<expr2tc> *fields = split_fields(id))
+      for (const expr2tc &field : *fields)
+        frame.level1.rename(field, n);
+  }
 }
 
 void goto_symext::symex_function_call_code(const expr2tc &expr)
@@ -667,7 +672,7 @@ void goto_symext::symex_function_call_code(const expr2tc &expr)
   frame.level1 = cur_state->previous_frame().level1;
   frame.level1.thread_id = cur_state->source.thread_nr;
 
-  give_locals_fresh_instances(goto_function, *cur_state, frame);
+  give_locals_fresh_instances(goto_function, frame);
 
   frame.calling_location = cur_state->source;
   frame.entry_guard = cur_state->guard;
@@ -1117,6 +1122,12 @@ void goto_symext::pop_frame()
     if (is_python_gc_object(ns.lookup(it.base_name)))
       continue;
 
+    if (art1 && art1->split_structs.is_untracked_field(it.base_name))
+    {
+      cur_state->level2.retire(it);
+      continue;
+    }
+
     type2tc ptr = pointer_type2tc(pointer_type2());
     expr2tc l1_sym = symbol2tc(ptr, it.base_name);
     frame.level1.get_ident_name(l1_sym);
@@ -1155,7 +1166,7 @@ bool goto_symext::make_return_assignment(expr2tc &assign, const expr2tc &code)
 
   if (!is_nil_expr(ret.operand))
   {
-    expr2tc value = ret.operand;
+    expr2tc value = split_rewrite(ret.operand);
 
     dereference(value, dereferencet::READ);
 
@@ -1183,6 +1194,9 @@ bool goto_symext::make_return_assignment(expr2tc &assign, const expr2tc &code)
 
 void goto_symext::symex_return(const expr2tc &code)
 {
+  if (validate_witness && memory_leak_check && !no_reachable_memleak)
+    symex_witness_main_return();
+
   // we treat this like an unconditional
   // goto to the end of the function
 

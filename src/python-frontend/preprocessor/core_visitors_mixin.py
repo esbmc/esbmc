@@ -880,17 +880,32 @@ class CoreVisitorsMixin:
                 expected_args = self._params_without_implicit_self(qualified_name)
                 kwonly_args = self.functionKwonlyParams.get(qualified_name, [])
         elif isinstance(node.func, ast.Name):
-            func_name = node.func.id
-            init_name = f"{func_name}.__init__"
-            if init_name in self.functionParams:
-                function_name = init_name
-                expected_args = self._params_without_implicit_self(init_name)
-                kwonly_args = self.functionKwonlyParams.get(init_name, [])
-            elif func_name in self.functionParams:
-                function_name = func_name
-                expected_args = self.functionParams[func_name]
-                kwonly_args = self.functionKwonlyParams.get(func_name, [])
+            return self._resolve_name_signature(node.func.id)
         return function_name, expected_args, kwonly_args
+
+    def _resolve_name_signature(self, func_name):
+        """The signature a call by the name `func_name` binds to. A parameter of an enclosing
+        def holds a value of its own, so a call through it binds to no def (#10670)."""
+        init_name = f"{func_name}.__init__"
+        if func_name in self._enclosing_params:
+            return None, None, []
+        if init_name in self.functionParams:
+            return (init_name, self._params_without_implicit_self(init_name),
+                    self.functionKwonlyParams.get(init_name, []))
+        if func_name in self.functionParams:
+            return (func_name, self.functionParams[func_name],
+                    self.functionKwonlyParams.get(func_name, []))
+        return None, None, []
+
+    def _enter_param_scope(self, node):
+        """Add the parameters of the def `node` to `_enclosing_params`, returning the set to
+        restore on exit."""
+        saved = self._enclosing_params
+        self._enclosing_params = saved | {
+            a.arg
+            for a in ast.walk(node.args) if isinstance(a, ast.arg)
+        }
+        return saved
 
     @staticmethod
     def _iter_own_scope_nodes(scope_node):
@@ -1283,6 +1298,8 @@ class CoreVisitorsMixin:
     def _record_function_param_types(self, node):
         if node.returns is not None:
             self.function_return_annotations[node.name] = node.returns
+            self.function_return_annotations[self._build_qualified_function_name(
+                node)] = node.returns
         for arg in node.args.args:
             if arg.annotation is not None:
                 param_type = self._extract_type_from_annotation(arg.annotation)
@@ -1571,6 +1588,12 @@ class CoreVisitorsMixin:
     def _store_function_defaults(self, node, qualified_name):
         return_nodes = []
         is_method = "." in qualified_name
+        # A call in a function's default runs once, when the def runs (#10309).
+        # A method's default is hoisted past its class, where a call may not
+        # resolve, so it stays at the call site.
+        hoisted = (ast.Name, ast.List, ast.Dict, ast.Set)
+        if not is_method:
+            hoisted += (ast.Call, )
         for i in range(1, len(node.args.defaults) + 1):
             arg_index = len(node.args.args) - i
             if arg_index < 0:
@@ -1579,7 +1602,7 @@ class CoreVisitorsMixin:
             arg_name = node.args.args[-i].arg
             if isinstance(default_node, ast.Constant):
                 self.functionDefaults[(qualified_name, arg_name)] = default_node.value
-            elif isinstance(default_node, (ast.Name, ast.List, ast.Dict, ast.Set)):
+            elif isinstance(default_node, hoisted):
                 assignment_node, target_var = self.generate_variable_copy(
                     qualified_name, node.args.args[-i],
                     self.class_scope_default(default_node, node) if is_method else default_node)
@@ -1597,7 +1620,7 @@ class CoreVisitorsMixin:
             kwarg_name = node.args.kwonlyargs[i].arg
             if isinstance(default, ast.Constant):
                 self.functionDefaults[(qualified_name, kwarg_name)] = default.value
-            elif isinstance(default, (ast.Name, ast.List, ast.Dict, ast.Set)):
+            elif isinstance(default, hoisted):
                 assignment_node, target_var = self.generate_variable_copy(
                     qualified_name, node.args.kwonlyargs[i],
                     self.class_scope_default(default, node) if is_method else default)
@@ -2342,6 +2365,7 @@ class CoreVisitorsMixin:
         bound_method_scope = self._enter_bound_method_scope(node)
         saved_vararg_defs = self._enter_vararg_scope(node)
         saved_builtin_shadows = self._enter_builtin_shadow_scope(node)
+        saved_params = self._enter_param_scope(node)
         try:
             node = self._rewrite_humaneval_20_none_sentinel(node)
 
@@ -2385,5 +2409,6 @@ class CoreVisitorsMixin:
             self._assignment_call_origins = saved_call_origins
             self._eq_only_items_view_targets = saved_eq_only
             self._builtin_shadow_names = saved_builtin_shadows
+            self._enclosing_params = saved_params
             self._exit_bound_method_scope(bound_method_scope)
             self._exit_vararg_scope(node, saved_vararg_defs)

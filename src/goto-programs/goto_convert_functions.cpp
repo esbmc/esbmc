@@ -1158,7 +1158,9 @@ bool goto_convert_functionst::convert_native_rec(
       t->location = location;
     }
     goto_programt::targett v = tmp_branch.instructions.begin();
+    const bool operand = v->location.is_short_circuit_operand();
     v->location = location;
+    v->location.set_short_circuit_operand(operand);
 
     goto_programt tmp_y;
     goto_programt::targett y = tmp_y.add_instruction();
@@ -1515,6 +1517,8 @@ bool goto_convert_functionst::convert_native_rec(
             x->switch_case_ids.push_back(integer2string(val));
         }
     }
+
+    evaluate_unguarded_switch_value(argument, sw.location, tmp_cases);
 
     goto_programt::targett d_jump = tmp_cases.add_instruction();
     d_jump->make_goto(case_entry(

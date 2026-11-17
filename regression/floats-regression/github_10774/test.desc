@@ -1,0 +1,4 @@
+CORE
+main.c
+--interval-analysis --fixedbv --no-div-by-zero-check
+^VERIFICATION SUCCESSFUL$

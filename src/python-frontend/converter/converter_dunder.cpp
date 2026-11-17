@@ -1,8 +1,10 @@
 #include <python-frontend/python_converter.h>
+#include <python-frontend/exception/python_exception_handler.h>
 #include <python-frontend/python_expr_builder.h>
 #include <python-frontend/symbol_id.h>
 #include <python-frontend/type/type_handler.h>
 #include <python-frontend/json_utils.h>
+#include <python-frontend/model_path.h>
 #include <util/lang/c_types.h>
 #include <util/expr/expr_util.h>
 #include <util/lang/python_types.h>
@@ -35,7 +37,15 @@ std::string python_converter::op_to_dunder(const std::string &op)
 
 std::string python_converter::op_to_rdunder(const std::string &op)
 {
+  // A comparison's reflection is its mirrored comparison (Python data model,
+  // "Rich comparison methods").
   static const std::map<std::string, std::string> rdunder_map = {
+    {"Eq", "__eq__"},
+    {"NotEq", "__ne__"},
+    {"Lt", "__gt__"},
+    {"LtE", "__ge__"},
+    {"Gt", "__lt__"},
+    {"GtE", "__le__"},
     {"Add", "__radd__"},
     {"Sub", "__rsub__"},
     {"Mult", "__rmul__"},
@@ -66,6 +76,25 @@ symbolt *python_converter::find_dunder_method(
 
   return find_function_in_base_classes(
     class_name, sid.to_string(), dunder_name, false);
+}
+
+std::string python_converter::keyed_dunder_name(
+  const std::string &class_name,
+  const std::string &dunder,
+  const nlohmann::json &key_node)
+{
+  const std::string kind = type_handler_.get_operand_type(key_node);
+  if (kind != "str" && kind != "int")
+    return dunder;
+  const std::string variant =
+    dunder.substr(0, dunder.size() - 2) + "_" + kind + "__";
+  const symbolt *method = find_dunder_method(class_name, variant);
+  if (
+    !method ||
+    !model_path::in_models(
+      model_path::normalised(method->location.get_file().as_string())))
+    return dunder;
+  return variant;
 }
 
 std::string
@@ -133,8 +162,9 @@ attribute_writes(const nlohmann::json &node, const std::string &attr)
   return n;
 }
 
-// The class C when @p stmt is `self.attr = C(...)` with @p self as `self`.
-static std::string constructed_class(
+// The value @p stmt stores when it is `self.attr = value` with @p self as
+// `self`, else null.
+static nlohmann::json stored_value(
   const nlohmann::json &stmt,
   const std::string &self,
   const std::string &attr)
@@ -144,15 +174,11 @@ static std::string constructed_class(
                                    ? stmt["targets"][0]
                                  : kind == "AnnAssign" ? stmt["target"]
                                                        : nlohmann::json();
-  const nlohmann::json value = stmt.value("value", nlohmann::json());
   if (
     !target.is_object() || target.value("_type", "") != "Attribute" ||
-    target.value("attr", "") != attr ||
-    target["value"].value("id", "") != self || !value.is_object() ||
-    value.value("_type", "") != "Call" ||
-    value["func"].value("_type", "") != "Name")
-    return "";
-  return value["func"].value("id", "");
+    target.value("attr", "") != attr || target["value"].value("id", "") != self)
+    return nullptr;
+  return stmt.value("value", nlohmann::json());
 }
 
 // Whether @p node defines or stores to `__init__`.
@@ -176,10 +202,10 @@ static bool binds_init(const nlohmann::json &node)
          std::any_of(node.begin(), node.end(), binds_init);
 }
 
-// The class C when the `__init__` @p class_def binds last stores a new C to
-// `self.attr` at its top level before any return, else "".
-static std::string
-init_constructed_class(const nlohmann::json &class_def, const std::string &attr)
+// The value the `__init__` @p class_def binds last stores to `self.attr` at
+// its top level before any return, else null.
+static nlohmann::json
+init_stored_value(const nlohmann::json &class_def, const std::string &attr)
 {
   const nlohmann::json *init = nullptr;
   for (const auto &stmt : class_def["body"])
@@ -188,41 +214,53 @@ init_constructed_class(const nlohmann::json &class_def, const std::string &attr)
   if (
     !init || init->value("_type", "") != "FunctionDef" ||
     !(*init)["decorator_list"].empty() || (*init)["args"]["args"].empty())
-    return "";
+    return nullptr;
 
   const std::string self = (*init)["args"]["args"][0].value("arg", "");
   for (const auto &stmt : (*init)["body"])
   {
-    const std::string cls = constructed_class(stmt, self, attr);
-    if (!cls.empty() || contains_return(stmt))
-      return cls;
+    const nlohmann::json value = stored_value(stmt, self, attr);
+    if (!value.is_null() || contains_return(stmt))
+      return value;
   }
-  return "";
+  return nullptr;
 }
 
-/// The class of the instance `obj.attr` holds, when that is fixed: the only
-/// store to `attr` in the module is an unconditional `self.attr = C(...)` in
-/// the `__init__` of obj's class, and neither class has a subclass. A
-/// component's type is that of the first value stored, so it names the
-/// runtime class only then: None, a subclass instance, or an attribute set
-/// on some paths would be dispatched as a C instance.
-std::string
-python_converter::attribute_class_name(const nlohmann::json &attribute)
+/// The value `obj.attr` holds, when that is fixed: the only store to `attr`
+/// in the module is an unconditional `self.attr = value` in the `__init__` of
+/// obj's class, which has no subclass. Else null.
+nlohmann::json
+python_converter::fixed_attribute_value(const nlohmann::json &attribute)
 {
   if (python_file() != main_python_filename())
-    return "";
+    return nullptr;
   const std::string owner = instance_class_name(attribute["value"]);
   const std::string attr = attribute.value("attr", "");
-  const nlohmann::json &body = (*ast_json)["body"];
-  const nlohmann::json owner_def = json_utils::find_class(body, owner);
+  const nlohmann::json owner_def =
+    json_utils::find_class((*ast_json)["body"], owner);
   if (
     owner_def.empty() || json_utils::has_subclass(owner, *ast_json) ||
     attribute_writes(*ast_json, attr) != 1)
-    return "";
+    return nullptr;
+  return init_stored_value(owner_def, attr);
+}
 
-  const std::string cls = init_constructed_class(owner_def, attr);
+/// The class C of the instance `obj.attr` holds, when its fixed value is a
+/// new C and C has no subclass. A component's type is that of the first value
+/// stored, so it names the runtime class only then: None, a subclass
+/// instance, or an attribute set on some paths would be dispatched as a C
+/// instance.
+std::string
+python_converter::attribute_class_name(const nlohmann::json &attribute)
+{
+  const nlohmann::json value = fixed_attribute_value(attribute);
   if (
-    cls.empty() || json_utils::find_class(body, cls).empty() ||
+    !value.is_object() || value.value("_type", "") != "Call" ||
+    value["func"].value("_type", "") != "Name")
+    return "";
+  const std::string cls = value["func"].value("id", "");
+  if (
+    json_utils::find_class((*ast_json)["body"], cls).empty() ||
     json_utils::has_subclass(cls, *ast_json))
     return "";
   return cls;
@@ -465,6 +503,66 @@ void python_converter::retype_placeholder_to_class(
     sym.set_type(migrate_type(new_type));
 }
 
+// A value typed as a class that a constructor parameter also takes another
+// type for may hold that other type (#10326).
+bool python_converter::holds_mixed_constructor_arg(const exprt &operand)
+{
+  const typet t = resolve_operand_type(operand, symbol_table_, ns);
+  if (
+    !t.is_struct() || is_excluded_struct_tag(to_struct_type(t)) ||
+    !is_user_class_struct_type(t))
+    return false;
+  // A class of another module has no definition in this one.
+  const nlohmann::json cls =
+    json_utils::find_class((*ast_json)["body"], class_name_of(t));
+  return cls.is_object() && cls.value("_mixed_constructor_arg", false);
+}
+
+// Arithmetic on such a value: neither the class's operator methods nor the
+// other type's apply to every instance, and the value is stored at the class
+// type. Report it as unsupported and end the path. Nil when it is not one.
+// `str % value` formats rather than computes, so it is not refused.
+exprt python_converter::refuse_mixed_constructor_arg(
+  const std::string &op,
+  const exprt &lhs,
+  const exprt &rhs,
+  const locationt &loc)
+{
+  static const std::set<std::string> unary = {"USub", "UAdd", "Invert"};
+  if (
+    (rhs.is_nil() ? !unary.count(op) : type_utils::is_relational_op(op)) ||
+    (op == "Mod" && type_utils::is_string_type(lhs.type())) ||
+    !(holds_mixed_constructor_arg(lhs) || holds_mixed_constructor_arg(rhs)))
+    return nil_exprt();
+  const std::string message =
+    "Unsupported: arithmetic on a value whose class differs between "
+    "instances";
+  if (!can_emit_runtime_guard())
+    throw std::runtime_error(message);
+  end_path_as_unsupported(message, loc);
+  const typet &number =
+    holds_mixed_constructor_arg(lhs) ? rhs.type() : lhs.type();
+  return side_effect_expr_nondett(
+    number.is_signedbv() || number.is_floatbv()
+      ? number
+      : type_handler::python_int_typet());
+}
+
+void python_converter::end_path_as_unsupported(
+  const std::string &message,
+  const locationt &loc)
+{
+  // Not the constant false, which CFG cleanup reads as the end of the
+  // function and so drops the assume.
+  const exprt never = not_exprt(true_exprt());
+  code_assertt check(never);
+  check.location() = loc;
+  check.location().user_provided(true);
+  check.location().comment(message);
+  add_instruction(check);
+  add_instruction(code_assumet(never));
+}
+
 exprt python_converter::dispatch_dunder_operator(
   const std::string &op,
   exprt &lhs,
@@ -473,6 +571,11 @@ exprt python_converter::dispatch_dunder_operator(
 {
   typet lhs_type = resolve_operand_type(lhs, symbol_table_, ns);
   typet rhs_type = resolve_operand_type(rhs, symbol_table_, ns);
+  if (
+    exprt refused = refuse_mixed_constructor_arg(op, lhs, rhs, loc);
+    refused.is_not_nil())
+    return refused;
+  bool lhs_defines_dunder = false;
 
   // Try lhs.__add__(rhs)
   if (lhs_type.is_struct())
@@ -489,6 +592,7 @@ exprt python_converter::dispatch_dunder_operator(
         symbolt *method = find_dunder_method(class_name, dunder);
         if (method)
         {
+          lhs_defines_dunder = true;
           const code_typet &method_type = to_code_type(method->get_type());
           if (is_other_param_compatible(method_type, rhs_type, ns))
           {
@@ -504,8 +608,11 @@ exprt python_converter::dispatch_dunder_operator(
     }
   }
 
-  // fallback: try rhs.__radd__(lhs)
-  if (rhs_type.is_struct())
+  // fallback: try rhs.__radd__(lhs). An annotation mismatch does not stop
+  // Python calling a comparison method the left operand defines.
+  if (
+    rhs_type.is_struct() &&
+    !(lhs_defines_dunder && type_utils::is_relational_op(op)))
   {
     const struct_typet &rhs_struct = to_struct_type(rhs_type);
     std::string rhs_tag = rhs_struct.tag().as_string();
@@ -534,7 +641,167 @@ exprt python_converter::dispatch_dunder_operator(
     }
   }
 
-  return nil_exprt();
+  if (!lacks_binary_dunder(op, lhs, rhs))
+    return nil_exprt();
+  static const std::map<std::string, std::string> symbols = {
+    {"Add", "+"},
+    {"Sub", "-"},
+    {"Mult", "*"},
+    {"Div", "/"},
+    {"FloorDiv", "//"},
+    {"Mod", "%"}};
+  return get_exception_handler().gen_exception_raise(
+    "TypeError",
+    "unsupported operand type(s) for " + symbols.at(op) + ": '" +
+      type_handler_.get_python_type_name(lhs.type()) + "' and '" +
+      type_handler_.get_python_type_name(rhs.type()) + "'");
+}
+
+// A number goes by value to a number parameter, an int to an `Any` one.
+static exprt item_dunder_arg(const exprt &arg, const typet &param_type)
+{
+  const bool to_number =
+    is_number(param_type) ||
+    (param_type == any_type() &&
+     (arg.type().is_signedbv() || arg.type().is_unsignedbv()));
+  return is_number(arg.type()) && to_number ? typecast_exprt(arg, param_type)
+                                            : arg;
+}
+
+// `boxes[1][i]` or `self.data[i] = v`: the AST names no class for the
+// receiver, but its type does. A class instance must not be indexed as a list.
+std::optional<exprt> python_converter::dispatch_item_dunder_by_type(
+  const exprt &receiver,
+  const nlohmann::json &receiver_node,
+  const std::string &dunder,
+  const nlohmann::json &args)
+{
+  const typet t = resolve_operand_type(receiver, symbol_table_, ns);
+  if (
+    !t.is_struct() || is_excluded_struct_tag(to_struct_type(t)) ||
+    !is_user_class_struct_type(t))
+    return std::nullopt;
+  const std::string cls = class_name_of(t);
+  // The static type names the runtime class only when no subclass exists
+  // and an attribute holds a value on every path.
+  if (
+    json_utils::has_subclass(cls, *ast_json) ||
+    (receiver_node.value("_type", "") == "Attribute" &&
+     fixed_attribute_value(receiver_node).is_null()))
+    return std::nullopt;
+
+  const std::runtime_error unsupported(
+    "subscripting an instance of class '" + cls + "' is not supported here");
+  const symbolt *method = find_dunder_method(cls, dunder);
+  // Only the class body can give a plain class the method.
+  if (!method && is_plain_user_class(cls))
+    return get_exception_handler().gen_exception_raise(
+      "TypeError",
+      "'" + cls + "' object " +
+        (dunder == "__getitem__" ? "is not subscriptable"
+                                 : "does not support item assignment"));
+  if (!method || args[0].value("_type", "") == "Slice")
+    throw unsupported;
+  const code_typet &method_type = to_code_type(method->get_type());
+  const auto &params = method_type.arguments();
+  if (params.size() != args.size() + 1)
+    throw unsupported;
+
+  std::vector<exprt> call_args = {dunder_ref_arg(receiver)};
+  for (size_t k = 0; k < args.size(); ++k)
+  {
+    const typet &param_type = params[k + 1].type();
+    const exprt arg = item_dunder_arg(get_expr(args[k]), param_type);
+    if (ns.follow(arg.type()) != ns.follow(param_type))
+      throw unsupported;
+    call_args.push_back(arg);
+  }
+  exprt call = build_call_expr(*method, method_type.return_type(), call_args);
+  call.location() = get_location_from_decl(receiver_node);
+  return call;
+}
+
+static bool mentions_string(const nlohmann::json &node, const std::string &s)
+{
+  if (node.is_string())
+    return node.get<std::string>() == s;
+  return node.is_structured() &&
+         std::any_of(node.begin(), node.end(), [&](const nlohmann::json &c) {
+           return mentions_string(c, s);
+         });
+}
+
+// A top-level class of the main module, defined once, with no decorator or
+// metaclass, whose bases are all such classes: nothing but its own body can
+// give it an operator method.
+bool python_converter::is_plain_user_class(const std::string &class_name)
+{
+  const nlohmann::json &body = (*ast_json)["body"];
+  const auto defs =
+    std::count_if(body.begin(), body.end(), [&](const nlohmann::json &stmt) {
+      return stmt.value("_type", "") == "ClassDef" &&
+             stmt.value("name", "") == class_name;
+    });
+  if (defs != 1)
+    return false;
+  const nlohmann::json cls = json_utils::find_class(body, class_name);
+  if (
+    !cls.value("decorator_list", nlohmann::json::array()).empty() ||
+    !cls.value("keywords", nlohmann::json::array()).empty())
+    return false;
+  for (const auto &base : cls.value("bases", nlohmann::json::array()))
+  {
+    const std::string id = base.value("id", "");
+    if (
+      base.value("_type", "") != "Name" || id == class_name ||
+      !is_plain_user_class(id))
+      return false;
+  }
+  return true;
+}
+
+// CPython raises TypeError for `x op y` when neither x.__op__ nor y.__rop__
+// exists. Only decided for a plain user class against another one or a number:
+// a sequence operand can multiply by an instance's __index__, a NumPy array
+// broadcasts over it, and a builtin base brings its own operators.
+bool python_converter::lacks_binary_dunder(
+  const std::string &op,
+  const exprt &lhs,
+  const exprt &rhs)
+{
+  const std::string dunder = op_to_dunder(op);
+  if (dunder.empty() || type_utils::is_relational_op(op))
+    return false;
+
+  bool has_class = false;
+  for (const exprt *operand : {&lhs, &rhs})
+  {
+    const typet t = resolve_operand_type(*operand, symbol_table_, ns);
+    if (t.is_signedbv() || t.is_unsignedbv() || t.is_floatbv() || t.is_bool())
+      continue;
+    if (
+      !t.is_struct() || is_excluded_struct_tag(to_struct_type(t)) ||
+      !is_user_class_struct_type(t) || !is_plain_user_class(class_name_of(t)))
+      return false;
+    has_class = true;
+  }
+  if (!has_class)
+    return false;
+
+  // The method may be bound by a def, an assignment in a class body, a store
+  // to the class attribute, setattr, type() or exec; any mention bails out.
+  for (const std::string &name :
+       {dunder,
+        op_to_rdunder(op),
+        std::string("setattr"),
+        std::string("type"),
+        std::string("exec"),
+        std::string("eval"),
+        std::string("__dict__"),
+        std::string("__class__")})
+    if (mentions_string(*ast_json, name))
+      return false;
+  return true;
 }
 
 static void
@@ -582,6 +849,10 @@ exprt python_converter::dispatch_unary_dunder_operator(
 
   if (is_excluded_struct_tag(struct_type))
     return nil_exprt();
+  if (
+    exprt refused = refuse_mixed_constructor_arg(op, operand, nil_exprt(), loc);
+    refused.is_not_nil())
+    return refused;
 
   static const std::map<std::string, std::string> unary_dunder_map = {
     {"USub", "__neg__"},

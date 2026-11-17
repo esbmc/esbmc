@@ -2027,7 +2027,9 @@ void goto_convertt::convert_while(const codet &code, goto_programt &dest)
 
   // do the v label
   goto_programt::targett v = tmp_branch.instructions.begin();
+  const bool operand = v->location.is_short_circuit_operand();
   v->location = code.location();
+  v->location.set_short_circuit_operand(operand);
 
   // do the y label
   goto_programt tmp_y;
@@ -2252,6 +2254,8 @@ void goto_convertt::convert_switch(const codet &code, goto_programt &dest)
       }
   }
 
+  evaluate_unguarded_switch_value(argument, code.location(), tmp_cases);
+
   {
     goto_programt::targett d_jump = tmp_cases.add_instruction();
     d_jump->make_goto(
@@ -2267,6 +2271,21 @@ void goto_convertt::convert_switch(const codet &code, goto_programt &dest)
 
   // restore old targets
   old_targets.restore(targets);
+}
+
+// C11 6.8.4.2: the controlling expression is evaluated even when no case guard
+// reads it, so its checks (e.g. a NULL dereference) must still fire.
+void goto_convertt::evaluate_unguarded_switch_value(
+  const exprt &value,
+  const locationt &location,
+  goto_programt &dest)
+{
+  if (!targets.cases.empty())
+    return;
+
+  code_expressiont eval(value);
+  eval.location() = location;
+  copy(eval, OTHER, dest);
 }
 
 void goto_convertt::convert_break(const code_breakt &code, goto_programt &dest)
@@ -2672,8 +2691,7 @@ void goto_convertt::convert_ifthenelse(const codet &c, goto_programt &dest)
     code_ifthenelset new_if0, new_if1;
     new_if0.op0() = code.cond().op0();
     new_if1.op0() = code.cond().op1();
-    new_if0.location() = location;
-    new_if1.location() = location;
+    new_if0.location() = new_if1.location() = short_circuit_operand(location);
     new_if0.set("#short_circuit", true);
     new_if1.set("#short_circuit", true);
     new_if1.op1() = code.then_case();
@@ -2795,6 +2813,7 @@ void goto_convertt::generate_conditional_branch(
   // Splitting would leave the temporaries of a short-circuit operand alive
   // past the condition, which is one full-expression ([class.temporary]/4).
   const bool split = !has_destructible_sideeffect(guard);
+  const locationt operand = short_circuit_operand(location);
 
   if (split && guard.is_and())
   {
@@ -2812,7 +2831,7 @@ void goto_convertt::generate_conditional_branch(
     in_short_circuit = true;
     forall_expr_list (it, op)
       generate_conditional_branch(
-        boolean_negate(*it), target_false, location, dest);
+        boolean_negate(*it), target_false, operand, dest);
     in_short_circuit = outer_short_circuit;
 
     goto_programt::targett t_true = dest.add_instruction();
@@ -2837,7 +2856,7 @@ void goto_convertt::generate_conditional_branch(
     const bool outer_short_circuit = in_short_circuit;
     in_short_circuit = true;
     forall_expr_list (it, op)
-      generate_conditional_branch(*it, target_true, location, dest);
+      generate_conditional_branch(*it, target_true, operand, dest);
     in_short_circuit = outer_short_circuit;
 
     goto_programt::targett t_false = dest.add_instruction();

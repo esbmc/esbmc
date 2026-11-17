@@ -1,0 +1,2 @@
+regression/loop-invariants/loop_assigns_large_array_compliance
+regression/loop-invariants/loop_assigns_large_array_compliance_fail

@@ -1,0 +1,5 @@
+CORE
+main.c
+--unwind 21 --smtlib --output /dev/null
+^Generated [0-9]+ VCC\(s\), [1-9][0-9]* remaining after simplification
+^Solving with solver Text output$

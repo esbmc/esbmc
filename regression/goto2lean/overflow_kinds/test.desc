@@ -1,0 +1,12 @@
+CORE
+main.c
+--goto2lean --overflow-check --unsigned-overflow-check --no-div-by-zero-check
+^  ¬\(\(BitVec\.ssubOverflow x y\) = true\) ∧ \($
+^  ¬\(\(BitVec\.smulOverflow x y\) = true\) ∧ \($
+^  -- arithmetic overflow on div$
+^  -- arithmetic overflow on modulus$
+^  ¬\(\(BitVec\.sdivOverflow x y\) = true\) ∧ \($
+^  ¬\(\(x == BitVec\.intMin 32\) = true\) ∧ \($
+^  ¬\(\(BitVec\.usubOverflow a b\) = true\) ∧ \($
+^  ¬\(\(BitVec\.umulOverflow a b\) = true\) ∧ \($
+^  ¬\(\(a != 0#32\) = true\) ∧ \($

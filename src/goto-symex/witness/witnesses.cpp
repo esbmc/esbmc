@@ -108,8 +108,15 @@ void yamlt::generate_yaml(
   const std::string &output_path_override)
 {
   YAML::Emitter yaml_emitter;
+  /* An absent thread_id means thread 0, so the two racing targets would both
+     claim the main thread. Format 2.4 is the first to allow `thread_id: any`
+     on a target (#10747); 2.1 has no thread_id at all. */
   if (this->witness_type == yamlt::VIOLATION)
-    create_violation_yaml_emitter(this->verified_file, options, yaml_emitter);
+    create_violation_yaml_emitter(
+      this->verified_file,
+      options,
+      yaml_emitter,
+      racing_target || thread_ids ? "2.4" : "2.1");
   else
     create_correctness_yaml_emitter(this->verified_file, options, yaml_emitter);
 
@@ -122,9 +129,11 @@ void yamlt::generate_yaml(
       yaml_emitter << YAML::BeginMap;
       yaml_emitter << YAML::Key << "segment" << YAML::Value << YAML::BeginSeq;
 
-      create_waypoint(waypoint, yaml_emitter);
-      if (racing_target && &waypoint == &this->segments.back())
-        create_waypoint(*racing_target, yaml_emitter);
+      const bool race_segment =
+        racing_target && &waypoint == &this->segments.back();
+      create_waypoint(waypoint, yaml_emitter, race_segment);
+      if (race_segment)
+        create_waypoint(*racing_target, yaml_emitter, true);
 
       yaml_emitter << YAML::EndSeq;
       yaml_emitter << YAML::EndMap;
@@ -193,7 +202,10 @@ std::string trim(const std::string &str)
   return str.substr(first_non_whitespace, length);
 }
 
-void create_waypoint(const waypoint &wp, YAML::Emitter &waypoint)
+void create_waypoint(
+  const waypoint &wp,
+  YAML::Emitter &waypoint,
+  bool any_thread)
 {
   waypoint << YAML::BeginMap;
   waypoint << YAML::Key << "waypoint" << YAML::Value << YAML::BeginMap;
@@ -204,6 +216,9 @@ void create_waypoint(const waypoint &wp, YAML::Emitter &waypoint)
   else if (wp.type == waypoint::assumption)
     waypoint << YAML::Key << "type" << YAML::Value << YAML::DoubleQuoted
              << "assumption";
+  else if (wp.type == waypoint::function_enter)
+    waypoint << YAML::Key << "type" << YAML::Value << YAML::DoubleQuoted
+             << "function_enter";
   else if (wp.type == waypoint::function_return)
     waypoint << YAML::Key << "type" << YAML::Value << YAML::DoubleQuoted
              << "function_return";
@@ -252,6 +267,11 @@ void create_waypoint(const waypoint &wp, YAML::Emitter &waypoint)
   waypoint << YAML::Key << "function" << YAML::Value << YAML::DoubleQuoted
            << wp.function;
   waypoint << YAML::EndMap;
+
+  if (any_thread)
+    waypoint << YAML::Key << "thread_id" << YAML::Value << "any";
+  else if (wp.thread_nr != 0)
+    waypoint << YAML::Key << "thread_id" << YAML::Value << wp.thread_nr;
 
   waypoint << YAML::EndMap;
   waypoint << YAML::EndMap;
@@ -827,11 +847,12 @@ static std::string yaml_specification(const optionst &options)
 void _create_yaml_metadata_emitter(
   const std::string &verifiedfile,
   const optionst &options,
-  YAML::Emitter &metadata)
+  YAML::Emitter &metadata,
+  const std::string &format_version = "2.1")
 {
   metadata << YAML::BeginMap;
   metadata << YAML::Key << "format_version" << YAML::Value << YAML::DoubleQuoted
-           << "2.1";
+           << format_version;
 
   std::string uuid =
     boost::uuids::to_string(boost::uuids::random_generator()());
@@ -949,7 +970,8 @@ void create_correctness_yaml_emitter(
 void create_violation_yaml_emitter(
   std::string &verifiedfile,
   optionst &options,
-  YAML::Emitter &root)
+  YAML::Emitter &root,
+  const std::string &format_version)
 {
   root << YAML::BeginSeq;
   root << YAML::BeginMap;
@@ -957,7 +979,7 @@ void create_violation_yaml_emitter(
        << "violation_sequence";
 
   root << YAML::Key << "metadata";
-  _create_yaml_metadata_emitter(verifiedfile, options, root);
+  _create_yaml_metadata_emitter(verifiedfile, options, root, format_version);
 }
 
 void check_replace_invalid_assignment(std::string &assignment)
@@ -1068,15 +1090,18 @@ BigInt get_line_number(
   return line_count;
 }
 
-std::optional<locationt> nondet_call_rparen(const locationt &call)
+/* The source lines of @p call's file, with @p line and @p column set to where
+   @p call starts in them, 0-based; null when there is no such position. */
+static const std::vector<std::string> *
+source_at(const locationt &call, size_t &line, size_t &column)
 {
   // One cached copy per source file, never freed; witnesses read few files.
   static std::unordered_map<std::string, std::vector<std::string>> files;
   const std::string file = call.get_file().as_string();
-  const size_t line = std::atoi(call.get_line().c_str());
-  const size_t column = std::atoi(call.get_column().c_str());
+  line = std::atoi(call.get_line().c_str());
+  column = std::atoi(call.get_column().c_str());
   if (file.empty() || line == 0 || column == 0)
-    return std::nullopt;
+    return nullptr;
   auto [it, fresh] = files.try_emplace(file);
   if (fresh)
   {
@@ -1086,29 +1111,94 @@ std::optional<locationt> nondet_call_rparen(const locationt &call)
   }
   const std::vector<std::string> &lines = it->second;
   if (line > lines.size() || column > lines[line - 1].size())
+    return nullptr;
+  --line;
+  --column;
+  return &lines;
+}
+
+static locationt moved_to(const locationt &call, size_t line, size_t column)
+{
+  locationt l = call;
+  l.set_line(line + 1);
+  l.set_column(column + 1);
+  return l;
+}
+
+std::optional<locationt> nondet_call_rparen(const locationt &call)
+{
+  size_t line, column;
+  const std::vector<std::string> *lines = source_at(call, line, column);
+  if (lines == nullptr)
     return std::nullopt;
 
   static const std::regex head(R"(^\w*nondet\w*\s*\()");
   std::smatch m;
-  const std::string rest = lines[line - 1].substr(column - 1);
+  const std::string rest = (*lines)[line].substr(column);
   if (!std::regex_search(rest, m, head))
     return std::nullopt;
 
   // The calls take no arguments: the ')' is the next non-blank character.
-  size_t c = column - 1 + m.length(0);
-  for (size_t l = line - 1; l < lines.size(); ++l, c = 0)
+  size_t c = column + m.length(0);
+  for (size_t l = line; l < lines->size(); ++l, c = 0)
   {
-    const size_t p = lines[l].find_first_not_of(" \t", c);
+    const size_t p = (*lines)[l].find_first_not_of(" \t", c);
     if (p == std::string::npos)
       continue;
-    if (lines[l][p] != ')')
+    if ((*lines)[l][p] != ')')
       return std::nullopt;
-    locationt rparen = call;
-    rparen.set_line(l + 1);
-    rparen.set_column(p + 1);
-    return rparen;
+    return moved_to(call, l, p);
   }
   return std::nullopt;
+}
+
+/* The line and column of the ')' that closes a '(' just before @p column on
+   @p line, skipping literals. A comment could hold either, so give up on one.
+ */
+static std::optional<std::pair<size_t, size_t>>
+closing_paren(const std::vector<std::string> &lines, size_t line, size_t column)
+{
+  size_t depth = 1;
+  char quote = 0;
+  for (size_t l = line, c = column; l < lines.size(); ++l, c = 0)
+    for (; c < lines[l].size(); ++c)
+    {
+      const char ch = lines[l][c];
+      const char next = c + 1 < lines[l].size() ? lines[l][c + 1] : 0;
+      if (quote)
+      {
+        c += ch == '\\';
+        quote = ch == quote ? 0 : quote;
+      }
+      else if (ch == '"' || ch == '\'')
+        quote = ch;
+      else if (ch == '/' && (next == '/' || next == '*'))
+        return std::nullopt;
+      else if (ch == '(')
+        ++depth;
+      else if (ch == ')' && --depth == 0)
+        return std::make_pair(l, c);
+    }
+  return std::nullopt;
+}
+
+std::optional<locationt> call_rparen(const locationt &call)
+{
+  size_t line, column;
+  const std::vector<std::string> *lines = source_at(call, line, column);
+  if (lines == nullptr)
+    return std::nullopt;
+
+  static const std::regex head(R"(^(?:\(\s*void\s*\)\s*)?\w+\s*\()");
+  std::smatch m;
+  const std::string rest = (*lines)[line].substr(column);
+  if (!std::regex_search(rest, m, head))
+    return std::nullopt;
+
+  const auto rparen = closing_paren(*lines, line, column + m.length(0));
+  if (!rparen)
+    return std::nullopt;
+  return moved_to(call, rparen->first, rparen->second);
 }
 
 std::string read_line(std::string file, BigInt line_number)
@@ -1632,6 +1722,37 @@ static void collect_nondet_bytes(
   }
 }
 
+using off_trace_mapt =
+  std::unordered_map<std::string, const goto_programt::instructiont *>;
+
+// A store through a pointer with several targets makes one step per target;
+// the one the trace takes is the input (#10315). A step at another instruction
+// that reads an off-trace nondet, e.g. the phi after an untaken branch, does
+// not emit it. Returns whether the step is on the trace.
+static bool track_on_trace(
+  const symex_target_equationt::SSA_stept &step,
+  const std::vector<expr2tc> &nondets,
+  smt_convt &smt_conv,
+  off_trace_mapt &off_trace,
+  std::unordered_set<std::string> &seen_nondets)
+{
+  const goto_programt::instructiont *const pc = &*step.source.pc;
+  const bool on_trace = smt_conv.l_get(step.guard).is_true();
+  for (const expr2tc &nondet_expr : nondets)
+  {
+    const std::string &name = to_symbol2t(nondet_expr).thename.as_string();
+    if (!on_trace)
+    {
+      off_trace.emplace(name, pc);
+      continue;
+    }
+    const auto it = off_trace.find(name);
+    if (it != off_trace.end() && it->second != pc)
+      seen_nondets.insert(name);
+  }
+  return on_trace;
+}
+
 // Shared nondet collection logic (used by both TestComp and CTest)
 std::vector<collected_nondet_value> collect_nondet_values(
   const symex_target_equationt &target,
@@ -1640,6 +1761,7 @@ std::vector<collected_nondet_value> collect_nondet_values(
 {
   std::vector<collected_nondet_value> results;
   std::unordered_set<std::string> seen_nondets;
+  off_trace_mapt off_trace;
 
   for (auto const &SSA_step : target.SSA_steps)
   {
@@ -1653,12 +1775,13 @@ std::vector<collected_nondet_value> collect_nondet_values(
       if (nondets.empty())
         continue;
 
+      if (!track_on_trace(SSA_step, nondets, smt_conv, off_trace, seen_nondets))
+        continue;
+
       const std::string file_path =
         SSA_step.source.pc->location.file().as_string();
-      const bool reached = smt_conv.l_get(SSA_step.guard).is_true();
-
       if (
-        reached && harness_inputs_only &&
+        harness_inputs_only &&
         SSA_step.source.pc->location.function() == "__VERIFIER_nondet_memory" &&
         file_operations::is_bundled_source(file_path))
       {
@@ -1672,7 +1795,6 @@ std::vector<collected_nondet_value> collect_nondet_values(
       }
 
       const bool is_input =
-        reached &&
         // Nondet initialisation of an uninitialised local (inserted by
         // mark_decl_as_non_det) is not a program input: the test harness
         // only feeds values to __VERIFIER_nondet_*() calls, so emitting it

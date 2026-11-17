@@ -1,0 +1,4 @@
+CORE
+main.py
+--sv-comp --python-check-exceptions AssertionError --unwind 5 --no-unwinding-assertions
+^VERIFICATION FAILED$

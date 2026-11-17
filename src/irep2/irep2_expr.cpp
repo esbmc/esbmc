@@ -979,6 +979,8 @@ std::string capability_top2t::field_names[esbmct::num_type_fields] =
   {"value", "", "", "", ""};
 std::string forall2t::field_names[esbmct::num_type_fields] =
   {"symbol", "predicate", "", "", ""};
+std::string array_lambda2t::field_names[esbmct::num_type_fields] =
+  {"binder", "body", "", "", ""};
 std::string exists2t::field_names[esbmct::num_type_fields] =
   {"symbol", "predicate", "", "", ""};
 std::string isinstance2t::field_names[esbmct::num_type_fields] =
