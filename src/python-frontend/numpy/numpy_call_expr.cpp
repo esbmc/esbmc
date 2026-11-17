@@ -1117,6 +1117,19 @@ static bool has_complex(const std::vector<scalar_value> &values)
   return false;
 }
 
+static dense_spectrum::complex_matrix
+complex_matrix_of(const std::vector<std::vector<scalar_value>> &matrix)
+{
+  dense_spectrum::complex_matrix out;
+  for (const auto &row : matrix)
+  {
+    out.emplace_back();
+    for (const auto &value : row)
+      out.back().push_back(value.value);
+  }
+  return out;
+}
+
 static bool has_complex(const std::vector<std::vector<scalar_value>> &values)
 {
   for (const auto &row : values)
@@ -6260,7 +6273,7 @@ static dense_spectrum::complex_vector as_complex(const std::vector<double> &v)
 // sum_j a_ij im_j - lr im_i - li re_i, and its magnitude is at most the sum
 // of theirs.
 static eigen_bounds pair_bounds(
-  const std::vector<std::vector<double>> &m,
+  const dense_spectrum::complex_matrix &m,
   std::complex<double> lambda,
   double value_radius,
   const dense_spectrum::complex_vector &v,
@@ -6275,8 +6288,11 @@ static eigen_bounds pair_bounds(
     std::vector<std::vector<box_factor>> re, im;
     for (std::size_t j = 0; j < m.size(); ++j)
     {
-      re.push_back({{m[i][j], 0.0}, {v[j].real(), r}});
-      im.push_back({{m[i][j], 0.0}, {v[j].imag(), r}});
+      const double ar = m[i][j].real(), ai = m[i][j].imag();
+      re.push_back({{ar, 0.0}, {v[j].real(), r}});
+      re.push_back({{-ai, 0.0}, {v[j].imag(), r}});
+      im.push_back({{ar, 0.0}, {v[j].imag(), r}});
+      im.push_back({{ai, 0.0}, {v[j].real(), r}});
     }
     re.push_back({{-lr, value_radius}, {v[i].real(), r}});
     re.push_back({{li, value_radius}, {v[i].imag(), r}});
@@ -6289,6 +6305,26 @@ static eigen_bounds pair_bounds(
   }
   bounds.norm = implied_bound(squares, 1.0);
   return bounds;
+}
+
+static dense_spectrum::complex_matrix
+as_complex_matrix(const std::vector<std::vector<double>> &m)
+{
+  dense_spectrum::complex_matrix out;
+  for (const auto &row : m)
+    out.emplace_back(row.begin(), row.end());
+  return out;
+}
+
+static eigen_bounds pair_bounds(
+  const std::vector<std::vector<double>> &m,
+  std::complex<double> lambda,
+  double value_radius,
+  const dense_spectrum::complex_vector &v,
+  double vector_radius)
+{
+  return pair_bounds(
+    as_complex_matrix(m), lambda, value_radius, v, vector_radius);
 }
 
 static exprt conjugate(const exprt &z);
@@ -6358,6 +6394,15 @@ numpy_call_expr::eigenvalue_pair(const std::vector<std::vector<double>> &m)
   return {if_exprt(swap, both[1], both[0]), if_exprt(swap, both[0], both[1])};
 }
 
+static bool is_symmetric(const std::vector<std::vector<double>> &m)
+{
+  for (std::size_t i = 0; i < m.size(); ++i)
+    for (std::size_t j = 0; j < i; ++j)
+      if (m[i][j] != m[j][i])
+        return false;
+  return true;
+}
+
 // NumPy returns complex eigenvalues, from LAPACK's dgeev: a diagonal matrix
 // keeps its entries, in order, and a triangular one has its diagonal in
 // some order.
@@ -6384,6 +6429,8 @@ exprt numpy_call_expr::eigenvalues(const std::vector<std::vector<double>> &m)
     if (!is_diagonal(m))
       values = in_any_order(values);
   }
+  else if (is_symmetric(m))
+    values = symmetric_eigenvalues(m);
   else if (!dense_spectrum::has_real_spectrum(m))
     return complex_spectrum(m, false);
   else
@@ -6555,6 +6602,34 @@ numpy_call_expr::dense_eigenvalues(const std::vector<std::vector<double>> &m)
     values.push_back(make_complex(
       lapack_value(system.values[k], system.value_radius[k]),
       lapack_value(0.0, 0.0)));
+  return in_any_order(values);
+}
+
+// The eigenvalues of a symmetric matrix, in any order. LAPACK's dgeev
+// returns those of a matrix within 1e-12 ||A|| of it, and as A is normal
+// each lies within that radius r of one of A's (Bauer-Fike), however close
+// two of A's are; the discs of a cluster of A's eigenvalues (discs that
+// overlap) hold as many of LAPACK's. So each is within r plus its cluster's
+// spread of its computed value, and only an eigenvalue alone in its disc is
+// sure to be real (a complex one would come with its conjugate).
+std::vector<exprt> numpy_call_expr::symmetric_eigenvalues(
+  const std::vector<std::vector<double>> &m)
+{
+  const std::vector<double> exact = dense_spectrum::symmetric_eigenvalues(m);
+  const double r = 2e-12 * frobenius_norm(m);
+  std::vector<exprt> values;
+  for (std::size_t first = 0; first < exact.size();)
+  {
+    std::size_t last = first;
+    while (last + 1 < exact.size() && exact[last + 1] - exact[last] <= 2 * r)
+      ++last;
+    const double spread = exact[last] - exact[first];
+    for (std::size_t k = first; k <= last; ++k)
+      values.push_back(make_complex(
+        lapack_value(exact[k], r + spread),
+        lapack_value(0.0, first == last ? 0.0 : r)));
+    first = last + 1;
+  }
   return in_any_order(values);
 }
 
@@ -6963,13 +7038,15 @@ void numpy_call_expr::bind_complex_eigenvector(
     abs_double(ieee_op("ieee_sub", squares, one)), "<=", relation.norm)};
   unit.location() = converter_.get_location_from_decl(call_);
   converter_.add_instruction(unit);
-  // A real vector's v.v has no imaginary part to bound.
-  near(
-    op("Sub", products, one),
-    "real",
-    relation.norm,
-    equality_exprt(
-      complex_part(lambda, "imag"), from_double(0.0, double_type())));
+  // A real matrix's real eigenvalue has a real vector, whose v.v has no
+  // imaginary part to bound.
+  if (relation.real_vectors)
+    near(
+      op("Sub", products, one),
+      "real",
+      relation.norm,
+      equality_exprt(
+        complex_part(lambda, "imag"), from_double(0.0, double_type())));
 }
 
 static exprt conjugate(const exprt &z)
@@ -6986,16 +7063,17 @@ static exprt negated_complex(const exprt &z)
 }
 
 // The orders LAPACK may return a spectrum in: its blocks (a real
-// eigenvalue, or a conjugate pair with the positive imaginary part first)
-// in any order, as the indices of the eigenvalues at each position.
+// eigenvalue, or, with `pairs`, a conjugate pair with the positive
+// imaginary part first; any eigenvalue of a complex matrix) in any order,
+// as the indices of the eigenvalues at each position.
 static std::vector<std::vector<std::size_t>>
-block_orders(const std::vector<std::complex<double>> &values)
+block_orders(const std::vector<std::complex<double>> &values, bool pairs)
 {
   std::vector<std::vector<std::size_t>> blocks;
   for (std::size_t k = 0; k < values.size(); ++k)
   {
     blocks.push_back({k});
-    if (values[k].imag() > 0)
+    if (pairs && values[k].imag() > 0)
       blocks.back().push_back(++k);
   }
   std::vector<std::size_t> permutation(blocks.size());
@@ -7057,11 +7135,7 @@ std::vector<exprt> numpy_call_expr::spectrum_order(
 }
 
 // eig and eigvals of a real matrix with a complex conjugate pair, which
-// NumPy returns as complex128: each eigenvalue within its radius, each pair
-// exactly conjugate with the positive imaginary part first, the blocks in
-// any order. An eigenvector is within the radius of one of its candidates
-// (LAPACK makes its largest component real), with either sign, and the
-// second of a pair is the conjugate of the first.
+// NumPy returns as complex128.
 exprt numpy_call_expr::complex_spectrum(
   const std::vector<std::vector<double>> &m,
   bool with_vectors)
@@ -7072,8 +7146,63 @@ exprt numpy_call_expr::complex_spectrum(
       "TypeError: numpy.linalg." + function + " supports only matrices up to " +
       std::to_string(max_linalg_order) + "x" +
       std::to_string(max_linalg_order));
-  const dense_spectrum::complex_eigen_system system =
-    dense_spectrum::complex_eigen_system_of(function, m);
+  return spectrum_result(
+    as_complex_matrix(m),
+    dense_spectrum::complex_eigen_system_of(function, m),
+    with_vectors,
+    true);
+}
+
+// eig and eigvals of a complex matrix up to 3x3: its eigenvalues come in any
+// order (each a block of its own) and none is the conjugate of another.
+exprt numpy_call_expr::complex_input_spectrum(
+  const dense_spectrum::complex_matrix &m,
+  bool with_vectors)
+{
+  const std::string function = with_vectors ? "eig" : "eigvals";
+  if (m.size() > 3)
+    throw std::runtime_error(
+      "TypeError: numpy.linalg." + function +
+      " of a complex matrix larger than 3x3 is not supported");
+  return spectrum_result(
+    m,
+    dense_spectrum::complex_input_eigen_system(function, m),
+    with_vectors,
+    false);
+}
+
+// The entries of a constant matrix as a program reads them: doubles for a
+// real one, complex128 for a complex one.
+static std::vector<std::vector<exprt>>
+matrix_entries(const dense_spectrum::complex_matrix &m, bool real_input)
+{
+  std::vector<std::vector<exprt>> entries;
+  for (const auto &row : m)
+  {
+    entries.emplace_back();
+    for (const std::complex<double> &x : row)
+    {
+      const exprt re = from_double(x.real(), double_type());
+      entries.back().push_back(
+        real_input ? re
+                   : make_complex(re, from_double(x.imag(), double_type())));
+    }
+  }
+  return entries;
+}
+
+// eig's or eigvals' complex128 results: each eigenvalue within its radius;
+// for a real matrix each pair exactly conjugate with the positive
+// imaginary part first, the blocks in any order. An eigenvector is within
+// the radius of one of its candidates (LAPACK makes its largest component
+// real), with either sign, and the second of a pair is the conjugate of the
+// first.
+exprt numpy_call_expr::spectrum_result(
+  const dense_spectrum::complex_matrix &m,
+  const dense_spectrum::complex_eigen_system &system,
+  bool with_vectors,
+  bool real_input)
+{
   std::vector<double> re, im, re_radius, im_radius;
   std::vector<bool> is_second;
   for (std::size_t k = 0; k < system.values.size(); ++k)
@@ -7081,12 +7210,13 @@ exprt numpy_call_expr::complex_spectrum(
     re.push_back(system.values[k].real());
     im.push_back(system.values[k].imag());
     re_radius.push_back(system.value_radius[k]);
-    im_radius.push_back(im.back() == 0.0 ? 0.0 : system.value_radius[k]);
-    is_second.push_back(im.back() < 0);
+    im_radius.push_back(
+      real_input && im.back() == 0.0 ? 0.0 : system.value_radius[k]);
+    is_second.push_back(real_input && im.back() < 0);
   }
   std::vector<exprt> second;
   const std::vector<exprt> slots =
-    spectrum_order(block_orders(system.values), is_second, second);
+    spectrum_order(block_orders(system.values, real_input), is_second, second);
   std::vector<exprt> values;
   for (std::size_t p = 0; p < slots.size(); ++p)
   {
@@ -7101,8 +7231,11 @@ exprt numpy_call_expr::complex_spectrum(
   eigen_bounds bounds{0.0, 0.0};
   const std::vector<std::vector<exprt>> columns =
     eigenvector_columns(m, system, slots, second, bounds);
+  std::optional<eigen_relation> relation = literal_relation(bounds);
+  if (relation)
+    relation->real_vectors = real_input;
   return bound_eigen_tuple(
-    constant_matrix_entries(m), values, columns, literal_relation(bounds));
+    matrix_entries(m, real_input), values, columns, relation);
 }
 
 // eig's (w, v), its eigenvector relations read from the stored results.
@@ -7134,7 +7267,7 @@ exprt numpy_call_expr::bound_eigen_tuple(
 
 // The eigenvector at each position of complex_spectrum's eigenvalues.
 std::vector<std::vector<exprt>> numpy_call_expr::eigenvector_columns(
-  const std::vector<std::vector<double>> &m,
+  const dense_spectrum::complex_matrix &m,
   const dense_spectrum::complex_eigen_system &system,
   const std::vector<exprt> &slots,
   const std::vector<exprt> &second,
@@ -8081,7 +8214,10 @@ exprt numpy_call_expr::linalg_unary(
     return raise_linalg_fault(fault->type, fault->message);
   std::vector<std::vector<scalar_value>> matrix;
   if (try_extract_scalar_2d_list(arg, matrix))
-    return constant_linalg(function, constant_matrix(function, matrix));
+    return (function == "eig" || function == "eigvals") && has_complex(matrix)
+             ? complex_input_spectrum(
+                 complex_matrix_of(matrix), function == "eig")
+             : constant_linalg(function, constant_matrix(function, matrix));
   if (contains_string_constant(arg))
     reject_linalg_operand(function);
   std::optional<std::vector<int>> shape;
@@ -8796,11 +8932,22 @@ singular_gap(const std::vector<singular_triple> &triples, double rounding)
 // vectors has an arbitrary sign, flipped together so U @ diag(S) @ Vh keeps
 // A unless the singular value is zero; their components are as accurate as
 // the gap between the singular values allows.
+// Whether svd's factors of a matrix that is not diagonal take the dense
+// route: any but a 2x2 matrix, and a 2x2 one whose singular value is
+// repeated, as its vectors may be any rotation of the plane.
+static bool dense_factor_route(const std::vector<std::vector<double>> &m)
+{
+  if (svd_order(m) != 2)
+    return true;
+  const std::vector<singular_triple> triples = singular_triples_2x2(m);
+  return triples[0].sigma - triples[1].sigma <= 2e-12 * frobenius_norm(m);
+}
+
 exprt numpy_call_expr::svd_factors(const std::vector<std::vector<double>> &m)
 {
   const std::size_t n = svd_order(m);
   const bool diagonal = n != 0 && is_diagonal(m);
-  if (!diagonal && n != 2)
+  if (!diagonal && dense_factor_route(m))
     return dense_svd_factors(m);
   const std::vector<singular_triple> triples =
     diagonal ? diagonal_singular_triples(m) : singular_triples_2x2(m);
@@ -8842,40 +8989,71 @@ exprt numpy_call_expr::svd_factors(const std::vector<std::vector<double>> &m)
     {double_array(u_rows), double_array(sigmas), double_array(vh_rows)});
 }
 
+// Assumes |sum - target| <= bound. A program subtracts each entry of A from
+// its reconstruction, and 1 from the norm of a singular vector, but compares
+// two vectors' product with 0 directly (a NaN target).
+void numpy_call_expr::relate_near(const exprt &sum, double target, double bound)
+{
+  const exprt measured =
+    std::isnan(target)
+      ? sum
+      : ieee_op("ieee_sub", sum, from_double(target, double_type()));
+  code_assumet within{binary_relation_exprt(
+    abs_double(measured), "<=", from_double(bound, double_type()))};
+  within.location() = converter_.get_location_from_decl(call_);
+  converter_.add_instruction(within);
+}
+
+// The orthonormality relations of the `boxed` columns of U (`columns`) or
+// rows of Vh, each within `radius` of `vectors`.
+void numpy_call_expr::relate_orthogonality(
+  const exprt &factor,
+  bool columns,
+  const dense_spectrum::matrix &vectors,
+  const std::vector<bool> &boxed,
+  double radius)
+{
+  const std::size_t length = vectors.front().size();
+  for (std::size_t a = 0; a < vectors.size(); ++a)
+    for (std::size_t b = a; boxed[a] && b < vectors.size(); ++b)
+    {
+      if (!boxed[b])
+        continue;
+      std::vector<std::vector<box_factor>> terms;
+      for (std::size_t i = 0; i < length; ++i)
+        terms.push_back({{vectors[a][i], radius}, {vectors[b][i], radius}});
+      relate_near(
+        factor_product(factor, a, b, length, columns),
+        a == b ? 1.0 : NAN,
+        implied_bound(terms, a == b ? 1.0 : 0.0));
+    }
+}
+
 // The reconstruction and orthogonality relations of svd's factors as a
 // program spells them over the stored results: each entry of
 // U[:, :k] diag(S) Vh[:k, :] within its bound of A's, and the columns of U
 // and the rows of Vh orthonormal within theirs. They hold at every point of
-// the factors' boxes (a singular value whose vectors take independent signs
-// counts as either sign), so they restrict nothing; they let a solver relate
-// the results to the matrix without exploring the boxes.
+// the factors' boxes (a singular value past the rank, whose vectors take
+// independent signs, counts as either sign), so they restrict nothing; they
+// let a solver relate the results to the matrix without exploring the
+// boxes. A vector no box bounds (`boxed` false: a rotation in a plane) has
+// none.
 void numpy_call_expr::bind_svd_relations(
   const std::vector<std::vector<double>> &m,
   const dense_spectrum::singular_system &system,
   const std::array<exprt, 3> &factors,
   const std::pair<double, double> &radii,
-  const std::vector<double> &sign_free)
+  const std::array<std::vector<bool>, 2> &boxed)
 {
   const double value_radius = radii.first, r = radii.second;
-  const std::size_t k = system.sigma.size();
-  // A program subtracts each entry of A from its reconstruction, and 1 from
-  // the norm of a singular vector, but compares two vectors' product with 0
-  // directly.
-  const auto near = [&](const exprt &sum, double target, double bound) {
-    const exprt measured =
-      std::isnan(target)
-        ? sum
-        : ieee_op("ieee_sub", sum, from_double(target, double_type()));
-    code_assumet within{binary_relation_exprt(
-      abs_double(measured), "<=", from_double(bound, double_type()))};
-    within.location() = converter_.get_location_from_decl(call_);
-    converter_.add_instruction(within);
-  };
+  const std::size_t k = system.sigma.size(), rank = system.rank;
   // Each reconstructed entry is a sum of k products of three results; past
-  // max_reconstruction_products of them a solver takes minutes to find a
-  // counterexample, so a larger matrix keeps only the orthogonality ones.
-  const bool reconstruct =
-    m.size() * m[0].size() * k <= max_reconstruction_products;
+  // max_reconstruction_products of them, or with a term over a vector no
+  // box bounds, a solver takes minutes to find a counterexample, so the
+  // matrix keeps only the orthogonality ones.
+  bool reconstruct = m.size() * m[0].size() * k <= max_reconstruction_products;
+  for (std::size_t l = 0; l < k; ++l)
+    reconstruct = reconstruct && boxed[0][l] && boxed[1][l];
   for (std::size_t i = 0; reconstruct && i < m.size(); ++i)
     for (std::size_t j = 0; j < m[i].size(); ++j)
     {
@@ -8883,88 +9061,277 @@ void numpy_call_expr::bind_svd_relations(
       for (std::size_t l = 0; l < k; ++l)
         terms.push_back(
           {{system.u[l][i], r},
-           sign_free[l] > 0 ? box_factor{0.0, sign_free[l]}
-                            : box_factor{system.sigma[l], value_radius},
+           l < rank ? box_factor{system.sigma[l], value_radius}
+                    : box_factor{0.0, system.sigma[l] + value_radius},
            {system.v[l][j], r}});
-      near(
+      relate_near(
         reconstructed_entry(factors, i, j, k),
         m[i][j],
         implied_bound(terms, m[i][j]));
     }
-  for (bool columns : {true, false})
+  relate_orthogonality(factors[0], true, system.u, boxed[0], r);
+  relate_orthogonality(factors[2], false, system.v, boxed[1], r);
+  if (system.u_rest.size() == 2)
+    relate_free_vectors(m, factors[0], true, system.u.size(), rank);
+  if (system.v_rest.size() == 2)
+    relate_free_vectors(m, factors[2], false, system.v.size(), rank);
+}
+
+// A v for each row of Vh past the rank (A^T u for each column of U,
+// `columns`), as a program spells it: within rounding of zero, as LAPACK's
+// A is within lapack_tolerance ||A|| of U diag(S) Vh, its vectors are
+// orthonormal within 2 lapack_tolerance and its singular values past the
+// rank within 4e-12 ||A||. The orthonormality of these vectors, a product
+// of two unknowns, is left to plane_vectors' construction: as a relation it
+// makes a solver take minutes to find a counterexample.
+void numpy_call_expr::relate_free_vectors(
+  const std::vector<std::vector<double>> &m,
+  const exprt &factor,
+  bool columns,
+  std::size_t count,
+  std::size_t rank)
+{
+  const std::size_t length = columns ? m.size() : m[0].size();
+  const std::size_t others = columns ? m[0].size() : m.size();
+  const double norm = frobenius_norm(m);
+  const double k = static_cast<double>(std::min(length, others));
+  const double image =
+    1e-12 * norm * (2 + 2 * static_cast<double>(rank) + 4 * k) +
+    1e-14 * (1 + norm);
+  for (std::size_t a = rank; a < count; ++a)
+    for (std::size_t o = 0; o < others; ++o)
+    {
+      std::vector<exprt> terms;
+      for (std::size_t i = 0; i < length; ++i)
+        terms.push_back(ieee_op(
+          "ieee_mul",
+          from_double(columns ? m[i][o] : m[o][i], double_type()),
+          columns ? element(element(factor, i), a)
+                  : element(element(factor, a), i)));
+      relate_near(summed(terms), NAN, image);
+    }
+}
+
+// The coefficients and components of unit vectors lie within [-1, 1].
+constexpr double unit_box = 1 + 1e-9;
+
+// A rotation or reflection of a plane: the unit (a, b), within 1e-10 of
+// it, and whether the second vector is flipped.
+plane_turn numpy_call_expr::turn()
+{
+  const exprt a = lapack_value(0.0, unit_box), b = lapack_value(0.0, unit_box);
+  relate_near(
+    ieee_op("ieee_add", ieee_op("ieee_mul", a, a), ieee_op("ieee_mul", b, b)),
+    1.0,
+    1e-10);
+  return {a, b, nondet_bool()};
+}
+
+// The first `count` (one or two) vectors of an orthonormal pair LAPACK may
+// return anywhere in a plane. With b1, b2 the computed plane, the first is
+// a b1 + b b2 and the second +-(-b b1 + a b2) for the `turn`: orthonormal
+// up to the components' slack, which covers how far LAPACK's plane lies
+// from the computed one (`tilt` per component) and LAPACK's own
+// orthogonality. Two products of unknowns per turn, where orthonormality
+// relations over free components take a solver minutes.
+std::vector<std::vector<exprt>> numpy_call_expr::plane_vectors(
+  const dense_spectrum::matrix &plane,
+  std::size_t count,
+  double tilt,
+  const plane_turn &turn)
+{
+  const std::size_t length = plane.front().size();
+  const double slack = 4 * tilt + 16 * lapack_tolerance + 1e-15;
+  const exprt &a = turn.a, &b = turn.b, &flip = turn.flip;
+  std::vector<std::vector<exprt>> vectors;
+  for (std::size_t c = 0; c < count; ++c)
   {
-    const dense_spectrum::matrix &vectors = columns ? system.u : system.v;
-    for (std::size_t a = 0; a < vectors.size(); ++a)
-      for (std::size_t b = a; b < vectors.size(); ++b)
-      {
-        std::vector<std::vector<box_factor>> terms;
-        for (std::size_t i = 0; i < vectors[a].size(); ++i)
-          terms.push_back({{vectors[a][i], r}, {vectors[b][i], r}});
-        near(
-          factor_product(
-            columns ? factors[0] : factors[2],
-            a,
-            b,
-            vectors[a].size(),
-            columns),
-          a == b ? 1.0 : NAN,
-          implied_bound(terms, a == b ? 1.0 : 0.0));
-      }
+    const exprt p = c == 0 ? a : negate_double(b), q = c == 0 ? b : a;
+    std::vector<exprt> vector;
+    for (std::size_t i = 0; i < length; ++i)
+    {
+      const exprt centre = ieee_op(
+        "ieee_add",
+        ieee_op("ieee_mul", p, from_double(plane[0][i], double_type())),
+        ieee_op("ieee_mul", q, from_double(plane[1][i], double_type())));
+      const exprt x = lapack_value(0.0, unit_box);
+      relate_near(
+        ieee_op(
+          "ieee_sub",
+          x,
+          c == 0 ? centre : if_exprt(flip, negate_double(centre), centre)),
+        NAN,
+        slack);
+      vector.push_back(x);
+    }
+    vectors.push_back(vector);
+  }
+  return vectors;
+}
+
+// The vectors of a factor past the rank: a single one, which completes the
+// space the others leave, fixed up to its sign; one or two in a plane, as
+// plane_vectors gives them.
+std::vector<std::vector<exprt>> numpy_call_expr::vectors_past_rank(
+  const dense_spectrum::matrix &vectors,
+  const dense_spectrum::matrix &rest,
+  std::size_t rank,
+  double radius)
+{
+  if (rest.size() > 2)
+    throw std::runtime_error(
+      "TypeError: numpy.linalg.svd factors whose singular vectors past the "
+      "rank span three or more dimensions are not supported");
+  const std::size_t count = vectors.size() - rank;
+  // The plane is as far from LAPACK's as the first `rank` vectors are from
+  // their computed ones, to which it is orthogonal.
+  const double tilt =
+    1.01 * std::sqrt(static_cast<double>(rank)) *
+    (std::sqrt(static_cast<double>(vectors.front().size())) * radius +
+     2 * lapack_tolerance);
+  if (rest.size() == 2 && count > 0)
+    return plane_vectors(rest, count, tilt, turn());
+  std::vector<std::vector<exprt>> out;
+  for (std::size_t j = rank; j < vectors.size(); ++j)
+  {
+    std::vector<exprt> components;
+    for (double component : vectors[j])
+      components.push_back(lapack_value(component, radius));
+    out.push_back(with_any_sign(components));
+  }
+  return out;
+}
+
+// Whether the singular values above rounding at j and j + 1 are within
+// rounding of each other: a repeated value, whose vectors LAPACK may rotate
+// in their plane. Three or more such values are refused.
+static std::vector<bool> repeated_pairs(
+  const dense_spectrum::singular_system &system,
+  double value_radius)
+{
+  std::vector<bool> starts(system.rank, false);
+  for (std::size_t j = 0; j + 1 < system.rank; ++j)
+    starts[j] = system.sigma[j] - system.sigma[j + 1] <= 2 * value_radius;
+  for (std::size_t j = 0; j + 1 < starts.size(); ++j)
+    if (starts[j] && starts[j + 1])
+      throw std::runtime_error(
+        "TypeError: numpy.linalg.svd factors of a singular value repeated "
+        "three or more times are not supported");
+  return starts;
+}
+
+// How far LAPACK's singular vectors (or the plane of a repeated value's) of
+// the values above rounding may lie from the computed ones: as the gaps
+// between those values, other than within a repeated pair, and between the
+// smallest of them and the rest (zero singular values, or the vectors that
+// complete a full factor), allow.
+static double determined_vector_radius(
+  const dense_spectrum::singular_system &system,
+  const std::vector<bool> &pairs,
+  double norm)
+{
+  const std::size_t rank = system.rank;
+  double gap = INFINITY;
+  for (std::size_t j = 0; j + 1 < rank; ++j)
+    if (!pairs[j])
+      gap = std::min(gap, system.sigma[j] - system.sigma[j + 1]);
+  const bool completed = rank < system.u.size() || rank < system.v.size();
+  if (rank > 0 && completed)
+    gap = std::min(
+      gap,
+      system.sigma[rank - 1] -
+        (rank < system.sigma.size() ? system.sigma[rank] : 0.0));
+  return 1e-12 * (1 + norm / gap);
+}
+
+// The singular vectors of the values above rounding: each pair within
+// `radius` of the computed one, with a sign LAPACK picks per triple, and
+// those of a repeated value an orthonormal pair anywhere in their computed
+// plane, rotated the same way in U and in Vh (so U diag(S) Vh is kept).
+void numpy_call_expr::determined_vectors(
+  const dense_spectrum::singular_system &system,
+  const std::vector<bool> &pairs,
+  double radius,
+  std::vector<std::vector<exprt>> &us,
+  std::vector<std::vector<exprt>> &vs,
+  std::array<std::vector<bool>, 2> &boxed)
+{
+  const auto box = [&](const std::vector<double> &vector) {
+    std::vector<exprt> components;
+    for (double component : vector)
+      components.push_back(lapack_value(component, radius));
+    return components;
+  };
+  // The computed plane of a repeated value is as far from LAPACK's as each
+  // of its vectors may be.
+  const double tilt =
+    1.01 * std::sqrt(2.0) *
+    (std::sqrt(
+       static_cast<double>(system.u.front().size() + system.v.front().size())) *
+       radius +
+     2 * lapack_tolerance);
+  for (std::size_t j = 0; j < system.rank; ++j)
+  {
+    if (!pairs[j])
+    {
+      const exprt flip = nondet_bool();
+      us.push_back(signed_by(flip, box(system.u[j])));
+      vs.push_back(signed_by(flip, box(system.v[j])));
+      boxed[0].push_back(true);
+      boxed[1].push_back(true);
+      continue;
+    }
+    const plane_turn shared = turn();
+    for (auto &u :
+         plane_vectors({system.u[j], system.u[j + 1]}, 2, tilt, shared))
+      us.push_back(u);
+    for (auto &v :
+         plane_vectors({system.v[j], system.v[j + 1]}, 2, tilt, shared))
+      vs.push_back(v);
+    boxed[0].insert(boxed[0].end(), 2, false);
+    boxed[1].insert(boxed[1].end(), 2, false);
+    ++j;
   }
 }
 
 // svd's (U, S, Vh) of a dense matrix (square and larger than 2x2, or
-// rectangular) whose singular values are distinct: each factor within the
-// radius the gap between them allows of the extended-precision one, which
-// singular_system_of checked against the reconstruction and orthogonality
-// relations. LAPACK picks the sign per singular triple (independently for a
-// singular value within rounding of zero, and for each vector that only
-// completes a full factor). U is m x m and Vh n x n with full_matrices, and
-// m x k and k x n without (k = min(m, n)).
+// rectangular) whose singular values above rounding are distinct: each
+// singular triple of those within the radius the gaps allow of the
+// extended-precision one, which singular_system_of checked against the
+// reconstruction and orthogonality relations, with a sign LAPACK picks per
+// triple. The vectors past the rank (zero singular values, and the extra
+// ones of a full factor) span what the others leave: a single one is fixed
+// up to its sign, and two or more are any orthonormal basis of that space.
+// U is m x m and Vh n x n with full_matrices, and m x k and k x n without
+// (k = min(m, n)).
 exprt numpy_call_expr::dense_svd_factors(
   const std::vector<std::vector<double>> &m)
 {
   const dense_spectrum::singular_system system =
     dense_spectrum::singular_system_of(m, svd_flag("full_matrices", true));
-  const std::size_t k = system.sigma.size();
+  const std::size_t k = system.sigma.size(), rank = system.rank;
   const double norm = frobenius_norm(m);
   const double value_radius = 1e-12 * norm;
-  std::vector<singular_triple> triples;
-  for (std::size_t j = 0; j < k; ++j)
-    triples.push_back({system.sigma[j], system.u[j], system.v[j]});
-  double gap = singular_gap(triples, 2 * value_radius);
-  // A vector that completes a full factor spans what A's range (or row
-  // space) leaves, as accurate as the smallest singular value allows.
-  if (system.u.size() > k || system.v.size() > k)
-    gap = std::min(gap, system.sigma.back());
-  const double vector_radius = 1e-12 * (1 + norm / gap);
+  const std::vector<bool> pairs = repeated_pairs(system, value_radius);
+  const double vector_radius = determined_vector_radius(system, pairs, norm);
   if (vector_radius > 1e-6)
     throw std::runtime_error(
       "TypeError: numpy.linalg.svd of a matrix larger than 2x2 with close "
       "singular values is not supported");
-  const auto box = [&](const std::vector<double> &vector) {
-    std::vector<exprt> components;
-    for (double component : vector)
-      components.push_back(lapack_value(component, vector_radius));
-    return components;
-  };
   std::vector<std::vector<exprt>> us, vs;
+  std::array<std::vector<bool>, 2> boxed;
+  determined_vectors(system, pairs, vector_radius, us, vs, boxed);
+  for (auto &u :
+       vectors_past_rank(system.u, system.u_rest, rank, vector_radius))
+    us.push_back(u);
+  for (auto &v :
+       vectors_past_rank(system.v, system.v_rest, rank, vector_radius))
+    vs.push_back(v);
+  boxed[0].resize(us.size(), system.u_rest.size() != 2);
+  boxed[1].resize(vs.size(), system.v_rest.size() != 2);
   std::vector<exprt> sigmas;
-  std::vector<double> sign_free;
   for (std::size_t j = 0; j < k; ++j)
-  {
-    const singular_triple &t = triples[j];
-    sigmas.push_back(lapack_value(t.sigma, value_radius));
-    const bool tied = t.sigma > value_radius;
-    sign_free.push_back(tied ? 0.0 : t.sigma + value_radius);
-    const exprt flip = nondet_bool();
-    us.push_back(signed_by(flip, box(t.u)));
-    vs.push_back(signed_by(tied ? flip : nondet_bool(), box(t.v)));
-  }
-  for (std::size_t j = k; j < system.u.size(); ++j)
-    us.push_back(with_any_sign(box(system.u[j])));
-  for (std::size_t j = k; j < system.v.size(); ++j)
-    vs.push_back(with_any_sign(box(system.v[j])));
+    sigmas.push_back(lapack_value(system.sigma[j], value_radius));
   assume_singular_order(sigmas);
   std::vector<exprt> u_rows, vh_rows;
   for (std::size_t i = 0; i < m.size(); ++i)
@@ -8980,7 +9347,7 @@ exprt numpy_call_expr::dense_svd_factors(
   const exprt s = stored(double_array(sigmas));
   const exprt vh = stored(double_array(vh_rows));
   bind_svd_relations(
-    m, system, {u, s, vh}, {value_radius, vector_radius}, sign_free);
+    m, system, {u, s, vh}, {value_radius, vector_radius}, boxed);
   return linalg_tuple({u, s, vh});
 }
 
