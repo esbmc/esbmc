@@ -5,8 +5,9 @@
 > printed write when its right-hand side reads a definition the slicer
 > removed; with it, the Phase 1 trace gate is met on the C and C++ suites and
 > a tenth of the Python suite under Z3, and on the same C and C++ suites and
-> a twentieth of the Python suite under Bitwuzla. Phase 1 still lacks a full
-> Python run; Phase 2 is next.** The corpus is in `regression/field-sensitivity/`
+> a twentieth of the Python suite under Bitwuzla, and the flag changes no
+> verdict on a further 970 Python tests. Phase 1 still lacks a full Python run
+> and an SV-COMP run; Phase 2 is next.** The corpus is in `regression/field-sensitivity/`
 > with baselines, and the census has been run and reverted. Phase 1 adds
 > `--field-sensitive-ssa` (default off): symex gives each field of an
 > eligible local, parameter or return slot its own SSA name. It meets the 2x
@@ -725,3 +726,28 @@ Symex seconds, both solvers, the same binaries, three runs each, medians:
 | `local_writes` | Z3 | 0.016 / 0.019 (1.2x) | 0.016 / 0.022 (1.4x) |
 | `local_writes` | Bitwuzla | 0.017 / 0.016 (0.9x) | 0.016 / 0.018 (1.1x) |
 
+Codecov reported two added lines uncovered: `return true` in
+`reads_sliced_definition` and `step.hidden = true` in `symex_slicet::run`.
+The coverage job runs only the tests in `regression/COV_TESTS.d`, and
+`field_sensitive_ssa_print_sliced_rhs_fail` was not listed; it now is. With
+`return true` changed to `return false` the test prints `s = { .a=0, .b=5 }`
+and fails under Z3 and Bitwuzla, so it runs both lines.
+
+Measured on 2026-11-17 with the branch merged into master `dc68c7e1f`,
+RelWithDebInfo, LLVM 18, Z3 4.13.3 and ESBMC's Bitwuzla 0.9.0 backend:
+
+- Python, `CORE` tests 2700 to 3669 in name order (970 tests, mostly not in
+  the earlier samples), flag forced on against off, default solver, 30 s per
+  run: 0 verdict changes. After dropping timings and the "splits" notice, 6
+  differ in output: `github_4345` and its `_fail` only in the symex
+  assignment count (389 against 398), and 4 (`github_5444_dictcomp_*_fail`,
+  `github_7434_yaml_drop_fail`) in compiler-variable numbering or witness
+  UUIDs, which also differ between two runs without the flag.
+- Witness files for the 4 tests whose trace changes, flag on, with the change
+  against the same build with `reads_sliced_definition` never matching: each
+  GraphML witness loses one edge, the hidden step's, and keeps the same
+  assumptions in the same order; the YAML witnesses are identical apart from
+  UUIDs and timestamps.
+
+Still not measured: the rest of the Python suite with the flag, and an
+SV-COMP run.
