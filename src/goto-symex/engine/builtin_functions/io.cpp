@@ -12,6 +12,7 @@
 #include <util/irep/migrate.h>
 #include <util/irep/std_types.h>
 #include <vector>
+#include <optional>
 #include <algorithm>
 #include <functional>
 #include <util/expr/array2string.h>
@@ -1457,70 +1458,92 @@ static bool object_byte_size(const type2tc &type, uint64_t &size)
   }
 }
 
+// Byte positions a store writes; nullopt means the whole object.
+using byte_positions = std::optional<std::vector<expr2tc>>;
+
+static byte_positions
+scanf_tail_positions(const type2tc &object_type, const expr2tc &offset)
+{
+  uint64_t size = 0;
+  if (!is_constant_int2t(offset) || !object_byte_size(object_type, size))
+    return std::nullopt;
+
+  const uint64_t start = to_constant_int2t(offset).as_ulong();
+  if (start >= size || size - start > max_unrolled_tail)
+    return std::nullopt;
+
+  std::vector<expr2tc> positions;
+  for (uint64_t pos = start; pos < size; ++pos)
+    positions.push_back(gen_ulong(pos));
+  return positions;
+}
+
+// The static pointee type may be wider than the conversion (e.g. %hhd through
+// an int *); the wider of the two is stored.
+static uint64_t widen_to_pointee(uint64_t store_bytes, const expr2tc &operand)
+{
+  if (!is_pointer_type(operand))
+    return store_bytes;
+  const type2tc &pointee = to_pointer_type(operand->type).subtype;
+  if (!is_number_type(pointee) && !is_pointer_type(pointee))
+    return store_bytes;
+  return std::max<uint64_t>(store_bytes, (pointee->get_width() + 7) / 8);
+}
+
+static byte_positions scanf_scalar_positions(
+  const type2tc &object_type,
+  const expr2tc &offset,
+  uint64_t store_bytes)
+{
+  uint64_t size = 0;
+  if (is_constant_int2t(offset) && object_byte_size(object_type, size))
+  {
+    const uint64_t start = to_constant_int2t(offset).as_ulong();
+    if (start + store_bytes > size || (start == 0 && store_bytes == size))
+      return std::nullopt;
+  }
+
+  std::vector<expr2tc> positions;
+  for (uint64_t k = 0; k < store_bytes; ++k)
+    positions.push_back(
+      add2tc(offset->type, offset, gen_long(offset->type, k)));
+  return positions;
+}
+
 void goto_symext::symex_scanf_store(
   const dereference_callbackt::internal_item &item,
   const expr2tc &operand,
   uint64_t store_bytes,
   const guard2tc &stored)
 {
-  const auto havoc_object = [&]() {
+  expr2tc offset = item.offset;
+  simplify(offset);
+
+  byte_positions positions;
+  if (store_bytes == 0)
+    positions = scanf_tail_positions(item.object->type, offset);
+  else if (store_bytes != unknown_store_bytes)
+    positions = scanf_scalar_positions(
+      item.object->type, offset, widen_to_pointee(store_bytes, operand));
+
+  if (!positions)
+  {
     symex_assign(
       code_assign2tc(item.object, gen_nondet(item.object->type)),
       false,
       stored);
-  };
+    return;
+  }
 
   const bool big_endian =
     config.ansi_c.endianess == configt::ansi_ct::IS_BIG_ENDIAN;
-  const auto havoc_byte = [&](const expr2tc &pos) {
+  for (const expr2tc &pos : *positions)
     symex_assign(
       code_assign2tc(
         byte_extract2tc(get_uint8_type(), item.object, pos, big_endian),
         gen_nondet(get_uint8_type())),
       false,
       stored);
-  };
-
-  if (store_bytes == unknown_store_bytes)
-    return havoc_object();
-
-  expr2tc offset = item.offset;
-  simplify(offset);
-  const bool constant_offset = is_constant_int2t(offset);
-  const uint64_t start =
-    constant_offset ? to_constant_int2t(offset).as_ulong() : 0;
-  uint64_t size = 0;
-  const bool sized = object_byte_size(item.object->type, size);
-
-  if (store_bytes == 0)
-  {
-    if (
-      !sized || !constant_offset || start >= size ||
-      size - start > max_unrolled_tail)
-      return havoc_object();
-
-    for (uint64_t pos = start; pos < size; ++pos)
-      havoc_byte(gen_ulong(pos));
-    return;
-  }
-
-  // The static pointee type may be wider than the conversion (e.g. %hhd
-  // through an int *); the wider of the two is stored.
-  if (is_pointer_type(operand))
-  {
-    const type2tc &pointee = to_pointer_type(operand->type).subtype;
-    if (is_number_type(pointee) || is_pointer_type(pointee))
-      store_bytes =
-        std::max<uint64_t>(store_bytes, (pointee->get_width() + 7) / 8);
-  }
-
-  if (
-    constant_offset && sized &&
-    (start + store_bytes > size || (start == 0 && store_bytes == size)))
-    return havoc_object();
-
-  for (uint64_t k = 0; k < store_bytes; ++k)
-    havoc_byte(add2tc(offset->type, offset, gen_long(offset->type, k)));
 }
 
 void goto_symext::symex_input(const code_function_call2t &func_call)
