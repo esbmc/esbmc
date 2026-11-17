@@ -1187,6 +1187,28 @@ static bool may_be_over_allocated(const expr2tc &expr, const namespacet &ns)
   return false;
 }
 
+// An unsigned index widened to a signed type cannot be negative; --ir does
+// not know that (#9225).
+static bool is_widened_unsigned(const expr2tc &index)
+{
+  return is_typecast2t(index) &&
+         is_unsignedbv_type(to_typecast2t(index).from) &&
+         to_typecast2t(index).from->type->get_width() <
+           index->type->get_width();
+}
+
+// A VLA's size may not fit the index type (#8048), so compare in a type that
+// holds both.
+static expr2tc
+address_upper_bound(const expr2tc &index, const expr2tc &size, bool one_past)
+{
+  type2tc wide = get_int_type(
+    std::max(index->type->get_width(), size->type->get_width()) + 1);
+  expr2tc i = typecast2tc(wide, index);
+  expr2tc n = typecast2tc(wide, size);
+  return one_past ? lessthanequal2tc(i, n) : lessthan2tc(i, n);
+}
+
 void goto_checkt::bounds_check(
   const expr2tc &expr,
   const guard2tc &guard,
@@ -1246,14 +1268,7 @@ void goto_checkt::bounds_check(
   expr2tc zero = gen_zero(the_index->type);
   assert(!is_nil_expr(zero));
 
-  // An unsigned index widened to a signed type cannot be negative; --ir does
-  // not know that (#9225).
-  const bool widened_unsigned =
-    is_typecast2t(the_index) &&
-    is_unsignedbv_type(to_typecast2t(the_index).from) &&
-    to_typecast2t(the_index).from->type->get_width() <
-      the_index->type->get_width();
-  if (!(address && widened_unsigned))
+  if (!(address && is_widened_unsigned(the_index)))
   {
     expr2tc lower = greaterthanequal2tc(the_index, zero);
     add_guarded_claim(lower, name + " lower bound", property, loc, guard);
@@ -1264,20 +1279,9 @@ void goto_checkt::bounds_check(
   const expr2tc &array_size = is_array_type(t) ? to_array_type(t).array_size
                                                : to_vector_type(t).array_size;
 
-  expr2tc upper;
-  if (address)
-  {
-    // A VLA's size may not fit the index type (#8048), so compare in a type
-    // that holds both.
-    type2tc wide = get_int_type(
-      std::max(the_index->type->get_width(), array_size->type->get_width()) +
-      1);
-    expr2tc i = typecast2tc(wide, the_index);
-    expr2tc n = typecast2tc(wide, array_size);
-    upper = one_past ? lessthanequal2tc(i, n) : lessthan2tc(i, n);
-  }
-  else
-    upper = lessthan2tc(the_index, typecast2tc(the_index->type, array_size));
+  const expr2tc upper =
+    address ? address_upper_bound(the_index, array_size, one_past)
+            : lessthan2tc(the_index, typecast2tc(the_index->type, array_size));
   add_guarded_claim(upper, name + " upper bound", property, loc, guard);
 }
 
