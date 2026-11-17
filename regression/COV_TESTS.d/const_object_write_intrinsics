@@ -1,0 +1,7 @@
+regression/esbmc/const_object_write_memcpy_fail
+regression/esbmc/const_object_write_memcpy_symbolic_fail
+regression/esbmc/const_object_write_memmove_fail
+regression/esbmc/const_object_write_nondet_memory_fail
+regression/esbmc/const_object_write_sscanf_fail
+regression/esbmc/const_object_write_init_object_fail
+regression/esbmc/const_object_write_intrinsics

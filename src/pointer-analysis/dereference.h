@@ -744,6 +744,18 @@ private:
   bool may_fold_index(const expr2tc &index) const;
 
 public:
+  /** A static object of const-qualified type; writing it is UB (C11 6.7.3p6).
+   */
+  static bool is_const_static(const symbolt &sym)
+  {
+    return sym.static_lifetime && sym.get_type().cmt_constant();
+  }
+
+  /** Fail a write to @p object under @p guard when it is a string literal or
+   *  a const static object. For callers that dereference in INTERNAL mode and
+   *  then write the objects found. */
+  void read_only_write_check(const expr2tc &object, const guard2tc &guard);
+
   void set_block_assertions(void)
   {
     block_assertions = true;

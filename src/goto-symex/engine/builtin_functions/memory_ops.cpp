@@ -960,6 +960,7 @@ bool goto_symext::memcpy_symbolic_length(
     res = update_object_byte(res, dst_off + i, new_byte, be);
   }
 
+  check_read_only_write(dst_obj, greaterthan2tc(n_arg, gen_zero(n_t)));
   symex_assign(code_assign2tc(dst_obj, res), false, cur_state->guard);
   return true;
 }
@@ -1173,6 +1174,7 @@ void goto_symext::intrinsic_memcpy_impl(
     }
 
     // Time to do the actual copy
+    bool write_checked = number_of_bytes == 0;
     for (const auto &src_item : src_items)
     {
       // Offset is garanteed to be a constant
@@ -1189,6 +1191,12 @@ void goto_symext::intrinsic_memcpy_impl(
       {
         bump_call(func_call, bump_name);
         return;
+      }
+
+      if (!write_checked)
+      {
+        check_read_only_write(item.object, item.guard);
+        write_checked = true;
       }
 
       guard2tc assignment_guard = guard;
@@ -1740,9 +1748,7 @@ void goto_symext::intrinsic_memset(
     if (is_symbol2t(*base))
     {
       const symbolt *sym = ns.lookup(to_symbol2t(*base).thename);
-      if (
-        sym != nullptr && sym->static_lifetime &&
-        sym->get_type().cmt_constant())
+      if (sym != nullptr && dereferencet::is_const_static(*sym))
       {
         bump_call(func_call, "c:@F@__memset_impl");
         return;
@@ -1878,6 +1884,7 @@ void goto_symext::intrinsic_havoc_object(const code_function_call2t &call)
       continue;
     expr2tc target_guard = item.guard;
     cur_state->rename(target_guard);
+    check_read_only_write(item.object, target_guard);
     guard2tc guard = cur_state->guard;
     guard.add(target_guard);
     symex_assign(
