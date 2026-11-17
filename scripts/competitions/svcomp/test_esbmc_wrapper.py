@@ -1533,6 +1533,23 @@ class ThreadedTaskCommandLineTest(unittest.TestCase):
         self.assertNotIn("--context-bound", cmd)
 
 
+class PointerArithCheckTest(unittest.TestCase):
+    """Forming an out-of-range &a[i] dereferences nothing, so memsafety runs
+    without the claim that reports it (#10787)."""
+
+    def command(self, prop):
+        with tempfile.NamedTemporaryFile("w", suffix=".i") as f:
+            f.write("int main() { return 0; }\n")
+            f.flush()
+            return wrapper.get_command_line("kinduction", prop, 64, f.name, "", False)
+
+    def test_memsafety_disables_it(self):
+        self.assertIn("--no-pointer-arith-check", self.command(wrapper.Property.memory))
+
+    def test_memsafety_keeps_bounds_checks(self):
+        self.assertNotIn("--no-bounds-check", self.command(wrapper.Property.memory))
+
+
 class OverflowFallbackTest(unittest.TestCase):
     """A no-overflow task runs k-induction first, then incremental BMC."""
 
