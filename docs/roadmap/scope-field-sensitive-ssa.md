@@ -6,7 +6,7 @@
 > removed; with it, the Phase 1 trace gate is met on the C and C++ suites and
 > a tenth of the Python suite under Z3, and on the same C and C++ suites and
 > a twentieth of the Python suite under Bitwuzla, and the flag changes no
-> verdict on a further 1940 Python tests. Phase 1 still lacks a full Python run
+> verdict on Python `CORE` tests 0 to 4639. Phase 1 still lacks a full Python run
 > and an SV-COMP run; Phase 2 is next.** The corpus is in `regression/field-sensitivity/`
 > with baselines, and the census has been run and reverted. Phase 1 adds
 > `--field-sensitive-ssa` (default off): symex gives each field of an
@@ -762,5 +762,31 @@ Z3 4.8.12, flag forced on against off, 30 s per run:
   `github_8404_alias_parameter_refused` (166 against 175) and
   `github_8404_passed_to_imported_refused` (159 against 168).
 
-Still not measured: the Python `CORE` tests outside positions 2700 to 4639
-and the earlier samples, and an SV-COMP run.
+Measured on 2026-11-17 at the PR head `f5e84b28c`, RelWithDebInfo, LLVM 18,
+Z3 4.13.3, flag forced on against off, 4 runs in parallel, 30 s per run;
+tests that timed out either way, or had no result because a batch was cut
+off, were re-run at 90 s:
+
+- Python, `CORE` tests 0 to 2699 in name order (`LC_ALL=C`, 0-based; 2700
+  tests): 0 verdict changes. 18 time out at 90 s with and without the flag.
+  `dynamic_type_scalar_tag_add_str_dyn` succeeded without the flag and timed
+  out with it at 90 s; run alone, without the flag it does not finish in
+  500 s, and with the flag it succeeds in 114 s, so its solver time varies
+  by run, not by flag. After dropping timings, the "splits" notice and
+  temporary model paths, 39 differ in output. 30 differ only in the symex
+  or slicing assignment count, and `github_10322_width` only in the bytes of
+  a temporary model path. In 5 (`arith_lost_type_default_fail`,
+  `arith_lost_type_fail`, `github_10365_fail`, `github_10365_type_fail`,
+  `github_10673_tagged_fail`), master prints a pointer field
+  of a whole struct write as a name (`.value=tmp$3.value`,
+  `.value=return_value$.value`) and the flag prints its value
+  (`&dynamic_1_array[0]`), the §8.7 right-hand side; master pins no value
+  there, so Invariant 4 holds. In 3 the counterexample chooses other values
+  for nondet inputs: `github_10679_def_alias_nested_call_fail` (`x`, from
+  `nondet_int()`, which the assertion leaves free), `github_10323_list_reversed_fail`
+  (the bytes of the nondet list elements) and `github_10493_ir_fail`, whose
+  printed value also changes between two runs without the flag.
+
+Still not measured: the Python `CORE` tests after position 4639 and outside
+the earlier samples (positions 4640 to 9227, 4588 tests, of which the
+samples cover about a tenth), and an SV-COMP run.
