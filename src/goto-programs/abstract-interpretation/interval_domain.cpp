@@ -1082,7 +1082,11 @@ void interval_domaint::transform(
       const expr2tc arg_symbol =
         symbol2tc(arg_type, function.argument_names[i]);
 
-      if (i >= code_function_call.operands.size())
+      // A nil operand is an argument symex leaves unassigned, e.g. every
+      // parameter of the --function entry point (#2074).
+      if (
+        i >= code_function_call.operands.size() ||
+        is_nil_expr(code_function_call.operands[i]))
       {
         havoc_rec(arg_symbol);
         continue;
