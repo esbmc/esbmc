@@ -2,7 +2,11 @@
 #include <string.h>
 
 /* A struct whose bytes are copied from a nondet integer holds a pointer that
- * can name any object, b included, with or without slicing (#10798). */
+ * can name any object, b included, with or without slicing (#10798). The
+ * sliced run misses it: the copy reaches the struct as a bitcast, which is
+ * also how every write through a pointer into a struct is encoded, so
+ * treating it as an int-to-pointer cast exhausted memory on
+ * esbmc-cpp/cpp/ch9_7. */
 uintptr_t nondet_uintptr(void);
 struct S
 {

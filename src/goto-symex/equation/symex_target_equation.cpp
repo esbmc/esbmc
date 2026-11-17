@@ -52,8 +52,8 @@ bool holds_pointer(const type2tc &type)
 
 /// Whether @p root casts an integer other than a null pointer constant to a
 /// pointer, or reads a pointer out of the bytes of another object, as a union
-/// member or memcpy does (#10798). Subterms in @p seen are skipped and added
-/// to it.
+/// member or a memcpy into a pointer does (#10798). Subterms in @p seen are
+/// skipped and added to it.
 bool casts_int_to_pointer(
   const expr2tc &root,
   std::unordered_set<const expr2t *> &seen)
@@ -68,8 +68,6 @@ bool casts_int_to_pointer(
       found = !is_pointer_type(from->type) &&
               !(is_constant_int2t(from) && to_constant_int2t(from).value == 0);
     }
-    else if (is_bitcast2t(e) && holds_pointer(e->type))
-      found = !holds_pointer(to_bitcast2t(e).from->type);
     else if (
       is_byte_update2t(e) ||
       (is_member2t(e) && is_union_type(to_member2t(e).source_value->type)))

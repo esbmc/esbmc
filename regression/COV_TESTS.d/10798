@@ -1,4 +1,3 @@
 regression/esbmc/github_10798
 regression/esbmc/github_10798_fail
 regression/esbmc/github_10798_memcpy_fail
-regression/esbmc/github_10798_struct_fail
