@@ -1,4 +1,5 @@
 CORE
 main.py
 --incremental-bmc
-^ERROR: TypeError: numpy.linalg.svd of a non-diagonal matrix with a repeated singular value is not supported$
+^VERIFICATION FAILED$
+^  FAILED +\[global\.assertion\.\d+\] +line 5 +assertion 
