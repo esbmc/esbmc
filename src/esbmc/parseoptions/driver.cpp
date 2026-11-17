@@ -526,6 +526,16 @@ int esbmc_parseoptionst::doit()
   get_command_line_options(options);
   remove_stale_lean_output(cmdline, options);
 
+  if (
+    options.get_bool_option("termination") &&
+    options.get_bool_option("validate-correctness-witness"))
+  {
+    log_status(
+      "Correctness witness validation is not supported for termination");
+    log_result("VERIFICATION UNKNOWN");
+    return 0;
+  }
+
   // for solidity: detect .sol files in positional args or via --sol
   {
     bool is_solidity = cmdline.isset("sol");

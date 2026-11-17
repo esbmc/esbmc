@@ -1,0 +1,4 @@
+CORE
+main.c
+--termination --max-k-step 6 --max-inductive-step 3
+^VERIFICATION FAILED$

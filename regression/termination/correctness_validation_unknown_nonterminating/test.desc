@@ -1,0 +1,4 @@
+CORE
+main.c
+--termination --validate-correctness-witness --witness witness.yml
+^VERIFICATION UNKNOWN$
