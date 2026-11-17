@@ -45,6 +45,12 @@ struct eigen_bounds
 };
 
 // The same bounds as expressions, which constrain nothing when `excused`.
+// A rotation or reflection of a plane, as numpy_call_expr::turn makes it.
+struct plane_turn
+{
+  exprt a, b, flip;
+};
+
 struct eigen_relation
 {
   exprt residual;
@@ -458,6 +464,8 @@ private:
   exprt eigenvalues(const std::vector<std::vector<double>> &m);
   exprt eigen_decomposition(const std::vector<std::vector<double>> &m);
   std::vector<exprt> in_any_order(const std::vector<exprt> &values);
+  std::vector<exprt>
+  symmetric_eigenvalues(const std::vector<std::vector<double>> &m);
   std::vector<exprt> permutation_slots(std::size_t n);
   std::vector<exprt> with_any_sign(const std::vector<exprt> &v);
   exprt selected_box(
@@ -492,13 +500,13 @@ private:
     const dense_spectrum::singular_system &system,
     const std::array<exprt, 3> &factors,
     const std::pair<double, double> &radii,
-    const std::array<bool, 2> &free);
+    const std::array<std::vector<bool>, 2> &boxed);
   void relate_near(const exprt &sum, double target, double bound);
   void relate_orthogonality(
     const exprt &factor,
     bool columns,
     const dense_spectrum::matrix &vectors,
-    std::size_t count,
+    const std::vector<bool> &boxed,
     double radius);
   void relate_free_vectors(
     const std::vector<std::vector<double>> &m,
@@ -511,11 +519,19 @@ private:
     const dense_spectrum::matrix &rest,
     std::size_t rank,
     double radius);
+  plane_turn turn();
   std::vector<std::vector<exprt>> plane_vectors(
     const dense_spectrum::matrix &plane,
     std::size_t count,
+    double tilt,
+    const plane_turn &turn);
+  void determined_vectors(
+    const dense_spectrum::singular_system &system,
+    const std::vector<bool> &pairs,
     double radius,
-    std::size_t rank);
+    std::vector<std::vector<exprt>> &us,
+    std::vector<std::vector<exprt>> &vs,
+    std::array<std::vector<bool>, 2> &boxed);
   exprt linalg_decomposition(
     const std::string &function,
     const std::vector<std::vector<double>> &m);

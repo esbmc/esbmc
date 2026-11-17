@@ -66,6 +66,10 @@ struct singular_system
 // (and, for eig, the eigenvectors).
 eigen_system real_eigen_system(const std::string &function, const matrix &m);
 
+// The eigenvalues of a symmetric matrix, ascending, each repeated as often
+// as its multiplicity.
+std::vector<double> symmetric_eigenvalues(const matrix &m);
+
 // Whether every eigenvalue of `m` is real (up to the separation the dense
 // routes need to tell a complex pair from a repeated real eigenvalue).
 bool has_real_spectrum(const matrix &m);

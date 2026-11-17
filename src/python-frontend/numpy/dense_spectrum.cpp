@@ -450,6 +450,49 @@ std::vector<eigenvector_candidate> eigenvector_candidates(
 }
 } // namespace
 
+std::vector<double> symmetric_eigenvalues(const matrix &m)
+{
+  mat a = widen(m);
+  const std::size_t n = a.size();
+  // Cyclic Jacobi: rotations that zero each off-diagonal entry in turn.
+  for (int sweep = 0; sweep < 60; ++sweep)
+  {
+    real off = 0;
+    for (std::size_t p = 0; p < n; ++p)
+      for (std::size_t q = p + 1; q < n; ++q)
+        off += a[p][q] * a[p][q];
+    if (off <= 1e-40L * frobenius(a) * frobenius(a))
+      break;
+    for (std::size_t p = 0; p < n; ++p)
+      for (std::size_t q = p + 1; q < n; ++q)
+      {
+        if (a[p][q] == 0)
+          continue;
+        const real theta = (a[q][q] - a[p][p]) / (2 * a[p][q]);
+        const real t = (theta >= 0 ? 1 : -1) /
+                       (std::fabs(theta) + std::sqrt(1 + theta * theta));
+        const real c = 1 / std::sqrt(1 + t * t), s = c * t;
+        for (std::size_t k = 0; k < n; ++k)
+        {
+          const real kp = a[k][p], kq = a[k][q];
+          a[k][p] = c * kp - s * kq;
+          a[k][q] = s * kp + c * kq;
+        }
+        for (std::size_t k = 0; k < n; ++k)
+        {
+          const real pk = a[p][k], qk = a[q][k];
+          a[p][k] = c * pk - s * qk;
+          a[q][k] = s * pk + c * qk;
+        }
+      }
+  }
+  std::vector<double> values;
+  for (std::size_t i = 0; i < n; ++i)
+    values.push_back(static_cast<double>(a[i][i]));
+  std::sort(values.begin(), values.end());
+  return values;
+}
+
 bool has_real_spectrum(const matrix &m)
 {
   const mat wide = widen(m);
