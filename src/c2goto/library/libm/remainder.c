@@ -1,6 +1,20 @@
 #include <fenv.h>
 #include <math.h>
 
+#define fixedbv_remainder_def(type, name, remquo_func)                         \
+  type name(type x, type y)                                                    \
+  {                                                                            \
+  __ESBMC_HIDE:;                                                               \
+    int quo;                                                                   \
+    return remquo_func(x, y, &quo);                                            \
+  }                                                                            \
+                                                                               \
+  type __##name(type x, type y)                                                \
+  {                                                                            \
+  __ESBMC_HIDE:;                                                               \
+    return name(x, y);                                                         \
+  }
+
 /* remainder() calls are normally intercepted by the frontend and lowered to
  * the solver's exact IEEE 754 remainder (fp.rem) -- see ieee_rem in
  * clang_c_adjust_expr.cpp. This body is the fallback for any path that does
@@ -36,8 +50,20 @@
     return name(x, y);                                                         \
   }
 
+#ifdef __ESBMC_FIXEDBV
+/* remquo's fixedbv body is exact and does not call back here. */
+fixedbv_remainder_def(float, remainderf, remquof);
+fixedbv_remainder_def(double, remainder, remquo);
+#  if __SIZEOF_POINTER__ == 8 /* 32-bit fixedbv long double is not 64 bits */
+fixedbv_remainder_def(long double, remainderl, remquol);
+#  else
+remainder_def(long double, remainderl, isnan, isinf, llrintl);
+#  endif
+#else
 remainder_def(float, remainderf, isnan, isinf, llrintf);
 remainder_def(double, remainder, isnan, isinf, llrint);
 remainder_def(long double, remainderl, isnan, isinf, llrintl);
+#endif
 
+#undef fixedbv_remainder_def
 #undef remainder_def
