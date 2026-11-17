@@ -1,0 +1,5 @@
+CORE
+main.cpp
+--context-bound 3 --cswitch-skip-readonly-globals
+^Thread interleavings 31$(?![\s\S]*Thread interleavings)
+^VERIFICATION SUCCESSFUL$
