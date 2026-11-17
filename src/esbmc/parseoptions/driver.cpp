@@ -128,6 +128,28 @@ static bool k_induction_parallel_conflicts(const cmdlinet &cmdline)
   return false;
 }
 
+static bool ts_strategy_conflicts(const cmdlinet &cmdline)
+{
+  // The TS strategies turn k-induction back on, so goto_termination's
+  // inductive-step-only assumes would reach the engines as invariants; PDR
+  // trusts those and would prove a non-terminating loop terminates.
+  for (const char *ts : {"ts-bmc", "ts-pdr", "ts-check"})
+    if (cmdline.isset(ts) && cmdline.isset("termination"))
+    {
+      log_error("--{} cannot be combined with --termination", ts);
+      return true;
+    }
+
+  // --ts-pdr runs instead of the BMC engine, which these flags configure.
+  for (const char *bmc : {"ts-bmc", "ts-fresh-solver", "ts-push-pop"})
+    if (cmdline.isset("ts-pdr") && cmdline.isset(bmc))
+    {
+      log_error("--ts-pdr cannot be combined with --{}", bmc);
+      return true;
+    }
+  return false;
+}
+
 /// --smt-during-symex builds one solver during symex, and the equation it
 /// leaves refers to that solver's terms, so the --parallel-solving jobs would
 /// all share it unsynchronised (issue #10103). The other flags imply it.
@@ -259,6 +281,9 @@ static bool incompatible_flags(const cmdlinet &cmdline)
       log_error("--{} cannot be combined with --termination", mode);
       return true;
     }
+
+  if (ts_strategy_conflicts(cmdline))
+    return true;
 
   if (k_induction_parallel_conflicts(cmdline))
     return true;
