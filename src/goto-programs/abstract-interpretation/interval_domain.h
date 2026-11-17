@@ -229,6 +229,8 @@ public:
   /// pointer as havoc_through_pointer does.
   void havoc_target(const expr2tc &target, const ai_baset *ai = nullptr);
   void havoc_arguments(const irep_idt &function_id, const namespacet &ns);
+  /// Binds each parameter of the function @p call enters to its argument.
+  void assign_call_parameters(const code_function_call2t &call);
   void apply_return(
     goto_programt::const_targett call,
     const ai_baset &ai,

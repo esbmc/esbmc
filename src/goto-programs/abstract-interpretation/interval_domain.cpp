@@ -952,6 +952,40 @@ bool contains_float(const expr2tc &e)
   return inner_float;
 }
 
+void interval_domaint::assign_call_parameters(const code_function_call2t &call)
+{
+  assert(is_code_type(call.function->type));
+  const code_type2t &function = to_code_type(call.function->type);
+
+  for (size_t i = 0; i < function.arguments.size(); i++)
+  {
+    // Only a prototype with no definition leaves a parameter unnamed, and
+    // every unnamed parameter would share one entry (#10187).
+    if (function.argument_names[i].empty())
+      continue;
+
+    const expr2tc arg_symbol =
+      symbol2tc(function.arguments[i], function.argument_names[i]);
+
+    // A nil operand is an argument symex leaves unassigned, e.g. every
+    // parameter of the --function entry point (#2074).
+    if (i >= call.operands.size() || is_nil_expr(call.operands[i]))
+    {
+      havoc_rec(arg_symbol);
+      continue;
+    }
+
+    const expr2tc &arg_value = call.operands[i];
+
+    // Are we dealing with a recursive function?
+    std::unordered_set<expr2tc, irep2_hash> symbols;
+    get_symbols(arg_value, symbols);
+
+    bool is_recursive_arg = symbols.count(arg_symbol);
+    assign(code_assign2tc(arg_symbol, arg_value), is_recursive_arg);
+  }
+}
+
 void interval_domaint::transform(
   goto_programt::const_targett from,
   goto_programt::const_targett to,
@@ -1066,41 +1100,7 @@ void interval_domaint::transform(
     if (!is_nil_expr(code_function_call.ret))
       havoc_target(code_function_call.ret, &ai);
 
-    assert(is_code_type(code_function_call.function->type));
-    const code_type2t &function =
-      to_code_type(code_function_call.function->type);
-
-    // Let's do an assignment for all parameters!
-    for (size_t i = 0; i < function.arguments.size(); i++)
-    {
-      // Only a prototype with no definition leaves a parameter unnamed, and
-      // every unnamed parameter would share one entry (#10187).
-      if (function.argument_names[i].empty())
-        continue;
-
-      const type2tc &arg_type = function.arguments[i];
-      const expr2tc arg_symbol =
-        symbol2tc(arg_type, function.argument_names[i]);
-
-      // A nil operand is an argument symex leaves unassigned, e.g. every
-      // parameter of the --function entry point (#2074).
-      if (
-        i >= code_function_call.operands.size() ||
-        is_nil_expr(code_function_call.operands[i]))
-      {
-        havoc_rec(arg_symbol);
-        continue;
-      }
-
-      const expr2tc &arg_value = code_function_call.operands[i];
-
-      // Are we dealing with a recursive function?
-      std::unordered_set<expr2tc, irep2_hash> symbols;
-      get_symbols(arg_value, symbols);
-
-      bool is_recursive_arg = symbols.count(arg_symbol);
-      assign(code_assign2tc(arg_symbol, arg_value), is_recursive_arg);
-    }
+    assign_call_parameters(code_function_call);
   }
 
   to--;
