@@ -1101,7 +1101,11 @@ void goto_symext::run_intrinsic(
         type2tc(),
         sideeffect2t::allockind::nondet);
 
-      symex_assign(code_assign2tc(item.object, val), false, cur_state->guard);
+      expr2tc target_guard = item.guard;
+      cur_state->rename(target_guard);
+      guard2tc guard = cur_state->guard;
+      guard.add(target_guard);
+      symex_assign(code_assign2tc(item.object, val), false, guard);
     }
 
     return;
