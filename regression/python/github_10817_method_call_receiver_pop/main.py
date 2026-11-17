@@ -1,5 +1,6 @@
 # A list method on a method call receiver runs the call once (#10817).
 class Gw:
+
     def __init__(self) -> None:
         self.calls: int = 0
 
