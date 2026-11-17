@@ -1117,6 +1117,19 @@ static bool has_complex(const std::vector<scalar_value> &values)
   return false;
 }
 
+static dense_spectrum::complex_matrix
+complex_matrix_of(const std::vector<std::vector<scalar_value>> &matrix)
+{
+  dense_spectrum::complex_matrix out;
+  for (const auto &row : matrix)
+  {
+    out.emplace_back();
+    for (const auto &value : row)
+      out.back().push_back(value.value);
+  }
+  return out;
+}
+
 static bool has_complex(const std::vector<std::vector<scalar_value>> &values)
 {
   for (const auto &row : values)
@@ -6260,7 +6273,7 @@ static dense_spectrum::complex_vector as_complex(const std::vector<double> &v)
 // sum_j a_ij im_j - lr im_i - li re_i, and its magnitude is at most the sum
 // of theirs.
 static eigen_bounds pair_bounds(
-  const std::vector<std::vector<double>> &m,
+  const dense_spectrum::complex_matrix &m,
   std::complex<double> lambda,
   double value_radius,
   const dense_spectrum::complex_vector &v,
@@ -6275,8 +6288,11 @@ static eigen_bounds pair_bounds(
     std::vector<std::vector<box_factor>> re, im;
     for (std::size_t j = 0; j < m.size(); ++j)
     {
-      re.push_back({{m[i][j], 0.0}, {v[j].real(), r}});
-      im.push_back({{m[i][j], 0.0}, {v[j].imag(), r}});
+      const double ar = m[i][j].real(), ai = m[i][j].imag();
+      re.push_back({{ar, 0.0}, {v[j].real(), r}});
+      re.push_back({{-ai, 0.0}, {v[j].imag(), r}});
+      im.push_back({{ar, 0.0}, {v[j].imag(), r}});
+      im.push_back({{ai, 0.0}, {v[j].real(), r}});
     }
     re.push_back({{-lr, value_radius}, {v[i].real(), r}});
     re.push_back({{li, value_radius}, {v[i].imag(), r}});
@@ -6289,6 +6305,26 @@ static eigen_bounds pair_bounds(
   }
   bounds.norm = implied_bound(squares, 1.0);
   return bounds;
+}
+
+static dense_spectrum::complex_matrix
+as_complex_matrix(const std::vector<std::vector<double>> &m)
+{
+  dense_spectrum::complex_matrix out;
+  for (const auto &row : m)
+    out.emplace_back(row.begin(), row.end());
+  return out;
+}
+
+static eigen_bounds pair_bounds(
+  const std::vector<std::vector<double>> &m,
+  std::complex<double> lambda,
+  double value_radius,
+  const dense_spectrum::complex_vector &v,
+  double vector_radius)
+{
+  return pair_bounds(
+    as_complex_matrix(m), lambda, value_radius, v, vector_radius);
 }
 
 static exprt conjugate(const exprt &z);
@@ -6963,13 +6999,15 @@ void numpy_call_expr::bind_complex_eigenvector(
     abs_double(ieee_op("ieee_sub", squares, one)), "<=", relation.norm)};
   unit.location() = converter_.get_location_from_decl(call_);
   converter_.add_instruction(unit);
-  // A real vector's v.v has no imaginary part to bound.
-  near(
-    op("Sub", products, one),
-    "real",
-    relation.norm,
-    equality_exprt(
-      complex_part(lambda, "imag"), from_double(0.0, double_type())));
+  // A real matrix's real eigenvalue has a real vector, whose v.v has no
+  // imaginary part to bound.
+  if (relation.real_vectors)
+    near(
+      op("Sub", products, one),
+      "real",
+      relation.norm,
+      equality_exprt(
+        complex_part(lambda, "imag"), from_double(0.0, double_type())));
 }
 
 static exprt conjugate(const exprt &z)
@@ -6986,16 +7024,17 @@ static exprt negated_complex(const exprt &z)
 }
 
 // The orders LAPACK may return a spectrum in: its blocks (a real
-// eigenvalue, or a conjugate pair with the positive imaginary part first)
-// in any order, as the indices of the eigenvalues at each position.
+// eigenvalue, or, with `pairs`, a conjugate pair with the positive
+// imaginary part first; any eigenvalue of a complex matrix) in any order,
+// as the indices of the eigenvalues at each position.
 static std::vector<std::vector<std::size_t>>
-block_orders(const std::vector<std::complex<double>> &values)
+block_orders(const std::vector<std::complex<double>> &values, bool pairs)
 {
   std::vector<std::vector<std::size_t>> blocks;
   for (std::size_t k = 0; k < values.size(); ++k)
   {
     blocks.push_back({k});
-    if (values[k].imag() > 0)
+    if (pairs && values[k].imag() > 0)
       blocks.back().push_back(++k);
   }
   std::vector<std::size_t> permutation(blocks.size());
@@ -7057,11 +7096,7 @@ std::vector<exprt> numpy_call_expr::spectrum_order(
 }
 
 // eig and eigvals of a real matrix with a complex conjugate pair, which
-// NumPy returns as complex128: each eigenvalue within its radius, each pair
-// exactly conjugate with the positive imaginary part first, the blocks in
-// any order. An eigenvector is within the radius of one of its candidates
-// (LAPACK makes its largest component real), with either sign, and the
-// second of a pair is the conjugate of the first.
+// NumPy returns as complex128.
 exprt numpy_call_expr::complex_spectrum(
   const std::vector<std::vector<double>> &m,
   bool with_vectors)
@@ -7072,8 +7107,63 @@ exprt numpy_call_expr::complex_spectrum(
       "TypeError: numpy.linalg." + function + " supports only matrices up to " +
       std::to_string(max_linalg_order) + "x" +
       std::to_string(max_linalg_order));
-  const dense_spectrum::complex_eigen_system system =
-    dense_spectrum::complex_eigen_system_of(function, m);
+  return spectrum_result(
+    as_complex_matrix(m),
+    dense_spectrum::complex_eigen_system_of(function, m),
+    with_vectors,
+    true);
+}
+
+// eig and eigvals of a complex matrix up to 3x3: its eigenvalues come in any
+// order (each a block of its own) and none is the conjugate of another.
+exprt numpy_call_expr::complex_input_spectrum(
+  const dense_spectrum::complex_matrix &m,
+  bool with_vectors)
+{
+  const std::string function = with_vectors ? "eig" : "eigvals";
+  if (m.size() > 3)
+    throw std::runtime_error(
+      "TypeError: numpy.linalg." + function +
+      " of a complex matrix larger than 3x3 is not supported");
+  return spectrum_result(
+    m,
+    dense_spectrum::complex_input_eigen_system(function, m),
+    with_vectors,
+    false);
+}
+
+// The entries of a constant matrix as a program reads them: doubles for a
+// real one, complex128 for a complex one.
+static std::vector<std::vector<exprt>>
+matrix_entries(const dense_spectrum::complex_matrix &m, bool real_input)
+{
+  std::vector<std::vector<exprt>> entries;
+  for (const auto &row : m)
+  {
+    entries.emplace_back();
+    for (const std::complex<double> &x : row)
+    {
+      const exprt re = from_double(x.real(), double_type());
+      entries.back().push_back(
+        real_input ? re
+                   : make_complex(re, from_double(x.imag(), double_type())));
+    }
+  }
+  return entries;
+}
+
+// eig's or eigvals' complex128 results: each eigenvalue within its radius;
+// for a real matrix each pair exactly conjugate with the positive
+// imaginary part first, the blocks in any order. An eigenvector is within
+// the radius of one of its candidates (LAPACK makes its largest component
+// real), with either sign, and the second of a pair is the conjugate of the
+// first.
+exprt numpy_call_expr::spectrum_result(
+  const dense_spectrum::complex_matrix &m,
+  const dense_spectrum::complex_eigen_system &system,
+  bool with_vectors,
+  bool real_input)
+{
   std::vector<double> re, im, re_radius, im_radius;
   std::vector<bool> is_second;
   for (std::size_t k = 0; k < system.values.size(); ++k)
@@ -7081,12 +7171,13 @@ exprt numpy_call_expr::complex_spectrum(
     re.push_back(system.values[k].real());
     im.push_back(system.values[k].imag());
     re_radius.push_back(system.value_radius[k]);
-    im_radius.push_back(im.back() == 0.0 ? 0.0 : system.value_radius[k]);
-    is_second.push_back(im.back() < 0);
+    im_radius.push_back(
+      real_input && im.back() == 0.0 ? 0.0 : system.value_radius[k]);
+    is_second.push_back(real_input && im.back() < 0);
   }
   std::vector<exprt> second;
   const std::vector<exprt> slots =
-    spectrum_order(block_orders(system.values), is_second, second);
+    spectrum_order(block_orders(system.values, real_input), is_second, second);
   std::vector<exprt> values;
   for (std::size_t p = 0; p < slots.size(); ++p)
   {
@@ -7101,8 +7192,11 @@ exprt numpy_call_expr::complex_spectrum(
   eigen_bounds bounds{0.0, 0.0};
   const std::vector<std::vector<exprt>> columns =
     eigenvector_columns(m, system, slots, second, bounds);
+  std::optional<eigen_relation> relation = literal_relation(bounds);
+  if (relation)
+    relation->real_vectors = real_input;
   return bound_eigen_tuple(
-    constant_matrix_entries(m), values, columns, literal_relation(bounds));
+    matrix_entries(m, real_input), values, columns, relation);
 }
 
 // eig's (w, v), its eigenvector relations read from the stored results.
@@ -7134,7 +7228,7 @@ exprt numpy_call_expr::bound_eigen_tuple(
 
 // The eigenvector at each position of complex_spectrum's eigenvalues.
 std::vector<std::vector<exprt>> numpy_call_expr::eigenvector_columns(
-  const std::vector<std::vector<double>> &m,
+  const dense_spectrum::complex_matrix &m,
   const dense_spectrum::complex_eigen_system &system,
   const std::vector<exprt> &slots,
   const std::vector<exprt> &second,
@@ -8081,7 +8175,10 @@ exprt numpy_call_expr::linalg_unary(
     return raise_linalg_fault(fault->type, fault->message);
   std::vector<std::vector<scalar_value>> matrix;
   if (try_extract_scalar_2d_list(arg, matrix))
-    return constant_linalg(function, constant_matrix(function, matrix));
+    return (function == "eig" || function == "eigvals") && has_complex(matrix)
+             ? complex_input_spectrum(
+                 complex_matrix_of(matrix), function == "eig")
+             : constant_linalg(function, constant_matrix(function, matrix));
   if (contains_string_constant(arg))
     reject_linalg_operand(function);
   std::optional<std::vector<int>> shape;

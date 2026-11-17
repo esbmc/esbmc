@@ -50,9 +50,10 @@ vec unit(vec v)
   return v;
 }
 
-mat transpose(const mat &m)
+template <typename T>
+std::vector<std::vector<T>> transpose(const std::vector<std::vector<T>> &m)
 {
-  mat t(m[0].size(), vec(m.size()));
+  std::vector<std::vector<T>> t(m[0].size(), std::vector<T>(m.size()));
   for (std::size_t i = 0; i < m.size(); ++i)
     for (std::size_t j = 0; j < m[i].size(); ++j)
       t[j][i] = m[i][j];
@@ -97,15 +98,17 @@ vec shifted_solve(mat m, real shift, vec b)
 
 // The characteristic polynomial's coefficients, lowest degree first, by
 // Faddeev-LeVerrier.
-vec characteristic_polynomial(const mat &a)
+template <typename T>
+std::vector<T> characteristic_polynomial(const std::vector<std::vector<T>> &a)
 {
+  using row = std::vector<T>;
   const std::size_t n = a.size();
-  vec c(n + 1, 0);
+  row c(n + 1, T(0));
   c[n] = 1;
-  mat m(n, vec(n, 0));
+  std::vector<row> m(n, row(n, T(0)));
   for (std::size_t k = 1; k <= n; ++k)
   {
-    mat next(n, vec(n, 0));
+    std::vector<row> next(n, row(n, T(0)));
     for (std::size_t i = 0; i < n; ++i)
       for (std::size_t j = 0; j < n; ++j)
       {
@@ -114,7 +117,7 @@ vec characteristic_polynomial(const mat &a)
         if (i == j)
           next[i][j] += c[n - k + 1];
       }
-    real trace = 0;
+    T trace = 0;
     for (std::size_t i = 0; i < n; ++i)
       for (std::size_t l = 0; l < n; ++l)
         trace += a[i][l] * next[l][i];
@@ -124,7 +127,8 @@ vec characteristic_polynomial(const mat &a)
   return c;
 }
 
-std::complex<real> evaluate(const vec &c, std::complex<real> z)
+template <typename T>
+std::complex<real> evaluate(const std::vector<T> &c, std::complex<real> z)
 {
   std::complex<real> value = 0;
   for (std::size_t i = c.size(); i-- > 0;)
@@ -133,7 +137,8 @@ std::complex<real> evaluate(const vec &c, std::complex<real> z)
 }
 
 // The roots of a monic polynomial, by Durand-Kerner.
-std::vector<std::complex<real>> roots(const vec &c)
+template <typename T>
+std::vector<std::complex<real>> roots(const std::vector<T> &c)
 {
   const std::size_t n = c.size() - 1;
   std::vector<std::complex<real>> z(n);
@@ -268,18 +273,23 @@ namespace
 {
 using cplx = std::complex<real>;
 using cvec = std::vector<cplx>;
+using cmat = std::vector<cvec>;
+
+template <typename T>
+cmat as_complex(const std::vector<std::vector<T>> &m)
+{
+  cmat out;
+  for (const auto &row : m)
+    out.emplace_back(row.begin(), row.end());
+  return out;
+}
 
 // x with (m - shift I) x = b for a complex shift, as shifted_solve.
-cvec complex_shifted_solve(const mat &real_m, cplx shift, cvec b)
+cvec complex_shifted_solve(cmat m, cplx shift, cvec b)
 {
-  const std::size_t n = real_m.size();
-  std::vector<cvec> m(n, cvec(n));
+  const std::size_t n = m.size();
   for (std::size_t i = 0; i < n; ++i)
-  {
-    for (std::size_t j = 0; j < n; ++j)
-      m[i][j] = real_m[i][j];
     m[i][i] -= shift;
-  }
   for (std::size_t k = 0; k < n; ++k)
   {
     std::size_t p = k;
@@ -321,7 +331,7 @@ cvec complex_unit(cvec v)
 }
 
 // Newton's method on det(A - lambda I), as refine, for a complex root.
-cplx complex_refine(const mat &a, cplx lambda)
+cplx complex_refine(const cmat &a, cplx lambda)
 {
   const std::size_t n = a.size();
   for (int iteration = 0; iteration < 20; ++iteration)
@@ -341,7 +351,7 @@ cplx complex_refine(const mat &a, cplx lambda)
   return lambda;
 }
 
-cvec complex_eigenvector(const mat &a, cplx lambda)
+cvec complex_eigenvector(const cmat &a, cplx lambda)
 {
   cvec v(a.size(), 1);
   for (int iteration = 0; iteration < 4; ++iteration)
@@ -349,7 +359,7 @@ cvec complex_eigenvector(const mat &a, cplx lambda)
   return v;
 }
 
-real complex_residual(const mat &a, cplx lambda, const cvec &v)
+real complex_residual(const cmat &a, cplx lambda, const cvec &v)
 {
   real sum = 0;
   for (std::size_t i = 0; i < a.size(); ++i)
@@ -373,7 +383,7 @@ cvec spectrum(const std::string &function, const mat &a)
       values.emplace_back(refine(a, root.real()), 0);
     else if (root.imag() > 0)
     {
-      const cplx lambda = complex_refine(a, root);
+      const cplx lambda = complex_refine(as_complex(a), root);
       values.push_back(lambda);
       values.push_back(std::conj(lambda));
     }
@@ -454,21 +464,25 @@ bool has_real_spectrum(const matrix &m)
   return true;
 }
 
-complex_eigen_system
-complex_eigen_system_of(const std::string &function, const matrix &m)
+namespace
 {
-  const mat wide = widen(m);
-  const real norm = frobenius(wide);
-  mat a = wide;
-  for (vec &row : a)
-    for (real &x : row)
-      x /= norm;
-  const cvec values = spectrum(function, a);
+// The eigenvalues `values` of `a` (scaled to unit norm by `norm`), each
+// within the radius its condition allows of LAPACK's, with the unit
+// eigenvectors LAPACK may return for it: for a real matrix, a real one for
+// a real eigenvalue and the conjugates of the first for the second of a
+// pair; for a complex matrix, one per largest component made real.
+complex_eigen_system bounded_eigen_system(
+  const std::string &function,
+  const cmat &a,
+  const cvec &values,
+  real norm,
+  bool real_input)
+{
   real gap = INFINITY;
   for (std::size_t i = 0; i < values.size(); ++i)
     for (std::size_t j = i + 1; j < values.size(); ++j)
       gap = std::min(gap, std::abs(values[i] - values[j]));
-  const mat at = transpose(a);
+  const cmat at = transpose(a);
   std::vector<cvec> vectors;
   std::vector<real> condition;
   real conditions = 0;
@@ -497,7 +511,7 @@ complex_eigen_system_of(const std::string &function, const matrix &m)
   // 1 / sqrt(n).
   const real vector_radius =
     (2 * backward_error * conditions / gap + backward_error) *
-    (2 + 2 * std::sqrt(static_cast<real>(m.size())));
+    (2 + 2 * std::sqrt(static_cast<real>(a.size())));
   if (function == "eig" && vector_radius > 1e-6L)
     reject_spectrum(function, "ill-conditioned eigenvectors");
   complex_eigen_system system;
@@ -509,10 +523,45 @@ complex_eigen_system_of(const std::string &function, const matrix &m)
       static_cast<double>(value.real()), static_cast<double>(value.imag()));
     system.value_radius.push_back(
       static_cast<double>(2 * backward_error * condition[k] * norm));
-    system.candidates.push_back(eigenvector_candidates(
-      values, k, vectors[k], system.candidates, 8 * vector_radius));
+    system.candidates.push_back(
+      real_input
+        ? eigenvector_candidates(
+            values, k, vectors[k], system.candidates, 8 * vector_radius)
+        : phase_candidates(vectors[k], 8 * vector_radius));
   }
   return system;
+}
+} // namespace
+
+complex_eigen_system
+complex_eigen_system_of(const std::string &function, const matrix &m)
+{
+  const mat wide = widen(m);
+  const real norm = frobenius(wide);
+  mat a = wide;
+  for (vec &row : a)
+    for (real &x : row)
+      x /= norm;
+  return bounded_eigen_system(
+    function, as_complex(a), spectrum(function, a), norm, true);
+}
+
+complex_eigen_system
+complex_input_eigen_system(const std::string &function, const complex_matrix &m)
+{
+  cmat a = as_complex(m);
+  real sum = 0;
+  for (const cvec &row : a)
+    for (const cplx &x : row)
+      sum += std::norm(x);
+  const real norm = std::sqrt(sum);
+  for (cvec &row : a)
+    for (cplx &x : row)
+      x /= norm;
+  cvec values;
+  for (const cplx &root : roots(characteristic_polynomial(a)))
+    values.push_back(complex_refine(a, root));
+  return bounded_eigen_system(function, a, values, norm, false);
 }
 
 namespace

@@ -75,6 +75,15 @@ bool has_real_spectrum(const matrix &m);
 complex_eigen_system
 complex_eigen_system_of(const std::string &function, const matrix &m);
 
+using complex_matrix = std::vector<std::vector<std::complex<double>>>;
+
+// The eigenvalues of a complex matrix, in no particular order and with no
+// conjugate pairs, each with candidates[k] as complex_eigen_system_of gives
+// them for a complex eigenvalue. Throws as complex_eigen_system_of does.
+complex_eigen_system complex_input_eigen_system(
+  const std::string &function,
+  const complex_matrix &m);
+
 // The singular values only, which any rounding keeps well conditioned.
 std::vector<double> singular_values_of(const matrix &m);
 

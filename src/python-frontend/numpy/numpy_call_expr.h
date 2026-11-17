@@ -50,6 +50,8 @@ struct eigen_relation
   exprt residual;
   exprt norm;
   exprt excused;
+  // A real matrix's real eigenvalues have real vectors.
+  bool real_vectors = true;
 };
 
 class numpy_call_expr : public function_call_expr
@@ -554,12 +556,20 @@ private:
   exprt complex_spectrum(
     const std::vector<std::vector<double>> &m,
     bool with_vectors);
+  exprt complex_input_spectrum(
+    const dense_spectrum::complex_matrix &m,
+    bool with_vectors);
+  exprt spectrum_result(
+    const dense_spectrum::complex_matrix &m,
+    const dense_spectrum::complex_eigen_system &system,
+    bool with_vectors,
+    bool real_input);
   std::vector<exprt> spectrum_order(
     const std::vector<std::vector<std::size_t>> &orders,
     const std::vector<bool> &is_second,
     std::vector<exprt> &second);
   std::vector<std::vector<exprt>> eigenvector_columns(
-    const std::vector<std::vector<double>> &m,
+    const dense_spectrum::complex_matrix &m,
     const dense_spectrum::complex_eigen_system &system,
     const std::vector<exprt> &slots,
     const std::vector<exprt> &second,
