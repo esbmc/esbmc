@@ -2,6 +2,7 @@
 
 #include <transition-system/ts_engines.h>
 #include <transition-system/ts_extraction.h>
+#include <transition-system/ts_pdr.h>
 #include <transition-system/ts_slice.h>
 #include <util/base/time_stopping.h>
 #include <util/message/message.h>
@@ -12,7 +13,8 @@
 
 bool esbmc_parseoptionst::ts_strategy_requested() const
 {
-  return cmdline.isset("ts-check") || cmdline.isset("ts-bmc");
+  return cmdline.isset("ts-check") || cmdline.isset("ts-bmc") ||
+         cmdline.isset("ts-pdr");
 }
 
 int esbmc_parseoptionst::do_ts_strategy(
@@ -71,6 +73,32 @@ int esbmc_parseoptionst::do_ts_strategy(
                            : strtoul(cmdline.getval("max-k-step"), nullptr, 10);
 
   namespacet ns(context);
+
+  if (cmdline.isset("ts-pdr"))
+  {
+    ts_pdrt pdr(ts, ns, options);
+    unsigned depth = 0;
+    switch (pdr.run(max_k, depth))
+    {
+    case ts_pdrt::resultt::safe:
+      log_success(
+        "\nSolution found by PDR (invariant checked)\nVERIFICATION SUCCESSFUL");
+      return 0;
+    case ts_pdrt::resultt::unsafe:
+    {
+      log_status("PDR found a violation at step {}; replaying with BMC", depth);
+      ts_enginet replay(ts, ns, options);
+      const int rc = replay.bmc(depth, false);
+      if (rc != 1)
+        log_error("BMC did not reproduce the PDR counterexample");
+      return rc;
+    }
+    case ts_pdrt::resultt::unknown:
+      log_status("PDR: {}", pdr.reason);
+      log_fail("\nVERIFICATION UNKNOWN");
+      return 0;
+    }
+  }
 
   if (cmdline.isset("ts-fresh-solver"))
   {

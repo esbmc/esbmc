@@ -117,6 +117,7 @@ static bool k_induction_parallel_conflicts(const cmdlinet &cmdline)
         "all-witnesses",
         "parallel-solving",
         "ts-bmc",
+        "ts-pdr",
         "ts-check"})
     if (cmdline.isset(incompatible))
     {
@@ -277,6 +278,7 @@ static bool incompatible_flags(const cmdlinet &cmdline)
           "k-induction-parallel",
           "loop-invariant",
           "ts-bmc",
+          "ts-pdr",
           "ts-check"})
       if (cmdline.isset(incompatible))
       {

@@ -12,12 +12,15 @@ class ts_enginet
 {
 public:
   /// Without `incremental`, the solver is never asked to track assumptions;
-  /// only solve_prefix and solve_bound may be used.
+  /// only solve_prefix and solve_bound may be used. With `cores` (PDR), the
+  /// solver reports unsat assumptions, the initial state holds only under
+  /// act_init, and each step's invariants hold under act_inv.
   ts_enginet(
     const transition_systemt &ts,
     const namespacet &ns,
     optionst &options,
-    bool incremental = true);
+    bool incremental = true,
+    bool cores = false);
 
   /// Exit codes follow do_bmc_strategy: 0 SUCCESSFUL or UNKNOWN, 1 FAILED,
   /// 6 solver error.
@@ -32,6 +35,8 @@ protected:
   const transition_systemt &ts;
   const namespacet &ns;
   std::unique_ptr<smt_convt> solver;
+  /// Nil without `cores`.
+  expr2tc act_init, act_inv;
 
   expr2tc bad_literal(unsigned step) const;
   /// Returns false if the prefix itself violates a property. Assumptions
