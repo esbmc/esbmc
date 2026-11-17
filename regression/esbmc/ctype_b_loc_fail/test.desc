@@ -1,0 +1,5 @@
+CORE
+main.c
+
+^VERIFICATION FAILED$
+^  assertion \(\*__ctype_b_loc\(\)\)\[.*\] & \(1 << 3\)$

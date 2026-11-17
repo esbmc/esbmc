@@ -821,6 +821,10 @@ void violation_yaml_goto_trace(
   yml.verified_file = options.get_option("input-file");
   log_progress("Generating Violation Yaml Witness for: {}", yml.verified_file);
 
+  // A summarised loop runs one iteration at a nondet index and the trace
+  // skips the others, so a waypoint would bind to a visit the trace left out.
+  // Those before the first summary would hold, but slicing can drop its steps.
+  const bool summarised = options.get_bool_option("array-loops-summarised");
   yml.thread_ids = registrable_spawns(goto_trace);
   /* A race's final segment holds the earlier access, which no waypoint after
      it may follow, so only nondet branches are kept there. */
@@ -830,7 +834,8 @@ void violation_yaml_goto_trace(
   size_t branching_waypoints = 0;
   for (const auto &step : goto_trace.steps)
   {
-    spawned |= push_call_waypoints(ns, step, yml, options) && !race;
+    if (!summarised)
+      spawned |= push_call_waypoints(ns, step, yml, options) && !race;
     const unsigned thread_nr = waypoint_thread(yml, step);
 
     switch (step.type)
@@ -855,8 +860,9 @@ void violation_yaml_goto_trace(
         if (step.nondet_dependent)
           --ahead;
 
-        if (!keeps_branching_waypoint(
-              step, ahead, spawned, branching_waypoints))
+        if (
+          summarised ||
+          !keeps_branching_waypoint(step, ahead, spawned, branching_waypoints))
           break;
 
         /* A switch would take one waypoint naming the case it enters, but

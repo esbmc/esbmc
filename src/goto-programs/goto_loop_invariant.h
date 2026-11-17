@@ -214,12 +214,15 @@ private:
   /**
    * Copy the loop body instructions (from @p body_begin up to, but not
    * including, @p loop_exit) into @p out. Intra-loop jump targets are remapped
-   * to the copied instructions; targets outside the loop are left unchanged.
+   * to the copied instructions. A jump to @p loop_head ends the copied
+   * iteration, falling through or jumping to @p loop_exit ends it under the
+   * back edge's continue condition, and a jump out of the loop ends the branch.
    * @p body_begin is the instruction after the loop head when the head is the
    * loop's guard, which ASSUME(entry_cond) models instead, and the head itself
    * otherwise -- a do-while head is a body instruction (issue #7494).
    */
   void copy_loop_body(
+    goto_programt::targett loop_head,
     goto_programt::targett body_begin,
     goto_programt::targett loop_exit,
     goto_programt &out) const;
