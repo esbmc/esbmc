@@ -222,7 +222,8 @@ bool numpy_consumer_is_modelled(
     "ndim",   "itemsize",    "nbytes",   "dtype",   "sum",         "prod",
     "mean",   "any",         "all",      "add",     "subtract",    "multiply",
     "divide", "true_divide", "negative", "astype",  "transpose",   "reshape",
-    "ravel",  "swapaxes",    "moveaxis", "squeeze", "expand_dims", "T"};
+    "ravel",  "swapaxes",    "moveaxis", "squeeze", "expand_dims", "T",
+    "eig",    "eigvals"};
   if (kind == numpy_dtypet::kindt::string)
     return over_strings.count(name) != 0;
   return kind != numpy_dtypet::kindt::complex || over_complex.count(name) != 0;
