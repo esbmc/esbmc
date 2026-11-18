@@ -13,13 +13,19 @@
 #include <irep2/irep2.h>
 #include <irep2/irep2_utils.h>
 #include <util/irep/migrate.h>
+#include <goto-symex/engine/split_structs.h>
 
 goto_symex_statet::goto_symex_statet(
   renaming::level2t &l2,
   value_sett &vs,
   const namespacet &_ns,
-  bool no_propagation)
-  : no_propagation(no_propagation), level2(l2), value_set(vs), ns(_ns)
+  bool no_propagation,
+  split_structst &split)
+  : no_propagation(no_propagation),
+    split_structs(&split),
+    level2(l2),
+    value_set(vs),
+    ns(_ns)
 {
   use_value_set = true;
   num_instructions = 0;
@@ -48,6 +54,7 @@ goto_symex_statet &goto_symex_statet::operator=(const goto_symex_statet &state)
   function_unwind = state.function_unwind;
   use_value_set = state.use_value_set;
   no_propagation = state.no_propagation;
+  split_structs = state.split_structs;
   call_stack = state.call_stack;
   witness_segs = state.witness_segs;
   witness_locations = state.witness_locations;
@@ -324,6 +331,17 @@ static expr2tc read_of_field(const expr2tc &l2_lhs, const expr2tc &field)
   return expr2tc();
 }
 
+/// Whether @p e may stand in a carried aggregate literal. A whole read of a
+/// split object keeps a field's L2 name where its value was refused; an opaque
+/// one would carry an object that, unsplit, is read as a symbol (#7521).
+static bool
+literal_element_may_propagate(const goto_symex_statet &state, const expr2tc &e)
+{
+  if (is_symbol2t(e) && state.split_structs->is_opaque(e))
+    return false;
+  return is_immutable_value(e) || state.constant_propagation(e);
+}
+
 /// Whether a constant aggregate literal may propagate: every element must
 /// itself propagate, or be immutable (#7597).
 static bool aggregate_literal_may_propagate(
@@ -333,7 +351,7 @@ static bool aggregate_literal_may_propagate(
   bool noconst = true;
 
   expr->foreach_operand([&](const expr2tc &e) {
-    if (noconst && !is_immutable_value(e) && !state.constant_propagation(e))
+    if (noconst && !literal_element_may_propagate(state, e))
       noconst = false;
   });
   return noconst;
@@ -572,7 +590,7 @@ static bool pin_refused_elements(
   bool pinned_any = false;
   for (size_t i = 0; i < elems.size(); i++)
   {
-    if (state.constant_propagation(elems[i]) || is_immutable_value(elems[i]))
+    if (literal_element_may_propagate(state, elems[i]))
       continue;
     pinned_any = true;
     elems[i] = read_of(i);
@@ -818,9 +836,17 @@ static expr2tc pin_chain_updates(
       // rebuilt's type; only equal types make the two agree.
       if (rebuilt->type != l2_lhs->type)
         return expr2tc();
-      value = read_of_field(l2_lhs, w.update_field);
-      if (is_nil_expr(value))
+      const expr2tc read = read_of_field(l2_lhs, w.update_field);
+      if (is_nil_expr(read))
         return expr2tc();
+      // A struct literal refused for some elements keeps its other elements:
+      // pinning only those to reads out of `read` lets a constant sibling
+      // still fold (#7521, a split struct copied into an unsplit member).
+      const expr2tc nested =
+        is_constant_struct2t(value) && value->type == read->type
+          ? pin_struct_literal(state, value, read)
+          : expr2tc();
+      value = is_nil_expr(nested) ? read : nested;
       pinned_any = true;
     }
     // A kept value need not match the slot: symex renames a `with`'s operands
@@ -912,6 +938,11 @@ void goto_symex_statet::assignment(expr2tc &lhs, const expr2tc &rhs)
 
   expr2tc const_value = constant_propagation(rhs) ? rhs : expr2tc();
   level2.make_assignment(lhs, const_value, rhs);
+  if (
+    is_nil_expr(const_value) &&
+    split_structs->is_field(to_symbol2t(lhs).thename) &&
+    !is_immutable_value(rhs))
+    split_structs->mark_opaque(lhs);
 
   // #7597: propagation is a whole-object decision, so one member written a
   // value it will not carry drops the object and with it a sibling loop
