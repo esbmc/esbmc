@@ -1618,7 +1618,11 @@ void goto_symext::symex_input(const code_function_call2t &func_call)
       assert(is_symbol2t(item.object) && "This only works for variables");
       check_read_only_write(item.object, and2tc(stored.as_expr(), item.guard));
 
-      symex_scanf_store(item, operand, conversions[i].bytes, stored);
+      expr2tc target_guard = item.guard;
+      cur_state->rename(target_guard);
+      guard2tc guard = stored;
+      guard.add(target_guard);
+      symex_scanf_store(item, operand, conversions[i].bytes, guard);
     }
   }
 
