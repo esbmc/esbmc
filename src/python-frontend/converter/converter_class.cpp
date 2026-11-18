@@ -1419,11 +1419,11 @@ typet python_converter::any_attribute_type(
 /// The Optional[V] that @p value, a `d.get(k)` without a default, reads when
 /// `d` is a parameter annotated `dict[K, V]` with a scalar V: the struct
 /// handle_dict_get builds, so the attribute keeps its None flag (#10831).
-/// Empty otherwise.
+/// @p fallback otherwise.
 typet python_converter::dict_get_optional_type(
   const nlohmann::json &value,
-  const std::unordered_map<std::string, nlohmann::json> &param_annotations)
-  const
+  const std::unordered_map<std::string, nlohmann::json> &param_annotations,
+  const typet &fallback) const
 {
   if (
     !value.is_object() || value.value("_type", "") != "Call" ||
@@ -1431,18 +1431,18 @@ typet python_converter::dict_get_optional_type(
     value["func"].value("attr", "") != "get" || value["args"].size() != 1 ||
     !value["keywords"].empty() ||
     value["func"]["value"].value("_type", "") != "Name")
-    return typet();
+    return fallback;
   const auto param =
     param_annotations.find(value["func"]["value"].value("id", ""));
   if (
     param == param_annotations.end() ||
     param->second.value("_type", "") != "Subscript" ||
     param->second["value"].value("id", "") != "dict")
-    return typet();
+    return fallback;
   const typet held =
     dict_handler_->get_dict_value_type_from_annotation(param->second);
   if (!held.is_signedbv() && !held.is_floatbv() && !held.is_bool())
-    return typet();
+    return fallback;
   return type_handler_.build_optional_type(held);
 }
 
@@ -1839,10 +1839,11 @@ void python_converter::get_attributes_from_self(
       stmt["targets"][0]["value"]["id"] == "self")
     {
       // A member is initialized with something that might be not annotated
-      typet type = dict_get_optional_type(stmt["value"], param_annotations);
-      if (type.id().empty())
-        type = unannotated_attribute_type(
-          stmt["value"], func_node, clazz, any_type());
+      const typet type = dict_get_optional_type(
+        stmt["value"],
+        param_annotations,
+        unannotated_attribute_type(
+          stmt["value"], func_node, clazz, any_type()));
       const std::string &attr_name = stmt["targets"][0]["attr"];
 
       if (!clazz.has_component(attr_name))
