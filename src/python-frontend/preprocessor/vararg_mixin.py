@@ -108,15 +108,22 @@ class VarargMixin:
             node.value.func, ast.Name) and node.value.func.id == "super")
 
     @staticmethod
+    def _can_pack_init(args, extra, kwnames):
+        if args.kwonlyargs or args.posonlyargs or extra < 0:
+            return False
+        if args.vararg is None and (extra or args.kwarg is None):
+            return False
+        if args.kwarg is None and kwnames:
+            return False
+        return not {arg.arg for arg in args.args}.intersection(kwnames)
+
+    @staticmethod
     def _fix_init_arity(init, arity, kwnames=()):
         """Replace `init`'s *args and **kwargs by the `arity` positional
         parameters and the `kwnames` keywords they pack; whether it did (#9074)."""
         args = init.args
         extra = arity - len(args.args)
-        named = {arg.arg for arg in args.args}
-        if (args.kwonlyargs or args.posonlyargs or extra < 0 or (args.vararg is None and extra)
-                or (args.vararg is None and args.kwarg is None) or (kwnames and args.kwarg is None)
-                or named.intersection(kwnames)):
+        if not VarargMixin._can_pack_init(args, extra, kwnames):
             return False
         pad = [f"_esbmc_va_{i}" for i in range(extra)]
         kw_pad = [f"_esbmc_kw_{i}" for i in range(len(kwnames))]
