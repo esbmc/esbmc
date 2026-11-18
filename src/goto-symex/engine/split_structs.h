@@ -47,6 +47,12 @@ public:
 
   static bool is_untracked_scalar(const type2tc &type);
 
+  /// Whether @p name is the field symbol of a split object.
+  bool is_field(const irep_idt &name) const
+  {
+    return field_ids.count(name) != 0;
+  }
+
   bool empty() const
   {
     return split.empty();
@@ -77,4 +83,5 @@ private:
     irep_id_hash>
     index;
   std::unordered_set<irep_idt, irep_id_hash> untracked_fields;
+  std::unordered_set<irep_idt, irep_id_hash> field_ids;
 };

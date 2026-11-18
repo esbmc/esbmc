@@ -154,6 +154,7 @@ void split_structst::add_fields(
     member_index.emplace(st.member_names[k], k);
     const std::string id = id2string(s.id) + "::" + std::to_string(k);
     fields.push_back(symbol2tc(st.members[k], id));
+    field_ids.insert(id);
     if (is_untracked_scalar(st.members[k]))
       untracked_fields.insert(id);
     if (context.find_symbol(id))
@@ -178,6 +179,7 @@ void split_structst::analyse(
   split.clear();
   index.clear();
   untracked_fields.clear();
+  field_ids.clear();
   if (!enabled(goto_functions, options))
     return;
 

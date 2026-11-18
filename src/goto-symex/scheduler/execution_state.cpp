@@ -59,7 +59,8 @@ execution_statet::execution_statet(
   const goto_programt *goto_program = &(it->second.body);
 
   // Initialize initial thread state
-  goto_symex_statet state(*state_level2, global_value_set, ns, no_propagation);
+  goto_symex_statet state(
+    *state_level2, global_value_set, ns, no_propagation, art->split_structs);
   state.initialize(
     (*goto_program).instructions.begin(),
     (*goto_program).instructions.end(),

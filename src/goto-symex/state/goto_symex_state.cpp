@@ -13,13 +13,19 @@
 #include <irep2/irep2.h>
 #include <irep2/irep2_utils.h>
 #include <util/irep/migrate.h>
+#include <goto-symex/engine/split_structs.h>
 
 goto_symex_statet::goto_symex_statet(
   renaming::level2t &l2,
   value_sett &vs,
   const namespacet &_ns,
-  bool no_propagation)
-  : no_propagation(no_propagation), level2(l2), value_set(vs), ns(_ns)
+  bool no_propagation,
+  const split_structst &split)
+  : no_propagation(no_propagation),
+    split_structs(&split),
+    level2(l2),
+    value_set(vs),
+    ns(_ns)
 {
   use_value_set = true;
   num_instructions = 0;
@@ -48,6 +54,7 @@ goto_symex_statet &goto_symex_statet::operator=(const goto_symex_statet &state)
   function_unwind = state.function_unwind;
   use_value_set = state.use_value_set;
   no_propagation = state.no_propagation;
+  split_structs = state.split_structs;
   call_stack = state.call_stack;
   witness_segs = state.witness_segs;
   witness_locations = state.witness_locations;
@@ -324,6 +331,18 @@ static expr2tc read_of_field(const expr2tc &l2_lhs, const expr2tc &field)
   return expr2tc();
 }
 
+/// Whether @p e may stand in a carried aggregate literal. A whole read of a
+/// split object keeps a field's L2 name only where its value was refused;
+/// carrying the name would carry an object that, unsplit, is read as a symbol
+/// and not carried (#7521).
+static bool
+literal_element_may_propagate(const goto_symex_statet &state, const expr2tc &e)
+{
+  if (is_symbol2t(e) && state.split_structs->is_field(to_symbol2t(e).thename))
+    return false;
+  return is_immutable_value(e) || state.constant_propagation(e);
+}
+
 /// Whether a constant aggregate literal may propagate: every element must
 /// itself propagate, or be immutable (#7597).
 static bool aggregate_literal_may_propagate(
@@ -333,7 +352,7 @@ static bool aggregate_literal_may_propagate(
   bool noconst = true;
 
   expr->foreach_operand([&](const expr2tc &e) {
-    if (noconst && !is_immutable_value(e) && !state.constant_propagation(e))
+    if (noconst && !literal_element_may_propagate(state, e))
       noconst = false;
   });
   return noconst;
@@ -572,7 +591,7 @@ static bool pin_refused_elements(
   bool pinned_any = false;
   for (size_t i = 0; i < elems.size(); i++)
   {
-    if (state.constant_propagation(elems[i]) || is_immutable_value(elems[i]))
+    if (literal_element_may_propagate(state, elems[i]))
       continue;
     pinned_any = true;
     elems[i] = read_of(i);
