@@ -1,0 +1,5 @@
+CORE
+main.c
+--incremental-bmc --context-bound 2 --max-k-step 4
+^The context bound cut schedules short, so the forward condition cannot show that every state was reached$
+^VERIFICATION UNKNOWN$

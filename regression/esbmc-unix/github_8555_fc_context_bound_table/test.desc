@@ -1,0 +1,5 @@
+CORE
+main.c
+--incremental-bmc --context-bound 2 --max-k-step 4 --file-output out.log
+CHECK_FILE out.log contains ^VERIFICATION UNKNOWN$
+CHECK_FILE out.log absent PASSED\s+\[main\.assertion\.1\]

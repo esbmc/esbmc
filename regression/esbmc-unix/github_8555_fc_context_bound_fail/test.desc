@@ -1,0 +1,5 @@
+CORE
+main.c
+--incremental-bmc --context-bound 3 --max-k-step 4
+^Bug found \(k = 3\)$
+^VERIFICATION FAILED$

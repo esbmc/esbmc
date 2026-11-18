@@ -1,0 +1,6 @@
+CORE
+main.c
+--incremental-bmc --multi-property --context-bound 2 --max-k-step 4
+^\s+UNKNOWN\s+\[main\.assertion\.1\]
+^\*\* 0 of 4 properties failed, 3 passed, 1 unknown$
+^VERIFICATION UNKNOWN$
