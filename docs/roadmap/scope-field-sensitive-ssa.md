@@ -31,8 +31,9 @@
 > under Z3 (24 s) and Bitwuzla (7 s) (§8.14). There, with the flag forced on
 > under Bitwuzla, the full C (3442), C++ (1361) and Python (9279) `CORE`
 > suites change no verdict, and both Phase 1 corpus rows meet the 2x bar
-> under Z3 and Bitwuzla (§8.15). Still unmeasured on merged master: the full
-> Python suite under Z3. Phase 1 also lacks an SV-COMP run.** The corpus is in `regression/field-sensitivity/`
+> under Z3 and Bitwuzla (§8.15). The whole Python suite (9823 tests) with
+> the flag forced on under Z3 loses no verdict either (§8.16). Phase 1 also
+> lacks an SV-COMP run.** The corpus is in `regression/field-sensitivity/`
 > with baselines, and the census has been run and reverted. Phase 1 adds
 > `--field-sensitive-ssa` (default off): symex gives each field of an
 > eligible local, parameter or return slot its own SSA name. It meets the 2x
@@ -1261,3 +1262,48 @@ fields:
 
 Every run reports `VERIFICATION SUCCESSFUL`. Not measured: the full Python
 suite under Z3 on merged master, and an SV-COMP run.
+
+### 8.16 Phase 1 Python suite under Z3 on merged master
+
+Measured on 2026-11-18 at master `02f76186e`, the clang 18 build of §8.14.
+Whole Python suite under ctest (`ctest -L python`, 9823 tests including
+`KNOWNBUG` and `THOROUGH`), the flag forced on through a wrapper that also
+replaces any solver option with `--z3`, `ESBMC_REGRESS_TIMEOUT_MAX=60`, 3
+jobs, in 10-minute runs. Every failure was re-run without the flag. During
+the runs `timeout` left orphaned ESBMC processes that competed for memory,
+so some timeouts and OOM kills below are inflated; the tests run alone are
+not affected.
+
+- 9726 pass with the flag. 97 fail; 96 of these also fail without the flag:
+  - 86 hit the 60 s cap both ways under Z3. Re-run under Bitwuzla with
+    the flag, 85 pass; `dict_splat_symbolic_key_fail` gives `VERIFICATION
+    FAILED`, as expected, in 63 s without the flag and 65 s with it, run
+    alone.
+  - Five `complex_*` tests (`--fp2bv`, no solver pinned) are OOM-killed
+    under Z3 both ways, even run alone; under Bitwuzla all five pass both
+    ways in the same time (3.6-20.8 s).
+  - Five fail both ways for reasons unrelated to the flag: `math27_nondet`
+    pins `--bitwuzla`, which the wrapper replaced (5.0 s and 4.9 s
+    SUCCESSFUL under Bitwuzla); `ir-ieee-no-solver` expects the "defaulting
+    to Z3" notice that the forced `--z3` suppresses; `github_7559_literal`
+    is a Python syntax error under this container's `python3`;
+    `elif_divergent_types_prior_float_fail` is `KNOWNBUG`;
+    `tagged_attr_store_nested` crashes in the frontend (§8.14).
+- `nondet_dict14` (`THOROUGH`) passed without the flag in the ctest re-run
+  and hit the 60 s cap with it. Run alone under Z3, both give `VERIFICATION
+  SUCCESSFUL`: 61, 47 and 47 s without the flag, 99, 91 and 89 s with it
+  (solver time 44 s against 87 s). Under Bitwuzla it takes 5.9 s and 6.3 s.
+  The flag splits three objects here, but the `--program-only` outputs with
+  and without it hold the same steps in a different order: at each join the
+  phi of `dynamic_12_inf_array` and that of the split `dynamic_11_value`
+  swap places. Z3's solve time depends on that order; the verdict does not,
+  and both runs are far inside the 1200 s budget.
+
+Phase 1 corpus rows on this build, symex seconds, three runs each,
+medians, 8 / 2048 fields, with the flag: `repro7521` 0.716 / 1.199 (1.67x)
+under Z3 and 0.615 / 1.119 (1.82x) under Bitwuzla; `local_writes` 0.017 /
+0.017 under Z3 and 0.017 / 0.018 under Bitwuzla. The 2x bar holds on both
+builds, with `repro7521` under Bitwuzla closest to it.
+
+Not measured: trace text of the Python suite under Z3 (ctest compares
+only the expected patterns), and an SV-COMP run.
