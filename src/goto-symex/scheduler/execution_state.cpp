@@ -885,7 +885,7 @@ void execution_statet::execute_guard()
 unsigned int execution_statet::add_thread(const goto_programt *prog)
 {
   goto_symex_statet new_state(
-    *state_level2, global_value_set, ns, no_propagation);
+    *state_level2, global_value_set, ns, no_propagation, art1->split_structs);
   new_state.initialize(
     prog->instructions.begin(),
     prog->instructions.end(),
