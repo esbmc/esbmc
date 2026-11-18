@@ -4385,15 +4385,17 @@ bool function_call_expr::is_re_module_call() const
   const std::string &func_name = function_id_.get_function();
 
   return (func_name == "match" || func_name == "search" ||
-          func_name == "fullmatch") &&
+          func_name == "fullmatch" || func_name == "sub") &&
          call_["func"]["_type"] == "Attribute" && get_object_name() == "re";
 }
 
 exprt function_call_expr::validate_re_module_args() const
 {
   const auto &args = call_["args"];
+  // re.sub(pattern, repl, string) takes a third str.
+  const size_t str_args = function_id_.get_function() == "sub" ? 3 : 2;
 
-  for (size_t i = 0; i < std::min(args.size(), size_t(2)); ++i)
+  for (size_t i = 0; i < std::min(args.size(), str_args); ++i)
   {
     exprt arg_expr = converter_.get_expr(args[i]);
     const typet &arg_type = arg_expr.type();
@@ -4414,6 +4416,9 @@ exprt function_call_expr::validate_re_module_args() const
 // the flag handling out of the matchers themselves (#8223).
 void function_call_expr::route_re_flags_call()
 {
+  // The sub model takes its flags itself.
+  if (function_id_.get_function() == "sub")
+    return;
   bool has_flags = call_["args"].size() > 2;
   for (const auto &kw : call_.value("keywords", nlohmann::json::array()))
     has_flags |= kw.value("arg", "") == "flags";

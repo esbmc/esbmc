@@ -634,3 +634,28 @@ class Pattern:
 def compile(pattern: str, flags: int = 0) -> Pattern:
     """Compile pattern; matching is deferred to the module matchers."""
     return Pattern(pattern, flags)
+
+
+def _has_regex_meta(pattern: str) -> bool:
+    """Whether pattern contains a character re gives a special meaning."""
+    i: int = 0
+    while i < len(pattern):
+        c: str = pattern[i]
+        if (c == '.' or c == '^' or c == '$' or c == '*' or c == '+' or c == '?' or c == '{'
+                or c == '}' or c == '[' or c == ']' or c == '\\' or c == '|' or c == '('
+                or c == ')'):
+            return True
+        i = i + 1
+    return False
+
+
+def sub(pattern: str, repl: str, string: str, count: int = 0, flags: int = 0) -> str:
+    """re.sub where pattern and repl have no special characters: it then
+    replaces the same occurrences as str.replace. Other patterns, a repl with
+    a backslash escape, flags and a negative count are not modelled."""
+    __ESBMC_assert(
+        not _has_regex_meta(pattern) and "\\" not in repl and flags == 0 and count >= 0,
+        "re.sub with a regex pattern, an escape in repl, flags or a negative count is not modelled")
+    if count == 0:
+        return string.replace(pattern, repl)
+    return string.replace(pattern, repl, count)
