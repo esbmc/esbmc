@@ -328,7 +328,8 @@ static bool early_answer_allowed(
     "memstats",
     "cov-report-json",
     "schedule",
-    "ts-bmc"};
+    "ts-bmc",
+    "ts-pdr"};
   return !python_checked_exceptions(options).empty() &&
          !checks_past_violation && !options.get_bool_option("termination") &&
          std::none_of(std::begin(bypassed), std::end(bypassed), [&](auto name) {
