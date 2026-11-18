@@ -674,30 +674,26 @@ static expr2tc split_literal_chain(
   const expr2tc &l2_lhs)
 {
   if (
-    !is_constant_struct2t(rhs) || !is_struct_type(l2_lhs) ||
+    !is_constant_struct2t(rhs) ||
     !state.split_structs->fields(to_symbol2t(l2_lhs).thename))
     return expr2tc();
 
-  const std::vector<expr2tc> &elems = to_constant_struct2t(rhs).datatype_members;
+  const std::vector<expr2tc> &elems =
+    to_constant_struct2t(rhs).datatype_members;
   const std::vector<irep_idt> names = struct_union_member_names(l2_lhs->type);
-  if (names.size() != elems.size())
-    return expr2tc();
-
   expr2tc chain = l2_lhs;
   for (size_t i = 0; i < elems.size(); i++)
   {
     if (!literal_element_may_propagate(state, elems[i]))
       continue;
-    const type2tc str_type = array_type2tc(
-      get_uint8_type(), gen_ulong(names[i].size() + 1), false);
+    const type2tc str_type =
+      array_type2tc(get_uint8_type(), gen_ulong(names[i].size() + 1), false);
     chain = with2tc(
       l2_lhs->type,
       chain,
       constant_string2tc(str_type, names[i], constant_string_kindt::DEFAULT),
       elems[i]);
   }
-  if (chain == l2_lhs)
-    return expr2tc();
   return state.constant_propagation(chain) ? chain : expr2tc();
 }
 
@@ -936,8 +932,7 @@ expr2tc goto_symex_statet::pin_symbolic_updates(
   if (!is_literal)
     return pin_chain_updates(*this, rhs, l2_lhs);
   expr2tc pinned = pin_literal_elements(*this, rhs, l2_lhs);
-  return is_nil_expr(pinned) ? split_literal_chain(*this, rhs, l2_lhs)
-                             : pinned;
+  return is_nil_expr(pinned) ? split_literal_chain(*this, rhs, l2_lhs) : pinned;
 }
 
 bool goto_symex_statet::constant_propagation_reference(
