@@ -47,6 +47,26 @@ public:
 
   static bool is_untracked_scalar(const type2tc &type);
 
+  /// Whether @p name is the field symbol of a split object.
+  bool is_field(const irep_idt &name) const
+  {
+    return field_ids.count(name) != 0;
+  }
+
+  /// Record that the L2 field symbol @p sym was assigned a value that would
+  /// leave the unsplit object unpropagated: neither carried nor an immutable
+  /// read. A whole read must not carry @p sym where the unsplit object would
+  /// be read as a symbol (#7521).
+  void mark_opaque(const expr2tc &sym)
+  {
+    opaque.insert(sym);
+  }
+
+  bool is_opaque(const expr2tc &sym) const
+  {
+    return !opaque.empty() && opaque.count(sym) != 0;
+  }
+
   bool empty() const
   {
     return split.empty();
@@ -77,4 +97,9 @@ private:
     irep_id_hash>
     index;
   std::unordered_set<irep_idt, irep_id_hash> untracked_fields;
+  std::unordered_set<irep_idt, irep_id_hash> field_ids;
+  /// Keyed by L2 name, shared by every state of a run. A name another
+  /// interleaving reuses for a different value stays marked, which only
+  /// refuses a propagation.
+  std::unordered_set<expr2tc, irep2_hash> opaque;
 };

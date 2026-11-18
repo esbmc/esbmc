@@ -175,6 +175,20 @@ python_converter::find_imported_class_module(
   return found;
 }
 
+bool python_converter::class_defines_method(
+  const std::string &class_name,
+  const std::string &method_name) const
+{
+  if (!json_utils::is_class(class_name, *ast_json))
+    return false;
+  if (!json_utils::find_class((*ast_json)["body"], class_name).is_null())
+    return json_utils::class_defines_method(
+      (*ast_json)["body"], class_name, method_name);
+  const nlohmann::json *module = find_imported_class_module(class_name).first;
+  return module && json_utils::class_defines_method(
+                     (*module)["body"], class_name, method_name);
+}
+
 symbolt *python_converter::find_function_in_imported_base_classes(
   const std::string &class_name,
   const std::string &method_name,

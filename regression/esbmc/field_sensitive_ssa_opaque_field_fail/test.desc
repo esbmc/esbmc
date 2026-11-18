@@ -1,0 +1,4 @@
+CORE
+main.c
+--field-sensitive-ssa --unwind 6
+^VERIFICATION FAILED$

@@ -1167,7 +1167,7 @@ bool goto_symext::make_return_assignment(expr2tc &assign, const expr2tc &code)
 
   if (!is_nil_expr(ret.operand))
   {
-    expr2tc value = split_rewrite(ret.operand);
+    expr2tc value = split_read(ret.operand);
 
     dereference(value, dereferencet::READ);
 

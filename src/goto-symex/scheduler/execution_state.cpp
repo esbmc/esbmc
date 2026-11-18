@@ -61,7 +61,8 @@ execution_statet::execution_statet(
   const goto_programt *goto_program = &(it->second.body);
 
   // Initialize initial thread state
-  goto_symex_statet state(*state_level2, global_value_set, ns, no_propagation);
+  goto_symex_statet state(
+    *state_level2, global_value_set, ns, no_propagation, art->split_structs);
   state.initialize(
     (*goto_program).instructions.begin(),
     (*goto_program).instructions.end(),
@@ -917,7 +918,7 @@ void execution_statet::guard_by_interleaving(expr2tc &expr) const
 unsigned int execution_statet::add_thread(const goto_programt *prog)
 {
   goto_symex_statet new_state(
-    *state_level2, global_value_set, ns, no_propagation);
+    *state_level2, global_value_set, ns, no_propagation, art1->split_structs);
   new_state.initialize(
     prog->instructions.begin(),
     prog->instructions.end(),
