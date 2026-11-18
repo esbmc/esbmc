@@ -1,42 +1,22 @@
 # Scope: field-sensitive SSA in goto-symex (#7521)
 
-> **Status at 2026-11-18: Phase 0 merged (#10773); Phase 1 merged (#10778)
-> with the §8.7 trace fix merged (#10799). §8.8 hides a split struct's
-> printed write when its right-hand side reads a definition the slicer
-> removed; with it, the Phase 1 trace gate is met on the C and C++ suites and
-> a tenth of the Python suite under Z3, and on the same C and C++ suites and
-> a twentieth of the Python suite under Bitwuzla. Every Python `CORE` test
-> has now been run with the flag forced on under Z3: one verdict is lost,
-> `tagged_attr_store` (25 s without the flag, no result in 1800 s with it,
-> master's Phase 1 code as well), so the Phase 1 Python gate is unmet
-> (§8.8). The loss is Z3-only (Bitwuzla: 8 s both ways) and holds at 7 of
-> 8 Z3 seeds. §8.9 traces it to the struct literal a whole read of a split
-> struct carries into its readers; refusing that literal fixes it but each
-> way of doing so measured so far loses elsewhere, so the gate is still
-> unmet. On the branch that refuses and pins it, `_nested` passes inside the
-> suite budget, but a C++ test loses constant propagation that master and
-> the parent keep (§8.9). Refusing only field names assigned an opaque
-> value restores that test and keeps `tagged_attr_store` at 36 s, but still
-> loses a loop bound master folds (§8.10). Pinning only the refused elements
-> of a copied struct literal restores that bound (§8.11), but on a clang
-> build neither rule solves `tagged_attr_store` with the flag under Z3 (no
-> result in 300 s and 1800 s), so the 36 s is build-sensitive and the Python
-> gate stays unmet. Returning a split whole read through a fresh named
-> temporary does not solve it either (§8.12). Assigning a whole read with an
-> opaque field to the object's own symbol, so that #7597's pinning still
-> carries its constant fields, does: 27-29 s with the flag, and no verdict
-> change on the C, C++ and a Python sample with the flag forced on (§8.13).
-> Standalone Z3 finds the formulas with and without the change about equally
-> hard, so the result needs confirming on other builds and under Bitwuzla.
-> Phase 1 also lacks an SV-COMP run.** The corpus is in `regression/field-sensitivity/`
+> **Status at 2026-11-18: Phase 0 merged (#10773); Phase 1 merged (#10778),
+> with the trace fixes #10799 (§8.7) and #10808 (§8.8) and the whole-read fix
+> #10839 (§8.13). On master `48d5f770e` with the flag forced on, the full
+> Python `CORE` suite (9279 tests, Bitwuzla), the C and C++ `CORE` suites
+> (Bitwuzla) and `tagged_attr_store` (Z3 and Bitwuzla) keep every verdict, and
+> the Phase 1 corpus rows meet the 2x bar under both solvers (§8.14). The
+> Phase 1 gate is still unmet on lost constant propagation: with the flag, a
+> struct copied out of a split struct with a pointer field no longer bounds
+> loops over its other fields. #10839 caused one form of this, a split copy
+> into a split destination (fixed in a follow-up PR); the other,
+> `github_7797_flat_set`, predates #10839 and is open (§8.14). Phase 1 also
+> lacks an SV-COMP run.** The corpus is in `regression/field-sensitivity/`
 > with baselines, and the census has been run and reverted. Phase 1 adds
 > `--field-sensitive-ssa` (default off): symex gives each field of an
-> eligible local, parameter or return slot its own SSA name. It meets the 2x
-> bar on the Phase 1 corpus rows and changes no verdict on the C, C++ (Z3 and Bitwuzla) and
-> k-induction suites or three Python samples (3132 tests), and no correctness witness.
-> The Phase 1 trace gate is Invariant 4 (same values), with the §8.6 changes
-> accepted. Two
-> mitigations are merged: #10037 stopped phi merges of wide structs from
+> eligible local, parameter or return slot its own SSA name. The Phase 1
+> trace gate is Invariant 4 (same values), with the §8.6 changes accepted.
+> Two mitigations are merged: #10037 stopped phi merges of wide structs from
 > scaling with the square of the width, and #10527 added the opt-in GOTO pass
 > `--scalarize-structs`. Line numbers are from master at `d3104e99c2`.
 
@@ -1205,3 +1185,62 @@ built with gcc 13.3, LLVM 18, Z3 4.13.3 and ESBMC's Bitwuzla 0.9.0 backend
 
 §8.13's result holds on a gcc build and under Bitwuzla: the verdict lost in
 §8.8 is restored under both solvers.
+
+Same build and binary, flag forced on against off, 4 runs in parallel, 30 s
+per run; tests that timed out either way were re-run at 120 s:
+
+| Suite | Tests | Verdict changes | Output changes beyond assignment counts |
+|---|---|---|---|
+| Python, every `CORE` test, default solver (Bitwuzla; tests that pin `--z3` keep it) | 9279 | 0 | 15, all listed below |
+| C (`regression/esbmc`, `CORE`), `--bitwuzla` replacing any solver option | 3422 | 0 | §8.6's accepted rows; `github_10770_initialised_struct_fail` (§8.7); noise |
+| C++ (`esbmc-cpp/cpp`, `CORE`), same | 1361 | 0 | `github_7797_flat_set` (below); `cpp_sum_class` line order |
+
+- Python: 12 tests time out at 30 s both ways; at 120 s all 12 reach the
+  same verdict with and without the flag. Of the 15 output differences, 8
+  are address-derived temporary names, 2 the bytes of a temporary path and 1
+  compiler-variable numbering. `github_9185_raise_local_fail` gains the step
+  §8.7 lists. `tagged_attr_store_fail` and `github_9799_tagged_attr_fail`
+  differ only in a temporary's name. In `nondet_list21`,
+  `github_10323_list_reversed_fail` and `github_10493_ir_fail` the
+  counterexample picks other values for nondet list elements that the
+  violated assertion leaves free. `nondet_list21` varies between three runs
+  without the flag, and the flag's trace matches one of them; the other two
+  are stable without the flag, and both traces are valid counterexamples.
+  The 5 traces §8.8 listed as printing a pointer field as a value
+  (`arith_lost_type_fail` and others) now match master without the flag,
+  apart from assignment counts.
+- C: the 20 `field_sensitive_ssa_*` tests pass the flag themselves and were
+  left to ctest (52/52 pass with the corpus). `github_6464_struct_field_pointer`
+  leaves fewer VCCs with the flag (7 against 12). The rest are §8.6's rows,
+  Clang AST addresses and `--parallel-solving` line order.
+
+Phase 1 corpus rows, flag on, symex seconds, three runs each, medians:
+
+| Row | Z3, 8 / 2048 fields | Bitwuzla, 8 / 2048 fields |
+|---|---|---|
+| `repro7521` | 0.822 / 1.308 (1.59x) | 0.749 / 1.218 (1.63x) |
+| `local_writes` | 0.017 / 0.019 (1.12x) | 0.017 / 0.023 (1.35x) |
+
+**Lost propagation, `github_7797_flat_set`** (`--std c++23 --unwind 6`).
+The verdict holds at the test's bound, but with the flag symex stops
+bounding two loops: `__lower_index` in `<flat_set>` and the copy loop of
+`vector::operator=` unwind to 6 and leave unwinding assertions, where
+without the flag neither does (2110 against 2376 symex assignments). Without
+`--unwind`, master without the flag is SUCCESSFUL after 0.09 s of symex,
+and with the flag gives no result in 120 s. A build of #10839's parent
+`56dd046ae` with the flag loses the same two bounds, so the loss predates
+#10839. A 12-line program
+(`flat_set<int>`, two inserts, `extract()`, `replace()`) reproduces it. In
+the SSA, `extract()` copies `__c` into a split temporary field by field,
+reading the buffer as `tmp$4::0 == tmp$2#4.buf`; the field is opaque, so the
+whole read into the unsplit `out` goes through #10839's hidden step
+(`out#1 == tmp$4#2`), and the loop guard reads `out#1._size` unfolded. The
+likely cause, not yet confirmed by instrumentation, is that #7597's pinned
+literal for `tmp$4#2` is refused because `immutable_read_type` excludes
+pointers (github_5868), so its constant `_size` is dropped with it. Without the flag `tmp$4 == tmp$2#4 WITH [_size:=2] WITH
+[_capacity:=2]` keeps the buffer inside the base symbol and propagates.
+
+A second form of the same loss, a split struct with a pointer field copied
+into another split struct (`struct V out = s;` then a loop to `out.size`),
+was introduced by #10839: its parent bounds the loop and master does not.
+
