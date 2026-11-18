@@ -1,0 +1,14 @@
+on:
+  workflow_call:
+
+jobs:
+  check:
+    name: Check Python regression tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+    - uses: actions/checkout@v6
+    - name: Install the Python runtime
+      run: scripts/ci/linux-runtime.sh python
+    - name: Check Python regression tests
+      run: ./scripts/check_python_tests.sh
