@@ -15,7 +15,10 @@
 > way of doing so measured so far loses elsewhere, so the gate is still
 > unmet. On the branch that refuses and pins it, `_nested` passes inside the
 > suite budget, but a C++ test loses constant propagation that master and
-> the parent keep (§8.9). Phase 1 also lacks an SV-COMP run.** The corpus is in `regression/field-sensitivity/`
+> the parent keep (§8.9). Refusing only field names assigned an opaque
+> value restores that test and keeps `tagged_attr_store` at 36 s, but still
+> loses a loop bound master folds (§8.10). Phase 1 also lacks an SV-COMP
+> run.** The corpus is in `regression/field-sensitivity/`
 > with baselines, and the census has been run and reverted. Phase 1 adds
 > `--field-sensitive-ssa` (default off): symex gives each field of an
 > eligible local, parameter or return slot its own SSA name. It meets the 2x
@@ -948,3 +951,62 @@ LLVM 18, Z3 4.13.3, 4-core container:
 Not measured in this run: the Python suite, the corpus 2x bar, and anything
 under Bitwuzla.
 
+
+### 8.10 Phase 1 Python gate: refusing only opaque field names
+
+The §8.9 rule refuses every split field's L2 name inside a literal. A field
+whose value was refused but is an immutable read (an L2 symbol, a member of
+one) is what master carries as a pinned read of the unsplit object, so
+refusing it refuses more than master. The diagnostic on
+`filesystem_path_decompose` showed only such fields refused: `_size` (field 1)
+of the `basic_string` temporaries in `substr` and the copy constructor.
+
+The rule tried here marks a split field's L2 name opaque when it is assigned a
+value that is neither carried nor an immutable read, and refuses only opaque
+names (`split_structst::mark_opaque`, `literal_element_may_propagate`).
+
+Measured on 2026-11-18, PR #10839's head `cb01b995` plus this rule,
+RelWithDebInfo, LLVM 18, Z3 4.13.3, `--z3` where stated, 4-core container,
+wall time. The §8.9 rule and the parent's (master's) rule were measured on
+the same binary through a temporary switch, since removed:
+
+| Test, flag on | parent (master) | §8.9 rule (#10839 head) | opaque rule |
+|---|---|---|---|
+| `tagged_attr_store`, Z3 | no result in 200 s (§8.9) | 35 s, 33 s, 36 s (§8.9) | 35 s, 36 s, 36 s |
+| `tagged_attr_store_nested`, Z3 | 29 s (§8.9) | 347 s (§8.9) | 375 s (without the flag 168 s) |
+| `filesystem_path_decompose` | 0 VCCs left | 360 VCCs left | 0 VCCs left |
+| `field_sensitive_ssa_nested_copy`, `--unwind 6` | 0 VCCs left | 3 VCCs left, loop unwound to the bound | 0 VCCs left |
+| `field_sensitive_ssa_opaque_field`, `--unwind 6` | 0 VCCs left | 3 VCCs left | 3 VCCs left |
+
+Without `--unwind`, the two "3 VCCs left" rows never stop unwinding: the loop
+bound `o.in.a[3]` is a constant element of a struct copied into a member of
+an unsplit, address-taken struct, and refusing one element of the copied
+literal pins the whole member update, so the constant sibling is lost. Master
+without the flag folds both programs in 1 assignment. The §8.9 rule as
+pushed in #10839 therefore loses termination on `nested_copy`, a 34-line C
+program. The opaque rule fixes that and `filesystem_path_decompose`, but
+still loses it on `opaque_field`, where the field is written `x + 1`.
+
+C (`regression/esbmc`, `CORE`, 3435 tests) and C++ (`esbmc-cpp/cpp`, `CORE`,
+1361 tests), flag forced on, opaque rule against the parent, default solver,
+30 s per run, 4 at a time: 0 verdict changes. C: 0 differences in the VCCs
+left after simplification. C++: `assoc_emplace` and `cpp_sum_class` differ
+only in the assignment count.
+
+The new tests: `nested_copy` fails under the §8.9 rule (3 VCCs left).
+`opaque_field` fails when `pin_chain_updates` pins a zero instead of the read
+of the assigned name. `opaque_field_fail` checks that the copied opaque value
+is the written one. `copy_pinned` now expects 0 VCCs left, as the parent
+does. The new branches (`mark_opaque` and the refusal of an opaque name) were
+reached on `tagged_attr_store` (field 3, `size`, of `result` in
+`__python_scalar_add_obj_dyn`) and on `opaque_field`, where the opaque rule
+and the parent differ.
+
+The Phase 1 Python gate is still unmet: no rule tried so far fixes
+`tagged_attr_store` without losing a propagation master keeps. Master pins
+the opaque `size` update to `member(result#n, size)` and still carries the
+object; the split L2 name is the same value. So the next step is to find why
+master's carried `result` is cheap for Z3 and the split one is not, by
+diffing the two `--smt-formula-only` outputs around `result`, instead of
+refusing literals. Not measured in this run: the Python suite, the corpus 2x
+bar, Bitwuzla, and SV-COMP.
