@@ -2522,6 +2522,13 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
     }
   }
 
+  auto is_optional_type = [](const typet &param_type) {
+    return param_type.is_struct() && to_struct_type(param_type)
+                                       .tag()
+                                       .as_string()
+                                       .starts_with("tag-Optional_");
+  };
+
   auto handle_keywords = [&](exprt &call_expr) {
     if (!element.contains("keywords") || element["keywords"].empty())
       return;
@@ -2581,18 +2588,11 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
       const typet &param_type = params[it->second].type();
       if (arg_expr.type().is_array() && param_type.is_pointer())
         arg_expr = string_handler_.get_array_base_address(arg_expr);
+      else if (is_optional_type(param_type))
+        arg_expr = wrap_in_optional(arg_expr, param_type);
 
       args[it->second] = arg_expr;
     }
-
-    // we need to check if the argument is provided despite being optional
-    auto is_optional_type = [&](const typet &param_type) {
-      if (!param_type.is_struct())
-        return false;
-      const struct_typet &struct_type = to_struct_type(param_type);
-      const std::string &tag = struct_type.tag().as_string();
-      return tag.starts_with("tag-Optional_");
-    };
 
     std::vector<size_t> missing_required;
     std::vector<bool> provided(params.size(), false);

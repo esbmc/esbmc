@@ -1965,11 +1965,9 @@ function_call_builder::instance_class_name(const nlohmann::json &node) const
 
 bool function_call_builder::receiver_class_defines_method() const
 {
-  const auto &ast = converter_.ast();
-  const std::string cls = instance_class_name(call_["func"]["value"]);
-  return json_utils::is_class(cls, ast) &&
-         json_utils::class_defines_method(
-           ast["body"], cls, call_["func"]["attr"].get<std::string>());
+  return converter_.class_defines_method(
+    instance_class_name(call_["func"]["value"]),
+    call_["func"]["attr"].get<std::string>());
 }
 
 exprt function_call_builder::build_method_call_on_receiver() const

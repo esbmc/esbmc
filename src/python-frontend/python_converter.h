@@ -2018,6 +2018,12 @@ private:
   std::pair<const nlohmann::json *, std::string>
   find_imported_class_module(const std::string &class_name) const;
 
+  /// True when @p class_name, defined in this file or an imported module,
+  /// defines or inherits @p method_name.
+  bool class_defines_method(
+    const std::string &class_name,
+    const std::string &method_name) const;
+
   /// @p method_name under @p base_class, as the module that defines the base
   /// spells it, or null when the base is not imported.
   symbolt *find_method_in_imported_base(
