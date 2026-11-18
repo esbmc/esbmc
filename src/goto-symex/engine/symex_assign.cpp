@@ -538,7 +538,11 @@ void goto_symext::symex_assign(
 
   expr2tc original_lhs = code.target;
   expr2tc lhs = split_rewrite(code.target);
-  expr2tc rhs = split_read(code.source);
+  // A split destination takes a whole read field by field, so no literal is
+  // carried, and reading through the symbol would lose a constant sibling
+  // whenever a pointer field keeps #7597's pinned literal unpropagated.
+  expr2tc rhs = is_split_whole(code.target) ? split_rewrite(code.source)
+                                            : split_read(code.source);
 
   replace_nondet(lhs);
   replace_nondet(rhs);
