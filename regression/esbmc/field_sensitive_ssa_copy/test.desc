@@ -1,0 +1,5 @@
+CORE
+main.c
+--field-sensitive-ssa
+^Field-sensitive SSA splits [1-9][0-9]* struct object\(s\)$
+^VERIFICATION SUCCESSFUL$

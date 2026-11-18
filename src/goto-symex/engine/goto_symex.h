@@ -1249,7 +1249,8 @@ protected:
     expr2tc &rhs,
     expr2tc &full_rhs,
     guard2tc &guard,
-    const bool hidden);
+    const bool hidden,
+    const bool full_rhs_after_write = false);
 
   /**
    *  Perform assignment to a structure.
@@ -1274,6 +1275,55 @@ protected:
     const expr2tc &full_lhs,
     expr2tc &rhs,
     expr2tc &full_rhs,
+    guard2tc &guard,
+    const bool hidden);
+
+  /** Give every local of @p goto_function, and each field of a split one, a
+   *  fresh L1 instance in @p frame. */
+  void give_locals_fresh_instances(
+    const goto_functiont &goto_function,
+    goto_symex_statet::framet &frame) const;
+
+  /** Make the L1 local @p l1_sym of @p type live in the current frame, with
+   *  a fresh L2 value if it had one before. */
+  void declare_l1(expr2tc l1_sym, const type2tc &type, bool reused);
+
+  /** The field symbols of @p name under --field-sensitive-ssa, or null when
+   *  symex keeps it whole. */
+  const std::vector<expr2tc> *split_fields(const irep_idt &name) const;
+
+  /** @p e with each split struct object replaced by its fields. */
+  expr2tc split_rewrite(const expr2tc &e) const;
+
+  void split_rewrite_operands(std::vector<expr2tc> &operands) const;
+
+  /** split_rewrite(@p e), except that a whole read of a split object one of
+   *  whose fields holds an opaque L2 name is first assigned to the object's
+   *  own symbol and read through it, as it is without the flag (#7521). */
+  expr2tc split_read(const expr2tc &e);
+
+  /** The base object of @p lhs, or of @p target, the source form of
+   *  @p lhs, when that names a split object as a whole. */
+  expr2tc assigned_object(const expr2tc &lhs, const expr2tc &target) const;
+
+  /** Whether @p target names a split object as a whole. */
+  bool is_split_whole(const expr2tc &target) const;
+
+  /** Assign @p rhs to @p original_lhs through @p lhs, its split form. */
+  void symex_assign_target(
+    const expr2tc &lhs,
+    const expr2tc &original_lhs,
+    expr2tc &rhs,
+    guard2tc &guard,
+    const bool hidden);
+
+  /** Assign @p rhs to the split object @p full_lhs, whose fields @p lhs
+   *  holds, as one field step per member. Every step but the last is hidden;
+   *  the last prints the whole struct, as an unsplit assignment would. */
+  void symex_assign_split(
+    const expr2tc &lhs,
+    const expr2tc &full_lhs,
+    expr2tc &rhs,
     guard2tc &guard,
     const bool hidden);
 
@@ -1966,6 +2016,11 @@ protected:
    *  the dereference code and the caller, who will inspect the contents after
    *  a call to dereference (in INTERNAL mode) completes. */
   std::list<dereference_callbackt::internal_item> internal_deref_items;
+
+  /** Fail an intrinsic's write to @p object, made when @p cond holds, if the
+   *  object is read-only, as valid_check does for a WRITE-mode dereference. */
+  void check_read_only_write(const expr2tc &object, const expr2tc &cond);
+
   /** Analyze the shared varables in a function call, this is because an
    * argumemt may be renamed to constant bool in symex_function_call_code(),
    * while we need to get the information for context switch.*/

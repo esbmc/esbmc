@@ -1275,13 +1275,35 @@ struct attribute_writest
           : "");
   }
 
-  void walk(const nlohmann::json &n, const std::string &attr_name)
+  // The class copies of the class being typed (#10662). Their own `self`
+  // stores reach only their own instances, so they do not type this class.
+  std::set<const nlohmann::json *> copies;
+
+  void walk(
+    const nlohmann::json &n,
+    const std::string &attr_name,
+    bool in_copy = false)
   {
     if (n.is_object())
+    {
+      in_copy |= copies.count(&n) != 0;
+      if (in_copy && is_self_store(n, attr_name))
+        return;
       visit(n, attr_name);
+    }
     for (const auto &child : n)
       if (child.is_structured())
-        walk(child, attr_name);
+        walk(child, attr_name, in_copy);
+  }
+
+  static bool is_self_store(const nlohmann::json &n, const std::string &attr)
+  {
+    if (!attribute_store_value(n, attr))
+      return false;
+    const nlohmann::json &target =
+      n.value("_type", "") == "Assign" ? n["targets"][0] : n["target"];
+    return target["value"].value("_type", "") == "Name" &&
+           target["value"].value("id", "") == "self";
   }
 };
 
@@ -1303,6 +1325,7 @@ bool stores_none_into(const nlohmann::json &n, const std::string &attr_name)
 typet python_converter::none_attribute_type(const std::string &attr_name) const
 {
   attribute_writest found;
+  found.copies = json_utils::class_copies_of(*ast_json, current_class_name_);
   for (const nlohmann::json *body : reachable_module_bodies())
     found.walk(*body, attr_name);
   if (found.setattr_call || found.writes != found.stores)
@@ -1367,6 +1390,36 @@ typet python_converter::any_attribute_type(
   return (from_usage.id().as_string().empty() || from_usage.is_nil())
            ? type_handler_.get_typet(std::string("Any"))
            : from_usage;
+}
+
+/// The Optional[V] that @p value, a `d.get(k)` without a default, reads when
+/// `d` is a parameter annotated `dict[K, V]` with a scalar V: the struct
+/// handle_dict_get builds, so the attribute keeps its None flag (#10831).
+/// @p fallback otherwise.
+typet python_converter::dict_get_optional_type(
+  const nlohmann::json &value,
+  const std::unordered_map<std::string, nlohmann::json> &param_annotations,
+  const typet &fallback) const
+{
+  if (
+    !value.is_object() || value.value("_type", "") != "Call" ||
+    value["func"].value("_type", "") != "Attribute" ||
+    value["func"].value("attr", "") != "get" || value["args"].size() != 1 ||
+    !value["keywords"].empty() ||
+    value["func"]["value"].value("_type", "") != "Name")
+    return fallback;
+  const auto param =
+    param_annotations.find(value["func"]["value"].value("id", ""));
+  if (
+    param == param_annotations.end() ||
+    param->second.value("_type", "") != "Subscript" ||
+    param->second["value"].value("id", "") != "dict")
+    return fallback;
+  const typet held =
+    dict_handler_->get_dict_value_type_from_annotation(param->second);
+  if (!held.is_signedbv() && !held.is_floatbv() && !held.is_bool())
+    return fallback;
+  return type_handler_.build_optional_type(held);
 }
 
 /// Whether @p value, stored by method @p func_node, is built only from
@@ -1762,8 +1815,11 @@ void python_converter::get_attributes_from_self(
       stmt["targets"][0]["value"]["id"] == "self")
     {
       // A member is initialized with something that might be not annotated
-      typet type =
-        unannotated_attribute_type(stmt["value"], func_node, clazz, any_type());
+      const typet type = dict_get_optional_type(
+        stmt["value"],
+        param_annotations,
+        unannotated_attribute_type(
+          stmt["value"], func_node, clazz, any_type()));
       const std::string &attr_name = stmt["targets"][0]["attr"];
 
       if (!clazz.has_component(attr_name))

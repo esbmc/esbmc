@@ -123,12 +123,23 @@ def do_exec(cmd_line, timeout=None, cwd=None):
 
   return stdout + stderr + abnormal_exit_line(p.returncode).encode()
 
+# benchexec's ESBMC tool-info takes the verdict from any output line containing
+# FALSE, TRUE or DONE (tools/esbmc.py determine_result). ESBMC quotes source
+# text, e.g. an injected witness invariant naming STATIC_CONST_FALSE, so the
+# echo lower-cases these words and only the wrapper's own verdict carries them.
+VERDICT_WORD = re.compile(r"FALSE|TRUE|DONE")
+
+
+def echo(text):
+  print(VERDICT_WORD.sub(lambda word: word.group(0).lower(), text))
+
+
 # Function to run esbmc
 def run(cmd_line, timeout=None):
   print("Verifying with ESBMC")
-  print("Command: " + cmd_line)
+  echo("Command: " + cmd_line)
   out = do_exec(cmd_line, timeout)
-  print(out.decode())
+  echo(out.decode())
   return out
 
 # A property table row, e.g. "  FAILED       [main.assertion.1]  line 7  x != 0".
@@ -461,6 +472,10 @@ esbmc_dargs += "--no-align-check --k-step 2 --unlimited-k-steps "
 # <https://github.com/esbmc/esbmc/pull/1190#issuecomment-1637047028>
 esbmc_dargs += "--no-vla-size-check "
 
+# Summarise counting loops over arrays, including loops that only assert, so
+# k-induction needs no unwinding of them (#10563).
+esbmc_dargs += "--summarize-array-loops "
+
 
 def check_if_benchmark_contains_pthread(benchmark):
   # A call, not a declaration: goblint-coreutils declare pthread_create
@@ -549,6 +564,9 @@ def get_command_line(strat, prop, arch, benchmark, dargs, esbmc_ci, keep_loops=F
     command_line += "--no-pointer-check --no-bounds-check --overflow-check --no-assertions --no-fp-conversion-check --no-fp-overflow-check "
   elif prop == Property.memory:
     command_line += "--memory-leak-check --no-reachable-memory-leak --no-assertions "
+    # Forming an out-of-range &a[i] is undefined but dereferences nothing, so
+    # it is not a valid-deref violation (#10787).
+    command_line += "--no-pointer-arith-check "
     # It seems SV-COMP doesn't want to check for memleaks on abort()
     # see also <https://github.com/esbmc/esbmc/issues/1259>
     command_line += "--no-abnormal-memory-leak "
@@ -558,7 +576,11 @@ def get_command_line(strat, prop, arch, benchmark, dargs, esbmc_ci, keep_loops=F
     command_line += "--no-pointer-check --no-bounds-check --memory-leak-check --no-assertions "
   elif prop == Property.reach:
     command_line += "--enable-unreachability-intrinsic "
-    command_line += "--no-pointer-check --interval-analysis --no-bounds-check --error-label ERROR "
+    command_line += "--no-pointer-check --interval-analysis --no-bounds-check "
+    # Interval arithmetic with widening keeps a counter's bounds through the
+    # k-induction havoc, e.g. j >= 0 for `for (int j = 0; j < N; j++)`.
+    command_line += ("--interval-analysis-arithmetic --interval-analysis-extrapolate "
+                     "--interval-analysis-extrapolate-under-approximate ")
     if not keep_loops:
       command_line += "--goto-unwind --unlimited-goto-unwind "
   elif prop == Property.datarace:
@@ -649,16 +671,12 @@ def values_flags(values_dir):
 
 
 def task_provides_verifier(benchmark):
-  """Does the task, or a directory above it, hold its own _sv_verifier.py?
-  Its nondet_* calls then cannot be fed the counterexample's values."""
-  directory = os.path.dirname(os.path.abspath(benchmark))
-  while True:
-    if os.path.isfile(os.path.join(directory, "_sv_verifier.py")):
-      return True
-    parent = os.path.dirname(directory)
-    if parent == directory:
-      return False
-    directory = parent
+  """Does the task's own directory hold a _sv_verifier.py? Its nondet_* calls
+  then cannot be fed the counterexample's values. One in a directory above,
+  such as sv-benchmarks' python/_sv_verifier.py, does not matter: the replay
+  runs a copy of the task's directory alone, with only that copy and the
+  stand-in on its module path."""
+  return os.path.isfile(os.path.join(os.path.dirname(os.path.abspath(benchmark)), "_sv_verifier.py"))
 
 
 def copy_task(benchmark, destination):
@@ -1218,6 +1236,8 @@ MAX_ECHO = 1000000
 # Unlike SV-COMP, Test-Comp runs assume allocation succeeds.
 testcomp_dargs = "--sv-comp --no-div-by-zero-check --force-malloc-success --state-hashing --add-symex-value-sets "
 testcomp_dargs += "--no-align-check --k-step 2 --floatbv --unlimited-k-steps --no-vla-size-check "
+# Test vectors from loop summaries are not validated yet (#10563).
+testcomp_dargs += "--no-summarize-array-loops "
 
 
 def is_testcomp_run(coverage, property_file_content):
@@ -1291,14 +1311,14 @@ def testcomp_command_line(strat, goal, arch, benchmark, coverage):
 
 def testcomp_run(cmd_line):
   print("Verifying with ESBMC")
-  print("Command: " + cmd_line)
+  echo("Command: " + cmd_line)
   out = do_exec(cmd_line, cwd=TEST_DIR).decode(errors="replace")
   # The result is parsed from the full output; only the tail is echoed
   if len(out) > MAX_ECHO:
     print(f"[... {len(out) - MAX_ECHO} characters of ESBMC output omitted ...]")
-    print(out[-MAX_ECHO:])
+    echo(out[-MAX_ECHO:])
   else:
-    print(out)
+    echo(out)
   return out
 
 

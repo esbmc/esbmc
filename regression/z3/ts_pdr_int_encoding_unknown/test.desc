@@ -1,0 +1,5 @@
+CORE
+main.c
+--z3 --ir --no-pointer-check --no-bounds-check --ts-pdr --max-k-step 20
+^PDR: PDR needs bit-vector encoding$
+^VERIFICATION UNKNOWN$

@@ -106,18 +106,18 @@ typedef struct
 
 cleanup_entry_t __esbmc_cleanup_stack[1]
   __attribute__((annotate("__ESBMC_inf_size")));
-size_t __esbmc_cleanup_level[1] __attribute__((annotate("__ESBMC_inf_size")));
+/* Thread-local rather than an infinite array indexed by thread id, so that
+ * symex folds it and the handler loop in pthread_exit unrolls exactly. */
+static _Thread_local size_t __esbmc_cleanup_level;
 
 size_t __esbmc_get_cleanup_level(void)
 {
-  pthread_t tid = __ESBMC_get_thread_id();
-  return __esbmc_cleanup_level[tid];
+  return __esbmc_cleanup_level;
 }
 
 void __esbmc_set_cleanup_level(int level)
 {
-  pthread_t tid = __ESBMC_get_thread_id();
-  __esbmc_cleanup_level[tid] = level;
+  __esbmc_cleanup_level = level;
 }
 
 /************************** Infinite Array Implementation
@@ -262,8 +262,14 @@ __ESBMC_HIDE:;
   __ESBMC_atomic_begin();
 
   // POSIX.1-2017 pthread_exit: cleanup handlers run before TSD destructors.
+  // They are application code, so the atomic section is released around them
+  // and other threads interleave with them (#9434).
   while (pthread_cleanup_enabled && __esbmc_get_cleanup_level() > 0)
+  {
+    __ESBMC_atomic_end();
     pthread_cleanup_pop(1); // 1 means execute the handler
+    __ESBMC_atomic_begin();
+  }
 
   pthread_exec_key_destructors();
 

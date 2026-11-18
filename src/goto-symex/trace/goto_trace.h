@@ -95,11 +95,29 @@ public:
   };
   std::optional<accesst> racing_access;
 
+  /* The threads spawned since the previous step, in creation order: each
+   * thread's number, the spawning thread's, the spawning call, and how many
+   * of nondet_returns came before it. */
+  struct spawnt
+  {
+    unsigned thread_nr;
+    unsigned parent_nr;
+    accesst call;
+    size_t nondet_returns_before;
+  };
+  std::list<spawnt> spawns;
+
   /* The nondet calls made since the previous step, this one included: each
-   * call's ')' paired with the value it returned. A call nested in an
-   * expression returns into a hidden temporary with no step of its own, so a
-   * witness has nothing else to record it from (#9881). */
-  std::list<std::pair<locationt, expr2tc>> nondet_returns;
+   * call's ')', the value it returned and the thread that made it. A call
+   * nested in an expression returns into a hidden temporary with no step of
+   * its own, so a witness has nothing else to record it from (#9881). */
+  struct nondet_returnt
+  {
+    locationt rparen;
+    expr2tc value;
+    unsigned thread_nr;
+  };
+  std::list<nondet_returnt> nondet_returns;
 
   // for OUTPUT
   std::string format_string;

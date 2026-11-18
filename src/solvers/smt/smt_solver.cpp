@@ -475,6 +475,7 @@ static bool walks_operands(const expr2tc &expr)
   case expr2t::pointer_offset_id:
   case expr2t::pointer_object_id:
   case expr2t::pointer_capability_id:
+  case expr2t::array_lambda_id:
     return false;
   default:
     return true;
@@ -681,6 +682,7 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
   case expr2t::pointer_offset_id:
   case expr2t::pointer_object_id:
   case expr2t::pointer_capability_id:
+  case expr2t::array_lambda_id:
     break; // Don't convert their operands
 
   default:
@@ -1807,6 +1809,38 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
       is_forall2t(expr), {convert_ast(bound_symbol)}, convert_ast(expanded));
     break;
   }
+  case expr2t::array_lambda_id:
+  {
+    // Reads reduce in the simplifier; only a use of the whole array gets
+    // here. Name it and define every element with a quantifier.
+    const array_lambda2t &lambda = to_array_lambda2t(expr);
+    // Spelling out the elements instead measured slower on TRUE tasks
+    // (k-induction re-encodes them every step), as slow as unwinding.
+    const expr2tc array = symbol2tc(
+      expr->type, fmt::format("__ESBMC_array_lambda_{}", quantifier_counter));
+    const expr2tc bound = symbol2tc(
+      lambda.binder->type,
+      fmt::format("__ESBMC_quantifier_{}", quantifier_counter++));
+    expr2tc body = lambda.body->clone();
+    replace_name_in_body(lambda.binder, bound, body);
+    const array_type2t &arr_type = to_array_type(expr->type);
+    const expr2tc element = index2tc(arr_type.subtype, array, bound);
+    expr2tc definition = equality2tc(element, body);
+    // The solver narrows the index to the bits the size needs, so indices
+    // past the end alias real elements: define only those inside it.
+    if (!arr_type.size_is_infinite && !is_nil_expr(arr_type.array_size))
+    {
+      const expr2tc zero = gen_zero(bound->type);
+      const expr2tc size = typecast2tc(bound->type, arr_type.array_size);
+      definition = implies2tc(
+        and2tc(lessthanequal2tc(zero, bound), lessthan2tc(bound, size)),
+        definition);
+    }
+    assert_ast(
+      mk_quantifier(true, {convert_ast(bound)}, convert_ast(definition)));
+    a = convert_ast(array);
+    break;
+  }
   case expr2t::uninterpreted_func_id:
   {
     const uninterpreted_func2t &uf = to_uninterpreted_func2t(expr);
@@ -2238,34 +2272,8 @@ smt_astt smt_solver_baset::convert_terminal(const expr2tc &expr)
 
     ir_ieee_api->assert_symbol_range(name, sym_ast, sym);
 
-    if (
-      ir_ieee && is_floatbv_type(sym.type) &&
-      name.rfind("nondet$symex::nondet", 0) == 0)
-    {
-      smt_astt nan_pred =
-        mk_fresh(mk_bool_sort(), "ir_ieee::nondet_nan::", nullptr);
-      ir_ieee_api->store_nan_pred(sym_ast, nan_pred);
-
-      // A nondet float is otherwise an unconstrained real. Without this,
-      // it can take a value strictly between 0 and the smallest subnormal
-      // (a magnitude no floating-point operation ever produces), which
-      // breaks identities like x+0==x now that mk_subnormal_flush()
-      // distinguishes that gap from zero. Representability doesn't depend
-      // on a rounding mode, so pass a nil expr2tc: mk_subnormal_flush falls
-      // back to its magnitude-only threshold, which is the correct (not
-      // merely conservative) check here.
-      const floatbv_type2t &fbv_type = to_floatbv_type(sym.type);
-      assert_ast(
-        mk_eq(sym_ast, mk_subnormal_flush(sym_ast, fbv_type, expr2tc())));
-
-      // The other half of representability: a magnitude strictly between
-      // max_normal and the infinity sentinel is a value no operation can
-      // produce, and the two readings of "infinite" disagree there --
-      // encode_ieee_mul's invalid-operation term tests |x| > max_normal
-      // while a math.h isinf() that compares against INFINITY tests
-      // |x| == sentinel. Left unconstrained, 0*f was reported non-zero.
-      ir_ieee_api->assert_representable_magnitude(sym_ast, fbv_type);
-    }
+    if (int_encoding && name.rfind("nondet$symex::nondet", 0) == 0)
+      assert_nondet_float_representable(sym_ast, sym.type);
 
     return sym_ast;
   }
@@ -2274,6 +2282,40 @@ smt_astt smt_solver_baset::convert_terminal(const expr2tc &expr)
     log_error("Converting unrecognized terminal expr to SMT\n{}", *expr);
     abort();
   }
+}
+
+void smt_solver_baset::assert_nondet_float_representable(
+  smt_astt sym_ast,
+  const type2tc &type)
+{
+  if (!is_floatbv_type(type))
+    return;
+
+  // A nondet float is otherwise an unconstrained real. Without this,
+  // it can take a value strictly between 0 and the smallest subnormal
+  // (a magnitude no floating-point operation ever produces), which
+  // breaks identities like x+0==x and f+g>=f for g>0 now that
+  // arithmetic results in that gap are flushed to zero (#2578).
+  // Representability doesn't depend on a rounding mode, so pass a nil
+  // expr2tc: mk_subnormal_flush falls back to its magnitude-only
+  // threshold, which is the correct (not merely conservative) check here.
+  const floatbv_type2t &fbv_type = to_floatbv_type(type);
+  assert_ast(mk_eq(sym_ast, mk_subnormal_flush(sym_ast, fbv_type, expr2tc())));
+
+  if (!ir_ieee)
+    return;
+
+  smt_astt nan_pred =
+    mk_fresh(mk_bool_sort(), "ir_ieee::nondet_nan::", nullptr);
+  ir_ieee_api->store_nan_pred(sym_ast, nan_pred);
+
+  // The other half of representability: a magnitude strictly between
+  // max_normal and the infinity sentinel is a value no operation can
+  // produce, and the two readings of "infinite" disagree there --
+  // encode_ieee_mul's invalid-operation term tests |x| > max_normal
+  // while a math.h isinf() that compares against INFINITY tests
+  // |x| == sentinel. Left unconstrained, 0*f was reported non-zero.
+  ir_ieee_api->assert_representable_magnitude(sym_ast, fbv_type);
 }
 
 std::string smt_solver_baset::mk_fresh_name(const std::string &tag)
@@ -3351,6 +3393,12 @@ type2tc smt_solver_baset::get_flattened_array_subtype(const type2tc &type)
 smt_resultt smt_solver_baset::dec_solve_assuming(const ast_vec &)
 {
   log_error("{} does not support solving under assumptions", solver_text());
+  abort();
+}
+
+bool smt_solver_baset::is_unsat_assumption(smt_astt)
+{
+  log_error("{} does not support unsat assumptions", solver_text());
   abort();
 }
 

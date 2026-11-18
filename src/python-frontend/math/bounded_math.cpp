@@ -146,12 +146,15 @@ exprt domain_error(const std::string &function, const exprt &x)
 }
 
 // The powers every implementation computes exactly: an integral result of
-// an integral base below 2^53, a power of two that stays normal, and the
-// special values C99 F.9.4.4 fixes.
+// an integral base below 2^53, a power of two that stays normal, a square
+// root whose square is exactly the base, and the special values C99 F.9.4.4
+// fixes.
 bool exact_power(double x, double y, double value)
 {
   if (!std::isfinite(value) || value == 0.0 || y == 0.0 || x == 1.0 || y == 1.0)
     return true;
+  if (y == 0.5)
+    return std::fma(value, value, -x) == 0.0;
   if (!std::isfinite(x) || !std::isfinite(y) || y != std::floor(y))
     return false;
   int exponent = 0;

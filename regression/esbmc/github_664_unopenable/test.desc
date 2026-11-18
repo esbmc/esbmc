@@ -1,0 +1,4 @@
+CORE
+main.c
+--file-output missing-dir/out.txt
+^ERROR: Cannot open missing-dir/out.txt$

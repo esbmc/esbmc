@@ -8,6 +8,7 @@
 #include <string>
 #include <functional>
 #include <map>
+#include <set>
 #include <unordered_map>
 #include <vector>
 #include <nlohmann/json.hpp>
@@ -119,6 +120,28 @@ inline std::string dotted_to_path(const std::string &module_name)
   std::string result = module_name;
   std::replace(result.begin(), result.end(), '.', '/');
   return result;
+}
+
+/// The classes of @p module that the class copy pass made from the same class
+/// as @p cls, other than @p cls itself: `<base>` and each
+/// `<base>__esbmc_poly_<signature>`. A `self` store in one of them reaches only
+/// its own instances.
+template <typename JsonType>
+std::set<const JsonType *>
+class_copies_of(const JsonType &module, const std::string &cls)
+{
+  static const std::string marker = "__esbmc_poly_";
+  const std::string base = cls.substr(0, cls.find(marker));
+  std::set<const JsonType *> copies;
+  for (const auto &stmt : module["body"])
+  {
+    const std::string name = stmt.value("name", "");
+    if (
+      stmt.value("_type", "") == "ClassDef" && name != cls &&
+      (name == base || name.rfind(base + marker, 0) == 0))
+      copies.insert(&stmt);
+  }
+  return copies;
 }
 
 template <typename JsonType>

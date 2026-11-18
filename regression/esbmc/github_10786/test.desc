@@ -1,0 +1,6 @@
+CORE
+main.c
+--std c11 --multi-property
+\[main\.division-by-zero\.1\]  line 5  division by zero$
+\[main\.division-by-zero\.2\]  line 6  division by zero$
+^VERIFICATION FAILED$

@@ -301,6 +301,8 @@ public:
   /** Solve with each boolean ast in @p assumptions held true for this query
    *  only. Backends without support abort; check supports_assumptions(). */
   virtual smt_resultt dec_solve_assuming(const ast_vec &assumptions);
+  /** After an UNSAT dec_solve_assuming: whether @p a was needed. */
+  virtual bool is_unsat_assumption(smt_astt a);
   virtual bool supports_assumptions() const
   {
     return false;
@@ -802,6 +804,8 @@ public:
    *  the appropriate method in the subclassing solver converter for the
    * terminal conversion */
   smt_astt convert_terminal(const expr2tc &expr);
+  /** Constrain a nondet float symbol under --ir to values a float can hold. */
+  void assert_nondet_float_representable(smt_astt sym_ast, const type2tc &type);
 
   /** Flatten pointer arithmetic. When faced with an addition or subtraction
    *  between a pointer and some integer or other pointer, perform whatever
@@ -914,6 +918,8 @@ public:
   smt_astt convert_bitcast_to_fp(const expr2tc &from, const type2tc &to_type);
   smt_astt
   convert_bitcast_to_struct(const expr2tc &from, const type2tc &to_type);
+  smt_astt
+  convert_int_mode_bitcast_to_bv(const expr2tc &from, const type2tc &to_type);
   /** Flatten a pointer to the machine representation a bitcast reinterprets,
    *  and rebuild it from one; see the comment on the definitions in
    *  smt_bitcast.cpp. */

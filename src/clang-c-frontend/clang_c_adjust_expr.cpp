@@ -1204,6 +1204,24 @@ void clang_c_adjust::adjust_dereference(exprt &deref)
   }
 }
 
+// Byte size of a VLA type, built from its size expressions as written:
+// c_sizeof goes through migrate_type, which simplifies them, so `0 & n / 0`
+// folds to 0 and `0 * n++` loses its side effect before goto_check and
+// goto_convert ever see them (C17 6.5.3.4p2 evaluates them; #10786).
+static exprt vla_sizeof(const typet &type, const namespacet &ns)
+{
+  const typet &t = ns.follow(type);
+  if (!t.is_array())
+    return c_sizeof(t, ns);
+
+  exprt n = to_array_type(t).size();
+  if (n.type() != size_type())
+    n = typecast_exprt(n, size_type());
+  exprt size = mult_exprt(n, vla_sizeof(t.subtype(), ns));
+  size.type() = size_type();
+  return size;
+}
+
 void clang_c_adjust::adjust_sizeof(exprt &expr)
 {
   // op0 is a type_exprt carrying the measured type T; op1, when present, is
@@ -1222,7 +1240,7 @@ void clang_c_adjust::adjust_sizeof(exprt &expr)
 
   if (expr.operands().size() == 1)
   {
-    exprt value = c_sizeof(measured, ns);
+    exprt value = vla_sizeof(measured, ns);
     if (value.is_nil())
     {
       log_error("type has no size, {}", measured.name());
@@ -1573,6 +1591,11 @@ static const char *float_lowering_id(
   const irep_idt &identifier,
   const side_effect_expr_function_callt &expr)
 {
+  // The fixedbv model build has no floatbv operands to give these nodes; its
+  // calls keep the C bodies, as a program's fixedbv calls do (#10774).
+  if (config.ansi_c.use_fixed_for_float)
+    return nullptr;
+
   /* c2goto compiles the models with this same binary, and libm/remainder.c's
    * own call is what puts ieee_rem into the model. The shape test would strip
    * it there, so only a program's call is checked -- which is where a

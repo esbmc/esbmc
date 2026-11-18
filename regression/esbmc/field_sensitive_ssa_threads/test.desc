@@ -1,0 +1,5 @@
+CORE
+main.c
+--field-sensitive-ssa
+^WARNING: --field-sensitive-ssa is ignored: the program may create threads$
+^VERIFICATION SUCCESSFUL$

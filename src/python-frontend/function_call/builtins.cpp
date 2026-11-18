@@ -290,7 +290,24 @@ bool function_call_expr::is_class_object_operand(
 }
 
 /// A name bound an int on one path and a float on another has one static C
-/// type, so isinstance would answer from that type on every path (#8417).
+/// type, so isinstance() and type() would answer from that type on every path
+/// (#8417).
+void function_call_expr::refuse_on_path_dependent_number(
+  const nlohmann::json &obj_arg,
+  const std::string &builtin) const
+{
+  if (obj_arg.value("_type", "") != "Name")
+    return;
+  if (
+    dynamic_type_detail::is_path_dependent_number(
+      converter_.scope_numeric_bindings(
+        obj_arg["id"].get<std::string>(), obj_arg.value("lineno", 0), true)))
+    throw std::runtime_error(
+      builtin + "() on '" + obj_arg["id"].get<std::string>() +
+      "', which holds an int or a float depending on the path, is not "
+      "supported");
+}
+
 void function_call_expr::refuse_isinstance_on_path_dependent_number(
   const nlohmann::json &obj_arg,
   const std::vector<nlohmann::json> &types) const
@@ -300,16 +317,8 @@ void function_call_expr::refuse_isinstance_on_path_dependent_number(
       const std::string id = t.value("id", "");
       return id == "int" || id == "float" || id == "bool";
     });
-  if (!asks_number || obj_arg.value("_type", "") != "Name")
-    return;
-  if (
-    dynamic_type_detail::is_path_dependent_number(
-      converter_.scope_numeric_bindings(
-        obj_arg["id"].get<std::string>(), obj_arg.value("lineno", 0), true)))
-    throw std::runtime_error(
-      "isinstance() on '" + obj_arg["id"].get<std::string>() +
-      "', which holds an int or a float depending on the path, is not "
-      "supported");
+  if (asks_number)
+    refuse_on_path_dependent_number(obj_arg, "isinstance");
 }
 
 /// Plants an assertion that the SV-COMP wrapper reads as Unknown, or stops the
@@ -1565,6 +1574,7 @@ exprt function_call_expr::handle_type_call() const
 
   exprt arg_expr = converter_.get_expr(args[0]);
   refuse_type_of_symbolic_int_power(args[0], arg_expr);
+  refuse_on_path_dependent_number(args[0], "type");
   if (python_converter::is_class_object(arg_expr))
     return converter_.make_class_object("type");
   const std::string instance_class = exact_instance_class(args[0], arg_expr);
@@ -3040,6 +3050,8 @@ exprt function_call_expr::handle_min_max(
   const typet result_type =
     common_min_max_type(exprs, func_name, converter_.ns);
 
+  refuse_int_lambda_min_max(exprs, result_type, comparison_op);
+
   // Cast all args to the common type.
   for (auto &e : exprs)
     if (!base_type_eq(e.type(), result_type, converter_.ns))
@@ -3061,6 +3073,59 @@ exprt function_call_expr::handle_min_max(
   }
 
   return migrate_expr_back(result2);
+}
+
+void function_call_expr::refuse_int_lambda_min_max(
+  std::vector<exprt> &exprs,
+  const typet &result_type,
+  irep_idt comparison_op) const
+{
+  if (
+    !converter_.current_block || !converter_.is_lambda_result(call_) ||
+    !result_type.is_floatbv() ||
+    std::none_of(exprs.begin(), exprs.end(), [](const exprt &e) {
+      return is_int_like(e.type());
+    }))
+    return;
+  // The selection is read twice, by the result and by the assertion, so each
+  // operand is evaluated once into a temporary.
+  const locationt location = converter_.get_location_from_decl(call_);
+  for (exprt &e : exprs)
+  {
+    if (e.is_constant())
+      continue;
+    symbolt &tmp =
+      converter_.create_tmp_symbol(call_, "$min_max$", e.type(), exprt());
+    code_declt decl(build_symbol(tmp));
+    decl.location() = location;
+    converter_.add_instruction(decl);
+    code_assignt assign(build_symbol(tmp), e);
+    assign.location() = location;
+    converter_.add_instruction(assign);
+    e = build_symbol(tmp);
+  }
+
+  // handle_min_max's selection chain, tracking whether it selects a float.
+  const type2tc rt2 = migrate_type(result_type);
+  expr2tc best2,
+    returns_float2 = constant_bool2tc(exprs[0].type().is_floatbv());
+  migrate_expr(build_typecast(exprs[0], result_type), best2);
+  for (size_t i = 1; i < exprs.size(); ++i)
+  {
+    expr2tc e2;
+    migrate_expr(build_typecast(exprs[i], result_type), e2);
+    const expr2tc cond = comparison_op == exprt::i_lt
+                           ? lessthan2tc(e2, best2)
+                           : greaterthan2tc(e2, best2);
+    best2 = if2tc(rt2, cond, e2, best2);
+    returns_float2 = if2tc(
+      get_bool_type(),
+      cond,
+      constant_bool2tc(exprs[i].type().is_floatbv()),
+      returns_float2);
+  }
+  converter_.refuse_int_lambda_result(
+    migrate_expr_back(returns_float2), *converter_.current_block, location);
 }
 
 // Whether a print() `file=` target is a standard stream (None is stdout),

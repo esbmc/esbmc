@@ -538,7 +538,9 @@ exprt python_converter::get_lambda_body_expr(
   const bool saved_lazy = in_lazy_operand_;
   const bool saved_own_block = in_operand_effects_block_;
   const unsigned saved_conditional = conditional_expr_depth_;
+  const nlohmann::json *saved_result = lambda_result_;
   current_block = &block;
+  lambda_result_ = &body;
   converting_lambda_body_ = false;
   in_lazy_operand_ = false;
   in_operand_effects_block_ = false;
@@ -558,11 +560,26 @@ exprt python_converter::get_lambda_body_expr(
     result = symbol_expr(tmp);
   }
   current_block = saved_block;
+  lambda_result_ = saved_result;
   converting_lambda_body_ = saved_lambda;
   in_lazy_operand_ = saved_lazy;
   in_operand_effects_block_ = saved_own_block;
   conditional_expr_depth_ = saved_conditional;
   return result;
+}
+
+void python_converter::refuse_int_lambda_result(
+  const exprt &returns_float,
+  code_blockt &block,
+  const locationt &location) const
+{
+  code_assertt check{returns_float};
+  check.location() = location;
+  check.location().user_provided(true);
+  check.location().comment(
+    "Unsupported: a lambda returning an int where it may also return a "
+    "float");
+  block.copy_to_operands(check);
 }
 
 exprt python_converter::get_named_expr(const nlohmann::json &element)
@@ -1618,8 +1635,16 @@ std::optional<exprt> python_converter::resolve_subscript_base(
   // Materialise the call into a temporary first, mirroring the assigned
   // path (s = sorted(words); s[0]). See #4807.
   if (current_block)
+  {
+    const exprt call = array;
     array =
       materialize_list_function_call(array, element["value"], *current_block);
+    if (
+      array.is_symbol() && call.is_function_call() &&
+      element_type_registry_.size(array.identifier().as_string()) == 0)
+      copy_elem_types_from_reordering_builtin(
+        element["value"], call, array.identifier().as_string());
+  }
 
   // A typed list (#10451) is read and written through its own storage, as
   // is a typed dict.
@@ -1743,6 +1768,8 @@ std::optional<exprt> python_converter::try_dispatch_dict_subscript(
   // Try to resolve the expected return type from the dict's type annotation
   typet expected_type =
     dict_handler_->resolve_expected_type_for_dict_subscript(array);
+  if (expected_type.is_nil() || expected_type.is_empty())
+    expected_type = dict_handler_->nested_literal_value_type(element);
 
   // A dict read out of a list, as in rows[0]["k"], has no symbol to type its
   // value by, and the handler's default reads it as a str. Take the type the

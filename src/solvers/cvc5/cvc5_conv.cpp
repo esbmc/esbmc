@@ -30,6 +30,8 @@ cvc5_convt::cvc5_convt(const namespacet &ns, const optionst &options)
   slv.setOption("produce-assertions", "true");
   if (options.get_bool_option("smt-assumptions"))
     slv.setOption("incremental", "true");
+  if (options.get_bool_option("smt-unsat-assumptions"))
+    slv.setOption("produce-unsat-assumptions", "true");
 }
 
 smt_resultt cvc5_convt::dec_solve()
@@ -54,12 +56,22 @@ smt_resultt cvc5_convt::dec_solve_assuming(const ast_vec &assumptions)
   for (smt_astt a : assumptions)
     terms.push_back(to_solver_smt_ast<cvc5_smt_ast>(a)->a);
 
+  unsat_assumption_ids.clear();
   cvc5::Result r = slv.checkSatAssuming(terms);
   if (r.isSat())
     return P_SATISFIABLE;
   if (r.isUnknown())
     return P_ERROR;
+  if (slv.getOption("produce-unsat-assumptions") == "true")
+    for (const cvc5::Term &t : slv.getUnsatAssumptions())
+      unsat_assumption_ids.insert(t.getId());
   return P_UNSATISFIABLE;
+}
+
+bool cvc5_convt::is_unsat_assumption(smt_astt a)
+{
+  return unsat_assumption_ids.count(
+    to_solver_smt_ast<cvc5_smt_ast>(a)->a.getId());
 }
 
 tvt cvc5_convt::get_bool(smt_astt a)
@@ -189,12 +201,10 @@ smt_astt cvc5_convt::mk_div(smt_astt a, smt_astt b)
   assert(a->sort->id == SMT_SORT_INT || a->sort->id == SMT_SORT_REAL);
   assert(b->sort->id == SMT_SORT_INT || b->sort->id == SMT_SORT_REAL);
   assert(a->sort->id == b->sort->id);
-  assert(a->sort->id == SMT_SORT_INT || a->sort->id == SMT_SORT_REAL);
-  assert(b->sort->id == SMT_SORT_INT || b->sort->id == SMT_SORT_REAL);
-  assert(a->sort->id == b->sort->id);
   return new_ast(
     slv.mkTerm(
-      cvc5::Kind::INTS_DIVISION,
+      a->sort->id == SMT_SORT_REAL ? cvc5::Kind::DIVISION
+                                   : cvc5::Kind::INTS_DIVISION,
       {to_solver_smt_ast<cvc5_smt_ast>(a)->a,
        to_solver_smt_ast<cvc5_smt_ast>(b)->a}),
     a->sort);

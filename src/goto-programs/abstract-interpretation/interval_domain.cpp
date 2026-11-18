@@ -952,6 +952,40 @@ bool contains_float(const expr2tc &e)
   return inner_float;
 }
 
+void interval_domaint::assign_call_parameters(const code_function_call2t &call)
+{
+  assert(is_code_type(call.function->type));
+  const code_type2t &function = to_code_type(call.function->type);
+
+  for (size_t i = 0; i < function.arguments.size(); i++)
+  {
+    // Only a prototype with no definition leaves a parameter unnamed, and
+    // every unnamed parameter would share one entry (#10187).
+    if (function.argument_names[i].empty())
+      continue;
+
+    const expr2tc arg_symbol =
+      symbol2tc(function.arguments[i], function.argument_names[i]);
+
+    // A nil operand is an argument symex leaves unassigned, e.g. every
+    // parameter of the --function entry point (#2074).
+    if (i >= call.operands.size() || is_nil_expr(call.operands[i]))
+    {
+      havoc_rec(arg_symbol);
+      continue;
+    }
+
+    const expr2tc &arg_value = call.operands[i];
+
+    // Are we dealing with a recursive function?
+    std::unordered_set<expr2tc, irep2_hash> symbols;
+    get_symbols(arg_value, symbols);
+
+    bool is_recursive_arg = symbols.count(arg_symbol);
+    assign(code_assign2tc(arg_symbol, arg_value), is_recursive_arg);
+  }
+}
+
 void interval_domaint::transform(
   goto_programt::const_targett from,
   goto_programt::const_targett to,
@@ -1057,6 +1091,9 @@ void interval_domaint::transform(
    * its execution. We can deal with this by just checking if the target
    * instruction is a function call!
    */
+  if (from->is_end_function() && std::prev(to)->is_function_call())
+    apply_return(std::prev(to), ai, ns);
+
   if (to->is_function_call())
   {
     const code_function_call2t &code_function_call =
@@ -1066,42 +1103,8 @@ void interval_domaint::transform(
     if (!is_nil_expr(code_function_call.ret))
       havoc_target(code_function_call.ret, &ai);
 
-    assert(is_code_type(code_function_call.function->type));
-    const code_type2t &function =
-      to_code_type(code_function_call.function->type);
-
-    // Let's do an assignment for all parameters!
-    for (size_t i = 0; i < function.arguments.size(); i++)
-    {
-      // Only a prototype with no definition leaves a parameter unnamed, and
-      // every unnamed parameter would share one entry (#10187).
-      if (function.argument_names[i].empty())
-        continue;
-
-      const type2tc &arg_type = function.arguments[i];
-      const expr2tc arg_symbol =
-        symbol2tc(arg_type, function.argument_names[i]);
-
-      if (i >= code_function_call.operands.size())
-      {
-        havoc_rec(arg_symbol);
-        continue;
-      }
-
-      const expr2tc &arg_value = code_function_call.operands[i];
-
-      // Are we dealing with a recursive function?
-      std::unordered_set<expr2tc, irep2_hash> symbols;
-      get_symbols(arg_value, symbols);
-
-      bool is_recursive_arg = symbols.count(arg_symbol);
-      assign(code_assign2tc(arg_symbol, arg_value), is_recursive_arg);
-    }
+    assign_call_parameters(code_function_call);
   }
-
-  to--;
-  if (from->is_end_function() && to->is_function_call())
-    apply_return(to, ai, ns);
 }
 
 /// The edge from the callee's END_FUNCTION back to @p call. A body is entered
@@ -1125,6 +1128,8 @@ void interval_domaint::apply_return(
       havoc_rec(decl);
     havoc_arguments(caller, ns);
   }
+  else
+    restore_unwritten(call, callee, ai);
 
   if (is_nil_expr(code.ret))
     return;
@@ -1142,6 +1147,53 @@ void interval_domaint::apply_return(
   expr2tc return_var =
     symbol2tc(code.ret->type, fmt::format("c:{}:ret", callee));
   assign(code_assign2tc(code.ret, return_var));
+}
+
+/// What @p callee, outside the caller's call cycle, cannot write still holds
+/// its value at @p call. The callee's exit state joins every call site's and
+/// may be widened.
+void interval_domaint::restore_unwritten(
+  goto_programt::const_targett call,
+  const irep_idt &callee,
+  const ai_baset &ai)
+{
+  const ai_baset::writest &writes = ai.writes_of(callee);
+  const std::unique_ptr<ai_domain_baset> at_call =
+    ai.abstract_state_before(call);
+  const interval_domaint &before =
+    static_cast<const interval_domaint &>(*at_call);
+  if (before.is_bottom())
+    return;
+  const auto &taken = *ai.address_taken();
+  const auto unwritten = [&](const irep_idt &id) {
+    return !writes.symbols.count(id) &&
+           !(writes.through_pointer && taken.count(id));
+  };
+  // ponytail: takes the value before the call, so an assume in the callee on a
+  // symbol it only reads is lost; meet the two if that costs precision.
+  copy_if_needed();
+  const auto restore = [&](const irep_idt &id) {
+    const auto it = before.intervals->find(id);
+    if (it == before.intervals->end())
+      intervals->erase(id);
+    else
+      (*intervals)[id] = it->second;
+  };
+  // A call through a function pointer may write anything but the caller's
+  // private locals.
+  if (writes.anything)
+  {
+    for (const irep_idt &id : ai.private_locals_of(ai.function_of(call)))
+      restore(id);
+    return;
+  }
+  for (auto it = intervals->begin(); it != intervals->end();)
+    it = unwritten(it->first) && !before.intervals->count(it->first)
+           ? intervals->erase(it)
+           : std::next(it);
+  for (const auto &[id, value] : *before.intervals)
+    if (unwritten(id))
+      (*intervals)[id] = value;
 }
 
 template <class Interval>
@@ -1268,6 +1320,7 @@ bool interval_domaint::join(
 
 bool interval_domaint::join(
   const interval_domaint &b,
+  const goto_programt::const_targett &from,
   const goto_programt::const_targett &to)
 {
   if (b.is_bottom() || is_top())
@@ -1290,11 +1343,18 @@ bool interval_domaint::join(
   // to expend much time on this.
   copy_if_needed();
 
-  const bool is_if_goto = to->is_goto() && !is_true(to->guard);
-  const bool is_guard = to->is_assume() || to->is_assert() || is_if_goto;
+  // Widen only where a cycle closes: a loop's back edge, or a call into a
+  // function's entry (recursion). Widening at a guard inside the body would
+  // throw away the bound the loop condition just gave.
+  const bool closes_cycle =
+    (from->is_goto() && to->location_number <= from->location_number) ||
+    (from->is_function_call() && std::next(from) != to);
 
   // Prevent short-circuit
-  bool result = join(*intervals, *b.intervals, is_guard);
+  bool result = join(
+    *intervals, *b.intervals, closes_cycle && cycle_changes >= fixpoint_limit);
+  if (result && closes_cycle)
+    ++cycle_changes;
   return result;
 }
 
@@ -1351,31 +1411,6 @@ void interval_domaint::assign(const expr2tc &expr, const bool recursive)
   else
     // Unmodelled assignment: the old range must not survive the write.
     havoc_rec(c.target);
-}
-
-/* The first argument a body-less call that symex models may write through,
- * or none: the input functions write past their format, its intrinsics and
- * builtins anywhere. An intrinsic missing from read_only is assumed to write,
- * which costs precision, never soundness. */
-static std::optional<size_t> first_written_argument(const irep_idt &callee)
-{
-  static const std::unordered_set<std::string_view> read_only = {
-    "c:@F@__ESBMC_memcmp",
-    "c:@F@__ESBMC_memchr",
-    "c:@F@__ESBMC_r_ok",
-    "c:@F@__ESBMC_is_fresh",
-    "c:@F@__ESBMC_get_object_size",
-    "c:@F@__ESBMC_builtin_object_size"};
-  const std::string &id = callee.as_string();
-  if (id == "c:@F@scanf")
-    return 1;
-  if (id == "c:@F@sscanf" || id == "c:@F@fscanf")
-    return 2;
-  if (
-    read_only.count(id) ||
-    !(has_prefix(id, "c:@F@__ESBMC") || has_prefix(id, "c:@F@__builtin")))
-    return std::nullopt;
-  return 0;
 }
 
 /// The object @p address points into, or nil when that is not statically known.
@@ -1869,7 +1904,7 @@ void interval_domaint::set_options(const optionst &options)
     options.get_bool_option("ub-shift-check");
 
   auto fixpoint_str = options.get_option("interval-analysis-extrapolate-limit");
-  fixpoint_limit = fixpoint_str.empty() ? 5 : atoi(fixpoint_str.c_str());
+  fixpoint_limit = fixpoint_str.empty() ? 3 : atoi(fixpoint_str.c_str());
 
   widening_extrapolate =
     options.get_bool_option("interval-analysis-extrapolate");
@@ -1930,7 +1965,7 @@ bool interval_domaint::keep_checked_arithmetic = false;
 thread_local bool interval_domaint::skip_inductive_step_instructions = false;
 
 // Widening options
-unsigned interval_domaint::fixpoint_limit = 5;
+unsigned interval_domaint::fixpoint_limit = 3;
 bool interval_domaint::widening_under_approximate_bound = false;
 bool interval_domaint::widening_extrapolate = false;
 bool interval_domaint::widening_narrowing = false;

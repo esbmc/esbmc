@@ -28,7 +28,70 @@ struct equation_conversion_statet
   // Negated discharge condition per kept assertion (or the path
   // assumption alone in vacuity mode). OR'd together and asserted once.
   std::vector<expr2tc> assertions;
+  // Subterms already searched by register_sliced_addresses: steps share
+  // them, so a per-step set would make the walk quadratic (#9150).
+  std::unordered_set<const expr2t *> sliced_seen;
+  // Whether a kept step casts an integer to a pointer. Without one, objects
+  // registered for sliced steps only add layout constraints.
+  bool has_int_to_pointer_cast = false;
 };
+
+/// Whether an object of @p type can hold a pointer. Conservative on an
+/// unresolved tag.
+bool holds_pointer(const type2tc &type)
+{
+  if (is_pointer_type(type) || is_symbol_type(type))
+    return true;
+  if (is_array_type(type) || is_vector_type(type))
+    return holds_pointer(array_or_vector_subtype(type));
+  if (!is_struct_type(type) && !is_union_type(type))
+    return false;
+  const std::vector<type2tc> members = struct_union_members(type);
+  return std::any_of(members.begin(), members.end(), holds_pointer);
+}
+
+/// Whether @p root casts an integer other than a null pointer constant to a
+/// pointer, or reads a pointer out of the bytes of another object, as a union
+/// member or a memcpy into a pointer does (#10798). Subterms in @p seen are
+/// skipped and added to it.
+bool casts_int_to_pointer(
+  const expr2tc &root,
+  std::unordered_set<const expr2t *> &seen)
+{
+  bool found = false;
+  std::function<void(const expr2tc &)> walk = [&](const expr2tc &e) {
+    if (!e || found || !seen.insert(e.get()).second)
+      return;
+    if (is_typecast2t(e) && is_pointer_type(e->type))
+    {
+      const expr2tc &from = to_typecast2t(e).from;
+      found = !is_pointer_type(from->type) &&
+              !(is_constant_int2t(from) && to_constant_int2t(from).value == 0);
+    }
+    else if (
+      is_byte_update2t(e) ||
+      (is_member2t(e) && is_union_type(to_member2t(e).source_value->type)))
+      found = holds_pointer(e->type);
+    e->foreach_operand([&](const expr2tc &op) { walk(op); });
+  };
+  walk(root);
+  return found;
+}
+
+bool casts_int_to_pointer(const expr2tc &root)
+{
+  std::unordered_set<const expr2t *> seen;
+  return casts_int_to_pointer(root, seen);
+}
+
+/// The object at the root of the index/member chain @p obj selects from.
+expr2tc address_base(expr2tc obj)
+{
+  while (is_index2t(obj) || is_member2t(obj))
+    obj = is_index2t(obj) ? to_index2t(obj).source_value
+                          : to_member2t(obj).source_value;
+  return obj;
+}
 
 /// The object @p e takes the address of, when that object has static storage
 /// duration (a literal, a static variable or a function); otherwise nil.
@@ -37,10 +100,7 @@ expr2tc static_address_base(const namespacet &ns, const expr2tc &e)
   if (!is_address_of2t(e))
     return expr2tc();
   // Unwrap index/member chains (e.g. &""[0]) to reach the literal base.
-  expr2tc obj = to_address_of2t(e).ptr_obj;
-  while (is_index2t(obj) || is_member2t(obj))
-    obj = is_index2t(obj) ? to_index2t(obj).source_value
-                          : to_member2t(obj).source_value;
+  const expr2tc obj = address_base(to_address_of2t(e).ptr_obj);
   const symbolt *sym =
     is_symbol2t(obj) ? ns.lookup(to_symbol2t(obj).thename) : nullptr;
   if (
@@ -126,6 +186,38 @@ void pre_register_addresses(
   }
 }
 
+/// An automatic or dynamic object whose address a sliced step takes is still
+/// exposed from that step on, so register it there, in program order, for a
+/// later int-to-ptr cast to reach, as it does under --no-slice (#9272).
+void register_sliced_addresses(
+  const namespacet &ns,
+  smt_convt &smt_conv,
+  equation_conversion_statet &state,
+  const symex_target_equationt::SSA_stept &step)
+{
+  if (!state.has_int_to_pointer_cast)
+    return;
+  std::unordered_set<const expr2t *> &seen = state.sliced_seen;
+  std::function<void(const expr2tc &)> walk = [&](const expr2tc &e) {
+    if (!e || !seen.insert(e.get()).second)
+      return;
+    if (is_address_of2t(e) && !static_address_base(ns, e))
+    {
+      const expr2tc obj = address_base(to_address_of2t(e).ptr_obj);
+      // Only the base, and only of constant size: anything else would encode
+      // SSA symbols the slicer may have left unassigned (#10293).
+      if (is_symbol2t(obj) && !has_variable_size(ns, obj->type))
+        smt_conv.convert_ast(address_of2tc(pointer_type2tc(obj->type), obj));
+    }
+    e->foreach_operand([&](const expr2tc &op) { walk(op); });
+  };
+  for (const expr2tc *e : {&step.guard, &step.cond, &step.rhs})
+    walk(*e);
+  if (step.output_data)
+    for (const expr2tc &arg : step.output_data->output_args)
+      walk(arg);
+}
+
 /// PathReachable asks only whether the path is feasible, ignoring the claim:
 /// UNSAT over the kept claims means every discharge was vacuous. Satisfiable
 /// asks whether the violation can be avoided, in the same shape the violation
@@ -164,6 +256,7 @@ void convert_internal_step(
 {
   if (step.ignore)
   {
+    register_sliced_addresses(ns, smt_conv, state, step);
     step.cond_expr = gen_true_expr();
     return;
   }
@@ -407,6 +500,15 @@ void symex_target_equationt::convert(smt_convt &smt_conv, assertion_modet mode)
 
   equation_conversion_statet state;
   state.assumpt_expr = gen_true_expr();
+  {
+    std::unordered_set<const expr2t *> cast_seen;
+    state.has_int_to_pointer_cast = std::any_of(
+      SSA_steps.begin(), SSA_steps.end(), [&](const SSA_stept &step) {
+        return !step.ignore && (casts_int_to_pointer(step.guard, cast_seen) ||
+                                casts_int_to_pointer(step.cond, cast_seen) ||
+                                casts_int_to_pointer(step.rhs, cast_seen));
+      });
+  }
 
   for (auto &SSA_step : SSA_steps)
     convert_internal_step(
@@ -628,27 +730,6 @@ runtime_encoded_equationt::runtime_encoded_equationt(
 }
 
 runtime_encoded_equationt::~runtime_encoded_equationt() = default;
-
-/// Whether @p root casts an integer other than a null pointer constant to a
-/// pointer.
-static bool casts_int_to_pointer(const expr2tc &root)
-{
-  bool found = false;
-  std::unordered_set<const expr2t *> seen;
-  std::function<void(const expr2tc &)> walk = [&](const expr2tc &e) {
-    if (!e || found || !seen.insert(e.get()).second)
-      return;
-    if (is_typecast2t(e) && is_pointer_type(e->type))
-    {
-      const expr2tc &from = to_typecast2t(e).from;
-      found = !is_pointer_type(from->type) &&
-              !(is_constant_int2t(from) && to_constant_int2t(from).value == 0);
-    }
-    e->foreach_operand([&](const expr2tc &op) { walk(op); });
-  };
-  walk(root);
-  return found;
-}
 
 /// Steps are converted as symex makes them, so a cast converted before a
 /// static object's address first appears would miss that object (#9273):

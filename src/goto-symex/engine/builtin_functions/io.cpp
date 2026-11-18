@@ -1452,6 +1452,7 @@ void goto_symext::symex_input(const code_function_call2t &func_call)
     for (const auto &item : internal_deref_items)
     {
       assert(is_symbol2t(item.object) && "This only works for variables");
+      check_read_only_write(item.object, and2tc(stored.as_expr(), item.guard));
 
       auto type = item.object->type;
       expr2tc val = sideeffect2tc(
@@ -1462,7 +1463,11 @@ void goto_symext::symex_input(const code_function_call2t &func_call)
         type2tc(),
         sideeffect2t::allockind::nondet);
 
-      symex_assign(code_assign2tc(item.object, val), false, stored);
+      expr2tc target_guard = item.guard;
+      cur_state->rename(target_guard);
+      guard2tc guard = stored;
+      guard.add(target_guard);
+      symex_assign(code_assign2tc(item.object, val), false, guard);
     }
   }
 

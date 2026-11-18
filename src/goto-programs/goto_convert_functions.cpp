@@ -861,9 +861,8 @@ bool goto_convert_functionst::convert_native_rec(
     if (initializer.is_not_nil())
     {
       code_assignt assign(var, initializer);
-      // The DECL above keeps its nil location: convert_decl emits it before the
-      // mutable access emitted_location reproduces.
-      assign.location() = emitted_location(decl.location);
+      // Nil stays nil: convert_decl_initializer reads it via a const codet.
+      assign.location() = decl.location;
       copy(assign, ASSIGN, dest);
     }
 
@@ -1158,7 +1157,9 @@ bool goto_convert_functionst::convert_native_rec(
       t->location = location;
     }
     goto_programt::targett v = tmp_branch.instructions.begin();
+    const bool operand = v->location.is_short_circuit_operand();
     v->location = location;
+    v->location.set_short_circuit_operand(operand);
 
     goto_programt tmp_y;
     goto_programt::targett y = tmp_y.add_instruction();
