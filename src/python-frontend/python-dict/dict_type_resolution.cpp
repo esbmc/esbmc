@@ -524,7 +524,7 @@ typet python_dict_handler::resolve_expected_type_for_dict_subscript(
   // Look up the variable's declaration in the AST to get its annotation
   std::string var_name = sym->name.as_string();
   nlohmann::json var_decl = json_utils::find_var_decl(
-    var_name, converter_.get_current_func_name(), converter_.get_ast_json());
+    var_name, converter_.current_ast_scope(), converter_.get_ast_json());
 
   if (var_decl.empty())
     return empty_typet();
