@@ -879,7 +879,11 @@ void transform_loop(
   // not apply to it: assuming it there would drop every path that leaves early
   // (#10154). Every guard is over the head's values, so the state before the
   // loop can be tested; without a flag, guards after a write are not kept.
-  const expr2tc entry = entry_condition(guards);
+  // Without a context (--termination) every loop is assumed to be entered, but
+  // a library loop is never the non-termination witness: assuming memcpy's
+  // `i < n` would drop every path that copies no byte (#10856).
+  const bool assumes_entry = entry_flags.context || !goto_function.body.hide;
+  const expr2tc entry = assumes_entry ? entry_condition(guards) : expr2tc();
   const expr2tc flag =
     can_flag && !is_nil_expr(entry) ? entry_flags.fresh() : expr2tc();
 
