@@ -13,7 +13,9 @@
 > 8 Z3 seeds. §8.9 traces it to the struct literal a whole read of a split
 > struct carries into its readers; refusing that literal fixes it but each
 > way of doing so measured so far loses elsewhere, so the gate is still
-> unmet. Phase 1 also lacks an SV-COMP run.** The corpus is in `regression/field-sensitivity/`
+> unmet. On the branch that refuses and pins it, `_nested` passes inside the
+> suite budget, but a C++ test loses constant propagation that master and
+> the parent keep (§8.9). Phase 1 also lacks an SV-COMP run.** The corpus is in `regression/field-sensitivity/`
 > with baselines, and the census has been run and reverted. Phase 1 adds
 > `--field-sensitive-ssa` (default off): symex gives each field of an
 > eligible local, parameter or return slot its own SSA name. It meets the 2x
@@ -913,4 +915,36 @@ Not measured on this branch: the C, C++ and Python suites, the corpus rows,
 and anything under Bitwuzla (the Bitwuzla sources cannot be downloaded in
 this container). A next step is to find what in `_nested` the pinned literal
 slows down, starting from the two `--smt-formula-only` outputs.
+
+Re-measured on 2026-11-18 on the same branch at `caa88902`, RelWithDebInfo,
+LLVM 18, Z3 4.13.3, 4-core container:
+
+- `_nested` with the flag, run alone with ESBMC's default seed: 347 s, within
+  the 1200 s suite budget, so no verdict is lost (without the flag: 161 s,
+  with one other job running). The earlier "no result in 400 s" was a 400 s
+  cap, not the suite budget.
+- On the two `--smt-formula-only` outputs, standalone Z3 4.13.3 with
+  `smt.random_seed`/`sat.random_seed` 1-6, 600 s cap, 4 jobs at a time:
+  without the flag 4 of 6 seeds solve (76-213 s); with the flag 5 of 6
+  (51-347 s). The formulas differ only in the names of `result`'s fields and
+  two unpack temporaries. The pinned formula is not harder than master's, and
+  the 29 s of the parent is a fast case of a high-variance instance.
+- C (`regression/esbmc`, `CORE`, 3427 tests) and C++ (`esbmc-cpp/cpp`,
+  `CORE`, 1361 tests), flag forced on, this branch against its parent
+  `5c823fff`, 30 s per run: 0 verdict changes. The C output differences (9)
+  are parallel-solving line order, Clang AST addresses and witness timestamps
+  that match on a re-run. In C++, 8 of 10 differences are assignment counts
+  and one (`cpp_sum_class`) is line order.
+- **Lost propagation:** `filesystem_path_decompose` (`--std c++17 --unwind
+  12`). Without the flag and with the flag on the parent, symex proves it
+  alone: 0 VCCs left after simplification, 320 unwind steps. With this
+  branch, 360 VCCs remain and the `find_last_of`, `substr` and `basic_string`
+  loops of the string model unwind to the bound, 609 unwind steps. The
+  verdict holds at this bound, but a test without one, or with a lower one,
+  would lose it. The rule refuses more than the unsplit object refuses: a
+  next step is to find which split field's L2 name in a literal master
+  carries, and refuse only names whose unsplit read master also refuses.
+
+Not measured in this run: the Python suite, the corpus 2x bar, and anything
+under Bitwuzla.
 
