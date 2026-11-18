@@ -41,6 +41,8 @@ execution_statet::execution_statet(
   mon_from_tid = false;
   monitor_from_tid = 0;
   guard_execution = guard_execution_name;
+  if (options.get_bool_option("schedule"))
+    interleaving_guard = get_guard_identifier();
   interleaving_unviable = false;
   main_returned = false;
   symex_trace = options.get_bool_option("symex-trace");
@@ -159,6 +161,7 @@ void execution_statet::copy_derived_from(const execution_statet &ex)
   guard_execution = ex.guard_execution;
   nondet_count = ex.nondet_count;
   node_id = ex.node_id;
+  interleaving_guard = ex.interleaving_guard;
   interleaving_unviable = ex.interleaving_unviable;
   main_returned = ex.main_returned;
 
@@ -825,6 +828,9 @@ void execution_statet::execute_guard()
   node_id = node_count++;
   expr2tc guard_expr = get_guard_identifier();
   expr2tc parent_guard;
+  const expr2tc parent_node = interleaving_guard;
+  if (parent_node)
+    interleaving_guard = guard_expr;
 
   // Preserve the existing false-guard handling for context switches taken
   // immediately after a branch, but keep the branch parent state explicit.
@@ -854,7 +860,17 @@ void execution_statet::execute_guard()
   if (is_false(parent_guard) || is_cur_state_guard_false(parent_guard))
   {
     // A context switch happens, add last thread state guard to assumption.
-    if (active_thread != last_active_thread)
+    // Under --schedule the node is made unselectable instead.
+    if (parent_node)
+    {
+      if (active_thread != last_active_thread)
+        target->assumption(
+          guard2tc().as_expr(),
+          not2tc(interleaving_guard),
+          get_active_state().source,
+          first_loop);
+    }
+    else if (active_thread != last_active_thread)
     {
       target->assumption(
         guard2tc().as_expr(),
@@ -873,12 +889,29 @@ void execution_statet::execute_guard()
   state_level2->rename(parent_guard);
   do_simplify(parent_guard);
 
+  if (parent_node)
+  {
+    // A selected node selects its parent, and implies the path to its switch.
+    target->assumption(
+      guard2tc().as_expr(),
+      implies2tc(interleaving_guard, parent_node),
+      get_active_state().source,
+      first_loop);
+    parent_guard = implies2tc(interleaving_guard, parent_guard);
+  }
+
   if (active_thread != last_active_thread)
     target->assumption(
       guard2tc().as_expr(),
       parent_guard,
       get_active_state().source,
       first_loop);
+}
+
+void execution_statet::guard_by_interleaving(expr2tc &expr) const
+{
+  if (interleaving_guard)
+    expr = implies2tc(interleaving_guard, expr);
 }
 
 unsigned int execution_statet::add_thread(const goto_programt *prog)

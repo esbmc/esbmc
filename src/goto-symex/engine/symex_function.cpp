@@ -597,6 +597,7 @@ void goto_symext::symex_function_call_code(const expr2tc &expr)
       // Add an unwinding assumption.
       expr2tc now_guard = cur_state->guard.as_expr();
       expr2tc not_now = not2tc(now_guard);
+      guard_by_interleaving(not_now);
       target->assumption(now_guard, not_now, cur_state->source, first_loop);
     }
 
