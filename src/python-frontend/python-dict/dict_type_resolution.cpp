@@ -440,6 +440,98 @@ literal_value_at(const nlohmann::json &dict, const nlohmann::json &key)
   return found;
 }
 
+/// The value the dict literal @p dict holds at the constant @p keys: null
+/// when a key is absent, nullopt when that is not known.
+static std::optional<const nlohmann::json *> literal_value_at_path(
+  const nlohmann::json &dict,
+  const std::vector<const nlohmann::json *> &keys)
+{
+  const nlohmann::json *value = &dict;
+  for (const nlohmann::json *key : keys)
+  {
+    if (value->value("_type", "") != "Dict")
+      return std::nullopt;
+    const std::optional<const nlohmann::json *> next =
+      literal_value_at(*value, *key);
+    if (!next || !*next)
+      return next;
+    value = *next;
+  }
+  return value;
+}
+
+/// The Name that the read chain @p subscript starts from, with its constant
+/// keys in @p keys, outermost first; null when a key is not a constant or
+/// the chain does not start from a Name.
+static const nlohmann::json *constant_key_path(
+  const nlohmann::json &subscript,
+  std::vector<const nlohmann::json *> &keys)
+{
+  const nlohmann::json *root = &subscript;
+  for (; root->value("_type", "") == "Subscript"; root = &(*root)["value"])
+  {
+    if ((*root)["slice"].value("_type", "") != "Constant")
+      return nullptr;
+    keys.insert(keys.begin(), &(*root)["slice"]);
+  }
+  return root->value("_type", "") == "Name" ? root : nullptr;
+}
+
+/// The dict literal that statement @p node binds to @p name alone, else null.
+static const nlohmann::json *
+dict_literal_bound_to(const nlohmann::json &node, const std::string &name)
+{
+  const std::string type = node.value("_type", "");
+  const nlohmann::json *target = type == "Assign" && node["targets"].size() == 1
+                                   ? &node["targets"][0]
+                                 : type == "AnnAssign" ? &node["target"]
+                                                       : nullptr;
+  if (!target || !is_name(*target, name))
+    return nullptr;
+  const nlohmann::json &value = node["value"];
+  return value.is_object() && value.value("_type", "") == "Dict" ? &value
+                                                                 : nullptr;
+}
+
+/// Whether @p node stores into or deletes from `name[k1]...[kn]` with n at
+/// most @p depth, which can replace a value a read @p depth keys deep sees.
+static bool
+stores_within(const nlohmann::json &node, const std::string &name, size_t depth)
+{
+  if (
+    node.value("_type", "") != "Subscript" ||
+    node["ctx"].value("_type", "") == "Load")
+    return false;
+  size_t n = 0;
+  const nlohmann::json *base = &node;
+  for (; base->value("_type", "") == "Subscript"; base = &(*base)["value"])
+    ++n;
+  return n <= depth && is_name(*base, name);
+}
+
+/// Collects into @p literals the dict literals bound to @p name under
+/// @p node; false when a store reaches @p depth or fewer keys into it.
+static bool collect_dict_literals(
+  const nlohmann::json &node,
+  const std::string &name,
+  size_t depth,
+  std::vector<const nlohmann::json *> &literals)
+{
+  if (node.is_object())
+  {
+    if (const nlohmann::json *literal = dict_literal_bound_to(node, name))
+      literals.push_back(literal);
+    if (stores_within(node, name, depth))
+      return false;
+  }
+  for (const auto &child : node)
+    if (
+      child.is_structured() &&
+      !collect_dict_literals(child, name, depth, literals))
+      return false;
+  return true;
+}
+
 /// The type of the value that the constant-key read chain @p subscript, as in
 /// `d["a"]["b"]`, takes from the dict literals bound to its root name. Empty
 /// unless every binding of the name is a dict literal, no subscript store can
@@ -450,80 +542,31 @@ typet python_dict_handler::nested_literal_value_type(
   const nlohmann::json &subscript)
 {
   std::vector<const nlohmann::json *> keys;
-  const nlohmann::json *root = &subscript;
-  while (root->value("_type", "") == "Subscript")
-  {
-    if ((*root)["slice"].value("_type", "") != "Constant")
-      return empty_typet();
-    keys.insert(keys.begin(), &(*root)["slice"]);
-    root = &(*root)["value"];
-  }
-  if (keys.size() < 2 || root->value("_type", "") != "Name")
+  const nlohmann::json *root = constant_key_path(subscript, keys);
+  if (!root || keys.size() < 2)
     return empty_typet();
 
   const std::string name = (*root)["id"].get<std::string>();
-  const nlohmann::json &ast = converter_.get_ast_json();
-  const nlohmann::json scope =
-    binding_scope(ast, name, converter_.get_current_func_name());
-
+  const nlohmann::json scope = binding_scope(
+    converter_.get_ast_json(), name, converter_.get_current_func_name());
   std::vector<const nlohmann::json *> literals;
-  bool overwritten = false;
-  std::function<void(const nlohmann::json &)> scan =
-    [&](const nlohmann::json &node) {
-      if (node.is_object())
-      {
-        const std::string kind = node.value("_type", "");
-        const nlohmann::json *target =
-          kind == "Assign" && node["targets"].size() == 1 ? &node["targets"][0]
-          : kind == "AnnAssign"                           ? &node["target"]
-                                                          : nullptr;
-        if (
-          target && target->value("_type", "") == "Name" &&
-          target->value("id", "") == name && node["value"].is_object() &&
-          node["value"].value("_type", "") == "Dict")
-          literals.push_back(&node["value"]);
-
-        if (kind == "Subscript" && node["ctx"].value("_type", "") != "Load")
-        {
-          size_t depth = 0;
-          const nlohmann::json *base = &node;
-          for (; base->value("_type", "") == "Subscript";
-               base = &(*base)["value"])
-            ++depth;
-          overwritten |= base->value("_type", "") == "Name" &&
-                         base->value("id", "") == name && depth <= keys.size();
-        }
-      }
-      for (const auto &child : node)
-        if (child.is_structured())
-          scan(child);
-    };
-  scan(scope);
   if (
-    overwritten || literals.empty() ||
+    !collect_dict_literals(scope, name, keys.size(), literals) ||
     json_utils::count_name_bindings(scope, name) != literals.size())
     return empty_typet();
 
   typet result = empty_typet();
-  for (const nlohmann::json *value : literals)
+  for (const nlohmann::json *literal : literals)
   {
-    for (const nlohmann::json *key : keys)
-    {
-      if (value->value("_type", "") != "Dict")
-        return empty_typet();
-      const std::optional<const nlohmann::json *> next =
-        literal_value_at(*value, *key);
-      if (!next)
-        return empty_typet();
-      value = *next;
-      if (!value)
-        break;
-    }
+    const std::optional<const nlohmann::json *> value =
+      literal_value_at_path(*literal, keys);
     if (!value)
+      return empty_typet();
+    if (!*value)
       continue;
-    const typet type = value->value("_type", "") == "Dict"
+    const typet type = (*value)->value("_type", "") == "Dict"
                          ? typet(get_dict_struct_type())
-                         : stored_literal_type(*value, type_handler_);
+                         : stored_literal_type(**value, type_handler_);
     if (type.is_empty() || (!result.is_empty() && type != result))
       return empty_typet();
     result = type;
