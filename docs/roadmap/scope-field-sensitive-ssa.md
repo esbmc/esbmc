@@ -27,8 +27,9 @@
 > carries its constant fields, does: 27-29 s with the flag, and no verdict
 > change on the C, C++ and a Python sample with the flag forced on (§8.13).
 > Standalone Z3 finds the formulas with and without the change about equally
-> hard, so the result needs confirming on other builds and under Bitwuzla.
-> Phase 1 also lacks an SV-COMP run.** The corpus is in `regression/field-sensitivity/`
+> hard. On merged master (#10839) `tagged_attr_store` passes with the flag
+> under Z3 (24 s) and Bitwuzla (7 s) (§8.14); the full Python suite with the
+> flag forced on is being re-run there. Phase 1 also lacks an SV-COMP run.** The corpus is in `regression/field-sensitivity/`
 > with baselines, and the census has been run and reverted. Phase 1 adds
 > `--field-sensitive-ssa` (default off): symex gives each field of an
 > eligible local, parameter or return slot its own SSA name. It meets the 2x
@@ -1191,3 +1192,19 @@ Not measured: Bitwuzla (not buildable in this container), the full Python
 suite with the flag forced on, the full C and C++ suites with the flag off
 under ctest (each needs more than 10 minutes on 4 cores; the change is not
 reached without the flag), and an SV-COMP run.
+
+### 8.14 Phase 1 Python gate on merged master
+
+Measured on 2026-11-18 at master `02f76186e` (#10839 merged),
+RelWithDebInfo built with clang 18, LLVM 18, Z3 4.13.3 and ESBMC's
+Bitwuzla 0.9.0 backend, 4-core container, run alone, 300 s cap, wall time:
+
+| `tagged_attr_store` | Without the flag | With the flag |
+|---|---|---|
+| `--z3` | SUCCESSFUL, 25.8 s | SUCCESSFUL, 23.7 s, 24.4 s, 23.9 s |
+| `--bitwuzla` | SUCCESSFUL, 7.0 s | SUCCESSFUL, 6.8 s |
+
+So §8.13's result holds on a second build: the flag no longer loses this
+verdict under Z3, and Bitwuzla is unaffected. `tagged_attr_store_nested`
+still crashes in the Python frontend on this clang build within 1 s, with
+and without the flag and under both solvers (§8.13).
