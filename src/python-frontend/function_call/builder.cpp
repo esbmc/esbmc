@@ -1323,6 +1323,15 @@ symbol_id function_call_builder::build_function_id() const
         inner_call["func"]["id"].is_string())
       {
         obj_name = inner_call["func"]["id"].get<std::string>();
+        // A list a plain function returns (`f().pop()`) is a list receiver,
+        // not an instance of a class named after the callee.
+        const symbolt *callee = converter_.find_symbol(
+          symbol_id(python_file, "", obj_name).to_string());
+        if (
+          callee && callee->get_type().is_code() &&
+          is_pylist_object_type(
+            to_code_type(callee->get_type()).return_type(), converter_.ns))
+          obj_name = "list";
       }
       else
       {
