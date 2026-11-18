@@ -1,0 +1,5 @@
+regression/python/github_9074_function_kwargs_get
+regression/python/github_9074_init_args_and_kwargs
+regression/python/github_9074_init_kwargs_empty_fail
+regression/python/github_9074_init_kwargs_given
+regression/python/github_9074_init_kwargs_given_fail
