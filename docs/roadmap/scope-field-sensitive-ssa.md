@@ -1276,3 +1276,80 @@ build, Z3 4.13.3 and Bitwuzla 0.9.0:
   changes; one temporary name differs.
 - ctest `field_sensitive_ssa` and `field-sensitivity`: 52/52 pass.
 
+
+### 8.16 `github_7797_flat_set`: a carried pointer field and a re-split L2 name
+
+Two defects, found from the 12-line `flat_set` reproducer of §8.14
+(`regression/esbmc-cpp/cpp/field_sensitive_ssa_flat_set_extract`).
+
+**Lost propagation.** The whole read of `tmp$4` in `extract()` is assigned
+to the object's own symbol (§8.13) as `{ .buf=tmp$4::0#2, ._size=2,
+._capacity=2 }`. `buf` is opaque, so #7597's pinning replaces it with
+`tmp$4#2.buf`; that read is a pointer, which `immutable_read_type` refuses
+(github_5868), so the whole pinned literal is refused and `_size` with it.
+§8.14's hypothesis is confirmed. Without the flag the copy is
+`tmp$2#4 WITH [_size:=2] WITH [_capacity:=2]`: the pointer stays inside the
+base symbol. `pin_symbolic_updates` now falls back, for a split object only,
+to that shape: `tmp$4#2 WITH [f := v]` over the members that propagate. The
+pointer rule is unchanged, and no pointer value is carried out of another
+object.
+
+**Wrong verdict.** That carried value holds `tmp$4#2`, an L2 name of a split
+object. Passing it as an argument to a split parameter runs
+`split_structs.rewrite` on the renamed argument (`argument_assignments` after
+`cur_state->rename`, `symex_function.cpp`), and `rewrite` turned the L2 name
+into the field symbols at generation 0, values never assigned. #7597's pinned
+literal already carries such names for non-pointer opaque fields, so this is
+reachable without the first change. On the head of #10862, this program
+gives `VERIFICATION FAILED` with the flag and `SUCCESSFUL` without it
+(`p::1#1 == s::1#0` in the SSA):
+
+```c
+struct S { int a; int b; };
+void f(struct S p, int x) { assert(p.b == x + 1); }
+int main(void)
+{
+  int x = nondet_int();
+  struct S s;
+  s.a = 1;
+  s.b = x + 1;
+  struct S t = s;
+  struct S *q = &t;
+  f(t, x);
+  return q->a - 1;
+}
+```
+
+`rewrite` now leaves an L2 name as it is: it names the definition the hidden
+step put in the equation. Debug builds would have hit `at_level_of`'s
+assertion instead.
+
+Measured on 2026-11-18/19, the head of #10862 (`3f47f12e6`) with and
+without this change, RelWithDebInfo, gcc 13.3, LLVM 18, Z3 4.13.3,
+Bitwuzla 0.9.0, 4-core container:
+
+- Reproducer, no `--unwind`: without the flag SUCCESSFUL in 0.8 s; with the
+  flag no result in 120 s before, SUCCESSFUL in 0.75 s after. At
+  `--unwind 6` with the flag, the four loops unwind 1/3/2/4 times, as
+  without the flag (before: 1/6/5/4, with unwinding assertions).
+- Each change alone is not enough: the pinning change alone bounds the copy
+  loop but reads `tmp$4::0#0` and keeps `__lower_index` unbounded; the
+  rewrite fix alone leaves both bounds lost.
+- New tests: `field_sensitive_ssa_carried_read_arg` (FAILED before),
+  `field_sensitive_ssa_split_copy_pointer_unsplit` and `_fail` (4 VCCs,
+  2 left and 5 iterations before; 3 and 1 after), and
+  `field_sensitive_ssa_flat_set_extract` and `_fail` (no result in 60 s
+  before). `field_sensitive_ssa_carried_read_arg_fail` pins the real
+  violation and passes both ways. All pass with the change.
+- Every new branch reached under Z3 and Bitwuzla by a C harness run with
+  `--enable-unreachability-intrinsic` and full unwinding, its
+  `__ESBMC_unreachable()` unreached (an instrumented build printed each
+  branch; a control `__ESBMC_unreachable()` on a reachable line FAILED).
+- Flag forced on, this change against #10862's head, default solver, 30 s
+  per run, 4 at a time: C `CORE` (3448) 0 verdict changes, and no output
+  change beyond witness UUIDs, timing fields and `--parallel-solving` order.
+  C++ `CORE`: CPP_RESULT. Python, every 10th test: PY_RESULT.
+- ctest without the flag: `field_sensitive_ssa|field-sensitivity|github_7797`
+  84/84; `esbmc/` 3576 of 3593, and the 17 failures fail the same way on
+  #10862's binary (Boolector not built, clang-18 builtins, 32-bit headers).
+- TIMINGS
