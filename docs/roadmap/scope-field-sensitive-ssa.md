@@ -10,7 +10,10 @@
 > `tagged_attr_store` (25 s without the flag, no result in 1800 s with it,
 > master's Phase 1 code as well), so the Phase 1 Python gate is unmet
 > (§8.8). The loss is Z3-only (Bitwuzla: 8 s both ways) and holds at 7 of
-> 8 Z3 seeds. Phase 1 also lacks an SV-COMP run.** The corpus is in `regression/field-sensitivity/`
+> 8 Z3 seeds. §8.9 traces it to the struct literal a whole read of a split
+> struct carries into its readers; refusing that literal fixes it but each
+> way of doing so measured so far loses elsewhere, so the gate is still
+> unmet. Phase 1 also lacks an SV-COMP run.** The corpus is in `regression/field-sensitivity/`
 > with baselines, and the census has been run and reverted. Phase 1 adds
 > `--field-sensitive-ssa` (default off): symex gives each field of an
 > eligible local, parameter or return slot its own SSA name. It meets the 2x
@@ -871,3 +874,43 @@ named symbol instead of an inlined literal), which §3 does not yet specify.
 
 Still not measured: an SV-COMP run, and the full Python suite under
 Bitwuzla.
+
+### 8.9 Phase 1 Python gate: the carried whole-read literal
+
+A whole read of a split struct renames to `constant_struct2t` of its field
+symbols. A field whose value constant propagation refuses keeps its L2 name,
+and `aggregate_literal_may_propagate` accepts an L2 name as immutable
+(#7597), so the literal is carried into every reader. Without the flag the
+object is one symbol whose `with` chain is refused, and readers read the
+symbol. In `tagged_attr_store` the carried literal is `result`'s, returned by
+`__python_scalar_add_obj_dyn`.
+
+Two rules were tried in `literal_element_may_propagate`
+(`goto_symex_state.cpp`), both treating a split field's L2 name as refused
+inside a literal. They differ in whether #7597's pinning (`pin_refused_elements`)
+then replaces that element by a read of the assigned name.
+
+Measured on 2026-11-18, branch `feat/field-sensitive-ssa-phase1-whole-read`
+on #10808's head `5c823fff`, RelWithDebInfo, LLVM 18, Z3 4.13.3, `--z3`, run
+alone, wall time:
+
+| Build | `tagged_attr_store` | `tagged_attr_store_nested` | `field_sensitive_ssa_copy_pinned` |
+|---|---|---|---|
+| without the flag | 25 s, 25 s, 27 s | 188 s, 182 s, 190 s | 0 VCCs left |
+| flag, parent | no result in 200 s (300 s earlier) | 29 s | 0 VCCs left |
+| flag, refuse and pin | 35 s, 33 s, 36 s | no result in 400 s (3 runs) | 1 VCC left |
+| flag, refuse without pinning | 23 s | 30 s | never stops unwinding |
+
+The pinned rule fixes `tagged_attr_store` but turns `_nested` from 29 s into
+a timeout. Without pinning both pass, but a constant field of a copy no
+longer bounds a loop: `field_sensitive_ssa_copy_pinned` (`t = s` into an
+address-taken `t`, then `while (i < t.n)`) unwinds without end, where master
+and the parent stop at 3. Neither rule is acceptable. The branch keeps the
+pinned rule, which loses no termination; the test pins it (the parent leaves
+0 VCCs, the no-pin rule never terminates).
+
+Not measured on this branch: the C, C++ and Python suites, the corpus rows,
+and anything under Bitwuzla (the Bitwuzla sources cannot be downloaded in
+this container). A next step is to find what in `_nested` the pinned literal
+slows down, starting from the two `--smt-formula-only` outputs.
+
