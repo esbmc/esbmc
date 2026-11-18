@@ -423,6 +423,8 @@ public:
    */
   typet resolve_expected_type_for_dict_subscript(const exprt &dict_expr);
 
+  typet nested_literal_value_type(const nlohmann::json &subscript);
+
   /**
    * @brief Read a struct value of type @p type from a dict item's value
    * pointer @p obj_value. A class instance is stored by reference, as a list
