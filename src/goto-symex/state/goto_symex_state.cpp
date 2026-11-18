@@ -836,9 +836,17 @@ static expr2tc pin_chain_updates(
       // rebuilt's type; only equal types make the two agree.
       if (rebuilt->type != l2_lhs->type)
         return expr2tc();
-      value = read_of_field(l2_lhs, w.update_field);
-      if (is_nil_expr(value))
+      const expr2tc read = read_of_field(l2_lhs, w.update_field);
+      if (is_nil_expr(read))
         return expr2tc();
+      // A struct literal refused for some elements keeps its other elements:
+      // pinning only those to reads out of `read` lets a constant sibling
+      // still fold (#7521, a split struct copied into an unsplit member).
+      const expr2tc nested =
+        is_constant_struct2t(value) && value->type == read->type
+          ? pin_struct_literal(state, value, read)
+          : expr2tc();
+      value = is_nil_expr(nested) ? read : nested;
       pinned_any = true;
     }
     // A kept value need not match the slot: symex renames a `with`'s operands

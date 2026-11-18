@@ -17,8 +17,11 @@
 > suite budget, but a C++ test loses constant propagation that master and
 > the parent keep (§8.9). Refusing only field names assigned an opaque
 > value restores that test and keeps `tagged_attr_store` at 36 s, but still
-> loses a loop bound master folds (§8.10). Phase 1 also lacks an SV-COMP
-> run.** The corpus is in `regression/field-sensitivity/`
+> loses a loop bound master folds (§8.10). Pinning only the refused elements
+> of a copied struct literal restores that bound (§8.11), but on a clang
+> build neither rule solves `tagged_attr_store` with the flag under Z3 (no
+> result in 300 s and 1800 s), so the 36 s is build-sensitive and the Python
+> gate stays unmet. Phase 1 also lacks an SV-COMP run.** The corpus is in `regression/field-sensitivity/`
 > with baselines, and the census has been run and reverted. Phase 1 adds
 > `--field-sensitive-ssa` (default off): symex gives each field of an
 > eligible local, parameter or return slot its own SSA name. It meets the 2x
@@ -1010,3 +1013,45 @@ master's carried `result` is cheap for Z3 and the split one is not, by
 diffing the two `--smt-formula-only` outputs around `result`, instead of
 refusing literals. Not measured in this run: the Python suite, the corpus 2x
 bar, Bitwuzla, and SV-COMP.
+
+### 8.11 Pinning a copied literal element by element
+
+In §8.10's `opaque_field`, `o.in = tmp` copies a split struct into a member
+of an unsplit one. `pin_chain_updates` refuses the copied literal because
+one element, `tmp.n`'s L2 name, is opaque, and pins the whole update to
+`member(o#2, in)`, so the constant `a[3]` that bounds the loop is lost. The
+change here pins only the refused elements of a struct literal, to reads of
+`member(o#2, in)` (`pin_struct_literal` applied to that read), and keeps the
+rest.
+
+Measured on 2026-11-18, PR #10839's head `cfce509d` with and without the
+change, RelWithDebInfo built with clang 18 (GCC 13 hit internal compiler
+errors in this container), LLVM 18, Z3 4.13.3, 4-core container, flag
+forced on in both binaries, default solver, 30 s per run, 4 at a time:
+
+| Test or suite | `cfce509d` | with the change |
+|---|---|---|
+| `opaque_field`, `--unwind 6` | 3 VCCs, 3 left | 2 VCCs, 1 left |
+| `opaque_field`, no `--unwind` | never stops unwinding (§8.10) | stops; 2 VCCs, 1 left |
+| `opaque_field`, no flag | 0 left (master) | 0 left (master) |
+| C `CORE` (3438) | | 0 verdict changes, 0 differences in VCCs left |
+| C++ `CORE` (1361) | | 0 verdict changes; `cpp_sum_class` differs only in its incremental step count |
+| Python `CORE`, 920 of a shuffled list | | 0 verdict changes; `class_copy_none_attr_nondet_fail` leaves 4 VCCs instead of 5 |
+| `tagged_attr_store`, `--z3` | no result in 300 s (90 s run: symex 1.4 s, 11828 VCCs, then Z3) | no result in 1800 s |
+| `tagged_attr_store`, no flag, `--z3` | 26 s | |
+
+The VCC left on `opaque_field` is `o.in.n == tmp.n`: master folds it because
+both sides are `member(tmp#5, n)`; here one side is `tmp`'s field name and
+the other a read of `o`. Its verdict is unchanged.
+
+`opaque_field`'s `test.desc` now expects 2 VCCs, which fails on
+`cfce509d` (3 VCCs). The new branch was reached on `opaque_field` with
+temporary logging under Z3; this container has no Bitwuzla build.
+
+`tagged_attr_store` does not reproduce §8.10's 36 s here: the `cfce509d`
+binary, built with clang instead of the GCC used before, gives no result in
+300 s with the flag. Symex output is the same size as without the flag
+(11828 VCCs left, 16530 against 16532 assignments), so the opaque rule's
+result there depends on the build, in line with the seed sensitivity in
+§8.9. The Python gate is therefore unmet whichever rule is used; the
+`--smt-formula-only` diff §8.10 proposes is still the next step.
