@@ -1,4 +1,0 @@
-CORE
-main.py
---incremental-bmc
-^ERROR: TypeError: numpy\.linalg\.svd factors of a non-square matrix with a zero singular value are not supported$

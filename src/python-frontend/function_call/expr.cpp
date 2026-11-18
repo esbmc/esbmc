@@ -2585,7 +2585,10 @@ function_call_expr::get_object_list_symbol(std::string &display_name) const
     if (call_expr.type() == list_type)
     {
       symbolt &tmp = converter_.create_tmp_symbol(
-        call_, "$call_list$", list_type, call_expr);
+        call_,
+        "$call_list$",
+        list_type,
+        to_value_expr(call_expr, converter_.ns));
       display_name = "$call_list$";
       return &tmp;
     }
