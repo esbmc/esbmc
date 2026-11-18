@@ -21,7 +21,9 @@
 > of a copied struct literal restores that bound (§8.11), but on a clang
 > build neither rule solves `tagged_attr_store` with the flag under Z3 (no
 > result in 300 s and 1800 s), so the 36 s is build-sensitive and the Python
-> gate stays unmet. Phase 1 also lacks an SV-COMP run.** The corpus is in `regression/field-sensitivity/`
+> gate stays unmet. Returning a split whole read through a named symbol, as
+> §8.8 proposed, does not solve it either (§8.12). Phase 1 also lacks an
+> SV-COMP run.** The corpus is in `regression/field-sensitivity/`
 > with baselines, and the census has been run and reverted. Phase 1 adds
 > `--field-sensitive-ssa` (default off): symex gives each field of an
 > eligible local, parameter or return slot its own SSA name. It meets the 2x
@@ -1055,3 +1057,47 @@ binary, built with clang instead of the GCC used before, gives no result in
 result there depends on the build, in line with the seed sensitivity in
 §8.9. The Python gate is therefore unmet whichever rule is used; the
 `--smt-formula-only` diff §8.10 proposes is still the next step.
+
+### 8.12 The SSA difference behind `tagged_attr_store`
+
+Measured on 2026-11-18 at PR #10839's head `9a5160a9`, RelWithDebInfo built
+with clang 18, LLVM 18, Z3 4.13.3, `--z3`, 4-core container, run alone, wall
+time:
+
+| `tagged_attr_store` | Result |
+|---|---|
+| without the flag | SUCCESSFUL, 25 s |
+| with the flag | no result in 600 s |
+| with the flag, return of a split whole read through a named temporary (prototype, reverted) | no result in 600 s |
+
+`--program-only` with and without the flag, with SSA numbers, temporary
+addresses and step numbers stripped, differs only in `result` of
+`__python_scalar_add_obj_dyn` (25528 against 25507 assignments, 7938 against
+7915 sliced). Without the flag, `result` is declared nondet, and its
+`both_str` path is the symbol `result#k == result#1 WITH [float_idx:=0] WITH
+[value:=...] WITH [type_id:=...] WITH [size:=lhs_len + rhs_len + 1]`; the
+callers' stores (`r := ...` in `dynamic_2_value`, the `ESBMC_unpack_temp`
+merges) read that symbol in the `both_str` arm and an inlined `WITH` chain on
+`result#1` in the `both_num` arm. With the flag, `size` is the field symbol
+`result::3`, both arms are struct literals, and the `both_str` arm of each
+merge pins `size` to the previous version of the store target
+(`.size=dynamic_2_value#n.r.size`, `.size=ESBMC_unpack_temp#n.size`), as
+§8.10's opaque rule intends.
+
+The prototype tested §8.8's proposal of a named symbol instead of an inlined
+literal: `make_return_assignment` assigned the renamed literal to a fresh
+symbol with the value set updated, and returned that symbol. The callers then
+read one symbol per call, as without the flag, and the formula still gives no
+result in 600 s. Without the value-set update the prototype reported
+`VERIFICATION FAILED` (the assertion at `main.py:21`), since the
+dereference of `.value` through an untracked symbol is unconstrained; any
+such rewrite must keep the value set. So naming the whole read at the return
+is not enough. What remains different from master is that master's `result`
+starts from a nondet base and every path updates it with `WITH`, while the
+flag gives four independent field chains. The next step is to test that
+difference directly: an SMT-level swap of the two encodings of `result` in
+the `--smt-formula-only` output, or Z3's statistics (`-st`) on both formulas,
+to find which part Z3 searches.
+
+Not measured in this run: any suite, the corpus 2x bar, and Bitwuzla (not
+built in this container).
