@@ -918,13 +918,15 @@ exprt python_converter::get_boolop_operand(
 /// operand's statements run only when Python evaluates it (#8275). Returns nil
 /// when nothing was planted, or, after emitting the planted statements
 /// unconditionally as before, when the operation is itself evaluated lazily (an
-/// and/or tail), is an `and` asserted directly, or the operands do not share a
-/// type whose truthiness is a plain condition. An asserted `and` fails anyway
+/// and/or tail) or is an `and` asserted directly. When the operands do not
+/// share a type whose truthiness is a plain condition, the planted statements
+/// are guarded by guard_boolop_operands and nil is returned, so the caller
+/// builds the value from the rewritten operands. An asserted `and` fails anyway
 /// when a later operand is skipped, so its early guard matters only when the
 /// exception is caught; guarding it made dict_update_kwargs' k-induction
 /// forward condition go from 28s to over 20 minutes.
 exprt python_converter::lower_short_circuit_boolop(
-  const exprt &logical_expr,
+  exprt &logical_expr,
   const std::vector<code_blockt> &effects,
   const std::function<exprt(const exprt &)> &truthy,
   const nlohmann::json &element)
@@ -940,7 +942,8 @@ exprt python_converter::lower_short_circuit_boolop(
                statement.op0().statement() == "cpp-throw";
       });
   };
-  if (std::none_of(effects.begin(), effects.end(), planted))
+  // The probe's statements are discarded; the real conversion plants them.
+  if (in_type_probe() || std::none_of(effects.begin(), effects.end(), planted))
     return nil_exprt();
 
   const exprt::operandst &operands = logical_expr.operands();
@@ -950,9 +953,14 @@ exprt python_converter::lower_short_circuit_boolop(
   const bool plain_cond = cond_type.is_bool() || cond_type.is_floatbv() ||
                           type_utils::is_integer_type(cond_type);
   const bool asserted_and = logical_expr.is_and() && &element == asserted_test_;
-  if (
-    asserted_and || !plain_cond || !can_emit_runtime_guard() ||
-    !std::all_of(operands.begin(), operands.end(), same_type))
+  const bool shared_cond =
+    plain_cond && std::all_of(operands.begin(), operands.end(), same_type);
+  if (!asserted_and && !shared_cond && can_emit_runtime_guard())
+  {
+    guard_boolop_operands(logical_expr, effects, truthy, element);
+    return nil_exprt();
+  }
+  if (asserted_and || !shared_cond || !can_emit_runtime_guard())
   {
     // Unguarded, a planted raise would fire where Python short-circuits.
     if (std::any_of(effects.begin(), effects.end(), plants_raise))
@@ -966,6 +974,48 @@ exprt python_converter::lower_short_circuit_boolop(
 
   return emit_guarded_boolop(
     logical_expr, effects, truthy, get_location_from_decl(element));
+}
+
+/// Plants each later operand's statements in \p effects, and that operand's
+/// evaluation, under the truth of the operands before it, binding an operand
+/// with a side effect to a temporary so the value built from \p logical_expr
+/// afterwards reads it without running it again.
+void python_converter::guard_boolop_operands(
+  exprt &logical_expr,
+  const std::vector<code_blockt> &effects,
+  const std::function<exprt(const exprt &)> &truthy,
+  const nlohmann::json &element)
+{
+  exprt::operandst &operands = logical_expr.operands();
+  const locationt location = get_location_from_decl(element);
+  const auto guard_after = [&](const exprt &operand, code_blockt rest) {
+    exprt cond = truthy(operand);
+    if (!cond.type().is_bool())
+      cond = typecast_exprt(cond, bool_type());
+    if (!logical_expr.is_and())
+      cond = not_exprt(cond);
+    code_ifthenelset guarded;
+    guarded.cond() = cond;
+    guarded.then_case() = rest;
+    guarded.location() = location;
+    guarded.location().property("skipped");
+    return guarded;
+  };
+
+  code_blockt rest;
+  for (std::size_t i = operands.size() - 1; i > 0; --i)
+  {
+    code_blockt block = effects[i];
+    operands[i] = bind_boolop_operand(operands[i], element, block);
+    if (i + 1 < operands.size())
+      block.copy_to_operands(guard_after(operands[i], rest));
+    rest = block;
+  }
+  code_blockt first;
+  operands.front() = bind_boolop_operand(operands.front(), element, first);
+  for (const exprt &statement : first.operands())
+    current_block->copy_to_operands(statement);
+  current_block->copy_to_operands(guard_after(operands.front(), rest));
 }
 
 /// Lowers the and/or \p logical_expr into a result temporary that each later
