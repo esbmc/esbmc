@@ -1,13 +1,15 @@
 # Scope: field-sensitive SSA in goto-symex (#7521)
 
-> **Status at 2026-11-17: Phase 0 merged (#10773); Phase 1 merged (#10778)
+> **Status at 2026-11-18: Phase 0 merged (#10773); Phase 1 merged (#10778)
 > with the §8.7 trace fix merged (#10799). §8.8 hides a split struct's
 > printed write when its right-hand side reads a definition the slicer
 > removed; with it, the Phase 1 trace gate is met on the C and C++ suites and
 > a tenth of the Python suite under Z3, and on the same C and C++ suites and
-> a twentieth of the Python suite under Bitwuzla, and the flag changes no
-> verdict on Python `CORE` tests 0 to 4639. Phase 1 still lacks a full Python run
-> and an SV-COMP run; Phase 2 is next.** The corpus is in `regression/field-sensitivity/`
+> a twentieth of the Python suite under Bitwuzla. Every Python `CORE` test
+> has now been run with the flag forced on under Z3: one verdict is lost,
+> `tagged_attr_store` (25 s without the flag, no result in 1800 s with it,
+> master's Phase 1 code as well), so the Phase 1 Python gate is unmet
+> (§8.8). Phase 1 also lacks an SV-COMP run.** The corpus is in `regression/field-sensitivity/`
 > with baselines, and the census has been run and reverted. Phase 1 adds
 > `--field-sensitive-ssa` (default off): symex gives each field of an
 > eligible local, parameter or return slot its own SSA name. It meets the 2x
@@ -787,6 +789,48 @@ off, were re-run at 90 s:
   (the bytes of the nondet list elements) and `github_10493_ir_fail`, whose
   printed value also changes between two runs without the flag.
 
-Still not measured: the Python `CORE` tests after position 4639 and outside
-the earlier samples (positions 4640 to 9227, 4588 tests, of which the
-samples cover about a tenth), and an SV-COMP run.
+Measured on 2026-11-18 at the PR head `ca9c9ed17`, RelWithDebInfo, LLVM 18,
+Z3 4.13.3, flag forced on against off, 4 runs in parallel, 30 s per run;
+tests that timed out either way were re-run at 90 s:
+
+- Python, `CORE` tests 4640 to 9227 in name order (`LC_ALL=C`, 0-based;
+  4588 tests, from `github_8502_ternary_ctor`). 25 time out at 90 s with and
+  without the flag. Two change verdict at 30 s and at 90 s, in opposite
+  directions; run alone:
+
+  | Test | Without the flag | With the flag |
+  |---|---|---|
+  | `tagged_attr_store` | SUCCESSFUL, 25 s | no result in 1800 s |
+  | `tagged_attr_store_nested` | SUCCESSFUL, 156 s | SUCCESSFUL, 28 s |
+
+  The two programs differ only in class and field names. With the flag
+  the sliced formula is 5 assignments smaller in both (16527 against 16532,
+  16542 against 16547). With `--no-slice` the flag makes `tagged_attr_store`
+  faster (24 s against 34 s). The build with this PR's slicer change
+  reverted (master `dc68c7e1f`'s `slice.cpp`) also gives no result in 300 s
+  with the flag, so the slowdown comes from Phase 1 as merged, not from
+  §8.8. The suite's per-test budget is 1200 s, so with the flag forced on
+  this is a lost verdict, and the Phase 1 gate is unmet on it.
+- After dropping timings, the "splits" notice and temporary model paths,
+  101 differ in output. 60 differ only in
+  the symex, slicing or VCC assignment count. 28 are threaded programs
+  where the flag prints `WARNING: --field-sensitive-ssa is ignored: the
+  program may create threads`. In 4 (`github_8970_alias_tagged_fail`,
+  `github_9030_call_param_fail`, `tagged_dict_param_fail`,
+  `github_9135_unrelated_cb_fail`) master prints a pointer field as a name
+  (`tmp$3.value`) and the flag as a value, as in the earlier samples.
+  `github_9185_raise_local_fail` gains the step §8.7 lists.
+  `github_9799_none_rebind_tagged_fail` differs only in a state number,
+  `github_9799_tagged_attr_fail` in an address-derived temporary name and
+  `typed_counter_gate_lowered` in a temporary path. In
+  `github_9135_unrelated_cb_fail` the flag picks `c = 0, d = 0` where master
+  picks `d = 1`; the violated assertion (`3 + 3 == 7`) reads neither, and
+  `r = "b"` matches `k2(False)`. `github_9314_fail`, `os1_fail`,
+  `github_8971_pass_static_fail` and `nondet_list21` report another failing
+  claim or other nondet values, and each varies between three runs of the
+  same binary (or, for `github_9314_fail`, prints the same trace in both
+  modes when run alone). `github_9075_lambda` aborts both ways, as its test
+  expects.
+
+Still not measured: an SV-COMP run, and the full Python suite under
+Bitwuzla.
