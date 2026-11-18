@@ -55,6 +55,7 @@ add_custom_command(OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/buildidobj.c
 # for a real binary: the build ID stamped into it, and the language mode table.
 add_library(esbmc-driver
     parseoptions/bmc_strategy.cpp
+    parseoptions/houdini_strategy.cpp
     parseoptions/command_line_options.cpp
     parseoptions/driver.cpp
     parseoptions/function_contracts.cpp
