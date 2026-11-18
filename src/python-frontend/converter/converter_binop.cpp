@@ -934,6 +934,34 @@ exprt python_converter::lower_short_circuit_boolop(
   const auto planted = [](const code_blockt &b) {
     return !b.operands().empty();
   };
+  // The probe's statements are discarded; the real conversion plants them.
+  if (in_type_probe() || std::none_of(effects.begin(), effects.end(), planted))
+    return nil_exprt();
+
+  const bool asserted_and = logical_expr.is_and() && &element == asserted_test_;
+  if (asserted_and || !can_emit_runtime_guard())
+  {
+    emit_unguarded_boolop_effects(effects);
+    return nil_exprt();
+  }
+
+  const exprt::operandst &operands = logical_expr.operands();
+  const typet &type = operands.front().type();
+  const auto same_type = [&](const exprt &e) { return e.type() == type; };
+  const typet cond_type = truthy(operands.front()).type();
+  const bool plain_cond = cond_type.is_bool() || cond_type.is_floatbv() ||
+                          type_utils::is_integer_type(cond_type);
+  if (plain_cond && std::all_of(operands.begin(), operands.end(), same_type))
+    return emit_guarded_boolop(
+      logical_expr, effects, truthy, get_location_from_decl(element));
+
+  guard_boolop_operands(logical_expr, effects, truthy, element);
+  return nil_exprt();
+}
+
+void python_converter::emit_unguarded_boolop_effects(
+  const std::vector<code_blockt> &effects)
+{
   const auto plants_raise = [](const code_blockt &b) {
     return std::any_of(
       b.operands().begin(), b.operands().end(), [](const exprt &statement) {
@@ -942,38 +970,13 @@ exprt python_converter::lower_short_circuit_boolop(
                statement.op0().statement() == "cpp-throw";
       });
   };
-  // The probe's statements are discarded; the real conversion plants them.
-  if (in_type_probe() || std::none_of(effects.begin(), effects.end(), planted))
-    return nil_exprt();
-
-  const exprt::operandst &operands = logical_expr.operands();
-  const typet &type = operands.front().type();
-  const auto same_type = [&](const exprt &e) { return e.type() == type; };
-  const typet cond_type = truthy(operands.front()).type();
-  const bool plain_cond = cond_type.is_bool() || cond_type.is_floatbv() ||
-                          type_utils::is_integer_type(cond_type);
-  const bool asserted_and = logical_expr.is_and() && &element == asserted_test_;
-  const bool shared_cond =
-    plain_cond && std::all_of(operands.begin(), operands.end(), same_type);
-  if (!asserted_and && !shared_cond && can_emit_runtime_guard())
-  {
-    guard_boolop_operands(logical_expr, effects, truthy, element);
-    return nil_exprt();
-  }
-  if (asserted_and || !shared_cond || !can_emit_runtime_guard())
-  {
-    // Unguarded, a planted raise would fire where Python short-circuits.
-    if (std::any_of(effects.begin(), effects.end(), plants_raise))
-      throw std::runtime_error(
-        "an and/or operand that raises is not supported in this context");
-    for (const code_blockt &block : effects)
-      for (const exprt &statement : block.operands())
-        current_block->copy_to_operands(statement);
-    return nil_exprt();
-  }
-
-  return emit_guarded_boolop(
-    logical_expr, effects, truthy, get_location_from_decl(element));
+  // Unguarded, a planted raise would fire where Python short-circuits.
+  if (std::any_of(effects.begin(), effects.end(), plants_raise))
+    throw std::runtime_error(
+      "an and/or operand that raises is not supported in this context");
+  for (const code_blockt &block : effects)
+    for (const exprt &statement : block.operands())
+      current_block->copy_to_operands(statement);
 }
 
 /// Plants each later operand's statements in \p effects, and that operand's
