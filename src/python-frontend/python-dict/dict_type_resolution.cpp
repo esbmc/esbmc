@@ -416,6 +416,121 @@ static typet stored_value_type(
     stored_value_annotation(ast, rhs, func), handler);
 }
 
+/// The value the dict literal @p dict binds to the constant @p key: null when
+/// it has no such key, nullopt when a `**` unpack may supply it or a bool
+/// key may equal an int one, as Python's `True == 1` does.
+static std::optional<const nlohmann::json *>
+literal_value_at(const nlohmann::json &dict, const nlohmann::json &key)
+{
+  if (key["value"].is_boolean())
+    return std::nullopt;
+  const nlohmann::json *found = nullptr;
+  const nlohmann::json &keys = dict["keys"];
+  for (size_t i = 0; i < keys.size(); ++i)
+  {
+    if (
+      keys[i].is_null() ||
+      keys[i].value("value", nlohmann::json()).is_boolean())
+      return std::nullopt;
+    if (
+      keys[i].value("_type", "") == "Constant" &&
+      keys[i]["value"] == key["value"])
+      found = &dict["values"][i];
+  }
+  return found;
+}
+
+/// The type of the value that the constant-key read chain @p subscript, as in
+/// `d["a"]["b"]`, takes from the dict literals bound to its root name. Empty
+/// unless every binding of the name is a dict literal, no subscript store can
+/// replace a value on the chain, and every literal holding the key path
+/// gives it the same type. A literal without the path would raise KeyError
+/// before this read.
+typet python_dict_handler::nested_literal_value_type(
+  const nlohmann::json &subscript)
+{
+  std::vector<const nlohmann::json *> keys;
+  const nlohmann::json *root = &subscript;
+  while (root->value("_type", "") == "Subscript")
+  {
+    if ((*root)["slice"].value("_type", "") != "Constant")
+      return empty_typet();
+    keys.insert(keys.begin(), &(*root)["slice"]);
+    root = &(*root)["value"];
+  }
+  if (keys.size() < 2 || root->value("_type", "") != "Name")
+    return empty_typet();
+
+  const std::string name = (*root)["id"].get<std::string>();
+  const nlohmann::json &ast = converter_.get_ast_json();
+  const nlohmann::json scope =
+    binding_scope(ast, name, converter_.get_current_func_name());
+
+  std::vector<const nlohmann::json *> literals;
+  bool overwritten = false;
+  std::function<void(const nlohmann::json &)> scan =
+    [&](const nlohmann::json &node) {
+      if (node.is_object())
+      {
+        const std::string kind = node.value("_type", "");
+        const nlohmann::json *target =
+          kind == "Assign" && node["targets"].size() == 1 ? &node["targets"][0]
+          : kind == "AnnAssign"                           ? &node["target"]
+                                                          : nullptr;
+        if (
+          target && target->value("_type", "") == "Name" &&
+          target->value("id", "") == name && node["value"].is_object() &&
+          node["value"].value("_type", "") == "Dict")
+          literals.push_back(&node["value"]);
+
+        if (kind == "Subscript" && node["ctx"].value("_type", "") != "Load")
+        {
+          size_t depth = 0;
+          const nlohmann::json *base = &node;
+          for (; base->value("_type", "") == "Subscript";
+               base = &(*base)["value"])
+            ++depth;
+          overwritten |= base->value("_type", "") == "Name" &&
+                         base->value("id", "") == name && depth <= keys.size();
+        }
+      }
+      for (const auto &child : node)
+        if (child.is_structured())
+          scan(child);
+    };
+  scan(scope);
+  if (
+    overwritten || literals.empty() ||
+    json_utils::count_name_bindings(scope, name) != literals.size())
+    return empty_typet();
+
+  typet result = empty_typet();
+  for (const nlohmann::json *value : literals)
+  {
+    for (const nlohmann::json *key : keys)
+    {
+      if (value->value("_type", "") != "Dict")
+        return empty_typet();
+      const std::optional<const nlohmann::json *> next =
+        literal_value_at(*value, *key);
+      if (!next)
+        return empty_typet();
+      value = *next;
+      if (!value)
+        break;
+    }
+    if (!value)
+      continue;
+    const typet type = value->value("_type", "") == "Dict"
+                         ? typet(get_dict_struct_type())
+                         : stored_literal_type(*value, type_handler_);
+    if (type.is_empty() || (!result.is_empty() && type != result))
+      return empty_typet();
+    result = type;
+  }
+  return result;
+}
+
 typet python_dict_handler::resolve_stored_key_type(const exprt &dict_expr)
 {
   const symbolt *sym = dict_expr.is_symbol()
