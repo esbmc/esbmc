@@ -183,6 +183,7 @@ private:
    */
   std::string call_receiver_class(const nlohmann::json &inner_call) const;
   std::string self_method_result_class(const nlohmann::json &inner_call) const;
+  std::string called_name_receiver(const std::string &name) const;
   bool overridden_below(
     const std::string &current,
     const std::string &definer,

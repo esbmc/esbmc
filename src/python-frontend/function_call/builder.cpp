@@ -1109,6 +1109,21 @@ static std::string rebase_method_id(
     pos, old_tail.size(), "@C@" + to + "@F@" + (is_ctor ? to : method));
 }
 
+// The receiver of a method called on `name(...)`. A list a plain function
+// returns (`f().pop()`) is a list receiver, not an instance of a class named
+// after the callee.
+std::string
+function_call_builder::called_name_receiver(const std::string &name) const
+{
+  const symbolt *fn = converter_.find_symbol(
+    symbol_id(converter_.python_file(), "", name).to_string());
+  const bool returns_list =
+    fn && fn->get_type().is_code() &&
+    is_pylist_object_type(
+      to_code_type(fn->get_type()).return_type(), converter_.ns);
+  return returns_list ? "list" : name;
+}
+
 symbol_id function_call_builder::build_function_id() const
 {
   const std::string &python_file = converter_.python_file();
@@ -1322,16 +1337,8 @@ symbol_id function_call_builder::build_function_id() const
         inner_call["func"].contains("id") &&
         inner_call["func"]["id"].is_string())
       {
-        obj_name = inner_call["func"]["id"].get<std::string>();
-        // A list a plain function returns (`f().pop()`) is a list receiver,
-        // not an instance of a class named after the callee.
-        const symbolt *callee = converter_.find_symbol(
-          symbol_id(python_file, "", obj_name).to_string());
-        if (
-          callee && callee->get_type().is_code() &&
-          is_pylist_object_type(
-            to_code_type(callee->get_type()).return_type(), converter_.ns))
-          obj_name = "list";
+        obj_name =
+          called_name_receiver(inner_call["func"]["id"].get<std::string>());
       }
       else
       {
