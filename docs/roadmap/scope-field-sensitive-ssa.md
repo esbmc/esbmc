@@ -1191,3 +1191,17 @@ Not measured: Bitwuzla (not buildable in this container), the full Python
 suite with the flag forced on, the full C and C++ suites with the flag off
 under ctest (each needs more than 10 minutes on 4 cores; the change is not
 reached without the flag), and an SV-COMP run.
+
+### 8.14 Phase 1 gate on master after #10839
+
+Measured on 2026-11-18, master `48d5f770e` (#10839 merged), RelWithDebInfo
+built with gcc 13.3, LLVM 18, Z3 4.13.3 and ESBMC's Bitwuzla 0.9.0 backend
+(CaDiCaL 2.1.2 cloned with git), 4-core container, run alone, wall time:
+
+| `tagged_attr_store` | Without the flag | With the flag |
+|---|---|---|
+| `--z3` | SUCCESSFUL, 30.0 s, 29.8 s | SUCCESSFUL, 28.5 s, 29.9 s |
+| `--bitwuzla` | SUCCESSFUL, 7.9 s, 8.2 s | SUCCESSFUL, 7.7 s, 8.1 s |
+
+§8.13's result holds on a gcc build and under Bitwuzla: the verdict lost in
+§8.8 is restored under both solvers.
