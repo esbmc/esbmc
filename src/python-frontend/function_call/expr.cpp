@@ -2626,8 +2626,18 @@ void function_call_expr::materialize_list_symbol(const symbolt *sym) const
     name.find("$dict_list$") == std::string::npos)
     return;
   code_declt decl(build_symbol(*sym));
-  decl.copy_to_operands(sym->get_value());
   decl.location() = sym->location;
+  exprt value = sym->get_value();
+  // A call is a statement, not a value: as a declaration initialiser it
+  // reaches the solver unconverted (#10817), so store its result instead.
+  if (value.is_function_call())
+  {
+    value.op0() = build_symbol(*sym);
+    converter_.current_block->copy_to_operands(decl);
+    converter_.current_block->copy_to_operands(value);
+    return;
+  }
+  decl.copy_to_operands(value);
   converter_.current_block->copy_to_operands(decl);
 }
 
