@@ -7466,9 +7466,12 @@ std::optional<exprt> function_call_expr::apply_builtin_dispatch(
   {
     exprt list_arg = converter_.get_expr(call_["args"][0]);
     typet elem_type;
-    if (list_arg.is_symbol())
+    // A call argument is typed by the list its callee returns.
+    const std::string list_id = list_arg.is_symbol()
+                                  ? list_arg.identifier().as_string()
+                                  : converter_.returned_list_id(list_arg);
+    if (!list_id.empty())
     {
-      const std::string &list_id = list_arg.identifier().as_string();
       // Check that all elements have the same type and get the common type
       // Returns double_type() for mixed int/float lists (Python semantics)
       elem_type =

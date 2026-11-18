@@ -1635,8 +1635,16 @@ std::optional<exprt> python_converter::resolve_subscript_base(
   // Materialise the call into a temporary first, mirroring the assigned
   // path (s = sorted(words); s[0]). See #4807.
   if (current_block)
+  {
+    const exprt call = array;
     array =
       materialize_list_function_call(array, element["value"], *current_block);
+    if (
+      array.is_symbol() && call.is_function_call() &&
+      element_type_registry_.size(array.identifier().as_string()) == 0)
+      copy_elem_types_from_reordering_builtin(
+        element["value"], call, array.identifier().as_string());
+  }
 
   // A typed list (#10451) is read and written through its own storage, as
   // is a typed dict.

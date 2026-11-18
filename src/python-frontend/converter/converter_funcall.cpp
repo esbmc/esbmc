@@ -2814,6 +2814,25 @@ exprt python_converter::get_return_from_func(const char *func_symbol_id)
   }
   return nil_exprt();
 }
+std::string python_converter::returned_list_id(const exprt &call)
+{
+  const bool is_side_effect =
+    call.id() == "sideeffect" && call.statement() == "function_call";
+  if (
+    call.type() != type_handler_.get_list_type() ||
+    (!call.is_function_call() && !is_side_effect))
+    return {};
+  const exprt &function = is_side_effect
+                            ? to_side_effect_expr_function_call(call).function()
+                            : to_code_function_call(to_code(call)).function();
+  if (!function.is_symbol())
+    return {};
+  const exprt ret = get_return_from_func(function.identifier().c_str());
+  if (ret.is_nil() || ret.operands().size() != 1 || !ret.op0().is_symbol())
+    return {};
+  return ret.op0().identifier().as_string();
+}
+
 exprt python_converter::materialize_list_function_call(
   const exprt &expr,
   const nlohmann::json &element,
@@ -2858,15 +2877,8 @@ exprt python_converter::materialize_list_function_call(
 
   target_block.copy_to_operands(new_call);
 
-  if (
-    call.type() == type_handler_.get_list_type() && call.function().is_symbol())
-  {
-    const exprt ret =
-      get_return_from_func(call.function().identifier().c_str());
-    if (!ret.is_nil() && ret.operands().size() == 1 && ret.op0().is_symbol())
-      element_type_registry_.assign_from(
-        ret.op0().identifier().as_string(), tmp_var_symbol.id.as_string());
-  }
+  if (const std::string ret = returned_list_id(call); !ret.empty())
+    element_type_registry_.assign_from(ret, tmp_var_symbol.id.as_string());
 
   // Return reference to the temp variable
   return symbol_expr(tmp_var_symbol);

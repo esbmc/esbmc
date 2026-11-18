@@ -5894,6 +5894,18 @@ static bool is_float_literal(const nlohmann::json &node)
          node["value"].is_number_float();
 }
 
+/// The registry id of the list the lowered \p call receives as its first
+/// argument, or empty when that argument is not a list symbol.
+static std::string first_list_arg_id(const typet &list_type, const exprt &call)
+{
+  if (!call.is_function_call())
+    return {};
+  const auto &args = to_code_function_call(to_code(call)).arguments();
+  if (args.empty() || !args[0].is_symbol() || args[0].type() != list_type)
+    return {};
+  return args[0].identifier().as_string();
+}
+
 /// A list literal is converted into a temporary list, which the lowered
 /// \p call receives as its first argument (#10462).
 static void copy_list_literal_elem_types(
@@ -5903,12 +5915,9 @@ static void copy_list_literal_elem_types(
   const exprt &call,
   const std::string &dest)
 {
-  if (!call.is_function_call())
+  const std::string src = first_list_arg_id(list_type, call);
+  if (src.empty())
     return;
-  const auto &args = to_code_function_call(to_code(call)).arguments();
-  if (args.empty() || !args[0].is_symbol() || args[0].type() != list_type)
-    return;
-  const std::string &src = args[0].identifier().as_string();
   // The literal's ints are promoted to float when it also holds a float, so a
   // float list is only known to hold floats when every element is one.
   const auto &elts = literal["elts"];
@@ -5952,14 +5961,10 @@ static void copy_named_list_elem_types(
 /// int -- `for u, v in sorted(d, key=d.__getitem__)` then fails to unpack.
 /// Only reached when nothing more precise has typed the destination.
 const nlohmann::json *
-python_converter::reordering_builtin_arg(const nlohmann::json &ast_node)
+python_converter::reordering_builtin_arg(const nlohmann::json &call)
 {
-  if (!ast_node.contains("value") || !ast_node["value"].is_object())
-    return nullptr;
-
-  const auto &call = ast_node["value"];
   if (
-    !call.contains("func") || !call["func"].is_object() ||
+    !call.is_object() || !call.contains("func") || !call["func"].is_object() ||
     call["func"].value("_type", "") != "Name")
     return nullptr;
 
@@ -5974,11 +5979,11 @@ python_converter::reordering_builtin_arg(const nlohmann::json &ast_node)
 }
 
 void python_converter::copy_elem_types_from_reordering_builtin(
-  const nlohmann::json &ast_node,
+  const nlohmann::json &call_node,
   const exprt &call,
   const std::string &lhs_id)
 {
-  const nlohmann::json *arg_p = reordering_builtin_arg(ast_node);
+  const nlohmann::json *arg_p = reordering_builtin_arg(call_node);
   if (arg_p == nullptr)
     return;
   const auto &arg = *arg_p;
@@ -5999,17 +6004,31 @@ void python_converter::copy_elem_types_from_reordering_builtin(
     return;
   }
 
-  // The dict-iterating form: the preprocessor rewrites `sorted(d, ...)` to
-  // `sorted(d.keys(), ...)`, so the argument is a call, not a name.
-  if (
-    arg.value("_type", "") != "Call" || !arg.contains("func") ||
-    arg["func"].value("_type", "") != "Attribute" ||
-    arg["func"]["value"].value("_type", "") != "Name")
+  if (arg.value("_type", "") != "Call")
     return;
 
-  const std::string component = arg["func"].value("attr", "");
+  // The dict-iterating form: the preprocessor rewrites `sorted(d, ...)` to
+  // `sorted(d.keys(), ...)`, so the argument is a call, not a name.
+  const std::string component =
+    arg.contains("func") && arg["func"].value("_type", "") == "Attribute" &&
+        arg["func"]["value"].value("_type", "") == "Name"
+      ? arg["func"].value("attr", "")
+      : std::string();
   if (component != "keys" && component != "values")
+  {
+    // Any other call argument reaches the lowered call bound to a temporary,
+    // or as the nested call itself.
+    std::string src = first_list_arg_id(type_handler_.get_list_type(), call);
+    if (src.empty() && call.is_function_call())
+    {
+      const auto &args = to_code_function_call(to_code(call)).arguments();
+      if (!args.empty())
+        src = returned_list_id(args[0]);
+    }
+    if (!src.empty())
+      copy_homogeneous_elem_types(element_type_registry_, src, lhs_id);
     return;
+  }
 
   symbol_id dict_sid = create_symbol_id();
   dict_sid.set_object(arg["func"]["value"]["id"].get<std::string>());
@@ -6258,7 +6277,8 @@ void python_converter::handle_function_call_rhs(
     // fall back to the called function's return-type annotation
     // to determine the element type.
     const std::string &lhs_id = lhs.identifier().as_string();
-    copy_elem_types_from_reordering_builtin(ast_node, rhs, lhs_id);
+    if (ast_node.contains("value"))
+      copy_elem_types_from_reordering_builtin(ast_node["value"], rhs, lhs_id);
     if (element_type_registry_.size(lhs_id) == 0)
       record_annotated_list_elem_type(ast_node, lhs_id);
 
