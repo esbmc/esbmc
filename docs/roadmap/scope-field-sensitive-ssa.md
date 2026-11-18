@@ -28,8 +28,11 @@
 > change on the C, C++ and a Python sample with the flag forced on (§8.13).
 > Standalone Z3 finds the formulas with and without the change about equally
 > hard. On merged master (#10839) `tagged_attr_store` passes with the flag
-> under Z3 (24 s) and Bitwuzla (7 s) (§8.14); the full Python suite with the
-> flag forced on is being re-run there. Phase 1 also lacks an SV-COMP run.** The corpus is in `regression/field-sensitivity/`
+> under Z3 (24 s) and Bitwuzla (7 s) (§8.14). There, with the flag forced on
+> under Bitwuzla, the full C (3442), C++ (1361) and Python (9279) `CORE`
+> suites change no verdict, and both Phase 1 corpus rows meet the 2x bar
+> under Z3 and Bitwuzla (§8.15). Still unmeasured on merged master: the full
+> Python suite under Z3. Phase 1 also lacks an SV-COMP run.** The corpus is in `regression/field-sensitivity/`
 > with baselines, and the census has been run and reverted. Phase 1 adds
 > `--field-sensitive-ssa` (default off): symex gives each field of an
 > eligible local, parameter or return slot its own SSA name. It meets the 2x
@@ -1208,3 +1211,53 @@ So §8.13's result holds on a second build: the flag no longer loses this
 verdict under Z3, and Bitwuzla is unaffected. `tagged_attr_store_nested`
 still crashes in the Python frontend on this clang build within 1 s, with
 and without the flag and under both solvers (§8.13).
+
+### 8.15 Phase 1 suites and corpus on merged master
+
+Measured on 2026-11-18 at master `02f76186e`, RelWithDebInfo built with
+gcc 13.3, LLVM 18, Z3 4.13.3 and ESBMC's Bitwuzla 0.9.0 backend (CaDiCaL
+2.1.2 cloned with git), 4-core container. Each `CORE` test command run with
+and without the flag, Bitwuzla as the default solver (tests that pin `--z3`
+keep it), 30 s per run, 4 at a time. Output is compared after dropping
+timings, temp paths, UUIDs, timestamps, heap addresses and the flag's own
+notices.
+
+| Suite | Tests | With a split object | Verdict changes | Output changes in split tests |
+|---|---|---|---|---|
+| C (`regression/esbmc`) | 3442 | 541 | 0 | 23, beyond the flag's own tests |
+| C++ (`esbmc-cpp/cpp`) | 1361 | 717 | 0 | 4 |
+| Python (`regression/python`) | 9279 | 737 | 0 | 4 |
+
+The flag's own `field_sensitive_ssa_*` tests are run with the flag removed
+for the comparison. In C, 19 of the 23 are tests §8.6 lists, in its four
+rows; `github_10770_initialised_struct_fail` gains the step §8.7 lists, and
+`github_2630_1` changes claim order under `--parallel-solving` (§8.13). The
+other two run under `--incremental-bmc` and fold claims at another bound
+(§8.6's fourth row): `github_1476` leaves 1 of 4 VCCs where master leaves 4,
+and `github_6464_struct_field_pointer` generates 7 VCCs where master
+generates 12, with the same 5 properties passed. In C++,
+`cpp_sum_class` (`--k-induction-parallel` order), `github_7797_flat_set`
+(unwinding to the bound) and `tuple_structured_binding` (`--incremental-bmc`)
+are listed in §8.6; `github_5868_const_iterator_deref` leaves 34 VCCs after
+simplification where master leaves 33, with the same verdict. In Python,
+`github_10323_list_reversed_fail` and `github_10493_ir_fail` print the
+values §8.6 lists, `github_9185_raise_local_fail` gains the step §8.7 lists,
+and `nondet_list21` (nothing split) prints a different counterexample in two
+of three runs without the flag.
+
+`queue_fifo` timed out without the flag and passed with it; run alone, it
+takes 31.2 s both ways, so the 30 s cap decides it. 5 C tests and 8 Python
+tests time out both ways.
+
+Phase 1 corpus rows, symex seconds, three runs each, medians, 8 / 2048
+fields:
+
+| Row | Solver | Without the flag | With the flag |
+|---|---|---|---|
+| `repro7521` | Z3 | 0.749 / 0.762 (1.02x) | 0.766 / 1.052 (1.37x) |
+| `repro7521` | Bitwuzla | 0.675 / 0.772 (1.14x) | 0.738 / 1.196 (1.62x) |
+| `local_writes` | Z3 | 0.702 / 4.666 (6.65x) | 0.022 / 0.020 (0.91x) |
+| `local_writes` | Bitwuzla | 0.649 / 4.573 (7.05x) | 0.018 / 0.017 (0.94x) |
+
+Every run reports `VERIFICATION SUCCESSFUL`. Not measured: the full Python
+suite under Z3 on merged master, and an SV-COMP run.
