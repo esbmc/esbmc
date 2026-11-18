@@ -2629,8 +2629,18 @@ void function_call_expr::materialize_list_symbol(const symbolt *sym) const
     name.find("$dict_list$") == std::string::npos)
     return;
   code_declt decl(build_symbol(*sym));
-  decl.copy_to_operands(sym->get_value());
   decl.location() = sym->location;
+  exprt value = sym->get_value();
+  // A call is a statement, not a value: as a declaration initialiser it
+  // reaches the solver unconverted (#10817), so store its result instead.
+  if (value.is_function_call())
+  {
+    value.op0() = build_symbol(*sym);
+    converter_.current_block->copy_to_operands(decl);
+    converter_.current_block->copy_to_operands(value);
+    return;
+  }
+  decl.copy_to_operands(value);
   converter_.current_block->copy_to_operands(decl);
 }
 
@@ -3674,15 +3684,7 @@ bool function_call_expr::receiver_class_defines_method(
   std::string cls = function_id_.get_class();
   if (cls.rfind("tag-", 0) == 0)
     cls = cls.substr(4);
-  const auto &ast = converter_.ast();
-  if (!is_class(cls, ast))
-    return false;
-  if (!json_utils::find_class(ast["body"], cls).is_null())
-    return json_utils::class_defines_method(ast["body"], cls, method_name);
-  const nlohmann::json *module =
-    converter_.find_imported_class_module(cls).first;
-  return module &&
-         json_utils::class_defines_method((*module)["body"], cls, method_name);
+  return converter_.class_defines_method(cls, method_name);
 }
 
 /// `b.set()` or `b.type()` where b's class defines the method: the builtin
