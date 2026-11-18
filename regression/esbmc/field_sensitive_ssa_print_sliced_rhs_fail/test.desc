@@ -1,0 +1,5 @@
+CORE
+main.c
+--field-sensitive-ssa
+\A(?![\s\S]*\n  s = )[\s\S]*\Z
+^VERIFICATION FAILED$
