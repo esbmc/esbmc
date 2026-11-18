@@ -1,17 +1,23 @@
 # Scope: field-sensitive SSA in goto-symex (#7521)
 
-> **Status at 2026-11-16: Phase 0 merged (#10773); Phase 1 merged (#10778)
-> with its trace gate unmet; the follow-up that fixes the gate is in review
-> (§8.7).** The corpus is in `regression/field-sensitivity/`
+> **Status at 2026-11-18: Phase 0 merged (#10773); Phase 1 merged (#10778)
+> with the §8.7 trace fix merged (#10799). §8.8 hides a split struct's
+> printed write when its right-hand side reads a definition the slicer
+> removed; with it, the Phase 1 trace gate is met on the C and C++ suites and
+> a tenth of the Python suite under Z3, and on the same C and C++ suites and
+> a twentieth of the Python suite under Bitwuzla. Every Python `CORE` test
+> has now been run with the flag forced on under Z3: one verdict is lost,
+> `tagged_attr_store` (25 s without the flag, no result in 1800 s with it,
+> master's Phase 1 code as well), so the Phase 1 Python gate is unmet
+> (§8.8). The loss is Z3-only (Bitwuzla: 8 s both ways) and holds at 7 of
+> 8 Z3 seeds. Phase 1 also lacks an SV-COMP run.** The corpus is in `regression/field-sensitivity/`
 > with baselines, and the census has been run and reverted. Phase 1 adds
 > `--field-sensitive-ssa` (default off): symex gives each field of an
 > eligible local, parameter or return slot its own SSA name. It meets the 2x
 > bar on the Phase 1 corpus rows and changes no verdict on the C, C++ (Z3 and Bitwuzla) and
 > k-induction suites or three Python samples (3132 tests), and no correctness witness.
 > The Phase 1 trace gate is Invariant 4 (same values), with the §8.6 changes
-> accepted. As merged, a split pointer field printed another value than master;
-> §8.7 makes a whole write of a split struct print its right-hand side, which
-> removes that and the rest of §8.6's "reassembled struct" row. Two
+> accepted. Two
 > mitigations are merged: #10037 stopped phi merges of wide structs from
 > scaling with the square of the width, and #10527 added the opt-in GOTO pass
 > `--scalarize-structs`. Line numbers are from master at `d3104e99c2`.
@@ -644,3 +650,224 @@ both solvers.
 
 Not measured here: the rest of the Python suite with the flag, witness files,
 and an SV-COMP run.
+
+### 8.8 Phase 1 trace gate: printed right-hand sides of sliced definitions
+
+§8.7 prints a whole write of a split struct as its right-hand side. The
+slicer keeps only the field steps a property reads, so that right-hand side
+can read a symbol whose defining step was sliced; the model leaves it free
+and the trace prints a value the program cannot produce. On
+
+```c
+int v = nondet_int() | 1;
+struct S s = {v, nondet_int()};
+assert(s.b != 5);
+```
+
+master without the flag prints no step for `s`; with the flag, master
+`d93aabc32` prints `s = { .a=0, .b=5 }` although `v` is odd. Under the flag
+the slicer now records the left-hand sides of the assignments it removes and
+hides a kept step whose printed right-hand side reads one of them, as it
+already drops a branching step that reads a sliced value (#9884). A symbol
+with no defining step (a fresh L2 name of a nondet write) is as free in the
+sliced formula as in the full one and does not hide a step.
+
+Measured on 2026-11-17 on master `d93aabc32`, RelWithDebInfo, LLVM 18, Z3
+4.13.3, one 4-core container, flag forced on, the change against the same
+build without it, 30 s per run. The Bitwuzla re-run is below.
+
+| Suite | Tests | Verdict changes | Output changes |
+|---|---|---|---|
+| C (`regression/esbmc`, `CORE`) | 3348 | 0 | 4 hidden steps: `field_sensitive_ssa_print_sliced_rhs_fail`, `github_1093` (`node = { .tag=0, .value=invalid-object }`), `github_5393_array_member_fail` and `_dyn_offset_fail` (`tmpl = { .a = 0 }`) |
+| C++ (`esbmc-cpp/cpp`, `CORE`) | 1359 | 0 | 0 (`cpp_sum_class` differs in `--k-induction-parallel` line order only) |
+| Python, every 10th `CORE` test | 923 | 0 | 0 |
+
+`time_h_difftime_antisymmetry` (C) and `github_8971_is_payload_unknown`
+(Python) run close to 30 s and timed out in one run each; re-run, both give
+the same verdict with and without the change (31.3 s and 29.6 s; 25.8 s and
+27.2 s). `github_2630_1` changes claim order under `--parallel-solving`
+between two runs of the same binary.
+
+The four hidden steps fall under the "step dropped" row of §8.6: in
+`github_1093` and both `github_5393` tests master without the flag prints
+the declaration of an uninitialised struct, which the flag printed with
+other values (§8.6, "reassembled struct"). `field_sensitive_ssa_print_sliced_rhs_fail`
+pins the change: without it the test prints `s = { .a=0, .b=5 }` and fails.
+
+Each new branch was reached with temporary instrumentation, flag forced on
+over the C suite: a removed definition recorded (3106 tests), a step hidden
+(6), the walk finding a removed definition (6) or none (97), and the walk
+skipping a shared subterm (`struct_array_ite_new_index` and its `_fail`).
+Symex seconds with the flag, Z3, three runs each, medians:
+
+| Row | Without the change, 8 / 2048 fields | With it, 8 / 2048 fields |
+|---|---|---|
+| `repro7521` | 0.822 / 1.216 (1.48x) | 0.822 / 1.271 (1.55x) |
+| `local_writes` | 0.019 / 0.023 (1.2x) | 0.019 / 0.021 (1.1x) |
+
+Re-run with Bitwuzla on 2026-11-17 at `512c450bb`, the same build setup
+with ESBMC's Bitwuzla 0.9.0 backend (CaDiCaL 2.1.2 cloned with git, as the
+tarball download is refused), flag forced on, `--bitwuzla` replacing any
+solver option of the test, 30 s per run:
+
+| Suite | Tests | Verdict changes | Output changes |
+|---|---|---|---|
+| C (`regression/esbmc`, `CORE`) | 3348 | 0 | the same 4 hidden steps as with Z3; under Bitwuzla master prints `node = { .tag={ .pointer_object=nil, .pointer_offset=nil }, ... }` in `github_1093` and `tmpl = { .a={ .pointer_object=nil, .pointer_offset=nil }, .pair={ 0, 0 } }` in `github_5393_array_member_fail` |
+| C++ (`esbmc-cpp/cpp`, `CORE`) | 1359 | 0 | 0 (`cpp_sum_class` line order only) |
+| Python, every 20th `CORE` test from the 6th | 461 | 0 | 0 |
+
+62 C tests use `--ir`, which Bitwuzla rejects; both builds error out on
+them, and the Z3 run above covers them. `github_2630_1` again changes claim
+order under `--parallel-solving`.
+
+Symex seconds, both solvers, the same binaries, three runs each, medians:
+
+| Row | Solver | Without the change, 8 / 2048 fields | With it, 8 / 2048 fields |
+|---|---|---|---|
+| `repro7521` | Z3 | 0.747 / 1.240 (1.66x) | 0.759 / 1.260 (1.66x) |
+| `repro7521` | Bitwuzla | 0.736 / 1.262 (1.71x) | 0.770 / 1.353 (1.76x) |
+| `local_writes` | Z3 | 0.016 / 0.019 (1.2x) | 0.016 / 0.022 (1.4x) |
+| `local_writes` | Bitwuzla | 0.017 / 0.016 (0.9x) | 0.016 / 0.018 (1.1x) |
+
+Codecov reported two added lines uncovered: `return true` in
+`reads_sliced_definition` and `step.hidden = true` in `symex_slicet::run`.
+The coverage job runs only the tests in `regression/COV_TESTS.d`, and
+`field_sensitive_ssa_print_sliced_rhs_fail` was not listed; it now is. With
+`return true` changed to `return false` the test prints `s = { .a=0, .b=5 }`
+and fails under Z3 and Bitwuzla, so it runs both lines.
+
+Measured on 2026-11-17 with the branch merged into master `dc68c7e1f`,
+RelWithDebInfo, LLVM 18, Z3 4.13.3 and ESBMC's Bitwuzla 0.9.0 backend:
+
+- Python, `CORE` tests 2700 to 3669 in name order (970 tests, mostly not in
+  the earlier samples), flag forced on against off, default solver, 30 s per
+  run: 0 verdict changes. After dropping timings and the "splits" notice, 6
+  differ in output: `github_4345` and its `_fail` only in the symex
+  assignment count (389 against 398), and 4 (`github_5444_dictcomp_*_fail`,
+  `github_7434_yaml_drop_fail`) in compiler-variable numbering or witness
+  UUIDs, which also differ between two runs without the flag.
+- Witness files for the 4 tests whose trace changes, flag on, with the change
+  against the same build with `reads_sliced_definition` never matching: each
+  GraphML witness loses one edge, the hidden step's, and keeps the same
+  assumptions in the same order; the YAML witnesses are identical apart from
+  UUIDs and timestamps.
+
+Measured on 2026-11-17 at the PR head `e9787f1f`, RelWithDebInfo, LLVM 18,
+Z3 4.8.12, flag forced on against off, 30 s per run:
+
+- Python, `CORE` tests 3670 to 4639 in name order (`LC_ALL=C`, 0-based;
+  970 tests, from `github_7552_index_fail`): 0 verdict changes. Three tests
+  (`github_8283_dict_zip_nondet`, `github_8418`,
+  `github_8488_functools_reduce`) time out with and without the flag. After
+  dropping timings, the "splits" notice, temporary model paths and
+  address-derived temporary names, 3 differ in output, each only in the
+  symex assignment count: `github_8130_reverse_fail` (836 against 839),
+  `github_8404_alias_parameter_refused` (166 against 175) and
+  `github_8404_passed_to_imported_refused` (159 against 168).
+
+Measured on 2026-11-17 at the PR head `f5e84b28c`, RelWithDebInfo, LLVM 18,
+Z3 4.13.3, flag forced on against off, 4 runs in parallel, 30 s per run;
+tests that timed out either way, or had no result because a batch was cut
+off, were re-run at 90 s:
+
+- Python, `CORE` tests 0 to 2699 in name order (`LC_ALL=C`, 0-based; 2700
+  tests): 0 verdict changes. 18 time out at 90 s with and without the flag.
+  `dynamic_type_scalar_tag_add_str_dyn` succeeded without the flag and timed
+  out with it at 90 s; run alone, without the flag it does not finish in
+  500 s, and with the flag it succeeds in 114 s, so its solver time varies
+  by run, not by flag. After dropping timings, the "splits" notice and
+  temporary model paths, 39 differ in output. 30 differ only in the symex
+  or slicing assignment count, and `github_10322_width` only in the bytes of
+  a temporary model path. In 5 (`arith_lost_type_default_fail`,
+  `arith_lost_type_fail`, `github_10365_fail`, `github_10365_type_fail`,
+  `github_10673_tagged_fail`), master prints a pointer field
+  of a whole struct write as a name (`.value=tmp$3.value`,
+  `.value=return_value$.value`) and the flag prints its value
+  (`&dynamic_1_array[0]`), the §8.7 right-hand side; master pins no value
+  there, so Invariant 4 holds. In 3 the counterexample chooses other values
+  for nondet inputs: `github_10679_def_alias_nested_call_fail` (`x`, from
+  `nondet_int()`, which the assertion leaves free), `github_10323_list_reversed_fail`
+  (the bytes of the nondet list elements) and `github_10493_ir_fail`, whose
+  printed value also changes between two runs without the flag.
+
+Measured on 2026-11-18 at the PR head `ca9c9ed17`, RelWithDebInfo, LLVM 18,
+Z3 4.13.3, flag forced on against off, 4 runs in parallel, 30 s per run;
+tests that timed out either way were re-run at 90 s:
+
+- Python, `CORE` tests 4640 to 9227 in name order (`LC_ALL=C`, 0-based;
+  4588 tests, from `github_8502_ternary_ctor`). 25 time out at 90 s with and
+  without the flag. Two change verdict at 30 s and at 90 s, in opposite
+  directions; run alone:
+
+  | Test | Without the flag | With the flag |
+  |---|---|---|
+  | `tagged_attr_store` | SUCCESSFUL, 25 s | no result in 1800 s |
+  | `tagged_attr_store_nested` | SUCCESSFUL, 156 s | SUCCESSFUL, 28 s |
+
+  The two programs differ only in class and field names. With the flag
+  the sliced formula is 5 assignments smaller in both (16527 against 16532,
+  16542 against 16547). With `--no-slice` the flag makes `tagged_attr_store`
+  faster (24 s against 34 s). The build with this PR's slicer change
+  reverted (master `dc68c7e1f`'s `slice.cpp`) also gives no result in 300 s
+  with the flag, so the slowdown comes from Phase 1 as merged, not from
+  §8.8. The suite's per-test budget is 1200 s, so with the flag forced on
+  this is a lost verdict, and the Phase 1 gate is unmet on it.
+- After dropping timings, the "splits" notice and temporary model paths,
+  101 differ in output. 60 differ only in
+  the symex, slicing or VCC assignment count. 28 are threaded programs
+  where the flag prints `WARNING: --field-sensitive-ssa is ignored: the
+  program may create threads`. In 4 (`github_8970_alias_tagged_fail`,
+  `github_9030_call_param_fail`, `tagged_dict_param_fail`,
+  `github_9135_unrelated_cb_fail`) master prints a pointer field as a name
+  (`tmp$3.value`) and the flag as a value, as in the earlier samples.
+  `github_9185_raise_local_fail` gains the step §8.7 lists.
+  `github_9799_none_rebind_tagged_fail` differs only in a state number,
+  `github_9799_tagged_attr_fail` in an address-derived temporary name and
+  `typed_counter_gate_lowered` in a temporary path. In
+  `github_9135_unrelated_cb_fail` the flag picks `c = 0, d = 0` where master
+  picks `d = 1`; the violated assertion (`3 + 3 == 7`) reads neither, and
+  `r = "b"` matches `k2(False)`. `github_9314_fail`, `os1_fail`,
+  `github_8971_pass_static_fail` and `nondet_list21` report another failing
+  claim or other nondet values, and each varies between three runs of the
+  same binary (or, for `github_9314_fail`, prints the same trace in both
+  modes when run alone). `github_9075_lambda` aborts both ways, as its test
+  expects.
+
+Measured on 2026-11-18 at the PR head `d9e07db7`, RelWithDebInfo, LLVM 18,
+Z3 4.13.3 and ESBMC's Bitwuzla 0.9.0 backend, run alone, 300 s:
+
+| `tagged_attr_store` | Without the flag | With the flag |
+|---|---|---|
+| `--z3` | SUCCESSFUL, 30 s | no result in 300 s |
+| `--bitwuzla` | SUCCESSFUL, 7.8 s | SUCCESSFUL, 8.3 s |
+
+CI builds Bitwuzla, the default solver when it is built in, so the loss is
+specific to Z3. The flag splits one object, `result` in
+`__python_scalar_add_obj_dyn` (`src/c2goto/library/python/scalar.c:490`),
+called three times. The two SSA programs differ only there, apart from
+address-derived temporary names. Without the flag `r` is assigned the symbol
+`result#9 == result#1 WITH [float_idx:=0] ... WITH [size:=...]`, with
+`result#1` nondet. With the flag `r` is assigned the struct literal
+`{ .value=&dynamic_4_array[0], ..., .size=result::3#4 }`, inlined into both
+arms of the `if`. The two formulas are equivalent.
+
+The `--smt-formula-only` output of each, solved by the standalone Z3 4.13.3
+binary with `smt.random_seed` and `sat.random_seed` set to N, 4 runs in
+parallel. "Unsolved" means a timeout, or a run the 15 GB memory limit
+killed at about 4 GB:
+
+| Formula | Seeds | Solved (unsat) | Unsolved |
+|---|---|---|---|
+| `tagged_attr_store`, without the flag | 0-7 (150 s for 0-3, 240 s for 4-7) | 7, in 58-127 s | 1 (seed 0, 150 s) |
+| `tagged_attr_store`, with the flag | 0-7 (same limits) | 1 (seed 4, 69 s) | 7 |
+| `tagged_attr_store_nested`, without the flag | 0-5, 240 s | 0 | 6 |
+| `tagged_attr_store_nested`, with the flag | 0-5, 240 s | 1 (seed 1, 147 s) | 5 |
+
+So the slowdown on `tagged_attr_store` is not a single unlucky seed: Z3
+finds the reassembled-literal encoding harder on this formula at almost
+every seed. `tagged_attr_store_nested` is hard for Z3 both ways. A fix
+would change how a whole read of a split struct reaches the formula (a
+named symbol instead of an inlined literal), which §3 does not yet specify.
+
+Still not measured: an SV-COMP run, and the full Python suite under
+Bitwuzla.
