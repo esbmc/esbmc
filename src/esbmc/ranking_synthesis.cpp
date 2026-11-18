@@ -467,6 +467,11 @@ prefix_defst scan_prefix_defs(
         it = std::next(skip_it->second.back);
         continue;
       }
+      // A containing loop's back-edge re-enters its head after the body
+      // has run, so a def made before that head need not hold there.
+      if (skip_it != skip->by_head_locnum.end())
+        for (const irep_idt &n : skip_it->second.modified)
+          out.defs.erase(n);
     }
     if (it->is_target() && !justified_targets.count(it->location_number))
     {
@@ -2492,6 +2497,11 @@ prefix_seedst collect_seeds(
         it = std::next(skip_it->second.back);
         continue;
       }
+      // A containing loop's back-edge re-enters its head after the body
+      // has run, so a fact established before that head need not hold
+      // on later entries to the analysed loop.
+      if (skip_it != loop_skip->by_head_locnum.end())
+        invalidate_pending_by(skip_it->second.modified);
     }
     if (it->is_target() && !justified_targets.count(it->location_number))
       return {};
