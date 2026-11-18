@@ -239,6 +239,15 @@ expr2tc split_structst::whole(const expr2tc &sym) const
   return constant_struct2tc(sym->type, std::move(members));
 }
 
+/// An L2 name of a split object is the whole read split_read assigned to its
+/// own symbol. A carried value holds it, and a parameter assignment rewrites
+/// the renamed argument, so it must stay a read of that definition.
+static bool is_level2(const symbol2t &s)
+{
+  return s.rlevel == symbol_renaming_level::level2 ||
+         s.rlevel == symbol_renaming_level::level2_global;
+}
+
 expr2tc split_structst::rewrite(const expr2tc &e) const
 {
   if (is_nil_expr(e))
@@ -248,13 +257,17 @@ expr2tc split_structst::rewrite(const expr2tc &e) const
   {
     const member2t &m = to_member2t(e);
     const symbol2t &s = to_symbol2t(m.source_value);
+    if (is_level2(s))
+      return e;
     if (const std::vector<expr2tc> *f = fields(s.thename))
       return at_level_of((*f)[index.at(s.thename).at(m.member)], s);
     return e;
   }
 
   if (is_symbol2t(e))
-    return fields(to_symbol2t(e).thename) ? whole(e) : e;
+    return !is_level2(to_symbol2t(e)) && fields(to_symbol2t(e).thename)
+             ? whole(e)
+             : e;
 
   // The eligibility scan keeps every byte-level access off a split object.
   assert(
