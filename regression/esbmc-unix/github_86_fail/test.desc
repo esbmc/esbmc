@@ -1,0 +1,5 @@
+CORE
+main.c
+--schedule --memory-leak-check --force-malloc-success
+^VERIFICATION FAILED$
+forgotten memory
