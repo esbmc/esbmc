@@ -21,9 +21,14 @@
 > of a copied struct literal restores that bound (§8.11), but on a clang
 > build neither rule solves `tagged_attr_store` with the flag under Z3 (no
 > result in 300 s and 1800 s), so the 36 s is build-sensitive and the Python
-> gate stays unmet. Returning a split whole read through a named symbol, as
-> §8.8 proposed, does not solve it either (§8.12). Phase 1 also lacks an
-> SV-COMP run.** The corpus is in `regression/field-sensitivity/`
+> gate stays unmet. Returning a split whole read through a fresh named
+> temporary does not solve it either (§8.12). Assigning a whole read with an
+> opaque field to the object's own symbol, so that #7597's pinning still
+> carries its constant fields, does: 27-29 s with the flag, and no verdict
+> change on the C, C++ and a Python sample with the flag forced on (§8.13).
+> Standalone Z3 finds the formulas with and without the change about equally
+> hard, so the result needs confirming on other builds and under Bitwuzla.
+> Phase 1 also lacks an SV-COMP run.** The corpus is in `regression/field-sensitivity/`
 > with baselines, and the census has been run and reverted. Phase 1 adds
 > `--field-sensitive-ssa` (default off): symex gives each field of an
 > eligible local, parameter or return slot its own SSA name. It meets the 2x
@@ -1101,3 +1106,88 @@ to find which part Z3 searches.
 
 Not measured in this run: any suite, the corpus 2x bar, and Bitwuzla (not
 built in this container).
+
+### 8.13 Reading a split struct with an opaque field through its own symbol
+
+§8.10's `--smt-formula-only` diff, on the clang build at `9a5160a9`: with the
+flag, `return result;` in `__python_scalar_add_obj_dyn` writes the literal
+`{ .value=&dynamic_4_array[0], ..., .size=result::3#4 }` straight into the
+caller's `self->r`, so the `with` chain of `dynamic_2_value` holds the
+literal, and the phi after the call reads `.size` back out of that chain.
+Without the flag the same write stores `result#9`, a symbol defined once by
+its own `with` chain.
+
+`goto_symext::split_read` now handles a whole read of a split object (the
+right-hand side of an assignment, or a returned value) whose L2 literal holds
+an opaque field name (§8.10): it assigns the literal to the object's own
+symbol in a hidden step and reads that symbol. #7597's pinning then carries
+`{ ..., .size=result#2.size }`, so constant fields still fold, and readers
+read `result#2` as they read `result#9` without the flag. A read with no
+opaque field is unchanged. The object's symbol is written only by this step
+and is never read at byte level.
+
+Measured on 2026-11-18, PR #10839's head `9a5160a9` with the change against
+the same build with it switched off through a temporary environment check
+(since removed), RelWithDebInfo built with clang 18, LLVM 18, Z3 4.13.3,
+4-core container, `--z3`, wall time:
+
+| Test | No flag | Flag, `9a5160a9` | Flag, this change |
+|---|---|---|---|
+| `tagged_attr_store` | 31 s | no result in 120 s (1800 s in §8.11) | 29 s, 28 s, 27 s, 29 s |
+| `tagged_attr_store_nested` | 214 s | 34 s | 35 s |
+
+`tagged_attr_store_nested` crashes in the Python frontend on this clang build
+with and without the flag: `python_converter::self_attribute_type` keeps a
+pointer into a `typet` local to an `if` block after the block ends. The
+`_nested` row was measured with that local hoisted, a change not in this PR.
+
+Standalone Z3 4.13.3 on the three `--smt-formula-only` outputs of
+`tagged_attr_store`, `smt.random_seed`/`sat.random_seed` set to N, 240 s
+cap, 4 jobs at a time:
+
+| Formula | Seeds | Solved (unsat) | Unsolved |
+|---|---|---|---|
+| no flag | 0-3 | 3, 107-159 s | 1 |
+| flag, `9a5160a9` | 0-3 | 3, 65-160 s | 1 |
+| flag, this change | 0-7 | 7, 58-125 s | 1 |
+
+Standalone, the three formulas are about equally hard. The in-process run is
+what loses the verdict at `9a5160a9`, and the change restores it there. ESBMC
+calls Z3 with a fixed seed, so the in-process runs above repeat one sample.
+
+§8.12's prototype assigned the literal to a fresh temporary at the return.
+This change differs in two ways: it writes the object's own symbol through
+`symex_assign_symbol`, so `goto_symex_statet::assignment` updates the value
+set and #7597's pinning carries `{ ..., .size=result#2.size }` to readers
+with the other fields constant; and it also covers the right-hand side of an
+assignment.
+
+Flag forced on, this change against `9a5160a9`, default solver (Z3), 30 s per
+run, 4 at a time; differences after dropping timings:
+
+| Suite | Tests | Verdict changes | Output changes |
+|---|---|---|---|
+| C (`regression/esbmc`, `CORE`) | 3440 | 0 | 0 beyond run-to-run noise: `--parallel-solving` line order (`github_2619`, `github_2630_1`), the shared proof cache (`proof_cache_*`), uninitialised bytes (`github_8524_unterminated_fail`) |
+| C++ (`esbmc-cpp/cpp`, `CORE`) | 1361 | 0 | `cpp_sum_class`: `--k-induction-parallel` line order |
+| Python, `CORE` tests among 920 of a shuffled list | 860 | 0 | `arith_lost_type_fail` prints `x = { .value=tmp$3.value, ... }`, as master without the flag does, where `9a5160a9` printed `.value=&dynamic_1_array[0]`; `github_5444_dictcomp_return_fail` in compiler-variable numbering |
+
+Four tests timed out at 30 s in both builds.
+
+Phase 1 corpus rows, flag on, `--z3`, symex seconds, three runs each,
+medians: `repro7521` 0.865 / 1.325 (8 / 2048 fields, 1.53x);
+`local_writes` 0.017 / 0.018 (1.06x).
+
+`field_sensitive_ssa_opaque_whole_read` checks the hidden step
+`r#N == { .a=1, .b=r::1#M }` in `--program-only` output and fails with the
+change switched off. `_fail` checks that the value read through the symbol
+is the written one. All three branches of `split_read` were reached under
+Z3, with temporary logging: the opaque branch on `opaque_whole_read`,
+`opaque_field` and `tagged_attr_store`, the unchanged split read on
+`copy_pinned`. In `opaque_whole_read_fail` the trace no longer prints
+`s = { .a=1, .b=0 }`, as master without the flag prints no step for `s`
+(§8.6, step dropped).
+
+Not measured: Bitwuzla (not buildable in this container), the full Python
+suite with the flag forced on, the full C and C++ suites with the flag off
+under ctest (each needs more than 10 minutes on 4 cores; the change is not
+reached without the flag), and an SV-COMP run.
