@@ -477,10 +477,18 @@ class InstanceType(Type):
         self.class_name = class_name
 
     def join(self, other):
+
+        if isinstance(other, Unknown):
+            return self
+
         if isinstance(other, InstanceType):
             if self.class_name == other.class_name:
                 return self
-        return UnionType([self, other])
+
+        if isinstance(other, UnionType):
+            return other.join(self)
+        
+        return UnionType([self, other,])
 
     def __repr__(self):
         return f"Instance[{self.class_name}]"

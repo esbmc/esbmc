@@ -12,6 +12,10 @@ class InferenceContext:
     known_classes: dict[str, Any]
     function_returns: Dict[str, Type] = field(default_factory=dict)
     function_params: Dict[str, list[Type]] = field(default_factory=dict)
+    function_param_observations: dict[str, list[list[Type]],] = field(default_factory=dict)
+    function_keys: Dict[int, str] = field(default_factory=dict) #Maps an AST function node to the name used by the interprocedural analysis
+    function_owners: Dict[int, str] = field(default_factory=dict) #Maps method nodes to their containg class
+
 
 
 def parse_isinstance_condition(cond):
@@ -51,8 +55,58 @@ def parse_none_condition(cond):
 
     return None
 
+def function_key(func_node, context)->str:
 
-class CallArgumentCollector(ast.NodeVisitor):
+    return context.function_keys.get(id(func_node), func_node.name) 
+
+def function_owner(func_node, context,):
+    return context.function_owners.get(
+        id(func_node)
+    )
+
+
+def resolve_method_key(
+    class_name,
+    method_name,
+    context,
+):
+    pending = [class_name]
+    visited = set()
+
+    while pending:
+        current_class = pending.pop()
+
+        if current_class in visited:
+            continue
+
+        visited.add(current_class)
+
+        candidate = (
+            f"{current_class}."
+            f"{method_name}"
+        )
+
+        if candidate in context.function_keys.values():
+            return candidate
+
+        class_info = context.known_classes.get(
+            current_class
+        )
+
+        if class_info is None:
+            continue
+
+        pending.extend(
+            class_info.bases
+        )
+
+    return None
+
+
+
+class CallArgumentCollector(
+    ast.NodeVisitor
+):
 
     def __init__(
         self,
@@ -65,25 +119,165 @@ class CallArgumentCollector(ast.NodeVisitor):
         self.context = context
 
     def visit_Call(self, node):
-        if (isinstance(node.func, ast.Name) and node.args):
-            arg_types = []
+        arg_types = [
+            infer_type_from_expr(
+                arg,
+                self.env,
+                self.context,
+            )
+            for arg in node.args
+        ]
 
-            for arg in node.args:
-                arg_type = infer_type_from_expr(
-                    arg,
+        #observed_params = (self.context.function_param_observations.setdefault(function_name,
+         
+        call_key = None  
+        collected_types = None                                                   #                 [[] for _ in arg_types],))
+
+        if isinstance(
+            node.func,
+            ast.Name,
+        ):
+            name = node.func.id
+
+            if name in self.context.known_classes:
+                constructor_key = resolve_method_key(
+                    name,
+                    "__init__",
+                    self.context,
+                )
+
+                if constructor_key is not None:
+                    call_key = constructor_key
+
+                    collected_types = [
+                        InstanceType(name),
+                        *arg_types,
+                    ]
+
+            elif name in (
+                self.context.function_keys.values()
+            ):
+                call_key = name
+                collected_types = arg_types
+
+            elif isinstance(
+                node.func,
+                ast.Attribute,
+            ):
+                receiver_type = infer_type_from_expr(
+                    node.func.value,
                     self.env,
                     self.context,
                 )
 
-                arg_types.append(arg_type)
+                if isinstance(
+                    receiver_type,
+                    InstanceType,
+                ):
+                    method_key = resolve_method_key(
+                        receiver_type.class_name,
+                        node.func.attr,
+                        self.context,
+                    )
 
-            merge_call_argument_types(
-                self.collected,
-                node.func.id,
-                arg_types,
+                    if method_key is not None:
+                        call_key = method_key
+
+                        collected_types = [
+                            receiver_type,
+                            *arg_types,
+                        ]
+
+            if (
+                call_key is not None
+                and collected_types is not None
+            ):
+                merge_call_argument_types(
+                    self.collected,
+                    call_key,
+                    collected_types,
+                )
+
+                observed_params = (
+                    self.context.function_param_observations.setdefault(
+                        call_key,
+                        [
+                            []
+                            for _ in collected_types
+                        ],
+                    )
+                )
+
+                while (
+                    len(observed_params)
+                    < len(collected_types)
+                ):
+                    observed_params.append([])
+
+                for i, arg_type in enumerate(
+                    collected_types
+                ):
+                    if isinstance(
+                        arg_type,
+                        (
+                            Unknown,
+                            Bottom,
+                        ),
+                    ):
+                        continue
+
+                    already_observed = any(
+                        arg_type == old_type
+                        for old_type
+                        in observed_params[i]
+                    )
+
+                    if not already_observed:
+                        observed_params[i].append(
+                            arg_type
+                        )
+
+            self.generic_visit(node)
+
+    def visit_Assign(self, node):
+        # First collect calls occurring in the RHS.
+        self.visit(node.value)
+
+        value_type = infer_type_from_expr(
+            node.value,
+            self.env,
+            self.context,
+        )
+
+        for target in node.targets:
+            bind_target_type(
+                target,
+                value_type,
+                self.env,
             )
 
-        self.generic_visit(node)
+    def visit_AnnAssign(self, node):
+        if node.value is not None:
+            self.visit(node.value)
+
+            value_type = infer_type_from_expr(
+                node.value,
+                self.env,
+                self.context,
+            )
+        else:
+            value_type = (
+                infer_annotation_type_with_classes(
+                    node.annotation,
+                    self.context.known_classes,
+                )
+            )
+
+        bind_target_type(
+            node.target,
+            value_type,
+            self.env,
+        )
 
     def visit_FunctionDef(self, node):
         return
@@ -470,6 +664,21 @@ def infer_async_for_element_type_from_calls(
 
     return element_type
 
+def register_function_context(tree, context,):
+    for stmt in tree.body:
+        if isinstance(stmt, (ast.FunctionDef, ast.AsyncFunctionDef,),):
+            context.function_keys[id(stmt)] = stmt.name
+
+        elif isinstance(stmt, ast.ClassDef):
+            for member in stmt.body:
+                if not isinstance(member, (ast.FunctionDef, ast.AsyncFunctionDef,),):
+                    continue 
+
+                key = f"{stmt.name}.{member.name}"
+
+                context.function_keys[id(member)] = key
+                context.function_owners[id(member)] = stmt.name
+                
 
 def infer_method_type(
     method_node,
@@ -677,30 +886,46 @@ def narrow_not_none(true_env, false_env, var):
 def initialize_environments(func_node, cfg, context):
     n = len(cfg.blocks)
 
-    in_envs = [dict() for _ in range(n)]
-    out_envs = [dict() for _ in range(n)]
+    in_envs = [{} for _ in range(n)]
+    out_envs = [{} for _ in range(n)]
 
-    entry_env = {}
-
-    inferred_params = context.function_params.get(
-        func_node.name,
-        [],
-    )
-
-    for i, arg in enumerate(func_node.args.args):
-        if arg.annotation is not None:
-            entry_env[arg.arg] = infer_annotation_type(arg.annotation)
-        elif i < len(inferred_params):
-            entry_env[arg.arg] = inferred_params[i]
-
-        else:
-            entry_env[arg.arg] = Unknown()
+    entry_env = function_parameter_environment(func_node, context,)
 
     if n > 0:
         in_envs[0] = entry_env.copy()
 
     return in_envs, out_envs
 
+def assign_attribute_type(target, value_type, env, context,):
+
+    if not isinstance(target, ast.Attribute):
+        return
+
+    if isinstance(target.value, ast.Name):
+        env_name =( f"{target.value.id}." f"{target.attr}")
+
+        env[env_name] = value_type
+
+    obj_type = infer_type_from_expr(target.value, env, context,)
+
+    if not isinstance(obj_type, InstanceType,):
+        return
+
+    class_info = context.known_classes.get(obj_type.class_name)
+
+    if class_info is None:
+        return
+
+    old_type = class_info.attributes.get(target.attr)
+
+    if (old_type is None or isinstance(old_type, Unknown)):
+        class_info.attributes[target.attr] = value_type
+        return
+
+    if isinstance(value_type, Unknown):
+        return
+
+    class_info.attributes[target.attr] = old_type.join(value_type)    
 
 def merge_into_environment(target, source):
     for name, typ in source.items():
@@ -923,6 +1148,31 @@ def transfer_augassign(
         return env
 
     if isinstance(target, ast.Attribute):
+        load_target = ast.Attribute(
+            value=target.value,
+            attr=target.attr,
+            ctx=ast.Load(),
+        )
+
+        expression = ast.BinOp(
+            left=load_target,
+            op=stmt.op,
+            right=stmt.value,
+        )
+
+        result_type = infer_type_from_expr(
+            expression,
+            env,
+            context,
+        )
+
+        assign_attribute_type(
+            target,
+            result_type,
+            env,
+            context,
+        )
+
         return env
 
     if isinstance(target, ast.Subscript):
@@ -975,6 +1225,50 @@ def transfer_augassign_subscript(
 
     return env
 
+def update_method_signature(func_node, ret_type, context,):
+
+    owner = function_owner(func_node, context,)
+
+    if owner is None:
+        return
+
+    class_info = context.known_classes.get(owner)
+
+    if class_info is None:
+        return
+
+    env = function_parameter_environment(func_node, context,)
+
+    param_types = []
+
+    for arg in func_node.args.args[1:]:
+        param_types.append(env.get(arg.arg, Unknown(),))
+
+    previous = class_info.attributes.get(func_node.name)
+
+    previous_return = Unknown()
+
+    if isinstance(
+        previous,
+        CallableType,
+    ):
+        previous_return = previous.ret
+
+    if func_node.name == "__init__":
+        method_return = NoneType()
+
+    elif isinstance(ret_type,(Unknown, Bottom,),):
+        method_return = previous_return
+
+    else:
+        method_return = ret_type
+
+    class_info.attributes[
+        func_node.name
+    ] = CallableType(
+        param_types,
+        method_return,
+    )        
 
 def transfer_return(stmt, env, context):
     if stmt.value is None:
@@ -1003,7 +1297,27 @@ def transfer_assign(
                 context,
             )
 
-        elif isinstance(target, ast.Subscript):
+        elif isinstance(
+            target,
+            ast.Attribute,
+        ):
+            value_type = infer_type_from_expr(
+                stmt.value,
+                env,
+                context,
+            )
+
+            assign_attribute_type(
+                target,
+                value_type,
+                env,
+                context,
+            )
+
+        elif isinstance(
+            target,
+            ast.Subscript,
+        ):
             assign_subscript(
                 target,
                 stmt.value,
@@ -1012,8 +1326,11 @@ def transfer_assign(
             )
 
         elif isinstance(
-                target,
-            (ast.Tuple, ast.List),
+            target,
+            (
+                ast.Tuple,
+                ast.List,
+            ),
         ):
             value_type = infer_type_from_expr(
                 stmt.value,
@@ -1069,20 +1386,43 @@ def function_parameter_environment(
 ):
     env = {}
 
+    key = function_key(func_node, context,)
+
+    owner = function_owner(func_node, context,)
+
     inferred_params = context.function_params.get(
-        func_node.name,
+        key,
         [],
     )
 
     for i, arg in enumerate(func_node.args.args):
+        
+        if owner is not None and i ==0:
+            env[arg.arg] = InstanceType(owner)
+            continue
+        
         if arg.annotation is not None:
-            env[arg.arg] = infer_annotation_type(arg.annotation)
+            env[arg.arg] = infer_annotation_type_with_classes(arg.annotation, context.known_classes)
 
         elif i < len(inferred_params):
             env[arg.arg] = inferred_params[i]
 
         else:
             env[arg.arg] = Unknown()
+
+    if (owner is not None and func_node.args.args):
+        self_name = func_node.args.args[0].arg 
+
+        class_info = context.known_classes.get(owner)
+
+        if class_info is not None:
+            for attr_name, attr_type in (
+                class_info.attributes.items()
+            ):
+                if isinstance(attr_type, CallableType,):
+                    continue
+
+                env[f"{self_name}.{attr_name}"] = attr_type       
 
     return env
 
@@ -1229,16 +1569,21 @@ def transfer_annassign(
     env,
     context,
 ):
-    if not isinstance(stmt.target, ast.Name):
-        return env
 
-    name = stmt.target.id
-    annotation = stmt.annotation
+        declared_type = infer_annotation_type_with_classes(
+            stmt.annotation,
+            context.known_classes,
+        )
 
-    if isinstance(annotation, ast.Name):
-        declared_type = mk_type_from_name(annotation.id)
+        final_type = declared_type
 
-        if isinstance(declared_type, (AnyType, Unknown)):
+        if isinstance(
+            declared_type,
+            (
+                AnyType,
+                Unknown,
+            ),
+        ):
             if stmt.value is not None:
                 inferred_type = infer_type_from_expr(
                     stmt.value,
@@ -1246,14 +1591,35 @@ def transfer_annassign(
                     context,
                 )
 
-                if not isinstance(inferred_type, (AnyType, Unknown)):
-                    env[name] = inferred_type
-                    return env
+                if not isinstance(
+                    inferred_type,
+                    (
+                        AnyType,
+                        Unknown,
+                    ),
+                ):
+                    final_type = inferred_type
 
-        env[name] = declared_type
-        return env
-    env[name] = Unknown()
-    return env
+        if isinstance(
+            stmt.target,
+            ast.Name,
+        ):
+            env[stmt.target.id] = final_type
+            return env
+
+        if isinstance(
+            stmt.target,
+            ast.Attribute,
+        ):
+            assign_attribute_type(
+                stmt.target,
+                final_type,
+                env,
+                context,
+            )
+            return env
+
+        return env      
 
 
 """ def transfer_expr(stmt, env, context):
@@ -1284,9 +1650,11 @@ def collect_function_argument_types(
     tree,
     context,
     max_iters=10,
-):
+) -> set[str]:
     for _ in range(max_iters):
         collected = {}
+
+        context.function_param_observations = {}
 
         module_collector = CallArgumentCollector(
             {},
@@ -1332,9 +1700,170 @@ def collect_function_argument_types(
                 collector.visit(stmt)
 
         if collected == context.function_params:
-            return
+            break
 
-        context.function_params = collected
+        context.function_params = {
+            name: list(types)
+            for name, types in collected.items()
+        }
+        
+    unsafe = set()
+
+    for function_name, observations in (
+        context.function_param_observations.items()
+    ):
+        for observed_types in observations:
+            if len(observed_types) > 1:
+                unsafe.add(function_name)
+                break
+
+    changed = True
+
+    while changed:
+        changed = False
+
+        for stmt in tree.body:
+            if isinstance(stmt, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef),):
+                continue        
+
+            for call in ast.walk(stmt):
+                if not isinstance(call, ast.Call,):
+                    continue
+
+                if not isinstance(call.func, ast.Name,):
+                    continue
+
+                called_name = call.func.id
+
+                if (
+                    called_name
+                    not in context.function_keys.values()
+                ):
+                    continue
+
+                has_unsafe_argument = False
+
+                for arg in call.args:
+                    for child in ast.walk(arg):
+                        if (
+                            isinstance(
+                                child,
+                                ast.Call,
+                            )
+                            and isinstance(
+                                child.func,
+                                ast.Name,
+                            )
+                            and child.func.id
+                            in unsafe
+                        ):
+                            has_unsafe_argument = True
+                            break
+
+                if (
+                    has_unsafe_argument
+                    and called_name not in unsafe
+                    ):
+                        unsafe.add(
+                            called_name
+                        )
+                        changed = True
+
+        # Propagation through parameters of an
+        # already unsafe function.
+        #
+        # Example:
+        #
+        # def cube(x):
+        #     return square(x) * x
+        #
+        # If cube is unsafe, x may be int or float,
+        # so square must also remain unannotated.
+        for func_node in ast.walk(tree):
+            if not isinstance(
+                func_node,
+                (
+                    ast.FunctionDef,
+                    ast.AsyncFunctionDef,
+                ),
+            ):
+                continue
+
+            current_key = function_key(
+                func_node,
+                context,
+            )
+
+            if current_key not in unsafe:
+                continue
+
+            parameter_names = {
+                arg.arg
+                for arg in func_node.args.args
+            }
+
+            pending: list[ast.AST] = list(
+                func_node.body
+            )
+
+            while pending:
+                node = pending.pop()
+
+                if isinstance(
+                    node,
+                    (
+                        ast.FunctionDef,
+                        ast.AsyncFunctionDef,
+                        ast.Lambda,
+                        ast.ClassDef,
+                    ),
+                ):
+                    continue
+
+                if (
+                    isinstance(
+                        node,
+                        ast.Call,
+                    )
+                    and isinstance(
+                        node.func,
+                        ast.Name,
+                    )
+                ):
+                    called_name = node.func.id
+
+                    if (
+                        called_name
+                        in context.function_keys.values()
+                    ):
+                        passes_parameter = any(
+                            isinstance(
+                                arg,
+                                ast.Name,
+                            )
+                            and arg.id
+                            in parameter_names
+                            for arg in node.args
+                        )
+
+                        if (
+                            passes_parameter
+                            and called_name
+                            not in unsafe
+                        ):
+                            unsafe.add(
+                                called_name
+                            )
+                            changed = True
+
+                pending.extend(
+                    ast.iter_child_nodes(node)
+                )
+
+    return unsafe
+                
+
+       # context.function_params = collected
 
 
 def transfer_expr(
@@ -1562,16 +2091,34 @@ def infer_instance_attribute_type(
     attr_name,
     known_classes,
 ):
-    class_info = known_classes.get(obj_type.class_name)
+    pending = [obj_type.class_name]
+    visited = set()
 
-    if class_info is None:
-        return Unknown()
+    while pending:
+        class_name = pending.pop()
 
-    return class_info.attributes.get(
-        attr_name,
-        Unknown(),
-    )
+        if class_name in visited:
+            continue
 
+        visited.add(class_name)
+
+        class_info = known_classes.get(
+            class_name
+        )
+
+        if class_info is None:
+            continue
+
+        if attr_name in class_info.attributes:
+            return class_info.attributes[
+                attr_name
+            ]
+
+        pending.extend(
+            class_info.bases
+        )
+
+    return Unknown()
 
 def infer_dict_attribute_type(obj_type, attr_name):
     if attr_name == "copy":
@@ -1864,6 +2411,25 @@ def infer_call_type(expr, env, context):
             context,
         )
 
+        if isinstance(
+            obj_type,
+            InstanceType,
+        ):
+            method_key = resolve_method_key(
+                obj_type.class_name,
+                func.attr,
+                context,
+            )
+
+            if (
+                method_key is not None
+                and method_key
+                in context.function_returns
+            ):
+                return context.function_returns[
+                    method_key
+                ]
+
         arg_types = []
         for arg in expr.args:
             arg_types.append(infer_type_from_expr(arg, env, context))
@@ -1911,6 +2477,9 @@ def infer_named_call_type(
     env,
     context,
 ):
+    if (func_name == "nondet_int" and not expr.args and not expr.keywords):
+        return IntType()
+    
     builtin_type = infer_builtin_call_type(func_name, expr, env, context)
     if func_name in context.function_returns:
         return context.function_returns[func_name]
@@ -1930,6 +2499,16 @@ def infer_named_call_type(
 
     return Unknown()
 
+def snapshot_class_attributes(
+    context,
+):
+    return {
+        class_name: dict(
+            class_info.attributes
+        )
+        for class_name, class_info
+        in context.known_classes.items()
+    }
 
 def infer_builtin_call_type(name, expr, env, context):
     if name == "nondet_bool" and name not in env:
@@ -2246,9 +2825,9 @@ def infer_tuple_subscript_type(
         return Unknown()
 
     if isinstance(index_expr, ast.Slice):
-        lower = None
-        upper = None
-        step = None
+        lower: int | None = None
+        upper: int | None = None
+        step: int | None = None
 
         if index_expr.lower is not None:
             if (isinstance(index_expr.lower, ast.Constant)
@@ -2265,7 +2844,7 @@ def infer_tuple_subscript_type(
 
         if index_expr.upper is not None:
             if (isinstance(index_expr.upper, ast.Constant)
-                    and not isinstance(index_expr.upper.value, int)
+                    and isinstance(index_expr.upper.value, int)
                     and not isinstance(index_expr.upper.value, bool)):
                 upper = index_expr.upper.value
 
@@ -2299,6 +2878,11 @@ def infer_tuple_subscript_type(
         elements = tuple_type.elems[slice(lower, upper, step)]
 
         return TupleType(elements)
+    
+    index_type = infer_type_from_expr(index_expr, env, None,)
+
+    if not isinstance(index_type, IntType):
+        return Unknown()
 
     # Normal tuple indexing
     if isinstance(index_expr, ast.Constant):
@@ -2318,6 +2902,8 @@ def infer_tuple_subscript_type(
             result = result.join(elem)
 
         return result
+
+    
 
     return Unknown()
 
@@ -2592,6 +3178,12 @@ def infer_type_from_expr(expr, env, context):
         return env.get(expr.id, Unknown())
 
     if isinstance(expr, ast.Attribute):
+        if isinstance(expr.value, ast.Name):
+            env_name = (f"{expr.value.id}." 
+                        f"{expr.attr}")
+
+            if env_name in env:
+                return env[env_name]
         obj_type = infer_type_from_expr(expr.value, env, context)
         if isinstance(obj_type, ComplexType):
             if expr.attr in {"real", "imag"}:
