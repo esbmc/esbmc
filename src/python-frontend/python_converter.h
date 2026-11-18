@@ -1311,7 +1311,15 @@ private:
     std::vector<code_blockt> &effects);
 
   exprt lower_short_circuit_boolop(
-    const exprt &logical_expr,
+    exprt &logical_expr,
+    const std::vector<code_blockt> &effects,
+    const std::function<exprt(const exprt &)> &truthy,
+    const nlohmann::json &element);
+
+  void emit_unguarded_boolop_effects(const std::vector<code_blockt> &effects);
+
+  void guard_boolop_operands(
+    exprt &logical_expr,
     const std::vector<code_blockt> &effects,
     const std::function<exprt(const exprt &)> &truthy,
     const nlohmann::json &element);
@@ -1809,6 +1817,10 @@ private:
 
   typet
   any_attribute_type(const nlohmann::json &stmt, const std::string &attr_name);
+  typet dict_get_optional_type(
+    const nlohmann::json &value,
+    const std::unordered_map<std::string, nlohmann::json> &param_annotations,
+    const typet &fallback) const;
   bool is_tagged_value_expr(
     const nlohmann::json &value,
     const nlohmann::json &func_node,
