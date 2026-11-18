@@ -2522,13 +2522,6 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
     }
   }
 
-  auto is_optional_type = [](const typet &param_type) {
-    return param_type.is_struct() && to_struct_type(param_type)
-                                       .tag()
-                                       .as_string()
-                                       .starts_with("tag-Optional_");
-  };
-
   auto handle_keywords = [&](exprt &call_expr) {
     if (!element.contains("keywords") || element["keywords"].empty())
       return;
@@ -2588,7 +2581,7 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
       const typet &param_type = params[it->second].type();
       if (arg_expr.type().is_array() && param_type.is_pointer())
         arg_expr = string_handler_.get_array_base_address(arg_expr);
-      else if (is_optional_type(param_type))
+      else if (type_utils::is_optional_struct(param_type))
         arg_expr = wrap_in_optional(arg_expr, param_type);
 
       args[it->second] = arg_expr;
@@ -2632,7 +2625,7 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
         continue;
 
       bool has_default = params[i].has_default_value();
-      bool optional_param = is_optional_type(params[i].type());
+      bool optional_param = type_utils::is_optional_struct(params[i].type());
 
       if (!has_default && !optional_param)
       {
@@ -2680,7 +2673,7 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
         const typet &param_type = params[i].type();
 
         // Check if this is an Optional type (struct with "is_none" field)
-        if (is_optional_type(param_type))
+        if (type_utils::is_optional_struct(param_type))
         {
           // Create Optional value with is_none=true
           constant_exprt none_expr(none_type());
