@@ -9,7 +9,8 @@
 > has now been run with the flag forced on under Z3: one verdict is lost,
 > `tagged_attr_store` (25 s without the flag, no result in 1800 s with it,
 > master's Phase 1 code as well), so the Phase 1 Python gate is unmet
-> (§8.8). Phase 1 also lacks an SV-COMP run.** The corpus is in `regression/field-sensitivity/`
+> (§8.8). The loss is Z3-only (Bitwuzla: 8 s both ways) and holds at 7 of
+> 8 Z3 seeds. Phase 1 also lacks an SV-COMP run.** The corpus is in `regression/field-sensitivity/`
 > with baselines, and the census has been run and reverted. Phase 1 adds
 > `--field-sensitive-ssa` (default off): symex gives each field of an
 > eligible local, parameter or return slot its own SSA name. It meets the 2x
@@ -831,6 +832,42 @@ tests that timed out either way were re-run at 90 s:
   same binary (or, for `github_9314_fail`, prints the same trace in both
   modes when run alone). `github_9075_lambda` aborts both ways, as its test
   expects.
+
+Measured on 2026-11-18 at the PR head `d9e07db7`, RelWithDebInfo, LLVM 18,
+Z3 4.13.3 and ESBMC's Bitwuzla 0.9.0 backend, run alone, 300 s:
+
+| `tagged_attr_store` | Without the flag | With the flag |
+|---|---|---|
+| `--z3` | SUCCESSFUL, 30 s | no result in 300 s |
+| `--bitwuzla` | SUCCESSFUL, 7.8 s | SUCCESSFUL, 8.3 s |
+
+CI builds Bitwuzla, the default solver when it is built in, so the loss is
+specific to Z3. The flag splits one object, `result` in
+`__python_scalar_add_obj_dyn` (`src/c2goto/library/python/scalar.c:490`),
+called three times. The two SSA programs differ only there, apart from
+address-derived temporary names. Without the flag `r` is assigned the symbol
+`result#9 == result#1 WITH [float_idx:=0] ... WITH [size:=...]`, with
+`result#1` nondet. With the flag `r` is assigned the struct literal
+`{ .value=&dynamic_4_array[0], ..., .size=result::3#4 }`, inlined into both
+arms of the `if`. The two formulas are equivalent.
+
+The `--smt-formula-only` output of each, solved by the standalone Z3 4.13.3
+binary with `smt.random_seed` and `sat.random_seed` set to N, 4 runs in
+parallel. "Unsolved" means a timeout, or a run the 15 GB memory limit
+killed at about 4 GB:
+
+| Formula | Seeds | Solved (unsat) | Unsolved |
+|---|---|---|---|
+| `tagged_attr_store`, without the flag | 0-7 (150 s for 0-3, 240 s for 4-7) | 7, in 58-127 s | 1 (seed 0, 150 s) |
+| `tagged_attr_store`, with the flag | 0-7 (same limits) | 1 (seed 4, 69 s) | 7 |
+| `tagged_attr_store_nested`, without the flag | 0-5, 240 s | 0 | 6 |
+| `tagged_attr_store_nested`, with the flag | 0-5, 240 s | 1 (seed 1, 147 s) | 5 |
+
+So the slowdown on `tagged_attr_store` is not a single unlucky seed: Z3
+finds the reassembled-literal encoding harder on this formula at almost
+every seed. `tagged_attr_store_nested` is hard for Z3 both ways. A fix
+would change how a whole read of a split struct reaches the formula (a
+named symbol instead of an inlined literal), which §3 does not yet specify.
 
 Still not measured: an SV-COMP run, and the full Python suite under
 Bitwuzla.
