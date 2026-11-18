@@ -1,6 +1,7 @@
 #pragma once
 
 #include <functional>
+#include <optional>
 #include <nlohmann/json.hpp>
 #include <functional>
 #include <string>
@@ -314,6 +315,31 @@ inline bool is_instance_call(
   return false;
 }
 
+// The kind of `value` when it names a parameter of `def`, which shadows any
+// module-level binding of the name: its annotation's kind, as on a
+// `__esbmc_poly_<kind>` copy, or "" when it has none or is starred.
+inline std::optional<std::string>
+parameter_kind(const nlohmann::json &def, const nlohmann::json &value)
+{
+  if (value.value("_type", "") != "Name" || !def.contains("args"))
+    return std::nullopt;
+  const nlohmann::json &args = def["args"];
+  const std::string id = value.value("id", "");
+  for (const char *group : {"posonlyargs", "args", "kwonlyargs"})
+    for (const auto &arg : args.value(group, nlohmann::json::array()))
+      if (arg.value("arg", "") == id)
+      {
+        const auto &ann = arg.value("annotation", nlohmann::json());
+        return ann.is_object() ? scalar_name_kind(ann.value("id", "")) : "";
+      }
+  for (const char *star : {"vararg", "kwarg"})
+    if (
+      args.contains(star) && args[star].is_object() &&
+      args[star].value("arg", "") == id)
+      return "";
+  return std::nullopt;
+}
+
 // The kind of an unannotated module-level def whose body is one `return`.
 inline std::string forwarded_return_kind(
   const std::string &callee,
@@ -326,17 +352,20 @@ inline std::string forwarded_return_kind(
   {
     if (
       !stmt.is_object() || stmt.value("_type", "") != "FunctionDef" ||
-      stmt.value("name", "") != callee)
-      continue;
-    const auto body = stmt.find("body");
-    if (body == stmt.end() || !body->is_array() || body->size() != 1)
+      stmt.value("name", "") != callee || !stmt.contains("body"))
+      continue; // kind_module_body lists body-less stubs before the defs
+    const nlohmann::json &body = stmt["body"];
+    if (!body.is_array() || body.size() != 1)
       return "";
-    const nlohmann::json &ret = body->front();
+    const nlohmann::json &ret = body.front();
     if (
       !ret.is_object() || ret.value("_type", "") != "Return" ||
       !ret.contains("value") || !ret["value"].is_object())
       return "";
-    return classify_literal_value_kind(ret["value"], module_body, depth + 1);
+    const nlohmann::json &value = ret["value"];
+    if (const auto kind = parameter_kind(stmt, value))
+      return *kind;
+    return classify_literal_value_kind(value, module_body, depth + 1);
   }
   return "";
 }
