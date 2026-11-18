@@ -6277,8 +6277,7 @@ void python_converter::handle_function_call_rhs(
     // fall back to the called function's return-type annotation
     // to determine the element type.
     const std::string &lhs_id = lhs.identifier().as_string();
-    if (ast_node.contains("value"))
-      copy_elem_types_from_reordering_builtin(ast_node["value"], rhs, lhs_id);
+    copy_elem_types_from_reordering_builtin(ast_node["value"], rhs, lhs_id);
     if (element_type_registry_.size(lhs_id) == 0)
       record_annotated_list_elem_type(ast_node, lhs_id);
 
