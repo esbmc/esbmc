@@ -1316,6 +1316,8 @@ private:
     const std::function<exprt(const exprt &)> &truthy,
     const nlohmann::json &element);
 
+  void emit_unguarded_boolop_effects(const std::vector<code_blockt> &effects);
+
   void guard_boolop_operands(
     exprt &logical_expr,
     const std::vector<code_blockt> &effects,
