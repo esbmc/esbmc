@@ -179,8 +179,10 @@ bool type_handler::is_constructor_call(const nlohmann::json &json) const
 
   const contextt &symbol_table = converter_.symbol_table();
 
+  // A variable holding a struct (e.g. an Optional parameter) shares the
+  // name only by coincidence; just a type symbol names a class.
   symbol_table.foreach_operand([&](const symbolt &s) {
-    if (s.get_type().id() == "struct" && s.name == func_name)
+    if (s.is_type && s.get_type().id() == "struct" && s.name == func_name)
     {
       is_ctor_call = true;
       return;
