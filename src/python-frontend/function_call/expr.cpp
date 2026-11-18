@@ -3684,15 +3684,7 @@ bool function_call_expr::receiver_class_defines_method(
   std::string cls = function_id_.get_class();
   if (cls.rfind("tag-", 0) == 0)
     cls = cls.substr(4);
-  const auto &ast = converter_.ast();
-  if (!is_class(cls, ast))
-    return false;
-  if (!json_utils::find_class(ast["body"], cls).is_null())
-    return json_utils::class_defines_method(ast["body"], cls, method_name);
-  const nlohmann::json *module =
-    converter_.find_imported_class_module(cls).first;
-  return module &&
-         json_utils::class_defines_method((*module)["body"], cls, method_name);
+  return converter_.class_defines_method(cls, method_name);
 }
 
 /// `b.set()` or `b.type()` where b's class defines the method: the builtin
