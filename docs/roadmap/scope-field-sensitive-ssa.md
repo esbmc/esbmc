@@ -9,7 +9,7 @@
 > Phase 1 gate is still unmet on lost constant propagation: with the flag, a
 > struct copied out of a split struct with a pointer field no longer bounds
 > loops over its other fields. #10839 caused one form of this, a split copy
-> into a split destination (fixed in a follow-up PR); the other,
+> into a split destination (fixed, §8.15); the other,
 > `github_7797_flat_set`, predates #10839 and is open (§8.14). Phase 1 also
 > lacks an SV-COMP run.** The corpus is in `regression/field-sensitivity/`
 > with baselines, and the census has been run and reverted. Phase 1 adds
@@ -1243,4 +1243,36 @@ pointers (github_5868), so its constant `_size` is dropped with it. Without the 
 A second form of the same loss, a split struct with a pointer field copied
 into another split struct (`struct V out = s;` then a loop to `out.size`),
 was introduced by #10839: its parent bounds the loop and master does not.
+
+### 8.15 A split destination takes a whole read field by field
+
+`goto_symext::symex_assign` now calls `split_read` only when the assignment's
+target is not a split whole object; into a split one it uses `split_rewrite`,
+as before #10839. `symex_assign_split` takes that read field by field, so no
+literal is carried and the hidden step bought nothing, while reading through
+the source's symbol lost a constant sibling whenever a pointer field kept
+the pinned literal unpropagated. A return still goes through `split_read`,
+so `tagged_attr_store`'s path is unchanged: applying the same rule to a
+return into a split return slot brought the Z3 timeout back (no result in
+300 s).
+
+Measured on 2026-11-18, the change on master `48d5f770e`, the same gcc 13.3
+build, Z3 4.13.3 and Bitwuzla 0.9.0:
+
+- `field_sensitive_ssa_split_copy_pointer` (`struct V out = s;` with a
+  `malloc`ed `buf`, then a loop to `out.size`, `--unwind 6`): 1 VCC, 0 left
+  after simplification, under both solvers. Master's binary unwinds the loop
+  to 6 and leaves 2 VCCs, so the test fails on master; `_fail` pins
+  `1 remaining` and FAILED, and master leaves 2. Four variants (through a
+  callee, `return *c`, and two struct shapes) bound the loop with the change
+  and not on master. The C++ `flat_set` reproducer of §8.14 is unchanged:
+  its destination is not split.
+- `tagged_attr_store`, flag on: Z3 28.4 s, Bitwuzla 7.9 s.
+- Flag forced on in both binaries, this change against master, default
+  solver (Bitwuzla), 30 s per run, 4 at a time: C `CORE` (3442) and C++
+  `CORE` (1361) 0 verdict changes; output differences are assignment counts,
+  `--parallel-solving` order, Clang AST addresses and timing fields. Python,
+  every 10th `CORE` test plus the `tagged_attr_store` tests (931): 0 verdict
+  changes; one temporary name differs.
+- ctest `field_sensitive_ssa` and `field-sensitivity`: 52/52 pass.
 
