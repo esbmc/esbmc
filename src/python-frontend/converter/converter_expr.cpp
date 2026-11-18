@@ -1760,6 +1760,8 @@ std::optional<exprt> python_converter::try_dispatch_dict_subscript(
   // Try to resolve the expected return type from the dict's type annotation
   typet expected_type =
     dict_handler_->resolve_expected_type_for_dict_subscript(array);
+  if (expected_type.is_nil() || expected_type.is_empty())
+    expected_type = dict_handler_->nested_literal_value_type(element);
 
   // A dict read out of a list, as in rows[0]["k"], has no symbol to type its
   // value by, and the handler's default reads it as a str. Take the type the

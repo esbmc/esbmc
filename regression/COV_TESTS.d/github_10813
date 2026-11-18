@@ -1,0 +1,7 @@
+regression/python/github_10813
+regression/python/github_10813_fail
+regression/python/github_10813_minmax
+regression/python/github_10813_minmax_fail
+regression/python/github_10813_step
+regression/python/github_10813_step_fail
+regression/python/github_10813_neg_fail

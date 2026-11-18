@@ -1,0 +1,5 @@
+CORE
+main.py
+
+^  FAILED +\[global\.assertion\.[0-9]+\] +line  3  uncaught exception: IndexError$
+^VERIFICATION FAILED$

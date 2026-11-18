@@ -104,7 +104,8 @@ public:
       slice_nondet(
         !options.get_bool_option("generate-testcase") &&
         !options.get_bool_option("generate-ctest-testcase") &&
-        options.get_option("witness-output-yaml").empty())
+        options.get_option("witness-output-yaml").empty()),
+      hide_unconstrained_prints(options.get_bool_option("field-sensitive-ssa"))
   {
   }
 
@@ -129,6 +130,7 @@ public:
     array_disqualified.clear();
     scanned_cache.clear();
     sliced_reads.clear();
+    sliced_definitions.clear();
 
     fine_timet algorithm_start = current_time();
     for (auto &step : boost::adaptors::reverse(eq))
@@ -146,6 +148,15 @@ public:
         step.is_branching() && !step.ignore &&
         (reads_sliced(step.guard) || reads_sliced(step.cond)))
         step.ignore = true;
+    // A split struct's whole write prints a right-hand side its kept field
+    // steps may not read. Where that reads a definition the slicer removed,
+    // the model's value for it is arbitrary (#10801): hide the step.
+    if (hide_unconstrained_prints)
+      for (auto &step : eq)
+        if (
+          step.is_assignment() && !step.ignore && !step.hidden &&
+          reads_sliced_definition(step.original_rhs))
+          step.hidden = true;
     fine_timet algorithm_stop = current_time();
     log_status(
       "Slicing time: {}s (removed {} assignments)",
@@ -188,6 +199,10 @@ public:
   /// Memo for #reads_sliced: node -> whether its subtree reads a sliced value.
   std::unordered_map<const expr2t *, bool> sliced_reads;
 
+  /// Left-hand sides of the assignment steps the reverse pass ignored, filled
+  /// only when #hide_unconstrained_prints is set.
+  std::unordered_set<std::string> sliced_definitions;
+
   static expr2tc get_nondet_symbol(const expr2tc &expr);
   /// The `nondet$` symbols of \p expr, in member order. Unlike
   /// get_nondet_symbol it descends into struct and union literals: constant
@@ -200,6 +215,8 @@ protected:
   const bool slice_assumes;
   /// Whether we should slice nondet symbols
   const bool slice_nondet;
+  /// Whether a kept step whose printed rhs reads a sliced definition is hidden
+  const bool hide_unconstrained_prints;
 
   /**
    * Collect every symbol of \expr into #depends (mutating "reverse-taint"
@@ -247,6 +264,10 @@ protected:
    * @return true if \expr reads a sliced value
    */
   bool reads_sliced(const expr2tc &expr);
+
+  /// Does \expr read a symbol in #sliced_definitions? A symbol with no
+  /// defining step is as free in the sliced formula as in the full one.
+  bool reads_sliced_definition(const expr2tc &expr) const;
 
   /**
    * Asserts are never sliced: collect the step's guard/cond symbols into
