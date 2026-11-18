@@ -538,7 +538,7 @@ void goto_symext::symex_assign(
 
   expr2tc original_lhs = code.target;
   expr2tc lhs = split_rewrite(code.target);
-  expr2tc rhs = split_rewrite(code.source);
+  expr2tc rhs = split_read(code.source);
 
   replace_nondet(lhs);
   replace_nondet(rhs);
@@ -803,6 +803,24 @@ expr2tc goto_symext::split_rewrite(const expr2tc &e) const
   if (!art1 || art1->split_structs.empty())
     return e;
   return art1->split_structs.rewrite(e);
+}
+
+expr2tc goto_symext::split_read(const expr2tc &e)
+{
+  expr2tc whole = split_rewrite(e);
+  if (!is_split_whole(e))
+    return whole;
+  cur_state->rename(whole);
+  const std::vector<expr2tc> &fields =
+    to_constant_struct2t(whole).datatype_members;
+  if (std::none_of(fields.begin(), fields.end(), [this](const expr2tc &f) {
+        return is_symbol2t(f) && art1->split_structs.is_opaque(f);
+      }))
+    return split_rewrite(e);
+  guard2tc guard;
+  expr2tc no_full_rhs;
+  symex_assign_symbol(e, e, whole, no_full_rhs, guard, true);
+  return e;
 }
 
 void goto_symext::split_rewrite_operands(std::vector<expr2tc> &operands) const
