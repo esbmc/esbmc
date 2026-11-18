@@ -1311,7 +1311,15 @@ private:
     std::vector<code_blockt> &effects);
 
   exprt lower_short_circuit_boolop(
-    const exprt &logical_expr,
+    exprt &logical_expr,
+    const std::vector<code_blockt> &effects,
+    const std::function<exprt(const exprt &)> &truthy,
+    const nlohmann::json &element);
+
+  void emit_unguarded_boolop_effects(const std::vector<code_blockt> &effects);
+
+  void guard_boolop_operands(
+    exprt &logical_expr,
     const std::vector<code_blockt> &effects,
     const std::function<exprt(const exprt &)> &truthy,
     const nlohmann::json &element);
