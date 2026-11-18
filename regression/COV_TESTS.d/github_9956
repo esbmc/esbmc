@@ -6,3 +6,7 @@ regression/python/github_9956_list
 regression/python/github_9956_reversed
 regression/python/github_9956_two_targets
 regression/python/github_9956_zip_arg
+regression/python/github_9956_inline_fail
+regression/python/github_9956_inline_float
+regression/python/github_9956_inline_mixed_unsupported
+regression/python/github_9956_inline_str

@@ -1100,6 +1100,10 @@ private:
     const nlohmann::json &function_node,
     const code_typet &type);
 
+  /// The registry id of the list symbol the function \p call names returns
+  /// last, or empty when it returns no list symbol.
+  std::string returned_list_id(const exprt &call);
+
   exprt materialize_list_function_call(
     const exprt &expr,
     const nlohmann::json &element,
@@ -3327,16 +3331,16 @@ private:
   // RHS processing helper methods
   // =========================================================================
 
-  /// The first argument of `ast_node`'s RHS when that RHS is a call to a
-  /// reordering builtin (sorted/reversed/list), else nullptr.
+  /// The first argument of \p call when it is a call to a reordering builtin
+  /// (sorted/reversed/list), else nullptr.
   static const nlohmann::json *
-  reordering_builtin_arg(const nlohmann::json &ast_node);
+  reordering_builtin_arg(const nlohmann::json &call);
 
   void record_annotated_list_elem_type(
     const nlohmann::json &ast_node,
     const std::string &lhs_id);
   void copy_elem_types_from_reordering_builtin(
-    const nlohmann::json &ast_node,
+    const nlohmann::json &call_node,
     const exprt &call,
     const std::string &lhs_id);
 
