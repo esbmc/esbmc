@@ -7,3 +7,4 @@ regression/esbmc/field_sensitive_ssa_loop_clauses
 regression/esbmc/field_sensitive_ssa_all_witnesses
 regression/esbmc/field_sensitive_ssa_print_pointer
 regression/esbmc/field_sensitive_ssa_print_pointer_fail
+regression/esbmc/field_sensitive_ssa_print_sliced_rhs_fail

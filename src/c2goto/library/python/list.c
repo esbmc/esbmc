@@ -209,6 +209,15 @@ static inline void *__ESBMC_copy_value(
     return cell;
   }
 
+  // Under --ir a byte-typed copy keeps only the low 64 bits of an int payload;
+  // an int64_t-typed cell keeps its unbounded value (#10543).
+  if (ptr_free == 1 && size == 8)
+  {
+    int64_t *cell = __ESBMC_alloca(sizeof(int64_t));
+    *cell = *(const int64_t *)value;
+    return cell;
+  }
+
   void *copied = __ESBMC_alloca(size);
 
   // Branch-free 8-byte-aligned fast paths for the common small sizes. These
