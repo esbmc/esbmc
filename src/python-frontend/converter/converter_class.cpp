@@ -1485,9 +1485,10 @@ typet python_converter::self_attribute_type(
 {
   const nlohmann::json &base = node["value"];
   const struct_typet *owner = &clazz;
+  typet held;
   if (base.value("_type", "") == "Attribute")
   {
-    typet held = ns.follow(self_attribute_type(base, clazz));
+    held = ns.follow(self_attribute_type(base, clazz));
     if (held.is_pointer())
       held = ns.follow(held.subtype());
     if (!held.is_struct())
