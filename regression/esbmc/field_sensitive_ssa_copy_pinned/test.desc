@@ -2,5 +2,5 @@ CORE
 main.c
 --field-sensitive-ssa
 ^Field-sensitive SSA splits 1 struct object\(s\)$
-^Generated 5 VCC\(s\), 1 remaining after simplification
+^Generated 5 VCC\(s\), 0 remaining after simplification
 ^VERIFICATION SUCCESSFUL$

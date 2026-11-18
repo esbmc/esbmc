@@ -57,7 +57,7 @@ public:
     value_sett &vs,
     const namespacet &_ns,
     bool no_propagation,
-    const split_structst &split);
+    split_structst &split);
 
   /**
    *  Copy constructor.
@@ -516,7 +516,7 @@ public:
    *  get_bool_option does a string-keyed map lookup. */
   bool no_propagation = false;
   /** The objects --field-sensitive-ssa splits. */
-  const split_structst *split_structs;
+  split_structst *split_structs;
   /** Reference to global l2 state. */
   renaming::level2t &level2;
   /** Reference to global pointer tracking state. */

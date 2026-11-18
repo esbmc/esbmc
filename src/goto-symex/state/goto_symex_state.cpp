@@ -20,7 +20,7 @@ goto_symex_statet::goto_symex_statet(
   value_sett &vs,
   const namespacet &_ns,
   bool no_propagation,
-  const split_structst &split)
+  split_structst &split)
   : no_propagation(no_propagation),
     split_structs(&split),
     level2(l2),
@@ -332,13 +332,12 @@ static expr2tc read_of_field(const expr2tc &l2_lhs, const expr2tc &field)
 }
 
 /// Whether @p e may stand in a carried aggregate literal. A whole read of a
-/// split object keeps a field's L2 name only where its value was refused;
-/// carrying the name would carry an object that, unsplit, is read as a symbol
-/// and not carried (#7521).
+/// split object keeps a field's L2 name where its value was refused; an opaque
+/// one would carry an object that, unsplit, is read as a symbol (#7521).
 static bool
 literal_element_may_propagate(const goto_symex_statet &state, const expr2tc &e)
 {
-  if (is_symbol2t(e) && state.split_structs->is_field(to_symbol2t(e).thename))
+  if (is_symbol2t(e) && state.split_structs->is_opaque(e))
     return false;
   return is_immutable_value(e) || state.constant_propagation(e);
 }
@@ -931,6 +930,11 @@ void goto_symex_statet::assignment(expr2tc &lhs, const expr2tc &rhs)
 
   expr2tc const_value = constant_propagation(rhs) ? rhs : expr2tc();
   level2.make_assignment(lhs, const_value, rhs);
+  if (
+    is_nil_expr(const_value) &&
+    split_structs->is_field(to_symbol2t(lhs).thename) &&
+    !is_immutable_value(rhs))
+    split_structs->mark_opaque(lhs);
 
   // #7597: propagation is a whole-object decision, so one member written a
   // value it will not carry drops the object and with it a sibling loop

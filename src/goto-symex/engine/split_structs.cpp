@@ -180,6 +180,7 @@ void split_structst::analyse(
   index.clear();
   untracked_fields.clear();
   field_ids.clear();
+  opaque.clear();
   if (!enabled(goto_functions, options))
     return;
 
