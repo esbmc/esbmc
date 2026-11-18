@@ -1,0 +1,7 @@
+CORE
+main.c
+--show-symex-value-sets
+^        ASSIGN x=&g;$
+\A(?![\s\S]*ASSIGN x=&g;\n\n\n(?:[^\n]+\n)*[^\n]*@t\?1!0\.[pq] = )
+\A(?![\s\S]*ASSIGN x=&g;\n\n\n(?:[^\n]+\n)*[^\n]*@F@f@s\?1!0\.[pq] = )
+^VERIFICATION SUCCESSFUL$
