@@ -1,0 +1,5 @@
+CORE
+main.py
+--unwind 5 --no-pointer-check --no-align-check
+^VERIFICATION FAILED$
+^\s*FAILED\s+\[f\.assertion\.\d+\]\s+line\s+7\s+assertion

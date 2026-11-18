@@ -934,6 +934,221 @@ typet python_dict_handler::uniform_list_dict_value_type(
            : value_type;
 }
 
+namespace
+{
+/// A subscript chain `name[s1][s2]...`: its root name and its slices,
+/// outermost first. The root is empty when the chain is not over a name.
+struct subscript_chain
+{
+  std::string root;
+  std::vector<const nlohmann::json *> slices;
+};
+
+subscript_chain chain_of(const nlohmann::json &node)
+{
+  subscript_chain chain;
+  const nlohmann::json *n = &node;
+  while (n->is_object() && n->value("_type", "") == "Subscript")
+  {
+    chain.slices.push_back(&(*n)["slice"]);
+    n = &(*n)["value"];
+  }
+  if (
+    !chain.slices.empty() && n->is_object() && n->value("_type", "") == "Name")
+    chain.root = n->value("id", "");
+  return chain;
+}
+
+/// Whether the literal's key @p key is the read's key @p slice; unknown when
+/// either is not a constant, or one is a bool and the other a number, which
+/// Python compares by value (`True == 1`).
+std::optional<bool>
+same_key(const nlohmann::json &key, const nlohmann::json &slice)
+{
+  if (
+    !key.is_object() || key.value("_type", "") != "Constant" ||
+    slice.value("_type", "") != "Constant")
+    return std::nullopt;
+  const nlohmann::json &a = key["value"];
+  const nlohmann::json &b = slice["value"];
+  if (a.is_boolean() != b.is_boolean() && (a.is_number() || b.is_number()))
+    return std::nullopt;
+  return a == b;
+}
+
+/// The kind ("list", "dict" or "scalar") of the value that @p slices reach in
+/// the dict literal @p dict; "" when a key is missing, so the read raises
+/// KeyError, and "?" when the kind is not known.
+std::string literal_kind_at(
+  const nlohmann::json &dict,
+  const std::vector<const nlohmann::json *> &slices)
+{
+  const nlohmann::json *value = &dict;
+  for (auto slice = slices.rbegin(); slice != slices.rend(); ++slice)
+  {
+    if (value->value("_type", "") != "Dict")
+      return "?";
+    const nlohmann::json &keys = (*value)["keys"];
+    const nlohmann::json *found = nullptr;
+    for (std::size_t i = 0; i < keys.size(); ++i)
+    {
+      const std::optional<bool> same = same_key(keys[i], **slice);
+      if (!same)
+        return "?";
+      if (*same)
+        found = &(*value)["values"][i];
+    }
+    if (!found)
+      return "";
+    value = found;
+  }
+  const std::string type = value->value("_type", "");
+  if (type == "List")
+    return "list";
+  if (type == "Dict")
+    return "dict";
+  return type == "Constant" ? "scalar" : "?";
+}
+
+/// The kind that every literal of @p literals holding @p slices gives the
+/// value there, "?" when they differ or none holds it.
+std::string chain_kind(
+  const std::vector<const nlohmann::json *> &literals,
+  const std::vector<const nlohmann::json *> &slices)
+{
+  std::string kind;
+  for (const nlohmann::json *literal : literals)
+  {
+    const std::string at = literal_kind_at(*literal, slices);
+    if (at == "?" || (!at.empty() && !kind.empty() && at != kind))
+      return "?";
+    if (!at.empty())
+      kind = at;
+  }
+  return kind.empty() ? "?" : kind;
+}
+
+/// The context (Load, Store or Del) of the Name or Subscript @p node.
+std::string ctx_of(const nlohmann::json &node)
+{
+  const auto ctx = node.find("ctx");
+  return ctx != node.end() && ctx->is_object() ? ctx->value("_type", "")
+                                               : std::string();
+}
+
+/// Whether @p node is tested for membership by its parent @p parent.
+bool is_membership_operand(
+  const nlohmann::json *parent,
+  const nlohmann::json &node)
+{
+  if (!parent || parent->value("_type", "") != "Compare")
+    return false;
+  for (const auto &op : (*parent)["ops"])
+    if (op.value("_type", "") != "In" && op.value("_type", "") != "NotIn")
+      return false;
+  for (const auto &operand : (*parent)["comparators"])
+    if (&operand == &node)
+      return true;
+  return false;
+}
+
+/// The dict literals bound to @p name in @p scope. Nullopt when @p name is
+/// bound there to anything else, or used where a dict it holds could be
+/// replaced or changed in place: deleted, stored through, passed or aliased,
+/// a dict read out of it and used other than by a further subscript or an
+/// `in` test, or a read out of it whose kind is not known.
+std::optional<std::vector<const nlohmann::json *>>
+unchanged_dict_literals(const nlohmann::json &scope, const std::string &name)
+{
+  std::vector<const nlohmann::json *> literals;
+  std::function<void(const nlohmann::json &)> collect =
+    [&](const nlohmann::json &node) {
+      if (
+        const nlohmann::json *value =
+          json_utils::plain_assigned_value(node, name))
+        literals.push_back(value);
+      for (const auto &child : node)
+        if (child.is_structured())
+          collect(child);
+    };
+  collect(scope);
+  if (literals.size() != json_utils::count_name_bindings(scope, name))
+    return std::nullopt;
+  for (const nlohmann::json *literal : literals)
+    if (literal->value("_type", "") != "Dict")
+      return std::nullopt;
+
+  bool unchanged = true;
+  std::function<void(const nlohmann::json &, const nlohmann::json *)> visit =
+    [&](const nlohmann::json &node, const nlohmann::json *parent) {
+      if (!unchanged)
+        return;
+      if (node.is_object() && node.value("_type", "") == "Subscript")
+      {
+        const subscript_chain chain = chain_of(node);
+        if (chain.root == name)
+        {
+          // Find the shortest part of the chain from the root that reads
+          // something other than a dict. A use of what that part reads, such
+          // as an index into a list, changes no dict.
+          const auto end = chain.slices.end();
+          std::size_t reads = 0;
+          std::string kind = "dict";
+          while (reads < chain.slices.size() && kind == "dict")
+          {
+            ++reads;
+            kind = chain_kind(literals, {end - reads, end});
+          }
+          if (kind == "dict")
+            unchanged =
+              ctx_of(node) == "Load" && is_membership_operand(parent, node);
+          else
+            unchanged = kind != "?" &&
+                        (reads < chain.slices.size() || ctx_of(node) == "Load");
+          for (const nlohmann::json *slice : chain.slices)
+            visit(*slice, nullptr);
+          return;
+        }
+      }
+      if (is_name(node, name))
+      {
+        // A store is one of the literal bindings counted above.
+        const std::string ctx = ctx_of(node);
+        unchanged = ctx == "Store" ||
+                    (ctx == "Load" && is_membership_operand(parent, node));
+        return;
+      }
+      for (const auto &child : node)
+        if (child.is_structured())
+          visit(child, node.is_object() ? &node : parent);
+    };
+  visit(scope, nullptr);
+  if (!unchanged)
+    return std::nullopt;
+  return literals;
+}
+} // namespace
+
+typet python_dict_handler::chain_literal_value_type(
+  const nlohmann::json &subscript)
+{
+  const subscript_chain chain = chain_of(subscript);
+  if (chain.root.empty())
+    return empty_typet();
+  // The literals point into the scope, which must outlive them.
+  const nlohmann::json scope = binding_scope(
+    converter_.get_ast_json(), chain.root, converter_.get_current_func_name());
+  const auto literals = unchanged_dict_literals(scope, chain.root);
+  if (!literals)
+    return empty_typet();
+  const std::string kind = chain_kind(*literals, chain.slices);
+  if (kind == "list")
+    return type_handler_.get_list_type();
+  if (kind == "dict")
+    return get_dict_struct_type();
+  return empty_typet();
+}
+
 typet python_dict_handler::get_dict_key_type_from_annotation(
   const nlohmann::json &annotation_node)
 {

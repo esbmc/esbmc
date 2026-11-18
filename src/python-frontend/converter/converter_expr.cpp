@@ -1778,6 +1778,11 @@ std::optional<exprt> python_converter::try_dispatch_dict_subscript(
         dict_handler_->uniform_list_dict_value_type(list->id.as_string());
     check_type = !expected_type.is_empty();
   }
+  // A dict read out of a dict, as in d[k1][k2], has no symbol either (#10791).
+  if (
+    (expected_type.is_nil() || expected_type.is_empty()) &&
+    base.value("_type", "") == "Subscript")
+    expected_type = dict_handler_->chain_literal_value_type(element);
 
   // A dict returned by a user function's call, as in f()[k], has no name to
   // type its value by either; the handler's str default would misread any

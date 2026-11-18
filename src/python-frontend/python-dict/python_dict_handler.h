@@ -458,6 +458,11 @@ public:
   /// differ, or the type is an aggregate.
   typet uniform_list_dict_value_type(const std::string &list_id) const;
 
+  /// The list or dict type of the value that the constant-key chain
+  /// @p subscript (`d[k1][k2]...`) reads out of the dict literals bound to its
+  /// root name; empty when that is not known statically.
+  typet chain_literal_value_type(const nlohmann::json &subscript);
+
   /**
    * @brief Check and handle dictionary subscript assignment
    *
