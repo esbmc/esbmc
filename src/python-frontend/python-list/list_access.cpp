@@ -5142,8 +5142,7 @@ exprt python_list::index_value(
 // (#10491).
 static size_t recorded_type_index(const nlohmann::json &list_node, size_t index)
 {
-  const bool repetition = !list_node.is_null() &&
-                          list_node.contains("value") &&
+  const bool repetition = !list_node.is_null() && list_node.contains("value") &&
                           list_node["value"].is_object() &&
                           list_node["value"].contains("_type") &&
                           list_node["value"]["_type"] == "BinOp" &&
