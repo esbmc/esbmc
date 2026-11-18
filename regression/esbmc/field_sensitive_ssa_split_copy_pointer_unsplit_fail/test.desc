@@ -1,5 +1,5 @@
 CORE
 main.c
 --field-sensitive-ssa --unwind 6
-^Generated 1 VCC\(s\), 1 remaining after simplification
+^Generated 3 VCC\(s\), 1 remaining after simplification
 ^VERIFICATION FAILED$
