@@ -3206,6 +3206,9 @@ private:
    * @param target_block The code block to add generated code to.
    * @return true if this was an unpacking assignment and was handled.
    */
+  void register_unpacked_linalg_results(
+    const nlohmann::json &value,
+    const nlohmann::json &target);
   bool handle_unpacking_assignment(
     const nlohmann::json &ast_node,
     const nlohmann::json &target,

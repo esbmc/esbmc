@@ -45,11 +45,19 @@ struct eigen_bounds
 };
 
 // The same bounds as expressions, which constrain nothing when `excused`.
+// A rotation or reflection of a plane, as numpy_call_expr::turn makes it.
+struct plane_turn
+{
+  exprt a, b, flip;
+};
+
 struct eigen_relation
 {
   exprt residual;
   exprt norm;
   exprt excused;
+  // A real matrix's real eigenvalues have real vectors.
+  bool real_vectors = true;
 };
 
 class numpy_call_expr : public function_call_expr
@@ -456,6 +464,8 @@ private:
   exprt eigenvalues(const std::vector<std::vector<double>> &m);
   exprt eigen_decomposition(const std::vector<std::vector<double>> &m);
   std::vector<exprt> in_any_order(const std::vector<exprt> &values);
+  std::vector<exprt>
+  symmetric_eigenvalues(const std::vector<std::vector<double>> &m);
   std::vector<exprt> permutation_slots(std::size_t n);
   std::vector<exprt> with_any_sign(const std::vector<exprt> &v);
   exprt selected_box(
@@ -490,7 +500,38 @@ private:
     const dense_spectrum::singular_system &system,
     const std::array<exprt, 3> &factors,
     const std::pair<double, double> &radii,
-    const std::vector<double> &sign_free);
+    const std::array<std::vector<bool>, 2> &boxed);
+  void relate_near(const exprt &sum, double target, double bound);
+  void relate_orthogonality(
+    const exprt &factor,
+    bool columns,
+    const dense_spectrum::matrix &vectors,
+    const std::vector<bool> &boxed,
+    double radius);
+  void relate_free_vectors(
+    const std::vector<std::vector<double>> &m,
+    const exprt &factor,
+    bool columns,
+    std::size_t count,
+    std::size_t rank);
+  std::vector<std::vector<exprt>> vectors_past_rank(
+    const dense_spectrum::matrix &vectors,
+    const dense_spectrum::matrix &rest,
+    std::size_t rank,
+    double radius);
+  plane_turn turn();
+  std::vector<std::vector<exprt>> plane_vectors(
+    const dense_spectrum::matrix &plane,
+    std::size_t count,
+    double tilt,
+    const plane_turn &turn);
+  void determined_vectors(
+    const dense_spectrum::singular_system &system,
+    const std::vector<bool> &pairs,
+    double radius,
+    std::vector<std::vector<exprt>> &us,
+    std::vector<std::vector<exprt>> &vs,
+    std::array<std::vector<bool>, 2> &boxed);
   exprt linalg_decomposition(
     const std::string &function,
     const std::vector<std::vector<double>> &m);
@@ -531,12 +572,20 @@ private:
   exprt complex_spectrum(
     const std::vector<std::vector<double>> &m,
     bool with_vectors);
+  exprt complex_input_spectrum(
+    const dense_spectrum::complex_matrix &m,
+    bool with_vectors);
+  exprt spectrum_result(
+    const dense_spectrum::complex_matrix &m,
+    const dense_spectrum::complex_eigen_system &system,
+    bool with_vectors,
+    bool real_input);
   std::vector<exprt> spectrum_order(
     const std::vector<std::vector<std::size_t>> &orders,
     const std::vector<bool> &is_second,
     std::vector<exprt> &second);
   std::vector<std::vector<exprt>> eigenvector_columns(
-    const std::vector<std::vector<double>> &m,
+    const dense_spectrum::complex_matrix &m,
     const dense_spectrum::complex_eigen_system &system,
     const std::vector<exprt> &slots,
     const std::vector<exprt> &second,

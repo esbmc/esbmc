@@ -5142,6 +5142,48 @@ typet python_converter::resolve_numpy_reducer_call_array_type(
   return probed_type;
 }
 
+// numpy.linalg.eig or numpy.linalg.svd, whose tuple holds arrays.
+static bool
+is_linalg_tuple_call(const nlohmann::json &value, const nlohmann::json &ast)
+{
+  if (
+    value.value("_type", "") != "Call" ||
+    value["func"].value("_type", "") != "Attribute")
+    return false;
+  const std::string function = value["func"].value("attr", "");
+  const nlohmann::json &module = value["func"]["value"];
+  return (function == "eig" || function == "svd") &&
+         module.value("_type", "") == "Attribute" &&
+         module.value("attr", "") == "linalg" &&
+         module["value"].value("_type", "") == "Name" &&
+         is_imported_numpy_module_alias(
+           ast, module["value"]["id"].get<std::string>());
+}
+
+// Each name an eig or svd result is unpacked into holds a fresh numpy array
+// of its own shape, so its attributes (.shape, .ndim, .size) read its type.
+void python_converter::register_unpacked_linalg_results(
+  const nlohmann::json &value,
+  const nlohmann::json &target)
+{
+  if (!is_linalg_tuple_call(value, *ast_json))
+    return;
+  for (const auto &element : target["elts"])
+  {
+    if (element.value("_type", "") != "Name")
+      continue;
+    const symbolt *symbol =
+      find_symbol(resolve_name_symbol_id(element["id"].get<std::string>()));
+    if (!symbol || !symbol->get_type().is_array())
+      continue;
+    const std::string id = symbol->id.as_string();
+    clear_numpy_array_storage_aliases_for(id);
+    clear_numpy_view_copy(symbol_expr(*symbol));
+    numpy_param_shapes_.erase(id);
+    numpy_array_symbols_.insert(id);
+  }
+}
+
 bool python_converter::handle_unpacking_assignment(
   const nlohmann::json &ast_node,
   const nlohmann::json &target,
@@ -5216,6 +5258,7 @@ bool python_converter::handle_unpacking_assignment(
   if (rhs.type().id() == "struct")
   {
     tuple_handler_->handle_tuple_unpacking(ast_node, target, rhs, target_block);
+    register_unpacked_linalg_results(ast_node["value"], target);
     return true;
   }
   else if (rhs.type().is_array())
