@@ -2515,7 +2515,8 @@ private:
   void track_unbound_global(
     const std::string &id,
     const nlohmann::json &binding,
-    const typet &type);
+    const typet &type,
+    std::size_t bindings = 1);
   void guard_unbound_global(
     const std::string &id,
     const std::string &name,
@@ -4593,9 +4594,15 @@ private:
     symbolt *lhs_symbol);
 
   /// A module global or function read by code converted before its binding,
-  /// mapped to the flag its binding sets and the type the reads took (#8369).
-  std::unordered_map<std::string, std::pair<std::string, typet>>
-    unbound_global_flags_;
+  /// mapped to the flag its bindings set, the type the reads took (#8369) and
+  /// the bindings not yet converted.
+  struct unbound_globalt
+  {
+    std::string flag;
+    typet type;
+    std::size_t bindings;
+  };
+  std::unordered_map<std::string, unbound_globalt> unbound_global_flags_;
   /// Classes deriving, directly or through another class, from a base in a
   /// module that has no model, mapped to that base as spelled. Such a class
   /// is converted without the base's members, so creating one is refused.
