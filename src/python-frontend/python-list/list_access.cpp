@@ -5137,6 +5137,21 @@ exprt python_list::index_value(
   return converter_.unwrap_optional_if_needed(optional);
 }
 
+// `xs * n` reads index 0, which misreads a mixed int/float repetition (open
+// defect). `xs + ys` records each operand's element, so it keeps the index
+// (#10491).
+static size_t recorded_type_index(const nlohmann::json &list_node, size_t index)
+{
+  const bool repetition = !list_node.is_null() &&
+                          list_node.contains("value") &&
+                          list_node["value"].is_object() &&
+                          list_node["value"].contains("_type") &&
+                          list_node["value"]["_type"] == "BinOp" &&
+                          list_node["value"].contains("op") &&
+                          list_node["value"]["op"]["_type"] == "Mult";
+  return repetition ? 0 : index;
+}
+
 exprt python_list::handle_index_access(
   const exprt &array,
   const nlohmann::json &slice_node)
@@ -5221,16 +5236,7 @@ exprt python_list::handle_index_access(
         elem_type = unrecorded_base_elem_type();
       else
       {
-        // `xs * n` reads index 0, which misreads a mixed int/float repetition
-        // (open defect). `xs + ys` records each operand's element, so it keeps
-        // the index (#10491).
-        const bool repetition = !list_node.is_null() &&
-                                list_node.contains("value") &&
-                                list_node["value"].is_object() &&
-                                list_node["value"].contains("_type") &&
-                                list_node["value"]["_type"] == "BinOp" &&
-                                list_node["value"]["op"]["_type"] == "Mult";
-        size_t type_index = repetition ? 0 : index;
+        size_t type_index = recorded_type_index(list_node, index);
 
         if (type_index < recorded->size())
           elem_type = (*recorded)[type_index].second;
