@@ -725,6 +725,17 @@ static std::vector<const with2t *> split_chain_updates(
   return updates;
 }
 
+/// @p updates, outermost first, applied over @p base.
+static expr2tc
+apply_updates(const std::vector<const with2t *> &updates, const expr2tc &base)
+{
+  expr2tc chain = base;
+  for (auto it = updates.rbegin(); it != updates.rend(); ++it)
+    chain =
+      with2tc(chain->type, chain, (*it)->update_field, (*it)->update_value);
+  return chain;
+}
+
 /// The value @p arm holds for member @p name, number @p i of @p arm's type, or
 /// nil when the shape does not say. Deliberately not member2tc(..)->simplify():
 /// expr2t::simplify walks the operands before applying the projection, so
@@ -1005,17 +1016,11 @@ void goto_symex_statet::assignment(expr2tc &lhs, const expr2tc &rhs)
     is_nil_expr(const_value) ? std::vector<const with2t *>()
                              : split_chain_updates(*this, const_value, lhs);
   level2.make_assignment(lhs, updates.empty() ? const_value : expr2tc(), rhs);
+  // The same updates over the name just defined, which they hold on.
   if (!updates.empty())
-  {
-    // The same updates over the name just defined, which they hold on.
-    expr2tc chain = lhs;
-    for (auto it = updates.rbegin(); it != updates.rend(); ++it)
-      chain =
-        with2tc(chain->type, chain, (*it)->update_field, (*it)->update_value);
     level2.set_constant(
       renaming::level2t::name_record(to_symbol2t(std::as_const(l1_lhs))),
-      chain);
-  }
+      apply_updates(updates, lhs));
   if (
     is_nil_expr(const_value) &&
     split_structs->is_field(to_symbol2t(lhs).thename) &&
