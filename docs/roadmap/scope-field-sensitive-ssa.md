@@ -1,17 +1,18 @@
 # Scope: field-sensitive SSA in goto-symex (#7521)
 
-> **Status at 2026-11-18: Phase 0 merged (#10773); Phase 1 merged (#10778),
+> **Status at 2026-11-19: Phase 0 merged (#10773); Phase 1 merged (#10778),
 > with the trace fixes #10799 (§8.7) and #10808 (§8.8) and the whole-read fix
 > #10839 (§8.13). On master `48d5f770e` with the flag forced on, the full
 > Python `CORE` suite (9279 tests, Bitwuzla), the C and C++ `CORE` suites
 > (Bitwuzla) and `tagged_attr_store` (Z3 and Bitwuzla) keep every verdict, and
-> the Phase 1 corpus rows meet the 2x bar under both solvers (§8.14). The
-> Phase 1 gate is still unmet on lost constant propagation: with the flag, a
-> struct copied out of a split struct with a pointer field no longer bounds
-> loops over its other fields. #10839 caused one form of this, a split copy
-> into a split destination (fixed, §8.15); the other,
-> `github_7797_flat_set`, predates #10839 and is open (§8.14). Phase 1 also
-> lacks an SV-COMP run.** The corpus is in `regression/field-sensitivity/`
+> the Phase 1 corpus rows meet the 2x bar under both solvers (§8.14). Master
+> also has a wrong verdict with the flag: a split struct's L2 name, carried
+> into a call argument, is re-split into unassigned field generations (§8.16).
+> The open Phase 1 PRs fix it and the lost constant propagation: #10862, a
+> split copy into a split destination (§8.15), and the PR stacked on it,
+> `github_7797_flat_set` and the re-split L2 name (§8.16). With both, no
+> Phase 1 gate measured so far is unmet; the full Python suite has not been
+> re-run on them, and Phase 1 lacks an SV-COMP run.** The corpus is in `regression/field-sensitivity/`
 > with baselines, and the census has been run and reverted. Phase 1 adds
 > `--field-sensitive-ssa` (default off): symex gives each field of an
 > eligible local, parameter or return slot its own SSA name. The Phase 1
@@ -1300,9 +1301,9 @@ object. Passing it as an argument to a split parameter runs
 `cur_state->rename`, `symex_function.cpp`), and `rewrite` turned the L2 name
 into the field symbols at generation 0, values never assigned. #7597's pinned
 literal already carries such names for non-pointer opaque fields, so this is
-reachable without the first change. On the head of #10862, this program
-gives `VERIFICATION FAILED` with the flag and `SUCCESSFUL` without it
-(`p::1#1 == s::1#0` in the SSA):
+reachable without the first change. On master `48d5f770e` and on the head
+of #10862, this program gives `VERIFICATION FAILED` with the flag and
+`SUCCESSFUL` without it (`p::1#1 == s::1#0` in the SSA):
 
 ```c
 struct S { int a; int b; };
@@ -1348,8 +1349,23 @@ Bitwuzla 0.9.0, 4-core container:
 - Flag forced on, this change against #10862's head, default solver, 30 s
   per run, 4 at a time: C `CORE` (3448) 0 verdict changes, and no output
   change beyond witness UUIDs, timing fields and `--parallel-solving` order.
-  C++ `CORE`: CPP_RESULT. Python, every 10th test: PY_RESULT.
+  C++ `CORE` (1363) 0 verdict changes; `github_7797_flat_set` now unwinds
+  as it does without the flag (2430 VCCs, 422 left, against 2586 and 511),
+  and `cpp_sum_class` differs in k-induction line order. Python, every 10th
+  test (940): 0 verdict changes. `github_9185_raise_local_fail` loses the
+  step §8.14 listed and now matches the run without the flag;
+  `github_10365_type_fail` drops the step `b = { ... }`, which the run
+  without the flag prints: `b`'s value is now carried, nothing reads `b#1`,
+  and the slicer removes it. The verdict, the violated property and every
+  other step are unchanged (Invariant 4).
 - ctest without the flag: `field_sensitive_ssa|field-sensitivity|github_7797`
   84/84; `esbmc/` 3576 of 3593, and the 17 failures fail the same way on
   #10862's binary (Boolector not built, clang-18 builtins, 32-bit headers).
-- TIMINGS
+- `tagged_attr_store`, wall time, flag on: Z3 25.8 s (25.4 s on #10862's
+  head, 27.9 s without the flag), Bitwuzla 7.4 s (7.2 s, 7.2 s).
+- Phase 1 corpus rows, flag on, symex seconds, medians of three:
+  `repro7521` 0.758 / 1.152 (1.52x) under Z3 and 0.773 / 1.229 (1.59x)
+  under Bitwuzla; `local_writes` 0.016 / 0.019 (1.19x) and 0.017 / 0.019
+  (1.12x).
+- Not measured: the full Python suite with this change, k-induction suites,
+  and SV-COMP.
