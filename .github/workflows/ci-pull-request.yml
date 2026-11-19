@@ -66,6 +66,26 @@ jobs:
       upload: false
       test-shard: python
 
+  build-ubuntu-numpy:
+    uses: ./.github/workflows/aux-build-unix.yml
+    name: static llvm-22 DebugOpt (numpy)
+    with:
+      operating-system: ubuntu-24.04
+      build-flags: '-b DebugOpt -e ON'
+      testing: true
+      upload: false
+      test-shard: numpy
+
+  build-ubuntu-pyother:
+    uses: ./.github/workflows/aux-build-unix.yml
+    name: static llvm-22 DebugOpt (pyother)
+    with:
+      operating-system: ubuntu-24.04
+      build-flags: '-b DebugOpt -e ON'
+      testing: true
+      upload: false
+      test-shard: pyother
+
   # Check project with clang-format. This job no longer auto-commits fixes:
   # it only *checks* that the lines changed in the PR are formatted, and on
   # failure posts a comment explaining how to fix the already-committed lines

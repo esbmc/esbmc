@@ -29,7 +29,7 @@ on:
         default: false
         type: boolean
       test-shard:
-        description: "Linux PR test selection: python, rest, or empty for both"
+        description: "Linux PR test selection: python, numpy, pyother, rest, or empty for all"
         required: false
         default: ''
         type: string
@@ -108,7 +108,7 @@ jobs:
         path: esbmc-${{ env.PLATFORM }}.zip
     
     - name: Check Python regression tests
-      if: ${{ inputs.testing == true && inputs.test-shard != 'rest' }}
+      if: ${{ inputs.testing == true && (inputs.test-shard == '' || inputs.test-shard == 'python') }}
       run: |
         # Set PATH to include Python 3.12 and user-installed tools (mypy, meson, etc.)
         export PATH="$(brew --prefix python@3.12)/bin:$HOME/Library/Python/3.12/bin:$PATH"
@@ -123,7 +123,7 @@ jobs:
         cd build/
         if [[ "${{ runner.os }}" == "Linux" ]]; then
           # Runner loss leaves no log (#10866); sample resources to show the cause.
-          ( while sleep 60; do echo "[sample] $(date -u +%T) $(df -h / | awk 'NR==2{print $4" free"}') $(free -m | awk 'NR==2{print $7" MB avail"}') load $(cut -d' ' -f1 /proc/loadavg)"; done ) &
+          ( while sleep 5; do echo "[sample] $(date -u +%T) $(df -h / | awk 'NR==2{print $4" free"}') $(free -m | awk 'NR==2{print $7" MB avail"}') load $(cut -d' ' -f1 /proc/loadavg) top $(ps -eo rss=,args= --sort=-rss | head -1 | cut -c1-120)"; done ) &
         fi
         # Cap the per-test TIMEOUT property at 120s. ctest --timeout is ignored
         # when tests set TIMEOUT via set_tests_properties (regression/CMakeLists.txt),
@@ -152,17 +152,19 @@ jobs:
         if [[ "${{ inputs.operating-system }}" =~ ^macos ]]; then
           ctest -j4 --output-on-failure --progress -L '^python/$|^platform-sensitive$'
         elif [[ "${{ github.event_name }}" == "pull_request" ]]; then
-          # The Python-frontend suites are ~70% of the CPU time and light on
-          # memory, so they run at -j3 on their own shard.
+          # Python-frontend suites run at -j3 in their own shards (#10866).
           py='^(python|numpy|quixbugs|humaneval|typeevalpy)/$'
-          rc=0
-          if [[ "${{ inputs.test-shard }}" != "rest" ]]; then
-            ctest -j3 --output-on-failure --progress -L "$py" -LE python-intensive . || rc=$?
-          fi
-          if [[ "${{ inputs.test-shard }}" != "python" ]]; then
-            ctest -j2 --output-on-failure --progress -LE "$py|python-intensive" . || rc=$?
-          fi
-          exit $rc
+          case "${{ inputs.test-shard }}" in
+            python)  ctest -j3 --output-on-failure --progress -L '^python/$' -LE python-intensive . ;;
+            numpy)   ctest -j3 --output-on-failure --progress -L '^numpy/$' -LE python-intensive . ;;
+            pyother) ctest -j3 --output-on-failure --progress -L '^(quixbugs|humaneval|typeevalpy)/$' -LE python-intensive . ;;
+            rest)    ctest -j2 --output-on-failure --progress -LE "$py|python-intensive" . ;;
+            *)
+              rc=0
+              ctest -j3 --output-on-failure --progress -L "$py" -LE python-intensive . || rc=$?
+              ctest -j2 --output-on-failure --progress -LE "$py|python-intensive" . || rc=$?
+              exit $rc ;;
+          esac
         else
           ctest -j2 --output-on-failure --progress .
         fi
