@@ -1799,6 +1799,13 @@ protected:
    */
   bool is_assume_false(const expr2tc &assumption);
 
+  /** Restrict an assumption or claim to the interleaving that emitted it.
+   *  --schedule puts every interleaving in one formula, so a step that is not
+   *  guarded this way constrains the claims of all of them (#10296). */
+  virtual void guard_by_interleaving(expr2tc &) const
+  {
+  }
+
   // Members
 
   /** Options we're working with */
