@@ -13,15 +13,17 @@ ts_enginet::ts_enginet(
   const transition_systemt &ts,
   const namespacet &ns,
   optionst &options,
-  bool incremental)
+  bool incremental,
+  bool cores)
   : ts(ts), ns(ns)
 {
   options.set_option("smt-assumptions", incremental);
-  // An incremental Bitwuzla re-runs its preprocessing on every new step with
-  // its caches cleared, which costs more than it saves.
+  options.set_option("smt-unsat-assumptions", incremental && cores);
+  // Without cores, an incremental Bitwuzla re-runs its preprocessing on every
+  // new step with its caches cleared, which costs more than it saves.
   std::vector<std::string> &bitwuzla = options.option_values["bitwuzla-opt"];
   const bool no_preprocess =
-    incremental &&
+    incremental && !cores &&
     std::none_of(bitwuzla.begin(), bitwuzla.end(), [](const std::string &o) {
       return o.rfind("preprocess=", 0) == 0;
     });
@@ -32,14 +34,23 @@ ts_enginet::ts_enginet(
     bitwuzla.pop_back();
   if (incremental && !solver->supports_assumptions())
   {
-    log_error(
-      "The transition-system BMC engine needs a solver with assumptions");
+    log_error("The transition-system engines need a solver with assumptions");
     abort();
   }
 
   for (const expr2tc &d : ts.prefix_defs)
     solver->define(d);
 
+  if (cores)
+  {
+    act_init = symbol2tc(get_bool_type(), "ts$act$init");
+    act_inv = symbol2tc(get_bool_type(), "ts$act$inv");
+    std::vector<expr2tc> init;
+    for (const auto &s : ts.states)
+      init.push_back(equality2tc(ts.at_step(s.pre, 0), s.init));
+    solver->assert_expr(implies2tc(act_init, conjunction(init)));
+    return;
+  }
   // The first state is the initial state outright, which lets the solver
   // fold constant initial values.
   for (const auto &s : ts.states)
@@ -122,20 +133,31 @@ void ts_enginet::add_step(unsigned step)
   ts_step_renamert at(ts, step);
   for (const expr2tc &d : ts.body_defs)
     solver->define(at(d));
+  if (!is_nil_expr(act_inv))
+    for (const expr2tc &inv : ts.invariants)
+      solver->assert_expr(implies2tc(act_inv, at(inv)));
   std::vector<expr2tc> violated;
   for (const auto &p : ts.bad)
     violated.push_back(at(p.violated));
   solver->assert_expr(implies2tc(bad_literal(step), disjunction(violated)));
 }
 
+expr2tc ts_enginet::step_constraint(unsigned step) const
+{
+  ts_step_renamert at(ts, step);
+  std::vector<expr2tc> c;
+  for (const expr2tc &a : ts.body_assumes)
+    c.push_back(at(a));
+  c.push_back(at(ts.back_guard));
+  for (const auto &p : ts.bad)
+    c.push_back(not2tc(at(p.violated)));
+  return conjunction(c);
+}
+
 void ts_enginet::close_step(unsigned step)
 {
   ts_step_renamert at(ts, step), next(ts, step + 1);
-  for (const expr2tc &a : ts.body_assumes)
-    solver->assert_expr(at(a));
-  solver->assert_expr(at(ts.back_guard));
-  for (const auto &p : ts.bad)
-    solver->assert_expr(not2tc(at(p.violated)));
+  solver->assert_expr(step_constraint(step));
   for (size_t i = 0; i < ts.states.size(); i++)
     solver->define(equality2tc(next(ts.states[i].pre), at(ts.states[i].post)));
 }
