@@ -328,7 +328,8 @@ static bool early_answer_allowed(
     "memstats",
     "cov-report-json",
     "schedule",
-    "ts-bmc"};
+    "ts-bmc",
+    "ts-pdr"};
   return !python_checked_exceptions(options).empty() &&
          !checks_past_violation && !options.get_bool_option("termination") &&
          std::none_of(std::begin(bypassed), std::end(bypassed), [&](auto name) {
@@ -683,7 +684,7 @@ bool esbmc_parseoptionst::process_goto_program(
       // NOT settle it — otherwise the verdict loop short-circuits on the
       // ranking flag and the havoc'd markers would just be dead work.
       if (!ranking_proved)
-        goto_termination(goto_functions, options, ns);
+        goto_termination(goto_functions, context, options, ns);
     }
 
     if (

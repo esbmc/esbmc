@@ -1,0 +1,4 @@
+CORE
+main.c
+--z3 --ts-pdr --ts-bmc
+^ERROR: --ts-pdr cannot be combined with --ts-bmc$

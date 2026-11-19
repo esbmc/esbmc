@@ -3,16 +3,23 @@
 
 #include <goto-programs/goto_functions.h>
 #include <util/symtab/context.h>
+#include <unordered_map>
+
+using loop_entry_flagst =
+  std::unordered_map<const goto_programt::instructiont *, expr2tc>;
 
 /// Per-loop k-induction transformation: havoc each loop's modified
 /// variables and inject an ASSUME of the loop entry condition right
 /// before the loop head. With @p context, a state that fails the loop's head
 /// test skips the loop, so it is neither havoced nor constrained (#10154); the
 /// flag that records this is a new symbol there. Without it every loop is
-/// assumed to be entered, which --termination needs: non-termination is a
-/// claim about the states that enter the loop. Applied to every function with a
-/// body (including __ESBMC_main, which is loop-free and therefore untouched,
-/// and library helpers).
+/// assumed to be entered. With @p entered, which --termination passes, only the
+/// loops of library helpers get a flag, recorded there by loop head:
+/// non-termination is a claim about the states that enter a user loop, but a
+/// helper called with arguments that skip its loop must not cut off every
+/// later state (#10856). Applied to every function with a body (including
+/// __ESBMC_main, which is loop-free and therefore untouched, and library
+/// helpers).
 ///
 /// A loop that writes through a pointer also havocs that storage: `*p` while
 /// the loop leaves `p` alone, otherwise the named objects the whole-program
@@ -27,6 +34,7 @@
 bool goto_k_induction(
   goto_functionst &goto_functions,
   contextt *context,
-  bool continue_past_failed_assertions);
+  bool continue_past_failed_assertions,
+  loop_entry_flagst *entered = nullptr);
 
 #endif /* GOTO_PROGRAMS_GOTO_K_INDUCTION_H_ */

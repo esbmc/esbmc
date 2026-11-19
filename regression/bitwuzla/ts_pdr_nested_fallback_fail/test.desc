@@ -1,0 +1,5 @@
+CORE
+main.c
+--bitwuzla --no-pointer-check --no-bounds-check --ts-pdr --max-k-step 10
+^Not a transition system$
+^VERIFICATION FAILED$
