@@ -59,6 +59,10 @@ bitwuzla_convt::bitwuzla_convt(const namespacet &ns, const optionst &options)
   }
 
   bitw_options.set(bitwuzla::Option::PRODUCE_MODELS, 1);
+  // Unsat assumptions imply unsat cores, which turn off several
+  // preprocessing passes; request them only where cores are read.
+  if (options.get_bool_option("smt-unsat-assumptions"))
+    bitw_options.set(bitwuzla::Option::PRODUCE_UNSAT_ASSUMPTIONS, 1);
   auto user = options.option_values.find("bitwuzla-opt");
   if (user != options.option_values.end())
     for (const std::string &kv : user->second)
@@ -130,6 +134,11 @@ smt_resultt bitwuzla_convt::dec_solve_assuming(const ast_vec &assumptions)
   if (result == bitwuzla::Result::UNSAT)
     return P_UNSATISFIABLE;
   return P_ERROR;
+}
+
+bool bitwuzla_convt::is_unsat_assumption(smt_astt a)
+{
+  return bitw->is_unsat_assumption(to_solver_smt_ast<bitw_smt_ast>(a)->a);
 }
 
 const std::string bitwuzla_convt::solver_text()

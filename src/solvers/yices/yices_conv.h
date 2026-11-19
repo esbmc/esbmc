@@ -2,6 +2,7 @@
 #define _ESBMC_SOLVERS_YICES_YICES_CONV_H_
 
 #include <solvers/smt/smt_solver.h>
+#include <unordered_set>
 #include <yices.h>
 
 class yices_smt_ast : public solver_smt_ast<term_t>
@@ -48,6 +49,7 @@ public:
 
   smt_resultt dec_solve() override;
   smt_resultt dec_solve_assuming(const ast_vec &assumptions) override;
+  bool is_unsat_assumption(smt_astt a) override;
   bool supports_assumptions() const override
   {
     return true;
@@ -163,6 +165,7 @@ public:
   void print_model() override;
 
   context_t *yices_ctx;
+  std::unordered_set<term_t> unsat_core_terms;
 };
 
 #endif /* _ESBMC_SOLVERS_YICES_YICES_CONV_H_ */

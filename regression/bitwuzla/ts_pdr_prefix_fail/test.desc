@@ -1,0 +1,5 @@
+CORE
+main.c
+--bitwuzla --no-pointer-check --no-bounds-check --ts-pdr --max-k-step 20
+^PDR found a violation at step 0; replaying with BMC$
+^VERIFICATION FAILED$

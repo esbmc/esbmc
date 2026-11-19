@@ -93,6 +93,11 @@ smt_resultt boolector_convt::dec_solve_assuming(const ast_vec &assumptions)
   return P_ERROR;
 }
 
+bool boolector_convt::is_unsat_assumption(smt_astt a)
+{
+  return boolector_failed(btor, to_solver_smt_ast<btor_smt_ast>(a)->a);
+}
+
 const std::string boolector_convt::solver_text()
 {
   std::string ss = "Boolector ";

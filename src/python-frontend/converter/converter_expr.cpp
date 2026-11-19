@@ -693,26 +693,28 @@ static std::string module_binding_name(const nlohmann::json &stmt)
   return "";
 }
 
-/// The statement binding \p name in \p body or in a block nested in it at
-/// module scope (an if, loop or try), or nullptr.
-static const nlohmann::json *
-find_module_binding(const nlohmann::json &body, const std::string &name)
+/// The statements binding \p name in \p body or in a block nested in it at
+/// module scope (an if, loop or try), in source order.
+static void collect_module_bindings(
+  const nlohmann::json &body,
+  const std::string &name,
+  std::vector<const nlohmann::json *> &found)
 {
   for (const auto &stmt : body)
   {
     if (module_binding_name(stmt) == name)
-      return &stmt;
+    {
+      found.push_back(&stmt);
+      continue;
+    }
     const std::string kind = stmt.value("_type", "");
     if (
       kind == "FunctionDef" || kind == "AsyncFunctionDef" || kind == "ClassDef")
       continue;
     for (const char *field : {"body", "orelse", "finalbody", "handlers"})
       if (stmt.contains(field) && stmt[field].is_array())
-        if (
-          const nlohmann::json *found = find_module_binding(stmt[field], name))
-          return found;
+        collect_module_bindings(stmt[field], name, found);
   }
-  return nullptr;
 }
 
 /// Whether \p value is a constant that leaves a global of annotated type
@@ -763,28 +765,42 @@ static std::size_t count_type_keeping_aug_assigns(
   return n;
 }
 
-/// The module-scope statement binding \p name when that is the one binding
-/// of the name anywhere in the module, or nullptr. Any other binding (a second
-/// one, a local) leaves the name's value at a read depending on which binding
-/// ran. An augmented assignment that keeps the binding's type does not count:
-/// it reads the name first, so it raises unless the binding has already run.
+/// The first module-scope statement binding \p name when the module's
+/// bindings of the name are that one, or module-scope annotated assignments
+/// all giving it one annotation; else nullptr. Any other binding (a local, a
+/// def bound twice) leaves the name's type at a read depending on which
+/// binding ran. An augmented assignment that keeps the binding's type does not
+/// count: it reads the name first, so it raises unless a binding has run.
+/// \p count receives the number of bindings.
 static const nlohmann::json *sole_module_binding(
   const nlohmann::json &module,
   const std::string &name,
-  const operand_type_test &has_type)
+  const operand_type_test &has_type,
+  std::size_t *count = nullptr)
 {
-  const nlohmann::json *binding = find_module_binding(module["body"], name);
-  if (!binding)
+  std::vector<const nlohmann::json *> bindings;
+  collect_module_bindings(module["body"], name, bindings);
+  if (bindings.empty())
     return nullptr;
-  const std::string type = binding->contains("annotation")
-                             ? (*binding)["annotation"].value("id", "")
-                             : "";
+  const nlohmann::json &first = *bindings.front();
+  const std::string type =
+    first.contains("annotation") ? first["annotation"].value("id", "") : "";
   if (
     json_utils::count_name_bindings(module, name) -
       count_type_keeping_aug_assigns(module, name, type, has_type) !=
-    1)
+    bindings.size())
     return nullptr;
-  return binding;
+  if (
+    bindings.size() > 1 &&
+    !std::all_of(bindings.begin(), bindings.end(), [&](const auto *binding) {
+      return binding->value("_type", "") == "AnnAssign" &&
+             json_utils::ast_equal_ignoring_location(
+               (*binding)["annotation"], first["annotation"]);
+    }))
+    return nullptr;
+  if (count)
+    *count = bindings.size();
+  return &first;
 }
 
 /// Whether \p operand is a module global already bound with annotated type
@@ -825,12 +841,14 @@ symbolt *python_converter::find_global_symbol(const symbol_id &sid)
 {
   if (symbolt *symbol = find_enclosing_scope_symbol(sid))
     return symbol;
+  std::size_t bindings = 0;
   const nlohmann::json *binding = sole_module_binding(
     *ast_json,
     sid.get_object(),
     [this](const nlohmann::json &operand, const std::string &type) {
       return operand_has_type(operand, type);
-    });
+    },
+    &bindings);
   if (!binding)
     return nullptr;
   if (binding->value("_type", "") == "Assign")
@@ -844,7 +862,8 @@ symbolt *python_converter::find_global_symbol(const symbol_id &sid)
   global.set_object(sid.get_object());
   symbolt *symbol = symbol_table_.find_symbol(global.to_string());
   if (symbol)
-    track_unbound_global(global.to_string(), *binding, symbol->get_type());
+    track_unbound_global(
+      global.to_string(), *binding, symbol->get_type(), bindings);
   return symbol;
 }
 
@@ -925,15 +944,16 @@ typet python_converter::forward_function_return_type(
                            : "";
   if (id != "int" && id != "float" && id != "bool" && id != "str")
     return typet();
-  flag->second.second = id == "str" ? gen_pointer_type(char_type())
-                                    : named_return_type(id, returns, *def);
-  return flag->second.second;
+  flag->second.type = id == "str" ? gen_pointer_type(char_type())
+                                  : named_return_type(id, returns, *def);
+  return flag->second.type;
 }
 
 void python_converter::track_unbound_global(
   const std::string &id,
   const nlohmann::json &binding,
-  const typet &type)
+  const typet &type,
+  std::size_t bindings)
 {
   if (unbound_global_flags_.count(id))
     return;
@@ -948,7 +968,7 @@ void python_converter::track_unbound_global(
   flag.static_lifetime = true;
   flag.set_value(migrate_expr(false_exprt()));
   symbol_table_.add(flag);
-  unbound_global_flags_.emplace(id, std::make_pair(flag_id, type));
+  unbound_global_flags_.emplace(id, unbound_globalt{flag_id, type, bindings});
 }
 
 /// Raises NameError at a read of \p id while its binding has not run.
@@ -961,16 +981,16 @@ void python_converter::guard_unbound_global(
   if (flag == unbound_global_flags_.end())
     return;
   emit_guarded_raise(
-    not_exprt(symbol_expr(*symbol_table_.find_symbol(flag->second.first))),
+    not_exprt(symbol_expr(*symbol_table_.find_symbol(flag->second.flag))),
     "NameError",
     "name '" + name + "' is not defined",
     get_location_from_decl(element));
 }
 
-/// Sets the flag of the global \p stmt binds, once it has run. Later reads
-/// need no guard, so the global stops being tracked. Reads converted earlier
-/// took the global's type from its annotation, so refuse a binding that gave
-/// it another.
+/// Sets the flag of the global \p stmt binds, once it has run. Reads after its
+/// last binding need no guard, so the global then stops being tracked. Reads
+/// converted earlier took the global's type from its annotation, so refuse a
+/// binding that gave it another.
 void python_converter::mark_global_bound(
   const nlohmann::json &stmt,
   code_blockt &block)
@@ -985,9 +1005,9 @@ void python_converter::mark_global_bound(
     return;
   const typet &bound = symbol_table_.find_symbol(sid.to_string())->get_type();
   if (
-    is_def ? !flag->second.second.id().empty() &&
-               to_code_type(bound).return_type() != flag->second.second
-           : bound != flag->second.second)
+    is_def ? !flag->second.type.id().empty() &&
+               to_code_type(bound).return_type() != flag->second.type
+           : bound != flag->second.type)
     throw std::runtime_error(
       fmt::format(
         "Variable '{}' is read before its binding at line {} as a different "
@@ -995,8 +1015,9 @@ void python_converter::mark_global_bound(
         name,
         get_location_from_decl(stmt).get_line().as_string()));
   block.copy_to_operands(code_assignt(
-    symbol_expr(*symbol_table_.find_symbol(flag->second.first)), true_exprt()));
-  unbound_global_flags_.erase(flag);
+    symbol_expr(*symbol_table_.find_symbol(flag->second.flag)), true_exprt()));
+  if (--flag->second.bindings == 0)
+    unbound_global_flags_.erase(flag);
 }
 
 exprt python_converter::get_default_expr(const nlohmann::json &node)
@@ -1635,8 +1656,16 @@ std::optional<exprt> python_converter::resolve_subscript_base(
   // Materialise the call into a temporary first, mirroring the assigned
   // path (s = sorted(words); s[0]). See #4807.
   if (current_block)
+  {
+    const exprt call = array;
     array =
       materialize_list_function_call(array, element["value"], *current_block);
+    if (
+      array.is_symbol() && call.is_function_call() &&
+      element_type_registry_.size(array.identifier().as_string()) == 0)
+      copy_elem_types_from_reordering_builtin(
+        element["value"], call, array.identifier().as_string());
+  }
 
   // A typed list (#10451) is read and written through its own storage, as
   // is a typed dict.
@@ -4062,7 +4091,8 @@ python_converter::scope_numeric_bindings(
     before,
     include_later,
     bindings,
-    [this](const nlohmann::json &call) { return call_number_kind(call); });
+    [this](const nlohmann::json &call) { return call_number_kind(call); },
+    (*ast_json)["body"]);
   return bindings;
 }
 

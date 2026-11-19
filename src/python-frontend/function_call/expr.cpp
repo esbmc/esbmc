@@ -7408,6 +7408,13 @@ exprt function_call_expr::sort_mixed_numeric_literal()
   return python_list(converter_, arg).build_list_from_exprs(sorted_elems);
 }
 
+// A call argument is typed by the list its callee returns.
+std::string function_call_expr::list_arg_id(const exprt &list_arg) const
+{
+  return list_arg.is_symbol() ? list_arg.identifier().as_string()
+                              : converter_.returned_list_id(list_arg);
+}
+
 std::optional<exprt> function_call_expr::apply_builtin_dispatch(
   std::string &actual_func_name,
   bool is_user_imported,
@@ -7468,9 +7475,9 @@ std::optional<exprt> function_call_expr::apply_builtin_dispatch(
   {
     exprt list_arg = converter_.get_expr(call_["args"][0]);
     typet elem_type;
-    if (list_arg.is_symbol())
+    const std::string list_id = list_arg_id(list_arg);
+    if (!list_id.empty())
     {
-      const std::string &list_id = list_arg.identifier().as_string();
       // Check that all elements have the same type and get the common type
       // Returns double_type() for mixed int/float lists (Python semantics)
       elem_type =
