@@ -4091,7 +4091,8 @@ python_converter::scope_numeric_bindings(
     before,
     include_later,
     bindings,
-    [this](const nlohmann::json &call) { return call_number_kind(call); });
+    [this](const nlohmann::json &call) { return call_number_kind(call); },
+    (*ast_json)["body"]);
   return bindings;
 }
 

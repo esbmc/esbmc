@@ -1359,6 +1359,12 @@ private:
     const nlohmann::json &ast_node,
     codet &target_block);
 
+  /// `a and b` as `b if a else a`, and `a or b` as `a if a else b`, when the
+  /// operands have incompatible literal kinds and `a`, read twice, has no
+  /// side effect; null otherwise (#10143).
+  nlohmann::json
+  divergent_boolop_as_conditional(const nlohmann::json &boolop) const;
+
   std::string instantiated_class(const nlohmann::json &value) const;
 
   bool ternary_needs_if_spelling(const nlohmann::json &ifexp) const;
