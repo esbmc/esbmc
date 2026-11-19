@@ -50,6 +50,19 @@ foreach(manifest IN LISTS cov_manifests)
     list(APPEND ESBMC_COV_TESTS ${cov_manifest})
 endforeach()
 
+# MEMORY_COST: "<test name> <GB>" per memory-heavy test, from
+# scripts/regression_memory.py. Each becomes a RESOURCE_GROUPS "mem" cost, which
+# ctest honours only under --resource-spec-file (see aux-build-unix.yml).
+file(STRINGS "${CMAKE_CURRENT_SOURCE_DIR}/MEMORY_COST" mem_cost_lines
+     REGEX "^[^#]")
+set(ESBMC_MEM_COST_TESTS "")
+set(ESBMC_MEM_COST_GB "")
+foreach(line IN LISTS mem_cost_lines)
+    string(REGEX MATCH "^(.+) ([0-9]+)$" _ "${line}")
+    list(APPEND ESBMC_MEM_COST_TESTS "${CMAKE_MATCH_1}")
+    list(APPEND ESBMC_MEM_COST_GB "${CMAKE_MATCH_2}")
+endforeach()
+
 option(ENABLE_SANITIZER_CI
     "Restrict regression to CORE mode for sanitizer-instrumented CI runs" OFF)
 
@@ -203,6 +216,11 @@ function(add_esbmc_regression_test folder modes test)
       TIMEOUT ${ESBMC_REGRESS_CTEST_TIMEOUT}
       ENVIRONMENT "ESBMC_REGRESS_TIMEOUT=${ESBMC_REGRESS_TIMEOUT};ESBMC_REGRESS_MEMORY_LIMIT=${ESBMC_REGRESS_MEMORY_LIMIT}"
       LABELS "regression;${folder}/${extra_labels}")
+    list(FIND ESBMC_MEM_COST_TESTS "${test_name}" mem_idx)
+    if(mem_idx GREATER -1)
+        list(GET ESBMC_MEM_COST_GB ${mem_idx} mem_gb)
+        set_tests_properties(${test_name} PROPERTIES RESOURCE_GROUPS "mem:${mem_gb}")
+    endif()
 endfunction()
 
 function(add_esbmc_regression folder modes)

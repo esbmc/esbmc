@@ -133,17 +133,24 @@ jobs:
         # On PR Linux, skip python-intensive to keep fast feedback.
         # On other systems/events (push, dispatch), run everything.
         #
-        # The Linux legs run the full esbmc-cpp suite, which contains
-        # memory-heavy container/string cases (e.g. unordered_map/copy_move_fail
-        # peaks ~8GB, map/multimap _string_class-2_bug ~3GB each). Under -j4 on a
-        # 16GB runner these can align and exhaust RAM, ending the job with a
-        # "runner received a shutdown signal" (OOM). Run the Linux legs with -j2
-        # to bound peak concurrent memory. The macOS leg runs the light python/
-        # suite plus a handful of platform-sensitive tests, and keeps -j4.
+        # About 90 tests peak at 1-8GB RSS (regression/MEMORY_COST); two aligned
+        # 8GB ones exhaust a 16GB runner ("runner received a shutdown signal").
+        # Each carries a RESOURCE_GROUPS "mem" cost in GB, and the Linux legs
+        # give ctest a budget of available RAM minus 1GB per slot for the
+        # untagged tests (all under 1GB). The floor of 8 matches the per-test
+        # 8GB RLIMIT_AS, so the largest test can always be scheduled.
+        if [[ "${{ runner.os }}" == "Linux" ]]; then
+          jobs=4
+          mem=$(( $(awk '/MemAvailable/{print $2}' /proc/meminfo) / 1048576 - jobs ))
+          (( mem < 8 )) && mem=8
+          echo "ctest mem budget: ${mem}GB at -j${jobs}"
+          printf '{"version":{"major":1,"minor":0},"local":[{"mem":[{"id":"0","slots":%d}]}]}\n' "$mem" > mem-spec.json
+          linux_args=(-j"$jobs" --resource-spec-file mem-spec.json)
+        fi
         if [[ "${{ inputs.operating-system }}" =~ ^macos ]]; then
           ctest -j4 --output-on-failure --progress -L '^python/$|^platform-sensitive$'
         elif [[ "${{ github.event_name }}" == "pull_request" ]]; then
-          ctest -j2 --output-on-failure --progress -LE python-intensive .
+          ctest "${linux_args[@]}" --output-on-failure --progress -LE python-intensive .
         else
-          ctest -j2 --output-on-failure --progress .
+          ctest "${linux_args[@]}" --output-on-failure --progress .
         fi
