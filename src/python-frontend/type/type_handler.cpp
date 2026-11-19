@@ -131,6 +131,19 @@ exprt type_handler::ptr_free_arg(const exprt &payload, const typet &elem_type)
     int_type());
 }
 
+// A variable holding a struct (e.g. an Optional parameter) may share the
+// name; only a type symbol names a class.
+static bool
+names_class_type(const contextt &symbol_table, const std::string &name)
+{
+  bool found = false;
+  symbol_table.foreach_operand([&](const symbolt &s) {
+    if (s.is_type && s.get_type().id() == "struct" && s.name == name)
+      found = true;
+  });
+  return found;
+}
+
 bool type_handler::is_constructor_call(const nlohmann::json &json) const
 {
   if (
@@ -175,19 +188,7 @@ bool type_handler::is_constructor_call(const nlohmann::json &json) const
     return true;
 
   // Then check the symbol table for already-processed classes
-  bool is_ctor_call = false;
-
-  const contextt &symbol_table = converter_.symbol_table();
-
-  symbol_table.foreach_operand([&](const symbolt &s) {
-    if (s.get_type().id() == "struct" && s.name == func_name)
-    {
-      is_ctor_call = true;
-      return;
-    }
-  });
-
-  return is_ctor_call;
+  return names_class_type(converter_.symbol_table(), func_name);
 }
 
 /// This utility maps internal ESBMC types to their corresponding Python type

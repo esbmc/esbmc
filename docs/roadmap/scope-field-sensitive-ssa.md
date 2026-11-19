@@ -10,7 +10,25 @@
 > `tagged_attr_store` (25 s without the flag, no result in 1800 s with it,
 > master's Phase 1 code as well), so the Phase 1 Python gate is unmet
 > (§8.8). The loss is Z3-only (Bitwuzla: 8 s both ways) and holds at 7 of
-> 8 Z3 seeds. Phase 1 also lacks an SV-COMP run.** The corpus is in `regression/field-sensitivity/`
+> 8 Z3 seeds. §8.9 traces it to the struct literal a whole read of a split
+> struct carries into its readers; refusing that literal fixes it but each
+> way of doing so measured so far loses elsewhere, so the gate is still
+> unmet. On the branch that refuses and pins it, `_nested` passes inside the
+> suite budget, but a C++ test loses constant propagation that master and
+> the parent keep (§8.9). Refusing only field names assigned an opaque
+> value restores that test and keeps `tagged_attr_store` at 36 s, but still
+> loses a loop bound master folds (§8.10). Pinning only the refused elements
+> of a copied struct literal restores that bound (§8.11), but on a clang
+> build neither rule solves `tagged_attr_store` with the flag under Z3 (no
+> result in 300 s and 1800 s), so the 36 s is build-sensitive and the Python
+> gate stays unmet. Returning a split whole read through a fresh named
+> temporary does not solve it either (§8.12). Assigning a whole read with an
+> opaque field to the object's own symbol, so that #7597's pinning still
+> carries its constant fields, does: 27-29 s with the flag, and no verdict
+> change on the C, C++ and a Python sample with the flag forced on (§8.13).
+> Standalone Z3 finds the formulas with and without the change about equally
+> hard, so the result needs confirming on other builds and under Bitwuzla.
+> Phase 1 also lacks an SV-COMP run.** The corpus is in `regression/field-sensitivity/`
 > with baselines, and the census has been run and reverted. Phase 1 adds
 > `--field-sensitive-ssa` (default off): symex gives each field of an
 > eligible local, parameter or return slot its own SSA name. It meets the 2x
@@ -871,3 +889,305 @@ named symbol instead of an inlined literal), which §3 does not yet specify.
 
 Still not measured: an SV-COMP run, and the full Python suite under
 Bitwuzla.
+
+### 8.9 Phase 1 Python gate: the carried whole-read literal
+
+A whole read of a split struct renames to `constant_struct2t` of its field
+symbols. A field whose value constant propagation refuses keeps its L2 name,
+and `aggregate_literal_may_propagate` accepts an L2 name as immutable
+(#7597), so the literal is carried into every reader. Without the flag the
+object is one symbol whose `with` chain is refused, and readers read the
+symbol. In `tagged_attr_store` the carried literal is `result`'s, returned by
+`__python_scalar_add_obj_dyn`.
+
+Two rules were tried in `literal_element_may_propagate`
+(`goto_symex_state.cpp`), both treating a split field's L2 name as refused
+inside a literal. They differ in whether #7597's pinning (`pin_refused_elements`)
+then replaces that element by a read of the assigned name.
+
+Measured on 2026-11-18, branch `feat/field-sensitive-ssa-phase1-whole-read`
+on #10808's head `5c823fff`, RelWithDebInfo, LLVM 18, Z3 4.13.3, `--z3`, run
+alone, wall time:
+
+| Build | `tagged_attr_store` | `tagged_attr_store_nested` | `field_sensitive_ssa_copy_pinned` |
+|---|---|---|---|
+| without the flag | 25 s, 25 s, 27 s | 188 s, 182 s, 190 s | 0 VCCs left |
+| flag, parent | no result in 200 s (300 s earlier) | 29 s | 0 VCCs left |
+| flag, refuse and pin | 35 s, 33 s, 36 s | no result in 400 s (3 runs) | 1 VCC left |
+| flag, refuse without pinning | 23 s | 30 s | never stops unwinding |
+
+The pinned rule fixes `tagged_attr_store` but turns `_nested` from 29 s into
+a timeout. Without pinning both pass, but a constant field of a copy no
+longer bounds a loop: `field_sensitive_ssa_copy_pinned` (`t = s` into an
+address-taken `t`, then `while (i < t.n)`) unwinds without end, where master
+and the parent stop at 3. Neither rule is acceptable. The branch keeps the
+pinned rule, which loses no termination; the test pins it (the parent leaves
+0 VCCs, the no-pin rule never terminates).
+
+Not measured on this branch: the C, C++ and Python suites, the corpus rows,
+and anything under Bitwuzla (the Bitwuzla sources cannot be downloaded in
+this container). A next step is to find what in `_nested` the pinned literal
+slows down, starting from the two `--smt-formula-only` outputs.
+
+Re-measured on 2026-11-18 on the same branch at `caa88902`, RelWithDebInfo,
+LLVM 18, Z3 4.13.3, 4-core container:
+
+- `_nested` with the flag, run alone with ESBMC's default seed: 347 s, within
+  the 1200 s suite budget, so no verdict is lost (without the flag: 161 s,
+  with one other job running). The earlier "no result in 400 s" was a 400 s
+  cap, not the suite budget.
+- On the two `--smt-formula-only` outputs, standalone Z3 4.13.3 with
+  `smt.random_seed`/`sat.random_seed` 1-6, 600 s cap, 4 jobs at a time:
+  without the flag 4 of 6 seeds solve (76-213 s); with the flag 5 of 6
+  (51-347 s). The formulas differ only in the names of `result`'s fields and
+  two unpack temporaries. The pinned formula is not harder than master's, and
+  the 29 s of the parent is a fast case of a high-variance instance.
+- C (`regression/esbmc`, `CORE`, 3427 tests) and C++ (`esbmc-cpp/cpp`,
+  `CORE`, 1361 tests), flag forced on, this branch against its parent
+  `5c823fff`, 30 s per run: 0 verdict changes. The C output differences (9)
+  are parallel-solving line order, Clang AST addresses and witness timestamps
+  that match on a re-run. In C++, 8 of 10 differences are assignment counts
+  and one (`cpp_sum_class`) is line order.
+- **Lost propagation:** `filesystem_path_decompose` (`--std c++17 --unwind
+  12`). Without the flag and with the flag on the parent, symex proves it
+  alone: 0 VCCs left after simplification, 320 unwind steps. With this
+  branch, 360 VCCs remain and the `find_last_of`, `substr` and `basic_string`
+  loops of the string model unwind to the bound, 609 unwind steps. The
+  verdict holds at this bound, but a test without one, or with a lower one,
+  would lose it. The rule refuses more than the unsplit object refuses: a
+  next step is to find which split field's L2 name in a literal master
+  carries, and refuse only names whose unsplit read master also refuses.
+
+Not measured in this run: the Python suite, the corpus 2x bar, and anything
+under Bitwuzla.
+
+
+### 8.10 Phase 1 Python gate: refusing only opaque field names
+
+The §8.9 rule refuses every split field's L2 name inside a literal. A field
+whose value was refused but is an immutable read (an L2 symbol, a member of
+one) is what master carries as a pinned read of the unsplit object, so
+refusing it refuses more than master. The diagnostic on
+`filesystem_path_decompose` showed only such fields refused: `_size` (field 1)
+of the `basic_string` temporaries in `substr` and the copy constructor.
+
+The rule tried here marks a split field's L2 name opaque when it is assigned a
+value that is neither carried nor an immutable read, and refuses only opaque
+names (`split_structst::mark_opaque`, `literal_element_may_propagate`).
+
+Measured on 2026-11-18, PR #10839's head `cb01b995` plus this rule,
+RelWithDebInfo, LLVM 18, Z3 4.13.3, `--z3` where stated, 4-core container,
+wall time. The §8.9 rule and the parent's (master's) rule were measured on
+the same binary through a temporary switch, since removed:
+
+| Test, flag on | parent (master) | §8.9 rule (#10839 head) | opaque rule |
+|---|---|---|---|
+| `tagged_attr_store`, Z3 | no result in 200 s (§8.9) | 35 s, 33 s, 36 s (§8.9) | 35 s, 36 s, 36 s |
+| `tagged_attr_store_nested`, Z3 | 29 s (§8.9) | 347 s (§8.9) | 375 s (without the flag 168 s) |
+| `filesystem_path_decompose` | 0 VCCs left | 360 VCCs left | 0 VCCs left |
+| `field_sensitive_ssa_nested_copy`, `--unwind 6` | 0 VCCs left | 3 VCCs left, loop unwound to the bound | 0 VCCs left |
+| `field_sensitive_ssa_opaque_field`, `--unwind 6` | 0 VCCs left | 3 VCCs left | 3 VCCs left |
+
+Without `--unwind`, the two "3 VCCs left" rows never stop unwinding: the loop
+bound `o.in.a[3]` is a constant element of a struct copied into a member of
+an unsplit, address-taken struct, and refusing one element of the copied
+literal pins the whole member update, so the constant sibling is lost. Master
+without the flag folds both programs in 1 assignment. The §8.9 rule as
+pushed in #10839 therefore loses termination on `nested_copy`, a 34-line C
+program. The opaque rule fixes that and `filesystem_path_decompose`, but
+still loses it on `opaque_field`, where the field is written `x + 1`.
+
+C (`regression/esbmc`, `CORE`, 3435 tests) and C++ (`esbmc-cpp/cpp`, `CORE`,
+1361 tests), flag forced on, opaque rule against the parent, default solver,
+30 s per run, 4 at a time: 0 verdict changes. C: 0 differences in the VCCs
+left after simplification. C++: `assoc_emplace` and `cpp_sum_class` differ
+only in the assignment count.
+
+The new tests: `nested_copy` fails under the §8.9 rule (3 VCCs left).
+`opaque_field` fails when `pin_chain_updates` pins a zero instead of the read
+of the assigned name. `opaque_field_fail` checks that the copied opaque value
+is the written one. `copy_pinned` now expects 0 VCCs left, as the parent
+does. The new branches (`mark_opaque` and the refusal of an opaque name) were
+reached on `tagged_attr_store` (field 3, `size`, of `result` in
+`__python_scalar_add_obj_dyn`) and on `opaque_field`, where the opaque rule
+and the parent differ.
+
+The Phase 1 Python gate is still unmet: no rule tried so far fixes
+`tagged_attr_store` without losing a propagation master keeps. Master pins
+the opaque `size` update to `member(result#n, size)` and still carries the
+object; the split L2 name is the same value. So the next step is to find why
+master's carried `result` is cheap for Z3 and the split one is not, by
+diffing the two `--smt-formula-only` outputs around `result`, instead of
+refusing literals. Not measured in this run: the Python suite, the corpus 2x
+bar, Bitwuzla, and SV-COMP.
+
+### 8.11 Pinning a copied literal element by element
+
+In §8.10's `opaque_field`, `o.in = tmp` copies a split struct into a member
+of an unsplit one. `pin_chain_updates` refuses the copied literal because
+one element, `tmp.n`'s L2 name, is opaque, and pins the whole update to
+`member(o#2, in)`, so the constant `a[3]` that bounds the loop is lost. The
+change here pins only the refused elements of a struct literal, to reads of
+`member(o#2, in)` (`pin_struct_literal` applied to that read), and keeps the
+rest.
+
+Measured on 2026-11-18, PR #10839's head `cfce509d` with and without the
+change, RelWithDebInfo built with clang 18 (GCC 13 hit internal compiler
+errors in this container), LLVM 18, Z3 4.13.3, 4-core container, flag
+forced on in both binaries, default solver, 30 s per run, 4 at a time:
+
+| Test or suite | `cfce509d` | with the change |
+|---|---|---|
+| `opaque_field`, `--unwind 6` | 3 VCCs, 3 left | 2 VCCs, 1 left |
+| `opaque_field`, no `--unwind` | never stops unwinding (§8.10) | stops; 2 VCCs, 1 left |
+| `opaque_field`, no flag | 0 left (master) | 0 left (master) |
+| C `CORE` (3438) | | 0 verdict changes, 0 differences in VCCs left |
+| C++ `CORE` (1361) | | 0 verdict changes; `cpp_sum_class` differs only in its incremental step count |
+| Python `CORE`, 920 of a shuffled list | | 0 verdict changes; `class_copy_none_attr_nondet_fail` leaves 4 VCCs instead of 5 |
+| `tagged_attr_store`, `--z3` | no result in 300 s (90 s run: symex 1.4 s, 11828 VCCs, then Z3) | no result in 1800 s |
+| `tagged_attr_store`, no flag, `--z3` | 26 s | |
+
+The VCC left on `opaque_field` is `o.in.n == tmp.n`: master folds it because
+both sides are `member(tmp#5, n)`; here one side is `tmp`'s field name and
+the other a read of `o`. Its verdict is unchanged.
+
+`opaque_field`'s `test.desc` now expects 2 VCCs, which fails on
+`cfce509d` (3 VCCs). The new branch was reached on `opaque_field` with
+temporary logging under Z3; this container has no Bitwuzla build.
+
+`tagged_attr_store` does not reproduce §8.10's 36 s here: the `cfce509d`
+binary, built with clang instead of the GCC used before, gives no result in
+300 s with the flag. Symex output is the same size as without the flag
+(11828 VCCs left, 16530 against 16532 assignments), so the opaque rule's
+result there depends on the build, in line with the seed sensitivity in
+§8.9. The Python gate is therefore unmet whichever rule is used; the
+`--smt-formula-only` diff §8.10 proposes is still the next step.
+
+### 8.12 The SSA difference behind `tagged_attr_store`
+
+Measured on 2026-11-18 at PR #10839's head `9a5160a9`, RelWithDebInfo built
+with clang 18, LLVM 18, Z3 4.13.3, `--z3`, 4-core container, run alone, wall
+time:
+
+| `tagged_attr_store` | Result |
+|---|---|
+| without the flag | SUCCESSFUL, 25 s |
+| with the flag | no result in 600 s |
+| with the flag, return of a split whole read through a named temporary (prototype, reverted) | no result in 600 s |
+
+`--program-only` with and without the flag, with SSA numbers, temporary
+addresses and step numbers stripped, differs only in `result` of
+`__python_scalar_add_obj_dyn` (25528 against 25507 assignments, 7938 against
+7915 sliced). Without the flag, `result` is declared nondet, and its
+`both_str` path is the symbol `result#k == result#1 WITH [float_idx:=0] WITH
+[value:=...] WITH [type_id:=...] WITH [size:=lhs_len + rhs_len + 1]`; the
+callers' stores (`r := ...` in `dynamic_2_value`, the `ESBMC_unpack_temp`
+merges) read that symbol in the `both_str` arm and an inlined `WITH` chain on
+`result#1` in the `both_num` arm. With the flag, `size` is the field symbol
+`result::3`, both arms are struct literals, and the `both_str` arm of each
+merge pins `size` to the previous version of the store target
+(`.size=dynamic_2_value#n.r.size`, `.size=ESBMC_unpack_temp#n.size`), as
+§8.10's opaque rule intends.
+
+The prototype tested §8.8's proposal of a named symbol instead of an inlined
+literal: `make_return_assignment` assigned the renamed literal to a fresh
+symbol with the value set updated, and returned that symbol. The callers then
+read one symbol per call, as without the flag, and the formula still gives no
+result in 600 s. Without the value-set update the prototype reported
+`VERIFICATION FAILED` (the assertion at `main.py:21`), since the
+dereference of `.value` through an untracked symbol is unconstrained; any
+such rewrite must keep the value set. So naming the whole read at the return
+is not enough. What remains different from master is that master's `result`
+starts from a nondet base and every path updates it with `WITH`, while the
+flag gives four independent field chains. The next step is to test that
+difference directly: an SMT-level swap of the two encodings of `result` in
+the `--smt-formula-only` output, or Z3's statistics (`-st`) on both formulas,
+to find which part Z3 searches.
+
+Not measured in this run: any suite, the corpus 2x bar, and Bitwuzla (not
+built in this container).
+
+### 8.13 Reading a split struct with an opaque field through its own symbol
+
+§8.10's `--smt-formula-only` diff, on the clang build at `9a5160a9`: with the
+flag, `return result;` in `__python_scalar_add_obj_dyn` writes the literal
+`{ .value=&dynamic_4_array[0], ..., .size=result::3#4 }` straight into the
+caller's `self->r`, so the `with` chain of `dynamic_2_value` holds the
+literal, and the phi after the call reads `.size` back out of that chain.
+Without the flag the same write stores `result#9`, a symbol defined once by
+its own `with` chain.
+
+`goto_symext::split_read` now handles a whole read of a split object (the
+right-hand side of an assignment, or a returned value) whose L2 literal holds
+an opaque field name (§8.10): it assigns the literal to the object's own
+symbol in a hidden step and reads that symbol. #7597's pinning then carries
+`{ ..., .size=result#2.size }`, so constant fields still fold, and readers
+read `result#2` as they read `result#9` without the flag. A read with no
+opaque field is unchanged. The object's symbol is written only by this step
+and is never read at byte level.
+
+Measured on 2026-11-18, PR #10839's head `9a5160a9` with the change against
+the same build with it switched off through a temporary environment check
+(since removed), RelWithDebInfo built with clang 18, LLVM 18, Z3 4.13.3,
+4-core container, `--z3`, wall time:
+
+| Test | No flag | Flag, `9a5160a9` | Flag, this change |
+|---|---|---|---|
+| `tagged_attr_store` | 31 s | no result in 120 s (1800 s in §8.11) | 29 s, 28 s, 27 s, 29 s |
+| `tagged_attr_store_nested` | 214 s | 34 s | 35 s |
+
+`tagged_attr_store_nested` crashes in the Python frontend on this clang build
+with and without the flag: `python_converter::self_attribute_type` keeps a
+pointer into a `typet` local to an `if` block after the block ends. The
+`_nested` row was measured with that local hoisted, a change not in this PR.
+
+Standalone Z3 4.13.3 on the three `--smt-formula-only` outputs of
+`tagged_attr_store`, `smt.random_seed`/`sat.random_seed` set to N, 240 s
+cap, 4 jobs at a time:
+
+| Formula | Seeds | Solved (unsat) | Unsolved |
+|---|---|---|---|
+| no flag | 0-3 | 3, 107-159 s | 1 |
+| flag, `9a5160a9` | 0-3 | 3, 65-160 s | 1 |
+| flag, this change | 0-7 | 7, 58-125 s | 1 |
+
+Standalone, the three formulas are about equally hard. The in-process run is
+what loses the verdict at `9a5160a9`, and the change restores it there. ESBMC
+calls Z3 with a fixed seed, so the in-process runs above repeat one sample.
+
+§8.12's prototype assigned the literal to a fresh temporary at the return.
+This change differs in two ways: it writes the object's own symbol through
+`symex_assign_symbol`, so `goto_symex_statet::assignment` updates the value
+set and #7597's pinning carries `{ ..., .size=result#2.size }` to readers
+with the other fields constant; and it also covers the right-hand side of an
+assignment.
+
+Flag forced on, this change against `9a5160a9`, default solver (Z3), 30 s per
+run, 4 at a time; differences after dropping timings:
+
+| Suite | Tests | Verdict changes | Output changes |
+|---|---|---|---|
+| C (`regression/esbmc`, `CORE`) | 3440 | 0 | 0 beyond run-to-run noise: `--parallel-solving` line order (`github_2619`, `github_2630_1`), the shared proof cache (`proof_cache_*`), uninitialised bytes (`github_8524_unterminated_fail`) |
+| C++ (`esbmc-cpp/cpp`, `CORE`) | 1361 | 0 | `cpp_sum_class`: `--k-induction-parallel` line order |
+| Python, `CORE` tests among 920 of a shuffled list | 860 | 0 | `arith_lost_type_fail` prints `x = { .value=tmp$3.value, ... }`, as master without the flag does, where `9a5160a9` printed `.value=&dynamic_1_array[0]`; `github_5444_dictcomp_return_fail` in compiler-variable numbering |
+
+Four tests timed out at 30 s in both builds.
+
+Phase 1 corpus rows, flag on, `--z3`, symex seconds, three runs each,
+medians: `repro7521` 0.865 / 1.325 (8 / 2048 fields, 1.53x);
+`local_writes` 0.017 / 0.018 (1.06x).
+
+`field_sensitive_ssa_opaque_whole_read` checks the hidden step
+`r#N == { .a=1, .b=r::1#M }` in `--program-only` output and fails with the
+change switched off. `_fail` checks that the value read through the symbol
+is the written one. All three branches of `split_read` were reached under
+Z3, with temporary logging: the opaque branch on `opaque_whole_read`,
+`opaque_field` and `tagged_attr_store`, the unchanged split read on
+`copy_pinned`. In `opaque_whole_read_fail` the trace no longer prints
+`s = { .a=1, .b=0 }`, as master without the flag prints no step for `s`
+(§8.6, step dropped).
+
+Not measured: Bitwuzla (not buildable in this container), the full Python
+suite with the flag forced on, the full C and C++ suites with the flag off
+under ctest (each needs more than 10 minutes on 4 cores; the change is not
+reached without the flag), and an SV-COMP run.

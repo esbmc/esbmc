@@ -1,0 +1,5 @@
+CORE
+main.c
+--bitwuzla --no-pointer-check --no-bounds-check --ts-pdr --max-k-step 20
+^PDR: state component f is not a bit-vector of at most 64 bits$
+^VERIFICATION UNKNOWN$
