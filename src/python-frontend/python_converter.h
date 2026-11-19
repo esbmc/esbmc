@@ -3921,7 +3921,10 @@ private:
   /// Throws on a tagged operand of an `and`/`or` whose value is used.
   void refuse_tagged_boolop_operand(const exprt &operand) const;
   void refuse_bool_with_list_operand(const exprt &logical_expr) const;
-  void refuse_lossy_any_boolop_operand(const exprt &logical_expr) const;
+  void refuse_lossy_any_boolop_operand(
+    const exprt &logical_expr,
+    const typet &result_type,
+    const nlohmann::json &element) const;
 
   /// The truthiness of a str and/or operand: false for None or "", else true.
   /// Any other value comes back unchanged.
