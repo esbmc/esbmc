@@ -1093,6 +1093,43 @@ void python_converter::refuse_bool_with_list_operand(
       "an and/or whose value is a list or a bool is not supported");
 }
 
+// An Any (void *) result holds each operand cast to a pointer, and a stored
+// one is true when that pointer is non-null. A float loses its value in the
+// cast, and an empty str or list is a non-null pointer, so it would read as
+// true (#10143). A nested Any operand may hold either. Tested in place, the
+// result keeps its `if` shape and its truth is read per operand instead.
+void python_converter::refuse_lossy_any_boolop_operand(
+  const exprt &logical_expr) const
+{
+  const exprt::operandst &operands = logical_expr.operands();
+  const typet list_type = type_handler_.get_list_type();
+  const auto may_be_empty = [&](const exprt &e) {
+    const typet &t = e.type();
+    if (
+      t == any_type() || t == list_type ||
+      (t.is_pointer() && t.subtype() == list_type))
+      return true;
+    if (!type_utils::is_string_type(t))
+      return false;
+    // A literal's array size counts its terminator.
+    BigInt size;
+    return !e.is_constant() || !t.is_array() ||
+           to_integer(to_array_type(t).size(), size) || size <= 1;
+  };
+  for (std::size_t i = 0; i < operands.size(); ++i)
+  {
+    // An `or` stops at an earlier operand only when that operand is true.
+    const bool result_when_false =
+      logical_expr.is_and() || i + 1 == operands.size();
+    if (
+      operands[i].type().is_floatbv() ||
+      (result_when_false && may_be_empty(operands[i])))
+      throw std::runtime_error(
+        "an and/or whose value may be a float, or an empty str or list, "
+        "next to another type is not supported");
+  }
+}
+
 exprt python_converter::boolop_string_truthiness(
   const exprt &value,
   const locationt &location)
@@ -1300,6 +1337,8 @@ exprt python_converter::get_logical_operator_expr(const nlohmann::json &element)
     if (t.is_bool())
       return build_boolean_chain(logical_expr);
     refuse_bool_with_list_operand(logical_expr);
+    if (t == any_type() && &element == assigned_value_)
+      refuse_lossy_any_boolop_operand(logical_expr);
     // Result expression starts from last operand as default else branch.
     const type2tc t2 = migrate_type(t);
     exprt result_expr = logical_expr.operands().back();
