@@ -590,6 +590,7 @@ const struct group_opt_templ all_cmd_options[] = {
      NULL,
      "With another --ts option, also print the extracted transition system"},
     {"ts-bmc", NULL, "Bounded model checking over the transition system"},
+    {"ts-pdr", NULL, "IC3/PDR over the transition system"},
     {"ts-no-fallback",
      NULL,
      "Report UNKNOWN instead of falling back when the program is not a "

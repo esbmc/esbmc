@@ -117,11 +117,34 @@ static bool k_induction_parallel_conflicts(const cmdlinet &cmdline)
         "all-witnesses",
         "parallel-solving",
         "ts-bmc",
+        "ts-pdr",
         "ts-check"})
     if (cmdline.isset(incompatible))
     {
       log_error(
         "--k-induction-parallel cannot be combined with --{}", incompatible);
+      return true;
+    }
+  return false;
+}
+
+static bool ts_strategy_conflicts(const cmdlinet &cmdline)
+{
+  // The TS strategies turn k-induction back on, so goto_termination's
+  // inductive-step-only assumes would reach the engines as invariants; PDR
+  // trusts those and would prove a non-terminating loop terminates.
+  for (const char *ts : {"ts-bmc", "ts-pdr", "ts-check"})
+    if (cmdline.isset(ts) && cmdline.isset("termination"))
+    {
+      log_error("--{} cannot be combined with --termination", ts);
+      return true;
+    }
+
+  // --ts-pdr runs instead of the BMC engine, which these flags configure.
+  for (const char *bmc : {"ts-bmc", "ts-fresh-solver", "ts-push-pop"})
+    if (cmdline.isset("ts-pdr") && cmdline.isset(bmc))
+    {
+      log_error("--ts-pdr cannot be combined with --{}", bmc);
       return true;
     }
   return false;
@@ -259,6 +282,9 @@ static bool incompatible_flags(const cmdlinet &cmdline)
       return true;
     }
 
+  if (ts_strategy_conflicts(cmdline))
+    return true;
+
   if (k_induction_parallel_conflicts(cmdline))
     return true;
 
@@ -277,6 +303,7 @@ static bool incompatible_flags(const cmdlinet &cmdline)
           "k-induction-parallel",
           "loop-invariant",
           "ts-bmc",
+          "ts-pdr",
           "ts-check"})
       if (cmdline.isset(incompatible))
       {
