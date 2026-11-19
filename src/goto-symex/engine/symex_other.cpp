@@ -182,8 +182,13 @@ void goto_symext::symex_dead(const expr2tc &code)
   if (live && stack_checks_enabled())
     cur_state->top().decrease_stack_frame_size(code2);
 
-  cur_state->value_set.erase_object(
-    to_symbol2t(l1_sym).get_symbol_name(), dead_code.type);
+  // A Python local outlives its DEAD: readers reach its members through a
+  // stored reference (#9169).
+  if (config.language.lid == language_idt::PYTHON)
+    cur_state->value_set.erase(to_symbol2t(l1_sym).get_symbol_name());
+  else
+    cur_state->value_set.erase_object(
+      to_symbol2t(l1_sym).get_symbol_name(), dead_code.type);
 
   if (const std::vector<expr2tc> *fields = split_fields(identifier))
     for (const expr2tc &field : *fields)
