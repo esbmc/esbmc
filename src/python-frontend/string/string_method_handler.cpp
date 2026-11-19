@@ -2771,8 +2771,7 @@ exprt string_handler::handle_string_rindex_range(
   return build_string_index_result(call, rfind_expr, location);
 }
 
-static bool
-are_literal_strings(const exprt &a, const exprt &b, const exprt &c)
+static bool are_literal_strings(const exprt &a, const exprt &b, const exprt &c)
 {
   const auto is_literal = [](const exprt &e) {
     return e.is_constant() && e.type().is_array();
