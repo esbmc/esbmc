@@ -1298,9 +1298,10 @@ protected:
   void split_rewrite_operands(std::vector<expr2tc> &operands) const;
 
   /** split_rewrite(@p e), except that a whole read of a split object one of
-   *  whose fields holds an opaque L2 name is first assigned to the object's
-   *  own symbol and read through it, as it is without the flag (#7521). */
-  expr2tc split_read(const expr2tc &e);
+   *  whose fields holds an opaque L2 name, into a @p dest that is not split,
+   *  is first assigned to the object's own symbol and read through it, as it
+   *  is without the flag (#7521). A return passes no @p dest. */
+  expr2tc split_read(const expr2tc &e, const expr2tc &dest = expr2tc());
 
   /** The base object of @p lhs, or of @p target, the source form of
    *  @p lhs, when that names a split object as a whole. */
