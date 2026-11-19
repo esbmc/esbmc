@@ -651,16 +651,6 @@ set(_slow_regression_tests
     # out at 120.02s in #5236, a run that does not touch its code path). Give it
     # the 2x budget like the other borderline quixbugs tests.
     "regression/quixbugs/lis_fail"
-    # knapsack(_fail) used to fast-fail with "max() arguments must be of
-    # comparable types" because the nested-list element of a defaultdict was
-    # mistyped. With the call-site nested-generic inference in #4830 the
-    # frontend now resolves the element types and ESBMC reaches the real
-    # (defaultdict + nested loop) symex, which does not converge under
-    # --incremental-bmc. These remain KNOWNBUG; the larger inner timeout lets
-    # testing_tool record the KNOWNBUG verdict instead of ctest hard-killing
-    # the run (see shortest_path_lengths note below; #4927).
-    "regression/quixbugs/knapsack"
-    "regression/quixbugs/knapsack_fail"
     # next_permutation(_fail) used to fast-crash with "Tuple unpacking only
     # supports simple names, not Subscript". With subscript-target unpacking
     # support (#4792) the swap converts and ESBMC reaches the real nested-loop
@@ -788,31 +778,17 @@ math(EXPR ESBMC_REGRESS_CTEST_TIMEOUT_SLOW
      "${ESBMC_REGRESS_TIMEOUT_SLOW} + 30")
 
 # Tests that exceed even the 2x slow tier on Debug+Opt Linux runners.
-# shortest_path_lengths(_fail) used to fast-fail because defaultdict with
-# a lambda factory was unsupported; with #4765 the lambda factory is now
-# honoured and ESBMC actually verifies the triple-nested Floyd-Warshall
-# loop. shortest_path_lengths has long been KNOWNBUG (non-converging);
-# shortest_path_lengths_fail is now KNOWNBUG too because #5236 made the
-# `{(i, i): 0 for i in range(n)}` seed populate concrete keys instead of
-# nondet ones, so ESBMC reaches the real defaultdict + triple-nested-loop
-# symex, which no longer converges under --incremental-bmc (>900s locally,
-# was ~245s when the keys were nondet). The 3x inner timeout fires well
-# before the program completes and, being shorter than the outer ctest
-# TIMEOUT, lets testing_tool record the KNOWNBUG verdict instead of ctest
-# hard-killing the run.
 math(EXPR ESBMC_REGRESS_TIMEOUT_VERY_SLOW "${ESBMC_REGRESS_TIMEOUT} * 3")
 math(EXPR ESBMC_REGRESS_CTEST_TIMEOUT_VERY_SLOW
      "${ESBMC_REGRESS_TIMEOUT_VERY_SLOW} + 30")
 set(_very_slow_regression_tests
-    "regression/quixbugs/shortest_path_lengths"
-    "regression/quixbugs/shortest_path_lengths_fail"
     # humaneval_62 (derivative) verifies SUCCESSFUL but is heavy: its body is a
     # list comprehension over enumerate(xs) followed by a slice
     # ([(i * x) for i, x in enumerate(xs)][1:]) under --unwind 20, which unwinds
     # the list-OM loops 20x and feeds a large bit-vector query (encode ~16s +
     # Bitwuzla ~54s locally). It times out at the 120s per-test cap on the
     # DebugOpt static Linux runner; an assertions-on build measures ~248s, the
-    # same band as shortest_path_lengths above. Give it the 3x budget so it
+    # same band as the other tests in this tier. Give it the 3x budget so it
     # doesn't flap.
     "regression/humaneval/humaneval_62"
     # list-slice-step-reverse verifies SUCCESSFUL but is symex-bound (reverse
