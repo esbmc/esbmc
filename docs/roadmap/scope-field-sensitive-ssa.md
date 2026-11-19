@@ -10,9 +10,11 @@
 > into a call argument, is re-split into unassigned field generations (§8.16).
 > The open Phase 1 PRs fix it and the lost constant propagation: #10862, a
 > split copy into a split destination (§8.15), and the PR stacked on it,
-> `github_7797_flat_set` and the re-split L2 name (§8.16). With both, no
-> Phase 1 gate measured so far is unmet; the full Python suite has not been
-> re-run on them, and Phase 1 lacks an SV-COMP run.** The corpus is in `regression/field-sensitivity/`
+> `github_7797_flat_set` and the re-split L2 name (§8.16). With both, the
+> full Python `CORE` suite keeps every verdict with the flag forced on, but
+> 11 Python traces lose the step of a whole tagged-value write that #10862
+> still prints, and `arith_lost_type_fail` pins that step, so it fails with
+> the flag (§8.17). Phase 1 also lacks an SV-COMP run.** The corpus is in `regression/field-sensitivity/`
 > with baselines, and the census has been run and reverted. Phase 1 adds
 > `--field-sensitive-ssa` (default off): symex gives each field of an
 > eligible local, parameter or return slot its own SSA name. The Phase 1
@@ -1369,3 +1371,41 @@ Bitwuzla 0.9.0, 4-core container:
   (1.12x).
 - Not measured: the full Python suite with this change, k-induction suites,
   and SV-COMP.
+
+### 8.17 Full Python suite on the `flat_set` fix
+
+Measured on 2026-11-19 at `7e9aef1f0` (the head of #10864), RelWithDebInfo,
+gcc 13.3, LLVM 18, Z3 4.13.3, Bitwuzla 0.9.0 (CaDiCaL 2.1.2 cloned with
+git), 4-core container. Every Python `CORE` test (9279), flag forced on
+against off on the same binary, default solver, 4 at a time, 30 s per run;
+the 10 tests that timed out either way were re-run at 120 s:
+
+- Verdicts: 0 changes. At 30 s, `queue_fifo` and `github_9392` time out
+  without the flag and pass with it (29.8 s and 29.3 s). At 120 s all 10
+  reach the same verdict both ways, each between 29 s and 62 s.
+- `tagged_attr_store`, run alone, wall time: Bitwuzla 4.8 s without the
+  flag, 5.5 s with it; Z3 21.3 s and 20.3 s.
+- After dropping timings, temporary model paths and address-derived names,
+  25 tests differ in output. 14 are noise seen before (§8.14): compiler-variable
+  numbering, witness UUIDs, the bytes of a temporary path, nondet values
+  the assertion leaves free
+  (`nondet_list21`, `github_10323_list_reversed_fail`,
+  `github_10493_ir_fail`), and the property list of a run that finished
+  only on one side of the 30 s cap.
+- 11 tests lose one step with the flag: the whole write of a tagged Python
+  value (`x = { .value=&dynamic_1_array[0], ... }` or `r = { ... }`) that
+  the run without the flag prints. The tests are `arith_lost_type_fail`,
+  `arith_lost_type_default_fail`, `github_10365_fail`,
+  `github_10365_type_fail`, `github_10673_tagged_fail`,
+  `github_8970_alias_tagged_fail`, `github_9030_call_param_fail`,
+  `github_9135_unrelated_cb_fail`, `tagged_arg_function_fail`,
+  `tagged_arg_staticmethod_fail` and `tagged_dict_param_fail`.
+  #10862's head (`3f47f12e6`, same build) prints the step in all 11 with the
+  flag, so this change drops it: the carried value leaves the definition
+  unread and the slicer removes it, as §8.16 records for
+  `github_10365_type_fail`. Invariant 4 allows a dropped step, but
+  `arith_lost_type_fail` pins `State N ... main.py line 13` in its
+  `test.desc`, so with the flag forced on it fails. That is a lost test, and
+  the Phase 1 gate is unmet until the step is kept or the loss is accepted
+  in review. Which of §8.16's two changes drops it has not been isolated.
+
