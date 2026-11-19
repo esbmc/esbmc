@@ -19,7 +19,9 @@
 > stack's head, merged with master `08198b792`, gives the same results (§8.22),
 > and a quarter of the Python `CORE` suite under Z3 keeps every verdict (one
 > only past a 60 s cap) and
-> every printed value the run without the flag pins (§8.23).
+> every printed value the run without the flag pins (§8.23). The stack
+> merged with master `1aa90ce5a`, which adds #10848's erasure of a dead
+> aggregate's member entries, keeps those results (§8.24).
 > Phase 1 still lacks an SV-COMP run.** The corpus is in `regression/field-sensitivity/`
 > with baselines, and the census has been run and reverted. Phase 1 adds
 > `--field-sensitive-ssa` (default off): symex gives each field of an
@@ -1637,3 +1639,32 @@ addresses, UUIDs and the flag's own notices.
   `github_10322_width` and `github_7693_fail` differ only in a temporary
   path's bytes and an address-derived name. No printed value that the run
   without the flag pins changes.
+
+### 8.24 The stack merged with #10848
+
+Measured on 2026-11-19 at `36b63072a` (the head of the PR stacked on
+#10862) merged with master `1aa90ce5a`, which adds #10848: `symex_dead`
+now erases a dead struct's or array's member entries from the value set.
+RelWithDebInfo, gcc 13.3, LLVM 18, Z3 and Bitwuzla 0.9.0 (CaDiCaL 2.1.2
+cloned with git), 4-core container.
+
+- ctest `field_sensitive_ssa|field-sensitivity|github_7797|github_9060|github_9434`:
+  92/92.
+- `github_9060` with the flag: after `DEAD t`, the value set holds no entry
+  for the split field symbols `t::0` and `t::1`, as it holds none for
+  `t.p` and `t.q` without the flag. The test's own patterns match the
+  unsplit names, so they cannot see split ones.
+- Flag forced on against off, every eighth directory of `regression/esbmc`
+  and `regression/esbmc-cpp/cpp`, `CORE` tests only, 60 s per run, 4 at a
+  time: 607 tests under each of `--z3` and `--bitwuzla`, 0 verdict changes.
+  Two tests that already pass the flag reject it a second time and were
+  not compared. Only verdicts were compared.
+- `tagged_attr_store`, wall time: Z3 26.8 s without the flag and 24.4 s
+  with it; Bitwuzla 7.5 s and 7.3 s. All `VERIFICATION SUCCESSFUL`.
+- `github_7797_flat_set` with the flag (`--unwind 6`): `VERIFICATION
+  SUCCESSFUL` in 0.96 s (Z3) and 1.03 s (Bitwuzla).
+- Phase 1 corpus rows, flag on, symex seconds, medians of three, 8 / 2048
+  fields: `repro7521` 0.860 / 1.279 (1.49x) under Z3 and 0.869 / 1.271
+  (1.46x) under Bitwuzla; `local_writes` 0.021 / 0.022 (1.05x) and
+  0.019 / 0.022 (1.16x).
+- Not measured here: trace text, Python suites, k-induction and SV-COMP.
