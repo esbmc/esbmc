@@ -12,10 +12,11 @@
 > The open Phase 1 PRs fix it and the lost constant propagation: #10862, a
 > split copy into a split destination (§8.18), and the PR stacked on it,
 > `github_7797_flat_set` and the re-split L2 name (§8.19). With both, the
-> full Python `CORE` suite keeps every verdict with the flag forced on, but
-> 11 Python traces lose the step of a whole tagged-value write that #10862
-> still prints, and `arith_lost_type_fail` pins that step, so it fails with
-> the flag (§8.20). Phase 1 also lacks an SV-COMP run.** The corpus is in `regression/field-sensitivity/`
+> full Python `CORE` suite keeps every verdict with the flag forced on
+> (§8.20). The 11 Python traces that lost the step of a whole tagged-value
+> write print it again: a copy of a split object's carried chain is now
+> carried over the destination's own name (§8.21). Phase 1 still lacks an
+> SV-COMP run.** The corpus is in `regression/field-sensitivity/`
 > with baselines, and the census has been run and reverted. Phase 1 adds
 > `--field-sensitive-ssa` (default off): symex gives each field of an
 > eligible local, parameter or return slot its own SSA name. The Phase 1
@@ -1520,3 +1521,59 @@ the 10 tests that timed out either way were re-run at 120 s:
   the Phase 1 gate is unmet until the step is kept or the loss is accepted
   in review. Which of §8.19's two changes drops it has not been isolated.
 
+### 8.21 A copied split chain carried over the destination's name
+
+§8.20's 11 lost steps come from the pinning change of §8.19. Disabling
+`split_literal_chain` alone brings the step back in `arith_lost_type_fail`.
+There the return temporary `tmp$3` is split, its pointer field is a phi of
+two addresses, and its `float_idx` is 0 on both paths, so its whole read
+carries `tmp$3#1 WITH [float_idx := 0]`. `x = ...` copied that value, so
+readers of `x` read `tmp$3#1`, nothing read `x#1`, and the slicer removed
+the step that prints `x`. Without the flag `tmp$3` is a phi of two `with`
+chains, which is not carried, so `x#1` is read and the step stays.
+
+`goto_symex_statet::assignment` now carries such a value, a `with` chain
+over the L2 name of another split object, as the same updates over the
+destination's own L2 name: `x#1 WITH [float_idx := 0]`. The equation
+defines `x#1` as the chain, so the updates hold on it, and the constants
+still fold. The rebuild only runs when something is split.
+
+Measured on 2026-11-19, `80cbf4393` against #10864's previous head
+`410e5925e`, RelWithDebInfo, gcc 13.3, LLVM 18, Z3 4.13.3, Bitwuzla 0.9.0
+(CaDiCaL 2.1.2 cloned with git), 4-core container. `d466dc811` only moves
+the rebuild into a helper; its output on the 11 tests is identical and
+ctest below ran on it.
+
+- The 11 tests of §8.20 with the flag print the same output as without it,
+  after dropping timings and addresses.
+- New tests: `field_sensitive_ssa_carried_copy_fail` pins the step
+  `g = { .p=..., .k=0 }` of a global copied from a split return value. It
+  fails on `410e5925e`, which drops the step, under Z3 and Bitwuzla.
+  `field_sensitive_ssa_carried_copy` pins `1 remaining` for the folded
+  sibling. It fails on a build without `split_literal_chain` (2 left).
+  Both pass with the change under both solvers. Each solver prints the
+  same step with and without the flag (Z3 prints `.p=t.p` both ways).
+- Flag forced on, the change against `410e5925e`, default solver, 30 s per
+  run, 4 at a time: C `CORE` (3450) and C++ `CORE` (1363), 0 verdict
+  changes. Output differences are witness timestamps, timing fields,
+  Clang AST addresses, and `--parallel-solving` or
+  `--k-induction-parallel` line order. Python, every 5th `CORE` test plus
+  the 11 and the `tagged_attr_store` tests (1869): 0 verdict changes; the
+  11 regain their step; 2 differ in an address-derived temporary name;
+  `function_values_fail` times out both ways.
+- `tagged_attr_store`, wall time, run alone: Z3 26.7 s without the flag,
+  24.7 s with it (25.9 s on `410e5925e`); Bitwuzla 7.6 s and 7.9 s (7.6 s).
+- Phase 1 corpus rows, flag on, symex seconds, medians of three, 8 / 2048
+  fields: `repro7521` 0.855 / 1.228 (1.44x) under Z3 and 0.805 / 1.248
+  (1.55x) under Bitwuzla; `local_writes` 0.021 / 0.022 (1.05x) and
+  0.020 / 0.022 (1.10x). All `VERIFICATION SUCCESSFUL`.
+- Each outcome of the new decisions is reached under Z3 and Bitwuzla by a
+  C harness run with `--enable-unreachability-intrinsic` and full
+  unwinding; an instrumented build printed each one, and the harness's
+  `__ESBMC_unreachable()` after the copy was reported reached.
+- ctest without the flag: `field_sensitive_ssa|field-sensitivity|github_7797`
+  86/86; `esbmc/` 3578 of 3595, and the 17 failures fail the same way on
+  `410e5925e`'s binary (Boolector not built, clang-18 builtins, 32-bit
+  headers).
+- Not measured: the full Python suite with this change, k-induction suites,
+  and SV-COMP.
