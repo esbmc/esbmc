@@ -4,6 +4,7 @@
 #include <functional>
 #include <optional>
 #include <nlohmann/json.hpp>
+#include <python-frontend/json_utils.h>
 #include <functional>
 #include <string>
 #include <unordered_map>
@@ -802,69 +803,50 @@ inline bool loop_spans(const nlohmann::json &stmt, int before)
          line_field(stmt, "lineno") <= before && (end < 0 || end >= before);
 }
 
-// The `return`s of `node`, outside the functions, lambdas and classes it
-// nests.
-inline void collect_returns(
-  const nlohmann::json &node,
-  std::vector<const nlohmann::json *> &out)
-{
-  if (!node.is_structured())
-    return;
-  if (node.is_object())
-  {
-    const std::string type = node.value("_type", "");
-    if (
-      type == "FunctionDef" || type == "AsyncFunctionDef" || type == "Lambda" ||
-      type == "ClassDef")
-      return;
-    if (type == "Return")
-      out.push_back(&node);
-  }
-  for (const auto &child : node)
-    collect_returns(child, out);
-}
-
-// The module-level def a call names directly, or null.
+// Python binds a name to its last def.
 inline const nlohmann::json *
 called_module_def(const nlohmann::json &call, const nlohmann::json &module_body)
 {
   if (!module_body.is_array() || call["func"].value("_type", "") != "Name")
     return nullptr;
   const std::string callee = call["func"].value("id", "");
-  for (const auto &stmt : module_body)
+  for (auto it = module_body.rbegin(); it != module_body.rend(); ++it)
     if (
-      stmt.is_object() && stmt.value("_type", "") == "FunctionDef" &&
-      stmt.value("name", "") == callee && stmt.contains("body"))
-      return &stmt;
+      it->is_object() && it->value("_type", "") == "FunctionDef" &&
+      it->value("name", "") == callee && it->contains("body"))
+      return &*it;
   return nullptr;
 }
 
 // The values `value` may give on different paths, each with its number
 // kind: the arms of a conditional expression and the `return`s of a
 // module-level def it calls. The annotator widens an int and a float joined
-// there to float, so the C type alone does not show the int.
+// there to float, so the C type alone does not show the int. A def already
+// being expanded adds nothing new, which bounds recursion.
 inline void collect_number_leaves(
   const nlohmann::json &value,
   const nlohmann::json &module_body,
-  unsigned depth,
+  std::vector<const nlohmann::json *> &expanding,
   std::vector<numeric_bindingt> &leaves)
 {
   const std::string type = value.value("_type", "");
-  if (depth < 8 && type == "IfExp")
+  if (type == "IfExp")
   {
-    collect_number_leaves(value["body"], module_body, depth + 1, leaves);
-    collect_number_leaves(value["orelse"], module_body, depth + 1, leaves);
+    collect_number_leaves(value["body"], module_body, expanding, leaves);
+    collect_number_leaves(value["orelse"], module_body, expanding, leaves);
     return;
   }
-  if (depth < 8 && type == "Call")
+  if (type == "Call")
     if (const nlohmann::json *def = called_module_def(value, module_body))
     {
-      std::vector<const nlohmann::json *> returns;
-      collect_returns((*def)["body"], returns);
-      for (const nlohmann::json *ret : returns)
-        if (ret->contains("value") && (*ret)["value"].is_object())
-          collect_number_leaves(
-            (*ret)["value"], module_body, depth + 1, leaves);
+      if (std::find(expanding.begin(), expanding.end(), def) != expanding.end())
+        return;
+      expanding.push_back(def);
+      std::vector<nlohmann::json> returns;
+      json_utils::collect_return_values((*def)["body"], returns);
+      for (const nlohmann::json &ret : returns)
+        collect_number_leaves(ret, module_body, expanding, leaves);
+      expanding.pop_back();
       return;
     }
   const std::string kind = classify_literal_value_kind(value, module_body);
@@ -892,7 +874,8 @@ inline void record_numeric_binding(
     stmt["value"].is_object())
   {
     std::vector<numeric_bindingt> leaves;
-    collect_number_leaves(stmt["value"], module_body, 0, leaves);
+    std::vector<const nlohmann::json *> expanding;
+    collect_number_leaves(stmt["value"], module_body, expanding, leaves);
     const auto has = [&leaves](const char *kind) {
       return std::any_of(
         leaves.begin(), leaves.end(), [kind](const numeric_bindingt &leaf) {
