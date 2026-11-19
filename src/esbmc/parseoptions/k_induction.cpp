@@ -925,6 +925,86 @@ tvt esbmc_parseoptionst::is_inductive_step_violated(
   return tvt(tvt::TV_UNKNOWN);
 }
 
+// A base case of the program goto_recurrent_state instrumented: a failed check
+// is a loop state that comes back at its head, so the loop can run forever.
+// Returns that loop.
+std::optional<locationt> esbmc_parseoptionst::find_recurrent_state(
+  const optionst &options,
+  uint64_t k_step)
+{
+  // Witness validation must confirm the witness's own cycle, not any.
+  if (
+    recurrent_state_loops.empty() ||
+    options.get_bool_option("validate-violation-witness"))
+    return {};
+
+  // Symex assumes its dereference checks rather than dropping them, as a path
+  // past an invalid access crashes instead of looping. A run that fails
+  // another claim it still raises shows no recurrent state. The
+  // non-termination report writes the witness and the other outputs.
+  optionst run = options;
+  run.set_option("no-pointer-check", false);
+  run.set_option("no-bounds-check", false);
+  run.set_option("conv-assert-to-assume", true);
+  run.set_option("base-case", true);
+  run.set_option("forward-condition", false);
+  run.set_option("inductive-step", false);
+  run.set_option("no-unwinding-assertions", true);
+  run.set_option("partial-loops", false);
+  run.set_option("unwind", integer2string(k_step));
+  for (const char *unwanted :
+       {"memory-leak-check",
+        "data-races-check",
+        "deadlock-check",
+        "overflow-check",
+        "printf-check",
+        "struct-fields-check",
+        "volatile-check",
+        "unknown-method-args-check",
+        "generate-testcase",
+        "generate-json-report"})
+    run.set_option(unwanted, false);
+  for (const char *output :
+       {"witness-output-yaml",
+        "witness-output-graphml",
+        "sarif-output",
+        "cex-output"})
+    run.set_option(output, "");
+
+  // Quiet, as the wrapper reads any "VERIFICATION FAILED" in the output as
+  // the verdict, and a failure this check rejects is none.
+  auto fails = [&] {
+    log_progress("Checking for a recurrent state, k = {:d}", k_step);
+    const VerbosityLevel verbosity = messaget::state.verbosity;
+    messaget::state.verbosity = std::min(verbosity, VerbosityLevel::Error);
+    bmct bmc(recurrent_state_program, run, context);
+    const bool failed = do_bmc(bmc) == P_SATISFIABLE;
+    messaget::state.verbosity = verbosity;
+    return failed && bmc.violated_claim == "recurrent state";
+  };
+  if (!fails())
+    return {};
+  if (recurrent_state_loops.size() == 1)
+    return recurrent_state_loops.front().head;
+
+  // Name the loop: the one whose check fails on its own.
+  std::vector<expr2tc> guards;
+  for (const recurrent_state_loopt &loop : recurrent_state_loops)
+    guards.push_back(loop.check->guard);
+  std::optional<locationt> found;
+  for (size_t i = 0; !found && i < guards.size(); i++)
+  {
+    for (size_t j = 0; j < guards.size(); j++)
+      recurrent_state_loops[j].check->guard =
+        i == j ? guards[j] : gen_true_expr();
+    if (fails())
+      found = recurrent_state_loops[i].head;
+  }
+  for (size_t j = 0; j < guards.size(); j++)
+    recurrent_state_loops[j].check->guard = guards[j];
+  return found;
+}
+
 // When k-induction exhausts all k-steps without a definitive result, run one
 // final per-VCC inductive-step check at the last k to identify which specific
 // properties could not be resolved, without impacting the main k-induction
