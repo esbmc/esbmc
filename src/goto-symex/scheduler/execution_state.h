@@ -400,6 +400,8 @@ public:
    */
   bool check_if_ileaves_blocked();
 
+  void guard_by_interleaving(expr2tc &expr) const override;
+
   /**
    *  True iff every thread in this schedule has reached a terminal state,
    *  i.e. has either ended or has an empty call stack. This is the precondition
@@ -692,6 +694,9 @@ public:
   /** Identifying number for this execution state. Used to distinguish runs
    *  in --schedule mode. */
   unsigned int node_id;
+  /** --schedule only: the free guard symbol of this interleaving's node,
+   *  nil otherwise. */
+  expr2tc interleaving_guard;
   /** True if the guard on this interleaving becomes false.
    *  Means that there is no path from here on where any assertion may
    *  become satisfiable. */
