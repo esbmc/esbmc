@@ -16,7 +16,10 @@
 > (§8.20). The 11 Python traces that lost the step of a whole tagged-value
 > write print it again: a copy of a split object's carried chain is now
 > carried over the destination's own name (§8.21). A separate build of the
-> stack's head, merged with master `08198b792`, gives the same results (§8.22).
+> stack's head, merged with master `08198b792`, gives the same results (§8.22),
+> and a quarter of the Python `CORE` suite under Z3 keeps every verdict (one
+> only past a 60 s cap) and
+> every printed value the run without the flag pins (§8.23).
 > Phase 1 still lacks an SV-COMP run.** The corpus is in `regression/field-sensitivity/`
 > with baselines, and the census has been run and reverted. Phase 1 adds
 > `--field-sensitive-ssa` (default off): symex gives each field of an
@@ -1606,3 +1609,30 @@ with git), 4-core container.
   per run, 4 at a time: 1612 tests, 0 verdict changes. Only verdicts were
   compared.
 - Not measured here: trace text, Python, k-induction suites and SV-COMP.
+
+### 8.23 Python trace text under Z3 on the stack's head
+
+Measured on 2026-11-19 at `273566c77` (the head of the PR stacked on
+#10862, which contains master `08198b792`). RelWithDebInfo built from
+scratch with gcc 13.3, LLVM 18, Z3 4.13.3 and Bitwuzla 0.9.0, 4-core
+container. Every fourth `regression/python` `CORE` test, starting at the
+second (2322 tests), each run with its `test.desc` options, any solver
+option replaced by `--z3`, with and without the flag, 60 s per run, 3 tests
+at a time. Output is compared after dropping timings, temporary paths,
+addresses, UUIDs and the flag's own notices.
+
+- Verdicts: 2321 agree. `github_8947_nondet_dict_fn_fail` gives
+  `VERIFICATION FAILED` without the flag and hits the 60 s cap with it. Run
+  alone, both give `VERIFICATION FAILED`: Z3 solve time 76.2, 76.6 and
+  73.3 s without the flag, 98.1, 96.6 and 93.2 s with it, and 793 VCCs, 182
+  after simplification, both ways. The flag splits one object. Under
+  Bitwuzla, the solver the test runs with, it takes 24.5 s and 25.6 s.
+  18 other tests hit the cap both ways and were not re-run.
+- Output: the flag splits an object in 185 tests. Beyond the flag's notice,
+  19 differ. 14 print another assignment count after simplification, with
+  the same VCC counts. `open_text_read_fail` numbers its violation as state
+  49 instead of 45 and prints the same values. `github_10493_ir_fail`
+  prints other values for nondet `*cell` reads, as in §8.17.
+  `github_10322_width` and `github_7693_fail` differ only in a temporary
+  path's bytes and an address-derived name. No printed value that the run
+  without the flag pins changes.
