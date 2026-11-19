@@ -2771,6 +2771,15 @@ exprt string_handler::handle_string_rindex_range(
   return build_string_index_result(call, rfind_expr, location);
 }
 
+static bool
+are_literal_strings(const exprt &a, const exprt &b, const exprt &c)
+{
+  const auto is_literal = [](const exprt &e) {
+    return e.is_constant() && e.type().is_array();
+  };
+  return is_literal(a) && is_literal(b) && is_literal(c);
+}
+
 exprt string_handler::handle_string_replace(
   const exprt &string_obj,
   const exprt &old_arg,
@@ -2803,13 +2812,9 @@ exprt string_handler::handle_string_replace(
       return str_expr;
   }
 
-  auto is_literal = [](const exprt &e) {
-    return e.is_constant() && e.type().is_array();
-  };
-
   if (
-    count_arg.is_constant() && is_literal(str_expr) && is_literal(old_expr) &&
-    is_literal(new_expr))
+    count_arg.is_constant() &&
+    are_literal_strings(str_expr, old_expr, new_expr))
   {
     const std::string src_str = extract_string_from_array_operands(str_expr);
     const std::string old_str = extract_string_from_array_operands(old_expr);

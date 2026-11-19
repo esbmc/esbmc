@@ -636,14 +636,18 @@ def compile(pattern: str, flags: int = 0) -> Pattern:
     return Pattern(pattern, flags)
 
 
+def _is_regex_meta(c: str) -> bool:
+    return (c == '.' or c == '^' or c == '$' or c == '*' or c == '+' or c == '?' or c == '{'
+            or c == '}' or c == '[' or c == ']' or c == '\\' or c == '|' or c == '('
+            or c == ')')
+
+
 def _has_regex_meta(pattern: str) -> bool:
     """Whether pattern contains a character re gives a special meaning."""
     i: int = 0
     while i < len(pattern):
         c: str = pattern[i]
-        if (c == '.' or c == '^' or c == '$' or c == '*' or c == '+' or c == '?' or c == '{'
-                or c == '}' or c == '[' or c == ']' or c == '\\' or c == '|' or c == '('
-                or c == ')'):
+        if _is_regex_meta(c):
             return True
         i = i + 1
     return False
