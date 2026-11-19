@@ -123,7 +123,7 @@ jobs:
         cd build/
         if [[ "${{ runner.os }}" == "Linux" ]]; then
           # Runner loss leaves no log (#10866); sample resources to show the cause.
-          ( while sleep 5; do echo "[sample] $(date -u +%T) $(df -h / | awk 'NR==2{print $4" free"}') $(free -m | awk 'NR==2{print $7" MB avail"}') load $(cut -d' ' -f1 /proc/loadavg) top $(ps -eo rss=,args= --sort=-rss | head -1 | cut -c1-120)"; done ) &
+          ( while sleep 5; do echo "[sample] $(date -u +%T) $(df -h / | awk 'NR==2{print $4" free"}') inodes $(df -i / | awk 'NR==2{print $5}') $(free -m | awk 'NR==2{print $7" MB avail"}') load $(cut -d' ' -f1 /proc/loadavg) procs $(ps -e --no-headers | wc -l) zombies $(ps -eo stat= | grep -c '^Z') threads $(ps -eLf --no-headers | wc -l) fds $(cut -f1 /proc/sys/fs/file-nr) tmp $(find /tmp -maxdepth 1 | wc -l) top $(ps -eo rss=,args= --sort=-rss | head -1 | cut -c1-80)"; done ) &
         fi
         # Cap the per-test TIMEOUT property at 120s. ctest --timeout is ignored
         # when tests set TIMEOUT via set_tests_properties (regression/CMakeLists.txt),
