@@ -54,6 +54,17 @@ jobs:
       operating-system: ubuntu-24.04
       build-flags: '-b DebugOpt -e ON'
       testing: true
+      test-shard: rest
+
+  build-ubuntu-python:
+    uses: ./.github/workflows/aux-build-unix.yml
+    name: static llvm-22 DebugOpt (python)
+    with:
+      operating-system: ubuntu-24.04
+      build-flags: '-b DebugOpt -e ON'
+      testing: true
+      upload: false
+      test-shard: python
 
   # Check project with clang-format. This job no longer auto-commits fixes:
   # it only *checks* that the lines changed in the PR are formatted, and on

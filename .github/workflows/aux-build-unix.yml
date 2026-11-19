@@ -28,6 +28,11 @@ on:
         required: false
         default: false
         type: boolean
+      test-shard:
+        description: "Linux PR test selection: python, rest, or empty for both"
+        required: false
+        default: ''
+        type: string
       linker:
         description: "ESBMC_LINKER passed to build.sh; auto keeps the probe"
         required: false
@@ -103,7 +108,7 @@ jobs:
         path: esbmc-${{ env.PLATFORM }}.zip
     
     - name: Check Python regression tests
-      if: ${{ inputs.testing == true }}
+      if: ${{ inputs.testing == true && inputs.test-shard != 'rest' }}
       run: |
         # Set PATH to include Python 3.12 and user-installed tools (mypy, meson, etc.)
         export PATH="$(brew --prefix python@3.12)/bin:$HOME/Library/Python/3.12/bin:$PATH"
@@ -116,6 +121,10 @@ jobs:
         # Set PATH to include Python 3.12 and user-installed tools (mypy, meson, etc.)
         export PATH="$(brew --prefix python@3.12)/bin:$HOME/Library/Python/3.12/bin:$PATH"
         cd build/
+        if [[ "${{ runner.os }}" == "Linux" ]]; then
+          # Runner loss leaves no log (#10866); sample resources to show the cause.
+          ( while sleep 60; do echo "[sample] $(date -u +%T) $(df -h / | awk 'NR==2{print $4" free"}') $(free -m | awk 'NR==2{print $7" MB avail"}') load $(cut -d' ' -f1 /proc/loadavg)"; done ) &
+        fi
         # Cap the per-test TIMEOUT property at 120s. ctest --timeout is ignored
         # when tests set TIMEOUT via set_tests_properties (regression/CMakeLists.txt),
         # so we override the cache variable that feeds it and reconfigure.
@@ -144,11 +153,15 @@ jobs:
           ctest -j4 --output-on-failure --progress -L '^python/$|^platform-sensitive$'
         elif [[ "${{ github.event_name }}" == "pull_request" ]]; then
           # The Python-frontend suites are ~70% of the CPU time and light on
-          # memory; running them at -j3 keeps the job under the 6 h limit.
+          # memory, so they run at -j3 on their own shard.
           py='^(python|numpy|quixbugs|humaneval|typeevalpy)/$'
           rc=0
-          ctest -j3 --output-on-failure --progress -L "$py" -LE python-intensive . || rc=$?
-          ctest -j2 --output-on-failure --progress -LE "$py|python-intensive" . || rc=$?
+          if [[ "${{ inputs.test-shard }}" != "rest" ]]; then
+            ctest -j3 --output-on-failure --progress -L "$py" -LE python-intensive . || rc=$?
+          fi
+          if [[ "${{ inputs.test-shard }}" != "python" ]]; then
+            ctest -j2 --output-on-failure --progress -LE "$py|python-intensive" . || rc=$?
+          fi
           exit $rc
         else
           ctest -j2 --output-on-failure --progress .
