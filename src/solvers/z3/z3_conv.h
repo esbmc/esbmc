@@ -2,6 +2,7 @@
 #define _ESBMC_SOLVERS_Z3_Z3_CONV_H
 
 #include <solvers/smt/smt_solver.h>
+#include <unordered_set>
 #include <z3++.h>
 #include <fstream>
 
@@ -38,6 +39,7 @@ public:
   void pop_ctx() override;
   smt_resultt dec_solve() override;
   smt_resultt dec_solve_assuming(const ast_vec &assumptions) override;
+  bool is_unsat_assumption(smt_astt a) override;
   bool supports_assumptions() const override
   {
     return true;
@@ -230,6 +232,7 @@ public:
   //  Must be first member; that way it's the last to be destroyed.
   z3::context z3_ctx;
   z3::solver solver;
+  std::unordered_set<unsigned> unsat_core_ids;
 };
 
 #endif /* _ESBMC_SOLVERS_Z3_Z3_CONV_H_ */
