@@ -232,6 +232,27 @@ static std::set<irep_idt> unreported_exceptions(const optionst &options)
   return {};
 }
 
+// The uninitialised-variable check would read the summary lambda's unwritten
+// elements, C has no lambda for --goto2c to print, and loop invariants are
+// about the loop the summary removes. A generated test replays the nondet
+// calls the trace records, and the summary removes the ones inside the loop
+// (#10821).
+static bool array_loop_summary_disabled(const cmdlinet &cmdline)
+{
+  for (const char *opt :
+       {"no-summarize-array-loops",
+        "uninitialised-vars-check",
+        "goto2c",
+        "loop-invariant",
+        "loop-invariant-check",
+        "generate-testcase",
+        "generate-ctest-testcase",
+        "generate-pytest-testcase"})
+    if (cmdline.isset(opt))
+      return true;
+  return false;
+}
+
 static void configure_branch_instrumentation(
   const cmdlinet &cmdline,
   goto_coveraget &coverage)
@@ -328,7 +349,8 @@ static bool early_answer_allowed(
     "memstats",
     "cov-report-json",
     "schedule",
-    "ts-bmc"};
+    "ts-bmc",
+    "ts-pdr"};
   return !python_checked_exceptions(options).empty() &&
          !checks_past_violation && !options.get_bool_option("termination") &&
          std::none_of(std::begin(bypassed), std::end(bypassed), [&](auto name) {
@@ -496,14 +518,9 @@ bool esbmc_parseoptionst::process_goto_program(
 
     // Before --goto-unwind unrolls the loops, interval analysis and
     // k-induction see them, and goto_check instruments the iteration the
-    // summary keeps. The uninitialised-variable check would read the lambda's
-    // unwritten elements, C has no lambda for --goto2c to print, and coverage
-    // and loop invariants are about the loop the summary removes.
+    // summary keeps. Coverage is about the loop the summary removes.
     if (
-      !cmdline.isset("no-summarize-array-loops") &&
-      !cmdline.isset("uninitialised-vars-check") && !cmdline.isset("goto2c") &&
-      !is_coverage && !cmdline.isset("loop-invariant") &&
-      !cmdline.isset("loop-invariant-check") &&
+      !is_coverage && !array_loop_summary_disabled(cmdline) &&
       goto_array_loop_summary(
         goto_functions,
         context,
@@ -683,7 +700,7 @@ bool esbmc_parseoptionst::process_goto_program(
       // NOT settle it — otherwise the verdict loop short-circuits on the
       // ranking flag and the havoc'd markers would just be dead work.
       if (!ranking_proved)
-        goto_termination(goto_functions, options, ns);
+        goto_termination(goto_functions, context, options, ns);
     }
 
     if (

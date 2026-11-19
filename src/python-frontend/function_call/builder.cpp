@@ -1109,6 +1109,21 @@ static std::string rebase_method_id(
     pos, old_tail.size(), "@C@" + to + "@F@" + (is_ctor ? to : method));
 }
 
+// The receiver of a method called on `name(...)`. A list a plain function
+// returns (`f().pop()`) is a list receiver, not an instance of a class named
+// after the callee.
+std::string
+function_call_builder::called_name_receiver(const std::string &name) const
+{
+  const symbolt *fn = converter_.find_symbol(
+    symbol_id(converter_.python_file(), "", name).to_string());
+  const bool returns_list =
+    fn && fn->get_type().is_code() &&
+    is_pylist_object_type(
+      to_code_type(fn->get_type()).return_type(), converter_.ns);
+  return returns_list ? "list" : name;
+}
+
 symbol_id function_call_builder::build_function_id() const
 {
   const std::string &python_file = converter_.python_file();
@@ -1322,7 +1337,8 @@ symbol_id function_call_builder::build_function_id() const
         inner_call["func"].contains("id") &&
         inner_call["func"]["id"].is_string())
       {
-        obj_name = inner_call["func"]["id"].get<std::string>();
+        obj_name =
+          called_name_receiver(inner_call["func"]["id"].get<std::string>());
       }
       else
       {
@@ -1965,11 +1981,9 @@ function_call_builder::instance_class_name(const nlohmann::json &node) const
 
 bool function_call_builder::receiver_class_defines_method() const
 {
-  const auto &ast = converter_.ast();
-  const std::string cls = instance_class_name(call_["func"]["value"]);
-  return json_utils::is_class(cls, ast) &&
-         json_utils::class_defines_method(
-           ast["body"], cls, call_["func"]["attr"].get<std::string>());
+  return converter_.class_defines_method(
+    instance_class_name(call_["func"]["value"]),
+    call_["func"]["attr"].get<std::string>());
 }
 
 exprt function_call_builder::build_method_call_on_receiver() const
