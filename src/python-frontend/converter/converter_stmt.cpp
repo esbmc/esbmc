@@ -7641,12 +7641,53 @@ void python_converter::reject_divergent_attribute_classes(
     "classes is not modelled");
 }
 
+nlohmann::json python_converter::divergent_boolop_as_conditional(
+  const nlohmann::json &boolop) const
+{
+  if (
+    boolop.value("_type", "") != "BoolOp" || !boolop.contains("values") ||
+    boolop["values"].size() != 2)
+    return nullptr;
+  const nlohmann::json &first = boolop["values"][0];
+  const nlohmann::json &second = boolop["values"][1];
+  if (json_utils::ast_contains_call(first) || contains_named_expr(first))
+    return nullptr;
+  const nlohmann::json module_body = kind_module_body();
+  const std::string first_kind =
+    dynamic_type_detail::classify_literal_value_kind(first, module_body);
+  const std::string second_kind =
+    dynamic_type_detail::classify_literal_value_kind(second, module_body);
+  if (
+    first_kind.empty() || second_kind.empty() ||
+    !dynamic_type_detail::kinds_diverge({first_kind, second_kind}))
+    return nullptr;
+
+  const bool is_and = boolop["op"].value("_type", "") == "And";
+  nlohmann::json ifexp = boolop;
+  ifexp["_type"] = "IfExp";
+  ifexp.erase("op");
+  ifexp.erase("values");
+  ifexp["test"] = first;
+  ifexp["body"] = is_and ? second : first;
+  ifexp["orelse"] = is_and ? first : second;
+  return ifexp;
+}
+
 bool python_converter::rewrite_divergent_conditional_assign(
   const nlohmann::json &ast_node,
   codet &target_block)
 {
   if (!ast_node.contains("value") || !ast_node["value"].is_object())
     return false;
+
+  if (
+    nlohmann::json ifexp = divergent_boolop_as_conditional(ast_node["value"]);
+    !ifexp.is_null())
+  {
+    nlohmann::json spelled = ast_node;
+    spelled["value"] = ifexp;
+    return rewrite_divergent_conditional_assign(spelled, target_block);
+  }
 
   const nlohmann::json &value = ast_node["value"];
   if (

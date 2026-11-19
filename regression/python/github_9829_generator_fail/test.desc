@@ -1,0 +1,5 @@
+CORE
+main.py
+
+FAILED.*assertion a == 4
+^VERIFICATION FAILED$

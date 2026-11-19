@@ -1,3 +1,3 @@
-# #10143: an or stops at a str only when it is non-empty.
-t = "a" or 0
-assert t == 0
+# #10143: "" and True is "", which is false.
+z = "" and True
+assert z
