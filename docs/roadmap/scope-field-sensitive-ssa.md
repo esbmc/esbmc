@@ -15,8 +15,9 @@
 > full Python `CORE` suite keeps every verdict with the flag forced on
 > (§8.20). The 11 Python traces that lost the step of a whole tagged-value
 > write print it again: a copy of a split object's carried chain is now
-> carried over the destination's own name (§8.21). Phase 1 still lacks an
-> SV-COMP run.** The corpus is in `regression/field-sensitivity/`
+> carried over the destination's own name (§8.21). A separate build of the
+> stack's head, merged with master `08198b792`, gives the same results (§8.22).
+> Phase 1 still lacks an SV-COMP run.** The corpus is in `regression/field-sensitivity/`
 > with baselines, and the census has been run and reverted. Phase 1 adds
 > `--field-sensitive-ssa` (default off): symex gives each field of an
 > eligible local, parameter or return slot its own SSA name. The Phase 1
@@ -1577,3 +1578,31 @@ ctest below ran on it.
   headers).
 - Not measured: the full Python suite with this change, k-induction suites,
   and SV-COMP.
+
+### 8.22 A separate build of the stack's head
+
+Measured on 2026-11-19 at `325108b28` (the head of the PR stacked on
+#10862) merged with master `08198b792`. RelWithDebInfo, built from scratch
+with gcc 13.3, LLVM 18, Z3 4.13.3 and Bitwuzla 0.9.0 (CaDiCaL 2.1.2 cloned
+with git), 4-core container.
+
+- ctest `field_sensitive_ssa|field-sensitivity|github_7797|tagged_attr_store|split_struct|scalarize`:
+  101/101 after the merge, and 92/92 for the same pattern without the last
+  two terms on `325108b28`.
+- The ten tests the two open PRs add, each run with `--z3` and with
+  `--bitwuzla` added to its `test.desc` options: every pattern matches
+  under both solvers.
+- `tagged_attr_store`, wall time, run alone: Z3 31.2 s without the flag and
+  28.9 s with it; Bitwuzla 7.9 s both ways. All `VERIFICATION SUCCESSFUL`.
+- `github_7797_flat_set` with the flag and no `--unwind`:
+  `VERIFICATION SUCCESSFUL` in 0.92 s (Z3) and 0.95 s (Bitwuzla).
+- Phase 1 corpus rows, flag on, symex seconds, medians of three, 8 / 2048
+  fields: `repro7521` 0.762 / 1.283 (1.68x) under Z3 and 0.807 / 1.332
+  (1.65x) under Bitwuzla; `local_writes` 0.018 / 0.020 (1.11x) and
+  0.016 / 0.020 (1.25x). On this build `repro7521` stays under the 2x bar
+  but is the closest of the two rows to it.
+- Flag forced on against off, every third directory of `regression/esbmc`
+  and `regression/esbmc-cpp/cpp`, `CORE` tests only, default solver, 30 s
+  per run, 4 at a time: 1612 tests, 0 verdict changes. Only verdicts were
+  compared.
+- Not measured here: trace text, Python, k-induction suites and SV-COMP.
