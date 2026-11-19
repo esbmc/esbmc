@@ -499,6 +499,15 @@ void add_havoc_assigns(
 {
   const type2tc void_ptr = pointer_type2tc(get_empty_type());
   const expr2tc havoc_object = havoc_object_function();
+  // A call cannot be guarded by an if2t, so jump over the object havocs.
+  goto_programt::targett skip_objects = dest.instructions.end();
+  if (!is_nil_expr(flag) && !havocs.through.empty())
+  {
+    skip_objects = dest.add_instruction(GOTO);
+    skip_objects->inductive_step_instruction = true;
+    skip_objects->guard = not2tc(flag);
+    skip_objects->location = location;
+  }
   // Ahead of the assignments, which interval analysis reads back from the
   // loop head.
   for (const expr2tc &ptr : havocs.through)
@@ -510,6 +519,13 @@ void add_havoc_assigns(
       havoc_object,
       std::vector<expr2tc>{typecast2tc(void_ptr, ptr)});
     t->location = location;
+  }
+  if (skip_objects != dest.instructions.end())
+  {
+    goto_programt::targett t = dest.add_instruction(SKIP);
+    t->inductive_step_instruction = true;
+    t->location = location;
+    skip_objects->targets.push_back(t);
   }
 
   const auto add = [&](const expr2tc &lhs, const expr2tc &rhs) {
@@ -632,6 +648,14 @@ struct entry_flagst
 {
   /// Where the flags go; null when every loop is assumed to be entered.
   contextt *context;
+  /// Each flagged loop's head and its flag, when the caller wants them; only
+  /// library helpers' loops are flagged then.
+  loop_entry_flagst *entered;
+
+  bool flags(const goto_functiont &function) const
+  {
+    return context && (!entered || function.body.hide);
+  }
   symbol_generator names{"c:@__ESBMC_kind_entry$"};
 
   expr2tc fresh()
@@ -855,9 +879,9 @@ void transform_loop(
   // call.
   marked_branchst cache;
   guardst guards;
-  // havoc_object cannot be made conditional, so a loop that writes through a
-  // pointer gets no flag.
-  const bool can_flag = entry_flags.context && havocs.through.empty();
+  // Only --termination has needed to jump over a whole-object havoc.
+  const bool can_flag = entry_flags.flags(goto_function) &&
+                        (entry_flags.entered || havocs.through.empty());
   const head_conditionst at_head = head_guards(
     goto_function.body, loop_head, loop_exit, address_taken, can_flag);
   get_entry_cond_rec(loop_head, loop_exit, at_head, guards, cache);
@@ -886,12 +910,14 @@ void transform_loop(
   // The first head sees the state before the loop, so an invariant that holds
   // there holds at every head. A jump into the body starts elsewhere.
   std::vector<std::pair<expr2tc, expr2tc>> held;
-  if (entry_flags.context && entry_jumps.empty())
+  if (entry_flags.flags(goto_function) && entry_jumps.empty())
     for (const expr2tc &invariant : at_head.invariants)
       held.emplace_back(entry_flags.fresh(), invariant);
 
   // Create the nondet assignments on the beginning of the loop
   make_nondet_assign(goto_function, loop_head, havocs, flag, entry, held);
+  if (entry_flags.entered && !is_nil_expr(flag))
+    (*entry_flags.entered)[&*loop_head] = flag;
 
   // Assume the loop entry condition before going into the loop
   assume_loop_entry_cond_before_loop(
@@ -3120,9 +3146,10 @@ unsettled_by_loops(goto_functionst &goto_functions)
 bool goto_k_induction(
   goto_functionst &goto_functions,
   contextt *context,
-  bool continue_past_failed_assertions)
+  bool continue_past_failed_assertions,
+  loop_entry_flagst *entered)
 {
-  entry_flagst entry_flags{context};
+  entry_flagst entry_flags{context, entered};
   // Andersen and loop_shapest key on location numbers, which inlining
   // restarts in every function.
   goto_functions.update();

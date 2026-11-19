@@ -2,6 +2,7 @@
 #define _ESBMC_SOLVERS_CVC_CVC5_CONV_H_
 
 #include <solvers/smt/smt_solver.h>
+#include <unordered_set>
 #include <cvc5/cvc5.h>
 
 class cvc5_smt_ast : public solver_smt_ast<cvc5::Term>
@@ -23,6 +24,7 @@ public:
 
   smt_resultt dec_solve() override;
   smt_resultt dec_solve_assuming(const ast_vec &assumptions) override;
+  bool is_unsat_assumption(smt_astt a) override;
   bool supports_assumptions() const override
   {
     return true;
@@ -173,6 +175,7 @@ public:
   unsigned int to_bv_counter;
 
   cvc5::Solver slv;
+  std::unordered_set<uint64_t> unsat_assumption_ids;
 
   symtabt symtable;
 
