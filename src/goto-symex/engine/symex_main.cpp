@@ -178,6 +178,7 @@ void goto_symext::assertion(
   expr2tc expr = the_assertion;
   cur_state->guard.guard_expr(expr);
   cur_state->global_guard.guard_expr(expr);
+  guard_by_interleaving(expr);
   // Negate after the path guard but before the execution guard: the probe
   // must leave the path free to be untaken, yet keep the execution guard (a
   // free symbol) forced (issue #10642).
@@ -185,6 +186,7 @@ void goto_symext::assertion(
   cur_state->guard.guard_expr(expr_neg);
   expr_neg = not2tc(expr_neg);
   cur_state->global_guard.guard_expr(expr_neg);
+  guard_by_interleaving(expr_neg);
   remaining_claims++;
   target->assertion(
     cur_state->guard.as_expr(),
@@ -314,6 +316,7 @@ void goto_symext::assume(const expr2tc &the_assumption)
     return;
 
   cur_state->guard.guard_expr(assumption);
+  guard_by_interleaving(assumption);
 
   expr2tc tmp_guard = cur_state->guard.as_expr();
   target->assumption(tmp_guard, assumption, cur_state->source, first_loop);
@@ -340,6 +343,7 @@ void goto_symext::defer_assumption(const expr2tc &the_assumption)
   }
 
   cur_state->guard.guard_expr(assumption);
+  guard_by_interleaving(assumption);
   deferred_assumptions.push_back(
     {cur_state->guard.as_expr(), assumption, cur_state->source, first_loop});
 }
