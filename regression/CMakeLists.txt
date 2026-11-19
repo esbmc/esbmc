@@ -687,18 +687,16 @@ set(_slow_regression_tests
     # budget covers the DebugOpt Linux runner's slowdown. The points-to-precision
     # regression is tracked separately.
     "regression/quixbugs/depth_first_search_fail"
-    # breadth_first_search(_fail) used to fast-fail with
+    # breadth_first_search_fail used to fast-fail with
     # "NameError: name 'Queue' is not defined" because aliased deque imports
     # were not resolved. With PR #5008 the alias fix and popleft/appendleft
     # support land, so ESBMC now reaches the real BFS symex (deque + set +
-    # 6-node graph). breadth_first_search still does not converge under
-    # --incremental-bmc, due to the __memcpy_impl loop in the list OM
-    # (string.c:278), and stays KNOWNBUG: the larger inner timeout lets
-    # testing_tool record the KNOWNBUG verdict instead of ctest hard-killing
-    # the run. breadth_first_search_fail is CORE since #7235 and reaches its
+    # 6-node graph). breadth_first_search does not converge under
+    # --incremental-bmc (the __memcpy_impl loop in the list OM, string.c:278),
+    # stays KNOWNBUG and passes by timing out, so it runs at the base budget.
+    # breadth_first_search_fail is CORE since #7235 and reaches its
     # VERIFICATION FAILED at ~123s on the DebugOpt Linux runner, so the 2x
     # budget is what keeps it off the 120s cap -- removing it flaps the test.
-    "regression/quixbugs/breadth_first_search"
     "regression/quixbugs/breadth_first_search_fail"
     # reverse_linked_list used to fast-crash with a SIGSEGV when comparing a
     # None-handle (pointer-width int) against a by-value Node struct via ==.
