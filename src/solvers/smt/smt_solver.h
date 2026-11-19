@@ -301,6 +301,8 @@ public:
   /** Solve with each boolean ast in @p assumptions held true for this query
    *  only. Backends without support abort; check supports_assumptions(). */
   virtual smt_resultt dec_solve_assuming(const ast_vec &assumptions);
+  /** After an UNSAT dec_solve_assuming: whether @p a was needed. */
+  virtual bool is_unsat_assumption(smt_astt a);
   virtual bool supports_assumptions() const
   {
     return false;

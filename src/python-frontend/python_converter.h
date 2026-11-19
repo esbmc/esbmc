@@ -1100,6 +1100,10 @@ private:
     const nlohmann::json &function_node,
     const code_typet &type);
 
+  /// The registry id of the list symbol the function \p call names returns
+  /// last, or empty when it returns no list symbol.
+  std::string returned_list_id(const exprt &call);
+
   exprt materialize_list_function_call(
     const exprt &expr,
     const nlohmann::json &element,
@@ -2030,6 +2034,12 @@ private:
   std::pair<const nlohmann::json *, std::string>
   find_imported_class_module(const std::string &class_name) const;
 
+  /// True when @p class_name, defined in this file or an imported module,
+  /// defines or inherits @p method_name.
+  bool class_defines_method(
+    const std::string &class_name,
+    const std::string &method_name) const;
+
   /// @p method_name under @p base_class, as the module that defines the base
   /// spells it, or null when the base is not imported.
   symbolt *find_method_in_imported_base(
@@ -2509,7 +2519,8 @@ private:
   void track_unbound_global(
     const std::string &id,
     const nlohmann::json &binding,
-    const typet &type);
+    const typet &type,
+    std::size_t bindings = 1);
   void guard_unbound_global(
     const std::string &id,
     const std::string &name,
@@ -3321,16 +3332,16 @@ private:
   // RHS processing helper methods
   // =========================================================================
 
-  /// The first argument of `ast_node`'s RHS when that RHS is a call to a
-  /// reordering builtin (sorted/reversed/list), else nullptr.
+  /// The first argument of \p call when it is a call to a reordering builtin
+  /// (sorted/reversed/list), else nullptr.
   static const nlohmann::json *
-  reordering_builtin_arg(const nlohmann::json &ast_node);
+  reordering_builtin_arg(const nlohmann::json &call);
 
   void record_annotated_list_elem_type(
     const nlohmann::json &ast_node,
     const std::string &lhs_id);
   void copy_elem_types_from_reordering_builtin(
-    const nlohmann::json &ast_node,
+    const nlohmann::json &call_node,
     const exprt &call,
     const std::string &lhs_id);
 
@@ -4587,9 +4598,15 @@ private:
     symbolt *lhs_symbol);
 
   /// A module global or function read by code converted before its binding,
-  /// mapped to the flag its binding sets and the type the reads took (#8369).
-  std::unordered_map<std::string, std::pair<std::string, typet>>
-    unbound_global_flags_;
+  /// mapped to the flag its bindings set, the type the reads took (#8369) and
+  /// the bindings not yet converted.
+  struct unbound_globalt
+  {
+    std::string flag;
+    typet type;
+    std::size_t bindings;
+  };
+  std::unordered_map<std::string, unbound_globalt> unbound_global_flags_;
   /// Classes deriving, directly or through another class, from a base in a
   /// module that has no model, mapped to that base as spelled. Such a class
   /// is converted without the base's members, so creating one is refused.
