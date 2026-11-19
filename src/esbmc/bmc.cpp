@@ -28,6 +28,7 @@
 #include <esbmc/bmc.h>
 #include <esbmc/property_report.h>
 #include <fstream>
+#include <goto-programs/goto_loop_invariant.h>
 #include <goto-programs/goto_loops.h>
 #include <goto-symex/trace/build_goto_trace.h>
 #include <goto-symex/symex_invariant.h>
@@ -292,8 +293,15 @@ void bmct::successful_trace(const symex_target_equationt &eq [[maybe_unused]])
   if (options.get_bool_option("result-only"))
     return;
 
+  std::vector<std::pair<locationt, std::string>> invariants = loop_invariants;
+  if (proves_loop_invariants())
+  {
+    const auto checked = checked_loop_invariants(program, ns);
+    invariants.insert(invariants.end(), checked.begin(), checked.end());
+  }
+
   goto_tracet goto_trace;
-  write_correctness_witnesses(options, ns, goto_trace, {}, loop_invariants);
+  write_correctness_witnesses(options, ns, goto_trace, {}, invariants);
 
   // On a successful verification there is no error trace, but dead-store
   // advisories (CWE-563) are still valid and must reach SARIF. Emit an
@@ -2131,6 +2139,43 @@ void bmct::report_coverage_verbose(
       abort();
     }
   }
+}
+
+/// Whether this run's success proves each loop invariant it checked for every
+/// state of the C program that reaches the loop from main (#10853).
+bool bmct::proves_loop_invariants() const
+{
+  if (
+    options.get_option("witness-output-yaml").empty() ||
+    config.language.lid != language_idt::C ||
+    !(config.main.empty() || config.main == "main"))
+    return false;
+  // Unbounded integers prove a different claim than C's.
+  if (options.get_bool_option("int-encoding"))
+    return false;
+  // These bounds drop the states beyond them without a claim.
+  if (
+    atol(options.get_option("depth").c_str()) > 0 ||
+    atoi(options.get_option("context-bound").c_str()) >= 0)
+    return false;
+  // k-induction's inductive step drops unwinding assertions too, but the
+  // strategy reports it only as part of a full proof.
+  if (options.get_bool_option("inductive-step"))
+  {
+    if (
+      !options.get_bool_option("k-induction") ||
+      options.get_bool_option("k-induction-parallel") ||
+      options.get_bool_option("disable-inductive-step"))
+      return false;
+  }
+  else if (
+    options.get_bool_option("no-unwinding-assertions") ||
+    options.get_bool_option("partial-loops"))
+    return false;
+  // The run reports SUCCESSFUL (report_result).
+  return !options.get_bool_option("kind-violation-found") &&
+         !options.get_bool_option("suppress-bounded-success") &&
+         proves_the_program();
 }
 
 bool bmct::proves_the_program() const

@@ -1,0 +1,5 @@
+CORE
+main.c
+--loop-invariant-check --claim 2 --claim 3 --witness-output-yaml -
+^VERIFICATION SUCCESSFUL$
+^  content:\n    \[\]$
