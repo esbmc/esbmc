@@ -1,5 +1,6 @@
 #pragma once
 
+#include <algorithm>
 #include <functional>
 #include <optional>
 #include <nlohmann/json.hpp>
@@ -801,6 +802,76 @@ inline bool loop_spans(const nlohmann::json &stmt, int before)
          line_field(stmt, "lineno") <= before && (end < 0 || end >= before);
 }
 
+// The `return`s of `node`, outside the functions, lambdas and classes it
+// nests.
+inline void collect_returns(
+  const nlohmann::json &node,
+  std::vector<const nlohmann::json *> &out)
+{
+  if (!node.is_structured())
+    return;
+  if (node.is_object())
+  {
+    const std::string type = node.value("_type", "");
+    if (
+      type == "FunctionDef" || type == "AsyncFunctionDef" || type == "Lambda" ||
+      type == "ClassDef")
+      return;
+    if (type == "Return")
+      out.push_back(&node);
+  }
+  for (const auto &child : node)
+    collect_returns(child, out);
+}
+
+// The module-level def a call names directly, or null.
+inline const nlohmann::json *
+called_module_def(const nlohmann::json &call, const nlohmann::json &module_body)
+{
+  if (!module_body.is_array() || call["func"].value("_type", "") != "Name")
+    return nullptr;
+  const std::string callee = call["func"].value("id", "");
+  for (const auto &stmt : module_body)
+    if (
+      stmt.is_object() && stmt.value("_type", "") == "FunctionDef" &&
+      stmt.value("name", "") == callee && stmt.contains("body"))
+      return &stmt;
+  return nullptr;
+}
+
+// The values `value` may give on different paths, each with its number
+// kind: the arms of a conditional expression and the `return`s of a
+// module-level def it calls. The annotator widens an int and a float joined
+// there to float, so the C type alone does not show the int.
+inline void collect_number_leaves(
+  const nlohmann::json &value,
+  const nlohmann::json &module_body,
+  unsigned depth,
+  std::vector<numeric_bindingt> &leaves)
+{
+  const std::string type = value.value("_type", "");
+  if (depth < 8 && type == "IfExp")
+  {
+    collect_number_leaves(value["body"], module_body, depth + 1, leaves);
+    collect_number_leaves(value["orelse"], module_body, depth + 1, leaves);
+    return;
+  }
+  if (depth < 8 && type == "Call")
+    if (const nlohmann::json *def = called_module_def(value, module_body))
+    {
+      std::vector<const nlohmann::json *> returns;
+      collect_returns((*def)["body"], returns);
+      for (const nlohmann::json *ret : returns)
+        if (ret->contains("value") && (*ret)["value"].is_object())
+          collect_number_leaves(
+            (*ret)["value"], module_body, depth + 1, leaves);
+      return;
+    }
+  const std::string kind = classify_literal_value_kind(value, module_body);
+  if (kind == "num" || kind == "float")
+    leaves.push_back({kind == "num" ? "int" : kind, value, true});
+}
+
 // Records the number `stmt` binds to `name`. A binding on the straight-line
 // spine before line `before` replaces every binding ahead of it on all paths,
 // so those are dropped.
@@ -810,11 +881,30 @@ inline void record_numeric_binding(
   bool nested,
   int before,
   std::vector<numeric_bindingt> &bindings,
-  const call_kindt &call_kind)
+  const call_kindt &call_kind,
+  const nlohmann::json &module_body)
 {
   const int line = line_field(stmt, "lineno");
   if (!nested && line >= 0 && line < before && assigns_name(stmt, name))
     bindings.clear();
+  if (
+    assigns_name(stmt, name) && stmt.contains("value") &&
+    stmt["value"].is_object())
+  {
+    std::vector<numeric_bindingt> leaves;
+    collect_number_leaves(stmt["value"], module_body, 0, leaves);
+    const auto has = [&leaves](const char *kind) {
+      return std::any_of(
+        leaves.begin(), leaves.end(), [kind](const numeric_bindingt &leaf) {
+          return leaf.kind == kind;
+        });
+    };
+    if (has("int") && has("float"))
+    {
+      bindings.insert(bindings.end(), leaves.begin(), leaves.end());
+      return;
+    }
+  }
   const std::string number = numeric_binding_kind(stmt, name, call_kind);
   if (!number.empty() && stmt.contains("value") && !stmt["value"].is_null())
     bindings.push_back({number, stmt["value"], nested});
@@ -830,7 +920,8 @@ inline void collect_numeric_bindings(
   int before,
   bool include_later,
   std::vector<numeric_bindingt> &bindings,
-  const call_kindt &call_kind)
+  const call_kindt &call_kind,
+  const nlohmann::json &module_body)
 {
   for (const auto &stmt : body)
   {
@@ -839,12 +930,20 @@ inline void collect_numeric_bindings(
     const std::string kind = stmt.value("_type", "");
     if (kind == "FunctionDef" || kind == "ClassDef")
       continue;
-    record_numeric_binding(stmt, name, nested, before, bindings, call_kind);
+    record_numeric_binding(
+      stmt, name, nested, before, bindings, call_kind, module_body);
     const bool later = include_later || loop_spans(stmt, before);
     for (const char *key : {"body", "orelse", "finalbody", "handlers", "cases"})
       if (stmt.contains(key) && stmt[key].is_array())
         collect_numeric_bindings(
-          stmt[key], name, true, before, later, bindings, call_kind);
+          stmt[key],
+          name,
+          true,
+          before,
+          later,
+          bindings,
+          call_kind,
+          module_body);
   }
 }
 
