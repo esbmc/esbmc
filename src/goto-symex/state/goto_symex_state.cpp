@@ -697,6 +697,34 @@ static expr2tc split_literal_chain(
   return state.constant_propagation(chain) ? chain : expr2tc();
 }
 
+/// The updates of @p value, outermost first, when it is a split_literal_chain
+/// over the L2 name of a split object other than @p lhs; otherwise none.
+/// Carried over that name, readers of @p lhs stop reading it and the slicer
+/// drops the step that prints it, which the run without the flag keeps (#7521).
+static std::vector<const with2t *> split_chain_updates(
+  const goto_symex_statet &state,
+  const expr2tc &value,
+  const expr2tc &lhs)
+{
+  std::vector<const with2t *> updates;
+  if (
+    state.split_structs->empty() || !is_with2t(value) || !is_struct_type(value))
+    return updates;
+
+  const expr2tc *base = &value;
+  while (is_with2t(*base))
+  {
+    updates.push_back(&to_with2t(*base));
+    base = &updates.back()->source_value;
+  }
+  if (
+    !is_symbol2t(*base) || (*base)->type != lhs->type ||
+    to_symbol2t(*base).thename == to_symbol2t(lhs).thename ||
+    !state.split_structs->fields(to_symbol2t(*base).thename))
+    updates.clear();
+  return updates;
+}
+
 /// The value @p arm holds for member @p name, number @p i of @p arm's type, or
 /// nil when the shape does not say. Deliberately not member2tc(..)->simplify():
 /// expr2t::simplify walks the operands before applying the projection, so
@@ -973,7 +1001,21 @@ void goto_symex_statet::assignment(expr2tc &lhs, const expr2tc &rhs)
   expr2tc l1_lhs = lhs;
 
   expr2tc const_value = constant_propagation(rhs) ? rhs : expr2tc();
-  level2.make_assignment(lhs, const_value, rhs);
+  const std::vector<const with2t *> updates =
+    is_nil_expr(const_value) ? std::vector<const with2t *>()
+                             : split_chain_updates(*this, const_value, lhs);
+  level2.make_assignment(lhs, updates.empty() ? const_value : expr2tc(), rhs);
+  if (!updates.empty())
+  {
+    // The same updates over the name just defined, which they hold on.
+    expr2tc chain = lhs;
+    for (auto it = updates.rbegin(); it != updates.rend(); ++it)
+      chain =
+        with2tc(chain->type, chain, (*it)->update_field, (*it)->update_value);
+    level2.set_constant(
+      renaming::level2t::name_record(to_symbol2t(std::as_const(l1_lhs))),
+      chain);
+  }
   if (
     is_nil_expr(const_value) &&
     split_structs->is_field(to_symbol2t(lhs).thename) &&
