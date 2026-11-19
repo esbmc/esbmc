@@ -291,6 +291,15 @@ bool loop_is_is_unreliable(const loopst &loop)
   return false;
 }
 
+/// A marker for a loop with an entry flag fails only once the loop is entered.
+static expr2tc exit_marker_guard(
+  const loop_entry_flagst &entered,
+  const goto_programt::targett &loop_head)
+{
+  const auto flag = entered.find(&*loop_head);
+  return flag == entered.end() ? gen_false_expr() : not2tc(flag->second);
+}
+
 /// Place an ASSERT(false) on every edge that leaves a loop,
 /// preserving each edge's original successor so CFG semantics are
 /// unchanged.
@@ -323,10 +332,14 @@ bool loop_is_is_unreliable(const loopst &loop)
 ///
 /// Marker is flagged inductive_step_instruction so BC/FC skip it;
 /// only IS sees the claim.
+///
+/// A loop with an entry flag in @p entered marks only the exits of a
+/// state that entered it: a state that skips the loop has not looped.
 void insert_markers_for_function(
   const irep_idt &function_name,
   goto_functionst &goto_functions,
-  goto_functiont &goto_function)
+  goto_functiont &goto_function,
+  const loop_entry_flagst &entered)
 {
   goto_programt &body = goto_function.body;
   goto_loopst loops(function_name, goto_functions, goto_function);
@@ -355,6 +368,7 @@ void insert_markers_for_function(
   {
     goto_programt::targett loop_head = info.head;
     goto_programt::targett loop_exit = info.back;
+    const expr2tc marker_guard = exit_marker_guard(entered, loop_head);
     const unsigned head_loc = loop_head->location_number;
     const unsigned exit_loc = loop_exit->location_number;
 
@@ -415,7 +429,7 @@ void insert_markers_for_function(
       // the marker.
       goto_programt::instructiont marker;
       marker.type = ASSERT;
-      marker.guard = gen_false_expr();
+      marker.guard = marker_guard;
       marker.location = orig_target->location;
       marker.location.comment("termination per-loop marker");
       marker.function = function_name;
@@ -449,7 +463,7 @@ void insert_markers_for_function(
     {
       goto_programt::instructiont marker;
       marker.type = ASSERT;
-      marker.guard = gen_false_expr();
+      marker.guard = marker_guard;
       marker.location = r->location;
       marker.location.comment("termination per-loop marker");
       marker.function = function_name;
@@ -469,7 +483,7 @@ void insert_markers_for_function(
       {
         goto_programt::instructiont marker;
         marker.type = ASSERT;
-        marker.guard = gen_false_expr();
+        marker.guard = marker_guard;
         marker.location = post->location;
         marker.location.comment("termination per-loop marker");
         marker.function = function_name;
@@ -720,6 +734,7 @@ void insert_abort_call_markers_for_function(
 
 void goto_termination(
   goto_functionst &goto_functions,
+  contextt &context,
   optionst &options,
   const namespacet &ns)
 {
@@ -734,10 +749,15 @@ void goto_termination(
   // there; library helpers (body.hide) DO have loops but those are
   // explicitly skipped in the per-function pass below. Its result gates
   // the inductive step, as on the reachability path.
-  // No entry flags: non-termination is a claim about the states that enter
-  // the loop.
+  // A library helper's loop that the state before it does not enter keeps
+  // that state: assuming its entry condition there would make every later
+  // state unreachable, which reads as non-termination (#10856).
+  loop_entry_flagst entered;
   bool any_unreliable_is_loop = goto_k_induction(
-    goto_functions, nullptr, options.get_bool_option("multi-property"));
+    goto_functions,
+    &context,
+    options.get_bool_option("multi-property"),
+    &entered);
 
   // Per-function pass: inject no-op-cycle ASSUMEs, gate IS for loops
   // that would make IS UNSAT unsound, and insert termination
@@ -785,7 +805,7 @@ void goto_termination(
     // Runs on library helpers too, so a program whose only loop lives
     // inside a hidden operational model (e.g. main() { memset(...); })
     // still has a termination claim for IS/FC to discharge.
-    insert_markers_for_function(it->first, goto_functions, it->second);
+    insert_markers_for_function(it->first, goto_functions, it->second, entered);
 
     // Re-number the function body before constructing another
     // `goto_loopst`. The marker pass inserts fresh ASSERT/GOTO
