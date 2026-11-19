@@ -3396,6 +3396,12 @@ smt_resultt smt_solver_baset::dec_solve_assuming(const ast_vec &)
   abort();
 }
 
+bool smt_solver_baset::is_unsat_assumption(smt_astt)
+{
+  log_error("{} does not support unsat assumptions", solver_text());
+  abort();
+}
+
 void smt_solver_baset::pre_solve()
 {
   // A new solve produces a fresh model; drop memoised l_get values.
