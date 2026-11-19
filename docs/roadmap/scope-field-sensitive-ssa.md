@@ -1291,6 +1291,7 @@ builds, with `repro7521` under Bitwuzla closest to it.
 
 Not measured: trace text of the Python suite under Z3 (ctest compares
 only the expected patterns), and an SV-COMP run.
+
 ### 8.17 Phase 1 gate on master after #10839
 
 Measured on 2026-11-18, master `48d5f770e` (#10839 merged), RelWithDebInfo
@@ -1365,9 +1366,9 @@ was introduced by #10839: its parent bounds the loop and master does not.
 
 ### 8.18 A split destination takes a whole read field by field
 
-`goto_symext::symex_assign` now calls `split_read` only when the assignment's
-target is not a split whole object; into a split one it uses `split_rewrite`,
-as before #10839. `symex_assign_split` takes that read field by field, so no
+`goto_symext::symex_assign` now passes the assignment's target to
+`split_read`, which skips the hidden step when that target is a split whole
+object and returns `split_rewrite`'s literal, as before #10839. `symex_assign_split` takes that read field by field, so no
 literal is carried and the hidden step bought nothing, while reading through
 the source's symbol lost a constant sibling whenever a pointer field kept
 the pinned literal unpropagated. A return still goes through `split_read`,
