@@ -1034,6 +1034,7 @@ private:
    *         call is not one of these.
    */
   std::optional<exprt> build_mixed_numeric_call(const std::string &list_id);
+  std::string list_arg_id(const exprt &list_arg) const;
 
   /// Whether the sorted() argument registered as @p list_id mixes int and
   /// float elements.

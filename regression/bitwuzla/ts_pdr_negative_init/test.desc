@@ -1,0 +1,6 @@
+CORE
+main.c
+--bitwuzla --no-pointer-check --no-bounds-check --ts-pdr --max-k-step 20
+^Transition system extracted
+^Solution found by PDR
+^VERIFICATION SUCCESSFUL$

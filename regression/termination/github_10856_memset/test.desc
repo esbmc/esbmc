@@ -1,0 +1,5 @@
+CORE
+main.c
+--termination --no-pointer-check --no-bounds-check --no-assertions --k-step 2 --max-k-step 40 --max-inductive-step 3
+^Forward condition shows all executions terminate \(k = 33\)$
+^VERIFICATION SUCCESSFUL$

@@ -2629,8 +2629,18 @@ void function_call_expr::materialize_list_symbol(const symbolt *sym) const
     name.find("$dict_list$") == std::string::npos)
     return;
   code_declt decl(build_symbol(*sym));
-  decl.copy_to_operands(sym->get_value());
   decl.location() = sym->location;
+  exprt value = sym->get_value();
+  // A call is a statement, not a value: as a declaration initialiser it
+  // reaches the solver unconverted (#10817), so store its result instead.
+  if (value.is_function_call())
+  {
+    value.op0() = build_symbol(*sym);
+    converter_.current_block->copy_to_operands(decl);
+    converter_.current_block->copy_to_operands(value);
+    return;
+  }
+  decl.copy_to_operands(value);
   converter_.current_block->copy_to_operands(decl);
 }
 
@@ -3674,15 +3684,7 @@ bool function_call_expr::receiver_class_defines_method(
   std::string cls = function_id_.get_class();
   if (cls.rfind("tag-", 0) == 0)
     cls = cls.substr(4);
-  const auto &ast = converter_.ast();
-  if (!is_class(cls, ast))
-    return false;
-  if (!json_utils::find_class(ast["body"], cls).is_null())
-    return json_utils::class_defines_method(ast["body"], cls, method_name);
-  const nlohmann::json *module =
-    converter_.find_imported_class_module(cls).first;
-  return module &&
-         json_utils::class_defines_method((*module)["body"], cls, method_name);
+  return converter_.class_defines_method(cls, method_name);
 }
 
 /// `b.set()` or `b.type()` where b's class defines the method: the builtin
@@ -7406,6 +7408,13 @@ exprt function_call_expr::sort_mixed_numeric_literal()
   return python_list(converter_, arg).build_list_from_exprs(sorted_elems);
 }
 
+// A call argument is typed by the list its callee returns.
+std::string function_call_expr::list_arg_id(const exprt &list_arg) const
+{
+  return list_arg.is_symbol() ? list_arg.identifier().as_string()
+                              : converter_.returned_list_id(list_arg);
+}
+
 std::optional<exprt> function_call_expr::apply_builtin_dispatch(
   std::string &actual_func_name,
   bool is_user_imported,
@@ -7466,9 +7475,9 @@ std::optional<exprt> function_call_expr::apply_builtin_dispatch(
   {
     exprt list_arg = converter_.get_expr(call_["args"][0]);
     typet elem_type;
-    if (list_arg.is_symbol())
+    const std::string list_id = list_arg_id(list_arg);
+    if (!list_id.empty())
     {
-      const std::string &list_id = list_arg.identifier().as_string();
       // Check that all elements have the same type and get the common type
       // Returns double_type() for mixed int/float lists (Python semantics)
       elem_type =

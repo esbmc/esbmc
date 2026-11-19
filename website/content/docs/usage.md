@@ -449,6 +449,20 @@ transition system falls back to the ordinary BMC strategy
   assumptions; meant as a cross-check.
 - `--ts-dump` — with any other `--ts` option, also print the extracted system.
 
+```sh
+esbmc file.c --ts-pdr --max-k-step 20
+```
+
+`--ts-pdr` runs IC3/PDR over the extracted system, with `--max-k-step` as the
+limit on the number of frames. It needs every state variable to be a
+bit-vector of at most 64 bits, and bit-vector encoding. A `VERIFICATION
+SUCCESSFUL` verdict is given only after the inductive invariant PDR found passes
+a check in a separate solver; a violation is replayed with BMC before
+`VERIFICATION FAILED` is reported. Anything else ends `VERIFICATION UNKNOWN`. A
+program that is not a transition system falls back to the ordinary BMC
+strategy. `--ts-pdr` cannot be combined with `--ts-bmc`, `--ts-fresh-solver`,
+`--ts-push-pop` or `--termination`.
+
 ## Reusing common subexpressions
 
 `--gcse` precomputes a subexpression shared between assignments into an
