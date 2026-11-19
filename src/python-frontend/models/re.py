@@ -638,8 +638,7 @@ def compile(pattern: str, flags: int = 0) -> Pattern:
 
 def _is_regex_meta(c: str) -> bool:
     return (c == '.' or c == '^' or c == '$' or c == '*' or c == '+' or c == '?' or c == '{'
-            or c == '}' or c == '[' or c == ']' or c == '\\' or c == '|' or c == '('
-            or c == ')')
+            or c == '}' or c == '[' or c == ']' or c == '\\' or c == '|' or c == '(' or c == ')')
 
 
 def _has_regex_meta(pattern: str) -> bool:
