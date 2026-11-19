@@ -1385,8 +1385,9 @@ was introduced by #10839: its parent bounds the loop and master does not.
 
 `goto_symext::symex_assign` now passes the assignment's target to
 `split_read`, which skips the hidden step when that target is a split whole
-object and returns `split_rewrite`'s literal, as before #10839. `symex_assign_split` takes that read field by field, so no
-literal is carried and the hidden step bought nothing, while reading through
+object and returns `split_rewrite`'s literal, as before #10839.
+`symex_assign_split` takes that read field by field, so no literal is
+carried and the hidden step bought nothing, while reading through
 the source's symbol lost a constant sibling whenever a pointer field kept
 the pinned literal unpropagated. A return still goes through `split_read`,
 so `tagged_attr_store`'s path is unchanged: applying the same rule to a
