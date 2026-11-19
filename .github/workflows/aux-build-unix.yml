@@ -144,10 +144,10 @@ jobs:
           ctest -j4 --output-on-failure --progress -L '^python/$|^platform-sensitive$'
         elif [[ "${{ github.event_name }}" == "pull_request" ]]; then
           # The Python-frontend suites are ~70% of the CPU time and light on
-          # memory; running them at -j4 keeps the job under the 6 h limit.
+          # memory; running them at -j3 keeps the job under the 6 h limit.
           py='^(python|numpy|quixbugs|humaneval|typeevalpy)/$'
           rc=0
-          ctest -j4 --output-on-failure --progress -L "$py" -LE python-intensive . || rc=$?
+          ctest -j3 --output-on-failure --progress -L "$py" -LE python-intensive . || rc=$?
           ctest -j2 --output-on-failure --progress -LE "$py|python-intensive" . || rc=$?
           exit $rc
         else
