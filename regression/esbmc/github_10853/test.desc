@@ -1,0 +1,6 @@
+CORE
+main.c
+--loop-invariant-check --witness-output-yaml -
+^VERIFICATION SUCCESSFUL$
+(?s)type: "loop_invariant"\s+location:\s+file_name: "[^"]*main.c"\s+line: 8\s+column: 3\s+function: "copy_bytes"\s+value: "i <= n && n <= 4"\s+format: "c_expression"
+(?s)type: "loop_invariant"\s+location:\s+file_name: "[^"]*main.c"\s+line: 16\s+column: 3\s+function: "main"\s+value: "0 <= i && i <= 5"

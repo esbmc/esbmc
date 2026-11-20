@@ -56,6 +56,14 @@ void goto_loop_invariant(
  */
 void goto_loop_invariant_combined(goto_functionst &goto_functions);
 
+/// The loop invariants whose base case and inductive step are both still
+/// claims of @p goto_functions, each as its loop's location and C text. A run
+/// that discharges every claim has proved them, so a correctness witness may
+/// state them (#10853); one that is not plain C is left out.
+std::vector<std::pair<locationt, std::string>> checked_loop_invariants(
+  const goto_functionst &goto_functions,
+  const namespacet &ns);
+
 class goto_loop_invariantt : public goto_loopst
 {
 public:
@@ -87,6 +95,8 @@ public:
 protected:
   contextt &context;
   bool use_frame_rule;
+  /// The claim number of the current loop's first invariant.
+  unsigned first_claim = 0;
 
   /// Frame enforcer shared between the havoc step (ASSUME) and the inductive
   /// step (ASSERT compliance check) for the currently-processed loop.

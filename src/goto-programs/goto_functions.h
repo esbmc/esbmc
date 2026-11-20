@@ -97,6 +97,9 @@ public:
   // the rest). Static for the same reason reached_claims is: goto_symext holds
   // goto_functionst by const reference. Cleared at the start of each run.
   static property_verdict_tablet property_verdicts;
+  // The answers of the checks --report-property-class keeps out of the
+  // verdict, filled the same two ways.
+  static property_verdict_tablet reported_verdicts;
 
   // Serialises clear_verified_claims_in_goto across parallel multi-property
   // claims, which may concurrently make_skip() the same assert instruction.

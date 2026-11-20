@@ -54,7 +54,7 @@ specify. So you usually do not touch `.github/workflows/*` for a version bump.
 
 ### C. Common to both
 
-3. **Update `BUILDING.md`.** Change the documented version so manual installers
+3. **Update the [Build Guide](/docs/development/building).** Change the documented version so manual installers
    match what `DOWNLOAD_DEPENDENCIES` fetches.
 
 4. **Reconcile API changes — the step that actually breaks.** If the solver
@@ -98,6 +98,6 @@ ninja -C build
   default options, and occasionally `check-sat` results on hard instances; treat a
   regression diff as signal, and pin/adjust solver options in the backend rather
   than working around it in tests.
-- **Keep `BUILDING.md` and the CMake pin in lockstep** — they are the two places a
+- **Keep the [Build Guide](/docs/development/building) and the CMake pin in lockstep** — they are the two places a
   user vs. the automated build read the version from, and drift between them
   produces "works in CI, fails locally" reports.

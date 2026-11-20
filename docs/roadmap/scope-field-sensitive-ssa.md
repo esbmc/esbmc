@@ -6,42 +6,25 @@
 > Python `CORE` suite (9279 tests, Bitwuzla), the C and C++ `CORE` suites
 > (Bitwuzla) and `tagged_attr_store` (Z3 and Bitwuzla) keep every verdict, and
 > the Phase 1 corpus rows meet the 2x bar under both solvers (§8.14-§8.17);
-> so does the whole Python suite under Z3 (§8.16). Master
-> also has a wrong verdict with the flag: a split struct's L2 name, carried
-> into a call argument, is re-split into unassigned field generations (§8.19).
-> The open Phase 1 PRs fix it and the lost constant propagation: #10862, a
-> split copy into a split destination (§8.18), and the PR stacked on it,
-> `github_7797_flat_set` and the re-split L2 name (§8.19). With both, the
-> full Python `CORE` suite keeps every verdict with the flag forced on
-> (§8.20). The 11 Python traces that lost the step of a whole tagged-value
-> write print it again: a copy of a split object's carried chain is now
-> carried over the destination's own name (§8.21). A separate build of the
-> stack's head, merged with master `08198b792`, gives the same results (§8.22),
-> and a quarter of the Python `CORE` suite under Z3 keeps every verdict (one
-> only past a 60 s cap) and
-> every printed value the run without the flag pins (§8.23). The stack
-> merged with master `1aa90ce5a`, which adds #10848's erasure of a dead
-> aggregate's member entries, keeps those results (§8.24).
-> Phase 1 still lacks an SV-COMP run. Phase 2's first part, stacked on that
-> PR, splits address-taken locals that every pointer access reaches as a
+> so does the whole Python suite under Z3 (§8.16). The Phase 1 fixes for a
+> split copy into a split destination (#10862, §8.18) and for a re-split L2
+> name and `github_7797_flat_set` (#10864, §8.19-§8.24) are merged; with
+> them the full Python `CORE` suite keeps every verdict with the flag forced
+> on (§8.20). Phase 1 still lacks an SV-COMP run. Phase 2's first part
+> (#10876) splits address-taken locals that every pointer access reaches as a
 > whole or through one member, as Andersen's points-to sets show (§8.25);
-> `local_addr_once` now meets the 2x bar, while globals and the SV-COMP run
-> are still open. An assert-enabled build of that part, merged with master
-> `e0ce5d373`, runs every C and C++ `CORE` test with the flag forced on
-> without tripping Invariant 3's assert, after a fix for a crash on a
-> points-to set that lists one object twice (§8.26). The two extra
-> `NOT CHECKED` claims `github_5868_is_scalar_const_lookup_fail` printed with
-> that part came from a phi reading a copy carried over the object's own name
-> in the other path's value set; the phi now leaves those entries to the
-> value-set merge, and the test prints what it prints without the flag
-> (§8.27). Phase 2's second part, stacked on the first, splits static
-> objects as well; `plc_db` with the flag now solves at 512 and 2048 fields,
-> but neither global row meets the 2x bar, and a split global copied from a
-> split value loses its trace step as a split local already does (§8.28).
-> Phase 2's third part, stacked on the second, memoizes the size of a struct
-> or union that needs no namespace lookup: the remaining width cost was the
-> dereference checks sizing the whole object on every access. With it, every
-> corpus row meets the 2x bar under Z3 and Bitwuzla (§8.29).**
+> `local_addr_once` now meets the 2x bar. An assert-enabled build of it runs
+> every C and C++ `CORE` test with the flag forced on without tripping
+> Invariant 3's assert (§8.26), and a phi no longer reads a copy carried over
+> the object's own name from the other path's value set (§8.27). Its merge
+> with master `aabf837b1` keeps those results under Z3 (§8.27). Phase 2's
+> second part (#10886), stacked on the first, splits static objects as well;
+> `plc_db` with the flag now solves at 512 and 2048 fields, and a split
+> global copied from a split value loses its trace step as a split local
+> already does (§8.28); the slicer now moves such a print to a kept field
+> step, which fixes both (§8.30). The dereference-size memo (#10894) is
+> stacked on it; with it, every corpus row meets the 2x bar under Z3 and
+> Bitwuzla (§8.29). The SV-COMP run is still open.**
 > The corpus is in `regression/field-sensitivity/`
 > with baselines, and the census has been run and reverted. Phase 1 adds
 > `--field-sensitive-ssa` (default off): symex gives each field of an
@@ -1856,6 +1839,36 @@ Measured on 2026-11-20 on `feat/field-sensitive-ssa-phase2-locals` at
 - Still open for the Phase 2 gate: globals (`global_callee`, `plc_db`), the
   assert-enabled run under Bitwuzla (§8.26), and an SV-COMP run.
 
+Re-measured on 2026-11-20 after merging master `aabf837b1` into
+`feat/field-sensitive-ssa-phase2-locals` (`fac81c88e`; #10864 was
+squash-merged, so its conflicts were resolved in favour of this branch).
+RelWithDebInfo, gcc 13.3, LLVM 18, Z3 4.13.3, 4-core container. Bitwuzla
+was not built: its CaDiCaL download is refused by the sandbox proxy.
+"Master" is a build of `aabf837b1`.
+
+- Flag forced on against off, same binary, 30 s per run: every fourth
+  `regression/esbmc-cpp/cpp` directory (343 `CORE` tests) and every eighth
+  `regression/esbmc` directory (437). 0 verdict changes. The only
+  differences are 6 tests that already pass `--field-sensitive-ssa` (given
+  twice, the option is rejected), `vector_reserve_realloc` and
+  `assoc_emplace`, which hit the 30 s cap without the flag (see below), and
+  random witness UUIDs; no trace text changes.
+- ctest `field_sensitive_ssa|field-sensitivity|github_7797|github_5868`:
+  215/215.
+- ctest without the flag, 10-minute cap, `-j4`: `esbmc-cpp/cpp` 627 tests
+  finished, 2 failed; `esbmc/` 746 finished, 4 failed; every 20th
+  `python/` test, 305 of 493 finished, 1 failed. Each failure prints the
+  same output on master: `vector_reserve_realloc` (Z3 does not finish
+  within 150 s), `ch8_5` (no `out_of_range` under LLVM 18), `02_eureka23`
+  and `gcc_popcount_01` (no Boolector), `builtin_clzg_ctzg` and
+  `bundled_headers_from_vfs` (LLVM 18), and `complex_cmath_log`
+  (`THOROUGH`, killed for memory on master too).
+- Corpus with the flag under Z3, symex seconds, medians of three, 8 / 2048
+  fields: `local_addr_once` 0.020 / 0.026 (1.30x); `repro7521` 0.922 /
+  1.355 (1.47x); `local_writes` 0.022 / 0.021 (0.95x).
+- clang-format 23.1.5 clean; complexity gate: nothing over threshold.
+- The merge adds no branch to `src/`.
+
 ### 8.28 Phase 2, part 2: static objects
 
 Measured on 2026-11-20 on `feat/field-sensitive-ssa-phase2-globals`,
@@ -1905,7 +1918,7 @@ Results:
   §8.21 loss for split destinations, not new to globals. Handing the print
   to the kept `g.p` step is not enough: the printed value reads the whole
   read of the return value's own symbol, which the slicer also removes, so
-  §8.8's rule hides it. Open.
+  §8.8's rule hides it. Fixed in §8.30.
 - Corpus, flag on, symex seconds, 8 / 2048 fields. Single runs right after
   the build: `global_callee` 0.330 / 1.971 (6.0x) under Z3 and 0.291 /
   2.019 (6.9x) under Bitwuzla; `plc_db` 0.033 / 0.205 (6.2x) and 0.034 /
@@ -1982,3 +1995,83 @@ Results:
   which already existed and now also set the flag, were not reached.
 - Still open for the Phase 2 gate: the trace step of §8.28, the
   assert-enabled run under Bitwuzla (§8.26), and an SV-COMP run.
+
+### 8.30 Phase 2, part 2: the print of a sliced split write
+
+Measured on 2026-11-20 on `feat/field-sensitive-ssa-phase2-globals` after
+merging `feat/field-sensitive-ssa-phase2-locals` at `6a47098d4`.
+RelWithDebInfo, gcc 13.3, LLVM 18, Z3 4.13.3 and Bitwuzla 0.9.0 (CaDiCaL
+2.1.2 cloned with git), 4-core container. "Base" is the merge's binary.
+(§8.29 is on the PR stacked on this one.)
+
+`symex_assign_split` prints a whole write to a split object on the step of
+its last field. In `field_sensitive_ssa_carried_copy_fail` that field is
+`g`'s padding, which nothing reads, so the slicer removed the step and the
+print with it, while the kept `g.p` step stayed hidden. Under the flag the
+slicer now moves the print of a removed last-field step to the latest kept
+field step of the same write (same instruction, same `original_lhs`) and
+keeps what the print reads, as the unsplit object's step keeps its
+right-hand side. §8.28's obstacle, a print reading the return value's
+removed whole read, goes away because that read is now kept. The test
+prints `g = { .p=&b, .k=0 }`; without the flag Z3 prints
+`g = { .p=t.p, .k=0 }`.
+
+Results:
+
+- ctest `field_sensitive_ssa|field-sensitivity|github_7797|github_5868`:
+  220/220 (219 before, plus the new test). `field_sensitive_ssa_carried_copy_fail`
+  and the new `field_sensitive_ssa_carried_copy_local_fail` (the same
+  program with a split local) fail on the base binary, which prints no step
+  for `g`, and pass under Z3 and Bitwuzla.
+- Flag forced on, base against this change, 20 s per run: every fourth
+  directory of `regression/esbmc` and `regression/esbmc-cpp/cpp` and every
+  twentieth of `regression/python` (1680 `CORE` tests). 0 verdict changes.
+  27 outputs differ. 16 Python tests differ only in temporary paths or
+  timings, and `github_7905_struct_refused` and `ts_dump_exec_guard` only
+  in timings. `github_8777_fail` ran past the 20 s cap both ways; re-run
+  alone, both take 27 s and fail the same 6 of 13 properties.
+  `assoc_emplace` and `field_sensitive_ssa_copy` keep more assignments.
+  `field_sensitive_ssa_carried_copy_fail` prints its step (the fix).
+  `overflow-result3` and `overflow-result-all-fail` print their `foo`
+  steps again, now the same as without the flag (§8.6 listed them as
+  dropped). `field_sensitive_ssa_print_pointer_fail` adds the steps
+  `t = { .a=5, .b=2 }` and `t = { .a=2, .b=5 }`, the values the program
+  computes from `x = 5`. `os1_fail` reports another uncaught exception from
+  a different model, same verdict. In `field_sensitive_ssa_phi_own_name_fail`
+  (no `--multi-property`), `assertion.3` is labelled `NOT CHECKED` instead
+  of `FAILED`: that mode labels a claim `FAILED` only when the one model
+  violates it, and the extra kept steps change the model. With
+  `--multi-property` both binaries report it `FAILED`. This run used a
+  build that still had the unreached check dropped below; the ctest runs
+  and the corpus used the final code.
+- Each outcome of `carry_split_print` reached under Z3 and Bitwuzla
+  (instrumented build, the new test's program and a variant whose last
+  field is kept): not a split field step; a removed printing step; a kept
+  printing step; a hidden step with no matching print; a removed sibling;
+  the print moved. A check for a sibling kept only for a nondet result was
+  reached by no harness: a nondet split write gives its last field a nondet
+  right-hand side too, so that step is kept rather than removed. It was
+  dropped. The new test's program with `__ESBMC_unreachable()` after the
+  copy reports it reached under both solvers.
+- Corpus, flag on, symex seconds, median of three, 8 / 2048 fields:
+
+  | Row | Z3 base | Z3 new | Bitwuzla base | Bitwuzla new |
+  |---|---|---|---|---|
+  | `repro7521` | 0.693 / 0.984 | 0.667 / 0.974 | 0.681 / 1.016 | 0.667 / 1.133 |
+  | `local_writes` | 0.014 / 0.017 | 0.014 / 0.017 | 0.014 / 0.016 | 0.016 / 0.016 |
+  | `local_addr_once` | 0.015 / 0.018 | 0.014 / 0.017 | 0.014 / 0.019 | 0.015 / 0.016 |
+  | `global_callee` | 0.169 / 1.287 | 0.156 / 1.304 | 0.160 / 1.201 | 0.160 / 1.343 |
+  | `plc_db` | 0.032 / 0.138 | 0.020 / 0.143 | 0.020 / 0.141 | 0.021 / 0.145 |
+
+  All `VERIFICATION SUCCESSFUL`. `plc_db_w2048` ran with the `w8` row's
+  options, since its own test only dumps SMT-LIB. The change runs after
+  symex, so the table only bounds the noise. The global rows miss the 2x
+  bar on this branch; #10894 brings them under it (§8.29).
+- ctest without the flag (the change acts only under it), 10-minute caps:
+  `esbmc-cpp/cpp` 627 of 628 run, `esbmc/` 902 of 906 run; the 1 and 4
+  failures (`ch8_5`, `02_eureka23`, `builtin_clzg_ctzg`,
+  `bundled_headers_from_vfs`, `gcc_popcount_01`) fail the same way with the
+  base binary.
+- clang-format 23.1.5 clean.
+- Still open for the Phase 2 gate: the assert-enabled run under Bitwuzla
+  (§8.26) and an SV-COMP run.

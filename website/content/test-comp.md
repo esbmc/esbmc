@@ -110,7 +110,7 @@ title: Test-COMP
     <ul>
       <li><strong>1<sup>st</sup></strong> Place in Cover-Error</li>
       <li><strong>1<sup>st</sup></strong> Place in Cover-Branches</li>
-      <li><strong>1<sup>nd</sup></strong> Place in Overall</li>
+      <li><strong>1<sup>st</sup></strong> Place in Overall</li>
     </ul>
   </li>
 </ul>

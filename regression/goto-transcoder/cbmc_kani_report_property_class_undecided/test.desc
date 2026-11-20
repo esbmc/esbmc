@@ -1,0 +1,5 @@
+CORE
+../cbmc_kani_report_property_class/cbmc_kani_report_property_class.goto
+--binary --function _RNvCs6vF97k9nHeS_6report7harness --report-property-class reachability_check --report-property-class cover --smt-formula-only
+^  UNDECIDED      \[harness.cover.1\]
+^\*\* 10 reported: 8 UNDECIDED, 1 UNREACHABLE, 1 UNSATISFIABLE$

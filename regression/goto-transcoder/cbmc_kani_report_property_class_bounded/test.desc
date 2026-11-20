@@ -1,0 +1,5 @@
+CORE
+cbmc_kani_report_property_class_bounded.goto
+--binary --function _RNvCs5yBg9JJgdhb_7bounded7harness --report-property-class reachability_check --report-property-class cover --unwind 3
+^  UNDECIDED      \[harness.cover.1\] .*i == 5 \(not every path was explored\)$
+^VERIFICATION FAILED$

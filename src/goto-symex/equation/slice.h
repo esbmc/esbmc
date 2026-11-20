@@ -133,11 +133,14 @@ public:
     sliced_definitions.clear();
 
     fine_timet algorithm_start = current_time();
+    symex_target_equationt::SSA_stept *sliced_print = nullptr;
     for (auto &step : boost::adaptors::reverse(eq))
     {
       if (step.ignore)
         continue;
       run_on_step(step);
+      if (hide_unconstrained_prints)
+        sliced_print = carry_split_print(step, sliced_print);
     }
     // A branching step only steers the witness, so its guard and cond are not
     // dependencies. Where they read a value the slicer removed, the model's
@@ -264,6 +267,20 @@ protected:
    * @return true if \expr reads a sliced value
    */
   bool reads_sliced(const expr2tc &expr);
+
+  /**
+   * A split struct's whole write prints on its last field's step. When the
+   * reverse pass removes that step, move the print to the latest kept field
+   * step of the same write and keep what it reads, as the unsplit object's
+   * step would be kept with its right-hand side (#7521).
+   *
+   * @param step the step the reverse pass just visited
+   * @param pending the removed printing step awaiting a kept sibling, or null
+   * @return the printing step still awaiting a kept sibling, or null
+   */
+  symex_target_equationt::SSA_stept *carry_split_print(
+    symex_target_equationt::SSA_stept &step,
+    symex_target_equationt::SSA_stept *pending);
 
   /// Does \expr read a symbol in #sliced_definitions? A symbol with no
   /// defining step is as free in the sliced formula as in the full one.

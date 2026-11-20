@@ -17,6 +17,7 @@
 #include <util/base/prefix.h>
 #include <util/irep/std_code.h>
 #include <util/expr/type_byte_size.h>
+#include <irep2/irep2_expr.h>
 #include <unordered_set>
 
 clang_c_adjust::clang_c_adjust(contextt &_context)

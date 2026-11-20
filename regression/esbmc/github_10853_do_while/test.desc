@@ -1,0 +1,5 @@
+CORE
+main.c
+--loop-invariant-check --witness-output-yaml -
+^VERIFICATION SUCCESSFUL$
+(?s)type: "loop_invariant"\s+location:\s+file_name: "[^"]*main.c"\s+line: 5\s+column: 3\s+function: "main"\s+value: "i <= 10"

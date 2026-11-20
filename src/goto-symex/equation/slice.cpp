@@ -290,6 +290,35 @@ void symex_slicet::run_on_assume(symex_target_equationt::SSA_stept &SSA_step)
   }
 }
 
+static bool is_split_field_step(const symex_target_equationt::SSA_stept &step)
+{
+  return step.is_assignment() && is_symbol2t(step.original_lhs) &&
+         has_prefix(
+           id2string(to_symbol2t(step.lhs).thename),
+           id2string(to_symbol2t(step.original_lhs).thename) + "::");
+}
+
+symex_target_equationt::SSA_stept *symex_slicet::carry_split_print(
+  symex_target_equationt::SSA_stept &step,
+  symex_target_equationt::SSA_stept *pending)
+{
+  if (!is_split_field_step(step))
+    return nullptr;
+  if (!step.hidden)
+    return step.ignore && !is_nil_expr(step.original_rhs) ? &step : nullptr;
+  if (
+    !pending || step.source.pc != pending->source.pc ||
+    step.original_lhs != pending->original_lhs)
+    return nullptr;
+  if (step.ignore)
+    return pending;
+  step.hidden = false;
+  step.original_rhs = pending->original_rhs;
+  scan_array_uses(step.original_rhs);
+  collect_dependencies(step.original_rhs);
+  return nullptr;
+}
+
 void symex_slicet::run_on_assignment(
   symex_target_equationt::SSA_stept &SSA_step)
 {

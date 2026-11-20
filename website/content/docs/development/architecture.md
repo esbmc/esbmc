@@ -36,6 +36,9 @@ directories follow it:
 | `util/` | Shared utilities and data structures |
 | `big-int/` | Arbitrary-precision integers |
 | `c2goto/`, `goto2c/` | C operational models compiled to GOTO, and GOTO back to C |
+| `goto2lean/` | Translation of a GOTO program to Lean 4 (`--goto2lean`, prototype; see [Lean](/docs/lean)) |
+| `transition-system/` | Extraction of a program's main loop as a transition system, and the `--ts-*` engines (BMC, IC3/PDR) over it |
+| `llm/` | LLM client interface, built only with `-DENABLE_LLM=On` |
 | `cpp/library/` | The C++ operational models |
 
 Each frontend parses one language into the shared GOTO representation:
