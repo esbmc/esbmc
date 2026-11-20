@@ -1057,25 +1057,8 @@ void value_sett::get_value_set_rec(
 
   if (is_byte_extract2t(expr))
   {
-    // This is cropping up when one assigns, for example, a pointer into a
-    // byte array. The lhs gets portions of the pointer, bitcasted and then
-    // byte extracted on the lhs. Thus, we need to blast through the byte
-    // extract.
-    const byte_extract2t &be = to_byte_extract2t(expr);
-    get_value_set_rec_cached(be.source_value, dest, suffix, original_type);
-
-    /* A pointer read out of an aggregate at a member's offset, as Kani does
-     * for DynMetadata (#10889), is keyed under that member's path, which the
-     * lookup above does not spell. */
-    const bool offset_known = is_constant_int2t(be.source_offset);
-    for (const std::string &path : offset_paths(
-           be.source_value->type,
-           offset_known ? to_constant_int2t(be.source_offset).value : 0,
-           offset_known,
-           expr->type,
-           ns))
-      get_value_set_rec_cached(
-        be.source_value, dest, path + suffix, original_type);
+    get_byte_extract_value_set(
+      to_byte_extract2t(expr), dest, suffix, original_type);
     return;
   }
 
@@ -1200,6 +1183,32 @@ void value_sett::get_value_set_rec(
     get_type_id(expr->type));
   expr2tc tmp = unknown2tc(original_type);
   insert(dest, tmp, BigInt(0));
+}
+
+void value_sett::get_byte_extract_value_set(
+  const byte_extract2t &be,
+  object_mapt &dest,
+  const std::string &suffix,
+  const type2tc &original_type) const
+{
+  // This is cropping up when one assigns, for example, a pointer into a
+  // byte array. The lhs gets portions of the pointer, bitcasted and then
+  // byte extracted on the lhs. Thus, we need to blast through the byte
+  // extract.
+  get_value_set_rec_cached(be.source_value, dest, suffix, original_type);
+
+  /* A pointer read out of an aggregate at a member's offset, as Kani does
+   * for DynMetadata (#10889), is keyed under that member's path, which the
+   * lookup above does not spell. */
+  const bool offset_known = is_constant_int2t(be.source_offset);
+  for (const std::string &path : offset_paths(
+         be.source_value->type,
+         offset_known ? to_constant_int2t(be.source_offset).value : 0,
+         offset_known,
+         be.type,
+         ns))
+    get_value_set_rec_cached(
+      be.source_value, dest, path + suffix, original_type);
 }
 
 void value_sett::get_byte_stitching_value_set(
