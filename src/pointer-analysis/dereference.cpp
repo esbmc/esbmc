@@ -3057,6 +3057,18 @@ void dereferencet::construct_struct_ref_from_dyn_offs_rec(
     return;
   }
 
+  // An element of a scalar array: legal at offset 0 when the sizes match, as
+  // in build_reference_rec's constant-offset scalar case (#10891).
+  if (
+    is_scalar_type(value->type) &&
+    value->type->get_width() == type->get_width())
+  {
+    expr2tc offs_is_zero =
+      and2tc(accuml_guard, equality2tc(offs, gen_long(offs->type, 0)));
+    output.emplace_back(offs_is_zero, bitcast2tc(type, value));
+    return;
+  }
+
   if (is_union_type(value->type))
   {
     // Handle union types. All members of a union are at offset 0.
