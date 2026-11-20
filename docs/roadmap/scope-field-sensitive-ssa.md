@@ -17,7 +17,7 @@
 > every C and C++ `CORE` test with the flag forced on without tripping
 > Invariant 3's assert (§8.26), and a phi no longer reads a copy carried over
 > the object's own name from the other path's value set (§8.27). Its merge
-> with master `aabf837b1` keeps those results (§8.28). Globals (#10886) and
+> with master `aabf837b1` keeps those results under Z3 (§8.27). Globals (#10886) and
 > the dereference-size memo (#10894) are stacked on it; the SV-COMP run is
 > still open.** The corpus is in `regression/field-sensitivity/`
 > with baselines, and the census has been run and reverted. Phase 1 adds
@@ -1832,3 +1832,33 @@ Measured on 2026-11-20 on `feat/field-sensitive-ssa-phase2-locals` at
   (1.15x).
 - Still open for the Phase 2 gate: globals (`global_callee`, `plc_db`), the
   assert-enabled run under Bitwuzla (§8.26), and an SV-COMP run.
+
+Re-measured on 2026-11-20 after merging master `aabf837b1` into
+`feat/field-sensitive-ssa-phase2-locals` (`fac81c88e`; #10864 was
+squash-merged, so its conflicts were resolved in favour of this branch).
+RelWithDebInfo, gcc 13.3, LLVM 18, Z3 4.13.3, 4-core container. Bitwuzla
+was not built: its CaDiCaL download is refused by the sandbox proxy.
+"Master" is a build of `aabf837b1`.
+
+- Flag forced on against off, same binary, 30 s per run: every fourth
+  `regression/esbmc-cpp/cpp` directory (343 `CORE` tests) and every eighth
+  `regression/esbmc` directory (437). 0 verdict changes. The only
+  differences are 6 tests that already pass `--field-sensitive-ssa` (given
+  twice, the option is rejected), `vector_reserve_realloc` and
+  `assoc_emplace`, which hit the 30 s cap without the flag (see below), and
+  random witness UUIDs; no trace text changes.
+- ctest `field_sensitive_ssa|field-sensitivity|github_7797|github_5868`:
+  215/215.
+- ctest without the flag, 10-minute cap, `-j4`: `esbmc-cpp/cpp` 627 tests
+  finished, 2 failed; `esbmc/` 746 finished, 4 failed; every 20th
+  `python/` test, 305 of 493 finished, 1 failed. Each failure prints the
+  same output on master: `vector_reserve_realloc` (Z3 does not finish
+  within 150 s), `ch8_5` (no `out_of_range` under LLVM 18), `02_eureka23`
+  and `gcc_popcount_01` (no Boolector), `builtin_clzg_ctzg` and
+  `bundled_headers_from_vfs` (LLVM 18), and `complex_cmath_log`
+  (`THOROUGH`, killed for memory on master too).
+- Corpus with the flag under Z3, symex seconds, medians of three, 8 / 2048
+  fields: `local_addr_once` 0.020 / 0.026 (1.30x); `repro7521` 0.922 /
+  1.355 (1.47x); `local_writes` 0.022 / 0.021 (0.95x).
+- clang-format 23.1.5 clean; complexity gate: nothing over threshold.
+- The merge adds no branch to `src/`.
