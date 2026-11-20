@@ -1433,6 +1433,9 @@ void goto_symext::symex_input(const code_function_call2t &func_call)
 
   // TODO: fill / cut off the inputs stream based on the length limits.
 
+  // C11 6.5.2.2p10: every argument is evaluated before the call, so resolve
+  // each target before a store can change a pointer a later argument reads.
+  std::vector<write_targett> targets;
   long assigned = 0;
   for (size_t i = 0; i < conversions.size(); i++)
   {
@@ -1448,28 +1451,9 @@ void goto_symext::symex_input(const code_function_call2t &func_call)
     internal_deref_items.clear();
     expr2tc deref = dereference2tc(get_empty_type(), operand);
     dereference(deref, dereferencet::INTERNAL);
-
-    for (const auto &item : internal_deref_items)
-    {
-      assert(is_symbol2t(item.object) && "This only works for variables");
-      check_read_only_write(item.object, and2tc(stored.as_expr(), item.guard));
-
-      auto type = item.object->type;
-      expr2tc val = sideeffect2tc(
-        type,
-        expr2tc(),
-        expr2tc(),
-        std::vector<expr2tc>(),
-        type2tc(),
-        sideeffect2t::allockind::nondet);
-
-      expr2tc target_guard = item.guard;
-      cur_state->rename(target_guard);
-      guard2tc guard = stored;
-      guard.add(target_guard);
-      symex_assign(code_assign2tc(item.object, val), false, guard);
-    }
+    collect_write_targets(stored, targets);
   }
+  write_nondet_targets(targets);
 
   cur_state->source.pc++;
 }

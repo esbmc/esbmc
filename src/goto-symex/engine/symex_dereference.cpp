@@ -267,3 +267,37 @@ void goto_symext::check_read_only_write(
   dereferencet(ns, new_context, options, symex_dereference_state)
     .read_only_write_check(object, guard);
 }
+
+void goto_symext::collect_write_targets(
+  const guard2tc &base,
+  std::vector<write_targett> &targets)
+{
+  for (const auto &item : internal_deref_items)
+  {
+    expr2tc pointer_guard = item.guard;
+    cur_state->rename(pointer_guard);
+    guard2tc guard = base;
+    guard.add(pointer_guard);
+    targets.push_back({item.object, guard});
+  }
+}
+
+void goto_symext::write_nondet_targets(
+  const std::vector<write_targett> &targets)
+{
+  for (const write_targett &target : targets)
+  {
+    check_read_only_write(target.object, target.guard.as_expr());
+    if (is_constant_string2t(target.object))
+      continue;
+    assert(is_symbol2t(target.object) && "Only variables can be written");
+    expr2tc val = sideeffect2tc(
+      target.object->type,
+      expr2tc(),
+      expr2tc(),
+      std::vector<expr2tc>(),
+      type2tc(),
+      sideeffect2t::allockind::nondet);
+    symex_assign(code_assign2tc(target.object, val), false, target.guard);
+  }
+}
