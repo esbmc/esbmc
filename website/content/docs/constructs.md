@@ -99,9 +99,11 @@ The `#include` has to sit inside the guard as well: the header `#error`s when
 the ordinary compile the guard exists to protect. Code that is compiled only by
 ESBMC can use the `__ESBMC_`-prefixed intrinsics directly and skip the header.
 
-`__ESBMC_alloca` is the one entry in that table that is not an injected
-declaration: ESBMC passes `-D__ESBMC_alloca=__builtin_alloca` to clang, so it
-allocates with the lifetime of the enclosing function.
+`__ESBMC_alloca` is the alloca ESBMC's own models use, and its storage is not
+released when the calling function returns, unlike `alloca` and
+`__builtin_alloca`, whose storage dies with their frame
+([#8727](https://github.com/esbmc/esbmc/pull/8727)). A pointer it returns
+therefore stays valid after the function that allocated it has returned.
 
 ```c
 #include <esbmc.h>
@@ -168,6 +170,12 @@ rejected with a diagnostic. `__VERIFIER_nondet_memory(p, n)` is the byte-granula
 alternative — it writes `n` non-deterministic bytes and so can havoc part of an
 object, or an object whose type is not known at the call. Note that a reachable
 call to it disables k-induction's inductive step.
+
+Both are checked as writes: havocking a `const` object or a string literal
+fails with `write access to const object` or `write access to string
+constant` ([#10809](https://github.com/esbmc/esbmc/pull/10809)), and
+`__ESBMC_init_object` on a function fails with `Program code accessed in write
+or free mode` ([#10828](https://github.com/esbmc/esbmc/pull/10828)).
 
 ## Assert and Assume
 
@@ -661,7 +669,7 @@ int main() {
     __ESBMC_assume(x > 50 && x < 100);
     unsigned int y = 0;
     #pragma unroll 80
-    for (int i = x - 1; x >= 0; x--) {
+    for (int i = x - 1; x > 0; x--) {
         y += x;
     }
     assert(y > 100);
@@ -680,8 +688,9 @@ to terminate, otherwise ESBMC will never stop verifying it. {{< /callout >}}
 int main() {
     unsigned int x = nondet_uint();
     __ESBMC_assume(x > 50 && x < 100);
+    unsigned int y = 0;
     #pragma unroll
-    for (int i = x - 1; x >= 0; x--) {
+    for (int i = x - 1; x > 0; x--) {
         y += x;
     }
     assert(y > 100);
@@ -697,8 +706,9 @@ it will throw a parsing error.
 int main() {
     unsigned int x = nondet_uint();
     __ESBMC_assume(x > 50 && x < 100);
+    unsigned int y = 0;
     #pragma unroll LOOP_BOUND
-    for (int i = x - 1; x >= 0; x--) {
+    for (int i = x - 1; x > 0; x--) {
         y += x;
     }
     assert(y > 100);
@@ -714,8 +724,9 @@ Alternatively, the same behavior can be obtained through the
 int main() {
     unsigned int x = nondet_uint();
     __ESBMC_assume(x > 50 && x < 100);
+    unsigned int y = 0;
     __ESBMC_unroll(LOOP_BOUND);
-    for (int i = x - 1; x >= 0; x--) {
+    for (int i = x - 1; x > 0; x--) {
         y += x;
     }
     assert(y > 100);
@@ -831,7 +842,8 @@ bound variable and make the quantifier vacuous).
 
 ### Limitations
 
-- Supported solvers are Z3 and CVC5 (no SMT-LIB support).
+- Supported solvers are Bitwuzla (the default), Z3 and CVC5 (no SMT-LIB
+  support).
 - Z3 supports only one symbol per quantifier; CVC5 supports multiple.
 - Recursive quantifiers (e.g. nested `forall`) are supported.
 - A constant-bounded symbol might cause incorrect simplifications (known issue).
@@ -842,7 +854,7 @@ These constructs have pages of their own:
 
 | Construct | Documented in |
 | --- | --- |
-| `__ESBMC_requires`, `__ESBMC_ensures`, `__ESBMC_assigns`, `__ESBMC_old`, `__ESBMC_return_value`, `__ESBMC_is_fresh`, `__ESBMC_contract` | [Function Contracts](/docs/function-contracts) |
+| `__ESBMC_requires`, `__ESBMC_ensures`, `__ESBMC_assigns`, `__ESBMC_old`, `__ESBMC_return_value`, `__ESBMC_is_fresh`, `__ESBMC_contract`, `__ESBMC_stack_used`, `__ESBMC_frame_size` | [Function Contracts](/docs/function-contracts) |
 | `__ESBMC_loop_invariant`, `__ESBMC_loop_assigns` | [Loop Invariants](/docs/loop-invariants) |
 
 Contract annotations are always declared, so an annotated file compiles under
@@ -902,5 +914,6 @@ so that a name encountered in a counterexample or a GOTO dump can be identified.
 | `__ESBMC_atexit_handler` | Runs functions registered with `atexit` |
 | `__ESBMC_memory_leak_checks` | Emits the memory-leak claims at program exit |
 | `__ESBMC_witness_assume` | Injected by the witness validator to replay an assumption waypoint |
+| `__ESBMC_witness_assert` | Injected by the witness validator to check a location invariant; kept under `--no-assertions` |
 | `__ESBMC_assigns_impl`, `__ESBMC_loop_assigns_impl` | Variadic backends behind the `__ESBMC_assigns` / `__ESBMC_loop_assigns` macros, which dispatch on argument count and accept **at most six** (`__ESBMC_assigns`) and **five** (`__ESBMC_loop_assigns`) targets |
 | `__ESBMC_old_raw` | Backend behind the `__ESBMC_old` macro |
