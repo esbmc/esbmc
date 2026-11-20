@@ -136,6 +136,7 @@ so is division by a variable when `--no-div-by-zero-check` is given.
 - Quantifiers in assertions and assumptions. Only an asserted `∀` is proved
   automatically; the rest end in `sorry`.
 - Calls to functions without a body: their result becomes nondeterministic.
+- `sizeof`, translated to the size the front end computed (#10693).
 
 Rejected with `ERROR: goto2lean: unsupported …`: arrays, pointers, structs,
 floating point, global variables, recursion, `printf`, ESBMC intrinsics,

@@ -11,11 +11,14 @@
 ///
 ///   1. Apply k-induction's per-loop havoc + assume-entry-cond to
 ///      every function except __ESBMC_main, so the inductive step
-///      runs from an arbitrary loop state.
+///      runs from an arbitrary loop state. A state that fails the head
+///      test of a library helper's loop skips that loop with its own
+///      values.
 ///   2. Insert per-loop ASSERT(false) markers on every edge that
 ///      leaves a loop (top-test exit, break, early-return-as-goto,
-///      goto-out-of-loop, do-while fall-through). Each marker is
-///      flagged inductive_step_instruction so base case and forward
+///      goto-out-of-loop, do-while fall-through); a skipped helper loop
+///      marks nothing. Each marker is flagged
+///      inductive_step_instruction so base case and forward
 ///      condition skip it; only the inductive step sees the claim.
 ///
 /// Reduction: the program does NOT terminate iff every marker is
@@ -32,6 +35,7 @@
 /// inconclusive for the program.
 void goto_termination(
   goto_functionst &goto_functions,
+  contextt &context,
   optionst &options,
   const namespacet &ns);
 

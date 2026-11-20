@@ -26,6 +26,7 @@ extern "C"
 #include <solvers/smt/smt_result.h>
 #include <solvers/smtlib/smtlib_conv.h>
 #include <solvers/solve.h>
+#include <algorithm>
 #include <cctype>
 #include <charconv>
 #include <clang-c-frontend/clang_c_language.h>
@@ -454,6 +455,65 @@ set_loop_invariant_options(const cmdlinet &cmdline, optionst &options)
     options.set_option("check-vacuity", true);
 }
 
+// A reported class is solved claim by claim and kept out of the verdict. The
+// coverage modes and --ltl keep tables of their own, which these claims would
+// bypass; run_chosen_strategy refuses the strategies once they are resolved.
+static void
+set_report_property_class_options(const cmdlinet &cmdline, optionst &options)
+{
+  if (!cmdline.isset("report-property-class"))
+    return;
+
+  const std::list<std::string> ignored =
+    cmdline.isset("ignore-property-class")
+      ? cmdline.get_values("ignore-property-class")
+      : std::list<std::string>();
+  for (const std::string &cls : cmdline.get_values("report-property-class"))
+  {
+    if (cls != "reachability_check" && cls != "cover")
+    {
+      log_error(
+        "--report-property-class takes reachability_check or cover, not "
+        "'{}'",
+        cls);
+      exit(1);
+    }
+    if (std::find(ignored.begin(), ignored.end(), cls) != ignored.end())
+    {
+      log_error("{} is both ignored and reported", cls);
+      exit(1);
+    }
+  }
+
+  static const char *const incompatible[] = {
+    "k-induction-parallel",
+    "forward-condition",
+    "inductive-step",
+    "ltl",
+    "assertion-coverage",
+    "assertion-coverage-claims",
+    "condition-coverage",
+    "condition-coverage-claims",
+    "condition-coverage-rm",
+    "condition-coverage-claims-rm",
+    "branch-coverage",
+    "branch-coverage-claims",
+    "branch-function-coverage",
+    "branch-function-coverage-claims",
+    "k-path-coverage",
+    "k-path-coverage-claims",
+    "dead-code-check"};
+  for (const char *option : incompatible)
+    if (cmdline.isset(option))
+    {
+      log_error("--report-property-class does not support --{}", option);
+      exit(1);
+    }
+
+  options.set_option("base-case", true);
+  options.set_option("multi-property", true);
+}
+
 // This method creates a set of options based on the CMD arguments passed to
 // ESBMC. Also, it sets some options that are used across various
 // ESBMC stages but which are not available via CMD.
@@ -798,6 +858,8 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
 #endif
 
   install_verbose_crash_handler(cmdline);
+
+  set_report_property_class_options(cmdline, options);
 
   // parallel solving activates "--multi-property"
   if (cmdline.isset("parallel-solving"))

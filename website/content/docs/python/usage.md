@@ -42,7 +42,8 @@ esbmc main.py --unwind 10
 | `--k-path-witness-depth=D` | Cap post-simplification guard depth for k-path witnesses (default 8). |
 | `--k-path-max-goals=M` | Per-function goal cap for k-path coverage (default 10000). |
 | `--generate-pytest-testcase` | Generate pytest test cases from counterexamples (see [Pytest Test Generation](/docs/python/pytest-testgen)) |
-| `--python <path>` | Python interpreter binary to use (searched in `$PATH`; default `python`). It must be Python 3 — ESBMC errors out on a Python 2 interpreter. |
+| `--python <path>` | Python interpreter binary to use (searched in `$PATH`; by default the first of `python3` and `python` found there). It must be Python 3 — ESBMC errors out on a Python 2 interpreter. |
+| `--no-python-typed-lists` | Keep every list in one untyped cell per element. By default (`--python-typed-lists`), a list whose every element is an `int` is stored in an `int64` array ([#10611](https://github.com/esbmc/esbmc/pull/10611)) |
 | `--function <name>` | Verify a single function instead of the entire file. Module-level and function-local imports are processed, so calls through imported modules resolve as they do at module scope |
 
 ## Writing Verification Harnesses
@@ -104,7 +105,7 @@ State 5 file main.py line 5 column 15 function div1 thread 0
 Violated property:
   file main.py line 5 column 15 function div1
   uncaught exception: ZeroDivisionError
-  !(c:@__ESBMC_exc_thrown && c:@__ESBMC_exc_typeid == 27)
+  !(c:@__ESBMC_exc_thrown && c:@__ESBMC_exc_typeid == 28)
 
 VERIFICATION FAILED
 ```
@@ -251,7 +252,7 @@ esbmc main.py --multi-property
 Violated property:
   file main.py line 3 column 11 function access_list_element
   uncaught exception: IndexError
-  !(c:@__ESBMC_exc_thrown && c:@__ESBMC_exc_typeid == 25)
+  !(c:@__ESBMC_exc_thrown && c:@__ESBMC_exc_typeid == 26)
 
 VERIFICATION FAILED
 ```

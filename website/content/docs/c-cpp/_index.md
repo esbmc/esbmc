@@ -24,9 +24,13 @@ real numbers, so `-0.0` equals `+0.0` and a NaN part compares unequal. A real
 operand of complex `+`, `-`, `*` or `/` applies to each part, and `*` and `/`
 recover the infinities that C17 G.5.1p4 requires, where the textbook formulas
 give NaN. A `sizeof` operand of variable length array type is evaluated (C17
-6.5.3.4p2), so for `int a[n][n]`, `sizeof(a[i++])` increments `i`. Under `--volatile-check`, every
-read of a volatile object, including a struct member and a read through a
-volatile-qualified pointer, returns a fresh nondeterministic value.
+6.5.3.4p2), so for `int a[n][n]`, `sizeof(a[i++])` increments `i`. Its size
+expressions are evaluated as written, so `sizeof(int[0 * n++])` increments `n`
+and `sizeof(int[0 & 1 / z])` reports a division by zero when `z == 0`. A
+variable length array initialised with `= {}` (C23) is zero-filled. Under
+`--volatile-check`, every read of a volatile object, including a struct member
+and a read through a volatile-qualified pointer, returns a fresh
+nondeterministic value.
 
 Under `--overflow-check`, a signed left shift with a non-negative left operand
 overflows in C when the result does not fit the signed type (C11 6.5.7p4), so
@@ -34,6 +38,14 @@ overflows in C when the result does not fit the signed type (C11 6.5.7p4), so
 when the result does not fit the corresponding unsigned type (CWG 1457), so
 `1 << 31` is defined and `2 << 31` is reported; from C++20 every such shift is
 defined.
+
+Arithmetic and compound assignment on two `_BitInt(N)` operands run at width
+`N`, since C23 6.3.1.1p2 exempts bit-precise integers from the integer
+promotions, so `--overflow-check` tests the `_BitInt(N)` range rather than
+`int`'s. Shifts still promote.
+
+`#pragma comment(...)` directives are ignored in C and C++, since they only
+pass information to the linker.
 
 See [Arguments of `main`](/docs/usage#arguments-of-main) for how `argv` and
 `envp` are modelled.
@@ -81,6 +93,9 @@ nondeterministic one:
 - `sem_trywait`, which takes an available semaphore or fails with `EAGAIN`
   without blocking, and `sem_timedwait`, which takes the semaphore, waits as
   `sem_wait` does, or fails with `ETIMEDOUT`. The timeout value is not modelled
+- glibc's `__ctype_b_loc`, which the `<ctype.h>` macros call in preprocessed
+  glibc programs. It returns glibc's C-locale class table, so `isspace(c)` in
+  such a program is not reported as a `NULL` dereference
 
 Several existing models were corrected: `strtol` and its siblings parse digits
 by base and set `endptr` and `errno` as C11 7.22.1.4 requires; `strtod` rounds
@@ -88,7 +103,12 @@ correctly when the digits and decimal exponent are exact; `atan2`, `hypot`,
 `ldexp`/`scalbn`, `nextafter` and `fesetround` follow C11 for signed zeros,
 infinities, NaNs, subnormals, overflow and unrecognised modes; and `frexpl`,
 `ldexpl` and their relatives read `long double` in the binary128 layout ESBMC
-encodes.
+encodes. `timegm` normalises every `struct tm` field, recomputes `tm_wday` and
+`tm_yday`, and returns the exact `time_t`, or -1 when the result does not fit.
+Under `--fixedbv`, `fmod`, `remainder`, `remquo` and `nearbyint` have exact
+fixed-point bodies.
+`pthread_exit` runs the cleanup handlers pushed with `pthread_cleanup_push`
+outside its atomic section, so other threads can interleave with them.
 
 Other models now keep error and end-of-input paths reachable and check the
 memory they touch:

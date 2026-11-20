@@ -1,0 +1,4 @@
+CORE
+main.c
+--report-property-class cover --ignore-property-class cover
+^ERROR: cover is both ignored and reported$

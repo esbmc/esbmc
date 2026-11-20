@@ -1,0 +1,5 @@
+CORE
+main.c
+--field-sensitive-ssa
+^Generated 7 VCC\(s\), 1 remaining after simplification
+^VERIFICATION SUCCESSFUL$

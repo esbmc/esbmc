@@ -131,12 +131,12 @@ jobs:
         # KNOWNBUG tests that never converge grow ~1GB per 5s until that
         # timeout, so cap each test's address space to fit -jN of them in the
         # 16GB runner (#10866). A capped KNOWNBUG test still passes.
-        mem=8192
+        mem_mb=8192
         case "${{ inputs.test-shard }}" in
-          python)        mem=6144 ;;
-          numpy|pyother) mem=4096 ;;
+          python)        mem_mb=6144 ;;
+          numpy|pyother) mem_mb=4096 ;;
         esac
-        cmake -DESBMC_REGRESS_TIMEOUT=120 -DESBMC_REGRESS_MEMORY_LIMIT=$mem .
+        cmake -DESBMC_REGRESS_TIMEOUT=120 -DESBMC_REGRESS_MEMORY_LIMIT=$mem_mb .
         # macOS PR: the python/ suite (anchored — excludes python-intensive
         # and python-coverage, which already run on Linux), plus the
         # platform-sensitive set. The Python frontend is the one part of ESBMC
@@ -150,31 +150,37 @@ jobs:
         # On PR Linux, skip python-intensive to keep fast feedback.
         # On other systems/events (push, dispatch), run everything.
         #
-        # The Linux legs run the full esbmc-cpp suite, which contains
-        # memory-heavy container/string cases (e.g. unordered_map/copy_move_fail
-        # peaks ~8GB, map/multimap _string_class-2_bug ~3GB each). Under -j4 on a
-        # 16GB runner these can align and exhaust RAM, ending the job with a
-        # "runner received a shutdown signal" (OOM). Run the Linux legs with -j2
-        # to bound peak concurrent memory. The macOS leg runs the light python/
-        # suite plus a handful of platform-sensitive tests, and keeps -j4.
+        # About 90 tests peak at 1-8GB RSS (regression/MEMORY_COST); two aligned
+        # 8GB ones exhaust a 16GB runner ("runner received a shutdown signal").
+        # Each carries a RESOURCE_GROUPS "mem" cost in GB, and the Linux legs
+        # give ctest a budget of available RAM minus 1GB per slot for the
+        # untagged tests (all under 1GB). The floor of 8 matches the per-test
+        # 8GB RLIMIT_AS, so the largest test can always be scheduled.
+        if [[ "${{ runner.os }}" == "Linux" ]]; then
+          # The Python shards keep the -jN their per-test cap is sized for.
+          case "${{ inputs.test-shard }}" in
+            python)        jobs=2 ;;
+            numpy|pyother) jobs=3 ;;
+            *)             jobs=4 ;;
+          esac
+          mem=$(( $(awk '/MemAvailable/{print $2}' /proc/meminfo) / 1048576 - jobs ))
+          (( mem < 8 )) && mem=8
+          echo "ctest mem budget: ${mem}GB at -j${jobs}"
+          printf '{"version":{"major":1,"minor":0},"local":[{"mem":[{"id":"0","slots":%d}]}]}\n' "$mem" > mem-spec.json
+          linux_args=(-j"$jobs" --resource-spec-file mem-spec.json)
+        fi
         if [[ "${{ inputs.operating-system }}" =~ ^macos ]]; then
           ctest -j4 --output-on-failure --progress -L '^python/$|^platform-sensitive$'
         elif [[ "${{ github.event_name }}" == "pull_request" ]]; then
-          # Python-frontend suites run in their own shards (#10866). The python
-          # shard stays at -j2: three of its symbolic str-format tests held ~5GB
-          # each and exhausted the 16GB runner at -j3.
+          # Python-frontend suites run in their own shards (#10866).
           py='^(python|numpy|quixbugs|humaneval|typeevalpy)/$'
           case "${{ inputs.test-shard }}" in
-            python)  ctest -j2 --output-on-failure --progress -L '^python/$' -LE python-intensive . ;;
-            numpy)   ctest -j3 --output-on-failure --progress -L '^numpy/$' -LE python-intensive . ;;
-            pyother) ctest -j3 --output-on-failure --progress -L '^(quixbugs|humaneval|typeevalpy)/$' -LE python-intensive . ;;
-            rest)    ctest -j2 --output-on-failure --progress -LE "$py|python-intensive" . ;;
-            *)
-              rc=0
-              ctest -j3 --output-on-failure --progress -L "$py" -LE python-intensive . || rc=$?
-              ctest -j2 --output-on-failure --progress -LE "$py|python-intensive" . || rc=$?
-              exit $rc ;;
+            python)  ctest "${linux_args[@]}" --output-on-failure --progress -L '^python/$' -LE python-intensive . ;;
+            numpy)   ctest "${linux_args[@]}" --output-on-failure --progress -L '^numpy/$' -LE python-intensive . ;;
+            pyother) ctest "${linux_args[@]}" --output-on-failure --progress -L '^(quixbugs|humaneval|typeevalpy)/$' -LE python-intensive . ;;
+            rest)    ctest "${linux_args[@]}" --output-on-failure --progress -LE "$py|python-intensive" . ;;
+            *)       ctest "${linux_args[@]}" --output-on-failure --progress -LE python-intensive . ;;
           esac
         else
-          ctest -j2 --output-on-failure --progress .
+          ctest "${linux_args[@]}" --output-on-failure --progress .
         fi

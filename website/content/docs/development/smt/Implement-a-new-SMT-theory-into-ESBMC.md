@@ -95,7 +95,7 @@ named by file/identifier; grep to locate the current line.
    theory that changes how integers/pointers are modelled must be reconciled here.
 
 10. **Add simplifications (optional).** Constant-folding or rewrites for the new
-    operations go in `src/util/simplify_expr.cpp`. Optional for correctness, useful
+    operations go in `src/util/expr/expr_simplifier.cpp`. Optional for correctness, useful
     for performance.
 
 ## Validation

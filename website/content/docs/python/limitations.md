@@ -21,10 +21,17 @@ weight: 4
   rewrite needs a bare name as the receiver and no positional argument.
 - `sorted()` supports `reverse`, and applies `key=` only where the iterable's
   shape is known at conversion time — see [Built-in Functions](#built-in-functions).
+- `sort()` of a list that mixes `int` and `float` elements is refused with
+  `Unsupported: sort() over a list mixing int and float`, with or without
+  `reverse=` ([#10483](https://github.com/esbmc/esbmc/pull/10483)).
+- A list slice whose step is neither a literal nor a name bound once to an int
+  constant (`l[::s]` with `s` a run-time value) fails a check
+  `Unsupported: slicing with a step that is not a constant` rather than being
+  sliced with step 1 ([#10506](https://github.com/esbmc/esbmc/pull/10506)).
 
 ## Sets
 
-- The supported set methods are `.issubset()`, `.issuperset()`, `.symmetric_difference()`, `.update()`, `.union()`, `.intersection()`, and `.difference()` (see [Supported Features — Sets](/docs/python/supported-features#sets)). The `.union()`/`.intersection()`/`.difference()` methods take exactly one argument (the zero-arg and variadic forms produce a clean error). Other named methods (`.add()`, `.remove()`, `.discard()`, `.isdisjoint()`, etc.) are not supported; use the equivalent binary operators (`-`, `&`, `|`, `^`) where one exists.
+- The set methods with a set-specific model are `.add()`, `.discard()`, `.issubset()`, `.issuperset()`, `.isdisjoint()`, `.symmetric_difference()`, `.update()`, and the variadic `.union()`/`.intersection()`/`.difference()` (see [Supported Features — Sets](/docs/python/supported-features#sets)). The others among them take exactly one argument, and a different count produces a clean error. Other named methods may not be handled; use the equivalent binary operators (`-`, `&`, `|`, `^`) where one exists.
 
 ## Dictionaries
 
@@ -72,6 +79,7 @@ weight: 4
 ## Strings
 
 - Most `str.*()` methods now degrade to a sound nondeterministic over-approximation when the receiver is not a compile-time constant (see [Supported Features — Strings](/docs/python/supported-features#strings)). A growing set have precise runtime operational models: the case transforms `swapcase`, `upper`, `lower`, `capitalize`, `title` (which cap the receiver at ~255 characters, asserting on longer input — `upper` truncates instead); the predicates `isupper`, `islower`, `isalpha`, `isdigit`, `isalnum`, `isspace`; `count`; and `find`/`rfind`. `str.join` likewise has a precise model (bounded to a 511-character result) when its iterable is a variable whose initialiser cannot be folded (e.g. a `List[str]` parameter), but falls back to a nondet `char *` when the iterable is a non-foldable expression such as `sorted(...)`, a comprehension, or a function-call result. Other methods (`casefold`, `isnumeric`, `isidentifier`, `removeprefix`, `removesuffix`, `center`, `ljust`, `rjust`, `zfill`, `expandtabs`, `partition`, `format`, `format_map`, `splitlines`, etc.) return a nondet value of the appropriate shape, so assertions on their specific functional result will report `VERIFICATION FAILED` on symbolic input.
+- With a width that is not a constant, `center()`, `ljust()`, `rjust()` and `zfill()` return the receiver unchanged where the width cannot add padding (at most the length of a constant receiver, or at most 0 for a non-constant one), and otherwise fail a check `Unsupported: <method>() symbolic width may require padding` ([#10730](https://github.com/esbmc/esbmc/pull/10730)).
 - `partition()` on a non-constant receiver returns `("", "", "")` — the same shape Python uses when the separator is not found.
 - `splitlines()` on a non-constant receiver returns an empty list.
 - Strings are stored as UTF-8 bytes. `len()` counts code points for a literal or a folded `chr()`, and `ord()` decodes the first code point, but a string built at run time (`chr(n) * 2`, `s = chr(n); len(s)`) and indexing (`s[i]`) still work on bytes.
@@ -89,6 +97,7 @@ within these bounds:
 - Ordered comparisons (`<`, `<=`, `>`, `>=`) work against a literal and between two tagged operands, raising `TypeError` on a type mismatch. `==` treats `bool` and `int` as the same type, so `True == 1`.
 - Divergence is detected across an `if`/`elif`/`else` chain when every branch assigns the name, and across an `if`/`elif` chain with no `else` whose arms assign it different types; an `if`/`else` chain with a branch that leaves it unassigned is not tagged.
 - An element of a list mixing strings and numbers (`[3.0, "+", 2.0]`) is read as a tagged value, so `isinstance` answers per element.
+- Inside a function, `isinstance()` and `type()` on a name bound to an `int` on one path and a `float` on another are refused with `... holds an int or a float depending on the path, is not supported` ([#10790](https://github.com/esbmc/esbmc/pull/10790)).
 - `x is None` is folded only against a literal `None`. A computed operand is not folded, since that would drop its side effects.
 - Rebinding a tagged variable to a list, tuple or class instance is refused inside a loop or a conditional body, where the join of the retyped aliases is not modelled.
 
@@ -104,7 +113,7 @@ within these bounds:
 
 ## Regular Expressions (`re` module)
 
-- Only `re.match()`, `re.search()`, `re.fullmatch()` and `re.compile()` (whose `Pattern` has the same three methods) are supported.
+- Only `re.match()`, `re.search()`, `re.fullmatch()` and `re.compile()` (whose `Pattern` has the same three methods) are supported, plus `re.sub()` for a pattern with no regex metacharacter, a `repl` with no backslash, no flags and a non-negative `count`; any other `re.sub()` fails a `not modelled` check.
 - Group-capture methods (`.group()`, `.groups()`, `.span()`) are rewritten by the parser into direct calls to internal helpers, and only the `(\d+)` pattern is recognised precisely; everything else returns a nondeterministic value.
 - The result of `re.match` / `re.search` / `re.fullmatch` is a `bool`, not an `Optional[Match]`: `if m:` works, `if m is None:` does not.
 - Complex patterns beyond the explicitly supported constructs exhibit nondeterministic behavior.
@@ -121,13 +130,13 @@ within these bounds:
 ## Collections Module
 
 - `defaultdict`: subscript access/assignment and the common type-factory forms are supported — `defaultdict(list)` (with `.append()` on the materialised list), the built-in scalar factories `defaultdict(int)` / `float` / `bool` / `str`, and nullary `lambda` factories whose body is a constant or built-in constructor (e.g. `defaultdict(lambda: float('inf'))`). On an unannotated dict the value type is also inferred from a constant literal subscript assignment (`d[k] = 5`). The `__missing__` hook and other methods are not.
-- `Counter`: only `__getitem__`, `__setitem__`, `values()`, and truthiness are supported. `most_common()` accepts the call but its result is unusable in any subsequent expression — comparisons trip a frontend "Unsupported comparison" error ([#4665](https://github.com/esbmc/esbmc/issues/4665)). `elements()`, `subtract()`, and arithmetic operators are not supported.
-- `Counter.update(...)` accepts only the single-positional-argument form; the keyword-argument form (`c.update(a=1)`) is not supported. `dict.update()` accepts keyword arguments.
+- `Counter`: only `__getitem__`, `__setitem__` (with `int`, `str` or `(int, int)` keys), `values()`, `clear()`, `update()` with no argument, and truthiness are supported. `update()` with an argument fails a check `Counter.update with an argument is not modelled`, and a keyword argument (`c.update(a=1)`) is refused at conversion ([#10551](https://github.com/esbmc/esbmc/pull/10551)). `most_common()` fails a check `Counter.most_common is not modelled` ([#4665](https://github.com/esbmc/esbmc/issues/4665)). `elements()`, `subtract()`, and arithmetic operators are not supported. `dict.update()` accepts keyword arguments.
+- `Counter(iterable)` is not modelled: the model's constructor takes no argument, and the iterable is ignored, so the counter starts empty. An assertion about the counts the iterable should give can then be reported `VERIFICATION SUCCESSFUL` although CPython fails it (`c = Counter([1, 1, 2]); assert c[1] == 0`).
 - `OrderedDict` supports construction and basic indexing / append / `__setitem__`. `deque` adds the FIFO-front methods `popleft()` and `appendleft()` on top of construction / indexing / `append` / `__setitem__`; other `deque` methods (`extend`, `rotate`, `maxlen`, etc.) are not supported. A `namedtuple` class is supported only at module level and is lowered to plain tuples, so a field is read only on a name bound by its constructor; other uses of the class are refused. `ChainMap` and other `collections` types are not supported.
 
 ## Datetime Module
 
-- Only `datetime.datetime(year, month, day)` is supported; `date`, `time`, and `timedelta` classes are not.
+- Only the `datetime.datetime` class is supported: its constructor (with optional time fields) and `replace()`. Time zones are not modelled (`tzinfo` may only be `None`), and the `date`, `time`, and `timedelta` classes are not supported.
 - Date arithmetic, string formatting (`strftime`), and parsing (`strptime`, `fromisoformat`) are not supported.
 
 ## Decimal Module
@@ -137,8 +146,9 @@ within these bounds:
 
 ## Heapq Module
 
-- `heapify()` is modelled as a no-op; the heap invariant is not enforced structurally.
+- Only `int` and tuple elements are fully modelled. With `float` or `str` elements, `heapify()` and index reads are exact but the value-returning operations give an unconstrained result, so an assertion that holds in CPython can be reported `VERIFICATION FAILED`.
 - A heap of tuples takes its element type from the caller's tuples, so `d, n = heappop(h)` unpacks. A heap built from an empty `[]` takes it from the tuples pushed by `heappush` imported with `from heapq import heappush`; pushes through `heapq.heappush(...)` are not used to infer it.
+- One program can use `heapq` on only one element type. If it uses both a tuple heap and an `int` heap, the tuple heap is modelled with `int` elements, and an assertion that fails in CPython can be reported `VERIFICATION SUCCESSFUL` (`regression/python/github_5931_mixed_heap_knownbug_fail`).
 - `nlargest()`, `nsmallest()`, and `merge()` are not supported.
 
 ## Time Module
@@ -158,8 +168,8 @@ within these bounds:
 - `np.arange()` materialises its result at conversion time, so its arguments must be constant — a name bound to a literal is resolved first, but a function parameter is rejected with `TypeError: numpy.arange() currently supports constant numeric inputs only` rather than routed through the operational model's while loop, which did not terminate in practice. A range past 10000 elements is declined for the same reason, and `step=0` raises `ValueError`.
 - A returned array keeps its metadata only for the shapes listed under [Supported Features — NumPy](/docs/python/supported-features#numpy-module-numpy). A **2-D array parameter** now keeps its full shape through the C-ABI row-pointer decay, so `.shape`, `.ndim`, `.size` and `numpy.transpose` / `.T` / `.transpose()` read it rather than the decayed 1-D type — this was the one shape here that produced a silently wrong array value rather than an explicit rejection, and it is now a `CORE` regression test rather than a `KNOWNBUG` ([#7722](https://github.com/esbmc/esbmc/pull/7722)). An unannotated function that builds an array through a local before returning it now keeps the array's type ([#7925](https://github.com/esbmc/esbmc/pull/7925)). One gap remains pinned as `KNOWNBUG` and surfaces as an explicit wrong verdict: a captured list mutated without a `global` declaration. A parameter with a genuinely symbolic shape is rejected with `numpy array parameter shape must be concrete` when `.shape`, `.ndim`, `.size`, `.T`, `transpose()`, `sort()` or `argsort()` reads it.
 - Views alias their source for any rank and for run-time bounds, steps and indices, but a view that escapes through an unknown call, or a shape with no static bound, is rejected; so is rebinding the source array inside a branch or loop while views of it are alive. `np.diagonal` is read-only, and a diagonal used inline (`np.diagonal(a)[i]`) rather than bound to a name is declined. `np.fill_diagonal` requires a value whose length matches the diagonal exactly.
-- `np.arccos`, `np.fmod`, `np.transpose`, `np.dot`, and `np.matmul` now lower to executable models (they were previously type-inference-only stubs), each under a stated restriction: `np.fmod` rejects `np.array(...)`-wrapped operands (`Unsupported operation: numpy.fmod on array operands`); `np.transpose` is limited to 2D and rejects higher rank; `np.dot`/`np.matmul` cover 1D/2D integer and float inputs.
-- `numpy.linalg` results are bounded rather than exact (see [Supported Features — NumPy](/docs/python/supported-features#numpy-module-numpy)). Constant matrices are limited to 6x6 and matrices with run-time entries to 3x3 (`det`, `inv`, `solve`) or 2x2 (`eigvals`, `eig`, `svd(compute_uv=False)`). Complex, repeated or ill-conditioned spectra, `svd` of non-square matrices, complex determinants and other `numpy.linalg` operations are not supported.
+- `np.arccos`, `np.fmod`, `np.transpose`, `np.dot`, and `np.matmul` now lower to executable models (they were previously type-inference-only stubs), each under a stated restriction: `np.fmod` rejects a Python list held in a variable (`TypeError: numpy.fmod() of this operand is not supported`); `np.transpose` is limited to 2D and rejects higher rank; `np.dot`/`np.matmul` cover 1D/2D integer and float inputs.
+- `numpy.linalg` results are bounded rather than exact (see [Supported Features — NumPy](/docs/python/supported-features#numpy-module-numpy)). Constant matrices are limited to 6x6 (complex ones to 3x3 for `eig` and `eigvals`) and matrices with run-time entries to 3x3. Repeated, close or ill-conditioned spectra beyond the cases listed there, `svd` factors that are not determined up to sign or a rotation in a plane, `svd(hermitian=True)`, complex determinants and other `numpy.linalg` operations are not supported.
 - The transcendental functions of a run-time argument (`exp`, `log`, `sin`, …, in NumPy and `math`) return a value within `--python-math-ulps` ulps (default 8) of the C library's, not the exact one, so an exact comparison against a constant can fail. `--python-math-ulps 0` removes the band but is unsound where NumPy uses SVML.
 
 ## Exception Handling

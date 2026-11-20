@@ -1,0 +1,4 @@
+CORE
+main.c
+--report-property-class cover --ltl
+^ERROR: --report-property-class does not support --ltl$

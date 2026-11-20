@@ -538,7 +538,7 @@ void goto_symext::symex_assign(
 
   expr2tc original_lhs = code.target;
   expr2tc lhs = split_rewrite(code.target);
-  expr2tc rhs = split_read(code.source);
+  expr2tc rhs = split_read(code.source, code.target);
 
   replace_nondet(lhs);
   replace_nondet(rhs);
@@ -805,10 +805,13 @@ expr2tc goto_symext::split_rewrite(const expr2tc &e) const
   return art1->split_structs.rewrite(e);
 }
 
-expr2tc goto_symext::split_read(const expr2tc &e)
+expr2tc goto_symext::split_read(const expr2tc &e, const expr2tc &dest)
 {
   expr2tc whole = split_rewrite(e);
-  if (!is_split_whole(e))
+  // A split destination takes the read field by field, so no literal is
+  // carried, and reading through the symbol would lose a constant sibling
+  // whenever a pointer field keeps #7597's pinned literal unpropagated.
+  if (!is_split_whole(e) || (!is_nil_expr(dest) && is_split_whole(dest)))
     return whole;
   cur_state->rename(whole);
   const std::vector<expr2tc> &fields =
