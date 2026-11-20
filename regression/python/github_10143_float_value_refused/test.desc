@@ -1,0 +1,4 @@
+CORE
+main.py
+
+^ERROR: an and/or whose value may be a float, or an empty str or list, next to another type is not supported$

@@ -17,7 +17,7 @@ supported, see [Limitations](/docs/c-cpp/limitations).
 | C++14 | Full | `std::make_unique` | `regression/esbmc-cpp14` |
 | C++17 | Full | `std::optional`, `std::variant`, `std::any`, `std::string_view` | `regression/esbmc-cpp17` |
 | C++20 | Broad | `std::span`, `<compare>`, `std::source_location`, `<concepts>`, `<numbers>`, `<latch>`, `<semaphore>`, `<stop_token>` | `regression/esbmc-cpp20` |
-| C++23 | Selected | `std::expected`, `<flat_map>`, `<flat_set>`, `<mdspan>` | `regression/esbmc-cpp20` |
+| C++23 | Selected | `std::expected`, `<flat_map>`, `<flat_set>`, `<mdspan>` | `regression/esbmc-cpp23`, `regression/esbmc-cpp` |
 
 The default is C++17. Select a different standard with `--std`, for example
 `--std c++20` or `--std c++03`.
@@ -82,7 +82,7 @@ State 5 file shape.cpp line 25 column 3 function main thread 0
 ----------------------------------------------------
 Violated property:
   file shape.cpp line 25 column 3 function main
-  assertion main
+  assertion s->area() > n
   !((_Bool)((signed long int)(!(return_value$ > n))))
 
 VERIFICATION FAILED
@@ -131,6 +131,9 @@ then produce ambiguity errors at parse time.
 - Under `--std c++14` and earlier, the copy clang elides in `C c = C::make();`
   and `return C(x);` is elided, as it is natively
 - Unions, including anonymous unions
+- A data member of empty class type occupies one byte ([intro.object]/8), so
+  a write through its address stays inside the enclosing object. A
+  `[[no_unique_address]]` member is not given the byte
 - `typeid` on a polymorphic glvalue reports the *dynamic* type, and the
   `type_info` name string is NUL-terminated
 
@@ -159,9 +162,10 @@ case. See [Limitations](/docs/c-cpp/limitations#constructor-and-destructor-order
 - Move constructors and move assignment operators
 - Address-of distributes over a conditional lvalue; class-typed conditionals
   elide their temporaries; a reference parameter binds to the selected arm
-- An lvalue conditional over reference-returning calls stays a reference rather
-  than being copied into a temporary, so a write through it — `(c ? get(v) :
-  get(w)).x = 2;` — reaches the selected object
+- An lvalue conditional over reference-returning calls or reference variables
+  stays a reference rather than being copied into a temporary, so a write
+  through it — `(c ? get(v) : get(w)).x = 2;` or `(c ? ra : rb).x = 2;` —
+  reaches the selected object
 
 ### Lambdas
 
@@ -197,6 +201,11 @@ case. See [Limitations](/docs/c-cpp/limitations#constructor-and-destructor-order
   base subobject rather than the derived object's leading storage
 - Virtual dispatch through a non-arrow member expression — `(*p).f()` and
   `ref.f()` dispatch virtually
+- `&Base::f` converted to a pointer to member function of a derived class binds
+  `this` to the `Base` subobject ([conv.mem]/2), so the call is correct when
+  `Base` is not the first base. See
+  [Limitations](/docs/c-cpp/limitations#inheritance-and-polymorphism) for the
+  conversions that still do not adjust `this`
 
 ### Memory management
 

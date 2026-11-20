@@ -13,6 +13,13 @@ Obtain the script `analyze_esbmc_results.py` located in `esbmc/scripts/competiti
 
 The script will print an analysis of the runs and exit. 
 
+When reading per-task logs, note two things about `esbmc-wrapper.py`. It prints
+`ERROR`, which benchexec scores as an error rather than unknown, when ESBMC exits
+on a signal or with exit code 70 and printed no verdict, timeout or
+out-of-memory line (#10394). It also lower-cases `TRUE`, `FALSE` and `DONE` in
+the ESBMC output it echoes, so only its own verdict line carries those words
+(#10669).
+
 # Creating ESBMC release
 
 Usually, it is just a matter of putting all the files into a folder called `esbmc`. Note that:

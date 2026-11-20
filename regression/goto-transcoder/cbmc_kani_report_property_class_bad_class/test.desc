@@ -1,0 +1,4 @@
+CORE
+main.c
+--report-property-class assertion
+^ERROR: --report-property-class takes reachability_check or cover, not 'assertion'$

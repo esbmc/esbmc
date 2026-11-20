@@ -25,8 +25,8 @@ The old test suites are not always the best to start with as the test cases migh
 ## Benchmark tracking
 
 The C++ regression suites live under `regression/esbmc-cpp*`, split by standard
-(`esbmc-cpp` for C++98/03, then `esbmc-cpp11`, `esbmc-cpp14`, `esbmc-cpp17` and
-`esbmc-cpp20`). Current pass rates come from
+(`esbmc-cpp` for C++98/03, then `esbmc-cpp11`, `esbmc-cpp14`, `esbmc-cpp17`,
+`esbmc-cpp20` and `esbmc-cpp23`). Current pass rates come from
 [CI](https://github.com/esbmc/esbmc/actions) rather than being tracked by hand;
 the `KNOWNBUG`-marked cases are catalogued under the umbrella issue
 [#4403](https://github.com/esbmc/esbmc/issues/4403).

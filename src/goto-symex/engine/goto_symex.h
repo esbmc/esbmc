@@ -1731,6 +1731,13 @@ protected:
     std::list<expr2tc> &out);
   /** Symbolic implementation of scanf and fscanf */
   void symex_input(const code_function_call2t &expr);
+  /** Havoc the bytes one scanf conversion writes through `operand`;
+   *  `store_bytes` is 0 for %s and %[. */
+  void symex_scanf_store(
+    const dereference_callbackt::internal_item &item,
+    const expr2tc &operand,
+    uint64_t store_bytes,
+    const guard2tc &stored);
   /** Symbolic implementation of va_arg */
   void symex_va_arg(
     const expr2tc &lhs,

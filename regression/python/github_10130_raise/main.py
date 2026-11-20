@@ -1,7 +1,8 @@
 # Issue #10130: a later str-and-bool operand's IndexError check runs only
 # where the operand is evaluated.
 t = ""
-r = t and t[0] == "a"
+r = bool(t and t[0] == "a")
+assert not r
 assert not (t and t[0] == "a")
 
 

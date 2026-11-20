@@ -1,0 +1,5 @@
+CORE
+main.c
+--loop-invariant-check --depth 30 --witness-output-yaml -
+^VERIFICATION SUCCESSFUL$
+^  content:\n    \[\]$

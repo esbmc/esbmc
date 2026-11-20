@@ -229,7 +229,8 @@ private:
   /// the report covers the whole program rather than only those properties
   /// some phase happened to reach a verdict on (discussion #7023).
   void seed_property_verdicts(const symex_target_equationt &eq) const;
-  /// Records each assertion of the program that no step of \p eq raised.
+  /// Records each assertion of the program that no step of \p eq raised: a
+  /// reported check always, any other under --report-unreached-claims.
   void seed_unreached_claims(const symex_target_equationt &eq) const;
 
   /// Record the verdict a satisfiable answer earns for one claim: Failed, or
@@ -260,6 +261,14 @@ private:
   void
   solve_past_the_abstraction(smt_resultt result, symex_target_equationt &eq);
 
+  /// Print goto_functionst::reported_verdicts in a section of their own.
+  void report_reported_properties() const;
+
+  /// Whether the run left paths unexplored: it stopped before deciding every
+  /// claim, cut a loop at its bound, or failed or never decided an unwinding
+  /// assertion.
+  bool search_stopped_short() const;
+
   /// Source files whose assertions come from ESBMC's own operational models,
   /// so the report can sort them after the user's code. Empty for Python,
   /// where a hidden body does not imply a model (remove_library_assertions).
@@ -281,6 +290,7 @@ private:
   /// claim discharged vacuously, the LTL monitor instrumented, and, under a
   /// k-step strategy, every row of the run's table Passed.
   bool proves_the_program() const;
+  bool proves_loop_invariants() const;
 
   /// Whether \p res establishes that *every* property holds, as opposed to a
   /// merely bounded round such as a k-induction base case. Must agree with the

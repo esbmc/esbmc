@@ -71,7 +71,8 @@ Both flags are opt-in; the default search order is unchanged. Because the
 deepening owns the outer verification loop, it is rejected with an error
 alongside the unwinding strategies that drive an outer loop of their own —
 `--termination`, `--incremental-bmc`, `--falsification`, `--k-induction`,
-`--k-induction-parallel` and `--loop-invariant`.
+`--k-induction-parallel` and `--loop-invariant`, and alongside the
+transition-system strategies `--ts-check`, `--ts-bmc` and `--ts-pdr`.
 
 ## Partial-order reduction
 
