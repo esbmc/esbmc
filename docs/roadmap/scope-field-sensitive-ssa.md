@@ -34,7 +34,11 @@
 > that part came from a phi reading a copy carried over the object's own name
 > in the other path's value set; the phi now leaves those entries to the
 > value-set merge, and the test prints what it prints without the flag
-> (§8.27).** The corpus is in `regression/field-sensitivity/`
+> (§8.27). Phase 2's second part, stacked on the first, splits static
+> objects as well; `plc_db` with the flag now solves at 512 and 2048 fields,
+> but neither global row meets the 2x bar, and a split global copied from a
+> split value loses its trace step as a split local already does (§8.28).**
+> The corpus is in `regression/field-sensitivity/`
 > with baselines, and the census has been run and reverted. Phase 1 adds
 > `--field-sensitive-ssa` (default off): symex gives each field of an
 > eligible local, parameter or return slot its own SSA name. The Phase 1
@@ -1847,3 +1851,74 @@ Measured on 2026-11-20 on `feat/field-sensitive-ssa-phase2-locals` at
   (1.15x).
 - Still open for the Phase 2 gate: globals (`global_callee`, `plc_db`), the
   assert-enabled run under Bitwuzla (§8.26), and an SV-COMP run.
+
+### 8.28 Phase 2, part 2: static objects
+
+Measured on 2026-11-20 on `feat/field-sensitive-ssa-phase2-globals`,
+stacked on `feat/field-sensitive-ssa-phase2-locals` at `738317be6`.
+RelWithDebInfo, gcc 13.3, LLVM 18, Z3 4.13.3 and Bitwuzla 0.9.0 (CaDiCaL
+2.1.2 cloned with git), 4-core container. "Base" is `738317be6`'s binary.
+
+What changes, behind `--field-sensitive-ssa` only: a global or a static
+local of struct type is eligible under the same rules as a local. Its field
+symbols copy its `static_lifetime`, so they rename to `level1_global` and
+are live everywhere. Two kinds stay whole: a `_Thread_local` object, and
+every static object when `--memory-leak-check` is set, since the leak check
+takes the context's static symbols as roots and reads them by name. On the
+harnesses below the leak verdicts did not change with that exclusion
+removed, so it is a precaution. A `const` global is not excluded: the
+read-only write check does not fire on a const struct on master either
+(`const struct S g; ((struct S *)&g)->a = 3;` is `SUCCESSFUL` with and
+without the flag).
+
+Results:
+
+- Harnesses, with and without the flag, Z3 and Bitwuzla: a global written
+  through a pointer in a callee, a static global with an initialiser, a
+  static local, a whole copy into and out of a global, a `const` global, a
+  `_Thread_local` global, and three `--memory-leak-check` programs. Same
+  verdicts both ways under both solvers.
+- New tests: `field_sensitive_ssa_global` and `_fail` (4 objects: a global,
+  a static global, a static local and a local); `_thread_local` and
+  `_leak_check`, which pin the split count with a local next to a static
+  object that stays whole. Each fails on its mutant: allowing every static
+  object fails `_global` and `_fail`; dropping the thread-local exclusion
+  fails `_thread_local`; dropping the leak-check exclusion fails
+  `_leak_check`. `field_sensitive_ssa_members` now splits its global too
+  (2 objects, was 1); its verdict is unchanged.
+- Every outcome of the new decision (static object split, kept for
+  `_Thread_local`, kept for the leak check, field renamed at
+  `level1_global`) reached under Z3 and Bitwuzla (instrumented build).
+- Flag forced on, base against this change, 20 s per run, every eighth
+  directory of `regression/esbmc` and `regression/esbmc-cpp/cpp` (606
+  `CORE` tests): 0 verdict changes; 121 split more objects.
+- ctest `field_sensitive_ssa|field-sensitivity|github_7797|github_5868`:
+  218/219. `field_sensitive_ssa_carried_copy_fail` fails: it pins the step
+  `g = { .p=..., .k=0 }` of a global copied from a split return value, and
+  `g` is now split. The print rides on the step of `g`'s last field, which
+  nothing reads, so the slicer removes it. With the base binary a split
+  *local* in the same place loses the step the same way, so this is the
+  §8.21 loss for split destinations, not new to globals. Handing the print
+  to the kept `g.p` step is not enough: the printed value reads the whole
+  read of the return value's own symbol, which the slicer also removes, so
+  §8.8's rule hides it. Open.
+- Corpus, flag on, symex seconds, 8 / 2048 fields. Single runs right after
+  the build: `global_callee` 0.330 / 1.971 (6.0x) under Z3 and 0.291 /
+  2.019 (6.9x) under Bitwuzla; `plc_db` 0.033 / 0.205 (6.2x) and 0.034 /
+  0.204 (6.0x). Medians of three on an idle machine later: `global_callee`
+  0.547 / 3.751 (6.9x) and 0.663 / 3.691 (5.6x); `plc_db` 0.086 / 0.455
+  (5.3x) and 0.073 / 0.499 (6.8x). Neither row meets the 2x bar. Without
+  the flag, `global_callee` at 2048 takes 3.759 s (Z3) and 3.961 s
+  (Bitwuzla) of symex, and `plc_db` at 512 and 2048 gives no result in
+  300 s under Z3; with the flag both solve in under 1 s (Z3 0.60 s and
+  0.83 s wall). Stack samples of `global_callee` at 2048 with the flag sit
+  in `dereferencet::check_data_obj_access`, `check_pointer_alignment` and
+  `object_base_alignment`, which call `type_byte_size` on the whole struct
+  on every dereference of `d`: the remaining width cost is in the pointer
+  checks, not in SSA.
+- ctest without the flag: the `esbmc` label did not finish within the
+  10-minute cap. The change only acts when the flag is set
+  (`split_structst::analyse` returns before it otherwise).
+- Still open for the Phase 2 gate: the 2x bar on `global_callee` and
+  `plc_db` (per-dereference size and alignment work), the trace step above,
+  the assert-enabled run under Bitwuzla (§8.26), and an SV-COMP run.
