@@ -2,5 +2,5 @@ regression/python/github_8914
 regression/python/github_8914_fail
 regression/python/github_8914_param_element
 regression/python/github_8914_param_element_fail
-regression/python/github_8914_mutated_element
-regression/python/github_8914_callee_store
+regression/python/github_8914_mutated_element_fail
+regression/python/github_8914_callee_store_fail
