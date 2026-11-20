@@ -547,6 +547,26 @@ static std::optional<exprt> fold_constant_replace(
   return converter.get_string_builder().build_string_literal(folded);
 }
 
+// __python_str_replace takes a C int, where a negative count replaces every
+// occurrence, as in Python. A count above INT_MAX is clamped rather than
+// truncated: it already exceeds the number of occurrences.
+static exprt symbolic_replace_count(const exprt &count)
+{
+  const typet &t = count.type();
+  if (!t.is_signedbv() && !t.is_unsignedbv() && !t.is_bool())
+    throw std::runtime_error(
+      "replace() count must be an int, got '" + t.id_string() + "'");
+  const typet wide = long_long_int_type();
+  const exprt n = typecast_exprt(count, wide);
+  return if_exprt(
+    binary_relation_exprt(n, ">", from_integer(INT_MAX, wide)),
+    from_integer(INT_MAX, int_type()),
+    if_exprt(
+      binary_relation_exprt(n, "<", from_integer(0, wide)),
+      from_integer(-1, int_type()),
+      typecast_exprt(n, int_type())));
+}
+
 std::optional<exprt> dispatch_replace_method(
   string_handler &self,
   const std::string &method_name,
@@ -592,11 +612,14 @@ std::optional<exprt> dispatch_replace_method(
   exprt count_expr = from_integer(-1, int_type());
   if (count_node != nullptr)
   {
-    const long long count_value = required_constant_int_arg(
-      *count_node,
-      "replace() only supports constant count in minimal support",
-      converter);
-    count_expr = from_integer(count_value, int_type());
+    long long count_value = 0;
+    count_expr = json_utils::extract_constant_integer(
+                   *count_node,
+                   converter.get_current_func_name(),
+                   converter.get_ast_json(),
+                   count_value)
+                   ? from_integer(count_value, int_type())
+                   : symbolic_replace_count(converter.get_expr(*count_node));
   }
 
   return self.handle_string_replace(
@@ -2748,6 +2771,14 @@ exprt string_handler::handle_string_rindex_range(
   return build_string_index_result(call, rfind_expr, location);
 }
 
+static bool are_literal_strings(const exprt &a, const exprt &b, const exprt &c)
+{
+  const auto is_literal = [](const exprt &e) {
+    return e.is_constant() && e.type().is_array();
+  };
+  return is_literal(a) && is_literal(b) && is_literal(c);
+}
+
 exprt string_handler::handle_string_replace(
   const exprt &string_obj,
   const exprt &old_arg,
@@ -2780,11 +2811,9 @@ exprt string_handler::handle_string_replace(
       return str_expr;
   }
 
-  auto is_literal = [](const exprt &e) {
-    return e.is_constant() && e.type().is_array();
-  };
-
-  if (is_literal(str_expr) && is_literal(old_expr) && is_literal(new_expr))
+  if (
+    count_arg.is_constant() &&
+    are_literal_strings(str_expr, old_expr, new_expr))
   {
     const std::string src_str = extract_string_from_array_operands(str_expr);
     const std::string old_str = extract_string_from_array_operands(old_expr);
