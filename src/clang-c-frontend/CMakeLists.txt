@@ -14,10 +14,5 @@ target_include_directories(clangcfrontend_stuff
 )
 target_link_libraries(clangcfrontend_stuff PUBLIC esbmc_common gotoprograms ${cheaders_lib} ${ESBMC_CLANG_LIBS})
 
-# MSVC 14.52 rejects clang's Diagnostic.h under C++23 (C2338, #10885).
-if(MSVC)
-  set_target_properties(clangcfrontend_stuff PROPERTIES CXX_STANDARD 20)
-endif()
-
 add_library(clangcfrontend INTERFACE)
 target_link_libraries(clangcfrontend INTERFACE clangcfrontend_stuff clangcfrontendast)
