@@ -373,18 +373,32 @@ int esbmc_parseoptionst::run_chosen_strategy(
   optionst &options,
   goto_functionst &goto_functions)
 {
+  const bool k_step =
+    cmdline.isset("termination") || cmdline.isset("incremental-bmc") ||
+    cmdline.isset("falsification") || cmdline.isset("k-induction") ||
+    cmdline.isset("loop-invariant") ||
+    // --sv-comp switches a program that starts a thread to incremental BMC.
+    options.get_bool_option("incremental-bmc");
+
+  // Only a single BMC run keeps a reported check out of its verdict (#10875).
+  if (
+    cmdline.isset("report-property-class") &&
+    (k_step || ts_strategy_requested() ||
+     cmdline.isset("incremental-context-bound")))
+  {
+    log_error(
+      "--report-property-class needs a single BMC run, not a "
+      "verification strategy");
+    return 1;
+  }
+
   if (cmdline.isset("incremental-context-bound"))
     return do_context_bound_deepening(options, goto_functions);
 
   if (ts_strategy_requested())
     return do_ts_strategy(options, goto_functions);
 
-  if (
-    cmdline.isset("termination") || cmdline.isset("incremental-bmc") ||
-    cmdline.isset("falsification") || cmdline.isset("k-induction") ||
-    cmdline.isset("loop-invariant") ||
-    // --sv-comp switches a program that starts a thread to incremental BMC.
-    options.get_bool_option("incremental-bmc"))
+  if (k_step)
     return do_bmc_strategy(options, goto_functions);
 
   // No strategy chosen: rely on the simplifier and the flags set through CMD.

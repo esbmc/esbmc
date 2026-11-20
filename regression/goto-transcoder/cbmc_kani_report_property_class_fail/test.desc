@@ -1,0 +1,7 @@
+CORE
+cbmc_kani_report_property_class_fail.goto
+--binary --function _RNvCs3xNRuUfIz3_11report_fail7harness --report-property-class reachability_check --report-property-class cover
+assertion failed: x < 255
+^\*\* 9 reported: 4 REACHABLE, 1 SATISFIED, 2 UNREACHABLE, 2 UNSATISFIABLE$
+^\*\* 1 of 2 properties failed, 1 passed$
+^VERIFICATION FAILED$

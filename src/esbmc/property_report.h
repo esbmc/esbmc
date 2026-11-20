@@ -18,6 +18,7 @@ struct property_rowt
   std::string function;
   std::string description;
   std::string note;
+  std::string property_class;
   unsigned line = 0;
   unsigned column = 0;
   unsigned instruction = 0;
