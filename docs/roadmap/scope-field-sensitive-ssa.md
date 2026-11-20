@@ -24,7 +24,9 @@
 > already does (§8.28); the slicer now moves such a print to a kept field
 > step, which fixes both (§8.30). The dereference-size memo (#10894) is
 > stacked on it; with it, every corpus row meets the 2x bar under Z3 and
-> Bitwuzla (§8.29). The SV-COMP run is still open.**
+> Bitwuzla (§8.29). The stack's head, built with asserts, runs every C and
+> C++ `CORE` test with the flag forced on under Bitwuzla without tripping
+> Invariant 3's assert (§8.31). The SV-COMP run is still open.**
 > The corpus is in `regression/field-sensitivity/`
 > with baselines, and the census has been run and reverted. Phase 1 adds
 > `--field-sensitive-ssa` (default off): symex gives each field of an
@@ -2088,3 +2090,26 @@ Results:
 - clang-format 23.1.5 clean.
 - Still open for the Phase 2 gate: the assert-enabled run under Bitwuzla
   (§8.26) and an SV-COMP run.
+
+### 8.31 Phase 2: assert-enabled run under Bitwuzla
+
+Measured on 2026-11-20 on `feat/field-sensitive-ssa-phase2-deref-size` at
+`0d1c47c53`, the head of the Phase 2 stack (#10876, #10886, #10894). Built
+with `-O2 -g1` and no `-DNDEBUG`, so the Invariant 3 assert in
+`split_structst::rewrite` is live (its text is in the binary). gcc 13.3,
+LLVM 18, Bitwuzla 0.9.0 (CaDiCaL 2.1.2 cloned with git), 4-core container.
+
+- Every `CORE` test of `regression/esbmc` and `regression/esbmc-cpp/cpp`
+  that does not already pass the flag (4838 of 4881), flag forced on and
+  off, solver options replaced by `--bitwuzla`, 20 s per run, 4 at a time.
+  No run prints a failed `assert`. Two runs end in `SIGABRT` both ways, each
+  printing the `ERROR:` its test expects (`github_7905_struct_refused`,
+  `init_obj_vlas`).
+- Verdict differences: `ch20_4`, `vector_reserve_realloc` and `_fail` hit
+  the 20 s cap without the flag and give their expected verdicts with it
+  (19.3 s, 0.8 s, 0.8 s). Every other test has the same verdict and exit
+  code both ways; 9 hit the cap both ways.
+- ctest `field_sensitive_ssa|field-sensitivity|github_7797|github_5868|type_byte_size`
+  on this build (default solver Bitwuzla): 220/220.
+- This closes §8.26's open Bitwuzla run. Still open for the Phase 2 gate:
+  an SV-COMP run.
