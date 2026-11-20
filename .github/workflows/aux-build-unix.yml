@@ -128,7 +128,15 @@ jobs:
         # Cap the per-test TIMEOUT property at 120s. ctest --timeout is ignored
         # when tests set TIMEOUT via set_tests_properties (regression/CMakeLists.txt),
         # so we override the cache variable that feeds it and reconfigure.
-        cmake -DESBMC_REGRESS_TIMEOUT=120 .
+        # KNOWNBUG tests that never converge grow ~1GB per 5s until that
+        # timeout, so cap each test's address space to fit -jN of them in the
+        # 16GB runner (#10866). A capped KNOWNBUG test still passes.
+        mem=8192
+        case "${{ inputs.test-shard }}" in
+          python)        mem=6144 ;;
+          numpy|pyother) mem=4096 ;;
+        esac
+        cmake -DESBMC_REGRESS_TIMEOUT=120 -DESBMC_REGRESS_MEMORY_LIMIT=$mem .
         # macOS PR: the python/ suite (anchored — excludes python-intensive
         # and python-coverage, which already run on Linux), plus the
         # platform-sensitive set. The Python frontend is the one part of ESBMC
