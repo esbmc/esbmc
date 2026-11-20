@@ -4452,10 +4452,10 @@ void bmct::report_reported_properties() const
         result.note = "not every path was explored";
       }
 
+  // Kani names every check, so no two reported rows read alike and need
+  // their conditions to tell them apart.
   const std::vector<property_rowt> rows =
-    build_property_rows(verdicts, library_files, [this](const expr2tc &e) {
-      return from_expr(ns, "", e);
-    });
+    build_property_rows(verdicts, library_files);
   // Uncolored: the verdict colors would paint a reachable check as a failure.
   print_property_rows(
     rows,
