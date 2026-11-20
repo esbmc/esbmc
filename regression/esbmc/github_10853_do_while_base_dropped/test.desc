@@ -1,0 +1,6 @@
+CORE
+main.c
+--loop-invariant-check --claim 1 --claim 2 --claim 4 --witness-output-yaml -
+^VERIFICATION SUCCESSFUL$
+(?s)line: 5\s+column: \d+\s+function: "main"\s+value: "i <= 5"
+(?s)\A(?!.*line: 9$)
