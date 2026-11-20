@@ -3928,6 +3928,10 @@ private:
   /// Throws on a tagged operand of an `and`/`or` whose value is used.
   void refuse_tagged_boolop_operand(const exprt &operand) const;
   void refuse_bool_with_list_operand(const exprt &logical_expr) const;
+  void refuse_lossy_any_boolop_operand(
+    const exprt &logical_expr,
+    const typet &result_type,
+    const nlohmann::json &element) const;
 
   /// The truthiness of a str and/or operand: false for None or "", else true.
   /// Any other value comes back unchanged.
@@ -4116,6 +4120,9 @@ private:
   // The test of the assert statement being converted; see
   // lower_short_circuit_boolop.
   const nlohmann::json *asserted_test_ = nullptr;
+  // The value of the assignment being converted; see
+  // refuse_lossy_any_boolop_operand.
+  const nlohmann::json *assigned_value_ = nullptr;
 
   bool needs_operand_guard(const std::string &op, const exprt &rhs) const;
   // Set by resolve_any_subscript_array_type when it adopts an array type for
