@@ -195,9 +195,10 @@ const struct group_opt_templ all_cmd_options[] = {
      "(int/pointer conversions), treat __builtin_unreachable as a no-op, emit "
      "physical line numbers for witnesses, and avoid malloc/free in the "
      "fopen/fclose models. A program that can start a thread is verified with "
-     "incremental BMC over schedules of at most three context switches, "
-     "without interval analysis or --goto-unwind. Set automatically by the "
-     "SV-COMP wrapper."},
+     "incremental BMC, without interval analysis or --goto-unwind. Only the "
+     "falsification rounds are bounded (--falsify-context-bound 3); the final "
+     "run keeps the whole schedule space. Set automatically by the SV-COMP "
+     "wrapper."},
     /* Read by clang_c_language.cpp, which is built unconditionally, so these
      * must not sit in a frontend-gated group (#7345). */
     {"clang-c-irep2-adjust",
@@ -229,7 +230,8 @@ const struct group_opt_templ all_cmd_options[] = {
    {
      {"python",
       boost::program_options::value<std::string>()->value_name("path"),
-      "Python interpreter binary to use (searched in $PATH; default: python)"},
+      "Python interpreter binary to use (searched in $PATH; default: the first "
+     "of python3, python on $PATH)"},
      {"override-return-annotation",
       NULL,
       "Override return annotation with inferred type"},
@@ -338,7 +340,8 @@ const struct group_opt_templ all_cmd_options[] = {
     {"unbound", NULL, "Model external function calls as arbitrary behavior"},
     {"bound",
      NULL,
-     "Model inter-contract function calls within a bounded system (default)"},
+     "Model inter-contract function calls within a bounded system (unbounded "
+     "is the default)"},
     {"reentry-check",
      NULL,
      "Detect reentrancy behavior during contract execution"},

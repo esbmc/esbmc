@@ -2,20 +2,25 @@
 #
 # Generate the ESBMC Doxygen API reference from the single .config/Doxyfile config.
 #
-# Usage: scripts/build-docs.sh [OUTPUT_DIRECTORY [HTML_OUTPUT]]
+# Usage: scripts/gen-docs.sh [OUTPUT_DIRECTORY [HTML_OUTPUT]]
 #
 # With no arguments the HTML goes to docs/html (the Doxyfile default) — used by
 # the local build, the CMake `docs` target, and the CI check. The website
 # deploy passes an output directory and HTML subdir to publish under /docs/api.
-# PROJECT_NUMBER is stamped from CMakeLists.txt here so the version lives in
-# exactly one place rather than being re-parsed by every consumer.
+# PROJECT_NUMBER is stamped from the project() VERSION in CMakeLists.txt here so
+# the version lives in exactly one place rather than being re-parsed by every
+# consumer.
 set -euo pipefail
 
 root=$(cd "$(dirname "$0")/.." && pwd)
 cd "$root"
 
-version=$(sed -nE 's/^set\(ESBMC_VERSION_(MAJOR|MINOR|PATCH) ([0-9]+)\).*/\2/p' \
-  CMakeLists.txt | paste -sd.)
+version=$(awk '$1 == "VERSION" { print $2; exit }' CMakeLists.txt)
+
+if [ -z "$version" ]; then
+  echo "gen-docs.sh: no project() VERSION in CMakeLists.txt" >&2
+  exit 1
+fi
 
 if [ $# -ge 1 ]; then mkdir -p "$1"; fi
 
