@@ -21,8 +21,9 @@
 > second part (#10886), stacked on the first, splits static objects as well;
 > `plc_db` with the flag now solves at 512 and 2048 fields, and a split
 > global copied from a split value loses its trace step as a split local
-> already does (§8.28). The dereference-size memo (#10894) is stacked on
-> it. The SV-COMP run is still open.**
+> already does (§8.28); the slicer now moves such a print to a kept field
+> step, which fixes both (§8.30). The dereference-size memo (#10894) is
+> stacked on it. The SV-COMP run is still open.**
 > The corpus is in `regression/field-sensitivity/`
 > with baselines, and the census has been run and reverted. Phase 1 adds
 > `--field-sensitive-ssa` (default off): symex gives each field of an
@@ -1916,7 +1917,7 @@ Results:
   §8.21 loss for split destinations, not new to globals. Handing the print
   to the kept `g.p` step is not enough: the printed value reads the whole
   read of the return value's own symbol, which the slicer also removes, so
-  §8.8's rule hides it. Open.
+  §8.8's rule hides it. Fixed in §8.30.
 - Corpus, flag on, symex seconds, 8 / 2048 fields. Single runs right after
   the build: `global_callee` 0.330 / 1.971 (6.0x) under Z3 and 0.291 /
   2.019 (6.9x) under Bitwuzla; `plc_db` 0.033 / 0.205 (6.2x) and 0.034 /
@@ -1937,3 +1938,83 @@ Results:
 - Still open for the Phase 2 gate: the 2x bar on `global_callee` and
   `plc_db` (per-dereference size and alignment work), the trace step above,
   the assert-enabled run under Bitwuzla (§8.26), and an SV-COMP run.
+
+### 8.30 Phase 2, part 2: the print of a sliced split write
+
+Measured on 2026-11-20 on `feat/field-sensitive-ssa-phase2-globals` after
+merging `feat/field-sensitive-ssa-phase2-locals` at `6a47098d4`.
+RelWithDebInfo, gcc 13.3, LLVM 18, Z3 4.13.3 and Bitwuzla 0.9.0 (CaDiCaL
+2.1.2 cloned with git), 4-core container. "Base" is the merge's binary.
+(§8.29 is on the PR stacked on this one.)
+
+`symex_assign_split` prints a whole write to a split object on the step of
+its last field. In `field_sensitive_ssa_carried_copy_fail` that field is
+`g`'s padding, which nothing reads, so the slicer removed the step and the
+print with it, while the kept `g.p` step stayed hidden. Under the flag the
+slicer now moves the print of a removed last-field step to the latest kept
+field step of the same write (same instruction, same `original_lhs`) and
+keeps what the print reads, as the unsplit object's step keeps its
+right-hand side. §8.28's obstacle, a print reading the return value's
+removed whole read, goes away because that read is now kept. The test
+prints `g = { .p=&b, .k=0 }`; without the flag Z3 prints
+`g = { .p=t.p, .k=0 }`.
+
+Results:
+
+- ctest `field_sensitive_ssa|field-sensitivity|github_7797|github_5868`:
+  220/220 (219 before, plus the new test). `field_sensitive_ssa_carried_copy_fail`
+  and the new `field_sensitive_ssa_carried_copy_local_fail` (the same
+  program with a split local) fail on the base binary, which prints no step
+  for `g`, and pass under Z3 and Bitwuzla.
+- Flag forced on, base against this change, 20 s per run: every fourth
+  directory of `regression/esbmc` and `regression/esbmc-cpp/cpp` and every
+  twentieth of `regression/python` (1680 `CORE` tests). 0 verdict changes.
+  27 outputs differ. 16 Python tests differ only in temporary paths or
+  timings, and `github_7905_struct_refused` and `ts_dump_exec_guard` only
+  in timings. `github_8777_fail` ran past the 20 s cap both ways; re-run
+  alone, both take 27 s and fail the same 6 of 13 properties.
+  `assoc_emplace` and `field_sensitive_ssa_copy` keep more assignments.
+  `field_sensitive_ssa_carried_copy_fail` prints its step (the fix).
+  `overflow-result3` and `overflow-result-all-fail` print their `foo`
+  steps again, now the same as without the flag (§8.6 listed them as
+  dropped). `field_sensitive_ssa_print_pointer_fail` adds the steps
+  `t = { .a=5, .b=2 }` and `t = { .a=2, .b=5 }`, the values the program
+  computes from `x = 5`. `os1_fail` reports another uncaught exception from
+  a different model, same verdict. In `field_sensitive_ssa_phi_own_name_fail`
+  (no `--multi-property`), `assertion.3` is labelled `NOT CHECKED` instead
+  of `FAILED`: that mode labels a claim `FAILED` only when the one model
+  violates it, and the extra kept steps change the model. With
+  `--multi-property` both binaries report it `FAILED`. This run used a
+  build that still had the unreached check dropped below; the ctest runs
+  and the corpus used the final code.
+- Each outcome of `carry_split_print` reached under Z3 and Bitwuzla
+  (instrumented build, the new test's program and a variant whose last
+  field is kept): not a split field step; a removed printing step; a kept
+  printing step; a hidden step with no matching print; a removed sibling;
+  the print moved. A check for a sibling kept only for a nondet result was
+  reached by no harness: a nondet split write gives its last field a nondet
+  right-hand side too, so that step is kept rather than removed. It was
+  dropped. The new test's program with `__ESBMC_unreachable()` after the
+  copy reports it reached under both solvers.
+- Corpus, flag on, symex seconds, median of three, 8 / 2048 fields:
+
+  | Row | Z3 base | Z3 new | Bitwuzla base | Bitwuzla new |
+  |---|---|---|---|---|
+  | `repro7521` | 0.693 / 0.984 | 0.667 / 0.974 | 0.681 / 1.016 | 0.667 / 1.133 |
+  | `local_writes` | 0.014 / 0.017 | 0.014 / 0.017 | 0.014 / 0.016 | 0.016 / 0.016 |
+  | `local_addr_once` | 0.015 / 0.018 | 0.014 / 0.017 | 0.014 / 0.019 | 0.015 / 0.016 |
+  | `global_callee` | 0.169 / 1.287 | 0.156 / 1.304 | 0.160 / 1.201 | 0.160 / 1.343 |
+  | `plc_db` | 0.032 / 0.138 | 0.020 / 0.143 | 0.020 / 0.141 | 0.021 / 0.145 |
+
+  All `VERIFICATION SUCCESSFUL`. `plc_db_w2048` ran with the `w8` row's
+  options, since its own test only dumps SMT-LIB. The change runs after
+  symex, so the table only bounds the noise. The global rows miss the 2x
+  bar on this branch; #10894 brings them under it (§8.29).
+- ctest without the flag (the change acts only under it), 10-minute caps:
+  `esbmc-cpp/cpp` 627 of 628 run, `esbmc/` 902 of 906 run; the 1 and 4
+  failures (`ch8_5`, `02_eureka23`, `builtin_clzg_ctzg`,
+  `bundled_headers_from_vfs`, `gcc_popcount_01`) fail the same way with the
+  base binary.
+- clang-format 23.1.5 clean.
+- Still open for the Phase 2 gate: the assert-enabled run under Bitwuzla
+  (§8.26) and an SV-COMP run.
