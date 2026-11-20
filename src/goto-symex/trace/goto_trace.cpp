@@ -586,8 +586,9 @@ static goto_programt::const_targett resume_point(
     return body.instructions.begin();
   const goto_programt::const_targett pc = last->pc;
   if (last->type == symex_targett::BREANCHING && pc->is_goto())
-    return last->guard != pc->flipped_guard ? pc->targets.front()
-                                            : std::next(pc);
+    return last->guard != pc->flipped_guard
+             ? goto_programt::const_targett(pc->targets.front())
+             : std::next(pc);
   return pc->is_goto() || pc->is_return() || pc->is_end_function()
            ? pc
            : std::next(pc);
