@@ -3060,7 +3060,7 @@ void dereferencet::construct_struct_ref_from_dyn_offs_rec(
   // An element of a scalar array: legal at offset 0 when the sizes match, as
   // in build_reference_rec's constant-offset scalar case (#10891).
   if (
-    is_scalar_type(value->type) &&
+    is_scalar_type(value->type) && !is_pointer_type(value->type) &&
     value->type->get_width() == type->get_width())
   {
     expr2tc offs_is_zero =
