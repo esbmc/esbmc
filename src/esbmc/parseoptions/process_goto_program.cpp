@@ -610,7 +610,7 @@ bool esbmc_parseoptionst::process_goto_program(
     {
       log_status("Enable correctness witness validation 2.0");
       remove_no_op(goto_functions);
-      goto_loop_invariant_combined(goto_functions);
+      goto_loop_invariant_combined(goto_functions, context);
     }
 
     // goto_k_induction returns true, and logs why, when the inductive step
@@ -627,7 +627,7 @@ bool esbmc_parseoptionst::process_goto_program(
       // Combined mode: Branch 1 (invariant inductivity check) +
       // ASSUME(INV) injected at end of loop body + k-induction (Branch 2).
       remove_no_op(goto_functions);
-      goto_loop_invariant_combined(goto_functions);
+      goto_loop_invariant_combined(goto_functions, context);
       disable_is_if_unsound(
         goto_k_induction(goto_functions, &context, checks_past_violation));
     }
