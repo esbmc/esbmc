@@ -3468,6 +3468,12 @@ void dereferencet::read_only_write_check(
   const expr2tc &object,
   const guard2tc &guard)
 {
+  if (is_code_type(object->type))
+  {
+    dereference_failure(
+      "Code separation", "Program code accessed in write or free mode", guard);
+    return;
+  }
   if (!is_read_only(object, ns))
     return;
   const expr2tc &symbol = get_symbol(object);

@@ -1,0 +1,5 @@
+CORE
+main.c
+
+^  dereference failure: write access to string constant$
+^VERIFICATION FAILED$
