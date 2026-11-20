@@ -1866,7 +1866,8 @@ void python_converter::record_call_site_displays(
   bool direct = true;
   if (
     call_site_list_literals(func_name, param_index, literals, direct, 0) &&
-    !literals.empty())
+    direct && !literals.empty() &&
+    param_keeps_positions(func_name, param_index, true))
     record_literal_elements(param_id, literals, false);
 }
 
