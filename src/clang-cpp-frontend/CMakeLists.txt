@@ -15,3 +15,8 @@ target_include_directories(esbmc_internal_cpp
 target_link_libraries(esbmc_internal_cpp PUBLIC esbmc_common cpp_includes)
 
 target_link_libraries(clangcppfrontend PUBLIC esbmc_common esbmc_internal_cpp fmt::fmt)
+
+# MSVC 14.52 rejects clang's Diagnostic.h under C++23 (C2338, #10885).
+if(MSVC)
+  set_target_properties(clangcppfrontend PROPERTIES CXX_STANDARD 20)
+endif()
