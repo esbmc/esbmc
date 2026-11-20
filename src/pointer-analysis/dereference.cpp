@@ -2865,17 +2865,12 @@ void dereferencet::construct_struct_ref_from_const_offset(
 
     // A struct laid over scalar members whose names or types differ from its
     // own, e.g. struct { char a, b; } read as struct { char c, d; } (#10888).
-    if (
-      is_struct_type(type) &&
-      intref.value + type_size <= type_byte_size_bits(value->type))
+    expr2tc rebuilt =
+      construct_struct_from_members(value, intref.value, type, guard, mode);
+    if (!is_nil_expr(rebuilt))
     {
-      expr2tc rebuilt =
-        construct_struct_from_members(value, intref.value, type, guard, mode);
-      if (!is_nil_expr(rebuilt))
-      {
-        value = rebuilt;
-        return;
-      }
+      value = rebuilt;
+      return;
     }
 
     // Fell out of that loop. Either this offset is out of range, or lies in
@@ -2897,6 +2892,11 @@ expr2tc dereferencet::construct_struct_from_members(
   const guard2tc &guard,
   modet mode)
 {
+  if (
+    !is_struct_type(type) ||
+    offset_bits + type_byte_size_bits(type) > type_byte_size_bits(value->type))
+    return expr2tc();
+
   const struct_type2t &structtype = to_struct_type(type);
   std::vector<expr2tc> fields;
   for (size_t i = 0; i < structtype.members.size(); i++)

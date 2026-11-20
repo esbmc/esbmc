@@ -661,8 +661,8 @@ private:
     const guard2tc &guard,
     modet mode);
   /** Build a struct of \p type from the members of \p value that lie at
-   *  \p offset_bits onwards, one target member at a time; nil if a member
-   *  cannot be built. */
+   *  \p offset_bits onwards, one target member at a time; nil if \p type is
+   *  not a struct, does not fit in \p value, or a member cannot be built. */
   expr2tc construct_struct_from_members(
     const expr2tc &value,
     const BigInt &offset_bits,
