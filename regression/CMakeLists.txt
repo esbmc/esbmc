@@ -662,11 +662,10 @@ set(_slow_regression_tests
     # powerset_fail reaches VERIFICATION FAILED since #8537 but takes 91-124s
     # on the DebugOpt Linux runner, so the 120s cap kills it intermittently.
     "regression/quixbugs/powerset_fail"
-    # Both verify with the expected verdict but slowed 2.5-5x after #9294
-    # (#9516): 44s to over 120s and 101-116s on the DebugOpt Linux runner, so
-    # the 120s cap kills them intermittently on unrelated PRs.
+    # Verifies with the expected verdict but slowed 2.5x after #9294 (#9516):
+    # 9-33s to 44-68s on the DebugOpt Linux runner, and runner noise pushed it
+    # past the 120s cap on unrelated PRs.
     "regression/esbmc-cpp/cpp/vector_reserve_realloc_nested"
-    "regression/esbmc/github_1352"
     # depth_first_search_fail builds a small Node graph and recurses over each
     # node's `successors` list. Under the object-model migration (#3067) every
     # instance is a heap Class* and a Class* read out of a list into a recursive
@@ -800,6 +799,10 @@ set(_very_slow_regression_tests
     # puts this past the 2x tier's 240s (#7679). Its VmPeak is ~4.7GiB against
     # the global 8GiB RLIMIT_AS, which has no per-test override.
     "regression/python-intensive/problem1_fail"
+    # The solver takes ~5x longer since #9294 (#9516): each fractal[x] read
+    # rebuilds a pointer from the bytes of a malloc'd block. 155-240s on the
+    # DebugOpt Linux runner, so the 2x tier's 240s cap kills it.
+    "regression/esbmc/github_1352"
 )
 
 foreach(_t IN LISTS _slow_regression_tests)
