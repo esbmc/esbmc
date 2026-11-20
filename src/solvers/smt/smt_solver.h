@@ -916,6 +916,7 @@ public:
    *  apply. */
   smt_astt convert_pointer_bitcast(const expr2tc &from, const type2tc &to_type);
   smt_astt convert_bitcast_to_fp(const expr2tc &from, const type2tc &to_type);
+  smt_astt convert_fp_to_bits(const expr2tc &from);
   smt_astt
   convert_bitcast_to_struct(const expr2tc &from, const type2tc &to_type);
   smt_astt

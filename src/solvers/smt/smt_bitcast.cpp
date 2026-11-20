@@ -634,6 +634,17 @@ smt_astt smt_solver_baset::convert_bitcast_to_fp(
   return nullptr;
 }
 
+/** The bits of the float @p from: those it was built from when it came from
+ *  a bitcast of a bit-vector, see fp_bits. */
+smt_astt smt_solver_baset::convert_fp_to_bits(const expr2tc &from)
+{
+  smt_astt fp = convert_ast(from);
+  auto it = fp_bits.find(fp);
+  if (it != fp_bits.end())
+    return it->second.first;
+  return fp_api->mk_from_fp_to_bv(fp);
+}
+
 /** Rebuild a struct from the bits of @p from, member by member. Null when
  *  those bits are not in a form this can take apart. */
 smt_astt smt_solver_baset::convert_bitcast_to_struct(
@@ -840,13 +851,7 @@ smt_astt smt_solver_baset::convert_bitcast(const expr2tc &expr)
       return int_mode;
 
     if (is_floatbv_type(from))
-    {
-      smt_astt fp = convert_ast(from);
-      auto it = fp_bits.find(fp);
-      if (it != fp_bits.end())
-        return it->second.first;
-      return fp_api->mk_from_fp_to_bv(fp);
-    }
+      return convert_fp_to_bits(from);
 
     if (is_fixedbv_type(from))
       return convert_ast(from);
