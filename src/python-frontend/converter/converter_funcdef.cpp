@@ -1850,6 +1850,24 @@ void python_converter::refine_any_param_to_list(
     return;
   if (elem_type != typet())
     element_type_registry_.record(param_id, "", elem_type);
+  else
+    record_call_site_displays(param_id, func_name, param_index);
+}
+
+/// Records the element types of the list displays every call of \p func_name
+/// passes as parameter \p param_index, such as `items` in k(*d) over
+/// t([1, [[60, 10]]]), where each is an element of a list parameter (#8914).
+void python_converter::record_call_site_displays(
+  const std::string &param_id,
+  const std::string &func_name,
+  size_t param_index)
+{
+  std::vector<nlohmann::json> literals;
+  bool direct = true;
+  if (
+    call_site_list_literals(func_name, param_index, literals, direct, 0) &&
+    !literals.empty())
+    record_literal_elements(param_id, literals, false);
 }
 
 /// Whether an unannotated parameter should be refined to the list model.

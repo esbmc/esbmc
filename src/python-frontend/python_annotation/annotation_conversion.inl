@@ -709,6 +709,56 @@ std::string python_annotation<Json>::infer_unpacked_element_type(
   return "Any";
 }
 
+/// Whether every use of @p name in @p node reads one of its elements, apart
+/// from at most one binding. A store, a call such as `name.append(x)`, or an
+/// alias could move or replace an element, but a read cannot.
+template <class Json>
+static bool only_element_reads(const Json &node, const std::string &name)
+{
+  unsigned bindings = 0;
+  std::function<bool(const Json &)> walk = [&](const Json &n) -> bool {
+    if (
+      n.is_object() && n.value("_type", "") == "Name" &&
+      n.value("id", "") == name)
+      return n["ctx"].value("_type", "") == "Store" && ++bindings == 1;
+    if (
+      n.is_object() && n.value("_type", "") == "Subscript" &&
+      n["ctx"].value("_type", "") == "Load" &&
+      n["value"].value("_type", "") == "Name" &&
+      n["value"].value("id", "") == name)
+      return walk(n["slice"]);
+    if (!n.is_object() && !n.is_array())
+      return true;
+    for (const auto &child : n)
+      if (!walk(child))
+        return false;
+    return true;
+  };
+  return walk(node);
+}
+
+/// The type of element @p subscript reads from @p value, a list display
+/// bound to @p var_name, when the index is a constant. The element keeps its
+/// own type when the display mixes types, which leaves the list itself
+/// without one (#8914), provided nothing but element reads uses the list.
+template <class Json>
+std::string python_annotation<Json>::fixed_element_type(
+  const Json &subscript,
+  const Json &value,
+  const std::string &var_name)
+{
+  const Json &index = subscript["slice"];
+  if (
+    value.value("_type", "") != "List" ||
+    index.value("_type", "") != "Constant" ||
+    !index["value"].is_number_unsigned())
+    return "";
+  const size_t i = index["value"].template get<size_t>();
+  if (i >= value["elts"].size() || !only_element_reads(ast_, var_name))
+    return "";
+  return get_argument_type(value["elts"][i]);
+}
+
 /// The type a subscript of a `container`-typed value yields, or empty.
 inline std::string
 subscript_result_type(const std::string &container, bool is_slice)
@@ -1230,7 +1280,10 @@ std::string python_annotation<Json>::get_argument_type(const Json &arg)
         !var_node.empty() && var_node.contains("value") &&
         !var_node["value"].is_null())
       {
-        return subscript_result_type(get_argument_type(val), is_slice);
+        const std::string container = get_argument_type(val);
+        if (!container.empty() || is_slice)
+          return subscript_result_type(container, is_slice);
+        return fixed_element_type(arg, var_node["value"], var_name);
       }
     }
     return "";
