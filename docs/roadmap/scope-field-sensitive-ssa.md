@@ -29,7 +29,12 @@
 > are still open. An assert-enabled build of that part, merged with master
 > `e0ce5d373`, runs every C and C++ `CORE` test with the flag forced on
 > without tripping Invariant 3's assert, after a fix for a crash on a
-> points-to set that lists one object twice (§8.26).** The corpus is in `regression/field-sensitivity/`
+> points-to set that lists one object twice (§8.26). The two extra
+> `NOT CHECKED` claims `github_5868_is_scalar_const_lookup_fail` printed with
+> that part came from a phi reading a copy carried over the object's own name
+> in the other path's value set; the phi now leaves those entries to the
+> value-set merge, and the test prints what it prints without the flag
+> (§8.27).** The corpus is in `regression/field-sensitivity/`
 > with baselines, and the census has been run and reverted. Phase 1 adds
 > `--field-sensitive-ssa` (default off): symex gives each field of an
 > eligible local, parameter or return slot its own SSA name. The Phase 1
@@ -1787,3 +1792,58 @@ and the eligibility scan run before any solver is called.
   at 20 s without the flag and give their expected verdicts with it.
 - Still open for the Phase 2 gate: as §8.25, plus a Bitwuzla run of the
   above.
+
+### 8.27 Phase 2, part 1: a phi over a copy carried over its own name
+
+Measured on 2026-11-20 on `feat/field-sensitive-ssa-phase2-locals` at
+`c13f2cf3d`. RelWithDebInfo, gcc 13.3, LLVM 18, Z3 4.13.3 and Bitwuzla
+0.9.0, 4-core container. "Base" is `c13f2cf3d`'s binary.
+
+- Cause of the open item in §8.25. In `std::map::upper_bound`, `begin()`'s
+  return temporary is split once its address may be taken, so the copy
+  `it = begin()` is carried as `it#1 WITH [...]` over `it`'s own L2 name
+  (§8.21). At the merge after `return it;`, `phi_function` renames the
+  other path's value of `it` to that chain and assigns it on the current
+  path, whose value set has already dropped `it` at its `DEAD`. Read there,
+  `it.it_key` and `it.it_value` have no entry and become unknown, and
+  `merge_value_sets` keeps the unknown next to the other path's targets. The
+  next `operator++` then emits invalid-pointer claims at `map:110-111`.
+  Without the flag the carried value reads `begin`'s temporary instead,
+  which both paths still hold.
+- Change, with the flag only: when the merged path's value is a `with`
+  chain over an L2 name of the object the phi assigns, the phi leaves the
+  current path's value-set entries for that object as they are, and
+  `merge_value_sets` adds the merged path's entries. This is sound because
+  each path's entries describe that path's value, and the merge takes their
+  union. `goto_symex_statet::assignment` takes a flag to skip the value-set
+  update.
+- `github_5868_is_scalar_const_lookup_fail` with the flag: 657 VCCs and 48
+  `NOT CHECKED` claims under Z3 and Bitwuzla, as without the flag (base:
+  661 and 50).
+- New pair `field_sensitive_ssa_phi_own_name` (`--multi-property`,
+  `SUCCESSFUL`) and `_fail` (an out-of-bounds read through the iterator,
+  `FAILED`), both C++ and reduced from the map. Both also require that no
+  `invalid pointer` claim is printed. On the base binary the first lists
+  3 such claims and `_fail` lists one, so both fail there; both pass with
+  the change.
+- Both outcomes of the new decision are reached under Z3 and Bitwuzla, in
+  a C harness of the same shape and in the C++ test (instrumented build
+  printing a marker per outcome).
+- Flag forced on, base against this change, 30 s per run: every fourth
+  `regression/esbmc-cpp/cpp` directory (345 `CORE` tests), every eighth
+  `regression/esbmc` directory (435), and every 150th `regression/python`
+  directory (61). 0 verdict changes. Text changes only in
+  `github_5868_is_scalar_const_lookup`, `_fail` and `github_9372`, which
+  generate fewer claims; the rest is timings and addresses.
+- ctest without the flag: `esbmc-cpp/cpp` 1472/1480 and `esbmc/` 3599/3618,
+  and the same 8 and 19 tests fail on the base binary. Under the 10-minute
+  cap, 1637 `python` tests ran and all passed.
+- ctest `field_sensitive_ssa|field-sensitivity|github_7797|github_5868`:
+  215/215.
+- Corpus with the flag, symex seconds, medians of three, 8 / 2048 fields:
+  `local_addr_once` 0.014 / 0.016 (1.14x) under Z3 and 0.014 / 0.015
+  (1.07x) under Bitwuzla; `repro7521` 0.677 / 0.906 (1.34x) and 0.688 /
+  1.032 (1.50x); `local_writes` 0.014 / 0.016 (1.14x) and 0.013 / 0.015
+  (1.15x).
+- Still open for the Phase 2 gate: globals (`global_callee`, `plc_db`), the
+  assert-enabled run under Bitwuzla (§8.26), and an SV-COMP run.
