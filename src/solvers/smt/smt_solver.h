@@ -1256,6 +1256,12 @@ public:
   /** Every flattened pointer in this context. Pruned on pop_ctx like
    *  uf_ackermann_history, whose asts have the same lifetime. */
   std::vector<ptr_flatten_entry> ptr_flatten_history;
+  /** The bit-vector each float built by a bits-to-float bitcast was made
+   *  from, with the context level it was made at. Reading the float's bits
+   *  back returns that bit-vector: SMT-LIB leaves the bits of a NaN
+   *  unspecified, so a native round trip need not be the identity (#10887).
+   *  Pruned on pop_ctx like ptr_flatten_history. */
+  std::unordered_map<smt_astt, std::pair<smt_astt, unsigned int>> fp_bits;
   /** The most flattens one rebuilt pointer is defined over; see
    *  decode_pointer_repr(). */
   static constexpr size_t max_rebuild_sources = 32;
