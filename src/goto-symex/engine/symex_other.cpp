@@ -130,6 +130,10 @@ void goto_symext::symex_decl(const expr2tc &code)
     frame.level1.get_ident_name(l1_field);
     declare_l1(l1_field, field->type, reused);
   }
+  // is_live_variable looks up the object a pointer names, not its fields.
+  if (art1->is_address_taken_local(identifier))
+    frame.local_variables.insert(
+      renaming::level2t::name_record(to_symbol2t(l1_sym)));
 }
 
 void goto_symext::declare_l1(expr2tc l1_sym, const type2tc &type, bool reused)

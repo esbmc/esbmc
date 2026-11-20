@@ -10,7 +10,7 @@ void symex_dereference_statet::dereference_failure(
   const std::string &msg,
   const guard2tc &guard)
 {
-  expr2tc g = guard.as_expr();
+  expr2tc g = goto_symex.split_rewrite(guard.as_expr());
   goto_symex.replace_dynamic_allocation(g);
   goto_symex.simplify_python_builtins(g);
   goto_symex.claim(not2tc(g), "dereference failure: " + msg);
@@ -18,7 +18,7 @@ void symex_dereference_statet::dereference_failure(
 
 void symex_dereference_statet::dereference_assume(const guard2tc &guard)
 {
-  expr2tc g = guard.as_expr();
+  expr2tc g = goto_symex.split_rewrite(guard.as_expr());
   goto_symex.replace_dynamic_allocation(g);
   goto_symex.simplify_python_builtins(g);
   goto_symex.assume(not2tc(g));
@@ -58,15 +58,16 @@ void symex_dereference_statet::points_to(
   const expr2tc &expr,
   value_setst::valuest &value_set)
 {
-  state.value_set.get_value_set(expr, value_set, true);
+  state.value_set.get_value_set(
+    goto_symex.split_rewrite(expr), value_set, true);
 }
 
 void symex_dereference_statet::get_value_set(
-  const expr2tc &expr,
+  const expr2tc &pointer,
   value_setst::valuest &value_set)
 {
   // Here we obtain the set of objects via value set analysis.
-  points_to(expr, value_set);
+  points_to(pointer, value_set);
 
   // add value set objects during the symbolic execution.
   if (
@@ -75,6 +76,7 @@ void symex_dereference_statet::get_value_set(
   {
     if (value_set.empty())
       return;
+    const expr2tc expr = goto_symex.split_rewrite(pointer);
 
     if (is_pointer_type(expr))
     {
@@ -149,6 +151,7 @@ void symex_dereference_statet::get_value_set(
 
 void symex_dereference_statet::rename(expr2tc &expr)
 {
+  expr = goto_symex.split_rewrite(expr);
   goto_symex.cur_state->rename(expr);
 }
 
@@ -254,7 +257,14 @@ void goto_symext::dereference(
     expr = tmp;
   }
   else
+  {
+    // split_read may leave a split object whole on purpose; only what a
+    // dereference resolves to is rewritten here.
+    const bool derefs = dereference.has_dereference(expr);
     dereference.dereference_expr(expr, guard, mode);
+    if (derefs)
+      expr = split_rewrite(expr);
+  }
 }
 
 void goto_symext::check_read_only_write(
