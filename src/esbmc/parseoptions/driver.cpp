@@ -560,9 +560,10 @@ int esbmc_parseoptionst::doit()
   // The parallel driver has no termination interpretation, so --termination
   // takes priority: fall through to the sequential strategy instead (#6031).
   // --report-property-class falls through to be refused before any fork.
-  if (
-    cmdline.isset("k-induction-parallel") && !cmdline.isset("termination") &&
-    !cmdline.isset("report-property-class"))
+  const bool fork_parallel = cmdline.isset("k-induction-parallel") &&
+                             !cmdline.isset("termination") &&
+                             !cmdline.isset("report-property-class");
+  if (fork_parallel)
     return doit_k_induction_parallel();
 
   // Parse ESBMC options (CMD + set internal options)
