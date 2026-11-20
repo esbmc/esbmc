@@ -281,6 +281,7 @@ private:
   /// claim discharged vacuously, the LTL monitor instrumented, and, under a
   /// k-step strategy, every row of the run's table Passed.
   bool proves_the_program() const;
+  bool proves_loop_invariants() const;
 
   /// Whether \p res establishes that *every* property holds, as opposed to a
   /// merely bounded round such as a k-induction base case. Must agree with the

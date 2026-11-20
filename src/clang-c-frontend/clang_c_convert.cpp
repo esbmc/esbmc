@@ -4560,7 +4560,13 @@ bool clang_c_convertert::get_cast_expr(
 
   case clang::CK_BitCast:
   case clang::CK_LValueBitCast:
-    convert_bit_cast(ns, expr, type);
+    // A decayed function designator still has code type until the adjust pass
+    // takes its address, and gen_typecast silently drops a cast from it
+    // (#10820).
+    if (expr.type().is_code())
+      expr = typecast_exprt(expr, type);
+    else
+      convert_bit_cast(ns, expr, type);
     break;
 
   // Member-pointer casts. ESBMC stores data-member pointers as plain pointers
