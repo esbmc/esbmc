@@ -8,9 +8,12 @@ This document explains how to maintain ESBMC's Launchpad PPA (Personal Package A
 
 ESBMC PPA location: https://launchpad.net/~esbmc/+archive/ubuntu/esbmc
 
-Currently supported Ubuntu versions:
-- **Noble** (24.04)
-- **Jammy** (22.04)
+Ubuntu versions:
+- **Noble** (24.04): current releases (latest upload `8.4.0+dfsg-1`).
+- **Jammy** (22.04): no longer updated. Its last upload is
+  `8.3.0+dfsg-1~jammy1`; the packaging changelog (`8.3.0+dfsg-2`) drops Jammy
+  because ESBMC uses C++23 `std::unreachable()`, which Jammy's GCC 11 does not
+  provide.
 
 ## Before You Begin
 
@@ -57,13 +60,16 @@ git merge origin/master
 
 ### Version Number Format
 
-ESBMC uses the following version number format:
+ESBMC uses the following version number format (see `debian/changelog` on the
+`debian-launchpad-patches` branch):
 
-- **Main version**: `7.11.0` (from upstream)
-- **Fix version**: `7.11.0+fix1-X` (Debian-specific fixes)
+- **Main version**: `8.4.0` (from upstream)
+- **Repacked version**: `8.4.0+dfsg-X` (DFSG-clean upstream tarball, Debian
+  revision `X`). Earlier uploads used `+fix1-X` (8.0 and before) or a plain `-X`
+  (8.2.0).
 - **Ubuntu version suffix**:
-  - Noble: `7.11.0+fix1-X`
-  - Jammy: `7.11.0+fix1-X~jammy1`
+  - Noble: `8.4.0+dfsg-X`
+  - Jammy (legacy uploads only): `8.3.0+dfsg-X~jammy1`
 
 ### Version Comparison Rules
 
@@ -88,7 +94,7 @@ Edit `debian/changelog` and add a new entry at the top:
 ```bash
 dch -i  # Interactive editing
 # or
-dch -v 7.11.0+fix1-10 "Describe your changes"
+dch -v 8.4.0+dfsg-2 "Describe your changes"
 ```
 
 **Important**:
@@ -235,6 +241,11 @@ https://launchpad.net/~esbmc/+archive/ubuntu/esbmc
 
 ## Handling Multiple Ubuntu Versions
 
+> [!NOTE]
+>
+> Only Noble currently receives uploads (see [Overview](#overview)).
+> This section applies when more than one series is built.
+
 ### Updating Multiple Versions Simultaneously
 
 **Important**: In `debian/changelog`, the Noble version entry must always be at the top (before Jammy), as it has a higher version number (`7.11.0+fix1-X` > `7.11.0+fix1-X~jammy1`).
@@ -291,7 +302,7 @@ If a fix only applies to a specific Ubuntu version:
 
 **Solution**:
 - Check version number format
-- Ensure using `+fix1-X` format instead of `-X` format
+- Ensure the version keeps the `+dfsg-X` format of earlier uploads
 - Increment the fix number
 
 ### 2. Original Tarball Conflict

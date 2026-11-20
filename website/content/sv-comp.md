@@ -25,7 +25,6 @@ toc: true
     </ul>
   </li>
 </ul>
-<h3>
 <h3>    
   <a href="https://sv-comp.sosy-lab.org/2025/" target="_blank">
     SV-COMP 2025
@@ -68,7 +67,6 @@ toc: true
     </ul>
   </li>
 </ul>
-<h3>
 <h3>
   <a href="https://sv-comp.sosy-lab.org/2019/" target="_blank">
     SV-COMP 2019
@@ -129,8 +127,8 @@ toc: true
   </li>
   <li><strong>Awards:</strong>
     <ul>
-      <li><strong>2<sup>nd</sup></strong> Place in Falsification Overall</li>
-      <li><strong>3<sup>rd</sup></strong> Place in Falsification Overall</li>
+      <li><strong>2<sup>nd</sup></strong> Place in Falsification Overall (ESBMC-kind)</li>
+      <li><strong>3<sup>rd</sup></strong> Place in Falsification Overall (ESBMC-incr)</li>
     </ul>
   </li>
 </ul>

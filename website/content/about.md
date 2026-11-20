@@ -18,14 +18,20 @@ ESBMC is a joint project with the
 
 The ESBMC development was supported by various research funding agencies,
 including CNPq (Brazil), CAPES (Brazil), FAPEAM (Brazil), EPSRC (UK), Royal
-Society (UK), British Council (UK), European Commission (Horizon 2020), and
-companies including Intel, Nokia Institute of Technology, Samsung, and
-[Veribee](https://www.veribee.co/). ESBMC is currently funded by Intel, EPSRC
-grants [EP/T026995/1](https://enncore.github.io),
+Society (UK), British Council (UK), UKRI (UK), European Commission (Horizon
+2020), foundations including Lattice, Rust and Ethereum, and companies including
+ARM, Amazon Web Services, Intel, Motorola Mobility, Nokia Institute of
+Technology, Samsung, and [Veribee](https://www.veribee.co/). ESBMC development
+is currently funded by ARM, EPSRC grants
+[EP/T026995/1](https://enncore.github.io) and
 [EP/V000497/1](https://scorch-project.github.io),
-[EU H2020 ELEGANT 957286](https://www.elegant-h2020.eu) and
-[Soteria project](https://soteriaresearch.org) awarded by the UK Research and
-Innovation for the Digital Security by Design (DSbD) Programme.
+[Ethereum Foundation](https://blog.ethereum.org/2022/07/29/academic-grants-grantee-announce),
+[Rust Foundation](https://rustfoundation.org/),
+[EU H2020 ELEGANT 957286](https://www.elegant-h2020.eu), Brazilian agencies CNPq
+(407885/2023-4), FAPEAM (01.02.016301.00292/2025-80) and CAPES (Finance Code
+001), the [Soteria project](https://soteriaresearch.org) awarded by UK Research
+and Innovation for the Digital Security by Design (DSbD) Programme, and XC5 Hong
+Kong Limited.
 
 <style>
 .sponsor-badge {
@@ -59,7 +65,7 @@ designed for efficient communication.")
 
 ## Open-Source and Support
 
-ESBMC is an open-source software. Most of ESBMC code is written by volunteers, with sposored development given by [Cyber Reasoning Limited](https://cyber-reasoning.co.uk).
+ESBMC is open-source software. Most of its code is written by volunteers, with sponsored development by [Cyber Reasoning Limited](https://cyber-reasoning.co.uk).
 
 ### Main Authors and Developers
 
