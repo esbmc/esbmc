@@ -152,10 +152,12 @@ jobs:
         if [[ "${{ inputs.operating-system }}" =~ ^macos ]]; then
           ctest -j4 --output-on-failure --progress -L '^python/$|^platform-sensitive$'
         elif [[ "${{ github.event_name }}" == "pull_request" ]]; then
-          # Python-frontend suites run at -j3 in their own shards (#10866).
+          # Python-frontend suites run in their own shards (#10866). The python
+          # shard stays at -j2: three of its symbolic str-format tests held ~5GB
+          # each and exhausted the 16GB runner at -j3.
           py='^(python|numpy|quixbugs|humaneval|typeevalpy)/$'
           case "${{ inputs.test-shard }}" in
-            python)  ctest -j3 --output-on-failure --progress -L '^python/$' -LE python-intensive . ;;
+            python)  ctest -j2 --output-on-failure --progress -L '^python/$' -LE python-intensive . ;;
             numpy)   ctest -j3 --output-on-failure --progress -L '^numpy/$' -LE python-intensive . ;;
             pyother) ctest -j3 --output-on-failure --progress -L '^(quixbugs|humaneval|typeevalpy)/$' -LE python-intensive . ;;
             rest)    ctest -j2 --output-on-failure --progress -LE "$py|python-intensive" . ;;
