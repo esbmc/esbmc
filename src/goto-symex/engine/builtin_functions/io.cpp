@@ -1597,6 +1597,16 @@ void goto_symext::symex_input(const code_function_call2t &func_call)
 
   // TODO: fill / cut off the inputs stream based on the length limits.
 
+  // C11 6.5.2.2p10: every argument is evaluated before the call, so resolve
+  // each target before a store can change a pointer a later argument reads.
+  struct scanf_targett
+  {
+    dereference_callbackt::internal_item item;
+    expr2tc operand;
+    uint64_t bytes;
+    guard2tc guard;
+  };
+  std::vector<scanf_targett> targets;
   long assigned = 0;
   for (size_t i = 0; i < conversions.size(); i++)
   {
@@ -1615,15 +1625,22 @@ void goto_symext::symex_input(const code_function_call2t &func_call)
 
     for (const auto &item : internal_deref_items)
     {
-      assert(is_symbol2t(item.object) && "This only works for variables");
-      check_read_only_write(item.object, and2tc(stored.as_expr(), item.guard));
-
-      expr2tc target_guard = item.guard;
-      cur_state->rename(target_guard);
+      expr2tc guard_expr = item.guard;
+      cur_state->rename(guard_expr);
       guard2tc guard = stored;
-      guard.add(target_guard);
-      symex_scanf_store(item, operand, conversions[i].bytes, guard);
+      guard.add(guard_expr);
+      scanf_targett target{item, operand, conversions[i].bytes, guard};
+      cur_state->rename(target.item.offset);
+      targets.push_back(target);
     }
+  }
+  for (const scanf_targett &target : targets)
+  {
+    check_read_only_write(target.item.object, target.guard.as_expr());
+    if (is_constant_string2t(target.item.object))
+      continue;
+    assert(is_symbol2t(target.item.object) && "This only works for variables");
+    symex_scanf_store(target.item, target.operand, target.bytes, target.guard);
   }
 
   cur_state->source.pc++;

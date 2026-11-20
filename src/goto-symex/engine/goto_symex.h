@@ -1806,6 +1806,13 @@ protected:
    */
   bool is_assume_false(const expr2tc &assumption);
 
+  /** Restrict an assumption or claim to the interleaving that emitted it.
+   *  --schedule puts every interleaving in one formula, so a step that is not
+   *  guarded this way constrains the claims of all of them (#10296). */
+  virtual void guard_by_interleaving(expr2tc &) const
+  {
+  }
+
   // Members
 
   /** Options we're working with */
@@ -2028,6 +2035,23 @@ protected:
   /** Fail an intrinsic's write to @p object, made when @p cond holds, if the
    *  object is read-only, as valid_check does for a WRITE-mode dereference. */
   void check_read_only_write(const expr2tc &object, const expr2tc &cond);
+
+  /** An object an intrinsic writes, and the condition under which it does. */
+  struct write_targett
+  {
+    expr2tc object;
+    guard2tc guard;
+  };
+
+  /** Append internal_deref_items to @p targets, each guarded by @p base and
+   *  its pointer guard, renamed now: a later write may change the pointer. */
+  void collect_write_targets(
+    const guard2tc &base,
+    std::vector<write_targett> &targets);
+
+  /** Assign each target a nondet value; a string literal is reported by
+   *  check_read_only_write and left unchanged. */
+  void write_nondet_targets(const std::vector<write_targett> &targets);
 
   /** Analyze the shared varables in a function call, this is because an
    * argumemt may be renamed to constant bool in symex_function_call_code(),
