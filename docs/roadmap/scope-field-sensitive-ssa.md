@@ -37,7 +37,11 @@
 > (§8.27). Phase 2's second part, stacked on the first, splits static
 > objects as well; `plc_db` with the flag now solves at 512 and 2048 fields,
 > but neither global row meets the 2x bar, and a split global copied from a
-> split value loses its trace step as a split local already does (§8.28).**
+> split value loses its trace step as a split local already does (§8.28).
+> Phase 2's third part, stacked on the second, memoizes the size of a struct
+> or union that needs no namespace lookup: the remaining width cost was the
+> dereference checks sizing the whole object on every access. With it, every
+> corpus row meets the 2x bar under Z3 and Bitwuzla (§8.29).**
 > The corpus is in `regression/field-sensitivity/`
 > with baselines, and the census has been run and reverted. Phase 1 adds
 > `--field-sensitive-ssa` (default off): symex gives each field of an
@@ -1922,3 +1926,59 @@ Results:
 - Still open for the Phase 2 gate: the 2x bar on `global_callee` and
   `plc_db` (per-dereference size and alignment work), the trace step above,
   the assert-enabled run under Bitwuzla (§8.26), and an SV-COMP run.
+
+### 8.29 Phase 2, part 3: record sizes in the dereference checks
+
+Measured on 2026-11-20 on `feat/field-sensitive-ssa-phase2-deref-size`,
+stacked on `feat/field-sensitive-ssa-phase2-globals` at `d74461ab2`.
+RelWithDebInfo, gcc 13.3, LLVM 18, Z3 4.13.3 and Bitwuzla 0.9.0, 4-core
+container. "Base" is `d74461ab2`'s binary.
+
+Callgrind on `global_callee` at 2048 fields with the flag, base: 71 % of all
+instructions are in `type_byte_size_expr`, called from
+`dereferencet::object_base_alignment`. `size_bits_expr` builds one
+`constant_int2t` per member (13.1 M for 6400 calls), and `check_data_obj_access`
+spends another 11 % summing the same members in `type_byte_size_bits`.
+
+What changes: `type_sizet` caches the size of a struct or union per type
+(`thread_local`, keyed by `type2tc`), for both `size_bits` and
+`size_bits_expr`, but only when sizing it followed no symbol type through the
+namespace, so the cached value is a function of the type alone. This is not
+behind the flag: it returns the same numbers on every path.
+
+Results:
+
+- Corpus, flag on, symex seconds, median of three, 8 / 2048 fields
+  (base, then this change):
+
+  | Row | Z3 base | Z3 new | Bitwuzla base | Bitwuzla new |
+  |---|---|---|---|---|
+  | `global_callee` | 0.253 / 1.723 (6.8x) | 0.180 / 0.205 (1.14x) | 0.220 / 1.650 (7.5x) | 0.195 / 0.199 (1.02x) |
+  | `plc_db` | 0.026 / 0.181 (7.0x) | 0.024 / 0.033 (1.38x) | 0.028 / 0.175 (6.3x) | 0.025 / 0.039 (1.56x) |
+  | `local_addr_once` | 0.020 / 0.020 | 0.018 / 0.019 | 0.017 / 0.022 | 0.018 / 0.021 |
+  | `local_writes` | 0.019 / 0.020 | 0.024 / 0.020 | 0.021 / 0.019 | 0.018 / 0.020 |
+  | `repro7521` | 0.846 / 1.322 | 0.790 / 1.361 (1.72x) | 0.837 / 1.283 | 0.834 / 1.263 (1.51x) |
+
+- Base against this change, 30 s per run, every `test.desc` option kept:
+  every fourth C and C++ `CORE` test plus every tenth Python `CORE` test
+  without the flag (2142), and every eighth C and C++ plus every twentieth
+  Python test with the flag forced on (1071). 0 verdict changes. 32 outputs
+  differ, all in witness UUIDs, Clang AST addresses and one Python temporary
+  named after an address.
+- ctest `field_sensitive_ssa|field-sensitivity|github_7797|github_5868|type_byte_size`:
+  218/219. `field_sensitive_ssa_carried_copy_fail` fails as on the base
+  (§8.28), with output identical to the base binary's.
+- New unit test: a struct and a union holding a symbol type, sized against two
+  namespaces that resolve it to 4 and 8 bytes, through both `type_byte_size`
+  and `type_byte_size_expr`. It fails when the cache ignores whether a symbol
+  was followed.
+- Branches (instrumented build, C and C++ harnesses, Z3 and Bitwuzla, same
+  counts under both): cache hit and store in `size_bits` and in
+  `size_bits_expr`, the struct and union arms, the no-store arm of `size_bits`
+  and both symbol-follow arms are reached. The no-store arm of
+  `size_bits_expr` was reached by none of the harnesses or by ~700 sampled C,
+  C++ and Python tests: a record the dereference sizes this way has already
+  been sized by `size_bits`. The unit test reaches it. The `cpp_name` arms,
+  which already existed and now also set the flag, were not reached.
+- Still open for the Phase 2 gate: the trace step of §8.28, the
+  assert-enabled run under Bitwuzla (§8.26), and an SV-COMP run.
