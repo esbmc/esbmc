@@ -2345,7 +2345,10 @@ smt_resultt bmct::start_bmc()
   // something -- except under a k-step strategy, which accumulates into one
   // table that the concluding phase, or the driver, prints once.
   if (reports_final_verdict(res) || reports_multi_property_verdict(options))
+  {
     report_property_verdicts(res);
+    report_reported_properties();
+  }
   report_result(res);
 
   // Dead-store advisories are verdict-independent, but the trace paths that
@@ -2398,7 +2401,10 @@ size_t bmct::barren_interleaving_budget() const
 static void prepare_property_verdicts(const optionst &options)
 {
   if (reports_multi_property_verdict(options))
+  {
     goto_functionst::property_verdicts.clear();
+    goto_functionst::reported_verdicts.clear();
+  }
   else if (is_bounded_round(options))
     goto_functionst::property_verdicts.begin_round();
 }
@@ -3512,6 +3518,8 @@ smt_resultt bmct::multi_property_check(
     claim.run(local_eq.SSA_steps);
 
     const property_locationt &claim_ploc = claim.claim_ploc;
+    const std::string claim_class =
+      reported_property_class(options, claim.claim_location);
 
     if (fail_fast_hit)
     {
@@ -3569,12 +3577,12 @@ smt_resultt bmct::multi_property_check(
     std::string cone_key;
     bool cached_proof = false;
     if (
-      proof_cache_hit(
-        proof_cache.get(),
-        proof_cache_verify,
-        local_eq.SSA_steps,
-        cone_key,
-        cached_proof))
+      claim_class.empty() && proof_cache_hit(
+                               proof_cache.get(),
+                               proof_cache_verify,
+                               local_eq.SSA_steps,
+                               cone_key,
+                               cached_proof))
     {
       record_discharge(
         withhold_proofs,
@@ -3644,6 +3652,21 @@ smt_resultt bmct::multi_property_check(
     fine_timet solve_start = current_time();
     smt_resultt solver_result = run_decision_procedure(*solver_ptr, local_eq);
     fine_timet solve_stop = current_time();
+
+    // A reported check's answer is information about the program, not a
+    // verdict on it, so it gets no trace, witness or verdict (#10875).
+    if (!claim_class.empty())
+    {
+      property_locationt loc = claim_ploc;
+      loc.property_class = claim_class;
+      goto_functionst::reported_verdicts.record(
+        claim.claim_key,
+        solver_result == P_SATISFIABLE     ? property_verdictt::Failed
+        : solver_result == P_UNSATISFIABLE ? property_verdictt::Passed
+                                           : property_verdictt::Unknown,
+        loc);
+      return;
+    }
 
     dump_claim_fingerprint(
       fingerprint_dump,
@@ -4115,18 +4138,25 @@ void bmct::seed_property_verdicts(const symex_target_equationt &eq) const
       continue;
 
     const std::string description = id2string(step.comment);
-    goto_functionst::property_verdicts.record(
+    const property_locationt loc =
+      classified_location(options, *step.source.pc, description);
+    verdict_table(loc).record(
       property_key(*step.source.pc, description),
       property_verdictt::NotChecked,
-      property_location(*step.source.pc, description));
+      loc);
   }
 
-  if (options.get_bool_option("report-unreached-claims"))
+  // A reported check symex never raised is unreachable, which is the answer
+  // its class asks for, so it is listed whether or not the others are.
+  if (
+    options.get_bool_option("report-unreached-claims") ||
+    !options.get_option("report-property-class").empty())
     seed_unreached_claims(eq);
 }
 
 void bmct::seed_unreached_claims(const symex_target_equationt &eq) const
 {
+  const bool every_claim = options.get_bool_option("report-unreached-claims");
   std::unordered_set<const goto_programt::instructiont *> reached;
   for (const auto &step : eq.SSA_steps)
     if (step.is_assert())
@@ -4138,10 +4168,14 @@ void bmct::seed_unreached_claims(const symex_target_equationt &eq) const
       {
         const std::string description =
           goto_symext::assertion_message(ns, instruction);
-        goto_functionst::property_verdicts.record(
+        const property_locationt loc =
+          classified_location(options, instruction, description);
+        if (loc.property_class.empty() && !every_claim)
+          continue;
+        verdict_table(loc).record(
           property_key(instruction, description),
           property_verdictt::Passed,
-          property_location(instruction, description),
+          loc,
           unreached_claim_note);
       }
 }
@@ -4279,14 +4313,22 @@ void bmct::report_coverage_goal_verdicts(
   log_result("{}", oss.str());
 }
 
+static const char *verdict_label_of(const property_rowt &row)
+{
+  return verdict_label(row.verdict);
+}
+
 static void print_property_rows(
   const std::vector<property_rowt> &rows,
   const property_countst &counts,
-  bool is_color)
+  bool is_color,
+  const char *heading = "Results:",
+  const char *(*label_of)(const property_rowt &) = verdict_label_of,
+  size_t label_width = 11)
 {
   const std::string RESET = is_color ? "\033[0m" : "";
 
-  log_result("\n** Results:");
+  log_result("\n** {}", heading);
 
   std::string group;
   for (const auto &row : rows)
@@ -4306,9 +4348,10 @@ static void print_property_rows(
     }
 
     log_result(
-      "  {}{:<11}{}  {:<{}}  line {:>{}}  {}{}",
+      "  {}{:<{}}{}  {:<{}}  line {:>{}}  {}{}",
       color,
-      verdict_label(row.verdict),
+      label_of(row),
+      label_width,
       RESET,
       "[" + row.id + "]",
       counts.id_width,
@@ -4403,6 +4446,82 @@ void report_k_step_property_table(
 
   if (goto_functionst::property_verdicts.is_incomplete())
     print_partial_report_note();
+}
+
+bool bmct::search_stopped_short() const
+{
+  if (report_incomplete || saw_bounded_loop_truncation)
+    return true;
+  for (const auto &[key, result] :
+       goto_functionst::property_verdicts.snapshot())
+    if (
+      result.verdict != property_verdictt::Passed &&
+      result.loc.description.find("unwinding assertion") != std::string::npos)
+      return true;
+  return false;
+}
+
+/// What a reported check's verdict says (#10875): Failed means its assertion
+/// can be violated, so a reachability check is reachable and a cover is
+/// satisfiable.
+static const char *reported_label(const property_rowt &row)
+{
+  const bool cover = row.property_class == "cover";
+  switch (row.verdict)
+  {
+  case property_verdictt::Failed:
+    return cover ? "SATISFIED" : "REACHABLE";
+  case property_verdictt::Passed:
+    return cover ? "UNSATISFIABLE" : "UNREACHABLE";
+  case property_verdictt::NotChecked:
+  case property_verdictt::Unknown:
+    break;
+  }
+  return "UNDECIDED";
+}
+
+void bmct::report_reported_properties() const
+{
+  std::map<std::string, property_resultt> verdicts =
+    goto_functionst::reported_verdicts.snapshot();
+  if (verdicts.empty())
+    return;
+
+  // Unreachable or unsatisfiable is a claim about every path, which a run that
+  // stopped short or cut a loop at its bound has not explored.
+  if (search_stopped_short())
+    for (auto &[key, result] : verdicts)
+      if (result.verdict == property_verdictt::Passed)
+      {
+        result.verdict = property_verdictt::Unknown;
+        result.note = "not every path was explored";
+      }
+
+  // Kani names every check, so no two reported rows read alike and need
+  // their conditions to tell them apart.
+  const std::vector<property_rowt> rows =
+    build_property_rows(verdicts, library_files);
+  // Uncolored: the verdict colors would paint a reachable check as a failure.
+  print_property_rows(
+    rows,
+    count_properties(rows),
+    false,
+    "Reported apart from the verdict:",
+    reported_label,
+    13);
+
+  std::map<std::string, size_t> tally;
+  for (const auto &row : rows)
+    ++tally[reported_label(row)];
+  std::ostringstream oss;
+  oss << "\n** " << rows.size() << " reported:";
+  const char *separator = " ";
+  for (const auto &[label, count] : tally)
+  {
+    oss << separator << count << " " << label;
+    separator = ", ";
+  }
+  log_result("{}", oss.str());
 }
 
 void bmct::report_property_verdicts(smt_resultt res) const

@@ -164,10 +164,11 @@ void goto_symext::record_property_verdict(
   // position.
   const bool coverage = options.get_bool_option("coverage-measurement") ||
                         options.get_bool_option("dead-code-check");
-  goto_functionst::property_verdicts.record(
+  const property_locationt loc = classified_location(options, pc, msg);
+  verdict_table(loc).record(
     coverage ? msg + " at " + pc.location.as_string() : property_key(pc, msg),
     verdict,
-    property_location(pc, msg),
+    loc,
     note);
 }
 

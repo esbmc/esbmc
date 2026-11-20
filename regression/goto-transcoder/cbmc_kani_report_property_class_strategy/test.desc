@@ -1,0 +1,4 @@
+CORE
+main.c
+--report-property-class cover --loop-invariant
+^ERROR: --report-property-class needs a single BMC run, not a verification strategy$

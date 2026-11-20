@@ -169,6 +169,13 @@ const struct group_opt_templ all_cmd_options[] = {
        "class"),
      "Skip the assertions a CBMC goto-binary tags with this property class "
      "(repeatable), e.g. Kani's reachability_check and cover"},
+    {"report-property-class",
+     boost::program_options::value<std::vector<std::string>>()->value_name(
+       "class"),
+     "Check the assertions a CBMC goto-binary tags with this property class "
+     "(reachability_check or cover, repeatable) and report them apart from "
+     "the verdict, as reachable or satisfiable or not. Implies "
+     "--multi-property"},
     {"dont-care-about-missing-extensions",
      NULL,
      "Don't crash on unsupported extensions"},
