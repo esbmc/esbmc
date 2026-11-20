@@ -22,7 +22,11 @@
 > every printed value the run without the flag pins (§8.23). The stack
 > merged with master `1aa90ce5a`, which adds #10848's erasure of a dead
 > aggregate's member entries, keeps those results (§8.24).
-> Phase 1 still lacks an SV-COMP run.** The corpus is in `regression/field-sensitivity/`
+> Phase 1 still lacks an SV-COMP run. Phase 2's first part, stacked on that
+> PR, splits address-taken locals that every pointer access reaches as a
+> whole or through one member, as Andersen's points-to sets show (§8.25);
+> `local_addr_once` now meets the 2x bar, while globals and the SV-COMP run
+> are still open.** The corpus is in `regression/field-sensitivity/`
 > with baselines, and the census has been run and reverted. Phase 1 adds
 > `--field-sensitive-ssa` (default off): symex gives each field of an
 > eligible local, parameter or return slot its own SSA name. The Phase 1
@@ -1668,3 +1672,78 @@ cloned with git), 4-core container.
   (1.46x) under Bitwuzla; `local_writes` 0.021 / 0.022 (1.05x) and
   0.019 / 0.022 (1.16x).
 - Not measured here: trace text, Python suites, k-induction and SV-COMP.
+
+### 8.25 Phase 2, part 1: address-taken locals
+
+Measured on 2026-11-20 on `feat/field-sensitive-ssa-phase2` (stacked on
+the `flat_set` PR at `c73e2982a`, which includes master `1aa90ce5a`).
+RelWithDebInfo, gcc 13.3, LLVM 18, Z3 4.13.3 and Bitwuzla 0.9.0, 4-core
+container. "Baseline" is the parent commit's binary.
+
+What changes, behind `--field-sensitive-ssa` only:
+
+- The eligibility scan no longer drops a local whose address is taken as
+  `&s` of its own type. Such a local stays eligible if, in every function
+  reachable from the entry point, each dereference whose Andersen points-to
+  set includes it has the object's own type and is read whole or through one
+  member. Pointer arithmetic on a pointer that may reach it, a pointer
+  passed to a function symex models itself or that has no body, an `OTHER`
+  instruction, and a points-to set Andersen cannot bound all drop it.
+  Uncalled functions are skipped because Andersen gives their pointer
+  parameters TOP.
+- Symex rewrites what a dereference resolves to, the pointer it queries
+  the value set with, the operands it renames inside a dereference, and the
+  guards of the dereference claims and assumptions it emits. `rewrite`
+  leaves an `address_of` alone, and a split local whose address is taken
+  keeps its own record in `local_variables`, so `is_live_variable` still
+  finds it.
+
+Results:
+
+- Harnesses: writes and reads through a pointer, a pointer field read
+  through a pointer, a pointer chosen between two objects, a dangling
+  pointer, and a reinterpreting `char *`. Same verdicts with and without the
+  flag under Z3 and Bitwuzla; the reinterpreted object is not split.
+- New tests `field_sensitive_ssa_through_pointer` and `_fail`,
+  `field_sensitive_ssa_pointer_dangling_fail`,
+  `field_sensitive_ssa_pointer_reinterpreted`. Each mutant fails at least
+  one of them: without the post-dereference rewrite, without the liveness
+  record, or without the claim guard rewrite, `_through_pointer` fails;
+  with the Andersen filter accepting every candidate, the reinterpreted
+  object splits and `_pointer_reinterpreted` fails.
+  `field_sensitive_ssa_opaque_whole_read` and `_fail` now split 2 objects:
+  `s`, reached only through `p`, splits too; the pinned `r` step is
+  unchanged.
+- Every new branch outcome (20) reached under Z3 and Bitwuzla: an
+  instrumented build printing a marker per outcome, 9 C and C++ harnesses.
+  An index on a pointer never reaches symex (`p[i]` is lowered to
+  `*(p + i)`), so the scan has no case for it.
+- Flag forced on against the baseline without it, every third directory of
+  `regression/esbmc` and `regression/esbmc-cpp/cpp`, `CORE` tests that do
+  not already pass the flag, 30 s per run, 4 at a time: 1626 tests, 218 of
+  which split more objects than the baseline with the flag. 0 verdict
+  changes: `vector_reserve_realloc` solves only with the flag, and every
+  other difference is both runs timing out or printing no verdict. The 218
+  re-run on the final binary give the same split counts and verdicts.
+- Trace text, the 87 of those 218 that fail: 83 print the same
+  counterexample. `github_9409_fail`, `github_9416_fail` and
+  `vector_count_value_ctor_fail` print a member write's value where the
+  baseline prints the whole struct (§8.6, first row); `github_9416_fail`
+  also no longer lists an unwinding assertion the flag lets symex fold.
+  `github_5868_is_scalar_const_lookup_fail` lists two more `NOT CHECKED`
+  invalid-pointer claims: a pointer field read through a split object has a
+  wider value set there. No verdict moves, but this is open.
+- Python, every 25th `CORE` test (373), flag forced on against off: 0
+  verdict changes. Python objects are never split.
+- ctest without the flag: `esbmc/` 3580/3604 and `esbmc-cpp/cpp` 1468/1476,
+  each failure failing the same way on the baseline; every 20th `python/`
+  test, 491/491.
+- Corpus, flag on, symex seconds, medians of three, 8 / 512 / 2048 fields:
+  `local_addr_once` 0.016 / 0.017 / 0.015 (0.94x) under Z3 and 0.017 /
+  0.014 / 0.017 (1.0x) under Bitwuzla; the baseline with the flag, which
+  does not split it, takes 0.611 / 1.636 / 4.664 and 0.611 / 1.723 / 4.272.
+  Z3 solving at 2048 fields drops from 5.5 s to 0.010 s. Every other corpus
+  row gives its expected verdict under both solvers except `plc_db` at 512
+  and 2048 fields, a global, which times out at 300 s as before.
+- Still open for the Phase 2 gate: globals (`global_callee`, `plc_db`), the
+  wider value set above, and an SV-COMP run.
