@@ -1,6 +1,6 @@
 # Scope: field-sensitive SSA in goto-symex (#7521)
 
-> **Status at 2026-11-19: Phase 0 merged (#10773); Phase 1 merged (#10778),
+> **Status at 2026-11-20: Phase 0 merged (#10773); Phase 1 merged (#10778),
 > with the trace fixes #10799 (§8.7) and #10808 (§8.8) and the whole-read fix
 > #10839 (§8.13). On master `48d5f770e` with the flag forced on, the full
 > Python `CORE` suite (9279 tests, Bitwuzla), the C and C++ `CORE` suites
@@ -26,7 +26,10 @@
 > PR, splits address-taken locals that every pointer access reaches as a
 > whole or through one member, as Andersen's points-to sets show (§8.25);
 > `local_addr_once` now meets the 2x bar, while globals and the SV-COMP run
-> are still open.** The corpus is in `regression/field-sensitivity/`
+> are still open. An assert-enabled build of that part, merged with master
+> `e0ce5d373`, runs every C and C++ `CORE` test with the flag forced on
+> without tripping Invariant 3's assert, after a fix for a crash on a
+> points-to set that lists one object twice (§8.26).** The corpus is in `regression/field-sensitivity/`
 > with baselines, and the census has been run and reverted. Phase 1 adds
 > `--field-sensitive-ssa` (default off): symex gives each field of an
 > eligible local, parameter or return slot its own SSA name. The Phase 1
@@ -1747,3 +1750,40 @@ Results:
   and 2048 fields, a global, which times out at 300 s as before.
 - Still open for the Phase 2 gate: globals (`global_callee`, `plc_db`), the
   wider value set above, and an SV-COMP run.
+
+### 8.26 Phase 2, part 1: assert-enabled run over the C and C++ suites
+
+Measured on 2026-11-20 on `feat/field-sensitive-ssa-phase2-locals` merged
+with the `flat_set` branch, itself merged with master `e0ce5d373`. Built
+with `-O2 -g1` and no `-DNDEBUG`, so `assert` is live, including the one in
+`split_structst::rewrite` that checks Invariant 3. gcc 13.3, LLVM 18, Z3
+4.13.3, 4-core container. Bitwuzla could not be built there (its CaDiCaL
+download was refused), so these runs are Z3 only. The Invariant 3 assert
+and the eligibility scan run before any solver is called.
+
+- Every `CORE` test of `regression/esbmc` and `regression/esbmc-cpp/cpp`
+  that does not already pass the flag (4802), flag forced on and off, 20 s
+  per run, 4 at a time. No run prints a failed `assert`. Five runs end in
+  `SIGABRT` both ways: each prints the `ERROR:` its test expects
+  (`github_7905_ir_refused`, `github_7905_struct_refused`,
+  `init_obj_vlas`) or a Z3 sort error it also prints without the flag
+  (`github_6310_typeid_dynamic` and `_fail`).
+- Five C++ tests lost their verdict with the flag: `github_7797_flat_eq`,
+  `github_7797_regex`, `github_9403`, `github_9417` and `github_9419` pass
+  without it, and with it end in `uncaught exception [St12out_of_range]:
+  unordered_map::at` before symex. §8.25's every-third-directory sample
+  did not include them. The pointer scan erased a candidate on the first of
+  two identical entries for it in one Andersen points-to set (a `std::map`
+  iterator's pointers into the map's arrays), then looked it up again. It
+  now skips a name it already dropped, which gives the same set as visiting
+  each name once. With the fix all five give `SUCCESSFUL` with the flag
+  (12 to 44 objects split), as without it.
+- New pair `field_sensitive_ssa_points_to_duplicate` and `_fail` (C++,
+  `std::multimap`, reduced from `github_9403`). Both end in the exception
+  without the fix and give `SUCCESSFUL` and `FAILED` with it. ctest
+  `field_sensitive_ssa|field-sensitivity|github_7797`: 92/92.
+- The other verdict differences: `assoc_emplace`, `om_source_from_vfs`,
+  `vector_emplace_back` and `_fail`, and `vector_reserve_realloc` time out
+  at 20 s without the flag and give their expected verdicts with it.
+- Still open for the Phase 2 gate: as §8.25, plus a Bitwuzla run of the
+  above.

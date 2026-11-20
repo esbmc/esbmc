@@ -210,9 +210,13 @@ private:
     if (is_dereference2t(e))
     {
       const bool ok = keeps_field_path(parent, grand);
+      // Andersen may list one object more than once.
       for (const irep_idt &n : reached(to_dereference2t(e).value))
-        if (!ok || candidates.at(n) != e->type)
-          candidates.erase(n);
+      {
+        auto c = candidates.find(n);
+        if (c != candidates.end() && (!ok || c->second != e->type))
+          candidates.erase(c);
+      }
     }
     else if ((is_add2t(e) || is_sub2t(e)) && is_pointer_type(e->type))
       drop_reached(e);
