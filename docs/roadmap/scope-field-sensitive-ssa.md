@@ -1995,6 +1995,19 @@ Results:
   which already existed and now also set the flag, were not reached.
 - Still open for the Phase 2 gate: the trace step of §8.28, the
   assert-enabled run under Bitwuzla (§8.26), and an SV-COMP run.
+- After merging `feat/field-sensitive-ssa-phase2-globals` at `43ce97fe0`
+  (§8.30), Z3 4.13.3 only (Bitwuzla's CaDiCaL download was refused): ctest
+  `field_sensitive_ssa|field-sensitivity|github_7797|github_5868|type_byte_size`
+  220/220, so `field_sensitive_ssa_carried_copy_fail` now passes here. Corpus,
+  flag on, symex seconds, median of three, 8 / 2048 fields:
+  `global_callee` 0.213 / 0.217 (1.01x), `plc_db` 0.026 / 0.034 (1.30x),
+  `local_addr_once` 0.019 / 0.019, `local_writes` 0.017 / 0.019,
+  `repro7521` 0.757 / 1.102 (1.45x); all `VERIFICATION SUCCESSFUL`. Flag
+  forced on against off, 20 s per run, every eighth C and C++ `CORE`
+  directory and every fortieth Python one (852 tests; 6 already pass the
+  flag): 0 verdict changes. `typed_list_eq_sorted_fail` hit the cap only
+  without the flag; alone it gives `VERIFICATION FAILED` both ways (25 s
+  and 13 s).
 
 ### 8.30 Phase 2, part 2: the print of a sliced split write
 
