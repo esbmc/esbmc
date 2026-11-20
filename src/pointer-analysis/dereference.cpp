@@ -2863,6 +2863,17 @@ void dereferencet::construct_struct_ref_from_const_offset(
       i++;
     }
 
+    // A struct laid over scalar members whose names or types differ from its
+    // own, e.g. struct { char a, b; } read as struct { char c, d; } (#10888).
+    if (
+      is_struct_type(type) &&
+      intref.value + type_size <= type_byte_size_bits(value->type))
+    {
+      value =
+        construct_struct_from_members(value, intref.value, type, guard, mode);
+      return;
+    }
+
     // Fell out of that loop. Either this offset is out of range, or lies in
     // padding.
     dereference_failure(
@@ -2873,6 +2884,27 @@ void dereferencet::construct_struct_ref_from_const_offset(
     "Unexpectedly {} type'd argument to construct_struct_ref",
     get_type_id(value->type));
   abort();
+}
+
+expr2tc dereferencet::construct_struct_from_members(
+  const expr2tc &value,
+  const BigInt &offset_bits,
+  const type2tc &type,
+  const guard2tc &guard,
+  modet mode)
+{
+  const struct_type2t &structtype = to_struct_type(type);
+  std::vector<expr2tc> fields;
+  for (size_t i = 0; i < structtype.members.size(); i++)
+  {
+    const BigInt member_offs =
+      offset_bits + member_offset_bits(type, structtype.member_names[i]);
+    expr2tc field = value;
+    build_reference_rec(
+      field, gen_ulong(member_offs), structtype.members[i], guard, mode);
+    fields.push_back(field);
+  }
+  return constant_struct2tc(type, fields);
 }
 
 void dereferencet::construct_struct_ref_from_dyn_offset(
