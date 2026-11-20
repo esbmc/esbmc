@@ -879,9 +879,7 @@ void transform_loop(
   // call.
   marked_branchst cache;
   guardst guards;
-  // Only --termination has needed to jump over a whole-object havoc.
-  const bool can_flag = entry_flags.flags(goto_function) &&
-                        (entry_flags.entered || havocs.through.empty());
+  const bool can_flag = entry_flags.flags(goto_function);
   const head_conditionst at_head = head_guards(
     goto_function.body, loop_head, loop_exit, address_taken, can_flag);
   get_entry_cond_rec(loop_head, loop_exit, at_head, guards, cache);

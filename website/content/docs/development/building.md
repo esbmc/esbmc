@@ -166,17 +166,18 @@ pkg install git cmake ninja python3 z3 bison flex boost-all
 ```
 
 ESBMC needs 32-bit libraries on FreeBSD — make sure the `lib32` set is
-installed.
+installed. ESBMC's CI does not build on FreeBSD, so these steps are not tested
+regularly.
 
 ### Provide an LLVM/Clang toolchain
 
-ESBMC's prebuilt LLVM download targets Linux, so fetch a FreeBSD LLVM release
-and point the build at it:
+ESBMC needs LLVM/Clang 18 or newer, and neither ESBMC's LLVM download nor the
+upstream LLVM releases provide a FreeBSD build of those versions. Install the
+`llvm18` package, which places LLVM and Clang (with their CMake files) under
+`/usr/local/llvm18`:
 
 ```sh
-fetch https://github.com/llvm/llvm-project/releases/download/llvmorg-16.0.0/clang+llvm-16.0.0-amd64-unknown-freebsd13.tar.xz
-tar xf clang+llvm-16.0.0-amd64-unknown-freebsd13.tar.xz
-mv clang+llvm-16.0.0-amd64-unknown-freebsd13 clang16
+pkg install llvm18
 ```
 
 ### Get the source, configure and build
@@ -184,7 +185,7 @@ mv clang+llvm-16.0.0-amd64-unknown-freebsd13 clang16
 ```sh
 git clone https://github.com/esbmc/esbmc.git && cd esbmc
 cmake -GNinja -Bbuild -DDOWNLOAD_DEPENDENCIES=1 -DENABLE_Z3=1 -DZ3_DIR=/usr/local \
-  -DLLVM_DIR=$PWD/../clang16 -DClang_DIR=$PWD/../clang16
+  -DLLVM_DIR=/usr/local/llvm18/lib/cmake/llvm -DClang_DIR=/usr/local/llvm18/lib/cmake/clang
 ninja -C build
 ```
 
@@ -205,41 +206,27 @@ ninja -C build
 ### Install dependencies
 
 ```bat
-vcpkg.exe install boost-filesystem:x64-windows boost-date-time:x64-windows boost-test:x64-windows boost-multi-index:x64-windows boost-crc:x64-windows boost-property-tree:x64-windows boost-uuid:x64-windows
+vcpkg.exe install boost-filesystem:x64-windows-static boost-dll:x64-windows-static boost-multiprecision:x64-windows-static boost-date-time:x64-windows-static boost-test:x64-windows-static boost-multi-index:x64-windows-static boost-crc:x64-windows-static boost-property-tree:x64-windows-static boost-process:x64-windows-static boost-uuid:x64-windows-static boost-program-options:x64-windows-static boost-iostreams:x64-windows-static
 choco install winflexbison gnuwin32-coreutils.portable
 ```
 
-Also obtain [Z3](https://github.com/Z3Prover/z3/releases) and a prebuilt
-LLVM/Clang. The official LLVM releases do not ship the CMake modules ESBMC
-needs, so build LLVM from source (see below).
+LLVM/Clang (the upstream 22.1.4 Windows release) and Z3 are fetched by
+`-DDOWNLOAD_DEPENDENCIES=On`, so they are not installed here.
 
 ### Configure and build
 
-Open the CMake project in Visual Studio, set the configuration to **Release**,
-the toolchain to **msvc_x64_x64**, the triplet to **x64-windows**, and add the
-dependency paths to the CMake flags:
+From PowerShell in the source tree, with vcpkg installed at `C:\vcpkg`:
 
-```
--DLLVM_DIR=C:\Deps\llvm -DClang_DIR=C:\Deps\llvm -DZ3_DIR=C:\Deps\z3
-```
-
-{{% details title="Build LLVM/Clang from source on Windows" closed="true" %}}
-Download the `llvm-14.X.X.src` and `clang-14.X.X.src` archives from the
-[LLVM releases](https://releases.llvm.org/) and unpack each into its own
-space-free directory. Then, from the **x64 Native Tools Command Prompt for VS
-2019**:
-
-```bat
-mkdir llvm-14.0.6.src\build-release && cd llvm-14.0.6.src\build-release
-cmake .. -Thost=x64 -G "Visual Studio 16 2019" -A x64 ^
-  -DCMAKE_INSTALL_PREFIX=C:\Deps\llvm -DCMAKE_PREFIX_PATH=C:\Deps\llvm ^
-  -DLLVM_ENABLE_ZLIB=OFF -DLLVM_ENABLE_LIBXML2=OFF ^
-  -DCMAKE_BUILD_TYPE=Release -DLLVM_USE_CRT_RELEASE=MT
-msbuild /m -p:Configuration=Release INSTALL.vcxproj
+```powershell
+mkdir build
+cd build
+cmake.exe .. -A x64 -DVCPKG_TARGET_TRIPLET=x64-windows-static -DCMAKE_TOOLCHAIN_FILE=C:\vcpkg\scripts\buildsystems\vcpkg.cmake -DCMAKE_BUILD_TYPE=RelWithDebInfo -DCMAKE_INSTALL_PREFIX:PATH=C:/deps/esbmc -DDOWNLOAD_DEPENDENCIES=On -DENABLE_Z3=ON -DENABLE_SMTLIB=OFF
+cmake --build . --target INSTALL --config RelWithDebInfo
 ```
 
-Repeat for the `clang-14.X.X.src` tree (same flags) to install Clang into the
-same prefix. {{% /details %}}
+This mirrors `scripts/build.ps1`, which ESBMC's Windows CI runs; the script
+additionally enables the Python, Solidity and Jimple frontends and the
+regression tests.
 
 {{% details title="Build inside WSL" closed="true" %}} With
 [WSL](https://docs.microsoft.com/en-us/windows/wsl/install-win10) you can build
@@ -262,7 +249,7 @@ building LLVM from source.
 | --------- | -------- | --------------- |
 | clang     | yes      | 18.0.0          |
 | boost     | yes      | 1.77            |
-| CMake     | yes      | 3.18.0          |
+| CMake     | yes      | 3.22            |
 | Boolector | no       | 3.2.2           |
 | CVC4      | no       | 1.8             |
 | CVC5      | no       | 1.1.2           |
@@ -540,7 +527,7 @@ is invoked with `-DBUILD_STATIC=Off` (or the variable unset).
 
 When Clang is built with `CLANG_LINK_CLANG_DYLIB=On`, ESBMC links the dynamic
 `libclang-cpp` and does not bundle Clang's headers. Header bundling is
-controlled by `CLANG_HEADERS_BUNDLED` (`On`/`Off`/`detect`); the default
+controlled by `ESBMC_CLANG_HEADERS_BUNDLED` (`On`/`Off`/`detect`); the default
 `detect` bundles headers only for static Clang links. Not bundling speeds up
 source translation by avoiding a temporary header-extraction directory, but
 ESBMC must be recompiled when the system Clang is updated. {{% /details %}}
@@ -549,6 +536,13 @@ ESBMC must be recompiled when the system Clang is updated. {{% /details %}}
 CHERI-enabled ESBMC uses
 [CHERI Clang](https://github.com/CTSRD-CHERI/llvm-project) (release 20210817,
 clang 13). Build it, then configure ESBMC against it:
+
+> [!WARNING]
+>
+> ESBMC's configure step rejects LLVM/Clang older than 18, so
+> this clang 13 recipe (and the `clang-cheri-17` archive that
+> `-DESBMC_CHERI=On -DDOWNLOAD_DEPENDENCIES=On` fetches) currently fails at
+> configure time with `ESBMC requires LLVM/Clang >= 18`.
 
 ```sh
 wget https://github.com/CTSRD-CHERI/llvm-project/archive/refs/tags/cheri-rel-20210817.tar.gz

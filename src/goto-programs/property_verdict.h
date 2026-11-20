@@ -43,6 +43,9 @@ struct property_locationt
   /// of assertions that share a description and a position.
   unsigned instruction = 0;
   expr2tc condition;
+  /// The class a CBMC goto-binary tagged the assertion with, when the report
+  /// names the row after it rather than after the description.
+  std::string property_class;
 };
 
 /// Where the claim \p description raised at \p pc lives, with the assertion's
@@ -155,6 +158,21 @@ private:
   std::atomic<bool> violation{false};
   std::atomic<bool> incomplete{false};
 };
+
+/// The class --report-property-class reports the assertion at \p location
+/// under, or empty when the assertion's verdict counts (#10875).
+std::string
+reported_property_class(const optionst &options, const locationt &location);
+
+/// property_location(), with the class the claim is reported under, if any.
+property_locationt classified_location(
+  const optionst &options,
+  const goto_programt::instructiont &pc,
+  const std::string &description);
+
+/// The table a claim at \p loc belongs in: a reported check's answer is kept
+/// apart from the run's verdicts.
+property_verdict_tablet &verdict_table(const property_locationt &loc);
 
 /// Whether a phase must leave a claim it discharges NotChecked rather than
 /// Passed: under a k-step strategy, a base case always, and any other phase

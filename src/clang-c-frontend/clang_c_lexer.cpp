@@ -23,6 +23,7 @@ CC_DIAGNOSTIC_IGNORE_LLVM_CHECKS()
 CC_DIAGNOSTIC_POP()
 
 #include <clang-c-frontend/clang_c_lexer.h>
+#include <irep2/irep2_expr.h>
 #include <util/arith/arith_tools.h>
 #include <util/arith/ieee_float.h>
 #include <util/lang/c_types.h>

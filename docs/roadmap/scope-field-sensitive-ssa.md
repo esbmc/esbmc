@@ -6,35 +6,20 @@
 > Python `CORE` suite (9279 tests, Bitwuzla), the C and C++ `CORE` suites
 > (Bitwuzla) and `tagged_attr_store` (Z3 and Bitwuzla) keep every verdict, and
 > the Phase 1 corpus rows meet the 2x bar under both solvers (§8.14-§8.17);
-> so does the whole Python suite under Z3 (§8.16). Master
-> also has a wrong verdict with the flag: a split struct's L2 name, carried
-> into a call argument, is re-split into unassigned field generations (§8.19).
-> The open Phase 1 PRs fix it and the lost constant propagation: #10862, a
-> split copy into a split destination (§8.18), and the PR stacked on it,
-> `github_7797_flat_set` and the re-split L2 name (§8.19). With both, the
-> full Python `CORE` suite keeps every verdict with the flag forced on
-> (§8.20). The 11 Python traces that lost the step of a whole tagged-value
-> write print it again: a copy of a split object's carried chain is now
-> carried over the destination's own name (§8.21). A separate build of the
-> stack's head, merged with master `08198b792`, gives the same results (§8.22),
-> and a quarter of the Python `CORE` suite under Z3 keeps every verdict (one
-> only past a 60 s cap) and
-> every printed value the run without the flag pins (§8.23). The stack
-> merged with master `1aa90ce5a`, which adds #10848's erasure of a dead
-> aggregate's member entries, keeps those results (§8.24).
-> Phase 1 still lacks an SV-COMP run. Phase 2's first part, stacked on that
-> PR, splits address-taken locals that every pointer access reaches as a
+> so does the whole Python suite under Z3 (§8.16). The Phase 1 fixes for a
+> split copy into a split destination (#10862, §8.18) and for a re-split L2
+> name and `github_7797_flat_set` (#10864, §8.19-§8.24) are merged; with
+> them the full Python `CORE` suite keeps every verdict with the flag forced
+> on (§8.20). Phase 1 still lacks an SV-COMP run. Phase 2's first part
+> (#10876) splits address-taken locals that every pointer access reaches as a
 > whole or through one member, as Andersen's points-to sets show (§8.25);
-> `local_addr_once` now meets the 2x bar, while globals and the SV-COMP run
-> are still open. An assert-enabled build of that part, merged with master
-> `e0ce5d373`, runs every C and C++ `CORE` test with the flag forced on
-> without tripping Invariant 3's assert, after a fix for a crash on a
-> points-to set that lists one object twice (§8.26). The two extra
-> `NOT CHECKED` claims `github_5868_is_scalar_const_lookup_fail` printed with
-> that part came from a phi reading a copy carried over the object's own name
-> in the other path's value set; the phi now leaves those entries to the
-> value-set merge, and the test prints what it prints without the flag
-> (§8.27).** The corpus is in `regression/field-sensitivity/`
+> `local_addr_once` now meets the 2x bar. An assert-enabled build of it runs
+> every C and C++ `CORE` test with the flag forced on without tripping
+> Invariant 3's assert (§8.26), and a phi no longer reads a copy carried over
+> the object's own name from the other path's value set (§8.27). Its merge
+> with master `aabf837b1` keeps those results (§8.28). Globals (#10886) and
+> the dereference-size memo (#10894) are stacked on it; the SV-COMP run is
+> still open.** The corpus is in `regression/field-sensitivity/`
 > with baselines, and the census has been run and reverted. Phase 1 adds
 > `--field-sensitive-ssa` (default off): symex gives each field of an
 > eligible local, parameter or return slot its own SSA name. The Phase 1

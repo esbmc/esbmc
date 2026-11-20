@@ -1,2 +1,4 @@
 regression/termination/github_10856
 regression/termination/github_10856_memset
+regression/k-induction/github_10856
+regression/k-induction/github_10856_proved

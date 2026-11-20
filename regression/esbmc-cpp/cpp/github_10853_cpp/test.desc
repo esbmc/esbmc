@@ -1,0 +1,5 @@
+CORE
+main.cpp
+--loop-invariant-check --witness-output-yaml -
+^VERIFICATION SUCCESSFUL$
+^  content:\n    \[\]$

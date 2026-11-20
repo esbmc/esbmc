@@ -73,7 +73,7 @@ Common ESBMC flags that work with Solidity:
 
 ## Writing Verification Harnesses
 
-You write properties directly inside contract functions using `assert`, `__ESBMC_assume`, and `__VERIFIER_nondet_*`:
+You write properties directly inside contract functions using `assert` and `__ESBMC_assume` (declared as an empty stub, see [Verification Harness Primitives](/docs/solidity/supported-features#verification-harness-primitives)). Inputs are non-deterministic through the arguments of the public functions:
 
 ```solidity
 pragma solidity >=0.8.0;
