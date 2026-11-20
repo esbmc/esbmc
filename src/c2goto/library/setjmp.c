@@ -37,6 +37,14 @@ __ESBMC_HIDE:;
 }
 #pragma clang diagnostic pop
 
+_Noreturn void _longjmp(jmp_buf env, int status)
+{
+__ESBMC_HIDE:;
+  longjmp(env, status);
+}
+
+// The Windows CRT has no sigjmp_buf, sigsetjmp or siglongjmp.
+#ifndef _WIN32
 #undef sigsetjmp
 int sigsetjmp(sigjmp_buf env, int savemask)
 {
@@ -51,14 +59,9 @@ __ESBMC_HIDE:;
   return setjmp(env);
 }
 
-_Noreturn void _longjmp(jmp_buf env, int status)
-{
-__ESBMC_HIDE:;
-  longjmp(env, status);
-}
-
 _Noreturn void siglongjmp(sigjmp_buf env, int status)
 {
 __ESBMC_HIDE:;
   longjmp(env, status);
 }
+#endif
