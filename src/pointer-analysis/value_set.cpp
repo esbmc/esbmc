@@ -1063,6 +1063,19 @@ void value_sett::get_value_set_rec(
     // extract.
     const byte_extract2t &be = to_byte_extract2t(expr);
     get_value_set_rec_cached(be.source_value, dest, suffix, original_type);
+
+    /* A pointer read out of an aggregate at a member's offset, as Kani does
+     * for DynMetadata (#10889), is keyed under that member's path, which the
+     * lookup above does not spell. */
+    const bool offset_known = is_constant_int2t(be.source_offset);
+    for (const std::string &path : offset_paths(
+           be.source_value->type,
+           offset_known ? to_constant_int2t(be.source_offset).value : 0,
+           offset_known,
+           expr->type,
+           ns))
+      get_value_set_rec_cached(
+        be.source_value, dest, path + suffix, original_type);
     return;
   }
 
