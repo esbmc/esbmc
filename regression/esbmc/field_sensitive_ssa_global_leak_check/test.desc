@@ -1,0 +1,5 @@
+CORE
+main.c
+--field-sensitive-ssa --memory-leak-check
+^Field-sensitive SSA splits 1 struct object\(s\)$
+^VERIFICATION SUCCESSFUL$
