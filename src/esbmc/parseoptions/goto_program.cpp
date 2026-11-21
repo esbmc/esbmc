@@ -489,8 +489,7 @@ bool esbmc_parseoptionst::create_goto_program(
       // CBMC places no object in the first page, so a pointer made from a
       // small integer, as Rust's NonNull::dangling() is, never names one
       // (#10905).
-      if (cbmc_binary)
-        config.ansi_c.reserve_first_page = true;
+      config.ansi_c.reserve_first_page |= cbmc_binary;
 
       // A CBMC goto-binary needs ESBMC's additions (the __ESBMC_main entry
       // wrapper and the CPROVER-intrinsic bodies). Synthesise and link them
