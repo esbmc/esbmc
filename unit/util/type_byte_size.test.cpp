@@ -420,3 +420,28 @@ TEST_CASE(
   REQUIRE_FALSE(is_power_of_two(0));
   REQUIRE_FALSE(is_power_of_two(-8));
 }
+
+TEST_CASE(
+  "a record holding a symbol type is sized against each namespace",
+  "[core][util][type_byte_size]")
+{
+  contextt narrow_ctx;
+  namespacet narrow(narrow_ctx);
+  const type2tc member = add_type_symbol(narrow_ctx, "T", get_int32_type());
+
+  contextt wide_ctx;
+  namespacet wide(wide_ctx);
+  add_type_symbol(wide_ctx, "T", get_int64_type());
+
+  const type2tc s = struct_of({member}, {"m"}, "S");
+  const type2tc u = union_of({member}, {"m"}, "U");
+
+  // Record sizes are memoized; one reached through ns.follow must not be.
+  for (const type2tc &record : {s, u})
+  {
+    REQUIRE(type_byte_size(record, &narrow) == 4);
+    REQUIRE(type_byte_size(record, &wide) == 8);
+    REQUIRE(type_byte_size_expr(record, &narrow) == gen_ulong(4));
+    REQUIRE(type_byte_size_expr(record, &wide) == gen_ulong(8));
+  }
+}
