@@ -2230,3 +2230,26 @@ member matches) and #10897 (no alignment check for packed reads).
   `github_8698_string_view_uncaught_fail`) fail the same way on a master
   `30592f8a7` build in the same container.
 - Still open for the Phase 2 gate: an SV-COMP run.
+
+### 8.34 Phase 2: the whole `esbmc/` suite on the stack's head, Z3 only
+
+Measured on 2026-11-21 on `feat/field-sensitive-ssa-phase2-deref-size` at
+`759c885a9` (code as §8.33), gcc 13.3, LLVM 18, Z3 4.13.3, without the flag.
+Bitwuzla could not be built: the proxy refuses the CaDiCaL archive it
+downloads, so tests that name no solver run under Z3. All 3667
+`regression/esbmc/` tests, in strided shards of at most 10 minutes, `-j4`,
+leftover ESBMC processes killed after each shard:
+
+- 3637 passed, 2 skipped, 20 failed, 8 did not finish.
+- 16 failures name `--boolector` or `--bitwuzla`, which this build lacks.
+  `builtin_clzg_ctzg` and `irep2_only_va_binds_by_reference_c23` need a
+  newer Clang than 18; `bundled_headers_from_vfs` is §8.32's `-resource-dir`
+  regex. `github_1172-3` and `github_1352-success-32bit` name no solver and
+  fail under Z3 after 62 s and 75 s.
+- Not finished under Z3 in 10 minutes, alone on the machine: the CORE tests
+  `builtin_overflow_generic` (7 VCCs, the time is all in Z3),
+  `github_9785_int_base_stores` and `_fail`, `github_10774_symbolic_fixedbv`,
+  and the THOROUGH `github_306`, `github_2513`, `github_302`, `realloc20`.
+- No failure is outside these environmental classes, but the two Z3
+  failures and the eight unfinished tests were not compared with a master
+  build, so the full-label gate stays open until a run with Bitwuzla.
