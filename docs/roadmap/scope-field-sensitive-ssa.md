@@ -30,7 +30,9 @@
 keeps the 2x bar on every corpus row and every verdict under Z3 and
 Bitwuzla (§8.32), and so does its merge with master `30592f8a7`, which adds
 #10895's rebuild of a struct read over differently named members (§8.33).
-The SV-COMP run is still open.**
+Its merge with master `6c3c2cf9d` keeps them too, and the whole `esbmc/`
+ctest label under Bitwuzla fails only the tests that fail on master
+(§8.35). The SV-COMP run is still open.**
 > The corpus is in `regression/field-sensitivity/`
 > with baselines, and the census has been run and reverted. Phase 1 adds
 > `--field-sensitive-ssa` (default off): symex gives each field of an
@@ -2253,3 +2255,71 @@ leftover ESBMC processes killed after each shard:
 - No failure is outside these environmental classes, but the two Z3
   failures and the eight unfinished tests were not compared with a master
   build, so the full-label gate stays open until a run with Bitwuzla.
+
+### 8.35 Phase 2: the stack merged with master `6c3c2cf9d`
+
+Measured on 2026-11-21 on `feat/field-sensitive-ssa-phase2-deref-size` at
+`c519e3437`: master `6c3c2cf9d` merged into #10876 (`6fe7738aa`), then up
+the stack into #10886 (`19e35edb8`) and #10894. No conflicts. The merge
+brings #10906 and #10907, which rebuild a struct read from the bytes of a
+wider member, of an aggregate or of an unaligned array. RelWithDebInfo,
+gcc 13.3, LLVM 18, Z3 4.13.3, Bitwuzla 0.9.0 (CaDiCaL 2.1.2 cloned with
+git), 4-core container; master built the same way in the same container.
+
+- The 34 tests master added since `30592f8a7`, flag forced on against off,
+  Z3 and Bitwuzla, 20 s each: no verdict changes. In the `github_10888*`
+  and `github_10891*` tests the struct is read through a cast pointer, so
+  it stays whole. The three Kani `goto-transcoder` `_fail` tests print
+  added steps for whole writes of a tuple struct (`var_5 = { .=1, .=0, .=0 }`,
+  §8.6 row 2); under Z3, `cbmc_kani_unaligned_struct_store_fail` also
+  picks other values for two unconstrained variables.
+- Corpus, flag on, symex seconds, median of three, 8 / 2048 fields:
+
+  | Row | Z3 | Bitwuzla |
+  |---|---|---|
+  | `global_callee` | 0.173 / 0.185 (1.07x) | 0.159 / 0.169 (1.06x) |
+  | `plc_db` | 0.021 / 0.030 (1.43x) | 0.020 / 0.029 (1.45x) |
+  | `local_addr_once` | 0.014 / 0.016 (1.14x) | 0.016 / 0.017 (1.06x) |
+  | `local_writes` | 0.015 / 0.017 (1.13x) | 0.015 / 0.018 (1.20x) |
+  | `repro7521` | 0.736 / 1.222 (1.66x) | 0.682 / 1.107 (1.62x) |
+
+- ctest `field_sensitive_ssa|field-sensitivity|github_7797|github_5868|github_10888|github_10891`:
+  245/245; the `type_byte_size` unit test passes (13 cases).
+- Flag forced on against off, solver options replaced, 20 s per run: every
+  eighth C and C++ directory and every fortieth Python one under Bitwuzla
+  (842 `CORE` tests, 423 with an object split), every other one of those
+  under Z3 (417, 218 split). No verdict changes. Trace text, normalised as in
+  §8.33: 40 outputs differ under Bitwuzla and 17 under Z3. 31 differ only by
+  the warning that the flag is ignored. 6 Python tests,
+  `intrinsic_unroll_unwind_assertion_fail` and
+  `pragma_unroll_nested_complete_true` print different text from one run
+  to the next with the flag and without it; `harness_math_remainder_fail`
+  under Z3 picks a different `x` on a second run with the flag, which is
+  the value the run without it prints. The rest are the kinds §8.32 lists: `github_1093`,
+  `github_9375_fail`, `assoc_contains_fail` and `github_9416_fail` print a
+  member write with the value the whole struct holds; `github_5393_array_member_fail`,
+  `github_7855-tie-hides-deref` and `struct_array_ite_new_index_fail`
+  print the reassembled struct (§8.6 row 3); `container_cbegin_cend2_fail`,
+  `irep2_constructor_assign_struct_arg_fail` and `typed_list_concat_fail`
+  add or drop a step; `assoc_contains_fail` (190 to 126 claims),
+  `github_9416_fail` (103 to 102) and `container_cbegin_cend2_fail` (2 more
+  decided) fold more claims, with the same failed claim;
+  `map_find_end_neq` and `read_spec_verify_1` print fewer loop-unwinding
+  lines, since per-field propagation folds the guards; and
+  `typed_list_sorted_untyped_nondet_fail` picks other nondet inputs.
+- Whole `esbmc/` ctest label without the flag, default solver Bitwuzla,
+  `-j4`: all 3686 tests finished in 452 s. 3666 passed and 20 failed. Run on
+  the master build, 16 of the 20 fail as well: Boolector
+  (among them `github_1352-32bit` and `_fail`), Clang newer than 18,
+  `bundled_headers_from_vfs`'s `-resource-dir` regex, and the
+  `tuple_const_array_*`, `math_log-rec*` and `overflow_*_fir*` tests. The other 4
+  (`cwe_dead_code_concurrent`, `github_664_fail`, `proof_cache_kinduction`,
+  `witness_float_return_nan`) failed because the flag comparison above had
+  left their output files (`out.sarif`, `out.txt`, `fp.tsv`, `w.yml`) in
+  the test directories. With those files removed, all 4 pass.
+- §8.34's ten Z3 failures and unfinished tests run through ctest with
+  their own options (Bitwuzla), 280 s cap: all ten pass, on this head and on
+  master.
+- ctest `esbmc-cpp/cpp/`: 1473/1481; the same 8 as §8.33 fail on the master
+  build. ctest `python/` under the 10-minute cap: 1618 run, all passed.
+- Still open for the Phase 2 gate: an SV-COMP run.
