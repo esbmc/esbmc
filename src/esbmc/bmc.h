@@ -63,6 +63,9 @@ public:
   BigInt interleaving_number;
   BigInt interleaving_failed;
 
+  /// The comment of the claim the last counterexample violated.
+  std::string violated_claim;
+
   /** Mirrors reachability_treet::cs_bound_pruned; valid after start_bmc(). */
   bool cs_bound_pruned = false;
 

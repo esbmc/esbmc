@@ -8,6 +8,7 @@
 #include <util/config/options.h>
 #include <util/config/parseoptions.h>
 #include <goto-programs/goto_functions_algorithm.h>
+#include <goto-programs/goto_recurrent_state.h>
 #include <util/base/threeval.h>
 #include <optional>
 #include <string_view>
@@ -126,6 +127,9 @@ protected:
     goto_functionst &goto_functions,
     const uint64_t &k_step);
 
+  std::optional<locationt>
+  find_recurrent_state(const optionst &options, uint64_t k_step);
+
   void diagnose_unknown_properties(
     optionst &options,
     goto_functionst &goto_functions,
@@ -186,6 +190,10 @@ protected:
   std::vector<std::pair<locationt, std::string>> ranking_transition_invariants;
   /// The reachable-state invariants assume_reachable_loop_states inserted.
   std::vector<std::pair<locationt, std::string>> reachable_state_invariants;
+
+  /// --termination: the program with recurrent-state checks, and its loops.
+  goto_functionst recurrent_state_program;
+  std::vector<recurrent_state_loopt> recurrent_state_loops;
 
   // coverage mode
   bool is_coverage;

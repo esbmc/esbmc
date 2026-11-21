@@ -696,6 +696,15 @@ bool esbmc_parseoptionst::process_goto_program(
                               .is_true();
       options.set_option("termination-ranking-proved", ranking_proved);
 
+      // A copy taken before the havoc, which runs the loops as written.
+      if (
+        !ranking_proved && !non_term_proved && !spawns_threads(goto_functions))
+      {
+        recurrent_state_program = goto_functions;
+        recurrent_state_loops =
+          goto_recurrent_state(recurrent_state_program, context);
+      }
+
       // Only run the marker/havoc transform when the ranking check did
       // NOT settle it — otherwise the verdict loop short-circuits on the
       // ranking flag and the havoc'd markers would just be dead work.
