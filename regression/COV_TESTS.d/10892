@@ -1,3 +1,4 @@
 regression/goto-transcoder/cbmc_kani_unaligned_load
 regression/goto-transcoder/cbmc_kani_unaligned_load_fail
 regression/goto-transcoder/cbmc_kani_misaligned_deref_fail
+regression/goto-transcoder/cbmc_kani_unaligned_struct_store_fail

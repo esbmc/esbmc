@@ -1781,6 +1781,7 @@ void dereferencet::construct_from_array(
   bool is_correctly_aligned = false;
   // Additional complexity occurs if it's aligned but overflows boundaries
   bool overflows_boundaries;
+  bool whole_element = false;
   if (is_constant_int2t(offset))
   {
     // Constant offset is aligned with array boundaries?
@@ -1815,7 +1816,7 @@ void dereferencet::construct_from_array(
      * Integer subtypes keep the original condition: their stitching is exact,
      * and weakening it would stop over-approximated alignments reaching
      * check_alignment (regression/esbmc/align-deref_fail). */
-    const bool whole_element =
+    whole_element =
       deref_size == subtype_size &&
       (is_floatbv_type(arr_subtype) || is_pointer_type(arr_subtype));
     overflows_boundaries =
@@ -1825,7 +1826,7 @@ void dereferencet::construct_from_array(
 
   // No alignment guarantee: assert that it's correct.
   if (!is_correctly_aligned)
-    check_alignment(deref_size, std::move(mod), guard, value);
+    check_alignment(deref_size, std::move(mod), guard, value, whole_element);
 
   if (!overflows_boundaries)
   {
@@ -3796,9 +3797,12 @@ void dereferencet::check_alignment(
   BigInt minwidth,
   const expr2tc &offset_bits,
   const guard2tc &guard,
-  const expr2tc &object)
+  const expr2tc &object,
+  bool guards_access)
 {
-  if (options.get_bool_option("no-align-check"))
+  if (
+    options.get_bool_option("no-align-check") ||
+    (options.get_bool_option("producer-asserts-alignment") && !guards_access))
     return;
 
   // If we are dealing with a bitfield, then
