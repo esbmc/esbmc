@@ -2711,16 +2711,32 @@ void dereferencet::construct_from_multidir_array(
   construct_from_array(value, mod, type, guard, mode, alignment);
 }
 
-static bool spans_elements(
-  const array_type2t &arr,
+// Whether a struct of type read at offset_bits into a constant-size array
+// extends past the element it starts in.
+static bool struct_spans_elements(
+  const type2tc &array_type,
   const BigInt &offset_bits,
   const type2tc &type)
 {
-  if (!is_constant_int2t(arr.array_size))
+  if (
+    !is_array_type(array_type) || !is_struct_type(type) ||
+    !is_constant_int2t(to_array_type(array_type).array_size))
     return false;
-  const BigInt elem_bits = type_byte_size_bits(arr.subtype);
+  const BigInt elem_bits =
+    type_byte_size_bits(to_array_type(array_type).subtype);
   return elem_bits > 0 &&
          offset_bits % elem_bits + type_byte_size_bits(type) > elem_bits;
+}
+
+// Whether a struct of type read at offset_bits into a member of member_bits
+// extends past that member.
+static bool struct_wider_than_member(
+  const type2tc &type,
+  const BigInt &offset_bits,
+  const BigInt &member_bits)
+{
+  return is_struct_type(type) &&
+         offset_bits + type_byte_size_bits(type) > member_bits;
 }
 
 void dereferencet::construct_struct_ref_from_const_offset_array(
@@ -2747,9 +2763,7 @@ void dereferencet::construct_struct_ref_from_const_offset_array(
   {
     // A struct spanning several elements, e.g. struct { S a, b; } read from
     // S arr[2], is rebuilt member by member (#10888).
-    if (
-      is_array_type(value->type) && is_struct_type(type) &&
-      spans_elements(to_array_type(value->type), intref.value, type))
+    if (struct_spans_elements(value->type, intref.value, type))
     {
       expr2tc rebuilt =
         construct_struct_from_members(value, intref.value, type, guard, mode);
@@ -2865,9 +2879,9 @@ void dereferencet::construct_struct_ref_from_const_offset(
 
       // A struct wider than the member it starts in is not read from that
       // member alone; it is rebuilt member by member below (#10888).
-      const bool fits =
-        !is_struct_type(type) || intref.value - offs + type_size <= size;
-      if (!is_scalar_type(it) && in_range && fits)
+      if (
+        !is_scalar_type(it) && in_range &&
+        !struct_wider_than_member(type, intref.value - offs, size))
       {
         if (size == 0)
         {
