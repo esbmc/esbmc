@@ -621,9 +621,11 @@ private:
   /// The byte at bit \p pos of struct \p value, read from the whole-byte
   /// member holding it; nil if there is none.
   expr2tc byte_of_struct(const expr2tc &value, const BigInt &pos);
-  /// A \p type access at bit \p start of struct element \p index of \p array
-  /// that ends in the next element, stitched from bytes of both; nil if it
-  /// fits in one element.
+  /// The byte at bit \p pos of union \p value, read from the union whole.
+  expr2tc byte_of_union(const expr2tc &value, const BigInt &pos);
+  /// A \p type access at bit \p start of struct or union element \p index of
+  /// \p array that ends in the next element, stitched from bytes of both; nil
+  /// if it fits in one element.
   expr2tc stitch_across_elements(
     const expr2tc &array,
     const expr2tc &index,
