@@ -980,19 +980,22 @@ bool allocates(const expr2tc &code, bool heap_only = false)
 
 /// Whether a value of \p type can hold a data address. CIL computes field
 /// addresses in integers, `(unsigned long)p + off`, so a pointer-wide integer
-/// can.
-bool carries_address(const type2tc &type)
+/// can, unless \p wide_integers is unset.
+bool carries_address(const type2tc &type, bool wide_integers = true)
 {
   if (is_pointer_type(type))
     return !is_code_type(to_pointer_type(type).subtype);
   if (is_bv_type(type))
-    return type->get_width() >= config.ansi_c.pointer_width();
+    return wide_integers && type->get_width() >= config.ansi_c.pointer_width();
   if (is_array_type(type))
-    return carries_address(to_array_type(type).subtype);
+    return carries_address(to_array_type(type).subtype, wide_integers);
   if (is_struct_type(type) || is_union_type(type))
   {
     const std::vector<type2tc> members = struct_union_members(type);
-    return std::any_of(members.begin(), members.end(), carries_address);
+    return std::any_of(
+      members.begin(), members.end(), [wide_integers](const type2tc &m) {
+        return carries_address(m, wide_integers);
+      });
   }
   return is_symbol_type(type);
 }
@@ -3041,6 +3044,20 @@ bool havoc_loop(
     goto_functions.function_map[to_symbol2t(havoc_object).thename].type =
       havoc_object->type;
   }
+  // When the havoc covers every state the loop reaches, a run that leaves the
+  // loop after n iterations leaves it in the step from its state k iterations
+  // earlier, so the step need not follow the paths the unwinding bound cuts
+  // out of the loop. A havoced pointer, or a pin, only approximates where the
+  // pointer may point, and an object written through a pointer may be left
+  // stale. A self-loop's back edge is its head, which the havocs replace.
+  loop.get_original_loop_exit()->exits_at_bound =
+    !loop.writes_through_pointer() && havocs.through.empty() &&
+    havocs.pins.empty() &&
+    std::none_of(
+      havocs.vars.begin(),
+      havocs.vars.end(),
+      [](const expr2tc &v) { return carries_address(v->type, false); }) &&
+    loop.get_original_loop_head() != loop.get_original_loop_exit();
   transform_loop(
     entry_flags,
     goto_function,
