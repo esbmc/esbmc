@@ -515,12 +515,16 @@ private:
     modet mode);
   /** \p object is the object being accessed, or nil where the caller does not
    *  know it yet -- then the base is assumed to carry the access width, as it
-   *  does for everything but a type that declines alignment. */
+   *  does for everything but a type that declines alignment. \p guards_access
+   *  marks a claim the access itself relies on: the value read or written is
+   *  only right when it holds. Only such claims are made when the producer
+   *  asserts alignment itself (CBMC goto-binaries, #10892). */
   void check_alignment(
     BigInt minwidth,
     const expr2tc &offset,
     const guard2tc &guard,
-    const expr2tc &object);
+    const expr2tc &object,
+    bool guards_access = false);
   /** The alignment the address-space model guarantees the base of \p object's
    *  object, i.e. the assumption check_alignment() is entitled to make about
    *  everything below the offset it checks. */
