@@ -28,6 +28,11 @@ on:
         required: false
         default: false
         type: boolean
+      test-shard:
+        description: "Linux PR test selection: python, numpy, pyother, rest, or empty for all"
+        required: false
+        default: ''
+        type: string
       linker:
         description: "ESBMC_LINKER passed to build.sh; auto keeps the probe"
         required: false
@@ -103,7 +108,7 @@ jobs:
         path: esbmc-${{ env.PLATFORM }}.zip
     
     - name: Check Python regression tests
-      if: ${{ inputs.testing == true }}
+      if: ${{ inputs.testing == true && (inputs.test-shard == '' || inputs.test-shard == 'python') }}
       run: |
         # Set PATH to include Python 3.12 and user-installed tools (mypy, meson, etc.)
         export PATH="$(brew --prefix python@3.12)/bin:$HOME/Library/Python/3.12/bin:$PATH"
@@ -116,10 +121,22 @@ jobs:
         # Set PATH to include Python 3.12 and user-installed tools (mypy, meson, etc.)
         export PATH="$(brew --prefix python@3.12)/bin:$HOME/Library/Python/3.12/bin:$PATH"
         cd build/
+        if [[ "${{ runner.os }}" == "Linux" ]]; then
+          # Runner loss leaves no log (#10866); sample resources to show the cause.
+          ( while sleep 5; do echo "[sample] $(date -u +%T) $(df -h / | awk 'NR==2{print $4" free"}') inodes $(df -i / | awk 'NR==2{print $5}') $(free -m | awk 'NR==2{print $7" MB avail"}') load $(cut -d' ' -f1 /proc/loadavg) procs $(ps -e --no-headers | wc -l) zombies $(ps -eo stat= | grep -c '^Z') threads $(ps -eLf --no-headers | wc -l) fds $(cut -f1 /proc/sys/fs/file-nr) tmp $(find /tmp -maxdepth 1 | wc -l) top $(ps -eo rss=,args= --sort=-rss | head -1 | cut -c1-80)"; done ) &
+        fi
         # Cap the per-test TIMEOUT property at 120s. ctest --timeout is ignored
         # when tests set TIMEOUT via set_tests_properties (regression/CMakeLists.txt),
         # so we override the cache variable that feeds it and reconfigure.
-        cmake -DESBMC_REGRESS_TIMEOUT=120 .
+        # KNOWNBUG tests that never converge grow ~1GB per 5s until that
+        # timeout, so cap each test's address space to fit -jN of them in the
+        # 16GB runner (#10866). A capped KNOWNBUG test still passes.
+        mem_mb=8192
+        case "${{ inputs.test-shard }}" in
+          python)        mem_mb=6144 ;;
+          numpy|pyother) mem_mb=4096 ;;
+        esac
+        cmake -DESBMC_REGRESS_TIMEOUT=120 -DESBMC_REGRESS_MEMORY_LIMIT=$mem_mb .
         # macOS PR: the python/ suite (anchored — excludes python-intensive
         # and python-coverage, which already run on Linux), plus the
         # platform-sensitive set. The Python frontend is the one part of ESBMC
@@ -140,7 +157,12 @@ jobs:
         # untagged tests (all under 1GB). The floor of 8 matches the per-test
         # 8GB RLIMIT_AS, so the largest test can always be scheduled.
         if [[ "${{ runner.os }}" == "Linux" ]]; then
-          jobs=4
+          # The Python shards keep the -jN their per-test cap is sized for.
+          case "${{ inputs.test-shard }}" in
+            python)        jobs=2 ;;
+            numpy|pyother) jobs=3 ;;
+            *)             jobs=4 ;;
+          esac
           mem=$(( $(awk '/MemAvailable/{print $2}' /proc/meminfo) / 1048576 - jobs ))
           (( mem < 8 )) && mem=8
           echo "ctest mem budget: ${mem}GB at -j${jobs}"
@@ -150,7 +172,15 @@ jobs:
         if [[ "${{ inputs.operating-system }}" =~ ^macos ]]; then
           ctest -j4 --output-on-failure --progress -L '^python/$|^platform-sensitive$'
         elif [[ "${{ github.event_name }}" == "pull_request" ]]; then
-          ctest "${linux_args[@]}" --output-on-failure --progress -LE python-intensive .
+          # Python-frontend suites run in their own shards (#10866).
+          py='^(python|numpy|quixbugs|humaneval|typeevalpy)/$'
+          case "${{ inputs.test-shard }}" in
+            python)  ctest "${linux_args[@]}" --output-on-failure --progress -L '^python/$' -LE python-intensive . ;;
+            numpy)   ctest "${linux_args[@]}" --output-on-failure --progress -L '^numpy/$' -LE python-intensive . ;;
+            pyother) ctest "${linux_args[@]}" --output-on-failure --progress -L '^(quixbugs|humaneval|typeevalpy)/$' -LE python-intensive . ;;
+            rest)    ctest "${linux_args[@]}" --output-on-failure --progress -LE "$py|python-intensive" . ;;
+            *)       ctest "${linux_args[@]}" --output-on-failure --progress -LE python-intensive . ;;
+          esac
         else
           ctest "${linux_args[@]}" --output-on-failure --progress .
         fi

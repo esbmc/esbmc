@@ -1,0 +1,4 @@
+regression/esbmc/github_10888
+regression/esbmc/github_10888_fail
+regression/esbmc/github_10888_packed
+regression/esbmc/github_10888_packed_fail
