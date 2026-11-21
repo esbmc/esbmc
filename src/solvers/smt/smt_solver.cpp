@@ -1352,7 +1352,8 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
       ir_ieee && int_encoding && is_floatbv_type(eq.side_1) &&
       is_floatbv_type(eq.side_2))
       a = ir_ieee_api->apply_nan_cmp(a, args[0], args[1], false);
-    a = convert_ptr_eq(eq.side_1, eq.side_2, a);
+    if (is_pointer_type(eq.side_1))
+      a = convert_ptr_eq(eq.side_1, eq.side_2, a);
     break;
   }
   case expr2t::notequal_id:
@@ -1368,7 +1369,8 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
       a = fp_api->mk_smt_fpbv_eq(args[0], args[1]);
     else
       a = args[0]->eq(this, args[1]);
-    a = convert_ptr_eq(neq.side_1, neq.side_2, a);
+    if (is_pointer_type(neq.side_1))
+      a = convert_ptr_eq(neq.side_1, neq.side_2, a);
     a = mk_not(a);
     if (
       ir_ieee && int_encoding && is_floatbv_type(neq.side_1) &&
