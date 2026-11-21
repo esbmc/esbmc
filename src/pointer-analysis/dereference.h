@@ -660,6 +660,15 @@ private:
     const type2tc &type,
     const guard2tc &guard,
     modet mode);
+  /** Build a struct of \p type from the members of \p value that lie at
+   *  \p offset_bits onwards, one target member at a time; nil if \p type is
+   *  not a struct, does not fit in \p value, or a member cannot be built. */
+  expr2tc construct_struct_from_members(
+    const expr2tc &value,
+    const BigInt &offset_bits,
+    const type2tc &type,
+    const guard2tc &guard,
+    modet mode);
   void construct_struct_ref_from_dyn_offset(
     expr2tc &value,
     const expr2tc &offs,
