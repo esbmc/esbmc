@@ -275,6 +275,8 @@ void smt_solver_baset::pop_ctx()
     return e.level >= ctx_level;
   });
   std::erase_if(
+    fp_bits, [this](const auto &kv) { return kv.second.second >= ctx_level; });
+  std::erase_if(
     flattened, [this](const auto &kv) { return kv.second.level >= ctx_level; });
   for (auto &[value, flattens] : flattened_values)
     std::erase_if(
@@ -413,6 +415,9 @@ smt_astt smt_solver_baset::convert_assign(const expr2tc &expr)
   smt_astt side1 = convert_ast(eq.side_1); // LHS
   smt_astt side2 = convert_ast(eq.side_2); // RHS
   side2->assign(this, side1);
+
+  if (auto it = fp_bits.find(side2); it != fp_bits.end())
+    fp_bits.insert({side1, {it->second.first, ctx_level}});
 
   // Put that into the smt cache, thus preserving the value of the assigned
   // symbols. IMPORTANT: the cache is now a fundamental part of how some
