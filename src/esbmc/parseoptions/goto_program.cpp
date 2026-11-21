@@ -485,8 +485,7 @@ bool esbmc_parseoptionst::create_goto_program(
       // CBMC adds no implicit alignment check on dereference: a producer that
       // needs one asserts it in the binary, as Kani does except for its
       // unaligned intrinsics (#10892).
-      if (cbmc_binary)
-        options.set_option("producer-asserts-alignment", true);
+      options.set_option("producer-asserts-alignment", cbmc_binary);
 
       // A CBMC goto-binary needs ESBMC's additions (the __ESBMC_main entry
       // wrapper and the CPROVER-intrinsic bodies). Synthesise and link them
