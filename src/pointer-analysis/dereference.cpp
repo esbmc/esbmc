@@ -3029,6 +3029,11 @@ void dereferencet::construct_struct_ref_from_dyn_offs_members(
   }
 }
 
+static expr2tc at_offset_zero(const expr2tc &offs, const expr2tc &accuml_guard)
+{
+  return and2tc(accuml_guard, equality2tc(offs, gen_long(offs->type, 0)));
+}
+
 /// An element of a scalar array is a legal struct/union access at offset 0
 /// when the sizes match, as in build_reference_rec's constant-offset scalar
 /// case (#10891). A pointer is left out: the solver cannot bitcast it to a
@@ -3044,9 +3049,26 @@ static void add_scalar_element_candidate(
     !is_scalar_type(value->type) || is_pointer_type(value->type) ||
     value->type->get_width() != type->get_width())
     return;
-  expr2tc offs_is_zero =
-    and2tc(accuml_guard, equality2tc(offs, gen_long(offs->type, 0)));
+  expr2tc offs_is_zero = at_offset_zero(offs, accuml_guard);
   output.emplace_back(offs_is_zero, bitcast2tc(type, value));
+}
+
+void dereferencet::add_rebuilt_struct_candidate(
+  const expr2tc &value,
+  const expr2tc &offs,
+  const type2tc &type,
+  const guard2tc &guard,
+  const expr2tc &accuml_guard,
+  modet mode,
+  std::list<std::pair<expr2tc, expr2tc>> &output)
+{
+  expr2tc offs_is_zero = at_offset_zero(offs, accuml_guard);
+  guard2tc tmp_guard = guard;
+  tmp_guard.add(offs_is_zero);
+  expr2tc rebuilt =
+    construct_struct_from_members(value, BigInt(0), type, tmp_guard, mode);
+  if (!is_nil_expr(rebuilt))
+    output.emplace_back(offs_is_zero, rebuilt);
 }
 
 void dereferencet::construct_struct_ref_from_dyn_offs_rec(
@@ -3094,6 +3116,36 @@ void dereferencet::construct_struct_ref_from_dyn_offs_rec(
       expr2tc arr_size_in_bits = mul2tc(sub_size->type, array_size, sub_size);
       expr2tc lt = lessthan2tc(offs, arr_size_in_bits);
       range_guard = and2tc(accuml_guard, lt);
+
+      // Over integer elements a struct may start inside one element and span
+      // several, so it is stitched from bytes, as at a constant offset
+      // (#10891).
+      if (is_bv_type(arr_type.subtype) && is_struct_type(type))
+      {
+        expr2tc size = gen_long(offs->type, type_byte_size_bits(type));
+        expr2tc fits = and2tc(
+          and2tc(accuml_guard, gte),
+          and2tc(
+            lessthanequal2tc(size, arr_size_in_bits),
+            lessthanequal2tc(
+              offs, sub2tc(offs->type, arr_size_in_bits, size))));
+        simplify(fits);
+        guard2tc tmp_guard = guard;
+        tmp_guard.add(fits);
+        // The struct's own alignment, not its width, is what the access needs.
+        if (!mode.unaligned)
+          check_alignment(
+            ::alignment(migrate_type_back(type), ns) * 8,
+            offs,
+            tmp_guard,
+            value);
+        modet unaligned_mode = mode;
+        unaligned_mode.unaligned = true;
+        expr2tc stitched = value;
+        construct_from_array(
+          stitched, offs, type, tmp_guard, unaligned_mode, 8);
+        output.emplace_back(fits, stitched);
+      }
     }
     simplify(range_guard);
 
@@ -3112,8 +3164,7 @@ void dereferencet::construct_struct_ref_from_dyn_offs_rec(
     {
       // Excellent. Guard that the offset is zero.
       // Still need to consider the fields, though, since the offset is dynamic.
-      expr2tc offs_is_zero =
-        and2tc(accuml_guard, equality2tc(offs, gen_long(offs->type, 0)));
+      expr2tc offs_is_zero = at_offset_zero(offs, accuml_guard);
       output.emplace_back(offs_is_zero, tmp);
 
       // An exact match is the whole object: a member can then only compare
@@ -3121,6 +3172,9 @@ void dereferencet::construct_struct_ref_from_dyn_offs_rec(
       if (tmp == value)
         return;
     }
+    else
+      add_rebuilt_struct_candidate(
+        value, offs, type, guard, accuml_guard, mode, output);
 
     // It's not compatible, but a subtype may be. Iterate over all of them.
     construct_struct_ref_from_dyn_offs_members(
@@ -3135,10 +3189,12 @@ void dereferencet::construct_struct_ref_from_dyn_offs_rec(
     expr2tc tmp = value;
     if (dereference_type_compare(tmp, type))
     {
-      expr2tc offs_is_zero =
-        and2tc(accuml_guard, equality2tc(offs, gen_long(offs->type, 0)));
+      expr2tc offs_is_zero = at_offset_zero(offs, accuml_guard);
       output.emplace_back(offs_is_zero, tmp);
     }
+    else
+      add_rebuilt_struct_candidate(
+        value, offs, type, guard, accuml_guard, mode, output);
 
     // For union members, all are at offset 0, so recurse into each member
     // that could contain the target type.
