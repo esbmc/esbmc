@@ -3071,6 +3071,38 @@ void dereferencet::add_rebuilt_struct_candidate(
     output.emplace_back(offs_is_zero, rebuilt);
 }
 
+void dereferencet::add_stitched_struct_candidate(
+  const expr2tc &value,
+  const expr2tc &offs,
+  const expr2tc &arr_size_in_bits,
+  const type2tc &type,
+  const guard2tc &guard,
+  const expr2tc &accuml_guard,
+  modet mode,
+  std::list<std::pair<expr2tc, expr2tc>> &output)
+{
+  if (!is_bv_type(to_array_type(value->type).subtype) || !is_struct_type(type))
+    return;
+  expr2tc size = gen_long(offs->type, type_byte_size_bits(type));
+  expr2tc fits = and2tc(
+    accuml_guard,
+    and2tc(
+      lessthanequal2tc(size, arr_size_in_bits),
+      lessthanequal2tc(offs, sub2tc(offs->type, arr_size_in_bits, size))));
+  simplify(fits);
+  guard2tc tmp_guard = guard;
+  tmp_guard.add(fits);
+  // The struct's own alignment, not its width, is what the access needs.
+  if (!mode.unaligned)
+    check_alignment(
+      ::alignment(migrate_type_back(type), ns) * 8, offs, tmp_guard, value);
+  modet unaligned_mode = mode;
+  unaligned_mode.unaligned = true;
+  expr2tc stitched = value;
+  construct_from_array(stitched, offs, type, tmp_guard, unaligned_mode, 8);
+  output.emplace_back(fits, stitched);
+}
+
 void dereferencet::construct_struct_ref_from_dyn_offs_rec(
   const expr2tc &value,
   const expr2tc &offs,
@@ -3117,35 +3149,15 @@ void dereferencet::construct_struct_ref_from_dyn_offs_rec(
       expr2tc lt = lessthan2tc(offs, arr_size_in_bits);
       range_guard = and2tc(accuml_guard, lt);
 
-      // Over integer elements a struct may start inside one element and span
-      // several, so it is stitched from bytes, as at a constant offset
-      // (#10891).
-      if (is_bv_type(arr_type.subtype) && is_struct_type(type))
-      {
-        expr2tc size = gen_long(offs->type, type_byte_size_bits(type));
-        expr2tc fits = and2tc(
-          and2tc(accuml_guard, gte),
-          and2tc(
-            lessthanequal2tc(size, arr_size_in_bits),
-            lessthanequal2tc(
-              offs, sub2tc(offs->type, arr_size_in_bits, size))));
-        simplify(fits);
-        guard2tc tmp_guard = guard;
-        tmp_guard.add(fits);
-        // The struct's own alignment, not its width, is what the access needs.
-        if (!mode.unaligned)
-          check_alignment(
-            ::alignment(migrate_type_back(type), ns) * 8,
-            offs,
-            tmp_guard,
-            value);
-        modet unaligned_mode = mode;
-        unaligned_mode.unaligned = true;
-        expr2tc stitched = value;
-        construct_from_array(
-          stitched, offs, type, tmp_guard, unaligned_mode, 8);
-        output.emplace_back(fits, stitched);
-      }
+      add_stitched_struct_candidate(
+        value,
+        offs,
+        arr_size_in_bits,
+        type,
+        guard,
+        and2tc(accuml_guard, gte),
+        mode,
+        output);
     }
     simplify(range_guard);
 

@@ -686,6 +686,18 @@ private:
     const expr2tc &accuml_guard,
     modet mode,
     std::list<std::pair<expr2tc, expr2tc>> &output);
+  /** Add to \p output the struct of \p type stitched from the bytes of
+   *  \p value at \p offs, when \p value is an integer array: the struct may
+   *  start inside one element and span several (#10891). */
+  void add_stitched_struct_candidate(
+    const expr2tc &value,
+    const expr2tc &offs,
+    const expr2tc &arr_size_in_bits,
+    const type2tc &type,
+    const guard2tc &guard,
+    const expr2tc &accuml_guard,
+    modet mode,
+    std::list<std::pair<expr2tc, expr2tc>> &output);
   void construct_struct_ref_from_dyn_offs_rec(
     const expr2tc &value,
     const expr2tc &offs,
