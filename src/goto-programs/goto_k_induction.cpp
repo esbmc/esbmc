@@ -978,6 +978,102 @@ bool allocates(const expr2tc &code, bool heap_only = false)
   return found;
 }
 
+/// Whether an expression has no side effect but a nondet value.
+bool only_nondet_effects(const expr2tc &e)
+{
+  bool pure = true;
+  for_each_subexpr(e, [&pure](const expr2tc &sub) {
+    pure &= !is_sideeffect2t(sub) ||
+            to_sideeffect2t(sub).kind == sideeffect2t::allockind::nondet;
+  });
+  return pure;
+}
+
+/// Whether \p lvalue is a part of a variable goto_loopst tracks or one
+/// declared in the scanned range.
+bool writes_tracked_variable(
+  expr2tc lvalue,
+  const std::unordered_set<irep_idt, irep_id_hash> &declared)
+{
+  while (is_index2t(lvalue) || is_member2t(lvalue))
+    lvalue = is_index2t(lvalue) ? to_index2t(lvalue).source_value
+                                : to_member2t(lvalue).source_value;
+  return check_var_name(lvalue) ||
+         (is_symbol2t(lvalue) && declared.count(to_symbol2t(lvalue).thename));
+}
+
+/// Whether the instructions in [\p it, \p end], and every function they call,
+/// change only variables goto_loopst records as modified: no write through a
+/// pointer or to a model variable, no allocation or free, no intrinsic.
+bool changes_only_tracked_variables(
+  const goto_functionst &goto_functions,
+  goto_programt::const_targett it,
+  goto_programt::const_targett end,
+  std::unordered_set<irep_idt, irep_id_hash> &visited)
+{
+  std::unordered_set<irep_idt, irep_id_hash> declared;
+  for (;; ++it)
+  {
+    switch (it->type)
+    {
+    case DECL:
+      declared.insert(to_code_decl2t(it->code).value);
+      break;
+    case GOTO:
+    case ASSUME:
+    case ASSERT:
+    case SKIP:
+    case LOCATION:
+    case DEAD:
+    case END_FUNCTION:
+      break;
+    case RETURN:
+      if (!only_nondet_effects(it->code))
+        return false;
+      break;
+    case ASSIGN:
+    {
+      const code_assign2t &assign = to_code_assign2t(it->code);
+      if (
+        !writes_tracked_variable(assign.target, declared) ||
+        !only_nondet_effects(assign.source))
+        return false;
+      break;
+    }
+    case FUNCTION_CALL:
+    {
+      const code_function_call2t &call = to_code_function_call2t(it->code);
+      if (
+        !is_symbol2t(call.function) ||
+        (!is_nil_expr(call.ret) &&
+         !writes_tracked_variable(call.ret, declared)) ||
+        !std::all_of(
+          call.operands.begin(), call.operands.end(), only_nondet_effects))
+        return false;
+      const irep_idt &name = to_symbol2t(call.function).thename;
+      const auto callee = goto_functions.function_map.find(name);
+      if (
+        callee == goto_functions.function_map.end() ||
+        !callee->second.body_available)
+        return false;
+      const goto_programt &body = callee->second.body;
+      if (
+        visited.insert(name).second && !changes_only_tracked_variables(
+                                         goto_functions,
+                                         body.instructions.begin(),
+                                         std::prev(body.instructions.end()),
+                                         visited))
+        return false;
+      break;
+    }
+    default:
+      return false;
+    }
+    if (it == end)
+      return true;
+  }
+}
+
 /// Whether a value of \p type can hold a data address. CIL computes field
 /// addresses in integers, `(unsigned long)p + off`, so a pointer-wide integer
 /// can, unless \p wide_integers is unset.
@@ -3044,12 +3140,11 @@ bool havoc_loop(
     goto_functions.function_map[to_symbol2t(havoc_object).thename].type =
       havoc_object->type;
   }
-  // When the havoc covers every state the loop reaches, a run that leaves the
+  // When the havoc covers every state the loop changes, a run that leaves the
   // loop after n iterations leaves it in the step from its state k iterations
-  // earlier, so the step need not follow the paths the unwinding bound cuts
-  // out of the loop. A havoced pointer, or a pin, only approximates where the
-  // pointer may point, and an object written through a pointer may be left
-  // stale. A self-loop's back edge is its head, which the havocs replace.
+  // earlier, so the step need not follow the paths the bound cuts out of the
+  // loop (#1320). A havoced pointer only approximates where it may point.
+  std::unordered_set<irep_idt, irep_id_hash> visited;
   loop.get_original_loop_exit()->exits_at_bound =
     !loop.writes_through_pointer() && havocs.through.empty() &&
     havocs.pins.empty() &&
@@ -3057,7 +3152,11 @@ bool havoc_loop(
       havocs.vars.begin(),
       havocs.vars.end(),
       [](const expr2tc &v) { return carries_address(v->type, false); }) &&
-    loop.get_original_loop_head() != loop.get_original_loop_exit();
+    changes_only_tracked_variables(
+      goto_functions,
+      loop.get_original_loop_head(),
+      loop.get_original_loop_exit(),
+      visited);
   transform_loop(
     entry_flags,
     goto_function,
