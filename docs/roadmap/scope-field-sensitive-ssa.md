@@ -28,7 +28,9 @@
 > C++ `CORE` test with the flag forced on under Bitwuzla without tripping
 > Invariant 3's assert (§8.31). The stack merged with master `a6615b898`
 keeps the 2x bar on every corpus row and every verdict under Z3 and
-Bitwuzla (§8.32). The SV-COMP run is still open.**
+Bitwuzla (§8.32), and so does its merge with master `d84043799`, which adds
+#10895's rebuild of a struct read over differently named members (§8.33).
+The SV-COMP run is still open.**
 > The corpus is in `regression/field-sensitivity/`
 > with baselines, and the census has been run and reverted. Phase 1 adds
 > `--field-sensitive-ssa` (default off): symex gives each field of an
@@ -2171,4 +2173,60 @@ git), 4-core container.
   does not use. `cwe_dead_code_concurrent` fails
   ctest on its `CHECK_FILE out.sarif`; run by hand it prints the expected
   text, and the stack changes no dead-code or SARIF file.
+- Still open for the Phase 2 gate: an SV-COMP run.
+
+### 8.33 Phase 2: the stack merged with master `d84043799`
+
+Measured on 2026-11-21 on `feat/field-sensitive-ssa-phase2-deref-size` at
+`bbc45885c`: master `d84043799` merged into #10876 (`7f7fff386`), then up
+the stack into #10886 (`02ebcf5f9`) and #10894. No conflicts. Same toolchain
+as §8.32. The merge brings #10895 (`construct_struct_from_members`, which
+reads a struct laid over another struct's members, from the bytes where no
+member matches) and #10897 (no alignment check for packed reads).
+
+- #10895 with the flag: a local and a global `struct A { char a, b; }` read
+  through a `struct B { char c, d; } *` keep the object whole (the cast makes
+  it ineligible), so no byte-level read reaches a split object. Under Z3 and
+  Bitwuzla, with and without the flag, the `same` claims hold and only the
+  `fail` claim is violated.
+- Corpus, flag on, symex seconds, median of three, 8 / 2048 fields:
+
+  | Row | Z3 | Bitwuzla |
+  |---|---|---|
+  | `global_callee` | 0.243 / 0.253 (1.04x) | 0.253 / 0.290 (1.14x) |
+  | `plc_db` | 0.032 / 0.038 (1.19x) | 0.031 / 0.038 (1.23x) |
+  | `local_addr_once` | 0.021 / 0.023 (1.09x) | 0.021 / 0.022 (1.04x) |
+  | `local_writes` | 0.021 / 0.022 (1.04x) | 0.020 / 0.022 (1.10x) |
+  | `repro7521` | 0.845 / 1.313 (1.55x) | 0.876 / 1.295 (1.47x) |
+
+  `plc_db` is timed with `--unwind 21` and the solver named, since its
+  2048-field `test.desc` only writes SMT-LIB; every width gives `SUCCESSFUL`.
+- ctest `field_sensitive_ssa|field-sensitivity|github_7797|github_5868|type_byte_size|github_10888`:
+  224/224.
+- Flag forced on against off, solver options replaced, 20 s per run: every
+  eighth C and C++ directory, every fortieth Python one and every test
+  master added since `a6615b898`, under Bitwuzla (851 `CORE` tests, 434
+  with an object split); half of those under Z3 (432). No verdict changes.
+  The one differing outcome is `vector_emplace_back` under Z3, which hits the
+  cap without the flag and gives `SUCCESSFUL` with it.
+- Trace text, after dropping timings, assignment and VCC counts, witness
+  UUIDs and AST addresses: 20 outputs differ under Bitwuzla, 9 under Z3, all
+  of §8.32's kinds. The new `github_10888_fail` adds a step for the
+  initialised `c`; `github_10135_irep2_only_fail`, `github_1590-local`,
+  `github_5393_array_member_dyn_offset_fail` and
+  `github_7597-array-member_fail` drop or add a step or print a member write
+  with equal values; `vector_emplace_back` and `github_5868_iterator_ops`
+  list fewer claims after simplification (192 to 138 and 113 to 84 `PASSED`),
+  with the same verdict; `github_10888` sends two claims to the solver that
+  fold away without the flag, and both hold; `github_2630_1` prints its
+  counterexamples in another order. `python/github_9314_fail` reports
+  `global.assertion.5` or `.2` as the failed claim under Z3 from one run to
+  the next without the flag as well.
+- ctest without the flag, 10-minute cap: `-L esbmc` 1835 passed, 4 failed
+  before the cap (`02_eureka23`, `gcc_popcount_01`, `builtin_clzg_ctzg`,
+  `bundled_headers_from_vfs`, the environmental failures of §8.32);
+  `-L esbmc-cpp/cpp` 1473/1481. The 8 C++ failures (`ch8_5`, the five
+  `github_7433*`, `github_8698_array_uncaught_fail`,
+  `github_8698_string_view_uncaught_fail`) fail the same way on a master
+  `d84043799` build in the same container.
 - Still open for the Phase 2 gate: an SV-COMP run.
