@@ -2720,6 +2720,7 @@ static bool struct_spans_elements(
 {
   if (
     !is_array_type(array_type) || !is_struct_type(type) ||
+    is_nil_expr(to_array_type(array_type).array_size) ||
     !is_constant_int2t(to_array_type(array_type).array_size))
     return false;
   const BigInt elem_bits =
