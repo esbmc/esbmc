@@ -20,8 +20,9 @@ public:
   split_structst() = default;
 
   /// Pick the locals and parameters of fixed-size struct type that are only
-  /// ever read whole or through a constant member, never by address or at
-  /// byte level, and add their field symbols to @p context. Picks nothing
+  /// ever read whole or through a constant member, never at byte level, and
+  /// whose address, if taken, only reaches dereferences of that kind, and add
+  /// their field symbols to @p context. Picks nothing
   /// unless --field-sensitive-ssa is set, or when the program may create
   /// threads or symex checks the stack size.
   void analyse(
