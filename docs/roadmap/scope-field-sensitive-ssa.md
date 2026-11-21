@@ -1,6 +1,6 @@
 # Scope: field-sensitive SSA in goto-symex (#7521)
 
-> **Status at 2026-11-20: Phase 0 merged (#10773); Phase 1 merged (#10778),
+> **Status at 2026-11-21: Phase 0 merged (#10773); Phase 1 merged (#10778),
 > with the trace fixes #10799 (§8.7) and #10808 (§8.8) and the whole-read fix
 > #10839 (§8.13). On master `48d5f770e` with the flag forced on, the full
 > Python `CORE` suite (9279 tests, Bitwuzla), the C and C++ `CORE` suites
@@ -26,7 +26,9 @@
 > stacked on it; with it, every corpus row meets the 2x bar under Z3 and
 > Bitwuzla (§8.29). The stack's head, built with asserts, runs every C and
 > C++ `CORE` test with the flag forced on under Bitwuzla without tripping
-> Invariant 3's assert (§8.31). The SV-COMP run is still open.**
+> Invariant 3's assert (§8.31). The stack merged with master `a6615b898`
+keeps the 2x bar on every corpus row and every verdict under Z3 and
+Bitwuzla (§8.32). The SV-COMP run is still open.**
 > The corpus is in `regression/field-sensitivity/`
 > with baselines, and the census has been run and reverted. Phase 1 adds
 > `--field-sensitive-ssa` (default off): symex gives each field of an
@@ -2113,3 +2115,60 @@ LLVM 18, Bitwuzla 0.9.0 (CaDiCaL 2.1.2 cloned with git), 4-core container.
   on this build (default solver Bitwuzla): 220/220.
 - This closes §8.26's open Bitwuzla run. Still open for the Phase 2 gate:
   an SV-COMP run.
+
+### 8.32 Phase 2: the stack merged with master `a6615b898`
+
+Measured on 2026-11-21 on `feat/field-sensitive-ssa-phase2-deref-size` at
+`f92e9edb9`: master `a6615b898` merged into #10876 (`a7744f1a3`), then up
+the stack into #10886 (`8acf3a8f4`) and #10894. No conflicts. RelWithDebInfo,
+gcc 13.3, LLVM 18, Z3 4.13.3, Bitwuzla 0.9.0 (CaDiCaL 2.1.2 cloned with
+git), 4-core container.
+
+- Corpus, flag on, symex seconds, median of three, 8 / 2048 fields:
+
+  | Row | Z3 | Bitwuzla |
+  |---|---|---|
+  | `global_callee` | 0.215 / 0.223 (1.04x) | 0.227 / 0.274 (1.21x) |
+  | `plc_db` | 0.028 / 0.036 (1.29x) | 0.029 / 0.037 (1.28x) |
+  | `local_addr_once` | 0.019 / 0.021 (1.11x) | 0.019 / 0.024 (1.26x) |
+  | `local_writes` | 0.020 / 0.021 (1.05x) | 0.019 / 0.021 (1.11x) |
+  | `repro7521` | 0.800 / 1.205 (1.51x) | 0.818 / 1.204 (1.47x) |
+
+- Every corpus row (30), Z3 and Bitwuzla, flag on and off, 600 s cap: 116
+  of 120 runs give the expected verdict, all 60 with the flag among them.
+  The other 4 are `plc_db` at 512 and 2048 fields (and `_fail`) under Z3
+  without the flag, which hit the cap, as in §8.2.
+- ctest `field_sensitive_ssa|field-sensitivity|github_7797|github_5868|type_byte_size`:
+  220/220.
+- Flag forced on against off, solver options replaced, 20 s per run: every
+  eighth C and C++ directory and every fortieth Python one under Bitwuzla
+  (853 `CORE` tests), half of those under Z3 (433). No verdict changes.
+  The only differing outcomes are tests whose `test.desc` already passes the
+  flag (6 and 3), where passing it twice is a command-line error. 3 and 5
+  tests hit the cap both ways. `github_6310_typeid_dynamic_fail` aborts with
+  the same Z3 sort mismatch both ways.
+- Trace text under Bitwuzla: 35 outputs differ. 6 Python ones differ between
+  two runs without the flag as well. Of the other 29, 16 differ only by the
+  warning that the flag is ignored (threads, `--all-witnesses`,
+  `--generate-pytest-testcase`). The other 13 fall into the §8.6 rows or
+  differ in the model: `github_1476_fail`, `github_5868_div_fail`,
+  `github_7597-literal_fail`, `irep2_constructor_assign_struct_arg_fail` and
+  `github_9443_fail` add or drop a step; `github_9375_fail` prints a member
+  write's value where the run without the flag prints the whole struct, with
+  equal values; `github_7597-cond-write_fail` and `typed_list_eq_sorted_fail`
+  pick another value for a nondet input (`IO.in`, `n`), and every value
+  derived from it agrees with that input; `github_9416_fail`,
+  `container_cbegin_cend2_fail`, `map_find_end_neq` and `assoc_contains_fail`
+  list fewer claims, since more fold to constants in simplification, with
+  the same failed claim and verdict; `github_9060` (`--show-symex-value-sets`)
+  dumps value sets that name field symbols. Under Z3, 14 outputs differ, all
+  of those kinds.
+- ctest `-L esbmc` without the flag, 10-minute cap: 2336 passed, 7 failed
+  before the cap. 6 are environmental: `02_eureka23`, `gcc_popcount_01`,
+  `github_1352-32bit` and `github_1352-fail-32bit` need Boolector,
+  `builtin_clzg_ctzg` needs a newer clang than 18, and
+  `bundled_headers_from_vfs` expects a `-resource-dir` this LLVM 18 install
+  does not use. `cwe_dead_code_concurrent` fails
+  ctest on its `CHECK_FILE out.sarif`; run by hand it prints the expected
+  text, and the stack changes no dead-code or SARIF file.
+- Still open for the Phase 2 gate: an SV-COMP run.
