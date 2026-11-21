@@ -102,6 +102,60 @@ smt_astt smt_solver_baset::convert_ptr_cmp(
   return convert_ast(op);
 }
 
+/* A pointer made from an integer that lies in no object names INVALID, and
+ * arithmetic on it keeps that object, so it can reach a real object's address
+ * without naming it. Pointer equality and difference then follow the
+ * addresses, as the pointers' integer conversions do (#10905); pointers into
+ * real objects keep using (object, offset). Nil where neither side can be such
+ * a pointer: NULL, or two known objects. */
+expr2tc smt_solver_baset::either_from_integer(
+  const expr2tc &side1,
+  const expr2tc &side2)
+{
+  if (
+    !is_pointer_type(side1) || is_constant(side1) || is_constant(side2) ||
+    (!is_nil_expr(static_address_of(side1)) &&
+     !is_nil_expr(static_address_of(side2))))
+    return expr2tc();
+
+  const type2tc addr_type = ptraddr_type2();
+  const expr2tc invalid =
+    constant_int2tc(addr_type, pointer_logic.back().get_invalid_object());
+  return or2tc(
+    equality2tc(pointer_object2tc(addr_type, side1), invalid),
+    equality2tc(pointer_object2tc(addr_type, side2), invalid));
+}
+
+expr2tc smt_solver_baset::pointer_difference_bytes(
+  const expr2tc &side1,
+  const expr2tc &side2)
+{
+  const type2tc type = signed_size_type2();
+  const expr2tc offsets = sub2tc(
+    type, pointer_offset2tc(type, side1), pointer_offset2tc(type, side2));
+  const expr2tc from_integer = either_from_integer(side1, side2);
+  if (is_nil_expr(from_integer))
+    return offsets;
+  const expr2tc addresses =
+    sub2tc(type, typecast2tc(type, side1), typecast2tc(type, side2));
+  return if2tc(type, from_integer, addresses, offsets);
+}
+
+smt_astt smt_solver_baset::convert_ptr_eq(
+  const expr2tc &side1,
+  const expr2tc &side2,
+  smt_astt same_repr)
+{
+  const expr2tc from_integer = either_from_integer(side1, side2);
+  if (is_nil_expr(from_integer))
+    return same_repr;
+
+  const type2tc addr_type = ptraddr_type2();
+  const expr2tc same_address =
+    equality2tc(typecast2tc(addr_type, side1), typecast2tc(addr_type, side2));
+  return mk_or(same_repr, convert_ast(and2tc(from_integer, same_address)));
+}
+
 smt_astt smt_solver_baset::divide_by_element_size(
   const expr2tc &diff,
   const expr2tc &size)
@@ -168,16 +222,16 @@ smt_astt smt_solver_baset::convert_pointer_arith(
     // already asserted for elsewhere.
     if (expr->expr_id == expr2t::sub_id)
     {
-      expr2tc offs1 = pointer_offset2tc(signed_size_type2(), side1);
-      expr2tc offs2 = pointer_offset2tc(signed_size_type2(), side2);
-      expr2tc the_ptr_offs = sub2tc(offs1->type, offs1, offs2);
-
       if (ret_is_ptr)
       {
+        expr2tc offs1 = pointer_offset2tc(signed_size_type2(), side1);
+        expr2tc offs2 = pointer_offset2tc(signed_size_type2(), side2);
         // Update field in tuple.
         smt_astt the_ptr = convert_ast(side1);
-        return the_ptr->update(this, convert_ast(the_ptr_offs), 1);
+        return the_ptr->update(
+          this, convert_ast(sub2tc(offs1->type, offs1, offs2)), 1);
       }
+      const expr2tc the_ptr_offs = pointer_difference_bytes(side1, side2);
 
       // C11 6.5.6p9: both operands of a pointer difference must point to
       // elements of the same array object, so their element types are
