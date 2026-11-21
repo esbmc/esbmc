@@ -788,6 +788,8 @@ set(_slow_regression_tests
     "regression/floats-regression/nn-tanh_5_unsafe"
     "regression/consensus/get_subtree_index"
     "regression/consensus/compute_shuffled_index"
+    # 70-116s on the DebugOpt Linux runner; hit the 120s cap in #10866 CI.
+    "regression/cuda/Supported_long_time/056_pass"
 )
 math(EXPR ESBMC_REGRESS_CTEST_TIMEOUT_SLOW
      "${ESBMC_REGRESS_TIMEOUT_SLOW} + 30")
