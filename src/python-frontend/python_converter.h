@@ -2276,6 +2276,10 @@ private:
     const std::string &param_id,
     const std::string &func_name,
     size_t param_index);
+  void record_call_site_displays(
+    const std::string &param_id,
+    const std::string &func_name,
+    size_t param_index);
   bool infer_list_elem_type_from_call_sites(
     const std::string &func_name,
     size_t param_index,

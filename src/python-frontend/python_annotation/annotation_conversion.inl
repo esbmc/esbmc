@@ -709,6 +709,119 @@ std::string python_annotation<Json>::infer_unpacked_element_type(
   return "Any";
 }
 
+/// Whether @p n is `name[...]` read as a value.
+template <class Json>
+static bool is_element_read(const Json &n, const std::string &name)
+{
+  return n.is_object() && n.value("_type", "") == "Subscript" &&
+         n["ctx"].value("_type", "") == "Load" &&
+         n["value"].value("_type", "") == "Name" &&
+         n["value"].value("id", "") == name;
+}
+
+/// Whether @p body uses @p param only to read its elements whole: no bare
+/// use (alias, call argument), no store into or through an element, and no
+/// attribute of one, any of which could change what an element holds.
+template <class Json>
+static bool
+only_reads_whole_elements(const Json &body, const std::string &param)
+{
+  std::function<bool(const Json &, bool)> walk =
+    [&](const Json &n, bool changed) -> bool {
+    if (!n.is_object() && !n.is_array())
+      return true;
+    if (n.is_object() && n.value("_type", "") == "Name")
+      return n.value("id", "") != param;
+    if (is_element_read(n, param))
+      return !changed && walk(n["slice"], false);
+    const std::string kind = n.is_object() ? n.value("_type", "") : "";
+    if (
+      kind == "Attribute" ||
+      (kind == "Subscript" && n["ctx"].value("_type", "") != "Load"))
+      return walk(n["value"], true) &&
+             (kind == "Attribute" || walk(n["slice"], false));
+    for (const auto &child : n)
+      if (!walk(child, false))
+        return false;
+    return true;
+  };
+  return walk(body, false);
+}
+
+/// Whether every use of @p name in @p ast, apart from at most one binding,
+/// passes one of its elements straight to a module-level function that only
+/// reads that parameter's elements whole. A store, a method call, an alias,
+/// a store into the element itself (`name[1][0] = x`) or one by the callee
+/// could change what the element holds.
+template <class Json>
+static bool only_element_arguments(const Json &ast, const std::string &name)
+{
+  unsigned bindings = 0;
+  auto passed_unchanged = [&](const Json &call, size_t position) {
+    const Json def =
+      json_utils::try_find_function(ast["body"], call["func"].value("id", ""));
+    if (def.empty() || def["args"]["args"].size() <= position)
+      return false;
+    return only_reads_whole_elements(
+      def["body"], def["args"]["args"][position].value("arg", ""));
+  };
+  std::function<bool(const Json &)> walk = [&](const Json &n) -> bool {
+    if (!n.is_object() && !n.is_array())
+      return true;
+    if (n.is_object() && n.value("_type", "") == "Name")
+      return n.value("id", "") != name ||
+             (n["ctx"].value("_type", "") == "Store" && ++bindings == 1);
+    if (n.is_object() && n.value("_type", "") == "Call")
+    {
+      const Json &args = n["args"];
+      for (size_t i = 0; i < args.size(); ++i)
+      {
+        const bool element = is_element_read(args[i], name);
+        if (element && !passed_unchanged(n, i))
+          return false;
+        if (!walk(element ? args[i]["slice"] : args[i]))
+          return false;
+      }
+      return walk(n["func"]) && walk(n["keywords"]);
+    }
+    for (const auto &child : n)
+      if (!walk(child))
+        return false;
+    return true;
+  };
+  return walk(ast);
+}
+
+/// The type of element @p subscript reads from @p value, a list display
+/// bound to @p var_name, when the index is a constant. The element keeps its
+/// own type when the display mixes types, which leaves the list itself
+/// without one (#8914), provided the list's elements are only passed to calls.
+template <class Json>
+std::string python_annotation<Json>::fixed_element_type(
+  const Json &subscript,
+  const Json &value,
+  const std::string &var_name)
+{
+  const Json &index = subscript["slice"];
+  if (
+    value.value("_type", "") != "List" ||
+    index.value("_type", "") != "Constant" ||
+    !index["value"].is_number_unsigned())
+    return "";
+  const Json &elts = value["elts"];
+  const size_t i = index["value"].template get<size_t>();
+  // A starred element shifts every position after it.
+  if (
+    i >= elts.size() ||
+    std::any_of(
+      elts.begin(),
+      elts.end(),
+      [](const Json &e) { return e.value("_type", "") == "Starred"; }) ||
+    !only_element_arguments(ast_, var_name))
+    return "";
+  return get_argument_type(elts[i]);
+}
+
 /// The type a subscript of a `container`-typed value yields, or empty.
 inline std::string
 subscript_result_type(const std::string &container, bool is_slice)
@@ -1230,7 +1343,10 @@ std::string python_annotation<Json>::get_argument_type(const Json &arg)
         !var_node.empty() && var_node.contains("value") &&
         !var_node["value"].is_null())
       {
-        return subscript_result_type(get_argument_type(val), is_slice);
+        const std::string container = get_argument_type(val);
+        if (!container.empty() || is_slice)
+          return subscript_result_type(container, is_slice);
+        return fixed_element_type(arg, var_node["value"], var_name);
       }
     }
     return "";
