@@ -90,5 +90,4 @@ regression/python/dict_splat_symbolic_key_mixed 2
 regression/quixbugs/depth_first_search_fail 2
 regression/cuda/benchmarks/025_pass 2
 regression/python-intensive/github_3771 2
-regression/esbmc/cbrtl_model 2
 regression/python/dict_splat_symbolic_key_fail 2
