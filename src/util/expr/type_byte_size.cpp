@@ -20,7 +20,7 @@ struct type_sizet
   const namespacet *ns;
   /* Set once the walk follows a symbol type through `ns`: a size computed
    * without that is a function of the type alone and can be memoized. */
-  mutable bool followed_symbol = false;
+  bool followed_symbol = false;
 
   explicit type_sizet(const namespacet *ns) : ns(ns)
   {
@@ -28,12 +28,12 @@ struct type_sizet
   type_sizet(const type_sizet &) = delete;
   type_sizet &operator=(const type_sizet &) = delete;
 
-  BigInt member_offset_bits(const type2tc &type, const irep_idt &member) const;
-  BigInt size_bits(const type2tc &type) const;
-  expr2tc size_bits_expr(const type2tc &type) const;
-  expr2tc pointer_offset_bits(const expr2tc &expr) const;
-  BigInt record_size_bits(const type2tc &type) const;
-  expr2tc record_size_bits_expr(const type2tc &type) const;
+  BigInt member_offset_bits(const type2tc &type, const irep_idt &member);
+  BigInt size_bits(const type2tc &type);
+  expr2tc size_bits_expr(const type2tc &type);
+  expr2tc pointer_offset_bits(const expr2tc &expr);
+  BigInt record_size_bits(const type2tc &type);
+  expr2tc record_size_bits_expr(const type2tc &type);
 };
 
 /* A dereference sizes the whole pointed-to object on every access, so without
@@ -41,9 +41,8 @@ struct type_sizet
 thread_local std::unordered_map<type2tc, BigInt, type2_hash> record_sizes;
 } // namespace
 
-BigInt type_sizet::member_offset_bits(
-  const type2tc &type,
-  const irep_idt &member) const
+BigInt
+type_sizet::member_offset_bits(const type2tc &type, const irep_idt &member)
 {
   BigInt result = 0;
 
@@ -247,7 +246,7 @@ BigInt type_byte_size_default(
   }
 }
 
-BigInt type_sizet::size_bits(const type2tc &type) const
+BigInt type_sizet::size_bits(const type2tc &type)
 {
   switch (type->type_id)
   {
@@ -314,7 +313,7 @@ BigInt type_sizet::size_bits(const type2tc &type) const
   }
 }
 
-BigInt type_sizet::record_size_bits(const type2tc &type) const
+BigInt type_sizet::record_size_bits(const type2tc &type)
 {
   if (auto it = record_sizes.find(type); it != record_sizes.end())
     return it->second;
@@ -363,7 +362,7 @@ static expr2tc bitsize(BigInt n)
   return constant_int2tc(bitsize_type2(), std::move(n));
 }
 
-expr2tc type_sizet::size_bits_expr(const type2tc &type) const
+expr2tc type_sizet::size_bits_expr(const type2tc &type)
 {
   /* The structure of this function is the same as that of
    * size_bits(). We don't call that and just handle the exception
@@ -450,7 +449,7 @@ expr2tc type_sizet::size_bits_expr(const type2tc &type) const
   }
 }
 
-expr2tc type_sizet::record_size_bits_expr(const type2tc &type) const
+expr2tc type_sizet::record_size_bits_expr(const type2tc &type)
 {
   type2tc t = bitsize_type2();
   if (is_struct_type(type))
@@ -521,7 +520,7 @@ expr2tc type_byte_size_expr(const type2tc &type, const namespacet *ns)
   return typecast2tc(t, div2tc(s, add2tc(s, n, bitsize(7)), bitsize(8)));
 }
 
-expr2tc type_sizet::pointer_offset_bits(const expr2tc &expr) const
+expr2tc type_sizet::pointer_offset_bits(const expr2tc &expr)
 {
   if (is_symbol2t(expr))
     return bitsize(0);
