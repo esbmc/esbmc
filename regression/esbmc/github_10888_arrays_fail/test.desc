@@ -1,0 +1,6 @@
+CORE
+main.c
+--multi-property
+^  FAILED .* assertion g.f2\[0\] == t.a\[0\]$
+^\*\* 1 of 3 properties failed, 2 passed$
+^VERIFICATION FAILED$
