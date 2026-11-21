@@ -1823,8 +1823,10 @@ void dereferencet::construct_from_array(
                     : (!is_correctly_aligned || deref_size > subtype_size);
   }
 
-  // No alignment guarantee: assert that it's correct.
-  if (!is_correctly_aligned)
+  // No alignment guarantee: assert that it's correct. A packed access type has
+  // alignment 1, whether it is the member being read or the whole struct.
+  const bool packed_type = is_structure_type(type) && struct_union_packed(type);
+  if (!is_correctly_aligned && !mode.unaligned && !packed_type)
     check_alignment(deref_size, std::move(mod), guard, value);
 
   if (!overflows_boundaries)
