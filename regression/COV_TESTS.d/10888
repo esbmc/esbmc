@@ -2,3 +2,11 @@ regression/esbmc/github_10888
 regression/esbmc/github_10888_fail
 regression/esbmc/github_10888_packed
 regression/esbmc/github_10888_packed_fail
+regression/esbmc/github_10888_nested
+regression/esbmc/github_10888_nested_fail
+regression/esbmc/github_10888_elems
+regression/esbmc/github_10888_elems_fail
+regression/esbmc/github_10888_elems_oob_fail
+regression/esbmc/github_10888_arrays
+regression/esbmc/github_10888_arrays_fail
+regression/esbmc/github_10888_oob_fail

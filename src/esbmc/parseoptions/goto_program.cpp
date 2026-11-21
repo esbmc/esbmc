@@ -481,10 +481,15 @@ bool esbmc_parseoptionst::create_goto_program(
           "linked automatically for CBMC goto-binaries (disable with "
           "--no-cprover-additions)");
 
+      const bool cbmc_binary = has_cbmc_binary_input();
+      // CBMC adds no implicit alignment check on dereference: a producer that
+      // needs one asserts it in the binary, as Kani does except for its
+      // unaligned intrinsics (#10892).
+      options.set_option("producer-asserts-alignment", cbmc_binary);
       // CBMC places no object in the first page, so a pointer made from a
       // small integer, as Rust's NonNull::dangling() is, never names one
       // (#10905).
-      if (has_cbmc_binary_input())
+      if (cbmc_binary)
         config.ansi_c.reserve_first_page = true;
 
       // A CBMC goto-binary needs ESBMC's additions (the __ESBMC_main entry
@@ -492,7 +497,7 @@ bool esbmc_parseoptionst::create_goto_program(
       // automatically, before reading the binaries so that goto_convert only
       // ever runs over the boilerplate and never clobbers the loaded bodies.
       const bool cbmc_additions =
-        has_cbmc_binary_input() && !cmdline.isset("no-cprover-additions");
+        cbmc_binary && !cmdline.isset("no-cprover-additions");
       if (cbmc_additions)
       {
         log_status(
