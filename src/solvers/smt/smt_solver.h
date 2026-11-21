@@ -830,8 +830,11 @@ public:
     const expr2tc &expr,
     const expr2tc &expr2,
     const expr2tc &templ_expr);
-  /** Equality of pointers @p side1 and @p side2, given @p same_repr, the
-   *  equality of their (object, offset) representations. */
+  expr2tc either_from_integer(const expr2tc &side1, const expr2tc &side2);
+  /** @p side1 - @p side2 in bytes. */
+  expr2tc pointer_difference_bytes(const expr2tc &side1, const expr2tc &side2);
+  /** Equality of @p side1 and @p side2, given @p same_repr, the equality of
+   *  their representations; for pointers, their (object, offset) pairs. */
   smt_astt convert_ptr_eq(
     const expr2tc &side1,
     const expr2tc &side2,
