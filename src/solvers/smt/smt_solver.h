@@ -830,6 +830,11 @@ public:
     const expr2tc &expr,
     const expr2tc &expr2,
     const expr2tc &templ_expr);
+  smt_astt rename_int_made_arith(
+    const expr2tc &arith,
+    const expr2tc &ptr_op,
+    const expr2tc &scaled,
+    smt_astt bumped);
   /** Take the address of some kind of expression. This will abort if the given
    *  expression isn't based on some symbol in some way. (i.e., you can't take
    *  the address of an addition, but you can take the address of a member of

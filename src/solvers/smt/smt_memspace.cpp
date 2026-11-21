@@ -128,6 +128,38 @@ smt_astt smt_solver_baset::divide_by_element_size(
   return int_encoding ? mk_truncated_div(type, d, s) : mk_bvsdiv(d, s);
 }
 
+/* A pointer made from an integer that no object holds is in INVALID, and
+ * moving it may land in an object. Name the result of @p arith by its address,
+ * as the pointer made from the moved integer is (#10905). A pointer that names
+ * an object keeps it, @p bumped, so its bounds checks still see where it came
+ * from. @p scaled is the moved distance in bytes. */
+smt_astt smt_solver_baset::rename_int_made_arith(
+  const expr2tc &arith,
+  const expr2tc &ptr_op,
+  const expr2tc &scaled,
+  smt_astt bumped)
+{
+  const expr2tc *base = &ptr_op;
+  while (is_typecast2t(*base) && is_pointer_type(to_typecast2t(*base).from))
+    base = &to_typecast2t(*base).from;
+  const bool ptr_first = is_pointer_type(*arith->get_sub_expr(0));
+  if (
+    !is_typecast2t(*base) || config.ansi_c.cheri ||
+    (is_sub2t(arith) && !ptr_first))
+    return bumped;
+
+  const type2tc &inttype = scaled->type;
+  expr2tc addr = typecast2tc(inttype, to_typecast2t(*base).from);
+  expr2tc moved = is_add2t(arith) ? add2tc(inttype, addr, scaled)
+                                  : sub2tc(inttype, addr, scaled);
+  expr2tc in_invalid = equality2tc(
+    pointer_object2tc(ptraddr_type2(), ptr_op),
+    constant_int2tc(
+      ptraddr_type2(), pointer_logic.back().get_invalid_object()));
+  smt_astt renamed = convert_ast(typecast2tc(arith->type, moved));
+  return renamed->ite(this, convert_ast(in_invalid), bumped);
+}
+
 smt_astt smt_solver_baset::convert_pointer_arith(
   const expr2tc &expr,
   const type2tc &type)
@@ -266,28 +298,7 @@ smt_astt smt_solver_baset::convert_pointer_arith(
 
     // That calculated the offset; update field in pointer.
     smt_astt bumped = the_ptr->update(this, convert_ast(newexpr), 1);
-
-    /* A pointer made from an integer that no object holds is in INVALID, and
-     * moving it may land in an object. Name the result by its address, as the
-     * pointer made from the moved integer is (#10905). A pointer that names an
-     * object keeps it, so its bounds checks still see where it came from. */
-    const expr2tc *base = &ptr_op;
-    while (is_typecast2t(*base) && is_pointer_type(to_typecast2t(*base).from))
-      base = &to_typecast2t(*base).from;
-    if (
-      !is_typecast2t(*base) || config.ansi_c.cheri ||
-      (is_sub2t(expr) && !op1_is_ptr))
-      return bumped;
-
-    expr2tc addr = typecast2tc(inttype, to_typecast2t(*base).from);
-    expr2tc moved =
-      is_add2t(expr) ? add2tc(inttype, addr, mul) : sub2tc(inttype, addr, mul);
-    expr2tc in_invalid = equality2tc(
-      pointer_object2tc(ptraddr_type2(), ptr_op),
-      constant_int2tc(
-        ptraddr_type2(), pointer_logic.back().get_invalid_object()));
-    smt_astt renamed = convert_ast(typecast2tc(type, moved));
-    return renamed->ite(this, convert_ast(in_invalid), bumped);
+    return rename_int_made_arith(expr, ptr_op, mul, bumped);
   }
   }
 
