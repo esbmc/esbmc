@@ -425,6 +425,46 @@ static std::vector<std::string> union_alias_paths(
   return member_paths_at_offset(type_in, offset_bits / 8, target, ns);
 }
 
+/* The byte offset and type of the member @p suffix names in @p type, or
+ * nullopt when the suffix does not name a whole, constantly placed member. */
+static std::optional<std::pair<BigInt, type2tc>> suffix_location(
+  const type2tc &type_in,
+  const std::string &suffix,
+  const namespacet &ns)
+{
+  type2tc type = ns.follow(type_in);
+  BigInt offset_bits = 0;
+  std::string rest = suffix;
+
+  while (!rest.empty())
+  {
+    if (rest[0] != '.' || !(is_struct_type(type) || is_union_type(type)))
+      return std::nullopt;
+
+    const std::vector<irep_idt> names = struct_union_member_names(type);
+    auto comp = match_leading_component(names, rest.substr(1));
+    if (!comp)
+      return std::nullopt;
+
+    try
+    {
+      if (is_struct_type(type))
+        offset_bits += member_offset_bits(type, names[comp->first], &ns);
+    }
+    catch (const array_type2t::array_size_excp &)
+    {
+      return std::nullopt;
+    }
+
+    type = ns.follow(struct_union_members(type)[comp->first]);
+    rest = rest.substr(1 + comp->second);
+  }
+
+  if (offset_bits % 8 != 0)
+    return std::nullopt;
+  return std::make_pair(offset_bits / 8, type);
+}
+
 void value_sett::get_constant_value_set(
   const expr2tc &expr,
   object_mapt &dest,
@@ -1191,6 +1231,24 @@ void value_sett::get_byte_extract_value_set(
   const std::string &suffix,
   const type2tc &original_type) const
 {
+  /* The suffix names a member of the extract's type. A pointer source, such
+   * as the one Kani's NonNull::new_unchecked reads as a NonNull (#10889), has
+   * no member to append it to: a member that covers the pointer's bytes is
+   * the pointer itself. */
+  if (
+    !suffix.empty() && is_pointer_type(be.source_value) &&
+    is_constant_int2t(be.source_offset))
+  {
+    const auto loc = suffix_location(be.type, suffix, ns);
+    if (
+      loc && is_pointer_type(loc->second) &&
+      loc->first + to_constant_int2t(be.source_offset).value == 0)
+    {
+      get_value_set_rec_cached(be.source_value, dest, "", original_type);
+      return;
+    }
+  }
+
   // This is cropping up when one assigns, for example, a pointer into a
   // byte array. The lhs gets portions of the pointer, bitcasted and then
   // byte extracted on the lhs. Thus, we need to blast through the byte

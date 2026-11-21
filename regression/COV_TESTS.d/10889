@@ -1,2 +1,4 @@
 regression/goto-transcoder/cbmc_kani_dyn_size_of_val
 regression/goto-transcoder/cbmc_kani_dyn_size_of_val_fail
+regression/goto-transcoder/cbmc_kani_nonnull_write
+regression/goto-transcoder/cbmc_kani_nonnull_write_fail
