@@ -2978,6 +2978,26 @@ void dereferencet::construct_struct_ref_from_dyn_offs_members(
   }
 }
 
+/// An element of a scalar array is a legal struct/union access at offset 0
+/// when the sizes match, as in build_reference_rec's constant-offset scalar
+/// case (#10891). A pointer is left out: the solver cannot bitcast it to a
+/// struct.
+static void add_scalar_element_candidate(
+  const expr2tc &value,
+  const expr2tc &offs,
+  const type2tc &type,
+  const expr2tc &accuml_guard,
+  std::list<std::pair<expr2tc, expr2tc>> &output)
+{
+  if (
+    !is_scalar_type(value->type) || is_pointer_type(value->type) ||
+    value->type->get_width() != type->get_width())
+    return;
+  expr2tc offs_is_zero =
+    and2tc(accuml_guard, equality2tc(offs, gen_long(offs->type, 0)));
+  output.emplace_back(offs_is_zero, bitcast2tc(type, value));
+}
+
 void dereferencet::construct_struct_ref_from_dyn_offs_rec(
   const expr2tc &value,
   const expr2tc &offs,
@@ -3151,6 +3171,8 @@ void dereferencet::construct_struct_ref_from_dyn_offs_rec(
     }
     return;
   }
+
+  add_scalar_element_candidate(value, offs, type, accuml_guard, output);
 }
 
 void dereferencet::construct_struct_member_from_byte_array(
