@@ -1793,8 +1793,8 @@ and the eligibility scan run before any solver is called.
 ### 8.27 Phase 2, part 1: a phi over a copy carried over its own name
 
 Measured on 2026-11-20 on `feat/field-sensitive-ssa-phase2-locals` at
-`c13f2cf3d`. RelWithDebInfo, gcc 13.3, LLVM 18, Z3 4.13.3 and Bitwuzla
-0.9.0, 4-core container. "Base" is `c13f2cf3d`'s binary.
+`0a43398b7`. RelWithDebInfo, gcc 13.3, LLVM 18, Z3 4.13.3 and Bitwuzla
+0.9.0, 4-core container. "Base" is `0a43398b7`'s binary.
 
 - Cause of the open item in §8.25. In `std::map::upper_bound`, `begin()`'s
   return temporary is split once its address may be taken, so the copy
@@ -1846,7 +1846,7 @@ Measured on 2026-11-20 on `feat/field-sensitive-ssa-phase2-locals` at
   assert-enabled run under Bitwuzla (§8.26), and an SV-COMP run.
 
 Re-measured on 2026-11-20 after merging master `aabf837b1` into
-`feat/field-sensitive-ssa-phase2-locals` (`fac81c88e`; #10864 was
+`feat/field-sensitive-ssa-phase2-locals` (`f212d6ff0`; #10864 was
 squash-merged, so its conflicts were resolved in favour of this branch).
 RelWithDebInfo, gcc 13.3, LLVM 18, Z3 4.13.3, 4-core container. Bitwuzla
 was not built: its CaDiCaL download is refused by the sandbox proxy.
@@ -2001,7 +2001,7 @@ Results:
   which already existed and now also set the flag, were not reached.
 - Still open for the Phase 2 gate: the trace step of §8.28, the
   assert-enabled run under Bitwuzla (§8.26), and an SV-COMP run.
-- After merging `feat/field-sensitive-ssa-phase2-globals` at `43ce97fe0`
+- After merging `feat/field-sensitive-ssa-phase2-globals` at `df48c998c`
   (§8.30), Z3 4.13.3 only (Bitwuzla's CaDiCaL download was refused): ctest
   `field_sensitive_ssa|field-sensitivity|github_7797|github_5868|type_byte_size`
   220/220, so `field_sensitive_ssa_carried_copy_fail` now passes here. Corpus,
@@ -2018,7 +2018,7 @@ Results:
 ### 8.30 Phase 2, part 2: the print of a sliced split write
 
 Measured on 2026-11-20 on `feat/field-sensitive-ssa-phase2-globals` after
-merging `feat/field-sensitive-ssa-phase2-locals` at `6a47098d4`.
+merging `feat/field-sensitive-ssa-phase2-locals` at `9e276a5e5`.
 RelWithDebInfo, gcc 13.3, LLVM 18, Z3 4.13.3 and Bitwuzla 0.9.0 (CaDiCaL
 2.1.2 cloned with git), 4-core container. "Base" is the merge's binary.
 (§8.29 is on the PR stacked on this one.)
@@ -2098,7 +2098,7 @@ Results:
 ### 8.31 Phase 2: assert-enabled run under Bitwuzla
 
 Measured on 2026-11-20 on `feat/field-sensitive-ssa-phase2-deref-size` at
-`0d1c47c53`, the head of the Phase 2 stack (#10876, #10886, #10894). Built
+`106575464`, the head of the Phase 2 stack (#10876, #10886, #10894). Built
 with `-O2 -g1` and no `-DNDEBUG`, so the Invariant 3 assert in
 `split_structst::rewrite` is live (its text is in the binary). gcc 13.3,
 LLVM 18, Bitwuzla 0.9.0 (CaDiCaL 2.1.2 cloned with git), 4-core container.
@@ -2121,8 +2121,8 @@ LLVM 18, Bitwuzla 0.9.0 (CaDiCaL 2.1.2 cloned with git), 4-core container.
 ### 8.32 Phase 2: the stack merged with master `a6615b898`
 
 Measured on 2026-11-21 on `feat/field-sensitive-ssa-phase2-deref-size` at
-`f92e9edb9`: master `a6615b898` merged into #10876 (`a7744f1a3`), then up
-the stack into #10886 (`8acf3a8f4`) and #10894. No conflicts. RelWithDebInfo,
+`f7dc7c07d`: master `a6615b898` merged into #10876 (`f76c06e4d`), then up
+the stack into #10886 (`ad66ead87`) and #10894. No conflicts. RelWithDebInfo,
 gcc 13.3, LLVM 18, Z3 4.13.3, Bitwuzla 0.9.0 (CaDiCaL 2.1.2 cloned with
 git), 4-core container.
 
@@ -2178,8 +2178,8 @@ git), 4-core container.
 ### 8.33 Phase 2: the stack merged with master `30592f8a7`
 
 Measured on 2026-11-21 on `feat/field-sensitive-ssa-phase2-deref-size` at
-`bbc45885c`: master `30592f8a7` merged into #10876 (`7f7fff386`), then up
-the stack into #10886 (`02ebcf5f9`) and #10894. No conflicts. Same toolchain
+`ae651e171`: master `30592f8a7` merged into #10876 (`0d6c46a0a`), then up
+the stack into #10886 (`97074691e`) and #10894. No conflicts. Same toolchain
 as §8.32. The merge brings #10895 (`construct_struct_from_members`, which
 reads a struct laid over another struct's members, from the bytes where no
 member matches) and #10897 (no alignment check for packed reads).
