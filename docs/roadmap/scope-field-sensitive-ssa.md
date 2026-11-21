@@ -2234,7 +2234,7 @@ member matches) and #10897 (no alignment check for packed reads).
 ### 8.34 Phase 2: the whole `esbmc/` suite on the stack's head, Z3 only
 
 Measured on 2026-11-21 on `feat/field-sensitive-ssa-phase2-deref-size` at
-`759c885a9` (code as §8.33), gcc 13.3, LLVM 18, Z3 4.13.3, without the flag.
+`b357259ff` (code as §8.33), gcc 13.3, LLVM 18, Z3 4.13.3, without the flag.
 Bitwuzla could not be built: the proxy refuses the CaDiCaL archive it
 downloads, so tests that name no solver run under Z3. All 3667
 `regression/esbmc/` tests, in strided shards of at most 10 minutes, `-j4`,
