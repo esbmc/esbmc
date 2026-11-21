@@ -28,7 +28,7 @@
 > C++ `CORE` test with the flag forced on under Bitwuzla without tripping
 > Invariant 3's assert (§8.31). The stack merged with master `a6615b898`
 keeps the 2x bar on every corpus row and every verdict under Z3 and
-Bitwuzla (§8.32), and so does its merge with master `d84043799`, which adds
+Bitwuzla (§8.32), and so does its merge with master `30592f8a7`, which adds
 #10895's rebuild of a struct read over differently named members (§8.33).
 The SV-COMP run is still open.**
 > The corpus is in `regression/field-sensitivity/`
@@ -2175,10 +2175,10 @@ git), 4-core container.
   text, and the stack changes no dead-code or SARIF file.
 - Still open for the Phase 2 gate: an SV-COMP run.
 
-### 8.33 Phase 2: the stack merged with master `d84043799`
+### 8.33 Phase 2: the stack merged with master `30592f8a7`
 
 Measured on 2026-11-21 on `feat/field-sensitive-ssa-phase2-deref-size` at
-`bbc45885c`: master `d84043799` merged into #10876 (`7f7fff386`), then up
+`bbc45885c`: master `30592f8a7` merged into #10876 (`7f7fff386`), then up
 the stack into #10886 (`02ebcf5f9`) and #10894. No conflicts. Same toolchain
 as §8.32. The merge brings #10895 (`construct_struct_from_members`, which
 reads a struct laid over another struct's members, from the bytes where no
@@ -2228,5 +2228,5 @@ member matches) and #10897 (no alignment check for packed reads).
   `-L esbmc-cpp/cpp` 1473/1481. The 8 C++ failures (`ch8_5`, the five
   `github_7433*`, `github_8698_array_uncaught_fail`,
   `github_8698_string_view_uncaught_fail`) fail the same way on a master
-  `d84043799` build in the same container.
+  `30592f8a7` build in the same container.
 - Still open for the Phase 2 gate: an SV-COMP run.
