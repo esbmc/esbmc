@@ -265,7 +265,29 @@ smt_astt smt_solver_baset::convert_pointer_arith(
     simplify(newexpr);
 
     // That calculated the offset; update field in pointer.
-    return the_ptr->update(this, convert_ast(newexpr), 1);
+    smt_astt bumped = the_ptr->update(this, convert_ast(newexpr), 1);
+
+    /* A pointer made from an integer that no object holds is in INVALID, and
+     * moving it may land in an object. Name the result by its address, as the
+     * pointer made from the moved integer is (#10905). A pointer that names an
+     * object keeps it, so its bounds checks still see where it came from. */
+    const expr2tc *base = &ptr_op;
+    while (is_typecast2t(*base) && is_pointer_type(to_typecast2t(*base).from))
+      base = &to_typecast2t(*base).from;
+    if (
+      !is_typecast2t(*base) || config.ansi_c.cheri ||
+      (is_sub2t(expr) && !op1_is_ptr))
+      return bumped;
+
+    expr2tc addr = typecast2tc(inttype, to_typecast2t(*base).from);
+    expr2tc moved =
+      is_add2t(expr) ? add2tc(inttype, addr, mul) : sub2tc(inttype, addr, mul);
+    expr2tc in_invalid = equality2tc(
+      pointer_object2tc(ptraddr_type2(), ptr_op),
+      constant_int2tc(
+        ptraddr_type2(), pointer_logic.back().get_invalid_object()));
+    smt_astt renamed = convert_ast(typecast2tc(type, moved));
+    return renamed->ite(this, convert_ast(in_invalid), bumped);
   }
   }
 
