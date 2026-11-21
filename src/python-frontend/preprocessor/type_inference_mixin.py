@@ -107,6 +107,14 @@ class TypeInferenceMixin:
         return class_names, var_classes
 
     @staticmethod
+    def _scan_class_bases(module):
+        """Map each module-level class to the names of its direct bases."""
+        return {
+            s.name: [b.id for b in s.bases if isinstance(b, ast.Name)]
+            for s in module.body if isinstance(s, ast.ClassDef)
+        }
+
+    @staticmethod
     def _plain_user_classes(module):
         """Classes whose every ancestor is a module class or object, with no
         metaclass keyword. A name defined more than once is left out."""

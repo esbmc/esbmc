@@ -359,6 +359,7 @@ private:
 
   // ----- class inheritance and specialisation (annotation_symbolic.inl) -----
   bool are_all_user_classes(const std::vector<std::string> &types) const;
+  bool is_refinable_annotation(const std::string &type) const;
   bool are_specializable_types(const std::vector<std::string> &types) const;
   static bool are_scalar_list_types(const std::vector<std::string> &types);
   bool is_specialization_pending(
