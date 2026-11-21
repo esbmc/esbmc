@@ -481,6 +481,12 @@ bool esbmc_parseoptionst::create_goto_program(
           "linked automatically for CBMC goto-binaries (disable with "
           "--no-cprover-additions)");
 
+      // CBMC places no object in the first page, so a pointer made from a
+      // small integer, as Rust's NonNull::dangling() is, never names one
+      // (#10905).
+      if (has_cbmc_binary_input())
+        config.ansi_c.reserve_first_page = true;
+
       // A CBMC goto-binary needs ESBMC's additions (the __ESBMC_main entry
       // wrapper and the CPROVER-intrinsic bodies). Synthesise and link them
       // automatically, before reading the binaries so that goto_convert only

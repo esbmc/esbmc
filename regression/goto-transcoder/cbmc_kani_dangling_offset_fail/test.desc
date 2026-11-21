@@ -1,0 +1,5 @@
+CORE
+cbmc_kani_dangling_offset_fail.goto
+--binary --function _RNvCs5XarvsdHZp4_20dangling_offset_fail7harness --ignore-property-class reachability_check --ignore-property-class cover
+^  \[KANI_CHECK_ID_[^]]*\] assertion failed: ptr1 as usize != ptr2 as usize$
+^VERIFICATION FAILED$
