@@ -1,3 +1,4 @@
+/* esbmc/esbmc#1320 */
 _Bool nondet_bool();
 int nondet_int();
 

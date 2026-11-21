@@ -1824,8 +1824,10 @@ void dereferencet::construct_from_array(
                     : (!is_correctly_aligned || deref_size > subtype_size);
   }
 
-  // No alignment guarantee: assert that it's correct.
-  if (!is_correctly_aligned)
+  // No alignment guarantee: assert that it's correct. A packed access type has
+  // alignment 1, whether it is the member being read or the whole struct.
+  const bool packed_type = is_structure_type(type) && struct_union_packed(type);
+  if (!is_correctly_aligned && !mode.unaligned && !packed_type)
     check_alignment(deref_size, std::move(mod), guard, value, whole_element);
 
   if (!overflows_boundaries)
@@ -2864,6 +2866,16 @@ void dereferencet::construct_struct_ref_from_const_offset(
       i++;
     }
 
+    // A struct laid over scalar members whose names or types differ from its
+    // own, e.g. struct { char a, b; } read as struct { char c, d; } (#10888).
+    expr2tc rebuilt =
+      construct_struct_from_members(value, intref.value, type, guard, mode);
+    if (!is_nil_expr(rebuilt))
+    {
+      value = rebuilt;
+      return;
+    }
+
     // Fell out of that loop. Either this offset is out of range, or lies in
     // padding.
     dereference_failure(
@@ -2874,6 +2886,45 @@ void dereferencet::construct_struct_ref_from_const_offset(
     "Unexpectedly {} type'd argument to construct_struct_ref",
     get_type_id(value->type));
   abort();
+}
+
+expr2tc dereferencet::construct_struct_from_members(
+  const expr2tc &value,
+  const BigInt &offset_bits,
+  const type2tc &type,
+  const guard2tc &guard,
+  modet mode)
+{
+  if (
+    !is_struct_type(type) ||
+    offset_bits + type_byte_size_bits(type) > type_byte_size_bits(value->type))
+    return expr2tc();
+
+  const struct_type2t &structtype = to_struct_type(type);
+  std::vector<expr2tc> fields;
+  for (size_t i = 0; i < structtype.members.size(); i++)
+  {
+    const type2tc &member_type = structtype.members[i];
+    const BigInt member_offs =
+      offset_bits + member_offset_bits(type, structtype.member_names[i], &ns);
+    expr2tc field = value;
+    // A scalar that no source field matches exactly may straddle source
+    // scalars (a packed target), so it is taken from the bytes; a matching
+    // field is read directly, which keeps a pointer's object.
+    if (
+      is_scalar_type(member_type) &&
+      !has_field_at(value->type, member_offs, member_type, ns) &&
+      occupies_whole_bytes(member_offs, type_byte_size_bits(member_type)) &&
+      !options.get_bool_option("int-encoding"))
+      construct_from_bytes(field, gen_ulong(member_offs), member_type);
+    else
+      build_reference_rec(
+        field, gen_ulong(member_offs), member_type, guard, mode);
+    if (is_nil_expr(field))
+      return expr2tc();
+    fields.push_back(field);
+  }
+  return constant_struct2tc(type, fields);
 }
 
 void dereferencet::construct_struct_ref_from_dyn_offset(
