@@ -1,0 +1,6 @@
+CORE
+main.c
+
+^VERIFICATION FAILED$
+^  FAILED +\[main\.array-bounds-violated\.1\] +line 13 +dereference failure: array bounds violated$
+^  NOT CHECKED +\[main\.assertion\.1\] +line 15 +assertion r\.v == 7$

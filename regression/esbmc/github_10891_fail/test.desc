@@ -2,5 +2,6 @@ CORE
 main.c
 --multi-property
 ^VERIFICATION FAILED$
-PASSED +\[main\.assertion\.[0-9]+\] +line [0-9]+ +dereference failure: Object accessed with incompatible base type
+PASSED +\[main\.assertion\.[0-9]+\] +line 12 +dereference failure: Incorrect alignment when accessing data object$
+PASSED +\[main\.array-bounds-violated\.[0-9]+\] +line 12 +dereference failure: array bounds violated$
 FAILED +\[main\.assertion\.[0-9]+\] +line [0-9]+ +assertion s\.v == 7$

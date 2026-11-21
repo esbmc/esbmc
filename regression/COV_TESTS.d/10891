@@ -1,3 +1,9 @@
 regression/esbmc/github_10891
 regression/esbmc/github_10891_fail
 regression/esbmc/github_10891_packed
+regression/esbmc/github_10891_union_elem
+regression/esbmc/github_10891_union_elem_fail
+regression/esbmc/github_10891_byte_offset
+regression/esbmc/github_10891_byte_offset_fail
+regression/esbmc/github_10891_byte_offset_align_fail
+regression/esbmc/github_10891_overaligned_fail

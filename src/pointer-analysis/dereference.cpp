@@ -2950,7 +2950,20 @@ void dereferencet::construct_struct_ref_from_dyn_offset(
   construct_struct_ref_from_dyn_offs_rec(
     value, offs, type, guard, gen_true_expr(), mode, resolved_list);
 
-  if (resolved_list.size() == 0)
+  expr2tc accuml = gen_false_expr();
+  for (const auto &candidate : resolved_list)
+    accuml = or2tc(accuml, candidate.first);
+  guard2tc tmp_guard = guard;
+  tmp_guard.add(not2tc(accuml));
+
+  // At an offset no candidate covers, a struct over an array is read member
+  // by member, as `{p->a, p->b}` would be (#10891).
+  expr2tc rebuilt =
+    is_array_type(value->type)
+      ? construct_struct_from_dyn_members(value, offs, type, tmp_guard, mode)
+      : expr2tc();
+
+  if (resolved_list.empty() && is_nil_expr(rebuilt))
   {
     // No legal accesses.
     value = expr2tc();
@@ -2959,32 +2972,52 @@ void dereferencet::construct_struct_ref_from_dyn_offset(
   }
 
   // Switch on the available offsets.
-  expr2tc result = make_failed_symbol(type);
-  for (std::list<std::pair<expr2tc, expr2tc>>::const_iterator it =
-         resolved_list.begin();
-       it != resolved_list.end();
-       ++it)
-  {
-    result = if2tc(type, it->first, it->second, result);
-  }
+  expr2tc result = is_nil_expr(rebuilt) ? make_failed_symbol(type) : rebuilt;
+  for (const auto &candidate : resolved_list)
+    result = if2tc(type, candidate.first, candidate.second, result);
 
   value = result;
 
-  // Finally, record an assertion that if none of those accesses were legal,
-  // then it's an illegal access.
-  expr2tc accuml = gen_false_expr();
-  for (std::list<std::pair<expr2tc, expr2tc>>::const_iterator it =
-         resolved_list.begin();
-       it != resolved_list.end();
-       ++it)
-  {
-    accuml = or2tc(accuml, it->first);
-  }
+  if (is_nil_expr(rebuilt))
+    bad_base_type_failure(tmp_guard, "legal dynamic offset", "illegal offset");
+}
 
-  accuml = not2tc(accuml);
-  guard2tc tmp_guard = guard;
-  tmp_guard.add(accuml);
-  bad_base_type_failure(tmp_guard, "legal dynamic offset", "illegal offset");
+expr2tc dereferencet::construct_struct_from_dyn_members(
+  const expr2tc &value,
+  const expr2tc &offs,
+  const type2tc &type,
+  const guard2tc &guard,
+  modet mode)
+{
+  // Integer encoding cannot stitch a member from the bytes of several elements.
+  if (!is_struct_type(type) || options.get_bool_option("int-encoding"))
+    return expr2tc();
+
+  // The members' own checks miss an over-aligned struct; a packed one, and
+  // its members, have alignment 1.
+  if (struct_union_packed(type))
+    mode.unaligned = true;
+  else if (!mode.unaligned)
+    check_alignment(
+      ::alignment(migrate_type_back(type), ns) * 8, offs, guard, value);
+
+  const struct_type2t &structtype = to_struct_type(type);
+  std::vector<expr2tc> fields;
+  for (size_t i = 0; i < structtype.members.size(); i++)
+  {
+    expr2tc member_offs = add2tc(
+      offs->type,
+      offs,
+      gen_long(
+        offs->type, member_offset_bits(type, structtype.member_names[i], &ns)));
+    simplify(member_offs);
+    expr2tc field = value;
+    build_reference_rec(field, member_offs, structtype.members[i], guard, mode);
+    if (is_nil_expr(field))
+      return expr2tc();
+    fields.push_back(field);
+  }
+  return constant_struct2tc(type, fields);
 }
 
 void dereferencet::construct_struct_ref_from_dyn_offs_members(

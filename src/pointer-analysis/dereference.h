@@ -669,6 +669,15 @@ private:
     const type2tc &type,
     const guard2tc &guard,
     modet mode);
+  /** Build a struct of \p type from \p value at the dynamic offset \p offs,
+   *  one target member at a time; nil if \p type is not a struct or a member
+   *  cannot be built. */
+  expr2tc construct_struct_from_dyn_members(
+    const expr2tc &value,
+    const expr2tc &offs,
+    const type2tc &type,
+    const guard2tc &guard,
+    modet mode);
   void construct_struct_ref_from_dyn_offset(
     expr2tc &value,
     const expr2tc &offs,
