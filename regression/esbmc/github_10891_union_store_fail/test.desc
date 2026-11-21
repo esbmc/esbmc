@@ -1,0 +1,5 @@
+CORE
+main.c
+
+^  assertion r.v == 8$
+^VERIFICATION FAILED$
