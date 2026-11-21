@@ -830,12 +830,6 @@ public:
     const expr2tc &expr,
     const expr2tc &expr2,
     const expr2tc &templ_expr);
-  /** Equality of pointers @p side1 and @p side2, given @p same_repr, the
-   *  equality of their (object, offset) representations. */
-  smt_astt convert_ptr_eq(
-    const expr2tc &side1,
-    const expr2tc &side2,
-    smt_astt same_repr);
   /** Take the address of some kind of expression. This will abort if the given
    *  expression isn't based on some symbol in some way. (i.e., you can't take
    *  the address of an addition, but you can take the address of a member of

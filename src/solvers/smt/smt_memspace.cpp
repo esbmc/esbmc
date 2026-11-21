@@ -102,34 +102,6 @@ smt_astt smt_solver_baset::convert_ptr_cmp(
   return convert_ast(op);
 }
 
-/* A pointer made from an integer that lies in no object names INVALID, and
- * arithmetic on it keeps that object, so it can reach a real object's address
- * without naming it. Such a pointer equals any pointer with the same address,
- * as its integer conversion says (#10905); pointers into real objects keep
- * comparing by (object, offset). */
-smt_astt smt_solver_baset::convert_ptr_eq(
-  const expr2tc &side1,
-  const expr2tc &side2,
-  smt_astt same_repr)
-{
-  // NULL and known objects already compare correctly by representation.
-  if (
-    is_constant(side1) || is_constant(side2) ||
-    (!is_nil_expr(static_address_of(side1)) &&
-     !is_nil_expr(static_address_of(side2))))
-    return same_repr;
-
-  const type2tc addr_type = ptraddr_type2();
-  const expr2tc invalid =
-    constant_int2tc(addr_type, pointer_logic.back().get_invalid_object());
-  const expr2tc from_integer = or2tc(
-    equality2tc(pointer_object2tc(addr_type, side1), invalid),
-    equality2tc(pointer_object2tc(addr_type, side2), invalid));
-  const expr2tc same_address =
-    equality2tc(typecast2tc(addr_type, side1), typecast2tc(addr_type, side2));
-  return mk_or(same_repr, convert_ast(and2tc(from_integer, same_address)));
-}
-
 smt_astt smt_solver_baset::divide_by_element_size(
   const expr2tc &diff,
   const expr2tc &size)
