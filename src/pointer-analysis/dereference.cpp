@@ -3141,11 +3141,17 @@ void dereferencet::add_stitched_struct_candidate(
   std::list<std::pair<expr2tc, expr2tc>> &output)
 {
   const type2tc &subtype = to_array_type(value->type).subtype;
-  // An element's own type is read whole by the element path.
+  /* An element's own type is read whole by the element path, and in C a struct
+   * as aligned as the element starts where the member walk finds it, so only
+   * a less aligned one, such as a packed struct, can straddle two elements. A
+   * CBMC goto-binary need not carry `packed`, so there any other type can. */
+  const bool aggregate = is_structure_type(subtype);
   if (
-    !is_struct_type(type) ||
-    !(is_bv_type(subtype) || is_structure_type(subtype)) ||
-    base_type_eq(type, subtype, ns))
+    !is_struct_type(type) || !(is_bv_type(subtype) || aggregate) ||
+    (aggregate && base_type_eq(type, subtype, ns)) ||
+    (aggregate && !options.get_bool_option("producer-asserts-alignment") &&
+     ::alignment(migrate_type_back(type), ns) >=
+       ::alignment(migrate_type_back(subtype), ns)))
     return;
   expr2tc size = gen_long(offs->type, type_byte_size_bits(type));
   expr2tc fits = and2tc(
