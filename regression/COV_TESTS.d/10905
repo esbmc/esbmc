@@ -1,3 +1,5 @@
 regression/esbmc/github_10905
 regression/esbmc/github_10905_fail
 regression/esbmc/github_7855-cast
+regression/goto-transcoder/cbmc_kani_dangling_offset
+regression/goto-transcoder/cbmc_kani_dangling_offset_fail
