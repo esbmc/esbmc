@@ -32,7 +32,9 @@ Bitwuzla (§8.32), and so does its merge with master `30592f8a7`, which adds
 #10895's rebuild of a struct read over differently named members (§8.33).
 Its merge with master `6c3c2cf9d` keeps them too, and the whole `esbmc/`
 ctest label under Bitwuzla fails only the tests that fail on master
-(§8.35). The SV-COMP run is still open.**
+(§8.35). So does its merge with master `3194304fb`, which adds #10901's
+member lookup through a `byte_extract` (§8.36). The SV-COMP run is still
+open.**
 > The corpus is in `regression/field-sensitivity/`
 > with baselines, and the census has been run and reverted. Phase 1 adds
 > `--field-sensitive-ssa` (default off): symex gives each field of an
@@ -2322,4 +2324,62 @@ git), 4-core container; master built the same way in the same container.
   master.
 - ctest `esbmc-cpp/cpp/`: 1473/1481; the same 8 as §8.33 fail on the master
   build. ctest `python/` under the 10-minute cap: 1618 run, all passed.
+- Still open for the Phase 2 gate: an SV-COMP run.
+
+### 8.36 Phase 2: the stack merged with master `3194304fb`
+
+Measured on 2026-11-21 on `feat/field-sensitive-ssa-phase2-deref-size` at
+`23283b102`: master `3194304fb` merged into #10876 (`71466a59a`), then up
+the stack into #10886 (`80dc69d74`) and #10894. No conflicts. The merge
+brings #10901, which makes the value set of a `byte_extract` also look up
+the member paths at its offset. A split object never reaches a
+`byte_extract` (Invariant 3), so the new lookup sees only whole objects.
+RelWithDebInfo, gcc 13.3, LLVM 18, Z3 4.13.3, Bitwuzla 0.9.0 (CaDiCaL 2.1.2
+cloned with git), 4-core container.
+
+- ctest `field_sensitive_ssa|field-sensitivity|github_7797|github_5868|github_10888|github_10891|type_byte_size|cbmc_kani_nonnull_write|cbmc_kani_dyn_size_of_val`:
+  250/250.
+- Corpus, flag on, symex seconds, median of three, 8 / 2048 fields:
+
+  | Row | Z3 | Bitwuzla |
+  |---|---|---|
+  | `global_callee` | 0.223 / 0.239 (1.07x) | 0.234 / 0.244 (1.04x) |
+  | `plc_db` | 0.029 / 0.038 (1.31x) | 0.030 / 0.038 (1.26x) |
+  | `local_addr_once` | 0.019 / 0.021 (1.10x) | 0.021 / 0.022 (1.04x) |
+  | `local_writes` | 0.019 / 0.021 (1.10x) | 0.021 / 0.021 (1.00x) |
+  | `repro7521` | 0.909 / 1.233 (1.35x) | 0.900 / 1.351 (1.50x) |
+
+- Flag forced on against off, solver options replaced, 20 s per run: every
+  eighth C and C++ `CORE` directory, every fortieth Python one and the 4
+  tests #10901 added, under Bitwuzla (851 tests, 439 with an object split),
+  and every other one of those under Z3 (426, 225 split). No verdict
+  changes. Once timings, the split count and the ignored-flag warning are
+  removed from the output, 33 outputs differ under Bitwuzla and 18 under
+  Z3. 16 of the Bitwuzla ones differ only in witness UUIDs, Python
+  temporaries named after an address or a temporary file, operational-model
+  load times, or a `TS-CHECK` extraction time. The rest are the kinds §8.32
+  lists: a member write printed with its value instead of the whole struct
+  (`assoc_emplace_fail`, `github_9372_fail`,
+  `field_sensitive_ssa_print_member_fail`), added or dropped steps for a
+  whole write (`github_4281_value_propagates`,
+  `irep2_constructor_assign_struct_arg_fail`, `github_10888_fail`, whose
+  `c` is split while the cast-to `s` stays whole, `github_7597-*_fail`, and
+  the two new Kani `_fail` tests), fewer loop-unwinding lines
+  (`github_9416_fail`, `github_5868_*`), claims folded or solved in a
+  different order (`github_7965_fail`,
+  `github_8255_kstep_single_verdict_fail`,
+  `field_sensitive_ssa_opaque_field`), and other nondet inputs
+  (`nondet_list21`). Under Z3, `github_1087` (single-model
+  mode) reports 1 failed claim with the flag and 3 without it;
+  `cbmc_kani_nonnull_write_fail` picks other inputs. With
+  `--multi-property`, both give every claim the same status with and
+  without the flag under Z3 and Bitwuzla (`github_1087`: 5 of 17 failed;
+  `cbmc_kani_nonnull_write_fail`: 1 of 8).
+- CI on #10876's previous head `6fe7738aa`: "static llvm-22 DebugOpt"
+  failed one test, `regression/esbmc/cbrtl_model`, the long-double solve
+  that #10894's comments measured near its 120 s cap on other branches. The
+  stack touches neither the model nor its solve. The re-run was cancelled
+  when the merge was pushed. On this head, without the flag, the test gives
+  `VERIFICATION SUCCESSFUL` in 87.4 s, 85.7 s of it in Bitwuzla, against
+  the 120 s cap.
 - Still open for the Phase 2 gate: an SV-COMP run.
