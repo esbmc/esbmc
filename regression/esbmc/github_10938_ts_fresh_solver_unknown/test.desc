@@ -1,0 +1,5 @@
+CORE
+main.c
+--smtlib --output /dev/null --ts-bmc --ts-fresh-solver
+\A(?![\s\S]*VERIFICATION SUCCESSFUL)
+^ERROR: Solver error before the loop$
