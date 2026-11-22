@@ -206,8 +206,26 @@ smt_astt smt_solver_baset::overflow_arith(const expr2tc &expr)
   case expr2t::shl_id:
   case expr2t::mul_id:
   {
-    // Zero extend; multiply; Make a decision based on the top half.
     unsigned int sz = zero->type->get_width();
+
+    if (is_shl2t(overflow.operand) && !int_encoding)
+    {
+      // Shifting back recovers the operand exactly when no bit was lost, so
+      // the shifter stays at the operand's width (#9223).
+      expr2tc amount = side2;
+      if (side1->type->get_width() != side2->type->get_width())
+        amount = typecast2tc(side1->type, side2);
+
+      smt_astt value = convert_ast(side1);
+      smt_astt amount_ast = convert_ast(amount);
+      smt_astt shifted = mk_bvshl(value, amount_ast);
+      smt_astt shifted_back = is_signedbv_type(side1)
+                                ? mk_bvashr(shifted, amount_ast)
+                                : mk_bvlshr(shifted, amount_ast);
+      return mk_not(mk_eq(shifted_back, value));
+    }
+
+    // Zero extend; multiply; Make a decision based on the top half.
 
     smt_astt arg1_ext = convert_ast(side1);
     smt_astt arg2_ext;
