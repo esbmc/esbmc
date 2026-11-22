@@ -37,7 +37,8 @@ boolector_convt::boolector_convt(const namespacet &ns, const optionst &options)
   boolector_set_opt(btor, BTOR_OPT_AUTO_CLEANUP, 1);
   if (
     options.get_bool_option("smt-during-symex") ||
-    options.get_bool_option("smt-assumptions"))
+    options.get_bool_option("smt-assumptions") ||
+    options.get_bool_option("all-witnesses"))
     boolector_set_opt(btor, BTOR_OPT_INCREMENTAL, 1);
   boolector_set_abort(error_handler);
 }
