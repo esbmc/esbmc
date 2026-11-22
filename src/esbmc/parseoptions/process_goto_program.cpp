@@ -610,7 +610,7 @@ bool esbmc_parseoptionst::process_goto_program(
     {
       log_status("Enable correctness witness validation 2.0");
       remove_no_op(goto_functions);
-      goto_loop_invariant_combined(goto_functions);
+      goto_loop_invariant_combined(goto_functions, context);
     }
 
     // goto_k_induction returns true, and logs why, when the inductive step
@@ -627,7 +627,7 @@ bool esbmc_parseoptionst::process_goto_program(
       // Combined mode: Branch 1 (invariant inductivity check) +
       // ASSUME(INV) injected at end of loop body + k-induction (Branch 2).
       remove_no_op(goto_functions);
-      goto_loop_invariant_combined(goto_functions);
+      goto_loop_invariant_combined(goto_functions, context);
       disable_is_if_unsound(
         goto_k_induction(goto_functions, &context, checks_past_violation));
     }
@@ -695,6 +695,15 @@ bool esbmc_parseoptionst::process_goto_program(
                               ranking_transition_invariants)
                               .is_true();
       options.set_option("termination-ranking-proved", ranking_proved);
+
+      // A copy taken before the havoc, which runs the loops as written.
+      if (
+        !ranking_proved && !non_term_proved && !spawns_threads(goto_functions))
+      {
+        recurrent_state_program = goto_functions;
+        recurrent_state_loops =
+          goto_recurrent_state(recurrent_state_program, context);
+      }
 
       // Only run the marker/havoc transform when the ranking check did
       // NOT settle it — otherwise the verdict loop short-circuits on the

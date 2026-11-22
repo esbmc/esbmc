@@ -18,27 +18,33 @@ them too. For verification in CI rather than at the keyboard, see
 ## Visual Studio Code
 
 [vscode-esbmc](https://github.com/esbmc/vscode-esbmc) verifies the file you are
-editing without leaving the editor. It contributes four command-palette entries:
+editing without leaving the editor, for C, C++, Python and Solidity files. It
+places each violated property on its line in the Problems panel (read from
+ESBMC's SARIF report), shows the verdict in the status bar and the
+counterexample steps in an **ESBMC Counterexample** view, and keeps ESBMC's full
+output in an output channel. A CodeLens above each function verifies that
+function alone. Its command-palette entries are:
 
-- `ESBMC: Verify file` — run ESBMC on the active C, C++, Python, Solidity or
-  Jimple file and stream the output to the integrated terminal;
-- `ESBMC: Verify file with Local AI` — run ESBMC on the current file and, when
-  a property fails, ask a local [Ollama](https://ollama.com) model to explain
-  the counterexample in a separate output channel. It ignores the `esbmc.*`
-  settings and needs Ollama serving `llama3.1:8b`;
+- `ESBMC: Verify file` — verify the active file with flags built from the
+  `esbmc.*` settings; `ESBMC: Show current flags` prints the command line those
+  settings produce, and `ESBMC: Show output` opens the output channel;
+- `ESBMC: Verify file with Local AI` — verify, then ask a local
+  [Ollama](https://ollama.com) model (by default `llama3.1:8b`) to explain the
+  counterexample and suggest a fix;
 - `ESBMC: Install latest version` and `ESBMC: Update to latest version` —
-  download and unpack the latest release into `$HOME/bin`, so you do not need
-  ESBMC on your `PATH` beforehand.
+  download the release build for Linux, macOS or Windows into the extension's
+  own storage, so you do not need ESBMC on your `PATH` beforehand (an `esbmc`
+  already on the `PATH` is used by default);
+- `ESBMC: Open example program` — open the bundled example.
 
-Note that it requires VS Code 1.68 or later. The install and update commands are Linux
-only; elsewhere, install ESBMC first via [Setup](/docs/setup).
+Note that it requires VS Code 1.68 or later. The extension also ships an MCP
+server with a `verify` tool, so AI coding agents can run ESBMC through it; the
+repository README shows the configuration.
 
 The extension is not on the VS Code Marketplace yet, so build the `.vsix` from
 source and install it from the Extensions view; the repository README has the
 walkthrough. Sideloading this way does not pull in the extension's dependency
 on `mindaro-dev.file-downloader`, which the install and update commands need.
-Publishing to the Marketplace and Open VSX is tracked in
-[vscode-esbmc#15](https://github.com/esbmc/vscode-esbmc/issues/15).
 
 ## Web interface
 

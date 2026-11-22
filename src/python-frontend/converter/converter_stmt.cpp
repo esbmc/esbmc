@@ -8723,6 +8723,8 @@ void python_converter::get_var_assign(
     {
       has_cached_any_subscript_rhs_ = false;
       is_converting_rhs = true;
+      const nlohmann::json *saved_assigned_value =
+        std::exchange(assigned_value_, &effective_ast_node["value"]);
 
       if (lhs_symbol)
         rhs = get_rhs_with_dict_resolution(
@@ -8730,6 +8732,7 @@ void python_converter::get_var_assign(
       else
         rhs = get_expr(effective_ast_node["value"]);
 
+      assigned_value_ = saved_assigned_value;
       is_converting_rhs = false;
     }
 

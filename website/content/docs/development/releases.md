@@ -25,8 +25,9 @@ git switch -c v8.1
 ### Update the Project Version
 
 Update the project version by modifying `/CMakeLists.txt`. Specifically the
-macros `ESBMC_VERSION_MAJOR`, `ESBMC_VERSION_MINOR`, `ESBMC_VERSION_PATCH` to
-include the desired version number.
+`VERSION` argument of the `project(ESBMC ...)` call (e.g. `VERSION 8.1.0`); CMake
+derives `ESBMC_VERSION_MAJOR`, `ESBMC_VERSION_MINOR` and `ESBMC_VERSION_PATCH`
+from it.
 
 ### Commit and Push to the Branch
 
@@ -93,8 +94,8 @@ release the workflow created for your tag.
 1. Confirm the attached assets are present: `esbmc-linux.zip`,
    `esbmc-linux-armv8.zip`, `esbmc-windows.zip`, `esbmc-macos.zip` and
    `esbmc.info`.
-2. Adjust the title if needed — the draft is created as `ESBMC v8.1`; past
-   releases use "Release 8.1" (note the missing v).
+2. Adjust the title if needed — the draft is created as `ESBMC v8.1`, the
+   form releases have used since v8.4 (v8.3 and earlier used "Release 8.3").
 3. Replace the placeholder description with release notes describing the
    changes included in the new version.
 4. Publish the release.

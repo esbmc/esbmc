@@ -1,0 +1,4 @@
+CORE
+cbmc_kani_unaligned_store.goto
+--binary --function _RNvCs32SyT0wB6MK_15unaligned_store7harness --ignore-property-class reachability_check --ignore-property-class cover
+^VERIFICATION SUCCESSFUL$

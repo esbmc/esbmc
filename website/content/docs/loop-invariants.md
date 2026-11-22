@@ -88,6 +88,12 @@ The last row holds when the property follows from the invariant alone. If it
 also needs the negated loop condition, the inductive step cannot close and
 k-induction falls back to unrolling — see [Choosing a Mode](#choosing-a-mode).
 
+Branch 1 runs a copy of the loop body after the havoc, so a claim in the body
+appears twice. A counterexample to the Branch 1 copy that runs through the
+havoc is reported `UNKNOWN` (`loop invariant too weak`), while the same claim
+on the k-induction branch is still reported `FAILED` when a real execution
+violates it ([#10652](https://github.com/esbmc/esbmc/pull/10652)).
+
 ### `--loop-invariant-check` — Havoc Abstraction Mode
 
 Applies the classic Hoare rule, replacing the annotated loop with:
@@ -129,16 +135,19 @@ Three caveats:
   Strengthen the invariant until it entails the property.
 
   The downgrade is not unconditional. Before reporting `UNKNOWN`, ESBMC asks the
-  solver whether the claim can hold at all on a feasible abstract path. If that
-  probe is UNSAT, *no* abstract state satisfies the claim; the concrete states
-  are a subset of the abstract ones, so the violation is real and the claim is
-  reported `FAILED`. An invariant strong enough to pin the counterexample —
-  `sn == (i - 1) * a` over an accumulator loop — therefore refutes a false
-  post-loop assertion in this mode, which it could not do before
+  solver whether some feasible abstract state either satisfies the claim or
+  does not reach it. If that probe is UNSAT, *every* abstract state reaches the
+  claim and violates it; the concrete states are a subset of the abstract ones,
+  so the violation is real and the claim is reported `FAILED`. An invariant
+  strong enough to pin the counterexample — `sn == (i - 1) * a` over an
+  accumulator loop — therefore refutes a false post-loop assertion in this
+  mode, which it could not do before
   ([#7626](https://github.com/esbmc/esbmc/pull/7626)). What is downgraded is the
-  case the probe leaves open: the abstraction admits the claim holding *and*
-  admits it failing, so the counterexample is the abstraction's and not the
-  program's.
+  case the probe leaves open: the abstraction admits a state that violates the
+  claim *and* one that satisfies it or skips it, so the counterexample is the
+  abstraction's and not the program's. A guarded claim, such as an
+  `assert(0)` under an `if` the invariant does not force, is therefore
+  `UNKNOWN` ([#10654](https://github.com/esbmc/esbmc/pull/10654)).
 
   What reports `FAILED` regardless of the probe is a claim *ahead* of every
   havoc, the invariant's own inductive step and its assigns-compliance check,
@@ -269,11 +278,6 @@ an undecided claim in `--loop-invariant-check` mode.
 > either strengthen the invariant or, when the property follows from the
 > invariant alone, switch to `--loop-invariant`.
 
-**`--k-induction-parallel` still reports a downgraded claim as `FAILED`.** The
-downgrade is recorded in the parallel driver but the verdict does not follow it
-back across the fork
-([#7516](https://github.com/esbmc/esbmc/issues/7516)).
-
 ## Mode Summary
 
 |                          | Unrolls the loop | Exit reasoning | Weak invariant           |
@@ -396,17 +400,21 @@ Variables not listed in `__ESBMC_loop_assigns` are guaranteed to be untouched �
 and ESBMC checks this.
 
 ```c
+int global[8];
+
 int main(void) {
     int i = 0;
-    int j = 42;
+    global[5] = 9;
 
-    __ESBMC_loop_invariant(i >= 0 && i <= 10);
-    __ESBMC_loop_assigns(i);
-    while (i < 10)
+    __ESBMC_loop_invariant(i >= 0 && i <= 4);
+    __ESBMC_loop_assigns(i, global[3]);
+    while (i < 4) {
+        global[3] = i;
         i++;
+    }
 
-    /* j was not listed in loop_assigns — ESBMC can prove it is still 42 */
-    __ESBMC_assert(j == 42, "j unchanged");
+    /* global[5] is not in loop_assigns: ESBMC can prove it is still 9 */
+    __ESBMC_assert(global[5] == 9, "global[5] unchanged");
     return 0;
 }
 ```
@@ -417,11 +425,19 @@ Run with:
 esbmc file.c --loop-invariant-check --loop-frame-rule
 ```
 
-Without `--loop-frame-rule`, the havoc step makes every loop-modified variable
-nondeterministic, so the assertion on `j` would fail despite `j` never being
-touched. With the flag, ESBMC snapshots all variables not in
-`__ESBMC_loop_assigns` before the havoc and assumes they are unchanged
-afterward.
+Without `--loop-frame-rule`, the havoc covers the whole of `global`, because
+the loop writes into it, so the assertion on `global[5]` is reported
+`UNKNOWN`. With the flag, ESBMC snapshots what `__ESBMC_loop_assigns` does not
+list before the havoc and assumes it is unchanged afterward, so the run reports
+`VERIFICATION SUCCESSFUL`. The flag also checks the clause: a body that writes
+a target the clause does not list, such as `global[6]` here, fails with
+`assigns compliance: ... not in assigns clause`.
+
+For an array of more than 256 elements, the element-wise frame is not
+generated: the loop rule then says nothing about the array's other elements,
+so an assertion about one of them cannot be proved. The compliance check still
+applies, against the array as it is after the havoc
+([#10745](https://github.com/esbmc/esbmc/pull/10745)).
 
 Both macros must be placed **before the loop**, as statements ending with `;`.
 `__ESBMC_loop_assigns` supports up to five targets; use `__ESBMC_loop_assigns()`
@@ -429,3 +445,21 @@ with no arguments to declare that the loop modifies nothing.
 
 > `--loop-frame-rule` requires `--loop-invariant-check`. It does not work with
 > `--loop-invariant` (the combined k-induction mode).
+
+## Invariants in correctness witnesses
+
+When a run proves an `__ESBMC_loop_invariant`, discharging both its base case
+and its inductive step, the YAML correctness witness written with
+`--witness-output-yaml` records it as a `loop_invariant` entry at the loop head
+([#10874](https://github.com/esbmc/esbmc/pull/10874)):
+
+```bash
+esbmc file.c --loop-invariant-check --witness-output-yaml witness.yml
+```
+
+An invariant is left out when either claim was not checked, when the run is
+bounded (`--depth`, `--context-bound`, `--partial-loops` or no unwinding
+assertions), starts outside `main`, uses `--ir`, or verifies a language other
+than C. It is also left out when it is not plain C, that is, integer and Boolean
+operators over program variables (floats, pointers and quantifiers are not), or
+when it names a variable that another declaration shadows at the loop head.

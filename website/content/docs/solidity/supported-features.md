@@ -140,7 +140,13 @@ You can write properties inline in any contract function:
 | `assert(cond)` | Property to verify; failure produces a counterexample |
 | `__ESBMC_assume(cond)` | Constrain the symbolic state; paths violating `cond` are pruned |
 | `__VERIFIER_assume(cond)` | Alias for `__ESBMC_assume` |
-| `__VERIFIER_assert(cond)` | Alias for `assert` |
-| `__VERIFIER_nondet_uint()` / `_int()` / `_bool()` / `_address()` / … | Inject a non-deterministic value of the given type |
+| `__VERIFIER_assert(cond)` / `__ESBMC_assert(cond)` | Alias for `assert` |
+
+solc rejects calls to undeclared functions, so declare each `__ESBMC_*` /
+`__VERIFIER_*` primitive you use as an empty stub in the contract, e.g.
+`function __ESBMC_assume(bool) internal pure {}`; the frontend replaces the call
+by its name (see `regression/esbmc-solidity/transfer_revert_2`). There is no
+`__VERIFIER_nondet_*` primitive: non-deterministic inputs come from the
+arguments of the public functions the dispatcher calls.
 
 The frontend automatically wraps every public/external function with a non-deterministic dispatcher loop, so contract state evolves across an arbitrary number of calls. Use `--focus-function <name>` to restrict the loop to a specific function.

@@ -180,6 +180,11 @@ public:
     // user-visible text rather than an interface.
     bool loop_invariant_havoc;
 
+    // Set by goto_k_induction on the back edge of a loop whose havoc covers
+    // every state the loop reaches. The inductive step then assumes that
+    // loop exits at the unwinding bound, despite --partial-loops (#1320).
+    bool exits_at_bound;
+
     // Set by convert_switch: decimal strings of all case constants whose
     // target is this GOTO, used by witness waypoint matching.  Contains more
     // than one entry when multiple case labels fall through to the same body.
@@ -203,6 +208,7 @@ public:
       inductive_assertion = false;
       flipped_guard = false;
       loop_invariant_havoc = false;
+      exits_at_bound = false;
     }
 
     inline void make_goto()
@@ -383,6 +389,7 @@ public:
         inductive_assertion(false),
         flipped_guard(false),
         loop_invariant_havoc(false),
+        exits_at_bound(false),
         location_number(0),
         loop_number(unsigned(0)),
         pragma_unroll_count(0),
@@ -398,6 +405,7 @@ public:
         inductive_assertion(false),
         flipped_guard(false),
         loop_invariant_havoc(false),
+        exits_at_bound(false),
         location_number(0),
         loop_number(unsigned(0)),
         pragma_unroll_count(0),
@@ -425,6 +433,7 @@ public:
         inductive_assertion(other.inductive_assertion),
         flipped_guard(other.flipped_guard),
         loop_invariant_havoc(other.loop_invariant_havoc),
+        exits_at_bound(other.exits_at_bound),
         switch_case_ids(other.switch_case_ids),
         location_number(other.location_number),
         loop_number(other.loop_number),
@@ -457,6 +466,7 @@ public:
         inductive_assertion(other.inductive_assertion),
         flipped_guard(other.flipped_guard),
         loop_invariant_havoc(other.loop_invariant_havoc),
+        exits_at_bound(other.exits_at_bound),
         switch_case_ids(std::move(other.switch_case_ids)),
         location_number(other.location_number),
         loop_number(other.loop_number),
@@ -496,6 +506,7 @@ public:
       std::swap(inductive_assertion, instruction.inductive_assertion);
       std::swap(flipped_guard, instruction.flipped_guard);
       std::swap(loop_invariant_havoc, instruction.loop_invariant_havoc);
+      std::swap(exits_at_bound, instruction.exits_at_bound);
       instruction.switch_case_ids.swap(switch_case_ids);
       // Swap location_number too — same copy-assign-through-swap
       // reasoning as for labels.

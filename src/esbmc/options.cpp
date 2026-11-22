@@ -169,6 +169,13 @@ const struct group_opt_templ all_cmd_options[] = {
        "class"),
      "Skip the assertions a CBMC goto-binary tags with this property class "
      "(repeatable), e.g. Kani's reachability_check and cover"},
+    {"report-property-class",
+     boost::program_options::value<std::vector<std::string>>()->value_name(
+       "class"),
+     "Check the assertions a CBMC goto-binary tags with this property class "
+     "(reachability_check or cover, repeatable) and report them apart from "
+     "the verdict, as reachable or satisfiable or not. Implies "
+     "--multi-property"},
     {"dont-care-about-missing-extensions",
      NULL,
      "Don't crash on unsupported extensions"},
@@ -195,8 +202,9 @@ const struct group_opt_templ all_cmd_options[] = {
      "(int/pointer conversions), treat __builtin_unreachable as a no-op, emit "
      "physical line numbers for witnesses, and avoid malloc/free in the "
      "fopen/fclose models. A program that can start a thread is verified with "
-     "incremental BMC over schedules of at most three context switches, "
-     "without interval analysis or --goto-unwind. Set automatically by the "
+     "incremental BMC, without interval analysis or --goto-unwind: schedules "
+     "of at most three context switches are searched for a violation first, "
+     "then the run continues with no context bound. Set automatically by the "
      "SV-COMP wrapper."},
     /* Read by clang_c_language.cpp, which is built unconditionally, so these
      * must not sit in a frontend-gated group (#7345). */
@@ -229,7 +237,8 @@ const struct group_opt_templ all_cmd_options[] = {
    {
      {"python",
       boost::program_options::value<std::string>()->value_name("path"),
-      "Python interpreter binary to use (searched in $PATH; default: python)"},
+      "Python interpreter binary to use (searched in $PATH; default: python3, "
+      "then python)"},
      {"override-return-annotation",
       NULL,
       "Override return annotation with inferred type"},
@@ -335,10 +344,12 @@ const struct group_opt_templ all_cmd_options[] = {
      NULL,
      "Force to verify every function, even if it's an unreachable "
      "internal/private function"},
-    {"unbound", NULL, "Model external function calls as arbitrary behavior"},
+    {"unbound",
+     NULL,
+     "Model external function calls as arbitrary behavior (default)"},
     {"bound",
      NULL,
-     "Model inter-contract function calls within a bounded system (default)"},
+     "Model inter-contract function calls within a bounded system"},
     {"reentry-check",
      NULL,
      "Detect reentrancy behavior during contract execution"},

@@ -1,0 +1,5 @@
+CORE
+main.c
+--loop-invariant-check --witness-output-yaml -
+^VERIFICATION SUCCESSFUL$
+value: "\(signed int\)c >= 0 && i <= 3 && \(signed int\)c \+ 1 > 0"$

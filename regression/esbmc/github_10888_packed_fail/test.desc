@@ -1,0 +1,6 @@
+CORE
+main.c
+--little-endian --multi-property
+^  FAILED .* assertion v.p == 1 && v.q == 0x0201 && v.r == 4$
+^\*\* 1 of [0-9]+ properties failed
+^VERIFICATION FAILED$

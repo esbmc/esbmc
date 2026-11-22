@@ -1,0 +1,6 @@
+CORE
+main.c
+--function f --enforce-contract f --loop-invariant-check --multi-property
+^VERIFICATION FAILED$
+PASSED .*loop invariant base case
+FAILED .*loop invariant inductive step

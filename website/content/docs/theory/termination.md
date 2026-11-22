@@ -42,6 +42,13 @@ The two k-induction obligations then read directly as termination verdicts:
 
 Anything still open at the maximum *k* is reported as `UNKNOWN`.
 
+The inductive step assumes that each loop of the user's program is entered.
+Loops inside ESBMC's library models, such as the byte loop behind `memcpy` and
+`memset`, are exempt: their exits count only when the loop is entered, so a
+call that runs such a loop zero times, like `memset(NULL, 0, 0)`, is not
+reported as non-termination
+([#10863](https://github.com/esbmc/esbmc/pull/10863)).
+
 ## The three-pass pipeline {#pipeline}
 
 The marker reduction above is the fallback. Two cheaper structural analyses run

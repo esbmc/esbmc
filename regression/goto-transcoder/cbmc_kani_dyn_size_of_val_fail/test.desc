@@ -1,0 +1,5 @@
+CORE
+cbmc_kani_dyn_size_of_val_fail.goto
+--binary --function _RNvCsdXZNkcsBg8N_13dyn_size_fail7harness --ignore-property-class reachability_check --ignore-property-class cover
+^  \[KANI_CHECK_ID_[^]]*\] assertion failed: std::mem::size_of_val\(d\) == 8$
+^VERIFICATION FAILED$

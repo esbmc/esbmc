@@ -5,7 +5,7 @@ title: HTML Report Generation
 ESBMC can generate interactive HTML reports that visualize counterexample traces, making it easier to understand and debug verification failures.
 
 {{< callout type="info" >}}
-ESBMC HTML Reports feature only works with C and C++.
+HTML reports work for C, C++ and Python programs.
 {{< /callout >}}
 
 ## Usage
@@ -16,7 +16,7 @@ To generate an HTML report when verification fails, use the `--generate-html-rep
 esbmc example.c --generate-html-report
 ```
 
-When verification fails, and a counterexample is found, ESBMC will create an HTML file named `report-<n>.html` in the current directory.
+When verification fails, and a counterexample is found, ESBMC will create an HTML file named `report-1.html` in the current directory. With `--multi-property`, it writes one report per violated property, named after its witness, such as `report-base-k0-0.html`.
 
 ### Example Output
 
@@ -130,5 +130,5 @@ esbmc main.py --incremental-bmc --generate-html-report
 ## Technical Notes
 
 - Reports are self-contained HTML files with no external dependencies
-- Multiple reports can be generated in the same directory (numbered sequentially)
+- A later run overwrites a report of the same name in the same directory
 - View ESBMC command options via "Show analyzer invocation" in the report

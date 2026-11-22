@@ -1731,6 +1731,13 @@ protected:
     std::list<expr2tc> &out);
   /** Symbolic implementation of scanf and fscanf */
   void symex_input(const code_function_call2t &expr);
+  /** Havoc the bytes one scanf conversion writes through `operand`;
+   *  `store_bytes` is 0 for %s and %[. */
+  void symex_scanf_store(
+    const dereference_callbackt::internal_item &item,
+    const expr2tc &operand,
+    uint64_t store_bytes,
+    const guard2tc &stored);
   /** Symbolic implementation of va_arg */
   void symex_va_arg(
     const expr2tc &lhs,
@@ -2028,6 +2035,23 @@ protected:
   /** Fail an intrinsic's write to @p object, made when @p cond holds, if the
    *  object is read-only, as valid_check does for a WRITE-mode dereference. */
   void check_read_only_write(const expr2tc &object, const expr2tc &cond);
+
+  /** An object an intrinsic writes, and the condition under which it does. */
+  struct write_targett
+  {
+    expr2tc object;
+    guard2tc guard;
+  };
+
+  /** Append internal_deref_items to @p targets, each guarded by @p base and
+   *  its pointer guard, renamed now: a later write may change the pointer. */
+  void collect_write_targets(
+    const guard2tc &base,
+    std::vector<write_targett> &targets);
+
+  /** Assign each target a nondet value; a string literal is reported by
+   *  check_read_only_write and left unchanged. */
+  void write_nondet_targets(const std::vector<write_targett> &targets);
 
   /** Analyze the shared varables in a function call, this is because an
    * argumemt may be renamed to constant bool in symex_function_call_code(),

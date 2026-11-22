@@ -1781,6 +1781,7 @@ void dereferencet::construct_from_array(
   bool is_correctly_aligned = false;
   // Additional complexity occurs if it's aligned but overflows boundaries
   bool overflows_boundaries;
+  bool whole_element = false;
   if (is_constant_int2t(offset))
   {
     // Constant offset is aligned with array boundaries?
@@ -1815,7 +1816,7 @@ void dereferencet::construct_from_array(
      * Integer subtypes keep the original condition: their stitching is exact,
      * and weakening it would stop over-approximated alignments reaching
      * check_alignment (regression/esbmc/align-deref_fail). */
-    const bool whole_element =
+    whole_element =
       deref_size == subtype_size &&
       (is_floatbv_type(arr_subtype) || is_pointer_type(arr_subtype));
     overflows_boundaries =
@@ -1823,9 +1824,11 @@ void dereferencet::construct_from_array(
                     : (!is_correctly_aligned || deref_size > subtype_size);
   }
 
-  // No alignment guarantee: assert that it's correct.
-  if (!is_correctly_aligned)
-    check_alignment(deref_size, std::move(mod), guard, value);
+  // No alignment guarantee: assert that it's correct. A packed access type has
+  // alignment 1, whether it is the member being read or the whole struct.
+  const bool packed_type = is_structure_type(type) && struct_union_packed(type);
+  if (!is_correctly_aligned && !mode.unaligned && !packed_type)
+    check_alignment(deref_size, std::move(mod), guard, value, whole_element);
 
   if (!overflows_boundaries)
   {
@@ -2426,7 +2429,9 @@ void dereferencet::construct_from_dyn_struct_offset(
  * packed, of the access type's, taken modulo the container's size, since the
  * container may be an array element (#10088). Not even under --no-align-check:
  * a byte step there gives every access through an integer-derived pointer an
- * arm per byte, so a misaligned spanning access is still dropped. */
+ * arm per byte, so a misaligned spanning access is still dropped. A CBMC
+ * goto-binary's producer asserts the alignment it needs, so there the type's
+ * does not apply (#10891). */
 BigInt dereferencet::spanning_step(
   const type2tc &type,
   const type2tc &container,
@@ -2434,7 +2439,7 @@ BigInt dereferencet::spanning_step(
   modet mode)
 {
   uint64_t step = std::max<uint64_t>(alignment, config.ansi_c.char_width);
-  if (!mode.unaligned)
+  if (!mode.unaligned && !options.get_bool_option("producer-asserts-alignment"))
   {
     const BigInt type_align = std::min(
       ::alignment(migrate_type_back(type), ns),
@@ -2526,6 +2531,14 @@ expr2tc dereferencet::byte_of_struct(const expr2tc &value, const BigInt &pos)
   return expr2tc();
 }
 
+// A union's arms overlay one another, whichever last stored it (#10891).
+expr2tc dereferencet::byte_of_union(const expr2tc &value, const BigInt &pos)
+{
+  const unsigned int width = config.ansi_c.char_width;
+  assert(pos % width == 0);
+  return extract_bytes(value, 1, gen_ulong(pos / width))[0];
+}
+
 expr2tc dereferencet::bit_field_byte(const expr2tc &value, const BigInt &pos)
 {
   const struct_type2t &struct_type = to_struct_type(value->type);
@@ -2579,8 +2592,9 @@ expr2tc dereferencet::stitch_across_elements(
   const BigInt elem_bits = type_byte_size_bits(elem_type, &ns);
   const BigInt access_bits = type_byte_size_bits(type, &ns);
   if (
-    !is_struct_type(elem_type) || !is_scalar_type(type) ||
-    start + access_bits <= elem_bits || options.get_bool_option("int-encoding"))
+    !(is_struct_type(elem_type) || is_union_type(elem_type)) ||
+    !is_scalar_type(type) || start + access_bits <= elem_bits ||
+    options.get_bool_option("int-encoding"))
     return expr2tc();
 
   const unsigned int width = config.ansi_c.char_width;
@@ -2593,9 +2607,11 @@ expr2tc dereferencet::stitch_across_elements(
       constant_int2tc(index->type, (pos / elem_bits).to_uint64()));
     simplify(elem_index);
     const expr2tc elem = index2tc(elem_type, array, elem_index);
-    expr2tc byte = byte_of_struct(elem, pos % elem_bits);
+    const BigInt elem_pos = pos % elem_bits;
+    expr2tc byte = is_union_type(elem) ? byte_of_union(elem, elem_pos)
+                                       : byte_of_struct(elem, elem_pos);
     if (is_nil_expr(byte))
-      byte = bit_field_byte(elem, pos % elem_bits);
+      byte = bit_field_byte(elem, elem_pos);
     bytes.push_back(byte);
   }
   return bitcast2tc(type, stitch_together_from_byte_array(bytes.size(), bytes));
@@ -2709,6 +2725,35 @@ void dereferencet::construct_from_multidir_array(
   construct_from_array(value, mod, type, guard, mode, alignment);
 }
 
+// Whether a struct of type read at offset_bits into a constant-size array
+// extends past the element it starts in.
+static bool struct_spans_elements(
+  const type2tc &array_type,
+  const BigInt &offset_bits,
+  const type2tc &type)
+{
+  if (
+    !is_array_type(array_type) || !is_struct_type(type) ||
+    is_nil_expr(to_array_type(array_type).array_size) ||
+    !is_constant_int2t(to_array_type(array_type).array_size))
+    return false;
+  const BigInt elem_bits =
+    type_byte_size_bits(to_array_type(array_type).subtype);
+  return elem_bits > 0 &&
+         offset_bits % elem_bits + type_byte_size_bits(type) > elem_bits;
+}
+
+// Whether a struct of type read at offset_bits into a member of member_bits
+// extends past that member.
+static bool struct_wider_than_member(
+  const type2tc &type,
+  const BigInt &offset_bits,
+  const BigInt &member_bits)
+{
+  return is_struct_type(type) &&
+         offset_bits + type_byte_size_bits(type) > member_bits;
+}
+
 void dereferencet::construct_struct_ref_from_const_offset_array(
   expr2tc &value,
   const expr2tc &offset,
@@ -2731,6 +2776,18 @@ void dereferencet::construct_struct_ref_from_const_offset_array(
     is_vector_type(value->type) ||
     !is_byte_type(get_base_array_subtype(value->type)))
   {
+    // A struct spanning several elements, e.g. struct { S a, b; } read from
+    // S arr[2], is rebuilt member by member (#10888).
+    if (struct_spans_elements(value->type, intref.value, type))
+    {
+      expr2tc rebuilt =
+        construct_struct_from_members(value, intref.value, type, guard, mode);
+      if (!is_nil_expr(rebuilt))
+      {
+        value = rebuilt;
+        return;
+      }
+    }
     construct_from_array(value, offset, type, guard, mode, alignment);
     return;
   }
@@ -2835,7 +2892,11 @@ void dereferencet::construct_struct_ref_from_const_offset(
                         ? (intref.value >= offs && intref.value < (offs + size))
                         : (intref.value == offs);
 
-      if (!is_scalar_type(it) && in_range)
+      // A struct wider than the member it starts in is not read from that
+      // member alone; it is rebuilt member by member below (#10888).
+      if (
+        !is_scalar_type(it) && in_range &&
+        !struct_wider_than_member(type, intref.value - offs, size))
       {
         if (size == 0)
         {
@@ -2863,6 +2924,16 @@ void dereferencet::construct_struct_ref_from_const_offset(
       i++;
     }
 
+    // A struct laid over scalar members whose names or types differ from its
+    // own, e.g. struct { char a, b; } read as struct { char c, d; } (#10888).
+    expr2tc rebuilt =
+      construct_struct_from_members(value, intref.value, type, guard, mode);
+    if (!is_nil_expr(rebuilt))
+    {
+      value = rebuilt;
+      return;
+    }
+
     // Fell out of that loop. Either this offset is out of range, or lies in
     // padding.
     dereference_failure(
@@ -2873,6 +2944,45 @@ void dereferencet::construct_struct_ref_from_const_offset(
     "Unexpectedly {} type'd argument to construct_struct_ref",
     get_type_id(value->type));
   abort();
+}
+
+expr2tc dereferencet::construct_struct_from_members(
+  const expr2tc &value,
+  const BigInt &offset_bits,
+  const type2tc &type,
+  const guard2tc &guard,
+  modet mode)
+{
+  if (
+    !is_struct_type(type) ||
+    offset_bits + type_byte_size_bits(type) > type_byte_size_bits(value->type))
+    return expr2tc();
+
+  const struct_type2t &structtype = to_struct_type(type);
+  std::vector<expr2tc> fields;
+  for (size_t i = 0; i < structtype.members.size(); i++)
+  {
+    const type2tc &member_type = structtype.members[i];
+    const BigInt member_offs =
+      offset_bits + member_offset_bits(type, structtype.member_names[i], &ns);
+    expr2tc field = value;
+    // A scalar that no source field matches exactly may straddle source
+    // scalars (a packed target), so it is taken from the bytes; a matching
+    // field is read directly, which keeps a pointer's object.
+    if (
+      is_scalar_type(member_type) &&
+      !has_field_at(value->type, member_offs, member_type, ns) &&
+      occupies_whole_bytes(member_offs, type_byte_size_bits(member_type)) &&
+      !options.get_bool_option("int-encoding"))
+      construct_from_bytes(field, gen_ulong(member_offs), member_type);
+    else
+      build_reference_rec(
+        field, gen_ulong(member_offs), member_type, guard, mode);
+    if (is_nil_expr(field))
+      return expr2tc();
+    fields.push_back(field);
+  }
+  return constant_struct2tc(type, fields);
 }
 
 void dereferencet::construct_struct_ref_from_dyn_offset(
@@ -2978,6 +3088,96 @@ void dereferencet::construct_struct_ref_from_dyn_offs_members(
   }
 }
 
+static expr2tc at_offset_zero(const expr2tc &offs, const expr2tc &accuml_guard)
+{
+  return and2tc(accuml_guard, equality2tc(offs, gen_long(offs->type, 0)));
+}
+
+/// An element of a scalar array is a legal struct/union access at offset 0
+/// when the sizes match, as in build_reference_rec's constant-offset scalar
+/// case (#10891). A pointer is left out: the solver cannot bitcast it to a
+/// struct.
+static void add_scalar_element_candidate(
+  const expr2tc &value,
+  const expr2tc &offs,
+  const type2tc &type,
+  const expr2tc &accuml_guard,
+  std::list<std::pair<expr2tc, expr2tc>> &output)
+{
+  if (
+    !is_scalar_type(value->type) || is_pointer_type(value->type) ||
+    value->type->get_width() != type->get_width())
+    return;
+  expr2tc offs_is_zero = at_offset_zero(offs, accuml_guard);
+  output.emplace_back(offs_is_zero, bitcast2tc(type, value));
+}
+
+void dereferencet::add_rebuilt_struct_candidate(
+  const expr2tc &value,
+  const expr2tc &offs,
+  const type2tc &type,
+  const guard2tc &guard,
+  const expr2tc &accuml_guard,
+  modet mode,
+  std::list<std::pair<expr2tc, expr2tc>> &output)
+{
+  expr2tc offs_is_zero = at_offset_zero(offs, accuml_guard);
+  guard2tc tmp_guard = guard;
+  tmp_guard.add(offs_is_zero);
+  expr2tc rebuilt =
+    construct_struct_from_members(value, BigInt(0), type, tmp_guard, mode);
+  if (!is_nil_expr(rebuilt))
+    output.emplace_back(offs_is_zero, rebuilt);
+}
+
+void dereferencet::add_stitched_struct_candidate(
+  const expr2tc &value,
+  const expr2tc &offs,
+  const expr2tc &arr_size_in_bits,
+  const type2tc &type,
+  const guard2tc &guard,
+  const expr2tc &accuml_guard,
+  modet mode,
+  std::list<std::pair<expr2tc, expr2tc>> &output)
+{
+  const type2tc &subtype = to_array_type(value->type).subtype;
+  /* An element's own type is read whole by the element path, and in C a struct
+   * as aligned as the element starts where the member walk finds it, so only
+   * a less aligned one, such as a packed struct, can straddle two elements. A
+   * CBMC goto-binary need not carry `packed`, so there any other type can. */
+  const bool aggregate = is_structure_type(subtype);
+  if (
+    !is_struct_type(type) || !(is_bv_type(subtype) || aggregate) ||
+    (aggregate && base_type_eq(type, subtype, ns)) ||
+    (aggregate && !options.get_bool_option("producer-asserts-alignment") &&
+     ::alignment(migrate_type_back(type), ns) >=
+       ::alignment(migrate_type_back(subtype), ns)))
+    return;
+  expr2tc size = gen_long(offs->type, type_byte_size_bits(type));
+  expr2tc fits = and2tc(
+    accuml_guard,
+    and2tc(
+      lessthanequal2tc(size, arr_size_in_bits),
+      lessthanequal2tc(offs, sub2tc(offs->type, arr_size_in_bits, size))));
+  simplify(fits);
+  guard2tc tmp_guard = guard;
+  tmp_guard.add(fits);
+  // The struct's own alignment, not its width, is what the access needs.
+  if (!mode.unaligned)
+    check_alignment(
+      ::alignment(migrate_type_back(type), ns) * 8, offs, tmp_guard, value);
+  modet unaligned_mode = mode;
+  unaligned_mode.unaligned = true;
+  // From aggregate elements the struct is stitched as an integer of its width.
+  const type2tc target =
+    is_bv_type(subtype) ? type
+                        : get_uint_type(type_byte_size_bits(type).to_uint64());
+  expr2tc stitched = value;
+  construct_from_array(stitched, offs, target, tmp_guard, unaligned_mode, 8);
+  output.emplace_back(
+    fits, target == type ? stitched : bitcast2tc(type, stitched));
+}
+
 void dereferencet::construct_struct_ref_from_dyn_offs_rec(
   const expr2tc &value,
   const expr2tc &offs,
@@ -3023,6 +3223,16 @@ void dereferencet::construct_struct_ref_from_dyn_offs_rec(
       expr2tc arr_size_in_bits = mul2tc(sub_size->type, array_size, sub_size);
       expr2tc lt = lessthan2tc(offs, arr_size_in_bits);
       range_guard = and2tc(accuml_guard, lt);
+
+      add_stitched_struct_candidate(
+        value,
+        offs,
+        arr_size_in_bits,
+        type,
+        guard,
+        and2tc(accuml_guard, gte),
+        mode,
+        output);
     }
     simplify(range_guard);
 
@@ -3041,8 +3251,7 @@ void dereferencet::construct_struct_ref_from_dyn_offs_rec(
     {
       // Excellent. Guard that the offset is zero.
       // Still need to consider the fields, though, since the offset is dynamic.
-      expr2tc offs_is_zero =
-        and2tc(accuml_guard, equality2tc(offs, gen_long(offs->type, 0)));
+      expr2tc offs_is_zero = at_offset_zero(offs, accuml_guard);
       output.emplace_back(offs_is_zero, tmp);
 
       // An exact match is the whole object: a member can then only compare
@@ -3050,6 +3259,9 @@ void dereferencet::construct_struct_ref_from_dyn_offs_rec(
       if (tmp == value)
         return;
     }
+    else
+      add_rebuilt_struct_candidate(
+        value, offs, type, guard, accuml_guard, mode, output);
 
     // It's not compatible, but a subtype may be. Iterate over all of them.
     construct_struct_ref_from_dyn_offs_members(
@@ -3064,10 +3276,12 @@ void dereferencet::construct_struct_ref_from_dyn_offs_rec(
     expr2tc tmp = value;
     if (dereference_type_compare(tmp, type))
     {
-      expr2tc offs_is_zero =
-        and2tc(accuml_guard, equality2tc(offs, gen_long(offs->type, 0)));
+      expr2tc offs_is_zero = at_offset_zero(offs, accuml_guard);
       output.emplace_back(offs_is_zero, tmp);
     }
+    else
+      add_rebuilt_struct_candidate(
+        value, offs, type, guard, accuml_guard, mode, output);
 
     // For union members, all are at offset 0, so recurse into each member
     // that could contain the target type.
@@ -3151,6 +3365,8 @@ void dereferencet::construct_struct_ref_from_dyn_offs_rec(
     }
     return;
   }
+
+  add_scalar_element_candidate(value, offs, type, accuml_guard, output);
 }
 
 void dereferencet::construct_struct_member_from_byte_array(
@@ -3468,6 +3684,12 @@ void dereferencet::read_only_write_check(
   const expr2tc &object,
   const guard2tc &guard)
 {
+  if (is_code_type(object->type))
+  {
+    dereference_failure(
+      "Code separation", "Program code accessed in write or free mode", guard);
+    return;
+  }
   if (!is_read_only(object, ns))
     return;
   const expr2tc &symbol = get_symbol(object);
@@ -3768,9 +3990,12 @@ void dereferencet::check_alignment(
   BigInt minwidth,
   const expr2tc &offset_bits,
   const guard2tc &guard,
-  const expr2tc &object)
+  const expr2tc &object,
+  bool guards_access)
 {
-  if (options.get_bool_option("no-align-check"))
+  if (
+    options.get_bool_option("no-align-check") ||
+    (options.get_bool_option("producer-asserts-alignment") && !guards_access))
     return;
 
   // If we are dealing with a bitfield, then

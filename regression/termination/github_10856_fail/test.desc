@@ -1,5 +1,5 @@
 CORE
 main.c
 --termination --k-step 2 --max-k-step 40 --max-inductive-step 3
-^Inductive step shows a non-terminating execution
+^Recurrent state shows a non-terminating execution.*$
 ^VERIFICATION FAILED$
