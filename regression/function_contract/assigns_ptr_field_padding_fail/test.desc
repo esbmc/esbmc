@@ -1,0 +1,5 @@
+CORE
+main.c
+--enforce-contract outer --replace-call-with-contract inner
+lex->token not in assigns clause
+^VERIFICATION FAILED$
