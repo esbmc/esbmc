@@ -1,0 +1,2 @@
+regression/esbmc-cpp/cpp/intrinsic_unroll_cpp_temporaries
+regression/esbmc-cpp/cpp/intrinsic_unroll_cpp_temporaries_fail
