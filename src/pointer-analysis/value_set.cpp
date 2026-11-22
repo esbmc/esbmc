@@ -366,10 +366,17 @@ static std::vector<std::string> offset_paths(
   /* The descriptor already names the object being dereferenced, which the
    * caller's unrefined lookup covers, so there is no path to add. Both walks
    * would otherwise yield the empty path and have the caller repeat it. */
-  if ((!offset_known || offset == 0) && ns.follow(type) == target)
+  const type2tc followed = ns.follow(type);
+  if (
+    (!offset_known || offset == 0) &&
+    (followed == target ||
+     (is_pointer_type(followed) && is_pointer_type(target))))
     return {};
 
-  return offset_known ? member_paths_at_offset(type, offset, target, ns)
+  /* A pointer read as another pointer type, as Kani's transmute of
+   * DynMetadata to *const () is, still names the pointer at that offset
+   * (#10889). */
+  return offset_known ? member_paths_at_offset(type, offset, target, ns, true)
                       : member_paths_of_type(type, target, ns);
 }
 
@@ -900,11 +907,11 @@ void value_sett::get_value_set_rec(
        * offset, so the lookup above asks for `s`, which nothing keys -- the
        * pointer held in `s.p` is invisible and a race through it is pruned
        * (R31, esbmc/esbmc#6774). Ask again under the paths that offset spells
-       * out. The match is on the dereferenced type exactly, so nothing is
-       * claimed that is not there -- and equally, a cast between the
-       * descriptor's type and this one puts the member back out of reach. An
-       * offset that is not constant selects no single path, so every path of
-       * the right type is taken instead (R32). */
+       * out. The match is on the dereferenced type, or at a constant offset on
+       * any pointer when it is one, so nothing is claimed that is not there --
+       * and equally, a cast to a non-pointer type puts the member back out of
+       * reach. An offset that is not constant selects no single path, so
+       * every path of the right type is taken instead (R32). */
       for (const std::string &path : offset_paths(
              object->type,
              it1.second.offset,
