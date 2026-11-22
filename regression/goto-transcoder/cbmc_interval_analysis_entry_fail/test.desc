@@ -1,5 +1,5 @@
 CORE
-cbmc_interval_analysis_entry_fail.goto
+../cbmc_abs_fail/cbmc_abs_fail.goto
 --binary --interval-analysis
 ^  assertion abs\(x\) == -7$
 ^VERIFICATION FAILED$

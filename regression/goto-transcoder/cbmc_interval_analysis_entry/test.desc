@@ -1,4 +1,4 @@
 CORE
-cbmc_interval_analysis_entry.goto
+../cbmc_abs/cbmc_abs.goto
 --binary --interval-analysis
 ^VERIFICATION SUCCESSFUL$

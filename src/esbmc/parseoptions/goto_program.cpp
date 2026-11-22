@@ -306,7 +306,8 @@ static bool retarget_esbmc_main(
       is_symbol2t(call.function) &&
       to_symbol2t(call.function).thename == "c:@F@main")
     {
-      // The interval domain binds parameters from the callee's code type.
+      // A call's function symbol carries the callee's code type; analyses read
+      // its parameters from it.
       call.function = symbol2tc(callee->second.type, target);
       // main's argc/argv must not bind the target's parameters, which symex
       // leaves nondet when the call supplies no argument.

@@ -1,2 +1,6 @@
 regression/goto-transcoder/cbmc_interval_analysis_entry
+regression/goto-transcoder/cbmc_interval_analysis_entry_fail
 regression/goto-transcoder/cbmc_kani_interval_analysis_entry
+regression/goto-transcoder/cbmc_kani_interval_analysis_entry_fail
+regression/esbmc/github_2175_binary_interval_analysis
+regression/esbmc/github_2175_binary_interval_analysis_fail
