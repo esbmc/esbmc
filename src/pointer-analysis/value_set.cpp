@@ -1232,6 +1232,38 @@ void value_sett::get_value_set_rec(
   insert(dest, tmp, BigInt(0));
 }
 
+/* An aggregate read as a differently shaped one, as Kani's
+ * NonNull::<[u8]>::from_ref reads a slice { data, len } as
+ * { pointer: { 0: { data, len } } } (#10936), spells the suffix in the
+ * extract's members. The source member at the same byte offset is what it
+ * names; looking the suffix up on the source instead finds no member. */
+bool value_sett::get_reshaped_aggregate_value_set(
+  const byte_extract2t &be,
+  object_mapt &dest,
+  const std::string &suffix,
+  const type2tc &original_type) const
+{
+  const type2tc source_type = ns.follow(be.source_value->type);
+  if (
+    suffix.empty() || !is_constant_int2t(be.source_offset) ||
+    !(is_struct_type(source_type) || is_union_type(source_type)))
+    return false;
+
+  const auto loc = suffix_location(be.type, suffix, ns);
+  if (!loc)
+    return false;
+
+  const std::vector<std::string> paths = member_paths_at_offset(
+    be.source_value->type,
+    loc->first + to_constant_int2t(be.source_offset).value,
+    loc->second,
+    ns,
+    true);
+  for (const std::string &path : paths)
+    get_value_set_rec_cached(be.source_value, dest, path, original_type);
+  return !paths.empty();
+}
+
 void value_sett::get_byte_extract_value_set(
   const byte_extract2t &be,
   object_mapt &dest,
@@ -1256,31 +1288,8 @@ void value_sett::get_byte_extract_value_set(
     }
   }
 
-  /* An aggregate read as a differently shaped one, as Kani's
-   * NonNull::<[u8]>::from_ref reads a slice { data, len } as
-   * { pointer: { 0: { data, len } } } (#10936), spells the suffix in the
-   * extract's members. The source member at the same byte offset is what it
-   * names; looking the suffix up on the source instead finds no member. */
-  if (
-    !suffix.empty() && is_constant_int2t(be.source_offset) &&
-    (is_struct_type(ns.follow(be.source_value->type)) ||
-     is_union_type(ns.follow(be.source_value->type))))
-  {
-    const auto loc = suffix_location(be.type, suffix, ns);
-    if (loc)
-    {
-      const std::vector<std::string> paths = member_paths_at_offset(
-        be.source_value->type,
-        loc->first + to_constant_int2t(be.source_offset).value,
-        loc->second,
-        ns,
-        true);
-      for (const std::string &path : paths)
-        get_value_set_rec_cached(be.source_value, dest, path, original_type);
-      if (!paths.empty())
-        return;
-    }
-  }
+  if (get_reshaped_aggregate_value_set(be, dest, suffix, original_type))
+    return;
 
   // This is cropping up when one assigns, for example, a pointer into a
   // byte array. The lhs gets portions of the pointer, bitcasted and then
