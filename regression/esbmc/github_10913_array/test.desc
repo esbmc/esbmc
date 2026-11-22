@@ -1,0 +1,6 @@
+CORE
+main.c
+--all-witnesses --boolector
+^\[Counterexamples - 16 witnesses\]$
+enumeration stopped: --max-witnesses cap reached
+^VERIFICATION FAILED$
