@@ -834,6 +834,13 @@ public:
   /** Pointer equality: equal (object, offset), or, for a pointer made from an
    *  integer outside every object, the same address (#10905). */
   smt_astt convert_ptr_eq(const expr2tc &side1, const expr2tc &side2);
+  /** Equality of two converted operands, by pointer, floating-point or bit
+   *  pattern as their types require. */
+  smt_astt convert_eq(
+    const expr2tc &side1,
+    const expr2tc &side2,
+    smt_astt a1,
+    smt_astt a2);
   /** Take the address of some kind of expression. This will abort if the given
    *  expression isn't based on some symbol in some way. (i.e., you can't take
    *  the address of an addition, but you can take the address of a member of
