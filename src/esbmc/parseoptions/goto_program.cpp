@@ -607,6 +607,31 @@ bool esbmc_parseoptionst::has_cbmc_binary_input()
   return false;
 }
 
+// True if a --binary input is a CBMC goto-binary written by Kani. Kani names
+// its helper symbols __KANI_ (e.g. __KANI_is_nonzero_power_of_two), and the
+// name sits in the binary's string table.
+bool esbmc_parseoptionst::has_kani_binary_input()
+{
+  if (!cmdline.isset("binary") || !has_cbmc_binary_input())
+    return false;
+  const std::string marker = "__KANI_";
+  for (const auto &arg : cmdline.args)
+  {
+    std::ifstream in(arg, std::ios::in | std::ios::binary);
+    std::string window;
+    char buf[1 << 16];
+    while (in.read(buf, sizeof(buf)) || in.gcount() > 0) // Flawfinder: ignore
+    {
+      window.append(buf, in.gcount());
+      if (window.find(marker) != std::string::npos)
+        return true;
+      // Keep a tail so a marker split across two reads is still found.
+      window.erase(0, window.size() - (marker.size() - 1));
+    }
+  }
+  return false;
+}
+
 // CBMC tags each ASSERT with a property class in its location. Kani's
 // reachability_check and cover assertions are informational: CBMC reports them
 // as failures and Kani's driver discounts them, so skipping them is opt-in.

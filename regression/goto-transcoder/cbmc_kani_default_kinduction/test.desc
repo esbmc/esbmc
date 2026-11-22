@@ -1,0 +1,5 @@
+CORE
+main.goto
+--binary
+^Kani goto-binary: verifying by k-induction$
+^VERIFICATION SUCCESSFUL$

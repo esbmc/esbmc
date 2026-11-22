@@ -357,6 +357,36 @@ static bool proof_cache_flags_usable(const optionst &options)
   return true;
 }
 
+// Kani harnesses verify by k-induction unless the run names a strategy or a
+// bound: on verify-rust-std's 1888 harnesses it agrees with Kani on 1716, plain
+// BMC on 1690, and it reports no harness safe that Kani refutes. Set on the
+// command line so every option k-induction implies follows as usual.
+void esbmc_parseoptionst::default_kani_strategy()
+{
+  static const char *const chosen[] = {
+    "unwind",
+    "k-induction",
+    "k-induction-parallel",
+    "incremental-bmc",
+    "falsification",
+    "termination",
+    "base-case",
+    "forward-condition",
+    "inductive-step",
+    "loop-invariant",
+    "incremental-context-bound",
+    "report-property-class",
+    "multi-property"};
+  for (const char *flag : chosen)
+    if (cmdline.isset(flag))
+      return;
+  if (ts_strategy_requested() || !has_kani_binary_input())
+    return;
+  log_status("Kani goto-binary: verifying by k-induction");
+  cmdline.set("k-induction", std::vector<std::string>{""}, {""});
+  cmdline.set("max-inductive-step", 3, {"3"});
+}
+
 // This is the main entry point of ESBMC. Here ESBMC performs initialisation
 // of the algorithms that will be run over the GOTO program at later stages
 //
@@ -565,6 +595,8 @@ int esbmc_parseoptionst::doit()
                              !cmdline.isset("report-property-class");
   if (fork_parallel)
     return doit_k_induction_parallel();
+
+  default_kani_strategy();
 
   // Parse ESBMC options (CMD + set internal options)
   optionst options;

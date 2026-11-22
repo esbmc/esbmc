@@ -1,0 +1,6 @@
+CORE
+main.goto
+--binary
+^Kani goto-binary: verifying by k-induction$
+x stays below 3
+^VERIFICATION FAILED$
