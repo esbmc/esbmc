@@ -486,6 +486,10 @@ bool esbmc_parseoptionst::create_goto_program(
       // needs one asserts it in the binary, as Kani does except for its
       // unaligned intrinsics (#10892).
       options.set_option("producer-asserts-alignment", cbmc_binary);
+      // CBMC places no object in the first page, so a pointer made from a
+      // small integer, as Rust's NonNull::dangling() is, never names one
+      // (#10905).
+      config.ansi_c.reserve_first_page |= cbmc_binary;
 
       // A CBMC goto-binary needs ESBMC's additions (the __ESBMC_main entry
       // wrapper and the CPROVER-intrinsic bodies). Synthesise and link them

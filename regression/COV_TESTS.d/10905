@@ -1,0 +1,2 @@
+regression/goto-transcoder/cbmc_kani_dangling_offset
+regression/goto-transcoder/cbmc_kani_dangling_offset_fail
