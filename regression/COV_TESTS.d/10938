@@ -1,2 +1,6 @@
 regression/bitwuzla/github_10938_ts_pdr_fail
 regression/bitwuzla/github_10938_ts_bmc_fail
+regression/bitwuzla/ts_bmc_no_loop
+regression/bitwuzla/ts_pdr_prefix_fail
+regression/bitwuzla/ts_bmc_fresh_solver_fail
+regression/esbmc/github_10938_ts_fresh_solver_unknown
