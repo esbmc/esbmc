@@ -3,3 +3,5 @@ regression/esbmc/github_10905_fail
 regression/goto-transcoder/cbmc_kani_dangling_offset
 regression/goto-transcoder/cbmc_kani_dangling_offset_fail
 regression/esbmc/github_7855-cast
+regression/esbmc/github_10905_null
+regression/esbmc/github_10905_null_fail

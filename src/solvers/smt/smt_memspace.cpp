@@ -105,10 +105,17 @@ smt_astt smt_solver_baset::convert_ptr_cmp(
 smt_astt
 smt_solver_baset::convert_ptr_eq(const expr2tc &side1, const expr2tc &side2)
 {
+  smt_astt same = convert_ast(side1)->eq(this, convert_ast(side2));
+  /* Only NULL has address 0 (#7008), so a pointer is at NULL's address only
+   * when it is NULL. */
+  for (const expr2tc *side : {&side1, &side2})
+    if (is_symbol2t(*side) && to_symbol2t(*side).thename == "NULL")
+      return same;
+
   smt_astt by_address =
     mk_smt_symbol(mk_fresh_name("smt_solver_baset::ptr_eq"), boolean_sort);
   ptr_eq_sites.push_back({by_address, side1, side2, ctx_level, {}});
-  return mk_or(convert_ast(side1)->eq(this, convert_ast(side2)), by_address);
+  return mk_or(same, by_address);
 }
 
 /* Offsetting a pointer made from an integer outside every object keeps it in
