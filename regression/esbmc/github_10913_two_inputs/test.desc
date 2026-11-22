@@ -1,0 +1,6 @@
+CORE
+main.c
+--all-witnesses --boolector
+^\[Counterexamples - 4 witnesses\]$
+enumeration stopped: UNSAT after 4 witnesses
+^VERIFICATION FAILED$

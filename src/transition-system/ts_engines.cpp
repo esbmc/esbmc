@@ -68,19 +68,20 @@ void ts_enginet::assume_prefix()
     solver->assert_expr(a);
 }
 
-bool ts_enginet::check_prefix()
+tvt ts_enginet::check_prefix()
 {
   if (ts.prefix_bad.empty())
   {
     assume_prefix();
-    return true;
+    return tvt(true);
   }
   std::vector<expr2tc> violated;
   for (const auto &p : ts.prefix_bad)
     violated.push_back(p.violated);
   expr2tc lit = symbol2tc(get_bool_type(), "ts$bad$prefix");
   solver->assert_expr(implies2tc(lit, disjunction(violated)));
-  if (solver->dec_solve_assuming({lit}) == smt_resultt::P_SATISFIABLE)
+  const smt_resultt res = solver->dec_solve_assuming({lit});
+  if (res == smt_resultt::P_SATISFIABLE)
   {
     for (const auto &p : ts.prefix_bad)
       if (solver->l_get(p.violated).is_true())
@@ -91,11 +92,15 @@ bool ts_enginet::check_prefix()
           p.comment);
         break;
       }
-    return false;
+    return tvt(false);
   }
+  // A loop-free program is decided here alone, so an undecided prefix must
+  // not read as safe (#10938).
+  if (res != smt_resultt::P_UNSATISFIABLE)
+    return tvt(tvt::TV_UNKNOWN);
   solver->assert_expr(not2tc(disjunction(violated)));
   assume_prefix();
-  return true;
+  return tvt(true);
 }
 
 smt_resultt ts_enginet::solve_prefix()
@@ -207,16 +212,23 @@ void ts_enginet::report_counterexample(unsigned step)
   log_status("{}", out.str());
 }
 
-int ts_enginet::bmc(uint64_t max_k, bool push_pop)
+int ts_enginet::bmc(uint64_t max_k, bool push_pop, bool replay)
 {
-  if (!check_prefix())
+  const tvt prefix = check_prefix();
+  if (prefix.is_false())
   {
     log_fail("\nVERIFICATION FAILED");
     return 1;
   }
+  if (prefix.is_unknown())
+  {
+    log_error("Solver error before the loop");
+    return 6;
+  }
   if (ts.bad.empty())
   {
-    log_success("\nVERIFICATION SUCCESSFUL");
+    if (!replay)
+      log_success("\nVERIFICATION SUCCESSFUL");
     return 0;
   }
 
@@ -248,6 +260,7 @@ int ts_enginet::bmc(uint64_t max_k, bool push_pop)
     }
     close_step(k);
   }
-  log_fail("\nVERIFICATION UNKNOWN");
+  if (!replay)
+    log_fail("\nVERIFICATION UNKNOWN");
   return 0;
 }

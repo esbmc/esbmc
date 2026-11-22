@@ -1,0 +1,5 @@
+CORE
+cbmc_kani_vtable_size_fail.goto
+--binary --function _RNvCskV1wPrMSgeW_16vtable_size_fail7harness --ignore-property-class reachability_check --ignore-property-class cover
+^VERIFICATION FAILED$
+assertion failed: unsafe \{ std::intrinsics::vtable_size\(vptr\) \} == 8$

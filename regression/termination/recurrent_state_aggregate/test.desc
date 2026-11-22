@@ -1,0 +1,5 @@
+CORE
+main.c
+--termination --k-step 2 --max-k-step 12 --max-inductive-step 3 --no-pointer-check --no-bounds-check --no-assertions
+^Recurrent state shows a non-terminating execution
+^VERIFICATION FAILED$

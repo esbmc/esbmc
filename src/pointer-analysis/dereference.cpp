@@ -1446,6 +1446,19 @@ enum target_flags
   flag_is_dyn_offs = 0x100,
 };
 
+/// Reinterpret a scalar as the struct or union of its width it is read as
+/// (C type punning at offset 0). A float reaches an aggregate through the
+/// unsigned integer of its width, as the solver cannot bitcast it to a union.
+static void
+reinterpret_scalar(expr2tc &value, const type2tc &type, const namespacet &ns)
+{
+  if (base_type_eq(value->type, type, ns))
+    return;
+  if (is_floatbv_type(value->type))
+    value = bitcast2tc(get_uint_type(value->type->get_width()), value);
+  value = bitcast2tc(type, value);
+}
+
 /*
  * Legend:
  * - src = value
@@ -1494,12 +1507,12 @@ enum target_flags
  *    U  |  s  |  d  | <ad-hoc>                                       | rec
  *    A  |  s  |  d  | construct_from_array                           | rec, st
  *  -----+-----+-----+------------------------------------------------+---------
- *    s  |  S  |  d  | <bad>: "Struct pointer pointed at scalar"      |
+ *    s  |  S  |  d  | <bitcast if off==0 and sizes match, else bad>  |
  *    S  |  S  |  d  | construct_struct_ref_from_dyn_offset           | rec, st
  *    U  |  S  |  d  | <ad-hoc>                                       | rec
  *    A  |  S  |  d  | construct_struct_ref_from_dyn_offset           | rec, st
  *  -----+-----+-----+------------------------------------------------+---------
- *    s  |  U  |  d  | <bad>: "Union pointer pointed at scalar"       |
+ *    s  |  U  |  d  | <bitcast if off==0 and sizes match, else bad>  |
  *    S  |  U  |  d  | construct_struct_ref_from_dyn_offset           | rec, st
  *    U  |  U  |  d  | construct_struct_ref_from_dyn_offset           | rec, st
  *    A  |  U  |  d  | construct_struct_ref_from_dyn_offset           | rec, st
@@ -1599,8 +1612,7 @@ void dereferencet::build_reference_rec(
     const constant_int2t &offs_int = to_constant_int2t(offset);
     if (offs_int.value == 0 && value->type->get_width() == type->get_width())
     {
-      if (!base_type_eq(value->type, type, ns))
-        value = bitcast2tc(type, value);
+      reinterpret_scalar(value, type, ns);
       break;
     }
     dereference_failure(
@@ -1624,8 +1636,7 @@ void dereferencet::build_reference_rec(
     const constant_int2t &offs_int = to_constant_int2t(offset);
     if (offs_int.value == 0 && value->type->get_width() == type->get_width())
     {
-      if (!base_type_eq(value->type, type, ns))
-        value = bitcast2tc(type, value);
+      reinterpret_scalar(value, type, ns);
       break;
     }
     dereference_failure(
@@ -1657,11 +1668,26 @@ void dereferencet::build_reference_rec(
     break;
 
   case flag_src_scalar | flag_dst_struct | flag_is_dyn_offs:
-    // Attempt to extract a structure from within a scalar. This is not
-    // permitted as the base data objects have incompatible types
-    dereference_failure(
-      "Bad dereference", "Struct pointer pointed at scalar", guard);
+  case flag_src_scalar | flag_dst_union | flag_is_dyn_offs:
+  {
+    // As at a constant offset: offset 0 with equal widths reinterprets the
+    // scalar, any other offset leaves the object (#10939). A pointer is left
+    // out, as the solver cannot bitcast it to an aggregate.
+    const char *name = is_union_type(type) ? "Union pointer pointed at scalar"
+                                           : "Struct pointer pointed at scalar";
+    if (
+      is_pointer_type(value->type) ||
+      value->type->get_width() != type->get_width())
+    {
+      dereference_failure("Bad dereference", name, guard);
+      break;
+    }
+    guard2tc off_nonzero = guard;
+    off_nonzero.add(notequal2tc(offset, gen_zero(offset->type)));
+    dereference_failure("Bad dereference", name, off_nonzero);
+    reinterpret_scalar(value, type, ns);
     break;
+  }
   case flag_src_struct | flag_dst_struct | flag_is_dyn_offs:
   case flag_src_array | flag_dst_struct | flag_is_dyn_offs:
     // Extract a structure from inside an array or another struct. Single
@@ -1669,12 +1695,6 @@ void dereferencet::build_reference_rec(
     construct_struct_ref_from_dyn_offset(value, offset, type, guard, mode);
     break;
 
-  case flag_src_scalar | flag_dst_union | flag_is_dyn_offs:
-    // Attempt to extract a union from within a scalar. This is not
-    // permitted as the base data objects have incompatible types
-    dereference_failure(
-      "Bad dereference", "Union pointer pointed at scalar", guard);
-    break;
   case flag_src_struct | flag_dst_union | flag_is_dyn_offs:
   case flag_src_array | flag_dst_union | flag_is_dyn_offs:
     // Extract a structure from inside an array or another struct. Single
@@ -2429,7 +2449,9 @@ void dereferencet::construct_from_dyn_struct_offset(
  * packed, of the access type's, taken modulo the container's size, since the
  * container may be an array element (#10088). Not even under --no-align-check:
  * a byte step there gives every access through an integer-derived pointer an
- * arm per byte, so a misaligned spanning access is still dropped. */
+ * arm per byte, so a misaligned spanning access is still dropped. A CBMC
+ * goto-binary's producer asserts the alignment it needs, so there the type's
+ * does not apply (#10891). */
 BigInt dereferencet::spanning_step(
   const type2tc &type,
   const type2tc &container,
@@ -2437,7 +2459,7 @@ BigInt dereferencet::spanning_step(
   modet mode)
 {
   uint64_t step = std::max<uint64_t>(alignment, config.ansi_c.char_width);
-  if (!mode.unaligned)
+  if (!mode.unaligned && !options.get_bool_option("producer-asserts-alignment"))
   {
     const BigInt type_align = std::min(
       ::alignment(migrate_type_back(type), ns),
@@ -2529,6 +2551,14 @@ expr2tc dereferencet::byte_of_struct(const expr2tc &value, const BigInt &pos)
   return expr2tc();
 }
 
+// A union's arms overlay one another, whichever last stored it (#10891).
+expr2tc dereferencet::byte_of_union(const expr2tc &value, const BigInt &pos)
+{
+  const unsigned int width = config.ansi_c.char_width;
+  assert(pos % width == 0);
+  return extract_bytes(value, 1, gen_ulong(pos / width))[0];
+}
+
 expr2tc dereferencet::bit_field_byte(const expr2tc &value, const BigInt &pos)
 {
   const struct_type2t &struct_type = to_struct_type(value->type);
@@ -2582,8 +2612,9 @@ expr2tc dereferencet::stitch_across_elements(
   const BigInt elem_bits = type_byte_size_bits(elem_type, &ns);
   const BigInt access_bits = type_byte_size_bits(type, &ns);
   if (
-    !is_struct_type(elem_type) || !is_scalar_type(type) ||
-    start + access_bits <= elem_bits || options.get_bool_option("int-encoding"))
+    !(is_struct_type(elem_type) || is_union_type(elem_type)) ||
+    !is_scalar_type(type) || start + access_bits <= elem_bits ||
+    options.get_bool_option("int-encoding"))
     return expr2tc();
 
   const unsigned int width = config.ansi_c.char_width;
@@ -2596,9 +2627,11 @@ expr2tc dereferencet::stitch_across_elements(
       constant_int2tc(index->type, (pos / elem_bits).to_uint64()));
     simplify(elem_index);
     const expr2tc elem = index2tc(elem_type, array, elem_index);
-    expr2tc byte = byte_of_struct(elem, pos % elem_bits);
+    const BigInt elem_pos = pos % elem_bits;
+    expr2tc byte = is_union_type(elem) ? byte_of_union(elem, elem_pos)
+                                       : byte_of_struct(elem, elem_pos);
     if (is_nil_expr(byte))
-      byte = bit_field_byte(elem, pos % elem_bits);
+      byte = bit_field_byte(elem, elem_pos);
     bytes.push_back(byte);
   }
   return bitcast2tc(type, stitch_together_from_byte_array(bytes.size(), bytes));
@@ -3127,7 +3160,18 @@ void dereferencet::add_stitched_struct_candidate(
   modet mode,
   std::list<std::pair<expr2tc, expr2tc>> &output)
 {
-  if (!is_bv_type(to_array_type(value->type).subtype) || !is_struct_type(type))
+  const type2tc &subtype = to_array_type(value->type).subtype;
+  /* An element's own type is read whole by the element path, and in C a struct
+   * as aligned as the element starts where the member walk finds it, so only
+   * a less aligned one, such as a packed struct, can straddle two elements. A
+   * CBMC goto-binary need not carry `packed`, so there any other type can. */
+  const bool aggregate = is_structure_type(subtype);
+  if (
+    !is_struct_type(type) || !(is_bv_type(subtype) || aggregate) ||
+    (aggregate && base_type_eq(type, subtype, ns)) ||
+    (aggregate && !options.get_bool_option("producer-asserts-alignment") &&
+     ::alignment(migrate_type_back(type), ns) >=
+       ::alignment(migrate_type_back(subtype), ns)))
     return;
   expr2tc size = gen_long(offs->type, type_byte_size_bits(type));
   expr2tc fits = and2tc(
@@ -3144,9 +3188,14 @@ void dereferencet::add_stitched_struct_candidate(
       ::alignment(migrate_type_back(type), ns) * 8, offs, tmp_guard, value);
   modet unaligned_mode = mode;
   unaligned_mode.unaligned = true;
+  // From aggregate elements the struct is stitched as an integer of its width.
+  const type2tc target =
+    is_bv_type(subtype) ? type
+                        : get_uint_type(type_byte_size_bits(type).to_uint64());
   expr2tc stitched = value;
-  construct_from_array(stitched, offs, type, tmp_guard, unaligned_mode, 8);
-  output.emplace_back(fits, stitched);
+  construct_from_array(stitched, offs, target, tmp_guard, unaligned_mode, 8);
+  output.emplace_back(
+    fits, target == type ? stitched : bitcast2tc(type, stitched));
 }
 
 void dereferencet::construct_struct_ref_from_dyn_offs_rec(

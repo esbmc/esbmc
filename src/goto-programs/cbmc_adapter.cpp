@@ -155,17 +155,39 @@ void intern_string_type(irept &candidate)
   }
 }
 
-// A "constant" irep of the given bitvector type holding `value`. The value is
-// emitted as a hex string so fix_expression's own constant branch converts it
-// to a binary string of the type's exact width on the later recursion (the same
-// path CBMC's own constants take -- see hex_to_bin), rather than duplicating
-// that width logic here.
-irept mk_bv_const(const irept &bv_type, unsigned long long value)
+// A "constant" irep of the given bitvector type holding the hex string `hex`,
+// which fix_expression's own constant branch converts to a binary string of the
+// type's exact width on the later recursion (the same path CBMC's own constants
+// take -- see hex_to_bin), rather than duplicating that width logic here.
+irept mk_bv_hex_const(const irept &bv_type, const std::string &hex)
 {
   irept c("constant");
   c.add("type") = bv_type;
-  c.add("value") = mk(int_to_hex(value));
+  c.add("value") = mk(hex);
   return c;
+}
+
+irept mk_bv_const(const irept &bv_type, unsigned long long value)
+{
+  return mk_bv_hex_const(bv_type, int_to_hex(value));
+}
+
+// Hex of the `width`-bit mask that sets the low k bits of every 2k-bit block,
+// built digit by digit so a width above 64 keeps its upper bits.
+static std::string swar_mask_hex(std::size_t width, std::size_t k)
+{
+  static const char *digits = "0123456789abcdef";
+  std::string s;
+  for (std::size_t nibble = 0; nibble * 4 < width; ++nibble)
+  {
+    unsigned d = 0;
+    for (std::size_t b = 0; b < 4 && nibble * 4 + b < width; ++b)
+      if ((nibble * 4 + b) % (2 * k) < k)
+        d |= 1u << b;
+    s.push_back(digits[d]);
+  }
+  std::reverse(s.begin(), s.end());
+  return s;
 }
 
 // A unary/binary expression node with raw operands in get_sub(); the later
@@ -453,13 +475,13 @@ void fix_expression(irept &irep)
 
   if (irep.id() == "bitreverse")
   {
-    // CBMC lowers __builtin_bitreverse{8,16,32,64} to a bitreverse irep
-    // (reverse the bit order: bit i <-> bit W-1-i), which migrate_expr has no
-    // handler for (aborts with "migrate expr failed"); ESBMC has no bitreverse
-    // irep2 node. As with clz/ctz above, reproduce it from ids migrate_expr
-    // already lowers (bitand, shl, lshr, bitor) via the standard SWAR reversal:
-    // swap adjacent bits, then 2-bit groups, then 4-bit, ... doubling the group
-    // size each step
+    // CBMC lowers __builtin_bitreverse{8,16,32,64}, and Kani
+    // u128::reverse_bits, to a bitreverse irep (reverse the bit order: bit i
+    // <-> bit W-1-i), which migrate_expr has no handler for (aborts with
+    // "migrate expr failed"); ESBMC has no bitreverse irep2 node. As with
+    // clz/ctz above, reproduce it from ids migrate_expr already lowers (bitand,
+    // shl, lshr, bitor) via the standard SWAR reversal: swap adjacent bits,
+    // then 2-bit groups, then 4-bit, ... doubling the group size each step
     //   acc = ((acc & mask_k) << k) | ((acc >> k) & mask_k)
     // where mask_k selects the low k bits of every 2k-bit block. Scoped to the
     // CBMC --binary path, so it never perturbs native handling.
@@ -470,12 +492,7 @@ void fix_expression(irept &irep)
     irept acc = operand;
     for (std::size_t k = 1; k < width; k <<= 1)
     {
-      // mask_k: low k bits set in each 2k-bit block, across the full width.
-      const unsigned long long block = (k >= 64) ? ~0ULL : ((1ULL << k) - 1);
-      unsigned long long m = 0;
-      for (std::size_t pos = 0; pos < width; pos += 2 * k)
-        m |= block << pos;
-      const irept mask = mk_bv_const(optype, m);
+      const irept mask = mk_bv_hex_const(optype, swar_mask_hex(width, k));
 
       // acc = ((acc & mask) << k) | ((acc >> k) & mask)
       irept lo = mk_binary(

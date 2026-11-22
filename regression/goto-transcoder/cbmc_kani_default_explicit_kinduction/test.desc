@@ -1,0 +1,5 @@
+CORE
+main.goto
+--binary --k-induction
+\A(?![\s\S]*Kani goto-binary)
+^VERIFICATION SUCCESSFUL$

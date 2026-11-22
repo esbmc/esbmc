@@ -516,6 +516,9 @@ void bmct::error_trace(smt_convt &smt_conv, const symex_target_equationt &eq)
 
   goto_tracet goto_trace;
   build_goto_trace(eq, smt_conv, goto_trace);
+  for (const goto_trace_stept &step : goto_trace.steps)
+    if (step.is_assert() && !step.guard)
+      violated_claim = step.comment;
 
   std::string output_file = options.get_option("cex-output");
   if (output_file != "")
@@ -3872,7 +3875,7 @@ smt_resultt bmct::multi_property_check(
         // (only when --all-witnesses is set, i.e. enumerate==true).
         // The legacy single-witness renderer does not use them.
         if (enumerate)
-          w.nondet_inputs = collect_nondet_values(local_eq, *solver_ptr);
+          w.nondet_inputs = collect_enumeration_inputs(local_eq, *solver_ptr);
         w.ce_index = ce_counter++;
 
         const std::string witness_id =

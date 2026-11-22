@@ -463,6 +463,19 @@ smt_astt smt_solver_baset::init_pointer_obj(
   expr2tc no_wraparound = greaterthanequal2tc(end_sym, start_sym);
   assert_expr(no_wraparound);
 
+  /* On a 64-bit target 2^63 lies in the non-canonical gap between user and
+   * kernel addresses, so no object of at most PTRDIFF_MAX bytes crosses it and
+   * the addresses inside one convert to intptr_t without wrapping (#10918).
+   * A larger size, which only --no-vla-size-check lets through, could not fit
+   * on either side, and layout is asserted on every path (#8048). */
+  if (ptr_loc_type->get_width() == 64)
+  {
+    const expr2tc top = constant_int2tc(ptr_loc_type, BigInt::power2m1(63));
+    assert_expr(implies2tc(
+      and2tc(lessthanequal2tc(the_size, top), lessthanequal2tc(start_sym, top)),
+      lessthanequal2tc(end_sym, top)));
+  }
+
   /* An object's address is a multiple of its type's alignment (C11 6.2.8,
    * [basic.align]), so constrain the base address to it. This covers both an
    * explicit alignas and the natural alignment every other object has; without

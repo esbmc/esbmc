@@ -1,0 +1,6 @@
+CORE
+main.goto
+--binary --max-inductive-step 5
+^Kani goto-binary: verifying by k-induction$
+^Checking inductive step, k = 4$
+^VERIFICATION SUCCESSFUL$

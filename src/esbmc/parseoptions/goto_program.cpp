@@ -1,5 +1,6 @@
 #include <ac_config.h>
 
+#include <algorithm>
 #include <esbmc/bmc.h>
 #include <esbmc/esbmc_parseoptions.h>
 #include <goto-symex/engine/goto_symex.h>
@@ -486,6 +487,10 @@ bool esbmc_parseoptionst::create_goto_program(
       // needs one asserts it in the binary, as Kani does except for its
       // unaligned intrinsics (#10892).
       options.set_option("producer-asserts-alignment", cbmc_binary);
+      // CBMC places no object in the first page, so a pointer made from a
+      // small integer, as Rust's NonNull::dangling() is, never names one
+      // (#10905).
+      config.ansi_c.reserve_first_page |= cbmc_binary;
 
       // A CBMC goto-binary needs ESBMC's additions (the __ESBMC_main entry
       // wrapper and the CPROVER-intrinsic bodies). Synthesise and link them
@@ -601,6 +606,39 @@ bool esbmc_parseoptionst::has_cbmc_binary_input()
       return true;
   }
   return false;
+}
+
+// Whether `path` is a CBMC goto-binary written by Kani. Kani names its helper
+// symbols __KANI_ (e.g. __KANI_is_nonzero_power_of_two), and the name sits in
+// the binary's string table; a goto-cc binary with such an identifier matches
+// too, which only changes the default strategy.
+static bool is_kani_binary(const std::string &path)
+{
+  std::ifstream in(path, std::ios::in | std::ios::binary);
+  unsigned char hdr[4] = {0, 0, 0, 0};
+  in.read(reinterpret_cast<char *>(hdr), sizeof(hdr)); // Flawfinder: ignore
+  if (
+    in.gcount() < static_cast<std::streamsize>(sizeof(hdr)) ||
+    !is_cbmc_goto_magic(hdr))
+    return false;
+  const std::string marker = "__KANI_";
+  std::string window;
+  char buf[1 << 16];
+  while (in.read(buf, sizeof(buf)) || in.gcount() > 0) // Flawfinder: ignore
+  {
+    window.append(buf, in.gcount());
+    if (window.find(marker) != std::string::npos)
+      return true;
+    // Keep a tail so a marker split across two reads is still found.
+    window.erase(0, window.size() - std::min(window.size(), marker.size() - 1));
+  }
+  return false;
+}
+
+bool esbmc_parseoptionst::has_kani_binary_input()
+{
+  return cmdline.isset("binary") &&
+         std::any_of(cmdline.args.begin(), cmdline.args.end(), is_kani_binary);
 }
 
 // CBMC tags each ASSERT with a property class in its location. Kani's

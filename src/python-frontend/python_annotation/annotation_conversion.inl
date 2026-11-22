@@ -6183,10 +6183,8 @@ void python_annotation<Json>::infer_parameter_types(Json &function_element)
         // Extract current annotation
         if (param["annotation"].contains("id"))
           current_type = param["annotation"]["id"];
-        // Check if it's a generic container without element type
-        if (
-          current_type == "list" || current_type == "dict" ||
-          current_type == "set")
+        // A bare container, or a class a call site may pass a subclass of
+        if (is_refinable_annotation(current_type))
         {
           has_partial_annotation = true;
           needs_inference = true; // Try to refine with element type

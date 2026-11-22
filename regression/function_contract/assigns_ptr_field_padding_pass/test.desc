@@ -1,0 +1,4 @@
+CORE
+main.c
+--enforce-contract outer --replace-call-with-contract inner
+^VERIFICATION SUCCESSFUL$

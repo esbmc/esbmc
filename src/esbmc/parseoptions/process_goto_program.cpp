@@ -350,9 +350,16 @@ static bool early_answer_allowed(
     "cov-report-json",
     "schedule",
     "ts-bmc",
-    "ts-pdr"};
+    "ts-pdr",
+    "abort-on-recursion",
+    "check-guard-subsumption",
+    "deadlock-check",
+    "printf-check"};
+  // The stack limits default to -1, so their values say whether they are on.
   return !python_checked_exceptions(options).empty() &&
          !checks_past_violation && !options.get_bool_option("termination") &&
+         atol(options.get_option("stack-limit").c_str()) <= 0 &&
+         atol(options.get_option("total-stack-limit").c_str()) <= 0 &&
          std::none_of(std::begin(bypassed), std::end(bypassed), [&](auto name) {
            return cmdline.isset(name);
          });
@@ -695,6 +702,15 @@ bool esbmc_parseoptionst::process_goto_program(
                               ranking_transition_invariants)
                               .is_true();
       options.set_option("termination-ranking-proved", ranking_proved);
+
+      // A copy taken before the havoc, which runs the loops as written.
+      if (
+        !ranking_proved && !non_term_proved && !spawns_threads(goto_functions))
+      {
+        recurrent_state_program = goto_functions;
+        recurrent_state_loops =
+          goto_recurrent_state(recurrent_state_program, context);
+      }
 
       // Only run the marker/havoc transform when the ranking check did
       // NOT settle it — otherwise the verdict loop short-circuits on the
