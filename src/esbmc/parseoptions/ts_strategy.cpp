@@ -31,7 +31,7 @@ static int run_pdr(
     log_status("PDR found a violation at step {}; replaying with BMC", depth);
     ts_enginet replay(ts, ns, options);
     const int rc = replay.bmc(depth, false, true);
-    if (rc == 1)
+    if (rc != 0)
       return rc;
     log_error("BMC did not reproduce the PDR counterexample");
     log_fail("\nVERIFICATION UNKNOWN");
@@ -116,10 +116,16 @@ int esbmc_parseoptionst::do_ts_strategy(
     if (!ts.prefix_bad.empty())
     {
       ts_enginet prefix(ts, ns, options, false);
-      if (prefix.solve_prefix() == smt_resultt::P_SATISFIABLE)
+      const smt_resultt res = prefix.solve_prefix();
+      if (res == smt_resultt::P_SATISFIABLE)
       {
         log_fail("\nVERIFICATION FAILED");
         return 1;
+      }
+      if (res != smt_resultt::P_UNSATISFIABLE)
+      {
+        log_error("Solver error before the loop");
+        return 6;
       }
     }
     if (ts.bad.empty())
