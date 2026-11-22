@@ -1,0 +1,5 @@
+CORE
+main.c
+--no-pointer-check
+false: p->a is o.x when k == 0
+^VERIFICATION FAILED$
