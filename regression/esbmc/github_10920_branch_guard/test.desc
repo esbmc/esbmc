@@ -1,0 +1,6 @@
+CORE
+main.c
+--all-witnesses
+^\[Counterexamples - 3 witnesses\]$
+enumeration stopped: UNSAT after 3 witnesses
+^VERIFICATION FAILED$

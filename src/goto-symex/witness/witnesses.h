@@ -302,6 +302,13 @@ std::vector<collected_nondet_value> collect_nondet_values(
   smt_convt &smt_conv,
   bool harness_inputs_only = false);
 
+/// The inputs --all-witnesses blocks, in call order: collect_nondet_values
+/// plus every nondet an on-trace assume or assert outside library sources
+/// reads directly.
+std::vector<collected_nondet_value> collect_enumeration_inputs(
+  const symex_target_equationt &target,
+  smt_convt &smt_conv);
+
 /// Build a blocking clause that excludes the given input tuple from future
 /// solver queries: NOT (sym_1 == val_1 AND sym_2 == val_2 AND ...).
 ///

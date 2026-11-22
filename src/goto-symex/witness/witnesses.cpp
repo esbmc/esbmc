@@ -1429,6 +1429,7 @@ bool find_nondet_in_expr(const expr2tc &expr)
 #include <util/lang/c_types.h>
 #include <util/expr/type_byte_size.h>
 #include <algorithm>
+#include <climits>
 #include <optional>
 #include <boost/property_tree/detail/xml_parser_writer_settings.hpp>
 #include <cassert>
@@ -1753,11 +1754,39 @@ static bool track_on_trace(
   return on_trace;
 }
 
-// Shared nondet collection logic (used by both TestComp and CTest)
-std::vector<collected_nondet_value> collect_nondet_values(
+static collected_nondet_value
+model_value(const expr2tc &nondet_expr, smt_convt &smt_conv)
+{
+  // Get concrete value, model-completing unconstrained aggregate
+  // components to zero so witnesses render with all fields present
+  // and consistent across the witness set. `nondet_expr` is the live
+  // root for re-querying any nested aggregate the backend left
+  // unexpanded (e.g. Z3 returns `{ .c=N, .i=member(sym).i }` for a
+  // struct whose nested `.i` field is itself a struct).
+  collected_nondet_value val;
+  val.symbol_name = to_symbol2t(nondet_expr).thename.as_string();
+  val.symbol_expr = nondet_expr;
+  val.value_expr = zero_fill_aggregate(
+    nondet_expr->type, smt_conv.get(nondet_expr), nondet_expr, smt_conv);
+  val.type = val.value_expr->type;
+  return val;
+}
+
+static bool is_library_source(const std::string &file_path)
+{
+  // System library nondets (stdin, stdout, stderr, etc.), and likewise
+  // nondets from ESBMC's own library and operational models, e.g. the
+  // uninitialised `errno` global in libc/library/stdlib.c.
+  return has_prefix(file_path, "/usr/include/") ||
+         has_prefix(file_path, "/lib/") || has_prefix(file_path, "/opt/") ||
+         file_operations::is_bundled_source(file_path);
+}
+
+static std::vector<collected_nondet_value> collect_trace_nondets(
   const symex_target_equationt &target,
   smt_convt &smt_conv,
-  bool harness_inputs_only)
+  bool harness_inputs_only,
+  std::unordered_set<std::string> &off_trace_names)
 {
   std::vector<collected_nondet_value> results;
   std::unordered_set<std::string> seen_nondets;
@@ -1801,12 +1830,7 @@ std::vector<collected_nondet_value> collect_nondet_values(
         // would shift every following input.
         !(harness_inputs_only &&
           SSA_step.source.pc->location.get_bool("#decl_nondet")) &&
-        // System library nondets (stdin, stdout, stderr, etc.)
-        !has_prefix(file_path, "/usr/include/") &&
-        !has_prefix(file_path, "/lib/") && !has_prefix(file_path, "/opt/") &&
-        // Likewise nondets from ESBMC's own library and operational models,
-        // e.g. the uninitialised `errno` global in libc/library/stdlib.c.
-        !file_operations::is_bundled_source(file_path);
+        !is_library_source(file_path);
 
       // A skipped nondet stays seen: it can reappear in a later struct
       // literal, e.g. a model-set member of a struct the program then writes.
@@ -1823,25 +1847,119 @@ std::vector<collected_nondet_value> collect_nondet_values(
         if (!seen_nondets.insert(name).second)
           continue;
 
-        // Get concrete value, model-completing unconstrained aggregate
-        // components to zero so witnesses render with all fields present
-        // and consistent across the witness set. `nondet_expr` is the live
-        // root for re-querying any nested aggregate the backend left
-        // unexpanded (e.g. Z3 returns `{ .c=N, .i=member(sym).i }` for a
-        // struct whose nested `.i` field is itself a struct).
-        auto concrete_value = zero_fill_aggregate(
-          nondet_expr->type, smt_conv.get(nondet_expr), nondet_expr, smt_conv);
-
-        collected_nondet_value val;
-        val.symbol_name = name;
-        val.symbol_expr = nondet_expr;
-        val.value_expr = concrete_value;
-        val.type = concrete_value->type;
-        results.push_back(val);
+        results.push_back(model_value(nondet_expr, smt_conv));
       }
     }
   }
+  for (const auto &[name, pc] : off_trace)
+    off_trace_names.insert(name);
   return results;
+}
+
+// Shared nondet collection logic (used by both TestComp and CTest)
+std::vector<collected_nondet_value> collect_nondet_values(
+  const symex_target_equationt &target,
+  smt_convt &smt_conv,
+  bool harness_inputs_only)
+{
+  std::unordered_set<std::string> off_trace_names;
+  return collect_trace_nondets(
+    target, smt_conv, harness_inputs_only, off_trace_names);
+}
+
+// Symex numbers its nondets in creation order, i.e. in call order.
+static unsigned long nondet_number(const std::string &name)
+{
+  const size_t digits = name.find_last_not_of("0123456789") + 1;
+  return digits < name.size() ? std::stoul(name.substr(digits)) : ULONG_MAX;
+}
+
+std::vector<collected_nondet_value> collect_enumeration_inputs(
+  const symex_target_equationt &target,
+  smt_convt &smt_conv)
+{
+  // A nondet the first pass skipped as a library input stays eligible: the
+  // program can pass its own input to an operational model, e.g. isdigit(c).
+  std::unordered_set<std::string> seen;
+  std::vector<collected_nondet_value> results =
+    collect_trace_nondets(target, smt_conv, false, seen);
+  for (const collected_nondet_value &v : results)
+    seen.insert(v.symbol_name);
+
+  // Symex can propagate a nondet call's result into the claim and slice away
+  // its only assignment, e.g. a store into an array that is never read whole
+  // (#10920); find such inputs where the formula uses them.
+  // A branch condition reaches the claim only through its guard symbol.
+  std::unordered_set<expr2tc, irep2_hash> symbols;
+  for (const auto &step : target.SSA_steps)
+  {
+    if (
+      step.ignore ||
+      is_library_source(step.source.pc->location.file().as_string()) ||
+      !smt_conv.l_get(step.guard).is_true())
+      continue;
+    if (step.is_assume() || step.is_assert())
+      get_symbols(step.cond, symbols);
+    else if (
+      step.is_assignment() &&
+      to_symbol2t(step.lhs).thename == "goto_symex::guard")
+      get_symbols(step.rhs, symbols);
+  }
+  for (const expr2tc &sym : symbols)
+  {
+    const std::string &name = to_symbol2t(sym).thename.as_string();
+    if (has_prefix(name, "nondet$") && seen.insert(name).second)
+      results.push_back(model_value(sym, smt_conv));
+  }
+  std::stable_sort(
+    results.begin(),
+    results.end(),
+    [](const collected_nondet_value &a, const collected_nondet_value &b) {
+      return nondet_number(a.symbol_name) < nondet_number(b.symbol_name);
+    });
+  return results;
+}
+
+static expr2tc same_value(const expr2tc &sym, const expr2tc &value)
+{
+  if (is_floatbv_type(sym->type))
+  {
+    const constant_floatbv2t *fbv = try_to_constant_floatbv2t(value);
+    if (fbv && fbv->value.is_NaN())
+      return isnan2tc(sym);
+    type2tc bv_type = get_uint_type(sym->type->get_width());
+    return equality2tc(bitcast2tc(bv_type, sym), bitcast2tc(bv_type, value));
+  }
+
+  // An SMT array has more indices than the C array, so a whole-array
+  // disequality can be met outside its bounds (#10920).
+  if (is_array_type(sym->type) && is_constant_array2t(value))
+  {
+    const type2tc &subtype = to_array_type(sym->type).subtype;
+    const std::vector<expr2tc> &elems =
+      to_constant_array2t(value).datatype_members;
+    expr2tc conj = gen_true_expr();
+    for (size_t i = 0; i < elems.size(); ++i)
+      conj = and2tc(
+        conj, same_value(index2tc(subtype, sym, gen_ulong(i)), elems[i]));
+    return conj;
+  }
+
+  if (is_struct_type(sym->type) && is_constant_struct2t(value))
+  {
+    const struct_type2t &st = to_struct_type(sym->type);
+    const std::vector<expr2tc> &members =
+      to_constant_struct2t(value).datatype_members;
+    expr2tc conj = gen_true_expr();
+    for (size_t i = 0; i < members.size(); ++i)
+      conj = and2tc(
+        conj,
+        same_value(
+          member2tc(st.members[i], sym, st.member_names[i]), members[i]));
+    return conj;
+  }
+
+  return equality2tc(sym, value);
 }
 
 expr2tc make_blocking_expr(const std::vector<collected_nondet_value> &nondets)
@@ -1874,25 +1992,7 @@ expr2tc make_blocking_expr(const std::vector<collected_nondet_value> &nondets)
   expr2tc conj;
   for (const auto &n : nondets)
   {
-    expr2tc eq;
-    const constant_floatbv2t *value_fbv =
-      try_to_constant_floatbv2t(n.value_expr);
-    if (
-      is_floatbv_type(n.symbol_expr->type) && value_fbv &&
-      value_fbv->value.is_NaN())
-    {
-      eq = isnan2tc(n.symbol_expr);
-    }
-    else if (is_floatbv_type(n.symbol_expr->type))
-    {
-      type2tc bv_type = get_uint_type(n.symbol_expr->type->get_width());
-      eq = equality2tc(
-        bitcast2tc(bv_type, n.symbol_expr), bitcast2tc(bv_type, n.value_expr));
-    }
-    else
-    {
-      eq = equality2tc(n.symbol_expr, n.value_expr);
-    }
+    expr2tc eq = same_value(n.symbol_expr, n.value_expr);
     conj = conj ? expr2tc(and2tc(conj, eq)) : eq;
   }
   return not2tc(conj);
