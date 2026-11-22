@@ -1,0 +1,5 @@
+CORE
+main.c
+
+assertion v.u == 0x3f800001u
+^VERIFICATION FAILED$
