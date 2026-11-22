@@ -106,6 +106,7 @@ void collect_paths_at_offset(
   const BigInt &offset,
   const type2tc &target,
   const namespacet &ns,
+  bool any_pointer,
   const std::string &prefix,
   std::vector<std::string> &dest)
 {
@@ -113,7 +114,9 @@ void collect_paths_at_offset(
    * or a typedef'd aggregate silently loses its path. */
   const type2tc type = ns.follow(type_in);
 
-  if (offset == 0 && type == target)
+  if (
+    offset == 0 && (type == target || (any_pointer && is_pointer_type(type) &&
+                                       is_pointer_type(target))))
   {
     dest.push_back(prefix);
     return;
@@ -133,7 +136,7 @@ void collect_paths_at_offset(
     }
     if (esize > 0)
       collect_paths_at_offset(
-        subtype, offset % esize, target, ns, prefix + "[]", dest);
+        subtype, offset % esize, target, ns, any_pointer, prefix + "[]", dest);
     return;
   }
 
@@ -162,6 +165,7 @@ void collect_paths_at_offset(
         (offset_bits - start_bits) / 8,
         target,
         ns,
+        any_pointer,
         prefix + "." + agg.names[i].as_string(),
         dest);
     if (!agg.overlaid)
@@ -205,10 +209,11 @@ std::vector<std::string> member_paths_at_offset(
   const type2tc &type,
   const BigInt &offset,
   const type2tc &target,
-  const namespacet &ns)
+  const namespacet &ns,
+  bool any_pointer)
 {
   std::vector<std::string> paths;
-  collect_paths_at_offset(type, offset, target, ns, "", paths);
+  collect_paths_at_offset(type, offset, target, ns, any_pointer, "", paths);
   return paths;
 }
 
