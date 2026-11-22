@@ -288,7 +288,8 @@ static bool retarget_esbmc_main(
   if (entry == goto_functions.function_map.end())
     return false;
 
-  if (!goto_functions.function_map.count(target))
+  const auto callee = goto_functions.function_map.find(target);
+  if (callee == goto_functions.function_map.end())
   {
     log_error(
       "entry point `{}' not found in the goto binary", id2string(target));
@@ -305,7 +306,8 @@ static bool retarget_esbmc_main(
       is_symbol2t(call.function) &&
       to_symbol2t(call.function).thename == "c:@F@main")
     {
-      call.function = symbol2tc(get_empty_type(), target);
+      // The interval domain binds parameters from the callee's code type.
+      call.function = symbol2tc(callee->second.type, target);
       // main's argc/argv must not bind the target's parameters, which symex
       // leaves nondet when the call supplies no argument.
       call.operands.clear();
