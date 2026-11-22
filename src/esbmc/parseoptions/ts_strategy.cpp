@@ -30,10 +30,12 @@ static int run_pdr(
   {
     log_status("PDR found a violation at step {}; replaying with BMC", depth);
     ts_enginet replay(ts, ns, options);
-    const int rc = replay.bmc(depth, false);
-    if (rc != 1)
-      log_error("BMC did not reproduce the PDR counterexample");
-    return rc;
+    const int rc = replay.bmc(depth, false, true);
+    if (rc == 1)
+      return rc;
+    log_error("BMC did not reproduce the PDR counterexample");
+    log_fail("\nVERIFICATION UNKNOWN");
+    return 0;
   }
   case ts_pdrt::resultt::unknown:
     break;

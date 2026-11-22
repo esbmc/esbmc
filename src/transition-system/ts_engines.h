@@ -2,6 +2,7 @@
 
 #include <transition-system/transition_system.h>
 #include <solvers/smt/smt_conv.h>
+#include <util/base/threeval.h>
 
 #include <cstdint>
 #include <memory>
@@ -23,8 +24,8 @@ public:
     bool cores = false);
 
   /// Exit codes follow do_bmc_strategy: 0 SUCCESSFUL or UNKNOWN, 1 FAILED,
-  /// 6 solver error.
-  int bmc(uint64_t max_k, bool push_pop);
+  /// 6 solver error. A replay prints only a violation it reproduces.
+  int bmc(uint64_t max_k, bool push_pop, bool replay = false);
 
   /// One monolithic BMC query on a fresh engine: steps 0..k unrolled, the
   /// violation at step k asserted, a single check-sat.
@@ -39,10 +40,10 @@ protected:
   expr2tc act_init, act_inv;
 
   expr2tc bad_literal(unsigned step) const;
-  /// Returns false if the prefix itself violates a property. Assumptions
-  /// before the loop only hold from here on: each prefix property already
-  /// carries the ones that precede it.
-  bool check_prefix();
+  /// False if the prefix itself violates a property, unknown if the solver
+  /// cannot decide. Assumptions before the loop only hold from here on: each
+  /// prefix property already carries the ones that precede it.
+  tvt check_prefix();
   void assume_prefix();
   void add_step(unsigned step);
   /// What a step must satisfy to reach the next: its assumptions, the

@@ -469,10 +469,16 @@ ts_pdrt::resultt ts_pdrt::run(uint64_t max_frames, unsigned &cex_depth)
   {
     if (!build_bits())
       return resultt::unknown;
-    if (!check_prefix())
+    const tvt prefix = check_prefix();
+    if (prefix.is_false())
     {
       cex_depth = 0;
       return resultt::unsafe;
+    }
+    if (prefix.is_unknown())
+    {
+      reason = "the solver could not decide the properties before the loop";
+      return resultt::unknown;
     }
     if (ts.bad.empty())
       return resultt::safe;
