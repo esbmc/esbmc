@@ -1,0 +1,6 @@
+CORE
+main.goto
+--binary
+^Kani goto-binary: verifying by k-induction$
+x never reaches 80
+^VERIFICATION FAILED$

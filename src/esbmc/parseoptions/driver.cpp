@@ -357,6 +357,65 @@ static bool proof_cache_flags_usable(const optionst &options)
   return true;
 }
 
+// A Kani harness verifies by k-induction unless the run asks for something
+// else: a strategy or a bound, a report, coverage, dead-code or print-only
+// mode, or witness validation. The flags go on the command line, so the options
+// k-induction implies and the checks that refuse it apply as usual. Unlimited k
+// steps keep a bug deeper than --max-k-step from ending UNKNOWN where plain BMC
+// would find it.
+void esbmc_parseoptionst::default_kani_strategy()
+{
+  static const char *const chosen[] = {
+    "unwind",
+    "unwindset",
+    "k-induction",
+    "k-induction-parallel",
+    "incremental-bmc",
+    "falsification",
+    "termination",
+    "base-case",
+    "forward-condition",
+    "inductive-step",
+    "loop-invariant",
+    "synthesise-loop-invariants",
+    "incremental-context-bound",
+    "multi-property",
+    "report-property-class",
+    "assertion-coverage",
+    "assertion-coverage-claims",
+    "condition-coverage",
+    "condition-coverage-claims",
+    "condition-coverage-rm",
+    "condition-coverage-claims-rm",
+    "branch-coverage",
+    "branch-coverage-claims",
+    "branch-function-coverage",
+    "branch-function-coverage-claims",
+    "k-path-coverage",
+    "k-path-coverage-claims",
+    "dead-code-check",
+    "parse-tree-only",
+    "symbol-table-only",
+    "goto-functions-only",
+    "program-only",
+    "show-claims",
+    "smt-formula-only",
+    "smt-formula-too",
+    "validate-correctness-witness",
+    "validate-violation-witness"};
+  for (const char *flag : chosen)
+    if (cmdline.isset(flag))
+      return;
+  if (ts_strategy_requested() || !has_kani_binary_input())
+    return;
+  log_status("Kani goto-binary: verifying by k-induction");
+  cmdline.set("k-induction", std::string(), {""});
+  if (cmdline.vm["max-k-step"].defaulted())
+    cmdline.set("unlimited-k-steps", std::string(), {""});
+  if (cmdline.vm["max-inductive-step"].defaulted())
+    cmdline.set("max-inductive-step", 3, {"3"});
+}
+
 // This is the main entry point of ESBMC. Here ESBMC performs initialisation
 // of the algorithms that will be run over the GOTO program at later stages
 //
@@ -473,6 +532,7 @@ int esbmc_parseoptionst::doit()
     return 1;
   }
 
+  default_kani_strategy();
   if (incompatible_flags(cmdline))
     return 1;
 
