@@ -224,6 +224,7 @@ void dereferencet::dereference_expr(expr2tc &expr, guard2tc &guard, modet mode)
   {
   case expr2t::and_id:
   case expr2t::or_id:
+  case expr2t::implies_id:
   case expr2t::if_id:
     dereference_guard_expr(expr, guard, mode);
     break;
@@ -295,13 +296,13 @@ void dereferencet::dereference_guard_expr(
   guard2tc &guard,
   modet mode)
 {
-  if (is_and2t(expr) || is_or2t(expr))
+  if (is_and2t(expr) || is_or2t(expr) || is_implies2t(expr))
   {
     // If this is an and or or expression, then if the first operand short
     // circuits the truth of the expression, then we shouldn't evaluate the
     // second expression. That means that the dereference assertions in the
     // 2nd should be guarded with the fact that the first operand didn't short
-    // circuit.
+    // circuit. `a => b` reads b only under a, as `a && b` does (#10941).
     assert(is_bool_type(expr));
 
     // Save the guard so we can restore it afterwards.
