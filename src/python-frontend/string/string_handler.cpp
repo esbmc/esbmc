@@ -2975,7 +2975,35 @@ exprt string_handler::try_handle_len_string_fast_path(
   if (exprt length = recorded_length(arg_json, arg_expr); !length.is_nil())
     return length;
 
-  return char_array_type_length(arg_expr);
+  return type_or_parameter_length(call_json, arg_expr);
+}
+
+/// The length a char array's type gives @p arg_expr or, for a str parameter,
+/// its code points counted at run time rather than the UTF-8 bytes strlen
+/// counts (#7552); nil otherwise. A parameter's binding is not in the body, so
+/// the folds above never apply to it.
+exprt string_handler::type_or_parameter_length(
+  const nlohmann::json &call_json,
+  const exprt &arg_expr)
+{
+  if (exprt length = char_array_type_length(arg_expr); !length.is_nil())
+    return length;
+  if (
+    !arg_expr.is_symbol() || !arg_expr.type().is_pointer() ||
+    !type_utils::is_char_storage(arg_expr.type().subtype()))
+    return nil_exprt();
+  const symbolt *param = converter_.find_symbol(
+    to_symbol_expr(arg_expr).get_identifier().as_string());
+  if (!param || !param->is_parameter)
+    return nil_exprt();
+  symbolt *count_symbol =
+    find_cached_c_function_symbol("c:@F@__python_str_codepoint_len");
+  if (!count_symbol)
+    throw std::runtime_error(
+      "__python_str_codepoint_len function not found in symbol table");
+  exprt call = build_call_expr(*count_symbol, size_type(), {arg_expr});
+  call.location() = converter_.get_location_from_decl(call_json);
+  return call;
 }
 
 /// The length symbol recorded for the string @p arg_expr names, or nil. The
