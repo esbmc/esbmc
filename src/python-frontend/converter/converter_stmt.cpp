@@ -5287,6 +5287,50 @@ bool python_converter::handle_unpacking_assignment(
       list.handle_list_var_unpacking(ast_node, target, rhs, target_block);
       return true;
     }
+
+    // An untyped parameter (void *) of a method no call reaches (#10377):
+    // fail only if the unpacking runs, instead of refusing the program.
+    if (pointed_type.id() == "empty")
+    {
+      std::function<void(const nlohmann::json &)> declare_target =
+        [&](const nlohmann::json &elt) {
+          const std::string kind = elt["_type"];
+          if (kind == "Starred")
+            return declare_target(elt["value"]);
+          if (kind == "Tuple" || kind == "List")
+          {
+            for (const auto &sub : elt["elts"])
+              declare_target(sub);
+            return;
+          }
+          if (kind != "Name")
+            return;
+          symbol_id var_sid = create_symbol_id();
+          var_sid.set_object(elt["id"].get<std::string>());
+          if (find_symbol(var_sid.to_string()))
+            return;
+          locationt loc = get_location_from_decl(elt);
+          symbolt var = create_symbol(
+            loc.get_file().as_string(),
+            elt["id"].get<std::string>(),
+            var_sid.to_string(),
+            loc,
+            long_long_int_type());
+          var.lvalue = true;
+          var.file_local = true;
+          var.is_extern = false;
+          symbol_table_.move_symbol_to_context(var);
+        };
+      declare_target(target);
+
+      code_assertt unsupported(migrate_expr_back(gen_false_expr()));
+      unsupported.location() = get_location_from_decl(ast_node);
+      unsupported.location().comment(
+        "Cannot unpack a value of unknown type at line " +
+        std::to_string(ast_node["lineno"].get<int>()));
+      target_block.copy_to_operands(unsupported);
+      return true;
+    }
   }
 
   throw std::runtime_error(
