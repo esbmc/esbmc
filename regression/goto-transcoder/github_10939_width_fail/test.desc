@@ -1,0 +1,5 @@
+CORE
+main.goto
+--binary --no-bounds-check
+dereference failure: Union pointer pointed at scalar$
+^VERIFICATION FAILED$

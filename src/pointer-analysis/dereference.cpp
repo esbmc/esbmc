@@ -1446,6 +1446,19 @@ enum target_flags
   flag_is_dyn_offs = 0x100,
 };
 
+/// Reinterpret a scalar as the struct or union of its width it is read as
+/// (C type punning at offset 0). A float reaches an aggregate through the
+/// unsigned integer of its width, as the solver cannot bitcast it to a union.
+static void
+reinterpret_scalar(expr2tc &value, const type2tc &type, const namespacet &ns)
+{
+  if (base_type_eq(value->type, type, ns))
+    return;
+  if (is_floatbv_type(value->type))
+    value = bitcast2tc(get_uint_type(value->type->get_width()), value);
+  value = bitcast2tc(type, value);
+}
+
 /*
  * Legend:
  * - src = value
@@ -1494,12 +1507,12 @@ enum target_flags
  *    U  |  s  |  d  | <ad-hoc>                                       | rec
  *    A  |  s  |  d  | construct_from_array                           | rec, st
  *  -----+-----+-----+------------------------------------------------+---------
- *    s  |  S  |  d  | <bad>: "Struct pointer pointed at scalar"      |
+ *    s  |  S  |  d  | <bitcast if off==0 and sizes match, else bad>  |
  *    S  |  S  |  d  | construct_struct_ref_from_dyn_offset           | rec, st
  *    U  |  S  |  d  | <ad-hoc>                                       | rec
  *    A  |  S  |  d  | construct_struct_ref_from_dyn_offset           | rec, st
  *  -----+-----+-----+------------------------------------------------+---------
- *    s  |  U  |  d  | <bad>: "Union pointer pointed at scalar"       |
+ *    s  |  U  |  d  | <bitcast if off==0 and sizes match, else bad>  |
  *    S  |  U  |  d  | construct_struct_ref_from_dyn_offset           | rec, st
  *    U  |  U  |  d  | construct_struct_ref_from_dyn_offset           | rec, st
  *    A  |  U  |  d  | construct_struct_ref_from_dyn_offset           | rec, st
@@ -1599,8 +1612,7 @@ void dereferencet::build_reference_rec(
     const constant_int2t &offs_int = to_constant_int2t(offset);
     if (offs_int.value == 0 && value->type->get_width() == type->get_width())
     {
-      if (!base_type_eq(value->type, type, ns))
-        value = bitcast2tc(type, value);
+      reinterpret_scalar(value, type, ns);
       break;
     }
     dereference_failure(
@@ -1624,8 +1636,7 @@ void dereferencet::build_reference_rec(
     const constant_int2t &offs_int = to_constant_int2t(offset);
     if (offs_int.value == 0 && value->type->get_width() == type->get_width())
     {
-      if (!base_type_eq(value->type, type, ns))
-        value = bitcast2tc(type, value);
+      reinterpret_scalar(value, type, ns);
       break;
     }
     dereference_failure(
@@ -1657,11 +1668,26 @@ void dereferencet::build_reference_rec(
     break;
 
   case flag_src_scalar | flag_dst_struct | flag_is_dyn_offs:
-    // Attempt to extract a structure from within a scalar. This is not
-    // permitted as the base data objects have incompatible types
-    dereference_failure(
-      "Bad dereference", "Struct pointer pointed at scalar", guard);
+  case flag_src_scalar | flag_dst_union | flag_is_dyn_offs:
+  {
+    // As at a constant offset: offset 0 with equal widths reinterprets the
+    // scalar, any other offset leaves the object (#10939). A pointer is left
+    // out, as the solver cannot bitcast it to an aggregate.
+    const char *name = is_union_type(type) ? "Union pointer pointed at scalar"
+                                           : "Struct pointer pointed at scalar";
+    if (
+      is_pointer_type(value->type) ||
+      value->type->get_width() != type->get_width())
+    {
+      dereference_failure("Bad dereference", name, guard);
+      break;
+    }
+    guard2tc off_nonzero = guard;
+    off_nonzero.add(notequal2tc(offset, gen_zero(offset->type)));
+    dereference_failure("Bad dereference", name, off_nonzero);
+    reinterpret_scalar(value, type, ns);
     break;
+  }
   case flag_src_struct | flag_dst_struct | flag_is_dyn_offs:
   case flag_src_array | flag_dst_struct | flag_is_dyn_offs:
     // Extract a structure from inside an array or another struct. Single
@@ -1669,12 +1695,6 @@ void dereferencet::build_reference_rec(
     construct_struct_ref_from_dyn_offset(value, offset, type, guard, mode);
     break;
 
-  case flag_src_scalar | flag_dst_union | flag_is_dyn_offs:
-    // Attempt to extract a union from within a scalar. This is not
-    // permitted as the base data objects have incompatible types
-    dereference_failure(
-      "Bad dereference", "Union pointer pointed at scalar", guard);
-    break;
   case flag_src_struct | flag_dst_union | flag_is_dyn_offs:
   case flag_src_array | flag_dst_union | flag_is_dyn_offs:
     // Extract a structure from inside an array or another struct. Single

@@ -35,6 +35,12 @@ public:
   const char *getval(const char *option) const;
   const std::list<std::string> &get_values(const char *option) const;
   bool isset(const char *option) const;
+  /// Set \p option as if it had been given on the command line; \p value has
+  /// the type its declaration parses to, \p text the form getval() returns.
+  void set(
+    const std::string &option,
+    const boost::any &value,
+    std::list<std::string> text);
   void clear();
   typedef std::vector<std::string> argst;
   argst args;

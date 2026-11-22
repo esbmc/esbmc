@@ -1066,6 +1066,12 @@ private:
     const nlohmann::json &left,
     const nlohmann::json &right);
 
+  void refuse_uncached_int_identity(
+    const expr2tc &lhs,
+    const expr2tc &rhs,
+    const nlohmann::json &left,
+    const nlohmann::json &right);
+
   exprt get_binary_operator_expr_for_is(
     const exprt &lhs,
     const exprt &rhs,
