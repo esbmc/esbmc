@@ -1,0 +1,5 @@
+CORE
+main.py
+
+TypeError: unsupported operand type\(s\) for \+
+^VERIFICATION FAILED$
