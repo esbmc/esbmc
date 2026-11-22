@@ -1,0 +1,4 @@
+CORE
+cbmc_r_ok_wrap.goto
+--binary
+^VERIFICATION SUCCESSFUL$
