@@ -680,6 +680,9 @@ set(_slow_regression_tests
     # powerset_fail reaches VERIFICATION FAILED since #8537 but takes 91-124s
     # on the DebugOpt Linux runner, so the 120s cap kills it intermittently.
     "regression/quixbugs/powerset_fail"
+    # Bitwuzla rebuilds p from two 32-bit halves of &x in each of the three
+    # claims: 98-104s on the DebugOpt Linux runner against the 120s cap.
+    "regression/esbmc/null_offset_stale_value_set"
     # Verifies with the expected verdict but slowed 2.5x after #9294 (#9516):
     # 9-33s to 44-68s on the DebugOpt Linux runner, and runner noise pushed it
     # past the 120s cap on unrelated PRs.
