@@ -299,6 +299,12 @@ void smt_solver_baset::pop_ctx()
   for (int_to_ptr_objectt &c : int_to_ptr_objects)
     if (c.closed_at && *c.closed_at >= ctx_level)
       c.closed_at.reset();
+  std::erase_if(ptr_eq_sites, [this](const ptr_eq_sitet &e) {
+    return e.level >= ctx_level;
+  });
+  for (ptr_eq_sitet &e : ptr_eq_sites)
+    if (e.closed_at && *e.closed_at >= ctx_level)
+      e.closed_at.reset();
 
   pointer_logic.pop_back();
   addr_space_sym_num.pop_back();
@@ -1343,7 +1349,9 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
 
     auto eq = to_equality2t(expr);
 
-    if (
+    if (is_pointer_type(eq.side_1) && is_pointer_type(eq.side_2))
+      a = convert_ptr_eq(eq.side_1, eq.side_2);
+    else if (
       is_floatbv_type(eq.side_1) && is_floatbv_type(eq.side_2) && !int_encoding)
       a = fp_api->mk_smt_fpbv_eq(args[0], args[1]);
     else
@@ -1361,7 +1369,9 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
 
     auto neq = to_notequal2t(expr);
 
-    if (
+    if (is_pointer_type(neq.side_1) && is_pointer_type(neq.side_2))
+      a = convert_ptr_eq(neq.side_1, neq.side_2);
+    else if (
       is_floatbv_type(neq.side_1) && is_floatbv_type(neq.side_2) &&
       !int_encoding)
       a = fp_api->mk_smt_fpbv_eq(args[0], args[1]);
@@ -3414,6 +3424,7 @@ void smt_solver_baset::pre_solve()
   get_ast_cache.clear();
 
   close_int_to_ptr_objects();
+  close_ptr_eq_sites();
 
   // NB: always perform tuple constraint adding first, as it covers tuple
   // arrays too, and might end up generating more ASTs to be encoded in
