@@ -813,11 +813,25 @@ static bool is_constant_index(const nlohmann::json &slice)
          index["value"].is_number_integer();
 }
 
-/// True when every read of `name` in `node` indexes it by a constant, so no
-/// statement can replace one of its elements.
+/// Whether @p node is `x, y = name`, which copies the elements of `name`.
+static bool unpacks_name(const nlohmann::json &node, const std::string &name)
+{
+  if (
+    !node.is_object() || node.value("_type", "") != "Assign" ||
+    node["targets"].size() != 1 || node["value"].value("_type", "") != "Name" ||
+    node["value"]["id"] != name)
+    return false;
+  const std::string target = node["targets"][0].value("_type", "");
+  return target == "Tuple" || target == "List";
+}
+
+/// True when every read of `name` in `node` indexes it by a constant or
+/// unpacks it, so no statement can replace one of its elements.
 static bool
 only_read_by_constant_index(const nlohmann::json &node, const std::string &name)
 {
+  if (unpacks_name(node, name))
+    return only_read_by_constant_index(node["targets"], name);
   if (node.is_object())
   {
     const std::string kind = node.value("_type", "");
@@ -854,6 +868,67 @@ folded_list_element(const nlohmann::json &module, const nlohmann::json &node)
   return element;
 }
 
+static bool has_starred(const nlohmann::json &elts)
+{
+  return std::any_of(elts.begin(), elts.end(), [](const nlohmann::json &e) {
+    return e.value("_type", "") == "Starred";
+  });
+}
+
+/// The list and element index that a top-level `x, y = list` binds to
+/// @p name when no other statement binds it, or {"", -1}.
+static std::pair<std::string, long long>
+unpacked_element(const nlohmann::json &module, const std::string &name)
+{
+  for (const auto &stmt : module["body"])
+  {
+    if (
+      stmt.value("_type", "") != "Assign" ||
+      stmt["value"].value("_type", "") != "Name")
+      continue;
+    const std::string list = stmt["value"]["id"].get<std::string>();
+    if (!unpacks_name(stmt, list) || has_starred(stmt["targets"][0]["elts"]))
+      continue;
+    const nlohmann::json &elts = stmt["targets"][0]["elts"];
+    const bool bound_here_only = json_utils::count_name_bindings(stmt, name) ==
+                                 json_utils::count_name_bindings(module, name);
+    for (std::size_t i = 0; bound_here_only && i < elts.size(); ++i)
+      if (elts[i].value("_type", "") == "Name" && elts[i]["id"] == name)
+        return {list, static_cast<long long>(i)};
+  }
+  return {"", -1};
+}
+
+/// "list[i]" when @p node reads element i of a module-level list literal whose
+/// elements are never replaced: `list[i]` with a constant i, or a name bound
+/// only by a top-level `x, y = list`. "" otherwise.
+static std::string
+list_element_read(const nlohmann::json &module, const nlohmann::json &node)
+{
+  std::pair<std::string, long long> element{"", -1};
+  if (
+    node.value("_type", "") == "Subscript" &&
+    node["value"].value("_type", "") == "Name" &&
+    node["slice"].value("_type", "") == "Constant" &&
+    node["slice"]["value"].is_number_integer())
+    element = {
+      node["value"]["id"].get<std::string>(),
+      node["slice"]["value"].get<long long>()};
+  else if (node.value("_type", "") == "Name")
+    element = unpacked_element(module, node["id"].get<std::string>());
+  const auto &[list, index] = element;
+  const nlohmann::json *value =
+    list.empty() ? nullptr : json_utils::top_level_value(module, list);
+  if (
+    !value || value->value("_type", "") != "List" ||
+    has_starred((*value)["elts"]) || index < 0 ||
+    index >= static_cast<long long>((*value)["elts"].size()) ||
+    json_utils::count_name_bindings(module, list) != 1 ||
+    !only_read_by_constant_index(module, list))
+    return "";
+  return list + "[" + std::to_string(index) + "]";
+}
+
 /// The module-level name that owns the object `node` denotes, or "" when that
 /// is not provable from the AST. Each name on the way must be bound exactly
 /// once in the whole module, by a top-level statement, and every name but the
@@ -865,6 +940,8 @@ static std::string
 sole_object_owner(const nlohmann::json &module, const nlohmann::json &node)
 {
   if (std::string element = folded_list_element(module, node); !element.empty())
+    return element;
+  if (std::string element = list_element_read(module, node); !element.empty())
     return element;
   std::set<std::string> seen;
   for (const nlohmann::json *name = &node; name->value("_type", "") == "Name";)
@@ -985,7 +1062,40 @@ expr2tc python_converter::build_is_equality(
     return or2tc(
       equality2tc(lhs2, rhs2), and2tc(isnan2tc(lhs2), isnan2tc(rhs2)));
 
+  refuse_uncached_int_identity(lhs2, rhs2, left, right);
   return equality2tc(lhs2, rhs2);
+}
+
+/// CPython caches the ints -5..256, so two equal ints there are one object
+/// and two unequal ints never are. Two equal ints outside it may be one object
+/// or two, which the model does not track, so that case is refused (#9298).
+void python_converter::refuse_uncached_int_identity(
+  const expr2tc &lhs,
+  const expr2tc &rhs,
+  const nlohmann::json &left,
+  const nlohmann::json &right)
+{
+  const bool python_int =
+    lhs->type == migrate_type(long_long_int_type()) ||
+    lhs->type == migrate_type(type_handler::python_int_typet());
+  const bool same_name = left.value("_type", "") == "Name" &&
+                         right.value("_type", "") == "Name" &&
+                         left["id"] == right["id"];
+  if (!python_int || rhs->type != lhs->type || same_name)
+    return;
+  const std::string refusal =
+    "Unsupported: 'is' between two equal ints outside -5..256 that are not "
+    "known to be one object";
+  if (!can_emit_operand_statement())
+    throw std::runtime_error(refusal);
+  const expr2tc cached = and2tc(
+    greaterthanequal2tc(lhs, constant_int2tc(lhs->type, BigInt(-5))),
+    lessthanequal2tc(lhs, constant_int2tc(lhs->type, BigInt(256))));
+  code_assertt check(migrate_expr_back(or2tc(notequal2tc(lhs, rhs), cached)));
+  check.location() = get_location_from_decl(left);
+  check.location().user_provided(true);
+  check.location().comment(refusal);
+  current_block->copy_to_operands(check);
 }
 
 std::optional<std::pair<exprt, std::string>>

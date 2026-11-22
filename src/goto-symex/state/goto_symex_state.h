@@ -408,8 +408,11 @@ public:
    *  tracking state.
    *  @param lhs Symbol being assigned to.
    *  @param rhs Value being assigned to symbol.
+   *  @param update_value_set False leaves the value set as it is, for a
+   *         caller that supplies @p lhs's entries itself.
    */
-  void assignment(expr2tc &lhs, const expr2tc &rhs);
+  void
+  assignment(expr2tc &lhs, const expr2tc &rhs, bool update_value_set = true);
 
   /** @p rhs with the earlier writes under its top-level array `with`
    *  replaced by @p l1_lhs, when they all write that same object. */

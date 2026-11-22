@@ -119,24 +119,52 @@ def _scope_nodes(body):
                 stack.append(child)
 
 
+def _assigned_literals(body):
+    """Per name assigned a list or tuple literal in this scope, the elements
+    of those literals."""
+    literals = {}
+    for node in _scope_nodes(body):
+        if not (isinstance(node, (ast.Assign, ast.AnnAssign))
+                and isinstance(node.value, (ast.List, ast.Tuple))):
+            continue
+        for target in node.targets if isinstance(node, ast.Assign) else [node.target]:
+            if isinstance(target, ast.Name):
+                literals.setdefault(target.id, []).extend(node.value.elts)
+    return literals
+
+
+def _iterated_elements(loop, literals):
+    """The elements a `for` over a list or tuple literal, or over a name
+    assigned one, binds its target to (#10305)."""
+    if isinstance(loop.iter, (ast.List, ast.Tuple)):
+        return loop.iter.elts
+    if isinstance(loop.iter, ast.Name):
+        return literals.get(loop.iter.id, [])
+    return []
+
+
 def _name_bindings(body):
-    """The (target name, value) of each assignment in this scope to names."""
+    """The (target name, value) of each assignment in this scope to names,
+    and of each element a `for` binds a name to."""
+    literals = _assigned_literals(body)
     for node in _scope_nodes(body):
         if isinstance(node, ast.Assign):
-            targets = node.targets
+            targets, values = node.targets, [node.value]
         elif isinstance(node, ast.AnnAssign) and node.value is not None:
-            targets = [node.target]
+            targets, values = [node.target], [node.value]
+        elif isinstance(node, (ast.For, ast.AsyncFor)):
+            targets, values = [node.target], _iterated_elements(node, literals)
         else:
             continue
         for target in targets:
             if isinstance(target, ast.Name):
-                yield target.id, node.value
+                for value in values:
+                    yield target.id, value
 
 
-def _receiver_classes(body, classes, returns):
-    """Per name bound in this scope to instances of more than one class of
-    this module, directly or through a copy of another name, the set of those
-    classes."""
+def _bound_classes(body, classes, returns):
+    """Per name bound in this scope to instances of classes of this module,
+    directly or through a copy of another name, the set of those classes."""
     bindings = list(_name_bindings(body))
     bound = {}
     for name, value in bindings:
@@ -151,6 +179,13 @@ def _receiver_classes(body, classes, returns):
                 found = bound.setdefault(name, set())
                 changed |= not bound[value.id] <= found
                 found |= bound[value.id]
+    return bound
+
+
+def _receiver_classes(body, classes, returns):
+    """Per name bound in this scope to instances of more than one class of
+    this module, the set of those classes."""
+    bound = _bound_classes(body, classes, returns)
     return {name: found for name, found in bound.items() if len(found) > 1}
 
 

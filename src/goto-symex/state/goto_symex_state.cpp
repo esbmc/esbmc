@@ -995,7 +995,10 @@ bool goto_symex_statet::constant_propagation_reference(
   return false;
 }
 
-void goto_symex_statet::assignment(expr2tc &lhs, const expr2tc &rhs)
+void goto_symex_statet::assignment(
+  expr2tc &lhs,
+  const expr2tc &rhs,
+  bool update_value_set)
 {
   assert(is_symbol2t(lhs));
   symbol2t &lhs_sym = to_symbol2t(lhs);
@@ -1040,7 +1043,7 @@ void goto_symex_statet::assignment(expr2tc &lhs, const expr2tc &rhs)
         renaming::level2t::name_record(to_symbol2t(std::as_const(l1_lhs))),
         pinned);
 
-  if (use_value_set)
+  if (use_value_set && update_value_set)
   {
     // update value sets
     expr2tc l1_rhs = shallow_array_update(rhs, l1_lhs);

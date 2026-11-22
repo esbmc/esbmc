@@ -1,0 +1,5 @@
+CORE
+main.goto
+--binary
+^  assertion a\.bytes\[0\] == 0x11$
+^VERIFICATION FAILED$

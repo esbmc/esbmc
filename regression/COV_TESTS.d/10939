@@ -1,0 +1,8 @@
+regression/goto-transcoder/github_10939
+regression/goto-transcoder/github_10939_fail
+regression/goto-transcoder/github_10939_write
+regression/esbmc/github_10939_float_union
+regression/goto-transcoder/github_10939_width_fail
+regression/goto-transcoder/github_10939_pointer_fail
+regression/esbmc/github_10939_struct_const
+regression/esbmc/github_10939_struct_const_fail

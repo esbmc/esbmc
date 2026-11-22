@@ -3875,7 +3875,7 @@ smt_resultt bmct::multi_property_check(
         // (only when --all-witnesses is set, i.e. enumerate==true).
         // The legacy single-witness renderer does not use them.
         if (enumerate)
-          w.nondet_inputs = collect_nondet_values(local_eq, *solver_ptr);
+          w.nondet_inputs = collect_enumeration_inputs(local_eq, *solver_ptr);
         w.ce_index = ce_counter++;
 
         const std::string witness_id =

@@ -1,28 +1,25 @@
 # Scope: field-sensitive SSA in goto-symex (#7521)
 
-> **Status at 2026-11-19: Phase 0 merged (#10773); Phase 1 merged (#10778),
+> **Status at 2026-11-20: Phase 0 merged (#10773); Phase 1 merged (#10778),
 > with the trace fixes #10799 (§8.7) and #10808 (§8.8) and the whole-read fix
 > #10839 (§8.13). On master `48d5f770e` with the flag forced on, the full
 > Python `CORE` suite (9279 tests, Bitwuzla), the C and C++ `CORE` suites
 > (Bitwuzla) and `tagged_attr_store` (Z3 and Bitwuzla) keep every verdict, and
 > the Phase 1 corpus rows meet the 2x bar under both solvers (§8.14-§8.17);
-> so does the whole Python suite under Z3 (§8.16). Master
-> also has a wrong verdict with the flag: a split struct's L2 name, carried
-> into a call argument, is re-split into unassigned field generations (§8.19).
-> The open Phase 1 PRs fix it and the lost constant propagation: #10862, a
-> split copy into a split destination (§8.18), and the PR stacked on it,
-> `github_7797_flat_set` and the re-split L2 name (§8.19). With both, the
-> full Python `CORE` suite keeps every verdict with the flag forced on
-> (§8.20). The 11 Python traces that lost the step of a whole tagged-value
-> write print it again: a copy of a split object's carried chain is now
-> carried over the destination's own name (§8.21). A separate build of the
-> stack's head, merged with master `08198b792`, gives the same results (§8.22),
-> and a quarter of the Python `CORE` suite under Z3 keeps every verdict (one
-> only past a 60 s cap) and
-> every printed value the run without the flag pins (§8.23). The stack
-> merged with master `1aa90ce5a`, which adds #10848's erasure of a dead
-> aggregate's member entries, keeps those results (§8.24).
-> Phase 1 still lacks an SV-COMP run.** The corpus is in `regression/field-sensitivity/`
+> so does the whole Python suite under Z3 (§8.16). The Phase 1 fixes for a
+> split copy into a split destination (#10862, §8.18) and for a re-split L2
+> name and `github_7797_flat_set` (#10864, §8.19-§8.24) are merged; with
+> them the full Python `CORE` suite keeps every verdict with the flag forced
+> on (§8.20). Phase 1 still lacks an SV-COMP run. Phase 2's first part
+> (#10876) splits address-taken locals that every pointer access reaches as a
+> whole or through one member, as Andersen's points-to sets show (§8.25);
+> `local_addr_once` now meets the 2x bar. An assert-enabled build of it runs
+> every C and C++ `CORE` test with the flag forced on without tripping
+> Invariant 3's assert (§8.26), and a phi no longer reads a copy carried over
+> the object's own name from the other path's value set (§8.27). Its merge
+> with master `aabf837b1` keeps those results under Z3 (§8.27). Globals (#10886) and
+> the dereference-size memo (#10894) are stacked on it; the SV-COMP run is
+> still open.** The corpus is in `regression/field-sensitivity/`
 > with baselines, and the census has been run and reverted. Phase 1 adds
 > `--field-sensitive-ssa` (default off): symex gives each field of an
 > eligible local, parameter or return slot its own SSA name. The Phase 1
@@ -1668,3 +1665,200 @@ cloned with git), 4-core container.
   (1.46x) under Bitwuzla; `local_writes` 0.021 / 0.022 (1.05x) and
   0.019 / 0.022 (1.16x).
 - Not measured here: trace text, Python suites, k-induction and SV-COMP.
+
+### 8.25 Phase 2, part 1: address-taken locals
+
+Measured on 2026-11-20 on `feat/field-sensitive-ssa-phase2` (stacked on
+the `flat_set` PR at `c73e2982a`, which includes master `1aa90ce5a`).
+RelWithDebInfo, gcc 13.3, LLVM 18, Z3 4.13.3 and Bitwuzla 0.9.0, 4-core
+container. "Baseline" is the parent commit's binary.
+
+What changes, behind `--field-sensitive-ssa` only:
+
+- The eligibility scan no longer drops a local whose address is taken as
+  `&s` of its own type. Such a local stays eligible if, in every function
+  reachable from the entry point, each dereference whose Andersen points-to
+  set includes it has the object's own type and is read whole or through one
+  member. Pointer arithmetic on a pointer that may reach it, a pointer
+  passed to a function symex models itself or that has no body, an `OTHER`
+  instruction, and a points-to set Andersen cannot bound all drop it.
+  Uncalled functions are skipped because Andersen gives their pointer
+  parameters TOP.
+- Symex rewrites what a dereference resolves to, the pointer it queries
+  the value set with, the operands it renames inside a dereference, and the
+  guards of the dereference claims and assumptions it emits. `rewrite`
+  leaves an `address_of` alone, and a split local whose address is taken
+  keeps its own record in `local_variables`, so `is_live_variable` still
+  finds it.
+
+Results:
+
+- Harnesses: writes and reads through a pointer, a pointer field read
+  through a pointer, a pointer chosen between two objects, a dangling
+  pointer, and a reinterpreting `char *`. Same verdicts with and without the
+  flag under Z3 and Bitwuzla; the reinterpreted object is not split.
+- New tests `field_sensitive_ssa_through_pointer` and `_fail`,
+  `field_sensitive_ssa_pointer_dangling_fail`,
+  `field_sensitive_ssa_pointer_reinterpreted`. Each mutant fails at least
+  one of them: without the post-dereference rewrite, without the liveness
+  record, or without the claim guard rewrite, `_through_pointer` fails;
+  with the Andersen filter accepting every candidate, the reinterpreted
+  object splits and `_pointer_reinterpreted` fails.
+  `field_sensitive_ssa_opaque_whole_read` and `_fail` now split 2 objects:
+  `s`, reached only through `p`, splits too; the pinned `r` step is
+  unchanged.
+- Every new branch outcome (20) reached under Z3 and Bitwuzla: an
+  instrumented build printing a marker per outcome, 9 C and C++ harnesses.
+  An index on a pointer never reaches symex (`p[i]` is lowered to
+  `*(p + i)`), so the scan has no case for it.
+- Flag forced on against the baseline without it, every third directory of
+  `regression/esbmc` and `regression/esbmc-cpp/cpp`, `CORE` tests that do
+  not already pass the flag, 30 s per run, 4 at a time: 1626 tests, 218 of
+  which split more objects than the baseline with the flag. 0 verdict
+  changes: `vector_reserve_realloc` solves only with the flag, and every
+  other difference is both runs timing out or printing no verdict. The 218
+  re-run on the final binary give the same split counts and verdicts.
+- Trace text, the 87 of those 218 that fail: 83 print the same
+  counterexample. `github_9409_fail`, `github_9416_fail` and
+  `vector_count_value_ctor_fail` print a member write's value where the
+  baseline prints the whole struct (§8.6, first row); `github_9416_fail`
+  also no longer lists an unwinding assertion the flag lets symex fold.
+  `github_5868_is_scalar_const_lookup_fail` lists two more `NOT CHECKED`
+  invalid-pointer claims: a pointer field read through a split object has a
+  wider value set there. No verdict moves, but this is open.
+- Python, every 25th `CORE` test (373), flag forced on against off: 0
+  verdict changes. Python objects are never split.
+- ctest without the flag: `esbmc/` 3580/3604 and `esbmc-cpp/cpp` 1468/1476,
+  each failure failing the same way on the baseline; every 20th `python/`
+  test, 491/491.
+- Corpus, flag on, symex seconds, medians of three, 8 / 512 / 2048 fields:
+  `local_addr_once` 0.016 / 0.017 / 0.015 (0.94x) under Z3 and 0.017 /
+  0.014 / 0.017 (1.0x) under Bitwuzla; the baseline with the flag, which
+  does not split it, takes 0.611 / 1.636 / 4.664 and 0.611 / 1.723 / 4.272.
+  Z3 solving at 2048 fields drops from 5.5 s to 0.010 s. Every other corpus
+  row gives its expected verdict under both solvers except `plc_db` at 512
+  and 2048 fields, a global, which times out at 300 s as before.
+- Still open for the Phase 2 gate: globals (`global_callee`, `plc_db`), the
+  wider value set above, and an SV-COMP run.
+
+### 8.26 Phase 2, part 1: assert-enabled run over the C and C++ suites
+
+Measured on 2026-11-20 on `feat/field-sensitive-ssa-phase2-locals` merged
+with the `flat_set` branch, itself merged with master `e0ce5d373`. Built
+with `-O2 -g1` and no `-DNDEBUG`, so `assert` is live, including the one in
+`split_structst::rewrite` that checks Invariant 3. gcc 13.3, LLVM 18, Z3
+4.13.3, 4-core container. Bitwuzla could not be built there (its CaDiCaL
+download was refused), so these runs are Z3 only. The Invariant 3 assert
+and the eligibility scan run before any solver is called.
+
+- Every `CORE` test of `regression/esbmc` and `regression/esbmc-cpp/cpp`
+  that does not already pass the flag (4802), flag forced on and off, 20 s
+  per run, 4 at a time. No run prints a failed `assert`. Five runs end in
+  `SIGABRT` both ways: each prints the `ERROR:` its test expects
+  (`github_7905_ir_refused`, `github_7905_struct_refused`,
+  `init_obj_vlas`) or a Z3 sort error it also prints without the flag
+  (`github_6310_typeid_dynamic` and `_fail`).
+- Five C++ tests lost their verdict with the flag: `github_7797_flat_eq`,
+  `github_7797_regex`, `github_9403`, `github_9417` and `github_9419` pass
+  without it, and with it end in `uncaught exception [St12out_of_range]:
+  unordered_map::at` before symex. §8.25's every-third-directory sample
+  did not include them. The pointer scan erased a candidate on the first of
+  two identical entries for it in one Andersen points-to set (a `std::map`
+  iterator's pointers into the map's arrays), then looked it up again. It
+  now skips a name it already dropped, which gives the same set as visiting
+  each name once. With the fix all five give `SUCCESSFUL` with the flag
+  (12 to 44 objects split), as without it.
+- New pair `field_sensitive_ssa_points_to_duplicate` and `_fail` (C++,
+  `std::multimap`, reduced from `github_9403`). Both end in the exception
+  without the fix and give `SUCCESSFUL` and `FAILED` with it. ctest
+  `field_sensitive_ssa|field-sensitivity|github_7797`: 92/92.
+- The other verdict differences: `assoc_emplace`, `om_source_from_vfs`,
+  `vector_emplace_back` and `_fail`, and `vector_reserve_realloc` time out
+  at 20 s without the flag and give their expected verdicts with it.
+- Still open for the Phase 2 gate: as §8.25, plus a Bitwuzla run of the
+  above.
+
+### 8.27 Phase 2, part 1: a phi over a copy carried over its own name
+
+Measured on 2026-11-20 on `feat/field-sensitive-ssa-phase2-locals` at
+`c13f2cf3d`. RelWithDebInfo, gcc 13.3, LLVM 18, Z3 4.13.3 and Bitwuzla
+0.9.0, 4-core container. "Base" is `c13f2cf3d`'s binary.
+
+- Cause of the open item in §8.25. In `std::map::upper_bound`, `begin()`'s
+  return temporary is split once its address may be taken, so the copy
+  `it = begin()` is carried as `it#1 WITH [...]` over `it`'s own L2 name
+  (§8.21). At the merge after `return it;`, `phi_function` renames the
+  other path's value of `it` to that chain and assigns it on the current
+  path, whose value set has already dropped `it` at its `DEAD`. Read there,
+  `it.it_key` and `it.it_value` have no entry and become unknown, and
+  `merge_value_sets` keeps the unknown next to the other path's targets. The
+  next `operator++` then emits invalid-pointer claims at `map:110-111`.
+  Without the flag the carried value reads `begin`'s temporary instead,
+  which both paths still hold.
+- Change, with the flag only: when the merged path's value is a `with`
+  chain over an L2 name of the object the phi assigns, the phi leaves the
+  current path's value-set entries for that object as they are, and
+  `merge_value_sets` adds the merged path's entries. This is sound because
+  each path's entries describe that path's value, and the merge takes their
+  union. `goto_symex_statet::assignment` takes a flag to skip the value-set
+  update.
+- `github_5868_is_scalar_const_lookup_fail` with the flag: 657 VCCs and 48
+  `NOT CHECKED` claims under Z3 and Bitwuzla, as without the flag (base:
+  661 and 50).
+- New pair `field_sensitive_ssa_phi_own_name` (`--multi-property`,
+  `SUCCESSFUL`) and `_fail` (an out-of-bounds read through the iterator,
+  `FAILED`), both C++ and reduced from the map. Both also require that no
+  `invalid pointer` claim is printed. On the base binary the first lists
+  3 such claims and `_fail` lists one, so both fail there; both pass with
+  the change.
+- Both outcomes of the new decision are reached under Z3 and Bitwuzla, in
+  a C harness of the same shape and in the C++ test (instrumented build
+  printing a marker per outcome).
+- Flag forced on, base against this change, 30 s per run: every fourth
+  `regression/esbmc-cpp/cpp` directory (345 `CORE` tests), every eighth
+  `regression/esbmc` directory (435), and every 150th `regression/python`
+  directory (61). 0 verdict changes. Text changes only in
+  `github_5868_is_scalar_const_lookup`, `_fail` and `github_9372`, which
+  generate fewer claims; the rest is timings and addresses.
+- ctest without the flag: `esbmc-cpp/cpp` 1472/1480 and `esbmc/` 3599/3618,
+  and the same 8 and 19 tests fail on the base binary. Under the 10-minute
+  cap, 1637 `python` tests ran and all passed.
+- ctest `field_sensitive_ssa|field-sensitivity|github_7797|github_5868`:
+  215/215.
+- Corpus with the flag, symex seconds, medians of three, 8 / 2048 fields:
+  `local_addr_once` 0.014 / 0.016 (1.14x) under Z3 and 0.014 / 0.015
+  (1.07x) under Bitwuzla; `repro7521` 0.677 / 0.906 (1.34x) and 0.688 /
+  1.032 (1.50x); `local_writes` 0.014 / 0.016 (1.14x) and 0.013 / 0.015
+  (1.15x).
+- Still open for the Phase 2 gate: globals (`global_callee`, `plc_db`), the
+  assert-enabled run under Bitwuzla (§8.26), and an SV-COMP run.
+
+Re-measured on 2026-11-20 after merging master `aabf837b1` into
+`feat/field-sensitive-ssa-phase2-locals` (`fac81c88e`; #10864 was
+squash-merged, so its conflicts were resolved in favour of this branch).
+RelWithDebInfo, gcc 13.3, LLVM 18, Z3 4.13.3, 4-core container. Bitwuzla
+was not built: its CaDiCaL download is refused by the sandbox proxy.
+"Master" is a build of `aabf837b1`.
+
+- Flag forced on against off, same binary, 30 s per run: every fourth
+  `regression/esbmc-cpp/cpp` directory (343 `CORE` tests) and every eighth
+  `regression/esbmc` directory (437). 0 verdict changes. The only
+  differences are 6 tests that already pass `--field-sensitive-ssa` (given
+  twice, the option is rejected), `vector_reserve_realloc` and
+  `assoc_emplace`, which hit the 30 s cap without the flag (see below), and
+  random witness UUIDs; no trace text changes.
+- ctest `field_sensitive_ssa|field-sensitivity|github_7797|github_5868`:
+  215/215.
+- ctest without the flag, 10-minute cap, `-j4`: `esbmc-cpp/cpp` 627 tests
+  finished, 2 failed; `esbmc/` 746 finished, 4 failed; every 20th
+  `python/` test, 305 of 493 finished, 1 failed. Each failure prints the
+  same output on master: `vector_reserve_realloc` (Z3 does not finish
+  within 150 s), `ch8_5` (no `out_of_range` under LLVM 18), `02_eureka23`
+  and `gcc_popcount_01` (no Boolector), `builtin_clzg_ctzg` and
+  `bundled_headers_from_vfs` (LLVM 18), and `complex_cmath_log`
+  (`THOROUGH`, killed for memory on master too).
+- Corpus with the flag under Z3, symex seconds, medians of three, 8 / 2048
+  fields: `local_addr_once` 0.020 / 0.026 (1.30x); `repro7521` 0.922 /
+  1.355 (1.47x); `local_writes` 0.022 / 0.021 (0.95x).
+- clang-format 23.1.5 clean; complexity gate: nothing over threshold.
+- The merge adds no branch to `src/`.

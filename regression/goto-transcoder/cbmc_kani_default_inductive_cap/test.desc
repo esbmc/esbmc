@@ -1,0 +1,6 @@
+CORE
+main.goto
+--binary
+\A(?![\s\S]*Checking inductive step, k = 4)
+^Solution found by the forward condition
+^VERIFICATION SUCCESSFUL$
