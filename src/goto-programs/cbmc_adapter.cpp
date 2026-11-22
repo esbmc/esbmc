@@ -155,11 +155,10 @@ void intern_string_type(irept &candidate)
   }
 }
 
-// A "constant" irep of the given bitvector type holding `value`. The value is
-// emitted as a hex string so fix_expression's own constant branch converts it
-// to a binary string of the type's exact width on the later recursion (the same
-// path CBMC's own constants take -- see hex_to_bin), rather than duplicating
-// that width logic here.
+// A "constant" irep of the given bitvector type holding the hex string `hex`,
+// which fix_expression's own constant branch converts to a binary string of the
+// type's exact width on the later recursion (the same path CBMC's own constants
+// take -- see hex_to_bin), rather than duplicating that width logic here.
 irept mk_bv_hex_const(const irept &bv_type, const std::string &hex)
 {
   irept c("constant");
@@ -476,13 +475,13 @@ void fix_expression(irept &irep)
 
   if (irep.id() == "bitreverse")
   {
-    // CBMC lowers __builtin_bitreverse{8,16,32,64} to a bitreverse irep
-    // (reverse the bit order: bit i <-> bit W-1-i), which migrate_expr has no
-    // handler for (aborts with "migrate expr failed"); ESBMC has no bitreverse
-    // irep2 node. As with clz/ctz above, reproduce it from ids migrate_expr
-    // already lowers (bitand, shl, lshr, bitor) via the standard SWAR reversal:
-    // swap adjacent bits, then 2-bit groups, then 4-bit, ... doubling the group
-    // size each step
+    // CBMC lowers __builtin_bitreverse{8,16,32,64}, and Kani
+    // u128::reverse_bits, to a bitreverse irep (reverse the bit order: bit i
+    // <-> bit W-1-i), which migrate_expr has no handler for (aborts with
+    // "migrate expr failed"); ESBMC has no bitreverse irep2 node. As with
+    // clz/ctz above, reproduce it from ids migrate_expr already lowers (bitand,
+    // shl, lshr, bitor) via the standard SWAR reversal: swap adjacent bits,
+    // then 2-bit groups, then 4-bit, ... doubling the group size each step
     //   acc = ((acc & mask_k) << k) | ((acc >> k) & mask_k)
     // where mask_k selects the low k bits of every 2k-bit block. Scoped to the
     // CBMC --binary path, so it never perturbs native handling.
