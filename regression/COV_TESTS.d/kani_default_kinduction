@@ -1,4 +1,7 @@
+regression/goto-transcoder/cbmc_kani_default_deep_fail
+regression/goto-transcoder/cbmc_kani_default_explicit_kinduction
+regression/goto-transcoder/cbmc_kani_default_inductive_cap
 regression/goto-transcoder/cbmc_kani_default_kinduction
 regression/goto-transcoder/cbmc_kani_default_kinduction_fail
-regression/goto-transcoder/cbmc_kani_default_unwind_fail
 regression/goto-transcoder/cbmc_kani_default_not_kani
+regression/goto-transcoder/cbmc_kani_default_unwind_fail

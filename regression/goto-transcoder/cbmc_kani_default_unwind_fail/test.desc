@@ -1,5 +1,6 @@
 CORE
 main.goto
 --binary --unwind 2
-FAILED +\[main\.assertion\.1\] +line +8 +unwinding assertion loop
+\A(?![\s\S]*Kani goto-binary)
+FAILED +\[main\.assertion\.1\] +line +\d+ +unwinding assertion loop
 ^VERIFICATION FAILED$

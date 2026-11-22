@@ -1,5 +1,5 @@
 /* A CBMC goto-binary whose symbol table names a __KANI_ helper, as every Kani
- * binary does. The loop has no bound, so only k-induction proves it. */
+ * binary does, so ESBMC verifies it by k-induction by default. */
 _Bool nondet_bool(void);
 int __KANI_marker;
 int main(void)
