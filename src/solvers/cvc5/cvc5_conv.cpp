@@ -129,10 +129,9 @@ expr2tc cvc5_convt::get_array_elem(
   auto const *carray = to_solver_smt_ast<cvc5_smt_ast>(array);
   size_t orig_w = array->sort->get_domain_width();
 
-  smt_astt tmpast = mk_smt_bv(BigInt(index), mk_bv_sort(orig_w));
-  auto const *tmpa = to_solver_smt_ast<cvc5_smt_ast>(tmpast);
-  cvc5::Term e = slv.mkTerm(cvc5::Kind::SELECT, {carray->a, tmpa->a});
-  delete tmpast;
+  auto const *idx = to_solver_smt_ast<cvc5_smt_ast>(
+    mk_smt_bv(BigInt(index), mk_bv_sort(orig_w)));
+  cvc5::Term e = slv.mkTerm(cvc5::Kind::SELECT, {carray->a, idx->a});
 
   return get_by_ast(subtype, new_ast(e, convert_sort(subtype)));
 }

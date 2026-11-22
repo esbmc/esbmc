@@ -1,0 +1,5 @@
+CORE
+main.c
+--all-witnesses --max-witnesses 4 --cvc5
+^\[Counterexamples - 4 witnesses\]$
+^VERIFICATION FAILED$
