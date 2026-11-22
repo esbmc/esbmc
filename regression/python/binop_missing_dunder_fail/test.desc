@@ -1,0 +1,5 @@
+CORE
+main.py
+
+^\s*FAILED\s+\[global\.assertion\.\d+\]\s+line 7\s+uncaught exception: TypeError$
+^VERIFICATION FAILED$

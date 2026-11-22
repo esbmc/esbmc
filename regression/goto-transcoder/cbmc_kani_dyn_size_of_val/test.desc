@@ -1,0 +1,4 @@
+CORE
+cbmc_kani_dyn_size_of_val.goto
+--binary --function _RNvCs4AValpHRXIv_8dyn_size7harness --ignore-property-class reachability_check --ignore-property-class cover
+^VERIFICATION SUCCESSFUL$

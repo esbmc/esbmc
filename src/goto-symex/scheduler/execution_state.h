@@ -265,7 +265,10 @@ public:
    *  @param expr Expression that we're asserting is true.
    *  @param msg Textual message explaining this assertion.
    */
-  void claim(const expr2tc &expr, const std::string &msg) override;
+  void claim(
+    const expr2tc &expr,
+    const std::string &msg,
+    bool user_assertion = false) override;
 
   /**
    *  Perform a jump across GOTO code.
@@ -396,6 +399,8 @@ public:
    *  @return True if the current state prohibits context switches.
    */
   bool check_if_ileaves_blocked();
+
+  void guard_by_interleaving(expr2tc &expr) const override;
 
   /**
    *  True iff every thread in this schedule has reached a terminal state,
@@ -689,6 +694,9 @@ public:
   /** Identifying number for this execution state. Used to distinguish runs
    *  in --schedule mode. */
   unsigned int node_id;
+  /** --schedule only: the free guard symbol of this interleaving's node,
+   *  nil otherwise. */
+  expr2tc interleaving_guard;
   /** True if the guard on this interleaving becomes false.
    *  Means that there is no path from here on where any assertion may
    *  become satisfiable. */
@@ -850,7 +858,10 @@ public:
   schedule_execution_statet(const schedule_execution_statet &ref) = default;
   std::shared_ptr<execution_statet> clone() const override;
   ~schedule_execution_statet() override;
-  void claim(const expr2tc &expr, const std::string &msg) override;
+  void claim(
+    const expr2tc &expr,
+    const std::string &msg,
+    bool user_assertion = false) override;
   void note_bounded_loop_truncation() override
   {
     goto_symext::note_bounded_loop_truncation();

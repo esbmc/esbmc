@@ -1,0 +1,5 @@
+CORE
+main.c
+--64 --clang-c-irep2-adjust-only
+^\s+FAILED\s+\[main\.assertion\.1\]\s+line 17\s+assertion p\.f != 12345$
+^VERIFICATION FAILED$

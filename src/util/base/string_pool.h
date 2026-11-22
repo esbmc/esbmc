@@ -10,6 +10,7 @@
 #include <string>
 #include <string_view>
 #include <unordered_map>
+#include <util/base/threads.h>
 
 class string_view_hash
 {
@@ -100,7 +101,7 @@ protected:
   std::array<std::atomic<chunk_t *>, MAX_CHUNKS> chunks{};
   std::atomic<size_t> published_size{0};
 
-  mutable std::shared_mutex pool_mutex;
+  mutable threads_mutex<std::shared_mutex> pool_mutex;
 
   unsigned get(std::string_view s);
 };

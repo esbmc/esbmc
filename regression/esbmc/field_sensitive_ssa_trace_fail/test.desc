@@ -1,0 +1,5 @@
+CORE
+main.c
+--field-sensitive-ssa --no-slice
+^  u = \{ \.a = 0 \}\n\nState 5 file [^\n]*main\.c line 17 [^\n]*\n-+\n  u = \{ \.a=1, \.b=2 \}\n\nState 6 file
+^VERIFICATION FAILED$

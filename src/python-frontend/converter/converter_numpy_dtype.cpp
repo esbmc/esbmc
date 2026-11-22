@@ -895,7 +895,7 @@ void python_converter::reject_numpy_scalar_read(
   if (
     value.value("_type", "") == "Subscript" &&
     !json_utils::ast_contains_call(value))
-    reject_numpy_scalar_crossing(get_expr_without_lhs(value).type(), action);
+    reject_numpy_scalar_crossing(probe_expr(value).type(), action);
 }
 
 void python_converter::reject_numpy_scalar_in_attribute(

@@ -2497,7 +2497,6 @@ regression/esbmc/sprintf_nondet_int_output
 regression/esbmc/sprintf_nondet_int_output_fail
 regression/esbmc-cpp/cpp/aligned_operator_new
 regression/esbmc-cpp/cpp/aligned_operator_new_fail
-regression/esbmc/cbrtl_model
 regression/esbmc/cbrtl_model_fail
 regression/esbmc/cbrtl_double_range
 regression/esbmc/cbrtl_double_range_fail
@@ -2776,7 +2775,7 @@ regression/python/github_8361_short_circuit
 regression/python/github_8361_short_circuit_fail
 regression/python/github_8361_str_operand
 regression/python/github_8361_str_operand_fail
-regression/python/walrus_while_boolop_coverage_unsupported
+regression/python/walrus_while_boolop_coverage
 regression/python/walrus_while_comprehension_unsupported
 regression/python/if_walrus_boolop_coverage
 regression/python/github_8363

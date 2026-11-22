@@ -140,7 +140,7 @@ Append the block that defines the `NEWSOLVER` macro gating the `#ifdef`s above:
 - **`src/esbmc/options.cpp`** — in the solver option group (where `{"z3", NULL,
   "Use Z3"}` lives) add `{"newsolver", NULL, "Use NewSolver"},`, plus any
   `--newsolver-debug`-style sub-options.
-- **`src/esbmc/esbmc_parseoptions.cpp`** — no mandatory factory edit; selection is
+- **`src/esbmc/parseoptions/driver.cpp`** — no mandatory factory edit; selection is
   data-driven from the map and `all_solvers[]`. `--list-solvers` and `--help` pick
   up the new backend automatically from `ESBMC_AVAILABLE_SOLVERS`. Optionally add
   `"newsolver"` to the `preferred[]` diagnostic array and the multi-solver
@@ -150,8 +150,8 @@ Users then select it with `esbmc file.c --newsolver`.
 
 ## 8. Documentation
 
-Update [`BUILDING.md`](https://github.com/esbmc/esbmc/blob/master/BUILDING.md)
-with a `NewSolver` subsection: how to obtain/build the library, the
+Update the [Build Guide](/docs/development/building)
+(`website/content/docs/development/building.md`) with a `NewSolver` subsection: how to obtain/build the library, the
 `-DENABLE_NEWSOLVER=On` flag (and `-DNewSolver_DIR=` / `DOWNLOAD_DEPENDENCIES`
 behaviour), the minimum supported version, and the `--newsolver` usage. Match the
 depth of the existing Z3/Bitwuzla entries.

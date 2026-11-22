@@ -1,0 +1,4 @@
+CORE
+main.py
+--python-typed-lists --unwind 6
+^VERIFICATION FAILED$

@@ -1,0 +1,5 @@
+CORE
+main.py
+--unwind 5 --no-pointer-check --no-align-check
+^  uncaught exception: NameError$
+^VERIFICATION FAILED$

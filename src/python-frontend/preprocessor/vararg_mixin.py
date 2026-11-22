@@ -46,13 +46,24 @@ class VarargMixin:
             if not self._called_only_by(cls, calls, parents, bind_counts):
                 continue
             init = self._plain_init(cls)
-            if init is None or any(
-                    call.keywords or any(isinstance(arg, ast.Starred) for arg in call.args)
-                    for call in calls):
+            signatures = {self._construction_signature(call) for call in calls}
+            if init is None or len(signatures) != 1 or None in signatures:
                 continue
-            arities = {len(call.args) for call in calls}
-            if len(arities) == 1:
-                self._fix_init_arity(init, arities.pop() + 1)
+            arity, kwnames = signatures.pop()
+            if self._fix_init_arity(init, arity + 1, kwnames):
+                for call in calls:
+                    call.args += [kw.value for kw in call.keywords]
+                    call.keywords = []
+
+    @staticmethod
+    def _construction_signature(call):
+        """The positional count and keyword names of `call`, or None when a
+        `*` or `**` splat or a repeated keyword hides what it passes."""
+        names = tuple(kw.arg for kw in call.keywords)
+        if (None in names or len(set(names)) != len(names)
+                or any(isinstance(arg, ast.Starred) for arg in call.args)):
+            return None
+        return len(call.args), names
 
     def _index_module(self, module):
         """Parent links, binding counts and calls by callee name for `module`."""
@@ -97,23 +108,45 @@ class VarargMixin:
             node.value.func, ast.Name) and node.value.func.id == "super")
 
     @staticmethod
-    def _fix_init_arity(init, arity):
-        """Replace `init`'s *args by the `arity` positional parameters it packs."""
+    def _can_pack_init(args, extra, kwnames):
+        if args.kwonlyargs or args.posonlyargs or extra < 0:
+            return False
+        if args.vararg is None and (extra or args.kwarg is None):
+            return False
+        if args.kwarg is None and kwnames:
+            return False
+        return not {arg.arg for arg in args.args}.intersection(kwnames)
+
+    @staticmethod
+    def _fix_init_arity(init, arity, kwnames=()):
+        """Replace `init`'s *args and **kwargs by the `arity` positional
+        parameters and the `kwnames` keywords they pack; whether it did (#9074)."""
         args = init.args
         extra = arity - len(args.args)
-        if args.vararg is None or args.kwarg or args.kwonlyargs or args.posonlyargs or extra < 0:
-            return
+        if not VarargMixin._can_pack_init(args, extra, kwnames):
+            return False
         pad = [f"_esbmc_va_{i}" for i in range(extra)]
-        pack = ast.Assign(targets=[ast.Name(id=args.vararg.arg, ctx=ast.Store())],
-                          value=ast.Tuple(elts=[ast.Name(id=name, ctx=ast.Load()) for name in pad],
-                                          ctx=ast.Load()))
-        args.args += [ast.arg(arg=name) for name in pad]
+        kw_pad = [f"_esbmc_kw_{i}" for i in range(len(kwnames))]
+        packs = []
+        if args.vararg is not None:
+            packs.append(
+                ast.Assign(targets=[ast.Name(id=args.vararg.arg, ctx=ast.Store())],
+                           value=ast.Tuple(elts=[ast.Name(id=name, ctx=ast.Load()) for name in pad],
+                                           ctx=ast.Load())))
+        if args.kwarg is not None:
+            packs.append(
+                ast.Assign(targets=[ast.Name(id=args.kwarg.arg, ctx=ast.Store())],
+                           value=ast.Dict(keys=[ast.Constant(value=name) for name in kwnames],
+                                          values=[ast.Name(id=n, ctx=ast.Load()) for n in kw_pad])))
+        args.args += [ast.arg(arg=name) for name in pad + kw_pad]
         args.vararg = None
+        args.kwarg = None
         # Every construction passes all the parameters, and a default would
         # otherwise attach to the trailing packed ones.
         args.defaults = []
-        init.body.insert(0, ast.copy_location(pack, init.body[0]))
+        init.body[:0] = [ast.copy_location(pack, init.body[0]) for pack in packs]
         ast.fix_missing_locations(init)
+        return True
 
     def _scan_vararg_alias_calls(self, module):
         """Map each call through a module-level alias of a variadic def to the def.
@@ -655,9 +688,11 @@ class VarargMixin:
                 self._record_fixed_length_starred(stmt, scope.body[index + 1:], bind_counts, unsafe,
                                                   fixed)
         for scope in defs:
+            calls = calls_to.get(scope.name, [])
             fixed.update(
-                self._fixed_length_starred_params(scope, calls_to.get(scope.name, []), parents,
-                                                  bind_counts, unsafe))
+                self._fixed_length_starred_params(scope, calls, parents, bind_counts, unsafe))
+            self._split_by_starred_length(module, scope, calls, (parents, bind_counts, unsafe),
+                                          fixed)
         return fixed
 
     def _fixed_length_starred_params(self, scope, calls, parents, bind_counts, unsafe):
@@ -682,6 +717,56 @@ class VarargMixin:
             fixed.update(
                 dict.fromkeys(self._starred_reads(scope, param.arg, parents, bind_counts), length))
         return fixed
+
+    def _split_by_starred_length(self, module, scope, calls, index_info, fixed):
+        """Replace a module-level `scope` by one copy per length of the
+        displays its `calls` pass for a parameter it unpacks into a call, when
+        those lengths differ (#9797). Each call goes to the copy for its
+        length, where the unpacking has that fixed length."""
+        parents, bind_counts, _ = index_info
+        inner = {id(node) for node in ast.walk(scope)}
+        if (scope not in module.body or scope.args.vararg or scope.args.kwarg
+                or any(id(call) in inner for call in calls)
+                or not self._called_only_by(scope, calls, parents, bind_counts)):
+            return
+        for index in range(len(scope.args.posonlyargs + scope.args.args)):
+            reads = self._length_split_reads(scope, index, calls, index_info)
+            if reads:
+                position = module.body.index(scope)
+                module.body[position:position + 1] = self._copy_per_length(
+                    scope, index, calls, reads, fixed)
+                return
+
+    def _length_split_reads(self, scope, index, calls, index_info):
+        """The `*p` reads in `scope` of its parameter p at `index` when `calls`
+        pass non-empty displays of one kind and more than one length there,
+        else None."""
+        parents, bind_counts, unsafe = index_info
+        name = (scope.args.posonlyargs + scope.args.args)[index].arg
+        displays = [self._passed_display(call, index) for call in calls]
+        if None in displays or len({kind for kind, _ in displays}) != 1:
+            return None
+        lengths = {length for _, length in displays}
+        if len(lengths) < 2 or not all(lengths) or name in unsafe or bind_counts.get(name) != 1:
+            return None
+        return self._starred_reads(scope, name, parents, bind_counts)
+
+    @staticmethod
+    def _copy_per_length(scope, index, calls, reads, fixed):
+        copies = {}
+        for call in calls:
+            length = len(call.args[index].elts)
+            if length not in copies:
+                memo = {}
+                copies[length] = copy.deepcopy(scope, memo)
+                copies[length].name = f"{scope.name}__esbmc_len{length}"
+                for node, known in list(fixed.items()):
+                    if id(node) in memo:
+                        fixed[memo[id(node)]] = known
+                for read in reads:
+                    fixed[memo[id(read)]] = length
+            call.func.id = copies[length].name
+        return list(copies.values())
 
     @staticmethod
     def _called_only_by(scope, calls, parents, bind_counts):

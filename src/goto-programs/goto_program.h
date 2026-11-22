@@ -170,16 +170,20 @@ public:
     // reached.
     bool flipped_guard;
 
-    // Set on the nondet assignments the standalone --loop-invariant-check
-    // schema emits in place of a loop. Every claim symex reaches after one of
-    // them is checked against the invariant's over-approximation, so a
-    // violation there means the invariant is too weak to carry the claim, not
-    // that the program can reach the state (issue #7480). A boolean rather
-    // than a test on location.comment(): the combined --loop-invariant pass
-    // emits "loop invariant havoc (verification branch)", whose downstream
-    // claims are *not* abstracted, and that comment is user-visible text
-    // rather than an interface.
+    // Set on the nondet assignments a loop-invariant schema emits: the
+    // standalone --loop-invariant-check havoc in place of a loop, and the
+    // combined pass's verification-branch havoc. A claim violated on a path
+    // that runs one of them is checked against the invariant's
+    // over-approximation, so the violation means the invariant is too weak to
+    // carry the claim, not that the program can reach the state (issues #7480,
+    // #10641). A boolean rather than a test on location.comment(), which is
+    // user-visible text rather than an interface.
     bool loop_invariant_havoc;
+
+    // Set by goto_k_induction on the back edge of a loop whose havoc covers
+    // every state the loop reaches. The inductive step then assumes that
+    // loop exits at the unwinding bound, despite --partial-loops (#1320).
+    bool exits_at_bound;
 
     // Set by convert_switch: decimal strings of all case constants whose
     // target is this GOTO, used by witness waypoint matching.  Contains more
@@ -204,6 +208,7 @@ public:
       inductive_assertion = false;
       flipped_guard = false;
       loop_invariant_havoc = false;
+      exits_at_bound = false;
     }
 
     inline void make_goto()
@@ -384,6 +389,7 @@ public:
         inductive_assertion(false),
         flipped_guard(false),
         loop_invariant_havoc(false),
+        exits_at_bound(false),
         location_number(0),
         loop_number(unsigned(0)),
         pragma_unroll_count(0),
@@ -399,6 +405,7 @@ public:
         inductive_assertion(false),
         flipped_guard(false),
         loop_invariant_havoc(false),
+        exits_at_bound(false),
         location_number(0),
         loop_number(unsigned(0)),
         pragma_unroll_count(0),
@@ -426,6 +433,7 @@ public:
         inductive_assertion(other.inductive_assertion),
         flipped_guard(other.flipped_guard),
         loop_invariant_havoc(other.loop_invariant_havoc),
+        exits_at_bound(other.exits_at_bound),
         switch_case_ids(other.switch_case_ids),
         location_number(other.location_number),
         loop_number(other.loop_number),
@@ -458,6 +466,7 @@ public:
         inductive_assertion(other.inductive_assertion),
         flipped_guard(other.flipped_guard),
         loop_invariant_havoc(other.loop_invariant_havoc),
+        exits_at_bound(other.exits_at_bound),
         switch_case_ids(std::move(other.switch_case_ids)),
         location_number(other.location_number),
         loop_number(other.loop_number),
@@ -497,6 +506,7 @@ public:
       std::swap(inductive_assertion, instruction.inductive_assertion);
       std::swap(flipped_guard, instruction.flipped_guard);
       std::swap(loop_invariant_havoc, instruction.loop_invariant_havoc);
+      std::swap(exits_at_bound, instruction.exits_at_bound);
       instruction.switch_case_ids.swap(switch_case_ids);
       // Swap location_number too — same copy-assign-through-swap
       // reasoning as for labels.

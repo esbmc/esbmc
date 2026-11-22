@@ -1,0 +1,3 @@
+regression/esbmc/github_10918
+regression/esbmc/github_10918_fail
+regression/esbmc/github_10918_huge_vla_fail

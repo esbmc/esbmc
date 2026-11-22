@@ -151,17 +151,27 @@ class ExpressionRewriteMixin:
                     if not self._inline_single_use_map(stmts, i, name_counts):
                         i += 1
 
+    def _is_sorted_of_map(self, node):
+        """Whether `node` is sorted(map(f, xs), ...) with a pure `f`."""
+        return (isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+                and node.func.id == "sorted" and node.args and self._is_map_call(node.args[0])
+                and self._is_pure_operand(node.args[0].args[0]))
+
     def _rewrite_map_values(self, module):
         """Lower the map() uses whose result is consumed once, in full: as the
-        value of an unpacking, as a for-loop iterable, and through a name used
-        only by the next statement. list(map(...)) is lowered in visit_Call."""
+        value of an unpacking, as the argument of sorted(), as a for-loop
+        iterable, and through a name used only by the next statement.
+        list(map(...)) is lowered in visit_Call."""
         if self._binds_name(module, "map"):
             return
         self._inline_single_use_maps(module)
+        sorted_bound = self._binds_name(module, "sorted")
         for n in ast.walk(module):
             if (self._is_unpacking(n) and self._is_map_call(n.value)
                     and self._is_pure_operand(n.value.args[0])):
                 n.value = self._map_as_listcomp(n.value)
+            elif not sorted_bound and self._is_sorted_of_map(n):
+                n.args[0] = self._map_as_listcomp(n.args[0])
             elif (isinstance(n, ast.For) and self._is_map_call(n.iter)
                   and self._map_for_lowerable(n, n.iter)):
                 self._map_for_as_plain_for(n)
@@ -791,7 +801,19 @@ for {i} in range(0, len({seq})):
             if obj_node.id in self._subscript_inferred_vars:
                 return node
             return ast.Constant(value=True)
+        # Annotations are not enforced: `a: A` may hold a subclass instance.
+        if self._is_subclass_of(type_node.id, ann.id):
+            return node
         return ast.Constant(value=False)
+
+    def _is_subclass_of(self, name, base, seen=None):
+        """Whether user class `name` derives from `base`, at any depth."""
+        seen = seen if seen is not None else set()
+        if name in seen:
+            return False
+        seen.add(name)
+        parents = getattr(self, "class_bases", {}).get(name, [])
+        return base in parents or any(self._is_subclass_of(p, base, seen) for p in parents)
 
     # Symmetric equality-shape rewrites attempted on `assert L == R`. Each
     # returns the rewritten test or None; the cascade stops at the first hit.
@@ -882,7 +904,42 @@ for {i} in range(0, len({seq})):
 
     def visit_Compare(self, node):
         node = self.generic_visit(node)
+        return self._distribute_over_conditional(node)
+
+    @staticmethod
+    def _distribute_over_conditional(node):
+        """`x == (a if c else b)` as `(x == a) if c else (x == b)`, and likewise for `!=` and a
+        conditional on the left, when one of the constants `a` and `b` is a str and the other a
+        number. A conditional takes one type, so the other arm would be compared as that type.
+        `x` and `c` are names or constants, so evaluating `c` before `x` changes nothing."""
+        if len(node.ops) != 1 or not isinstance(node.ops[0], (ast.Eq, ast.NotEq)):
+            return node
+        sides = (node.left, node.comparators[0])
+        for i, cond in enumerate(sides):
+            other = sides[1 - i]
+            if ExpressionRewriteMixin._mixes_str_and_number(cond) and isinstance(
+                    other, (ast.Name, ast.Constant)):
+                arms = [[arm, other] if i == 0 else [other, arm]
+                        for arm in (cond.body, cond.orelse)]
+                compares = [
+                    ast.Compare(copy.deepcopy(a), node.ops, [copy.deepcopy(b)]) for a, b in arms
+                ]
+                return ast.fix_missing_locations(
+                    ast.copy_location(ast.IfExp(cond.test, *compares), node))
         return node
+
+    @staticmethod
+    def _mixes_str_and_number(node):
+        """`a if c else b` with a name or constant `c`, and constants `a` and `b` of which one is
+        a str and the other an int, a float or a bool."""
+        if not (isinstance(node, ast.IfExp) and isinstance(node.test, (ast.Name, ast.Constant))):
+            return False
+        arms = (node.body, node.orelse)
+        if not all(
+                isinstance(a, ast.Constant) and type(a.value) in (str, int, float, bool)
+                for a in arms):
+            return False
+        return isinstance(arms[0].value, str) != isinstance(arms[1].value, str)
 
     @staticmethod
     def _literal_list_truth(node):
@@ -894,10 +951,17 @@ for {i} in range(0, len({seq})):
     def visit_BoolOp(self, node):
         """Fold the operands decided by a list literal on the left: `[1] and x` is `x`,
         `[] and x` is `[]`, `[1] or x` is `[1]` and `[] or x` is `x`, so the result has the
-        type of the operand that is kept."""
+        type of the operand that is kept. `(a and b) and c` has the value of `a and b and c`,
+        so a nested operand with the same operator is spliced in."""
         node = self.generic_visit(node)
         is_and = isinstance(node.op, ast.And)
-        values = list(node.values)
+        values = []
+        for value in node.values:
+            if isinstance(value, ast.BoolOp) and type(value.op) is type(node.op):
+                values.extend(value.values)
+            else:
+                values.append(value)
+        node.values = list(values)
         while len(values) > 1:
             truth = self._literal_list_truth(values[0])
             if truth is None:

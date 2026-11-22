@@ -100,8 +100,6 @@ protected:
     const function_summaryt &summary,
     const code_function_call2t &call);
 
-  void collect_address_taken(const expr2tc &expr, function_summaryt &out) const;
-
   /// Collect the leaf symbols of `expr` into `out`, applying check_var_name.
   void collect_loop_symbols(const expr2tc &expr, loopst::loop_varst &out) const;
 

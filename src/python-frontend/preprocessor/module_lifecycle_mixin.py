@@ -1,5 +1,6 @@
 import ast
 
+from preprocessor.numpy_annotations import drop_ndarray_annotations
 from preprocessor.numpy_path_bindings import lower_numpy_path_bindings
 from preprocessor.numpy_returned_views import lower_numpy_returned_views
 from preprocessor.path_dependent_attributes import lower_path_dependent_attributes
@@ -63,6 +64,7 @@ class ModuleLifecycleMixin:
             lower_path_dependent_attributes(node)
             lower_numpy_returned_views(node)
             lower_numpy_path_bindings(node)
+            drop_ndarray_annotations(node)
         self._copy_methods_into_heirs(node)
         self._builtin_shadow_names = self._scan_builtin_shadow_names(node)
         self._unobservable_builtin_keys = self._scan_unobservable_builtin_keys(node)

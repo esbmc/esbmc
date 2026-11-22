@@ -12,7 +12,7 @@ This provides the tool with modularization opportunities.
 
 # GOTO Programs
 
-## Abstract Interpretation (`goto-programs/ai.h`)
+## Abstract Interpretation (`goto-programs/abstract-interpretation/ai.h`)
 
 - Interval Analysis
 - Static Analysis (it is defined in the terms of AI).

@@ -69,6 +69,8 @@ public:
   ///
   /// ASSUME mode (loops): constrains search space for k-induction
   /// ASSERT mode (contracts): checks assigns clause compliance
+  /// An array whose ASSUME is withheld is snapshotted again there, and a later
+  /// ASSERT on the same enforcer compares it against that post-havoc copy.
   ///
   /// \param explicit_assigns Variables explicitly allowed to change
   /// \param dest GOTO program to append instructions to
@@ -94,19 +96,6 @@ public:
   /// it is for expressions that are implicitly pre-state, such as the index of
   /// an assigns target.
   expr2tc in_pre_state(const expr2tc &expr) const;
-
-  /// \brief Patch old_snapshot side effects in a GOTO program to use frame
-  /// snapshots.
-  ///
-  /// Scans all ASSIGN instructions in \p prog for the pattern:
-  ///   return_value$___ESBMC_old_raw$N = old_snapshot(var)
-  /// where \p var matches an active snapshot entry.  The RHS is replaced with
-  ///   (void*)&snapshot_of_var
-  /// so that *(T*)return_value$... naturally dereferences the snapshot value.
-  ///
-  /// Must be called after materialize_snapshots() has populated
-  /// active_snapshots.
-  void patch_old_snapshot_assigns(goto_programt &prog) const;
 
   /// \brief Get the active snapshots (for debugging/inspection)
   const std::vector<snapshot_entryt> &get_active_snapshots() const
@@ -163,6 +152,22 @@ private:
 
   /// Active snapshot entries from the most recent materialize_snapshots call
   std::vector<snapshot_entryt> active_snapshots;
+
+  /// Arrays whose post-havoc frame was withheld, snapshotted after the havoc
+  /// for the compliance assertion.
+  std::vector<snapshot_entryt> post_havoc_snapshots;
+
+  std::string snapshot_prefix;
+
+  expr2tc capture(
+    const expr2tc &var,
+    goto_programt &dest,
+    const locationt &loc,
+    const std::string &comment);
+
+  /// The snapshot @p entry's variable is compared with: its latest post-havoc
+  /// snapshot in ASSERT mode if there is one, else its pre-state snapshot.
+  expr2tc frame_baseline(const snapshot_entryt &entry, frame_modet mode) const;
 
   /// Counter for generating unique snapshot names
   size_t snapshot_counter;

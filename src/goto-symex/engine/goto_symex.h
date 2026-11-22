@@ -296,6 +296,7 @@ protected:
   void
   symex_witness_function_return(expr2tc ret_val, const irep_idt &call_line);
   bool symex_witness_function_enter(const irep_idt &call_line);
+  void symex_witness_main_return();
   void symex_witness_branching(
     const expr2tc &old_guard,
     const expr2tc &new_guard,
@@ -303,7 +304,23 @@ protected:
     bool &new_guard_true,
     bool &new_guard_false,
     const goto_programt::instructiont &instruction);
-  void symex_witness_assert(expr2tc &new_expr, const std::string &msg);
+  void symex_witness_assert(
+    expr2tc &new_expr,
+    const std::string &msg,
+    bool user_assertion);
+  const std::vector<size_t> &
+  witness_segments_at(waypoint::Type type, const irep_idt &line) const;
+  expr2tc witness_segment_guard(size_t segment, const expr2tc &position);
+  expr2tc witness_position() const;
+  expr2tc witness_target_guard(
+    const locationt &loc,
+    const expr2tc &position,
+    bool return_statement = false);
+  expr2tc witness_assert_target_guard(
+    const std::string &msg,
+    bool application_assertion,
+    const expr2tc &position);
+  void advance_witness_position(size_t segment, const expr2tc &position);
 
   /**
    *  Interpret an OTHER instruction.
@@ -387,7 +404,10 @@ protected:
    *  @param expr Expression that must always be true.
    *  @param msg Textual message explaining assertion.
    */
-  virtual void claim(const expr2tc &expr, const std::string &msg);
+  virtual void claim(
+    const expr2tc &expr,
+    const std::string &msg,
+    bool user_assertion = false);
 
   /**
    *  Record a verdict for the claim being symbolically executed.
@@ -671,6 +691,10 @@ protected:
   bool
   run_builtin(const code_function_call2t &call, const std::string &symname);
 
+  /** __builtin_bounded_<function>(a, b) of a binary bounded function. */
+  void symex_bounded_binary_math(
+    const code_function_call2t &call,
+    const std::string &function);
   /** __builtin_bounded_<function>(x, exact): the bounded result of a
    *  transcendental function, from util/arith/transcendental.h. */
   void symex_bounded_math(
@@ -873,12 +897,22 @@ protected:
     const code_function_call2t &func_call,
     reachability_treet &art);
 
+  /** The __builtin_object_size of `ptr` for one constant `type_value`, given
+   * `deref`, the INTERNAL dereference of `ptr` that filled
+   * internal_deref_items. */
+  expr2tc
+  object_size_of_type(const expr2tc &ptr, const expr2tc &deref, int type_value);
+
   /* Handles dereferencing between threads and is used only in data race checks.
    * **/
   void replace_races_check(expr2tc &expr);
 
   void simplify_python_builtins(expr2tc &expr);
   void reject_untyped_isinstance(const expr2tc &value);
+  expr2tc
+  isinstance_subject_of(const isinstance2t &obj, bool *beside_null = nullptr);
+  void guard_isinstance_beside_null(expr2tc &expr);
+  void split_isinstance_over_objects(expr2tc &expr);
 
   void volatile_check(expr2tc &expr);
 
@@ -1215,7 +1249,8 @@ protected:
     expr2tc &rhs,
     expr2tc &full_rhs,
     guard2tc &guard,
-    const bool hidden);
+    const bool hidden,
+    const bool full_rhs_after_write = false);
 
   /**
    *  Perform assignment to a structure.
@@ -1240,6 +1275,56 @@ protected:
     const expr2tc &full_lhs,
     expr2tc &rhs,
     expr2tc &full_rhs,
+    guard2tc &guard,
+    const bool hidden);
+
+  /** Give every local of @p goto_function, and each field of a split one, a
+   *  fresh L1 instance in @p frame. */
+  void give_locals_fresh_instances(
+    const goto_functiont &goto_function,
+    goto_symex_statet::framet &frame) const;
+
+  /** Make the L1 local @p l1_sym of @p type live in the current frame, with
+   *  a fresh L2 value if it had one before. */
+  void declare_l1(expr2tc l1_sym, const type2tc &type, bool reused);
+
+  /** The field symbols of @p name under --field-sensitive-ssa, or null when
+   *  symex keeps it whole. */
+  const std::vector<expr2tc> *split_fields(const irep_idt &name) const;
+
+  /** @p e with each split struct object replaced by its fields. */
+  expr2tc split_rewrite(const expr2tc &e) const;
+
+  void split_rewrite_operands(std::vector<expr2tc> &operands) const;
+
+  /** split_rewrite(@p e), except that a whole read of a split object one of
+   *  whose fields holds an opaque L2 name, into a @p dest that is not split,
+   *  is first assigned to the object's own symbol and read through it, as it
+   *  is without the flag (#7521). A return passes no @p dest. */
+  expr2tc split_read(const expr2tc &e, const expr2tc &dest = expr2tc());
+
+  /** The base object of @p lhs, or of @p target, the source form of
+   *  @p lhs, when that names a split object as a whole. */
+  expr2tc assigned_object(const expr2tc &lhs, const expr2tc &target) const;
+
+  /** Whether @p target names a split object as a whole. */
+  bool is_split_whole(const expr2tc &target) const;
+
+  /** Assign @p rhs to @p original_lhs through @p lhs, its split form. */
+  void symex_assign_target(
+    const expr2tc &lhs,
+    const expr2tc &original_lhs,
+    expr2tc &rhs,
+    guard2tc &guard,
+    const bool hidden);
+
+  /** Assign @p rhs to the split object @p full_lhs, whose fields @p lhs
+   *  holds, as one field step per member. Every step but the last is hidden;
+   *  the last prints the whole struct, as an unsplit assignment would. */
+  void symex_assign_split(
+    const expr2tc &lhs,
+    const expr2tc &full_lhs,
+    expr2tc &rhs,
     guard2tc &guard,
     const bool hidden);
 
@@ -1385,10 +1470,12 @@ protected:
     const bool hidden);
 
   /** A store to a member of the struct symex_assign_member_arms is merging,
-   *  recorded by symex_assign_member instead of assigned. */
+   *  recorded by symex_assign_member instead of assigned. \p path names the
+   *  struct members leading from that struct to \p member. */
   struct member_store
   {
     expr2tc member;
+    std::vector<irep_idt> path;
     expr2tc guard;
     expr2tc value;
   };
@@ -1402,12 +1489,22 @@ protected:
   /** Non-null while symex_assign_member_arms collects stores. */
   member_store_collector *member_stores = nullptr;
 
-  /** Record the store of \p rhs to \p lhs, a member of the struct being
-   *  merged, under \p guard. */
-  void record_member_store(
+  /** Record the store of \p rhs to \p lhs under \p guard if \p lhs is reached
+   *  from the struct being merged through struct members only; otherwise
+   *  return false and record nothing. */
+  bool record_member_store(
     const expr2tc &lhs,
     const expr2tc &rhs,
     const guard2tc &guard);
+
+  /** \p obj, a struct at \p path below the merged struct, rebuilt member by
+   *  member from \p stores. With \p guarded, each store applies under its
+   *  guard; otherwise \p stores belong to one arm and do not overlap. */
+  expr2tc merge_member_stores(
+    const expr2tc &obj,
+    const std::vector<irep_idt> &path,
+    const std::vector<member_store> &stores,
+    bool guarded) const;
 
   /**
    *  Perform assignment to a byte extract.
@@ -1574,6 +1671,9 @@ protected:
     char spec,
     bool reads_to_nul,
     const expr2tc &arg);
+  /** Check the read of a non-constant format string, the unrenamed operand
+   *  `fmt` (C11 7.21.6.1p2). */
+  void check_printf_format(const expr2tc &fmt);
   /** Store an unrenamed sprintf-family call's output and return the length
    *  that call returns: the stored length, or for printf, fprintf and dprintf
    *  with a used result, printf_output_length. Nil when unknown. */
@@ -1631,6 +1731,13 @@ protected:
     std::list<expr2tc> &out);
   /** Symbolic implementation of scanf and fscanf */
   void symex_input(const code_function_call2t &expr);
+  /** Havoc the bytes one scanf conversion writes through `operand`;
+   *  `store_bytes` is 0 for %s and %[. */
+  void symex_scanf_store(
+    const dereference_callbackt::internal_item &item,
+    const expr2tc &operand,
+    uint64_t store_bytes,
+    const guard2tc &stored);
   /** Symbolic implementation of va_arg */
   void symex_va_arg(
     const expr2tc &lhs,
@@ -1698,6 +1805,13 @@ protected:
    *  Incrementally check the assumption.
    */
   bool is_assume_false(const expr2tc &assumption);
+
+  /** Restrict an assumption or claim to the interleaving that emitted it.
+   *  --schedule puts every interleaving in one formula, so a step that is not
+   *  guarded this way constrains the claims of all of them (#10296). */
+  virtual void guard_by_interleaving(expr2tc &) const
+  {
+  }
 
   // Members
 
@@ -1911,11 +2025,34 @@ protected:
   /** Cached from --validate-violation-witness; checked on every
    * branch/intrinsic. */
   bool validate_witness;
+  expr2tc witness_cursor;
 
   /** Set of dereference state records; this field is used as a mailbox between
    *  the dereference code and the caller, who will inspect the contents after
    *  a call to dereference (in INTERNAL mode) completes. */
   std::list<dereference_callbackt::internal_item> internal_deref_items;
+
+  /** Fail an intrinsic's write to @p object, made when @p cond holds, if the
+   *  object is read-only, as valid_check does for a WRITE-mode dereference. */
+  void check_read_only_write(const expr2tc &object, const expr2tc &cond);
+
+  /** An object an intrinsic writes, and the condition under which it does. */
+  struct write_targett
+  {
+    expr2tc object;
+    guard2tc guard;
+  };
+
+  /** Append internal_deref_items to @p targets, each guarded by @p base and
+   *  its pointer guard, renamed now: a later write may change the pointer. */
+  void collect_write_targets(
+    const guard2tc &base,
+    std::vector<write_targett> &targets);
+
+  /** Assign each target a nondet value; a string literal is reported by
+   *  check_read_only_write and left unchanged. */
+  void write_nondet_targets(const std::vector<write_targett> &targets);
+
   /** Analyze the shared varables in a function call, this is because an
    * argumemt may be renamed to constant bool in symex_function_call_code(),
    * while we need to get the information for context switch.*/
@@ -1951,6 +2088,8 @@ protected:
 
   void
   get_value_set(const expr2tc &expr, value_setst::valuest &value_set) override;
+
+  void points_to(const expr2tc &expr, value_setst::valuest &value_set) override;
 
   bool has_failed_symbol(const expr2tc &expr, const symbolt *&symbol) override;
 

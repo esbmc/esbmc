@@ -1,0 +1,7 @@
+CORE
+main.c
+--termination --k-step 2 --max-k-step 6 --max-inductive-step 3 --no-assertions --no-pointer-check --no-bounds-check --witness-output-yaml -
+^VERIFICATION SUCCESSFUL$
+type: "loop_transition_invariant"
+line: 11$
+value: ".*AnyPrev.* > .* \|\| .*AnyPrev.* > .*"$

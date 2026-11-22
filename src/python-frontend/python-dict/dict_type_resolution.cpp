@@ -236,6 +236,93 @@ static std::string stored_expr_kind(const nlohmann::json &rhs, bool by_key)
   return literal.type_name();
 }
 
+/// The node whose bindings of `var` are the ones a read in the scope `func`
+/// sees: `func` itself when it binds `var`, else the whole module (#10489).
+static nlohmann::json binding_scope(
+  const nlohmann::json &ast,
+  const std::string &var,
+  const std::string &func)
+{
+  const nlohmann::json function = json_utils::find_function_by_path(
+    ast, json_utils::split_function_path(func));
+  return function.is_object() && json_utils::count_name_bindings(function, var)
+           ? function
+           : ast;
+}
+
+/// The annotation that types the value `rhs` in the scope `func`: that of a
+/// variable bound once, or the return annotation of a module-level function.
+/// Null for any other value (#10432).
+static nlohmann::json stored_value_annotation(
+  const nlohmann::json &ast,
+  const nlohmann::json &rhs,
+  const std::string &func)
+{
+  const std::string type = rhs.value("_type", "");
+  const std::string var = rhs.value("id", "");
+  if (
+    type == "Name" &&
+    json_utils::count_name_bindings(binding_scope(ast, var, func), var) == 1)
+  {
+    const nlohmann::json decl = json_utils::find_var_decl(var, func, ast);
+    return decl.is_object() ? decl.value("annotation", nlohmann::json())
+                            : nlohmann::json();
+  }
+  if (type != "Call" || rhs["func"].value("_type", "") != "Name")
+    return nlohmann::json();
+  const nlohmann::json def =
+    json_utils::try_find_function(ast["body"], rhs["func"].value("id", ""));
+  return def.is_object() ? def.value("returns", nlohmann::json())
+                         : nlohmann::json();
+}
+
+/// The scalar type the annotation `node` names: `int`, `float`, `bool` or
+/// `str`, else empty.
+static typet
+scalar_annotation_type(const nlohmann::json &node, type_handler &handler)
+{
+  const std::string id = node.is_object() && node.value("_type", "") == "Name"
+                           ? node.value("id", "")
+                           : "";
+  if (id == "bool")
+    return bool_type();
+  if (id == "int" || id == "float")
+    return handler.get_typet(id, 0);
+  if (id == "str")
+    return gen_pointer_type(char_type());
+  return empty_typet();
+}
+
+/// The literal kind (see stored_expr_kind) of a value of the scalar type
+/// `node` annotates, "?" for any other annotation.
+static std::string annotated_kind(const nlohmann::json &node)
+{
+  static const std::map<std::string, std::string> kinds = {
+    {"bool", "boolean"},
+    {"int", "number"},
+    {"float", "number"},
+    {"str", "string"}};
+  const auto it = kinds.find(
+    node.is_object() && node.value("_type", "") == "Name" ? node.value("id", "")
+                                                          : "");
+  return it == kinds.end() ? "?" : it->second;
+}
+
+/// The kind of the stored value `rhs` that is not a literal: that of the
+/// scalar type it is annotated with (see annotated_kind), or the class that a
+/// constructor call builds.
+static std::string
+stored_value_kind(const nlohmann::json &ast, const nlohmann::json &rhs)
+{
+  const std::string callee =
+    rhs.value("_type", "") == "Call" && rhs["func"].value("_type", "") == "Name"
+      ? rhs["func"].value("id", "")
+      : "";
+  if (!callee.empty() && json_utils::is_class(callee, ast))
+    return "class " + callee;
+  return annotated_kind(stored_value_annotation(ast, rhs, ""));
+}
+
 /// The kind of the literal that the statement `stmt` stores into the dict
 /// `name` by subscript, "?" for any other value, and "" if it stores nothing.
 /// With @p by_key it is the kind of the stored key instead.
@@ -257,7 +344,8 @@ static std::string stored_literal_kind(
   const auto &rhs = by_key ? target["slice"] : stmt["value"];
   if (!by_key && reads_back_from(ast, rhs, name))
     return "";
-  return stored_expr_kind(rhs, by_key);
+  const std::string kind = stored_expr_kind(rhs, by_key);
+  return kind == "?" && !by_key ? stored_value_kind(ast, rhs) : kind;
 }
 
 /// Whether every statement of `body` that stores into the dict `name` by
@@ -309,6 +397,181 @@ stored_literal_type(const nlohmann::json &rhs, type_handler &handler)
   if (lit.is_string())
     return gen_pointer_type(char_type());
   return empty_typet();
+}
+
+/// The value type that storing `rhs` in the scope `func` gives a dict: that
+/// of a literal (a list only when @p only_lists), or the scalar type a
+/// variable or a call is annotated with. Empty for any other value.
+static typet stored_value_type(
+  const nlohmann::json &ast,
+  const nlohmann::json &rhs,
+  const std::string &func,
+  bool only_lists,
+  type_handler &handler)
+{
+  const std::string kind = rhs.value("_type", "");
+  if (kind == "Constant" || (kind == "List" && only_lists))
+    return stored_literal_type(rhs, handler);
+  return scalar_annotation_type(
+    stored_value_annotation(ast, rhs, func), handler);
+}
+
+/// The value the dict literal @p dict binds to the constant @p key: null when
+/// it has no such key, nullopt when a `**` unpack may supply it or a bool
+/// key may equal an int one, as Python's `True == 1` does.
+static std::optional<const nlohmann::json *>
+literal_value_at(const nlohmann::json &dict, const nlohmann::json &key)
+{
+  if (key["value"].is_boolean())
+    return std::nullopt;
+  const nlohmann::json *found = nullptr;
+  const nlohmann::json &keys = dict["keys"];
+  for (size_t i = 0; i < keys.size(); ++i)
+  {
+    if (
+      keys[i].is_null() ||
+      keys[i].value("value", nlohmann::json()).is_boolean())
+      return std::nullopt;
+    if (
+      keys[i].value("_type", "") == "Constant" &&
+      keys[i]["value"] == key["value"])
+      found = &dict["values"][i];
+  }
+  return found;
+}
+
+/// The value the dict literal @p dict holds at the constant @p keys: null
+/// when a key is absent, nullopt when that is not known.
+static std::optional<const nlohmann::json *> literal_value_at_path(
+  const nlohmann::json &dict,
+  const std::vector<const nlohmann::json *> &keys)
+{
+  const nlohmann::json *value = &dict;
+  for (const nlohmann::json *key : keys)
+  {
+    if (value->value("_type", "") != "Dict")
+      return std::nullopt;
+    const std::optional<const nlohmann::json *> next =
+      literal_value_at(*value, *key);
+    if (!next || !*next)
+      return next;
+    value = *next;
+  }
+  return value;
+}
+
+/// The Name that the read chain @p subscript starts from, with its constant
+/// keys in @p keys, outermost first; null when a key is not a constant or
+/// the chain does not start from a Name.
+static const nlohmann::json *constant_key_path(
+  const nlohmann::json &subscript,
+  std::vector<const nlohmann::json *> &keys)
+{
+  const nlohmann::json *root = &subscript;
+  for (; root->value("_type", "") == "Subscript"; root = &(*root)["value"])
+  {
+    if ((*root)["slice"].value("_type", "") != "Constant")
+      return nullptr;
+    keys.insert(keys.begin(), &(*root)["slice"]);
+  }
+  return root->value("_type", "") == "Name" ? root : nullptr;
+}
+
+/// The dict literal that statement @p node binds to @p name alone, else null.
+static const nlohmann::json *
+dict_literal_bound_to(const nlohmann::json &node, const std::string &name)
+{
+  const std::string type = node.value("_type", "");
+  const nlohmann::json *target = type == "Assign" && node["targets"].size() == 1
+                                   ? &node["targets"][0]
+                                 : type == "AnnAssign" ? &node["target"]
+                                                       : nullptr;
+  if (!target || !is_name(*target, name))
+    return nullptr;
+  const nlohmann::json &value = node["value"];
+  return value.is_object() && value.value("_type", "") == "Dict" ? &value
+                                                                 : nullptr;
+}
+
+/// Whether @p node stores into or deletes from `name[k1]...[kn]` with n at
+/// most @p depth, which can replace a value a read @p depth keys deep sees.
+static bool
+stores_within(const nlohmann::json &node, const std::string &name, size_t depth)
+{
+  if (
+    node.value("_type", "") != "Subscript" ||
+    node["ctx"].value("_type", "") == "Load")
+    return false;
+  size_t n = 0;
+  const nlohmann::json *base = &node;
+  for (; base->value("_type", "") == "Subscript"; base = &(*base)["value"])
+    ++n;
+  return n <= depth && is_name(*base, name);
+}
+
+/// Collects into @p literals the dict literals bound to @p name under
+/// @p node; false when a store reaches @p depth or fewer keys into it.
+static bool collect_dict_literals(
+  const nlohmann::json &node,
+  const std::string &name,
+  size_t depth,
+  std::vector<const nlohmann::json *> &literals)
+{
+  if (node.is_object())
+  {
+    if (const nlohmann::json *literal = dict_literal_bound_to(node, name))
+      literals.push_back(literal);
+    if (stores_within(node, name, depth))
+      return false;
+  }
+  for (const auto &child : node)
+    if (
+      child.is_structured() &&
+      !collect_dict_literals(child, name, depth, literals))
+      return false;
+  return true;
+}
+
+/// The type of the value that the constant-key read chain @p subscript, as in
+/// `d["a"]["b"]`, takes from the dict literals bound to its root name. Empty
+/// unless every binding of the name is a dict literal, no subscript store can
+/// replace a value on the chain, and every literal holding the key path
+/// gives it the same type. A literal without the path would raise KeyError
+/// before this read.
+typet python_dict_handler::nested_literal_value_type(
+  const nlohmann::json &subscript)
+{
+  std::vector<const nlohmann::json *> keys;
+  const nlohmann::json *root = constant_key_path(subscript, keys);
+  if (!root || keys.size() < 2)
+    return empty_typet();
+
+  const std::string name = (*root)["id"].get<std::string>();
+  const nlohmann::json scope = binding_scope(
+    converter_.get_ast_json(), name, converter_.get_current_func_name());
+  std::vector<const nlohmann::json *> literals;
+  if (
+    !collect_dict_literals(scope, name, keys.size(), literals) ||
+    json_utils::count_name_bindings(scope, name) != literals.size())
+    return empty_typet();
+
+  typet result = empty_typet();
+  for (const nlohmann::json *literal : literals)
+  {
+    const std::optional<const nlohmann::json *> value =
+      literal_value_at_path(*literal, keys);
+    if (!value)
+      return empty_typet();
+    if (!*value)
+      continue;
+    const typet type = (*value)->value("_type", "") == "Dict"
+                         ? typet(get_dict_struct_type())
+                         : stored_literal_type(**value, type_handler_);
+    if (type.is_empty() || (!result.is_empty() && type != result))
+      return empty_typet();
+    result = type;
+  }
+  return result;
 }
 
 typet python_dict_handler::resolve_stored_key_type(const exprt &dict_expr)
@@ -419,7 +682,7 @@ typet python_dict_handler::resolve_expected_type_for_dict_subscript(
   // Look up the variable's declaration in the AST to get its annotation
   std::string var_name = sym->name.as_string();
   nlohmann::json var_decl = json_utils::find_var_decl(
-    var_name, converter_.get_current_func_name(), converter_.get_ast_json());
+    var_name, converter_.current_ast_scope(), converter_.get_ast_json());
 
   if (var_decl.empty())
     return empty_typet();
@@ -612,15 +875,16 @@ typet python_dict_handler::resolve_expected_type_for_dict_subscript(
               return;
             const auto &rhs = stmt["value"];
 
-            const std::string rhs_kind = rhs.value("_type", std::string());
-            if (rhs_kind == "Constant" || (rhs_kind == "List" && only_lists))
+            const typet stored = stored_value_type(
+              converter_.get_ast_json(),
+              rhs,
+              converter_.get_current_func_name(),
+              only_lists,
+              type_handler_);
+            if (!stored.is_empty())
             {
-              const typet stored = stored_literal_type(rhs, type_handler_);
-              if (!stored.is_empty())
-              {
-                candidate = stored;
-                have_candidate = true;
-              }
+              candidate = stored;
+              have_candidate = true;
               return;
             }
 

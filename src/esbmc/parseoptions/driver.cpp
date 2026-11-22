@@ -104,18 +104,70 @@ extern "C"
 /// The forked k-induction processes each keep their own property table, and
 /// the one that concludes the run reports its base-case bound as PASSED (D4 of
 /// docs/roadmap/multi-property-strategy-plan.md). The other flags listed turn
-/// --multi-property on. --termination runs the sequential driver instead.
+/// --multi-property on. The TS strategies never run under this driver, yet
+/// they drop the loop-entry flags its inductive step needs (#10154).
+/// --termination runs the sequential driver instead.
 static bool k_induction_parallel_conflicts(const cmdlinet &cmdline)
 {
   if (!cmdline.isset("k-induction-parallel") || cmdline.isset("termination"))
     return false;
 
   for (const char *incompatible :
-       {"multi-property", "all-witnesses", "parallel-solving"})
+       {"multi-property",
+        "all-witnesses",
+        "parallel-solving",
+        "ts-bmc",
+        "ts-pdr",
+        "ts-check"})
     if (cmdline.isset(incompatible))
     {
       log_error(
         "--k-induction-parallel cannot be combined with --{}", incompatible);
+      return true;
+    }
+  return false;
+}
+
+static bool ts_strategy_conflicts(const cmdlinet &cmdline)
+{
+  // The TS strategies turn k-induction back on, so goto_termination's
+  // inductive-step-only assumes would reach the engines as invariants; PDR
+  // trusts those and would prove a non-terminating loop terminates.
+  for (const char *ts : {"ts-bmc", "ts-pdr", "ts-check"})
+    if (cmdline.isset(ts) && cmdline.isset("termination"))
+    {
+      log_error("--{} cannot be combined with --termination", ts);
+      return true;
+    }
+
+  // --ts-pdr runs instead of the BMC engine, which these flags configure.
+  for (const char *bmc : {"ts-bmc", "ts-fresh-solver", "ts-push-pop"})
+    if (cmdline.isset("ts-pdr") && cmdline.isset(bmc))
+    {
+      log_error("--ts-pdr cannot be combined with --{}", bmc);
+      return true;
+    }
+  return false;
+}
+
+/// --smt-during-symex builds one solver during symex, and the equation it
+/// leaves refers to that solver's terms, so the --parallel-solving jobs would
+/// all share it unsynchronised (issue #10103). The other flags imply it.
+static bool parallel_solving_conflicts(const cmdlinet &cmdline)
+{
+  if (!cmdline.isset("parallel-solving"))
+    return false;
+
+  for (const char *incompatible :
+       {"smt-during-symex",
+        "smt-thread-guard",
+        "smt-symex-guard",
+        "smt-symex-assert",
+        "smt-symex-assume"})
+    if (cmdline.isset(incompatible))
+    {
+      log_error(
+        "--parallel-solving cannot be combined with --{}", incompatible);
       return true;
     }
   return false;
@@ -230,7 +282,13 @@ static bool incompatible_flags(const cmdlinet &cmdline)
       return true;
     }
 
+  if (ts_strategy_conflicts(cmdline))
+    return true;
+
   if (k_induction_parallel_conflicts(cmdline))
+    return true;
+
+  if (parallel_solving_conflicts(cmdline))
     return true;
 
   // --incremental-context-bound owns the outer verification loop, re-running
@@ -243,7 +301,10 @@ static bool incompatible_flags(const cmdlinet &cmdline)
           "falsification",
           "k-induction",
           "k-induction-parallel",
-          "loop-invariant"})
+          "loop-invariant",
+          "ts-bmc",
+          "ts-pdr",
+          "ts-check"})
       if (cmdline.isset(incompatible))
       {
         log_error(
@@ -312,16 +373,32 @@ int esbmc_parseoptionst::run_chosen_strategy(
   optionst &options,
   goto_functionst &goto_functions)
 {
+  const bool k_step =
+    cmdline.isset("termination") || cmdline.isset("incremental-bmc") ||
+    cmdline.isset("falsification") || cmdline.isset("k-induction") ||
+    cmdline.isset("loop-invariant") ||
+    // --sv-comp switches a program that starts a thread to incremental BMC.
+    options.get_bool_option("incremental-bmc");
+
+  // Only a single BMC run keeps a reported check out of its verdict (#10875).
+  if (
+    cmdline.isset("report-property-class") &&
+    (k_step || ts_strategy_requested() ||
+     cmdline.isset("incremental-context-bound")))
+  {
+    log_error(
+      "--report-property-class needs a single BMC run, not a "
+      "verification strategy");
+    return 1;
+  }
+
   if (cmdline.isset("incremental-context-bound"))
     return do_context_bound_deepening(options, goto_functions);
 
   if (ts_strategy_requested())
     return do_ts_strategy(options, goto_functions);
 
-  if (
-    cmdline.isset("termination") || cmdline.isset("incremental-bmc") ||
-    cmdline.isset("falsification") || cmdline.isset("k-induction") ||
-    cmdline.isset("loop-invariant"))
+  if (k_step)
     return do_bmc_strategy(options, goto_functions);
 
   // No strategy chosen: rely on the simplifier and the flags set through CMD.
@@ -329,16 +406,49 @@ int esbmc_parseoptionst::run_chosen_strategy(
   return do_bmc(bmc);
 }
 
+// --skip-bmc leaves silently; an early answer (#10252) prints its verdict.
+static bool answered_without_bmc(const optionst &options)
+{
+  if (options.get_bool_option("skip-bmc"))
+    return true;
+  const bool early = options.get_bool_option("python-no-checked-exception");
+  if (early)
+    log_success("\nVERIFICATION SUCCESSFUL");
+  return early;
+}
+
+// A --goto2lean run that fails anywhere must not leave an earlier proof file.
+static void
+remove_stale_lean_output(const cmdlinet &cmdline, const optionst &options)
+{
+  if (cmdline.isset("goto2lean") && !options.get_option("output").empty())
+    std::remove(options.get_option("output").c_str());
+}
+
+// Reopen stderr rather than open a new stream, so that what clang and LLVM
+// write to stderr (diagnostics, -v under --verbosity) reaches the file too.
+static bool redirect_output(const cmdlinet &cmdline)
+{
+  if (!cmdline.isset("file-output"))
+    return true;
+  const char *path = cmdline.getval("file-output");
+  if (!freopen(path, "w+", stderr))
+  {
+    messaget::state.out = stdout;
+    log_error("Cannot open {}", path);
+    return false;
+  }
+  messaget::state.out = stderr;
+  // freopen makes stderr fully buffered; clang writes to the descriptor
+  // directly, so keep our lines in order with its.
+  messaget::state.set_flushln();
+  return true;
+}
+
 int esbmc_parseoptionst::doit()
 {
-  // Configure msg output
-  if (cmdline.isset("file-output"))
-  {
-    FILE *f = fopen(cmdline.getval("file-output"), "w+");
-    /* TODO: handle failure */
-    out = f;
-    messaget::state.out = f;
-  }
+  if (!redirect_output(cmdline))
+    return 1;
 
   // Print a banner with version info to stdout
   {
@@ -449,12 +559,17 @@ int esbmc_parseoptionst::doit()
   //
   // The parallel driver has no termination interpretation, so --termination
   // takes priority: fall through to the sequential strategy instead (#6031).
-  if (cmdline.isset("k-induction-parallel") && !cmdline.isset("termination"))
+  // --report-property-class falls through to be refused before any fork.
+  const bool fork_parallel = cmdline.isset("k-induction-parallel") &&
+                             !cmdline.isset("termination") &&
+                             !cmdline.isset("report-property-class");
+  if (fork_parallel)
     return doit_k_induction_parallel();
 
   // Parse ESBMC options (CMD + set internal options)
   optionst options;
   get_command_line_options(options);
+  remove_stale_lean_output(cmdline, options);
 
   // for solidity: detect .sol files in positional args or via --sol
   {
@@ -497,13 +612,11 @@ int esbmc_parseoptionst::doit()
         cmdline.isset("neurosym") || cmdline.isset("default-solver");
       if (!user_picked_solver && !incremental_mode)
       {
-        const std::string padded =
-          std::string(" ") + ESBMC_AVAILABLE_SOLVERS + " ";
         const char *preferred[] = {"bitwuzla", "cvc5", "boolector", "z3"};
         const char *chosen = nullptr;
         for (const char *name : preferred)
         {
-          if (padded.find(std::string(" ") + name + " ") != std::string::npos)
+          if (solver_built_in(name))
           {
             chosen = name;
             break;
@@ -554,7 +667,7 @@ int esbmc_parseoptionst::doit()
     return 1;
 
   // Leave without doing any Bounded Model Checking
-  if (options.get_bool_option("skip-bmc"))
+  if (answered_without_bmc(options))
     return 0;
 
   // A violation found under a bounded schedule space is genuine whichever

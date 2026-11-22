@@ -1,0 +1,6 @@
+CORE
+main.py
+--multi-property
+^VERIFICATION FAILED$
+^\s*FAILED\s+\[global\.assertion\.\d+\]\s+line 12\s+Unsupported: arithmetic on a value whose class differs between instances$
+^\*\* 1 of \d+ properties failed

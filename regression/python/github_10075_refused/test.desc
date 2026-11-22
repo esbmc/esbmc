@@ -1,0 +1,4 @@
+CORE
+main.py
+
+^ERROR: storing a call result into an Optional of another type is not yet supported$

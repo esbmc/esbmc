@@ -559,11 +559,13 @@ class TestTrueDiv:
         zero = ModelDecimal(0, 0, 0, 0)
         assert zero.__truediv__(zero)._is_special == 2
 
-    def test_x_div_zero_is_inf(self):
+    def test_x_div_zero_raises(self):
         x = ModelDecimal(0, 5, 0, 0)
         zero = ModelDecimal(0, 0, 0, 0)
-        result = x.__truediv__(zero)
-        assert result._is_special == 1
+        with pytest.raises(ZeroDivisionError):
+            x.__truediv__(zero)
+        with pytest.raises(ZeroDivisionError):
+            x.__floordiv__(zero)
 
     def test_inf_div_inf_is_nan(self):
         inf = ModelDecimal(0, 0, 0, 1)

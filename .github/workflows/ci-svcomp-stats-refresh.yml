@@ -10,7 +10,7 @@ on:
       svbenchmarks:
         description: 'sv-benchmarks ref'
         required: true
-        default: 'main'
+        default: 'svcomp27-freeze'
 
 concurrency:
   group: sv-comp-stats-refresh
@@ -47,14 +47,14 @@ jobs:
         with:
           path: esbmc-src
       - name: Setup SV-Benchmarks
-        # On `schedule`, inputs.* resolves to empty string, so `|| 'main'`
+        # On `schedule`, inputs.* resolves to empty string, so `|| 'svcomp27-freeze'`
         # picks the default. Keep this explicit — a naive "simplification"
         # would break scheduled runs.
         run: |
           cd $HOME/sv-benchmarks
           git fetch --all --tags --force
-          git checkout ${{ inputs.svbenchmarks || 'main' }}
-          if [ "${{ inputs.svbenchmarks || 'main' }}" = "main" ]; then
+          git checkout ${{ inputs.svbenchmarks || 'svcomp27-freeze' }}
+          if [ "${{ inputs.svbenchmarks || 'svcomp27-freeze' }}" = "main" ]; then
             git reset --hard origin/main
           fi
       - uses: actions/download-artifact@v8
@@ -124,7 +124,7 @@ jobs:
           body: |
             Automated quarterly refresh of
             `scripts/competitions/svcomp/stats-*` from a full benchexec
-            run of the SV-Benchmarks `${{ inputs.svbenchmarks || 'main' }}`
+            run of the SV-Benchmarks `${{ inputs.svbenchmarks || 'svcomp27-freeze' }}`
             ref. Review the Score numbers before merging.
           branch: auto/sv-comp-stats-refresh
           add-paths: scripts/competitions/svcomp/stats-*

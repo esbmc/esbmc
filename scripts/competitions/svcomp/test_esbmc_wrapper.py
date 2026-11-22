@@ -1,11 +1,16 @@
 #!/usr/bin/env python3
 """Self-test. Run: python3 scripts/competitions/svcomp/test_esbmc_wrapper.py"""
 
+import argparse
+import contextlib
+import io
+import shlex
 import importlib.util
 import os
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 from unittest import mock
 
@@ -380,6 +385,75 @@ class ParseResultTest(unittest.TestCase):
             "TRUE")
 
 
+
+class AbnormalExitTest(unittest.TestCase):
+    """benchexec counts a run that prints "Unknown" as unknown, so a crash
+    must print something else to be seen as an error (#8097)."""
+
+    def setUp(self):
+        self.saved_args = wrapper.args
+        wrapper.args = argparse.Namespace(dry_run=False)
+
+    def tearDown(self):
+        wrapper.args = self.saved_args
+
+    def verdict(self, script):
+        output = wrapper.do_exec("sh -c " + shlex.quote(script)).decode()
+        return wrapper.get_result_string(wrapper.parse_result(output, wrapper.Property.reach))
+
+    def test_a_run_killed_by_a_signal_is_an_error(self):
+        self.assertEqual(self.verdict("echo Starting; kill -ABRT $$"), "ERROR")
+
+    def test_an_uncaught_exception_is_an_error(self):
+        self.assertEqual(
+            self.verdict("echo 'ERROR: uncaught exception [x]: y'; exit 70"), "ERROR")
+
+    def test_a_crash_after_a_verdict_keeps_the_verdict(self):
+        self.assertEqual(self.verdict("echo 'VERIFICATION SUCCESSFUL'; kill -SEGV $$"), "TRUE")
+
+    def test_a_crash_after_an_out_of_memory_is_a_memory_out(self):
+        self.assertEqual(self.verdict("echo 'ERROR: Out of memory'; kill -ABRT $$"), "Unknown")
+
+    def test_a_normal_exit_without_a_verdict_is_unknown(self):
+        self.assertEqual(self.verdict("echo 'VERIFICATION UNKNOWN'; exit 6"), "Unknown")
+
+
+class EchoTest(unittest.TestCase):
+    """benchexec reads FALSE, TRUE or DONE on any output line as the verdict,
+    so echoing ESBMC's quote of a witness invariant must not carry them
+    (#10643)."""
+
+    INVARIANT = ("Injecting loop invariant at line 5: "
+                 "0 <= i && i <= 10 && STATIC_CONST_FALSE == 0")
+
+    def setUp(self):
+        self.saved_args = wrapper.args
+        wrapper.args = argparse.Namespace(dry_run=False)
+
+    def tearDown(self):
+        wrapper.args = self.saved_args
+
+    def echoed(self, script):
+        printed = io.StringIO()
+        with contextlib.redirect_stdout(printed):
+            output = wrapper.run("sh -c " + shlex.quote(script)).decode()
+        return output, printed.getvalue()
+
+    def test_quoted_source_does_not_carry_a_verdict_word(self):
+        output, printed = self.echoed(
+            f"echo '{self.INVARIANT}'; echo 'TRUE DONE FALSE_DEREF'; "
+            "echo 'VERIFICATION SUCCESSFUL'")
+        for word in ("FALSE", "TRUE", "DONE"):
+            self.assertNotIn(word, printed)
+        self.assertIn("STATIC_CONST_false == 0", printed)
+        self.assertEqual(
+            wrapper.get_result_string(wrapper.parse_result(output, wrapper.Property.reach)),
+            "TRUE")
+
+    def test_the_parsed_output_is_unchanged(self):
+        output, _ = self.echoed(f"echo '{self.INVARIANT}'")
+        self.assertEqual(output, self.INVARIANT + "\n")
+
 # The scalar model's own TypeError on `r + 1`, where `r` is an int on one path
 # and a str on the other.
 PY_MODEL_TYPEERROR = """
@@ -398,6 +472,58 @@ scalar.c, function __python_scalar_add_num
 VERIFICATION FAILED
 """
 
+# sv-benchmarks' quixbugs/pascal_1 under ESBMC 9f5278bb04, trimmed: the
+# violated property is the list model's own assertion, and the program's
+# uncaught IndexError fails alongside it.
+PY_MODEL_INDEXERROR = """
+Violated property:
+  file /src/c2goto/library/python/list.c line 697 column 3 function __ESBMC_list_at
+  IndexError: out-of-bounds read in list
+  index < l->size
+
+
+** Results:
+pascal_1.py
+  NOT CHECKED  [global.assertion.2]                                line   0  uncaught exception: IndexError
+pascal_1.py, function pascal
+  FAILED       [pascal.assertion.6]                                line  23  uncaught exception: IndexError
+/src/c2goto/library/python/list.c, function __ESBMC_list_at
+  FAILED       [__ESBMC_list_at.assertion.1]                       line 697  IndexError: out-of-bounds read in list
+
+** 2 of 124 properties failed, 60 passed, 62 not checked
+
+VERIFICATION FAILED
+"""
+
+PY_MODEL_INDEXERROR_AND_KEYERROR = PY_MODEL_INDEXERROR.replace(
+    "uncaught exception: IndexError", "uncaught exception: KeyError")
+
+# One run falsifying both members of the data-lookup family names neither.
+PY_INDEX_AND_KEYERROR = """
+Violated property:
+  file p_lookup.py line 6 column 12 function main
+  uncaught exception: IndexError
+
+Violated property:
+  file p_lookup.py line 8 column 4 function main
+  uncaught exception: KeyError
+
+** Results:
+p_lookup.py, function main
+  FAILED       [main.assertion.1]  line 6  uncaught exception: IndexError
+  FAILED       [main.assertion.2]  line 8  uncaught exception: KeyError
+
+** 2 of 4 properties failed, 2 not checked
+
+VERIFICATION FAILED
+"""
+
+PY_INDEXERROR_AND_MODEL_TYPEERROR = PY_INDEXERROR.replace(
+    "\n** 1 of 4 properties failed, 3 not checked",
+    "  FAILED       [main.assertion.2]  line 7  TypeError: unsupported operand type(s) for +"
+    "\n\n** 2 of 4 properties failed, 2 not checked")
+
+
 class PythonPropertyTest(unittest.TestCase):
     """The Python track scores one exception family per property file.
 
@@ -411,7 +537,8 @@ class PythonPropertyTest(unittest.TestCase):
 
     def test_zerodivision_falsifies_arithmetic(self):
         self.assertEqual(
-            self.verdict(PY_ZERODIVISION, wrapper.Property.py_arithmetic), "FALSE")
+            self.verdict(PY_ZERODIVISION, wrapper.Property.py_arithmetic),
+            "FALSE(ZeroDivisionError)")
 
     def test_zerodivision_says_nothing_about_data_lookup(self):
         self.assertEqual(
@@ -423,11 +550,28 @@ class PythonPropertyTest(unittest.TestCase):
 
     def test_indexerror_falsifies_data_lookup(self):
         self.assertEqual(
-            self.verdict(PY_INDEXERROR, wrapper.Property.py_datalookup), "FALSE")
+            self.verdict(PY_INDEXERROR, wrapper.Property.py_datalookup), "FALSE(IndexError)")
+
+    def test_a_model_indexerror_is_named(self):
+        self.assertEqual(
+            self.verdict(PY_MODEL_INDEXERROR, wrapper.Property.py_datalookup), "FALSE(IndexError)")
+
+    def test_a_model_indexerror_beside_a_keyerror_leaves_false_unnamed(self):
+        self.assertEqual(
+            self.verdict(PY_MODEL_INDEXERROR_AND_KEYERROR, wrapper.Property.py_datalookup), "FALSE")
+
+    def test_two_exceptions_of_the_family_leave_false_unnamed(self):
+        self.assertEqual(
+            self.verdict(PY_INDEX_AND_KEYERROR, wrapper.Property.py_datalookup), "FALSE")
+
+    def test_an_exception_outside_the_family_does_not_hide_the_name(self):
+        self.assertEqual(
+            self.verdict(PY_INDEXERROR_AND_MODEL_TYPEERROR, wrapper.Property.py_datalookup),
+            "FALSE(IndexError)")
 
     def test_typeerror_falsifies_dynamic_typing(self):
         self.assertEqual(
-            self.verdict(PY_TYPEERROR, wrapper.Property.py_dyntyping), "FALSE")
+            self.verdict(PY_TYPEERROR, wrapper.Property.py_dyntyping), "FALSE(TypeError)")
 
     def test_typeerror_says_nothing_about_arithmetic(self):
         self.assertEqual(
@@ -435,7 +579,7 @@ class PythonPropertyTest(unittest.TestCase):
 
     def test_model_typeerror_falsifies_dynamic_typing(self):
         self.assertEqual(
-            self.verdict(PY_MODEL_TYPEERROR, wrapper.Property.py_dyntyping), "FALSE")
+            self.verdict(PY_MODEL_TYPEERROR, wrapper.Property.py_dyntyping), "FALSE(TypeError)")
 
     def test_model_typeerror_says_nothing_about_arithmetic(self):
         self.assertEqual(
@@ -573,7 +717,7 @@ class IntegerEncodingConfirmationTest(unittest.TestCase):
 
         with mock.patch.object(wrapper, "run", fake_run), \
                 mock.patch.object(wrapper.time, "monotonic", side_effect=[0, elapsed, 0, plain_seconds]):
-            result = wrapper.verify("kinduction", prop, 64, benchmark, False, "", False, None, None)
+            result = wrapper.verify("kinduction", prop, 64, benchmark, "", False, None, None)
         return wrapper.get_result_string(result), calls
 
     def test_rerun_at_the_same_line_keeps_false(self):
@@ -697,11 +841,355 @@ class IntegerEncodingConfirmationTest(unittest.TestCase):
         self.assertEqual(len(calls), 1)
 
 
+def write_task(directory, source, files=None):
+    """Write main.py, and any other files, into a task directory."""
+    for name, text in {"main.py": source, **(files or {})}.items():
+        with open(os.path.join(directory, name), "w", encoding="utf-8") as f:
+            f.write(text)
+
+
+class FakeEsbmc:
+    """Stands in for wrapper.run(): answers the first run, the values run and
+    the --ir re-run, and records each command line and its timeout."""
+
+    def __init__(self, first, ir, witness, values_run):
+        self.first, self.ir, self.witness, self.values_run = first, ir, witness, values_run
+        self.calls = []
+        self.timeouts = []
+
+    def __call__(self, cmd_line, timeout=None):
+        self.calls.append(cmd_line)
+        self.timeouts.append(timeout)
+        words = shlex.split(cmd_line)
+        if "--pytest-output-dir" not in words:
+            return (self.ir if "--ir" in cmd_line else self.first).encode()
+        if self.witness is not None:
+            values_dir = words[words.index("--pytest-output-dir") + 1]
+            with open(os.path.join(values_dir, "test_main.py"), "w", encoding="utf-8") as f:
+                f.write(self.witness)
+        return (self.values_run or self.first).encode()
+
+
+class CPythonReplayTest(unittest.TestCase):
+    """A FALSE stays FALSE when CPython, fed the counterexample's values, ends
+    with the property's exception; anything else leaves it to the --ir re-run."""
+
+    PASSED = IntegerEncodingConfirmationTest.PASSED
+    HEADER = "import _sv_verifier\n"
+
+    def verify(self, prop, first, source, witness, **options):
+        """Run verify() on a task whose first ESBMC run says FALSE with `witness`
+        as its recorded values; returns the verdict and the ESBMC command lines.
+        Options: ir, files, verifier, values_run, verifier_above (the task sits
+        in python/<project>/ under a python/_sv_verifier.py, as in sv-benchmarks)."""
+        esbmc = FakeEsbmc(first, self.PASSED if options.get("ir") is None else options["ir"],
+                          witness, options.get("values_run"))
+        with tempfile.TemporaryDirectory() as root:
+            task = root
+            if options.get("verifier_above"):
+                task = os.path.join(root, "python", "project")
+                os.makedirs(task)
+                write_task(os.path.join(root, "python"), "", {"_sv_verifier.py": options["verifier_above"]})
+            write_task(task, source, options.get("files"))
+            with mock.patch.object(wrapper, "run", esbmc), \
+                    mock.patch.object(wrapper, "REPLAY_VERIFIER", options.get("verifier") or wrapper.REPLAY_VERIFIER):
+                result = wrapper.verify("kinduction", prop, 64, os.path.join(task, "main.py"),
+                                        "", False, None, None)
+        return wrapper.get_result_string(result), esbmc.calls
+
+    def ir_calls(self, calls):
+        return [c for c in calls if c.endswith("--ir --z3 ")]
+
+    def test_a_replay_ending_in_the_family_confirms_without_the_ir_rerun(self):
+        verdict, calls = self.verify(
+            wrapper.Property.py_datalookup, PY_INDEXERROR,
+            self.HEADER + "xs = _sv_verifier.nondet_list(_sv_verifier.nondet_int)\nxs[3]\n",
+            "witness = [\n    {'list0': [1]},\n]\n")
+        self.assertEqual(verdict, "FALSE(IndexError)")
+        self.assertEqual(len(calls), 2)
+        self.assertEqual(len(self.ir_calls(calls)), 0)
+
+    def test_a_replay_ending_normally_falls_back_to_the_ir_rerun(self):
+        verdict, calls = self.verify(
+            wrapper.Property.py_datalookup, PY_INDEXERROR,
+            self.HEADER + "xs = _sv_verifier.nondet_list(_sv_verifier.nondet_int)\nxs[0]\n",
+            "witness = [\n    {'list0': [1]},\n]\n")
+        self.assertEqual(verdict, "Unknown")
+        self.assertEqual(len(self.ir_calls(calls)), 1)
+
+    def test_a_fallback_that_confirms_keeps_false(self):
+        verdict, calls = self.verify(
+            wrapper.Property.py_datalookup, PY_INDEXERROR,
+            self.HEADER + "xs = _sv_verifier.nondet_list(_sv_verifier.nondet_int)\nxs[0]\n",
+            "witness = [\n    {'list0': [1]},\n]\n", ir=PY_INDEXERROR)
+        self.assertEqual(verdict, "FALSE(IndexError)")
+        self.assertEqual(len(self.ir_calls(calls)), 1)
+
+    def test_an_exception_of_another_family_does_not_confirm(self):
+        verdict, calls = self.verify(
+            wrapper.Property.py_datalookup, PY_INDEXERROR,
+            self.HEADER + "x = _sv_verifier.nondet_int()\n1 + 'a'\n",
+            "witness = [\n    {'arg0': 1},\n]\n")
+        self.assertEqual(verdict, "Unknown")
+        self.assertEqual(len(self.ir_calls(calls)), 1)
+
+    def test_the_same_replay_confirms_only_its_own_property(self):
+        source = self.HEADER + "x = _sv_verifier.nondet_int()\n[][x]\n"
+        witness = "witness = [\n    {'arg0': 1},\n]\n"
+        verdict, calls = self.verify(wrapper.Property.py_arithmetic, PY_ZERODIVISION, source, witness)
+        self.assertEqual(verdict, "Unknown")
+        self.assertEqual(len(self.ir_calls(calls)), 1)
+
+    def test_an_overflow_error_from_a_size_limit_does_not_confirm(self):
+        verdict, calls = self.verify(
+            wrapper.Property.py_datalookup, PY_INDEXERROR,
+            self.HEADER + "n = _sv_verifier.nondet_int()\n[0] * n\n",
+            "witness = [\n    {'arg0': 9223372036854775807},\n]\n")
+        self.assertEqual(verdict, "Unknown")
+        self.assertEqual(len(self.ir_calls(calls)), 1)
+
+    def test_a_witness_with_too_few_values_is_inconclusive_even_if_caught(self):
+        source = self.HEADER + (
+            "try:\n    a = _sv_verifier.nondet_int()\n    b = _sv_verifier.nondet_int()\n"
+            "except BaseException:\n    pass\n[][0]\n")
+        verdict, calls = self.verify(
+            wrapper.Property.py_datalookup, PY_INDEXERROR, source, "witness = [\n    {'arg0': 1},\n]\n")
+        self.assertEqual(verdict, "Unknown")
+        self.assertEqual(len(self.ir_calls(calls)), 1)
+
+    def test_a_missing_bool_is_completed_from_a_bit_string(self):
+        source = self.HEADER + (
+            "s = _sv_verifier.nondet_str()\nif _sv_verifier.nondet_bool():\n    d = {}\n    d[s]\n")
+        verdict, calls = self.verify(
+            wrapper.Property.py_datalookup, PY_INDEXERROR, source, "witness = [\n    {'arg0': 'k'},\n]\n")
+        self.assertEqual(verdict, "FALSE(IndexError)")
+        self.assertEqual(len(calls), 2)
+        self.assertEqual(len(self.ir_calls(calls)), 0)
+
+    def test_a_constant_bool_tail_covers_a_loop_asking_for_a_bool_each_pass(self):
+        source = self.HEADER + (
+            "n = 0\nwhile _sv_verifier.nondet_bool():\n    n += 1\n    if n > 5:\n        [][0]\n")
+        verdict, calls = self.verify(
+            wrapper.Property.py_datalookup, PY_INDEXERROR, source, "witness = [\n    {},\n]\n")
+        self.assertEqual(verdict, "FALSE(IndexError)")
+        self.assertEqual(len(calls), 2)
+        self.assertEqual(len(self.ir_calls(calls)), 0)
+
+    def test_a_scalar_is_taken_by_type_when_the_witness_order_differs(self):
+        source = self.HEADER + (
+            "x = _sv_verifier.nondet_int()\nf = _sv_verifier.nondet_float()\n1 / (x - 7)\n")
+        verdict, calls = self.verify(
+            wrapper.Property.py_arithmetic, PY_ZERODIVISION, source,
+            "witness = [\n    {'arg0': 1.5, 'arg1': 7},\n]\n")
+        self.assertEqual(verdict, "FALSE(ZeroDivisionError)")
+        self.assertEqual(len(calls), 2)
+        self.assertEqual(len(self.ir_calls(calls)), 0)
+
+    def test_a_missing_witness_is_an_empty_one(self):
+        verdict, calls = self.verify(
+            wrapper.Property.py_datalookup, PY_INDEXERROR, "[][0]\n", None)
+        self.assertEqual(verdict, "FALSE(IndexError)")
+        self.assertEqual(len(calls), 2)
+        self.assertEqual(len(self.ir_calls(calls)), 0)
+
+    def test_a_program_that_asks_for_a_value_of_an_empty_witness_is_inconclusive(self):
+        verdict, calls = self.verify(
+            wrapper.Property.py_datalookup, PY_INDEXERROR,
+            self.HEADER + "x = _sv_verifier.nondet_int()\n[][0]\n", None)
+        self.assertEqual(verdict, "Unknown")
+        self.assertEqual(len(self.ir_calls(calls)), 1)
+
+    def test_a_non_printable_string_is_inconclusive(self):
+        verdict, calls = self.verify(
+            wrapper.Property.py_datalookup, PY_INDEXERROR,
+            self.HEADER + "s = _sv_verifier.nondet_str()\n[][0]\n",
+            "witness = [\n    {'arg0': '\\x01'},\n]\n")
+        self.assertEqual(verdict, "Unknown")
+        self.assertEqual(len(self.ir_calls(calls)), 1)
+
+    def test_a_float_outside_its_range_is_inconclusive(self):
+        verdict, calls = self.verify(
+            wrapper.Property.py_datalookup, PY_INDEXERROR,
+            self.HEADER + "f = _sv_verifier.nondet_float_range(0.0, 1.0)\n[][0]\n",
+            "witness = [\n    {'arg0': 5.0},\n]\n")
+        self.assertEqual(verdict, "Unknown")
+        self.assertEqual(len(self.ir_calls(calls)), 1)
+
+    def test_a_task_with_its_own_verifier_module_is_not_replayed(self):
+        with mock.patch.object(wrapper, "replay_once", side_effect=AssertionError("replayed")):
+            verdict, calls = self.verify(
+                wrapper.Property.py_datalookup, PY_INDEXERROR, "[][0]\n", None,
+                files={"_sv_verifier.py": "def nondet_int():\n    return 0\n"})
+        self.assertEqual(verdict, "Unknown")
+        self.assertEqual(len(self.ir_calls(calls)), 1)
+
+    def test_a_verifier_module_above_the_task_does_not_stop_the_replay(self):
+        verdict, calls = self.verify(
+            wrapper.Property.py_datalookup, PY_INDEXERROR,
+            self.HEADER + "xs = _sv_verifier.nondet_list(_sv_verifier.nondet_int)\nxs[3]\n",
+            "witness = [\n    {'list0': [1]},\n]\n",
+            verifier_above="def nondet_int():\n    return 0\n")
+        self.assertEqual(verdict, "FALSE(IndexError)")
+        self.assertEqual(len(self.ir_calls(calls)), 0)
+
+    def test_a_replay_that_does_not_end_falls_back_within_its_budget(self):
+        started = time.monotonic()
+        with mock.patch.object(wrapper, "REPLAY_BUDGET", 3):
+            verdict, calls = self.verify(
+                wrapper.Property.py_datalookup, PY_INDEXERROR, "while True:\n    pass\n", None)
+        self.assertEqual(verdict, "Unknown")
+        self.assertEqual(len(self.ir_calls(calls)), 1)
+        self.assertLess(time.monotonic() - started, 15)
+
+    @unittest.skipUnless(hasattr(__builtins__ if isinstance(__builtins__, dict) is False else None, "ExceptionGroup")
+                         or "ExceptionGroup" in dir(__import__("builtins")), "needs Python 3.11")
+    def test_an_exception_group_is_not_read_as_its_members(self):
+        verdict, calls = self.verify(
+            wrapper.Property.py_datalookup, PY_INDEXERROR,
+            "class G(ExceptionGroup, IndexError):\n    pass\n\n\nraise G('g', [IndexError('x')])\n", None)
+        self.assertEqual(verdict, "Unknown")
+        self.assertEqual(len(self.ir_calls(calls)), 1)
+
+    def test_a_missing_python_falls_back(self):
+        with mock.patch.object(wrapper.sys, "executable", "/nonexistent/python3"):
+            verdict, calls = self.verify(wrapper.Property.py_datalookup, PY_INDEXERROR, "[][0]\n", None)
+        self.assertEqual(verdict, "Unknown")
+        self.assertEqual(len(self.ir_calls(calls)), 1)
+
+    def test_no_budget_left_skips_the_replay(self):
+        with mock.patch.object(wrapper, "replay_once", side_effect=AssertionError("replayed")), \
+                mock.patch.object(wrapper, "TOTAL_BUDGET", 0):
+            verdict, calls = self.verify(wrapper.Property.py_datalookup, PY_INDEXERROR, "[][0]\n", None)
+        self.assertEqual(verdict, "Unknown")
+        self.assertEqual(len(self.ir_calls(calls)), 0)
+
+    def test_the_wrapper_is_one_file_holding_the_replay_sources(self):
+        with tempfile.TemporaryDirectory() as directory:
+            written = wrapper.write_replay_files(os.path.join(directory, "replay"))
+            self.assertEqual(sorted(os.listdir(written)), ["_sv_verifier.py", "launch.py"])
+            for name in os.listdir(written):
+                with open(os.path.join(written, name), encoding="utf-8") as f:
+                    compile(f.read(), name, "exec")
+
+    def test_the_first_run_never_carries_the_pytest_flags(self):
+        _, calls = self.verify(wrapper.Property.py_datalookup, PY_INDEXERROR, "[][0]\n", None)
+        self.assertEqual(sum(1 for c in calls if "--pytest" not in c and "--ir" not in c), 1)
+        self.assertNotIn("--pytest", calls[0])
+
+    def test_a_values_run_that_does_not_find_the_violation_falls_back_to_ir(self):
+        verdict, calls = self.verify(
+            wrapper.Property.py_datalookup, PY_INDEXERROR, "[][0]\n", None, values_run=self.PASSED)
+        self.assertEqual(verdict, "Unknown")
+        self.assertEqual(len(self.ir_calls(calls)), 1)
+
+    def verify_after(self, first, elapsed, source="[][0]\n"):
+        """verify_python() on a first run that ended `elapsed` seconds in."""
+        esbmc = FakeEsbmc(first, self.PASSED, None, None)
+        with tempfile.TemporaryDirectory() as task, mock.patch.object(wrapper, "run", esbmc):
+            write_task(task, source)
+            wrapper.verify_python(wrapper.esbmc_path + wrapper.python_search_flags("kinduction"),
+                                  wrapper.Property.py_datalookup, os.path.join(task, "main.py"),
+                                  time.monotonic() - elapsed, wrapper.python_search_flags("kinduction"))
+        return esbmc
+
+    def test_a_values_run_is_skipped_when_it_would_leave_no_budget_for_the_replay(self):
+        esbmc = self.verify_after(PY_INDEXERROR, wrapper.TOTAL_BUDGET - wrapper.REPLAY_BUDGET - 1)
+        self.assertEqual(len(esbmc.calls), 1)
+
+    def test_a_late_violation_gives_the_values_run_what_the_replay_leaves(self):
+        esbmc = self.verify_after(PY_INDEXERROR, 400)
+        self.assertIn("--pytest", esbmc.calls[1])
+        self.assertAlmostEqual(esbmc.timeouts[1], wrapper.TOTAL_BUDGET - 400 - wrapper.REPLAY_BUDGET, delta=1)
+
+    def test_an_early_violation_caps_the_values_run_near_the_first_runs_time(self):
+        esbmc = self.verify_after(PY_INDEXERROR, 100)
+        self.assertAlmostEqual(esbmc.timeouts[1], 1.5 * 100 + 10, delta=1)
+
+    def test_a_quick_violation_still_gives_the_values_run_its_floor(self):
+        esbmc = self.verify_after(PY_INDEXERROR, 7)
+        self.assertAlmostEqual(esbmc.timeouts[1], wrapper.VALUES_MIN_BUDGET, delta=1)
+
+    def test_a_values_run_near_the_limit_stays_within_what_the_replay_leaves(self):
+        esbmc = self.verify_after(PY_INDEXERROR, wrapper.TOTAL_BUDGET - wrapper.REPLAY_BUDGET - 30)
+        self.assertAlmostEqual(esbmc.timeouts[1], 30, delta=1)
+
+    def test_a_confirmation_checks_only_the_violations_bound(self):
+        esbmc = self.verify_after(PY_INDEXERROR + "\nBug found (k = 53)\n", 10, "pass\n")
+        self.assertIn("--k-induction", esbmc.calls[0])
+        for confirmation in esbmc.calls[1:]:
+            self.assertIn("--unwind 53 --no-unwinding-assertions ", confirmation)
+            self.assertNotIn("--k-induction", confirmation)
+            self.assertNotIn("--unlimited-k-steps", confirmation)
+        self.assertTrue(any("--pytest" in c for c in esbmc.calls[1:]))
+        self.assertTrue(any("--ir" in c for c in esbmc.calls[1:]))
+
+    def test_a_bound_printed_by_the_program_is_not_read(self):
+        printed = "[Counterexample]\nBug found (k = 9)\n" + PY_INDEXERROR
+        esbmc = self.verify_after(printed, 10)
+        self.assertIn("--k-induction", esbmc.calls[1])
+        self.assertNotIn("--unwind", esbmc.calls[1])
+
+    def test_control_without_a_bound_the_confirmation_searches_again(self):
+        esbmc = self.verify_after(PY_INDEXERROR, 10, "pass\n")
+        self.assertEqual(len(esbmc.calls), 3)
+        for confirmation in esbmc.calls[1:]:
+            self.assertIn("--k-induction", confirmation)
+            self.assertNotIn("--unwind", confirmation)
+
+    def test_only_python_runs_ask_for_the_values(self):
+        _, calls = self.verify(wrapper.Property.py_datalookup, PY_INDEXERROR, "[][0]\n", None)
+        self.assertNotIn("--pytest", calls[0])
+        self.assertIn("--generate-pytest-testcase --pytest-values-only --pytest-output-dir", calls[1])
+        self.assertNotIn("--pytest", "".join(self.ir_calls(calls)))
+        with tempfile.NamedTemporaryFile("w", suffix=".c") as c_file, \
+                mock.patch.object(wrapper, "confirmed_by_replay", side_effect=AssertionError("replayed")):
+            esbmc = FakeEsbmc(REACH_WITH_UNCHECKED_UNWINDING, self.PASSED, None, None)
+            with mock.patch.object(wrapper, "run", esbmc):
+                result = wrapper.verify("kinduction", wrapper.Property.reach, 64, c_file.name,
+                                        "", False, None, None)
+        self.assertEqual(wrapper.get_result_string(result), "FALSE_REACH")
+        self.assertNotIn("--pytest", esbmc.calls[0])
+
+    def test_a_witness_validation_run_does_not_replay(self):
+        with tempfile.NamedTemporaryFile("w", suffix=".py") as py_file, \
+                mock.patch.object(wrapper, "confirmed_by_replay", side_effect=AssertionError("replayed")):
+            esbmc = FakeEsbmc(PY_INDEXERROR, self.PASSED, None, None)
+            with mock.patch.object(wrapper, "run", esbmc):
+                wrapper.verify("incr", wrapper.Property.py_datalookup, 64, py_file.name, "",
+                               False, "w.yml", "violation")
+        self.assertNotIn("--pytest", esbmc.calls[0])
+
+    # Negative controls: a stand-in that ignores the witness, or a replay judged
+    # under another property, must not confirm what the tests above confirm.
+    def mutated_stand_in(self, old, new):
+        self.assertIn(old, wrapper.REPLAY_VERIFIER)
+        return wrapper.REPLAY_VERIFIER.replace(old, new, 1)
+
+    def test_control_a_stand_in_returning_zero_does_not_confirm_the_scalar_case(self):
+        stand_in = self.mutated_stand_in(
+            "    return _pop_typed(lambda v: type(v) is int)", "    return 0")
+        source = self.HEADER + "x = _sv_verifier.nondet_int()\nf = _sv_verifier.nondet_float()\n1 / (x - 7)\n"
+        verdict, _ = self.verify(
+            wrapper.Property.py_arithmetic, PY_ZERODIVISION, source,
+            "witness = [\n    {'arg0': 1.5, 'arg1': 7},\n]\n", verifier=stand_in)
+        self.assertEqual(verdict, "Unknown")
+
+    def test_control_a_stand_in_without_the_bool_search_does_not_confirm_the_bool_case(self):
+        stand_in = self.mutated_stand_in(
+            "    if not _bits:\n        if _fill:", "    if not _bits:\n        if False:")
+        source = self.HEADER + (
+            "n = 0\nwhile _sv_verifier.nondet_bool():\n    n += 1\n    if n > 5:\n        [][0]\n")
+        verdict, _ = self.verify(
+            wrapper.Property.py_datalookup, PY_INDEXERROR, source, "witness = [\n    {},\n]\n",
+            verifier=stand_in)
+        self.assertEqual(verdict, "Unknown")
+
+
 class PythonCommandLineTest(unittest.TestCase):
     """Each run reports only its property's exception family."""
 
     def command(self, prop):
-        return wrapper.get_command_line("kinduction", prop, None, "main.py", False, "", False)
+        return wrapper.get_command_line("kinduction", prop, None, "main.py", "", False)
 
     def test_each_property_checks_its_own_family(self):
         cases = (
@@ -1030,6 +1518,38 @@ class PthreadDetectionTest(unittest.TestCase):
             "extern int pthread_create (pthread_t *__restrict __newthread,\n"))
 
 
+class ThreadedTaskCommandLineTest(unittest.TestCase):
+    """ESBMC, not the wrapper, configures a program that starts a thread
+    (#10189)."""
+
+    def test_a_pthread_create_call_keeps_the_common_command_line(self):
+        with tempfile.NamedTemporaryFile("w", suffix=".i") as f:
+            f.write("int main() { pthread_create(&t, 0, f, 0); }\n")
+            f.flush()
+            cmd = wrapper.get_command_line(
+                "kinduction", wrapper.Property.reach, 64, f.name, "", False)
+        self.assertIn("--k-induction", cmd)
+        self.assertIn("--interval-analysis", cmd)
+        self.assertNotIn("--context-bound", cmd)
+
+
+class PointerArithCheckTest(unittest.TestCase):
+    """Forming an out-of-range &a[i] dereferences nothing, so memsafety runs
+    without the claim that reports it (#10787)."""
+
+    def command(self, prop):
+        with tempfile.NamedTemporaryFile("w", suffix=".i") as f:
+            f.write("int main() { return 0; }\n")
+            f.flush()
+            return wrapper.get_command_line("kinduction", prop, 64, f.name, "", False)
+
+    def test_memsafety_disables_it(self):
+        self.assertIn("--no-pointer-arith-check", self.command(wrapper.Property.memory))
+
+    def test_memsafety_keeps_bounds_checks(self):
+        self.assertNotIn("--no-bounds-check", self.command(wrapper.Property.memory))
+
+
 class OverflowFallbackTest(unittest.TestCase):
     """A no-overflow task runs k-induction first, then incremental BMC."""
 
@@ -1069,6 +1589,7 @@ VERIFICATION FAILED
         self.assertEqual(verdict, "TRUE")
         self.assertEqual(len(calls), 1)
         self.assertIn("--memlimit " + wrapper.KIND_OVERFLOW_MEMLIMIT, calls[0])
+        self.assertIn(wrapper.KIND_OVERFLOW_INTERVALS, calls[0] + " ")
 
     def test_an_overflow_found_by_k_induction_is_kept(self):
         verdict, calls = self.run_wrapper(self.OVERFLOW, self.SUCCESSFUL)
@@ -1087,6 +1608,7 @@ VERIFICATION FAILED
         self.assertIn("--incremental-bmc", calls[1])
         self.assertNotIn("--k-induction", calls[1])
         self.assertNotIn("--memlimit", calls[1])
+        self.assertNotIn("--interval-analysis", calls[1])
 
 
 if __name__ == "__main__":

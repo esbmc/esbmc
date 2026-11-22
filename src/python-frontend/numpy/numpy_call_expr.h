@@ -1,11 +1,14 @@
 #pragma once
 
+#include <python-frontend/numpy/dense_spectrum.h>
+
 #include <python-frontend/numpy/numpy_dtype.h>
 #include <python-frontend/numpy/numpy_reducer_shared.h>
 
 #include <python-frontend/function_call/expr.h>
 #include <python-frontend/python-list/python_list.h>
 #include <nlohmann/json.hpp>
+#include <array>
 #include <functional>
 #include <optional>
 #include <utility>
@@ -34,6 +37,29 @@ numpy_literal_with_dtype(const nlohmann::json &call, const nlohmann::json &ast);
 enum class norm_order;
 struct norm_value;
 
+// Bounds on an eigenvector's residual |A v - lambda v| and on |v.v - 1|.
+struct eigen_bounds
+{
+  double residual;
+  double norm;
+};
+
+// The same bounds as expressions, which constrain nothing when `excused`.
+// A rotation or reflection of a plane, as numpy_call_expr::turn makes it.
+struct plane_turn
+{
+  exprt a, b, flip;
+};
+
+struct eigen_relation
+{
+  exprt residual;
+  exprt norm;
+  exprt excused;
+  // A real matrix's real eigenvalues have real vectors.
+  bool real_vectors = true;
+};
+
 class numpy_call_expr : public function_call_expr
 {
 public:
@@ -58,6 +84,9 @@ public:
     python_converter &converter);
 
 private:
+  // A call nested in an argument restores, rather than clears, the flag.
+  const bool outer_build_static_lists_;
+
   exprt create_expr_from_call();
 
   // transpose()/flatten()/ravel() and every other descriptor-materialized
@@ -311,31 +340,198 @@ private:
   exprt lapack_value(double exact, double radius);
   exprt numpy_math_value(const std::string &function, double x);
   std::optional<exprt> try_numpy_math_constant();
+  std::optional<exprt> try_bounded_ufunc(const std::string &function);
+  exprt bounded_binary_ufunc(const std::string &function);
+  std::optional<exprt> try_runtime_power(const std::string &function);
+  bool may_hold_float(const nlohmann::json &arg);
+  std::optional<exprt> try_arithmetic_ufunc(const std::string &function);
+  exprt integer_power(const exprt &base, const exprt &exponent);
+  std::optional<exprt> try_refused_operand_kind(const std::string &function);
+  std::optional<exprt>
+  unary_element(const std::string &function, const exprt &x);
+  exprt reciprocal_element(const exprt &x);
+  std::optional<exprt> power_element(
+    const std::string &function,
+    const typet &leaf,
+    const exprt &a,
+    const exprt &b);
+  std::optional<exprt> division_element(
+    const std::string &function,
+    const typet &leaf,
+    const exprt &a,
+    const exprt &b);
+  exprt arithmetic_element(
+    const std::string &function,
+    const typet &leaf,
+    const std::vector<exprt> &x);
+  exprt broadcast_elements(
+    const std::vector<exprt> &operands,
+    const std::vector<std::size_t> &shape,
+    const typet &leaf,
+    std::size_t depth,
+    const std::function<exprt(const std::vector<exprt> &)> &f);
+  std::vector<std::size_t> ufunc_shape(
+    const std::vector<exprt> &operands,
+    std::optional<std::size_t> out_index);
+  /// An exception NumPy raises for a selected element `when` holds.
+  struct ufunc_check
+  {
+    std::string type, message;
+    std::function<exprt(const std::vector<exprt> &)> when;
+  };
+  exprt apply_ufunc(
+    const std::string &function,
+    const std::vector<exprt> &inputs,
+    const typet &leaf,
+    const std::function<exprt(const std::vector<exprt> &)> &f,
+    const ufunc_check *check = nullptr);
+  std::optional<exprt> ufunc_mask(const std::string &function);
+  exprt mask_operand(const std::string &function, const nlohmann::json &node);
+  exprt boolean_mask(const std::string &function, const nlohmann::json &node);
+  exprt elementwise_relation(const irep_idt &id, std::vector<exprt> operands);
+  static exprt truth_of(const exprt &element);
+  /// The array out= writes (a view's pointer, or the array) and its elements
+  /// as read before the call.
+  struct ufunc_output
+  {
+    exprt target;
+    exprt value;
+  };
+  std::optional<ufunc_output>
+  ufunc_out(const std::string &function, std::size_t arity, const typet &leaf);
+  struct ufunc_plan
+  {
+    std::optional<ufunc_output> out;
+    std::optional<exprt> mask;
+    std::vector<exprt> operands;
+    std::vector<std::size_t> shape;
+  };
+  exprt ufunc_error_value(const std::vector<exprt> &inputs, const typet &leaf);
+  exprt selected_fault(
+    const ufunc_check &check,
+    const std::optional<exprt> &mask,
+    const std::vector<exprt> &e,
+    const std::vector<exprt> &elements);
+  ufunc_plan plan_ufunc(
+    const std::string &function,
+    const std::vector<exprt> &inputs,
+    const typet &leaf);
+  exprt out_operand(const std::string &function, const nlohmann::json &node);
+  void reject_unwritable_out(const exprt &target);
+  exprt write_out(const exprt &target, const exprt &result);
   std::optional<exprt> try_runtime_math(const std::string &function);
+  std::optional<exprt>
+  elementwise_math(const std::string &function, const nlohmann::json &arg);
   const std::string &canonical_function();
+  exprt
+  elementwise_operand(const std::string &function, const nlohmann::json &arg);
   std::optional<exprt>
   copy_of_view(const std::string &function, const exprt &operand);
   void
   reject_non_numeric_elements(const std::string &function, const typet &type);
   exprt bind_array_once(const exprt &array);
-  exprt runtime_math_array(const std::string &function, const exprt &value);
+  exprt bind_once(const exprt &value);
+  exprt retype_lhs(const exprt &result);
+  std::optional<exprt> try_float_predicate(const std::string &function);
   exprt numpy_math_list(const std::string &function, const nlohmann::json &arg);
-  std::vector<std::vector<double>>
-  linalg_matrix(const std::function<void(nlohmann::json &)> &unwrap);
+  std::optional<exprt> literal_array_operand(const nlohmann::json &arg);
+  exprt linalg_unary(
+    const std::string &function,
+    const std::function<void(nlohmann::json &)> &resolve);
+  exprt constant_linalg(
+    const std::string &function,
+    const std::vector<std::vector<double>> &m);
+  exprt runtime_linalg(
+    const std::string &function,
+    const std::vector<std::vector<exprt>> &m,
+    const std::vector<exprt> &b = {});
+  exprt runtime_decomposition(
+    const std::string &function,
+    const std::vector<std::vector<exprt>> &m);
+  exprt runtime_solve(
+    const nlohmann::json &original_a,
+    const nlohmann::json &original_b);
+  exprt runtime_inverse(
+    const std::vector<std::vector<exprt>> &m,
+    const std::vector<exprt> &b);
+  exprt linalg_solve_call(
+    const nlohmann::json &original_a,
+    const nlohmann::json &original_b,
+    nlohmann::json a,
+    nlohmann::json b);
   exprt nondet_bool();
+  exprt nondet_value(const typet &type, const std::string &name);
   exprt eigenvalues(const std::vector<std::vector<double>> &m);
   exprt eigen_decomposition(const std::vector<std::vector<double>> &m);
   std::vector<exprt> in_any_order(const std::vector<exprt> &values);
+  std::vector<exprt>
+  symmetric_eigenvalues(const std::vector<std::vector<double>> &m);
+  std::vector<exprt> permutation_slots(std::size_t n);
+  std::vector<exprt> with_any_sign(const std::vector<exprt> &v);
+  exprt selected_box(
+    const exprt &slot,
+    const std::vector<double> &exacts,
+    double radius);
+  exprt selected_box(
+    const exprt &slot,
+    const std::vector<double> &exacts,
+    const std::vector<double> &radii);
+  std::vector<exprt>
+  dense_eigenvalues(const std::vector<std::vector<double>> &m);
+  void dense_eigen_pairs(
+    const std::vector<std::vector<double>> &m,
+    std::vector<exprt> &values,
+    std::vector<std::vector<exprt>> &columns,
+    eigen_bounds &bounds);
   void eigen_pair_2x2(
     const std::vector<std::vector<double>> &m,
     std::vector<exprt> &values,
-    std::vector<std::vector<exprt>> &columns);
+    std::vector<std::vector<exprt>> &columns,
+    eigen_bounds &bounds);
   std::vector<exprt>
   signed_column(const std::vector<double> &exact, double radius);
   exprt linalg_tuple(const std::vector<exprt> &parts);
   std::vector<exprt> eigenvalue_pair(const std::vector<std::vector<double>> &m);
   exprt singular_values(const std::vector<std::vector<double>> &m);
   bool svd_values_only() const;
+  bool svd_flag(const std::string &name, bool fallback) const;
+  void bind_svd_relations(
+    const std::vector<std::vector<double>> &m,
+    const dense_spectrum::singular_system &system,
+    const std::array<exprt, 3> &factors,
+    const std::pair<double, double> &radii,
+    const std::array<std::vector<bool>, 2> &boxed);
+  void relate_near(const exprt &sum, double target, double bound);
+  void relate_orthogonality(
+    const exprt &factor,
+    bool columns,
+    const dense_spectrum::matrix &vectors,
+    const std::vector<bool> &boxed,
+    double radius);
+  void relate_free_vectors(
+    const std::vector<std::vector<double>> &m,
+    const exprt &factor,
+    bool columns,
+    std::size_t count,
+    std::size_t rank);
+  std::vector<std::vector<exprt>> vectors_past_rank(
+    const dense_spectrum::matrix &vectors,
+    const dense_spectrum::matrix &rest,
+    std::size_t rank,
+    double radius);
+  plane_turn turn();
+  std::vector<std::vector<exprt>> plane_vectors(
+    const dense_spectrum::matrix &plane,
+    std::size_t count,
+    double tilt,
+    const plane_turn &turn);
+  void determined_vectors(
+    const dense_spectrum::singular_system &system,
+    const std::vector<bool> &pairs,
+    double radius,
+    std::vector<std::vector<exprt>> &us,
+    std::vector<std::vector<exprt>> &vs,
+    std::array<std::vector<bool>, 2> &boxed);
   exprt linalg_decomposition(
     const std::string &function,
     const std::vector<std::vector<double>> &m);
@@ -343,15 +539,64 @@ private:
   exprt linalg_inverse(const std::vector<std::vector<double>> &m);
   exprt bounded_inverse(const std::vector<std::vector<double>> &m);
   void raise_singular_matrix();
+  void raise_linalg(
+    const std::string &type,
+    const std::string &message,
+    const exprt &when);
+  exprt raise_linalg_fault(const std::string &type, const std::string &message);
   exprt bounded_solve(
     const std::string &function,
     const std::vector<std::vector<double>> &m,
     const std::vector<double> &b);
   void unwrap_linalg_operand(nlohmann::json &arg) const;
-  std::vector<std::vector<exprt>>
-  runtime_entries(const nlohmann::json &arg, std::size_t &rank);
+  std::vector<std::vector<exprt>> runtime_entries(
+    const nlohmann::json &arg,
+    std::optional<std::vector<int>> &shape);
   exprt within_radius(const exprt &value, const exprt &radius);
-  exprt symbolic_det(const nlohmann::json &arg, bool strings);
+  void
+  assume_near(const exprt &residual, const exprt &bound, const exprt &excused);
+  std::vector<std::pair<exprt, exprt>>
+  runtime_eigenvalues(const std::vector<std::vector<exprt>> &m);
+  std::vector<std::pair<exprt, exprt>>
+  runtime_eigenvalues_3x3(const std::vector<std::vector<exprt>> &m);
+  exprt runtime_eigen_pairs(const std::vector<std::vector<exprt>> &m);
+  exprt runtime_singular_values(const std::vector<std::vector<exprt>> &m);
+  exprt runtime_singular_values_of(const std::vector<std::vector<exprt>> &m);
+  exprt runtime_svd_factors(const std::vector<std::vector<exprt>> &m);
+  exprt dense_svd_factors(const std::vector<std::vector<double>> &m);
+  void bind_complex_eigenvector(
+    const std::vector<std::vector<exprt>> &m,
+    const exprt &lambda,
+    const std::vector<exprt> &v,
+    const eigen_relation &relation);
+  exprt complex_spectrum(
+    const std::vector<std::vector<double>> &m,
+    bool with_vectors);
+  exprt complex_input_spectrum(
+    const dense_spectrum::complex_matrix &m,
+    bool with_vectors);
+  exprt spectrum_result(
+    const dense_spectrum::complex_matrix &m,
+    const dense_spectrum::complex_eigen_system &system,
+    bool with_vectors,
+    bool real_input);
+  std::vector<exprt> spectrum_order(
+    const std::vector<std::vector<std::size_t>> &orders,
+    const std::vector<bool> &is_second,
+    std::vector<exprt> &second);
+  std::vector<std::vector<exprt>> eigenvector_columns(
+    const dense_spectrum::complex_matrix &m,
+    const dense_spectrum::complex_eigen_system &system,
+    const std::vector<exprt> &slots,
+    const std::vector<exprt> &second,
+    eigen_bounds &bounds);
+  exprt bound_eigen_tuple(
+    const std::vector<std::vector<exprt>> &m,
+    const std::vector<exprt> &values,
+    const std::vector<std::vector<exprt>> &columns,
+    const std::optional<eigen_relation> &relation);
+  exprt stored(const exprt &value);
+  exprt symbolic_det(const std::vector<std::vector<exprt>> &m);
   exprt symbolic_norm(const nlohmann::json &arg, norm_order order);
   exprt linalg_norm(const std::function<void(nlohmann::json &)> &unwrap);
   exprt norm_array(const std::vector<std::vector<exprt>> &rows, bool as_matrix);

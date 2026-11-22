@@ -1,0 +1,5 @@
+CORE
+main.c
+--goto2lean --ir
+^  let c := \(256 : Int\);$
+^  \(c = \(256 : Int\)\) ∧ \($

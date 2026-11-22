@@ -1,0 +1,5 @@
+CORE
+main.c
+--no-assertions --overflow-check --no-pointer-check --no-bounds-check --validate-correctness-witness --witness witness.yml
+^VERIFICATION FAILED$
+^  witness invariant$

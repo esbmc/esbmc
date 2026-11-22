@@ -538,7 +538,9 @@ exprt python_converter::get_lambda_body_expr(
   const bool saved_lazy = in_lazy_operand_;
   const bool saved_own_block = in_operand_effects_block_;
   const unsigned saved_conditional = conditional_expr_depth_;
+  const nlohmann::json *saved_result = lambda_result_;
   current_block = &block;
+  lambda_result_ = &body;
   converting_lambda_body_ = false;
   in_lazy_operand_ = false;
   in_operand_effects_block_ = false;
@@ -558,11 +560,26 @@ exprt python_converter::get_lambda_body_expr(
     result = symbol_expr(tmp);
   }
   current_block = saved_block;
+  lambda_result_ = saved_result;
   converting_lambda_body_ = saved_lambda;
   in_lazy_operand_ = saved_lazy;
   in_operand_effects_block_ = saved_own_block;
   conditional_expr_depth_ = saved_conditional;
   return result;
+}
+
+void python_converter::refuse_int_lambda_result(
+  const exprt &returns_float,
+  code_blockt &block,
+  const locationt &location) const
+{
+  code_assertt check{returns_float};
+  check.location() = location;
+  check.location().user_provided(true);
+  check.location().comment(
+    "Unsupported: a lambda returning an int where it may also return a "
+    "float");
+  block.copy_to_operands(check);
 }
 
 exprt python_converter::get_named_expr(const nlohmann::json &element)
@@ -662,8 +679,8 @@ symbolt *python_converter::find_enclosing_scope_symbol(symbol_id sid) const
   return find_symbol(sid.global_to_string());
 }
 
-/// The name \p stmt binds, if it is a def or an annotated assignment to a
-/// name; otherwise empty.
+/// The name \p stmt binds, if it is a def or an assignment to one name;
+/// otherwise empty.
 static std::string module_binding_name(const nlohmann::json &stmt)
 {
   const std::string kind = stmt.value("_type", "");
@@ -671,29 +688,33 @@ static std::string module_binding_name(const nlohmann::json &stmt)
     return stmt["name"].get<std::string>();
   if (kind == "AnnAssign")
     return stmt["target"].value("id", "");
+  if (kind == "Assign" && stmt["targets"].size() == 1)
+    return stmt["targets"][0].value("id", "");
   return "";
 }
 
-/// The statement binding \p name in \p body or in a block nested in it at
-/// module scope (an if, loop or try), or nullptr.
-static const nlohmann::json *
-find_module_binding(const nlohmann::json &body, const std::string &name)
+/// The statements binding \p name in \p body or in a block nested in it at
+/// module scope (an if, loop or try), in source order.
+static void collect_module_bindings(
+  const nlohmann::json &body,
+  const std::string &name,
+  std::vector<const nlohmann::json *> &found)
 {
   for (const auto &stmt : body)
   {
     if (module_binding_name(stmt) == name)
-      return &stmt;
+    {
+      found.push_back(&stmt);
+      continue;
+    }
     const std::string kind = stmt.value("_type", "");
     if (
       kind == "FunctionDef" || kind == "AsyncFunctionDef" || kind == "ClassDef")
       continue;
     for (const char *field : {"body", "orelse", "finalbody", "handlers"})
       if (stmt.contains(field) && stmt[field].is_array())
-        if (
-          const nlohmann::json *found = find_module_binding(stmt[field], name))
-          return found;
+        collect_module_bindings(stmt[field], name, found);
   }
-  return nullptr;
 }
 
 /// Whether \p value is a constant that leaves a global of annotated type
@@ -744,32 +765,47 @@ static std::size_t count_type_keeping_aug_assigns(
   return n;
 }
 
-/// The module-scope statement binding \p name when that is the one binding
-/// of the name anywhere in the module, or nullptr. Any other binding (a second
-/// one, a local) leaves the name's value at a read depending on which binding
-/// ran. An augmented assignment that keeps the binding's type does not count:
-/// it reads the name first, so it raises unless the binding has already run.
+/// The first module-scope statement binding \p name when the module's
+/// bindings of the name are that one, or module-scope annotated assignments
+/// all giving it one annotation; else nullptr. Any other binding (a local, a
+/// def bound twice) leaves the name's type at a read depending on which
+/// binding ran. An augmented assignment that keeps the binding's type does not
+/// count: it reads the name first, so it raises unless a binding has run.
+/// \p count receives the number of bindings.
 static const nlohmann::json *sole_module_binding(
   const nlohmann::json &module,
   const std::string &name,
-  const operand_type_test &has_type)
+  const operand_type_test &has_type,
+  std::size_t *count = nullptr)
 {
-  const nlohmann::json *binding = find_module_binding(module["body"], name);
-  if (!binding)
+  std::vector<const nlohmann::json *> bindings;
+  collect_module_bindings(module["body"], name, bindings);
+  if (bindings.empty())
     return nullptr;
-  const std::string type = binding->contains("annotation")
-                             ? (*binding)["annotation"].value("id", "")
-                             : "";
+  const nlohmann::json &first = *bindings.front();
+  const std::string type =
+    first.contains("annotation") ? first["annotation"].value("id", "") : "";
   if (
     json_utils::count_name_bindings(module, name) -
       count_type_keeping_aug_assigns(module, name, type, has_type) !=
-    1)
+    bindings.size())
     return nullptr;
-  return binding;
+  if (
+    bindings.size() > 1 &&
+    !std::all_of(bindings.begin(), bindings.end(), [&](const auto *binding) {
+      return binding->value("_type", "") == "AnnAssign" &&
+             json_utils::ast_equal_ignoring_location(
+               (*binding)["annotation"], first["annotation"]);
+    }))
+    return nullptr;
+  if (count)
+    *count = bindings.size();
+  return &first;
 }
 
 /// Whether \p operand is a module global already bound with annotated type
-/// \p type, or a call to a module function already defined to return it.
+/// \p type, or a call to a module function already defined to return it, or
+/// through a module global holding such functions.
 bool python_converter::operand_has_type(
   const nlohmann::json &operand,
   const std::string &type) const
@@ -777,16 +813,23 @@ bool python_converter::operand_has_type(
   const bool is_call = operand["_type"] == "Call";
   const std::string id = (is_call ? operand["func"] : operand).value("id", "");
   symbol_id sid(current_python_file, "", is_call ? id : "");
-  if (!is_call)
+  const symbolt *symbol =
+    is_call ? symbol_table_.find_symbol(sid.to_string()) : nullptr;
+  if (!symbol)
+  {
+    sid.set_function("");
     sid.set_object(id);
-  const symbolt *symbol = symbol_table_.find_symbol(sid.to_string());
+    symbol = symbol_table_.find_symbol(sid.to_string());
+  }
   if (!symbol)
     return false;
   const typet &expected = type_handler_.get_typet(type);
   if (!is_call)
     return symbol->get_type() == expected;
-  return symbol->get_type().is_code() &&
-         to_code_type(symbol->get_type()).return_type() == expected;
+  typet callee = symbol->get_type();
+  if (callee.is_pointer())
+    callee = callee.subtype();
+  return callee.is_code() && to_code_type(callee).return_type() == expected;
 }
 
 /// The module global \p sid names for a read in an enclosing scope. Code
@@ -798,13 +841,19 @@ symbolt *python_converter::find_global_symbol(const symbol_id &sid)
 {
   if (symbolt *symbol = find_enclosing_scope_symbol(sid))
     return symbol;
+  std::size_t bindings = 0;
   const nlohmann::json *binding = sole_module_binding(
     *ast_json,
     sid.get_object(),
     [this](const nlohmann::json &operand, const std::string &type) {
       return operand_has_type(operand, type);
-    });
-  if (!binding || binding->value("_type", "") != "AnnAssign")
+    },
+    &bindings);
+  if (!binding)
+    return nullptr;
+  if (binding->value("_type", "") == "Assign")
+    return forward_function_global(sid.get_object(), *binding);
+  if (binding->value("_type", "") != "AnnAssign")
     return nullptr;
   nlohmann::json annotated = *binding;
   annotated.erase("_inferred_annotation");
@@ -813,8 +862,45 @@ symbolt *python_converter::find_global_symbol(const symbol_id &sid)
   global.set_object(sid.get_object());
   symbolt *symbol = symbol_table_.find_symbol(global.to_string());
   if (symbol)
-    track_unbound_global(global.to_string(), *binding, symbol->get_type());
+    track_unbound_global(
+      global.to_string(), *binding, symbol->get_type(), bindings);
   return symbol;
+}
+
+/// The global \p name of the module binding \p binding, `name = f` with `f`
+/// a module function bound once and already converted, registered as a
+/// pointer to `f` for a read converted before the binding (#10635); else
+/// nullptr.
+symbolt *python_converter::forward_function_global(
+  const std::string &name,
+  const nlohmann::json &binding)
+{
+  const nlohmann::json &value = binding["value"];
+  if (value.value("_type", "") != "Name")
+    return nullptr;
+  const std::string fn = value["id"].get<std::string>();
+  const symbolt *def = symbol_table_.find_symbol(
+    symbol_id(current_python_file, "", fn).to_string());
+  if (
+    !def || !def->get_type().is_code() ||
+    json_utils::count_name_bindings(*ast_json, fn) != 1)
+    return nullptr;
+  symbol_id sid(current_python_file, "", "");
+  sid.set_object(name);
+  const std::string module_name =
+    current_python_file.substr(0, current_python_file.find_last_of("."));
+  symbolt symbol = create_symbol(
+    module_name,
+    name,
+    sid.to_string(),
+    get_location_from_decl(binding),
+    gen_pointer_type(def->get_type()));
+  symbol.lvalue = true;
+  symbol.file_local = false;
+  symbol.is_extern = false;
+  symbolt *added = symbol_table_.move_symbol_to_context(symbol);
+  track_unbound_global(sid.to_string(), binding, added->get_type());
+  return added;
 }
 
 /// The module function \p name as a value, or nil. A function the module
@@ -858,15 +944,16 @@ typet python_converter::forward_function_return_type(
                            : "";
   if (id != "int" && id != "float" && id != "bool" && id != "str")
     return typet();
-  flag->second.second = id == "str" ? gen_pointer_type(char_type())
-                                    : named_return_type(id, returns, *def);
-  return flag->second.second;
+  flag->second.type = id == "str" ? gen_pointer_type(char_type())
+                                  : named_return_type(id, returns, *def);
+  return flag->second.type;
 }
 
 void python_converter::track_unbound_global(
   const std::string &id,
   const nlohmann::json &binding,
-  const typet &type)
+  const typet &type,
+  std::size_t bindings)
 {
   if (unbound_global_flags_.count(id))
     return;
@@ -881,7 +968,7 @@ void python_converter::track_unbound_global(
   flag.static_lifetime = true;
   flag.set_value(migrate_expr(false_exprt()));
   symbol_table_.add(flag);
-  unbound_global_flags_.emplace(id, std::make_pair(flag_id, type));
+  unbound_global_flags_.emplace(id, unbound_globalt{flag_id, type, bindings});
 }
 
 /// Raises NameError at a read of \p id while its binding has not run.
@@ -894,16 +981,16 @@ void python_converter::guard_unbound_global(
   if (flag == unbound_global_flags_.end())
     return;
   emit_guarded_raise(
-    not_exprt(symbol_expr(*symbol_table_.find_symbol(flag->second.first))),
+    not_exprt(symbol_expr(*symbol_table_.find_symbol(flag->second.flag))),
     "NameError",
     "name '" + name + "' is not defined",
     get_location_from_decl(element));
 }
 
-/// Sets the flag of the global \p stmt binds, once it has run. Later reads
-/// need no guard, so the global stops being tracked. Reads converted earlier
-/// took the global's type from its annotation, so refuse a binding that gave
-/// it another.
+/// Sets the flag of the global \p stmt binds, once it has run. Reads after its
+/// last binding need no guard, so the global then stops being tracked. Reads
+/// converted earlier took the global's type from its annotation, so refuse a
+/// binding that gave it another.
 void python_converter::mark_global_bound(
   const nlohmann::json &stmt,
   code_blockt &block)
@@ -918,9 +1005,9 @@ void python_converter::mark_global_bound(
     return;
   const typet &bound = symbol_table_.find_symbol(sid.to_string())->get_type();
   if (
-    is_def ? !flag->second.second.id().empty() &&
-               to_code_type(bound).return_type() != flag->second.second
-           : bound != flag->second.second)
+    is_def ? !flag->second.type.id().empty() &&
+               to_code_type(bound).return_type() != flag->second.type
+           : bound != flag->second.type)
     throw std::runtime_error(
       fmt::format(
         "Variable '{}' is read before its binding at line {} as a different "
@@ -928,8 +1015,9 @@ void python_converter::mark_global_bound(
         name,
         get_location_from_decl(stmt).get_line().as_string()));
   block.copy_to_operands(code_assignt(
-    symbol_expr(*symbol_table_.find_symbol(flag->second.first)), true_exprt()));
-  unbound_global_flags_.erase(flag);
+    symbol_expr(*symbol_table_.find_symbol(flag->second.flag)), true_exprt()));
+  if (--flag->second.bindings == 0)
+    unbound_global_flags_.erase(flag);
 }
 
 exprt python_converter::get_default_expr(const nlohmann::json &node)
@@ -1568,8 +1656,23 @@ std::optional<exprt> python_converter::resolve_subscript_base(
   // Materialise the call into a temporary first, mirroring the assigned
   // path (s = sorted(words); s[0]). See #4807.
   if (current_block)
+  {
+    const exprt call = array;
     array =
       materialize_list_function_call(array, element["value"], *current_block);
+    if (
+      array.is_symbol() && call.is_function_call() &&
+      element_type_registry_.size(array.identifier().as_string()) == 0)
+      copy_elem_types_from_reordering_builtin(
+        element["value"], call, array.identifier().as_string());
+  }
+
+  // A typed list (#10451) is read and written through its own storage, as
+  // is a typed dict.
+  if (python_list::is_typed_dict_read(element))
+    return python_list(*this, element).typed_dict_get();
+  if (python_list::is_typed_subscript(element))
+    return python_list(*this, element).typed_subscript(array, element["slice"]);
 
   return std::nullopt;
 }
@@ -1686,6 +1789,8 @@ std::optional<exprt> python_converter::try_dispatch_dict_subscript(
   // Try to resolve the expected return type from the dict's type annotation
   typet expected_type =
     dict_handler_->resolve_expected_type_for_dict_subscript(array);
+  if (expected_type.is_nil() || expected_type.is_empty())
+    expected_type = dict_handler_->nested_literal_value_type(element);
 
   // A dict read out of a list, as in rows[0]["k"], has no symbol to type its
   // value by, and the handler's default reads it as a str. Take the type the
@@ -1719,6 +1824,8 @@ std::optional<exprt> python_converter::try_dispatch_dict_subscript(
   }
   else if (is_call_bound_dict(base))
     check_type = !type_handler_.type_to_string(expected_type).empty();
+
+  expected_type = dict_read_function_type(element).value_or(expected_type);
 
   // Pass the expected type to the dict handler
   // If empty, the handler will use its default heuristics
@@ -2076,17 +2183,26 @@ std::optional<exprt> python_converter::try_dispatch_bool_mask_variable_index(
 
 std::optional<exprt> python_converter::try_dispatch_dunder_getitem(
   const nlohmann::json &element,
-  const nlohmann::json &slice)
+  const nlohmann::json &slice,
+  const exprt &receiver)
 {
   // Handle object subscripting through __getitem__:
   //   obj[key] -> obj.__getitem__(key)
   if (!has_dunder_method(element["value"], "__getitem__"))
-    return std::nullopt;
+    return dispatch_item_dunder_by_type(
+      receiver,
+      element["value"],
+      "__getitem__",
+      nlohmann::json::array({slice}));
 
   nlohmann::json args = nlohmann::json::array();
   args.push_back(slice);
-  nlohmann::json call_node =
-    build_dunder_call(element["value"], "__getitem__", args, element);
+  nlohmann::json call_node = build_dunder_call(
+    element["value"],
+    keyed_dunder_name(
+      instance_class_name(element["value"]), "__getitem__", slice),
+    args,
+    element);
   return get_function_call(call_node);
 }
 
@@ -2318,7 +2434,7 @@ exprt python_converter::handle_subscript_expr(const nlohmann::json &element)
 
   if (
     std::optional<exprt> dunder_result =
-      try_dispatch_dunder_getitem(element, slice))
+      try_dispatch_dunder_getitem(element, slice, array))
     return *dunder_result;
 
   reject_scalar_subscript(array_type, element);
@@ -2417,6 +2533,154 @@ static bool class_binds_attribute(
   return true;
 }
 
+// Collects in @p nested the attributes stored on `self` in @p node below the
+// top level of a method body, and in @p top those stored at it.
+static void collect_self_stores(
+  const nlohmann::json &node,
+  bool at_top,
+  std::set<std::string> &top,
+  std::set<std::string> &nested)
+{
+  if (!node.is_structured())
+    return;
+  if (
+    node.is_object() && node.value("_type", "") == "Attribute" &&
+    node["value"].value("id", "") == "self" &&
+    node.value("ctx", nlohmann::json()).value("_type", "") != "Load")
+    (at_top ? top : nested).insert(node.value("attr", ""));
+  // The statements of a block below the method body are nested.
+  const bool block = node.is_object() && node.contains("body");
+  for (const auto &child : node)
+    collect_self_stores(child, at_top && !block, top, nested);
+}
+
+// Adds to @p clazz a presence flag `<attr>$set` for each attribute that
+// `__init__` of @p class_node stores on `self` only inside a block and that
+// nothing else binds: no other method and no base. An instance whose
+// constructor took no such path lacks the attribute, and a read of it raises
+// AttributeError (#10587), or reads the class attribute it would have
+// shadowed (#10588).
+void python_converter::add_presence_flags(
+  const nlohmann::json &class_node,
+  struct_typet &clazz)
+{
+  std::set<std::string> top, nested, elsewhere;
+  for (const auto &method : class_node["body"])
+  {
+    if (method.value("_type", "") != "FunctionDef")
+      continue;
+    if (method.value("name", "") == "__init__")
+      for (const auto &stmt : method["body"])
+        collect_self_stores(stmt, true, top, nested);
+    else
+      collect_self_stores(method["body"], true, elsewhere, elsewhere);
+  }
+  const std::string class_name = class_node.value("name", "");
+  for (const std::string &attr : nested)
+  {
+    if (top.count(attr) || elsewhere.count(attr))
+      continue;
+    // A class attribute is read where the instance has not shadowed it,
+    // which needs the class found by name.
+    if (
+      assigns_class_attribute(class_node["body"], attr) &&
+      json_utils::find_class((*ast_json)["body"], class_name).empty())
+      continue;
+    bool base_binds = false;
+    for (const auto &base : class_node["bases"])
+      base_binds |=
+        class_binds_attribute(*ast_json, base.value("id", ""), attr);
+    if (base_binds)
+      continue;
+    const std::string flag = attr + "$set";
+    if (!clazz.has_component(flag))
+      clazz.components().push_back(
+        python_frontend::build_component(class_name, flag, bool_type()));
+  }
+}
+
+// The presence flag of the attribute @p member reads, or nil when it has none.
+exprt python_converter::presence_flag_of(const exprt &member) const
+{
+  if (!member.is_member())
+    return nil_exprt();
+  const exprt &object = to_member_expr(member).struct_op();
+  const typet followed = ns.follow(object.type());
+  const std::string flag =
+    to_member_expr(member).get_component_name().as_string() + "$set";
+  if (!followed.is_struct() || !to_struct_type(followed).has_component(flag))
+    return nil_exprt();
+  return member_exprt(object, flag, bool_type());
+}
+
+// A read of an attribute with a presence flag raises AttributeError where
+// the flag is clear (#10587).
+exprt python_converter::guard_presence_flagged_read(
+  const nlohmann::json &element,
+  const exprt &expr)
+{
+  if (is_converting_lhs || element.value("_type", "") != "Attribute")
+    return expr;
+  const exprt flag = presence_flag_of(expr);
+  if (flag.is_nil() || in_rhs_type_probe_)
+    return expr;
+  const typet object_type = ns.follow(to_member_expr(expr).struct_op().type());
+  const std::string class_name =
+    extract_class_name_from_tag(to_struct_type(object_type).tag().as_string());
+  // An instance that has not shadowed a class attribute reads it (#10588).
+  symbol_id class_attr(current_python_file, class_name, "");
+  class_attr.set_object(element.value("attr", ""));
+  if (const symbolt *shadowed = find_symbol(class_attr.to_string()))
+    return if_exprt(
+      flag, expr, typecast_exprt(symbol_expr(*shadowed), expr.type()));
+  emit_guarded_raise(
+    not_exprt(flag),
+    "AttributeError",
+    "'" + class_name + "' object has no attribute '" +
+      element.value("attr", "") + "'",
+    get_location_from_decl(element));
+  return expr;
+}
+
+// Sets the presence flag of an attribute store.
+void python_converter::set_presence_flag(
+  const exprt &lhs,
+  const nlohmann::json &ast_node,
+  codet &target_block) const
+{
+  const exprt flag = presence_flag_of(lhs);
+  if (flag.is_nil())
+    return;
+  code_assignt assign(flag, true_exprt());
+  assign.location() = get_location_from_decl(ast_node);
+  target_block.copy_to_operands(assign);
+}
+
+// A constructor first clears the presence flags of its class: no attribute
+// they guard is set before its store runs.
+void python_converter::clear_presence_flags(const code_typet &type, exprt &body)
+  const
+{
+  if (type.return_type().id() != "constructor" || type.arguments().empty())
+    return;
+  const symbolt *cls = symbol_table_.find_symbol("tag-" + current_class_name_);
+  if (!cls || !cls->get_type().is_struct())
+    return;
+  const struct_typet &clazz = to_struct_type(cls->get_type());
+  const exprt self = symbol_exprt(
+    type.arguments().front().get_identifier(), type.arguments().front().type());
+  exprt::operandst clears;
+  for (const auto &component : clazz.components())
+  {
+    const std::string name = component.get_name().as_string();
+    if (name.size() > 4 && name.compare(name.size() - 4, 4, "$set") == 0)
+      clears.push_back(code_assignt(
+        member_exprt(dereference_exprt(self, clazz), name, bool_type()),
+        false_exprt()));
+  }
+  body.operands().insert(body.operands().begin(), clears.begin(), clears.end());
+}
+
 // A store `obj.attr = v` from outside the class, of an attribute the class
 // never binds, made on only some paths: a later read on another path raises
 // AttributeError in CPython, which the instance's struct cannot tell apart
@@ -2496,9 +2760,10 @@ exprt python_converter::get_class_dunder_attribute(
     return nil_exprt();
   if (element["attr"] == "__class__")
     return get_class_attribute(element);
-  if (element["attr"] == "__name__")
-    return get_class_name(element["value"]);
-  return nil_exprt();
+  if (element["attr"] != "__name__")
+    return nil_exprt();
+  const exprt name = get_class_name(element["value"]);
+  return name.is_nil() ? get_function_name(element["value"]) : name;
 }
 
 exprt python_converter::get_class_attribute(const nlohmann::json &element)
@@ -2547,6 +2812,40 @@ exprt python_converter::get_class_name(const nlohmann::json &value)
     throw std::runtime_error(
       "__name__ of a class not known statically is not supported");
   return string_builder_->build_string_literal(name);
+}
+
+// A function value whose `__name__` get_function_name could not fold.
+static void
+reject_function_name_read(const typet &type, const std::string &attr_name)
+{
+  if (type.is_code() && attr_name == "__name__")
+    throw std::runtime_error(
+      "__name__ of a function not known statically is not supported");
+}
+
+// `f.__name__` when the one binding of `f` is a module-level def or lambda
+// ahead of the read. Nil otherwise.
+exprt python_converter::get_function_name(const nlohmann::json &value)
+{
+  if (value.value("_type", "") != "Name")
+    return nil_exprt();
+  const std::string name = value["id"].get<std::string>();
+  const nlohmann::json &body = (*ast_json)["body"];
+  if (dynamic_type_detail::count_bindings(body, name) != 1)
+    return nil_exprt();
+  for (const auto &stmt : body)
+  {
+    const nlohmann::json *assigned =
+      dynamic_type_detail::assigned_value_at(stmt, name);
+    const bool is_def = stmt.value("_type", "") == "FunctionDef" &&
+                        stmt.value("name", "") == name;
+    const bool is_lambda = assigned && assigned->value("_type", "") == "Lambda";
+    if (
+      (is_def || is_lambda) &&
+      stmt.value("lineno", 0) < value.value("lineno", 0))
+      return string_builder_->build_string_literal(is_def ? name : "<lambda>");
+  }
+  return nil_exprt();
 }
 
 // `module.member` for an imported module, unless a local binding shadows the
@@ -3272,6 +3571,7 @@ exprt python_converter::get_expr(const nlohmann::json &element)
       const typet &symbol_type = (symbol->get_type().is_pointer())
                                    ? symbol->get_type().subtype()
                                    : symbol->get_type();
+      reject_function_name_read(symbol_type, attr_name);
 
       // Handle union types
       if (
@@ -3564,6 +3864,7 @@ exprt python_converter::get_expr(const nlohmann::json &element)
       expr = get_lambda_expr(element);
     else
       expr = get_call_expr(element);
+    guard_tagged_callee(expr, element);
     break;
   }
   // Ternary operator
@@ -3598,6 +3899,38 @@ exprt python_converter::get_expr(const nlohmann::json &element)
   }
   }
 
+  return guard_none_flagged_read(
+    element, guard_presence_flagged_read(element, expr));
+}
+
+/// A tagged attribute holds None only through its None flag (#10350). A read
+/// other than an operand of an operator, which reads the flag itself, would
+/// take the payload: where the flag is set, claim it as unsupported.
+exprt python_converter::guard_none_flagged_read(
+  const nlohmann::json &element,
+  const exprt &expr)
+{
+  if (
+    is_converting_lhs || !type_handler_.is_tagged_scalar_type(expr.type()) ||
+    std::find(
+      none_aware_operands_.begin(), none_aware_operands_.end(), &element) !=
+      none_aware_operands_.end())
+    return expr;
+  const exprt flag = none_flag_of_attribute(expr);
+  // A type probe of an assignment's value is converted again for real.
+  if (flag.is_nil() || in_rhs_type_probe_)
+    return expr;
+  const std::string message = "Unsupported: reading attribute '" +
+                              element.value("attr", "") +
+                              "', which may hold None, as a value";
+  if (!can_emit_runtime_guard())
+    throw std::runtime_error(message);
+  code_assertt check{not_exprt(flag)};
+  check.location() = get_location_from_decl(element);
+  check.location().user_provided(true);
+  check.location().comment(message);
+  add_instruction(check);
+  add_instruction(code_assumet(not_exprt(flag)));
   return expr;
 }
 
@@ -3758,7 +4091,8 @@ python_converter::scope_numeric_bindings(
     before,
     include_later,
     bindings,
-    [this](const nlohmann::json &call) { return call_number_kind(call); });
+    [this](const nlohmann::json &call) { return call_number_kind(call); },
+    (*ast_json)["body"]);
   return bindings;
 }
 

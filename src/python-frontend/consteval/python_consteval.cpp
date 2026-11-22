@@ -1,59 +1,43 @@
 #include <python-frontend/consteval/python_consteval.h>
+#include <big-int/bigint.hh>
+#include <python-frontend/math/python_round.h>
 #include <algorithm>
 #include <cctype>
 #include <cmath>
 #include <functional>
 #include <unordered_set>
 
-static double round_ties_to_even_consteval(const double value)
+// round(x) or round(x, ndigits) as CPython computes it. Answers nullopt where
+// the converter decides: a result outside long long or an OverflowError.
+static std::optional<PyConstValue>
+eval_round(const PyConstValue &x, const std::optional<long long> ndigits)
 {
-  const double lower = std::floor(value);
-  const double diff = value - lower;
-  constexpr double tie_eps = 1e-12;
-
-  if (diff < 0.5 - tie_eps)
-    return lower;
-  if (diff > 0.5 + tie_eps)
-    return lower + 1.0;
-
-  const double parity = std::fmod(std::fabs(lower), 2.0);
-  const bool lower_is_even =
-    parity < tie_eps || std::fabs(parity - 2.0) < tie_eps;
-  return lower_is_even ? lower : lower + 1.0;
-}
-
-static double
-round_to_ndigits_ties_even_consteval(const double value, const int ndigits)
-{
-  auto round_ld_ties_even = [](const long double v) -> long double {
-    const long double lower = std::floor(v);
-    const long double diff = v - lower;
-    constexpr long double tie_eps = 1e-15L;
-
-    if (diff < 0.5L - tie_eps)
-      return lower;
-    if (diff > 0.5L + tie_eps)
-      return lower + 1.0L;
-
-    const long double parity = std::fmod(std::fabs(lower), 2.0L);
-    const bool lower_is_even =
-      parity < tie_eps || std::fabs(parity - 2.0L) < tie_eps;
-    return lower_is_even ? lower : lower + 1.0L;
-  };
-
-  long double scale = 1.0L;
-  if (ndigits >= 0)
+  const int n =
+    ndigits ? static_cast<int>(std::clamp<long long>(*ndigits, -1000, 1000))
+            : 0;
+  // bool is an int subclass, and round() of either gives an int
+  if (x.kind == PyConstValue::INT || x.kind == PyConstValue::BOOL)
   {
-    for (int i = 0; i < ndigits; ++i)
-      scale *= 10.0L;
-    return static_cast<double>(
-      round_ld_ties_even(static_cast<long double>(value) * scale) / scale);
+    const std::optional<long long> rounded = round_int_to_ndigits(
+      x.kind == PyConstValue::BOOL ? x.bool_val : x.int_val, n);
+    if (!rounded)
+      return std::nullopt;
+    return PyConstValue::make_int(*rounded);
   }
-
-  for (int i = 0; i < -ndigits; ++i)
-    scale *= 10.0L;
-  return static_cast<double>(
-    round_ld_ties_even(static_cast<long double>(value) / scale) * scale);
+  if (x.kind != PyConstValue::FLOAT)
+    return std::nullopt;
+  if (ndigits)
+  {
+    const std::optional<double> rounded =
+      round_to_ndigits_ties_even(x.float_val, n);
+    if (!rounded)
+      return std::nullopt;
+    return PyConstValue::make_float(*rounded);
+  }
+  const double rounded = round_ties_to_even(x.float_val);
+  if (!(rounded >= -9223372036854775808.0 && rounded < 9223372036854775808.0))
+    return std::nullopt;
+  return PyConstValue::make_int(static_cast<long long>(rounded));
 }
 
 bool PyConstValue::is_truthy() const
@@ -75,6 +59,53 @@ bool PyConstValue::is_truthy() const
     return !tuple_val.empty();
   }
   return false;
+}
+
+// A Python int does not wrap: give up on a result outside long long range
+// rather than fold a wrapped value (#10254).
+static std::optional<PyConstValue> make_checked_int(const BigInt &v)
+{
+  if (!v.is_int64())
+    return std::nullopt;
+  return PyConstValue::make_int(v.to_int64());
+}
+
+static std::optional<PyConstValue>
+eval_int_binop(const std::string &op, long long lhs, long long rhs)
+{
+  const BigInt l(lhs), r(rhs);
+  if (op == "Add")
+    return make_checked_int(l + r);
+  if (op == "Sub")
+    return make_checked_int(l - r);
+  if (op == "Mult")
+    return make_checked_int(l * r);
+  if (op == "FloorDiv" || op == "Mod")
+  {
+    if (r.is_zero())
+      return std::nullopt;
+    // BigInt division truncates; Python floors, and % takes the divisor's sign.
+    BigInt q = l / r;
+    BigInt rem = l - q * r;
+    if (!rem.is_zero() && l.is_negative() != r.is_negative())
+    {
+      q -= 1;
+      rem += r;
+    }
+    return make_checked_int(op == "FloorDiv" ? q : rem);
+  }
+  if (op == "Pow")
+  {
+    if (rhs < 0)
+      return std::nullopt; // Would produce float
+    if (rhs > 64)
+      return std::nullopt; // Exponent too large for safe const-eval
+    BigInt result = 1;
+    for (long long i = 0; i < rhs; ++i)
+      result *= l;
+    return make_checked_int(result);
+  }
+  return std::nullopt;
 }
 
 // CPython int/float equality is exact. A double equals a long long only when
@@ -839,30 +870,17 @@ python_consteval::exec_stmt(const nlohmann::json &stmt, Env &env)
     const std::string &op = stmt["op"]["_type"];
     PyConstValue &lhs = it->second;
 
-    if (op == "Add")
+    if (lhs.kind == PyConstValue::INT && rhs->kind == PyConstValue::INT)
     {
-      if (lhs.kind == PyConstValue::INT && rhs->kind == PyConstValue::INT)
-        lhs.int_val += rhs->int_val;
-      else if (
-        lhs.kind == PyConstValue::STRING && rhs->kind == PyConstValue::STRING)
-        lhs.string_val += rhs->string_val;
-      else
+      auto result = eval_int_binop(op, lhs.int_val, rhs->int_val);
+      if (!result)
         return std::nullopt;
+      lhs = *result;
     }
-    else if (op == "Sub")
-    {
-      if (lhs.kind == PyConstValue::INT && rhs->kind == PyConstValue::INT)
-        lhs.int_val -= rhs->int_val;
-      else
-        return std::nullopt;
-    }
-    else if (op == "Mult")
-    {
-      if (lhs.kind == PyConstValue::INT && rhs->kind == PyConstValue::INT)
-        lhs.int_val *= rhs->int_val;
-      else
-        return std::nullopt;
-    }
+    else if (
+      op == "Add" && lhs.kind == PyConstValue::STRING &&
+      rhs->kind == PyConstValue::STRING)
+      lhs.string_val += rhs->string_val;
     else
       return std::nullopt;
 
@@ -1110,7 +1128,7 @@ python_consteval::eval_expr(const nlohmann::json &node, const Env &env)
     if (op == "USub")
     {
       if (operand->kind == PyConstValue::INT)
-        return PyConstValue::make_int(-operand->int_val);
+        return make_checked_int(-BigInt(operand->int_val));
       if (operand->kind == PyConstValue::FLOAT)
         return PyConstValue{
           PyConstValue::FLOAT, false, 0, -operand->float_val, "", {}};
@@ -1168,40 +1186,7 @@ python_consteval::eval_expr(const nlohmann::json &node, const Env &env)
     // Integer arithmetic
     if (left->kind == PyConstValue::INT && right->kind == PyConstValue::INT)
     {
-      long long l = left->int_val, r = right->int_val;
-      if (op == "Add")
-        return PyConstValue::make_int(l + r);
-      if (op == "Sub")
-        return PyConstValue::make_int(l - r);
-      if (op == "Mult")
-        return PyConstValue::make_int(l * r);
-      if (op == "FloorDiv")
-      {
-        if (r == 0)
-          return std::nullopt;
-        return PyConstValue::make_int(l / r);
-      }
-      if (op == "Mod")
-      {
-        if (r == 0)
-          return std::nullopt;
-        long long result = l % r;
-        // Python mod always returns non-negative for positive divisor
-        if (result != 0 && ((result < 0) != (r < 0)))
-          result += r;
-        return PyConstValue::make_int(result);
-      }
-      if (op == "Pow")
-      {
-        if (r < 0)
-          return std::nullopt; // Would produce float
-        if (r > 64)
-          return std::nullopt; // Exponent too large for safe const-eval
-        long long result = 1;
-        for (long long i = 0; i < r; ++i)
-          result *= l;
-        return PyConstValue::make_int(result);
-      }
+      return eval_int_binop(op, left->int_val, right->int_val);
     }
 
     return std::nullopt;
@@ -1817,6 +1802,10 @@ python_consteval::eval_expr(const nlohmann::json &node, const Env &env)
 
     const std::string &func_name = node["func"]["id"].get<std::string>();
 
+    // A name bound to a value is not the builtin or the function of that name.
+    if (env.count(func_name))
+      return std::nullopt;
+
     // Built-in: len()
     if (func_name == "len")
     {
@@ -1881,8 +1870,10 @@ python_consteval::eval_expr(const nlohmann::json &node, const Env &env)
       if (!arg)
         return std::nullopt;
       if (arg->kind == PyConstValue::INT)
-        return PyConstValue::make_int(
-          arg->int_val < 0 ? -arg->int_val : arg->int_val);
+      {
+        const BigInt v(arg->int_val);
+        return make_checked_int(v.is_negative() ? -v : v);
+      }
       return std::nullopt;
     }
 
@@ -1894,29 +1885,12 @@ python_consteval::eval_expr(const nlohmann::json &node, const Env &env)
       auto arg = eval_expr(node["args"][0], env);
       if (!arg)
         return std::nullopt;
-
       if (node["args"].size() == 1)
-      {
-        // round(x) -> int
-        if (arg->kind == PyConstValue::INT)
-          return PyConstValue::make_int(arg->int_val);
-        if (arg->kind == PyConstValue::FLOAT)
-          return PyConstValue::make_int(
-            static_cast<long long>(
-              round_ties_to_even_consteval(arg->float_val)));
-        return std::nullopt;
-      }
-
-      // round(x, n) -> float (or int if n <= 0, but keep float for simplicity)
+        return eval_round(*arg, std::nullopt);
       auto ndigits = eval_expr(node["args"][1], env);
       if (!ndigits || ndigits->kind != PyConstValue::INT)
         return std::nullopt;
-      int n = static_cast<int>(ndigits->int_val);
-      double val = (arg->kind == PyConstValue::INT)
-                     ? static_cast<double>(arg->int_val)
-                     : arg->float_val;
-      double rounded = round_to_ndigits_ties_even_consteval(val, n);
-      return PyConstValue::make_float(rounded);
+      return eval_round(*arg, ndigits->int_val);
     }
 
     // Built-in: min(), max()

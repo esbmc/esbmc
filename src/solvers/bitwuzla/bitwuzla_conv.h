@@ -33,6 +33,7 @@ public:
   void pop_ctx() override;
   smt_resultt dec_solve() override;
   smt_resultt dec_solve_assuming(const ast_vec &assumptions) override;
+  bool is_unsat_assumption(smt_astt a) override;
   bool supports_assumptions() const override
   {
     return true;
@@ -183,6 +184,11 @@ public:
   std::unordered_map<std::string, bitwuzla::Term> uf_decls;
 
 private:
+  bitwuzla::Result check_sat(const std::vector<bitwuzla::Term> &assumptions);
+
+  /** Bitwuzla cannot be destroyed after check_sat threw (#10054). */
+  bool check_sat_threw = false;
+
   /** Identifies a sort by kind plus the two values that parameterise it: the
    *  bit-width for bit-vectors, (exponent, significand) for floating-point, and
    *  the domain and range sorts' addresses for arrays -- identity rather than

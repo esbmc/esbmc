@@ -1,0 +1,4 @@
+CORE
+main.cpp
+--goto-functions-only
+^\s*ASSERT exc_thrown == 0 \|\| exc_typeid == \d+ // uncaught exception$

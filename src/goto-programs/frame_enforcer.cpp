@@ -22,31 +22,50 @@ void frame_enforcert::materialize_snapshots(
   const std::string &scope_prefix)
 {
   active_snapshots.clear();
+  post_havoc_snapshots.clear();
+  snapshot_prefix = scope_prefix;
 
   for (const auto &var : vars_to_snapshot)
   {
-    // 1. Create snapshot symbol in symbol table
-    expr2tc snap_sym =
-      create_snapshot_symbol(var, scope_prefix, snapshot_counter++);
-
-    // 2. Record mapping for later use in enforce_frame_rule and replace_old
     snapshot_entryt entry;
     entry.original_expr = var;
-    entry.snapshot_sym = snap_sym;
+    entry.snapshot_sym = capture(var, dest, loc, "frame: capture pre-state");
     active_snapshots.push_back(entry);
-
-    // 3. Generate DECL instruction for the snapshot variable
-    goto_programt::targett decl_inst = dest.add_instruction(DECL);
-    decl_inst->code = code_decl2tc(var->type, to_symbol2t(snap_sym).thename);
-    decl_inst->location = loc;
-    decl_inst->location.comment("frame: snapshot declaration");
-
-    // 4. Generate ASSIGN instruction: snap_var = var
-    goto_programt::targett assign_inst = dest.add_instruction(ASSIGN);
-    assign_inst->code = code_assign2tc(snap_sym, var);
-    assign_inst->location = loc;
-    assign_inst->location.comment("frame: capture pre-state");
   }
+}
+
+expr2tc frame_enforcert::capture(
+  const expr2tc &var,
+  goto_programt &dest,
+  const locationt &loc,
+  const std::string &comment)
+{
+  expr2tc snap_sym =
+    create_snapshot_symbol(var, snapshot_prefix, snapshot_counter++);
+
+  goto_programt::targett decl_inst = dest.add_instruction(DECL);
+  decl_inst->code = code_decl2tc(var->type, to_symbol2t(snap_sym).thename);
+  decl_inst->location = loc;
+  decl_inst->location.comment("frame: snapshot declaration");
+
+  goto_programt::targett assign_inst = dest.add_instruction(ASSIGN);
+  assign_inst->code = code_assign2tc(snap_sym, var);
+  assign_inst->location = loc;
+  assign_inst->location.comment(comment);
+  return snap_sym;
+}
+
+expr2tc frame_enforcert::frame_baseline(
+  const snapshot_entryt &entry,
+  frame_modet mode) const
+{
+  if (mode == frame_modet::ASSERT)
+    for (auto it = post_havoc_snapshots.rbegin();
+         it != post_havoc_snapshots.rend();
+         ++it)
+      if (it->original_expr == entry.original_expr)
+        return it->snapshot_sym;
+  return entry.snapshot_sym;
 }
 
 static const expr2tc &strip_typecasts(const expr2tc &e)
@@ -448,7 +467,7 @@ void frame_enforcert::enforce_frame_rule(
   for (const auto &entry : active_snapshots)
   {
     const expr2tc &var = entry.original_expr;
-    const expr2tc &snap = entry.snapshot_sym;
+    const expr2tc snap = frame_baseline(entry, mode);
 
     // Check if this variable is directly in the assigns set
     bool is_assigned = false;
@@ -468,8 +487,14 @@ void frame_enforcert::enforce_frame_rule(
     if (emit_partial_frame(dest, loc, mode, classified, var, snap))
       continue;
 
+    // Nothing then ties the havoc'd array to its entry value, so the body's
+    // compliance is judged against its value after the havoc.
     if (withhold_whole_object_frame(mode, classified, var))
+    {
+      post_havoc_snapshots.push_back(
+        {var, capture(var, dest, loc, "frame: capture post-havoc state")});
       continue;
+    }
 
     // Build the base guard: var == snapshot (unchanged condition)
     expr2tc guard = equality2tc(var, snap);
@@ -538,51 +563,6 @@ frame_enforcert::collect_global_variables(const contextt &context)
   });
 
   return globals;
-}
-
-void frame_enforcert::patch_old_snapshot_assigns(goto_programt &prog) const
-{
-  if (active_snapshots.empty())
-    return;
-
-  for (auto &instr : prog.instructions)
-  {
-    if (!instr.is_assign())
-      continue;
-
-    const code_assign2t &assign = to_code_assign2t(instr.code);
-
-    // Check RHS is an old_snapshot side effect
-    if (!is_sideeffect2t(assign.source))
-      continue;
-    const sideeffect2t &effect = to_sideeffect2t(assign.source);
-    if (effect.kind != sideeffect2t::allockind::old_snapshot)
-      continue;
-
-    // The operand of old_snapshot is the original variable
-    const expr2tc &operand = effect.operand;
-
-    // Find matching snapshot entry by symbol identifier
-    for (const auto &entry : active_snapshots)
-    {
-      if (!is_symbol2t(operand) || !is_symbol2t(entry.original_expr))
-        continue;
-      if (
-        to_symbol2t(operand).thename !=
-        to_symbol2t(entry.original_expr).thename)
-        continue;
-
-      // Replace RHS with (void*)&snapshot_sym
-      // address_of2tc(T, snap) produces type T*; typecast to lhs type (void*)
-      expr2tc addr =
-        address_of2tc(entry.snapshot_sym->type, entry.snapshot_sym);
-      expr2tc patched_rhs = (addr->type != assign.target->type)
-                              ? typecast2tc(assign.target->type, addr)
-                              : addr;
-      instr.code = code_assign2tc(assign.target, patched_rhs);
-      break;
-    }
-  }
 }
 
 expr2tc frame_enforcert::in_pre_state(const expr2tc &expr) const

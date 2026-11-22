@@ -1,3 +1,4 @@
+#include <numeric>
 #include <cassert>
 #include <unordered_set>
 #include <langapi/language_util.h>
@@ -158,12 +159,15 @@ void value_sett::record_array_member(
   const type2tc &array_type,
   const BigInt &element_size)
 {
+  if (
+    !o.offset_is_set || o.offset.is_negative() || !is_struct_type(object) ||
+    is_null_object2t(object) || !is_array_type(array_type) ||
+    to_array_type(array_type).size_is_infinite)
+    return;
   // A [0] or [1] array may be indexed past its end on purpose, as a flexible
   // array member, so only a longer array bounds the pointer.
   BigInt size = type_byte_size_default(array_type, 0);
-  if (
-    o.offset_is_set && !o.offset.is_negative() && is_struct_type(object) &&
-    size > element_size)
+  if (size > element_size)
   {
     o.member_begin = o.offset.to_uint64();
     o.member_end = o.member_begin + size.to_uint64();
@@ -192,7 +196,8 @@ expr2tc value_sett::to_expr(
   {
     // The dereference treats a member object as one named here, and no other.
     target = get_base_object(object);
-    if (it->second.has_member())
+    // A known offset is resolved against the whole object.
+    if (it->second.has_member() && !it->second.offset_is_set)
     {
       expr2tc member =
         array_member_at(target, it->second.member_begin, it->second.member_end);
@@ -361,10 +366,17 @@ static std::vector<std::string> offset_paths(
   /* The descriptor already names the object being dereferenced, which the
    * caller's unrefined lookup covers, so there is no path to add. Both walks
    * would otherwise yield the empty path and have the caller repeat it. */
-  if ((!offset_known || offset == 0) && ns.follow(type) == target)
+  const type2tc followed = ns.follow(type);
+  if (
+    (!offset_known || offset == 0) &&
+    (followed == target ||
+     (is_pointer_type(followed) && is_pointer_type(target))))
     return {};
 
-  return offset_known ? member_paths_at_offset(type, offset, target, ns)
+  /* A pointer read as another pointer type, as Kani's transmute of
+   * DynMetadata to *const () is, still names the pointer at that offset
+   * (#10889). */
+  return offset_known ? member_paths_at_offset(type, offset, target, ns, true)
                       : member_paths_of_type(type, target, ns);
 }
 
@@ -418,6 +430,46 @@ static std::vector<std::string> union_alias_paths(
     return {};
 
   return member_paths_at_offset(type_in, offset_bits / 8, target, ns);
+}
+
+/* The byte offset and type of the member @p suffix names in @p type, or
+ * nullopt when the suffix does not name a whole, constantly placed member. */
+static std::optional<std::pair<BigInt, type2tc>> suffix_location(
+  const type2tc &type_in,
+  const std::string &suffix,
+  const namespacet &ns)
+{
+  type2tc type = ns.follow(type_in);
+  BigInt offset_bits = 0;
+  std::string rest = suffix;
+
+  while (!rest.empty())
+  {
+    if (rest[0] != '.' || !(is_struct_type(type) || is_union_type(type)))
+      return std::nullopt;
+
+    const std::vector<irep_idt> names = struct_union_member_names(type);
+    auto comp = match_leading_component(names, rest.substr(1));
+    if (!comp)
+      return std::nullopt;
+
+    try
+    {
+      if (is_struct_type(type))
+        offset_bits += member_offset_bits(type, names[comp->first], &ns);
+    }
+    catch (const array_type2t::array_size_excp &)
+    {
+      return std::nullopt;
+    }
+
+    type = ns.follow(struct_union_members(type)[comp->first]);
+    rest = rest.substr(1 + comp->second);
+  }
+
+  if (offset_bits % 8 != 0)
+    return std::nullopt;
+  return std::make_pair(offset_bits / 8, type);
 }
 
 void value_sett::get_constant_value_set(
@@ -583,55 +635,48 @@ void value_sett::offset_pointer_arith_objects(
   object_mapt &dest) const
 {
   const bool is_const = total_offs.has_value();
-  unsigned int ptr_align = get_natural_alignment(ptr_op);
+  /* A nondet offset moves the pointer by a multiple of its pointee's size,
+   * which need not be the object's element size: (uint64_t *)s + j into an
+   * array of 6-byte structs is 2-byte aligned, not 6 (#10088). */
+  uint64_t step = 1;
+  if (is_const)
+    step = total_offs->is_negative() ? (-*total_offs).to_uint64()
+                                     : total_offs->to_uint64();
+  else if (is_pointer_type(ptr_op))
+  {
+    try
+    {
+      step =
+        type_byte_size(to_pointer_type(ptr_op->type).subtype, &ns).to_uint64();
+    }
+    catch (const array_type2t::array_size_excp &)
+    {
+      // A VLA pointee: keep the byte step.
+    }
+  }
 
   for (const auto &it : pointer_expr_set)
   {
     objectt object = it.second;
-
-    unsigned int nat_align = get_natural_alignment(object_numbering[it.first]);
 
     if (is_const && object.offset_is_set)
     {
       // Both are const; we can accumulate offsets;
       object.offset += *total_offs;
     }
-    else if (is_const && !object.offset_is_set)
-    {
-      // Offset is const, but existing pointer isn't. The alignment is now
-      // at least as small as the operand alignment.
-      object.offset_alignment = std::min(nat_align, object.offset_alignment);
-    }
-    else if (!is_const && object.offset_is_set)
-    {
-      // Nondet but aligned offset from arithmetic; but offset set in
-      // current object. Take the minimum alignment again.
-      unsigned int offset_align = 0;
-      if ((object.offset % nat_align) != 0)
-      {
-        // We have some kind of offset into this data object, but it's less
-        // than the data objects natural alignment. So, the maximum
-        // alignment we can have is that of the pointer type being added
-        // or subtracted. The minimum, depends on the offset into the
-        // data object we're pointing at.
-        offset_align = ptr_align;
-        if (object.offset % ptr_align != 0)
-          // Too complex to calculate; clamp to bytes.
-          offset_align = 1;
-      }
-      else
-      {
-        offset_align = nat_align;
-      }
-
-      object.offset_is_set = false;
-      object.offset_alignment = std::min(nat_align, offset_align);
-    }
     else
     {
-      // Final case: nondet offset from operation, and nondet offset in
-      // the current object. So, just take the minimum available.
-      object.offset_alignment = std::min(nat_align, object.offset_alignment);
+      // The offset is now a multiple of whatever divides both the old offset
+      // (or its alignment) and the step, capped by the object's natural
+      // alignment.
+      uint64_t old_align = object.offset_alignment;
+      if (object.offset_is_set)
+        old_align = object.offset.is_negative() ? (-object.offset).to_uint64()
+                                                : object.offset.to_uint64();
+      object.offset_is_set = false;
+      object.offset_alignment = std::gcd(
+        std::gcd(old_align, step),
+        uint64_t(get_natural_alignment(object_numbering[it.first])));
     }
 
     // Once updated, store object reference into destination map.
@@ -862,11 +907,11 @@ void value_sett::get_value_set_rec(
        * offset, so the lookup above asks for `s`, which nothing keys -- the
        * pointer held in `s.p` is invisible and a race through it is pruned
        * (R31, esbmc/esbmc#6774). Ask again under the paths that offset spells
-       * out. The match is on the dereferenced type exactly, so nothing is
-       * claimed that is not there -- and equally, a cast between the
-       * descriptor's type and this one puts the member back out of reach. An
-       * offset that is not constant selects no single path, so every path of
-       * the right type is taken instead (R32). */
+       * out. The match is on the dereferenced type, or at a constant offset on
+       * any pointer when it is one, so nothing is claimed that is not there --
+       * and equally, a cast to a non-pointer type puts the member back out of
+       * reach. An offset that is not constant selects no single path, so
+       * every path of the right type is taken instead (R32). */
       for (const std::string &path : offset_paths(
              object->type,
              it1.second.offset,
@@ -1059,12 +1104,8 @@ void value_sett::get_value_set_rec(
 
   if (is_byte_extract2t(expr))
   {
-    // This is cropping up when one assigns, for example, a pointer into a
-    // byte array. The lhs gets portions of the pointer, bitcasted and then
-    // byte extracted on the lhs. Thus, we need to blast through the byte
-    // extract.
-    const byte_extract2t &be = to_byte_extract2t(expr);
-    get_value_set_rec_cached(be.source_value, dest, suffix, original_type);
+    get_byte_extract_value_set(
+      to_byte_extract2t(expr), dest, suffix, original_type);
     return;
   }
 
@@ -1078,10 +1119,15 @@ void value_sett::get_value_set_rec(
   if (is_bitor2t(expr) || is_bitand2t(expr) || is_bitxor2t(expr))
   {
     assert(expr->get_num_sub_exprs() == 2);
+    // A bitwise operation on an address, e.g. aligning it with a mask, moves
+    // it by an amount that depends on the address itself, so the operand's
+    // offset no longer holds (#677).
+    object_mapt operand_set;
     get_value_set_rec_cached(
-      *expr->get_sub_expr(0), dest, suffix, original_type);
+      *expr->get_sub_expr(0), operand_set, suffix, original_type);
     get_value_set_rec_cached(
-      *expr->get_sub_expr(1), dest, suffix, original_type);
+      *expr->get_sub_expr(1), operand_set, suffix, original_type);
+    offset_pointer_arith_objects(operand_set, expr, std::nullopt, dest);
     return;
   }
 
@@ -1184,6 +1230,50 @@ void value_sett::get_value_set_rec(
     get_type_id(expr->type));
   expr2tc tmp = unknown2tc(original_type);
   insert(dest, tmp, BigInt(0));
+}
+
+void value_sett::get_byte_extract_value_set(
+  const byte_extract2t &be,
+  object_mapt &dest,
+  const std::string &suffix,
+  const type2tc &original_type) const
+{
+  /* The suffix names a member of the extract's type. A pointer source, such
+   * as the one Kani's NonNull::new_unchecked reads as a NonNull (#10889), has
+   * no member to append it to: a member that covers the pointer's bytes is
+   * the pointer itself. */
+  if (
+    !suffix.empty() && is_pointer_type(be.source_value) &&
+    is_constant_int2t(be.source_offset))
+  {
+    const auto loc = suffix_location(be.type, suffix, ns);
+    if (
+      loc && is_pointer_type(loc->second) &&
+      loc->first + to_constant_int2t(be.source_offset).value == 0)
+    {
+      get_value_set_rec_cached(be.source_value, dest, "", original_type);
+      return;
+    }
+  }
+
+  // This is cropping up when one assigns, for example, a pointer into a
+  // byte array. The lhs gets portions of the pointer, bitcasted and then
+  // byte extracted on the lhs. Thus, we need to blast through the byte
+  // extract.
+  get_value_set_rec_cached(be.source_value, dest, suffix, original_type);
+
+  /* A pointer read out of an aggregate at a member's offset, as Kani does
+   * for DynMetadata (#10889), is keyed under that member's path, which the
+   * lookup above does not spell. */
+  const bool offset_known = is_constant_int2t(be.source_offset);
+  for (const std::string &path : offset_paths(
+         be.source_value->type,
+         offset_known ? to_constant_int2t(be.source_offset).value : 0,
+         offset_known,
+         be.type,
+         ns))
+    get_value_set_rec_cached(
+      be.source_value, dest, path + suffix, original_type);
 }
 
 void value_sett::get_byte_stitching_value_set(
@@ -1327,6 +1417,13 @@ void value_sett::get_reference_set_rec(const expr2tc &expr, object_mapt &dest)
         // Whatever the base object is, apply the offset represented by this
         // index expression.
         objectt o = a_it.second;
+        // The pointer stays in this array under pointer arithmetic (C11
+        // 6.5.6p8), whether the index is known yet or not (#10063).
+        record_array_member(
+          o,
+          object,
+          index.source_value->type,
+          type_byte_size_default(index.type, 1));
 
         if (has_const_index_offset && index_offset == 0)
         {
@@ -1358,8 +1455,6 @@ void value_sett::get_reference_set_rec(const expr2tc &expr, object_mapt &dest)
                                  : o.offset_alignment;
 
           o.offset_alignment = std::min(index_align, old_align);
-
-          record_array_member(o, object, index.source_value->type, m);
           o.offset_is_set = false;
         }
 

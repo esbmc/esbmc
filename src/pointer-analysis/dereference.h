@@ -119,6 +119,11 @@ public:
   virtual void
   get_value_set(const expr2tc &expr, value_setst::valuest &value_set) = 0;
 
+  /** The objects \p expr can point at, with no side effect on the program
+   *  (get_value_set may assume them during an inductive step). */
+  virtual void
+  points_to(const expr2tc &expr, value_setst::valuest &value_set) = 0;
+
   /** Check whether a failed symbol already exists for the given symbol.
    *  This is legacy, and will be removed at some point soon. */
   virtual bool
@@ -322,6 +327,7 @@ private:
    */
   virtual void
   dereference_addrof_expr(expr2tc &expr, guard2tc &guard, modet mode);
+  bool address_in_one_object(expr2tc &expr, const expr2tc &base);
 
   /** Interpret an expression that accesses a nonscalar type. This means that
    *  it's an index or member (or some other glue expr) on top of a dereference
@@ -509,12 +515,16 @@ private:
     modet mode);
   /** \p object is the object being accessed, or nil where the caller does not
    *  know it yet -- then the base is assumed to carry the access width, as it
-   *  does for everything but a type that declines alignment. */
+   *  does for everything but a type that declines alignment. \p guards_access
+   *  marks a claim the access itself relies on: the value read or written is
+   *  only right when it holds. Only such claims are made when the producer
+   *  asserts alignment itself (CBMC goto-binaries, #10892). */
   void check_alignment(
     BigInt minwidth,
     const expr2tc &offset,
     const guard2tc &guard,
-    const expr2tc &object);
+    const expr2tc &object,
+    bool guards_access = false);
   /** The alignment the address-space model guarantees the base of \p object's
    *  object, i.e. the assumption check_alignment() is entitled to make about
    *  everything below the offset it checks. */
@@ -550,6 +560,10 @@ private:
     expr2tc &value,
     const expr2tc &offset,
     const type2tc &type);
+  void construct_from_bytes(
+    expr2tc &value,
+    const expr2tc &offset,
+    const type2tc &type);
   void construct_from_dyn_offset(
     expr2tc &value,
     const expr2tc &offset,
@@ -568,6 +582,70 @@ private:
     unsigned long alignment,
     modet mode,
     const expr2tc *failed_symbol = nullptr);
+  /// Whether the member of struct \p value at \p field_offset gets no arm of
+  /// its own; for a bit-field, adds to \p extract_list the arms of the
+  /// accesses that start in it.
+  bool skips_member(
+    const expr2tc &value,
+    const expr2tc &offset,
+    const type2tc &type,
+    const guard2tc &guard,
+    unsigned long alignment,
+    modet mode,
+    const BigInt &field_offset,
+    const BigInt &field_size,
+    std::list<std::pair<expr2tc, expr2tc>> &extract_list);
+  /// Adds to \p extract_list an arm for each aligned \p offset in
+  /// [\p first, \p field_end) at which a \p type access starts in struct
+  /// \p value, read across the members it covers. Under integer encoding a
+  /// store there fails instead.
+  void add_arms_from(
+    const expr2tc &value,
+    const expr2tc &offset,
+    const type2tc &type,
+    const guard2tc &guard,
+    unsigned long alignment,
+    modet mode,
+    const BigInt &first,
+    const BigInt &field_end,
+    std::list<std::pair<expr2tc, expr2tc>> &extract_list);
+  /// The byte at bit \p pos of struct \p value, assembled from the bit-field
+  /// and padding members covering it.
+  expr2tc bit_field_byte(const expr2tc &value, const BigInt &pos);
+  /// The \p bits bits of struct \p value from bit \p start, each byte read
+  /// from the members holding it so that a store touches no other member.
+  expr2tc stitch_across_members(
+    const expr2tc &value,
+    const BigInt &start,
+    unsigned int bits);
+  /// The byte at bit \p pos of struct \p value, read from the whole-byte
+  /// member holding it; nil if there is none.
+  expr2tc byte_of_struct(const expr2tc &value, const BigInt &pos);
+  /// The byte at bit \p pos of union \p value, read from the union whole.
+  expr2tc byte_of_union(const expr2tc &value, const BigInt &pos);
+  /// A \p type access at bit \p start of struct or union element \p index of
+  /// \p array that ends in the next element, stitched from bytes of both; nil
+  /// if it fits in one element.
+  expr2tc stitch_across_elements(
+    const expr2tc &array,
+    const expr2tc &index,
+    const BigInt &start,
+    const type2tc &type);
+  /// Wraps \p value in an arm for each aligned dynamic \p offset into element
+  /// \p index of \p array at which a \p type access ends in the next element.
+  void add_element_spanning_arms(
+    expr2tc &value,
+    const expr2tc &array,
+    const expr2tc &index,
+    const expr2tc &offset,
+    const type2tc &type,
+    unsigned long alignment,
+    modet mode);
+  BigInt spanning_step(
+    const type2tc &type,
+    const type2tc &container,
+    unsigned long alignment,
+    modet mode);
   void construct_from_multidir_array(
     expr2tc &value,
     const expr2tc &offset,
@@ -588,12 +666,44 @@ private:
     const type2tc &type,
     const guard2tc &guard,
     modet mode);
+  /** Build a struct of \p type from the members of \p value that lie at
+   *  \p offset_bits onwards, one target member at a time; nil if \p type is
+   *  not a struct, does not fit in \p value, or a member cannot be built. */
+  expr2tc construct_struct_from_members(
+    const expr2tc &value,
+    const BigInt &offset_bits,
+    const type2tc &type,
+    const guard2tc &guard,
+    modet mode);
   void construct_struct_ref_from_dyn_offset(
     expr2tc &value,
     const expr2tc &offs,
     const type2tc &type,
     const guard2tc &guard,
     modet mode);
+  /** Add to \p output the struct of \p type rebuilt from the members of
+   *  \p value at offset 0, as construct_struct_ref_from_const_offset does,
+   *  guarded by \p offs being zero (#10891). */
+  void add_rebuilt_struct_candidate(
+    const expr2tc &value,
+    const expr2tc &offs,
+    const type2tc &type,
+    const guard2tc &guard,
+    const expr2tc &accuml_guard,
+    modet mode,
+    std::list<std::pair<expr2tc, expr2tc>> &output);
+  /** Add to \p output the struct of \p type stitched from the bytes of
+   *  \p value at \p offs, when \p value is an integer array: the struct may
+   *  start inside one element and span several (#10891). */
+  void add_stitched_struct_candidate(
+    const expr2tc &value,
+    const expr2tc &offs,
+    const expr2tc &arr_size_in_bits,
+    const type2tc &type,
+    const guard2tc &guard,
+    const expr2tc &accuml_guard,
+    modet mode,
+    std::list<std::pair<expr2tc, expr2tc>> &output);
   void construct_struct_ref_from_dyn_offs_rec(
     const expr2tc &value,
     const expr2tc &offs,
@@ -623,6 +733,17 @@ private:
     const guard2tc &guard,
     modet mode,
     unsigned long alignment = 0);
+  /// Builds a \p type access at \p elem_offset into element \p index of
+  /// \p value, an array of structs or unions.
+  void construct_from_struct_array(
+    expr2tc &value,
+    const expr2tc &offset,
+    const expr2tc &index,
+    const expr2tc &elem_offset,
+    const type2tc &type,
+    const guard2tc &guard,
+    modet mode,
+    unsigned long alignment);
   /// Builds a vector or array destination; false for any other type.
   bool construct_value_ref(
     expr2tc &value,
@@ -661,6 +782,20 @@ private:
   bool may_fold_index(const expr2tc &index) const;
 
 public:
+  /** A static object of const-qualified type; writing it is UB (C11 6.7.3p6).
+   */
+  static bool is_const_static(const symbolt &sym)
+  {
+    return sym.static_lifetime && sym.get_type().cmt_constant();
+  }
+
+  /** Whether @p object lies in a string literal (C11 6.4.5p7) or a const
+   *  static object. */
+  static bool is_read_only(const expr2tc &object, const namespacet &ns);
+
+  /** Fail a write to @p object under @p guard when it is read-only. */
+  void read_only_write_check(const expr2tc &object, const guard2tc &guard);
+
   void set_block_assertions(void)
   {
     block_assertions = true;

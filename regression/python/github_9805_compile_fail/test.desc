@@ -1,0 +1,6 @@
+CORE
+main.py
+
+^VERIFICATION FAILED$
+main\.py line 3
+assertion b == 5

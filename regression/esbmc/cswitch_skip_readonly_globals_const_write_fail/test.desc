@@ -1,0 +1,5 @@
+CORE
+main.c
+--context-bound 3 --cswitch-skip-readonly-globals
+write access to const object `t'
+^VERIFICATION FAILED$

@@ -1,0 +1,6 @@
+CORE
+main.py
+
+^  file .*main.py line 12 column 0$
+^  assertion ISNONE\(m->nxt, 0\)$
+^VERIFICATION FAILED$

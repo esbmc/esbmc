@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <cassert>
 #include <cstring>
 #include <goto-symex/trace/goto_trace.h>
@@ -108,6 +109,15 @@ void goto_trace_stept::output(const namespacet &ns, std::ostream &out) const
   out << "\n";
 }
 
+std::string trace_value_string(const namespacet &ns, const expr2tc &value)
+{
+  if (
+    config.options.get_bool_option("ir") && is_constant_int2t(value) &&
+    is_bv_type(value))
+    return integer2string(to_constant_int2t(value).value);
+  return from_expr(ns, "", value);
+}
+
 void counterexample_value(
   std::ostream &out,
   const namespacet &ns,
@@ -119,7 +129,7 @@ void counterexample_value(
     out << "(assignment removed)";
   else
   {
-    out << " = " << from_expr(ns, "", value);
+    out << " = " << trace_value_string(ns, value);
 
     // Don't print the bit-vector if we're running on integer/real mode
     if (is_constant_expr(value) && !config.options.get_bool_option("ir"))
@@ -481,37 +491,35 @@ void violation_graphml_goto_trace(
   }
 }
 
-/* A function_return waypoint for each nondet call made up to @p step. It sits
-   at the call's ')' and names the value the call returned, not the value of
-   the expression the call is part of (#9881). */
-static void push_nondet_return_waypoints(
+/* A function_return waypoint for a nondet call. It sits at the call's ')'
+   and names the value the call returned, not the value of the expression
+   the call is part of (#9881). */
+static void push_nondet_return_waypoint(
   const namespacet &ns,
-  const goto_trace_stept &step,
+  const goto_trace_stept::nondet_returnt &call,
   yamlt &yml,
   optionst &options)
 {
-  for (const auto &[rparen, value] : step.nondet_returns)
-  {
-    if (!input_file_check(rparen))
-      continue;
+  const auto &[rparen, value, thread_nr] = call;
+  if (!input_file_check(rparen))
+    return;
 
-    std::string result = from_expr(ns, "", value, presentationt::WITNESS);
-    check_replace_invalid_assignment(result);
-    if (result.empty())
-      continue;
+  std::string result = from_expr(ns, "", value, presentationt::WITNESS);
+  check_replace_invalid_assignment(result);
+  if (result.empty())
+    return;
 
-    // `\result == NAN` holds for no value, NaN included, so a NaN result
-    // gets no waypoint.
-    if (
-      is_constant_floatbv2t(value) &&
-      to_constant_floatbv2t(value).value.is_NaN())
-      continue;
+  // `\result == NAN` holds for no value, NaN included, so a NaN result
+  // gets no waypoint.
+  if (
+    is_constant_floatbv2t(value) && to_constant_floatbv2t(value).value.is_NaN())
+    return;
 
-    waypoint wp = witness_waypoint(rparen, yml.verified_file, options);
-    wp.type = waypoint::function_return;
-    wp.value = "\\result == " + result;
-    yml.segments.push_back(wp);
-  }
+  waypoint wp = witness_waypoint(rparen, yml.verified_file, options);
+  wp.type = waypoint::function_return;
+  wp.value = "\\result == " + result;
+  wp.thread_nr = yml.thread_ids ? thread_nr : 0;
+  yml.segments.push_back(wp);
 }
 
 /* Branches in a recursive trace number in the hundreds of thousands (#9689),
@@ -519,15 +527,157 @@ static void push_nondet_return_waypoints(
    branching waypoint only weakens guidance. */
 static constexpr size_t max_branching_waypoints = 1000;
 
+/* Whether @p entry can call itself, directly or through other functions. */
+static bool
+recursive(const goto_functionst &goto_functions, const irep_idt &entry)
+{
+  std::unordered_set<irep_idt, irep_id_hash> seen;
+  std::vector<irep_idt> todo{entry};
+  while (!todo.empty())
+  {
+    const auto it = goto_functions.function_map.find(todo.back());
+    todo.pop_back();
+    if (it == goto_functions.function_map.end())
+      continue;
+    for (const auto &i : it->second.body.instructions)
+    {
+      if (!i.is_function_call())
+        continue;
+      const expr2tc &callee = to_code_function_call2t(i.code).function;
+      if (!is_symbol2t(callee) || to_symbol2t(callee).thename == entry)
+        return true;
+      if (seen.insert(to_symbol2t(callee).thename).second)
+        todo.push_back(to_symbol2t(callee).thename);
+    }
+  }
+  return false;
+}
+
+/* The entry function, whose `}` locates the end of __ESBMC_main. */
+static const goto_functionst::function_mapt::value_type *entry_function(
+  const goto_functionst &goto_functions,
+  const goto_trace_stept &violation)
+{
+  for (const auto &f : goto_functions.function_map)
+    if (
+      f.first != violation.pc->function &&
+      !f.second.body.instructions.empty() &&
+      f.second.body.instructions.back().location == violation.pc->location)
+      return &f;
+  return nullptr;
+}
+
+/* Where the path resumes in @p body after its last step there. */
+static goto_programt::const_targett resume_point(
+  const goto_tracet &goto_trace,
+  const goto_trace_stept &violation,
+  const irep_idt &function,
+  const goto_programt &body)
+{
+  const goto_trace_stept *last = nullptr;
+  for (const auto &step : goto_trace.steps)
+  {
+    if (&step == &violation)
+      break;
+    if (step.thread_nr == violation.thread_nr && step.pc->function == function)
+      last = &step;
+  }
+  if (last == nullptr)
+    return body.instructions.begin();
+  const goto_programt::const_targett pc = last->pc;
+  if (last->type == symex_targett::BREANCHING && pc->is_goto())
+    return last->guard != pc->flipped_guard
+             ? goto_programt::const_targett(pc->targets.front())
+             : std::next(pc);
+  return pc->is_goto() || pc->is_return() || pc->is_end_function()
+           ? pc
+           : std::next(pc);
+}
+
+/* The `return` every path from @p pc leaves the function by, or null when
+   paths can leave by different ones or fall off the end. */
+static const goto_programt::instructiont *
+sole_return(goto_programt::const_targett pc)
+{
+  const goto_programt::instructiont *ret = nullptr;
+  for (; !pc->is_end_function(); ++pc)
+  {
+    if (pc->is_return())
+    {
+      if (ret != nullptr)
+        return nullptr;
+      ret = &*pc;
+    }
+    if (
+      pc->is_goto() && !is_false(pc->guard) &&
+      (pc->targets.front()->location_number <= pc->location_number ||
+       pc->targets.front()->is_end_function()))
+      return nullptr;
+  }
+  return ret != nullptr && std::prev(pc)->is_return() ? ret : nullptr;
+}
+
+/* A valid-memtrack violation at program exit is checked at the end of
+   __ESBMC_main, located at the entry function's `}`. The witness format makes
+   its target the `return` the path left the entry function by (#9939). The
+   path is replayed from the branch directions the trace records; from a branch
+   it does not record, the `return` must be the only one ahead. Branching steps
+   carry no stack trace, so a recursive entry function is not replayed. */
+static const goto_programt::instructiont *memtrack_return(
+  const goto_tracet &goto_trace,
+  const goto_functionst &goto_functions,
+  const goto_trace_stept &violation)
+{
+  if (
+    !violation.pc->is_end_function() ||
+    violation.pc->function != "__ESBMC_main" ||
+    !has_prefix(violation.comment, "dereference failure: forgotten memory"))
+    return nullptr;
+
+  const auto *entry = entry_function(goto_functions, violation);
+  if (entry == nullptr || recursive(goto_functions, entry->first))
+    return nullptr;
+
+  auto pc =
+    resume_point(goto_trace, violation, entry->first, entry->second.body);
+  for (; !pc->is_return(); ++pc)
+  {
+    if (pc->is_end_function())
+      return nullptr;
+    if (!pc->is_goto() || is_false(pc->guard))
+      continue;
+    if (
+      !is_true(pc->guard) ||
+      pc->targets.front()->location_number <= pc->location_number)
+      return sole_return(pc);
+    pc = std::prev(pc->targets.front());
+  }
+  return &*pc;
+}
+
 /* The failed assertion's access, and for a data race the access it raced
    with. */
 static void push_violation_targets(
   yamlt &yml,
+  const goto_tracet &goto_trace,
+  const goto_functionst &goto_functions,
   const goto_trace_stept &step,
+  unsigned thread_nr,
   optionst &options)
 {
-  yml.segments.push_back(witness_target_waypoint(
-    step.pc, step.stack_trace, yml.verified_file, options));
+  const goto_programt::instructiont *ret =
+    memtrack_return(goto_trace, goto_functions, step);
+  waypoint wp;
+  if (ret != nullptr && input_file_check(ret->location))
+  {
+    wp = witness_waypoint(ret->location, yml.verified_file, options);
+    wp.type = waypoint::target;
+  }
+  else
+    wp = witness_target_waypoint(
+      step.pc, step.stack_trace, yml.verified_file, options);
+  wp.thread_nr = thread_nr;
+  yml.segments.push_back(wp);
   if (step.racing_access)
     yml.racing_target = witness_target_waypoint(
       step.racing_access->pc,
@@ -562,28 +712,140 @@ nondet_branch_visits(const goto_tracet &goto_trace)
   return visits;
 }
 
+/* The ')' of the thread-creating call in the input file, where the
+   function_enter waypoint registering @p spawn sits. */
+static std::optional<locationt>
+spawn_rparen(const goto_trace_stept::spawnt &spawn)
+{
+  const locationt *loc =
+    witness_input_location(spawn.call.pc, spawn.call.stack_trace);
+  return loc ? call_rparen(*loc) : std::nullopt;
+}
+
+/* The format numbers a spawned thread by the order of the function_enter
+   waypoints registering it, ESBMC by its creation order on the path. The two
+   agree, so waypoints can carry thread IDs, when every thread spawned before
+   the violation gets one (#10749). */
+static bool registrable_spawns(const goto_tracet &goto_trace)
+{
+  unsigned spawned = 0;
+  for (const auto &step : goto_trace.steps)
+  {
+    for (const auto &spawn : step.spawns)
+      if (spawn.thread_nr != ++spawned || !spawn_rparen(spawn))
+        return false;
+    if (step.thread_nr > spawned)
+      return false;
+    if (step.type == symex_targett::ASSERT && !step.guard)
+      break;
+  }
+  return spawned != 0;
+}
+
+static unsigned waypoint_thread(const yamlt &yml, const goto_trace_stept &step)
+{
+  return yml.thread_ids ? step.thread_nr : 0;
+}
+
+/* The waypoints of the calls made since the previous step, in the order they
+   ran: each nondet call's function_return and, when threads are registered,
+   each spawn's function_enter. Whether there was a registered spawn. */
+static bool push_call_waypoints(
+  const namespacet &ns,
+  const goto_trace_stept &step,
+  yamlt &yml,
+  optionst &options)
+{
+  auto call = step.nondet_returns.begin();
+  size_t pushed = 0;
+  auto push_returns_up_to = [&](size_t end) {
+    for (; pushed < end; ++pushed, ++call)
+      push_nondet_return_waypoint(ns, *call, yml, options);
+  };
+
+  for (const auto &spawn : step.spawns)
+  {
+    if (!yml.thread_ids)
+      break;
+    push_returns_up_to(spawn.nondet_returns_before);
+    waypoint wp =
+      witness_waypoint(*spawn_rparen(spawn), yml.verified_file, options);
+    wp.type = waypoint::function_enter;
+    wp.thread_nr = spawn.parent_nr;
+    yml.segments.push_back(wp);
+  }
+  push_returns_up_to(step.nondet_returns.size());
+  return yml.thread_ids && !step.spawns.empty();
+}
+
+/* A validator cannot match a follow waypoint against a file it was
+   not given; dropping one only weakens guidance. witnesslint also
+   rejects line 0, e.g. the argv setup in __ESBMC_main (#9650). A
+   branch fixed by the program text gets none, as on deep recursion
+   they number in the hundreds of thousands (#9689), unless a
+   nondet-dependent visit of its location follows: a validator would
+   bind that visit's waypoint to this one. The ones kept can fill the
+   cap before a later nondet waypoint. After a registered spawn the
+   schedule orders the threads' branches, and only the segments can
+   pass that order on, so every branch gets one (#10749). An operand
+   of && or || gets none: the waypoint's value is the whole
+   condition's, and a validator would apply it to another operand. */
+static bool keeps_branching_waypoint(
+  const goto_trace_stept &step,
+  size_t ahead,
+  bool spawned,
+  size_t branching_waypoints)
+{
+  return branching_waypoints < max_branching_waypoints &&
+         input_file_check(step.pc->location) &&
+         !step.pc->location.get_line().empty() &&
+         (step.nondet_dependent || ahead != 0 || spawned) &&
+         !step.condition_operand;
+}
+
+static bool has_race(const goto_tracet &goto_trace)
+{
+  return std::any_of(
+    goto_trace.steps.begin(), goto_trace.steps.end(), [](const auto &step) {
+      return step.racing_access.has_value();
+    });
+}
+
 void violation_yaml_goto_trace(
   optionst &options,
   const namespacet &ns,
   const goto_tracet &goto_trace,
+  const goto_functionst &goto_functions,
   const std::string &output_path_override)
 {
   yamlt yml(yamlt::VIOLATION);
   yml.verified_file = options.get_option("input-file");
   log_progress("Generating Violation Yaml Witness for: {}", yml.verified_file);
 
+  // A summarised loop runs one iteration at a nondet index and the trace
+  // skips the others, so a waypoint would bind to a visit the trace left out.
+  // Those before the first summary would hold, but slicing can drop its steps.
+  const bool summarised = options.get_bool_option("array-loops-summarised");
+  yml.thread_ids = registrable_spawns(goto_trace);
+  /* A race's final segment holds the earlier access, which no waypoint after
+     it may follow, so only nondet branches are kept there. */
+  const bool race = has_race(goto_trace);
+  bool spawned = false;
   auto nondet_visits_ahead = nondet_branch_visits(goto_trace);
   size_t branching_waypoints = 0;
   for (const auto &step : goto_trace.steps)
   {
-    push_nondet_return_waypoints(ns, step, yml, options);
+    if (!summarised)
+      spawned |= push_call_waypoints(ns, step, yml, options) && !race;
+    const unsigned thread_nr = waypoint_thread(yml, step);
 
     switch (step.type)
     {
     case symex_targett::ASSERT:
       if (!step.guard)
       {
-        push_violation_targets(yml, step, options);
+        push_violation_targets(
+          yml, goto_trace, goto_functions, step, thread_nr, options);
 
         /* having printed a property violation, don't print more steps. */
 
@@ -599,21 +861,9 @@ void violation_yaml_goto_trace(
         if (step.nondet_dependent)
           --ahead;
 
-        /* A validator cannot match a follow waypoint against a file it was
-           not given; dropping one only weakens guidance. witnesslint also
-           rejects line 0, e.g. the argv setup in __ESBMC_main (#9650). A
-           branch fixed by the program text gets none, as on deep recursion
-           they number in the hundreds of thousands (#9689), unless a
-           nondet-dependent visit of its location follows: a validator would
-           bind that visit's waypoint to this one. The ones kept can fill the
-           cap before a later nondet waypoint. An operand of && or || gets none:
-           the waypoint's value is the whole condition's, and a validator would
-           apply it to another operand. */
         if (
-          branching_waypoints >= max_branching_waypoints ||
-          !input_file_check(step.pc->location) ||
-          step.pc->location.get_line().empty() ||
-          (!step.nondet_dependent && ahead == 0) || step.condition_operand)
+          summarised ||
+          !keeps_branching_waypoint(step, ahead, spawned, branching_waypoints))
           break;
 
         /* A switch would take one waypoint naming the case it enters, but
@@ -627,6 +877,7 @@ void violation_yaml_goto_trace(
           witness_waypoint(step.pc->location, yml.verified_file, options);
         wp.type = waypoint::branching;
         wp.value = !step.guard ? "true" : "false";
+        wp.thread_nr = thread_nr;
         yml.segments.push_back(wp);
       }
       break;
@@ -704,26 +955,34 @@ void correctness_yaml_goto_trace(
   optionst &options,
   const namespacet &ns [[maybe_unused]],
   const goto_tracet &goto_trace [[maybe_unused]],
-  const std::vector<std::pair<locationt, std::string>> &transition_invariants)
+  const std::vector<std::pair<locationt, std::string>> &transition_invariants,
+  const std::vector<std::pair<locationt, std::string>> &loop_invariants)
 {
   yamlt yml(yamlt::CORRECTNESS);
   yml.verified_file = options.get_option("input-file");
   log_progress(
     "Generating Correctness Yaml Witness for: {}", yml.verified_file);
 
-  for (const auto &[loc, value] : transition_invariants)
-  {
-    const waypoint at = witness_waypoint(loc, yml.verified_file, options);
-    invariant inv;
-    inv.type = invariant::loop_transition_invariant;
-    inv.file = at.file;
-    inv.line = at.line;
-    inv.column = at.column;
-    inv.function = at.function;
-    inv.value = value;
-    inv.format = "ext_c_expression";
-    yml.invariants.push_back(inv);
-  }
+  // A transition invariant relates two states, so only ext_c_expression can
+  // write it; a loop invariant is plain C.
+  auto add = [&](const auto &invariants, invariant::Type type) {
+    for (const auto &[loc, value] : invariants)
+    {
+      const waypoint at = witness_waypoint(loc, yml.verified_file, options);
+      invariant inv;
+      inv.type = type;
+      inv.file = at.file;
+      inv.line = at.line;
+      inv.column = at.column;
+      inv.function = at.function;
+      inv.value = value;
+      inv.format =
+        type == invariant::loop_invariant ? "c_expression" : "ext_c_expression";
+      yml.invariants.push_back(inv);
+    }
+  };
+  add(transition_invariants, invariant::loop_transition_invariant);
+  add(loop_invariants, invariant::loop_invariant);
 
   yml.generate_yaml(options);
 }
@@ -732,7 +991,8 @@ void write_correctness_witnesses(
   optionst &options,
   const namespacet &ns,
   const goto_tracet &goto_trace,
-  const std::vector<std::pair<locationt, std::string>> &transition_invariants)
+  const std::vector<std::pair<locationt, std::string>> &transition_invariants,
+  const std::vector<std::pair<locationt, std::string>> &loop_invariants)
 {
   if (options.get_bool_option("result-only"))
     return;
@@ -741,7 +1001,8 @@ void write_correctness_witnesses(
     correctness_graphml_goto_trace(options, ns, goto_trace);
 
   if (!options.get_option("witness-output-yaml").empty())
-    correctness_yaml_goto_trace(options, ns, goto_trace, transition_invariants);
+    correctness_yaml_goto_trace(
+      options, ns, goto_trace, transition_invariants, loop_invariants);
 }
 
 void appendInfo(
@@ -808,6 +1069,7 @@ static void show_stack_frame(
 
 static void show_function_call_trace(
   std::ostream &out,
+  const namespacet &ns,
   const goto_tracet &goto_trace,
   const goto_trace_stept &last_step)
 {
@@ -841,7 +1103,7 @@ static void show_function_call_trace(
     // emit outermost-of-new first to preserve call order.
     size_t n_new = cur.size() - common;
     for (size_t k = n_new; k-- > 0;)
-      show_stack_frame(out, cur[k].function, cur[k]);
+      show_stack_frame(out, frame_function_name(ns, cur[k].function), cur[k]);
     prev = cur;
     if (&s == &last_step)
       break;
@@ -875,9 +1137,6 @@ static void show_failed_property(
     for (const auto &frame : step.stack_trace)
       show_stack_frame(out, frame_function_name(ns, frame.function), frame);
   }
-  if (config.options.get_bool_option("show-funccall-trace"))
-    show_function_call_trace(out, goto_trace, step);
-
   out << "  " << step.comment << "\n";
   // A reached coverage probe carries no weakness: its guard is the
   // constant `false` the instrumentation put there, not the program's
@@ -892,6 +1151,8 @@ static void show_failed_property(
     if (step.pc->is_assert())
       out << "  " << from_expr(ns, "", step.pc->guard) << "\n";
   }
+  if (config.options.get_bool_option("show-funccall-trace"))
+    show_function_call_trace(out, ns, goto_trace, step);
 }
 
 void show_goto_trace(

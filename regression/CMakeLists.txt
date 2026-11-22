@@ -50,6 +50,19 @@ foreach(manifest IN LISTS cov_manifests)
     list(APPEND ESBMC_COV_TESTS ${cov_manifest})
 endforeach()
 
+# MEMORY_COST: "<test name> <GB>" per memory-heavy test, from
+# scripts/regression_memory.py. Each becomes a RESOURCE_GROUPS "mem" cost, which
+# ctest honours only under --resource-spec-file (see aux-build-unix.yml).
+file(STRINGS "${CMAKE_CURRENT_SOURCE_DIR}/MEMORY_COST" mem_cost_lines
+     REGEX "^[^#]")
+set(ESBMC_MEM_COST_TESTS "")
+set(ESBMC_MEM_COST_GB "")
+foreach(line IN LISTS mem_cost_lines)
+    string(REGEX MATCH "^(.+) ([0-9]+)$" _ "${line}")
+    list(APPEND ESBMC_MEM_COST_TESTS "${CMAKE_MATCH_1}")
+    list(APPEND ESBMC_MEM_COST_GB "${CMAKE_MATCH_2}")
+endforeach()
+
 option(ENABLE_SANITIZER_CI
     "Restrict regression to CORE mode for sanitizer-instrumented CI runs" OFF)
 
@@ -151,13 +164,23 @@ message(STATUS "Regression capabilities: ${ESBMC_TEST_CAPABILITIES_ARG}")
 # "<folder>/<test>". The macOS CI leg runs only the python/ suite, so without
 # this a change of that kind passes on Linux and fails on macOS with no signal
 # from CI; #6617 was fixed twice for exactly that reason. These carry the
-# platform-sensitive label, which the macOS leg also selects (#6619).
+# platform-sensitive label, which the macOS and Windows legs also select (#6619).
 set(ESBMC_PLATFORM_SENSITIVE_TESTS
     # Deep expression nesting: needs the large-stack thread main.cpp spawns,
     # since raising RLIMIT_STACK does not grow the main thread's stack on
     # macOS even though setrlimit reports success (#6618).
     esbmc/deep_binary_chain_pass
-    esbmc/deep_binary_chain_fail)
+    esbmc/deep_binary_chain_fail
+    # The NumPy model is found by its path, which is '\'-separated on
+    # Windows (#10272).
+    numpy/windows_model_path_column_view
+    numpy/windows_model_path_column_view_fail
+    numpy/windows_model_path_reversed_view_write
+    numpy/windows_model_path_reversed_view_write_fail
+    numpy/windows_model_path_sum
+    numpy/windows_model_path_sum_fail
+    numpy/windows_model_path_zeros_index
+    numpy/windows_model_path_zeros_index_fail)
 
 # An optional 5th argument names a backend to run the suite under. The tool
 # string is shlex-split by testing_tool.py, so the extra option rides along with
@@ -193,6 +216,11 @@ function(add_esbmc_regression_test folder modes test)
       TIMEOUT ${ESBMC_REGRESS_CTEST_TIMEOUT}
       ENVIRONMENT "ESBMC_REGRESS_TIMEOUT=${ESBMC_REGRESS_TIMEOUT};ESBMC_REGRESS_MEMORY_LIMIT=${ESBMC_REGRESS_MEMORY_LIMIT}"
       LABELS "regression;${folder}/${extra_labels}")
+    list(FIND ESBMC_MEM_COST_TESTS "${test_name}" mem_idx)
+    if(mem_idx GREATER -1)
+        list(GET ESBMC_MEM_COST_GB ${mem_idx} mem_gb)
+        set_tests_properties(${test_name} PROPERTIES RESOURCE_GROUPS "mem:${mem_gb}")
+    endif()
 endfunction()
 
 function(add_esbmc_regression folder modes)
@@ -272,6 +300,7 @@ if(ENABLE_PYTHON_FRONTEND)
     set(REGRESSIONS_NUMPY numpy)
     set(REGRESSIONS_HUMANEVAL humaneval)
     set(REGRESSIONS_QUIXBUGS quixbugs)
+    set(REGRESSIONS_TYPEEVALPY typeevalpy)
     set(REGRESSIONS_PYTHON_COVERAGE python-coverage)
     set(REGRESSIONS_PYTHON_CONTRACTS python-contracts)
     set(REGRESSIONS_AI_GENERATED_CODE ai-generated-code)
@@ -388,6 +417,7 @@ if(APPLE)
                     ${REGRESSIONS_NUMPY}
                     ${REGRESSIONS_HUMANEVAL}
                     ${REGRESSIONS_QUIXBUGS}
+                    ${REGRESSIONS_TYPEEVALPY}
                     ${REGRESSIONS_PYTHON_COVERAGE}
                     ${REGRESSIONS_PYTHON_CONTRACTS}
                     ${REGRESSIONS_AI_GENERATED_CODE}
@@ -395,7 +425,9 @@ if(APPLE)
                     ${TEST_GENERATION}
                     ltl
                     goto-transcoder
+                    goto2lean
                     loop-invariants
+                    field-sensitivity
        )
 elseif(WIN32)
     # FUTURE: Add floats-regression esbmc-cpp/cpp
@@ -466,6 +498,7 @@ else()
                     ${REGRESSIONS_NUMPY}
                     ${REGRESSIONS_HUMANEVAL}
                     ${REGRESSIONS_QUIXBUGS}
+                    ${REGRESSIONS_TYPEEVALPY}
                     ${REGRESSIONS_PYTHON_COVERAGE}
                     ${REGRESSIONS_PYTHON_CONTRACTS}
                     ${REGRESSIONS_AI_GENERATED_CODE}
@@ -474,8 +507,10 @@ else()
                     ltl
                     goto-coverage
                     goto-transcoder
+                    goto2lean
                     parallel-solving
                     loop-invariants
+                    field-sensitivity
                     function_contract
                     witnesses_validate/reachsafety-violationwitness
                     witnesses_validate/reachsafety-correctnesswitness
@@ -634,16 +669,6 @@ set(_slow_regression_tests
     # out at 120.02s in #5236, a run that does not touch its code path). Give it
     # the 2x budget like the other borderline quixbugs tests.
     "regression/quixbugs/lis_fail"
-    # knapsack(_fail) used to fast-fail with "max() arguments must be of
-    # comparable types" because the nested-list element of a defaultdict was
-    # mistyped. With the call-site nested-generic inference in #4830 the
-    # frontend now resolves the element types and ESBMC reaches the real
-    # (defaultdict + nested loop) symex, which does not converge under
-    # --incremental-bmc. These remain KNOWNBUG; the larger inner timeout lets
-    # testing_tool record the KNOWNBUG verdict instead of ctest hard-killing
-    # the run (see shortest_path_lengths note below; #4927).
-    "regression/quixbugs/knapsack"
-    "regression/quixbugs/knapsack_fail"
     # next_permutation(_fail) used to fast-crash with "Tuple unpacking only
     # supports simple names, not Subscript". With subscript-target unpacking
     # support (#4792) the swap converts and ESBMC reaches the real nested-loop
@@ -655,11 +680,10 @@ set(_slow_regression_tests
     # powerset_fail reaches VERIFICATION FAILED since #8537 but takes 91-124s
     # on the DebugOpt Linux runner, so the 120s cap kills it intermittently.
     "regression/quixbugs/powerset_fail"
-    # Both verify with the expected verdict but slowed 2.5-5x after #9294
-    # (#9516): 44s to over 120s and 101-116s on the DebugOpt Linux runner, so
-    # the 120s cap kills them intermittently on unrelated PRs.
+    # Verifies with the expected verdict but slowed 2.5x after #9294 (#9516):
+    # 9-33s to 44-68s on the DebugOpt Linux runner, and runner noise pushed it
+    # past the 120s cap on unrelated PRs.
     "regression/esbmc-cpp/cpp/vector_reserve_realloc_nested"
-    "regression/esbmc/github_1352"
     # depth_first_search_fail builds a small Node graph and recurses over each
     # node's `successors` list. Under the object-model migration (#3067) every
     # instance is a heap Class* and a Class* read out of a list into a recursive
@@ -670,18 +694,16 @@ set(_slow_regression_tests
     # budget covers the DebugOpt Linux runner's slowdown. The points-to-precision
     # regression is tracked separately.
     "regression/quixbugs/depth_first_search_fail"
-    # breadth_first_search(_fail) used to fast-fail with
+    # breadth_first_search_fail used to fast-fail with
     # "NameError: name 'Queue' is not defined" because aliased deque imports
     # were not resolved. With PR #5008 the alias fix and popleft/appendleft
     # support land, so ESBMC now reaches the real BFS symex (deque + set +
-    # 6-node graph). breadth_first_search still does not converge under
-    # --incremental-bmc, due to the __memcpy_impl loop in the list OM
-    # (string.c:278), and stays KNOWNBUG: the larger inner timeout lets
-    # testing_tool record the KNOWNBUG verdict instead of ctest hard-killing
-    # the run. breadth_first_search_fail is CORE since #7235 and reaches its
+    # 6-node graph). breadth_first_search does not converge under
+    # --incremental-bmc (the __memcpy_impl loop in the list OM, string.c:278),
+    # stays KNOWNBUG and passes by timing out, so it runs at the base budget.
+    # breadth_first_search_fail is CORE since #7235 and reaches its
     # VERIFICATION FAILED at ~123s on the DebugOpt Linux runner, so the 2x
     # budget is what keeps it off the 120s cap -- removing it flaps the test.
-    "regression/quixbugs/breadth_first_search"
     "regression/quixbugs/breadth_first_search_fail"
     # reverse_linked_list used to fast-crash with a SIGSEGV when comparing a
     # None-handle (pointer-width int) against a by-value Node struct via ==.
@@ -766,36 +788,24 @@ set(_slow_regression_tests
     "regression/floats-regression/nn-tanh_5_unsafe"
     "regression/consensus/get_subtree_index"
     "regression/consensus/compute_shuffled_index"
+    # 70-116s on the DebugOpt Linux runner; hit the 120s cap in #10866 CI.
+    "regression/cuda/Supported_long_time/056_pass"
 )
 math(EXPR ESBMC_REGRESS_CTEST_TIMEOUT_SLOW
      "${ESBMC_REGRESS_TIMEOUT_SLOW} + 30")
 
 # Tests that exceed even the 2x slow tier on Debug+Opt Linux runners.
-# shortest_path_lengths(_fail) used to fast-fail because defaultdict with
-# a lambda factory was unsupported; with #4765 the lambda factory is now
-# honoured and ESBMC actually verifies the triple-nested Floyd-Warshall
-# loop. shortest_path_lengths has long been KNOWNBUG (non-converging);
-# shortest_path_lengths_fail is now KNOWNBUG too because #5236 made the
-# `{(i, i): 0 for i in range(n)}` seed populate concrete keys instead of
-# nondet ones, so ESBMC reaches the real defaultdict + triple-nested-loop
-# symex, which no longer converges under --incremental-bmc (>900s locally,
-# was ~245s when the keys were nondet). The 3x inner timeout fires well
-# before the program completes and, being shorter than the outer ctest
-# TIMEOUT, lets testing_tool record the KNOWNBUG verdict instead of ctest
-# hard-killing the run.
 math(EXPR ESBMC_REGRESS_TIMEOUT_VERY_SLOW "${ESBMC_REGRESS_TIMEOUT} * 3")
 math(EXPR ESBMC_REGRESS_CTEST_TIMEOUT_VERY_SLOW
      "${ESBMC_REGRESS_TIMEOUT_VERY_SLOW} + 30")
 set(_very_slow_regression_tests
-    "regression/quixbugs/shortest_path_lengths"
-    "regression/quixbugs/shortest_path_lengths_fail"
     # humaneval_62 (derivative) verifies SUCCESSFUL but is heavy: its body is a
     # list comprehension over enumerate(xs) followed by a slice
     # ([(i * x) for i, x in enumerate(xs)][1:]) under --unwind 20, which unwinds
     # the list-OM loops 20x and feeds a large bit-vector query (encode ~16s +
     # Bitwuzla ~54s locally). It times out at the 120s per-test cap on the
     # DebugOpt static Linux runner; an assertions-on build measures ~248s, the
-    # same band as shortest_path_lengths above. Give it the 3x budget so it
+    # same band as the other tests in this tier. Give it the 3x budget so it
     # doesn't flap.
     "regression/humaneval/humaneval_62"
     # list-slice-step-reverse verifies SUCCESSFUL but is symex-bound (reverse

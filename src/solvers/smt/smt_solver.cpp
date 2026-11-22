@@ -275,11 +275,24 @@ void smt_solver_baset::pop_ctx()
     return e.level >= ctx_level;
   });
   std::erase_if(
+    fp_bits, [this](const auto &kv) { return kv.second.second >= ctx_level; });
+  std::erase_if(
     flattened, [this](const auto &kv) { return kv.second.level >= ctx_level; });
+  for (auto &[value, flattens] : flattened_values)
+    std::erase_if(
+      flattens, [this](const auto &f) { return f.first >= ctx_level; });
+  std::erase_if(
+    flattened_values, [](const auto &kv) { return kv.second.empty(); });
   std::erase_if(
     ptr_flow, [this](const auto &kv) { return kv.second.first >= ctx_level; });
   if (base_addrspace_tied && *base_addrspace_tied >= ctx_level)
     base_addrspace_tied.reset();
+  std::erase_if(addrspace_stores, [this](const addrspace_storet &s) {
+    return s.level >= ctx_level;
+  });
+  for (addrspace_storet &s : addrspace_stores)
+    if (s.asserted_at && *s.asserted_at >= ctx_level)
+      s.asserted_at.reset();
   std::erase_if(int_to_ptr_objects, [this](const int_to_ptr_objectt &c) {
     return c.level >= ctx_level;
   });
@@ -376,11 +389,7 @@ void smt_solver_baset::define(const expr2tc &expr)
   const equality2t &eq = to_equality2t(expr);
   const type2tc &t = eq.side_1->type;
   const bool scalar = is_bool_type(t) || is_bv_type(t) || is_floatbv_type(t);
-  bool converted;
-  {
-    std::lock_guard lock(smt_cache_mutex);
-    converted = smt_cache.find(eq.side_1) != smt_cache.end();
-  }
+  const bool converted = smt_cache.find(eq.side_1) != smt_cache.end();
   // Aggregates need the flatteners' assign; a symbol already in use would
   // otherwise stay free.
   if (!scalar || converted)
@@ -389,7 +398,6 @@ void smt_solver_baset::define(const expr2tc &expr)
     return;
   }
   smt_astt value = convert_ast(eq.side_2);
-  std::lock_guard lock(smt_cache_mutex);
   smt_cache.insert({eq.side_1, value, ctx_level});
 }
 
@@ -408,17 +416,15 @@ smt_astt smt_solver_baset::convert_assign(const expr2tc &expr)
   smt_astt side2 = convert_ast(eq.side_2); // RHS
   side2->assign(this, side1);
 
+  if (auto it = fp_bits.find(side2); it != fp_bits.end())
+    fp_bits.insert({side1, {it->second.first, ctx_level}});
+
   // Put that into the smt cache, thus preserving the value of the assigned
   // symbols. IMPORTANT: the cache is now a fundamental part of how some
   // flatteners work, in that one can choose to create a set of expressions and
   // their ASTs, then store them in the cache, rather than have a more
   // sophisticated conversion.
-  {
-    const smt_cache_entryt e = {eq.side_1, side2, ctx_level};
-    // Lock automatically released when it goes out of scope
-    std::lock_guard lock(smt_cache_mutex);
-    smt_cache.insert(e);
-  }
+  smt_cache.insert({eq.side_1, side2, ctx_level});
 
   // Propagate ir-ieee interval metadata from RHS to LHS SSA variable so
   // that get_interval() lookups on the LHS variable find the stored interval
@@ -474,6 +480,7 @@ static bool walks_operands(const expr2tc &expr)
   case expr2t::pointer_offset_id:
   case expr2t::pointer_object_id:
   case expr2t::pointer_capability_id:
+  case expr2t::array_lambda_id:
     return false;
   default:
     return true;
@@ -487,12 +494,8 @@ smt_astt smt_solver_baset::convert_ast(const expr2tc &expr)
   // the warmed post-order path those re-entrant calls are guaranteed hits;
   // checking the cache up front keeps them O(1) instead of paying a worklist
   // allocation per call.
-  {
-    std::lock_guard lock(smt_cache_mutex);
-    smt_cachet::const_iterator hit = smt_cache.find(expr);
-    if (hit != smt_cache.end())
-      return hit->ast;
-  }
+  if (auto hit = smt_cache.find(expr); hit != smt_cache.end())
+    return hit->ast;
 
   // Warm the cache bottom-up with an explicit-stack post-order walk so that
   // the per-node body (convert_ast_node) never has to recurse through a long
@@ -512,13 +515,10 @@ smt_astt smt_solver_baset::convert_ast(const expr2tc &expr)
     const expr2tc node = stack.back().first;
     const bool expanded = stack.back().second;
 
+    if (smt_cache.find(node) != smt_cache.end())
     {
-      std::lock_guard lock(smt_cache_mutex);
-      if (smt_cache.find(node) != smt_cache.end())
-      {
-        stack.pop_back();
-        continue;
-      }
+      stack.pop_back();
+      continue;
     }
 
     if (!expanded && walks_operands(node))
@@ -548,15 +548,11 @@ smt_astt smt_solver_baset::convert_ast(const expr2tc &expr)
     // must record the result here — later iterations and the final lookup rely
     // on every converted node being present in the cache.
     smt_astt a = convert_ast_node(node);
-    {
-      std::lock_guard lock(smt_cache_mutex);
-      if (smt_cache.find(node) == smt_cache.end())
-        smt_cache.insert(smt_cache_entryt{node, a, ctx_level});
-    }
+    if (smt_cache.find(node) == smt_cache.end())
+      smt_cache.insert(smt_cache_entryt{node, a, ctx_level});
     stack.pop_back();
   }
 
-  std::lock_guard lock(smt_cache_mutex);
   return smt_cache.find(expr)->ast;
 }
 
@@ -609,12 +605,8 @@ smt_astt smt_solver_baset::convert_ieee_arith_2op(const expr2tc &expr)
 
 smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
 {
-  {
-    std::lock_guard lock(smt_cache_mutex);
-    smt_cachet::const_iterator cache_result = smt_cache.find(expr);
-    if (cache_result != smt_cache.end())
-      return (cache_result->ast);
-  }
+  if (auto hit = smt_cache.find(expr); hit != smt_cache.end())
+    return hit->ast;
 
   // A sizeof(T) node lowers to its eagerly-computed byte-size value.
   // do_simplify normally folds it away, but under --no-simplify it survives to
@@ -695,6 +687,7 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
   case expr2t::pointer_offset_id:
   case expr2t::pointer_object_id:
   case expr2t::pointer_capability_id:
+  case expr2t::array_lambda_id:
     break; // Don't convert their operands
 
   default:
@@ -1682,7 +1675,7 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
   }
   case expr2t::bitnot_id:
   {
-    a = mk_bvnot(args[0]);
+    a = convert_bitnot(args[0]);
     break;
   }
   case expr2t::not_id:
@@ -1821,6 +1814,38 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
       is_forall2t(expr), {convert_ast(bound_symbol)}, convert_ast(expanded));
     break;
   }
+  case expr2t::array_lambda_id:
+  {
+    // Reads reduce in the simplifier; only a use of the whole array gets
+    // here. Name it and define every element with a quantifier.
+    const array_lambda2t &lambda = to_array_lambda2t(expr);
+    // Spelling out the elements instead measured slower on TRUE tasks
+    // (k-induction re-encodes them every step), as slow as unwinding.
+    const expr2tc array = symbol2tc(
+      expr->type, fmt::format("__ESBMC_array_lambda_{}", quantifier_counter));
+    const expr2tc bound = symbol2tc(
+      lambda.binder->type,
+      fmt::format("__ESBMC_quantifier_{}", quantifier_counter++));
+    expr2tc body = lambda.body->clone();
+    replace_name_in_body(lambda.binder, bound, body);
+    const array_type2t &arr_type = to_array_type(expr->type);
+    const expr2tc element = index2tc(arr_type.subtype, array, bound);
+    expr2tc definition = equality2tc(element, body);
+    // The solver narrows the index to the bits the size needs, so indices
+    // past the end alias real elements: define only those inside it.
+    if (!arr_type.size_is_infinite && !is_nil_expr(arr_type.array_size))
+    {
+      const expr2tc zero = gen_zero(bound->type);
+      const expr2tc size = typecast2tc(bound->type, arr_type.array_size);
+      definition = implies2tc(
+        and2tc(lessthanequal2tc(zero, bound), lessthan2tc(bound, size)),
+        definition);
+    }
+    assert_ast(
+      mk_quantifier(true, {convert_ast(bound)}, convert_ast(definition)));
+    a = convert_ast(array);
+    break;
+  }
   case expr2t::uninterpreted_func_id:
   {
     const uninterpreted_func2t &uf = to_uninterpreted_func2t(expr);
@@ -1836,11 +1861,7 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
     abort();
   }
 
-  {
-    struct smt_cache_entryt entry = {expr, a, ctx_level};
-    std::lock_guard lock(smt_cache_mutex);
-    smt_cache.insert(entry);
-  }
+  smt_cache.insert({expr, a, ctx_level});
   return a;
 }
 
@@ -2256,34 +2277,8 @@ smt_astt smt_solver_baset::convert_terminal(const expr2tc &expr)
 
     ir_ieee_api->assert_symbol_range(name, sym_ast, sym);
 
-    if (
-      ir_ieee && is_floatbv_type(sym.type) &&
-      name.rfind("nondet$symex::nondet", 0) == 0)
-    {
-      smt_astt nan_pred =
-        mk_fresh(mk_bool_sort(), "ir_ieee::nondet_nan::", nullptr);
-      ir_ieee_api->store_nan_pred(sym_ast, nan_pred);
-
-      // A nondet float is otherwise an unconstrained real. Without this,
-      // it can take a value strictly between 0 and the smallest subnormal
-      // (a magnitude no floating-point operation ever produces), which
-      // breaks identities like x+0==x now that mk_subnormal_flush()
-      // distinguishes that gap from zero. Representability doesn't depend
-      // on a rounding mode, so pass a nil expr2tc: mk_subnormal_flush falls
-      // back to its magnitude-only threshold, which is the correct (not
-      // merely conservative) check here.
-      const floatbv_type2t &fbv_type = to_floatbv_type(sym.type);
-      assert_ast(
-        mk_eq(sym_ast, mk_subnormal_flush(sym_ast, fbv_type, expr2tc())));
-
-      // The other half of representability: a magnitude strictly between
-      // max_normal and the infinity sentinel is a value no operation can
-      // produce, and the two readings of "infinite" disagree there --
-      // encode_ieee_mul's invalid-operation term tests |x| > max_normal
-      // while a math.h isinf() that compares against INFINITY tests
-      // |x| == sentinel. Left unconstrained, 0*f was reported non-zero.
-      ir_ieee_api->assert_representable_magnitude(sym_ast, fbv_type);
-    }
+    if (int_encoding && name.rfind("nondet$symex::nondet", 0) == 0)
+      assert_nondet_float_representable(sym_ast, sym.type);
 
     return sym_ast;
   }
@@ -2292,6 +2287,40 @@ smt_astt smt_solver_baset::convert_terminal(const expr2tc &expr)
     log_error("Converting unrecognized terminal expr to SMT\n{}", *expr);
     abort();
   }
+}
+
+void smt_solver_baset::assert_nondet_float_representable(
+  smt_astt sym_ast,
+  const type2tc &type)
+{
+  if (!is_floatbv_type(type))
+    return;
+
+  // A nondet float is otherwise an unconstrained real. Without this,
+  // it can take a value strictly between 0 and the smallest subnormal
+  // (a magnitude no floating-point operation ever produces), which
+  // breaks identities like x+0==x and f+g>=f for g>0 now that
+  // arithmetic results in that gap are flushed to zero (#2578).
+  // Representability doesn't depend on a rounding mode, so pass a nil
+  // expr2tc: mk_subnormal_flush falls back to its magnitude-only
+  // threshold, which is the correct (not merely conservative) check here.
+  const floatbv_type2t &fbv_type = to_floatbv_type(type);
+  assert_ast(mk_eq(sym_ast, mk_subnormal_flush(sym_ast, fbv_type, expr2tc())));
+
+  if (!ir_ieee)
+    return;
+
+  smt_astt nan_pred =
+    mk_fresh(mk_bool_sort(), "ir_ieee::nondet_nan::", nullptr);
+  ir_ieee_api->store_nan_pred(sym_ast, nan_pred);
+
+  // The other half of representability: a magnitude strictly between
+  // max_normal and the infinity sentinel is a value no operation can
+  // produce, and the two readings of "infinite" disagree there --
+  // encode_ieee_mul's invalid-operation term tests |x| > max_normal
+  // while a math.h isinf() that compares against INFINITY tests
+  // |x| == sentinel. Left unconstrained, 0*f was reported non-zero.
+  ir_ieee_api->assert_representable_magnitude(sym_ast, fbv_type);
 }
 
 std::string smt_solver_baset::mk_fresh_name(const std::string &tag)
@@ -3372,6 +3401,12 @@ smt_resultt smt_solver_baset::dec_solve_assuming(const ast_vec &)
   abort();
 }
 
+bool smt_solver_baset::is_unsat_assumption(smt_astt)
+{
+  log_error("{} does not support unsat assumptions", solver_text());
+  abort();
+}
+
 void smt_solver_baset::pre_solve()
 {
   // A new solve produces a fresh model; drop memoised l_get values.
@@ -3970,7 +4005,6 @@ bool smt_solver_baset::has_term(const expr2tc &expr)
 {
   if (is_symbol2t(expr))
     return true;
-  std::lock_guard lock(smt_cache_mutex);
   return smt_cache.find(expr) != smt_cache.end();
 }
 
@@ -3978,6 +4012,8 @@ smt_astt smt_solver_baset::term_of(const expr2tc &expr)
 {
   if (has_term(expr))
     return convert_ast(expr);
+  if (is_index2t(expr))
+    return infinite_array_row_term(to_index2t(expr));
   if (!is_member2t(expr) || is_union_type(to_member2t(expr).source_value))
     return nullptr;
   const member2t &member = to_member2t(expr);
@@ -3987,6 +4023,23 @@ smt_astt smt_solver_baset::term_of(const expr2tc &expr)
                this,
                get_member_name_field(member.source_value->type, member.member))
            : nullptr;
+}
+
+/* An infinite array of arrays (a nested Solidity mapping) is not flattened, so
+ * a row of it has an array sort of its own: select it at the index's model
+ * value. */
+smt_astt smt_solver_baset::infinite_array_row_term(const index2t &index)
+{
+  const type2tc &src_type = index.source_value->type;
+  if (
+    !is_array_type(index.type) || !is_array_type(src_type) ||
+    !to_array_type(src_type).size_is_infinite)
+    return nullptr;
+  smt_astt source = term_of(index.source_value);
+  const expr2tc idx = get(index.index);
+  if (!source || !is_constant_int2t(idx))
+    return nullptr;
+  return source->select(this, fix_array_idx(idx, src_type));
 }
 
 /* Converting an expression the encoding never saw builds new formula, and some
@@ -4922,6 +4975,14 @@ smt_astt smt_solver_baset::mk_bvnot(smt_astt a)
 {
   (void)a;
   abort();
+}
+
+smt_astt smt_solver_baset::convert_bitnot(smt_astt a)
+{
+  // Over unbounded integers ~x is exactly -x - 1.
+  if (int_encoding)
+    return mk_sub(mk_neg(a), mk_smt_int(BigInt(1)));
+  return mk_bvnot(a);
 }
 
 smt_astt smt_solver_baset::mk_bvxor(smt_astt a, smt_astt b)

@@ -3,6 +3,7 @@
 #include <python-frontend/math/bounded_math.h>
 #include <python-frontend/numpy/ndarray_shape.h>
 #include <python-frontend/numpy/numpy_call_expr.h>
+#include <python-frontend/numpy/dense_spectrum.h>
 #include <python-frontend/numpy/numpy_dtype.h>
 #include <python-frontend/numpy/numpy_nditer.h>
 #include <python-frontend/numpy/numpy_random.h>
@@ -27,6 +28,7 @@
 
 #include <algorithm>
 #include <array>
+#include <bit>
 #include <cfloat>
 #include <climits>
 #include <cmath>
@@ -741,6 +743,9 @@ struct singular_matrix_error : std::runtime_error
 // Matrices larger than this reject before any result is built: the
 // cofactor determinant and every unrolled result grow with the order.
 constexpr std::size_t max_linalg_order = 6;
+// The products of three svd results that the reconstruction relations of a
+// constant matrix may hold (rows x columns x singular values).
+constexpr std::size_t max_reconstruction_products = 12;
 
 // The real square matrix a numpy.linalg function reads, checked as NumPy
 // checks it: rows of different lengths raise NumPy's ValueError, and a
@@ -1110,6 +1115,19 @@ static bool has_complex(const std::vector<scalar_value> &values)
       return true;
   }
   return false;
+}
+
+static dense_spectrum::complex_matrix
+complex_matrix_of(const std::vector<std::vector<scalar_value>> &matrix)
+{
+  dense_spectrum::complex_matrix out;
+  for (const auto &row : matrix)
+  {
+    out.emplace_back();
+    for (const auto &value : row)
+      out.back().push_back(value.value);
+  }
+  return out;
 }
 
 static bool has_complex(const std::vector<std::vector<scalar_value>> &values)
@@ -3267,14 +3285,15 @@ numpy_call_expr::numpy_call_expr(
   const symbol_id &function_id,
   const nlohmann::json &call,
   python_converter &converter)
-  : function_call_expr(function_id, call, converter)
+  : function_call_expr(function_id, call, converter),
+    outer_build_static_lists_(converter.build_static_lists)
 {
   converter_.build_static_lists = true;
 }
 
 numpy_call_expr::~numpy_call_expr()
 {
-  converter_.build_static_lists = false;
+  converter_.build_static_lists = outer_build_static_lists_;
 }
 
 const nlohmann::json *
@@ -4687,19 +4706,194 @@ std::optional<exprt> numpy_call_expr::try_argmin_argmax_axis_result(
   return try_argmin_argmax_along_axis(function, arg);
 }
 
+static bool has_constant_shape(const typet &type)
+{
+  return !type.is_array() || (to_array_type(type).size().is_constant() &&
+                              has_constant_shape(type.subtype()));
+}
+
+static bool is_none(const nlohmann::json &node)
+{
+  return node.value("_type", "") == "Constant" && node.contains("value") &&
+         node["value"].is_null();
+}
+
+static const nlohmann::json *
+keyword_value(const nlohmann::json &call, const std::string &name)
+{
+  if (!call.contains("keywords"))
+    return nullptr;
+  for (const auto &kw : call["keywords"])
+    if (kw.value("arg", "") == name)
+      return &kw["value"];
+  return nullptr;
+}
+
+// The first keyword the ufunc lowering does not handle: where= and out= are
+// lowered, and dtype=float leaves the result unchanged; dtype=float raises
+// for a ufunc without a float loop, as isnan.
+static std::optional<std::string>
+unhandled_ufunc_keyword(const nlohmann::json &call, bool has_float_loop = true)
+{
+  for (const auto &kw : call.value("keywords", nlohmann::json::array()))
+  {
+    const std::string arg = kw.value("arg", "");
+    const nlohmann::json &value = kw["value"];
+    const bool float64 =
+      value.value("id", "") == "float" || value.value("attr", "") == "float64";
+    if (
+      arg != "out" && arg != "where" &&
+      !(arg == "dtype" && float64 && has_float_loop))
+      return arg;
+  }
+  return std::nullopt;
+}
+
+// Whether the call masks its result with where= or writes it to an out=
+// array, given as a keyword or as the argument after the inputs.
+static bool masks_or_writes(const nlohmann::json &call, std::size_t arity)
+{
+  const nlohmann::json *out = keyword_value(call, "out");
+  return call["args"].size() > arity || keyword_value(call, "where") ||
+         (out && !is_none(*out));
+}
+
+static void reject_ufunc_keywords_and_arity(
+  const nlohmann::json &call,
+  const std::string &function,
+  std::size_t arity,
+  bool has_float_loop = true)
+{
+  if (
+    std::optional<std::string> keyword =
+      unhandled_ufunc_keyword(call, has_float_loop))
+    throw std::runtime_error(
+      "TypeError: numpy." + function + "() keyword '" + *keyword +
+      "' is not supported");
+  const std::size_t given = call["args"].size();
+  if (given < arity)
+    throw std::runtime_error(
+      "TypeError: numpy." + function + "() takes " + std::to_string(arity) +
+      " positional arguments, got " + std::to_string(given));
+  if (given > arity + 1)
+    throw std::runtime_error(
+      "TypeError: " + function + "() takes from " + std::to_string(arity) +
+      " to " + std::to_string(arity + 1) + " positional arguments but " +
+      std::to_string(given) + " were given");
+}
+
+// A ufunc whose where= or out= is not lowered is refused rather than
+// computed as if the keyword were absent.
+static void reject_unlowered_ufunc_keywords(
+  const nlohmann::json &call,
+  const std::string &function)
+{
+  static const std::set<std::string> ufuncs = {
+    "abs",
+    "absolute",
+    "add",
+    "bitwise_and",
+    "bitwise_count",
+    "bitwise_invert",
+    "bitwise_left_shift",
+    "bitwise_not",
+    "bitwise_or",
+    "bitwise_right_shift",
+    "bitwise_xor",
+    "ceil",
+    "conj",
+    "conjugate",
+    "copysign",
+    "deg2rad",
+    "degrees",
+    "divide",
+    "divmod",
+    "equal",
+    "fabs",
+    "float_power",
+    "floor",
+    "floor_divide",
+    "fmax",
+    "fmin",
+    "fmod",
+    "frexp",
+    "gcd",
+    "greater",
+    "greater_equal",
+    "heaviside",
+    "invert",
+    "isnat",
+    "lcm",
+    "ldexp",
+    "left_shift",
+    "less",
+    "less_equal",
+    "logaddexp",
+    "logaddexp2",
+    "logical_and",
+    "logical_not",
+    "logical_or",
+    "logical_xor",
+    "matmul",
+    "matvec",
+    "maximum",
+    "minimum",
+    "mod",
+    "modf",
+    "multiply",
+    "negative",
+    "nextafter",
+    "not_equal",
+    "positive",
+    "pow",
+    "power",
+    "rad2deg",
+    "radians",
+    "reciprocal",
+    "remainder",
+    "right_shift",
+    "sign",
+    "signbit",
+    "spacing",
+    "square",
+    "subtract",
+    "true_divide",
+    "trunc",
+    "vecdot",
+    "vecmat"};
+  if (!ufuncs.count(function))
+    return;
+  for (const char *name : {"where", "out"})
+    if (const nlohmann::json *value = keyword_value(call, name))
+      if (!is_none(*value) || std::string(name) == "where")
+        throw std::runtime_error(
+          "TypeError: numpy." + function + "() keyword '" + name +
+          "' is not supported");
+}
+
 // Calls answered before the general paths: the scalar functions whose
 // operational model is their whole definition (building them as a binary
 // operation has no operator to use), and any()/all().
 std::optional<exprt>
 numpy_call_expr::try_early_result(const std::string &function)
 {
+  if (std::optional<exprt> refused = try_refused_operand_kind(function))
+    return refused;
   if (std::optional<exprt> narrow = try_narrow_operand_call(function))
     return narrow;
 
-  static const std::set<std::string> model_only = {
-    "remainder", "nextafter", "isclose"};
+  static const std::set<std::string> model_only = {"nextafter", "isclose"};
+  if (std::optional<exprt> predicate = try_float_predicate(function))
+    return predicate;
+  if (std::optional<exprt> bounded = try_bounded_ufunc(function))
+    return bounded;
   if (std::optional<exprt> math = try_runtime_math(function))
     return math;
+  if (std::optional<exprt> power = try_runtime_power(function))
+    return power;
+  if (std::optional<exprt> arithmetic = try_arithmetic_ufunc(function))
+    return arithmetic;
+  reject_unlowered_ufunc_keywords(call_, function);
   if (!model_only.count(function))
     return try_any_all_result(function);
   for (const nlohmann::json &arg : call_["args"])
@@ -5881,17 +6075,91 @@ exprt numpy_call_expr::lapack_matrix(
   return array;
 }
 
+namespace
+{
+// The exception NumPy raises for an operand's shape before LAPACK runs.
+struct linalg_fault
+{
+  std::string type, message;
+};
+} // namespace
+
+static linalg_fault rank_fault(std::size_t rank)
+{
+  return {
+    "LinAlgError",
+    std::to_string(rank) +
+      "-dimensional array given. Array must be at least two-dimensional"};
+}
+
+static std::optional<linalg_fault>
+shape_fault(const std::vector<int> &shape, bool square)
+{
+  if (shape.size() < 2)
+    return rank_fault(shape.size());
+  if (square && shape[0] != shape[1])
+    return linalg_fault{
+      "LinAlgError", "Last 2 dimensions of the array must be square"};
+  return std::nullopt;
+}
+
+static bool is_list_literal(const nlohmann::json &node)
+{
+  const std::string kind = node.value("_type", "");
+  return (kind == "List" || kind == "Tuple") && node.contains("elts");
+}
+
+static bool contains_call(const nlohmann::json &node)
+{
+  if (node.is_object() && node.value("_type", "") == "Call")
+    return true;
+  return (node.is_object() || node.is_array()) &&
+         std::any_of(node.begin(), node.end(), [](const nlohmann::json &child) {
+           return contains_call(child);
+         });
+}
+
+// The shape fault of a literal operand: a scalar, a flat list, rows of
+// different lengths (np.array's ValueError), or rows that are not square.
+// Elements that are neither literals nor constants, and calls whose effects
+// must happen before the fault, leave it to the run-time route.
+static std::optional<linalg_fault>
+literal_fault(const nlohmann::json &arg, bool square)
+{
+  if (contains_call(arg))
+    return std::nullopt;
+  scalar_value scalar;
+  if (try_extract_scalar_constant(arg, scalar))
+    return rank_fault(0);
+  if (!is_list_literal(arg))
+    return std::nullopt;
+  const nlohmann::json &rows = arg["elts"];
+  std::size_t lists = 0, scalars = 0;
+  for (const auto &row : rows)
+  {
+    lists += is_list_literal(row);
+    scalars += try_extract_scalar_constant(row, scalar);
+  }
+  if (lists + scalars != rows.size())
+    return std::nullopt;
+  if (lists == 0)
+    return rank_fault(1);
+  for (const auto &row : rows)
+    if (!is_list_literal(row) || row["elts"].size() != rows[0]["elts"].size())
+      return linalg_fault{
+        "ValueError",
+        "setting an array element with a sequence. The requested array has "
+        "an inhomogeneous shape after 1 dimensions. The detected shape was (" +
+          std::to_string(rows.size()) + ",) + inhomogeneous part."};
+  return shape_fault(
+    {static_cast<int>(rows.size()), static_cast<int>(rows[0]["elts"].size())},
+    square);
+}
+
 // The literal a numpy.linalg operand stands for: the list of np.array(list)
-// or of a constructor such as np.eye(3). A scalar has no matrix dimensions.
+// or of a constructor such as np.eye(3).
 void numpy_call_expr::unwrap_linalg_operand(nlohmann::json &arg) const
 {
-  scalar_value scalar;
-  if (
-    function_id_.get_function() != "norm" &&
-    try_extract_scalar_constant(arg, scalar))
-    throw std::runtime_error(
-      "numpy.linalg.LinAlgError: 0-dimensional array given. Array must be at "
-      "least two-dimensional");
   if (arg.value("_type", "") != "Call")
     return;
   const nlohmann::json &func = arg["func"];
@@ -5906,27 +6174,6 @@ void numpy_call_expr::unwrap_linalg_operand(nlohmann::json &arg) const
     std::optional<nlohmann::json> literal =
       materialize_numpy_constructor_array(arg, converter_.ast()))
     arg = *literal;
-}
-
-// The constant real square matrix an eigvals or svd call reads.
-std::vector<std::vector<double>> numpy_call_expr::linalg_matrix(
-  const std::function<void(nlohmann::json &)> &unwrap)
-{
-  const std::string &function = function_id_.get_function();
-  nlohmann::json arg = call_["args"][0];
-  unwrap(arg);
-  std::vector<std::vector<scalar_value>> matrix;
-  if (!try_extract_scalar_2d_list(arg, matrix))
-    throw std::runtime_error(
-      "TypeError: numpy.linalg." + function +
-      " currently supports only constant 2D real numeric matrices");
-  for (const auto &row : matrix)
-    for (const auto &value : row)
-      if (value.is_complex)
-        throw std::runtime_error(
-          "TypeError: numpy.linalg." + function +
-          " does not support complex-valued matrices");
-  return real_matrix(matrix);
 }
 
 static bool is_diagonal(const std::vector<std::vector<double>> &m)
@@ -5961,17 +6208,126 @@ static double frobenius_norm(const std::vector<std::vector<double>> &m)
 
 exprt numpy_call_expr::nondet_bool()
 {
-  symbolt &tmp =
-    converter_.create_tmp_symbol(call_, "$order$", bool_type(), exprt());
-  const exprt flag = symbol_expr(tmp);
-  code_declt decl(flag);
+  return nondet_value(bool_type(), "$order$");
+}
+
+exprt numpy_call_expr::nondet_value(const typet &type, const std::string &name)
+{
+  symbolt &tmp = converter_.create_tmp_symbol(call_, name, type, exprt());
+  const exprt value = symbol_expr(tmp);
+  code_declt decl(value);
   decl.location() = converter_.get_location_from_decl(call_);
   converter_.add_instruction(decl);
-  code_assignt assign(flag, side_effect_expr_nondett(bool_type()));
+  code_assignt assign(value, side_effect_expr_nondett(type));
   assign.location() = decl.location();
   converter_.add_instruction(assign);
-  return flag;
+  return value;
 }
+
+namespace
+{
+// A factor of a product: any value within `radius` of `center`.
+struct box_factor
+{
+  double center, radius;
+};
+} // namespace
+
+// An upper bound on |sum of the products - target| for every choice of the
+// factors in their boxes, evaluated in doubles: the products' spread from
+// their centres, plus the rounding of each product and sum.
+static double
+implied_bound(const std::vector<std::vector<box_factor>> &terms, double target)
+{
+  long double residual = -static_cast<long double>(target), spread = 0,
+              magnitude = std::fabs(static_cast<long double>(target));
+  for (const auto &term : terms)
+  {
+    long double centre = 1, high = 1;
+    for (const box_factor &f : term)
+    {
+      centre *= f.center;
+      high *= std::fabs(static_cast<long double>(f.center)) + f.radius;
+    }
+    residual += centre;
+    spread += high - std::fabs(centre);
+    magnitude += high;
+  }
+  return static_cast<double>(
+    2 * (std::fabs(residual) + spread + 8 * DBL_EPSILON * magnitude) + 1e-300L);
+}
+
+static eigen_bounds widest(const eigen_bounds &a, const eigen_bounds &b)
+{
+  return {std::max(a.residual, b.residual), std::max(a.norm, b.norm)};
+}
+
+static dense_spectrum::complex_vector as_complex(const std::vector<double> &v)
+{
+  return dense_spectrum::complex_vector(v.begin(), v.end());
+}
+
+// Bounds on the complex residual and norm relations of (lambda, v) for
+// every value in their boxes: A v - lambda v has real part
+// sum_j a_ij re_j - lr re_i + li im_i and imaginary part
+// sum_j a_ij im_j - lr im_i - li re_i, and its magnitude is at most the sum
+// of theirs.
+static eigen_bounds pair_bounds(
+  const dense_spectrum::complex_matrix &m,
+  std::complex<double> lambda,
+  double value_radius,
+  const dense_spectrum::complex_vector &v,
+  double vector_radius)
+{
+  const double lr = lambda.real(), li = lambda.imag();
+  const double r = vector_radius;
+  eigen_bounds bounds{0.0, 0.0};
+  std::vector<std::vector<box_factor>> squares;
+  for (std::size_t i = 0; i < m.size(); ++i)
+  {
+    std::vector<std::vector<box_factor>> re, im;
+    for (std::size_t j = 0; j < m.size(); ++j)
+    {
+      const double ar = m[i][j].real(), ai = m[i][j].imag();
+      re.push_back({{ar, 0.0}, {v[j].real(), r}});
+      re.push_back({{-ai, 0.0}, {v[j].imag(), r}});
+      im.push_back({{ar, 0.0}, {v[j].imag(), r}});
+      im.push_back({{ai, 0.0}, {v[j].real(), r}});
+    }
+    re.push_back({{-lr, value_radius}, {v[i].real(), r}});
+    re.push_back({{li, value_radius}, {v[i].imag(), r}});
+    im.push_back({{-lr, value_radius}, {v[i].imag(), r}});
+    im.push_back({{-li, value_radius}, {v[i].real(), r}});
+    bounds.residual = std::max(
+      bounds.residual, implied_bound(re, 0.0) + implied_bound(im, 0.0));
+    squares.push_back({{v[i].real(), r}, {v[i].real(), r}});
+    squares.push_back({{v[i].imag(), r}, {v[i].imag(), r}});
+  }
+  bounds.norm = implied_bound(squares, 1.0);
+  return bounds;
+}
+
+static dense_spectrum::complex_matrix
+as_complex_matrix(const std::vector<std::vector<double>> &m)
+{
+  dense_spectrum::complex_matrix out;
+  for (const auto &row : m)
+    out.emplace_back(row.begin(), row.end());
+  return out;
+}
+
+static eigen_bounds pair_bounds(
+  const std::vector<std::vector<double>> &m,
+  std::complex<double> lambda,
+  double value_radius,
+  const dense_spectrum::complex_vector &v,
+  double vector_radius)
+{
+  return pair_bounds(
+    as_complex_matrix(m), lambda, value_radius, v, vector_radius);
+}
+
+static exprt conjugate(const exprt &z);
 
 // How far LAPACK may round the eigenvalues of a 2x2 matrix that is not
 // diagonal: a triangular one keeps its diagonal exactly, and close
@@ -5997,30 +6353,8 @@ std::vector<exprt>
 numpy_call_expr::in_any_order(const std::vector<exprt> &values)
 {
   const std::size_t n = values.size();
-  std::vector<exprt> slots;
-  exprt::operandst distinct;
-  for (std::size_t k = 0; k < n; ++k)
-  {
-    symbolt &tmp =
-      converter_.create_tmp_symbol(call_, "$order$", size_type(), exprt());
-    const exprt slot = symbol_expr(tmp);
-    code_declt decl(slot);
-    decl.location() = converter_.get_location_from_decl(call_);
-    converter_.add_instruction(decl);
-    code_assignt assign(slot, side_effect_expr_nondett(size_type()));
-    assign.location() = decl.location();
-    converter_.add_instruction(assign);
-    distinct.push_back(
-      binary_relation_exprt(slot, "<", from_integer(n, size_type())));
-    for (const exprt &earlier : slots)
-      distinct.push_back(not_exprt(equality_exprt(slot, earlier)));
-    slots.push_back(slot);
-  }
-  code_assumet permutation{and_exprt(distinct)};
-  permutation.location() = converter_.get_location_from_decl(call_);
-  converter_.add_instruction(permutation);
   std::vector<exprt> ordered;
-  for (const exprt &slot : slots)
+  for (const exprt &slot : permutation_slots(n))
   {
     exprt chosen = values.back();
     for (std::size_t i = n - 1; i-- > 0;)
@@ -6053,10 +6387,20 @@ numpy_call_expr::eigenvalue_pair(const std::vector<std::vector<double>> &m)
   for (const auto &[re, im] : pair)
     both.push_back(
       make_complex(lapack_value(re, radius), lapack_value(im, imag_radius)));
+  // LAPACK's dlanv2 returns a complex pair as exact conjugates.
   if (square < 0 && !triangular)
-    return both;
+    return {both[0], conjugate(both[0])};
   const exprt swap = nondet_bool();
   return {if_exprt(swap, both[1], both[0]), if_exprt(swap, both[0], both[1])};
+}
+
+static bool is_symmetric(const std::vector<std::vector<double>> &m)
+{
+  for (std::size_t i = 0; i < m.size(); ++i)
+    for (std::size_t j = 0; j < i; ++j)
+      if (m[i][j] != m[j][i])
+        return false;
+  return true;
 }
 
 // NumPy returns complex eigenvalues, from LAPACK's dgeev: a diagonal matrix
@@ -6085,10 +6429,12 @@ exprt numpy_call_expr::eigenvalues(const std::vector<std::vector<double>> &m)
     if (!is_diagonal(m))
       values = in_any_order(values);
   }
+  else if (is_symmetric(m))
+    values = symmetric_eigenvalues(m);
+  else if (!dense_spectrum::has_real_spectrum(m))
+    return complex_spectrum(m, false);
   else
-    throw std::runtime_error(
-      "TypeError: numpy.linalg.eigvals supports only 2x2, diagonal and "
-      "triangular matrices currently");
+    values = dense_eigenvalues(m);
   exprt array(
     "array",
     array_typet(get_complex_struct_type(), from_integer(n, size_type())));
@@ -6127,6 +6473,29 @@ unit_eigenvector_2x2(const std::vector<std::vector<double>> &m, double lambda)
   return {u[0] / length, u[1] / length};
 }
 
+static std::vector<exprt>
+signed_by(const exprt &flip, const std::vector<exprt> &v)
+{
+  std::vector<exprt> column;
+  for (const exprt &value : v)
+    column.push_back(if_exprt(flip, negate_double(value), value));
+  return column;
+}
+
+static std::vector<exprt> constant_row(const std::vector<double> &row)
+{
+  std::vector<exprt> values;
+  for (double value : row)
+    values.push_back(from_double(value, double_type()));
+  return values;
+}
+
+// `v` or -v, as LAPACK's eigenvectors have an arbitrary sign.
+std::vector<exprt> numpy_call_expr::with_any_sign(const std::vector<exprt> &v)
+{
+  return signed_by(nondet_bool(), v);
+}
+
 // A column of `lapack_value`s around `exact`, with an arbitrary sign as
 // LAPACK's eigenvectors have.
 std::vector<exprt>
@@ -6148,7 +6517,8 @@ numpy_call_expr::signed_column(const std::vector<double> &exact, double radius)
 void numpy_call_expr::eigen_pair_2x2(
   const std::vector<std::vector<double>> &m,
   std::vector<exprt> &values,
-  std::vector<std::vector<exprt>> &columns)
+  std::vector<std::vector<exprt>> &columns,
+  eigen_bounds &bounds)
 {
   const double a = m[0][0], b = m[0][1], c = m[1][0], d = m[1][1];
   const double mid = (a + d) / 2, half = (a - d) / 2;
@@ -6171,12 +6541,22 @@ void numpy_call_expr::eigen_pair_2x2(
   const double vector_radius = 1e-12 * (1 + norm / gap);
   std::vector<exprt> found_values;
   std::vector<std::vector<exprt>> found_columns;
+  const double value_radius = eigenvalue_radius(m, square);
+  bounds = {0.0, 0.0};
   for (double lambda : lambdas)
   {
-    found_values.push_back(lapack_value(lambda, eigenvalue_radius(m, square)));
-    found_columns.push_back(signed_column(
-      unit_eigenvector_2x2(m, lambda),
-      vector_radius < 1 ? vector_radius : INFINITY));
+    const std::vector<double> v = unit_eigenvector_2x2(m, lambda);
+    found_values.push_back(lapack_value(lambda, value_radius));
+    found_columns.push_back(
+      signed_column(v, vector_radius < 1 ? vector_radius : INFINITY));
+    bounds = widest(
+      bounds,
+      pair_bounds(
+        m,
+        {lambda, 0.0},
+        value_radius,
+        as_complex(v),
+        vector_radius < 1 ? vector_radius : INFINITY));
   }
   const exprt swap = nondet_bool();
   for (std::size_t k = 0; k < 2; ++k)
@@ -6190,6 +6570,69 @@ void numpy_call_expr::eigen_pair_2x2(
   }
 }
 
+// n distinct slots in [0, n), chosen nondeterministically.
+std::vector<exprt> numpy_call_expr::permutation_slots(std::size_t n)
+{
+  std::vector<exprt> slots;
+  exprt::operandst distinct;
+  for (std::size_t k = 0; k < n; ++k)
+  {
+    const exprt slot = nondet_value(size_type(), "$order$");
+    distinct.push_back(
+      binary_relation_exprt(slot, "<", from_integer(n, size_type())));
+    for (const exprt &earlier : slots)
+      distinct.push_back(not_exprt(equality_exprt(slot, earlier)));
+    slots.push_back(slot);
+  }
+  code_assumet permutation{and_exprt(distinct)};
+  permutation.location() = converter_.get_location_from_decl(call_);
+  converter_.add_instruction(permutation);
+  return slots;
+}
+
+// The real, distinct eigenvalues of a dense matrix larger than 2x2, each
+// within its own condition-scaled radius, in any order.
+std::vector<exprt>
+numpy_call_expr::dense_eigenvalues(const std::vector<std::vector<double>> &m)
+{
+  const dense_spectrum::eigen_system system =
+    dense_spectrum::real_eigen_system("eigvals", m);
+  std::vector<exprt> values;
+  for (std::size_t k = 0; k < system.values.size(); ++k)
+    values.push_back(make_complex(
+      lapack_value(system.values[k], system.value_radius[k]),
+      lapack_value(0.0, 0.0)));
+  return in_any_order(values);
+}
+
+// The eigenvalues of a symmetric matrix, in any order. LAPACK's dgeev
+// returns those of a matrix within 1e-12 ||A|| of it, and as A is normal
+// each lies within that radius r of one of A's (Bauer-Fike), however close
+// two of A's are; the discs of a cluster of A's eigenvalues (discs that
+// overlap) hold as many of LAPACK's. So each is within r plus its cluster's
+// spread of its computed value, and only an eigenvalue alone in its disc is
+// sure to be real (a complex one would come with its conjugate).
+std::vector<exprt> numpy_call_expr::symmetric_eigenvalues(
+  const std::vector<std::vector<double>> &m)
+{
+  const std::vector<double> exact = dense_spectrum::symmetric_eigenvalues(m);
+  const double r = 2e-12 * frobenius_norm(m);
+  std::vector<exprt> values;
+  for (std::size_t first = 0; first < exact.size();)
+  {
+    std::size_t last = first;
+    while (last + 1 < exact.size() && exact[last + 1] - exact[last] <= 2 * r)
+      ++last;
+    const double spread = exact[last] - exact[first];
+    for (std::size_t k = first; k <= last; ++k)
+      values.push_back(make_complex(
+        lapack_value(exact[k], r + spread),
+        lapack_value(0.0, first == last ? 0.0 : r)));
+    first = last + 1;
+  }
+  return in_any_order(values);
+}
+
 // `(values, vectors)` as a Python tuple of two arrays.
 exprt numpy_call_expr::linalg_tuple(const std::vector<exprt> &parts)
 {
@@ -6197,15 +6640,7 @@ exprt numpy_call_expr::linalg_tuple(const std::vector<exprt> &parts)
   std::vector<expr2tc> members;
   for (const exprt &part : parts)
   {
-    symbolt &tmp =
-      converter_.create_tmp_symbol(call_, "$linalg$", part.type(), exprt());
-    const exprt symbol = symbol_expr(tmp);
-    code_declt decl(symbol);
-    decl.location() = converter_.get_location_from_decl(call_);
-    converter_.add_instruction(decl);
-    code_assignt assign(symbol, part);
-    assign.location() = decl.location();
-    converter_.add_instruction(assign);
+    const exprt symbol = part.id() == "symbol" ? part : stored(part);
     types.push_back(part.type());
     expr2tc member;
     migrate_expr(symbol, member);
@@ -6214,6 +6649,22 @@ exprt numpy_call_expr::linalg_tuple(const std::vector<exprt> &parts)
   const struct_typet type =
     converter_.get_tuple_handler().create_tuple_struct_type(types);
   return migrate_expr_back(constant_struct2tc(migrate_type(type), members));
+}
+
+// A temporary holding `value`, which the relations over a result read as
+// the program does.
+exprt numpy_call_expr::stored(const exprt &value)
+{
+  symbolt &tmp =
+    converter_.create_tmp_symbol(call_, "$linalg$", value.type(), exprt());
+  const exprt symbol = symbol_expr(tmp);
+  code_declt decl(symbol);
+  decl.location() = converter_.get_location_from_decl(call_);
+  converter_.add_instruction(decl);
+  code_assignt assign(symbol, value);
+  assign.location() = decl.location();
+  converter_.add_instruction(assign);
+  return symbol;
 }
 
 static exprt double_array(const std::vector<exprt> &values)
@@ -6226,6 +6677,53 @@ static exprt double_array(const std::vector<exprt> &values)
   return array;
 }
 
+static std::vector<std::vector<exprt>>
+constant_matrix_entries(const std::vector<std::vector<double>> &m)
+{
+  std::vector<std::vector<exprt>> entries;
+  for (const auto &row : m)
+    entries.push_back(constant_row(row));
+  return entries;
+}
+
+// The relations a constant matrix's eigenvectors satisfy at every point of
+// their boxes, unless a bound is not finite.
+static std::optional<eigen_relation> literal_relation(const eigen_bounds &b)
+{
+  if (!std::isfinite(b.residual) || !std::isfinite(b.norm))
+    return std::nullopt;
+  return eigen_relation{
+    from_double(b.residual, double_type()),
+    from_double(b.norm, double_type()),
+    false_exprt()};
+}
+
+// A complex128 array of `values`.
+static exprt complex_array(const std::vector<exprt> &values)
+{
+  exprt array(
+    "array",
+    array_typet(
+      get_complex_struct_type(), from_integer(values.size(), size_type())));
+  for (const exprt &value : values)
+    array.copy_to_operands(value);
+  return array;
+}
+
+// The complex128 matrix whose columns are `columns`.
+static exprt complex_columns(const std::vector<std::vector<exprt>> &columns)
+{
+  std::vector<exprt> rows;
+  for (std::size_t i = 0; i < columns.size(); ++i)
+  {
+    std::vector<exprt> row;
+    for (const auto &column : columns)
+      row.push_back(column[i]);
+    rows.push_back(complex_array(row));
+  }
+  return double_array(rows);
+}
+
 // eig of a real matrix whose eigenvalues are real: the eigenvalues, and unit
 // eigenvectors as the columns of the second result. A diagonal matrix keeps
 // its entries and the identity, as LAPACK's dgeev leaves it.
@@ -6233,8 +6731,11 @@ exprt numpy_call_expr::eigen_decomposition(
   const std::vector<std::vector<double>> &m)
 {
   const std::size_t n = require_square(m);
+  if (!is_diagonal(m) && !dense_spectrum::has_real_spectrum(m))
+    return complex_spectrum(m, true);
   std::vector<exprt> values;
   std::vector<std::vector<exprt>> columns;
+  eigen_bounds bounds{INFINITY, INFINITY};
   if (is_diagonal(m))
     for (std::size_t j = 0; j < n; ++j)
     {
@@ -6245,42 +6746,105 @@ exprt numpy_call_expr::eigen_decomposition(
       columns.push_back(column);
     }
   else if (n == 2)
-    eigen_pair_2x2(m, values, columns);
+    eigen_pair_2x2(m, values, columns, bounds);
   else
-    throw std::runtime_error(
-      "TypeError: numpy.linalg.eig supports only 2x2 and diagonal matrices "
-      "currently");
-  std::vector<exprt> rows;
-  for (std::size_t i = 0; i < n; ++i)
+    dense_eigen_pairs(m, values, columns, bounds);
+  const exprt zero = from_double(0.0, double_type());
+  std::vector<exprt> complex_values;
+  std::vector<std::vector<exprt>> complex_columns_;
+  for (std::size_t k = 0; k < n; ++k)
   {
-    std::vector<exprt> row;
-    for (std::size_t j = 0; j < n; ++j)
-      row.push_back(columns[j][i]);
-    rows.push_back(double_array(row));
+    complex_values.push_back(make_complex(values[k], zero));
+    complex_columns_.emplace_back();
+    for (const exprt &x : columns[k])
+      complex_columns_.back().push_back(make_complex(x, zero));
   }
-  return linalg_tuple({double_array(values), double_array(rows)});
+  return bound_eigen_tuple(
+    constant_matrix_entries(m),
+    complex_values,
+    complex_columns_,
+    literal_relation(bounds));
 }
 
-// svd(compute_uv=False) of a 2x2 matrix: the singular values in descending
-// order, from a formula that keeps the smaller one accurate.
+namespace
+{
+// One singular value with its left and right singular vectors.
+struct singular_triple
+{
+  double sigma;
+  std::vector<double> u, v;
+};
+} // namespace
+
+// A diagonal matrix's singular values are its entries' magnitudes in
+// descending order, with unit vectors and the entry's sign kept in v.
+static std::vector<singular_triple>
+diagonal_singular_triples(const std::vector<std::vector<double>> &m)
+{
+  const std::size_t n = m.size();
+  std::vector<std::size_t> order(n);
+  std::iota(order.begin(), order.end(), 0);
+  std::stable_sort(
+    order.begin(), order.end(), [&](std::size_t i, std::size_t j) {
+      return std::fabs(m[i][i]) > std::fabs(m[j][j]);
+    });
+  std::vector<singular_triple> triples;
+  for (std::size_t k : order)
+  {
+    std::vector<double> u(n, 0.0), v(n, 0.0);
+    u[k] = 1.0;
+    v[k] = m[k][k] < 0 ? -1.0 : 1.0;
+    triples.push_back({std::fabs(m[k][k]), u, v});
+  }
+  return triples;
+}
+
+// The order of the square matrix svd decomposes, or 0 for a rectangular
+// one; neither dimension may exceed max_linalg_order.
+static std::size_t svd_order(const std::vector<std::vector<double>> &m)
+{
+  const std::size_t n = m.size();
+  if (std::max(n, m[0].size()) > max_linalg_order)
+    throw std::runtime_error(
+      "TypeError: numpy.linalg.svd supports only matrices up to " +
+      std::to_string(max_linalg_order) + "x" +
+      std::to_string(max_linalg_order));
+  return m[0].size() == n ? n : 0;
+}
+
+// svd(compute_uv=False): the singular values in descending order. A 2x2
+// matrix's come from a formula that keeps the smaller one accurate, a
+// diagonal matrix's are its entries' magnitudes, and a larger matrix's are
+// within LAPACK's backward error of the extended-precision ones.
 exprt numpy_call_expr::singular_values(
   const std::vector<std::vector<double>> &m)
 {
-  if (m.size() != 2 || m[0].size() != 2 || m[1].size() != 2)
-    throw std::runtime_error(
-      "TypeError: numpy.linalg.svd currently supports only 2x2 matrices");
-  const double a = m[0][0], b = m[0][1], c = m[1][0], d = m[1][1];
-  const double largest =
-    (std::hypot(a + d, c - b) + std::hypot(a - d, b + c)) / 2;
-  const double smallest =
-    largest == 0.0 ? 0.0 : std::fabs(a * d - b * c) / largest;
-  const double radius = 1e-12 * frobenius_norm(m);
-  const exprt first = lapack_value(largest, radius);
-  const exprt second = lapack_value(smallest, radius);
-  assume_singular_order({first, second});
-  exprt array("array", array_typet(first.type(), from_integer(2, size_type())));
-  array.copy_to_operands(first, second);
-  return array;
+  const std::size_t n = svd_order(m);
+  std::vector<double> sigma;
+  double radius = 1e-12 * frobenius_norm(m);
+  if (n == 0)
+    sigma = dense_spectrum::singular_values_of(m);
+  else if (n == 2)
+  {
+    const double a = m[0][0], b = m[0][1], c = m[1][0], d = m[1][1];
+    const double largest =
+      (std::hypot(a + d, c - b) + std::hypot(a - d, b + c)) / 2;
+    sigma = {
+      largest, largest == 0.0 ? 0.0 : std::fabs(a * d - b * c) / largest};
+  }
+  else if (is_diagonal(m))
+  {
+    for (const singular_triple &t : diagonal_singular_triples(m))
+      sigma.push_back(t.sigma);
+    radius = 0.0;
+  }
+  else
+    sigma = dense_spectrum::singular_values_of(m);
+  std::vector<exprt> values;
+  for (double value : sigma)
+    values.push_back(lapack_value(value, radius));
+  assume_singular_order(values);
+  return double_array(values);
 }
 
 static bool is_number_type(const typet &t)
@@ -6295,10 +6859,13 @@ static const typet &array_leaf_type(const typet &t)
 
 // The shape of @p t with double elements.
 // A string literal anywhere in a list literal makes NumPy build a string
-// array, which no numpy.linalg function takes.
+// array, which no numpy.linalg function takes; one passed to a call, as in
+// float("nan"), is not an element.
 static bool contains_string_constant(const nlohmann::json &node)
 {
   if (!node.is_object() && !node.is_array())
+    return false;
+  if (node.is_object() && node.value("_type", "") == "Call")
     return false;
   if (
     node.is_object() && node.value("_type", "") == "Constant" &&
@@ -6318,6 +6885,94 @@ static exprt ieee_op(const char *op, const exprt &a, const exprt &b)
   return result;
 }
 
+static exprt
+select_constant(const exprt &slot, const std::vector<double> &values)
+{
+  exprt chosen = from_double(values.back(), double_type());
+  for (std::size_t i = values.size() - 1; i-- > 0;)
+    chosen = if_exprt(
+      equality_exprt(slot, from_integer(i, size_type())),
+      from_double(values[i], double_type()),
+      chosen);
+  return chosen;
+}
+
+// Any double within `radius` of the value `slot` selects.
+exprt numpy_call_expr::selected_box(
+  const exprt &slot,
+  const std::vector<double> &exacts,
+  double radius)
+{
+  return selected_box(slot, exacts, std::vector<double>(exacts.size(), radius));
+}
+
+// Any double within radii[k] of exacts[k], k the value of `slot`.
+exprt numpy_call_expr::selected_box(
+  const exprt &slot,
+  const std::vector<double> &exacts,
+  const std::vector<double> &radii)
+{
+  std::vector<double> lows, highs;
+  for (std::size_t k = 0; k < exacts.size(); ++k)
+  {
+    lows.push_back(exacts[k] - radii[k]);
+    highs.push_back(exacts[k] + radii[k]);
+  }
+  const exprt result = lapack_value(0.0, INFINITY);
+  code_assumet within{and_exprt(
+    binary_relation_exprt(result, ">=", select_constant(slot, lows)),
+    binary_relation_exprt(result, "<=", select_constant(slot, highs)))};
+  within.location() = converter_.get_location_from_decl(call_);
+  converter_.add_instruction(within);
+  return result;
+}
+
+// eig of a dense matrix larger than 2x2 whose eigenvalues are real and
+// distinct: each eigenvalue within its radius with its unit eigenvector of
+// arbitrary sign, the pairs in any order. The residual and norm relations
+// hold at every point of those boxes, so they restrict nothing; they let a
+// solver relate the results to the matrix without exploring the boxes.
+void numpy_call_expr::dense_eigen_pairs(
+  const std::vector<std::vector<double>> &m,
+  std::vector<exprt> &values,
+  std::vector<std::vector<exprt>> &columns,
+  eigen_bounds &bounds)
+{
+  if (m.size() > max_linalg_order)
+    throw std::runtime_error(
+      "TypeError: numpy.linalg.eig supports only matrices up to " +
+      std::to_string(max_linalg_order) + "x" +
+      std::to_string(max_linalg_order));
+  const dense_spectrum::eigen_system system =
+    dense_spectrum::real_eigen_system("eig", m);
+  const double value_radius =
+    *std::max_element(system.value_radius.begin(), system.value_radius.end());
+  const double vector_radius = system.vector_radius;
+  bounds = {0.0, 0.0};
+  for (std::size_t k = 0; k < system.values.size(); ++k)
+    bounds = widest(
+      bounds,
+      pair_bounds(
+        m,
+        {system.values[k], 0.0},
+        value_radius,
+        as_complex(system.vectors[k]),
+        vector_radius));
+  for (const exprt &slot : permutation_slots(system.values.size()))
+  {
+    values.push_back(selected_box(slot, system.values, value_radius));
+    std::vector<exprt> v;
+    for (std::size_t i = 0; i < m.size(); ++i)
+    {
+      std::vector<double> components;
+      for (const auto &vector : system.vectors)
+        components.push_back(vector[i]);
+      v.push_back(selected_box(slot, components, vector_radius));
+    }
+    columns.push_back(with_any_sign(v));
+  }
+}
+
 static exprt abs_double(const exprt &value)
 {
   expr2tc value2;
@@ -6330,6 +6985,341 @@ static exprt is_finite_double(const exprt &value)
   expr2tc value2;
   migrate_expr(value, value2);
   return migrate_expr_back(not2tc(or2tc(isnan2tc(value2), isinf2tc(value2))));
+}
+
+// The residual and norm relations of a complex eigenvector as a program
+// over the complex128 results spells them: the real and imaginary parts of
+// A v - lambda v within `relation.residual` (each is at most its
+// magnitude), the sum of |v_i|^2 within `relation.norm` of 1 and, for a real
+// eigenvalue's real vector, the real part of the sum of v_i * v_i minus 1.
+// Bounding the parts rather than abs() keeps the relations free of square
+// roots, which makes counterexamples slow to find.
+void numpy_call_expr::bind_complex_eigenvector(
+  const std::vector<std::vector<exprt>> &m,
+  const exprt &lambda,
+  const std::vector<exprt> &v,
+  const eigen_relation &relation)
+{
+  complex_handler &complex = converter_.get_complex_handler();
+  const nlohmann::json none = nlohmann::json::object();
+  const auto op = [&](const char *name, const exprt &x, const exprt &y) {
+    return complex.handle_binary_op(name, x, y, none);
+  };
+  const auto near =
+    [&](
+      const exprt &z, const char *part, const exprt &bound, const exprt &when) {
+      code_assumet within{or_exprt(
+        or_exprt(not_exprt(when), relation.excused),
+        binary_relation_exprt(abs_double(complex_part(z, part)), "<=", bound))};
+      within.location() = converter_.get_location_from_decl(call_);
+      converter_.add_instruction(within);
+    };
+  const exprt one = from_double(1.0, double_type());
+  for (std::size_t i = 0; i < m.size(); ++i)
+  {
+    exprt sum = op("Mult", m[i][0], v[0]);
+    for (std::size_t j = 1; j < m.size(); ++j)
+      sum = op("Add", sum, op("Mult", m[i][j], v[j]));
+    const exprt residual = op("Sub", sum, op("Mult", lambda, v[i]));
+    for (const char *part : {"real", "imag"})
+      near(residual, part, relation.residual, true_exprt());
+  }
+  exprt squares = nil_exprt(), products = nil_exprt();
+  for (const exprt &x : v)
+  {
+    const exprt re = complex_part(x, "real"), im = complex_part(x, "imag");
+    for (const exprt &term :
+         {ieee_op("ieee_mul", re, re), ieee_op("ieee_mul", im, im)})
+      squares = squares.is_nil() ? term : ieee_op("ieee_add", squares, term);
+    const exprt product = op("Mult", x, x);
+    products = products.is_nil() ? product : op("Add", products, product);
+  }
+  code_assumet unit{binary_relation_exprt(
+    abs_double(ieee_op("ieee_sub", squares, one)), "<=", relation.norm)};
+  unit.location() = converter_.get_location_from_decl(call_);
+  converter_.add_instruction(unit);
+  // A real matrix's real eigenvalue has a real vector, whose v.v has no
+  // imaginary part to bound.
+  if (relation.real_vectors)
+    near(
+      op("Sub", products, one),
+      "real",
+      relation.norm,
+      equality_exprt(
+        complex_part(lambda, "imag"), from_double(0.0, double_type())));
+}
+
+static exprt conjugate(const exprt &z)
+{
+  return make_complex(
+    complex_part(z, "real"), negate_double(complex_part(z, "imag")));
+}
+
+static exprt negated_complex(const exprt &z)
+{
+  return make_complex(
+    negate_double(complex_part(z, "real")),
+    negate_double(complex_part(z, "imag")));
+}
+
+// The orders LAPACK may return a spectrum in: its blocks (a real
+// eigenvalue, or, with `pairs`, a conjugate pair with the positive
+// imaginary part first; any eigenvalue of a complex matrix) in any order,
+// as the indices of the eigenvalues at each position.
+static std::vector<std::vector<std::size_t>>
+block_orders(const std::vector<std::complex<double>> &values, bool pairs)
+{
+  std::vector<std::vector<std::size_t>> blocks;
+  for (std::size_t k = 0; k < values.size(); ++k)
+  {
+    blocks.push_back({k});
+    if (pairs && values[k].imag() > 0)
+      blocks.back().push_back(++k);
+  }
+  std::vector<std::size_t> permutation(blocks.size());
+  std::iota(permutation.begin(), permutation.end(), 0);
+  std::vector<std::vector<std::size_t>> orders;
+  do
+  {
+    orders.emplace_back();
+    for (std::size_t block : permutation)
+      orders.back().insert(
+        orders.back().end(), blocks[block].begin(), blocks[block].end());
+  } while (std::next_permutation(permutation.begin(), permutation.end()));
+  return orders;
+}
+
+static exprt
+select_index(const exprt &choice, const std::vector<std::size_t> &values)
+{
+  exprt chosen = from_integer(values.back(), size_type());
+  for (std::size_t i = values.size() - 1; i-- > 0;)
+    chosen = if_exprt(
+      equality_exprt(choice, from_integer(i, size_type())),
+      from_integer(values[i], size_type()),
+      chosen);
+  return chosen;
+}
+
+// The index of the eigenvalue at each position under one of `orders`,
+// chosen nondeterministically; second[p] holds when position p has the
+// conjugate of the eigenvalue before it.
+std::vector<exprt> numpy_call_expr::spectrum_order(
+  const std::vector<std::vector<std::size_t>> &orders,
+  const std::vector<bool> &is_second,
+  std::vector<exprt> &second)
+{
+  exprt choice = from_integer(0, size_type());
+  if (orders.size() > 1)
+  {
+    choice = nondet_value(size_type(), "$order$");
+    code_assumet bounded{binary_relation_exprt(
+      choice, "<", from_integer(orders.size(), size_type()))};
+    bounded.location() = converter_.get_location_from_decl(call_);
+    converter_.add_instruction(bounded);
+  }
+  std::vector<exprt> slots;
+  for (std::size_t p = 0; p < orders.front().size(); ++p)
+  {
+    std::vector<std::size_t> at, flags;
+    for (const auto &order : orders)
+    {
+      at.push_back(order[p]);
+      flags.push_back(is_second[order[p]] ? 1 : 0);
+    }
+    slots.push_back(select_index(choice, at));
+    second.push_back(equality_exprt(
+      select_index(choice, flags), from_integer(1, size_type())));
+  }
+  return slots;
+}
+
+// eig and eigvals of a real matrix with a complex conjugate pair, which
+// NumPy returns as complex128.
+exprt numpy_call_expr::complex_spectrum(
+  const std::vector<std::vector<double>> &m,
+  bool with_vectors)
+{
+  const std::string function = with_vectors ? "eig" : "eigvals";
+  if (m.size() > max_linalg_order)
+    throw std::runtime_error(
+      "TypeError: numpy.linalg." + function + " supports only matrices up to " +
+      std::to_string(max_linalg_order) + "x" +
+      std::to_string(max_linalg_order));
+  return spectrum_result(
+    as_complex_matrix(m),
+    dense_spectrum::complex_eigen_system_of(function, m),
+    with_vectors,
+    true);
+}
+
+// eig and eigvals of a complex matrix up to 3x3: its eigenvalues come in any
+// order (each a block of its own) and none is the conjugate of another.
+exprt numpy_call_expr::complex_input_spectrum(
+  const dense_spectrum::complex_matrix &m,
+  bool with_vectors)
+{
+  const std::string function = with_vectors ? "eig" : "eigvals";
+  if (m.size() > 3)
+    throw std::runtime_error(
+      "TypeError: numpy.linalg." + function +
+      " of a complex matrix larger than 3x3 is not supported");
+  return spectrum_result(
+    m,
+    dense_spectrum::complex_input_eigen_system(function, m),
+    with_vectors,
+    false);
+}
+
+// The entries of a constant matrix as a program reads them: doubles for a
+// real one, complex128 for a complex one.
+static std::vector<std::vector<exprt>>
+matrix_entries(const dense_spectrum::complex_matrix &m, bool real_input)
+{
+  std::vector<std::vector<exprt>> entries;
+  for (const auto &row : m)
+  {
+    entries.emplace_back();
+    for (const std::complex<double> &x : row)
+    {
+      const exprt re = from_double(x.real(), double_type());
+      entries.back().push_back(
+        real_input ? re
+                   : make_complex(re, from_double(x.imag(), double_type())));
+    }
+  }
+  return entries;
+}
+
+// eig's or eigvals' complex128 results: each eigenvalue within its radius;
+// for a real matrix each pair exactly conjugate with the positive
+// imaginary part first, the blocks in any order. An eigenvector is within
+// the radius of one of its candidates (LAPACK makes its largest component
+// real), with either sign, and the second of a pair is the conjugate of the
+// first.
+exprt numpy_call_expr::spectrum_result(
+  const dense_spectrum::complex_matrix &m,
+  const dense_spectrum::complex_eigen_system &system,
+  bool with_vectors,
+  bool real_input)
+{
+  std::vector<double> re, im, re_radius, im_radius;
+  std::vector<bool> is_second;
+  for (std::size_t k = 0; k < system.values.size(); ++k)
+  {
+    re.push_back(system.values[k].real());
+    im.push_back(system.values[k].imag());
+    re_radius.push_back(system.value_radius[k]);
+    im_radius.push_back(
+      real_input && im.back() == 0.0 ? 0.0 : system.value_radius[k]);
+    is_second.push_back(real_input && im.back() < 0);
+  }
+  std::vector<exprt> second;
+  const std::vector<exprt> slots =
+    spectrum_order(block_orders(system.values, real_input), is_second, second);
+  std::vector<exprt> values;
+  for (std::size_t p = 0; p < slots.size(); ++p)
+  {
+    const exprt own = make_complex(
+      selected_box(slots[p], re, re_radius),
+      selected_box(slots[p], im, im_radius));
+    values.push_back(
+      p == 0 ? own : if_exprt(second[p], conjugate(values[p - 1]), own));
+  }
+  if (!with_vectors)
+    return complex_array(values);
+  eigen_bounds bounds{0.0, 0.0};
+  const std::vector<std::vector<exprt>> columns =
+    eigenvector_columns(m, system, slots, second, bounds);
+  std::optional<eigen_relation> relation = literal_relation(bounds);
+  if (relation)
+    relation->real_vectors = real_input;
+  return bound_eigen_tuple(
+    matrix_entries(m, real_input), values, columns, relation);
+}
+
+// eig's (w, v), its eigenvector relations read from the stored results.
+exprt numpy_call_expr::bound_eigen_tuple(
+  const std::vector<std::vector<exprt>> &m,
+  const std::vector<exprt> &values,
+  const std::vector<std::vector<exprt>> &columns,
+  const std::optional<eigen_relation> &relation)
+{
+  const exprt w = stored(complex_array(values));
+  const exprt v = stored(complex_columns(columns));
+  if (relation)
+    for (std::size_t p = 0; p < values.size(); ++p)
+    {
+      std::vector<exprt> column;
+      for (std::size_t i = 0; i < values.size(); ++i)
+        column.push_back(index_exprt(
+          index_exprt(v, from_integer(i, size_type()), v.type().subtype()),
+          from_integer(p, size_type()),
+          get_complex_struct_type()));
+      bind_complex_eigenvector(
+        m,
+        index_exprt(w, from_integer(p, size_type()), get_complex_struct_type()),
+        column,
+        *relation);
+    }
+  return linalg_tuple({w, v});
+}
+
+// The eigenvector at each position of complex_spectrum's eigenvalues.
+std::vector<std::vector<exprt>> numpy_call_expr::eigenvector_columns(
+  const dense_spectrum::complex_matrix &m,
+  const dense_spectrum::complex_eigen_system &system,
+  const std::vector<exprt> &slots,
+  const std::vector<exprt> &second,
+  eigen_bounds &bounds)
+{
+  const std::size_t n = m.size();
+  const double r = system.vector_radius;
+  std::vector<std::size_t> first, last;
+  std::vector<std::vector<double>> re(n), im(n), im_radius(n);
+  for (std::size_t k = 0; k < system.candidates.size(); ++k)
+  {
+    first.push_back(re[0].size());
+    for (const auto &candidate : system.candidates[k])
+    {
+      for (std::size_t i = 0; i < n; ++i)
+      {
+        re[i].push_back(candidate.vector[i].real());
+        im[i].push_back(candidate.vector[i].imag());
+        const bool exact =
+          candidate.real_component == n || candidate.real_component == i;
+        im_radius[i].push_back(exact ? 0.0 : r);
+      }
+      bounds = widest(
+        bounds,
+        pair_bounds(
+          m, system.values[k], system.value_radius[k], candidate.vector, r));
+    }
+    last.push_back(re[0].size());
+  }
+  std::vector<std::vector<exprt>> columns;
+  for (std::size_t p = 0; p < slots.size(); ++p)
+  {
+    const exprt pick = nondet_value(size_type(), "$phase$");
+    code_assumet among{and_exprt(
+      binary_relation_exprt(pick, ">=", select_index(slots[p], first)),
+      binary_relation_exprt(pick, "<", select_index(slots[p], last)))};
+    among.location() = converter_.get_location_from_decl(call_);
+    converter_.add_instruction(among);
+    const exprt flip = nondet_bool();
+    std::vector<exprt> column;
+    for (std::size_t i = 0; i < n; ++i)
+    {
+      const exprt own = make_complex(
+        selected_box(pick, re[i], r), selected_box(pick, im[i], im_radius[i]));
+      const exprt signed_own = if_exprt(flip, negated_complex(own), own);
+      column.push_back(
+        p == 0 ? signed_own
+               : if_exprt(second[p], conjugate(columns[p - 1][i]), signed_own));
+    }
+    columns.push_back(column);
+  }
+  return columns;
 }
 
 // The value of a cofactor expansion and the sum of its terms' magnitudes.
@@ -6363,31 +7353,18 @@ cofactor_terms(const std::vector<std::vector<exprt>> &m)
   return {value, magnitude};
 }
 
-// The entries of a numeric array of rank 1 or 2 known only at run time, as
-// doubles read from it once, rows of one row for rank 1; empty otherwise.
-std::vector<std::vector<exprt>>
-numpy_call_expr::runtime_entries(const nlohmann::json &arg, std::size_t &rank)
+// The entries of a rank 1 or 2 `array` as doubles: the rows of a matrix, or
+// one row for a vector.
+static std::vector<std::vector<exprt>>
+array_entries(const exprt &array, const std::vector<int> &shape)
 {
-  exprt *lhs = converter_.current_lhs;
-  converter_.current_lhs = nullptr;
-  const exprt value = converter_.get_expr(arg);
-  converter_.current_lhs = lhs;
-  const std::vector<int> shape =
-    type_handler_.get_array_type_shape(value.type());
-  const typet &leaf = array_leaf_type(value.type());
-  if (
-    shape.empty() || shape.size() > 2 || !is_number_type(leaf) ||
-    leaf == char_type())
-    return {};
-  rank = shape.size();
-  const exprt array = bind_array_once(value);
   std::vector<exprt> rows = {array};
   if (shape.size() == 2)
   {
     rows.clear();
     for (int i = 0; i < shape[0]; ++i)
       rows.push_back(
-        np_index(array, from_integer(i, size_type()), value.type().subtype()));
+        np_index(array, from_integer(i, size_type()), array.type().subtype()));
   }
   std::vector<std::vector<exprt>> entries;
   for (const exprt &row : rows)
@@ -6405,13 +7382,35 @@ numpy_call_expr::runtime_entries(const nlohmann::json &arg, std::size_t &rank)
   return entries;
 }
 
+// The entries of a numeric operand known only at run time, read from it
+// once. `shape` is set for any numeric operand, empty for a scalar; there
+// are no entries beyond rank 2.
+std::vector<std::vector<exprt>> numpy_call_expr::runtime_entries(
+  const nlohmann::json &arg,
+  std::optional<std::vector<int>> &shape)
+{
+  exprt *lhs = converter_.current_lhs;
+  converter_.current_lhs = nullptr;
+  const exprt value = converter_.get_expr(arg);
+  converter_.current_lhs = lhs;
+  const typet &leaf = array_leaf_type(value.type());
+  if (!is_number_type(leaf) || leaf == char_type())
+    return {};
+  shape = type_handler_.get_array_type_shape(value.type());
+  if (shape->empty())
+    bind_once(value);
+  if (shape->empty() || shape->size() > 2)
+    return {};
+  return array_entries(bind_array_once(value), *shape);
+}
+
 // Any double within `radius` of `value`, or any double at all when the
-// radius is not finite.
+// radius or the value is not finite.
 exprt numpy_call_expr::within_radius(const exprt &value, const exprt &radius)
 {
   const exprt result = lapack_value(0.0, INFINITY);
   code_assumet within{or_exprt(
-    not_exprt(is_finite_double(radius)),
+    not_exprt(and_exprt(is_finite_double(radius), is_finite_double(value))),
     and_exprt(
       binary_relation_exprt(result, ">=", ieee_op("ieee_sub", value, radius)),
       binary_relation_exprt(
@@ -6461,20 +7460,921 @@ sum_of_magnitudes(const std::vector<exprt> &magnitudes, bool squares)
 // det of a matrix of order at most 3 with entries known only at run time:
 // the cofactor expansion, within lapack_tolerance of the sum of its terms'
 // magnitudes, which covers LU's rounding and NumPy's sum of logarithms.
-exprt numpy_call_expr::symbolic_det(const nlohmann::json &arg, bool strings)
+exprt numpy_call_expr::symbolic_det(const std::vector<std::vector<exprt>> &m)
 {
-  std::size_t rank = 0;
-  const std::vector<std::vector<exprt>> m =
-    strings ? std::vector<std::vector<exprt>>() : runtime_entries(arg, rank);
-  if (rank != 2 || m.size() < 2 || m.size() > 3 || m.size() != m.front().size())
-    throw std::runtime_error(
-      "TypeError: numpy.linalg.det currently supports only constant 2D "
-      "numeric arrays");
   const auto [value, magnitude] = cofactor_terms(m);
   return within_radius(
     value,
     ieee_op(
       "ieee_mul", from_double(lapack_tolerance, double_type()), magnitude));
+}
+
+// The largest magnitude among `values`, NaN when one is NaN.
+static exprt largest_magnitude(const std::vector<exprt> &values)
+{
+  std::vector<exprt> magnitudes;
+  for (const exprt &value : values)
+    magnitudes.push_back(abs_double(value));
+  return extreme_magnitude(magnitudes, ">");
+}
+
+// The largest row sum of magnitudes, NaN when one is NaN.
+static exprt infinity_norm(const std::vector<std::vector<exprt>> &m)
+{
+  std::vector<exprt> sums;
+  for (const auto &row : m)
+  {
+    std::vector<exprt> magnitudes;
+    for (const exprt &entry : row)
+      magnitudes.push_back(abs_double(entry));
+    sums.push_back(sum_of_magnitudes(magnitudes, false));
+  }
+  return extreme_magnitude(sums, ">");
+}
+
+static exprt
+dot_double(const std::vector<exprt> &a, const std::vector<exprt> &b)
+{
+  std::vector<exprt> terms;
+  for (std::size_t k = 0; k < a.size(); ++k)
+    terms.push_back(ieee_op("ieee_mul", a[k], b[k]));
+  return sum_of_magnitudes(terms, false);
+}
+
+// Assumes |residual| <= bound, a relation LAPACK's result satisfies, unless
+// `excused`; a bound that is not finite does not satisfy it.
+void numpy_call_expr::assume_near(
+  const exprt &residual,
+  const exprt &bound,
+  const exprt &excused)
+{
+  code_assumet near{or_exprt(
+    excused,
+    and_exprt(
+      is_finite_double(bound),
+      binary_relation_exprt(abs_double(residual), "<=", bound)))};
+  near.location() = converter_.get_location_from_decl(call_);
+  converter_.add_instruction(near);
+}
+
+// Whether any of `values` overflows: a relation over it would hold for no
+// result, so it must constrain nothing.
+static exprt any_not_finite(const std::vector<exprt> &values)
+{
+  exprt::operandst finite;
+  for (const exprt &value : values)
+    finite.push_back(is_finite_double(value));
+  return not_exprt(and_exprt(finite));
+}
+
+// The cofactor (-1)^(i+j) det(m without row i and column j).
+static exprt
+cofactor(const std::vector<std::vector<exprt>> &m, std::size_t i, std::size_t j)
+{
+  if (m.size() == 1)
+    return from_double(1.0, double_type());
+  std::vector<std::vector<exprt>> minor;
+  for (std::size_t r = 0; r < m.size(); ++r)
+  {
+    if (r == i)
+      continue;
+    minor.push_back(m[r]);
+    minor.back().erase(minor.back().begin() + j);
+  }
+  const exprt value = cofactor_terms(minor).first;
+  return (i + j) % 2 ? negate_double(value) : value;
+}
+
+static exprt product(const std::vector<exprt> &factors)
+{
+  exprt result = factors.front();
+  for (std::size_t k = 1; k < factors.size(); ++k)
+    result = ieee_op("ieee_mul", result, factors[k]);
+  return result;
+}
+
+static std::vector<exprt>
+adjugate_entries(const std::vector<std::vector<exprt>> &m)
+{
+  std::vector<exprt> entries;
+  for (std::size_t i = 0; i < m.size(); ++i)
+    for (std::size_t j = 0; j < m.size(); ++j)
+      entries.push_back(cofactor(m, j, i));
+  return entries;
+}
+
+// Whether neither X nor its residual can overflow: |X| <= (n-1)!
+// max(||m||, 1)^(n-1) |B| / |det|, and |m||X| one factor more.
+static exprt representable_solution(
+  const exprt &det,
+  const exprt &norm,
+  const exprt &rhs_norm,
+  std::size_t n)
+{
+  const exprt one = from_double(1.0, double_type());
+  exprt power = ieee_op("ieee_add", one, rhs_norm);
+  for (std::size_t k = 0; k < n; ++k)
+    power = ieee_op(
+      "ieee_mul",
+      power,
+      if_exprt(binary_relation_exprt(norm, ">", one), norm, one));
+  return binary_relation_exprt(
+    ieee_op("ieee_mul", abs_double(det), from_double(1e300, double_type())),
+    ">",
+    power);
+}
+
+static std::vector<std::vector<exprt>> identity_columns(std::size_t n)
+{
+  std::vector<std::vector<exprt>> columns;
+  for (std::size_t j = 0; j < n; ++j)
+  {
+    columns.emplace_back();
+    for (std::size_t i = 0; i < n; ++i)
+      columns.back().push_back(from_double(i == j ? 1.0 : 0.0, double_type()));
+  }
+  return columns;
+}
+
+static exprt columns_as_matrix(const std::vector<std::vector<exprt>> &columns)
+{
+  std::vector<exprt> rows;
+  for (std::size_t i = 0; i < columns.size(); ++i)
+  {
+    std::vector<exprt> row;
+    for (const auto &column : columns)
+      row.push_back(column[i]);
+    rows.push_back(double_array(row));
+  }
+  return double_array(rows);
+}
+
+// inv(m), or solve(m, b) when `b` has entries, for a matrix of order at most
+// 3 known only at run time. LU with partial pivoting is backward stable:
+// LAPACK's X satisfies |m X - B| <= c u |L||U||X|. While
+// |det| > lapack_tolerance n ||m|| max|adj m|, m is far enough from singular
+// that |X| <= 2n max|adj m| |B| / |det|, so |m X - B| |det| is within
+// lapack_tolerance (2n ||m|| max|adj m| + |det|) |B|, a relation linear in X
+// that also covers evaluating the residual in doubles. Below that LAPACK may
+// meet a zero pivot: the call may raise LinAlgError, and otherwise its result
+// is unconstrained, as it is where X or its residual may overflow.
+exprt numpy_call_expr::runtime_inverse(
+  const std::vector<std::vector<exprt>> &m,
+  const std::vector<exprt> &b)
+{
+  const std::size_t n = m.size();
+  const exprt det = cofactor_terms(m).first;
+  const exprt tolerance = from_double(lapack_tolerance, double_type());
+  const exprt order = from_double(static_cast<double>(n), double_type());
+  const exprt norm = infinity_norm(m);
+  const exprt largest_cofactor = largest_magnitude(adjugate_entries(m));
+  const exprt rhs_norm =
+    b.empty() ? from_double(1.0, double_type()) : largest_magnitude(b);
+  const exprt ill_conditioned = not_exprt(binary_relation_exprt(
+    abs_double(det), ">", product({tolerance, order, norm, largest_cofactor})));
+  raise_linalg(
+    "LinAlgError",
+    "Singular matrix",
+    and_exprt(ill_conditioned, nondet_bool()));
+  const exprt excused = or_exprt(
+    ill_conditioned, not_exprt(representable_solution(det, norm, rhs_norm, n)));
+  const exprt bound = ieee_op(
+    "ieee_add",
+    product(
+      {tolerance,
+       rhs_norm,
+       ieee_op(
+         "ieee_add",
+         product({ieee_op("ieee_add", order, order), norm, largest_cofactor}),
+         abs_double(det))}),
+    from_double(1e-300, double_type()));
+  const exprt unbounded = or_exprt(excused, any_not_finite({bound}));
+  std::vector<std::vector<exprt>> columns;
+  for (const std::vector<exprt> &target :
+       b.empty() ? identity_columns(n) : std::vector<std::vector<exprt>>{b})
+  {
+    std::vector<exprt> column;
+    for (std::size_t i = 0; i < n; ++i)
+      column.push_back(lapack_value(0.0, INFINITY));
+    for (std::size_t i = 0; i < n; ++i)
+      assume_near(
+        ieee_op(
+          "ieee_mul",
+          ieee_op("ieee_sub", dot_double(m[i], column), target[i]),
+          det),
+        bound,
+        unbounded);
+    columns.push_back(column);
+  }
+  return b.empty() ? columns_as_matrix(columns) : double_array(columns.front());
+}
+
+static exprt entries_finite(const std::vector<std::vector<exprt>> &m)
+{
+  exprt::operandst finite;
+  for (const auto &row : m)
+    for (const exprt &entry : row)
+      finite.push_back(is_finite_double(entry));
+  return and_exprt(finite);
+}
+
+// The sum of the entries' magnitudes, at least the matrix's 2-norm.
+static exprt entry_scale(const std::vector<std::vector<exprt>> &m)
+{
+  std::vector<exprt> magnitudes;
+  for (const auto &row : m)
+    for (const exprt &entry : row)
+      magnitudes.push_back(abs_double(entry));
+  return sum_of_magnitudes(magnitudes, false);
+}
+
+static exprt within_floor(const exprt &bound)
+{
+  return ieee_op("ieee_add", bound, from_double(1e-300, double_type()));
+}
+
+// The eigenvalues of a 2x2 matrix known only at run time, as (real, imag)
+// pairs. LAPACK's are the eigenvalues of a matrix within rounding of m, so
+// their sum and product are within lapack_tolerance S and S^2 (S the sum of
+// the entries' magnitudes) of the trace and the determinant: relations
+// without square roots that hold however ill-conditioned the eigenvalues
+// are. They are a real pair or, with the positive imaginary part first, a
+// conjugate pair, as the discriminant decides up to rounding.
+std::vector<std::pair<exprt, exprt>>
+numpy_call_expr::runtime_eigenvalues(const std::vector<std::vector<exprt>> &m)
+{
+  raise_linalg(
+    "LinAlgError",
+    "Array must not contain infs or NaNs",
+    not_exprt(entries_finite(m)));
+  const exprt &a = m[0][0], &b = m[0][1], &c = m[1][0], &d = m[1][1];
+  const exprt tolerance = from_double(lapack_tolerance, double_type());
+  const exprt scale = entry_scale(m);
+  const exprt sum_bound = within_floor(ieee_op("ieee_mul", tolerance, scale));
+  const exprt product_bound = within_floor(product({tolerance, scale, scale}));
+  const exprt difference = ieee_op("ieee_sub", a, d);
+  const exprt discriminant = ieee_op(
+    "ieee_add",
+    ieee_op("ieee_mul", difference, difference),
+    product({from_double(4.0, double_type()), b, c}));
+  const exprt trace = ieee_op("ieee_add", a, d);
+  const exprt det =
+    ieee_op("ieee_sub", ieee_op("ieee_mul", a, d), ieee_op("ieee_mul", b, c));
+  const exprt excused =
+    any_not_finite({product_bound, discriminant, trace, det});
+  const exprt slack =
+    ieee_op("ieee_mul", from_double(16.0, double_type()), product_bound);
+  const exprt real = nondet_bool();
+  const exprt re1 = lapack_value(0.0, INFINITY),
+              re2 = lapack_value(0.0, INFINITY);
+  const exprt im1 = lapack_value(0.0, INFINITY),
+              im2 = lapack_value(0.0, INFINITY);
+  const exprt zero = from_double(0.0, double_type());
+  code_assumet shape{if_exprt(
+    real,
+    and_exprt(
+      or_exprt(
+        excused,
+        binary_relation_exprt(discriminant, ">=", negate_double(slack))),
+      and_exprt(equality_exprt(im1, zero), equality_exprt(im2, zero))),
+    and_exprt(
+      or_exprt(excused, binary_relation_exprt(discriminant, "<=", slack)),
+      and_exprt(
+        and_exprt(
+          equality_exprt(re1, re2), equality_exprt(im2, negate_double(im1))),
+        binary_relation_exprt(im1, ">=", zero))))};
+  shape.location() = converter_.get_location_from_decl(call_);
+  converter_.add_instruction(shape);
+  assume_near(
+    ieee_op("ieee_sub", ieee_op("ieee_add", re1, re2), trace),
+    sum_bound,
+    excused);
+  assume_near(
+    ieee_op(
+      "ieee_sub",
+      ieee_op(
+        "ieee_sub",
+        ieee_op("ieee_mul", re1, re2),
+        ieee_op("ieee_mul", im1, im2)),
+      det),
+    product_bound,
+    excused);
+  return {{re1, im1}, {re2, im2}};
+}
+
+// The eigenvalues of a 3x3 matrix known only at run time, as (real, imag)
+// pairs: a real eigenvalue t (a real 3x3 matrix always has one) and the two
+// roots of the quadratic that deflating it leaves, a real pair or a
+// conjugate pair with the positive imaginary part first, before or after t.
+// LAPACK's are those of a matrix within lapack_tolerance S of m (S the sum
+// of the entries' magnitudes, at least its 2-norm and every eigenvalue's
+// magnitude), so det(m - t I), the sum of all three and the sum of their
+// pairwise products are within 144, 6 and 24 times lapack_tolerance S^3, S
+// and S^2 of zero, the trace and the sum of the principal 2x2 minors (the
+// first-order perturbation, doubled for the rest and for rounding). These
+// fix the spectrum, and leave the solver one root to find at a time.
+std::vector<std::pair<exprt, exprt>> numpy_call_expr::runtime_eigenvalues_3x3(
+  const std::vector<std::vector<exprt>> &m)
+{
+  raise_linalg(
+    "LinAlgError",
+    "Array must not contain infs or NaNs",
+    not_exprt(entries_finite(m)));
+  const auto mul = [](const exprt &x, const exprt &y) {
+    return ieee_op("ieee_mul", x, y);
+  };
+  const auto add = [](const exprt &x, const exprt &y) {
+    return ieee_op("ieee_add", x, y);
+  };
+  const auto sub = [](const exprt &x, const exprt &y) {
+    return ieee_op("ieee_sub", x, y);
+  };
+  const exprt tolerance = from_double(lapack_tolerance, double_type());
+  const exprt scale = entry_scale(m);
+  const exprt trace = add(add(m[0][0], m[1][1]), m[2][2]);
+  exprt minors = nil_exprt();
+  for (std::size_t i = 0; i < 3; ++i)
+    for (std::size_t j = i + 1; j < 3; ++j)
+    {
+      const exprt minor = sub(mul(m[i][i], m[j][j]), mul(m[i][j], m[j][i]));
+      minors = minors.is_nil() ? minor : add(minors, minor);
+    }
+  const exprt t = lapack_value(0.0, INFINITY);
+  std::vector<std::vector<exprt>> shifted = m;
+  for (std::size_t i = 0; i < 3; ++i)
+    shifted[i][i] = sub(m[i][i], t);
+  const exprt characteristic = cofactor_terms(shifted).first;
+  const exprt sum_bound =
+    within_floor(product({from_double(6.0, double_type()), tolerance, scale}));
+  const exprt pair_bound = within_floor(
+    product({from_double(24.0, double_type()), tolerance, scale, scale}));
+  const exprt root_bound = within_floor(product(
+    {from_double(144.0, double_type()), tolerance, scale, scale, scale}));
+  // While 1000 S^3 is finite, so is every term below.
+  const exprt excused = any_not_finite(
+    {root_bound,
+     trace,
+     minors,
+     product({from_double(1e3, double_type()), scale, scale, scale})});
+  const exprt re1 = lapack_value(0.0, INFINITY),
+              re2 = lapack_value(0.0, INFINITY);
+  const exprt im1 = lapack_value(0.0, INFINITY),
+              im2 = lapack_value(0.0, INFINITY);
+  const exprt zero = from_double(0.0, double_type());
+  const exprt reach = ieee_op("ieee_add", scale, scale);
+  exprt::operandst within;
+  for (const exprt &part : {t, re1, re2, im1, im2})
+    within.push_back(binary_relation_exprt(abs_double(part), "<=", reach));
+  code_assumet bounded{or_exprt(excused, and_exprt(within))};
+  bounded.location() = converter_.get_location_from_decl(call_);
+  converter_.add_instruction(bounded);
+  code_assumet shape{or_exprt(
+    and_exprt(equality_exprt(im1, zero), equality_exprt(im2, zero)),
+    and_exprt(
+      and_exprt(
+        equality_exprt(re1, re2), equality_exprt(im2, negate_double(im1))),
+      binary_relation_exprt(im1, ">", zero)))};
+  shape.location() = converter_.get_location_from_decl(call_);
+  converter_.add_instruction(shape);
+  const exprt rest = add(re1, re2);
+  assume_near(characteristic, root_bound, excused);
+  assume_near(sub(add(rest, t), trace), sum_bound, excused);
+  assume_near(
+    sub(add(sub(mul(re1, re2), mul(im1, im2)), mul(t, rest)), minors),
+    pair_bound,
+    excused);
+  const exprt first = nondet_bool();
+  const auto at = [&](const exprt &when_first, const exprt &otherwise) {
+    return if_exprt(first, when_first, otherwise);
+  };
+  const exprt w = stored(complex_array(
+    {make_complex(at(t, re1), at(zero, im1)),
+     make_complex(at(re1, re2), at(im1, im2)),
+     make_complex(at(re2, t), at(im2, zero))}));
+  // The trace relation again over the eigenvalues in the order the program
+  // reads them, which a sum over the results then matches.
+  std::vector<std::pair<exprt, exprt>> positions;
+  exprt total = nil_exprt();
+  for (std::size_t k = 0; k < 3; ++k)
+  {
+    const exprt value =
+      index_exprt(w, from_integer(k, size_type()), get_complex_struct_type());
+    positions.emplace_back(
+      complex_part(value, "real"), complex_part(value, "imag"));
+    total = total.is_nil() ? value
+                           : converter_.get_complex_handler().handle_binary_op(
+                               "Add", total, value, nlohmann::json::object());
+  }
+  assume_near(sub(complex_part(total, "real"), trace), sum_bound, excused);
+  return positions;
+}
+
+// eig of a 2x2 or 3x3 matrix known only at run time: the eigenvalues as
+// runtime_eigenvalues bounds them, each with a unit eigenvector whose
+// residual stays within lapack_tolerance S of zero (LAPACK's pair is exact
+// for a matrix within rounding of m). A real eigenvalue's eigenvector is
+// real, and the second of a conjugate pair has the conjugate of the first's;
+// the phase LAPACK picks is left free.
+exprt numpy_call_expr::runtime_eigen_pairs(
+  const std::vector<std::vector<exprt>> &m)
+{
+  const std::size_t n = m.size();
+  const std::vector<std::pair<exprt, exprt>> spectrum =
+    n == 2 ? runtime_eigenvalues(m) : runtime_eigenvalues_3x3(m);
+  const exprt tolerance = from_double(lapack_tolerance, double_type());
+  const exprt scale = entry_scale(m);
+  const exprt residual =
+    within_floor(product({from_double(2.0, double_type()), tolerance, scale}));
+  const exprt zero = from_double(0.0, double_type());
+  std::vector<exprt> values;
+  std::vector<std::vector<exprt>> columns;
+  for (std::size_t k = 0; k < n; ++k)
+  {
+    const auto &[re, im] = spectrum[k];
+    values.push_back(make_complex(re, im));
+    std::vector<exprt> column;
+    exprt::operandst real_vector, conjugate_vector;
+    for (std::size_t i = 0; i < n; ++i)
+    {
+      const exprt x = lapack_value(0.0, INFINITY),
+                  y = lapack_value(0.0, INFINITY);
+      column.push_back(make_complex(x, y));
+      real_vector.push_back(equality_exprt(y, zero));
+      if (k > 0)
+      {
+        const exprt &before = columns[k - 1][i];
+        conjugate_vector.push_back(and_exprt(
+          equality_exprt(x, complex_part(before, "real")),
+          equality_exprt(y, negate_double(complex_part(before, "imag")))));
+      }
+    }
+    code_assumet real{
+      or_exprt(not_exprt(equality_exprt(im, zero)), and_exprt(real_vector))};
+    real.location() = converter_.get_location_from_decl(call_);
+    converter_.add_instruction(real);
+    if (k > 0)
+    {
+      const auto &[before_re, before_im] = spectrum[k - 1];
+      code_assumet conjugate{or_exprt(
+        not_exprt(and_exprt(
+          and_exprt(
+            equality_exprt(re, before_re),
+            equality_exprt(im, negate_double(before_im))),
+          binary_relation_exprt(before_im, ">", zero))),
+        and_exprt(conjugate_vector))};
+      conjugate.location() = real.location();
+      converter_.add_instruction(conjugate);
+    }
+    columns.push_back(column);
+  }
+  return bound_eigen_tuple(
+    m,
+    values,
+    columns,
+    eigen_relation{
+      residual,
+      within_floor(product({from_double(2.0, double_type()), tolerance})),
+      any_not_finite({residual, product({scale, scale})})});
+}
+
+// svd(compute_uv=False) of a 2x2 matrix known only at run time: LAPACK's
+// singular values are those of a matrix within rounding of m, so the sum of
+// their squares and their product are within lapack_tolerance S^2 of the
+// squared Frobenius norm and |det m|, S the sum of the entries' magnitudes.
+exprt numpy_call_expr::runtime_singular_values(
+  const std::vector<std::vector<exprt>> &m)
+{
+  raise_linalg(
+    "LinAlgError", "SVD did not converge", not_exprt(entries_finite(m)));
+  const exprt &a = m[0][0], &b = m[0][1], &c = m[1][0], &d = m[1][1];
+  const exprt scale = entry_scale(m);
+  const exprt bound = within_floor(product(
+    {from_double(4.0 * lapack_tolerance, double_type()), scale, scale}));
+  std::vector<exprt> entries;
+  for (const auto &row : m)
+    entries.insert(entries.end(), row.begin(), row.end());
+  const exprt squares = dot_double(entries, entries);
+  const exprt det = abs_double(
+    ieee_op("ieee_sub", ieee_op("ieee_mul", a, d), ieee_op("ieee_mul", b, c)));
+  const exprt excused = any_not_finite({bound, squares, det});
+  const std::vector<exprt> sigmas = {
+    lapack_value(0.0, INFINITY), lapack_value(0.0, INFINITY)};
+  assume_singular_order(sigmas);
+  assume_near(
+    ieee_op("ieee_sub", dot_double(sigmas, sigmas), squares), bound, excused);
+  assume_near(
+    ieee_op("ieee_sub", ieee_op("ieee_mul", sigmas[0], sigmas[1]), det),
+    bound,
+    excused);
+  return double_array(sigmas);
+}
+
+// The k x k minors of m (rows and columns in increasing order).
+static std::vector<exprt>
+minors_of(const std::vector<std::vector<exprt>> &m, std::size_t k)
+{
+  const std::size_t rows = m.size(), cols = m[0].size();
+  std::vector<exprt> minors;
+  std::vector<bool> row_pick(rows, false), col_pick(cols, false);
+  std::fill(row_pick.begin(), row_pick.begin() + k, true);
+  do
+  {
+    std::fill(col_pick.begin(), col_pick.end(), false);
+    std::fill(col_pick.begin(), col_pick.begin() + k, true);
+    do
+    {
+      std::vector<std::vector<exprt>> sub;
+      for (std::size_t i = 0; i < rows; ++i)
+      {
+        if (!row_pick[i])
+          continue;
+        sub.emplace_back();
+        for (std::size_t j = 0; j < cols; ++j)
+          if (col_pick[j])
+            sub.back().push_back(m[i][j]);
+      }
+      minors.push_back(cofactor_terms(sub).first);
+    } while (std::prev_permutation(col_pick.begin(), col_pick.end()));
+  } while (std::prev_permutation(row_pick.begin(), row_pick.end()));
+  return minors;
+}
+
+static exprt element(const exprt &array, std::size_t i)
+{
+  return index_exprt(
+    array, from_integer(i, size_type()), array.type().subtype());
+}
+
+static exprt summed(const std::vector<exprt> &terms)
+{
+  exprt sum = terms.front();
+  for (std::size_t k = 1; k < terms.size(); ++k)
+    sum = ieee_op("ieee_add", sum, terms[k]);
+  return sum;
+}
+
+// u[i][0] * s[0] * vh[0][j] + ... over the first k singular values, as a
+// program spells A[i][j] reconstructed from svd's (U, S, Vh).
+static exprt reconstructed_entry(
+  const std::array<exprt, 3> &factors,
+  std::size_t i,
+  std::size_t j,
+  std::size_t k)
+{
+  std::vector<exprt> terms;
+  for (std::size_t l = 0; l < k; ++l)
+    terms.push_back(ieee_op(
+      "ieee_mul",
+      ieee_op(
+        "ieee_mul", element(element(factors[0], i), l), element(factors[1], l)),
+      element(element(factors[2], l), j)));
+  return summed(terms);
+}
+
+// The sum of the products of columns a and b of U (`columns`), or of rows a
+// and b of Vh, each `length` long.
+static exprt factor_product(
+  const exprt &factor,
+  std::size_t a,
+  std::size_t b,
+  std::size_t length,
+  bool columns)
+{
+  std::vector<exprt> terms;
+  for (std::size_t i = 0; i < length; ++i)
+    terms.push_back(
+      columns ? ieee_op(
+                  "ieee_mul",
+                  element(element(factor, i), a),
+                  element(element(factor, i), b))
+              : ieee_op(
+                  "ieee_mul",
+                  element(element(factor, a), i),
+                  element(element(factor, b), i)));
+  return summed(terms);
+}
+
+// The singular values of a matrix known only at run time, up to 3x3 and
+// other than 2x2: LAPACK's are those of a matrix within lapack_tolerance S
+// of m (S the sum of the entries' magnitudes), so by Cauchy-Binet the
+// elementary symmetric functions of their squares are within 36, 144 and 72
+// times lapack_tolerance S^2, S^4 and S^6 of the sums of the squared 1x1,
+// 2x2 and 3x3 minors (twice the first-order perturbation). Each is at most
+// 2S, and they are non-negative and descending.
+exprt numpy_call_expr::runtime_singular_values_of(
+  const std::vector<std::vector<exprt>> &m)
+{
+  raise_linalg(
+    "LinAlgError", "SVD did not converge", not_exprt(entries_finite(m)));
+  const std::size_t k = std::min(m.size(), m[0].size());
+  const exprt tolerance = from_double(lapack_tolerance, double_type());
+  const exprt scale = entry_scale(m);
+  const exprt squared = product({scale, scale});
+  std::vector<exprt> sigmas;
+  for (std::size_t j = 0; j < k; ++j)
+    sigmas.push_back(lapack_value(0.0, INFINITY));
+  assume_singular_order(sigmas);
+  const exprt excused = any_not_finite(
+    {product({from_double(1e3, double_type()), squared, squared, squared})});
+  exprt::operandst within;
+  for (const exprt &sigma : sigmas)
+    within.push_back(
+      binary_relation_exprt(sigma, "<=", ieee_op("ieee_add", scale, scale)));
+  code_assumet bounded{or_exprt(excused, and_exprt(within))};
+  bounded.location() = converter_.get_location_from_decl(call_);
+  converter_.add_instruction(bounded);
+  const double factors[] = {36.0, 144.0, 72.0};
+  exprt power = squared;
+  for (std::size_t order = 1; order <= k; ++order)
+  {
+    exprt target = nil_exprt(), symmetric = nil_exprt();
+    for (const exprt &minor : minors_of(m, order))
+    {
+      const exprt term = ieee_op("ieee_mul", minor, minor);
+      target = target.is_nil() ? term : ieee_op("ieee_add", target, term);
+    }
+    std::vector<bool> pick(k, false);
+    std::fill(pick.begin(), pick.begin() + order, true);
+    do
+    {
+      std::vector<exprt> chosen;
+      for (std::size_t j = 0; j < k; ++j)
+        if (pick[j])
+          chosen.push_back(sigmas[j]);
+      const exprt root = product(chosen);
+      const exprt term = ieee_op("ieee_mul", root, root);
+      symmetric =
+        symmetric.is_nil() ? term : ieee_op("ieee_add", symmetric, term);
+    } while (std::prev_permutation(pick.begin(), pick.end()));
+    assume_near(
+      ieee_op("ieee_sub", symmetric, target),
+      within_floor(product(
+        {from_double(factors[order - 1], double_type()), tolerance, power})),
+      excused);
+    power = product({power, squared});
+  }
+  return double_array(sigmas);
+}
+
+// svd's (U, S, Vh) of a matrix known only at run time, up to 3x3: S as
+// runtime_singular_values_of bounds it, and factors whose entries LAPACK's
+// backward stability ties to m: U[:, :k] diag(S) Vh[:k, :] within
+// 4 lapack_tolerance S of m entry by entry, and the columns of U and the
+// rows of Vh orthonormal within 2 lapack_tolerance (n u for LAPACK, plus
+// rounding). The signs and the completing vectors are left free.
+exprt numpy_call_expr::runtime_svd_factors(
+  const std::vector<std::vector<exprt>> &m)
+{
+  const std::size_t rows = m.size(), cols = m[0].size();
+  const std::size_t k = std::min(rows, cols);
+  const bool full = svd_flag("full_matrices", true);
+  const exprt s = stored(runtime_singular_values_of(m));
+  const auto factor = [&](std::size_t r, std::size_t c) {
+    std::vector<exprt> out_rows;
+    for (std::size_t i = 0; i < r; ++i)
+    {
+      std::vector<exprt> row;
+      for (std::size_t j = 0; j < c; ++j)
+        row.push_back(lapack_value(0.0, INFINITY));
+      out_rows.push_back(double_array(row));
+    }
+    return stored(double_array(out_rows));
+  };
+  const std::array<exprt, 3> factors = {
+    factor(rows, full ? rows : k), s, factor(full ? cols : k, cols)};
+  const exprt tolerance = from_double(lapack_tolerance, double_type());
+  const exprt scale = entry_scale(m);
+  const exprt reconstruction =
+    within_floor(product({from_double(4.0, double_type()), tolerance, scale}));
+  const exprt excused =
+    any_not_finite({reconstruction, product({scale, scale})});
+  for (std::size_t i = 0; i < rows; ++i)
+    for (std::size_t j = 0; j < cols; ++j)
+      assume_near(
+        ieee_op("ieee_sub", reconstructed_entry(factors, i, j, k), m[i][j]),
+        reconstruction,
+        excused);
+  const exprt unit =
+    within_floor(product({from_double(2.0, double_type()), tolerance}));
+  const exprt one = from_double(1.0, double_type());
+  for (bool columns : {true, false})
+  {
+    const std::size_t count = full ? (columns ? rows : cols) : k;
+    for (std::size_t a = 0; a < count; ++a)
+      for (std::size_t b = a; b < count; ++b)
+      {
+        const exprt sum = factor_product(
+          columns ? factors[0] : factors[2],
+          a,
+          b,
+          columns ? rows : cols,
+          columns);
+        assume_near(
+          a == b ? ieee_op("ieee_sub", sum, one) : sum, unit, false_exprt());
+      }
+  }
+  return linalg_tuple({factors[0], factors[1], factors[2]});
+}
+
+// The real matrix of a constant operand: det and inv check its order too.
+static std::vector<std::vector<double>> constant_matrix(
+  const std::string &function,
+  const std::vector<std::vector<scalar_value>> &matrix)
+{
+  if (function == "det" || function == "inv")
+    return checked_square_matrix(function, matrix);
+  for (const auto &row : matrix)
+    for (const auto &value : row)
+      if (value.is_complex)
+        throw std::runtime_error(
+          "TypeError: numpy.linalg." + function +
+          " does not support complex-valued matrices");
+  return real_matrix(matrix);
+}
+
+// The diagnostic for an operand no numpy.linalg route can read.
+[[noreturn]] static void reject_linalg_operand(const std::string &function)
+{
+  throw std::runtime_error(
+    "TypeError: numpy.linalg." + function + " requires a real numeric matrix");
+}
+
+// det, inv, eig, eigvals or svd of one operand: a shape NumPy refuses raises
+// its exception, a constant matrix takes the exact or bounded route, and one
+// known only at run time the run-time route.
+exprt numpy_call_expr::linalg_unary(
+  const std::string &function,
+  const std::function<void(nlohmann::json &)> &resolve)
+{
+  nlohmann::json arg = call_["args"][0];
+  resolve(arg);
+  unwrap_linalg_operand(arg);
+  const bool square = function != "svd";
+  if (const std::optional<linalg_fault> fault = literal_fault(arg, square))
+    return raise_linalg_fault(fault->type, fault->message);
+  std::vector<std::vector<scalar_value>> matrix;
+  if (try_extract_scalar_2d_list(arg, matrix))
+    return (function == "eig" || function == "eigvals") && has_complex(matrix)
+             ? complex_input_spectrum(
+                 complex_matrix_of(matrix), function == "eig")
+             : constant_linalg(function, constant_matrix(function, matrix));
+  if (contains_string_constant(arg))
+    reject_linalg_operand(function);
+  std::optional<std::vector<int>> shape;
+  const std::vector<std::vector<exprt>> m =
+    runtime_entries(call_["args"][0], shape);
+  if (!shape)
+    reject_linalg_operand(function);
+  if (const std::optional<linalg_fault> fault = shape_fault(*shape, square))
+    return raise_linalg_fault(fault->type, fault->message);
+  return runtime_linalg(function, m);
+}
+
+// The run-time routes, each over matrices of a bounded order.
+exprt numpy_call_expr::runtime_linalg(
+  const std::string &function,
+  const std::vector<std::vector<exprt>> &m,
+  const std::vector<exprt> &b)
+{
+  if (m.empty())
+    reject_linalg_operand(function);
+  if (m.size() > 3 || m[0].size() > 3)
+    throw std::runtime_error(
+      "TypeError: numpy.linalg." + function +
+      " supports only run-time matrices up to 3x3");
+  if (function == "det")
+    return symbolic_det(m);
+  if (function == "inv" || function == "solve")
+    return runtime_inverse(m, b);
+  return runtime_decomposition(function, m);
+}
+
+// eig, eigvals and svd of a matrix known only at run time, up to 3x3
+// (runtime_linalg checks the order).
+exprt numpy_call_expr::runtime_decomposition(
+  const std::string &function,
+  const std::vector<std::vector<exprt>> &m)
+{
+  const bool two_by_two = m.size() == 2 && m[0].size() == 2;
+  if (function == "svd" && !svd_values_only())
+    return runtime_svd_factors(m);
+  if (function == "svd")
+    return two_by_two ? runtime_singular_values(m)
+                      : runtime_singular_values_of(m);
+  if (m.size() == 1)
+    throw std::runtime_error(
+      "TypeError: numpy.linalg." + function +
+      " of a run-time matrix supports only 2x2 and 3x3 matrices");
+  if (function == "eig")
+    return runtime_eigen_pairs(m);
+  std::vector<exprt> values;
+  for (const auto &[re, im] :
+       two_by_two ? runtime_eigenvalues(m) : runtime_eigenvalues_3x3(m))
+    values.push_back(make_complex(re, im));
+  return complex_array(values);
+}
+
+exprt numpy_call_expr::constant_linalg(
+  const std::string &function,
+  const std::vector<std::vector<double>> &m)
+{
+  if (function == "inv")
+    return linalg_inverse(m);
+  if (function != "det")
+    return linalg_decomposition(function, m);
+  if (const std::optional<double> computed = exact_det(m))
+    return lapack_value(*computed, 0.0);
+  if (structurally_singular(m))
+    return lapack_value(0.0, 0.0);
+  const double exact = cofactor_det(m);
+  return lapack_value(exact, det_radius(m, exact));
+}
+
+namespace
+{
+// The fault NumPy's solve raises for its right-hand side.
+std::optional<linalg_fault>
+solve_rhs_fault(const std::vector<int> &shape, std::size_t n)
+{
+  if (shape.empty())
+    return linalg_fault{
+      "ValueError",
+      "solve: Input operand 1 does not have enough dimensions (has 0, gufunc "
+      "core with signature (m,m),(m,n)->(m,n) requires 2)"};
+  if (shape.size() > 1)
+    throw std::runtime_error(
+      "TypeError: numpy.linalg.solve supports only a 1D right-hand side");
+  if (static_cast<std::size_t>(shape[0]) == n)
+    return std::nullopt;
+  return linalg_fault{
+    "ValueError",
+    "solve1: Input operand 1 has a mismatch in its core dimension 0, with "
+    "gufunc signature (m,m),(m)->(m) (size " +
+      std::to_string(shape[0]) + " is different from " + std::to_string(n) +
+      ")"};
+}
+} // namespace
+
+static std::vector<double> real_parts(const std::vector<scalar_value> &values)
+{
+  std::vector<double> parts;
+  for (const scalar_value &value : values)
+    parts.push_back(value.value.real());
+  return parts;
+}
+
+// solve(a, b), with a 1D b: both operands are evaluated before a shape
+// NumPy refuses raises, the matrix's faults first.
+exprt numpy_call_expr::linalg_solve_call(
+  const nlohmann::json &original_a,
+  const nlohmann::json &original_b,
+  nlohmann::json a,
+  nlohmann::json b)
+{
+  unwrap_linalg_operand(a);
+  unwrap_linalg_operand(b);
+  const std::optional<linalg_fault> literal = literal_fault(a, true);
+  std::vector<std::vector<scalar_value>> matrix;
+  std::vector<scalar_value> rhs;
+  if (literal)
+  {
+    std::optional<std::vector<int>> b_shape;
+    runtime_entries(original_b, b_shape);
+    return raise_linalg_fault(literal->type, literal->message);
+  }
+  if (
+    !try_extract_scalar_2d_list(a, matrix) ||
+    !try_extract_scalar_1d_list(b, rhs))
+    return runtime_solve(original_a, original_b);
+  const std::vector<std::vector<double>> real =
+    checked_square_matrix("solve", matrix);
+  if (
+    const std::optional<linalg_fault> fault =
+      solve_rhs_fault({static_cast<int>(rhs.size())}, real.size()))
+    return raise_linalg_fault(fault->type, fault->message);
+  return linalg_solve("solve", real, real_parts(rhs));
+}
+
+// solve over operands known only at run time.
+exprt numpy_call_expr::runtime_solve(
+  const nlohmann::json &original_a,
+  const nlohmann::json &original_b)
+{
+  std::optional<std::vector<int>> a_shape, b_shape;
+  const std::vector<std::vector<exprt>> m =
+    runtime_entries(original_a, a_shape);
+  const std::vector<std::vector<exprt>> v =
+    runtime_entries(original_b, b_shape);
+  if (!a_shape)
+    reject_linalg_operand("solve");
+  std::optional<linalg_fault> fault = shape_fault(*a_shape, true);
+  if (!fault && b_shape)
+    fault = solve_rhs_fault(*b_shape, m.size());
+  if (fault)
+    return raise_linalg_fault(fault->type, fault->message);
+  if (!b_shape)
+    reject_linalg_operand("solve");
+  return runtime_linalg("solve", m, v.front());
 }
 
 // norm of a vector, or the Frobenius norm of a matrix, with entries known
@@ -6484,8 +8384,9 @@ exprt numpy_call_expr::symbolic_norm(
   const nlohmann::json &arg,
   norm_order order)
 {
-  std::size_t rank = 0;
-  const std::vector<std::vector<exprt>> m = runtime_entries(arg, rank);
+  std::optional<std::vector<int>> shape;
+  const std::vector<std::vector<exprt>> m = runtime_entries(arg, shape);
+  const std::size_t rank = shape.value_or(std::vector<int>()).size();
   const bool sum_of_squares =
     order == norm_order::none ||
     order == (rank == 1 ? norm_order::l2 : norm_order::frobenius);
@@ -6562,7 +8463,7 @@ static bool exact_nonnegative_sum(const std::vector<double> &terms)
     int exponent = 0;
     const auto mantissa = static_cast<unsigned long long>(
       std::ldexp(std::frexp(term, &exponent), 53));
-    lowest = std::min(lowest, exponent - 53 + __builtin_ctzll(mantissa));
+    lowest = std::min(lowest, exponent - 53 + std::countr_zero(mantissa));
   }
   return std::isfinite(sum) &&
          (lowest == INT_MAX || sum < std::ldexp(1.0, lowest + 53));
@@ -6805,12 +8706,59 @@ exprt numpy_call_expr::linalg_inverse(const std::vector<std::vector<double>> &m)
 // NumPy's LinAlgError for a singular matrix, raised where the call runs.
 void numpy_call_expr::raise_singular_matrix()
 {
-  exprt raise = converter_.get_exception_handler().gen_exception_raise(
-    "LinAlgError", "Singular matrix");
+  raise_linalg("LinAlgError", "Singular matrix", true_exprt());
+}
+
+// The exception `type` raised where the call runs, when `when` holds.
+void numpy_call_expr::raise_linalg(
+  const std::string &type,
+  const std::string &message,
+  const exprt &when)
+{
+  exprt raise =
+    converter_.get_exception_handler().gen_exception_raise(type, message);
   raise.location() = converter_.get_location_from_decl(call_);
   code_expressiont raise_code(raise);
   raise_code.location() = raise.location();
-  converter_.add_instruction(raise_code);
+  if (when.is_true())
+  {
+    converter_.add_instruction(raise_code);
+    return;
+  }
+  code_ifthenelset guard;
+  guard.cond() = when;
+  guard.then_case() = raise_code;
+  guard.location() = raise.location();
+  converter_.add_instruction(guard);
+}
+
+// A shape fault raises before the function computes anything; the value
+// returned only gives the unreachable assignment a type of the right form.
+exprt numpy_call_expr::raise_linalg_fault(
+  const std::string &type,
+  const std::string &message)
+{
+  raise_linalg(type, message, true_exprt());
+  // An array target keeps its type: the assignment is never reached.
+  if (converter_.current_lhs && converter_.current_lhs->type().is_array())
+    return nondet_value(converter_.current_lhs->type(), "$linalg$");
+  const std::string &function = function_id_.get_function();
+  const exprt zero = lapack_vector({0.0}, 0.0);
+  const exprt square = lapack_matrix({{0.0}}, 0.0);
+  if (function == "det")
+    return from_double(0.0, double_type());
+  if (function == "eigvals")
+    return double_array(
+      {make_complex(gen_zero(double_type()), gen_zero(double_type()))});
+  if (function == "eig")
+  {
+    const exprt c =
+      make_complex(gen_zero(double_type()), gen_zero(double_type()));
+    return linalg_tuple({complex_array({c}), complex_columns({{c}})});
+  }
+  if (function == "svd")
+    return svd_values_only() ? zero : linalg_tuple({square, zero, square});
+  return function == "inv" ? square : zero;
 }
 
 exprt numpy_call_expr::bounded_inverse(
@@ -6886,6 +8834,13 @@ exprt numpy_call_expr::linalg_decomposition(
   const std::string &function,
   const std::vector<std::vector<double>> &m)
 {
+  for (const auto &row : m)
+    for (double value : row)
+      if (!std::isfinite(value))
+        return raise_linalg_fault(
+          "LinAlgError",
+          function == "svd" ? "SVD did not converge"
+                            : "Array must not contain infs or NaNs");
   if (function == "eig")
     return eigen_decomposition(m);
   if (function == "eigvals")
@@ -6893,46 +8848,34 @@ exprt numpy_call_expr::linalg_decomposition(
   return svd_values_only() ? singular_values(m) : svd_factors(m);
 }
 
-bool numpy_call_expr::svd_values_only() const
+// The value of svd's boolean keyword `name` (the preprocessor binds the
+// positional ones to their names), `fallback` when absent. Only a constant
+// is read, so the keyword is evaluated once, at conversion.
+bool numpy_call_expr::svd_flag(const std::string &name, bool fallback) const
 {
-  bool values_only = false;
   for (const auto &kw : call_.value("keywords", nlohmann::json::array()))
-    values_only = values_only || (kw.value("arg", "") == "compute_uv" &&
-                                  kw["value"].value("value", true) == false);
-  return values_only;
+  {
+    if (kw.value("arg", "") != name)
+      continue;
+    const nlohmann::json &value = kw["value"];
+    if (
+      value.value("_type", "") != "Constant" || !value.contains("value") ||
+      !(value["value"].is_boolean() || value["value"].is_number_integer()))
+      throw std::runtime_error(
+        "TypeError: numpy.linalg.svd keyword '" + name +
+        "' must be a constant boolean");
+    return value["value"].is_boolean() ? value["value"].get<bool>()
+                                       : value["value"].get<long long>() != 0;
+  }
+  return fallback;
 }
 
-namespace
+bool numpy_call_expr::svd_values_only() const
 {
-// One singular value with its left and right singular vectors.
-struct singular_triple
-{
-  double sigma;
-  std::vector<double> u, v;
-};
-} // namespace
-
-// A diagonal matrix's singular values are its entries' magnitudes in
-// descending order, with unit vectors and the entry's sign kept in v.
-static std::vector<singular_triple>
-diagonal_singular_triples(const std::vector<std::vector<double>> &m)
-{
-  const std::size_t n = m.size();
-  std::vector<std::size_t> order(n);
-  std::iota(order.begin(), order.end(), 0);
-  std::stable_sort(
-    order.begin(), order.end(), [&](std::size_t i, std::size_t j) {
-      return std::fabs(m[i][i]) > std::fabs(m[j][j]);
-    });
-  std::vector<singular_triple> triples;
-  for (std::size_t k : order)
-  {
-    std::vector<double> u(n, 0.0), v(n, 0.0);
-    u[k] = 1.0;
-    v[k] = m[k][k] < 0 ? -1.0 : 1.0;
-    triples.push_back({std::fabs(m[k][k]), u, v});
-  }
-  return triples;
+  if (svd_flag("hermitian", false))
+    throw std::runtime_error(
+      "TypeError: numpy.linalg.svd(hermitian=True) is not supported");
+  return !svd_flag("compute_uv", true);
 }
 
 // A 2x2 matrix: v are the eigenvectors of A^T A, u1 = A v1 / sigma1 and u2
@@ -6989,16 +8932,23 @@ singular_gap(const std::vector<singular_triple> &triples, double rounding)
 // vectors has an arbitrary sign, flipped together so U @ diag(S) @ Vh keeps
 // A unless the singular value is zero; their components are as accurate as
 // the gap between the singular values allows.
+// Whether svd's factors of a matrix that is not diagonal take the dense
+// route: any but a 2x2 matrix, and a 2x2 one whose singular value is
+// repeated, as its vectors may be any rotation of the plane.
+static bool dense_factor_route(const std::vector<std::vector<double>> &m)
+{
+  if (svd_order(m) != 2)
+    return true;
+  const std::vector<singular_triple> triples = singular_triples_2x2(m);
+  return triples[0].sigma - triples[1].sigma <= 2e-12 * frobenius_norm(m);
+}
+
 exprt numpy_call_expr::svd_factors(const std::vector<std::vector<double>> &m)
 {
-  const std::size_t n = m.size();
-  const bool square = std::all_of(
-    m.begin(), m.end(), [n](const auto &row) { return row.size() == n; });
-  const bool diagonal = square && is_diagonal(m);
-  if (!square || (!diagonal && n != 2))
-    throw std::runtime_error(
-      "TypeError: numpy.linalg.svd supports only 2x2 and diagonal matrices "
-      "currently");
+  const std::size_t n = svd_order(m);
+  const bool diagonal = n != 0 && is_diagonal(m);
+  if (!diagonal && dense_factor_route(m))
+    return dense_svd_factors(m);
   const std::vector<singular_triple> triples =
     diagonal ? diagonal_singular_triples(m) : singular_triples_2x2(m);
   const double norm = frobenius_norm(m);
@@ -7039,6 +8989,368 @@ exprt numpy_call_expr::svd_factors(const std::vector<std::vector<double>> &m)
     {double_array(u_rows), double_array(sigmas), double_array(vh_rows)});
 }
 
+// Assumes |sum - target| <= bound. A program subtracts each entry of A from
+// its reconstruction, and 1 from the norm of a singular vector, but compares
+// two vectors' product with 0 directly (a NaN target).
+void numpy_call_expr::relate_near(const exprt &sum, double target, double bound)
+{
+  const exprt measured =
+    std::isnan(target)
+      ? sum
+      : ieee_op("ieee_sub", sum, from_double(target, double_type()));
+  code_assumet within{binary_relation_exprt(
+    abs_double(measured), "<=", from_double(bound, double_type()))};
+  within.location() = converter_.get_location_from_decl(call_);
+  converter_.add_instruction(within);
+}
+
+// The orthonormality relations of the `boxed` columns of U (`columns`) or
+// rows of Vh, each within `radius` of `vectors`.
+void numpy_call_expr::relate_orthogonality(
+  const exprt &factor,
+  bool columns,
+  const dense_spectrum::matrix &vectors,
+  const std::vector<bool> &boxed,
+  double radius)
+{
+  const std::size_t length = vectors.front().size();
+  for (std::size_t a = 0; a < vectors.size(); ++a)
+    for (std::size_t b = a; boxed[a] && b < vectors.size(); ++b)
+    {
+      if (!boxed[b])
+        continue;
+      std::vector<std::vector<box_factor>> terms;
+      for (std::size_t i = 0; i < length; ++i)
+        terms.push_back({{vectors[a][i], radius}, {vectors[b][i], radius}});
+      relate_near(
+        factor_product(factor, a, b, length, columns),
+        a == b ? 1.0 : NAN,
+        implied_bound(terms, a == b ? 1.0 : 0.0));
+    }
+}
+
+// The reconstruction and orthogonality relations of svd's factors as a
+// program spells them over the stored results: each entry of
+// U[:, :k] diag(S) Vh[:k, :] within its bound of A's, and the columns of U
+// and the rows of Vh orthonormal within theirs. They hold at every point of
+// the factors' boxes (a singular value past the rank, whose vectors take
+// independent signs, counts as either sign), so they restrict nothing; they
+// let a solver relate the results to the matrix without exploring the
+// boxes. A vector no box bounds (`boxed` false: a rotation in a plane) has
+// none.
+void numpy_call_expr::bind_svd_relations(
+  const std::vector<std::vector<double>> &m,
+  const dense_spectrum::singular_system &system,
+  const std::array<exprt, 3> &factors,
+  const std::pair<double, double> &radii,
+  const std::array<std::vector<bool>, 2> &boxed)
+{
+  const double value_radius = radii.first, r = radii.second;
+  const std::size_t k = system.sigma.size(), rank = system.rank;
+  // Each reconstructed entry is a sum of k products of three results; past
+  // max_reconstruction_products of them, or with a term over a vector no
+  // box bounds, a solver takes minutes to find a counterexample, so the
+  // matrix keeps only the orthogonality ones.
+  bool reconstruct = m.size() * m[0].size() * k <= max_reconstruction_products;
+  for (std::size_t l = 0; l < k; ++l)
+    reconstruct = reconstruct && boxed[0][l] && boxed[1][l];
+  for (std::size_t i = 0; reconstruct && i < m.size(); ++i)
+    for (std::size_t j = 0; j < m[i].size(); ++j)
+    {
+      std::vector<std::vector<box_factor>> terms;
+      for (std::size_t l = 0; l < k; ++l)
+        terms.push_back(
+          {{system.u[l][i], r},
+           l < rank ? box_factor{system.sigma[l], value_radius}
+                    : box_factor{0.0, system.sigma[l] + value_radius},
+           {system.v[l][j], r}});
+      relate_near(
+        reconstructed_entry(factors, i, j, k),
+        m[i][j],
+        implied_bound(terms, m[i][j]));
+    }
+  relate_orthogonality(factors[0], true, system.u, boxed[0], r);
+  relate_orthogonality(factors[2], false, system.v, boxed[1], r);
+  if (system.u_rest.size() == 2)
+    relate_free_vectors(m, factors[0], true, system.u.size(), rank);
+  if (system.v_rest.size() == 2)
+    relate_free_vectors(m, factors[2], false, system.v.size(), rank);
+}
+
+// A v for each row of Vh past the rank (A^T u for each column of U,
+// `columns`), as a program spells it: within rounding of zero, as LAPACK's
+// A is within lapack_tolerance ||A|| of U diag(S) Vh, its vectors are
+// orthonormal within 2 lapack_tolerance and its singular values past the
+// rank within 4e-12 ||A||. The orthonormality of these vectors, a product
+// of two unknowns, is left to plane_vectors' construction: as a relation it
+// makes a solver take minutes to find a counterexample.
+void numpy_call_expr::relate_free_vectors(
+  const std::vector<std::vector<double>> &m,
+  const exprt &factor,
+  bool columns,
+  std::size_t count,
+  std::size_t rank)
+{
+  const std::size_t length = columns ? m.size() : m[0].size();
+  const std::size_t others = columns ? m[0].size() : m.size();
+  const double norm = frobenius_norm(m);
+  const double k = static_cast<double>(std::min(length, others));
+  const double image =
+    1e-12 * norm * (2 + 2 * static_cast<double>(rank) + 4 * k) +
+    1e-14 * (1 + norm);
+  for (std::size_t a = rank; a < count; ++a)
+    for (std::size_t o = 0; o < others; ++o)
+    {
+      std::vector<exprt> terms;
+      for (std::size_t i = 0; i < length; ++i)
+        terms.push_back(ieee_op(
+          "ieee_mul",
+          from_double(columns ? m[i][o] : m[o][i], double_type()),
+          columns ? element(element(factor, i), a)
+                  : element(element(factor, a), i)));
+      relate_near(summed(terms), NAN, image);
+    }
+}
+
+// The coefficients and components of unit vectors lie within [-1, 1].
+constexpr double unit_box = 1 + 1e-9;
+
+// A rotation or reflection of a plane: the unit (a, b), within 1e-10 of
+// it, and whether the second vector is flipped.
+plane_turn numpy_call_expr::turn()
+{
+  const exprt a = lapack_value(0.0, unit_box), b = lapack_value(0.0, unit_box);
+  relate_near(
+    ieee_op("ieee_add", ieee_op("ieee_mul", a, a), ieee_op("ieee_mul", b, b)),
+    1.0,
+    1e-10);
+  return {a, b, nondet_bool()};
+}
+
+// The first `count` (one or two) vectors of an orthonormal pair LAPACK may
+// return anywhere in a plane. With b1, b2 the computed plane, the first is
+// a b1 + b b2 and the second +-(-b b1 + a b2) for the `turn`: orthonormal
+// up to the components' slack, which covers how far LAPACK's plane lies
+// from the computed one (`tilt` per component) and LAPACK's own
+// orthogonality. Two products of unknowns per turn, where orthonormality
+// relations over free components take a solver minutes.
+std::vector<std::vector<exprt>> numpy_call_expr::plane_vectors(
+  const dense_spectrum::matrix &plane,
+  std::size_t count,
+  double tilt,
+  const plane_turn &turn)
+{
+  const std::size_t length = plane.front().size();
+  const double slack = 4 * tilt + 16 * lapack_tolerance + 1e-15;
+  const exprt &a = turn.a, &b = turn.b, &flip = turn.flip;
+  std::vector<std::vector<exprt>> vectors;
+  for (std::size_t c = 0; c < count; ++c)
+  {
+    const exprt p = c == 0 ? a : negate_double(b), q = c == 0 ? b : a;
+    std::vector<exprt> vector;
+    for (std::size_t i = 0; i < length; ++i)
+    {
+      const exprt centre = ieee_op(
+        "ieee_add",
+        ieee_op("ieee_mul", p, from_double(plane[0][i], double_type())),
+        ieee_op("ieee_mul", q, from_double(plane[1][i], double_type())));
+      const exprt x = lapack_value(0.0, unit_box);
+      relate_near(
+        ieee_op(
+          "ieee_sub",
+          x,
+          c == 0 ? centre : if_exprt(flip, negate_double(centre), centre)),
+        NAN,
+        slack);
+      vector.push_back(x);
+    }
+    vectors.push_back(vector);
+  }
+  return vectors;
+}
+
+// The vectors of a factor past the rank: a single one, which completes the
+// space the others leave, fixed up to its sign; one or two in a plane, as
+// plane_vectors gives them.
+std::vector<std::vector<exprt>> numpy_call_expr::vectors_past_rank(
+  const dense_spectrum::matrix &vectors,
+  const dense_spectrum::matrix &rest,
+  std::size_t rank,
+  double radius)
+{
+  if (rest.size() > 2)
+    throw std::runtime_error(
+      "TypeError: numpy.linalg.svd factors whose singular vectors past the "
+      "rank span three or more dimensions are not supported");
+  const std::size_t count = vectors.size() - rank;
+  // The plane is as far from LAPACK's as the first `rank` vectors are from
+  // their computed ones, to which it is orthogonal.
+  const double tilt =
+    1.01 * std::sqrt(static_cast<double>(rank)) *
+    (std::sqrt(static_cast<double>(vectors.front().size())) * radius +
+     2 * lapack_tolerance);
+  if (rest.size() == 2 && count > 0)
+    return plane_vectors(rest, count, tilt, turn());
+  std::vector<std::vector<exprt>> out;
+  for (std::size_t j = rank; j < vectors.size(); ++j)
+  {
+    std::vector<exprt> components;
+    for (double component : vectors[j])
+      components.push_back(lapack_value(component, radius));
+    out.push_back(with_any_sign(components));
+  }
+  return out;
+}
+
+// Whether the singular values above rounding at j and j + 1 are within
+// rounding of each other: a repeated value, whose vectors LAPACK may rotate
+// in their plane. Three or more such values are refused.
+static std::vector<bool> repeated_pairs(
+  const dense_spectrum::singular_system &system,
+  double value_radius)
+{
+  std::vector<bool> starts(system.rank, false);
+  for (std::size_t j = 0; j + 1 < system.rank; ++j)
+    starts[j] = system.sigma[j] - system.sigma[j + 1] <= 2 * value_radius;
+  for (std::size_t j = 0; j + 1 < starts.size(); ++j)
+    if (starts[j] && starts[j + 1])
+      throw std::runtime_error(
+        "TypeError: numpy.linalg.svd factors of a singular value repeated "
+        "three or more times are not supported");
+  return starts;
+}
+
+// How far LAPACK's singular vectors (or the plane of a repeated value's) of
+// the values above rounding may lie from the computed ones: as the gaps
+// between those values, other than within a repeated pair, and between the
+// smallest of them and the rest (zero singular values, or the vectors that
+// complete a full factor), allow.
+static double determined_vector_radius(
+  const dense_spectrum::singular_system &system,
+  const std::vector<bool> &pairs,
+  double norm)
+{
+  const std::size_t rank = system.rank;
+  double gap = INFINITY;
+  for (std::size_t j = 0; j + 1 < rank; ++j)
+    if (!pairs[j])
+      gap = std::min(gap, system.sigma[j] - system.sigma[j + 1]);
+  const bool completed = rank < system.u.size() || rank < system.v.size();
+  if (rank > 0 && completed)
+    gap = std::min(
+      gap,
+      system.sigma[rank - 1] -
+        (rank < system.sigma.size() ? system.sigma[rank] : 0.0));
+  return 1e-12 * (1 + norm / gap);
+}
+
+// The singular vectors of the values above rounding: each pair within
+// `radius` of the computed one, with a sign LAPACK picks per triple, and
+// those of a repeated value an orthonormal pair anywhere in their computed
+// plane, rotated the same way in U and in Vh (so U diag(S) Vh is kept).
+void numpy_call_expr::determined_vectors(
+  const dense_spectrum::singular_system &system,
+  const std::vector<bool> &pairs,
+  double radius,
+  std::vector<std::vector<exprt>> &us,
+  std::vector<std::vector<exprt>> &vs,
+  std::array<std::vector<bool>, 2> &boxed)
+{
+  const auto box = [&](const std::vector<double> &vector) {
+    std::vector<exprt> components;
+    for (double component : vector)
+      components.push_back(lapack_value(component, radius));
+    return components;
+  };
+  // The computed plane of a repeated value is as far from LAPACK's as each
+  // of its vectors may be.
+  const double tilt =
+    1.01 * std::sqrt(2.0) *
+    (std::sqrt(
+       static_cast<double>(system.u.front().size() + system.v.front().size())) *
+       radius +
+     2 * lapack_tolerance);
+  for (std::size_t j = 0; j < system.rank; ++j)
+  {
+    if (!pairs[j])
+    {
+      const exprt flip = nondet_bool();
+      us.push_back(signed_by(flip, box(system.u[j])));
+      vs.push_back(signed_by(flip, box(system.v[j])));
+      boxed[0].push_back(true);
+      boxed[1].push_back(true);
+      continue;
+    }
+    const plane_turn shared = turn();
+    for (auto &u :
+         plane_vectors({system.u[j], system.u[j + 1]}, 2, tilt, shared))
+      us.push_back(u);
+    for (auto &v :
+         plane_vectors({system.v[j], system.v[j + 1]}, 2, tilt, shared))
+      vs.push_back(v);
+    boxed[0].insert(boxed[0].end(), 2, false);
+    boxed[1].insert(boxed[1].end(), 2, false);
+    ++j;
+  }
+}
+
+// svd's (U, S, Vh) of a dense matrix (square and larger than 2x2, or
+// rectangular) whose singular values above rounding are distinct: each
+// singular triple of those within the radius the gaps allow of the
+// extended-precision one, which singular_system_of checked against the
+// reconstruction and orthogonality relations, with a sign LAPACK picks per
+// triple. The vectors past the rank (zero singular values, and the extra
+// ones of a full factor) span what the others leave: a single one is fixed
+// up to its sign, and two or more are any orthonormal basis of that space.
+// U is m x m and Vh n x n with full_matrices, and m x k and k x n without
+// (k = min(m, n)).
+exprt numpy_call_expr::dense_svd_factors(
+  const std::vector<std::vector<double>> &m)
+{
+  const dense_spectrum::singular_system system =
+    dense_spectrum::singular_system_of(m, svd_flag("full_matrices", true));
+  const std::size_t k = system.sigma.size(), rank = system.rank;
+  const double norm = frobenius_norm(m);
+  const double value_radius = 1e-12 * norm;
+  const std::vector<bool> pairs = repeated_pairs(system, value_radius);
+  const double vector_radius = determined_vector_radius(system, pairs, norm);
+  if (vector_radius > 1e-6)
+    throw std::runtime_error(
+      "TypeError: numpy.linalg.svd of a matrix larger than 2x2 with close "
+      "singular values is not supported");
+  std::vector<std::vector<exprt>> us, vs;
+  std::array<std::vector<bool>, 2> boxed;
+  determined_vectors(system, pairs, vector_radius, us, vs, boxed);
+  for (auto &u :
+       vectors_past_rank(system.u, system.u_rest, rank, vector_radius))
+    us.push_back(u);
+  for (auto &v :
+       vectors_past_rank(system.v, system.v_rest, rank, vector_radius))
+    vs.push_back(v);
+  boxed[0].resize(us.size(), system.u_rest.size() != 2);
+  boxed[1].resize(vs.size(), system.v_rest.size() != 2);
+  std::vector<exprt> sigmas;
+  for (std::size_t j = 0; j < k; ++j)
+    sigmas.push_back(lapack_value(system.sigma[j], value_radius));
+  assume_singular_order(sigmas);
+  std::vector<exprt> u_rows, vh_rows;
+  for (std::size_t i = 0; i < m.size(); ++i)
+  {
+    std::vector<exprt> row;
+    for (const auto &u : us)
+      row.push_back(u[i]);
+    u_rows.push_back(double_array(row));
+  }
+  for (const auto &v : vs)
+    vh_rows.push_back(double_array(v));
+  const exprt u = stored(double_array(u_rows));
+  const exprt s = stored(double_array(sigmas));
+  const exprt vh = stored(double_array(vh_rows));
+  bind_svd_relations(
+    m, system, {u, s, vh}, {value_radius, vector_radius}, boxed);
+  return linalg_tuple({u, s, vh});
+}
+
 // NumPy evaluates these with its own vectorised code where the CPU has it
 // (SVML on AVX-512 is tested to 4 ulps of the exact value, tanh differs from
 // glibc by 2 ulps even without it), so the bound is wider than libm's.
@@ -7047,37 +9359,1101 @@ exprt numpy_call_expr::numpy_math_value(const std::string &function, double x)
   return bounded_math(converter_, call_).literal(function, x);
 }
 
-// `out=None` and `dtype=float` leave a scalar ufunc's result unchanged.
-static bool only_noop_ufunc_keywords(const nlohmann::json &call)
+// A tuple literal, read as the list NumPy makes of it.
+static nlohmann::json tuples_as_lists(nlohmann::json node)
 {
-  for (const auto &kw : call.value("keywords", nlohmann::json::array()))
+  if (node.value("_type", "") == "Tuple")
+    node["_type"] = "List";
+  if (node.contains("elts"))
+    for (nlohmann::json &element : node["elts"])
+      element = tuples_as_lists(element);
+  return node;
+}
+
+// The ufuncs whose only route is the bounded model: anything outside it is
+// refused rather than handed to a path that does not know them.
+std::optional<exprt>
+numpy_call_expr::try_bounded_ufunc(const std::string &function)
+{
+  static const std::set<std::string> ufuncs = {
+    "expm1",
+    "log1p",
+    "exp2",
+    "arcsinh",
+    "arccosh",
+    "arctanh",
+    "cbrt",
+    "hypot",
+    "arctan2"};
+  if (!ufuncs.count(function))
+    return std::nullopt;
+  const std::size_t arity = bounded_math::is_bounded_binary(function) ? 2 : 1;
+  reject_ufunc_keywords_and_arity(call_, function, arity);
+  if (arity == 2)
+    return bounded_binary_ufunc(function);
+  const nlohmann::json arg = tuples_as_lists(call_["args"][0]);
+  numeric_value constant;
+  std::vector<std::vector<numeric_value>> rows;
+  std::vector<numeric_value> row;
+  const bool plain = !masks_or_writes(call_, arity);
+  if (plain && try_extract_numeric_constant(arg, constant))
+    return numpy_math_value(function, to_double(constant));
+  if (
+    plain && (try_extract_numeric_1d_list(arg, row) ||
+              try_extract_numeric_2d_list(arg, rows)))
+    return retype_lhs(numpy_math_list(function, arg));
+  if (std::optional<exprt> result = elementwise_math(function, arg))
+    return result;
+  throw std::runtime_error(
+    "TypeError: numpy." + function + " of this argument is not supported");
+}
+
+// hypot, arctan2, power or float_power of numbers, arrays or views in
+// float64, broadcast as NumPy does.
+exprt numpy_call_expr::bounded_binary_ufunc(const std::string &function)
+{
+  std::vector<exprt> operands;
+  for (const nlohmann::json &arg : {call_["args"][0], call_["args"][1]})
   {
-    const std::string arg = kw.value("arg", "");
-    const nlohmann::json &value = kw["value"];
-    const bool none = value.value("_type", "") == "Constant" &&
-                      value.contains("value") && value["value"].is_null();
-    const bool float64 =
-      value.value("id", "") == "float" || value.value("attr", "") == "float64";
-    if (!(arg == "out" && none) && !(arg == "dtype" && float64))
+    numeric_value number;
+    std::optional<exprt> literal = literal_array_operand(arg);
+    if (!literal && try_extract_numeric_constant(arg, number))
+      literal = from_double(to_double(number), double_type());
+    operands.push_back(literal ? *literal : elementwise_operand(function, arg));
+  }
+  const exprt &a = operands[0], &b = operands[1];
+  for (const exprt &operand : operands)
+    if (!is_number_type(array_leaf_type(operand.type())))
+      throw std::runtime_error(
+        "TypeError: numpy." + function + " of a non-number is not supported");
+  const std::string model =
+    function == "power" || function == "float_power" ? "pow" : function;
+  return apply_ufunc(
+    function, {a, b}, double_type(), [&](const std::vector<exprt> &x) {
+      return bounded_math(converter_, call_)
+        .binary(model, x[0], x[1], math_module::numpy);
+    });
+}
+
+// The arithmetic ufuncs and aliases the element-wise lowering computes: under
+// where=/out= for all of them, and always for those that have no other route
+// (true_divide is divide, square is multiply(x, x), and the unary negative,
+// positive and absolute keep their operand's dtype).
+static std::optional<std::size_t> arithmetic_arity(const std::string &name)
+{
+  static const std::map<std::string, std::size_t> arity = {
+    {"add", 2},
+    {"subtract", 2},
+    {"multiply", 2},
+    {"divide", 2},
+    {"true_divide", 2},
+    {"power", 2},
+    {"pow", 2},
+    {"floor_divide", 2},
+    {"remainder", 2},
+    {"mod", 2},
+    {"fmod", 2},
+    {"float_power", 2},
+    {"square", 1},
+    {"negative", 1},
+    {"positive", 1},
+    {"absolute", 1},
+    {"fabs", 1},
+    {"reciprocal", 1}};
+  auto it = arity.find(name);
+  if (it == arity.end())
+    return std::nullopt;
+  return it->second;
+}
+
+// The dtype NumPy computes an arithmetic ufunc in: float64 for division,
+// fabs or any float operand, int64 for integers. Booleans and other types
+// reject.
+static typet
+arithmetic_leaf(const std::string &function, const std::vector<exprt> &operands)
+{
+  bool floating =
+    function == "divide" || function == "true_divide" || function == "fabs";
+  for (const exprt &operand : operands)
+  {
+    const typet &leaf = array_leaf_type(operand.type());
+    if (leaf.is_bool() || !is_number_type(leaf))
+      throw std::runtime_error(
+        "TypeError: numpy." + function + "() of " +
+        (leaf.is_bool() ? "a bool operand" : "this operand") +
+        " is not supported");
+    floating = floating || leaf.is_floatbv();
+  }
+  return floating ? double_type() : signedbv_typet(64);
+}
+
+// The constant element an index of a literal array reads.
+static exprt constant_element(const exprt &element)
+{
+  if (element.id() == "typecast")
+    return constant_element(element.op0());
+  if (
+    element.id() != "index" || !element.op1().is_constant() ||
+    element.op0().id() != "array")
+    return element;
+  BigInt position;
+  if (to_integer(element.op1(), position))
+    return element;
+  const exprt::operandst &items = element.op0().operands();
+  const std::size_t i = position.to_uint64();
+  return i < items.size() ? constant_element(items[i]) : element;
+}
+
+// base ** exponent in int64 as NumPy computes it, by squaring, wrapping on
+// overflow; a constant exponent takes only the bits it has. A negative
+// exponent is NumPy's ValueError, which the caller raises. Each step is bound
+// to a temporary, as nesting the squares would double the formula each time.
+exprt numpy_call_expr::integer_power(const exprt &base, const exprt &exponent)
+{
+  const typet &type = base.type();
+  std::size_t bits = 64;
+  BigInt known;
+  const exprt literal = constant_element(exponent);
+  if (literal.is_constant() && !to_integer(literal, known))
+  {
+    if (known < 0)
+      return from_integer(0, type);
+    bits = 0;
+    for (BigInt rest = known; rest > 0; rest /= 2)
+      ++bits;
+  }
+  exprt result = from_integer(1, type), square = base;
+  for (std::size_t k = 0; k < bits; ++k)
+  {
+    exprt shifted("lshr", type);
+    shifted.copy_to_operands(exponent, from_integer(k, type));
+    exprt bit("bitand", type);
+    bit.copy_to_operands(shifted, from_integer(1, type));
+    exprt product("*", type);
+    product.copy_to_operands(result, square);
+    result = bind_once(if_exprt(
+      not_exprt(equality_exprt(bit, from_integer(0, type))), product, result));
+    exprt next("*", type);
+    next.copy_to_operands(square, square);
+    square = bind_once(next);
+  }
+  return result;
+}
+
+// negative, positive, absolute, fabs or reciprocal of one element of
+// `leaf`; absolute of the smallest integer wraps to itself, as NumPy's does.
+std::optional<exprt>
+numpy_call_expr::unary_element(const std::string &function, const exprt &x)
+{
+  if (function == "positive")
+    return x;
+  exprt negated("unary-", x.type());
+  negated.copy_to_operands(x);
+  if (function == "negative")
+    return negated;
+  if (function == "reciprocal")
+    return reciprocal_element(x);
+  if (function != "absolute" && function != "fabs")
+    return std::nullopt;
+  if (x.type().is_floatbv())
+    return abs_double(x);
+  return exprt(if_exprt(
+    binary_relation_exprt(x, "<", from_integer(0, x.type())), negated, x));
+}
+
+// 1 / x in x's dtype: IEEE division for a float, and for an integer the
+// quotient truncated, as NumPy's loop converts 1.0 / x; that conversion of
+// 1.0 / 0 is up to the platform, so a zero gives any value.
+exprt numpy_call_expr::reciprocal_element(const exprt &x)
+{
+  const typet &type = x.type();
+  if (type.is_floatbv())
+  {
+    exprt quotient("ieee_div", type);
+    quotient.copy_to_operands(from_double(1.0, type), x);
+    quotient.add("rounding_mode") =
+      symbol_exprt("c:@__ESBMC_rounding_mode", int_type());
+    return quotient;
+  }
+  const auto is = [&](int value) {
+    return equality_exprt(x, from_integer(value, type));
+  };
+  return if_exprt(
+    is(1),
+    from_integer(1, type),
+    if_exprt(
+      is(-1),
+      from_integer(-1, type),
+      if_exprt(is(0), nondet_value(type, "$ufunc$"), from_integer(0, type))));
+}
+
+// power of one element pair: by squaring in int64, or the bounded pow.
+std::optional<exprt> numpy_call_expr::power_element(
+  const std::string &function,
+  const typet &leaf,
+  const exprt &a,
+  const exprt &b)
+{
+  if (function != "power" && function != "pow")
+    return std::nullopt;
+  if (!leaf.is_floatbv())
+    return integer_power(a, b);
+  return bounded_math(converter_, call_)
+    .binary("pow", a, b, math_module::numpy);
+}
+
+// floor_divide, remainder/mod or fmod of one element pair: NumPy's // and %
+// as the array operators compute them, or C's fmod, whose remainder keeps
+// the dividend's sign. An integer zero divisor gives 0, and -1 divides any
+// integer, the smallest included.
+std::optional<exprt> numpy_call_expr::division_element(
+  const std::string &function,
+  const typet &leaf,
+  const exprt &a,
+  const exprt &b)
+{
+  static const std::map<std::string, std::string> python_ops = {
+    {"floor_divide", "FloorDiv"}, {"remainder", "Mod"}, {"mod", "Mod"}};
+  if (const auto op = python_ops.find(function); op != python_ops.end())
+    return converter_.numpy_element_op(op->second, a, b, leaf);
+  if (function != "fmod")
+    return std::nullopt;
+  if (leaf.is_floatbv())
+    return converter_.get_math_handler().handle_fmod(a, b, nlohmann::json());
+  exprt truncated("mod", leaf);
+  truncated.copy_to_operands(a, b);
+  return if_exprt(
+    or_exprt(
+      equality_exprt(b, from_integer(0, leaf)),
+      equality_exprt(b, from_integer(-1, leaf))),
+    from_integer(0, leaf),
+    truncated);
+}
+
+// One element of an arithmetic ufunc, its operands already of `leaf`.
+exprt numpy_call_expr::arithmetic_element(
+  const std::string &function,
+  const typet &leaf,
+  const std::vector<exprt> &x)
+{
+  static const std::map<std::string, std::pair<irep_idt, irep_idt>> ops = {
+    {"add", {"ieee_add", "+"}},
+    {"subtract", {"ieee_sub", "-"}},
+    {"multiply", {"ieee_mul", "*"}},
+    {"square", {"ieee_mul", "*"}},
+    {"divide", {"ieee_div", "/"}},
+    {"true_divide", {"ieee_div", "/"}}};
+  const exprt &a = x.front(), &b = x.back();
+  if (std::optional<exprt> unary = unary_element(function, a))
+    return *unary;
+  if (std::optional<exprt> quotient = division_element(function, leaf, a, b))
+    return *quotient;
+  if (std::optional<exprt> power = power_element(function, leaf, a, b))
+    return *power;
+  const auto &[ieee_op_id, integer_op] = ops.at(function);
+  exprt result(leaf.is_floatbv() ? ieee_op_id : integer_op, leaf);
+  result.copy_to_operands(a, b);
+  if (leaf.is_floatbv())
+    result.add("rounding_mode") =
+      symbol_exprt("c:@__ESBMC_rounding_mode", int_type());
+  return result;
+}
+
+// add, subtract, multiply, divide and power under where=/out=, and the
+// true_divide and square aliases, through the element-wise lowering of the
+// math ufuncs: inputs, mask and out= evaluated once, masked elements left
+// to out=, and NumPy's checks raised before anything is written.
+std::optional<exprt>
+numpy_call_expr::try_arithmetic_ufunc(const std::string &function)
+{
+  static const std::set<std::string> own_route = {
+    "true_divide",
+    "square",
+    "negative",
+    "positive",
+    "absolute",
+    "floor_divide",
+    "remainder",
+    "mod",
+    "fmod",
+    "float_power",
+    "reciprocal",
+    "fabs"};
+  const std::optional<std::size_t> arity = arithmetic_arity(function);
+  if (!arity || (!own_route.count(function) && !masks_or_writes(call_, *arity)))
+    return std::nullopt;
+  reject_ufunc_keywords_and_arity(call_, function, *arity);
+  // float_power is power computed in float64, as the bounded route does.
+  if (function == "float_power")
+    return bounded_binary_ufunc(function);
+  std::vector<exprt> inputs;
+  // Converted as the program wrote them: an integer literal keeps its dtype.
+  for (std::size_t i = 0; i < *arity; ++i)
+    inputs.push_back(elementwise_operand(function, call_["args"][i]));
+  const typet leaf = arithmetic_leaf(function, inputs);
+  const auto as_leaf = [&](const std::vector<exprt> &e) {
+    std::vector<exprt> x;
+    for (const exprt &element : e)
+      x.push_back(
+        element.type() == leaf ? element : typecast_exprt(element, leaf));
+    return x;
+  };
+  const bool integer_power =
+    !leaf.is_floatbv() && (function == "power" || function == "pow");
+  const ufunc_check negative_exponent{
+    "ValueError",
+    "Integers to negative integer powers are not allowed.",
+    [&](const std::vector<exprt> &e) {
+      return binary_relation_exprt(
+        as_leaf(e).back(), "<", from_integer(0, leaf));
+    }};
+  return apply_ufunc(
+    function,
+    inputs,
+    leaf,
+    [&](const std::vector<exprt> &e) {
+      return arithmetic_element(function, leaf, as_leaf(e));
+    },
+    integer_power ? &negative_exponent : nullptr);
+}
+
+static bool is_numeric_literal_operand(const nlohmann::json &arg)
+{
+  numeric_value constant;
+  std::vector<numeric_value> row;
+  std::vector<std::vector<numeric_value>> rows;
+  const nlohmann::json node = tuples_as_lists(arg);
+  return try_extract_numeric_constant(node, constant) ||
+         try_extract_numeric_1d_list(node, row) ||
+         try_extract_numeric_2d_list(node, rows);
+}
+
+// numpy.power with an operand known only at run time and a float element:
+// the bounded pow of each pair of elements. Literal and integer operands
+// keep their exact routes.
+std::optional<exprt>
+numpy_call_expr::try_runtime_power(const std::string &function)
+{
+  if (
+    (function != "power" && function != "pow") || call_["args"].size() != 2 ||
+    masks_or_writes(call_, 2))
+    return std::nullopt;
+  const nlohmann::json &args = call_["args"];
+  if (
+    is_numeric_literal_operand(args[0]) && is_numeric_literal_operand(args[1]))
+    return std::nullopt;
+  if (!may_hold_float(args[0]) && !may_hold_float(args[1]))
+    return std::nullopt;
+  return bounded_binary_ufunc("power");
+}
+
+// Whether an operand's elements may be floats, read without converting an
+// operand whose conversion has effects (a call, or any other expression).
+bool numpy_call_expr::may_hold_float(const nlohmann::json &arg)
+{
+  if (std::optional<exprt> literal = literal_array_operand(arg))
+    return array_leaf_type(literal->type()).is_floatbv();
+  if (arg.value("_type", "") != "Name")
+    return true;
+  return array_leaf_type(converter_.get_expr(arg).type()).is_floatbv();
+}
+
+namespace
+{
+// An error NumPy raises when it checks a ufunc's operands, before it
+// computes or writes anything: raised where the call runs, unlike a
+// diagnostic for a form the model does not support.
+struct numpy_ufunc_error : std::runtime_error
+{
+  numpy_ufunc_error(const std::string &type, const std::string &message)
+    : std::runtime_error(type + ": " + message), type(type), message(message)
+  {
+  }
+  std::string type, message;
+};
+} // namespace
+
+static std::optional<nlohmann::json>
+out_node(const nlohmann::json &call, std::size_t arity);
+
+// The array a ufunc call whose where=/out= are lowered writes, when it is a
+// name or a subscript without calls, which read the same storage again.
+static std::optional<nlohmann::json>
+named_ufunc_output(const nlohmann::json &ast, const nlohmann::json &call)
+{
+  static const std::set<std::string> binary = {"hypot", "arctan2", "atan2"};
+  static const std::set<std::string> aliases = {
+    "asin", "acos", "atan", "asinh", "acosh", "atanh", "atan2"};
+  const nlohmann::json &func = call.value("func", nlohmann::json::object());
+  const nlohmann::json &module = func.value("value", nlohmann::json::object());
+  const std::string name = func.value("attr", "");
+  if (
+    call.value("_type", "") != "Call" || module.value("_type", "") != "Name" ||
+    !is_imported_numpy_module_alias(ast, module.value("id", "")) ||
+    !(bounded_math::has_runtime_model(name) ||
+      bounded_math::is_float_predicate(name) || aliases.count(name) ||
+      arithmetic_arity(name)))
+    return std::nullopt;
+  const std::size_t arity =
+    arithmetic_arity(name).value_or(binary.count(name) ? 2 : 1);
+  std::optional<nlohmann::json> out;
+  try
+  {
+    out = out_node(call, arity);
+  }
+  catch (const std::runtime_error &)
+  {
+    return std::nullopt;
+  }
+  const std::string type = out ? out->value("_type", "") : "";
+  if (
+    (type != "Name" && type != "Subscript") ||
+    json_utils::ast_contains_call(*out))
+    return std::nullopt;
+  return out;
+}
+
+// The value an assignment stores in something other than a name.
+static void stored_value(
+  const nlohmann::json &node,
+  std::vector<const nlohmann::json *> &values)
+{
+  const bool annotated = node.value("_type", "") == "AnnAssign";
+  const nlohmann::json &target =
+    annotated ? node["target"] : node["targets"][0];
+  if (target.value("_type", "") != "Name")
+    values.push_back(&node["value"]);
+}
+
+// The arguments of a call to a function that is not a numpy one.
+static void passed_values(
+  const nlohmann::json &ast,
+  const nlohmann::json &call,
+  std::vector<const nlohmann::json *> &values)
+{
+  const nlohmann::json &module =
+    call["func"].value("value", nlohmann::json::object());
+  if (
+    module.value("_type", "") == "Name" &&
+    is_imported_numpy_module_alias(ast, module.value("id", "")))
+    return;
+  for (const nlohmann::json &arg : call["args"])
+    values.push_back(&arg);
+  for (const nlohmann::json &keyword : call["keywords"])
+    values.push_back(&keyword["value"]);
+}
+
+// The values a node lets escape: returned, stored or passed to a function
+// that is not a numpy one.
+static std::vector<const nlohmann::json *>
+escaping_values(const nlohmann::json &ast, const nlohmann::json &node)
+{
+  static const std::map<std::string, std::string> fields = {
+    {"Return", "value"},
+    {"Yield", "value"},
+    {"NamedExpr", "value"},
+    {"Lambda", "body"},
+    {"List", "elts"},
+    {"Tuple", "elts"},
+    {"Set", "elts"},
+    {"Dict", "values"}};
+  std::vector<const nlohmann::json *> values;
+  const std::string type = node.value("_type", "");
+  const auto field = fields.find(type);
+  if (field != fields.end())
+  {
+    const nlohmann::json &value = node[field->second];
+    if (value.is_array())
+      for (const nlohmann::json &item : value)
+        values.push_back(&item);
+    else
+      values.push_back(&value);
+  }
+  else if (type == "Assign" || type == "AnnAssign")
+    stored_value(node, values);
+  else if (type == "Call")
+    passed_values(ast, node, values);
+  return values;
+}
+
+// Such a value would be a copy where NumPy returns the out= array itself.
+static void reject_escaping_ufunc_output(
+  const nlohmann::json &ast,
+  const nlohmann::json &node)
+{
+  for (const nlohmann::json *value : escaping_values(ast, node))
+    if (value->is_object() && named_ufunc_output(ast, *value))
+      throw std::runtime_error(
+        "TypeError: numpy." + (*value)["func"].value("attr", "") +
+        "() with out= is only supported as a statement or assigned to a "
+        "name");
+}
+
+static void
+alias_ufunc_outputs_in(const nlohmann::json &ast, nlohmann::json &node)
+{
+  if (node.is_object())
+  {
+    reject_escaping_ufunc_output(ast, node);
+    for (auto &child : node.items())
+      alias_ufunc_outputs_in(ast, child.value());
+    return;
+  }
+  if (!node.is_array())
+    return;
+  nlohmann::json body = nlohmann::json::array();
+  for (nlohmann::json &statement : node)
+  {
+    alias_ufunc_outputs_in(ast, statement);
+    const std::string type =
+      statement.is_object() ? statement.value("_type", "") : "";
+    const bool named =
+      type == "AnnAssign" ? statement["target"].value("_type", "") == "Name"
+      : type == "Assign"  ? std::all_of(
+                              statement["targets"].begin(),
+                              statement["targets"].end(),
+                              [](const nlohmann::json &t) {
+                               return t.value("_type", "") == "Name";
+                              })
+                          : false;
+    const std::optional<nlohmann::json> out =
+      named && statement["value"].is_object()
+        ? named_ufunc_output(ast, statement["value"])
+        : std::nullopt;
+    if (!out)
+    {
+      body.push_back(statement);
+      continue;
+    }
+    nlohmann::json call = statement;
+    call["_type"] = "Expr";
+    call.erase("targets");
+    call.erase("target");
+    call.erase("annotation");
+    call.erase("simple");
+    body.push_back(call);
+    statement["value"] = *out;
+    body.push_back(statement);
+  }
+  node = body;
+}
+
+void alias_numpy_ufunc_outputs(nlohmann::json &ast)
+{
+  alias_ufunc_outputs_in(ast, ast["body"]);
+}
+
+// Python evaluates keywords in the order written, after the positionals.
+static bool where_before_out(const nlohmann::json &call, std::size_t arity)
+{
+  if (call["args"].size() > arity)
+    return false;
+  for (const nlohmann::json &keyword :
+       call.value("keywords", nlohmann::json::array()))
+  {
+    const nlohmann::json &arg = keyword["arg"];
+    if (arg == "where" || arg == "out")
+      return arg == "where";
+  }
+  return false;
+}
+
+static bool is_constant_array(const exprt &e)
+{
+  return e.id() == "array" &&
+         std::all_of(
+           e.operands().begin(), e.operands().end(), [](const exprt &x) {
+             return x.is_constant() || is_constant_array(x);
+           });
+}
+
+// f of the operands' elements at each index of the broadcast shape, from
+// dimension depth on; a dimension of 1 or a missing leading one repeats.
+exprt numpy_call_expr::broadcast_elements(
+  const std::vector<exprt> &operands,
+  const std::vector<std::size_t> &shape,
+  const typet &leaf,
+  std::size_t depth,
+  const std::function<exprt(const std::vector<exprt> &)> &f)
+{
+  if (depth == shape.size())
+    return f(operands);
+  const std::size_t rest = shape.size() - depth;
+  typet type = leaf;
+  for (std::size_t d = shape.size(); d-- > depth;)
+    type = array_typet(type, from_integer(shape[d], size_type()));
+  exprt result("array", type);
+  for (std::size_t i = 0; i < shape[depth]; ++i)
+  {
+    std::vector<exprt> elements;
+    for (const exprt &v : operands)
+    {
+      const std::vector<int> dims =
+        type_handler_.get_array_type_shape(v.type());
+      const std::size_t index = !dims.empty() && dims.front() == 1 ? 0 : i;
+      if (dims.size() < rest)
+        elements.push_back(v);
+      else if (is_constant_array(v))
+        elements.push_back(v.operands()[index]);
+      else
+        elements.push_back(
+          np_index(v, from_integer(index, size_type()), v.type().subtype()));
+    }
+    result.copy_to_operands(
+      broadcast_elements(elements, shape, leaf, depth + 1, f));
+  }
+  return result;
+}
+
+static std::string numpy_shape(const std::vector<std::size_t> &shape)
+{
+  std::string text = "(";
+  for (std::size_t i = 0; i < shape.size(); ++i)
+    text += (i ? "," : "") + std::to_string(shape[i]);
+  return text + (shape.size() == 1 ? ",)" : ")");
+}
+
+// Broadcasts shape with next in place; a dimension of 1 takes the other's,
+// 0 included, as NumPy pairs (1,) with (0,).
+static bool broadcast_into(
+  std::vector<std::size_t> &shape,
+  const std::vector<std::size_t> &next)
+{
+  if (next.size() > shape.size())
+    shape.insert(shape.begin(), next.size() - shape.size(), 1);
+  const std::size_t skip = shape.size() - next.size();
+  for (std::size_t i = 0; i < next.size(); ++i)
+  {
+    std::size_t &dim = shape[skip + i];
+    if (dim != next[i] && next[i] != 1 && dim != 1)
       return false;
+    if (dim == 1)
+      dim = next[i];
   }
   return true;
 }
 
-static typet double_shaped(const typet &t)
+// The shape the operands broadcast to, which out=, the operand at
+// out_index, must already have.
+std::vector<std::size_t> numpy_call_expr::ufunc_shape(
+  const std::vector<exprt> &operands,
+  std::optional<std::size_t> out_index)
 {
-  if (!t.is_array())
-    return double_type();
-  return array_typet(double_shaped(t.subtype()), to_array_type(t).size());
+  std::vector<std::vector<std::size_t>> shapes;
+  for (const exprt &operand : operands)
+  {
+    const std::vector<int> dims =
+      type_handler_.get_array_type_shape(operand.type());
+    shapes.emplace_back(dims.begin(), dims.end());
+  }
+  std::vector<std::size_t> shape;
+  for (const std::vector<std::size_t> &next : shapes)
+  {
+    if (!broadcast_into(shape, next))
+    {
+      std::string listed;
+      for (const std::vector<std::size_t> &s : shapes)
+        listed += (listed.empty() ? "" : " ") + numpy_shape(s);
+      throw numpy_ufunc_error(
+        "ValueError",
+        "operands could not be broadcast together with shapes " + listed);
+    }
+  }
+  if (out_index && shapes[*out_index] != shape)
+    throw numpy_ufunc_error(
+      "ValueError",
+      "non-broadcastable output operand with shape " +
+        numpy_shape(shapes[*out_index]) +
+        " doesn't match the broadcast shape " + numpy_shape(shape));
+  return shape;
 }
 
-// `np.exp(x)` of a number or a numeric array known only at run time.
+// What a call whose checks raised gives the unreachable assignment: a value
+// of the target's array type, or of the first input's.
+exprt numpy_call_expr::ufunc_error_value(
+  const std::vector<exprt> &inputs,
+  const typet &leaf)
+{
+  const exprt *lhs = converter_.current_lhs;
+  if (lhs && lhs->type().is_array())
+    return nondet_value(lhs->type(), "$ufunc$");
+  const typet &input = inputs.front().type();
+  return nondet_value(input.is_array() ? input : leaf, "$ufunc$");
+}
+
+// The check's condition on an element, for an element the mask selects.
+exprt numpy_call_expr::selected_fault(
+  const ufunc_check &check,
+  const std::optional<exprt> &mask,
+  const std::vector<exprt> &e,
+  const std::vector<exprt> &elements)
+{
+  const exprt when = check.when(elements);
+  return mask ? exprt(and_exprt(truth_of(e.back()), when)) : when;
+}
+
+// The mask and out= of a ufunc call, each evaluated once in Python's order,
+// and the shape the operands broadcast to.
+numpy_call_expr::ufunc_plan numpy_call_expr::plan_ufunc(
+  const std::string &function,
+  const std::vector<exprt> &inputs,
+  const typet &leaf)
+{
+  const std::size_t n = inputs.size();
+  ufunc_plan plan;
+  if (where_before_out(call_, n))
+    plan.mask = ufunc_mask(function);
+  plan.out = ufunc_out(function, n, leaf);
+  if (!where_before_out(call_, n))
+    plan.mask = ufunc_mask(function);
+  plan.operands = inputs;
+  if (plan.out)
+    plan.operands.push_back(plan.out->value);
+  if (plan.mask)
+    plan.operands.push_back(*plan.mask);
+  plan.shape = ufunc_shape(
+    plan.operands, plan.out ? std::optional<std::size_t>(n) : std::nullopt);
+  return plan;
+}
+
+// f of the inputs at each index of their broadcast shape, as the ufunc
+// computes it under where= and out=: an element the mask leaves out keeps
+// what out= holds, or is any value without out=, as NumPy leaves it
+// uninitialised.
+exprt numpy_call_expr::apply_ufunc(
+  const std::string &function,
+  const std::vector<exprt> &inputs,
+  const typet &leaf,
+  const std::function<exprt(const std::vector<exprt> &)> &f,
+  const ufunc_check *check)
+{
+  const std::size_t n = inputs.size();
+  ufunc_plan plan;
+  try
+  {
+    plan = plan_ufunc(function, inputs, leaf);
+  }
+  catch (const numpy_ufunc_error &error)
+  {
+    // Checked before anything is written, as NumPy checks it.
+    raise_linalg(error.type, error.message, true_exprt());
+    return ufunc_error_value(inputs, leaf);
+  }
+  const std::optional<ufunc_output> &out = plan.out;
+  const std::optional<exprt> &mask = plan.mask;
+  std::vector<exprt> &operands = plan.operands;
+  const std::vector<std::size_t> &shape = plan.shape;
+  for (exprt &operand : operands)
+    if (!is_constant_array(operand))
+      operand = bind_array_once(operand);
+  const typet result_leaf = out ? array_leaf_type(out->value.type()) : leaf;
+  exprt::operandst faults;
+  const exprt result = broadcast_elements(
+    operands, shape, result_leaf, 0, [&](const std::vector<exprt> &e) {
+      const std::vector<exprt> elements(e.begin(), e.begin() + n);
+      if (check)
+        faults.push_back(selected_fault(*check, mask, e, elements));
+      exprt value = f(elements);
+      if (value.type() != result_leaf)
+        value = typecast_exprt(value, result_leaf);
+      if (!mask)
+        return value;
+      const exprt kept = out ? e[n] : nondet_value(result_leaf, "$uninit$");
+      return exprt(if_exprt(truth_of(e.back()), value, kept));
+    });
+  // A selected element NumPy refuses raises before anything is written.
+  if (check && !faults.empty())
+    raise_linalg(check->type, check->message, or_exprt(faults));
+  return retype_lhs(out ? write_out(out->target, result) : result);
+}
+
+// The mask where= gives; None masks every element out.
+std::optional<exprt> numpy_call_expr::ufunc_mask(const std::string &function)
+{
+  const nlohmann::json *where = keyword_value(call_, "where");
+  if (!where)
+    return std::nullopt;
+  if (is_none(*where))
+    return false_exprt();
+  return mask_operand(function, tuples_as_lists(*where));
+}
+
+static std::string dtype_name(const typet &type)
+{
+  if (type.is_bool())
+    return "bool";
+  if (type.is_floatbv())
+    return "float" + type.width().as_string();
+  const std::string width = type.width().as_string();
+  return (type.is_unsignedbv() ? "uint" : "int") + width;
+}
+
+// A comparison, ~, &, | or ^ in a mask is taken element-wise, as NumPy
+// computes it over arrays; anything else is converted as an operand.
+exprt numpy_call_expr::mask_operand(
+  const std::string &function,
+  const nlohmann::json &node)
+{
+  static const std::map<std::string, irep_idt> relations = {
+    {"Lt", "<"},
+    {"LtE", "<="},
+    {"Gt", ">"},
+    {"GtE", ">="},
+    {"Eq", "="},
+    {"NotEq", "notequal"}};
+  static const std::map<std::string, irep_idt> connectives = {
+    {"BitAnd", "and"}, {"BitOr", "or"}, {"BitXor", "xor"}};
+  const std::string type = node.value("_type", "");
+  const std::string op =
+    type == "Compare" && node["ops"].size() == 1
+      ? node["ops"][0].value("_type", "")
+      : node.value("op", nlohmann::json::object()).value("_type", "");
+  if (type == "Compare" && relations.count(op))
+    return elementwise_relation(
+      relations.at(op),
+      {elementwise_operand(function, node["left"]),
+       elementwise_operand(function, node["comparators"][0])});
+  if (type == "BinOp" && connectives.count(op))
+    return elementwise_relation(
+      connectives.at(op),
+      {boolean_mask(function, node["left"]),
+       boolean_mask(function, node["right"])});
+  if (type == "UnaryOp" && op == "Invert")
+    return elementwise_relation(
+      "not", {boolean_mask(function, node["operand"])});
+  const exprt mask = elementwise_operand(function, node);
+  const typet &leaf = array_leaf_type(mask.type());
+  if (!is_number_type(leaf))
+    throw std::runtime_error(
+      "TypeError: numpy." + function +
+      "() where= of this argument is not supported");
+  // NumPy converts a literal sequence to bool, but casts an array under the
+  // safe rule, which only a bool array passes.
+  if (
+    mask.type().is_array() && !leaf.is_bool() && type != "List" &&
+    type != "Tuple")
+    throw numpy_ufunc_error(
+      "TypeError",
+      "Cannot cast array data from dtype('" + dtype_name(leaf) +
+        "') to dtype('bool') according to the rule 'safe'");
+  return mask;
+}
+
+exprt numpy_call_expr::boolean_mask(
+  const std::string &function,
+  const nlohmann::json &node)
+{
+  const exprt mask = mask_operand(function, node);
+  if (!array_leaf_type(mask.type()).is_bool())
+    throw std::runtime_error(
+      "TypeError: numpy." + function +
+      "() where= with a bitwise operator on non-booleans is not supported");
+  return mask;
+}
+
+// The operator id applied to the operands' elements at each index of their
+// broadcast shape; numbers of different types are compared as doubles.
+exprt numpy_call_expr::elementwise_relation(
+  const irep_idt &id,
+  std::vector<exprt> operands)
+{
+  const std::vector<std::size_t> shape = ufunc_shape(operands, std::nullopt);
+  for (exprt &operand : operands)
+    operand = bind_array_once(operand);
+  return broadcast_elements(
+    operands, shape, bool_type(), 0, [&](std::vector<exprt> e) {
+      if (e.size() == 2 && e[0].type() != e[1].type())
+        for (exprt &side : e)
+          side = typecast_exprt(side, double_type());
+      exprt result(id, bool_type());
+      for (const exprt &side : e)
+        result.copy_to_operands(side);
+      return result;
+    });
+}
+
+exprt numpy_call_expr::truth_of(const exprt &element)
+{
+  if (element.type().is_bool())
+    return element;
+  exprt nonzero("notequal", bool_type());
+  nonzero.copy_to_operands(element, gen_zero(element.type()));
+  return nonzero;
+}
+
+// The node out= names, or the argument after the inputs, unwrapped from a
+// one-element tuple; nullopt for out=None.
+static std::optional<nlohmann::json>
+out_node(const nlohmann::json &call, std::size_t arity)
+{
+  const nlohmann::json *keyword = keyword_value(call, "out");
+  const nlohmann::json &args = call["args"];
+  if (keyword && args.size() > arity)
+    throw std::runtime_error(
+      "TypeError: cannot specify 'out' as both a positional and keyword "
+      "argument");
+  if (!keyword && args.size() <= arity)
+    return std::nullopt;
+  nlohmann::json node = args.size() > arity ? args[arity] : *keyword;
+  if (node.value("_type", "") == "Tuple")
+  {
+    if (node["elts"].size() != 1)
+      throw numpy_ufunc_error(
+        "ValueError",
+        "The 'out' tuple must have exactly one entry per ufunc output");
+    node = node["elts"][0];
+  }
+  if (is_none(node))
+    return std::nullopt;
+  const std::string type = node.value("_type", "");
+  if (type == "List" || type == "Tuple" || type == "Constant")
+    throw numpy_ufunc_error("TypeError", "return arrays must be of ArrayType");
+  return node;
+}
+
+// out= must be an ndarray, or a writable view of one.
+void numpy_call_expr::reject_unwritable_out(const exprt &target)
+{
+  const numpy_ufunc_error not_array(
+    "TypeError", "return arrays must be of ArrayType");
+  if (target.type().is_array())
+    return;
+  if (!target.type().is_pointer())
+    throw not_array;
+  std::optional<python_list::strided_view_desc> view =
+    python_list(converter_, call_).describe_strided_view(target);
+  if (!view)
+    throw not_array;
+  if (view->readonly)
+    throw numpy_ufunc_error("ValueError", "output array is read-only");
+}
+
+// The array out= names with its elements as the ufunc reads them; nullopt
+// for out=None.
+std::optional<numpy_call_expr::ufunc_output> numpy_call_expr::ufunc_out(
+  const std::string &function,
+  std::size_t arity,
+  const typet &leaf)
+{
+  const std::optional<nlohmann::json> node = out_node(call_, arity);
+  if (!node)
+    return std::nullopt;
+  const exprt target = out_operand(function, *node);
+  reject_unwritable_out(target);
+  const exprt value = copy_of_view(function, target).value_or(target);
+  reject_non_numeric_elements(function, value.type());
+  if (!has_constant_shape(value.type()))
+    throw std::runtime_error(
+      "TypeError: numpy." + function +
+      " of an array whose shape is known only at run time is not supported");
+  const typet &out_leaf = array_leaf_type(value.type());
+  const bool narrows = (leaf.is_floatbv() && !out_leaf.is_floatbv()) ||
+                       (!leaf.is_bool() && out_leaf.is_bool());
+  if (narrows)
+    throw numpy_ufunc_error(
+      "TypeError",
+      "Cannot cast ufunc '" + function + "' output from dtype('" +
+        dtype_name(leaf) + "') to dtype('" + dtype_name(out_leaf) +
+        "') with casting rule 'same_kind'");
+  return ufunc_output{target, value};
+}
+
+// The out= operand as converted; a slice is bound to a temporary, as
+// `v = a[1:]` binds it, so that it names the elements of `a` it covers.
+exprt numpy_call_expr::out_operand(
+  const std::string &function,
+  const nlohmann::json &node)
+{
+  exprt *lhs = converter_.current_lhs;
+  exprt view = nil_exprt();
+  if (node.value("_type", "") == "Subscript")
+  {
+    symbolt &tmp = converter_.create_tmp_symbol(
+      call_, "$out_view$", pointer_typet(double_type()), exprt());
+    view = symbol_expr(tmp);
+  }
+  converter_.current_lhs = view.is_nil() ? nullptr : &view;
+  const exprt target = converter_.get_expr(node);
+  converter_.current_lhs = lhs;
+  if (view.is_nil())
+    return node.value("_type", "") == "Call" ? bind_array_once(target) : target;
+  if (!target.type().is_pointer())
+    throw std::runtime_error(
+      "TypeError: numpy." + function +
+      "() out= of this subscript is not supported");
+  view.type() = target.type();
+  code_declt decl(view);
+  decl.location() = converter_.get_location_from_decl(call_);
+  converter_.add_instruction(decl);
+  code_assignt assign(view, target);
+  assign.location() = decl.location();
+  converter_.add_instruction(assign);
+  return view;
+}
+
+// Stores the result in the out= array, whole or through its view, and gives
+// what the call returns.
+exprt numpy_call_expr::write_out(const exprt &target, const exprt &result)
+{
+  const locationt location = converter_.get_location_from_decl(call_);
+  if (!target.type().is_pointer())
+  {
+    code_assignt assign(target, result);
+    assign.location() = location;
+    converter_.add_instruction(assign);
+    return target;
+  }
+  // Bound first, so an out= view overlapping an input reads it unchanged.
+  const exprt value = bind_array_once(result);
+  python_list list(converter_, call_);
+  const python_list::strided_view_desc view =
+    *list.describe_strided_view(target);
+  const std::vector<int> shape =
+    type_handler_.get_array_type_shape(value.type());
+  std::size_t count = 1;
+  for (int extent : shape)
+    count *= extent;
+  for (std::size_t flat = 0; flat < count; ++flat)
+  {
+    std::vector<std::size_t> digits(shape.size());
+    for (std::size_t axis = shape.size(), rest = flat; axis-- > 0;)
+    {
+      digits[axis] = rest % shape[axis];
+      rest /= shape[axis];
+    }
+    std::vector<exprt> index;
+    exprt element = value;
+    for (std::size_t digit : digits)
+    {
+      index.push_back(from_integer(digit, signedbv_typet(64)));
+      element = np_index(
+        element, from_integer(digit, size_type()), element.type().subtype());
+    }
+    code_assignt assign(list.view_element(view, index), element);
+    assign.location() = location;
+    converter_.add_instruction(assign);
+  }
+  return value;
+}
+
+// `np.exp(x)` of a number or a numeric array known only at run time, and of
+// any operand under where= or out=.
 std::optional<exprt>
 numpy_call_expr::try_runtime_math(const std::string &function)
 {
-  if (
-    !bounded_math::has_runtime_model(function) || call_["args"].size() != 1 ||
-    !only_noop_ufunc_keywords(call_))
+  if (!bounded_math::has_runtime_model(function))
+    return std::nullopt;
+  if (masks_or_writes(call_, 1))
+  {
+    reject_ufunc_keywords_and_arity(call_, function, 1);
+    if (
+      std::optional<exprt> result =
+        elementwise_math(function, tuples_as_lists(call_["args"][0])))
+      return result;
+    throw std::runtime_error(
+      "TypeError: numpy." + function + " of this argument is not supported");
+  }
+  if (call_["args"].size() != 1 || unhandled_ufunc_keyword(call_))
     return std::nullopt;
   const nlohmann::json &arg = call_["args"][0];
   const std::string type = arg.value("_type", "");
@@ -7086,6 +10462,36 @@ numpy_call_expr::try_runtime_math(const std::string &function)
     type == "List" || type == "Tuple" ||
     try_extract_numeric_constant(arg, constant))
     return std::nullopt;
+  if (std::optional<exprt> result = elementwise_math(function, arg))
+    return result;
+  if (json_utils::ast_contains_call(arg))
+    throw std::runtime_error(
+      "TypeError: numpy." + function +
+      " of a call that does not return a number is not supported");
+  return std::nullopt;
+}
+
+// The function of a number, or of each element of an array or a view, known
+// only at run time; nullopt when the argument holds no numbers.
+std::optional<exprt> numpy_call_expr::elementwise_math(
+  const std::string &function,
+  const nlohmann::json &arg)
+{
+  const exprt x = elementwise_operand(function, arg);
+  if (!is_number_type(array_leaf_type(x.type())))
+    return std::nullopt;
+  return apply_ufunc(
+    function, {x}, double_type(), [&](const std::vector<exprt> &element) {
+      return bounded_math(converter_, call_)
+        .runtime(function, element[0], math_module::numpy);
+    });
+}
+
+// The argument of an element-wise ufunc, a view copied out.
+exprt numpy_call_expr::elementwise_operand(
+  const std::string &function,
+  const nlohmann::json &arg)
+{
   // Converting a view operand with current_lhs set would retype the target.
   exprt *lhs = converter_.current_lhs;
   converter_.current_lhs = nullptr;
@@ -7093,21 +10499,15 @@ numpy_call_expr::try_runtime_math(const std::string &function)
   converter_.current_lhs = lhs;
   const exprt x = copy_of_view(function, operand).value_or(operand);
   reject_non_numeric_elements(function, x.type());
-  if (is_number_type(array_leaf_type(x.type())))
-  {
-    const exprt result = runtime_math_array(function, bind_array_once(x));
-    if (result.type().is_array() && converter_.current_lhs)
-    {
-      converter_.current_lhs->type() = result.type();
-      converter_.update_symbol(*converter_.current_lhs);
-    }
-    return result;
-  }
-  if (json_utils::ast_contains_call(arg))
+  if (!has_constant_shape(x.type()))
     throw std::runtime_error(
       "TypeError: numpy." + function +
-      " of a call that does not return a number is not supported");
-  return std::nullopt;
+      " of an array whose shape is known only at run time is not supported");
+  // A number or a call is evaluated here, in argument order; an array is
+  // read when the ufunc runs, after every argument, as NumPy reads it.
+  if (x.id() == "code" || (!x.type().is_array() && !x.is_constant()))
+    return bind_once(x);
+  return x;
 }
 
 // The elements of a view with constant axes, in row-major order.
@@ -7147,46 +10547,64 @@ exprt numpy_call_expr::bind_array_once(const exprt &array)
 {
   if (!array.type().is_array() || array.is_symbol())
     return array;
+  return bind_once(array);
+}
+
+exprt numpy_call_expr::bind_once(const exprt &value)
+{
   symbolt &tmp =
-    converter_.create_tmp_symbol(call_, "$math_array$", array.type(), exprt());
+    converter_.create_tmp_symbol(call_, "$math_array$", value.type(), exprt());
   const exprt symbol = symbol_expr(tmp);
   code_declt decl(symbol);
   decl.location() = converter_.get_location_from_decl(call_);
   converter_.add_instruction(decl);
-  if (array.id() == "code" && array.get("statement") == "function_call")
+  // The type probe of an assignment converts its value again for real; only
+  // the type is wanted here, so a call it binds must not run twice.
+  if (converter_.in_type_probe())
+    return symbol;
+  if (value.id() == "code" && value.get("statement") == "function_call")
   {
-    code_function_callt call = to_code_function_call(to_code(array));
+    code_function_callt call = to_code_function_call(to_code(value));
     call.lhs() = symbol;
     converter_.add_instruction(call);
   }
   else
   {
-    code_assignt assign(symbol, array);
+    code_assignt assign(symbol, value);
     assign.location() = decl.location();
     converter_.add_instruction(assign);
   }
   return symbol;
 }
 
-// The function of each element of a number or of a numeric array of
-// concrete shape, read as a number known only at run time.
-exprt numpy_call_expr::runtime_math_array(
-  const std::string &function,
-  const exprt &value)
+exprt numpy_call_expr::retype_lhs(const exprt &result)
 {
-  const typet &type = value.type();
-  if (!type.is_array())
-    return bounded_math(converter_, call_)
-      .runtime(function, value, math_module::numpy);
-  const int size = type_handler_.get_array_type_shape(type).front();
-  exprt result(
-    "array",
-    array_typet(
-      double_shaped(type.subtype()), from_integer(size, size_type())));
-  for (int i = 0; i < size; ++i)
-    result.copy_to_operands(runtime_math_array(
-      function, np_index(value, from_integer(i, size_type()), type.subtype())));
+  if (result.type().is_array() && converter_.current_lhs)
+  {
+    converter_.current_lhs->type() = result.type();
+    converter_.update_symbol(*converter_.current_lhs);
+  }
   return result;
+}
+
+// `np.isnan(x)`, `np.isinf(a)`, `np.isfinite(a[1:])`: a number, or each
+// element of a numeric array or view of concrete shape.
+std::optional<exprt>
+numpy_call_expr::try_float_predicate(const std::string &function)
+{
+  if (!bounded_math::is_float_predicate(function))
+    return std::nullopt;
+  reject_ufunc_keywords_and_arity(call_, function, 1, false);
+  const exprt x =
+    elementwise_operand(function, tuples_as_lists(call_["args"][0]));
+  if (!is_number_type(array_leaf_type(x.type())))
+    throw std::runtime_error(
+      "TypeError: numpy." + function + " of this argument is not supported");
+  return apply_ufunc(
+    function, {x}, bool_type(), [&](const std::vector<exprt> &element) {
+      return bounded_math(converter_, call_)
+        .float_predicate(function, element[0]);
+    });
 }
 
 // `np.exp(0.3)`, `np.sin(-1.0)`: a numeric literal argument.
@@ -7201,10 +10619,11 @@ std::optional<exprt> numpy_call_expr::try_numpy_math_constant()
   return numpy_math_value(function, to_double(value));
 }
 
-// The function applied to each element of a literal 1-D or 2-D list.
-exprt numpy_call_expr::numpy_math_list(
-  const std::string &function,
-  const nlohmann::json &arg)
+// A literal 1-D or 2-D list of numbers as an array of f of each element;
+// nullopt for anything else.
+static std::optional<exprt> numeric_list_array(
+  const nlohmann::json &arg,
+  const std::function<exprt(double)> &f)
 {
   std::vector<std::vector<numeric_value>> rows;
   std::vector<numeric_value> row;
@@ -7212,7 +10631,7 @@ exprt numpy_call_expr::numpy_math_list(
   if (flat)
     rows.push_back(row);
   else if (!try_extract_numeric_2d_list(arg, rows))
-    throw std::runtime_error("Unsupported Numpy call: " + function);
+    return std::nullopt;
   std::vector<exprt> results;
   for (const auto &values : rows)
   {
@@ -7220,7 +10639,7 @@ exprt numpy_call_expr::numpy_math_list(
       "array",
       array_typet(double_type(), from_integer(values.size(), size_type())));
     for (const numeric_value &value : values)
-      array.copy_to_operands(numpy_math_value(function, to_double(value)));
+      array.copy_to_operands(f(to_double(value)));
     results.push_back(array);
   }
   if (flat)
@@ -7232,6 +10651,40 @@ exprt numpy_call_expr::numpy_math_list(
   for (const exprt &result : results)
     matrix.copy_to_operands(result);
   return matrix;
+}
+
+// The function applied to each element of a literal 1-D or 2-D list.
+exprt numpy_call_expr::numpy_math_list(
+  const std::string &function,
+  const nlohmann::json &arg)
+{
+  if (std::optional<exprt> array = numeric_list_array(arg, [&](double x) {
+        return numpy_math_value(function, x);
+      }))
+    return *array;
+  throw std::runtime_error("Unsupported Numpy call: " + function);
+}
+
+// A literal list of numbers, or np.array of one, as a constant array, so
+// that its elements fold where the model only relates elements read at run
+// time.
+std::optional<exprt>
+numpy_call_expr::literal_array_operand(const nlohmann::json &arg)
+{
+  nlohmann::json node = tuples_as_lists(arg);
+  const nlohmann::json func = node.value("func", nlohmann::json::object());
+  const nlohmann::json module = func.value("value", nlohmann::json::object());
+  const std::string attr = func.value("attr", "");
+  if (
+    node.value("_type", "") == "Call" &&
+    (attr == "array" || attr == "asarray") &&
+    module.value("_type", "") == "Name" &&
+    is_imported_numpy_module_alias(converter_.ast(), module.value("id", "")) &&
+    node["args"].size() == 1 &&
+    node.value("keywords", nlohmann::json::array()).empty())
+    node = tuples_as_lists(node["args"][0]);
+  return numeric_list_array(
+    node, [](double x) { return from_double(x, double_type()); });
 }
 
 typet numpy_call_expr::get_typet_from_dtype() const
@@ -7452,6 +10905,9 @@ bool is_broadcastable(
 
 void numpy_call_expr::broadcast_check(const nlohmann::json &operands) const
 {
+  // solve checks its operands' shapes itself and raises NumPy's errors.
+  if (function_id_.get_function() == "solve")
+    return;
   std::vector<std::size_t> previous_shape;
   bool is_first_operand = true;
 
@@ -8150,52 +11606,16 @@ exprt numpy_call_expr::create_expr_from_call()
   if (call_["args"].size() == 1 || function_id_.get_function() == "norm")
   {
     const std::string &function = function_id_.get_function();
-    if (function == "det")
-    {
-      nlohmann::json arg = call_["args"][0];
-      resolve_var(arg);
-      unwrap_linalg_operand(arg);
-
-      std::vector<std::vector<scalar_value>> matrix;
-      if (!try_extract_scalar_2d_list(arg, matrix))
-        return symbolic_det(call_["args"][0], contains_string_constant(arg));
-
-      const std::vector<std::vector<double>> real =
-        checked_square_matrix(function, matrix);
-      if (const std::optional<double> computed = exact_det(real))
-        return lapack_value(*computed, 0.0);
-      if (structurally_singular(real))
-        return lapack_value(0.0, 0.0);
-      const double exact = cofactor_det(real);
-      return lapack_value(exact, det_radius(real, exact));
-    }
-
-    auto unwrap_np_array_arg = [&resolve_var, this](nlohmann::json &arg) {
-      resolve_var(arg);
-      unwrap_linalg_operand(arg);
-    };
-
-    if (function == "inv")
-    {
-      nlohmann::json arg = call_["args"][0];
-      unwrap_np_array_arg(arg);
-
-      std::vector<std::vector<scalar_value>> matrix;
-      if (!try_extract_scalar_2d_list(arg, matrix))
-        throw std::runtime_error(
-          "TypeError: numpy.linalg.inv currently supports only constant 2D "
-          "numeric arrays");
-
-      return linalg_inverse(checked_square_matrix(function, matrix));
-    }
+    static const std::set<std::string> matrix_functions = {
+      "det", "inv", "eig", "eigvals", "svd"};
+    if (matrix_functions.count(function) != 0)
+      return linalg_unary(function, resolve_var);
 
     if (function == "norm")
-      return linalg_norm(unwrap_np_array_arg);
-
-    static const std::set<std::string> decompositions = {
-      "eig", "eigvals", "svd"};
-    if (decompositions.count(function) != 0)
-      return linalg_decomposition(function, linalg_matrix(unwrap_np_array_arg));
+      return linalg_norm([&resolve_var, this](nlohmann::json &arg) {
+        resolve_var(arg);
+        unwrap_linalg_operand(arg);
+      });
 
     if (is_complex_function(function))
     {
@@ -8751,36 +12171,7 @@ exprt numpy_call_expr::create_expr_from_call()
     resolve_var(rhs);
 
     if (function == "solve")
-    {
-      unwrap_linalg_operand(lhs);
-      unwrap_linalg_operand(rhs);
-
-      std::vector<std::vector<scalar_value>> A;
-      if (!try_extract_scalar_2d_list(lhs, A))
-        throw std::runtime_error(
-          "TypeError: numpy.linalg.solve requires a constant 2D numeric "
-          "matrix as first argument");
-
-      const std::vector<std::vector<double>> real =
-        checked_square_matrix(function, A);
-      const std::size_t n = real.size();
-
-      std::vector<scalar_value> b;
-      if (!try_extract_scalar_1d_list(rhs, b))
-        throw std::runtime_error(
-          "TypeError: numpy.linalg.solve requires a constant 1D numeric "
-          "array as second argument");
-
-      if (b.size() != n)
-        throw std::runtime_error(
-          "ValueError: numpy.linalg.solve: matrix and vector sizes are "
-          "incompatible");
-
-      std::vector<double> rhs_values;
-      for (const scalar_value &value : b)
-        rhs_values.push_back(value.value.real());
-      return linalg_solve(function, real, rhs_values);
-    }
+      return linalg_solve_call(original_lhs, original_rhs, lhs, rhs);
 
     if (should_fallback_to_numpy_model(function))
       return function_call_expr::get();
@@ -11334,6 +14725,29 @@ numpy_call_expr::try_narrow_float_reduce(const std::string &function)
   return complex_value_reduce(function, *narrow_float_mean_nodes(operand));
 }
 
+// The name of the ufunc that has no NumPy loop for operands of `kind`:
+// strings for any of these, and complex numbers for the real-only ones.
+static std::optional<std::string>
+refusing_ufunc(const std::string &function, numpy_dtypet::kindt kind)
+{
+  static const std::map<std::string, std::string> real_only = {
+    {"floor_divide", "floor_divide"},
+    {"remainder", "remainder"},
+    {"mod", "remainder"},
+    {"fmod", "fmod"},
+    {"fabs", "fabs"}};
+  if (const auto name = real_only.find(function); name != real_only.end())
+    return kind == numpy_dtypet::kindt::string ||
+               kind == numpy_dtypet::kindt::complex
+             ? std::optional<std::string>(name->second)
+             : std::nullopt;
+  if (function != "float_power" && function != "reciprocal")
+    return std::nullopt;
+  return kind == numpy_dtypet::kindt::string
+           ? std::optional<std::string>(function)
+           : std::nullopt;
+}
+
 void numpy_call_expr::reject_unmodelled_operands(
   const std::string &function) const
 {
@@ -11351,7 +14765,10 @@ void numpy_call_expr::reject_unmodelled_operands(
     "sort",
     "argsort"};
   reject_array_copy_with_dtype(function);
+  // NumPy's own TypeError for these is raised by try_refused_operand_kind.
   const auto reject = [&function](kindt kind) {
+    if (refusing_ufunc(function, kind))
+      return;
     throw std::runtime_error(
       "TypeError: numpy." + function + "() over a " + numpy_kind_name(kind) +
       " array is not supported");
@@ -11467,7 +14884,6 @@ fold_double(const std::string &function, double left, double right)
     {"add", [](double a, double b) { return a + b; }},
     {"subtract", [](double a, double b) { return a - b; }},
     {"multiply", [](double a, double b) { return a * b; }},
-    {"power", [](double a, double b) { return std::pow(a, b); }},
     {"copysign", [](double a, double b) { return std::copysign(a, b); }},
     {"fmax", [](double a, double b) { return std::fmax(a, b); }},
     {"fmin", [](double a, double b) { return std::fmin(a, b); }},
@@ -11559,6 +14975,13 @@ std::optional<exprt> numpy_call_expr::fold_scalar_binary(
     folded.cformat(integer2string(wrapped));
     return folded;
   }
+  if (function == "power")
+    return bounded_math(converter_, call_)
+      .binary(
+        "pow",
+        from_double(to_double(lhs), double_type()),
+        from_double(to_double(rhs), double_type()),
+        math_module::numpy);
   const std::optional<double> value =
     fold_double(function, to_double(lhs), to_double(rhs));
   if (!value)
@@ -11632,6 +15055,15 @@ exprt numpy_call_expr::scalar_binary_call(
       "TypeError: numpy." + function +
       "() is only supported on number "
       "literals with constant folding");
+  // power of floats takes the bounded model either way, not the C pow model
+  // `**` would reach.
+  if (function == "power" && !(lhs.is_int && rhs.is_int))
+    return bounded_math(converter_, call_)
+      .binary(
+        "pow",
+        from_double(to_double(lhs), double_type()),
+        from_double(to_double(rhs), double_type()),
+        math_module::numpy);
   return unfolded_scalar_binary(function, lhs, rhs, t);
 }
 
@@ -11639,8 +15071,19 @@ exprt numpy_call_expr::scalar_binary_call(
 const std::string &numpy_call_expr::canonical_function()
 {
   static const std::map<std::string, std::string> aliases = {
-    {"asin", "arcsin"}, {"acos", "arccos"}, {"atan", "arctan"}};
-  auto alias = aliases.find(function_id_.get_function());
+    {"asin", "arcsin"},
+    {"acos", "arccos"},
+    {"atan", "arctan"},
+    {"asinh", "arcsinh"},
+    {"acosh", "arccosh"},
+    {"atanh", "arctanh"},
+    {"atan2", "arctan2"}};
+  const std::string &name = function_id_.get_function();
+  // The bounded model has erf and erfc for math; NumPy has neither.
+  if (name == "erf" || name == "erfc")
+    throw std::runtime_error(
+      "AttributeError: module 'numpy' has no attribute '" + name + "'");
+  auto alias = aliases.find(name);
   if (alias != aliases.end())
     function_id_.set_function(alias->second);
   return function_id_.get_function();
@@ -11933,6 +15376,35 @@ numpy_call_expr::try_narrow_operand_call(const std::string &function)
       "TypeError: numpy." + function +
       "() over a dtype narrower than 64 bits is not supported");
   return call_with_narrow_constructors_bound(function);
+}
+
+// NumPy's TypeError for an operand dtype the ufunc has no loop for, raised
+// where the call runs.
+std::optional<exprt>
+numpy_call_expr::try_refused_operand_kind(const std::string &function)
+{
+  using kindt = numpy_dtypet::kindt;
+  for (const nlohmann::json &arg : call_.value("args", nlohmann::json::array()))
+  {
+    const std::optional<std::string> name =
+      is_string_operand(arg)    ? refusing_ufunc(function, kindt::string)
+      : is_complex_operand(arg) ? refusing_ufunc(function, kindt::complex)
+                                : std::nullopt;
+    if (!name)
+      continue;
+    raise_linalg(
+      "TypeError",
+      "ufunc '" + *name +
+        "' not supported for the input types, and the inputs could not be "
+        "safely coerced to any supported types according to the casting rule "
+        "''safe''",
+      true_exprt());
+    const exprt *lhs = converter_.current_lhs;
+    return nondet_value(
+      lhs && lhs->type().is_array() ? lhs->type() : typet(double_type()),
+      "$ufunc$");
+  }
+  return std::nullopt;
 }
 
 exprt numpy_call_expr::get()

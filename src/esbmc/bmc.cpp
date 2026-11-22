@@ -28,6 +28,7 @@
 #include <esbmc/bmc.h>
 #include <esbmc/property_report.h>
 #include <fstream>
+#include <goto-programs/goto_loop_invariant.h>
 #include <goto-programs/goto_loops.h>
 #include <goto-symex/trace/build_goto_trace.h>
 #include <goto-symex/symex_invariant.h>
@@ -48,6 +49,7 @@
 #include <util/irep/migrate.h>
 #include <util/base/cwe_mapping.h>
 #include <util/symtab/show_symbol_table.h>
+#include <util/base/threads.h>
 #include <util/base/time_stopping.h>
 #include <util/ssa/cache.h>
 #include <util/ssa/fingerprint.h>
@@ -266,13 +268,12 @@ bmct::bmct(goto_functionst &funcs, optionst &opts, contextt &_context)
   if (options.get_bool_option("smt-during-symex"))
   {
     runtime_solver = std::unique_ptr<smt_convt>(create_solver("", ns, options));
+    auto equation =
+      std::make_shared<runtime_encoded_equationt>(ns, *runtime_solver);
+    equation->pre_register_addresses(funcs);
 
     symex = std::make_unique<reachability_treet>(
-      funcs,
-      ns,
-      options,
-      std::make_shared<runtime_encoded_equationt>(ns, *runtime_solver),
-      _context);
+      funcs, ns, options, equation, _context);
   }
   else
   {
@@ -292,8 +293,15 @@ void bmct::successful_trace(const symex_target_equationt &eq [[maybe_unused]])
   if (options.get_bool_option("result-only"))
     return;
 
+  std::vector<std::pair<locationt, std::string>> invariants = loop_invariants;
+  if (proves_loop_invariants())
+  {
+    const auto checked = checked_loop_invariants(program, ns);
+    invariants.insert(invariants.end(), checked.begin(), checked.end());
+  }
+
   goto_tracet goto_trace;
-  write_correctness_witnesses(options, ns, goto_trace);
+  write_correctness_witnesses(options, ns, goto_trace, {}, invariants);
 
   // On a successful verification there is no error trace, but dead-store
   // advisories (CWE-563) are still valid and must reach SARIF. Emit an
@@ -330,6 +338,34 @@ static bool is_loop_invariant_obligation(const locationt &location)
          property == "assigns compliance";
 }
 
+// Whether \p step is a loop-invariant havoc that \p smt_conv's model runs
+// through. Witness validation havocs only on a side branch before the real
+// loop, so a havoc earlier in the trace need not lie on the violating path
+// (issue #10641). A guard the model leaves undetermined counts as run.
+static bool runs_invariant_havoc(
+  const symex_target_equationt::SSA_stept &step,
+  smt_convt &smt_conv)
+{
+  return step.is_assignment() && step.source.pc->loop_invariant_havoc &&
+         !smt_conv.l_get(step.guard).is_false();
+}
+
+// Whether the model of \p eq runs a loop-invariant havoc before the one claim
+// the claim slicer kept.
+static bool model_runs_invariant_havoc(
+  const symex_target_equationt &eq,
+  smt_convt &smt_conv)
+{
+  for (const auto &step : eq.SSA_steps)
+  {
+    if (step.is_assert() && !step.ignore)
+      return false;
+    if (runs_invariant_havoc(step, smt_conv))
+      return true;
+  }
+  return false;
+}
+
 // Attached to a claim downgraded from Failed to Unknown because the only trace
 // violating it runs through a --loop-invariant-check havoc (issue #7480).
 static const char *const weak_invariant_note =
@@ -340,7 +376,8 @@ void bmct::record_satisfiable_claim(
   const claim_slicer &claim,
   const property_locationt &loc,
   bool inductive_step,
-  symex_target_equationt &local_eq)
+  symex_target_equationt &local_eq,
+  smt_convt &smt_conv)
 {
   // Neither answer refutes the program. An inductive-step run starts from an
   // arbitrary state, and a claim downstream of a loop-invariant havoc is
@@ -364,10 +401,11 @@ void bmct::record_satisfiable_claim(
   }
 
   // A claim downstream of the havoc is unknowable only while the abstraction
-  // admits it holding (issue #7585).
+  // admits an execution that avoids it (issues #7585, #10642).
   if (
     claim.claim_after_invariant_havoc &&
     !is_loop_invariant_obligation(claim.claim_location) &&
+    model_runs_invariant_havoc(local_eq, smt_conv) &&
     check_claim_unsatisfiable(local_eq) != P_UNSATISFIABLE)
   {
     weak_invariant_detected = true;
@@ -399,7 +437,7 @@ void bmct::record_violated_properties(
 
   for (const auto &step : eq.SSA_steps)
   {
-    if (step.is_assignment() && step.source.pc->loop_invariant_havoc)
+    if (runs_invariant_havoc(step, smt_conv))
       seen_invariant_havoc = true;
 
     if (!step.is_assert() || step.ignore)
@@ -428,6 +466,47 @@ void bmct::record_violated_properties(
   }
 }
 
+void bmct::solve_past_the_abstraction(
+  smt_resultt result,
+  symex_target_equationt &eq)
+{
+  // Inductive-step and forward-condition models witness no violation, and a
+  // --smt-during-symex solver cannot be replaced by a fresh one.
+  if (
+    result != P_SATISFIABLE || options.get_bool_option("inductive-step") ||
+    options.get_bool_option("forward-condition") ||
+    options.get_bool_option("smt-during-symex"))
+    return;
+
+  std::vector<symex_target_equationt::SSA_stept *> set_aside;
+  while (runtime_solver->has_model())
+  {
+    record_violated_properties(*runtime_solver, eq);
+    if (!violates_only_the_abstraction())
+      break;
+
+    const size_t before = set_aside.size();
+    for (auto &step : eq.SSA_steps)
+      if (
+        step.is_assert() && !step.ignore &&
+        !runtime_solver->l_get(step.cond_expr).is_true())
+      {
+        step.ignore = true;
+        set_aside.push_back(&step);
+      }
+    if (set_aside.size() == before)
+      break;
+
+    std::unique_ptr<smt_convt> next(create_solver("", ns, options));
+    if (run_decision_procedure(*next, eq) != P_SATISFIABLE)
+      break;
+    runtime_solver = std::move(next);
+  }
+
+  for (auto *step : set_aside)
+    step->ignore = false;
+}
+
 void bmct::error_trace(smt_convt &smt_conv, const symex_target_equationt &eq)
 {
   if (options.get_bool_option("result-only"))
@@ -437,6 +516,9 @@ void bmct::error_trace(smt_convt &smt_conv, const symex_target_equationt &eq)
 
   goto_tracet goto_trace;
   build_goto_trace(eq, smt_conv, goto_trace);
+  for (const goto_trace_stept &step : goto_trace.steps)
+    if (step.is_assert() && !step.guard)
+      violated_claim = step.comment;
 
   std::string output_file = options.get_option("cex-output");
   if (output_file != "")
@@ -452,7 +534,7 @@ void bmct::error_trace(smt_convt &smt_conv, const symex_target_equationt &eq)
     violation_graphml_goto_trace(options, ns, goto_trace);
 
   if (witness_yaml_output != "")
-    violation_yaml_goto_trace(options, ns, goto_trace);
+    violation_yaml_goto_trace(options, ns, goto_trace, program);
 
   if (!options.get_option("sarif-output").empty())
   {
@@ -663,9 +745,9 @@ void bmct::report_violation()
     report_unknown();
 }
 
-/// UNSAT iff no feasible path satisfies the kept claim. A violation found
-/// downstream of a loop-invariant havoc is then one the invariant itself
-/// forces, not an artefact of the abstraction (issue #7585).
+/// UNSAT iff every feasible execution violates the kept claim. A violation
+/// found downstream of a loop-invariant havoc is then one the invariant itself
+/// forces, not an artefact of the abstraction (issues #7585, #10642).
 smt_resultt
 bmct::check_claim_unsatisfiable(symex_target_equationt &local_eq) const
 {
@@ -675,7 +757,8 @@ bmct::check_claim_unsatisfiable(symex_target_equationt &local_eq) const
   return solver->dec_solve();
 }
 
-/// Whether the invariant leaves the claim at \p claim_index no way to hold.
+/// Whether the invariant leaves the claim at \p claim_index no way to be
+/// avoided.
 /// The single-formula path has no per-claim equation, so slice one the way
 /// multi_property_check does and run the same probe.
 bool bmct::invariant_refutes(
@@ -2061,6 +2144,43 @@ void bmct::report_coverage_verbose(
   }
 }
 
+/// Whether this run's success proves each loop invariant it checked for every
+/// state of the C program that reaches the loop from main (#10853).
+bool bmct::proves_loop_invariants() const
+{
+  if (
+    options.get_option("witness-output-yaml").empty() ||
+    config.language.lid != language_idt::C ||
+    !(config.main.empty() || config.main == "main"))
+    return false;
+  // Unbounded integers prove a different claim than C's.
+  if (options.get_bool_option("int-encoding"))
+    return false;
+  // These bounds drop the states beyond them without a claim.
+  if (
+    atol(options.get_option("depth").c_str()) > 0 ||
+    atoi(options.get_option("context-bound").c_str()) >= 0)
+    return false;
+  // k-induction's inductive step drops unwinding assertions too, but the
+  // strategy reports it only as part of a full proof.
+  if (options.get_bool_option("inductive-step"))
+  {
+    if (
+      !options.get_bool_option("k-induction") ||
+      options.get_bool_option("k-induction-parallel") ||
+      options.get_bool_option("disable-inductive-step"))
+      return false;
+  }
+  else if (
+    options.get_bool_option("no-unwinding-assertions") ||
+    options.get_bool_option("partial-loops"))
+    return false;
+  // The run reports SUCCESSFUL (report_result).
+  return !options.get_bool_option("kind-violation-found") &&
+         !options.get_bool_option("suppress-bounded-success") &&
+         proves_the_program();
+}
+
 bool bmct::proves_the_program() const
 {
   return !vacuity_detected && !ltl_uninstrumented && run_fully_proved(options);
@@ -2228,7 +2348,10 @@ smt_resultt bmct::start_bmc()
   // something -- except under a k-step strategy, which accumulates into one
   // table that the concluding phase, or the driver, prints once.
   if (reports_final_verdict(res) || reports_multi_property_verdict(options))
+  {
     report_property_verdicts(res);
+    report_reported_properties();
+  }
   report_result(res);
 
   // Dead-store advisories are verdict-independent, but the trace paths that
@@ -2281,7 +2404,10 @@ size_t bmct::barren_interleaving_budget() const
 static void prepare_property_verdicts(const optionst &options)
 {
   if (reports_multi_property_verdict(options))
+  {
     goto_functionst::property_verdicts.clear();
+    goto_functionst::reported_verdicts.clear();
+  }
   else if (is_bounded_round(options))
     goto_functionst::property_verdicts.begin_round();
 }
@@ -2720,6 +2846,7 @@ smt_resultt bmct::run_thread(std::shared_ptr<symex_target_equationt> &eq)
         solver_result.bounded_loop_truncations);
 
     smt_resultt result = run_decision_procedure(*runtime_solver, *eq);
+    solve_past_the_abstraction(result, *eq);
 
     // Per-claim vacuity probe in single-property mode: a whole-equation
     // reachability check would silently miss a vacuous claim whenever some
@@ -3394,6 +3521,8 @@ smt_resultt bmct::multi_property_check(
     claim.run(local_eq.SSA_steps);
 
     const property_locationt &claim_ploc = claim.claim_ploc;
+    const std::string claim_class =
+      reported_property_class(options, claim.claim_location);
 
     if (fail_fast_hit)
     {
@@ -3451,12 +3580,12 @@ smt_resultt bmct::multi_property_check(
     std::string cone_key;
     bool cached_proof = false;
     if (
-      proof_cache_hit(
-        proof_cache.get(),
-        proof_cache_verify,
-        local_eq.SSA_steps,
-        cone_key,
-        cached_proof))
+      claim_class.empty() && proof_cache_hit(
+                               proof_cache.get(),
+                               proof_cache_verify,
+                               local_eq.SSA_steps,
+                               cone_key,
+                               cached_proof))
     {
       record_discharge(
         withhold_proofs,
@@ -3527,6 +3656,21 @@ smt_resultt bmct::multi_property_check(
     smt_resultt solver_result = run_decision_procedure(*solver_ptr, local_eq);
     fine_timet solve_stop = current_time();
 
+    // A reported check's answer is information about the program, not a
+    // verdict on it, so it gets no trace, witness or verdict (#10875).
+    if (!claim_class.empty())
+    {
+      property_locationt loc = claim_ploc;
+      loc.property_class = claim_class;
+      goto_functionst::reported_verdicts.record(
+        claim.claim_key,
+        solver_result == P_SATISFIABLE     ? property_verdictt::Failed
+        : solver_result == P_UNSATISFIABLE ? property_verdictt::Passed
+                                           : property_verdictt::Unknown,
+        loc);
+      return;
+    }
+
     dump_claim_fingerprint(
       fingerprint_dump,
       local_eq.SSA_steps,
@@ -3578,7 +3722,7 @@ smt_resultt bmct::multi_property_check(
                        "invariant, requires clause, or upstream assume"
                      : "");
       else if (solver_result == P_SATISFIABLE)
-        record_satisfiable_claim(claim, claim_ploc, is, local_eq);
+        record_satisfiable_claim(claim, claim_ploc, is, local_eq, *solver_ptr);
       else
       {
         // No answer at all. A coverage run suppresses the verdict that would
@@ -3761,7 +3905,7 @@ smt_resultt bmct::multi_property_check(
             options, ns, w.trace, tag_artifact(graphml_path));
         if (want_yaml)
           violation_yaml_goto_trace(
-            options, ns, w.trace, tag_artifact(yaml_path));
+            options, ns, w.trace, program, tag_artifact(yaml_path));
         if (want_testcase)
           generate_testcase(
             "testcase-" + witness_id + ".xml", local_eq, *solver_ptr);
@@ -3925,6 +4069,7 @@ smt_resultt bmct::multi_property_check(
 
         // TODO: Running everything in parallel might be a bad idea.
         //       Should we also add a thread pool?
+        threads_scope scope;
         std::vector<std::thread> parallel_jobs;
         for (const auto &i : jobs)
           parallel_jobs.push_back(
@@ -3996,18 +4141,25 @@ void bmct::seed_property_verdicts(const symex_target_equationt &eq) const
       continue;
 
     const std::string description = id2string(step.comment);
-    goto_functionst::property_verdicts.record(
+    const property_locationt loc =
+      classified_location(options, *step.source.pc, description);
+    verdict_table(loc).record(
       property_key(*step.source.pc, description),
       property_verdictt::NotChecked,
-      property_location(*step.source.pc, description));
+      loc);
   }
 
-  if (options.get_bool_option("report-unreached-claims"))
+  // A reported check symex never raised is unreachable, which is the answer
+  // its class asks for, so it is listed whether or not the others are.
+  if (
+    options.get_bool_option("report-unreached-claims") ||
+    !options.get_option("report-property-class").empty())
     seed_unreached_claims(eq);
 }
 
 void bmct::seed_unreached_claims(const symex_target_equationt &eq) const
 {
+  const bool every_claim = options.get_bool_option("report-unreached-claims");
   std::unordered_set<const goto_programt::instructiont *> reached;
   for (const auto &step : eq.SSA_steps)
     if (step.is_assert())
@@ -4019,10 +4171,14 @@ void bmct::seed_unreached_claims(const symex_target_equationt &eq) const
       {
         const std::string description =
           goto_symext::assertion_message(ns, instruction);
-        goto_functionst::property_verdicts.record(
+        const property_locationt loc =
+          classified_location(options, instruction, description);
+        if (loc.property_class.empty() && !every_claim)
+          continue;
+        verdict_table(loc).record(
           property_key(instruction, description),
           property_verdictt::Passed,
-          property_location(instruction, description),
+          loc,
           unreached_claim_note);
       }
 }
@@ -4160,14 +4316,22 @@ void bmct::report_coverage_goal_verdicts(
   log_result("{}", oss.str());
 }
 
+static const char *verdict_label_of(const property_rowt &row)
+{
+  return verdict_label(row.verdict);
+}
+
 static void print_property_rows(
   const std::vector<property_rowt> &rows,
   const property_countst &counts,
-  bool is_color)
+  bool is_color,
+  const char *heading = "Results:",
+  const char *(*label_of)(const property_rowt &) = verdict_label_of,
+  size_t label_width = 11)
 {
   const std::string RESET = is_color ? "\033[0m" : "";
 
-  log_result("\n** Results:");
+  log_result("\n** {}", heading);
 
   std::string group;
   for (const auto &row : rows)
@@ -4187,9 +4351,10 @@ static void print_property_rows(
     }
 
     log_result(
-      "  {}{:<11}{}  {:<{}}  line {:>{}}  {}{}",
+      "  {}{:<{}}{}  {:<{}}  line {:>{}}  {}{}",
       color,
-      verdict_label(row.verdict),
+      label_of(row),
+      label_width,
       RESET,
       "[" + row.id + "]",
       counts.id_width,
@@ -4284,6 +4449,82 @@ void report_k_step_property_table(
 
   if (goto_functionst::property_verdicts.is_incomplete())
     print_partial_report_note();
+}
+
+bool bmct::search_stopped_short() const
+{
+  if (report_incomplete || saw_bounded_loop_truncation)
+    return true;
+  for (const auto &[key, result] :
+       goto_functionst::property_verdicts.snapshot())
+    if (
+      result.verdict != property_verdictt::Passed &&
+      result.loc.description.find("unwinding assertion") != std::string::npos)
+      return true;
+  return false;
+}
+
+/// What a reported check's verdict says (#10875): Failed means its assertion
+/// can be violated, so a reachability check is reachable and a cover is
+/// satisfiable.
+static const char *reported_label(const property_rowt &row)
+{
+  const bool cover = row.property_class == "cover";
+  switch (row.verdict)
+  {
+  case property_verdictt::Failed:
+    return cover ? "SATISFIED" : "REACHABLE";
+  case property_verdictt::Passed:
+    return cover ? "UNSATISFIABLE" : "UNREACHABLE";
+  case property_verdictt::NotChecked:
+  case property_verdictt::Unknown:
+    break;
+  }
+  return "UNDECIDED";
+}
+
+void bmct::report_reported_properties() const
+{
+  std::map<std::string, property_resultt> verdicts =
+    goto_functionst::reported_verdicts.snapshot();
+  if (verdicts.empty())
+    return;
+
+  // Unreachable or unsatisfiable is a claim about every path, which a run that
+  // stopped short or cut a loop at its bound has not explored.
+  if (search_stopped_short())
+    for (auto &[key, result] : verdicts)
+      if (result.verdict == property_verdictt::Passed)
+      {
+        result.verdict = property_verdictt::Unknown;
+        result.note = "not every path was explored";
+      }
+
+  // Kani names every check, so no two reported rows read alike and need
+  // their conditions to tell them apart.
+  const std::vector<property_rowt> rows =
+    build_property_rows(verdicts, library_files);
+  // Uncolored: the verdict colors would paint a reachable check as a failure.
+  print_property_rows(
+    rows,
+    count_properties(rows),
+    false,
+    "Reported apart from the verdict:",
+    reported_label,
+    13);
+
+  std::map<std::string, size_t> tally;
+  for (const auto &row : rows)
+    ++tally[reported_label(row)];
+  std::ostringstream oss;
+  oss << "\n** " << rows.size() << " reported:";
+  const char *separator = " ";
+  for (const auto &[label, count] : tally)
+  {
+    oss << separator << count << " " << label;
+    separator = ", ";
+  }
+  log_result("{}", oss.str());
 }
 
 void bmct::report_property_verdicts(smt_resultt res) const

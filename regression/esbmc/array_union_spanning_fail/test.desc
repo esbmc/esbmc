@@ -1,0 +1,5 @@
+CORE
+main.c
+
+^  expect FAIL$
+^VERIFICATION FAILED$

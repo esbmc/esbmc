@@ -1,0 +1,4 @@
+CORE
+main.py
+--incremental-bmc
+^ERROR: TypeError: numpy.linalg.inv supports only run-time matrices up to 3x3$

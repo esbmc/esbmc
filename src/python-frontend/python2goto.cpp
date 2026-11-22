@@ -24,7 +24,8 @@ const struct group_opt_templ python2goto_options[] = {
       "write the goto binary to this file"},
      {"python",
       boost::program_options::value<std::string>()->value_name("path"),
-      "Python interpreter binary to use (searched in $PATH; default: python)"},
+      "Python interpreter binary to use (searched in $PATH; default: python3, "
+      "then python)"},
      {"verbosity",
       boost::program_options::value<std::vector<std::string>>(),
       "Verbosity of log output, can be given multiple times. Parameter is "

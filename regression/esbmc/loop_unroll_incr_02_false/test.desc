@@ -1,4 +1,4 @@
 THOROUGH
 main.c
---incremental-bmc
+--incremental-bmc --no-summarize-array-loops
 ^VERIFICATION UNKNOWN$

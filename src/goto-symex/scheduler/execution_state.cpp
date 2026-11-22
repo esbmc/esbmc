@@ -41,6 +41,8 @@ execution_statet::execution_statet(
   mon_from_tid = false;
   monitor_from_tid = 0;
   guard_execution = guard_execution_name;
+  if (options.get_bool_option("schedule"))
+    interleaving_guard = get_guard_identifier();
   interleaving_unviable = false;
   main_returned = false;
   symex_trace = options.get_bool_option("symex-trace");
@@ -59,7 +61,8 @@ execution_statet::execution_statet(
   const goto_programt *goto_program = &(it->second.body);
 
   // Initialize initial thread state
-  goto_symex_statet state(*state_level2, global_value_set, ns, no_propagation);
+  goto_symex_statet state(
+    *state_level2, global_value_set, ns, no_propagation, art->split_structs);
   state.initialize(
     (*goto_program).instructions.begin(),
     (*goto_program).instructions.end(),
@@ -76,7 +79,12 @@ execution_statet::execution_statet(
       {
         state.witness_segs.resize(wps.back().segment_idx + 1);
         for (const auto &wp : wps)
+        {
           state.witness_segs[wp.segment_idx].push_back(wp);
+          auto &segments = state.witness_locations[{wp.type, wp.line_id}];
+          if (segments.empty() || segments.back() != wp.segment_idx)
+            segments.push_back(wp.segment_idx);
+        }
       }
     }
   }
@@ -108,6 +116,10 @@ execution_statet::execution_statet(
   nondet_count = 0;
 
   thread_cswitch_threshold = (options.get_bool_option("ltl")) ? 3 : 2;
+  // Ordinary SSA storage lets replay progress follow deferred-path merges.
+  if (validate_witness)
+    witness_cursor = materialise_old_snapshot(
+      constant_int2tc(get_uint64_type(), 0), guard2tc());
 }
 
 execution_statet::execution_statet(const execution_statet &ex)
@@ -150,6 +162,7 @@ void execution_statet::copy_derived_from(const execution_statet &ex)
   guard_execution = ex.guard_execution;
   nondet_count = ex.nondet_count;
   node_id = ex.node_id;
+  interleaving_guard = ex.interleaving_guard;
   interleaving_unviable = ex.interleaving_unviable;
   main_returned = ex.main_returned;
 
@@ -414,9 +427,12 @@ void execution_statet::symex_assign(
     analyze_assign(code);
 }
 
-void execution_statet::claim(const expr2tc &expr, const std::string &msg)
+void execution_statet::claim(
+  const expr2tc &expr,
+  const std::string &msg,
+  bool user_assertion)
 {
-  goto_symext::claim(expr, msg);
+  goto_symext::claim(expr, msg, user_assertion);
 
   if (threads_state.size() >= thread_cswitch_threshold)
     analyze_read(expr);
@@ -530,14 +546,6 @@ expr2tc execution_statet::get_guard_identifier()
 
 void execution_statet::switch_to_thread(unsigned int i)
 {
-  // A violation sequence orders waypoints along the interleaved execution,
-  // so the next thread resumes matching where this one stopped.
-  const goto_symex_statet &from = threads_state[active_thread];
-  goto_symex_statet &to = threads_state[i];
-  to.cur_seg = from.cur_seg;
-  to.witness_guard = from.witness_guard;
-  to.cycle_branch_map = from.cycle_branch_map;
-
   last_active_thread = active_thread;
   active_thread = i;
   cur_state = &threads_state[active_thread];
@@ -821,6 +829,9 @@ void execution_statet::execute_guard()
   node_id = node_count++;
   expr2tc guard_expr = get_guard_identifier();
   expr2tc parent_guard;
+  const expr2tc parent_node = interleaving_guard;
+  if (parent_node)
+    interleaving_guard = guard_expr;
 
   // Preserve the existing false-guard handling for context switches taken
   // immediately after a branch, but keep the branch parent state explicit.
@@ -850,7 +861,17 @@ void execution_statet::execute_guard()
   if (is_false(parent_guard) || is_cur_state_guard_false(parent_guard))
   {
     // A context switch happens, add last thread state guard to assumption.
-    if (active_thread != last_active_thread)
+    // Under --schedule the node is made unselectable instead.
+    if (parent_node)
+    {
+      if (active_thread != last_active_thread)
+        target->assumption(
+          guard2tc().as_expr(),
+          not2tc(interleaving_guard),
+          get_active_state().source,
+          first_loop);
+    }
+    else if (active_thread != last_active_thread)
     {
       target->assumption(
         guard2tc().as_expr(),
@@ -869,6 +890,17 @@ void execution_statet::execute_guard()
   state_level2->rename(parent_guard);
   do_simplify(parent_guard);
 
+  if (parent_node)
+  {
+    // A selected node selects its parent, and implies the path to its switch.
+    target->assumption(
+      guard2tc().as_expr(),
+      implies2tc(interleaving_guard, parent_node),
+      get_active_state().source,
+      first_loop);
+    parent_guard = implies2tc(interleaving_guard, parent_guard);
+  }
+
   if (active_thread != last_active_thread)
     target->assumption(
       guard2tc().as_expr(),
@@ -877,10 +909,16 @@ void execution_statet::execute_guard()
       first_loop);
 }
 
+void execution_statet::guard_by_interleaving(expr2tc &expr) const
+{
+  if (interleaving_guard)
+    expr = implies2tc(interleaving_guard, expr);
+}
+
 unsigned int execution_statet::add_thread(const goto_programt *prog)
 {
   goto_symex_statet new_state(
-    *state_level2, global_value_set, ns, no_propagation);
+    *state_level2, global_value_set, ns, no_propagation, art1->split_structs);
   new_state.initialize(
     prog->instructions.begin(),
     prog->instructions.end(),
@@ -893,6 +931,7 @@ unsigned int execution_statet::add_thread(const goto_programt *prog)
   new_state.global_guard.make_true();
   new_state.global_guard.add(get_guard_identifier());
   new_state.witness_segs = cur_state->witness_segs;
+  new_state.witness_locations = cur_state->witness_locations;
   threads_state.push_back(new_state);
   if (threads_state.size() > art1->reduction_stats.peak_threads)
     art1->reduction_stats.peak_threads = threads_state.size();
@@ -1739,14 +1778,15 @@ std::shared_ptr<execution_statet> schedule_execution_statet::clone() const
 
 void schedule_execution_statet::claim(
   const expr2tc &expr,
-  const std::string &msg)
+  const std::string &msg,
+  bool user_assertion)
 {
   unsigned int tmp_total, tmp_remaining, tmp_simplified;
 
   tmp_total = total_claims;
   tmp_remaining = remaining_claims;
   tmp_simplified = simplified_claims;
-  execution_statet::claim(expr, msg);
+  execution_statet::claim(expr, msg, user_assertion);
 
   tmp_total = total_claims - tmp_total;
   tmp_remaining = remaining_claims - tmp_remaining;

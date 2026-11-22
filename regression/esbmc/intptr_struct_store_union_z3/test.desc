@@ -1,0 +1,4 @@
+CORE
+main.c
+--z3 --no-pointer-check --no-bounds-check --timeout 60s
+^VERIFICATION SUCCESSFUL$

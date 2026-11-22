@@ -836,7 +836,9 @@ void goto_symext::phi_function(const statet::merge_statet &merge_state)
 
 void goto_symext::loop_bound_exceeded(const expr2tc &guard)
 {
-  if (partial_loops && !config.options.get_bool_option("termination"))
+  if (
+    partial_loops && !config.options.get_bool_option("termination") &&
+    !cur_state->source.pc->exits_at_bound)
     return;
 
   unsigned loop_number = cur_state->source.pc->loop_number;
@@ -859,6 +861,7 @@ void goto_symext::loop_bound_exceeded(const expr2tc &guard)
     // generate unwinding assumption, unless we permit partial loops
     expr2tc guarded_expr = negated_cond;
     cur_state->guard.guard_expr(guarded_expr);
+    guard_by_interleaving(guarded_expr);
     target->assumption(
       cur_state->guard.as_expr(), guarded_expr, cur_state->source, first_loop);
 

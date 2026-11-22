@@ -24,12 +24,13 @@
 #  include <cstring>
 #  include <malloc.h>
 
-/* glibc gives a non-main thread its own arena, so running the work on the
- * thread below leaves symbolic execution, encoding and the solver allocating
- * from a secondary one. Capping the process at a single arena puts them back on
- * the main arena and is worth ~5% of wall clock, but only together with the
- * malloc_trim() once GOTO creation is done (esbmc/esbmc#6831): the two are a
- * pair, and the trim alone is a 3% regression.
+/* glibc gives a non-main thread its own arena, so running the work on a
+ * thread (the fallback below) leaves symbolic execution, encoding and the
+ * solver allocating from a secondary one. Capping the process at a single arena
+ * puts them back on the main arena and is worth ~5% of wall clock, but only
+ * together with the malloc_trim() once GOTO creation is done
+ * (esbmc/esbmc#6831): the two are a pair, and the trim alone is a 3%
+ * regression.
  *
  * --parallel-solving is the exception, since it allocates from several threads
  * at once and one arena would serialise them. It has to be read out of argv
@@ -116,6 +117,61 @@ static void *run_main(void *arg)
   args->result = run_esbmc(args->argc, args->argv);
   return nullptr;
 }
+
+#  ifdef __has_feature
+#    define ESBMC_HAS_FEATURE(x) __has_feature(x)
+#  else
+#    define ESBMC_HAS_FEATURE(x) 0
+#  endif
+// Sanitizers lose track of the stack across swapcontext. Clang reports them
+// through __has_feature, GCC through the __SANITIZE_*__ macros.
+#  if defined(__linux__) && !defined(__SANITIZE_ADDRESS__) &&                  \
+    !defined(__SANITIZE_THREAD__) && !ESBMC_HAS_FEATURE(address_sanitizer) &&  \
+    !ESBMC_HAS_FEATURE(thread_sanitizer) &&                                    \
+    !ESBMC_HAS_FEATURE(memory_sanitizer)
+#    include <sys/mman.h>
+#    include <ucontext.h>
+#    include <unistd.h>
+#    define ESBMC_SWITCH_STACK 1
+
+static main_argst *stack_args;
+
+static void run_main_on_stack()
+{
+  run_main(stack_args);
+}
+
+/* Run the work on a larger stack without a second thread. Once a process has
+ * started one, glibc's malloc and libstdc++'s shared_ptr take their atomic
+ * paths for good. */
+static bool switch_stack(main_argst &args)
+{
+  const size_t page = sysconf(_SC_PAGESIZE);
+  char *mem = static_cast<char *>(mmap(
+    nullptr,
+    esbmc_stack_size + page,
+    PROT_READ | PROT_WRITE,
+    MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE | MAP_STACK,
+    -1,
+    0));
+  if (mem == MAP_FAILED)
+    return false;
+  // A guard page, so an overflow faults rather than running into other memory.
+  ucontext_t caller, callee;
+  bool ran = mprotect(mem, page, PROT_NONE) == 0 && getcontext(&callee) == 0;
+  if (ran)
+  {
+    callee.uc_stack.ss_sp = mem + page;
+    callee.uc_stack.ss_size = esbmc_stack_size;
+    callee.uc_link = &caller;
+    stack_args = &args;
+    makecontext(&callee, run_main_on_stack, 0);
+    ran = swapcontext(&caller, &callee) == 0;
+  }
+  munmap(mem, esbmc_stack_size + page);
+  return ran;
+}
+#  endif
 #endif
 
 int main(int argc, const char **argv)
@@ -145,6 +201,14 @@ int main(int argc, const char **argv)
 #endif
 
   register_bundled_files();
+
+#ifdef ESBMC_SWITCH_STACK
+  {
+    main_argst args{argc, argv, 0};
+    if (switch_stack(args))
+      return args.result;
+  }
+#endif
 
 #ifndef _WIN32
   pthread_attr_t attr;

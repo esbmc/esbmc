@@ -5,6 +5,7 @@
 #include <vector>
 #include <set>
 #include <util/base/string_pool.h>
+#include <util/base/threads.h>
 #include <mutex>
 
 class StringContainerTest
@@ -287,6 +288,7 @@ TEST_CASE(
   "global container: thread safety initialization",
   "[global][static][thread]")
 {
+  threads_scope scope;
   std::vector<std::thread> threads;
   std::set<string_pool *> instances;
   std::mutex mutex;
@@ -438,6 +440,7 @@ TEST_CASE(
   "[concurrency][thread]")
 {
   string_pool container;
+  threads_scope scope;
   std::vector<std::thread> threads;
   std::vector<unsigned> ids(10);
   std::mutex mutex;
@@ -472,6 +475,7 @@ TEST_CASE(
   unsigned master_id = container["shared"];
 
   std::vector<unsigned> retrieved_ids(100);
+  threads_scope scope;
   std::vector<std::thread> threads;
   std::mutex mutex;
 
@@ -506,6 +510,7 @@ TEST_CASE(
   const int NUM_THREADS = 10;
   const int STRINGS_PER_THREAD = 1000;
 
+  threads_scope scope;
   std::vector<std::thread> threads;
   std::set<unsigned> all_ids;
   std::mutex mutex;

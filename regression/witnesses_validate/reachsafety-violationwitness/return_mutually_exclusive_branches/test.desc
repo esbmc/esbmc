@@ -1,0 +1,4 @@
+CORE
+main.c
+--32 --sv-comp --std c11 --enable-unreachability-intrinsic --validate-violation-witness --witness witness.yml --unwind 4
+^VERIFICATION SUCCESSFUL$

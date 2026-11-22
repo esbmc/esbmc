@@ -1,0 +1,4 @@
+CORE
+cbmc_kani_nonnull_write.goto
+--binary --function _RNvCskxv5kU2BOjz_13nonnull_write7harness --ignore-property-class reachability_check --ignore-property-class cover
+^VERIFICATION SUCCESSFUL$

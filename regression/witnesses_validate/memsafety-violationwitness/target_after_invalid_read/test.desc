@@ -1,0 +1,4 @@
+CORE
+main.c
+--32 --std c11 --validate-violation-witness --witness witness.yml --memory-leak-check --no-assertions
+^VERIFICATION SUCCESSFUL$

@@ -169,6 +169,13 @@ const struct group_opt_templ all_cmd_options[] = {
        "class"),
      "Skip the assertions a CBMC goto-binary tags with this property class "
      "(repeatable), e.g. Kani's reachability_check and cover"},
+    {"report-property-class",
+     boost::program_options::value<std::vector<std::string>>()->value_name(
+       "class"),
+     "Check the assertions a CBMC goto-binary tags with this property class "
+     "(reachability_check or cover, repeatable) and report them apart from "
+     "the verdict, as reachable or satisfiable or not. Implies "
+     "--multi-property"},
     {"dont-care-about-missing-extensions",
      NULL,
      "Don't crash on unsupported extensions"},
@@ -178,13 +185,14 @@ const struct group_opt_templ all_cmd_options[] = {
     {"funsigned-char", NULL, "Make \"char\" unsigned by default"},
     {"fms-extensions", NULL, "Enable microsoft C extensions"},
     {"argv-max-args",
-     boost::program_options::value<int>()->default_value(2)->value_name("nr"),
-     "Maximum number of argv entries backed with nondet strings (default 2). "
+     boost::program_options::value<int>()->default_value(5)->value_name("nr"),
+     "Maximum number of argv (and envp) entries backed with nondet strings "
+     "(default 5). "
      "Higher values widen coverage at the cost of a larger SMT formula."},
     {"argv-max-strlen",
      boost::program_options::value<int>()->default_value(256)->value_name("nr"),
      "Maximum length (in bytes, including the null terminator) of each backed "
-     "argv string (default 256)."},
+     "argv or envp string (default 256)."},
     {"gcc-nested-functions",
      NULL,
      "Enable GCC nested functions extension (source-level lambda lifting)"},
@@ -193,7 +201,11 @@ const struct group_opt_templ all_cmd_options[] = {
      "Enable SV-COMP mode: suppress GCC-acceptable frontend diagnostics "
      "(int/pointer conversions), treat __builtin_unreachable as a no-op, emit "
      "physical line numbers for witnesses, and avoid malloc/free in the "
-     "fopen/fclose models. Set automatically by the SV-COMP wrapper."},
+     "fopen/fclose models. A program that can start a thread is verified with "
+     "incremental BMC, without interval analysis or --goto-unwind: schedules "
+     "of at most three context switches are searched for a violation first, "
+     "then the run continues with no context bound. Set automatically by the "
+     "SV-COMP wrapper."},
     /* Read by clang_c_language.cpp, which is built unconditionally, so these
      * must not sit in a frontend-gated group (#7345). */
     {"clang-c-irep2-adjust",
@@ -225,7 +237,8 @@ const struct group_opt_templ all_cmd_options[] = {
    {
      {"python",
       boost::program_options::value<std::string>()->value_name("path"),
-      "Python interpreter binary to use (searched in $PATH; default: python)"},
+      "Python interpreter binary to use (searched in $PATH; default: python3, "
+      "then python)"},
      {"override-return-annotation",
       NULL,
       "Override return annotation with inferred type"},
@@ -258,6 +271,13 @@ const struct group_opt_templ all_cmd_options[] = {
      {"nondet-str-length",
       boost::program_options::value<int>()->default_value(16)->value_name("nr"),
       "Set maximum length for non-deterministic strings (default is 16)"},
+     {"python-typed-lists",
+      NULL,
+      "Keep a list whose every element is an int in an int64 array instead of "
+      "one untyped cell per element (default on)"},
+     {"no-python-typed-lists",
+      NULL,
+      "Keep every list in one untyped cell per element"},
      {"python-list-compare-depth",
       boost::program_options::value<int>()->default_value(4)->value_name("nr"),
       "Set maximum nesting depth for Python list comparison (default is 4)"},
@@ -324,10 +344,12 @@ const struct group_opt_templ all_cmd_options[] = {
      NULL,
      "Force to verify every function, even if it's an unreachable "
      "internal/private function"},
-    {"unbound", NULL, "Model external function calls as arbitrary behavior"},
+    {"unbound",
+     NULL,
+     "Model external function calls as arbitrary behavior (default)"},
     {"bound",
      NULL,
-     "Model inter-contract function calls within a bounded system (default)"},
+     "Model inter-contract function calls within a bounded system"},
     {"reentry-check",
      NULL,
      "Detect reentrancy behavior during contract execution"},
@@ -467,6 +489,10 @@ const struct group_opt_templ all_cmd_options[] = {
      boost::program_options::value<std::string>(),
      "Redirect all output to a file (no stdout/stderr)"},
     {"goto2c", NULL, "Translate the GOTO program to C"},
+    {"goto2lean",
+     NULL,
+     "Translate the GOTO program reachable from the entry function to Lean 4 "
+     "(prototype; scalar fragment)"},
     {"generate-testcase",
      NULL,
      "If a solution is found, generates a testcase in XML"},
@@ -575,6 +601,7 @@ const struct group_opt_templ all_cmd_options[] = {
      NULL,
      "With another --ts option, also print the extracted transition system"},
     {"ts-bmc", NULL, "Bounded model checking over the transition system"},
+    {"ts-pdr", NULL, "IC3/PDR over the transition system"},
     {"ts-no-fallback",
      NULL,
      "Report UNKNOWN instead of falling back when the program is not a "
@@ -830,6 +857,10 @@ const struct group_opt_templ all_cmd_options[] = {
      "ESBMC generates inside model code (see --no-standard-checks), renumbers "
      "--claim, and is unsupported for Python"},
     {"no-bounds-check", NULL, "Do not do array bounds check"},
+    {"no-pointer-arith-check",
+     NULL,
+     "Do not check that &a[i] stays within a or one past its end (C11 "
+     "6.5.6p8); --no-bounds-check also disables it"},
     {"no-div-by-zero-check", NULL, "Do not do division by zero check"},
     {"no-pointer-check", NULL, "Do not do pointer check"},
     {"no-align-check", NULL, "Do not check pointer alignment"},
@@ -837,6 +868,10 @@ const struct group_opt_templ all_cmd_options[] = {
      NULL,
      "Do not check that a floating-point to integer conversion is in range "
      "(C11 6.3.1.4p1); the rest of --overflow-check is unaffected"},
+    {"no-fp-overflow-check",
+     NULL,
+     "Do not check floating-point arithmetic for overflow; integer overflow "
+     "checks under --overflow-check are unaffected"},
     {"no-unlimited-scanf-check",
      NULL,
      "Do not do overflow check for scanf/fscanf with unlimited character "
@@ -1009,8 +1044,9 @@ const struct group_opt_templ all_cmd_options[] = {
      NULL,
      "Enable extrapolation in abstract states (all)"},
     {"interval-analysis-extrapolate-limit",
-     boost::program_options::value<int>()->default_value(1)->value_name("nr"),
-     "Set limit for reaching a fixpoint (default is 1)"},
+     boost::program_options::value<int>()->default_value(3)->value_name("nr"),
+     "Number of times a loop head may change before it is widened (default "
+     "is 3)"},
     {"interval-analysis-extrapolate-under-approximate",
      NULL,
      "Assume integers will not overflow (Integers)"},
@@ -1115,6 +1151,20 @@ const struct group_opt_templ all_cmd_options[] = {
      NULL,
      "Disable constant propagation (unsupported with concurrency: the pthread "
      "model requires constant thread ids)"},
+    {"summarize-array-loops",
+     NULL,
+     "Also summarise counting loops that write no array"},
+    {"no-summarize-array-loops",
+     NULL,
+     "Do not replace counting loops that only write a[i] by their effect"},
+    {"scalarize-structs",
+     NULL,
+     "Give each field of a struct variable whose address is never taken a "
+     "variable of its own, so that writing a field does not copy the struct"},
+    {"field-sensitive-ssa",
+     NULL,
+     "Experimental: give each field of a local struct whose address is never "
+     "taken its own SSA name in symex (single-threaded programs only)"},
     {"gcse",
      NULL,
      "Adds intermediate variables to precompute common sub-expressions between "

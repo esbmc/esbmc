@@ -1,0 +1,5 @@
+CORE
+main.py
+--branch-coverage
+^COVERAGE ANALYSIS COMPLETE$
+\A(?![\s\S]*IndexError)[\s\S]*\Z

@@ -1,7 +1,11 @@
 #pragma once
 
+#include <algorithm>
 #include <functional>
+#include <optional>
 #include <nlohmann/json.hpp>
+#include <python-frontend/json_utils.h>
+#include <functional>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
@@ -173,6 +177,20 @@ inline std::string binop_kind(
   return left == "num" && right == "num" && integer_ops.count(op) ? "num" : "";
 }
 
+// The kind of `op operand`: `not` gives a bool, `-`, `+` and `~` keep a
+// number's kind (`~` only an int's); "" for any other operand.
+inline std::string unary_kind(const std::string &op, const std::string &operand)
+{
+  if (op == "Not")
+    return "num";
+  if (op == "Invert")
+    return operand == "num" ? "num" : "";
+  return (op == "USub" || op == "UAdd") &&
+             (operand == "num" || operand == "float")
+           ? operand
+           : "";
+}
+
 // The kind a module-level def named `callee` returns, by its annotation.
 inline std::string annotated_return_kind(
   const std::string &callee,
@@ -299,6 +317,31 @@ inline bool is_instance_call(
   return false;
 }
 
+// The kind of `value` when it names a parameter of `def`, which shadows any
+// module-level binding of the name: its annotation's kind, as on a
+// `__esbmc_poly_<kind>` copy, or "" when it has none or is starred.
+inline std::optional<std::string>
+parameter_kind(const nlohmann::json &def, const nlohmann::json &value)
+{
+  if (value.value("_type", "") != "Name" || !def.contains("args"))
+    return std::nullopt;
+  const nlohmann::json &args = def["args"];
+  const std::string id = value.value("id", "");
+  for (const char *group : {"posonlyargs", "args", "kwonlyargs"})
+    for (const auto &arg : args.value(group, nlohmann::json::array()))
+      if (arg.value("arg", "") == id)
+      {
+        const auto &ann = arg.value("annotation", nlohmann::json());
+        return ann.is_object() ? scalar_name_kind(ann.value("id", "")) : "";
+      }
+  for (const char *star : {"vararg", "kwarg"})
+    if (
+      args.contains(star) && args[star].is_object() &&
+      args[star].value("arg", "") == id)
+      return "";
+  return std::nullopt;
+}
+
 // The kind of an unannotated module-level def whose body is one `return`.
 inline std::string forwarded_return_kind(
   const std::string &callee,
@@ -311,17 +354,20 @@ inline std::string forwarded_return_kind(
   {
     if (
       !stmt.is_object() || stmt.value("_type", "") != "FunctionDef" ||
-      stmt.value("name", "") != callee)
-      continue;
-    const auto body = stmt.find("body");
-    if (body == stmt.end() || !body->is_array() || body->size() != 1)
+      stmt.value("name", "") != callee || !stmt.contains("body"))
+      continue; // kind_module_body lists body-less stubs before the defs
+    const nlohmann::json &body = stmt["body"];
+    if (!body.is_array() || body.size() != 1)
       return "";
-    const nlohmann::json &ret = body->front();
+    const nlohmann::json &ret = body.front();
     if (
       !ret.is_object() || ret.value("_type", "") != "Return" ||
       !ret.contains("value") || !ret["value"].is_object())
       return "";
-    return classify_literal_value_kind(ret["value"], module_body, depth + 1);
+    const nlohmann::json &value = ret["value"];
+    if (const auto kind = parameter_kind(stmt, value))
+      return *kind;
+    return classify_literal_value_kind(value, module_body, depth + 1);
   }
   return "";
 }
@@ -529,8 +575,8 @@ classify_branch_literal_assigns(
 }
 
 // Collects, per name, the literal kinds assigned to it across every leaf
-// reachable from `block`, following elif/nested if-else chains. Returns
-// false if any such chain is dangling (no final else).
+// reachable from `block`, following elif/nested if-else chains. A chain with
+// no final else ends in an empty leaf, which assigns nothing.
 inline bool collect_branch_literal_kinds(
   const nlohmann::json &block,
   std::unordered_map<std::string, std::unordered_set<std::string>> &kinds,
@@ -544,9 +590,7 @@ inline bool collect_branch_literal_kinds(
     block[0].value("_type", "") == "If")
   {
     const auto &nested = block[0];
-    if (
-      !nested.contains("body") || !nested.contains("orelse") ||
-      nested["orelse"].empty())
+    if (!nested.contains("body") || !nested.contains("orelse"))
       return false;
 
     return collect_branch_literal_kinds(
@@ -584,9 +628,7 @@ inline bool collect_if_node_literal_kinds(
   const nlohmann::json &scope_body,
   const nlohmann::json &module_body = nlohmann::json())
 {
-  if (!if_node.contains("body"))
-    return false;
-  if (!if_node.contains("orelse") || if_node["orelse"].empty())
+  if (!if_node.contains("body") || !if_node.contains("orelse"))
     return false;
 
   return collect_branch_literal_kinds(
@@ -637,9 +679,26 @@ inline bool ifexp_arms_diverge(
          kinds_diverge({then_kind, else_kind});
 }
 
+// The literal kind `stmt` leaves `name` bound to, given `prior`, the kind
+// before it: `prior` when `stmt` does not bind `name`, else the kind of a
+// plain assignment, else "".
+inline std::string kind_after_statement(
+  const nlohmann::json &stmt,
+  const std::string &name,
+  const std::string &prior,
+  const nlohmann::json &module_body)
+{
+  if (
+    assigns_name(stmt, name) && stmt.contains("value") &&
+    !stmt["value"].is_null())
+    return classify_literal_value_kind(stmt["value"], module_body);
+  return count_bindings(stmt, name) == 0 ? prior : "";
+}
+
 // True if some top-level `If` in `scope_body`, or a conditional expression
-// bound to `name`, assigns `name` genuinely incompatible literal kinds across
-// every branch.
+// bound to `name`, assigns `name` genuinely incompatible literal kinds. An
+// `If` whose branches do not all assign `name` joins them with the kind
+// bound before it.
 inline bool scope_assigns_divergent_literal_types(
   const std::string &name,
   const nlohmann::json &scope_body,
@@ -648,10 +707,13 @@ inline bool scope_assigns_divergent_literal_types(
   if (!scope_body.is_array())
     return false;
 
+  std::string prior_kind;
   for (const auto &stmt : scope_body)
   {
     if (!stmt.is_object())
       continue;
+    const std::string before = prior_kind;
+    prior_kind = kind_after_statement(stmt, name, before, module_body);
     if (
       assigns_name(stmt, name) && stmt.contains("value") &&
       ifexp_arms_diverge(stmt["value"], module_body))
@@ -667,9 +729,15 @@ inline bool scope_assigns_divergent_literal_types(
       continue;
 
     auto it = kinds.find(name);
-    if (
-      it != kinds.end() && leaf_count[name] == leaf_total &&
-      kinds_diverge(it->second))
+    if (it == kinds.end())
+      continue;
+    if (leaf_count[name] < leaf_total)
+    {
+      if (before.empty())
+        continue;
+      it->second.insert(before);
+    }
+    if (kinds_diverge(it->second))
       return true;
   }
   return false;
@@ -735,6 +803,57 @@ inline bool loop_spans(const nlohmann::json &stmt, int before)
          line_field(stmt, "lineno") <= before && (end < 0 || end >= before);
 }
 
+// Python binds a name to its last def.
+inline const nlohmann::json *
+called_module_def(const nlohmann::json &call, const nlohmann::json &module_body)
+{
+  if (!module_body.is_array() || call["func"].value("_type", "") != "Name")
+    return nullptr;
+  const std::string callee = call["func"].value("id", "");
+  for (auto it = module_body.rbegin(); it != module_body.rend(); ++it)
+    if (
+      it->is_object() && it->value("_type", "") == "FunctionDef" &&
+      it->value("name", "") == callee && it->contains("body"))
+      return &*it;
+  return nullptr;
+}
+
+// The values `value` may give on different paths, each with its number
+// kind: the arms of a conditional expression and the `return`s of a
+// module-level def it calls. The annotator widens an int and a float joined
+// there to float, so the C type alone does not show the int. A def already
+// being expanded adds nothing new, which bounds recursion.
+inline void collect_number_leaves(
+  const nlohmann::json &value,
+  const nlohmann::json &module_body,
+  std::vector<const nlohmann::json *> &expanding,
+  std::vector<numeric_bindingt> &leaves)
+{
+  const std::string type = value.value("_type", "");
+  if (type == "IfExp")
+  {
+    collect_number_leaves(value["body"], module_body, expanding, leaves);
+    collect_number_leaves(value["orelse"], module_body, expanding, leaves);
+    return;
+  }
+  if (type == "Call")
+    if (const nlohmann::json *def = called_module_def(value, module_body))
+    {
+      if (std::find(expanding.begin(), expanding.end(), def) != expanding.end())
+        return;
+      expanding.push_back(def);
+      std::vector<nlohmann::json> returns;
+      json_utils::collect_return_values((*def)["body"], returns);
+      for (const nlohmann::json &ret : returns)
+        collect_number_leaves(ret, module_body, expanding, leaves);
+      expanding.pop_back();
+      return;
+    }
+  const std::string kind = classify_literal_value_kind(value, module_body);
+  if (kind == "num" || kind == "float")
+    leaves.push_back({kind == "num" ? "int" : kind, value, true});
+}
+
 // Records the number `stmt` binds to `name`. A binding on the straight-line
 // spine before line `before` replaces every binding ahead of it on all paths,
 // so those are dropped.
@@ -744,11 +863,31 @@ inline void record_numeric_binding(
   bool nested,
   int before,
   std::vector<numeric_bindingt> &bindings,
-  const call_kindt &call_kind)
+  const call_kindt &call_kind,
+  const nlohmann::json &module_body)
 {
   const int line = line_field(stmt, "lineno");
   if (!nested && line >= 0 && line < before && assigns_name(stmt, name))
     bindings.clear();
+  if (
+    assigns_name(stmt, name) && stmt.contains("value") &&
+    stmt["value"].is_object())
+  {
+    std::vector<numeric_bindingt> leaves;
+    std::vector<const nlohmann::json *> expanding;
+    collect_number_leaves(stmt["value"], module_body, expanding, leaves);
+    const auto has = [&leaves](const char *kind) {
+      return std::any_of(
+        leaves.begin(), leaves.end(), [kind](const numeric_bindingt &leaf) {
+          return leaf.kind == kind;
+        });
+    };
+    if (has("int") && has("float"))
+    {
+      bindings.insert(bindings.end(), leaves.begin(), leaves.end());
+      return;
+    }
+  }
   const std::string number = numeric_binding_kind(stmt, name, call_kind);
   if (!number.empty() && stmt.contains("value") && !stmt["value"].is_null())
     bindings.push_back({number, stmt["value"], nested});
@@ -764,7 +903,8 @@ inline void collect_numeric_bindings(
   int before,
   bool include_later,
   std::vector<numeric_bindingt> &bindings,
-  const call_kindt &call_kind)
+  const call_kindt &call_kind,
+  const nlohmann::json &module_body)
 {
   for (const auto &stmt : body)
   {
@@ -773,12 +913,20 @@ inline void collect_numeric_bindings(
     const std::string kind = stmt.value("_type", "");
     if (kind == "FunctionDef" || kind == "ClassDef")
       continue;
-    record_numeric_binding(stmt, name, nested, before, bindings, call_kind);
+    record_numeric_binding(
+      stmt, name, nested, before, bindings, call_kind, module_body);
     const bool later = include_later || loop_spans(stmt, before);
     for (const char *key : {"body", "orelse", "finalbody", "handlers", "cases"})
       if (stmt.contains(key) && stmt[key].is_array())
         collect_numeric_bindings(
-          stmt[key], name, true, before, later, bindings, call_kind);
+          stmt[key],
+          name,
+          true,
+          before,
+          later,
+          bindings,
+          call_kind,
+          module_body);
   }
 }
 
@@ -796,5 +944,114 @@ is_path_dependent_number(const std::vector<numeric_bindingt> &bindings)
     in_block |= binding.in_block;
   }
   return has_int && has_float && in_block;
+}
+
+// Target/value pair of an Assign or AnnAssign, or nulls otherwise.
+inline std::pair<const nlohmann::json *, const nlohmann::json *>
+assign_target_value(const nlohmann::json &stmt)
+{
+  if (!stmt.is_object() || !stmt.contains("value"))
+    return {nullptr, nullptr};
+  const std::string &kind = stmt.value("_type", "");
+  if (
+    kind == "Assign" && stmt.contains("targets") &&
+    stmt["targets"].is_array() && !stmt["targets"].empty())
+    return {&stmt["targets"][0], &stmt["value"]};
+  if (kind == "AnnAssign" && stmt.contains("target"))
+    return {&stmt["target"], &stmt["value"]};
+  return {nullptr, nullptr};
+}
+
+// Literal kinds assigned anywhere in the module to `.<attr_name>`.
+inline std::unordered_set<std::string> collect_attribute_literal_kinds(
+  const nlohmann::json &module_body,
+  const std::string &attr_name)
+{
+  std::unordered_set<std::string> kinds;
+
+  std::function<void(const nlohmann::json &)> scan =
+    [&](const nlohmann::json &body) {
+      if (!body.is_array())
+        return;
+      for (const auto &stmt : body)
+      {
+        if (!stmt.is_object())
+          continue;
+
+        auto [target, value] = assign_target_value(stmt);
+        if (
+          target && value && !value->is_null() &&
+          target->value("_type", "") == "Attribute" &&
+          target->value("attr", "") == attr_name)
+        {
+          std::string kind = classify_literal_value_kind(*value, module_body);
+          if (!kind.empty())
+            kinds.insert(kind);
+        }
+
+        if (stmt.contains("body"))
+          scan(stmt["body"]);
+        if (stmt.contains("orelse"))
+          scan(stmt["orelse"]);
+      }
+    };
+
+  scan(module_body);
+  return kinds;
+}
+
+// Classes (by name) whose own methods assign `self.<attr_name>` somewhere.
+inline std::unordered_set<std::string> classes_declaring_attribute(
+  const nlohmann::json &module_body,
+  const std::string &attr_name)
+{
+  std::unordered_set<std::string> owners;
+  if (!module_body.is_array())
+    return owners;
+
+  for (const auto &stmt : module_body)
+  {
+    if (!stmt.is_object() || stmt.value("_type", "") != "ClassDef")
+      continue;
+    const std::string &class_name = stmt.value("name", "");
+    if (!stmt.contains("body"))
+      continue;
+
+    for (const auto &member : stmt["body"])
+    {
+      if (!member.is_object() || member.value("_type", "") != "FunctionDef")
+        continue;
+      if (!member.contains("body"))
+        continue;
+
+      std::function<bool(const nlohmann::json &)> assigns_self_attr =
+        [&](const nlohmann::json &body) -> bool {
+        if (!body.is_array())
+          return false;
+        for (const auto &inner : body)
+        {
+          if (!inner.is_object())
+            continue;
+          auto [target, value] = assign_target_value(inner);
+          if (
+            target && value && target->value("_type", "") == "Attribute" &&
+            target->value("attr", "") == attr_name &&
+            target->contains("value") && (*target)["value"].is_object() &&
+            (*target)["value"].value("_type", "") == "Name" &&
+            (*target)["value"].value("id", "") == "self")
+            return true;
+          if (inner.contains("body") && assigns_self_attr(inner["body"]))
+            return true;
+          if (inner.contains("orelse") && assigns_self_attr(inner["orelse"]))
+            return true;
+        }
+        return false;
+      };
+
+      if (assigns_self_attr(member["body"]))
+        owners.insert(class_name);
+    }
+  }
+  return owners;
 }
 } // namespace dynamic_type_detail

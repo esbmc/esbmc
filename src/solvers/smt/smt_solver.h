@@ -7,7 +7,6 @@
 #include <boost/multi_index/ordered_index.hpp>
 #include <boost/multi_index_container.hpp>
 #include <memory>
-#include <mutex>
 #include <set>
 #include <utility>
 #include <unordered_map>
@@ -233,6 +232,7 @@ public:
    *  frame per level and overflow the stack. The operand walk inside this
    *  body therefore hits the cache instead of recursing. */
   smt_astt convert_ast_node(const expr2tc &expr);
+  smt_astt convert_bitnot(smt_astt a);
 
   /** Convert one of the two-operand IEEE arithmetic nodes (add/sub/mul/div/
    *  rem), which share an operand layout and differ only in the solver call
@@ -301,6 +301,8 @@ public:
   /** Solve with each boolean ast in @p assumptions held true for this query
    *  only. Backends without support abort; check supports_assumptions(). */
   virtual smt_resultt dec_solve_assuming(const ast_vec &assumptions);
+  /** After an UNSAT dec_solve_assuming: whether @p a was needed. */
+  virtual bool is_unsat_assumption(smt_astt a);
   virtual bool supports_assumptions() const
   {
     return false;
@@ -373,9 +375,12 @@ public:
   /** Whether the encoding gave @p expr a term a model can be read through. A
    *  symbol is a leaf: converting one only declares it. */
   bool has_term(const expr2tc &expr);
-  /** The term of @p expr, or of the encoded struct it is a field of projected
-   *  to that field; null where neither exists. Builds no constraint. */
+  /** The term of @p expr, of the encoded struct it is a field of projected
+   *  to that field, or of the infinite array it is a row of selected at that
+   *  row; null where none exists. Builds no constraint. */
   smt_astt term_of(const expr2tc &expr);
+  /** term_of() for a row of an infinite array of arrays; null otherwise. */
+  smt_astt infinite_array_row_term(const index2t &index);
   /** The model value of @p expr, computed from the values of its operands
    *  where it has no term, so that reading it builds no new formula. */
   expr2tc value_of(const expr2tc &expr);
@@ -799,6 +804,8 @@ public:
    *  the appropriate method in the subclassing solver converter for the
    * terminal conversion */
   smt_astt convert_terminal(const expr2tc &expr);
+  /** Constrain a nondet float symbol under --ir to values a float can hold. */
+  void assert_nondet_float_representable(smt_astt sym_ast, const type2tc &type);
 
   /** Flatten pointer arithmetic. When faced with an addition or subtraction
    *  between a pointer and some integer or other pointer, perform whatever
@@ -909,8 +916,11 @@ public:
    *  apply. */
   smt_astt convert_pointer_bitcast(const expr2tc &from, const type2tc &to_type);
   smt_astt convert_bitcast_to_fp(const expr2tc &from, const type2tc &to_type);
+  smt_astt convert_fp_to_bits(const expr2tc &from);
   smt_astt
   convert_bitcast_to_struct(const expr2tc &from, const type2tc &to_type);
+  smt_astt
+  convert_int_mode_bitcast_to_bv(const expr2tc &from, const type2tc &to_type);
   /** Flatten a pointer to the machine representation a bitcast reinterprets,
    *  and rebuild it from one; see the comment on the definitions in
    *  smt_bitcast.cpp. */
@@ -951,10 +961,31 @@ public:
   void set_ra_conv(ra_apit *iface);
 
   void bump_addrspace_array(unsigned int idx, const expr2tc &val);
-  /** Get the symbol name for the current address-allocation record array. */
-  std::string get_cur_addrspace_ident();
-  /** The address-space version every other one is stored over. */
-  expr2tc base_addrspace_array() const;
+  /** The current version of the address-allocation record arrays. */
+  unsigned int cur_addrspace() const;
+  /** The start (@p member 0) or end (1) address of object @p obj in
+   *  address-space version @p version. */
+  expr2tc
+  addrspace_read(unsigned int version, unsigned int member, const expr2tc &obj);
+  /** A store bump_addrspace_array() made: the version it defines, the slot,
+   *  its range, the context level it was made at, and the one its equations
+   *  were asserted at, if they have been. */
+  struct addrspace_storet
+  {
+    unsigned int version;
+    unsigned int idx;
+    expr2tc range;
+    unsigned int level;
+    std::optional<unsigned int> asserted_at;
+  };
+  /** The stores, asserted only once a version they define is read, so a
+   *  formula that never reads an address keeps no arrays (#9785). */
+  std::vector<addrspace_storet> addrspace_stores;
+  void assert_addrspace_stores(unsigned int version);
+  bool native_addrspace() const;
+  /** init_addr_space_array() starts the version count here; every other
+   *  version is stored over it. */
+  static constexpr unsigned int base_addrspace = 1;
   void tie_base_addrspace(unsigned int idx, const expr2tc &val);
   /** Gives the base version every object's range, now and on registration,
    *  for convert_typecast_to_ptr(), the only reader of a slot before it is
@@ -1004,11 +1035,12 @@ public:
     bool from_byte_update);
   smt_astt address_holds(
     const expr2tc &ptr,
-    const expr2tc &addrspace,
+    unsigned int addrspace,
     const expr2tc &target,
     bool in_range);
   /** Typecast a pointer to an integer */
   smt_astt convert_typecast_from_ptr(const typecast2t &cast);
+  expr2tc static_address_of(const expr2tc &ptr);
   /** Typecast structs to other structs */
   smt_astt convert_typecast_to_struct(const typecast2t &cast);
   /** Despatch a typecast expression to a more specific typecast method */
@@ -1140,8 +1172,6 @@ public:
 
   /** A cache mapping expressions to converted SMT ASTs. */
   smt_cachet smt_cache;
-  /** A mutex lock for writing to the cache. */
-  std::mutex smt_cache_mutex;
   /** A cache of converted type2tc's to smt sorts */
   smt_sort_cachet sort_cache;
 
@@ -1227,12 +1257,26 @@ public:
   /** Every flattened pointer in this context. Pruned on pop_ctx like
    *  uf_ackermann_history, whose asts have the same lifetime. */
   std::vector<ptr_flatten_entry> ptr_flatten_history;
+  /** The bit-vector each float built by a bits-to-float bitcast was made
+   *  from, with the context level it was made at. Reading the float's bits
+   *  back returns that bit-vector: SMT-LIB leaves the bits of a NaN
+   *  unspecified, so a native round trip need not be the identity (#10887).
+   *  Pruned on pop_ctx like ptr_flatten_history. */
+  std::unordered_map<smt_astt, std::pair<smt_astt, unsigned int>> fp_bits;
   /** The most flattens one rebuilt pointer is defined over; see
    *  decode_pointer_repr(). */
   static constexpr size_t max_rebuild_sources = 32;
   /** Each flattening bitcast converted so far, for steps that hit it in the
    *  conversion cache. */
   std::unordered_map<expr2tc, ptr_flatten_entry, irep2_hash> flattened;
+  /** The context level and id of each flatten of a pointer, by its value: a
+   *  flatten inside an aggregate converted in an earlier step is a cache hit
+   *  too, and the step names only the pointer (#9937). */
+  std::unordered_map<
+    expr2tc,
+    std::vector<std::pair<unsigned int, size_t>>,
+    irep2_hash>
+    flattened_values;
   void record_flattened_pointer(smt_astt address, smt_astt pointer);
 
   /** The SSA step being converted: its guard, the flattens its operands may
@@ -1272,7 +1316,8 @@ public:
   /** Type of the address space allocation records. Currently a start address
    *  integer and an end address integer. */
   type2tc addr_space_type;
-  /** Type of the array of address space allocation records. */
+  /** Type of the array of address space allocation records, used where the
+   *  solver has no native arrays; see native_addrspace(). */
   type2tc addr_space_arr_type;
   /** The objects given an address so far, each mapped to whether it is a heap
    *  object that may be freed. In a list to support pushing and popping. */

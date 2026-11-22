@@ -65,7 +65,10 @@ bool goto_symext::check_incremental(const expr2tc &expr, const std::string &msg)
   return false;
 }
 
-void goto_symext::claim(const expr2tc &claim_expr, const std::string &msg)
+void goto_symext::claim(
+  const expr2tc &claim_expr,
+  const std::string &msg,
+  bool user_assertion)
 {
   // Can happen when evaluating certain special intrinsics. Gulp.
   if (cur_state->guard.is_false())
@@ -123,7 +126,7 @@ void goto_symext::claim(const expr2tc &claim_expr, const std::string &msg)
     check_incremental(new_expr, msg))
     return; // claim fully resolved by incremental solving
 
-  symex_witness_assert(new_expr, msg);
+  symex_witness_assert(new_expr, msg, user_assertion);
 
   // add assertion to the target equation
   assertion(new_expr, msg);
@@ -161,10 +164,11 @@ void goto_symext::record_property_verdict(
   // position.
   const bool coverage = options.get_bool_option("coverage-measurement") ||
                         options.get_bool_option("dead-code-check");
-  goto_functionst::property_verdicts.record(
+  const property_locationt loc = classified_location(options, pc, msg);
+  verdict_table(loc).record(
     coverage ? msg + " at " + pc.location.as_string() : property_key(pc, msg),
     verdict,
-    property_location(pc, msg),
+    loc,
     note);
 }
 
@@ -175,9 +179,15 @@ void goto_symext::assertion(
   expr2tc expr = the_assertion;
   cur_state->guard.guard_expr(expr);
   cur_state->global_guard.guard_expr(expr);
-  expr2tc expr_neg = not2tc(the_assertion);
+  guard_by_interleaving(expr);
+  // Negate after the path guard but before the execution guard: the probe
+  // must leave the path free to be untaken, yet keep the execution guard (a
+  // free symbol) forced (issue #10642).
+  expr2tc expr_neg = the_assertion;
   cur_state->guard.guard_expr(expr_neg);
+  expr_neg = not2tc(expr_neg);
   cur_state->global_guard.guard_expr(expr_neg);
+  guard_by_interleaving(expr_neg);
   remaining_claims++;
   target->assertion(
     cur_state->guard.as_expr(),
@@ -307,6 +317,7 @@ void goto_symext::assume(const expr2tc &the_assumption)
     return;
 
   cur_state->guard.guard_expr(assumption);
+  guard_by_interleaving(assumption);
 
   expr2tc tmp_guard = cur_state->guard.as_expr();
   target->assumption(tmp_guard, assumption, cur_state->source, first_loop);
@@ -333,6 +344,7 @@ void goto_symext::defer_assumption(const expr2tc &the_assumption)
   }
 
   cur_state->guard.guard_expr(assumption);
+  guard_by_interleaving(assumption);
   deferred_assumptions.push_back(
     {cur_state->guard.as_expr(), assumption, cur_state->source, first_loop});
 }
@@ -423,7 +435,7 @@ void goto_symext::symex_step(reachability_treet &art)
 
   case GOTO:
   {
-    expr2tc tmp(instruction.guard);
+    expr2tc tmp = split_rewrite(instruction.guard);
     replace_nondet(tmp);
     volatile_check(tmp);
 
@@ -487,6 +499,9 @@ void goto_symext::symex_step(reachability_treet &art)
     replace_nondet(deref_code);
 
     code_function_call2t &call = to_code_function_call2t(deref_code);
+    // The result slot stays whole here: symex_assign splits it, and the trace
+    // names it as written.
+    split_rewrite_operands(call.operands);
 
     if (!is_nil_expr(call.ret))
     {
@@ -603,7 +618,7 @@ void goto_symext::symex_assume()
   if (cur_state->guard.is_false())
     return;
 
-  expr2tc cond = cur_state->source.pc->guard;
+  expr2tc cond = split_rewrite(cur_state->source.pc->guard);
   const bool ends_path = cur_state->source.pc->location.get_bool("ends_path");
 
   replace_nondet(cond);
@@ -650,9 +665,15 @@ void goto_symext::symex_assert()
 
   const goto_programt::instructiont &instruction = *cur_state->source.pc;
 
+  // A --bidirectional block asserts, before the loop's back-edge, that an
+  // inductive-step start state is unreachable. It is not a program property,
+  // so a violation of it outside the inductive step is no bug (#10128).
+  if (instruction.inductive_assertion && !inductive_step)
+    return;
+
   const std::string msg = assertion_message(ns, instruction);
 
-  expr2tc tmp = instruction.guard;
+  expr2tc tmp = split_rewrite(instruction.guard);
   replace_nondet(tmp);
 
   dereference(tmp, dereferencet::READ);
@@ -662,7 +683,11 @@ void goto_symext::symex_assert()
   simplify_python_builtins(tmp);
 
   claim_skips_deferred = instruction.location.get_bool("ends_path");
-  claim(tmp, msg);
+  claim(
+    tmp,
+    msg,
+    instruction.location.user_provided() &&
+      instruction.location.property() == "assertion");
   claim_skips_deferred = false;
 }
 
@@ -685,6 +710,12 @@ require_new_object_pointer_lvalue(const code_function_call2t &func_call)
     get_type_id(func_call.ret->type),
     loc.empty() ? "" : (" at " + loc));
   abort();
+}
+
+/// The type @p ptr points to; nil when @p ptr is nil.
+static type2tc pointee_type_or_nil(const expr2tc &ptr)
+{
+  return is_nil_expr(ptr) ? type2tc() : to_pointer_type(ptr->type).subtype;
 }
 
 void goto_symext::run_intrinsic(
@@ -1046,10 +1077,6 @@ void goto_symext::run_intrinsic(
 
     for (const auto &item : internal_deref_items)
     {
-      assert(
-        is_symbol2t(item.object) &&
-        "__ESBMC_init_object only works for variables");
-
       // Get the length of the type. This will propagate an exception for
       // dynamic/infinite sized arrays (as expected)
       try
@@ -1067,16 +1094,10 @@ void goto_symext::run_intrinsic(
           "__ESBMC_init_object does not support infinite-length arrays");
         abort();
       }
-      expr2tc val = sideeffect2tc(
-        item.object->type,
-        expr2tc(),
-        expr2tc(),
-        std::vector<expr2tc>(),
-        type2tc(),
-        sideeffect2t::allockind::nondet);
-
-      symex_assign(code_assign2tc(item.object, val), false, cur_state->guard);
     }
+    std::vector<write_targett> targets;
+    collect_write_targets(guard2tc(), targets);
+    write_nondet_targets(targets);
 
     return;
   }
@@ -1297,19 +1318,13 @@ void goto_symext::run_intrinsic(
     return;
   }
 
-  if (has_prefix(symname, "c:@F@__ESBMC_create_inf_obj"))
+  // __ESBMC_create_inf_obj and __ESBMC_create_inf_slots (python/list.c): a
+  // fresh infinite array of what the result points to.
+  if (has_prefix(symname, "c:@F@__ESBMC_create_inf_"))
   {
     assert(func_call.operands.size() == 0 && "Wrong signature");
-
-    const symbolt *list_object_symbol =
-      new_context.find_symbol("tag-struct __ESBMC_PyObj");
-    assert(list_object_symbol);
-
     symex_mem_inf(
-      func_call.ret,
-      migrate_symbol_type(*list_object_symbol),
-      cur_state->guard);
-
+      func_call.ret, pointee_type_or_nil(func_call.ret), cur_state->guard);
     return;
   }
 
@@ -1325,7 +1340,7 @@ void goto_symext::run_intrinsic(
     if (func_call.operands.size() < 2)
       return;
     size_t seg_idx = to_constant_int2t(func_call.operands[0]).value.to_uint64();
-    if (seg_idx != cur_state->cur_seg)
+    if (seg_idx >= cur_state->witness_segs.size())
       return;
 
     // pc has already been incremented past this intrinsic call; step back one
@@ -1350,13 +1365,14 @@ void goto_symext::run_intrinsic(
     expr2tc arg = func_call.operands[1];
     cur_state->rename(arg);
 
+    const expr2tc position = witness_position();
+    const expr2tc active = witness_segment_guard(seg_idx, position);
     if (matched->action == waypoint::avoid)
-      assume(not2tc(arg));
-    else
-      assume(arg);
+      arg = not2tc(arg);
+    assume(implies2tc(active, arg));
 
     if (matched->action != waypoint::avoid)
-      cur_state->advance_witness_position();
+      advance_witness_position(seg_idx, position);
     return;
   }
 

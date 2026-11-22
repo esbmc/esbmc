@@ -53,6 +53,8 @@ reachability_treet::reachability_treet(
     options.get_bool_option("cswitch-skip-readonly-globals");
   scan_program_writes();
   scan_address_taken();
+  split_structs.analyse(
+    goto_functions, ns, context, options, address_taken_locals);
 }
 
 /* Insert `name` into `out` if it names a storage-bearing user global. */
@@ -322,10 +324,20 @@ void reachability_treet::scan_address_taken()
     for (const auto &ins : f_it->second.body.instructions)
     {
       collect_address_taken(
-        ins.code, ns, address_taken_globals, address_taken_locals);
+        ins.code, ns, pointer_writable_globals, address_taken_locals);
       collect_address_taken(
-        ins.guard, ns, address_taken_globals, address_taken_locals);
+        ins.guard, ns, pointer_writable_globals, address_taken_locals);
     }
+
+  if (!readonly_global_opt)
+    return;
+  // Writing a const object is UB (C11 6.7.3p6), so no thread changes one. The
+  // pointer check reports such a write as "write access to const object".
+  for (auto it = pointer_writable_globals.begin();
+       it != pointer_writable_globals.end();)
+    it = dereferencet::is_const_static(*ns.lookup(*it))
+           ? pointer_writable_globals.erase(it)
+           : std::next(it);
 }
 
 void reachability_treet::setup_for_new_explore()
@@ -547,7 +559,9 @@ void reachability_treet::create_next_state()
       {new_state, scheduler_framet{}, next_thread_id});
 
     /* Make it active, make it follow on from previous state... */
-    if (new_state->get_active_state_number() != next_thread_id)
+    // Leaving a thread that has ended is not a preemption.
+    const unsigned int from = new_state->get_active_state_number();
+    if (from != next_thread_id && !new_state->threads_state[from].thread_ended)
       new_state->increment_context_switch();
 
     new_state->switch_to_thread(next_thread_id);
@@ -653,17 +667,18 @@ void reachability_treet::switch_to_next_execution_state()
 
 void reachability_treet::drain_to_unexplored(bool add_leak_checks)
 {
+  // Only the first frame drained ends a schedule; the rest are its ancestors.
+  bool at_leaf = add_leak_checks;
   while (exploration_frames.size() > 0 && !step_next_state())
   {
-    // Only fire the leak walker on the final frame when every thread has
-    // reached a terminal state — otherwise a still-running spawned thread
-    // may hold the only live reference to a dynamic object via its stack
-    // frame, which the globals-rooted reachability constraint misses and
-    // spuriously reports as forgotten. See #4634.
-    if (
-      add_leak_checks && exploration_frames.size() == 1 &&
-      cur_frame_it->state->all_threads_terminal())
+    // Only fire the leak walker when every thread has reached a terminal
+    // state — otherwise a still-running spawned thread may hold the only live
+    // reference to a dynamic object via its stack frame, which the
+    // globals-rooted reachability constraint misses and spuriously reports as
+    // forgotten. See #4634.
+    if (at_leaf && cur_frame_it->state->all_threads_terminal())
       cur_frame_it->state->add_memory_leak_checks();
+    at_leaf = false;
 
     erase_current_frame();
   }

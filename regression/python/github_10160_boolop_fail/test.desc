@@ -1,0 +1,5 @@
+CORE
+main.py
+
+^\s*assertion k == 5$
+^VERIFICATION FAILED$

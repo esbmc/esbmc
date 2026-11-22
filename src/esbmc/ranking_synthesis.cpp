@@ -453,19 +453,23 @@ prefix_defst scan_prefix_defs(
     if (skip)
     {
       auto skip_it = skip->by_head_locnum.find(it->location_number);
-      if (
-        skip_it != skip->by_head_locnum.end() &&
-        skip_it->second.back->location_number < head->location_number)
+      // A containing loop's modified symbols are dropped too: its
+      // back-edge re-enters its head after the body has run, so a def
+      // made before that head need not hold there.
+      if (skip_it != skip->by_head_locnum.end())
       {
         for (const irep_idt &n : skip_it->second.modified)
           out.defs.erase(n);
-        // The loop's exit-target label is the natural landing point
-        // after the loop exits; mark it as justified so the walker
-        // doesn't bail when it lands there.
-        if (skip_it->second.exit_target_locnum != 0)
-          justified_targets.insert(skip_it->second.exit_target_locnum);
-        it = std::next(skip_it->second.back);
-        continue;
+        if (skip_it->second.back->location_number < head->location_number)
+        {
+          // The loop's exit-target label is the natural landing point
+          // after the loop exits; mark it as justified so the walker
+          // doesn't bail when it lands there.
+          if (skip_it->second.exit_target_locnum != 0)
+            justified_targets.insert(skip_it->second.exit_target_locnum);
+          it = std::next(skip_it->second.back);
+          continue;
+        }
       }
     }
     if (it->is_target() && !justified_targets.count(it->location_number))
@@ -2484,13 +2488,17 @@ prefix_seedst collect_seeds(
     if (loop_skip)
     {
       auto skip_it = loop_skip->by_head_locnum.find(it->location_number);
-      if (
-        skip_it != loop_skip->by_head_locnum.end() &&
-        skip_it->second.back->location_number < head->location_number)
+      // A containing loop's modified symbols are dropped too: its
+      // back-edge re-enters its head after the body has run, so a fact
+      // established before that head need not hold there.
+      if (skip_it != loop_skip->by_head_locnum.end())
       {
         invalidate_pending_by(skip_it->second.modified);
-        it = std::next(skip_it->second.back);
-        continue;
+        if (skip_it->second.back->location_number < head->location_number)
+        {
+          it = std::next(skip_it->second.back);
+          continue;
+        }
       }
     }
     if (it->is_target() && !justified_targets.count(it->location_number))
@@ -3170,6 +3178,28 @@ expr2tc at_any_prev(const namespacet &ns, const expr2tc &e)
   return out;
 }
 
+/// Whether @p e reads only program variables and integer constants, the only
+/// leaves at_any_prev moves to the earlier state. A dereference becomes a
+/// synthetic symbol (`$rank_deref$...`) that prints as its pointer, so
+/// `\at(p, AnyPrev)` would name the old pointer, not the value it pointed to.
+bool plain_measure(const namespacet &ns, const expr2tc &e)
+{
+  if (is_symbol2t(e))
+    return ns.lookup(to_symbol2t(e).thename) != nullptr;
+  if (is_constant_int2t(e))
+    return true;
+  if (
+    is_dereference2t(e) || is_index2t(e) || is_member2t(e) ||
+    is_address_of2t(e) || is_sideeffect2t(e))
+    return false;
+  bool plain = true, leaf = true;
+  e->foreach_operand([&](const expr2tc &op) {
+    leaf = false;
+    plain = plain && plain_measure(ns, op);
+  });
+  return plain && !leaf;
+}
+
 /// `\at(m, AnyPrev) > m` for each measure, as a disjunction: each disjunct is
 /// well-founded, and a lexicographic decrease satisfies the disjunction against
 /// every earlier state because that order is transitive.
@@ -3574,7 +3604,14 @@ tvt try_prove_termination_by_ranking(
                  outer.get_original_loop_exit()->location_number >
                    back->location_number;
         });
-      if (f_it->first == "c:@F@main" && !nested)
+      // A do-while loop has no instruction at its `do`, and the witness must
+      // name the loop statement, not the first statement of its body.
+      const bool bottom_tested = !is_true(back->guard);
+      if (
+        f_it->first == "c:@F@main" && !nested && !bottom_tested &&
+        std::all_of(measures.begin(), measures.end(), [&](const expr2tc &m) {
+          return plain_measure(ns, m);
+        }))
         transition_invariants.emplace_back(
           head->location, transition_invariant(ns, measures));
     }

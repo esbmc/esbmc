@@ -2,6 +2,7 @@
 #include <util/message/message.h>
 #include <util/irep/migrate.h>
 #include <util/symtab/symbol.h>
+#include <util/base/threads.h>
 
 #include <atomic>
 #include <mutex>
@@ -11,7 +12,7 @@ namespace
 // --parallel-solving reads the shared symbol table from several threads, so
 // the first read of a lazy cache fills it under a lock and publishes it
 // (#8565). Recursive: a migration may read another symbol's cache.
-std::recursive_mutex lazy_cache_mutex;
+threads_mutex<std::recursive_mutex> lazy_cache_mutex;
 static_assert(std::atomic_ref<bool>::is_always_lock_free);
 
 template <typename Fill>

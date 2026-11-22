@@ -1,0 +1,4 @@
+CORE
+main.c
+--z3 --ts-pdr --termination
+^ERROR: --ts-pdr cannot be combined with --termination$

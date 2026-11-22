@@ -1,0 +1,7 @@
+regression/python/github_10495_symbolic_ljust
+regression/python/github_10495_symbolic_rjust
+regression/python/github_10495_symbolic_center
+regression/python/github_10495_symbolic_zfill
+regression/python/github_10495_symbolic_receiver
+regression/python/github_10495_constant_name_width
+regression/python/github_10495_symbolic_padding_unsupported

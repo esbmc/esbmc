@@ -131,6 +131,19 @@ exprt type_handler::ptr_free_arg(const exprt &payload, const typet &elem_type)
     int_type());
 }
 
+// A variable holding a struct (e.g. an Optional parameter) may share the
+// name; only a type symbol names a class.
+static bool
+names_class_type(const contextt &symbol_table, const std::string &name)
+{
+  bool found = false;
+  symbol_table.foreach_operand([&](const symbolt &s) {
+    if (s.is_type && s.get_type().id() == "struct" && s.name == name)
+      found = true;
+  });
+  return found;
+}
+
 bool type_handler::is_constructor_call(const nlohmann::json &json) const
 {
   if (
@@ -175,19 +188,7 @@ bool type_handler::is_constructor_call(const nlohmann::json &json) const
     return true;
 
   // Then check the symbol table for already-processed classes
-  bool is_ctor_call = false;
-
-  const contextt &symbol_table = converter_.symbol_table();
-
-  symbol_table.foreach_operand([&](const symbolt &s) {
-    if (s.get_type().id() == "struct" && s.name == func_name)
-    {
-      is_ctor_call = true;
-      return;
-    }
-  });
-
-  return is_ctor_call;
+  return names_class_type(converter_.symbol_table(), func_name);
 }
 
 /// This utility maps internal ESBMC types to their corresponding Python type
@@ -610,7 +611,9 @@ typet type_handler::get_typet(const std::string &ast_type, size_t type_size)
   if (
     ast_type == "uint" || ast_type == "uint64" || ast_type == "Epoch" ||
     ast_type == "Slot" || ast_type == "Gwei")
-    return lower_to_seam(unsignedbv_type2tc(config.ansi_c.long_long_int_width));
+    return lower_to_seam(
+      unsignedbv_type2tc(config.ansi_c.long_long_int_width),
+      "fixed_width_unsigned");
 
   // bool — represents True/False
   if (ast_type == "bool")
@@ -648,7 +651,7 @@ typet type_handler::get_typet(const std::string &ast_type, size_t type_size)
 
   // Custom large unsigned integer types (used in Ethereum, BLS, etc.)
   if (ast_type == "uint256" || ast_type == "BLSFieldElement")
-    return lower_to_seam(unsignedbv_type2tc(256));
+    return lower_to_seam(unsignedbv_type2tc(256), "fixed_width_unsigned");
 
   // bytes — immutable sequences of bytes
   // Here modeled as array of signed integers (8-bit).

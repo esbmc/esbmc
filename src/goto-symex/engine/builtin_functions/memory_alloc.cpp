@@ -215,6 +215,11 @@ void goto_symext::symex_realloc(
   if (handle_realloc_zero_size(lhs, code, guard, realloc_size))
     return;
 
+  // C17 7.22.3.5p3: a pointer realloc did not get from an allocator, or one
+  // already freed, is undefined behaviour, as for free.
+  expr2tc free_check = src_ptr;
+  dereference(free_check, dereferencet::FREE);
+
   // Nil unless the request can exceed max_object_size(); see R38. Under
   // --force-realloc-success the cap is not applied at all, for the reason the
   // symbolic malloc arm gives: assuming it away would prune

@@ -1,0 +1,5 @@
+CORE
+main.py
+--python-check-exceptions ZeroDivisionError --enable-unreachability-intrinsic
+reachability: unreachable code reached
+^VERIFICATION FAILED$

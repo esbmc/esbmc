@@ -1,5 +1,6 @@
 #include "irep2/irep2_utils.h"
 #include <goto-programs/goto_loops.h>
+#include <util/base/prefix.h>
 #include <util/config/config.h>
 #include <util/expr/expr_util.h>
 
@@ -65,9 +66,19 @@ bool check_var_name(const expr2tc &expr)
   if (found != std::string::npos)
     return false;
 
-  // Don't add variables that we created for k-induction
-  found = identifier.find("$");
-  if (found != std::string::npos)
+  // A clang USR ("c:...") also takes a '$' from a GNU identifier (`int c$`),
+  // which is tracked like any other (#10111). Its '$@' encoding of a
+  // class-typed parameter stays excluded: tracking those locals makes the
+  // entry-condition assume of a loop that never runs vacuous
+  // (regression/k-induction/cpp_stack_top_bug).
+  if (has_prefix(identifier, "c:"))
+  {
+    for (const char *internal :
+         {"::$", "$@", "$init_guard", "array_init$", "subobjects_built$"})
+      if (identifier.find(internal) != std::string::npos)
+        return false;
+  }
+  else if (identifier.find('$') != std::string::npos)
     return false;
 
   if (identifier == "__func__")
@@ -217,28 +228,6 @@ written_arguments(const irep_idt &function, const std::vector<expr2tc> &args)
     if (is_pointer_type(args[i]->type))
       written.push_back(args[i]);
   return written;
-}
-
-/// A variable whose address the callee takes can be reassigned through that
-/// address, which collect_lhs_symbols does not see.
-void goto_loopst::collect_address_taken(
-  const expr2tc &e,
-  function_summaryt &out) const
-{
-  if (is_nil_expr(e))
-    return;
-  if (is_address_of2t(e))
-  {
-    expr2tc obj = to_address_of2t(e).ptr_obj;
-    while (is_member2t(obj) || is_index2t(obj) || is_typecast2t(obj))
-      obj = is_member2t(obj)  ? to_member2t(obj).source_value
-            : is_index2t(obj) ? to_index2t(obj).source_value
-                              : to_typecast2t(obj).from;
-    if (is_symbol2t(obj))
-      out.address_taken.insert(to_symbol2t(obj).thename);
-  }
-  e->foreach_operand(
-    [this, &out](const expr2tc &op) { collect_address_taken(op, out); });
 }
 
 void goto_loopst::function_summaryt::record_write(const expr2tc &lhs)
@@ -479,8 +468,10 @@ bool goto_loopst::compute_function_summary(
 
   for (const auto &instr : it->second.body.instructions)
   {
-    collect_address_taken(instr.code, local);
-    collect_address_taken(instr.guard, local);
+    // A variable whose address the callee takes can be reassigned through
+    // that address, which collect_lhs_symbols does not see.
+    get_address_taken(instr.code, local.address_taken);
+    get_address_taken(instr.guard, local.address_taken);
     if (instr.is_assign())
     {
       const expr2tc &target = to_code_assign2t(instr.code).target;
