@@ -9,6 +9,7 @@
 #include <util/expr/expr_util.h>
 #include <util/base/i2string.h>
 #include <util/irep/std_expr.h>
+#include <util/irep/pad_names.h>
 #include <util/symtab/symbol.h>
 #include <util/symtab/pretty.h>
 #include <irep2/irep2_expr.h>
@@ -3311,6 +3312,8 @@ code_contractst::materialize_ptr_field_snapshots(
         const irep_idt &field = stype.member_names[i];
         if (assigned_fields.count(field))
           continue; // This field is explicitly assigned — skip
+        if (is_padding_name(id2string(field)))
+          continue; // Padding holds no value; a whole-struct havoc changes it
 
         const type2tc &ftype = stype.members[i];
 
