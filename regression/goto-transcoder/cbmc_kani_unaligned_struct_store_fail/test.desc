@@ -1,0 +1,5 @@
+CORE
+cbmc_kani_unaligned_struct_store_fail.goto
+--binary --function _RNvCscvYobUfI8ei_27unaligned_struct_store_fail7harness --ignore-property-class reachability_check --ignore-property-class cover
+^VERIFICATION FAILED$
+^  \[KANI_CHECK_ID_[^]]*\] assertion failed: b == 0

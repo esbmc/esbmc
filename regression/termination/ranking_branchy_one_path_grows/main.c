@@ -6,9 +6,10 @@
  * else-arm). recognize_loop accepts the shape and yields two paths; the
  * decrease obligation on the else-path is satisfiable (m'_else = m + 1
  * >= m holds), so the prover must NOT certify the loop and control must
- * fall through to the existing machinery, leaving the verdict UNKNOWN.
+ * fall through to the existing machinery. Going up then down repeats a
+ * state, which the recurrent-state check reports.
  *
- * Expected verdict: VERIFICATION UNKNOWN. */
+ * Expected verdict: VERIFICATION FAILED. */
 
 extern int __VERIFIER_nondet_int(void);
 

@@ -336,8 +336,8 @@ int main(void) {
 
 **Step 1 — Verify each function in isolation.**
 
-Start at the leaves. Each call uses `--replace-call-with-contract "*"` so that
-only the target function's body is unrolled:
+Start at the leaves. Each run replaces the target's callees with their
+contracts, so that only the target function's body is unrolled:
 
 ```bash
 # No callees — verify the leaf directly
@@ -589,11 +589,11 @@ esbmc main.py --enforce-contract double
 Clauses are inert under a plain BMC run, exactly as in C.
 
 A clause the lowering cannot express is rejected with a diagnostic naming the
-clause and line — a function call or subscript inside the condition, a
-reference whose type cannot be determined, `__ESBMC_return_value` inside
-`requires` or on a function annotated `-> None` — rather than being silently
-dropped. `__ESBMC_old` and the quantified forms are not yet available in
-Python.
+clause and line — a function call other than `len` of a `list`, a subscript
+with a variable index, a reference whose type cannot be determined,
+`__ESBMC_return_value` inside `requires` or on a function annotated `-> None` —
+rather than being silently dropped. `__ESBMC_old` is available over scalars
+(below); the quantified forms are not yet available in Python.
 
 `__ESBMC_assigns(...)` declares the frame as in C. A target must be a
 module-level global or an attribute; a local or a parameter is rejected. An
@@ -632,8 +632,8 @@ main()
 | `__ESBMC_is_fresh(ptr, size)`   | `requires` / `ensures` | Memory freshness                      |
 | `__ESBMC_stack_used`            | `requires` / `ensures` | Cumulative recursive-frame stack, bits |
 | `__ESBMC_frame_size`            | `requires` / `ensures` | This function's frame size, bits       |
-| `__ESBMC_forall(&var, body)`    | `requires` / `ensures` | Universal quantifier (needs `--z3`)   |
-| `__ESBMC_exists(&var, body)`    | `requires` / `ensures` | Existential quantifier (needs `--z3`) |
+| `__ESBMC_forall(&var, body)`    | `requires` / `ensures` | Universal quantifier (needs a quantifier-capable solver) |
+| `__ESBMC_exists(&var, body)`    | `requires` / `ensures` | Existential quantifier (needs a quantifier-capable solver) |
 | `__ESBMC_loop_invariant(cond)`  | Before loop            | Loop invariant                        |
 | `__ESBMC_loop_assigns(v1, ...)` | Before loop            | Loop modification frame               |
 | `__ESBMC_contract`              | Function attribute     | Marks function for bulk processing    |
@@ -751,9 +751,14 @@ and the reason rather than verified as something else:
 
 | Written | Rejected because |
 | --- | --- |
-| `__ESBMC_requires(len(l) > 0)` | a call binds to a temporary local to the body, leaving the clause over a free symbol |
-| `__ESBMC_ensures(__ESBMC_return_value == l[0])` | a subscript expands into a bounds-check branch, collapsing the clause to a constant |
+| `__ESBMC_requires(sum(l) > 0)` | a call binds to a temporary local to the body, leaving the clause over a free symbol |
+| `__ESBMC_ensures(__ESBMC_return_value == l[i])` | a subscript with a variable index expands into a bounds-check branch, collapsing the clause to a constant |
 | `__ESBMC_requires(o > 0)` where `o` has no inferable type | an untyped parameter is a `void *`, so the comparison is on a pointer |
+
+Over a `list` parameter, `len(l)` and a subscript with a constant index, such
+as `l[1]` or `l[-1]`, are admitted: they lower to direct reads of the list
+object ([#8767](https://github.com/esbmc/esbmc/pull/8767)). `len` of a `str`
+is still rejected as a call.
 
 ```
 ERROR: __ESBMC_requires clause at line 2 contains a function call; a contract
@@ -788,11 +793,11 @@ determined.
 | `and`, `or`, `not` in a clause | supported |
 | `--enforce-contract` / `--replace-call-with-contract` | supported |
 | parameters annotated `int`, `float`, `bool` | supported |
-| `list`, `str`, class instances, unannotated parameters | supported when the clause does not mention them |
+| `list`, `str`, class instances, unannotated parameters | supported when the clause does not mention them, except `len(l)` and `l[k]` with a constant `k` over a `list` |
 | methods | supported |
 | globals in a clause | supported |
 | `__ESBMC_old` | supported over `int`, `float` and `bool`, in `ensures` only; not needed for parameters (above) |
-| `__ESBMC_assigns` | not supported |
+| `__ESBMC_assigns` | supported over module-level globals and attributes (above) |
 | `__ESBMC_is_fresh` | not supported |
 | `__ESBMC_forall` / `__ESBMC_exists` | not supported |
 | `--enforce-all-contracts` / `--replace-all-contracts` | not supported, no Python equivalent of the `__ESBMC_contract` attribute |
@@ -800,15 +805,10 @@ determined.
 Every unsupported construct reports what it is rather than failing obscurely:
 
 ```
-ERROR: __ESBMC_assigns at line 5 is not supported in Python contracts yet
+ERROR: __ESBMC_requires clause at line 2 contains a function call; a contract
+clause must be a pure expression (__ESBMC_is_fresh is not supported by the
+Python frontend yet)
 ```
-
-Each construct that is rejected has a `FUTURE` regression test stating the
-verdict it should produce once implemented, so the test flips from passing to
-"consider reclassifying" the moment support lands.
-`--enforce-all-contracts` has no such test: it needs a Python surface for the
-`__ESBMC_contract` marker, and until that is chosen there is no source file
-whose verdict would change.
 
 Without a contract flag the clauses state nothing and are dropped, so an
 annotated file verifies exactly as it did before it was annotated.
@@ -890,6 +890,6 @@ zero verification conditions. Parameters are unaffected, being nondeterministic,
 so state the precondition over a parameter where the choice exists
 ([#7356](https://github.com/esbmc/esbmc/issues/7356)).
 
-**Quantifiers require Z3.** `__ESBMC_forall` and `__ESBMC_exists` are not
-supported by Boolector or other backends. Pass `--z3` when using quantified
-conditions.
+**Quantifiers need a solver that supports them.** `__ESBMC_forall` and
+`__ESBMC_exists` are encoded by Bitwuzla (the default), Z3 and CVC5, and not by
+Boolector or the other backends.

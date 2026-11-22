@@ -1,0 +1,6 @@
+CORE
+main.c
+--loop-invariant-check --witness-output-yaml -
+^VERIFICATION SUCCESSFUL$
+(?s)line: 5\s+column: \d+\s+function: "main"\s+value: "i <= 10"
+(?s)line: 9\s+column: \d+\s+function: "main"\s+value: "j <= 5 \|\| i <= 10"

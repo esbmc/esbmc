@@ -1,0 +1,5 @@
+CORE
+main.c
+--loop-invariant-check --unwind 2 --no-unwinding-assertions --witness-output-yaml -
+^VERIFICATION SUCCESSFUL$
+^  content:\n    \[\]$

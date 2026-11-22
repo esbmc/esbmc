@@ -74,7 +74,7 @@ public:
 
   /// @p e with every constant member of a split object replaced by its field
   /// symbol and every other occurrence of the object by the struct of its
-  /// fields. Only L0 expressions taken from the program reach this.
+  /// fields. An L2 name is left as it is.
   expr2tc rewrite(const expr2tc &e) const;
 
   /// The struct of @p sym's field symbols.

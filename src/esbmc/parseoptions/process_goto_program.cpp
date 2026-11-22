@@ -232,6 +232,27 @@ static std::set<irep_idt> unreported_exceptions(const optionst &options)
   return {};
 }
 
+// The uninitialised-variable check would read the summary lambda's unwritten
+// elements, C has no lambda for --goto2c to print, and loop invariants are
+// about the loop the summary removes. A generated test replays the nondet
+// calls the trace records, and the summary removes the ones inside the loop
+// (#10821).
+static bool array_loop_summary_disabled(const cmdlinet &cmdline)
+{
+  for (const char *opt :
+       {"no-summarize-array-loops",
+        "uninitialised-vars-check",
+        "goto2c",
+        "loop-invariant",
+        "loop-invariant-check",
+        "generate-testcase",
+        "generate-ctest-testcase",
+        "generate-pytest-testcase"})
+    if (cmdline.isset(opt))
+      return true;
+  return false;
+}
+
 static void configure_branch_instrumentation(
   const cmdlinet &cmdline,
   goto_coveraget &coverage)
@@ -497,14 +518,9 @@ bool esbmc_parseoptionst::process_goto_program(
 
     // Before --goto-unwind unrolls the loops, interval analysis and
     // k-induction see them, and goto_check instruments the iteration the
-    // summary keeps. The uninitialised-variable check would read the lambda's
-    // unwritten elements, C has no lambda for --goto2c to print, and coverage
-    // and loop invariants are about the loop the summary removes.
+    // summary keeps. Coverage is about the loop the summary removes.
     if (
-      !cmdline.isset("no-summarize-array-loops") &&
-      !cmdline.isset("uninitialised-vars-check") && !cmdline.isset("goto2c") &&
-      !is_coverage && !cmdline.isset("loop-invariant") &&
-      !cmdline.isset("loop-invariant-check") &&
+      !is_coverage && !array_loop_summary_disabled(cmdline) &&
       goto_array_loop_summary(
         goto_functions,
         context,
@@ -594,7 +610,7 @@ bool esbmc_parseoptionst::process_goto_program(
     {
       log_status("Enable correctness witness validation 2.0");
       remove_no_op(goto_functions);
-      goto_loop_invariant_combined(goto_functions);
+      goto_loop_invariant_combined(goto_functions, context);
     }
 
     // goto_k_induction returns true, and logs why, when the inductive step
@@ -611,7 +627,7 @@ bool esbmc_parseoptionst::process_goto_program(
       // Combined mode: Branch 1 (invariant inductivity check) +
       // ASSUME(INV) injected at end of loop body + k-induction (Branch 2).
       remove_no_op(goto_functions);
-      goto_loop_invariant_combined(goto_functions);
+      goto_loop_invariant_combined(goto_functions, context);
       disable_is_if_unsound(
         goto_k_induction(goto_functions, &context, checks_past_violation));
     }
@@ -680,11 +696,20 @@ bool esbmc_parseoptionst::process_goto_program(
                               .is_true();
       options.set_option("termination-ranking-proved", ranking_proved);
 
+      // A copy taken before the havoc, which runs the loops as written.
+      if (
+        !ranking_proved && !non_term_proved && !spawns_threads(goto_functions))
+      {
+        recurrent_state_program = goto_functions;
+        recurrent_state_loops =
+          goto_recurrent_state(recurrent_state_program, context);
+      }
+
       // Only run the marker/havoc transform when the ranking check did
       // NOT settle it — otherwise the verdict loop short-circuits on the
       // ranking flag and the havoc'd markers would just be dead work.
       if (!ranking_proved)
-        goto_termination(goto_functions, options, ns);
+        goto_termination(goto_functions, context, options, ns);
     }
 
     if (

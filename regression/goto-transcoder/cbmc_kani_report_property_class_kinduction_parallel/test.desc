@@ -1,0 +1,4 @@
+CORE
+main.c
+--report-property-class cover --k-induction-parallel
+^ERROR: --report-property-class does not support --k-induction-parallel$(?![\s\S]*does not support)(?![\s\S]*^VERIFICATION)

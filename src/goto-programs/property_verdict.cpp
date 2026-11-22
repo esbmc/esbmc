@@ -2,10 +2,12 @@
 #include <goto-programs/property_verdict.h>
 #include <util/config/options.h>
 
+#include <algorithm>
 #include <cstdint>
 #include <cstdlib>
 
 property_verdict_tablet goto_functionst::property_verdicts;
+property_verdict_tablet goto_functionst::reported_verdicts;
 
 static property_locationt
 property_location(const locationt &location, const std::string &description)
@@ -103,6 +105,34 @@ void property_verdict_tablet::begin_round()
 void property_verdict_tablet::note_incomplete()
 {
   incomplete = true;
+}
+
+std::string
+reported_property_class(const optionst &options, const locationt &location)
+{
+  const auto reported = options.option_values.find("report-property-class");
+  if (reported == options.option_values.end())
+    return "";
+  const std::string cls = id2string(location.get("property_class"));
+  const std::vector<std::string> &classes = reported->second;
+  return std::find(classes.begin(), classes.end(), cls) != classes.end() ? cls
+                                                                         : "";
+}
+
+property_locationt classified_location(
+  const optionst &options,
+  const goto_programt::instructiont &pc,
+  const std::string &description)
+{
+  property_locationt loc = property_location(pc, description);
+  loc.property_class = reported_property_class(options, pc.location);
+  return loc;
+}
+
+property_verdict_tablet &verdict_table(const property_locationt &loc)
+{
+  return loc.property_class.empty() ? goto_functionst::property_verdicts
+                                    : goto_functionst::reported_verdicts;
 }
 
 bool withholds_proofs(const optionst &options)

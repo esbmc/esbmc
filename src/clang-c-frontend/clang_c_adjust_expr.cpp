@@ -17,6 +17,7 @@
 #include <util/base/prefix.h>
 #include <util/irep/std_code.h>
 #include <util/expr/type_byte_size.h>
+#include <irep2/irep2_expr.h>
 #include <unordered_set>
 
 clang_c_adjust::clang_c_adjust(contextt &_context)
@@ -880,6 +881,21 @@ bool clang_c_adjust::lower_complex_binary_arithmetic(exprt &expr)
   return true;
 }
 
+/// C23 6.3.1.1p2: the integer promotions do not apply to a bit-precise
+/// integer, so an operation clang typed as _BitInt(N) on _BitInt(N) operands
+/// runs at N bits. Promoting it to int moves the boundary --overflow-check
+/// tests (#7363).
+static bool is_bit_precise_operation(
+  const typet &type,
+  const exprt &op0,
+  const exprt &op1,
+  const namespacet &ns)
+{
+  const typet &t = ns.follow(type);
+  return (t.is_signedbv() || t.is_unsignedbv()) && t.get_bool("#extint") &&
+         ns.follow(op0.type()) == t && ns.follow(op1.type()) == t;
+}
+
 void clang_c_adjust::adjust_expr_binary_arithmetic(exprt &expr)
 {
   adjust_operands(expr);
@@ -893,7 +909,8 @@ void clang_c_adjust::adjust_expr_binary_arithmetic(exprt &expr)
   const typet o_type0 = ns.follow(op0.type());
   const typet o_type1 = ns.follow(op1.type());
 
-  gen_typecast_arithmetic(ns, op0, op1);
+  if (!is_bit_precise_operation(expr.type(), op0, op1, ns))
+    gen_typecast_arithmetic(ns, op0, op1);
 
   const typet &type0 = op0.type();
   const typet &type1 = op1.type();
@@ -1414,7 +1431,10 @@ void clang_c_adjust::adjust_side_effect_assignment(exprt &expr)
     }
   }
 
-  gen_typecast_arithmetic(ns, op0, op1);
+  const typet &computation_type =
+    static_cast<const typet &>(expr.find("computation_type"));
+  if (!is_bit_precise_operation(computation_type, op0, op1, ns))
+    gen_typecast_arithmetic(ns, op0, op1);
   promote_to_computation_type(expr, ns);
 }
 

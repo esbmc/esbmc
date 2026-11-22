@@ -1,0 +1,7 @@
+CORE
+main.c
+--multi-property
+^  PASSED +\[main.assertion.[0-9]+\] +line 12 +assertion o != 1 \|\| r.v == 0x08010203u$
+^  PASSED +\[main.assertion.[0-9]+\] +line 13 +assertion o != 3 \|\| r.v == 0x06070801u$
+^  FAILED +\[main.assertion.[0-9]+\] +line 14 +assertion r.v != 0x07080102u$
+^VERIFICATION FAILED$
