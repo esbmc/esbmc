@@ -1052,6 +1052,15 @@ public:
     codet &target_block);
 
 private:
+  /// `in`, count(), index() and remove() call __eq__ on the items they
+  /// compare, and a set's lookup calls __hash__ first; the models compare
+  /// without them.
+  void refuse_skipped_eq(
+    const exprt &list,
+    const exprt &item,
+    const std::string &operation,
+    const locationt &loc);
+
   // Helpers of the typed-list lowerings in typed_list.cpp.
   typet typed_int_type() const;
   exprt typed_int_type_id() const;
