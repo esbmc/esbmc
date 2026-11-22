@@ -1,0 +1,6 @@
+CORE
+main.c
+--field-sensitive-ssa
+^Field-sensitive SSA splits 1 struct object\(s\)$
+^  dereference failure: accessed expired variable pointer `s'$
+^VERIFICATION FAILED$
