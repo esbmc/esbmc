@@ -801,7 +801,19 @@ for {i} in range(0, len({seq})):
             if obj_node.id in self._subscript_inferred_vars:
                 return node
             return ast.Constant(value=True)
+        # Annotations are not enforced: `a: A` may hold a subclass instance.
+        if self._is_subclass_of(type_node.id, ann.id):
+            return node
         return ast.Constant(value=False)
+
+    def _is_subclass_of(self, name, base, seen=None):
+        """Whether user class `name` derives from `base`, at any depth."""
+        seen = seen if seen is not None else set()
+        if name in seen:
+            return False
+        seen.add(name)
+        parents = getattr(self, "class_bases", {}).get(name, [])
+        return base in parents or any(self._is_subclass_of(p, base, seen) for p in parents)
 
     # Symmetric equality-shape rewrites attempted on `assert L == R`. Each
     # returns the rewritten test or None; the cascade stops at the first hit.
