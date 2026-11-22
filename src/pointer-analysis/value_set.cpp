@@ -367,17 +367,17 @@ static std::vector<std::string> offset_paths(
    * caller's unrefined lookup covers, so there is no path to add. Both walks
    * would otherwise yield the empty path and have the caller repeat it. */
   const type2tc followed = ns.follow(type);
-  if ((!offset_known || offset == 0) && followed == target)
+  if (
+    (!offset_known || offset == 0) &&
+    (followed == target ||
+     (is_pointer_type(followed) && is_pointer_type(target))))
     return {};
 
   /* A pointer read as another pointer type, as Kani's transmute of
    * DynMetadata to *const () is, still names the pointer at that offset
    * (#10889). */
-  if (!offset_known)
-    return member_paths_of_type(type, target, ns);
-  if (offset == 0 && is_pointer_type(followed) && is_pointer_type(target))
-    return {};
-  return member_paths_at_offset(type, offset, target, ns, true);
+  return offset_known ? member_paths_at_offset(type, offset, target, ns, true)
+                      : member_paths_of_type(type, target, ns);
 }
 
 /* The paths that alias @p suffix in @p type. A union's arms overlay one
