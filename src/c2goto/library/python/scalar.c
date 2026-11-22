@@ -82,7 +82,9 @@ __ESBMC_HIDE:;
     return __python_scalar_cmp_float_float(f, widened);
   if (f >= 0x1p63)
     return 1;
-  long long whole = (long long)f;
+  // f == widened here, so converting widened, which depends on n only,
+  // gives the same value without a symbolic float-to-int conversion.
+  long long whole = (long long)widened;
   return (whole > n) - (whole < n);
 }
 
