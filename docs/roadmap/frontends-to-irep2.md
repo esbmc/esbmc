@@ -4690,3 +4690,37 @@ argument's `#location` and `#default_value`, and the second of those was missed 
 entirely: the probe ran on a function with no default argument. **The blind spot was the probe's input,
 not its comparator** (`scope-python-irep2.md` §11.3.3). Choosing the comparator carefully is cheap;
 choosing an input that can exhibit every key the node can carry is the part that needs thought.
+
+## 84. §31.1's three sites abort like legacy (2026-11-23)
+
+Phase 1's first open item: §31.1 said the native `break`, `continue` and
+`decl`-symbol arms should stop at the legacy diagnostic instead of falling back,
+because the `goto_convert_rec` they fell back to stops there anyway. They now
+`log_error` and `abort()`: "break without target" and "continue without target"
+as in `convert_break`/`convert_continue`, and a named message where
+`convert_decl` only asserts (compiled out under `-DNDEBUG`, where legacy goes on
+to dereference null). `return false` in `convert_native_rec`: 12 -> 9.
+
+§31.1 called the break and continue sites unreachable from well-formed input.
+They are reachable from ill-formed Python: `ast.parse` accepts a `break` outside
+a loop (CPython rejects it only at compile time), so `if x > 0: break` at module
+or function level reaches the arm. On master it falls back and legacy aborts. On
+this branch the native arm aborts with the same message. Run
+`gdb -batch -ex run -ex bt --args esbmc brk.py` to see the difference: the
+backtrace ends in `convert_break` on master and in `convert_native_rec` on the
+branch. The right answer for that input is a syntax error from the Python
+frontend. That is a separate defect and is not fixed here.
+
+Measured: `--goto-functions-only` with each test's `test.desc` flags, master
+binary against branch binary, over 1 615 CORE tests (every CORE test in
+`esbmc`, `cbmc`, `esbmc-cpp/cpp` and `python` whose source uses `break` or
+`continue`, plus every tenth CORE test of those suites). Outputs are identical
+after removing timings, temporary paths and the address-derived temp names
+(`ESBMC_unpack_temp_<n>`, `unpack_<n>_0`). Exit codes are identical as well.
+No new regression test can pin the change, because both binaries print the
+same diagnostic and exit the same way on every input that reaches these sites.
+
+Next: §31.2, the nil `for` condition. Read Jimple's and Solidity's loop
+lowering for a `code_for2t` producer with a nil condition. If neither produces
+one, that site joins these three. §31.3's expression-statement code operand and
+the Solidity decline census follow.
