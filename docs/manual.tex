@@ -234,7 +234,9 @@ DFS & Perform depth first search scheduling of multithreaded code. The
 default.\\
 \hline
 schedule & Perform a ``schedule'' scheduling of multithreaded code, encoding
-all interleavings into one SSA program.\\
+all interleavings into one SSA program. The formula grows exponentially with
+the context bound, partial-order reduction does not apply, and
+\texttt{--state-hashing} is rejected.\\
 \hline
 all-runs & Explore all interleavings in the program, even after a counterexample
 is found.\\
