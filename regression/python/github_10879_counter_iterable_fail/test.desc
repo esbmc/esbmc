@@ -2,4 +2,4 @@ CORE
 main.py
 
 ^VERIFICATION FAILED$
-Counter with an argument is not modelled
+Counter with a non-empty argument is not modelled
