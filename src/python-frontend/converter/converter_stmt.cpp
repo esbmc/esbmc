@@ -5287,55 +5287,68 @@ bool python_converter::handle_unpacking_assignment(
       list.handle_list_var_unpacking(ast_node, target, rhs, target_block);
       return true;
     }
-
-    // An untyped parameter (void *) of a method no call reaches (#10377):
-    // fail only if the unpacking runs, instead of refusing the program.
-    if (pointed_type.id() == "empty")
-    {
-      std::function<void(const nlohmann::json &)> declare_target =
-        [&](const nlohmann::json &elt) {
-          const std::string kind = elt["_type"];
-          if (kind == "Starred")
-            return declare_target(elt["value"]);
-          if (kind == "Tuple" || kind == "List")
-          {
-            for (const auto &sub : elt["elts"])
-              declare_target(sub);
-            return;
-          }
-          if (kind != "Name")
-            return;
-          symbol_id var_sid = create_symbol_id();
-          var_sid.set_object(elt["id"].get<std::string>());
-          if (find_symbol(var_sid.to_string()))
-            return;
-          locationt loc = get_location_from_decl(elt);
-          symbolt var = create_symbol(
-            loc.get_file().as_string(),
-            elt["id"].get<std::string>(),
-            var_sid.to_string(),
-            loc,
-            long_long_int_type());
-          var.lvalue = true;
-          var.file_local = true;
-          var.is_extern = false;
-          symbol_table_.move_symbol_to_context(var);
-        };
-      declare_target(target);
-
-      code_assertt unsupported(migrate_expr_back(gen_false_expr()));
-      unsupported.location() = get_location_from_decl(ast_node);
-      unsupported.location().comment(
-        "Cannot unpack a value of unknown type at line " +
-        std::to_string(ast_node["lineno"].get<int>()));
-      target_block.copy_to_operands(unsupported);
-      return true;
-    }
   }
 
-  throw std::runtime_error(
-    "Cannot unpack " + rhs.type().id_string() +
-    " - only tuples and arrays can be unpacked");
+  return unpack_unresolved(ast_node, target, rhs, target_block);
+}
+
+// A base method whose untyped parameter is unpacked, overridden by a
+// subclass: no call types the parameter, so the base body is not run (#10377).
+bool python_converter::unpack_unresolved(
+  const nlohmann::json &ast_node,
+  const nlohmann::json &target,
+  const exprt &rhs,
+  codet &target_block)
+{
+  const bool untyped_param =
+    rhs.type().is_pointer() && ns.follow(rhs.type().subtype()).id() == "empty";
+  if (
+    !untyped_param ||
+    !overridden_below(current_class_name_, current_func_name_))
+  {
+    throw std::runtime_error(
+      "Cannot unpack " + rhs.type().id_string() +
+      " - only tuples and arrays can be unpacked");
+  }
+
+  std::function<void(const nlohmann::json &)> declare_target =
+    [&](const nlohmann::json &elt) {
+      const std::string kind = elt["_type"];
+      if (kind == "Starred")
+        return declare_target(elt["value"]);
+      if (kind == "Tuple" || kind == "List")
+      {
+        for (const auto &sub : elt["elts"])
+          declare_target(sub);
+        return;
+      }
+      if (kind != "Name")
+        return;
+      symbol_id var_sid = create_symbol_id();
+      var_sid.set_object(elt["id"].get<std::string>());
+      if (find_symbol(var_sid.to_string()))
+        return;
+      locationt loc = get_location_from_decl(elt);
+      symbolt var = create_symbol(
+        loc.get_file().as_string(),
+        elt["id"].get<std::string>(),
+        var_sid.to_string(),
+        loc,
+        long_long_int_type());
+      var.lvalue = true;
+      var.file_local = true;
+      var.is_extern = false;
+      symbol_table_.move_symbol_to_context(var);
+    };
+  declare_target(target);
+
+  code_assertt unsupported(migrate_expr_back(gen_false_expr()));
+  unsupported.location() = get_location_from_decl(ast_node);
+  unsupported.location().comment(
+    "Cannot unpack a value of unknown type at line " +
+    std::to_string(ast_node["lineno"].get<int>()));
+  target_block.copy_to_operands(unsupported);
+  return true;
 }
 
 namespace
