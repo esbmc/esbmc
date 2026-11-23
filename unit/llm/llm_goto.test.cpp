@@ -585,6 +585,12 @@ TEST_CASE("parser maps every C integer type name in a cast", "[llm]")
   CHECK(cast_type("unsigned long") == long_uint_type2());
   CHECK(cast_type("long long int") == long_long_int_type2());
   CHECK(cast_type("unsigned long long") == long_long_uint_type2());
+  CHECK(cast_type("int8_t") == signedbv_type2tc(8));
+  CHECK(cast_type("uint64_t") == unsignedbv_type2tc(64));
+  CHECK(cast_type("size_t") == size_type2());
+  CHECK(cast_type("ptrdiff_t") == signed_size_type2());
+  CHECK_FALSE(parse(f, "(unsigned uint32_t)s").has_value());
+  CHECK_FALSE(parse(f, "(myint_t)s").has_value());
 }
 
 TEST_CASE("parser rejects ill-typed operands of every operator", "[llm]")

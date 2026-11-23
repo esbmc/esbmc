@@ -225,6 +225,15 @@ const std::map<std::string, std::function<type2tc()>> &cast_types()
     add_integer("", int_type2, uint_type2);
     add_integer("long", long_int_type2, long_uint_type2);
     add_integer("long long", long_long_int_type2, long_long_uint_type2);
+    // The frontend erases typedefs, so only the standard ones are known.
+    for (unsigned width : {8, 16, 32, 64})
+    {
+      const std::string n = std::to_string(width);
+      add("int" + n + "_t", [width] { return signedbv_type2tc(width); });
+      add("uint" + n + "_t", [width] { return unsignedbv_type2tc(width); });
+    }
+    add("size_t", size_type2);
+    add("ptrdiff_t", signed_size_type2);
     return out;
   }();
   return types;
@@ -471,9 +480,11 @@ private:
   {
     static const std::set<std::string> keywords = {
       "_Bool", "bool", "char", "short", "int", "long", "signed", "unsigned"};
-    return peek().kind == tokent::PUNCTUATOR && peek().text == "(" &&
-           peek(1).kind == tokent::IDENTIFIER && keywords.count(peek(1).text) &&
-           !scope.count(peek(1).text);
+    if (
+      peek().kind != tokent::PUNCTUATOR || peek().text != "(" ||
+      peek(1).kind != tokent::IDENTIFIER || scope.count(peek(1).text))
+      return false;
+    return keywords.count(peek(1).text) || cast_types().count(peek(1).text);
   }
 
   type2tc type_name()
