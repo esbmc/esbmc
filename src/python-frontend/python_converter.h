@@ -891,6 +891,12 @@ private:
 
   void get_function_definition(const nlohmann::json &function_node);
 
+  bool unpack_unresolved(
+    const nlohmann::json &ast_node,
+    const nlohmann::json &target,
+    const exprt &rhs,
+    codet &target_block);
+
   /// Returns @p call_expr, a call through `callee` whose function type is
   /// unknown, made to pass the defaults of a top-level function `callee` may
   /// hold whose parameters @p call leaves out. Refuses the path where it
