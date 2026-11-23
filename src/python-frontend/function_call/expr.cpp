@@ -259,11 +259,20 @@ exprt function_call_expr::build_temporary_receiver(
   // declared and nondet: the constructor was converted but its call never
   // reached the block, so a method reading state __init__ wrote saw an
   // unconstrained value.
+  return get_expr_without_lhs(ctor_call);
+}
+
+/// Converts @p node as a value of its own. A constructor call converted while
+/// current_lhs points at the enclosing assignment's target builds the object
+/// into that target and yields nil, so `n = xs.count(C(1))` passed a void
+/// element and crashed symex (#10958).
+exprt function_call_expr::get_expr_without_lhs(const nlohmann::json &node) const
+{
   exprt *saved_lhs = converter_.current_lhs;
   converter_.current_lhs = nullptr;
-  exprt ctor_result = converter_.get_expr(ctor_call);
+  exprt value = converter_.get_expr(node);
   converter_.current_lhs = saved_lhs;
-  return ctor_result;
+  return value;
 }
 
 /// Whether the declaration of \p method that \p class_node resolves to is a
@@ -2737,7 +2746,7 @@ exprt function_call_expr::handle_list_insert() const
     throw std::runtime_error("List variable not found: " + list_display_name);
 
   exprt index_expr = converter_.get_expr(args[0]);
-  exprt value_to_insert = converter_.get_expr(args[1]);
+  exprt value_to_insert = get_expr_without_lhs(args[1]);
 
   if (value_to_insert.is_constant())
   {
@@ -2871,7 +2880,7 @@ exprt function_call_expr::handle_list_appendleft() const
     throw std::runtime_error("List variable not found: " + list_display_name);
 
   exprt index_expr = from_integer(0, signedbv_typet(64));
-  exprt value_to_insert = converter_.get_expr(args[0]);
+  exprt value_to_insert = get_expr_without_lhs(args[0]);
 
   if (value_to_insert.is_constant())
   {
@@ -2917,7 +2926,7 @@ exprt function_call_expr::handle_tuple_method() const
   const struct_typet &tuple_type = to_struct_type(receiver.type());
   const auto &components = tuple_type.components();
 
-  exprt elem = converter_.get_expr(args[0]);
+  exprt elem = get_expr_without_lhs(args[0]);
 
   if (method_name == "count")
   {
@@ -3183,7 +3192,7 @@ exprt function_call_expr::handle_list_remove() const
   if (!list_symbol)
     throw std::runtime_error("List variable not found: " + list_display_name);
 
-  exprt value_to_remove = converter_.get_expr(args[0]);
+  exprt value_to_remove = get_expr_without_lhs(args[0]);
 
   python_list list_helper(converter_, call_);
   exprt result =
@@ -3255,7 +3264,7 @@ exprt function_call_expr::handle_list_count() const
   if (!list_symbol)
     throw std::runtime_error("List variable not found: " + list_display_name);
 
-  exprt value = converter_.get_expr(args[0]);
+  exprt value = get_expr_without_lhs(args[0]);
   python_list list_helper(converter_, call_);
   return list_helper.build_count_list_call(*list_symbol, call_, value);
 }
@@ -3275,7 +3284,7 @@ exprt function_call_expr::handle_list_index() const
   if (!list_symbol)
     throw std::runtime_error("List variable not found: " + list_display_name);
 
-  exprt value = converter_.get_expr(args[0]);
+  exprt value = get_expr_without_lhs(args[0]);
   python_list list_helper(converter_, call_);
 
   if (args.size() == 1)
@@ -3641,7 +3650,7 @@ exprt function_call_expr::handle_set_method() const
   // add/discard take a single element value.
   if (method_name == "add" || method_name == "discard")
   {
-    exprt elem = converter_.get_expr(args[0]);
+    exprt elem = get_expr_without_lhs(args[0]);
     python_list helper(converter_, call_);
     return helper.build_set_membership_call(
       *set_symbol, call_, elem, method_name);
@@ -4303,7 +4312,7 @@ exprt function_call_expr::handle_list_append() const
     throw std::runtime_error("List variable not found: " + list_display_name);
 
   // Get the value to append
-  exprt value_to_append = converter_.get_expr(args[0]);
+  exprt value_to_append = get_expr_without_lhs(args[0]);
 
   // A function name stored in a list decays to a function pointer, mirroring
   // the implicit conversion the call-argument path already applies. Storing
@@ -4424,7 +4433,7 @@ exprt function_call_expr::handle_list_extend() const
   if (!list_symbol)
     throw std::runtime_error("List variable not found: " + list_display_name);
 
-  exprt other_list = converter_.get_expr(args[0]);
+  exprt other_list = get_expr_without_lhs(args[0]);
 
   python_list list(converter_, nlohmann::json());
 
