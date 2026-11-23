@@ -357,20 +357,6 @@ static bool proof_cache_flags_usable(const optionst &options)
   return true;
 }
 
-// Kani runs CBMC with --no-malloc-may-fail (kani#891), under which neither
-// malloc nor realloc returns NULL, so a Kani binary is checked the same way
-// whatever strategy the run picks. A constant size above the object-size
-// limit still yields NULL (memory_alloc.cpp).
-void esbmc_parseoptionst::default_kani_options()
-{
-  if (!has_kani_binary_input())
-    return;
-  log_status("Kani goto-binary: assuming malloc and realloc do not fail");
-  cmdline.set("force-malloc-success", std::string(), {""});
-  cmdline.set("force-realloc-success", std::string(), {""});
-  default_kani_strategy();
-}
-
 // A Kani harness verifies by k-induction unless the run asks for something
 // else: a strategy or a bound, a report, coverage, dead-code or print-only
 // mode, or witness validation. The flags go on the command line, so the options
@@ -420,7 +406,7 @@ void esbmc_parseoptionst::default_kani_strategy()
   for (const char *flag : chosen)
     if (cmdline.isset(flag))
       return;
-  if (ts_strategy_requested())
+  if (ts_strategy_requested() || !has_kani_binary_input())
     return;
   log_status("Kani goto-binary: verifying by k-induction");
   cmdline.set("k-induction", std::string(), {""});
@@ -546,7 +532,7 @@ int esbmc_parseoptionst::doit()
     return 1;
   }
 
-  default_kani_options();
+  default_kani_strategy();
   if (incompatible_flags(cmdline))
     return 1;
 

@@ -2,3 +2,5 @@ regression/goto-transcoder/cbmc_kani_default_malloc_success
 regression/goto-transcoder/cbmc_kani_default_malloc_strategy
 regression/goto-transcoder/cbmc_kani_default_realloc_success
 regression/goto-transcoder/cbmc_kani_default_ts_strategy
+regression/goto-transcoder/cbmc_kani_default_malloc_string_fail
+regression/goto-transcoder/cbmc_kani_default_malloc_native_fail

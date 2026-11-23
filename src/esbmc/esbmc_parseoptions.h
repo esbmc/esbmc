@@ -140,7 +140,6 @@ protected:
   /// True if any --binary input is a CBMC goto-binary (magic 0x7f 'G' 'B' 'F').
   bool has_cbmc_binary_input();
   bool has_kani_binary_input();
-  void default_kani_options();
   void default_kani_strategy();
 
   /// Synthesises ESBMC's "additions" (the __ESBMC_main entry wrapper and the
