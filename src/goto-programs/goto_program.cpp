@@ -466,6 +466,9 @@ std::ostream &operator<<(std::ostream &out, goto_program_instruction_typet t)
   case CATCH:
     out << "CATCH";
     break;
+  case LOOP_INVARIANT:
+    out << "LOOP_INVARIANT";
+    break;
   default:
     assert(!"Unknown instruction type");
     out << "unknown instruction";
