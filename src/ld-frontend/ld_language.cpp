@@ -1,4 +1,5 @@
 #include <ld-frontend/ld_language.h>
+#include <ld-frontend/ld_scan_loop.h>
 #include <ld-frontend/parser/plcopen_xml_parser.h>
 #include <ld-frontend/semantics/type_checker.h>
 #include <ld-frontend/ir/ld_ir_builder.h>
@@ -87,7 +88,7 @@ bool ld_languaget::typecheck(contextt &context, const std::string & /*module*/)
       property_encoder encoder(context, ast_.source_file);
       code_blockt prop_code = encoder.encode(props_);
 
-      symbolt *scan_sym = context.find_symbol("ld::scan_loop");
+      symbolt *scan_sym = context.find_symbol(ld_scan_loop_id);
       if (scan_sym && !prop_code.operands().empty())
       {
         // The while loop may follow set-up statements (--ld-closed-world
