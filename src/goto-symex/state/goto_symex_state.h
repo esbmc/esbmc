@@ -239,6 +239,10 @@ public:
      *  further consumption, so recovery must decline). */
     unsigned int va_cursor;
 
+    /** One past this activation's last va_arg index; later activations of
+     *  the same function materialise theirs after it. */
+    unsigned int va_limit;
+
     /** Record the entry guard of the function */
     guard2tc entry_guard;
 
@@ -252,6 +256,7 @@ public:
       : return_value(expr2tc()),
         va_index(UINT_MAX),
         va_cursor(UINT_MAX),
+        va_limit(UINT_MAX),
         hidden(false),
         stack_frame_total(0)
     {

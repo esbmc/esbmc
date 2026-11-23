@@ -1,0 +1,9 @@
+CORE
+main.c
+--printf-check --multi-property
+^VERIFICATION FAILED$
+^\*\* 4 of \d+ properties failed
+\[vp\.assertion\.\d+\] +line 10 +printf %s argument is not NUL-terminated
+\[vfp\.assertion\.\d+\] +line 18 +printf %s argument is not NUL-terminated
+\[vsp\.assertion\.\d+\] +line 26 +printf %s argument is not NUL-terminated
+\[vsnp\.assertion\.\d+\] +line 34 +printf %s argument is not NUL-terminated

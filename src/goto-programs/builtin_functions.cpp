@@ -2054,10 +2054,9 @@ void goto_convertt::do_function_call_symbol(
     // call frame, so va_arg needs no assignment here. Emitting an ASSIGN
     // crashes the pointer analysis on Linux/Windows where va_list is a
     // struct array, so those targets keep the erased form. Where va_list is
-    // a plain pointer, emit the real copy: symex_printf's va_list recovery
-    // must be able to see that the destination now aliases another va_list
-    // (an erased copy would let a foreign va_list masquerade as a fresh
-    // local, defeating the recovery's provenance gate).
+    // a plain pointer, emit the real copy. Either way the marker call below
+    // tells symex_printf's va_list recovery that the destination now aliases
+    // another va_list.
     exprt dest_expr = make_va_list(arguments[0]);
 
     if (!is_lvalue(dest_expr))

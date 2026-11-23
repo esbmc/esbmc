@@ -1,0 +1,13 @@
+regression/esbmc/github_10973
+regression/esbmc/github_10973_terminated
+regression/esbmc/github_10973_v_variants
+regression/esbmc/github_10973_va_arg_discarded
+regression/esbmc/github_10973_va_arg_discarded_fail
+regression/esbmc/github_10973_va_copy_foreign
+regression/esbmc/github_10973_elem_copy_fail
+regression/esbmc/github_10973_elem_copy
+regression/esbmc/github_10973_null_s_fail
+regression/esbmc/github_10973_recursion_fail
+regression/esbmc/github_10973_va_arg_unstarted_fail
+regression/esbmc/github_10973_va_copy_out_fail
+regression/esbmc/github_10973_cast_fail

@@ -693,6 +693,10 @@ void goto_symext::symex_function_call_code(const expr2tc &expr)
   const code_type2t &function_type = to_code_type(goto_function.type);
   frame.va_index = argument_assignments(identifier, function_type, arguments);
   frame.va_cursor = frame.va_index;
+  const size_t params = function_type.arguments.size();
+  if (frame.va_index != UINT_MAX)
+    frame.va_limit =
+      frame.va_index + std::max(arguments.size(), params) - params;
 
   havoc_parameters(interval_domain_state, function_type);
 }
