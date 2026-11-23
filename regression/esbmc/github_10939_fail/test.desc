@@ -1,0 +1,5 @@
+CORE
+main.c
+--no-propagation
+^  dereference failure: Access to object out of bounds$
+^VERIFICATION FAILED$

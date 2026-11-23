@@ -1,0 +1,4 @@
+CORE
+main.c
+--overflow-check --z3 --std c11 --smt-formula-only
+bvashr
