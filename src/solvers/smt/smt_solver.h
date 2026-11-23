@@ -710,6 +710,11 @@ public:
    *  @return Boolean valued AST representing whether an overflow occurs. */
   virtual smt_astt overflow_arith(const expr2tc &expr);
 
+  /** Bit-vector overflow of @p value << @p amount, encoded at the width of
+   *  @p value (#9223).
+   *  @return Boolean valued AST, true when a significant bit is shifted out. */
+  smt_astt overflow_shl_bv(const expr2tc &value, const expr2tc &amount);
+
   /** Detect integer overflows in a cast. Takes a typecast2tc as an argument,
    *  and if it causes a decrease in integer width, then encodes a test that
    *  the dropped bits are never significant / used.
