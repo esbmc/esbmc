@@ -17,4 +17,4 @@ def knapsack(capacity, items):
 
     return memo[len(items), capacity]
 
-assert knapsack(3, [[3, 5]]) == 5
+assert knapsack(1, [[1, 5]]) == 5
