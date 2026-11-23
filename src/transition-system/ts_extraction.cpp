@@ -1,4 +1,5 @@
 #include <transition-system/ts_extraction.h>
+#include <ld-frontend/ld_scan_loop.h>
 
 #include <goto-symex/equation/symex_target_equation.h>
 #include <goto-symex/scheduler/reachability_tree.h>
@@ -13,13 +14,13 @@
 
 namespace
 {
-const irep_idt main_id = "c:@F@main";
 const std::string marker_init = "ts$init$";
 const std::string marker_pre = "ts$pre$";
 const std::string marker_post = "ts$post$";
 
 struct loop_shapet
 {
+  irep_idt main_id;
   unsigned entry, head, back;
   std::vector<expr2tc> havoc_vars;
   /// main has no loop: the whole program is the prefix, there is no state and
@@ -148,8 +149,15 @@ bool calls_are_supported(
   return true;
 }
 
+irep_idt loop_function(const goto_functionst &fns)
+{
+  const irep_idt c_main = "c:@F@main";
+  return fns.function_map.count(c_main) ? c_main : irep_idt(ld_scan_loop_id);
+}
+
 bool recognise(const goto_functionst &fns, loop_shapet &shape)
 {
+  const irep_idt &main_id = shape.main_id;
   auto main_fn = fns.function_map.find(main_id);
   if (main_fn == fns.function_map.end() || !main_fn->second.body_available)
   {
@@ -233,7 +241,7 @@ bool recognise(const goto_functionst &fns, loop_shapet &shape)
   if (entry_fn != fns.function_map.end())
   {
     const auto &insns = entry_fn->second.body.instructions;
-    auto call_main = std::find_if(insns.begin(), insns.end(), [](auto &i) {
+    auto call_main = std::find_if(insns.begin(), insns.end(), [&](auto &i) {
       if (!i.is_function_call())
         return false;
       const expr2tc &f = to_code_function_call2t(i.code).function;
@@ -350,12 +358,13 @@ bool extract_transition_system(
     return false;
   }
   loop_shapet shape;
+  shape.main_id = loop_function(goto_functions);
   if (!recognise(goto_functions, shape))
     return false;
 
   goto_functionst program = goto_functions;
   program.update();
-  goto_programt &main_body = program.function_map[main_id].body;
+  goto_programt &main_body = program.function_map[shape.main_id].body;
 
   // Introduce the magic markers
   const unsigned n = shape.havoc_vars.size();
