@@ -1,0 +1,5 @@
+CORE
+main.goto
+--binary
+^Kani goto-binary: assuming every allocation succeeds$
+^VERIFICATION SUCCESSFUL$

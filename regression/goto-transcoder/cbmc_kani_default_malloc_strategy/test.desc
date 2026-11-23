@@ -1,0 +1,5 @@
+CORE
+main.goto
+--binary --incremental-bmc
+^Kani goto-binary: assuming every allocation succeeds$
+^VERIFICATION SUCCESSFUL$
