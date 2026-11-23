@@ -289,6 +289,7 @@ private:
    * literal, or when index() would raise ValueError.
    */
   std::optional<exprt> fold_constant_list_query() const;
+  exprt get_expr_without_lhs(const nlohmann::json &node) const;
   void materialize_list_symbol(const symbolt *sym) const;
 
   /*

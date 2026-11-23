@@ -1,0 +1,5 @@
+CORE
+main.py
+
+Unsupported: set or dict hashing does not call __eq__ of class .Node.
+^VERIFICATION FAILED$

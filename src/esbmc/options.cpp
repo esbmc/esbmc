@@ -489,6 +489,10 @@ const struct group_opt_templ all_cmd_options[] = {
      boost::program_options::value<std::string>(),
      "Redirect all output to a file (no stdout/stderr)"},
     {"goto2c", NULL, "Translate the GOTO program to C"},
+    {"goto2c-structured-loops",
+     NULL,
+     "With --goto2c, print loops and if/else as C statements instead of "
+     "labels and gotos"},
     {"goto2lean",
      NULL,
      "Translate the GOTO program reachable from the entry function to Lean 4 "
@@ -689,7 +693,10 @@ const struct group_opt_templ all_cmd_options[] = {
      NULL,
      "Disable the vacuity probe (overrides default-on behavior)."}}},
   {"Concurrency and Scheduling",
-   {{"schedule", NULL, "Use schedule recording approach"},
+   {{"schedule",
+     NULL,
+     "Encode every interleaving in one formula; it grows exponentially with "
+     "--context-bound and gets no partial-order reduction"},
     {"context-bound",
      boost::program_options::value<int>()->default_value(-1)->value_name("nr"),
      "Limit number of context switches for each thread"},

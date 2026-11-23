@@ -2156,6 +2156,12 @@ private:
   std::optional<std::string> family_method_owner(
     const std::string &class_name,
     const std::string &m) const;
+  /// Whether @p class_name, a class this file imports, or a subclass this
+  /// file defines may define @p m. True when the class or one of its bases
+  /// cannot be found in the module it comes from.
+  bool imported_family_may_define(
+    const std::string &class_name,
+    const std::string &m) const;
   std::optional<std::pair<bool, std::string>> stored_function(
     const nlohmann::json &target,
     const nlohmann::json &value,

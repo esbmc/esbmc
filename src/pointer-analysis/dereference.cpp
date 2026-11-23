@@ -2365,6 +2365,19 @@ void dereferencet::construct_from_dyn_struct_offset(
     it = ns.follow(it);
     BigInt field_size = type_byte_size_bits(it, &ns);
 
+    // A sub-byte access, such as a bit-field read, starts at the member
+    // which holds it and has its width.
+    if (access_sz % config.ansi_c.char_width != 0 && field_size == access_sz)
+    {
+      expr2tc field = member2tc(it, value, struct_type.member_names[i]);
+      if (!base_type_eq(field->type, type, ns))
+        field = bitcast2tc(type, field);
+      extract_list.emplace_back(
+        equality2tc(bits_offset, constant_int2tc(offset->type, offs)), field);
+      i++;
+      continue;
+    }
+
     if (
       skips_member(
         value,

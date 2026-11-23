@@ -1,0 +1,10 @@
+regression/esbmc/bitfield_dyn_index_read
+regression/esbmc/bitfield_dyn_index_read_fail
+regression/esbmc/bitfield_dyn_index_read_ir
+regression/esbmc/bitfield_dyn_index_read_ir_fail
+regression/esbmc/bitfield_dyn_index_signed
+regression/esbmc/bitfield_dyn_index_signed_fail
+regression/esbmc/bitfield_dyn_index_store
+regression/esbmc/bitfield_dyn_index_store_fail
+regression/esbmc/bitfield_dyn_index_twin
+regression/esbmc/bitfield_dyn_index_twin_fail
