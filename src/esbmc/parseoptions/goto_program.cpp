@@ -614,7 +614,7 @@ bool esbmc_parseoptionst::has_cbmc_binary_input()
 // Whether `path` is a CBMC goto-binary written by Kani. Kani names its helper
 // symbols __KANI_ (e.g. __KANI_is_nonzero_power_of_two), and the name sits in
 // the binary's string table; a goto-cc binary with such an identifier matches
-// too, which only changes the default strategy.
+// too, and then gets Kani's defaults (strategy and allocation success).
 static bool is_kani_binary(const std::string &path)
 {
   std::ifstream in(path, std::ios::in | std::ios::binary);

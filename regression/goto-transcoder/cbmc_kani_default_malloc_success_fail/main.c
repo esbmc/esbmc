@@ -1,3 +1,4 @@
+/* A Kani binary whose assertion fails although malloc cannot fail. */
 #include <stdlib.h>
 int __KANI_marker;
 int main(void)

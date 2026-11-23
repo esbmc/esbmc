@@ -357,15 +357,17 @@ static bool proof_cache_flags_usable(const optionst &options)
   return true;
 }
 
-// Kani runs CBMC with --no-malloc-may-fail (kani#891), so its verdicts assume
-// every allocation succeeds; a Kani binary is checked under the same
-// assumption whatever strategy the run picks.
+// Kani runs CBMC with --no-malloc-may-fail (kani#891), under which neither
+// malloc nor realloc returns NULL, so a Kani binary is checked the same way
+// whatever strategy the run picks. A constant size above the object-size
+// limit still yields NULL (memory_alloc.cpp).
 void esbmc_parseoptionst::default_kani_options()
 {
   if (!has_kani_binary_input())
     return;
-  log_status("Kani goto-binary: assuming every allocation succeeds");
+  log_status("Kani goto-binary: assuming malloc and realloc do not fail");
   cmdline.set("force-malloc-success", std::string(), {""});
+  cmdline.set("force-realloc-success", std::string(), {""});
   default_kani_strategy();
 }
 
