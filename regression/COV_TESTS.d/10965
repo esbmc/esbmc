@@ -6,3 +6,9 @@ regression/esbmc/github_10965_guarded_fail
 regression/esbmc/github_10965_phi_fail
 regression/esbmc/github_10965_phi_scope
 regression/esbmc-cpp/cpp/github_7797_flat_map_update
+regression/esbmc/github_10965_with_chain
+regression/esbmc/github_10965_with_chain_scope
+regression/esbmc/github_10965_with_chain_nested
+regression/esbmc/github_10965_with_chain_fail
+regression/esbmc/github_10965_with_chain_nested_fail
+regression/esbmc/github_10965_with_chain_copy
