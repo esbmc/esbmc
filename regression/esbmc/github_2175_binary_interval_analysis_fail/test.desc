@@ -1,0 +1,5 @@
+CORE
+../github_2175_binary_fail/main.goto
+--binary --function foo --interval-analysis
+^  x is nondet$
+^VERIFICATION FAILED$
