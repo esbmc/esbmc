@@ -1,0 +1,5 @@
+CORE
+main.goto
+--binary
+assertion ret\.digits\[3\] <= 8
+^VERIFICATION FAILED$

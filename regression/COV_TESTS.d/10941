@@ -1,0 +1,6 @@
+regression/goto-transcoder/github_10941
+regression/goto-transcoder/github_10941_fail
+regression/goto-transcoder/github_10941_goto_check
+regression/goto-transcoder/github_10941_goto_check_fail
+regression/esbmc/github_10941_short_circuit
+regression/esbmc/github_10941_short_circuit_fail
