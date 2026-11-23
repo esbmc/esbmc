@@ -2367,9 +2367,7 @@ void dereferencet::construct_from_dyn_struct_offset(
 
     // A sub-byte access, such as a bit-field read, starts at the member
     // which holds it and has its width.
-    if (
-      !int_encoding && access_sz % config.ansi_c.char_width != 0 &&
-      field_size == access_sz)
+    if (access_sz % config.ansi_c.char_width != 0 && field_size == access_sz)
     {
       expr2tc field = member2tc(it, value, struct_type.member_names[i]);
       if (!base_type_eq(field->type, type, ns))
