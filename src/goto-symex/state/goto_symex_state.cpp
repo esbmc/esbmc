@@ -1508,14 +1508,17 @@ void goto_symex_statet::fixup_renamed_type(
   expr2tc &expr,
   const type2tc &orig_type)
 {
-  if (is_code_type(orig_type) || is_code_type(expr->type))
+  // Read through const: a non-const expr-> detaches a shared node, and a
+  // carried array value must keep its identity (extends_carried).
+  const type2tc &renamed_type = std::as_const(expr)->type;
+  if (is_code_type(orig_type) || is_code_type(renamed_type))
   {
     return;
   }
   // Empty (void) types have no width; the scalar-vs-scalar width comparison
   // below would otherwise throw symbolic_type_excp from get_width(). No
   // fix-up is meaningful for void values, so bail out.
-  if (is_empty_type(orig_type) || is_empty_type(expr->type))
+  if (is_empty_type(orig_type) || is_empty_type(renamed_type))
   {
     return;
   }
@@ -1525,7 +1528,7 @@ void goto_symex_statet::fixup_renamed_type(
 
     // Grab pointer types
     const pointer_type2t &orig = to_pointer_type(orig_type);
-    const pointer_type2t &newtype = to_pointer_type(expr->type);
+    const pointer_type2t &newtype = to_pointer_type(renamed_type);
 
     type2tc origsubtype = orig.subtype;
     type2tc newsubtype = newtype.subtype;
@@ -1549,15 +1552,15 @@ void goto_symex_statet::fixup_renamed_type(
     if (!origsize || !newsize || *origsize != *newsize)
       expr = typecast2tc(orig_type, expr);
   }
-  else if (is_scalar_type(orig_type) && is_scalar_type(expr->type))
+  else if (is_scalar_type(orig_type) && is_scalar_type(renamed_type))
   {
     // If we're a BV and have changed size, then we're quite likely to cause
     // an SMT problem later on. Immediately cast. Also if we've gratuitously
     // changed sign.
     if (
-      orig_type->get_width() != expr->type->get_width() ||
-      (is_bv_type(orig_type) && is_bv_type(expr->type) &&
-       orig_type->type_id != expr->type->type_id))
+      orig_type->get_width() != renamed_type->get_width() ||
+      (is_bv_type(orig_type) && is_bv_type(renamed_type) &&
+       orig_type->type_id != renamed_type->type_id))
     {
       expr = typecast2tc(orig_type, expr);
     }
