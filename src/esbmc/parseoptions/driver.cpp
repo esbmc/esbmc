@@ -174,6 +174,17 @@ static bool parallel_solving_conflicts(const cmdlinet &cmdline)
   return false;
 }
 
+/// generate_hash needs a state_hashing_level2t, which the --schedule execution
+/// state never installs (#10296).
+static bool schedule_conflicts(const cmdlinet &cmdline)
+{
+  if (!cmdline.isset("schedule") || !cmdline.isset("state-hashing"))
+    return false;
+
+  log_error("--schedule cannot be combined with --state-hashing");
+  return true;
+}
+
 /// The flag combinations that cannot produce a sound report, rejected
 /// before any work is done. Kept out of doit() so every combination check
 /// reads in one place.
@@ -290,6 +301,9 @@ static bool incompatible_flags(const cmdlinet &cmdline)
     return true;
 
   if (parallel_solving_conflicts(cmdline))
+    return true;
+
+  if (schedule_conflicts(cmdline))
     return true;
 
   // --incremental-context-bound owns the outer verification loop, re-running

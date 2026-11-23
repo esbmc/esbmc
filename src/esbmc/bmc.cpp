@@ -2412,6 +2412,14 @@ static void prepare_property_verdicts(const optionst &options)
     goto_functionst::property_verdicts.begin_round();
 }
 
+/// The assertion cache keys on SSA names, which another interleaving or
+/// another k reuses with different definitions (#10276).
+static void clear_assertion_cache(const optionst &options)
+{
+  if (!options.get_bool_option("no-cache-asserts"))
+    get_ssa_caching_db().clear();
+}
+
 smt_resultt bmct::run(std::shared_ptr<symex_target_equationt> &eq)
 {
   symex->options.set_option("unwind", options.get_option("unwind"));
@@ -2422,7 +2430,10 @@ smt_resultt bmct::run(std::shared_ptr<symex_target_equationt> &eq)
   report_incomplete = false;
 
   if (options.get_bool_option("schedule"))
+  {
+    clear_assertion_cache(options);
     return run_thread(eq);
+  }
 
   // Under --multi-property a violation no longer ends the run: a property
   // after the violated one may only be reachable in a later interleaving, and
@@ -2441,10 +2452,7 @@ smt_resultt bmct::run(std::shared_ptr<symex_target_equationt> &eq)
     if (++interleaving_number > 1)
       log_status("Thread interleavings {}", interleaving_number);
 
-    // Clear the cache between thread interleavings to prevent
-    // incorrect caching of assertions with different thread contexts
-    if (!options.get_bool_option("no-cache-asserts"))
-      get_ssa_caching_db().clear();
+    clear_assertion_cache(options);
 
     fine_timet bmc_start = current_time();
     res = run_thread(eq);

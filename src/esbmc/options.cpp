@@ -693,7 +693,10 @@ const struct group_opt_templ all_cmd_options[] = {
      NULL,
      "Disable the vacuity probe (overrides default-on behavior)."}}},
   {"Concurrency and Scheduling",
-   {{"schedule", NULL, "Use schedule recording approach"},
+   {{"schedule",
+     NULL,
+     "Encode every interleaving in one formula; it grows exponentially with "
+     "--context-bound and gets no partial-order reduction"},
     {"context-bound",
      boost::program_options::value<int>()->default_value(-1)->value_name("nr"),
      "Limit number of context switches for each thread"},
