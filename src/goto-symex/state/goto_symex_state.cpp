@@ -181,6 +181,26 @@ static bool is_const_foldable_arith(const expr2tc &e)
          is_modulus2t(e);
 }
 
+/// Whether a value of this type may hold a pointer. A carried value is read
+/// back through the value set of the object it names, which has moved on by
+/// the time a copy is read (#10965).
+static bool type_may_hold_pointer(const type2tc &type)
+{
+  if (is_pointer_type(type))
+    return true;
+  if (is_array_type(type))
+    return type_may_hold_pointer(to_array_type(type).subtype);
+  if (is_struct_type(type))
+    for (const type2tc &m : to_struct_type(type).members)
+      if (type_may_hold_pointer(m))
+        return true;
+  if (is_union_type(type))
+    for (const type2tc &m : to_union_type(type).members)
+      if (type_may_hold_pointer(m))
+        return true;
+  return false;
+}
+
 /// The types a read may be carried at. Scalars, and fixed-size struct, union or
 /// array aggregates: a read of a whole member denotes it exactly and folds a
 /// sibling the same way, which is what a write into an array member needs
@@ -205,7 +225,8 @@ static bool immutable_read_type(const expr2tc &e)
   // projects out of a constant_union2t only, so a read folds no cross-member
   // access and the aliasing a carried union literal would expose does not
   // arise. It is the enclosing object's other members this keeps foldable.
-  return is_struct_type(e->type) || is_union_type(e->type);
+  return (is_struct_type(e->type) || is_union_type(e->type)) &&
+         !type_may_hold_pointer(e->type);
 }
 
 /// A value that can never change once recorded: a level2 SSA generation
@@ -1427,8 +1448,7 @@ void goto_symex_statet::print_stack_trace(unsigned int indent, std::ostream &os)
   {
     if (it->function_identifier == "")
     { // Top level call
-      os << spaces << "init"
-         << "\n";
+      os << spaces << "init" << "\n";
     }
     else
     {
@@ -1443,8 +1463,7 @@ void goto_symex_statet::print_stack_trace(unsigned int indent, std::ostream &os)
 
   if (!thread_ended)
   {
-    os << spaces << "Next instruction to be executed:"
-       << "\n";
+    os << spaces << "Next instruction to be executed:" << "\n";
     source.pc->output_instruction(ns, "", os);
   }
 }
