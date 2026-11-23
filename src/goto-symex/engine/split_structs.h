@@ -19,7 +19,8 @@ class split_structst
 public:
   split_structst() = default;
 
-  /// Pick the locals and parameters of fixed-size struct type that are only
+  /// Pick the locals, parameters and static objects of fixed-size struct
+  /// type that are only
   /// ever read whole or through a constant member, never at byte level, and
   /// whose address, if taken, only reaches dereferences of that kind, and add
   /// their field symbols to @p context. Picks nothing

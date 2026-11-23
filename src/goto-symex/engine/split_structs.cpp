@@ -264,11 +264,13 @@ bool layable(const type2tc &t)
          !to_constant_int2t(a.array_size).value.is_zero();
 }
 
-bool splittable(const symbolt &s, const type2tc &type)
+/* A static object stays whole when it is per-thread, or when the
+ * memory-leak check reads it as a root by its own name. */
+bool splittable(const symbolt &s, const type2tc &type, bool leak_roots)
 {
   if (
-    s.static_lifetime || s.is_extern || s.mode == "Python" ||
-    !is_struct_type(type))
+    s.is_extern || s.mode == "Python" || !is_struct_type(type) ||
+    (s.static_lifetime && (leak_roots || s.is_thread_local)))
     return false;
   const struct_type2t &st = to_struct_type(type);
   return !st.members.empty() &&
@@ -354,6 +356,7 @@ void split_structst::analyse(
       for (const auto &i : f.body.instructions)
         scan.analyse(i);
 
+  const bool leak_roots = options.get_bool_option("memory-leak-check");
   const auto by_field_paths = pointer_accessible(goto_functions, scan);
   for (const auto &[name, type] : scan.seen)
   {
@@ -363,7 +366,7 @@ void split_structst::analyse(
        !by_field_paths.count(name)))
       continue;
     const symbolt *s = ns.lookup(name);
-    if (!s || !splittable(*s, type))
+    if (!s || !splittable(*s, type, leak_roots))
       continue;
 
     add_fields(*s, to_struct_type(type), context);
@@ -387,7 +390,9 @@ static expr2tc at_level_of(const expr2tc &field, const symbol2t &sym)
   if (sym.rlevel == symbol_renaming_level::level0)
     return field;
   // Fields only ever take their object's L1 activation, never an L2 name.
-  assert(sym.rlevel == symbol_renaming_level::level1);
+  assert(
+    sym.rlevel == symbol_renaming_level::level1 ||
+    sym.rlevel == symbol_renaming_level::level1_global);
   return symbol2tc(
     field->type,
     to_symbol2t(field).thename,

@@ -1,5 +1,5 @@
 /* A bool, a float and an array field split; the block-scope s dies each
- * iteration, and the global g stays whole. */
+ * iteration, and the global g splits too. */
 #include <assert.h>
 #include <stdbool.h>
 
