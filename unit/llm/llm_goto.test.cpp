@@ -492,6 +492,13 @@ TEST_CASE(
   add(CATCH);
   add(OTHER)->code = code_free2tc(f.a);
   add(OTHER)->code = code_expression2tc(add2tc(f.int_t, x, num(1)));
+  add(OTHER)->code = code_expression2tc(sideeffect2tc(
+    f.int_t,
+    expr2tc(),
+    expr2tc(),
+    std::vector<expr2tc>(),
+    type2tc(),
+    sideeffect2t::allockind::nondet));
   add(GOTO)->targets.push_back(head);
   add(ASSERT)->guard = equality2tc(x, num(0));
   add(END_FUNCTION);
@@ -523,7 +530,7 @@ TEST_CASE(
     "    throw;\n"
     "    catch;\n"
     "    FREE(a);\n"
-    "    s + 1;\n"
+    "    NONDET(signed int);\n"
     "  }\n"
     "  assert(s == 0);\n"
     "}\n");

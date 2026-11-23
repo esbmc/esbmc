@@ -43,6 +43,14 @@ std::string integer_name(unsigned width, bool is_signed)
   return is_signed ? base : "unsigned " + base;
 }
 
+bool has_side_effect(const expr2tc &e)
+{
+  bool found = is_sideeffect2t(e);
+  e->foreach_operand(
+    [&found](const expr2tc &op) { found = found || has_side_effect(op); });
+  return found;
+}
+
 /// `tag-struct S` -> `struct S`.
 std::string tag_name(const irep_idt &id)
 {
@@ -558,6 +566,11 @@ private:
     case CATCH:
       return "catch;";
     case OTHER:
+      // e.g. the `(void)sizeof(cond)` glibc's assert() leaves behind.
+      if (
+        is_code_expression2t(i.code) &&
+        !has_side_effect(to_code_expression2t(i.code).operand))
+        return "";
       return statement(i.code);
     default:
       return "";
