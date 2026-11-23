@@ -1,0 +1,2 @@
+regression/goto-transcoder/cbmc_union_return_pointer
+regression/goto-transcoder/cbmc_union_return_pointer_fail

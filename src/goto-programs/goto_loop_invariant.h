@@ -54,7 +54,17 @@ void goto_loop_invariant(
  * goto_k_induction (Branch 2), which adds ASSUME(invariant) after its
  * nondet-assign step to tighten the inductive-step search space.
  */
-void goto_loop_invariant_combined(goto_functionst &goto_functions);
+void goto_loop_invariant_combined(
+  goto_functionst &goto_functions,
+  contextt &context);
+
+/// The loop invariants whose base case and inductive step are both still
+/// claims of @p goto_functions, each as its loop's location and C text. A run
+/// that discharges every claim has proved them, so a correctness witness may
+/// state them (#10853); one that is not plain C is left out.
+std::vector<std::pair<locationt, std::string>> checked_loop_invariants(
+  const goto_functionst &goto_functions,
+  const namespacet &ns);
 
 class goto_loop_invariantt : public goto_loopst
 {
@@ -87,6 +97,8 @@ public:
 protected:
   contextt &context;
   bool use_frame_rule;
+  /// The claim number of the current loop's first invariant.
+  unsigned first_claim = 0;
 
   /// Frame enforcer shared between the havoc step (ASSUME) and the inductive
   /// step (ASSERT compliance check) for the currently-processed loop.
@@ -127,10 +139,12 @@ protected:
     const std::vector<expr2tc> &invariants,
     goto_programt &side_effects_out);
 
-  // Insert ASSERT invariant before loop (prepends side_effects if non-empty)
+  // Insert ASSERT invariant before loop, preceded by the __ESBMC_old captures
+  // and the side_effects
   void insert_assert_before_loop(
     goto_programt::targett &loop_head,
     const std::vector<expr2tc> &invariants,
+    const goto_programt &old_captures,
     const goto_programt &side_effects);
 
   static type2tc havoc_pointee_type(const expr2tc &ptr, const namespacet &ns);
@@ -142,9 +156,6 @@ protected:
   // Insert HAVOC and ASSUME at \p loop_head, which must be the loop head's own
   // instruction, so that everything the guard evaluates runs after the havoc
   // (inserts side_effects between the HAVOC block and the ASSUME).
-  // side_effects is non-const: if frame rule is active, old_snapshot assigns
-  // are patched in-place so insert_inductive_step_and_termination (called
-  // after this) sees the patched version too.
   /// Havoc the objects the loop writes through a pointer.
   void havoc_pointees(
     const loopst &loop,
@@ -156,7 +167,7 @@ protected:
     const loopst &loop,
     const std::vector<expr2tc> &invariants,
     const std::vector<expr2tc> &loop_assigns,
-    goto_programt &side_effects);
+    const goto_programt &side_effects);
 
   // Insert inductive step verification and loop termination
   // (prepends side_effects before the ASSERT)
@@ -198,14 +209,18 @@ public:
   goto_loop_invariant_combinedt(
     const irep_idt &_function_name,
     goto_functionst &_goto_functions,
-    goto_functiont &_goto_function)
-    : goto_loopst(_function_name, _goto_functions, _goto_function)
+    goto_functiont &_goto_function,
+    contextt &_context)
+    : goto_loopst(_function_name, _goto_functions, _goto_function),
+      context(_context)
   {
     if (!function_loops.empty())
       process_loops_combined();
   }
 
 private:
+  contextt &context;
+
   void process_loops_combined();
 
   /// Insert the Branch 1 verification block before @p loop.

@@ -1,0 +1,6 @@
+CORE
+main.c
+--multi-property
+^  FAILED .* assertion g.f2.f1 == arr\[1\].f1$
+^\*\* 1 of 2 properties failed, 1 passed$
+^VERIFICATION FAILED$

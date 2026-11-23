@@ -2581,18 +2581,11 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
       const typet &param_type = params[it->second].type();
       if (arg_expr.type().is_array() && param_type.is_pointer())
         arg_expr = string_handler_.get_array_base_address(arg_expr);
+      else if (type_utils::is_optional_struct(param_type))
+        arg_expr = wrap_in_optional(arg_expr, param_type);
 
       args[it->second] = arg_expr;
     }
-
-    // we need to check if the argument is provided despite being optional
-    auto is_optional_type = [&](const typet &param_type) {
-      if (!param_type.is_struct())
-        return false;
-      const struct_typet &struct_type = to_struct_type(param_type);
-      const std::string &tag = struct_type.tag().as_string();
-      return tag.starts_with("tag-Optional_");
-    };
 
     std::vector<size_t> missing_required;
     std::vector<bool> provided(params.size(), false);
@@ -2632,7 +2625,7 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
         continue;
 
       bool has_default = params[i].has_default_value();
-      bool optional_param = is_optional_type(params[i].type());
+      bool optional_param = type_utils::is_optional_struct(params[i].type());
 
       if (!has_default && !optional_param)
       {
@@ -2680,7 +2673,7 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
         const typet &param_type = params[i].type();
 
         // Check if this is an Optional type (struct with "is_none" field)
-        if (is_optional_type(param_type))
+        if (type_utils::is_optional_struct(param_type))
         {
           // Create Optional value with is_none=true
           constant_exprt none_expr(none_type());
@@ -2814,6 +2807,25 @@ exprt python_converter::get_return_from_func(const char *func_symbol_id)
   }
   return nil_exprt();
 }
+std::string python_converter::returned_list_id(const exprt &call)
+{
+  const bool is_side_effect =
+    call.id() == "sideeffect" && call.statement() == "function_call";
+  if (
+    call.type() != type_handler_.get_list_type() ||
+    (!call.is_function_call() && !is_side_effect))
+    return {};
+  const exprt &function = is_side_effect
+                            ? to_side_effect_expr_function_call(call).function()
+                            : to_code_function_call(to_code(call)).function();
+  if (!function.is_symbol())
+    return {};
+  const exprt ret = get_return_from_func(function.identifier().c_str());
+  if (ret.is_nil() || ret.operands().size() != 1 || !ret.op0().is_symbol())
+    return {};
+  return ret.op0().identifier().as_string();
+}
+
 exprt python_converter::materialize_list_function_call(
   const exprt &expr,
   const nlohmann::json &element,
@@ -2858,15 +2870,8 @@ exprt python_converter::materialize_list_function_call(
 
   target_block.copy_to_operands(new_call);
 
-  if (
-    call.type() == type_handler_.get_list_type() && call.function().is_symbol())
-  {
-    const exprt ret =
-      get_return_from_func(call.function().identifier().c_str());
-    if (!ret.is_nil() && ret.operands().size() == 1 && ret.op0().is_symbol())
-      element_type_registry_.assign_from(
-        ret.op0().identifier().as_string(), tmp_var_symbol.id.as_string());
-  }
+  if (const std::string ret = returned_list_id(call); !ret.empty())
+    element_type_registry_.assign_from(ret, tmp_var_symbol.id.as_string());
 
   // Return reference to the temp variable
   return symbol_expr(tmp_var_symbol);

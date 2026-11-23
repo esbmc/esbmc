@@ -30,6 +30,11 @@ set(esbmc_pch_targets
 # -O2 reports a false -Wstringop-overflow on the ESBMC_AVAILABLE_SOLVERS
 # concatenation in driver.cpp, which -Werror turns into a build failure.
 
+# A C++20 target cannot reuse the C++23 PCH.
+if(MSVC)
+  list(REMOVE_ITEM esbmc_pch_targets ${esbmc_clang_header_targets})
+endif()
+
 foreach(target IN LISTS esbmc_pch_targets)
   if(TARGET ${target})
     target_precompile_headers(${target} REUSE_FROM util_esbmc)

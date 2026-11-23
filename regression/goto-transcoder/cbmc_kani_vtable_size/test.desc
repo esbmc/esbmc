@@ -1,0 +1,4 @@
+CORE
+cbmc_kani_vtable_size.goto
+--binary --function _RNvCsjphAolVxGHE_11vtable_size7harness --ignore-property-class reachability_check --ignore-property-class cover
+^VERIFICATION SUCCESSFUL$

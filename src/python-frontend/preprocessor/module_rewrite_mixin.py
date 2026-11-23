@@ -25,6 +25,7 @@ from preprocessor.function_value_params import inline_def_aliases, raise_not_cal
 from preprocessor.function_value_types import apply_imported_tags, reject_mixed_function_values
 from preprocessor.held_method_tags import tag_held_methods
 from preprocessor.iter_next_lowering import lower_iter_next
+from preprocessor.mixed_class_loops import unroll_mixed_class_loops
 from preprocessor.receiver_classes import refuse_path_dependent_receivers
 from preprocessor.receiver_split import split_path_dependent_receivers
 from preprocessor.class_value_calls import dispatch_class_value_calls
@@ -662,6 +663,7 @@ class ModuleRewriteMixin:
         lower_namedtuples(node, self.module_name)
         self._lower_decorators(node, entry)
         define_read_siblings_first(node)
+        unroll_mixed_class_loops(node)
         if entry:
             dispatch_class_value_calls(node)
             split_path_dependent_receivers(node, self.module_name)
@@ -710,6 +712,7 @@ class ModuleRewriteMixin:
         self.module_class_names, self.instance_var_classes = \
             self._build_var_class_map(node)
         self.plain_user_classes = self._plain_user_classes(node)
+        self.class_bases = self._scan_class_bases(node)
         self.factory_classes = self._scan_factory_classes(node, self.module_class_names)
         self._call_raised_classes(node)
         self.attr_list_element_classes = self._scan_attr_list_element_classes(node)

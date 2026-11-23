@@ -1,5 +1,6 @@
 #include <ac_config.h>
 
+#include <algorithm>
 #include <esbmc/bmc.h>
 #include <esbmc/esbmc_parseoptions.h>
 #include <goto-symex/engine/goto_symex.h>
@@ -287,7 +288,8 @@ static bool retarget_esbmc_main(
   if (entry == goto_functions.function_map.end())
     return false;
 
-  if (!goto_functions.function_map.count(target))
+  const auto callee = goto_functions.function_map.find(target);
+  if (callee == goto_functions.function_map.end())
   {
     log_error(
       "entry point `{}' not found in the goto binary", id2string(target));
@@ -304,7 +306,9 @@ static bool retarget_esbmc_main(
       is_symbol2t(call.function) &&
       to_symbol2t(call.function).thename == "c:@F@main")
     {
-      call.function = symbol2tc(get_empty_type(), target);
+      // A call's function symbol carries the callee's code type; analyses read
+      // its parameters from it.
+      call.function = symbol2tc(callee->second.type, target);
       // main's argc/argv must not bind the target's parameters, which symex
       // leaves nondet when the call supplies no argument.
       call.operands.clear();
@@ -481,12 +485,22 @@ bool esbmc_parseoptionst::create_goto_program(
           "linked automatically for CBMC goto-binaries (disable with "
           "--no-cprover-additions)");
 
+      const bool cbmc_binary = has_cbmc_binary_input();
+      // CBMC adds no implicit alignment check on dereference: a producer that
+      // needs one asserts it in the binary, as Kani does except for its
+      // unaligned intrinsics (#10892).
+      options.set_option("producer-asserts-alignment", cbmc_binary);
+      // CBMC places no object in the first page, so a pointer made from a
+      // small integer, as Rust's NonNull::dangling() is, never names one
+      // (#10905).
+      config.ansi_c.reserve_first_page |= cbmc_binary;
+
       // A CBMC goto-binary needs ESBMC's additions (the __ESBMC_main entry
       // wrapper and the CPROVER-intrinsic bodies). Synthesise and link them
       // automatically, before reading the binaries so that goto_convert only
       // ever runs over the boilerplate and never clobbers the loaded bodies.
       const bool cbmc_additions =
-        has_cbmc_binary_input() && !cmdline.isset("no-cprover-additions");
+        cbmc_binary && !cmdline.isset("no-cprover-additions");
       if (cbmc_additions)
       {
         log_status(
@@ -595,6 +609,39 @@ bool esbmc_parseoptionst::has_cbmc_binary_input()
       return true;
   }
   return false;
+}
+
+// Whether `path` is a CBMC goto-binary written by Kani. Kani names its helper
+// symbols __KANI_ (e.g. __KANI_is_nonzero_power_of_two), and the name sits in
+// the binary's string table; a goto-cc binary with such an identifier matches
+// too, which only changes the default strategy.
+static bool is_kani_binary(const std::string &path)
+{
+  std::ifstream in(path, std::ios::in | std::ios::binary);
+  unsigned char hdr[4] = {0, 0, 0, 0};
+  in.read(reinterpret_cast<char *>(hdr), sizeof(hdr)); // Flawfinder: ignore
+  if (
+    in.gcount() < static_cast<std::streamsize>(sizeof(hdr)) ||
+    !is_cbmc_goto_magic(hdr))
+    return false;
+  const std::string marker = "__KANI_";
+  std::string window;
+  char buf[1 << 16];
+  while (in.read(buf, sizeof(buf)) || in.gcount() > 0) // Flawfinder: ignore
+  {
+    window.append(buf, in.gcount());
+    if (window.find(marker) != std::string::npos)
+      return true;
+    // Keep a tail so a marker split across two reads is still found.
+    window.erase(0, window.size() - std::min(window.size(), marker.size() - 1));
+  }
+  return false;
+}
+
+bool esbmc_parseoptionst::has_kani_binary_input()
+{
+  return cmdline.isset("binary") &&
+         std::any_of(cmdline.args.begin(), cmdline.args.end(), is_kani_binary);
 }
 
 // CBMC tags each ASSERT with a property class in its location. Kani's

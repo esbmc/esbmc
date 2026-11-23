@@ -102,6 +102,60 @@ smt_astt smt_solver_baset::convert_ptr_cmp(
   return convert_ast(op);
 }
 
+smt_astt
+smt_solver_baset::convert_ptr_eq(const expr2tc &side1, const expr2tc &side2)
+{
+  smt_astt same = convert_ast(side1)->eq(this, convert_ast(side2));
+  /* Only NULL has address 0 (#7008), so a pointer is at NULL's address only
+   * when it is NULL. */
+  for (const expr2tc *side : {&side1, &side2})
+    if (is_symbol2t(*side) && to_symbol2t(*side).thename == "NULL")
+      return same;
+
+  smt_astt by_address =
+    mk_smt_symbol(mk_fresh_name("smt_solver_baset::ptr_eq"), boolean_sort);
+  ptr_eq_sites.push_back({by_address, side1, side2, ctx_level, {}});
+  return mk_or(same, by_address);
+}
+
+/* Offsetting a pointer made from an integer outside every object keeps it in
+ * INVALID, so it differs from a pointer into a real object at the same address
+ * (#10905). Such a pointer's object is one convert_typecast_to_ptr() named; a
+ * pointer of unknown origin keeps comparing by (object, offset). */
+void smt_solver_baset::close_ptr_eq_sites()
+{
+  const type2tc addr_type = ptraddr_type2();
+  smt_astt invalid = convert_terminal(
+    constant_int2tc(addr_type, pointer_logic.back().get_invalid_object()));
+  for (ptr_eq_sitet &site : ptr_eq_sites)
+  {
+    if (site.closed_at)
+      continue;
+    site.closed_at = ctx_level;
+
+    if (int_to_ptr_objects.empty())
+    {
+      assert_ast(mk_not(site.by_address));
+      continue;
+    }
+
+    ast_vec from_integer;
+    for (const expr2tc *side : {&site.side1, &site.side2})
+    {
+      smt_astt obj = convert_ast(pointer_object2tc(addr_type, *side));
+      ast_vec names;
+      for (const int_to_ptr_objectt &c : int_to_ptr_objects)
+        names.push_back(obj->eq(this, c.object));
+      from_integer.push_back(
+        mk_and(obj->eq(this, invalid), make_n_ary_or(names)));
+    }
+    smt_astt same_address = convert_ast(equality2tc(
+      typecast2tc(addr_type, site.side1), typecast2tc(addr_type, site.side2)));
+    assert_ast(site.by_address->eq(
+      this, mk_and(make_n_ary_or(from_integer), same_address)));
+  }
+}
+
 smt_astt smt_solver_baset::divide_by_element_size(
   const expr2tc &diff,
   const expr2tc &size)
@@ -462,6 +516,19 @@ smt_astt smt_solver_baset::init_pointer_obj(
   // end >= start
   expr2tc no_wraparound = greaterthanequal2tc(end_sym, start_sym);
   assert_expr(no_wraparound);
+
+  /* On a 64-bit target 2^63 lies in the non-canonical gap between user and
+   * kernel addresses, so no object of at most PTRDIFF_MAX bytes crosses it and
+   * the addresses inside one convert to intptr_t without wrapping (#10918).
+   * A larger size, which only --no-vla-size-check lets through, could not fit
+   * on either side, and layout is asserted on every path (#8048). */
+  if (ptr_loc_type->get_width() == 64)
+  {
+    const expr2tc top = constant_int2tc(ptr_loc_type, BigInt::power2m1(63));
+    assert_expr(implies2tc(
+      and2tc(lessthanequal2tc(the_size, top), lessthanequal2tc(start_sym, top)),
+      lessthanequal2tc(end_sym, top)));
+  }
 
   /* An object's address is a multiple of its type's alignment (C11 6.2.8,
    * [basic.align]), so constrain the base address to it. This covers both an

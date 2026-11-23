@@ -832,6 +832,20 @@ protected:
     const std::string &suffix,
     const type2tc &original_type) const;
 
+  void get_byte_extract_value_set(
+    const byte_extract2t &be,
+    object_mapt &dest,
+    const std::string &suffix,
+    const type2tc &original_type) const;
+
+  /// Returns false, leaving dest alone, when no source member lies under
+  /// the suffix.
+  bool get_reshaped_aggregate_value_set(
+    const byte_extract2t &be,
+    object_mapt &dest,
+    const std::string &suffix,
+    const type2tc &original_type) const;
+
   // Like get_value_set_rec, but dedicated to walking through the ireps that
   // are produced by pointer deref byte stitching
   void get_byte_stitching_value_set(

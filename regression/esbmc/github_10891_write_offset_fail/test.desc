@@ -1,0 +1,5 @@
+CORE
+main.c
+
+^  assertion buf\[1\] == 0$
+^VERIFICATION FAILED$

@@ -276,8 +276,7 @@ void * producer_routine(void *arg)
     status = bounded_buf_put(thread->bbuf, (void*)((int)temp));
     
     if (status != 0)
-      fprintf(stderr, "producer %d: error_code = %d, %s\n", 
-	      thread->id, status, strerror(status));
+      fprintf(stderr, "producer %d: error_code = %d\n", thread->id, status);
     else
       fprintf(stdout, "producer %d -> %d\n", thread->id, ch); 
       { }
@@ -306,8 +305,7 @@ void * consumer_routine(void * arg)
     status = bounded_buf_get(thread->bbuf, &temp);
     
     if (status != 0)
-      fprintf(stderr, "consumer %d: error code = %d %s\n", thread->id, 
-	      status, strerror(status));
+      fprintf(stderr, "consumer %d: error code = %d\n", thread->id, status);
     else
     {
       ch = (char)( (int)temp );

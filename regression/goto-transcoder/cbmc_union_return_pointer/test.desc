@@ -1,0 +1,4 @@
+CORE
+cbmc_union_return_pointer.goto
+--binary
+^VERIFICATION SUCCESSFUL$

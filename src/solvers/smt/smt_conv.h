@@ -40,6 +40,9 @@ public:
   /** Solve with each boolean expression in @p assumptions held true for this
    *  query only. */
   smt_resultt dec_solve_assuming(const std::vector<expr2tc> &assumptions);
+  /** The assumptions of the last UNSAT dec_solve_assuming that the proof
+   *  needed. Needs the smt-unsat-assumptions option. */
+  std::vector<expr2tc> unsat_assumptions();
   bool supports_assumptions() const;
   void pre_solve();
   const std::string solver_text();
@@ -97,6 +100,7 @@ public:
 
 private:
   std::unique_ptr<smt_solver_baset> solver_impl;
+  std::vector<expr2tc> last_assumptions;
 };
 
 #endif /* _ESBMC_PROP_SMT_SMT_CONV_H_ */

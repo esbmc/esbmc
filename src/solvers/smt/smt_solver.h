@@ -301,6 +301,8 @@ public:
   /** Solve with each boolean ast in @p assumptions held true for this query
    *  only. Backends without support abort; check supports_assumptions(). */
   virtual smt_resultt dec_solve_assuming(const ast_vec &assumptions);
+  /** After an UNSAT dec_solve_assuming: whether @p a was needed. */
+  virtual bool is_unsat_assumption(smt_astt a);
   virtual bool supports_assumptions() const
   {
     return false;
@@ -828,6 +830,17 @@ public:
     const expr2tc &expr,
     const expr2tc &expr2,
     const expr2tc &templ_expr);
+
+  /** Pointer equality: equal (object, offset), or, for a pointer made from an
+   *  integer outside every object, the same address (#10905). */
+  smt_astt convert_ptr_eq(const expr2tc &side1, const expr2tc &side2);
+  /** Equality of two converted operands, by pointer, floating-point or bit
+   *  pattern as their types require. */
+  smt_astt convert_eq(
+    const expr2tc &side1,
+    const expr2tc &side2,
+    smt_astt a1,
+    smt_astt a2);
   /** Take the address of some kind of expression. This will abort if the given
    *  expression isn't based on some symbol in some way. (i.e., you can't take
    *  the address of an addition, but you can take the address of a member of
@@ -914,6 +927,7 @@ public:
    *  apply. */
   smt_astt convert_pointer_bitcast(const expr2tc &from, const type2tc &to_type);
   smt_astt convert_bitcast_to_fp(const expr2tc &from, const type2tc &to_type);
+  smt_astt convert_fp_to_bits(const expr2tc &from);
   smt_astt
   convert_bitcast_to_struct(const expr2tc &from, const type2tc &to_type);
   smt_astt
@@ -1002,6 +1016,19 @@ public:
   };
   std::vector<int_to_ptr_objectt> int_to_ptr_objects;
   void close_int_to_ptr_objects();
+
+  /** A pointer (in)equality convert_ptr_eq() made, whose address clause
+   *  close_ptr_eq_sites() defines once every int-to-pointer object is known. */
+  struct ptr_eq_sitet
+  {
+    smt_astt by_address;
+    expr2tc side1;
+    expr2tc side2;
+    unsigned int level;
+    std::optional<unsigned int> closed_at;
+  };
+  std::vector<ptr_eq_sitet> ptr_eq_sites;
+  void close_ptr_eq_sites();
 
   /** Operand pairs of every division seen by note_division_operands. */
   std::set<std::pair<expr2tc, expr2tc>> divided_operand_pairs;
@@ -1254,6 +1281,12 @@ public:
   /** Every flattened pointer in this context. Pruned on pop_ctx like
    *  uf_ackermann_history, whose asts have the same lifetime. */
   std::vector<ptr_flatten_entry> ptr_flatten_history;
+  /** The bit-vector each float built by a bits-to-float bitcast was made
+   *  from, with the context level it was made at. Reading the float's bits
+   *  back returns that bit-vector: SMT-LIB leaves the bits of a NaN
+   *  unspecified, so a native round trip need not be the identity (#10887).
+   *  Pruned on pop_ctx like ptr_flatten_history. */
+  std::unordered_map<smt_astt, std::pair<smt_astt, unsigned int>> fp_bits;
   /** The most flattens one rebuilt pointer is defined over; see
    *  decode_pointer_repr(). */
   static constexpr size_t max_rebuild_sources = 32;

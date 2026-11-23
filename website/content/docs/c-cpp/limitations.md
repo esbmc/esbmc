@@ -66,12 +66,21 @@ inheritance/polymorphism regressions remain marked `KNOWNBUG`
 ([#4399](https://github.com/esbmc/esbmc/issues/4399)), as do some of the
 `gcc-template-tests` ([#4398](https://github.com/esbmc/esbmc/issues/4398)).
 
+Converting `&Base::f` itself to a pointer to member of a derived class adjusts
+`this` to the `Base` subobject. Two conversions still only retag the pointer,
+so the call runs on the start of the derived object when `Base` is not its
+first base: a member-function pointer converted from a variable
+(`int (B::*q)() = &B::get; int (C::*pm)() = q;`), and a pointer to a variadic
+member function. Both are pinned as `KNOWNBUG`
+(`regression/esbmc-cpp/cpp/github_9379_variable`, `github_9379_ellipsis`).
+
 ## Expressions
 
-An lvalue conditional over reference *variables* — `(c ? ra : rb).x = 2` —
-aborts the frontend, and a conditional over pointers to members is unsupported
-([#6717](https://github.com/esbmc/esbmc/issues/6717)). The reference-returning
-call shape works.
+A conditional over pointers to members, such as
+`int Foo::*pm = c ? &Foo::a : &Foo::x;`, is unsupported: dereferencing `pm`
+aborts with `pointer-to-member: constant propagation failed`. An lvalue
+conditional over reference-returning calls or reference variables works
+([#6717](https://github.com/esbmc/esbmc/issues/6717)).
 
 ## Standard library
 

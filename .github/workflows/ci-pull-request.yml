@@ -54,6 +54,37 @@ jobs:
       operating-system: ubuntu-24.04
       build-flags: '-b DebugOpt -e ON'
       testing: true
+      test-shard: rest
+
+  build-ubuntu-python:
+    uses: ./.github/workflows/aux-build-unix.yml
+    name: static llvm-22 DebugOpt (python)
+    with:
+      operating-system: ubuntu-24.04
+      build-flags: '-b DebugOpt -e ON'
+      testing: true
+      upload: false
+      test-shard: python
+
+  build-ubuntu-numpy:
+    uses: ./.github/workflows/aux-build-unix.yml
+    name: static llvm-22 DebugOpt (numpy)
+    with:
+      operating-system: ubuntu-24.04
+      build-flags: '-b DebugOpt -e ON'
+      testing: true
+      upload: false
+      test-shard: numpy
+
+  build-ubuntu-pyother:
+    uses: ./.github/workflows/aux-build-unix.yml
+    name: static llvm-22 DebugOpt (pyother)
+    with:
+      operating-system: ubuntu-24.04
+      build-flags: '-b DebugOpt -e ON'
+      testing: true
+      upload: false
+      test-shard: pyother
 
   # Check project with clang-format. This job no longer auto-commits fixes:
   # it only *checks* that the lines changed in the PR are formatted, and on
@@ -255,7 +286,21 @@ jobs:
               exit 0
             fi
 
-            yapf --in-place "${files[@]}"
+            parseable=()
+            for f in "${files[@]}"; do
+              if python3 -c 'import ast, sys; ast.parse(open(sys.argv[1], "rb").read())' "$f" 2>/dev/null; then
+                parseable+=("$f")
+              else
+                echo "Skipping unparseable Python file: $f"
+              fi
+            done
+
+            if [ "${#parseable[@]}" -eq 0 ]; then
+              echo "No parseable Python files to format."
+              exit 0
+            fi
+
+            yapf --in-place "${parseable[@]}"
 
         - name: Auto-commit formatting changes
           uses: stefanzweifel/git-auto-commit-action@v7

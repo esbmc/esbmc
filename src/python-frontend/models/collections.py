@@ -61,8 +61,15 @@ def OrderedDict(*args, **kwargs) -> dict:
 class Counter:
     """Simplified Counter model: maps (int, int) keys to integer counts."""
 
-    def __init__(self) -> None:
-        """Initialize an empty counter with no recorded keys."""
+    def __init__(self, iterable: list = None) -> None:
+        """Initialize an empty counter with no recorded keys.
+
+        Counting the elements of an iterable or mapping is not modelled, so a
+        call with a non-empty one is refused rather than starting empty
+        (#10879). An empty one gives an empty counter.
+        """
+        __ESBMC_assert(iterable is None or len(iterable) == 0,
+                       "Counter with a non-empty argument is not modelled")
         self.data: dict[tuple[int, int], int]
         self.data = {}
         self.count: int = 0

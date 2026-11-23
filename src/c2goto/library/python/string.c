@@ -144,6 +144,21 @@ __ESBMC_HIDE:;
   return 1;
 }
 
+// Python len() of a str - its code points, which are the UTF-8 bytes that are
+// not continuation bytes (0b10xxxxxx).
+size_t __python_str_codepoint_len(const char *s)
+{
+__ESBMC_HIDE:;
+  size_t len = 0;
+  while (*s)
+  {
+    if (((unsigned char)*s & 0xC0) != 0x80)
+      len++;
+    s++;
+  }
+  return len;
+}
+
 // Python string isalnum - true iff the string is non-empty and every
 // character is a letter (ASCII A-Z / a-z) or a digit (0-9). Matches
 // Python's CPython behaviour on the ASCII subset; broader Unicode

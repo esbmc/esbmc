@@ -30,6 +30,8 @@ cvc5_convt::cvc5_convt(const namespacet &ns, const optionst &options)
   slv.setOption("produce-assertions", "true");
   if (options.get_bool_option("smt-assumptions"))
     slv.setOption("incremental", "true");
+  if (options.get_bool_option("smt-unsat-assumptions"))
+    slv.setOption("produce-unsat-assumptions", "true");
 }
 
 smt_resultt cvc5_convt::dec_solve()
@@ -54,12 +56,22 @@ smt_resultt cvc5_convt::dec_solve_assuming(const ast_vec &assumptions)
   for (smt_astt a : assumptions)
     terms.push_back(to_solver_smt_ast<cvc5_smt_ast>(a)->a);
 
+  unsat_assumption_ids.clear();
   cvc5::Result r = slv.checkSatAssuming(terms);
   if (r.isSat())
     return P_SATISFIABLE;
   if (r.isUnknown())
     return P_ERROR;
+  if (slv.getOption("produce-unsat-assumptions") == "true")
+    for (const cvc5::Term &t : slv.getUnsatAssumptions())
+      unsat_assumption_ids.insert(t.getId());
   return P_UNSATISFIABLE;
+}
+
+bool cvc5_convt::is_unsat_assumption(smt_astt a)
+{
+  return unsat_assumption_ids.count(
+    to_solver_smt_ast<cvc5_smt_ast>(a)->a.getId());
 }
 
 tvt cvc5_convt::get_bool(smt_astt a)
@@ -117,10 +129,9 @@ expr2tc cvc5_convt::get_array_elem(
   auto const *carray = to_solver_smt_ast<cvc5_smt_ast>(array);
   size_t orig_w = array->sort->get_domain_width();
 
-  smt_astt tmpast = mk_smt_bv(BigInt(index), mk_bv_sort(orig_w));
-  auto const *tmpa = to_solver_smt_ast<cvc5_smt_ast>(tmpast);
-  cvc5::Term e = slv.mkTerm(cvc5::Kind::SELECT, {carray->a, tmpa->a});
-  delete tmpast;
+  auto const *idx = to_solver_smt_ast<cvc5_smt_ast>(
+    mk_smt_bv(BigInt(index), mk_bv_sort(orig_w)));
+  cvc5::Term e = slv.mkTerm(cvc5::Kind::SELECT, {carray->a, idx->a});
 
   return get_by_ast(subtype, new_ast(e, convert_sort(subtype)));
 }

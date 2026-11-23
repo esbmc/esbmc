@@ -1028,6 +1028,9 @@ private:
   exprt try_len_fast_path_from_name_arg(const nlohmann::json &arg_json);
   bool is_single_binding(const std::string &var_name);
   exprt recorded_length(const nlohmann::json &arg_json, const exprt &arg_expr);
+  exprt type_or_parameter_length(
+    const nlohmann::json &call_json,
+    const exprt &arg_expr);
 
   /**
    * @brief Convert float bits to string representation

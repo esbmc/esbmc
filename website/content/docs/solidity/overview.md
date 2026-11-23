@@ -84,4 +84,4 @@ This explores every reachable contract state across every possible sequence of p
 
 Once the GOTO program is built, ESBMC's backend runs symbolic execution to produce SSA (static single-assignment) form, encodes the result as a first-order SMT formula, and discharges it with an SMT solver.
 
-The default solver for Solidity is **Bitwuzla**. Pass `--bitwuzla`, `--z3`, or `--cvc5` to pick a specific backend.
+The default solver for Solidity is **Bitwuzla** when the build includes it. Otherwise ESBMC falls back to CVC5, then Boolector, then Z3; under `--k-induction`, `--incremental-bmc` and `--falsification` it uses ESBMC's general default order instead (Bitwuzla, Boolector, Z3, ...). Pass `--bitwuzla`, `--z3`, or `--cvc5` to pick a specific backend.

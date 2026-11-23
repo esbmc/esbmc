@@ -68,17 +68,17 @@ pointer-safety bookkeeping rather than program logic.
 
 ## Supported SMT Theories
 
-ESBMC selects the SMT theory based on the program and the active solver backend:
+The logic the `--smtlib` backend declares (`(set-logic ...)`) depends on the
+arithmetic encoding, not on the program:
 
-| Theory       | Description                                        | Typical use              |
-|--------------|----------------------------------------------------|--------------------------|
-| QF_BV        | Quantifier-free bit-vectors                        | Integer / pointer safety |
-| QF_BVFP      | Bit-vectors + floating-point (IEEE 754)            | `--floatbv` mode         |
-| QF_ALIA      | Arrays + linear integer arithmetic                 | Array safety checks      |
-| QF_AUFLIRA   | Arrays + uninterpreted functions + mixed arithmetic| General C programs       |
+| Encoding                | Logic      | Description                                          |
+|-------------------------|------------|------------------------------------------------------|
+| Bit-vectors (default)   | QF_AUFBV   | Arrays + uninterpreted functions + bit-vectors       |
+| Integer/real (`--ir`)   | QF_AUFLIRA | Arrays + uninterpreted functions + integer/real arithmetic |
 
-Use `--smtlib` to see exactly which logic declaration (`(set-logic ...)`) ESBMC
-emits for your program.
+The `--smtlib` backend lowers floating-point operations to bit-vectors. The
+backends with a native floating-point theory use it instead; see
+[Supported SMT backends](/docs/usage#smt-backends).
 
 ## References
 

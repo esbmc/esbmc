@@ -222,6 +222,8 @@ exprt python_dict_handler::handle_dict_subscript(
   list_elem_info key_info =
     list_handler.get_lookup_key_info(slice_node, key_expr);
   refuse_untyped_key(key_info.elem_symbol->get_type(), location);
+  converter_.refuse_skipped_hash(
+    key_expr.type(), "set or dict hashing", location);
 
   // Call try_find_index(keys, key, type_hash, size) — returns SIZE_MAX if
   // absent
@@ -630,6 +632,8 @@ void python_dict_handler::handle_dict_subscript_assign(
   // Check if key exists using membership test
   nlohmann::json dummy_json;
   python_list list_handler_check(converter_, dummy_json);
+  converter_.refuse_skipped_hash(
+    key_expr.type(), "set or dict hashing", location);
   exprt key_exists = list_handler_check.contains(key_expr, keys_member);
 
   // Create the "key exists" branch: update existing value
@@ -811,6 +815,8 @@ exprt python_dict_handler::handle_dict_membership(
   nlohmann::json dummy_json;
   python_list list_handler(converter_, dummy_json);
 
+  converter_.refuse_skipped_hash(
+    key_expr.type(), "set or dict hashing", key_expr.location());
   exprt contains_result = list_handler.contains(key_expr, keys_member);
 
   if (negated)
@@ -842,6 +848,8 @@ void python_dict_handler::handle_dict_delete(
   // This avoids calling __ESBMC_list_find_index on empty dict or missing key
   nlohmann::json dummy_json;
   python_list list_handler_check(converter_, dummy_json);
+  converter_.refuse_skipped_hash(
+    key_expr.type(), "set or dict hashing", location);
   exprt key_exists = list_handler_check.contains(key_expr, keys_member);
 
   // Create KeyError exception for when key doesn't exist

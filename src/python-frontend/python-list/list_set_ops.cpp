@@ -14,6 +14,8 @@ exprt python_list::build_set_membership_call(
     throw std::runtime_error(c_func + " function not found in symbol table");
 
   list_elem_info elem_info = get_list_element_info(op, elem);
+  converter_.refuse_skipped_hash(
+    elem.type(), "set or dict hashing", elem_info.location);
 
   exprt element_arg;
   if (

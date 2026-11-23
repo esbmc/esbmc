@@ -2,6 +2,7 @@
 
 #include <transition-system/ts_engines.h>
 #include <transition-system/ts_extraction.h>
+#include <transition-system/ts_pdr.h>
 #include <transition-system/ts_slice.h>
 #include <util/base/time_stopping.h>
 #include <util/message/message.h>
@@ -10,9 +11,44 @@
 #include <limits>
 #include <sstream>
 
+/// Exit codes as for ts_enginet::bmc.
+static int run_pdr(
+  const transition_systemt &ts,
+  const namespacet &ns,
+  optionst &options,
+  uint64_t max_k)
+{
+  ts_pdrt pdr(ts, ns, options);
+  unsigned depth = 0;
+  switch (pdr.run(max_k, depth))
+  {
+  case ts_pdrt::resultt::safe:
+    log_success(
+      "\nSolution found by PDR (invariant checked)\nVERIFICATION SUCCESSFUL");
+    return 0;
+  case ts_pdrt::resultt::unsafe:
+  {
+    log_status("PDR found a violation at step {}; replaying with BMC", depth);
+    ts_enginet replay(ts, ns, options);
+    const int rc = replay.bmc(depth, false, true);
+    if (rc != 0)
+      return rc;
+    log_error("BMC did not reproduce the PDR counterexample");
+    log_fail("\nVERIFICATION UNKNOWN");
+    return 0;
+  }
+  case ts_pdrt::resultt::unknown:
+    break;
+  }
+  log_status("PDR: {}", pdr.reason);
+  log_fail("\nVERIFICATION UNKNOWN");
+  return 0;
+}
+
 bool esbmc_parseoptionst::ts_strategy_requested() const
 {
-  return cmdline.isset("ts-check") || cmdline.isset("ts-bmc");
+  return cmdline.isset("ts-check") || cmdline.isset("ts-bmc") ||
+         cmdline.isset("ts-pdr");
 }
 
 int esbmc_parseoptionst::do_ts_strategy(
@@ -72,15 +108,24 @@ int esbmc_parseoptionst::do_ts_strategy(
 
   namespacet ns(context);
 
+  if (cmdline.isset("ts-pdr"))
+    return run_pdr(ts, ns, options, max_k);
+
   if (cmdline.isset("ts-fresh-solver"))
   {
     if (!ts.prefix_bad.empty())
     {
       ts_enginet prefix(ts, ns, options, false);
-      if (prefix.solve_prefix() == smt_resultt::P_SATISFIABLE)
+      const smt_resultt res = prefix.solve_prefix();
+      if (res == smt_resultt::P_SATISFIABLE)
       {
         log_fail("\nVERIFICATION FAILED");
         return 1;
+      }
+      if (res != smt_resultt::P_UNSATISFIABLE)
+      {
+        log_error("Solver error before the loop");
+        return 6;
       }
     }
     if (ts.bad.empty())

@@ -1,0 +1,5 @@
+CORE
+main.goto
+--binary --max-k-step 5
+^Kani goto-binary: verifying by k-induction$
+^VERIFICATION UNKNOWN$

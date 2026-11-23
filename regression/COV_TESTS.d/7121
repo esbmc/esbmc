@@ -1,0 +1,5 @@
+regression/loop-invariants/github_7121_old_pass
+regression/loop-invariants/github_7121_old_fail
+regression/loop-invariants/github_7121_old_combined_pass
+regression/loop-invariants/github_7121_old_combined_fail
+regression/loop-invariants/github_7121_forall_fail

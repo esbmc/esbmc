@@ -1,0 +1,5 @@
+CORE
+cbmc_kani_nonnull_write_fail.goto
+--binary --function _RNvCs5brmBXgQB8f_18nonnull_write_fail7harness --ignore-property-class reachability_check --ignore-property-class cover
+^  \[KANI_CHECK_ID_[^]]*\] assertion failed: a == v$
+^VERIFICATION FAILED$

@@ -1,0 +1,5 @@
+CORE
+main.py
+--python-check-exceptions ZeroDivisionError
+^VERIFICATION FAILED$
+Unsupported: 'in' does not call __eq__ of class 'C'

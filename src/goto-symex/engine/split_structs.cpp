@@ -1,5 +1,7 @@
 #include <goto-symex/engine/split_structs.h>
 #include <irep2/irep2_utils.h>
+#include <pointer-analysis/andersen.h>
+#include <util/base/prefix.h>
 #include <util/config/config.h>
 #include <util/message/message.h>
 
@@ -12,6 +14,9 @@ class split_scant
 public:
   std::unordered_map<irep_idt, type2tc, irep_id_hash> seen;
   std::unordered_set<irep_idt, irep_id_hash> excluded;
+  /* Objects whose address is taken as `&s`; pointer_scant decides whether
+   * every access through that address keeps a field path. */
+  std::unordered_set<irep_idt, irep_id_hash> addressed;
 
   /* How a use under the current node may reach an object: any use escapes
    * under an address or a side effect, and a whole one under a byte-level or
@@ -36,18 +41,34 @@ public:
     return use == uset::plain && reinterprets ? uset::whole_escapes : use;
   }
 
+  /* Records the object @p sym names; one read at two types stays whole. */
+  irep_idt see(const expr2tc &sym)
+  {
+    const auto [it, fresh] = seen.emplace(to_symbol2t(sym).thename, sym->type);
+    if (!fresh && it->second != sym->type)
+      excluded.insert(it->first);
+    return it->first;
+  }
+
   /* One walk over @p e; a member of a symbol is not a use of the whole. */
   void note(const expr2tc &e, uset use = uset::plain)
   {
     if (is_nil_expr(e))
       return;
+    if (
+      use == uset::plain && is_address_of2t(e) &&
+      is_symbol2t(to_address_of2t(e).ptr_obj))
+    {
+      addressed.insert(see(to_address_of2t(e).ptr_obj));
+      return;
+    }
     use = use_under(e, use);
 
     if (is_symbol2t(e))
     {
-      const auto [it, fresh] = seen.emplace(to_symbol2t(e).thename, e->type);
-      if ((!fresh && it->second != e->type) || use != uset::plain)
-        excluded.insert(it->first);
+      const irep_idt name = see(e);
+      if (use != uset::plain)
+        excluded.insert(name);
       return;
     }
     if (is_member2t(e) && is_symbol2t(to_member2t(e).source_value))
@@ -89,6 +110,149 @@ public:
   }
 };
 
+/* Drops each addressed candidate some access through a pointer could reach
+ * other than as the whole object or one of its members, both of the object's
+ * own type, since symex would then build that access at byte level. Andersen's
+ * points-to sets are sound, so a pointer it cannot bound drops every one. */
+class pointer_scant
+{
+public:
+  pointer_scant(
+    andersent &points_to,
+    std::unordered_map<irep_idt, type2tc, irep_id_hash> candidates)
+    : candidates(std::move(candidates)), points_to(points_to)
+  {
+  }
+
+  std::unordered_map<irep_idt, type2tc, irep_id_hash> candidates;
+
+  void
+  analyse(const goto_functionst &goto_functions, goto_programt::const_targett i)
+  {
+    loc = i;
+    walk(i->guard, nullptr, nullptr);
+    if (is_nil_expr(i->code))
+      return;
+    if (
+      i->is_other() ||
+      (i->is_function_call() && opaque_call(goto_functions, i->code)))
+      i->code->foreach_operand([this](const expr2tc &op) { drop_reached(op); });
+    walk(i->code, nullptr, nullptr);
+  }
+
+private:
+  andersent &points_to;
+  goto_programt::const_targett loc;
+
+  /* Symex runs these itself, or havocs what they reach, without a dereference
+   * this scan can see. */
+  static bool
+  opaque_call(const goto_functionst &goto_functions, const expr2tc &code)
+  {
+    const expr2tc &f = to_code_function_call2t(code).function;
+    if (!is_symbol2t(f))
+      return true;
+    const std::string &id = to_symbol2t(f).thename.as_string();
+    if (
+      has_prefix(id, "c:@F@__ESBMC") || has_prefix(id, "c:@F@__builtin") ||
+      id == "c:@F@scanf" || id == "c:@F@sscanf" || id == "c:@F@fscanf")
+      return true;
+    auto it = goto_functions.function_map.find(to_symbol2t(f).thename);
+    return it == goto_functions.function_map.end() ||
+           !it->second.body_available;
+  }
+
+  /* The candidates @p pointer may point to. One Andersen cannot bound may
+   * point into any of them at any offset, so it drops them all. */
+  std::vector<irep_idt> reached(const expr2tc &pointer)
+  {
+    value_setst::valuest objects;
+    points_to.get_values(loc, pointer, objects);
+    std::vector<irep_idt> hit;
+    for (const expr2tc &v : objects)
+    {
+      if (!is_object_descriptor2t(v))
+      {
+        candidates.clear();
+        return {};
+      }
+      const expr2tc &obj = to_object_descriptor2t(v).object;
+      if (is_symbol2t(obj) && candidates.count(to_symbol2t(obj).thename))
+        hit.push_back(to_symbol2t(obj).thename);
+    }
+    return hit;
+  }
+
+  void drop_reached(const expr2tc &e)
+  {
+    if (is_nil_expr(e) || candidates.empty() || !is_pointer_type(e))
+      return;
+    for (const irep_idt &n : reached(e))
+      candidates.erase(n);
+  }
+
+  static bool keeps_field_path(const expr2tc *parent, const expr2tc *grand)
+  {
+    auto reinterprets_or_offsets = [](const expr2tc *e) {
+      return e && (is_index2t(*e) || is_address_of2t(*e) || is_member2t(*e) ||
+                   is_byte_extract2t(*e) || is_byte_update2t(*e) ||
+                   is_bitcast2t(*e) || is_with2t(*e));
+    };
+    if (parent && is_member2t(*parent))
+      return !reinterprets_or_offsets(grand);
+    return !reinterprets_or_offsets(parent);
+  }
+
+  void walk(const expr2tc &e, const expr2tc *parent, const expr2tc *grand)
+  {
+    if (is_nil_expr(e) || candidates.empty())
+      return;
+    if (is_dereference2t(e))
+    {
+      const bool ok = keeps_field_path(parent, grand);
+      // Andersen may list one object more than once.
+      for (const irep_idt &n : reached(to_dereference2t(e).value))
+      {
+        auto c = candidates.find(n);
+        if (c != candidates.end() && (!ok || c->second != e->type))
+          candidates.erase(c);
+      }
+    }
+    else if ((is_add2t(e) || is_sub2t(e)) && is_pointer_type(e->type))
+      drop_reached(e);
+    e->foreach_operand([&](const expr2tc &op) { walk(op, &e, parent); });
+  }
+};
+
+/* The objects @p scan saw addressed that every access through a pointer
+ * reaches as a whole or through one member. */
+std::unordered_map<irep_idt, type2tc, irep_id_hash> pointer_accessible(
+  const goto_functionst &goto_functions,
+  const split_scant &scan)
+{
+  std::unordered_map<irep_idt, type2tc, irep_id_hash> candidates;
+  for (const irep_idt &name : scan.addressed)
+    if (!scan.excluded.count(name))
+      candidates.emplace(name, scan.seen.at(name));
+  if (candidates.empty())
+    return candidates;
+
+  andersent points_to;
+  points_to(goto_functions);
+  pointer_scant pointers(points_to, std::move(candidates));
+  // Andersen gives an uncalled function's pointer parameters TOP.
+  for (const irep_idt &fn : reachable_functions(goto_functions))
+  {
+    auto f = goto_functions.function_map.find(fn);
+    if (f == goto_functions.function_map.end() || !f->second.body_available)
+      continue;
+    const goto_programt &body = f->second.body;
+    for (auto i = body.instructions.begin(); i != body.instructions.end(); ++i)
+      pointers.analyse(goto_functions, i);
+  }
+  return std::move(pointers.candidates);
+}
+
 /* A flexible, zero-length or variable-length array member stays in its
  * struct. */
 bool layable(const type2tc &t)
@@ -100,11 +264,13 @@ bool layable(const type2tc &t)
          !to_constant_int2t(a.array_size).value.is_zero();
 }
 
-bool splittable(const symbolt &s, const type2tc &type)
+/* A static object stays whole when it is per-thread, or when the
+ * memory-leak check reads it as a root by its own name. */
+bool splittable(const symbolt &s, const type2tc &type, bool leak_roots)
 {
   if (
-    s.static_lifetime || s.is_extern || s.mode == "Python" ||
-    !is_struct_type(type))
+    s.is_extern || s.mode == "Python" || !is_struct_type(type) ||
+    (s.static_lifetime && (leak_roots || s.is_thread_local)))
     return false;
   const struct_type2t &st = to_struct_type(type);
   return !st.members.empty() &&
@@ -154,6 +320,7 @@ void split_structst::add_fields(
     member_index.emplace(st.member_names[k], k);
     const std::string id = id2string(s.id) + "::" + std::to_string(k);
     fields.push_back(symbol2tc(st.members[k], id));
+    field_ids.insert(id);
     if (is_untracked_scalar(st.members[k]))
       untracked_fields.insert(id);
     if (context.find_symbol(id))
@@ -178,6 +345,8 @@ void split_structst::analyse(
   split.clear();
   index.clear();
   untracked_fields.clear();
+  field_ids.clear();
+  opaque.clear();
   if (!enabled(goto_functions, options))
     return;
 
@@ -187,12 +356,17 @@ void split_structst::analyse(
       for (const auto &i : f.body.instructions)
         scan.analyse(i);
 
+  const bool leak_roots = options.get_bool_option("memory-leak-check");
+  const auto by_field_paths = pointer_accessible(goto_functions, scan);
   for (const auto &[name, type] : scan.seen)
   {
-    if (scan.excluded.count(name) || address_taken_locals.count(name))
+    if (
+      scan.excluded.count(name) ||
+      ((scan.addressed.count(name) || address_taken_locals.count(name)) &&
+       !by_field_paths.count(name)))
       continue;
     const symbolt *s = ns.lookup(name);
-    if (!s || !splittable(*s, type))
+    if (!s || !splittable(*s, type, leak_roots))
       continue;
 
     add_fields(*s, to_struct_type(type), context);
@@ -216,7 +390,9 @@ static expr2tc at_level_of(const expr2tc &field, const symbol2t &sym)
   if (sym.rlevel == symbol_renaming_level::level0)
     return field;
   // Fields only ever take their object's L1 activation, never an L2 name.
-  assert(sym.rlevel == symbol_renaming_level::level1);
+  assert(
+    sym.rlevel == symbol_renaming_level::level1 ||
+    sym.rlevel == symbol_renaming_level::level1_global);
   return symbol2tc(
     field->type,
     to_symbol2t(field).thename,
@@ -236,9 +412,30 @@ expr2tc split_structst::whole(const expr2tc &sym) const
   return constant_struct2tc(sym->type, std::move(members));
 }
 
+/// An L2 name, or a member of one. An L2 name of a split object is the whole
+/// read split_read assigned to its own symbol. A carried value holds it, and a
+/// parameter assignment rewrites the renamed argument, so it must stay a read
+/// of that definition.
+static bool is_level2_read(const expr2tc &e)
+{
+  const expr2tc &base = is_member2t(e) ? to_member2t(e).source_value : e;
+  if (!is_symbol2t(base))
+    return false;
+  const symbol_renaming_level level = to_symbol2t(base).rlevel;
+  return level == symbol_renaming_level::level2 ||
+         level == symbol_renaming_level::level2_global;
+}
+
+/// Whether rewrite leaves @p e as it is: nothing, an L2 read, or an address,
+/// which names the object rather than its value.
+static bool kept_whole(const expr2tc &e)
+{
+  return is_nil_expr(e) || is_level2_read(e) || is_address_of2t(e);
+}
+
 expr2tc split_structst::rewrite(const expr2tc &e) const
 {
-  if (is_nil_expr(e))
+  if (kept_whole(e))
     return e;
 
   if (is_member2t(e) && is_symbol2t(to_member2t(e).source_value))

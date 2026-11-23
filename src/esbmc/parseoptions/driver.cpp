@@ -117,11 +117,34 @@ static bool k_induction_parallel_conflicts(const cmdlinet &cmdline)
         "all-witnesses",
         "parallel-solving",
         "ts-bmc",
+        "ts-pdr",
         "ts-check"})
     if (cmdline.isset(incompatible))
     {
       log_error(
         "--k-induction-parallel cannot be combined with --{}", incompatible);
+      return true;
+    }
+  return false;
+}
+
+static bool ts_strategy_conflicts(const cmdlinet &cmdline)
+{
+  // The TS strategies turn k-induction back on, so goto_termination's
+  // inductive-step-only assumes would reach the engines as invariants; PDR
+  // trusts those and would prove a non-terminating loop terminates.
+  for (const char *ts : {"ts-bmc", "ts-pdr", "ts-check"})
+    if (cmdline.isset(ts) && cmdline.isset("termination"))
+    {
+      log_error("--{} cannot be combined with --termination", ts);
+      return true;
+    }
+
+  // --ts-pdr runs instead of the BMC engine, which these flags configure.
+  for (const char *bmc : {"ts-bmc", "ts-fresh-solver", "ts-push-pop"})
+    if (cmdline.isset("ts-pdr") && cmdline.isset(bmc))
+    {
+      log_error("--ts-pdr cannot be combined with --{}", bmc);
       return true;
     }
   return false;
@@ -259,6 +282,9 @@ static bool incompatible_flags(const cmdlinet &cmdline)
       return true;
     }
 
+  if (ts_strategy_conflicts(cmdline))
+    return true;
+
   if (k_induction_parallel_conflicts(cmdline))
     return true;
 
@@ -277,6 +303,7 @@ static bool incompatible_flags(const cmdlinet &cmdline)
           "k-induction-parallel",
           "loop-invariant",
           "ts-bmc",
+          "ts-pdr",
           "ts-check"})
       if (cmdline.isset(incompatible))
       {
@@ -330,6 +357,65 @@ static bool proof_cache_flags_usable(const optionst &options)
   return true;
 }
 
+// A Kani harness verifies by k-induction unless the run asks for something
+// else: a strategy or a bound, a report, coverage, dead-code or print-only
+// mode, or witness validation. The flags go on the command line, so the options
+// k-induction implies and the checks that refuse it apply as usual. Unlimited k
+// steps keep a bug deeper than --max-k-step from ending UNKNOWN where plain BMC
+// would find it.
+void esbmc_parseoptionst::default_kani_strategy()
+{
+  static const char *const chosen[] = {
+    "unwind",
+    "unwindset",
+    "k-induction",
+    "k-induction-parallel",
+    "incremental-bmc",
+    "falsification",
+    "termination",
+    "base-case",
+    "forward-condition",
+    "inductive-step",
+    "loop-invariant",
+    "synthesise-loop-invariants",
+    "incremental-context-bound",
+    "multi-property",
+    "report-property-class",
+    "assertion-coverage",
+    "assertion-coverage-claims",
+    "condition-coverage",
+    "condition-coverage-claims",
+    "condition-coverage-rm",
+    "condition-coverage-claims-rm",
+    "branch-coverage",
+    "branch-coverage-claims",
+    "branch-function-coverage",
+    "branch-function-coverage-claims",
+    "k-path-coverage",
+    "k-path-coverage-claims",
+    "dead-code-check",
+    "parse-tree-only",
+    "symbol-table-only",
+    "goto-functions-only",
+    "program-only",
+    "show-claims",
+    "smt-formula-only",
+    "smt-formula-too",
+    "validate-correctness-witness",
+    "validate-violation-witness"};
+  for (const char *flag : chosen)
+    if (cmdline.isset(flag))
+      return;
+  if (ts_strategy_requested() || !has_kani_binary_input())
+    return;
+  log_status("Kani goto-binary: verifying by k-induction");
+  cmdline.set("k-induction", std::string(), {""});
+  if (cmdline.vm["max-k-step"].defaulted())
+    cmdline.set("unlimited-k-steps", std::string(), {""});
+  if (cmdline.vm["max-inductive-step"].defaulted())
+    cmdline.set("max-inductive-step", 3, {"3"});
+}
+
 // This is the main entry point of ESBMC. Here ESBMC performs initialisation
 // of the algorithms that will be run over the GOTO program at later stages
 //
@@ -346,18 +432,32 @@ int esbmc_parseoptionst::run_chosen_strategy(
   optionst &options,
   goto_functionst &goto_functions)
 {
+  const bool k_step =
+    cmdline.isset("termination") || cmdline.isset("incremental-bmc") ||
+    cmdline.isset("falsification") || cmdline.isset("k-induction") ||
+    cmdline.isset("loop-invariant") ||
+    // --sv-comp switches a program that starts a thread to incremental BMC.
+    options.get_bool_option("incremental-bmc");
+
+  // Only a single BMC run keeps a reported check out of its verdict (#10875).
+  if (
+    cmdline.isset("report-property-class") &&
+    (k_step || ts_strategy_requested() ||
+     cmdline.isset("incremental-context-bound")))
+  {
+    log_error(
+      "--report-property-class needs a single BMC run, not a "
+      "verification strategy");
+    return 1;
+  }
+
   if (cmdline.isset("incremental-context-bound"))
     return do_context_bound_deepening(options, goto_functions);
 
   if (ts_strategy_requested())
     return do_ts_strategy(options, goto_functions);
 
-  if (
-    cmdline.isset("termination") || cmdline.isset("incremental-bmc") ||
-    cmdline.isset("falsification") || cmdline.isset("k-induction") ||
-    cmdline.isset("loop-invariant") ||
-    // --sv-comp switches a program that starts a thread to incremental BMC.
-    options.get_bool_option("incremental-bmc"))
+  if (k_step)
     return do_bmc_strategy(options, goto_functions);
 
   // No strategy chosen: rely on the simplifier and the flags set through CMD.
@@ -432,6 +532,7 @@ int esbmc_parseoptionst::doit()
     return 1;
   }
 
+  default_kani_strategy();
   if (incompatible_flags(cmdline))
     return 1;
 
@@ -518,7 +619,11 @@ int esbmc_parseoptionst::doit()
   //
   // The parallel driver has no termination interpretation, so --termination
   // takes priority: fall through to the sequential strategy instead (#6031).
-  if (cmdline.isset("k-induction-parallel") && !cmdline.isset("termination"))
+  // --report-property-class falls through to be refused before any fork.
+  const bool fork_parallel = cmdline.isset("k-induction-parallel") &&
+                             !cmdline.isset("termination") &&
+                             !cmdline.isset("report-property-class");
+  if (fork_parallel)
     return doit_k_induction_parallel();
 
   // Parse ESBMC options (CMD + set internal options)

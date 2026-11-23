@@ -1,0 +1,5 @@
+CORE
+main.goto
+--binary --function main
+high != one << 63
+^VERIFICATION FAILED$

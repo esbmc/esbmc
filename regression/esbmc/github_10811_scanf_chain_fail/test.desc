@@ -1,0 +1,5 @@
+CORE
+main.c
+
+^  assertion x == 0 \|\| p != \(void \*\)0$
+^VERIFICATION FAILED$

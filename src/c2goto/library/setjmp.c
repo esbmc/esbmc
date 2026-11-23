@@ -1,6 +1,11 @@
 
 #include <setjmp.h>
 
+#ifdef _WIN32
+// The Windows CRT has no sigjmp_buf; glibc defines it as jmp_buf.
+typedef jmp_buf sigjmp_buf;
+#endif
+
 // longjmp's transfer of control is lowered by goto-programs/lower_longjmp.cpp,
 // which reads these after every call and matches the token against the one
 // each setjmp call site recorded in its frame.

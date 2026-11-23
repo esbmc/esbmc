@@ -1,0 +1,5 @@
+CORE
+main.c
+--incremental-bmc
+^  dereference failure: write access to string constant$
+^VERIFICATION FAILED$

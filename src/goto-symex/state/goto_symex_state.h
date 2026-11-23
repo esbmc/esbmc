@@ -23,6 +23,8 @@
 #include <vector>
 #include <goto-symex/waypoint.h>
 
+class split_structst;
+
 class execution_statet; // forward decl
 
 /**
@@ -48,12 +50,14 @@ public:
    *  @param l2 Global L2 state reference.
    *  @param vs Global value set reference.
    *  @param no_propagation Value of --no-propagation, from the live optionst.
+   *  @param split The objects --field-sensitive-ssa splits.
    */
   goto_symex_statet(
     renaming::level2t &l2,
     value_sett &vs,
     const namespacet &_ns,
-    bool no_propagation);
+    bool no_propagation,
+    split_structst &split);
 
   /**
    *  Copy constructor.
@@ -404,8 +408,11 @@ public:
    *  tracking state.
    *  @param lhs Symbol being assigned to.
    *  @param rhs Value being assigned to symbol.
+   *  @param update_value_set False leaves the value set as it is, for a
+   *         caller that supplies @p lhs's entries itself.
    */
-  void assignment(expr2tc &lhs, const expr2tc &rhs);
+  void
+  assignment(expr2tc &lhs, const expr2tc &rhs, bool update_value_set = true);
 
   /** @p rhs with the earlier writes under its top-level array `with`
    *  replaced by @p l1_lhs, when they all write that same object. */
@@ -511,6 +518,8 @@ public:
    *  Cached because constant_propagation() runs on every assignment and
    *  get_bool_option does a string-keyed map lookup. */
   bool no_propagation = false;
+  /** The objects --field-sensitive-ssa splits. */
+  split_structst *split_structs;
   /** Reference to global l2 state. */
   renaming::level2t &level2;
   /** Reference to global pointer tracking state. */

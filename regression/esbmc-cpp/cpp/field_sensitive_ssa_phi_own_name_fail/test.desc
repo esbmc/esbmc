@@ -1,0 +1,6 @@
+CORE
+main.cpp
+--std c++17 --field-sensitive-ssa
+^VERIFICATION FAILED$
+array bounds violated: heap object
+(?s)\A(?!.*invalid pointer)
