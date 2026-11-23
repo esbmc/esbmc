@@ -1,2 +1,7 @@
 regression/esbmc/github_10965
 regression/esbmc/github_10965_scope
+regression/esbmc/github_10965_ite_fail
+regression/esbmc/github_10965_member_fail
+regression/esbmc/github_10965_guarded_fail
+regression/esbmc/github_10965_phi_fail
+regression/esbmc/github_10965_phi_scope
