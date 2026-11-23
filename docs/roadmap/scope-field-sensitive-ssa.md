@@ -18,12 +18,13 @@
 > Invariant 3's assert (§8.26), and a phi no longer reads a copy carried over
 > the object's own name from the other path's value set (§8.27). Its merge
 > with master `aabf837b1` keeps those results under Z3 (§8.27). Phase 2's
-> second part (#10886), stacked on the first, splits static objects as well;
+> second part (#10886, merged on 2026-11-23 with the first and the memo) splits
+> static objects as well;
 > `plc_db` with the flag now solves at 512 and 2048 fields, and a split
 > global copied from a split value loses its trace step as a split local
 > already does (§8.28); the slicer now moves such a print to a kept field
 > step, which fixes both (§8.30). The dereference-size memo (#10894) is
-> stacked on it; with it, every corpus row meets the 2x bar under Z3 and
+> merged with it; with it, every corpus row meets the 2x bar under Z3 and
 > Bitwuzla (§8.29). The stack's head, built with asserts, runs every C and
 > C++ `CORE` test with the flag forced on under Bitwuzla without tripping
 > Invariant 3's assert (§8.31). The stack merged with master `a6615b898`
@@ -33,8 +34,8 @@ Bitwuzla (§8.32), and so does its merge with master `30592f8a7`, which adds
 Its merge with master `6c3c2cf9d` keeps them too, and the whole `esbmc/`
 ctest label under Bitwuzla fails only the tests that fail on master
 (§8.35). So does its merge with master `3194304fb`, which adds #10901's
-member lookup through a `byte_extract` (§8.36). The SV-COMP run is still
-open.**
+member lookup through a `byte_extract` (§8.36). Phases 0-2 are on master; the SV-COMP
+run that Phases 1 and 2 require is still open, and Phase 3 waits for it.**
 > The corpus is in `regression/field-sensitivity/`
 > with baselines, and the census has been run and reverted. Phase 1 adds
 > `--field-sensitive-ssa` (default off): symex gives each field of an
