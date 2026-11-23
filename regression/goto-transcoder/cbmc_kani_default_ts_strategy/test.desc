@@ -1,0 +1,5 @@
+CORE
+main.goto
+--binary --ts-check
+^Kani goto-binary: assuming malloc and realloc do not fail$
+\A(?![\s\S]*verifying by k-induction)
