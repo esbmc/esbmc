@@ -52,7 +52,8 @@ python_list::list_eq_target python_list::select_list_eq(
   return {
     eq_tagged_sym,
     {th.tagged_scalar_type_id(long_long_int_type()),
-     th.tagged_scalar_type_id(bool_type())}};
+     th.tagged_scalar_type_id(bool_type()),
+     th.tagged_scalar_type_id(double_type())}};
 }
 
 std::optional<expr2tc> python_list::fast_elem_equality(
@@ -866,8 +867,27 @@ exprt python_list::contains_list(const exprt &item, const exprt &list)
   return build_symbol(ret);
 }
 
+void python_list::refuse_skipped_eq(
+  const exprt &list,
+  const exprt &item,
+  const std::string &operation,
+  const locationt &loc)
+{
+  const std::string id =
+    list.is_symbol() ? list.identifier().as_string() : std::string();
+  const symbolt *sym = converter_.find_symbol(id);
+  const std::vector<std::string> dunders =
+    sym && sym->is_set ? std::vector<std::string>{"__hash__", "__eq__"}
+                       : std::vector<std::string>{"__eq__"};
+  converter_.refuse_skipped_dunder(item.type(), dunders, operation, loc) ||
+    converter_.refuse_skipped_element_dunder(id, dunders, operation, loc);
+}
+
 exprt python_list::contains(const exprt &item, const exprt &list)
 {
+  refuse_skipped_eq(
+    list, item, "'in'", converter_.get_location_from_decl(list_value_));
+
   // Get type and size information for the item
   list_elem_info item_info = get_list_element_info(list_value_, item);
 
@@ -1018,6 +1038,8 @@ exprt python_list::build_count_index_list_call(
   const std::string &func_id)
 {
   list_elem_info elem_info = get_list_element_info(op, elem);
+  refuse_skipped_eq(
+    build_symbol(list), elem, "list.count()", elem_info.location);
 
   const symbolt *func = converter_.symbol_table().find_symbol(func_id);
   if (!func)
@@ -1063,6 +1085,8 @@ exprt python_list::build_index_list_call(
   // asserting __ESBMC_list_index model, which fires an uncatchable property
   // violation. Mirrors the dict KeyError and list.remove ValueError lowerings.
   list_elem_info elem_info = get_list_element_info(op, elem);
+  refuse_skipped_eq(
+    build_symbol(list), elem, "list.index()", elem_info.location);
 
   const symbolt *find_func =
     converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_try_find_index");
@@ -1126,6 +1150,8 @@ exprt python_list::build_index_range_list_call(
   const exprt &end)
 {
   list_elem_info elem_info = get_list_element_info(op, elem);
+  refuse_skipped_eq(
+    build_symbol(list), elem, "list.index()", elem_info.location);
 
   const symbolt *func =
     converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_index_range");

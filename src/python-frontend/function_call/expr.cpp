@@ -459,11 +459,36 @@ exprt function_call_expr::handle_generic_hash()
 {
   // hash() must agree on equal arguments (#8704). An int hashes to itself
   // reduced modulo 2^61 - 1 with -1 mapped to -2, as CPython does; a str goes
-  // through a deterministic model. Anything else stays nondet.
+  // through a deterministic model; an instance whose class defines __hash__
+  // calls it, its result -1 also mapped to -2. Anything else stays nondet.
   const typet int_type = type_handler::python_int_typet();
   const locationt location = converter_.get_location_from_decl(call_);
-  exprt arg = converter_.get_expr(call_["args"][0]);
+  const auto declare_tmp = [&](const typet &type) -> symbolt & {
+    symbolt &tmp = converter_.create_tmp_symbol(call_, "$hash$", type, exprt());
+    code_declt decl(build_symbol(tmp));
+    decl.location() = location;
+    converter_.add_instruction(decl);
+    return tmp;
+  };
 
+  const nlohmann::json &arg_node = call_["args"][0];
+  if (converter_.has_dunder_method(arg_node, "__hash__"))
+  {
+    exprt call = converter_.get_expr(converter_.build_dunder_call(
+      arg_node, "__hash__", nlohmann::json::array(), call_));
+    converter_.convert_function_call_to_side_effect(call);
+    const symbolt &result = declare_tmp(call.type());
+    code_assignt store(build_symbol(result), call);
+    store.location() = location;
+    converter_.add_instruction(store);
+    const exprt h = typecast_exprt(build_symbol(result), int_type);
+    return if_exprt(
+      equality_exprt(h, from_integer(-1, int_type)),
+      from_integer(-2, int_type),
+      h);
+  }
+
+  exprt arg = converter_.get_expr(arg_node);
   if (
     arg.type().is_bool() || arg.type().is_signedbv() ||
     arg.type().is_unsignedbv())
@@ -477,11 +502,7 @@ exprt function_call_expr::handle_generic_hash()
       reduced);
   }
 
-  symbolt &tmp =
-    converter_.create_tmp_symbol(call_, "$hash$", int_type, exprt());
-  code_declt decl(build_symbol(tmp));
-  decl.location() = location;
-  converter_.add_instruction(decl);
+  symbolt &tmp = declare_tmp(int_type);
 
   const symbolt *str_hash =
     converter_.symbol_table().find_symbol("c:@F@__python_str_hash");
@@ -497,6 +518,7 @@ exprt function_call_expr::handle_generic_hash()
     return build_symbol(tmp);
   }
 
+  converter_.refuse_skipped_hash(arg.type(), "hash()", location);
   exprt nondet_value("sideeffect", int_type);
   nondet_value.statement("nondet");
   code_assignt nondet_assign(build_symbol(tmp), nondet_value);
@@ -3272,6 +3294,40 @@ exprt function_call_expr::handle_list_index() const
     *list_symbol, call_, value, start, end);
 }
 
+bool function_call_expr::refuse_skipped_ordering(const typet &t) const
+{
+  // A tuple orders by its items.
+  const typet &followed = converter_.ns.follow(t);
+  if (
+    followed.is_struct() &&
+    to_struct_type(followed).tag().as_string().starts_with("tag-tuple"))
+  {
+    const auto &items = to_struct_type(followed).components();
+    return std::any_of(items.begin(), items.end(), [this](const auto &item) {
+      return refuse_skipped_ordering(item.type());
+    });
+  }
+
+  const std::string &name = function_id_.get_function();
+  return (name == "sorted" || name == "sort" || name == "min" ||
+          name == "max") &&
+         converter_.refuse_skipped_dunder(
+           t,
+           {"__lt__", "__gt__"},
+           name == "sort" ? "list.sort()" : name + "()",
+           converter_.get_location_from_decl(call_));
+}
+
+void function_call_expr::refuse_skipped_ordering(
+  const std::string &list_id) const
+{
+  const auto *recorded = converter_.get_element_type_registry().find(list_id);
+  if (recorded)
+    for (const auto &entry : *recorded)
+      if (refuse_skipped_ordering(entry.second))
+        return;
+}
+
 exprt function_call_expr::handle_list_sort() const
 {
   const auto &args = call_["args"];
@@ -3309,6 +3365,7 @@ exprt function_call_expr::handle_list_sort() const
     throw std::runtime_error("List variable not found: " + list_display_name);
 
   const std::string &list_id = list_symbol->id.as_string();
+  refuse_skipped_ordering(list_id);
 
   // ── Determine type_flag and float_type_id ─────────────────────────────────
   //
@@ -6521,6 +6578,7 @@ std::optional<exprt> function_call_expr::try_fold_sorted()
       return std::nullopt;
     list_id = list_arg.identifier().as_string();
   }
+  refuse_skipped_ordering(list_id);
 
   const size_t map_size = converter_.get_element_type_registry().size(list_id);
   if (map_size == 0 || map_size > 32)
@@ -7481,6 +7539,7 @@ std::optional<exprt> function_call_expr::apply_builtin_dispatch(
     exprt list_arg = converter_.get_expr(call_["args"][0]);
     typet elem_type;
     const std::string list_id = list_arg_id(list_arg);
+    refuse_skipped_ordering(list_id);
     if (!list_id.empty())
     {
       // Check that all elements have the same type and get the common type

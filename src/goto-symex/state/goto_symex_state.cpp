@@ -546,8 +546,13 @@ bool goto_symex_statet::constant_propagation(const expr2tc &expr) const
            current = &to_with2t(*current).source_value)
       {
         const expr2tc &update = to_with2t(*current).update_value;
+        // A literal's own elements are checked: `{p}` with p a local pointer
+        // carries p's L2 name past the frame that owns its value set (#10940).
+        const bool literal = is_constant_struct2t(update) ||
+                             is_constant_union2t(update) ||
+                             is_constant_array2t(update);
         if (
-          !is_constant_expr(update) &&
+          (literal || !is_constant_expr(update)) &&
           !update_may_propagate(*this, update, symbolic_updates))
           return false;
       }

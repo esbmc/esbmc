@@ -2953,6 +2953,7 @@ exprt function_call_expr::handle_min_max(
 
         if (components.empty())
           throw std::runtime_error(func_name + "() arg is an empty sequence");
+        refuse_skipped_ordering(struct_type);
 
         // Start with first element: result = t.element_0
         exprt result =

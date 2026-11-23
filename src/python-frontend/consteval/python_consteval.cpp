@@ -1047,6 +1047,14 @@ static std::optional<PyConstValue> ascii_string_constant(const std::string &s)
   return PyConstValue::make_string(s);
 }
 
+// A str reaches here as a call's argument too, not only as a literal (#7552).
+static std::optional<PyConstValue> ascii_string_len(const std::string &s)
+{
+  if (!ascii_string_constant(s))
+    return std::nullopt;
+  return PyConstValue::make_int(static_cast<long long>(s.size()));
+}
+
 std::optional<PyConstValue>
 python_consteval::eval_expr(const nlohmann::json &node, const Env &env)
 {
@@ -1815,8 +1823,7 @@ python_consteval::eval_expr(const nlohmann::json &node, const Env &env)
       if (!arg)
         return std::nullopt;
       if (arg->kind == PyConstValue::STRING)
-        return PyConstValue::make_int(
-          static_cast<long long>(arg->string_val.size()));
+        return ascii_string_len(arg->string_val);
       return std::nullopt;
     }
 
