@@ -1,0 +1,5 @@
+CORE
+main.c
+
+^VERIFICATION FAILED$
+missing va_start: va_arg on an uninitialised va_list
