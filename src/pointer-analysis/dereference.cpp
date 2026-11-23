@@ -1670,11 +1670,23 @@ void dereferencet::build_reference_rec(
     break;
 
   case flag_src_scalar | flag_dst_union | flag_is_dyn_offs:
-    // Attempt to extract a union from within a scalar. This is not
-    // permitted as the base data objects have incompatible types
+  {
+    // As in the constant-offset case, a scalar of the union's width can be
+    // reinterpreted as the union when the offset is zero.
+    if (value->type->get_width() == type->get_width())
+    {
+      guard2tc bad_offs_guard(guard);
+      bad_offs_guard.add(not2tc(equality2tc(offset, gen_zero(offset->type))));
+      dereference_failure(
+        "Bad dereference", "Union pointer pointed at scalar", bad_offs_guard);
+      if (!base_type_eq(value->type, type, ns))
+        value = bitcast2tc(type, value);
+      break;
+    }
     dereference_failure(
       "Bad dereference", "Union pointer pointed at scalar", guard);
     break;
+  }
   case flag_src_struct | flag_dst_union | flag_is_dyn_offs:
   case flag_src_array | flag_dst_union | flag_is_dyn_offs:
     // Extract a structure from inside an array or another struct. Single
