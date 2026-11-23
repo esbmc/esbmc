@@ -1,5 +1,6 @@
 #include <esbmc/esbmc_parseoptions.h>
 
+#include <transition-system/ts_btor2.h>
 #include <transition-system/ts_engines.h>
 #include <transition-system/ts_extraction.h>
 #include <transition-system/ts_pdr.h>
@@ -8,6 +9,7 @@
 #include <util/message/message.h>
 
 #include <cstdlib>
+#include <fstream>
 #include <limits>
 #include <sstream>
 
@@ -45,10 +47,30 @@ static int run_pdr(
   return 0;
 }
 
+/// Returns the reason the export failed, or an empty string.
+static std::string
+export_btor2(const transition_systemt &ts, const std::string &path)
+{
+  std::ostringstream btor2;
+  try
+  {
+    write_btor2(ts, btor2);
+  }
+  catch (const std::runtime_error &e)
+  {
+    return e.what();
+  }
+  std::ofstream file(path);
+  if (!(file << btor2.str()))
+    return "cannot write " + path;
+  log_status("BTOR2 written to {}", path);
+  return "";
+}
+
 bool esbmc_parseoptionst::ts_strategy_requested() const
 {
-  return cmdline.isset("ts-check") || cmdline.isset("ts-bmc") ||
-         cmdline.isset("ts-pdr");
+  return cmdline.isset("ts-check") || cmdline.isset("ts-btor2") ||
+         cmdline.isset("ts-bmc") || cmdline.isset("ts-pdr");
 }
 
 int esbmc_parseoptionst::do_ts_strategy(
@@ -66,7 +88,9 @@ int esbmc_parseoptionst::do_ts_strategy(
       log_result("TS-CHECK rejected");
     else
       log_status("Not a transition system");
-    if (cmdline.isset("ts-check") || cmdline.isset("ts-no-fallback"))
+    if (
+      cmdline.isset("ts-check") || cmdline.isset("ts-no-fallback") ||
+      cmdline.isset("ts-btor2"))
     {
       log_result("VERIFICATION UNKNOWN");
       return 0;
@@ -85,6 +109,23 @@ int esbmc_parseoptionst::do_ts_strategy(
     std::ostringstream oss;
     ts.dump(oss, namespacet(context));
     log_result("{}", oss.str());
+  }
+
+  if (cmdline.isset("ts-btor2"))
+  {
+    const std::string error = export_btor2(ts, cmdline.getval("ts-btor2"));
+    if (!error.empty())
+    {
+      log_error("BTOR2 export: {}", error);
+      if (!cmdline.isset("ts-check"))
+        return 6;
+      log_result("TS-CHECK rejected: BTOR2 export: {}", error);
+    }
+    if (!error.empty() || !cmdline.isset("ts-check"))
+    {
+      log_result("VERIFICATION UNKNOWN");
+      return 0;
+    }
   }
 
   if (cmdline.isset("ts-check"))

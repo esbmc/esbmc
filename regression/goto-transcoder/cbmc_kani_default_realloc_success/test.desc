@@ -1,0 +1,5 @@
+CORE
+main.goto
+--binary
+^Kani goto-binary: assuming malloc and realloc do not fail$
+^VERIFICATION SUCCESSFUL$

@@ -1,0 +1,6 @@
+CORE
+main.goto
+--binary
+\A(?![\s\S]*Kani goto-binary)
+^  dereference failure: NULL pointer$
+^VERIFICATION FAILED$

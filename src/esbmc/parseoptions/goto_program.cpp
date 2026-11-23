@@ -455,6 +455,10 @@ static bool bridge_binary_entry_point(
 // \param options - options to be passed through,
 // \param goto_functions - this is where the created GOTO program is stored.
 static void link_cbmc_libc_bodies(goto_functionst &goto_functions);
+static void default_kani_allocation(
+  bool cbmc_binary,
+  const contextt &context,
+  optionst &options);
 static void
 skip_property_classes(const cmdlinet &cmdline, goto_functionst &goto_functions);
 
@@ -515,6 +519,8 @@ bool esbmc_parseoptionst::create_goto_program(
 
       if (read_goto_binary(goto_functions))
         return true;
+
+      default_kani_allocation(cbmc_binary, context, options);
 
       // Resolve CBMC's bodyless libc externals (ceil/floor/..., strlen/strcmp/
       // strncmp) to the operational-model bodies the additions linked, before
@@ -611,10 +617,12 @@ bool esbmc_parseoptionst::has_cbmc_binary_input()
   return false;
 }
 
+static constexpr std::string_view kani_prefix = "__KANI_";
+
 // Whether `path` is a CBMC goto-binary written by Kani. Kani names its helper
 // symbols __KANI_ (e.g. __KANI_is_nonzero_power_of_two), and the name sits in
-// the binary's string table; a goto-cc binary with such an identifier matches
-// too, which only changes the default strategy.
+// the binary's string table; a goto-cc binary with such an identifier or string
+// matches too. A match only selects the default strategy.
 static bool is_kani_binary(const std::string &path)
 {
   std::ifstream in(path, std::ios::in | std::ios::binary);
@@ -624,7 +632,7 @@ static bool is_kani_binary(const std::string &path)
     in.gcount() < static_cast<std::streamsize>(sizeof(hdr)) ||
     !is_cbmc_goto_magic(hdr))
     return false;
-  const std::string marker = "__KANI_";
+  const std::string marker(kani_prefix);
   std::string window;
   char buf[1 << 16];
   while (in.read(buf, sizeof(buf)) || in.gcount() > 0) // Flawfinder: ignore
@@ -636,6 +644,28 @@ static bool is_kani_binary(const std::string &path)
     window.erase(0, window.size() - std::min(window.size(), marker.size() - 1));
   }
   return false;
+}
+
+// Kani runs CBMC with --no-malloc-may-fail (kani#891), under which neither
+// malloc nor realloc returns NULL; a constant size above the object-size limit
+// still yields NULL (memory_alloc.cpp). Unlike is_kani_binary, a string does
+// not match: a symbol must carry the __KANI_ name, and identifiers starting
+// with two underscores are reserved (C11 7.1.3).
+static void default_kani_allocation(
+  bool cbmc_binary,
+  const contextt &context,
+  optionst &options)
+{
+  if (!cbmc_binary)
+    return;
+  bool kani = false;
+  context.foreach_operand(
+    [&kani](const symbolt &s) { kani |= has_prefix(s.name, kani_prefix); });
+  if (!kani)
+    return;
+  log_status("Kani goto-binary: assuming malloc and realloc do not fail");
+  options.set_option("force-malloc-success", true);
+  options.set_option("force-realloc-success", true);
 }
 
 bool esbmc_parseoptionst::has_kani_binary_input()
