@@ -5,3 +5,4 @@ regression/esbmc-unix/partial_order_reject_cond
 regression/esbmc-unix/partial_order_reject_loop_spawn
 regression/esbmc-unix/partial_order_reject_schedule
 regression/esbmc-unix/partial_order_reject_thread_arg
+regression/esbmc-unix/partial_order_reject_falsify

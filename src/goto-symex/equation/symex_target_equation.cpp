@@ -306,7 +306,7 @@ void convert_internal_step(
   {
     smt_conv.renumber_symbol_address(step.guard, step.lhs, step.rhs);
   }
-  else if (!step.is_skip() && !step.is_event())
+  else if (!step.adds_no_constraint())
   {
     assert(0 && "Unexpected SSA step type in conversion");
   }

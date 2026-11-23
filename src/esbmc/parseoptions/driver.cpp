@@ -221,6 +221,11 @@ static bool partial_order_conflicts(const cmdlinet &cmdline)
   return false;
 }
 
+static bool concurrency_mode_conflicts(const cmdlinet &cmdline)
+{
+  return schedule_conflicts(cmdline) || partial_order_conflicts(cmdline);
+}
+
 /// The flag combinations that cannot produce a sound report, rejected
 /// before any work is done. Kept out of doit() so every combination check
 /// reads in one place.
@@ -339,10 +344,7 @@ static bool incompatible_flags(const cmdlinet &cmdline)
   if (parallel_solving_conflicts(cmdline))
     return true;
 
-  if (schedule_conflicts(cmdline))
-    return true;
-
-  if (partial_order_conflicts(cmdline))
+  if (concurrency_mode_conflicts(cmdline))
     return true;
 
   // --incremental-context-bound owns the outer verification loop, re-running
@@ -483,6 +485,14 @@ void esbmc_parseoptionst::default_kani_strategy()
 //    - Perform a single run of Bounded Model Checking and rely
 //      on the simplifier to determine the sufficient verification bound
 //      (see "do_bmc")
+int esbmc_parseoptionst::do_partial_order(const goto_functionst &goto_functions)
+{
+  if (!partial_order_in_scope(goto_functions, namespacet(context)))
+    return 1;
+  log_error("--partial-order cannot verify yet (#10990)");
+  return 1;
+}
+
 int esbmc_parseoptionst::run_chosen_strategy(
   optionst &options,
   goto_functionst &goto_functions)
@@ -505,6 +515,9 @@ int esbmc_parseoptionst::run_chosen_strategy(
       "verification strategy");
     return 1;
   }
+
+  if (options.get_bool_option("partial-order"))
+    return do_partial_order(goto_functions);
 
   if (cmdline.isset("incremental-context-bound"))
     return do_context_bound_deepening(options, goto_functions);
@@ -780,14 +793,6 @@ int esbmc_parseoptionst::doit()
 
   if (!proof_cache_flags_usable(options))
     return 1;
-
-  if (options.get_bool_option("partial-order"))
-  {
-    if (!partial_order_in_scope(goto_functions, namespacet(context)))
-      return 1;
-    log_error("--partial-order cannot verify yet (#10990)");
-    return 1;
-  }
 
   // Leave without doing any Bounded Model Checking
   if (answered_without_bmc(options))

@@ -150,6 +150,10 @@ public:
       return type >= symex_targett::SHARED_READ &&
              type <= symex_targett::ATOMIC_END;
     }
+    bool adds_no_constraint() const
+    {
+      return is_skip() || is_event();
+    }
 
     expr2tc guard;
 
