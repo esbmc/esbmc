@@ -710,6 +710,11 @@ public:
    *  @return Boolean valued AST representing whether an overflow occurs. */
   virtual smt_astt overflow_arith(const expr2tc &expr);
 
+  /** Bit-vector overflow of @p value << @p amount, encoded at the width of
+   *  @p value (#9223).
+   *  @return Boolean valued AST, true when a significant bit is shifted out. */
+  smt_astt overflow_shl_bv(const expr2tc &value, const expr2tc &amount);
+
   /** Detect integer overflows in a cast. Takes a typecast2tc as an argument,
    *  and if it causes a decrease in integer width, then encodes a test that
    *  the dropped bits are never significant / used.
@@ -830,6 +835,17 @@ public:
     const expr2tc &expr,
     const expr2tc &expr2,
     const expr2tc &templ_expr);
+
+  /** Pointer equality: equal (object, offset), or, for a pointer made from an
+   *  integer outside every object, the same address (#10905). */
+  smt_astt convert_ptr_eq(const expr2tc &side1, const expr2tc &side2);
+  /** Equality of two converted operands, by pointer, floating-point or bit
+   *  pattern as their types require. */
+  smt_astt convert_eq(
+    const expr2tc &side1,
+    const expr2tc &side2,
+    smt_astt a1,
+    smt_astt a2);
   /** Take the address of some kind of expression. This will abort if the given
    *  expression isn't based on some symbol in some way. (i.e., you can't take
    *  the address of an addition, but you can take the address of a member of
@@ -1005,6 +1021,19 @@ public:
   };
   std::vector<int_to_ptr_objectt> int_to_ptr_objects;
   void close_int_to_ptr_objects();
+
+  /** A pointer (in)equality convert_ptr_eq() made, whose address clause
+   *  close_ptr_eq_sites() defines once every int-to-pointer object is known. */
+  struct ptr_eq_sitet
+  {
+    smt_astt by_address;
+    expr2tc side1;
+    expr2tc side2;
+    unsigned int level;
+    std::optional<unsigned int> closed_at;
+  };
+  std::vector<ptr_eq_sitet> ptr_eq_sites;
+  void close_ptr_eq_sites();
 
   /** Operand pairs of every division seen by note_division_operands. */
   std::set<std::pair<expr2tc, expr2tc>> divided_operand_pairs;

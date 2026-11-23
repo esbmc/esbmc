@@ -482,8 +482,21 @@ program that is not a transition system falls back to the ordinary BMC
 strategy. `--ts-pdr` cannot be combined with `--ts-bmc`, `--ts-fresh-solver` or
 `--ts-push-pop`.
 
-ESBMC stops with an error when `--ts-check`, `--ts-bmc` or `--ts-pdr` is
-combined with `--termination`
+```sh
+esbmc file.c --ts-btor2 model.btor2
+```
+
+`--ts-btor2` writes the extracted system to a file as a BTOR2 safety problem
+with one `bad` property, for hardware model checkers such as rIC3 or btormc, and
+stops with `VERIFICATION UNKNOWN`. It uses a validity latch rather than a BTOR2
+`constraint`, since a constraint would also have to hold in the violating step
+and would hide a violation followed by a loop exit. Only scalar bit-vector and
+boolean terms are exported: floats, pointers and arrays are rejected with an
+error. With `--ts-check`, a failed export prints `TS-CHECK rejected: BTOR2
+export: ...`.
+
+ESBMC stops with an error when `--ts-check`, `--ts-bmc`, `--ts-pdr` or
+`--ts-btor2` is combined with `--termination`
 ([#10814](https://github.com/esbmc/esbmc/pull/10814)), or with
 `--k-induction-parallel` or `--incremental-context-bound`, whose drivers run
 before the transition-system strategy and would never reach it

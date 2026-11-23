@@ -1,4 +1,5 @@
 #include <ld-frontend/ir_gen/ld_converter.h>
+#include <ld-frontend/ld_scan_loop.h>
 #include <ld-frontend/ir_gen/st_fb_translator.h>
 #include <cctype>
 #include <algorithm>
@@ -795,7 +796,7 @@ void ld_converter::emit_scan_function(const code_blockt &scan_body)
   scan_type.return_type() = empty_typet();
 
   symbolt scan_sym;
-  scan_sym.id = "ld::scan_loop";
+  scan_sym.id = ld_scan_loop_id;
   scan_sym.name = "scan_loop";
   scan_sym.module = "ld";
   scan_sym.mode = "LD";
@@ -850,7 +851,7 @@ void ld_converter::emit_main_function()
   code_typet scan_type;
   scan_type.return_type() = empty_typet();
   code_function_callt call;
-  call.function() = symbol_exprt("ld::scan_loop", scan_type);
+  call.function() = symbol_exprt(ld_scan_loop_id, scan_type);
   main_body.copy_to_operands(call);
 
   main_sym.set_value(main_body);

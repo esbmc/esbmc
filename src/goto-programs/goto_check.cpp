@@ -1399,6 +1399,8 @@ void goto_checkt::check_rec(
 
   case expr2t::and_id:
   case expr2t::or_id:
+  // `a => b` evaluates b only under a, as `a && b` does (#10941).
+  case expr2t::implies_id:
   {
     assert(is_bool_type(expr));
 

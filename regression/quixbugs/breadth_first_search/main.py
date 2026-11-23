@@ -1,5 +1,10 @@
 from collections import deque as Queue
-from node import Node
+
+
+class Node:
+    def __init__(self, value=None, successors=[]):
+        self.value = value
+        self.successors = successors
 
 
 def breadth_first_search(startnode, goalnode):
@@ -22,6 +27,6 @@ def breadth_first_search(startnode, goalnode):
 
 
 station1 = Node(1)
-station2 = Node(2, None, [station1])
+station2 = Node(2, [station1])
 
 assert breadth_first_search(station2, station1)

@@ -1,0 +1,5 @@
+CORE
+counter.ld
+--ld-props props.yaml --ts-pdr --ts-no-fallback
+^PDR found a violation at step [0-9]+; replaying with BMC$
+^VERIFICATION FAILED$

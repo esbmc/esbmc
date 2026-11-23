@@ -20,6 +20,26 @@ static expr2tc sum_not_below_operands(const expr2tc &sum)
   return and2tc(ge1, greaterthanequal2tc(sum, add.side_2));
 }
 
+/// @p amount at the width of the shifted @p value.
+static expr2tc shift_amount(const expr2tc &value, const expr2tc &amount)
+{
+  if (value->type->get_width() == amount->type->get_width())
+    return amount;
+  return typecast2tc(value->type, amount);
+}
+
+smt_astt
+smt_solver_baset::overflow_shl_bv(const expr2tc &value, const expr2tc &amount)
+{
+  // Shifting back recovers the operand exactly when no bit was lost.
+  smt_astt v = convert_ast(value);
+  smt_astt d = convert_ast(shift_amount(value, amount));
+  smt_astt shifted = mk_bvshl(v, d);
+  smt_astt shifted_back =
+    is_signedbv_type(value) ? mk_bvashr(shifted, d) : mk_bvlshr(shifted, d);
+  return mk_not(mk_eq(shifted_back, v));
+}
+
 smt_astt smt_solver_baset::overflow_arith(const expr2tc &expr)
 {
   const overflow2t &overflow = to_overflow2t(expr);
@@ -204,6 +224,9 @@ smt_astt smt_solver_baset::overflow_arith(const expr2tc &expr)
   }
 
   case expr2t::shl_id:
+    if (!int_encoding)
+      return overflow_shl_bv(side1, side2);
+    [[fallthrough]];
   case expr2t::mul_id:
   {
     // Zero extend; multiply; Make a decision based on the top half.
@@ -216,10 +239,8 @@ smt_astt smt_solver_baset::overflow_arith(const expr2tc &expr)
       arg1_ext = is_signedbv_type(side1) ? mk_sign_ext(arg1_ext, sz)
                                          : mk_zero_ext(arg1_ext, sz);
 
-    expr2tc op2 = side2;
-    if (is_shl2t(overflow.operand))
-      if (side1->type->get_width() != side2->type->get_width())
-        op2 = typecast2tc(side1->type, side2);
+    const expr2tc op2 =
+      is_shl2t(overflow.operand) ? shift_amount(side1, side2) : side2;
 
     arg2_ext = convert_ast(op2);
 
