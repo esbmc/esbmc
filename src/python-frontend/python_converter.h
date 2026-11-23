@@ -891,6 +891,12 @@ private:
 
   void get_function_definition(const nlohmann::json &function_node);
 
+  bool unpack_unresolved(
+    const nlohmann::json &ast_node,
+    const nlohmann::json &target,
+    const exprt &rhs,
+    codet &target_block);
+
   /// Returns @p call_expr, a call through `callee` whose function type is
   /// unknown, made to pass the defaults of a top-level function `callee` may
   /// hold whose parameters @p call leaves out. Refuses the path where it
@@ -1243,6 +1249,28 @@ private:
   // comprehension; the generic builder would reinterpret any other instance
   // as a list, so refuse it.
   void refuse_list_of_instance(const typet &t);
+
+  // @p operation calls one of @p dunders on the objects it handles, but its
+  // model compares them without the call, so an exception or assert in a
+  // user's method would be missed. Where @p t is an instance of a class that
+  // may define one, report @p operation as unsupported and end the path.
+  // Returns whether it did.
+  bool refuse_skipped_dunder(
+    const typet &t,
+    const std::vector<std::string> &dunders,
+    const std::string &operation,
+    const locationt &loc);
+  // The same for a value @p operation hashes with __hash__.
+  bool refuse_skipped_hash(
+    const typet &t,
+    const std::string &operation,
+    const locationt &loc);
+  // The same for the element types recorded for the container @p id.
+  bool refuse_skipped_element_dunder(
+    const std::string &id,
+    const std::vector<std::string> &dunders,
+    const std::string &operation,
+    const locationt &loc);
 
   // Widen a symbol rebound from a non-class placeholder (None, Any, a bare
   // scalar) to a class-pointer binding. Only those types are widened: a

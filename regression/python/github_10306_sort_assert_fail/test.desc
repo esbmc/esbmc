@@ -1,0 +1,5 @@
+CORE
+main.py
+
+^VERIFICATION FAILED$
+Unsupported: list.sort\(\) does not call __lt__ of class 'C'

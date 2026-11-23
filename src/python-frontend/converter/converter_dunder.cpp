@@ -444,6 +444,52 @@ void python_converter::refuse_list_of_instance(const typet &t)
       "' is not supported here");
 }
 
+bool python_converter::refuse_skipped_dunder(
+  const typet &t,
+  const std::vector<std::string> &dunders,
+  const std::string &operation,
+  const locationt &loc)
+{
+  const typet &cls = t.is_pointer() ? t.subtype() : t;
+  if (!is_user_class_struct_type(cls))
+    return false;
+  const std::string name = class_name_of(cls);
+  const auto defined = std::find_if(
+    dunders.begin(), dunders.end(), [&](const std::string &dunder) {
+      return family_method_owner(name, dunder) != std::string();
+    });
+  if (defined == dunders.end())
+    return false;
+  const std::string message = "Unsupported: " + operation + " does not call " +
+                              *defined + " of class '" + name + "'";
+  if (!can_emit_runtime_guard())
+    throw std::runtime_error(message);
+  end_path_as_unsupported(message, loc);
+  return true;
+}
+
+bool python_converter::refuse_skipped_hash(
+  const typet &t,
+  const std::string &operation,
+  const locationt &loc)
+{
+  // Defining __eq__ alone leaves a class unhashable, a TypeError.
+  return refuse_skipped_dunder(t, {"__hash__", "__eq__"}, operation, loc);
+}
+
+bool python_converter::refuse_skipped_element_dunder(
+  const std::string &container_id,
+  const std::vector<std::string> &dunders,
+  const std::string &operation,
+  const locationt &loc)
+{
+  const auto *recorded = element_type_registry_.find(container_id);
+  return recorded &&
+         std::any_of(recorded->begin(), recorded->end(), [&](const auto &e) {
+           return refuse_skipped_dunder(e.second, dunders, operation, loc);
+         });
+}
+
 bool python_converter::is_class_instance(const nlohmann::json &value_node)
 {
   const std::string node_type = value_node.value("_type", "");
