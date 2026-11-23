@@ -79,6 +79,12 @@ public:
     const expr2tc &size,
     const sourcet &source) override;
 
+  void event(
+    const expr2tc &guard,
+    step_typet type,
+    const expr2tc &symbol,
+    const sourcet &source) override;
+
   // `runtime_encoded_equationt` overrides `convert` and supports only the
   // default mode; incremental BMC callers must run probes through the
   // non-incremental path.
@@ -138,6 +144,11 @@ public:
     bool is_branching() const
     {
       return type == symex_targett::BREANCHING;
+    }
+    bool is_event() const
+    {
+      return type >= symex_targett::SHARED_READ &&
+             type <= symex_targett::ATOMIC_END;
     }
 
     expr2tc guard;

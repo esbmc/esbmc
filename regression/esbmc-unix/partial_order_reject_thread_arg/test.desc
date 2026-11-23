@@ -1,0 +1,5 @@
+CORE
+main.c
+--partial-order
+^ERROR: --partial-order does not support a thread argument other than NULL yet, at file .*main\.c line 12 column 3 function
+\A(?![\s\S]*VERIFICATION)[\s\S]*\Z

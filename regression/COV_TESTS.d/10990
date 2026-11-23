@@ -1,0 +1,7 @@
+regression/esbmc-unix/partial_order_in_scope
+regression/esbmc-unix/partial_order_reject_address
+regression/esbmc-unix/partial_order_reject_array
+regression/esbmc-unix/partial_order_reject_cond
+regression/esbmc-unix/partial_order_reject_loop_spawn
+regression/esbmc-unix/partial_order_reject_schedule
+regression/esbmc-unix/partial_order_reject_thread_arg

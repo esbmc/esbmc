@@ -306,7 +306,7 @@ void convert_internal_step(
   {
     smt_conv.renumber_symbol_address(step.guard, step.lhs, step.rhs);
   }
-  else if (!step.is_skip())
+  else if (!step.is_skip() && !step.is_event())
   {
     assert(0 && "Unexpected SSA step type in conversion");
   }
@@ -474,6 +474,25 @@ void symex_target_equationt::renumber(
     debug_print_step(SSA_step);
 }
 
+void symex_target_equationt::event(
+  const expr2tc &guard,
+  step_typet type,
+  const expr2tc &symbol,
+  const sourcet &source)
+{
+  SSA_steps.emplace_back();
+  SSA_stept &SSA_step = SSA_steps.back();
+
+  SSA_step.guard = guard;
+  SSA_step.lhs = symbol;
+  SSA_step.type = type;
+  SSA_step.source = source;
+  assert(SSA_step.is_event());
+
+  if (debug_print)
+    debug_print_step(SSA_step);
+}
+
 void symex_target_equationt::convert(smt_convt &smt_conv, assertion_modet mode)
 {
   // Pre-register address-of'd static objects so int-to-ptr casts see them
@@ -586,6 +605,21 @@ void symex_target_equationt::SSA_stept::output(
   case symex_targett::ASSIGNMENT:
     out << "ASSIGNMENT (";
     out << (hidden ? "HIDDEN" : "") << ")\n";
+    break;
+  case symex_targett::SHARED_READ:
+    out << "SHARED_READ " << to_symbol2t(lhs).get_symbol_name() << "\n";
+    break;
+  case symex_targett::SHARED_WRITE:
+    out << "SHARED_WRITE " << to_symbol2t(lhs).get_symbol_name() << "\n";
+    break;
+  case symex_targett::SPAWN:
+    out << "SPAWN\n";
+    break;
+  case symex_targett::ATOMIC_BEGIN:
+    out << "ATOMIC_BEGIN\n";
+    break;
+  case symex_targett::ATOMIC_END:
+    out << "ATOMIC_END\n";
     break;
 
   default:

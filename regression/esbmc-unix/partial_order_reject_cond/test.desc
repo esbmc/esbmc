@@ -1,0 +1,5 @@
+CORE
+main.c
+--partial-order
+^ERROR: --partial-order does not support a call to pthread_cond_signal yet, at file .*main\.c line 10 column 3 function
+\A(?![\s\S]*VERIFICATION)[\s\S]*\Z

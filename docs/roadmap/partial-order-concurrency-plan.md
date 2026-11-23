@@ -1,7 +1,8 @@
 # Plan — a partial-order encoding for concurrent programs (`--partial-order`)
 
-**Status (2026-11-23):** not started. Nothing below has been built or measured;
-the effort figures are estimates.
+**Status (2026-11-23):** phase 0 in progress. The `--partial-order` flag, its
+scope check and the event step types exist; it does not verify yet. Nothing
+has been measured; the effort figures are estimates.
 **Origin:** [#10296](https://github.com/esbmc/esbmc/issues/10296), which found
 `--schedule` unsound and slow, and its
 [effort estimate](https://github.com/esbmc/esbmc/issues/10296#issuecomment-6798263610).
@@ -78,6 +79,10 @@ Scope: global scalars only; no pointers, arrays, data-race check or witnesses.
   object, and contiguous atomic sections.
 - Compare with the default on the §2 program and on about 50 SV-COMP
   ConcurrencySafety tasks restricted to global scalars.
+
+Done: `--partial-order` and its flag conflicts; a scope check on user code
+(`goto-programs/partial_order_scope.cpp`) that names the first unsupported
+construct; the five event step types, recorded by `symex_targett::event`.
 
 **Go** if every verdict matches and the time grows more slowly than the
 default's as the bound rises. **No-go** closes #10990 with the measurements
