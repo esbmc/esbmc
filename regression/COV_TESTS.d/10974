@@ -1,2 +1,5 @@
 regression/goto-transcoder/cbmc_calloc
 regression/goto-transcoder/cbmc_calloc_fail
+regression/goto-transcoder/cbmc_calloc_overflow
+regression/goto-transcoder/cbmc_calloc_nondet
+regression/goto-transcoder/cbmc_calloc_force_success

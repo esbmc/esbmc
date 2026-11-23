@@ -705,8 +705,9 @@ skip_property_classes(const cmdlinet &cmdline, goto_functionst &goto_functions)
 // type onto the bodyless
 // declaration lets symex resolve the call: argument_assignments binds actual
 // args using the copied type's parameter names, which match the copied body
-// (goto-symex/engine/symex_function.cpp). The string bodies are byte loops, so
-// a call with a symbolic length needs an `--unwind` bound like any other loop.
+// (goto-symex/engine/symex_function.cpp). The string bodies, and calloc's zero
+// fill, are byte loops, so a call with a symbolic length needs an `--unwind`
+// bound like any other loop.
 static void link_cbmc_libc_bodies(goto_functionst &goto_functions)
 {
   static const char *const libc[] = {
