@@ -1,0 +1,5 @@
+CORE
+main.py
+--python-check-exceptions ZeroDivisionError
+^VERIFICATION FAILED$
+Unsupported: sorted\(\) does not call __lt__ of class 'C'

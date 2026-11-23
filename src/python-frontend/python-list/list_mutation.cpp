@@ -2068,6 +2068,8 @@ exprt python_list::build_remove_list_call(
   const exprt &elem)
 {
   list_elem_info elem_info = get_list_element_info(op, elem);
+  refuse_skipped_eq(
+    build_symbol(list), elem, "list.remove()", elem_info.location);
 
   const symbolt *remove_func =
     converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_remove");

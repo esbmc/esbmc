@@ -1,0 +1,5 @@
+CORE
+main.py
+
+^VERIFICATION FAILED$
+Unsupported: list.count\(\) does not call __eq__ of class 'C'
