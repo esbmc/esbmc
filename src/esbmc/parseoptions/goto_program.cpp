@@ -722,7 +722,7 @@ static void link_cbmc_libc_bodies(goto_functionst &goto_functions)
     "iscntrl",       "isdigit",       "isgraph",   "islower",  "isprint",
     "fesetround",    "fegetround",    "ispunct",   "isspace",  "isupper",
     "isxdigit",      "tolower",       "toupper",   "atoi",     "atol",
-    "strtol"};
+    "strtol",        "calloc"};
 
   for (const char *name : libc)
   {
@@ -850,6 +850,7 @@ bool esbmc_parseoptionst::synthesize_cprover_additions(
     "  (void *)isspace,   (void *)isupper,  (void *)isxdigit,\n"
     "  (void *)tolower,   (void *)toupper,\n"
     "  (void *)atoi,      (void *)atol,     (void *)strtol,\n"
+    "  (void *)calloc,\n"
     "  (void *)__cbmc_is_fresh_impl, (void *)__cbmc_is_fresh_check_impl,\n"
     "  (void *)fesetround, (void *)fegetround,\n"
     "};\n"

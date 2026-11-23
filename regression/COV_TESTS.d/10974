@@ -1,0 +1,2 @@
+regression/goto-transcoder/cbmc_calloc
+regression/goto-transcoder/cbmc_calloc_fail
