@@ -71,8 +71,7 @@ bool goto_symext::recover_va_list_args(
   size_t fmt_idx,
   std::list<expr2tc> &out)
 {
-  if (!takes_va_list(call.kind))
-    return false;
+  assert(takes_va_list(call.kind));
 
   // Every v* signature takes the va_list as its last operand, right after
   // the format string.
