@@ -687,6 +687,10 @@ set(_slow_regression_tests
     # 9-33s to 44-68s on the DebugOpt Linux runner, and runner noise pushed it
     # past the 120s cap on unrelated PRs.
     "regression/esbmc-cpp/cpp/vector_reserve_realloc_nested"
+    # #10965 stops carrying a struct that holds a pointer, so flat_map's vector
+    # copies are no longer folded (#10982): ~20s locally, ~4.5x that on the
+    # DebugOpt Linux runner.
+    "regression/esbmc-cpp/cpp/github_7797_flat_map_update"
     # depth_first_search_fail builds a small Node graph and recurses over each
     # node's `successors` list. Under the object-model migration (#3067) every
     # instance is a heap Class* and a Class* read out of a list into a recursive
@@ -822,10 +826,6 @@ set(_very_slow_regression_tests
     # puts this past the 2x tier's 240s (#7679). Its VmPeak is ~4.7GiB against
     # the global 8GiB RLIMIT_AS, which has no per-test override.
     "regression/python-intensive/problem1_fail"
-    # #10965 stops carrying a struct that holds a pointer, so the flat_map's
-    # vector copies are no longer folded: 2.9k to 61k assignments, ~90s locally,
-    # past the 120s cap on the DebugOpt Linux runner. The verdict is unchanged.
-    "regression/esbmc-cpp/cpp/github_7797_flat_map"
 )
 
 foreach(_t IN LISTS _slow_regression_tests)

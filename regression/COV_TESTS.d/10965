@@ -5,3 +5,4 @@ regression/esbmc/github_10965_member_fail
 regression/esbmc/github_10965_guarded_fail
 regression/esbmc/github_10965_phi_fail
 regression/esbmc/github_10965_phi_scope
+regression/esbmc-cpp/cpp/github_7797_flat_map_update
