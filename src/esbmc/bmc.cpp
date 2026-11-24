@@ -815,7 +815,8 @@ void bmct::show_program(const symex_target_equationt &eq)
 
   for (auto const &it : eq.SSA_steps)
   {
-    if (!(it.is_assert() || it.is_assignment() || it.is_assume()))
+    if (!(it.is_assert() || it.is_assignment() || it.is_assume() ||
+          it.is_event()))
       continue;
 
     if (it.ignore && !sliced)
@@ -828,9 +829,14 @@ void bmct::show_program(const symex_target_equationt &eq)
     oss << "\n/* " << count << " */ ";
 
     std::string string_value;
-    languages.from_expr(migrate_expr_back(it.cond), string_value);
+    if (!it.is_event())
+      languages.from_expr(migrate_expr_back(it.cond), string_value);
 
-    if (it.is_assignment())
+    if (it.is_event())
+    {
+      it.output(ns, oss);
+    }
+    else if (it.is_assignment())
     {
       oss << string_value << "\n";
     }
@@ -2726,8 +2732,10 @@ smt_resultt bmct::run_thread(std::shared_ptr<symex_target_equationt> &eq)
   try
   {
     goto_symext::symex_resultt solver_result =
-      options.get_bool_option("schedule") ? symex->generate_schedule_formula()
-                                          : symex->get_next_formula();
+      options.get_bool_option("partial-order")
+        ? symex->generate_partial_order_formula()
+      : options.get_bool_option("schedule") ? symex->generate_schedule_formula()
+                                            : symex->get_next_formula();
 
     fine_timet symex_stop = current_time();
 

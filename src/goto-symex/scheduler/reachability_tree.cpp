@@ -989,3 +989,19 @@ goto_symext::symex_resultt reachability_treet::generate_schedule_formula()
     schedule_simplified_claims,
     schedule_bounded_loop_truncations);
 }
+
+goto_symext::symex_resultt reachability_treet::generate_partial_order_formula()
+{
+  execution_statet &ex_state = get_cur_state();
+  // A thread spawned along the way is appended, so the bound is re-read.
+  for (unsigned int tid = 0; tid < ex_state.threads_state.size(); ++tid)
+  {
+    ex_state.switch_to_thread(tid);
+    while (ex_state.can_execution_continue())
+      ex_state.symex_step(*this);
+  }
+
+  ++reduction_stats.schedules_explored;
+  ex_state.release_symex_caches();
+  return ex_state.get_symex_result();
+}
