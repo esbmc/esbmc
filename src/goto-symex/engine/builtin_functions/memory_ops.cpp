@@ -1749,8 +1749,7 @@ void goto_symext::intrinsic_memset(
   // it would hide races and torn writes from a concurrent thread.
   if (
     ex_state.threads_state.size() == 1 && internal_deref_items.size() == 1 &&
-    (memset_symbolic(internal_deref_items.front(), arg1, arg2) ||
-     memset_whole_dynamic(internal_deref_items.front(), arg1, arg2)))
+    memset_symbolic(internal_deref_items.front(), arg1, arg2))
   {
     memset_finish(func_call, arg0, arg2);
     return;
@@ -1913,7 +1912,9 @@ bool goto_symext::memset_symbolic(
   // unsigned[1024] solves in 230 s, an unsigned[256] in 6 s (#10991).
   const uint64_t cap = is_constant_int2t(off) ? 4096 : 1024;
   const uint64_t size = integer_object_size(object->type);
-  if (size == 0 || size > cap || dereferencet::is_read_only(object, ns))
+  if (size == 0)
+    return memset_whole_dynamic(item, value, n);
+  if (size > cap || dereferencet::is_read_only(object, ns))
     return false;
 
   guard2tc guard = cur_state->guard;
@@ -1960,13 +1961,28 @@ bool goto_symext::memset_symbolic(
   return true;
 }
 
+/** The size malloc was asked for, given the array size symex_mem gave the
+ *  object: it wraps a request that may fail as ite(fits, size, 0). */
+static const expr2tc &requested_size(const expr2tc &array_size)
+{
+  if (!is_if2t(array_size))
+    return array_size;
+  const if2t &ite = to_if2t(array_size);
+  return is_constant_int2t(ite.false_value) &&
+             to_constant_int2t(ite.false_value).value.is_zero()
+           ? ite.true_value
+           : array_size;
+}
+
 bool goto_symext::memset_whole_dynamic(
   const dereference_callbackt::internal_item &item,
   const expr2tc &value,
   const expr2tc &n)
 {
   const expr2tc &object = item.object;
-  if (!is_symbol2t(object) || !is_array_type(object->type))
+  if (
+    !is_symbol2t(object) || !is_array_type(object->type) ||
+    dereferencet::is_read_only(object, ns))
     return false;
   const array_type2t &arr = to_array_type(object->type);
   if (
@@ -1981,12 +1997,7 @@ bool goto_symext::memset_whole_dynamic(
     return false;
 
   const expr2tc &size = arr.array_size;
-  const expr2tc &requested =
-    is_if2t(size) && is_constant_int2t(to_if2t(size).false_value) &&
-        to_constant_int2t(to_if2t(size).false_value).value.is_zero()
-      ? to_if2t(size).true_value
-      : size;
-  if (requested != n)
+  if (requested_size(size) != n)
     return false;
 
   guard2tc guard = cur_state->guard;
