@@ -3635,9 +3635,12 @@ void dereferencet::valid_check(
 
   if (is_constant_string2t(symbol))
   {
-    // always valid, but can't write
+    // always valid, but can't write or free
     if (is_write(mode))
       read_only_write_check(object, guard);
+    else if (is_free(mode))
+      dereference_failure(
+        "pointer dereference", "free() of non-dynamic memory", guard);
   }
   else if (is_nil_expr(symbol))
   {

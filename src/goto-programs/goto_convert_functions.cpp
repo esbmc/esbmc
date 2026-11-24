@@ -793,7 +793,10 @@ bool goto_convert_functionst::convert_native_rec(
 
     symbolt *s = context.find_symbol(decl.value);
     if (s == nullptr)
-      return false;
+    {
+      log_error("decl of `{}' has no symbol", id2string(decl.value));
+      abort();
+    }
 
     auto delegate_to_legacy = [&]() {
       exprt op = migrate_expr_back(code2);
@@ -1577,10 +1580,11 @@ bool goto_convert_functionst::convert_native_rec(
   {
     const code_break2t &b = to_code_break2t(code2);
 
-    // A break outside a loop or switch shouldn't reach here, but stay defensive
-    // rather than trust the invariant.
     if (!targets.break_set)
-      return false;
+    {
+      log_error("break without target");
+      abort();
+    }
 
     // unwind_destructor_stack emits the exit DEADs into `dest` then restores
     // targets.destructor_stack to its pre-call state — a break is one exit
@@ -1600,7 +1604,10 @@ bool goto_convert_functionst::convert_native_rec(
     const code_continue2t &c = to_code_continue2t(code2);
 
     if (!targets.continue_set)
-      return false;
+    {
+      log_error("continue without target");
+      abort();
+    }
 
     unwind_destructor_stack(c.location, targets.continue_stack_size, dest);
 
