@@ -372,6 +372,9 @@ jobs:
         # group, which is the failure that voided the run in #7136.
         run: |
           set -uo pipefail
+          # One run's raws have filled the 150 GB runner volume; log their size.
+          echo "raw profiles: $(find /tmp/esbmc-coverage -maxdepth 1 -name 'coverage-*.profraw' | wc -l) files," \
+               "$(du -sh /tmp/esbmc-coverage | cut -f1)"
           mkdir -p /tmp/esbmc-coverage/groups
           for raw in /tmp/esbmc-coverage/coverage-*.profraw; do
             [ -e "$raw" ] || continue
