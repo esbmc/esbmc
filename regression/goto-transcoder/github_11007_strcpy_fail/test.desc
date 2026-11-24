@@ -1,0 +1,5 @@
+CORE
+main.goto
+--binary
+FAILED\s+\[strcpy\.array-bounds-violated\.1\]
+^VERIFICATION FAILED$

@@ -1,0 +1,4 @@
+CORE
+github_11007.goto
+--binary --unwind 10
+^VERIFICATION SUCCESSFUL$

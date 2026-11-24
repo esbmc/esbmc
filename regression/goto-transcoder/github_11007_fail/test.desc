@@ -1,0 +1,5 @@
+CORE
+github_11007_fail.goto
+--binary
+^VERIFICATION FAILED$
+writing memory segment of size 4 with 5 bytes
