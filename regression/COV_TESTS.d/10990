@@ -10,3 +10,12 @@ regression/esbmc-unix/partial_order_events_order
 regression/esbmc-unix/partial_order_events_fresh_read
 regression/esbmc-unix/partial_order_events_after_main
 regression/esbmc-unix/partial_order_events_counter
+regression/esbmc-unix/partial_order_rf_value
+regression/esbmc-unix/partial_order_rf_value_fail
+regression/esbmc-unix/partial_order_latest_write
+regression/esbmc-unix/partial_order_latest_write_fail
+regression/esbmc-unix/partial_order_no_later_write
+regression/esbmc-unix/partial_order_no_later_write_fail
+regression/esbmc-unix/partial_order_reject_verify_join
+regression/esbmc-unix/partial_order_reject_verify_assume
+regression/esbmc-unix/partial_order_no_slice

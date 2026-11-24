@@ -69,10 +69,22 @@ bool is_null(expr2tc e)
   return is_constant(e) && !is_constant_string2t(e);
 }
 
+/// Calls whose ordering needs the spawn, join and atomic-section events,
+/// which the memory model does not see yet, and assumptions, which the
+/// equation applies to every later thread's claims whatever the clocks say.
+bool needs_unbuilt_events(const std::string &name)
+{
+  return name.starts_with("pthread_join") ||
+         name.starts_with("pthread_mutex_lock") ||
+         name == "__ESBMC_atomic_begin" || name == "__VERIFIER_atomic_begin" ||
+         name == "__VERIFIER_assume";
+}
+
 class scope_checkt
 {
 public:
-  explicit scope_checkt(const namespacet &ns) : ns(ns)
+  scope_checkt(const namespacet &ns, bool verifying)
+    : ns(ns), verifying(verifying)
   {
   }
 
@@ -97,6 +109,7 @@ public:
 
 private:
   const namespacet &ns;
+  const bool verifying;
   const locationt *where = nullptr;
   /// Functions that create a thread, directly or through a call.
   std::set<std::string> spawners;
@@ -166,6 +179,8 @@ private:
   {
     if (instruction.is_function_call())
       return check_call(to_code_function_call2t(instruction.code));
+    if (verifying && instruction.is_assume())
+      return reject("verifying an assumption");
     return check_expr(instruction.code) && check_expr(instruction.guard);
   }
 
@@ -176,6 +191,8 @@ private:
       return reject("a call through a function pointer");
     if (is_unsupported_call(name))
       return reject("a call to " + name);
+    if (verifying && needs_unbuilt_events(name))
+      return reject("verifying a call to " + name);
 
     if (!check_expr(call.ret))
       return false;
@@ -251,7 +268,9 @@ bool is_partial_order_global(const namespacet &ns, const irep_idt &name)
 
 bool partial_order_in_scope(
   const goto_functionst &goto_functions,
-  const namespacet &ns)
+  const namespacet &ns,
+  bool verifying)
 {
-  return scope_checkt(ns).check(goto_functions);
+  return scope_checkt(ns, false).check(goto_functions) &&
+         (!verifying || scope_checkt(ns, true).check(goto_functions));
 }

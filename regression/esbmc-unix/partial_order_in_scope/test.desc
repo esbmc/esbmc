@@ -1,5 +1,5 @@
 CORE
 main.c
---partial-order
-^ERROR: --partial-order cannot verify yet \(#10990\)$
+--partial-order --program-only
+\A(?![\s\S]*ERROR)[\s\S]*\Z
 \A(?![\s\S]*VERIFICATION)[\s\S]*\Z

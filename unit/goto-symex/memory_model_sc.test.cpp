@@ -1,0 +1,246 @@
+/*******************************************************************
+ Module: --partial-order SC memory model (#10990)
+
+ Hand-built two-thread equations: thread 0 writes x and then reads it,
+ thread 1 writes x. Each test fixes the clocks, the reads-from choices and
+ the values, substitutes them into the constraints memory_model_sct
+ prepends, and checks whether they all hold.
+
+ \*******************************************************************/
+
+#define CATCH_CONFIG_MAIN
+#include <catch2/catch.hpp>
+
+#include <map>
+#include <string>
+
+#include <goto-symex/equation/memory_model_sc.h>
+#include <irep2/irep2_expr.h>
+#include <irep2/irep2_utils.h>
+#include <util/symtab/context.h>
+#include <util/symtab/namespace.h>
+
+namespace
+{
+using valuation = std::map<expr2tc, expr2tc>;
+
+expr2tc x(unsigned version)
+{
+  return symbol2tc(
+    get_int32_type(),
+    "c:@x",
+    symbol2t::renaming_level::level2_global,
+    0,
+    version);
+}
+
+expr2tc clock(unsigned event)
+{
+  return symbol2tc(
+    get_uint32_type(), "__ESBMC_po_clock$" + std::to_string(event));
+}
+
+expr2tc rf(unsigned write, unsigned read)
+{
+  return symbol2tc(
+    get_bool_type(),
+    "__ESBMC_po_rf$" + std::to_string(write) + "$" + std::to_string(read));
+}
+
+expr2tc num(int v)
+{
+  return constant_int2tc(get_int32_type(), BigInt(v));
+}
+
+expr2tc tick(unsigned v)
+{
+  return constant_int2tc(get_uint32_type(), BigInt(v));
+}
+
+void add_event(
+  symex_target_equationt &eq,
+  unsigned thread,
+  symex_targett::step_typet type,
+  const expr2tc &sym)
+{
+  symex_targett::sourcet source;
+  source.thread_nr = thread;
+  eq.event(gen_true_expr(), type, sym, source);
+}
+
+bool mentions(const expr2tc &e, const expr2tc &sym)
+{
+  if (is_nil_expr(e))
+    return false;
+  if (e == sym)
+    return true;
+  bool found = false;
+  e->foreach_operand(
+    [&](const expr2tc &op) { found = found || mentions(op, sym); });
+  return found;
+}
+
+/// Events 0: W x#1 (thread 0), 1: R x#3 (thread 0), 2: W x#2 (thread 1).
+struct write_read_writet
+{
+  contextt ctx;
+  namespacet ns{ctx};
+  symex_target_equationt eq{ns};
+
+  write_read_writet()
+  {
+    add_event(eq, 0, symex_targett::SHARED_WRITE, x(1));
+    add_event(eq, 0, symex_targett::SHARED_READ, x(3));
+    add_event(eq, 1, symex_targett::SHARED_WRITE, x(2));
+    memory_model_sct().run(eq.SSA_steps);
+  }
+
+  void substitute(expr2tc &e, const valuation &v) const
+  {
+    auto it = v.find(e);
+    if (it != v.end())
+    {
+      e = it->second;
+      return;
+    }
+    e->Foreach_operand([&](expr2tc &op) { substitute(op, v); });
+  }
+
+  bool holds(const valuation &v) const
+  {
+    for (const auto &step : eq.SSA_steps)
+    {
+      if (!step.is_assume())
+        continue;
+      expr2tc cond = step.cond;
+      substitute(cond, v);
+      simplify(cond);
+      REQUIRE(is_constant_bool2t(cond));
+      if (is_false(cond))
+        return false;
+    }
+    return true;
+  }
+};
+
+/// Thread 0 writes 0 at clock 1 and reads it at clock 2; thread 1 writes 1
+/// at clock 3.
+valuation reads_initial_write()
+{
+  return {
+    {x(1), num(0)},
+    {x(2), num(1)},
+    {x(3), num(0)},
+    {clock(0), tick(1)},
+    {clock(1), tick(2)},
+    {clock(2), tick(3)},
+    {rf(0, 1), gen_true_expr()},
+    {rf(2, 1), gen_false_expr()}};
+}
+} // namespace
+
+TEST_CASE("constraints are hidden assumptions ahead of the events", "[po]")
+{
+  write_read_writet f;
+  REQUIRE(f.eq.SSA_steps.size() > 3);
+  auto it = f.eq.SSA_steps.begin();
+  for (size_t i = 0; i < f.eq.SSA_steps.size() - 3; ++i, ++it)
+  {
+    CHECK(it->is_assume());
+    CHECK(it->hidden);
+  }
+  for (; it != f.eq.SSA_steps.end(); ++it)
+    CHECK(it->is_event());
+}
+
+TEST_CASE("an SC execution satisfies the constraints", "[po]")
+{
+  write_read_writet f;
+  CHECK(f.holds(reads_initial_write()));
+
+  valuation v = reads_initial_write();
+  v[clock(1)] = tick(3);
+  v[clock(2)] = tick(2);
+  v[rf(0, 1)] = gen_false_expr();
+  v[rf(2, 1)] = gen_true_expr();
+  v[x(3)] = num(1);
+  CHECK(f.holds(v));
+}
+
+TEST_CASE("program order is kept within a thread", "[po]")
+{
+  write_read_writet f;
+  // Thread 0 reads thread 1's write before its own write: every constraint
+  // but program order holds.
+  valuation v = reads_initial_write();
+  v[clock(2)] = tick(0);
+  v[clock(1)] = tick(1);
+  v[clock(0)] = tick(2);
+  v[rf(0, 1)] = gen_false_expr();
+  v[rf(2, 1)] = gen_true_expr();
+  v[x(3)] = num(1);
+  CHECK_FALSE(f.holds(v));
+}
+
+TEST_CASE("writes to an object are totally ordered", "[po]")
+{
+  write_read_writet f;
+  valuation v = reads_initial_write();
+  v[clock(2)] = tick(1);
+  CHECK_FALSE(f.holds(v));
+}
+
+TEST_CASE("a read has the value of the write it reads from", "[po]")
+{
+  write_read_writet f;
+  valuation v = reads_initial_write();
+  v[x(3)] = num(1);
+  CHECK_FALSE(f.holds(v));
+}
+
+TEST_CASE("a read reads from some write", "[po]")
+{
+  write_read_writet f;
+  valuation v = reads_initial_write();
+  v[rf(0, 1)] = gen_false_expr();
+  CHECK_FALSE(f.holds(v));
+}
+
+TEST_CASE("a read cannot read from a later write", "[po]")
+{
+  write_read_writet f;
+  valuation v = reads_initial_write();
+  v[rf(0, 1)] = gen_false_expr();
+  v[rf(2, 1)] = gen_true_expr();
+  v[x(3)] = num(1);
+  CHECK_FALSE(f.holds(v));
+}
+
+TEST_CASE("a read cannot skip a write between", "[po]")
+{
+  write_read_writet f;
+  valuation v = reads_initial_write();
+  v[clock(2)] = tick(1);
+  v[clock(0)] = tick(0);
+  CHECK_FALSE(f.holds(v));
+}
+
+TEST_CASE("a thread never reads its own later write", "[po]")
+{
+  contextt ctx;
+  namespacet ns(ctx);
+  symex_target_equationt eq(ns);
+  add_event(eq, 0, symex_targett::SHARED_READ, x(3));
+  add_event(eq, 0, symex_targett::SHARED_WRITE, x(1));
+  add_event(eq, 1, symex_targett::SHARED_WRITE, x(2));
+  memory_model_sct().run(eq.SSA_steps);
+
+  bool own = false, other = false;
+  for (const auto &step : eq.SSA_steps)
+  {
+    own |= mentions(step.cond, rf(1, 0));
+    other |= mentions(step.cond, rf(2, 0));
+  }
+  CHECK_FALSE(own);
+  CHECK(other);
+}

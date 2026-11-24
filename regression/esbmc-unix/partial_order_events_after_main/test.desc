@@ -2,5 +2,5 @@ CORE
 main.c
 --partial-order --program-only --no-slice
 ^/\* \d+ \*/ \(assert\).* => x&0#3 == 0$
-\A(?![\s\S]*\(assume\))[\s\S]*\Z
+\A(?![\s\S]*\(assume\)(0|FALSE|false)$)[\s\S]*\Z
 \A(?![\s\S]*VERIFICATION)[\s\S]*\Z

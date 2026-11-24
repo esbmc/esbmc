@@ -1,5 +1,6 @@
 /* #10990: the mutex counter of the plan's section 2 is inside the
-   --partial-order phase 0 scope; the encoding itself is not there yet. */
+   --partial-order phase 0 scope; verifying it waits on the join and lock
+   events. */
 #include <pthread.h>
 #include <assert.h>
 int x = 0;

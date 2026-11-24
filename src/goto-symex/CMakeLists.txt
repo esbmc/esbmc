@@ -35,6 +35,7 @@ add_library(symex
   equation/symex_symmetry.cpp
   equation/features.cpp
   equation/ssa_step_algorithm.cpp
+  equation/memory_model_sc.cpp
 
   trace/goto_trace.cpp
   trace/build_goto_trace.cpp

@@ -700,8 +700,8 @@ const struct group_opt_templ all_cmd_options[] = {
     {"partial-order",
      NULL,
      "Encode concurrency as one formula that orders shared accesses, with no "
-     "context bound (prototype: accepts global scalars only and does not "
-     "verify yet)"},
+     "context bound (prototype: accepts global scalars only, and verifies "
+     "no joins, locks, atomic sections or assumptions yet)"},
     {"context-bound",
      boost::program_options::value<int>()->default_value(-1)->value_name("nr"),
      "Limit number of context switches for each thread"},

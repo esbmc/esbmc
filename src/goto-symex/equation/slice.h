@@ -336,6 +336,15 @@ protected:
    * @param SSA_step a renumber step
    */
   void run_on_renumber(symex_target_equationt::SSA_stept &SSA_step) override;
+
+  /**
+   * Keep what a --partial-order event depends on. Any read may observe a
+   * write, but the memory-model constraints that say which one come first in
+   * the equation, after this backwards walk has passed the write.
+   *
+   * @param SSA_step an event step
+   */
+  void run_on_event(symex_target_equationt::SSA_stept &SSA_step) override;
 };
 
 #endif
