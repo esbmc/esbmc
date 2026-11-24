@@ -1,0 +1,5 @@
+CORE
+cbmc_kani_fill_symbolic_fail.goto
+--binary --function _RNvCsi5X4Vmw8DXH_4fill7harness --ignore-property-class reachability_check --ignore-property-class cover --unwind 2
+^VERIFICATION FAILED$
+every digit is 0
