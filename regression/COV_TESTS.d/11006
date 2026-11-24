@@ -1,0 +1,5 @@
+regression/goto-transcoder/github_11006
+regression/goto-transcoder/github_11006_fail
+regression/goto-transcoder/github_11006_loop_entry
+regression/goto-transcoder/github_11006_jump_fail
+regression/goto-transcoder/github_11006_dropped

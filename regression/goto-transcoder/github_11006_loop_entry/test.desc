@@ -1,0 +1,5 @@
+CORE
+main.goto
+--binary --loop-invariant-check --unwind 8
+^WARNING: CBMC adapter: ignoring a loop invariant that uses __CPROVER_loop_entry or __CPROVER_old$
+^VERIFICATION SUCCESSFUL$
