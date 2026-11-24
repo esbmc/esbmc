@@ -1,8 +1,9 @@
 # Plan — a partial-order encoding for concurrent programs (`--partial-order`)
 
 **Status (2026-11-24):** phase 0 in progress. The `--partial-order` flag, its
-scope check, the event step types and the run-to-completion symex path exist;
-it does not verify yet. Nothing has been measured; the effort figures are
+scope check, the event step types, the run-to-completion symex path and the SC
+memory-model pass exist; it verifies programs without joins, locks, atomic
+sections or assumptions. Nothing has been measured; the effort figures are
 estimates.
 **Origin:** [#10296](https://github.com/esbmc/esbmc/issues/10296), which found
 `--schedule` unsound and slow, and its
@@ -88,6 +89,12 @@ Symex runs each thread to completion (`generate_partial_order_formula`) and
 records user-global reads, under a fresh L2 name, and writes as events;
 `--program-only` shows them. The operational model's state is still renamed
 sequentially, so `pthread_join` waits on the spawn/join events of a later unit.
+`equation/memory_model_sc.cpp` prepends hidden assumptions: a clock per event,
+program order, a write order per object, and a reads-from choice per read with
+its from-read constraints. Until spawn events order a thread after its
+creation, a thread may also be placed before main's initialisation, which can
+only add spurious failures; verification rejects joins, locks, atomic sections
+and assumptions, which need events the pass does not have yet.
 
 **Go** if every verdict matches and the time grows more slowly than the
 default's as the bound rises. **No-go** closes #10990 with the measurements

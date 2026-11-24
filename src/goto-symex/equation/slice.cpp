@@ -455,6 +455,13 @@ void symex_slicet::run_on_renumber(symex_target_equationt::SSA_stept &SSA_step)
   // Don't collect the symbol; this insn has no effect on dependencies.
 }
 
+void symex_slicet::run_on_event(symex_target_equationt::SSA_stept &SSA_step)
+{
+  collect_dependencies(SSA_step.guard);
+  if (SSA_step.type == symex_targett::SHARED_WRITE)
+    collect_dependencies(SSA_step.lhs);
+}
+
 /**
  * Naive slicer: slice every step after the last assertion
  * @param steps SSA steps to be sliced

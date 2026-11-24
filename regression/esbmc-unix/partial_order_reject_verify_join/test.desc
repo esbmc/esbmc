@@ -1,0 +1,5 @@
+CORE
+main.c
+--partial-order
+^ERROR: --partial-order does not support verifying a call to pthread_join\w* yet, at file .*main\.c line 13 
+\A(?![\s\S]*VERIFICATION)[\s\S]*\Z

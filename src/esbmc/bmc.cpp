@@ -34,6 +34,7 @@
 #include <goto-symex/symex_invariant.h>
 #include <goto-symex/trace/goto_trace.h>
 #include <goto-symex/equation/features.h>
+#include <goto-symex/equation/memory_model_sc.h>
 #include <goto-symex/trace/sarif.h>
 #include <goto-symex/equation/symex_symmetry.h>
 #include <goto-symex/trace/xml_goto_trace.h>
@@ -241,6 +242,10 @@ bmct::bmct(goto_functionst &funcs, optionst &opts, contextt &_context)
 
   // The next block will initialize the algorithms used for the analysis.
   {
+    const bool partial_order = opts.get_bool_option("partial-order");
+    if (partial_order)
+      algorithms.emplace_back(std::make_unique<memory_model_sct>());
+
     // Run cache if user has specified the option
     if (
       !options.get_bool_option("no-cache-asserts") &&
@@ -251,8 +256,12 @@ bmct::bmct(goto_functionst &funcs, optionst &opts, contextt &_context)
       algorithms.emplace_back(
         std::make_unique<assertion_cache>(get_ssa_caching_db()));
 
+    // A shared read may observe a write after the last assertion.
     if (opts.get_bool_option("no-slice"))
-      algorithms.emplace_back(std::make_unique<simple_slice>());
+    {
+      if (!partial_order)
+        algorithms.emplace_back(std::make_unique<simple_slice>());
+    }
     else
       algorithms.emplace_back(std::make_unique<symex_slicet>(options));
 

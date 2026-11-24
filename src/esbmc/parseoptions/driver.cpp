@@ -489,15 +489,11 @@ int esbmc_parseoptionst::do_partial_order(
   optionst &options,
   goto_functionst &goto_functions)
 {
-  if (!partial_order_in_scope(goto_functions, namespacet(context)))
+  if (!partial_order_in_scope(
+        goto_functions,
+        namespacet(context),
+        !options.get_bool_option("program-only")))
     return 1;
-  // Without the memory-model pass a shared read is unconstrained, so only the
-  // events can be shown, not a verdict.
-  if (!options.get_bool_option("program-only"))
-  {
-    log_error("--partial-order cannot verify yet (#10990)");
-    return 1;
-  }
   bmct bmc(goto_functions, options, context);
   return do_bmc(bmc);
 }
