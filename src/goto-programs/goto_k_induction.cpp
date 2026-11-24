@@ -5,6 +5,7 @@
 #include <goto-programs/goto_loops.h>
 #include <goto-programs/loopst.h>
 #include <goto-programs/remove_no_op.h>
+#include <goto-programs/write_footprint.h>
 #include <irep2/irep2_expr.h>
 #include <irep2/irep2_guard.h>
 #include <pointer-analysis/andersen.h>
@@ -447,7 +448,8 @@ std::vector<expr2tc> ordered(const loopst::loop_varst &vars)
 
 /// What the inductive step havocs for the modified variables of \p loop: a
 /// symbol the loop writes only through member chains is replaced by them.
-std::vector<expr2tc> havoc_targets(const loopst &loop)
+std::vector<expr2tc>
+havoc_targets(const loopst &loop, const write_footprintt &footprint)
 {
   std::vector<expr2tc> targets;
   for (const expr2tc &var : ordered(loop.get_modified_loop_vars()))
@@ -455,7 +457,10 @@ std::vector<expr2tc> havoc_targets(const loopst &loop)
     const loopst::loop_varst *partial = loop.partial_writes(var);
     if (!partial)
     {
-      targets.push_back(var);
+      if (const auto *fields = footprint.partial_writes(var))
+        targets.insert(targets.end(), fields->begin(), fields->end());
+      else
+        targets.push_back(var);
       continue;
     }
     const std::vector<expr2tc> chains = ordered(*partial);
@@ -1347,6 +1352,24 @@ public:
     return it != owner.end() && it->second != function;
   }
 
+  std::vector<expr2tc> pointer_sources(const expr2tc &symbol) const
+  {
+    const irep_idt &name = to_symbol2t(symbol).thename;
+    const auto it = defs.find(name);
+    if (
+      it == defs.end() || pointer_address_taken.count(name) ||
+      (!owner.count(name) && looped.count(name)))
+      return {};
+    std::vector<expr2tc> values;
+    for (const deft &d : it->second)
+    {
+      if (is_nil_expr(d.value) || d.in_own_loop)
+        return {};
+      values.push_back(d.value);
+    }
+    return values;
+  }
+
 private:
   /// An assignment to a symbol: a value, the result of a call to \p callee,
   /// or neither, for a write to part of the symbol or a call through a
@@ -1460,6 +1483,7 @@ private:
   /// do to a local: every call declares it afresh.
   std::unordered_set<irep_idt, irep_id_hash> looped_here;
   std::unordered_set<irep_idt, irep_id_hash> unsettled;
+  std::unordered_set<irep_idt, irep_id_hash> pointer_address_taken;
 };
 
 void derivationst::define(
@@ -1508,6 +1532,8 @@ void derivationst::record(
   bool in_loop,
   bool in_own_loop)
 {
+  get_address_taken(instr.code, pointer_address_taken);
+  get_address_taken(instr.guard, pointer_address_taken);
   if (instr.is_decl())
   {
     const code_decl2t &decl = to_code_decl2t(instr.code);
@@ -2291,6 +2317,7 @@ struct loop_writest
   const goto_programt &body;
   andersent &points_to;
   const derivationst &derivations;
+  const write_footprintt &footprint;
   /// Whether symex drops a write through a pointer it cannot resolve, which
   /// tracing a pointer to what it derives from relies on.
   bool drops_unresolved;
@@ -3139,7 +3166,7 @@ bool havoc_loop(
     havocs.vars.empty())
     return covered;
 
-  for (const expr2tc &var : havoc_targets(loop))
+  for (const expr2tc &var : havoc_targets(loop, w.footprint))
     if (
       w.derivations.keeps_object(
         w.function, w.address_taken, w.addressless(), var))
@@ -3290,6 +3317,15 @@ bool goto_k_induction(
     drops_unresolved ? unsettled_by_loops(goto_functions)
                      : std::unordered_set<irep_idt, irep_id_hash>());
 
+  const write_footprintt footprint(
+    goto_functions,
+    points_to,
+    reachable,
+    [&](const irep_idt &function, unsigned location) {
+      return shapes.in_loop(function, location);
+    },
+    [&](const expr2tc &symbol) { return derivations.pointer_sources(symbol); });
+
   // A reachable __VERIFIER_nondet_memory call havocs a caller object the
   // inductive step cannot generalise, so its unsoundness is independent of any
   // loop shape — disable the inductive step up front. See #5593.
@@ -3343,6 +3379,7 @@ bool goto_k_induction(
            it->second.body,
            points_to,
            derivations,
+           footprint,
            drops_unresolved,
            address_taken,
            *iteration++,
