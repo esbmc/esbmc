@@ -1,0 +1,5 @@
+CORE
+main.c
+--data-races-check --unwind 6
+^VERIFICATION FAILED$
+^  R/W data race on c:@d$

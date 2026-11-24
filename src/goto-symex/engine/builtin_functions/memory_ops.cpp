@@ -1745,8 +1745,10 @@ void goto_symext::intrinsic_memset(
   }
 
   simplify(arg2);
+  // One assignment cannot be interleaved, unlike __memset_impl's byte loop, so
+  // it would hide races and torn writes from a concurrent thread.
   if (
-    internal_deref_items.size() == 1 &&
+    ex_state.threads_state.size() == 1 && internal_deref_items.size() == 1 &&
     memset_symbolic(internal_deref_items.front(), arg1, arg2))
   {
     memset_finish(func_call, arg0, arg2);
@@ -1896,22 +1898,21 @@ bool goto_symext::memset_symbolic(
   const expr2tc &value,
   const expr2tc &n)
 {
-  // Same cap and rationale as memcpy_symbolic_length's.
-  static const uint64_t MAX_MEMSET_UNROLL = 64;
-
   const expr2tc &object = item.object;
   expr2tc off = item.offset;
   cur_state->rename(off);
-  if (!object || !off)
-    return false;
   simplify(off);
-  if (is_constant_int2t(off) && is_constant_int2t(n))
+  // A signed length would let a negative n pass the bounds claim as a no-op.
+  if (
+    (is_constant_int2t(off) && is_constant_int2t(n)) ||
+    !is_unsignedbv_type(n->type))
     return false;
 
+  // memcpy_symbolic_length's cap. A symbolic offset costs more: filling an
+  // unsigned[1024] solves in 230 s, an unsigned[256] in 6 s (#10991).
+  const uint64_t cap = is_constant_int2t(off) ? 4096 : 1024;
   const uint64_t size = integer_object_size(object->type);
-  if (
-    size == 0 || size > MAX_MEMSET_UNROLL ||
-    dereferencet::is_read_only(object, ns))
+  if (size == 0 || size > cap || dereferencet::is_read_only(object, ns))
     return false;
 
   guard2tc guard = cur_state->guard;
@@ -1939,17 +1940,22 @@ bool goto_symext::memset_symbolic(
   const type2tc byte_t = get_uint8_type();
   const expr2tc byte = typecast2tc(byte_t, value);
   const bool be = target_is_big_endian();
-  expr2tc res = object;
+  std::vector<expr2tc> new_bytes;
+  new_bytes.reserve(size);
   for (uint64_t j = 0; j < size; ++j)
   {
     const expr2tc pos = constant_int2tc(off_t, BigInt(j));
     expr2tc within = and2tc(
       lessthanequal2tc(off, pos),
       lessthan2tc(typecast2tc(n_t, sub2tc(off_t, pos, off)), n));
-    res = update_object_byte(
-      res, j, if2tc(byte_t, within, byte, object_byte(object, j, be)), be);
+    new_bytes.push_back(
+      if2tc(byte_t, within, byte, object_byte(object, j, be)));
   }
-  symex_assign(code_assign2tc(object, res), false, guard);
+  symex_assign(
+    code_assign2tc(
+      object, update_object_bytes(object, 0, new_bytes.data(), size, be)),
+    false,
+    guard);
   return true;
 }
 

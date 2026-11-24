@@ -764,8 +764,9 @@ protected:
    *  constant, the case __memset_impl unwinds --unwind times (#10991): each
    *  byte j of the object becomes ite(off <= j && j - off < n, value, old),
    *  and off + n is claimed to stay within the object. Returns false, changing
-   *  nothing, when both are constant or the object is not a small integer
-   *  scalar or integer array. */
+   *  nothing, when off and n are both constant, n is signed, or the object is
+   *  read-only or not an integer or integer array of at most 4 KiB (1 KiB
+   *  when off is symbolic). */
   bool memset_symbolic(
     const dereference_callbackt::internal_item &item,
     const expr2tc &value,
