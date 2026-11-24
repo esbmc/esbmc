@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <cassert>
 #include <numeric>
 #include <langapi/language_util.h>
@@ -2777,14 +2778,14 @@ static bool struct_spans_elements(
          offset_bits % elem_bits + type_byte_size_bits(type) > elem_bits;
 }
 
-// Whether a struct of type read at offset_bits into a member of member_bits
-// extends past that member.
-static bool struct_wider_than_member(
+// Whether a struct or union of type read at offset_bits into a member of
+// member_bits extends past that member.
+static bool aggregate_wider_than_member(
   const type2tc &type,
   const BigInt &offset_bits,
   const BigInt &member_bits)
 {
-  return is_struct_type(type) &&
+  return (is_struct_type(type) || is_union_type(type)) &&
          offset_bits + type_byte_size_bits(type) > member_bits;
 }
 
@@ -2926,11 +2927,11 @@ void dereferencet::construct_struct_ref_from_const_offset(
                         ? (intref.value >= offs && intref.value < (offs + size))
                         : (intref.value == offs);
 
-      // A struct wider than the member it starts in is not read from that
-      // member alone; it is rebuilt member by member below (#10888).
+      // A struct or union wider than the member it starts in is not read from
+      // that member alone; it is rebuilt member by member below (#10888).
       if (
         !is_scalar_type(it) && in_range &&
-        !struct_wider_than_member(type, intref.value - offs, size))
+        !aggregate_wider_than_member(type, intref.value - offs, size))
       {
         if (size == 0)
         {
@@ -2958,8 +2959,9 @@ void dereferencet::construct_struct_ref_from_const_offset(
       i++;
     }
 
-    // A struct laid over scalar members whose names or types differ from its
-    // own, e.g. struct { char a, b; } read as struct { char c, d; } (#10888).
+    // A struct or union laid over scalar members whose names or types differ
+    // from its own, e.g. struct { char a, b; } read as struct { char c, d; }
+    // (#10888) or struct { int i; } as union { char b[4]; } (#10939).
     expr2tc rebuilt =
       construct_struct_from_members(value, intref.value, type, guard, mode);
     if (!is_nil_expr(rebuilt))
@@ -2980,6 +2982,29 @@ void dereferencet::construct_struct_ref_from_const_offset(
   abort();
 }
 
+expr2tc dereferencet::construct_member_from_members(
+  const expr2tc &value,
+  const BigInt &member_offs,
+  const type2tc &member_type,
+  const guard2tc &guard,
+  modet mode)
+{
+  expr2tc field = value;
+  // A scalar that no source field matches exactly may straddle source
+  // scalars (a packed target), so it is taken from the bytes; a matching
+  // field is read directly, which keeps a pointer's object.
+  if (
+    is_scalar_type(member_type) &&
+    !has_field_at(value->type, member_offs, member_type, ns) &&
+    occupies_whole_bytes(member_offs, type_byte_size_bits(member_type)) &&
+    !options.get_bool_option("int-encoding"))
+    construct_from_bytes(field, gen_ulong(member_offs), member_type);
+  else
+    build_reference_rec(
+      field, gen_ulong(member_offs), member_type, guard, mode);
+  return field;
+}
+
 expr2tc dereferencet::construct_struct_from_members(
   const expr2tc &value,
   const BigInt &offset_bits,
@@ -2988,30 +3013,40 @@ expr2tc dereferencet::construct_struct_from_members(
   modet mode)
 {
   if (
-    !is_struct_type(type) ||
+    !(is_struct_type(type) || is_union_type(type)) ||
     offset_bits + type_byte_size_bits(type) > type_byte_size_bits(value->type))
     return expr2tc();
+
+  // A union is built through a member spanning all of it, so that a write
+  // through the result reaches every byte (#10939).
+  if (is_union_type(type))
+  {
+    const union_type2t &uniontype = to_union_type(type);
+    const BigInt size = type_byte_size_bits(type);
+    // A union is as wide as its widest member, and a zero-sized one never
+    // gets here (build_reference_rec returns early for it).
+    const auto member = std::find_if(
+      uniontype.members.begin(),
+      uniontype.members.end(),
+      [&size](const type2tc &m) { return type_byte_size_bits(m) == size; });
+    assert(member != uniontype.members.end());
+    const size_t i = member - uniontype.members.begin();
+    expr2tc field =
+      construct_member_from_members(value, offset_bits, *member, guard, mode);
+    if (is_nil_expr(field))
+      return expr2tc();
+    return constant_union2tc(
+      type, uniontype.member_names[i], std::vector<expr2tc>{field});
+  }
 
   const struct_type2t &structtype = to_struct_type(type);
   std::vector<expr2tc> fields;
   for (size_t i = 0; i < structtype.members.size(); i++)
   {
-    const type2tc &member_type = structtype.members[i];
     const BigInt member_offs =
       offset_bits + member_offset_bits(type, structtype.member_names[i], &ns);
-    expr2tc field = value;
-    // A scalar that no source field matches exactly may straddle source
-    // scalars (a packed target), so it is taken from the bytes; a matching
-    // field is read directly, which keeps a pointer's object.
-    if (
-      is_scalar_type(member_type) &&
-      !has_field_at(value->type, member_offs, member_type, ns) &&
-      occupies_whole_bytes(member_offs, type_byte_size_bits(member_type)) &&
-      !options.get_bool_option("int-encoding"))
-      construct_from_bytes(field, gen_ulong(member_offs), member_type);
-    else
-      build_reference_rec(
-        field, gen_ulong(member_offs), member_type, guard, mode);
+    expr2tc field = construct_member_from_members(
+      value, member_offs, structtype.members[i], guard, mode);
     if (is_nil_expr(field))
       return expr2tc();
     fields.push_back(field);

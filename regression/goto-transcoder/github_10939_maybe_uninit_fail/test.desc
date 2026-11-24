@@ -1,0 +1,6 @@
+CORE
+main.goto
+--binary
+^VERIFICATION FAILED$
+FAILED +\[main\.assertion\.[0-9]+\] +line +[0-9]+ +assertion a\.value\.value\[0\] == 0x11
+^\*\* 1 of [0-9]+ properties failed
