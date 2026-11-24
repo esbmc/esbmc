@@ -9,6 +9,7 @@
 #include <sstream>
 #include <string>
 #include <util/base/breakpoint.h>
+#include <util/base/filesystem.h>
 #include <util/lang/c_types.h>
 #include <util/config/config.h>
 #include <util/expr/expr_util.h>
@@ -389,12 +390,18 @@ void execution_statet::symex_step(reachability_treet &art)
     symex_end_function(art, instruction);
     break;
   case ATOMIC_BEGIN:
+    record_atomic_event(symex_targett::ATOMIC_BEGIN, instruction);
     state.source.pc++;
     increment_active_atomic_number();
     break;
   case ATOMIC_END:
     decrement_active_atomic_number();
+    record_atomic_event(symex_targett::ATOMIC_END, instruction);
     state.source.pc++;
+    break;
+  case FUNCTION_CALL:
+    if (!partial_order || !partial_order_join(instruction))
+      goto_symext::symex_step(art);
     break;
   case RETURN:
     if (
@@ -1105,6 +1112,70 @@ void execution_statet::record_shared_write(const expr2tc &code)
     symex_targett::SHARED_WRITE,
     sym,
     cur_state->source);
+}
+
+void execution_statet::record_thread_event(
+  symex_targett::step_typet type,
+  unsigned int tid)
+{
+  if (!partial_order || cur_state->guard.is_false())
+    return;
+  target->event(
+    cur_state->guard.as_expr(),
+    type,
+    constant_int2tc(get_uint32_type(), BigInt(tid)),
+    cur_state->source);
+}
+
+void execution_statet::record_atomic_event(
+  symex_targett::step_typet type,
+  const goto_programt::instructiont &instruction)
+{
+  // The operational model's own atomic sections guard its bookkeeping, which
+  // --partial-order renames sequentially rather than as events.
+  if (
+    !partial_order || cur_state->guard.is_false() ||
+    file_operations::is_bundled_source(
+      instruction.location.get_file().as_string()))
+    return;
+  target->event(cur_state->guard.as_expr(), type, expr2tc(), cur_state->source);
+}
+
+bool execution_statet::partial_order_join(
+  const goto_programt::instructiont &instruction)
+{
+  const code_function_call2t &call = to_code_function_call2t(instruction.code);
+  if (
+    !is_symbol2t(call.function) || !to_symbol2t(call.function)
+                                      .thename.as_string()
+                                      .starts_with("c:@F@pthread_join"))
+    return false;
+
+  if (!cur_state->guard.is_false())
+  {
+    expr2tc tid = call.operands.at(0);
+    cur_state->rename(tid);
+    simplify(tid);
+    if (!is_constant_int2t(tid))
+    {
+      log_error(
+        "--partial-order needs the thread a join waits for to be known "
+        "during symbolic execution, at {}",
+        instruction.location.as_string());
+      abort();
+    }
+    record_thread_event(
+      symex_targett::JOIN, to_constant_int2t(tid).value.to_uint64());
+
+    if (!is_nil_expr(call.ret))
+    {
+      expr2tc ret = call.ret;
+      dereference(ret, dereferencet::WRITE);
+      symex_assign(code_assign2tc(ret, gen_zero(ret->type)), true, guard2tc());
+    }
+  }
+  cur_state->source.pc++;
+  return true;
 }
 
 void execution_statet::analyze_args(const expr2tc &expr)

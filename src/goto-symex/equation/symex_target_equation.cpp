@@ -613,7 +613,10 @@ void symex_target_equationt::SSA_stept::output(
     out << "SHARED_WRITE " << to_symbol2t(lhs).get_symbol_name() << "\n";
     break;
   case symex_targett::SPAWN:
-    out << "SPAWN\n";
+    out << "SPAWN " << to_constant_int2t(lhs).as_ulong() << "\n";
+    break;
+  case symex_targett::JOIN:
+    out << "JOIN " << to_constant_int2t(lhs).as_ulong() << "\n";
     break;
   case symex_targett::ATOMIC_BEGIN:
     out << "ATOMIC_BEGIN\n";

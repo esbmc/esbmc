@@ -80,6 +80,38 @@ bool mentions(const expr2tc &e, const expr2tc &sym)
   return found;
 }
 
+void substitute(expr2tc &e, const valuation &v)
+{
+  auto it = v.find(e);
+  if (it != v.end())
+  {
+    e = it->second;
+    return;
+  }
+  e->Foreach_operand([&](expr2tc &op) { substitute(op, v); });
+}
+
+bool all_hold(const symex_target_equationt &eq, const valuation &v)
+{
+  for (const auto &step : eq.SSA_steps)
+  {
+    if (!step.is_assume())
+      continue;
+    expr2tc cond = step.cond;
+    substitute(cond, v);
+    simplify(cond);
+    REQUIRE(is_constant_bool2t(cond));
+    if (is_false(cond))
+      return false;
+  }
+  return true;
+}
+
+expr2tc thread_id(unsigned t)
+{
+  return constant_int2tc(get_uint32_type(), BigInt(t));
+}
+
 /// Events 0: W x#1 (thread 0), 1: R x#3 (thread 0), 2: W x#2 (thread 1).
 struct write_read_writet
 {
@@ -95,31 +127,9 @@ struct write_read_writet
     memory_model_sct().run(eq.SSA_steps);
   }
 
-  void substitute(expr2tc &e, const valuation &v) const
-  {
-    auto it = v.find(e);
-    if (it != v.end())
-    {
-      e = it->second;
-      return;
-    }
-    e->Foreach_operand([&](expr2tc &op) { substitute(op, v); });
-  }
-
   bool holds(const valuation &v) const
   {
-    for (const auto &step : eq.SSA_steps)
-    {
-      if (!step.is_assume())
-        continue;
-      expr2tc cond = step.cond;
-      substitute(cond, v);
-      simplify(cond);
-      REQUIRE(is_constant_bool2t(cond));
-      if (is_false(cond))
-        return false;
-    }
-    return true;
+    return all_hold(eq, v);
   }
 };
 
@@ -243,4 +253,84 @@ TEST_CASE("a thread never reads its own later write", "[po]")
   }
   CHECK_FALSE(own);
   CHECK(other);
+}
+
+/// Events 0: SPAWN 1 (thread 0), 1: W x#1 (thread 1), 2: JOIN 1 (thread 0).
+struct spawn_joint
+{
+  contextt ctx;
+  namespacet ns{ctx};
+  symex_target_equationt eq{ns};
+
+  spawn_joint()
+  {
+    add_event(eq, 0, symex_targett::SPAWN, thread_id(1));
+    add_event(eq, 1, symex_targett::SHARED_WRITE, x(1));
+    add_event(eq, 0, symex_targett::JOIN, thread_id(1));
+    memory_model_sct().run(eq.SSA_steps);
+  }
+};
+
+valuation clocks(unsigned c0, unsigned c1, unsigned c2)
+{
+  return {{clock(0), tick(c0)}, {clock(1), tick(c1)}, {clock(2), tick(c2)}};
+}
+
+TEST_CASE("a spawned thread runs between its spawn and join", "[po]")
+{
+  spawn_joint f;
+  CHECK(all_hold(f.eq, clocks(1, 2, 3)));
+  CHECK_FALSE(all_hold(f.eq, clocks(2, 1, 3)));
+  CHECK_FALSE(all_hold(f.eq, clocks(1, 3, 2)));
+}
+
+/// Events 0: ATOMIC_BEGIN, 1: W x#1, 2: ATOMIC_END (thread 0), 3: W x#2
+/// (thread 1).
+struct atomic_sectiont
+{
+  contextt ctx;
+  namespacet ns{ctx};
+  symex_target_equationt eq{ns};
+
+  atomic_sectiont()
+  {
+    add_event(eq, 0, symex_targett::ATOMIC_BEGIN, expr2tc());
+    add_event(eq, 0, symex_targett::SHARED_WRITE, x(1));
+    add_event(eq, 0, symex_targett::ATOMIC_END, expr2tc());
+    add_event(eq, 1, symex_targett::SHARED_WRITE, x(2));
+    memory_model_sct().run(eq.SSA_steps);
+  }
+
+  bool holds_with_other_at(unsigned c3) const
+  {
+    valuation v = clocks(2, 4, 6);
+    v[clock(3)] = tick(c3);
+    return all_hold(eq, v);
+  }
+};
+
+TEST_CASE("no other thread's event falls inside an atomic section", "[po]")
+{
+  atomic_sectiont f;
+  CHECK(f.holds_with_other_at(1));
+  CHECK(f.holds_with_other_at(7));
+  CHECK_FALSE(f.holds_with_other_at(3));
+  CHECK_FALSE(f.holds_with_other_at(5));
+}
+
+TEST_CASE("a section left open lasts to its thread's end", "[po]")
+{
+  contextt ctx;
+  namespacet ns(ctx);
+  symex_target_equationt eq(ns);
+  add_event(eq, 0, symex_targett::ATOMIC_BEGIN, expr2tc());
+  add_event(eq, 0, symex_targett::SHARED_WRITE, x(1));
+  add_event(eq, 1, symex_targett::SHARED_WRITE, x(2));
+  memory_model_sct().run(eq.SSA_steps);
+
+  valuation v = {{clock(0), tick(1)}, {clock(1), tick(3)}};
+  v[clock(2)] = tick(2);
+  CHECK_FALSE(all_hold(eq, v));
+  v[clock(2)] = tick(4);
+  CHECK(all_hold(eq, v));
 }

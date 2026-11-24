@@ -471,6 +471,21 @@ public:
    *  defines as a SHARED_WRITE event. */
   void record_shared_write(const expr2tc &code);
 
+  /** --partial-order: record a SPAWN or JOIN event naming thread \p tid. */
+  void record_thread_event(symex_targett::step_typet type, unsigned int tid);
+
+  /** --partial-order: record an ATOMIC_BEGIN or ATOMIC_END event for an
+   *  atomic section in user code. */
+  void record_atomic_event(
+    symex_targett::step_typet type,
+    const goto_programt::instructiont &instruction);
+
+  /** --partial-order: replace a pthread_join call by a JOIN event. The
+   *  operational model's join waits for the thread to end, which never
+   *  happens here because the thread runs after its joiner in the equation.
+   *  @return Whether \p instruction was such a call */
+  bool partial_order_join(const goto_programt::instructiont &instruction);
+
   /** Kind of memory access, used by get_expr_globals to decide whether a
    *  read-only global can be filtered out of cswitch-triggering sets. */
   enum class access_kindt

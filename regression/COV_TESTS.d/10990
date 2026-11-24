@@ -16,6 +16,14 @@ regression/esbmc-unix/partial_order_latest_write
 regression/esbmc-unix/partial_order_latest_write_fail
 regression/esbmc-unix/partial_order_no_later_write
 regression/esbmc-unix/partial_order_no_later_write_fail
-regression/esbmc-unix/partial_order_reject_verify_join
+regression/esbmc-unix/partial_order_reject_verify_lock
 regression/esbmc-unix/partial_order_reject_verify_assume
 regression/esbmc-unix/partial_order_no_slice
+regression/esbmc-unix/partial_order_spawn
+regression/esbmc-unix/partial_order_spawn_fail
+regression/esbmc-unix/partial_order_join
+regression/esbmc-unix/partial_order_join_fail
+regression/esbmc-unix/partial_order_atomic
+regression/esbmc-unix/partial_order_atomic_fail
+regression/esbmc-unix/partial_order_reject_global_thread_id
+regression/esbmc-unix/partial_order_events_threads

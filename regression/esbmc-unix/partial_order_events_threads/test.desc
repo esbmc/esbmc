@@ -1,0 +1,9 @@
+CORE
+main.c
+--partial-order --program-only
+^/\* \d+ \*/ Thread 0 file .*pthread_lib\.c line \d+ .*function pthread_create\nSPAWN 1$
+^/\* \d+ \*/ Thread 0 file .*main\.c line 16 .*\nJOIN 1$
+^/\* \d+ \*/ Thread 1 file .*main\.c line 7 .*\nATOMIC_BEGIN$
+^/\* \d+ \*/ Thread 1 file .*main\.c line 9 .*\nATOMIC_END$
+\A(?![\s\S]*pthread_lib\.c[^\n]*\nATOMIC_)[\s\S]*\Z
+\A(?![\s\S]*VERIFICATION)[\s\S]*\Z

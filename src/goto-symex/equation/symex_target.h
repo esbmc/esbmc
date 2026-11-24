@@ -30,6 +30,7 @@ public:
     SHARED_READ,
     SHARED_WRITE,
     SPAWN,
+    JOIN,
     ATOMIC_BEGIN,
     ATOMIC_END
   };
@@ -99,7 +100,8 @@ public:
     unsigned loop_number) = 0;
 
   /// Record a --partial-order event. \p symbol is the SSA symbol a shared
-  /// read or write accesses, and nil for the other event types.
+  /// read or write accesses, the thread id a spawn creates or a join waits
+  /// for, and nil for an atomic-section event.
   virtual void event(
     const expr2tc &guard,
     step_typet type,

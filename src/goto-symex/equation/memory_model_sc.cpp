@@ -9,6 +9,11 @@ irep_idt object_of(const symex_target_equationt::SSA_stept &step)
 {
   return to_symbol2t(step.lhs).thename;
 }
+
+unsigned thread_of(const symex_target_equationt::SSA_stept &step)
+{
+  return to_constant_int2t(step.lhs).value.to_uint64();
+}
 } // namespace
 
 bool memory_model_sct::run(symex_target_equationt::SSA_stepst &steps)
@@ -17,12 +22,16 @@ bool memory_model_sct::run(symex_target_equationt::SSA_stepst &steps)
   per_thread.clear();
   reads.clear();
   writes.clear();
+  spawns.clear();
+  joins.clear();
   constraints.clear();
 
   collect(steps);
   program_order();
   write_order();
   read_from();
+  thread_order();
+  atomic_sections();
 
   steps.splice(steps.begin(), constraints);
   return true;
@@ -45,6 +54,10 @@ void memory_model_sct::collect(const symex_target_equationt::SSA_stepst &steps)
       reads[object_of(step)].push_back(id);
     else if (step.type == symex_targett::SHARED_WRITE)
       writes[object_of(step)].push_back(id);
+    else if (step.type == symex_targett::SPAWN)
+      spawns.push_back(id);
+    else if (step.type == symex_targett::JOIN)
+      joins.push_back(id);
   }
 }
 
@@ -116,6 +129,58 @@ void memory_model_sct::read_from()
         constrain(implies2tc(read.step->guard, disjunction(choices)), read);
     }
   }
+}
+
+void memory_model_sct::thread_order()
+{
+  for (size_t s : spawns)
+  {
+    auto it = per_thread.find(thread_of(*events[s].step));
+    if (it != per_thread.end())
+      constrain(
+        implies2tc(events[s].step->guard, before(s, it->second.front())),
+        events[s]);
+  }
+
+  for (size_t j : joins)
+  {
+    auto it = per_thread.find(thread_of(*events[j].step));
+    if (it != per_thread.end())
+      constrain(
+        implies2tc(events[j].step->guard, before(it->second.back(), j)),
+        events[j]);
+  }
+}
+
+void memory_model_sct::atomic_sections()
+{
+  for (const auto &[thread, ids] : per_thread)
+  {
+    unsigned depth = 0;
+    size_t begin = 0;
+    for (size_t id : ids)
+    {
+      const symex_targett::step_typet type = events[id].step->type;
+      if (type == symex_targett::ATOMIC_BEGIN && depth++ == 0)
+        begin = id;
+      else if (type == symex_targett::ATOMIC_END && depth > 0 && --depth == 0)
+        isolate(begin, id);
+    }
+    // A section still open when its thread ends lasts to the thread's end.
+    if (depth > 0)
+      isolate(begin, ids.back());
+  }
+}
+
+void memory_model_sct::isolate(size_t begin, size_t end)
+{
+  for (size_t other = 0; other < events.size(); ++other)
+    if (!same_thread(other, begin))
+      constrain(
+        implies2tc(
+          events[begin].step->guard,
+          or2tc(before(other, begin), before(end, other))),
+        events[begin]);
 }
 
 void memory_model_sct::constrain(const expr2tc &cond, const eventt &about)
