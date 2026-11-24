@@ -1686,19 +1686,22 @@ bool fix_builtin_call(irept &code)
   // __builtin___*_chk calls, which carry the destination's
   // __builtin_object_size as a trailing argument and have no body here. Drop
   // that argument: the copy's own bounds check already reports an overflow of
-  // the destination object.
-  static const std::unordered_map<std::string, const char *> fortified = {
-    {"__builtin___memcpy_chk", "c:@F@__ESBMC_memcpy"},
-    {"__builtin___memmove_chk", "c:@F@__ESBMC_memmove"},
-    {"__builtin___memset_chk", "c:@F@__ESBMC_memset"},
-    {"__builtin___strcpy_chk", "c:@F@strcpy"},
-    {"__builtin___strncpy_chk", "c:@F@strncpy"},
-    {"__builtin___strcat_chk", "c:@F@strcat"},
-    {"__builtin___strncat_chk", "c:@F@strncat"}};
+  // the destination object. A call of any other arity is left bodyless.
+  static const std::unordered_map<std::string, std::pair<const char *, size_t>>
+    fortified = {
+      {"__builtin___memcpy_chk", {"c:@F@__ESBMC_memcpy", 4}},
+      {"__builtin___memmove_chk", {"c:@F@__ESBMC_memmove", 4}},
+      {"__builtin___memset_chk", {"c:@F@__ESBMC_memset", 4}},
+      {"__builtin___strcpy_chk", {"c:@F@strcpy", 3}},
+      {"__builtin___strncpy_chk", {"c:@F@strncpy", 4}},
+      {"__builtin___strcat_chk", {"c:@F@strcat", 3}},
+      {"__builtin___strncat_chk", {"c:@F@strncat", 4}}};
   auto chk_it = fortified.find(callee);
-  if (chk_it != fortified.end() && !sub[2].get_sub().empty())
+  if (
+    chk_it != fortified.end() &&
+    sub[2].get_sub().size() == chk_it->second.second)
   {
-    code.get_sub()[1].set("identifier", chk_it->second);
+    code.get_sub()[1].set("identifier", chk_it->second.first);
     code.get_sub()[2].get_sub().pop_back();
     return false;
   }
