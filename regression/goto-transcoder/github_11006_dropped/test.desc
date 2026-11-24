@@ -1,0 +1,7 @@
+CORE
+main.goto
+--binary --loop-invariant-check --unwind 8
+^WARNING: CBMC adapter: ignoring a loop invariant: CBMC adapter: __CPROVER_DYNAMIC_OBJECT
+^WARNING: CBMC goto-binary: ignoring a loop invariant: migrate expr failed: pointer_in_range$
+^WARNING: CBMC goto-binary: ignoring a loop invariant with a side effect$
+^VERIFICATION SUCCESSFUL$

@@ -4,6 +4,7 @@
 // mirror the Rust to keep the two implementations easy to diff.
 
 #include <goto-programs/cbmc_adapter.h>
+#include <util/config/config.h>
 #include <util/lang/c_types.h>
 #include <util/message/message.h>
 
@@ -2160,6 +2161,55 @@ const char *rewrite_whole_object_codet(
     "' whole-object operations are not yet supported on the --binary path");
 }
 
+// __CPROVER_loop_entry(e) and __CPROVER_old(e), which ESBMC cannot express.
+bool uses_history_variable(const irept &i)
+{
+  if ((i.id() == "loop_entry" || i.id() == "old") && !i.get_sub().empty())
+    return true;
+  for (const auto &s : i.get_sub())
+    if (uses_history_variable(s))
+      return true;
+  for (const auto &p : i.get_named_sub())
+    if (uses_history_variable(p.second))
+      return true;
+  return false;
+}
+
+// goto-cc and Kani keep a loop's invariant as a comment on its back edge's
+// guard, which fix_expression does not visit. Only the loop-invariant modes
+// read it, so leave it alone otherwise. Dropping an invariant is sound: the
+// loop is then handled as if it had none.
+void lift_loop_invariant(const irept &guard, irept &instruction)
+{
+  const irept &invariant = guard.find("#spec_loop_invariant");
+  if (
+    invariant.is_nil() ||
+    !(config.options.get_bool_option("loop-invariant") ||
+      config.options.get_bool_option("loop-invariant-check") ||
+      config.options.get_bool_option("synthesise-loop-invariants")))
+    return;
+
+  if (uses_history_variable(invariant))
+  {
+    log_warning(
+      "CBMC adapter: ignoring a loop invariant that uses "
+      "__CPROVER_loop_entry or __CPROVER_old");
+    return;
+  }
+
+  irept fixed = invariant;
+  try
+  {
+    fix_expression(fixed);
+  }
+  catch (const std::string &e)
+  {
+    log_warning("CBMC adapter: ignoring a loop invariant: {}", e);
+    return;
+  }
+  instruction.add("loop_invariant") = fixed;
+}
+
 irept instruction_to_esbmc_irep(
   const cbmc_instructiont &ins,
   const std::map<unsigned, unsigned> &target_revmap,
@@ -2228,6 +2278,7 @@ irept instruction_to_esbmc_irep(
   result.add("function") = mk(function_name);
 
   fix_expression(result);
+  lift_loop_invariant(ins.guard, result);
 
   // fix_expression is what turns java_new_array_data into a marked malloc, so
   // the extent is only visible now. Record it against the payload symbol for
