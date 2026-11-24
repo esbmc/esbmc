@@ -666,13 +666,22 @@ private:
     const type2tc &type,
     const guard2tc &guard,
     modet mode);
-  /** Build a struct of \p type from the members of \p value that lie at
-   *  \p offset_bits onwards, one target member at a time; nil if \p type is
-   *  not a struct, does not fit in \p value, or a member cannot be built. */
+  /** Build a struct or union of \p type from the members of \p value that lie
+   *  at \p offset_bits onwards, one target member at a time (a union through
+   *  its first member as wide as itself); nil if \p type is neither, does not
+   *  fit in \p value, or a member cannot be built. */
   expr2tc construct_struct_from_members(
     const expr2tc &value,
     const BigInt &offset_bits,
     const type2tc &type,
+    const guard2tc &guard,
+    modet mode);
+  /** One member of construct_struct_from_members' result: \p member_type
+   *  read from \p value at \p member_offs, or nil. */
+  expr2tc construct_member_from_members(
+    const expr2tc &value,
+    const BigInt &member_offs,
+    const type2tc &member_type,
     const guard2tc &guard,
     modet mode);
   void construct_struct_ref_from_dyn_offset(
@@ -681,8 +690,8 @@ private:
     const type2tc &type,
     const guard2tc &guard,
     modet mode);
-  /** Add to \p output the struct of \p type rebuilt from the members of
-   *  \p value at offset 0, as construct_struct_ref_from_const_offset does,
+  /** Add to \p output the struct or union of \p type rebuilt from the members
+   *  of \p value at offset 0, as construct_struct_ref_from_const_offset does,
    *  guarded by \p offs being zero (#10891). */
   void add_rebuilt_struct_candidate(
     const expr2tc &value,
