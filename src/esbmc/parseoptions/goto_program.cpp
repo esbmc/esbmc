@@ -705,8 +705,9 @@ skip_property_classes(const cmdlinet &cmdline, goto_functionst &goto_functions)
 // type onto the bodyless
 // declaration lets symex resolve the call: argument_assignments binds actual
 // args using the copied type's parameter names, which match the copied body
-// (goto-symex/engine/symex_function.cpp). The string bodies are byte loops, so
-// a call with a symbolic length needs an `--unwind` bound like any other loop.
+// (goto-symex/engine/symex_function.cpp). The string bodies, and calloc's zero
+// fill, are byte loops, so a call with a symbolic length needs an `--unwind`
+// bound like any other loop.
 static void link_cbmc_libc_bodies(goto_functionst &goto_functions)
 {
   static const char *const libc[] = {
@@ -722,7 +723,7 @@ static void link_cbmc_libc_bodies(goto_functionst &goto_functions)
     "iscntrl",       "isdigit",       "isgraph",   "islower",  "isprint",
     "fesetround",    "fegetround",    "ispunct",   "isspace",  "isupper",
     "isxdigit",      "tolower",       "toupper",   "atoi",     "atol",
-    "strtol"};
+    "strtol",        "calloc"};
 
   for (const char *name : libc)
   {
@@ -850,6 +851,7 @@ bool esbmc_parseoptionst::synthesize_cprover_additions(
     "  (void *)isspace,   (void *)isupper,  (void *)isxdigit,\n"
     "  (void *)tolower,   (void *)toupper,\n"
     "  (void *)atoi,      (void *)atol,     (void *)strtol,\n"
+    "  (void *)calloc,\n"
     "  (void *)__cbmc_is_fresh_impl, (void *)__cbmc_is_fresh_check_impl,\n"
     "  (void *)fesetround, (void *)fegetround,\n"
     "};\n"
