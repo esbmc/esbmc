@@ -829,6 +829,40 @@ static inline expr2tc do_memcpy_expression(
   return copy_primitive(dst, dst_offset, src, src_offset, num_of_bytes);
 }
 
+static bool is_byte_array(const expr2tc &object)
+{
+  return is_array_type(object) && !multibyte_array(object);
+}
+
+/* @p dst with bytes [dst_off, dst_off+n) taken from @p src at @p src_off, for
+ * a symbolic @p n: one array_lambda, which reads simplify to a single ite, in
+ * place of a per-byte chain as long as the object. Both arrays are read before
+ * the assignment, so an overlapping copy has memmove semantics. */
+static expr2tc copy_byte_range(
+  const expr2tc &dst,
+  uint64_t dst_off,
+  const expr2tc &src,
+  uint64_t src_off,
+  const expr2tc &n)
+{
+  static unsigned binders = 0;
+  const type2tc &t = n->type;
+  const expr2tc j =
+    symbol2tc(t, fmt::format("__ESBMC_memcpy_index${}", binders++));
+  const expr2tc rel = sub2tc(t, j, constant_int2tc(t, BigInt(dst_off)));
+  const expr2tc within = and2tc(
+    lessthanequal2tc(constant_int2tc(t, BigInt(dst_off)), j),
+    lessthan2tc(rel, n));
+  const type2tc &dst_elem = to_array_type(dst->type).subtype;
+  const type2tc &src_elem = to_array_type(src->type).subtype;
+  expr2tc from = index2tc(
+    src_elem, src, add2tc(t, rel, constant_int2tc(t, BigInt(src_off))));
+  if (src_elem != dst_elem)
+    from = typecast2tc(dst_elem, from);
+  return array_lambda2tc(
+    dst->type, j, if2tc(dst_elem, within, from, index2tc(dst_elem, dst, j)));
+}
+
 static void offset_simplifier(expr2tc &e)
 {
   simplify(e);
@@ -910,7 +944,8 @@ bool goto_symext::memcpy_symbolic_length(
   const expr2tc &n_arg)
 {
   // Same cap and rationale as intrinsic_memcmp's: past this the ite chain
-  // costs more than the C loop it replaces.
+  // costs more than the C loop it replaces, so a larger copy between byte
+  // arrays is one array_lambda instead (#11005).
   static const uint64_t MAX_MEMCPY_UNROLL = 64;
 
   // Passing 0 for the length puts the resolver in its symbolic-length mode:
@@ -924,7 +959,10 @@ bool goto_symext::memcpy_symbolic_length(
     return false;
 
   const uint64_t nbytes = std::min(src_avail, dst_avail);
-  if (nbytes == 0 || nbytes > MAX_MEMCPY_UNROLL)
+  const bool as_lambda = nbytes > MAX_MEMCPY_UNROLL;
+  if (
+    nbytes == 0 ||
+    (as_lambda && (!is_byte_array(src_obj) || !is_byte_array(dst_obj))))
     return false;
 
   // Soundness: only the first nbytes bytes are modelled, so if n could exceed
@@ -950,8 +988,10 @@ bool goto_symext::memcpy_symbolic_length(
   const bool be = config.ansi_c.endianess == configt::ansi_ct::IS_BIG_ENDIAN;
   const type2tc n_t = n_arg->type;
 
-  expr2tc res = dst_obj;
-  for (uint64_t i = 0; i < nbytes; ++i)
+  expr2tc res = as_lambda
+                  ? copy_byte_range(dst_obj, dst_off, src_obj, src_off, n_arg)
+                  : dst_obj;
+  for (uint64_t i = 0; !as_lambda && i < nbytes; ++i)
   {
     expr2tc src_byte = object_byte(src_obj, src_off + i, be);
     expr2tc dst_byte = object_byte(dst_obj, dst_off + i, be);

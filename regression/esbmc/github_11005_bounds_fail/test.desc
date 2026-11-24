@@ -1,0 +1,5 @@
+CORE
+main.c
+
+^  dereference failure: memcpy length exceeds object bounds$
+^VERIFICATION FAILED$
