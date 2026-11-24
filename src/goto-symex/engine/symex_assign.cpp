@@ -1147,10 +1147,11 @@ expr2tc goto_symext::merge_member_stores(
   {
     member_path.back() = type.member_names[i];
     expr2tc value = member2tc(type.members[i], obj, type.member_names[i]);
-    if (std::any_of(
-          stores.begin(), stores.end(), [&member_path](const member_store &s) {
-            return is_strict_prefix(member_path, s.path);
-          }))
+    if (
+      std::any_of(
+        stores.begin(), stores.end(), [&member_path](const member_store &s) {
+          return is_strict_prefix(member_path, s.path);
+        }))
       value = merge_member_stores(value, member_path, stores, guarded);
     for (const member_store &store : stores)
     {
