@@ -43,25 +43,44 @@ object_byte(const expr2tc &object, uint64_t offset, bool big_endian)
     big_endian);
 }
 
-/** @p object with byte @p offset replaced by @p byte. */
-static expr2tc update_object_byte(
+/** @p object with the @p n bytes from @p offset replaced by @p bytes. Each
+ * array element is rebuilt from @p object's own element, not from the partial
+ * result, so the term stays linear in @p n. */
+static expr2tc update_object_bytes(
   const expr2tc &object,
   uint64_t offset,
-  const expr2tc &byte,
+  const expr2tc *bytes,
+  uint64_t n,
   bool big_endian)
 {
+  expr2tc res = object;
   const array_type2t *arr = multibyte_array(object);
   if (!arr)
-    return byte_update2tc(
-      object->type, object, gen_ulong(offset), byte, big_endian);
+  {
+    for (uint64_t i = 0; i < n; i++)
+      res = byte_update2tc(
+        object->type, res, gen_ulong(offset + i), bytes[i], big_endian);
+    return res;
+  }
   const uint64_t size = type_byte_size(arr->subtype).to_uint64();
-  const expr2tc index = gen_ulong(offset / size);
-  return with2tc(
-    object->type,
-    object,
-    index,
-    update_object_byte(
-      index2tc(arr->subtype, object, index), offset % size, byte, big_endian));
+  for (uint64_t i = 0; i < n;)
+  {
+    const uint64_t rel = (offset + i) % size;
+    const uint64_t chunk = std::min(size - rel, n - i);
+    const expr2tc index = gen_ulong((offset + i) / size);
+    res = with2tc(
+      object->type,
+      res,
+      index,
+      update_object_bytes(
+        index2tc(arr->subtype, object, index),
+        rel,
+        bytes + i,
+        chunk,
+        big_endian));
+    i += chunk;
+  }
+  return res;
 }
 
 static bool target_is_big_endian()
@@ -909,9 +928,9 @@ bool goto_symext::memcpy_symbolic_length(
   const expr2tc &src_arg,
   const expr2tc &n_arg)
 {
-  // Same cap and rationale as intrinsic_memcmp's: past this the ite chain
-  // costs more than the C loop it replaces.
-  static const uint64_t MAX_MEMCPY_UNROLL = 64;
+  // Past this the ite chain costs more than the C loop it replaces; a 4 KiB
+  // copy into an int array solves in about a second (#11005).
+  static const uint64_t MAX_MEMCPY_UNROLL = 4096;
 
   // Passing 0 for the length puts the resolver in its symbolic-length mode:
   // it reports the bytes available in each object instead of range-checking a
@@ -950,15 +969,17 @@ bool goto_symext::memcpy_symbolic_length(
   const bool be = config.ansi_c.endianess == configt::ansi_ct::IS_BIG_ENDIAN;
   const type2tc n_t = n_arg->type;
 
-  expr2tc res = dst_obj;
+  std::vector<expr2tc> new_bytes;
+  new_bytes.reserve(nbytes);
   for (uint64_t i = 0; i < nbytes; ++i)
   {
     expr2tc src_byte = object_byte(src_obj, src_off + i, be);
     expr2tc dst_byte = object_byte(dst_obj, dst_off + i, be);
     expr2tc within = lessthan2tc(constant_int2tc(n_t, BigInt(i)), n_arg);
-    expr2tc new_byte = if2tc(byte_t, within, src_byte, dst_byte);
-    res = update_object_byte(res, dst_off + i, new_byte, be);
+    new_bytes.push_back(if2tc(byte_t, within, src_byte, dst_byte));
   }
+  expr2tc res =
+    update_object_bytes(dst_obj, dst_off, new_bytes.data(), nbytes, be);
 
   check_read_only_write(
     dst_obj,
