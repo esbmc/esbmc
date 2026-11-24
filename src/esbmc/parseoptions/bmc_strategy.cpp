@@ -965,6 +965,7 @@ int esbmc_parseoptionst::falsify_with_bounded_schedules(
         "inductive-step",
         "multi-property",
         "incremental-context-bound",
+        "partial-order",
         "show-vcc",
         "smt-formula-only",
         "smt-formula-too"})

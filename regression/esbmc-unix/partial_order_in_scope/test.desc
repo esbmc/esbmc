@@ -1,0 +1,5 @@
+CORE
+main.c
+--partial-order
+^ERROR: --partial-order cannot verify yet \(#10990\)$
+\A(?![\s\S]*VERIFICATION)[\s\S]*\Z

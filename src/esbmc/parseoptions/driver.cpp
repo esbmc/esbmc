@@ -43,6 +43,7 @@ extern "C"
 #include <goto-programs/add_restrict_assertions.h>
 #include <goto-programs/goto_atomicity_check.h>
 #include <goto-programs/goto_check.h>
+#include <goto-programs/partial_order_scope.h>
 #include <goto-programs/goto_convert_functions.h>
 #include <goto-programs/goto_inline.h>
 #include <goto-programs/goto_k_induction.h>
@@ -185,6 +186,46 @@ static bool schedule_conflicts(const cmdlinet &cmdline)
   return true;
 }
 
+/// --partial-order runs each thread once and lets the solver order the shared
+/// accesses (#10990), so the interleaving explorers, the unwinding strategies
+/// and the checks that need a scheduler or a trace are out of its scope.
+static bool partial_order_conflicts(const cmdlinet &cmdline)
+{
+  if (!cmdline.isset("partial-order"))
+    return false;
+
+  for (const char *incompatible :
+       {"schedule",
+        "incremental-context-bound",
+        "state-hashing",
+        "k-induction",
+        "k-induction-parallel",
+        "incremental-bmc",
+        "falsification",
+        "termination",
+        "deadlock-check",
+        "data-races-check",
+        "data-races-check-only",
+        "lock-order-check",
+        "atomicity-check",
+        "ltl",
+        "interactive-ileaves",
+        "witness-output",
+        "witness-output-graphml",
+        "witness-output-yaml"})
+    if (cmdline.isset(incompatible))
+    {
+      log_error("--partial-order cannot be combined with --{}", incompatible);
+      return true;
+    }
+  return false;
+}
+
+static bool concurrency_mode_conflicts(const cmdlinet &cmdline)
+{
+  return schedule_conflicts(cmdline) || partial_order_conflicts(cmdline);
+}
+
 /// The flag combinations that cannot produce a sound report, rejected
 /// before any work is done. Kept out of doit() so every combination check
 /// reads in one place.
@@ -303,7 +344,7 @@ static bool incompatible_flags(const cmdlinet &cmdline)
   if (parallel_solving_conflicts(cmdline))
     return true;
 
-  if (schedule_conflicts(cmdline))
+  if (concurrency_mode_conflicts(cmdline))
     return true;
 
   // --incremental-context-bound owns the outer verification loop, re-running
@@ -444,6 +485,14 @@ void esbmc_parseoptionst::default_kani_strategy()
 //    - Perform a single run of Bounded Model Checking and rely
 //      on the simplifier to determine the sufficient verification bound
 //      (see "do_bmc")
+int esbmc_parseoptionst::do_partial_order(const goto_functionst &goto_functions)
+{
+  if (!partial_order_in_scope(goto_functions, namespacet(context)))
+    return 1;
+  log_error("--partial-order cannot verify yet (#10990)");
+  return 1;
+}
+
 int esbmc_parseoptionst::run_chosen_strategy(
   optionst &options,
   goto_functionst &goto_functions)
@@ -466,6 +515,9 @@ int esbmc_parseoptionst::run_chosen_strategy(
       "verification strategy");
     return 1;
   }
+
+  if (options.get_bool_option("partial-order"))
+    return do_partial_order(goto_functions);
 
   if (cmdline.isset("incremental-context-bound"))
     return do_context_bound_deepening(options, goto_functions);
