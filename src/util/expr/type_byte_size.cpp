@@ -258,6 +258,23 @@ BigInt type_byte_size_default(
   }
 }
 
+/// A _BitInt(N) with N not a multiple of the byte width occupies the smallest
+/// power-of-two byte count holding N bits (#9351).
+static BigInt padded_bv_bits(const BigInt &bits)
+{
+  if (bits % 8 == 0)
+    return bits;
+  BigInt bytes = 1;
+  while (bits > bytes * 8)
+    bytes *= 2;
+  return bytes * 8;
+}
+
+static BigInt array_element_bits(const type2tc &sub, const BigInt &bits)
+{
+  return is_bv_type(sub) ? padded_bv_bits(bits) : bits;
+}
+
 BigInt type_sizet::size_bits(const type2tc &type)
 {
   switch (type->type_id)
@@ -310,7 +327,8 @@ BigInt type_sizet::size_bits(const type2tc &type)
     if (!is_constant_int2t(arrsize))
       throw array_type2t::dyn_sized_array_excp(arrsize);
 
-    BigInt subsize = size_bits(array_or_vector_subtype(type));
+    const type2tc &subtype = array_or_vector_subtype(type);
+    BigInt subsize = array_element_bits(subtype, size_bits(subtype));
     const constant_int2t &arrsize_int = to_constant_int2t(arrsize);
     return subsize * arrsize_int.value;
   }
@@ -365,6 +383,8 @@ BigInt type_byte_size_bits(const type2tc &type, const namespacet *ns)
 BigInt type_byte_size(const type2tc &type, const namespacet *ns)
 {
   BigInt bits = type_byte_size_bits(type, ns);
+  if (is_bv_type(type))
+    bits = padded_bv_bits(bits);
 
   return (bits + 7) / 8;
 }
@@ -427,8 +447,12 @@ expr2tc type_sizet::size_bits_expr(const type2tc &type)
     expr2tc arrsize = array_or_vector_size(type);
     simplify(arrsize);
 
-    expr2tc subsize = size_bits_expr(array_or_vector_subtype(type));
+    const type2tc &subtype = array_or_vector_subtype(type);
+    expr2tc subsize = size_bits_expr(subtype);
     simplify(subsize);
+    if (is_constant_int2t(subsize))
+      subsize =
+        bitsize(array_element_bits(subtype, to_constant_int2t(subsize).value));
 
     if (is_constant_int2t(arrsize) && is_constant_int2t(subsize))
       return bitsize(
