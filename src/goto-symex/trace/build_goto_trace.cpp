@@ -569,6 +569,11 @@ void build_goto_trace(
     if (SSA_step.hidden)
       continue;
 
+    // A --partial-order event has no value of its own; the assignment it
+    // marks is already in the trace.
+    if (SSA_step.is_event())
+      continue;
+
     // is_true() also drops steps whose guard the solver could not evaluate:
     // such a step has no authentic state to report (see #6191).
     if (SSA_step.ignore || !smt_conv.l_get(SSA_step.guard).is_true())
