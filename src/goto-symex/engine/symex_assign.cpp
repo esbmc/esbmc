@@ -687,6 +687,11 @@ void goto_symext::symex_assign_symbol(
   const bool hidden,
   const bool full_rhs_after_write)
 {
+  // Each failed dereference makes a fresh sink (make_failed_symbol), so a
+  // write to one is never read back; its validity claim is already emitted.
+  if (has_prefix(to_symbol2t(lhs).thename.as_string(), "symex::invalid_object"))
+    return;
+
   // put assignment guard in rhs
   if (!guard.is_true())
     rhs = if2tc(rhs->type, guard.as_expr(), rhs, lhs);

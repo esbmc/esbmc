@@ -1,0 +1,5 @@
+CORE
+main.c
+--no-slice --no-pointer-check --program-too
+\A(?![\s\S]*invalid_object\d*&\d+#\d+ ==)
+^VERIFICATION SUCCESSFUL$
