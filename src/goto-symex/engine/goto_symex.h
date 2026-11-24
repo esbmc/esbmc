@@ -115,7 +115,7 @@ public:
         total_claims(claims),
         remaining_claims(remain),
         simplified_claims(simplified),
-        bounded_loop_truncations(truncations) {};
+        bounded_loop_truncations(truncations){};
     std::shared_ptr<symex_targett> target;
     unsigned int total_claims;
     unsigned int remaining_claims;
@@ -1321,6 +1321,13 @@ protected:
   /** Assign @p rhs to the split object @p full_lhs, whose fields @p lhs
    *  holds, as one field step per member. Every step but the last is hidden;
    *  the last prints the whole struct, as an unsplit assignment would. */
+  /** The scalar field symbols of the split struct @p lhs, each with the
+   *  member of @p rhs it takes. */
+  static void split_leaves(
+    const expr2tc &lhs,
+    const expr2tc &rhs,
+    std::vector<std::pair<expr2tc, expr2tc>> &leaves);
+
   void symex_assign_split(
     const expr2tc &lhs,
     const expr2tc &full_lhs,
@@ -1666,10 +1673,8 @@ protected:
   /** Check the original operand `arg` of a %s or %p conversion: the read of
    *  a %s string, plus the --printf-check claims; `reads_to_nul` is false
    *  when a precision or length modifier changes what %s reads. */
-  void check_printf_pointer_arg(
-    char spec,
-    bool reads_to_nul,
-    const expr2tc &arg);
+  void
+  check_printf_pointer_arg(char spec, bool reads_to_nul, const expr2tc &arg);
   /** Check the read of a non-constant format string, the unrenamed operand
    *  `fmt` (C11 7.21.6.1p2). */
   void check_printf_format(const expr2tc &fmt);
