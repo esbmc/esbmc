@@ -760,6 +760,25 @@ protected:
     reachability_treet &art,
     const code_function_call2t &func_call);
 
+  /** Models a memset into @p item whose offset or length @p n is not a
+   *  constant, the case __memset_impl unwinds --unwind times (#10991): each
+   *  byte j of the object becomes ite(off <= j && j - off < n, value, old),
+   *  and off + n is claimed to stay within the object. Returns false, changing
+   *  nothing, when off and n are both constant, n is signed, or the object is
+   *  read-only or not an integer or integer array of at most 4 KiB (1 KiB
+   *  when off is symbolic). */
+  bool memset_symbolic(
+    const dereference_callbackt::internal_item &item,
+    const expr2tc &value,
+    const expr2tc &n);
+
+  /** The pointer checks and return-value assignment shared by both of
+   *  intrinsic_memset's paths. */
+  void memset_finish(
+    const code_function_call2t &func_call,
+    const expr2tc &ptr,
+    const expr2tc &n);
+
   /**
    * @brief Intrinsic call for C memcpy function call
    *

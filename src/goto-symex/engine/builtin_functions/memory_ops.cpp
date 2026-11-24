@@ -1730,12 +1730,11 @@ void goto_symext::intrinsic_memset(
   /* Preconditions for the optimization:
    * A: It should point to someplace
    * B: byte itself should be renamed properly
-   * C: Number of bytes cannot be symbolic
-   * D: This is a simplification. So don't run with --no-simplify */
+   * C: This is a simplification. So don't run with --no-simplify */
   cur_state->rename(arg1);
   cur_state->rename(arg2);
   if (
-    !internal_deref_items.size() || !arg1 || !arg2 || is_symbol2t(arg2) ||
+    !internal_deref_items.size() || !arg1 || !arg2 ||
     options.get_bool_option("no-simplify"))
   {
     /* Not sure what to do here, let's rely
@@ -1746,6 +1745,16 @@ void goto_symext::intrinsic_memset(
   }
 
   simplify(arg2);
+  // One assignment cannot be interleaved, unlike __memset_impl's byte loop, so
+  // it would hide races and torn writes from a concurrent thread.
+  if (
+    ex_state.threads_state.size() == 1 && internal_deref_items.size() == 1 &&
+    memset_symbolic(internal_deref_items.front(), arg1, arg2))
+  {
+    memset_finish(func_call, arg0, arg2);
+    return;
+  }
+
   if (!is_constant_int2t(arg2))
   {
     log_debug("memset", "TODO: simplifier issues :/");
@@ -1859,14 +1868,108 @@ void goto_symext::intrinsic_memset(
     // 4. Assign the new object
     symex_assign(code_assign2tc(item.object, new_object), false, guard);
   }
-  claim_valid_operand(arg0, arg2, "memset");
-  // Lastly, let's add a NULL ptr check
+  memset_finish(func_call, arg0, arg2);
+}
+
+/** Byte size of @p t if it is an integer or a fixed-size array of integers,
+ *  else 0. */
+static uint64_t integer_object_size(const type2tc &t)
+{
+  if (
+    !is_bv_type(t) &&
+    !(is_array_type(t) && is_bv_type(to_array_type(t).subtype)))
+    return 0;
+  try
+  {
+    return type_byte_size(t).to_uint64();
+  }
+  catch (const array_type2t::dyn_sized_array_excp &)
+  {
+    return 0;
+  }
+  catch (const array_type2t::inf_sized_array_excp &)
+  {
+    return 0;
+  }
+}
+
+bool goto_symext::memset_symbolic(
+  const dereference_callbackt::internal_item &item,
+  const expr2tc &value,
+  const expr2tc &n)
+{
+  const expr2tc &object = item.object;
+  expr2tc off = item.offset;
+  cur_state->rename(off);
+  simplify(off);
+  // A signed length would let a negative n pass the bounds claim as a no-op.
+  if (
+    (is_constant_int2t(off) && is_constant_int2t(n)) ||
+    !is_unsignedbv_type(n->type))
+    return false;
+
+  // memcpy_symbolic_length's cap. A symbolic offset costs more: filling an
+  // unsigned[1024] solves in 230 s, an unsigned[256] in 6 s (#10991).
+  const uint64_t cap = is_constant_int2t(off) ? 4096 : 1024;
+  const uint64_t size = integer_object_size(object->type);
+  if (size == 0 || size > cap || dereferencet::is_read_only(object, ns))
+    return false;
+
+  guard2tc guard = cur_state->guard;
+  expr2tc item_guard = item.guard;
+  cur_state->rename(item_guard);
+  guard.add(item_guard);
+
+  const type2tc &off_t = off->type;
+  const type2tc &n_t = n->type;
+  if (
+    !options.get_bool_option("no-pointer-check") &&
+    !options.get_bool_option("no-bounds-check"))
+  {
+    const expr2tc end = constant_int2tc(off_t, BigInt(size));
+    expr2tc in_bounds = and2tc(
+      and2tc(
+        greaterthanequal2tc(off, gen_zero(off_t)), lessthanequal2tc(off, end)),
+      lessthanequal2tc(n, typecast2tc(n_t, sub2tc(off_t, end, off))));
+    claim(
+      implies2tc(
+        guard.as_expr(), or2tc(equality2tc(n, gen_zero(n_t)), in_bounds)),
+      "dereference failure: memset length exceeds object bounds");
+  }
+
+  const type2tc byte_t = get_uint8_type();
+  const expr2tc byte = typecast2tc(byte_t, value);
+  const bool be = target_is_big_endian();
+  std::vector<expr2tc> new_bytes;
+  new_bytes.reserve(size);
+  for (uint64_t j = 0; j < size; ++j)
+  {
+    const expr2tc pos = constant_int2tc(off_t, BigInt(j));
+    expr2tc within = and2tc(
+      lessthanequal2tc(off, pos),
+      lessthan2tc(typecast2tc(n_t, sub2tc(off_t, pos, off)), n));
+    new_bytes.push_back(
+      if2tc(byte_t, within, byte, object_byte(object, j, be)));
+  }
+  symex_assign(
+    code_assign2tc(
+      object, update_object_bytes(object, 0, new_bytes.data(), size, be)),
+    false,
+    guard);
+  return true;
+}
+
+void goto_symext::memset_finish(
+  const code_function_call2t &func_call,
+  const expr2tc &ptr,
+  const expr2tc &n)
+{
+  claim_valid_operand(ptr, n, "memset");
   if (!options.get_bool_option("no-pointer-check"))
   {
-    expr2tc null_sym = symbol2tc(arg0->type, "NULL");
-    expr2tc obj = same_object2tc(arg0, null_sym);
-    expr2tc null_check = not2tc(same_object2tc(arg0, null_sym));
-    ex_state.cur_state->guard.guard_expr(null_check);
+    expr2tc null_sym = symbol2tc(ptr->type, "NULL");
+    expr2tc null_check = not2tc(same_object2tc(ptr, null_sym));
+    cur_state->guard.guard_expr(null_check);
     claim(null_check, " dereference failure: NULL pointer");
   }
 
@@ -1874,7 +1977,7 @@ void goto_symext::intrinsic_memset(
   if (!is_nil_expr(ret_ref))
   {
     dereference(ret_ref, dereferencet::READ);
-    symex_assign(code_assign2tc(ret_ref, arg0), false, cur_state->guard);
+    symex_assign(code_assign2tc(ret_ref, ptr), false, cur_state->guard);
   }
 }
 

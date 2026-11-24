@@ -1,0 +1,5 @@
+regression/goto-transcoder/github_11007
+regression/goto-transcoder/github_11007_fail
+regression/goto-transcoder/github_11007_ret
+regression/goto-transcoder/github_11007_strcpy_fail
+regression/goto-transcoder/github_11007_arity
