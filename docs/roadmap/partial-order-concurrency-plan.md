@@ -3,8 +3,8 @@
 **Status (2026-11-24):** phase 0 in progress. The `--partial-order` flag, its
 scope check, the event step types, the run-to-completion symex path, the SC
 memory-model pass and the spawn, join and atomic-section events exist; it
-verifies programs without locks or assumptions. Nothing has been measured; the effort figures are
-estimates.
+verifies programs without locks or assumptions. The phase 0 measurements are
+below (§4) and await the go/no-go decision; the effort figures are estimates.
 **Origin:** [#10296](https://github.com/esbmc/esbmc/issues/10296), which found
 `--schedule` unsound and slow, and its
 [effort estimate](https://github.com/esbmc/esbmc/issues/10296#issuecomment-6798263610).
@@ -96,6 +96,27 @@ and precede every JOIN on it; symex replaces `pthread_join` by a JOIN event,
 so joins need a thread id that is not a global. No other thread's event falls
 inside a user atomic section. Verification still rejects locks and
 assumptions.
+
+The three `github_10296_*` programs become `partial_order_github_10296_*`
+pairs. Locks are still rejected, so the counter uses an atomic section.
+
+Measurements (Z3, one core each, 2026-11-24). The §2 counter with an atomic
+section in place of the mutex, N threads:
+
+| N | default | `--context-bound 4` | `--partial-order` |
+|---|---|---|---|
+| 2 | 0.6 s | 0.6 s | 2.4 s |
+| 3 | 10.7 s | 12.1 s | 10.1 s |
+| 4 | >300 s | 269 s | 19.9 s |
+| 5 | >300 s | >300 s | 58.4 s |
+
+With the mutex, the default takes 1.1, 2.9 and 3.5 s at `--context-bound` 2,
+3 and 4. Of 367 SV-COMP `unreach-call` tasks in `pthread*`, the scope check
+rejects 113 and `--partial-order` decides 58 within 30 s, all from
+`pthread-wmm`. On those 58, at 60 s each, it gets every verdict right with a
+median of 14.1 s; the default decides 54 (median 1.3 s) and
+`--context-bound` 2, 3 and 4 decide 58, 58 and 55 (medians 0.3, 0.5 and
+0.5 s), with no wrong verdict.
 
 **Go** if every verdict matches and the time grows more slowly than the
 default's as the bound rises. **No-go** closes #10990 with the measurements
