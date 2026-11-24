@@ -772,6 +772,16 @@ protected:
     const expr2tc &value,
     const expr2tc &n);
 
+  /** Fill a whole dynamic byte array of symbolic size, as calloc's memset
+   *  does, with one assignment of array_of(value) plus a bounds claim.
+   *  Applies only from offset 0 when @p n is the array's size, or is the
+   *  size symex_mem gives a request it may fail (ite(fits, n, 0)). Returns
+   *  false, emitting nothing, otherwise (#10991). */
+  bool memset_whole_dynamic(
+    const dereference_callbackt::internal_item &item,
+    const expr2tc &value,
+    const expr2tc &n);
+
   /** The pointer checks and return-value assignment shared by both of
    *  intrinsic_memset's paths. */
   void memset_finish(

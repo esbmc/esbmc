@@ -1749,7 +1749,8 @@ void goto_symext::intrinsic_memset(
   // it would hide races and torn writes from a concurrent thread.
   if (
     ex_state.threads_state.size() == 1 && internal_deref_items.size() == 1 &&
-    memset_symbolic(internal_deref_items.front(), arg1, arg2))
+    (memset_symbolic(internal_deref_items.front(), arg1, arg2) ||
+     memset_whole_dynamic(internal_deref_items.front(), arg1, arg2)))
   {
     memset_finish(func_call, arg0, arg2);
     return;
@@ -1954,6 +1955,60 @@ bool goto_symext::memset_symbolic(
   symex_assign(
     code_assign2tc(
       object, update_object_bytes(object, 0, new_bytes.data(), size, be)),
+    false,
+    guard);
+  return true;
+}
+
+bool goto_symext::memset_whole_dynamic(
+  const dereference_callbackt::internal_item &item,
+  const expr2tc &value,
+  const expr2tc &n)
+{
+  const expr2tc &object = item.object;
+  if (!is_symbol2t(object) || !is_array_type(object->type))
+    return false;
+  const array_type2t &arr = to_array_type(object->type);
+  if (
+    arr.size_is_infinite || is_nil_expr(arr.array_size) ||
+    !is_bv_type(arr.subtype) || arr.subtype->get_width() != 8)
+    return false;
+
+  expr2tc off = item.offset;
+  cur_state->rename(off);
+  simplify(off);
+  if (!is_constant_int2t(off) || !to_constant_int2t(off).value.is_zero())
+    return false;
+
+  const expr2tc &size = arr.array_size;
+  const expr2tc &requested =
+    is_if2t(size) && is_constant_int2t(to_if2t(size).false_value) &&
+        to_constant_int2t(to_if2t(size).false_value).value.is_zero()
+      ? to_if2t(size).true_value
+      : size;
+  if (requested != n)
+    return false;
+
+  guard2tc guard = cur_state->guard;
+  expr2tc item_guard = item.guard;
+  cur_state->rename(item_guard);
+  guard.add(item_guard);
+
+  if (
+    !options.get_bool_option("no-pointer-check") &&
+    !options.get_bool_option("no-bounds-check"))
+    claim(
+      implies2tc(
+        guard.as_expr(),
+        or2tc(
+          equality2tc(n, gen_zero(n->type)),
+          lessthanequal2tc(n, typecast2tc(n->type, size)))),
+      "dereference failure: memset length exceeds object bounds");
+
+  symex_assign(
+    code_assign2tc(
+      object,
+      constant_array_of2tc(object->type, typecast2tc(arr.subtype, value))),
     false,
     guard);
   return true;
