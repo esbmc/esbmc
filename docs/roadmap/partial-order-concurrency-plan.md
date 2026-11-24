@@ -1,9 +1,9 @@
 # Plan — a partial-order encoding for concurrent programs (`--partial-order`)
 
 **Status (2026-11-24):** phase 0 in progress. The `--partial-order` flag, its
-scope check, the event step types, the run-to-completion symex path and the SC
-memory-model pass exist; it verifies programs without joins, locks, atomic
-sections or assumptions. Nothing has been measured; the effort figures are
+scope check, the event step types, the run-to-completion symex path, the SC
+memory-model pass and the spawn, join and atomic-section events exist; it
+verifies programs without locks or assumptions. Nothing has been measured; the effort figures are
 estimates.
 **Origin:** [#10296](https://github.com/esbmc/esbmc/issues/10296), which found
 `--schedule` unsound and slow, and its
@@ -60,7 +60,7 @@ Phase 0 is judged against the default column, not against `--schedule`.
   `--partial-order` it gets a fresh, unconstrained L2 version; a shared write
   gets its usual new version. Both are recorded as events.
 - **Event steps.** `symex_targett::step_typet` (`equation/symex_target.h`)
-  gains `SHARED_READ`, `SHARED_WRITE`, `SPAWN`, `ATOMIC_BEGIN` and
+  gains `SHARED_READ`, `SHARED_WRITE`, `SPAWN`, `JOIN`, `ATOMIC_BEGIN` and
   `ATOMIC_END`. `sourcet::thread_nr` already tags every step with its thread.
 - **Memory-model pass.** A new `equation/memory_model_sc.{h,cpp}` runs on the
   finished equation, before slicing and solving, and appends the order
@@ -91,10 +91,11 @@ records user-global reads, under a fresh L2 name, and writes as events;
 sequentially, so `pthread_join` waits on the spawn/join events of a later unit.
 `equation/memory_model_sc.cpp` prepends hidden assumptions: a clock per event,
 program order, a write order per object, and a reads-from choice per read with
-its from-read constraints. Until spawn events order a thread after its
-creation, a thread may also be placed before main's initialisation, which can
-only add spurious failures; verification rejects joins, locks, atomic sections
-and assumptions, which need events the pass does not have yet.
+its from-read constraints. A spawned thread's events follow its SPAWN event
+and precede every JOIN on it; symex replaces `pthread_join` by a JOIN event,
+so joins need a thread id that is not a global. No other thread's event falls
+inside a user atomic section. Verification still rejects locks and
+assumptions.
 
 **Go** if every verdict matches and the time grows more slowly than the
 default's as the bound rises. **No-go** closes #10990 with the measurements

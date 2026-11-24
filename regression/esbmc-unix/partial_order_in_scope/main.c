@@ -1,5 +1,5 @@
 /* #10990: the mutex counter of the plan's section 2 is inside the
-   --partial-order phase 0 scope; verifying it waits on the join and lock
+   --partial-order phase 0 scope; verifying it waits on the lock
    events. */
 #include <pthread.h>
 #include <assert.h>

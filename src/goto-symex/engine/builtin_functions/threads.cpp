@@ -172,6 +172,7 @@ void goto_symext::intrinsic_spawn_thread(
 
   // Invalidates current state reference!
   unsigned int thread_id = art.get_cur_state().add_thread(&prog);
+  art.get_cur_state().record_thread_event(symex_targett::SPAWN, thread_id);
 
   statet &state = art.get_cur_state().get_active_state();
 

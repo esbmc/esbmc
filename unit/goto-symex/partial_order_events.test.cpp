@@ -28,6 +28,7 @@ const std::vector<stept> event_types{
   symex_targett::SHARED_READ,
   symex_targett::SHARED_WRITE,
   symex_targett::SPAWN,
+  symex_targett::JOIN,
   symex_targett::ATOMIC_BEGIN,
   symex_targett::ATOMIC_END};
 
@@ -142,9 +143,15 @@ TEST_CASE("an event step prints its type and symbol", "[partial-order]")
     symex_targett::ATOMIC_BEGIN,
     expr2tc(),
     symex_targett::sourcet());
+  eq.event(
+    gen_true_expr(),
+    symex_targett::JOIN,
+    constant_int2tc(get_uint32_type(), BigInt(2)),
+    symex_targett::sourcet());
 
   std::ostringstream out;
   eq.output(out);
   CHECK(out.str().find("SHARED_WRITE") != std::string::npos);
   CHECK(out.str().find("ATOMIC_BEGIN") != std::string::npos);
+  CHECK(out.str().find("JOIN 2") != std::string::npos);
 }

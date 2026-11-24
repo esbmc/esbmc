@@ -34,7 +34,10 @@ bool is_supported_thread_call(const std::string &name)
     "__ESBMC_atomic_begin",
     "__ESBMC_atomic_end",
     "__VERIFIER_atomic_begin",
-    "__VERIFIER_atomic_end"};
+    "__VERIFIER_atomic_end",
+    // Inserted ahead of every atomic section; each thread runs to completion,
+    // so it does nothing.
+    "__ESBMC_yield"};
   return supported.count(name) != 0;
 }
 
@@ -48,7 +51,6 @@ bool is_unsupported_call(const std::string &name)
     if (name.starts_with(prefix))
       return true;
   static const std::set<std::string> scheduler_intrinsics{
-    "__ESBMC_yield",
     "__ESBMC_switch_to",
     "__ESBMC_switch_away_from",
     "__ESBMC_spawn_thread",
@@ -69,15 +71,12 @@ bool is_null(expr2tc e)
   return is_constant(e) && !is_constant_string2t(e);
 }
 
-/// Calls whose ordering needs the spawn, join and atomic-section events,
-/// which the memory model does not see yet, and assumptions, which the
-/// equation applies to every later thread's claims whatever the clocks say.
+/// Locks, which the memory model does not order yet, and assumptions, which
+/// the equation applies to every later thread's claims whatever the clocks
+/// say.
 bool needs_unbuilt_events(const std::string &name)
 {
-  return name.starts_with("pthread_join") ||
-         name.starts_with("pthread_mutex_lock") ||
-         name == "__ESBMC_atomic_begin" || name == "__VERIFIER_atomic_begin" ||
-         name == "__VERIFIER_assume";
+  return name.starts_with("pthread_mutex_lock") || name == "__VERIFIER_assume";
 }
 
 class scope_checkt
@@ -194,13 +193,8 @@ private:
     if (verifying && needs_unbuilt_events(name))
       return reject("verifying a call to " + name);
 
-    if (!check_expr(call.ret))
+    if (!check_expr(call.ret) || !check_thread_args(name, call))
       return false;
-
-    if (name == "pthread_create" && !is_null(call.operands.at(3)))
-      return reject("a thread argument other than NULL");
-    if (name.starts_with("pthread_join") && !is_null(call.operands.at(1)))
-      return reject("a join result pointer other than NULL");
 
     for (const expr2tc &arg : call.operands)
     {
@@ -212,6 +206,25 @@ private:
       if (!check_expr(arg))
         return false;
     }
+    return true;
+  }
+
+  bool check_thread_args(
+    const std::string &name,
+    const code_function_call2t &call) const
+  {
+    const bool create = name == "pthread_create";
+    const bool join = name.starts_with("pthread_join");
+    if (create && !is_null(call.operands.at(3)))
+      return reject("a thread argument other than NULL");
+    if (join && !is_null(call.operands.at(1)))
+      return reject("a join result pointer other than NULL");
+    // Joins are ordered by a thread id known during symex, and a global's
+    // value is chosen by the solver.
+    if (
+      (create && is_shared_address(call.operands.at(0))) ||
+      (join && reads_shared(call.operands.at(0))))
+      return reject("a thread id stored in a global");
     return true;
   }
 
@@ -243,6 +256,22 @@ private:
   bool is_shared(const symbol2t &sym) const
   {
     return is_partial_order_global(ns, sym.thename);
+  }
+
+  bool is_shared_address(const expr2tc &e) const
+  {
+    return is_address_of2t(e) && is_symbol2t(to_address_of2t(e).ptr_obj) &&
+           is_shared(to_symbol2t(to_address_of2t(e).ptr_obj));
+  }
+
+  bool reads_shared(const expr2tc &e) const
+  {
+    if (is_symbol2t(e) && is_shared(to_symbol2t(e)))
+      return true;
+    bool found = false;
+    e->foreach_operand(
+      [&](const expr2tc &op) { found = found || reads_shared(op); });
+    return found;
   }
 };
 } // namespace
