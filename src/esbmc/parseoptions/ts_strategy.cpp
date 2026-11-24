@@ -47,6 +47,57 @@ static int run_pdr(
   return 0;
 }
 
+/// Exit codes as for ts_enginet::bmc.
+static int run_fresh_solver(
+  const transition_systemt &ts,
+  const namespacet &ns,
+  optionst &options,
+  uint64_t max_k)
+{
+  if (!ts.prefix_bad.empty())
+  {
+    ts_enginet prefix(ts, ns, options, false);
+    const smt_resultt res = prefix.solve_prefix();
+    if (res == smt_resultt::P_SATISFIABLE)
+    {
+      log_fail("\nVERIFICATION FAILED");
+      return 1;
+    }
+    if (res != smt_resultt::P_UNSATISFIABLE)
+    {
+      log_error("Solver error before the loop");
+      return 6;
+    }
+  }
+  if (ts.bad.empty())
+  {
+    log_success("\nVERIFICATION SUCCESSFUL");
+    return 0;
+  }
+  for (uint64_t k = 0; k <= max_k; k++)
+  {
+    fine_timet start = current_time();
+    ts_enginet fresh(ts, ns, options, false);
+    smt_resultt res = fresh.solve_bound(k);
+    log_status(
+      "TS BMC step {} (fresh solver): {} ({}s)",
+      k,
+      res == smt_resultt::P_SATISFIABLE     ? "violated"
+      : res == smt_resultt::P_UNSATISFIABLE ? "safe"
+                                            : "unknown",
+      time2string(current_time() - start));
+    if (res == smt_resultt::P_SATISFIABLE)
+    {
+      log_fail("\nVERIFICATION FAILED");
+      return 1;
+    }
+    if (res != smt_resultt::P_UNSATISFIABLE)
+      return 6;
+  }
+  log_fail("\nVERIFICATION UNKNOWN");
+  return 0;
+}
+
 /// Returns the reason the export failed, or an empty string.
 static std::string
 export_btor2(const transition_systemt &ts, const std::string &path)
@@ -153,50 +204,7 @@ int esbmc_parseoptionst::do_ts_strategy(
     return run_pdr(ts, ns, options, max_k);
 
   if (cmdline.isset("ts-fresh-solver"))
-  {
-    if (!ts.prefix_bad.empty())
-    {
-      ts_enginet prefix(ts, ns, options, false);
-      const smt_resultt res = prefix.solve_prefix();
-      if (res == smt_resultt::P_SATISFIABLE)
-      {
-        log_fail("\nVERIFICATION FAILED");
-        return 1;
-      }
-      if (res != smt_resultt::P_UNSATISFIABLE)
-      {
-        log_error("Solver error before the loop");
-        return 6;
-      }
-    }
-    if (ts.bad.empty())
-    {
-      log_success("\nVERIFICATION SUCCESSFUL");
-      return 0;
-    }
-    for (uint64_t k = 0; k <= max_k; k++)
-    {
-      fine_timet start = current_time();
-      ts_enginet fresh(ts, ns, options, false);
-      smt_resultt res = fresh.solve_bound(k);
-      log_status(
-        "TS BMC step {} (fresh solver): {} ({}s)",
-        k,
-        res == smt_resultt::P_SATISFIABLE     ? "violated"
-        : res == smt_resultt::P_UNSATISFIABLE ? "safe"
-                                              : "unknown",
-        time2string(current_time() - start));
-      if (res == smt_resultt::P_SATISFIABLE)
-      {
-        log_fail("\nVERIFICATION FAILED");
-        return 1;
-      }
-      if (res != smt_resultt::P_UNSATISFIABLE)
-        return 6;
-    }
-    log_fail("\nVERIFICATION UNKNOWN");
-    return 0;
-  }
+    return run_fresh_solver(ts, ns, options, max_k);
 
   ts_enginet engine(ts, ns, options);
   return engine.bmc(max_k, cmdline.isset("ts-push-pop"));
