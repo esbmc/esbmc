@@ -193,19 +193,8 @@ private:
     if (verifying && needs_unbuilt_events(name))
       return reject("verifying a call to " + name);
 
-    if (!check_expr(call.ret))
+    if (!check_expr(call.ret) || !check_thread_args(name, call))
       return false;
-
-    if (name == "pthread_create" && !is_null(call.operands.at(3)))
-      return reject("a thread argument other than NULL");
-    if (name.starts_with("pthread_join") && !is_null(call.operands.at(1)))
-      return reject("a join result pointer other than NULL");
-    // Joins are ordered by a thread id known during symex, and a global's
-    // value is chosen by the solver.
-    if (
-      (name == "pthread_create" && is_shared_address(call.operands.at(0))) ||
-      (name.starts_with("pthread_join") && reads_shared(call.operands.at(0))))
-      return reject("a thread id stored in a global");
 
     for (const expr2tc &arg : call.operands)
     {
@@ -217,6 +206,25 @@ private:
       if (!check_expr(arg))
         return false;
     }
+    return true;
+  }
+
+  bool check_thread_args(
+    const std::string &name,
+    const code_function_call2t &call) const
+  {
+    const bool create = name == "pthread_create";
+    const bool join = name.starts_with("pthread_join");
+    if (create && !is_null(call.operands.at(3)))
+      return reject("a thread argument other than NULL");
+    if (join && !is_null(call.operands.at(1)))
+      return reject("a join result pointer other than NULL");
+    // Joins are ordered by a thread id known during symex, and a global's
+    // value is chosen by the solver.
+    if (
+      (create && is_shared_address(call.operands.at(0))) ||
+      (join && reads_shared(call.operands.at(0))))
+      return reject("a thread id stored in a global");
     return true;
   }
 

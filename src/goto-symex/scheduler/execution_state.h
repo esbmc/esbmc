@@ -480,10 +480,15 @@ public:
     symex_targett::step_typet type,
     const goto_programt::instructiont &instruction);
 
+  /** Run a function call, or its --partial-order replacement. */
+  void symex_call(
+    reachability_treet &art,
+    const goto_programt::instructiont &instruction);
+
   /** --partial-order: replace a pthread_join call by a JOIN event. The
    *  operational model's join waits for the thread to end, which never
    *  happens here because the thread runs after its joiner in the equation.
-   *  @return Whether \p instruction was such a call */
+   *  @return Whether \p instruction was such a call under --partial-order */
   bool partial_order_join(const goto_programt::instructiont &instruction);
 
   /** Kind of memory access, used by get_expr_globals to decide whether a

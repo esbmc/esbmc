@@ -400,8 +400,7 @@ void execution_statet::symex_step(reachability_treet &art)
     state.source.pc++;
     break;
   case FUNCTION_CALL:
-    if (!partial_order || !partial_order_join(instruction))
-      goto_symext::symex_step(art);
+    symex_call(art, instruction);
     break;
   case RETURN:
     if (
@@ -1141,14 +1140,23 @@ void execution_statet::record_atomic_event(
   target->event(cur_state->guard.as_expr(), type, expr2tc(), cur_state->source);
 }
 
+void execution_statet::symex_call(
+  reachability_treet &art,
+  const goto_programt::instructiont &instruction)
+{
+  if (!partial_order_join(instruction))
+    goto_symext::symex_step(art);
+}
+
 bool execution_statet::partial_order_join(
   const goto_programt::instructiont &instruction)
 {
   const code_function_call2t &call = to_code_function_call2t(instruction.code);
   if (
-    !is_symbol2t(call.function) || !to_symbol2t(call.function)
-                                      .thename.as_string()
-                                      .starts_with("c:@F@pthread_join"))
+    !partial_order || !is_symbol2t(call.function) ||
+    !to_symbol2t(call.function)
+       .thename.as_string()
+       .starts_with("c:@F@pthread_join"))
     return false;
 
   if (!cur_state->guard.is_false())
