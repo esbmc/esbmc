@@ -271,7 +271,7 @@ on a line.
 | Join | `goto_symext::merge_gotos` + `merge_state_guards` + `phi_function` + `merge_locality` + `merge_value_sets`, `symex_goto.cpp:326,293,393,370,382` | Disjoin guards, emit `ite` phi assignments for every variable whose L2 index differs, union locals and value sets. |
 | Loop bound | `goto_symext::get_unwind` / `loop_bound_exceeded`, `symex_goto.cpp:525,497` | Precedence: loop-specific > function-specific > global; on exhaustion emit an unwinding *assertion*, or (with `--no-unwinding-assertions`) an *assumption* that truncates the path. |
 | Equation | `symex_target_equationt::SSA_stept`, `symex_target_equation.h:94` | Flat list; `ignore` = sliced, `hidden` = suppressed from trace, `cond` = the encoded formula. |
-| Slicing | `symex_slicet::run` + `run_on_assignment`, `slice.h:101`, `slice.cpp:~230-300` | Reverse reverse-taint closure over `depends`; additionally elides array stores to indices proven never read (`index_reads`, `array_disqualified`). |
+| Slicing | `symex_slicet::run` + `slice_assignment`, `slice.h:101`, `slice.cpp:~230-300` | Reverse reverse-taint closure over `depends`; additionally elides array stores to indices proven never read (`index_reads`, `array_disqualified`). |
 | Interleaving search | `reachability_treet`, `reachability_tree.{h,cpp}` | DFS over `execution_statet` clones; prunes by POR, `hit_hashes` state hashing, `--context-bound`. |
 | POR | `execution_statet::check_mpor_dependency` / `calculate_mpor_constraints`, `execution_state.cpp` | Drops an interleaving when the last transitions of two threads are independent (no WW/RW/WR intersection). |
 | State hashing | `state_hashing_level2t::make_assignment` / `generate_l2_state_hash`, `execution_state.cpp:~1342,1359` | Fingerprints (variable → value-hash); equal fingerprint ⇒ prune. Keyed by **L0** name (see R6). |
@@ -365,7 +365,7 @@ produced equation).
 | **I9** | `merge_value_sets` produces a **superset** of both inputs (over-approximation direction). | `merge_value_sets` → `value_sett::make_union` | **unenforced** |
 | **I10** | No two assignment steps in an equation define the same SSA name. | whole engine | `check_for_duplicate_assigns` **logs** a message; never fails (R5) |
 | **I11** | Slicing preserves equisatisfiability of every retained claim: a step marked `ignore` is not read by any retained step. | `symex_slicet::run_on_*` | **unenforced** |
-| **I12** | Array-store elision precondition: index *i* of array version *v* is never read downstream **and** *v* is not disqualified. | `run_on_assignment`, `index_reads`, `array_disqualified` | **unenforced** |
+| **I12** | Array-store elision precondition: index *i* of array version *v* is never read downstream **and** *v* is not disqualified. | `slice_assignment`, `index_reads`, `array_disqualified` | **unenforced** |
 | **I13** | `push_ctx`/`pop_ctx` on the equation are LIFO and restore the exact step-list prefix. | `symex_target_equationt::push_ctx`, `scoped_end_points` | **unenforced** |
 | **I14** | POR drops an interleaving only when the two transitions are genuinely independent (`check_mpor_dependency` false ⇒ commutative). | `check_mpor_dependency`, `calculate_mpor_constraints` | **unenforced** |
 | **I15** | State-hash equality implies concrete-state equality (no false collision ⇒ no over-pruning). | `generate_l2_state_hash`, `hit_hashes` | **unenforced**; hash keyed by L0 name (R6) |
@@ -563,8 +563,8 @@ reverse drain + `erase`, `goto_symex_statet::pop_frame`.
 **Twin:** allow `pop_frame` to discard → conservation fails.
 
 #### H-A4 — Slicer dependency closure & dead-store elision (P0, I11/I12)
-**Target:** `symex_slicet::run_on_assignment` / `run_on_assume` /
-`run_on_renumber` / `collect_dependencies` / `scan_array_uses`
+**Target:** `symex_slicet::slice_assignment` / `slice_assume` /
+`slice_renumber` / `collect_dependencies` / `scan_array_uses`
 (`slice.cpp`, `slice.h:101-252`).
 **Model:** ≤ 6 `step_t`s over ≤ 3 scalars and 1 array of ≤ 4 constant indices,
 plus one symbolic-index read to exercise `array_disqualified`; two evaluators —
