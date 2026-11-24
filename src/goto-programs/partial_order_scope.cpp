@@ -69,12 +69,6 @@ bool is_null(expr2tc e)
   return is_constant(e) && !is_constant_string2t(e);
 }
 
-bool is_scalar(const type2tc &t)
-{
-  return is_bv_type(t) || is_bool_type(t) || is_fixedbv_type(t) ||
-         is_floatbv_type(t);
-}
-
 class scope_checkt
 {
 public:
@@ -216,7 +210,9 @@ private:
         return reject("taking the address of a global");
     }
 
-    if (is_symbol2t(e) && is_shared(to_symbol2t(e)) && !is_scalar(e->type))
+    if (
+      is_symbol2t(e) && is_shared(to_symbol2t(e)) &&
+      !is_partial_order_scalar(e->type))
       return reject("a global of non-scalar type");
 
     bool ok = true;
@@ -229,16 +225,29 @@ private:
 
   bool is_shared(const symbol2t &sym) const
   {
-    const std::string name = sym.thename.as_string();
-    if (
-      name.find("__ESBMC") != std::string::npos ||
-      name.find("pthread_lib") != std::string::npos)
-      return false;
-    const symbolt *symbol = ns.lookup(sym.thename);
-    return symbol && symbol->static_lifetime && !symbol->get_type().is_code();
+    return is_partial_order_global(ns, sym.thename);
   }
 };
 } // namespace
+
+bool is_partial_order_scalar(const type2tc &t)
+{
+  return is_bv_type(t) || is_bool_type(t) || is_fixedbv_type(t) ||
+         is_floatbv_type(t);
+}
+
+bool is_partial_order_global(const namespacet &ns, const irep_idt &name)
+{
+  const std::string id = name.as_string();
+  if (
+    id.find("__ESBMC") != std::string::npos ||
+    id.find("pthread_lib") != std::string::npos)
+    return false;
+  const symbolt *symbol = ns.lookup(name);
+  return symbol && symbol->static_lifetime && !symbol->get_type().is_code() &&
+         !file_operations::is_bundled_source(
+           symbol->location.get_file().as_string());
+}
 
 bool partial_order_in_scope(
   const goto_functionst &goto_functions,

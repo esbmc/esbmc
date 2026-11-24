@@ -485,12 +485,21 @@ void esbmc_parseoptionst::default_kani_strategy()
 //    - Perform a single run of Bounded Model Checking and rely
 //      on the simplifier to determine the sufficient verification bound
 //      (see "do_bmc")
-int esbmc_parseoptionst::do_partial_order(const goto_functionst &goto_functions)
+int esbmc_parseoptionst::do_partial_order(
+  optionst &options,
+  goto_functionst &goto_functions)
 {
   if (!partial_order_in_scope(goto_functions, namespacet(context)))
     return 1;
-  log_error("--partial-order cannot verify yet (#10990)");
-  return 1;
+  // Without the memory-model pass a shared read is unconstrained, so only the
+  // events can be shown, not a verdict.
+  if (!options.get_bool_option("program-only"))
+  {
+    log_error("--partial-order cannot verify yet (#10990)");
+    return 1;
+  }
+  bmct bmc(goto_functions, options, context);
+  return do_bmc(bmc);
 }
 
 int esbmc_parseoptionst::run_chosen_strategy(
@@ -517,7 +526,7 @@ int esbmc_parseoptionst::run_chosen_strategy(
   }
 
   if (options.get_bool_option("partial-order"))
-    return do_partial_order(goto_functions);
+    return do_partial_order(options, goto_functions);
 
   if (cmdline.isset("incremental-context-bound"))
     return do_context_bound_deepening(options, goto_functions);

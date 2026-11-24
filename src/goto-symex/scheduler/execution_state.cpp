@@ -1,9 +1,11 @@
+#include <goto-programs/partial_order_scope.h>
 #include <goto-symex/scheduler/execution_state.h>
 #include <goto-symex/scheduler/reachability_tree.h>
 #include <goto-symex/symex_invariant.h>
 #include <langapi/language_ui.h>
 #include <langapi/languages.h>
 #include <langapi/mode.h>
+#include <functional>
 #include <sstream>
 #include <string>
 #include <util/base/breakpoint.h>
@@ -49,6 +51,7 @@ execution_statet::execution_statet(
   smt_during_symex = options.get_bool_option("smt-during-symex");
   smt_thread_guard = options.get_bool_option("smt-thread-guard");
   no_propagation = options.get_bool_option("no-propagation");
+  partial_order = options.get_bool_option("partial-order");
 
   goto_functionst::function_mapt::const_iterator it =
     goto_functions.function_map.find("__ESBMC_main");
@@ -175,6 +178,7 @@ void execution_statet::copy_derived_from(const execution_statet &ex)
   smt_during_symex = ex.smt_during_symex;
   smt_thread_guard = ex.smt_thread_guard;
   no_propagation = ex.no_propagation;
+  partial_order = ex.partial_order;
 
   CS_number = ex.CS_number;
 
@@ -312,7 +316,10 @@ void execution_statet::symex_end_function(
     // detect terminating paths. The assume(false) here would kill
     // the path before reaching that marker; the assertion would
     // never become a VCC.
-    assume(gen_false_expr());
+    // Under --partial-order the spawned threads run after main in the
+    // equation, so an assume(false) here would make their claims vacuous.
+    if (!partial_order)
+      assume(gen_false_expr());
     end_thread();
     interleaving_unviable = true;
   }
@@ -374,6 +381,8 @@ void execution_statet::symex_step(reachability_treet &art)
   if (break_insn != 0 && break_insn == instruction.location_number)
     breakpoint();
 
+  record_shared_reads(instruction);
+
   switch (instruction.type)
   {
   case END_FUNCTION:
@@ -423,7 +432,7 @@ void execution_statet::symex_assign(
 {
   goto_symext::symex_assign(code, hidden, guard);
 
-  if (threads_state.size() >= thread_cswitch_threshold)
+  if (partial_order || threads_state.size() >= thread_cswitch_threshold)
     analyze_assign(code);
 }
 
@@ -970,6 +979,12 @@ unsigned int execution_statet::add_thread(const goto_programt *prog)
 
 void execution_statet::analyze_assign(const expr2tc &code)
 {
+  if (partial_order)
+  {
+    record_shared_write(code);
+    return;
+  }
+
   if (is_nil_expr(code) || get_active_state().guard.is_false())
     return;
 
@@ -1002,6 +1017,94 @@ void execution_statet::analyze_read(const expr2tc &code)
     thread_last_reads[active_thread].insert(
       global_reads.begin(), global_reads.end());
   }
+}
+
+namespace
+{
+bool is_partial_order_event_symbol(const expr2tc &e, const namespacet &ns)
+{
+  return is_symbol2t(e) && is_partial_order_scalar(e->type) &&
+         is_partial_order_global(ns, to_symbol2t(e).thename);
+}
+
+/// The shared globals \p instruction reads, at L0.
+std::set<expr2tc> partial_order_reads(
+  const goto_programt::instructiont &instruction,
+  const namespacet &ns)
+{
+  std::set<expr2tc> reads;
+  std::function<void(const expr2tc &)> walk = [&](const expr2tc &e) {
+    if (is_nil_expr(e) || is_address_of2t(e))
+      return;
+    if (is_partial_order_event_symbol(e, ns))
+      reads.insert(e);
+    e->foreach_operand(walk);
+  };
+
+  switch (instruction.type)
+  {
+  case ASSIGN:
+    walk(to_code_assign2t(instruction.code).source);
+    break;
+  case FUNCTION_CALL:
+    for (const expr2tc &arg :
+         to_code_function_call2t(instruction.code).operands)
+      walk(arg);
+    break;
+  case GOTO:
+  case ASSERT:
+  case ASSUME:
+    walk(instruction.guard);
+    break;
+  case RETURN:
+  case OTHER:
+    walk(instruction.code);
+    break;
+  default:
+    break;
+  }
+  return reads;
+}
+} // namespace
+
+void execution_statet::record_shared_reads(
+  const goto_programt::instructiont &instruction)
+{
+  if (!partial_order || cur_state->guard.is_false())
+    return;
+
+  for (expr2tc sym : partial_order_reads(instruction, ns))
+  {
+    cur_state->top().level1.rename(sym);
+    cur_state->level2.retire(renaming::level2t::name_record(to_symbol2t(sym)));
+    cur_state->level2.get_ident_name(sym);
+    target->event(
+      cur_state->guard.as_expr(),
+      symex_targett::SHARED_READ,
+      sym,
+      cur_state->source);
+  }
+}
+
+void execution_statet::record_shared_write(const expr2tc &code)
+{
+  if (is_nil_expr(code) || cur_state->guard.is_false())
+    return;
+
+  expr2tc sym = to_code_assign2t(code).target;
+  if (!is_symbol2t(sym))
+    return;
+  cur_state->get_original_name(sym);
+  if (!is_partial_order_event_symbol(sym, ns))
+    return;
+
+  cur_state->top().level1.rename(sym);
+  cur_state->level2.get_ident_name(sym);
+  target->event(
+    cur_state->guard.as_expr(),
+    symex_targett::SHARED_WRITE,
+    sym,
+    cur_state->source);
 }
 
 void execution_statet::analyze_args(const expr2tc &expr)

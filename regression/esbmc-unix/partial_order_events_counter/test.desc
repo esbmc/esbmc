@@ -1,0 +1,7 @@
+CORE
+main.c
+--partial-order --program-only
+^/\* \d+ \*/ Thread 1 file .*main\.c line 10 .*\nSHARED_READ c:@x&0#\d+$
+^/\* \d+ \*/ Thread 2 file .*main\.c line 10 .*\nSHARED_WRITE c:@x&0#\d+$
+\A(?![\s\S]*SHARED_\w+ c:@m)[\s\S]*\Z
+\A(?![\s\S]*VERIFICATION)[\s\S]*\Z

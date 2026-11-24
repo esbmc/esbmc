@@ -1,8 +1,9 @@
 # Plan — a partial-order encoding for concurrent programs (`--partial-order`)
 
-**Status (2026-11-23):** phase 0 in progress. The `--partial-order` flag, its
-scope check and the event step types exist; it does not verify yet. Nothing
-has been measured; the effort figures are estimates.
+**Status (2026-11-24):** phase 0 in progress. The `--partial-order` flag, its
+scope check, the event step types and the run-to-completion symex path exist;
+it does not verify yet. Nothing has been measured; the effort figures are
+estimates.
 **Origin:** [#10296](https://github.com/esbmc/esbmc/issues/10296), which found
 `--schedule` unsound and slow, and its
 [effort estimate](https://github.com/esbmc/esbmc/issues/10296#issuecomment-6798263610).
@@ -10,7 +11,7 @@ has been measured; the effort figures are estimates.
 [#10989](https://github.com/esbmc/esbmc/pull/10989) repaired `--schedule`;
 its formula still grows exponentially with `--context-bound`. Tracked in
 [#10990](https://github.com/esbmc/esbmc/issues/10990).
-**Last updated:** 2026-11-23.
+**Last updated:** 2026-11-24.
 
 ## 1. Goal
 
@@ -83,6 +84,10 @@ Scope: global scalars only; no pointers, arrays, data-race check or witnesses.
 Done: `--partial-order` and its flag conflicts; a scope check on user code
 (`goto-programs/partial_order_scope.cpp`) that names the first unsupported
 construct; the five event step types, recorded by `symex_targett::event`.
+Symex runs each thread to completion (`generate_partial_order_formula`) and
+records user-global reads, under a fresh L2 name, and writes as events;
+`--program-only` shows them. The operational model's state is still renamed
+sequentially, so `pthread_join` waits on the spawn/join events of a later unit.
 
 **Go** if every verdict matches and the time grows more slowly than the
 default's as the bound rises. **No-go** closes #10990 with the measurements

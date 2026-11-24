@@ -11,3 +11,10 @@
 bool partial_order_in_scope(
   const goto_functionst &goto_functions,
   const namespacet &ns);
+
+/// Whether \p name is a user global whose accesses --partial-order records
+/// as events. The operational model's own state is not one.
+bool is_partial_order_global(const namespacet &ns, const irep_idt &name);
+
+/// The types of the globals the phase 0 prototype handles.
+bool is_partial_order_scalar(const type2tc &t);
