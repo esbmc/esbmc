@@ -2778,6 +2778,20 @@ static bool struct_spans_elements(
          offset_bits % elem_bits + type_byte_size_bits(type) > elem_bits;
 }
 
+// The first of the widest members of a union, through which building the
+// union reaches every byte a write through it must store (#10939, #11013).
+static size_t widest_union_member(const union_type2t &uniontype)
+{
+  const std::vector<type2tc> &members = uniontype.members;
+  return std::max_element(
+           members.begin(),
+           members.end(),
+           [](const type2tc &a, const type2tc &b) {
+             return type_byte_size_bits(a) < type_byte_size_bits(b);
+           }) -
+         members.begin();
+}
+
 // Whether a struct or union of type read at offset_bits into a member of
 // member_bits extends past that member.
 static bool aggregate_wider_than_member(
@@ -2840,13 +2854,12 @@ void dereferencet::construct_struct_ref_from_const_offset_array(
       value = make_failed_symbol(type);
       return;
     }
-    // For unions all members overlap at the same offset; reconstruct using
-    // the first member, mirroring construct_struct_ref_from_dyn_offset.
+    const size_t i = widest_union_member(uniontype);
     expr2tc target = value;
     build_reference_rec(
-      target, gen_ulong(intref.value), uniontype.members[0], guard, mode);
-    std::vector<expr2tc> fields = {target};
-    value = constant_union2tc(type, uniontype.member_names[0], fields);
+      target, gen_ulong(intref.value), uniontype.members[i], guard, mode);
+    value = constant_union2tc(
+      type, uniontype.member_names[i], std::vector<expr2tc>{target});
     return;
   }
 
@@ -3022,17 +3035,11 @@ expr2tc dereferencet::construct_struct_from_members(
   if (is_union_type(type))
   {
     const union_type2t &uniontype = to_union_type(type);
-    const BigInt size = type_byte_size_bits(type);
-    // A union is as wide as its widest member, and a zero-sized one never
-    // gets here (build_reference_rec returns early for it).
-    const auto member = std::find_if(
-      uniontype.members.begin(),
-      uniontype.members.end(),
-      [&size](const type2tc &m) { return type_byte_size_bits(m) == size; });
-    assert(member != uniontype.members.end());
-    const size_t i = member - uniontype.members.begin();
-    expr2tc field =
-      construct_member_from_members(value, offset_bits, *member, guard, mode);
+    // A zero-sized union never gets here (build_reference_rec returns early
+    // for it).
+    const size_t i = widest_union_member(uniontype);
+    expr2tc field = construct_member_from_members(
+      value, offset_bits, uniontype.members[i], guard, mode);
     if (is_nil_expr(field))
       return expr2tc();
     return constant_union2tc(
@@ -3418,18 +3425,17 @@ void dereferencet::construct_struct_ref_from_dyn_offs_rec(
     }
     else if (is_union_type(type))
     {
-      // For unions from byte arrays, read the first member at offset
       const union_type2t &uniontype = to_union_type(type);
       if (uniontype.members.empty())
         return;
+      const size_t i = widest_union_member(uniontype);
       expr2tc target = value; // The byte array
       expr2tc union_offs = offs;
       simplify(union_offs);
-      build_reference_rec(target, union_offs, uniontype.members[0], tmp, mode);
+      build_reference_rec(target, union_offs, uniontype.members[i], tmp, mode);
 
-      std::vector<expr2tc> members = {target};
-      expr2tc the_union =
-        constant_union2tc(type, uniontype.member_names[0], members);
+      expr2tc the_union = constant_union2tc(
+        type, uniontype.member_names[i], std::vector<expr2tc>{target});
       output.emplace_back(accuml_guard, the_union);
     }
     return;
