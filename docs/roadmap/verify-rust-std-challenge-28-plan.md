@@ -227,10 +227,20 @@ What we learned:
 - `--show-loops` does not list the Rust loops of a Kani goto-binary, so they can only be
   bounded through `--unwindsetname` (esbmc#11008).
 
-Following §8, the useful contributions are the ESBMC fixes (esbmc#10991, esbmc#11008)
-and these measurements, which can go to the #596 author. A per-claim run would show
-whether a few arithmetic claims carry the whole cost. If they do, Grisu could be done
-compositionally, as §5 already plans for Dragon.
+A per-claim run (`--claim N`, one process per claim, 900 s each) on the f64 shortest
+harness with the round-3 options shows where the cost sits. Of the 111 claims in
+flt2dec, `diy_float` and the harness, 100 were proven (median 85 s, 90th percentile
+304 s). They include every `Fp::mul` overflow check and the digit bound
+`debug_assert!(q < 10)` (`grisu.rs:321`, 216 s), which every competing PR assumed.
+The 11 that timed out are the `buf[i]` index check (`grisu.rs:322`), `*last > b'0'`,
+and nine overflow checks on the `plus1`/`threshold`/`ulp` arithmetic in the digit loop
+and `round_and_weed`. These results hold within `--unwind 30` and the weed bound of 10.
+
+So the hard part is narrow: the remaining claims are the `buf[i]` index check and the
+overflow checks on the error-bound arithmetic, not the multiply or the digit value. A
+compositional proof of Grisu would need loop invariants for those claims. Following
+§8, the useful contributions are the ESBMC fixes (esbmc#10991, esbmc#11008) and these
+measurements, which can go to the #596 author.
 
 ## 8. Decisions to take
 
