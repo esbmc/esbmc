@@ -34,8 +34,12 @@ Bitwuzla (§8.32), and so does its merge with master `30592f8a7`, which adds
 Its merge with master `6c3c2cf9d` keeps them too, and the whole `esbmc/`
 ctest label under Bitwuzla fails only the tests that fail on master
 (§8.35). So does its merge with master `3194304fb`, which adds #10901's
-member lookup through a `byte_extract` (§8.36). Phases 0-2 are on master; the SV-COMP
-run that Phases 1 and 2 require is still open, and Phase 3 waits for it.**
+member lookup through a `byte_extract` (§8.36). Phases 0-2 are on master. The SV-COMP
+run (§8.37, master `e523eb04c8`, T=100 s) lost no correct verdict on one
+host and made no wrong one, so the Phase 2 gate is met on soundness. It is
+not met on timing: the flag costs about 14-18% CPU where it splits a struct,
+and three near-limit tasks may time out under suite load (§8.37). Phase 3
+may start with that exception recorded.**
 > The corpus is in `regression/field-sensitivity/`
 > with baselines, and the census has been run and reverted. Phase 1 adds
 > `--field-sensitive-ssa` (default off): symex gives each field of an
@@ -2384,3 +2388,59 @@ cloned with git), 4-core container.
   `VERIFICATION SUCCESSFUL` in 87.4 s, 85.7 s of it in Bitwuzla, against
   the 120 s cap.
 - Still open for the Phase 2 gate: an SV-COMP run.
+
+### 8.37 Phase 2: SV-COMP run, flag off against flag on
+
+Master `e523eb04c8`, one build copied to two hosts, SV-COMP 2027 C suite at
+T=100 s, 39,204 runs per arm. Arm A has the flag off, arm B has
+`--field-sensitive-ssa`. The hosts were not equally fast: on tasks the flag
+did not touch, arm B's host used 5.5% less CPU.
+
+| | Score | Correct | Wrong |
+|---|---|---|---|
+| Arm A | 44,102 | 27,047 | 15 |
+| Arm B | 44,233 | 27,155 | 15 |
+
+- The change is in `no-overflow` (+67 correct) and `unreach-call` (+41).
+  The other run sets are identical.
+- 126 tasks changed category: 117 gained a verdict, 9 lost one, none became
+  wrong.
+- Of the 9 losses, 8 had no struct split, so both arms solved the same
+  formula and the difference is host timing; two are threaded `pthread-wmm`
+  programs, where the flag disables itself. The ninth,
+  `softsign_w64_r1_case_0_unsafe`, split a struct and went from 93.7 s to
+  just over 100 s although every phase ESBMC times was faster.
+- Of the 117 gains, 79 had a struct split. They include 68 Juliet
+  `int_fgets` no-overflow tasks, which the split brings to about 48 s, inside
+  the wrapper's 60 s k-induction budget. The other 38 gains are noise.
+- Corrected for host speed, the flag costs about 14-18% CPU on tasks where
+  it splits a struct (8.1% median, 11.6% geometric mean as measured).
+
+Same-host rerun on `benchexec-root-2`, rounds interleaved A1 B1 A2 B2 A3 B3,
+12 tasks plus 52 filler tasks per round to keep 64 concurrent runs. The
+filler's B/A CPU median is 1.000 over 156 pairs, so the host did not drift.
+A task counts as lost if the flag fails to solve it in at least 2 of 3
+rounds while flag-off solves it in all 3 (fixed before the rerun).
+
+| Task | Role | Verdict A / B | B/A CPU |
+|---|---|---|---|
+| `softsign_w64_r1_case_0_unsafe` | suspect | false 3/3, 3/3 | 1.105 |
+| `algorithm90_unique` | suspect | false 3/3, 3/3 | 1.022 |
+| `list_clear_bug` | suspect | false 3/3, 3/3 | 1.023 |
+| `epat.ko`, `pg.ko`, `aws_linked_list_remove_harness_negated`, `synaptics_usb.ko`, `aws_hash_table_clean_up_harness`, `list_end_bug` | gain | same 3/3, 3/3 | 1.00-1.03 |
+| `vector17` | gain | false 3/3, 3/3 | 0.904 |
+| `algorithm107`, `gcd_1+newton_3_6` | control | same 3/3, 3/3 | 1.026, 1.006 |
+
+- No suspect is lost under the rule: the flag solves each in 3 of 3 rounds.
+- The rerun ran 12-20% faster than the full suite (`softsign` flag-off took
+  78 s against 93.7 s), so it did not recreate the near-limit condition.
+  Scaled to the suite's timings, `softsign` lands at about 103.5 s,
+  `list_clear_bug` at about 101.1 s and `algorithm90_unique` at about
+  99.9 s. Under suite load, up to three correct verdicts could time out, and
+  up to seven of the split gains could disappear.
+- `softsign` costs 10.5% more CPU with the flag, about 9 s in every round;
+  `vector17` is 10% faster, so that gain is not noise.
+
+Gate: no wrong verdict in either arm, and no lost correct verdict on equal
+hardware. Not measured: a full-suite run with both arms on one host.
+
