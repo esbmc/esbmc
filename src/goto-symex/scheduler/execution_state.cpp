@@ -381,8 +381,7 @@ void execution_statet::symex_step(reachability_treet &art)
   if (break_insn != 0 && break_insn == instruction.location_number)
     breakpoint();
 
-  if (partial_order)
-    record_shared_reads(instruction);
+  record_shared_reads(instruction);
 
   switch (instruction.type)
   {
@@ -415,10 +414,7 @@ void execution_statet::symex_step(reachability_treet &art)
       // offers no context-switch point unless analyzed first. The guard a
       // switch here must chain is likewise the one from before the return
       // (issue #6558).
-      if (partial_order)
-        record_shared_write(assign);
-      else
-        analyze_assign(assign);
+      analyze_assign(assign);
       last_transition.parent_guard = threads_state[active_thread].guard;
       symex_return(thecode);
     }
@@ -436,9 +432,7 @@ void execution_statet::symex_assign(
 {
   goto_symext::symex_assign(code, hidden, guard);
 
-  if (partial_order)
-    record_shared_write(code);
-  else if (threads_state.size() >= thread_cswitch_threshold)
+  if (partial_order || threads_state.size() >= thread_cswitch_threshold)
     analyze_assign(code);
 }
 
@@ -985,6 +979,12 @@ unsigned int execution_statet::add_thread(const goto_programt *prog)
 
 void execution_statet::analyze_assign(const expr2tc &code)
 {
+  if (partial_order)
+  {
+    record_shared_write(code);
+    return;
+  }
+
   if (is_nil_expr(code) || get_active_state().guard.is_false())
     return;
 
@@ -1070,7 +1070,7 @@ std::set<expr2tc> partial_order_reads(
 void execution_statet::record_shared_reads(
   const goto_programt::instructiont &instruction)
 {
-  if (cur_state->guard.is_false())
+  if (!partial_order || cur_state->guard.is_false())
     return;
 
   for (expr2tc sym : partial_order_reads(instruction, ns))
