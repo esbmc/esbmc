@@ -2,6 +2,7 @@
 #include <irep2/irep2_utils.h>
 
 #include <string>
+#include <vector>
 
 namespace
 {
@@ -14,6 +15,28 @@ irep_idt object_of(const symex_target_equationt::SSA_stept &step)
 const expr2tc &value_read(const symex_target_equationt::SSA_stept &step)
 {
   return step.type == symex_targett::SHARED_WRITE ? step.rhs : step.lhs;
+}
+
+/// \p a == \p b, element by element for an array of constant size: some
+/// solvers, Bitwuzla among them, do not decide an equality with a constant
+/// array that is not a top-level assertion.
+expr2tc same_value(const expr2tc &a, const expr2tc &b)
+{
+  if (!is_array_type(a->type))
+    return equality2tc(a, b);
+  const array_type2t &type = to_array_type(a->type);
+  if (type.size_is_infinite || !is_constant_int2t(type.array_size))
+    return equality2tc(a, b);
+
+  const uint64_t size = to_constant_int2t(type.array_size).value.to_uint64();
+  std::vector<expr2tc> elems;
+  for (uint64_t i = 0; i < size; ++i)
+  {
+    const expr2tc idx = constant_int2tc(index_type2(), BigInt(i));
+    elems.push_back(same_value(
+      index2tc(type.subtype, a, idx), index2tc(type.subtype, b, idx)));
+  }
+  return conjunction(elems);
 }
 
 unsigned thread_of(const symex_target_equationt::SSA_stept &step)
@@ -120,7 +143,7 @@ void memory_model_sct::read_from()
             rf,
             conjunction(
               {write.step->guard,
-               equality2tc(value_read(*read.step), write.step->lhs),
+               same_value(value_read(*read.step), write.step->lhs),
                before(w, r)})),
           read);
 
