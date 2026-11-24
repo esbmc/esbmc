@@ -2,3 +2,4 @@ CORE
 main.c
 --k-induction --k-step 4 --max-k-step 5
 ^VERIFICATION FAILED$
+FAILED.*Access to object out of bounds
