@@ -235,15 +235,17 @@ private:
 
     if (is_address_of2t(e))
     {
-      const expr2tc &obj = to_address_of2t(e).ptr_obj;
+      expr2tc obj = to_address_of2t(e).ptr_obj;
+      while (is_index2t(obj))
+        obj = to_index2t(obj).source_value;
       if (is_symbol2t(obj) && is_shared(to_symbol2t(obj)))
         return reject("taking the address of a global");
     }
 
     if (
       is_symbol2t(e) && is_shared(to_symbol2t(e)) &&
-      !is_partial_order_scalar(e->type))
-      return reject("a global of non-scalar type");
+      !is_partial_order_type(e->type))
+      return reject("a global that is not a scalar or an array of scalars");
 
     bool ok = true;
     e->foreach_operand([this, &ok](const expr2tc &op) {
@@ -276,8 +278,10 @@ private:
 };
 } // namespace
 
-bool is_partial_order_scalar(const type2tc &t)
+bool is_partial_order_type(const type2tc &t)
 {
+  if (is_array_type(t))
+    return is_partial_order_type(to_array_type(t).subtype);
   return is_bv_type(t) || is_bool_type(t) || is_fixedbv_type(t) ||
          is_floatbv_type(t);
 }

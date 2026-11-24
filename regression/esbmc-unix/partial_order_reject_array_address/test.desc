@@ -1,0 +1,5 @@
+CORE
+main.c
+--partial-order
+^ERROR: --partial-order does not support taking the address of a global yet, at file .*main\.c line 6 column 3 function t$
+\A(?![\s\S]*VERIFICATION)[\s\S]*\Z

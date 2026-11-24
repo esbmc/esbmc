@@ -10,6 +10,12 @@ irep_idt object_of(const symex_target_equationt::SSA_stept &step)
   return to_symbol2t(step.lhs).thename;
 }
 
+/// The value a read, or an update of part of an object, observes.
+const expr2tc &value_read(const symex_target_equationt::SSA_stept &step)
+{
+  return step.type == symex_targett::SHARED_WRITE ? step.rhs : step.lhs;
+}
+
 unsigned thread_of(const symex_target_equationt::SSA_stept &step)
 {
   return to_constant_int2t(step.lhs).value.to_uint64();
@@ -53,7 +59,11 @@ void memory_model_sct::collect(const symex_target_equationt::SSA_stepst &steps)
     if (step.type == symex_targett::SHARED_READ)
       reads[object_of(step)].push_back(id);
     else if (step.type == symex_targett::SHARED_WRITE)
+    {
       writes[object_of(step)].push_back(id);
+      if (!is_nil_expr(step.rhs))
+        reads[object_of(step)].push_back(id);
+    }
     else if (step.type == symex_targett::SPAWN)
       spawns.push_back(id);
     else if (step.type == symex_targett::JOIN)
@@ -95,8 +105,8 @@ void memory_model_sct::read_from()
       std::vector<expr2tc> choices;
       for (size_t w : write_ids)
       {
-        // A thread never reads its own later write.
-        if (same_thread(w, r) && w > r)
+        // A thread never reads its own later write, nor an update its own.
+        if (same_thread(w, r) && w >= r)
           continue;
 
         const eventt &write = events[w];
@@ -110,14 +120,15 @@ void memory_model_sct::read_from()
             rf,
             conjunction(
               {write.step->guard,
-               equality2tc(read.step->lhs, write.step->lhs),
+               equality2tc(value_read(*read.step), write.step->lhs),
                before(w, r)})),
           read);
 
         // From-read: a write ordered after the one read from comes after the
-        // read too, so the read sees the latest write.
+        // read too, so the read sees the latest write. For an update this
+        // also keeps every other write out from between the two.
         for (size_t later : write_ids)
-          if (later != w)
+          if (later != w && later != r)
             constrain(
               implies2tc(
                 conjunction({rf, events[later].step->guard, before(w, later)}),
