@@ -223,9 +223,13 @@ What we learned:
   the 64x64-bit product in `Fp::mul` and the division by a symbolic `ten_kappa`.
 - In exact mode, `round_up` calls `fill` at a symbolic offset with a symbolic length.
   ESBMC lowers that to the `__memset_impl` loop, which unwinds to the `--unwind` bound
-  rather than to the object's size (esbmc#10991).
-- `--show-loops` does not list the Rust loops of a Kani goto-binary, so they can only be
-  bounded through `--unwindsetname` (esbmc#11008).
+  rather than to the object's size (esbmc#10991). esbmc#11018 models such a fill
+  without the loop.
+- `--show-loops` lists the Rust loops only when it gets the same
+  `--report-property-class` or `--ignore-property-class` options as the verification
+  run. Without them, Kani's `assert(false)` reachability checks make the rest of the
+  harness unreachable, and the loops are removed before they are listed (esbmc#11008,
+  closed). With them, `--unwindset` bounds a Rust loop by number.
 
 A per-claim run (`--claim N`, one process per claim, 900 s each) on the f64 shortest
 harness with the round-3 options shows where the cost sits. Of the 111 claims in
@@ -239,7 +243,7 @@ and `round_and_weed`. These results hold within `--unwind 30` and the weed bound
 So the hard part is narrow: the remaining claims are the `buf[i]` index check and the
 overflow checks on the error-bound arithmetic, not the multiply or the digit value. A
 compositional proof of Grisu would need loop invariants for those claims. Following
-§8, the useful contributions are the ESBMC fixes (esbmc#10991, esbmc#11008) and these
+§8, the useful contributions are the ESBMC fix for esbmc#10991 (esbmc#11018) and these
 measurements, which can go to the #596 author.
 
 ## 8. Decisions to take
