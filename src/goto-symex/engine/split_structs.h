@@ -40,6 +40,14 @@ public:
     return it == split.end() ? nullptr : &it->second;
   }
 
+  /// Every field symbol under @p name, nested struct fields and their own
+  /// fields included, or null when it is not split.
+  const std::vector<expr2tc> *descendants(const irep_idt &name) const
+  {
+    auto it = all.find(name);
+    return it == all.end() ? nullptr : &it->second;
+  }
+
   /// Whether @p name is a field symbol no value set entry can hold: a scalar
   /// narrower than a pointer.
   bool is_untracked_field(const irep_idt &name) const
@@ -89,9 +97,21 @@ private:
 
   /// Record the field symbols of @p s, of type @p st, and add them to
   /// @p context.
-  void add_fields(const symbolt &s, const struct_type2t &st, contextt &context);
+  /// With @p nest, a member of struct type is split into fields of its own,
+  /// until @p budget leaf fields are used.
+  void add_fields(
+    const symbolt &s,
+    const struct_type2t &st,
+    contextt &context,
+    bool nest,
+    size_t &budget,
+    std::vector<expr2tc> &under);
+
+  /// The field symbol @p e names, at the level of its object, or nil.
+  expr2tc field_of(const expr2tc &e) const;
 
   std::unordered_map<irep_idt, std::vector<expr2tc>, irep_id_hash> split;
+  std::unordered_map<irep_idt, std::vector<expr2tc>, irep_id_hash> all;
   /// Member name to field index, per split object.
   std::unordered_map<
     irep_idt,

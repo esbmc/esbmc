@@ -117,7 +117,8 @@ void goto_symext::symex_decl(const expr2tc &code)
     renaming::level2t::name_record(to_symbol2t(l1_sym)));
 
   // A split object lives in its fields, which share its L1 activation.
-  const std::vector<expr2tc> *fields = split_fields(identifier);
+  const std::vector<expr2tc> *fields =
+    art1->split_structs.descendants(identifier);
   if (!fields)
   {
     declare_l1(l1_sym, decl_code.type, reused);
@@ -194,7 +195,7 @@ void goto_symext::symex_dead(const expr2tc &code)
     cur_state->value_set.erase_object(
       to_symbol2t(l1_sym).get_symbol_name(), dead_code.type);
 
-  if (const std::vector<expr2tc> *fields = split_fields(identifier))
+  if (const auto *fields = art1->split_structs.descendants(identifier))
     for (const expr2tc &field : *fields)
     {
       expr2tc l1_field = field;

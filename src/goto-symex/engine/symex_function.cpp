@@ -530,7 +530,7 @@ void goto_symext::give_locals_fresh_instances(
   {
     const unsigned n = ++cur_state->variable_instance_nums[id];
     frame.level1.rename(symbol2tc(get_empty_type(), id), n);
-    if (const std::vector<expr2tc> *fields = split_fields(id))
+    if (const auto *fields = art1->split_structs.descendants(id))
       for (const expr2tc &field : *fields)
         frame.level1.rename(field, n);
   }

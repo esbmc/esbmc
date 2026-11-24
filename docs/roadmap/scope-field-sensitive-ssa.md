@@ -39,7 +39,8 @@ run (§8.37, master `e523eb04c8`, T=100 s) lost no correct verdict on one
 host and made no wrong one, so the Phase 2 gate is met on soundness. It is
 not met on timing: the flag costs about 14-18% CPU where it splits a struct,
 and three near-limit tasks may time out under suite load (§8.37). Phase 3
-may start with that exception recorded.**
+may start with that exception recorded. Phase 3a (nested structs of objects
+whose address is never taken) is in draft; its gate is not met (§8.38).**
 > The corpus is in `regression/field-sensitivity/`
 > with baselines, and the census has been run and reverted. Phase 1 adds
 > `--field-sensitive-ssa` (default off): symex gives each field of an
@@ -2444,3 +2445,29 @@ rounds while flag-off solves it in all 3 (fixed before the rerun).
 Gate: no wrong verdict in either arm, and no lost correct verdict on equal
 hardware. Not measured: a full-suite run with both arms on one host.
 
+
+### 8.38 Phase 3a: nested structs
+
+Z3 4.13.3 only (no Bitwuzla in this container), master `c5d34566f2` plus the
+change, `CORE` tests, flag forced on, 30 s per run, base build against the
+change, output compared after dropping timings, uuids and addresses.
+
+| Suite | Tests run | Verdict changes | Output changes |
+|---|---|---|---|
+| C (`regression/esbmc`) | 3622 | 0 | 14 |
+| C++ (`esbmc-cpp/cpp`) | 1369 | 0 | 1 |
+| Python (first 900) | 805 | 0 | 0 |
+
+Timeouts (9 C, 8 C++, 3 Python) did not finish in either build. The C++
+change and 8 of the C changes are parallel-solving or k-induction output
+order, or the assignment count in a `Generated N VCC(s)` line. The remaining
+traces: `github_10965_with_chain_nested_fail` prints `r2 = { .f={ .p=&b }, ... }`
+where the base build with the flag prints `r2 = { .f=r.f, ... }`, and
+`github_7597-array-member_fail` prints `VAR.in.out = 2000 (...)` where it
+prints `{ .out=2000 }`. Both differ from flag off already, and neither is one
+of the four changes §8.6 accepts, so the trace gate is not met.
+
+Not measured: Bitwuzla, the corpus 2x bar, the SV-COMP run, an assert-enabled
+build, and a `__ESBMC_unreachable()` harness per new branch. Arrays of
+structs, a nested struct written whole (`o.i = t` keeps `o` whole) and
+k-induction havoc are not done.

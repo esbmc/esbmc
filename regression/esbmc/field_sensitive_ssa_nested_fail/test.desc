@@ -1,0 +1,5 @@
+CORE
+main.c
+--field-sensitive-ssa --unwind 6 --no-unwinding-assertions --z3
+^Field-sensitive SSA splits 13 struct object\(s\)$
+^VERIFICATION FAILED$
