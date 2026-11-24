@@ -1,0 +1,5 @@
+CORE
+main.c
+
+^  assertion \*t\.a\.p == 5$
+^VERIFICATION FAILED$
