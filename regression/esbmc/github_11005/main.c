@@ -11,6 +11,11 @@ int main()
   if (n > 70)
     assert(b[70] == a[70]);
 
+  unsigned char u[100];
+  memcpy(u, a, n);
+  if (n > 80)
+    assert(u[80] == (unsigned char)a[80]);
+
   char c[100];
   char c5 = c[5], c6 = c[6];
   unsigned m = nondet_uint();
