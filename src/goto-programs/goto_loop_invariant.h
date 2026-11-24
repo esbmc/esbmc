@@ -19,6 +19,11 @@
 /// to whichever loop happens to be nearby.
 extern const char *const kSynthesisedInvariantProperty;
 
+/// Property tag for a LOOP_INVARIANT that a goto-binary reader placed
+/// immediately before its loop head (the CBMC adapter); held to the same
+/// immediately-before rule as a synthesised marker.
+extern const char *const kPinnedInvariantProperty;
+
 namespace loop_invariant
 {
 /// Instructions with no effect a caller needs to account for: no write to a

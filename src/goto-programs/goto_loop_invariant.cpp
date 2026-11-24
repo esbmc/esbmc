@@ -50,6 +50,7 @@
 // ---------------------------------------------------------------------------
 
 const char *const kSynthesisedInvariantProperty = "synthesised-loop-invariant";
+const char *const kPinnedInvariantProperty = "pinned-loop-invariant";
 
 /// The base case and inductive step of one invariant carry the same number,
 /// so checked_loop_invariants pairs them without reading their guards.
@@ -114,6 +115,14 @@ static bool is_compiler_temp(goto_programt::const_targett t)
   return false;
 }
 
+/// A marker its producer placed immediately before its own loop head.
+static bool is_head_adjacent_marker(goto_programt::const_targett t)
+{
+  const std::string &property = t->location.property().as_string();
+  return property == kSynthesisedInvariantProperty ||
+         property == kPinnedInvariantProperty;
+}
+
 /// Walk backwards from @p loop_head (up to kMaxInvariantSearchBack steps) and
 /// return the invariant expression(s) for the nearest LOOP_INVARIANT found.
 /// Multiple conjuncts are folded into a single and2tc.  Returns an empty
@@ -172,9 +181,7 @@ static std::vector<expr2tc> extract_invariants_near(
     // A user-written invariant keeps the historical proximity-only behaviour:
     // the frontend may legitimately place it further from the head, and #3936
     // depends on that latitude.
-    if (
-      it->location.property().as_string() == kSynthesisedInvariantProperty &&
-      crossed_real_instruction)
+    if (is_head_adjacent_marker(it) && crossed_real_instruction)
     {
       // The count line has already reported this as synthesised. Say so rather
       // than drop it silently: the rule leans on the marker sitting immediately
@@ -182,7 +189,7 @@ static std::vector<expr2tc> extract_invariants_near(
       // invariants would start disappearing with no signal at all.
       log_debug(
         "loop-invariant",
-        "ignoring a synthesised loop invariant that belongs to another loop");
+        "ignoring a loop invariant that belongs to another loop");
       return invariants;
     }
 

@@ -1,0 +1,5 @@
+CORE
+main.goto
+--binary --function main --loop-invariant-check
+^Processing 1 loop invariant$
+^VERIFICATION SUCCESSFUL$

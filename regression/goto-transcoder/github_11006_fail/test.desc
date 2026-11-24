@@ -1,0 +1,5 @@
+CORE
+main.goto
+--binary --function main --loop-invariant-check
+^\s+FAILED\s+.*loop invariant inductive step$
+^VERIFICATION FAILED$

@@ -60,6 +60,15 @@ void convert(const irept &irep, goto_programt::instructiont &instruction)
     throw std::string("goto binary: malformed instruction");
   }
 
+  // The CBMC adapter carries a loop invariant in the guard field.
+  if (
+    instruction.is_loop_invariant() && !is_nil_expr(instruction.guard) &&
+    !is_true(instruction.guard))
+  {
+    instruction.add_loop_invariant(instruction.guard);
+    instruction.guard = gen_true_expr();
+  }
+
   // don't touch the targets, the goto_programt conversion does that
 
   const irept &lbls = irep.labels_irep();

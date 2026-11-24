@@ -4,6 +4,8 @@
 // mirror the Rust to keep the two implementations easy to diff.
 
 #include <goto-programs/cbmc_adapter.h>
+#include <goto-programs/goto_loop_invariant.h>
+#include <goto-programs/goto_program.h>
 #include <util/lang/c_types.h>
 #include <util/message/message.h>
 
@@ -2244,14 +2246,75 @@ irept instruction_to_esbmc_irep(
   return result;
 }
 
+// goto-cc keeps the __CPROVER_loop_invariant clauses of a loop on the guard of
+// its back edge; ESBMC's loop-invariant pass reads them from a LOOP_INVARIANT
+// instruction placed before the loop head. Keyed by the head's target number.
+std::map<unsigned, irept> loop_invariants_by_head(const cbmc_functiont &func)
+{
+  std::map<unsigned, irept> invariants;
+  for (const auto &ins : func.instructions)
+  {
+    const irept::subt &clauses =
+      ins.guard.find("#spec_loop_invariant").get_sub();
+    if (clauses.empty() || ins.targets.size() != 1)
+      continue;
+    irept conjunction = clauses.front();
+    for (std::size_t k = 1; k < clauses.size(); k++)
+      conjunction = mk_binary("and", mk("bool"), conjunction, clauses[k]);
+    invariants.emplace(ins.targets.front(), conjunction);
+  }
+  return invariants;
+}
+
+irept loop_invariant_to_esbmc_irep(
+  const irept &invariant,
+  const irept &location,
+  const std::string &function_name)
+{
+  irept result;
+  result.add("code") = mk("nil");
+  result.add("location") = location;
+  result.add("location").set("property", kPinnedInvariantProperty);
+  result.add("typeid") = mk(std::to_string(LOOP_INVARIANT));
+  result.add("guard") = invariant;
+  result.add("function") = mk(function_name);
+  fix_expression(result);
+  return result;
+}
+
+bool is_io_instruction(const cbmc_instructiont &ins)
+{
+  // __CPROVER_input/__CPROVER_output are trace-display annotations with no
+  // constraint semantics, and migrate_expr has no case for either. JBMC emits
+  // `input` for the entry point's arguments, so dropping only `output` left
+  // every Java main failing to migrate.
+  const irep_idt stmt =
+    ins.code.id() != "nil" ? ins.code.find("statement").id() : irep_idt();
+  return stmt == "output" || stmt == "input";
+}
+
 irept function_to_esbmc_irep(const cbmc_functiont &func)
 {
-  // CBMC numbers targets from 1 with a per-instruction target number; ESBMC
-  // uses the instruction's position. Build the reverse map over ALL
-  // instructions first (matching adapter.rs), then emit.
+  const std::map<unsigned, irept> invariants = loop_invariants_by_head(func);
+
+  // CBMC numbers targets with a per-instruction target number; ESBMC uses the
+  // instruction's position in the emitted program, which a dropped I/O
+  // instruction or an inserted LOOP_INVARIANT shifts. Build the reverse map
+  // over ALL instructions first, then emit.
   std::map<unsigned, unsigned> target_revmap;
-  for (unsigned i = 0; i < func.instructions.size(); i++)
-    target_revmap[func.instructions[i].target_number] = i;
+  unsigned position = 0;
+  for (const auto &ins : func.instructions)
+  {
+    // A jump to a dropped instruction lands on the next one emitted.
+    if (is_io_instruction(ins))
+    {
+      target_revmap[ins.target_number] = position;
+      continue;
+    }
+    if (invariants.count(ins.target_number) != 0)
+      position++;
+    target_revmap[ins.target_number] = position++;
+  }
 
   irept result(irep_idt("goto-program"));
   // Byte extent per Java array payload symbol, populated at the allocation and
@@ -2260,16 +2323,16 @@ irept function_to_esbmc_irep(const cbmc_functiont &func)
   std::unordered_map<std::string, irept> payload_extent;
   for (const auto &ins : func.instructions)
   {
-    // __CPROVER_input/__CPROVER_output are trace-display annotations with no
-    // constraint semantics, and migrate_expr has no case for either. JBMC emits
-    // `input` for the entry point's arguments, so dropping only `output` left
-    // every Java main failing to migrate.
-    const irep_idt stmt =
-      ins.code.id() != "nil" ? ins.code.find("statement").id() : irep_idt();
-    const bool is_io = stmt == "output" || stmt == "input";
-    if (!is_io)
-      result.get_sub().push_back(instruction_to_esbmc_irep(
-        ins, target_revmap, func.name, payload_extent));
+    if (is_io_instruction(ins))
+      continue;
+    // The head is a jump target, so the back edge skips the LOOP_INVARIANT
+    // and only the loop's entry passes through it.
+    auto inv = invariants.find(ins.target_number);
+    if (inv != invariants.end())
+      result.get_sub().push_back(loop_invariant_to_esbmc_irep(
+        inv->second, ins.source_location, func.name));
+    result.get_sub().push_back(
+      instruction_to_esbmc_irep(ins, target_revmap, func.name, payload_extent));
   }
   return result;
 }
