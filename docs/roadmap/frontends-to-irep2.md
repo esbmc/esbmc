@@ -4690,3 +4690,35 @@ argument's `#location` and `#default_value`, and the second of those was missed 
 entirely: the probe ran on a function with no default argument. **The blind spot was the probe's input,
 not its comparator** (`scope-python-irep2.md` §11.3.3). Choosing the comparator carefully is cheap;
 choosing an input that can exhibit every key the node can carry is the part that needs thought.
+
+## 84. §31.1's three sites abort instead of falling back (2026-11-23)
+
+Phase 1 is the earliest open phase, and §31.4 put three of its five origin sites first: a native
+`break` or `continue` with no target, and a `code_decl2t` whose symbol is absent from the context.
+The arms now `log_error` and `abort()` where they returned false. The legacy converter the fallback
+reaches aborts at the same points (`convert_break`, `convert_continue`; `convert_decl` asserts, and
+under `NDEBUG` dereferences the null symbol), so a run that reaches one of them still ends without a
+verdict. `return false` lines in `convert_native_rec`: 12 -> 9 (§30.4 counted 11, and one more has been added since); origin sites 5 -> 2.
+
+Two things make "the fallback would also abort" hold. The native while, do-while, for and switch arms
+call `set_break`/`set_continue` at the same four constructs as `convert_while`, `convert_dowhile`,
+`convert_for` and `convert_switch`. `convert_native_rec` is only called from itself and
+`try_convert_body_native`, so a body the legacy converter handles never re-enters it with
+different targets.
+
+Measured: `--goto-functions-only` with each test's flags over 17 881 tests (`esbmc`, `esbmc-cpp`,
+`cbmc`, `esbmc-solidity`, `jimple`, `python`). No run prints either new diagnostic. The 921 runs that
+exit non-zero print the same output under the unpatched binary, apart from timings, clang AST pointer
+addresses and temp paths. Because nothing reaches the three sites, the other 16 960 take the same path
+as before. This is the first decline census to include Solidity, which §29.4 and §30.4 left
+unmeasured: 545 tests, none reaching these sites. That covers these three sites only, not
+the full per-site census the status block asks for.
+
+No regression test can tell the two binaries apart. An input that reaches one of the sites aborts
+under both. Clang rejects a stray `break` before conversion. Python does not, because `ast.parse`
+accepts one at module level, so `x = 1` followed by `break` reaches the native arm, and both binaries
+print `break without target` and abort. There are no new tests, and the census is the measurement.
+
+Next in Phase 1 is §31.2, the nil `for` condition. Jimple's and Solidity's loop lowering still has to be
+read for a `code_for2t` producer. If neither produces one, the guard becomes an abort the same way.
+§31.3's expression-statement code operand, and a Solidity decline census over all five sites, come after it.
