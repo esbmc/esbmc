@@ -462,6 +462,15 @@ public:
    */
   void analyze_read(const expr2tc &expr);
 
+  /** --partial-order (#10990): give every shared global \p instruction reads
+   *  a fresh, unconstrained L2 name, recorded as a SHARED_READ event, so the
+   *  memory-model pass can choose which write it observes. */
+  void record_shared_reads(const goto_programt::instructiont &instruction);
+
+  /** --partial-order: record the L2 name an assignment to a shared global
+   *  defines as a SHARED_WRITE event. */
+  void record_shared_write(const expr2tc &code);
+
   /** Kind of memory access, used by get_expr_globals to decide whether a
    *  read-only global can be filtered out of cswitch-triggering sets. */
   enum class access_kindt
@@ -762,6 +771,9 @@ protected:
    *  thread's goto_symex_statet, so the option is looked up once per run
    *  rather than once per thread creation. */
   bool no_propagation;
+  /** --partial-order: run each thread to completion and record its shared
+   *  accesses as events instead of offering context switches. */
+  bool partial_order;
 
   /** Copy execution_statet's own scheduling fields from `ex`. The base
    *  goto_symext slice is left untouched (the copy constructor's

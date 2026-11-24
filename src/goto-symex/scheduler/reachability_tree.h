@@ -262,6 +262,14 @@ public:
   goto_symext::symex_resultt generate_schedule_formula();
 
   /**
+   *  Run threads in --partial-order manner (#10990): each thread runs to
+   *  completion, main first and then each spawned thread in creation order,
+   *  with no context switch and no backtracking.
+   *  @return Symex result holding every thread's steps and events
+   */
+  goto_symext::symex_resultt generate_partial_order_formula();
+
+  /**
    *  Reset ex_state stack to unexplored state.
    *  This is just a wrapper around reset_to_unexplored_state
    *  @return True if there is another state to be explored

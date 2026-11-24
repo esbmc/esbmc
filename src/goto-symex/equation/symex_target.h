@@ -24,7 +24,14 @@ public:
     OUTPUT,
     SKIP,
     RENUMBER,
-    BREANCHING
+    BREANCHING,
+    // --partial-order events (#10990): they add nothing to the formula
+    // themselves; the memory-model pass orders them.
+    SHARED_READ,
+    SHARED_WRITE,
+    SPAWN,
+    ATOMIC_BEGIN,
+    ATOMIC_END
   };
 
   struct sourcet
@@ -90,6 +97,14 @@ public:
     std::vector<stack_framet> stack_trace,
     const sourcet &source,
     unsigned loop_number) = 0;
+
+  /// Record a --partial-order event. \p symbol is the SSA symbol a shared
+  /// read or write accesses, and nil for the other event types.
+  virtual void event(
+    const expr2tc &guard,
+    step_typet type,
+    const expr2tc &symbol,
+    const sourcet &source) = 0;
 
   // Renumber the pointer object of a given symbol
   virtual void renumber(

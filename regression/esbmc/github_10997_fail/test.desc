@@ -1,0 +1,5 @@
+CORE
+main.c
+--loop-invariant-check --no-standard-checks
+^VERIFICATION FAILED$
+^  FAILED .*loop invariant base case$

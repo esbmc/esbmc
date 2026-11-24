@@ -1667,7 +1667,6 @@ protected:
    *  a %s string, plus the --printf-check claims; `reads_to_nul` is false
    *  when a precision or length modifier changes what %s reads. */
   void check_printf_pointer_arg(
-    printf_kindt kind,
     char spec,
     bool reads_to_nul,
     const expr2tc &arg);
@@ -1719,7 +1718,7 @@ protected:
    *  exact: the call must sit in the variadic function's own frame, the
    *  va_list operand must be one of that function's own non-parameter
    *  locals, and no va_arg may have been consumed in the activation yet. On
-   *  success fills `out` with the activation's L2-renamed va_arg values (in
+   *  success fills `out` with the activation's unrenamed va_arg symbols (in
    *  declaration order) and returns true; otherwise returns false and the
    *  caller must keep treating the arguments as unreliable (sound fallback).
    *  @param call The original (unrenamed) printf side effect.

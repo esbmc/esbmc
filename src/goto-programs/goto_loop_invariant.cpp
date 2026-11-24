@@ -631,6 +631,10 @@ static void extract_and_remove_side_effects_impl(
 
     if (search->is_goto())
     {
+      // Collected code below a branch (`||`, `&&`, `?:`) is conditional
+      // (#10997); re-running it unconditionally would clobber the temporary.
+      if (!to_remove.empty())
+        return;
       continue;
     }
 

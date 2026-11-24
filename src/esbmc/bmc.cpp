@@ -800,6 +800,12 @@ static bool is_vacuity_probe_candidate(const std::string &claim_property)
          claim_property == "assigns compliance";
 }
 
+static bool is_shown_in_program(const symex_target_equationt::SSA_stept &step)
+{
+  return step.is_assert() || step.is_assignment() || step.is_assume() ||
+         step.is_event();
+}
+
 void bmct::show_program(const symex_target_equationt &eq)
 {
   unsigned int count = 1;
@@ -815,7 +821,7 @@ void bmct::show_program(const symex_target_equationt &eq)
 
   for (auto const &it : eq.SSA_steps)
   {
-    if (!(it.is_assert() || it.is_assignment() || it.is_assume()))
+    if (!is_shown_in_program(it))
       continue;
 
     if (it.ignore && !sliced)
@@ -826,6 +832,14 @@ void bmct::show_program(const symex_target_equationt &eq)
     if (!it.comment.empty())
       oss << " (" << it.comment << ")";
     oss << "\n/* " << count << " */ ";
+
+    if (it.is_event())
+    {
+      it.output(ns, oss);
+      oss << '\n';
+      count++;
+      continue;
+    }
 
     std::string string_value;
     languages.from_expr(migrate_expr_back(it.cond), string_value);
@@ -2712,6 +2726,16 @@ static void report_empty_coverage(const optionst &options)
   }
 }
 
+static goto_symext::symex_resultt
+next_formula(reachability_treet &symex, const optionst &options)
+{
+  if (options.get_bool_option("partial-order"))
+    return symex.generate_partial_order_formula();
+  if (options.get_bool_option("schedule"))
+    return symex.generate_schedule_formula();
+  return symex.get_next_formula();
+}
+
 smt_resultt bmct::run_thread(std::shared_ptr<symex_target_equationt> &eq)
 {
   // Clear collected pytest test data at the start of coverage run
@@ -2725,9 +2749,7 @@ smt_resultt bmct::run_thread(std::shared_ptr<symex_target_equationt> &eq)
   fine_timet symex_start = current_time();
   try
   {
-    goto_symext::symex_resultt solver_result =
-      options.get_bool_option("schedule") ? symex->generate_schedule_formula()
-                                          : symex->get_next_formula();
+    goto_symext::symex_resultt solver_result = next_formula(*symex, options);
 
     fine_timet symex_stop = current_time();
 

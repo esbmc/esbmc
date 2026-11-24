@@ -697,6 +697,11 @@ const struct group_opt_templ all_cmd_options[] = {
      NULL,
      "Encode every interleaving in one formula; it grows exponentially with "
      "--context-bound and gets no partial-order reduction"},
+    {"partial-order",
+     NULL,
+     "Encode concurrency as one formula that orders shared accesses, with no "
+     "context bound (prototype: accepts global scalars only and does not "
+     "verify yet)"},
     {"context-bound",
      boost::program_options::value<int>()->default_value(-1)->value_name("nr"),
      "Limit number of context switches for each thread"},
