@@ -181,6 +181,84 @@ static bool is_const_foldable_arith(const expr2tc &e)
          is_modulus2t(e);
 }
 
+/// Whether a value of this type may hold a pointer. A carried value is read
+/// back through the value set of the object it names, which has moved on by
+/// the time a copy is read (#10965).
+static bool type_may_hold_pointer(const type2tc &type)
+{
+  if (is_pointer_type(type))
+    return true;
+  if (is_array_type(type))
+    return type_may_hold_pointer(to_array_type(type).subtype);
+  if (is_struct_type(type))
+    for (const type2tc &m : to_struct_type(type).members)
+      if (type_may_hold_pointer(m))
+        return true;
+  if (is_union_type(type))
+    for (const type2tc &m : to_union_type(type).members)
+      if (type_may_hold_pointer(m))
+        return true;
+  return false;
+}
+
+static bool same_l1_object(const symbol2t &a, const symbol2t &b)
+{
+  return a.thename == b.thename && a.level1_num == b.level1_num &&
+         a.thread_num == b.thread_num;
+}
+
+/// Whether carrying @p value into @p lhs would let a read of one of its pointer
+/// members reach an older generation of another object through a struct `with`
+/// chain that leaves the member unwritten. value_sett resolves that read
+/// against the other object's current points-to set, which has moved on
+/// (#10965). A chain over @p lhs itself is safe: only the current generation of
+/// an object is ever read, so its own earlier one is never read stale.
+static bool exposes_foreign_pointer(const expr2tc &value, const symbol2t &lhs)
+{
+  if (is_nil_expr(value) || !type_may_hold_pointer(value->type))
+    return false;
+
+  if (is_with2t(value) && is_struct_type(value->type))
+  {
+    std::vector<irep_idt> written;
+    expr2tc base = value;
+    for (; is_with2t(base); base = to_with2t(base).source_value)
+    {
+      const with2t &w = to_with2t(base);
+      if (exposes_foreign_pointer(w.update_value, lhs))
+        return true;
+      written.push_back(to_constant_string2t(w.update_field).value);
+    }
+
+    if (is_constant_expr(base))
+      return false;
+    if (exposes_foreign_pointer(base, lhs))
+      return true;
+
+    expr2tc root = base;
+    while (is_member2t(root) || is_index2t(root))
+      root = is_member2t(root) ? to_member2t(root).source_value
+                               : to_index2t(root).source_value;
+    if (is_symbol2t(root) && same_l1_object(to_symbol2t(root), lhs))
+      return false;
+
+    const struct_type2t &type = to_struct_type(value->type);
+    for (size_t i = 0; i < type.members.size(); ++i)
+      if (
+        type_may_hold_pointer(type.members[i]) &&
+        std::find(written.begin(), written.end(), type.member_names[i]) ==
+          written.end())
+        return true;
+    return false;
+  }
+
+  bool found = false;
+  value->foreach_operand([&](const expr2tc &op) {
+    found = found || exposes_foreign_pointer(op, lhs);
+  });
+  return found;
+}
+
 /// The types a read may be carried at. Scalars, and fixed-size struct, union or
 /// array aggregates: a read of a whole member denotes it exactly and folds a
 /// sibling the same way, which is what a write into an array member needs
@@ -205,7 +283,8 @@ static bool immutable_read_type(const expr2tc &e)
   // projects out of a constant_union2t only, so a read folds no cross-member
   // access and the aliasing a carried union literal would expose does not
   // arise. It is the enclosing object's other members this keeps foldable.
-  return is_struct_type(e->type) || is_union_type(e->type);
+  return (is_struct_type(e->type) || is_union_type(e->type)) &&
+         !type_may_hold_pointer(e->type);
 }
 
 /// A value that can never change once recorded: a level2 SSA generation
@@ -702,6 +781,31 @@ static expr2tc split_literal_chain(
   return state.constant_propagation(chain) ? chain : expr2tc();
 }
 
+/// The `with` nodes of @p value, outermost first.
+static std::vector<const with2t *> chain_updates(const expr2tc &value)
+{
+  std::vector<const with2t *> updates;
+  for (const expr2tc *cur = &value; is_with2t(*cur);
+       cur = &updates.back()->source_value)
+    updates.push_back(&to_with2t(*cur));
+  return updates;
+}
+
+/// The updates of the struct chain @p value, to carry over the name @p lhs
+/// defines instead of the base exposes_foreign_pointer rejects, or none when an
+/// update value itself exposes one.
+static std::vector<const with2t *>
+rebased_updates(const expr2tc &value, const symbol2t &lhs)
+{
+  if (!is_with2t(value) || !is_struct_type(value->type))
+    return {};
+  std::vector<const with2t *> updates = chain_updates(value);
+  for (const with2t *w : updates)
+    if (exposes_foreign_pointer(w->update_value, lhs))
+      return {};
+  return updates;
+}
+
 /// The updates of @p value, outermost first, when it is a split_literal_chain
 /// over the L2 name of a split object other than @p lhs; otherwise none.
 /// Carried over that name, readers of @p lhs stop reading it and the slicer
@@ -711,17 +815,12 @@ static std::vector<const with2t *> split_chain_updates(
   const expr2tc &value,
   const expr2tc &lhs)
 {
-  std::vector<const with2t *> updates;
   if (
     state.split_structs->empty() || !is_with2t(value) || !is_struct_type(value))
-    return updates;
+    return {};
 
-  const expr2tc *base = &value;
-  while (is_with2t(*base))
-  {
-    updates.push_back(&to_with2t(*base));
-    base = &updates.back()->source_value;
-  }
+  std::vector<const with2t *> updates = chain_updates(value);
+  const expr2tc *base = &updates.back()->source_value;
   if (
     !is_symbol2t(*base) || (*base)->type != lhs->type ||
     to_symbol2t(*base).thename == to_symbol2t(lhs).thename ||
@@ -1020,9 +1119,17 @@ void goto_symex_statet::assignment(
   expr2tc l1_lhs = lhs;
 
   expr2tc const_value = constant_propagation(rhs) ? rhs : expr2tc();
-  const std::vector<const with2t *> updates =
+  std::vector<const with2t *> updates =
     is_nil_expr(const_value) ? std::vector<const with2t *>()
                              : split_chain_updates(*this, const_value, lhs);
+  if (
+    updates.empty() && !is_nil_expr(const_value) &&
+    exposes_foreign_pointer(const_value, to_symbol2t(lhs)))
+  {
+    updates = rebased_updates(const_value, to_symbol2t(lhs));
+    if (updates.empty())
+      const_value = expr2tc();
+  }
   level2.make_assignment(lhs, updates.empty() ? const_value : expr2tc(), rhs);
   // The same updates over the name just defined, which they hold on.
   if (!updates.empty())
@@ -1427,8 +1534,7 @@ void goto_symex_statet::print_stack_trace(unsigned int indent, std::ostream &os)
   {
     if (it->function_identifier == "")
     { // Top level call
-      os << spaces << "init"
-         << "\n";
+      os << spaces << "init" << "\n";
     }
     else
     {
@@ -1443,8 +1549,7 @@ void goto_symex_statet::print_stack_trace(unsigned int indent, std::ostream &os)
 
   if (!thread_ended)
   {
-    os << spaces << "Next instruction to be executed:"
-       << "\n";
+    os << spaces << "Next instruction to be executed:" << "\n";
     source.pc->output_instruction(ns, "", os);
   }
 }
