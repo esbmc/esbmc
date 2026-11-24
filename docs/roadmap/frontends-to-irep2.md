@@ -4715,8 +4715,9 @@ unmeasured: 545 tests, none reaching these sites. That covers these three sites 
 the full per-site census the status block asks for.
 
 No regression test can tell the two binaries apart. An input that reaches one of the sites aborts
-under both. C and Python reject a stray `break` before conversion. There are no new tests, and the
-census is the measurement.
+under both. Clang rejects a stray `break` before conversion. Python does not, because `ast.parse`
+accepts one at module level, so `x = 1` followed by `break` reaches the native arm, and both binaries
+print `break without target` and abort. There are no new tests, and the census is the measurement.
 
 Next in Phase 1 is §31.2, the nil `for` condition. Jimple's and Solidity's loop lowering still has to be
 read for a `code_for2t` producer. If neither produces one, the guard becomes an abort the same way.
