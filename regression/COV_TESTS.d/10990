@@ -27,3 +27,7 @@ regression/esbmc-unix/partial_order_atomic
 regression/esbmc-unix/partial_order_atomic_fail
 regression/esbmc-unix/partial_order_reject_global_thread_id
 regression/esbmc-unix/partial_order_events_threads
+regression/esbmc-unix/partial_order_github_10296_assert
+regression/esbmc-unix/partial_order_github_10296_assert_join
+regression/esbmc-unix/partial_order_github_10296_counter
+regression/esbmc-unix/partial_order_github_10296_counter_fail
