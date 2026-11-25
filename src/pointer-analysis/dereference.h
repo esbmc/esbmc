@@ -559,7 +559,9 @@ private:
   void construct_from_const_offset(
     expr2tc &value,
     const expr2tc &offset,
-    const type2tc &type);
+    const type2tc &type,
+    const guard2tc &guard,
+    modet mode);
   void construct_from_bytes(
     expr2tc &value,
     const expr2tc &offset,

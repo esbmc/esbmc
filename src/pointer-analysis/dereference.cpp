@@ -1596,7 +1596,7 @@ void dereferencet::build_reference_rec(
   {
   case flag_src_scalar | flag_dst_scalar | flag_is_const_offs:
     // Access a scalar from a scalar.
-    construct_from_const_offset(value, offset, type);
+    construct_from_const_offset(value, offset, type, guard, mode);
     break;
   case flag_src_struct | flag_dst_scalar | flag_is_const_offs:
     // Extract a scalar from within a structure
@@ -2088,7 +2088,9 @@ void dereferencet::construct_array_ref(
 void dereferencet::construct_from_const_offset(
   expr2tc &value,
   const expr2tc &offset,
-  const type2tc &type)
+  const type2tc &type,
+  const guard2tc &guard,
+  modet mode)
 {
   const constant_int2t &theint = to_constant_int2t(offset);
 
@@ -2124,6 +2126,21 @@ void dereferencet::construct_from_const_offset(
       offs +=
         member_offset_bits(themember.source_value->type, themember.member, &ns);
     value = themember.source_value;
+  }
+
+  // Integer encoding has no byte representation of a struct to extract from
+  // (#11014): a read is left a free value, a store is reported.
+  if (
+    options.get_bool_option("int-encoding") &&
+    (is_struct_type(value) || is_union_type(value)))
+  {
+    if (is_write(mode))
+      dereference_failure(
+        "pointer dereference",
+        "Store through a struct member under integer encoding",
+        guard);
+    value = make_failed_symbol(type);
+    return;
   }
   construct_from_bytes(value, constant_int2tc(offset->type, offs), type);
 }
