@@ -110,8 +110,8 @@ bool needs_unbuilt_events(const std::string &name)
 class scope_checkt
 {
 public:
-  scope_checkt(const namespacet &ns, bool verifying)
-    : ns(ns), verifying(verifying)
+  scope_checkt(const namespacet &ns, bool verifying, bool races)
+    : ns(ns), verifying(verifying), races(races)
   {
   }
 
@@ -135,6 +135,7 @@ public:
 private:
   const namespacet &ns;
   const bool verifying;
+  const bool races;
   const locationt *where = nullptr;
   const goto_functionst *functions = nullptr;
 
@@ -260,6 +261,12 @@ private:
       !is_partial_order_type(e->type))
       return reject("a global that is not a scalar or an array of scalars");
 
+    // An array is one object, so accesses to distinct elements would race.
+    if (
+      races && is_symbol2t(e) && is_shared(to_symbol2t(e)) &&
+      is_array_type(e->type))
+      return reject("checking data races on a global array");
+
     bool ok = true;
     e->foreach_operand([this, &ok](const expr2tc &op) {
       if (ok)
@@ -319,8 +326,9 @@ bool is_partial_order_global(const namespacet &ns, const irep_idt &name)
 bool partial_order_in_scope(
   const goto_functionst &goto_functions,
   const namespacet &ns,
-  bool verifying)
+  bool verifying,
+  bool races)
 {
-  return scope_checkt(ns, false).check(goto_functions) &&
-         (!verifying || scope_checkt(ns, true).check(goto_functions));
+  return scope_checkt(ns, false, races).check(goto_functions) &&
+         (!verifying || scope_checkt(ns, true, races).check(goto_functions));
 }

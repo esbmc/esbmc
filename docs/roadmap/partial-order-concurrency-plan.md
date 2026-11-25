@@ -1,11 +1,12 @@
 # Plan — a partial-order encoding for concurrent programs (`--partial-order`)
 
-**Status (2026-11-25):** phase 1 in progress. Phase 0 is done, with the
-measurements below (§4), and the maintainer decided **go** on 2026-11-24.
-`--partial-order` verifies programs on global scalars and arrays of them,
-including through pointers, with threads created in loops, mutexes,
+**Status (2026-11-25):** phase 1 in review, phase 2 in progress. Phase 0 is
+done, with the measurements below (§4), and the maintainer decided **go** on
+2026-11-24. `--partial-order` verifies programs on global scalars and arrays
+of them, including through pointers, with threads created in loops, mutexes,
 condition variables, `pthread_exit` and the scheduler intrinsics phase 1
-lists, without assumptions; the effort figures are estimates.
+lists, without assumptions, and checks data races on scalars; the effort
+figures are estimates.
 **Origin:** [#10296](https://github.com/esbmc/esbmc/issues/10296), which found
 `--schedule` unsound and slow, and its
 [effort estimate](https://github.com/esbmc/esbmc/issues/10296#issuecomment-6798263610).
@@ -163,6 +164,12 @@ operational model takes one at will, so signals and broadcasts change nothing.
 - Deadlock: no order lets the program finish.
 - Rejected at first: atomicity, lock-order, the end-of-program leak check,
   k-induction and the incremental modes.
+
+Done: `--data-races-check` claims, for each pair of conflicting events from
+different threads, that no execution runs them back to back. The SC
+constraints already order every such pair, so "unordered clocks" never
+holds. Global arrays are rejected under the check, since an array is one
+object.
 
 ### Phase 3 — traces and witnesses (1–2 weeks)
 

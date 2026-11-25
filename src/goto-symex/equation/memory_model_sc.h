@@ -19,10 +19,14 @@
 /// before it. An execution in which a thread waits forever for a lock is not
 /// one of these, so its violations are not reported.
 /// The constraints go first in the equation, so every claim depends on them.
+/// With \p races, a claim at the end of the equation for each pair of
+/// conflicting events of different threads states that no execution places
+/// them next to each other.
 class memory_model_sct : public ssa_step_algorithm
 {
 public:
-  memory_model_sct() : ssa_step_algorithm(true)
+  explicit memory_model_sct(bool races = false)
+    : ssa_step_algorithm(true), races(races)
   {
   }
 
@@ -31,6 +35,12 @@ public:
   BigInt ignored() const override
   {
     return 0;
+  }
+
+  /// The data-race claims the last run() appended.
+  size_t claims_added() const override
+  {
+    return n_race_claims;
   }
 
 private:
@@ -45,7 +55,9 @@ private:
   std::map<irep_idt, std::vector<size_t>> reads, writes;
   std::vector<size_t> spawns, joins;
   std::map<irep_idt, std::vector<size_t>> locks, unlocks;
-  symex_target_equationt::SSA_stepst constraints;
+  symex_target_equationt::SSA_stepst constraints, claims;
+  const bool races;
+  size_t n_race_claims = 0;
 
   void collect(const symex_target_equationt::SSA_stepst &steps);
   void program_order();
@@ -54,6 +66,8 @@ private:
   void thread_order();
   void atomic_sections();
   void mutexes();
+  void data_races();
+  void claim_no_race(size_t a, size_t b);
   void isolate(size_t begin, size_t end);
   void constrain(const expr2tc &cond, const eventt &about);
   expr2tc before(size_t a, size_t b) const;

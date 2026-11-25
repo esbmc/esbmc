@@ -12,7 +12,9 @@
 #include <catch2/catch.hpp>
 
 #include <map>
+#include <set>
 #include <string>
+#include <vector>
 
 #include <goto-symex/equation/memory_model_sc.h>
 #include <irep2/irep2_expr.h>
@@ -481,4 +483,142 @@ TEST_CASE("a mutex nobody unlocks is locked once", "[po]")
   memory_model_sct().run(eq.SSA_steps);
 
   CHECK_FALSE(all_hold(eq, {{clock(0), tick(1)}, {clock(1), tick(2)}}));
+}
+
+namespace
+{
+std::vector<const symex_target_equationt::SSA_stept *>
+race_claims(const symex_target_equationt &eq)
+{
+  std::vector<const symex_target_equationt::SSA_stept *> out;
+  for (const auto &step : eq.SSA_steps)
+    if (step.is_assert())
+      out.push_back(&step);
+  return out;
+}
+
+bool races_under(const symex_target_equationt::SSA_stept &claim, valuation v)
+{
+  expr2tc adjacent = claim.cond_neg;
+  substitute(adjacent, v);
+  simplify(adjacent);
+  REQUIRE(is_constant_bool2t(adjacent));
+  return is_true(adjacent);
+}
+
+/// Events 0: W x (thread 0), 1: W y (thread 0), 2: R x (thread 1).
+struct write_write_readt
+{
+  contextt ctx;
+  namespacet ns{ctx};
+  symex_target_equationt eq{ns};
+
+  explicit write_write_readt(bool races)
+  {
+    add_event(eq, 0, symex_targett::SHARED_WRITE, x(1));
+    add_event(
+      eq, 0, symex_targett::SHARED_WRITE, symbol2tc(get_int32_type(), "c:@y"));
+    add_event(eq, 1, symex_targett::SHARED_READ, x(2));
+    memory_model_sct(races).run(eq.SSA_steps);
+  }
+};
+} // namespace
+
+TEST_CASE("races are claimed only when asked for", "[po]")
+{
+  CHECK(race_claims(write_write_readt(false).eq).empty());
+
+  write_write_readt f(true);
+  const auto claims = race_claims(f.eq);
+  REQUIRE(claims.size() == 1);
+  CHECK(claims[0] == &f.eq.SSA_steps.back());
+  CHECK(claims[0]->comment == "R/W data race on c:@x");
+}
+
+TEST_CASE("conflicting events race when nothing lies between", "[po]")
+{
+  write_write_readt f(true);
+  const auto &claim = *race_claims(f.eq).front();
+  const valuation adjacent = {
+    {clock(0), tick(1)}, {clock(1), tick(3)}, {clock(2), tick(2)}};
+  CHECK(races_under(claim, adjacent));
+  const valuation reversed = {
+    {clock(0), tick(2)}, {clock(1), tick(3)}, {clock(2), tick(1)}};
+  CHECK(races_under(claim, reversed));
+  const valuation separated = {
+    {clock(0), tick(1)}, {clock(1), tick(2)}, {clock(2), tick(3)}};
+  CHECK_FALSE(races_under(claim, separated));
+}
+
+TEST_CASE("an event off the path does not separate a race", "[po]")
+{
+  contextt ctx;
+  namespacet ns(ctx);
+  symex_target_equationt eq(ns);
+  add_event(eq, 0, symex_targett::SHARED_WRITE, x(1));
+  symex_targett::sourcet source;
+  eq.event(
+    gen_false_expr(),
+    symex_targett::SHARED_WRITE,
+    symbol2tc(get_int32_type(), "c:@y"),
+    source);
+  add_event(eq, 1, symex_targett::SHARED_READ, x(2));
+  memory_model_sct(true).run(eq.SSA_steps);
+
+  const auto claims = race_claims(eq);
+  REQUIRE(claims.size() == 1);
+  CHECK(races_under(
+    *claims[0],
+    {{clock(0), tick(1)}, {clock(1), tick(2)}, {clock(2), tick(3)}}));
+}
+
+TEST_CASE("only conflicting pairs of different threads are claimed", "[po]")
+{
+  contextt ctx;
+  namespacet ns(ctx);
+  symex_target_equationt eq(ns);
+  add_event(eq, 0, symex_targett::SHARED_WRITE, x(1));
+  add_event(eq, 0, symex_targett::SHARED_READ, x(2));
+  add_event(eq, 1, symex_targett::SHARED_READ, x(3));
+  add_event(eq, 1, symex_targett::SHARED_WRITE, x(4));
+  memory_model_sct(true).run(eq.SSA_steps);
+
+  // W0/R2, W0/W3 and W3/R1; neither R/R nor a thread with itself.
+  std::multiset<std::string> comments;
+  for (const auto *claim : race_claims(eq))
+    comments.insert(claim->comment.as_string());
+  CHECK(
+    comments == std::multiset<std::string>{
+                  "R/W data race on c:@x",
+                  "R/W data race on c:@x",
+                  "W/W data race on c:@x"});
+}
+
+TEST_CASE("the race claims appended are counted", "[po]")
+{
+  contextt ctx;
+  namespacet ns(ctx);
+  symex_target_equationt eq(ns);
+  add_event(eq, 0, symex_targett::SHARED_WRITE, x(1));
+  add_event(eq, 1, symex_targett::SHARED_READ, x(2));
+  memory_model_sct model(true);
+  model.run(eq.SSA_steps);
+  CHECK(model.claims_added() == race_claims(eq).size());
+  CHECK(model.claims_added() == 1);
+}
+
+TEST_CASE("an access off the path does not race", "[po]")
+{
+  contextt ctx;
+  namespacet ns(ctx);
+  symex_target_equationt eq(ns);
+  symex_targett::sourcet source;
+  eq.event(gen_false_expr(), symex_targett::SHARED_WRITE, x(1), source);
+  add_event(eq, 1, symex_targett::SHARED_READ, x(2));
+  memory_model_sct(true).run(eq.SSA_steps);
+
+  const auto claims = race_claims(eq);
+  REQUIRE(claims.size() == 1);
+  CHECK_FALSE(
+    races_under(*claims[0], {{clock(0), tick(1)}, {clock(1), tick(2)}}));
 }

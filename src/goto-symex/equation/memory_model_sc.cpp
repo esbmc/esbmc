@@ -1,6 +1,7 @@
 #include <goto-symex/equation/memory_model_sc.h>
 #include <irep2/irep2_utils.h>
 
+#include <set>
 #include <string>
 #include <vector>
 
@@ -56,6 +57,7 @@ bool memory_model_sct::run(symex_target_equationt::SSA_stepst &steps)
   locks.clear();
   unlocks.clear();
   constraints.clear();
+  claims.clear();
 
   collect(steps);
   program_order();
@@ -64,8 +66,12 @@ bool memory_model_sct::run(symex_target_equationt::SSA_stepst &steps)
   thread_order();
   atomic_sections();
   mutexes();
+  if (races)
+    data_races();
 
+  n_race_claims = claims.size();
   steps.splice(steps.begin(), constraints);
+  steps.splice(steps.end(), claims);
   return true;
 }
 
@@ -254,6 +260,50 @@ void memory_model_sct::mutexes()
           events[later]);
       }
   }
+}
+
+void memory_model_sct::data_races()
+{
+  for (const auto &[object, write_ids] : writes)
+  {
+    std::set<size_t> accesses(write_ids.begin(), write_ids.end());
+    if (auto it = reads.find(object); it != reads.end())
+      accesses.insert(it->second.begin(), it->second.end());
+    for (size_t w : write_ids)
+      for (size_t other : accesses)
+        if (
+          !same_thread(w, other) &&
+          (w < other ||
+           events[other].step->type != symex_targett::SHARED_WRITE))
+          claim_no_race(w, other);
+  }
+}
+
+/// A race is a pair of conflicting events with no event between them in some
+/// execution: the schedule can then run either one first.
+void memory_model_sct::claim_no_race(size_t a, size_t b)
+{
+  std::vector<expr2tc> adjacent{or2tc(before(a, b), before(b, a))};
+  for (size_t c = 0; c < events.size(); ++c)
+    if (c != a && c != b)
+      adjacent.push_back(implies2tc(
+        events[c].step->guard,
+        not2tc(or2tc(
+          and2tc(before(a, c), before(c, b)),
+          and2tc(before(b, c), before(c, a))))));
+
+  const eventt &second = events[b];
+  const bool both_write = second.step->type == symex_targett::SHARED_WRITE;
+  claims.emplace_back();
+  symex_target_equationt::SSA_stept &step = claims.back();
+  step.type = symex_targett::ASSERT;
+  step.guard = and2tc(events[a].step->guard, second.step->guard);
+  // The encoding reads only cond, as for a claim symex makes.
+  step.cond_neg = and2tc(step.guard, conjunction(adjacent));
+  step.cond = not2tc(step.cond_neg);
+  step.source = second.step->source;
+  step.comment = std::string(both_write ? "W/W" : "R/W") + " data race on " +
+                 id2string(object_of(*second.step));
 }
 
 void memory_model_sct::constrain(const expr2tc &cond, const eventt &about)

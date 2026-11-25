@@ -244,7 +244,9 @@ bmct::bmct(goto_functionst &funcs, optionst &opts, contextt &_context)
   {
     const bool partial_order = opts.get_bool_option("partial-order");
     if (partial_order)
-      algorithms.emplace_back(std::make_unique<memory_model_sct>());
+      algorithms.emplace_back(
+        std::make_unique<memory_model_sct>(
+          opts.get_bool_option("data-races-check")));
 
     // Run cache if user has specified the option
     if (
@@ -2784,6 +2786,8 @@ smt_resultt bmct::run_thread(std::shared_ptr<symex_target_equationt> &eq)
     {
       a->run(eq->SSA_steps);
       ignored += a->ignored();
+      solver_result.total_claims += a->claims_added();
+      solver_result.remaining_claims += a->claims_added();
     }
 
     // Count remaining assertions after all algorithms have run
