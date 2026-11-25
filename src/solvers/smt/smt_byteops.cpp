@@ -26,12 +26,30 @@ smt_astt smt_solver_baset::convert_byte_extract(const expr2tc &expr)
     return convert_byte_extract_bv_mode(data, source, offs, src_width);
 }
 
+/* Reading a whole object as another type of its width, as Kani's transmutes
+ * do (#11023), keeps every bit, and a pointer keeps its provenance. Nil when
+ * @p data reads only part of its source. */
+static expr2tc whole_object_read(const byte_extract2t &data, unsigned src_width)
+{
+  const expr2tc &source = data.source_value;
+  if (
+    !is_constant_int2t(data.source_offset) ||
+    !to_constant_int2t(data.source_offset).value.is_zero() ||
+    data.type->get_width() != src_width)
+    return expr2tc();
+  return data.type == source->type ? source : bitcast2tc(data.type, source);
+}
+
 smt_astt smt_solver_baset::convert_byte_extract_int_mode(
   const byte_extract2t &data,
   expr2tc source,
   expr2tc offs,
   unsigned int src_width)
 {
+  if (const expr2tc whole = whole_object_read(data, src_width);
+      !is_nil_expr(whole))
+    return convert_ast(whole);
+
   // A typecast would take an aggregate's value, which has none (#11014).
   if (is_structure_type(source) || is_array_type(source))
     source = bitcast2tc(get_uint_type(src_width), source);
