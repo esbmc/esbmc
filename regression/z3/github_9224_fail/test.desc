@@ -1,0 +1,5 @@
+CORE
+main.c
+--z3
+^\s+x = -[0-9]+
+^VERIFICATION FAILED$
