@@ -75,3 +75,12 @@ regression/esbmc-unix/partial_order_really_atomic_fail
 regression/esbmc-unix/partial_order_terminate
 regression/esbmc-unix/partial_order_terminate_fail
 regression/esbmc-unix/partial_order_reject_scheduler_state
+regression/esbmc-unix/partial_order_race
+regression/esbmc-unix/partial_order_race_fail
+regression/esbmc-unix/partial_order_race_ww
+regression/esbmc-unix/partial_order_race_ww_fail
+regression/esbmc-unix/partial_order_race_join
+regression/esbmc-unix/partial_order_race_join_fail
+regression/esbmc-unix/partial_order_race_guarded
+regression/esbmc-unix/partial_order_race_guarded_fail
+regression/esbmc-unix/partial_order_reject_race_array
