@@ -1062,7 +1062,11 @@ static BigInt checked_access_bits(const type2tc &type, const namespacet &ns)
     return 0;
   if (is_struct_type(type) || is_union_type(type))
   {
-    const BigInt bits = ::alignment(migrate_type_back(type), ns) * 8;
+    /* The symbol's type, as in object_base_alignment(): a union's `packed`
+     * and a record's `#pragma pack(n)` do not survive migrate_type_back(). */
+    const symbolt *sym = ns.lookup("tag-" + id2string(struct_union_name(type)));
+    const typet legacy = sym ? sym->get_type() : migrate_type_back(type);
+    const BigInt bits = ::alignment(legacy, ns) * 8;
     return bits > 8 ? bits : BigInt(0);
   }
   if (!(is_scalar_type(type) || is_vector_type(type)))

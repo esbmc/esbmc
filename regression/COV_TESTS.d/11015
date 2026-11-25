@@ -1,3 +1,4 @@
 regression/esbmc/github_11015
 regression/esbmc/github_11015_fail
 regression/esbmc/github_11015_union_fail
+regression/esbmc/github_11015_packed
