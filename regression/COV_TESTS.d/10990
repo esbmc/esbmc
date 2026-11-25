@@ -14,7 +14,6 @@ regression/esbmc-unix/partial_order_latest_write
 regression/esbmc-unix/partial_order_latest_write_fail
 regression/esbmc-unix/partial_order_no_later_write
 regression/esbmc-unix/partial_order_no_later_write_fail
-regression/esbmc-unix/partial_order_reject_verify_lock
 regression/esbmc-unix/partial_order_reject_verify_assume
 regression/esbmc-unix/partial_order_no_slice
 regression/esbmc-unix/partial_order_spawn
@@ -54,3 +53,12 @@ regression/esbmc-unix/partial_order_loop_spawn_guarded
 regression/esbmc-unix/partial_order_loop_spawn_guarded_fail
 regression/esbmc-unix/partial_order_join_symbolic
 regression/esbmc-unix/partial_order_join_symbolic_fail
+regression/esbmc-unix/partial_order_mutex
+regression/esbmc-unix/partial_order_mutex_fail
+regression/esbmc-unix/partial_order_mutex_guarded
+regression/esbmc-unix/partial_order_mutex_guarded_fail
+regression/esbmc-unix/partial_order_mutex_pointer
+regression/esbmc-unix/partial_order_mutex_pointer_fail
+regression/esbmc-unix/partial_order_reject_local_mutex
+regression/esbmc-unix/partial_order_events_lock
+regression/esbmc-unix/partial_order_reject_mutex_choice

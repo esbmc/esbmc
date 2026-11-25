@@ -512,6 +512,15 @@ public:
    *  @return Whether \p instruction was such a call under --partial-order */
   bool partial_order_join(const goto_programt::instructiont &instruction);
 
+  /** --partial-order: replace a pthread_mutex_lock or pthread_mutex_unlock
+   *  call by a LOCK or UNLOCK event on its mutex, which the memory model
+   *  orders in place of the operational model's wait.
+   *  @return Whether \p instruction was such a call under --partial-order */
+  bool partial_order_mutex(const goto_programt::instructiont &instruction);
+
+  /** Assign 0 to what \p call returns into, if anything. */
+  void return_zero(const code_function_call2t &call);
+
   /** Kind of memory access, used by get_expr_globals to decide whether a
    *  read-only global can be filtered out of cswitch-triggering sets. */
   enum class access_kindt

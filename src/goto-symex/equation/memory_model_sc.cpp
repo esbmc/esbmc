@@ -53,6 +53,8 @@ bool memory_model_sct::run(symex_target_equationt::SSA_stepst &steps)
   writes.clear();
   spawns.clear();
   joins.clear();
+  locks.clear();
+  unlocks.clear();
   constraints.clear();
 
   collect(steps);
@@ -61,6 +63,7 @@ bool memory_model_sct::run(symex_target_equationt::SSA_stepst &steps)
   read_from();
   thread_order();
   atomic_sections();
+  mutexes();
 
   steps.splice(steps.begin(), constraints);
   return true;
@@ -91,6 +94,10 @@ void memory_model_sct::collect(const symex_target_equationt::SSA_stepst &steps)
       spawns.push_back(id);
     else if (step.type == symex_targett::JOIN)
       joins.push_back(id);
+    else if (step.type == symex_targett::LOCK)
+      locks[object_of(step)].push_back(id);
+    else if (step.type == symex_targett::UNLOCK)
+      unlocks[object_of(step)].push_back(id);
   }
 }
 
@@ -215,6 +222,38 @@ void memory_model_sct::isolate(size_t begin, size_t end)
           events[begin].step->guard,
           or2tc(before(other, begin), before(end, other))),
         events[begin]);
+}
+
+void memory_model_sct::mutexes()
+{
+  for (const auto &[mutex, lock_ids] : locks)
+  {
+    const std::vector<size_t> &unlock_ids = unlocks[mutex];
+    for (size_t taken : lock_ids)
+      for (size_t later : lock_ids)
+      {
+        if (taken == later)
+          continue;
+        if (taken < later && !same_thread(taken, later))
+          constrain(
+            notequal2tc(events[taken].clock, events[later].clock),
+            events[later]);
+
+        // The false seed: disjunction() of nothing is true.
+        std::vector<expr2tc> releases{gen_false_expr()};
+        for (size_t u : unlock_ids)
+          releases.push_back(conjunction(
+            {events[u].step->guard, before(taken, u), before(u, later)}));
+        constrain(
+          implies2tc(
+            conjunction(
+              {events[taken].step->guard,
+               events[later].step->guard,
+               before(taken, later)}),
+            disjunction(releases)),
+          events[later]);
+      }
+  }
 }
 
 void memory_model_sct::constrain(const expr2tc &cond, const eventt &about)

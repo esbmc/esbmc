@@ -64,6 +64,15 @@ bool is_unsupported_call(const std::string &name)
   return scheduler_intrinsics.count(name) != 0;
 }
 
+bool is_mutex_type(const type2tc &t)
+{
+  const std::string name =
+    is_struct_type(t)  ? to_struct_type(t).name.as_string()
+    : is_union_type(t) ? to_union_type(t).name.as_string()
+                       : "";
+  return name.find("pthread_mutex_t") != std::string::npos;
+}
+
 bool is_null(expr2tc e)
 {
   while (is_typecast2t(e))
@@ -71,12 +80,11 @@ bool is_null(expr2tc e)
   return is_constant(e) && !is_constant_string2t(e);
 }
 
-/// Locks, which the memory model does not order yet, and assumptions, which
-/// the equation applies to every later thread's claims whatever the clocks
-/// say.
+/// Assumptions, which the equation applies to every later thread's claims
+/// whatever the clocks say.
 bool needs_unbuilt_events(const std::string &name)
 {
-  return name.starts_with("pthread_mutex_lock") || name == "__VERIFIER_assume";
+  return name == "__VERIFIER_assume";
 }
 
 class scope_checkt
@@ -179,6 +187,13 @@ private:
   {
     const bool create = name == "pthread_create";
     const bool join = name.starts_with("pthread_join");
+    const bool mutex = name.starts_with("pthread_mutex_lock") ||
+                       name.starts_with("pthread_mutex_unlock");
+    // A lock event names its mutex by the global it is.
+    if (
+      mutex && is_address_of2t(call.operands.at(0)) &&
+      !is_shared_address(call.operands.at(0)))
+      return reject("a mutex that is not a global");
     if (create && !is_null(call.operands.at(3)))
       return reject("a thread argument other than NULL");
     if (join && !is_null(call.operands.at(1)))
@@ -195,6 +210,12 @@ private:
   bool check_expr(const expr2tc &e) const
   {
     if (is_nil_expr(e))
+      return true;
+
+    // Symex resolves the pointer to the global when it is locked.
+    if (
+      is_address_of2t(e) && is_symbol2t(to_address_of2t(e).ptr_obj) &&
+      is_mutex_type(to_address_of2t(e).ptr_obj->type))
       return true;
 
     if (

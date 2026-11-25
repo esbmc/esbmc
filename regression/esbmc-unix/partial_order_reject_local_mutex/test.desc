@@ -1,0 +1,5 @@
+CORE
+main.c
+--partial-order
+^ERROR: --partial-order does not support a mutex that is not a global yet, at file .*main\.c line 6 
+\A(?![\s\S]*VERIFICATION)[\s\S]*\Z

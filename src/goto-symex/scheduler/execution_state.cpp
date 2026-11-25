@@ -1288,8 +1288,56 @@ void execution_statet::symex_call(
   reachability_treet &art,
   const goto_programt::instructiont &instruction)
 {
-  if (!partial_order_join(instruction))
+  if (!partial_order_join(instruction) && !partial_order_mutex(instruction))
     goto_symext::symex_step(art);
+}
+
+void execution_statet::return_zero(const code_function_call2t &call)
+{
+  if (is_nil_expr(call.ret))
+    return;
+  expr2tc ret = call.ret;
+  dereference(ret, dereferencet::WRITE);
+  symex_assign(code_assign2tc(ret, gen_zero(ret->type)), true, guard2tc());
+}
+
+bool execution_statet::partial_order_mutex(
+  const goto_programt::instructiont &instruction)
+{
+  const code_function_call2t &call = to_code_function_call2t(instruction.code);
+  if (!partial_order || !is_symbol2t(call.function))
+    return false;
+  const std::string name = to_symbol2t(call.function).thename.as_string();
+  const bool lock = name.starts_with("c:@F@pthread_mutex_lock");
+  if (!lock && !name.starts_with("c:@F@pthread_mutex_unlock"))
+    return false;
+
+  if (!cur_state->guard.is_false())
+  {
+    expr2tc mutex = call.operands.at(0);
+    cur_state->rename(mutex);
+    simplify(mutex);
+    const expr2tc obj =
+      is_address_of2t(mutex) ? to_address_of2t(mutex).ptr_obj : expr2tc();
+    if (
+      is_nil_expr(obj) || !is_symbol2t(obj) ||
+      !is_partial_order_global(ns, to_symbol2t(obj).thename))
+    {
+      log_error(
+        "--partial-order needs a mutex that is a global known during "
+        "symbolic execution, at {}",
+        instruction.location.as_string());
+      abort();
+    }
+    target->event(
+      cur_state->guard.as_expr(),
+      lock ? symex_targett::LOCK : symex_targett::UNLOCK,
+      symbol2tc(obj->type, to_symbol2t(obj).thename),
+      cur_state->source);
+    return_zero(call);
+  }
+  cur_state->source.pc++;
+  return true;
 }
 
 bool execution_statet::partial_order_join(
@@ -1320,13 +1368,7 @@ bool execution_statet::partial_order_join(
             symex_targett::JOIN,
             k,
             equality2tc(tid, constant_int2tc(tid->type, BigInt(k))));
-
-    if (!is_nil_expr(call.ret))
-    {
-      expr2tc ret = call.ret;
-      dereference(ret, dereferencet::WRITE);
-      symex_assign(code_assign2tc(ret, gen_zero(ret->type)), true, guard2tc());
-    }
+    return_zero(call);
   }
   cur_state->source.pc++;
   return true;
