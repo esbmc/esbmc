@@ -33,6 +33,19 @@ void dereferencet::reset_object_counter()
 // Look for the base of an expression such as &a->b[1];, where all we're doing
 // is performing some pointer arithmetic, rather than actually performing some
 // dereference operation.
+// Index of the widest member, so that a write through a union built over a
+// byte array reaches every byte (#10939, #11013). The union is non-empty.
+static size_t widest_union_member(const union_type2t &uniontype)
+{
+  size_t widest = 0;
+  for (size_t i = 1; i < uniontype.members.size(); i++)
+    if (
+      type_byte_size_bits(uniontype.members[i]) >
+      type_byte_size_bits(uniontype.members[widest]))
+      widest = i;
+  return widest;
+}
+
 static inline expr2tc get_base_dereference(const expr2tc &e)
 {
   // XXX -- do we need to consider if2t's? And how?
@@ -2841,12 +2854,13 @@ void dereferencet::construct_struct_ref_from_const_offset_array(
       return;
     }
     // For unions all members overlap at the same offset; reconstruct using
-    // the first member, mirroring construct_struct_ref_from_dyn_offset.
+    // the widest member.
+    const size_t i = widest_union_member(uniontype);
     expr2tc target = value;
     build_reference_rec(
-      target, gen_ulong(intref.value), uniontype.members[0], guard, mode);
+      target, gen_ulong(intref.value), uniontype.members[i], guard, mode);
     std::vector<expr2tc> fields = {target};
-    value = constant_union2tc(type, uniontype.member_names[0], fields);
+    value = constant_union2tc(type, uniontype.member_names[i], fields);
     return;
   }
 
@@ -3418,18 +3432,18 @@ void dereferencet::construct_struct_ref_from_dyn_offs_rec(
     }
     else if (is_union_type(type))
     {
-      // For unions from byte arrays, read the first member at offset
       const union_type2t &uniontype = to_union_type(type);
       if (uniontype.members.empty())
         return;
+      const size_t i = widest_union_member(uniontype);
       expr2tc target = value; // The byte array
       expr2tc union_offs = offs;
       simplify(union_offs);
-      build_reference_rec(target, union_offs, uniontype.members[0], tmp, mode);
+      build_reference_rec(target, union_offs, uniontype.members[i], tmp, mode);
 
       std::vector<expr2tc> members = {target};
       expr2tc the_union =
-        constant_union2tc(type, uniontype.member_names[0], members);
+        constant_union2tc(type, uniontype.member_names[i], members);
       output.emplace_back(accuml_guard, the_union);
     }
     return;
