@@ -514,9 +514,16 @@ public:
 
   /** --partial-order: replace a pthread_mutex_lock or pthread_mutex_unlock
    *  call by a LOCK or UNLOCK event on its mutex, which the memory model
-   *  orders in place of the operational model's wait.
+   *  orders in place of the operational model's wait, and a
+   *  pthread_cond_wait by an UNLOCK and a LOCK of its mutex.
    *  @return Whether \p instruction was such a call under --partial-order */
   bool partial_order_mutex(const goto_programt::instructiont &instruction);
+
+  /** --partial-order: end the path at a pthread_exit call. The operational
+   *  model ends it with an assumption, which would also hold every other
+   *  thread's later claims, since they follow it in the equation.
+   *  @return Whether \p instruction was such a call under --partial-order */
+  bool partial_order_exit(const goto_programt::instructiont &instruction);
 
   /** Assign 0 to what \p call returns into, if anything. */
   void return_zero(const code_function_call2t &call);

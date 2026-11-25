@@ -31,6 +31,13 @@ bool is_supported_thread_call(const std::string &name)
     "pthread_mutex_lock_noassert",
     "pthread_mutex_unlock_noassert",
     "pthread_mutex_destroy",
+    // Signals change nothing a wait observes, since a wait may wake at will.
+    "pthread_cond_init",
+    "pthread_cond_destroy",
+    "pthread_cond_signal",
+    "pthread_cond_broadcast",
+    "pthread_cond_wait_nocheck",
+    "pthread_exit",
     "__ESBMC_atomic_begin",
     "__ESBMC_atomic_end",
     "__VERIFIER_atomic_begin",
@@ -187,12 +194,12 @@ private:
   {
     const bool create = name == "pthread_create";
     const bool join = name.starts_with("pthread_join");
+    const bool wait = name.starts_with("pthread_cond_wait");
     const bool mutex = name.starts_with("pthread_mutex_lock") ||
-                       name.starts_with("pthread_mutex_unlock");
+                       name.starts_with("pthread_mutex_unlock") || wait;
     // A lock event names its mutex by the global it is.
-    if (
-      mutex && is_address_of2t(call.operands.at(0)) &&
-      !is_shared_address(call.operands.at(0)))
+    const expr2tc m = mutex ? call.operands.at(wait ? 1 : 0) : expr2tc();
+    if (mutex && is_address_of2t(m) && !is_shared_address(m))
       return reject("a mutex that is not a global");
     if (create && !is_null(call.operands.at(3)))
       return reject("a thread argument other than NULL");

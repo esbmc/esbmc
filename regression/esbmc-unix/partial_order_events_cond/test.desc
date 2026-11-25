@@ -1,0 +1,5 @@
+CORE
+main.c
+--partial-order --program-only
+^/\* \d+ \*/ Thread 0 file .*main\.c line 9 .*\nUNLOCK c:@m\n.*\n/\* \d+ \*/ Thread 0 file .*main\.c line 9 .*\nLOCK c:@m$
+\A(?![\s\S]*VERIFICATION)[\s\S]*\Z

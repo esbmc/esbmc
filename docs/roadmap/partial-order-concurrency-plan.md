@@ -3,8 +3,9 @@
 **Status (2026-11-25):** phase 1 in progress. Phase 0 is done, with the
 measurements below (§4), and the maintainer decided **go** on 2026-11-24.
 `--partial-order` verifies programs on global scalars and arrays of them,
-including through pointers, with threads created in loops and with mutexes,
-without assumptions; the effort figures are estimates.
+including through pointers, with threads created in loops, mutexes,
+condition variables and `pthread_exit`, without assumptions; the effort
+figures are estimates.
 **Origin:** [#10296](https://github.com/esbmc/esbmc/issues/10296), which found
 `--schedule` unsound and slow, and its
 [effort estimate](https://github.com/esbmc/esbmc/issues/10296#issuecomment-6798263610).
@@ -146,7 +147,10 @@ thread id differs between paths waits, on each path, for the thread it names.
 `pthread_mutex_lock` and `pthread_mutex_unlock` on a global mutex are LOCK
 and UNLOCK events; a lock is taken only if every earlier lock of its mutex was
 released before it. An execution in which a thread waits forever for a lock is
-not modelled; phase 2's deadlock check covers it.
+not modelled; phase 2's deadlock check covers it. `pthread_cond_wait` is an
+UNLOCK and a LOCK of its mutex: POSIX allows spurious wakeups and the
+operational model takes one at will, so signals and broadcasts change nothing.
+`pthread_exit` ends the path of the thread that calls it, main included.
 
 ### Phase 2 — properties (3–4 weeks)
 
