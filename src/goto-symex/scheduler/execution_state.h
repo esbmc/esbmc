@@ -488,8 +488,12 @@ public:
    *  L2 name and return it. */
   expr2tc fresh_shared_value(expr2tc sym);
 
-  /** --partial-order: record a SPAWN or JOIN event naming thread \p tid. */
-  void record_thread_event(symex_targett::step_typet type, unsigned int tid);
+  /** --partial-order: record a SPAWN or JOIN event naming thread \p tid,
+   *  under the current guard and, if not nil, \p cond. */
+  void record_thread_event(
+    symex_targett::step_typet type,
+    unsigned int tid,
+    const expr2tc &cond = expr2tc());
 
   /** --partial-order: record an ATOMIC_BEGIN or ATOMIC_END event for an
    *  atomic section in user code. */

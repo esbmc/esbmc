@@ -3,8 +3,8 @@
 **Status (2026-11-25):** phase 1 in progress. Phase 0 is done, with the
 measurements below (§4), and the maintainer decided **go** on 2026-11-24.
 `--partial-order` verifies programs on global scalars and arrays of them,
-including through pointers, without locks or assumptions; the effort figures
-are estimates.
+including through pointers and with threads created in loops, without locks
+or assumptions; the effort figures are estimates.
 **Origin:** [#10296](https://github.com/esbmc/esbmc/issues/10296), which found
 `--schedule` unsound and slow, and its
 [effort estimate](https://github.com/esbmc/esbmc/issues/10296#issuecomment-6798263610).
@@ -140,7 +140,9 @@ whole array; an element write is an update, a write that also reads the
 array's previous value, and the from-read constraint keeps every other write
 out from between the two. A dereference reads, or updates, every global its
 pointer's value set reaches; a global pointer and a global's address passed to
-a function without a body are still rejected.
+a function without a body are still rejected. A thread created in a loop is
+one thread per unwinding, spawned under that unwinding's guard; a join whose
+thread id differs between paths waits, on each path, for the thread it names.
 
 ### Phase 2 — properties (3–4 weeks)
 

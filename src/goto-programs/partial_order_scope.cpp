@@ -90,17 +90,14 @@ public:
   bool check(const goto_functionst &goto_functions)
   {
     functions = &goto_functions;
-    collect_spawners(goto_functions);
     for (const auto &[name, fn] : goto_functions.function_map)
     {
       if (!is_user_function(name.as_string(), fn))
         continue;
-      for (auto it = fn.body.instructions.begin();
-           it != fn.body.instructions.end();
-           ++it)
+      for (const auto &instruction : fn.body.instructions)
       {
-        where = &it->location;
-        if (!check_instruction(*it) || !check_loop(fn.body, it))
+        where = &instruction.location;
+        if (!check_instruction(instruction))
           return false;
       }
     }
@@ -112,8 +109,6 @@ private:
   const bool verifying;
   const locationt *where = nullptr;
   const goto_functionst *functions = nullptr;
-  /// Functions that create a thread, directly or through a call.
-  std::set<std::string> spawners;
 
   static bool
   is_user_function(const std::string &name, const goto_functiont &fn)
@@ -132,48 +127,6 @@ private:
       what,
       where->as_string());
     return false;
-  }
-
-  void collect_spawners(const goto_functionst &goto_functions)
-  {
-    spawners.insert(fn_prefix + "pthread_create");
-    for (bool grew = true; grew;)
-    {
-      grew = false;
-      for (const auto &[name, fn] : goto_functions.function_map)
-        if (!spawners.count(name.as_string()) && calls_spawner(fn.body))
-          grew = spawners.insert(name.as_string()).second;
-    }
-  }
-
-  bool calls_spawner(const goto_programt &body) const
-  {
-    for (const auto &instruction : body.instructions)
-      if (is_spawning_call(instruction))
-        return true;
-    return false;
-  }
-
-  bool is_spawning_call(const goto_programt::instructiont &instruction) const
-  {
-    if (!instruction.is_function_call())
-      return false;
-    const expr2tc &function =
-      to_code_function_call2t(instruction.code).function;
-    return is_symbol2t(function) &&
-           spawners.count(to_symbol2t(function).thename.as_string());
-  }
-
-  /// One thread per unwinding of a loop belongs to phase 1.
-  bool check_loop(const goto_programt &body, goto_programt::const_targett latch)
-    const
-  {
-    if (!latch->is_backwards_goto())
-      return true;
-    for (auto it = latch->targets.front(); it != latch; ++it)
-      if (is_spawning_call(*it))
-        return reject("a thread created inside a loop");
-    return true;
   }
 
   bool check_instruction(const goto_programt::instructiont &instruction) const

@@ -1255,12 +1255,16 @@ void execution_statet::record_shared_write(const expr2tc &code)
 
 void execution_statet::record_thread_event(
   symex_targett::step_typet type,
-  unsigned int tid)
+  unsigned int tid,
+  const expr2tc &cond)
 {
   if (!partial_order || cur_state->guard.is_false())
     return;
+  guard2tc guard = cur_state->guard;
+  if (!is_nil_expr(cond))
+    guard.add(cond);
   target->event(
-    cur_state->guard.as_expr(),
+    guard.as_expr(),
     type,
     constant_int2tc(get_uint32_type(), BigInt(tid)),
     cur_state->source);
@@ -1304,16 +1308,18 @@ bool execution_statet::partial_order_join(
     expr2tc tid = call.operands.at(0);
     cur_state->rename(tid);
     simplify(tid);
-    if (!is_constant_int2t(tid))
-    {
-      log_error(
-        "--partial-order needs the thread a join waits for to be known "
-        "during symbolic execution, at {}",
-        instruction.location.as_string());
-      abort();
-    }
-    record_thread_event(
-      symex_targett::JOIN, to_constant_int2t(tid).value.to_uint64());
+    if (is_constant_int2t(tid))
+      record_thread_event(
+        symex_targett::JOIN, to_constant_int2t(tid).value.to_uint64());
+    else
+      // A thread id merged from paths that spawned different threads, as
+      // after a loop with a symbolic bound.
+      for (unsigned int k = 0; k < threads_state.size(); ++k)
+        if (k != active_thread)
+          record_thread_event(
+            symex_targett::JOIN,
+            k,
+            equality2tc(tid, constant_int2tc(tid->type, BigInt(k))));
 
     if (!is_nil_expr(call.ret))
     {

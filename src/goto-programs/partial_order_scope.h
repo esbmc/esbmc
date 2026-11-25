@@ -5,8 +5,8 @@
 
 /// Whether the user code in \p goto_functions stays inside what the
 /// --partial-order prototype handles (#10990): shared globals of scalar
-/// or array-of-scalar type, threads created outside loops with a null argument,
-/// and pthread create, join and mutex calls. The operational models are not
+/// or array-of-scalar type, threads created with a null argument, and
+/// pthread create, join and mutex calls. The operational models are not
 /// checked. With \p verifying, also rejects what the memory model cannot
 /// order yet: locks and assumptions. Logs the first construct outside that
 /// scope.

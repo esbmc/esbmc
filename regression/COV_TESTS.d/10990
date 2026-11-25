@@ -1,7 +1,6 @@
 regression/esbmc-unix/partial_order_in_scope
 regression/esbmc-unix/partial_order_reject_address
 regression/esbmc-unix/partial_order_reject_cond
-regression/esbmc-unix/partial_order_reject_loop_spawn
 regression/esbmc-unix/partial_order_reject_schedule
 regression/esbmc-unix/partial_order_reject_thread_arg
 regression/esbmc-unix/partial_order_reject_falsify
@@ -49,3 +48,9 @@ regression/esbmc-unix/partial_order_pointer_increment
 regression/esbmc-unix/partial_order_pointer_increment_fail
 regression/esbmc-unix/partial_order_pointer_array
 regression/esbmc-unix/partial_order_pointer_array_fail
+regression/esbmc-unix/partial_order_loop_spawn
+regression/esbmc-unix/partial_order_loop_spawn_fail
+regression/esbmc-unix/partial_order_loop_spawn_guarded
+regression/esbmc-unix/partial_order_loop_spawn_guarded_fail
+regression/esbmc-unix/partial_order_join_symbolic
+regression/esbmc-unix/partial_order_join_symbolic_fail
