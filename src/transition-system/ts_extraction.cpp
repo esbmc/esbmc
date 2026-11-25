@@ -95,9 +95,10 @@ std::string l1_name(const expr2tc &e)
          std::to_string(s.thread_num);
 }
 
-/** No recursion, and no function pointers outside the library models. Loops in
- * callees are checked during capture: one that would run more than once
- * leaves an unwinding assertion in the step.
+/** No recursion, no function pointers outside the library models, and no
+ * callee that k-induction transformed. A callee loop it left alone is checked
+ * during capture: one that would run more than once leaves an unwinding
+ * assertion in the step.
  */
 bool calls_are_supported(
   const goto_functionst &fns,
@@ -135,8 +136,19 @@ bool calls_are_supported(
     auto f = fns.function_map.find(name);
     if (f == fns.function_map.end() || !f->second.body_available)
       continue;
-    stack.push_back(name);
     const auto &body = f->second.body;
+    // Without entry flags (loop_entry_flags), a callee loop's havoc is
+    // followed by an unconditional assume of its condition, which is false
+    // whenever the loop is not entered and would cut off the rest of the path.
+    if (std::any_of(
+          body.instructions.begin(),
+          body.instructions.end(),
+          [](const auto &i) { return i.inductive_step_instruction; }))
+    {
+      log_warning("{} has a loop that k-induction havocs", name.as_string());
+      return false;
+    }
+    stack.push_back(name);
     if (!calls_are_supported(
           fns,
           body.instructions.begin(),

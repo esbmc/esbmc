@@ -1,0 +1,5 @@
+CORE
+main.c
+--bitwuzla --no-pointer-check --no-bounds-check --ts-pdr --max-k-step 20
+^WARNING: c:@F@g has a loop that k-induction havocs$
+^VERIFICATION SUCCESSFUL$
