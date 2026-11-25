@@ -2472,8 +2472,16 @@ C++ and C were of those kinds, not all were inspected.
 Four new tests (`field_sensitive_ssa_nested_*`) pin the split count, which
 master does not reach (3 objects against 9), and the verdict.
 
+Corpus rows, Z3 4.13.3 (Ubuntu 24.04 packages), RelWithDebInfo build of this
+branch, one run each, `test.desc` options without `--smtlib`, 60 s limit,
+flag on: every row verifies and w2048 is within 2x of w8 (global_callee 0.4 s
+against 0.4 s, local_addr_once 0.2 s against 0.2 s, local_writes 0.2 s against
+0.3 s, plc_db 0.5 s against 0.4 s, repro7521 1.3 s against 0.8 s). With the
+flag off, plc_db_w512 and plc_db_w2048 hit the 60 s limit. Phase 3 adds no
+nested struct to these rows, so this checks that it did not regress them.
+
 Unmet gates, not measured: the Python suite (Python objects are not split, 613
-tests ran with no change), Bitwuzla, the corpus rows against the 2x bar,
+tests ran with no change), Bitwuzla (not installable here),
 the k-induction suite, the unreachability harnesses for each new branch,
 the assert-enabled build, and the SV-COMP run. Arrays of structs and k-induction
 havoc of field symbols remain to be done.
