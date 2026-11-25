@@ -678,15 +678,15 @@ const struct group_opt_templ all_cmd_options[] = {
      "k-induction phase is selected. --check-vacuity applies to the whole run, "
      "so a program with no loop at all can still report UNKNOWN where it "
      "reported SUCCESSFUL; --no-vacuity-check turns it back off"},
-    {"synthesise-loops",
-     boost::program_options::value<std::string>()->value_name("llm"),
+    {"llm-invariants",
+     NULL,
      "Synthesise loop invariants with a language model: the command given by "
      "--llm-command proposes invariants for every loop, and the claims they "
      "fail are fed back to it. Implies --synthesise-loop-invariants, whose "
      "havoc schema discharges them"},
     {"llm-command",
      boost::program_options::value<std::string>()->value_name("cmd"),
-     "Model command for --synthesise-loops=llm, run once per query and "
+     "Model command for --llm-invariants, run once per query and "
      "split on spaces; it reads the conversation on stdin and writes its "
      "answer to stdout, e.g. 'ollama run qwen2.5-coder'"},
     {"llm-timeout",
@@ -694,7 +694,7 @@ const struct group_opt_templ all_cmd_options[] = {
      "Seconds each model query may take"},
     {"llm-max-rounds",
      boost::program_options::value<int>()->default_value(3)->value_name("nr"),
-     "Model queries --synthesise-loops=llm makes before the "
+     "Model queries --llm-invariants makes before the "
      "invariants found so far are kept"},
     {"loop-frame-rule",
      NULL,

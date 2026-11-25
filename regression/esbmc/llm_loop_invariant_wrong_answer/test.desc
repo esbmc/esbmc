@@ -1,6 +1,6 @@
 CORE
 main.c
---synthesise-loops llm --llm-command model.py --llm-max-rounds 1
+--llm-invariants --llm-command model.py --llm-max-rounds 1
 REQUIRES posix_host
 ^LLM loop invariants: 1 of 2 candidate conjunct\(s\) are inductive$
 \A(?![\s\S]*VERIFICATION SUCCESSFUL)[\s\S]*\Z

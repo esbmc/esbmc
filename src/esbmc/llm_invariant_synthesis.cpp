@@ -453,7 +453,7 @@ void llm_synthesise_loop_invariants(
   if (spawns_threads(goto_functions))
   {
     log_warning(
-      "--synthesise-loops=llm: the program creates threads, and "
+      "--llm-invariants: the program creates threads, and "
       "cutting a loop deletes the interleaving points its body carried. "
       "Synthesising nothing");
     return;
@@ -463,7 +463,7 @@ void llm_synthesise_loop_invariants(
   if (user_invariant_present(goto_functions))
   {
     log_warning(
-      "--synthesise-loops=llm: the program already carries loop "
+      "--llm-invariants: the program already carries loop "
       "invariants, which are authoritative. Synthesising nothing");
     return;
   }
@@ -471,7 +471,7 @@ void llm_synthesise_loop_invariants(
   llm_cegist cegis(goto_functions, context, options, use_frame_rule);
   if (!cegis.has_loops())
   {
-    log_warning("--synthesise-loops=llm added no invariant: no loop was found");
+    log_warning("--llm-invariants added no invariant: no loop was found");
     return;
   }
 
@@ -523,6 +523,6 @@ void llm_synthesise_loop_invariants(
       loops == 1 ? "" : "s");
   else
     log_warning(
-      "--synthesise-loops=llm added no invariant: the model "
+      "--llm-invariants added no invariant: the model "
       "proposed none that is inductive; the run proceeds unchanged");
 }

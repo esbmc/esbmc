@@ -1120,10 +1120,10 @@ void esbmc_parseoptionst::apply_loop_invariants(
   bool k_induction_ran)
 {
   const bool use_frame_rule = cmdline.isset("loop-frame-rule");
-  const bool llm = cmdline.isset("synthesise-loops");
+  const bool llm = cmdline.isset("llm-invariants");
   if (llm && k_induction_ran)
     log_warning(
-      "--synthesise-loops=llm added no invariant: the k-induction "
+      "--llm-invariants added no invariant: the k-induction "
       "transform has already rewritten the loop heads. Drop the k-induction "
       "phase to use it");
   else if (llm)

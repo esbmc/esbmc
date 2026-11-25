@@ -1,4 +1,0 @@
-CORE
-main.c
---synthesise-loops guess
-^ERROR: --synthesise-loops takes 'llm', not 'guess'$

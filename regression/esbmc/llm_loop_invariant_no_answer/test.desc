@@ -1,6 +1,6 @@
 CORE
 main.c
---synthesise-loops llm --llm-command model.sh --llm-max-rounds 2
+--llm-invariants --llm-command model.sh --llm-max-rounds 2
 REQUIRES posix_host
 ^WARNING: LLM loop invariants: no answer: CLI LLM process exited with 1$
 ^LLM loop invariants: round 2, asking the model$

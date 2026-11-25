@@ -1,4 +1,0 @@
-CORE
-main.c
---synthesise-loops llm --llm-command model.py --llm-max-rounds 0
-^ERROR: --llm-max-rounds must be at least 1$

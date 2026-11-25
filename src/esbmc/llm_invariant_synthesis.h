@@ -5,7 +5,7 @@
 #include <util/config/options.h>
 #include <util/symtab/context.h>
 
-/// --synthesise-loops=llm: ask a language model for loop invariants with
+/// --llm-invariants: ask a language model for loop invariants with
 /// chain-of-thought prompting, as Pirzada et al. do ("LLM-Generated Invariants
 /// for Bounded Model Checking Without Loop Unrolling", ASE 2024), and refine
 /// them counterexample-guided, which that work does not.

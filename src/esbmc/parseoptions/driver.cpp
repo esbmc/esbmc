@@ -224,32 +224,26 @@ static bool concurrency_mode_conflicts(const cmdlinet &cmdline)
   return schedule_conflicts(cmdline) || partial_order_conflicts(cmdline);
 }
 
-/// --synthesise-loops=llm runs the --synthesise-loop-invariants pipeline with
-/// a model as the synthesiser, so it sets that flag and inherits every
+/// --llm-invariants runs the --synthesise-loop-invariants pipeline with a
+/// model as the synthesiser, so it sets that flag and inherits every
 /// implication and conflict check made on it.
 static bool select_loop_synthesiser(cmdlinet &cmdline)
 {
-  if (!cmdline.isset("synthesise-loops"))
+  if (!cmdline.isset("llm-invariants"))
   {
     if (cmdline.isset("llm-command"))
     {
-      log_error("--llm-command needs --synthesise-loops=llm");
+      log_error("--llm-command needs --llm-invariants");
       return true;
     }
     return false;
-  }
-  const std::string engine = cmdline.getval("synthesise-loops");
-  if (engine != "llm")
-  {
-    log_error("--synthesise-loops takes 'llm', not '{}'", engine);
-    return true;
   }
   if (
     !cmdline.isset("llm-command") ||
     std::string(cmdline.getval("llm-command")).find_first_not_of(' ') ==
       std::string::npos)
   {
-    log_error("--synthesise-loops=llm needs --llm-command");
+    log_error("--llm-invariants needs --llm-command");
     return true;
   }
   for (const char *count : {"llm-timeout", "llm-max-rounds"})
@@ -471,7 +465,7 @@ void esbmc_parseoptionst::default_kani_strategy()
     "inductive-step",
     "loop-invariant",
     "synthesise-loop-invariants",
-    "synthesise-loops",
+    "llm-invariants",
     "incremental-context-bound",
     "multi-property",
     "report-property-class",
