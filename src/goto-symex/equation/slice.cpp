@@ -459,7 +459,11 @@ void symex_slicet::run_on_event(symex_target_equationt::SSA_stept &SSA_step)
 {
   collect_dependencies(SSA_step.guard);
   if (SSA_step.type == symex_targett::SHARED_WRITE)
+  {
+    // A read of an array observes all of it, so no element store is dead.
+    scan_array_uses(SSA_step.lhs);
     collect_dependencies(SSA_step.lhs);
+  }
 }
 
 /**

@@ -478,13 +478,15 @@ void symex_target_equationt::event(
   const expr2tc &guard,
   step_typet type,
   const expr2tc &symbol,
-  const sourcet &source)
+  const sourcet &source,
+  const expr2tc &old)
 {
   SSA_steps.emplace_back();
   SSA_stept &SSA_step = SSA_steps.back();
 
   SSA_step.guard = guard;
   SSA_step.lhs = symbol;
+  SSA_step.rhs = old;
   SSA_step.type = type;
   SSA_step.source = source;
   assert(SSA_step.is_event());
@@ -610,7 +612,10 @@ void symex_target_equationt::SSA_stept::output(
     out << "SHARED_READ " << to_symbol2t(lhs).get_symbol_name() << "\n";
     break;
   case symex_targett::SHARED_WRITE:
-    out << "SHARED_WRITE " << to_symbol2t(lhs).get_symbol_name() << "\n";
+    out << "SHARED_WRITE " << to_symbol2t(lhs).get_symbol_name();
+    if (!is_nil_expr(rhs))
+      out << " updating " << to_symbol2t(rhs).get_symbol_name();
+    out << "\n";
     break;
   case symex_targett::SPAWN:
     out << "SPAWN " << to_constant_int2t(lhs).as_ulong() << "\n";

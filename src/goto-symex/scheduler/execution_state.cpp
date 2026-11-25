@@ -436,6 +436,9 @@ void execution_statet::symex_assign(
   const bool hidden,
   const guard2tc &guard)
 {
+  if (partial_order && partial_order_array_update(code, hidden, guard))
+    return;
+
   goto_symext::symex_assign(code, hidden, guard);
 
   if (partial_order || threads_state.size() >= thread_cswitch_threshold)
@@ -1029,8 +1032,19 @@ namespace
 {
 bool is_partial_order_event_symbol(const expr2tc &e, const namespacet &ns)
 {
-  return is_symbol2t(e) && is_partial_order_scalar(e->type) &&
+  return is_symbol2t(e) && is_partial_order_type(e->type) &&
          is_partial_order_global(ns, to_symbol2t(e).thename);
+}
+
+/// The array an assignment to \p lhs writes an element of, or nil.
+expr2tc assigned_array(const expr2tc &lhs)
+{
+  if (!is_index2t(lhs))
+    return expr2tc();
+  expr2tc root = lhs;
+  while (is_index2t(root))
+    root = to_index2t(root).source_value;
+  return is_symbol2t(root) ? root : expr2tc();
 }
 
 /// The shared globals \p instruction reads, at L0.
@@ -1050,8 +1064,14 @@ std::set<expr2tc> partial_order_reads(
   switch (instruction.type)
   {
   case ASSIGN:
-    walk(to_code_assign2t(instruction.code).source);
+  {
+    const code_assign2t &assign = to_code_assign2t(instruction.code);
+    walk(assign.source);
+    for (expr2tc lhs = assign.target; is_index2t(lhs);
+         lhs = to_index2t(lhs).source_value)
+      walk(to_index2t(lhs).index);
     break;
+  }
   case FUNCTION_CALL:
     for (const expr2tc &arg :
          to_code_function_call2t(instruction.code).operands)
@@ -1079,17 +1099,62 @@ void execution_statet::record_shared_reads(
   if (!partial_order || cur_state->guard.is_false())
     return;
 
-  for (expr2tc sym : partial_order_reads(instruction, ns))
-  {
-    cur_state->top().level1.rename(sym);
-    cur_state->level2.retire(renaming::level2t::name_record(to_symbol2t(sym)));
-    cur_state->level2.get_ident_name(sym);
+  for (const expr2tc &sym : partial_order_reads(instruction, ns))
     target->event(
       cur_state->guard.as_expr(),
       symex_targett::SHARED_READ,
-      sym,
+      fresh_shared_value(sym),
       cur_state->source);
+}
+
+expr2tc execution_statet::fresh_shared_value(expr2tc sym)
+{
+  cur_state->top().level1.rename(sym);
+  cur_state->level2.retire(renaming::level2t::name_record(to_symbol2t(sym)));
+  cur_state->level2.get_ident_name(sym);
+  return sym;
+}
+
+bool execution_statet::partial_order_array_update(
+  const expr2tc &code,
+  const bool hidden,
+  const guard2tc &guard)
+{
+  const code_assign2t &assign = to_code_assign2t(code);
+  expr2tc array = assigned_array(assign.target);
+  if (is_nil_expr(array) || !is_partial_order_event_symbol(array, ns))
+    return false;
+
+  // Evaluate the value and the indices first: what they read of the array
+  // was recorded as a separate read, which another thread's write may follow
+  // before the update.
+  expr2tc lhs = assign.target;
+  std::function<void(expr2tc &)> snapshot_indices = [&](expr2tc &e) {
+    if (!is_index2t(e))
+      return;
+    index2t &index = to_index2t(e);
+    snapshot_indices(index.source_value);
+    if (!is_constant_int2t(index.index))
+      index.index = materialise_old_snapshot(index.index, guard);
+  };
+  snapshot_indices(lhs);
+  const expr2tc value = materialise_old_snapshot(assign.source, guard);
+
+  const bool live = !cur_state->guard.is_false();
+  const expr2tc old = live ? fresh_shared_value(array) : expr2tc();
+  goto_symext::symex_assign(code_assign2tc(lhs, value), hidden, guard);
+  if (live)
+  {
+    cur_state->top().level1.rename(array);
+    cur_state->level2.get_ident_name(array);
+    target->event(
+      cur_state->guard.as_expr(),
+      symex_targett::SHARED_WRITE,
+      array,
+      cur_state->source,
+      old);
   }
+  return true;
 }
 
 void execution_statet::record_shared_write(const expr2tc &code)

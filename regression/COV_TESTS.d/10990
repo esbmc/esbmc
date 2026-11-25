@@ -1,6 +1,5 @@
 regression/esbmc-unix/partial_order_in_scope
 regression/esbmc-unix/partial_order_reject_address
-regression/esbmc-unix/partial_order_reject_array
 regression/esbmc-unix/partial_order_reject_cond
 regression/esbmc-unix/partial_order_reject_loop_spawn
 regression/esbmc-unix/partial_order_reject_schedule
@@ -31,3 +30,13 @@ regression/esbmc-unix/partial_order_github_10296_assert
 regression/esbmc-unix/partial_order_github_10296_assert_join
 regression/esbmc-unix/partial_order_github_10296_counter
 regression/esbmc-unix/partial_order_github_10296_counter_fail
+regression/esbmc-unix/partial_order_array_update
+regression/esbmc-unix/partial_order_array_update_fail
+regression/esbmc-unix/partial_order_array_increment
+regression/esbmc-unix/partial_order_array_increment_fail
+regression/esbmc-unix/partial_order_array_index
+regression/esbmc-unix/partial_order_array_index_fail
+regression/esbmc-unix/partial_order_reject_struct
+regression/esbmc-unix/partial_order_reject_array_address
+regression/esbmc-unix/partial_order_array_shared_index
+regression/esbmc-unix/partial_order_array_shared_index_fail

@@ -1,0 +1,4 @@
+CORE
+main.c
+--partial-order --no-bounds-check
+^VERIFICATION FAILED$

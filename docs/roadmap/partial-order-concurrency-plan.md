@@ -1,10 +1,10 @@
 # Plan — a partial-order encoding for concurrent programs (`--partial-order`)
 
-**Status (2026-11-24):** phase 0 in progress. The `--partial-order` flag, its
-scope check, the event step types, the run-to-completion symex path, the SC
-memory-model pass and the spawn, join and atomic-section events exist; it
-verifies programs without locks or assumptions. The phase 0 measurements are
-below (§4) and await the go/no-go decision; the effort figures are estimates.
+**Status (2026-11-24):** phase 1 in progress. Phase 0 is done, with the
+measurements below (§4), and the maintainer decided **go** on 2026-11-24.
+`--partial-order` verifies programs on global scalars and arrays of them,
+without locks, assumptions or pointers to globals; the effort figures are
+estimates.
 **Origin:** [#10296](https://github.com/esbmc/esbmc/issues/10296), which found
 `--schedule` unsound and slow, and its
 [effort estimate](https://github.com/esbmc/esbmc/issues/10296#issuecomment-6798263610).
@@ -118,6 +118,8 @@ median of 14.1 s; the default decides 54 (median 1.3 s) and
 `--context-bound` 2, 3 and 4 decide 58, 58 and 55 (medians 0.3, 0.5 and
 0.5 s), with no wrong verdict.
 
+Decision: **go**, by the maintainer on 2026-11-24.
+
 **Go** if every verdict matches and the time grows more slowly than the
 default's as the bound rises. **No-go** closes #10990 with the measurements
 recorded here.
@@ -132,6 +134,11 @@ recorded here.
   `__ESBMC_switch_to`, monitors and LTL are rejected;
   `__ESBMC_blocked_threads_count`, `__ESBMC_terminate_thread` and
   `__ESBMC_really_atomic_*` are ported or rejected one by one.
+
+Done: a global array of scalars is one object. A read of an element reads the
+whole array; an element write is an update, a write that also reads the
+array's previous value, and the from-read constraint keeps every other write
+out from between the two. Taking a global's address is still rejected.
 
 ### Phase 2 — properties (3–4 weeks)
 

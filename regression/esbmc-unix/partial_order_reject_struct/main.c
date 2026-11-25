@@ -1,15 +1,18 @@
 #include <pthread.h>
 #include <assert.h>
-int a[2];
+struct s
+{
+  int f;
+} g;
 void *t(void *arg)
 {
-  a[0] = 1;
+  g.f = 1;
   return 0;
 }
 int main()
 {
   pthread_t id;
   pthread_create(&id, 0, t, 0);
-  assert(a[0] == 0);
+  assert(g.f == 0);
   return 0;
 }

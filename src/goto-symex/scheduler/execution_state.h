@@ -471,6 +471,19 @@ public:
    *  defines as a SHARED_WRITE event. */
   void record_shared_write(const expr2tc &code);
 
+  /** --partial-order: assign to an element of a shared array as an update
+   *  of the whole array, whose old value is a fresh L2 name the memory model
+   *  ties to the latest write. Returns false if \p code assigns to anything
+   *  else. */
+  bool partial_order_array_update(
+    const expr2tc &code,
+    const bool hidden,
+    const guard2tc &guard);
+
+  /** --partial-order: give the shared global \p sym a fresh, unconstrained
+   *  L2 name and return it. */
+  expr2tc fresh_shared_value(expr2tc sym);
+
   /** --partial-order: record a SPAWN or JOIN event naming thread \p tid. */
   void record_thread_event(symex_targett::step_typet type, unsigned int tid);
 
