@@ -70,3 +70,8 @@ regression/esbmc-unix/partial_order_exit_fail
 regression/esbmc-unix/partial_order_exit_main
 regression/esbmc-unix/partial_order_exit_main_fail
 regression/esbmc-unix/partial_order_reject_cond_local_mutex
+regression/esbmc-unix/partial_order_really_atomic
+regression/esbmc-unix/partial_order_really_atomic_fail
+regression/esbmc-unix/partial_order_terminate
+regression/esbmc-unix/partial_order_terminate_fail
+regression/esbmc-unix/partial_order_reject_scheduler_state

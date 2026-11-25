@@ -4,8 +4,8 @@
 measurements below (§4), and the maintainer decided **go** on 2026-11-24.
 `--partial-order` verifies programs on global scalars and arrays of them,
 including through pointers, with threads created in loops, mutexes,
-condition variables and `pthread_exit`, without assumptions; the effort
-figures are estimates.
+condition variables, `pthread_exit` and the scheduler intrinsics phase 1
+lists, without assumptions; the effort figures are estimates.
 **Origin:** [#10296](https://github.com/esbmc/esbmc/issues/10296), which found
 `--schedule` unsound and slow, and its
 [effort estimate](https://github.com/esbmc/esbmc/issues/10296#issuecomment-6798263610).
@@ -151,6 +151,10 @@ not modelled; phase 2's deadlock check covers it. `pthread_cond_wait` is an
 UNLOCK and a LOCK of its mutex: POSIX allows spurious wakeups and the
 operational model takes one at will, so signals and broadcasts change nothing.
 `pthread_exit` ends the path of the thread that calls it, main included.
+`__ESBMC_terminate_thread` in user code does the same, and
+`__ESBMC_really_atomic_*` opens and closes an atomic section like
+`__ESBMC_atomic_*`; a read of the operational model's thread counters, such as
+`__ESBMC_blocked_threads_count`, is rejected.
 
 ### Phase 2 — properties (3–4 weeks)
 

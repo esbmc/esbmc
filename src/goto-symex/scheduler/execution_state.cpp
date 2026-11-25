@@ -1289,18 +1289,32 @@ void execution_statet::symex_call(
   const goto_programt::instructiont &instruction)
 {
   if (
-    !partial_order_join(instruction) && !partial_order_mutex(instruction) &&
-    !partial_order_exit(instruction))
-    goto_symext::symex_step(art);
+    partial_order_join(instruction) || partial_order_mutex(instruction) ||
+    partial_order_exit(instruction))
+    return;
+
+  const expr2tc &function = to_code_function_call2t(instruction.code).function;
+  const irep_idt name =
+    is_symbol2t(function) ? to_symbol2t(function).thename : irep_idt();
+  if (name == "c:@F@__ESBMC_really_atomic_begin")
+    record_atomic_event(symex_targett::ATOMIC_BEGIN, instruction);
+  else if (name == "c:@F@__ESBMC_really_atomic_end")
+    record_atomic_event(symex_targett::ATOMIC_END, instruction);
+  goto_symext::symex_step(art);
 }
 
 bool execution_statet::partial_order_exit(
   const goto_programt::instructiont &instruction)
 {
   const code_function_call2t &call = to_code_function_call2t(instruction.code);
-  if (
-    !partial_order || !is_symbol2t(call.function) ||
-    to_symbol2t(call.function).thename != "c:@F@pthread_exit")
+  if (!partial_order || !is_symbol2t(call.function))
+    return false;
+  const irep_idt &name = to_symbol2t(call.function).thename;
+  // The operational model's trampoline ends every thread this way.
+  const bool terminate = name == "c:@F@__ESBMC_terminate_thread" &&
+                         !file_operations::is_bundled_source(
+                           instruction.location.get_file().as_string());
+  if (name != "c:@F@pthread_exit" && !terminate)
     return false;
 
   cur_state->guard.make_false();

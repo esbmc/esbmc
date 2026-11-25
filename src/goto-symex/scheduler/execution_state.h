@@ -496,7 +496,8 @@ public:
     const expr2tc &cond = expr2tc());
 
   /** --partial-order: record an ATOMIC_BEGIN or ATOMIC_END event for an
-   *  atomic section in user code. */
+   *  atomic section in user code, opened by __ESBMC_atomic_begin or
+   *  __ESBMC_really_atomic_begin. */
   void record_atomic_event(
     symex_targett::step_typet type,
     const goto_programt::instructiont &instruction);
@@ -519,9 +520,11 @@ public:
    *  @return Whether \p instruction was such a call under --partial-order */
   bool partial_order_mutex(const goto_programt::instructiont &instruction);
 
-  /** --partial-order: end the path at a pthread_exit call. The operational
-   *  model ends it with an assumption, which would also hold every other
-   *  thread's later claims, since they follow it in the equation.
+  /** --partial-order: end the path at a pthread_exit call, or at a call to
+   *  __ESBMC_terminate_thread in user code. The operational model ends it
+   *  with an assumption, which would also hold every other thread's later
+   *  claims, since they follow it in the equation, and the intrinsic ends the
+   *  thread on every path, not only the one that calls it.
    *  @return Whether \p instruction was such a call under --partial-order */
   bool partial_order_exit(const goto_programt::instructiont &instruction);
 
