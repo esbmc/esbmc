@@ -471,6 +471,8 @@ public:
     smt_astt right_ast,
     const expr2tc &expr);
 
+  smt_astt convert_extract(const extract2t &ex);
+
   /** Create an integer or SBV/UBV sort */
   smt_sortt mk_int_bv_sort(std::size_t width)
   {

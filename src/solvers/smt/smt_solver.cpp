@@ -336,6 +336,20 @@ smt_astt smt_solver_baset::imply_ast(smt_astt a, smt_astt b)
   return mk_implies(a, b);
 }
 
+smt_astt smt_solver_baset::convert_extract(const extract2t &ex)
+{
+  smt_astt a = convert_ast(ex.from);
+  const unsigned width = ex.upper - ex.lower + 1;
+  if (ex.from->type->get_width() == width)
+    return a;
+  if (!int_encoding)
+    return mk_extract(a, ex.upper, ex.lower);
+
+  // Euclidean div and mod read a negative value's two's complement bits.
+  smt_astt shifted = mk_div(a, mk_smt_int(BigInt::power2(ex.lower)));
+  return mk_mod(shifted, mk_smt_int(BigInt::power2(width)));
+}
+
 smt_astt smt_solver_baset::convert_concat_int_mode(
   smt_astt left_ast,
   smt_astt right_ast,
@@ -1732,11 +1746,7 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
   }
   case expr2t::extract_id:
   {
-    const extract2t &ex = to_extract2t(expr);
-    a = convert_ast(ex.from);
-    if (ex.from->type->get_width() == ex.upper - ex.lower + 1)
-      return a;
-    a = mk_extract(a, ex.upper, ex.lower);
+    a = convert_extract(to_extract2t(expr));
     break;
   }
   case expr2t::code_comma_id:
