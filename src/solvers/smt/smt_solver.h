@@ -1047,20 +1047,27 @@ public:
     const std::unordered_set<unsigned int> &registered);
 
   /** A registered object, the `__ESBMC_alloc` version it was registered
-   *  under, the context level it was registered at, and the one its layout
-   *  was asserted at, if it has been. */
+   *  under, the context level it was registered at, the one its layout was
+   *  asserted at, if it has been, and an address below which it and every
+   *  object registered before it fit side by side. */
   struct object_layoutt
   {
     unsigned int obj;
     expr2tc valid_objects;
     unsigned int level;
     std::optional<unsigned int> laid_out_at;
+    BigInt extent;
   };
   /** Only a cast between a pointer and an integer reads an address, so the
-   *  quadratic non-overlap constraints wait for the first one (#9221). */
+   *  quadratic non-overlap constraints wait for the first one (#9221), unless
+   *  the objects may not fit in the lower half of the address space without
+   *  them: there the constraints decide which paths are feasible. */
   std::vector<object_layoutt> object_layouts;
   /** The context level the layout was first needed at. */
   std::optional<unsigned int> layout_needed_at;
+  /** Record object @p obj_num, which reserves at most @p reserved addresses,
+   *  and lay it out if the layout is needed. */
+  void register_layout(unsigned int obj_num, const BigInt &reserved);
   void lay_out_objects();
 
   /** Typecast data to bools */

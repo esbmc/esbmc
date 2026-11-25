@@ -421,6 +421,9 @@ smt_astt smt_solver_baset::convert_identifier_pointer(
   type2tc t = pointer_type2tc(get_empty_type());
   a = tuple_api->mk_tuple_symbol(symbol, convert_sort(t));
 
+  // Laying out the object may convert this address again.
+  smt_cache.insert({new_addr_of, a, ctx_level});
+
   // If this object hasn't yet been put in the address space record, we need to
   // assert that the symbol has the object ID we've allocated, and then fill out
   // the address space record.
@@ -448,11 +451,18 @@ smt_astt smt_solver_baset::convert_identifier_pointer(
     assert_ast(a->eq(this, output));
   }
 
-  // Insert canonical address-of this expression.
-  struct smt_cache_entryt entry = {new_addr_of, a, ctx_level};
-  smt_cache.insert(entry);
-
   return a;
+}
+
+/* At most the addresses an object reserves, [start, end] and the padding its
+ * alignment may put before it; a size known only symbolically may be any. */
+static BigInt reserved_extent(const expr2tc &size, const BigInt &align)
+{
+  expr2tc s = size;
+  simplify(s);
+  if (!is_constant_int2t(s))
+    return BigInt::power2(size->type->get_width());
+  return to_constant_int2t(s).value + align;
 }
 
 smt_astt smt_solver_baset::init_pointer_obj(
@@ -536,16 +546,15 @@ smt_astt smt_solver_baset::init_pointer_obj(
    * the latter, `(uintptr_t)&x % alignof(T) == 0` is satisfiably false and
    * yields a spurious counterexample. Types of alignment 1 constrain nothing.
    */
+  /* dereferencet::check_alignment() reads a scalar access as aligned from its
+   * offset alone, so it assumes the base carries the access width; without
+   * the same assumption here the two disagree on whether one pointer can be
+   * misaligned (#6951). object_base_alignment() is that shared assumption --
+   * the deref check consults it too, so a packed object, whose base this
+   * leaves unconstrained, no longer reads as aligned there (#7707). */
+  const BigInt a = type ? object_base_alignment(*type, size, ns) : BigInt(1);
   if (type)
   {
-    /* dereferencet::check_alignment() reads a scalar access as aligned from its
-     * offset alone, so it assumes the base carries the access width; without
-     * the same assumption here the two disagree on whether one pointer can be
-     * misaligned (#6951). object_base_alignment() is that shared assumption --
-     * the deref check consults it too, so a packed object, whose base this
-     * leaves unconstrained, no longer reads as aligned there (#7707). */
-    const BigInt a = object_base_alignment(*type, size, ns);
-
     if (
       a > 1 && !int_encoding && is_power_of_two(a) &&
       a.floorPow2() < ptr_loc_type->get_width())
@@ -582,10 +591,7 @@ smt_astt smt_solver_baset::init_pointer_obj(
   }
 
   addr_space_data.back()[obj_num] = may_be_freed;
-  object_layouts.push_back(
-    {obj_num, current_valid_objects_sym, ctx_level, std::nullopt});
-  if (layout_needed_at)
-    lay_out_objects();
+  register_layout(obj_num, reserved_extent(the_size, a));
 
   membs.clear();
   membs.push_back(start_sym);
@@ -601,6 +607,23 @@ smt_astt smt_solver_baset::init_pointer_obj(
   bump_addrspace_array(obj_num, range_struct);
 
   return ptr_val;
+}
+
+void smt_solver_baset::register_layout(
+  unsigned int obj_num,
+  const BigInt &reserved)
+{
+  // Packed from 2 up: NULL owns 0 and no function starts at 1.
+  const BigInt extent =
+    (object_layouts.empty() ? std::max(first_object_address(), BigInt(2))
+                            : object_layouts.back().extent) +
+    reserved;
+  object_layouts.push_back(
+    {obj_num, current_valid_objects_sym, ctx_level, std::nullopt, extent});
+  if (
+    layout_needed_at ||
+    extent > BigInt::power2(ptraddr_type2()->get_width() - 1))
+    lay_out_objects();
 }
 
 void smt_solver_baset::lay_out_objects()
