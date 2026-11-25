@@ -1,13 +1,14 @@
 # Plan — a partial-order encoding for concurrent programs (`--partial-order`)
 
-**Status (2026-11-25):** phase 1 and phase 2 in review, phase 3 in progress. Phase 0 is
+**Status (2026-11-25):** phase 1, phase 2 and phase 3 in review. Phase 0 is
 done, with the measurements below (§4), and the maintainer decided **go** on
 2026-11-24. `--partial-order` verifies programs on global scalars and arrays
 of them, including through pointers, with threads created in loops, mutexes,
 condition variables, `pthread_exit` and the scheduler intrinsics phase 1
 lists, without assumptions, and checks data races on scalars and deadlocks
 on mutexes and joins. Its counterexamples list steps in the order the
-solver's clocks give them; the effort figures are estimates.
+solver's clocks give them, and its violation witnesses carry thread ids;
+the effort figures are estimates.
 **Origin:** [#10296](https://github.com/esbmc/esbmc/issues/10296), which found
 `--schedule` unsound and slow, and its
 [effort estimate](https://github.com/esbmc/esbmc/issues/10296#issuecomment-6798263610).
@@ -187,7 +188,9 @@ under the check.
 
 Done: each event keeps its clock in its step, and `build_goto_trace` merges
 the threads' steps by clock. A step takes the clock of its thread's next
-event; a thread with no event follows its spawn.
+event; a thread with no event follows its spawn. `--witness-output*` is
+accepted: each spawn moves to its thread's first step when the merge put that
+step first, so the YAML waypoints carry thread ids in clock order.
 
 ### Phase 4 — validation and tuning (3–4 weeks)
 

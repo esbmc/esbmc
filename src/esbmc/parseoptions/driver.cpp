@@ -188,7 +188,7 @@ static bool schedule_conflicts(const cmdlinet &cmdline)
 
 /// --partial-order runs each thread once and lets the solver order the shared
 /// accesses (#10990), so the interleaving explorers, the unwinding strategies
-/// and the checks that need a scheduler or a trace are out of its scope.
+/// and the checks that need a scheduler are out of its scope.
 static bool partial_order_conflicts(const cmdlinet &cmdline)
 {
   if (!cmdline.isset("partial-order"))
@@ -207,10 +207,7 @@ static bool partial_order_conflicts(const cmdlinet &cmdline)
         "lock-order-check",
         "atomicity-check",
         "ltl",
-        "interactive-ileaves",
-        "witness-output",
-        "witness-output-graphml",
-        "witness-output-yaml"})
+        "interactive-ileaves"})
     if (cmdline.isset(incompatible))
     {
       log_error("--partial-order cannot be combined with --{}", incompatible);
