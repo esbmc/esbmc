@@ -345,7 +345,10 @@ smt_astt smt_solver_baset::convert_extract(const extract2t &ex)
   if (!int_encoding)
     return mk_extract(a, ex.upper, ex.lower);
 
-  // Euclidean div and mod read a negative value's two's complement bits.
+  // Bits [upper:lower] of a are (a div 2^lower) mod 2^width. Euclidean div and
+  // mod make this read a negative value's two's complement bits, e.g. bits
+  // [3:1] of -5 (0b11111011) are 0b101 = 5: -5 div 2 = -3, -3 mod 8 = 5.
+  // Truncating division would give -2 and then 6.
   smt_astt shifted = mk_div(a, mk_smt_int(BigInt::power2(ex.lower)));
   return mk_mod(shifted, mk_smt_int(BigInt::power2(width)));
 }
