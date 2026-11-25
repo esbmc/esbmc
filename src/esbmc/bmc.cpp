@@ -7,11 +7,13 @@
 #include <algorithm>
 #include <cctype>
 #include <cstdlib>
+#include <functional>
 #include <mutex>
 #include <thread>
 #include <chrono>
 
 #ifndef _WIN32
+#  include <pthread.h>
 #  include <unistd.h>
 #  include <sched.h>
 #else
@@ -1014,6 +1016,61 @@ void run_job_guarded(
     if (final_result != P_SATISFIABLE)
       final_result = P_ERROR;
   }
+}
+
+/// --parallel-solving-threads, or one thread per hardware thread.
+static size_t parallel_solving_threads(const optionst &options)
+{
+  const std::string n = options.get_option("parallel-solving-threads");
+  return n.empty() ? std::thread::hardware_concurrency() : std::stoul(n);
+}
+
+/// Runs @p job on each element of @p jobs, in order, on the calling thread and
+/// up to @p max_threads - 1 helpers. A thread per job exhausted the
+/// per-process thread limit once loop unrolling multiplied the claims (6144
+/// threads on macOS).
+template <typename jobt>
+void run_on_worker_pool(
+  const std::vector<size_t> &jobs,
+  size_t max_threads,
+  const jobt &job)
+{
+  std::atomic<size_t> next{0};
+  std::function<void()> worker = [&] {
+    for (size_t k = next++; k < jobs.size(); k = next++)
+      job(jobs[k]);
+  };
+  const size_t threads = std::min(jobs.size(), max_threads);
+#ifdef _WIN32
+  std::vector<std::thread> pool;
+  for (size_t h = 1; h < threads; ++h)
+    pool.emplace_back(worker);
+  worker();
+  for (auto &t : pool)
+    t.join();
+#else
+  // Solving recurses over expressions as symex does, so a helper needs the
+  // calling thread's large stack, not the default 512 KiB on macOS (#6617).
+  pthread_attr_t attr;
+  pthread_attr_init(&attr);
+  pthread_attr_setstacksize(&attr, 512UL * 1024 * 1024);
+  auto trampoline = [](void *w) -> void * {
+    (*static_cast<std::function<void()> *>(w))();
+    return nullptr;
+  };
+  std::vector<pthread_t> pool;
+  for (size_t h = 1; h < threads; ++h)
+  {
+    pthread_t t;
+    // A helper the system refuses only leaves its jobs to the others.
+    if (pthread_create(&t, &attr, trampoline, &worker) == 0)
+      pool.push_back(t);
+  }
+  pthread_attr_destroy(&attr);
+  worker();
+  for (pthread_t t : pool)
+    pthread_join(t, nullptr);
+#endif
 }
 
 /// True when the multi-witness report must avoid box-drawing glyphs. A console
@@ -4098,38 +4155,12 @@ smt_resultt bmct::multi_property_check(
       // PARALLEL
       if (options.get_bool_option("parallel-solving"))
       {
-        /* NOTE: I would love to use std::for_each here, but it is not giving
-         * the result I would expect. My guess is either compiler version
-         * or some magic flag that we are not using.
-         *
-         * Nevertheless, we can achieve the same results by just creating
-         * threads.
-         */
-
-        // TODO: Running everything in parallel might be a bad idea.
-        //       Should we also add a thread pool?
         threads_scope scope;
-        std::vector<std::thread> parallel_jobs;
-        for (const auto &i : jobs)
-          parallel_jobs.push_back(
-            std::thread(
-              [&](const size_t &n) {
-                run_job_guarded(
-                  job_function,
-                  n,
-                  result_mutex,
-                  final_result,
-                  report_incomplete);
-              },
-              i));
-
-        // Main driver
-        for (auto &t : parallel_jobs)
-        {
-          t.join();
-        }
-        // We could remove joined jobs from the parallel_jobs vector.
-        // However, its probably not worth for small vectors.
+        run_on_worker_pool(
+          jobs, parallel_solving_threads(options), [&](size_t n) {
+            run_job_guarded(
+              job_function, n, result_mutex, final_result, report_incomplete);
+          });
       }
       // SEQUENTIAL
       else

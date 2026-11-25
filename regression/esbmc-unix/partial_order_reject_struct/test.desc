@@ -1,0 +1,5 @@
+CORE
+main.c
+--partial-order
+^ERROR: --partial-order does not support a global that is not a scalar or an array of scalars yet, at file .*main\.c line 16 column 3 function main$
+\A(?![\s\S]*VERIFICATION)[\s\S]*\Z

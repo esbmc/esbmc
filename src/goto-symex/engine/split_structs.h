@@ -33,6 +33,13 @@ public:
     const optionst &options,
     const std::unordered_set<irep_idt, irep_id_hash> &address_taken_locals);
 
+  /// Every field symbol of @p name at any depth, nested structs included.
+  const std::vector<expr2tc> *all_fields(const irep_idt &name) const
+  {
+    auto it = all.find(name);
+    return it == all.end() ? nullptr : &it->second;
+  }
+
   /// The L0 field symbols of @p name, or null when it is not split.
   const std::vector<expr2tc> *fields(const irep_idt &name) const
   {
@@ -82,16 +89,25 @@ public:
   /// The struct of @p sym's field symbols.
   expr2tc whole(const expr2tc &sym) const;
 
+  /// The field symbol a chain of members over a split object names, at the
+  /// object's level, or nil.
+  expr2tc field_of(const expr2tc &e) const;
+
 private:
   /// Whether the options and the program allow any split at all.
   static bool
   enabled(const goto_functionst &goto_functions, const optionst &options);
 
   /// Record the field symbols of @p s, of type @p st, and add them to
-  /// @p context.
-  void add_fields(const symbolt &s, const struct_type2t &st, contextt &context);
+  /// @p context; with @p nest, a struct member is split in turn.
+  void add_fields(
+    const symbolt &s,
+    const struct_type2t &st,
+    contextt &context,
+    bool nest);
 
   std::unordered_map<irep_idt, std::vector<expr2tc>, irep_id_hash> split;
+  std::unordered_map<irep_idt, std::vector<expr2tc>, irep_id_hash> all;
   /// Member name to field index, per split object.
   std::unordered_map<
     irep_idt,

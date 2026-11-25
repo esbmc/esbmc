@@ -194,12 +194,14 @@ static std::vector<expr2tc> extract_invariants_near(
     // that may appear between consecutive same-loop invariants are compiler-
     // generated temporaries; any real instruction means we have crossed into
     // a different context (e.g. outer-loop body), so we stop immediately.
-    // Reuse `dist` so that Phase 1 + Phase 2 together respect the same
-    // kMaxInvariantSearchBack bound and avoid an O(n) scan in large functions.
-    while (it != begin && dist < goto_loop_invariantt::kMaxInvariantSearchBack)
+    // The walk ends at the first other instruction, so it is not bounded by
+    // kMaxInvariantSearchBack: the temporaries of a branching invariant
+    // (#11033) alone can exceed it.
+    std::set<const goto_programt::instructiont *> scanned{&*it};
+    while (it != begin)
     {
       --it;
-      ++dist;
+      scanned.insert(&*it);
       if (it->is_loop_invariant())
       {
         const std::list<expr2tc> &extra = it->get_loop_invariants();
@@ -208,6 +210,12 @@ static std::vector<expr2tc> extract_invariants_near(
         continue;
       }
       if (is_compiler_temp(it))
+        continue;
+      // `f() || g()` in an invariant lowers to a branch that stays inside the
+      // temporaries it computes (#11033).
+      if (
+        it->is_goto() && !it->targets.empty() &&
+        scanned.count(&*it->targets.front()))
         continue;
       break; // real instruction — stop clustering
     }

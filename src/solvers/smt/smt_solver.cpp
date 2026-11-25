@@ -3,6 +3,7 @@
 #include <iomanip>
 #include <solvers/prop/literal.h>
 #include <solvers/smt/smt_solver.h>
+#include <solvers/smt/array_conv.h>
 #include <solvers/smt/fp/ir_ieee_conv.h>
 #include <solvers/smt/smt_fp_rounding_utils.h>
 #include <sstream>
@@ -146,6 +147,24 @@ void smt_solver_baset::set_fp_conv(fp_convt *iface)
 {
   assert(fp_api == NULL && "set_fp_iface should only be called once");
   fp_api = iface;
+}
+
+void smt_solver_baset::set_tuple_iface(std::unique_ptr<tuple_iface> iface)
+{
+  set_tuple_iface(iface.get());
+  owned_tuple_api = std::move(iface);
+}
+
+void smt_solver_baset::set_array_iface(std::unique_ptr<array_convt> iface)
+{
+  set_array_iface(iface.get());
+  owned_array_api = std::move(iface);
+}
+
+void smt_solver_baset::set_fp_conv(std::unique_ptr<fp_convt> iface)
+{
+  set_fp_conv(iface.get());
+  owned_fp_api = std::move(iface);
 }
 
 void smt_solver_baset::set_ra_conv(ra_apit *iface)
@@ -302,6 +321,9 @@ void smt_solver_baset::pop_ctx()
     base_addrspace_tied.reset();
   pop_entries(addrspace_stores, ctx_level, &addrspace_storet::asserted_at);
   pop_entries(int_to_ptr_objects, ctx_level, &int_to_ptr_objectt::closed_at);
+  pop_entries(object_layouts, ctx_level, &object_layoutt::laid_out_at);
+  if (layout_needed_at && *layout_needed_at >= ctx_level)
+    layout_needed_at.reset();
   pop_entries(ptr_eq_sites, ctx_level, &ptr_eq_sitet::closed_at);
 
   pointer_logic.pop_back();

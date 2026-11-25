@@ -1,0 +1,5 @@
+CORE
+main.c
+
+^  FAILED +\[main\.assertion\.[0-9]+\] +line +11 +assertion buf\[i \+ 3\] != 4$
+^VERIFICATION FAILED$

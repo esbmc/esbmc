@@ -33,6 +33,19 @@ void dereferencet::reset_object_counter()
 // Look for the base of an expression such as &a->b[1];, where all we're doing
 // is performing some pointer arithmetic, rather than actually performing some
 // dereference operation.
+// Index of the widest member, so that a write through a union built over a
+// byte array reaches every byte (#10939, #11013). The union is non-empty.
+static size_t widest_union_member(const union_type2t &uniontype)
+{
+  size_t widest = 0;
+  for (size_t i = 1; i < uniontype.members.size(); i++)
+    if (
+      type_byte_size_bits(uniontype.members[i]) >
+      type_byte_size_bits(uniontype.members[widest]))
+      widest = i;
+  return widest;
+}
+
 static inline expr2tc get_base_dereference(const expr2tc &e)
 {
   // XXX -- do we need to consider if2t's? And how?
@@ -1039,6 +1052,29 @@ bool dereferencet::dereference_type_compare(
   return false;
 }
 
+/* The alignment in bits a read or write of @p type is checked against here, or
+ * 0 when it is not checked: code, pointers and bit-fields are skipped, and a
+ * vector's lanes are only checked at their own width (#7907). A whole struct
+ * or union needs its own alignment, not its width (#11015). */
+static BigInt checked_access_bits(const type2tc &type, const namespacet &ns)
+{
+  if (is_code_type(type) || is_pointer_type(type))
+    return 0;
+  if (is_struct_type(type) || is_union_type(type))
+  {
+    /* The symbol's type, as in object_base_alignment(): a union's `packed`
+     * and a record's `#pragma pack(n)` do not survive migrate_type_back(). */
+    const symbolt *sym = ns.lookup("tag-" + id2string(struct_union_name(type)));
+    const typet legacy = sym ? sym->get_type() : migrate_type_back(type);
+    const BigInt bits = ::alignment(legacy, ns) * 8;
+    return bits > 8 ? bits : BigInt(0);
+  }
+  if (!(is_scalar_type(type) || is_vector_type(type)))
+    return 0;
+  const BigInt bits = type_byte_size_bits(type);
+  return bits % 8 == 0 ? bits : BigInt(0);
+}
+
 void dereferencet::check_pointer_alignment(
   modet mode,
   const type2tc &type,
@@ -1052,29 +1088,16 @@ void dereferencet::check_pointer_alignment(
   // flag when walking into a packed-struct member; honour it here so
   // we mirror the suppression already done at the scalar
   // check_alignment() site below.
-  if (mode.unaligned)
+  if (mode.unaligned || !(is_read(mode) || is_write(mode)))
     return;
 
-  // Only check alignment for scalar and vector read/write operations (excluding
-  // code and pointer types). A vector's lanes are only checked at their own
-  // width (#7907).
-  if (
-    !(is_read(mode) || is_write(mode)) ||
-    !(is_scalar_type(type) || is_vector_type(type)) || is_code_type(type) ||
-    is_pointer_type(type))
-  {
-    return;
-  }
-
-  BigInt access_size_bits = type_byte_size_bits(type);
-
-  // Only check alignment for whole-byte-sized accesses (skip bit-fields)
-  if (access_size_bits % 8 != 0)
+  const BigInt access_size_bits = checked_access_bits(type, ns);
+  if (access_size_bits == 0)
     return;
 
   /* A packed object's base is free, so its offset alone decides nothing: the
    * object-aware checks in build_reference_to() claim the whole address. */
-  if (is_object_descriptor2t(what) && is_scalar_type(type))
+  if (is_object_descriptor2t(what) && !is_vector_type(type))
   {
     const expr2tc &object = to_object_descriptor2t(what).object;
     if (
@@ -2841,12 +2864,13 @@ void dereferencet::construct_struct_ref_from_const_offset_array(
       return;
     }
     // For unions all members overlap at the same offset; reconstruct using
-    // the first member, mirroring construct_struct_ref_from_dyn_offset.
+    // the widest member.
+    const size_t i = widest_union_member(uniontype);
     expr2tc target = value;
     build_reference_rec(
-      target, gen_ulong(intref.value), uniontype.members[0], guard, mode);
+      target, gen_ulong(intref.value), uniontype.members[i], guard, mode);
     std::vector<expr2tc> fields = {target};
-    value = constant_union2tc(type, uniontype.member_names[0], fields);
+    value = constant_union2tc(type, uniontype.member_names[i], fields);
     return;
   }
 
@@ -3418,18 +3442,18 @@ void dereferencet::construct_struct_ref_from_dyn_offs_rec(
     }
     else if (is_union_type(type))
     {
-      // For unions from byte arrays, read the first member at offset
       const union_type2t &uniontype = to_union_type(type);
       if (uniontype.members.empty())
         return;
+      const size_t i = widest_union_member(uniontype);
       expr2tc target = value; // The byte array
       expr2tc union_offs = offs;
       simplify(union_offs);
-      build_reference_rec(target, union_offs, uniontype.members[0], tmp, mode);
+      build_reference_rec(target, union_offs, uniontype.members[i], tmp, mode);
 
       std::vector<expr2tc> members = {target};
       expr2tc the_union =
-        constant_union2tc(type, uniontype.member_names[0], members);
+        constant_union2tc(type, uniontype.member_names[i], members);
       output.emplace_back(accuml_guard, the_union);
     }
     return;

@@ -40,6 +40,9 @@ host and made no wrong one, so the Phase 2 gate is met on soundness. It is
 not met on timing: the flag costs about 14-18% CPU where it splits a struct,
 and three near-limit tasks may time out under suite load (§8.37). Phase 3
 may start with that exception recorded.**
+> Phase 3, first part (nested structs; arrays of structs and k-induction
+> havoc are not started): a struct member of a split object is split in turn,
+> up to 4096 leaves per object (§8.38). The gate is not met: see §8.38.
 > The corpus is in `regression/field-sensitivity/`
 > with baselines, and the census has been run and reverted. Phase 1 adds
 > `--field-sensitive-ssa` (default off): symex gives each field of an
@@ -2444,3 +2447,33 @@ rounds while flag-off solves it in all 3 (fixed before the rerun).
 Gate: no wrong verdict in either arm, and no lost correct verdict on equal
 hardware. Not measured: a full-suite run with both arms on one host.
 
+### 8.38 Phase 3, part 1: nested structs (draft, gate not met)
+
+A struct member of a split object is itself split, recursively, with field
+ids `<object id>::<k>::<j>`; the cap is 4096 leaves per top-level object, and
+above it nested members stay whole as in Phase 2. A member chain over a split
+object reads the leaf, a whole read builds nested `constant_struct`s, and
+`symex_assign_split` assigns the leaves. The pointer scan accepts a member
+chain of any length over a dereference.
+
+Measured on a build with Z3 only (Bitwuzla's dependencies are not installed in
+the sandbox), RelWithDebInfo, flag forced on in each `test.desc` command, 30 s
+per run, compared with a build of master `b28844fbb`:
+
+| Suite | Tests run | Verdict changes against flag off | Verdict changes against master with the flag |
+|---|---|---|---|
+| C (`regression/esbmc`) CORE, tests not passing the flag themselves | 2272 | 0 | 0 |
+| C++ (`esbmc-cpp/cpp`) CORE | 970 | 0 | 0 |
+
+The runs stopped at a 540 s budget, so 1375 C and 399 C++ tests were not run.
+Output differences against master (78 C, 45 C++) are uuid and timestamp lines
+in witnesses and k-induction or parallel-solving order; the ones sampled in
+C++ and C were of those kinds, not all were inspected.
+Four new tests (`field_sensitive_ssa_nested_*`) pin the split count, which
+master does not reach (3 objects against 9), and the verdict.
+
+Unmet gates, not measured: the Python suite (Python objects are not split, 613
+tests ran with no change), Bitwuzla, the corpus rows against the 2x bar,
+the k-induction suite, the unreachability harnesses for each new branch,
+the assert-enabled build, and the SV-COMP run. Arrays of structs and k-induction
+havoc of field symbols remain to be done.

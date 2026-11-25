@@ -687,6 +687,11 @@ void goto_symext::symex_assign_symbol(
   const bool hidden,
   const bool full_rhs_after_write)
 {
+  // Each failed dereference makes a fresh sink (make_failed_symbol), so a
+  // write to one is never read back; its validity claim is already emitted.
+  if (has_prefix(to_symbol2t(lhs).thename.as_string(), "symex::invalid_object"))
+    return;
+
   // put assignment guard in rhs
   if (!guard.is_true())
     rhs = if2tc(rhs->type, guard.as_expr(), rhs, lhs);
@@ -771,7 +776,7 @@ void goto_symext::symex_assign_structure(
 const std::vector<expr2tc> *
 goto_symext::split_fields(const irep_idt &name) const
 {
-  return art1 ? art1->split_structs.fields(name) : nullptr;
+  return art1 ? art1->split_structs.all_fields(name) : nullptr;
 }
 
 expr2tc
@@ -814,10 +819,10 @@ expr2tc goto_symext::split_read(const expr2tc &e, const expr2tc &dest)
   if (!is_split_whole(e) || (!is_nil_expr(dest) && is_split_whole(dest)))
     return whole;
   cur_state->rename(whole);
-  const std::vector<expr2tc> &fields =
-    to_constant_struct2t(whole).datatype_members;
-  if (std::none_of(fields.begin(), fields.end(), [this](const expr2tc &f) {
-        return is_symbol2t(f) && art1->split_structs.is_opaque(f);
+  std::vector<std::pair<expr2tc, expr2tc>> leaves;
+  split_leaves(whole, whole, leaves);
+  if (std::none_of(leaves.begin(), leaves.end(), [this](const auto &f) {
+        return is_symbol2t(f.first) && art1->split_structs.is_opaque(f.first);
       }))
     return split_rewrite(e);
   guard2tc guard;
@@ -832,6 +837,26 @@ void goto_symext::split_rewrite_operands(std::vector<expr2tc> &operands) const
     op = split_rewrite(op);
 }
 
+void goto_symext::split_leaves(
+  const expr2tc &lhs,
+  const expr2tc &rhs,
+  std::vector<std::pair<expr2tc, expr2tc>> &leaves)
+{
+  const struct_type2t &st = to_struct_type(lhs->type);
+  const std::vector<expr2tc> &fields =
+    to_constant_struct2t(lhs).datatype_members;
+  for (size_t k = 0; k < fields.size(); k++)
+  {
+    expr2tc rhs_k = is_constant_struct2t(rhs)
+                      ? to_constant_struct2t(rhs).datatype_members[k]
+                      : member2tc(st.members[k], rhs, st.member_names[k]);
+    if (is_constant_struct2t(fields[k]))
+      split_leaves(fields[k], rhs_k, leaves);
+    else
+      leaves.emplace_back(fields[k], rhs_k);
+  }
+}
+
 void goto_symext::symex_assign_split(
   const expr2tc &lhs,
   const expr2tc &full_lhs,
@@ -839,10 +864,9 @@ void goto_symext::symex_assign_split(
   guard2tc &guard,
   const bool hidden)
 {
-  const struct_type2t &st = to_struct_type(lhs->type);
-  const std::vector<expr2tc> &fields =
-    to_constant_struct2t(lhs).datatype_members;
-  const size_t last = fields.size() - 1;
+  std::vector<std::pair<expr2tc, expr2tc>> leaves;
+  split_leaves(lhs, rhs, leaves);
+  const size_t last = leaves.size() - 1;
   const bool nondet = guard.is_true() && is_symbol2t(rhs) &&
                       has_prefix(to_symbol2t(rhs).thename, "nondet$symex::");
   // The step that prints shows the right-hand side, as a whole write of an
@@ -857,23 +881,19 @@ void goto_symext::symex_assign_split(
   }
   for (size_t k = 0; k <= last; k++)
   {
+    auto &[field, rhs_k] = leaves[k];
     // A fresh L2 name is as free as a nondet value; only a field the value
     // set could track needs the assignment step.
-    if (
-      nondet && k != last &&
-      split_structst::is_untracked_scalar(fields[k]->type))
+    if (nondet && k != last && split_structst::is_untracked_scalar(field->type))
     {
-      expr2tc l1_field = fields[k];
+      expr2tc l1_field = field;
       cur_state->top().level1.rename(l1_field);
       cur_state->level2.make_assignment(l1_field, expr2tc(), expr2tc());
       continue;
     }
-    expr2tc rhs_k = is_constant_struct2t(rhs)
-                      ? to_constant_struct2t(rhs).datatype_members[k]
-                      : member2tc(st.members[k], rhs, st.member_names[k]);
     expr2tc full_rhs = k != last || hidden ? expr2tc() : nondet ? lhs : printed;
     symex_assign_symbol(
-      fields[k], full_lhs, rhs_k, full_rhs, guard, hidden || k != last, nondet);
+      field, full_lhs, rhs_k, full_rhs, guard, hidden || k != last, nondet);
   }
 }
 

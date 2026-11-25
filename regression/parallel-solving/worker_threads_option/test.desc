@@ -1,0 +1,5 @@
+CORE
+main.c
+--unwind 41 --parallel-solving --parallel-solving-threads 2
+^  FAILED  .* assertion x != 7$
+^VERIFICATION FAILED$

@@ -130,14 +130,15 @@ public:
   analyse(const goto_functionst &goto_functions, goto_programt::const_targett i)
   {
     loc = i;
-    walk(i->guard, nullptr, nullptr);
+    std::vector<const expr2tc *> ancestors;
+    walk(i->guard, ancestors);
     if (is_nil_expr(i->code))
       return;
     if (
       i->is_other() ||
       (i->is_function_call() && opaque_call(goto_functions, i->code)))
       i->code->foreach_operand([this](const expr2tc &op) { drop_reached(op); });
-    walk(i->code, nullptr, nullptr);
+    walk(i->code, ancestors);
   }
 
 private:
@@ -191,25 +192,28 @@ private:
       candidates.erase(n);
   }
 
-  static bool keeps_field_path(const expr2tc *parent, const expr2tc *grand)
+  /* Whether the member chain @p ancestors (innermost last) above a
+   * dereference ends in anything but an access that leaves the field path. */
+  static bool keeps_field_path(const std::vector<const expr2tc *> &ancestors)
   {
-    auto reinterprets_or_offsets = [](const expr2tc *e) {
-      return e && (is_index2t(*e) || is_address_of2t(*e) || is_member2t(*e) ||
-                   is_byte_extract2t(*e) || is_byte_update2t(*e) ||
-                   is_bitcast2t(*e) || is_with2t(*e));
-    };
-    if (parent && is_member2t(*parent))
-      return !reinterprets_or_offsets(grand);
-    return !reinterprets_or_offsets(parent);
+    auto up = ancestors.rbegin();
+    while (up != ancestors.rend() && is_member2t(**up))
+      ++up;
+    if (up == ancestors.rend())
+      return true;
+    const expr2tc &e = **up;
+    return !(
+      is_index2t(e) || is_address_of2t(e) || is_byte_extract2t(e) ||
+      is_byte_update2t(e) || is_bitcast2t(e) || is_with2t(e));
   }
 
-  void walk(const expr2tc &e, const expr2tc *parent, const expr2tc *grand)
+  void walk(const expr2tc &e, std::vector<const expr2tc *> &ancestors)
   {
     if (is_nil_expr(e) || candidates.empty())
       return;
     if (is_dereference2t(e))
     {
-      const bool ok = keeps_field_path(parent, grand);
+      const bool ok = keeps_field_path(ancestors);
       // Andersen may list one object more than once.
       for (const irep_idt &n : reached(to_dereference2t(e).value))
       {
@@ -220,7 +224,9 @@ private:
     }
     else if ((is_add2t(e) || is_sub2t(e)) && is_pointer_type(e->type))
       drop_reached(e);
-    e->foreach_operand([&](const expr2tc &op) { walk(op, &e, parent); });
+    ancestors.push_back(&e);
+    e->foreach_operand([&](const expr2tc &op) { walk(op, ancestors); });
+    ancestors.pop_back();
   }
 };
 
@@ -262,6 +268,31 @@ bool layable(const type2tc &t)
   const array_type2t &a = to_array_type(t);
   return !a.size_is_infinite && is_constant_int2t(a.array_size) &&
          !to_constant_int2t(a.array_size).value.is_zero();
+}
+
+/* Mirrors multidim_propagation_bound: the most leaves one object may split
+ * into when its nested structs are split too. */
+constexpr size_t max_leaves = 4096;
+
+/* The scalar fields of @p t once every nested struct is split. */
+size_t leaf_count(const type2tc &t)
+{
+  if (!is_struct_type(t))
+    return 1;
+  size_t n = 0;
+  for (const type2tc &m : to_struct_type(t).members)
+    n += leaf_count(m);
+  return n;
+}
+
+/* A nested struct member is split as well. */
+bool nestable(const type2tc &t)
+{
+  if (!is_struct_type(t))
+    return false;
+  const struct_type2t &st = to_struct_type(t);
+  return !st.members.empty() &&
+         std::all_of(st.members.begin(), st.members.end(), layable);
 }
 
 /* A static object stays whole when it is per-thread, or when the
@@ -311,27 +342,35 @@ bool split_structst::enabled(
 void split_structst::add_fields(
   const symbolt &s,
   const struct_type2t &st,
-  contextt &context)
+  contextt &context,
+  bool nest)
 {
   std::vector<expr2tc> &fields = split[s.id];
   auto &member_index = index[s.id];
+  auto &closure = all[s.id];
   for (size_t k = 0; k < st.members.size(); k++)
   {
     member_index.emplace(st.member_names[k], k);
     const std::string id = id2string(s.id) + "::" + std::to_string(k);
     fields.push_back(symbol2tc(st.members[k], id));
+    closure.push_back(fields.back());
     field_ids.insert(id);
     if (is_untracked_scalar(st.members[k]))
       untracked_fields.insert(id);
-    if (context.find_symbol(id))
-      continue;
     symbolt var = s;
     var.id = id;
     var.name = id2string(s.name) + "." + id2string(st.member_pretty_names[k]);
     var.is_parameter = false;
     var.set_type(st.members[k]);
     var.set_value(expr2tc());
-    context.add(var);
+    if (!context.find_symbol(id))
+      context.add(var);
+    if (nest && nestable(st.members[k]))
+    {
+      add_fields(var, to_struct_type(st.members[k]), context, nest);
+      const auto &inner = all.at(id);
+      closure.insert(closure.end(), inner.begin(), inner.end());
+    }
   }
 }
 
@@ -343,6 +382,7 @@ void split_structst::analyse(
   const std::unordered_set<irep_idt, irep_id_hash> &address_taken_locals)
 {
   split.clear();
+  all.clear();
   index.clear();
   untracked_fields.clear();
   field_ids.clear();
@@ -369,7 +409,8 @@ void split_structst::analyse(
     if (!s || !splittable(*s, type, leak_roots))
       continue;
 
-    add_fields(*s, to_struct_type(type), context);
+    add_fields(
+      *s, to_struct_type(type), context, leaf_count(type) <= max_leaves);
   }
   if (!split.empty())
     log_status("Field-sensitive SSA splits {} struct object(s)", split.size());
@@ -408,8 +449,25 @@ expr2tc split_structst::whole(const expr2tc &sym) const
   const symbol2t &s = to_symbol2t(sym);
   std::vector<expr2tc> members;
   for (const expr2tc &field : split.at(s.thename))
-    members.push_back(at_level_of(field, s));
+  {
+    expr2tc at = at_level_of(field, s);
+    members.push_back(fields(to_symbol2t(field).thename) ? whole(at) : at);
+  }
   return constant_struct2tc(sym->type, std::move(members));
+}
+
+expr2tc split_structst::field_of(const expr2tc &e) const
+{
+  if (!is_member2t(e))
+    return expr2tc();
+  const member2t &m = to_member2t(e);
+  const expr2tc base =
+    is_symbol2t(m.source_value) ? m.source_value : field_of(m.source_value);
+  if (is_nil_expr(base))
+    return base;
+  const symbol2t &s = to_symbol2t(base);
+  const std::vector<expr2tc> *f = fields(s.thename);
+  return f ? at_level_of((*f)[index.at(s.thename).at(m.member)], s) : expr2tc();
 }
 
 /// An L2 name, or a member of one. An L2 name of a split object is the whole
@@ -418,10 +476,12 @@ expr2tc split_structst::whole(const expr2tc &sym) const
 /// of that definition.
 static bool is_level2_read(const expr2tc &e)
 {
-  const expr2tc &base = is_member2t(e) ? to_member2t(e).source_value : e;
-  if (!is_symbol2t(base))
+  const expr2tc *base = &e;
+  while (is_member2t(*base))
+    base = &to_member2t(*base).source_value;
+  if (!is_symbol2t(*base))
     return false;
-  const symbol_renaming_level level = to_symbol2t(base).rlevel;
+  const symbol_renaming_level level = to_symbol2t(*base).rlevel;
   return level == symbol_renaming_level::level2 ||
          level == symbol_renaming_level::level2_global;
 }
@@ -438,14 +498,8 @@ expr2tc split_structst::rewrite(const expr2tc &e) const
   if (kept_whole(e))
     return e;
 
-  if (is_member2t(e) && is_symbol2t(to_member2t(e).source_value))
-  {
-    const member2t &m = to_member2t(e);
-    const symbol2t &s = to_symbol2t(m.source_value);
-    if (const std::vector<expr2tc> *f = fields(s.thename))
-      return at_level_of((*f)[index.at(s.thename).at(m.member)], s);
-    return e;
-  }
+  if (const expr2tc f = field_of(e); !is_nil_expr(f))
+    return fields(to_symbol2t(f).thename) ? whole(f) : f;
 
   if (is_symbol2t(e))
     return fields(to_symbol2t(e).thename) ? whole(e) : e;

@@ -1,10 +1,10 @@
 #include <pthread.h>
 #include <assert.h>
 int x;
+void touch(int *p);
 void *t(void *arg)
 {
-  int *p = &x;
-  *p = 1;
+  touch(&x);
   return 0;
 }
 int main()
