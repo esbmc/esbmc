@@ -173,6 +173,16 @@ bool cmdlinet::isset(const char *option) const
   return vm.count(option) > 0;
 }
 
+void cmdlinet::set(
+  const std::string &option,
+  const boost::any &value,
+  std::list<std::string> text)
+{
+  vm.erase(option);
+  vm.emplace(option, boost::program_options::variable_value(value, false));
+  options_map[option] = std::move(text);
+}
+
 const std::list<std::string> &cmdlinet::get_values(const char *option) const
 {
   cmdlinet::options_mapt::const_iterator value = options_map.find(option);

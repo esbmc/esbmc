@@ -39,6 +39,12 @@ bool has_return_none(const nlohmann::json &body);
 // top level or inside nested `body`/`orelse` blocks.
 bool has_return_value(const nlohmann::json &body);
 
+// Appends `return None` to each function in `node` that has no return
+// annotation, returns a value and may fall off its end, as CPython returns None
+// there. An annotated function is left alone, so the converter still reports
+// its missing return.
+void return_none_on_fall_off(nlohmann::json &node);
+
 // Recursively reconstructs a dotted base name for an attribute /
 // subscript chain rooted at a Name node (e.g. `obj.attr[0]`).
 // Returns the empty string on unrecognised shapes.

@@ -427,8 +427,14 @@ static expr2tc simplify_arith_2ops(
     // Fix rounding when a bv overflow occurs. Only the bv arm yields a
     // constant_int2t result, so this reproduces the original per-arm fixup.
     if (!is_nil_expr(simpl_res) && is_constant_int2t(simpl_res))
+    {
+      if (
+        int_encoding_fold_wraps(
+          to_constant_int2t(simpl_res).value, simpl_res->type))
+        return expr2tc();
       simpl_res =
         from_integer(to_constant_int2t(simpl_res).value, simpl_res->type);
+    }
   }
 
   return typecast_check_return(type, simpl_res);
@@ -573,7 +579,8 @@ static expr2tc fold_bitnot_plus_const(
     return is_bitnot2t(e) && e->type == type ? to_bitnot2t(e).value : expr2tc();
   };
   auto is_const = [&type](const expr2tc &e) {
-    return is_constant_int2t(e) && e->type == type;
+    return is_constant_int2t(e) && e->type == type &&
+           !int_encoding_fold_wraps(to_constant_int2t(e).value - 1, type);
   };
   auto decrement = [&type](const expr2tc &c) {
     return from_integer(to_constant_int2t(c).value - 1, type);
@@ -709,12 +716,14 @@ expr2tc add2t::do_simplify() const
   // longer match. Catch the value-shaped form too.
   if (
     is_signedbv_type(type) && is_constant_int2t(side_2) &&
-    to_constant_int2t(side_2).value.is_negative())
+    to_constant_int2t(side_2).value.is_negative() &&
+    !int_encoding_fold_wraps(-to_constant_int2t(side_2).value, type))
     return sub2tc(
       type, side_1, from_integer(-to_constant_int2t(side_2).value, type));
   if (
     is_signedbv_type(type) && is_constant_int2t(side_1) &&
-    to_constant_int2t(side_1).value.is_negative())
+    to_constant_int2t(side_1).value.is_negative() &&
+    !int_encoding_fold_wraps(-to_constant_int2t(side_1).value, type))
     return sub2tc(
       type, side_2, from_integer(-to_constant_int2t(side_1).value, type));
 
@@ -1327,8 +1336,14 @@ static expr2tc simplify_arith_1op(const type2tc &type, const expr2tc &value)
     // Properly handle truncation when an overflow occurs
     // or when the result gets out of the bounds of the type
     if (!is_nil_expr(simpl_res) && is_constant_int2t(simpl_res))
+    {
+      if (
+        int_encoding_fold_wraps(
+          to_constant_int2t(simpl_res).value, simpl_res->type))
+        return expr2tc();
       simpl_res =
         from_integer(to_constant_int2t(simpl_res).value, simpl_res->type);
+    }
   }
   else if (is_fixedbv_type(value))
   {
@@ -1481,6 +1496,26 @@ expr2tc with2t::do_simplify() const
     const with2t &inner = to_with2t(source_value);
     if (inner.update_field == update_field)
       return with2tc(type, inner.source_value, update_field, update_value);
+  }
+
+  // A store on a lambda stays a lambda, so reads still simplify and the solver
+  // never needs the whole array as a quantified term.
+  if (is_array_lambda2t(source_value))
+  {
+    const array_lambda2t &lambda = to_array_lambda2t(source_value);
+    expr2tc j = lambda.binder;
+    expr2tc idx = update_field;
+    const unsigned jw = j->type->get_width(), iw = idx->type->get_width();
+    if (j->type != idx->type && jw == iw)
+      return expr2tc();
+    if (jw < iw)
+      j = typecast2tc(idx->type, j);
+    else if (iw < jw)
+      idx = typecast2tc(j->type, idx);
+    return array_lambda2tc(
+      type,
+      lambda.binder,
+      if2tc(lambda.body->type, equality2tc(j, idx), update_value, lambda.body));
   }
 
   if (is_constant_struct2t(source_value))
@@ -2067,12 +2102,43 @@ static expr2tc resolve_with_chain_lookup(
   return expr2tc();
 }
 
+static void
+substitute_binder(expr2tc &e, const irep_idt &binder, const expr2tc &value)
+{
+  if (is_symbol2t(e))
+  {
+    if (to_symbol2t(e).thename == binder)
+      e = value;
+    return;
+  }
+  // A nested lambda binding the same name shadows it.
+  if (
+    is_array_lambda2t(e) &&
+    to_symbol2t(to_array_lambda2t(e).binder).thename == binder)
+    return;
+  e->Foreach_operand(
+    [&binder, &value](expr2tc &op) { substitute_binder(op, binder, value); });
+}
+
 expr2tc index2t::do_simplify() const
 {
   // expr2t::simplify walks operands bottom-up before invoking do_simplify,
   // so source_value and index are already simplified.
   const expr2tc &src = source_value;
   const expr2tc &idx_e = index;
+
+  if (is_array_lambda2t(src))
+  {
+    const array_lambda2t &lambda = to_array_lambda2t(src);
+    expr2tc body = lambda.body;
+    // Reads may index with another integer type than the binder's.
+    const expr2tc idx = idx_e->type == lambda.binder->type
+                          ? idx_e
+                          : typecast2tc(lambda.binder->type, idx_e);
+    substitute_binder(body, to_symbol2t(lambda.binder).thename, idx);
+    expr2tc simplified = body->simplify();
+    return is_nil_expr(simplified) ? body : simplified;
+  }
 
   if (is_with2t(src))
   {
@@ -2783,6 +2849,9 @@ static expr2tc do_bit_munge_operation(
      * past the width. Require 0 <= br < 64 and otherwise leave the shift
      * symbolic for the solver. */
     can_eval &= !is_shift || (br >= 0 && br < 64);
+    if constexpr (std::is_same_v<constructor, shl2t>)
+      can_eval =
+        can_eval && !int_encoding_fold_wraps(bl * BigInt::power2(r), type);
     if (can_eval)
     {
       uint64_t res = opfunc(l, r);
@@ -3585,6 +3654,8 @@ static std::optional<expr2tc> fold_constant_bv_source(
     // type: from_integer(BigInt, type2tc) truncates/sign-extends to the
     // destination width via the same binary round-trip the legacy
     // from_integer + to_integer pair performed.
+    if (int_encoding_fold_wraps(theint.value, type))
+      return expr2tc();
     return from_integer(theint.value, type);
   }
 
@@ -6438,7 +6509,9 @@ expr2tc ieee_rem2t::do_simplify() const
   // left to the solver. What does fold are the operand facts that decide the
   // result no matter what the other side is (IEEE 754 remainder; the
   // operation is exact, so no rounding mode participates).
-  assert(is_floatbv_type(type));
+  // Under --fixedbv the libm models' ieee_rem nodes are fixedbv (#10774).
+  if (!is_floatbv_type(type))
+    return expr2tc();
   const ieee_float_spect spec(to_floatbv_type(type));
 
   if (is_constant_floatbv2t(side_1))

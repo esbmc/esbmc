@@ -79,16 +79,24 @@ public:
     const expr2tc &size,
     const sourcet &source) override;
 
+  void event(
+    const expr2tc &guard,
+    step_typet type,
+    const expr2tc &symbol,
+    const sourcet &source,
+    const expr2tc &old = expr2tc()) override;
+
   // `runtime_encoded_equationt` overrides `convert` and supports only the
   // default mode; incremental BMC callers must run probes through the
   // non-incremental path.
   /// How an assertion is encoded.
   ///   Violated       -- `not(assumpt -> cond)`: can the claim be violated?
   ///   PathReachable  -- `assumpt`: is the path to it feasible at all?
-  ///   Satisfiable    -- `not(assumpt -> cond_neg)`: can the claim hold? UNSAT
-  ///                     means no feasible path satisfies it, so a violation
-  ///                     found against an over-approximation is one the
-  ///                     approximation's own constraints force (issue #7585).
+  ///   Satisfiable    -- `not(assumpt -> cond_neg)`: can the violation be
+  ///                     avoided? UNSAT means every feasible execution
+  ///                     violates the claim, so a violation found against an
+  ///                     over-approximation is one the approximation's own
+  ///                     constraints force (issues #7585, #10642).
   enum class assertion_modet
   {
     Violated,
@@ -138,6 +146,15 @@ public:
     {
       return type == symex_targett::BREANCHING;
     }
+    bool is_event() const
+    {
+      return type >= symex_targett::SHARED_READ &&
+             type <= symex_targett::ATOMIC_END;
+    }
+    bool adds_no_constraint() const
+    {
+      return is_skip() || is_event();
+    }
 
     expr2tc guard;
 
@@ -152,7 +169,7 @@ public:
     // std::string) and dedups the payload across the many steps that share
     // a message.
     expr2tc cond;
-    /// `cond` with the claim negated under the same guards (issue #7585).
+    /// `cond` negated under the execution guard only (issue #10642).
     expr2tc cond_neg;
     irep_idt comment;
 

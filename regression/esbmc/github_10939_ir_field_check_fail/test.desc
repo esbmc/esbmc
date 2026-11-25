@@ -1,0 +1,5 @@
+CORE
+main.c
+--z3 --ir --struct-fields-check
+^VERIFICATION FAILED$
+FAILED +\[main\.assertion\.[0-9]+\] +line +[0-9]+ +dereference failure: Over-sized read of struct field

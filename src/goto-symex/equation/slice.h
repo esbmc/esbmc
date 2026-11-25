@@ -104,7 +104,8 @@ public:
       slice_nondet(
         !options.get_bool_option("generate-testcase") &&
         !options.get_bool_option("generate-ctest-testcase") &&
-        options.get_option("witness-output-yaml").empty())
+        options.get_option("witness-output-yaml").empty()),
+      hide_unconstrained_prints(options.get_bool_option("field-sensitive-ssa"))
   {
   }
 
@@ -129,13 +130,17 @@ public:
     array_disqualified.clear();
     scanned_cache.clear();
     sliced_reads.clear();
+    sliced_definitions.clear();
 
     fine_timet algorithm_start = current_time();
+    symex_target_equationt::SSA_stept *sliced_print = nullptr;
     for (auto &step : boost::adaptors::reverse(eq))
     {
       if (step.ignore)
         continue;
       run_on_step(step);
+      if (hide_unconstrained_prints)
+        sliced_print = carry_split_print(step, sliced_print);
     }
     // A branching step only steers the witness, so its guard and cond are not
     // dependencies. Where they read a value the slicer removed, the model's
@@ -146,6 +151,15 @@ public:
         step.is_branching() && !step.ignore &&
         (reads_sliced(step.guard) || reads_sliced(step.cond)))
         step.ignore = true;
+    // A split struct's whole write prints a right-hand side its kept field
+    // steps may not read. Where that reads a definition the slicer removed,
+    // the model's value for it is arbitrary (#10801): hide the step.
+    if (hide_unconstrained_prints)
+      for (auto &step : eq)
+        if (
+          step.is_assignment() && !step.ignore && !step.hidden &&
+          reads_sliced_definition(step.original_rhs))
+          step.hidden = true;
     fine_timet algorithm_stop = current_time();
     log_status(
       "Slicing time: {}s (removed {} assignments)",
@@ -188,6 +202,10 @@ public:
   /// Memo for #reads_sliced: node -> whether its subtree reads a sliced value.
   std::unordered_map<const expr2t *, bool> sliced_reads;
 
+  /// Left-hand sides of the assignment steps the reverse pass ignored, filled
+  /// only when #hide_unconstrained_prints is set.
+  std::unordered_set<std::string> sliced_definitions;
+
   static expr2tc get_nondet_symbol(const expr2tc &expr);
   /// The `nondet$` symbols of \p expr, in member order. Unlike
   /// get_nondet_symbol it descends into struct and union literals: constant
@@ -200,6 +218,8 @@ protected:
   const bool slice_assumes;
   /// Whether we should slice nondet symbols
   const bool slice_nondet;
+  /// Whether a kept step whose printed rhs reads a sliced definition is hidden
+  const bool hide_unconstrained_prints;
 
   /**
    * Collect every symbol of \expr into #depends (mutating "reverse-taint"
@@ -247,6 +267,24 @@ protected:
    * @return true if \expr reads a sliced value
    */
   bool reads_sliced(const expr2tc &expr);
+
+  /**
+   * A split struct's whole write prints on its last field's step. When the
+   * reverse pass removes that step, move the print to the latest kept field
+   * step of the same write and keep what it reads, as the unsplit object's
+   * step would be kept with its right-hand side (#7521).
+   *
+   * @param step the step the reverse pass just visited
+   * @param pending the removed printing step awaiting a kept sibling, or null
+   * @return the printing step still awaiting a kept sibling, or null
+   */
+  symex_target_equationt::SSA_stept *carry_split_print(
+    symex_target_equationt::SSA_stept &step,
+    symex_target_equationt::SSA_stept *pending);
+
+  /// Does \expr read a symbol in #sliced_definitions? A symbol with no
+  /// defining step is as free in the sliced formula as in the full one.
+  bool reads_sliced_definition(const expr2tc &expr) const;
 
   /**
    * Asserts are never sliced: collect the step's guard/cond symbols into
@@ -298,6 +336,15 @@ protected:
    * @param SSA_step a renumber step
    */
   void run_on_renumber(symex_target_equationt::SSA_stept &SSA_step) override;
+
+  /**
+   * Keep what a --partial-order event depends on. Any read may observe a
+   * write, but the memory-model constraints that say which one come first in
+   * the equation, after this backwards walk has passed the write.
+   *
+   * @param SSA_step an event step
+   */
+  void run_on_event(symex_target_equationt::SSA_stept &SSA_step) override;
 };
 
 #endif

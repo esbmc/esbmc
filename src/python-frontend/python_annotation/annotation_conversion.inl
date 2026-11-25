@@ -355,16 +355,21 @@ std::string python_annotation<Json>::resolve_subscript_type(
         subscript_node["slice"]["_type"] == "List")) ||
       slice_is_list_var;
 
-    // First try to use the element_type from annotation (e.g., list[int])
-    if (!element_type.empty())
-      return is_multi_result ? "list[" + element_type + "]" : element_type;
+    // Use the element_type from the annotation (e.g., list[int]), else infer
+    // it from the initializer.
+    if (
+      element_type.empty() && var_node.contains("value") &&
+      !var_node["value"].is_null())
+      element_type = get_list_subtype(var_node["value"]);
 
-    // Try to infer from initialization if available
-    if (var_node.contains("value") && !var_node["value"].is_null())
+    if (!element_type.empty())
     {
-      std::string inferred = get_list_subtype(var_node["value"]);
-      if (!inferred.empty())
-        return is_multi_result ? "list[" + inferred + "]" : inferred;
+      if (is_multi_result)
+        return "list[" + element_type + "]";
+      // An item of another type stored later makes some element differ.
+      return list_gains_other_type(var_name, element_type, body)
+               ? "Any"
+               : element_type;
     }
 
     // Last resort: return Any for unknown list element types
@@ -704,6 +709,119 @@ std::string python_annotation<Json>::infer_unpacked_element_type(
   return "Any";
 }
 
+/// Whether @p n is `name[...]` read as a value.
+template <class Json>
+static bool is_element_read(const Json &n, const std::string &name)
+{
+  return n.is_object() && n.value("_type", "") == "Subscript" &&
+         n["ctx"].value("_type", "") == "Load" &&
+         n["value"].value("_type", "") == "Name" &&
+         n["value"].value("id", "") == name;
+}
+
+/// Whether @p body uses @p param only to read its elements whole: no bare
+/// use (alias, call argument), no store into or through an element, and no
+/// attribute of one, any of which could change what an element holds.
+template <class Json>
+static bool
+only_reads_whole_elements(const Json &body, const std::string &param)
+{
+  std::function<bool(const Json &, bool)> walk =
+    [&](const Json &n, bool changed) -> bool {
+    if (!n.is_object() && !n.is_array())
+      return true;
+    if (n.is_object() && n.value("_type", "") == "Name")
+      return n.value("id", "") != param;
+    if (is_element_read(n, param))
+      return !changed && walk(n["slice"], false);
+    const std::string kind = n.is_object() ? n.value("_type", "") : "";
+    if (
+      kind == "Attribute" ||
+      (kind == "Subscript" && n["ctx"].value("_type", "") != "Load"))
+      return walk(n["value"], true) &&
+             (kind == "Attribute" || walk(n["slice"], false));
+    for (const auto &child : n)
+      if (!walk(child, false))
+        return false;
+    return true;
+  };
+  return walk(body, false);
+}
+
+/// Whether every use of @p name in @p ast, apart from at most one binding,
+/// passes one of its elements straight to a module-level function that only
+/// reads that parameter's elements whole. A store, a method call, an alias,
+/// a store into the element itself (`name[1][0] = x`) or one by the callee
+/// could change what the element holds.
+template <class Json>
+static bool only_element_arguments(const Json &ast, const std::string &name)
+{
+  unsigned bindings = 0;
+  auto passed_unchanged = [&](const Json &call, size_t position) {
+    const Json def =
+      json_utils::try_find_function(ast["body"], call["func"].value("id", ""));
+    if (def.empty() || def["args"]["args"].size() <= position)
+      return false;
+    return only_reads_whole_elements(
+      def["body"], def["args"]["args"][position].value("arg", ""));
+  };
+  std::function<bool(const Json &)> walk = [&](const Json &n) -> bool {
+    if (!n.is_object() && !n.is_array())
+      return true;
+    if (n.is_object() && n.value("_type", "") == "Name")
+      return n.value("id", "") != name ||
+             (n["ctx"].value("_type", "") == "Store" && ++bindings == 1);
+    if (n.is_object() && n.value("_type", "") == "Call")
+    {
+      const Json &args = n["args"];
+      for (size_t i = 0; i < args.size(); ++i)
+      {
+        const bool element = is_element_read(args[i], name);
+        if (element && !passed_unchanged(n, i))
+          return false;
+        if (!walk(element ? args[i]["slice"] : args[i]))
+          return false;
+      }
+      return walk(n["func"]) && walk(n["keywords"]);
+    }
+    for (const auto &child : n)
+      if (!walk(child))
+        return false;
+    return true;
+  };
+  return walk(ast);
+}
+
+/// The type of element @p subscript reads from @p value, a list display
+/// bound to @p var_name, when the index is a constant. The element keeps its
+/// own type when the display mixes types, which leaves the list itself
+/// without one (#8914), provided the list's elements are only passed to calls.
+template <class Json>
+std::string python_annotation<Json>::fixed_element_type(
+  const Json &subscript,
+  const Json &value,
+  const std::string &var_name)
+{
+  const Json &index = subscript["slice"];
+  if (
+    value.value("_type", "") != "List" ||
+    index.value("_type", "") != "Constant" ||
+    !index["value"].is_number_unsigned())
+    return "";
+  const Json &elts = value["elts"];
+  const size_t i = index["value"].template get<size_t>();
+  // A starred element shifts every position after it.
+  if (
+    i >= elts.size() ||
+    std::any_of(
+      elts.begin(),
+      elts.end(),
+      [](const Json &e) { return e.value("_type", "") == "Starred"; }) ||
+    !only_element_arguments(ast_, var_name))
+    return "";
+  return get_argument_type(elts[i]);
+}
+
 /// The type a subscript of a `container`-typed value yields, or empty.
 inline std::string
 subscript_result_type(const std::string &container, bool is_slice)
@@ -840,6 +958,12 @@ python_annotation<Json>::get_dict_literal_type(const Json &dict_value)
 
 // ---------- dispatchers ----------
 
+/// @p type, or @p fallback when @p type is unknown.
+inline std::string known_or(std::string type, std::string fallback)
+{
+  return type.empty() ? fallback : type;
+}
+
 // The type of the value a call such as abs(a - b), len(list) or A()
 // returns, or "" when unknown.
 template <class Json>
@@ -881,6 +1005,10 @@ std::string python_annotation<Json>::get_call_type(const Json &arg)
     if (builtin_functions().count(func_name))
       return get_builtin_call_type(arg);
 
+    const std::string per_call = specialised_call_type(func_name, arg);
+    if (!per_call.empty())
+      return per_call;
+
     // For user-defined functions, try to get return type
     try
     {
@@ -893,7 +1021,151 @@ std::string python_annotation<Json>::get_call_type(const Json &arg)
     }
   }
 
-  return module_call_type(arg);
+  return known_or(user_method_call_type(arg), module_call_type(arg));
+}
+
+/// Whether @p name, or a class it derives from, is @p base.
+template <class Json>
+static bool derives_from(
+  const Json &body,
+  const std::string &name,
+  const std::string &base,
+  std::set<std::string> &visited)
+{
+  if (name == base)
+    return true;
+  const Json cls = json_utils::find_class(body, name);
+  if (cls.empty() || !visited.insert(name).second || !cls.contains("bases"))
+    return false;
+  for (const Json &b : cls["bases"])
+    if (
+      b.contains("id") &&
+      derives_from(body, b["id"].template get<std::string>(), base, visited))
+      return true;
+  return false;
+}
+
+/// Whether a class derived from @p cls defines @p method itself, so an
+/// instance typed @p cls may run another body.
+template <class Json>
+static bool overridden_below(
+  const Json &body,
+  const std::string &cls,
+  const std::string &method)
+{
+  for (const Json &stmt : body)
+  {
+    if (stmt.value("_type", "") != "ClassDef" || stmt["name"] == cls)
+      continue;
+    std::set<std::string> visited;
+    if (
+      derives_from(
+        body, stmt["name"].template get<std::string>(), cls, visited) &&
+      !json_utils::try_find_function(stmt["body"], method).empty())
+      return true;
+  }
+  return false;
+}
+
+/// The type `receiver.method(...)` returns when the receiver is an instance
+/// of a class the program defines, such as `p.clone()`, or "" when unknown.
+/// Without it a parameter fed the call stays `void *` (#10381). Only a
+/// single-base chain is walked, and a method a subclass overrides is left
+/// unknown, since the instance may be of that subclass.
+template <class Json>
+std::string python_annotation<Json>::user_method_call_type(const Json &call)
+{
+  const Json &func = call["func"];
+  if (func["_type"] != "Attribute" || !func.contains("value"))
+    return "";
+  const std::string method = func["attr"].template get<std::string>();
+  const std::string receiver = get_argument_type(func["value"]);
+  if (
+    !json_utils::is_class(receiver, ast_) ||
+    overridden_below(ast_["body"], receiver, method))
+    return "";
+  std::set<std::string> visited;
+  for (std::string cls = receiver; visited.insert(cls).second;)
+  {
+    const Json node = json_utils::find_class(ast_["body"], cls);
+    if (node.empty())
+      return "";
+    const Json def = json_utils::try_find_function(node["body"], method);
+    if (!def.empty())
+    {
+      const std::string type = method_return_type(def, cls);
+      return type == "Any" ? "" : type;
+    }
+    const Json &bases = node["bases"];
+    if (bases.size() != 1 || !bases[0].contains("id"))
+      return "";
+    cls = bases[0]["id"].template get<std::string>();
+  }
+  return "";
+}
+
+/// The type @p call returns when @p func_name is copied per call type
+/// because its calls pass an int to a parameter at one site and a float at
+/// another: the return type with this call's argument types, or "".
+/// Typing every call by one shared return type gave `f(g(1))` and
+/// `f(g(0.5))` one argument type, so `f` kept a single int signature
+/// (#10359).
+template <class Json>
+std::string python_annotation<Json>::specialised_call_type(
+  const std::string &func_name,
+  const Json &call)
+{
+  Json *func = nullptr;
+  for (Json &node : ast_["body"])
+    if (node.value("_type", "") == "FunctionDef" && node["name"] == func_name)
+      func = &node;
+  if (
+    func == nullptr || !call.contains("args") ||
+    !specialising_calls_.insert(func_name).second)
+    return "";
+  struct scopet
+  {
+    std::set<std::string> &set;
+    const std::string &name;
+    ~scopet()
+    {
+      set.erase(name);
+    }
+  } scope{specialising_calls_, func_name};
+
+  Json &params = (*func)["args"]["args"];
+  const std::vector<Json> calls = find_function_calls(func_name, ast_["body"]);
+  bool specialised = false;
+  for (size_t i = 0; i < params.size() && !specialised; ++i)
+    specialised =
+      params[i].value("annotation", Json()).is_null() &&
+      are_specializable_types(collect_parameter_types_from_calls(i, calls));
+  if (!specialised)
+    return "";
+
+  const Json saved_params = params;
+  const Json saved_returns = (*func)["returns"];
+  for (size_t i = 0; i < params.size() && i < call["args"].size(); ++i)
+  {
+    const std::string type = get_argument_type(call["args"][i]);
+    if (params[i].value("annotation", Json()).is_null() && !type.empty())
+      add_parameter_annotation(params[i], type);
+  }
+  if (
+    saved_returns.is_object() &&
+    saved_returns.value("_inferred_annotation", false))
+    (*func)["returns"] = nullptr;
+  std::string type;
+  try
+  {
+    type = get_function_return_type(func_name, ast_);
+  }
+  catch (std::runtime_error &)
+  {
+  }
+  params = saved_params;
+  (*func)["returns"] = saved_returns;
+  return type;
 }
 
 /// The type a call of an imported module's function, such as
@@ -932,7 +1204,8 @@ std::string
 python_annotation<Json>::subscript_annotation_type(const Json &annotation)
 {
   const std::string full = json_utils::render_annotation_type(annotation);
-  if (annotation["value"]["id"] == "dict" && !full.empty())
+  const auto &container = annotation["value"]["id"];
+  if ((container == "dict" || container == "list") && !full.empty())
     return full;
   return json_utils::get_annotation_type_name(annotation);
 }
@@ -949,6 +1222,28 @@ std::string python_annotation<Json>::container_literal_type(
   if (base_type == "dict" && value["_type"] == "Dict")
     return get_argument_type(value);
   return "";
+}
+
+/// The type every element of the list literal \p value has, or empty when
+/// \p value is not a list literal or its elements differ or are untyped.
+/// Unlike get_list_type_from_literal, it never falls back to int.
+template <class Json>
+std::string
+python_annotation<Json>::common_literal_element_type(const Json &value)
+{
+  if (
+    !value.is_object() || value.value("_type", "") != "List" ||
+    !value.contains("elts") || value["elts"].empty())
+    return "";
+  std::string common;
+  for (const Json &elt : value["elts"])
+  {
+    const std::string type = get_argument_type(elt);
+    if (type.empty() || type == "Any" || (!common.empty() && type != common))
+      return "";
+    common = type;
+  }
+  return common;
 }
 
 template <class Json>
@@ -1024,6 +1319,15 @@ std::string python_annotation<Json>::get_argument_type(const Json &arg)
             arg["slice"]["_type"] == "Slice")
             return elem.empty() ? "list" : "list[" + elem + "]";
 
+          // The for-loop lowering annotates an iterable whose element type it
+          // cannot tell as list[Any]: recover it from a list literal value.
+          if (elem.empty() || elem == "Any")
+          {
+            const std::string common =
+              common_literal_element_type(var_node.value("value", Json()));
+            if (!common.empty())
+              return common;
+          }
           return elem.empty() ? "Any" : elem;
         }
         // Simple name annotation (e.g., list without subtype)
@@ -1039,7 +1343,10 @@ std::string python_annotation<Json>::get_argument_type(const Json &arg)
         !var_node.empty() && var_node.contains("value") &&
         !var_node["value"].is_null())
       {
-        return subscript_result_type(get_argument_type(val), is_slice);
+        const std::string container = get_argument_type(val);
+        if (!container.empty() || is_slice)
+          return subscript_result_type(container, is_slice);
+        return fixed_element_type(arg, var_node["value"], var_name);
       }
     }
     return "";
@@ -1349,6 +1656,21 @@ std::string python_annotation<Json>::class_attribute_type(
   return "";
 }
 
+/// Whether @p node stores to an attribute named @p attr on an instance of the
+/// class being typed. A copy of the class (@p in_copy) stores into `self` only
+/// on its own instances.
+template <class Json>
+static bool
+stores_attribute(const Json &node, const std::string &attr, bool in_copy)
+{
+  if (
+    node.value("_type", "") != "Attribute" || node.value("attr", "") != attr ||
+    (node.contains("ctx") && node["ctx"].value("_type", "") == "Load"))
+    return false;
+  return !in_copy || !node["value"].is_object() ||
+         node["value"].value("id", "") != "self";
+}
+
 /// Counts the nodes under @p node that may store to an attribute named
 /// @p attr, a `setattr` call or a `__class__` read, and the uses of @p name
 /// outside annotations.
@@ -1358,21 +1680,23 @@ static void count_attr_writers(
   const std::string &attr,
   const std::string &name,
   size_t &stores,
-  size_t &name_reads)
+  size_t &name_reads,
+  const std::set<const Json *> &copies,
+  bool in_copy = false)
 {
   if (node.is_array())
   {
     for (const Json &child : node)
-      count_attr_writers(child, attr, name, stores, name_reads);
+      count_attr_writers(
+        child, attr, name, stores, name_reads, copies, in_copy);
     return;
   }
   if (!node.is_object())
     return;
+  in_copy |= copies.count(&node) != 0;
   const std::string type = node.value("_type", "");
-  const std::string ctx =
-    node.contains("ctx") ? node["ctx"].value("_type", "") : "";
   if (
-    (type == "Attribute" && node.value("attr", "") == attr && ctx != "Load") ||
+    stores_attribute(node, attr, in_copy) ||
     (type == "Attribute" && node.value("attr", "") == "__class__") ||
     (type == "Name" && node.value("id", "") == "setattr"))
     ++stores;
@@ -1380,14 +1704,79 @@ static void count_attr_writers(
     ++name_reads;
   for (auto it = node.begin(); it != node.end(); ++it)
     if (it.key() != "annotation" && it.key() != "returns")
-      count_attr_writers(it.value(), attr, name, stores, name_reads);
+      count_attr_writers(
+        it.value(), attr, name, stores, name_reads, copies, in_copy);
+}
+
+/// How many times the AST node @p node itself binds or declares @p name.
+template <class Json>
+static size_t own_bindings(const Json &node, const std::string &name)
+{
+  const std::string kind = node.value("_type", "");
+  if (kind == "Global" || kind == "Nonlocal")
+    return std::count(node["names"].begin(), node["names"].end(), name);
+  if (kind == "alias")
+    return (node["asname"].is_string() ? node["asname"] : node["name"]) == name;
+  const bool is_def = kind == "FunctionDef" || kind == "AsyncFunctionDef" ||
+                      kind == "ClassDef";
+  const bool stored =
+    kind == "Name" && node.contains("ctx") &&
+    node["ctx"].value("_type", "") != "Load" && node.value("id", "") == name;
+  return stored || (kind == "arg" && node.value("arg", "") == name) ||
+         (is_def && node.value("name", "") == name);
+}
+
+/// How many places in @p node bind or declare @p name, in any scope.
+template <class Json>
+static size_t binding_count(const Json &node, const std::string &name)
+{
+  if (!node.is_structured())
+    return 0;
+  size_t count = node.is_object() ? own_bindings(node, name) : 0;
+  for (const Json &child : node)
+    count += binding_count(child, name);
+  return count;
+}
+
+/// Whether @p arg, passed at a constructor call, holds a @p type wherever the
+/// call is: a literal of that type, or a name bound once in the module, by a
+/// top-level assignment whose value has that type.
+template <class Json>
+bool python_annotation<Json>::argument_has_type(
+  const Json &arg,
+  const std::string &type)
+{
+  if (arg.value("_type", "") == "Constant")
+    return get_argument_type(arg) == type;
+  if (
+    arg.value("_type", "") != "Name" ||
+    binding_count(ast_, arg["id"].template get<std::string>()) != 1)
+    return false;
+  for (const Json &stmt : ast_["body"])
+  {
+    const std::string kind = stmt.value("_type", "");
+    const Json *target = kind == "Assign" && stmt["targets"].size() == 1
+                           ? &stmt["targets"][0]
+                         : kind == "AnnAssign" ? &stmt["target"]
+                                               : nullptr;
+    if (
+      !target || target->value("_type", "") != "Name" ||
+      (*target)["id"] != arg["id"] || stmt["value"].is_null())
+      continue;
+    const std::string saved = current_func_name_context_;
+    current_func_name_context_.clear();
+    const std::string value_type = get_argument_type(stmt["value"]);
+    current_func_name_context_ = saved;
+    return value_type == type;
+  }
+  return false;
 }
 
 /// The declared type of `self.attr` in a method of the class being annotated,
 /// or empty. An unannotated attribute takes the type of its first
 /// constructor call, so the type is given only when the attribute is stored
 /// once, by `__init__` of a class used only in plain calls, from a literal of
-/// that type or from a parameter that every call passes such a literal.
+/// that type or from a parameter that every call passes such a value.
 template <class Json>
 std::string python_annotation<Json>::self_attribute_type(const Json &node)
 {
@@ -1409,7 +1798,13 @@ std::string python_annotation<Json>::self_attribute_type(const Json &node)
       continue;
     size_t stores = 0;
     size_t name_reads = 0;
-    count_attr_writers(ast_["body"], attr, cls, stores, name_reads);
+    count_attr_writers(
+      ast_["body"],
+      attr,
+      cls,
+      stores,
+      name_reads,
+      json_utils::class_copies_of(ast_, cls));
     const Json annotation = json_utils::find_attr_annotation(class_node, attr);
     const std::vector<Json> calls = find_function_calls(cls, ast_["body"]);
     if (stores != 1 || annotation.empty() || calls.size() != name_reads)
@@ -1432,8 +1827,7 @@ std::string python_annotation<Json>::self_attribute_type(const Json &node)
     {
       if (
         !call["keywords"].empty() || call["args"].size() < index ||
-        call["args"][index - 1].value("_type", "") != "Constant" ||
-        get_argument_type(call["args"][index - 1]) != type)
+        !argument_has_type(call["args"][index - 1], type))
         return "";
       for (const Json &arg : call["args"])
         if (arg.value("_type", "") == "Starred")
@@ -1452,6 +1846,47 @@ std::string python_annotation<Json>::get_operand_type(const Json &node)
   return type.empty() ? self_attribute_type(node) : type;
 }
 
+/// The argument @p item_arg picks from the first call under @p node for which
+/// it picks one; empty when there is none.
+template <class Json, class ItemArg>
+static Json find_first_item_arg(const Json &node, const ItemArg &item_arg)
+{
+  if (node.is_object() && node.value("_type", std::string()) == "Call")
+  {
+    Json found = item_arg(node);
+    if (!found.empty())
+      return found;
+  }
+  if (node.is_object() || node.is_array())
+    for (const auto &child : node)
+    {
+      Json found = find_first_item_arg(child, item_arg);
+      if (!found.empty())
+        return found;
+    }
+  return Json();
+}
+
+template <class Json>
+static bool names(const Json &node, const std::string &name)
+{
+  return node.is_object() && node.value("_type", std::string()) == "Name" &&
+         node.value("id", std::string()) == name;
+}
+
+/// The argument of @p call when it is `<name>.append(arg)`, else empty.
+template <class Json>
+static Json append_arg(const Json &call, const std::string &name)
+{
+  const Json &func = call["func"];
+  if (
+    func.value("_type", std::string()) == "Attribute" &&
+    func.value("attr", std::string()) == "append" &&
+    names(func["value"], name) && call["args"].size() == 1)
+    return call["args"][0];
+  return Json();
+}
+
 // Recursively search a statement subtree for the first
 // ``<name>.append(arg)`` call and return its argument node. Returns an
 // empty Json when no such append exists. Used to recover the element
@@ -1459,38 +1894,38 @@ std::string python_annotation<Json>::get_operand_type(const Json &node)
 template <class Json>
 static Json find_first_append_arg(const Json &node, const std::string &name)
 {
-  if (node.is_object())
-  {
+  return find_first_item_arg(
+    node, [&name](const Json &call) { return append_arg(call, name); });
+}
+
+template <class Json>
+bool python_annotation<Json>::list_gains_other_type(
+  const std::string &name,
+  const std::string &element_type,
+  const Json &body)
+{
+  const Json other = find_first_item_arg(body, [&](const Json &call) {
+    const Json item = append_arg(call, name);
+    if (item.empty())
+      return Json();
+    const std::string type = get_argument_type(item);
+    return !type.empty() && type != element_type ? item : Json();
+  });
+  return !other.empty();
+}
+
+/// The item of the first `heappush(<name>, x)` under @p node, or empty.
+template <class Json>
+static Json find_first_heappush_arg(const Json &node, const std::string &name)
+{
+  return find_first_item_arg(node, [&name](const Json &call) {
+    const Json &args = call["args"];
     if (
-      node.value("_type", std::string()) == "Call" && node.contains("func") &&
-      node["func"].is_object() &&
-      node["func"].value("_type", std::string()) == "Attribute" &&
-      node["func"].value("attr", std::string()) == "append" &&
-      node["func"].contains("value") && node["func"]["value"].is_object() &&
-      node["func"]["value"].value("_type", std::string()) == "Name" &&
-      node["func"]["value"].value("id", std::string()) == name &&
-      node.contains("args") && node["args"].is_array() &&
-      node["args"].size() == 1)
-    {
-      return node["args"][0];
-    }
-    for (auto it = node.begin(); it != node.end(); ++it)
-    {
-      Json found = find_first_append_arg(*it, name);
-      if (!found.empty())
-        return found;
-    }
-  }
-  else if (node.is_array())
-  {
-    for (const auto &child : node)
-    {
-      Json found = find_first_append_arg(child, name);
-      if (!found.empty())
-        return found;
-    }
-  }
-  return Json();
+      names(call["func"], "heappush") && args.size() == 2 &&
+      names(args[0], name))
+      return args[1];
+    return Json();
+  });
 }
 
 // Method to get the full type of a list literal
@@ -1673,6 +2108,50 @@ std::string python_annotation<Json>::refine_any_from_value(
   return value_type.empty() ? annotated : value_type;
 }
 
+/// Whether @p type is spelled from int, float, str, bool and tuple alone.
+static bool is_builtin_scalar_or_tuple(const std::string &type)
+{
+  static const std::set<std::string> builtins = {
+    "int", "float", "str", "bool", "tuple"};
+  std::string word;
+  for (const char c : type + ",")
+  {
+    if (c != '[' && c != ']' && c != ',' && c != ' ')
+    {
+      word += c;
+      continue;
+    }
+    if (!word.empty() && !builtins.count(word))
+      return false;
+    word.clear();
+  }
+  return !type.empty();
+}
+
+/// `list[T]` for an empty list @p var_name whose first item stored under
+/// @p body is a `heappush` of a T, heapq's imported by name. The heapq model
+/// appends in its own module, where the converter cannot record the caller's
+/// element type, so the annotation is the only place it can come from. A T
+/// naming a class is left out: the annotation would name it before its
+/// definition. `heapq.heappush` is left out too: a heap of tuples it fills
+/// can read back wrong elements even when annotated by hand. "" otherwise.
+template <class Json>
+std::string python_annotation<Json>::heap_list_type(
+  const Json &body,
+  const std::string &var_name)
+{
+  if (
+    !json_utils::is_imported_from(ast_, "heapq", "heappush") ||
+    !json_utils::try_find_function(ast_["body"], "heappush").empty() ||
+    !find_first_append_arg(body, var_name).empty())
+    return "";
+  const Json item = find_first_heappush_arg(body, var_name);
+  if (item.empty())
+    return "";
+  const std::string elem_type = get_argument_type(item);
+  return is_builtin_scalar_or_tuple(elem_type) ? "list[" + elem_type + "]" : "";
+}
+
 template <class Json>
 std::string python_annotation<Json>::recover_list_type_from_appends(
   const std::string &var_name)
@@ -1690,7 +2169,7 @@ std::string python_annotation<Json>::recover_list_type_from_appends(
 
   Json append_arg = find_first_append_arg(body, var_name);
   if (append_arg.empty())
-    return "";
+    return heap_list_type(body, var_name);
 
   // Only commit to a parameterised list when the element type resolves to a
   // concrete type. An unresolved ("") or dynamic ("Any") element keeps the
@@ -1901,31 +2380,7 @@ std::string python_annotation<Json>::get_type_from_binary_expr(
   {
     // If the LHS of the binary operation is a variable, its type is retrieved
     if (lhs["_type"] == "Name")
-    {
-      // Retrieve the type from the variable declaration within the current
-      // function body
-      Json left_op = find_annotated_assign(lhs["id"], body["body"]);
-
-      // If not found in the function body, try to retrieve it from the function
-      // arguments
-      if (left_op.empty() && body.contains("args"))
-        left_op = find_annotated_assign(lhs["id"], body["args"]["args"]);
-
-      // Check current function scope for function parameters
-      if (
-        left_op.empty() && current_func != nullptr &&
-        (*current_func).contains("args"))
-      {
-        left_op =
-          find_annotated_assign(lhs["id"], (*current_func)["args"]["args"]);
-      }
-
-      type = operand_annotation_type(left_op);
-      // As a fallback, check global scope for prior annotation
-      if (type.empty())
-        type = operand_annotation_type(
-          find_annotated_assign(lhs["id"], ast_["body"]));
-    }
+      type = name_operand_type(lhs, body);
     else if (lhs["_type"] == "UnaryOp")
     {
       const auto &operand = lhs["operand"];
@@ -2007,7 +2462,32 @@ std::string python_annotation<Json>::get_type_from_binary_expr(
     }
   }
 
+  if (is_str_operation(stmt, type, body))
+    return "str";
   return promote_to_float_operand(stmt, type);
+}
+
+/// Whether `+` on an untyped left operand, or `*` on an int count, has a str
+/// right operand, making the result a str (#10535).
+template <class Json>
+bool python_annotation<Json>::is_str_operation(
+  const Json &stmt,
+  const std::string &left_type,
+  const Json &body)
+{
+  const Json &expr = stmt.contains("value") ? stmt["value"] : stmt;
+  if (!expr.contains("op") || !expr["op"].is_object())
+    return false;
+  const std::string op = expr["op"].value("_type", "");
+  const bool unknown = left_type.empty() || left_type == "Any";
+  const bool count = left_type == "int" || left_type == "bool";
+  if (!(op == "Add" && unknown) && !(op == "Mult" && (unknown || count)))
+    return false;
+  const Json &rhs = expr["right"];
+  const std::string rhs_kind = rhs.value("_type", "");
+  if (rhs_kind == "Name")
+    return name_operand_type(rhs, body) == "str";
+  return rhs_kind == "Constant" && get_type_from_constant(rhs) == "str";
 }
 
 /// The type a call of a name returns, or nullopt when the name holds a
@@ -2032,6 +2512,31 @@ python_annotation<Json>::named_call_type(const Json &call, const Json &body)
       return std::nullopt;
     throw;
   }
+}
+
+/// The type of a name operand: its annotation as a local, a parameter or a
+/// global, or else str when its only binding is a str. Arguments type an
+/// unannotated parameter before the caller's assignments are annotated, so
+/// without the last step `t1 + t2` of two str names is not a str (#10520).
+template <class Json>
+std::string
+python_annotation<Json>::name_operand_type(const Json &name, const Json &body)
+{
+  const std::string id = name["id"];
+  Json decl = find_annotated_assign(id, body["body"]);
+  if (decl.empty() && body.contains("args"))
+    decl = find_annotated_assign(id, body["args"]["args"]);
+  if (
+    decl.empty() && current_func != nullptr && (*current_func).contains("args"))
+    decl = find_annotated_assign(id, (*current_func)["args"]["args"]);
+  std::string type = operand_annotation_type(decl);
+  if (type.empty())
+    type = operand_annotation_type(find_annotated_assign(id, ast_["body"]));
+  if (
+    type.empty() && !is_rebound_in_scope(id) &&
+    get_argument_type(name) == "str")
+    type = "str";
+  return type;
 }
 
 /// The type a declaration's annotation names, or empty. A `list[T]` or
@@ -2159,6 +2664,26 @@ inline std::string known_fallback_return_type(
     (fallback_type == "NoneType" && has_return_value(body)))
     return "";
   return fallback_type;
+}
+
+/// The type of a function with no top-level return: None, unless a nested
+/// return yields a value whose type was not inferred (e.g. a function), which
+/// None would mistype (#10231).
+inline std::string no_top_level_return_type(const nlohmann::json &body)
+{
+  return has_return_value(body) ? "" : "NoneType";
+}
+
+/// Whether a function whose value returns infer \p inferred_type can take it
+/// as its return annotation. With a None return too, only a list can: the
+/// converter returns a list as a pointer, NULL for None, as for an
+/// Optional[list] annotation. Any other type is left unannotated for the
+/// converter to wrap in an Optional.
+inline bool
+inferred_return_holds_none(const std::string &inferred_type, bool returns_none)
+{
+  return !returns_none || inferred_type == "list" ||
+         inferred_type.rfind("list[", 0) == 0;
 }
 
 template <class Json>
@@ -2315,7 +2840,9 @@ std::string python_annotation<Json>::get_function_return_type(
               // If the body also has `return None` paths, the function
               // actually returns Optional[T] regardless of the annotation.
               // Return "" so the converter handles this as Optional.
-              if (has_return_none(func_elem["body"]))
+              if (!inferred_return_holds_none(
+                    returns["id"].template get<std::string>(),
+                    has_return_none(func_elem["body"])))
               {
                 functions_in_analysis_.erase(func_name);
                 return "";
@@ -2364,7 +2891,8 @@ std::string python_annotation<Json>::get_function_return_type(
     if (!inferred_type.empty() && inferred_type != "NoneType")
     {
       // Found a non-None return type; check for mixed value+None returns
-      if (has_return_none(func_elem["body"]))
+      if (!inferred_return_holds_none(
+            inferred_type, has_return_none(func_elem["body"])))
       {
         // Mixed returns: leave unannotated so converter handles via Optional
         functions_in_analysis_.erase(func_name);
@@ -2404,9 +2932,8 @@ std::string python_annotation<Json>::get_function_return_type(
       return known_fallback_return_type(fallback_type, func_elem["body"]);
     }
 
-    // If function has no explicit return statements, assume void/None
     functions_in_analysis_.erase(func_name);
-    return "NoneType";
+    return no_top_level_return_type(func_elem["body"]);
   }
 
   // Check for lambda assignments when regular function not found
@@ -2767,7 +3294,8 @@ static bool binds_name_in(const Json *scope, const std::string &name)
 }
 
 /// Whether a statement in `stmts`, or in a module-level `if`, `try`, loop or
-/// `with` block under them, assigns `name` (g = f).
+/// `with` block under them, assigns `name` (g = f). An assignment this pass
+/// has already annotated as Any (g: Any = f) still counts.
 static bool assigns_name_at_module_level(
   const nlohmann::json &stmts,
   const std::string &name)
@@ -2781,6 +3309,11 @@ static bool assigns_name_at_module_level(
         if (t.contains("id") && t["id"] == name)
           return true;
     }
+    if (
+      stype == "AnnAssign" && stmt.value("_inferred_annotation", false) &&
+      stmt["annotation"].value("id", "") == "Any" &&
+      stmt["target"].value("id", "") == name)
+      return true;
     if (
       stype == "FunctionDef" || stype == "AsyncFunctionDef" ||
       stype == "ClassDef")
@@ -3851,6 +4384,12 @@ InferResult python_annotation<Json>::infer_type_from_ifexp(
     return InferResult::OK;
   }
 
+  // A function arm makes the value a function on one path, which no other
+  // arm's type describes; leave the name to the converter (#10231).
+  function_values values(ast_, extra_subscript_inference_asts_);
+  if (values.of(ifexp_node["body"]) || values.of(ifexp_node["orelse"]))
+    return InferResult::UNKNOWN;
+
   // If only one branch succeeded, use that type
   if (body_result == InferResult::OK)
   {
@@ -4077,6 +4616,12 @@ InferResult python_annotation<Json>::infer_type(
         Json append_arg = find_first_append_arg(body, target_name);
         if (!append_arg.empty() && append_arg_is_plain_int(append_arg))
           inferred_type = "list[int]";
+        else if (append_arg.empty())
+        {
+          const std::string heap_type = heap_list_type(body, target_name);
+          if (!heap_type.empty())
+            inferred_type = heap_type;
+        }
       }
     }
   }
@@ -4259,7 +4804,8 @@ InferResult python_annotation<Json>::infer_self_attribute_copy(
     stmt["targets"][0]["attr"].template get<std::string>(),
     "",
     stores,
-    name_reads);
+    name_reads,
+    json_utils::class_copies_of(ast_, current_class_name_));
   if (stores != 1)
     return InferResult::UNKNOWN;
   inferred_type = self_attribute_type(stmt["value"]);
@@ -5240,7 +5786,11 @@ static bool rebound_in_function(
     if (decl.empty())
       continue;
     if (decl.value("_type", "") == "arg")
-      return !json_utils::get_var_node(name, func).empty();
+    {
+      // get_var_node falls back to the parameter when nothing assigns it.
+      const Json bound = json_utils::get_var_node(name, func);
+      return bound.is_object() && bound.value("_type", "") != "arg";
+    }
     return json_utils::has_multiple_assignments_in_block(name, func);
   }
   return false;
@@ -5266,6 +5816,29 @@ std::string python_annotation<Json>::caller_arg_type(
   return type;
 }
 
+/// The scope of the nodes nested in @p node, which lies in @p scope.
+template <class Json>
+typename python_annotation<Json>::caller_scopet
+python_annotation<Json>::inner_scope(
+  const Json &node,
+  const caller_scopet &scope)
+{
+  caller_scopet inner = scope;
+  const std::string kind = node.value("_type", "");
+  if (kind == "ClassDef" && scope.ctx.empty())
+    inner.class_prefix = node.value("name", "") + "@C@";
+  else if (kind == "FunctionDef" || kind == "AsyncFunctionDef")
+  {
+    const std::string name = node.value("name", "");
+    inner.ctx =
+      scope.ctx.empty() ? scope.class_prefix + name : scope.ctx + "@F@" + name;
+    inner.class_prefix.clear();
+  }
+  else if (kind == "Lambda")
+    inner.in_lambda = true;
+  return inner;
+}
+
 /// Append to @p types the type of argument @p index at each call to
 /// @p callee made in a function nested in @p node, resolved in that caller's
 /// scope, or "" where it is unknown. The call-site inference resolves names
@@ -5289,21 +5862,10 @@ void python_annotation<Json>::collect_caller_arg_types(
   if (!node.is_object())
     return;
 
-  caller_scopet inner = scope;
-  const std::string kind = node.value("_type", "");
-  if (kind == "ClassDef" && scope.ctx.empty())
-    inner.class_prefix = node.value("name", "") + "@C@";
-  else if (kind == "FunctionDef" || kind == "AsyncFunctionDef")
-  {
-    const std::string name = node.value("name", "");
-    inner.ctx =
-      scope.ctx.empty() ? scope.class_prefix + name : scope.ctx + "@F@" + name;
-    inner.class_prefix.clear();
-  }
-  else if (kind == "Lambda")
-    inner.in_lambda = true;
-  else if (
-    kind == "Call" && scope.ctx != scope.root && node.contains("args") &&
+  const caller_scopet inner = inner_scope(node, scope);
+  if (
+    node.value("_type", "") == "Call" && scope.ctx != scope.root &&
+    node.contains("args") &&
     index < node["args"].size() && node["func"].value("_type", "") == "Name" &&
     node["func"].value("id", "") == callee)
   {
@@ -5324,10 +5886,11 @@ template <class Json>
 std::vector<std::string> python_annotation<Json>::caller_arg_types(
   const std::string &func_name,
   size_t index,
-  const Json &search_context)
+  const Json &search_context,
+  const std::string &root)
 {
   caller_scopet scope;
-  scope.root = current_func_name_context_;
+  scope.root = root;
   scope.ctx = scope.root;
   std::vector<std::string> types;
   collect_caller_arg_types(func_name, index, search_context, scope, types);
@@ -5360,7 +5923,8 @@ std::string python_annotation<Json>::infer_parameter_type_at_call_sites(
   std::string inferred =
     infer_parameter_type_from_calls(param_index, function_calls);
   const std::vector<std::string> callers =
-    caller_arg_types(func_name, param_index, search_context);
+    caller_arg_types(
+      func_name, param_index, search_context, current_func_name_context_);
   // Every call is made in another function, whose scope alone can type its
   // argument (`find(pkt.ident)` with `pkt` a caller's local, #8672).
   if (
@@ -5381,10 +5945,11 @@ bool python_annotation<Json>::specializable_at_call_sites(
   const std::string &func_name,
   size_t param_index,
   std::vector<std::string> &call_types,
-  const Json &search_context)
+  const Json &search_context,
+  const std::string &call_site_context)
 {
-  for (const std::string &type :
-       caller_arg_types(func_name, param_index, search_context))
+  for (const std::string &type : caller_arg_types(
+         func_name, param_index, search_context, call_site_context))
   {
     if (type.empty())
       return false;
@@ -5618,10 +6183,8 @@ void python_annotation<Json>::infer_parameter_types(Json &function_element)
         // Extract current annotation
         if (param["annotation"].contains("id"))
           current_type = param["annotation"]["id"];
-        // Check if it's a generic container without element type
-        if (
-          current_type == "list" || current_type == "dict" ||
-          current_type == "set")
+        // A bare container, or a class a call site may pass a subclass of
+        if (is_refinable_annotation(current_type))
         {
           has_partial_annotation = true;
           needs_inference = true; // Try to refine with element type
@@ -5688,10 +6251,13 @@ void python_annotation<Json>::infer_parameter_types(Json &function_element)
         std::vector<std::string> call_types =
           collect_parameter_types_from_calls(i, calls);
 
+        // Merged with the types the calls made in other functions pass
+        // first, which the callee's scope cannot see (#10372).
         if (
-          parent_func == nullptr && call_types.size() > 1 &&
+          parent_func == nullptr &&
           specializable_at_call_sites(
-            func_name, i, call_types, search_context) &&
+            func_name, i, call_types, search_context, call_site_context) &&
+          call_types.size() > 1 &&
           (!are_scalar_list_types(call_types) ||
            function_values(ast_, extra_subscript_inference_asts_)
              .only_called(function_element, ast_)))
@@ -6001,6 +6567,59 @@ bool python_annotation<Json>::is_instance_call(const Json &func) const
          json_utils::try_find_function(ast_["body"], name).is_null();
 }
 
+/// Whether @p node calls a method of an instance, setting its @p receiver,
+/// @p method and @p args: `obj.m(args)`, `obj(args)` calling
+/// `obj.__call__(args)` (#9070), a read `obj[key]` calling
+/// `obj.__getitem__(key)` or `obj[key] = value` calling
+/// `obj.__setitem__(key, value)` (#10334).
+template <class Json>
+bool python_annotation<Json>::receiver_method_call(
+  const Json &node,
+  Json &receiver,
+  std::string &method,
+  Json &args) const
+{
+  const std::string kind = node.value("_type", "");
+  if (kind == "Subscript")
+  {
+    if (!node.contains("ctx") || node["ctx"].value("_type", "") != "Load")
+      return false;
+    receiver = node["value"];
+    method = "__getitem__";
+    args = Json::array();
+    args.push_back(node["slice"]);
+    return true;
+  }
+  if (
+    kind == "Assign" && node["targets"].size() == 1 &&
+    node["targets"][0].value("_type", "") == "Subscript")
+  {
+    receiver = node["targets"][0]["value"];
+    method = "__setitem__";
+    args = Json::array();
+    args.push_back(node["targets"][0]["slice"]);
+    args.push_back(node["value"]);
+    return true;
+  }
+  if (kind != "Call")
+    return false;
+  const Json &func = node["func"];
+  if (is_instance_call(func))
+  {
+    receiver = func;
+    method = "__call__";
+  }
+  else if (func.value("_type", "") == "Attribute")
+  {
+    receiver = func["value"];
+    method = func["attr"].template get<std::string>();
+  }
+  else
+    return false;
+  args = node["args"];
+  return true;
+}
+
 /// Types the unannotated parameters of a method from its `obj.m(args)` calls
 /// at module level, where `obj` is a name bound once to an instance of a
 /// module class, when every such call passes one type (#8923). With
@@ -6043,20 +6662,13 @@ python_annotation<Json>::preprocess_receiver_method_calls(bool inside_functions)
       parent_func = saved_parent;
       return;
     }
-    const Json &func = node.value("func", Json());
-    // `obj(args)` on a callable instance calls `obj.__call__(args)` (#9070).
-    const bool instance_call = kind == "Call" && is_instance_call(func);
-    const bool method_call =
-      kind == "Call" && func.value("_type", "") == "Attribute";
-    const Json receiver =
-      instance_call ? func : method_call ? func["value"] : Json();
+    Json receiver, args;
+    std::string attr;
     if (
-      (instance_call || method_call) &&
+      receiver_method_call(node, receiver, attr, args) &&
       receiver.value("_type", "") == "Name" &&
       !is_rebound_in_scope(receiver["id"].template get<std::string>()))
     {
-      const std::string attr =
-        instance_call ? "__call__" : func["attr"].template get<std::string>();
       for (const std::string &cls :
            get_class_ancestors(get_argument_type(receiver)))
         if (Json *method = class_method(cls, attr))
@@ -6067,11 +6679,14 @@ python_annotation<Json>::preprocess_receiver_method_calls(bool inside_functions)
           const Json &params = (*method)["args"]["args"];
           owner[method] = {cls, attr};
           for (size_t i = 1; i < params.size(); ++i)
-            seen[{method, i}].insert(
-              i - 1 < node["args"].size() &&
-                  !is_dynamically_typed_name(node["args"][i - 1], ast_["body"])
-                ? get_argument_type(node["args"][i - 1])
-                : std::string());
+          {
+            const std::string type =
+              i - 1 < args.size() &&
+                  !is_dynamically_typed_name(args[i - 1], ast_["body"])
+                ? get_argument_type(args[i - 1])
+                : std::string();
+            seen[{method, i}].insert(is_unresolved_arg_type(type) ? "" : type);
+          }
           break;
         }
     }
@@ -6096,6 +6711,14 @@ python_annotation<Json>::preprocess_receiver_method_calls(bool inside_functions)
   return typed;
 }
 
+/// Runs preprocess_self_method_calls until it types no further parameter.
+template <class Json>
+void python_annotation<Json>::settle_self_method_calls()
+{
+  while (preprocess_self_method_calls())
+    ;
+}
+
 /// Types the methods called on a receiver that only the specialised copies
 /// of a def resolve, then infers again what depended on those parameters
 /// (#9661).
@@ -6104,6 +6727,9 @@ void python_annotation<Json>::retype_methods_called_on_receivers()
 {
   if (preprocess_receiver_method_calls(true).empty())
     return;
+  // A method those calls typed passes its parameters on through `self.m()`
+  // (#10590).
+  settle_self_method_calls();
   const auto forget_inferred_return = [](Json &def) {
     if (
       def["returns"].is_object() &&
@@ -6130,8 +6756,9 @@ void python_annotation<Json>::retype_methods_called_on_receivers()
   }
 }
 
-/// The type of call argument @p arg in method @p caller: that of a literal or
-/// of a parameter the method never rebinds, else "".
+/// The type of call argument @p arg in method @p caller: that of a literal, of
+/// a parameter the method never rebinds, or of a local whose one store is an
+/// annotated assignment, else "".
 template <class Json>
 std::string
 python_annotation<Json>::self_call_arg_type(const Json &arg, const Json &caller)
@@ -6141,19 +6768,15 @@ python_annotation<Json>::self_call_arg_type(const Json &arg, const Json &caller)
   if (arg.value("_type", "") != "Name")
     return "";
   const std::string name = arg["id"].template get<std::string>();
-  std::function<bool(const Json &)> stores = [&](const Json &node) {
-    if (
-      node.is_object() && node.value("_type", "") == "Name" &&
-      node.value("id", "") == name &&
-      node.value("ctx", Json()).value("_type", "") == "Store")
-      return true;
-    if (node.is_structured())
-      for (const auto &child : node)
-        if (stores(child))
-          return true;
-    return false;
-  };
-  if (stores(caller["body"]))
+  const std::size_t stores = name_store_count(caller["body"], name);
+  if (stores == 1)
+  {
+    const Json decl = find_annotated_assign(name, caller["body"]);
+    return decl.value("_type", "") == "AnnAssign"
+             ? operand_annotation_type(decl)
+             : "";
+  }
+  if (stores != 0)
     return "";
   for (const Json &param : caller["args"]["args"])
     if (param.value("arg", "") == name)
@@ -6477,9 +7100,26 @@ void python_annotation<Json>::refuse_mixed_constructor_args() const
   }
 }
 
+/// A constructor parameter typed from its first call keeps that type for the
+/// other calls' arguments, so a value typed as a class passed there may hold
+/// another type (#10326). None is modelled alongside the class. Marks those
+/// classes for the converter.
+template <class Json>
+void python_annotation<Json>::mark_mixed_constructor_classes()
+{
+  for (const auto &[param, types] : constructor_arg_types_)
+    for (Json &element : ast_["body"])
+      if (
+        types.size() - types.count("NoneType") > 1 &&
+        element["_type"] == "ClassDef" &&
+        types.count(element["name"].template get<std::string>()))
+        element["_mixed_constructor_arg"] = true;
+}
+
 template <class Json>
 void python_annotation<Json>::add_type_annotation()
 {
+  python_annotation_utils::return_none_on_fall_off(ast_);
   // Iterated so a constructor called with its caller's parameter sees the
   // type that parameter gets from a later call (GitHub #8963).
   while (preprocess_constructor_calls(ast_))
@@ -6530,7 +7170,10 @@ void python_annotation<Json>::add_type_annotation()
   }
 
   apply_pending_specializations();
+  while (specialize_callees_of_copies())
+    apply_pending_specializations();
   retype_methods_called_on_receivers();
+  mark_mixed_constructor_classes();
 }
 
 template <class Json>
@@ -6543,6 +7186,7 @@ void python_annotation<Json>::add_extra_subscript_inference_source(
 template <class Json>
 void python_annotation<Json>::add_type_annotation(const std::string &func_name)
 {
+  python_annotation_utils::return_none_on_fall_off(ast_);
   current_line_ = 0;
   annotating_function_entry_point_ = true;
 
@@ -6699,15 +7343,12 @@ void python_annotation<Json>::annotate_function(Json &function_element)
       infer_from_return_statements(function_element["body"], func_name);
 
     // Only add annotation if we successfully inferred a type from return
-    // statements and the function does not have mixed value+None returns
+    // statements that also covers any None return
     if (!inferred_type.empty() && inferred_type != "NoneType")
     {
-      // Check if there are also None returns (mixed value+None)
-      // If so, leave the annotation as null for the converter to handle
-      // via Optional wrapping
-      bool has_none_return = has_return_none(function_element["body"]);
-
-      if (!has_none_return)
+      if (
+        inferred_return_holds_none(
+          inferred_type, has_return_none(function_element["body"])))
       {
         // Update the function node to include the return type annotation.
         // Marked _inferred_annotation so a downstream converter check (e.g.

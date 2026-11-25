@@ -59,6 +59,10 @@ bitwuzla_convt::bitwuzla_convt(const namespacet &ns, const optionst &options)
   }
 
   bitw_options.set(bitwuzla::Option::PRODUCE_MODELS, 1);
+  // Unsat assumptions imply unsat cores, which turn off several
+  // preprocessing passes; request them only where cores are read.
+  if (options.get_bool_option("smt-unsat-assumptions"))
+    bitw_options.set(bitwuzla::Option::PRODUCE_UNSAT_ASSUMPTIONS, 1);
   auto user = options.option_values.find("bitwuzla-opt");
   if (user != options.option_values.end())
     for (const std::string &kv : user->second)
@@ -66,7 +70,14 @@ bitwuzla_convt::bitwuzla_convt(const namespacet &ns, const optionst &options)
   bitw = std::make_unique<bitwuzla::Bitwuzla>(tm, bitw_options);
 }
 
-bitwuzla_convt::~bitwuzla_convt() = default;
+bitwuzla_convt::~bitwuzla_convt()
+{
+  if (check_sat_threw)
+    (void)bitw.release();
+  else
+    // Before tm, whose terms the asts hold, is destroyed.
+    delete_all_asts();
+}
 
 void bitwuzla_convt::push_ctx()
 {
@@ -83,11 +94,25 @@ void bitwuzla_convt::pop_ctx()
   smt_solver_baset::pop_ctx();
 }
 
+bitwuzla::Result
+bitwuzla_convt::check_sat(const std::vector<bitwuzla::Term> &assumptions)
+{
+  try
+  {
+    return bitw->check_sat(assumptions);
+  }
+  catch (...)
+  {
+    check_sat_threw = true;
+    throw;
+  }
+}
+
 smt_resultt bitwuzla_convt::dec_solve()
 {
   pre_solve();
 
-  bitwuzla::Result result = bitw->check_sat();
+  bitwuzla::Result result = check_sat({});
 
   if (result == bitwuzla::Result::SAT)
     return P_SATISFIABLE;
@@ -106,12 +131,17 @@ smt_resultt bitwuzla_convt::dec_solve_assuming(const ast_vec &assumptions)
   for (smt_astt a : assumptions)
     terms.push_back(to_solver_smt_ast<bitw_smt_ast>(a)->a);
 
-  bitwuzla::Result result = bitw->check_sat(terms);
+  bitwuzla::Result result = check_sat(terms);
   if (result == bitwuzla::Result::SAT)
     return P_SATISFIABLE;
   if (result == bitwuzla::Result::UNSAT)
     return P_UNSATISFIABLE;
   return P_ERROR;
+}
+
+bool bitwuzla_convt::is_unsat_assumption(smt_astt a)
+{
+  return bitw->is_unsat_assumption(to_solver_smt_ast<bitw_smt_ast>(a)->a);
 }
 
 const std::string bitwuzla_convt::solver_text()
@@ -906,9 +936,9 @@ smt_sortt bitwuzla_convt::mk_fbv_sort(std::size_t width)
 
 smt_sortt bitwuzla_convt::mk_array_sort(smt_sortt domain, smt_sortt range)
 {
-  /* Keyed on the operand sorts' addresses: no smt_sort is ever freed (nothing
-   * under src/solvers/ deletes one, and pop_ctx frees only smt_asts), so an
-   * address can never be recycled into a different sort. Identity rather than
+  /* Keyed on the operand sorts' addresses: no smt_sort is freed before the
+   * solver (pop_ctx frees only smt_asts), so an address can never be
+   * recycled into a different sort. Identity rather than
    * width because a Bool domain and a 1-bit bit-vector domain are distinct
    * Bitwuzla sorts that share a width. */
   sort_keyt key{

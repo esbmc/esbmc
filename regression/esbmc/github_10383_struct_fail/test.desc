@@ -1,0 +1,6 @@
+CORE
+main.c
+--std c2x --z3 --multi-property
+^VERIFICATION FAILED$
+FAILED.*member set$
+FAILED.*element set$

@@ -73,6 +73,7 @@ public:
   static bool enable_eval_assumptions; /// Try to evaluate in a guard in a TVT
                                        /// to accelerate bottoms
   static bool enable_ibex_contractor;  /// Use ibex contractor
+  static bool keep_checked_arithmetic; /// Overflow or shift checks are on
 
   /// When set, the transformer skips any instruction whose
   /// `inductive_step_instruction` flag is true. Used by the post-k-induction
@@ -117,15 +118,18 @@ protected:
    * @return True if the join increases the set represented by *this, False if
    *   there is no change.
    */
-  bool join(const interval_domaint &b, const goto_programt::const_targett &to);
+  bool join(
+    const interval_domaint &b,
+    const goto_programt::const_targett &from,
+    const goto_programt::const_targett &to);
 
 public:
   bool merge(
     const interval_domaint &b,
-    goto_programt::const_targett,
+    goto_programt::const_targett from,
     goto_programt::const_targett to)
   {
-    const bool result = join(b, to);
+    const bool result = join(b, from, to);
     copied = false;
     return result;
   }
@@ -224,10 +228,16 @@ public:
    * @param expr
    */
   void havoc_rec(const expr2tc &expr);
+  void restore_unwritten(
+    goto_programt::const_targett call,
+    const irep_idt &callee,
+    const ai_baset &ai);
   /// Forgets what a write to the lvalue \p target may change, through a
   /// pointer as havoc_through_pointer does.
   void havoc_target(const expr2tc &target, const ai_baset *ai = nullptr);
   void havoc_arguments(const irep_idt &function_id, const namespacet &ns);
+  /// Binds each parameter of the function @p call enters to its argument.
+  void assign_call_parameters(const code_function_call2t &call);
   void apply_return(
     goto_programt::const_targett call,
     const ai_baset &ai,
@@ -271,6 +281,9 @@ public:
 
   std::shared_ptr<interval_map> intervals;
   bool copied = false;
+  /// Times a join that closes a cycle changed this state; widening waits for
+  /// fixpoint_limit of them, so a variable with few values keeps its bounds.
+  unsigned cycle_changes = 0;
 
   static std::shared_ptr<interval_map> get_empty()
   {

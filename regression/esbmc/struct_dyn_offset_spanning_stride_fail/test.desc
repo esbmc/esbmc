@@ -1,0 +1,5 @@
+CORE
+main.c
+
+^  expect FAIL: s\[1\]\.c == 2$
+^VERIFICATION FAILED$

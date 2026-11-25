@@ -125,6 +125,11 @@ static std::string resolve_user_solver_choice(const optionst &options)
   return solver_name;
 }
 
+bool solver_built_in(const std::string &name)
+{
+  return esbmc_solvers.count(name) > 0;
+}
+
 std::string effective_solver_name(const optionst &options)
 {
   std::string name = resolve_user_solver_choice(options);
@@ -250,28 +255,22 @@ smt_convt *create_solver(
   // options were given, use that by default
   if (tuple_api != nullptr && !node_flat && !sym_flat)
     ctx->set_tuple_iface(tuple_api);
-  // Use the node flattener if specified
-  else if (node_flat)
-    ctx->set_tuple_iface(new smt_tuple_node_flattener(ctx, ns));
-  // Use the symbol flattener if specified
-  else if (sym_flat)
-    ctx->set_tuple_iface(new smt_tuple_sym_flattener(ctx, ns));
-  // Default: node flattener
+  else if (sym_flat && !node_flat)
+    ctx->set_tuple_iface(std::make_unique<smt_tuple_sym_flattener>(ctx, ns));
+  // Default, and --tuple-node-flattener: node flattener
   else
-    ctx->set_tuple_iface(new smt_tuple_node_flattener(ctx, ns));
+    ctx->set_tuple_iface(std::make_unique<smt_tuple_node_flattener>(ctx, ns));
 
   // Pick an array flattener to use. Again, pick the solver native one by
   // default, or the one specified, or if none of the above then use the built
   // in arrays -> to BV flattener.
   if (array_api != nullptr && !array_flat)
     ctx->set_array_iface(array_api);
-  else if (array_flat)
-    ctx->set_array_iface(new array_convt(ctx));
   else
-    ctx->set_array_iface(new array_convt(ctx));
+    ctx->set_array_iface(std::make_unique<array_convt>(ctx));
 
   if (fp_api == nullptr || fp_to_bv)
-    ctx->set_fp_conv(new fp_convt(ctx));
+    ctx->set_fp_conv(std::make_unique<fp_convt>(ctx));
   else
     ctx->set_fp_conv(fp_api);
 

@@ -241,6 +241,19 @@ public:
     const typet &type,
     const locationt &location);
 
+  /// Stop a lookup with a key of unknown type, which would never match.
+  void refuse_untyped_key(const typet &key_type, const locationt &location);
+
+  /// Stop a read of unknown type that can see a value other than a scalar.
+  void refuse_untyped_aggregate_read(
+    const exprt &dict_expr,
+    const nlohmann::json &slice_node,
+    const typet &read_type,
+    const locationt &location);
+
+  /// Report @p message as unsupported where the read runs and end the path.
+  void refuse(const std::string &message, const locationt &location);
+
   /**
    * @brief Handles dictionary subscript assignment (e.g., `dict['key'] =
    * value`).
@@ -409,6 +422,8 @@ public:
    * @return The expected value type from annotation, or empty_typet
    */
   typet resolve_expected_type_for_dict_subscript(const exprt &dict_expr);
+
+  typet nested_literal_value_type(const nlohmann::json &subscript);
 
   /**
    * @brief Read a struct value of type @p type from a dict item's value

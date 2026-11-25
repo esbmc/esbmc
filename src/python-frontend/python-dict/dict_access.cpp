@@ -26,6 +26,37 @@ void python_dict_handler::check_value_type(
   converter_.add_instruction(check);
 }
 
+/// A key stored at its lost type (`void *`) hashes like no stored key, so its
+/// lookup would raise KeyError on every path (#10241). A list element read at
+/// that type carries its own type and is not one. Where the lookup runs,
+/// report it as unsupported and end the path instead.
+void python_dict_handler::refuse_untyped_key(
+  const typet &key_type,
+  const locationt &location)
+{
+  if (key_type.is_pointer() && key_type.subtype().is_empty())
+    refuse(
+      "Unsupported: a dict lookup with a key whose type is not known",
+      location);
+}
+
+void python_dict_handler::refuse(
+  const std::string &message,
+  const locationt &location)
+{
+  if (!converter_.can_emit_runtime_guard())
+    throw std::runtime_error(message);
+  // Not the constant false, which CFG cleanup reads as the end of the
+  // function and so drops the assume.
+  const exprt never = not_exprt(true_exprt());
+  code_assertt check(never);
+  check.location() = location;
+  check.location().user_provided(true);
+  check.location().comment(message);
+  converter_.add_instruction(check);
+  converter_.add_instruction(code_assumet(never));
+}
+
 /// The float_type_id argument of a push or set: an element's own type id
 /// routes a float into the real-sorted __ESBMC_float_buf (and records its
 /// float_idx) so a typed read finds it there (#5501); 0 copies the bytes.
@@ -81,6 +112,36 @@ static bool reads_other_kind(
   const char expected = scalar_kind(type);
   return kinds.size() > 1 ||
          (expected && kinds.size() == 1 && *kinds.begin() != expected);
+}
+
+/// Stop a read of @p dict_expr at @p slice_node of no known @p read_type when
+/// a value it can see is neither a scalar nor a str: the char pointer it
+/// defaults to would read that value as a str (#10432).
+void python_dict_handler::refuse_untyped_aggregate_read(
+  const exprt &dict_expr,
+  const nlohmann::json &slice_node,
+  const typet &read_type,
+  const locationt &location)
+{
+  const bool untyped = read_type.is_nil() || read_type.is_empty();
+  const std::string vals_id =
+    untyped && dict_expr.is_symbol()
+      ? get_internal_list_id(dict_expr.identifier().as_string(), false)
+      : std::string();
+  const element_type_registry::entries *entries =
+    vals_id.empty() ? nullptr
+                    : converter_.get_element_type_registry().find(
+                        vals_id, type_slot::dict_value_types);
+  if (!entries)
+    return;
+  const std::string key = dict_key_id(slice_node, converter_.get_ast_json());
+  for (const element_type_registry::entry &e : *entries)
+    if (
+      (key.empty() || e.first.empty() || e.first == key) &&
+      !scalar_kind(e.second) && !type_handler_.is_tagged_scalar_type(e.second))
+      return refuse(
+        "Unsupported: a dict read of a value whose type is not known",
+        location);
 }
 
 /// Whether a read of @p dict_expr at @p slice_node, whose recorded values are
@@ -160,6 +221,9 @@ exprt python_dict_handler::handle_dict_subscript(
   python_list list_handler(converter_, slice_node);
   list_elem_info key_info =
     list_handler.get_lookup_key_info(slice_node, key_expr);
+  refuse_untyped_key(key_info.elem_symbol->get_type(), location);
+  converter_.refuse_skipped_hash(
+    key_expr.type(), "set or dict hashing", location);
 
   // Call try_find_index(keys, key, type_hash, size) — returns SIZE_MAX if
   // absent
@@ -514,6 +578,8 @@ exprt python_dict_handler::handle_dict_subscript(
       return struct_value;
   }
 
+  refuse_untyped_aggregate_read(dict_expr, slice_node, resolved_type, location);
+
   // Default: cast void* to char* for string values
   exprt value_as_string =
     build_typecast(obj_value, gen_pointer_type(char_type()));
@@ -566,6 +632,8 @@ void python_dict_handler::handle_dict_subscript_assign(
   // Check if key exists using membership test
   nlohmann::json dummy_json;
   python_list list_handler_check(converter_, dummy_json);
+  converter_.refuse_skipped_hash(
+    key_expr.type(), "set or dict hashing", location);
   exprt key_exists = list_handler_check.contains(key_expr, keys_member);
 
   // Create the "key exists" branch: update existing value
@@ -747,6 +815,8 @@ exprt python_dict_handler::handle_dict_membership(
   nlohmann::json dummy_json;
   python_list list_handler(converter_, dummy_json);
 
+  converter_.refuse_skipped_hash(
+    key_expr.type(), "set or dict hashing", key_expr.location());
   exprt contains_result = list_handler.contains(key_expr, keys_member);
 
   if (negated)
@@ -778,6 +848,8 @@ void python_dict_handler::handle_dict_delete(
   // This avoids calling __ESBMC_list_find_index on empty dict or missing key
   nlohmann::json dummy_json;
   python_list list_handler_check(converter_, dummy_json);
+  converter_.refuse_skipped_hash(
+    key_expr.type(), "set or dict hashing", location);
   exprt key_exists = list_handler_check.contains(key_expr, keys_member);
 
   // Create KeyError exception for when key doesn't exist

@@ -1555,7 +1555,7 @@ void goto_convertt::rewrite_short_circuit_as_ternary(exprt &expr)
 
     // This is a hack for now. We need to solve this properly by
     // correctly tracking all locations through all GOTO transformations
-    op.location() = expr.location();
+    op.location() = short_circuit_operand(expr.location());
 
     if (!op.is_boolean())
     {
@@ -1584,7 +1584,6 @@ void goto_convertt::rewrite_short_circuit_as_ternary(exprt &expr)
   }
 
   expr.swap(tmp);
-  expr.location() = tmp.location();
 }
 
 void goto_convertt::remove_sideeffects(
@@ -2463,8 +2462,11 @@ void goto_convertt::remove_function_call(
   // If the result of the function call is never used
   // or the return type of the invoked function is "void",
   // we can just call the above function without any
-  // further modifications.
-  if (!result_is_used || expr.type().id() == "empty")
+  // further modifications. A discarded va_arg still moves the cursor
+  // (C11 7.16.1.1p2), which only its assignment form does.
+  const bool is_va_arg = !expr.operands().empty() && expr.op0().is_symbol() &&
+                         expr.op0().identifier() == "__ESBMC_va_arg";
+  if ((!result_is_used && !is_va_arg) || expr.type().id() == "empty")
   {
     assert(expr.operands().size() == 2);
     code_function_callt call;

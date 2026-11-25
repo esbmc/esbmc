@@ -8,6 +8,7 @@
 #include <string>
 #include <functional>
 #include <map>
+#include <set>
 #include <unordered_map>
 #include <vector>
 #include <nlohmann/json.hpp>
@@ -119,6 +120,28 @@ inline std::string dotted_to_path(const std::string &module_name)
   std::string result = module_name;
   std::replace(result.begin(), result.end(), '.', '/');
   return result;
+}
+
+/// The classes of @p module that the class copy pass made from the same class
+/// as @p cls, other than @p cls itself: `<base>` and each
+/// `<base>__esbmc_poly_<signature>`. A `self` store in one of them reaches only
+/// its own instances.
+template <typename JsonType>
+std::set<const JsonType *>
+class_copies_of(const JsonType &module, const std::string &cls)
+{
+  static const std::string marker = "__esbmc_poly_";
+  const std::string base = cls.substr(0, cls.find(marker));
+  std::set<const JsonType *> copies;
+  for (const auto &stmt : module["body"])
+  {
+    const std::string name = stmt.value("name", "");
+    if (
+      stmt.value("_type", "") == "ClassDef" && name != cls &&
+      (name == base || name.rfind(base + marker, 0) == 0))
+      copies.insert(&stmt);
+  }
+  return copies;
 }
 
 template <typename JsonType>
@@ -1165,6 +1188,33 @@ plain_assigned_value(const nlohmann::json &stmt, const std::string &name)
   if (type == "AnnAssign" && binds(stmt["target"]) && !stmt["value"].is_null())
     return &stmt["value"];
   return nullptr;
+}
+
+// Collect values from plain assignments to `name` under `node`.
+// Skipping nested definitions is useful for function-local analysis; callers
+// that account for bindings across the full AST must include those scopes.
+inline void collect_plain_assigned_values(
+  const nlohmann::json &node,
+  const std::string &name,
+  std::vector<const nlohmann::json *> &values,
+  bool stop_at_nested_scopes)
+{
+  if (!node.is_structured())
+    return;
+  if (node.is_object())
+  {
+    const std::string kind = node.value("_type", "");
+    if (
+      stop_at_nested_scopes &&
+      (kind == "FunctionDef" || kind == "AsyncFunctionDef" ||
+       kind == "ClassDef" || kind == "Lambda"))
+      return;
+    if (const auto *value = plain_assigned_value(node, name))
+      values.push_back(value);
+  }
+  for (const auto &child : node)
+    if (child.is_structured())
+      collect_plain_assigned_values(child, name, values, stop_at_nested_scopes);
 }
 
 // The value a top-level `name = ...` or `name: T = ...` statement assigns.

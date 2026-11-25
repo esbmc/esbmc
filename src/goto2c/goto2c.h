@@ -4,12 +4,19 @@
 #include <util/symtab/namespace.h>
 #include <goto-programs/goto_functions.h>
 #include <goto-programs/goto_program.h>
+#include <goto-programs/goto_structure.h>
 
 class goto2ct
 {
 public:
-  goto2ct(namespacet &_ns, goto_functionst _goto_functions)
-    : ns(_ns), goto_functions(_goto_functions)
+  /// @p _structured_loops prints loops and if/else as C statements.
+  goto2ct(
+    namespacet &_ns,
+    goto_functionst _goto_functions,
+    bool _structured_loops = false)
+    : ns(_ns),
+      goto_functions(_goto_functions),
+      structured_loops(_structured_loops)
   {
   }
 
@@ -32,7 +39,7 @@ public:
   std::string translate(goto_functionst &goto_functions);
   std::string translate(std::string function_id, goto_functiont &goto_function);
   std::string translate(goto_programt &goto_program);
-  std::string translate(goto_programt::instructiont &instruction);
+  std::string translate(const goto_programt::instructiont &instruction);
 
   // Access methods
   goto_functionst get_goto_functions()
@@ -48,6 +55,7 @@ public:
 protected:
   namespacet &ns;
   goto_functionst goto_functions;
+  bool structured_loops;
 
   std::list<symbolt> fun_decls;
   std::list<typet> global_types;
@@ -61,6 +69,28 @@ protected:
 private:
   // Auxiliary methods
   typet get_base_type(typet type, namespacet ns);
+
+  static std::string label(const goto_programt::instructiont &instruction);
+  static void leave_scope(std::vector<unsigned int> &scopes, std::ostream &out);
+  static void enter_scope(
+    const goto_programt::instructiont &instruction,
+    std::vector<unsigned int> &scopes,
+    std::size_t floor,
+    std::ostream &out);
+  void translate(
+    const std::vector<structured_stmtt> &stmts,
+    std::vector<unsigned int> &scopes,
+    std::size_t floor,
+    std::ostream &out);
+  void translate(
+    const structured_stmtt &stmt,
+    std::vector<unsigned int> &scopes,
+    std::size_t floor,
+    std::ostream &out);
+  void translate_block(
+    const std::vector<structured_stmtt> &stmts,
+    std::vector<unsigned int> &scopes,
+    std::ostream &out);
 
   // Preprocessing methods
   void extract_symbol_tables();
@@ -98,6 +128,7 @@ private:
   void check_atomic_begin(goto_programt::instructiont instruction);
   void check_atomic_end(goto_programt::instructiont instruction);
   void check_other(goto_programt::instructiont instruction);
+  void check_loop_invariant(goto_programt::instructiont instruction);
 
   // Methods for checking expressions
   void check_guard(const expr2tc &guard);

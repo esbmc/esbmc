@@ -1170,7 +1170,6 @@ static expr2tc migrate_pointer_ok(const exprt &expr)
   // solver.
   const type2tc offs_type = get_int_type(config.ansi_c.address_width);
   expr2tc offset = pointer_offset2tc(offs_type, ptr);
-  expr2tc last = add2tc(offs_type, offset, coerce_to_type(size, offs_type));
 
   // not(invalid_pointer) rather than valid_object: the latter is
   // __ESBMC_alloc[obj], which symex only maintains for dynamic objects, so a
@@ -1181,9 +1180,17 @@ static expr2tc migrate_pointer_ok(const exprt &expr)
   // exclude it; CBMC reports it as not readable, so say so explicitly.
   expr2tc not_null = notequal2tc(ptr, gen_zero(ptr->type));
 
+  // offset + size can wrap for a size near 2^63, so compare the size with the
+  // bytes left in the object once the offset is known to lie inside it.
+  expr2tc extent_s = coerce_to_type(extent, offs_type);
+  expr2tc left = typecast2tc(size->type, sub2tc(offs_type, extent_s, offset));
+  expr2tc in_object = and2tc(
+    greaterthanequal2tc(offset, gen_zero(offs_type)),
+    lessthanequal2tc(offset, extent_s));
+
   return and2tc(
     and2tc(not_null, not2tc(invalid_pointer2tc(ptr))),
-    lessthanequal2tc(last, coerce_to_type(extent, offs_type)));
+    and2tc(in_object, lessthanequal2tc(size, left)));
 }
 
 /// cpp_new[] hides the array size in a size field. The frontend stores it under
@@ -3277,6 +3284,16 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     return;
   }
 
+  if (expr.id() == "array_lambda")
+  {
+    type = migrate_type(expr.type());
+    expr2tc args[2];
+    migrate_expr(expr.op0(), args[0]);
+    migrate_expr(expr.op1(), args[1]);
+    new_expr_ref = array_lambda2tc(type, args[0], args[1]);
+    return;
+  }
+
   if (expr.id() == "forall")
   {
     type = migrate_type(expr.type());
@@ -4178,6 +4195,14 @@ static exprt migrate_expr_back_rest6(const expr2tc &ref)
     exprt back("forall", migrate_type_back(ref2.type));
     back.copy_to_operands(migrate_expr_back(ref2.side_1));
     back.copy_to_operands(migrate_expr_back(ref2.side_2));
+    return back;
+  }
+  case expr2t::array_lambda_id:
+  {
+    const array_lambda2t &ref2 = to_array_lambda2t(ref);
+    exprt back("array_lambda", migrate_type_back(ref2.type));
+    back.copy_to_operands(migrate_expr_back(ref2.binder));
+    back.copy_to_operands(migrate_expr_back(ref2.body));
     return back;
   }
   case expr2t::exists_id:

@@ -39,4 +39,7 @@ public:
   virtual void run_on_branching(symex_target_equationt::SSA_stept &)
   {
   }
+  virtual void run_on_event(symex_target_equationt::SSA_stept &)
+  {
+  }
 };

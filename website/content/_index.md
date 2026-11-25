@@ -3,10 +3,10 @@ title: ESBMC
 toc: false
 ---
 
-{{< callout type="important" icon="sparkles" >}} **NEW:** Around 80 pull
-requests landed in early August — Python function contracts, a user-facing
-`esbmc.h`, concurrency soundness fixes and more. Read the
-[development update](/news/development-update-august-2026). {{< /callout >}}
+{{< callout type="important" icon="sparkles" >}} **NEW:** 515 commits landed on
+`master` between 13 and 27 October, about three in five in the Python frontend.
+Read the [development update](/news/development-update-late-october-2026).
+{{< /callout >}}
 
 {{< cards >}}
 {{< card link="https://dblp.org/pid/42/4311" title="Publications" icon="book-open" >}}
@@ -22,8 +22,8 @@ requests landed in early August — Python function contracts, a user-facing
 {{< /cards >}}
 
 ESBMC is a mature, permissively licensed open-source SMT-based context-bounded
-model checker for single and multi-threaded C, C++, CUDA, CHERI, Kotlin, Python,
-Rust, and Solidity programs. It automatically detects or proves the absence of
+model checker for single and multi-threaded C, C++, CUDA, CHERI-C, Java, Kotlin,
+Python, and Solidity programs. It automatically detects or proves the absence of
 runtime errors (e.g., bounds checks, pointer safety, overflow) and verifies
 user-defined assertions without requiring pre- or postconditions. For
 multi-threaded programs, ESBMC supports lazy and schedule-recording approaches,
@@ -62,22 +62,23 @@ scratch using our [build](docs/development/building) guide. {{< /callout >}}
 
 ## Features
 
-ESBMC aims to support all C features up to version 14, and detects errors in
-software by simulating a finite prefix of the program execution with all
-possible inputs. Classes of problems that can be detected include:
+ESBMC detects errors by symbolically executing a finite prefix of the program
+for all possible inputs. Its frontends and encodings are:
 
-- The Clang compiler as its C/C++/CHERI/CUDA frontend;
+- The Clang compiler as its C/C++/CUDA frontend, and CHERI Clang for CHERI-C
+  (CHERI-C needs a separate ESBMC build; see the
+  [Build Guide](docs/development/building));
 - The Soot framework via Jimple as its Java/Kotlin frontend;
 - The [ast](https://docs.python.org/3/library/ast.html) and
   [ast2json](https://pypi.org/project/ast2json/) modules as its
   [Python frontend](/docs/python/overview); the first SMT-based bounded model
   checker for Python programs;
 - Implements the Solidity grammar production rules as its Solidity frontend;
-- Supports IEEE floating-point arithmetic for various SMT solvers.
+- IEEE 754 floating-point arithmetic, encoded in the solver's floating-point
+  theory or, for solvers without one, as bit-vectors.
 
-ESBMC implements state-of-the-art incremental BMC and _k_-induction proof-rule
-algorithms based on Satisfiability Modulo Theories (SMT) and Constraint
-Programming (CP) solvers.
+ESBMC implements bounded model checking (BMC), incremental BMC and _k_-induction
+on top of Satisfiability Modulo Theories (SMT) solvers.
 
 We provide some background material/publications to help you understand what
 ESBMC can offer. These are available
@@ -101,55 +102,48 @@ below, please, do not hesitate to contact us through our
 ## CBMC Differences
 
 ESBMC and [CBMC](https://www.cprover.org/cbmc/) share a common ancestry but have
-diverged substantially. The list below reflects the current state of ESBMC
-(release 7.x) and contrasts it with mainline CBMC.
+diverged substantially. The list below reflects ESBMC 8.6 and contrasts it
+with mainline CBMC.
 
 **Frontends and language support.**
 
-- ESBMC uses the Clang/LLVM front-end for C (up to C23), C++ (up to C++20), CUDA
-  and CHERI-C, inheriting Clang's diagnostics, attribute handling and template
-  instantiation. CBMC still relies on its own in-tree C and C++ parsers, which
-  lag behind Clang on modern language features (e.g. C++17/20 templates,
-  structured bindings, `if constexpr`).
+- ESBMC uses the Clang/LLVM frontend for C (up to C23), C++ (up to C++20, with
+  selected C++23 features), CUDA and CHERI-C, inheriting Clang's diagnostics,
+  attribute handling and template instantiation. CBMC uses its own in-tree C
+  and C++ parsers.
 - ESBMC ships dedicated frontends for **Python 3.10+** (the first BMC-based
   Python-code verifier), **Solidity** (smart contracts) and **Kotlin/Java** (via
-  the Soot/Jimple IR), with ongoing work on a **Rust** frontend. CBMC supports
-  only C/C++ in the main tool; Java is handled by the separate JBMC project and
-  Rust by Kani.
+  the Soot/Jimple IR). CBMC supports only C/C++ in the main tool; Java is
+  handled by the separate JBMC tool, and Rust by Kani, which builds on CBMC.
 
 **Verification backend.**
 
 - ESBMC encodes programs directly into SMT and supports multiple solver backends
-  — Z3, Bitwuzla (default), Boolector, CVC4/CVC5, Yices, MathSAT and any SMT-LIB
-  v2 solver — exploiting native theories for arrays, bit-vectors, floating-point
-  and quantifiers. CBMC focuses on SAT-based encodings of fully unrolled
-  programs (its built-in solver is based on MiniSat), with external SMT solvers
-  used in a more limited role.
-- ESBMC integrates an interval-arithmetic abstract domain that can prune loop
-  unwindings (`--interval-symex-guard`) and discharge assertions proved true by
-  the abstract semantics (`--interval-symex-assert`), reducing the size of the
+  — Z3, Bitwuzla (the default when it is built in), Boolector, CVC4/CVC5, Yices,
+  MathSAT and any SMT-LIB v2 solver — using native theories for arrays,
+  bit-vectors, floating-point and quantifiers. CBMC's default backend is a SAT
+  solver over a bit-blasted encoding, with SMT solvers as an alternative.
+- ESBMC integrates an interval abstract domain into symbolic execution. It stops
+  unwinding a loop when the intervals prove the loop exits (on by default in
+  plain BMC; disable with `--no-interval-symex-guard`) and can skip assertions
+  the intervals prove (`--interval-symex-assert`). Both reduce the size of the
   SMT formula handed to the solver.
 
 **Proof techniques.**
 
 - ESBMC implements incremental BMC, _k_-induction and bidirectional
   _k_-induction in a single invocation, combining base-case, forward-condition
-  and inductive-step checks in one run. CBMC's _k_-induction workflow
-  historically requires three separate passes (CFG construction, program
-  annotation, verification) and lacks the forward condition needed to prove that
-  all reachable states have been covered, relying on bounded unwinding instead.
-- ESBMC supports function contracts (`__ESBMC_assume`, `__ESBMC_assert`,
-  pre/post-conditions) and LLM-assisted invariant generation for loops that
-  cannot be unrolled within a budget.
+  and inductive-step checks in one run.
+- ESBMC supports function contracts (`__ESBMC_requires`, `__ESBMC_ensures`,
+  `__ESBMC_assigns`) and loop invariants (`__ESBMC_loop_invariant`), which it
+  can both check and use in place of the code they describe.
 
 **Concurrency verification.**
 
 - ESBMC explores thread interleavings explicitly under context-bounded
   verification, with both **lazy** and **schedule-recording** exploration
   strategies and a partial-order reduction (POR) pass that prunes independent
-  interleavings. This typically scales better than CBMC's single-formula
-  encoding of the whole concurrent program on programs with many interleaving
-  points.
+  interleavings.
 - ESBMC ships models for POSIX threads, C11 atomics and a subset of
   `std::thread` / `std::atomic`, and can verify safety, deadlock and data-race
   properties.
@@ -158,30 +152,30 @@ diverged substantially. The list below reflects the current state of ESBMC
 
 - A byte-precise memory model with object-level pointer analysis lets ESBMC
   check pointer-safety, array bounds, use-after-free, double-free and memory
-  leaks across heap and stack. Full IEEE-754 semantics are available across all
-  SMT backends that expose the FP theory.
+  leaks across heap and stack. Floating-point follows IEEE 754, through the
+  solver's floating-point theory by default or through a bit-vector encoding
+  (`--fp2bv`) for solvers without one.
 
 **Operational models and library support.**
 
-- ESBMC builds a sizable operational model (compiled to GOTO via `c2goto`) for
-  the C standard library, large parts of the C++ STL (containers, iterators,
-  algorithms, strings), Python built-ins (lists, dicts, strings, `enum`) and the
-  Kotlin/Java standard library. This enables verification of real-world code
-  that uses these libraries without manual stubbing.
+- ESBMC ships operational models for the C standard library (compiled to GOTO
+  by `c2goto`), large parts of the C++ standard library (containers, iterators,
+  algorithms, strings), and Python built-ins and modules (lists, dicts,
+  strings, `enum`, `math`, `re` and others, written in Python). Code that uses
+  the modelled parts of these libraries can be verified without writing stubs.
 
 **Recent competition results and industrial use.**
 
-- In [SV-COMP](/sv-comp) 2025 ESBMC-kind placed **2nd in ReachSafety**, and, in
-  SV-COMP 2026, it placed **2nd in ReachSafety**. In [Test-COMP](/test-comp),
-  ESBMC (via the FuSeBMC test-generator) has won **1st Overall in 2023, 2024,
-  2025, and 2026**, with 1st place in _Cover-Error_ every year and 1st (or 2nd
-  in 2025) in _Cover-Branches_.
-- Industrial deployments include the verification of Arm's **Realm Management
+- ESBMC-kind placed **2nd in ReachSafety** at [SV-COMP](/sv-comp) 2025 and
+  2026. At [Test-COMP](/test-comp), FuSeBMC, a test generator built on ESBMC,
+  placed **1st Overall every year from 2022 to 2026**, 1st in _Cover-Error_ in
+  each of those years, and 1st in _Cover-Branches_ in every year except 2025
+  (2nd).
+- Applications include the verification of Arm's **Realm Management
   Monitor** in the Confidential Computing Architecture (SAS 2024), Ethereum
   smart-contract auditing (ICSE 2022), Arduino-based embedded firmware (SBESC
   2023), the Ethereum Consensus Specification (ISSTA 2024) and the **ESBMC-AI**
-  pipeline that pairs LLMs with the model checker for repair and invariant
-  synthesis.
+  pipeline that pairs LLMs with the model checker to repair code.
 
 ## SPARK Ada Differences
 
@@ -192,9 +186,11 @@ verification design space. The main differences are:
 **Verification methodology.**
 
 - ESBMC is a _bounded model checker_: it symbolically executes a finite prefix
-  of the program, encodes the resulting verification conditions as SMT, and is
-  _complete for bug-finding_ within the bound. Soundness for unbounded programs
-  is achieved via _k_-induction with a forward condition.
+  of the program and encodes the resulting verification conditions as SMT.
+  Within the bound, it finds every reachable violation of the checked
+  properties. A proof for all executions requires either that the bound covers
+  every execution (no unwinding assertion fails) or that _k_-induction
+  converges.
 - SPARK is a _deductive verifier_: GNATprove translates Ada units to Why3,
   derives Hoare-style verification conditions from user-supplied contracts, and
   discharges them with SMT solvers (Alt-Ergo, CVC5, Z3) or, for hard goals,
@@ -203,8 +199,8 @@ verification design space. The main differences are:
 
 **Supported languages.**
 
-- ESBMC: C (C23), C++ (C++20), CUDA, CHERI-C, Python, Solidity, Kotlin, Java,
-  Rust.
+- ESBMC: C (up to C23), C++ (up to C++20, with selected C++23 features), CUDA,
+  CHERI-C, Python, Solidity, Kotlin, Java.
 - SPARK: a strict subset of Ada 2012/2022 that forbids exceptions, controlled
   types, side-effects in functions and unrestricted aliasing, with optional
   escape hatches via `SPARK_Mode => Off`.
@@ -214,14 +210,15 @@ verification design space. The main differences are:
 - ESBMC verifies code essentially _as-is_: built-in safety properties (pointer
   safety, overflow, bounds, leaks, data races) are checked automatically;
   user-defined assertions need only `assert` or `__ESBMC_assert`. Loop
-  invariants are optional and can be synthesised by the
-  [interval domain](/docs/) or by LLM assistance. When annotations _are_
-  supplied — `__ESBMC_requires` / `__ESBMC_ensures` for pre/post-conditions,
-  `__ESBMC_assigns` for frame conditions, `__ESBMC_loop_invariant` for loop
-  invariants, and `__ESBMC_contract` for bulk contract enforcement — ESBMC uses
-  them to both verify the implementation against its contract and to replace
-  call sites with the contract abstraction, enabling the same style of
-  compositional, contract-driven verification as SPARK (see
+  invariants are optional; `--interval-analysis` infers
+  [interval invariants](/docs/theory/interval-analysis) and adds them as
+  assumptions. When annotations _are_ supplied — `__ESBMC_requires` /
+  `__ESBMC_ensures` for pre/post-conditions, `__ESBMC_assigns` for frame
+  conditions, `__ESBMC_loop_invariant` for loop invariants, and
+  `__ESBMC_contract` to mark functions for `--enforce-all-contracts` and
+  `--replace-all-contracts` — ESBMC uses them to verify the implementation
+  against its contract and to replace call sites with the contract, which
+  supports compositional verification (see
   [Function Contracts](/docs/function-contracts/)).
 - SPARK proofs depend on the programmer authoring `Pre`, `Post`,
   `Contract_Cases`, `Loop_Invariant`, `Loop_Variant`, `Global` and `Depends`
@@ -230,9 +227,10 @@ verification design space. The main differences are:
 
 **Automation level.**
 
-- ESBMC is push-button: one invocation produces `VERIFICATION SUCCESSFUL`,
-  `VERIFICATION FAILED` (with a concrete counterexample trace) or a
-  budget-exhausted result.
+- ESBMC is push-button: one invocation reports `VERIFICATION SUCCESSFUL`,
+  `VERIFICATION FAILED` (with a counterexample trace), `VERIFICATION UNKNOWN`
+  (neither proved nor refuted, e.g. when _k_-induction does not converge), or
+  stops at its time or memory limit.
 - SPARK is mostly automatic through the _Silver_ (absence of run-time errors)
   and _Gold_ (key integrity properties) levels, given suitable contracts.
   Reaching the _Platinum_ level — full functional correctness — typically
@@ -241,10 +239,10 @@ verification design space. The main differences are:
 
 **Memory and concurrency verification.**
 
-- ESBMC handles arbitrary heap-allocated data structures, pointer arithmetic and
-  aliasing through its byte-level memory model, and verifies multi-threaded code
-  (POSIX threads, C11 atomics, `std::thread`) with context-bounded interleaving
-  exploration and POR.
+- ESBMC reasons about heap-allocated data structures, pointer arithmetic and
+  aliasing through its byte-level memory model, up to the unwinding bound, and
+  verifies multi-threaded code (POSIX threads, C11 atomics, `std::thread`) by
+  exploring interleavings, optionally context-bounded, with POR.
 - SPARK relies on a static _ownership and borrowing_ discipline (Ada 2022) to
   rule out aliasing rather than reason about it, and restricts concurrency to
   the Ravenscar/Jorvik profiles (statically scheduled tasks, no dynamic
@@ -265,7 +263,7 @@ verification design space. The main differences are:
 
 | Aspect      | ESBMC                                                                                                                       | SPARK Ada                                                                                                                       |
 | ----------- | --------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| Strengths   | Push-button, multi-language, finds real counterexamples, handles full C/C++ memory models and concurrency                   | Strong functional-correctness guarantees, mature tooling for certification, sound by construction                               |
+| Strengths   | Push-button, multi-language, produces counterexample traces, handles C/C++ pointers, heap and threads                       | Strong functional-correctness guarantees, mature tooling for certification, sound by construction                               |
 | Limitations | Bounded by default; full proofs require _k_-induction convergence; counterexamples may be spurious if models are abstracted | Restricted language subset; effort-intensive contract authoring; weak support for dynamic aliasing and unstructured concurrency |
 
 ### Recent Applications (2022-2024)

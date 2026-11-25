@@ -16,7 +16,7 @@ The usual structure for you to run c-reduce is:
 
 # Generating a preprocessed file
 
-To generate a `.i` from a `.c` file, you should use the same compiler used by the language frontend, i.e., Clang 11
+To generate a `.i` from a `.c` file, you should use the same compiler used by the language frontend, i.e., the Clang version ESBMC was built against (18 or later)
 
 `clang -E main.c > main.i`
 
@@ -68,7 +68,7 @@ grep 'Unexpected side-effect statement' esbmc_out.txt >/dev/null 2>&1
 
 ## When ESBMC fails but other tools find the result correctly
 
-In this example, ESBMC output contains `VERIFICATION SUCCESSFUL` and the other tool `Verification result: FALSE`. You can replace this at will
+In this example, ESBMC reports `VERIFICATION FAILED` while CBMC reports `VERIFICATION SUCCESSFUL`. You can replace this at will
 
 ```bash
 #!/bin/bash

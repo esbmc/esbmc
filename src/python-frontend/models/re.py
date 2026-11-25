@@ -609,3 +609,56 @@ def _fullmatch_flags(pattern: str, string: str, flags: int) -> bool:
     if mode == 1:
         return fullmatch(pattern.lower(), string.lower())
     return fullmatch(pattern, string)
+
+
+class Pattern:
+    """re.Pattern; its matchers return the same bool as the module functions."""
+
+    def __init__(self, pattern: str, flags: int) -> None:
+        self.pattern: str = pattern
+        self.flags: int = flags
+
+    def match(self, string: str) -> bool:
+        """re.match with this pattern and its flags."""
+        return _match_flags(self.pattern, string, self.flags)
+
+    def search(self, string: str) -> bool:
+        """re.search with this pattern and its flags."""
+        return _search_flags(self.pattern, string, self.flags)
+
+    def fullmatch(self, string: str) -> bool:
+        """re.fullmatch with this pattern and its flags."""
+        return _fullmatch_flags(self.pattern, string, self.flags)
+
+
+def compile(pattern: str, flags: int = 0) -> Pattern:
+    """Compile pattern; matching is deferred to the module matchers."""
+    return Pattern(pattern, flags)
+
+
+def _is_regex_meta(c: str) -> bool:
+    return (c == '.' or c == '^' or c == '$' or c == '*' or c == '+' or c == '?' or c == '{'
+            or c == '}' or c == '[' or c == ']' or c == '\\' or c == '|' or c == '(' or c == ')')
+
+
+def _has_regex_meta(pattern: str) -> bool:
+    """Whether pattern contains a character re gives a special meaning."""
+    i: int = 0
+    while i < len(pattern):
+        c: str = pattern[i]
+        if _is_regex_meta(c):
+            return True
+        i = i + 1
+    return False
+
+
+def sub(pattern: str, repl: str, string: str, count: int = 0, flags: int = 0) -> str:
+    """re.sub where pattern and repl have no special characters: it then
+    replaces the same occurrences as str.replace. Other patterns, a repl with
+    a backslash escape, flags and a negative count are not modelled."""
+    __ESBMC_assert(
+        not _has_regex_meta(pattern) and "\\" not in repl and flags == 0 and count >= 0,
+        "re.sub with a regex pattern, an escape in repl, flags or a negative count is not modelled")
+    if count == 0:
+        return string.replace(pattern, repl)
+    return string.replace(pattern, repl, count)

@@ -1,0 +1,5 @@
+CORE
+main.c
+--unwind 6
+^VERIFICATION FAILED$
+^  assertion !\(a == 1 && b == 0\)$

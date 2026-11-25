@@ -1,0 +1,5 @@
+CORE
+main.c
+--schedule --state-hashing
+^ERROR: --schedule cannot be combined with --state-hashing$
+\A(?![\s\S]*VERIFICATION)[\s\S]*\Z

@@ -15,6 +15,8 @@
 #include <util/lang/c_types.h>
 #include <util/lang/python_types.h>
 #include <algorithm>
+#include <functional>
+#include <optional>
 #include <cctype>
 
 using namespace python_expr;
@@ -22,11 +24,33 @@ using namespace python_expr;
 namespace
 {
 using dynamic_type_detail::assigned_value_at;
-using dynamic_type_detail::collect_branch_literal_kinds;
+using dynamic_type_detail::collect_if_node_literal_kinds;
 using dynamic_type_detail::count_bindings;
 using dynamic_type_detail::single_assigned_value;
 
 using param_kinds_t = std::unordered_map<std::string, std::string>;
+
+// A bool, an int or a float, which the tagged numeric helpers take.
+bool is_number_type(const typet &t)
+{
+  return t.is_bool() || t.is_signedbv() || t.is_unsignedbv() || t.is_floatbv();
+}
+
+// A three-way compare result is -1/0/1, or 2 when a NaN leaves the operands
+// unordered, so every ordered comparison is then false.
+exprt decode_three_way(const std::string &op, const exprt &cmp)
+{
+  exprt zero = from_integer(BigInt(0), int_type());
+  exprt one = from_integer(BigInt(1), int_type());
+  if (op == "Lt")
+    return build_less_than(cmp, zero);
+  if (op == "LtE")
+    return build_less_equal(cmp, zero);
+  if (op == "Gt")
+    return build_equal(cmp, one);
+  assert(op == "GtE" && "unexpected operator for a three-way compare");
+  return build_or(build_equal(cmp, zero), build_equal(cmp, one));
+}
 
 // Kinds of the parameters annotated (or inferred from call sites) as int,
 // bool, float or str, so `return x` counts like a literal of that kind
@@ -82,6 +106,30 @@ std::string nondet_call_kind(const nlohmann::json &call)
   return callee == "nondet_int" || callee == "nondet_bool" ? "num" : "";
 }
 
+// The kind of arithmetic on operands of kind `operand_kind`, e.g. `n + 1`
+// (#9812), `-n` or `abs(n)`; none when `value` is no such arithmetic.
+std::optional<std::string> arithmetic_kind(
+  const nlohmann::json &value,
+  const std::function<std::string(const nlohmann::json &)> &operand_kind)
+{
+  const std::string type = value.value("_type", "");
+  if (type == "BinOp")
+    return dynamic_type_detail::binop_kind(
+      value["op"].value("_type", ""),
+      operand_kind(value["left"]),
+      operand_kind(value["right"]));
+  if (type == "UnaryOp")
+    return dynamic_type_detail::unary_kind(
+      value["op"].value("_type", ""), operand_kind(value["operand"]));
+  if (
+    type == "Call" && value["func"].value("id", "") == "abs" &&
+    value["args"].size() == 1 &&
+    value.value("keywords", nlohmann::json::array()).empty())
+    return dynamic_type_detail::unary_kind(
+      "UAdd", operand_kind(value["args"][0]));
+  return std::nullopt;
+}
+
 // Classifies a single `return <literal>` or `return <param>` statement:
 // "num", "str", or "" if neither applies.
 std::string classify_return_literal_kind(
@@ -100,20 +148,12 @@ std::string classify_return_literal_kind(
     auto it = param_kinds.find(value.value("id", ""));
     return it == param_kinds.end() ? "" : it->second;
   }
-  // Arithmetic on a parameter, e.g. `return n + 1` (#9812).
-  if (value.value("_type", "") == "BinOp")
-  {
-    auto operand_kind = [&](const char *side) {
-      return classify_return_literal_kind(
-        {{"_type", "Return"}, {"value", value[side]}},
-        param_kinds,
-        module_body);
-    };
-    return dynamic_type_detail::binop_kind(
-      value["op"].value("_type", ""),
-      operand_kind("left"),
-      operand_kind("right"));
-  }
+  const auto arithmetic = arithmetic_kind(value, [&](const nlohmann::json &op) {
+    return classify_return_literal_kind(
+      {{"_type", "Return"}, {"value", op}}, param_kinds, module_body);
+  });
+  if (arithmetic)
+    return *arithmetic;
   if (value.value("_type", "") == "Call")
   {
     const std::string kind = nondet_call_kind(value);
@@ -225,7 +265,10 @@ bool has_divergent_returns(
   const param_kinds_t &param_kinds,
   const nlohmann::json &module_body)
 {
-  return has_divergent_literal_returns(
+  // The preprocessor marks the functions a call through a function value may
+  // reach when they return scalars of different types.
+  return function_node.contains("esbmc_tagged_return") ||
+         has_divergent_literal_returns(
            function_node, param_kinds, module_body) ||
          has_divergent_ifexp_return(function_node, param_kinds, module_body);
 }
@@ -243,19 +286,34 @@ bool is_param(const nlohmann::json &function_node, const std::string &name)
   return false;
 }
 
-// True when a return in `block` (if/else arms included) yields a Name that
-// is not one of `function_node`'s own parameters.
+// True when `value` reads a Name that is not one of `function_node`'s own
+// parameters.
+bool reads_free_name(
+  const nlohmann::json &value,
+  const nlohmann::json &function_node)
+{
+  if (
+    value.is_object() && value.value("_type", "") == "Name" &&
+    !is_param(function_node, value.value("id", "")))
+    return true;
+  if (value.is_structured())
+    for (const auto &child : value)
+      if (reads_free_name(child, function_node))
+        return true;
+  return false;
+}
+
+// True when a return in `block` (if/else arms included) yields a value that
+// reads a Name that is not one of `function_node`'s own parameters.
 bool returns_free_name(
   const nlohmann::json &block,
   const nlohmann::json &function_node)
 {
   for (const auto &stmt : block)
   {
-    const nlohmann::json &value = stmt.value("value", nlohmann::json());
     if (
-      stmt.value("_type", "") == "Return" && value.is_object() &&
-      value.value("_type", "") == "Name" &&
-      !is_param(function_node, value.value("id", "")))
+      stmt.value("_type", "") == "Return" &&
+      reads_free_name(stmt.value("value", nlohmann::json()), function_node))
       return true;
     for (const char *arm : {"body", "orelse"})
       if (
@@ -415,9 +473,11 @@ bool calls_dynamic_function(
   const nlohmann::json &module_body,
   unsigned depth)
 {
-  if (
-    !value.is_object() || value.value("_type", "") != "Call" ||
-    value["func"].value("_type", "") != "Name")
+  if (!value.is_object() || value.value("_type", "") != "Call")
+    return false;
+  if (value.contains("esbmc_tagged_call"))
+    return true;
+  if (value["func"].value("_type", "") != "Name")
     return false;
   const nlohmann::json *callee = find_callee_def(
     function_node["body"], module_body, value["func"].value("id", ""));
@@ -611,34 +671,36 @@ std::unordered_set<std::string> dynamic_type_handler::detect_dynamic_type_names(
     }
   }
 
-  const nlohmann::json callables = converter_.kind_module_body();
-  auto collect = [&](const nlohmann::json &block) {
-    return collect_branch_literal_kinds(
-      block, kinds, leaf_count, leaf_total, *scope_body, callables);
-  };
-  const bool keeps_value =
-    !if_node.contains("orelse") || if_node["orelse"].empty();
-  if (
-    !if_node.contains("body") || !collect(if_node["body"]) ||
-    (!keeps_value && !collect(if_node["orelse"])))
+  if (!collect_if_node_literal_kinds(
+        if_node,
+        kinds,
+        leaf_count,
+        leaf_total,
+        *scope_body,
+        converter_.kind_module_body()))
     return dynamic_type_names;
 
+  // A path through a leaf that assigns nothing keeps the name's value, or
+  // leaves it unbound, so that a read there raises.
   for (auto &[name, kind_set] : kinds)
+  {
+    const symbolt *existing =
+      converter_.symbol_table().find_symbol(bound_symbol_id(name).to_string());
     if (
-      leaf_count[name] == leaf_total &&
-      joins_divergent_kinds(name, kind_set, keeps_value))
+      joins_divergent_kinds(
+        name, existing, kind_set, existing && leaf_count[name] < leaf_total))
       dynamic_type_names.insert(name);
+  }
 
   return dynamic_type_names;
 }
 
 bool dynamic_type_handler::joins_divergent_kinds(
   const std::string &name,
+  const symbolt *existing,
   std::unordered_set<std::string> &kinds,
   bool keeps_value) const
 {
-  const symbolt *existing =
-    converter_.symbol_table().find_symbol(bound_symbol_id(name).to_string());
   const bool declared_any = existing && existing->get_type() == any_type();
   if (
     existing && !declared_any &&
@@ -662,6 +724,72 @@ bool dynamic_type_handler::joins_divergent_kinds(
     return false;
   kinds.erase("");
   return dynamic_type_detail::kinds_diverge(kinds);
+}
+
+std::unordered_set<std::string>
+dynamic_type_handler::detect_dynamic_type_attributes(
+  const std::string &class_name) const
+{
+  std::unordered_set<std::string> result;
+  const nlohmann::json &module_body = converter_.ast()["body"];
+
+  const nlohmann::json *class_node = nullptr;
+  for (const auto &stmt : module_body)
+  {
+    if (
+      stmt.is_object() && stmt.value("_type", "") == "ClassDef" &&
+      stmt.value("name", "") == class_name)
+    {
+      class_node = &stmt;
+      break;
+    }
+  }
+  if (!class_node || !class_node->contains("body"))
+    return result;
+
+  // Attribute names this class assigns via self.<attr>.
+  std::unordered_set<std::string> self_attrs;
+  for (const auto &member : (*class_node)["body"])
+  {
+    if (member.value("_type", "") != "FunctionDef" || !member.contains("body"))
+      continue;
+    for (const auto &stmt : member["body"])
+    {
+      auto [target, value] = dynamic_type_detail::assign_target_value(stmt);
+      (void)value;
+      if (
+        target && target->value("_type", "") == "Attribute" &&
+        target->contains("value") && (*target)["value"].is_object() &&
+        (*target)["value"].value("_type", "") == "Name" &&
+        (*target)["value"].value("id", "") == "self")
+        self_attrs.insert(target->value("attr", ""));
+    }
+  }
+
+  for (const auto &attr : self_attrs)
+    if (attribute_kinds_diverge(attr))
+      result.insert(attr);
+  return result;
+}
+
+// Only one class declares `attr`, and the stores into an attribute of that
+// name across every module the program reaches assign it diverging literal
+// kinds: an instance of an imported class may be rebound by the entry module.
+bool dynamic_type_handler::attribute_kinds_diverge(
+  const std::string &attr) const
+{
+  std::unordered_set<std::string> owners;
+  std::unordered_set<std::string> kinds;
+  for (const nlohmann::json *body : converter_.reachable_module_bodies())
+  {
+    const auto declaring =
+      dynamic_type_detail::classes_declaring_attribute(*body, attr);
+    owners.insert(declaring.begin(), declaring.end());
+    const auto assigned =
+      dynamic_type_detail::collect_attribute_literal_kinds(*body, attr);
+    kinds.insert(assigned.begin(), assigned.end());
+  }
+  return owners.size() <= 1 && dynamic_type_detail::kinds_diverge(kinds);
 }
 
 void dynamic_type_handler::declare_dynamic_type_names(
@@ -723,7 +851,7 @@ void dynamic_type_handler::declare_dynamic_type_names(
         continue;
       exprt existing_value = build_symbol(*existing_symbol);
       for (const codet &instr : build_tag_field_assigns(
-             *alias_symbol_ptr, existing_value, alias_location))
+             build_symbol(*alias_symbol_ptr), existing_value, alias_location))
         converter_.add_instruction(instr);
       continue;
     }
@@ -866,6 +994,14 @@ exprt dynamic_type_handler::module_name_payload(
     build_address_of(build_symbol(*object)), pointer_typet(empty_typet()));
 }
 
+exprt dynamic_type_handler::int_payload(const exprt &value) const
+{
+  const symbolt *copy_func =
+    converter_.symbol_table().find_symbol("c:@F@__python_scalar_int_copy");
+  assert(copy_func && "__python_scalar_int_copy not found in symbol table");
+  return build_call_expr(*copy_func, pointer_typet(empty_typet()), {value});
+}
+
 exprt dynamic_type_handler::build_scalar_payload(
   const exprt &rhs,
   const locationt &location,
@@ -909,6 +1045,9 @@ exprt dynamic_type_handler::build_scalar_payload(
   if (value_to_store.type().is_pointer())
     return build_typecast(build_symbol(backing), pointer_typet(empty_typet()));
 
+  if (value_to_store.type() == long_long_int_type())
+    return int_payload(build_symbol(backing));
+
   const symbolt *copy_func =
     converter_.symbol_table().find_symbol("c:@F@__python_scalar_tag_copy");
   assert(copy_func && "__python_scalar_tag_copy not found in symbol table");
@@ -919,7 +1058,7 @@ exprt dynamic_type_handler::build_scalar_payload(
 }
 
 std::vector<codet> dynamic_type_handler::build_tag_field_assigns(
-  symbolt &tag_symbol,
+  const exprt &tag_expr,
   const exprt &rhs,
   const locationt &location,
   const std::optional<std::string> &interned_text)
@@ -946,8 +1085,6 @@ std::vector<codet> dynamic_type_handler::build_tag_field_assigns(
   if (type_handler_.is_string_type(type_id_source))
     type_id_source = pointer_typet(char_type());
   exprt type_id_value = type_handler_.tagged_scalar_type_id(type_id_source);
-
-  exprt tag_expr = build_symbol(tag_symbol);
 
   code_assignt value_assign(
     build_member(tag_expr, "value", pointer_typet(empty_typet())), tag_value);
@@ -994,7 +1131,21 @@ void dynamic_type_handler::assign(
   symbolt *tag_symbol = find_tag_symbol(name);
 
   for (const codet &instr : build_tag_field_assigns(
-         *tag_symbol, rhs, location, interned_str_text(value_node)))
+         build_symbol(*tag_symbol),
+         rhs,
+         location,
+         interned_str_text(value_node)))
+    target_block.copy_to_operands(instr);
+}
+
+void dynamic_type_handler::assign_to_lvalue(
+  const exprt &rhs,
+  const locationt &location,
+  const exprt &tagged_lvalue,
+  codet &target_block)
+{
+  for (const codet &instr :
+       build_tag_field_assigns(tagged_lvalue, rhs, location))
     target_block.copy_to_operands(instr);
 }
 
@@ -1008,8 +1159,22 @@ void dynamic_type_handler::resolve_read(symbolt *&symbol) const
   }
 }
 
+exprt dynamic_type_handler::float_type_id() const
+{
+  return type_handler_.tagged_scalar_type_id(double_type());
+}
+
+exprt dynamic_type_handler::is_number_arg(const exprt &tagged) const
+{
+  return build_typecast(
+    type_handler_.tagged_scalar_is_number(
+      build_member(tagged, "type_id", size_type())),
+    int_type());
+}
+
 exprt dynamic_type_handler::build_literal_compare_call(
   const std::string &num_func_name,
+  const std::string &float_func_name,
   const std::string &str_func_name,
   const exprt &tagged,
   const exprt &literal)
@@ -1031,25 +1196,23 @@ exprt dynamic_type_handler::build_literal_compare_call(
       *str_func, int_type(), {tagged_addr, lit_type_id, lit_addr, lit_size});
   }
 
-  if (
-    !literal.type().is_bool() && !literal.type().is_signedbv() &&
-    !literal.type().is_unsignedbv())
+  if (!is_number_type(literal.type()))
     throw std::runtime_error(
       "comparing a dynamically-typed variable against this literal type is "
       "not yet supported");
 
-  exprt lit_value =
-    build_typecast(literal, signedbv_typet(config.ansi_c.long_long_int_width));
-  exprt tagged_type_id = build_member(tagged, "type_id", size_type());
-  exprt type_matches = build_typecast(
-    type_handler_.tagged_scalar_type_matches(tagged_type_id, literal.type()),
-    int_type());
-
-  const symbolt *num_func =
-    converter_.symbol_table().find_symbol("c:@F@" + num_func_name);
+  const bool float_literal = literal.type().is_floatbv();
+  exprt lit_value = build_typecast(
+    literal,
+    float_literal ? double_type()
+                  : signedbv_typet(config.ansi_c.long_long_int_width));
+  const symbolt *num_func = converter_.symbol_table().find_symbol(
+    "c:@F@" + (float_literal ? float_func_name : num_func_name));
   assert(num_func && "tagged-vs-literal num helper not found in symbol table");
   return build_call_expr(
-    *num_func, int_type(), {tagged_addr, type_matches, lit_value});
+    *num_func,
+    int_type(),
+    {tagged_addr, is_number_arg(tagged), lit_value, float_type_id()});
 }
 
 exprt dynamic_type_handler::build_eq_literal(
@@ -1057,7 +1220,11 @@ exprt dynamic_type_handler::build_eq_literal(
   const exprt &literal)
 {
   exprt call = build_literal_compare_call(
-    "__python_scalar_eq_num", "__python_scalar_eq_str", tagged, literal);
+    "__python_scalar_eq_num",
+    "__python_scalar_eq_float",
+    "__python_scalar_eq_str",
+    tagged,
+    literal);
   return build_equal(call, from_integer(1, int_type()));
 }
 
@@ -1069,7 +1236,6 @@ exprt dynamic_type_handler::handle_comparison(
   const bool lhs_tagged = type_handler_.is_tagged_scalar_type(lhs.type());
   const bool rhs_tagged = type_handler_.is_tagged_scalar_type(rhs.type());
   const bool ordered = type_utils::is_ordered_comparison(op);
-  refuse_float_tag_operation(lhs, rhs);
 
   if (lhs_tagged && rhs_tagged)
   {
@@ -1085,7 +1251,8 @@ exprt dynamic_type_handler::handle_comparison(
       {build_address_of(lhs),
        build_address_of(rhs),
        type_handler_.tagged_scalar_type_id(long_long_int_type()),
-       type_handler_.tagged_scalar_type_id(bool_type())});
+       type_handler_.tagged_scalar_type_id(bool_type()),
+       float_type_id()});
     exprt equal = build_equal(call, from_integer(1, int_type()));
     return op == "NotEq" ? build_not(equal) : equal;
   }
@@ -1112,18 +1279,14 @@ exprt dynamic_type_handler::build_ordered_literal(
   const exprt &tagged,
   const exprt &literal)
 {
-  exprt cmp = build_literal_compare_call(
-    "__python_scalar_cmp_num", "__python_scalar_cmp_str", tagged, literal);
-
-  exprt zero = from_integer(BigInt(0), int_type());
-  if (op == "Lt")
-    return build_less_than(cmp, zero);
-  if (op == "LtE")
-    return build_less_equal(cmp, zero);
-  if (op == "Gt")
-    return build_greater_than(cmp, zero);
-  assert(op == "GtE" && "unexpected operator routed to build_ordered_literal");
-  return build_greater_equal(cmp, zero);
+  return decode_three_way(
+    op,
+    build_literal_compare_call(
+      "__python_scalar_cmp_num",
+      "__python_scalar_cmp_float",
+      "__python_scalar_cmp_str",
+      tagged,
+      literal));
 }
 
 exprt dynamic_type_handler::build_ordered_obj(
@@ -1140,17 +1303,9 @@ exprt dynamic_type_handler::build_ordered_obj(
     {build_address_of(lhs),
      build_address_of(rhs),
      type_handler_.tagged_scalar_type_id(long_long_int_type()),
-     type_handler_.tagged_scalar_type_id(bool_type())});
-
-  exprt zero = from_integer(BigInt(0), int_type());
-  if (op == "Lt")
-    return build_less_than(cmp, zero);
-  if (op == "LtE")
-    return build_less_equal(cmp, zero);
-  if (op == "Gt")
-    return build_greater_than(cmp, zero);
-  assert(op == "GtE" && "unexpected operator routed to build_ordered_obj");
-  return build_greater_equal(cmp, zero);
+     type_handler_.tagged_scalar_type_id(bool_type()),
+     float_type_id()});
+  return decode_three_way(op, cmp);
 }
 
 exprt dynamic_type_handler::build_add_literal(
@@ -1189,10 +1344,6 @@ exprt dynamic_type_handler::build_add_literal(
 
   exprt lit_value =
     build_typecast(literal, signedbv_typet(config.ansi_c.long_long_int_width));
-  exprt tagged_type_id = build_member(tagged, "type_id", size_type());
-  exprt type_matches = build_typecast(
-    type_handler_.tagged_scalar_type_matches(tagged_type_id, literal.type()),
-    int_type());
 
   const symbolt *add_num_func =
     converter_.symbol_table().find_symbol("c:@F@__python_scalar_add_num");
@@ -1200,7 +1351,7 @@ exprt dynamic_type_handler::build_add_literal(
   return build_call_expr(
     *add_num_func,
     signedbv_typet(config.ansi_c.long_long_int_width),
-    {tagged_addr, type_matches, lit_value});
+    {tagged_addr, is_number_arg(tagged), lit_value, float_type_id()});
 }
 
 exprt dynamic_type_handler::build_sub_literal(
@@ -1222,21 +1373,99 @@ exprt dynamic_type_handler::build_sub_literal(
   exprt tagged_addr = build_address_of(tagged);
   exprt lit_value =
     build_typecast(literal, signedbv_typet(config.ansi_c.long_long_int_width));
-  exprt tagged_type_id = build_member(tagged, "type_id", size_type());
-  exprt type_matches = build_typecast(
-    type_handler_.tagged_scalar_type_matches(tagged_type_id, literal.type()),
-    int_type());
 
   return build_call_expr(
     *sub_func,
     signedbv_typet(config.ansi_c.long_long_int_width),
     {tagged_addr,
-     type_matches,
+     is_number_arg(tagged),
      lit_value,
-     from_integer(BigInt(tagged_is_left ? 1 : 0), int_type())});
+     from_integer(BigInt(tagged_is_left ? 1 : 0), int_type()),
+     float_type_id()});
+}
+
+/// The scalar.c function and result type of `/`, `//` (#10555), `*` or `%`
+/// on numbers, with @p suffix ("" for a literal operand, "_dyn" for two tags).
+static std::pair<std::string, typet>
+division_function(const std::string &op, const std::string &suffix)
+{
+  static const std::unordered_map<std::string, std::string> names = {
+    {"FloorDiv", "floordiv"}, {"Mult", "mul"}, {"Mod", "mod"}};
+  const auto name = names.find(op);
+  if (name == names.end())
+    return {"c:@F@__python_scalar_div_num" + suffix, double_type()};
+  return {
+    "c:@F@__python_scalar_" + name->second + "_num" + suffix,
+    signedbv_typet(config.ansi_c.long_long_int_width)};
+}
+
+bool dynamic_type_handler::is_tagged_arithmetic(const std::string &op)
+{
+  static const std::unordered_set<std::string> ops = {
+    "Add", "Sub", "Div", "FloorDiv", "Mult", "Mod"};
+  return ops.count(op) != 0;
+}
+
+/// Where `*` or `%` on @p lhs and @p rhs is valid in CPython but not on
+/// numbers: a str repeated by an int, or a str formatted by `%`. Neither is
+/// modelled here. False for any other operator.
+exprt dynamic_type_handler::unmodelled_str_operand(
+  const std::string &op,
+  const exprt &lhs,
+  const exprt &rhs) const
+{
+  if (op != "Mult" && op != "Mod")
+    return false_exprt();
+  const exprt str_id =
+    type_handler_.tagged_scalar_type_id(pointer_typet(char_type()));
+  // Whether @p operand holds a str, or else an int or a bool.
+  auto kind = [&](const exprt &operand, bool str) -> exprt {
+    const typet &type = operand.type();
+    if (!type_handler_.is_tagged_scalar_type(type))
+    {
+      const bool integral =
+        type.is_signedbv() || type.is_unsignedbv() || type.is_bool();
+      return gen_boolean(!str && integral);
+    }
+    const exprt type_id = build_member(operand, "type_id", size_type());
+    if (str)
+      return build_equal(type_id, str_id);
+    return type_handler_.tagged_scalar_type_matches(
+      type_id, long_long_int_type());
+  };
+  if (op == "Mod")
+    return kind(lhs, true);
+  return build_or(
+    build_and(kind(lhs, true), kind(rhs, false)),
+    build_and(kind(lhs, false), kind(rhs, true)));
+}
+
+/// Claims, as unsupported, that @p lhs `op` @p rhs is not a str repeated or
+/// formatted, then assumes it.
+void dynamic_type_handler::claim_numeric_operands(
+  const std::string &op,
+  const exprt &lhs,
+  const exprt &rhs,
+  const locationt &location)
+{
+  const exprt unmodelled = unmodelled_str_operand(op, lhs, rhs);
+  if (unmodelled.is_false())
+    return;
+  if (!converter_.can_emit_runtime_guard())
+    throw std::runtime_error(
+      "operator '" + op + "' on a dynamically-typed str is not yet supported");
+  code_assertt check(build_not(unmodelled));
+  check.location() = location;
+  check.location().user_provided(true);
+  check.location().comment(
+    op == "Mod" ? "Unsupported: % formatting of a dynamically-typed str"
+                : "Unsupported: repeating a dynamically-typed str");
+  converter_.add_instruction(check);
+  converter_.add_instruction(code_assumet(build_not(unmodelled)));
 }
 
 exprt dynamic_type_handler::build_div_literal(
+  const std::string &op,
   const exprt &tagged,
   const exprt &literal,
   bool tagged_is_left,
@@ -1246,12 +1475,13 @@ exprt dynamic_type_handler::build_div_literal(
     !literal.type().is_bool() && !literal.type().is_signedbv() &&
     !literal.type().is_unsignedbv())
     throw std::runtime_error(
-      "dividing a dynamically-typed variable by this literal type is not "
+      "operator '" + op +
+      "' between a dynamically-typed variable and this literal type is not "
       "yet supported");
 
-  const symbolt *div_func =
-    converter_.symbol_table().find_symbol("c:@F@__python_scalar_div_num");
-  assert(div_func && "__python_scalar_div_num not found in symbol table");
+  const auto [div_name, div_type] = division_function(op, "");
+  const symbolt *div_func = converter_.symbol_table().find_symbol(div_name);
+  assert(div_func && "scalar division function not found in symbol table");
 
   exprt tagged_addr = build_address_of(tagged);
   exprt lit_value =
@@ -1268,15 +1498,17 @@ exprt dynamic_type_handler::build_div_literal(
       pointer_typet(signedbv_typet(config.ansi_c.long_long_int_width))),
     signedbv_typet(config.ansi_c.long_long_int_width));
   exprt divisor = tagged_is_left ? lit_value : tagged_numeric_value;
-  guard_zero_division(divisor, type_matches, location);
+  if (op != "Mult")
+    guard_zero_division(divisor, type_matches, location);
 
   return build_call_expr(
     *div_func,
-    double_type(),
+    div_type,
     {tagged_addr,
-     build_typecast(type_matches, int_type()),
+     is_number_arg(tagged),
      lit_value,
-     from_integer(BigInt(tagged_is_left ? 1 : 0), int_type())});
+     from_integer(BigInt(tagged_is_left ? 1 : 0), int_type()),
+     float_type_id()});
 }
 
 exprt dynamic_type_handler::handle_arithmetic(
@@ -1287,7 +1519,8 @@ exprt dynamic_type_handler::handle_arithmetic(
 {
   const bool lhs_tagged = type_handler_.is_tagged_scalar_type(lhs.type());
   const bool rhs_tagged = type_handler_.is_tagged_scalar_type(rhs.type());
-  refuse_float_tag_operation(lhs, rhs);
+  refuse_float_tag_operation(lhs, rhs, location);
+  claim_numeric_operands(op, lhs, rhs, location);
 
   // Equality can settle a type_id mismatch without knowing either type;
   // arithmetic cannot, since it needs the concrete type to pick an operation.
@@ -1297,8 +1530,7 @@ exprt dynamic_type_handler::handle_arithmetic(
       return build_add_tagged(lhs, rhs);
     if (op == "Sub")
       return build_sub_tagged(lhs, rhs);
-    assert(op == "Div" && "unexpected operator routed to handle_arithmetic");
-    return build_div_tagged(lhs, rhs, location);
+    return build_div_tagged(op, lhs, rhs, location);
   }
 
   if (op == "Add")
@@ -1309,9 +1541,8 @@ exprt dynamic_type_handler::handle_arithmetic(
     return lhs_tagged ? build_sub_literal(lhs, rhs, /*tagged_is_left=*/true)
                       : build_sub_literal(rhs, lhs, /*tagged_is_left=*/false);
 
-  assert(op == "Div" && "unexpected operator routed to handle_arithmetic");
-  return lhs_tagged ? build_div_literal(lhs, rhs, true, location)
-                    : build_div_literal(rhs, lhs, false, location);
+  return lhs_tagged ? build_div_literal(op, lhs, rhs, true, location)
+                    : build_div_literal(op, rhs, lhs, false, location);
 }
 
 exprt dynamic_type_handler::build_neg_tagged(
@@ -1319,7 +1550,7 @@ exprt dynamic_type_handler::build_neg_tagged(
   const locationt &location)
 {
   exprt zero = from_integer(0, signedbv_typet(config.ansi_c.int_width));
-  refuse_float_tag_operation(zero, tagged);
+  refuse_float_tag_operation(zero, tagged, location);
   guard_type_error("Sub", zero, tagged, location);
   return build_sub_literal(tagged, zero, /*tagged_is_left=*/false);
 }
@@ -1334,12 +1565,6 @@ exprt dynamic_type_handler::build_add_tagged(const exprt &lhs, const exprt &rhs)
   exprt rhs_type_id = build_member(rhs, "type_id", size_type());
   exprt str_type_id =
     type_handler_.tagged_scalar_type_id(pointer_typet(char_type()));
-  exprt lhs_is_num = build_typecast(
-    type_handler_.tagged_scalar_type_matches(lhs_type_id, long_long_int_type()),
-    int_type());
-  exprt rhs_is_num = build_typecast(
-    type_handler_.tagged_scalar_type_matches(rhs_type_id, long_long_int_type()),
-    int_type());
   exprt lhs_is_str =
     build_typecast(build_equal(lhs_type_id, str_type_id), int_type());
   exprt rhs_is_str =
@@ -1349,13 +1574,14 @@ exprt dynamic_type_handler::build_add_tagged(const exprt &lhs, const exprt &rhs)
     *add_func,
     type_handler_.get_tagged_object_type(),
     {build_address_of(lhs),
-     lhs_is_num,
+     is_number_arg(lhs),
      lhs_is_str,
      build_address_of(rhs),
-     rhs_is_num,
+     is_number_arg(rhs),
      rhs_is_str,
      type_handler_.tagged_scalar_type_id(long_long_int_type()),
-     str_type_id});
+     str_type_id,
+     float_type_id()});
 }
 
 exprt dynamic_type_handler::build_sub_tagged(const exprt &lhs, const exprt &rhs)
@@ -1364,29 +1590,25 @@ exprt dynamic_type_handler::build_sub_tagged(const exprt &lhs, const exprt &rhs)
     converter_.symbol_table().find_symbol("c:@F@__python_scalar_sub_num_dyn");
   assert(sub_func && "__python_scalar_sub_num_dyn not found in symbol table");
 
-  exprt lhs_type_id = build_member(lhs, "type_id", size_type());
-  exprt rhs_type_id = build_member(rhs, "type_id", size_type());
-  exprt lhs_is_num = build_typecast(
-    type_handler_.tagged_scalar_type_matches(lhs_type_id, long_long_int_type()),
-    int_type());
-  exprt rhs_is_num = build_typecast(
-    type_handler_.tagged_scalar_type_matches(rhs_type_id, long_long_int_type()),
-    int_type());
-
   return build_call_expr(
     *sub_func,
     signedbv_typet(config.ansi_c.long_long_int_width),
-    {build_address_of(lhs), lhs_is_num, build_address_of(rhs), rhs_is_num});
+    {build_address_of(lhs),
+     is_number_arg(lhs),
+     build_address_of(rhs),
+     is_number_arg(rhs),
+     float_type_id()});
 }
 
 exprt dynamic_type_handler::build_div_tagged(
+  const std::string &op,
   const exprt &lhs,
   const exprt &rhs,
   const locationt &location)
 {
-  const symbolt *div_func =
-    converter_.symbol_table().find_symbol("c:@F@__python_scalar_div_num_dyn");
-  assert(div_func && "__python_scalar_div_num_dyn not found in symbol table");
+  const auto [div_name, div_type] = division_function(op, "_dyn");
+  const symbolt *div_func = converter_.symbol_table().find_symbol(div_name);
+  assert(div_func && "scalar division function not found in symbol table");
 
   exprt lhs_type_id = build_member(lhs, "type_id", size_type());
   exprt rhs_type_id = build_member(rhs, "type_id", size_type());
@@ -1400,16 +1622,18 @@ exprt dynamic_type_handler::build_div_tagged(
       build_member(rhs, "value", pointer_typet(empty_typet())),
       pointer_typet(signedbv_typet(config.ansi_c.long_long_int_width))),
     signedbv_typet(config.ansi_c.long_long_int_width));
-  guard_zero_division(
-    rhs_numeric_value, build_and(lhs_is_num, rhs_is_num), location);
+  if (op != "Mult")
+    guard_zero_division(
+      rhs_numeric_value, build_and(lhs_is_num, rhs_is_num), location);
 
   return build_call_expr(
     *div_func,
-    double_type(),
+    div_type,
     {build_address_of(lhs),
-     build_typecast(lhs_is_num, int_type()),
+     is_number_arg(lhs),
      build_address_of(rhs),
-     build_typecast(rhs_is_num, int_type())});
+     is_number_arg(rhs),
+     float_type_id()});
 }
 
 exprt dynamic_type_handler::operands_type_ok(
@@ -1422,20 +1646,23 @@ exprt dynamic_type_handler::operands_type_ok(
   if (!lhs_tagged || !rhs_tagged)
   {
     const exprt &tagged = lhs_tagged ? lhs : rhs;
-    const exprt &literal = lhs_tagged ? rhs : lhs;
-    return type_handler_.tagged_scalar_type_matches(
-      build_member(tagged, "type_id", size_type()), literal.type());
+    const typet &literal_type = (lhs_tagged ? rhs : lhs).type();
+    exprt tagged_type_id = build_member(tagged, "type_id", size_type());
+    return build_or(
+      is_number_type(literal_type)
+        ? type_handler_.tagged_scalar_is_number(tagged_type_id)
+        : type_handler_.tagged_scalar_type_matches(
+            tagged_type_id, literal_type),
+      unmodelled_str_operand(op, lhs, rhs));
   }
 
   exprt lhs_type_id = build_member(lhs, "type_id", size_type());
   exprt rhs_type_id = build_member(rhs, "type_id", size_type());
-  exprt lhs_is_num =
-    type_handler_.tagged_scalar_type_matches(lhs_type_id, long_long_int_type());
-  exprt rhs_is_num =
-    type_handler_.tagged_scalar_type_matches(rhs_type_id, long_long_int_type());
+  exprt lhs_is_num = type_handler_.tagged_scalar_is_number(lhs_type_id);
+  exprt rhs_is_num = type_handler_.tagged_scalar_is_number(rhs_type_id);
   exprt both_num = build_and(lhs_is_num, rhs_is_num);
-  if (op == "Sub" || op == "Div")
-    return both_num;
+  if (op != "Add" && is_tagged_arithmetic(op))
+    return build_or(both_num, unmodelled_str_operand(op, lhs, rhs));
   if (op == "Add")
   {
     exprt str_type_id =
@@ -1461,7 +1688,12 @@ void dynamic_type_handler::guard_type_error(
     return;
 
   static const std::unordered_map<std::string, std::string> symbols = {
-    {"Add", "+"}, {"Sub", "-"}, {"Div", "/"}};
+    {"Add", "+"},
+    {"Sub", "-"},
+    {"Div", "/"},
+    {"FloorDiv", "//"},
+    {"Mult", "*"},
+    {"Mod", "%"}};
   auto symbol = symbols.find(op);
   const std::string message =
     symbol == symbols.end()
@@ -1544,6 +1776,33 @@ exprt dynamic_type_handler::build_isinstance_check(
     "dynamically-typed variable");
 }
 
+exprt dynamic_type_handler::build_len(
+  const exprt &tagged,
+  const locationt &location)
+{
+  if (!converter_.in_type_probe())
+  {
+    if (!converter_.can_emit_operand_statement())
+      throw std::runtime_error(
+        "len() of a dynamically-typed variable here is not yet supported");
+    exprt is_str = build_equal(
+      build_member(tagged, "type_id", size_type()),
+      type_handler_.tagged_scalar_type_id(pointer_typet(char_type())));
+    converter_.emit_guarded_raise(
+      build_not(is_str), "TypeError", "object has no len()", location);
+  }
+
+  const symbolt *strlen_func = converter_.symbol_table().find_symbol(
+    "c:@F@__python_scalar_strlen_bounded");
+  assert(
+    strlen_func && "__python_scalar_strlen_bounded not found in symbol table");
+  exprt chars = build_typecast(
+    build_member(tagged, "value", pointer_typet(empty_typet())),
+    pointer_typet(char_type()));
+  return build_typecast(
+    build_call_expr(*strlen_func, size_type(), {chars}), long_long_int_type());
+}
+
 exprt dynamic_type_handler::build_truthiness(const exprt &tagged)
 {
   const symbolt *func =
@@ -1602,7 +1861,7 @@ exprt dynamic_type_handler::build_tagged_value(
   target_block.copy_to_operands(tag_decl);
 
   for (const codet &instr :
-       build_tag_field_assigns(tag_symbol, value, location))
+       build_tag_field_assigns(build_symbol(tag_symbol), value, location))
     target_block.copy_to_operands(instr);
 
   return build_symbol(tag_symbol);
@@ -1735,16 +1994,40 @@ exprt dynamic_type_handler::build_numeric_conversion(
 
 void dynamic_type_handler::refuse_float_tag_operation(
   const exprt &lhs,
-  const exprt &rhs) const
+  const exprt &rhs,
+  const locationt &location) const
 {
   if (
     !dynamic_type_detail::float_tags_possible() ||
     type_handler_.is_string_type(lhs.type()) ||
-    type_handler_.is_string_type(rhs.type()))
+    type_handler_.is_string_type(rhs.type()) || converter_.in_type_probe())
     return;
-  throw std::runtime_error(
-    "arithmetic or comparison on a dynamically-typed variable that may hold "
-    "a float is not yet supported");
+  const bool lhs_tagged = type_handler_.is_tagged_scalar_type(lhs.type());
+  const bool rhs_tagged = type_handler_.is_tagged_scalar_type(rhs.type());
+  if (
+    !converter_.can_emit_runtime_guard() ||
+    (!lhs_tagged && lhs.type().is_floatbv()) ||
+    (!rhs_tagged && rhs.type().is_floatbv()))
+    throw std::runtime_error(
+      "arithmetic or comparison on a dynamically-typed variable that may "
+      "hold a float is not yet supported");
+  // The operations do not model a float payload, so a path that reaches
+  // them with one is reported as unsupported and goes no further.
+  for (const exprt *operand : {&lhs, &rhs})
+  {
+    if (!type_handler_.is_tagged_scalar_type(operand->type()))
+      continue;
+    const exprt not_float = build_not(build_equal(
+      build_member(*operand, "type_id", size_type()),
+      type_handler_.tagged_scalar_type_id(double_type())));
+    code_assertt check(not_float);
+    check.location() = location;
+    check.location().user_provided(true);
+    check.location().comment(
+      "Unsupported: arithmetic or comparison on a dynamically-typed float");
+    converter_.add_instruction(check);
+    converter_.add_instruction(code_assumet(not_float));
+  }
 }
 
 void dynamic_type_handler::refuse_tagged_argument() const

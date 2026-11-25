@@ -52,7 +52,8 @@ python_list::list_eq_target python_list::select_list_eq(
   return {
     eq_tagged_sym,
     {th.tagged_scalar_type_id(long_long_int_type()),
-     th.tagged_scalar_type_id(bool_type())}};
+     th.tagged_scalar_type_id(bool_type()),
+     th.tagged_scalar_type_id(double_type())}};
 }
 
 std::optional<expr2tc> python_list::fast_elem_equality(
@@ -866,8 +867,27 @@ exprt python_list::contains_list(const exprt &item, const exprt &list)
   return build_symbol(ret);
 }
 
+void python_list::refuse_skipped_eq(
+  const exprt &list,
+  const exprt &item,
+  const std::string &operation,
+  const locationt &loc)
+{
+  const std::string id =
+    list.is_symbol() ? list.identifier().as_string() : std::string();
+  const symbolt *sym = converter_.find_symbol(id);
+  const std::vector<std::string> dunders =
+    sym && sym->is_set ? std::vector<std::string>{"__hash__", "__eq__"}
+                       : std::vector<std::string>{"__eq__"};
+  converter_.refuse_skipped_dunder(item.type(), dunders, operation, loc) ||
+    converter_.refuse_skipped_element_dunder(id, dunders, operation, loc);
+}
+
 exprt python_list::contains(const exprt &item, const exprt &list)
 {
+  refuse_skipped_eq(
+    list, item, "'in'", converter_.get_location_from_decl(list_value_));
+
   // Get type and size information for the item
   list_elem_info item_info = get_list_element_info(list_value_, item);
 
@@ -1006,71 +1026,6 @@ exprt python_list::contains(const exprt &item, const exprt &list)
   return result;
 }
 
-exprt python_list::build_min_max_for_mixed_numeric(
-  const exprt &list_arg,
-  const std::string &list_id,
-  const std::string &func_name,
-  irep_idt comparison_op)
-{
-  const auto *recorded = elem_types().find(list_id);
-  if (!recorded)
-    throw std::runtime_error(func_name + "() arg is an empty sequence");
-
-  const auto &type_info = *recorded;
-  const size_t n = type_info.size();
-
-  pointer_typet obj_ptr_type(
-    converter_.get_type_handler().get_list_element_type());
-  const typet double_t = double_type();
-  locationt loc = converter_.get_location_from_decl(list_value_);
-
-  // Declare a temp symbol, emit its declaration, and return its symbol_expr.
-  auto make_tmp = [&](const std::string &name, const typet &type) -> exprt {
-    symbolt &sym =
-      converter_.create_tmp_symbol(list_value_, name, type, exprt());
-    code_declt decl(build_symbol(sym));
-    decl.location() = loc;
-    converter_.add_instruction(decl);
-    return build_symbol(sym);
-  };
-
-  // Access element i from the list and return it promoted to double.
-  auto get_elem_as_double = [&](size_t i) -> exprt {
-    typet orig_type = type_info[i].second;
-    exprt list_at = build_list_at_call(
-      list_arg, from_integer(BigInt(i), size_type()), list_value_);
-    exprt obj = make_tmp("$list_obj$", obj_ptr_type);
-    code_assignt assign_obj(obj, list_at);
-    assign_obj.location() = loc;
-    converter_.add_instruction(assign_obj);
-    exprt val = extract_pyobject_value(obj, orig_type);
-    return orig_type.is_floatbv() ? val : build_typecast(val, double_t);
-  };
-
-  exprt result = make_tmp("$minmax_result$", double_t);
-  code_assignt init(result, get_elem_as_double(0));
-  init.location() = loc;
-  converter_.add_instruction(init);
-
-  for (size_t i = 1; i < n; i++)
-  {
-    exprt elem = make_tmp("$minmax_elem$", double_t);
-    code_assignt assign_elem(elem, get_elem_as_double(i));
-    assign_elem.location() = loc;
-    converter_.add_instruction(assign_elem);
-
-    exprt condition(comparison_op, bool_type());
-    condition.copy_to_operands(elem, result);
-    code_ifthenelset ite;
-    ite.cond() = condition;
-    ite.then_case() = code_assignt(result, elem);
-    ite.location() = loc;
-    ite.location().property("skipped");
-    converter_.add_instruction(ite);
-  }
-
-  return result;
-}
 
 // list.count(x) / list.index(x): both pass (list, &value, type_id, size) to a
 // C model that walks the list comparing elements (same plumbing as remove), and
@@ -1083,6 +1038,8 @@ exprt python_list::build_count_index_list_call(
   const std::string &func_id)
 {
   list_elem_info elem_info = get_list_element_info(op, elem);
+  refuse_skipped_eq(
+    build_symbol(list), elem, "list.count()", elem_info.location);
 
   const symbolt *func = converter_.symbol_table().find_symbol(func_id);
   if (!func)
@@ -1128,6 +1085,8 @@ exprt python_list::build_index_list_call(
   // asserting __ESBMC_list_index model, which fires an uncatchable property
   // violation. Mirrors the dict KeyError and list.remove ValueError lowerings.
   list_elem_info elem_info = get_list_element_info(op, elem);
+  refuse_skipped_eq(
+    build_symbol(list), elem, "list.index()", elem_info.location);
 
   const symbolt *find_func =
     converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_try_find_index");
@@ -1191,6 +1150,8 @@ exprt python_list::build_index_range_list_call(
   const exprt &end)
 {
   list_elem_info elem_info = get_list_element_info(op, elem);
+  refuse_skipped_eq(
+    build_symbol(list), elem, "list.index()", elem_info.location);
 
   const symbolt *func =
     converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_index_range");

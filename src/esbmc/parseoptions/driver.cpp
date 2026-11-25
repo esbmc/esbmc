@@ -43,6 +43,7 @@ extern "C"
 #include <goto-programs/add_restrict_assertions.h>
 #include <goto-programs/goto_atomicity_check.h>
 #include <goto-programs/goto_check.h>
+#include <goto-programs/partial_order_scope.h>
 #include <goto-programs/goto_convert_functions.h>
 #include <goto-programs/goto_inline.h>
 #include <goto-programs/goto_k_induction.h>
@@ -104,18 +105,48 @@ extern "C"
 /// The forked k-induction processes each keep their own property table, and
 /// the one that concludes the run reports its base-case bound as PASSED (D4 of
 /// docs/roadmap/multi-property-strategy-plan.md). The other flags listed turn
-/// --multi-property on. --termination runs the sequential driver instead.
+/// --multi-property on. The TS strategies never run under this driver, yet
+/// they drop the loop-entry flags its inductive step needs (#10154).
+/// --termination runs the sequential driver instead.
 static bool k_induction_parallel_conflicts(const cmdlinet &cmdline)
 {
   if (!cmdline.isset("k-induction-parallel") || cmdline.isset("termination"))
     return false;
 
   for (const char *incompatible :
-       {"multi-property", "all-witnesses", "parallel-solving"})
+       {"multi-property",
+        "all-witnesses",
+        "parallel-solving",
+        "ts-bmc",
+        "ts-pdr",
+        "ts-check",
+        "ts-btor2"})
     if (cmdline.isset(incompatible))
     {
       log_error(
         "--k-induction-parallel cannot be combined with --{}", incompatible);
+      return true;
+    }
+  return false;
+}
+
+static bool ts_strategy_conflicts(const cmdlinet &cmdline)
+{
+  // The TS strategies turn k-induction back on, so goto_termination's
+  // inductive-step-only assumes would reach the engines as invariants; PDR
+  // trusts those and would prove a non-terminating loop terminates.
+  for (const char *ts : {"ts-bmc", "ts-pdr", "ts-check", "ts-btor2"})
+    if (cmdline.isset(ts) && cmdline.isset("termination"))
+    {
+      log_error("--{} cannot be combined with --termination", ts);
+      return true;
+    }
+
+  // --ts-pdr runs instead of the BMC engine, which these flags configure.
+  for (const char *bmc : {"ts-bmc", "ts-fresh-solver", "ts-push-pop"})
+    if (cmdline.isset("ts-pdr") && cmdline.isset(bmc))
+    {
+      log_error("--ts-pdr cannot be combined with --{}", bmc);
       return true;
     }
   return false;
@@ -142,6 +173,57 @@ static bool parallel_solving_conflicts(const cmdlinet &cmdline)
       return true;
     }
   return false;
+}
+
+/// generate_hash needs a state_hashing_level2t, which the --schedule execution
+/// state never installs (#10296).
+static bool schedule_conflicts(const cmdlinet &cmdline)
+{
+  if (!cmdline.isset("schedule") || !cmdline.isset("state-hashing"))
+    return false;
+
+  log_error("--schedule cannot be combined with --state-hashing");
+  return true;
+}
+
+/// --partial-order runs each thread once and lets the solver order the shared
+/// accesses (#10990), so the interleaving explorers, the unwinding strategies
+/// and the checks that need a scheduler or a trace are out of its scope.
+static bool partial_order_conflicts(const cmdlinet &cmdline)
+{
+  if (!cmdline.isset("partial-order"))
+    return false;
+
+  for (const char *incompatible :
+       {"schedule",
+        "incremental-context-bound",
+        "state-hashing",
+        "k-induction",
+        "k-induction-parallel",
+        "incremental-bmc",
+        "falsification",
+        "termination",
+        "deadlock-check",
+        "data-races-check",
+        "data-races-check-only",
+        "lock-order-check",
+        "atomicity-check",
+        "ltl",
+        "interactive-ileaves",
+        "witness-output",
+        "witness-output-graphml",
+        "witness-output-yaml"})
+    if (cmdline.isset(incompatible))
+    {
+      log_error("--partial-order cannot be combined with --{}", incompatible);
+      return true;
+    }
+  return false;
+}
+
+static bool concurrency_mode_conflicts(const cmdlinet &cmdline)
+{
+  return schedule_conflicts(cmdline) || partial_order_conflicts(cmdline);
 }
 
 /// The flag combinations that cannot produce a sound report, rejected
@@ -253,10 +335,16 @@ static bool incompatible_flags(const cmdlinet &cmdline)
       return true;
     }
 
+  if (ts_strategy_conflicts(cmdline))
+    return true;
+
   if (k_induction_parallel_conflicts(cmdline))
     return true;
 
   if (parallel_solving_conflicts(cmdline))
+    return true;
+
+  if (concurrency_mode_conflicts(cmdline))
     return true;
 
   // --incremental-context-bound owns the outer verification loop, re-running
@@ -269,7 +357,11 @@ static bool incompatible_flags(const cmdlinet &cmdline)
           "falsification",
           "k-induction",
           "k-induction-parallel",
-          "loop-invariant"})
+          "loop-invariant",
+          "ts-bmc",
+          "ts-pdr",
+          "ts-check",
+          "ts-btor2"})
       if (cmdline.isset(incompatible))
       {
         log_error(
@@ -322,6 +414,65 @@ static bool proof_cache_flags_usable(const optionst &options)
   return true;
 }
 
+// A Kani harness verifies by k-induction unless the run asks for something
+// else: a strategy or a bound, a report, coverage, dead-code or print-only
+// mode, or witness validation. The flags go on the command line, so the options
+// k-induction implies and the checks that refuse it apply as usual. Unlimited k
+// steps keep a bug deeper than --max-k-step from ending UNKNOWN where plain BMC
+// would find it.
+void esbmc_parseoptionst::default_kani_strategy()
+{
+  static const char *const chosen[] = {
+    "unwind",
+    "unwindset",
+    "k-induction",
+    "k-induction-parallel",
+    "incremental-bmc",
+    "falsification",
+    "termination",
+    "base-case",
+    "forward-condition",
+    "inductive-step",
+    "loop-invariant",
+    "synthesise-loop-invariants",
+    "incremental-context-bound",
+    "multi-property",
+    "report-property-class",
+    "assertion-coverage",
+    "assertion-coverage-claims",
+    "condition-coverage",
+    "condition-coverage-claims",
+    "condition-coverage-rm",
+    "condition-coverage-claims-rm",
+    "branch-coverage",
+    "branch-coverage-claims",
+    "branch-function-coverage",
+    "branch-function-coverage-claims",
+    "k-path-coverage",
+    "k-path-coverage-claims",
+    "dead-code-check",
+    "parse-tree-only",
+    "symbol-table-only",
+    "goto-functions-only",
+    "program-only",
+    "show-claims",
+    "smt-formula-only",
+    "smt-formula-too",
+    "validate-correctness-witness",
+    "validate-violation-witness"};
+  for (const char *flag : chosen)
+    if (cmdline.isset(flag))
+      return;
+  if (ts_strategy_requested() || !has_kani_binary_input())
+    return;
+  log_status("Kani goto-binary: verifying by k-induction");
+  cmdline.set("k-induction", std::string(), {""});
+  if (cmdline.vm["max-k-step"].defaulted())
+    cmdline.set("unlimited-k-steps", std::string(), {""});
+  if (cmdline.vm["max-inductive-step"].defaulted())
+    cmdline.set("max-inductive-step", 3, {"3"});
+}
+
 // This is the main entry point of ESBMC. Here ESBMC performs initialisation
 // of the algorithms that will be run over the GOTO program at later stages
 //
@@ -334,20 +485,52 @@ static bool proof_cache_flags_usable(const optionst &options)
 //    - Perform a single run of Bounded Model Checking and rely
 //      on the simplifier to determine the sufficient verification bound
 //      (see "do_bmc")
+int esbmc_parseoptionst::do_partial_order(
+  optionst &options,
+  goto_functionst &goto_functions)
+{
+  if (!partial_order_in_scope(
+        goto_functions,
+        namespacet(context),
+        !options.get_bool_option("program-only")))
+    return 1;
+  bmct bmc(goto_functions, options, context);
+  return do_bmc(bmc);
+}
+
 int esbmc_parseoptionst::run_chosen_strategy(
   optionst &options,
   goto_functionst &goto_functions)
 {
+  const bool k_step =
+    cmdline.isset("termination") || cmdline.isset("incremental-bmc") ||
+    cmdline.isset("falsification") || cmdline.isset("k-induction") ||
+    cmdline.isset("loop-invariant") ||
+    // --sv-comp switches a program that starts a thread to incremental BMC.
+    options.get_bool_option("incremental-bmc");
+
+  // Only a single BMC run keeps a reported check out of its verdict (#10875).
+  if (
+    cmdline.isset("report-property-class") &&
+    (k_step || ts_strategy_requested() ||
+     cmdline.isset("incremental-context-bound")))
+  {
+    log_error(
+      "--report-property-class needs a single BMC run, not a "
+      "verification strategy");
+    return 1;
+  }
+
+  if (options.get_bool_option("partial-order"))
+    return do_partial_order(options, goto_functions);
+
   if (cmdline.isset("incremental-context-bound"))
     return do_context_bound_deepening(options, goto_functions);
 
   if (ts_strategy_requested())
     return do_ts_strategy(options, goto_functions);
 
-  if (
-    cmdline.isset("termination") || cmdline.isset("incremental-bmc") ||
-    cmdline.isset("falsification") || cmdline.isset("k-induction") ||
-    cmdline.isset("loop-invariant"))
+  if (k_step)
     return do_bmc_strategy(options, goto_functions);
 
   // No strategy chosen: rely on the simplifier and the flags set through CMD.
@@ -355,16 +538,49 @@ int esbmc_parseoptionst::run_chosen_strategy(
   return do_bmc(bmc);
 }
 
+// --skip-bmc leaves silently; an early answer (#10252) prints its verdict.
+static bool answered_without_bmc(const optionst &options)
+{
+  if (options.get_bool_option("skip-bmc"))
+    return true;
+  const bool early = options.get_bool_option("python-no-checked-exception");
+  if (early)
+    log_success("\nVERIFICATION SUCCESSFUL");
+  return early;
+}
+
+// A --goto2lean run that fails anywhere must not leave an earlier proof file.
+static void
+remove_stale_lean_output(const cmdlinet &cmdline, const optionst &options)
+{
+  if (cmdline.isset("goto2lean") && !options.get_option("output").empty())
+    std::remove(options.get_option("output").c_str());
+}
+
+// Reopen stderr rather than open a new stream, so that what clang and LLVM
+// write to stderr (diagnostics, -v under --verbosity) reaches the file too.
+static bool redirect_output(const cmdlinet &cmdline)
+{
+  if (!cmdline.isset("file-output"))
+    return true;
+  const char *path = cmdline.getval("file-output");
+  if (!freopen(path, "w+", stderr))
+  {
+    messaget::state.out = stdout;
+    log_error("Cannot open {}", path);
+    return false;
+  }
+  messaget::state.out = stderr;
+  // freopen makes stderr fully buffered; clang writes to the descriptor
+  // directly, so keep our lines in order with its.
+  messaget::state.set_flushln();
+  return true;
+}
+
 int esbmc_parseoptionst::doit()
 {
-  // Configure msg output
-  if (cmdline.isset("file-output"))
-  {
-    FILE *f = fopen(cmdline.getval("file-output"), "w+");
-    /* TODO: handle failure */
-    out = f;
-    messaget::state.out = f;
-  }
+  if (!redirect_output(cmdline))
+    return 1;
 
   // Print a banner with version info to stdout
   {
@@ -389,6 +605,7 @@ int esbmc_parseoptionst::doit()
     return 1;
   }
 
+  default_kani_strategy();
   if (incompatible_flags(cmdline))
     return 1;
 
@@ -475,12 +692,17 @@ int esbmc_parseoptionst::doit()
   //
   // The parallel driver has no termination interpretation, so --termination
   // takes priority: fall through to the sequential strategy instead (#6031).
-  if (cmdline.isset("k-induction-parallel") && !cmdline.isset("termination"))
+  // --report-property-class falls through to be refused before any fork.
+  const bool fork_parallel = cmdline.isset("k-induction-parallel") &&
+                             !cmdline.isset("termination") &&
+                             !cmdline.isset("report-property-class");
+  if (fork_parallel)
     return doit_k_induction_parallel();
 
   // Parse ESBMC options (CMD + set internal options)
   optionst options;
   get_command_line_options(options);
+  remove_stale_lean_output(cmdline, options);
 
   // for solidity: detect .sol files in positional args or via --sol
   {
@@ -523,13 +745,11 @@ int esbmc_parseoptionst::doit()
         cmdline.isset("neurosym") || cmdline.isset("default-solver");
       if (!user_picked_solver && !incremental_mode)
       {
-        const std::string padded =
-          std::string(" ") + ESBMC_AVAILABLE_SOLVERS + " ";
         const char *preferred[] = {"bitwuzla", "cvc5", "boolector", "z3"};
         const char *chosen = nullptr;
         for (const char *name : preferred)
         {
-          if (padded.find(std::string(" ") + name + " ") != std::string::npos)
+          if (solver_built_in(name))
           {
             chosen = name;
             break;
@@ -580,7 +800,7 @@ int esbmc_parseoptionst::doit()
     return 1;
 
   // Leave without doing any Bounded Model Checking
-  if (options.get_bool_option("skip-bmc"))
+  if (answered_without_bmc(options))
     return 0;
 
   // A violation found under a bounded schedule space is genuine whichever

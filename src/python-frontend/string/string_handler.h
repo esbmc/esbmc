@@ -99,6 +99,14 @@ public:
   /// ASCII value this is also ascii().
   exprt build_repr(const exprt &value, const locationt &location);
 
+  /// Copy a string array into a fresh temporary and return the temporary.
+  /// Symex bounds a string model's loops only over a named object: a
+  /// literal's address does not constant-propagate into the callee (#7559).
+  exprt bind_string_to_tmp(
+    const exprt &str,
+    const std::string &name,
+    const locationt &location);
+
   /// The rendered text of one f-string replacement field.
   exprt format_fstring_part(const nlohmann::json &value);
 
@@ -313,6 +321,33 @@ public:
     const exprt &receiver,
     const std::string &method,
     const nlohmann::json &call_json);
+
+  /**
+   * @brief The str a tagged argument of str method `method` holds, after
+   * raising TypeError on the paths where it holds another type. Any other
+   * argument is returned unchanged.
+   */
+  exprt read_tagged_str_argument(
+    const exprt &argument,
+    const std::string &method,
+    const locationt &location);
+
+  /// @p receiver, held in a temporary when it is not a symbol, so that it can
+  /// be read more than once; @p refusal stops the conversion where it cannot.
+  exprt held_tagged_receiver(
+    const exprt &receiver,
+    const nlohmann::json &call_json,
+    const std::string &refusal);
+
+  /// The char pointer of the str @p tagged holds, behind a guard raising
+  /// @p exception with @p message where it holds another type. @p refusal
+  /// stops the conversion where no guard can be planted.
+  exprt read_tagged_str(
+    const exprt &tagged,
+    const std::string &exception,
+    const std::string &message,
+    const std::string &refusal,
+    const locationt &location);
 
   /**
    * @brief Try fast-path folding for len() when argument is string-like.
@@ -993,6 +1028,9 @@ private:
   exprt try_len_fast_path_from_name_arg(const nlohmann::json &arg_json);
   bool is_single_binding(const std::string &var_name);
   exprt recorded_length(const nlohmann::json &arg_json, const exprt &arg_expr);
+  exprt type_or_parameter_length(
+    const nlohmann::json &call_json,
+    const exprt &arg_expr);
 
   /**
    * @brief Convert float bits to string representation

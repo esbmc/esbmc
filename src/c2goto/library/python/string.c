@@ -144,6 +144,21 @@ __ESBMC_HIDE:;
   return 1;
 }
 
+// Python len() of a str - its code points, which are the UTF-8 bytes that are
+// not continuation bytes (0b10xxxxxx).
+size_t __python_str_codepoint_len(const char *s)
+{
+__ESBMC_HIDE:;
+  size_t len = 0;
+  while (*s)
+  {
+    if (((unsigned char)*s & 0xC0) != 0x80)
+      len++;
+    s++;
+  }
+  return len;
+}
+
 // Python string isalnum - true iff the string is non-empty and every
 // character is a letter (ASCII A-Z / a-z) or a digit (0-9). Matches
 // Python's CPython behaviour on the ASCII subset; broader Unicode
@@ -1180,6 +1195,7 @@ __ESBMC_HIDE:;
   list->type = NULL;
   list->is_tuple = false;
   list->may_nest = &__ESBMC_list_nest_no;
+  list->slot = NULL;
   list->items = items;
   list->size = count;
   return list;
@@ -1832,6 +1848,32 @@ __ESBMC_HIDE:;
   return buffer;
 }
 
+// Write digits[0, n) to dst in reverse and return n. n <= cap, and the
+// concrete cap bounds the loop when n is symbolic.
+static size_t
+__python_emit_reversed(char *dst, const char *digits, size_t n, size_t cap)
+{
+__ESBMC_HIDE:;
+  for (size_t i = 0; i < cap && i < n; ++i)
+    dst[i] = digits[n - 1 - i];
+  return n;
+}
+
+// Write the decimal digits of mag to dst and return their count. A 64-bit
+// value has at most 20, so the loop is bounded for a symbolic mag.
+static size_t __python_emit_decimal(char *dst, unsigned long long mag)
+{
+__ESBMC_HIDE:;
+  char digits[20];
+  size_t n = 0;
+  do
+  {
+    digits[n++] = (char)('0' + mag % 10);
+    mag /= 10;
+  } while (n < 20 && mag > 0);
+  return __python_emit_reversed(dst, digits, n, sizeof digits);
+}
+
 // Python int -> str. Matches str(int) for any 64-bit signed integer:
 // decimal digits, leading '-' for negatives, NUL-terminated.
 // Buffer fits the widest case: "-9223372036854775808" + NUL = 21 bytes.
@@ -1852,21 +1894,11 @@ __ESBMC_HIDE:;
   unsigned long long mag =
     negative ? -(unsigned long long)v : (unsigned long long)v;
 
-  // Write digits right-to-left into a 20-byte scratch (max 20 decimal digits).
-  char digits[20];
-  size_t n = 0;
-  while (mag > 0)
-  {
-    digits[n++] = (char)('0' + (mag % 10));
-    mag /= 10;
-  }
-
   size_t pos = 0;
   if (negative)
     buffer[pos++] = '-';
 
-  while (n > 0)
-    buffer[pos++] = digits[--n];
+  pos += __python_emit_decimal(buffer + pos, mag);
 
   buffer[pos] = '\0';
   return buffer;
@@ -1890,9 +1922,9 @@ __ESBMC_HIDE:;
   if (mag == 0)
     digits[n++] = '0';
   else
-    while (mag != 0)
+    for (; n < 64 && mag != 0; ++n)
     {
-      digits[n++] = (char)('0' + (mag & 1U));
+      digits[n] = (char)('0' + (mag & 1U));
       mag >>= 1U;
     }
 
@@ -1902,8 +1934,7 @@ __ESBMC_HIDE:;
   buffer[pos++] = '0';
   buffer[pos++] = 'b';
 
-  while (n > 0)
-    buffer[pos++] = digits[--n];
+  pos += __python_emit_reversed(buffer + pos, digits, n, sizeof digits);
 
   buffer[pos] = '\0';
   return buffer;
@@ -1925,10 +1956,10 @@ __ESBMC_HIDE:;
   if (mag == 0)
     digits[n++] = '0';
   else
-    while (mag != 0)
+    for (; n < 16 && mag != 0; ++n)
     {
       unsigned d = (unsigned)(mag & 0xFU);
-      digits[n++] = (char)(d < 10 ? '0' + d : 'a' + (d - 10));
+      digits[n] = (char)(d < 10 ? '0' + d : 'a' + (d - 10));
       mag >>= 4U;
     }
 
@@ -1938,8 +1969,7 @@ __ESBMC_HIDE:;
   buffer[pos++] = '0';
   buffer[pos++] = 'x';
 
-  while (n > 0)
-    buffer[pos++] = digits[--n];
+  pos += __python_emit_reversed(buffer + pos, digits, n, sizeof digits);
 
   buffer[pos] = '\0';
   return buffer;
@@ -1961,9 +1991,9 @@ __ESBMC_HIDE:;
   if (mag == 0)
     digits[n++] = '0';
   else
-    while (mag != 0)
+    for (; n < 22 && mag != 0; ++n)
     {
-      digits[n++] = (char)('0' + (unsigned)(mag & 7U));
+      digits[n] = (char)('0' + (unsigned)(mag & 7U));
       mag >>= 3U;
     }
 
@@ -1973,8 +2003,7 @@ __ESBMC_HIDE:;
   buffer[pos++] = '0';
   buffer[pos++] = 'o';
 
-  while (n > 0)
-    buffer[pos++] = digits[--n];
+  pos += __python_emit_reversed(buffer + pos, digits, n, sizeof digits);
 
   buffer[pos] = '\0';
   return buffer;
@@ -2063,27 +2092,18 @@ __ESBMC_HIDE:;
   else
     goto unrendered;
 
-  char digits[20];
-  size_t n = 0;
-  do
-  {
-    digits[n++] = (char)('0' + ip % 10);
-    ip /= 10;
-  } while (ip > 0);
-  while (n > 0)
-    buffer[pos++] = digits[--n];
+  pos += __python_emit_decimal(buffer + pos, ip);
 
   buffer[pos++] = '.';
   if (frac_digits == 0)
     buffer[pos++] = '0';
   else
   {
-    unsigned long long scale = 100000;
-    while (frac_digits > 0)
+    for (unsigned long long scale = 100000; scale > 0 && frac_digits > 0;
+         scale /= 10)
     {
       buffer[pos++] = (char)('0' + frac_digits / scale);
       frac_digits %= scale;
-      scale /= 10;
     }
   }
   buffer[pos] = '\0';
@@ -2148,15 +2168,7 @@ __ESBMC_HIDE:;
   unsigned long long ip = d / scale;
   unsigned long long frac = d % scale;
 
-  char digits[20];
-  size_t n = 0;
-  do
-  {
-    digits[n++] = (char)('0' + ip % 10);
-    ip /= 10;
-  } while (ip > 0);
-  while (n > 0)
-    buffer[pos++] = digits[--n];
+  pos += __python_emit_decimal(buffer + pos, ip);
 
   if (prec > 0)
   {

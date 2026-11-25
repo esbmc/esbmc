@@ -1,0 +1,5 @@
+CORE
+main.c
+--field-sensitive-ssa --incremental-bmc
+^Field-sensitive SSA splits 2 struct object\(s\)$
+^VERIFICATION SUCCESSFUL$

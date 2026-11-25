@@ -1,0 +1,5 @@
+CORE
+main.c
+--goto2lean --unsigned-overflow-check
+^  \(\(c ≠ 0#32\) → ¬\(\(BitVec\.uaddOverflow a b\) = true\)\) ∧ \($
+^  let r := \(if \(c != 0#32\) then \(a \+ b\) else \(0#32\)\);$

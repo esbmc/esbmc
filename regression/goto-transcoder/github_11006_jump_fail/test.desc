@@ -1,0 +1,5 @@
+CORE
+main.goto
+--binary --loop-invariant --unwind 8
+^VERIFICATION FAILED$
+^  FAILED       \[main.assertion.1\]  line 14  loop invariant base case$

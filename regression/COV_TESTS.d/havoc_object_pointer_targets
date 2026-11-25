@@ -1,2 +1,3 @@
 regression/esbmc/havoc_object_pointer_targets
 regression/esbmc/havoc_object_pointer_targets_fail
+regression/esbmc/havoc_object_string_literal_fail

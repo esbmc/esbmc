@@ -61,8 +61,15 @@ def OrderedDict(*args, **kwargs) -> dict:
 class Counter:
     """Simplified Counter model: maps (int, int) keys to integer counts."""
 
-    def __init__(self) -> None:
-        """Initialize an empty counter with no recorded keys."""
+    def __init__(self, iterable: list = None) -> None:
+        """Initialize an empty counter with no recorded keys.
+
+        Counting the elements of an iterable or mapping is not modelled, so a
+        call with a non-empty one is refused rather than starting empty
+        (#10879). An empty one gives an empty counter.
+        """
+        __ESBMC_assert(iterable is None or len(iterable) == 0,
+                       "Counter with a non-empty argument is not modelled")
         self.data: dict[tuple[int, int], int]
         self.data = {}
         self.count: int = 0
@@ -82,9 +89,55 @@ class Counter:
             self.count = self.count + 1
         self.data[key] = value
 
+    # The frontend is monomorphic, so a str or int key gets its own copy of
+    # __getitem__ / __setitem__; python_converter::keyed_dunder_name picks it
+    # from the key's type at the subscript (#10501).
+    def __getitem_str__(self, key: str) -> int:
+        """``__getitem__`` for a str key."""
+        try:
+            return self.data[key]
+        except KeyError:
+            return 0
+
+    def __setitem_str__(self, key: str, value: int) -> None:
+        """``__setitem__`` for a str key."""
+        try:
+            self.data[key]
+        except KeyError:
+            self.count = self.count + 1
+        self.data[key] = value
+
+    def __getitem_int__(self, key: int) -> int:
+        """``__getitem__`` for an int key."""
+        try:
+            return self.data[key]
+        except KeyError:
+            return 0
+
+    def __setitem_int__(self, key: int, value: int) -> None:
+        """``__setitem__`` for an int key."""
+        try:
+            self.data[key]
+        except KeyError:
+            self.count = self.count + 1
+        self.data[key] = value
+
     def values(self) -> list[int]:
         """Return all recorded counts."""
         return self.data.values()
+
+    def update(self, iterable: list[tuple[int, int]] = None) -> None:
+        """Counter.update with no argument leaves the counts unchanged.
+
+        Adding counts from an iterable or mapping is not modelled. Keyword
+        arguments are refused at conversion.
+        """
+        __ESBMC_assert(iterable is None, "Counter.update with an argument is not modelled")
+
+    def clear(self) -> None:
+        """Remove every recorded key."""
+        self.data = {}
+        self.count = 0
 
     def __bool__(self) -> bool:
         """Return True iff at least one key has been recorded."""

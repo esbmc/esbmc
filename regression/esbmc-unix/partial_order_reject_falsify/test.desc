@@ -1,0 +1,5 @@
+CORE
+main.c
+--partial-order --falsify-context-bound 2
+^ERROR: --falsify-context-bound cannot be combined with --partial-order$
+\A(?![\s\S]*VERIFICATION)[\s\S]*\Z

@@ -447,6 +447,13 @@ public:
     return type.cpp_type() == "numpy_numeric";
   }
 
+  /// A declared fixed-width unsigned type (uint64, Gwei, ...), which wraps
+  /// rather than reading as a Python int.
+  static bool is_fixed_width_unsigned(const typet &type)
+  {
+    return type.cpp_type() == "fixed_width_unsigned";
+  }
+
   /// A scalar a NumPy operation reads at its dtype: a tagged integer, or a
   /// float narrower than a Python float.
   static bool is_numpy_scalar_type(const typet &type)

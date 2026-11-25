@@ -1,0 +1,5 @@
+CORE
+main.c
+--multi-property
+^\s*PASSED\s+\[main\.null-pointer-dereference\.1\]
+^VERIFICATION SUCCESSFUL$

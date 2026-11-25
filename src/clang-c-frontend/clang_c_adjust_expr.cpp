@@ -17,6 +17,7 @@
 #include <util/base/prefix.h>
 #include <util/irep/std_code.h>
 #include <util/expr/type_byte_size.h>
+#include <irep2/irep2_expr.h>
 #include <unordered_set>
 
 clang_c_adjust::clang_c_adjust(contextt &_context)
@@ -880,6 +881,21 @@ bool clang_c_adjust::lower_complex_binary_arithmetic(exprt &expr)
   return true;
 }
 
+/// C23 6.3.1.1p2: the integer promotions do not apply to a bit-precise
+/// integer, so an operation clang typed as _BitInt(N) on _BitInt(N) operands
+/// runs at N bits. Promoting it to int moves the boundary --overflow-check
+/// tests (#7363).
+static bool is_bit_precise_operation(
+  const typet &type,
+  const exprt &op0,
+  const exprt &op1,
+  const namespacet &ns)
+{
+  const typet &t = ns.follow(type);
+  return (t.is_signedbv() || t.is_unsignedbv()) && t.get_bool("#extint") &&
+         ns.follow(op0.type()) == t && ns.follow(op1.type()) == t;
+}
+
 void clang_c_adjust::adjust_expr_binary_arithmetic(exprt &expr)
 {
   adjust_operands(expr);
@@ -893,7 +909,8 @@ void clang_c_adjust::adjust_expr_binary_arithmetic(exprt &expr)
   const typet o_type0 = ns.follow(op0.type());
   const typet o_type1 = ns.follow(op1.type());
 
-  gen_typecast_arithmetic(ns, op0, op1);
+  if (!is_bit_precise_operation(expr.type(), op0, op1, ns))
+    gen_typecast_arithmetic(ns, op0, op1);
 
   const typet &type0 = op0.type();
   const typet &type1 = op1.type();
@@ -1204,6 +1221,24 @@ void clang_c_adjust::adjust_dereference(exprt &deref)
   }
 }
 
+// Byte size of a VLA type, built from its size expressions as written:
+// c_sizeof goes through migrate_type, which simplifies them, so `0 & n / 0`
+// folds to 0 and `0 * n++` loses its side effect before goto_check and
+// goto_convert ever see them (C17 6.5.3.4p2 evaluates them; #10786).
+static exprt vla_sizeof(const typet &type, const namespacet &ns)
+{
+  const typet &t = ns.follow(type);
+  if (!t.is_array())
+    return c_sizeof(t, ns);
+
+  exprt n = to_array_type(t).size();
+  if (n.type() != size_type())
+    n = typecast_exprt(n, size_type());
+  exprt size = mult_exprt(n, vla_sizeof(t.subtype(), ns));
+  size.type() = size_type();
+  return size;
+}
+
 void clang_c_adjust::adjust_sizeof(exprt &expr)
 {
   // op0 is a type_exprt carrying the measured type T; op1, when present, is
@@ -1222,7 +1257,7 @@ void clang_c_adjust::adjust_sizeof(exprt &expr)
 
   if (expr.operands().size() == 1)
   {
-    exprt value = c_sizeof(measured, ns);
+    exprt value = vla_sizeof(measured, ns);
     if (value.is_nil())
     {
       log_error("type has no size, {}", measured.name());
@@ -1396,7 +1431,10 @@ void clang_c_adjust::adjust_side_effect_assignment(exprt &expr)
     }
   }
 
-  gen_typecast_arithmetic(ns, op0, op1);
+  const typet &computation_type =
+    static_cast<const typet &>(expr.find("computation_type"));
+  if (!is_bit_precise_operation(computation_type, op0, op1, ns))
+    gen_typecast_arithmetic(ns, op0, op1);
   promote_to_computation_type(expr, ns);
 }
 
@@ -1573,6 +1611,11 @@ static const char *float_lowering_id(
   const irep_idt &identifier,
   const side_effect_expr_function_callt &expr)
 {
+  // The fixedbv model build has no floatbv operands to give these nodes; its
+  // calls keep the C bodies, as a program's fixedbv calls do (#10774).
+  if (config.ansi_c.use_fixed_for_float)
+    return nullptr;
+
   /* c2goto compiles the models with this same binary, and libm/remainder.c's
    * own call is what puts ieee_rem into the model. The shape test would strip
    * it there, so only a program's call is checked -- which is where a

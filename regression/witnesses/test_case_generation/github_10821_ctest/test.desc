@@ -1,0 +1,5 @@
+CORE
+main.c
+--generate-ctest-testcase
+^VERIFICATION FAILED$
+CHECK_FILE esbmc-ctest/test_case.c contains static unsigned char const v\[\] = \{ 5, 6, 7 \};

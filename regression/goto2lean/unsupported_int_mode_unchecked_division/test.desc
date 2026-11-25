@@ -1,0 +1,4 @@
+CORE
+main.c
+--goto2lean --ir --no-div-by-zero-check
+^ERROR: goto2lean: unsupported division by a variable under --ir with --no-div-by-zero-check

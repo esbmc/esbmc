@@ -9,6 +9,7 @@
 #include <solvers/smt/smt_result.h>
 #include <solvers/smtlib/smtlib_conv.h>
 #include <solvers/solve.h>
+#include <algorithm>
 #include <cctype>
 #include <charconv>
 #include <clang-c-frontend/clang_c_language.h>
@@ -28,10 +29,12 @@
 #include <goto-programs/goto_convert_functions.h>
 #include <goto-programs/goto_inline.h>
 #include <goto-programs/goto_k_induction.h>
+#include <goto-programs/scalarize_structs.h>
 #include <goto-programs/goto_termination.h>
 #include <esbmc/ranking_synthesis.h>
 #include <esbmc/non_termination.h>
 #include <goto-programs/goto_loop_simplify.h>
+#include <goto-programs/goto_array_loop_summary.h>
 #include <goto-programs/goto_invariant_synthesis.h>
 #include <goto-programs/goto_loop_invariant.h>
 #include <goto-programs/abstract-interpretation/interval_analysis.h>
@@ -44,6 +47,7 @@
 #include <goto-programs/remove_unreachable.h>
 #include <goto-programs/remove_library_assertions.h>
 #include <goto-programs/remove_exceptions.h>
+#include <goto-programs/python_exception_reachability.h>
 #include <goto-programs/lower_longjmp.h>
 #include <goto-programs/set_claims.h>
 #include <goto-programs/show_claims.h>
@@ -213,12 +217,40 @@ static void apply_gcse(
 //
 // \param options - various options used by the processing methods,
 // \param goto_functions - reference to the GOTO program to be processed.
+// TS extraction reads the havoc as the loop-head state, so it needs every loop
+// entered; its fallback runs no inductive step (#10201).
+static contextt *loop_entry_flags(bool ts_strategy, contextt &context)
+{
+  return ts_strategy ? nullptr : &context;
+}
+
 // Exceptions whose escape is not reported as a failed property.
 static std::set<irep_idt> unreported_exceptions(const optionst &options)
 {
   if (options.get_bool_option("python-ignore-assertions"))
     return {"AssertionError"};
   return {};
+}
+
+// The uninitialised-variable check would read the summary lambda's unwritten
+// elements, C has no lambda for --goto2c to print, and loop invariants are
+// about the loop the summary removes. A generated test replays the nondet
+// calls the trace records, and the summary removes the ones inside the loop
+// (#10821).
+static bool array_loop_summary_disabled(const cmdlinet &cmdline)
+{
+  for (const char *opt :
+       {"no-summarize-array-loops",
+        "uninitialised-vars-check",
+        "goto2c",
+        "loop-invariant",
+        "loop-invariant-check",
+        "generate-testcase",
+        "generate-ctest-testcase",
+        "generate-pytest-testcase"})
+    if (cmdline.isset(opt))
+      return true;
+  return false;
 }
 
 static void configure_branch_instrumentation(
@@ -288,6 +320,91 @@ static void use_fp2bv_for_unsupported_formats(
   options.set_option("fp2bv", true);
 }
 
+// The early answer skips symex and the verdict path, so it must not run when an
+// option adds claims in symex or asks for output from them (#10252).
+static bool early_answer_allowed(
+  const optionst &options,
+  const cmdlinet &cmdline,
+  bool checks_past_violation)
+{
+  static const char *const bypassed[] = {
+    "termination",
+    "enable-unreachability-intrinsic",
+    "memory-leak-check",
+    "ltl",
+    "witness-output",
+    "witness-output-graphml",
+    "witness-output-yaml",
+    "proof-cache",
+    "smt-formula-only",
+    "smt-formula-too",
+    "smt-model",
+    "show-vcc",
+    "symex-ssa-trace",
+    "ssa-trace",
+    "ssa-symbol-table",
+    "show-symex-value-sets",
+    "program-too",
+    "check-vacuity",
+    "memstats",
+    "cov-report-json",
+    "schedule",
+    "ts-bmc",
+    "ts-pdr",
+    "abort-on-recursion",
+    "check-guard-subsumption",
+    "deadlock-check",
+    "printf-check"};
+  // The stack limits default to -1, so their values say whether they are on.
+  return !python_checked_exceptions(options).empty() &&
+         !checks_past_violation && !options.get_bool_option("termination") &&
+         atol(options.get_option("stack-limit").c_str()) <= 0 &&
+         atol(options.get_option("total-stack-limit").c_str()) <= 0 &&
+         std::none_of(std::begin(bypassed), std::end(bypassed), [&](auto name) {
+           return cmdline.isset(name);
+         });
+}
+
+static void record_early_answer(
+  optionst &options,
+  const cmdlinet &cmdline,
+  const goto_functionst &goto_functions,
+  const contextt &context,
+  bool checks_past_violation)
+{
+  if (early_answer_allowed(options, cmdline, checks_past_violation))
+    options.set_option(
+      "python-no-checked-exception",
+      no_reachable_property(
+        goto_functions,
+        context,
+        options.get_bool_option("no-unwinding-assertions")));
+}
+
+static bool
+should_check_after_violation(const optionst &options, bool is_coverage)
+{
+  return options.get_bool_option("multi-property") || is_coverage ||
+         options.get_bool_option("validate-violation-witness");
+}
+
+// Under --termination, goto_termination does its own havoc, so
+// goto_k_induction must not also run (#6031). Witness validation forces the
+// k-induction option, so under --incremental-bmc the strategy runs an
+// inductive step that needs the havoc too (#10640).
+static bool needs_k_induction_havoc(
+  const cmdlinet &cmdline,
+  const optionst &options,
+  bool ts_strategy)
+{
+  if (options.get_bool_option("termination"))
+    return false;
+  return cmdline.isset("inductive-step") || cmdline.isset("k-induction") ||
+         cmdline.isset("k-induction-parallel") || ts_strategy ||
+         (cmdline.isset("validate-correctness-witness") &&
+          options.get_bool_option("incremental-bmc"));
+}
+
 bool esbmc_parseoptionst::process_goto_program(
   optionst &options,
   goto_functionst &goto_functions)
@@ -326,8 +443,9 @@ bool esbmc_parseoptionst::process_goto_program(
 
     // Claims after a violation are still checked, so no pass may treat a
     // failed assertion as the end of its path (#7900).
+    // Witness validation filters non-target claims during symbolic execution.
     const bool checks_past_violation =
-      options.get_bool_option("multi-property") || is_coverage;
+      should_check_after_violation(options, is_coverage);
 
     // For coverage mode, treat extra input files (cmdline.args[1:]) as include
     // files so that the coverage location_pool covers all input sources.
@@ -405,6 +523,18 @@ bool esbmc_parseoptionst::process_goto_program(
       cmdline.isset("condition-coverage-claims-rm"))
       remove_unreachable(goto_functions, checks_past_violation);
 
+    // Before --goto-unwind unrolls the loops, interval analysis and
+    // k-induction see them, and goto_check instruments the iteration the
+    // summary keeps. Coverage is about the loop the summary removes.
+    if (
+      !is_coverage && !array_loop_summary_disabled(cmdline) &&
+      goto_array_loop_summary(
+        goto_functions,
+        context,
+        options,
+        cmdline.isset("summarize-array-loops")))
+      options.set_option("array-loops-summarised", true);
+
     // Apply all the initialized algorithms
     for (auto &algorithm : goto_preprocess_algorithms)
     {
@@ -438,6 +568,8 @@ bool esbmc_parseoptionst::process_goto_program(
       unreported_exceptions(options),
       python_checked_exceptions(options));
 
+    scalarize_structs(goto_functions, context, options);
+
     // do partial inlining
     if (!cmdline.isset("no-inlining"))
     {
@@ -450,12 +582,8 @@ bool esbmc_parseoptionst::process_goto_program(
     if (cmdline.isset("gcse"))
       apply_gcse(goto_functions, context, cmdline);
 
-    // Under --termination, goto_termination does its own havoc, so
-    // goto_k_induction must not also run (#6031).
     bool is_k_induction =
-      (cmdline.isset("inductive-step") || cmdline.isset("k-induction") ||
-       cmdline.isset("k-induction-parallel") || ts_strategy_requested()) &&
-      !options.get_bool_option("termination");
+      needs_k_induction_havoc(cmdline, options, ts_strategy_requested());
 
     // --termination reuses k-induction's havoc machinery via
     // goto_termination, so the post-havoc invariant injection applies
@@ -489,7 +617,7 @@ bool esbmc_parseoptionst::process_goto_program(
     {
       log_status("Enable correctness witness validation 2.0");
       remove_no_op(goto_functions);
-      goto_loop_invariant_combined(goto_functions);
+      goto_loop_invariant_combined(goto_functions, context);
     }
 
     // goto_k_induction returns true, and logs why, when the inductive step
@@ -506,9 +634,9 @@ bool esbmc_parseoptionst::process_goto_program(
       // Combined mode: Branch 1 (invariant inductivity check) +
       // ASSUME(INV) injected at end of loop body + k-induction (Branch 2).
       remove_no_op(goto_functions);
-      goto_loop_invariant_combined(goto_functions);
+      goto_loop_invariant_combined(goto_functions, context);
       disable_is_if_unsound(
-        goto_k_induction(goto_functions, ns, checks_past_violation));
+        goto_k_induction(goto_functions, &context, checks_past_violation));
     }
     else
     {
@@ -521,8 +649,10 @@ bool esbmc_parseoptionst::process_goto_program(
       {
         reachable_state_invariants =
           assume_reachable_loop_states(goto_functions, ns, 10000);
-        disable_is_if_unsound(
-          goto_k_induction(goto_functions, ns, checks_past_violation));
+        disable_is_if_unsound(goto_k_induction(
+          goto_functions,
+          loop_entry_flags(ts_strategy_requested(), context),
+          checks_past_violation));
       }
 
       if (wants_loop_invariants())
@@ -573,11 +703,20 @@ bool esbmc_parseoptionst::process_goto_program(
                               .is_true();
       options.set_option("termination-ranking-proved", ranking_proved);
 
+      // A copy taken before the havoc, which runs the loops as written.
+      if (
+        !ranking_proved && !non_term_proved && !spawns_threads(goto_functions))
+      {
+        recurrent_state_program = goto_functions;
+        recurrent_state_loops =
+          goto_recurrent_state(recurrent_state_program, context);
+      }
+
       // Only run the marker/havoc transform when the ranking check did
       // NOT settle it — otherwise the verdict loop short-circuits on the
       // ranking flag and the havoc'd markers would just be dead work.
       if (!ranking_proved)
-        goto_termination(goto_functions, options, ns);
+        goto_termination(goto_functions, context, options, ns);
     }
 
     if (
@@ -929,6 +1068,9 @@ bool esbmc_parseoptionst::process_goto_program(
       goto_coveraget tmp(ns, goto_functions, filename);
       tmp.negating_asserts(tgt_fname);
     }
+
+    record_early_answer(
+      options, cmdline, goto_functions, context, checks_past_violation);
   }
 
   catch (const char *e)

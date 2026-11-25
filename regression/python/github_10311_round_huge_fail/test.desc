@@ -1,0 +1,5 @@
+CORE
+main.py
+
+^\s+assertion a == -2147483648$
+^VERIFICATION FAILED$

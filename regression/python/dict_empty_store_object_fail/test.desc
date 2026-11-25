@@ -1,0 +1,5 @@
+KNOWNBUG
+main.py
+
+^VERIFICATION FAILED$
+file .*main\.py line 8 column 0\b

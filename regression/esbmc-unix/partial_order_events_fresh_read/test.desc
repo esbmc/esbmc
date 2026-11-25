@@ -1,0 +1,7 @@
+CORE
+main.c
+--partial-order --program-only --no-slice
+^SHARED_READ c:@x&0#3\n\n.*\n/\* \d+ \*/ l\S* == x&0#3$
+^SHARED_READ c:@x&0#4\n\n.*\n/\* \d+ \*/ m\S* == x&0#4$
+\A(?![\s\S]*SHARED_\w+ c:@[lm])[\s\S]*\Z
+\A(?![\s\S]*VERIFICATION)[\s\S]*\Z

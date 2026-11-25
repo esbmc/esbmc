@@ -144,6 +144,9 @@ public:
   /// The earlier of two racing accesses; written beside the last waypoint
   /// in a final segment of two targets, as a no-data-race witness requires.
   std::optional<waypoint> racing_target;
+  /// Whether the waypoints carry thread IDs, registered by function_enter
+  /// waypoints on the thread-creating calls.
+  bool thread_ids = false;
   std::vector<invariant> invariants;
 
   yamlt(typet t)
@@ -193,9 +196,15 @@ void create_correctness_yaml_emitter(
 void create_violation_yaml_emitter(
   std::string &verifiedfile,
   optionst &options,
-  YAML::Emitter &root);
+  YAML::Emitter &root,
+  const std::string &format_version);
 
-void create_waypoint(const waypoint &wp, YAML::Emitter &waypoint);
+/// @p any_thread writes `thread_id: any`, which format 2.4 allows only on a
+/// target waypoint.
+void create_waypoint(
+  const waypoint &wp,
+  YAML::Emitter &waypoint,
+  bool any_thread = false);
 void create_invariant(const invariant &inv, YAML::Emitter &out);
 
 /**
@@ -242,6 +251,11 @@ bool is_valid_witness_expr(
 /// function_return waypoint sits on it (#9881).
 std::optional<locationt> nondet_call_rparen(const locationt &call);
 
+/// The ')' closing the call whose callee name starts at @p call, read from
+/// the source; nullopt when the text there is not such a call. A YAML
+/// function_enter waypoint sits on it.
+std::optional<locationt> call_rparen(const locationt &call);
+
 BigInt get_line_number(
   const std::string &verified_file,
   BigInt relative_line_number,
@@ -287,6 +301,13 @@ std::vector<collected_nondet_value> collect_nondet_values(
   const symex_target_equationt &target,
   smt_convt &smt_conv,
   bool harness_inputs_only = false);
+
+/// The inputs --all-witnesses blocks, in call order: collect_nondet_values
+/// plus every nondet an on-trace assume or assert outside library sources
+/// reads directly.
+std::vector<collected_nondet_value> collect_enumeration_inputs(
+  const symex_target_equationt &target,
+  smt_convt &smt_conv);
 
 /// Build a blocking clause that excludes the given input tuple from future
 /// solver queries: NOT (sym_1 == val_1 AND sym_2 == val_2 AND ...).

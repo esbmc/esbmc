@@ -1,0 +1,5 @@
+CORE
+main.py
+
+^  FAILED .*line 12  uncaught exception: TypeError$
+^VERIFICATION FAILED$

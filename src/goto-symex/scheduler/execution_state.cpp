@@ -1,12 +1,15 @@
+#include <goto-programs/partial_order_scope.h>
 #include <goto-symex/scheduler/execution_state.h>
 #include <goto-symex/scheduler/reachability_tree.h>
 #include <goto-symex/symex_invariant.h>
 #include <langapi/language_ui.h>
 #include <langapi/languages.h>
 #include <langapi/mode.h>
+#include <functional>
 #include <sstream>
 #include <string>
 #include <util/base/breakpoint.h>
+#include <util/base/filesystem.h>
 #include <util/lang/c_types.h>
 #include <util/config/config.h>
 #include <util/expr/expr_util.h>
@@ -41,12 +44,15 @@ execution_statet::execution_statet(
   mon_from_tid = false;
   monitor_from_tid = 0;
   guard_execution = guard_execution_name;
+  if (options.get_bool_option("schedule"))
+    interleaving_guard = get_guard_identifier();
   interleaving_unviable = false;
   main_returned = false;
   symex_trace = options.get_bool_option("symex-trace");
   smt_during_symex = options.get_bool_option("smt-during-symex");
   smt_thread_guard = options.get_bool_option("smt-thread-guard");
   no_propagation = options.get_bool_option("no-propagation");
+  partial_order = options.get_bool_option("partial-order");
 
   goto_functionst::function_mapt::const_iterator it =
     goto_functions.function_map.find("__ESBMC_main");
@@ -59,7 +65,8 @@ execution_statet::execution_statet(
   const goto_programt *goto_program = &(it->second.body);
 
   // Initialize initial thread state
-  goto_symex_statet state(*state_level2, global_value_set, ns, no_propagation);
+  goto_symex_statet state(
+    *state_level2, global_value_set, ns, no_propagation, art->split_structs);
   state.initialize(
     (*goto_program).instructions.begin(),
     (*goto_program).instructions.end(),
@@ -76,7 +83,12 @@ execution_statet::execution_statet(
       {
         state.witness_segs.resize(wps.back().segment_idx + 1);
         for (const auto &wp : wps)
+        {
           state.witness_segs[wp.segment_idx].push_back(wp);
+          auto &segments = state.witness_locations[{wp.type, wp.line_id}];
+          if (segments.empty() || segments.back() != wp.segment_idx)
+            segments.push_back(wp.segment_idx);
+        }
       }
     }
   }
@@ -108,6 +120,10 @@ execution_statet::execution_statet(
   nondet_count = 0;
 
   thread_cswitch_threshold = (options.get_bool_option("ltl")) ? 3 : 2;
+  // Ordinary SSA storage lets replay progress follow deferred-path merges.
+  if (validate_witness)
+    witness_cursor = materialise_old_snapshot(
+      constant_int2tc(get_uint64_type(), 0), guard2tc());
 }
 
 execution_statet::execution_statet(const execution_statet &ex)
@@ -150,6 +166,7 @@ void execution_statet::copy_derived_from(const execution_statet &ex)
   guard_execution = ex.guard_execution;
   nondet_count = ex.nondet_count;
   node_id = ex.node_id;
+  interleaving_guard = ex.interleaving_guard;
   interleaving_unviable = ex.interleaving_unviable;
   main_returned = ex.main_returned;
 
@@ -162,6 +179,7 @@ void execution_statet::copy_derived_from(const execution_statet &ex)
   smt_during_symex = ex.smt_during_symex;
   smt_thread_guard = ex.smt_thread_guard;
   no_propagation = ex.no_propagation;
+  partial_order = ex.partial_order;
 
   CS_number = ex.CS_number;
 
@@ -299,7 +317,10 @@ void execution_statet::symex_end_function(
     // detect terminating paths. The assume(false) here would kill
     // the path before reaching that marker; the assertion would
     // never become a VCC.
-    assume(gen_false_expr());
+    // Under --partial-order the spawned threads run after main in the
+    // equation, so an assume(false) here would make their claims vacuous.
+    if (!partial_order)
+      assume(gen_false_expr());
     end_thread();
     interleaving_unviable = true;
   }
@@ -361,18 +382,25 @@ void execution_statet::symex_step(reachability_treet &art)
   if (break_insn != 0 && break_insn == instruction.location_number)
     breakpoint();
 
+  record_shared_reads(instruction);
+
   switch (instruction.type)
   {
   case END_FUNCTION:
     symex_end_function(art, instruction);
     break;
   case ATOMIC_BEGIN:
+    record_atomic_event(symex_targett::ATOMIC_BEGIN, instruction);
     state.source.pc++;
     increment_active_atomic_number();
     break;
   case ATOMIC_END:
     decrement_active_atomic_number();
+    record_atomic_event(symex_targett::ATOMIC_END, instruction);
     state.source.pc++;
+    break;
+  case FUNCTION_CALL:
+    symex_call(art, instruction);
     break;
   case RETURN:
     if (
@@ -408,15 +436,21 @@ void execution_statet::symex_assign(
   const bool hidden,
   const guard2tc &guard)
 {
+  if (partial_order && partial_order_update(code, hidden, guard))
+    return;
+
   goto_symext::symex_assign(code, hidden, guard);
 
-  if (threads_state.size() >= thread_cswitch_threshold)
+  if (partial_order || threads_state.size() >= thread_cswitch_threshold)
     analyze_assign(code);
 }
 
-void execution_statet::claim(const expr2tc &expr, const std::string &msg)
+void execution_statet::claim(
+  const expr2tc &expr,
+  const std::string &msg,
+  bool user_assertion)
 {
-  goto_symext::claim(expr, msg);
+  goto_symext::claim(expr, msg, user_assertion);
 
   if (threads_state.size() >= thread_cswitch_threshold)
     analyze_read(expr);
@@ -530,14 +564,6 @@ expr2tc execution_statet::get_guard_identifier()
 
 void execution_statet::switch_to_thread(unsigned int i)
 {
-  // A violation sequence orders waypoints along the interleaved execution,
-  // so the next thread resumes matching where this one stopped.
-  const goto_symex_statet &from = threads_state[active_thread];
-  goto_symex_statet &to = threads_state[i];
-  to.cur_seg = from.cur_seg;
-  to.witness_guard = from.witness_guard;
-  to.cycle_branch_map = from.cycle_branch_map;
-
   last_active_thread = active_thread;
   active_thread = i;
   cur_state = &threads_state[active_thread];
@@ -821,6 +847,9 @@ void execution_statet::execute_guard()
   node_id = node_count++;
   expr2tc guard_expr = get_guard_identifier();
   expr2tc parent_guard;
+  const expr2tc parent_node = interleaving_guard;
+  if (parent_node)
+    interleaving_guard = guard_expr;
 
   // Preserve the existing false-guard handling for context switches taken
   // immediately after a branch, but keep the branch parent state explicit.
@@ -850,7 +879,17 @@ void execution_statet::execute_guard()
   if (is_false(parent_guard) || is_cur_state_guard_false(parent_guard))
   {
     // A context switch happens, add last thread state guard to assumption.
-    if (active_thread != last_active_thread)
+    // Under --schedule the node is made unselectable instead.
+    if (parent_node)
+    {
+      if (active_thread != last_active_thread)
+        target->assumption(
+          guard2tc().as_expr(),
+          not2tc(interleaving_guard),
+          get_active_state().source,
+          first_loop);
+    }
+    else if (active_thread != last_active_thread)
     {
       target->assumption(
         guard2tc().as_expr(),
@@ -869,6 +908,17 @@ void execution_statet::execute_guard()
   state_level2->rename(parent_guard);
   do_simplify(parent_guard);
 
+  if (parent_node)
+  {
+    // A selected node selects its parent, and implies the path to its switch.
+    target->assumption(
+      guard2tc().as_expr(),
+      implies2tc(interleaving_guard, parent_node),
+      get_active_state().source,
+      first_loop);
+    parent_guard = implies2tc(interleaving_guard, parent_guard);
+  }
+
   if (active_thread != last_active_thread)
     target->assumption(
       guard2tc().as_expr(),
@@ -877,10 +927,16 @@ void execution_statet::execute_guard()
       first_loop);
 }
 
+void execution_statet::guard_by_interleaving(expr2tc &expr) const
+{
+  if (interleaving_guard)
+    expr = implies2tc(interleaving_guard, expr);
+}
+
 unsigned int execution_statet::add_thread(const goto_programt *prog)
 {
   goto_symex_statet new_state(
-    *state_level2, global_value_set, ns, no_propagation);
+    *state_level2, global_value_set, ns, no_propagation, art1->split_structs);
   new_state.initialize(
     prog->instructions.begin(),
     prog->instructions.end(),
@@ -893,6 +949,7 @@ unsigned int execution_statet::add_thread(const goto_programt *prog)
   new_state.global_guard.make_true();
   new_state.global_guard.add(get_guard_identifier());
   new_state.witness_segs = cur_state->witness_segs;
+  new_state.witness_locations = cur_state->witness_locations;
   threads_state.push_back(new_state);
   if (threads_state.size() > art1->reduction_stats.peak_threads)
     art1->reduction_stats.peak_threads = threads_state.size();
@@ -931,6 +988,12 @@ unsigned int execution_statet::add_thread(const goto_programt *prog)
 
 void execution_statet::analyze_assign(const expr2tc &code)
 {
+  if (partial_order)
+  {
+    record_shared_write(code);
+    return;
+  }
+
   if (is_nil_expr(code) || get_active_state().guard.is_false())
     return;
 
@@ -963,6 +1026,304 @@ void execution_statet::analyze_read(const expr2tc &code)
     thread_last_reads[active_thread].insert(
       global_reads.begin(), global_reads.end());
   }
+}
+
+namespace
+{
+bool is_partial_order_event_symbol(const expr2tc &e, const namespacet &ns)
+{
+  return is_symbol2t(e) && is_partial_order_type(e->type) &&
+         is_partial_order_global(ns, to_symbol2t(e).thename);
+}
+
+/// The array an assignment to \p lhs writes an element of, or nil.
+expr2tc assigned_array(const expr2tc &lhs)
+{
+  if (!is_index2t(lhs))
+    return expr2tc();
+  expr2tc root = lhs;
+  while (is_index2t(root))
+    root = to_index2t(root).source_value;
+  return is_symbol2t(root) ? root : expr2tc();
+}
+
+/// The pointer an assignment to \p lhs writes through, or nil.
+expr2tc assigned_pointer(expr2tc lhs)
+{
+  while (is_index2t(lhs))
+    lhs = to_index2t(lhs).source_value;
+  return is_dereference2t(lhs) ? to_dereference2t(lhs).value : expr2tc();
+}
+
+/// The shared globals \p instruction reads by name, at L0, and the pointers
+/// it reads through.
+void partial_order_reads(
+  const goto_programt::instructiont &instruction,
+  const namespacet &ns,
+  std::set<expr2tc> &reads,
+  std::vector<expr2tc> &pointers)
+{
+  std::function<void(const expr2tc &)> walk, walk_lvalue;
+  walk = [&](const expr2tc &e) {
+    if (is_nil_expr(e))
+      return;
+    if (is_address_of2t(e))
+      return walk_lvalue(to_address_of2t(e).ptr_obj);
+    if (is_dereference2t(e))
+      pointers.push_back(to_dereference2t(e).value);
+    if (is_partial_order_event_symbol(e, ns))
+      reads.insert(e);
+    e->foreach_operand(walk);
+  };
+  // What locating an lvalue reads, but not the object it names.
+  walk_lvalue = [&](const expr2tc &e) {
+    if (is_index2t(e))
+    {
+      walk(to_index2t(e).index);
+      walk_lvalue(to_index2t(e).source_value);
+    }
+    else if (is_dereference2t(e))
+      walk(to_dereference2t(e).value);
+    else if (!is_symbol2t(e))
+      walk(e);
+  };
+
+  switch (instruction.type)
+  {
+  case ASSIGN:
+  {
+    const code_assign2t &assign = to_code_assign2t(instruction.code);
+    walk(assign.source);
+    walk_lvalue(assign.target);
+    break;
+  }
+  case FUNCTION_CALL:
+    for (const expr2tc &arg :
+         to_code_function_call2t(instruction.code).operands)
+      walk(arg);
+    break;
+  case GOTO:
+  case ASSERT:
+  case ASSUME:
+    walk(instruction.guard);
+    break;
+  case RETURN:
+  case OTHER:
+    walk(instruction.code);
+    break;
+  default:
+    break;
+  }
+}
+} // namespace
+
+void execution_statet::record_shared_reads(
+  const goto_programt::instructiont &instruction)
+{
+  if (!partial_order || cur_state->guard.is_false())
+    return;
+
+  std::set<expr2tc> reads;
+  std::vector<expr2tc> pointers;
+  partial_order_reads(instruction, ns, reads, pointers);
+  for (const expr2tc &ptr : pointers)
+  {
+    const std::set<expr2tc> pointees = shared_pointees(ptr);
+    reads.insert(pointees.begin(), pointees.end());
+  }
+
+  for (const expr2tc &sym : reads)
+    target->event(
+      cur_state->guard.as_expr(),
+      symex_targett::SHARED_READ,
+      fresh_shared_value(sym),
+      cur_state->source);
+}
+
+std::set<expr2tc> execution_statet::shared_pointees(const expr2tc &ptr)
+{
+  std::set<expr2tc> pointees;
+  expr2tc tmp = ptr;
+  if (!is_pointer_type(tmp->type))
+    return pointees;
+  // The value set is keyed by L1 names.
+  cur_state->top().level1.rename(tmp);
+  value_setst::valuest dest;
+  cur_state->value_set.get_reference_set(
+    dereference2tc(to_pointer_type(tmp->type).subtype, tmp), dest);
+
+  for (const expr2tc &obj : dest)
+  {
+    if (!is_object_descriptor2t(obj))
+      continue;
+    expr2tc root = to_object_descriptor2t(obj).object;
+    while (is_index2t(root))
+      root = to_index2t(root).source_value;
+    if (!is_symbol2t(root))
+      continue;
+    const expr2tc sym = symbol2tc(root->type, to_symbol2t(root).thename);
+    if (is_partial_order_event_symbol(sym, ns))
+      pointees.insert(sym);
+  }
+  return pointees;
+}
+
+expr2tc execution_statet::fresh_shared_value(expr2tc sym)
+{
+  cur_state->top().level1.rename(sym);
+  cur_state->level2.retire(renaming::level2t::name_record(to_symbol2t(sym)));
+  cur_state->level2.get_ident_name(sym);
+  return sym;
+}
+
+bool execution_statet::partial_order_update(
+  const expr2tc &code,
+  const bool hidden,
+  const guard2tc &guard)
+{
+  const code_assign2t &assign = to_code_assign2t(code);
+  std::set<expr2tc> written;
+  const expr2tc array = assigned_array(assign.target);
+  if (!is_nil_expr(array) && is_partial_order_event_symbol(array, ns))
+    written.insert(array);
+  const expr2tc pointer = assigned_pointer(assign.target);
+  if (!is_nil_expr(pointer))
+    written = shared_pointees(pointer);
+  if (written.empty())
+    return false;
+
+  // Evaluate the value, the indices and the pointer first: what they read of
+  // a written object was recorded as a separate read, which another thread's
+  // write may follow before the update.
+  expr2tc lhs = assign.target;
+  std::function<void(expr2tc &)> snapshot_operands = [&](expr2tc &e) {
+    if (is_index2t(e))
+    {
+      index2t &index = to_index2t(e);
+      snapshot_operands(index.source_value);
+      if (!is_constant_int2t(index.index))
+        index.index = materialise_old_snapshot(index.index, guard);
+    }
+    else if (is_dereference2t(e) && !is_symbol2t(to_dereference2t(e).value))
+      to_dereference2t(e).value =
+        materialise_old_snapshot(to_dereference2t(e).value, guard);
+  };
+  snapshot_operands(lhs);
+  const expr2tc value = materialise_old_snapshot(assign.source, guard);
+
+  // A write through a pointer to one of several objects leaves the others
+  // with their old value, so it updates each of them.
+  std::vector<std::pair<expr2tc, expr2tc>> updates;
+  if (!cur_state->guard.is_false())
+    for (const expr2tc &sym : written)
+      updates.emplace_back(sym, fresh_shared_value(sym));
+  goto_symext::symex_assign(code_assign2tc(lhs, value), hidden, guard);
+  for (auto &[sym, old] : updates)
+  {
+    cur_state->top().level1.rename(sym);
+    cur_state->level2.get_ident_name(sym);
+    target->event(
+      cur_state->guard.as_expr(),
+      symex_targett::SHARED_WRITE,
+      sym,
+      cur_state->source,
+      old);
+  }
+  return true;
+}
+
+void execution_statet::record_shared_write(const expr2tc &code)
+{
+  if (is_nil_expr(code) || cur_state->guard.is_false())
+    return;
+
+  expr2tc sym = to_code_assign2t(code).target;
+  if (!is_symbol2t(sym))
+    return;
+  cur_state->get_original_name(sym);
+  if (!is_partial_order_event_symbol(sym, ns))
+    return;
+
+  cur_state->top().level1.rename(sym);
+  cur_state->level2.get_ident_name(sym);
+  target->event(
+    cur_state->guard.as_expr(),
+    symex_targett::SHARED_WRITE,
+    sym,
+    cur_state->source);
+}
+
+void execution_statet::record_thread_event(
+  symex_targett::step_typet type,
+  unsigned int tid)
+{
+  if (!partial_order || cur_state->guard.is_false())
+    return;
+  target->event(
+    cur_state->guard.as_expr(),
+    type,
+    constant_int2tc(get_uint32_type(), BigInt(tid)),
+    cur_state->source);
+}
+
+void execution_statet::record_atomic_event(
+  symex_targett::step_typet type,
+  const goto_programt::instructiont &instruction)
+{
+  // The operational model's own atomic sections guard its bookkeeping, which
+  // --partial-order renames sequentially rather than as events.
+  if (
+    !partial_order || cur_state->guard.is_false() ||
+    file_operations::is_bundled_source(
+      instruction.location.get_file().as_string()))
+    return;
+  target->event(cur_state->guard.as_expr(), type, expr2tc(), cur_state->source);
+}
+
+void execution_statet::symex_call(
+  reachability_treet &art,
+  const goto_programt::instructiont &instruction)
+{
+  if (!partial_order_join(instruction))
+    goto_symext::symex_step(art);
+}
+
+bool execution_statet::partial_order_join(
+  const goto_programt::instructiont &instruction)
+{
+  const code_function_call2t &call = to_code_function_call2t(instruction.code);
+  if (
+    !partial_order || !is_symbol2t(call.function) ||
+    !to_symbol2t(call.function)
+       .thename.as_string()
+       .starts_with("c:@F@pthread_join"))
+    return false;
+
+  if (!cur_state->guard.is_false())
+  {
+    expr2tc tid = call.operands.at(0);
+    cur_state->rename(tid);
+    simplify(tid);
+    if (!is_constant_int2t(tid))
+    {
+      log_error(
+        "--partial-order needs the thread a join waits for to be known "
+        "during symbolic execution, at {}",
+        instruction.location.as_string());
+      abort();
+    }
+    record_thread_event(
+      symex_targett::JOIN, to_constant_int2t(tid).value.to_uint64());
+
+    if (!is_nil_expr(call.ret))
+    {
+      expr2tc ret = call.ret;
+      dereference(ret, dereferencet::WRITE);
+      symex_assign(code_assign2tc(ret, gen_zero(ret->type)), true, guard2tc());
+    }
+  }
+  cur_state->source.pc++;
+  return true;
 }
 
 void execution_statet::analyze_args(const expr2tc &expr)
@@ -1739,14 +2100,15 @@ std::shared_ptr<execution_statet> schedule_execution_statet::clone() const
 
 void schedule_execution_statet::claim(
   const expr2tc &expr,
-  const std::string &msg)
+  const std::string &msg,
+  bool user_assertion)
 {
   unsigned int tmp_total, tmp_remaining, tmp_simplified;
 
   tmp_total = total_claims;
   tmp_remaining = remaining_claims;
   tmp_simplified = simplified_claims;
-  execution_statet::claim(expr, msg);
+  execution_statet::claim(expr, msg, user_assertion);
 
   tmp_total = total_claims - tmp_total;
   tmp_remaining = remaining_claims - tmp_remaining;

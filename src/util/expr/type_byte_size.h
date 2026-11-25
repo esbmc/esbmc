@@ -25,12 +25,15 @@ BigInt member_offset(
  * value_sett::get_reference_set_rec does. They live here so the two directions
  * share a file and the conventions they must agree on -- padding as explicit
  * members, unions overlaid at zero, ns.follow before measuring -- are held in
- * one place rather than by comment (esbmc/esbmc#6981, R31/R32). */
+ * one place rather than by comment (esbmc/esbmc#6981, R31/R32). With
+ * @p any_pointer, a pointer `target` also matches a pointer of another pointee
+ * type, which holds the same address. */
 std::vector<std::string> member_paths_at_offset(
   const type2tc &type,
   const BigInt &offset,
   const type2tc &target,
-  const namespacet &ns);
+  const namespacet &ns,
+  bool any_pointer = false);
 
 /* As above, but for a descriptor carrying no constant offset: no single path is
  * selected, so every path of the right type is possible. No size is consulted,

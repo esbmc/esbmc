@@ -29,7 +29,7 @@ The output is written to `docs/html`; open `docs/html/index.html`.
 
 {{< tab name="Via CMake" >}}
 ```sh
-cmake -Bbuild -S. -DBUILD_DOC=On
+cmake -GNinja -Bbuild -S. -DBUILD_DOC=On
 ninja -C build docs
 ```
 This runs the same `.config/Doxyfile` configuration and writes to `docs/html`.

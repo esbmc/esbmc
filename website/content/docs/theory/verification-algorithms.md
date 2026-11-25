@@ -128,7 +128,7 @@ ESBMC recovers the lost precision without giving up soundness. The key
 observation is that any *sound over-approximation* of the states reachable at the
 loop head may be re-asserted as an inductive hypothesis immediately after the
 havoc: doing so can only prune spurious havoc-induced states, never a real
-inductive counterexample [6]. ESBMC supplies two such hypotheses:
+inductive counterexample [6]. ESBMC supplies three such hypotheses:
 
 - **Numeric bounds.** After the havoc is in place, the
   [interval analysis](/docs/theory/interval-analysis) is recomputed on the
@@ -140,8 +140,17 @@ inductive counterexample [6]. ESBMC supplies two such hypotheses:
   of candidate objects the analysis already proved it may reference, recovering
   enough shape information to discharge traversal-style loops over linked
   structures.
+- **Reachable states of an input loop.** For a `while (1)` loop in `main` that
+  reads an input from a finite set of valid values and passes it to an update
+  function over scalar globals, ESBMC runs the loop from the initial state on
+  concrete values for every valid input and collects every global state the
+  loop head can see. The disjunction of those states is assumed after the
+  havoc, and it is also written as the `loop_invariant` of the correctness
+  witness. ESBMC skips the loop when it finds more than 10,000 states, a global
+  with more than 256 values, or code it does not model, and logs
+  `assuming its N reachable states in the inductive step` when it applies.
 
-Both hypotheses are tagged so that **only the inductive step sees them** — the
+All three hypotheses are tagged so that **only the inductive step sees them**: the
 base case and forward condition are untouched, so bug-finding and the bounded
 proof are unaffected. Each hypothesis is applied only where it provably
 over-approximates the reachable loop-head states; where that cannot be

@@ -1,0 +1,4 @@
+CORE
+main.c
+--goto2lean
+^ERROR: goto2lean: unsupported global variable c:@g at .*main\.c:1$

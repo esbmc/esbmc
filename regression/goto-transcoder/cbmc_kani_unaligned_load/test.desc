@@ -1,0 +1,4 @@
+CORE
+cbmc_kani_unaligned_load.goto
+--binary --function _RNvCs7dDnheNfSQo_14unaligned_load7harness --ignore-property-class reachability_check --ignore-property-class cover
+^VERIFICATION SUCCESSFUL$

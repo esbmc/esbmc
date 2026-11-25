@@ -1,0 +1,4 @@
+CORE
+main.py
+
+^ERROR: Cannot unpack non-tuple element into nested target$

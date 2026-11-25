@@ -127,7 +127,7 @@ int main(void)
   int i;
   for (i = 0; i < 4; i++)
   {
-    *p = i;
+    *p = *p + i;
     p = (p == &a) ? &b : &a;
   }
   return 0;

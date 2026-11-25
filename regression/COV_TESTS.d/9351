@@ -1,0 +1,3 @@
+regression/esbmc/github_9351_bitint_memset
+regression/esbmc/github_9351_bitint_stride
+regression/esbmc/github_9351_bitint_stride_fail

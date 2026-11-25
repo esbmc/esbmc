@@ -2,4 +2,5 @@ CORE
 main.py
 --incremental-bmc
 ^VERIFICATION FAILED$
-^  assertion .*: relation$
+^  FAILED +\[global\.assertion\.1\] +line 6 +assertion 
+< 1e-09: relation$

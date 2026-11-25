@@ -1,0 +1,11 @@
+CORE
+cbmc_kani_report_property_class.goto
+--binary --function _RNvCs6vF97k9nHeS_6report7harness --report-property-class reachability_check --report-property-class cover
+^  SATISFIED      \[harness.cover.1\]
+^  UNSATISFIABLE  \[harness.cover.2\]
+^  UNSATISFIABLE  \[harness.cover.3\] .*zero > 1$
+^  UNREACHABLE    \[harness.reachability_check.4\] .*report_3$
+^  UNREACHABLE    \[harness.reachability_check.5\] .*report_4 \(never reached\)$
+^\*\* 10 reported: 5 REACHABLE, 1 SATISFIED, 2 UNREACHABLE, 2 UNSATISFIABLE$
+^\*\* 0 of 3 properties failed, 3 passed$
+^VERIFICATION SUCCESSFUL$

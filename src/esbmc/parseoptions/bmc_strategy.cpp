@@ -683,30 +683,29 @@ int esbmc_parseoptionst::do_bmc_strategy(
         return 0;
       }
 
+      // The verdict of a check that found a loop running forever.
+      auto non_terminating =
+        [&](const std::string &comment, const std::optional<locationt> &loop) {
+          const namespacet ns(context);
+          report_non_termination_cwe(
+            options, ns, goto_functions, comment, loop, terminating_loops);
+          const std::string cwes = format_cwe_list(cwe_for(comment));
+          std::string msg = "\n" + comment + "\n";
+          if (!cwes.empty())
+            msg += "CWE: " + cwes + "\n";
+          msg += "VERIFICATION FAILED";
+          log_fail("{}", msg);
+          return 1;
+        };
+
       // A recurrent-set non-termination check found an inductive R such
       // that every reachable state under R has an input continuation
       // staying in R and avoiding all exits (Gupta et al., POPL 2008).
       // The loop is non-terminating; report FAILED without unwinding.
       if (options.get_bool_option("termination-non-termination-proved"))
-      {
-        const std::string comment =
-          "Recurrent set shows a non-terminating execution";
-        const namespacet ns(context);
-        report_non_termination_cwe(
-          options,
-          ns,
-          goto_functions,
-          comment,
-          non_termination_loop,
-          terminating_loops);
-        const std::string cwes = format_cwe_list(cwe_for(comment));
-        std::string msg = "\n" + comment + "\n";
-        if (!cwes.empty())
-          msg += "CWE: " + cwes + "\n";
-        msg += "VERIFICATION FAILED";
-        log_fail("{}", msg);
-        return 1;
-      }
+        return non_terminating(
+          "Recurrent set shows a non-terminating execution",
+          non_termination_loop);
 
       // Skip IS for k = 1 (degenerates to a base-case check).
       if (
@@ -718,6 +717,13 @@ int esbmc_parseoptionst::do_bmc_strategy(
           k_step);
         return 0;
       }
+
+      if (const auto loop = find_recurrent_state(options, k_step))
+        return non_terminating(
+          fmt::format(
+            "Recurrent state shows a non-terminating execution (k = {})",
+            k_step),
+          loop);
 
       // IS UNSAT is only sound when k-induction actually havoc'd every
       // loop the property depends on. goto_k_induction skips a loop
@@ -959,6 +965,7 @@ int esbmc_parseoptionst::falsify_with_bounded_schedules(
         "inductive-step",
         "multi-property",
         "incremental-context-bound",
+        "partial-order",
         "show-vcc",
         "smt-formula-only",
         "smt-formula-too"})

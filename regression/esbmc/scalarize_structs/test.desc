@@ -1,0 +1,5 @@
+CORE
+main.c
+--scalarize-structs --unwind 4 --no-unwinding-assertions
+^Scalarized [0-9]+ struct variable\(s\)$
+^VERIFICATION SUCCESSFUL$

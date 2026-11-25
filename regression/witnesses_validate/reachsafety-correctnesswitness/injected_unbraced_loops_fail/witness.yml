@@ -1,0 +1,20 @@
+- entry_type: invariant_set
+  metadata:
+    format_version: "2.0"
+  content:
+  - invariant:
+      type: loop_invariant
+      location:
+        file_name: main.c
+        line: 5
+        function: main
+      value: "1"
+      format: c_expression
+  - invariant:
+      type: loop_invariant
+      location:
+        file_name: main.c
+        line: 6
+        function: main
+      value: "1"
+      format: c_expression

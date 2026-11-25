@@ -91,6 +91,7 @@
  */
 
 // Forward dec.
+class array_convt;
 class fp_convt;
 class ir_ieee_convt;
 class smt_solver_baset;
@@ -232,6 +233,7 @@ public:
    *  frame per level and overflow the stack. The operand walk inside this
    *  body therefore hits the cache instead of recursing. */
   smt_astt convert_ast_node(const expr2tc &expr);
+  smt_astt convert_bitnot(smt_astt a);
 
   /** Convert one of the two-operand IEEE arithmetic nodes (add/sub/mul/div/
    *  rem), which share an operand layout and differ only in the solver call
@@ -300,6 +302,8 @@ public:
   /** Solve with each boolean ast in @p assumptions held true for this query
    *  only. Backends without support abort; check supports_assumptions(). */
   virtual smt_resultt dec_solve_assuming(const ast_vec &assumptions);
+  /** After an UNSAT dec_solve_assuming: whether @p a was needed. */
+  virtual bool is_unsat_assumption(smt_astt a);
   virtual bool supports_assumptions() const
   {
     return false;
@@ -467,6 +471,8 @@ public:
     smt_astt left_ast,
     smt_astt right_ast,
     const expr2tc &expr);
+
+  smt_astt convert_extract(const extract2t &ex);
 
   /** Create an integer or SBV/UBV sort */
   smt_sortt mk_int_bv_sort(std::size_t width)
@@ -707,6 +713,11 @@ public:
    *  @return Boolean valued AST representing whether an overflow occurs. */
   virtual smt_astt overflow_arith(const expr2tc &expr);
 
+  /** Bit-vector overflow of @p value << @p amount, encoded at the width of
+   *  @p value (#9223).
+   *  @return Boolean valued AST, true when a significant bit is shifted out. */
+  smt_astt overflow_shl_bv(const expr2tc &value, const expr2tc &amount);
+
   /** Detect integer overflows in a cast. Takes a typecast2tc as an argument,
    *  and if it causes a decrease in integer width, then encodes a test that
    *  the dropped bits are never significant / used.
@@ -801,6 +812,8 @@ public:
    *  the appropriate method in the subclassing solver converter for the
    * terminal conversion */
   smt_astt convert_terminal(const expr2tc &expr);
+  /** Constrain a nondet float symbol under --ir to values a float can hold. */
+  void assert_nondet_float_representable(smt_astt sym_ast, const type2tc &type);
 
   /** Flatten pointer arithmetic. When faced with an addition or subtraction
    *  between a pointer and some integer or other pointer, perform whatever
@@ -825,6 +838,17 @@ public:
     const expr2tc &expr,
     const expr2tc &expr2,
     const expr2tc &templ_expr);
+
+  /** Pointer equality: equal (object, offset), or, for a pointer made from an
+   *  integer outside every object, the same address (#10905). */
+  smt_astt convert_ptr_eq(const expr2tc &side1, const expr2tc &side2);
+  /** Equality of two converted operands, by pointer, floating-point or bit
+   *  pattern as their types require. */
+  smt_astt convert_eq(
+    const expr2tc &side1,
+    const expr2tc &side2,
+    smt_astt a1,
+    smt_astt a2);
   /** Take the address of some kind of expression. This will abort if the given
    *  expression isn't based on some symbol in some way. (i.e., you can't take
    *  the address of an addition, but you can take the address of a member of
@@ -911,8 +935,11 @@ public:
    *  apply. */
   smt_astt convert_pointer_bitcast(const expr2tc &from, const type2tc &to_type);
   smt_astt convert_bitcast_to_fp(const expr2tc &from, const type2tc &to_type);
+  smt_astt convert_fp_to_bits(const expr2tc &from);
   smt_astt
   convert_bitcast_to_struct(const expr2tc &from, const type2tc &to_type);
+  smt_astt
+  convert_int_mode_bitcast_to_bv(const expr2tc &from, const type2tc &to_type);
   /** Flatten a pointer to the machine representation a bitcast reinterprets,
    *  and rebuild it from one; see the comment on the definitions in
    *  smt_bitcast.cpp. */
@@ -949,14 +976,39 @@ public:
   void set_array_iface(array_iface *iface);
   /** Stores handle for the floating-point interface. */
   void set_fp_conv(fp_convt *iface);
+  /** As above, for an interface built for this solver, which it then owns. */
+  void set_tuple_iface(std::unique_ptr<tuple_iface> iface);
+  void set_array_iface(std::unique_ptr<array_convt> iface);
+  void set_fp_conv(std::unique_ptr<fp_convt> iface);
   /** Stores handle for the real-arithmetic/enclosure interface. */
   void set_ra_conv(ra_apit *iface);
 
   void bump_addrspace_array(unsigned int idx, const expr2tc &val);
-  /** Get the symbol name for the current address-allocation record array. */
-  std::string get_cur_addrspace_ident();
-  /** The address-space version every other one is stored over. */
-  expr2tc base_addrspace_array() const;
+  /** The current version of the address-allocation record arrays. */
+  unsigned int cur_addrspace() const;
+  /** The start (@p member 0) or end (1) address of object @p obj in
+   *  address-space version @p version. */
+  expr2tc
+  addrspace_read(unsigned int version, unsigned int member, const expr2tc &obj);
+  /** A store bump_addrspace_array() made: the version it defines, the slot,
+   *  its range, the context level it was made at, and the one its equations
+   *  were asserted at, if they have been. */
+  struct addrspace_storet
+  {
+    unsigned int version;
+    unsigned int idx;
+    expr2tc range;
+    unsigned int level;
+    std::optional<unsigned int> asserted_at;
+  };
+  /** The stores, asserted only once a version they define is read, so a
+   *  formula that never reads an address keeps no arrays (#9785). */
+  std::vector<addrspace_storet> addrspace_stores;
+  void assert_addrspace_stores(unsigned int version);
+  bool native_addrspace() const;
+  /** init_addr_space_array() starts the version count here; every other
+   *  version is stored over it. */
+  static constexpr unsigned int base_addrspace = 1;
   void tie_base_addrspace(unsigned int idx, const expr2tc &val);
   /** Gives the base version every object's range, now and on registration,
    *  for convert_typecast_to_ptr(), the only reader of a slot before it is
@@ -977,12 +1029,53 @@ public:
   std::vector<int_to_ptr_objectt> int_to_ptr_objects;
   void close_int_to_ptr_objects();
 
+  /** A pointer (in)equality convert_ptr_eq() made, whose address clause
+   *  close_ptr_eq_sites() defines once every int-to-pointer object is known. */
+  struct ptr_eq_sitet
+  {
+    smt_astt by_address;
+    expr2tc side1;
+    expr2tc side2;
+    unsigned int level;
+    std::optional<unsigned int> closed_at;
+  };
+  std::vector<ptr_eq_sitet> ptr_eq_sites;
+  void close_ptr_eq_sites();
+
   /** Operand pairs of every division seen by note_division_operands. */
   std::set<std::pair<expr2tc, expr2tc>> divided_operand_pairs;
-  /** Create and assert address space constraints on the given object ID
-   *  number. Essentially, this asserts that all the objects to date don't
-   *  overlap with /this/ one. */
-  void finalize_pointer_chain(unsigned int obj_num);
+  /** Assert that object @p obj_num overlaps none of the lower-numbered
+   *  objects. A freeable one among @p registered is kept apart only while
+   *  @p valid_objects, the `__ESBMC_alloc` version @p obj_num was registered
+   *  under, holds it alive. */
+  void finalize_pointer_chain(
+    unsigned int obj_num,
+    const expr2tc &valid_objects,
+    const std::unordered_set<unsigned int> &registered);
+
+  /** A registered object, the `__ESBMC_alloc` version it was registered
+   *  under, the context level it was registered at, the one its layout was
+   *  asserted at, if it has been, and an address below which it and every
+   *  object registered before it fit side by side. */
+  struct object_layoutt
+  {
+    unsigned int obj;
+    expr2tc valid_objects;
+    unsigned int level;
+    std::optional<unsigned int> laid_out_at;
+    BigInt extent;
+  };
+  /** Only a cast between a pointer and an integer reads an address, so the
+   *  quadratic non-overlap constraints wait for the first one (#9221), unless
+   *  the objects may not fit in the lower half of the address space without
+   *  them: there the constraints decide which paths are feasible. */
+  std::vector<object_layoutt> object_layouts;
+  /** The context level the layout was first needed at. */
+  std::optional<unsigned int> layout_needed_at;
+  /** Record object @p obj_num, which reserves at most @p reserved addresses,
+   *  and lay it out if the layout is needed. */
+  void register_layout(unsigned int obj_num, const BigInt &reserved);
+  void lay_out_objects();
 
   /** Typecast data to bools */
   smt_astt convert_typecast_to_bool(const typecast2t &cast);
@@ -1006,11 +1099,12 @@ public:
     bool from_byte_update);
   smt_astt address_holds(
     const expr2tc &ptr,
-    const expr2tc &addrspace,
+    unsigned int addrspace,
     const expr2tc &target,
     bool in_range);
   /** Typecast a pointer to an integer */
   smt_astt convert_typecast_from_ptr(const typecast2t &cast);
+  expr2tc static_address_of(const expr2tc &ptr);
   /** Typecast structs to other structs */
   smt_astt convert_typecast_to_struct(const typecast2t &cast);
   /** Despatch a typecast expression to a more specific typecast method */
@@ -1227,6 +1321,12 @@ public:
   /** Every flattened pointer in this context. Pruned on pop_ctx like
    *  uf_ackermann_history, whose asts have the same lifetime. */
   std::vector<ptr_flatten_entry> ptr_flatten_history;
+  /** The bit-vector each float built by a bits-to-float bitcast was made
+   *  from, with the context level it was made at. Reading the float's bits
+   *  back returns that bit-vector: SMT-LIB leaves the bits of a NaN
+   *  unspecified, so a native round trip need not be the identity (#10887).
+   *  Pruned on pop_ctx like ptr_flatten_history. */
+  std::unordered_map<smt_astt, std::pair<smt_astt, unsigned int>> fp_bits;
   /** The most flattens one rebuilt pointer is defined over; see
    *  decode_pointer_repr(). */
   static constexpr size_t max_rebuild_sources = 32;
@@ -1280,7 +1380,8 @@ public:
   /** Type of the address space allocation records. Currently a start address
    *  integer and an end address integer. */
   type2tc addr_space_type;
-  /** Type of the array of address space allocation records. */
+  /** Type of the array of address space allocation records, used where the
+   *  solver has no native arrays; see native_addrspace(). */
   type2tc addr_space_arr_type;
   /** The objects given an address so far, each mapped to whether it is a heap
    *  object that may be freed. In a list to support pushing and popping. */
@@ -1313,6 +1414,11 @@ public:
   smt_astt int_shift_op_array;
 
 private:
+  // A solver's native interface is the solver itself, so only these are freed.
+  std::unique_ptr<tuple_iface> owned_tuple_api;
+  std::unique_ptr<array_convt> owned_array_api;
+  std::unique_ptr<fp_convt> owned_fp_api;
+
   expr2tc get_by_ast_uncached(const type2tc &type, smt_astt a);
 
   double convert_rational_to_double(

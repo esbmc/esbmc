@@ -9,6 +9,7 @@
 #include <util/message/message.h>
 #include <util/irep/std_expr.h>
 #include <util/symtab/symbol.h>
+#include <algorithm>
 #include <cassert>
 #include <cstdint>
 #include <cstdlib>
@@ -345,6 +346,78 @@ static void set_object_alignment(symbolt &symbol)
   symbol.set_type(std::move(type));
 }
 
+static bool has_side_effect(const expr2tc &expr)
+{
+  if (is_sideeffect2t(expr) || is_sideeffect_assign2t(expr))
+    return true;
+  bool found = false;
+  expr->foreach_operand(
+    [&found](const expr2tc &op) { found = found || has_side_effect(op); });
+  return found;
+}
+
+// The adapter lifts a back edge's #spec_loop_invariant to "loop_invariant": a
+// clause list from goto-cc, or one boolean expression. False when a clause
+// cannot be expressed; dropping the invariant is then sound.
+static bool build_invariant_marker(
+  const irept &invariant,
+  goto_programt::instructiont &marker)
+{
+  const bool is_clause_list = invariant.find("type").is_nil();
+  for (const irept &clause :
+       is_clause_list ? invariant.get_sub() : irept::subt{invariant})
+  {
+    expr2tc clause2;
+    try
+    {
+      migrate_expr(static_cast<const exprt &>(clause), clause2);
+    }
+    catch (const std::string &e)
+    {
+      log_warning("CBMC goto-binary: ignoring a loop invariant: {}", e);
+      return false;
+    }
+    // A side effect here never reaches goto_convert's removal pass.
+    if (has_side_effect(clause2))
+    {
+      log_warning(
+        "CBMC goto-binary: ignoring a loop invariant with a side effect");
+      return false;
+    }
+    marker.add_loop_invariant(clause2);
+  }
+  return true;
+}
+
+// Place each invariant as a LOOP_INVARIANT immediately before its loop head,
+// where goto_loop_invariant looks for the marker __ESBMC_loop_invariant
+// produces. Back edges keep targeting the head; a jump into the loop from
+// before it is moved onto the marker, or it would skip the base case check.
+static void add_loop_invariants(const irept &function_irep, goto_programt &body)
+{
+  auto ins = body.instructions.begin();
+  for (const irept &ins_irep : function_irep.get_sub())
+  {
+    const irept &invariant = ins_irep.find("loop_invariant");
+    goto_programt::instructiont marker(LOOP_INVARIANT);
+    if (
+      invariant.is_not_nil() && ins->is_backwards_goto() &&
+      build_invariant_marker(invariant, marker))
+    {
+      const goto_programt::targett head = ins->targets.front();
+      marker.location = head->location;
+      marker.function = head->function;
+      const goto_programt::targett placed =
+        body.instructions.insert(head, std::move(marker));
+      for (auto &from : body.instructions)
+        if (from.location_number < head->location_number)
+          std::replace(from.targets.begin(), from.targets.end(), head, placed);
+    }
+    ++ins;
+  }
+  body.update();
+}
+
 bool read_cbmc_goto_object(
   std::istream &in,
   const std::string &filename,
@@ -414,6 +487,7 @@ bool read_cbmc_goto_object(
       goto_functions.function_map.emplace(fname, goto_functiont());
     goto_functiont &f = goto_functions.function_map.at(fname);
     convert(named.second, f.body);
+    add_loop_invariants(named.second, f.body);
     f.body_available = f.body.instructions.size() > 0;
   }
 

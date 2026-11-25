@@ -7,6 +7,7 @@
 #include <goto-symex/engine/dynamic_allocation.h>
 #include <goto-symex/scheduler/execution_state.h>
 #include <goto-symex/engine/goto_symex.h>
+#include <goto-symex/scheduler/reachability_tree.h>
 #include <goto-symex/witness/witnesses.h>
 #include <util/lang/c_types.h>
 #include <util/symtab/cprover_prefix.h>
@@ -363,6 +364,7 @@ goto_symext &goto_symext::operator=(const goto_symext &sym)
   total_stack_limit = sym.total_stack_limit;
   no_return_value_opt = sym.no_return_value_opt;
   validate_witness = sym.validate_witness;
+  witness_cursor = sym.witness_cursor;
 
   // Art ptr is shared
   art1 = sym.art1;
@@ -535,8 +537,8 @@ void goto_symext::symex_assign(
   }
 
   expr2tc original_lhs = code.target;
-  expr2tc lhs = code.target;
-  expr2tc rhs = code.source;
+  expr2tc lhs = split_rewrite(code.target);
+  expr2tc rhs = split_read(code.source, code.target);
 
   replace_nondet(lhs);
   replace_nondet(rhs);
@@ -574,7 +576,7 @@ void goto_symext::symex_assign(
   bool hidden_ssa = hidden || cur_state->top().hidden;
   if (!hidden_ssa)
   {
-    auto const maybe_symbol = get_base_object(lhs);
+    auto const maybe_symbol = assigned_object(lhs, code.target);
     if (is_symbol2t(maybe_symbol))
     {
       auto const s = to_symbol2t(maybe_symbol).thename.as_string();
@@ -584,7 +586,7 @@ void goto_symext::symex_assign(
   }
 
   guard2tc g(guard); // NOT the state guard!
-  symex_assign_rec(lhs, original_lhs, rhs, expr2tc(), g, hidden_ssa);
+  symex_assign_target(lhs, original_lhs, rhs, g, hidden_ssa);
 
   if (validate_witness && is_symbol2t(original_lhs))
   {
@@ -682,8 +684,14 @@ void goto_symext::symex_assign_symbol(
   expr2tc &rhs,
   expr2tc &full_rhs,
   guard2tc &guard,
-  const bool hidden)
+  const bool hidden,
+  const bool full_rhs_after_write)
 {
+  // Each failed dereference makes a fresh sink (make_failed_symbol), so a
+  // write to one is never read back; its validity claim is already emitted.
+  if (has_prefix(to_symbol2t(lhs).thename.as_string(), "symex::invalid_object"))
+    return;
+
   // put assignment guard in rhs
   if (!guard.is_true())
     rhs = if2tc(rhs->type, guard.as_expr(), rhs, lhs);
@@ -691,7 +699,7 @@ void goto_symext::symex_assign_symbol(
   cur_state->rename(rhs);
   do_simplify(rhs);
 
-  if (!is_nil_expr(full_rhs))
+  if (!is_nil_expr(full_rhs) && !full_rhs_after_write)
   {
     cur_state->rename(full_rhs);
     do_simplify(full_rhs);
@@ -700,6 +708,12 @@ void goto_symext::symex_assign_symbol(
   expr2tc renamed_lhs = lhs;
   cur_state->rename_type(renamed_lhs);
   cur_state->assignment(renamed_lhs, rhs);
+
+  if (!is_nil_expr(full_rhs) && full_rhs_after_write)
+  {
+    cur_state->rename(full_rhs);
+    do_simplify(full_rhs);
+  }
 
   // A guarded assignment wrapped rhs in an ite above, so only genuine
   // unconditional copies reach the copy-chain map.
@@ -756,6 +770,130 @@ void goto_symext::symex_assign_structure(
     expr2tc rhs_memb = member2tc(it, rhs, structtype.member_names[i]);
     symex_assign_rec(lhs_memb, full_lhs, rhs_memb, full_rhs, guard, hidden);
     i++;
+  }
+}
+
+const std::vector<expr2tc> *
+goto_symext::split_fields(const irep_idt &name) const
+{
+  return art1 ? art1->split_structs.all_fields(name) : nullptr;
+}
+
+expr2tc
+goto_symext::assigned_object(const expr2tc &lhs, const expr2tc &target) const
+{
+  return get_base_object(is_split_whole(target) ? target : lhs);
+}
+
+bool goto_symext::is_split_whole(const expr2tc &target) const
+{
+  return is_symbol2t(target) && split_fields(to_symbol2t(target).thename);
+}
+
+void goto_symext::symex_assign_target(
+  const expr2tc &lhs,
+  const expr2tc &original_lhs,
+  expr2tc &rhs,
+  guard2tc &guard,
+  const bool hidden)
+{
+  if (is_split_whole(original_lhs))
+    symex_assign_split(lhs, original_lhs, rhs, guard, hidden);
+  else
+    symex_assign_rec(lhs, original_lhs, rhs, expr2tc(), guard, hidden);
+}
+
+expr2tc goto_symext::split_rewrite(const expr2tc &e) const
+{
+  if (!art1 || art1->split_structs.empty())
+    return e;
+  return art1->split_structs.rewrite(e);
+}
+
+expr2tc goto_symext::split_read(const expr2tc &e, const expr2tc &dest)
+{
+  expr2tc whole = split_rewrite(e);
+  // A split destination takes the read field by field, so no literal is
+  // carried, and reading through the symbol would lose a constant sibling
+  // whenever a pointer field keeps #7597's pinned literal unpropagated.
+  if (!is_split_whole(e) || (!is_nil_expr(dest) && is_split_whole(dest)))
+    return whole;
+  cur_state->rename(whole);
+  std::vector<std::pair<expr2tc, expr2tc>> leaves;
+  split_leaves(whole, whole, leaves);
+  if (std::none_of(leaves.begin(), leaves.end(), [this](const auto &f) {
+        return is_symbol2t(f.first) && art1->split_structs.is_opaque(f.first);
+      }))
+    return split_rewrite(e);
+  guard2tc guard;
+  expr2tc no_full_rhs;
+  symex_assign_symbol(e, e, whole, no_full_rhs, guard, true);
+  return e;
+}
+
+void goto_symext::split_rewrite_operands(std::vector<expr2tc> &operands) const
+{
+  for (expr2tc &op : operands)
+    op = split_rewrite(op);
+}
+
+void goto_symext::split_leaves(
+  const expr2tc &lhs,
+  const expr2tc &rhs,
+  std::vector<std::pair<expr2tc, expr2tc>> &leaves)
+{
+  const struct_type2t &st = to_struct_type(lhs->type);
+  const std::vector<expr2tc> &fields =
+    to_constant_struct2t(lhs).datatype_members;
+  for (size_t k = 0; k < fields.size(); k++)
+  {
+    expr2tc rhs_k = is_constant_struct2t(rhs)
+                      ? to_constant_struct2t(rhs).datatype_members[k]
+                      : member2tc(st.members[k], rhs, st.member_names[k]);
+    if (is_constant_struct2t(fields[k]))
+      split_leaves(fields[k], rhs_k, leaves);
+    else
+      leaves.emplace_back(fields[k], rhs_k);
+  }
+}
+
+void goto_symext::symex_assign_split(
+  const expr2tc &lhs,
+  const expr2tc &full_lhs,
+  expr2tc &rhs,
+  guard2tc &guard,
+  const bool hidden)
+{
+  std::vector<std::pair<expr2tc, expr2tc>> leaves;
+  split_leaves(lhs, rhs, leaves);
+  const size_t last = leaves.size() - 1;
+  const bool nondet = guard.is_true() && is_symbol2t(rhs) &&
+                      has_prefix(to_symbol2t(rhs).thename, "nondet$symex::");
+  // The step that prints shows the right-hand side, as a whole write of an
+  // unsplit object does: a field's model value alone can lose a pointer's
+  // provenance. Fields of a nondet write have no right-hand side to show.
+  expr2tc printed;
+  if (!hidden && !nondet)
+  {
+    printed = if2tc(rhs->type, guard.as_expr(), rhs, lhs);
+    cur_state->rename(printed);
+    do_simplify(printed);
+  }
+  for (size_t k = 0; k <= last; k++)
+  {
+    auto &[field, rhs_k] = leaves[k];
+    // A fresh L2 name is as free as a nondet value; only a field the value
+    // set could track needs the assignment step.
+    if (nondet && k != last && split_structst::is_untracked_scalar(field->type))
+    {
+      expr2tc l1_field = field;
+      cur_state->top().level1.rename(l1_field);
+      cur_state->level2.make_assignment(l1_field, expr2tc(), expr2tc());
+      continue;
+    }
+    expr2tc full_rhs = k != last || hidden ? expr2tc() : nondet ? lhs : printed;
+    symex_assign_symbol(
+      field, full_lhs, rhs_k, full_rhs, guard, hidden || k != last, nondet);
   }
 }
 
@@ -1387,7 +1525,9 @@ void goto_symext::symex_assign_extract(
   }
 
   // OK: accuml now has a bitblob sized expression that can be assigned into
-  // the relevant field.
+  // the relevant field, which may be signed.
+  if (accuml->type != ex.from->type)
+    accuml = bitcast2tc(ex.from->type, accuml);
   symex_assign_rec(ex.from, full_lhs, accuml, full_rhs, guard, hidden);
 }
 

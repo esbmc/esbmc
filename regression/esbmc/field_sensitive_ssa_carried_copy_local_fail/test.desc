@@ -1,0 +1,6 @@
+CORE
+main.c
+--field-sensitive-ssa
+^State [0-9]+ file .*main\.c line 22 column 7 function main thread 0$
+^  g = \{ \.p=&b, \.k=0 \}$
+^VERIFICATION FAILED$

@@ -510,11 +510,43 @@ const symbolt &python_math::get_c_math_symbol_cached(
   return *symbol;
 }
 
+static bool has_side_effect(const expr2tc &e)
+{
+  bool found = is_sideeffect2t(e);
+  e->foreach_operand(
+    [&found](const expr2tc &op) { found = found || has_side_effect(op); });
+  return found;
+}
+
+/// pow(x, 0.5) as sqrt(x), which the solver decides far faster (#10552).
+/// They differ only where pow takes -0.0 to +0.0 and -inf to +inf (C11
+/// F.10.4.4), so those two inputs are guarded.
+static exprt sqrt_for_half_power(const expr2tc &x)
+{
+  const type2tc &type = x->type;
+  const expr2tc zero = gen_zero(type);
+  expr2tc inf;
+  migrate_expr(from_double(INFINITY, migrate_type_back(type)), inf);
+  const expr2tc root = ieee_sqrt2tc(
+    type, x, symbol2tc(get_int32_type(), "c:@__ESBMC_rounding_mode"));
+  return migrate_expr_back(if2tc(
+    type,
+    and2tc(isinf2tc(x), lessthan2tc(x, zero)),
+    inf,
+    if2tc(type, equality2tc(x, zero), zero, root)));
+}
+
 exprt python_math::handle_power_symbolic(exprt base, exprt exp)
 {
   // Convert arguments to double type if needed
   exprt double_base = promote_to_double_if_needed(std::move(base));
   exprt double_exp = promote_to_double_if_needed(std::move(exp));
+
+  // The guards read the base three times, so a call or nondet keeps pow().
+  expr2tc x;
+  migrate_expr(double_base, x);
+  if (try_resolve_constant_double(double_exp) == 0.5 && !has_side_effect(x))
+    return sqrt_for_half_power(x);
 
   // Create the function call.
   // Always return double result: Python power with float operands returns float
@@ -1058,6 +1090,11 @@ exprt python_math::handle_divmod(
     dividend = typecast_exprt(dividend, int_like(divisor));
   if (is_any_ptr(divisor))
     divisor = typecast_exprt(divisor, int_like(dividend));
+  // A bool operand is an int in arithmetic: divmod(7, True) == (7, 0).
+  if (dividend.type().is_bool())
+    dividend = typecast_exprt(dividend, int_like(divisor));
+  if (divisor.type().is_bool())
+    divisor = typecast_exprt(divisor, int_like(dividend));
 
   // A zero divisor raises a catchable ZeroDivisionError, as `//` and `%` do.
   if (
@@ -1329,12 +1366,7 @@ exprt python_math::handle_pow(
     return from_double(std::pow(*base_const, *exp_const), double_type());
   }
 
-  base = promote_to_double_if_needed(std::move(base));
-  exp = promote_to_double_if_needed(std::move(exp));
-
-  // Create the function call expression
-  exprt pow_call = build_c_math_call_expr(
-    get_c_math_symbol_cached("c:@F@pow", "pow"), double_type(), {base, exp});
+  exprt pow_call = handle_power_symbolic(std::move(base), std::move(exp));
   pow_call.location() = converter.get_location_from_decl(element);
 
   return pow_call;

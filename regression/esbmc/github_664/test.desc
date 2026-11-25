@@ -1,0 +1,6 @@
+CORE
+main.c
+--verbosity clang:9 --file-output out.txt
+^ESBMC version
+CHECK_FILE out.txt contains ^#include <\.\.\.> search starts here:$
+CHECK_FILE out.txt contains ^VERIFICATION SUCCESSFUL$

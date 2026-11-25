@@ -1,0 +1,5 @@
+CORE
+main.py
+--python-check-exceptions ZeroDivisionError,FloatingPointError
+^\s*FAILED\s+\[f\.assertion\.1\]\s+line 5\s+uncaught exception: ZeroDivisionError$
+^VERIFICATION FAILED$

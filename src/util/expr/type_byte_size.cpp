@@ -1,5 +1,6 @@
 #include <algorithm>
 #include <cstdlib>
+#include <unordered_map>
 #include <irep2/irep2_utils.h>
 #include <irep2/irep2_type.h>
 #include <util/arith/arith_tools.h>
@@ -17,6 +18,9 @@ namespace
 struct type_sizet
 {
   const namespacet *ns;
+  /* Set once the walk follows a symbol type through `ns`: a size computed
+   * without that is a function of the type alone and can be memoized. */
+  bool followed_symbol = false;
 
   explicit type_sizet(const namespacet *ns) : ns(ns)
   {
@@ -24,16 +28,21 @@ struct type_sizet
   type_sizet(const type_sizet &) = delete;
   type_sizet &operator=(const type_sizet &) = delete;
 
-  BigInt member_offset_bits(const type2tc &type, const irep_idt &member) const;
-  BigInt size_bits(const type2tc &type) const;
-  expr2tc size_bits_expr(const type2tc &type) const;
-  expr2tc pointer_offset_bits(const expr2tc &expr) const;
+  BigInt member_offset_bits(const type2tc &type, const irep_idt &member);
+  BigInt size_bits(const type2tc &type);
+  expr2tc size_bits_expr(const type2tc &type);
+  expr2tc pointer_offset_bits(const expr2tc &expr);
+  BigInt record_size_bits(const type2tc &type);
+  expr2tc record_size_bits_expr(const type2tc &type);
 };
+
+/* A dereference sizes the whole pointed-to object on every access, so without
+ * this a field access costs time linear in the record's width (#7521). */
+thread_local std::unordered_map<type2tc, BigInt, type2_hash> record_sizes;
 } // namespace
 
-BigInt type_sizet::member_offset_bits(
-  const type2tc &type,
-  const irep_idt &member) const
+BigInt
+type_sizet::member_offset_bits(const type2tc &type, const irep_idt &member)
 {
   BigInt result = 0;
 
@@ -95,6 +104,15 @@ aggregate_memberst aggregate_members(const type2tc &type)
  * leave them dangling at the end of the full expression. */
 aggregate_memberst aggregate_members(type2tc &&) = delete;
 
+/* With any_pointer, a pointer of another pointee type holds the same address
+ * as a pointer `target`, so it names the same object (#10889). */
+bool names_target(const type2tc &type, const type2tc &target, bool any_pointer)
+{
+  if (type == target)
+    return true;
+  return any_pointer && is_pointer_type(type) && is_pointer_type(target);
+}
+
 /* A member of no constant size ends the descent, keeping the paths already
  * found: it is the last member, since C11 6.7.2.1p18 puts a flexible array
  * member last and 6.7.2.1p9 bars a variably modified member outright, so no
@@ -106,6 +124,7 @@ void collect_paths_at_offset(
   const BigInt &offset,
   const type2tc &target,
   const namespacet &ns,
+  bool any_pointer,
   const std::string &prefix,
   std::vector<std::string> &dest)
 {
@@ -113,7 +132,7 @@ void collect_paths_at_offset(
    * or a typedef'd aggregate silently loses its path. */
   const type2tc type = ns.follow(type_in);
 
-  if (offset == 0 && type == target)
+  if (offset == 0 && names_target(type, target, any_pointer))
   {
     dest.push_back(prefix);
     return;
@@ -133,7 +152,7 @@ void collect_paths_at_offset(
     }
     if (esize > 0)
       collect_paths_at_offset(
-        subtype, offset % esize, target, ns, prefix + "[]", dest);
+        subtype, offset % esize, target, ns, any_pointer, prefix + "[]", dest);
     return;
   }
 
@@ -162,6 +181,7 @@ void collect_paths_at_offset(
         (offset_bits - start_bits) / 8,
         target,
         ns,
+        any_pointer,
         prefix + "." + agg.names[i].as_string(),
         dest);
     if (!agg.overlaid)
@@ -205,10 +225,11 @@ std::vector<std::string> member_paths_at_offset(
   const type2tc &type,
   const BigInt &offset,
   const type2tc &target,
-  const namespacet &ns)
+  const namespacet &ns,
+  bool any_pointer)
 {
   std::vector<std::string> paths;
-  collect_paths_at_offset(type, offset, target, ns, "", paths);
+  collect_paths_at_offset(type, offset, target, ns, any_pointer, "", paths);
   return paths;
 }
 
@@ -237,7 +258,24 @@ BigInt type_byte_size_default(
   }
 }
 
-BigInt type_sizet::size_bits(const type2tc &type) const
+/// A _BitInt(N) with N not a multiple of the byte width occupies the smallest
+/// power-of-two byte count holding N bits (#9351).
+static BigInt padded_bv_bits(const BigInt &bits)
+{
+  if (bits % 8 == 0)
+    return bits;
+  BigInt bytes = 1;
+  while (bits > bytes * 8)
+    bytes *= 2;
+  return bytes * 8;
+}
+
+static BigInt array_element_bits(const type2tc &sub, const BigInt &bits)
+{
+  return is_bv_type(sub) ? padded_bv_bits(bits) : bits;
+}
+
+BigInt type_sizet::size_bits(const type2tc &type)
 {
   switch (type->type_id)
   {
@@ -251,13 +289,19 @@ BigInt type_sizet::size_bits(const type2tc &type) const
 
   case type2t::symbol_id:
     if (ns)
+    {
+      followed_symbol = true;
       return size_bits(ns->follow(type));
+    }
     log_error("Symbolic type id in size_typet::size_bits\n{}", *type);
     abort();
 
   case type2t::cpp_name_id:
     if (ns)
+    {
+      followed_symbol = true;
       return size_bits(ns->follow(type));
+    }
     log_error("Symbolic C++ type id in size_typet::size_bits\n{}", *type);
     abort();
 
@@ -283,38 +327,52 @@ BigInt type_sizet::size_bits(const type2tc &type) const
     if (!is_constant_int2t(arrsize))
       throw array_type2t::dyn_sized_array_excp(arrsize);
 
-    BigInt subsize = size_bits(array_or_vector_subtype(type));
+    const type2tc &subtype = array_or_vector_subtype(type);
+    BigInt subsize = array_element_bits(subtype, size_bits(subtype));
     const constant_int2t &arrsize_int = to_constant_int2t(arrsize);
     return subsize * arrsize_int.value;
   }
 
   case type2t::struct_id:
-  {
-    // Sum the sizes of all members. Inter-member and trailing padding
-    // (for word-boundary and array-of-struct alignment; see C89 6.3.3.4) is
-    // inserted by the frontend as explicit padding members, so summing
-    // member sizes already accounts for it.
-    BigInt accumulated_size = 0;
-    for (auto const &it : to_struct_type(type).members)
-      accumulated_size += size_bits(it);
-
-    return accumulated_size;
-  }
-
   case type2t::union_id:
-  {
-    // Very simple: the largest field size, rounded up to a word boundary for
-    // array allocation alignment.
-    BigInt max_size = 0;
-    for (auto const &it : to_union_type(type).members)
-      max_size = std::max(max_size, size_bits(it));
-    return max_size;
-  }
+    return record_size_bits(type);
 
   default:
     log_error("Unrecognised type in size_typet::size_bits:\n{}", *type);
     abort();
   }
+}
+
+BigInt type_sizet::record_size_bits(const type2tc &type)
+{
+  if (auto it = record_sizes.find(type); it != record_sizes.end())
+    return it->second;
+
+  const bool followed_outer = followed_symbol;
+  followed_symbol = false;
+
+  BigInt size = 0;
+  if (is_struct_type(type))
+  {
+    // Sum the sizes of all members. Inter-member and trailing padding
+    // (for word-boundary and array-of-struct alignment; see C89 6.3.3.4) is
+    // inserted by the frontend as explicit padding members, so summing
+    // member sizes already accounts for it.
+    for (auto const &it : to_struct_type(type).members)
+      size += size_bits(it);
+  }
+  else
+  {
+    // Very simple: the largest field size, rounded up to a word boundary for
+    // array allocation alignment.
+    for (auto const &it : to_union_type(type).members)
+      size = std::max(size, size_bits(it));
+  }
+
+  if (!followed_symbol)
+    record_sizes.emplace(type, size);
+  followed_symbol |= followed_outer;
+  return size;
 }
 
 BigInt type_byte_size_bits(const type2tc &type, const namespacet *ns)
@@ -325,6 +383,8 @@ BigInt type_byte_size_bits(const type2tc &type, const namespacet *ns)
 BigInt type_byte_size(const type2tc &type, const namespacet *ns)
 {
   BigInt bits = type_byte_size_bits(type, ns);
+  if (is_bv_type(type))
+    bits = padded_bv_bits(bits);
 
   return (bits + 7) / 8;
 }
@@ -334,7 +394,7 @@ static expr2tc bitsize(BigInt n)
   return constant_int2tc(bitsize_type2(), std::move(n));
 }
 
-expr2tc type_sizet::size_bits_expr(const type2tc &type) const
+expr2tc type_sizet::size_bits_expr(const type2tc &type)
 {
   /* The structure of this function is the same as that of
    * size_bits(). We don't call that and just handle the exception
@@ -353,13 +413,19 @@ expr2tc type_sizet::size_bits_expr(const type2tc &type) const
 
   case type2t::symbol_id:
     if (ns)
+    {
+      followed_symbol = true;
       return size_bits_expr(ns->follow(type));
+    }
     log_error("Symbolic type id in type_size_t::size_bits_expr\n{}", *type);
     abort();
 
   case type2t::cpp_name_id:
     if (ns)
+    {
+      followed_symbol = true;
       return size_bits_expr(ns->follow(type));
+    }
     log_error("Symbolic C++ type id in type_size_t::size_bits_expr\n{}", *type);
     abort();
 
@@ -381,8 +447,12 @@ expr2tc type_sizet::size_bits_expr(const type2tc &type) const
     expr2tc arrsize = array_or_vector_size(type);
     simplify(arrsize);
 
-    expr2tc subsize = size_bits_expr(array_or_vector_subtype(type));
+    const type2tc &subtype = array_or_vector_subtype(type);
+    expr2tc subsize = size_bits_expr(subtype);
     simplify(subsize);
+    if (is_constant_int2t(subsize))
+      subsize =
+        bitsize(array_element_bits(subtype, to_constant_int2t(subsize).value));
 
     if (is_constant_int2t(arrsize) && is_constant_int2t(subsize))
       return bitsize(
@@ -395,6 +465,30 @@ expr2tc type_sizet::size_bits_expr(const type2tc &type) const
   }
 
   case type2t::struct_id:
+  case type2t::union_id:
+  {
+    if (auto it = record_sizes.find(type); it != record_sizes.end())
+      return bitsize(it->second);
+
+    const bool followed_outer = followed_symbol;
+    followed_symbol = false;
+    expr2tc size = record_size_bits_expr(type);
+    if (!followed_symbol && is_constant_int2t(size))
+      record_sizes.emplace(type, to_constant_int2t(size).value);
+    followed_symbol |= followed_outer;
+    return size;
+  }
+
+  default:
+    log_error("Unrecognised type in type_size_t::size_bits_expr:\n{}", *type);
+    abort();
+  }
+}
+
+expr2tc type_sizet::record_size_bits_expr(const type2tc &type)
+{
+  type2tc t = bitsize_type2();
+  if (is_struct_type(type))
   {
     // Sum the sizes of all members. Inter-member and trailing padding
     // (for word-boundary and array-of-struct alignment; see C89 6.3.3.4) is
@@ -402,7 +496,6 @@ expr2tc type_sizet::size_bits_expr(const type2tc &type) const
     // member sizes already accounts for it.
     BigInt acc_cnst = 0;
     expr2tc acc_dyn;
-    type2tc t = bitsize_type2();
     for (const type2tc &member : to_struct_type(type).members)
     {
       expr2tc s = size_bits_expr(member);
@@ -423,38 +516,29 @@ expr2tc type_sizet::size_bits_expr(const type2tc &type) const
     return add2tc(t, bitsize(acc_cnst), acc_dyn);
   }
 
-  case type2t::union_id:
+  // Very simple: the largest field size, rounded up to a word boundary for
+  // array allocation alignment.
+  BigInt max_cnst = 0;
+  expr2tc max_dyn;
+  for (const type2tc &elem : to_union_type(type).members)
   {
-    // Very simple: the largest field size, rounded up to a word boundary for
-    // array allocation alignment.
-    BigInt max_cnst = 0;
-    expr2tc max_dyn;
-    type2tc t = bitsize_type2();
-    for (const type2tc &elem : to_union_type(type).members)
-    {
-      expr2tc s = size_bits_expr(elem);
-      if (is_constant_int2t(s))
-        max_cnst = std::max(max_cnst, to_constant_int2t(s).value);
-      else if (max_dyn)
-        max_dyn = if2tc(t, greaterthan2tc(max_dyn, s), max_dyn, s);
-      else
-        max_dyn = s;
-    }
-
-    if (!max_dyn)
-      return bitsize(max_cnst);
-
-    if (max_cnst == 0)
-      return max_dyn;
-
-    expr2tc c = bitsize(max_cnst);
-    return if2tc(t, greaterthan2tc(max_dyn, c), max_dyn, c);
+    expr2tc s = size_bits_expr(elem);
+    if (is_constant_int2t(s))
+      max_cnst = std::max(max_cnst, to_constant_int2t(s).value);
+    else if (max_dyn)
+      max_dyn = if2tc(t, greaterthan2tc(max_dyn, s), max_dyn, s);
+    else
+      max_dyn = s;
   }
 
-  default:
-    log_error("Unrecognised type in type_size_t::size_bits_expr:\n{}", *type);
-    abort();
-  }
+  if (!max_dyn)
+    return bitsize(max_cnst);
+
+  if (max_cnst == 0)
+    return max_dyn;
+
+  expr2tc c = bitsize(max_cnst);
+  return if2tc(t, greaterthan2tc(max_dyn, c), max_dyn, c);
 }
 
 expr2tc type_byte_size_bits_expr(const type2tc &type, const namespacet *ns)
@@ -472,7 +556,7 @@ expr2tc type_byte_size_expr(const type2tc &type, const namespacet *ns)
   return typecast2tc(t, div2tc(s, add2tc(s, n, bitsize(7)), bitsize(8)));
 }
 
-expr2tc type_sizet::pointer_offset_bits(const expr2tc &expr) const
+expr2tc type_sizet::pointer_offset_bits(const expr2tc &expr)
 {
   if (is_symbol2t(expr))
     return bitsize(0);

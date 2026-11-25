@@ -1,0 +1,5 @@
+CORE
+main.c
+--bitwuzla --ts-pdr
+\A(?![\s\S]*VERIFICATION SUCCESSFUL)
+^VERIFICATION (FAILED|UNKNOWN)$

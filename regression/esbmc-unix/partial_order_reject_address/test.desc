@@ -1,0 +1,5 @@
+CORE
+main.c
+--partial-order
+^ERROR: --partial-order does not support passing the address of a global to touch yet, at file .*main\.c line 7 column 3 function t$
+\A(?![\s\S]*VERIFICATION)[\s\S]*\Z

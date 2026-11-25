@@ -8,7 +8,7 @@
 
 void goto_symext::symex_other(const expr2tc &code)
 {
-  expr2tc code2 = code;
+  expr2tc code2 = split_rewrite(code);
   if (is_code_expression2t(code2))
   {
     // Represents an expression that gets evaluated, but does not have any
@@ -105,9 +105,6 @@ void goto_symext::symex_decl(const expr2tc &code)
   const bool redeclared = frame.declaration_history.count(rec) != 0;
   const bool reused = redeclared && reusable_type(decl_code.type) &&
                       !art1->is_address_taken_local(identifier);
-  if (reused)
-    cur_state->value_set.erase_object(
-      to_symbol2t(l1_sym).get_symbol_name(), decl_code.type);
   if (
     to_symbol2t(l1_sym).rlevel != symbol_renaming_level::level1 ||
     (redeclared && !reused))
@@ -116,11 +113,37 @@ void goto_symext::symex_decl(const expr2tc &code)
     frame.level1.rename(l1_sym, ++index);
     frame.level1.get_ident_name(l1_sym);
   }
+  frame.declaration_history.insert(
+    renaming::level2t::name_record(to_symbol2t(l1_sym)));
 
-  // And record it
+  // A split object lives in its fields, which share its L1 activation.
+  const std::vector<expr2tc> *fields = split_fields(identifier);
+  if (!fields)
+  {
+    declare_l1(l1_sym, decl_code.type, reused);
+    return;
+  }
+  for (const expr2tc &field : *fields)
+  {
+    frame.level1.rename(field, to_symbol2t(l1_sym).level1_num);
+    expr2tc l1_field = field;
+    frame.level1.get_ident_name(l1_field);
+    declare_l1(l1_field, field->type, reused);
+  }
+  // is_live_variable looks up the object a pointer names, not its fields.
+  if (art1->is_address_taken_local(identifier))
+    frame.local_variables.insert(
+      renaming::level2t::name_record(to_symbol2t(l1_sym)));
+}
+
+void goto_symext::declare_l1(expr2tc l1_sym, const type2tc &type, bool reused)
+{
+  if (reused)
+    cur_state->value_set.erase_object(
+      to_symbol2t(l1_sym).get_symbol_name(), type);
+
   renaming::level2t::name_record l(to_symbol2t(l1_sym));
-  frame.declaration_history.insert(l);
-  frame.local_variables.insert(l);
+  cur_state->top().local_variables.insert(l);
 
   // seen it before?
   // it should get a fresh value, even a reused instance its previous
@@ -129,7 +152,7 @@ void goto_symext::symex_decl(const expr2tc &code)
   {
     // Dummy assignment - blank constant value isn't considered for const
     // propagation, variable number will be bumped to result in a new free
-    // variable. Invalidates l1_symbol reference?
+    // variable.
     cur_state->level2.make_assignment(l1_sym, expr2tc(), expr2tc());
   }
 }
@@ -163,5 +186,22 @@ void goto_symext::symex_dead(const expr2tc &code)
   if (live && stack_checks_enabled())
     cur_state->top().decrease_stack_frame_size(code2);
 
-  cur_state->value_set.erase(to_symbol2t(l1_sym).get_symbol_name());
+  // A Python local outlives its DEAD: readers reach its members through a
+  // stored reference (#9169).
+  if (config.language.lid == language_idt::PYTHON)
+    cur_state->value_set.erase(to_symbol2t(l1_sym).get_symbol_name());
+  else
+    cur_state->value_set.erase_object(
+      to_symbol2t(l1_sym).get_symbol_name(), dead_code.type);
+
+  if (const std::vector<expr2tc> *fields = split_fields(identifier))
+    for (const expr2tc &field : *fields)
+    {
+      expr2tc l1_field = field;
+      cur_state->top().level1.get_ident_name(l1_field);
+      cur_state->top().local_variables.erase(
+        renaming::level2t::name_record(to_symbol2t(l1_field)));
+      if (!art1->split_structs.is_untracked_field(to_symbol2t(field).thename))
+        cur_state->value_set.erase(to_symbol2t(l1_field).get_symbol_name());
+    }
 }
