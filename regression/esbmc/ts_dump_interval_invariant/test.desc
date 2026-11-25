@@ -1,0 +1,5 @@
+CORE
+main.c
+--no-pointer-check --no-bounds-check --interval-analysis --interval-analysis-arithmetic --ts-check --ts-dump
+^Invariants:\n(  x\S* <= 10 && 0 <= x\S*\n)+Prefix assumptions:$
+^TS-CHECK accepted 
