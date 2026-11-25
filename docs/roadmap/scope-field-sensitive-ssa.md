@@ -2516,3 +2516,25 @@ Not run: C++ and Python suites, the remaining C tests, Bitwuzla, the corpus
 2x bar, k-induction, the unreachability harnesses, the assert-enabled build
 and SV-COMP. Arrays of structs and k-induction havoc are not started. The
 Phase 3 gate stays unmet.
+
+### 8.40 Phase 3, part 1: the `h.p` trace difference and the k-induction suite
+
+Z3-only RelWithDebInfo build of `4c310985a`, 30 s per run.
+
+- `counterexample_unresolved_component_fail` (§8.39): `h` is flat
+  (`int *p; int t;`), so nesting plays no part. With the flag the step prints
+  `h.p = &x`; without it, `h.p = { .p=&x, .t=0 }`. The value of `h.p` is `&x`
+  in both, so Invariant 4 holds. This is the first row of §8.6 (a member
+  write prints the member where master prints the whole struct), pinned by
+  `field_sensitive_ssa_print_member_fail`. Decision: accepted under that row;
+  no code change.
+- k-induction: every test of `regression/k-induction` (316) and
+  `regression/k-induction-parallel` (78), run with and without the flag
+  (options from `test.desc`, solver Z3), gives the same verdict lines, 394 of
+  394. Tests that pass the flag themselves are skipped (none here).
+
+Not measured: the C and C++ tests beyond §8.38 and §8.39, the Python suite
+with the flag forced on, Bitwuzla, the corpus 2x bar under Bitwuzla,
+the unreachability harnesses, the assert-enabled build and SV-COMP. Arrays of
+structs and k-induction havoc of field symbols are not started. The Phase 3
+gate stays unmet.
