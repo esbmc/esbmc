@@ -1,0 +1,5 @@
+CORE
+main.c
+--unwind 21 --no-unwinding-assertions --smt-formula-only
+\A(?![\s\S]*\(bvult __ESBMC_ptr_obj_end_)
+\(check-sat\)

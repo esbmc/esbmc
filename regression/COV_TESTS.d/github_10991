@@ -6,3 +6,7 @@ regression/goto-transcoder/cbmc_kani_fill_symbolic
 regression/goto-transcoder/cbmc_kani_fill_symbolic_fail
 regression/esbmc/github_10991_race_fail
 regression/esbmc/github_10991_torn_fail
+regression/esbmc/github_10991_calloc
+regression/esbmc/github_10991_calloc_fail
+regression/goto-transcoder/cbmc_calloc_symbolic
+regression/goto-transcoder/cbmc_calloc_symbolic_fail

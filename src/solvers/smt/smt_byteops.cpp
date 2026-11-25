@@ -32,12 +32,11 @@ smt_astt smt_solver_baset::convert_byte_extract_int_mode(
   expr2tc offs,
   unsigned int src_width)
 {
-  // Convert source to integer representation if needed
-  if (!is_number_type(source->type))
-  {
-    // For non-numeric types, we need to interpret them as mathematical integers
+  // A typecast would take an aggregate's value, which has none (#11014).
+  if (is_structure_type(source) || is_array_type(source))
+    source = bitcast2tc(get_uint_type(src_width), source);
+  else if (!is_number_type(source->type))
     source = typecast2tc(get_uint_type(src_width), source);
-  }
 
   // Ensure we work with integer types only in int_encoding mode
   type2tc target_type = get_uint_type(src_width);
@@ -298,7 +297,11 @@ smt_solver_baset::convert_byte_update_int_mode(const byte_update2t &data)
   // Use consistent integer type for all operations
   type2tc target_type = get_uint_type(src_width);
 
-  if (!is_number_type(source->type) || !is_bv_type(source->type))
+  // A typecast would take an aggregate's value, which has none (#11014).
+  const bool aggregate = is_structure_type(source) || is_array_type(source);
+  if (aggregate)
+    source = bitcast2tc(target_type, source);
+  else if (!is_number_type(source->type) || !is_bv_type(source->type))
   {
     source = typecast2tc(target_type, source);
     need_type_conversion_back = true;
@@ -322,7 +325,9 @@ smt_solver_baset::convert_byte_update_int_mode(const byte_update2t &data)
     data, source, offs, update_value, src_width);
 
   // Convert back to original type if we converted from non-numeric
-  if (need_type_conversion_back)
+  if (aggregate)
+    result = bitcast2tc(original_source_type, result);
+  else if (need_type_conversion_back)
     result = typecast2tc(original_source_type, result);
 
   return convert_ast(result);

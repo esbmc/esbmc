@@ -1,0 +1,4 @@
+CORE
+github_10936_iter.goto
+--binary --function _RNvCse0aBsb0s0VU_17github_10936_iter7harness --ignore-property-class reachability_check --ignore-property-class cover --unwind 6
+^VERIFICATION SUCCESSFUL$

@@ -1912,7 +1912,9 @@ bool goto_symext::memset_symbolic(
   // unsigned[1024] solves in 230 s, an unsigned[256] in 6 s (#10991).
   const uint64_t cap = is_constant_int2t(off) ? 4096 : 1024;
   const uint64_t size = integer_object_size(object->type);
-  if (size == 0 || size > cap || dereferencet::is_read_only(object, ns))
+  if (size == 0)
+    return memset_whole_dynamic(item, value, n);
+  if (size > cap || dereferencet::is_read_only(object, ns))
     return false;
 
   guard2tc guard = cur_state->guard;
@@ -1954,6 +1956,70 @@ bool goto_symext::memset_symbolic(
   symex_assign(
     code_assign2tc(
       object, update_object_bytes(object, 0, new_bytes.data(), size, be)),
+    false,
+    guard);
+  return true;
+}
+
+/** The size malloc was asked for, given the array size symex_mem gave the
+ *  object: it wraps a request that may fail as ite(fits, size, 0). */
+static const expr2tc &requested_size(const expr2tc &array_size)
+{
+  if (!is_if2t(array_size))
+    return array_size;
+  const if2t &ite = to_if2t(array_size);
+  return is_constant_int2t(ite.false_value) &&
+             to_constant_int2t(ite.false_value).value.is_zero()
+           ? ite.true_value
+           : array_size;
+}
+
+bool goto_symext::memset_whole_dynamic(
+  const dereference_callbackt::internal_item &item,
+  const expr2tc &value,
+  const expr2tc &n)
+{
+  const expr2tc &object = item.object;
+  if (
+    !is_symbol2t(object) || !is_array_type(object->type) ||
+    dereferencet::is_read_only(object, ns))
+    return false;
+  const array_type2t &arr = to_array_type(object->type);
+  if (
+    arr.size_is_infinite || is_nil_expr(arr.array_size) ||
+    !is_bv_type(arr.subtype) || arr.subtype->get_width() != 8)
+    return false;
+
+  expr2tc off = item.offset;
+  cur_state->rename(off);
+  simplify(off);
+  if (!is_constant_int2t(off) || !to_constant_int2t(off).value.is_zero())
+    return false;
+
+  const expr2tc &size = arr.array_size;
+  if (requested_size(size) != n)
+    return false;
+
+  guard2tc guard = cur_state->guard;
+  expr2tc item_guard = item.guard;
+  cur_state->rename(item_guard);
+  guard.add(item_guard);
+
+  if (
+    !options.get_bool_option("no-pointer-check") &&
+    !options.get_bool_option("no-bounds-check"))
+    claim(
+      implies2tc(
+        guard.as_expr(),
+        or2tc(
+          equality2tc(n, gen_zero(n->type)),
+          lessthanequal2tc(n, typecast2tc(n->type, size)))),
+      "dereference failure: memset length exceeds object bounds");
+
+  symex_assign(
+    code_assign2tc(
+      object,
+      constant_array_of2tc(object->type, typecast2tc(arr.subtype, value))),
     false,
     guard);
   return true;
