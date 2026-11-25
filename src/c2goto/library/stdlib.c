@@ -95,6 +95,8 @@ __ESBMC_HIDE:;
 }
 #pragma clang diagnostic pop
 
+void *__memset_impl(void *s, int c, size_t n);
+
 void *calloc(size_t nmemb, size_t size)
 {
 __ESBMC_HIDE:;
@@ -114,8 +116,13 @@ __ESBMC_HIDE:;
 
   size_t total_size = nmemb * size;
   void *res = malloc(total_size);
+  // memset's parameter copy would hide from __ESBMC_memset that the length is
+  // the object's size, which lets it fill a symbolic-size object without a
+  // loop (#10991). __memset_impl is its fallback.
+  void *hax = &__memset_impl;
+  (void)hax;
   if (res)
-    memset(res, 0, total_size);
+    __ESBMC_memset(res, 0, total_size);
   return res;
 }
 

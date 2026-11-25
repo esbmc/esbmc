@@ -252,6 +252,13 @@ private:
     unsigned sbits,
     smt_astt &result);
 
+  smt_astt mk_int_magnitude_to_fpbv(
+    smt_astt sgn,
+    smt_astt mag,
+    unsigned ebits,
+    unsigned sbits,
+    smt_astt rm);
+
   smt_astt mk_rounding_decision(
     smt_astt &rm,
     smt_astt &sgn,

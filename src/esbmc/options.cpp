@@ -794,6 +794,11 @@ const struct group_opt_templ all_cmd_options[] = {
     {"parallel-solving",
      NULL,
      "Solve each VCC in parallel (this activates --multi-property)"},
+    {"parallel-solving-threads",
+     boost::program_options::value<int>()->value_name("n"),
+     "Solve at most n VCCs at once under --parallel-solving (default: one "
+     "per hardware thread); each holds its own solver, so fewer threads use "
+     "less memory"},
     {"no-symmetry-breaking",
      NULL,
      "Disable recognising running max/min folds (e.g. over an uninitialised "
