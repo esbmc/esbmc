@@ -1,0 +1,5 @@
+CORE
+cbmc_calloc_symbolic_fail.goto
+--binary
+^VERIFICATION FAILED$
+^  assertion p\[k\] == 1$
