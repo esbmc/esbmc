@@ -41,6 +41,17 @@ void substitute(expr2tc &expr, const expr2tc &from, const expr2tc &to)
   expr->Foreach_operand(
     [&from, &to](expr2tc &op) { substitute(op, from, to); });
 }
+
+/// Where `ins` can hold a call: its code, its guard and, on a LOOP_INVARIANT,
+/// each invariant (#11051).
+std::vector<expr2tc *> call_holders(goto_programt::instructiont &ins)
+{
+  std::vector<expr2tc *> holders{&ins.code, &ins.guard};
+  if (ins.loop_contract_data)
+    for (expr2tc &inv : ins.loop_contract_data->invariants)
+      holders.push_back(&inv);
+  return holders;
+}
 } // namespace
 
 void lift_call_expressions(contextt &context, goto_functionst &goto_functions)
@@ -60,9 +71,11 @@ void lift_call_expressions(contextt &context, goto_functionst &goto_functions)
       // can expose the next, so drain each instruction before moving on.
       for (;;)
       {
-        expr2tc nested = find_nested_call(it->code);
-        if (is_nil_expr(nested))
-          nested = find_nested_call(it->guard);
+        const std::vector<expr2tc *> holders = call_holders(*it);
+        expr2tc nested;
+        for (const expr2tc *holder : holders)
+          if (is_nil_expr(nested))
+            nested = find_nested_call(*holder);
         if (is_nil_expr(nested))
           break;
 
@@ -73,8 +86,8 @@ void lift_call_expressions(contextt &context, goto_functionst &goto_functions)
           gen.new_symbol(context, migrate_type_back(ret_type), "lifted");
         expr2tc tmp_expr = symbol2tc(ret_type, tmp.id);
 
-        substitute(it->code, nested, tmp_expr);
-        substitute(it->guard, nested, tmp_expr);
+        for (expr2tc *holder : holders)
+          substitute(*holder, nested, tmp_expr);
 
         goto_programt::instructiont call_inst;
         call_inst.type = FUNCTION_CALL;

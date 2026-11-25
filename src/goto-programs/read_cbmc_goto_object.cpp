@@ -346,13 +346,34 @@ static void set_object_alignment(symbolt &symbol)
   symbol.set_type(std::move(type));
 }
 
-static bool has_side_effect(const expr2tc &expr)
+// lift_call_expressions evaluates a call ahead of the LOOP_INVARIANT marker,
+// which is faithful only where every evaluation of the invariant reaches it:
+// not past the first operand of a short-circuit operator. Kani lowers each
+// loop invariant to such a call of a generated closure (#11051).
+static bool
+has_unliftable_side_effect(const expr2tc &expr, bool conditional = false)
 {
-  if (is_sideeffect2t(expr) || is_sideeffect_assign2t(expr))
+  if (is_nil_expr(expr))
+    return false;
+  if (is_sideeffect2t(expr))
+  {
+    if (
+      conditional ||
+      to_sideeffect2t(expr).kind != sideeffect2t::allockind::function_call)
+      return true;
+  }
+  else if (is_sideeffect_assign2t(expr))
     return true;
+
+  const bool short_circuit =
+    is_and2t(expr) || is_or2t(expr) || is_implies2t(expr) || is_if2t(expr);
   bool found = false;
-  expr->foreach_operand(
-    [&found](const expr2tc &op) { found = found || has_side_effect(op); });
+  unsigned idx = 0;
+  expr->foreach_operand([&](const expr2tc &op) {
+    found = found || has_unliftable_side_effect(
+                       op, conditional || (short_circuit && idx > 0));
+    ++idx;
+  });
   return found;
 }
 
@@ -377,8 +398,7 @@ static bool build_invariant_marker(
       log_warning("CBMC goto-binary: ignoring a loop invariant: {}", e);
       return false;
     }
-    // A side effect here never reaches goto_convert's removal pass.
-    if (has_side_effect(clause2))
+    if (has_unliftable_side_effect(clause2))
     {
       log_warning(
         "CBMC goto-binary: ignoring a loop invariant with a side effect");
