@@ -35,9 +35,10 @@ def derive_param_and_return_types(
     param_types = {}
     #context is a list of inferred parameter types
     known_param_types = context.function_params.get(
-        function_key(func_node, context), [],
+        function_key(func_node, context),
+        [],
     )
-    # func_node is an AST node, args is an array of arguments for each node representing a whole line in a function, and args.args and leads direclty to the argument representing a variable 
+    # func_node is an AST node, args is an array of arguments for each node representing a whole line in a function, and args.args and leads direclty to the argument representing a variable
     for i, arg in enumerate(func_node.args.args):
         if i < len(known_param_types):
             param_types[arg.arg] = merged.get(arg.arg, Unknown())
@@ -87,15 +88,23 @@ def annotate_parameters(funct_node: ast.FunctionDef, param_types, skip_names=Non
         if annotation is not None:
             arg.annotation = annotation
 
+
 def safe_parameter_to_annotate(function_name, index, observed_params):
-    observed = observed_params.get(function_name, [],)
+    observed = observed_params.get(
+        function_name,
+        [],
+    )
 
     if index >= len(observed):
         return True
 
     return len(observed[index]) <= 1
 
-def collect_unsafe_function_signatures(ast_node, context,) -> set[str]:
+
+def collect_unsafe_function_signatures(
+    ast_node,
+    context,
+) -> set[str]:
     unsafe: set[str] = set()
 
     for function_name, observations in (context.function_param_observations.items()):
@@ -110,7 +119,10 @@ def collect_unsafe_function_signatures(ast_node, context,) -> set[str]:
         changed = False
 
         for func_node in ast.walk(ast_node):
-            if not isinstance(func_node, (ast.FunctionDef, ast.AsyncFunctionDef),):
+            if not isinstance(
+                    func_node,
+                (ast.FunctionDef, ast.AsyncFunctionDef),
+            ):
                 continue
 
             current_key = function_key(func_node, context)
@@ -118,10 +130,16 @@ def collect_unsafe_function_signatures(ast_node, context,) -> set[str]:
             parameter_names = {arg.arg for arg in func_node.args.args}
 
             for node in ast.walk(func_node):
-                if not isinstance(node, ast.Call,):
+                if not isinstance(
+                        node,
+                        ast.Call,
+                ):
                     continue
 
-                if not isinstance(node.func,ast.Name,):
+                if not isinstance(
+                        node.func,
+                        ast.Name,
+                ):
                     continue
 
                 called_name = node.func.id
@@ -133,12 +151,18 @@ def collect_unsafe_function_signatures(ast_node, context,) -> set[str]:
 
                 for arg in node.args:
                     for child in ast.walk(arg):
-                        if (isinstance(child, ast.Call) and isinstance(child.func, ast.Name,) and child.func.id in unsafe):
+                        if (isinstance(child, ast.Call) and isinstance(
+                                child.func,
+                                ast.Name,
+                        ) and child.func.id in unsafe):
                             unsafe_argument = True
                             break
 
-                        if (current_key in unsafe and isinstance(arg, ast.Name,) and arg.id in parameter_names):
-                                unsafe_argument = True
+                        if (current_key in unsafe and isinstance(
+                                arg,
+                                ast.Name,
+                        ) and arg.id in parameter_names):
+                            unsafe_argument = True
                         if unsafe_argument:
                             break
 
@@ -146,7 +170,8 @@ def collect_unsafe_function_signatures(ast_node, context,) -> set[str]:
                         unsafe.add(called_name)
                         changed = True
 
-    return unsafe                            
+    return unsafe
+
 
 def collect_incompatible_function_values(
     ast_node,
@@ -154,9 +179,7 @@ def collect_incompatible_function_values(
 ) -> set[str]:
     functions: set[str] = set()
 
-    known_function_names = set(
-        context.function_keys.values()
-    )
+    known_function_names = set(context.function_keys.values())
 
     print(
         "[INCOMPATIBLE] known functions:",
@@ -170,7 +193,7 @@ def collect_incompatible_function_values(
 
     function_aliases: dict[str, str] = {}
 
-    #Handles functions with different signatures 
+    #Handles functions with different signatures
 
     # Case 1:
     # A conditional expression directly selects
@@ -181,24 +204,17 @@ def collect_incompatible_function_values(
 
     for node in ast.walk(ast_node):
         if not isinstance(
-            node,
-            ast.Call,
+                node,
+                ast.Call,
         ):
             continue
 
         for arg in node.args:
-            if (
-                isinstance(
+            if (isinstance(
                     arg,
                     ast.Name,
-                )
-                and arg.id
-                in known_function_names
-            ):
-                functions.add(
-                    arg.id
-                )
-
+            ) and arg.id in known_function_names):
+                functions.add(arg.id)
 
     # Functions assigned to the same variable.
     #
@@ -218,94 +234,65 @@ def collect_incompatible_function_values(
 
     for node in ast.walk(ast_node):
         if not isinstance(
-            node,
-            ast.Assign,
+                node,
+                ast.Assign,
         ):
             continue
 
         if not isinstance(
-            node.value,
-            ast.Name,
+                node.value,
+                ast.Name,
         ):
             continue
 
         function_name = node.value.id
 
-        if (
-            function_name
-            not in known_function_names
-        ):
+        if (function_name not in known_function_names):
             continue
 
         for target in node.targets:
             if not isinstance(
-                target,
-                ast.Name,
+                    target,
+                    ast.Name,
             ):
                 continue
 
             assigned_functions.setdefault(
                 target.id,
                 set(),
-            ).add(
-                function_name
-            )
+            ).add(function_name)
 
-    for function_names in (
-        assigned_functions.values()
-    ):
+    for function_names in (assigned_functions.values()):
         if len(function_names) < 2:
             continue
 
-        return_types = [
-            context.function_returns.get(
-                name
-            )
-            for name in function_names
-        ]
+        return_types = [context.function_returns.get(name) for name in function_names]
 
-        known_return_types = [
-            typ
-            for typ in return_types
-            if typ is not None
-        ]
+        known_return_types = [typ for typ in return_types if typ is not None]
 
         if len(known_return_types) < 2:
             continue
 
         first_type = known_return_types[0]
 
-        if any(
-            typ != first_type
-            for typ in known_return_types[1:]
-        ):
-            functions.update(
-                function_names
-            )
-
+        if any(typ != first_type for typ in known_return_types[1:]):
+            functions.update(function_names)
 
     # A function itself is returned:
     #
     #     return func
     for node in ast.walk(ast_node):
         if not isinstance(
-            node,
-            ast.Return,
+                node,
+                ast.Return,
         ):
             continue
 
-        if (
-            isinstance(
+        if (isinstance(
                 node.value,
                 ast.Name,
-            )
-            and node.value.id
-            in known_function_names
-        ):
-            functions.add(
-                node.value.id
-            )
-
+        ) and node.value.id in known_function_names):
+            functions.add(node.value.id)
 
     # Case 1:
     # A conditional expression selects between
@@ -314,49 +301,33 @@ def collect_incompatible_function_values(
     #     s if c else i
     for node in ast.walk(ast_node):
         if not isinstance(
-            node,
-            ast.IfExp,
+                node,
+                ast.IfExp,
         ):
             continue
 
         if not isinstance(
-            node.body,
-            ast.Name,
+                node.body,
+                ast.Name,
         ):
             continue
 
         if not isinstance(
-            node.orelse,
-            ast.Name,
+                node.orelse,
+                ast.Name,
         ):
             continue
 
         left_name = node.body.id
         right_name = node.orelse.id
 
-        left_return = (
-            context.function_returns.get(
-                left_name
-            )
-        )
+        left_return = (context.function_returns.get(left_name))
 
-        right_return = (
-            context.function_returns.get(
-                right_name
-            )
-        )
+        right_return = (context.function_returns.get(right_name))
 
-        if (
-            left_return is not None
-            and right_return is not None
-            and left_return != right_return
-        ):
-            functions.add(
-                left_name
-            )
-            functions.add(
-                right_name
-            )
+        if (left_return is not None and right_return is not None and left_return != right_return):
+            functions.add(left_name)
+            functions.add(right_name)
 
     # Case 2:
     # A function returns different function values
@@ -367,21 +338,25 @@ def collect_incompatible_function_values(
     #     return i
     for func_node in ast.walk(ast_node):
         if not isinstance(
-            func_node,
-                (
-                    ast.FunctionDef,
-                    ast.AsyncFunctionDef,
-                ),
-            ):
-                continue
+                func_node,
+            (
+                ast.FunctionDef,
+                ast.AsyncFunctionDef,
+            ),
+        ):
+            continue
 
         function_valued_default_types = list(func_node.args.defaults)
 
-        function_valued_default_types.extend(default for default in func_node.args.kw_defaults if default is not None)
+        function_valued_default_types.extend(default for default in func_node.args.kw_defaults
+                                             if default is not None)
 
         for default in function_valued_default_types:
-            if (isinstance(default, ast.Name,) and default.id in known_function_names):
-                functions.add(default.id)       
+            if (isinstance(
+                    default,
+                    ast.Name,
+            ) and default.id in known_function_names):
+                functions.add(default.id)
 
         returned_functions = set()
         pending: list[ast.AST] = list(func_node.body)
@@ -393,48 +368,32 @@ def collect_incompatible_function_values(
             # nested functions or classes.
             if isinstance(
                     node,
-                    (
-                        ast.FunctionDef,
-                        ast.AsyncFunctionDef,
-                        ast.Lambda,
-                        ast.ClassDef,
-                    ),
-                ):
-                    continue
+                (
+                    ast.FunctionDef,
+                    ast.AsyncFunctionDef,
+                    ast.Lambda,
+                    ast.ClassDef,
+                ),
+            ):
+                continue
 
             if isinstance(node, ast.Return):
-                if (
-                        isinstance(node.value, ast.Name)
-                        and node.value.id
-                        in context.function_returns
-                    ):
-                        returned_functions.add(
-                            node.value.id
-                        )
+                if (isinstance(node.value, ast.Name) and node.value.id in context.function_returns):
+                    returned_functions.add(node.value.id)
 
-                        continue
+                    continue
 
-                pending.extend(
-                    ast.iter_child_nodes(node)
-                )
+                pending.extend(ast.iter_child_nodes(node))
 
             if len(returned_functions) < 2:
                 continue
 
-            returned_types = [
-                context.function_returns[name]
-                for name in returned_functions
-            ]
+            returned_types = [context.function_returns[name] for name in returned_functions]
 
             first_type = returned_types[0]
 
-            if any(
-                typ != first_type
-                for typ in returned_types[1:]
-            ):
-                functions.update(
-                    returned_functions
-                )
+            if any(typ != first_type for typ in returned_types[1:]):
+                functions.update(returned_functions)
     # Case 3:
     # Different methods are assigned to the same
     # instance attribute:
@@ -442,67 +401,108 @@ def collect_incompatible_function_values(
     #     self.smth = self.func2
     #     self.smth = self.func3
     for class_node in ast_node.body:
-        if not isinstance(class_node, ast.ClassDef,):
-             continue
+        if not isinstance(
+                class_node,
+                ast.ClassDef,
+        ):
+            continue
 
-        attribute_methods: dict[str, set[str],] = {}
+        attribute_methods: dict[
+            str,
+            set[str],
+        ] = {}
 
         for member in class_node.body:
-            if not isinstance(member, (ast.FunctionDef, ast.AsyncFunctionDef),):
-                    continue
+            if not isinstance(
+                    member,
+                (ast.FunctionDef, ast.AsyncFunctionDef),
+            ):
+                continue
 
             for node in ast.walk(member):
-                if not isinstance(node, ast.Assign,):
-                        continue
+                if not isinstance(
+                        node,
+                        ast.Assign,
+                ):
+                    continue
 
                 if len(node.targets) != 1:
-                        continue
+                    continue
 
                 target = node.targets[0]
 
-                if not isinstance(target, ast.Attribute,):
-                        continue
+                if not isinstance(
+                        target,
+                        ast.Attribute,
+                ):
+                    continue
 
                 if not isinstance(target.value, ast.Name):
-                        continue
+                    continue
 
                 if not isinstance(node.value, ast.Attribute):
-                        continue
+                    continue
 
-                if not isinstance(node.value.value, ast.Name,):
-                        continue
+                if not isinstance(
+                        node.value.value,
+                        ast.Name,
+                ):
+                    continue
 
                 if node.value.value.id != "self":
-                        continue
+                    continue
 
-                method_key = (f"{class_node.name}." f"{node.value.attr}")
+                method_key = (f"{class_node.name}."
+                              f"{node.value.attr}")
 
-                print("[INCOMPATIBLE DEBUG] assignment:", target.attr, "<-", method_key,)
+                print(
+                    "[INCOMPATIBLE DEBUG] assignment:",
+                    target.attr,
+                    "<-",
+                    method_key,
+                )
 
                 if (method_key not in context.function_returns):
 
-                    print("[INCOMPATIBLE DEBUG] no return type:", method_key,)
+                    print(
+                        "[INCOMPATIBLE DEBUG] no return type:",
+                        method_key,
+                    )
                     continue
 
-                print( "[INCOMPATIBLE DEBUG] return:", method_key, "=>", context.function_returns[method_key],)                                
+                print(
+                    "[INCOMPATIBLE DEBUG] return:",
+                    method_key,
+                    "=>",
+                    context.function_returns[method_key],
+                )
 
-                attribute_methods.setdefault(target.attr, set(),).add(method_key)
+                attribute_methods.setdefault(
+                    target.attr,
+                    set(),
+                ).add(method_key)
 
                 for method_keys in (attribute_methods.values()):
                     if len(method_keys) < 2:
                         continue
 
-                    print("[INCOMPATIBLE DEBUG] attributes:", attribute_methods,)
+                    print(
+                        "[INCOMPATIBLE DEBUG] attributes:",
+                        attribute_methods,
+                    )
 
                     return_types = [context.function_returns[key] for key in method_keys]
 
-                    print("[INCOMPATIBLE DEBUG] final:", functions,)
+                    print(
+                        "[INCOMPATIBLE DEBUG] final:",
+                        functions,
+                    )
 
                     first_type = return_types[0]
 
                     if any(typ != first_type for typ in return_types[1:]):
                         functions.update(method_keys)
-        
+
         assigned_functions: dict[
             str,
             set[str],
@@ -510,14 +510,14 @@ def collect_incompatible_function_values(
 
         for node in ast.walk(ast_node):
             if not isinstance(
-                node,
-                ast.Assign,
+                    node,
+                    ast.Assign,
             ):
                 continue
 
             if not isinstance(
-                node.value,
-                ast.Name,
+                    node.value,
+                    ast.Name,
             ):
                 continue
 
@@ -526,41 +526,28 @@ def collect_incompatible_function_values(
             # Use function_returns here because these
             # are exactly the functions whose inferred
             # return types we need to compare.
-            if (
-                function_name
-                not in context.function_returns
-            ):
+            if (function_name not in context.function_returns):
                 continue
 
             for target in node.targets:
                 if not isinstance(
-                    target,
-                    ast.Name,
+                        target,
+                        ast.Name,
                 ):
                     continue
 
                 assigned_functions.setdefault(
                     target.id,
                     set(),
-                ).add(
-                    function_name
-                )
+                ).add(function_name)
 
-            for function_names in (
-                assigned_functions.values()
-            ):
+            for function_names in (assigned_functions.values()):
                 if len(function_names) < 2:
                     continue
 
-                names = list(
-                    function_names
-                )
+                names = list(function_names)
 
-                first_type = (
-                    context.function_returns.get(
-                        names[0]
-                    )
-                )
+                first_type = (context.function_returns.get(names[0]))
 
                 if first_type is None:
                     continue
@@ -568,24 +555,18 @@ def collect_incompatible_function_values(
                 incompatible = False
 
                 for name in names[1:]:
-                    return_type = (
-                        context.function_returns.get(
-                            name
-                        )
-                    )
+                    return_type = (context.function_returns.get(name))
 
-                    if (
-                        return_type is not None
-                        and return_type != first_type
-                    ):
+                    if (return_type is not None and return_type != first_type):
                         incompatible = True
                         break
 
                 if incompatible:
-                    functions.update(
-                        function_names
-                    )
-    print("[INCOMPATIBLE] assigned functions:", assigned_functions,)                    
+                    functions.update(function_names)
+    print(
+        "[INCOMPATIBLE] assigned functions:",
+        assigned_functions,
+    )
 
     return functions
 
@@ -759,45 +740,35 @@ def annotate_function_with_env_and_signatures(
 
     rebound_parameters = collect_rebound_parameters(func_node)
 
-    skip_parameters = set(
-        rebound_parameters
-    )
+    skip_parameters = set(rebound_parameters)
 
     owner = function_owner(
         func_node,
         context,
     )
 
-    if (
-        owner is not None
-        and func_node.args.args
-    ):
-        skip_parameters.add(
-            func_node.args.args[0].arg
-        )
-    
+    if (owner is not None and func_node.args.args):
+        skip_parameters.add(func_node.args.args[0].arg)
 
-    key = function_key( func_node, context,) 
+    key = function_key(
+        func_node,
+        context,
+    )
 
-    safe_signature = True  
+    safe_signature = True
 
-    for i, _ in enumerate(
-        func_node.args.args):
-        if (
-            function_owner(
+    for i, _ in enumerate(func_node.args.args):
+        if (function_owner(
                 func_node,
                 context,
-            )
-            is not None
-            and i == 0
-        ):
+        ) is not None and i == 0):
             # self
             continue
 
         if not safe_parameter_to_annotate(
-            key,
-            i,
-            context.function_param_observations,
+                key,
+                i,
+                context.function_param_observations,
         ):
             safe_signature = False
             break
@@ -814,10 +785,7 @@ def annotate_function_with_env_and_signatures(
         context.function_param_observations,
     )
 
-    if (
-        key not in skip_function_signatures
-        and safe_signature
-    ):
+    if (key not in skip_function_signatures and safe_signature):
         annotate_parameters(
             func_node,
             param_types,
@@ -888,9 +856,9 @@ def annotate_function_with_env_and_signatures(
             continue
 
         if is_typed_assignment(
-            stmt,
-            merged,
-            already_annotated,
+                stmt,
+                merged,
+                already_annotated,
         ):
             if not isinstance(stmt, ast.Assign):
                 new_body.append(stmt)
@@ -909,18 +877,14 @@ def annotate_function_with_env_and_signatures(
             name = target.id
             t = merged[name]
 
-            print(
-                f"[ANNOTATE DEBUG] converting assignment "
-                f"{name} -> "
-                f"{t.to_ann_name()}"
-            )
+            print(f"[ANNOTATE DEBUG] converting assignment "
+                  f"{name} -> "
+                  f"{t.to_ann_name()}")
 
-            new_body.append(
-                convert_assign_to_annassign(
-                    stmt,
-                    t,
-                )
-            )
+            new_body.append(convert_assign_to_annassign(
+                stmt,
+                t,
+            ))
 
             already_annotated.add(name)
             continue
@@ -1399,7 +1363,13 @@ def annotate_module_with_outenvs(
 
         print("[ANNOTATE DEBUG] outenvs:")
         print(out_envs)
-        annotate_function_with_env_and_signatures(node, out_envs, return_types, context, skip_function_signatures,)
+        annotate_function_with_env_and_signatures(
+            node,
+            out_envs,
+            return_types,
+            context,
+            skip_function_signatures,
+        )
 
         print(f"[ANNOTATE DEBUG] AFTER function: {node.name}")
         print(ast.unparse(node))
@@ -1596,11 +1566,14 @@ def annotate_ast(ast_node, opts=None):
     known_classes = collect_known_classes(ast_node)
     context = InferenceContext(known_classes=known_classes)
 
-    register_function_context(ast_node, context,)
+    register_function_context(
+        ast_node,
+        context,
+    )
 
     function_nodes = [
-        node for node in ast.walk(ast_node) 
-        if isinstance(node,
+        node for node in ast.walk(ast_node) if isinstance(
+            node,
             (
                 ast.FunctionDef,
                 ast.AsyncFunctionDef,
@@ -1619,22 +1592,13 @@ def annotate_ast(ast_node, opts=None):
             iteration + 1,
         )
 
-        old_params = {
-            name: list(types)
-            for name, types
-            in context.function_params.items()
-        }
+        old_params = {name: list(types) for name, types in context.function_params.items()}
 
-        old_returns = dict(
-            context.function_returns
-        )
+        old_returns = dict(context.function_returns)
 
         old_class_attributes = {
-            name: dict(
-                class_info.attributes
-            )
-            for name, class_info
-            in context.known_classes.items()
+            name: dict(class_info.attributes)
+            for name, class_info in context.known_classes.items()
         }
 
         # Recompute function argument types using the
@@ -1645,7 +1609,10 @@ def annotate_ast(ast_node, opts=None):
             context,
         )
 
-        print("[PYTYPE PARAMS]", context.function_params,)
+        print(
+            "[PYTYPE PARAMS]",
+            context.function_params,
+        )
 
         current_out_envs = {}
         current_return_types = {}
@@ -1747,15 +1714,12 @@ def annotate_ast(ast_node, opts=None):
         return_types_by_func = (current_return_types)
 
         current_class_attributes = {
-            name: dict(
-                class_info.attributes
-            )
-            for name, class_info
-            in context.known_classes.items()
+            name: dict(class_info.attributes)
+            for name, class_info in context.known_classes.items()
         }
 
         if (context.function_params == old_params and context.function_returns == old_returns
-            and current_class_attributes == old_class_attributes):
+                and current_class_attributes == old_class_attributes):
             print("[PYTYPE] interprocedural "
                   "analysis converged")
             break
@@ -1764,14 +1728,15 @@ def annotate_ast(ast_node, opts=None):
         print("[PYTYPE] interprocedural "
               "analysis reached iteration limit")
 
-    skip_function_signatures = (
-        collect_incompatible_function_values(
-            ast_node,
-            context,
-        )
-    )
+    skip_function_signatures = (collect_incompatible_function_values(
+        ast_node,
+        context,
+    ))
 
-    unsafe_function_signatures = (collect_unsafe_function_signatures(ast_node, context,))
+    unsafe_function_signatures = (collect_unsafe_function_signatures(
+        ast_node,
+        context,
+    ))
 
     skip_function_signatures.update(unsafe_function_signatures)
 

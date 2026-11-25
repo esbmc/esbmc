@@ -487,8 +487,11 @@ class InstanceType(Type):
 
         if isinstance(other, UnionType):
             return other.join(self)
-        
-        return UnionType([self, other,])
+
+        return UnionType([
+            self,
+            other,
+        ])
 
     def __repr__(self):
         return f"Instance[{self.class_name}]"
