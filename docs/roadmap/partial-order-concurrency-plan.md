@@ -1,6 +1,6 @@
 # Plan — a partial-order encoding for concurrent programs (`--partial-order`)
 
-**Status (2026-11-25):** phase 1, phase 2 and phase 3 in review. Phase 0 is
+**Status (2026-11-25):** phases 1 to 3 in review; phase 4 started. Phase 0 is
 done, with the measurements below (§4), and the maintainer decided **go** on
 2026-11-24. `--partial-order` verifies programs on global scalars and arrays
 of them, including through pointers, with threads created in loops, mutexes,
@@ -200,6 +200,34 @@ step first, so the YAML waypoints carry thread ids in clock order.
 - Integer vs bitvector clocks; Z3 vs Bitwuzla.
 - Decide whether the SV-COMP wrapper uses `--partial-order` in any category
   and whether `--schedule` is removed.
+
+Done: `scripts/dev/partial_order_compare.py` runs each pthread test of a suite
+with and without `--partial-order` and lists the disagreements. On
+`esbmc-unix` and `esbmc-unix2` (564 tests, Z3, 20 s each, 2026-11-25), the
+scope check or a flag conflict rejects 374, both modes decide 173 and agree
+on 162 (median 0.29 s default, 0.26 s `--partial-order`), and
+`--partial-order` times out on 9 that the default decides and runs out of
+memory on `03_microbenchmark`. The 11
+disagreements:
+
+- Missed violations. `esbmc-unix2/01_pthread46` (`--unwind 2
+  --no-unwinding-assertions`): two threads spawned in `main`'s `while(1)`
+  loop both run `s++; assert(s == 1)`; the unwinding assumption that ends
+  `main` probably also hides the threads' failure.
+  `github_2386_atomic_write_race_fail`: under `--data-races-check`, no race
+  is reported between a write inside an atomic section and a plain read in
+  `main`.
+- False alarms. `github_4434_thread_local`: a `__thread` global is shared.
+  `github_9441_atomic_narrow_rmw`: a compound assignment to an `_Atomic`
+  object loses an update, as if it were a separate read and write.
+  `esbmc-unix2/11_time_var_mutex`: a lock built from `abort()` in an atomic
+  section probably does not cut the thread's later events.
+- Different semantics. In the four `github_6831_{stats,sleep_sets}*` tests
+  the default runs `x++` as one step, so a lost update is not reachable;
+  `--partial-order` reads and writes separately and finds it.
+  `github_6474_reinit` re-initialises a locked mutex: the default unlocks
+  it, `--partial-order` keeps it locked and reports a deadlock.
+  `02_account_symbolic_05` runs the default at `--context-bound 1`.
 
 ## 5. Tests
 
