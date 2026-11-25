@@ -1,0 +1,4 @@
+CORE
+main.c
+--llm-command model.py
+^ERROR: --llm-command needs --synthesise-loops=llm$

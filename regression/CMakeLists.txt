@@ -147,6 +147,11 @@ if(NOT WIN32)
     endif()
 endif()
 
+# A test can name a script with a shebang line as a program to run.
+if(NOT WIN32)
+    list(APPEND ESBMC_TEST_CAPABILITIES posix_host)
+endif()
+
 # The per-test budget is long enough for a test that takes minutes to solve.
 # ESBMC_REGRESS_TIMEOUT is one global number, so a test needing more than a
 # short leg allows has no way to ask for more; without this it is reported as

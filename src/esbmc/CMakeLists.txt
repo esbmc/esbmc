@@ -63,7 +63,7 @@ add_library(esbmc-driver
     parseoptions/process_goto_program.cpp
     parseoptions/property_monitors.cpp
     parseoptions/ts_strategy.cpp
-    bmc.cpp property_report.cpp ranking_synthesis.cpp non_termination.cpp show_vcc.cpp options.cpp)
+    bmc.cpp llm_invariant_synthesis.cpp property_report.cpp ranking_synthesis.cpp non_termination.cpp show_vcc.cpp options.cpp)
 target_include_directories(esbmc-driver
     PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}
 )
@@ -73,7 +73,7 @@ target_link_libraries(esbmc-driver PUBLIC
                             ${LD_FRONTEND_TARGETS}
                             ${GOTO_CONTRACTOR_TARGETS} ${JIMPLE_FRONTEND_TARGETS}
                             clangcfrontend clangcppfrontend symex langapi transition-system-extraction transition-system-engines
-                            solvers clibs gotoalgorithms cache ESBMC::boost goto2c goto2lean ${OS_INCLUDE_LIBS}
+                            solvers clibs gotoalgorithms cache ESBMC::boost goto2c goto2lean llm llm_goto ${OS_INCLUDE_LIBS}
                             nlohmann_json::nlohmann_json)
 
 add_executable(esbmc main.cpp globals.cpp ${CMAKE_CURRENT_BINARY_DIR}/buildidobj.c)

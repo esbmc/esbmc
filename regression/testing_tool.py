@@ -282,6 +282,9 @@ STATIC_CAPABILITIES = {
     # (--smtlib-solver-prog); a build that links z3 need not also ship the
     # executable, and Windows has no implementation of that pipe at all.
     "z3_binary",
+    # The host is POSIX, so a test can name a script with a shebang line as a
+    # program for ESBMC to run.
+    "posix_host",
     # The per-test budget (ESBMC_REGRESS_TIMEOUT) is at least 600s. For tests
     # whose solve genuinely takes minutes: the PR leg caps every test at 120s,
     # where such a test can only ever report a timeout.

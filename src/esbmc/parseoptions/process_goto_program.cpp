@@ -18,6 +18,7 @@
 #include <csignal>
 #include <cstdlib>
 #include <limits>
+#include <sstream>
 #include <util/arith/ieee_float.h>
 #include <util/expr/expr_util.h>
 #include <iostream>
@@ -33,6 +34,7 @@
 #include <goto-programs/goto_termination.h>
 #include <esbmc/ranking_synthesis.h>
 #include <esbmc/non_termination.h>
+#include <esbmc/llm_invariant_synthesis.h>
 #include <goto-programs/goto_loop_simplify.h>
 #include <goto-programs/goto_array_loop_summary.h>
 #include <goto-programs/goto_invariant_synthesis.h>
@@ -1117,7 +1119,31 @@ void esbmc_parseoptionst::apply_loop_invariants(
   const optionst &options,
   bool k_induction_ran)
 {
-  if (cmdline.isset("synthesise-loop-invariants"))
+  const bool use_frame_rule = cmdline.isset("loop-frame-rule");
+  const bool llm = cmdline.isset("synthesise-loops");
+  if (llm && k_induction_ran)
+    log_warning(
+      "--synthesise-loops=llm added no invariant: the k-induction "
+      "transform has already rewritten the loop heads. Drop the k-induction "
+      "phase to use it");
+  else if (llm)
+  {
+    llm::configt cfg;
+    cfg.backend = llm::backendt::cli;
+    std::istringstream command(cmdline.getval("llm-command"));
+    command >> cfg.executable;
+    for (std::string arg; command >> arg;)
+      cfg.extra_args.push_back(arg);
+    cfg.timeout_ms = 1000u * unsigned(atoi(cmdline.getval("llm-timeout")));
+    llm_synthesise_loop_invariants(
+      goto_functions,
+      context,
+      options,
+      *llm::make_client(cfg),
+      atoi(cmdline.getval("llm-max-rounds")),
+      use_frame_rule);
+  }
+  else if (cmdline.isset("synthesise-loop-invariants"))
     // Read from `options`, the same object goto_check consults
     // (goto_check.cpp:34,36). Deciding the same question from `cmdline`
     // instead happens to agree today only because nothing calls
@@ -1130,6 +1156,5 @@ void esbmc_parseoptionst::apply_loop_invariants(
         options.get_bool_option("unsigned-overflow-check")},
       k_induction_ran);
 
-  bool use_frame_rule = cmdline.isset("loop-frame-rule");
   goto_loop_invariant(goto_functions, context, use_frame_rule);
 }

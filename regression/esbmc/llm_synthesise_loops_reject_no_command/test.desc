@@ -1,0 +1,4 @@
+CORE
+main.c
+--synthesise-loops llm
+^ERROR: --synthesise-loops=llm needs --llm-command$

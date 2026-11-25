@@ -1,0 +1,9 @@
+CORE
+main.c
+--synthesise-loops llm --llm-command model.py
+REQUIRES posix_host
+^LLM loop invariants: 2 of 2 candidate conjunct\(s\) are inductive$
+^Synthesised loop invariants for 1 loop$
+\A(?![\s\S]*round 2)[\s\S]*\Z
+FAILED.*assertion x \+ y == n \+ 1
+^VERIFICATION FAILED$
