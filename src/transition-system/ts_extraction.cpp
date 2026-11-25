@@ -140,10 +140,11 @@ bool calls_are_supported(
     // Without entry flags (loop_entry_flags), a callee loop's havoc is
     // followed by an unconditional assume of its condition, which is false
     // whenever the loop is not entered and would cut off the rest of the path.
-    if (std::any_of(
-          body.instructions.begin(),
-          body.instructions.end(),
-          [](const auto &i) { return i.inductive_step_instruction; }))
+    if (
+      std::any_of(
+        body.instructions.begin(), body.instructions.end(), [](const auto &i) {
+          return i.inductive_step_instruction;
+        }))
     {
       log_warning("{} has a loop that k-induction havocs", name.as_string());
       return false;
@@ -265,6 +266,21 @@ bool recognise(const goto_functionst &fns, loop_shapet &shape)
   shape.head = head->location_number;
   shape.back = back->location_number;
   return true;
+}
+
+/** A loop or recursion that runs more than once leaves an unwinding claim;
+ * only the main loop's own, at `main_back`, is expected.
+ */
+bool unwinds_inside_step(
+  const symex_target_equationt &eq,
+  const goto_programt::instructiont *main_back)
+{
+  return std::any_of(
+    eq.SSA_steps.begin(), eq.SSA_steps.end(), [main_back](const auto &s) {
+      return s.is_assert() && &*s.source.pc != main_back &&
+             s.comment.as_string().find("unwinding assertion") !=
+               std::string::npos;
+    });
 }
 
 goto_programt::targett find_location(goto_programt &body, unsigned number)
@@ -501,18 +517,10 @@ bool extract_transition_system(
       return false;
     }
   }
-  for (size_t i = 0; i < steps.size(); i++)
+  if (unwinds_inside_step(*eq, main_back_insn))
   {
-    const auto &s = *steps[i];
-    if (!s.is_assert())
-      continue;
-    if (
-      !at_main_back(s) &&
-      s.comment.as_string().find("unwinding assertion") != std::string::npos)
-    {
-      log_warning("a loop or recursion inside a step runs more than once");
-      return false;
-    }
+    log_warning("a loop or recursion inside a step runs more than once");
+    return false;
   }
   std::unordered_set<expr2tc, irep2_hash> distinct;
   for (unsigned k = 0; k < n; k++)
