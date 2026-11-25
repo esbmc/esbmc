@@ -155,3 +155,22 @@ TEST_CASE("an event step prints its type and symbol", "[partial-order]")
   CHECK(out.str().find("ATOMIC_BEGIN") != std::string::npos);
   CHECK(out.str().find("JOIN 2") != std::string::npos);
 }
+
+TEST_CASE("an update stores and prints the value it updates", "[partial-order]")
+{
+  contextt ctx;
+  namespacet ns(ctx);
+  symex_target_equationt eq(ns);
+
+  eq.event(
+    gen_true_expr(),
+    symex_targett::SHARED_WRITE,
+    shared_x(),
+    symex_targett::sourcet(),
+    shared_x());
+  CHECK(eq.SSA_steps.back().rhs == shared_x());
+
+  std::ostringstream out;
+  eq.output(out);
+  CHECK(out.str().find(" updating ") != std::string::npos);
+}

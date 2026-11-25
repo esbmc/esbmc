@@ -436,6 +436,9 @@ void execution_statet::symex_assign(
   const bool hidden,
   const guard2tc &guard)
 {
+  if (partial_order && partial_order_update(code, hidden, guard))
+    return;
+
   goto_symext::symex_assign(code, hidden, guard);
 
   if (partial_order || threads_state.size() >= thread_cswitch_threshold)
@@ -1029,29 +1032,71 @@ namespace
 {
 bool is_partial_order_event_symbol(const expr2tc &e, const namespacet &ns)
 {
-  return is_symbol2t(e) && is_partial_order_scalar(e->type) &&
+  return is_symbol2t(e) && is_partial_order_type(e->type) &&
          is_partial_order_global(ns, to_symbol2t(e).thename);
 }
 
-/// The shared globals \p instruction reads, at L0.
-std::set<expr2tc> partial_order_reads(
-  const goto_programt::instructiont &instruction,
-  const namespacet &ns)
+/// The array an assignment to \p lhs writes an element of, or nil.
+expr2tc assigned_array(const expr2tc &lhs)
 {
-  std::set<expr2tc> reads;
-  std::function<void(const expr2tc &)> walk = [&](const expr2tc &e) {
-    if (is_nil_expr(e) || is_address_of2t(e))
+  if (!is_index2t(lhs))
+    return expr2tc();
+  expr2tc root = lhs;
+  while (is_index2t(root))
+    root = to_index2t(root).source_value;
+  return is_symbol2t(root) ? root : expr2tc();
+}
+
+/// The pointer an assignment to \p lhs writes through, or nil.
+expr2tc assigned_pointer(expr2tc lhs)
+{
+  while (is_index2t(lhs))
+    lhs = to_index2t(lhs).source_value;
+  return is_dereference2t(lhs) ? to_dereference2t(lhs).value : expr2tc();
+}
+
+/// The shared globals \p instruction reads by name, at L0, and the pointers
+/// it reads through.
+void partial_order_reads(
+  const goto_programt::instructiont &instruction,
+  const namespacet &ns,
+  std::set<expr2tc> &reads,
+  std::vector<expr2tc> &pointers)
+{
+  std::function<void(const expr2tc &)> walk, walk_lvalue;
+  walk = [&](const expr2tc &e) {
+    if (is_nil_expr(e))
       return;
+    if (is_address_of2t(e))
+      return walk_lvalue(to_address_of2t(e).ptr_obj);
+    if (is_dereference2t(e))
+      pointers.push_back(to_dereference2t(e).value);
     if (is_partial_order_event_symbol(e, ns))
       reads.insert(e);
     e->foreach_operand(walk);
+  };
+  // What locating an lvalue reads, but not the object it names.
+  walk_lvalue = [&](const expr2tc &e) {
+    if (is_index2t(e))
+    {
+      walk(to_index2t(e).index);
+      walk_lvalue(to_index2t(e).source_value);
+    }
+    else if (is_dereference2t(e))
+      walk(to_dereference2t(e).value);
+    else if (!is_symbol2t(e))
+      walk(e);
   };
 
   switch (instruction.type)
   {
   case ASSIGN:
-    walk(to_code_assign2t(instruction.code).source);
+  {
+    const code_assign2t &assign = to_code_assign2t(instruction.code);
+    walk(assign.source);
+    walk_lvalue(assign.target);
     break;
+  }
   case FUNCTION_CALL:
     for (const expr2tc &arg :
          to_code_function_call2t(instruction.code).operands)
@@ -1069,7 +1114,6 @@ std::set<expr2tc> partial_order_reads(
   default:
     break;
   }
-  return reads;
 }
 } // namespace
 
@@ -1079,17 +1123,113 @@ void execution_statet::record_shared_reads(
   if (!partial_order || cur_state->guard.is_false())
     return;
 
-  for (expr2tc sym : partial_order_reads(instruction, ns))
+  std::set<expr2tc> reads;
+  std::vector<expr2tc> pointers;
+  partial_order_reads(instruction, ns, reads, pointers);
+  for (const expr2tc &ptr : pointers)
   {
-    cur_state->top().level1.rename(sym);
-    cur_state->level2.retire(renaming::level2t::name_record(to_symbol2t(sym)));
-    cur_state->level2.get_ident_name(sym);
+    const std::set<expr2tc> pointees = shared_pointees(ptr);
+    reads.insert(pointees.begin(), pointees.end());
+  }
+
+  for (const expr2tc &sym : reads)
     target->event(
       cur_state->guard.as_expr(),
       symex_targett::SHARED_READ,
-      sym,
+      fresh_shared_value(sym),
       cur_state->source);
+}
+
+std::set<expr2tc> execution_statet::shared_pointees(const expr2tc &ptr)
+{
+  std::set<expr2tc> pointees;
+  expr2tc tmp = ptr;
+  if (!is_pointer_type(tmp->type))
+    return pointees;
+  // The value set is keyed by L1 names.
+  cur_state->top().level1.rename(tmp);
+  value_setst::valuest dest;
+  cur_state->value_set.get_reference_set(
+    dereference2tc(to_pointer_type(tmp->type).subtype, tmp), dest);
+
+  for (const expr2tc &obj : dest)
+  {
+    if (!is_object_descriptor2t(obj))
+      continue;
+    expr2tc root = to_object_descriptor2t(obj).object;
+    while (is_index2t(root))
+      root = to_index2t(root).source_value;
+    if (!is_symbol2t(root))
+      continue;
+    const expr2tc sym = symbol2tc(root->type, to_symbol2t(root).thename);
+    if (is_partial_order_event_symbol(sym, ns))
+      pointees.insert(sym);
   }
+  return pointees;
+}
+
+expr2tc execution_statet::fresh_shared_value(expr2tc sym)
+{
+  cur_state->top().level1.rename(sym);
+  cur_state->level2.retire(renaming::level2t::name_record(to_symbol2t(sym)));
+  cur_state->level2.get_ident_name(sym);
+  return sym;
+}
+
+bool execution_statet::partial_order_update(
+  const expr2tc &code,
+  const bool hidden,
+  const guard2tc &guard)
+{
+  const code_assign2t &assign = to_code_assign2t(code);
+  std::set<expr2tc> written;
+  const expr2tc array = assigned_array(assign.target);
+  if (!is_nil_expr(array) && is_partial_order_event_symbol(array, ns))
+    written.insert(array);
+  const expr2tc pointer = assigned_pointer(assign.target);
+  if (!is_nil_expr(pointer))
+    written = shared_pointees(pointer);
+  if (written.empty())
+    return false;
+
+  // Evaluate the value, the indices and the pointer first: what they read of
+  // a written object was recorded as a separate read, which another thread's
+  // write may follow before the update.
+  expr2tc lhs = assign.target;
+  std::function<void(expr2tc &)> snapshot_operands = [&](expr2tc &e) {
+    if (is_index2t(e))
+    {
+      index2t &index = to_index2t(e);
+      snapshot_operands(index.source_value);
+      if (!is_constant_int2t(index.index))
+        index.index = materialise_old_snapshot(index.index, guard);
+    }
+    else if (is_dereference2t(e) && !is_symbol2t(to_dereference2t(e).value))
+      to_dereference2t(e).value =
+        materialise_old_snapshot(to_dereference2t(e).value, guard);
+  };
+  snapshot_operands(lhs);
+  const expr2tc value = materialise_old_snapshot(assign.source, guard);
+
+  // A write through a pointer to one of several objects leaves the others
+  // with their old value, so it updates each of them.
+  std::vector<std::pair<expr2tc, expr2tc>> updates;
+  if (!cur_state->guard.is_false())
+    for (const expr2tc &sym : written)
+      updates.emplace_back(sym, fresh_shared_value(sym));
+  goto_symext::symex_assign(code_assign2tc(lhs, value), hidden, guard);
+  for (auto &[sym, old] : updates)
+  {
+    cur_state->top().level1.rename(sym);
+    cur_state->level2.get_ident_name(sym);
+    target->event(
+      cur_state->guard.as_expr(),
+      symex_targett::SHARED_WRITE,
+      sym,
+      cur_state->source,
+      old);
+  }
+  return true;
 }
 
 void execution_statet::record_shared_write(const expr2tc &code)

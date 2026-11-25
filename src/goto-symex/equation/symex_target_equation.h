@@ -83,7 +83,8 @@ public:
     const expr2tc &guard,
     step_typet type,
     const expr2tc &symbol,
-    const sourcet &source) override;
+    const sourcet &source,
+    const expr2tc &old = expr2tc()) override;
 
   // `runtime_encoded_equationt` overrides `convert` and supports only the
   // default mode; incremental BMC callers must run probes through the

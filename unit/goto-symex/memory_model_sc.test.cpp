@@ -61,11 +61,12 @@ void add_event(
   symex_target_equationt &eq,
   unsigned thread,
   symex_targett::step_typet type,
-  const expr2tc &sym)
+  const expr2tc &sym,
+  const expr2tc &old = expr2tc())
 {
   symex_targett::sourcet source;
   source.thread_nr = thread;
-  eq.event(gen_true_expr(), type, sym, source);
+  eq.event(gen_true_expr(), type, sym, source, old);
 }
 
 bool mentions(const expr2tc &e, const expr2tc &sym)
@@ -333,4 +334,71 @@ TEST_CASE("a section left open lasts to its thread's end", "[po]")
   CHECK_FALSE(all_hold(eq, v));
   v[clock(2)] = tick(4);
   CHECK(all_hold(eq, v));
+}
+
+/// Events 0: W x#1 (thread 0), 1: W x#2 updating x#3 (thread 1), 2: W x#4
+/// updating x#5 (thread 2), as two element writes to one array.
+struct two_updatest
+{
+  contextt ctx;
+  namespacet ns{ctx};
+  symex_target_equationt eq{ns};
+
+  two_updatest()
+  {
+    add_event(eq, 0, symex_targett::SHARED_WRITE, x(1));
+    add_event(eq, 1, symex_targett::SHARED_WRITE, x(2), x(3));
+    add_event(eq, 2, symex_targett::SHARED_WRITE, x(4), x(5));
+    memory_model_sct().run(eq.SSA_steps);
+  }
+};
+
+/// The initial write, then thread 1's update, then thread 2's, which reads
+/// thread 1's.
+valuation serial_updates()
+{
+  return {
+    {x(1), num(0)},
+    {x(2), num(1)},
+    {x(3), num(0)},
+    {x(4), num(2)},
+    {x(5), num(1)},
+    {clock(0), tick(1)},
+    {clock(1), tick(2)},
+    {clock(2), tick(3)},
+    {rf(0, 1), gen_true_expr()},
+    {rf(2, 1), gen_false_expr()},
+    {rf(0, 2), gen_false_expr()},
+    {rf(1, 2), gen_true_expr()}};
+}
+
+TEST_CASE("an update reads the latest write before it", "[po]")
+{
+  two_updatest f;
+  CHECK(all_hold(f.eq, serial_updates()));
+
+  valuation v = serial_updates();
+  v[x(5)] = num(0);
+  CHECK_FALSE(all_hold(f.eq, v));
+}
+
+TEST_CASE("no write falls between an update's read and its write", "[po]")
+{
+  two_updatest f;
+  // Both updates read the initial write, so thread 1's is lost.
+  valuation v = serial_updates();
+  v[x(5)] = num(0);
+  v[rf(0, 2)] = gen_true_expr();
+  v[rf(1, 2)] = gen_false_expr();
+  CHECK_FALSE(all_hold(f.eq, v));
+}
+
+TEST_CASE("an update never reads its own write", "[po]")
+{
+  two_updatest f;
+  for (const auto &step : f.eq.SSA_steps)
+  {
+    CHECK_FALSE(mentions(step.cond, rf(1, 1)));
+    CHECK_FALSE(mentions(step.cond, rf(2, 2)));
+  }
 }

@@ -11,6 +11,8 @@
 /// clocks an SC execution: program order within a thread, a total order on
 /// the writes to each object, and for each read a choice of the write it
 /// reads from, which must be the latest write to that object before the read.
+/// A write that updates part of an object, such as an array element, also
+/// reads the object, atomically with its write.
 /// A spawned thread's events follow its spawn and precede every join on it,
 /// and no other thread's event falls inside an atomic section.
 /// The constraints go first in the equation, so every claim depends on them.
