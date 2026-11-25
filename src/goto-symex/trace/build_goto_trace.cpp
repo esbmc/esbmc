@@ -534,6 +534,18 @@ condition_operand_gotos(const goto_programt &prog)
   return operands;
 }
 
+/// Hidden steps are internal SSA bookkeeping (e.g. phi-merge nodes at
+/// control-flow joins). They carry a synthesised value and a source location
+/// borrowed from a branch, so surfacing them in the trace yields
+/// contradictory-looking states (see discussion #5701). They are never a
+/// user-visible source assignment, so drop them regardless of slicing. A
+/// --partial-order event has no value of its own; the assignment it marks is
+/// already in the trace.
+static bool is_bookkeeping(const symex_target_equationt::SSA_stept &step)
+{
+  return step.hidden || step.is_event();
+}
+
 void build_goto_trace(
   const symex_target_equationt &target,
   smt_convt &smt_conv,
@@ -561,12 +573,7 @@ void build_goto_trace(
     record_nondet_return(smt_conv, SSA_step, nondet_returns, nondet_origin);
     record_spawn(smt_conv, SSA_step, nondet_returns.size(), spawns);
 
-    // Hidden steps are internal SSA bookkeeping (e.g. phi-merge nodes at
-    // control-flow joins). They carry a synthesised value and a source
-    // location borrowed from a branch, so surfacing them in the trace yields
-    // contradictory-looking states (see discussion #5701). They are never a
-    // user-visible source assignment, so drop them regardless of slicing.
-    if (SSA_step.hidden)
+    if (is_bookkeeping(SSA_step))
       continue;
 
     // is_true() also drops steps whose guard the solver could not evaluate:

@@ -400,6 +400,8 @@ public:
    */
   bool check_if_ileaves_blocked();
 
+  void guard_by_interleaving(expr2tc &expr) const override;
+
   /**
    *  True iff every thread in this schedule has reached a terminal state,
    *  i.e. has either ended or has an empty call stack. This is the precondition
@@ -459,6 +461,52 @@ public:
    *  @param expr Container of expression possibly touching global state.
    */
   void analyze_read(const expr2tc &expr);
+
+  /** --partial-order (#10990): give every shared global \p instruction reads
+   *  a fresh, unconstrained L2 name, recorded as a SHARED_READ event, so the
+   *  memory-model pass can choose which write it observes. */
+  void record_shared_reads(const goto_programt::instructiont &instruction);
+
+  /** --partial-order: record the L2 name an assignment to a shared global
+   *  defines as a SHARED_WRITE event. */
+  void record_shared_write(const expr2tc &code);
+
+  /** --partial-order: assign to an element of a shared array, or through a
+   *  pointer that may reach a shared global, as an update of each object
+   *  written, whose old value is a fresh L2 name the memory model ties to
+   *  the latest write. Returns false if \p code writes no such object. */
+  bool partial_order_update(
+    const expr2tc &code,
+    const bool hidden,
+    const guard2tc &guard);
+
+  /** --partial-order: the shared globals, at L0, that dereferencing \p ptr
+   *  may reach. */
+  std::set<expr2tc> shared_pointees(const expr2tc &ptr);
+
+  /** --partial-order: give the shared global \p sym a fresh, unconstrained
+   *  L2 name and return it. */
+  expr2tc fresh_shared_value(expr2tc sym);
+
+  /** --partial-order: record a SPAWN or JOIN event naming thread \p tid. */
+  void record_thread_event(symex_targett::step_typet type, unsigned int tid);
+
+  /** --partial-order: record an ATOMIC_BEGIN or ATOMIC_END event for an
+   *  atomic section in user code. */
+  void record_atomic_event(
+    symex_targett::step_typet type,
+    const goto_programt::instructiont &instruction);
+
+  /** Run a function call, or its --partial-order replacement. */
+  void symex_call(
+    reachability_treet &art,
+    const goto_programt::instructiont &instruction);
+
+  /** --partial-order: replace a pthread_join call by a JOIN event. The
+   *  operational model's join waits for the thread to end, which never
+   *  happens here because the thread runs after its joiner in the equation.
+   *  @return Whether \p instruction was such a call under --partial-order */
+  bool partial_order_join(const goto_programt::instructiont &instruction);
 
   /** Kind of memory access, used by get_expr_globals to decide whether a
    *  read-only global can be filtered out of cswitch-triggering sets. */
@@ -692,6 +740,9 @@ public:
   /** Identifying number for this execution state. Used to distinguish runs
    *  in --schedule mode. */
   unsigned int node_id;
+  /** --schedule only: the free guard symbol of this interleaving's node,
+   *  nil otherwise. */
+  expr2tc interleaving_guard;
   /** True if the guard on this interleaving becomes false.
    *  Means that there is no path from here on where any assertion may
    *  become satisfiable. */
@@ -757,6 +808,9 @@ protected:
    *  thread's goto_symex_statet, so the option is looked up once per run
    *  rather than once per thread creation. */
   bool no_propagation;
+  /** --partial-order: run each thread to completion and record its shared
+   *  accesses as events instead of offering context switches. */
+  bool partial_order;
 
   /** Copy execution_statet's own scheduling fields from `ex`. The base
    *  goto_symext slice is left untouched (the copy constructor's

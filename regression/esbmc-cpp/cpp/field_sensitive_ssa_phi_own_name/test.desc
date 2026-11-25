@@ -1,0 +1,5 @@
+CORE
+main.cpp
+--std c++17 --field-sensitive-ssa --multi-property
+^VERIFICATION SUCCESSFUL$
+(?s)\A(?!.*invalid pointer)

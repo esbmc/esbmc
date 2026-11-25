@@ -29,7 +29,7 @@ You may want use `hexdump clib32.goto -C` to take a look at the their header "GB
 
 called as part of the `c2goto`'s conversion flow. So the `c2goto` first converts ESBMC's internal libraries to `goto` functions and the associated context (aka. symbol table). Then write them to the corresponding *.goto binary file. Four biinaries files are created using difference machine word length 32/64 in float-bv and fixed-bv respectively. They are `clib32.goto`, `clib32_fp.goto`, `clib64.goto` and `clib64_fp.goto`. 
 
-* **[Phease 2]** CMake flails the *.goto binaries of Phase 1 to generate four *.c file that contains a char array. This process is done by the `flail.py` script in `src/scripts` directory. The output files are `clib32.c`, `clib32_fp.c`, `clib64.c` and `clib64_fp.c`. 
+* **[Phase 2]** CMake flails the *.goto binaries of Phase 1 to generate four *.c file that contains a char array. This process is done by the `scripts/flail.py` script. The output files are `clib32.c`, `clib32_fp.c`, `clib64.c` and `clib64_fp.c`.
 
 Now we've got a bunch of .goto binary files and the corresponding .c files in which we encode the symbol table and the equivalent GOTO functions of ESBMC's internal libraries (i.e. the OMs). So how are they used? ... OK here comes the linking phase. 
 

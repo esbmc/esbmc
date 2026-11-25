@@ -102,6 +102,60 @@ smt_astt smt_solver_baset::convert_ptr_cmp(
   return convert_ast(op);
 }
 
+smt_astt
+smt_solver_baset::convert_ptr_eq(const expr2tc &side1, const expr2tc &side2)
+{
+  smt_astt same = convert_ast(side1)->eq(this, convert_ast(side2));
+  /* Only NULL has address 0 (#7008), so a pointer is at NULL's address only
+   * when it is NULL. */
+  for (const expr2tc *side : {&side1, &side2})
+    if (is_symbol2t(*side) && to_symbol2t(*side).thename == "NULL")
+      return same;
+
+  smt_astt by_address =
+    mk_smt_symbol(mk_fresh_name("smt_solver_baset::ptr_eq"), boolean_sort);
+  ptr_eq_sites.push_back({by_address, side1, side2, ctx_level, {}});
+  return mk_or(same, by_address);
+}
+
+/* Offsetting a pointer made from an integer outside every object keeps it in
+ * INVALID, so it differs from a pointer into a real object at the same address
+ * (#10905). Such a pointer's object is one convert_typecast_to_ptr() named; a
+ * pointer of unknown origin keeps comparing by (object, offset). */
+void smt_solver_baset::close_ptr_eq_sites()
+{
+  const type2tc addr_type = ptraddr_type2();
+  smt_astt invalid = convert_terminal(
+    constant_int2tc(addr_type, pointer_logic.back().get_invalid_object()));
+  for (ptr_eq_sitet &site : ptr_eq_sites)
+  {
+    if (site.closed_at)
+      continue;
+    site.closed_at = ctx_level;
+
+    if (int_to_ptr_objects.empty())
+    {
+      assert_ast(mk_not(site.by_address));
+      continue;
+    }
+
+    ast_vec from_integer;
+    for (const expr2tc *side : {&site.side1, &site.side2})
+    {
+      smt_astt obj = convert_ast(pointer_object2tc(addr_type, *side));
+      ast_vec names;
+      for (const int_to_ptr_objectt &c : int_to_ptr_objects)
+        names.push_back(obj->eq(this, c.object));
+      from_integer.push_back(
+        mk_and(obj->eq(this, invalid), make_n_ary_or(names)));
+    }
+    smt_astt same_address = convert_ast(equality2tc(
+      typecast2tc(addr_type, site.side1), typecast2tc(addr_type, site.side2)));
+    assert_ast(site.by_address->eq(
+      this, mk_and(make_n_ary_or(from_integer), same_address)));
+  }
+}
+
 smt_astt smt_solver_baset::divide_by_element_size(
   const expr2tc &diff,
   const expr2tc &size)
@@ -367,6 +421,9 @@ smt_astt smt_solver_baset::convert_identifier_pointer(
   type2tc t = pointer_type2tc(get_empty_type());
   a = tuple_api->mk_tuple_symbol(symbol, convert_sort(t));
 
+  // Laying out the object may convert this address again.
+  smt_cache.insert({new_addr_of, a, ctx_level});
+
   // If this object hasn't yet been put in the address space record, we need to
   // assert that the symbol has the object ID we've allocated, and then fill out
   // the address space record.
@@ -394,11 +451,18 @@ smt_astt smt_solver_baset::convert_identifier_pointer(
     assert_ast(a->eq(this, output));
   }
 
-  // Insert canonical address-of this expression.
-  struct smt_cache_entryt entry = {new_addr_of, a, ctx_level};
-  smt_cache.insert(entry);
-
   return a;
+}
+
+/* At most the addresses an object reserves, [start, end] and the padding its
+ * alignment may put before it; a size known only symbolically may be any. */
+static BigInt reserved_extent(const expr2tc &size, const BigInt &align)
+{
+  expr2tc s = size;
+  simplify(s);
+  if (!is_constant_int2t(s))
+    return BigInt::power2(size->type->get_width());
+  return to_constant_int2t(s).value + align;
 }
 
 smt_astt smt_solver_baset::init_pointer_obj(
@@ -463,22 +527,34 @@ smt_astt smt_solver_baset::init_pointer_obj(
   expr2tc no_wraparound = greaterthanequal2tc(end_sym, start_sym);
   assert_expr(no_wraparound);
 
+  /* On a 64-bit target 2^63 lies in the non-canonical gap between user and
+   * kernel addresses, so no object of at most PTRDIFF_MAX bytes crosses it and
+   * the addresses inside one convert to intptr_t without wrapping (#10918).
+   * A larger size, which only --no-vla-size-check lets through, could not fit
+   * on either side, and layout is asserted on every path (#8048). */
+  if (ptr_loc_type->get_width() == 64)
+  {
+    const expr2tc top = constant_int2tc(ptr_loc_type, BigInt::power2m1(63));
+    assert_expr(implies2tc(
+      and2tc(lessthanequal2tc(the_size, top), lessthanequal2tc(start_sym, top)),
+      lessthanequal2tc(end_sym, top)));
+  }
+
   /* An object's address is a multiple of its type's alignment (C11 6.2.8,
    * [basic.align]), so constrain the base address to it. This covers both an
    * explicit alignas and the natural alignment every other object has; without
    * the latter, `(uintptr_t)&x % alignof(T) == 0` is satisfiably false and
    * yields a spurious counterexample. Types of alignment 1 constrain nothing.
    */
+  /* dereferencet::check_alignment() reads a scalar access as aligned from its
+   * offset alone, so it assumes the base carries the access width; without
+   * the same assumption here the two disagree on whether one pointer can be
+   * misaligned (#6951). object_base_alignment() is that shared assumption --
+   * the deref check consults it too, so a packed object, whose base this
+   * leaves unconstrained, no longer reads as aligned there (#7707). */
+  const BigInt a = type ? object_base_alignment(*type, size, ns) : BigInt(1);
   if (type)
   {
-    /* dereferencet::check_alignment() reads a scalar access as aligned from its
-     * offset alone, so it assumes the base carries the access width; without
-     * the same assumption here the two disagree on whether one pointer can be
-     * misaligned (#6951). object_base_alignment() is that shared assumption --
-     * the deref check consults it too, so a packed object, whose base this
-     * leaves unconstrained, no longer reads as aligned there (#7707). */
-    const BigInt a = object_base_alignment(*type, size, ns);
-
     if (
       a > 1 && !int_encoding && is_power_of_two(a) &&
       a.floorPow2() < ptr_loc_type->get_width())
@@ -514,10 +590,8 @@ smt_astt smt_solver_baset::init_pointer_obj(
         ptr_loc_type, BigInt::power2m1(ptr_loc_type->get_width()))));
   }
 
-  // Generate address space layout constraints.
-  finalize_pointer_chain(obj_num);
-
   addr_space_data.back()[obj_num] = may_be_freed;
+  register_layout(obj_num, reserved_extent(the_size, a));
 
   membs.clear();
   membs.push_back(start_sym);
@@ -535,12 +609,57 @@ smt_astt smt_solver_baset::init_pointer_obj(
   return ptr_val;
 }
 
-void smt_solver_baset::finalize_pointer_chain(unsigned int objnum)
+void smt_solver_baset::register_layout(
+  unsigned int obj_num,
+  const BigInt &reserved)
+{
+  // Packed from 2 up: NULL owns 0 and no function starts at 1.
+  const BigInt extent =
+    (object_layouts.empty() ? std::max(first_object_address(), BigInt(2))
+                            : object_layouts.back().extent) +
+    reserved;
+  object_layouts.push_back(
+    {obj_num, current_valid_objects_sym, ctx_level, std::nullopt, extent});
+  if (
+    layout_needed_at ||
+    extent > BigInt::power2(ptraddr_type2()->get_width() - 1))
+    lay_out_objects();
+}
+
+void smt_solver_baset::lay_out_objects()
+{
+  if (!layout_needed_at)
+    layout_needed_at = ctx_level;
+  // Layouts are asserted in registration order, so the laid-out ones are a
+  // prefix.
+  if (object_layouts.empty() || object_layouts.back().laid_out_at)
+    return;
+
+  /* An object registered later than one with a higher number is kept apart
+   * from it unconditionally, as it was when layouts were asserted on
+   * registration. */
+  std::unordered_set<unsigned int> registered;
+  /* Converting an older __ESBMC_alloc version whose cache entry a pop dropped
+   * makes it current again (convert_terminal). */
+  const expr2tc valid_objects = current_valid_objects_sym;
+  for (object_layoutt &l : object_layouts)
+  {
+    if (!l.laid_out_at)
+    {
+      finalize_pointer_chain(l.obj, l.valid_objects, registered);
+      l.laid_out_at = ctx_level;
+    }
+    registered.insert(l.obj);
+  }
+  current_valid_objects_sym = valid_objects;
+}
+
+void smt_solver_baset::finalize_pointer_chain(
+  unsigned int objnum,
+  const expr2tc &valid_objects,
+  const std::unordered_set<unsigned int> &registered)
 {
   type2tc inttype = ptraddr_type2();
-  unsigned int num_ptrs = addr_space_data.back().size();
-  if (num_ptrs == 0)
-    return;
 
   std::stringstream start1, end1;
   start1 << "__ESBMC_ptr_obj_start_" << objnum;
@@ -572,18 +691,9 @@ void smt_solver_baset::finalize_pointer_chain(unsigned int objnum)
      * depends on whether it is still alive in `__ESBMC_alloc`:
      *   (__ESBMC_alloc[j] == true) => (i_end < j_start || i_start > j_end)
      * __ESBMC_alloc is never set for a stack or static object, so those stay
-     * disjoint from every other object unconditionally.
-     *
-     * XXXfbrausse: This is crucially relies on the fact that the current
-     * version of the __ESBMC_alloc symbol stored in `current_valid_objects_sym`
-     * is the one this new object i gets registered with.
-     */
-    const auto obj_j = addr_space_data.back().find(j);
-    if (
-      current_valid_objects_sym && obj_j != addr_space_data.back().end() &&
-      obj_j->second)
-      e = implies2tc(
-        index2tc(get_bool_type(), current_valid_objects_sym, gen_ulong(j)), e);
+     * disjoint from every other object unconditionally. */
+    if (valid_objects && registered.count(j) && addr_space_data.back().at(j))
+      e = implies2tc(index2tc(get_bool_type(), valid_objects, gen_ulong(j)), e);
 
     assert_expr(e);
   }
@@ -816,6 +926,7 @@ expr2tc smt_solver_baset::addrspace_read(
   unsigned int member,
   const expr2tc &obj)
 {
+  lay_out_objects();
   if (!native_addrspace())
   {
     const struct_type2t &as = to_struct_type(addr_space_type);

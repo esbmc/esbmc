@@ -14,8 +14,8 @@ set -euo pipefail
 root=$(cd "$(dirname "$0")/.." && pwd)
 cd "$root"
 
-version=$(sed -nE 's/^set\(ESBMC_VERSION_(MAJOR|MINOR|PATCH) ([0-9]+)\).*/\2/p' \
-  CMakeLists.txt | paste -sd.)
+version=$(sed -nE '/^project\(ESBMC/,/\)/s/^[[:space:]]*VERSION ([0-9.]+).*/\1/p' \
+  CMakeLists.txt)
 
 if [ $# -ge 1 ]; then mkdir -p "$1"; fi
 

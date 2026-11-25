@@ -1,0 +1,4 @@
+regression/esbmc/function_write_plain_fail
+regression/esbmc/function_write_sscanf_fail
+regression/esbmc/function_write_init_object_fail
+regression/esbmc/function_object_access

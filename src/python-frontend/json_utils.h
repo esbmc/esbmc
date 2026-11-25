@@ -1190,6 +1190,33 @@ plain_assigned_value(const nlohmann::json &stmt, const std::string &name)
   return nullptr;
 }
 
+// Collect values from plain assignments to `name` under `node`.
+// Skipping nested definitions is useful for function-local analysis; callers
+// that account for bindings across the full AST must include those scopes.
+inline void collect_plain_assigned_values(
+  const nlohmann::json &node,
+  const std::string &name,
+  std::vector<const nlohmann::json *> &values,
+  bool stop_at_nested_scopes)
+{
+  if (!node.is_structured())
+    return;
+  if (node.is_object())
+  {
+    const std::string kind = node.value("_type", "");
+    if (
+      stop_at_nested_scopes &&
+      (kind == "FunctionDef" || kind == "AsyncFunctionDef" ||
+       kind == "ClassDef" || kind == "Lambda"))
+      return;
+    if (const auto *value = plain_assigned_value(node, name))
+      values.push_back(value);
+  }
+  for (const auto &child : node)
+    if (child.is_structured())
+      collect_plain_assigned_values(child, name, values, stop_at_nested_scopes);
+}
+
 // The value a top-level `name = ...` or `name: T = ...` statement assigns.
 inline const nlohmann::json *
 top_level_value(const nlohmann::json &module, const std::string &name)

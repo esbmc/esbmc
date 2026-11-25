@@ -1,5 +1,6 @@
 #include <cassert>
 #include <goto-symex/engine/goto_symex.h>
+#include <goto-symex/scheduler/reachability_tree.h>
 #include <goto-symex/equation/slice.h>
 #include <goto-symex/equation/symex_target_equation.h>
 
@@ -741,6 +742,22 @@ static void collect_l1_phis(
     });
 }
 
+/// Whether @p value is a `with` chain over an L2 name of @p lhs's object, the
+/// shape a copy of a split object is carried in (#7521). Its base is a version
+/// of the object on the path @p value came from; read in another path's value
+/// set, where the object may be dead, its pointer members become unknown.
+static bool chain_over_own_name(const expr2tc &value, const expr2tc &lhs)
+{
+  if (!is_with2t(value))
+    return false;
+  const expr2tc *base = &value;
+  while (is_with2t(*base))
+    base = &to_with2t(*base).source_value;
+  return is_symbol2t(*base) &&
+         to_symbol2t(*base).thename == to_symbol2t(lhs).thename &&
+         to_symbol2t(*base).level1_num == to_symbol2t(lhs).level1_num;
+}
+
 void goto_symext::phi_function(const statet::merge_statet &merge_state)
 {
   if (merge_state.guard.is_false() && cur_state->guard.is_false())
@@ -819,7 +836,10 @@ void goto_symext::phi_function(const statet::merge_statet &merge_state)
 
     cur_state->rename_type(new_lhs);
     cur_state->rename_type(rhs);
-    cur_state->assignment(new_lhs, rhs);
+    // merge_value_sets adds the merged path's entries for the object.
+    const bool own_chain = art1 && !art1->split_structs.empty() &&
+                           chain_over_own_name(merge_state_rhs, new_lhs);
+    cur_state->assignment(new_lhs, rhs, !own_chain);
 
     target->assignment(
       gen_true_expr(),
@@ -836,7 +856,9 @@ void goto_symext::phi_function(const statet::merge_statet &merge_state)
 
 void goto_symext::loop_bound_exceeded(const expr2tc &guard)
 {
-  if (partial_loops && !config.options.get_bool_option("termination"))
+  if (
+    partial_loops && !config.options.get_bool_option("termination") &&
+    !cur_state->source.pc->exits_at_bound)
     return;
 
   unsigned loop_number = cur_state->source.pc->loop_number;
@@ -859,6 +881,7 @@ void goto_symext::loop_bound_exceeded(const expr2tc &guard)
     // generate unwinding assumption, unless we permit partial loops
     expr2tc guarded_expr = negated_cond;
     cur_state->guard.guard_expr(guarded_expr);
+    guard_by_interleaving(guarded_expr);
     target->assumption(
       cur_state->guard.as_expr(), guarded_expr, cur_state->source, first_loop);
 

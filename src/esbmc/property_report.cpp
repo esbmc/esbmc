@@ -126,6 +126,7 @@ std::vector<property_rowt> build_property_rows(
     row.verdict = result.verdict;
     row.instruction = result.loc.instruction;
     row.condition = result.loc.condition;
+    row.property_class = result.loc.property_class;
     // A property recorded before this ran carries no structured location; the
     // key still describes it, so fall back to that rather than dropping a row.
     row.description =
@@ -170,7 +171,8 @@ std::vector<property_rowt> build_property_rows(
     // would point the reader at code they are not in.
     const std::string stem =
       (row.function.empty() ? std::string("global") : row.function) + "." +
-      property_class(row.description);
+      (row.property_class.empty() ? property_class(row.description)
+                                  : row.property_class);
     row.id = stem + "." + std::to_string(++counters[stem]);
   }
 

@@ -1,0 +1,5 @@
+CORE
+main.goto
+--binary --function harness --k-induction
+^  i reaches 5$
+^VERIFICATION FAILED$

@@ -1,0 +1,7 @@
+regression/goto-transcoder/github_10936
+regression/goto-transcoder/github_10936_dyn
+regression/goto-transcoder/github_10936_fail
+regression/goto-transcoder/github_10936_iter
+regression/goto-transcoder/github_10936_iter_fail
+regression/goto-transcoder/github_10936_nonzero
+regression/goto-transcoder/github_10936_zeroed

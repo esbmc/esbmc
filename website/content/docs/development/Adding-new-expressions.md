@@ -32,7 +32,7 @@ This is just a matter of adding the declaration at `clang_c_language.cpp`
 
 Note: if the language that you are going to use has support for these operators then you just convert them directly. No need to create an intrinsic.
 
-In `builtin_functions.cpp` we can hijack these functions and convert them into the expression. Note that there are two files with that name: at goto (for static replacement) or symex (for "dynamic" replacement). For quantifiers, I want to replace them at the goto level.
+In `builtin_functions.cpp` we can hijack these functions and convert them into the expression. That file, `src/goto-programs/builtin_functions.cpp`, does static replacement at the goto level; "dynamic" replacement happens in symex, under `src/goto-symex/engine/builtin_functions/`. For quantifiers, I want to replace them at the goto level.
 
 Of course... we can't generate anything yet. I suggest making them return nondet for now. 
 
@@ -70,46 +70,43 @@ That's all. Running a program now should result in issues at migrate.
 
 Before solving the migration issue, we need to create the expression at irep2. Irep2 relies on lots of metaprogramming to generate the expressions in a sane way. A custom LSP for esbmc project might be great to sort this out! Adding new expressions/types is not a well documented process and the sideffects are not well known.
 
-The first step is to add the expression into `#define ESBMC_LIST_OF_EXPRS` on `irep2.h` file. Please note that you *must* put in the last position! This is needed because `expr_names[]` on `irep2_expr.h` will assume the same ordering, add the name of the expression into the array. The next steps consists in defining the `contents` and the `methods` of the expression. This is done at `irep2_expr.h` file. Before:
+The current checklist is "Adding a new node" in `src/irep2/README.md`. For
+`forall` it has three steps.
 
-
-```cpp
-BOOST_PP_LIST_CONS(extract,
-BOOST_PP_LIST_NIL)
-```
- 
-After:
+First, append a row for the expression to `src/irep2/expr_kinds.inc`. This file
+is the single list of expression kinds; the `forall_id` entry of the
+`expr2t::expr_ids` enum and the `is_forall2t` and `to_forall2t` helpers are
+generated from it:
 
 ```cpp
-BOOST_PP_LIST_CONS(extract,
-BOOST_PP_LIST_CONS(forall,
-BOOST_PP_LIST_NIL)
+IREP2_EXPR(forall,                "forall")
 ```
 
-We need to start defining the data and contents of the expression. For now let's assume that this is just a special type
-of  logic expression. For that we can add `irep_typedefs(forall, logic_2ops);` in the `irep2_expr.h`.
-
-Defining the methods of the expression. Note that the `expr_methods` is generated automatically.
-
+Second, define the class in `src/irep2/irep2_expr.h`, together with an
+`irep_typedefs(forall);` line that generates the `forall2tc(...)` constructor
+helper. The class inherits from `expr2t`, declares its fields, and lists them in
+a `fields` tuple in the same order as the constructor parameters:
 
 ```cpp
-class forall2t : public forall2t_expr_methods
+class forall2t : public expr2t
 {
 public:
-  forall2t(
-    const type2tc &type,
-    const expr2tc &sym,
-    const expr2tc &predicate)
-    : logic_expr_methods(type, forall_id, sym, predicate)
+  expr2tc side_1, side_2;
+  forall2t(const type2tc &type, const expr2tc &sym, const expr2tc &predicate)
+    : expr2t(type, forall_id), side_1(sym), side_2(predicate)
   {
   }
   forall2t(const forall2t &ref) = default;
 
+  static constexpr auto fields =
+    std::make_tuple(&expr2t::type, &forall2t::side_1, &forall2t::side_2);
   static std::string field_names[esbmct::num_type_fields];
 };
 ```
 
-The folder `irep2_templates` contains macros to define all the forall declarations. So add a definition for the field_names: `std::string forall2t::field_names[esbmct::num_type_fields] =  {"symbol", "predicate", "", "", ""};` . Finally you need to generate the map definitions of the field names to the actual data. For the forall expression I went for `irep2_templates/irep2_templates_expr_ops.cpp` and added `expr_typedefs2(forall, logic_expr);`. Note that that the 2 is used because we have 2 parameters, so choose accordingly.
+Third, add the `field_names` table in `src/irep2/irep2_expr.cpp`, one string
+per field after `type`, in tuple order, padded with empty strings:
+`std::string forall2t::field_names[esbmct::num_type_fields] = {"symbol", "predicate", "", "", ""};`.
 
 This is the barebones to have a code that compiles. We can now update the migration to use this new expression.
 

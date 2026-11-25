@@ -8,7 +8,7 @@ representation for **expressions** (`expr2t`) and **types** (`type2t`). It is
 the data structure every frontend lowers to, every transformation rewrites,
 and every backend (symex, SMT, goto2c) consumes. It replaces the older
 "stringy" `irept` for the verification pipeline; conversions live in
-`util/migrate.{h,cpp}`.
+`util/irep/migrate.{h,cpp}`.
 
 For the full documentation — design rationale, file layout, anatomy of a node,
 how to add a new node, gotchas, and a reference of every type and expression

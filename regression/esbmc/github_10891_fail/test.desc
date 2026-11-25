@@ -1,0 +1,6 @@
+CORE
+main.c
+--multi-property
+^VERIFICATION FAILED$
+PASSED +\[main\.assertion\.[0-9]+\] +line [0-9]+ +dereference failure: Object accessed with incompatible base type
+FAILED +\[main\.assertion\.[0-9]+\] +line [0-9]+ +assertion s\.v == 7$

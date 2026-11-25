@@ -1,0 +1,5 @@
+CORE
+main.c
+--field-sensitive-ssa
+^Field-sensitive SSA splits 3 struct object\(s\)$
+^VERIFICATION SUCCESSFUL$

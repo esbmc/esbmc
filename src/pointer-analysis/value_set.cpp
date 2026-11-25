@@ -366,10 +366,17 @@ static std::vector<std::string> offset_paths(
   /* The descriptor already names the object being dereferenced, which the
    * caller's unrefined lookup covers, so there is no path to add. Both walks
    * would otherwise yield the empty path and have the caller repeat it. */
-  if ((!offset_known || offset == 0) && ns.follow(type) == target)
+  const type2tc followed = ns.follow(type);
+  if (
+    (!offset_known || offset == 0) &&
+    (followed == target ||
+     (is_pointer_type(followed) && is_pointer_type(target))))
     return {};
 
-  return offset_known ? member_paths_at_offset(type, offset, target, ns)
+  /* A pointer read as another pointer type, as Kani's transmute of
+   * DynMetadata to *const () is, still names the pointer at that offset
+   * (#10889). */
+  return offset_known ? member_paths_at_offset(type, offset, target, ns, true)
                       : member_paths_of_type(type, target, ns);
 }
 
@@ -423,6 +430,46 @@ static std::vector<std::string> union_alias_paths(
     return {};
 
   return member_paths_at_offset(type_in, offset_bits / 8, target, ns);
+}
+
+/* The byte offset and type of the member @p suffix names in @p type, or
+ * nullopt when the suffix does not name a whole, constantly placed member. */
+static std::optional<std::pair<BigInt, type2tc>> suffix_location(
+  const type2tc &type_in,
+  const std::string &suffix,
+  const namespacet &ns)
+{
+  type2tc type = ns.follow(type_in);
+  BigInt offset_bits = 0;
+  std::string rest = suffix;
+
+  while (!rest.empty())
+  {
+    if (rest[0] != '.' || !(is_struct_type(type) || is_union_type(type)))
+      return std::nullopt;
+
+    const std::vector<irep_idt> names = struct_union_member_names(type);
+    auto comp = match_leading_component(names, rest.substr(1));
+    if (!comp)
+      return std::nullopt;
+
+    try
+    {
+      if (is_struct_type(type))
+        offset_bits += member_offset_bits(type, names[comp->first], &ns);
+    }
+    catch (const array_type2t::array_size_excp &)
+    {
+      return std::nullopt;
+    }
+
+    type = ns.follow(struct_union_members(type)[comp->first]);
+    rest = rest.substr(1 + comp->second);
+  }
+
+  if (offset_bits % 8 != 0)
+    return std::nullopt;
+  return std::make_pair(offset_bits / 8, type);
 }
 
 void value_sett::get_constant_value_set(
@@ -860,11 +907,11 @@ void value_sett::get_value_set_rec(
        * offset, so the lookup above asks for `s`, which nothing keys -- the
        * pointer held in `s.p` is invisible and a race through it is pruned
        * (R31, esbmc/esbmc#6774). Ask again under the paths that offset spells
-       * out. The match is on the dereferenced type exactly, so nothing is
-       * claimed that is not there -- and equally, a cast between the
-       * descriptor's type and this one puts the member back out of reach. An
-       * offset that is not constant selects no single path, so every path of
-       * the right type is taken instead (R32). */
+       * out. The match is on the dereferenced type, or at a constant offset on
+       * any pointer when it is one, so nothing is claimed that is not there --
+       * and equally, a cast to a non-pointer type puts the member back out of
+       * reach. An offset that is not constant selects no single path, so
+       * every path of the right type is taken instead (R32). */
       for (const std::string &path : offset_paths(
              object->type,
              it1.second.offset,
@@ -1057,12 +1104,8 @@ void value_sett::get_value_set_rec(
 
   if (is_byte_extract2t(expr))
   {
-    // This is cropping up when one assigns, for example, a pointer into a
-    // byte array. The lhs gets portions of the pointer, bitcasted and then
-    // byte extracted on the lhs. Thus, we need to blast through the byte
-    // extract.
-    const byte_extract2t &be = to_byte_extract2t(expr);
-    get_value_set_rec_cached(be.source_value, dest, suffix, original_type);
+    get_byte_extract_value_set(
+      to_byte_extract2t(expr), dest, suffix, original_type);
     return;
   }
 
@@ -1187,6 +1230,85 @@ void value_sett::get_value_set_rec(
     get_type_id(expr->type));
   expr2tc tmp = unknown2tc(original_type);
   insert(dest, tmp, BigInt(0));
+}
+
+/* An aggregate read as a differently shaped one, as Kani's
+ * NonNull::<[u8]>::from_ref reads a slice { data, len } as
+ * { pointer: { 0: { data, len } } } (#10936), spells the suffix in the
+ * extract's members. The source member at the same byte offset is what it
+ * names; looking the suffix up on the source instead finds no member. */
+bool value_sett::get_reshaped_aggregate_value_set(
+  const byte_extract2t &be,
+  object_mapt &dest,
+  const std::string &suffix,
+  const type2tc &original_type) const
+{
+  const type2tc source_type = ns.follow(be.source_value->type);
+  if (
+    suffix.empty() || !is_constant_int2t(be.source_offset) ||
+    !(is_struct_type(source_type) || is_union_type(source_type)))
+    return false;
+
+  const auto loc = suffix_location(be.type, suffix, ns);
+  if (!loc)
+    return false;
+
+  const std::vector<std::string> paths = member_paths_at_offset(
+    be.source_value->type,
+    loc->first + to_constant_int2t(be.source_offset).value,
+    loc->second,
+    ns,
+    true);
+  for (const std::string &path : paths)
+    get_value_set_rec_cached(be.source_value, dest, path, original_type);
+  return !paths.empty();
+}
+
+void value_sett::get_byte_extract_value_set(
+  const byte_extract2t &be,
+  object_mapt &dest,
+  const std::string &suffix,
+  const type2tc &original_type) const
+{
+  /* The suffix names a member of the extract's type. A pointer source, such
+   * as the one Kani's NonNull::new_unchecked reads as a NonNull (#10889), has
+   * no member to append it to: a member that covers the pointer's bytes is
+   * the pointer itself. */
+  if (
+    !suffix.empty() && is_pointer_type(be.source_value) &&
+    is_constant_int2t(be.source_offset))
+  {
+    const auto loc = suffix_location(be.type, suffix, ns);
+    if (
+      loc && is_pointer_type(loc->second) &&
+      loc->first + to_constant_int2t(be.source_offset).value == 0)
+    {
+      get_value_set_rec_cached(be.source_value, dest, "", original_type);
+      return;
+    }
+  }
+
+  if (get_reshaped_aggregate_value_set(be, dest, suffix, original_type))
+    return;
+
+  // This is cropping up when one assigns, for example, a pointer into a
+  // byte array. The lhs gets portions of the pointer, bitcasted and then
+  // byte extracted on the lhs. Thus, we need to blast through the byte
+  // extract.
+  get_value_set_rec_cached(be.source_value, dest, suffix, original_type);
+
+  /* A pointer read out of an aggregate at a member's offset, as Kani does
+   * for DynMetadata (#10889), is keyed under that member's path, which the
+   * lookup above does not spell. */
+  const bool offset_known = is_constant_int2t(be.source_offset);
+  for (const std::string &path : offset_paths(
+         be.source_value->type,
+         offset_known ? to_constant_int2t(be.source_offset).value : 0,
+         offset_known,
+         be.type,
+         ns))
+    get_value_set_rec_cached(
+      be.source_value, dest, path + suffix, original_type);
 }
 
 void value_sett::get_byte_stitching_value_set(

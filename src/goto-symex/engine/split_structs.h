@@ -19,9 +19,11 @@ class split_structst
 public:
   split_structst() = default;
 
-  /// Pick the locals and parameters of fixed-size struct type that are only
-  /// ever read whole or through a constant member, never by address or at
-  /// byte level, and add their field symbols to @p context. Picks nothing
+  /// Pick the locals, parameters and static objects of fixed-size struct
+  /// type that are only
+  /// ever read whole or through a constant member, never at byte level, and
+  /// whose address, if taken, only reaches dereferences of that kind, and add
+  /// their field symbols to @p context. Picks nothing
   /// unless --field-sensitive-ssa is set, or when the program may create
   /// threads or symex checks the stack size.
   void analyse(
@@ -30,6 +32,13 @@ public:
     contextt &context,
     const optionst &options,
     const std::unordered_set<irep_idt, irep_id_hash> &address_taken_locals);
+
+  /// Every field symbol of @p name at any depth, nested structs included.
+  const std::vector<expr2tc> *all_fields(const irep_idt &name) const
+  {
+    auto it = all.find(name);
+    return it == all.end() ? nullptr : &it->second;
+  }
 
   /// The L0 field symbols of @p name, or null when it is not split.
   const std::vector<expr2tc> *fields(const irep_idt &name) const
@@ -47,6 +56,26 @@ public:
 
   static bool is_untracked_scalar(const type2tc &type);
 
+  /// Whether @p name is the field symbol of a split object.
+  bool is_field(const irep_idt &name) const
+  {
+    return field_ids.count(name) != 0;
+  }
+
+  /// Record that the L2 field symbol @p sym was assigned a value that would
+  /// leave the unsplit object unpropagated: neither carried nor an immutable
+  /// read. A whole read must not carry @p sym where the unsplit object would
+  /// be read as a symbol (#7521).
+  void mark_opaque(const expr2tc &sym)
+  {
+    opaque.insert(sym);
+  }
+
+  bool is_opaque(const expr2tc &sym) const
+  {
+    return !opaque.empty() && opaque.count(sym) != 0;
+  }
+
   bool empty() const
   {
     return split.empty();
@@ -54,11 +83,15 @@ public:
 
   /// @p e with every constant member of a split object replaced by its field
   /// symbol and every other occurrence of the object by the struct of its
-  /// fields. Only L0 expressions taken from the program reach this.
+  /// fields. An L2 name is left as it is.
   expr2tc rewrite(const expr2tc &e) const;
 
   /// The struct of @p sym's field symbols.
   expr2tc whole(const expr2tc &sym) const;
+
+  /// The field symbol a chain of members over a split object names, at the
+  /// object's level, or nil.
+  expr2tc field_of(const expr2tc &e) const;
 
 private:
   /// Whether the options and the program allow any split at all.
@@ -66,10 +99,15 @@ private:
   enabled(const goto_functionst &goto_functions, const optionst &options);
 
   /// Record the field symbols of @p s, of type @p st, and add them to
-  /// @p context.
-  void add_fields(const symbolt &s, const struct_type2t &st, contextt &context);
+  /// @p context; with @p nest, a struct member is split in turn.
+  void add_fields(
+    const symbolt &s,
+    const struct_type2t &st,
+    contextt &context,
+    bool nest);
 
   std::unordered_map<irep_idt, std::vector<expr2tc>, irep_id_hash> split;
+  std::unordered_map<irep_idt, std::vector<expr2tc>, irep_id_hash> all;
   /// Member name to field index, per split object.
   std::unordered_map<
     irep_idt,
@@ -77,4 +115,9 @@ private:
     irep_id_hash>
     index;
   std::unordered_set<irep_idt, irep_id_hash> untracked_fields;
+  std::unordered_set<irep_idt, irep_id_hash> field_ids;
+  /// Keyed by L2 name, shared by every state of a run. A name another
+  /// interleaving reuses for a different value stays marked, which only
+  /// refuses a propagation.
+  std::unordered_set<expr2tc, irep2_hash> opaque;
 };

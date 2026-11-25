@@ -36,6 +36,28 @@ bool python_annotation<Json>::are_all_user_classes(
   return true;
 }
 
+// Whether a parameter annotated `type` may be retyped from its call sites: a
+// bare container, whose element type they give, or a class the program
+// subclasses. Python does not enforce annotations, so `def run(a: A)` called
+// with a B must run B's overrides (#10304).
+template <class Json>
+bool python_annotation<Json>::is_refinable_annotation(
+  const std::string &type) const
+{
+  if (type == "list" || type == "dict" || type == "set")
+    return true;
+  if (!json_utils::is_class(type, ast_))
+    return false;
+  for (const Json &stmt : ast_["body"])
+    if (
+      stmt.value("_type", std::string()) == "ClassDef" &&
+      stmt.contains("bases"))
+      for (const Json &base : stmt["bases"])
+        if (base.value("id", std::string()) == type)
+          return true;
+  return false;
+}
+
 // Lists whose element types differ between call sites, e.g. list[str] and
 // list[int]: no one annotation types the parameter (#9545).
 template <class Json>

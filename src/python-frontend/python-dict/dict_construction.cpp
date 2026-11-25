@@ -643,6 +643,8 @@ exprt python_dict_handler::create_dict_from_literal(
   for (size_t i = 0; i < keys.size(); ++i)
   {
     exprt key_expr = converter_.get_expr(keys[i]);
+    converter_.refuse_skipped_hash(
+      key_expr.type(), "set or dict hashing", location);
 
     const std::string key_elem_id = materialize_tuple_key(key_expr, element);
 

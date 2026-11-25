@@ -9,7 +9,7 @@ Weakness Enumeration (CWE) identifiers. The mapping is pinned to **MITRE CWE
 retains ids whose Vulnerability Mapping Usage is `ALLOWED` or
 `ALLOWED-WITH-REVIEW`.
 
-ESBMC currently distinguishes **36 unique CWE identifiers** across **30
+ESBMC currently distinguishes **36 unique CWE identifiers** across **32
 violation kinds**: CWE-120, 121, 122, 125, 129, 131, 190, 191, 193, 252, 362,
 366, 369, 401, 415, 416, 457, 469, 476, 562, 563, 590, 617, 674, 681, 761, 787,
 789, 822, 823, 824, 825, 833, 835, 908, 1335. One of these — CWE-563 — is an

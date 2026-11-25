@@ -444,6 +444,92 @@ void python_converter::refuse_list_of_instance(const typet &t)
       "' is not supported here");
 }
 
+bool python_converter::refuse_skipped_dunder(
+  const typet &t,
+  const std::vector<std::string> &dunders,
+  const std::string &operation,
+  const locationt &loc)
+{
+  const typet &cls = t.is_pointer() ? t.subtype() : t;
+  if (!is_user_class_struct_type(cls))
+    return false;
+  const std::string name = class_name_of(cls);
+  const auto defined = std::find_if(
+    dunders.begin(), dunders.end(), [&](const std::string &dunder) {
+      const std::optional<std::string> owner =
+        family_method_owner(name, dunder);
+      return owner ? *owner != std::string()
+                   : imported_family_may_define(name, dunder);
+    });
+  if (defined == dunders.end())
+    return false;
+  const std::string message = "Unsupported: " + operation + " does not call " +
+                              *defined + " of class '" + name + "'";
+  if (!can_emit_runtime_guard())
+    throw std::runtime_error(message);
+  end_path_as_unsupported(message, loc);
+  return true;
+}
+
+// Every base of @p class_name, followed within @p body, is a class @p body
+// defines or `object`.
+static bool bases_defined_in(
+  const nlohmann::json &body,
+  const std::string &class_name,
+  std::set<std::string> &seen)
+{
+  if (!seen.insert(class_name).second)
+    return true;
+  const nlohmann::json cls = json_utils::find_class(body, class_name);
+  if (cls.is_null())
+    return false;
+  for (const auto &base : cls.value("bases", nlohmann::json::array()))
+  {
+    const std::string id = base.value("id", std::string());
+    if (id != "object" && (id.empty() || !bases_defined_in(body, id, seen)))
+      return false;
+  }
+  return true;
+}
+
+// Classes imported from another module have no MRO here, so look in the
+// module they come from (#10967).
+bool python_converter::imported_family_may_define(
+  const std::string &class_name,
+  const std::string &m) const
+{
+  const nlohmann::json *module = find_imported_class_module(class_name).first;
+  std::set<std::string> seen;
+  if (!module || !bases_defined_in((*module)["body"], class_name, seen))
+    return true;
+  const std::set<std::string> family = subclasses(class_name);
+  return std::any_of(family.begin(), family.end(), [&](const std::string &c) {
+    return class_defines_method(c, m);
+  });
+}
+
+bool python_converter::refuse_skipped_hash(
+  const typet &t,
+  const std::string &operation,
+  const locationt &loc)
+{
+  // Defining __eq__ alone leaves a class unhashable, a TypeError.
+  return refuse_skipped_dunder(t, {"__hash__", "__eq__"}, operation, loc);
+}
+
+bool python_converter::refuse_skipped_element_dunder(
+  const std::string &container_id,
+  const std::vector<std::string> &dunders,
+  const std::string &operation,
+  const locationt &loc)
+{
+  const auto *recorded = element_type_registry_.find(container_id);
+  return recorded &&
+         std::any_of(recorded->begin(), recorded->end(), [&](const auto &e) {
+           return refuse_skipped_dunder(e.second, dunders, operation, loc);
+         });
+}
+
 bool python_converter::is_class_instance(const nlohmann::json &value_node)
 {
   const std::string node_type = value_node.value("_type", "");

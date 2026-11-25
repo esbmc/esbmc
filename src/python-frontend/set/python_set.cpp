@@ -72,6 +72,8 @@ exprt python_set::get()
   for (auto &e : set_value_["elts"])
   {
     exprt elem = converter_.get_expr(e);
+    converter_.refuse_skipped_hash(
+      elem.type(), "set or dict hashing", converter_.get_location_from_decl(e));
 
     // Skip duplicates
     if (elements.count(elem))

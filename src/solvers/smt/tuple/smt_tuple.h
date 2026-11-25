@@ -1,6 +1,8 @@
 #ifndef _ESBMC_SOLVERS_SMT_TUPLE_SMT_TUPLE_H_
 #define _ESBMC_SOLVERS_SMT_TUPLE_SMT_TUPLE_H_
 
+#include <memory>
+#include <vector>
 #include <solvers/smt/smt_ast.h>
 #include <solvers/smt/tuple/smt_tuple_sort.h>
 
@@ -81,6 +83,17 @@ public:
   virtual void pop_tuple_ctx() {};
 
   virtual ~tuple_iface() = default;
+
+protected:
+  /** Keeps a sort this flattener made until the flattener is destroyed. */
+  smt_sortt own_sort(smt_sort *s)
+  {
+    sorts.emplace_back(s);
+    return s;
+  }
+
+private:
+  std::vector<std::unique_ptr<smt_sort>> sorts;
 };
 
 #endif /* _ESBMC_SOLVERS_SMT_TUPLE_SMT_TUPLE_H_ */

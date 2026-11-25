@@ -1,0 +1,5 @@
+CORE
+main.c
+--bitwuzla --ts-bmc
+\A(?![\s\S]*VERIFICATION SUCCESSFUL)
+^(VERIFICATION FAILED|ERROR: Solver error before the loop)$

@@ -5,7 +5,6 @@
 
 #include <cmath>
 #include <complex>
-#include <stdexcept>
 
 using dense_spectrum::complex_vector;
 using dense_spectrum::matrix;
@@ -145,17 +144,196 @@ TEST_CASE("singular_system_of factors rectangular matrices", "[dense_spectrum]")
   }
 }
 
+namespace
+{
+double dot(const std::vector<double> &a, const std::vector<double> &b)
+{
+  double sum = 0;
+  for (std::size_t i = 0; i < a.size(); ++i)
+    sum += a[i] * b[i];
+  return sum;
+}
+
+// The rows of `vectors` are orthonormal and orthogonal to those of `known`.
+void require_orthonormal(const matrix &vectors, const matrix &known = {})
+{
+  for (std::size_t a = 0; a < vectors.size(); ++a)
+  {
+    for (std::size_t b = 0; b < vectors.size(); ++b)
+      REQUIRE(std::fabs(dot(vectors[a], vectors[b]) - (a == b)) < 1e-12);
+    for (const auto &k : known)
+      REQUIRE(std::fabs(dot(vectors[a], k)) < 1e-12);
+  }
+}
+
+void require_reconstructs(
+  const matrix &a,
+  const dense_spectrum::singular_system &system)
+{
+  for (std::size_t i = 0; i < a.size(); ++i)
+    for (std::size_t j = 0; j < a[0].size(); ++j)
+    {
+      double sum = 0;
+      for (std::size_t k = 0; k < system.sigma.size(); ++k)
+        sum += system.u[k][i] * system.sigma[k] * system.v[k][j];
+      REQUIRE(std::fabs(sum - a[i][j]) < 1e-12);
+    }
+}
+} // namespace
+
 TEST_CASE(
-  "singular_system_of refuses factors LAPACK may rotate",
+  "singular_system_of completes rank deficient factors",
   "[dense_spectrum]")
 {
-  // Rank 1: the second right singular vector of the reduced factors lies
-  // anywhere in a plane.
-  REQUIRE_THROWS_AS(
-    dense_spectrum::singular_system_of({{1, 2, 3}, {2, 4, 6}}, false),
-    std::runtime_error);
-  // A 1x3 matrix's full Vh completes a plane.
-  REQUIRE_THROWS_AS(
-    dense_spectrum::singular_system_of({{1, 2, 3}}, true), std::runtime_error);
-  REQUIRE_NOTHROW(dense_spectrum::singular_system_of({{1, 2, 3}}, false));
+  SECTION("a zero singular value of the reduced factors")
+  {
+    const matrix a = {{1, 2, 3}, {2, 4, 6}};
+    const auto system = dense_spectrum::singular_system_of(a, false);
+    REQUIRE(system.rank == 1);
+    REQUIRE(system.u.size() == 2);
+    REQUIRE(system.v.size() == 2);
+    REQUIRE(system.sigma[1] < 1e-12);
+    // The reduced Vh keeps one vector of a plane, which v_rest spans.
+    REQUIRE(system.u_rest.size() == 1);
+    REQUIRE(system.v_rest.size() == 2);
+    require_orthonormal(system.u);
+    require_orthonormal(system.v);
+    require_orthonormal(system.v_rest, {system.v[0]});
+    require_reconstructs(a, system);
+  }
+  SECTION("a full factor completing a plane, through the transpose")
+  {
+    const matrix a = {{1, 2, 3}};
+    const auto system = dense_spectrum::singular_system_of(a, true);
+    REQUIRE(system.rank == 1);
+    REQUIRE(system.v.size() == 3);
+    REQUIRE(system.v_rest.size() == 2);
+    REQUIRE(system.u_rest.empty());
+    require_orthonormal(system.v);
+    require_orthonormal(system.v_rest, {system.v[0]});
+    require_reconstructs(a, system);
+  }
+  SECTION("a full factor completing a plane directly")
+  {
+    const matrix a = {{1}, {2}, {2}};
+    const auto system = dense_spectrum::singular_system_of(a, true);
+    REQUIRE(system.u.size() == 3);
+    REQUIRE(system.u_rest.size() == 2);
+    require_orthonormal(system.u);
+    require_orthonormal(system.u_rest, {system.u[0]});
+    require_reconstructs(a, system);
+  }
+  SECTION("a zero matrix has rank zero and no gap to divide by")
+  {
+    const matrix a = {{0, 0}, {0, 0}, {0, 0}};
+    const auto system = dense_spectrum::singular_system_of(a, true);
+    REQUIRE(system.rank == 0);
+    REQUIRE(system.sigma[0] == 0);
+    REQUIRE(system.u_rest.size() == 3);
+    require_orthonormal(system.u);
+    require_orthonormal(system.v);
+  }
+}
+
+TEST_CASE(
+  "complex_input_eigen_system bounds a complex matrix's spectrum",
+  "[dense_spectrum]")
+{
+  using cd = std::complex<double>;
+  const auto residual_of = [](
+                             const dense_spectrum::complex_matrix &a,
+                             cd lambda,
+                             const complex_vector &v) {
+    double worst = 0;
+    for (std::size_t i = 0; i < a.size(); ++i)
+    {
+      cd r = -lambda * v[i];
+      for (std::size_t j = 0; j < a.size(); ++j)
+        r += a[i][j] * v[j];
+      worst = std::max(worst, std::abs(r));
+    }
+    return worst;
+  };
+  SECTION("a 3x3 spectrum with no conjugate pairs")
+  {
+    const dense_spectrum::complex_matrix a = {
+      {{1, 1}, {2, 0}, {0, 0}},
+      {{0, 0}, {2, 0.5}, {1, 0}},
+      {{0, 1}, {0, 0}, {3, 0}}};
+    const auto system = dense_spectrum::complex_input_eigen_system("eig", a);
+    REQUIRE(system.values.size() == 3);
+    cd trace = 0;
+    for (std::size_t k = 0; k < 3; ++k)
+    {
+      trace += system.values[k];
+      REQUIRE(system.value_radius[k] > 0);
+      REQUIRE(system.value_radius[k] < 1e-9);
+      REQUIRE_FALSE(system.candidates[k].empty());
+      for (const auto &candidate : system.candidates[k])
+      {
+        REQUIRE(residual_of(a, system.values[k], candidate.vector) < 1e-12);
+        REQUIRE(std::fabs(norm_squared(candidate.vector) - 1) < 1e-12);
+        const cd largest = candidate.vector[candidate.real_component];
+        REQUIRE(largest.imag() == 0);
+        for (const cd &x : candidate.vector)
+          REQUIRE(std::abs(x) <= std::abs(largest) + 1e-9);
+      }
+    }
+    REQUIRE(std::abs(trace - cd(6, 1.5)) < 1e-12);
+  }
+  SECTION("a real eigenvalue of a complex matrix has a complex vector")
+  {
+    const dense_spectrum::complex_matrix a = {
+      {{1, 0}, {0, 0}}, {{5, 0}, {2, 1}}};
+    const auto system = dense_spectrum::complex_input_eigen_system("eig", a);
+    bool seen = false;
+    for (std::size_t k = 0; k < 2; ++k)
+      if (std::abs(system.values[k] - cd(1, 0)) < 1e-12)
+      {
+        seen = true;
+        const auto &candidate = system.candidates[k].front();
+        REQUIRE(candidate.real_component == 1);
+        REQUIRE(candidate.vector[0].imag() != 0);
+      }
+    REQUIRE(seen);
+  }
+  SECTION("eigenvalues too close to bound are refused")
+  {
+    const dense_spectrum::complex_matrix a = {
+      {{1, 0}, {3, 0}}, {{0, 0}, {1, 1e-9}}};
+    REQUIRE_THROWS_AS(
+      dense_spectrum::complex_input_eigen_system("eig", a), std::runtime_error);
+  }
+}
+
+TEST_CASE(
+  "symmetric_eigenvalues keeps a repeated eigenvalue's multiplicity",
+  "[dense_spectrum]")
+{
+  const auto values =
+    dense_spectrum::symmetric_eigenvalues({{2, 1, 1}, {1, 2, 1}, {1, 1, 2}});
+  REQUIRE(values.size() == 3);
+  REQUIRE(std::fabs(values[0] - 1) < 1e-15);
+  REQUIRE(std::fabs(values[1] - 1) < 1e-15);
+  REQUIRE(std::fabs(values[2] - 4) < 1e-15);
+}
+
+TEST_CASE("close spectra keep their computed values", "[dense_spectrum]")
+{
+  SECTION("symmetric eigenvalues a small gap apart stay apart")
+  {
+    const auto values = dense_spectrum::symmetric_eigenvalues(
+      {{1, 1e-10, 0}, {1e-10, 1 + 1e-9, 0}, {0, 0, 3}});
+    REQUIRE(values[1] - values[0] > 9e-10);
+    REQUIRE(std::fabs(values[0] + values[1] - (2 + 1e-9)) < 1e-15);
+  }
+  SECTION("a repeated singular value's computed plane reconstructs A")
+  {
+    const matrix a = {{4, 4, 1}, {-4, 2, 2}, {2, -4, 2}};
+    const auto system = dense_spectrum::singular_system_of(a, true);
+    REQUIRE(std::fabs(system.sigma[0] - system.sigma[1]) < 1e-12);
+    require_orthonormal(system.u);
+    require_orthonormal(system.v);
+    require_reconstructs(a, system);
+  }
 }

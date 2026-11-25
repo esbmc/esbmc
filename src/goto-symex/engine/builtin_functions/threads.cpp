@@ -79,8 +79,6 @@ void goto_symext::intrinsic_set_thread_data(
   expr2tc threadid = call.operands[0];
   expr2tc startdata = call.operands[1];
 
-  // TODO: remove this global guard
-  state.global_guard.add(cur_state->guard.as_expr());
   state.rename(threadid);
   state.rename(startdata);
 
@@ -174,6 +172,7 @@ void goto_symext::intrinsic_spawn_thread(
 
   // Invalidates current state reference!
   unsigned int thread_id = art.get_cur_state().add_thread(&prog);
+  art.get_cur_state().record_thread_event(symex_targett::SPAWN, thread_id);
 
   statet &state = art.get_cur_state().get_active_state();
 

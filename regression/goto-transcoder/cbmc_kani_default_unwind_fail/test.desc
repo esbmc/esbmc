@@ -1,0 +1,6 @@
+CORE
+main.goto
+--binary --unwind 2
+\A(?![\s\S]*Kani goto-binary: verifying by k-induction)
+FAILED +\[main\.assertion\.1\] +line +\d+ +unwinding assertion loop
+^VERIFICATION FAILED$

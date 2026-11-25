@@ -220,31 +220,6 @@ bool python_converter::is_instance_attribute(
   return false;
 }
 
-// Appends what each plain assignment to `name` under `node` assigns, outside
-// nested scopes. A binding these miss is still counted by count_name_bindings,
-// which then forces the fallback.
-static void collect_assigned_values(
-  const nlohmann::json &node,
-  const std::string &name,
-  std::vector<const nlohmann::json *> &values)
-{
-  if (node.is_object())
-  {
-    const std::string kind = node.value("_type", "");
-    if (
-      kind == "FunctionDef" || kind == "AsyncFunctionDef" ||
-      kind == "ClassDef" || kind == "Lambda")
-      return;
-    if (
-      const nlohmann::json *value =
-        json_utils::plain_assigned_value(node, name))
-      values.push_back(value);
-  }
-  for (const auto &child : node)
-    if (child.is_structured())
-      collect_assigned_values(child, name, values);
-}
-
 // `value`, or every value assigned to the local it names when plain
 // assignments are all of that local's bindings in `method` (#9073).
 static std::vector<const nlohmann::json *>
@@ -254,7 +229,8 @@ assigned_values(const nlohmann::json &value, const nlohmann::json &method)
     return {&value};
   const std::string name = value["id"].get<std::string>();
   std::vector<const nlohmann::json *> values;
-  collect_assigned_values(method["body"], name, values);
+  json_utils::collect_plain_assigned_values(
+    method["body"], name, values, /*stop_at_nested_scopes=*/true);
   if (
     values.empty() ||
     values.size() != json_utils::count_name_bindings(method, name))
@@ -1416,6 +1392,36 @@ typet python_converter::any_attribute_type(
            : from_usage;
 }
 
+/// The Optional[V] that @p value, a `d.get(k)` without a default, reads when
+/// `d` is a parameter annotated `dict[K, V]` with a scalar V: the struct
+/// handle_dict_get builds, so the attribute keeps its None flag (#10831).
+/// @p fallback otherwise.
+typet python_converter::dict_get_optional_type(
+  const nlohmann::json &value,
+  const std::unordered_map<std::string, nlohmann::json> &param_annotations,
+  const typet &fallback) const
+{
+  if (
+    !value.is_object() || value.value("_type", "") != "Call" ||
+    value["func"].value("_type", "") != "Attribute" ||
+    value["func"].value("attr", "") != "get" || value["args"].size() != 1 ||
+    !value["keywords"].empty() ||
+    value["func"]["value"].value("_type", "") != "Name")
+    return fallback;
+  const auto param =
+    param_annotations.find(value["func"]["value"].value("id", ""));
+  if (
+    param == param_annotations.end() ||
+    param->second.value("_type", "") != "Subscript" ||
+    param->second["value"].value("id", "") != "dict")
+    return fallback;
+  const typet held =
+    dict_handler_->get_dict_value_type_from_annotation(param->second);
+  if (!held.is_signedbv() && !held.is_floatbv() && !held.is_bool())
+    return fallback;
+  return type_handler_.build_optional_type(held);
+}
+
 /// Whether @p value, stored by method @p func_node, is built only from
 /// dynamically-typed operands: tagged attributes of @p clazz and unannotated
 /// parameters that call sites tag.
@@ -1455,9 +1461,10 @@ typet python_converter::self_attribute_type(
 {
   const nlohmann::json &base = node["value"];
   const struct_typet *owner = &clazz;
+  typet held;
   if (base.value("_type", "") == "Attribute")
   {
-    typet held = ns.follow(self_attribute_type(base, clazz));
+    held = ns.follow(self_attribute_type(base, clazz));
     if (held.is_pointer())
       held = ns.follow(held.subtype());
     if (!held.is_struct())
@@ -1809,8 +1816,11 @@ void python_converter::get_attributes_from_self(
       stmt["targets"][0]["value"]["id"] == "self")
     {
       // A member is initialized with something that might be not annotated
-      typet type =
-        unannotated_attribute_type(stmt["value"], func_node, clazz, any_type());
+      const typet type = dict_get_optional_type(
+        stmt["value"],
+        param_annotations,
+        unannotated_attribute_type(
+          stmt["value"], func_node, clazz, any_type()));
       const std::string &attr_name = stmt["targets"][0]["attr"];
 
       if (!clazz.has_component(attr_name))

@@ -4,6 +4,7 @@
 // mirror the Rust to keep the two implementations easy to diff.
 
 #include <goto-programs/cbmc_adapter.h>
+#include <util/config/config.h>
 #include <util/lang/c_types.h>
 #include <util/message/message.h>
 
@@ -155,17 +156,39 @@ void intern_string_type(irept &candidate)
   }
 }
 
-// A "constant" irep of the given bitvector type holding `value`. The value is
-// emitted as a hex string so fix_expression's own constant branch converts it
-// to a binary string of the type's exact width on the later recursion (the same
-// path CBMC's own constants take -- see hex_to_bin), rather than duplicating
-// that width logic here.
-irept mk_bv_const(const irept &bv_type, unsigned long long value)
+// A "constant" irep of the given bitvector type holding the hex string `hex`,
+// which fix_expression's own constant branch converts to a binary string of the
+// type's exact width on the later recursion (the same path CBMC's own constants
+// take -- see hex_to_bin), rather than duplicating that width logic here.
+irept mk_bv_hex_const(const irept &bv_type, const std::string &hex)
 {
   irept c("constant");
   c.add("type") = bv_type;
-  c.add("value") = mk(int_to_hex(value));
+  c.add("value") = mk(hex);
   return c;
+}
+
+irept mk_bv_const(const irept &bv_type, unsigned long long value)
+{
+  return mk_bv_hex_const(bv_type, int_to_hex(value));
+}
+
+// Hex of the `width`-bit mask that sets the low k bits of every 2k-bit block,
+// built digit by digit so a width above 64 keeps its upper bits.
+static std::string swar_mask_hex(std::size_t width, std::size_t k)
+{
+  static const char *digits = "0123456789abcdef";
+  std::string s;
+  for (std::size_t nibble = 0; nibble * 4 < width; ++nibble)
+  {
+    unsigned d = 0;
+    for (std::size_t b = 0; b < 4 && nibble * 4 + b < width; ++b)
+      if ((nibble * 4 + b) % (2 * k) < k)
+        d |= 1u << b;
+    s.push_back(digits[d]);
+  }
+  std::reverse(s.begin(), s.end());
+  return s;
 }
 
 // A unary/binary expression node with raw operands in get_sub(); the later
@@ -453,13 +476,13 @@ void fix_expression(irept &irep)
 
   if (irep.id() == "bitreverse")
   {
-    // CBMC lowers __builtin_bitreverse{8,16,32,64} to a bitreverse irep
-    // (reverse the bit order: bit i <-> bit W-1-i), which migrate_expr has no
-    // handler for (aborts with "migrate expr failed"); ESBMC has no bitreverse
-    // irep2 node. As with clz/ctz above, reproduce it from ids migrate_expr
-    // already lowers (bitand, shl, lshr, bitor) via the standard SWAR reversal:
-    // swap adjacent bits, then 2-bit groups, then 4-bit, ... doubling the group
-    // size each step
+    // CBMC lowers __builtin_bitreverse{8,16,32,64}, and Kani
+    // u128::reverse_bits, to a bitreverse irep (reverse the bit order: bit i
+    // <-> bit W-1-i), which migrate_expr has no handler for (aborts with
+    // "migrate expr failed"); ESBMC has no bitreverse irep2 node. As with
+    // clz/ctz above, reproduce it from ids migrate_expr already lowers (bitand,
+    // shl, lshr, bitor) via the standard SWAR reversal: swap adjacent bits,
+    // then 2-bit groups, then 4-bit, ... doubling the group size each step
     //   acc = ((acc & mask_k) << k) | ((acc >> k) & mask_k)
     // where mask_k selects the low k bits of every 2k-bit block. Scoped to the
     // CBMC --binary path, so it never perturbs native handling.
@@ -470,12 +493,7 @@ void fix_expression(irept &irep)
     irept acc = operand;
     for (std::size_t k = 1; k < width; k <<= 1)
     {
-      // mask_k: low k bits set in each 2k-bit block, across the full width.
-      const unsigned long long block = (k >= 64) ? ~0ULL : ((1ULL << k) - 1);
-      unsigned long long m = 0;
-      for (std::size_t pos = 0; pos < width; pos += 2 * k)
-        m |= block << pos;
-      const irept mask = mk_bv_const(optype, m);
+      const irept mask = mk_bv_hex_const(optype, swar_mask_hex(width, k));
 
       // acc = ((acc & mask) << k) | ((acc >> k) & mask)
       irept lo = mk_binary(
@@ -1664,6 +1682,30 @@ bool fix_builtin_call(irept &code)
 
   const std::string callee = sub[1].find("identifier").id_string();
 
+  // _FORTIFY_SOURCE (on by default in the macOS SDK) turns these into
+  // __builtin___*_chk calls, which carry the destination's
+  // __builtin_object_size as a trailing argument and have no body here. Drop
+  // that argument: the copy's own bounds check already reports an overflow of
+  // the destination object. A call of any other arity is left bodyless.
+  static const std::unordered_map<std::string, std::pair<const char *, size_t>>
+    fortified = {
+      {"__builtin___memcpy_chk", {"c:@F@__ESBMC_memcpy", 4}},
+      {"__builtin___memmove_chk", {"c:@F@__ESBMC_memmove", 4}},
+      {"__builtin___memset_chk", {"c:@F@__ESBMC_memset", 4}},
+      {"__builtin___strcpy_chk", {"c:@F@strcpy", 3}},
+      {"__builtin___strncpy_chk", {"c:@F@strncpy", 4}},
+      {"__builtin___strcat_chk", {"c:@F@strcat", 3}},
+      {"__builtin___strncat_chk", {"c:@F@strncat", 4}}};
+  auto chk_it = fortified.find(callee);
+  if (
+    chk_it != fortified.end() &&
+    sub[2].get_sub().size() == chk_it->second.second)
+  {
+    code.get_sub()[1].set("identifier", chk_it->second.first);
+    code.get_sub()[2].get_sub().pop_back();
+    return false;
+  }
+
   // memcpy/memset/memmove: CBMC inlines a <builtin-library-*> body that
   // performs the copy via ARRAY_COPY/ARRAY_REPLACE/ARRAY_SET
   // OTHER-instructions, which ESBMC's symex has no handler for and silently
@@ -2143,6 +2185,55 @@ const char *rewrite_whole_object_codet(
     "' whole-object operations are not yet supported on the --binary path");
 }
 
+// __CPROVER_loop_entry(e) and __CPROVER_old(e), which ESBMC cannot express.
+bool uses_history_variable(const irept &i)
+{
+  if ((i.id() == "loop_entry" || i.id() == "old") && !i.get_sub().empty())
+    return true;
+  for (const auto &s : i.get_sub())
+    if (uses_history_variable(s))
+      return true;
+  for (const auto &p : i.get_named_sub())
+    if (uses_history_variable(p.second))
+      return true;
+  return false;
+}
+
+// goto-cc and Kani keep a loop's invariant as a comment on its back edge's
+// guard, which fix_expression does not visit. Only the loop-invariant modes
+// read it, so leave it alone otherwise. Dropping an invariant is sound: the
+// loop is then handled as if it had none.
+void lift_loop_invariant(const irept &guard, irept &instruction)
+{
+  const irept &invariant = guard.find("#spec_loop_invariant");
+  if (
+    invariant.is_nil() ||
+    !(config.options.get_bool_option("loop-invariant") ||
+      config.options.get_bool_option("loop-invariant-check") ||
+      config.options.get_bool_option("synthesise-loop-invariants")))
+    return;
+
+  if (uses_history_variable(invariant))
+  {
+    log_warning(
+      "CBMC adapter: ignoring a loop invariant that uses "
+      "__CPROVER_loop_entry or __CPROVER_old");
+    return;
+  }
+
+  irept fixed = invariant;
+  try
+  {
+    fix_expression(fixed);
+  }
+  catch (const std::string &e)
+  {
+    log_warning("CBMC adapter: ignoring a loop invariant: {}", e);
+    return;
+  }
+  instruction.add("loop_invariant") = fixed;
+}
+
 irept instruction_to_esbmc_irep(
   const cbmc_instructiont &ins,
   const std::map<unsigned, unsigned> &target_revmap,
@@ -2211,6 +2302,7 @@ irept instruction_to_esbmc_irep(
   result.add("function") = mk(function_name);
 
   fix_expression(result);
+  lift_loop_invariant(ins.guard, result);
 
   // fix_expression is what turns java_new_array_data into a marked malloc, so
   // the extent is only visible now. Record it against the payload symbol for

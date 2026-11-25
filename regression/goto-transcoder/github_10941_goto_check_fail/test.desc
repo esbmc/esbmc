@@ -1,0 +1,5 @@
+CORE
+main.goto
+--binary --multi-property
+FAILED +\[main\.division-by-zero\.1\]
+^VERIFICATION FAILED$

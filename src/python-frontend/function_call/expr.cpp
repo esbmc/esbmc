@@ -259,11 +259,20 @@ exprt function_call_expr::build_temporary_receiver(
   // declared and nondet: the constructor was converted but its call never
   // reached the block, so a method reading state __init__ wrote saw an
   // unconstrained value.
+  return get_expr_without_lhs(ctor_call);
+}
+
+/// Converts @p node as a value of its own. A constructor call converted while
+/// current_lhs points at the enclosing assignment's target builds the object
+/// into that target and yields nil, so `n = xs.count(C(1))` passed a void
+/// element and crashed symex (#10958).
+exprt function_call_expr::get_expr_without_lhs(const nlohmann::json &node) const
+{
   exprt *saved_lhs = converter_.current_lhs;
   converter_.current_lhs = nullptr;
-  exprt ctor_result = converter_.get_expr(ctor_call);
+  exprt value = converter_.get_expr(node);
   converter_.current_lhs = saved_lhs;
-  return ctor_result;
+  return value;
 }
 
 /// Whether the declaration of \p method that \p class_node resolves to is a
@@ -459,11 +468,36 @@ exprt function_call_expr::handle_generic_hash()
 {
   // hash() must agree on equal arguments (#8704). An int hashes to itself
   // reduced modulo 2^61 - 1 with -1 mapped to -2, as CPython does; a str goes
-  // through a deterministic model. Anything else stays nondet.
+  // through a deterministic model; an instance whose class defines __hash__
+  // calls it, its result -1 also mapped to -2. Anything else stays nondet.
   const typet int_type = type_handler::python_int_typet();
   const locationt location = converter_.get_location_from_decl(call_);
-  exprt arg = converter_.get_expr(call_["args"][0]);
+  const auto declare_tmp = [&](const typet &type) -> symbolt & {
+    symbolt &tmp = converter_.create_tmp_symbol(call_, "$hash$", type, exprt());
+    code_declt decl(build_symbol(tmp));
+    decl.location() = location;
+    converter_.add_instruction(decl);
+    return tmp;
+  };
 
+  const nlohmann::json &arg_node = call_["args"][0];
+  if (converter_.has_dunder_method(arg_node, "__hash__"))
+  {
+    exprt call = converter_.get_expr(converter_.build_dunder_call(
+      arg_node, "__hash__", nlohmann::json::array(), call_));
+    converter_.convert_function_call_to_side_effect(call);
+    const symbolt &result = declare_tmp(call.type());
+    code_assignt store(build_symbol(result), call);
+    store.location() = location;
+    converter_.add_instruction(store);
+    const exprt h = typecast_exprt(build_symbol(result), int_type);
+    return if_exprt(
+      equality_exprt(h, from_integer(-1, int_type)),
+      from_integer(-2, int_type),
+      h);
+  }
+
+  exprt arg = converter_.get_expr(arg_node);
   if (
     arg.type().is_bool() || arg.type().is_signedbv() ||
     arg.type().is_unsignedbv())
@@ -477,11 +511,7 @@ exprt function_call_expr::handle_generic_hash()
       reduced);
   }
 
-  symbolt &tmp =
-    converter_.create_tmp_symbol(call_, "$hash$", int_type, exprt());
-  code_declt decl(build_symbol(tmp));
-  decl.location() = location;
-  converter_.add_instruction(decl);
+  symbolt &tmp = declare_tmp(int_type);
 
   const symbolt *str_hash =
     converter_.symbol_table().find_symbol("c:@F@__python_str_hash");
@@ -497,6 +527,7 @@ exprt function_call_expr::handle_generic_hash()
     return build_symbol(tmp);
   }
 
+  converter_.refuse_skipped_hash(arg.type(), "hash()", location);
   exprt nondet_value("sideeffect", int_type);
   nondet_value.statement("nondet");
   code_assignt nondet_assign(build_symbol(tmp), nondet_value);
@@ -2585,7 +2616,10 @@ function_call_expr::get_object_list_symbol(std::string &display_name) const
     if (call_expr.type() == list_type)
     {
       symbolt &tmp = converter_.create_tmp_symbol(
-        call_, "$call_list$", list_type, call_expr);
+        call_,
+        "$call_list$",
+        list_type,
+        to_value_expr(call_expr, converter_.ns));
       display_name = "$call_list$";
       return &tmp;
     }
@@ -2626,8 +2660,18 @@ void function_call_expr::materialize_list_symbol(const symbolt *sym) const
     name.find("$dict_list$") == std::string::npos)
     return;
   code_declt decl(build_symbol(*sym));
-  decl.copy_to_operands(sym->get_value());
   decl.location() = sym->location;
+  exprt value = sym->get_value();
+  // A call is a statement, not a value: as a declaration initialiser it
+  // reaches the solver unconverted (#10817), so store its result instead.
+  if (value.is_function_call())
+  {
+    value.op0() = build_symbol(*sym);
+    converter_.current_block->copy_to_operands(decl);
+    converter_.current_block->copy_to_operands(value);
+    return;
+  }
+  decl.copy_to_operands(value);
   converter_.current_block->copy_to_operands(decl);
 }
 
@@ -2702,7 +2746,7 @@ exprt function_call_expr::handle_list_insert() const
     throw std::runtime_error("List variable not found: " + list_display_name);
 
   exprt index_expr = converter_.get_expr(args[0]);
-  exprt value_to_insert = converter_.get_expr(args[1]);
+  exprt value_to_insert = get_expr_without_lhs(args[1]);
 
   if (value_to_insert.is_constant())
   {
@@ -2836,7 +2880,7 @@ exprt function_call_expr::handle_list_appendleft() const
     throw std::runtime_error("List variable not found: " + list_display_name);
 
   exprt index_expr = from_integer(0, signedbv_typet(64));
-  exprt value_to_insert = converter_.get_expr(args[0]);
+  exprt value_to_insert = get_expr_without_lhs(args[0]);
 
   if (value_to_insert.is_constant())
   {
@@ -2882,7 +2926,7 @@ exprt function_call_expr::handle_tuple_method() const
   const struct_typet &tuple_type = to_struct_type(receiver.type());
   const auto &components = tuple_type.components();
 
-  exprt elem = converter_.get_expr(args[0]);
+  exprt elem = get_expr_without_lhs(args[0]);
 
   if (method_name == "count")
   {
@@ -3148,7 +3192,7 @@ exprt function_call_expr::handle_list_remove() const
   if (!list_symbol)
     throw std::runtime_error("List variable not found: " + list_display_name);
 
-  exprt value_to_remove = converter_.get_expr(args[0]);
+  exprt value_to_remove = get_expr_without_lhs(args[0]);
 
   python_list list_helper(converter_, call_);
   exprt result =
@@ -3220,7 +3264,7 @@ exprt function_call_expr::handle_list_count() const
   if (!list_symbol)
     throw std::runtime_error("List variable not found: " + list_display_name);
 
-  exprt value = converter_.get_expr(args[0]);
+  exprt value = get_expr_without_lhs(args[0]);
   python_list list_helper(converter_, call_);
   return list_helper.build_count_list_call(*list_symbol, call_, value);
 }
@@ -3240,7 +3284,7 @@ exprt function_call_expr::handle_list_index() const
   if (!list_symbol)
     throw std::runtime_error("List variable not found: " + list_display_name);
 
-  exprt value = converter_.get_expr(args[0]);
+  exprt value = get_expr_without_lhs(args[0]);
   python_list list_helper(converter_, call_);
 
   if (args.size() == 1)
@@ -3257,6 +3301,40 @@ exprt function_call_expr::handle_list_index() const
       : from_integer(BigInt(std::numeric_limits<int32_t>::max()), int_type());
   return list_helper.build_index_range_list_call(
     *list_symbol, call_, value, start, end);
+}
+
+bool function_call_expr::refuse_skipped_ordering(const typet &t) const
+{
+  // A tuple orders by its items.
+  const typet &followed = converter_.ns.follow(t);
+  if (
+    followed.is_struct() &&
+    to_struct_type(followed).tag().as_string().starts_with("tag-tuple"))
+  {
+    const auto &items = to_struct_type(followed).components();
+    return std::any_of(items.begin(), items.end(), [this](const auto &item) {
+      return refuse_skipped_ordering(item.type());
+    });
+  }
+
+  const std::string &name = function_id_.get_function();
+  return (name == "sorted" || name == "sort" || name == "min" ||
+          name == "max") &&
+         converter_.refuse_skipped_dunder(
+           t,
+           {"__lt__", "__gt__"},
+           name == "sort" ? "list.sort()" : name + "()",
+           converter_.get_location_from_decl(call_));
+}
+
+void function_call_expr::refuse_skipped_ordering(
+  const std::string &list_id) const
+{
+  const auto *recorded = converter_.get_element_type_registry().find(list_id);
+  if (recorded)
+    for (const auto &entry : *recorded)
+      if (refuse_skipped_ordering(entry.second))
+        return;
 }
 
 exprt function_call_expr::handle_list_sort() const
@@ -3296,6 +3374,7 @@ exprt function_call_expr::handle_list_sort() const
     throw std::runtime_error("List variable not found: " + list_display_name);
 
   const std::string &list_id = list_symbol->id.as_string();
+  refuse_skipped_ordering(list_id);
 
   // ── Determine type_flag and float_type_id ─────────────────────────────────
   //
@@ -3571,7 +3650,7 @@ exprt function_call_expr::handle_set_method() const
   // add/discard take a single element value.
   if (method_name == "add" || method_name == "discard")
   {
-    exprt elem = converter_.get_expr(args[0]);
+    exprt elem = get_expr_without_lhs(args[0]);
     python_list helper(converter_, call_);
     return helper.build_set_membership_call(
       *set_symbol, call_, elem, method_name);
@@ -3671,15 +3750,7 @@ bool function_call_expr::receiver_class_defines_method(
   std::string cls = function_id_.get_class();
   if (cls.rfind("tag-", 0) == 0)
     cls = cls.substr(4);
-  const auto &ast = converter_.ast();
-  if (!is_class(cls, ast))
-    return false;
-  if (!json_utils::find_class(ast["body"], cls).is_null())
-    return json_utils::class_defines_method(ast["body"], cls, method_name);
-  const nlohmann::json *module =
-    converter_.find_imported_class_module(cls).first;
-  return module &&
-         json_utils::class_defines_method((*module)["body"], cls, method_name);
+  return converter_.class_defines_method(cls, method_name);
 }
 
 /// `b.set()` or `b.type()` where b's class defines the method: the builtin
@@ -4241,7 +4312,7 @@ exprt function_call_expr::handle_list_append() const
     throw std::runtime_error("List variable not found: " + list_display_name);
 
   // Get the value to append
-  exprt value_to_append = converter_.get_expr(args[0]);
+  exprt value_to_append = get_expr_without_lhs(args[0]);
 
   // A function name stored in a list decays to a function pointer, mirroring
   // the implicit conversion the call-argument path already applies. Storing
@@ -4362,7 +4433,7 @@ exprt function_call_expr::handle_list_extend() const
   if (!list_symbol)
     throw std::runtime_error("List variable not found: " + list_display_name);
 
-  exprt other_list = converter_.get_expr(args[0]);
+  exprt other_list = get_expr_without_lhs(args[0]);
 
   python_list list(converter_, nlohmann::json());
 
@@ -4380,15 +4451,17 @@ bool function_call_expr::is_re_module_call() const
   const std::string &func_name = function_id_.get_function();
 
   return (func_name == "match" || func_name == "search" ||
-          func_name == "fullmatch") &&
+          func_name == "fullmatch" || func_name == "sub") &&
          call_["func"]["_type"] == "Attribute" && get_object_name() == "re";
 }
 
 exprt function_call_expr::validate_re_module_args() const
 {
   const auto &args = call_["args"];
+  // re.sub(pattern, repl, string) takes a third str.
+  const size_t str_args = function_id_.get_function() == "sub" ? 3 : 2;
 
-  for (size_t i = 0; i < std::min(args.size(), size_t(2)); ++i)
+  for (size_t i = 0; i < std::min(args.size(), str_args); ++i)
   {
     exprt arg_expr = converter_.get_expr(args[i]);
     const typet &arg_type = arg_expr.type();
@@ -4409,6 +4482,9 @@ exprt function_call_expr::validate_re_module_args() const
 // the flag handling out of the matchers themselves (#8223).
 void function_call_expr::route_re_flags_call()
 {
+  // The sub model takes its flags itself.
+  if (function_id_.get_function() == "sub")
+    return;
   bool has_flags = call_["args"].size() > 2;
   for (const auto &kw : call_.value("keywords", nlohmann::json::array()))
     has_flags |= kw.value("arg", "") == "flags";
@@ -6511,6 +6587,7 @@ std::optional<exprt> function_call_expr::try_fold_sorted()
       return std::nullopt;
     list_id = list_arg.identifier().as_string();
   }
+  refuse_skipped_ordering(list_id);
 
   const size_t map_size = converter_.get_element_type_registry().size(list_id);
   if (map_size == 0 || map_size > 32)
@@ -7403,6 +7480,13 @@ exprt function_call_expr::sort_mixed_numeric_literal()
   return python_list(converter_, arg).build_list_from_exprs(sorted_elems);
 }
 
+// A call argument is typed by the list its callee returns.
+std::string function_call_expr::list_arg_id(const exprt &list_arg) const
+{
+  return list_arg.is_symbol() ? list_arg.identifier().as_string()
+                              : converter_.returned_list_id(list_arg);
+}
+
 std::optional<exprt> function_call_expr::apply_builtin_dispatch(
   std::string &actual_func_name,
   bool is_user_imported,
@@ -7463,9 +7547,10 @@ std::optional<exprt> function_call_expr::apply_builtin_dispatch(
   {
     exprt list_arg = converter_.get_expr(call_["args"][0]);
     typet elem_type;
-    if (list_arg.is_symbol())
+    const std::string list_id = list_arg_id(list_arg);
+    refuse_skipped_ordering(list_id);
+    if (!list_id.empty())
     {
-      const std::string &list_id = list_arg.identifier().as_string();
       // Check that all elements have the same type and get the common type
       // Returns double_type() for mixed int/float lists (Python semantics)
       elem_type =

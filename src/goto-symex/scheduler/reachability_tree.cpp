@@ -667,17 +667,18 @@ void reachability_treet::switch_to_next_execution_state()
 
 void reachability_treet::drain_to_unexplored(bool add_leak_checks)
 {
+  // Only the first frame drained ends a schedule; the rest are its ancestors.
+  bool at_leaf = add_leak_checks;
   while (exploration_frames.size() > 0 && !step_next_state())
   {
-    // Only fire the leak walker on the final frame when every thread has
-    // reached a terminal state — otherwise a still-running spawned thread
-    // may hold the only live reference to a dynamic object via its stack
-    // frame, which the globals-rooted reachability constraint misses and
-    // spuriously reports as forgotten. See #4634.
-    if (
-      add_leak_checks && exploration_frames.size() == 1 &&
-      cur_frame_it->state->all_threads_terminal())
+    // Only fire the leak walker when every thread has reached a terminal
+    // state — otherwise a still-running spawned thread may hold the only live
+    // reference to a dynamic object via its stack frame, which the
+    // globals-rooted reachability constraint misses and spuriously reports as
+    // forgotten. See #4634.
+    if (at_leaf && cur_frame_it->state->all_threads_terminal())
       cur_frame_it->state->add_memory_leak_checks();
+    at_leaf = false;
 
     erase_current_frame();
   }
@@ -987,4 +988,20 @@ goto_symext::symex_resultt reachability_treet::generate_schedule_formula()
     schedule_remaining_claims,
     schedule_simplified_claims,
     schedule_bounded_loop_truncations);
+}
+
+goto_symext::symex_resultt reachability_treet::generate_partial_order_formula()
+{
+  execution_statet &ex_state = get_cur_state();
+  // A thread spawned along the way is appended, so the bound is re-read.
+  for (unsigned int tid = 0; tid < ex_state.threads_state.size(); ++tid)
+  {
+    ex_state.switch_to_thread(tid);
+    while (ex_state.can_execution_continue())
+      ex_state.symex_step(*this);
+  }
+
+  ++reduction_stats.schedules_explored;
+  ex_state.release_symex_caches();
+  return ex_state.get_symex_result();
 }

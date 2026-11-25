@@ -1,18 +1,127 @@
 #include <esbmc/esbmc_parseoptions.h>
 
+#include <transition-system/ts_btor2.h>
 #include <transition-system/ts_engines.h>
 #include <transition-system/ts_extraction.h>
+#include <transition-system/ts_pdr.h>
 #include <transition-system/ts_slice.h>
 #include <util/base/time_stopping.h>
 #include <util/message/message.h>
 
 #include <cstdlib>
+#include <fstream>
 #include <limits>
 #include <sstream>
 
+/// Exit codes as for ts_enginet::bmc.
+static int run_pdr(
+  const transition_systemt &ts,
+  const namespacet &ns,
+  optionst &options,
+  uint64_t max_k)
+{
+  ts_pdrt pdr(ts, ns, options);
+  unsigned depth = 0;
+  switch (pdr.run(max_k, depth))
+  {
+  case ts_pdrt::resultt::safe:
+    log_success(
+      "\nSolution found by PDR (invariant checked)\nVERIFICATION SUCCESSFUL");
+    return 0;
+  case ts_pdrt::resultt::unsafe:
+  {
+    log_status("PDR found a violation at step {}; replaying with BMC", depth);
+    ts_enginet replay(ts, ns, options);
+    const int rc = replay.bmc(depth, false, true);
+    if (rc != 0)
+      return rc;
+    log_error("BMC did not reproduce the PDR counterexample");
+    log_fail("\nVERIFICATION UNKNOWN");
+    return 0;
+  }
+  case ts_pdrt::resultt::unknown:
+    break;
+  }
+  log_status("PDR: {}", pdr.reason);
+  log_fail("\nVERIFICATION UNKNOWN");
+  return 0;
+}
+
+/// Exit codes as for ts_enginet::bmc.
+static int run_fresh_solver(
+  const transition_systemt &ts,
+  const namespacet &ns,
+  optionst &options,
+  uint64_t max_k)
+{
+  if (!ts.prefix_bad.empty())
+  {
+    ts_enginet prefix(ts, ns, options, false);
+    const smt_resultt res = prefix.solve_prefix();
+    if (res == smt_resultt::P_SATISFIABLE)
+    {
+      log_fail("\nVERIFICATION FAILED");
+      return 1;
+    }
+    if (res != smt_resultt::P_UNSATISFIABLE)
+    {
+      log_error("Solver error before the loop");
+      return 6;
+    }
+  }
+  if (ts.bad.empty())
+  {
+    log_success("\nVERIFICATION SUCCESSFUL");
+    return 0;
+  }
+  for (uint64_t k = 0; k <= max_k; k++)
+  {
+    fine_timet start = current_time();
+    ts_enginet fresh(ts, ns, options, false);
+    smt_resultt res = fresh.solve_bound(k);
+    log_status(
+      "TS BMC step {} (fresh solver): {} ({}s)",
+      k,
+      res == smt_resultt::P_SATISFIABLE     ? "violated"
+      : res == smt_resultt::P_UNSATISFIABLE ? "safe"
+                                            : "unknown",
+      time2string(current_time() - start));
+    if (res == smt_resultt::P_SATISFIABLE)
+    {
+      log_fail("\nVERIFICATION FAILED");
+      return 1;
+    }
+    if (res != smt_resultt::P_UNSATISFIABLE)
+      return 6;
+  }
+  log_fail("\nVERIFICATION UNKNOWN");
+  return 0;
+}
+
+/// Returns the reason the export failed, or an empty string.
+static std::string
+export_btor2(const transition_systemt &ts, const std::string &path)
+{
+  std::ostringstream btor2;
+  try
+  {
+    write_btor2(ts, btor2);
+  }
+  catch (const std::runtime_error &e)
+  {
+    return e.what();
+  }
+  std::ofstream file(path);
+  if (!(file << btor2.str()))
+    return "cannot write " + path;
+  log_status("BTOR2 written to {}", path);
+  return "";
+}
+
 bool esbmc_parseoptionst::ts_strategy_requested() const
 {
-  return cmdline.isset("ts-check") || cmdline.isset("ts-bmc");
+  return cmdline.isset("ts-check") || cmdline.isset("ts-btor2") ||
+         cmdline.isset("ts-bmc") || cmdline.isset("ts-pdr");
 }
 
 int esbmc_parseoptionst::do_ts_strategy(
@@ -30,7 +139,9 @@ int esbmc_parseoptionst::do_ts_strategy(
       log_result("TS-CHECK rejected");
     else
       log_status("Not a transition system");
-    if (cmdline.isset("ts-check") || cmdline.isset("ts-no-fallback"))
+    if (
+      cmdline.isset("ts-check") || cmdline.isset("ts-no-fallback") ||
+      cmdline.isset("ts-btor2"))
     {
       log_result("VERIFICATION UNKNOWN");
       return 0;
@@ -49,6 +160,23 @@ int esbmc_parseoptionst::do_ts_strategy(
     std::ostringstream oss;
     ts.dump(oss, namespacet(context));
     log_result("{}", oss.str());
+  }
+
+  if (cmdline.isset("ts-btor2"))
+  {
+    const std::string error = export_btor2(ts, cmdline.getval("ts-btor2"));
+    if (!error.empty())
+    {
+      log_error("BTOR2 export: {}", error);
+      if (!cmdline.isset("ts-check"))
+        return 6;
+      log_result("TS-CHECK rejected: BTOR2 export: {}", error);
+    }
+    if (!error.empty() || !cmdline.isset("ts-check"))
+    {
+      log_result("VERIFICATION UNKNOWN");
+      return 0;
+    }
   }
 
   if (cmdline.isset("ts-check"))
@@ -72,45 +200,11 @@ int esbmc_parseoptionst::do_ts_strategy(
 
   namespacet ns(context);
 
+  if (cmdline.isset("ts-pdr"))
+    return run_pdr(ts, ns, options, max_k);
+
   if (cmdline.isset("ts-fresh-solver"))
-  {
-    if (!ts.prefix_bad.empty())
-    {
-      ts_enginet prefix(ts, ns, options, false);
-      if (prefix.solve_prefix() == smt_resultt::P_SATISFIABLE)
-      {
-        log_fail("\nVERIFICATION FAILED");
-        return 1;
-      }
-    }
-    if (ts.bad.empty())
-    {
-      log_success("\nVERIFICATION SUCCESSFUL");
-      return 0;
-    }
-    for (uint64_t k = 0; k <= max_k; k++)
-    {
-      fine_timet start = current_time();
-      ts_enginet fresh(ts, ns, options, false);
-      smt_resultt res = fresh.solve_bound(k);
-      log_status(
-        "TS BMC step {} (fresh solver): {} ({}s)",
-        k,
-        res == smt_resultt::P_SATISFIABLE     ? "violated"
-        : res == smt_resultt::P_UNSATISFIABLE ? "safe"
-                                              : "unknown",
-        time2string(current_time() - start));
-      if (res == smt_resultt::P_SATISFIABLE)
-      {
-        log_fail("\nVERIFICATION FAILED");
-        return 1;
-      }
-      if (res != smt_resultt::P_UNSATISFIABLE)
-        return 6;
-    }
-    log_fail("\nVERIFICATION UNKNOWN");
-    return 0;
-  }
+    return run_fresh_solver(ts, ns, options, max_k);
 
   ts_enginet engine(ts, ns, options);
   return engine.bmc(max_k, cmdline.isset("ts-push-pop"));

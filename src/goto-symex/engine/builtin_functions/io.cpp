@@ -12,6 +12,7 @@
 #include <util/irep/migrate.h>
 #include <util/irep/std_types.h>
 #include <vector>
+#include <optional>
 #include <algorithm>
 #include <functional>
 #include <util/expr/array2string.h>
@@ -39,13 +40,38 @@ static bool takes_va_list(printf_kindt kind)
   return false;
 }
 
+// The variable an access to a va_list goes through: x86_64 passes `ap` as
+// &ap[0] and copies one as *q = *ap or q[0] = ap[0].
+static expr2tc va_list_object(expr2tc ap)
+{
+  while (true)
+  {
+    if (is_typecast2t(ap))
+      ap = to_typecast2t(ap).from;
+    else if (is_address_of2t(ap))
+      ap = to_address_of2t(ap).ptr_obj;
+    else if (is_index2t(ap))
+      ap = to_index2t(ap).source_value;
+    else if (is_member2t(ap))
+      ap = to_member2t(ap).source_value;
+    else if (is_dereference2t(ap))
+      ap = to_dereference2t(ap).value;
+    else
+      return ap;
+  }
+}
+
+static bool names_symbol(const expr2tc &e, const irep_idt &id)
+{
+  return is_symbol2t(e) && to_symbol2t(e).thename == id;
+}
+
 bool goto_symext::recover_va_list_args(
   const code_printf2t &call,
   size_t fmt_idx,
   std::list<expr2tc> &out)
 {
-  if (!takes_va_list(call.kind))
-    return false;
+  assert(takes_va_list(call.kind));
 
   // Every v* signature takes the va_list as its last operand, right after
   // the format string.
@@ -71,33 +97,10 @@ bool goto_symext::recover_va_list_args(
   if (frame.va_index == UINT_MAX || frame.va_cursor != frame.va_index)
     return false;
 
-  expr2tc ap = call.operands[fmt_idx + 1];
-  while (true)
-  {
-    if (is_typecast2t(ap))
-      ap = to_typecast2t(ap).from;
-    else if (is_address_of2t(ap))
-      ap = to_address_of2t(ap).ptr_obj;
-    else if (is_index2t(ap))
-      ap = to_index2t(ap).source_value;
-    else
-      break;
-  }
+  const expr2tc ap = va_list_object(call.operands[fmt_idx + 1]);
   if (!is_symbol2t(ap))
     return false;
   const irep_idt &ap_id = to_symbol2t(ap).thename;
-
-  // Recovery is limited to targets where va_list is a plain pointer (e.g.
-  // AArch64 SysV/Darwin): there every va_list copy is a visible ASSIGN --
-  // va_copy included, since goto conversion lowers it to a real assignment
-  // for pointer va_lists (builtin_functions.cpp) -- so the freshness scan
-  // below is exhaustive. Where va_list is a struct array (x86_64 SysV),
-  // va_copy stays erased at goto conversion (assigning arrays breaks the
-  // pointer analysis), a copied foreign va_list would be invisible, and
-  // recovery must stay off until va_copy leaves a symex-visible marker
-  // there too.
-  if (!is_pointer_type(ap->type))
-    return false;
 
   // Owning-function check: a local of function F is mangled
   // `<file>@<offset>@F@<F>@<name>` while F itself is `<prefix>@F@<F>`. Only
@@ -123,9 +126,10 @@ bool goto_symext::recover_va_list_args(
   // not enough -- a foreign va_list can be laundered into one (va_copy from
   // a parameter or a global, plain assignment on pointer-va_list targets, or
   // memcpy), after which it denotes some OTHER activation's arguments. All
-  // such channels are visible in the function body on pointer-va_list
-  // targets: decline unless the operand's only assignment is its
-  // declaration-time nondet and its address is never taken.
+  // such channels are visible in the function body: va_copy leaves a marker
+  // call on every target (builtin_functions.cpp). Decline unless the
+  // operand's only assignment is its declaration-time nondet, nothing copies
+  // into it, and its address is never taken.
   auto fn_it = goto_functions.function_map.find(frame.function_identifier);
   if (
     fn_it == goto_functions.function_map.end() || !fn_it->second.body_available)
@@ -134,31 +138,29 @@ bool goto_symext::recover_va_list_args(
   {
     if (is_nil_expr(insn.code))
       continue;
-    // Skip the va_start/va_copy markers this analysis itself relies on: they
-    // reference &ap by construction, but starting (or copying into) a va_list
-    // is not the address-laundering the scan below guards against. va_copy's
-    // laundering, where it matters, is carried by the separate ASSIGN it emits
-    // on pointer-va_list targets, which the scan still inspects.
+    // The va_start and va_copy markers take &ap by construction: only a copy
+    // into ap launders it.
     if (is_code_function_call2t(insn.code))
     {
-      const expr2tc &fn = to_code_function_call2t(insn.code).function;
-      if (is_symbol2t(fn))
+      const code_function_call2t &fc = to_code_function_call2t(insn.code);
+      if (is_symbol2t(fc.function))
       {
-        const irep_idt &fn_name = to_symbol2t(fn).thename;
-        if (
-          fn_name == "c:@F@__builtin_va_start" ||
-          fn_name == "c:@F@__builtin_va_copy")
+        const irep_idt &fn_name = to_symbol2t(fc.function).thename;
+        if (fn_name == "c:@F@__builtin_va_start")
           continue;
+        if (fn_name == "c:@F@__builtin_va_copy")
+        {
+          if (names_symbol(va_list_object(fc.operands[0]), ap_id))
+            return false;
+          continue;
+        }
       }
     }
     if (is_code_assign2t(insn.code))
     {
       const code_assign2t &assign = to_code_assign2t(insn.code);
-      expr2tc tgt = assign.target;
-      while (is_typecast2t(tgt))
-        tgt = to_typecast2t(tgt).from;
       if (
-        is_symbol2t(tgt) && to_symbol2t(tgt).thename == ap_id &&
+        names_symbol(va_list_object(assign.target), ap_id) &&
         !(is_sideeffect2t(assign.source) &&
           to_sideeffect2t(assign.source).kind ==
             sideeffect2t::allockind::nondet))
@@ -169,13 +171,16 @@ bool goto_symext::recover_va_list_args(
     std::function<void(const expr2tc &)> scan = [&](const expr2tc &e) {
       if (is_nil_expr(e) || addr_taken)
         return;
+      // A v* call reads its va_list operand, which x86_64 passes as &ap[0].
+      if (is_code_printf2t(e) && takes_va_list(to_code_printf2t(e).kind))
+      {
+        const std::vector<expr2tc> &ops = to_code_printf2t(e).operands;
+        std::for_each(ops.begin(), ops.end() - 1, scan);
+        return;
+      }
       if (is_address_of2t(e))
       {
-        expr2tc obj = to_address_of2t(e).ptr_obj;
-        while (is_typecast2t(obj) || is_index2t(obj))
-          obj = is_typecast2t(obj) ? to_typecast2t(obj).from
-                                   : to_index2t(obj).source_value;
-        if (is_symbol2t(obj) && to_symbol2t(obj).thename == ap_id)
+        if (names_symbol(va_list_object(e), ap_id))
         {
           addr_taken = true;
           return;
@@ -188,23 +193,13 @@ bool goto_symext::recover_va_list_args(
       return false;
   }
 
-  // Collect this activation's va_arg values, L2-renamed so constant
-  // propagation exposes string-literal arguments to the formatter. Probing
-  // stops at the first missing symbol: later activations have not
-  // materialised yet, so the run ends exactly at this activation's argument
-  // count (a nested completed activation of the same function can extend it,
-  // but those extra values are only ever consumed by a format string with
-  // more specifiers than passed arguments -- undefined behaviour).
+  // This activation's va_arg symbols, unrenamed like a direct call's operands.
   const std::string va_prefix = fid + "::va_arg";
-  for (unsigned k = frame.va_index; k < frame.va_index + 256; k++)
+  for (unsigned k = frame.va_index; k < frame.va_limit; k++)
   {
     const symbolt *s = new_context.find_symbol(va_prefix + std::to_string(k));
-    if (s == nullptr)
-      break;
-    expr2tc arg = symbol2tc(migrate_symbol_type(*s), s->id);
-    cur_state->rename(arg);
-    do_simplify(arg);
-    out.push_back(arg);
+    assert(s != nullptr);
+    out.push_back(symbol2tc(migrate_symbol_type(*s), s->id));
   }
   return true;
 }
@@ -571,24 +566,7 @@ void goto_symext::claim_nul_terminated(const expr2tc &ptr)
     "printf %s argument is not NUL-terminated within its object");
 }
 
-// Only a direct call's operands are its arguments; a v* call passes a va_list.
-static bool printf_args_are_direct(printf_kindt kind)
-{
-  switch (kind)
-  {
-  case printf_kindt::VPRINTF:
-  case printf_kindt::VFPRINTF:
-  case printf_kindt::VSPRINTF:
-  case printf_kindt::VSNPRINTF:
-  case printf_kindt::VASPRINTF:
-    return false;
-  default:
-    return true;
-  }
-}
-
 void goto_symext::check_printf_pointer_arg(
-  printf_kindt kind,
   char spec,
   bool reads_to_nul,
   const expr2tc &arg)
@@ -605,7 +583,7 @@ void goto_symext::check_printf_pointer_arg(
                     : "printf format specifier %p requires pointer argument");
     return;
   }
-  if (spec != 's' || !reads_to_nul || !printf_args_are_direct(kind))
+  if (spec != 's' || !reads_to_nul)
     return;
   if (printf_check)
     claim_nul_terminated(arg);
@@ -1079,16 +1057,32 @@ void goto_symext::symex_printf(const expr2tc &lhs, expr2tc &rhs)
   }
 
   // A v* call's only operand after the format is its va_list, which is
-  // neither a printf argument nor a pointer printf dereferences.
+  // neither a printf argument nor a pointer printf dereferences. Its
+  // arguments are checked and formatted only when they can be recovered
+  // (GitHub #5012, #10973).
   const bool args_behind_va_list = takes_va_list(new_rhs.kind);
+  std::list<expr2tc> recovered_args;
+  const bool va_recovered =
+    args_behind_va_list &&
+    recover_va_list_args(to_code_printf2t(rhs), fmt_idx, recovered_args);
+  const bool args_known = !args_behind_va_list || va_recovered;
   const bool printf_check =
-    options.get_bool_option("printf-check") && !args_behind_va_list;
+    options.get_bool_option("printf-check") && args_known;
 
-  // Check format specifiers against original operands before
-  // renaming/conversion
-  if (!args_behind_va_list)
+  // The unrenamed operands the conversions take, in order, and their values
+  // before any store below.
+  const std::vector<expr2tc> &operands = to_code_printf2t(rhs).operands;
+  const std::vector<expr2tc> call_args =
+    va_recovered
+      ? std::vector<expr2tc>(recovered_args.begin(), recovered_args.end())
+      : std::vector<expr2tc>(operands.begin() + idx, operands.end());
+  std::vector<expr2tc> renamed_args = call_args;
+  for (expr2tc &arg : renamed_args)
+    if (arg)
+      cur_state->rename(arg);
+
+  if (args_known)
   {
-    const code_printf2t &original_rhs = to_code_printf2t(rhs);
     std::string format_str = fmt.as_string();
     size_t arg_idx = 0;
 
@@ -1151,18 +1145,16 @@ void goto_symext::symex_printf(const expr2tc &lhs, expr2tc &rhs)
             std::string::npos)
           break;
 
-        // Check conversion specifier against original operands
         const char spec = format_str[i];
-        const size_t actual_arg_idx = idx + arg_idx;
-        if (actual_arg_idx >= original_rhs.operands.size())
+        if (arg_idx >= call_args.size())
         {
           if (printf_check)
             claim(
               gen_false_expr(),
               "printf has more format specifiers than arguments");
         }
-        else if (const expr2tc &arg = original_rhs.operands[actual_arg_idx])
-          check_printf_pointer_arg(new_rhs.kind, spec, reads_to_nul, arg);
+        else if (const expr2tc &arg = call_args[arg_idx])
+          check_printf_pointer_arg(spec, reads_to_nul, arg);
         arg_idx++;
       }
     }
@@ -1172,10 +1164,8 @@ void goto_symext::symex_printf(const expr2tc &lhs, expr2tc &rhs)
   if (printf_check)
   {
     // Dereference check all pointer arguments after the format string
-    for (size_t i = idx; i < new_rhs.operands.size(); i++)
+    for (const expr2tc &arg : renamed_args)
     {
-      expr2tc &arg = new_rhs.operands[i];
-
       if (!arg)
         continue;
 
@@ -1224,30 +1214,15 @@ void goto_symext::symex_printf(const expr2tc &lhs, expr2tc &rhs)
   if (is_allocating && !new_rhs.operands.empty())
     strp = new_rhs.operands[0];
 
-  // va_list %s recovery (G-C, GitHub #5012): when the va_list-to-argument
-  // mapping is provably exact, substitute the recovered arguments for the
-  // opaque va_list below, so the formatter can bound -- or pin -- the output
-  // length exactly as it does for the direct printf-family forms. Uses the
-  // original (unrenamed) rhs: the operand's L0 symbol identifies whose
-  // va_list this is.
-  std::list<expr2tc> recovered_args;
-  const bool va_recovered =
-    !is_nil_expr(lhs) && format_is_constant &&
-    recover_va_list_args(to_code_printf2t(rhs), fmt_idx, recovered_args);
-
   const expr2tc output_len =
     printf_return_length(lhs, to_code_printf2t(rhs), fmt_idx);
 
-  // Now we pop the format
-  for (size_t i = 0; i < idx; i++)
-    new_rhs.operands.erase(new_rhs.operands.begin());
-
   std::list<expr2tc> args;
-  new_rhs.foreach_operand([this, &args](const expr2tc &e) {
-    expr2tc tmp = e;
-    do_simplify(tmp);
-    args.push_back(tmp);
-  });
+  for (expr2tc arg : renamed_args)
+  {
+    do_simplify(arg);
+    args.push_back(arg);
+  }
 
   // The value assigned to the return lvalue, nil when the result is discarded.
   // Needed below to keep the asprintf/vasprintf *strp allocation off the
@@ -1270,26 +1245,14 @@ void goto_symext::symex_printf(const expr2tc &lhs, expr2tc &rhs)
       migrate_expr(printf_code, rhs);
     }
 
-    // With a successful va_list recovery the single va_list operand is
-    // replaced by the actual variadic arguments, restoring the direct-call
-    // argument shape the formatter expects.
-    if (va_recovered)
-      args = recovered_args;
-
     // 2 printf_formatter does not handle char arrays: fold them to strings.
     fold_printf_char_arrays(args);
 
     // 3 get the number of characters output (return value)
     printf_formattert printf_formatter;
-    // For the v* variants the actual arguments are hidden behind a va_list, so
-    // the operand at a %s position is the va_list pointer, not the string. Mark
-    // the operands unreliable so the formatter does not derive an (unsound)
-    // object-size bound from them; %s stays unbounded until va_list recovery.
-    printf_formatter.args_reliable = !args_behind_va_list;
-    // A successful recovery replaced the va_list with the actual arguments,
-    // so they are exactly as reliable as a direct call's.
-    if (va_recovered)
-      printf_formatter.args_reliable = true;
+    // Behind an unrecovered va_list the operand at a %s position is the
+    // va_list itself: deriving an object-size bound from it is unsound.
+    printf_formatter.args_reliable = args_known;
     printf_formatter(fmt.as_string(), args);
     printf_formatter.as_string(); // populate min_outlen / max_outlen
 
@@ -1359,11 +1322,51 @@ void goto_symext::symex_printf(const expr2tc &lhs, expr2tc &rhs)
     cur_state->guard.as_expr(), cur_state->source, fmt.as_string(), args);
 }
 
-// One entry per conversion that takes an argument: true if it assigns an
-// input item, false for %n, which the return value does not count.
-static std::vector<bool> scanf_conversions(const std::string &fmt)
+// A format that is not a literal says nothing about what an argument receives.
+static constexpr uint64_t unknown_store_bytes = UINT64_MAX;
+
+struct scanf_conversion
 {
-  std::vector<bool> conversions;
+  // False for %n, which the return value does not count.
+  bool assigns;
+  // Bytes stored (C11 7.21.6.2); 0 for %s and %[, which write from the target
+  // to the end of its object.
+  uint64_t bytes;
+};
+
+static uint64_t scanf_store_bytes(
+  char conversion,
+  const std::string &length,
+  uint64_t field_width)
+{
+  const auto &ansi = config.ansi_c;
+  unsigned bits = ansi.int_width;
+  if (conversion == 'c')
+    bits = (length == "l" ? ansi.wchar_t_width : ansi.char_width) *
+           std::max<uint64_t>(field_width, 1);
+  else if (conversion == 'p')
+    bits = ansi.address_width;
+  else if (std::string("fFeEgGaA").find(conversion) != std::string::npos)
+    bits = length == "L"   ? ansi.long_double_width
+           : length == "l" ? ansi.double_width
+                           : ansi.single_width;
+  else if (length == "hh")
+    bits = ansi.char_width;
+  else if (length == "h")
+    bits = ansi.short_int_width;
+  else if (length == "l")
+    bits = ansi.long_int_width;
+  else if (length == "ll" || length == "j")
+    bits = ansi.long_long_int_width;
+  else if (length == "z" || length == "t")
+    bits = ansi.address_width;
+  return bits / 8;
+}
+
+// One entry per conversion that takes an argument.
+static std::vector<scanf_conversion> scanf_conversions(const std::string &fmt)
+{
+  std::vector<scanf_conversion> conversions;
   for (size_t i = 0; i + 1 < fmt.length(); ++i)
   {
     if (fmt[i] != '%')
@@ -1371,19 +1374,138 @@ static std::vector<bool> scanf_conversions(const std::string &fmt)
     if (fmt[++i] == '%')
       continue;
 
-    // Width and length modifiers. '*' is left out: a suppressed conversion
-    // takes no argument.
+    // Field width and length modifiers. '*' is left out: a suppressed
+    // conversion takes no argument.
+    uint64_t field_width = 0;
+    std::string length;
     while (i < fmt.length() &&
            std::string("-+ #0123456789.hlLzjt").find(fmt[i]) !=
              std::string::npos)
+    {
+      if (isdigit(fmt[i]))
+        field_width =
+          std::min<uint64_t>(field_width * 10 + (fmt[i] - '0'), 1 << 20);
+      else if (std::string("hlLzjt").find(fmt[i]) != std::string::npos)
+        length += fmt[i];
       ++i;
+    }
 
     if (
       i < fmt.length() &&
       std::string("diouxXfFeEgGaAcsp[n").find(fmt[i]) != std::string::npos)
-      conversions.push_back(fmt[i] != 'n');
+    {
+      const bool open_ended = fmt[i] == 's' || fmt[i] == '[';
+      conversions.push_back(
+        {fmt[i] != 'n',
+         open_ended ? 0 : scanf_store_bytes(fmt[i], length, field_width)});
+    }
   }
   return conversions;
+}
+
+// Largest tail a %s / %[ store havocs byte by byte; beyond it the whole object
+// is havocked, which over-approximates.
+static constexpr uint64_t max_unrolled_tail = 256;
+
+static bool object_byte_size(const type2tc &type, uint64_t &size)
+{
+  try
+  {
+    size = type_byte_size(type).to_uint64();
+    return true;
+  }
+  catch (const array_type2t::array_size_excp &)
+  {
+    return false;
+  }
+}
+
+// Byte positions a store writes; nullopt means the whole object.
+using byte_positions = std::optional<std::vector<expr2tc>>;
+
+static byte_positions
+scanf_tail_positions(const type2tc &object_type, const expr2tc &offset)
+{
+  uint64_t size = 0;
+  if (!is_constant_int2t(offset) || !object_byte_size(object_type, size))
+    return std::nullopt;
+
+  const uint64_t start = to_constant_int2t(offset).as_ulong();
+  if (start >= size || size - start > max_unrolled_tail)
+    return std::nullopt;
+
+  std::vector<expr2tc> positions;
+  for (uint64_t pos = start; pos < size; ++pos)
+    positions.push_back(gen_ulong(pos));
+  return positions;
+}
+
+// The static pointee type may be wider than the conversion (e.g. %hhd through
+// an int *); the wider of the two is stored.
+static uint64_t widen_to_pointee(uint64_t store_bytes, const expr2tc &operand)
+{
+  if (!is_pointer_type(operand))
+    return store_bytes;
+  const type2tc &pointee = to_pointer_type(operand->type).subtype;
+  if (!is_number_type(pointee) && !is_pointer_type(pointee))
+    return store_bytes;
+  return std::max<uint64_t>(store_bytes, (pointee->get_width() + 7) / 8);
+}
+
+static byte_positions scanf_scalar_positions(
+  const type2tc &object_type,
+  const expr2tc &offset,
+  uint64_t store_bytes)
+{
+  uint64_t size = 0;
+  if (is_constant_int2t(offset) && object_byte_size(object_type, size))
+  {
+    const uint64_t start = to_constant_int2t(offset).as_ulong();
+    if (start + store_bytes > size || (start == 0 && store_bytes == size))
+      return std::nullopt;
+  }
+
+  std::vector<expr2tc> positions;
+  for (uint64_t k = 0; k < store_bytes; ++k)
+    positions.push_back(
+      add2tc(offset->type, offset, gen_long(offset->type, k)));
+  return positions;
+}
+
+void goto_symext::symex_scanf_store(
+  const dereference_callbackt::internal_item &item,
+  const expr2tc &operand,
+  uint64_t store_bytes,
+  const guard2tc &stored)
+{
+  expr2tc offset = item.offset;
+  simplify(offset);
+
+  byte_positions positions;
+  if (store_bytes == 0)
+    positions = scanf_tail_positions(item.object->type, offset);
+  else if (store_bytes != unknown_store_bytes)
+    positions = scanf_scalar_positions(
+      item.object->type, offset, widen_to_pointee(store_bytes, operand));
+
+  if (!positions)
+  {
+    symex_assign(
+      code_assign2tc(item.object, gen_nondet(item.object->type)),
+      false,
+      stored);
+    return;
+  }
+
+  const bool big_endian =
+    config.ansi_c.endianess == configt::ansi_ct::IS_BIG_ENDIAN;
+  for (const expr2tc &pos : *positions)
+    symex_assign(
+      code_assign2tc(
+        byte_extract2tc(get_uint8_type(), item.object, pos, big_endian),
+        gen_nondet(get_uint8_type())),
+      false,
+      stored);
 }
 
 void goto_symext::symex_input(const code_function_call2t &func_call)
@@ -1412,7 +1534,8 @@ void goto_symext::symex_input(const code_function_call2t &func_call)
   cur_state->rename(fmt_operand);
 
   const size_t available_args = func_call.operands.size() - (fmt_idx + 1);
-  std::vector<bool> conversions(available_args, true);
+  std::vector<scanf_conversion> conversions(
+    available_args, {true, unknown_store_bytes});
   const expr2tc &base_expr = get_base_object(fmt_operand);
   if (is_constant_string2t(base_expr))
     conversions =
@@ -1422,7 +1545,10 @@ void goto_symext::symex_input(const code_function_call2t &func_call)
   // C11 7.21.6.2p16: EOF if input fails before the first conversion, else the
   // number of items assigned, which a matching failure can leave below the
   // number of conversions.
-  const long items = std::count(conversions.begin(), conversions.end(), true);
+  const long items = std::count_if(
+    conversions.begin(), conversions.end(), [](const scanf_conversion &c) {
+      return c.assigns;
+    });
   expr2tc count = gen_nondet(int_type2());
   replace_nondet(count);
   assume(and2tc(
@@ -1433,13 +1559,23 @@ void goto_symext::symex_input(const code_function_call2t &func_call)
 
   // TODO: fill / cut off the inputs stream based on the length limits.
 
+  // C11 6.5.2.2p10: every argument is evaluated before the call, so resolve
+  // each target before a store can change a pointer a later argument reads.
+  struct scanf_targett
+  {
+    dereference_callbackt::internal_item item;
+    expr2tc operand;
+    uint64_t bytes;
+    guard2tc guard;
+  };
+  std::vector<scanf_targett> targets;
   long assigned = 0;
   for (size_t i = 0; i < conversions.size(); i++)
   {
     // Item k is stored only when the k conversions before it matched too,
     // and a %n target only when every item before it was assigned.
     guard2tc stored;
-    if (conversions[i])
+    if (conversions[i].assigns)
       stored.add(greaterthan2tc(count, gen_long(int_type2(), assigned++)));
     else if (assigned > 0)
       stored.add(greaterthanequal2tc(count, gen_long(int_type2(), assigned)));
@@ -1451,20 +1587,22 @@ void goto_symext::symex_input(const code_function_call2t &func_call)
 
     for (const auto &item : internal_deref_items)
     {
-      assert(is_symbol2t(item.object) && "This only works for variables");
-      check_read_only_write(item.object, and2tc(stored.as_expr(), item.guard));
-
-      auto type = item.object->type;
-      expr2tc val = sideeffect2tc(
-        type,
-        expr2tc(),
-        expr2tc(),
-        std::vector<expr2tc>(),
-        type2tc(),
-        sideeffect2t::allockind::nondet);
-
-      symex_assign(code_assign2tc(item.object, val), false, stored);
+      expr2tc guard_expr = item.guard;
+      cur_state->rename(guard_expr);
+      guard2tc guard = stored;
+      guard.add(guard_expr);
+      scanf_targett target{item, operand, conversions[i].bytes, guard};
+      cur_state->rename(target.item.offset);
+      targets.push_back(target);
     }
+  }
+  for (const scanf_targett &target : targets)
+  {
+    check_read_only_write(target.item.object, target.guard.as_expr());
+    if (is_constant_string2t(target.item.object))
+      continue;
+    assert(is_symbol2t(target.item.object) && "This only works for variables");
+    symex_scanf_store(target.item, target.operand, target.bytes, target.guard);
   }
 
   cur_state->source.pc++;

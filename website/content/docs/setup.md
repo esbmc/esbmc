@@ -15,8 +15,10 @@ sudo apt update
 sudo apt install esbmc
 ```
 
-This method is recommended for general users and supports Ubuntu 22.04 (Jammy)
-and 24.04 (Noble).
+This method is recommended for general users and supports Ubuntu 24.04 (Noble).
+The PPA no longer updates Ubuntu 22.04 (Jammy); its last package there is ESBMC
+8.3.0. The packaging dropped Jammy because ESBMC uses C++23 `std::unreachable`,
+which Jammy's GCC 11 does not provide.
 
 ## Homebrew (macOS and Linux)
 
@@ -36,7 +38,7 @@ Once unzipped, read the license before running ESBMC. The distribution is split
 into two directories:
 
 - `bin`: the static ESBMC binary;
-- `license`: the ESBMC, Z3 and Boolector licenses.
+- `license`: the ESBMC, Z3, Boolector and Boost licenses.
 
 If you want to use other SMT solvers (e.g. MathSAT, Yices, CVC4), check out the
 ESBMC [source code](https://github.com/esbmc/esbmc) and follow the

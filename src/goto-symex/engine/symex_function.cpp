@@ -597,6 +597,7 @@ void goto_symext::symex_function_call_code(const expr2tc &expr)
       // Add an unwinding assumption.
       expr2tc now_guard = cur_state->guard.as_expr();
       expr2tc not_now = not2tc(now_guard);
+      guard_by_interleaving(not_now);
       target->assumption(now_guard, not_now, cur_state->source, first_loop);
     }
 
@@ -692,6 +693,10 @@ void goto_symext::symex_function_call_code(const expr2tc &expr)
   const code_type2t &function_type = to_code_type(goto_function.type);
   frame.va_index = argument_assignments(identifier, function_type, arguments);
   frame.va_cursor = frame.va_index;
+  const size_t params = function_type.arguments.size();
+  if (frame.va_index != UINT_MAX)
+    frame.va_limit =
+      frame.va_index + std::max(arguments.size(), params) - params;
 
   havoc_parameters(interval_domain_state, function_type);
 }
@@ -1166,7 +1171,7 @@ bool goto_symext::make_return_assignment(expr2tc &assign, const expr2tc &code)
 
   if (!is_nil_expr(ret.operand))
   {
-    expr2tc value = split_rewrite(ret.operand);
+    expr2tc value = split_read(ret.operand);
 
     dereference(value, dereferencet::READ);
 

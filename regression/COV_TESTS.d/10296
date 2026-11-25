@@ -1,0 +1,5 @@
+regression/esbmc-unix/github_10296_assert
+regression/esbmc-unix/github_10296_race
+regression/esbmc-unix/github_10296_safe
+regression/esbmc-unix/github_10296_state_hashing
+regression/esbmc-unix/github_10296_state_hashing_reject

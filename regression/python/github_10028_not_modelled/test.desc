@@ -1,0 +1,5 @@
+CORE
+main.py
+
+^VERIFICATION FAILED$
+re\.sub with a regex pattern, an escape in repl, flags or a negative count is not modelled$

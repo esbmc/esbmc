@@ -5142,6 +5142,48 @@ typet python_converter::resolve_numpy_reducer_call_array_type(
   return probed_type;
 }
 
+// numpy.linalg.eig or numpy.linalg.svd, whose tuple holds arrays.
+static bool
+is_linalg_tuple_call(const nlohmann::json &value, const nlohmann::json &ast)
+{
+  if (
+    value.value("_type", "") != "Call" ||
+    value["func"].value("_type", "") != "Attribute")
+    return false;
+  const std::string function = value["func"].value("attr", "");
+  const nlohmann::json &module = value["func"]["value"];
+  return (function == "eig" || function == "svd") &&
+         module.value("_type", "") == "Attribute" &&
+         module.value("attr", "") == "linalg" &&
+         module["value"].value("_type", "") == "Name" &&
+         is_imported_numpy_module_alias(
+           ast, module["value"]["id"].get<std::string>());
+}
+
+// Each name an eig or svd result is unpacked into holds a fresh numpy array
+// of its own shape, so its attributes (.shape, .ndim, .size) read its type.
+void python_converter::register_unpacked_linalg_results(
+  const nlohmann::json &value,
+  const nlohmann::json &target)
+{
+  if (!is_linalg_tuple_call(value, *ast_json))
+    return;
+  for (const auto &element : target["elts"])
+  {
+    if (element.value("_type", "") != "Name")
+      continue;
+    const symbolt *symbol =
+      find_symbol(resolve_name_symbol_id(element["id"].get<std::string>()));
+    if (!symbol || !symbol->get_type().is_array())
+      continue;
+    const std::string id = symbol->id.as_string();
+    clear_numpy_array_storage_aliases_for(id);
+    clear_numpy_view_copy(symbol_expr(*symbol));
+    numpy_param_shapes_.erase(id);
+    numpy_array_symbols_.insert(id);
+  }
+}
+
 bool python_converter::handle_unpacking_assignment(
   const nlohmann::json &ast_node,
   const nlohmann::json &target,
@@ -5216,6 +5258,7 @@ bool python_converter::handle_unpacking_assignment(
   if (rhs.type().id() == "struct")
   {
     tuple_handler_->handle_tuple_unpacking(ast_node, target, rhs, target_block);
+    register_unpacked_linalg_results(ast_node["value"], target);
     return true;
   }
   else if (rhs.type().is_array())
@@ -5246,9 +5289,66 @@ bool python_converter::handle_unpacking_assignment(
     }
   }
 
-  throw std::runtime_error(
-    "Cannot unpack " + rhs.type().id_string() +
-    " - only tuples and arrays can be unpacked");
+  return unpack_unresolved(ast_node, target, rhs, target_block);
+}
+
+// A base method whose untyped parameter is unpacked, overridden by a
+// subclass: no call types the parameter, so the base body is not run (#10377).
+bool python_converter::unpack_unresolved(
+  const nlohmann::json &ast_node,
+  const nlohmann::json &target,
+  const exprt &rhs,
+  codet &target_block)
+{
+  const bool untyped_param =
+    rhs.type().is_pointer() && ns.follow(rhs.type().subtype()).id() == "empty";
+  if (
+    !untyped_param ||
+    !overridden_below(current_class_name_, current_func_name_))
+  {
+    throw std::runtime_error(
+      "Cannot unpack " + rhs.type().id_string() +
+      " - only tuples and arrays can be unpacked");
+  }
+
+  std::function<void(const nlohmann::json &)> declare_target =
+    [&](const nlohmann::json &elt) {
+      const std::string kind = elt["_type"];
+      if (kind == "Starred")
+        return declare_target(elt["value"]);
+      if (kind == "Tuple" || kind == "List")
+      {
+        for (const auto &sub : elt["elts"])
+          declare_target(sub);
+        return;
+      }
+      if (kind != "Name")
+        return;
+      symbol_id var_sid = create_symbol_id();
+      var_sid.set_object(elt["id"].get<std::string>());
+      if (find_symbol(var_sid.to_string()))
+        return;
+      locationt loc = get_location_from_decl(elt);
+      symbolt var = create_symbol(
+        loc.get_file().as_string(),
+        elt["id"].get<std::string>(),
+        var_sid.to_string(),
+        loc,
+        long_long_int_type());
+      var.lvalue = true;
+      var.file_local = true;
+      var.is_extern = false;
+      symbol_table_.move_symbol_to_context(var);
+    };
+  declare_target(target);
+
+  code_assertt unsupported(migrate_expr_back(gen_false_expr()));
+  unsupported.location() = get_location_from_decl(ast_node);
+  unsupported.location().comment(
+    "Cannot unpack a value of unknown type at line " +
+    std::to_string(ast_node["lineno"].get<int>()));
+  target_block.copy_to_operands(unsupported);
+  return true;
 }
 
 namespace
@@ -5281,12 +5381,49 @@ void collect_read_names(
     if (child.is_structured() && !(key == "func" && node.is_object()))
       collect_read_names(child, names);
 }
+
+bool has_uniform_tuple_bindings(
+  const nlohmann::json &module,
+  const std::string &name,
+  size_t bindings)
+{
+  std::vector<const nlohmann::json *> values;
+  json_utils::collect_plain_assigned_values(
+    module, name, values, /*stop_at_nested_scopes=*/false);
+  if (values.size() != bindings)
+    return false;
+
+  // Every binding must produce tuples with the same runtime representation.
+  std::optional<size_t> arity;
+  for (const auto *value : values)
+  {
+    if (value->value("_type", "") != "List" || (*value)["elts"].empty())
+      return false;
+    for (const auto &tuple : (*value)["elts"])
+    {
+      if (tuple.value("_type", "") != "Tuple")
+        return false;
+      const auto &members = tuple["elts"];
+      if (!arity)
+        arity = members.size();
+      if (
+        members.size() != *arity ||
+        !std::all_of(members.begin(), members.end(), [](const auto &member) {
+          return member.value("_type", "") == "Constant" &&
+                 member["value"].is_number_integer();
+        }))
+        return false;
+    }
+  }
+  return true;
+}
 } // namespace
 
 // The registry records types flow-insensitively, and a store through an alias
 // does not update it. Trust it only for lists the right-hand side builds
-// itself or reads from a variable bound once, to a plain literal, and named
-// nowhere else, so no branch, loop or alias can have changed its elements.
+// itself or reads from a variable named only at its bindings and this use,
+// bound either once to a plain literal or only to nonempty lists of same-arity
+// integer-constant tuples.
 bool python_converter::unpack_record_is_trusted(
   const nlohmann::json &value) const
 {
@@ -5296,10 +5433,16 @@ bool python_converter::unpack_record_is_trusted(
   {
     const nlohmann::json decl =
       json_utils::find_var_decl(name, current_function_name(), ast());
+    const size_t bindings = json_utils::count_name_bindings(ast(), name);
+    if (json_utils::count_name_nodes(ast(), name) != bindings + 1)
+      return false;
     if (
-      json_utils::count_name_bindings(ast(), name) != 1 ||
-      json_utils::count_name_nodes(ast(), name) != 2 ||
-      !decl.contains("value") || !is_plain_literal(decl["value"]))
+      bindings > 1 && value.value("_type", "") == "Name" &&
+      has_uniform_tuple_bindings(ast(), name, bindings))
+      continue;
+    if (
+      bindings != 1 || !decl.contains("value") ||
+      !is_plain_literal(decl["value"]))
       return false;
   }
   return true;
@@ -5851,6 +5994,18 @@ static bool is_float_literal(const nlohmann::json &node)
          node["value"].is_number_float();
 }
 
+/// The registry id of the list the lowered \p call receives as its first
+/// argument, or empty when that argument is not a list symbol.
+static std::string first_list_arg_id(const typet &list_type, const exprt &call)
+{
+  if (!call.is_function_call())
+    return {};
+  const auto &args = to_code_function_call(to_code(call)).arguments();
+  if (args.empty() || !args[0].is_symbol() || args[0].type() != list_type)
+    return {};
+  return args[0].identifier().as_string();
+}
+
 /// A list literal is converted into a temporary list, which the lowered
 /// \p call receives as its first argument (#10462).
 static void copy_list_literal_elem_types(
@@ -5860,12 +6015,9 @@ static void copy_list_literal_elem_types(
   const exprt &call,
   const std::string &dest)
 {
-  if (!call.is_function_call())
+  const std::string src = first_list_arg_id(list_type, call);
+  if (src.empty())
     return;
-  const auto &args = to_code_function_call(to_code(call)).arguments();
-  if (args.empty() || !args[0].is_symbol() || args[0].type() != list_type)
-    return;
-  const std::string &src = args[0].identifier().as_string();
   // The literal's ints are promoted to float when it also holds a float, so a
   // float list is only known to hold floats when every element is one.
   const auto &elts = literal["elts"];
@@ -5909,14 +6061,10 @@ static void copy_named_list_elem_types(
 /// int -- `for u, v in sorted(d, key=d.__getitem__)` then fails to unpack.
 /// Only reached when nothing more precise has typed the destination.
 const nlohmann::json *
-python_converter::reordering_builtin_arg(const nlohmann::json &ast_node)
+python_converter::reordering_builtin_arg(const nlohmann::json &call)
 {
-  if (!ast_node.contains("value") || !ast_node["value"].is_object())
-    return nullptr;
-
-  const auto &call = ast_node["value"];
   if (
-    !call.contains("func") || !call["func"].is_object() ||
+    !call.is_object() || !call.contains("func") || !call["func"].is_object() ||
     call["func"].value("_type", "") != "Name")
     return nullptr;
 
@@ -5931,11 +6079,11 @@ python_converter::reordering_builtin_arg(const nlohmann::json &ast_node)
 }
 
 void python_converter::copy_elem_types_from_reordering_builtin(
-  const nlohmann::json &ast_node,
+  const nlohmann::json &call_node,
   const exprt &call,
   const std::string &lhs_id)
 {
-  const nlohmann::json *arg_p = reordering_builtin_arg(ast_node);
+  const nlohmann::json *arg_p = reordering_builtin_arg(call_node);
   if (arg_p == nullptr)
     return;
   const auto &arg = *arg_p;
@@ -5956,17 +6104,31 @@ void python_converter::copy_elem_types_from_reordering_builtin(
     return;
   }
 
-  // The dict-iterating form: the preprocessor rewrites `sorted(d, ...)` to
-  // `sorted(d.keys(), ...)`, so the argument is a call, not a name.
-  if (
-    arg.value("_type", "") != "Call" || !arg.contains("func") ||
-    arg["func"].value("_type", "") != "Attribute" ||
-    arg["func"]["value"].value("_type", "") != "Name")
+  if (arg.value("_type", "") != "Call")
     return;
 
-  const std::string component = arg["func"].value("attr", "");
+  // The dict-iterating form: the preprocessor rewrites `sorted(d, ...)` to
+  // `sorted(d.keys(), ...)`, so the argument is a call, not a name.
+  const std::string component =
+    arg.contains("func") && arg["func"].value("_type", "") == "Attribute" &&
+        arg["func"]["value"].value("_type", "") == "Name"
+      ? arg["func"].value("attr", "")
+      : std::string();
   if (component != "keys" && component != "values")
+  {
+    // Any other call argument reaches the lowered call bound to a temporary,
+    // or as the nested call itself.
+    std::string src = first_list_arg_id(type_handler_.get_list_type(), call);
+    if (src.empty() && call.is_function_call())
+    {
+      const auto &args = to_code_function_call(to_code(call)).arguments();
+      if (!args.empty())
+        src = returned_list_id(args[0]);
+    }
+    if (!src.empty())
+      copy_homogeneous_elem_types(element_type_registry_, src, lhs_id);
     return;
+  }
 
   symbol_id dict_sid = create_symbol_id();
   dict_sid.set_object(arg["func"]["value"]["id"].get<std::string>());
@@ -6215,7 +6377,7 @@ void python_converter::handle_function_call_rhs(
     // fall back to the called function's return-type annotation
     // to determine the element type.
     const std::string &lhs_id = lhs.identifier().as_string();
-    copy_elem_types_from_reordering_builtin(ast_node, rhs, lhs_id);
+    copy_elem_types_from_reordering_builtin(ast_node["value"], rhs, lhs_id);
     if (element_type_registry_.size(lhs_id) == 0)
       record_annotated_list_elem_type(ast_node, lhs_id);
 
@@ -7579,12 +7741,53 @@ void python_converter::reject_divergent_attribute_classes(
     "classes is not modelled");
 }
 
+nlohmann::json python_converter::divergent_boolop_as_conditional(
+  const nlohmann::json &boolop) const
+{
+  if (
+    boolop.value("_type", "") != "BoolOp" || !boolop.contains("values") ||
+    boolop["values"].size() != 2)
+    return nullptr;
+  const nlohmann::json &first = boolop["values"][0];
+  const nlohmann::json &second = boolop["values"][1];
+  if (json_utils::ast_contains_call(first) || contains_named_expr(first))
+    return nullptr;
+  const nlohmann::json module_body = kind_module_body();
+  const std::string first_kind =
+    dynamic_type_detail::classify_literal_value_kind(first, module_body);
+  const std::string second_kind =
+    dynamic_type_detail::classify_literal_value_kind(second, module_body);
+  if (
+    first_kind.empty() || second_kind.empty() ||
+    !dynamic_type_detail::kinds_diverge({first_kind, second_kind}))
+    return nullptr;
+
+  const bool is_and = boolop["op"].value("_type", "") == "And";
+  nlohmann::json ifexp = boolop;
+  ifexp["_type"] = "IfExp";
+  ifexp.erase("op");
+  ifexp.erase("values");
+  ifexp["test"] = first;
+  ifexp["body"] = is_and ? second : first;
+  ifexp["orelse"] = is_and ? first : second;
+  return ifexp;
+}
+
 bool python_converter::rewrite_divergent_conditional_assign(
   const nlohmann::json &ast_node,
   codet &target_block)
 {
   if (!ast_node.contains("value") || !ast_node["value"].is_object())
     return false;
+
+  if (
+    nlohmann::json ifexp = divergent_boolop_as_conditional(ast_node["value"]);
+    !ifexp.is_null())
+  {
+    nlohmann::json spelled = ast_node;
+    spelled["value"] = ifexp;
+    return rewrite_divergent_conditional_assign(spelled, target_block);
+  }
 
   const nlohmann::json &value = ast_node["value"];
   if (
@@ -8620,6 +8823,8 @@ void python_converter::get_var_assign(
     {
       has_cached_any_subscript_rhs_ = false;
       is_converting_rhs = true;
+      const nlohmann::json *saved_assigned_value =
+        std::exchange(assigned_value_, &effective_ast_node["value"]);
 
       if (lhs_symbol)
         rhs = get_rhs_with_dict_resolution(
@@ -8627,6 +8832,7 @@ void python_converter::get_var_assign(
       else
         rhs = get_expr(effective_ast_node["value"]);
 
+      assigned_value_ = saved_assigned_value;
       is_converting_rhs = false;
     }
 

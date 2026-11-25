@@ -1,0 +1,4 @@
+CORE
+../github_2175_binary/main.goto
+--binary --function foo --interval-analysis
+^VERIFICATION SUCCESSFUL$

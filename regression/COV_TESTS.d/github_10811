@@ -1,0 +1,6 @@
+regression/esbmc/github_10811_scanf_alias
+regression/esbmc/github_10811_scanf_alias_fail
+regression/esbmc/github_10811_init_object_alias
+regression/esbmc/github_10811_init_object_alias_fail
+regression/esbmc/github_10811_scanf_chain_fail
+regression/esbmc/github_10811_init_object_self

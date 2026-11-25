@@ -1,0 +1,5 @@
+CORE
+main.c
+--unwind 2
+^VERIFICATION FAILED$
+^  assertion d\[j\] == 1$

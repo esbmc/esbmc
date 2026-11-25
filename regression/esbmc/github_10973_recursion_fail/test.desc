@@ -1,0 +1,5 @@
+CORE
+main.c
+--printf-check
+^VERIFICATION FAILED$
+printf has more format specifiers than arguments

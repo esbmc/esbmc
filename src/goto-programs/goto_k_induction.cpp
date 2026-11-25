@@ -5,6 +5,7 @@
 #include <goto-programs/goto_loops.h>
 #include <goto-programs/loopst.h>
 #include <goto-programs/remove_no_op.h>
+#include <goto-programs/write_footprint.h>
 #include <irep2/irep2_expr.h>
 #include <irep2/irep2_guard.h>
 #include <pointer-analysis/andersen.h>
@@ -447,7 +448,8 @@ std::vector<expr2tc> ordered(const loopst::loop_varst &vars)
 
 /// What the inductive step havocs for the modified variables of \p loop: a
 /// symbol the loop writes only through member chains is replaced by them.
-std::vector<expr2tc> havoc_targets(const loopst &loop)
+std::vector<expr2tc>
+havoc_targets(const loopst &loop, const write_footprintt &footprint)
 {
   std::vector<expr2tc> targets;
   for (const expr2tc &var : ordered(loop.get_modified_loop_vars()))
@@ -455,7 +457,10 @@ std::vector<expr2tc> havoc_targets(const loopst &loop)
     const loopst::loop_varst *partial = loop.partial_writes(var);
     if (!partial)
     {
-      targets.push_back(var);
+      if (const auto *fields = footprint.partial_writes(var))
+        targets.insert(targets.end(), fields->begin(), fields->end());
+      else
+        targets.push_back(var);
       continue;
     }
     const std::vector<expr2tc> chains = ordered(*partial);
@@ -499,6 +504,15 @@ void add_havoc_assigns(
 {
   const type2tc void_ptr = pointer_type2tc(get_empty_type());
   const expr2tc havoc_object = havoc_object_function();
+  // A call cannot be guarded by an if2t, so jump over the object havocs.
+  goto_programt::targett skip_objects = dest.instructions.end();
+  if (!is_nil_expr(flag) && !havocs.through.empty())
+  {
+    skip_objects = dest.add_instruction(GOTO);
+    skip_objects->inductive_step_instruction = true;
+    skip_objects->guard = not2tc(flag);
+    skip_objects->location = location;
+  }
   // Ahead of the assignments, which interval analysis reads back from the
   // loop head.
   for (const expr2tc &ptr : havocs.through)
@@ -510,6 +524,13 @@ void add_havoc_assigns(
       havoc_object,
       std::vector<expr2tc>{typecast2tc(void_ptr, ptr)});
     t->location = location;
+  }
+  if (skip_objects != dest.instructions.end())
+  {
+    goto_programt::targett t = dest.add_instruction(SKIP);
+    t->inductive_step_instruction = true;
+    t->location = location;
+    skip_objects->targets.push_back(t);
   }
 
   const auto add = [&](const expr2tc &lhs, const expr2tc &rhs) {
@@ -632,6 +653,14 @@ struct entry_flagst
 {
   /// Where the flags go; null when every loop is assumed to be entered.
   contextt *context;
+  /// Each flagged loop's head and its flag, when the caller wants them; only
+  /// library helpers' loops are flagged then.
+  loop_entry_flagst *entered;
+
+  bool flags(const goto_functiont &function) const
+  {
+    return context && (!entered || function.body.hide);
+  }
   symbol_generator names{"c:@__ESBMC_kind_entry$"};
 
   expr2tc fresh()
@@ -855,9 +884,7 @@ void transform_loop(
   // call.
   marked_branchst cache;
   guardst guards;
-  // havoc_object cannot be made conditional, so a loop that writes through a
-  // pointer gets no flag.
-  const bool can_flag = entry_flags.context && havocs.through.empty();
+  const bool can_flag = entry_flags.flags(goto_function);
   const head_conditionst at_head = head_guards(
     goto_function.body, loop_head, loop_exit, address_taken, can_flag);
   get_entry_cond_rec(loop_head, loop_exit, at_head, guards, cache);
@@ -886,12 +913,14 @@ void transform_loop(
   // The first head sees the state before the loop, so an invariant that holds
   // there holds at every head. A jump into the body starts elsewhere.
   std::vector<std::pair<expr2tc, expr2tc>> held;
-  if (entry_flags.context && entry_jumps.empty())
+  if (entry_flags.flags(goto_function) && entry_jumps.empty())
     for (const expr2tc &invariant : at_head.invariants)
       held.emplace_back(entry_flags.fresh(), invariant);
 
   // Create the nondet assignments on the beginning of the loop
   make_nondet_assign(goto_function, loop_head, havocs, flag, entry, held);
+  if (entry_flags.entered && !is_nil_expr(flag))
+    (*entry_flags.entered)[&*loop_head] = flag;
 
   // Assume the loop entry condition before going into the loop
   assume_loop_entry_cond_before_loop(
@@ -978,21 +1007,120 @@ bool allocates(const expr2tc &code, bool heap_only = false)
   return found;
 }
 
+/// Whether an expression has no side effect but a nondet value.
+bool only_nondet_effects(const expr2tc &e)
+{
+  bool pure = true;
+  for_each_subexpr(e, [&pure](const expr2tc &sub) {
+    pure &= !is_sideeffect2t(sub) ||
+            to_sideeffect2t(sub).kind == sideeffect2t::allockind::nondet;
+  });
+  return pure;
+}
+
+/// Whether \p lvalue is a part of a variable goto_loopst tracks or one
+/// declared in the scanned range.
+bool writes_tracked_variable(
+  expr2tc lvalue,
+  const std::unordered_set<irep_idt, irep_id_hash> &declared)
+{
+  while (is_index2t(lvalue) || is_member2t(lvalue))
+    lvalue = is_index2t(lvalue) ? to_index2t(lvalue).source_value
+                                : to_member2t(lvalue).source_value;
+  return check_var_name(lvalue) ||
+         (is_symbol2t(lvalue) && declared.count(to_symbol2t(lvalue).thename));
+}
+
+/// Whether the instructions in [\p it, \p end], and every function they call,
+/// change only variables goto_loopst records as modified: no write through a
+/// pointer or to a model variable, no allocation or free, no intrinsic.
+bool changes_only_tracked_variables(
+  const goto_functionst &goto_functions,
+  goto_programt::const_targett it,
+  goto_programt::const_targett end,
+  std::unordered_set<irep_idt, irep_id_hash> &visited)
+{
+  std::unordered_set<irep_idt, irep_id_hash> declared;
+  for (;; ++it)
+  {
+    switch (it->type)
+    {
+    case DECL:
+      declared.insert(to_code_decl2t(it->code).value);
+      break;
+    case GOTO:
+    case ASSUME:
+    case ASSERT:
+    case SKIP:
+    case LOCATION:
+    case DEAD:
+    case END_FUNCTION:
+      break;
+    case RETURN:
+      if (!only_nondet_effects(it->code))
+        return false;
+      break;
+    case ASSIGN:
+    {
+      const code_assign2t &assign = to_code_assign2t(it->code);
+      if (
+        !writes_tracked_variable(assign.target, declared) ||
+        !only_nondet_effects(assign.source))
+        return false;
+      break;
+    }
+    case FUNCTION_CALL:
+    {
+      const code_function_call2t &call = to_code_function_call2t(it->code);
+      if (
+        !is_symbol2t(call.function) ||
+        (!is_nil_expr(call.ret) &&
+         !writes_tracked_variable(call.ret, declared)) ||
+        !std::all_of(
+          call.operands.begin(), call.operands.end(), only_nondet_effects))
+        return false;
+      const irep_idt &name = to_symbol2t(call.function).thename;
+      const auto callee = goto_functions.function_map.find(name);
+      if (
+        callee == goto_functions.function_map.end() ||
+        !callee->second.body_available)
+        return false;
+      const goto_programt &body = callee->second.body;
+      if (
+        visited.insert(name).second && !changes_only_tracked_variables(
+                                         goto_functions,
+                                         body.instructions.begin(),
+                                         std::prev(body.instructions.end()),
+                                         visited))
+        return false;
+      break;
+    }
+    default:
+      return false;
+    }
+    if (it == end)
+      return true;
+  }
+}
+
 /// Whether a value of \p type can hold a data address. CIL computes field
 /// addresses in integers, `(unsigned long)p + off`, so a pointer-wide integer
-/// can.
-bool carries_address(const type2tc &type)
+/// can, unless \p wide_integers is unset.
+bool carries_address(const type2tc &type, bool wide_integers = true)
 {
   if (is_pointer_type(type))
     return !is_code_type(to_pointer_type(type).subtype);
   if (is_bv_type(type))
-    return type->get_width() >= config.ansi_c.pointer_width();
+    return wide_integers && type->get_width() >= config.ansi_c.pointer_width();
   if (is_array_type(type))
-    return carries_address(to_array_type(type).subtype);
+    return carries_address(to_array_type(type).subtype, wide_integers);
   if (is_struct_type(type) || is_union_type(type))
   {
     const std::vector<type2tc> members = struct_union_members(type);
-    return std::any_of(members.begin(), members.end(), carries_address);
+    return std::any_of(
+      members.begin(), members.end(), [wide_integers](const type2tc &m) {
+        return carries_address(m, wide_integers);
+      });
   }
   return is_symbol_type(type);
 }
@@ -1224,6 +1352,24 @@ public:
     return it != owner.end() && it->second != function;
   }
 
+  std::vector<expr2tc> pointer_sources(const expr2tc &symbol) const
+  {
+    const irep_idt &name = to_symbol2t(symbol).thename;
+    const auto it = defs.find(name);
+    if (
+      it == defs.end() || pointer_address_taken.count(name) ||
+      (!owner.count(name) && looped.count(name)))
+      return {};
+    std::vector<expr2tc> values;
+    for (const deft &d : it->second)
+    {
+      if (is_nil_expr(d.value) || d.in_own_loop)
+        return {};
+      values.push_back(d.value);
+    }
+    return values;
+  }
+
 private:
   /// An assignment to a symbol: a value, the result of a call to \p callee,
   /// or neither, for a write to part of the symbol or a call through a
@@ -1337,6 +1483,7 @@ private:
   /// do to a local: every call declares it afresh.
   std::unordered_set<irep_idt, irep_id_hash> looped_here;
   std::unordered_set<irep_idt, irep_id_hash> unsettled;
+  std::unordered_set<irep_idt, irep_id_hash> pointer_address_taken;
 };
 
 void derivationst::define(
@@ -1385,6 +1532,8 @@ void derivationst::record(
   bool in_loop,
   bool in_own_loop)
 {
+  get_address_taken(instr.code, pointer_address_taken);
+  get_address_taken(instr.guard, pointer_address_taken);
   if (instr.is_decl())
   {
     const code_decl2t &decl = to_code_decl2t(instr.code);
@@ -2168,6 +2317,7 @@ struct loop_writest
   const goto_programt &body;
   andersent &points_to;
   const derivationst &derivations;
+  const write_footprintt &footprint;
   /// Whether symex drops a write through a pointer it cannot resolve, which
   /// tracing a pointer to what it derives from relies on.
   bool drops_unresolved;
@@ -3016,7 +3166,7 @@ bool havoc_loop(
     havocs.vars.empty())
     return covered;
 
-  for (const expr2tc &var : havoc_targets(loop))
+  for (const expr2tc &var : havoc_targets(loop, w.footprint))
     if (
       w.derivations.keeps_object(
         w.function, w.address_taken, w.addressless(), var))
@@ -3041,6 +3191,23 @@ bool havoc_loop(
     goto_functions.function_map[to_symbol2t(havoc_object).thename].type =
       havoc_object->type;
   }
+  // When the havoc covers every state the loop changes, a run that leaves the
+  // loop after n iterations leaves it in the step from its state k iterations
+  // earlier, so the step need not follow the paths the bound cuts out of the
+  // loop (#1320). A havoced pointer only approximates where it may point.
+  std::unordered_set<irep_idt, irep_id_hash> visited;
+  loop.get_original_loop_exit()->exits_at_bound =
+    !loop.writes_through_pointer() && havocs.through.empty() &&
+    havocs.pins.empty() &&
+    std::none_of(
+      havocs.vars.begin(),
+      havocs.vars.end(),
+      [](const expr2tc &v) { return carries_address(v->type, false); }) &&
+    changes_only_tracked_variables(
+      goto_functions,
+      loop.get_original_loop_head(),
+      loop.get_original_loop_exit(),
+      visited);
   transform_loop(
     entry_flags,
     goto_function,
@@ -3120,9 +3287,10 @@ unsettled_by_loops(goto_functionst &goto_functions)
 bool goto_k_induction(
   goto_functionst &goto_functions,
   contextt *context,
-  bool continue_past_failed_assertions)
+  bool continue_past_failed_assertions,
+  loop_entry_flagst *entered)
 {
-  entry_flagst entry_flags{context};
+  entry_flagst entry_flags{context, entered};
   // Andersen and loop_shapest key on location numbers, which inlining
   // restarts in every function.
   goto_functions.update();
@@ -3148,6 +3316,15 @@ bool goto_k_induction(
     shapes,
     drops_unresolved ? unsettled_by_loops(goto_functions)
                      : std::unordered_set<irep_idt, irep_id_hash>());
+
+  const write_footprintt footprint(
+    goto_functions,
+    points_to,
+    reachable,
+    [&](const irep_idt &function, unsigned location) {
+      return shapes.in_loop(function, location);
+    },
+    [&](const expr2tc &symbol) { return derivations.pointer_sources(symbol); });
 
   // A reachable __VERIFIER_nondet_memory call havocs a caller object the
   // inductive step cannot generalise, so its unsoundness is independent of any
@@ -3202,6 +3379,7 @@ bool goto_k_induction(
            it->second.body,
            points_to,
            derivations,
+           footprint,
            drops_unresolved,
            address_taken,
            *iteration++,

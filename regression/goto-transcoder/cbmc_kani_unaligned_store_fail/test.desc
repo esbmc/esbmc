@@ -1,0 +1,5 @@
+CORE
+cbmc_kani_unaligned_store_fail.goto
+--binary --function _RNvCsfXQsHbUsofp_20unaligned_store_fail7harness --ignore-property-class reachability_check --ignore-property-class cover
+^  \[KANI_CHECK_ID_[^]]*\] assertion failed: read_back == val.wrapping_add\(1\)$
+^VERIFICATION FAILED$

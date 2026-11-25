@@ -70,7 +70,8 @@ Then refine the generated Ruby formula:
 - Use upstream's canonical homepage (`https://esbmc.org`) and an immutable
   source URL (the tagged tarball), verified with a SHA-256.
 - Declare **only** required dependencies (ESBMC needs a C++ toolchain, CMake,
-  Boost, Z3, GMP, fmt, yaml-cpp, and LLVM/Clang — mirror the real build system,
+  Bison, Flex, Boost, Z3, GMP, fmt, yaml-cpp, nlohmann-json, immer, and
+  LLVM/Clang — mirror the real build system,
   as in the [Debian dependency example](/docs/development/debian-packaging#debiancontrol--declare-minimal-justified-dependencies)).
 - Add a meaningful `test do` block — for a verifier, feed ESBMC a tiny program
   with a known bug and assert it reports `VERIFICATION FAILED`, plus a safe

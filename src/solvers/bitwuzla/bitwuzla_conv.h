@@ -33,6 +33,7 @@ public:
   void pop_ctx() override;
   smt_resultt dec_solve() override;
   smt_resultt dec_solve_assuming(const ast_vec &assumptions) override;
+  bool is_unsat_assumption(smt_astt a) override;
   bool supports_assumptions() const override
   {
     return true;
@@ -196,9 +197,9 @@ private:
 
   /** Sorts are immutable and outlive every context, so one instance per
    *  distinct sort suffices. mk_extract, mk_concat and the extends ask for a
-   *  bit-vector sort per call, and neither the solver_smt_sort nor the
-   *  Bitwuzla sort reference behind it is ever freed. */
-  std::map<sort_keyt, smt_sortt> bitw_sorts;
+   *  bit-vector sort per call; each is freed only with the solver, before tm
+   *  (declared after it). */
+  std::map<sort_keyt, std::unique_ptr<const smt_sort>> bitw_sorts;
 
   template <typename buildt>
   smt_sortt cached_sort(const sort_keyt &key, buildt build)
@@ -206,7 +207,7 @@ private:
     auto it = bitw_sorts.find(key);
     if (it == bitw_sorts.end())
       it = bitw_sorts.emplace(key, build()).first;
-    return it->second;
+    return it->second.get();
   }
 
   smt_astt

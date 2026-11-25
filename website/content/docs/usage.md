@@ -187,11 +187,13 @@ VERIFICATION SUCCESSFUL
 concurrent programs itself. After building the GOTO program, ESBMC checks
 whether `main` can start a thread. If it can, and `--termination` is not set,
 ESBMC prints `The program can start a thread: verifying its schedules`, drops
-`--interval-analysis` and `--goto-unwind`, replaces `--k-induction` with
-`--incremental-bmc` (except when validating a correctness witness), and uses
-`--context-bound 3` unless you give a bound. Schedules beyond the context bound
-are not explored, so `VERIFICATION SUCCESSFUL` in this configuration does not
-cover them.
+`--interval-analysis` and `--goto-unwind`, and replaces `--k-induction` with
+`--incremental-bmc` (except when validating a correctness witness). It first
+looks for a violation with the context bound raised from 1 to 3
+(`--falsify-context-bound 3`, unless you give a value or `--multi-property`); a
+violation found there is genuine. The run that follows sets no context bound of
+its own, so its `VERIFICATION SUCCESSFUL` is not limited to schedules with few
+context switches ([#10279](https://github.com/esbmc/esbmc/pull/10279)).
 
 ## Verifying Python Programs
 
@@ -306,10 +308,27 @@ We recommend reading [Exchange Format for Violation Witnesses and Correctness Wi
 
 `--witness-output-yaml PATH` writes the witness in the YAML format instead, and
 `--witness-output NAME` writes both, to `NAME.graphml` and `NAME.yml`. YAML
-witnesses declare `format_version: "2.1"`. In a violation witness, each
+witnesses declare `format_version: "2.1"`, except violation witnesses that need
+a `thread_id`, which 2.1 lacks; those declare `"2.4"`. In a violation witness
+for a program that starts threads, each `pthread_create` on the path
+gets a `function_enter` waypoint that registers the new thread, and the
+waypoints of a spawned thread carry its `thread_id`
+([#10766](https://github.com/esbmc/esbmc/pull/10766)). A data-race witness
+marks both racing targets `thread_id: any`
+([#10755](https://github.com/esbmc/esbmc/pull/10755)). In a violation witness, each
 `__VERIFIER_nondet_*()` call on the path gets a `function_return` waypoint at
 the call's closing `)`, with a constraint such as `\result == 2147483647` in
 `ext_c_expression` format.
+
+A correctness witness from a run that proves `__ESBMC_loop_invariant`
+annotations, for example under `--loop-invariant-check`, lists each proved
+invariant as a `loop_invariant` at its loop head. An invariant is left out when
+its base case or inductive step was not discharged, when the run is bounded
+(`--depth`, `--context-bound`, `--partial-loops`, `--no-unwinding-assertions`),
+starts outside `main`, is not C or uses `--ir`, or when the invariant is not
+plain C over unshadowed variables
+([#10874](https://github.com/esbmc/esbmc/pull/10874); see
+[Loop Invariants](/docs/loop-invariants#invariants-in-correctness-witnesses)).
 
 A GraphML trace step that comes from a header or from one of ESBMC's operational
 models is emitted with an `originfile` naming the file it came from, and keeps
@@ -449,6 +468,40 @@ transition system falls back to the ordinary BMC strategy
   assumptions; meant as a cross-check.
 - `--ts-dump` — with any other `--ts` option, also print the extracted system.
 
+```sh
+esbmc file.c --ts-pdr --max-k-step 20
+```
+
+`--ts-pdr` runs IC3/PDR over the extracted system, with `--max-k-step` as the
+limit on the number of frames. It needs every state variable to be a
+bit-vector of at most 64 bits, and bit-vector encoding. A `VERIFICATION
+SUCCESSFUL` verdict is given only after the inductive invariant PDR found passes
+a check in a separate solver; a violation is replayed with BMC before
+`VERIFICATION FAILED` is reported. Anything else ends `VERIFICATION UNKNOWN`. A
+program that is not a transition system falls back to the ordinary BMC
+strategy. `--ts-pdr` cannot be combined with `--ts-bmc`, `--ts-fresh-solver` or
+`--ts-push-pop`.
+
+```sh
+esbmc file.c --ts-btor2 model.btor2
+```
+
+`--ts-btor2` writes the extracted system to a file as a BTOR2 safety problem
+with one `bad` property, for hardware model checkers such as rIC3 or btormc, and
+stops with `VERIFICATION UNKNOWN`. It uses a validity latch rather than a BTOR2
+`constraint`, since a constraint would also have to hold in the violating step
+and would hide a violation followed by a loop exit. Only scalar bit-vector and
+boolean terms are exported: floats, pointers and arrays are rejected with an
+error. With `--ts-check`, a failed export prints `TS-CHECK rejected: BTOR2
+export: ...`.
+
+ESBMC stops with an error when `--ts-check`, `--ts-bmc`, `--ts-pdr` or
+`--ts-btor2` is combined with `--termination`
+([#10814](https://github.com/esbmc/esbmc/pull/10814)), or with
+`--k-induction-parallel` or `--incremental-context-bound`, whose drivers run
+before the transition-system strategy and would never reach it
+([#10427](https://github.com/esbmc/esbmc/pull/10427)).
+
 ## Reusing common subexpressions
 
 `--gcse` precomputes a subexpression shared between assignments into an
@@ -464,6 +517,59 @@ The available-expressions analysis is sequential, so `--gcse` is skipped with a
 warning on a program that may create threads: another thread can write a
 variable between two reads that the analysis treats as equal
 ([#8072](https://github.com/esbmc/esbmc/pull/8072)).
+
+## Interval-based pruning during symbolic execution
+
+Symbolic execution tracks variable intervals as it runs and stops unwinding a
+loop once the intervals prove the loop exits, which keeps the SMT formula
+smaller. This is on by default; `--no-interval-symex-guard` turns it off. ESBMC
+also turns it off under `--k-induction`, `--k-induction-parallel`,
+`--incremental-bmc`, `--termination`, `--base-case`, `--forward-condition`,
+`--inductive-step` and the function-contract options `--enforce-contract`,
+`--enforce-all-contracts`, `--replace-call-with-contract` and
+`--replace-all-contracts`, whose transformations a single shared interval
+state cannot follow. `--interval-symex-assert`, off by default, also skips
+assertions that the tracked intervals prove true.
+
+## Summarising array loops
+
+Before loops are unwound, ESBMC replaces a counting loop such as
+`for (; i < hi; i++)` whose body only writes `a[i]` (a constant, affine or
+nondet value, possibly under a condition) by its effect: one iteration at a
+nondet index in `[i, hi)`, so every check in the body still applies to each
+index, followed by a single update of the whole array. The loop then needs no
+unwinding, and ESBMC prints `Summarised N array loop(s)`. This is on by default
+([#10563](https://github.com/esbmc/esbmc/pull/10563)):
+
+- `--no-summarize-array-loops` turns it off.
+- `--summarize-array-loops` also summarises counting loops that write no array,
+  such as a loop whose body only asserts, directly or through
+  `__VERIFIER_assert`.
+
+The pass is skipped for programs that may create threads, for coverage runs,
+and under `--uninitialised-vars-check`, `--goto2c`, `--loop-invariant`,
+`--loop-invariant-check`, `--generate-testcase`, `--generate-ctest-testcase` and
+`--generate-pytest-testcase`. A summarised loop leaves no per-iteration steps in
+the counterexample, so test generation skips it to keep the nondet inputs the
+loop reads ([#10825](https://github.com/esbmc/esbmc/pull/10825)).
+
+## Splitting struct variables into fields
+
+Writing one field of a struct normally makes a new value of the whole struct.
+Two opt-in options avoid that for structs whose address is never taken
+([#7521](https://github.com/esbmc/esbmc/issues/7521)):
+
+- `--scalarize-structs` is a GOTO pass that gives each field of such a struct
+  variable a variable of its own, shown as `s.f` in traces. A parameter, an
+  extern, a call result, or a variable assigned an expression that reads it or
+  has another type keeps its struct. The pass does nothing on a program that
+  may create threads ([#10527](https://github.com/esbmc/esbmc/pull/10527)).
+- `--field-sensitive-ssa` (experimental) does the same inside symbolic
+  execution, giving each field of a local, parameter or return slot its own SSA
+  name. It is ignored, with a warning, for programs that may create threads and
+  under `--all-witnesses` and the test-generation options, and it has no effect
+  under `--stack-limit` or `--total-stack-limit`
+  ([#10778](https://github.com/esbmc/esbmc/pull/10778)).
 
 ## Selecting the floating-point rounding mode
 
@@ -517,6 +623,32 @@ finite operands do not produce an infinity
 checked. The SV-COMP wrapper passes both `--no-fp-conversion-check` and
 `--no-fp-overflow-check` for the no-overflow property, which covers
 signed-integer arithmetic only; `--sv-comp` on its own disables neither check.
+
+## Taking the address of an array element
+
+C11 6.5.6p8 allows a pointer into an array to point at most one past its last
+element. ESBMC checks this when `&a[i]` is formed, even if the pointer is never
+dereferenced: it claims `0 <= i <= size` for `&a[i]`, and `i < size` when the
+element itself is named, as in `&a[i].f`
+([#10803](https://github.com/esbmc/esbmc/pull/10803)):
+
+```c
+struct { int a[1]; int end; } b;
+int main()
+{
+  int c = 2;
+  int *p = &b.a[c];   /* two past the start of b.a: undefined */
+  return 0;
+}
+```
+
+```
+  FAILED       [main.pointer-arithmetic-out-of-bounds.2]  line 5  pointer arithmetic out of bounds: array upper bound
+```
+
+`--no-pointer-arith-check` turns just this check off, and `--no-bounds-check`
+also disables it. The SV-COMP wrapper turns it off for the memory-safety
+properties. `b.a + 2` is not checked.
 
 ## Function-pointer calls with no target
 
@@ -996,6 +1128,14 @@ leaves the checks ESBMC *generates* inside model code (those are controlled by
 `--no-standard-checks`), renumbers `--claim` indices, and is unsupported for
 Python.
 
+## Writing the output to a file
+
+`--file-output FILE` writes ESBMC's messages to `FILE` instead of the terminal.
+This includes what the clang frontend prints, such as compiler warnings and the
+`-v` output shown under `--verbosity clang:9`. A path that cannot be opened is
+reported as `ERROR: Cannot open FILE` and the run stops
+([#10781](https://github.com/esbmc/esbmc/pull/10781)).
+
 ## When an option value swallows another option
 
 `boost::program_options` takes the next token as a value-taking option's value,
@@ -1037,7 +1177,8 @@ one-shot batch mode:
 | Boolector | `--boolector` |
 | Z3 | `--z3` |
 | MathSAT | `--mathsat` |
-| CVC4 | `--cvc` |
+| CVC4 | `--cvc4` (or `--cvc`) |
+| CVC5 | `--cvc5` |
 | Yices | `--yices` |
 | SMTLIB | `--smtlib --smtlib-solver-prog CMD` |
 | Bitwuzllob | `--bitwuzllob` |

@@ -1,0 +1,22 @@
+- entry_type: invariant_set
+  metadata:
+    format_version: "2.0"
+  content:
+    - invariant:
+        type: "loop_invariant"
+        location:
+          file_name: "main.c"
+          line: 8
+          column: 3
+          function: "copy_bytes"
+        value: "i < n"
+        format: "c_expression"
+    - invariant:
+        type: "loop_invariant"
+        location:
+          file_name: "main.c"
+          line: 16
+          column: 3
+          function: "main"
+        value: "0 <= i && i <= 5"
+        format: "c_expression"

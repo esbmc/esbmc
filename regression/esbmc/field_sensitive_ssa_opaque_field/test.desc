@@ -1,0 +1,5 @@
+CORE
+main.c
+--field-sensitive-ssa --unwind 6
+^Generated 2 VCC\(s\)
+^VERIFICATION SUCCESSFUL$

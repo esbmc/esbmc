@@ -3,6 +3,7 @@
 #include <iomanip>
 #include <solvers/prop/literal.h>
 #include <solvers/smt/smt_solver.h>
+#include <solvers/smt/array_conv.h>
 #include <solvers/smt/fp/ir_ieee_conv.h>
 #include <solvers/smt/smt_fp_rounding_utils.h>
 #include <sstream>
@@ -148,6 +149,24 @@ void smt_solver_baset::set_fp_conv(fp_convt *iface)
   fp_api = iface;
 }
 
+void smt_solver_baset::set_tuple_iface(std::unique_ptr<tuple_iface> iface)
+{
+  set_tuple_iface(iface.get());
+  owned_tuple_api = std::move(iface);
+}
+
+void smt_solver_baset::set_array_iface(std::unique_ptr<array_convt> iface)
+{
+  set_array_iface(iface.get());
+  owned_array_api = std::move(iface);
+}
+
+void smt_solver_baset::set_fp_conv(std::unique_ptr<fp_convt> iface)
+{
+  set_fp_conv(iface.get());
+  owned_fp_api = std::move(iface);
+}
+
 void smt_solver_baset::set_ra_conv(ra_apit *iface)
 {
   assert(ra_api == NULL && "set_ra_conv should only be called once");
@@ -247,6 +266,19 @@ static void expand_quantifier_defs_in(
     [&defs](expr2tc &sub) { expand_quantifier_defs_in(sub, defs); });
 }
 
+/* Drop the entries made at or above @p level and reopen those it closed. */
+template <class T>
+static void pop_entries(
+  std::vector<T> &entries,
+  unsigned int level,
+  std::optional<unsigned int> T::*mark)
+{
+  std::erase_if(entries, [level](const T &e) { return e.level >= level; });
+  for (T &e : entries)
+    if (e.*mark && *(e.*mark) >= level)
+      (e.*mark).reset();
+}
+
 void smt_solver_baset::pop_ctx()
 {
   // Any context change can change the model; drop memoised l_get values.
@@ -275,6 +307,8 @@ void smt_solver_baset::pop_ctx()
     return e.level >= ctx_level;
   });
   std::erase_if(
+    fp_bits, [this](const auto &kv) { return kv.second.second >= ctx_level; });
+  std::erase_if(
     flattened, [this](const auto &kv) { return kv.second.level >= ctx_level; });
   for (auto &[value, flattens] : flattened_values)
     std::erase_if(
@@ -285,18 +319,12 @@ void smt_solver_baset::pop_ctx()
     ptr_flow, [this](const auto &kv) { return kv.second.first >= ctx_level; });
   if (base_addrspace_tied && *base_addrspace_tied >= ctx_level)
     base_addrspace_tied.reset();
-  std::erase_if(addrspace_stores, [this](const addrspace_storet &s) {
-    return s.level >= ctx_level;
-  });
-  for (addrspace_storet &s : addrspace_stores)
-    if (s.asserted_at && *s.asserted_at >= ctx_level)
-      s.asserted_at.reset();
-  std::erase_if(int_to_ptr_objects, [this](const int_to_ptr_objectt &c) {
-    return c.level >= ctx_level;
-  });
-  for (int_to_ptr_objectt &c : int_to_ptr_objects)
-    if (c.closed_at && *c.closed_at >= ctx_level)
-      c.closed_at.reset();
+  pop_entries(addrspace_stores, ctx_level, &addrspace_storet::asserted_at);
+  pop_entries(int_to_ptr_objects, ctx_level, &int_to_ptr_objectt::closed_at);
+  pop_entries(object_layouts, ctx_level, &object_layoutt::laid_out_at);
+  if (layout_needed_at && *layout_needed_at >= ctx_level)
+    layout_needed_at.reset();
+  pop_entries(ptr_eq_sites, ctx_level, &ptr_eq_sitet::closed_at);
 
   pointer_logic.pop_back();
   addr_space_sym_num.pop_back();
@@ -328,6 +356,20 @@ smt_astt smt_solver_baset::imply_ast(smt_astt a, smt_astt b)
 {
   assert(a->sort->id == SMT_SORT_BOOL && b->sort->id == SMT_SORT_BOOL);
   return mk_implies(a, b);
+}
+
+smt_astt smt_solver_baset::convert_extract(const extract2t &ex)
+{
+  smt_astt a = convert_ast(ex.from);
+  const unsigned width = ex.upper - ex.lower + 1;
+  if (ex.from->type->get_width() == width)
+    return a;
+  if (!int_encoding)
+    return mk_extract(a, ex.upper, ex.lower);
+
+  // Euclidean div and mod read a negative value's two's complement bits.
+  smt_astt shifted = mk_div(a, mk_smt_int(BigInt::power2(ex.lower)));
+  return mk_mod(shifted, mk_smt_int(BigInt::power2(width)));
 }
 
 smt_astt smt_solver_baset::convert_concat_int_mode(
@@ -413,6 +455,9 @@ smt_astt smt_solver_baset::convert_assign(const expr2tc &expr)
   smt_astt side1 = convert_ast(eq.side_1); // LHS
   smt_astt side2 = convert_ast(eq.side_2); // RHS
   side2->assign(this, side1);
+
+  if (auto it = fp_bits.find(side2); it != fp_bits.end())
+    fp_bits.insert({side1, {it->second.first, ctx_level}});
 
   // Put that into the smt cache, thus preserving the value of the assigned
   // symbols. IMPORTANT: the cache is now a fundamental part of how some
@@ -596,6 +641,19 @@ smt_astt smt_solver_baset::convert_ieee_arith_2op(const expr2tc &expr)
     /* fp.rem is exact; the node's rounding_mode is plumbing only. */
     return fp_api->mk_smt_fpbv_rem(side_1, side_2);
   }
+}
+
+smt_astt smt_solver_baset::convert_eq(
+  const expr2tc &side1,
+  const expr2tc &side2,
+  smt_astt a1,
+  smt_astt a2)
+{
+  if (is_pointer_type(side1) && is_pointer_type(side2))
+    return convert_ptr_eq(side1, side2);
+  if (is_floatbv_type(side1) && is_floatbv_type(side2) && !int_encoding)
+    return fp_api->mk_smt_fpbv_eq(a1, a2);
+  return a1->eq(this, a2);
 }
 
 smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
@@ -1338,11 +1396,7 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
 
     auto eq = to_equality2t(expr);
 
-    if (
-      is_floatbv_type(eq.side_1) && is_floatbv_type(eq.side_2) && !int_encoding)
-      a = fp_api->mk_smt_fpbv_eq(args[0], args[1]);
-    else
-      a = args[0]->eq(this, args[1]);
+    a = convert_eq(eq.side_1, eq.side_2, args[0], args[1]);
     if (
       ir_ieee && int_encoding && is_floatbv_type(eq.side_1) &&
       is_floatbv_type(eq.side_2))
@@ -1356,13 +1410,7 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
 
     auto neq = to_notequal2t(expr);
 
-    if (
-      is_floatbv_type(neq.side_1) && is_floatbv_type(neq.side_2) &&
-      !int_encoding)
-      a = fp_api->mk_smt_fpbv_eq(args[0], args[1]);
-    else
-      a = args[0]->eq(this, args[1]);
-    a = mk_not(a);
+    a = mk_not(convert_eq(neq.side_1, neq.side_2, args[0], args[1]));
     if (
       ir_ieee && int_encoding && is_floatbv_type(neq.side_1) &&
       is_floatbv_type(neq.side_2))
@@ -1720,11 +1768,7 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
   }
   case expr2t::extract_id:
   {
-    const extract2t &ex = to_extract2t(expr);
-    a = convert_ast(ex.from);
-    if (ex.from->type->get_width() == ex.upper - ex.lower + 1)
-      return a;
-    a = mk_extract(a, ex.upper, ex.lower);
+    a = convert_extract(to_extract2t(expr));
     break;
   }
   case expr2t::code_comma_id:
@@ -3396,6 +3440,12 @@ smt_resultt smt_solver_baset::dec_solve_assuming(const ast_vec &)
   abort();
 }
 
+bool smt_solver_baset::is_unsat_assumption(smt_astt)
+{
+  log_error("{} does not support unsat assumptions", solver_text());
+  abort();
+}
+
 void smt_solver_baset::pre_solve()
 {
   // A new solve produces a fresh model; drop memoised l_get values.
@@ -3403,6 +3453,7 @@ void smt_solver_baset::pre_solve()
   get_ast_cache.clear();
 
   close_int_to_ptr_objects();
+  close_ptr_eq_sites();
 
   // NB: always perform tuple constraint adding first, as it covers tuple
   // arrays too, and might end up generating more ASTs to be encoded in

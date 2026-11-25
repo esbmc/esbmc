@@ -289,6 +289,7 @@ private:
    * literal, or when index() would raise ValueError.
    */
   std::optional<exprt> fold_constant_list_query() const;
+  exprt get_expr_without_lhs(const nlohmann::json &node) const;
   void materialize_list_symbol(const symbolt *sym) const;
 
   /*
@@ -673,6 +674,13 @@ private:
   exprt handle_list_copy() const;
   exprt handle_list_remove() const;
   exprt handle_list_sort() const;
+  /// sorted(), list.sort(), min() and max() order their items with __lt__
+  /// or a reflected __gt__, which the models skip. Refuses an item of type
+  /// @p t, or a tuple holding one, that may define one; returns whether it
+  /// did.
+  bool refuse_skipped_ordering(const typet &t) const;
+  /// The same for each element type recorded for @p list_id.
+  void refuse_skipped_ordering(const std::string &list_id) const;
   exprt handle_list_reverse() const;
   exprt handle_list_count() const;
   exprt handle_list_index() const;
@@ -1034,6 +1042,7 @@ private:
    *         call is not one of these.
    */
   std::optional<exprt> build_mixed_numeric_call(const std::string &list_id);
+  std::string list_arg_id(const exprt &list_arg) const;
 
   /// Whether the sorted() argument registered as @p list_id mixes int and
   /// float elements.

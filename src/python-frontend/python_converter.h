@@ -891,6 +891,12 @@ private:
 
   void get_function_definition(const nlohmann::json &function_node);
 
+  bool unpack_unresolved(
+    const nlohmann::json &ast_node,
+    const nlohmann::json &target,
+    const exprt &rhs,
+    codet &target_block);
+
   /// Returns @p call_expr, a call through `callee` whose function type is
   /// unknown, made to pass the defaults of a top-level function `callee` may
   /// hold whose parameters @p call leaves out. Refuses the path where it
@@ -1066,6 +1072,12 @@ private:
     const nlohmann::json &left,
     const nlohmann::json &right);
 
+  void refuse_uncached_int_identity(
+    const expr2tc &lhs,
+    const expr2tc &rhs,
+    const nlohmann::json &left,
+    const nlohmann::json &right);
+
   exprt get_binary_operator_expr_for_is(
     const exprt &lhs,
     const exprt &rhs,
@@ -1099,6 +1111,10 @@ private:
   bool returns_implicit_none(
     const nlohmann::json &function_node,
     const code_typet &type);
+
+  /// The registry id of the list symbol the function \p call names returns
+  /// last, or empty when it returns no list symbol.
+  std::string returned_list_id(const exprt &call);
 
   exprt materialize_list_function_call(
     const exprt &expr,
@@ -1234,6 +1250,28 @@ private:
   // as a list, so refuse it.
   void refuse_list_of_instance(const typet &t);
 
+  // @p operation calls one of @p dunders on the objects it handles, but its
+  // model compares them without the call, so an exception or assert in a
+  // user's method would be missed. Where @p t is an instance of a class that
+  // may define one, report @p operation as unsupported and end the path.
+  // Returns whether it did.
+  bool refuse_skipped_dunder(
+    const typet &t,
+    const std::vector<std::string> &dunders,
+    const std::string &operation,
+    const locationt &loc);
+  // The same for a value @p operation hashes with __hash__.
+  bool refuse_skipped_hash(
+    const typet &t,
+    const std::string &operation,
+    const locationt &loc);
+  // The same for the element types recorded for the container @p id.
+  bool refuse_skipped_element_dunder(
+    const std::string &id,
+    const std::vector<std::string> &dunders,
+    const std::string &operation,
+    const locationt &loc);
+
   // Widen a symbol rebound from a non-class placeholder (None, Any, a bare
   // scalar) to a class-pointer binding. Only those types are widened: a
   // struct-shaped one may already back an expression built elsewhere.
@@ -1311,7 +1349,15 @@ private:
     std::vector<code_blockt> &effects);
 
   exprt lower_short_circuit_boolop(
-    const exprt &logical_expr,
+    exprt &logical_expr,
+    const std::vector<code_blockt> &effects,
+    const std::function<exprt(const exprt &)> &truthy,
+    const nlohmann::json &element);
+
+  void emit_unguarded_boolop_effects(const std::vector<code_blockt> &effects);
+
+  void guard_boolop_operands(
+    exprt &logical_expr,
     const std::vector<code_blockt> &effects,
     const std::function<exprt(const exprt &)> &truthy,
     const nlohmann::json &element);
@@ -1346,6 +1392,12 @@ private:
   bool rewrite_divergent_conditional_assign(
     const nlohmann::json &ast_node,
     codet &target_block);
+
+  /// `a and b` as `b if a else a`, and `a or b` as `a if a else b`, when the
+  /// operands have incompatible literal kinds and `a`, read twice, has no
+  /// side effect; null otherwise (#10143).
+  nlohmann::json
+  divergent_boolop_as_conditional(const nlohmann::json &boolop) const;
 
   std::string instantiated_class(const nlohmann::json &value) const;
 
@@ -1809,6 +1861,10 @@ private:
 
   typet
   any_attribute_type(const nlohmann::json &stmt, const std::string &attr_name);
+  typet dict_get_optional_type(
+    const nlohmann::json &value,
+    const std::unordered_map<std::string, nlohmann::json> &param_annotations,
+    const typet &fallback) const;
   bool is_tagged_value_expr(
     const nlohmann::json &value,
     const nlohmann::json &func_node,
@@ -2018,6 +2074,12 @@ private:
   std::pair<const nlohmann::json *, std::string>
   find_imported_class_module(const std::string &class_name) const;
 
+  /// True when @p class_name, defined in this file or an imported module,
+  /// defines or inherits @p method_name.
+  bool class_defines_method(
+    const std::string &class_name,
+    const std::string &method_name) const;
+
   /// @p method_name under @p base_class, as the module that defines the base
   /// spells it, or null when the base is not imported.
   symbolt *find_method_in_imported_base(
@@ -2092,6 +2154,12 @@ private:
   /// The class that @p class_name and all its subclasses resolve @p m to: ""
   /// when none resolves it, nullopt when they differ or an MRO is unknown.
   std::optional<std::string> family_method_owner(
+    const std::string &class_name,
+    const std::string &m) const;
+  /// Whether @p class_name, a class this file imports, or a subclass this
+  /// file defines may define @p m. True when the class or one of its bases
+  /// cannot be found in the module it comes from.
+  bool imported_family_may_define(
     const std::string &class_name,
     const std::string &m) const;
   std::optional<std::pair<bool, std::string>> stored_function(
@@ -2245,6 +2313,10 @@ private:
 
   /// Recovers a bare `list` parameter's element type from its call sites.
   bool seed_mixed_call_site_elements(
+    const std::string &param_id,
+    const std::string &func_name,
+    size_t param_index);
+  void record_call_site_displays(
     const std::string &param_id,
     const std::string &func_name,
     size_t param_index);
@@ -2497,7 +2569,8 @@ private:
   void track_unbound_global(
     const std::string &id,
     const nlohmann::json &binding,
-    const typet &type);
+    const typet &type,
+    std::size_t bindings = 1);
   void guard_unbound_global(
     const std::string &id,
     const std::string &name,
@@ -3206,6 +3279,9 @@ private:
    * @param target_block The code block to add generated code to.
    * @return true if this was an unpacking assignment and was handled.
    */
+  void register_unpacked_linalg_results(
+    const nlohmann::json &value,
+    const nlohmann::json &target);
   bool handle_unpacking_assignment(
     const nlohmann::json &ast_node,
     const nlohmann::json &target,
@@ -3306,16 +3382,16 @@ private:
   // RHS processing helper methods
   // =========================================================================
 
-  /// The first argument of `ast_node`'s RHS when that RHS is a call to a
-  /// reordering builtin (sorted/reversed/list), else nullptr.
+  /// The first argument of \p call when it is a call to a reordering builtin
+  /// (sorted/reversed/list), else nullptr.
   static const nlohmann::json *
-  reordering_builtin_arg(const nlohmann::json &ast_node);
+  reordering_builtin_arg(const nlohmann::json &call);
 
   void record_annotated_list_elem_type(
     const nlohmann::json &ast_node,
     const std::string &lhs_id);
   void copy_elem_types_from_reordering_builtin(
-    const nlohmann::json &ast_node,
+    const nlohmann::json &call_node,
     const exprt &call,
     const std::string &lhs_id);
 
@@ -3896,6 +3972,10 @@ private:
   /// Throws on a tagged operand of an `and`/`or` whose value is used.
   void refuse_tagged_boolop_operand(const exprt &operand) const;
   void refuse_bool_with_list_operand(const exprt &logical_expr) const;
+  void refuse_lossy_any_boolop_operand(
+    const exprt &logical_expr,
+    const typet &result_type,
+    const nlohmann::json &element) const;
 
   /// The truthiness of a str and/or operand: false for None or "", else true.
   /// Any other value comes back unchanged.
@@ -4084,6 +4164,9 @@ private:
   // The test of the assert statement being converted; see
   // lower_short_circuit_boolop.
   const nlohmann::json *asserted_test_ = nullptr;
+  // The value of the assignment being converted; see
+  // refuse_lossy_any_boolop_operand.
+  const nlohmann::json *assigned_value_ = nullptr;
 
   bool needs_operand_guard(const std::string &op, const exprt &rhs) const;
   // Set by resolve_any_subscript_array_type when it adopts an array type for
@@ -4572,9 +4655,15 @@ private:
     symbolt *lhs_symbol);
 
   /// A module global or function read by code converted before its binding,
-  /// mapped to the flag its binding sets and the type the reads took (#8369).
-  std::unordered_map<std::string, std::pair<std::string, typet>>
-    unbound_global_flags_;
+  /// mapped to the flag its bindings set, the type the reads took (#8369) and
+  /// the bindings not yet converted.
+  struct unbound_globalt
+  {
+    std::string flag;
+    typet type;
+    std::size_t bindings;
+  };
+  std::unordered_map<std::string, unbound_globalt> unbound_global_flags_;
   /// Classes deriving, directly or through another class, from a base in a
   /// module that has no model, mapped to that base as spelled. Such a class
   /// is converted without the base's members, so creating one is refused.

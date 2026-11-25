@@ -36,10 +36,13 @@
 #include <util/lang/c_types.h>
 #include <util/expr/expr_util.h>
 #include <util/base/i2string.h>
+#include <langapi/language_util.h>
 #include <util/irep/std_expr.h>
 #include <util/config/options.h>
 #include <irep2/irep2_utils.h>
+#include <algorithm>
 #include <functional>
+#include <climits>
 #include <map>
 
 // ---------------------------------------------------------------------------
@@ -48,6 +51,19 @@
 
 const char *const kSynthesisedInvariantProperty = "synthesised-loop-invariant";
 const char *const kHoudiniCandidatePrefix = "houdini-candidate:";
+
+/// The base case and inductive step of one invariant carry the same number,
+/// so checked_loop_invariants pairs them without reading their guards.
+static const irep_idt invariant_claim_key = "#invariant_claim";
+
+/// Reserves @p n consecutive claim numbers and returns the first.
+static unsigned reserve_invariant_claims(size_t n)
+{
+  static unsigned next = 0;
+  const unsigned first = next;
+  next += n;
+  return first;
+}
 
 namespace loop_invariant
 {
@@ -99,47 +115,40 @@ static bool is_compiler_temp(goto_programt::const_targett t)
   return false;
 }
 
-/// A Houdini candidate marker, as opposed to a user-written or affine
-/// invariant. Houdini emits a whole pool immediately before the head, so these
-/// are exempt from the proximity window that bounds the backwards scan.
-static bool is_houdini_marker(goto_programt::const_targett t)
-{
-  const std::string p = t->location.property().as_string();
-  return p.rfind(kHoudiniCandidatePrefix, 0) == 0;
-}
-
 /// Phase 2 of extract_invariants_near: collect any further LOOP_INVARIANT
 /// instructions belonging to the same loop as the one just collected. These
 /// arise when the user writes multiple separate __ESBMC_loop_invariant() calls
-/// (issue #3936). Only compiler-generated temporaries may sit between
-/// consecutive same-loop invariants; any real instruction means we have crossed
-/// into a different context (e.g. an outer-loop body), so we stop immediately.
-/// @p dist is shared with phase 1 so the two together respect one
-/// kMaxInvariantSearchBack bound and avoid an O(n) scan in large functions.
+/// (issue #3936), and a Houdini pool is one such contiguous run. Only
+/// compiler-generated temporaries may sit between consecutive same-loop
+/// invariants; any real instruction means we have crossed into a different
+/// context (e.g. an outer-loop body), so we stop immediately. The walk ends at
+/// the first other instruction, so it is not bounded by
+/// kMaxInvariantSearchBack: the temporaries of a branching invariant (#11033)
+/// alone can exceed it.
 template <typename Collect>
 static void cluster_same_loop_invariants(
-  goto_programt::targett &it,
+  goto_programt::targett it,
   goto_programt::targett begin,
-  size_t &dist,
   Collect collect)
 {
-  while (it != begin && dist < goto_loop_invariantt::kMaxInvariantSearchBack)
+  std::set<const goto_programt::instructiont *> scanned{&*it};
+  while (it != begin)
   {
     --it;
-    ++dist;
+    scanned.insert(&*it);
     if (it->is_loop_invariant())
     {
-      // A Houdini pool is one contiguous run of markers emitted immediately
-      // before this head, so it is a single group however long it is. The
-      // window bounds the scan over *ordinary* instructions; counting the pool
-      // against it would silently truncate the pool instead.
-      if (is_houdini_marker(it))
-        --dist;
       if (!it->get_loop_invariants().empty())
         collect(it);
       continue;
     }
     if (is_compiler_temp(it))
+      continue;
+    // `f() || g()` in an invariant lowers to a branch that stays inside the
+    // temporaries it computes (#11033).
+    if (
+      it->is_goto() && !it->targets.empty() &&
+      scanned.count(&*it->targets.front()))
       continue;
     break; // real instruction — stop clustering
   }
@@ -225,7 +234,7 @@ static std::vector<expr2tc> extract_invariants_near(
     }
 
     collect(it);
-    cluster_same_loop_invariants(it, begin, dist, collect);
+    cluster_same_loop_invariants(it, begin, collect);
     break; // done: found the invariant group for this loop
   }
 
@@ -243,6 +252,53 @@ void goto_loop_invariant(
         it->first, goto_functions, it->second, context, use_frame_rule);
 
   goto_functions.update();
+}
+
+/// __ESBMC_old in an invariant denotes the value on entry to the loop, but
+/// symex lowers old_snapshot to the address of its operand, so each copy of the
+/// side effects re-read after the havoc or the body sees the current state and
+/// `x == __ESBMC_old(x)` holds trivially (issue #7121). Copy each operand once
+/// into \p captures, to run ahead of the base case, and point every
+/// old_snapshot in \p side_effects at its copy.
+static void capture_old_values(
+  contextt &context,
+  goto_programt &side_effects,
+  goto_programt &captures)
+{
+  static unsigned counter = 0;
+
+  for (auto &instr : side_effects.instructions)
+  {
+    if (!instr.is_assign())
+      continue;
+    const code_assign2t &assign = to_code_assign2t(instr.code);
+    if (
+      !is_sideeffect2t(assign.source) ||
+      to_sideeffect2t(assign.source).kind !=
+        sideeffect2t::allockind::old_snapshot)
+      continue;
+
+    const expr2tc target = assign.target;
+    const expr2tc value = to_sideeffect2t(assign.source).operand;
+
+    symbolt symbol;
+    symbol.name = "__ESBMC_loop_old_" + std::to_string(counter++);
+    symbol.id = symbol.name;
+    set_symbol_type(symbol, value->type);
+    symbol.lvalue = true;
+    const irep_idt id = context.move_symbol_to_context(symbol)->id;
+    const expr2tc copy = symbol2tc(value->type, id);
+
+    goto_programt::targett decl = captures.add_instruction(DECL);
+    decl->code = code_decl2tc(value->type, id);
+    decl->location = instr.location;
+    goto_programt::targett init = captures.add_instruction(ASSIGN);
+    init->code = code_assign2tc(copy, value);
+    init->location = instr.location;
+
+    instr.code = code_assign2tc(
+      target, typecast2tc(target->type, address_of2tc(value->type, copy)));
+  }
 }
 
 void goto_loop_invariantt::goto_loop_invariant()
@@ -267,6 +323,7 @@ void goto_loop_invariantt::convert_loop_with_invariant(loopst &loop)
 
   if (invariants.empty())
     return;
+  first_claim = reserve_invariant_claims(invariants.size());
 
   log_status(
     "Processing {} loop invariant{}",
@@ -280,6 +337,8 @@ void goto_loop_invariantt::convert_loop_with_invariant(loopst &loop)
   // ASSERT/ASSUME.
   goto_programt side_effects;
   extract_and_remove_side_effects(loop_head, loop, invariants, side_effects);
+  goto_programt old_captures;
+  capture_old_values(context, side_effects, old_captures);
 
   // insert_assert_before_loop swaps the base case into the loop-head slot and
   // moves the head's own instruction to a fresh node behind it, so the
@@ -288,7 +347,7 @@ void goto_loop_invariantt::convert_loop_with_invariant(loopst &loop)
   goto_programt::targett after_head = std::next(loop_head);
 
   // 1. Insert ASSERT invariant before loop (base case)
-  insert_assert_before_loop(loop_head, invariants, side_effects);
+  insert_assert_before_loop(loop_head, invariants, old_captures, side_effects);
 
   // A write through a dereference has no named symbol for the havoc to cover,
   // so resolve the pointer to the objects it may reference and havoc those
@@ -609,6 +668,10 @@ static void extract_and_remove_side_effects_impl(
 
     if (search->is_goto())
     {
+      // Collected code below a branch (`||`, `&&`, `?:`) is conditional
+      // (#10997); re-running it unconditionally would clobber the temporary.
+      if (!to_remove.empty())
+        return;
       continue;
     }
 
@@ -653,21 +716,24 @@ void goto_loop_invariantt::extract_and_remove_side_effects(
 void goto_loop_invariantt::insert_assert_before_loop(
   goto_programt::targett &loop_head,
   const std::vector<expr2tc> &invariants,
+  const goto_programt &old_captures,
   const goto_programt &side_effects)
 {
   goto_programt dest;
 
+  for (const auto &instr : old_captures.instructions)
+    dest.instructions.push_back(instr);
   for (const auto &instr : side_effects.instructions)
     dest.instructions.push_back(instr);
 
   for (size_t i = 0; i < invariants.size(); ++i)
   {
-    // Create assert instruction for each invariant
     goto_programt::targett t = dest.add_instruction(ASSERT);
     t->guard = invariants[i];
     t->location = loop_head->location;
     t->location.comment(invariant_claim_comment("loop invariant base case", i));
     t->location.property("invariant-base-case");
+    t->location.set(invariant_claim_key, first_claim + i);
   }
 
   // Insert before the loop head
@@ -738,7 +804,7 @@ void goto_loop_invariantt::insert_havoc_and_assume_before_condition(
   const loopst &loop,
   const std::vector<expr2tc> &invariants,
   const std::vector<expr2tc> &loop_assigns,
-  goto_programt &side_effects)
+  const goto_programt &side_effects)
 {
   // The havoc models an arbitrary iteration, so it belongs at the loop head,
   // where the base case and the inductive step already anchor the invariant --
@@ -769,13 +835,6 @@ void goto_loop_invariantt::insert_havoc_and_assume_before_condition(
 
     active_frame_enforcer->materialize_snapshots(
       vars_to_snapshot, dest, loop_head->location, "loop");
-
-    // Patch old_snapshot side-effect assignments to use the frame snapshots.
-    // Replaces: return_value$___ESBMC_old_raw$N = old_snapshot(var)
-    // With:     return_value$___ESBMC_old_raw$N = (void*)&snapshot_of_var
-    // This also propagates to insert_inductive_step_and_termination which is
-    // called after this function and receives the same side_effects object.
-    active_frame_enforcer->patch_old_snapshot_assigns(side_effects);
   }
 
   // Before Step 2: a pointer the loop reassigns is havoc'd there, and writing
@@ -939,7 +998,6 @@ void goto_loop_invariantt::insert_inductive_step_and_termination(
   // 3. ASSERT for inductive step.
   for (size_t i = 0; i < invariants.size(); ++i)
   {
-    // Create assert instruction for each invariant
     goto_programt::targett t = dest.add_instruction(ASSERT);
     t->guard = conditional_back_edge ? expr2tc(or2tc(exit_cond, invariants[i]))
                                      : invariants[i];
@@ -947,6 +1005,7 @@ void goto_loop_invariantt::insert_inductive_step_and_termination(
     t->location.comment(
       invariant_claim_comment("loop invariant inductive step", i));
     t->location.property("invariant-inductive-step");
+    t->location.set(invariant_claim_key, first_claim + i);
   }
 
   // 4. Cut the back edge: the havoc already covers every iteration.
@@ -969,11 +1028,14 @@ void goto_loop_invariantt::insert_inductive_step_and_termination(
 // Combined mode implementation
 // ---------------------------------------------------------------------------
 
-void goto_loop_invariant_combined(goto_functionst &goto_functions)
+void goto_loop_invariant_combined(
+  goto_functionst &goto_functions,
+  contextt &context)
 {
   Forall_goto_functions (it, goto_functions)
     if (it->second.body_available)
-      goto_loop_invariant_combinedt(it->first, goto_functions, it->second);
+      goto_loop_invariant_combinedt(
+        it->first, goto_functions, it->second, context);
 
   goto_functions.update();
 }
@@ -1113,6 +1175,8 @@ void goto_loop_invariant_combinedt::insert_invariant_verification_branch(
   goto_programt side_effects;
   extract_and_remove_side_effects_impl(
     goto_function, loop_head, loop, invariants, side_effects);
+  goto_programt old_captures;
+  capture_old_values(context, side_effects, old_captures);
 
   // ── 2. Copy loop body, and the entry condition that stands in for the head
   const expr2tc entry_cond = loop_entry_cond(loop_head);
@@ -1128,13 +1192,15 @@ void goto_loop_invariant_combinedt::insert_invariant_verification_branch(
   // [4a] Base-case ASSERT(INV)
   for (const auto &instr : side_effects.instructions)
     branch1.instructions.push_back(instr);
-  for (const auto &inv : invariants)
+  const unsigned first_claim = reserve_invariant_claims(invariants.size());
+  for (size_t i = 0; i < invariants.size(); ++i)
   {
     auto t = branch1.add_instruction(ASSERT);
-    t->guard = inv;
+    t->guard = invariants[i];
     t->location = loop_head->location;
     t->location.comment("loop invariant base case");
     t->location.property("invariant-base-case");
+    t->location.set(invariant_claim_key, first_claim + i);
   }
 
   // [4b] HAVOC(loop_vars)
@@ -1178,13 +1244,14 @@ void goto_loop_invariant_combinedt::insert_invariant_verification_branch(
   // [4f] Inductive-step ASSERT(INV)
   for (const auto &instr : side_effects.instructions)
     branch1.instructions.push_back(instr);
-  for (const auto &inv : invariants)
+  for (size_t i = 0; i < invariants.size(); ++i)
   {
     auto t = branch1.add_instruction(ASSERT);
-    t->guard = inv;
+    t->guard = invariants[i];
     t->location = loop_exit->location;
     t->location.comment("loop invariant inductive step");
     t->location.property("invariant-inductive-step");
+    t->location.set(invariant_claim_key, first_claim + i);
   }
 
   // [4g] ASSUME(false) — terminate Branch 1; never falls through
@@ -1207,6 +1274,9 @@ void goto_loop_invariant_combinedt::insert_invariant_verification_branch(
     // Splice the gate at the front of branch1
     branch1.destructive_insert(branch1.instructions.begin(), gate);
   }
+
+  // Ahead of the gate, so that Branch 2 reads the same entry values.
+  branch1.destructive_insert(branch1.instructions.begin(), old_captures);
 
   // ── 6. Add ASSUME(INV) at the loop head (Branch 2) ───────────────────────
   // The invariant holds where it is annotated, at the head of an iteration, so
@@ -1236,4 +1306,128 @@ void goto_loop_invariant_combinedt::insert_invariant_verification_branch(
       loop_head++;
     goto_function.body.insert_swap(loop_head, assume_inv);
   }
+}
+
+/// Whether @p sym is a program variable that its own name denotes in
+/// @p function: no other global, nor local of @p function, shares it.
+static bool is_plain_c_symbol(
+  const symbol2t &sym,
+  const namespacet &ns,
+  const irep_idt &function)
+{
+  const symbolt *s = ns.lookup(sym.thename);
+  if (
+    !s || s->id.as_string().find('$') != std::string::npos ||
+    s->id.as_string().find("__ESBMC") != std::string::npos)
+    return false;
+  unsigned named = 0;
+  ns.get_context().foreach_operand([&](const symbolt &other) {
+    if (other.is_type || other.get_type().is_code() || other.name != s->name)
+      return;
+    const irep_idt owner = other.get_function_name();
+    if (owner.empty() || owner == function)
+      ++named;
+  });
+  return named == 1;
+}
+
+/// The value a C integer constant without a suffix has, which is the
+/// constant's own only when it fits in int (C11 6.4.4.1p5).
+static bool is_plain_c_constant(const constant_int2t &c)
+{
+  return c.value >= INT_MIN && c.value <= INT_MAX &&
+         (is_signedbv_type(c.type) || c.value >= 0);
+}
+
+/// Whether a witness can state @p e as written: integer and Boolean C
+/// operators over program variables whose names are not shadowed in
+/// @p function. Everything else, including floats, pointers, quantifiers and
+/// ESBMC temporaries, is left out.
+static bool
+is_plain_c(const expr2tc &e, const namespacet &ns, const irep_idt &function)
+{
+  // C compares and computes only on scalars; an aggregate can only be named.
+  const bool aggregate = is_array_type(e->type) || is_struct_type(e->type);
+  if (!aggregate && !is_bv_type(e->type) && !is_bool_type(e->type))
+    return false;
+  if (aggregate && !is_symbol2t(e) && !is_member2t(e) && !is_index2t(e))
+    return false;
+
+  switch (e->expr_id)
+  {
+  case expr2t::symbol_id:
+    return is_plain_c_symbol(to_symbol2t(e), ns, function);
+  case expr2t::constant_int_id:
+    return is_plain_c_constant(to_constant_int2t(e));
+  case expr2t::constant_bool_id:
+    return true;
+  case expr2t::typecast_id:
+    // Its other operand is the rounding mode, which a C cast leaves implicit.
+    return is_plain_c(to_typecast2t(e).from, ns, function);
+  case expr2t::not_id:
+  case expr2t::and_id:
+  case expr2t::or_id:
+  case expr2t::if_id:
+  case expr2t::equality_id:
+  case expr2t::notequal_id:
+  case expr2t::lessthan_id:
+  case expr2t::greaterthan_id:
+  case expr2t::lessthanequal_id:
+  case expr2t::greaterthanequal_id:
+  case expr2t::neg_id:
+  case expr2t::add_id:
+  case expr2t::sub_id:
+  case expr2t::mul_id:
+  case expr2t::div_id:
+  case expr2t::modulus_id:
+  case expr2t::bitand_id:
+  case expr2t::bitor_id:
+  case expr2t::bitxor_id:
+  case expr2t::bitnot_id:
+  case expr2t::shl_id:
+  case expr2t::ashr_id:
+  case expr2t::lshr_id:
+  case expr2t::index_id:
+  case expr2t::member_id:
+  {
+    bool plain = true;
+    e->foreach_operand([&](const expr2tc &op) {
+      plain = plain && is_plain_c(op, ns, function);
+    });
+    return plain;
+  }
+  default:
+    return false;
+  }
+}
+
+std::vector<std::pair<locationt, std::string>> checked_loop_invariants(
+  const goto_functionst &goto_functions,
+  const namespacet &ns)
+{
+  std::map<irep_idt, expr2tc> base_cases;
+  std::vector<std::pair<irep_idt, locationt>> steps;
+  forall_goto_functions (f_it, goto_functions)
+    forall_goto_program_instructions (it, f_it->second.body)
+    {
+      const irep_idt &claim = it->location.get(invariant_claim_key);
+      if (!it->is_assert() || claim.empty())
+        continue;
+      if (it->location.property() == "invariant-base-case")
+        base_cases.emplace(claim, it->guard);
+      else if (it->location.property() == "invariant-inductive-step")
+        steps.emplace_back(claim, it->location);
+    }
+
+  std::vector<std::pair<locationt, std::string>> invariants;
+  for (const auto &[claim, location] : steps)
+  {
+    const auto base = base_cases.find(claim);
+    if (
+      base != base_cases.end() &&
+      is_plain_c(base->second, ns, location.get_function()))
+      invariants.emplace_back(
+        location, from_expr(ns, "", base->second, presentationt::WITNESS));
+  }
+  return invariants;
 }

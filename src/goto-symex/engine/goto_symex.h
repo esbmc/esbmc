@@ -760,6 +760,36 @@ protected:
     reachability_treet &art,
     const code_function_call2t &func_call);
 
+  /** Models a memset into @p item whose offset or length @p n is not a
+   *  constant, the case __memset_impl unwinds --unwind times (#10991): each
+   *  byte j of the object becomes ite(off <= j && j - off < n, value, old),
+   *  and off + n is claimed to stay within the object. Returns false, changing
+   *  nothing, when off and n are both constant, n is signed, or the object is
+   *  read-only or not an integer or integer array of at most 4 KiB (1 KiB
+   *  when off is symbolic). An object of no fixed size goes to
+   *  memset_whole_dynamic. */
+  bool memset_symbolic(
+    const dereference_callbackt::internal_item &item,
+    const expr2tc &value,
+    const expr2tc &n);
+
+  /** Fills a byte array of symbolic size whole, as calloc does, with one
+   *  assignment of array_of(value) plus a bounds claim. Applies only from
+   *  offset 0 when @p n is the array's size expression, or the request that
+   *  symex_mem wraps as ite(fits, n, 0). Returns false, changing nothing,
+   *  otherwise (#10991). */
+  bool memset_whole_dynamic(
+    const dereference_callbackt::internal_item &item,
+    const expr2tc &value,
+    const expr2tc &n);
+
+  /** The pointer checks and return-value assignment shared by both of
+   *  intrinsic_memset's paths. */
+  void memset_finish(
+    const code_function_call2t &func_call,
+    const expr2tc &ptr,
+    const expr2tc &n);
+
   /**
    * @brief Intrinsic call for C memcpy function call
    *
@@ -1297,6 +1327,12 @@ protected:
 
   void split_rewrite_operands(std::vector<expr2tc> &operands) const;
 
+  /** split_rewrite(@p e), except that a whole read of a split object one of
+   *  whose fields holds an opaque L2 name, into a @p dest that is not split,
+   *  is first assigned to the object's own symbol and read through it, as it
+   *  is without the flag (#7521). A return passes no @p dest. */
+  expr2tc split_read(const expr2tc &e, const expr2tc &dest = expr2tc());
+
   /** The base object of @p lhs, or of @p target, the source form of
    *  @p lhs, when that names a split object as a whole. */
   expr2tc assigned_object(const expr2tc &lhs, const expr2tc &target) const;
@@ -1311,6 +1347,13 @@ protected:
     expr2tc &rhs,
     guard2tc &guard,
     const bool hidden);
+
+  /** The scalar field symbols of the split struct @p lhs, each with the
+   *  member of @p rhs it takes. */
+  static void split_leaves(
+    const expr2tc &lhs,
+    const expr2tc &rhs,
+    std::vector<std::pair<expr2tc, expr2tc>> &leaves);
 
   /** Assign @p rhs to the split object @p full_lhs, whose fields @p lhs
    *  holds, as one field step per member. Every step but the last is hidden;
@@ -1661,7 +1704,6 @@ protected:
    *  a %s string, plus the --printf-check claims; `reads_to_nul` is false
    *  when a precision or length modifier changes what %s reads. */
   void check_printf_pointer_arg(
-    printf_kindt kind,
     char spec,
     bool reads_to_nul,
     const expr2tc &arg);
@@ -1713,7 +1755,7 @@ protected:
    *  exact: the call must sit in the variadic function's own frame, the
    *  va_list operand must be one of that function's own non-parameter
    *  locals, and no va_arg may have been consumed in the activation yet. On
-   *  success fills `out` with the activation's L2-renamed va_arg values (in
+   *  success fills `out` with the activation's unrenamed va_arg symbols (in
    *  declaration order) and returns true; otherwise returns false and the
    *  caller must keep treating the arguments as unreliable (sound fallback).
    *  @param call The original (unrenamed) printf side effect.
@@ -1725,6 +1767,13 @@ protected:
     std::list<expr2tc> &out);
   /** Symbolic implementation of scanf and fscanf */
   void symex_input(const code_function_call2t &expr);
+  /** Havoc the bytes one scanf conversion writes through `operand`;
+   *  `store_bytes` is 0 for %s and %[. */
+  void symex_scanf_store(
+    const dereference_callbackt::internal_item &item,
+    const expr2tc &operand,
+    uint64_t store_bytes,
+    const guard2tc &stored);
   /** Symbolic implementation of va_arg */
   void symex_va_arg(
     const expr2tc &lhs,
@@ -1792,6 +1841,13 @@ protected:
    *  Incrementally check the assumption.
    */
   bool is_assume_false(const expr2tc &assumption);
+
+  /** Restrict an assumption or claim to the interleaving that emitted it.
+   *  --schedule puts every interleaving in one formula, so a step that is not
+   *  guarded this way constrains the claims of all of them (#10296). */
+  virtual void guard_by_interleaving(expr2tc &) const
+  {
+  }
 
   // Members
 
@@ -2015,6 +2071,23 @@ protected:
   /** Fail an intrinsic's write to @p object, made when @p cond holds, if the
    *  object is read-only, as valid_check does for a WRITE-mode dereference. */
   void check_read_only_write(const expr2tc &object, const expr2tc &cond);
+
+  /** An object an intrinsic writes, and the condition under which it does. */
+  struct write_targett
+  {
+    expr2tc object;
+    guard2tc guard;
+  };
+
+  /** Append internal_deref_items to @p targets, each guarded by @p base and
+   *  its pointer guard, renamed now: a later write may change the pointer. */
+  void collect_write_targets(
+    const guard2tc &base,
+    std::vector<write_targett> &targets);
+
+  /** Assign each target a nondet value; a string literal is reported by
+   *  check_read_only_write and left unchanged. */
+  void write_nondet_targets(const std::vector<write_targett> &targets);
 
   /** Analyze the shared varables in a function call, this is because an
    * argumemt may be renamed to constant bool in symex_function_call_code(),

@@ -169,6 +169,13 @@ const struct group_opt_templ all_cmd_options[] = {
        "class"),
      "Skip the assertions a CBMC goto-binary tags with this property class "
      "(repeatable), e.g. Kani's reachability_check and cover"},
+    {"report-property-class",
+     boost::program_options::value<std::vector<std::string>>()->value_name(
+       "class"),
+     "Check the assertions a CBMC goto-binary tags with this property class "
+     "(reachability_check or cover, repeatable) and report them apart from "
+     "the verdict, as reachable or satisfiable or not. Implies "
+     "--multi-property"},
     {"dont-care-about-missing-extensions",
      NULL,
      "Don't crash on unsupported extensions"},
@@ -195,8 +202,9 @@ const struct group_opt_templ all_cmd_options[] = {
      "(int/pointer conversions), treat __builtin_unreachable as a no-op, emit "
      "physical line numbers for witnesses, and avoid malloc/free in the "
      "fopen/fclose models. A program that can start a thread is verified with "
-     "incremental BMC over schedules of at most three context switches, "
-     "without interval analysis or --goto-unwind. Set automatically by the "
+     "incremental BMC, without interval analysis or --goto-unwind: schedules "
+     "of at most three context switches are searched for a violation first, "
+     "then the run continues with no context bound. Set automatically by the "
      "SV-COMP wrapper."},
     /* Read by clang_c_language.cpp, which is built unconditionally, so these
      * must not sit in a frontend-gated group (#7345). */
@@ -229,7 +237,8 @@ const struct group_opt_templ all_cmd_options[] = {
    {
      {"python",
       boost::program_options::value<std::string>()->value_name("path"),
-      "Python interpreter binary to use (searched in $PATH; default: python)"},
+      "Python interpreter binary to use (searched in $PATH; default: python3, "
+      "then python)"},
      {"override-return-annotation",
       NULL,
       "Override return annotation with inferred type"},
@@ -335,10 +344,12 @@ const struct group_opt_templ all_cmd_options[] = {
      NULL,
      "Force to verify every function, even if it's an unreachable "
      "internal/private function"},
-    {"unbound", NULL, "Model external function calls as arbitrary behavior"},
+    {"unbound",
+     NULL,
+     "Model external function calls as arbitrary behavior (default)"},
     {"bound",
      NULL,
-     "Model inter-contract function calls within a bounded system (default)"},
+     "Model inter-contract function calls within a bounded system"},
     {"reentry-check",
      NULL,
      "Detect reentrancy behavior during contract execution"},
@@ -478,6 +489,10 @@ const struct group_opt_templ all_cmd_options[] = {
      boost::program_options::value<std::string>(),
      "Redirect all output to a file (no stdout/stderr)"},
     {"goto2c", NULL, "Translate the GOTO program to C"},
+    {"goto2c-structured-loops",
+     NULL,
+     "With --goto2c, print loops and if/else as C statements instead of "
+     "labels and gotos"},
     {"goto2lean",
      NULL,
      "Translate the GOTO program reachable from the entry function to Lean 4 "
@@ -589,7 +604,11 @@ const struct group_opt_templ all_cmd_options[] = {
     {"ts-dump",
      NULL,
      "With another --ts option, also print the extracted transition system"},
+    {"ts-btor2",
+     boost::program_options::value<std::string>()->value_name("file"),
+     "Write the transition system to file as BTOR2 and stop"},
     {"ts-bmc", NULL, "Bounded model checking over the transition system"},
+    {"ts-pdr", NULL, "IC3/PDR over the transition system"},
     {"ts-no-fallback",
      NULL,
      "Report UNKNOWN instead of falling back when the program is not a "
@@ -681,7 +700,15 @@ const struct group_opt_templ all_cmd_options[] = {
      NULL,
      "Disable the vacuity probe (overrides default-on behavior)."}}},
   {"Concurrency and Scheduling",
-   {{"schedule", NULL, "Use schedule recording approach"},
+   {{"schedule",
+     NULL,
+     "Encode every interleaving in one formula; it grows exponentially with "
+     "--context-bound and gets no partial-order reduction"},
+    {"partial-order",
+     NULL,
+     "Encode concurrency as one formula that orders shared accesses, with no "
+     "context bound (prototype: accepts global scalars only, and verifies "
+     "no joins, locks, atomic sections or assumptions yet)"},
     {"context-bound",
      boost::program_options::value<int>()->default_value(-1)->value_name("nr"),
      "Limit number of context switches for each thread"},
@@ -774,6 +801,11 @@ const struct group_opt_templ all_cmd_options[] = {
     {"parallel-solving",
      NULL,
      "Solve each VCC in parallel (this activates --multi-property)"},
+    {"parallel-solving-threads",
+     boost::program_options::value<int>()->value_name("n"),
+     "Solve at most n VCCs at once under --parallel-solving (default: one "
+     "per hardware thread); each holds its own solver, so fewer threads use "
+     "less memory"},
     {"no-symmetry-breaking",
      NULL,
      "Disable recognising running max/min folds (e.g. over an uninitialised "

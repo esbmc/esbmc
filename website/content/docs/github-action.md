@@ -11,7 +11,10 @@ recent commits. Note that the git diff functionality of this action relies on
 the user using appropriate naming conventions for their files: when using a git
 diff, ESBMC will only run on files that end with the '.c' or '.cpp' extension.
 
-This action is supported on Linux, Windows, and macOS runners. For a more
+This action is supported on Linux, Windows, and macOS runners. It downloads a
+fixed ESBMC release rather than the latest one (v7.6.1 on Linux and Windows,
+v7.6 on macOS, as pinned in the action's `action.yml`), so options added to
+ESBMC since then are not available through `esbmc-options`. For a more
 detailed guide on how to use this action, see the
 [esbmc-action repository's README](https://github.com/esbmc/esbmc-action/blob/main/README.md).
 

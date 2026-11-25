@@ -12,7 +12,7 @@ endforeach()
 # VERSION also sets ESBMC_VERSION and ESBMC_VERSION_{MAJOR,MINOR,PATCH}, which
 # cmake_config.in and CPack read.
 project(ESBMC
-  VERSION 8.6.0
+  VERSION 8.8.0
   DESCRIPTION "Efficient SMT-based Context-Bounded Model Checker"
   HOMEPAGE_URL "https://github.com/esbmc/esbmc"
   LANGUAGES C CXX)
@@ -146,6 +146,18 @@ include(WError)
 include(EsbmcCommon)
 
 add_subdirectory(src)
+
+# The targets that include clang headers. MSVC 14.52 rejects clang's
+# Diagnostic.h under C++23 (C2338, #10885), so MSVC builds them as C++20.
+set(esbmc_clang_header_targets
+  clangcfrontend_stuff clangcfrontendast clangcppfrontend solidityfrontend_stuff)
+if(MSVC)
+  foreach(target IN LISTS esbmc_clang_header_targets)
+    if(TARGET ${target})
+      set_target_properties(${target} PROPERTIES CXX_STANDARD 20)
+    endif()
+  endforeach()
+endif()
 
 include(Irep2Optimization)
 
