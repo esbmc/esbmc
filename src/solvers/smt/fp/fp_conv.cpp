@@ -923,6 +923,52 @@ smt_astt fp_convt::mk_smt_typecast_from_fpbv_to_fpbv(
   return ctx->mk_ite(c1, v1, result);
 }
 
+// mag is a non-zero integer magnitude whose exponent is at most emax, so the
+// result is normal and only the rounding carry can reach the infinity encoding.
+// Adding the increment to exponent:fraction propagates that carry for free.
+smt_astt fp_convt::mk_int_magnitude_to_fpbv(
+  smt_astt sgn,
+  smt_astt mag,
+  unsigned ebits,
+  unsigned sbits,
+  smt_astt rm)
+{
+  const unsigned bv_sz = mag->sort->get_data_width();
+  smt_astt lz = mk_leading_zeros(mag, bv_sz);
+  smt_astt norm = ctx->mk_bvshl(mag, lz);
+
+  smt_astt lz_e = bv_sz >= ebits ? ctx->mk_extract(lz, ebits - 1, 0)
+                                 : ctx->mk_zero_ext(lz, ebits - bv_sz);
+  smt_astt biased_exp = ctx->mk_bvsub(
+    ctx->mk_smt_bv(BigInt::power2m1(ebits - 1) + (bv_sz - 1), ebits), lz_e);
+
+  smt_astt bits;
+  if (bv_sz <= sbits)
+  {
+    smt_astt frac = ctx->mk_extract(norm, bv_sz - 2, 0);
+    if (bv_sz < sbits)
+      frac = ctx->mk_concat(frac, ctx->mk_smt_bv(BigInt(0), sbits - bv_sz));
+    bits = ctx->mk_concat(biased_exp, frac);
+  }
+  else
+  {
+    const unsigned low = bv_sz - sbits;
+    smt_astt frac = ctx->mk_extract(norm, bv_sz - 2, low);
+    smt_astt last = ctx->mk_extract(norm, low, low);
+    smt_astt round = ctx->mk_extract(norm, low - 1, low - 1);
+    smt_astt sticky = low >= 2
+                        ? ctx->mk_bvredor(ctx->mk_extract(norm, low - 2, 0))
+                        : ctx->mk_smt_bv(BigInt(0), 1);
+    smt_astt inc = mk_rounding_decision(rm, sgn, last, round, sticky);
+    bits = ctx->mk_bvadd(
+      ctx->mk_concat(biased_exp, frac),
+      ctx->mk_zero_ext(inc, ebits + sbits - 2));
+  }
+
+  return mk_from_bv_to_fp(
+    ctx->mk_concat(sgn, bits), mk_fpbv_sort(ebits, sbits - 1));
+}
+
 smt_astt
 fp_convt::mk_smt_typecast_ubv_to_fpbv(smt_astt x, smt_sortt to, smt_astt rm)
 {
@@ -947,6 +993,10 @@ fp_convt::mk_smt_typecast_ubv_to_fpbv(smt_astt x, smt_sortt to, smt_astt rm)
   smt_astt is_zero = ctx->mk_eq(x, bv0_sz);
 
   smt_astt pzero = mk_pzero(ebits, sbits);
+
+  if (bv_sz >= 2 && bv_sz <= BigInt::power2(ebits - 1))
+    return ctx->mk_ite(
+      is_zero, pzero, mk_int_magnitude_to_fpbv(bv0_1, x, ebits, sbits, rm));
 
   // Special case: x == 0 -> p/n zero
   smt_astt c1 = is_zero;
@@ -1063,6 +1113,12 @@ fp_convt::mk_smt_typecast_sbv_to_fpbv(smt_astt x, smt_sortt to, smt_astt rm)
   smt_astt is_neg = ctx->mk_eq(is_neg_bit, bv1_1);
   smt_astt neg_x = ctx->mk_bvneg(x);
   smt_astt x_abs = ctx->mk_ite(is_neg, neg_x, x);
+
+  if (bv_sz >= 2 && bv_sz <= BigInt::power2(ebits - 1))
+    return ctx->mk_ite(
+      is_zero,
+      pzero,
+      mk_int_magnitude_to_fpbv(is_neg_bit, x_abs, ebits, sbits, rm));
 
   // x is [bv_sz-1] . [bv_sz-2 ... 0] * 2^(bv_sz-1)
   // bv_sz-1 is the "1.0" bit for the rounder.
