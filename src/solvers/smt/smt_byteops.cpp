@@ -46,8 +46,9 @@ smt_astt smt_solver_baset::convert_byte_extract_int_mode(
   expr2tc offs,
   unsigned int src_width)
 {
-  if (const expr2tc whole = whole_object_read(data, src_width);
-      !is_nil_expr(whole))
+  if (
+    const expr2tc whole = whole_object_read(data, src_width);
+    !is_nil_expr(whole))
     return convert_ast(whole);
 
   // A typecast would take an aggregate's value, which has none (#11014).
