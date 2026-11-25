@@ -1337,6 +1337,13 @@ protected:
     guard2tc &guard,
     const bool hidden);
 
+  /** The scalar field symbols of the split struct @p lhs, each with the
+   *  member of @p rhs it takes. */
+  static void split_leaves(
+    const expr2tc &lhs,
+    const expr2tc &rhs,
+    std::vector<std::pair<expr2tc, expr2tc>> &leaves);
+
   /** Assign @p rhs to the split object @p full_lhs, whose fields @p lhs
    *  holds, as one field step per member. Every step but the last is hidden;
    *  the last prints the whole struct, as an unsplit assignment would. */
