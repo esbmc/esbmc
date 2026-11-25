@@ -5,8 +5,8 @@ done, with the measurements below (§4), and the maintainer decided **go** on
 2026-11-24. `--partial-order` verifies programs on global scalars and arrays
 of them, including through pointers, with threads created in loops, mutexes,
 condition variables, `pthread_exit` and the scheduler intrinsics phase 1
-lists, without assumptions, and checks data races on scalars; the effort
-figures are estimates.
+lists, without assumptions, and checks data races on scalars and deadlocks
+on mutexes and joins; the effort figures are estimates.
 **Origin:** [#10296](https://github.com/esbmc/esbmc/issues/10296), which found
 `--schedule` unsound and slow, and its
 [effort estimate](https://github.com/esbmc/esbmc/issues/10296#issuecomment-6798263610).
@@ -170,6 +170,13 @@ different threads, that no execution runs them back to back. The SC
 constraints already order every such pair, so "unordered clocks" never
 holds. Global arrays are rejected under the check, since an array is one
 object.
+
+`--deadlock-check` frees a stop time: the events before it are a prefix, and
+only its locks need a release. The claim is that no prefix leaves main, and
+every other thread with events left, waiting on a held mutex or on a join;
+the other claims need every thread to finish. Condition waits, which wake at
+will here, and `pthread_exit`, which lets threads outlive main, are rejected
+under the check.
 
 ### Phase 3 — traces and witnesses (1–2 weeks)
 

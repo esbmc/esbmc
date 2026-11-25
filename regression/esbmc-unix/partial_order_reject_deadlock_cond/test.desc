@@ -1,0 +1,5 @@
+CORE
+main.c
+--partial-order --deadlock-check
+^ERROR: --partial-order does not support a call to pthread_cond_wait_check yet, at file .*main\.c line 9 column 3 function
+\A(?![\s\S]*VERIFICATION)[\s\S]*\Z

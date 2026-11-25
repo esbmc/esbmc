@@ -84,3 +84,13 @@ regression/esbmc-unix/partial_order_race_join_fail
 regression/esbmc-unix/partial_order_race_guarded
 regression/esbmc-unix/partial_order_race_guarded_fail
 regression/esbmc-unix/partial_order_reject_race_array
+regression/esbmc-unix/partial_order_deadlock
+regression/esbmc-unix/partial_order_deadlock_fail
+regression/esbmc-unix/partial_order_deadlock_join
+regression/esbmc-unix/partial_order_deadlock_join_fail
+regression/esbmc-unix/partial_order_deadlock_threads
+regression/esbmc-unix/partial_order_deadlock_threads_fail
+regression/esbmc-unix/partial_order_deadlock_assert
+regression/esbmc-unix/partial_order_deadlock_assert_fail
+regression/esbmc-unix/partial_order_reject_deadlock_exit
+regression/esbmc-unix/partial_order_reject_deadlock_cond

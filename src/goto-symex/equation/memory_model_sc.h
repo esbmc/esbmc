@@ -22,11 +22,16 @@
 /// With \p races, a claim at the end of the equation for each pair of
 /// conflicting events of different threads states that no execution places
 /// them next to each other.
+/// With \p deadlocks, the events whose clock is below a free stop time form a
+/// prefix of the execution, and only the locks in it need a release before
+/// them. A claim states that no prefix leaves main, and every other thread
+/// that has events left, waiting on a held mutex or an unfinished thread.
+/// Every other claim then holds only over executions that run to the end.
 class memory_model_sct : public ssa_step_algorithm
 {
 public:
-  explicit memory_model_sct(bool races = false)
-    : ssa_step_algorithm(true), races(races)
+  explicit memory_model_sct(bool races = false, bool deadlocks = false)
+    : ssa_step_algorithm(true), races(races), deadlocks(deadlocks)
   {
   }
 
@@ -37,10 +42,10 @@ public:
     return 0;
   }
 
-  /// The data-race claims the last run() appended.
+  /// The data-race and deadlock claims the last run() appended.
   size_t claims_added() const override
   {
-    return n_race_claims;
+    return n_claims;
   }
 
 private:
@@ -57,7 +62,8 @@ private:
   std::map<irep_idt, std::vector<size_t>> locks, unlocks;
   symex_target_equationt::SSA_stepst constraints, claims;
   const bool races;
-  size_t n_race_claims = 0;
+  const bool deadlocks;
+  size_t n_claims = 0;
 
   void collect(const symex_target_equationt::SSA_stepst &steps);
   void program_order();
@@ -68,6 +74,11 @@ private:
   void mutexes();
   void data_races();
   void claim_no_race(size_t a, size_t b);
+  void claim_no_deadlock();
+  void complete_runs_only(symex_target_equationt::SSA_stepst &steps) const;
+  expr2tc finished(unsigned thread) const;
+  expr2tc waits(size_t id) const;
+  expr2tc done(size_t id) const;
   void isolate(size_t begin, size_t end);
   void constrain(const expr2tc &cond, const eventt &about);
   expr2tc before(size_t a, size_t b) const;
