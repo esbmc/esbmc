@@ -1,10 +1,10 @@
 # Plan — a partial-order encoding for concurrent programs (`--partial-order`)
 
-**Status (2026-11-24):** phase 1 in progress. Phase 0 is done, with the
+**Status (2026-11-25):** phase 1 in progress. Phase 0 is done, with the
 measurements below (§4), and the maintainer decided **go** on 2026-11-24.
 `--partial-order` verifies programs on global scalars and arrays of them,
-without locks, assumptions or pointers to globals; the effort figures are
-estimates.
+including through pointers, without locks or assumptions; the effort figures
+are estimates.
 **Origin:** [#10296](https://github.com/esbmc/esbmc/issues/10296), which found
 `--schedule` unsound and slow, and its
 [effort estimate](https://github.com/esbmc/esbmc/issues/10296#issuecomment-6798263610).
@@ -12,7 +12,7 @@ estimates.
 [#10989](https://github.com/esbmc/esbmc/pull/10989) repaired `--schedule`;
 its formula still grows exponentially with `--context-bound`. Tracked in
 [#10990](https://github.com/esbmc/esbmc/issues/10990).
-**Last updated:** 2026-11-24.
+**Last updated:** 2026-11-25.
 
 ## 1. Goal
 
@@ -138,7 +138,9 @@ recorded here.
 Done: a global array of scalars is one object. A read of an element reads the
 whole array; an element write is an update, a write that also reads the
 array's previous value, and the from-read constraint keeps every other write
-out from between the two. Taking a global's address is still rejected.
+out from between the two. A dereference reads, or updates, every global its
+pointer's value set reaches; a global pointer and a global's address passed to
+a function without a body are still rejected.
 
 ### Phase 2 — properties (3–4 weeks)
 

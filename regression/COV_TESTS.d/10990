@@ -37,6 +37,15 @@ regression/esbmc-unix/partial_order_array_increment_fail
 regression/esbmc-unix/partial_order_array_index
 regression/esbmc-unix/partial_order_array_index_fail
 regression/esbmc-unix/partial_order_reject_struct
-regression/esbmc-unix/partial_order_reject_array_address
 regression/esbmc-unix/partial_order_array_shared_index
 regression/esbmc-unix/partial_order_array_shared_index_fail
+regression/esbmc-unix/partial_order_pointer_write
+regression/esbmc-unix/partial_order_pointer_write_fail
+regression/esbmc-unix/partial_order_pointer_read
+regression/esbmc-unix/partial_order_pointer_read_fail
+regression/esbmc-unix/partial_order_pointer_choice
+regression/esbmc-unix/partial_order_pointer_choice_fail
+regression/esbmc-unix/partial_order_pointer_increment
+regression/esbmc-unix/partial_order_pointer_increment_fail
+regression/esbmc-unix/partial_order_pointer_array
+regression/esbmc-unix/partial_order_pointer_array_fail
