@@ -181,11 +181,8 @@ private:
       return reject("a call to " + name);
     if (verifying && needs_unbuilt_events(name))
       return reject("verifying a call to " + name);
-    // The deadlock claim takes main's end for the process's end.
-    if (
-      deadlocks &&
-      (name == "pthread_exit" || name == "__ESBMC_terminate_thread"))
-      return reject("checking deadlocks with a call to " + name);
+    if (!check_deadlock_call(name))
+      return false;
 
     if (!check_expr(call.ret) || !check_thread_args(name, call))
       return false;
@@ -203,6 +200,16 @@ private:
       if (!check_expr(arg))
         return false;
     }
+    return true;
+  }
+
+  /// The deadlock claim takes main's end for the process's end.
+  bool check_deadlock_call(const std::string &name) const
+  {
+    if (
+      deadlocks &&
+      (name == "pthread_exit" || name == "__ESBMC_terminate_thread"))
+      return reject("checking deadlocks with a call to " + name);
     return true;
   }
 
