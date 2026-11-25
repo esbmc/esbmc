@@ -518,6 +518,25 @@ static bool jumps_past(
   return false;
 }
 
+/// The LOOP_INVARIANT at most kMaxInvariantSearchBack instructions before
+/// \p loop_head, or the instruction where the search stopped.
+static goto_programt::targett find_loop_invariant_before(
+  goto_programt &body,
+  goto_programt::targett loop_head)
+{
+  goto_programt::targett it = loop_head;
+  size_t back_dist = 0;
+  while (it != body.instructions.begin() &&
+         back_dist < goto_loop_invariantt::kMaxInvariantSearchBack)
+  {
+    --it;
+    ++back_dist;
+    if (it->is_loop_invariant())
+      break;
+  }
+  return it;
+}
+
 /// Shared implementation used by both the legacy loop-invariant pass and the
 /// combined loop-invariant + k-induction pass.  See the declaration of
 /// goto_loop_invariantt::extract_and_remove_side_effects for a high-level
@@ -552,17 +571,8 @@ static void extract_and_remove_side_effects_impl(
     return false;
   };
 
-  // Find the LOOP_INVARIANT instruction preceding loop_head.
-  goto_programt::targett loop_inv_it = loop_head;
-  size_t back_dist = 0;
-  while (loop_inv_it != goto_function.body.instructions.begin() &&
-         back_dist < goto_loop_invariantt::kMaxInvariantSearchBack)
-  {
-    --loop_inv_it;
-    ++back_dist;
-    if (loop_inv_it->is_loop_invariant())
-      break;
-  }
+  goto_programt::targett loop_inv_it =
+    find_loop_invariant_before(goto_function.body, loop_head);
   if (!loop_inv_it->is_loop_invariant())
     return;
 
