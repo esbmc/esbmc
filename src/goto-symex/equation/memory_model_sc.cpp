@@ -302,8 +302,10 @@ void memory_model_sct::claim_no_race(size_t a, size_t b)
   step.cond_neg = and2tc(step.guard, conjunction(adjacent));
   step.cond = not2tc(step.cond_neg);
   step.source = second.step->source;
-  step.comment = std::string(both_write ? "W/W" : "R/W") + " data race on " +
-                 id2string(object_of(*second.step));
+  std::string comment = both_write ? "W/W" : "R/W";
+  comment += " data race on ";
+  comment += id2string(object_of(*second.step));
+  step.comment = comment;
 }
 
 void memory_model_sct::constrain(const expr2tc &cond, const eventt &about)
