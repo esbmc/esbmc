@@ -563,25 +563,25 @@ struct po_positiont
   }
 };
 
-using po_positionst =
-  std::unordered_map<const symex_target_equationt::SSA_stept *, po_positiont>;
+using stept = symex_target_equationt::SSA_stept;
+using po_positionst = std::unordered_map<const stept *, po_positiont>;
+using clockst = std::unordered_map<const stept *, BigInt>;
 
-/// Empty unless the memory model gave the events clocks. A step follows the
-/// last event of its thread, except that the assignment a write event
-/// records goes with that write. A thread with no event follows its spawn.
-po_positionst
-po_positions(const symex_target_equationt &target, smt_convt &smt_conv)
+clockst event_clocks(const symex_target_equationt &target, smt_convt &smt_conv)
 {
-  using stept = symex_target_equationt::SSA_stept;
-  std::unordered_map<const stept *, BigInt> clocks;
+  clockst clocks;
   for (const stept &step : target.SSA_steps)
     if (step.is_event() && !is_nil_expr(step.cond))
       if (
         const expr2tc clock = smt_conv.get(step.cond); is_constant_int2t(clock))
         clocks[&step] = to_constant_int2t(clock).value;
-  if (clocks.empty())
-    return {};
+  return clocks;
+}
 
+/// The next event with a clock in each step's thread.
+std::unordered_map<const stept *, const stept *>
+next_events(const symex_target_equationt &target, const clockst &clocks)
+{
   std::unordered_map<const stept *, const stept *> next_event;
   std::map<unsigned, const stept *> next;
   for (auto it = target.SSA_steps.rbegin(); it != target.SSA_steps.rend(); ++it)
@@ -591,7 +591,16 @@ po_positions(const symex_target_equationt &target, smt_convt &smt_conv)
     else if (auto n = next.find(it->source.thread_nr); n != next.end())
       next_event[&*it] = n->second;
   }
+  return next_event;
+}
 
+/// A step follows the last event of its thread, except that the assignment a
+/// write event records goes with that write. A thread with no event follows
+/// its spawn.
+po_positionst
+po_positions(const symex_target_equationt &target, const clockst &clocks)
+{
+  const auto next_event = next_events(target, clocks);
   po_positionst positions;
   std::map<unsigned, BigInt> last, spawned_at;
   for (const stept &step : target.SSA_steps)
@@ -621,7 +630,7 @@ po_positions(const symex_target_equationt &target, smt_convt &smt_conv)
 
 /// Merge the threads' steps by position, keeping each thread's own order
 /// even where a sliced constraint left two of its clocks unordered.
-void order_by_clock(
+void merge_threads(
   goto_tracet &goto_trace,
   const std::vector<po_positiont> &positions)
 {
@@ -657,6 +666,25 @@ void order_by_clock(
   for (goto_trace_stept &step : goto_trace.steps)
     step.step_nr = ++step_nr;
 }
+
+/// Under --partial-order symex lists each thread whole; the clocks the
+/// memory model gave the events say how the threads interleave. \p sources
+/// holds the SSA step of each trace step.
+void order_by_clock(
+  const symex_target_equationt &target,
+  smt_convt &smt_conv,
+  goto_tracet &goto_trace,
+  const std::vector<const stept *> &sources)
+{
+  const clockst clocks = event_clocks(target, smt_conv);
+  if (clocks.empty())
+    return;
+  const po_positionst positions = po_positions(target, clocks);
+  std::vector<po_positiont> trace_positions;
+  for (const stept *step : sources)
+    trace_positions.push_back(positions.at(step));
+  merge_threads(goto_trace, trace_positions);
+}
 } // namespace
 
 void build_goto_trace(
@@ -664,8 +692,7 @@ void build_goto_trace(
   smt_convt &smt_conv,
   goto_tracet &goto_trace)
 {
-  const po_positionst po_steps = po_positions(target, smt_conv);
-  std::vector<po_positiont> po_trace;
+  std::vector<const symex_target_equationt::SSA_stept *> sources;
   unsigned step_nr = 0;
   input_trackert inputs;
   race_flag_trackert race_flags;
@@ -781,12 +808,10 @@ void build_goto_trace(
     goto_trace_step.spawns.swap(spawns);
 
     goto_trace.steps.push_back(goto_trace_step);
-    if (!po_steps.empty())
-      po_trace.push_back(po_steps.at(&SSA_step));
+    sources.push_back(&SSA_step);
   }
 
-  if (!po_steps.empty())
-    order_by_clock(goto_trace, po_trace);
+  order_by_clock(target, smt_conv, goto_trace, sources);
 }
 
 void build_successful_goto_trace(
