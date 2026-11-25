@@ -471,14 +471,18 @@ public:
    *  defines as a SHARED_WRITE event. */
   void record_shared_write(const expr2tc &code);
 
-  /** --partial-order: assign to an element of a shared array as an update
-   *  of the whole array, whose old value is a fresh L2 name the memory model
-   *  ties to the latest write. Returns false if \p code assigns to anything
-   *  else. */
-  bool partial_order_array_update(
+  /** --partial-order: assign to an element of a shared array, or through a
+   *  pointer that may reach a shared global, as an update of each object
+   *  written, whose old value is a fresh L2 name the memory model ties to
+   *  the latest write. Returns false if \p code writes no such object. */
+  bool partial_order_update(
     const expr2tc &code,
     const bool hidden,
     const guard2tc &guard);
+
+  /** --partial-order: the shared globals, at L0, that dereferencing \p ptr
+   *  may reach. */
+  std::set<expr2tc> shared_pointees(const expr2tc &ptr);
 
   /** --partial-order: give the shared global \p sym a fresh, unconstrained
    *  L2 name and return it. */

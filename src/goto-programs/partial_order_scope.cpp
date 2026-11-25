@@ -89,6 +89,7 @@ public:
 
   bool check(const goto_functionst &goto_functions)
   {
+    functions = &goto_functions;
     collect_spawners(goto_functions);
     for (const auto &[name, fn] : goto_functions.function_map)
     {
@@ -110,6 +111,7 @@ private:
   const namespacet &ns;
   const bool verifying;
   const locationt *where = nullptr;
+  const goto_functionst *functions = nullptr;
   /// Functions that create a thread, directly or through a call.
   std::set<std::string> spawners;
 
@@ -203,10 +205,19 @@ private:
         name.starts_with("pthread_") && is_address_of2t(arg) &&
         is_symbol2t(to_address_of2t(arg).ptr_obj))
         continue;
+      // A symex intrinsic writes through the pointer without recording events.
+      if (is_shared_address(arg) && !has_body(call))
+        return reject("passing the address of a global to " + name);
       if (!check_expr(arg))
         return false;
     }
     return true;
+  }
+
+  bool has_body(const code_function_call2t &call) const
+  {
+    auto it = functions->function_map.find(to_symbol2t(call.function).thename);
+    return it != functions->function_map.end() && it->second.body_available;
   }
 
   bool check_thread_args(
@@ -233,15 +244,6 @@ private:
     if (is_nil_expr(e))
       return true;
 
-    if (is_address_of2t(e))
-    {
-      expr2tc obj = to_address_of2t(e).ptr_obj;
-      while (is_index2t(obj))
-        obj = to_index2t(obj).source_value;
-      if (is_symbol2t(obj) && is_shared(to_symbol2t(obj)))
-        return reject("taking the address of a global");
-    }
-
     if (
       is_symbol2t(e) && is_shared(to_symbol2t(e)) &&
       !is_partial_order_type(e->type))
@@ -262,8 +264,12 @@ private:
 
   bool is_shared_address(const expr2tc &e) const
   {
-    return is_address_of2t(e) && is_symbol2t(to_address_of2t(e).ptr_obj) &&
-           is_shared(to_symbol2t(to_address_of2t(e).ptr_obj));
+    if (!is_address_of2t(e))
+      return false;
+    expr2tc obj = to_address_of2t(e).ptr_obj;
+    while (is_index2t(obj))
+      obj = to_index2t(obj).source_value;
+    return is_symbol2t(obj) && is_shared(to_symbol2t(obj));
   }
 
   bool reads_shared(const expr2tc &e) const
