@@ -5,7 +5,7 @@
 
 namespace
 {
-/// The first expression-context call below `expr`. Migration spells these
+/// An expression-context call below `expr`. Migration spells these
 /// `sideeffect2t`/function_call, so a statement-level `code_function_call2t`
 /// is never one of them and needs no special case.
 expr2tc find_nested_call(const expr2tc &expr)
@@ -13,16 +13,17 @@ expr2tc find_nested_call(const expr2tc &expr)
   if (is_nil_expr(expr))
     return expr2tc();
 
-  if (
-    is_sideeffect2t(expr) &&
-    to_sideeffect2t(expr).kind == sideeffect2t::allockind::function_call)
-    return expr;
-
+  // Innermost first: a call lifted with a call in its arguments would be
+  // stepped over with that call still inside.
   expr2tc found;
   expr->foreach_operand([&found](const expr2tc &op) {
     if (is_nil_expr(found))
       found = find_nested_call(op);
   });
+  if (
+    is_nil_expr(found) && is_sideeffect2t(expr) &&
+    to_sideeffect2t(expr).kind == sideeffect2t::allockind::function_call)
+    return expr;
   return found;
 }
 

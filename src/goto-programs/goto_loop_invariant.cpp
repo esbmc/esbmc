@@ -500,6 +500,24 @@ collect_symbols_local(const expr2tc &expr, std::set<irep_idt> &symbols)
   }
 }
 
+/// True when \p jump can land strictly after \p first and no later than
+/// \p last.
+static bool jumps_past(
+  const goto_programt::instructiont &jump,
+  goto_programt::targett first,
+  goto_programt::targett last)
+{
+  for (auto it = first; it != last;)
+  {
+    ++it;
+    if (
+      std::find(jump.targets.begin(), jump.targets.end(), it) !=
+      jump.targets.end())
+      return true;
+  }
+  return false;
+}
+
 /// Shared implementation used by both the legacy loop-invariant pass and the
 /// combined loop-invariant + k-induction pass.  See the declaration of
 /// goto_loop_invariantt::extract_and_remove_side_effects for a high-level
@@ -639,11 +657,15 @@ static void extract_and_remove_side_effects_impl(
 
     if (search->is_goto())
     {
+      if (to_remove.empty())
+        continue;
       // Collected code below a branch (`||`, `&&`, `?:`) is conditional
       // (#10997); re-running it unconditionally would clobber the temporary.
-      if (!to_remove.empty())
+      // A jump that cannot land past its start, such as an earlier loop's
+      // back edge, only ends it (#11051).
+      if (jumps_past(*search, to_remove.back(), loop_inv_it))
         return;
-      continue;
+      break;
     }
 
     // Consecutive __ESBMC_loop_invariant() calls for the same loop lower to

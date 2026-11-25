@@ -348,8 +348,9 @@ static void set_object_alignment(symbolt &symbol)
 
 // lift_call_expressions evaluates a call ahead of the LOOP_INVARIANT marker,
 // which is faithful only where every evaluation of the invariant reaches it:
-// not past the first operand of a short-circuit operator. Kani lowers each
-// loop invariant to such a call of a generated closure (#11051).
+// not past the first operand of a short-circuit operator, nor under a binder.
+// Kani lowers each loop invariant to such a call of a generated closure
+// (#11051).
 static bool
 has_unliftable_side_effect(const expr2tc &expr, bool conditional = false)
 {
@@ -365,6 +366,8 @@ has_unliftable_side_effect(const expr2tc &expr, bool conditional = false)
   else if (is_sideeffect_assign2t(expr))
     return true;
 
+  if (is_forall2t(expr) || is_exists2t(expr))
+    conditional = true;
   const bool short_circuit =
     is_and2t(expr) || is_or2t(expr) || is_implies2t(expr) || is_if2t(expr);
   bool found = false;
