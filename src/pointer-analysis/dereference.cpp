@@ -1052,6 +1052,25 @@ bool dereferencet::dereference_type_compare(
   return false;
 }
 
+/* The alignment in bits a read or write of @p type is checked against here, or
+ * 0 when it is not checked: code, pointers and bit-fields are skipped, and a
+ * vector's lanes are only checked at their own width (#7907). A whole struct
+ * or union needs its own alignment, not its width (#11015). */
+static BigInt checked_access_bits(const type2tc &type, const namespacet &ns)
+{
+  if (is_code_type(type) || is_pointer_type(type))
+    return 0;
+  if (is_struct_type(type) || is_union_type(type))
+  {
+    const BigInt bits = ::alignment(migrate_type_back(type), ns) * 8;
+    return bits > 8 ? bits : BigInt(0);
+  }
+  if (!(is_scalar_type(type) || is_vector_type(type)))
+    return 0;
+  const BigInt bits = type_byte_size_bits(type);
+  return bits % 8 == 0 ? bits : BigInt(0);
+}
+
 void dereferencet::check_pointer_alignment(
   modet mode,
   const type2tc &type,
@@ -1065,29 +1084,16 @@ void dereferencet::check_pointer_alignment(
   // flag when walking into a packed-struct member; honour it here so
   // we mirror the suppression already done at the scalar
   // check_alignment() site below.
-  if (mode.unaligned)
+  if (mode.unaligned || !(is_read(mode) || is_write(mode)))
     return;
 
-  // Only check alignment for scalar and vector read/write operations (excluding
-  // code and pointer types). A vector's lanes are only checked at their own
-  // width (#7907).
-  if (
-    !(is_read(mode) || is_write(mode)) ||
-    !(is_scalar_type(type) || is_vector_type(type)) || is_code_type(type) ||
-    is_pointer_type(type))
-  {
-    return;
-  }
-
-  BigInt access_size_bits = type_byte_size_bits(type);
-
-  // Only check alignment for whole-byte-sized accesses (skip bit-fields)
-  if (access_size_bits % 8 != 0)
+  const BigInt access_size_bits = checked_access_bits(type, ns);
+  if (access_size_bits == 0)
     return;
 
   /* A packed object's base is free, so its offset alone decides nothing: the
    * object-aware checks in build_reference_to() claim the whole address. */
-  if (is_object_descriptor2t(what) && is_scalar_type(type))
+  if (is_object_descriptor2t(what) && !is_vector_type(type))
   {
     const expr2tc &object = to_object_descriptor2t(what).object;
     if (
