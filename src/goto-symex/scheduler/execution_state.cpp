@@ -1288,8 +1288,24 @@ void execution_statet::symex_call(
   reachability_treet &art,
   const goto_programt::instructiont &instruction)
 {
-  if (!partial_order_join(instruction) && !partial_order_mutex(instruction))
+  if (
+    !partial_order_join(instruction) && !partial_order_mutex(instruction) &&
+    !partial_order_exit(instruction))
     goto_symext::symex_step(art);
+}
+
+bool execution_statet::partial_order_exit(
+  const goto_programt::instructiont &instruction)
+{
+  const code_function_call2t &call = to_code_function_call2t(instruction.code);
+  if (
+    !partial_order || !is_symbol2t(call.function) ||
+    to_symbol2t(call.function).thename != "c:@F@pthread_exit")
+    return false;
+
+  cur_state->guard.make_false();
+  cur_state->source.pc++;
+  return true;
 }
 
 void execution_statet::return_zero(const code_function_call2t &call)
@@ -1309,12 +1325,16 @@ bool execution_statet::partial_order_mutex(
     return false;
   const std::string name = to_symbol2t(call.function).thename.as_string();
   const bool lock = name.starts_with("c:@F@pthread_mutex_lock");
-  if (!lock && !name.starts_with("c:@F@pthread_mutex_unlock"))
+  const bool unlock = name.starts_with("c:@F@pthread_mutex_unlock");
+  // POSIX allows spurious wakeups, and the operational model takes one at
+  // will, so a wait is an unlock followed by a lock.
+  const bool wait = name.starts_with("c:@F@pthread_cond_wait");
+  if (!lock && !unlock && !wait)
     return false;
 
   if (!cur_state->guard.is_false())
   {
-    expr2tc mutex = call.operands.at(0);
+    expr2tc mutex = call.operands.at(wait ? 1 : 0);
     cur_state->rename(mutex);
     simplify(mutex);
     const expr2tc obj =
@@ -1329,11 +1349,19 @@ bool execution_statet::partial_order_mutex(
         instruction.location.as_string());
       abort();
     }
-    target->event(
-      cur_state->guard.as_expr(),
-      lock ? symex_targett::LOCK : symex_targett::UNLOCK,
-      symbol2tc(obj->type, to_symbol2t(obj).thename),
-      cur_state->source);
+    const expr2tc sym = symbol2tc(obj->type, to_symbol2t(obj).thename);
+    if (!lock)
+      target->event(
+        cur_state->guard.as_expr(),
+        symex_targett::UNLOCK,
+        sym,
+        cur_state->source);
+    if (!unlock)
+      target->event(
+        cur_state->guard.as_expr(),
+        symex_targett::LOCK,
+        sym,
+        cur_state->source);
     return_zero(call);
   }
   cur_state->source.pc++;

@@ -62,3 +62,11 @@ regression/esbmc-unix/partial_order_mutex_pointer_fail
 regression/esbmc-unix/partial_order_reject_local_mutex
 regression/esbmc-unix/partial_order_events_lock
 regression/esbmc-unix/partial_order_reject_mutex_choice
+regression/esbmc-unix/partial_order_cond_wait
+regression/esbmc-unix/partial_order_cond_wait_fail
+regression/esbmc-unix/partial_order_events_cond
+regression/esbmc-unix/partial_order_exit
+regression/esbmc-unix/partial_order_exit_fail
+regression/esbmc-unix/partial_order_exit_main
+regression/esbmc-unix/partial_order_exit_main_fail
+regression/esbmc-unix/partial_order_reject_cond_local_mutex
