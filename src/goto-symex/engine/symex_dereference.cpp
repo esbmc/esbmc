@@ -54,12 +54,84 @@ bool symex_dereference_statet::has_failed_symbol(
   return false;
 }
 
+static bool is_pure_integer(const expr2tc &e)
+{
+  if (!is_bv_type(e) || is_dereference2t(e))
+    return false;
+  bool pure = true;
+  e->foreach_operand([&pure](const expr2tc &op) {
+    if (pure && !is_pure_integer(op))
+      pure = false;
+  });
+  return pure;
+}
+
+/* The value set is keyed by level1 names, so `p + i` has an unknown offset
+ * even where `i` has a propagated constant value; the reference is then built
+ * at POINTER_OFFSET(p) + i and folds no read (#2256). */
+static void fold_propagated_integers(goto_symex_statet &state, expr2tc &e)
+{
+  if (is_nil_expr(e) || is_constant_expr(e))
+    return;
+  if (is_pure_integer(e))
+  {
+    expr2tc value = e;
+    state.rename(value);
+    simplify(value);
+    if (is_constant_int2t(value))
+      e = value;
+    return;
+  }
+  e->Foreach_operand(
+    [&state](expr2tc &op) { fold_propagated_integers(state, op); });
+}
+
+static bool is_scalar(const type2tc &t)
+{
+  return is_bv_type(t) || is_fixedbv_type(t) || is_floatbv_type(t) ||
+         is_pointer_type(t);
+}
+
+/* Whether @p descriptor is NULL or an array whose elements are read whole by
+ * an access of @p type. */
+static bool is_element_access(const type2tc &type, const expr2tc &descriptor)
+{
+  if (!is_object_descriptor2t(descriptor))
+    return true;
+  const expr2tc &root = to_object_descriptor2t(descriptor).get_root_object();
+  if (is_null_object2t(root))
+    return true;
+  if (!is_array_type(root))
+    return false;
+  const type2tc &sub = to_array_type(root->type).subtype;
+  return is_scalar(sub) && sub->get_width() == type->get_width();
+}
+
 void symex_dereference_statet::points_to(
   const expr2tc &expr,
   value_setst::valuest &value_set)
 {
-  state.value_set.get_value_set(
-    goto_symex.split_rewrite(expr), value_set, true);
+  const expr2tc pointer = goto_symex.split_rewrite(expr);
+  state.value_set.get_value_set(pointer, value_set, true);
+
+  // Only for whole-element reads of arrays: a known offset into an aggregate,
+  // or one cutting across elements, takes dereference paths that the symbolic
+  // offset has kept out of reach, and the latter slows the solver.
+  if (!is_pointer_type(pointer))
+    return;
+  const type2tc &type = to_pointer_type(pointer->type).subtype;
+  if (
+    !is_scalar(type) ||
+    !std::all_of(value_set.begin(), value_set.end(), [&type](const expr2tc &d) {
+      return is_element_access(type, d);
+    }))
+    return;
+  expr2tc folded = pointer;
+  fold_propagated_integers(state, folded);
+  if (folded == pointer)
+    return;
+  value_set.clear();
+  state.value_set.get_value_set(folded, value_set, true);
 }
 
 void symex_dereference_statet::get_value_set(
