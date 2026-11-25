@@ -40,6 +40,9 @@ bool is_supported_thread_call(const std::string &name)
     "pthread_exit",
     "__ESBMC_atomic_begin",
     "__ESBMC_atomic_end",
+    "__ESBMC_really_atomic_begin",
+    "__ESBMC_really_atomic_end",
+    "__ESBMC_terminate_thread",
     "__VERIFIER_atomic_begin",
     "__VERIFIER_atomic_end",
     // Inserted ahead of every atomic section; each thread runs to completion,
@@ -61,14 +64,24 @@ bool is_unsupported_call(const std::string &name)
     "__ESBMC_switch_to",
     "__ESBMC_switch_away_from",
     "__ESBMC_spawn_thread",
-    "__ESBMC_terminate_thread",
-    "__ESBMC_really_atomic_begin",
-    "__ESBMC_really_atomic_end",
     "__ESBMC_switch_to_monitor",
     "__ESBMC_switch_from_monitor",
     "__ESBMC_register_monitor",
     "__ESBMC_kill_monitor"};
   return scheduler_intrinsics.count(name) != 0;
+}
+
+/// The operational model's thread counters, which symex renames sequentially
+/// rather than as events, so a user read would see one thread's view only.
+std::string scheduler_state_name(const symbol2t &sym)
+{
+  static const std::set<std::string> counters{
+    "__ESBMC_num_total_threads",
+    "__ESBMC_num_threads_running",
+    "__ESBMC_blocked_threads_count"};
+  const std::string name = sym.thename.as_string();
+  const std::string bare = name.starts_with("c:@") ? name.substr(3) : name;
+  return counters.count(bare) != 0 ? bare : "";
 }
 
 bool is_mutex_type(const type2tc &t)
@@ -235,6 +248,12 @@ private:
       is_address_of2t(e) && is_symbol2t(to_address_of2t(e).ptr_obj) &&
       is_mutex_type(to_address_of2t(e).ptr_obj->type))
       return true;
+
+    if (is_symbol2t(e))
+      if (
+        const std::string state = scheduler_state_name(to_symbol2t(e));
+        !state.empty())
+        return reject("the scheduler state " + state);
 
     if (
       is_symbol2t(e) && is_shared(to_symbol2t(e)) &&
