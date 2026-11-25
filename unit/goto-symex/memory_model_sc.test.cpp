@@ -402,3 +402,83 @@ TEST_CASE("an update never reads its own write", "[po]")
     CHECK_FALSE(mentions(step.cond, rf(2, 2)));
   }
 }
+
+/// Events 0: LOCK m, 1: UNLOCK m (thread 0), 2: LOCK m (thread 1), which it
+/// never releases.
+struct lockst
+{
+  contextt ctx;
+  namespacet ns{ctx};
+  symex_target_equationt eq{ns};
+
+  lockst()
+  {
+    const expr2tc m = symbol2tc(get_int32_type(), "c:@m");
+    add_event(eq, 0, symex_targett::LOCK, m);
+    add_event(eq, 0, symex_targett::UNLOCK, m);
+    add_event(eq, 1, symex_targett::LOCK, m);
+    memory_model_sct().run(eq.SSA_steps);
+  }
+};
+
+TEST_CASE("a lock waits for the mutex to be released", "[po]")
+{
+  lockst f;
+  CHECK(all_hold(f.eq, clocks(1, 2, 3)));
+  CHECK_FALSE(all_hold(f.eq, clocks(1, 3, 2)));
+}
+
+TEST_CASE("a lock never released keeps later locks out", "[po]")
+{
+  lockst f;
+  CHECK_FALSE(all_hold(f.eq, clocks(2, 3, 1)));
+}
+
+TEST_CASE("two threads do not lock a mutex at once", "[po]")
+{
+  lockst f;
+  CHECK_FALSE(all_hold(f.eq, clocks(1, 2, 1)));
+}
+
+TEST_CASE("an unlock off the path does not release the mutex", "[po]")
+{
+  contextt ctx;
+  namespacet ns(ctx);
+  symex_target_equationt eq(ns);
+  const expr2tc m = symbol2tc(get_int32_type(), "c:@m");
+  add_event(eq, 0, symex_targett::LOCK, m);
+  symex_targett::sourcet source;
+  eq.event(gen_false_expr(), symex_targett::UNLOCK, m, source);
+  add_event(eq, 1, symex_targett::LOCK, m);
+  memory_model_sct().run(eq.SSA_steps);
+
+  CHECK_FALSE(all_hold(eq, clocks(1, 2, 3)));
+}
+
+TEST_CASE("different mutexes do not exclude each other", "[po]")
+{
+  contextt ctx;
+  namespacet ns(ctx);
+  symex_target_equationt eq(ns);
+  add_event(eq, 0, symex_targett::LOCK, symbol2tc(get_int32_type(), "c:@m1"));
+  add_event(eq, 1, symex_targett::LOCK, symbol2tc(get_int32_type(), "c:@m2"));
+  memory_model_sct().run(eq.SSA_steps);
+
+  valuation v = {{clock(0), tick(1)}, {clock(1), tick(1)}};
+  CHECK(all_hold(eq, v));
+  v[clock(1)] = tick(2);
+  CHECK(all_hold(eq, v));
+}
+
+TEST_CASE("a mutex nobody unlocks is locked once", "[po]")
+{
+  contextt ctx;
+  namespacet ns(ctx);
+  symex_target_equationt eq(ns);
+  const expr2tc m = symbol2tc(get_int32_type(), "c:@m");
+  add_event(eq, 0, symex_targett::LOCK, m);
+  add_event(eq, 1, symex_targett::LOCK, m);
+  memory_model_sct().run(eq.SSA_steps);
+
+  CHECK_FALSE(all_hold(eq, {{clock(0), tick(1)}, {clock(1), tick(2)}}));
+}

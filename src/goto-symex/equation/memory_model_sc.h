@@ -15,6 +15,9 @@
 /// reads the object, atomically with its write.
 /// A spawned thread's events follow its spawn and precede every join on it,
 /// and no other thread's event falls inside an atomic section.
+/// A lock is taken only if every earlier lock of its mutex was released
+/// before it. An execution in which a thread waits forever for a lock is not
+/// one of these, so its violations are not reported.
 /// The constraints go first in the equation, so every claim depends on them.
 class memory_model_sct : public ssa_step_algorithm
 {
@@ -41,6 +44,7 @@ private:
   std::map<unsigned, std::vector<size_t>> per_thread;
   std::map<irep_idt, std::vector<size_t>> reads, writes;
   std::vector<size_t> spawns, joins;
+  std::map<irep_idt, std::vector<size_t>> locks, unlocks;
   symex_target_equationt::SSA_stepst constraints;
 
   void collect(const symex_target_equationt::SSA_stepst &steps);
@@ -49,6 +53,7 @@ private:
   void read_from();
   void thread_order();
   void atomic_sections();
+  void mutexes();
   void isolate(size_t begin, size_t end);
   void constrain(const expr2tc &cond, const eventt &about);
   expr2tc before(size_t a, size_t b) const;

@@ -1,5 +1,5 @@
 /* #10990: the section 2 counter. Under --partial-order --program-only each
-   thread contributes its read and write of x; the mutex is not an event. */
+   thread contributes its read and write of x; the mutex is no shared object. */
 #include <pthread.h>
 #include <assert.h>
 int x = 0;
