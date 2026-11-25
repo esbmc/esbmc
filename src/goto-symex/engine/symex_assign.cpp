@@ -832,6 +832,31 @@ void goto_symext::split_rewrite_operands(std::vector<expr2tc> &operands) const
     op = split_rewrite(op);
 }
 
+// A nested struct field is a struct of its own fields; the leaves are what
+// gets a name.
+static void flatten_split_fields(
+  const expr2tc &l,
+  const expr2tc &r,
+  std::vector<expr2tc> &fields,
+  std::vector<expr2tc> &values)
+{
+  const struct_type2t &st = to_struct_type(l->type);
+  const auto &members = to_constant_struct2t(l).datatype_members;
+  for (size_t k = 0; k < members.size(); k++)
+  {
+    expr2tc rk = is_constant_struct2t(r)
+                   ? to_constant_struct2t(r).datatype_members[k]
+                   : member2tc(st.members[k], r, st.member_names[k]);
+    if (is_constant_struct2t(members[k]))
+    {
+      flatten_split_fields(members[k], rk, fields, values);
+      continue;
+    }
+    fields.push_back(members[k]);
+    values.push_back(rk);
+  }
+}
+
 void goto_symext::symex_assign_split(
   const expr2tc &lhs,
   const expr2tc &full_lhs,
@@ -839,28 +864,8 @@ void goto_symext::symex_assign_split(
   guard2tc &guard,
   const bool hidden)
 {
-  // A nested struct field is a struct of its own fields; the leaves are what
-  // gets a name.
   std::vector<expr2tc> fields, values;
-  std::function<void(const expr2tc &, const expr2tc &)> flatten =
-    [&](const expr2tc &l, const expr2tc &r) {
-      const struct_type2t &st = to_struct_type(l->type);
-      const auto &members = to_constant_struct2t(l).datatype_members;
-      for (size_t k = 0; k < members.size(); k++)
-      {
-        expr2tc rk = is_constant_struct2t(r)
-                       ? to_constant_struct2t(r).datatype_members[k]
-                       : member2tc(st.members[k], r, st.member_names[k]);
-        if (is_constant_struct2t(members[k]))
-        {
-          flatten(members[k], rk);
-          continue;
-        }
-        fields.push_back(members[k]);
-        values.push_back(rk);
-      }
-    };
-  flatten(lhs, rhs);
+  flatten_split_fields(lhs, rhs, fields, values);
   const size_t last = fields.size() - 1;
   const bool nondet = guard.is_true() && is_symbol2t(rhs) &&
                       has_prefix(to_symbol2t(rhs).thename, "nondet$symex::");
@@ -1149,10 +1154,11 @@ expr2tc goto_symext::merge_member_stores(
   {
     member_path.back() = type.member_names[i];
     expr2tc value = member2tc(type.members[i], obj, type.member_names[i]);
-    if (std::any_of(
-          stores.begin(), stores.end(), [&member_path](const member_store &s) {
-            return is_strict_prefix(member_path, s.path);
-          }))
+    if (
+      std::any_of(
+        stores.begin(), stores.end(), [&member_path](const member_store &s) {
+          return is_strict_prefix(member_path, s.path);
+        }))
       value = merge_member_stores(value, member_path, stores, guarded);
     for (const member_store &store : stores)
     {
