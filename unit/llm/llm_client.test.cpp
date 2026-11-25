@@ -35,6 +35,21 @@ TEST_CASE("cli backend returns the process output", "[llm]")
     client->complete({{"user", "Hello."}}) == "user: Hello.\nassistant: ");
 }
 
+TEST_CASE("cli backend throws when the process gives no answer", "[llm]")
+{
+  llm::configt cfg;
+  cfg.backend = llm::backendt::cli;
+  cfg.executable = "false";
+  REQUIRE_THROWS_AS(
+    llm::make_client(cfg)->complete({{"user", "Hello."}}), std::runtime_error);
+
+  cfg.executable = "sleep";
+  cfg.extra_args = {"5"};
+  cfg.timeout_ms = 100;
+  REQUIRE_THROWS_AS(
+    llm::make_client(cfg)->complete({{"user", "Hello."}}), std::runtime_error);
+}
+
 TEST_CASE("factory picks backend by enum", "[llm]")
 {
   llm::configt cfg;
