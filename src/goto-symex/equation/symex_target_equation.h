@@ -162,7 +162,8 @@ public:
     expr2tc lhs, rhs;
     expr2tc original_lhs, original_rhs;
 
-    // cond: assume/assert condition, assignment equality, or branch guard.
+    // cond: assume/assert condition, assignment equality, branch guard, or
+    // a --partial-order event's clock.
     // comment interned: assertion messages are a small, highly repetitive
     // set ("dereference failure", "array bounds violated", ...), so
     // irep_idt both shrinks the inline footprint (4 bytes vs a 32-byte

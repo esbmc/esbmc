@@ -94,3 +94,7 @@ regression/esbmc-unix/partial_order_deadlock_assert
 regression/esbmc-unix/partial_order_deadlock_assert_fail
 regression/esbmc-unix/partial_order_reject_deadlock_exit
 regression/esbmc-unix/partial_order_reject_deadlock_cond
+regression/esbmc-unix/partial_order_trace_write
+regression/esbmc-unix/partial_order_trace_write_fail
+regression/esbmc-unix/partial_order_trace_lost_update
+regression/esbmc-unix/partial_order_trace_lost_update_fail

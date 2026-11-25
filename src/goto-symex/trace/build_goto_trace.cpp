@@ -4,9 +4,11 @@
 #include <goto-symex/state/renaming.h>
 #include <goto-symex/witness/witnesses.h>
 #include <solvers/smt/smt_conv.h>
+#include <list>
 #include <map>
 #include <unordered_map>
 #include <unordered_set>
+#include <vector>
 
 static bool reads_through_dereference(const expr2tc &e);
 
@@ -546,11 +548,116 @@ static bool is_bookkeeping(const symex_target_equationt::SSA_stept &step)
   return step.hidden || step.is_event();
 }
 
+namespace
+{
+/// Where a step falls in a --partial-order execution: at the clock of the
+/// next event of its thread, or just after the thread's last event.
+struct po_positiont
+{
+  BigInt clock;
+  bool after_last = false;
+
+  bool operator<(const po_positiont &other) const
+  {
+    return clock != other.clock ? clock < other.clock
+                                : after_last < other.after_last;
+  }
+};
+
+using po_positionst =
+  std::unordered_map<const symex_target_equationt::SSA_stept *, po_positiont>;
+
+/// Empty unless the memory model gave the events clocks. A thread with no
+/// event of its own follows its spawn.
+po_positionst
+po_positions(const symex_target_equationt &target, smt_convt &smt_conv)
+{
+  po_positionst positions;
+  std::map<unsigned, BigInt> next;
+  std::map<unsigned, std::vector<const symex_target_equationt::SSA_stept *>>
+    pending;
+  std::map<unsigned, BigInt> spawned_at;
+
+  for (auto it = target.SSA_steps.rbegin(); it != target.SSA_steps.rend(); ++it)
+  {
+    const unsigned thread = it->source.thread_nr;
+    if (it->is_event() && !is_nil_expr(it->cond))
+    {
+      const expr2tc clock = smt_conv.get(it->cond);
+      if (is_constant_int2t(clock))
+      {
+        const BigInt &value = to_constant_int2t(clock).value;
+        if (!next.count(thread))
+          for (auto *step : pending[thread])
+            positions[step] = {value, true};
+        next[thread] = value;
+        if (it->type == symex_targett::SPAWN)
+          spawned_at[to_constant_int2t(it->lhs).value.to_uint64()] = value;
+      }
+    }
+
+    if (auto n = next.find(thread); n != next.end())
+      positions[&*it] = {n->second, false};
+    else
+      pending[thread].push_back(&*it);
+  }
+
+  if (next.empty())
+    return {};
+  for (const auto &[thread, steps] : pending)
+    if (!next.count(thread))
+      for (auto *step : steps)
+        positions[step] = {spawned_at[thread], true};
+  return positions;
+}
+
+/// Merge the threads' steps by position, keeping each thread's own order
+/// even where a sliced constraint left two of its clocks unordered.
+void order_by_clock(
+  goto_tracet &goto_trace,
+  const std::vector<po_positiont> &positions)
+{
+  std::map<unsigned, std::list<size_t>> queues;
+  std::vector<goto_tracet::stepst::iterator> steps;
+  for (auto it = goto_trace.steps.begin(); it != goto_trace.steps.end(); ++it)
+  {
+    queues[it->thread_nr].push_back(steps.size());
+    steps.push_back(it);
+  }
+
+  goto_tracet::stepst ordered;
+  while (!queues.empty())
+  {
+    auto first = queues.begin();
+    for (auto q = std::next(first); q != queues.end(); ++q)
+    {
+      const size_t a = q->second.front(), b = first->second.front();
+      if (
+        positions[a] < positions[b] ||
+        (!(positions[b] < positions[a]) && a < b))
+        first = q;
+    }
+    ordered.splice(
+      ordered.end(), goto_trace.steps, steps[first->second.front()]);
+    first->second.pop_front();
+    if (first->second.empty())
+      queues.erase(first);
+  }
+  goto_trace.steps.swap(ordered);
+
+  unsigned step_nr = 0;
+  for (goto_trace_stept &step : goto_trace.steps)
+    step.step_nr = ++step_nr;
+}
+} // namespace
+
 void build_goto_trace(
   const symex_target_equationt &target,
   smt_convt &smt_conv,
   goto_tracet &goto_trace)
 {
+  const po_positionst po_steps = po_positions(target, smt_conv);
+  std::vector<po_positiont> po_trace;
   unsigned step_nr = 0;
   input_trackert inputs;
   race_flag_trackert race_flags;
@@ -666,7 +773,12 @@ void build_goto_trace(
     goto_trace_step.spawns.swap(spawns);
 
     goto_trace.steps.push_back(goto_trace_step);
+    if (!po_steps.empty())
+      po_trace.push_back(po_steps.at(&SSA_step));
   }
+
+  if (!po_steps.empty())
+    order_by_clock(goto_trace, po_trace);
 }
 
 void build_successful_goto_trace(

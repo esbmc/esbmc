@@ -81,17 +81,17 @@ bool memory_model_sct::run(symex_target_equationt::SSA_stepst &steps)
   return true;
 }
 
-void memory_model_sct::collect(const symex_target_equationt::SSA_stepst &steps)
+void memory_model_sct::collect(symex_target_equationt::SSA_stepst &steps)
 {
-  for (const auto &step : steps)
+  for (auto &step : steps)
   {
     if (!step.is_event() || step.ignore)
       continue;
 
     const size_t id = events.size();
-    events.push_back(
-      {&step,
-       symbol2tc(get_uint32_type(), "__ESBMC_po_clock$" + std::to_string(id))});
+    step.cond =
+      symbol2tc(get_uint32_type(), "__ESBMC_po_clock$" + std::to_string(id));
+    events.push_back({&step, step.cond});
     per_thread[step.source.thread_nr].push_back(id);
 
     if (step.type == symex_targett::SHARED_READ)

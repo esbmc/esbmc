@@ -19,6 +19,7 @@
 /// before it. An execution in which a thread waits forever for a lock is not
 /// one of these, so its violations are not reported.
 /// The constraints go first in the equation, so every claim depends on them.
+/// Each event keeps its clock in its cond, for the trace to order steps by.
 /// With \p races, a claim at the end of the equation for each pair of
 /// conflicting events of different threads states that no execution places
 /// them next to each other.
@@ -65,7 +66,7 @@ private:
   const bool deadlocks;
   size_t n_claims = 0;
 
-  void collect(const symex_target_equationt::SSA_stepst &steps);
+  void collect(symex_target_equationt::SSA_stepst &steps);
   void program_order();
   void write_order();
   void read_from();

@@ -166,6 +166,14 @@ TEST_CASE("constraints are hidden assumptions ahead of the events", "[po]")
     CHECK(it->is_event());
 }
 
+TEST_CASE("each event keeps its clock for the trace", "[po]")
+{
+  write_read_writet f;
+  auto it = std::prev(f.eq.SSA_steps.end(), 3);
+  for (unsigned event = 0; event < 3; ++event, ++it)
+    CHECK(it->cond == clock(event));
+}
+
 TEST_CASE("an SC execution satisfies the constraints", "[po]")
 {
   write_read_writet f;
