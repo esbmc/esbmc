@@ -1,0 +1,5 @@
+CORE
+main.c
+--ssa-features-dump --multi-property
+(?s)^SSA: Contains BITWISE OPERATIONS$(?:(?!Solving claim).)*^Solving claim 'operand
+^VERIFICATION FAILED$
