@@ -1,4 +1,4 @@
 CORE
 main.c
 --fp2bv --smt-formula-only
-\A(?![\s\S]*bvlshr)[\s\S]*\(get-model\)
+\A(?![\s\S]*bvlshr)[\s\S]*\(check-sat\)
