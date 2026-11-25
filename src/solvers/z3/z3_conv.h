@@ -44,6 +44,11 @@ public:
   {
     return true;
   }
+  // Z3 is as fast or faster on its own bvsdiv/bvsrem by 2^k.
+  bool shifts_for_pow2_sdiv() const override
+  {
+    return false;
+  }
 
   tvt get_bool(smt_astt a) override;
   BigInt get_bv(smt_astt a, bool is_signed) override;

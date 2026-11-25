@@ -308,6 +308,12 @@ public:
   {
     return false;
   }
+  /** Whether to encode signed division and remainder by a constant 2^k with
+   *  shifts rather than bvsdiv/bvsrem (#9224). */
+  virtual bool shifts_for_pow2_sdiv() const
+  {
+    return true;
+  }
 
   void pre_solve();
 

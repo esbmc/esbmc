@@ -17,6 +17,52 @@
 #include <cmath>
 #include <limits>
 
+/// The k for which a signed division or remainder by @p divisor is by the
+/// constant 2^k and is encoded with shifts, else -1.
+static int pow2_sdiv_exponent(
+  const smt_solver_baset &s,
+  const expr2tc &dividend,
+  const expr2tc &divisor)
+{
+  if (
+    !s.shifts_for_pow2_sdiv() || !is_signedbv_type(dividend) ||
+    !is_signedbv_type(divisor) || !is_constant_int2t(divisor))
+    return -1;
+  const BigInt &v = to_constant_int2t(divisor).value;
+  if (!is_power_of_two(v) || v.floorPow2() + 1 >= divisor->type->get_width())
+    return -1;
+  return v.floorPow2();
+}
+
+/// x + (x < 0 ? 2^k - 1 : 0), so an arithmetic shift right by k rounds
+/// toward zero as C11 6.5.5p6 requires.
+static smt_astt
+bias_negative_dividend(smt_solver_baset &s, smt_astt x, unsigned k)
+{
+  const unsigned w = x->sort->get_data_width();
+  smt_astt sign = s.mk_bvashr(x, s.mk_smt_bv(BigInt(w - 1), w));
+  return s.mk_bvadd(x, s.mk_bvlshr(sign, s.mk_smt_bv(BigInt(w - k), w)));
+}
+
+/// x - (x / 2^k) * 2^k: x minus the biased dividend with its low k bits clear.
+static smt_astt srem_pow2(smt_solver_baset &s, smt_astt x, unsigned k)
+{
+  const unsigned w = x->sort->get_data_width();
+  smt_astt high_bits = s.mk_smt_bv(BigInt::power2(w) - BigInt::power2(k), w);
+  return s.mk_bvsub(x, s.mk_bvand(bias_negative_dividend(s, x, k), high_bits));
+}
+
+static smt_astt
+mk_signed_div(smt_solver_baset &s, const div2t &d, smt_astt a, smt_astt b)
+{
+  const int k = pow2_sdiv_exponent(s, d.side_1, d.side_2);
+  if (k < 0)
+    return s.mk_bvsdiv(a, b);
+  return s.mk_bvashr(
+    bias_negative_dividend(s, a, k),
+    s.mk_smt_bv(BigInt(k), a->sort->get_data_width()));
+}
+
 // Helpers extracted from z3_convt.
 
 static std::string extract_magnitude(const std::string &v, unsigned width)
@@ -932,7 +978,7 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
     else
     {
       assert(is_signedbv_type(d.side_1) && is_signedbv_type(d.side_2));
-      a = mk_bvsdiv(args[0], args[1]);
+      a = mk_signed_div(*this, d, args[0], args[1]);
     }
     break;
   }
@@ -1915,6 +1961,8 @@ smt_solver_baset::convert_modulus(const modulus2t &m, smt_astt a, smt_astt b)
     return mk_bvsmod(a, b);
 
   assert(is_bv_type(m.side_1) && is_bv_type(m.side_2));
+  if (const int k = pow2_sdiv_exponent(*this, m.side_1, m.side_2); k >= 0)
+    return srem_pow2(*this, a, k);
   const bool both_unsigned =
     is_unsignedbv_type(m.side_1) && is_unsignedbv_type(m.side_2);
   if (divided_operand_pairs.count({m.side_1, m.side_2}))
