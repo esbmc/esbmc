@@ -392,6 +392,98 @@ Decrementing loops and comparisons other than `<` / `<=` are not recognised. The
 restrictions and the design constraint they follow from are documented in
 `src/goto-programs/goto_invariant_synthesis.h`.
 
+## Synthesising Invariants with a Language Model
+
+```sh
+esbmc file.c --llm-invariants --llm-command "ollama run qwen2.5-coder"
+```
+
+`--llm-invariants` asks a language model for the invariants of every loop, not
+only affine ones. ESBMC renders the GOTO program as C-like text, with each loop
+labelled (`main L1`) and the variables it modifies listed, and asks the model
+for one conjunct per line. Each conjunct is attached as its own invariant and
+checked with the `--loop-invariant-check` schema: a conjunct that does not hold
+when the loop is first reached, or is not preserved by one iteration, is dropped,
+and the rest are checked again until all survivors are inductive. The model is
+then told which conjuncts were dropped and why, which are kept, and which
+assertions are still unproved, and is asked for more. After at most
+`--llm-max-rounds` rounds the survivors go to the normal
+`--synthesise-loop-invariants` run, which checks them again and gives the
+verdict, so a wrong answer can cost a proof but never fake one.
+
+```c
+#include <assert.h>
+
+unsigned nondet_uint(void);
+
+int main(void)
+{
+  unsigned n = nondet_uint();
+  unsigned i = 0, x = 0, y = 0;
+
+  while (i < n)
+  {
+    if (i % 2 == 0)
+      x++;
+    else
+      y++;
+    i++;
+  }
+
+  assert(x + y == n);
+  return 0;
+}
+```
+
+The branch in the body puts this loop out of reach of the affine synthesiser.
+With a model that first answers `x + y == i`, a wrong `x == y` and an
+unparsable `foo(i)`, the call is rejected before checking, `x == y` is dropped,
+the feedback says the assertion is still unproved, and the model adds
+`i <= n`:
+
+```
+LLM loop invariants: round 1, asking the model
+LLM loop invariants: 1 of 2 candidate conjunct(s) are inductive
+LLM loop invariants: round 2, asking the model
+LLM loop invariants: 2 of 2 candidate conjunct(s) are inductive
+Synthesised loop invariants for 1 loop
+...
+VERIFICATION SUCCESSFUL
+```
+
+This run is pinned as `regression/esbmc/llm_loop_invariant_cegis`, with a
+scripted `model.py` standing in for the model.
+
+**The model command.** ESBMC runs `--llm-command` once per round, writes the
+conversation to its stdin as `system: ...`, `user: ...` lines ending in
+`assistant: `, and reads the answer from its stdout. A non-zero exit, or no
+answer within `--llm-timeout` seconds (default 120), skips the round with a
+warning. The command is split on spaces without shell quoting, so wrap anything
+more involved in a script:
+
+```sh
+#!/bin/sh
+exec claude -p --model haiku --tools "" --no-session-persistence
+```
+
+| Option | Default | Meaning |
+| --- | --- | --- |
+| `--llm-command cmd` | required | the model command |
+| `--llm-timeout s` | 120 | seconds each model query may take |
+| `--llm-max-rounds n` | 3 | model queries before the invariants found so far are kept |
+| `--verbosity llm:9` | | print each raw model answer |
+
+`--llm-invariants` implies `--synthesise-loop-invariants` and so inherits its
+implied options and its conflicts. It synthesises nothing for a program that
+can reach `__ESBMC_spawn_thread` or already carries a loop invariant, and
+nothing under `--k-induction`, whose transform has already rewritten the loop
+heads.
+
+**Limitation.** A loop the model is not shown, such as one in a hidden library
+body or one formed by recursion, is unwound only once while the conjuncts are
+checked. A conjunct can then pass that check and fail in the final run, which
+reports `FAILED` on the invariant's claim rather than on a reachable bug.
+
 ## Loop Frame Rule (`--loop-frame-rule`)
 
 A loop invariant says what stays true across iterations. The **loop frame rule**
