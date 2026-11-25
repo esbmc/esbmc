@@ -1037,10 +1037,31 @@ public:
 
   /** Operand pairs of every division seen by note_division_operands. */
   std::set<std::pair<expr2tc, expr2tc>> divided_operand_pairs;
-  /** Create and assert address space constraints on the given object ID
-   *  number. Essentially, this asserts that all the objects to date don't
-   *  overlap with /this/ one. */
-  void finalize_pointer_chain(unsigned int obj_num);
+  /** Assert that object @p obj_num overlaps none of the lower-numbered
+   *  objects. A freeable one among @p registered is kept apart only while
+   *  @p valid_objects, the `__ESBMC_alloc` version @p obj_num was registered
+   *  under, holds it alive. */
+  void finalize_pointer_chain(
+    unsigned int obj_num,
+    const expr2tc &valid_objects,
+    const std::unordered_set<unsigned int> &registered);
+
+  /** A registered object, the `__ESBMC_alloc` version it was registered
+   *  under, the context level it was registered at, and the one its layout
+   *  was asserted at, if it has been. */
+  struct object_layoutt
+  {
+    unsigned int obj;
+    expr2tc valid_objects;
+    unsigned int level;
+    std::optional<unsigned int> laid_out_at;
+  };
+  /** Only a cast between a pointer and an integer reads an address, so the
+   *  quadratic non-overlap constraints wait for the first one (#9221). */
+  std::vector<object_layoutt> object_layouts;
+  /** The context level the layout was first needed at. */
+  std::optional<unsigned int> layout_needed_at;
+  void lay_out_objects();
 
   /** Typecast data to bools */
   smt_astt convert_typecast_to_bool(const typecast2t &cast);
