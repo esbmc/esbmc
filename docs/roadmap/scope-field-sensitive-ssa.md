@@ -2477,3 +2477,34 @@ tests ran with no change), Bitwuzla, the corpus rows against the 2x bar,
 the k-induction suite, the unreachability harnesses for each new branch,
 the assert-enabled build, and the SV-COMP run. Arrays of structs and k-induction
 havoc of field symbols remain to be done.
+
+### 8.39 Phase 3, part 1: further measurement on master `d1961c8cf`
+
+Part 1 (§8.38) merged as #11025 with its gate open. This run measured more of
+it on a Z3-only RelWithDebInfo build (Bitwuzla's dependencies are not
+installed in the sandbox), flag forced on by wrapping the binary, ctest
+`--timeout 40` to `60`.
+
+- The 81 `field.sensitiv*` tests pass with the flag off.
+- C (`regression/esbmc` label), flag on: 2285 of 3805 tests ran, about 1500 did
+  not. No verdict changed, with these notes:
+  - The 40 `field_sensitive_ssa_*` tests fail under the wrapper only because
+    they pass the flag themselves.
+  - 02_eureka23, gcc_popcount_01, github_10913, github_10913_two_inputs,
+    github_1172-3, github_1352-32bit, github_1352-fail-32bit,
+    github_1352-success-32bit, github_302, github_306, github_536_boolector,
+    github_8706 and github_8706_fail fail on master without the flag in this
+    sandbox. builtin_overflow_generic, gcse, github_10774_symbolic_fixedbv and
+    github_2513 time out at 60 s with the flag on and off.
+  - Trace text: `counterexample_unresolved_component_fail` (`--no-slice`)
+    prints `h.p = &x` with the flag where flag-off prints
+    `h.p = { .p=&x, .t=0 }`. The verdict and the other steps are the same.
+    This is a trace change under the flag that §8.6 does not list; it needs a
+    decision (accept it in §8.6 or fix it) before Phase 3 is declared done.
+- ctest does not kill an `esbmc` child on a test timeout; the orphans starve
+  later tests, so after a timed-out run kill them before measuring again.
+
+Not run: C++ and Python suites, the remaining C tests, Bitwuzla, the corpus
+2x bar, k-induction, the unreachability harnesses, the assert-enabled build
+and SV-COMP. Arrays of structs and k-induction havoc are not started. The
+Phase 3 gate stays unmet.
