@@ -550,64 +550,72 @@ static bool is_bookkeeping(const symex_target_equationt::SSA_stept &step)
 
 namespace
 {
-/// Where a step falls in a --partial-order execution: at the clock of the
-/// next event of its thread, or just after the thread's last event.
+/// Where a step falls in a --partial-order execution: just before an event,
+/// or just after one.
 struct po_positiont
 {
   BigInt clock;
-  bool after_last = false;
+  bool after = false;
 
   bool operator<(const po_positiont &other) const
   {
-    return clock != other.clock ? clock < other.clock
-                                : after_last < other.after_last;
+    return clock != other.clock ? clock < other.clock : after < other.after;
   }
 };
 
 using po_positionst =
   std::unordered_map<const symex_target_equationt::SSA_stept *, po_positiont>;
 
-/// Empty unless the memory model gave the events clocks. A thread with no
-/// event of its own follows its spawn.
+/// Empty unless the memory model gave the events clocks. A step follows the
+/// last event of its thread, except that the assignment a write event
+/// records goes with that write. A thread with no event follows its spawn.
 po_positionst
 po_positions(const symex_target_equationt &target, smt_convt &smt_conv)
 {
-  po_positionst positions;
-  std::map<unsigned, BigInt> next;
-  std::map<unsigned, std::vector<const symex_target_equationt::SSA_stept *>>
-    pending;
-  std::map<unsigned, BigInt> spawned_at;
+  using stept = symex_target_equationt::SSA_stept;
+  std::unordered_map<const stept *, BigInt> clocks;
+  for (const stept &step : target.SSA_steps)
+    if (step.is_event() && !is_nil_expr(step.cond))
+      if (
+        const expr2tc clock = smt_conv.get(step.cond); is_constant_int2t(clock))
+        clocks[&step] = to_constant_int2t(clock).value;
+  if (clocks.empty())
+    return {};
 
+  std::unordered_map<const stept *, const stept *> next_event;
+  std::map<unsigned, const stept *> next;
   for (auto it = target.SSA_steps.rbegin(); it != target.SSA_steps.rend(); ++it)
   {
-    const unsigned thread = it->source.thread_nr;
-    if (it->is_event() && !is_nil_expr(it->cond))
-    {
-      const expr2tc clock = smt_conv.get(it->cond);
-      if (is_constant_int2t(clock))
-      {
-        const BigInt &value = to_constant_int2t(clock).value;
-        if (!next.count(thread))
-          for (auto *step : pending[thread])
-            positions[step] = {value, true};
-        next[thread] = value;
-        if (it->type == symex_targett::SPAWN)
-          spawned_at[to_constant_int2t(it->lhs).value.to_uint64()] = value;
-      }
-    }
-
-    if (auto n = next.find(thread); n != next.end())
-      positions[&*it] = {n->second, false};
-    else
-      pending[thread].push_back(&*it);
+    if (clocks.count(&*it))
+      next[it->source.thread_nr] = &*it;
+    else if (auto n = next.find(it->source.thread_nr); n != next.end())
+      next_event[&*it] = n->second;
   }
 
-  if (next.empty())
-    return {};
-  for (const auto &[thread, steps] : pending)
-    if (!next.count(thread))
-      for (auto *step : steps)
-        positions[step] = {spawned_at[thread], true};
+  po_positionst positions;
+  std::map<unsigned, BigInt> last, spawned_at;
+  for (const stept &step : target.SSA_steps)
+  {
+    const unsigned thread = step.source.thread_nr;
+    if (auto c = clocks.find(&step); c != clocks.end())
+    {
+      last[thread] = c->second;
+      if (step.type == symex_targett::SPAWN)
+        spawned_at[to_constant_int2t(step.lhs).value.to_uint64()] = c->second;
+      continue;
+    }
+
+    auto n = next_event.find(&step);
+    auto l = last.find(thread);
+    if (
+      n != next_event.end() &&
+      (l == last.end() || &*n->second->source.pc == &*step.source.pc))
+      positions[&step] = {clocks.at(n->second), false};
+    else if (l != last.end())
+      positions[&step] = {l->second, true};
+    else
+      positions[&step] = {spawned_at[thread], true};
+  }
   return positions;
 }
 
