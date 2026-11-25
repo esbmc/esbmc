@@ -2,3 +2,5 @@ regression/esbmc/github_11013
 regression/esbmc/github_11013_fail
 regression/esbmc/github_11013_read
 regression/esbmc/github_11013_read_fail
+regression/esbmc/github_11013_dyn
+regression/esbmc/github_11013_dyn_fail
