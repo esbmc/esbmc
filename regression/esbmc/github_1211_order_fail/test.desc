@@ -1,0 +1,5 @@
+CORE
+main.c
+
+^Caching time: .*\(removed 0 assertions\)$
+^VERIFICATION FAILED$
