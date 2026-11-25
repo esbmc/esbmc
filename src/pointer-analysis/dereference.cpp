@@ -2128,12 +2128,19 @@ void dereferencet::construct_from_const_offset(
     value = themember.source_value;
   }
 
-  // Integer encoding has no byte representation of a struct to extract from
-  // (#11014): a read is left a free value, a store is reported.
+  // Integer encoding has bytes only of integers, not of a struct (#11014):
+  // an access covering anything but integer members is left a free value on
+  // a read and reported on a store.
   if (
     options.get_bool_option("int-encoding") &&
     (is_struct_type(value) || is_union_type(value)))
   {
+    const expr2tc bytes = stitch_integer_members(value, offs, access_bits);
+    if (!is_nil_expr(bytes))
+    {
+      value = bitcast2tc(type, bytes);
+      return;
+    }
     if (is_write(mode))
       dereference_failure(
         "pointer dereference",
@@ -2560,7 +2567,29 @@ expr2tc dereferencet::stitch_across_members(
   return stitch_together_from_byte_array(bytes.size(), bytes);
 }
 
-expr2tc dereferencet::byte_of_struct(const expr2tc &value, const BigInt &pos)
+expr2tc dereferencet::stitch_integer_members(
+  const expr2tc &value,
+  const BigInt &start,
+  uint64_t bits)
+{
+  const unsigned int width = config.ansi_c.char_width;
+  if (!is_struct_type(value) || start % width != 0 || bits % width != 0)
+    return expr2tc();
+  std::vector<expr2tc> bytes;
+  for (BigInt pos = start; pos < start + bits; pos += width)
+  {
+    expr2tc byte = byte_of_struct(value, pos, true);
+    if (is_nil_expr(byte))
+      return expr2tc();
+    bytes.push_back(byte);
+  }
+  return stitch_together_from_byte_array(bytes.size(), bytes);
+}
+
+expr2tc dereferencet::byte_of_struct(
+  const expr2tc &value,
+  const BigInt &pos,
+  bool integers_only)
 {
   const struct_type2t &struct_type = to_struct_type(value->type);
   const unsigned int width = config.ansi_c.char_width;
@@ -2572,7 +2601,7 @@ expr2tc dereferencet::byte_of_struct(const expr2tc &value, const BigInt &pos)
     const BigInt m_size = type_byte_size_bits(member_type, &ns);
     if (
       m_offs % width == 0 && m_size % width == 0 && m_offs <= pos &&
-      pos < m_offs + m_size)
+      pos < m_offs + m_size && (!integers_only || is_bv_type(member_type)))
       return extract_bytes(
         member2tc(member_type, value, name),
         1,

@@ -620,9 +620,18 @@ private:
     const expr2tc &value,
     const BigInt &start,
     unsigned int bits);
+  /// The \p bits bits of struct \p value from bit \p start, stitched from
+  /// the integer members holding them; nil if another member holds any.
+  expr2tc stitch_integer_members(
+    const expr2tc &value,
+    const BigInt &start,
+    uint64_t bits);
   /// The byte at bit \p pos of struct \p value, read from the whole-byte
-  /// member holding it; nil if there is none.
-  expr2tc byte_of_struct(const expr2tc &value, const BigInt &pos);
+  /// member holding it (an integer one if \p integers_only); nil if none.
+  expr2tc byte_of_struct(
+    const expr2tc &value,
+    const BigInt &pos,
+    bool integers_only = false);
   /// The byte at bit \p pos of union \p value, read from the union whole.
   expr2tc byte_of_union(const expr2tc &value, const BigInt &pos);
   /// A \p type access at bit \p start of struct or union element \p index of
