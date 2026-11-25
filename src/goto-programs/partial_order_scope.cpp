@@ -188,19 +188,30 @@ private:
     return it != functions->function_map.end() && it->second.body_available;
   }
 
+  /// A lock event names its mutex by the global it is.
+  bool check_mutex_arg(
+    const std::string &name,
+    const code_function_call2t &call) const
+  {
+    const bool wait = name.starts_with("pthread_cond_wait");
+    if (
+      !wait && !name.starts_with("pthread_mutex_lock") &&
+      !name.starts_with("pthread_mutex_unlock"))
+      return true;
+    const expr2tc &m = call.operands.at(wait ? 1 : 0);
+    if (is_address_of2t(m) && !is_shared_address(m))
+      return reject("a mutex that is not a global");
+    return true;
+  }
+
   bool check_thread_args(
     const std::string &name,
     const code_function_call2t &call) const
   {
     const bool create = name == "pthread_create";
     const bool join = name.starts_with("pthread_join");
-    const bool wait = name.starts_with("pthread_cond_wait");
-    const bool mutex = name.starts_with("pthread_mutex_lock") ||
-                       name.starts_with("pthread_mutex_unlock") || wait;
-    // A lock event names its mutex by the global it is.
-    const expr2tc m = mutex ? call.operands.at(wait ? 1 : 0) : expr2tc();
-    if (mutex && is_address_of2t(m) && !is_shared_address(m))
-      return reject("a mutex that is not a global");
+    if (!check_mutex_arg(name, call))
+      return false;
     if (create && !is_null(call.operands.at(3)))
       return reject("a thread argument other than NULL");
     if (join && !is_null(call.operands.at(1)))

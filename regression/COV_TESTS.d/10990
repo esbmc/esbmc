@@ -69,3 +69,4 @@ regression/esbmc-unix/partial_order_exit
 regression/esbmc-unix/partial_order_exit_fail
 regression/esbmc-unix/partial_order_exit_main
 regression/esbmc-unix/partial_order_exit_main_fail
+regression/esbmc-unix/partial_order_reject_cond_local_mutex
