@@ -91,6 +91,7 @@
  */
 
 // Forward dec.
+class array_convt;
 class fp_convt;
 class ir_ieee_convt;
 class smt_solver_baset;
@@ -973,6 +974,10 @@ public:
   void set_array_iface(array_iface *iface);
   /** Stores handle for the floating-point interface. */
   void set_fp_conv(fp_convt *iface);
+  /** As above, for an interface built for this solver, which it then owns. */
+  void set_tuple_iface(std::unique_ptr<tuple_iface> iface);
+  void set_array_iface(std::unique_ptr<array_convt> iface);
+  void set_fp_conv(std::unique_ptr<fp_convt> iface);
   /** Stores handle for the real-arithmetic/enclosure interface. */
   void set_ra_conv(ra_apit *iface);
 
@@ -1379,6 +1384,11 @@ public:
   smt_astt int_shift_op_array;
 
 private:
+  // A solver's native interface is the solver itself, so only these are freed.
+  std::unique_ptr<tuple_iface> owned_tuple_api;
+  std::unique_ptr<array_convt> owned_array_api;
+  std::unique_ptr<fp_convt> owned_fp_api;
+
   expr2tc get_by_ast_uncached(const type2tc &type, smt_astt a);
 
   double convert_rational_to_double(
