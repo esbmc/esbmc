@@ -100,6 +100,10 @@ public:
   void print_model();
 
 private:
+  /** Run @p solve until it is UNSAT or its model needs no deferred layout. */
+  template <class Solve>
+  smt_resultt solve_laying_out(Solve solve);
+
   std::unique_ptr<smt_solver_baset> solver_impl;
   std::vector<expr2tc> last_assumptions;
 };

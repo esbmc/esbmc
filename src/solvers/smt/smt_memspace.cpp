@@ -739,16 +739,17 @@ bool smt_solver_baset::assert_overlapping_layouts()
     return end_a && start_b && *end_a < *start_b;
   };
 
-  bool asserted = false;
+  // Read the whole model first: an assertion discards it (#8097).
+  std::vector<lazy_layoutt *> overlapping;
   for (lazy_layoutt &l : lazy_layouts)
+    if (!l.asserted_at && !apart(l.obj1, l.obj2) && !apart(l.obj2, l.obj1))
+      overlapping.push_back(&l);
+  for (lazy_layoutt *l : overlapping)
   {
-    if (l.asserted_at || apart(l.obj1, l.obj2) || apart(l.obj2, l.obj1))
-      continue;
-    assert_expr(l.no_overlap);
-    l.asserted_at = ctx_level;
-    asserted = true;
+    assert_expr(l->no_overlap);
+    l->asserted_at = ctx_level;
   }
-  return asserted;
+  return !overlapping.empty();
 }
 
 smt_astt smt_solver_baset::convert_addr_of(const expr2tc &expr)

@@ -18,13 +18,19 @@ void smt_convt::pop_ctx()
   solver_impl->pop_ctx();
 }
 
-smt_resultt smt_convt::dec_solve()
+template <class Solve>
+smt_resultt smt_convt::solve_laying_out(Solve solve)
 {
   smt_resultt res;
   do
-    res = solver_impl->dec_solve();
+    res = solve();
   while (res == P_SATISFIABLE && solver_impl->assert_overlapping_layouts());
   return res;
+}
+
+smt_resultt smt_convt::dec_solve()
+{
+  return solve_laying_out([this] { return solver_impl->dec_solve(); });
 }
 
 smt_resultt
@@ -34,11 +40,8 @@ smt_convt::dec_solve_assuming(const std::vector<expr2tc> &assumptions)
   smt_solver_baset::ast_vec asts;
   for (const expr2tc &a : assumptions)
     asts.push_back(solver_impl->convert_ast(a));
-  smt_resultt res;
-  do
-    res = solver_impl->dec_solve_assuming(asts);
-  while (res == P_SATISFIABLE && solver_impl->assert_overlapping_layouts());
-  return res;
+  return solve_laying_out(
+    [&] { return solver_impl->dec_solve_assuming(asts); });
 }
 
 std::vector<expr2tc> smt_convt::unsat_assumptions()

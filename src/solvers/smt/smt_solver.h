@@ -311,11 +311,11 @@ public:
 
   void pre_solve();
 
-  /** Convert @p expr, laying out the objects it registers lazily: their
-   *  non-overlap constraints wait for assert_overlapping_layouts(). For
-   *  objects only an int-to-pointer cast can observe, a model rarely
-   *  overlaps them, so most of those quadratic constraints are never
-   *  asserted (#10796). */
+  /** Convert @p expr, laying out the objects it first registers lazily:
+   *  their non-overlap constraints wait for assert_overlapping_layouts(). An
+   *  object a sliced step registers is mostly observed only through
+   *  int-to-pointer casts, so a model rarely overlaps it and most of those
+   *  quadratic constraints are never asserted (#10796). */
   void convert_laid_out_lazily(const expr2tc &expr);
   /** Assert the deferred non-overlap constraints the current model violates.
    *  @return Whether any was asserted, i.e. whether the model is spurious. */
