@@ -2472,8 +2472,96 @@ C++ and C were of those kinds, not all were inspected.
 Four new tests (`field_sensitive_ssa_nested_*`) pin the split count, which
 master does not reach (3 objects against 9), and the verdict.
 
+Corpus rows, Z3 4.13.3 (Ubuntu 24.04 packages), RelWithDebInfo build of this
+branch, one run each, `test.desc` options without `--smtlib`, 60 s limit,
+flag on: every row verifies and w2048 is within 2x of w8 (global_callee 0.4 s
+against 0.4 s, local_addr_once 0.2 s against 0.2 s, local_writes 0.2 s against
+0.3 s, plc_db 0.5 s against 0.4 s, repro7521 1.3 s against 0.8 s). With the
+flag off, plc_db_w512 and plc_db_w2048 hit the 60 s limit. Phase 3 adds no
+nested struct to these rows, so this checks that it did not regress them.
+
 Unmet gates, not measured: the Python suite (Python objects are not split, 613
-tests ran with no change), Bitwuzla, the corpus rows against the 2x bar,
+tests ran with no change), Bitwuzla (not installable here),
 the k-induction suite, the unreachability harnesses for each new branch,
 the assert-enabled build, and the SV-COMP run. Arrays of structs and k-induction
 havoc of field symbols remain to be done.
+
+### 8.39 Phase 3, part 1: further measurement on master `d1961c8cf`
+
+Part 1 (§8.38) merged as #11025 with its gate open. This run measured more of
+it on a Z3-only RelWithDebInfo build (Bitwuzla's dependencies are not
+installed in the sandbox), flag forced on by wrapping the binary, ctest
+`--timeout 40` to `60`.
+
+- The 81 `field.sensitiv*` tests pass with the flag off.
+- C (`regression/esbmc` label), flag on: 2285 of 3805 tests ran, about 1500 did
+  not. No verdict changed, with these notes:
+  - The 40 `field_sensitive_ssa_*` tests fail under the wrapper only because
+    they pass the flag themselves.
+  - 02_eureka23, gcc_popcount_01, github_10913, github_10913_two_inputs,
+    github_1172-3, github_1352-32bit, github_1352-fail-32bit,
+    github_1352-success-32bit, github_302, github_306, github_536_boolector,
+    github_8706 and github_8706_fail fail on master without the flag in this
+    sandbox. builtin_overflow_generic, gcse, github_10774_symbolic_fixedbv and
+    github_2513 time out at 60 s with the flag on and off.
+  - Trace text: `counterexample_unresolved_component_fail` (`--no-slice`)
+    prints `h.p = &x` with the flag where flag-off prints
+    `h.p = { .p=&x, .t=0 }`. The verdict and the other steps are the same.
+    This is a trace change under the flag that §8.6 does not list; it needs a
+    decision (accept it in §8.6 or fix it) before Phase 3 is declared done.
+- ctest does not kill an `esbmc` child on a test timeout; the orphans starve
+  later tests, so after a timed-out run kill them before measuring again.
+
+Not run: C++ and Python suites, the remaining C tests, Bitwuzla, the corpus
+2x bar, k-induction, the unreachability harnesses, the assert-enabled build
+and SV-COMP. Arrays of structs and k-induction havoc are not started. The
+Phase 3 gate stays unmet.
+
+### 8.40 Phase 3, part 1: the `h.p` trace difference and the k-induction suite
+
+Z3-only RelWithDebInfo build of `4c310985a`, 30 s per run.
+
+- `counterexample_unresolved_component_fail` (§8.39): `h` is flat
+  (`int *p; int t;`), so nesting plays no part. With the flag the step prints
+  `h.p = &x`; without it, `h.p = { .p=&x, .t=0 }`. The value of `h.p` is `&x`
+  in both, so Invariant 4 holds. This is the first row of §8.6 (a member
+  write prints the member where master prints the whole struct), pinned by
+  `field_sensitive_ssa_print_member_fail`. Decision: accepted under that row;
+  no code change.
+- k-induction: every test of `regression/k-induction` (316) and
+  `regression/k-induction-parallel` (78), run with and without the flag
+  (options from `test.desc`, solver Z3), gives the same verdict lines, 394 of
+  394. Tests that pass the flag themselves are skipped (none here).
+
+Not measured: the C and C++ tests beyond §8.38 and §8.39, the Python suite
+with the flag forced on, Bitwuzla, the corpus 2x bar under Bitwuzla,
+the unreachability harnesses, the assert-enabled build and SV-COMP. Arrays of
+structs and k-induction havoc of field symbols are not started. The Phase 3
+gate stays unmet.
+
+### 8.41 Phase 3, part 1: C and C++ on master `7a0712557`
+
+Z3-only RelWithDebInfo build of master `7a0712557` merged into this branch
+(Bitwuzla's dependencies are not installed in the sandbox, nor is Boolector).
+The flag was forced on by a wrapper script around the binary; ctest
+`--timeout 60`, `-j4`, each run capped at 590 s.
+
+- C, `regression/esbmc/`, test numbers 3000 up: 829 started, 823 passed. The
+  six failures (`overflow_10_fir`, `overflow_16_fir_new`,
+  `tuple_const_array_*`) pass `--boolector`, which this build lacks; they
+  fail the same way with the flag off.
+- C, test numbers 1 to 2999: the run reached 1401 of 2999 tests, 1349 passed.
+  Of the 11 failures that are not `field_sensitive_ssa_*` (those pass the flag
+  themselves), 10 fail identically with the flag off. The eleventh,
+  `counterexample_unresolved_component_fail`, is the §8.40 `h.p` row.
+- C++, `esbmc-cpp/cpp` label: 494 of 1482 started, 483 passed. The failures
+  are `ch8_5`, which fails with the flag off, and the six
+  `field_sensitive_ssa_*` tests that pass the flag themselves.
+
+No verdict changed with the flag on in any test that ran. About 1600 C and
+about 990 C++ tests did not run in the budget.
+
+Not measured: the rest of the C and C++ tests, the Python suite, Bitwuzla,
+the corpus 2x bar, the unreachability harnesses, the assert-enabled build,
+SV-COMP. Arrays of structs and k-induction havoc are not started. The Phase 3
+gate stays unmet.
