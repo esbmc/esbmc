@@ -32,8 +32,8 @@ struct type_sizet
   BigInt size_bits(const type2tc &type);
   expr2tc size_bits_expr(const type2tc &type);
   expr2tc pointer_offset_bits(const expr2tc &expr);
-  expr2tc element_offset_bytes(const index2t &index);
   expr2tc pointer_offset_bytes(const expr2tc &expr);
+  expr2tc index_offset_bytes(const index2t &index);
   BigInt record_size_bits(const type2tc &type);
   expr2tc record_size_bits_expr(const type2tc &type);
 };
@@ -665,28 +665,44 @@ expr2tc compute_pointer_offset_bits(const expr2tc &expr, const namespacet *ns)
   return type_sizet(ns).pointer_offset_bits(expr);
 }
 
-static bool is_zero_int(const expr2tc &e)
+/* As pointer_offset_bits(), but in bytes at the width of size_t; nil when a
+ * step is not a constant whole number of bytes (a bit-field, a sub-byte or
+ * variable-sized element). The same sum computed in bits and divided by 8 is
+ * equal modulo 2^width, but costs a wider multiplier and a divider (#9226). */
+expr2tc type_sizet::pointer_offset_bytes(const expr2tc &expr)
 {
-  return is_constant_int2t(e) && to_constant_int2t(e).value.is_zero();
+  const type2tc t = size_type2();
+
+  if (is_index2t(expr))
+    return index_offset_bytes(to_index2t(expr));
+
+  if (is_member2t(expr))
+  {
+    const member2t &memb = to_member2t(expr);
+    BigInt bits = 0;
+    if (is_struct_type(memb.source_value->type))
+      bits = member_offset_bits(memb.source_value->type, memb.member);
+    if (bits % 8 != 0)
+      return expr2tc();
+
+    const expr2tc base = pointer_offset_bytes(memb.source_value);
+    if (is_nil_expr(base))
+      return base;
+    return add2tc(t, constant_int2tc(t, bits / 8), base);
+  }
+
+  if (is_typecast2t(expr))
+    return pointer_offset_bytes(to_typecast2t(expr).from);
+
+  if (
+    is_symbol2t(expr) || is_constant_expr(expr) || is_dynamic_object2t(expr) ||
+    is_dereference2t(expr))
+    return gen_zero(t);
+
+  return expr2tc();
 }
 
-/* `base + offset`, folded where either is constant; nil stays nil. */
-static expr2tc add_offsets(const expr2tc &base, const expr2tc &offset)
-{
-  if (is_nil_expr(base) || is_zero_int(offset))
-    return base;
-  if (is_zero_int(base))
-    return offset;
-  if (is_constant_int2t(base) && is_constant_int2t(offset))
-    return gen_long(
-      base->type,
-      to_constant_int2t(base).value + to_constant_int2t(offset).value);
-  return add2tc(base->type, base, offset);
-}
-
-/* The byte offset of element `index` in its array, or nil when the element
- * size is not a whole number of bytes. */
-expr2tc type_sizet::element_offset_bytes(const index2t &index)
+expr2tc type_sizet::index_offset_bytes(const index2t &index)
 {
   if (!is_array_or_vector_type(index.source_value))
     return expr2tc();
@@ -697,63 +713,28 @@ expr2tc type_sizet::element_offset_bytes(const index2t &index)
     !is_constant_int2t(elem_bits) ||
     to_constant_int2t(elem_bits).value % 8 != 0)
     return expr2tc();
-  const BigInt elem_bytes = to_constant_int2t(elem_bits).value / 8;
+
+  const expr2tc base = pointer_offset_bytes(index.source_value);
+  if (is_nil_expr(base))
+    return base;
 
   const type2tc t = size_type2();
-  if (
-    is_constant_int2t(index.index) &&
-    !to_constant_int2t(index.index).value.is_negative())
-    return gen_long(t, elem_bytes * to_constant_int2t(index.index).value);
-
-  const expr2tc idx = typecast2tc(t, index.index);
-  return elem_bytes == 1 ? idx : mul2tc(t, gen_long(t, elem_bytes), idx);
-}
-
-/* The byte offset of `expr` in its base object, or nil when an element or
- * member on the path does not start on a byte boundary. Computing in bits
- * and dividing by 8 would cost the solver a divider (#9226). */
-expr2tc type_sizet::pointer_offset_bytes(const expr2tc &expr)
-{
-  if (is_index2t(expr))
-  {
-    const index2t &index = to_index2t(expr);
-    const expr2tc offset = element_offset_bytes(index);
-    if (is_nil_expr(offset))
-      return offset;
-    return add_offsets(pointer_offset_bytes(index.source_value), offset);
-  }
-
-  if (is_member2t(expr))
-  {
-    const member2t &memb = to_member2t(expr);
-    const BigInt bits =
-      is_struct_type(memb.source_value->type)
-        ? member_offset_bits(memb.source_value->type, memb.member)
-        : BigInt(0);
-    if (bits % 8 != 0)
-      return expr2tc();
-    return add_offsets(
-      pointer_offset_bytes(memb.source_value),
-      gen_long(size_type2(), bits / 8));
-  }
-
-  if (is_typecast2t(expr))
-    return pointer_offset_bytes(to_typecast2t(expr).from);
-
-  if (
-    is_symbol2t(expr) || is_constant_expr(expr) || is_dynamic_object2t(expr) ||
-    is_dereference2t(expr))
-    return gen_zero(size_type2());
-
-  return expr2tc();
+  const expr2tc elem =
+    constant_int2tc(t, to_constant_int2t(elem_bits).value / 8);
+  const expr2tc idx =
+    index.index->type == t ? index.index : typecast2tc(t, index.index);
+  return add2tc(t, mul2tc(t, elem, idx), base);
 }
 
 expr2tc compute_pointer_offset(const expr2tc &expr, const namespacet *ns)
 {
-  if (
-    expr2tc bytes = type_sizet(ns).pointer_offset_bytes(expr);
-    !is_nil_expr(bytes))
-    return bytes;
+  /* Only an offset with a symbolic index takes the byte form: moving
+   * constant offsets too made Z3 12x slower on realloc14 and github_9375. */
+  if (is_index2t(expr) && !is_constant_int2t(to_index2t(expr).index))
+    if (
+      expr2tc bytes = type_sizet(ns).pointer_offset_bytes(expr);
+      !is_nil_expr(bytes))
+      return bytes;
 
   expr2tc bits = compute_pointer_offset_bits(expr, ns);
   expr2tc bytes = div2tc(bits->type, bits, bitsize(8));

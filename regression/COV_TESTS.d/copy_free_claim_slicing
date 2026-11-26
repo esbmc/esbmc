@@ -1,0 +1,3 @@
+regression/esbmc/ssa_features_dump
+regression/esbmc/ssa_features_dump_multi_property
+regression/esbmc/github_9884_sliced_guard_fail

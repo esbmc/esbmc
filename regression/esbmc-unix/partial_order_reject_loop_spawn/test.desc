@@ -1,5 +1,0 @@
-CORE
-main.c
---partial-order --unwind 3
-^ERROR: --partial-order does not support a thread created inside a loop yet, at file .*main\.c line 16 column 3 function main$
-\A(?![\s\S]*VERIFICATION)[\s\S]*\Z

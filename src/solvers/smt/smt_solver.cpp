@@ -367,7 +367,10 @@ smt_astt smt_solver_baset::convert_extract(const extract2t &ex)
   if (!int_encoding)
     return mk_extract(a, ex.upper, ex.lower);
 
-  // Euclidean div and mod read a negative value's two's complement bits.
+  // Bits [upper:lower] of a are (a div 2^lower) mod 2^width. Euclidean div and
+  // mod make this read a negative value's two's complement bits, e.g. bits
+  // [3:1] of -5 (0b11111011) are 0b101 = 5: -5 div 2 = -3, -3 mod 8 = 5.
+  // Truncating division would give -2 and then 6.
   smt_astt shifted = mk_div(a, mk_smt_int(BigInt::power2(ex.lower)));
   return mk_mod(shifted, mk_smt_int(BigInt::power2(width)));
 }
@@ -656,6 +659,42 @@ smt_astt smt_solver_baset::convert_eq(
   return a1->eq(this, a2);
 }
 
+/// k when a / b divides by the constant b = 2^k with 0 < k < w-1, w the
+/// width of both operands, otherwise 0.
+static unsigned
+sdiv_pow2_exponent(const expr2tc &divisor, smt_astt a, smt_astt b)
+{
+  const unsigned w = a->sort->get_data_width();
+  if (!is_constant_int2t(divisor) || b->sort->get_data_width() != w)
+    return 0;
+  const BigInt &v = to_constant_int2t(divisor).value;
+  unsigned k = 1;
+  BigInt p = 2;
+  for (; p < v; p *= 2)
+    ++k;
+  return p == v && k + 1 < w ? k : 0;
+}
+
+/// a + 2^k - 1 for negative a, a otherwise: the bias that makes an
+/// arithmetic shift by k (0 < k < w-1) round toward zero, so signed / and %
+/// by 2^k need no divider (#9224).
+static smt_astt sdiv_pow2_biased(smt_solver_baset &s, smt_astt a, unsigned k)
+{
+  const unsigned w = a->sort->get_data_width();
+  smt_astt sign = s.mk_bvashr(a, s.mk_smt_bv(BigInt(w - 1), a->sort));
+  return s.mk_bvadd(a, s.mk_bvlshr(sign, s.mk_smt_bv(BigInt(w - k), a->sort)));
+}
+
+static smt_astt
+mk_sdiv(smt_solver_baset &s, const expr2tc &divisor, smt_astt a, smt_astt b)
+{
+  const unsigned k = sdiv_pow2_exponent(divisor, a, b);
+  if (!k)
+    return s.mk_bvsdiv(a, b);
+  return s.mk_bvashr(
+    sdiv_pow2_biased(s, a, k), s.mk_smt_bv(BigInt(k), a->sort));
+}
+
 smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
 {
   if (auto hit = smt_cache.find(expr); hit != smt_cache.end())
@@ -932,7 +971,7 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
     else
     {
       assert(is_signedbv_type(d.side_1) && is_signedbv_type(d.side_2));
-      a = mk_bvsdiv(args[0], args[1]);
+      a = mk_sdiv(*this, d.side_2, args[0], args[1]);
     }
     break;
   }
@@ -1917,6 +1956,13 @@ smt_solver_baset::convert_modulus(const modulus2t &m, smt_astt a, smt_astt b)
   assert(is_bv_type(m.side_1) && is_bv_type(m.side_2));
   const bool both_unsigned =
     is_unsignedbv_type(m.side_1) && is_unsignedbv_type(m.side_2);
+  if (const unsigned k = both_unsigned ? 0 : sdiv_pow2_exponent(m.side_2, a, b))
+  {
+    const BigInt mask =
+      BigInt::power2(a->sort->get_data_width()) - BigInt::power2(k);
+    return mk_bvsub(
+      a, mk_bvand(sdiv_pow2_biased(*this, a, k), mk_smt_bv(mask, a->sort)));
+  }
   if (divided_operand_pairs.count({m.side_1, m.side_2}))
   {
     smt_astt quot = both_unsigned ? mk_bvudiv(a, b) : mk_bvsdiv(a, b);

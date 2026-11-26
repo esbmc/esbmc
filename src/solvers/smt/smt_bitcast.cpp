@@ -590,6 +590,9 @@ smt_astt smt_solver_baset::convert_pointer_bitcast(
     pointer_repr_applies(to_type, from->type))
     return decode_pointer_repr(from, to_type);
 
+  if (is_pointer_type(to_type) && (is_struct_type(from) || is_array_type(from)))
+    return convert_ast(bitcast2tc(to_type, flatten_to_bitvector(from)));
+
   return nullptr;
 }
 
@@ -658,9 +661,9 @@ smt_astt smt_solver_baset::convert_bitcast_to_struct(
   if (is_floatbv_type(new_from))
     new_from = bitcast2tc(get_uint_type(new_from->type->get_width()), new_from);
 
-  // Converting from array to struct, we convert it to bv and use the bv to
-  // struct method to do the job for us
-  if (is_array_type(new_from))
+  // Converting from an array or another struct, we convert it to bv and use
+  // the bv to struct method to do the job for us
+  if (is_array_type(new_from) || is_struct_type(new_from))
     new_from = flatten_to_bitvector(new_from);
 
   if (!is_bv_type(new_from) && !is_union_type(new_from))

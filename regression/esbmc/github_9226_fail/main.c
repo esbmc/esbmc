@@ -1,32 +1,18 @@
-/* github #9226: byte offsets of elements and members reached through a
- * symbolic index. */
-#include <stddef.h>
+/* github #9226: the byte offset of a member of an array element, with a
+ * stride one int too long. */
+#include <assert.h>
 
 int nondet_int(void);
-struct inner
+struct s
 {
   char c;
-  short h[3];
-};
-struct outer
-{
-  int x;
-  struct inner in[4];
-};
-struct outer o;
+  int x[3];
+} st[4];
 
 int main(void)
 {
   int i = nondet_int();
-  int j = nondet_int();
-  __ESBMC_assume(i >= 0 && i < 4);
-  __ESBMC_assume(j >= 0 && j < 3);
-  char *base = (char *)&o;
-  char *p = (char *)&o.in[i].h[j];
-  __ESBMC_assert(
-    p - base == offsetof(struct outer, in) + i * sizeof(struct inner) +
-                  offsetof(struct inner, h) + j * sizeof(int),
-    "byte offset of o.in[i].h[j]");
-  __ESBMC_assert(&o.in[i].h[j] == o.in[i].h + j, "element address");
+  __ESBMC_assume(i >= 0 && i < 3);
+  assert((char *)&st[i].x[i] - (char *)st == 20 * i + 4 + 4 * i);
   return 0;
 }
