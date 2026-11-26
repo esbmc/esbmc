@@ -17,7 +17,11 @@
 #  include <boost/process/v2/src.hpp>
 #endif
 
+#include <csignal>
 #include <sstream>
+#include <stdexcept>
+
+#include <fmt/format.h>
 
 #include <util/message/message.h>
 
@@ -46,53 +50,67 @@ std::string cli_clientt::complete(const std::vector<message_t> &messages)
   asio::writable_pipe in(ctx);
   asio::readable_pipe out(ctx);
 
-  const auto exe = bp::environment::find_executable(cfg.executable);
-  if (exe.empty())
-  {
-    log_error("CLI LLM executable '{}' not found in PATH", cfg.executable);
-    abort();
-  }
+  const bp::filesystem::path named(cfg.executable);
+  const auto exe = named.has_parent_path()
+                     ? named
+                     : bp::environment::find_executable(cfg.executable);
+  if (exe.empty() || !bp::filesystem::exists(exe))
+    throw std::runtime_error(
+      fmt::format("CLI LLM executable '{}' not found", cfg.executable));
 
   bp::process child(
     ctx, exe, cfg.extra_args, bp::process_stdio{in, out, nullptr});
 
   const std::string input = prompt.str();
+#ifndef _WIN32
+  // A command that exits without reading its input must not kill ESBMC;
+  // asio may write as soon as async_write is called.
+  const auto old_sigpipe = signal(SIGPIPE, SIG_IGN);
+#endif
   asio::async_write(
     in, asio::buffer(input), [&in](boost::system::error_code, std::size_t) {
       in.close();
     });
 
-  std::string result;
-  asio::async_read(
-    out, asio::dynamic_buffer(result), [](boost::system::error_code, size_t) {
-    });
-
   int exit_code = 0;
-  bool timed_out = false;
+  bool timed_out = false, read_done = false, child_done = false;
   asio::steady_timer timer(ctx, std::chrono::milliseconds(cfg.timeout_ms));
   timer.async_wait([&](boost::system::error_code ec) {
     if (ec)
       return;
     timed_out = true;
-    child.terminate();
+    boost::system::error_code ignored;
+    child.terminate(ignored);
+    // A grandchild can still hold the pipes open; closing them ends the reads.
+    in.close();
+    out.close();
   });
+
+  std::string result;
+  asio::async_read(
+    out, asio::dynamic_buffer(result), [&](boost::system::error_code, size_t) {
+      read_done = true;
+      if (child_done)
+        timer.cancel();
+    });
   child.async_wait([&](boost::system::error_code, int code) {
     exit_code = code;
-    timer.cancel();
+    child_done = true;
+    if (read_done)
+      timer.cancel();
   });
 
   ctx.run();
+#ifndef _WIN32
+  signal(SIGPIPE, old_sigpipe);
+#endif
 
   if (timed_out)
-  {
-    log_error("CLI LLM process timed out after {} ms", cfg.timeout_ms);
-    abort();
-  }
+    throw std::runtime_error(
+      fmt::format("CLI LLM process timed out after {} ms", cfg.timeout_ms));
   if (exit_code != 0)
-  {
-    log_error("CLI LLM process exited with {}", exit_code);
-    abort();
-  }
+    throw std::runtime_error(
+      fmt::format("CLI LLM process exited with {}", exit_code));
 
   while (!result.empty() && result.back() == '\n')
     result.pop_back();

@@ -224,6 +224,42 @@ static bool concurrency_mode_conflicts(const cmdlinet &cmdline)
   return schedule_conflicts(cmdline) || partial_order_conflicts(cmdline);
 }
 
+/// --llm-invariants runs the --synthesise-loop-invariants pipeline with a
+/// model as the synthesiser, so it sets that flag and inherits every
+/// implication and conflict check made on it.
+static bool select_loop_synthesiser(cmdlinet &cmdline)
+{
+  if (!cmdline.isset("llm-invariants"))
+  {
+    if (cmdline.isset("llm-command"))
+    {
+      log_error("--llm-command needs --llm-invariants");
+      return true;
+    }
+    return false;
+  }
+#ifndef ENABLE_LLM
+  log_error("--llm-invariants needs a build with -DENABLE_LLM=On");
+  return true;
+#endif
+  if (
+    !cmdline.isset("llm-command") ||
+    std::string(cmdline.getval("llm-command")).find_first_not_of(' ') ==
+      std::string::npos)
+  {
+    log_error("--llm-invariants needs --llm-command");
+    return true;
+  }
+  for (const char *count : {"llm-timeout", "llm-max-rounds"})
+    if (atoi(cmdline.getval(count)) < 1)
+    {
+      log_error("--{} must be at least 1", count);
+      return true;
+    }
+  cmdline.set("synthesise-loop-invariants", std::string(), {""});
+  return false;
+}
+
 /// The flag combinations that cannot produce a sound report, rejected
 /// before any work is done. Kept out of doit() so every combination check
 /// reads in one place.
@@ -435,6 +471,7 @@ void esbmc_parseoptionst::default_kani_strategy()
     "inductive-step",
     "loop-invariant",
     "synthesise-loop-invariants",
+    "llm-invariants",
     "incremental-context-bound",
     "multi-property",
     "report-property-class",
@@ -588,6 +625,11 @@ static bool redirect_output(const cmdlinet &cmdline)
   return true;
 }
 
+static bool rejected_flags(cmdlinet &cmdline)
+{
+  return select_loop_synthesiser(cmdline) || incompatible_flags(cmdline);
+}
+
 int esbmc_parseoptionst::doit()
 {
   if (!redirect_output(cmdline))
@@ -617,7 +659,7 @@ int esbmc_parseoptionst::doit()
   }
 
   default_kani_strategy();
-  if (incompatible_flags(cmdline))
+  if (rejected_flags(cmdline))
     return 1;
 
   // Preprocess the input program.

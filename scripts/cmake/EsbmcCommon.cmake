@@ -49,6 +49,10 @@ if(ENABLE_GOTO_CONTRACTOR)
   target_compile_definitions(esbmc_common INTERFACE ENABLE_GOTO_CONTRACTOR)
 endif()
 
+if(ENABLE_LLM)
+  target_compile_definitions(esbmc_common INTERFACE ENABLE_LLM)
+endif()
+
 # Debug aid: prove every simplifier rewrite equivalent with an SMT solver
 if(ENABLE_SIMPLIFIER_EQUIVALENCE_CHECK)
   target_compile_definitions(esbmc_common INTERFACE ENABLE_SIMPLIFIER_EQUIVALENCE_CHECK)

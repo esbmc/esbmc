@@ -23,6 +23,10 @@ if(ENABLE_GOTO_CONTRACTOR)
   set(GOTO_CONTRACTOR_TARGETS gotocontractor)
 endif()
 
+if(ENABLE_LLM)
+  set(LLM_TARGETS llm llm_goto)
+endif()
+
 if(ENABLE_JIMPLE_FRONTEND)
   set(JIMPLE_FRONTEND_TARGETS jimple)
 endif()
@@ -64,6 +68,9 @@ add_library(esbmc-driver
     parseoptions/property_monitors.cpp
     parseoptions/ts_strategy.cpp
     bmc.cpp property_report.cpp ranking_synthesis.cpp non_termination.cpp show_vcc.cpp options.cpp)
+if(ENABLE_LLM)
+  target_sources(esbmc-driver PRIVATE llm_invariant_synthesis.cpp)
+endif()
 target_include_directories(esbmc-driver
     PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}
 )
@@ -73,7 +80,7 @@ target_link_libraries(esbmc-driver PUBLIC
                             ${LD_FRONTEND_TARGETS}
                             ${GOTO_CONTRACTOR_TARGETS} ${JIMPLE_FRONTEND_TARGETS}
                             clangcfrontend clangcppfrontend symex langapi transition-system-extraction transition-system-engines
-                            solvers clibs gotoalgorithms cache ESBMC::boost goto2c goto2lean ${OS_INCLUDE_LIBS}
+                            solvers clibs gotoalgorithms cache ESBMC::boost goto2c goto2lean ${LLM_TARGETS} ${OS_INCLUDE_LIBS}
                             nlohmann_json::nlohmann_json)
 
 add_executable(esbmc main.cpp globals.cpp ${CMAKE_CURRENT_BINARY_DIR}/buildidobj.c)
