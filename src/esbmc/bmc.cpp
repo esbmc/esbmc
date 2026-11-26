@@ -1020,11 +1020,24 @@ void run_job_guarded(
   }
 }
 
-/// --parallel-solving-threads, or one thread per hardware thread.
+/// The CPUs this process may run on. hardware_concurrency() counts every
+/// online CPU on Linux, ignoring a taskset or BenchExec affinity mask.
+static size_t available_cpus()
+{
+#ifdef __linux__
+  cpu_set_t set;
+  if (sched_getaffinity(0, sizeof(set), &set) == 0)
+    return CPU_COUNT(&set);
+#endif
+  // hardware_concurrency() returns 0 when the count is unknown.
+  return std::max(1u, std::thread::hardware_concurrency());
+}
+
+/// --parallel-solving-threads, or one thread per available CPU.
 static size_t parallel_solving_threads(const optionst &options)
 {
   const std::string n = options.get_option("parallel-solving-threads");
-  return n.empty() ? std::thread::hardware_concurrency() : std::stoul(n);
+  return n.empty() ? available_cpus() : std::max(1, std::stoi(n));
 }
 
 /// Runs @p job on each element of @p jobs, in order, on the calling thread and
@@ -1043,6 +1056,11 @@ void run_on_worker_pool(
       job(jobs[k]);
   };
   const size_t threads = std::min(jobs.size(), max_threads);
+  log_debug(
+    "parallel-solving",
+    "Solving {} VCCs in parallel, worker threads: {}",
+    jobs.size(),
+    threads);
 #ifdef _WIN32
   std::vector<std::thread> pool;
   for (size_t h = 1; h < threads; ++h)
