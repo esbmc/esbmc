@@ -1826,36 +1826,24 @@ void goto_convertt::remove_sideeffects(
       if (fsym && fsym->name == "__ESBMC_loop_invariant")
       {
         exprt::operandst &args = expr.op1().operands();
-        exprt *and_expr = nullptr;
         if (args.size() == 1 && has_sideeffect(args.front()))
         {
-          // Locate the && expression, looking through any implicit typecast
-          // that Clang inserts when converting the && result to _Bool.
-          if (args.front().is_and())
-            and_expr = &args.front();
-          else if (
-            args.front().id() == "typecast" &&
-            args.front().operands().size() == 1 && args.front().op0().is_and())
-            and_expr = &args.front().op0();
+          // Look through the typecast Clang inserts when converting the
+          // && / || result to _Bool.
+          const exprt &inner = args.front().id() == "typecast" &&
+                                   args.front().operands().size() == 1
+                                 ? args.front().op0()
+                                 : args.front();
 
-          if (and_expr)
+          // Keep the chain a plain and/or over temporaries; the default path
+          // lowers it to branches and the invariant would read a stale
+          // pre-loop temporary.
+          if (inner.is_and() || inner.id() == "or")
           {
-            exprt::operandst conjuncts;
-            collect_and_conjuncts(*and_expr, conjuncts);
-            for (auto &c : conjuncts)
-              remove_sideeffects(c, dest);
-            // Replace the argument with the rebuilt and-chain; drop any
-            // surrounding typecast since and(...) is already boolean.
-            args.front() = rebuild_and_chain(conjuncts, 0);
+            flatten_contract_clause(args.front(), dest);
+            remove_function_call(expr, dest, result_is_used);
+            return;
           }
-        }
-        // Only bypass Forall_operands when we actually rewrote the && chain;
-        // otherwise (e.g. single foo(x) or foo(x)==0) fall through to normal
-        // path.
-        if (and_expr)
-        {
-          remove_function_call(expr, dest, result_is_used);
-          return;
         }
       }
 
