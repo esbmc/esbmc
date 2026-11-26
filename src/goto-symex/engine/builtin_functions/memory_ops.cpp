@@ -775,6 +775,74 @@ static expr2tc copy_into_float(
   return expr2tc();
 }
 
+/* The element size of @p dst and @p src when both are fixed-size arrays of
+ * one element type and the n-byte range is element-aligned on both sides;
+ * 0 otherwise. */
+static uint64_t copyable_element_size(
+  const expr2tc &dst,
+  uint64_t dst_offset,
+  const expr2tc &src,
+  uint64_t src_offset,
+  uint64_t n)
+{
+  if (!is_array_type(dst->type) || !is_array_type(src->type))
+    return 0;
+  const type2tc &elem_t = to_array_type(dst->type).subtype;
+  if (
+    elem_t != to_array_type(src->type).subtype ||
+    !fits_bytes(dst->type, dst_offset, n) ||
+    !fits_bytes(src->type, src_offset, n))
+    return 0;
+  const uint64_t esize = type_byte_size(elem_t).to_uint64();
+  if (esize == 0 || dst_offset % esize || src_offset % esize || n % esize)
+    return 0;
+  return esize;
+}
+
+/* @p dst with the elements over the copied range read from @p src, as an
+ * array lambda so its size does not grow with the array. Both are read before
+ * the assignment, so an overlapping copy keeps memmove semantics. */
+static expr2tc copy_array_elements(
+  const expr2tc &dst,
+  uint64_t dst_offset,
+  const expr2tc &src,
+  uint64_t src_offset,
+  uint64_t n)
+{
+  const uint64_t esize =
+    copyable_element_size(dst, dst_offset, src, src_offset, n);
+  if (esize == 0)
+    return expr2tc();
+
+  static unsigned lambdas = 0;
+  const type2tc &elem_t = to_array_type(dst->type).subtype;
+  const type2tc idx_t = size_type2();
+  const expr2tc k =
+    symbol2tc(idx_t, fmt::format("__ESBMC_memcpy_index${}", lambdas++));
+  const expr2tc first = constant_int2tc(idx_t, BigInt(dst_offset / esize));
+  const expr2tc last = constant_int2tc(idx_t, BigInt((dst_offset + n) / esize));
+  const expr2tc src_first = constant_int2tc(idx_t, BigInt(src_offset / esize));
+  const expr2tc src_k = add2tc(idx_t, src_first, sub2tc(idx_t, k, first));
+  const expr2tc body = if2tc(
+    elem_t,
+    and2tc(lessthanequal2tc(first, k), lessthan2tc(k, last)),
+    index2tc(elem_t, src, src_k),
+    index2tc(elem_t, dst, k));
+  return array_lambda2tc(dst->type, k, body);
+}
+
+// copy_array_elements, or the float copy when it declines.
+static expr2tc copy_aggregate(
+  const expr2tc &dst,
+  uint64_t dst_offset,
+  const expr2tc &src,
+  uint64_t src_offset,
+  uint64_t n)
+{
+  expr2tc result = copy_array_elements(dst, dst_offset, src, src_offset, n);
+  return result ? result : copy_into_float(dst, dst_offset, src, src_offset, n);
+}
+
 // gen_byte_memcpy, or the float copy when it declines.
 static expr2tc copy_primitive(
   const expr2tc &dst,
@@ -828,8 +896,7 @@ static inline expr2tc do_memcpy_expression(
       }
     }
 
-    log_debug("memcpy", "Only primitives are supported for now");
-    return copy_into_float(dst, dst_offset, src, src_offset, num_of_bytes);
+    return copy_aggregate(dst, dst_offset, src, src_offset, num_of_bytes);
   }
 
   // gen_byte_memcpy asserts on get_width(), which throws
@@ -846,6 +913,13 @@ static inline expr2tc do_memcpy_expression(
 
   // Base-case. Primitives!
   return copy_primitive(dst, dst_offset, src, src_offset, num_of_bytes);
+}
+
+// BigInt::to_uint64 drops the sign, so a pointer before its object would
+// read as one inside it.
+static bool is_nonnegative_constant(const expr2tc &e)
+{
+  return is_constant_int2t(e) && !to_constant_int2t(e).value.is_negative();
 }
 
 static void offset_simplifier(expr2tc &e)
@@ -1077,7 +1151,7 @@ void goto_symext::intrinsic_memcpy_impl(
     }
 
     offset_simplifier(item_offset);
-    if (!is_constant_int2t(item_offset))
+    if (!is_nonnegative_constant(item_offset))
     {
       bump_call(func_call, bump_name);
       return;
@@ -1156,7 +1230,7 @@ void goto_symext::intrinsic_memcpy_impl(
     cur_state->rename(item.offset);
 
     offset_simplifier(item.offset);
-    if (!is_constant_int2t(item.offset))
+    if (!is_nonnegative_constant(item.offset))
     {
       bump_call(func_call, bump_name);
       return;
@@ -1283,7 +1357,7 @@ bool goto_symext::memcmp_resolve_operand(
     return false;
 
   offset_simplifier(item.offset);
-  if (!is_constant_int2t(item.offset))
+  if (!is_nonnegative_constant(item.offset))
     return false;
   offset = to_constant_int2t(item.offset).value.to_uint64();
 
@@ -1588,7 +1662,7 @@ void goto_symext::intrinsic_memchr(
     }
 
     offset_simplifier(item_offset);
-    if (!is_constant_int2t(item_offset))
+    if (!is_nonnegative_constant(item_offset))
     {
       bump_call(func_call, bump_name);
       return;
@@ -1798,7 +1872,7 @@ void goto_symext::intrinsic_memset(
 
     simplify(item_offset);
 
-    if (!is_constant_int2t(item_offset))
+    if (!is_nonnegative_constant(item_offset))
     {
       /* item_offset did not simplify to a constant (symbolic or too
        * complex); for now bump_call, later we should expand our simplifier
