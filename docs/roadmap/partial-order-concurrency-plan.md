@@ -1,6 +1,6 @@
 # Plan — a partial-order encoding for concurrent programs (`--partial-order`)
 
-**Status (2026-11-26):** phases 1 to 3 in review; phase 4 started. Phase 0 is
+**Status (2026-11-26):** phases 1 to 3 merged; phase 4 in progress. Phase 0 is
 done, with the measurements below (§4), and the maintainer decided **go** on
 2026-11-24. `--partial-order` verifies programs on global scalars and arrays
 of them, including through pointers, with threads created in loops, mutexes,
@@ -9,7 +9,8 @@ lists, without assumptions, and checks data races on scalars and deadlocks
 on mutexes and joins. Its counterexamples list steps in the order the
 solver's clocks give them, and its violation witnesses carry thread ids.
 A loop cut by `--no-unwinding-assertions` stops only its own thread and
-the threads that wait for it; the effort figures are estimates.
+the threads that wait for it. A compound assignment to a narrow `_Atomic`
+object is recorded as a write. The effort figures are estimates.
 **Origin:** [#10296](https://github.com/esbmc/esbmc/issues/10296), which found
 `--schedule` unsound and slow, and its
 [effort estimate](https://github.com/esbmc/esbmc/issues/10296#issuecomment-6798263610).
@@ -226,9 +227,13 @@ disagreements:
   `github_2386_atomic_write_race_fail`: under `--data-races-check`, no race
   is reported between a write inside an atomic section and a plain read in
   `main`.
-- False alarms. `github_4434_thread_local`: a `__thread` global is shared.
+- False alarms. `github_4434_thread_local`: a `__thread` global was shared.
+  Fixed: it is no longer an event, so each thread keeps its own SSA chain
+  (`partial_order_thread_local*`).
   `github_9441_atomic_narrow_rmw`: a compound assignment to an `_Atomic`
-  object loses an update, as if it were a separate read and write.
+  object narrower than int assigns to `(int)c`, which was not recorded as a
+  write. Fixed: writes, element updates and dereference updates see through
+  the cast (`partial_order_atomic_rmw*`).
   `esbmc-unix2/11_time_var_mutex`: a lock built from `abort()` in an atomic
   section probably does not cut the thread's later events.
 - Different semantics. In the four `github_6831_{stats,sleep_sets}*` tests

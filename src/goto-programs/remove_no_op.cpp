@@ -1,4 +1,5 @@
 #include <goto-programs/remove_no_op.h>
+#include <goto-programs/goto_loop_invariant.h>
 
 // Determine whether the instruction is a no-op.
 // Some examples of such instructions incude: a SKIP,
@@ -79,6 +80,16 @@ bool is_no_op(
   return false;
 }
 
+// goto-cc gives each loop its own head, often `IF false`; removing it can merge
+// a contracted loop's head into an inner loop's (#11085).
+static bool
+heads_cbmc_contract(const goto_programt &body, goto_programt::const_targett it)
+{
+  return it != body.instructions.begin() &&
+         std::prev(it)->is_loop_invariant() &&
+         std::prev(it)->location.property() == kCbmcLoopContractProperty;
+}
+
 // Remove unnecessary no-op statements in a subset of the given GOTO program
 //
 // \param goto_program  goto program containing the instructions to be cleaned
@@ -111,7 +122,8 @@ void remove_no_op(
       // for collecting labels
       std::list<irep_idt> labels;
 
-      while (is_no_op(goto_program, it, true))
+      while (is_no_op(goto_program, it, true) &&
+             !heads_cbmc_contract(goto_program, it))
       {
         // don't remove the last no-op statement,
         // it could be a target
