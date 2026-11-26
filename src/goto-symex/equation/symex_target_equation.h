@@ -311,6 +311,7 @@ public:
         lhs(step.lhs),
         rhs(step.rhs),
         original_lhs(step.original_lhs),
+        havoc_entry(step.havoc_entry),
         comment(step.comment),
         cond(step.cond),
         original_rhs(step.original_rhs),
@@ -322,7 +323,7 @@ public:
     const SSA_stept &step;
     const sourcet &source;
     const symex_targett::step_typet &type;
-    const expr2tc &guard, &lhs, &rhs, &original_lhs;
+    const expr2tc &guard, &lhs, &rhs, &original_lhs, &havoc_entry;
     const irep_idt &comment;
     expr2tc cond, original_rhs;
     bool ignore, hidden;

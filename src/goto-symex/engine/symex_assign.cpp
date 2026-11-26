@@ -714,7 +714,9 @@ void goto_symext::symex_assign_symbol(
 
   expr2tc renamed_lhs = lhs;
   cur_state->rename_type(renamed_lhs);
-  cur_state->assignment(renamed_lhs, rhs);
+  // Reads past a loop-invariant havoc name its lhs, so pinning that to
+  // havoc_entry pins every read (bmct::solve_from_loop_entry, #11027).
+  cur_state->assignment(renamed_lhs, rhs, true, is_nil_expr(havoc_entry));
 
   if (!is_nil_expr(full_rhs) && full_rhs_after_write)
   {

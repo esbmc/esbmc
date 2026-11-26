@@ -243,14 +243,16 @@ private:
 
   /// Record the verdict a satisfiable answer earns for one claim: Failed, or
   /// Unknown when the model witnesses only the invariant abstraction rather
-  /// than a reachable state (issue #7480). Returns the solver holding a real
-  /// counterexample when the model had to be replaced to find one (#11027).
-  std::unique_ptr<smt_convt> record_satisfiable_claim(
+  /// than a reachable state (issue #7480). Returns the solver whose model to
+  /// report: \p smt_conv, or one from the loop's entry state, then owned by
+  /// \p entry_solver, when only that one refutes the program (#11027).
+  smt_convt &record_satisfiable_claim(
     const claim_slicer &claim,
     const property_locationt &loc,
     bool inductive_step,
     symex_target_equationt &local_eq,
-    smt_convt &smt_conv);
+    smt_convt &smt_conv,
+    std::unique_ptr<smt_convt> &entry_solver);
 
   /// Record a verdict for every assertion in \p eq that \p smt_conv's model
   /// falsifies, so the report names them even when the counterexample itself
@@ -270,6 +272,7 @@ private:
   /// runtime_solver then holds the last satisfying model.
   void
   solve_past_the_abstraction(smt_resultt result, symex_target_equationt &eq);
+  void set_aside_abstraction_violations(symex_target_equationt &eq);
 
   /// Print goto_functionst::reported_verdicts in a section of their own.
   void report_reported_properties() const;

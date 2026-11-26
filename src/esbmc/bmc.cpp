@@ -398,12 +398,13 @@ static const char *const weak_invariant_note =
   "loop invariant too weak to prove this claim: the counterexample is against "
   "the havoc abstraction, not a reachable state of the program";
 
-std::unique_ptr<smt_convt> bmct::record_satisfiable_claim(
+smt_convt &bmct::record_satisfiable_claim(
   const claim_slicer &claim,
   const property_locationt &loc,
   bool inductive_step,
   symex_target_equationt &local_eq,
-  smt_convt &smt_conv)
+  smt_convt &smt_conv,
+  std::unique_ptr<smt_convt> &entry_solver)
 {
   // Neither answer refutes the program. An inductive-step run starts from an
   // arbitrary state, and a claim downstream of a loop-invariant havoc is
@@ -423,7 +424,7 @@ std::unique_ptr<smt_convt> bmct::record_satisfiable_claim(
         property_verdictt::Unknown,
         loc,
         "inductive step could not prove this claim");
-    return nullptr;
+    return smt_conv;
   }
 
   // A claim downstream of the havoc is unknowable only while the abstraction
@@ -440,12 +441,15 @@ std::unique_ptr<smt_convt> bmct::record_satisfiable_claim(
     weak_invariant_detected = true;
     goto_functionst::property_verdicts.record(
       claim.claim_key, property_verdictt::Unknown, loc, weak_invariant_note);
-    return nullptr;
+    return smt_conv;
   }
 
   goto_functionst::property_verdicts.record(
     claim.claim_key, property_verdictt::Failed, loc);
-  return entry_model;
+  if (!entry_model)
+    return smt_conv;
+  entry_solver = std::move(entry_model);
+  return *entry_solver;
 }
 
 void bmct::record_violated_properties(
@@ -506,29 +510,28 @@ void bmct::solve_past_the_abstraction(
   if (
     result != P_SATISFIABLE || options.get_bool_option("inductive-step") ||
     options.get_bool_option("forward-condition") ||
-    options.get_bool_option("smt-during-symex"))
+    options.get_bool_option("smt-during-symex") || !runtime_solver->has_model())
     return;
 
+  record_violated_properties(*runtime_solver, eq);
+  if (!violates_only_the_abstraction())
+    return;
+
+  if (auto entry_model = solve_from_loop_entry(eq))
+  {
+    runtime_solver = std::move(entry_model);
+    record_violated_properties(*runtime_solver, eq, true);
+    return;
+  }
+  set_aside_abstraction_violations(eq);
+}
+
+void bmct::set_aside_abstraction_violations(symex_target_equationt &eq)
+{
   std::vector<std::pair<symex_target_equationt::SSA_stept *, expr2tc>>
     set_aside;
-  bool entry_probed = false;
-  while (runtime_solver->has_model())
+  for (;;)
   {
-    record_violated_properties(*runtime_solver, eq);
-    if (!violates_only_the_abstraction())
-      break;
-
-    if (!entry_probed)
-    {
-      entry_probed = true;
-      if (auto entry_model = solve_from_loop_entry(eq))
-      {
-        runtime_solver = std::move(entry_model);
-        record_violated_properties(*runtime_solver, eq, true);
-        break;
-      }
-    }
-
     const size_t before = set_aside.size();
     for (auto &step : eq.SSA_steps)
       if (
@@ -551,6 +554,11 @@ void bmct::solve_past_the_abstraction(
       break;
     }
     runtime_solver = std::move(next);
+    if (!runtime_solver->has_model())
+      break;
+    record_violated_properties(*runtime_solver, eq);
+    if (!violates_only_the_abstraction())
+      break;
   }
 
   for (auto &entry : set_aside)
@@ -3944,13 +3952,8 @@ smt_resultt bmct::multi_property_check(
                      : "");
       else if (solver_result == P_SATISFIABLE)
       {
-        if (
-          auto entry_model = record_satisfiable_claim(
-            claim, claim_ploc, is, local_eq, *solver_ptr))
-        {
-          new_solver = std::move(entry_model);
-          solver_ptr = new_solver.get();
-        }
+        solver_ptr = &record_satisfiable_claim(
+          claim, claim_ploc, is, local_eq, *solver_ptr, new_solver);
       }
       else
       {

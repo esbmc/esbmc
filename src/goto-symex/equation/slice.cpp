@@ -497,6 +497,8 @@ void symex_slicet::slice_step(Step &step)
   case symex_targett::JOIN:
   case symex_targett::ATOMIC_BEGIN:
   case symex_targett::ATOMIC_END:
+  case symex_targett::LOCK:
+  case symex_targett::UNLOCK:
     slice_event(step);
     break;
   case symex_targett::OUTPUT:
