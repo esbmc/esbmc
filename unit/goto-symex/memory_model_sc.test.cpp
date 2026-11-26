@@ -622,3 +622,168 @@ TEST_CASE("an access off the path does not race", "[po]")
   CHECK_FALSE(
     races_under(*claims[0], {{clock(0), tick(1)}, {clock(1), tick(2)}}));
 }
+
+namespace
+{
+expr2tc mutex(const char *name)
+{
+  return symbol2tc(get_int32_type(), name);
+}
+
+expr2tc stop()
+{
+  return symbol2tc(get_uint32_type(), "__ESBMC_po_stop");
+}
+
+/// The clocks \p ticks in event order, and the stop time \p at.
+valuation timed(const std::vector<unsigned> &ticks, unsigned at)
+{
+  valuation v{{stop(), tick(at)}};
+  for (unsigned e = 0; e < ticks.size(); ++e)
+    v[clock(e)] = tick(ticks[e]);
+  return v;
+}
+
+const symex_target_equationt::SSA_stept *
+deadlock_claim(const symex_target_equationt &eq)
+{
+  for (const auto &step : eq.SSA_steps)
+    if (step.is_assert() && step.comment == "Deadlocked state")
+      return &step;
+  return nullptr;
+}
+
+bool deadlocked(const symex_target_equationt &eq, const valuation &v)
+{
+  const auto *claim = deadlock_claim(eq);
+  REQUIRE(claim);
+  return races_under(*claim, v);
+}
+
+/// Events 0: LOCK a, 1: LOCK b, 2: UNLOCK b, 3: UNLOCK a (thread 0), and
+/// 4: LOCK b, 5: LOCK a, 6: UNLOCK a, 7: UNLOCK b (thread 1).
+struct lock_ordert
+{
+  contextt ctx;
+  namespacet ns{ctx};
+  symex_target_equationt eq{ns};
+
+  explicit lock_ordert(bool deadlocks)
+  {
+    for (unsigned t = 0; t < 2; ++t)
+    {
+      const expr2tc first = mutex(t == 0 ? "c:@a" : "c:@b");
+      const expr2tc second = mutex(t == 0 ? "c:@b" : "c:@a");
+      add_event(eq, t, symex_targett::LOCK, first);
+      add_event(eq, t, symex_targett::LOCK, second);
+      add_event(eq, t, symex_targett::UNLOCK, second);
+      add_event(eq, t, symex_targett::UNLOCK, first);
+    }
+    memory_model_sct(false, deadlocks).run(eq.SSA_steps);
+  }
+};
+
+/// Each thread holds the mutex the other locks next.
+const std::vector<unsigned> crossed{1, 3, 5, 6, 2, 4, 7, 8};
+} // namespace
+
+TEST_CASE("deadlocks are claimed only when asked for", "[po]")
+{
+  CHECK_FALSE(deadlock_claim(lock_ordert(false).eq));
+  lock_ordert f(true);
+  REQUIRE(deadlock_claim(f.eq));
+  CHECK(deadlock_claim(f.eq) == &f.eq.SSA_steps.back());
+}
+
+TEST_CASE("a lock after the stop time need not wait for a release", "[po]")
+{
+  CHECK_FALSE(all_hold(lock_ordert(false).eq, timed(crossed, 3)));
+  CHECK(all_hold(lock_ordert(true).eq, timed(crossed, 3)));
+  CHECK_FALSE(all_hold(lock_ordert(true).eq, timed(crossed, 9)));
+}
+
+TEST_CASE("crossed locks deadlock", "[po]")
+{
+  lock_ordert f(true);
+  CHECK(deadlocked(f.eq, timed(crossed, 3)));
+  // Thread 1 has not taken b yet, so main can.
+  CHECK_FALSE(deadlocked(f.eq, timed(crossed, 2)));
+  CHECK_FALSE(deadlocked(f.eq, timed(crossed, 9)));
+}
+
+TEST_CASE("a thread waiting on main is no deadlock once main ends", "[po]")
+{
+  contextt ctx;
+  namespacet ns(ctx);
+  symex_target_equationt eq(ns);
+  add_event(eq, 0, symex_targett::LOCK, mutex("c:@m"));
+  add_event(eq, 1, symex_targett::LOCK, mutex("c:@m"));
+  memory_model_sct(false, true).run(eq.SSA_steps);
+
+  CHECK_FALSE(deadlocked(eq, timed({1, 2}, 2)));
+}
+
+TEST_CASE("main joining a thread that waits on main deadlocks", "[po]")
+{
+  contextt ctx;
+  namespacet ns(ctx);
+  symex_target_equationt eq(ns);
+  add_event(eq, 0, symex_targett::LOCK, mutex("c:@m"));
+  add_event(eq, 0, symex_targett::JOIN, thread_id(1));
+  add_event(eq, 1, symex_targett::LOCK, mutex("c:@m"));
+  memory_model_sct(false, true).run(eq.SSA_steps);
+
+  CHECK(deadlocked(eq, timed({1, 3, 2}, 2)));
+  // Before main takes the mutex, the thread can.
+  CHECK_FALSE(deadlocked(eq, timed({1, 3, 2}, 1)));
+}
+
+TEST_CASE("an event off the path does not wait", "[po]")
+{
+  contextt ctx;
+  namespacet ns(ctx);
+  symex_target_equationt eq(ns);
+  add_event(eq, 0, symex_targett::LOCK, mutex("c:@m"));
+  symex_targett::sourcet source;
+  eq.event(gen_false_expr(), symex_targett::LOCK, mutex("c:@m"), source);
+  add_event(eq, 0, symex_targett::UNLOCK, mutex("c:@m"));
+  memory_model_sct(false, true).run(eq.SSA_steps);
+
+  CHECK_FALSE(deadlocked(eq, timed({1, 2, 3}, 2)));
+}
+
+TEST_CASE("other claims hold until every thread ends", "[po]")
+{
+  contextt ctx;
+  namespacet ns(ctx);
+  symex_target_equationt eq(ns);
+  add_event(eq, 0, symex_targett::SHARED_WRITE, x(1));
+  add_event(eq, 1, symex_targett::SHARED_READ, x(2));
+  symex_targett::sourcet source;
+  eq.assertion(
+    gen_true_expr(),
+    gen_false_expr(),
+    gen_true_expr(),
+    "user claim",
+    {},
+    source,
+    0);
+  memory_model_sct model(true, true);
+  model.run(eq.SSA_steps);
+  CHECK(model.claims_added() == 2);
+
+  for (const auto &step : eq.SSA_steps)
+  {
+    if (!step.is_assert() || step.comment == "Deadlocked state")
+      continue;
+    for (unsigned at : {2u, 3u})
+    {
+      expr2tc cond = step.cond;
+      substitute(cond, timed({1, 2}, at));
+      simplify(cond);
+      REQUIRE(is_constant_bool2t(cond));
+      // Thread 1's read is still pending at 2, so the claim holds vacuously.
+      CHECK(is_true(cond) == (at == 2));
+    }
+  }
+}

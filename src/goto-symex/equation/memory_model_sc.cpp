@@ -68,8 +68,14 @@ bool memory_model_sct::run(symex_target_equationt::SSA_stepst &steps)
   mutexes();
   if (races)
     data_races();
+  if (deadlocks)
+  {
+    complete_runs_only(steps);
+    complete_runs_only(claims);
+    claim_no_deadlock();
+  }
 
-  n_race_claims = claims.size();
+  n_claims = claims.size();
   steps.splice(steps.begin(), constraints);
   steps.splice(steps.end(), claims);
   return true;
@@ -250,14 +256,14 @@ void memory_model_sct::mutexes()
         for (size_t u : unlock_ids)
           releases.push_back(conjunction(
             {events[u].step->guard, before(taken, u), before(u, later)}));
+        std::vector<expr2tc> both{
+          events[taken].step->guard,
+          events[later].step->guard,
+          before(taken, later)};
+        if (deadlocks)
+          both.push_back(done(later));
         constrain(
-          implies2tc(
-            conjunction(
-              {events[taken].step->guard,
-               events[later].step->guard,
-               before(taken, later)}),
-            disjunction(releases)),
-          events[later]);
+          implies2tc(conjunction(both), disjunction(releases)), events[later]);
       }
   }
 }
@@ -306,6 +312,103 @@ void memory_model_sct::claim_no_race(size_t a, size_t b)
   comment += " data race on ";
   comment += id2string(object_of(*second.step));
   step.comment = comment;
+}
+
+/// A deadlock is a prefix after which main, and every other thread that has
+/// events left, waits at its first pending event. Returning from main ends
+/// the process, so main must be one of the waiting threads.
+void memory_model_sct::claim_no_deadlock()
+{
+  auto main_it = per_thread.find(0);
+  if (main_it == per_thread.end())
+    return;
+
+  std::vector<expr2tc> all_wait;
+  for (const auto &[thread, ids] : per_thread)
+  {
+    std::vector<expr2tc> waiting{gen_false_expr()};
+    // Shared across the iterations, so the formula grows linearly.
+    expr2tc earlier_done = gen_true_expr();
+    for (size_t id : ids)
+    {
+      const expr2tc &guard = events[id].step->guard;
+      waiting.push_back(
+        conjunction({guard, not2tc(done(id)), earlier_done, waits(id)}));
+      earlier_done = and2tc(earlier_done, implies2tc(guard, done(id)));
+    }
+    all_wait.push_back(
+      thread == 0 ? disjunction(waiting)
+                  : or2tc(finished(thread), disjunction(waiting)));
+  }
+
+  claims.emplace_back();
+  symex_target_equationt::SSA_stept &step = claims.back();
+  step.type = symex_targett::ASSERT;
+  step.guard = gen_true_expr();
+  step.cond_neg = conjunction(all_wait);
+  step.cond = not2tc(step.cond_neg);
+  step.source = events[main_it->second.back()].step->source;
+  step.comment = "Deadlocked state";
+}
+
+/// Whether \p id, pending at the stop time, cannot run: it locks a mutex
+/// whose last lock in the prefix has no release after it, or joins a thread
+/// with events left.
+expr2tc memory_model_sct::waits(size_t id) const
+{
+  const symex_target_equationt::SSA_stept &step = *events[id].step;
+  if (step.type == symex_targett::JOIN)
+    return not2tc(finished(thread_of(step)));
+  if (step.type != symex_targett::LOCK)
+    return gen_false_expr();
+
+  auto unlock_it = unlocks.find(object_of(step));
+  std::vector<expr2tc> held{gen_false_expr()};
+  for (size_t taken : locks.at(object_of(step)))
+  {
+    std::vector<expr2tc> released{gen_false_expr()};
+    if (unlock_it != unlocks.end())
+      for (size_t u : unlock_it->second)
+        released.push_back(
+          conjunction({events[u].step->guard, done(u), before(taken, u)}));
+    held.push_back(conjunction(
+      {events[taken].step->guard, done(taken), not2tc(disjunction(released))}));
+  }
+  return disjunction(held);
+}
+
+/// Each claim other than the deadlock one is violated only by an execution
+/// that runs every thread to its end, as without a stop time.
+void memory_model_sct::complete_runs_only(
+  symex_target_equationt::SSA_stepst &steps) const
+{
+  std::vector<expr2tc> all;
+  for (const auto &[thread, ids] : per_thread)
+    all.push_back(finished(thread));
+  const expr2tc all_finished = conjunction(all);
+
+  for (auto &step : steps)
+    if (step.is_assert())
+    {
+      step.cond = implies2tc(all_finished, step.cond);
+      if (!is_nil_expr(step.cond_neg))
+        step.cond_neg = and2tc(all_finished, step.cond_neg);
+    }
+}
+
+expr2tc memory_model_sct::finished(unsigned thread) const
+{
+  std::vector<expr2tc> all;
+  if (auto it = per_thread.find(thread); it != per_thread.end())
+    for (size_t id : it->second)
+      all.push_back(implies2tc(events[id].step->guard, done(id)));
+  return conjunction(all);
+}
+
+expr2tc memory_model_sct::done(size_t id) const
+{
+  return lessthan2tc(
+    events[id].clock, symbol2tc(get_uint32_type(), "__ESBMC_po_stop"));
 }
 
 void memory_model_sct::constrain(const expr2tc &cond, const eventt &about)

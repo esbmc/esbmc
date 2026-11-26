@@ -30,6 +30,10 @@ bool is_supported_thread_call(const std::string &name)
     "pthread_join_noswitch",
     "pthread_mutex_lock_noassert",
     "pthread_mutex_unlock_noassert",
+    // ... and with it.
+    "pthread_join_switch",
+    "pthread_mutex_lock_check",
+    "pthread_mutex_unlock_check",
     "pthread_mutex_destroy",
     // Signals change nothing a wait observes, since a wait may wake at will.
     "pthread_cond_init",
@@ -110,8 +114,8 @@ bool needs_unbuilt_events(const std::string &name)
 class scope_checkt
 {
 public:
-  scope_checkt(const namespacet &ns, bool verifying, bool races)
-    : ns(ns), verifying(verifying), races(races)
+  scope_checkt(const namespacet &ns, bool verifying, bool races, bool deadlocks)
+    : ns(ns), verifying(verifying), races(races), deadlocks(deadlocks)
   {
   }
 
@@ -136,6 +140,7 @@ private:
   const namespacet &ns;
   const bool verifying;
   const bool races;
+  const bool deadlocks;
   const locationt *where = nullptr;
   const goto_functionst *functions = nullptr;
 
@@ -176,6 +181,8 @@ private:
       return reject("a call to " + name);
     if (verifying && needs_unbuilt_events(name))
       return reject("verifying a call to " + name);
+    if (!check_deadlock_call(name))
+      return false;
 
     if (!check_expr(call.ret) || !check_thread_args(name, call))
       return false;
@@ -193,6 +200,16 @@ private:
       if (!check_expr(arg))
         return false;
     }
+    return true;
+  }
+
+  /// The deadlock claim takes main's end for the process's end.
+  bool check_deadlock_call(const std::string &name) const
+  {
+    if (
+      deadlocks &&
+      (name == "pthread_exit" || name == "__ESBMC_terminate_thread"))
+      return reject("checking deadlocks with a call to " + name);
     return true;
   }
 
@@ -327,8 +344,10 @@ bool partial_order_in_scope(
   const goto_functionst &goto_functions,
   const namespacet &ns,
   bool verifying,
-  bool races)
+  bool races,
+  bool deadlocks)
 {
-  return scope_checkt(ns, false, races).check(goto_functions) &&
-         (!verifying || scope_checkt(ns, true, races).check(goto_functions));
+  return scope_checkt(ns, false, races, deadlocks).check(goto_functions) &&
+         (!verifying ||
+          scope_checkt(ns, true, races, deadlocks).check(goto_functions));
 }
