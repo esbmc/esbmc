@@ -1,0 +1,5 @@
+CORE
+../counterexample_init_nested/main.c
+--tuple-node-flattener
+^VERIFICATION FAILED$
+(?s)^  obj = \{\s*\.inner=\{\s*\.i=7,\s*\.d=1\.250000e\+0\s*\},\s*\.values=\{ 3, 4 \}\s*\}$

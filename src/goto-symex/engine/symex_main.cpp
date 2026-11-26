@@ -1075,6 +1075,10 @@ void goto_symext::run_intrinsic(
     expr2tc deref = dereference2tc(get_empty_type(), arg0);
     dereference(deref, dereferencet::INTERNAL);
 
+    const auto next_source = cur_state->source;
+    // Intrinsic dispatch advances the PC before entering run_intrinsic.
+    --cur_state->source.pc;
+
     for (const auto &item : internal_deref_items)
     {
       // Get the length of the type. This will propagate an exception for
@@ -1098,6 +1102,8 @@ void goto_symext::run_intrinsic(
     std::vector<write_targett> targets;
     collect_write_targets(guard2tc(), targets);
     write_nondet_targets(targets);
+
+    cur_state->source = next_source;
 
     return;
   }
