@@ -100,6 +100,16 @@ void goto_convert_functionst::add_return(
 
 // Stamp `loc` onto every value-level sub-expression of `expr` that lacks a
 // source location (used by restore_value_locations below).
+/// Whether convert_decl must handle a declaration of type \p t: code, an
+/// array, or a pointer to an array (#11094).
+static bool decl_needs_legacy_type(const typet &t)
+{
+  const typet *pointee = &t;
+  while (pointee->is_pointer())
+    pointee = &pointee->subtype();
+  return t.is_code() || pointee->is_array();
+}
+
 static void stamp_value_locations(exprt &expr, const locationt &loc)
 {
   // Read this node's OWN location (const overload, non-recursive); the mutable
@@ -805,27 +815,19 @@ bool goto_convert_functionst::convert_native_rec(
       return true;
     };
 
-    // Delegate the two convert_decl shapes this handler does not reproduce
+    // Delegate the convert_decl shapes this handler does not reproduce
     // natively:
     //  - a static-lifetime or code-typed symbol is a no-op SKIP,
     //  - an array type may be a VLA needing rewrite_vla_decl / a dynamic-size
-    //    generator — exclude all arrays conservatively.
+    //    generator — exclude all arrays conservatively,
+    //  - a pointer to an array may point to a VLA, whose bounds convert_decl
+    //    checks.
     // A destructible type or an initializer needing lowering is delegated the
     // same way just below; everything else is convert_decl's plain path
     // (a DECL, an optional side-effect-free ASSIGN, and one scope-exit
     // code_dead) reproduced natively after that.
-    if (
-      s->static_lifetime || s->get_type().is_code() || s->get_type().is_array())
+    if (s->static_lifetime || decl_needs_legacy_type(s->get_type()))
       return delegate_to_legacy();
-
-    // A pointer to a VLA needs convert_decl's bound check.
-    {
-      const typet *pointee = &s->get_type();
-      while (pointee->is_pointer())
-        pointee = &pointee->subtype();
-      if (pointee != &s->get_type() && pointee->is_array())
-        return delegate_to_legacy();
-    }
 
     exprt initializer = is_nil_expr(decl.init) ? static_cast<exprt>(nil_exprt())
                                                : migrate_expr_back(decl.init);

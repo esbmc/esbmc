@@ -825,7 +825,7 @@ void goto_convertt::check_vla_pointee_bounds(
   const locationt &loc,
   goto_programt &dest)
 {
-  if (options.get_bool_option("no-vla-size-check"))
+  if (!ptr_type.is_pointer() || options.get_bool_option("no-vla-size-check"))
     return;
 
   const typet *t = &ptr_type;
@@ -1369,8 +1369,7 @@ void goto_convertt::convert_decl(const codet &code, goto_programt &dest)
     generate_dynamic_size_vla(
       var, new_code.location(), dest, s->mode == "Python");
 
-  if (var.type().is_pointer())
-    check_vla_pointee_bounds(var.type(), new_code.location(), dest);
+  check_vla_pointee_bounds(var.type(), new_code.location(), dest);
 
   if (!initializer.is_nil())
     convert_decl_initializer(var, initializer, new_code, *s, dest);
