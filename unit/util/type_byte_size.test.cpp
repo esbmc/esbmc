@@ -445,3 +445,44 @@ TEST_CASE(
     REQUIRE(type_byte_size_expr(record, &wide) == gen_ulong(8));
   }
 }
+
+TEST_CASE(
+  "compute_pointer_offset works in bytes when every step is whole bytes",
+  "[core][util][type_byte_size]")
+{
+  const type2tc t = size_type2();
+  const type2tc arr = array_type2tc(get_int32_type(), gen_ulong(10), false);
+  const expr2tc a = symbol2tc(arr, "a");
+  const expr2tc i = symbol2tc(get_int32_type(), "i");
+
+  REQUIRE(
+    compute_pointer_offset(index2tc(get_int32_type(), a, i)) ==
+    mul2tc(t, gen_ulong(4), typecast2tc(t, i)));
+  REQUIRE(
+    compute_pointer_offset(index2tc(get_int32_type(), a, gen_ulong(3))) ==
+    gen_ulong(12));
+  // A constant offset wraps at the width of size_t, as bits / 8 does.
+  REQUIRE(
+    compute_pointer_offset(index2tc(
+      get_int32_type(),
+      a,
+      gen_long(get_int64_type(), BigInt::power2(62) + 1))) == gen_ulong(4));
+  REQUIRE(
+    compute_pointer_offset(
+      index2tc(get_int32_type(), a, gen_long(get_int64_type(), -1))) ==
+    gen_ulong(BigInt::power2(64) - 4));
+
+  const type2tc s = struct_of({get_int32_type(), arr}, {"x", "arr"}, "S");
+  const expr2tc arr_member = member2tc(arr, symbol2tc(s, "s"), "arr");
+  REQUIRE(
+    compute_pointer_offset(index2tc(get_int32_type(), arr_member, i)) ==
+    add2tc(t, mul2tc(t, gen_ulong(4), typecast2tc(t, i)), gen_ulong(4)));
+
+  // A member at bit 3 has no byte offset: the bit offset divided by 8 stays.
+  const type2tc bf = struct_of(
+    {unsignedbv_type2tc(3), unsignedbv_type2tc(5)}, {"lo", "hi"}, "B");
+  const expr2tc off = compute_pointer_offset(
+    member2tc(unsignedbv_type2tc(5), symbol2tc(bf, "b"), "hi"));
+  REQUIRE(is_typecast2t(off));
+  REQUIRE(is_div2t(to_typecast2t(off).from));
+}

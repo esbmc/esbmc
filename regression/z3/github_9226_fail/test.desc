@@ -1,0 +1,5 @@
+CORE
+main.c
+--z3 --smt-formula-too
+\A(?![\s\S]*bvudiv)
+^VERIFICATION FAILED$

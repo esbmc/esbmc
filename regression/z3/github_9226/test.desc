@@ -1,0 +1,5 @@
+CORE
+main.c
+--z3 --smt-formula-too --no-bounds-check --no-pointer-check
+\A(?![\s\S]*bvudiv)
+^VERIFICATION SUCCESSFUL$
