@@ -488,11 +488,16 @@ public:
    *  L2 name and return it. */
   expr2tc fresh_shared_value(expr2tc sym);
 
-  /** --partial-order: record a SPAWN or JOIN event naming thread \p tid. */
-  void record_thread_event(symex_targett::step_typet type, unsigned int tid);
+  /** --partial-order: record a SPAWN or JOIN event naming thread \p tid,
+   *  under the current guard and, if not nil, \p cond. */
+  void record_thread_event(
+    symex_targett::step_typet type,
+    unsigned int tid,
+    const expr2tc &cond = expr2tc());
 
   /** --partial-order: record an ATOMIC_BEGIN or ATOMIC_END event for an
-   *  atomic section in user code. */
+   *  atomic section in user code, opened by __ESBMC_atomic_begin or
+   *  __ESBMC_really_atomic_begin. */
   void record_atomic_event(
     symex_targett::step_typet type,
     const goto_programt::instructiont &instruction);
@@ -507,6 +512,24 @@ public:
    *  happens here because the thread runs after its joiner in the equation.
    *  @return Whether \p instruction was such a call under --partial-order */
   bool partial_order_join(const goto_programt::instructiont &instruction);
+
+  /** --partial-order: replace a pthread_mutex_lock or pthread_mutex_unlock
+   *  call by a LOCK or UNLOCK event on its mutex, which the memory model
+   *  orders in place of the operational model's wait, and a
+   *  pthread_cond_wait by an UNLOCK and a LOCK of its mutex.
+   *  @return Whether \p instruction was such a call under --partial-order */
+  bool partial_order_mutex(const goto_programt::instructiont &instruction);
+
+  /** --partial-order: end the path at a pthread_exit call, or at a call to
+   *  __ESBMC_terminate_thread in user code. The operational model ends it
+   *  with an assumption, which would also hold every other thread's later
+   *  claims, since they follow it in the equation, and the intrinsic ends the
+   *  thread on every path, not only the one that calls it.
+   *  @return Whether \p instruction was such a call under --partial-order */
+  bool partial_order_exit(const goto_programt::instructiont &instruction);
+
+  /** Assign 0 to what \p call returns into, if anything. */
+  void return_zero(const code_function_call2t &call);
 
   /** Kind of memory access, used by get_expr_globals to decide whether a
    *  read-only global can be filtered out of cswitch-triggering sets. */

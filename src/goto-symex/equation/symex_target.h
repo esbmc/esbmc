@@ -32,7 +32,9 @@ public:
     SPAWN,
     JOIN,
     ATOMIC_BEGIN,
-    ATOMIC_END
+    ATOMIC_END,
+    LOCK,
+    UNLOCK
   };
 
   struct sourcet

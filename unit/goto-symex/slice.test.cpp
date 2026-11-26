@@ -269,3 +269,72 @@ int main(void)
   // The read index is unknown, so no store to this array may be neutralised.
   CHECK(r.elided_stores == 0);
 }
+
+TEST_CASE(
+  "a claim sliced in place matches the claim sliced in a copy",
+  "[symex][slice]")
+{
+  // --multi-property slices each claim over a view of the shared equation and
+  // keeps only the steps it needs; every step must come out as slicing a copy
+  // of the whole equation leaves it.
+  symex_run::equation run(R"(
+int *nondet_ptr(void);
+int nondet_int(void);
+int main(void)
+{
+  int *arr[4];
+  int *p = nondet_ptr();
+  int unused = nondet_int();
+  arr[0] = p + 1;
+  arr[1] = p + 2;
+  arr[2] = p + 3;
+  arr[3] = p + 4;
+  __ESBMC_assert(arr[1] != 0, "read one index");
+  if (nondet_int() > 0)
+    unused = unused + 1;
+  __ESBMC_assert(unused != 424242, "second claim");
+  return 0;
+}
+)");
+  const symex_target_equationt &eq = run.get();
+  contextt context;
+  namespacet ns(context);
+
+  size_t cut = 0, elided = 0;
+  for (size_t claim = 1; claim <= 2; ++claim)
+  {
+    symex_target_equationt copy = eq;
+    claim_slicer(claim, false, false, ns).run(copy.SSA_steps);
+    symex_slicet(run.options()).run(copy.SSA_steps);
+
+    std::vector<symex_target_equationt::sliced_stept> view;
+    for (const auto &step : eq.SSA_steps)
+      view.emplace_back(step);
+    claim_slicer(claim, false, false, ns).run(view);
+    symex_slicet(run.options()).run(view);
+    const symex_target_equationt sliced(eq, view);
+
+    auto expected = copy.SSA_steps.begin();
+    sliced.for_each_step(
+      [&](const symex_target_equationt::SSA_stept &step) {
+        REQUIRE(expected != copy.SSA_steps.end());
+        CHECK(step.ignore == expected->ignore);
+        CHECK(step.cond == expected->cond);
+        CHECK(step.original_rhs == expected->original_rhs);
+        CHECK(step.hidden == expected->hidden);
+        elided += store_elided(step);
+        ++expected;
+      },
+      [&](const symex_target_equationt::SSA_stept &step) {
+        REQUIRE(expected != copy.SSA_steps.end());
+        CHECK(expected->ignore);
+        CHECK(step.lhs == expected->lhs);
+        ++cut;
+        ++expected;
+      });
+    CHECK(expected == copy.SSA_steps.end());
+  }
+  // Non-vacuity: steps were cut, and a held step carries a rewritten store.
+  CHECK(cut > 0);
+  CHECK(elided > 0);
+}
