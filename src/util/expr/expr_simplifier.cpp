@@ -1875,7 +1875,7 @@ expr2tc pointer_offset2t::do_simplify() const
            is_constant_string2t(index.source_value)))
           return gen_zero(type);
 
-        // compute_pointer_offset builds a fresh typecast/div/mul/add tree;
+        // compute_pointer_offset builds a fresh mul/add tree;
         // try_simplification only walks the root, so use the full simplifier
         // to fold member_offset + idx*sizeof down to a constant for nested
         // shapes like &(member.array)[0].
