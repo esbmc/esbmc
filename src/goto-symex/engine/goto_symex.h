@@ -832,8 +832,9 @@ protected:
    *  unwinds --unwind times per call). Mirrors intrinsic_memcmp's symbolic-n
    *  path: bound the copy by the objects' own widths, guard each byte position
    *  with i < n, and claim n <= that bound so an over-long copy is still
-   *  reported. Returns false when the operands cannot be resolved, leaving the
-   *  caller to bump. */
+   *  reported. An operand at a symbolic offset rebuilds the whole destination
+   *  and reads each source byte through the offset. Returns false when the
+   *  operands cannot be resolved, leaving the caller to bump. */
   bool memcpy_symbolic_length(
     const expr2tc &dst_arg,
     const expr2tc &src_arg,
@@ -858,6 +859,16 @@ protected:
   /** Claim that a memory builtin's operand, on the path @p guard selects, is
    *  not a code object; nothing under --no-pointer-check. */
   void claim_not_code(const expr2tc &guard);
+
+  /** Resolve @p ptr to a single fixed-size scalar or array object, giving
+   *  the renamed, simplified byte @p offset into it (constant or not) and the
+   *  object's byte @p size. Returns false on any miss. */
+  bool resolve_byte_object(
+    const expr2tc &ptr,
+    expr2tc &object,
+    expr2tc &offset,
+    uint64_t &size,
+    bool rename_object = true);
 
   /** Helper for intrinsic_memcmp: resolve @p ptr to a single concrete
    *  primitive object with a constant offset, validating that an

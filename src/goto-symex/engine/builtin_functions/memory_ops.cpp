@@ -923,64 +923,185 @@ void goto_symext::memcpy_finish(
   }
 }
 
+/** Byte @p pos of @p object, where @p pos need not be constant. */
+static expr2tc
+object_byte_at(const expr2tc &object, const expr2tc &pos, bool big_endian)
+{
+  if (is_constant_int2t(pos))
+    return object_byte(
+      object, to_constant_int2t(pos).value.to_uint64(), big_endian);
+  if (!is_array_type(object))
+    return byte_extract2tc(get_uint8_type(), object, pos, big_endian);
+  const array_type2t &arr = to_array_type(object->type);
+  const type2tc &pos_t = pos->type;
+  const expr2tc elem_size = constant_int2tc(pos_t, type_byte_size(arr.subtype));
+  expr2tc index = div2tc(pos_t, pos, elem_size);
+  expr2tc rel = modulus2tc(pos_t, pos, elem_size);
+  simplify(index);
+  simplify(rel);
+  return object_byte_at(index2tc(arr.subtype, object, index), rel, big_endian);
+}
+
+/** @p offset is symbolic, or a constant inside an object of @p size. */
+static bool fits_constant_offset(const expr2tc &offset, uint64_t size)
+{
+  if (!is_constant_int2t(offset))
+    return true;
+  const BigInt &off = to_constant_int2t(offset).value;
+  return !off.is_negative() && off.to_uint64() <= size;
+}
+
+/** n bytes fit in an object of @p size from byte @p offset. */
+static expr2tc
+fits_object(const expr2tc &offset, uint64_t size, const expr2tc &n)
+{
+  const type2tc &off_t = offset->type;
+  const expr2tc end = constant_int2tc(off_t, BigInt(size));
+  expr2tc fits = and2tc(
+    and2tc(
+      greaterthanequal2tc(offset, gen_zero(off_t)),
+      lessthanequal2tc(offset, end)),
+    lessthanequal2tc(n, typecast2tc(n->type, sub2tc(off_t, end, offset))));
+  simplify(fits);
+  return fits;
+}
+
+/** The bytes a symbolic-length copy from @p src_off of an object of
+ *  @p src_size into @p dst_obj at @p dst_off can reach, or 0 when it cannot
+ *  be modelled without the C loop. */
+static uint64_t symbolic_copy_width(
+  const expr2tc &dst_obj,
+  const expr2tc &dst_off,
+  uint64_t dst_size,
+  const expr2tc &src_off,
+  uint64_t src_size,
+  const type2tc &n_t)
+{
+  // Past this the ite chain costs more than the C loop it replaces; a 4 KiB
+  // copy into an int array solves in about a second (#11005). A symbolic
+  // offset gets memset_symbolic's lower cap (#10991).
+  static const uint64_t MAX_MEMCPY_UNROLL = 4096;
+  static const uint64_t MAX_MEMCPY_UNROLL_SYMBOLIC_OFFSET = 1024;
+
+  if (
+    !fits_constant_offset(src_off, src_size) ||
+    !fits_constant_offset(dst_off, dst_size))
+    return 0;
+  const bool symbolic_dst = !is_constant_int2t(dst_off);
+  const bool symbolic_src = !is_constant_int2t(src_off);
+  // At a symbolic destination offset the copy is a chain of stores, which
+  // needs the destination to be an array of bytes.
+  if (symbolic_dst && (!is_array_type(dst_obj) || multibyte_array(dst_obj)))
+    return 0;
+
+  const uint64_t src_first =
+    symbolic_src ? 0 : to_constant_int2t(src_off).value.to_uint64();
+  const uint64_t dst_first =
+    symbolic_dst ? 0 : to_constant_int2t(dst_off).value.to_uint64();
+  const uint64_t nbytes = std::min(src_size - src_first, dst_size - dst_first);
+  if (!symbolic_src && !symbolic_dst)
+    return nbytes > MAX_MEMCPY_UNROLL ? 0 : nbytes;
+  // A signed length would let a negative n pass the bounds claim as a no-op.
+  return is_unsignedbv_type(n_t) && nbytes <= MAX_MEMCPY_UNROLL_SYMBOLIC_OFFSET
+           ? nbytes
+           : 0;
+}
+
+/** @p dst_obj after copying the first @p n of @p nbytes bytes from
+ *  @p src_obj at @p src_off to @p dst_off. The source is read from its value
+ *  *before* the assignment, so an overlapping copy keeps the memmove
+ *  semantics the constant-length path already has. */
+static expr2tc copy_symbolic_length(
+  const expr2tc &dst_obj,
+  const expr2tc &dst_off,
+  const expr2tc &src_obj,
+  const expr2tc &src_off,
+  const expr2tc &n,
+  uint64_t nbytes)
+{
+  const bool be = target_is_big_endian();
+  const type2tc byte_t = get_uint8_type();
+  auto at = [](const expr2tc &off, uint64_t i) {
+    expr2tc pos = add2tc(off->type, off, constant_int2tc(off->type, BigInt(i)));
+    simplify(pos);
+    return pos;
+  };
+  auto copies = [&n](uint64_t i) {
+    return lessthan2tc(constant_int2tc(n->type, BigInt(i)), n);
+  };
+
+  if (is_constant_int2t(dst_off))
+  {
+    const uint64_t first = to_constant_int2t(dst_off).value.to_uint64();
+    std::vector<expr2tc> new_bytes;
+    new_bytes.reserve(nbytes);
+    for (uint64_t i = 0; i < nbytes; ++i)
+      new_bytes.push_back(if2tc(
+        byte_t,
+        copies(i),
+        object_byte_at(src_obj, at(src_off, i), be),
+        object_byte(dst_obj, first + i, be)));
+    return update_object_bytes(dst_obj, first, new_bytes.data(), nbytes, be);
+  }
+
+  const type2tc &elem_t = to_array_type(dst_obj->type).subtype;
+  expr2tc res = dst_obj;
+  for (uint64_t i = 0; i < nbytes; ++i)
+  {
+    const expr2tc pos = at(dst_off, i);
+    expr2tc byte = object_byte_at(src_obj, at(src_off, i), be);
+    if (elem_t != byte_t)
+      byte = typecast2tc(elem_t, byte);
+    // Past n the old byte is stored back; a position the index domain wraps
+    // lands below dst_off, so it cannot undo a copied byte.
+    res = with2tc(
+      dst_obj->type,
+      res,
+      pos,
+      if2tc(elem_t, copies(i), byte, index2tc(elem_t, dst_obj, pos)));
+  }
+  return res;
+}
+
 bool goto_symext::memcpy_symbolic_length(
   const expr2tc &dst_arg,
   const expr2tc &src_arg,
   const expr2tc &n_arg)
 {
-  // Past this the ite chain costs more than the C loop it replaces; a 4 KiB
-  // copy into an int array solves in about a second (#11005).
-  static const uint64_t MAX_MEMCPY_UNROLL = 4096;
-
-  // Passing 0 for the length puts the resolver in its symbolic-length mode:
-  // it reports the bytes available in each object instead of range-checking a
-  // constant read. (Named for memcmp, but the resolution is generic.)
-  expr2tc src_obj, dst_obj;
-  uint64_t src_off, dst_off, src_avail, dst_avail;
+  expr2tc src_obj, dst_obj, src_off, dst_off;
+  uint64_t src_size, dst_size;
   if (
-    !memcmp_resolve_operand(src_arg, 0, src_obj, src_off, src_avail) ||
-    !memcmp_resolve_operand(dst_arg, 0, dst_obj, dst_off, dst_avail, false))
+    !resolve_byte_object(src_arg, src_obj, src_off, src_size) ||
+    !resolve_byte_object(dst_arg, dst_obj, dst_off, dst_size, false))
     return false;
 
-  const uint64_t nbytes = std::min(src_avail, dst_avail);
-  if (nbytes == 0 || nbytes > MAX_MEMCPY_UNROLL)
+  const type2tc n_t = n_arg->type;
+  const uint64_t nbytes =
+    symbolic_copy_width(dst_obj, dst_off, dst_size, src_off, src_size, n_t);
+  if (nbytes == 0)
     return false;
 
-  // Soundness: only the first nbytes bytes are modelled, so if n could exceed
-  // that the real memcpy would run past an object. Claim the bound rather than
-  // silently dropping the access, exactly as intrinsic_memcmp does.
+  // Soundness: only bytes inside both objects are modelled, so if n could
+  // exceed what is left of either the real memcpy would run past an object.
+  // Claim the bound rather than silently dropping the access, exactly as
+  // intrinsic_memcmp does.
   if (
     !options.get_bool_option("no-bounds-check") &&
     !options.get_bool_option("no-pointer-check"))
   {
-    expr2tc in_bounds =
-      lessthanequal2tc(n_arg, constant_int2tc(n_arg->type, BigInt(nbytes)));
+    expr2tc in_bounds = or2tc(
+      equality2tc(n_arg, gen_zero(n_t)),
+      and2tc(
+        fits_object(src_off, src_size, n_arg),
+        fits_object(dst_off, dst_size, n_arg)));
     guard2tc g = cur_state->guard;
     claim(
       implies2tc(g.as_expr(), in_bounds),
       "dereference failure: memcpy length exceeds object bounds");
   }
 
-  // Rebuild the destination a byte at a time, taking the source byte only
-  // where i < n. Both sides are read from the values *before* the assignment,
-  // so an overlapping copy keeps the memmove semantics the constant-length
-  // path already has.
-  const type2tc byte_t = get_uint_type(8);
-  const bool be = config.ansi_c.endianess == configt::ansi_ct::IS_BIG_ENDIAN;
-  const type2tc n_t = n_arg->type;
-
-  std::vector<expr2tc> new_bytes;
-  new_bytes.reserve(nbytes);
-  for (uint64_t i = 0; i < nbytes; ++i)
-  {
-    expr2tc src_byte = object_byte(src_obj, src_off + i, be);
-    expr2tc dst_byte = object_byte(dst_obj, dst_off + i, be);
-    expr2tc within = lessthan2tc(constant_int2tc(n_t, BigInt(i)), n_arg);
-    new_bytes.push_back(if2tc(byte_t, within, src_byte, dst_byte));
-  }
-  expr2tc res =
-    update_object_bytes(dst_obj, dst_off, new_bytes.data(), nbytes, be);
-
+  const expr2tc res =
+    copy_symbolic_length(dst_obj, dst_off, src_obj, src_off, n_arg, nbytes);
   check_read_only_write(
     dst_obj,
     and2tc(
@@ -1252,23 +1373,17 @@ void goto_symext::intrinsic_memmove(
   intrinsic_memcpy_impl(art, func_call, "c:@F@__memmove_impl");
 }
 
-// Resolve @p ptr to a single concrete primitive object with a constant offset.
-// Returns false (caller should bump to the C loop) if the pointer is symbolic,
-// resolves to multiple objects, has a non-constant offset, or the n-byte read
-// would run past the object. On success fills @p object / @p offset.
-bool goto_symext::memcmp_resolve_operand(
+bool goto_symext::resolve_byte_object(
   const expr2tc &ptr,
-  unsigned long number_of_bytes,
   expr2tc &object,
-  uint64_t &offset,
-  uint64_t &avail_bytes,
+  expr2tc &offset,
+  uint64_t &size,
   bool rename_object)
 {
   internal_deref_items.clear();
   expr2tc deref = dereference2tc(get_empty_type(), ptr);
   dereference(deref, dereferencet::INTERNAL);
 
-  // Exactly one target object — a single concrete primitive region.
   if (internal_deref_items.size() != 1)
     return false;
 
@@ -1281,11 +1396,7 @@ bool goto_symext::memcmp_resolve_operand(
   cur_state->rename(item.offset);
   if (!item.object || !item.offset)
     return false;
-
   offset_simplifier(item.offset);
-  if (!is_constant_int2t(item.offset))
-    return false;
-  offset = to_constant_int2t(item.offset).value.to_uint64();
 
   // Scalars and fixed-size arrays are byte-extractable. Structs/unions have a
   // non-flat byte layout we don't model here, and code/empty types have no
@@ -1297,10 +1408,9 @@ bool goto_symext::memcmp_resolve_operand(
     is_empty_type(t))
     return false;
 
-  uint64_t type_size;
   try
   {
-    type_size = type_byte_size(t).to_uint64();
+    size = type_byte_size(t).to_uint64();
   }
   catch (const array_type2t::dyn_sized_array_excp &)
   {
@@ -1311,6 +1421,31 @@ bool goto_symext::memcmp_resolve_operand(
     return false;
   }
 
+  object = item.object;
+  offset = item.offset;
+  return true;
+}
+
+// Resolve @p ptr to a single concrete primitive object with a constant offset.
+// Returns false (caller should bump to the C loop) if the pointer is symbolic,
+// resolves to multiple objects, has a non-constant offset, or the n-byte read
+// would run past the object. On success fills @p object / @p offset.
+bool goto_symext::memcmp_resolve_operand(
+  const expr2tc &ptr,
+  unsigned long number_of_bytes,
+  expr2tc &object,
+  uint64_t &offset,
+  uint64_t &avail_bytes,
+  bool rename_object)
+{
+  expr2tc off;
+  uint64_t type_size;
+  if (
+    !resolve_byte_object(ptr, object, off, type_size, rename_object) ||
+    !is_constant_int2t(off))
+    return false;
+  offset = to_constant_int2t(off).value.to_uint64();
+
   if (offset > type_size)
     return false;
   // For a constant length, require the read to fit; for a symbolic length the
@@ -1318,7 +1453,6 @@ bool goto_symext::memcmp_resolve_operand(
   if (number_of_bytes != 0 && (type_size - offset) < number_of_bytes)
     return false;
 
-  object = item.object;
   avail_bytes = type_size - offset;
   return true;
 }
