@@ -1,0 +1,2 @@
+regression/goto-transcoder/cbmc_kani_default_loop_invariant
+regression/goto-transcoder/cbmc_kani_default_loop_invariant_fail

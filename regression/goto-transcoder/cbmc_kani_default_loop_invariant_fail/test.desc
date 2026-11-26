@@ -1,0 +1,6 @@
+CORE
+main.goto
+--binary
+^Kani goto-binary: verifying loop contracts by incremental BMC$
+s stays below twice n
+^VERIFICATION FAILED$
