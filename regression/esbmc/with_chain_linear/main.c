@@ -2,7 +2,7 @@
  * chain at every write and read made symex quadratic: minutes, not seconds. */
 #include <assert.h>
 
-#define N 8000
+#define N 16000
 int a[N];
 
 int main()

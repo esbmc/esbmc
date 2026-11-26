@@ -1,4 +1,4 @@
 CORE
 main.c
---unwind 8001 --no-summarize-array-loops
+--unwind 16001 --no-summarize-array-loops
 ^VERIFICATION SUCCESSFUL$

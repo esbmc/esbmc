@@ -425,7 +425,9 @@ public:
     bool propagate = true);
 
   /** @p rhs with the earlier writes under its top-level array `with`
-   *  replaced by @p l1_lhs, when they all write that same object. */
+   *  replaced by @p l1_lhs, when they all write that same object, or when
+   *  @p extends_carried: @p rhs's source is the chain @p l1_lhs already
+   *  carries, whose base may be a literal or another object. */
   expr2tc shallow_array_update(
     const expr2tc &rhs,
     const expr2tc &l1_lhs,

@@ -1,7 +1,7 @@
 /* with_chain_linear, with the last element overwritten. */
 #include <assert.h>
 
-#define N 8000
+#define N 16000
 int a[N];
 
 int main()
