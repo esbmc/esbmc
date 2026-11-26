@@ -1,0 +1,3 @@
+regression/esbmc/github_11026
+regression/esbmc/github_11026_fail
+regression/esbmc/github_11026_bounds_fail

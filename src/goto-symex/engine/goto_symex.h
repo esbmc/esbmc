@@ -862,14 +862,17 @@ protected:
   /** Helper for intrinsic_memcmp: resolve @p ptr to a single concrete
    *  primitive object with a constant offset, validating that an
    *  @p number_of_bytes read stays in bounds. Returns false (bump to the C
-   *  loop) on any miss. */
+   *  loop) on any miss. With @p symbolic_offset, a non-constant offset is
+   *  stored there instead, with @p offset 0 and @p avail_bytes the object's
+   *  size. */
   bool memcmp_resolve_operand(
     const expr2tc &ptr,
     unsigned long number_of_bytes,
     expr2tc &object,
     uint64_t &offset,
     uint64_t &avail_bytes,
-    bool rename_object = true);
+    bool rename_object = true,
+    expr2tc *symbolic_offset = nullptr);
 
   /** Claims @p ptr is not NULL unless @p n is zero. */
   void claim_nonnull_operand(
