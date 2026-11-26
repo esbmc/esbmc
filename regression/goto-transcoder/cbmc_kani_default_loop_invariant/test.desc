@@ -1,0 +1,5 @@
+CORE
+main.goto
+--binary
+^Kani goto-binary: verifying loop contracts by incremental BMC$
+^VERIFICATION SUCCESSFUL$

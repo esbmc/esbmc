@@ -173,8 +173,10 @@ bool is_constant_one(const expr2tc &expr)
 
 /// True when a LOOP_INVARIANT already sits in the window goto_loop_invariant's
 /// extractor searches -- the extractor's own constant, so the two agree by
-/// construction. Both invariants would be folded into one conjunction, so
-/// adding a guess next to a user-written one risks failing the user's proof.
+/// construction (the extractor also steps over k-induction's instructions,
+/// but synthesis adds nothing after k-induction). Both invariants would be
+/// folded into one conjunction, so adding a guess next to a user-written one
+/// risks failing the user's proof.
 bool has_user_invariant(
   const goto_programt::targett &head,
   const goto_programt::targett &begin)

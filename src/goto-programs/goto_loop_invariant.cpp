@@ -50,6 +50,7 @@
 // ---------------------------------------------------------------------------
 
 const char *const kSynthesisedInvariantProperty = "synthesised-loop-invariant";
+const char *const kCbmcLoopContractProperty = "cbmc-loop-contract";
 
 /// The base case and inductive step of one invariant carry the same number,
 /// so checked_loop_invariants pairs them without reading their guards.
@@ -118,6 +119,53 @@ static bool is_compiler_temp(goto_programt::const_targett t)
 /// return the invariant expression(s) for the nearest LOOP_INVARIANT found.
 /// Multiple conjuncts are folded into a single and2tc.  Returns an empty
 /// vector when no annotated LOOP_INVARIANT is in range.
+/// Whether a tool, not the user, emitted this invariant, which it places
+/// immediately before its own loop head.
+static bool is_tool_placed_invariant(const goto_programt::instructiont &i)
+{
+  const std::string &tag = i.location.property().as_string();
+  return tag == kSynthesisedInvariantProperty ||
+         tag == kCbmcLoopContractProperty;
+}
+
+/// Hands \p collect each further LOOP_INVARIANT of the loop whose first one
+/// \p it is. These arise when the user writes multiple separate
+/// __ESBMC_loop_invariant() calls (issue #3936). The only instructions that
+/// may appear between consecutive same-loop invariants are compiler-generated
+/// temporaries; any real instruction means we have crossed into a different
+/// context (e.g. outer-loop body), so we stop immediately. The walk ends at the
+/// first other instruction, so it is not bounded by kMaxInvariantSearchBack:
+/// the temporaries of a branching invariant (#11033) alone can exceed it.
+template <class Collect>
+static void collect_same_loop_invariants(
+  goto_programt::targett it,
+  goto_programt::targett begin,
+  Collect &&collect)
+{
+  std::set<const goto_programt::instructiont *> scanned{&*it};
+  while (it != begin)
+  {
+    --it;
+    scanned.insert(&*it);
+    if (it->is_loop_invariant())
+    {
+      const std::list<expr2tc> &extra = it->get_loop_invariants();
+      if (!extra.empty())
+        collect(extra);
+      continue;
+    }
+    if (is_compiler_temp(it))
+      continue;
+    // `f() || g()` in an invariant lowers to a branch that stays inside the
+    // temporaries it computes (#11033).
+    if (
+      it->is_goto() && !it->targets.empty() &&
+      scanned.count(&*it->targets.front()))
+      continue;
+    break; // real instruction — stop clustering
+  }
+}
+
 static std::vector<expr2tc> extract_invariants_near(
   goto_programt::targett loop_head,
   goto_programt::targett begin)
@@ -155,6 +203,9 @@ static std::vector<expr2tc> extract_invariants_near(
   while (it != begin && dist < goto_loop_invariantt::kMaxInvariantSearchBack)
   {
     --it;
+    // k-induction instruments this loop ahead of its head (#11081).
+    if (it->inductive_step_instruction)
+      continue;
     ++dist;
 
     if (!it->is_loop_invariant())
@@ -172,53 +223,21 @@ static std::vector<expr2tc> extract_invariants_near(
     // A user-written invariant keeps the historical proximity-only behaviour:
     // the frontend may legitimately place it further from the head, and #3936
     // depends on that latitude.
-    if (
-      it->location.property().as_string() == kSynthesisedInvariantProperty &&
-      crossed_real_instruction)
+    if (is_tool_placed_invariant(*it) && crossed_real_instruction)
     {
-      // The count line has already reported this as synthesised. Say so rather
-      // than drop it silently: the rule leans on the marker sitting immediately
-      // before its own head, so if a future pass ever inserts real work there,
-      // invariants would start disappearing with no signal at all.
+      // Say so rather than drop it silently: the rule leans on the marker
+      // sitting immediately before its own head, so if a future pass ever
+      // inserts real work there, invariants would start disappearing with no
+      // signal at all.
       log_debug(
         "loop-invariant",
-        "ignoring a synthesised loop invariant that belongs to another loop");
+        "ignoring a loop invariant that belongs to another loop");
       return invariants;
     }
 
     collect(inv_list);
-
-    // Phase 2: collect any additional LOOP_INVARIANT instructions that belong
-    // to the same loop.  These arise when the user writes multiple separate
-    // __ESBMC_loop_invariant() calls (issue #3936).  The only instructions
-    // that may appear between consecutive same-loop invariants are compiler-
-    // generated temporaries; any real instruction means we have crossed into
-    // a different context (e.g. outer-loop body), so we stop immediately.
-    // The walk ends at the first other instruction, so it is not bounded by
-    // kMaxInvariantSearchBack: the temporaries of a branching invariant
-    // (#11033) alone can exceed it.
-    std::set<const goto_programt::instructiont *> scanned{&*it};
-    while (it != begin)
-    {
-      --it;
-      scanned.insert(&*it);
-      if (it->is_loop_invariant())
-      {
-        const std::list<expr2tc> &extra = it->get_loop_invariants();
-        if (!extra.empty())
-          collect(extra);
-        continue;
-      }
-      if (is_compiler_temp(it))
-        continue;
-      // `f() || g()` in an invariant lowers to a branch that stays inside the
-      // temporaries it computes (#11033).
-      if (
-        it->is_goto() && !it->targets.empty() &&
-        scanned.count(&*it->targets.front()))
-        continue;
-      break; // real instruction — stop clustering
-    }
+    // Phase 2: the loop's further invariants.
+    collect_same_loop_invariants(it, begin, collect);
     break; // done: found the invariant group for this loop
   }
 
@@ -366,6 +385,28 @@ void goto_loop_invariantt::convert_loop_with_invariant(loopst &loop)
   active_loop_assigns.clear();
 }
 
+/// The LOOP_INVARIANT at most kMaxInvariantSearchBack instructions before
+/// \p loop_head, not counting k-induction's instrumentation of the loop
+/// (#11081), or the instruction where the search stopped.
+static goto_programt::targett find_loop_invariant_before(
+  goto_programt &body,
+  goto_programt::targett loop_head)
+{
+  goto_programt::targett it = loop_head;
+  size_t back_dist = 0;
+  while (it != body.instructions.begin() &&
+         back_dist < goto_loop_invariantt::kMaxInvariantSearchBack)
+  {
+    --it;
+    if (it->inductive_step_instruction)
+      continue;
+    ++back_dist;
+    if (it->is_loop_invariant())
+      break;
+  }
+  return it;
+}
+
 std::vector<expr2tc>
 goto_loop_invariantt::extract_loop_invariants(const loopst &loop)
 {
@@ -376,35 +417,13 @@ goto_loop_invariantt::extract_loop_invariants(const loopst &loop)
 std::vector<expr2tc>
 goto_loop_invariantt::extract_loop_assigns(const loopst &loop)
 {
-  std::vector<expr2tc> assigns;
-
-  goto_programt::targett loop_head = loop.get_original_loop_head();
-
-  if (loop_head == goto_function.body.instructions.begin())
-    return assigns;
-
-  // Search backwards from loop head to find LOOP_INVARIANT with assigns targets
-  goto_programt::targett search_it = loop_head;
-  size_t search_distance = 0;
-
-  while (search_it != goto_function.body.instructions.begin() &&
-         search_distance < goto_loop_invariantt::kMaxInvariantSearchBack)
-  {
-    --search_it;
-    ++search_distance;
-
-    if (search_it->is_loop_invariant())
-    {
-      auto const &targets = search_it->get_loop_assigns_targets();
-      for (const auto &target : targets)
-      {
-        assigns.push_back(target);
-      }
-      break;
-    }
-  }
-
-  return assigns;
+  // Empty when the search stops short of a LOOP_INVARIANT, the only
+  // instruction that carries contract data.
+  const std::list<expr2tc> targets =
+    find_loop_invariant_before(
+      goto_function.body, loop.get_original_loop_head())
+      ->get_loop_assigns_targets();
+  return {targets.begin(), targets.end()};
 }
 
 void goto_loop_invariantt::collect_symbols(
@@ -516,25 +535,6 @@ static bool jumps_past(
       return true;
   }
   return false;
-}
-
-/// The LOOP_INVARIANT at most kMaxInvariantSearchBack instructions before
-/// \p loop_head, or the instruction where the search stopped.
-static goto_programt::targett find_loop_invariant_before(
-  goto_programt &body,
-  goto_programt::targett loop_head)
-{
-  goto_programt::targett it = loop_head;
-  size_t back_dist = 0;
-  while (it != body.instructions.begin() &&
-         back_dist < goto_loop_invariantt::kMaxInvariantSearchBack)
-  {
-    --it;
-    ++back_dist;
-    if (it->is_loop_invariant())
-      break;
-  }
-  return it;
 }
 
 /// Shared implementation used by both the legacy loop-invariant pass and the

@@ -1,6 +1,7 @@
 #include <goto-programs/read_cbmc_goto_object.h>
 #include <goto-programs/cbmc_adapter.h>
 #include <goto-programs/goto_functions.h>
+#include <goto-programs/goto_loop_invariant.h>
 #include <goto-programs/goto_program_irep.h>
 #include <util/lang/c_types.h>
 #include <util/config/config.h>
@@ -429,6 +430,7 @@ static void add_loop_invariants(const irept &function_irep, goto_programt &body)
     {
       const goto_programt::targett head = ins->targets.front();
       marker.location = head->location;
+      marker.location.property(kCbmcLoopContractProperty);
       marker.function = head->function;
       const goto_programt::targett placed =
         body.instructions.insert(head, std::move(marker));
