@@ -1,0 +1,3 @@
+regression/goto-transcoder/cbmc_loop_contract_kinduction
+regression/goto-transcoder/github_11081
+regression/goto-transcoder/github_11081_fail
