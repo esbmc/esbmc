@@ -317,6 +317,9 @@ void smt_solver_baset::pop_ctx()
     flattened_values, [](const auto &kv) { return kv.second.empty(); });
   std::erase_if(
     ptr_flow, [this](const auto &kv) { return kv.second.first >= ctx_level; });
+  std::erase_if(stored_pointer_bits, [this](const auto &kv) {
+    return kv.second.second >= ctx_level;
+  });
   if (base_addrspace_tied && *base_addrspace_tied >= ctx_level)
     base_addrspace_tied.reset();
   pop_entries(addrspace_stores, ctx_level, &addrspace_storet::asserted_at);

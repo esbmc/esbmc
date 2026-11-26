@@ -59,19 +59,21 @@ public:
   /** Fresh nondeterministic symbol read by the step. */
   std::vector<std::pair<expr2tc, std::string>> inputs;
 
-  // Same as the prefix but for loop body
+  // Same as the prefix but for the step: the loop body, and the suffix after
+  // the loop on the path that exits.
   std::vector<expr2tc> body_defs, body_assumes;
 
   /** `violated` already folds in the assumptions (`!(assumes -> cond)`), so it
-   * is SAT exactly when that claim can fail in this step.
+   * is SAT exactly when that claim can fail in this step. Suffix claims are
+   * guarded by the exit, so a step can violate one without a successor.
    */
   std::vector<propertyt> bad;
 
   /// Guard for the loop condition (usually trivial true for unbounded loops).
   expr2tc back_guard;
 
-  /** Facts only the inductive step may assume: the loop entry condition and
-   * interval-analysis bounds.
+  /** Facts only the inductive step may assume, such as interval-analysis
+   * bounds. Never the loop entry condition, which is false in an exit step.
    */
   std::vector<expr2tc> invariants;
 

@@ -1,0 +1,2 @@
+regression/bitwuzla/ts_bmc_callee_loop_fail
+regression/esbmc/ts_dump_interval_invariant
