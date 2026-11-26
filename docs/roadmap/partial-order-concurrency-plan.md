@@ -9,7 +9,8 @@ lists, without assumptions, and checks data races on scalars and deadlocks
 on mutexes and joins. Its counterexamples list steps in the order the
 solver's clocks give them, and its violation witnesses carry thread ids.
 A loop cut by `--no-unwinding-assertions` stops only its own thread and
-the threads that wait for it; the effort figures are estimates.
+the threads that wait for it, and an access inside an atomic section races
+with a plain one; the effort figures are estimates.
 **Origin:** [#10296](https://github.com/esbmc/esbmc/issues/10296), which found
 `--schedule` unsound and slow, and its
 [effort estimate](https://github.com/esbmc/esbmc/issues/10296#issuecomment-6798263610).
@@ -224,8 +225,9 @@ disagreements:
   threads' violations, and a recursion bound is still an assumption on the
   whole equation.
   `github_2386_atomic_write_race_fail`: under `--data-races-check`, no race
-  is reported between a write inside an atomic section and a plain read in
-  `main`.
+  was reported between a write inside an atomic section and a plain read in
+  `main`. Fixed: a section's bounds no longer separate a race, and two
+  accesses inside atomic sections never race (`partial_order_atomic_race*`).
 - False alarms. `github_4434_thread_local`: a `__thread` global is shared.
   `github_9441_atomic_narrow_rmw`: a compound assignment to an `_Atomic`
   object loses an update, as if it were a separate read and write.
