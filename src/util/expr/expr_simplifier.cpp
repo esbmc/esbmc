@@ -3745,6 +3745,26 @@ static std::optional<expr2tc> fold_constant_floatbv_source(
   return std::nullopt;
 }
 
+/// `(T)(void *)x` as `(T)(uintptr_t)x`: the solver gives a pointer made from an
+/// integer that integer as its address (smt_casts.cpp), so the round trip is
+/// exact. Without this, a thread argument passed as `(void *)i` indexes arrays
+/// with an opaque cast (#6480). `(T)NULL` stays: the value set reads NULL
+/// provenance through it (dereferencet::null_offset_check).
+static expr2tc fold_pointer_to_integer(const type2tc &type, const expr2tc &ptr)
+{
+  if (
+    !is_bv_type(type) || config.ansi_c.cheri || !is_typecast2t(ptr) ||
+    !is_pointer_type(ptr) || !is_bv_type(to_typecast2t(ptr).from))
+    return expr2tc();
+
+  const expr2tc &x = to_typecast2t(ptr).from;
+  const unsigned int addr_width = config.ansi_c.address_width;
+  if (x->type->get_width() == addr_width && type->get_width() <= addr_width)
+    return typecast2tc(type, x);
+
+  return typecast2tc(type, typecast2tc(ptraddr_type2(), x));
+}
+
 /// Constant-operand typecasts, dispatched on the source type.
 ///
 /// nullopt when no arm matches, so the caller falls through to the
@@ -3804,6 +3824,8 @@ expr2tc typecast2t::do_simplify() const
     expr2tc zero2 = gen_zero(simp->type);
     return notequal2tc(simp, zero2);
   }
+  else if (expr2tc folded = fold_pointer_to_integer(type, simp))
+    return folded;
   else if (is_pointer_type(type) && is_pointer_type(simp))
   {
     // Casting from one pointer to another is meaningless... except when there's
