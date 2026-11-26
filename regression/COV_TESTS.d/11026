@@ -4,3 +4,4 @@ regression/esbmc/github_11026_src
 regression/esbmc/github_11026_overlap
 regression/esbmc/github_11026_bounds_fail
 regression/esbmc/github_11026_scalar
+regression/esbmc/github_11026_src_bounds_fail

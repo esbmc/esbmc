@@ -1435,13 +1435,12 @@ bool goto_symext::memcmp_resolve_operand(
   unsigned long number_of_bytes,
   expr2tc &object,
   uint64_t &offset,
-  uint64_t &avail_bytes,
-  bool rename_object)
+  uint64_t &avail_bytes)
 {
   expr2tc off;
   uint64_t type_size;
   if (
-    !resolve_byte_object(ptr, object, off, type_size, rename_object) ||
+    !resolve_byte_object(ptr, object, off, type_size) ||
     !is_constant_int2t(off))
     return false;
   offset = to_constant_int2t(off).value.to_uint64();

@@ -832,9 +832,10 @@ protected:
    *  unwinds --unwind times per call). Mirrors intrinsic_memcmp's symbolic-n
    *  path: bound the copy by the objects' own widths, guard each byte position
    *  with i < n, and claim n <= that bound so an over-long copy is still
-   *  reported. An operand at a symbolic offset rebuilds the whole destination
-   *  and reads each source byte through the offset. Returns false when the
-   *  operands cannot be resolved, leaving the caller to bump. */
+   *  reported. A source at a symbolic offset is read through the offset; a
+   *  byte-array destination at a symbolic offset gets one store per byte.
+   *  Returns false when the operands cannot be resolved, leaving the caller
+   *  to bump. */
   bool memcpy_symbolic_length(
     const expr2tc &dst_arg,
     const expr2tc &src_arg,
@@ -879,8 +880,7 @@ protected:
     unsigned long number_of_bytes,
     expr2tc &object,
     uint64_t &offset,
-    uint64_t &avail_bytes,
-    bool rename_object = true);
+    uint64_t &avail_bytes);
 
   /** Claims @p ptr is not NULL unless @p n is zero. */
   void claim_nonnull_operand(
