@@ -1,6 +1,6 @@
-// A loop in a callee that runs several times per step cannot be captured in a
-// one-iteration symbolic run: extraction must refuse and the normal strategy
-// must find the bug.
+// A loop in a callee gets the k-induction havoc followed by an unconditional
+// assume of its condition, which cuts the path when the loop is not entered:
+// extraction must refuse and the normal strategy must find the bug.
 extern unsigned char __VERIFIER_nondet_uchar(void);
 extern void abort(void);
 void reach_error() {}

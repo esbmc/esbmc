@@ -1,6 +1,5 @@
-// The assertion after the loop is only reached by leaving it, which the
-// transition system treats as a dead end: extraction must refuse and the
-// normal strategy must find the bug.
+// The assertion after the loop is only reached by leaving it: the step that
+// exits runs the suffix, so the transition system itself finds the bug.
 extern unsigned char __VERIFIER_nondet_uchar(void);
 extern void abort(void);
 void reach_error() {}
