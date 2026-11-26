@@ -1,0 +1,4 @@
+CORE
+cbmc_calloc_symbolic.goto
+--binary
+^VERIFICATION SUCCESSFUL$

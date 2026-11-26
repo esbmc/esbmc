@@ -91,6 +91,7 @@
  */
 
 // Forward dec.
+class array_convt;
 class fp_convt;
 class ir_ieee_convt;
 class smt_solver_baset;
@@ -470,6 +471,8 @@ public:
     smt_astt left_ast,
     smt_astt right_ast,
     const expr2tc &expr);
+
+  smt_astt convert_extract(const extract2t &ex);
 
   /** Create an integer or SBV/UBV sort */
   smt_sortt mk_int_bv_sort(std::size_t width)
@@ -973,6 +976,10 @@ public:
   void set_array_iface(array_iface *iface);
   /** Stores handle for the floating-point interface. */
   void set_fp_conv(fp_convt *iface);
+  /** As above, for an interface built for this solver, which it then owns. */
+  void set_tuple_iface(std::unique_ptr<tuple_iface> iface);
+  void set_array_iface(std::unique_ptr<array_convt> iface);
+  void set_fp_conv(std::unique_ptr<fp_convt> iface);
   /** Stores handle for the real-arithmetic/enclosure interface. */
   void set_ra_conv(ra_apit *iface);
 
@@ -1037,10 +1044,38 @@ public:
 
   /** Operand pairs of every division seen by note_division_operands. */
   std::set<std::pair<expr2tc, expr2tc>> divided_operand_pairs;
-  /** Create and assert address space constraints on the given object ID
-   *  number. Essentially, this asserts that all the objects to date don't
-   *  overlap with /this/ one. */
-  void finalize_pointer_chain(unsigned int obj_num);
+  /** Assert that object @p obj_num overlaps none of the lower-numbered
+   *  objects. A freeable one among @p registered is kept apart only while
+   *  @p valid_objects, the `__ESBMC_alloc` version @p obj_num was registered
+   *  under, holds it alive. */
+  void finalize_pointer_chain(
+    unsigned int obj_num,
+    const expr2tc &valid_objects,
+    const std::unordered_set<unsigned int> &registered);
+
+  /** A registered object, the `__ESBMC_alloc` version it was registered
+   *  under, the context level it was registered at, the one its layout was
+   *  asserted at, if it has been, and an address below which it and every
+   *  object registered before it fit side by side. */
+  struct object_layoutt
+  {
+    unsigned int obj;
+    expr2tc valid_objects;
+    unsigned int level;
+    std::optional<unsigned int> laid_out_at;
+    BigInt extent;
+  };
+  /** Only a cast between a pointer and an integer reads an address, so the
+   *  quadratic non-overlap constraints wait for the first one (#9221), unless
+   *  the objects may not fit in the lower half of the address space without
+   *  them: there the constraints decide which paths are feasible. */
+  std::vector<object_layoutt> object_layouts;
+  /** The context level the layout was first needed at. */
+  std::optional<unsigned int> layout_needed_at;
+  /** Record object @p obj_num, which reserves at most @p reserved addresses,
+   *  and lay it out if the layout is needed. */
+  void register_layout(unsigned int obj_num, const BigInt &reserved);
+  void lay_out_objects();
 
   /** Typecast data to bools */
   smt_astt convert_typecast_to_bool(const typecast2t &cast);
@@ -1379,6 +1414,11 @@ public:
   smt_astt int_shift_op_array;
 
 private:
+  // A solver's native interface is the solver itself, so only these are freed.
+  std::unique_ptr<tuple_iface> owned_tuple_api;
+  std::unique_ptr<array_convt> owned_array_api;
+  std::unique_ptr<fp_convt> owned_fp_api;
+
   expr2tc get_by_ast_uncached(const type2tc &type, smt_astt a);
 
   double convert_rational_to_double(

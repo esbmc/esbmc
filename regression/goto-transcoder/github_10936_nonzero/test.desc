@@ -1,0 +1,4 @@
+CORE
+github_10936_nonzero.goto
+--binary --function _RNvCseE8bhX8igOp_20github_10936_nonzero7harness --ignore-property-class reachability_check --ignore-property-class cover --unwind 6
+^VERIFICATION SUCCESSFUL$
