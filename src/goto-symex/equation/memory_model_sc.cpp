@@ -59,6 +59,7 @@ bool memory_model_sct::run(symex_target_equationt::SSA_stepst &steps)
   constraints.clear();
   claims.clear();
 
+  block_on_halted_joins(steps);
   collect(steps);
   program_order();
   write_order();
@@ -81,17 +82,17 @@ bool memory_model_sct::run(symex_target_equationt::SSA_stepst &steps)
   return true;
 }
 
-void memory_model_sct::collect(const symex_target_equationt::SSA_stepst &steps)
+void memory_model_sct::collect(symex_target_equationt::SSA_stepst &steps)
 {
-  for (const auto &step : steps)
+  for (auto &step : steps)
   {
     if (!step.is_event() || step.ignore)
       continue;
 
     const size_t id = events.size();
-    events.push_back(
-      {&step,
-       symbol2tc(get_uint32_type(), "__ESBMC_po_clock$" + std::to_string(id))});
+    step.cond =
+      symbol2tc(get_uint32_type(), "__ESBMC_po_clock$" + std::to_string(id));
+    events.push_back({&step, step.cond});
     per_thread[step.source.thread_nr].push_back(id);
 
     if (step.type == symex_targett::SHARED_READ)
@@ -110,6 +111,69 @@ void memory_model_sct::collect(const symex_target_equationt::SSA_stepst &steps)
       locks[object_of(step)].push_back(id);
     else if (step.type == symex_targett::UNLOCK)
       unlocks[object_of(step)].push_back(id);
+  }
+}
+
+namespace
+{
+struct haltst
+{
+  std::map<unsigned, std::vector<expr2tc>> halts;
+  std::map<unsigned, std::vector<std::pair<expr2tc, unsigned>>> joins;
+  std::map<unsigned, expr2tc> stuck;
+
+  /// When \p thread never ends: it halts at an unwinding bound, or it joins
+  /// a thread that never ends.
+  expr2tc never_ends(unsigned thread)
+  {
+    if (auto it = stuck.find(thread); it != stuck.end())
+      return it->second;
+    // A thread that joins itself, directly or not, waits at the join.
+    stuck[thread] = gen_false_expr();
+    std::vector<expr2tc> all = halts[thread];
+    for (const auto &[guard, joined] : joins[thread])
+      all.push_back(and2tc(guard, never_ends(joined)));
+    return stuck[thread] = disjunction(all);
+  }
+};
+} // namespace
+
+/// A join on a thread that never ends does not return: the joining thread's
+/// later events do not happen and its later claims hold.
+void memory_model_sct::block_on_halted_joins(
+  symex_target_equationt::SSA_stepst &steps) const
+{
+  haltst h;
+  for (const auto &step : steps)
+  {
+    if (step.ignore)
+      continue;
+    if (step.type == symex_targett::HALT)
+      h.halts[step.source.thread_nr].push_back(step.guard);
+    else if (step.type == symex_targett::JOIN)
+      h.joins[step.source.thread_nr].emplace_back(step.guard, thread_of(step));
+  }
+  if (h.halts.empty())
+    return;
+
+  std::map<unsigned, expr2tc> blocked;
+  for (auto &step : steps)
+  {
+    if (step.ignore || !(step.is_event() || step.is_assert()))
+      continue;
+    expr2tc &now = blocked.try_emplace(step.source.thread_nr, gen_false_expr())
+                     .first->second;
+    if (step.is_assert())
+    {
+      step.cond = or2tc(now, step.cond);
+      if (!is_nil_expr(step.cond_neg))
+        step.cond_neg = and2tc(not2tc(now), step.cond_neg);
+      continue;
+    }
+    // A join that never returns blocks from the join itself.
+    if (step.type == symex_targett::JOIN)
+      now = or2tc(now, and2tc(step.guard, h.never_ends(thread_of(step))));
+    step.guard = and2tc(step.guard, not2tc(now));
   }
 }
 
@@ -218,6 +282,8 @@ void memory_model_sct::atomic_sections()
         begin = id;
       else if (type == symex_targett::ATOMIC_END && depth > 0 && --depth == 0)
         isolate(begin, id);
+      else if (type == symex_targett::HALT && depth > 0)
+        halt_inside(begin, id);
     }
     // A section still open when its thread ends lasts to the thread's end.
     if (depth > 0)
@@ -234,6 +300,19 @@ void memory_model_sct::isolate(size_t begin, size_t end)
           events[begin].step->guard,
           or2tc(before(other, begin), before(end, other))),
         events[begin]);
+}
+
+/// A thread that halts inside an atomic section never leaves it, so every
+/// other event comes before the section.
+void memory_model_sct::halt_inside(size_t begin, size_t halt)
+{
+  for (size_t other = 0; other < events.size(); ++other)
+    if (!same_thread(other, begin))
+      constrain(
+        implies2tc(
+          conjunction({events[halt].step->guard, events[other].step->guard}),
+          before(other, begin)),
+        events[halt]);
 }
 
 void memory_model_sct::mutexes()

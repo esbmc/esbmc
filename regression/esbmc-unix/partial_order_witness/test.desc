@@ -1,0 +1,5 @@
+CORE
+main.c
+--partial-order --unwind 4 --witness-output-yaml -
+^VERIFICATION SUCCESSFUL$
+^- entry_type: "invariant_set"$

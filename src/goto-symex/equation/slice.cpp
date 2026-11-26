@@ -487,6 +487,7 @@ void symex_slicet::slice_step(Step &step)
   case symex_targett::RENUMBER:
     slice_renumber(step);
     break;
+  case symex_targett::HALT:
   case symex_targett::SHARED_READ:
   case symex_targett::SHARED_WRITE:
   case symex_targett::SPAWN:
