@@ -27,6 +27,12 @@ namespace loop_invariant
 /// synthesised marker and the loop head it was emitted for, and
 /// goto_invariant_synthesis's reading of a loop body.
 bool is_inert_scan_instruction(goto_programt::const_targett t);
+
+/// Whether \p t counts toward kMaxInvariantSearchBack. goto_k_induction puts
+/// its havoc block between a loop's marker and its head, one assignment per
+/// variable the loop writes, so counting it pushed the marker out of the
+/// window (#11081).
+bool counts_toward_search_window(goto_programt::const_targett t);
 } // namespace loop_invariant
 
 // Forward declaration: full definition is in frame_enforcer.h (included in

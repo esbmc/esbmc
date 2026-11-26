@@ -78,6 +78,11 @@ bool is_inert_scan_instruction(goto_programt::const_targett t)
   return t->is_skip() || t->is_location() || t->is_decl() || t->type == DEAD ||
          t->is_assume();
 }
+
+bool counts_toward_search_window(goto_programt::const_targett t)
+{
+  return !t->inductive_step_instruction;
+}
 } // namespace loop_invariant
 
 /// True for a name the frontend generated rather than the user: ESBMC spells
@@ -155,7 +160,7 @@ static std::vector<expr2tc> extract_invariants_near(
   while (it != begin && dist < goto_loop_invariantt::kMaxInvariantSearchBack)
   {
     --it;
-    ++dist;
+    dist += loop_invariant::counts_toward_search_window(it);
 
     if (!it->is_loop_invariant())
     {
@@ -391,7 +396,7 @@ goto_loop_invariantt::extract_loop_assigns(const loopst &loop)
          search_distance < goto_loop_invariantt::kMaxInvariantSearchBack)
   {
     --search_it;
-    ++search_distance;
+    search_distance += loop_invariant::counts_toward_search_window(search_it);
 
     if (search_it->is_loop_invariant())
     {
@@ -530,7 +535,7 @@ static goto_programt::targett find_loop_invariant_before(
          back_dist < goto_loop_invariantt::kMaxInvariantSearchBack)
   {
     --it;
-    ++back_dist;
+    back_dist += loop_invariant::counts_toward_search_window(it);
     if (it->is_loop_invariant())
       break;
   }

@@ -180,11 +180,11 @@ bool has_user_invariant(
   const goto_programt::targett &begin)
 {
   goto_programt::targett it = head;
-  for (size_t steps = 0;
-       it != begin && steps < goto_loop_invariantt::kMaxInvariantSearchBack;
-       ++steps)
+  size_t steps = 0;
+  while (it != begin && steps < goto_loop_invariantt::kMaxInvariantSearchBack)
   {
     --it;
+    steps += loop_invariant::counts_toward_search_window(it);
     // A marker this pass emitted is not a user's; enclosed_by_user_invariant
     // runs after some have already been inserted.
     if (
