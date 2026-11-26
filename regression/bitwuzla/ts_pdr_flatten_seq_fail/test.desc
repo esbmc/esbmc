@@ -1,0 +1,5 @@
+CORE
+main.c
+--bitwuzla --no-pointer-check --no-bounds-check --ts-pdr --ts-no-fallback
+^Flattened main into one loop over 2 cut points$
+^VERIFICATION FAILED$

@@ -30,6 +30,7 @@
 #include <goto-programs/goto_convert_functions.h>
 #include <goto-programs/goto_inline.h>
 #include <goto-programs/goto_k_induction.h>
+#include <transition-system/ts_flatten.h>
 #include <goto-programs/scalarize_structs.h>
 #include <goto-programs/goto_termination.h>
 #include <esbmc/ranking_synthesis.h>
@@ -596,6 +597,10 @@ bool esbmc_parseoptionst::process_goto_program(
 
     bool is_k_induction =
       needs_k_induction_havoc(cmdline, options, ts_strategy_requested());
+
+    // Before interval analysis and the havoc, which then see one loop.
+    if (ts_strategy_requested())
+      flatten_loops(goto_functions, context);
 
     // --termination reuses k-induction's havoc machinery via
     // goto_termination, so the post-havoc invariant injection applies

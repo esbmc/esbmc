@@ -1,5 +1,6 @@
 CORE
 main.c
 --bitwuzla --no-pointer-check --no-bounds-check --ts-pdr --max-k-step 10
+^WARNING: havocked state holds a pointer or an empty aggregate$
 ^Not a transition system$
 ^VERIFICATION FAILED$

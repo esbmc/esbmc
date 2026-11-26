@@ -1,6 +1,6 @@
 CORE
 main.c
 --no-pointer-check --no-bounds-check --ts-check
-^WARNING: main has more than one loop$
-^TS-CHECK rejected$
+^Flattened main into one loop over 2 cut points$
+^TS-CHECK accepted
 ^VERIFICATION UNKNOWN$
