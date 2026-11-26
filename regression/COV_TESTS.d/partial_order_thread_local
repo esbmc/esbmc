@@ -1,0 +1,2 @@
+regression/esbmc-unix/partial_order_thread_local
+regression/esbmc-unix/partial_order_thread_local_fail

@@ -108,6 +108,8 @@ protected:
   /// Allocated in insert_havoc_and_assume_before_condition, freed in
   /// convert_loop_with_invariant after insert_inductive_step_and_termination.
   frame_enforcert *active_frame_enforcer = nullptr;
+  /// Back edges an enclosing loop's contract already checks and cuts.
+  std::set<const goto_programt::instructiont *> absorbed_back_edges;
   /// Assigns targets for the current loop (mirrors loop_assigns passed to
   /// insert_havoc_and_assume_before_condition, kept for use in the ASSERT
   /// step).
@@ -176,6 +178,7 @@ protected:
   // (prepends side_effects before the ASSERT)
   void insert_inductive_step_and_termination(
     const loopst &loop,
+    goto_programt::targett loop_exit,
     const std::vector<expr2tc> &invariants,
     const goto_programt &side_effects);
 };
