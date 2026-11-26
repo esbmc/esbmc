@@ -15,6 +15,8 @@
 /// reads the object, atomically with its write.
 /// A spawned thread's events follow its spawn and precede every join on it,
 /// and no other thread's event falls inside an atomic section.
+/// A thread that halts at an unwinding bound never ends, and neither does a
+/// thread that joins it: no event after that join happens.
 /// A lock is taken only if every earlier lock of its mutex was released
 /// before it. An execution in which a thread waits forever for a lock is not
 /// one of these, so its violations are not reported.
@@ -66,6 +68,7 @@ private:
   const bool deadlocks;
   size_t n_claims = 0;
 
+  void block_on_halted_joins(symex_target_equationt::SSA_stepst &steps) const;
   void collect(symex_target_equationt::SSA_stepst &steps);
   void program_order();
   void write_order();

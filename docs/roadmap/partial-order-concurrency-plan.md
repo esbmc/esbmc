@@ -1,13 +1,14 @@
 # Plan — a partial-order encoding for concurrent programs (`--partial-order`)
 
-**Status (2026-11-25):** phases 1 to 3 in review; phase 4 started. Phase 0 is
+**Status (2026-11-26):** phases 1 to 3 in review; phase 4 started. Phase 0 is
 done, with the measurements below (§4), and the maintainer decided **go** on
 2026-11-24. `--partial-order` verifies programs on global scalars and arrays
 of them, including through pointers, with threads created in loops, mutexes,
 condition variables, `pthread_exit` and the scheduler intrinsics phase 1
 lists, without assumptions, and checks data races on scalars and deadlocks
 on mutexes and joins. Its counterexamples list steps in the order the
-solver's clocks give them, and its violation witnesses carry thread ids;
+solver's clocks give them, and its violation witnesses carry thread ids.
+A loop cut by `--no-unwinding-assertions` stops only its own thread;
 the effort figures are estimates.
 **Origin:** [#10296](https://github.com/esbmc/esbmc/issues/10296), which found
 `--schedule` unsound and slow, and its
@@ -16,7 +17,7 @@ the effort figures are estimates.
 [#10989](https://github.com/esbmc/esbmc/pull/10989) repaired `--schedule`;
 its formula still grows exponentially with `--context-bound`. Tracked in
 [#10990](https://github.com/esbmc/esbmc/issues/10990).
-**Last updated:** 2026-11-25.
+**Last updated:** 2026-11-26.
 
 ## 1. Goal
 
@@ -213,7 +214,11 @@ disagreements:
 - Missed violations. `esbmc-unix2/01_pthread46` (`--unwind 2
   --no-unwinding-assertions`): two threads spawned in `main`'s `while(1)`
   loop both run `s++; assert(s == 1)`; the unwinding assumption that ends
-  `main` probably also hides the threads' failure.
+  `main` also hid the threads' failure. Fixed: past its bound a thread
+  records a HALT event instead of that assumption, and a join on a halted
+  thread does not return, so only the joiner's later events and claims
+  drop out (`partial_order_loop_bound*`). `--deadlock-check` keeps the
+  assumption.
   `github_2386_atomic_write_race_fail`: under `--data-races-check`, no race
   is reported between a write inside an atomic section and a plain read in
   `main`.

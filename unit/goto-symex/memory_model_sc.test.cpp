@@ -11,6 +11,7 @@
 #define CATCH_CONFIG_MAIN
 #include <catch2/catch.hpp>
 
+#include <functional>
 #include <map>
 #include <set>
 #include <string>
@@ -794,4 +795,103 @@ TEST_CASE("other claims hold until every thread ends", "[po]")
       CHECK(is_true(cond) == (at == 2));
     }
   }
+}
+
+/// Thread 0 spawns 1, claims false, joins 1, then reads x and claims false
+/// again; thread 1 writes x and halts at an unwinding bound when h holds.
+struct halted_joint
+{
+  contextt ctx;
+  namespacet ns{ctx};
+  symex_target_equationt eq{ns};
+  const expr2tc h = symbol2tc(get_bool_type(), "h");
+
+  void claim(const std::string &comment)
+  {
+    symex_targett::sourcet source;
+    eq.assertion(
+      gen_true_expr(),
+      gen_false_expr(),
+      gen_true_expr(),
+      comment,
+      {},
+      source,
+      0);
+  }
+
+  halted_joint()
+  {
+    add_event(eq, 0, symex_targett::SPAWN, thread_id(1));
+    claim("before join");
+    add_event(eq, 0, symex_targett::JOIN, thread_id(1));
+    add_event(eq, 0, symex_targett::SHARED_READ, x(2));
+    claim("after join");
+    add_event(eq, 1, symex_targett::SHARED_WRITE, x(1));
+    symex_targett::sourcet source;
+    source.thread_nr = 1;
+    eq.event(h, symex_targett::HALT, expr2tc(), source);
+    memory_model_sct().run(eq.SSA_steps);
+  }
+
+  expr2tc under(expr2tc e, bool halted) const
+  {
+    substitute(e, {{h, halted ? gen_true_expr() : gen_false_expr()}});
+    simplify(e);
+    REQUIRE(is_constant_bool2t(e));
+    return e;
+  }
+
+  const symex_target_equationt::SSA_stept &step(
+    std::function<bool(const symex_target_equationt::SSA_stept &)> match) const
+  {
+    for (const auto &s : eq.SSA_steps)
+      if (match(s))
+        return s;
+    FAIL("no such step");
+    return eq.SSA_steps.front();
+  }
+};
+
+TEST_CASE("a join on a halted thread does not return", "[po]")
+{
+  halted_joint f;
+  const auto &read =
+    f.step([](const auto &s) { return s.type == symex_targett::SHARED_READ; });
+  const auto &join =
+    f.step([](const auto &s) { return s.type == symex_targett::JOIN; });
+  const auto &before =
+    f.step([](const auto &s) { return s.comment == "before join"; });
+  const auto &after =
+    f.step([](const auto &s) { return s.comment == "after join"; });
+
+  CHECK(is_false(f.under(read.guard, true)));
+  CHECK(is_true(f.under(read.guard, false)));
+  CHECK(is_true(f.under(join.guard, true)));
+  CHECK(is_true(f.under(after.cond, true)));
+  CHECK(is_false(f.under(after.cond, false)));
+  CHECK(is_false(f.under(before.cond, true)));
+}
+
+TEST_CASE("a thread joining a halted thread never ends either", "[po]")
+{
+  contextt ctx;
+  namespacet ns(ctx);
+  symex_target_equationt eq(ns);
+  const expr2tc h = symbol2tc(get_bool_type(), "h");
+  add_event(eq, 0, symex_targett::JOIN, thread_id(1));
+  add_event(eq, 0, symex_targett::SHARED_READ, x(2));
+  add_event(eq, 1, symex_targett::JOIN, thread_id(2));
+  symex_targett::sourcet source;
+  source.thread_nr = 2;
+  eq.event(h, symex_targett::HALT, expr2tc(), source);
+  memory_model_sct().run(eq.SSA_steps);
+
+  for (const auto &s : eq.SSA_steps)
+    if (s.type == symex_targett::SHARED_READ)
+    {
+      expr2tc guard = s.guard;
+      substitute(guard, {{h, gen_true_expr()}});
+      simplify(guard);
+      CHECK(is_false(guard));
+    }
 }

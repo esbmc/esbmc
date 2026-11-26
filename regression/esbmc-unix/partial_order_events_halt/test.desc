@@ -1,0 +1,5 @@
+CORE
+main.c
+--partial-order --program-only --unwind 2 --no-unwinding-assertions
+^/\* \d+ \*/ Thread 1 file .*main\.c line 8 .*function t\nHALT$
+\A(?![\s\S]*VERIFICATION)[\s\S]*\Z
