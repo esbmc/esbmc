@@ -731,8 +731,9 @@ expr2tc compute_pointer_offset(const expr2tc &expr, const namespacet *ns)
   /* Only an offset with a symbolic index takes the byte form: moving
    * constant offsets too made Z3 12x slower on realloc14 and github_9375. */
   if (is_index2t(expr) && !is_constant_int2t(to_index2t(expr).index))
-    if (expr2tc bytes = type_sizet(ns).pointer_offset_bytes(expr);
-        !is_nil_expr(bytes))
+    if (
+      expr2tc bytes = type_sizet(ns).pointer_offset_bytes(expr);
+      !is_nil_expr(bytes))
       return bytes;
 
   expr2tc bits = compute_pointer_offset_bits(expr, ns);
