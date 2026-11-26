@@ -1,5 +1,5 @@
 CORE
 main.goto
---binary --k-induction --loop-invariant-check --max-k-step 2
+--binary --k-induction --loop-invariant-check --max-k-step 4
 ^Processing 1 loop invariant$
 ^VERIFICATION SUCCESSFUL$

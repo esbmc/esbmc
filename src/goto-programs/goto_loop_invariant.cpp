@@ -352,8 +352,9 @@ static bool lands_on_head(
   return true;
 }
 
-/// A CBMC contract holds at its loop's head, so a back edge into that head from
-/// an inner loop sharing it must re-establish the invariant too (#11085).
+/// goto-cc gives a loop at the start of a do-while body the do-while's head, so
+/// a back edge from that inner loop must re-establish a CBMC contract on the
+/// head too (#11085).
 static std::vector<goto_programt::targett>
 inner_back_edges_to_head(goto_programt &body, const loopst &loop)
 {

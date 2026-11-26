@@ -1,5 +1,5 @@
 CORE
 main.goto
---binary --loop-invariant-check
+--binary --loop-invariant-check --unwind 4
 ^Processing 1 loop invariant$
 ^VERIFICATION SUCCESSFUL$
