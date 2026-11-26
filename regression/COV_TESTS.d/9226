@@ -1,0 +1,3 @@
+regression/smtlib/github_9226_formula
+regression/esbmc/github_9226
+regression/esbmc/github_9226_fail
