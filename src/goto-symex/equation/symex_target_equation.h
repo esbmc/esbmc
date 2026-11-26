@@ -148,8 +148,7 @@ public:
     }
     bool is_event() const
     {
-      return type >= symex_targett::SHARED_READ &&
-             type <= symex_targett::UNLOCK;
+      return type >= symex_targett::SHARED_READ && type <= symex_targett::HALT;
     }
     bool adds_no_constraint() const
     {

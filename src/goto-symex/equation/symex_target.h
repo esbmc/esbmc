@@ -34,7 +34,8 @@ public:
     ATOMIC_BEGIN,
     ATOMIC_END,
     LOCK,
-    UNLOCK
+    UNLOCK,
+    HALT
   };
 
   struct sourcet
@@ -103,8 +104,8 @@ public:
 
   /// Record a --partial-order event. \p symbol is the SSA symbol a shared
   /// read or write accesses, the thread id a spawn creates or a join waits
-  /// for, and nil for an atomic-section event. A write that updates part of
-  /// an object also reads it: \p old names the value it updates.
+  /// for, and nil for an atomic-section event or a halt. A write that updates
+  /// part of an object also reads it: \p old names the value it updates.
   virtual void event(
     const expr2tc &guard,
     step_typet type,
