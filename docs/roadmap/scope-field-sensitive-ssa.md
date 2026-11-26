@@ -40,8 +40,8 @@ host and made no wrong one, so the Phase 2 gate is met on soundness. It is
 not met on timing: the flag costs about 14-18% CPU where it splits a struct,
 and three near-limit tasks may time out under suite load (§8.37). Phase 3
 may start with that exception recorded.**
-> Phase 3, first part (nested structs; arrays of structs and k-induction
-> havoc are not started): a struct member of a split object is split in turn,
+> Phase 3, first part (nested structs; arrays of structs are not started, and
+> k-induction havoc already goes through member chains, §8.42): a struct member of a split object is split in turn,
 > up to 4096 leaves per object (§8.38). The gate is not met: see §8.38.
 > The corpus is in `regression/field-sensitivity/`
 > with baselines, and the census has been run and reverted. Phase 1 adds
@@ -2564,4 +2564,24 @@ about 990 C++ tests did not run in the budget.
 Not measured: the rest of the C and C++ tests, the Python suite, Bitwuzla,
 the corpus 2x bar, the unreachability harnesses, the assert-enabled build,
 SV-COMP. Arrays of structs and k-induction havoc are not started. The Phase 3
+gate stays unmet.
+
+### 8.42 Phase 3: k-induction havoc and arrays of structs on master `170a23e993`
+
+Z3-only RelWithDebInfo build of master `170a23e993` (the sandbox needed
+`libboost-*-dev`, `bison`, `flex` and `libc6-dev-i386` for the 32-bit libc
+model; the build takes about 35 minutes on 4 cores).
+
+- `havoc_targets` (`goto_k_induction.cpp:452`) already replaces a symbol that a
+  loop writes only through member chains by those chains, so the Phase 3
+  k-induction item has no separate havoc to add for split objects. One program
+  (a loop incrementing `s.a` of a split `struct { int a; int b; int c[3]; }`,
+  asserting `s.b == 5`) gives the same verdict, "successful by the inductive
+  step at k = 2", with and without the flag, and the flag splits `s`. No
+  other k-induction program was run in this entry; §8.40 has the suite.
+- An array of structs indexed by constants (`struct P a[3]`) is not split:
+  `splittable` (`split_structs.cpp`) accepts struct-typed objects only.
+  This is the remaining Phase 3 item, and it is not started.
+
+Not measured: everything else the Phase 3 gate lists, as in §8.41. The Phase 3
 gate stays unmet.
