@@ -372,6 +372,28 @@ void goto_loop_invariantt::convert_loop_with_invariant(loopst &loop)
   active_loop_assigns.clear();
 }
 
+/// The LOOP_INVARIANT at most kMaxInvariantSearchBack instructions before
+/// \p loop_head, not counting k-induction's instrumentation of the loop
+/// (#11081), or the instruction where the search stopped.
+static goto_programt::targett find_loop_invariant_before(
+  goto_programt &body,
+  goto_programt::targett loop_head)
+{
+  goto_programt::targett it = loop_head;
+  size_t back_dist = 0;
+  while (it != body.instructions.begin() &&
+         back_dist < goto_loop_invariantt::kMaxInvariantSearchBack)
+  {
+    --it;
+    if (it->inductive_step_instruction)
+      continue;
+    ++back_dist;
+    if (it->is_loop_invariant())
+      break;
+  }
+  return it;
+}
+
 std::vector<expr2tc>
 goto_loop_invariantt::extract_loop_invariants(const loopst &loop)
 {
@@ -382,35 +404,13 @@ goto_loop_invariantt::extract_loop_invariants(const loopst &loop)
 std::vector<expr2tc>
 goto_loop_invariantt::extract_loop_assigns(const loopst &loop)
 {
-  std::vector<expr2tc> assigns;
-
-  goto_programt::targett loop_head = loop.get_original_loop_head();
-
-  if (loop_head == goto_function.body.instructions.begin())
-    return assigns;
-
-  // Search backwards from loop head to find LOOP_INVARIANT with assigns targets
-  goto_programt::targett search_it = loop_head;
-  size_t search_distance = 0;
-
-  while (search_it != goto_function.body.instructions.begin() &&
-         search_distance < goto_loop_invariantt::kMaxInvariantSearchBack)
-  {
-    --search_it;
-    ++search_distance;
-
-    if (search_it->is_loop_invariant())
-    {
-      auto const &targets = search_it->get_loop_assigns_targets();
-      for (const auto &target : targets)
-      {
-        assigns.push_back(target);
-      }
-      break;
-    }
-  }
-
-  return assigns;
+  // Empty when the search stops short of a LOOP_INVARIANT, the only
+  // instruction that carries contract data.
+  const std::list<expr2tc> targets =
+    find_loop_invariant_before(
+      goto_function.body, loop.get_original_loop_head())
+      ->get_loop_assigns_targets();
+  return {targets.begin(), targets.end()};
 }
 
 void goto_loop_invariantt::collect_symbols(
@@ -522,27 +522,6 @@ static bool jumps_past(
       return true;
   }
   return false;
-}
-
-/// The LOOP_INVARIANT at most kMaxInvariantSearchBack instructions before
-/// \p loop_head, or the instruction where the search stopped.
-static goto_programt::targett find_loop_invariant_before(
-  goto_programt &body,
-  goto_programt::targett loop_head)
-{
-  goto_programt::targett it = loop_head;
-  size_t back_dist = 0;
-  while (it != body.instructions.begin() &&
-         back_dist < goto_loop_invariantt::kMaxInvariantSearchBack)
-  {
-    --it;
-    if (it->inductive_step_instruction)
-      continue;
-    ++back_dist;
-    if (it->is_loop_invariant())
-      break;
-  }
-  return it;
 }
 
 /// Shared implementation used by both the legacy loop-invariant pass and the

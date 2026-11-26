@@ -1,3 +1,4 @@
 regression/goto-transcoder/cbmc_loop_contract_kinduction
 regression/goto-transcoder/github_11081
 regression/goto-transcoder/github_11081_fail
+regression/loop-invariants/loop_assigns_check_fail_kinduction
