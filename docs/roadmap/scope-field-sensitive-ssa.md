@@ -2538,3 +2538,30 @@ with the flag forced on, Bitwuzla, the corpus 2x bar under Bitwuzla,
 the unreachability harnesses, the assert-enabled build and SV-COMP. Arrays of
 structs and k-induction havoc of field symbols are not started. The Phase 3
 gate stays unmet.
+
+### 8.41 Phase 3, part 1: C and C++ on master `7a0712557`
+
+Z3-only RelWithDebInfo build of master `7a0712557` merged into this branch
+(Bitwuzla's dependencies are not installed in the sandbox, nor is Boolector).
+The flag was forced on by a wrapper script around the binary; ctest
+`--timeout 60`, `-j4`, each run capped at 590 s.
+
+- C, `regression/esbmc/`, test numbers 3000 up: 829 started, 823 passed. The
+  six failures (`overflow_10_fir`, `overflow_16_fir_new`,
+  `tuple_const_array_*`) pass `--boolector`, which this build lacks; they
+  fail the same way with the flag off.
+- C, test numbers 1 to 2999: the run reached 1401 of 2999 tests, 1349 passed.
+  Of the 11 failures that are not `field_sensitive_ssa_*` (those pass the flag
+  themselves), 10 fail identically with the flag off. The eleventh,
+  `counterexample_unresolved_component_fail`, is the §8.40 `h.p` row.
+- C++, `esbmc-cpp/cpp` label: 494 of 1482 started, 483 passed. The failures
+  are `ch8_5`, which fails with the flag off, and the six
+  `field_sensitive_ssa_*` tests that pass the flag themselves.
+
+No verdict changed with the flag on in any test that ran. About 1600 C and
+about 990 C++ tests did not run in the budget.
+
+Not measured: the rest of the C and C++ tests, the Python suite, Bitwuzla,
+the corpus 2x bar, the unreachability harnesses, the assert-enabled build,
+SV-COMP. Arrays of structs and k-induction havoc are not started. The Phase 3
+gate stays unmet.
