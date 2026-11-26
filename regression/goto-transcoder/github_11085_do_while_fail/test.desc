@@ -1,0 +1,5 @@
+CORE
+main.goto
+--binary --loop-invariant-check --unwind 4
+^  FAILED       \[main.assertion.3\]            line 17  loop invariant inductive step$
+^VERIFICATION FAILED$
