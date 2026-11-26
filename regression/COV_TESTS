@@ -2444,6 +2444,8 @@ regression/python/github_8200_late
 regression/python/github_8200_late_fail
 regression/esbmc-unix/partial_order_events_halt
 regression/esbmc-unix/partial_order_loop_bound
+regression/esbmc-unix/partial_order_loop_bound_atomic
+regression/esbmc-unix/partial_order_loop_bound_atomic_fail
 regression/esbmc-unix/partial_order_loop_bound_fail
 regression/esbmc-unix/partial_order_loop_bound_join
 regression/esbmc-unix/partial_order_loop_bound_join_fail

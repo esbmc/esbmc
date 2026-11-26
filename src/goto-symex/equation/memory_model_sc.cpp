@@ -170,9 +170,10 @@ void memory_model_sct::block_on_halted_joins(
         step.cond_neg = and2tc(not2tc(now), step.cond_neg);
       continue;
     }
-    step.guard = and2tc(step.guard, not2tc(now));
+    // A join that never returns blocks from the join itself.
     if (step.type == symex_targett::JOIN)
       now = or2tc(now, and2tc(step.guard, h.never_ends(thread_of(step))));
+    step.guard = and2tc(step.guard, not2tc(now));
   }
 }
 
@@ -281,6 +282,8 @@ void memory_model_sct::atomic_sections()
         begin = id;
       else if (type == symex_targett::ATOMIC_END && depth > 0 && --depth == 0)
         isolate(begin, id);
+      else if (type == symex_targett::HALT && depth > 0)
+        halt_inside(begin, id);
     }
     // A section still open when its thread ends lasts to the thread's end.
     if (depth > 0)
@@ -297,6 +300,19 @@ void memory_model_sct::isolate(size_t begin, size_t end)
           events[begin].step->guard,
           or2tc(before(other, begin), before(end, other))),
         events[begin]);
+}
+
+/// A thread that halts inside an atomic section never leaves it, so every
+/// other event comes before the section.
+void memory_model_sct::halt_inside(size_t begin, size_t halt)
+{
+  for (size_t other = 0; other < events.size(); ++other)
+    if (!same_thread(other, begin))
+      constrain(
+        implies2tc(
+          conjunction({events[halt].step->guard, events[other].step->guard}),
+          before(other, begin)),
+        events[halt]);
 }
 
 void memory_model_sct::mutexes()

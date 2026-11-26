@@ -866,7 +866,8 @@ TEST_CASE("a join on a halted thread does not return", "[po]")
 
   CHECK(is_false(f.under(read.guard, true)));
   CHECK(is_true(f.under(read.guard, false)));
-  CHECK(is_true(f.under(join.guard, true)));
+  CHECK(is_false(f.under(join.guard, true)));
+  CHECK(is_true(f.under(join.guard, false)));
   CHECK(is_true(f.under(after.cond, true)));
   CHECK(is_false(f.under(after.cond, false)));
   CHECK(is_false(f.under(before.cond, true)));
@@ -894,4 +895,34 @@ TEST_CASE("a thread joining a halted thread never ends either", "[po]")
       simplify(guard);
       CHECK(is_false(guard));
     }
+}
+
+TEST_CASE("a thread halted in an atomic section keeps others out", "[po]")
+{
+  contextt ctx;
+  namespacet ns(ctx);
+  symex_target_equationt eq(ns);
+  const expr2tc h = symbol2tc(get_bool_type(), "h");
+  add_event(eq, 0, symex_targett::SHARED_READ, x(2));
+  add_event(eq, 1, symex_targett::ATOMIC_BEGIN, expr2tc());
+  symex_targett::sourcet source;
+  source.thread_nr = 1;
+  eq.event(h, symex_targett::HALT, expr2tc(), source);
+  eq.event(not2tc(h), symex_targett::ATOMIC_END, expr2tc(), source);
+  memory_model_sct().run(eq.SSA_steps);
+
+  // Main's read at 6, after the section's end, which is off the halted path.
+  valuation v = {
+    {clock(0), tick(6)},
+    {clock(1), tick(2)},
+    {clock(2), tick(3)},
+    {clock(3), tick(5)}};
+  v[h] = gen_true_expr();
+  CHECK_FALSE(all_hold(eq, v));
+  v[h] = gen_false_expr();
+  v[clock(3)] = tick(3);
+  v[clock(2)] = tick(2);
+  v[clock(1)] = tick(1);
+  v[clock(0)] = tick(4);
+  CHECK(all_hold(eq, v));
 }

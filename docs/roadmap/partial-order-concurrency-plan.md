@@ -8,8 +8,8 @@ condition variables, `pthread_exit` and the scheduler intrinsics phase 1
 lists, without assumptions, and checks data races on scalars and deadlocks
 on mutexes and joins. Its counterexamples list steps in the order the
 solver's clocks give them, and its violation witnesses carry thread ids.
-A loop cut by `--no-unwinding-assertions` stops only its own thread;
-the effort figures are estimates.
+A loop cut by `--no-unwinding-assertions` stops only its own thread and
+the threads that wait for it; the effort figures are estimates.
 **Origin:** [#10296](https://github.com/esbmc/esbmc/issues/10296), which found
 `--schedule` unsound and slow, and its
 [effort estimate](https://github.com/esbmc/esbmc/issues/10296#issuecomment-6798263610).
@@ -217,8 +217,12 @@ disagreements:
   `main` also hid the threads' failure. Fixed: past its bound a thread
   records a HALT event instead of that assumption, and a join on a halted
   thread does not return, so only the joiner's later events and claims
-  drop out (`partial_order_loop_bound*`). `--deadlock-check` keeps the
-  assumption.
+  drop out; a thread halted inside an atomic section keeps every other
+  event before it (`partial_order_loop_bound*`). `--deadlock-check` keeps
+  the assumption. Still open: a thread halted while it holds a mutex makes
+  any later lock of that mutex unsatisfiable, which hides the other
+  threads' violations, and a recursion bound is still an assumption on the
+  whole equation.
   `github_2386_atomic_write_race_fail`: under `--data-races-check`, no race
   is reported between a write inside an atomic section and a plain read in
   `main`.
