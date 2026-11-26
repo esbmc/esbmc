@@ -173,6 +173,49 @@ irept mk_bv_const(const irept &bv_type, unsigned long long value)
   return mk_bv_hex_const(bv_type, int_to_hex(value));
 }
 
+// Reads a raw CBMC integer constant. Values are hex strings at this point --
+// fix_expression's own constant branch is what later rewrites them to binary of
+// the type's width -- so parse base 16, and reject anything too wide for the
+// conversion rather than letting stoull throw.
+bool constant_uint(const irept &c, unsigned long long &out)
+{
+  if (c.id() != "constant")
+    return false;
+
+  const std::string v = c.find("value").id_string();
+  if (
+    v.empty() || v.size() > 16 ||
+    v.find_first_not_of("0123456789abcdefABCDEF") != std::string::npos)
+    return false;
+
+  out = std::stoull(v, nullptr, 16);
+  return true;
+}
+
+// The value of `allocate`'s zero-init flag when it is a literal: a bool or
+// integer constant, or the `k != 0` that C's conversion of an integer literal
+// to
+// __CPROVER_bool leaves behind.
+bool constant_flag(const irept &flag, bool &value)
+{
+  const irep_idt &v = flag.find("value").id();
+  if (flag.id() == "constant" && (v == "true" || v == "false"))
+  {
+    value = v == "true";
+    return true;
+  }
+
+  unsigned long long lhs, rhs = 0;
+  const bool ne = flag.id() == "notequal" && flag.get_sub().size() == 2;
+  if (
+    !constant_uint(ne ? flag.get_sub()[0] : flag, lhs) ||
+    (ne && !constant_uint(flag.get_sub()[1], rhs)))
+    return false;
+
+  value = lhs != rhs;
+  return true;
+}
+
 // Hex of the `width`-bit mask that sets the low k bits of every 2k-bit block,
 // built digit by digit so a width above 64 keeps its upper bits.
 static std::string swar_mask_hex(std::size_t width, std::size_t k)
@@ -763,31 +806,45 @@ void fix_expression(irept &irep)
   {
     // CBMC's generic object allocation (remove_java_new.cpp:99-103): operands
     // are the byte size and a zero-initialise flag, and the type is already the
-    // result pointer. That is a malloc in all but name. The flag is false in
-    // every emitted instance because CBMC follows the allocation with its own
-    // zero-initialising assignment; a true flag would mean the fill is implicit
-    // and dropping it would leave the object nondet, so decline instead.
+    // result pointer. With the flag false that is a malloc in all but name. A
+    // true flag (CBMC's calloc, DFCC's write and object sets) becomes a call to
+    // ESBMC's calloc model, which lift_call_expressions hoists to a statement.
     const irept::subt ops = irep.get_sub();
     if (ops.size() != 2)
       throw std::string(
         "CBMC adapter: 'allocate' expects a size and a zero-init flag");
-    const std::string zero_flag = ops[1].find("value").id_string();
-    if (zero_flag != "false" && zero_flag != "0")
+    bool zero;
+    if (!constant_flag(ops[1], zero))
       throw std::string(
-        "CBMC adapter: zero-initialising 'allocate' is not yet supported on "
-        "the --binary path");
+        "CBMC adapter: 'allocate' with a zero-init flag that is not a literal "
+        "is not yet supported on the --binary path");
 
     irept size_arg(irep_idt("typecast"));
     size_arg.add("type") = static_cast<const irept &>(size_type());
     size_arg.get_sub().push_back(ops[0]);
-    fix_expression(size_arg);
 
     irep.id("sideeffect");
-    irep.add("statement") = mk("malloc");
     irep.get_sub().clear();
-    irep.get_sub().push_back(ops[0]);
-    irep.add("#size") = size_arg;
-    irep.add("#type") = static_cast<const irept &>(char_type());
+    if (zero)
+    {
+      irept calloc(irep_idt("symbol"));
+      calloc.set("identifier", "c:@F@calloc");
+      irept args(irep_idt("arguments"));
+      args.get_sub().push_back(mk_bv_const(size_arg.find("type"), 1));
+      args.get_sub().push_back(size_arg);
+
+      irep.add("statement") = mk("function_call");
+      irep.get_sub().push_back(calloc);
+      irep.get_sub().push_back(args);
+    }
+    else
+    {
+      fix_expression(size_arg);
+      irep.add("statement") = mk("malloc");
+      irep.get_sub().push_back(ops[0]);
+      irep.add("#size") = size_arg;
+      irep.add("#type") = static_cast<const irept &>(char_type());
+    }
   }
 
   if (
@@ -2026,25 +2083,6 @@ bool rewrite_array_copy(irept &code)
   code.get_sub().clear();
   code.get_sub().push_back(*dst);
   code.get_sub().push_back(*src);
-  return true;
-}
-
-// Reads a raw CBMC integer constant. Values are hex strings at this point --
-// fix_expression's own constant branch is what later rewrites them to binary of
-// the type's width -- so parse base 16, and reject anything too wide for the
-// conversion rather than letting stoull throw.
-bool constant_uint(const irept &c, unsigned long long &out)
-{
-  if (c.id() != "constant")
-    return false;
-
-  const std::string v = c.find("value").id_string();
-  if (
-    v.empty() || v.size() > 16 ||
-    v.find_first_not_of("0123456789abcdefABCDEF") != std::string::npos)
-    return false;
-
-  out = std::stoull(v, nullptr, 16);
   return true;
 }
 

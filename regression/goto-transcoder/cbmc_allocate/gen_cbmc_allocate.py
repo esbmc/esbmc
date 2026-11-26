@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Regenerate cbmc_allocate{,_fail}.goto.
+"""Regenerate cbmc_allocate{,_fail}.goto and cbmc_allocate_zero_*.goto.
 
 Pins ESBMC's mapping of CBMC's generic `allocate` side effect onto malloc
 (docs/roadmap/jbmc-goto-binary-poc-plan.md 2.6). `allocate` is what remove_java_new
@@ -12,9 +12,14 @@ must report VERIFICATION FAILED -- without it a mapping that dropped the store
 entirely, or returned a pointer to nondet memory, could still satisfy the pass
 fixture if the assertion happened to be vacuous.
 
+The zero fixtures set the zero-init flag, spelled as the bool `true` that JBMC
+and symtab2gb emit or as the integer literal 1, and read the object without a
+store, so only the zero fill makes the pass fixtures hold.
+
     ./gen_cbmc_allocate.py
 
-Regenerated with cbmc 6.8.0 (GOTO_BINARY_VERSION 6).
+Regenerated with cbmc 6.8.0 (GOTO_BINARY_VERSION 6); the zero fixtures with
+cbmc 6.11.0.
 """
 
 import json
@@ -69,7 +74,11 @@ def code(statement, operands, type_id="code"):
     }
 
 
-def build(path, expected):
+FALSE = {"id": "constant", "namedSub": {"value": {"id": "false"}, "type": BOOL}}
+TRUE = {"id": "constant", "namedSub": {"value": {"id": "true"}, "type": BOOL}}
+
+
+def build(path, expected, flag=None, store=True):
     p = sym_expr("p", INT_PTR)
 
     # side_effect_exprt(ID_allocate, {byte_size, zero_init}, int*) -- the shape
@@ -78,13 +87,13 @@ def build(path, expected):
         "id": "side_effect",
         "namedSub": {"statement": {"id": "allocate"}, "type": INT_PTR},
         "sub": [constant("4", SIZE),
-                {"id": "constant",
-                 "namedSub": {"value": {"id": "false"}, "type": BOOL}}],
+                flag or FALSE],
     }
 
+    writes = [code("assign", [deref(p, INT), constant("2a", INT)])]
     body = code("block", [
         code("assign", [p, allocate]),
-        code("assign", [deref(p, INT), constant("2a", INT)]),
+        *(writes if store else []),
         code("assert", [{
             "id": "=",
             "namedSub": {"type": BOOL},
@@ -114,6 +123,12 @@ def main():
     build(
         os.path.join(here, os.pardir, "cbmc_allocate_fail",
                      "cbmc_allocate_fail.goto"), "2b")
+    # The zero fill reads back 0; the fail variants expect 1 instead.
+    for name, flag in (("bool", TRUE), ("literal", constant("1", INT))):
+        for suffix, expected in (("", "0"), ("_fail", "1")):
+            test = f"cbmc_allocate_zero_{name}{suffix}"
+            build(os.path.join(here, os.pardir, test, test + ".goto"),
+                  expected, flag=flag, store=False)
 
 
 if __name__ == "__main__":
