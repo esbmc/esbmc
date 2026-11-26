@@ -1,1 +1,2 @@
 regression/parallel-solving/worker_threads_option
+regression/parallel-solving/worker_threads_negative

@@ -1,0 +1,5 @@
+CORE
+main.c
+
+^Caching time: .*\(removed 2 assertions\)$
+^VERIFICATION SUCCESSFUL$

@@ -1,4 +1,4 @@
-KNOWNBUG
+CORE
 main.c
 --fixedbv --no-slice --ir --z3
 ^VERIFICATION FAILED$

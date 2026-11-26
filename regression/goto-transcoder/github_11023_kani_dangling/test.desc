@@ -1,0 +1,4 @@
+CORE
+../cbmc_kani_dangling_offset/cbmc_kani_dangling_offset.goto
+--binary --function _RNvCskbLgOWONl3G_15dangling_offset7harness --ignore-property-class reachability_check --ignore-property-class cover --ir
+^VERIFICATION SUCCESSFUL$

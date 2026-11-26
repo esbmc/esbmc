@@ -1,0 +1,5 @@
+CORE
+main.c
+--unwind 41 --parallel-solving --parallel-solving-threads -1 --verbosity parallel-solving:9
+^Solving [0-9]+ VCCs in parallel, worker threads: 1$
+^VERIFICATION FAILED$
