@@ -335,7 +335,8 @@ bool is_partial_order_global(const namespacet &ns, const irep_idt &name)
     id.find("pthread_lib") != std::string::npos)
     return false;
   const symbolt *symbol = ns.lookup(name);
-  return symbol && symbol->static_lifetime && !symbol->get_type().is_code() &&
+  return symbol && symbol->static_lifetime && !symbol->is_thread_local &&
+         !symbol->get_type().is_code() &&
          !file_operations::is_bundled_source(
            symbol->location.get_file().as_string());
 }
