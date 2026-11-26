@@ -9,7 +9,8 @@ lists, without assumptions, and checks data races on scalars and deadlocks
 on mutexes and joins. Its counterexamples list steps in the order the
 solver's clocks give them, and its violation witnesses carry thread ids.
 A loop cut by `--no-unwinding-assertions` stops only its own thread and
-the threads that wait for it; the effort figures are estimates.
+the threads that wait for it. A compound assignment to a narrow `_Atomic`
+object is recorded as a write. The effort figures are estimates.
 **Origin:** [#10296](https://github.com/esbmc/esbmc/issues/10296), which found
 `--schedule` unsound and slow, and its
 [effort estimate](https://github.com/esbmc/esbmc/issues/10296#issuecomment-6798263610).
@@ -228,7 +229,9 @@ disagreements:
   `main`.
 - False alarms. `github_4434_thread_local`: a `__thread` global is shared.
   `github_9441_atomic_narrow_rmw`: a compound assignment to an `_Atomic`
-  object loses an update, as if it were a separate read and write.
+  object narrower than int assigns to `(int)c`, which was not recorded as a
+  write. Fixed: writes, element updates and dereference updates see through
+  the cast (`partial_order_atomic_rmw*`).
   `esbmc-unix2/11_time_var_mutex`: a lock built from `abort()` in an atomic
   section probably does not cut the thread's later events.
 - Different semantics. In the four `github_6831_{stats,sleep_sets}*` tests

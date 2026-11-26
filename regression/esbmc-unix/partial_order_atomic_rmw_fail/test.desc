@@ -1,0 +1,5 @@
+CORE
+main.c
+--partial-order
+^  FAILED +\[main\.assertion\.[0-9]+\] .*assertion c != 2$
+^VERIFICATION FAILED$
