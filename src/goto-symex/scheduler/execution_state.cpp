@@ -1036,9 +1036,19 @@ bool is_partial_order_event_symbol(const expr2tc &e, const namespacet &ns)
          is_partial_order_global(ns, to_symbol2t(e).thename);
 }
 
-/// The array an assignment to \p lhs writes an element of, or nil.
-expr2tc assigned_array(const expr2tc &lhs)
+/// The object an assignment to \p lhs writes. A compound assignment to an
+/// object narrower than int assigns to its promotion, \c (int)c.
+expr2tc strip_lvalue_casts(expr2tc lhs)
 {
+  while (is_typecast2t(lhs) || is_bitcast2t(lhs))
+    lhs = is_typecast2t(lhs) ? to_typecast2t(lhs).from : to_bitcast2t(lhs).from;
+  return lhs;
+}
+
+/// The array an assignment to \p lhs writes an element of, or nil.
+expr2tc assigned_array(const expr2tc &full_lhs)
+{
+  const expr2tc lhs = strip_lvalue_casts(full_lhs);
   if (!is_index2t(lhs))
     return expr2tc();
   expr2tc root = lhs;
@@ -1050,6 +1060,7 @@ expr2tc assigned_array(const expr2tc &lhs)
 /// The pointer an assignment to \p lhs writes through, or nil.
 expr2tc assigned_pointer(expr2tc lhs)
 {
+  lhs = strip_lvalue_casts(lhs);
   while (is_index2t(lhs))
     lhs = to_index2t(lhs).source_value;
   return is_dereference2t(lhs) ? to_dereference2t(lhs).value : expr2tc();
@@ -1197,7 +1208,11 @@ bool execution_statet::partial_order_update(
   // write may follow before the update.
   expr2tc lhs = assign.target;
   std::function<void(expr2tc &)> snapshot_operands = [&](expr2tc &e) {
-    if (is_index2t(e))
+    if (is_typecast2t(e))
+      snapshot_operands(to_typecast2t(e).from);
+    else if (is_bitcast2t(e))
+      snapshot_operands(to_bitcast2t(e).from);
+    else if (is_index2t(e))
     {
       index2t &index = to_index2t(e);
       snapshot_operands(index.source_value);
@@ -1237,7 +1252,7 @@ void execution_statet::record_shared_write(const expr2tc &code)
   if (is_nil_expr(code) || cur_state->guard.is_false())
     return;
 
-  expr2tc sym = to_code_assign2t(code).target;
+  expr2tc sym = strip_lvalue_casts(to_code_assign2t(code).target);
   if (!is_symbol2t(sym))
     return;
   cur_state->get_original_name(sym);
