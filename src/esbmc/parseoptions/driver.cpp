@@ -203,8 +203,6 @@ static bool partial_order_conflicts(const cmdlinet &cmdline)
         "incremental-bmc",
         "falsification",
         "termination",
-        "deadlock-check",
-        "data-races-check",
         "data-races-check-only",
         "lock-order-check",
         "atomicity-check",
@@ -492,7 +490,9 @@ int esbmc_parseoptionst::do_partial_order(
   if (!partial_order_in_scope(
         goto_functions,
         namespacet(context),
-        !options.get_bool_option("program-only")))
+        !options.get_bool_option("program-only"),
+        options.get_bool_option("data-races-check"),
+        options.get_bool_option("deadlock-check")))
     return 1;
   bmct bmc(goto_functions, options, context);
   return do_bmc(bmc);

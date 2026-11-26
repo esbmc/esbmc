@@ -1,21 +1,6 @@
 #include "irep2/irep2_type.h"
 #include <goto-symex/equation/features.h>
 
-bool ssa_features::run(symex_target_equationt::SSA_stepst &steps)
-{
-  features.clear();
-
-  for (const auto &step : steps)
-  {
-    for (const expr2tc &e : std::array{step.cond, step.guard})
-      check(e);
-  }
-
-  print_result();
-
-  return false;
-}
-
 void ssa_features::check(const expr2tc &e)
 {
   if (!e)

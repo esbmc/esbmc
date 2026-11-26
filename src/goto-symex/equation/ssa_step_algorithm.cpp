@@ -34,6 +34,8 @@ void ssa_step_algorithm::run_on_step(symex_target_equationt::SSA_stept &step)
   case ssa_type::JOIN:
   case ssa_type::ATOMIC_BEGIN:
   case ssa_type::ATOMIC_END:
+  case ssa_type::LOCK:
+  case ssa_type::UNLOCK:
     run_on_event(step);
     break;
   default:
