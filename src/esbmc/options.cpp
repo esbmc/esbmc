@@ -797,7 +797,7 @@ const struct group_opt_templ all_cmd_options[] = {
     {"parallel-solving-threads",
      boost::program_options::value<int>()->value_name("n"),
      "Solve at most n VCCs at once under --parallel-solving (default: one "
-     "per hardware thread); each holds its own solver, so fewer threads use "
+     "per available CPU); each holds its own solver, so fewer threads use "
      "less memory"},
     {"no-symmetry-breaking",
      NULL,
