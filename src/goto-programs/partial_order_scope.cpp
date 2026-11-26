@@ -30,9 +30,23 @@ bool is_supported_thread_call(const std::string &name)
     "pthread_join_noswitch",
     "pthread_mutex_lock_noassert",
     "pthread_mutex_unlock_noassert",
+    // ... and with it.
+    "pthread_join_switch",
+    "pthread_mutex_lock_check",
+    "pthread_mutex_unlock_check",
     "pthread_mutex_destroy",
+    // Signals change nothing a wait observes, since a wait may wake at will.
+    "pthread_cond_init",
+    "pthread_cond_destroy",
+    "pthread_cond_signal",
+    "pthread_cond_broadcast",
+    "pthread_cond_wait_nocheck",
+    "pthread_exit",
     "__ESBMC_atomic_begin",
     "__ESBMC_atomic_end",
+    "__ESBMC_really_atomic_begin",
+    "__ESBMC_really_atomic_end",
+    "__ESBMC_terminate_thread",
     "__VERIFIER_atomic_begin",
     "__VERIFIER_atomic_end",
     // Inserted ahead of every atomic section; each thread runs to completion,
@@ -54,14 +68,33 @@ bool is_unsupported_call(const std::string &name)
     "__ESBMC_switch_to",
     "__ESBMC_switch_away_from",
     "__ESBMC_spawn_thread",
-    "__ESBMC_terminate_thread",
-    "__ESBMC_really_atomic_begin",
-    "__ESBMC_really_atomic_end",
     "__ESBMC_switch_to_monitor",
     "__ESBMC_switch_from_monitor",
     "__ESBMC_register_monitor",
     "__ESBMC_kill_monitor"};
   return scheduler_intrinsics.count(name) != 0;
+}
+
+/// The operational model's thread counters, which symex renames sequentially
+/// rather than as events, so a user read would see one thread's view only.
+std::string scheduler_state_name(const symbol2t &sym)
+{
+  static const std::set<std::string> counters{
+    "__ESBMC_num_total_threads",
+    "__ESBMC_num_threads_running",
+    "__ESBMC_blocked_threads_count"};
+  const std::string name = sym.thename.as_string();
+  const std::string bare = name.starts_with("c:@") ? name.substr(3) : name;
+  return counters.count(bare) != 0 ? bare : "";
+}
+
+bool is_mutex_type(const type2tc &t)
+{
+  const std::string name =
+    is_struct_type(t)  ? to_struct_type(t).name.as_string()
+    : is_union_type(t) ? to_union_type(t).name.as_string()
+                       : "";
+  return name.find("pthread_mutex_t") != std::string::npos;
 }
 
 bool is_null(expr2tc e)
@@ -71,36 +104,32 @@ bool is_null(expr2tc e)
   return is_constant(e) && !is_constant_string2t(e);
 }
 
-/// Locks, which the memory model does not order yet, and assumptions, which
-/// the equation applies to every later thread's claims whatever the clocks
-/// say.
+/// Assumptions, which the equation applies to every later thread's claims
+/// whatever the clocks say.
 bool needs_unbuilt_events(const std::string &name)
 {
-  return name.starts_with("pthread_mutex_lock") || name == "__VERIFIER_assume";
+  return name == "__VERIFIER_assume";
 }
 
 class scope_checkt
 {
 public:
-  scope_checkt(const namespacet &ns, bool verifying)
-    : ns(ns), verifying(verifying)
+  scope_checkt(const namespacet &ns, bool verifying, bool races, bool deadlocks)
+    : ns(ns), verifying(verifying), races(races), deadlocks(deadlocks)
   {
   }
 
   bool check(const goto_functionst &goto_functions)
   {
     functions = &goto_functions;
-    collect_spawners(goto_functions);
     for (const auto &[name, fn] : goto_functions.function_map)
     {
       if (!is_user_function(name.as_string(), fn))
         continue;
-      for (auto it = fn.body.instructions.begin();
-           it != fn.body.instructions.end();
-           ++it)
+      for (const auto &instruction : fn.body.instructions)
       {
-        where = &it->location;
-        if (!check_instruction(*it) || !check_loop(fn.body, it))
+        where = &instruction.location;
+        if (!check_instruction(instruction))
           return false;
       }
     }
@@ -110,10 +139,10 @@ public:
 private:
   const namespacet &ns;
   const bool verifying;
+  const bool races;
+  const bool deadlocks;
   const locationt *where = nullptr;
   const goto_functionst *functions = nullptr;
-  /// Functions that create a thread, directly or through a call.
-  std::set<std::string> spawners;
 
   static bool
   is_user_function(const std::string &name, const goto_functiont &fn)
@@ -134,48 +163,6 @@ private:
     return false;
   }
 
-  void collect_spawners(const goto_functionst &goto_functions)
-  {
-    spawners.insert(fn_prefix + "pthread_create");
-    for (bool grew = true; grew;)
-    {
-      grew = false;
-      for (const auto &[name, fn] : goto_functions.function_map)
-        if (!spawners.count(name.as_string()) && calls_spawner(fn.body))
-          grew = spawners.insert(name.as_string()).second;
-    }
-  }
-
-  bool calls_spawner(const goto_programt &body) const
-  {
-    for (const auto &instruction : body.instructions)
-      if (is_spawning_call(instruction))
-        return true;
-    return false;
-  }
-
-  bool is_spawning_call(const goto_programt::instructiont &instruction) const
-  {
-    if (!instruction.is_function_call())
-      return false;
-    const expr2tc &function =
-      to_code_function_call2t(instruction.code).function;
-    return is_symbol2t(function) &&
-           spawners.count(to_symbol2t(function).thename.as_string());
-  }
-
-  /// One thread per unwinding of a loop belongs to phase 1.
-  bool check_loop(const goto_programt &body, goto_programt::const_targett latch)
-    const
-  {
-    if (!latch->is_backwards_goto())
-      return true;
-    for (auto it = latch->targets.front(); it != latch; ++it)
-      if (is_spawning_call(*it))
-        return reject("a thread created inside a loop");
-    return true;
-  }
-
   bool check_instruction(const goto_programt::instructiont &instruction) const
   {
     if (instruction.is_function_call())
@@ -194,6 +181,8 @@ private:
       return reject("a call to " + name);
     if (verifying && needs_unbuilt_events(name))
       return reject("verifying a call to " + name);
+    if (!check_deadlock_call(name))
+      return false;
 
     if (!check_expr(call.ret) || !check_thread_args(name, call))
       return false;
@@ -214,10 +203,36 @@ private:
     return true;
   }
 
+  /// The deadlock claim takes main's end for the process's end.
+  bool check_deadlock_call(const std::string &name) const
+  {
+    if (
+      deadlocks &&
+      (name == "pthread_exit" || name == "__ESBMC_terminate_thread"))
+      return reject("checking deadlocks with a call to " + name);
+    return true;
+  }
+
   bool has_body(const code_function_call2t &call) const
   {
     auto it = functions->function_map.find(to_symbol2t(call.function).thename);
     return it != functions->function_map.end() && it->second.body_available;
+  }
+
+  /// A lock event names its mutex by the global it is.
+  bool check_mutex_arg(
+    const std::string &name,
+    const code_function_call2t &call) const
+  {
+    const bool wait = name.starts_with("pthread_cond_wait");
+    if (
+      !wait && !name.starts_with("pthread_mutex_lock") &&
+      !name.starts_with("pthread_mutex_unlock"))
+      return true;
+    const expr2tc &m = call.operands.at(wait ? 1 : 0);
+    if (is_address_of2t(m) && !is_shared_address(m))
+      return reject("a mutex that is not a global");
+    return true;
   }
 
   bool check_thread_args(
@@ -226,6 +241,8 @@ private:
   {
     const bool create = name == "pthread_create";
     const bool join = name.starts_with("pthread_join");
+    if (!check_mutex_arg(name, call))
+      return false;
     if (create && !is_null(call.operands.at(3)))
       return reject("a thread argument other than NULL");
     if (join && !is_null(call.operands.at(1)))
@@ -244,10 +261,28 @@ private:
     if (is_nil_expr(e))
       return true;
 
+    // Symex resolves the pointer to the global when it is locked.
+    if (
+      is_address_of2t(e) && is_symbol2t(to_address_of2t(e).ptr_obj) &&
+      is_mutex_type(to_address_of2t(e).ptr_obj->type))
+      return true;
+
+    if (is_symbol2t(e))
+      if (
+        const std::string state = scheduler_state_name(to_symbol2t(e));
+        !state.empty())
+        return reject("the scheduler state " + state);
+
     if (
       is_symbol2t(e) && is_shared(to_symbol2t(e)) &&
       !is_partial_order_type(e->type))
       return reject("a global that is not a scalar or an array of scalars");
+
+    // An array is one object, so accesses to distinct elements would race.
+    if (
+      races && is_symbol2t(e) && is_shared(to_symbol2t(e)) &&
+      is_array_type(e->type))
+      return reject("checking data races on a global array");
 
     bool ok = true;
     e->foreach_operand([this, &ok](const expr2tc &op) {
@@ -308,8 +343,11 @@ bool is_partial_order_global(const namespacet &ns, const irep_idt &name)
 bool partial_order_in_scope(
   const goto_functionst &goto_functions,
   const namespacet &ns,
-  bool verifying)
+  bool verifying,
+  bool races,
+  bool deadlocks)
 {
-  return scope_checkt(ns, false).check(goto_functions) &&
-         (!verifying || scope_checkt(ns, true).check(goto_functions));
+  return scope_checkt(ns, false, races, deadlocks).check(goto_functions) &&
+         (!verifying ||
+          scope_checkt(ns, true, races, deadlocks).check(goto_functions));
 }

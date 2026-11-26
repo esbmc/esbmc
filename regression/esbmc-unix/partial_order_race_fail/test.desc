@@ -1,0 +1,5 @@
+CORE
+main.c
+--partial-order --data-races-check
+^VERIFICATION FAILED$
+R/W data race on c:@g

@@ -1,0 +1,4 @@
+CORE
+main.c
+--partial-order --data-races-check
+^VERIFICATION FAILED$

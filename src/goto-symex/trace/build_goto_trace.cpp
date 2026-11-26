@@ -299,6 +299,7 @@ using nondet_originst =
 static void record_nondet_return(
   smt_convt &smt_conv,
   const symex_target_equationt::SSA_stept &step,
+  bool ignored,
   std::list<goto_trace_stept::nondet_returnt> &out,
   nondet_originst &origin)
 {
@@ -322,7 +323,7 @@ static void record_nondet_return(
       ambiguous = true;
     nondet = symbol;
   }
-  if (!nondet || ambiguous || step.ignore)
+  if (!nondet || ambiguous || ignored)
     return;
 
   // Other nondet assignments (an uninitialised local, a contract's havoc of a
@@ -457,12 +458,12 @@ struct race_flag_trackert
 
   void note_assignment(
     smt_convt &smt_conv,
-    const symex_target_equationt::SSA_stept &step)
+    const symex_target_equationt::SSA_stept &step,
+    bool ignored)
   {
     if (
       !step.is_assignment() || !is_races_flag(step.lhs) ||
-      !is_with2t(step.rhs) || step.ignore ||
-      !smt_conv.l_get(step.guard).is_true())
+      !is_with2t(step.rhs) || ignored || !smt_conv.l_get(step.guard).is_true())
       return;
 
     const with2t &with = to_with2t(step.rhs);
@@ -566,20 +567,24 @@ void build_goto_trace(
   // cleared on every solve / context change), so the thousands of repeated
   // guard-AST queries this loop issues collapse to one solver call each
   // without any explicit scope management here.
-  for (auto const &SSA_step : target.SSA_steps)
-  {
-    inputs.note_assignment(SSA_step);
-    race_flags.note_assignment(smt_conv, SSA_step);
-    record_nondet_return(smt_conv, SSA_step, nondet_returns, nondet_origin);
-    record_spawn(smt_conv, SSA_step, nondet_returns.size(), spawns);
+  auto record =
+    [&](const symex_target_equationt::SSA_stept &step, bool ignored) {
+      inputs.note_assignment(step);
+      race_flags.note_assignment(smt_conv, step, ignored);
+      record_nondet_return(
+        smt_conv, step, ignored, nondet_returns, nondet_origin);
+      record_spawn(smt_conv, step, nondet_returns.size(), spawns);
+    };
+  auto trace_step = [&](const symex_target_equationt::SSA_stept &SSA_step) {
+    record(SSA_step, SSA_step.ignore);
 
     if (is_bookkeeping(SSA_step))
-      continue;
+      return;
 
     // is_true() also drops steps whose guard the solver could not evaluate:
     // such a step has no authentic state to report (see #6191).
     if (SSA_step.ignore || !smt_conv.l_get(SSA_step.guard).is_true())
-      continue;
+      return;
 
     goto_trace_stept goto_trace_step;
 
@@ -615,7 +620,7 @@ void build_goto_trace(
           "trace",
           "skipping assignment at {} (symbolic type)",
           SSA_step.source.pc->location.as_string());
-        continue;
+        return;
       }
       catch (const array_type2t::dyn_sized_array_excp &e)
       {
@@ -623,7 +628,7 @@ void build_goto_trace(
           "trace",
           "skipping assignment at {} (symbolic-size array, e.g. argv)",
           SSA_step.source.pc->location.as_string());
-        continue;
+        return;
       }
     }
 
@@ -666,7 +671,10 @@ void build_goto_trace(
     goto_trace_step.spawns.swap(spawns);
 
     goto_trace.steps.push_back(goto_trace_step);
-  }
+  };
+  target.for_each_step(
+    trace_step,
+    [&](const symex_target_equationt::SSA_stept &step) { record(step, true); });
 }
 
 void build_successful_goto_trace(
