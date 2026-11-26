@@ -1,6 +1,6 @@
 # Plan — a partial-order encoding for concurrent programs (`--partial-order`)
 
-**Status (2026-11-26):** phases 1 to 3 in review; phase 4 started. Phase 0 is
+**Status (2026-11-26):** phases 1 to 3 merged; phase 4 in progress. Phase 0 is
 done, with the measurements below (§4), and the maintainer decided **go** on
 2026-11-24. `--partial-order` verifies programs on global scalars and arrays
 of them, including through pointers, with threads created in loops, mutexes,
@@ -228,7 +228,9 @@ disagreements:
   was reported between a write inside an atomic section and a plain read in
   `main`. Fixed: a section's bounds no longer separate a race, and two
   accesses inside atomic sections never race (`partial_order_atomic_race*`).
-- False alarms. `github_4434_thread_local`: a `__thread` global is shared.
+- False alarms. `github_4434_thread_local`: a `__thread` global was shared.
+  Fixed: it is no longer an event, so each thread keeps its own SSA chain
+  (`partial_order_thread_local*`).
   `github_9441_atomic_narrow_rmw`: a compound assignment to an `_Atomic`
   object loses an update, as if it were a separate read and write.
   `esbmc-unix2/11_time_var_mutex`: a lock built from `abort()` in an atomic
