@@ -620,8 +620,8 @@ bool esbmc_parseoptionst::has_cbmc_binary_input()
 static constexpr std::string_view kani_prefix = "__KANI_";
 
 // Whether `path` is a CBMC goto-binary whose string table holds `marker`. A
-// match only selects a default strategy, so a string or identifier that merely
-// spells `marker` is harmless.
+// match only selects a default strategy; a string or identifier that merely
+// spells `marker` matches too.
 static bool
 cbmc_binary_mentions(const std::string &path, std::string_view marker)
 {
@@ -667,23 +667,26 @@ static void default_kani_allocation(
   options.set_option("force-realloc-success", true);
 }
 
-// Kani names its helper symbols __KANI_ (e.g. __KANI_is_nonzero_power_of_two).
-bool esbmc_parseoptionst::has_kani_binary_input()
+static bool
+any_binary_mentions(const cmdlinet &cmdline, std::string_view marker)
 {
   return cmdline.isset("binary") &&
          std::any_of(
-           cmdline.args.begin(), cmdline.args.end(), [](const std::string &p) {
-             return cbmc_binary_mentions(p, kani_prefix);
+           cmdline.args.begin(), cmdline.args.end(), [marker](const auto &p) {
+             return cbmc_binary_mentions(p, marker);
            });
+}
+
+// Kani names its helper symbols __KANI_ (e.g. __KANI_is_nonzero_power_of_two).
+bool esbmc_parseoptionst::has_kani_binary_input()
+{
+  return any_binary_mentions(cmdline, kani_prefix);
 }
 
 // The CBMC adapter reads a loop contract from this back-edge attribute.
 bool esbmc_parseoptionst::has_loop_invariant_binary_input()
 {
-  return std::any_of(
-    cmdline.args.begin(), cmdline.args.end(), [](const std::string &p) {
-      return cbmc_binary_mentions(p, "#spec_loop_invariant");
-    });
+  return any_binary_mentions(cmdline, "#spec_loop_invariant");
 }
 
 // CBMC tags each ASSERT with a property class in its location. Kani's

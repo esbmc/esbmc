@@ -18,6 +18,9 @@
 /// 10-instruction window, and a synthesised invariant silently attaches itself
 /// to whichever loop happens to be nearby.
 extern const char *const kSynthesisedInvariantProperty;
+/// Tag the CBMC goto-binary reader stamps on a loop contract's marker, which it
+/// places immediately before that loop's head; same rule as above.
+extern const char *const kCbmcLoopContractProperty;
 
 namespace loop_invariant
 {

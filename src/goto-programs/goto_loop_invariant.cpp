@@ -50,6 +50,7 @@
 // ---------------------------------------------------------------------------
 
 const char *const kSynthesisedInvariantProperty = "synthesised-loop-invariant";
+const char *const kCbmcLoopContractProperty = "cbmc-loop-contract";
 
 /// The base case and inductive step of one invariant carry the same number,
 /// so checked_loop_invariants pairs them without reading their guards.
@@ -172,17 +173,19 @@ static std::vector<expr2tc> extract_invariants_near(
     // A user-written invariant keeps the historical proximity-only behaviour:
     // the frontend may legitimately place it further from the head, and #3936
     // depends on that latitude.
+    const std::string &tag = it->location.property().as_string();
     if (
-      it->location.property().as_string() == kSynthesisedInvariantProperty &&
+      (tag == kSynthesisedInvariantProperty ||
+       tag == kCbmcLoopContractProperty) &&
       crossed_real_instruction)
     {
-      // The count line has already reported this as synthesised. Say so rather
-      // than drop it silently: the rule leans on the marker sitting immediately
-      // before its own head, so if a future pass ever inserts real work there,
-      // invariants would start disappearing with no signal at all.
+      // Say so rather than drop it silently: the rule leans on the marker
+      // sitting immediately before its own head, so if a future pass ever
+      // inserts real work there, invariants would start disappearing with no
+      // signal at all.
       log_debug(
         "loop-invariant",
-        "ignoring a synthesised loop invariant that belongs to another loop");
+        "ignoring a loop invariant that belongs to another loop");
       return invariants;
     }
 

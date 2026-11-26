@@ -416,12 +416,12 @@ static bool proof_cache_flags_usable(const optionst &options)
 
 // A Kani harness verifies by k-induction unless the run asks for something
 // else: a strategy or a bound, a report, coverage, dead-code or print-only
-// mode, or witness validation. A harness whose binary carries a loop contract
-// instead cuts each such loop at its invariant and runs incremental BMC: under
-// k-induction the loop is still unwound and the invariant never cuts it. The
-// flags go on the command line, so the options they imply and the checks that
-// refuse them apply as usual. Unlimited k steps keep a bug deeper than
-// --max-k-step from ending UNKNOWN where plain BMC would find it.
+// mode, or witness validation. The flags go on the command line, so the options
+// they imply and the checks that refuse them apply as usual. Unlimited k steps
+// keep a bug deeper than --max-k-step from ending UNKNOWN where plain BMC would
+// find it. A harness whose binary carries a loop contract instead cuts each
+// such loop at its invariant; k steps stay bounded there, because a claim past
+// a too-weak invariant stays UNKNOWN at every k.
 void esbmc_parseoptionst::default_kani_strategy()
 {
   static const char *const chosen[] = {
@@ -477,11 +477,11 @@ void esbmc_parseoptionst::default_kani_strategy()
   {
     log_status("Kani goto-binary: verifying by k-induction");
     cmdline.set("k-induction", std::string(), {""});
+    if (cmdline.vm["max-k-step"].defaulted())
+      cmdline.set("unlimited-k-steps", std::string(), {""});
     if (cmdline.vm["max-inductive-step"].defaulted())
       cmdline.set("max-inductive-step", 3, {"3"});
   }
-  if (cmdline.vm["max-k-step"].defaulted())
-    cmdline.set("unlimited-k-steps", std::string(), {""});
 }
 
 // This is the main entry point of ESBMC. Here ESBMC performs initialisation
