@@ -449,24 +449,26 @@ expr2tc byte_update_bit_offset(const byte_update2t &data)
 }
 
 smt_astt
+smt_solver_baset::convert_byte_update_as_bits(const byte_update2t &data)
+{
+  // This is a pointer or a bool, or something. We don't want to handle
+  // casting of it in convert_byte_update_bv_mode, so wrap it up as a
+  // bitvector and re-apply.
+  type2tc bit_type = get_uint_type(data.type->get_width());
+  expr2tc src_obj = bitcast2tc(bit_type, data.source_value);
+  expr2tc new_update = byte_update2tc(
+    bit_type, src_obj, data.source_offset, data.update_value, data.big_endian);
+  if (step_stored && *step_stored == data)
+    stored_pointer_bits[step_stored_at] = {convert_ast(new_update), ctx_level};
+  expr2tc cast_back = bitcast2tc(data.type, new_update);
+  return convert_ast(cast_back);
+}
+
+smt_astt
 smt_solver_baset::convert_byte_update_bv_mode(const byte_update2t &data)
 {
   if (!is_bv_type(data.type) && !is_fixedbv_type(data.type))
-  {
-    // This is a pointer or a bool, or something. We don't want to handle
-    // casting of it in the body of this function, so wrap it up as a bitvector
-    // and re-apply.
-    type2tc bit_type = get_uint_type(data.type->get_width());
-    expr2tc src_obj = bitcast2tc(bit_type, data.source_value);
-    expr2tc new_update = byte_update2tc(
-      bit_type,
-      src_obj,
-      data.source_offset,
-      data.update_value,
-      data.big_endian);
-    expr2tc cast_back = bitcast2tc(data.type, new_update);
-    return convert_ast(cast_back);
-  }
+    return convert_byte_update_as_bits(data);
 
   if (!is_constant_int2t(data.source_offset))
   {
