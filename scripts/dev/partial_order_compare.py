@@ -113,25 +113,36 @@ def collect(suites):
 DECIDED = ("SUCCESSFUL", "FAILED")
 
 
-def summarise(results):
-    both = [r for r in results if r[3][0] in DECIDED and r[4][0] in DECIDED]
-    disagree = [r for r in both if r[3][0] != r[4][0]]
-    partial_status = collections.Counter(r[4][0] for r in results)
-    reasons = collections.Counter(r[4][1] for r in results if r[4][0] == "REJECTED")
+def print_status(label, statuses):
+    counts = collections.Counter(statuses)
+    print(f"{label}: " + ", ".join(f"{k} {v}" for k, v in sorted(counts.items())))
 
-    print(f"tests: {len(results)}")
-    print("--partial-order: " + ", ".join(f"{k} {v}" for k, v in sorted(partial_status.items())))
-    default_status = collections.Counter(r[3][0] for r in results)
-    print("default: " + ", ".join(f"{k} {v}" for k, v in sorted(default_status.items())))
-    print(f"decided by both: {len(both)}, agreeing: {len(both) - len(disagree)}")
-    if both:
-        times_d = sorted(r[3][2] for r in both)
-        times_p = sorted(r[4][2] for r in both)
-        print(f"median time on those: default {times_d[len(both) // 2]:.2f} s, "
-              f"--partial-order {times_p[len(both) // 2]:.2f} s")
+
+def print_median_times(both):
+    times_d = sorted(r[3][2] for r in both)
+    times_p = sorted(r[4][2] for r in both)
+    print(f"median time on those: default {times_d[len(both) // 2]:.2f} s, "
+          f"--partial-order {times_p[len(both) // 2]:.2f} s")
+
+
+def print_rejections(results):
+    reasons = collections.Counter(r[4][1] for r in results if r[4][0] == "REJECTED")
     print("rejections:")
     for reason, count in reasons.most_common():
         print(f"  {count:4d}  {reason}")
+
+
+def summarise(results):
+    both = [r for r in results if r[3][0] in DECIDED and r[4][0] in DECIDED]
+    disagree = [r for r in both if r[3][0] != r[4][0]]
+
+    print(f"tests: {len(results)}")
+    print_status("--partial-order", (r[4][0] for r in results))
+    print_status("default", (r[3][0] for r in results))
+    print(f"decided by both: {len(both)}, agreeing: {len(both) - len(disagree)}")
+    if both:
+        print_median_times(both)
+    print_rejections(results)
     for test_dir, level, expected, default, partial in disagree:
         print(f"DISAGREE {test_dir} ({level}, expects {expected}): "
               f"default {default[0]}, --partial-order {partial[0]}")

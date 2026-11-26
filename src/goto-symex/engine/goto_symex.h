@@ -766,8 +766,19 @@ protected:
    *  and off + n is claimed to stay within the object. Returns false, changing
    *  nothing, when off and n are both constant, n is signed, or the object is
    *  read-only or not an integer or integer array of at most 4 KiB (1 KiB
-   *  when off is symbolic). */
+   *  when off is symbolic). An object of no fixed size goes to
+   *  memset_whole_dynamic. */
   bool memset_symbolic(
+    const dereference_callbackt::internal_item &item,
+    const expr2tc &value,
+    const expr2tc &n);
+
+  /** Fills a byte array of symbolic size whole, as calloc does, with one
+   *  assignment of array_of(value) plus a bounds claim. Applies only from
+   *  offset 0 when @p n is the array's size expression, or the request that
+   *  symex_mem wraps as ite(fits, n, 0). Returns false, changing nothing,
+   *  otherwise (#10991). */
+  bool memset_whole_dynamic(
     const dereference_callbackt::internal_item &item,
     const expr2tc &value,
     const expr2tc &n);

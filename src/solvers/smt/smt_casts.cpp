@@ -431,6 +431,8 @@ smt_astt smt_solver_baset::convert_typecast_to_ptr(const typecast2t &cast)
   if (is_pointer_type(cast.from))
     return convert_ast(cast.from);
 
+  lay_out_objects();
+
   // Unpleasentness; we don't know what pointer this integer is going to
   // correspond to, and there's no way of telling statically, so we have
   // to enumerate all pointers it could point at. IE, all of them. Which
@@ -657,6 +659,7 @@ expr2tc smt_solver_baset::static_address_of(const expr2tc &ptr)
 
 smt_astt smt_solver_baset::convert_typecast_from_ptr(const typecast2t &cast)
 {
+  lay_out_objects();
   type2tc addr_type = ptraddr_type2();
   type2tc diff_type = get_int_type(config.ansi_c.address_width);
 

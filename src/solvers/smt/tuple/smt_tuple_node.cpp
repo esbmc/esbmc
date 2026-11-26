@@ -282,8 +282,8 @@ smt_astt smt_tuple_node_flattener::tuple_array_of(
 {
   uint64_t elems = 1ULL << array_size;
   type2tc array_type = array_type2tc(init_val->type, gen_ulong(elems), false);
-  smt_sortt array_sort = new smt_sort(
-    SMT_SORT_ARRAY, array_type, array_size, ctx->convert_sort(init_val->type));
+  smt_sortt array_sort = own_sort(new smt_sort(
+    SMT_SORT_ARRAY, array_type, array_size, ctx->convert_sort(init_val->type)));
 
   return array_conv.convert_array_of_wsort(
     ctx->convert_ast(init_val), array_size, array_sort);
@@ -300,11 +300,11 @@ smt_sortt smt_tuple_node_flattener::mk_struct_sort(const type2tc &type)
       "interface");
     unsigned int dom_width = array_domain_width_or_word_size(arrtype);
 
-    return new smt_sort(
-      SMT_SORT_ARRAY, type, dom_width, ctx->convert_sort(arrtype.subtype));
+    return own_sort(new smt_sort(
+      SMT_SORT_ARRAY, type, dom_width, ctx->convert_sort(arrtype.subtype)));
   }
 
-  return new smt_sort(SMT_SORT_STRUCT, type);
+  return own_sort(new smt_sort(SMT_SORT_STRUCT, type));
 }
 
 void smt_tuple_node_flattener::add_tuple_constraints_for_solving()

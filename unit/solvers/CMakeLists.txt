@@ -65,6 +65,10 @@ if(ENABLE_BITWUZLA)
                   "bitwuzla_out_of_memory.test.cpp"
                   "solvers;util_esbmc;filesystem;bigint")
   endif()
+
+  new_unit_test(bitwuzla_frees_its_terms_test
+                "bitwuzla_frees_its_terms.test.cpp"
+                "solvers;util_esbmc;filesystem;bigint")
 endif()
 
 if(ENABLE_SMTLIB)

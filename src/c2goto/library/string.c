@@ -3,6 +3,9 @@
 #include <ctype.h>
 
 #undef strcpy
+#undef stpcpy
+#undef strlcpy
+#undef memccpy
 #undef strncpy
 #undef strcat
 #undef strncat
@@ -42,6 +45,49 @@ __ESBMC_HIDE:;
   }
 
   return dst;
+}
+
+char *stpcpy(char *dst, const char *src)
+{
+__ESBMC_HIDE:;
+  __ESBMC_assert(src != NULL, "Source pointer is null");
+  size_t i = 0;
+  for (;; ++i)
+  {
+    dst[i] = src[i];
+    if (src[i] == '\0')
+      break;
+  }
+  return dst + i;
+}
+
+size_t strlcpy(char *dst, const char *src, size_t n)
+{
+__ESBMC_HIDE:;
+  __ESBMC_assert(src != NULL, "Source pointer is null");
+  size_t len = strlen(src);
+  if (n != 0)
+  {
+    size_t copy = len < n - 1 ? len : n - 1;
+    for (size_t i = 0; i < copy; ++i)
+      dst[i] = src[i];
+    dst[copy] = '\0';
+  }
+  return len;
+}
+
+void *memccpy(void *dst, const void *src, int c, size_t n)
+{
+__ESBMC_HIDE:;
+  unsigned char *d = (unsigned char *)dst;
+  const unsigned char *s = (const unsigned char *)src;
+  for (size_t i = 0; i < n; ++i)
+  {
+    d[i] = s[i];
+    if (s[i] == (unsigned char)c)
+      return d + i + 1;
+  }
+  return NULL;
 }
 
 char *strncpy(char *dst, const char *src, size_t n)
