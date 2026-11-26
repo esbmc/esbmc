@@ -119,6 +119,53 @@ static bool is_compiler_temp(goto_programt::const_targett t)
 /// return the invariant expression(s) for the nearest LOOP_INVARIANT found.
 /// Multiple conjuncts are folded into a single and2tc.  Returns an empty
 /// vector when no annotated LOOP_INVARIANT is in range.
+/// Whether a tool, not the user, emitted this invariant, which it places
+/// immediately before its own loop head.
+static bool is_tool_placed_invariant(const goto_programt::instructiont &i)
+{
+  const std::string &tag = i.location.property().as_string();
+  return tag == kSynthesisedInvariantProperty ||
+         tag == kCbmcLoopContractProperty;
+}
+
+/// Hands \p collect each further LOOP_INVARIANT of the loop whose first one
+/// \p it is. These arise when the user writes multiple separate
+/// __ESBMC_loop_invariant() calls (issue #3936). The only instructions that
+/// may appear between consecutive same-loop invariants are compiler-generated
+/// temporaries; any real instruction means we have crossed into a different
+/// context (e.g. outer-loop body), so we stop immediately. The walk ends at the
+/// first other instruction, so it is not bounded by kMaxInvariantSearchBack:
+/// the temporaries of a branching invariant (#11033) alone can exceed it.
+template <class Collect>
+static void collect_same_loop_invariants(
+  goto_programt::targett it,
+  goto_programt::targett begin,
+  Collect &&collect)
+{
+  std::set<const goto_programt::instructiont *> scanned{&*it};
+  while (it != begin)
+  {
+    --it;
+    scanned.insert(&*it);
+    if (it->is_loop_invariant())
+    {
+      const std::list<expr2tc> &extra = it->get_loop_invariants();
+      if (!extra.empty())
+        collect(extra);
+      continue;
+    }
+    if (is_compiler_temp(it))
+      continue;
+    // `f() || g()` in an invariant lowers to a branch that stays inside the
+    // temporaries it computes (#11033).
+    if (
+      it->is_goto() && !it->targets.empty() &&
+      scanned.count(&*it->targets.front()))
+      continue;
+    break; // real instruction — stop clustering
+  }
+}
+
 static std::vector<expr2tc> extract_invariants_near(
   goto_programt::targett loop_head,
   goto_programt::targett begin)
@@ -176,11 +223,7 @@ static std::vector<expr2tc> extract_invariants_near(
     // A user-written invariant keeps the historical proximity-only behaviour:
     // the frontend may legitimately place it further from the head, and #3936
     // depends on that latitude.
-    const std::string &tag = it->location.property().as_string();
-    if (
-      (tag == kSynthesisedInvariantProperty ||
-       tag == kCbmcLoopContractProperty) &&
-      crossed_real_instruction)
+    if (is_tool_placed_invariant(*it) && crossed_real_instruction)
     {
       // Say so rather than drop it silently: the rule leans on the marker
       // sitting immediately before its own head, so if a future pass ever
@@ -193,38 +236,8 @@ static std::vector<expr2tc> extract_invariants_near(
     }
 
     collect(inv_list);
-
-    // Phase 2: collect any additional LOOP_INVARIANT instructions that belong
-    // to the same loop.  These arise when the user writes multiple separate
-    // __ESBMC_loop_invariant() calls (issue #3936).  The only instructions
-    // that may appear between consecutive same-loop invariants are compiler-
-    // generated temporaries; any real instruction means we have crossed into
-    // a different context (e.g. outer-loop body), so we stop immediately.
-    // The walk ends at the first other instruction, so it is not bounded by
-    // kMaxInvariantSearchBack: the temporaries of a branching invariant
-    // (#11033) alone can exceed it.
-    std::set<const goto_programt::instructiont *> scanned{&*it};
-    while (it != begin)
-    {
-      --it;
-      scanned.insert(&*it);
-      if (it->is_loop_invariant())
-      {
-        const std::list<expr2tc> &extra = it->get_loop_invariants();
-        if (!extra.empty())
-          collect(extra);
-        continue;
-      }
-      if (is_compiler_temp(it))
-        continue;
-      // `f() || g()` in an invariant lowers to a branch that stays inside the
-      // temporaries it computes (#11033).
-      if (
-        it->is_goto() && !it->targets.empty() &&
-        scanned.count(&*it->targets.front()))
-        continue;
-      break; // real instruction — stop clustering
-    }
+    // Phase 2: the loop's further invariants.
+    collect_same_loop_invariants(it, begin, collect);
     break; // done: found the invariant group for this loop
   }
 

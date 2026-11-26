@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <unordered_set>
 #include <goto-symex/equation/ssa_step_algorithm.h>
 #include <goto-symex/equation/symex_target_equation.h>
@@ -18,7 +19,26 @@ class ssa_features : public ssa_step_algorithm
 {
 public:
   ssa_features() : ssa_step_algorithm(false) {};
-  bool run(symex_target_equationt::SSA_stepst &) override;
+  bool run(symex_target_equationt::SSA_stepst &steps) override
+  {
+    return run_on(steps);
+  }
+
+  template <class Steps>
+  bool run_on(const Steps &steps)
+  {
+    features.clear();
+
+    for (const auto &step : steps)
+    {
+      for (const expr2tc &e : std::array{step.cond, step.guard})
+        check(e);
+    }
+
+    print_result();
+
+    return false;
+  }
 
   std::unordered_set<SSA_FEATURES> features;
   void print_result() const;
