@@ -1001,11 +1001,13 @@ void goto_symext::memcpy_finish(
 static expr2tc
 object_byte_at(const expr2tc &object, const expr2tc &pos, bool big_endian)
 {
-  if (is_constant_int2t(pos))
-    return object_byte(
-      object, to_constant_int2t(pos).value.to_uint64(), big_endian);
+  // An array is indexed first even at a constant pos: object_byte would
+  // byte-extract a byte array whole, which the solver cannot encode.
   if (!is_array_type(object))
-    return byte_extract2tc(get_uint8_type(), object, pos, big_endian);
+    return is_constant_int2t(pos)
+             ? object_byte(
+                 object, to_constant_int2t(pos).value.to_uint64(), big_endian)
+             : byte_extract2tc(get_uint8_type(), object, pos, big_endian);
   const array_type2t &arr = to_array_type(object->type);
   const type2tc &pos_t = pos->type;
   const expr2tc elem_size = constant_int2tc(pos_t, type_byte_size(arr.subtype));
