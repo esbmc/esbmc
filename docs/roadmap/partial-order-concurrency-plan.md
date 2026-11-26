@@ -1,10 +1,12 @@
 # Plan — a partial-order encoding for concurrent programs (`--partial-order`)
 
-**Status (2026-11-25):** phase 1 in progress. Phase 0 is done, with the
-measurements below (§4), and the maintainer decided **go** on 2026-11-24.
-`--partial-order` verifies programs on global scalars and arrays of them,
-including through pointers, without locks or assumptions; the effort figures
-are estimates.
+**Status (2026-11-25):** phase 1 in review, phase 2 in progress. Phase 0 is
+done, with the measurements below (§4), and the maintainer decided **go** on
+2026-11-24. `--partial-order` verifies programs on global scalars and arrays
+of them, including through pointers, with threads created in loops, mutexes,
+condition variables, `pthread_exit` and the scheduler intrinsics phase 1
+lists, without assumptions, and checks data races on scalars and deadlocks
+on mutexes and joins; the effort figures are estimates.
 **Origin:** [#10296](https://github.com/esbmc/esbmc/issues/10296), which found
 `--schedule` unsound and slow, and its
 [effort estimate](https://github.com/esbmc/esbmc/issues/10296#issuecomment-6798263610).
@@ -140,7 +142,20 @@ whole array; an element write is an update, a write that also reads the
 array's previous value, and the from-read constraint keeps every other write
 out from between the two. A dereference reads, or updates, every global its
 pointer's value set reaches; a global pointer and a global's address passed to
-a function without a body are still rejected.
+a function without a body are still rejected. A thread created in a loop is
+one thread per unwinding, spawned under that unwinding's guard; a join whose
+thread id differs between paths waits, on each path, for the thread it names.
+`pthread_mutex_lock` and `pthread_mutex_unlock` on a global mutex are LOCK
+and UNLOCK events; a lock is taken only if every earlier lock of its mutex was
+released before it. An execution in which a thread waits forever for a lock is
+not modelled; phase 2's deadlock check covers it. `pthread_cond_wait` is an
+UNLOCK and a LOCK of its mutex: POSIX allows spurious wakeups and the
+operational model takes one at will, so signals and broadcasts change nothing.
+`pthread_exit` ends the path of the thread that calls it, main included.
+`__ESBMC_terminate_thread` in user code does the same, and
+`__ESBMC_really_atomic_*` opens and closes an atomic section like
+`__ESBMC_atomic_*`; a read of the operational model's thread counters, such as
+`__ESBMC_blocked_threads_count`, is rejected.
 
 ### Phase 2 — properties (3–4 weeks)
 
@@ -149,6 +164,19 @@ a function without a body are still rejected.
 - Deadlock: no order lets the program finish.
 - Rejected at first: atomicity, lock-order, the end-of-program leak check,
   k-induction and the incremental modes.
+
+Done: `--data-races-check` claims, for each pair of conflicting events from
+different threads, that no execution runs them back to back. The SC
+constraints already order every such pair, so "unordered clocks" never
+holds. Global arrays are rejected under the check, since an array is one
+object.
+
+`--deadlock-check` frees a stop time: the events before it are a prefix, and
+only its locks need a release. The claim is that no prefix leaves main, and
+every other thread with events left, waiting on a held mutex or on a join;
+the other claims need every thread to finish. Condition waits, which wake at
+will here, and `pthread_exit`, which lets threads outlive main, are rejected
+under the check.
 
 ### Phase 3 — traces and witnesses (1–2 weeks)
 

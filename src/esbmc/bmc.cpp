@@ -246,7 +246,10 @@ bmct::bmct(goto_functionst &funcs, optionst &opts, contextt &_context)
   {
     const bool partial_order = opts.get_bool_option("partial-order");
     if (partial_order)
-      algorithms.emplace_back(std::make_unique<memory_model_sct>());
+      algorithms.emplace_back(
+        std::make_unique<memory_model_sct>(
+          opts.get_bool_option("data-races-check"),
+          opts.get_bool_option("deadlock-check")));
 
     // Run cache if user has specified the option
     if (
@@ -372,14 +375,21 @@ static bool model_runs_invariant_havoc(
   const symex_target_equationt &eq,
   smt_convt &smt_conv)
 {
-  for (const auto &step : eq.SSA_steps)
-  {
-    if (step.is_assert() && !step.ignore)
-      return false;
-    if (runs_invariant_havoc(step, smt_conv))
-      return true;
-  }
-  return false;
+  bool decided = false, runs = false;
+  auto visit = [&](const symex_target_equationt::SSA_stept &step, bool kept) {
+    if (decided)
+      return;
+    if (step.is_assert() && kept)
+      decided = true;
+    else if (runs_invariant_havoc(step, smt_conv))
+      decided = runs = true;
+  };
+  eq.for_each_step(
+    [&](const symex_target_equationt::SSA_stept &step) {
+      visit(step, !step.ignore);
+    },
+    [&](const symex_target_equationt::SSA_stept &step) { visit(step, false); });
+  return runs;
 }
 
 // Attached to a claim downgraded from Failed to Unknown because the only trace
@@ -1042,6 +1052,37 @@ static size_t parallel_solving_threads(const optionst &options)
   const std::string n = options.get_option("parallel-solving-threads");
   return n.empty() ? available_cpus() : std::max(1, std::stoi(n));
 }
+
+/// One claim's view of a shared equation, for the slicers to write. It lives
+/// in its worker's buffer, whose capacity outlasts the job, so a job neither
+/// copies the equation nor allocates a step list. Emptied when the job ends,
+/// as it holds the equation's expressions.
+class claim_slice_buffert
+{
+public:
+  explicit claim_slice_buffert(const symex_target_equationt &eq)
+    : steps(buffer())
+  {
+    // Not left empty when an earlier fill threw.
+    steps.clear();
+    steps.reserve(eq.SSA_steps.size());
+    for (const auto &step : eq.SSA_steps)
+      steps.emplace_back(step);
+  }
+  ~claim_slice_buffert()
+  {
+    steps.clear();
+  }
+
+  std::vector<symex_target_equationt::sliced_stept> &steps;
+
+private:
+  static std::vector<symex_target_equationt::sliced_stept> &buffer()
+  {
+    thread_local std::vector<symex_target_equationt::sliced_stept> steps;
+    return steps;
+  }
+};
 
 /// Runs @p job on each element of @p jobs, in order, on the calling thread and
 /// up to @p max_threads - 1 helpers. A thread per job exhausted the
@@ -2864,6 +2905,8 @@ smt_resultt bmct::run_thread(std::shared_ptr<symex_target_equationt> &eq)
     {
       a->run(eq->SSA_steps);
       ignored += a->ignored();
+      solver_result.total_claims += a->claims_added();
+      solver_result.remaining_claims += a->claims_added();
     }
 
     // Count remaining assertions after all algorithms have run
@@ -3622,8 +3665,7 @@ smt_resultt bmct::multi_property_check(
         return;
     }
 
-    // Since this is just a copy, we probably don't need a lock
-    symex_target_equationt local_eq = eq;
+    claim_slice_buffert slice(eq);
 
     // Set up the current claim and disable slice info output.
     // `is_goto_cov` flips claim_slicer's `claim_msg` source: in goto-cov
@@ -3637,7 +3679,7 @@ smt_resultt bmct::multi_property_check(
     // signature (PR #4330 review).
     const bool is_goto_cov = is_cov_run || is_dead_code;
     claim_slicer claim(i, false, is_goto_cov, ns);
-    claim.run(local_eq.SSA_steps);
+    claim.run(slice.steps);
 
     const property_locationt &claim_ploc = claim.claim_ploc;
     const std::string claim_class =
@@ -3687,14 +3729,16 @@ smt_resultt bmct::multi_property_check(
     if (!options.get_bool_option("no-slice"))
     {
       symex_slicet slicer(options);
-      slicer.run(local_eq.SSA_steps);
+      slicer.run(slice.steps);
     }
 
     if (options.get_bool_option("ssa-features-dump"))
     {
       ssa_features features;
-      features.run(local_eq.SSA_steps);
+      features.run_on(slice.steps);
     }
+
+    symex_target_equationt local_eq(eq, slice.steps);
 
     std::string cone_key;
     bool cached_proof = false;

@@ -1,0 +1,5 @@
+CORE
+main.c
+--partial-order --deadlock-check
+^ERROR: --partial-order does not support checking deadlocks with a call to pthread_exit yet, at file .*main\.c line 6 column 3 function
+\A(?![\s\S]*VERIFICATION)[\s\S]*\Z
