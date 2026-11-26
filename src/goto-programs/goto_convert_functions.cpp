@@ -818,6 +818,15 @@ bool goto_convert_functionst::convert_native_rec(
       s->static_lifetime || s->get_type().is_code() || s->get_type().is_array())
       return delegate_to_legacy();
 
+    // A pointer to a VLA needs convert_decl's bound check.
+    {
+      const typet *pointee = &s->get_type();
+      while (pointee->is_pointer())
+        pointee = &pointee->subtype();
+      if (pointee != &s->get_type() && pointee->is_array())
+        return delegate_to_legacy();
+    }
+
     exprt initializer = is_nil_expr(decl.init) ? static_cast<exprt>(nil_exprt())
                                                : migrate_expr_back(decl.init);
 
