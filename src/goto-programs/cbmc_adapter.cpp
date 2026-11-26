@@ -193,9 +193,8 @@ bool constant_uint(const irept &c, unsigned long long &out)
 }
 
 // The value of `allocate`'s zero-init flag when it is a literal: a bool or
-// integer constant, or the `k != 0` that C's conversion of an integer literal
-// to
-// __CPROVER_bool leaves behind.
+// integer constant, or the `k != 0` left by C's conversion of an integer
+// literal to __CPROVER_bool.
 bool constant_flag(const irept &flag, bool &value)
 {
   const irep_idt &v = flag.find("value").id();
@@ -817,7 +816,7 @@ void fix_expression(irept &irep)
     if (!constant_flag(ops[1], zero))
       throw std::string(
         "CBMC adapter: 'allocate' with a zero-init flag that is not a literal "
-        "is not yet supported on the --binary path");
+        "of at most 64 bits is not yet supported on the --binary path");
 
     irept size_arg(irep_idt("typecast"));
     size_arg.add("type") = static_cast<const irept &>(size_type());

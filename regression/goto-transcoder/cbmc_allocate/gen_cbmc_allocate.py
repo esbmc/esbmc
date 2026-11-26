@@ -129,6 +129,18 @@ def main():
             test = f"cbmc_allocate_zero_{name}{suffix}"
             build(os.path.join(here, os.pardir, test, test + ".goto"),
                   expected, flag=flag, store=False)
+    build_wide_flag(here)
+
+
+def build_wide_flag(here):
+    """`k != 0` with a k too wide for 64 bits must be declined, not misread."""
+    u128 = {"id": "unsignedbv", "namedSub": {"width": {"id": "128"}}}
+    wide = {"id": "notequal", "namedSub": {"type": BOOL},
+            "sub": [constant("10000000000000000", u128),
+                    constant("0", u128)]}
+    test = "cbmc_allocate_wide_flag"
+    build(os.path.join(here, os.pardir, test, test + ".goto"), "0",
+          flag=wide, store=False)
 
 
 if __name__ == "__main__":
