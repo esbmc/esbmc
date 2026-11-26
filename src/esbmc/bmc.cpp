@@ -254,9 +254,14 @@ bmct::bmct(goto_functionst &funcs, optionst &opts, contextt &_context)
       !options.get_bool_option("forward-condition") &&
       !options.get_bool_option("k-induction") &&
       !options.get_bool_option("ltl"))
-      // Store the set between runs
+      // Store the set between runs. --multi-property and --check-vacuity
+      // decide each claim alone, and an implied claim can differ from the
+      // one implying it there.
       algorithms.emplace_back(
-        std::make_unique<assertion_cache>(get_ssa_caching_db()));
+        std::make_unique<assertion_cache>(
+          get_ssa_caching_db(),
+          !options.get_bool_option("multi-property") &&
+            !options.get_bool_option("check-vacuity")));
 
     // A shared read may observe a write after the last assertion.
     if (opts.get_bool_option("no-slice"))
