@@ -312,8 +312,63 @@ void goto_loop_invariantt::goto_loop_invariant()
     // inductive check is trivially true.  We still process the loop so that
     // the base-case ASSERT is emitted (it can still catch a wrong invariant).
     // TODO: consider whether an empty modified-vars set warrants a warning.
-    convert_loop_with_invariant(function_loop);
+    if (!absorbed_back_edges.count(&*function_loop.get_original_loop_exit()))
+      convert_loop_with_invariant(function_loop);
   }
+}
+
+/// The LOOP_INVARIANT at most kMaxInvariantSearchBack instructions before
+/// \p loop_head, not counting k-induction's instrumentation of the loop
+/// (#11081), or the instruction where the search stopped.
+static goto_programt::targett find_loop_invariant_before(
+  goto_programt &body,
+  goto_programt::targett loop_head)
+{
+  goto_programt::targett it = loop_head;
+  size_t back_dist = 0;
+  while (it != body.instructions.begin() &&
+         back_dist < goto_loop_invariantt::kMaxInvariantSearchBack)
+  {
+    --it;
+    if (it->inductive_step_instruction)
+      continue;
+    ++back_dist;
+    if (it->is_loop_invariant())
+      break;
+  }
+  return it;
+}
+
+/// Whether a jump to \p target reaches \p head over nothing but k-induction's
+/// instrumentation of the loops there (#11081).
+static bool lands_on_head(
+  goto_programt::const_targett target,
+  goto_programt::const_targett head,
+  const goto_programt::instructionst &body)
+{
+  while (target != head)
+    if (head == body.begin() || !(--head)->inductive_step_instruction)
+      return false;
+  return true;
+}
+
+/// A CBMC contract holds at its loop's head, so a back edge into that head from
+/// an inner loop sharing it must re-establish the invariant too (#11085).
+static std::vector<goto_programt::targett>
+inner_back_edges_to_head(goto_programt &body, const loopst &loop)
+{
+  const goto_programt::targett head = loop.get_original_loop_head();
+  std::vector<goto_programt::targett> edges;
+  if (
+    find_loop_invariant_before(body, head)->location.property() !=
+    kCbmcLoopContractProperty)
+    return edges;
+  for (auto it = std::next(head); it != loop.get_original_loop_exit(); ++it)
+    if (
+      it->is_backwards_goto() &&
+      lands_on_head(it->targets.front(), head, body.instructions))
+      edges.push_back(it);
+  return edges;
 }
 
 void goto_loop_invariantt::convert_loop_with_invariant(loopst &loop)
@@ -327,6 +382,12 @@ void goto_loop_invariantt::convert_loop_with_invariant(loopst &loop)
   if (invariants.empty())
     return;
   first_claim = reserve_invariant_claims(invariants.size());
+
+  std::vector<goto_programt::targett> back_edges =
+    inner_back_edges_to_head(goto_function.body, loop);
+  for (const goto_programt::targett back_edge : back_edges)
+    absorbed_back_edges.insert(&*back_edge);
+  back_edges.push_back(loop.get_original_loop_exit());
 
   log_status(
     "Processing {} loop invariant{}",
@@ -377,34 +438,14 @@ void goto_loop_invariantt::convert_loop_with_invariant(loopst &loop)
     std::prev(after_head), loop, invariants, loop_assigns, side_effects);
 
   // 3. Insert inductive step verification and loop termination
-  insert_inductive_step_and_termination(loop, invariants, side_effects);
+  for (const goto_programt::targett back_edge : back_edges)
+    insert_inductive_step_and_termination(
+      loop, back_edge, invariants, side_effects);
 
   // Cleanup: free the frame enforcer after both steps are done.
   delete active_frame_enforcer;
   active_frame_enforcer = nullptr;
   active_loop_assigns.clear();
-}
-
-/// The LOOP_INVARIANT at most kMaxInvariantSearchBack instructions before
-/// \p loop_head, not counting k-induction's instrumentation of the loop
-/// (#11081), or the instruction where the search stopped.
-static goto_programt::targett find_loop_invariant_before(
-  goto_programt &body,
-  goto_programt::targett loop_head)
-{
-  goto_programt::targett it = loop_head;
-  size_t back_dist = 0;
-  while (it != body.instructions.begin() &&
-         back_dist < goto_loop_invariantt::kMaxInvariantSearchBack)
-  {
-    --it;
-    if (it->inductive_step_instruction)
-      continue;
-    ++back_dist;
-    if (it->is_loop_invariant())
-      break;
-  }
-  return it;
 }
 
 std::vector<expr2tc>
@@ -962,11 +1003,11 @@ void goto_loop_invariantt::insert_havoc_and_assume_before_condition(
 
 void goto_loop_invariantt::insert_inductive_step_and_termination(
   const loopst &loop,
+  goto_programt::targett loop_exit,
   const std::vector<expr2tc> &invariants,
   const goto_programt &side_effects)
 {
   // Insert at the end of loop body (before GOTO back to loop head)
-  goto_programt::targett loop_exit = loop.get_original_loop_exit();
   goto_programt::targett insert_point = loop_exit;
 
   goto_programt dest;
@@ -1008,7 +1049,9 @@ void goto_loop_invariantt::insert_inductive_step_and_termination(
     t->location = loop_exit->location;
     t->location.comment("loop invariant inductive step");
     t->location.property("invariant-inductive-step");
-    t->location.set(invariant_claim_key, first_claim + i);
+    // The witness states the invariant once, at its own loop.
+    if (loop_exit == loop.get_original_loop_exit())
+      t->location.set(invariant_claim_key, first_claim + i);
   }
 
   // 4. Cut the back edge: the havoc already covers every iteration.
