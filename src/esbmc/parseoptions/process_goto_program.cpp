@@ -34,7 +34,9 @@
 #include <goto-programs/goto_termination.h>
 #include <esbmc/ranking_synthesis.h>
 #include <esbmc/non_termination.h>
-#include <esbmc/llm_invariant_synthesis.h>
+#ifdef ENABLE_LLM
+#  include <esbmc/llm_invariant_synthesis.h>
+#endif
 #include <goto-programs/goto_loop_simplify.h>
 #include <goto-programs/goto_array_loop_summary.h>
 #include <goto-programs/goto_invariant_synthesis.h>
@@ -1126,6 +1128,7 @@ void esbmc_parseoptionst::apply_loop_invariants(
       "--llm-invariants added no invariant: the k-induction "
       "transform has already rewritten the loop heads. Drop the k-induction "
       "phase to use it");
+#ifdef ENABLE_LLM
   else if (llm)
   {
     llm::configt cfg;
@@ -1143,6 +1146,7 @@ void esbmc_parseoptionst::apply_loop_invariants(
       atoi(cmdline.getval("llm-max-rounds")),
       use_frame_rule);
   }
+#endif
   else if (cmdline.isset("synthesise-loop-invariants"))
     // Read from `options`, the same object goto_check consults
     // (goto_check.cpp:34,36). Deciding the same question from `cmdline`

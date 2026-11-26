@@ -238,6 +238,10 @@ static bool select_loop_synthesiser(cmdlinet &cmdline)
     }
     return false;
   }
+#ifndef ENABLE_LLM
+  log_error("--llm-invariants needs a build with -DENABLE_LLM=On");
+  return true;
+#endif
   if (
     !cmdline.isset("llm-command") ||
     std::string(cmdline.getval("llm-command")).find_first_not_of(' ') ==
@@ -610,6 +614,11 @@ static bool redirect_output(const cmdlinet &cmdline)
   return true;
 }
 
+static bool rejected_flags(cmdlinet &cmdline)
+{
+  return select_loop_synthesiser(cmdline) || incompatible_flags(cmdline);
+}
+
 int esbmc_parseoptionst::doit()
 {
   if (!redirect_output(cmdline))
@@ -639,7 +648,7 @@ int esbmc_parseoptionst::doit()
   }
 
   default_kani_strategy();
-  if (select_loop_synthesiser(cmdline) || incompatible_flags(cmdline))
+  if (rejected_flags(cmdline))
     return 1;
 
   // Preprocess the input program.

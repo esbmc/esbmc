@@ -297,6 +297,9 @@ endif()
 if(ENABLE_LD_FRONTEND)
     set(REGRESSIONS_LD ld)
 endif()
+if(ENABLE_LLM)
+    set(REGRESSIONS_LLM llm)
+endif()
 if(ENABLE_PYTHON_FRONTEND)
     set(REGRESSIONS_PYTHON python)
     set(REGRESSIONS_PYTHON_INTENSIVE python-intensive)
@@ -427,6 +430,7 @@ if(APPLE)
                     ${REGRESSIONS_PYTHON_CONTRACTS}
                     ${REGRESSIONS_AI_GENERATED_CODE}
                     ${REGRESSIONS_LD}
+                    ${REGRESSIONS_LLM}
                     ${TEST_GENERATION}
                     ltl
                     goto-transcoder
@@ -508,6 +512,7 @@ else()
                     ${REGRESSIONS_PYTHON_CONTRACTS}
                     ${REGRESSIONS_AI_GENERATED_CODE}
                     ${REGRESSIONS_LD}
+                    ${REGRESSIONS_LLM}
                     ${TEST_GENERATION}
                     ltl
                     goto-coverage

@@ -398,6 +398,8 @@ restrictions and the design constraint they follow from are documented in
 esbmc file.c --llm-invariants --llm-command "ollama run qwen2.5-coder"
 ```
 
+The flag needs ESBMC built with `-DENABLE_LLM=On`.
+
 `--llm-invariants` asks a language model for the invariants of every loop, not
 only affine ones. ESBMC renders the GOTO program as C-like text, with each loop
 labelled (`main L1`) and the variables it modifies listed, and asks the model
@@ -451,7 +453,7 @@ Synthesised loop invariants for 1 loop
 VERIFICATION SUCCESSFUL
 ```
 
-This run is pinned as `regression/esbmc/llm_loop_invariant_cegis`, with a
+This run is pinned as `regression/llm/llm_loop_invariant_cegis`, with a
 scripted `model.py` standing in for the model.
 
 **The model command.** ESBMC runs `--llm-command` once per round, writes the

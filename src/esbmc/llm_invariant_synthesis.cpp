@@ -218,10 +218,10 @@ public:
           rejected << "- " << name << ": only " << max_conjuncts
                    << " invariants per loop are checked; `" << render(*loop, c)
                    << "` was ignored.\n";
-        else if (std::none_of(
-                   kept.begin(), kept.end(), [&](const candidatet &k) {
-                     return k.expr == c;
-                   }))
+        else if (
+          std::none_of(kept.begin(), kept.end(), [&](const candidatet &k) {
+            return k.expr == c;
+          }))
           kept.push_back(
             {c, conjuncts.size() == 1 ? line.expression : render(*loop, c)});
     }
