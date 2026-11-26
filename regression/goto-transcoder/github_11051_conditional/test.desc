@@ -1,0 +1,5 @@
+CORE
+main.goto
+--binary --loop-invariant-check --unwind 8
+^WARNING: CBMC goto-binary: ignoring a loop invariant with a side effect$
+^VERIFICATION SUCCESSFUL$

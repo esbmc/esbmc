@@ -1,0 +1,5 @@
+CORE
+main.c
+--ssa-features-dump
+^SSA: Contains BITWISE OPERATIONS$
+^VERIFICATION FAILED$

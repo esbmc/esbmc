@@ -500,6 +500,43 @@ collect_symbols_local(const expr2tc &expr, std::set<irep_idt> &symbols)
   }
 }
 
+/// True when \p jump can land strictly after \p first and no later than
+/// \p last.
+static bool jumps_past(
+  const goto_programt::instructiont &jump,
+  goto_programt::targett first,
+  goto_programt::targett last)
+{
+  for (auto it = first; it != last;)
+  {
+    ++it;
+    if (
+      std::find(jump.targets.begin(), jump.targets.end(), it) !=
+      jump.targets.end())
+      return true;
+  }
+  return false;
+}
+
+/// The LOOP_INVARIANT at most kMaxInvariantSearchBack instructions before
+/// \p loop_head, or the instruction where the search stopped.
+static goto_programt::targett find_loop_invariant_before(
+  goto_programt &body,
+  goto_programt::targett loop_head)
+{
+  goto_programt::targett it = loop_head;
+  size_t back_dist = 0;
+  while (it != body.instructions.begin() &&
+         back_dist < goto_loop_invariantt::kMaxInvariantSearchBack)
+  {
+    --it;
+    ++back_dist;
+    if (it->is_loop_invariant())
+      break;
+  }
+  return it;
+}
+
 /// Shared implementation used by both the legacy loop-invariant pass and the
 /// combined loop-invariant + k-induction pass.  See the declaration of
 /// goto_loop_invariantt::extract_and_remove_side_effects for a high-level
@@ -534,17 +571,8 @@ static void extract_and_remove_side_effects_impl(
     return false;
   };
 
-  // Find the LOOP_INVARIANT instruction preceding loop_head.
-  goto_programt::targett loop_inv_it = loop_head;
-  size_t back_dist = 0;
-  while (loop_inv_it != goto_function.body.instructions.begin() &&
-         back_dist < goto_loop_invariantt::kMaxInvariantSearchBack)
-  {
-    --loop_inv_it;
-    ++back_dist;
-    if (loop_inv_it->is_loop_invariant())
-      break;
-  }
+  goto_programt::targett loop_inv_it =
+    find_loop_invariant_before(goto_function.body, loop_head);
   if (!loop_inv_it->is_loop_invariant())
     return;
 
@@ -639,11 +667,15 @@ static void extract_and_remove_side_effects_impl(
 
     if (search->is_goto())
     {
+      if (to_remove.empty())
+        continue;
       // Collected code below a branch (`||`, `&&`, `?:`) is conditional
       // (#10997); re-running it unconditionally would clobber the temporary.
-      if (!to_remove.empty())
+      // A jump that cannot land past its start, such as an earlier loop's
+      // back edge, only ends it (#11051).
+      if (jumps_past(*search, to_remove.back(), loop_inv_it))
         return;
-      continue;
+      break;
     }
 
     // Consecutive __ESBMC_loop_invariant() calls for the same loop lower to

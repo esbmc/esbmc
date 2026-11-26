@@ -8,14 +8,16 @@
 
 /**
  * @Brief This class stores all asserts conditions and guards
- *        for a given SSA, if some pair was already added
- *        then it will assume that it is UNSAT.
+ *        for a given SSA, and ignores an assertion that an earlier
+ *        one implies: the same claim under the same guard conjuncts or,
+ *        with subsume_guards, under a subset of them.
  *        Currently, this works for the base case check only.
  */
 class assertion_cache : public ssa_step_algorithm
 {
 public:
-  assertion_cache(assert_db &db) : ssa_step_algorithm(true), db(db)
+  assertion_cache(assert_db &db, bool subsume_guards)
+    : ssa_step_algorithm(true), db(db), subsume_guards(subsume_guards)
   {
   }
 
@@ -31,6 +33,7 @@ protected:
   assert_db &db;
 
 private:
+  const bool subsume_guards;
   BigInt hits = 0;
   BigInt total = 0;
 };

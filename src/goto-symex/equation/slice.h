@@ -61,6 +61,7 @@ public:
     }
   };
   bool run(symex_target_equationt::SSA_stepst &) override;
+  bool run(std::vector<symex_target_equationt::sliced_stept> &);
   size_t claim_to_keep;
   std::string claim_msg;
   std::string claim_loc;
@@ -83,6 +84,10 @@ public:
   bool show_slice_info;
   bool is_goto_cov;
   namespacet ns;
+
+private:
+  template <class Steps>
+  bool run_on(Steps &steps);
 };
 
 /**
@@ -117,56 +122,8 @@ public:
    *
    * @param eq symex formula to be sliced
    */
-  bool run(symex_target_equationt::SSA_stepst &eq) override
-  {
-    // The slicer object is reused across equations (e.g. incremental-bmc /
-    // k-induction run it once per produced formula). Each formula must be
-    // sliced independently, so clear all per-equation state up front.
-    // (Previously only `sliced` was reset, leaking `depends` across equations.)
-    sliced = 0;
-    depends.clear();
-    collected_cache.clear();
-    index_reads.clear();
-    array_disqualified.clear();
-    scanned_cache.clear();
-    sliced_reads.clear();
-    sliced_definitions.clear();
-
-    fine_timet algorithm_start = current_time();
-    symex_target_equationt::SSA_stept *sliced_print = nullptr;
-    for (auto &step : boost::adaptors::reverse(eq))
-    {
-      if (step.ignore)
-        continue;
-      run_on_step(step);
-      if (hide_unconstrained_prints)
-        sliced_print = carry_split_print(step, sliced_print);
-    }
-    // A branching step only steers the witness, so its guard and cond are not
-    // dependencies. Where they read a value the slicer removed, the model's
-    // value for it is arbitrary and the waypoint may be infeasible (#9884):
-    // drop the step rather than keep that definition.
-    for (auto &step : eq)
-      if (
-        step.is_branching() && !step.ignore &&
-        (reads_sliced(step.guard) || reads_sliced(step.cond)))
-        step.ignore = true;
-    // A split struct's whole write prints a right-hand side its kept field
-    // steps may not read. Where that reads a definition the slicer removed,
-    // the model's value for it is arbitrary (#10801): hide the step.
-    if (hide_unconstrained_prints)
-      for (auto &step : eq)
-        if (
-          step.is_assignment() && !step.ignore && !step.hidden &&
-          reads_sliced_definition(step.original_rhs))
-          step.hidden = true;
-    fine_timet algorithm_stop = current_time();
-    log_status(
-      "Slicing time: {}s (removed {} assignments)",
-      time2string(algorithm_stop - algorithm_start),
-      sliced);
-    return true;
-  }
+  bool run(symex_target_equationt::SSA_stepst &eq) override;
+  bool run(std::vector<symex_target_equationt::sliced_stept> &eq);
 
   /**
    * Holds the symbols the current equation depends on.
@@ -185,7 +142,7 @@ public:
   /// already recorded for the source version. A store to an index NOT present
   /// here is provably dead and may be elided. Populated by #scan_array_uses,
   /// consulted by
-  /// #run_on_assignment to drop dead array stores.
+  /// #slice_assignment to drop dead array stores.
   std::unordered_map<std::string, std::unordered_set<size_t>> index_reads;
 
   /// Array versions whose element reads cannot be reasoned about per-index
@@ -278,9 +235,8 @@ protected:
    * @param pending the removed printing step awaiting a kept sibling, or null
    * @return the printing step still awaiting a kept sibling, or null
    */
-  symex_target_equationt::SSA_stept *carry_split_print(
-    symex_target_equationt::SSA_stept &step,
-    symex_target_equationt::SSA_stept *pending);
+  template <class Step>
+  Step *carry_split_print(Step &step, Step *pending);
 
   /// Does \expr read a symbol in #sliced_definitions? A symbol with no
   /// defining step is as free in the sliced formula as in the full one.
@@ -292,7 +248,8 @@ protected:
    *
    * @param SSA_step an assert step
    */
-  void run_on_assert(symex_target_equationt::SSA_stept &SSA_step) override;
+  template <class Step>
+  void slice_assert(Step &SSA_step);
 
   /**
    * Remove unneeded assumes from the formula
@@ -311,7 +268,8 @@ protected:
    *
    * @param SSA_step an assume step
    */
-  void run_on_assume(symex_target_equationt::SSA_stept &SSA_step) override;
+  template <class Step>
+  void slice_assume(Step &SSA_step);
 
   /**
    * Remove unneeded assignments from the formula
@@ -324,7 +282,8 @@ protected:
    *
    * @param SSA_step an assignment step
    */
-  void run_on_assignment(symex_target_equationt::SSA_stept &SSA_step) override;
+  template <class Step>
+  void slice_assignment(Step &SSA_step);
 
   /**
    * Remove unneeded renumbers from the formula
@@ -335,7 +294,8 @@ protected:
    *
    * @param SSA_step a renumber step
    */
-  void run_on_renumber(symex_target_equationt::SSA_stept &SSA_step) override;
+  template <class Step>
+  void slice_renumber(Step &SSA_step);
 
   /**
    * Keep what a --partial-order event depends on. Any read may observe a
@@ -344,7 +304,14 @@ protected:
    *
    * @param SSA_step an event step
    */
-  void run_on_event(symex_target_equationt::SSA_stept &SSA_step) override;
+  template <class Step>
+  void slice_event(Step &SSA_step);
+
+  template <class Step>
+  void slice_step(Step &step);
+
+  template <class Steps>
+  bool run_on(Steps &eq);
 };
 
 #endif
