@@ -667,6 +667,47 @@ void merge_threads(
     step.step_nr = ++step_nr;
 }
 
+/// The merge can put a spawned thread's steps before the parent's step that
+/// carries the spawn, and a witness registers a thread only before its first
+/// waypoint (#10749). Move each spawn to the earlier of the two, keeping the
+/// spawns in creation order.
+void place_spawns(goto_tracet &goto_trace)
+{
+  using spawnt = goto_trace_stept::spawnt;
+  std::vector<goto_trace_stept *> steps;
+  std::map<unsigned, size_t> first_step;
+  std::vector<std::pair<size_t, spawnt>> spawns;
+  for (goto_trace_stept &step : goto_trace.steps)
+  {
+    first_step.try_emplace(step.thread_nr, steps.size());
+    for (spawnt &spawn : step.spawns)
+      spawns.emplace_back(steps.size(), std::move(spawn));
+    step.spawns.clear();
+    steps.push_back(&step);
+  }
+
+  size_t bound = steps.size();
+  for (auto it = spawns.rbegin(); it != spawns.rend(); ++it)
+  {
+    auto &[at, spawn] = *it;
+    const auto child = first_step.find(spawn.thread_nr);
+    const size_t earliest =
+      std::min({at, bound, child == first_step.end() ? at : child->second});
+    if (earliest != at)
+      spawn.nondet_returns_before = 0;
+    at = bound = earliest;
+  }
+
+  for (auto &[at, spawn] : spawns)
+  {
+    std::list<spawnt> &placed = steps[at]->spawns;
+    if (!placed.empty())
+      spawn.nondet_returns_before = std::max(
+        spawn.nondet_returns_before, placed.back().nondet_returns_before);
+    placed.push_back(std::move(spawn));
+  }
+}
+
 /// Under --partial-order symex lists each thread whole; the clocks the
 /// memory model gave the events say how the threads interleave. \p sources
 /// holds the SSA step of each trace step.
@@ -684,6 +725,7 @@ void order_by_clock(
   for (const stept *step : sources)
     trace_positions.push_back(positions.at(step));
   merge_threads(goto_trace, trace_positions);
+  place_spawns(goto_trace);
 }
 } // namespace
 

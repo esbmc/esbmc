@@ -1,0 +1,9 @@
+CORE
+main.c
+--partial-order --error-label ERROR --unwind 4 --witness-output-yaml -
+^VERIFICATION FAILED$
+^    format_version: "2\.4"$
+(?s)type: "function_enter"(?:(?!waypoint:).)*line: 17\s+column: 32
+(?s)type: "function_enter"(?:(?!waypoint:).)*line: 18\s+column: 32
+(?s)function: "t1"\s+thread_id: 1.*function: "t2"\s+thread_id: 2.*function: "t1"\s+thread_id: 1
+(?s)type: "target"(?:(?!thread_id).)*\Z

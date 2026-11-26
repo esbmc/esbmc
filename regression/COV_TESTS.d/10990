@@ -98,3 +98,5 @@ regression/esbmc-unix/partial_order_trace_write
 regression/esbmc-unix/partial_order_trace_write_fail
 regression/esbmc-unix/partial_order_trace_lost_update
 regression/esbmc-unix/partial_order_trace_lost_update_fail
+regression/esbmc-unix/partial_order_witness
+regression/esbmc-unix/partial_order_witness_fail
