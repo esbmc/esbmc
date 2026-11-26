@@ -799,6 +799,7 @@ void goto_loop_invariantt::havoc_pointees(
     t->code = code_assign2tc(dereference2tc(pointee, ptr), gen_nondet(pointee));
     t->location = loc;
     t->location.comment("loop invariant havoc");
+    t->loop_invariant_havoc = true;
   }
 }
 

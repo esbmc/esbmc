@@ -705,9 +705,18 @@ void goto_symext::symex_assign_symbol(
     do_simplify(full_rhs);
   }
 
+  expr2tc havoc_entry;
+  if (cur_state->source.pc->loop_invariant_havoc)
+  {
+    havoc_entry = lhs;
+    cur_state->rename(havoc_entry);
+  }
+
   expr2tc renamed_lhs = lhs;
   cur_state->rename_type(renamed_lhs);
-  cur_state->assignment(renamed_lhs, rhs);
+  // Reads past a loop-invariant havoc name its lhs, so pinning that to
+  // havoc_entry pins every read (bmct::solve_from_loop_entry, #11027).
+  cur_state->assignment(renamed_lhs, rhs, true, is_nil_expr(havoc_entry));
 
   if (!is_nil_expr(full_rhs) && full_rhs_after_write)
   {
@@ -745,7 +754,8 @@ void goto_symext::symex_assign_symbol(
     cur_state->source,
     cur_state->gen_stack_trace(),
     hidden,
-    first_loop);
+    first_loop,
+    havoc_entry);
 }
 
 void goto_symext::symex_assign_structure(

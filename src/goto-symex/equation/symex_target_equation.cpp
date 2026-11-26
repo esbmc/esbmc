@@ -286,6 +286,7 @@ void convert_internal_step(
   else if (step.is_output())
   {
     symex_target_equationt::SSA_stept::output_datat &od = step.output_payload();
+    od.converted_output_args.clear();
     for (const expr2tc &tmp : od.output_args)
     {
       if (is_constant_expr(tmp) || is_constant_string2t(tmp))
@@ -372,7 +373,8 @@ void symex_target_equationt::assignment(
   const sourcet &source,
   std::vector<stack_framet> stack_trace,
   const bool hidden,
-  unsigned loop_number)
+  unsigned loop_number,
+  const expr2tc &havoc_entry)
 {
   assert(!is_nil_expr(lhs));
 
@@ -391,6 +393,7 @@ void symex_target_equationt::assignment(
   if (!stack_trace.empty())
     SSA_step.stack_trace_payload() = std::move(stack_trace);
   SSA_step.loop_number = loop_number;
+  SSA_step.havoc_entry = havoc_entry;
 
   if (debug_print)
     debug_print_step(SSA_step);
