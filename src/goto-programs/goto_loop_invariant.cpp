@@ -156,6 +156,9 @@ static std::vector<expr2tc> extract_invariants_near(
   while (it != begin && dist < goto_loop_invariantt::kMaxInvariantSearchBack)
   {
     --it;
+    // k-induction instruments this loop ahead of its head (#11081).
+    if (it->inductive_step_instruction)
+      continue;
     ++dist;
 
     if (!it->is_loop_invariant())
@@ -533,6 +536,8 @@ static goto_programt::targett find_loop_invariant_before(
          back_dist < goto_loop_invariantt::kMaxInvariantSearchBack)
   {
     --it;
+    if (it->inductive_step_instruction)
+      continue;
     ++back_dist;
     if (it->is_loop_invariant())
       break;
