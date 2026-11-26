@@ -2443,6 +2443,10 @@ regression/python/github_8239_fail
 regression/python/github_8200_late
 regression/python/github_8200_late_fail
 regression/esbmc-unix/partial_order_events_halt
+regression/esbmc-unix/partial_order_lock_held_at_bound
+regression/esbmc-unix/partial_order_lock_held_at_bound_fail
+regression/esbmc-unix/partial_order_lock_never_released
+regression/esbmc-unix/partial_order_lock_never_released_fail
 regression/esbmc-unix/partial_order_loop_bound
 regression/esbmc-unix/partial_order_loop_bound_atomic
 regression/esbmc-unix/partial_order_loop_bound_atomic_fail

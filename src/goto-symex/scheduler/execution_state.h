@@ -526,6 +526,11 @@ public:
    *  @return Whether \p instruction was such a call under --partial-order */
   bool partial_order_mutex(const goto_programt::instructiont &instruction);
 
+  /** --partial-order: a lock may wait forever, as on a mutex its holder
+   *  never releases. The thread then halts before the lock, and the other
+   *  threads run on, so their earlier violations stay reachable. */
+  void wait_forever_at_lock();
+
   /** --partial-order: end the path at a pthread_exit call, or at a call to
    *  __ESBMC_terminate_thread in user code. The operational model ends it
    *  with an assumption, which would also hold every other thread's later
@@ -840,6 +845,8 @@ protected:
   /** --partial-order: run each thread to completion and record its shared
    *  accesses as events instead of offering context switches. */
   bool partial_order;
+  /** --partial-order: how many locks have a choice to wait forever. */
+  unsigned lock_waits = 0;
 
   /** Copy execution_statet's own scheduling fields from `ex`. The base
    *  goto_symext slice is left untouched (the copy constructor's
