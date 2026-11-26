@@ -115,10 +115,6 @@ static bool is_compiler_temp(goto_programt::const_targett t)
   return false;
 }
 
-/// Walk backwards from @p loop_head (up to kMaxInvariantSearchBack steps) and
-/// return the invariant expression(s) for the nearest LOOP_INVARIANT found.
-/// Multiple conjuncts are folded into a single and2tc.  Returns an empty
-/// vector when no annotated LOOP_INVARIANT is in range.
 /// Whether a tool, not the user, emitted this invariant, which it places
 /// immediately before its own loop head.
 static bool is_tool_placed_invariant(const goto_programt::instructiont &i)
@@ -166,6 +162,10 @@ static void collect_same_loop_invariants(
   }
 }
 
+/// Walk backwards from @p loop_head (up to kMaxInvariantSearchBack steps) and
+/// return the invariant expression(s) for the nearest LOOP_INVARIANT found.
+/// Multiple conjuncts are folded into a single and2tc.  Returns an empty
+/// vector when no annotated LOOP_INVARIANT is in range.
 static std::vector<expr2tc> extract_invariants_near(
   goto_programt::targett loop_head,
   goto_programt::targett begin)
