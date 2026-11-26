@@ -618,8 +618,16 @@ void smt_solver_baset::register_layout(
     (object_layouts.empty() ? std::max(first_object_address(), BigInt(2))
                             : object_layouts.back().extent) +
     reserved;
+  const bool lazy = registering_lazily && supports_assumptions() &&
+                    !options.get_bool_option("smt-formula-only") &&
+                    !options.get_bool_option("smt-formula-too");
   object_layouts.push_back(
-    {obj_num, current_valid_objects_sym, ctx_level, std::nullopt, extent});
+    {obj_num,
+     current_valid_objects_sym,
+     ctx_level,
+     std::nullopt,
+     extent,
+     lazy});
   if (
     layout_needed_at ||
     extent > BigInt::power2(ptraddr_type2()->get_width() - 1))
@@ -639,6 +647,10 @@ void smt_solver_baset::lay_out_objects()
    * from it unconditionally, as it was when layouts were asserted on
    * registration. */
   std::unordered_set<unsigned int> registered;
+  std::unordered_set<unsigned int> lazy;
+  for (const object_layoutt &l : object_layouts)
+    if (l.lazy)
+      lazy.insert(l.obj);
   /* Converting an older __ESBMC_alloc version whose cache entry a pop dropped
    * makes it current again (convert_terminal). */
   const expr2tc valid_objects = current_valid_objects_sym;
@@ -646,7 +658,7 @@ void smt_solver_baset::lay_out_objects()
   {
     if (!l.laid_out_at)
     {
-      finalize_pointer_chain(l.obj, l.valid_objects, registered);
+      finalize_pointer_chain(l.obj, l.valid_objects, registered, lazy);
       l.laid_out_at = ctx_level;
     }
     registered.insert(l.obj);
@@ -657,7 +669,8 @@ void smt_solver_baset::lay_out_objects()
 void smt_solver_baset::finalize_pointer_chain(
   unsigned int objnum,
   const expr2tc &valid_objects,
-  const std::unordered_set<unsigned int> &registered)
+  const std::unordered_set<unsigned int> &registered,
+  const std::unordered_set<unsigned int> &lazy)
 {
   type2tc inttype = ptraddr_type2();
 
@@ -695,8 +708,47 @@ void smt_solver_baset::finalize_pointer_chain(
     if (valid_objects && registered.count(j) && addr_space_data.back().at(j))
       e = implies2tc(index2tc(get_bool_type(), valid_objects, gen_ulong(j)), e);
 
-    assert_expr(e);
+    if (lazy.count(objnum) || lazy.count(j))
+      lazy_layouts.push_back({objnum, j, e, ctx_level, std::nullopt});
+    else
+      assert_expr(e);
   }
+}
+
+void smt_solver_baset::convert_laid_out_lazily(const expr2tc &expr)
+{
+  registering_lazily = true;
+  convert_ast(expr);
+  registering_lazily = false;
+}
+
+bool smt_solver_baset::assert_overlapping_layouts()
+{
+  const type2tc inttype = ptraddr_type2();
+  std::unordered_map<std::string, std::optional<BigInt>> values;
+  auto value = [&](const std::string &name) {
+    auto [it, fresh] = values.try_emplace(name);
+    if (fresh)
+      if (const expr2tc v = get(symbol2tc(inttype, name)); is_constant_int2t(v))
+        it->second = to_constant_int2t(v).value;
+    return it->second;
+  };
+  auto apart = [&](unsigned int a, unsigned int b) {
+    const auto end_a = value("__ESBMC_ptr_obj_end_" + std::to_string(a));
+    const auto start_b = value("__ESBMC_ptr_obj_start_" + std::to_string(b));
+    return end_a && start_b && *end_a < *start_b;
+  };
+
+  bool asserted = false;
+  for (lazy_layoutt &l : lazy_layouts)
+  {
+    if (l.asserted_at || apart(l.obj1, l.obj2) || apart(l.obj2, l.obj1))
+      continue;
+    assert_expr(l.no_overlap);
+    l.asserted_at = ctx_level;
+    asserted = true;
+  }
+  return asserted;
 }
 
 smt_astt smt_solver_baset::convert_addr_of(const expr2tc &expr)

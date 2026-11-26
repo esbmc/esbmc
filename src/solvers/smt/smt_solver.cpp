@@ -322,6 +322,7 @@ void smt_solver_baset::pop_ctx()
   pop_entries(addrspace_stores, ctx_level, &addrspace_storet::asserted_at);
   pop_entries(int_to_ptr_objects, ctx_level, &int_to_ptr_objectt::closed_at);
   pop_entries(object_layouts, ctx_level, &object_layoutt::laid_out_at);
+  pop_entries(lazy_layouts, ctx_level, &lazy_layoutt::asserted_at);
   if (layout_needed_at && *layout_needed_at >= ctx_level)
     layout_needed_at.reset();
   pop_entries(ptr_eq_sites, ctx_level, &ptr_eq_sitet::closed_at);

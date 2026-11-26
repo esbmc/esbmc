@@ -20,7 +20,11 @@ void smt_convt::pop_ctx()
 
 smt_resultt smt_convt::dec_solve()
 {
-  return solver_impl->dec_solve();
+  smt_resultt res;
+  do
+    res = solver_impl->dec_solve();
+  while (res == P_SATISFIABLE && solver_impl->assert_overlapping_layouts());
+  return res;
 }
 
 smt_resultt
@@ -30,7 +34,11 @@ smt_convt::dec_solve_assuming(const std::vector<expr2tc> &assumptions)
   smt_solver_baset::ast_vec asts;
   for (const expr2tc &a : assumptions)
     asts.push_back(solver_impl->convert_ast(a));
-  return solver_impl->dec_solve_assuming(asts);
+  smt_resultt res;
+  do
+    res = solver_impl->dec_solve_assuming(asts);
+  while (res == P_SATISFIABLE && solver_impl->assert_overlapping_layouts());
+  return res;
 }
 
 std::vector<expr2tc> smt_convt::unsat_assumptions()
@@ -119,6 +127,11 @@ void smt_convt::convert_ast(const expr2tc &expr)
   // Discard the handle: callers only need the expression encoded into the
   // solver, and the AST is retained in the implementation's cache.
   solver_impl->convert_ast(expr);
+}
+
+void smt_convt::convert_laid_out_lazily(const expr2tc &expr)
+{
+  solver_impl->convert_laid_out_lazily(expr);
 }
 
 void smt_convt::convert_assign(const expr2tc &expr)

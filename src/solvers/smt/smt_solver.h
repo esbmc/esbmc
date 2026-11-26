@@ -311,6 +311,16 @@ public:
 
   void pre_solve();
 
+  /** Convert @p expr, laying out the objects it registers lazily: their
+   *  non-overlap constraints wait for assert_overlapping_layouts(). For
+   *  objects only an int-to-pointer cast can observe, a model rarely
+   *  overlaps them, so most of those quadratic constraints are never
+   *  asserted (#10796). */
+  void convert_laid_out_lazily(const expr2tc &expr);
+  /** Assert the deferred non-overlap constraints the current model violates.
+   *  @return Whether any was asserted, i.e. whether the model is spurious. */
+  bool assert_overlapping_layouts();
+
   /** Get the satisfying assignment using the type.
    *  @param expr Variable to get the value of. Must be a symbol expression.
    *  @return Explicit assigned value of expr in the solver. May be nil, in
@@ -1051,7 +1061,8 @@ public:
   void finalize_pointer_chain(
     unsigned int obj_num,
     const expr2tc &valid_objects,
-    const std::unordered_set<unsigned int> &registered);
+    const std::unordered_set<unsigned int> &registered,
+    const std::unordered_set<unsigned int> &lazy);
 
   /** A registered object, the `__ESBMC_alloc` version it was registered
    *  under, the context level it was registered at, the one its layout was
@@ -1064,6 +1075,7 @@ public:
     unsigned int level;
     std::optional<unsigned int> laid_out_at;
     BigInt extent;
+    bool lazy;
   };
   /** Only a cast between a pointer and an integer reads an address, so the
    *  quadratic non-overlap constraints wait for the first one (#9221), unless
@@ -1076,6 +1088,18 @@ public:
    *  and lay it out if the layout is needed. */
   void register_layout(unsigned int obj_num, const BigInt &reserved);
   void lay_out_objects();
+  /** A non-overlap constraint between two objects, one of them registered
+   *  lazily, asserted only once a model overlaps them. */
+  struct lazy_layoutt
+  {
+    unsigned int obj1;
+    unsigned int obj2;
+    expr2tc no_overlap;
+    unsigned int level;
+    std::optional<unsigned int> asserted_at;
+  };
+  std::vector<lazy_layoutt> lazy_layouts;
+  bool registering_lazily = false;
 
   /** Typecast data to bools */
   smt_astt convert_typecast_to_bool(const typecast2t &cast);

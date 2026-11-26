@@ -52,6 +52,7 @@ public:
    *  conversion, never the handle), so neither these nor any other smt_convt
    *  method exposes a solver-handle type. */
   void convert_ast(const expr2tc &expr);
+  void convert_laid_out_lazily(const expr2tc &expr);
   void convert_assign(const expr2tc &expr);
   /** Like convert_assign, but only binds the symbol to its value; nothing is
    *  asserted. */
