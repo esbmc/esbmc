@@ -726,11 +726,23 @@ expr2tc type_sizet::index_offset_bytes(const index2t &index)
   return add2tc(t, mul2tc(t, elem, idx), base);
 }
 
+static bool has_symbolic_index(const expr2tc &expr)
+{
+  if (is_index2t(expr))
+    return !is_constant_int2t(to_index2t(expr).index) ||
+           has_symbolic_index(to_index2t(expr).source_value);
+  if (is_member2t(expr))
+    return has_symbolic_index(to_member2t(expr).source_value);
+  if (is_typecast2t(expr))
+    return has_symbolic_index(to_typecast2t(expr).from);
+  return false;
+}
+
 expr2tc compute_pointer_offset(const expr2tc &expr, const namespacet *ns)
 {
   /* Only an offset with a symbolic index takes the byte form: moving
    * constant offsets too made Z3 12x slower on realloc14 and github_9375. */
-  if (is_index2t(expr) && !is_constant_int2t(to_index2t(expr).index))
+  if (has_symbolic_index(expr))
     if (
       expr2tc bytes = type_sizet(ns).pointer_offset_bytes(expr);
       !is_nil_expr(bytes))
