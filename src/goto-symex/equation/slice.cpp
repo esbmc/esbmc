@@ -362,6 +362,10 @@ void symex_slicet::run_on_assignment(
   {
     scan_array_uses(SSA_step.guard);
 
+    // bmct::solve_from_loop_entry encodes a kept havoc as this value.
+    scan_array_uses(SSA_step.havoc_entry);
+    collect_dependencies(SSA_step.havoc_entry);
+
     const symbol2t &lhs = to_symbol2t(SSA_step.lhs);
 
     // Dead-store elimination for `lhs = src with [const_i := v]`: if index

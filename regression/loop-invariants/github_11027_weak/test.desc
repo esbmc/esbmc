@@ -1,0 +1,6 @@
+CORE
+main.c
+--loop-invariant-check --multi-property
+^Violated property:\n.*\n  after: x == 10$
+^\s+UNKNOWN\s+\[main\.assertion\.3\]\s+line\s+12\s+after: x == 10 \(loop invariant too weak
+^VERIFICATION UNKNOWN$

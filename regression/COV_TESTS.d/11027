@@ -1,0 +1,6 @@
+regression/loop-invariants/github_11027
+regression/loop-invariants/github_11027_single
+regression/loop-invariants/github_11027_weak
+regression/loop-invariants/github_11027_weak_single
+regression/loop-invariants/github_11027_entry_sliced
+regression/loop-invariants/github_11027_pointee

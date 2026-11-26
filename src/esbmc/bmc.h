@@ -98,7 +98,12 @@ protected:
   smt_resultt check_vacuity(symex_target_equationt &local_eq) const;
 
   /// Whether some feasible execution avoids violating the kept claim.
-  smt_resultt check_claim_unsatisfiable(symex_target_equationt &local_eq) const;
+  smt_resultt check_claim_unsatisfiable(const symex_target_equationt &eq) const;
+
+  /// A model violating a claim of \p eq from the state each invariant-havoc'd
+  /// loop is entered in, or null when there is none (#11027).
+  std::unique_ptr<smt_convt>
+  solve_from_loop_entry(symex_target_equationt &eq) const;
 
   /// Whether the invariant leaves one claim no way to be avoided (#10642).
   bool invariant_refutes(const symex_target_equationt &eq, size_t claim_index);
@@ -238,8 +243,9 @@ private:
 
   /// Record the verdict a satisfiable answer earns for one claim: Failed, or
   /// Unknown when the model witnesses only the invariant abstraction rather
-  /// than a reachable state (issue #7480).
-  void record_satisfiable_claim(
+  /// than a reachable state (issue #7480). Returns the solver holding a real
+  /// counterexample when the model had to be replaced to find one (#11027).
+  std::unique_ptr<smt_convt> record_satisfiable_claim(
     const claim_slicer &claim,
     const property_locationt &loc,
     bool inductive_step,
@@ -252,10 +258,11 @@ private:
   /// a loop-invariant havoc, whose witness is the abstraction rather than a
   /// reachable state (issue #7480). Call only where a SAT result can witness a
   /// real violation at all: an inductive-step or forward-condition model
-  /// cannot.
+  /// cannot. A model from solve_from_loop_entry witnesses only real ones.
   void record_violated_properties(
     smt_convt &smt_conv,
-    const symex_target_equationt &eq);
+    const symex_target_equationt &eq,
+    bool from_loop_entry = false);
 
   /// A model that refutes only the loop-invariant abstraction can hide a real
   /// violation of another claim. After a satisfiable \p result, set its claims

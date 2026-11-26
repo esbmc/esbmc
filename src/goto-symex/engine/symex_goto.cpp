@@ -509,7 +509,8 @@ void goto_symext::symex_goto(const expr2tc &old_guard)
         cur_state->source,
         cur_state->gen_stack_trace(),
         true,
-        first_loop);
+        first_loop,
+        expr2tc());
 
       if (is_constant_expr(new_rhs))
         guard_expr = new_rhs;
@@ -850,7 +851,8 @@ void goto_symext::phi_function(const statet::merge_statet &merge_state)
       cur_state->source,
       cur_state->gen_stack_trace(),
       true,
-      first_loop);
+      first_loop,
+      expr2tc());
   }
 }
 

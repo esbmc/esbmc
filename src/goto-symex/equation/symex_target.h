@@ -53,7 +53,8 @@ public:
     }
   };
 
-  // write to a variable - lhs must be a symbol
+  // write to a variable - lhs must be a symbol. \p havoc_entry is nil unless
+  // the write is a loop-invariant havoc, where it is the value lhs held before.
   virtual void assignment(
     const expr2tc &guard,
     const expr2tc &lhs,
@@ -63,7 +64,8 @@ public:
     const sourcet &source,
     std::vector<stack_framet> stack_trace,
     const bool hidden,
-    unsigned loop_number) = 0;
+    unsigned loop_number,
+    const expr2tc &havoc_entry) = 0;
 
   // record output
   virtual void output(

@@ -705,6 +705,13 @@ void goto_symext::symex_assign_symbol(
     do_simplify(full_rhs);
   }
 
+  expr2tc havoc_entry;
+  if (cur_state->source.pc->loop_invariant_havoc)
+  {
+    havoc_entry = lhs;
+    cur_state->rename(havoc_entry);
+  }
+
   expr2tc renamed_lhs = lhs;
   cur_state->rename_type(renamed_lhs);
   cur_state->assignment(renamed_lhs, rhs);
@@ -745,7 +752,8 @@ void goto_symext::symex_assign_symbol(
     cur_state->source,
     cur_state->gen_stack_trace(),
     hidden,
-    first_loop);
+    first_loop,
+    havoc_entry);
 }
 
 void goto_symext::symex_assign_structure(

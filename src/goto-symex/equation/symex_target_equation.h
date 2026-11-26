@@ -40,7 +40,8 @@ public:
     const sourcet &source,
     std::vector<stack_framet> stack_trace,
     const bool hidden,
-    unsigned loop_number) override;
+    unsigned loop_number,
+    const expr2tc &havoc_entry) override;
 
   // output
   void output(
@@ -201,6 +202,10 @@ public:
     // non-ignored assumes and before conversion.
     expr2tc cond_expr;
 
+    // A loop-invariant havoc's assignment: the value lhs held before it, so
+    // that a run from the loop's entry state can be encoded (#11027).
+    expr2tc havoc_entry;
+
     // for slicing
     bool ignore;
 
@@ -236,6 +241,7 @@ public:
             ? std::make_unique<std::vector<stack_framet>>(*o.stack_trace_box)
             : nullptr),
         cond_expr(o.cond_expr),
+        havoc_entry(o.havoc_entry),
         ignore(o.ignore),
         hidden(o.hidden),
         loop_number(o.loop_number)
