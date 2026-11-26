@@ -663,6 +663,12 @@ void symex_target_equationt::SSA_stept::output(
   case symex_targett::ATOMIC_END:
     out << "ATOMIC_END\n";
     break;
+  case symex_targett::LOCK:
+    out << "LOCK " << to_symbol2t(lhs).get_symbol_name() << "\n";
+    break;
+  case symex_targett::UNLOCK:
+    out << "UNLOCK " << to_symbol2t(lhs).get_symbol_name() << "\n";
+    break;
 
   default:
     assert(

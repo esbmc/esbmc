@@ -16,6 +16,12 @@ public:
   /// How many steps were ignored after this algorithm
   virtual BigInt ignored() const = 0;
 
+  /// How many claims this algorithm appended to the equation
+  virtual size_t claims_added() const
+  {
+    return 0;
+  }
+
   void run_on_step(symex_target_equationt::SSA_stept &);
 
   virtual void run_on_assignment(symex_target_equationt::SSA_stept &)

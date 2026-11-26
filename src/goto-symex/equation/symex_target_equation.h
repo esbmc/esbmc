@@ -149,7 +149,7 @@ public:
     bool is_event() const
     {
       return type >= symex_targett::SHARED_READ &&
-             type <= symex_targett::ATOMIC_END;
+             type <= symex_targett::UNLOCK;
     }
     bool adds_no_constraint() const
     {

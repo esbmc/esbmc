@@ -5,15 +5,18 @@
 
 /// Whether the user code in \p goto_functions stays inside what the
 /// --partial-order prototype handles (#10990): shared globals of scalar
-/// or array-of-scalar type, threads created outside loops with a null argument,
-/// and pthread create, join and mutex calls. The operational models are not
-/// checked. With \p verifying, also rejects what the memory model cannot
-/// order yet: locks and assumptions. Logs the first construct outside that
-/// scope.
+/// or array-of-scalar type, threads created with a null argument, and
+/// pthread create, join, exit, mutex and condition-variable calls. The
+/// operational models are not checked. With \p verifying, also rejects what
+/// the memory model cannot order yet: assumptions. With \p races, also
+/// rejects global arrays. With \p deadlocks, also rejects pthread_exit.
+/// Logs the first construct outside that scope.
 bool partial_order_in_scope(
   const goto_functionst &goto_functions,
   const namespacet &ns,
-  bool verifying);
+  bool verifying,
+  bool races,
+  bool deadlocks);
 
 /// Whether \p name is a user global whose accesses --partial-order records
 /// as events. The operational model's own state is not one.

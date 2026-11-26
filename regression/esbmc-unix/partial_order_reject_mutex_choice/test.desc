@@ -1,0 +1,5 @@
+CORE
+main.c
+--partial-order
+^ERROR: --partial-order needs a mutex that is a global known during symbolic execution, at file .*main\.c line 9 
+\A(?![\s\S]*VERIFICATION)[\s\S]*\Z
