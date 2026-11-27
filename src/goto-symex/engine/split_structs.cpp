@@ -74,6 +74,23 @@ public:
     return it->first;
   }
 
+  void note_dynamic_index(const expr2tc &e)
+  {
+    if (!is_index2t(e) || !is_struct_type(e->type) || constant_in_bounds(e))
+      return;
+    if (const expr2tc *root = symbol_root(e))
+      excluded.insert(see(*root));
+  }
+
+  static const expr2tc *field_source(const expr2tc &e)
+  {
+    if (is_member2t(e))
+      return &to_member2t(e).source_value;
+    if (is_index2t(e) && is_struct_type(e->type))
+      return &to_index2t(e).source_value;
+    return nullptr;
+  }
+
   /* One walk over @p e; a member of a symbol is not a use of the whole. */
   void note(const expr2tc &e, uset use = uset::plain)
   {
@@ -88,9 +105,7 @@ public:
     }
     use = use_under(e, use);
 
-    if (is_index2t(e) && is_struct_type(e->type) && !constant_in_bounds(e))
-      if (const expr2tc *root = symbol_root(e))
-        excluded.insert(see(*root));
+    note_dynamic_index(e);
 
     if (is_symbol2t(e))
     {
@@ -99,10 +114,7 @@ public:
         excluded.insert(name);
       return;
     }
-    const expr2tc *source = is_member2t(e) ? &to_member2t(e).source_value
-                            : is_index2t(e) && is_struct_type(e->type)
-                              ? &to_index2t(e).source_value
-                              : nullptr;
+    const expr2tc *source = field_source(e);
     if (source && is_symbol2t(*source))
     {
       if (is_index2t(e))
