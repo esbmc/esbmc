@@ -2069,8 +2069,8 @@ bool rewrite_array_set_fill(irept &code)
 // type. They part company only when the extents differ, and neither remainder
 // is a whole-array assignment: a longer `array_copy` destination is left
 // *unconstrained* past the source extent (verified against CBMC), while
-// `array_replace` overwrites only the prefix and preserves the tail. Mismatched
-// extents are therefore declined rather than approximated in either direction.
+// `array_replace` overwrites only the prefix and preserves the tail. Those
+// are left to rewrite_array_copy_call.
 bool rewrite_array_copy(irept &code)
 {
   const irept::subt ops = code.get_sub();
@@ -2086,6 +2086,35 @@ bool rewrite_array_copy(irept &code)
   code.get_sub().clear();
   code.get_sub().push_back(*dst);
   code.get_sub().push_back(*src);
+  return true;
+}
+
+// Rewrites `ARRAY_COPY dst src` / `ARRAY_REPLACE dst src` whose operands are
+// not two same-typed whole arrays -- heap buffers, offsets into an object,
+// differing extents -- into a call to the boilerplate body that sizes both
+// objects at run time (synthesize_cprover_additions).
+bool rewrite_array_copy_call(irept &code, const irep_idt &stmt)
+{
+  const irept::subt &ops = code.get_sub();
+  if (
+    ops.size() != 2 || ops[0].find("type").id() != "pointer" ||
+    ops[1].find("type").id() != "pointer")
+    return false;
+
+  irept func(irep_idt("symbol"));
+  func.set(
+    "identifier",
+    stmt == "array_copy" ? "c:@F@__cbmc_array_copy_impl"
+                         : "c:@F@__cbmc_array_replace_impl");
+
+  irept args(irep_idt("arguments"));
+  args.get_sub() = code.get_sub();
+
+  code.add("statement") = mk("function_call");
+  code.get_sub().clear();
+  code.get_sub().push_back(get_nil_irep());
+  code.get_sub().push_back(func);
+  code.get_sub().push_back(args);
   return true;
 }
 
@@ -2185,7 +2214,7 @@ bool rewrite_havoc_object(irept &code)
 // them. The rest are declined by throwing, which create_goto_program's handler
 // turns into a graceful error exit (roadmap §4.7): migrate would otherwise
 // abort() on them (SIGABRT). These reach the adapter only from an explicit
-// __CPROVER_array_set / _array_copy / _array_replace / _havoc_object -- CBMC's
+// __CPROVER_array_set / _array_equal / _havoc_object -- CBMC's
 // own memset lowering is retargeted to __ESBMC_memset in fix_builtin_call
 // before its ARRAY_SET body runs (§4.8).
 const char *rewrite_whole_object_codet(
@@ -2207,6 +2236,8 @@ const char *rewrite_whole_object_codet(
   {
     if (rewrite_array_copy(code))
       return "13";
+    if (rewrite_array_copy_call(code, stmt))
+      return "16";
   }
   else if (stmt == "array_equal")
   {
