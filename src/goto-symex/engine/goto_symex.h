@@ -1860,9 +1860,9 @@ protected:
   {
   }
 
-  /** Stop only the current thread where \p cont, the condition to run one
-   *  more iteration past the unwinding bound, holds. Returns false when the
-   *  bound must be an assumption on the whole equation instead. */
+  /** Stop only the current thread where \p cond holds: a loop needs one more
+   *  iteration past its bound, or an assumption fails. Returns false when
+   *  this must be an assumption on the whole equation instead. */
   virtual bool halt_thread_at_bound(const expr2tc &)
   {
     return false;

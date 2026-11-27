@@ -1285,12 +1285,12 @@ void execution_statet::record_thread_event(
     cur_state->source);
 }
 
-bool execution_statet::halt_thread_at_bound(const expr2tc &cont)
+bool execution_statet::halt_thread_at_bound(const expr2tc &cond)
 {
   if (!partial_order || options.get_bool_option("deadlock-check"))
     return false;
   guard2tc guard = cur_state->guard;
-  guard.add(cont);
+  guard.add(cond);
   target->event(
     guard.as_expr(), symex_targett::HALT, expr2tc(), cur_state->source);
   return true;

@@ -104,13 +104,6 @@ bool is_null(expr2tc e)
   return is_constant(e) && !is_constant_string2t(e);
 }
 
-/// Assumptions, which the equation applies to every later thread's claims
-/// whatever the clocks say.
-bool needs_unbuilt_events(const std::string &name)
-{
-  return name == "__VERIFIER_assume";
-}
-
 class scope_checkt
 {
 public:
@@ -167,8 +160,8 @@ private:
   {
     if (instruction.is_function_call())
       return check_call(to_code_function_call2t(instruction.code));
-    if (verifying && instruction.is_assume())
-      return reject("verifying an assumption");
+    if (verifying && deadlocks && instruction.is_assume())
+      return reject("an assumption under --deadlock-check");
     return check_expr(instruction.code) && check_expr(instruction.guard);
   }
 
@@ -179,8 +172,8 @@ private:
       return reject("a call through a function pointer");
     if (is_unsupported_call(name))
       return reject("a call to " + name);
-    if (verifying && needs_unbuilt_events(name))
-      return reject("verifying a call to " + name);
+    if (verifying && deadlocks && name == "__VERIFIER_assume")
+      return reject("a call to " + name + " under --deadlock-check");
     if (!check_deadlock_call(name))
       return false;
 

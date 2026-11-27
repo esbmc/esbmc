@@ -1,6 +1,6 @@
 # Plan — a partial-order encoding for concurrent programs (`--partial-order`)
 
-**Status (2026-11-26):** phases 1 to 3 merged; phase 4 in progress. Phase 0 is
+**Status (2026-11-27):** phases 1 to 3 merged; phase 4 in progress. Phase 0 is
 done, with the measurements below (§4), and the maintainer decided **go** on
 2026-11-24. `--partial-order` verifies programs on global scalars and arrays
 of them, including through pointers, with threads created in loops, mutexes,
@@ -10,7 +10,8 @@ on mutexes and joins. Its counterexamples list steps in the order the
 solver's clocks give them, and its violation witnesses carry thread ids.
 A loop cut by `--no-unwinding-assertions` stops only its own thread and
 the threads that wait for it. A compound assignment to a narrow `_Atomic`
-object is recorded as a write. The effort figures are estimates.
+object is recorded as a write. A failed assumption, `abort()` included,
+stops only its own thread. The effort figures are estimates.
 **Origin:** [#10296](https://github.com/esbmc/esbmc/issues/10296), which found
 `--schedule` unsound and slow, and its
 [effort estimate](https://github.com/esbmc/esbmc/issues/10296#issuecomment-6798263610).
@@ -18,7 +19,7 @@ object is recorded as a write. The effort figures are estimates.
 [#10989](https://github.com/esbmc/esbmc/pull/10989) repaired `--schedule`;
 its formula still grows exponentially with `--context-bound`. Tracked in
 [#10990](https://github.com/esbmc/esbmc/issues/10990).
-**Last updated:** 2026-11-26.
+**Last updated:** 2026-11-27.
 
 ## 1. Goal
 
@@ -235,7 +236,11 @@ disagreements:
   write. Fixed: writes, element updates and dereference updates see through
   the cast (`partial_order_atomic_rmw*`).
   `esbmc-unix2/11_time_var_mutex`: a lock built from `abort()` in an atomic
-  section probably does not cut the thread's later events.
+  section did not keep a later thread out, since an assumption only
+  constrained the claims after it in the equation. Fixed: a failed
+  assumption halts its thread, as a loop bound does, and assumptions are
+  accepted except under `--deadlock-check` (`partial_order_abort*`,
+  `partial_order_assume_*`); the task now takes 100 s.
 - Different semantics. In the four `github_6831_{stats,sleep_sets}*` tests
   the default runs `x++` as one step, so a lost update is not reachable;
   `--partial-order` reads and writes separately and finds it.
